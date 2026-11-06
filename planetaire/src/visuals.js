@@ -304,7 +304,7 @@ export function createVisuals(renderer, scene, camera, sim) {
     const rimS = float(1).sub(abs(dot(normalize(normalWorld), normalize(cameraPosition.sub(positionWorld))))).pow(1.6);
     // raies d'émission : hydrogène (rouge Hα), oxygène (bleu-vert [O III]), soufre (orangé)
     const zone = mx_noise_float(nrm.add(warp).mul(2.5).add(vec3(tt.mul(0.3))));
-    const hotC = varying(mix(mix(vec3(1.0, 0.2, 0.25), vec3(0.25, 0.95, 0.85), smoothstep(-0.25, 0.35, zone)), vec3(1.0, 0.6, 0.25), smoothstep(0.4, 0.7, abs(mx_noise_float(nrm.add(warp).mul(6.0))))));
+    const hotC = varying(mix(mix(vec3(1.0, 0.2, 0.25), vec3(0.35, 0.55, 1.0), smoothstep(-0.25, 0.35, zone)), vec3(1.0, 0.6, 0.25), smoothstep(0.4, 0.7, abs(mx_noise_float(nrm.add(warp).mul(6.0))))));
     const bulgeV = varying(bulge);
     // front de choc lumineux qui balaie la bulle (pulsations)
     const front = smoothstep(0.75, 1.0, sin(bulgeV.mul(6.0).sub(time.mul(1.5))).mul(0.5).add(0.5)).mul(0.6);
@@ -523,7 +523,7 @@ export function createVisuals(renderer, scene, camera, sim) {
   }
   if (cine) {
     const l = dot(out, vec3(0.2126, 0.7152, 0.0722));
-    const tint = mix(vec3(0.93, 1.0, 1.07), vec3(1.06, 1.0, 0.92), smoothstep(0.02, 0.6, l)); // ombres froides → hautes lumières chaudes
+    const tint = mix(vec3(0.95, 0.96, 1.08), vec3(1.06, 1.0, 0.92), smoothstep(0.02, 0.6, l)); // ombres bleutées (sans vert) → hautes lumières chaudes
     out = out.mul(tint);
     out = out.sub(vec3(l, l, l)).mul(1.08).add(vec3(l, l, l));                                     // saturation légère
     out = out.mul(smoothstep(0.0, 0.035, l).mul(0.2).add(0.8));          // noirs plus profonds

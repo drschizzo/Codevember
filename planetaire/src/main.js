@@ -839,7 +839,7 @@ async function main() {
   function applyLife() {
     const p = life.p, U = sim.U;
     U.Ms.value = p.Ms; U.gasDens.value = p.gasDens;
-    U.clearOn.value = p.clearOn; U.clearR.value = p.clearR;
+    U.clearOn.value = p.clearOn; U.clearR.value = p.clearR; U.clearR2.value = p.clearR2; U.beltLoss.value = p.beltLoss;
     U.starR.value = p.starR; U.outR.value = p.outR; U.snA.value = p.snA; U.snHeat.value = p.snHeat; U.snR.value = p.snR; U.snW.value = p.snW;
     U.snow.value = p.snow;
     vis.setStar(p);
@@ -849,7 +849,15 @@ async function main() {
       toast('Allumage : la fusion de l’hydrogène démarre au cœur de l’étoile');
       flyHome(null, 4);
       if (state.seek < 0) { state.burst = 0.35; audio.ignition(); }
-    } else if (e === 'clearing') toast('Le gaz a disparu : la lumière de l’étoile balaie le disque');
+    } else if (e === 'clearing') {
+      // La ceinture de débris se loge juste au-delà de la géante la plus lointaine
+      // (comme la ceinture de Kuiper au-delà de Neptune), ou vers 4,5 UA sans géante.
+      const giants = state.planets.filter((p) => p.mE > 10 && p.a < 8.5);
+      const aG = giants.length ? Math.max(...giants.map((p) => p.a)) : 3;
+      const c = Math.min(7.8, Math.max(3.2, aG * 1.5));
+      life.beltIn = c * 0.85; life.beltOut = c * 1.15;
+      toast('Le gaz a disparu : la lumière de l’étoile balaie le disque');
+    }
     else if (e === 'mature') toast('Le système est formé');
     else if (e === 'giant') { toast('L’étoile a épuisé son hydrogène : elle devient une supergéante rouge'); audio.giant(); }
     else if (e === 'collapse') toast('Le cœur de fer s’effondre…');
