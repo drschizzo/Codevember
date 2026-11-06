@@ -4,6 +4,8 @@ Un système planétaire simulé entièrement sur le GPU (WebGPU + three.js TSL),
 
 ## Le cycle de vie
 
+L'écran d'accueil le montre d'abord en miniature : un petit film de 20 s qui boucle (`src/intro.js`, Canvas 2D, indépendant de WebGPU). On y voit le nuage s'effondrer, l'étoile s'allumer, les planètes creuser leurs sillons, la supergéante, la supernova, puis un nouveau nuage. Les grains y portent déjà leur couleur de provenance. La vraie simulation ne démarre qu'au clic sur « Entrer ».
+
 Une frise dans le panneau suit les phases. Pour chacune, elle indique sa vraie durée, car le film est très accéléré et de façon inégale.
 
 1. **Effondrement du nuage** : une sphère d'un million de grains, en rotation et turbulente, s'effondre. Chaque grain conserve son moment cinétique et rejoint le disque à son rayon centrifuge (modèle d'Ulrich / Cassen-Moosman). Ce rayon devient son « lieu de naissance ». Les grains proches de l'axe tombent sur l'étoile.
@@ -46,6 +48,9 @@ Paramètres d'URL :
 | `?auto` | saute l'écran d'accueil (sans le son) |
 | `?nocine` | rendu sans post-traitement « cinéma » |
 | `?agx` | ancien tone mapping (AgX) |
+| `?sdr` / `?hdr` | force la sortie SDR ou HDR (par défaut : HDR si l’écran le permet) |
+| `?peak=4` | pic de luminosité en HDR, en multiples du blanc de l’interface |
+| `?exposure=1.45` | exposition globale |
 
 ## Commandes
 

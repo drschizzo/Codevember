@@ -13,7 +13,8 @@ import { provenanceTSL, ROCK, ICE } from './palette.js';
 
 const DUST_K = Math.min(1, 1.2 / Math.min(devicePixelRatio, 2));
 
-export function createVisuals(renderer, scene, camera, sim) {
+export function createVisuals(renderer, scene, camera, sim, opts = {}) {
+  const HDR = !!opts.hdr;
   const { pPos, pVel, pHeat, ePos, eTot, eGas, tau } = sim.buffers;
   // Pulsation de chaque planète quand elle passe sous la tête (écrite par le CPU)
   const pulseBuf = instancedArray(M, 'float');
@@ -32,7 +33,7 @@ export function createVisuals(renderer, scene, camera, sim) {
     // la même taille apparente en points… pour 2,8× moins de pixels à
     // remplir (le coût du rendu est dominé par ce remplissage additif).
     // L'éclat est compensé pour garder la même lumière totale.
-    alpha: uniform(0.14 / DUST_K ** 2),
+    alpha: uniform(0.19 / DUST_K ** 2),
     dustK: uniform(1.0),   // éclat global de la poussière (baisse quand le disque s'épuise)
     size: uniform(0.0085 * DUST_K * Math.min(3, Math.sqrt((1 << 20) / sim.N))),
     light: uniform(1.5),
@@ -46,6 +47,9 @@ export function createVisuals(renderer, scene, camera, sim) {
     shell: uniform(0.0),          // rémanent de supernova : intensité
     selected: uniform(-1, 'int'),
     snow: sim.U.snow,
+    exposure: uniform(1.45),
+    // pic de l'écran HDR, en multiples du blanc de l'interface (?peak=)
+    peak: uniform(Number(new URLSearchParams(location.search).get('peak')) || 4.0),
   };
 
   // ── Poussière ──────────────────────────────────────────────────────────────
@@ -154,7 +158,7 @@ export function createVisuals(renderer, scene, camera, sim) {
     const d = length(uv().sub(0.5)).mul(2.0);
     hm.colorNode = vec4(V.starCol.mul(V.starI).mul(0.25), exp(d.mul(6.0).negate()).sub(Math.exp(-6.0)).max(0));
     const h = new THREE.Sprite(hm);
-    h.scale.setScalar(3.2);
+    h.scale.setScalar(1.3);
     star.add(h);
     star.userData.halo = h;
     // jets bipolaires de la protoétoile (le long de l'axe de rotation)
@@ -330,7 +334,7 @@ export function createVisuals(renderer, scene, camera, sim) {
     const mE = m.div(M_EARTH);
     const Rp = select(mE.lessThan(2.0), pow(mE, 0.28), pow(mE.div(2.0), 0.59).mul(1.21).min(11.5));
     const visR = select(E.w.greaterThan(0), pow(Rp, 0.75).mul(0.013).max(0.005), 0.0)
-      .mul(pulseBuf.element(instanceIndex).mul(0.35).add(1.0)); // la planète « bat » quand elle sonne
+      .mul(pulseBuf.element(instanceIndex).mul(0.06).add(1.0)); // la planète « bat » (à peine) quand elle sonne
     mat.positionNode = positionLocal.mul(visR).add(E.xyz);
 
     const solid = max(m.sub(G.y), 1e-30);
@@ -429,19 +433,21 @@ export function createVisuals(renderer, scene, camera, sim) {
     albedo = mix(albedo, vec3(0.85, 0.88, 0.9), wisps.mul(float(1).sub(isGas)));
 
     // ── Éclairage : flux ∝ 1/a (adouci), terminateur doux, pas de surexposition
-    const flux = clamp(float(0.75).mul(V.lightK).div(pow(aV.max(0.4), 0.8)), 0.03, 2.0);
+    // (décroissance très adoucie : en vrai ∝ 1/a², mais les planètes lointaines
+    //  doivent rester lisibles ; en HDR la face éclairée peut dépasser le blanc)
+    const flux = clamp(float(2.4).mul(V.lightK).div(pow(aV.max(0.4), 0.5)), 0.3, 4.0);
     const ndl = max(dot(n, toStar), 0.0);
     const lit = smoothstep(-0.05, 0.6, dot(n, toStar)).mul(0.35).add(ndl.mul(0.65));
     // liseré (Fresnel) : seulement au bord du disque vu depuis la caméra
     const rim = float(1).sub(max(dot(n, normalize(cameraPosition.sub(positionWorld))), 0)).pow(4);
     const dayRim = smoothstep(-0.2, 0.4, dot(n, toStar));
-    mat.colorNode = albedo.mul(lit.mul(flux).mul(V.starCol.mul(0.5).add(0.5)).add(0.015))
+    mat.colorNode = albedo.mul(lit.mul(flux).mul(V.starCol.mul(0.5).add(0.5)).add(0.05))
       .add(lava.mul(float(1).sub(isGas)))                                   // visible aussi côté nuit
       .add(vec3(0.9, 0.3, 0.1).mul(heat.mul(isGas).mul(0.25)))             // géante jeune : lueur
       .add(hazeCol.mul(rim).mul(atmo).mul(dayRim).mul(flux).mul(0.9))      // limbe atmosphérique
       .add(vec3(1.0, 0.45, 0.15).mul(glow))
       .add(vec3(0.6, 0.9, 1.0).mul(sel).mul(rim).mul(0.5))
-      .add(vec3(1.0, 0.95, 0.85).mul(pulse).mul(rim.mul(3.0).add(0.5)));
+      .add(vec3(1.0, 0.92, 0.8).mul(pulse).mul(rim).mul(0.7)); // note jouée : liseré discret (un éclair, lui, signale une collision)
 
     const geo = new THREE.IcosahedronGeometry(1, 5);
     const planets = new THREE.Mesh(geo, mat);
@@ -491,19 +497,15 @@ export function createVisuals(renderer, scene, camera, sim) {
   const useBloom = !qp.has('nobloom');
   const cine = !qp.has('nocine');
   // Rendu « cinéma » (désactivable avec ?nocine) :
-  //  · aberration chromatique légère, croissante vers les bords (optique réelle) ;
   //  · bloom doux et large, seuil haut (la poussière reste nette) ;
   //  · traînée anamorphique horizontale sur les sources intenses (étoile,
   //    éclairs, supernova), légèrement bleutée ;
   //  · étalonnage : ombres froides, hautes lumières chaudes, contraste en S ;
   //  · vignettage ovale et grain de pellicule animé.
   const ctr = screenUV.sub(0.5);
-  const r2c = dot(ctr, ctr);
-  const ca = ctr.mul(r2c.mul(0.012));
-  const src = cine
-    ? vec3(color.sample(screenUV.add(ca)).r, color.sample(screenUV).g, color.sample(screenUV.sub(ca)).b)
-    : color.rgb;
-  let out = src;
+  // (pas d'aberration chromatique : sur des grains d'un ou deux pixels, décaler
+  //  R et B en laissant G en place fabriquait un fantôme vert pour chaque grain)
+  let out = color.rgb;
   if (useBloom) {
     const bl = bloom(color, 0.55, 0.65, 0.85);
     out = out.add(bl);
@@ -521,21 +523,35 @@ export function createVisuals(renderer, scene, camera, sim) {
       out = out.add(vec3(0.5, 0.72, 1.0).mul(streak.min(4.0)).mul(0.06));
     }
   }
+  out = out.mul(V.exposure);
   if (cine) {
     const l = dot(out, vec3(0.2126, 0.7152, 0.0722));
-    const tint = mix(vec3(0.95, 0.96, 1.08), vec3(1.06, 1.0, 0.92), smoothstep(0.02, 0.6, l)); // ombres bleutées (sans vert) → hautes lumières chaudes
+    const tint = mix(vec3(0.97, 0.95, 1.06), vec3(1.05, 0.98, 0.93), smoothstep(0.02, 0.6, l)); // ombres bleutées (sans vert) → hautes lumières chaudes
     out = out.mul(tint);
     out = out.sub(vec3(l, l, l)).mul(1.08).add(vec3(l, l, l));                                     // saturation légère
-    out = out.mul(smoothstep(0.0, 0.035, l).mul(0.2).add(0.8));          // noirs plus profonds
+    out = out.mul(smoothstep(0.0, 0.02, l).mul(0.1).add(0.9));           // noirs un peu plus profonds
     const vig = smoothstep(1.0, 0.25, length(ctr.mul(vec2(1.25, 1.6))));
     // (hachage entier par pixel et par image : pas de motif, contrairement à fract(sin(·)))
     const pix = screenCoordinate.x.toUint().add(screenCoordinate.y.toUint().mul(uint(8191)));
     const grain = hash(pix.add(fract(time.mul(0.37)).mul(1.0e6).toUint().mul(uint(131071)))).sub(0.5).mul(0.035);
-    out = out.mul(vig.mul(0.75).add(0.25)).add(grain.mul(l.mul(-0.6).add(1.0)).mul(0.6));
+    out = out.mul(vig.mul(0.4).add(0.6)).add(grain.mul(float(1).sub(l.min(1.0).mul(0.6))).mul(0.5));
   } else {
     out = out.mul(smoothstep(1.25, 0.35, length(ctr).mul(1.6)));
   }
-  pipeline.outputNode = vec4(max(out, vec3(0)), 1.0);
+  out = max(out.xyz, vec3(0));
+  if (HDR) {
+    // Courbe HDR : linéaire jusqu'à 0,7 (le blanc de l'interface vaut 1), puis
+    // épaule exponentielle vers le pic de l'écran. Calculée sur la composante
+    // max : la teinte est conservée ; les sources très intenses blanchissent
+    // un peu, comme sur un vrai capteur.
+    const K = 0.7;
+    const m = max(out.r, max(out.g, out.b));
+    const span = V.peak.sub(K);
+    const mt = select(m.lessThan(K), m, float(K).add(span.mul(float(1).sub(exp(m.sub(K).div(span).negate())))));
+    const toned = out.mul(mt.div(m.max(1e-5)));
+    out = mix(toned, vec3(mt, mt, mt), smoothstep(V.peak.mul(0.6), V.peak.mul(3.0), m).mul(0.7));
+  }
+  pipeline.outputNode = vec4(out, 1.0);
 
   // ── Effets ──────────────────────────────────────────────────────────────────
   // · Impact géant : éclair + deux ondes de choc ORANGE, accrochés à la planète
@@ -648,7 +664,7 @@ export function createVisuals(renderer, scene, camera, sim) {
     star.userData.core.scale.setScalar(R);
     // éclat de surface ∝ (L / R²)^¼ (température effective) ; halo ∝ luminosité
     V.starI.value = p.starI;
-    star.userData.halo.scale.setScalar(2.4 * Math.min(3, Math.max(0.35, Math.pow(p.L, 0.3))) + 2 * R);
+    star.userData.halo.scale.setScalar(1.3 * Math.min(3, Math.max(0.35, Math.pow(p.L, 0.3))) + 2 * R);
     V.starCol.value.setRGB(p.color[0], p.color[1], p.color[2]);
     V.lightK.value = Math.min(2.5, Math.max(0.12, Math.pow(p.L, 0.35)));
     V.ambient.value = p.ambient;

@@ -1,0 +1,25 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "planetaire",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        ".claude/serve.py",
+        "8000",
+        "planetaire"
+      ],
+      "port": 8000
+    },
+    {
+      "name": "planetaire-8001",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        ".claude/serve.py",
+        "8001",
+        "planetaire"
+      ],
+      "port": 8001
+    }
+  ]
+}
