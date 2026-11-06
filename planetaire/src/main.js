@@ -957,6 +957,7 @@ async function main() {
     updateCamera(real);
     controls.update();
     vis.updateFx(state.paused ? 0 : real, (i) => pred.get(i));
+    if (vis.updatePulsar(state.paused ? 0 : real)) audio.pulsarTick(); // un faisceau nous balaie : « tic »
 
     // bouffée d'exposition : tout le système s'illumine un instant
     state.burst = Math.max(0, (state.burst || 0) - real * 1.4);

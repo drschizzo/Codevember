@@ -143,8 +143,9 @@ export function createLifecycle() {
         p.outR = 60;
         p.snR = 2.6 * ts; p.snW = 0.4 + 0.1 * p.snR; p.snA = 30 * Math.exp(-ts / 5);
         p.snHeat = Math.exp(-ts / 6);
-        p.shell = ss(0.3, 2, ts) * (0.5 + 0.5 * Math.exp(-ts / 10)); p.shellR = p.snR * 1.04;
-        p.pulsar = ss(2, 5, ts);
+        const fadeOut = 1 - ss(SN_END - 3, SN_END - 0.3, tr); // transition douce vers le cycle suivant
+        p.shell = ss(0.3, 2, ts) * (0.5 + 0.5 * Math.exp(-ts / 10)) * fadeOut; p.shellR = p.snR * 1.04;
+        p.pulsar = ss(2, 4.5, ts) * fadeOut;
       }
       if (tr >= SN_END) {
         life.cycle++; life.boom = false; life.tIgn = -1; life.gasEnv = 1;
