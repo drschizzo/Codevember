@@ -29,19 +29,25 @@
   <aside id="panel">
     <section id="stats"></section>
     <section>
-      <h2>Planètes</h2>
+      <h2>Planètes <button id="auto" title="Suivre automatiquement la plus massive (touche A)">auto</button><button id="overview" hidden title="Revenir à la vue d’ensemble (Échap)">vue d’ensemble</button></h2>
+      <p class="hint">Cliquez une planète pour la suivre de près.</p>
       <ul id="list"></ul>
     </section>
     <section>
-      <h2>Coupe — lignée de la matière</h2>
+      <h2>Coupe — de quoi est faite la planète</h2>
+      <p class="cap">Une planète grossit par couches, comme un oignon : le cœur est la matière captée en premier, la surface la plus récente. <b>La couleur de chaque couche indique où cette matière est née</b> dans le disque.</p>
       <canvas id="cut"></canvas>
       <p id="cutinfo"></p>
-      <p class="legend"><i style="--c:#ff4d1f"></i>né près de l’étoile <i style="--c:#edc27a"></i>sable <i style="--c:#9edcff"></i>glaces <i style="--c:#c79eff"></i>bord externe <i class="imp"></i>impact géant</p>
+      <div class="provlegend">
+        <div id="provbar"></div>
+        <div class="ticks"><span>0,35 UA</span><span class="snow">▲ ligne des glaces</span><span>9 UA</span></div>
+      </div>
+      <p class="legend"><i class="imp"></i>impact géant <i style="--c:#dec79e"></i>gaz capté <i style="--c:#7a3a1e"></i>embryon initial</p>
     </section>
   </aside>
 
   <footer id="groove-wrap">
-    <h2>Sillon — densité sous la tête de lecture (étoile → bord)</h2>
+    <h2>Sillon — ce que lit la tête (trait bleu), de l’étoile au bord · ● une planète sonne en passant dessous</h2>
     <canvas id="groove"></canvas>
   </footer>
 
@@ -52,6 +58,7 @@
       <dt>Maj + glisser</dt><dd>puits gravitationnel : remuer le disque</dd>
       <dt>double-clic</dt><dd>semer un embryon de planète</dd>
       <dt>clic</dt><dd>choisir une planète (coupe) · A : choix auto</dd>
+      <dt>clic dans la liste</dt><dd>zoomer et suivre la planète · Échap : vue d’ensemble</dd>
       <dt>E</dt><dd>étoile vagabonde (survol)</dd>
       <dt>P</dt><dd>migration planétaire on/off</dd>
       <dt>C</dt><dd>couleur : provenance / composition / température</dd>
@@ -68,7 +75,7 @@
       <p class="sub">Lignée &amp; Sillons</p>
       <p>Un million de grains de poussière tournent autour d’une jeune étoile. Chacun se souvient de l’endroit où il est né.
       Les planètes qui se forment gardent ces souvenirs en strates ; le disque, lu comme un vinyle par une tête fixe, devient musique.</p>
-      <p class="dim">Chaque planète chante à sa fréquence orbitale : deux planètes en résonance 3:2 jouent une quinte.</p>
+      <p class="dim">Une tête de lecture fixe (le trait bleu) écoute le disque : chaque planète joue sa note quand elle passe dessous, aiguë près de l’étoile, grave au loin. Les planètes rapides battent vite, les lointaines rarement : le système devient un rythme.</p>
       <button id="enter">Entrer — avec le son</button>
       <button id="enter-silent" class="ghost">sans le son</button>
       <p class="dim small">WebGPU · three.js r186 · TSL compute · <code>?n=2097152</code> pour plus de grains</p>

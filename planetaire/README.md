@@ -2,8 +2,10 @@
 
 Un disque protoplanétaire simulé entièrement sur le GPU (WebGPU + three.js TSL), qui **se souvient**.
 
-- **Lignée** : chaque grain de poussière garde son rayon de naissance et sa composition (roche en deçà de la ligne des glaces, glace au-delà). Les planètes qui se forment empilent ces souvenirs en **strates**. La vue en coupe montre leur histoire : la graine au centre, puis les apports successifs, et les **impacts géants** (fusions) cerclés d'orange.
-- **Sillons** : comme un vinyle, le disque est lu par une **tête de lecture fixe**, et c'est la rotation képlérienne qui fait défiler la matière dessous. Les anneaux et les grumeaux « pincent » des cordes, et les lacunes creusées par les planètes se taisent. Chaque planète chante à une fréquence proportionnelle à sa **fréquence orbitale réelle** (repliée par octaves). Deux planètes en résonance 3:2 jouent donc une quinte, et 2:1 une octave.
+- **Lignée** : chaque grain de poussière garde son rayon de naissance et sa composition (roche en deçà de la ligne des glaces, glace au-delà). Les planètes qui se forment empilent ces souvenirs en **strates**. La coupe annotée montre leur histoire : l'embryon initial au cœur, les apports successifs, les **impacts géants** cerclés d'orange et, pour les géantes, l'**enveloppe de gaz**. Survoler une strate la décrit.
+- **Sillons** : comme un vinyle, le disque est lu par une **tête de lecture fixe** (le trait bleu), et c'est la rotation képlérienne qui fait défiler la matière dessous. Ce qui passe sous la tête joue, selon une règle unique : **la hauteur dépend de la distance à l'étoile** (aigu au centre, grave au bord, gamme pentatonique). Chaque planète sonne quand elle croise la tête : les internes battent vite, les lointaines rarement, et deux planètes en résonance 3:2 forment un motif 3 contre 2. Le timbre et la durée suivent la masse. Les anneaux de poussière pincent doucement leur note, et un bourdon s'assombrit à mesure que le disque s'épuise.
+- **Budgets de masse** : le disque contient 700 M⊕ de solides et un réservoir de gaz qui se dissipe (~160 orbites). Au-delà de la *masse d'isolation*, une planète n'avale presque plus de cailloux. Au-delà de 10 M⊕, un cœur capte du gaz (emballement limité par l'ouverture d'un sillon) et devient une géante gazeuse. Les rayons affichés suivent la relation masse–rayon de Chen & Kipping (2017). Ils sont exagérés pour rester visibles, mais une Jupiter reste plus petite que l'étoile.
+- **Impacts géants** : éclair, onde de choc, ralenti, secousse et un nuage de débris incandescents arrachés au point d'impact, qui refroidissent en orbite.
 
 ## Lancer
 
@@ -33,6 +35,7 @@ Paramètres d'URL :
 | **Maj + glisser** | puits gravitationnel : remuer le disque avec le doigt |
 | **double-clic** | semer un embryon de planète |
 | clic sur une planète | l'inspecter (coupe stratigraphique) · **A** : retour au choix auto |
+| clic dans la liste | zoomer sur la planète et la suivre sur son orbite · **Échap** : vue d'ensemble |
 | **E** | une étoile vagabonde traverse le système |
 | **P** | migration planétaire (type I) on/off |
 | **C** | couleurs : provenance / roche-glace / température |
@@ -44,7 +47,8 @@ Tout l'état vit dans des storage buffers, et rien ne transite par le CPU dans l
 
 ```
 par image (4 sous-pas) :
-  stepParticles   N threads   gravité étoile + 64 embryons, traînée du gaz (relaxation
+  buildActive     1 thread    liste compacte des embryons actifs + paramètres précalculés
+  stepParticles   N threads   gravité étoile + embryons actifs, traînée du gaz (relaxation
                               exponentielle exacte → stable pour tout nombre de Stokes),
                               turbulence, pièges de pression, capture atomique
   embryoForces    64 threads  N-corps exact + amortissement par le gaz + migration
@@ -56,6 +60,10 @@ puis :
   opticalDepth    256 threads profondeur optique cumulée depuis l'étoile → ombre du disque
   readNeedle      192 threads densité sous la tête de lecture → son
 ```
+
+- **Caméra et effets** : position + vitesse des embryons sont relues à chaque image (2 ko). La lecture arrive avec quelques images de retard, mais elle est datée, et on la propage jusqu'à l'instant présent (2 corps, saute-mouton). L'erreur mesurée est d'environ 10⁻⁵ UA, si bien que la caméra de suivi, les impacts et les notes restent accrochés aux planètes rendues par le GPU.
+- **Gravité « boostée »** : le facteur ×25 qui accélère la croissance des embryons s'efface avec la masse (≈ ×1,2 pour une Jupiter). Les fusions conservent le centre de masse et la quantité de mouvement, et leur rayon se base sur les sphères de Hill.
+- **Accéléré** (`?warp`) : la grille de densité n'est reconstruite qu'une fois par image. Le coût est dominé par la bande passante mémoire des grains (~70 octets lus et écrits par grain et par sous-pas).
 
 - **Rendu** : 1 M de sprites instanciés qui lisent directement les buffers de simulation, sans copie. Ils sont ombrés par la profondeur optique (le bord interne projette son ombre, et les grains en surface du disque restent éclairés). Le tout est rendu en HDR avec tone mapping AgX et bloom.
 - **Physique** : unités G·M★ = 1, distances en UA. Les grains suivent une distribution de nombres de Stokes (10⁻² à 2), ce qui donne une dérive radiale différenciée. Au-delà de la *masse d'isolation*, une planète crée un maximum de pression juste à l'extérieur de son orbite. Le gaz y devient super-képlérien et les cailloux s'y accumulent en **anneau**, comme dans les images ALMA de HL Tauri. La gravité des embryons est amplifiée (`boost`) pour que la formation se joue en quelques minutes.
