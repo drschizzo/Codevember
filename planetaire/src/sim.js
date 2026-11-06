@@ -92,12 +92,12 @@ export function createSim(renderer, N) {
     frame: uniform(0, 'uint'),
     eta: uniform(0.012),         // déficit de vitesse du gaz (pression)
     boost: uniform(25.0),        // amplification artistique de la gravité des embryons
-    fHill: uniform(0.38),        // rayon de capture / rayon de Hill
+    fHill: uniform(0.5),         // rayon de capture / rayon de Hill
     soft2: uniform(2.0e-4),
     mp: uniform(SOLID0 / N),     // masse d'un grain (baisse quand le disque s'épuise)
     gasAvail: uniform(1.0),      // fraction du gaz encore disponible (CPU)
     mCrit: uniform(10.0 * M_EARTH), // masse critique du cœur : capture du gaz
-    gasK: uniform(0.035),        // taux de capture du gaz (en Ω)
+    gasK: uniform(0.05),         // taux de capture du gaz (en Ω)
     snow: uniform(2.7),          // ligne des glaces (UA)
     turb: uniform(0.0025),
     isoMass: uniform(6.0 * M_EARTH), // masse d'isolation (création des anneaux)
@@ -262,7 +262,10 @@ export function createSim(renderer, N) {
       writeParticle(idx, sseed, rA, R_OUT);
     }).Else(() => {
       P.assign(vec4(p, P.w));
-      V.assign(vec4(v, V.w));
+      // En deçà de la ligne des glaces, la glace d'un caillou qui dérive vers
+      // l'intérieur se sublime : il n'apporte plus que de la roche.
+      // (Il garde son rayon de naissance : la lignée reste visible.)
+      V.assign(vec4(v, select(R.lessThan(U.snow.mul(0.95)), 0.0, V.w)));
       If(H.greaterThan(0.0), () => { // la quasi-totalité des grains est froide : pas d'écriture
         H.assign(select(H.greaterThan(0.004), H.mul(exp(U.dt.mul(-0.55))), 0.0));
       });
@@ -342,24 +345,37 @@ export function createSim(renderer, N) {
     });
   })().compute(M, [64]);
 
-  // Empile une couche dans la mémoire d'une planète ; si la pile est pleine,
-  // elle est compressée par paires (on garde toute l'histoire, en plus grossier).
+  // Empile une couche dans la mémoire d'une planète (type : 0 accrétion,
+  // 2 embryon initial, 3 gaz, ≥ 10 matière d'un impacteur — 10 + n° d'impact,
+  // + 0,5 pour son gaz). Si la pile est pleine, on fusionne la paire de
+  // couches voisines la plus légère, de préférence de même nature : les gros
+  // événements (impacts, enveloppe) restent lisibles, l'embryon initial aussi.
   function pushLayer(i, layer) {
     const info = eInfo.element(i);
     const n = info.w.toInt().toVar();
     If(n.greaterThanEqual(L), () => {
-      Loop({ start: 0, end: L / 2, type: 'int', name: 'q' }, ({ q }) => {
-        const a = eLayers.element(i.mul(L).add(q.mul(2))).toVar();
-        const b = eLayers.element(i.mul(L).add(q.mul(2).add(1))).toVar();
-        const mt = max(a.x.add(b.x), 1e-20);
-        eLayers.element(i.mul(L).add(q)).assign(vec4(
-          mt,
-          a.x.mul(a.y).add(b.x.mul(b.y)).div(mt),
-          a.x.mul(a.z).add(b.x.mul(b.z)).div(mt),
-          select(a.w.equal(1.0).or(b.w.equal(1.0)), 1.0, max(a.w, b.w)),
-        ));
+      const best = int(1).toVar();
+      const bc = float(1e30).toVar();
+      Loop({ start: 1, end: L - 1, type: 'int', name: 'q' }, ({ q }) => {
+        const A = eLayers.element(i.mul(L).add(q)), B = eLayers.element(i.mul(L).add(q.add(1)));
+        const cost = A.x.add(B.x).mul(select(A.w.equal(B.w), 1.0, 6.0));
+        If(cost.lessThan(bc), () => { bc.assign(cost); best.assign(q); });
       });
-      n.assign(L / 2);
+      const a = eLayers.element(i.mul(L).add(best)).toVar();
+      const b = eLayers.element(i.mul(L).add(best.add(1))).toVar();
+      const mt = max(a.x.add(b.x), 1e-20);
+      const same = a.w.equal(b.w);
+      const heavy = select(a.x.greaterThanEqual(b.x), a, b);
+      eLayers.element(i.mul(L).add(best)).assign(vec4(
+        mt,
+        select(same, a.x.mul(a.y).add(b.x.mul(b.y)).div(mt), heavy.y),
+        select(same, a.x.mul(a.z).add(b.x.mul(b.z)).div(mt), heavy.z),
+        heavy.w,
+      ));
+      Loop({ start: best.add(1), end: int(L - 1), type: 'int', name: 'q2', condition: '<' }, ({ q2 }) => {
+        eLayers.element(i.mul(L).add(q2)).assign(eLayers.element(i.mul(L).add(q2.add(1))));
+      });
+      n.assign(L - 1);
     });
     eLayers.element(i.mul(L).add(n)).assign(layer);
     info.w.assign(n.add(1).toFloat());
@@ -405,12 +421,16 @@ export function createSim(renderer, N) {
       // le gaz qui reste dans le disque.
       const G = eGas.element(i);
       const a = max(length(E.xz), R_IN);
+      // (gaz capté → couche de type 3)
       If(m.greaterThan(U.mCrit).and(U.gasAvail.greaterThan(0.0)), () => {
         const mMax = pow(a, 0.4).mul(260.0 * M_EARTH);
         const Om = pow(a, -1.5);
         const dmg = m.mul(U.gasK).mul(Om).mul(U.frameDt).mul(U.gasAvail)
           .mul(smoothstep(U.mCrit, U.mCrit.mul(2.0), m))
-          .mul(clamp(float(1).sub(m.div(mMax)), 0.0, 1.0));
+          .mul(clamp(float(1).sub(m.div(mMax)), 0.0, 1.0))
+          // disque interne chaud : l'enveloppe se refroidit mal et grossit
+          // très lentement → on y garde surtout des planètes rocheuses
+          .mul(smoothstep(1.2, U.snow, a).mul(0.985).add(0.015));
         m.addAssign(dmg);
         E.w.assign(m);
         G.x.addAssign(dmg);
@@ -457,8 +477,21 @@ export function createSim(renderer, N) {
               info.x.assign(0); info.y.assign(0); info.z.assign(0);
             });
             const TL = eTot.element(l);
-            const mlSolid = max(ml.sub(eGas.element(l).y), 1e-20);
-            pushLayer(h, vec4(ml.mul(0.92), TL.x.div(mlSolid), TL.y.div(mlSolid), 1.0));
+            // L'impacteur apporte toute sa propre histoire : ses couches sont
+            // recopiées (du cœur vers la surface) comme un groupe « impact ».
+            const meta0 = impMeta.element(0);
+            const gid = meta0.x.add(11.0).toVar(); // 10 + n° de cet impact
+            const nl = eInfo.element(l).w.toInt().toVar();
+            Loop({ start: int(0), end: nl, type: 'int', name: 'c', condition: '<' }, ({ c }) => {
+              const Ly = eLayers.element(l.mul(L).add(c)).toVar();
+              const isGas = Ly.w.equal(3.0).or(Ly.w.sub(floor(Ly.w)).greaterThan(0.25));
+              pushLayer(h, vec4(Ly.x.mul(0.92), Ly.y, Ly.z, select(isGas, gid.add(0.5), gid)));
+            });
+            // (plus la matière qu'il accrétait au moment du choc)
+            const IL = eInfo.element(l);
+            If(IL.x.greaterThan(0.0), () => {
+              pushLayer(h, vec4(IL.x.mul(0.92), IL.y.div(IL.x), IL.z.div(IL.x), gid));
+            });
             const TH = eTot.element(h);
             TH.x.addAssign(TL.x.mul(0.92));
             TH.y.addAssign(TL.y.mul(0.92));

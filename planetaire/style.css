@@ -16,6 +16,11 @@ h2 { font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacin
 #panel { position: fixed; top: 18px; right: 18px; width: 300px; max-height: calc(100% - 36px); overflow: auto;
   background: var(--glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
   border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 16px; }
+#speed { display: flex; gap: 3px; }
+#speed button { flex: 1; font: 500 11px Inter, sans-serif; color: var(--dim); background: rgba(255,255,255,0.04); border: 1px solid var(--line);
+  border-radius: 6px; padding: 4px 0; cursor: pointer; font-variant-numeric: tabular-nums; }
+#speed button:hover { color: var(--fg); }
+#speed button.on { color: #021; background: var(--accent); border-color: var(--accent); }
 #stats div { display: flex; justify-content: space-between; gap: 10px; font-variant-numeric: tabular-nums; }
 #stats span { color: var(--dim); }
 #list { list-style: none; }

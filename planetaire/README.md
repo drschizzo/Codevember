@@ -39,7 +39,7 @@ Paramètres d'URL :
 | **E** | une étoile vagabonde traverse le système |
 | **P** | migration planétaire (type I) on/off |
 | **C** | couleurs : provenance / roche-glace / température |
-| **+ / −**, Espace, **M**, **H** | vitesse, pause, son, aide |
+| **+ / −**, Espace, **M**, **H** | vitesse (×¼ à ×8, boutons dans le panneau ; ×2 par défaut), pause, son, aide |
 
 ## Architecture GPU
 
@@ -67,7 +67,15 @@ puis :
 
 - **Rendu** : 1 M de sprites instanciés qui lisent directement les buffers de simulation, sans copie. Ils sont ombrés par la profondeur optique (le bord interne projette son ombre, et les grains en surface du disque restent éclairés). Le tout est rendu en HDR avec tone mapping AgX et bloom.
 - **Physique** : unités G·M★ = 1, distances en UA. Les grains suivent une distribution de nombres de Stokes (10⁻² à 2), ce qui donne une dérive radiale différenciée. Au-delà de la *masse d'isolation*, une planète crée un maximum de pression juste à l'extérieur de son orbite. Le gaz y devient super-képlérien et les cailloux s'y accumulent en **anneau**, comme dans les images ALMA de HL Tauri. La gravité des embryons est amplifiée (`boost`) pour que la formation se joue en quelques minutes.
-- **Mémoire** : chaque planète a 32 strates (masse, fraction de glace, rayon moyen de naissance, type). Quand la pile est pleine, elle est compressée par paires : on garde toute l'histoire, à une résolution plus grossière.
+- **Mémoire** : chaque planète a 32 strates (masse, fraction de glace, rayon moyen de naissance, type). Quand la pile est pleine, on fusionne la paire de couches voisines la plus légère et de même nature : les gros événements restent distincts. Lors d'un impact géant, les couches de l'impacteur sont recopiées dans le survivant, en un groupe bordé d'orange : on lit l'histoire des deux corps.
+- **Évolution des planètes** : une petite sous-simulation par planète pilote l'aspect de sa surface.
+  - La chaleur interne vient de l'accrétion et des impacts géants, puis se dissipe d'autant plus lentement que la planète est massive. Chaude, elle porte un océan de magma avec une croûte noire et des fissures incandescentes. Un monde glacé chauffé se resurface plutôt de glace jeune.
+  - Les cratères s'accumulent avec l'âge sur les surfaces sans atmosphère, et la fusion les efface.
+  - L'eau vient de la matière née au-delà de la ligne des glaces. Selon la température d'équilibre à cette distance, elle donne de la vapeur, des océans et des nuages, ou de la banquise.
+  - L'atmosphère n'est retenue qu'au-dessus de ~0,2 M⊕. Elle est fine et bleue si la planète est tempérée, épaisse et jaune (type Vénus) si elle est chaude.
+  - Les géantes jeunes luisent faiblement en rouge et ont des bandes floues, qui se contrastent en refroidissant.
+  - La couleur de surface suit la composition ; la provenance se lit dans la coupe. La coupe affiche aussi la température d'équilibre, l'âge et le type de surface.
+- **Composition** : la glace d'un caillou qui dérive en deçà de la ligne des glaces se sublime, et la capture du gaz est très lente dans le disque interne chaud. Les planètes internes restent donc surtout rocheuses.
 
 ## Pistes pour la suite
 
