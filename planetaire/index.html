@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Planétaire — Lignée &amp; Sillons</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,500;1,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.webgpu.js",
+      "three/webgpu": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.webgpu.js",
+      "three/tsl": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.tsl.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="app"></div>
+
+  <header id="title">
+    <h1>Planétaire</h1>
+    <p>Lignée &amp; Sillons — un disque protoplanétaire qui se souvient</p>
+  </header>
+
+  <aside id="panel">
+    <section id="stats"></section>
+    <section>
+      <h2>Planètes</h2>
+      <ul id="list"></ul>
+    </section>
+    <section>
+      <h2>Coupe — lignée de la matière</h2>
+      <canvas id="cut"></canvas>
+      <p id="cutinfo"></p>
+      <p class="legend"><i style="--c:#ff4d1f"></i>né près de l’étoile <i style="--c:#edc27a"></i>sable <i style="--c:#9edcff"></i>glaces <i style="--c:#c79eff"></i>bord externe <i class="imp"></i>impact géant</p>
+    </section>
+  </aside>
+
+  <footer id="groove-wrap">
+    <h2>Sillon — densité sous la tête de lecture (étoile → bord)</h2>
+    <canvas id="groove"></canvas>
+  </footer>
+
+  <div id="help" class="hidden">
+    <h2>Commandes</h2>
+    <dl>
+      <dt>glisser</dt><dd>tourner autour · molette : zoom</dd>
+      <dt>Maj + glisser</dt><dd>puits gravitationnel : remuer le disque</dd>
+      <dt>double-clic</dt><dd>semer un embryon de planète</dd>
+      <dt>clic</dt><dd>choisir une planète (coupe) · A : choix auto</dd>
+      <dt>E</dt><dd>étoile vagabonde (survol)</dd>
+      <dt>P</dt><dd>migration planétaire on/off</dd>
+      <dt>C</dt><dd>couleur : provenance / composition / température</dd>
+      <dt>+ / −</dt><dd>vitesse · Espace : pause · M : son</dd>
+      <dt>H</dt><dd>afficher / masquer cette aide</dd>
+    </dl>
+  </div>
+
+  <div id="toast"></div>
+
+  <div id="intro">
+    <div class="card">
+      <h1>Planétaire</h1>
+      <p class="sub">Lignée &amp; Sillons</p>
+      <p>Un million de grains de poussière tournent autour d’une jeune étoile. Chacun se souvient de l’endroit où il est né.
+      Les planètes qui se forment gardent ces souvenirs en strates ; le disque, lu comme un vinyle par une tête fixe, devient musique.</p>
+      <p class="dim">Chaque planète chante à sa fréquence orbitale : deux planètes en résonance 3:2 jouent une quinte.</p>
+      <button id="enter">Entrer — avec le son</button>
+      <button id="enter-silent" class="ghost">sans le son</button>
+      <p class="dim small">WebGPU · three.js r186 · TSL compute · <code>?n=2097152</code> pour plus de grains</p>
+    </div>
+  </div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
