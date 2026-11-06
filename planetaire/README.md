@@ -63,7 +63,13 @@ puis :
 
 - **Caméra et effets** : position + vitesse des embryons sont relues à chaque image (2 ko). La lecture arrive avec quelques images de retard, mais elle est datée, et on la propage jusqu'à l'instant présent (2 corps, saute-mouton). L'erreur mesurée est d'environ 10⁻⁵ UA, si bien que la caméra de suivi, les impacts et les notes restent accrochés aux planètes rendues par le GPU.
 - **Gravité « boostée »** : le facteur ×25 qui accélère la croissance des embryons s'efface avec la masse (≈ ×1,2 pour une Jupiter). Les fusions conservent le centre de masse et la quantité de mouvement, et leur rayon se base sur les sphères de Hill.
-- **Accéléré** (`?warp`) : la grille de densité n'est reconstruite qu'une fois par image. Le coût est dominé par la bande passante mémoire des grains (~70 octets lus et écrits par grain et par sous-pas).
+- **Performances** (objectif 120 i/s) :
+  - Le temps simulé suit le temps réel. Les grains font des pas ≤ 0,011, et les embryons deux sous-pas par pas de grains, le tout en une seule soumission GPU par image.
+  - Le travail par image est plafonné en accéléré, pour éviter la spirale « image lente → plus de pas ».
+  - Les fusions sont détectées en parallèle ; c'était 2 016 paires sur un seul thread, soit ~2 ms.
+  - Sur écran Retina, les grains sont 0,6× plus petits en unités-monde, avec un éclat compensé : ~2,8× moins de pixels à remplir, poste dominant du rendu.
+  - Une résolution adaptative baisse la densité de pixels si l'image dépasse 1/55 s, et la remonte s'il reste de la marge.
+  - `?prof` active les requêtes d'horodatage GPU (`window.__prof`) et le temps JS par image (`window.__profJs`).
 
 - **Rendu** : 1 M de sprites instanciés qui lisent directement les buffers de simulation, sans copie. Ils sont ombrés par la profondeur optique (le bord interne projette son ombre, et les grains en surface du disque restent éclairés). Le tout est rendu en HDR avec tone mapping AgX et bloom.
 - **Physique** : unités G·M★ = 1, distances en UA. Les grains suivent une distribution de nombres de Stokes (10⁻² à 2), ce qui donne une dérive radiale différenciée. Au-delà de la *masse d'isolation*, une planète crée un maximum de pression juste à l'extérieur de son orbite. Le gaz y devient super-képlérien et les cailloux s'y accumulent en **anneau**, comme dans les images ALMA de HL Tauri. La gravité des embryons est amplifiée (`boost`) pour que la formation se joue en quelques minutes.

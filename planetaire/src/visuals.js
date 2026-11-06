@@ -11,6 +11,8 @@ import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import { cellOf, diskH, M, R_IN, R_OUT, M_EARTH } from './sim.js';
 import { provenanceTSL, ROCK, ICE } from './palette.js';
 
+const DUST_K = Math.min(1, 1.2 / Math.min(devicePixelRatio, 2));
+
 export function createVisuals(renderer, scene, camera, sim) {
   const { pPos, pVel, pHeat, ePos, eTot, eGas, tau } = sim.buffers;
   // Pulsation de chaque planète quand elle passe sous la tête (écrite par le CPU)
@@ -26,9 +28,13 @@ export function createVisuals(renderer, scene, camera, sim) {
 
   const V = {
     colorMode: uniform(0, 'int'),
-    alpha: uniform(0.14),
+    // Sur écran haute densité, des grains plus petits en unités-monde gardent
+    // la même taille apparente en points… pour 2,8× moins de pixels à
+    // remplir (le coût du rendu est dominé par ce remplissage additif).
+    // L'éclat est compensé pour garder la même lumière totale.
+    alpha: uniform(0.14 / DUST_K ** 2),
     dustK: uniform(1.0),   // éclat global de la poussière (baisse quand le disque s'épuise)
-    size: uniform(0.0085 * Math.min(3, Math.sqrt((1 << 20) / sim.N))),
+    size: uniform(0.0085 * DUST_K * Math.min(3, Math.sqrt((1 << 20) / sim.N))),
     light: uniform(1.5),
     ambient: uniform(0.04),
     selected: uniform(-1, 'int'),
@@ -363,7 +369,8 @@ export function createVisuals(renderer, scene, camera, sim) {
   // strength ~ masse de l'impacteur en M⊕
   function impact(index, pos, strength) {
     const fx = impacts.reduce((b, f) => (f.t < 0 ? f : b.t < 0 ? b : f.t > b.t ? f : b));
-    fx.t = 0; fx.index = index; fx.pos = pos.slice(); fx.s = Math.min(1.6, 0.55 + 0.45 * Math.cbrt(strength));
+    fx.t = 0; fx.index = index; fx.pos = pos.slice(); fx.s = Math.min(1.6, 0.3 + 0.5 * Math.cbrt(strength));
+    fx.k = Math.min(1, 0.2 + strength / 2); // intensité : une collision d'embryons n'aveugle pas
     fx.flash.visible = fx.r1.mesh.visible = fx.r2.mesh.visible = true;
   }
   function pulse(index, a, rgb) {
@@ -388,15 +395,15 @@ export function createVisuals(renderer, scene, camera, sim) {
       const fl = Math.exp(-t * 1.8);
       f.flash.position.set(x, y, z);
       f.flash.scale.setScalar(S * (0.6 + 2.6 * (1 - Math.exp(-t * 5))));
-      f.U.k.value = 14 * fl;
+      f.U.k.value = 14 * fl * f.k;
       f.U.color.value.setRGB(1, 0.55 + 0.4 * fl, 0.25 + 0.6 * fl * fl);
       // ondes de choc dans le plan du disque
       f.r1.mesh.position.set(x, y + 0.001, z);
       f.r1.mesh.scale.setScalar(0.05 * near + S * 3.2 * (1 - Math.exp(-t * 1.6)));
-      f.r1.U.k.value = 7 * Math.exp(-t * 1.0);
+      f.r1.U.k.value = 7 * Math.exp(-t * 1.0) * f.k;
       f.r2.mesh.position.set(x, y + 0.001, z);
       f.r2.mesh.scale.setScalar(0.05 * near + S * 6 * (1 - Math.exp(-t * 0.6)));
-      f.r2.U.k.value = 3 * Math.exp(-t * 0.7) * Math.min(1, t * 4);
+      f.r2.U.k.value = 3 * Math.exp(-t * 0.7) * Math.min(1, t * 4) * f.k;
       if (t > 6) { f.t = -1; f.flash.visible = f.r1.mesh.visible = f.r2.mesh.visible = false; }
     }
     pulseArr.fill(0);

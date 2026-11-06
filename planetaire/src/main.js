@@ -11,8 +11,11 @@ const params = new URLSearchParams(location.search);
 async function main() {
   if (!navigator.gpu) return fail('WebGPU n’est pas disponible dans ce navigateur.');
 
-  const renderer = new THREE.WebGPURenderer({ antialias: false, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  // ?prof : chronométrage GPU (requêtes d'horodatage) affiché dans la console
+  const PROF = params.has('prof');
+  const renderer = new THREE.WebGPURenderer({ antialias: false, powerPreference: 'high-performance', trackTimestamp: PROF });
+  const MAX_PR = Math.min(devicePixelRatio, 2);
+  renderer.setPixelRatio(MAX_PR);
   renderer.setSize(innerWidth, innerHeight);
   renderer.toneMapping = THREE.AgXToneMapping;
   renderer.toneMappingExposure = 1.1;
@@ -381,9 +384,12 @@ async function main() {
       const e = evo.get(f.h);
       if (e) { e.heat = Math.min(1, e.heat + 0.45 + 1.5 * f.mlE / Math.max(s.mE, 0.05)); e.craters *= 0.15; }
       audio.impact(f.mlE, s.a, screenPan(s.x, s.y, s.z));
-      state.slow = Math.max(state.slow, Math.min(1, 0.6 + 0.3 * Math.cbrt(f.mlE)));
-      state.shake = Math.max(state.shake, Math.min(1, 0.4 + 0.4 * Math.cbrt(f.mlE)));
-      state.burst = Math.max(state.burst || 0, Math.min(1, 0.5 + 0.3 * Math.cbrt(f.mlE)));
+      // ralenti, secousse et éblouissement proportionnés à l'impacteur : les
+      // petites collisions d'embryons (fréquentes au début) restent discrètes
+      const big = Math.min(1, f.mlE / 2);
+      state.slow = Math.max(state.slow, 0.9 * big);
+      state.shake = Math.max(state.shake, Math.min(1, 0.15 + 0.6 * big));
+      state.burst = Math.max(state.burst || 0, 0.8 * big * big);
       s.flash = performance.now();
       toast(`Impact géant : ${nameOf(f.h)} absorbe ${nameOf(f.l)} (${fmtMass(f.mlE, true)})`);
     }
@@ -430,7 +436,11 @@ async function main() {
       const age = (state.simTime - e.born) / (2 * Math.PI);
       Object.assign(e, { atmo, water, ocean, iceSurf, hot, Teq, age, molten });
       p.evo = e;
-      vis.setEvo(p.index, [e.heat, ocean, iceSurf, e.craters], [atmo, hot, Math.min(1, age / 60), Teq / 1000]);
+      // (garde-fou : une valeur non finie ici contaminerait tout l'écran via le bloom)
+      const fin = (v) => (Number.isFinite(v) ? v : 0);
+      if (!Number.isFinite(e.heat)) e.heat = 0;
+      if (!Number.isFinite(e.craters)) e.craters = 0;
+      vis.setEvo(p.index, [e.heat, ocean, iceSurf, e.craters].map(fin), [atmo, hot, Math.min(1, age / 60), Teq / 1000].map(fin));
     }
     for (const i of evo.keys()) if (!pl.some((p) => p.index === i)) evo.delete(i);
   }
@@ -788,28 +798,56 @@ async function main() {
     renderer.setSize(innerWidth, innerHeight);
   });
 
+  // ── Résolution adaptative ───────────────────────────────────────────────────
+  // Filet de sécurité : si l'image moyenne dépasse 1/55 s pendant 2 s, on baisse
+  // la densité de pixels d'un cran ; s'il reste de la marge, on la remonte.
+  const PR_STEPS = [1, 1.25, 1.5, 1.75, 2].filter((p) => p <= MAX_PR);
+  if (!PR_STEPS.includes(MAX_PR)) PR_STEPS.push(MAX_PR);
+  let prIdx = PR_STEPS.length - 1, prAcc = 0, prN = 0, prCool = 0;
+  function adaptResolution(real) {
+    if (real <= 0) return;
+    prAcc += real; prN++; prCool = Math.max(0, prCool - real);
+    if (prAcc < 2) return;
+    const mean = prAcc / prN;
+    prAcc = 0; prN = 0;
+    if (prCool > 0 || state.paused) return;
+    let next = prIdx;
+    if (mean > 1 / 55 && prIdx > 0) next--;
+    else if (mean < 1 / 100 && prIdx < PR_STEPS.length - 1) next++;
+    if (next !== prIdx) {
+      prIdx = next; prCool = 4;
+      renderer.setPixelRatio(PR_STEPS[prIdx]);
+      renderer.setSize(innerWidth, innerHeight);
+    }
+  }
+
   // ── Boucle ─────────────────────────────────────────────────────────────────
   let last = performance.now();
   const shakeOff = new THREE.Vector3();
   renderer.setAnimationLoop((now) => {
-    const real = Math.min(0.1, (now - last) / 1000);
+    // (l'horodatage rAF peut précéder `last` à la 1re image : jamais de pas négatif)
+    const tJs0 = PROF ? performance.now() : 0;
+    const real = Math.min(0.1, Math.max(0, (now - last) / 1000));
     last = now;
     state.fps = state.fps * 0.95 + (1 / Math.max(real, 1e-3)) * 0.05;
+    adaptResolution(real);
     // ralenti après un impact géant : le temps s'étire puis repart
     state.slow = Math.max(0, state.slow - real / 2.6);
     const timeScale = 1 - 0.8 * Math.pow(state.slow, 0.7);
-    sim.U.dt.value = 0.004 * Math.min(1, state.speed) * timeScale;
-    const steps = Math.max(1, Math.round(state.speed)) * warp;
+    // Temps simulé indexé sur le temps réel (0,96 unité/s à ×1, comme avant à
+    // 60 i/s) : à 120 i/s chaque image fait deux fois moins de travail.
+    // (plafonné : si le GPU ne suit pas en accéléré, le temps ralentit au lieu
+    //  de demander toujours plus de sous-pas — pas de spirale)
+    const frameTime = Math.min(0.066 * warp, Math.min(0.05, real) * 0.96 * state.speed * timeScale * warp);
 
     let dtSim = 0;
-    if (!state.paused) {
-      dtSim = sim.U.dt.value * sim.substeps * steps;
+    if (!state.paused && frameTime > 0) {
+      dtSim = frameTime;
       state.simTime += dtSim;
-      sim.U.frameDt.value = dtSim / steps;
       const tick = state.simTime >= state.nextLayer;
       if (tick) state.nextLayer = state.simTime + 2.5;
       updateFlyby(dtSim);
-      for (let w = 0; w < steps; w++) sim.step(tick && w === 0, w === steps - 1);
+      sim.step(dtSim, tick);
     }
     // positions de l'instant présent, PUIS caméra : sinon elle aurait une image de retard
     predictAll();
@@ -829,11 +867,22 @@ async function main() {
     camera.position.add(shakeOff);
     vis.pipeline.render();
     camera.position.sub(shakeOff);
+    const tR = PROF ? performance.now() : 0;
     poll(now);
+    if (PROF) { profJs.loop += tR - tJs0; profJs.poll += performance.now() - tR; }
+    if (PROF && ++profN % 30 === 0) {
+      window.__profJs = { loop: (profJs.loop / 30).toFixed(2), poll: (profJs.poll / 30).toFixed(2) };
+      profJs.loop = profJs.poll = 0;
+      Promise.all([renderer.resolveTimestampsAsync('compute'), renderer.resolveTimestampsAsync('render')]).then(() => {
+        window.__prof = { compute: renderer.info.compute.timestamp, render: renderer.info.render.timestamp };
+      });
+    }
   });
+  let profN = 0;
+  const profJs = { loop: 0, poll: 0 };
 
   if (params.has('auto')) { $('#intro').classList.add('gone'); }
-  window.__planetaire = { sim, state, renderer, audio, launchFlyby, pred, kin };
+  window.__planetaire = { sim, state, renderer, audio, launchFlyby, pred, kin, vis }; // (débogage)
 }
 
 function fail(msg) {
