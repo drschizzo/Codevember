@@ -14,14 +14,20 @@ async function main() {
 
   // ?prof : chronométrage GPU (requêtes d'horodatage) affiché dans la console
   const PROF = params.has('prof');
-  const renderer = new THREE.WebGPURenderer({ antialias: false, powerPreference: 'high-performance', trackTimestamp: PROF });
+  // Écran HDR (EDR sur Mac, HDR sous Windows) : sortie en virgule flottante sur
+  // un canevas « extended » — les hautes lumières (étoile, éclairs, supernova)
+  // dépassent le blanc de l'interface. ?sdr force le rendu classique.
+  const HDR = !params.has('sdr') && (params.has('hdr') || matchMedia('(dynamic-range: high)').matches);
+  const renderer = new THREE.WebGPURenderer({ antialias: false, powerPreference: 'high-performance', trackTimestamp: PROF,
+    ...(HDR ? { outputType: THREE.HalfFloatType } : {}) });
   const MAX_PR = Math.min(devicePixelRatio, 2);
   renderer.setPixelRatio(MAX_PR);
   renderer.setSize(innerWidth, innerHeight);
-  // Neutral (Khronos) plutôt qu'AgX : garde la teinte des couleurs vives (géante rouge,
-  // rémanent, lave), qu'AgX délave vers le blanc
-  renderer.toneMapping = new URLSearchParams(location.search).has("agx") ? THREE.AgXToneMapping : THREE.NeutralToneMapping;
-  renderer.toneMappingExposure = 1.1;
+  // SDR : Neutral (Khronos) plutôt qu'AgX — garde la teinte des couleurs vives
+  // (géante rouge, rémanent, lave), qu'AgX délave vers le blanc.
+  // HDR : courbe maison dans visuals.js (épaule douce jusqu'au pic de l'écran).
+  renderer.toneMapping = HDR ? THREE.NoToneMapping : params.has('agx') ? THREE.AgXToneMapping : THREE.NeutralToneMapping;
+  renderer.toneMappingExposure = 1; // (l'exposition est appliquée dans visuals.js)
   await renderer.init();
   if (!renderer.backend.isWebGPUBackend) return fail('Cette expérience nécessite WebGPU (pas de repli WebGL).');
   $('#app').appendChild(renderer.domElement);
@@ -46,7 +52,8 @@ async function main() {
 
   const sim = createSim(renderer, N);
   await sim.init();
-  const vis = createVisuals(renderer, scene, camera, sim);
+  const EXPOSURE = Number(params.get('exposure')) || 1.45;
+  const vis = createVisuals(renderer, scene, camera, sim, { hdr: HDR });
   const audio = new Sonifier();
   const life = createLifecycle();
 
@@ -149,7 +156,7 @@ async function main() {
       case 'm': audio.setMuted(!audio.muted); toast(audio.muted ? 'Son coupé' : 'Son actif'); break;
       case 'h': $('#help').classList.toggle('hidden'); break;
       case 'a': state.autoSelect = true; toast('Sélection automatique'); break;
-      case '[': seekTo(life.phase - 1 < 0 ? 0 : life.phase - (life.p.progress < 0.1 ? 1 : 0)); break;
+      case '[': seekTo(life.phase - 1); break;
       case ']': seekTo(life.phase + 1); break;
       case 'escape': overview(); break;
       case '+': case '=': setSpeed(1); break;
@@ -911,7 +918,9 @@ async function main() {
     });
   }
   const phasesEl = $('#phases');
-  phasesEl.innerHTML = PHASES.map((ph, i) => `<div data-i="${i}" title="Aller à : ${ph.name}"><u></u></div>`).join('');
+  phasesEl.innerHTML = PHASES.map((ph, i) => `<div data-i="${i}" title="${ph.name}"><span><u></u></span></div>`).join('');
+  $('#phPrev').addEventListener('click', () => seekTo(life.phase - 1));
+  $('#phNext').addEventListener('click', () => seekTo(life.phase + 1));
   phasesEl.addEventListener('click', (e) => {
     const d = e.target.closest('[data-i]');
     if (d) seekTo(Number(d.dataset.i));
@@ -920,12 +929,17 @@ async function main() {
   // ── Navigation entre les phases ─────────────────────────────────────────────
   // Vers l'avant : avance rapide de la vraie simulation (le système se forme
   // pour de bon, il n'est pas « truqué »). Vers l'arrière : on recommence le
-  // cycle depuis le nuage, puis avance rapide si besoin.
+  // cycle depuis le nuage (on ne peut pas remonter le temps d'une vraie
+  // simulation), puis avance rapide si besoin — seulement pour une phase
+  // strictement antérieure : cliquer la phase en cours ne fait rien.
   state.seek = -1;
   function seekTo(i) {
     i = Math.max(0, Math.min(PHASES.length - 1, i));
-    if (state.resetting || life.phase === 6) return; // (pas pendant une supernova)
-    if (i <= life.phase) {
+    if (state.resetting) return;
+    if (life.phase === 6) { toast('Pendant la supernova, on regarde ! Un nouveau cycle suivra.'); return; }
+    if (state.seek >= 0 && i === state.seek) return;     // (déjà en route)
+    if (i === life.phase && state.seek < 0) { toast(`Déjà en phase « ${PHASES[i].name} »`); return; }
+    if (i < life.phase) {
       life.restart();
       startNewCycle(true);
       if (i === 0) return;
@@ -947,9 +961,13 @@ async function main() {
     const ph = PHASES[life.phase];
     $('#cyc').textContent = `cycle ${life.cycle + 1}`;
     [...phasesEl.children].forEach((el, i) => {
-      el.className = i < life.phase ? 'done' : i === life.phase ? 'now' : '';
-      el.firstChild.style.width = i === life.phase ? `${Math.min(100, life.p.progress * 100).toFixed(1)}%` : '';
+      el.className = i < life.phase ? 'done' : i === life.phase ? 'now' : i === state.seek ? 'target' : '';
+      el.title = i < life.phase ? `${PHASES[i].name} — revenir en arrière recommence le cycle depuis le nuage`
+        : i === life.phase ? `${PHASES[i].name} (en cours)` : `Avancer jusqu’à : ${PHASES[i].name}`;
+      el.firstChild.firstChild.style.width = i === life.phase ? `${Math.min(100, life.p.progress * 100).toFixed(1)}%` : '';
     });
+    $('#phPrev').disabled = life.phase === 0 || life.phase === 6;
+    $('#phNext').disabled = life.phase >= 5 || state.seek >= 0;
     const head = `<b>${ph.name}</b> <span class="dim">· en réalité ${ph.real}</span>`;
     if ($('#phaseName').innerHTML !== head) { $('#phaseName').innerHTML = head; $('#phaseDesc').textContent = ph.desc; }
   }
@@ -957,7 +975,11 @@ async function main() {
   // ── Boucle ─────────────────────────────────────────────────────────────────
   let last = performance.now();
   const shakeOff = new THREE.Vector3();
+  // La simulation attend qu'on entre : tant que l'accueil est affiché, rien ne
+  // tourne (ni calcul, ni rendu) — le cycle commence au clic.
+  const introEl = $('#intro');
   renderer.setAnimationLoop((now) => {
+    if (!introEl.classList.contains('gone')) { last = now; return; }
     // (l'horodatage rAF peut précéder `last` à la 1re image : jamais de pas négatif)
     const tJs0 = PROF ? performance.now() : 0;
     const real = Math.min(0.1, Math.max(0, (now - last) / 1000));
@@ -1009,7 +1031,7 @@ async function main() {
 
     // bouffée d'exposition : tout le système s'illumine un instant
     state.burst = Math.max(0, (state.burst || 0) - real * 1.4);
-    renderer.toneMappingExposure = 1.1 * (1 + (state.follow >= 0 ? 0.3 : 0.9) * state.burst * state.burst * (state.burst > 1 ? 3 : 1));
+    vis.V.exposure.value = EXPOSURE * (1 + (state.follow >= 0 ? 0.3 : 0.9) * state.burst * state.burst * (state.burst > 1 ? 3 : 1));
 
     // secousse de caméra
     state.shake = Math.max(0, state.shake - real * 1.2);
@@ -1037,7 +1059,7 @@ async function main() {
 }
 
 function fail(msg) {
-  $('#intro').innerHTML = `<div class="card"><h1>Planétaire</h1><p>${msg}</p><p class="dim">Essayez Chrome, Edge ou Safari récents.</p></div>`;
+  $('#intro').innerHTML = `<div class="card fail"><h1>Planétaire</h1><p>${msg}</p><p class="dim">Essayez Chrome, Edge ou Safari récents.</p></div>`;
 }
 
 main().catch((e) => { console.error(e); fail('Erreur d’initialisation : ' + e.message); });

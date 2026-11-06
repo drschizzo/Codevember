@@ -22,13 +22,22 @@ h2 { font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacin
 #speed button:hover { color: var(--fg); }
 #speed button.on { color: #021; background: var(--accent); border-color: var(--accent); }
 #life h2 #cyc { color: var(--accent); margin-left: 4px; }
-#phases { display: flex; gap: 3px; margin-bottom: 6px; }
-#phases div { cursor: pointer; transition: transform .15s; }
-#phases div:hover { transform: scaleY(1.8); background: rgba(158,220,255,0.3); }
+#phnav { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+#phnav button { flex: none; width: 22px; height: 18px; padding: 0; line-height: 1; font-size: 11px; color: var(--dim);
+  background: rgba(255,255,255,0.04); border: 1px solid var(--line); border-radius: 5px; cursor: pointer; }
+#phnav button:not(:disabled):hover { color: var(--fg, #fff); border-color: var(--accent); }
+#phnav button:disabled { opacity: .3; cursor: default; }
+#phases { display: flex; gap: 3px; flex: 1; }
+/* zone cliquable haute, barre visible fine */
+#phases div { flex: 1; padding: 6px 0; cursor: pointer; }
+#phases span { display: block; height: 5px; border-radius: 3px; background: rgba(255,255,255,0.08); overflow: hidden; transition: transform .15s; }
+#phases div:hover span { transform: scaleY(1.8); background: rgba(158,220,255,0.3); }
+#phases div.done span { background: rgba(158,220,255,0.45); }
+#phases div.target span { background: rgba(255,190,140,0.35); }
+#phases div.now { cursor: default; }
+#phases div.now:hover span { transform: none; }
+#phases u { display: block; height: 100%; width: 0; background: var(--accent); }
 body.seeking #phases div.now u { background: var(--warm); }
-#phases div { flex: 1; height: 5px; border-radius: 3px; background: rgba(255,255,255,0.08); overflow: hidden; }
-#phases div.done { background: rgba(158,220,255,0.45); }
-#phases div u { display: block; height: 100%; width: 0; background: var(--accent); }
 #phaseName { font-size: 12.5px; }
 #phaseName b { font-weight: 500; }
 #phaseName .dim { color: var(--dim); font-size: 11px; }
@@ -92,23 +101,33 @@ body.seeking #phases div.now u { background: var(--warm); }
   background: rgba(10, 14, 26, 0.75); border: 1px solid var(--line); opacity: 0; transition: all .3s; pointer-events: none; }
 #toast.on { opacity: 1; transform: translate(-50%, 0); }
 
-#intro { position: fixed; inset: 0; display: grid; place-items: center; background: radial-gradient(ellipse at center, rgba(1,1,3,0.55), rgba(1,1,3,0.92));
-  transition: opacity 1.2s; z-index: 10; padding: 16px; }
+#intro { position: fixed; inset: 0; background: #010103; transition: opacity 1.2s; z-index: 10; }
 #intro.gone { opacity: 0; pointer-events: none; }
-#intro .card { max-width: 520px; text-align: center; }
-#intro h1 { font-size: 64px; line-height: 1; }
-#intro .sub { font-size: 22px; font-style: italic; color: var(--dim); margin: 6px 0 22px; }
-#intro p { margin-bottom: 14px; font-size: 14px; }
-#intro .dim { color: var(--dim); }
-#intro .small { font-size: 11px; margin-top: 18px; }
+#introAnim { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#intro .card { position: absolute; left: 0; right: 0; bottom: 0; padding: 60px 16px 34px; text-align: center;
+  background: linear-gradient(to top, rgba(1,1,3,0.85) 30%, rgba(1,1,3,0)); }
+#intro h1 { font-size: 52px; line-height: 1; margin-top: 18px; }
+#intro .sub { font-size: 19px; font-style: italic; color: var(--dim); margin: 6px 0 16px; }
+#intro p { font-size: 14px; }
 #intro button { font: 400 14px Inter, sans-serif; color: #010103; background: var(--fg); border: 0; border-radius: 999px;
-  padding: 11px 22px; margin: 8px 4px 0; cursor: pointer; transition: transform .2s, background .2s; }
+  padding: 11px 22px; margin: 4px; cursor: pointer; transition: transform .2s, background .2s; }
 #intro button:hover { transform: translateY(-1px); background: #fff; }
 #intro button.ghost { background: transparent; color: var(--dim); border: 1px solid var(--line); }
+#introLabel { font: italic 300 17px/1.2 'Cormorant Garamond', serif; color: var(--dim); height: 21px; margin-bottom: 7px;
+  transition: opacity .22s; letter-spacing: .03em; }
+#introLabel.swap { opacity: 0; }
+#introBar { position: relative; width: 200px; height: 2px; margin: 0 auto; background: rgba(255,255,255,.08); border-radius: 1px; }
+#introBar u { display: block; height: 100%; width: 0; background: var(--accent); opacity: .7; border-radius: 1px; }
+#introBar i { position: absolute; top: -2px; width: 1px; height: 6px; background: rgba(255,255,255,.22); }
+/* (message d'erreur : la carte reprend le centre) */
+#intro .dim { color: var(--dim); }
+#intro .card.fail { top: 0; display: grid; place-content: center; background: none; }
 
 @media (max-width: 760px) {
   #panel { width: auto; left: 16px; right: 16px; top: auto; bottom: 16px; max-height: 42%; }
   #groove-wrap { display: none; }
   #title { left: 16px; top: 16px; }
   #help { left: 16px; right: 16px; width: auto; }
+  #intro h1 { font-size: 40px; }
+  #intro .sub { font-size: 16px; }
 }

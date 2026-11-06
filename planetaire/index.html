@@ -30,7 +30,7 @@
     <section><h2>Vitesse du temps</h2><div id="speed"></div></section>
     <section id="life">
       <h2>Vie du système <span id="cyc"></span></h2>
-      <div id="phases"></div>
+      <div id="phnav"><button id="phPrev" title="Phase précédente (touche [) — recommence le cycle">◂</button><div id="phases"></div><button id="phNext" title="Phase suivante (touche ]) — avance rapide de la simulation en cours">▸</button></div>
       <p id="phaseName"></p>
       <p id="phaseDesc"></p>
     </section>
@@ -78,18 +78,18 @@
   <div id="toast"></div>
 
   <div id="intro">
+    <canvas id="introAnim" aria-label="Le cycle de vie d’un système planétaire, en accéléré"></canvas>
     <div class="card">
+      <p id="introLabel"></p>
+      <div id="introBar"><u></u></div>
       <h1>Planétaire</h1>
-      <p class="sub">Lignée &amp; Sillons</p>
-      <p>Un nuage d’un million de grains s’effondre, une étoile s’allume, des planètes naissent, vieillissent… puis l’étoile explose et un nouveau cycle commence.
-      Chaque grain se souvient de l’endroit où il est né ; les planètes gardent ces souvenirs en strates, et le disque, lu comme un vinyle par une tête fixe, devient musique.</p>
-      <p class="dim">Une tête de lecture fixe, invisible, écoute le disque : chaque planète joue sa note quand elle passe dessous, aiguë près de l’étoile, grave au loin. Les planètes rapides battent vite, les lointaines rarement : le système devient un rythme.</p>
+      <p class="sub">La vie d’un système planétaire, du nuage à la supernova — et sa musique.</p>
       <button id="enter">Entrer — avec le son</button>
       <button id="enter-silent" class="ghost">sans le son</button>
-      <p class="dim small">WebGPU · three.js r186 · TSL compute · <code>?n=2097152</code> pour plus de grains</p>
     </div>
   </div>
 
+  <script type="module" src="src/intro.js"></script>
   <script type="module" src="src/main.js"></script>
 </body>
 </html>
