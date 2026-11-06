@@ -74,7 +74,7 @@ export function createVisuals(renderer, scene, camera, sim) {
     // (moins lumineux tout près de la caméra : pas de voile devant la planète suivie)
     const camD = length(P.xyz.sub(cameraPosition));
     const nearK = smoothstep(0.05, 1.2, camD).mul(0.85).add(0.15);
-    const lightC = V.starCol.mul(V.lightK);
+    const lightC = V.starCol.mul(V.lightK.min(1.2)); // (plafonné : sinon la poussière sature devant une géante)
     const col = varying(base.mul(irr.mul(V.light).mul(lightC).add(V.ambient)).add(thermal.mul(V.lightK.min(1.0))).mul(V.alpha.mul(V.dustK)).mul(nearK).div(V.sizeK).add(hot.mul(0.5)));
 
     // Grain net : cœur plein, bord court (plus de halo flou)
@@ -164,24 +164,57 @@ export function createVisuals(renderer, scene, camera, sim) {
     const knots = sin(along.mul(40.0).sub(time.mul(6.0))).mul(0.3).add(0.7); // nœuds de choc qui s'éloignent
     const across = abs(dot(normalWorld, normalize(cameraPosition.sub(positionWorld)))).pow(2.0); // plus dense au centre du jet
     jm.colorNode = vec4(vec3(0.55, 0.75, 1.0).mul(V.jets).mul(1.3).mul(knots), across.mul(float(1).sub(along)).mul(smoothstep(0.0, 0.05, along)));
+    // (dans un pivot : après la supernova, les mêmes faisceaux deviennent ceux
+    //  du pulsar, inclinés et en rotation rapide)
+    const pivot = new THREE.Group();
+    pivot.rotation.order = 'YXZ';
     for (const sgn of [1, -1]) {
       const jet = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.22, 5.5, 24, 1, true), jm);
       jet.geometry.translate(0, -2.75, 0); // base à l'origine, s'étend vers −y…
       jet.rotation.x = sgn > 0 ? Math.PI : 0; // …et vers +y pour l'autre
-      star.add(jet);
+      pivot.add(jet);
     }
+    star.add(pivot);
+    star.userData.pivot = pivot;
   }
   scene.add(star);
 
   // Rémanent de supernova : coquille en expansion, filamenteuse
   const shell = new THREE.Mesh(new THREE.SphereGeometry(1, 96, 48), new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
   {
-    const nrm = normalize(normalLocal);
-    const fil = mx_fractal_noise_float(nrm.mul(5.0), 4, 2.2, 0.55);
-    const filaments = smoothstep(0.05, 0.45, fil).add(smoothstep(0.35, 0.6, abs(mx_noise_float(nrm.mul(11.0)))).mul(0.5));
-    const rimS = float(1).sub(abs(dot(nrm, normalize(cameraPosition.sub(positionWorld))))).pow(2.0);
-    const hotC = mix(vec3(1.0, 0.45, 0.25), vec3(0.4, 0.7, 1.0), smoothstep(-0.2, 0.3, mx_noise_float(nrm.mul(3.0))));
-    shell.material.colorNode = vec4(hotC.mul(V.shell).mul(1.6), filaments.mul(rimS.mul(0.8).add(0.2)).mul(V.shell));
+    // Bulle vivante :
+    //  · forme : chaque direction s'étend à sa propre vitesse (bosses qui
+    //    gonflent et ondulent au cours du temps) ;
+    //  · filaments : bruit « en crête » dont le domaine est déformé par un
+    //    second bruit qui dérive (turbulence) — ils se tordent et glissent ;
+    //  · lente rotation d'ensemble et scintillement.
+    const tt = time.mul(0.12);
+    const nrm0 = normalize(normalLocal);
+    const ca = cos(time.mul(0.03)), sa = sin(time.mul(0.03));
+    const nrm = vec3(nrm0.x.mul(ca).sub(nrm0.z.mul(sa)), nrm0.y, nrm0.x.mul(sa).add(nrm0.z.mul(ca)));
+    const bulge = mx_fractal_noise_float(nrm.mul(1.6).add(vec3(0, tt.mul(0.5), 0)), 3, 2.0, 0.5);
+    shell.material.positionNode = positionLocal.mul(bulge.mul(0.22).add(1.0));
+    // (basses fréquences calculées par sommet : même rendu, bien moins de calcul par pixel)
+    const warp = varying(vec3(
+      mx_noise_float(nrm.mul(2.0).add(vec3(tt, 0, 0))),
+      mx_noise_float(nrm.mul(2.0).add(vec3(0, tt, 5.2))),
+      mx_noise_float(nrm.mul(2.0).add(vec3(1.7, 0, tt))),
+    ).mul(0.35));
+    const q = nrm.add(warp);
+    const r1 = float(1).sub(abs(mx_fractal_noise_float(q.mul(4.0).add(vec3(tt.mul(0.6))), 3, 2.0, 0.5))).pow(10.0);
+    const r2 = float(1).sub(abs(mx_noise_float(q.mul(11.0).sub(vec3(tt.mul(1.3), 0, 3.1))))).pow(14.0);
+    const flick = varying(mx_noise_float(nrm.add(warp).mul(3.0).add(vec3(0, 0, time.mul(0.4)))));
+    const filaments = r1.add(r2.mul(0.6)).mul(flick.mul(0.35).add(0.85));
+    // brillance au limbe (on voit la coquille par la tranche sur les bords),
+    // presque invisible de face : depuis l'intérieur, pas de voile
+    const rimS = float(1).sub(abs(dot(normalize(normalWorld), normalize(cameraPosition.sub(positionWorld))))).pow(1.6);
+    // raies d'émission : hydrogène (rouge Hα), oxygène (bleu-vert [O III]), soufre (orangé)
+    const zone = mx_noise_float(nrm.add(warp).mul(2.5).add(vec3(tt.mul(0.3))));
+    const hotC = varying(mix(mix(vec3(1.0, 0.2, 0.25), vec3(0.25, 0.95, 0.85), smoothstep(-0.25, 0.35, zone)), vec3(1.0, 0.6, 0.25), smoothstep(0.4, 0.7, abs(mx_noise_float(nrm.add(warp).mul(6.0))))));
+    const bulgeV = varying(bulge);
+    // front de choc lumineux qui balaie la bulle (pulsations)
+    const front = smoothstep(0.75, 1.0, sin(bulgeV.mul(6.0).sub(time.mul(1.5))).mul(0.5).add(0.5)).mul(0.6);
+    shell.material.colorNode = vec4(hotC.mul(V.shell).mul(1.4).add(vec3(0.9, 0.95, 1.0).mul(front).mul(V.shell)), filaments.add(front.mul(0.15)).mul(rimS.mul(0.9).add(0.05)).mul(V.shell));
     shell.visible = false;
     scene.add(shell);
   }
@@ -483,12 +516,15 @@ export function createVisuals(renderer, scene, camera, sim) {
     const R = p.starVisR;
     star.userData.core.scale.setScalar(R);
     // éclat de surface ∝ (L / R²)^¼ (température effective) ; halo ∝ luminosité
-    V.starI.value = Math.min(40, Math.max(1.2, 6 * Math.pow(p.L / Math.pow(R / 0.15, 2), 0.25)));
+    V.starI.value = p.starI;
     star.userData.halo.scale.setScalar(3.2 * Math.min(3, Math.max(0.35, Math.pow(p.L, 0.3))) + 2 * R);
     V.starCol.value.setRGB(p.color[0], p.color[1], p.color[2]);
     V.lightK.value = Math.min(2.5, Math.max(0.12, Math.pow(p.L, 0.35)));
     V.ambient.value = p.ambient;
-    V.jets.value = p.jets;
+    V.jets.value = Math.max(p.jets, p.pulsar || 0);
+    const pv = star.userData.pivot;
+    if (p.pulsar > 0) { pv.rotation.x = 0.7; pv.rotation.y += 0.25; pv.scale.set(0.6, 2.2, 0.6); }
+    else { pv.rotation.set(0, 0, 0); pv.scale.set(1, 1, 1); }
     V.sizeK.value = p.sizeK;
     V.shell.value = p.shell;
     shell.visible = p.shell > 0.002;

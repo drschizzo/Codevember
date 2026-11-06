@@ -30,7 +30,7 @@ export const PHASES = [
 // Durées (unités de simulation ; ×2 par défaut ≈ 1,92 unité/s)
 const T_CLOUD = 45, T_PROTO = 40, T_CLEAR = 220, T_MATURE = 160, T_GIANT = 140;
 const GAS_TAU = 190;            // dissipation du gaz après l'allumage
-const SN_COLLAPSE = 0.8, SN_END = 15; // secondes réelles
+const SN_COLLAPSE = 0.9, SN_BOOM = 1.35, SN_END = 17; // secondes (à ×1)
 
 const ss = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -38,7 +38,7 @@ const mixc = (a, b, t) => a.map((v, i) => lerp(v, b[i], t));
 
 const COL_PROTO = [1.0, 0.32, 0.1];
 const COL_MAIN = [1.0, 0.82, 0.62];
-const COL_GIANT = [1.0, 0.36, 0.14];
+const COL_GIANT = [1.0, 0.26, 0.06];
 const COL_NS = [0.6, 0.75, 1.0];
 
 export function createLifecycle() {
@@ -64,14 +64,14 @@ export function createLifecycle() {
     const id = PHASES[life.phase].id;
     const t = life.t;
     const p = {
-      Ms: 1, L: 1, color: COL_MAIN, starVisR: 0.15, starR: 0, jets: 0, ambient: 0.04,
-      sizeK: 1, gasDens: 1, clearOn: 0, clearR: 0, snA: 0, snR: 0, snW: 1, spawn: false, shell: 0, shellR: 0,
+      Ms: 1, L: 1, color: COL_MAIN, starI: 6, outR: 29, starVisR: 0.15, starR: 0, jets: 0, ambient: 0.04,
+      sizeK: 1, gasDens: 1, clearOn: 0, clearR: 0, snA: 0, snR: 0, snW: 1, snHeat: 0, pulsar: 0, spawn: false, shell: 0, shellR: 0,
       progress: 0,
     };
 
     if (id === 'cloud') {
       const k = t / T_CLOUD;
-      p.L = lerp(0.004, 0.03, k);
+      p.L = lerp(0.004, 0.03, k); p.starI = lerp(1.2, 2.2, k);
       p.color = COL_PROTO; p.starVisR = lerp(0.05, 0.26, ss(0.1, 1, k));
       p.sizeK = lerp(3.5, 1.8, k); // grains « nébuleux », visibles de loin
       p.jets = ss(0.55, 1, k) * 0.6; p.ambient = lerp(0.7, 0.3, k); // nébuleuse éclairée par les étoiles voisines
@@ -79,7 +79,7 @@ export function createLifecycle() {
       if (t >= T_CLOUD) go(1);
     } else if (id === 'proto') {
       const k = t / T_PROTO;
-      p.L = lerp(0.03, 0.12, k);
+      p.L = lerp(0.03, 0.12, k); p.starI = lerp(2.2, 2.8, k);
       p.color = COL_PROTO; p.starVisR = lerp(0.26, 0.18, k);
       p.sizeK = lerp(1.8, 1, k);
       p.jets = 0.6 + 0.4 * Math.min(1, k * 3); p.ambient = lerp(0.3, 0.12, k);
@@ -89,6 +89,7 @@ export function createLifecycle() {
       const ti = life.tIgn;
       const k = ss(0, 12, ti);
       p.L = lerp(0.12, 1, k); p.color = mixc([1, 0.95, 0.9], COL_MAIN, k);
+      p.starI = lerp(14, 6, k); // éclair d'allumage
       p.starVisR = lerp(0.18, 0.15, k);
       p.jets = 1 - ss(0, 30, ti); p.ambient = lerp(0.12, 0.04, ss(0, 20, ti));
       p.spawn = ti > 6 && ti < 90;
@@ -113,28 +114,37 @@ export function createLifecycle() {
       const g = ss(0, 1, k);
       p.L = lerp(1.5, 45, g * g);
       p.color = mixc(COL_MAIN, COL_GIANT, ss(0, 0.6, k));
+      p.starI = lerp(6, 0.85, ss(0, 0.7, k)); // surface froide (~3 500 K) : éclat de surface faible
       p.starVisR = lerp(0.15, 1.35, g);
       p.starR = Math.max(0, p.starVisR * 0.95 - 0.1); // engloutit ce qui passe sous sa surface
       p.Ms = lerp(1, 0.62, g);                         // vent stellaire : perte de masse
       p.progress = k;
       if (t >= T_GIANT) { go(6); events.push('collapse'); }
     } else if (id === 'nova') {
-      const tr = life.tReal;
+      // (la supernova se joue au plus à ×1 — cf. main.js — : tr en secondes « ×1 »)
+      const tr = t / 0.96;
       p.gasDens = 0; p.progress = tr / SN_END;
       if (tr < SN_COLLAPSE) {
-        // le cœur s'effondre : l'étoile se rétracte en un instant
+        // le cœur s'effondre : l'étoile se rétracte en un instant…
         const k = tr / SN_COLLAPSE;
-        p.L = lerp(45, 8, k); p.color = mixc(COL_GIANT, [1, 0.9, 0.8], k);
-        p.starVisR = lerp(1.35, 0.03, k * k); p.Ms = 0.62;
+        p.L = lerp(45, 3, k); p.color = mixc(COL_GIANT, [1, 0.6, 0.4], k);
+        p.starVisR = lerp(1.35, 0.04, k * k * k); p.Ms = 0.62; p.starI = lerp(1.4, 3, k);
+      } else if (tr < SN_BOOM) {
+        // …un instant de silence…
+        p.L = 0.3; p.color = [1, 0.7, 0.5]; p.starVisR = 0.04; p.starI = 2; p.Ms = 0.62;
       } else {
         if (!life.boom) { life.boom = true; events.push('supernova'); }
-        const ts = tr - SN_COLLAPSE;
+        const ts = tr - SN_BOOM;
         p.Ms = 0.12; // étoile à neutrons : le système n'est plus lié
-        p.L = 2 + 400 * Math.exp(-ts * 1.2);
-        p.color = mixc([1, 1, 1], COL_NS, ss(0, 4, ts));
-        p.starVisR = 0.03;
-        p.snR = 4.2 * ts; p.snW = 0.5 + 0.12 * p.snR; p.snA = 30 * Math.exp(-ts / 5);
-        p.shell = Math.exp(-ts / 7); p.shellR = p.snR;
+        p.L = 1 + 600 * Math.exp(-ts * 1.5);
+        p.color = mixc([1, 1, 1], COL_NS, ss(0, 3, ts));
+        p.starVisR = lerp(0.9, 0.03, ss(0, 0.6, ts)); // boule de feu, puis l'étoile à neutrons
+        p.starI = 8 + 60 * Math.exp(-ts * 2.5);
+        p.outR = 60;
+        p.snR = 2.6 * ts; p.snW = 0.4 + 0.1 * p.snR; p.snA = 30 * Math.exp(-ts / 5);
+        p.snHeat = Math.exp(-ts / 6);
+        p.shell = ss(0.3, 2, ts) * (0.5 + 0.5 * Math.exp(-ts / 10)); p.shellR = p.snR * 1.04;
+        p.pulsar = ss(2, 5, ts);
       }
       if (tr >= SN_END) {
         life.cycle++; life.boom = false; life.tIgn = -1; life.gasEnv = 1;
