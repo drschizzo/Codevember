@@ -149,6 +149,8 @@ async function main() {
       case 'm': audio.setMuted(!audio.muted); toast(audio.muted ? 'Son coupé' : 'Son actif'); break;
       case 'h': $('#help').classList.toggle('hidden'); break;
       case 'a': state.autoSelect = true; toast('Sélection automatique'); break;
+      case '[': seekTo(life.phase - 1 < 0 ? 0 : life.phase - (life.p.progress < 0.1 ? 1 : 0)); break;
+      case ']': seekTo(life.phase + 1); break;
       case 'escape': overview(); break;
       case '+': case '=': setSpeed(1); break;
       case '-': setSpeed(-1); break;
@@ -382,7 +384,7 @@ async function main() {
       state.lastSerial = f.serial;
       (state.absorbedBy ||= new Map()).set(f.l, f.h);
       const s = pl.find((p) => p.index === f.h);
-      if (!s || state.paused) continue;
+      if (!s || state.paused || state.seek >= 0) continue;
       vis.impact(f.h, pred.get(f.h) || [s.x, s.y, s.z], f.mlE);
       // l'énergie du choc fond la surface : océan de magma, cratères effacés
       const e = evo.get(f.h);
@@ -790,7 +792,8 @@ async function main() {
   }
 
   let toastTimer;
-  function toast(msg) {
+  function toast(msg, force) {
+    if (state.seek >= 0 && !force) return; // (silence pendant l'avance rapide)
     const t = $('#toast');
     t.textContent = msg; t.classList.add('on');
     clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('on'), 2400);
@@ -845,7 +848,7 @@ async function main() {
     if (e === 'ignition') {
       toast('Allumage : la fusion de l’hydrogène démarre au cœur de l’étoile');
       flyHome(null, 4);
-      state.burst = 1; audio.ignition();
+      if (state.seek < 0) { state.burst = 0.35; audio.ignition(); }
     } else if (e === 'clearing') toast('Le gaz a disparu : la lumière de l’étoile balaie le disque');
     else if (e === 'mature') toast('Le système est formé');
     else if (e === 'giant') { toast('L’étoile a épuisé son hydrogène : elle devient une supergéante rouge'); audio.giant(); }
@@ -883,7 +886,7 @@ async function main() {
       return;
     }
   }
-  function startNewCycle() {
+  function startNewCycle(replay = false) {
     state.resetting = true;
     if (state.follow >= 0) overview();
     flyHome(CLOUD_VIEW, 4);
@@ -896,11 +899,42 @@ async function main() {
       vis.updateOrbits([]);
       renderList();
       state.resetting = false;
-      toast(`Cycle ${life.cycle + 1} : un nouveau nuage, ensemencé par la supernova`);
+      if (!replay) toast(`Cycle ${life.cycle + 1} : un nouveau nuage, ensemencé par la supernova`);
     });
   }
   const phasesEl = $('#phases');
-  phasesEl.innerHTML = PHASES.map((ph) => `<div title="${ph.name}"><u></u></div>`).join('');
+  phasesEl.innerHTML = PHASES.map((ph, i) => `<div data-i="${i}" title="Aller à : ${ph.name}"><u></u></div>`).join('');
+  phasesEl.addEventListener('click', (e) => {
+    const d = e.target.closest('[data-i]');
+    if (d) seekTo(Number(d.dataset.i));
+  });
+
+  // ── Navigation entre les phases ─────────────────────────────────────────────
+  // Vers l'avant : avance rapide de la vraie simulation (le système se forme
+  // pour de bon, il n'est pas « truqué »). Vers l'arrière : on recommence le
+  // cycle depuis le nuage, puis avance rapide si besoin.
+  state.seek = -1;
+  function seekTo(i) {
+    i = Math.max(0, Math.min(PHASES.length - 1, i));
+    if (state.resetting || life.phase === 6) return; // (pas pendant une supernova)
+    if (i <= life.phase) {
+      life.restart();
+      startNewCycle(true);
+      if (i === 0) return;
+    }
+    state.seek = i;
+    audio.setMuted(true, true);
+    document.body.classList.add('seeking');
+    toast(`Avance rapide vers « ${PHASES[i].name} »…`, true);
+  }
+  function endSeek() {
+    state.seek = -1;
+    audio.setMuted(audio.muted, false);
+    document.body.classList.remove('seeking');
+    $('#toast').classList.remove('on');
+    toast(PHASES[life.phase].name, true);
+    if (state.follow < 0) flyHome(life.phase === 0 ? CLOUD_VIEW : null, 2.5);
+  }
   function renderLife() {
     const ph = PHASES[life.phase];
     $('#cyc').textContent = `cycle ${life.cycle + 1}`;
@@ -931,7 +965,13 @@ async function main() {
     //  de demander toujours plus de sous-pas — pas de spirale)
     // (la supernova se joue au plus à ×1 : c'est un moment à regarder)
     const spd = life.phase === 6 ? Math.min(1, state.speed) : state.speed;
-    const frameTime = Math.min(0.066 * warp, Math.min(0.05, real) * 0.96 * spd * timeScale * warp);
+    let frameTime = Math.min(0.066 * warp, Math.min(0.05, real) * 0.96 * spd * timeScale * warp);
+    // navigation : avance rapide vers une phase (grands pas, tout à fond)
+    if (state.seek >= 0 && !state.resetting) {
+      if (life.phase >= state.seek) endSeek();
+      else frameTime = 0.4;
+    }
+    sim.maxDtP = state.seek >= 0 ? 0.03 : 0.011;
 
     // cycle de vie : paramètres de l'étoile et du disque, événements
     if (!state.paused && !state.resetting) {

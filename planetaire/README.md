@@ -16,6 +16,8 @@ Une frise dans le panneau suit les phases. Pour chacune, elle indique sa vraie d
 
 Avertissement honnête : une étoile comme le Soleil finit en naine blanche, pas en supernova. Il faut plus de ~8 masses solaires, et une telle étoile vit seulement quelques dizaines de millions d'années. On l'assume ici pour boucler le cycle.
 
+**Rendu « cinéma »** : léger tone mapping Neutral, bloom doux, traînée anamorphique sur les sources intenses, aberration chromatique vers les bords, étalonnage (ombres froides, hautes lumières chaudes), vignettage et grain de pellicule.
+
 ## Ce qui est simulé
 
 - **Lignée** : chaque grain de poussière garde son rayon de naissance et sa composition (roche en deçà de la ligne des glaces, glace au-delà). Les planètes qui se forment empilent ces souvenirs en **strates**. La coupe annotée montre leur histoire : l'embryon initial au cœur, les apports successifs, les **impacts géants** cerclés d'orange et, pour les géantes, l'**enveloppe de gaz**. Survoler une strate la décrit.
@@ -42,6 +44,8 @@ Paramètres d'URL :
 | `?nobloom` | désactive le bloom (GPU modestes) |
 | `?warp=4` | avance rapide (4 pas de simulation par image) |
 | `?auto` | saute l'écran d'accueil (sans le son) |
+| `?nocine` | rendu sans post-traitement « cinéma » |
+| `?agx` | ancien tone mapping (AgX) |
 
 ## Commandes
 
@@ -52,6 +56,7 @@ Paramètres d'URL :
 | **double-clic** | semer un embryon de planète |
 | clic sur une planète | l'inspecter (coupe stratigraphique) · **A** : retour au choix auto |
 | clic dans la liste | zoomer sur la planète et la suivre sur son orbite · **Échap** : vue d'ensemble |
+| clic sur la frise, **[ / ]** | aller à une phase du cycle : avance rapide de la vraie simulation, ou on recommence le cycle |
 | **E** | une étoile vagabonde traverse le système |
 | **P** | migration planétaire (type I) on/off |
 | **C** | couleurs : provenance / roche-glace / température |
