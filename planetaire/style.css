@@ -21,6 +21,15 @@ h2 { font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacin
   border-radius: 6px; padding: 4px 0; cursor: pointer; font-variant-numeric: tabular-nums; }
 #speed button:hover { color: var(--fg); }
 #speed button.on { color: #021; background: var(--accent); border-color: var(--accent); }
+#life h2 #cyc { color: var(--accent); margin-left: 4px; }
+#phases { display: flex; gap: 3px; margin-bottom: 6px; }
+#phases div { flex: 1; height: 5px; border-radius: 3px; background: rgba(255,255,255,0.08); overflow: hidden; }
+#phases div.done { background: rgba(158,220,255,0.45); }
+#phases div u { display: block; height: 100%; width: 0; background: var(--accent); }
+#phaseName { font-size: 12.5px; }
+#phaseName b { font-weight: 500; }
+#phaseName .dim { color: var(--dim); font-size: 11px; }
+#phaseDesc { color: var(--dim); font-size: 11.5px; margin-top: 3px; }
 #stats div { display: flex; justify-content: space-between; gap: 10px; font-variant-numeric: tabular-nums; }
 #stats span { color: var(--dim); }
 #list { list-style: none; }

@@ -130,7 +130,7 @@ export class Sonifier {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
     // bourdon : plus le disque est riche, plus il est ouvert
-    this.droneLP.frequency.setTargetAtTime(140 + 700 * dustFrac, t, 1.5);
+    this.droneLP.frequency.setTargetAtTime((140 + 700 * dustFrac) * (this.mood ?? 1), t, 1.5);
     this.drone.gain.setTargetAtTime(this.muted ? 0 : 0.012 + 0.03 * dustFrac, t, 1.5);
 
     // regroupe les anneaux par degré de gamme
@@ -200,6 +200,56 @@ export class Sonifier {
       const dd = Math.max(0, Math.min(STEPS, d0 + Math.round((Math.random() - 0.3) * 6)));
       this.pluck(freqOfDegree(dd, 2), 0.6 + Math.random() * 0.8, 0.4 + Math.pow(Math.random(), 1.6) * 3);
     }
+  }
+
+  // Allumage de l'étoile : accord majeur qui s'ouvre lentement + scintillement
+  ignition() {
+    if (!this.ctx || this.muted) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const out = ctx.createGain(); out.connect(this.bus);
+    out.gain.setValueAtTime(0, t);
+    out.gain.linearRampToValueAtTime(0.16, t + 2.5);
+    out.gain.exponentialRampToValueAtTime(1e-4, t + 12);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 0.8;
+    lp.frequency.setValueAtTime(200, t); lp.frequency.exponentialRampToValueAtTime(4000, t + 4);
+    lp.connect(out);
+    for (const [semi, det] of [[0, -6], [7, 4], [12, 0], [16, 3], [19, -3], [24, 5]]) {
+      const o = ctx.createOscillator(); o.type = 'sawtooth';
+      o.frequency.value = BASE * Math.pow(2, semi / 12); o.detune.value = det;
+      const g = ctx.createGain(); g.gain.value = 0.12;
+      o.connect(g).connect(lp); o.start(t); o.stop(t + 12.2);
+    }
+    for (let i = 0; i < 14; i++) this.pluck(freqOfDegree(10 + Math.floor(Math.random() * 8), 1), 0.7, 1.5 + Math.random() * 5);
+    this.drone.gain.setTargetAtTime(0.045, t + 2, 3);
+  }
+
+  // Supergéante : le bourdon descend et s'assombrit
+  giant() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.mood = 0.3;
+  }
+
+  // Supernova : effondrement (aspiration), puis déflagration et longue traîne
+  supernova() {
+    if (!this.ctx || this.muted) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    this.impact(60, 1, 0);
+    const n = ctx.createBufferSource();
+    const len = ctx.sampleRate * 9;
+    const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+    for (let c = 0; c < 2; c++) { const d = buf.getChannelData(c); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2); }
+    n.buffer = buf;
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 1;
+    lp.frequency.setValueAtTime(9000, t); lp.frequency.exponentialRampToValueAtTime(60, t + 8);
+    const g = ctx.createGain(); g.gain.value = 0.55;
+    n.connect(lp).connect(g).connect(this.bus); n.start(t);
+    const o = ctx.createOscillator(); o.frequency.setValueAtTime(55, t); o.frequency.exponentialRampToValueAtTime(18, t + 7);
+    const og = ctx.createGain(); og.gain.setValueAtTime(0.6, t); og.gain.exponentialRampToValueAtTime(1e-4, t + 8);
+    o.connect(og).connect(this.bus); o.start(t); o.stop(t + 8.2);
+    this.drone.gain.setTargetAtTime(0.0, t, 2);
+    this.mood = 1;
+    this.drone.gain.setTargetAtTime(0.03, t + 12, 4);
   }
 
   // Étoile vagabonde : souffle filtré qui suit la distance (effet Doppler grossier)

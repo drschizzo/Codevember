@@ -5,7 +5,7 @@ import {
   Fn, instanceIndex, uniform, float, vec3, vec4, length, exp, max, mix, uv,
   smoothstep, varying, hash, positionLocal, normalLocal, normalize, dot, select, min,
   pass, screenUV, pow, clamp, instancedArray, cbrt, sin, cos, time, cameraPosition, abs, uint,
-  mx_fractal_noise_float, mx_noise_float, mx_worley_noise_vec2, positionWorld,
+  mx_fractal_noise_float, mx_noise_float, mx_worley_noise_vec2, positionWorld, normalWorld,
 } from 'three/tsl';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import { cellOf, diskH, M, R_IN, R_OUT, M_EARTH } from './sim.js';
@@ -37,6 +37,13 @@ export function createVisuals(renderer, scene, camera, sim) {
     size: uniform(0.0085 * DUST_K * Math.min(3, Math.sqrt((1 << 20) / sim.N))),
     light: uniform(1.5),
     ambient: uniform(0.04),
+    // étoile (pilotée par le cycle de vie)
+    starCol: uniform(new THREE.Color(1.0, 0.82, 0.62)), // couleur de la lumière
+    starI: uniform(6.0),          // éclat du disque stellaire
+    lightK: uniform(1.0),         // éclairement relatif (luminosité, adoucie)
+    jets: uniform(0.0),
+    sizeK: uniform(1.0),          // grossissement des grains (nuage en effondrement)
+    shell: uniform(0.0),          // rémanent de supernova : intensité
     selected: uniform(-1, 'int'),
     snow: sim.U.snow,
   };
@@ -67,7 +74,8 @@ export function createVisuals(renderer, scene, camera, sim) {
     // (moins lumineux tout près de la caméra : pas de voile devant la planète suivie)
     const camD = length(P.xyz.sub(cameraPosition));
     const nearK = smoothstep(0.05, 1.2, camD).mul(0.85).add(0.15);
-    const col = varying(base.mul(irr.mul(V.light).add(V.ambient)).add(thermal).mul(V.alpha.mul(V.dustK)).mul(nearK).add(hot.mul(0.5)));
+    const lightC = V.starCol.mul(V.lightK);
+    const col = varying(base.mul(irr.mul(V.light).mul(lightC).add(V.ambient)).add(thermal.mul(V.lightK.min(1.0))).mul(V.alpha.mul(V.dustK)).mul(nearK).div(V.sizeK).add(hot.mul(0.5)));
 
     // Grain net : cœur plein, bord court (plus de halo flou)
     const d = length(uv().sub(0.5));
@@ -75,7 +83,8 @@ export function createVisuals(renderer, scene, camera, sim) {
     mat.colorNode = vec4(col, shape);
     // Taille plafonnée en pixels : vus de près, les grains restent des points
     // fins au lieu de devenir des taches (utile quand on suit une planète).
-    mat.scaleNode = V.size.mul(hash(instanceIndex).mul(0.8).add(0.6)).mul(heat.mul(1.6).add(1.0)).mul(clamp(camD.div(4.0), 0.06, 1.0));
+    mat.scaleNode = V.size.mul(hash(instanceIndex).mul(0.8).add(0.6)).mul(heat.mul(1.6).add(1.0)).mul(clamp(camD.div(4.0), 0.06, 1.0))
+      .mul(V.sizeK).mul(select(P.w.greaterThanEqual(0.0), 1.0, 0.0)); // grain retiré : plus dessiné
 
     const dust = new THREE.Sprite(mat);
     dust.count = sim.N;
@@ -129,8 +138,53 @@ export function createVisuals(renderer, scene, camera, sim) {
     g.add(h);
     return g;
   };
-  const star = makeStar(0.15, [6.0, 4.6, 3.2], 3.2);
+  // Étoile centrale pilotable : couleur, éclat, rayon (protoétoile rouge,
+  // étoile jaune-blanc, supergéante rouge, étoile à neutrons…)
+  const star = new THREE.Group();
+  {
+    const core = new THREE.Mesh(new THREE.SphereGeometry(1, 64, 32), new THREE.MeshBasicNodeMaterial());
+    // granulation : la surface bouillonne (surtout visible sur la géante)
+    const gran = mx_fractal_noise_float(normalLocal.mul(6.0).add(vec3(time.mul(0.05), 0, 0)), 3, 2.0, 0.5);
+    const limb = max(dot(normalize(normalLocal), normalize(cameraPosition.sub(positionWorld))), 0.0).pow(0.4);
+    core.material.colorNode = V.starCol.mul(V.starI).mul(sin(time.mul(3.0)).mul(0.03).add(1.0)).mul(gran.mul(0.25).add(1.0)).mul(limb.mul(0.6).add(0.4));
+    core.scale.setScalar(0.15);
+    star.add(core);
+    star.userData.core = core;
+    const hm = new THREE.SpriteNodeMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+    const d = length(uv().sub(0.5)).mul(2.0);
+    hm.colorNode = vec4(V.starCol.mul(V.starI).mul(0.25), exp(d.mul(6.0).negate()).sub(Math.exp(-6.0)).max(0));
+    const h = new THREE.Sprite(hm);
+    h.scale.setScalar(3.2);
+    star.add(h);
+    star.userData.halo = h;
+    // jets bipolaires de la protoétoile (le long de l'axe de rotation)
+    const jm = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+    const ju = uv();
+    const along = float(1).sub(ju.y);           // 0 à la base (contre l'étoile), 1 au bout
+    const knots = sin(along.mul(40.0).sub(time.mul(6.0))).mul(0.3).add(0.7); // nœuds de choc qui s'éloignent
+    const across = abs(dot(normalWorld, normalize(cameraPosition.sub(positionWorld)))).pow(2.0); // plus dense au centre du jet
+    jm.colorNode = vec4(vec3(0.55, 0.75, 1.0).mul(V.jets).mul(1.3).mul(knots), across.mul(float(1).sub(along)).mul(smoothstep(0.0, 0.05, along)));
+    for (const sgn of [1, -1]) {
+      const jet = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.22, 5.5, 24, 1, true), jm);
+      jet.geometry.translate(0, -2.75, 0); // base à l'origine, s'étend vers −y…
+      jet.rotation.x = sgn > 0 ? Math.PI : 0; // …et vers +y pour l'autre
+      star.add(jet);
+    }
+  }
   scene.add(star);
+
+  // Rémanent de supernova : coquille en expansion, filamenteuse
+  const shell = new THREE.Mesh(new THREE.SphereGeometry(1, 96, 48), new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+  {
+    const nrm = normalize(normalLocal);
+    const fil = mx_fractal_noise_float(nrm.mul(5.0), 4, 2.2, 0.55);
+    const filaments = smoothstep(0.05, 0.45, fil).add(smoothstep(0.35, 0.6, abs(mx_noise_float(nrm.mul(11.0)))).mul(0.5));
+    const rimS = float(1).sub(abs(dot(nrm, normalize(cameraPosition.sub(positionWorld))))).pow(2.0);
+    const hotC = mix(vec3(1.0, 0.45, 0.25), vec3(0.4, 0.7, 1.0), smoothstep(-0.2, 0.3, mx_noise_float(nrm.mul(3.0))));
+    shell.material.colorNode = vec4(hotC.mul(V.shell).mul(1.6), filaments.mul(rimS.mul(0.8).add(0.2)).mul(V.shell));
+    shell.visible = false;
+    scene.add(shell);
+  }
   const flyStar = makeStar(0.06, [3.0, 4.0, 7.0], 2.2);
   flyStar.visible = false;
   scene.add(flyStar);
@@ -248,13 +302,13 @@ export function createVisuals(renderer, scene, camera, sim) {
     albedo = mix(albedo, vec3(0.85, 0.88, 0.9), wisps.mul(float(1).sub(isGas)));
 
     // ── Éclairage : flux ∝ 1/a (adouci), terminateur doux, pas de surexposition
-    const flux = clamp(float(0.75).div(pow(aV.max(0.4), 0.8)), 0.2, 1.0);
+    const flux = clamp(float(0.75).mul(V.lightK).div(pow(aV.max(0.4), 0.8)), 0.03, 2.0);
     const ndl = max(dot(n, toStar), 0.0);
     const lit = smoothstep(-0.05, 0.6, dot(n, toStar)).mul(0.35).add(ndl.mul(0.65));
     // liseré (Fresnel) : seulement au bord du disque vu depuis la caméra
     const rim = float(1).sub(max(dot(n, normalize(cameraPosition.sub(positionWorld))), 0)).pow(4);
     const dayRim = smoothstep(-0.2, 0.4, dot(n, toStar));
-    mat.colorNode = albedo.mul(lit.mul(flux).add(0.015))
+    mat.colorNode = albedo.mul(lit.mul(flux).mul(V.starCol.mul(0.5).add(0.5)).add(0.015))
       .add(lava.mul(float(1).sub(isGas)))                                   // visible aussi côté nuit
       .add(vec3(0.9, 0.3, 0.1).mul(heat.mul(isGas).mul(0.25)))             // géante jeune : lueur
       .add(hazeCol.mul(rim).mul(atmo).mul(dayRim).mul(flux).mul(0.9))      // limbe atmosphérique
@@ -424,5 +478,22 @@ export function createVisuals(renderer, scene, camera, sim) {
     }
   }
 
-  return { V, star, flyStar, updateOrbits, pipeline, impact, pulse, updateFx, setEvo };
+  // Paramètres de l'étoile fournis par le cycle de vie (lifecycle.js)
+  function setStar(p) {
+    const R = p.starVisR;
+    star.userData.core.scale.setScalar(R);
+    // éclat de surface ∝ (L / R²)^¼ (température effective) ; halo ∝ luminosité
+    V.starI.value = Math.min(40, Math.max(1.2, 6 * Math.pow(p.L / Math.pow(R / 0.15, 2), 0.25)));
+    star.userData.halo.scale.setScalar(3.2 * Math.min(3, Math.max(0.35, Math.pow(p.L, 0.3))) + 2 * R);
+    V.starCol.value.setRGB(p.color[0], p.color[1], p.color[2]);
+    V.lightK.value = Math.min(2.5, Math.max(0.12, Math.pow(p.L, 0.35)));
+    V.ambient.value = p.ambient;
+    V.jets.value = p.jets;
+    V.sizeK.value = p.sizeK;
+    V.shell.value = p.shell;
+    shell.visible = p.shell > 0.002;
+    if (shell.visible) shell.scale.setScalar(Math.max(0.1, p.shellR));
+  }
+
+  return { V, star, flyStar, updateOrbits, pipeline, impact, pulse, updateFx, setEvo, setStar };
 }
