@@ -5,7 +5,7 @@ import {
   Fn, instanceIndex, uniform, float, vec3, vec4, length, exp, max, mix, uv,
   smoothstep, varying, hash, positionLocal, normalLocal, normalize, dot, select, min,
   pass, screenUV, pow, clamp, instancedArray, cbrt, sin, cos, time, cameraPosition, abs, uint,
-  mx_fractal_noise_float, mx_noise_float, mx_worley_noise_vec2, positionWorld, normalWorld,
+  mx_fractal_noise_float, mx_noise_float, mx_worley_noise_vec2, positionWorld, normalWorld, vec2, fract, screenCoordinate,
 } from 'three/tsl';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import { cellOf, diskH, M, R_IN, R_OUT, M_EARTH } from './sim.js';
@@ -75,7 +75,7 @@ export function createVisuals(renderer, scene, camera, sim) {
     const camD = length(P.xyz.sub(cameraPosition));
     const nearK = smoothstep(0.05, 1.2, camD).mul(0.85).add(0.15);
     const lightC = V.starCol.mul(V.lightK.min(1.2)); // (plafonné : sinon la poussière sature devant une géante)
-    const col = varying(base.mul(irr.mul(V.light).mul(lightC).add(V.ambient)).add(thermal.mul(V.lightK.min(1.0))).mul(V.alpha.mul(V.dustK)).mul(nearK).div(V.sizeK).add(hot.mul(0.5)));
+    const col = varying(base.mul(irr.mul(V.light).mul(lightC).add(V.ambient)).add(thermal.mul(V.lightK.min(1.0))).mul(V.alpha.mul(V.dustK)).mul(nearK).add(hot.mul(0.5))); // (grains du nuage plus gros ET pas atténués : la nébuleuse se voit)
 
     // Grain net : cœur plein, bord court (plus de halo flou)
     const d = length(uv().sub(0.5));
@@ -460,9 +460,10 @@ export function createVisuals(renderer, scene, camera, sim) {
   const orbitMat = new THREE.LineBasicNodeMaterial({ vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.5 });
   const orbits = new THREE.LineSegments(orbitGeo, orbitMat);
   orbits.frustumCulled = false;
-  scene.add(orbits);
+  orbits.visible = false; // (lignes d'orbite retirées : elles alourdissaient l'image)
 
   function updateOrbits(planets) {
+    if (!orbits.visible) return;
     orbitPos.fill(0); orbitCol.fill(0);
     for (const pl of planets) {
       const o = pl.index * SEG * 6;
@@ -479,28 +480,62 @@ export function createVisuals(renderer, scene, camera, sim) {
     orbitGeo.attributes.color.needsUpdate = true;
   }
 
-  // ── Tête de lecture (fixe, φ = 0 → axe +X) ─────────────────────────────────
-  {
-    const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(R_IN, 0, 0), new THREE.Vector3(R_OUT, 0, 0)]);
-    const m = new THREE.LineBasicNodeMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
-    m.colorNode = vec4(0.5, 0.8, 1.0, 0.6);
-    scene.add(new THREE.Line(g, m));
-    const head = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.22, 16), new THREE.MeshBasicNodeMaterial());
-    head.material.colorNode = vec3(1.2, 2.0, 3.0);
-    head.position.set(R_OUT + 0.2, 0, 0);
-    head.rotation.z = Math.PI / 2;
-    scene.add(head);
-  }
+  // (La tête de lecture n'est plus dessinée : elle reste un principe sonore,
+  //  visible dans le panneau « Sillon ».)
 
   // ── Post-process : bloom + vignette ────────────────────────────────────────
   const pipeline = new THREE.RenderPipeline(renderer);
   const scenePass = pass(scene, camera);
   const color = scenePass.getTextureNode('output');
-  const vig = smoothstep(1.25, 0.35, length(screenUV.sub(0.5)).mul(1.6));
-  const useBloom = !new URLSearchParams(location.search).has('nobloom');
-  // Seuil haut : seuls l'étoile, les planètes et les impacts « débordent »,
-  // la poussière reste nette.
-  pipeline.outputNode = (useBloom ? color.add(bloom(color, 0.7, 0.45, 0.85)) : color).mul(vig);
+  const qp = new URLSearchParams(location.search);
+  const useBloom = !qp.has('nobloom');
+  const cine = !qp.has('nocine');
+  // Rendu « cinéma » (désactivable avec ?nocine) :
+  //  · aberration chromatique légère, croissante vers les bords (optique réelle) ;
+  //  · bloom doux et large, seuil haut (la poussière reste nette) ;
+  //  · traînée anamorphique horizontale sur les sources intenses (étoile,
+  //    éclairs, supernova), légèrement bleutée ;
+  //  · étalonnage : ombres froides, hautes lumières chaudes, contraste en S ;
+  //  · vignettage ovale et grain de pellicule animé.
+  const ctr = screenUV.sub(0.5);
+  const r2c = dot(ctr, ctr);
+  const ca = ctr.mul(r2c.mul(0.012));
+  const src = cine
+    ? vec3(color.sample(screenUV.add(ca)).r, color.sample(screenUV).g, color.sample(screenUV.sub(ca)).b)
+    : color.rgb;
+  let out = src;
+  if (useBloom) {
+    const bl = bloom(color, 0.55, 0.65, 0.85);
+    out = out.add(bl);
+    if (cine) {
+      // traînée anamorphique : échantillonnée dans l'image nette (pas dans le
+      // bloom flou) pour rester une ligne fine ; seules les hautes lumières comptent
+      let streak = float(0);
+      for (let i = 1; i <= 12; i++) {
+        const o = vec2(i * i * 0.0016, 0);
+        const w = Math.exp(-i * 0.28);
+        const a1 = dot(color.sample(screenUV.add(o)).rgb, vec3(0.2126, 0.7152, 0.0722));
+        const a2 = dot(color.sample(screenUV.sub(o)).rgb, vec3(0.2126, 0.7152, 0.0722));
+        streak = streak.add(max(a1.sub(1.5), 0.0).add(max(a2.sub(1.5), 0.0)).mul(w));
+      }
+      out = out.add(vec3(0.5, 0.72, 1.0).mul(streak.min(4.0)).mul(0.06));
+    }
+  }
+  if (cine) {
+    const l = dot(out, vec3(0.2126, 0.7152, 0.0722));
+    const tint = mix(vec3(0.93, 1.0, 1.07), vec3(1.06, 1.0, 0.92), smoothstep(0.02, 0.6, l)); // ombres froides → hautes lumières chaudes
+    out = out.mul(tint);
+    out = out.sub(vec3(l, l, l)).mul(1.08).add(vec3(l, l, l));                                     // saturation légère
+    out = out.mul(smoothstep(0.0, 0.035, l).mul(0.2).add(0.8));          // noirs plus profonds
+    const vig = smoothstep(1.0, 0.25, length(ctr.mul(vec2(1.25, 1.6))));
+    // (hachage entier par pixel et par image : pas de motif, contrairement à fract(sin(·)))
+    const pix = screenCoordinate.x.toUint().add(screenCoordinate.y.toUint().mul(uint(8191)));
+    const grain = hash(pix.add(fract(time.mul(0.37)).mul(1.0e6).toUint().mul(uint(131071)))).sub(0.5).mul(0.035);
+    out = out.mul(vig.mul(0.75).add(0.25)).add(grain.mul(l.mul(-0.6).add(1.0)).mul(0.6));
+  } else {
+    out = out.mul(smoothstep(1.25, 0.35, length(ctr).mul(1.6)));
+  }
+  pipeline.outputNode = vec4(max(out, vec3(0)), 1.0);
 
   // ── Effets ──────────────────────────────────────────────────────────────────
   // · Impact géant : éclair + deux ondes de choc ORANGE, accrochés à la planète
@@ -545,6 +580,7 @@ export function createVisuals(renderer, scene, camera, sim) {
     return { sp, U, t: -1 };
   });
   const pulses = new Map(); // index → âge (s)
+  const SHOW_TICKS = false;
   const _p = new THREE.Vector3();
 
   // strength ~ masse de l'impacteur en M⊕
@@ -556,6 +592,7 @@ export function createVisuals(renderer, scene, camera, sim) {
   }
   function pulse(index, a, rgb) {
     pulses.set(index, 0);
+    if (!SHOW_TICKS) return; // repères sur la tête de lecture : masqués
     const k = ticks.find((q) => q.t < 0) || ticks[0];
     k.t = 0;
     k.sp.position.set(a, 0.004, 0);
@@ -611,7 +648,7 @@ export function createVisuals(renderer, scene, camera, sim) {
     star.userData.core.scale.setScalar(R);
     // éclat de surface ∝ (L / R²)^¼ (température effective) ; halo ∝ luminosité
     V.starI.value = p.starI;
-    star.userData.halo.scale.setScalar(3.2 * Math.min(3, Math.max(0.35, Math.pow(p.L, 0.3))) + 2 * R);
+    star.userData.halo.scale.setScalar(2.4 * Math.min(3, Math.max(0.35, Math.pow(p.L, 0.3))) + 2 * R);
     V.starCol.value.setRGB(p.color[0], p.color[1], p.color[2]);
     V.lightK.value = Math.min(2.5, Math.max(0.12, Math.pow(p.L, 0.35)));
     V.ambient.value = p.ambient;

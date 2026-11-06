@@ -36,6 +36,7 @@ const ss = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
 const lerp = (a, b, t) => a + (b - a) * t;
 const mixc = (a, b, t) => a.map((v, i) => lerp(v, b[i], t));
 
+const STAR_I = 3.4;               // éclat de surface de l'étoile sur la séquence principale
 const COL_PROTO = [1.0, 0.32, 0.1];
 const COL_MAIN = [1.0, 0.82, 0.62];
 const COL_GIANT = [1.0, 0.26, 0.06];
@@ -64,7 +65,7 @@ export function createLifecycle() {
     const id = PHASES[life.phase].id;
     const t = life.t;
     const p = {
-      Ms: 1, L: 1, color: COL_MAIN, starI: 6, outR: 29, starVisR: 0.15, starR: 0, jets: 0, ambient: 0.04,
+      Ms: 1, L: 1, color: COL_MAIN, starI: STAR_I, outR: 29, starVisR: 0.15, starR: 0, jets: 0, ambient: 0.04,
       sizeK: 1, gasDens: 1, clearOn: 0, clearR: 0, snA: 0, snR: 0, snW: 1, snHeat: 0, pulsar: 0, spawn: false, shell: 0, shellR: 0,
       progress: 0,
     };
@@ -73,25 +74,29 @@ export function createLifecycle() {
       const k = t / T_CLOUD;
       p.L = lerp(0.004, 0.03, k); p.starI = lerp(1.2, 2.2, k);
       p.color = COL_PROTO; p.starVisR = lerp(0.05, 0.26, ss(0.1, 1, k));
-      p.sizeK = lerp(3.5, 1.8, k); // grains « nébuleux », visibles de loin
-      p.jets = ss(0.55, 1, k) * 0.6; p.ambient = lerp(0.7, 0.3, k); // nébuleuse éclairée par les étoiles voisines
+      p.sizeK = lerp(2.2, 1.5, k); // grains « nébuleux », visibles de loin (sans trop de remplissage)
+      p.jets = ss(0.55, 1, k) * 0.6; p.ambient = lerp(1.8, 0.6, k); // nébuleuse éclairée par les étoiles voisines
       p.progress = k;
       if (t >= T_CLOUD) go(1);
     } else if (id === 'proto') {
       const k = t / T_PROTO;
       p.L = lerp(0.03, 0.12, k); p.starI = lerp(2.2, 2.8, k);
       p.color = COL_PROTO; p.starVisR = lerp(0.26, 0.18, k);
-      p.sizeK = lerp(1.8, 1, k);
-      p.jets = 0.6 + 0.4 * Math.min(1, k * 3); p.ambient = lerp(0.3, 0.12, k);
+      p.sizeK = lerp(1.5, 1, k);
+      p.jets = 0.6 + 0.4 * Math.min(1, k * 3); p.ambient = lerp(0.6, 0.12, k);
       p.progress = k;
       if (t >= T_PROTO) { go(2); life.tIgn = 0; events.push('ignition'); }
     } else if (id === 'disk') {
       const ti = life.tIgn;
-      const k = ss(0, 12, ti);
-      p.L = lerp(0.12, 1, k); p.color = mixc([1, 0.95, 0.9], COL_MAIN, k);
-      p.starI = lerp(14, 6, k); // éclair d'allumage
+      // Allumage progressif (~25 unités, ~13 s à ×2) : la luminosité, la
+      // couleur et l'ambiance glissent continûment de la protoétoile à l'étoile,
+      // avec un léger sursaut d'éclat au démarrage de la fusion.
+      const k = ss(0, 25, ti);
+      const surge = Math.exp(-(((ti - 5) / 3.5) ** 2));
+      p.L = lerp(0.12, 1, k); p.color = mixc(COL_PROTO, COL_MAIN, ss(0, 18, ti));
+      p.starI = lerp(2.8, STAR_I, k) + 1.6 * surge;
       p.starVisR = lerp(0.18, 0.15, k);
-      p.jets = 1 - ss(0, 30, ti); p.ambient = lerp(0.12, 0.04, ss(0, 20, ti));
+      p.jets = 1 - ss(0, 30, ti); p.ambient = lerp(0.12, 0.04, k);
       p.spawn = ti > 6 && ti < 90;
       life.gasEnv = Math.exp(-ti / GAS_TAU);
       p.gasDens = Math.min(1, gasLeftFrac / 0.3) * life.gasEnv;
@@ -114,7 +119,7 @@ export function createLifecycle() {
       const g = ss(0, 1, k);
       p.L = lerp(1.5, 45, g * g);
       p.color = mixc(COL_MAIN, COL_GIANT, ss(0, 0.6, k));
-      p.starI = lerp(6, 0.85, ss(0, 0.7, k)); // surface froide (~3 500 K) : éclat de surface faible
+      p.starI = lerp(STAR_I, 0.85, ss(0, 0.7, k)); // surface froide (~3 500 K) : éclat de surface faible
       p.starVisR = lerp(0.15, 1.35, g);
       p.starR = Math.max(0, p.starVisR * 0.95 - 0.1); // engloutit ce qui passe sous sa surface
       p.Ms = lerp(1, 0.62, g);                         // vent stellaire : perte de masse
@@ -158,6 +163,8 @@ export function createLifecycle() {
     return events;
   };
 
+  // Recommence le cycle en cours depuis le nuage (navigation vers l'arrière)
+  life.restart = () => { life.tIgn = -1; life.gasEnv = 1; life.boom = false; go(0); };
   life.reset = () => { life.cycle = 0; life.tIgn = -1; life.gasEnv = 1; life.boom = false; go(0); };
   life.reset();
   return life;

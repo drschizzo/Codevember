@@ -1,6 +1,6 @@
 // Sonification — « Sillons »
 //
-// Une seule règle, audible et visible : la TÊTE DE LECTURE (le trait bleu,
+// Une seule règle, audible et visible : la TÊTE DE LECTURE (invisible,
 // fixe) lit le disque comme un vinyle. Ce qui passe dessous joue.
 //
 // · Hauteur = distance à l'étoile, sur une même gamme pour tout le disque :
@@ -85,9 +85,12 @@ export class Sonifier {
     this.flyNoise = null;
   }
 
-  setMuted(m) {
-    this.muted = m;
-    if (this.ctx) this.master.gain.setTargetAtTime(m ? 0 : 0.8, this.ctx.currentTime, 0.1);
+  // temp : coupure temporaire (avance rapide) sans changer le choix de l'utilisateur
+  setMuted(m, temp) {
+    if (temp === undefined) this.muted = m;
+    this.tempMute = !!temp;
+    const off = this.muted || this.tempMute;
+    if (this.ctx) this.master.gain.setTargetAtTime(off ? 0 : 0.8, this.ctx.currentTime, 0.1);
   }
 
   // Une planète croise la tête de lecture.

@@ -23,6 +23,9 @@ h2 { font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacin
 #speed button.on { color: #021; background: var(--accent); border-color: var(--accent); }
 #life h2 #cyc { color: var(--accent); margin-left: 4px; }
 #phases { display: flex; gap: 3px; margin-bottom: 6px; }
+#phases div { cursor: pointer; transition: transform .15s; }
+#phases div:hover { transform: scaleY(1.8); background: rgba(158,220,255,0.3); }
+body.seeking #phases div.now u { background: var(--warm); }
 #phases div { flex: 1; height: 5px; border-radius: 3px; background: rgba(255,255,255,0.08); overflow: hidden; }
 #phases div.done { background: rgba(158,220,255,0.45); }
 #phases div u { display: block; height: 100%; width: 0; background: var(--accent); }
