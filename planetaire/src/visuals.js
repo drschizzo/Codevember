@@ -179,6 +179,100 @@ export function createVisuals(renderer, scene, camera, sim) {
   }
   scene.add(star);
 
+  // ── Pulsar (étoile à neutrons en rotation) ────────────────────────────────
+  // Axe magnétique incliné sur l'axe de rotation : les deux faisceaux balaient
+  // le ciel comme un phare. Lignes de champ dipolaires qui tournent avec
+  // l'étoile, nébuleuse de vent en tore dans le plan équatorial (comme au cœur
+  // de la nébuleuse du Crabe). Rotation ralentie : un vrai pulsar jeune tourne
+  // ~30 fois par seconde.
+  const PU = { k: uniform(0), flash: uniform(0) };
+  const pulsar = new THREE.Group();       // tourne autour de l'axe de rotation (y)
+  const magAxis = new THREE.Group();      // incliné : porte l'axe magnétique
+  magAxis.rotation.z = 1.0; // ~57° : les faisceaux passent près de la ligne de visée
+  pulsar.scale.setScalar(2.4);
+  pulsar.add(magAxis);
+  pulsar.visible = false;
+  scene.add(pulsar);
+  {
+    const add = () => ({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+    // faisceaux : cônes fins, plus intenses au centre et près de l'étoile,
+    // parcourus de stries qui filent vers l'extérieur
+    const bm = new THREE.MeshBasicNodeMaterial({ ...add(), side: THREE.DoubleSide });
+    const along = float(1).sub(uv().y);                     // 0 à l'étoile, 1 au bout
+    const core = abs(dot(normalWorld, normalize(cameraPosition.sub(positionWorld)))).pow(3.0);
+    const streaks = sin(along.mul(60.0).sub(time.mul(14.0))).mul(0.25).add(0.75)
+      .mul(mx_noise_float(vec3(uv().x.mul(12.0), along.mul(8.0).sub(time.mul(3.0)), 0)).mul(0.3).add(0.85));
+    const fade = pow(float(1).sub(along), 1.6).mul(smoothstep(0.0, 0.02, along));
+    bm.colorNode = vec4(vec3(0.65, 0.85, 1.0).mul(PU.k).mul(PU.flash.mul(2.0).add(1.2)).mul(streaks), core.mul(fade).mul(PU.k));
+    for (const sgn of [1, -1]) {
+      const g = new THREE.ConeGeometry(0.75, 9, 32, 1, true);
+      g.translate(0, -4.5, 0);              // apex à l'origine, s'ouvre vers −y…
+      const beam = new THREE.Mesh(g, bm);
+      if (sgn > 0) beam.rotation.x = Math.PI; // …et vers +y
+      magAxis.add(beam);
+    }
+    // lignes de champ dipolaires r = Lsin²θ, dans des plans contenant l'axe
+    // magnétique ; de la lumière circule le long des lignes
+    const pts = [], sPar = [];
+    for (const Lk of [0.35, 0.6, 0.95, 1.4]) {
+      for (let a = 0; a < 6; a++) {
+        const az = (a / 6) * Math.PI * 2 + Lk;
+        const n = 64;
+        for (let i = 0; i < n; i++) {
+          const t0 = 0.12 + (Math.PI - 0.24) * i / n, t1 = 0.12 + (Math.PI - 0.24) * (i + 1) / n;
+          for (const th of [t0, t1]) {
+            const r = Lk * Math.sin(th) ** 2;
+            pts.push(r * Math.sin(th) * Math.cos(az), r * Math.cos(th), r * Math.sin(th) * Math.sin(az));
+            sPar.push(th / Math.PI, Lk);
+          }
+        }
+      }
+    }
+    const fg = new THREE.BufferGeometry();
+    fg.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+    fg.setAttribute('uv', new THREE.Float32BufferAttribute(sPar, 2));
+    const fm = new THREE.LineBasicNodeMaterial(add());
+    const flow = sin(uv().x.mul(40.0).sub(time.mul(5.0)).add(uv().y.mul(9.0))).mul(0.5).add(0.5).pow(3.0);
+    fm.colorNode = vec4(vec3(0.4, 0.75, 1.0).mul(PU.k).mul(flow.mul(1.6).add(0.25)), PU.k.mul(float(0.9).div(uv().y.add(0.4))));
+    magAxis.add(new THREE.LineSegments(fg, fm));
+    // nébuleuse de vent : tore équatorial, ondes qui s'éloignent
+    const tm = new THREE.MeshBasicNodeMaterial({ ...add(), side: THREE.DoubleSide });
+    const ringR = length(positionLocal.xz);
+    const waves = sin(ringR.mul(9.0).sub(time.mul(2.2))).mul(0.5).add(0.5).pow(2.0);
+    const wisp = mx_fractal_noise_float(positionLocal.mul(3.0).add(vec3(0, time.mul(0.2), 0)), 3, 2.0, 0.5).mul(0.5).add(0.6);
+    const tRim = float(1).sub(abs(dot(normalWorld, normalize(cameraPosition.sub(positionWorld))))).pow(1.5);
+    tm.colorNode = vec4(vec3(0.45, 0.6, 1.0).mul(PU.k).mul(1.2), waves.mul(wisp).mul(tRim.mul(0.7).add(0.15)).mul(PU.k).mul(0.6));
+    const torus = new THREE.Mesh(new THREE.TorusGeometry(1.1, 0.42, 24, 96), tm);
+    torus.rotation.x = Math.PI / 2;
+    pulsar.add(torus);
+    // halo de l'étoile à neutrons, qui flashe à chaque passage d'un faisceau
+    const hm = new THREE.SpriteNodeMaterial(add());
+    const hd = length(uv().sub(0.5)).mul(2.0);
+    hm.colorNode = vec4(vec3(0.7, 0.85, 1.0).mul(PU.k).mul(PU.flash.mul(6.0).add(1.0)), exp(hd.mul(hd).mul(-30.0)).add(exp(hd.mul(-9.0)).mul(0.5)).mul(smoothstep(1.0, 0.85, hd)));
+    const halo = new THREE.Sprite(hm);
+    halo.scale.setScalar(1.6);
+    pulsar.add(halo);
+  }
+  let pulsarSpin = 0, pulsarPrevFlash = 0;
+  const _bd = new THREE.Vector3(), _toCam = new THREE.Vector3();
+  // Renvoie true au moment où un faisceau passe face à la caméra (pour le son)
+  function updatePulsar(dtReal, k) {
+    pulsar.visible = k > 0.002;
+    PU.k.value = k;
+    if (!pulsar.visible) return false;
+    pulsarSpin += dtReal * 2 * Math.PI * 0.75; // 0,75 tour par seconde (ralenti)
+    pulsar.rotation.y = pulsarSpin;
+    pulsar.updateMatrixWorld();
+    _bd.set(0, 1, 0).transformDirection(magAxis.matrixWorld);
+    _toCam.copy(camera.position).normalize();
+    const c = Math.abs(_bd.dot(_toCam));                 // un des deux faisceaux vers nous
+    const flash = Math.pow(Math.max(0, (c - 0.75) / 0.25), 4);
+    PU.flash.value = flash;
+    const tick = flash > 0.35 && pulsarPrevFlash <= 0.35;
+    pulsarPrevFlash = flash;
+    return tick;
+  }
+
   // Rémanent de supernova : coquille en expansion, filamenteuse
   const shell = new THREE.Mesh(new THREE.SphereGeometry(1, 96, 48), new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
   {
@@ -521,15 +615,14 @@ export function createVisuals(renderer, scene, camera, sim) {
     V.starCol.value.setRGB(p.color[0], p.color[1], p.color[2]);
     V.lightK.value = Math.min(2.5, Math.max(0.12, Math.pow(p.L, 0.35)));
     V.ambient.value = p.ambient;
-    V.jets.value = Math.max(p.jets, p.pulsar || 0);
-    const pv = star.userData.pivot;
-    if (p.pulsar > 0) { pv.rotation.x = 0.7; pv.rotation.y += 0.25; pv.scale.set(0.6, 2.2, 0.6); }
-    else { pv.rotation.set(0, 0, 0); pv.scale.set(1, 1, 1); }
+    V.jets.value = p.jets;
+    pulsarK = p.pulsar || 0;
     V.sizeK.value = p.sizeK;
     V.shell.value = p.shell;
     shell.visible = p.shell > 0.002;
     if (shell.visible) shell.scale.setScalar(Math.max(0.1, p.shellR));
   }
 
-  return { V, star, flyStar, updateOrbits, pipeline, impact, pulse, updateFx, setEvo, setStar };
+  let pulsarK = 0;
+  return { V, star, flyStar, updateOrbits, pipeline, impact, pulse, updateFx, setEvo, setStar, updatePulsar: (dt) => updatePulsar(dt, pulsarK) };
 }

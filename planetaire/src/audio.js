@@ -252,6 +252,24 @@ export class Sonifier {
     this.drone.gain.setTargetAtTime(0.03, t + 12, 4);
   }
 
+  // Pulsar : un « tic » sec à chaque passage du faisceau (les pulsars captés
+  // par les radiotélescopes, convertis en son, ressemblent exactement à ça)
+  pulsarTick() {
+    if (!this.ctx || this.muted) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const n = ctx.createBufferSource();
+    const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.04), ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * 0.004));
+    n.buffer = buf;
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2400; bp.Q.value = 1.2;
+    const g = ctx.createGain(); g.gain.value = 0.5;
+    n.connect(bp).connect(g).connect(this.bus); n.start(t);
+    const o = ctx.createOscillator(); o.frequency.setValueAtTime(180, t); o.frequency.exponentialRampToValueAtTime(60, t + 0.08);
+    const og = ctx.createGain(); og.gain.setValueAtTime(0.25, t); og.gain.exponentialRampToValueAtTime(1e-4, t + 0.1);
+    o.connect(og).connect(this.bus); o.start(t); o.stop(t + 0.12);
+  }
+
   // Étoile vagabonde : souffle filtré qui suit la distance (effet Doppler grossier)
   flyby(dist, pan, approaching) {
     if (!this.ctx) return;
