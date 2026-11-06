@@ -1,10 +1,26 @@
 # Planétaire — *Lignée & Sillons*
 
-Un disque protoplanétaire simulé entièrement sur le GPU (WebGPU + three.js TSL), qui **se souvient**.
+Un système planétaire simulé entièrement sur le GPU (WebGPU + three.js TSL), de sa naissance à sa mort, et qui **se souvient**.
+
+## Le cycle de vie
+
+Une frise dans le panneau suit les phases. Pour chacune, elle indique sa vraie durée, car le film est très accéléré et de façon inégale.
+
+1. **Effondrement du nuage** : une sphère d'un million de grains, en rotation et turbulente, s'effondre. Chaque grain conserve son moment cinétique et rejoint le disque à son rayon centrifuge (modèle d'Ulrich / Cassen-Moosman). Ce rayon devient son « lieu de naissance ». Les grains proches de l'axe tombent sur l'étoile.
+2. **Protoétoile** : elle est rouge, ne brille que par sa contraction, et lance deux jets le long de l'axe.
+3. **Allumage** puis **formation des planètes** : la fusion démarre (éclair, accord). La luminosité monte, et avec elle la ligne des glaces. Les embryons naissent là où la poussière s'accumule, grossissent, se percutent et captent du gaz. Le gaz se dissipe.
+4. **Dissipation du disque** : sans gaz, la lumière souffle les poussières fines (pression de radiation), et les plus grosses spiralent vers l'étoile (Poynting-Robertson). Le disque se vide de l'intérieur vers l'extérieur et laisse une ceinture de débris. Le disque est fini : un grain avalé, tombé ou soufflé est retiré pour de bon.
+5. **Maturité**.
+6. **Supergéante rouge** : l'étoile enfle, rougit et perd de la masse, si bien que les orbites s'élargissent. Elle engloutit les planètes proches et réchauffe les lointaines : les glaces fondent, les océans s'évaporent.
+7. **Supernova** : le cœur s'effondre, un silence, puis l'explosion. Les grains retirés redeviennent des éjecta incandescents en « doigts » de Rayleigh-Taylor. L'onde de choc chauffe et balaie le disque, et le système, devenu non lié, se disperse. Il reste un rémanent animé (filaments Hα et [O III]) et un pulsar. Puis **un nouveau nuage** : le cycle recommence.
+
+Avertissement honnête : une étoile comme le Soleil finit en naine blanche, pas en supernova. Il faut plus de ~8 masses solaires, et une telle étoile vit seulement quelques dizaines de millions d'années. On l'assume ici pour boucler le cycle.
+
+## Ce qui est simulé
 
 - **Lignée** : chaque grain de poussière garde son rayon de naissance et sa composition (roche en deçà de la ligne des glaces, glace au-delà). Les planètes qui se forment empilent ces souvenirs en **strates**. La coupe annotée montre leur histoire : l'embryon initial au cœur, les apports successifs, les **impacts géants** cerclés d'orange et, pour les géantes, l'**enveloppe de gaz**. Survoler une strate la décrit.
 - **Sillons** : comme un vinyle, le disque est lu par une **tête de lecture fixe** (le trait bleu), et c'est la rotation képlérienne qui fait défiler la matière dessous. Ce qui passe sous la tête joue, selon une règle unique : **la hauteur dépend de la distance à l'étoile** (aigu au centre, grave au bord, gamme pentatonique). Chaque planète sonne quand elle croise la tête : les internes battent vite, les lointaines rarement, et deux planètes en résonance 3:2 forment un motif 3 contre 2. Le timbre et la durée suivent la masse. Les anneaux de poussière pincent doucement leur note, et un bourdon s'assombrit à mesure que le disque s'épuise.
-- **Budgets de masse** : le disque contient 700 M⊕ de solides et un réservoir de gaz qui se dissipe (~160 orbites). Au-delà de la *masse d'isolation*, une planète n'avale presque plus de cailloux. Au-delà de 10 M⊕, un cœur capte du gaz (emballement limité par l'ouverture d'un sillon) et devient une géante gazeuse. Les rayons affichés suivent la relation masse–rayon de Chen & Kipping (2017). Ils sont exagérés pour rester visibles, mais une Jupiter reste plus petite que l'étoile.
+- **Budgets de masse** : les solides sont comptés grain par grain (700 M⊕ au départ dans le nuage). Le gaz est un réservoir qui se dissipe après l'allumage. Au-delà de la *masse d'isolation*, une planète n'avale presque plus de cailloux. Au-delà de 10 M⊕, un cœur capte du gaz (emballement limité par l'ouverture d'un sillon) et devient une géante gazeuse. Les rayons affichés suivent la relation masse–rayon de Chen & Kipping (2017). Ils sont exagérés pour rester visibles, mais une Jupiter reste plus petite que l'étoile.
 - **Impacts géants** : éclair, onde de choc, ralenti, secousse et un nuage de débris incandescents arrachés au point d'impact, qui refroidissent en orbite.
 
 ## Lancer
