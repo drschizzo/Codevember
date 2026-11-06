@@ -83,9 +83,9 @@ export function createSim(renderer, N) {
   //   [2M].x = nombre d'actifs
   const eAct = instancedArray(M * 2 + 1, 'vec4');
 
-  const grid = instancedArray(NR * NPHI, 'uint').toAtomic();
+  const grid = instancedArray(NR * NPHI + 1, 'uint').toAtomic(); // + compteur de grains actifs
   const tau = instancedArray(NR * NPHI, 'float');
-  const needle = instancedArray(NR, 'float');
+  const needle = instancedArray(NR + 1, 'float'); // [NR] = nombre de grains actifs
 
   // ── Uniformes ──────────────────────────────────────────────────────────────
   const U = {
@@ -116,7 +116,19 @@ export function createSim(renderer, N) {
     spawnIdx: uniform(0, 'int'),
     spawnPos: uniform(new THREE.Vector3()),
     spawnMass: uniform(0.05 * M_EARTH),
-    infall: uniform(0.5),        // part des grains perdus qui renaissent au bord externe (le reste : partout)
+    // ── Cycle de vie (piloté par lifecycle.js) ──
+    Ms: uniform(1.0),            // masse centrale (G·M) : baisse quand l'étoile perd sa masse
+    gasDens: uniform(1.0),       // densité relative du gaz du disque (0 = dissipé)
+    clearOn: uniform(0.0),       // dissipation du disque en cours
+    clearR: uniform(0.0),        // front de dissipation (UA), progresse vers l'extérieur
+    starR: uniform(0.0),         // rayon physique de l'étoile (géante rouge : engloutit)
+    snA: uniform(0.0),           // onde de choc de supernova : amplitude,
+    snR: uniform(0.0),           //   rayon,
+    snW: uniform(1.0),           //   épaisseur
+    cycleSeed: uniform(0, 'uint'),
+    cloudR: uniform(14.0),       // nuage initial : rayon (UA),
+    cloudOmega: uniform(0.0153), //   rotation solide (le bord tombe vers ~9 UA),
+    cloudTurb: uniform(0.03),    //   vitesses turbulentes
   };
 
   // ── Outils ─────────────────────────────────────────────────────────────────
@@ -129,100 +141,54 @@ export function createSim(renderer, N) {
   // sinon une géante tirerait comme 20 Jupiter et disperserait tout le système.
   const B_M = 3.0 * M_EARTH;
   const gmass = (m) => m.mul(float(1).add(U.boost.sub(1.0).div(m.div(B_M).add(1.0))));
-  const hillR = (a, m) => U.fHill.mul(a).mul(pow(gmass(m).div(3.0), 1 / 3));
+  const hillR = (a, m) => U.fHill.mul(a).mul(pow(gmass(m).div(U.Ms.mul(3.0)), 1 / 3));
   // Au-delà de la masse d'isolation, la planète ouvre un piège de pression :
   // elle n'avale presque plus de cailloux (ils s'accumulent en anneau).
   const captureRadius = (a, m) => hillR(a, m)
     .mul(mix(1.0, 0.04, smoothstep(0.8, 1.6, m.div(isoMassAt(a)))));
 
-  function writeParticle(idx, seed, rA, rB) {
-    const h1 = hash(seed), h2 = hash(seed.add(1)), h3 = hash(seed.add(2)), h4 = hash(seed.add(3));
-    const r = mix(float(rA), float(rB), h1);
-    const ph = h2.mul(TAU);
-    const y = gauss(h3, h4).mul(diskH(r)).mul(0.5);
-    const c = cos(ph), s = sin(ph);
-    const vK = sqrt(float(1).div(r)).mul(float(1).sub(U.eta));
-    pPos.element(idx).assign(vec4(r.mul(c), y, r.mul(s), r));
-    pVel.element(idx).assign(vec4(s.negate().mul(vK), 0, c.mul(vK), select(r.greaterThan(U.snow), 1.0, 0.0)));
-  }
-
-  // ── Initialisation des grains ──────────────────────────────────────────────
-  const initParticles = Fn(() => {
+  // ── Nuage initial (effondrement) ───────────────────────────────────────────
+  // Sphère en rotation solide, turbulente et grumeleuse. Chaque grain conserve
+  // son moment cinétique en tombant : il rejoint le disque à son rayon
+  // centrifuge r = Ω² R⊥⁴ / GM (modèle d'Ulrich / Cassen-Moosman), qui devient
+  // son « lieu de naissance » (provenance). Les plus proches de l'axe tombent
+  // directement sur l'étoile et la nourrissent.
+  const initCloud = Fn(() => {
     const idx = instanceIndex;
-    writeParticle(idx, idx.mul(4), R_IN, R_OUT);
+    const sd = idx.mul(7).add(U.cycleSeed);
+    const h1 = hash(sd), h2 = hash(sd.add(1)), h3 = hash(sd.add(2));
+    const h4 = hash(sd.add(3)), h5 = hash(sd.add(4));
+    // 45 % des grains dans ~400 grumeaux (densités du nuage turbulent)
+    const inClump = h4.lessThan(0.45);
+    const cid = floor(h5.mul(400.0)).toUint().add(U.cycleSeed.mul(31));
+    const cc = vec3(hash(cid.mul(3)).sub(0.5), hash(cid.mul(3).add(1)).sub(0.5), hash(cid.mul(3).add(2)).sub(0.5)).mul(2.0);
+    const ct = h2.mul(2).sub(1), stt = sqrt(max(float(1).sub(ct.mul(ct)), 0)), ph = h3.mul(TAU);
+    const dirU = vec3(stt.mul(cos(ph)), ct, stt.mul(sin(ph)));
+    const uni = dirU.mul(pow(h1, 1 / 3));
+    const clump = normalize(cc).mul(pow(clamp(length(cc), 0.0, 1.0), 0.33)).add(dirU.mul(h1.mul(0.12)));
+    const q = select(inClump, clump, uni).mul(U.cloudR);
+    const Rp = length(q.xz);
+    // vitesse : rotation solide + turbulence
+    const turbV = vec3(hash(sd.add(9)).sub(0.5), hash(sd.add(10)).sub(0.5), hash(sd.add(11)).sub(0.5)).mul(U.cloudTurb);
+    const vel = vec3(q.z.negate(), 0, q.x).mul(U.cloudOmega).add(turbV);
+    const rLand = U.cloudOmega.mul(U.cloudOmega).mul(Rp.mul(Rp).mul(Rp.mul(Rp)));
+    pPos.element(idx).assign(vec4(q, clamp(rLand, 0.05, R_OUT * 1.4)));
+    pVel.element(idx).assign(vec4(vel, 1.0)); // nuage froid : grains glacés
+    pHeat.element(idx).assign(float(0));
   })().compute(N, [PARTICLE_WG]);
 
   // ── Pas de temps des grains ────────────────────────────────────────────────
+  // Un grain inactif (avalé par une planète, tombé dans l'étoile, soufflé hors
+  // du système) a P.w < 0 : il n'est plus ni simulé ni dessiné. Le disque est
+  // fini et se vide pour de bon.
   const stepParticles = Fn(() => {
     const idx = instanceIndex;
     const P = pPos.element(idx);
     const V = pVel.element(idx);
-    const p = P.xyz.toVar();
-    const v = V.xyz.toVar();
+    const H = pHeat.element(idx);
 
-    const r2 = dot(p, p);
-    const r = sqrt(r2);
-    const R = max(length(p.xz), 1e-3).toVar();
-    const acc = p.negate().div(r2.mul(r)).toVar();
-    const etaEff = float(U.eta).toVar();
-    const captured = int(-1).toVar();
-
-    const nAct = eAct.element(M * 2).x.toInt();
-    Loop({ start: int(0), end: nAct, type: 'int', name: 'j', condition: '<' }, ({ j }) => {
-      const A0 = eAct.element(j.mul(2));
-      const A1 = eAct.element(j.mul(2).add(1));
-      const d = A0.xyz.sub(p);
-      const d2 = dot(d, d);
-      const d2s = d2.add(U.soft2);
-      acc.addAssign(d.mul(A0.w.div(d2s.mul(sqrt(d2s)))));
-      If(d2.lessThan(A1.z.mul(A1.z)), () => { captured.assign(A1.w.toInt()); });
-      // Piège de pression juste à l'extérieur des planètes massives :
-      // le gaz y devient super-képlérien → les grains s'accumulent en anneau.
-      If(A1.y.greaterThan(0.0), () => {
-        const x = R.sub(A1.x).div(A1.x.mul(0.0593));
-        If(abs(x).lessThan(3.5), () => {
-          etaEff.addAssign(A1.y.mul(x).mul(exp(x.mul(x).negate())));
-        });
-      });
-    });
-
-    // Perturbateurs : puits de l'utilisateur et étoile vagabonde
-    const dw = U.wellPos.sub(p);
-    const dw2 = dot(dw, dw).add(0.04);
-    acc.addAssign(dw.mul(U.wellMass.div(dw2.mul(sqrt(dw2)))));
-    const df = U.flyPos.sub(p);
-    const df2 = dot(df, df).add(0.02);
-    acc.addAssign(df.mul(U.flyMass.div(df2.mul(sqrt(df2)))));
-
-    // Gaz : rotation sub-képlérienne + relaxation exacte (exp) vers sa vitesse
-    const Omega = float(1).div(R.mul(sqrt(R)));
-    const vK = sqrt(float(1).div(R));
-    const tang = vec3(p.z.negate(), 0, p.x).div(R);
-    const vGas = tang.mul(vK.mul(float(1).sub(etaEff)));
-    const ts = stokesOf(idx).div(Omega);
-
-    v.addAssign(acc.mul(U.dt));
-    v.assign(vGas.add(v.sub(vGas).mul(exp(U.dt.div(ts).negate()))));
-
-    // Turbulence (marche aléatoire)
-    const seed = idx.mul(8).add(eAct.element(M * 2).y.toUint().mul(1664525));
-    const kick = vec3(hash(seed).sub(0.5), hash(seed.add(1)).sub(0.5).mul(0.6), hash(seed.add(2)).sub(0.5));
-    v.addAssign(kick.mul(U.turb).mul(vK).mul(sqrt(U.dt.mul(Omega)).mul(3.0)));
-
-    p.addAssign(v.mul(U.dt));
-
-    const rNew = length(p);
-    const lost = rNew.lessThan(R_IN * 0.75).or(rNew.greaterThan(R_OUT * 2.5)).or(captured.greaterThanEqual(0));
-
-    If(captured.greaterThanEqual(0), () => {
-      const base = captured.mul(4);
-      atomicAdd(eAccum.element(base), uint(1));
-      atomicAdd(eAccum.element(base.add(1)), V.w.toUint());
-      atomicAdd(eAccum.element(base.add(2)), P.w.mul(64.0).toUint());
-    });
-
-    // Impact géant récent : une fraction des grains est arrachée et projetée
-    // depuis le point d'impact (nuage de débris chauds).
+    // Impact géant récent : une fraction des grains (de préférence inactifs,
+    // donc recyclés) est projetée depuis le point d'impact.
     const eject = int(-1).toVar();
     Loop({ start: 0, end: NIMP, type: 'int', name: 'k' }, ({ k }) => {
       const I = impInfo.element(k);
@@ -233,7 +199,6 @@ export function createSim(renderer, N) {
       });
     });
 
-    const H = pHeat.element(idx);
     If(eject.greaterThanEqual(0), () => {
       const I = impInfo.element(eject);
       const IP = impPos.element(eject);
@@ -248,28 +213,108 @@ export function createSim(renderer, N) {
       const rc = hillR(as, Es.w).mul(0.5);
       const pos = Es.xyz.add(dir.mul(rc.add(h3.mul(0.03))));
       // vitesse orbitale (circulaire) du survivant + vitesse d'éjection
-      const vOrb = vec3(Es.z.negate(), 0, Es.x).div(as).mul(sqrt(float(1).div(as)));
-      const vej = sqrt(float(1).div(a)).mul(mix(0.05, 0.4, h4.mul(h4)));
-      const vel = vOrb.add(dir.mul(vej));
+      const vOrb = vec3(Es.z.negate(), 0, Es.x).div(as).mul(sqrt(U.Ms.div(as)));
+      const vej = sqrt(U.Ms.div(a)).mul(mix(0.05, 0.4, h4.mul(h4)));
       // (limite de 8 buffers par shader : les débris prennent la provenance du lieu d'impact)
       P.assign(vec4(pos, a));
-      V.assign(vec4(vel, select(a.greaterThan(U.snow), 1.0, 0.0)));
+      V.assign(vec4(vOrb.add(dir.mul(vej)), select(a.greaterThan(U.snow), 1.0, 0.0)));
       H.assign(mix(0.7, 1.0, h3));
-    }).ElseIf(lost, () => {
-      H.assign(0);
-      // Renaissance : la matière perdue est remplacée, pour moitié par un apport
-      // du nuage parent au bord externe, pour moitié dans tout le disque.
-      const sseed = idx.mul(4).add(U.frame.mul(747796405)).add(eAct.element(M * 2).y.toUint().mul(2891336453)).add(uint(12345));
-      const rA = select(hash(sseed.add(7)).lessThan(U.infall), float(R_OUT * 0.82), float(R_IN * 1.2));
-      writeParticle(idx, sseed, rA, R_OUT);
-    }).Else(() => {
-      P.assign(vec4(p, P.w));
-      // En deçà de la ligne des glaces, la glace d'un caillou qui dérive vers
-      // l'intérieur se sublime : il n'apporte plus que de la roche.
-      // (Il garde son rayon de naissance : la lignée reste visible.)
-      V.assign(vec4(v, select(R.lessThan(U.snow.mul(0.95)), 0.0, V.w)));
-      If(H.greaterThan(0.0), () => { // la quasi-totalité des grains est froide : pas d'écriture
-        H.assign(select(H.greaterThan(0.004), H.mul(exp(U.dt.mul(-0.55))), 0.0));
+    }).ElseIf(P.w.greaterThanEqual(0.0), () => {
+      const p = P.xyz.toVar();
+      const v = V.xyz.toVar();
+
+      const r2 = dot(p, p);
+      const r = sqrt(r2);
+      const R = max(length(p.xz), 1e-3).toVar();
+      const acc = p.negate().mul(U.Ms.div(r2.mul(r))).toVar();
+      const etaEff = float(U.eta).toVar();
+      const captured = int(-1).toVar();
+
+      const nAct = eAct.element(M * 2).x.toInt();
+      Loop({ start: int(0), end: nAct, type: 'int', name: 'j', condition: '<' }, ({ j }) => {
+        const A0 = eAct.element(j.mul(2));
+        const A1 = eAct.element(j.mul(2).add(1));
+        const d = A0.xyz.sub(p);
+        const d2 = dot(d, d);
+        const d2s = d2.add(U.soft2);
+        acc.addAssign(d.mul(A0.w.div(d2s.mul(sqrt(d2s)))));
+        If(d2.lessThan(A1.z.mul(A1.z)), () => { captured.assign(A1.w.toInt()); });
+        // Piège de pression juste à l'extérieur des planètes massives :
+        // le gaz y devient super-képlérien → les grains s'accumulent en anneau.
+        If(A1.y.greaterThan(0.0), () => {
+          const x = R.sub(A1.x).div(A1.x.mul(0.0593));
+          If(abs(x).lessThan(3.5), () => {
+            etaEff.addAssign(A1.y.mul(x).mul(exp(x.mul(x).negate())));
+          });
+        });
+      });
+
+      // Perturbateurs : puits de l'utilisateur et étoile vagabonde
+      const dw = U.wellPos.sub(p);
+      const dw2 = dot(dw, dw).add(0.04);
+      acc.addAssign(dw.mul(U.wellMass.div(dw2.mul(sqrt(dw2)))));
+      const df = U.flyPos.sub(p);
+      const df2 = dot(df, df).add(0.02);
+      acc.addAssign(df.mul(U.flyMass.div(df2.mul(sqrt(df2)))));
+
+      const st = stokesOf(idx);
+      // Dissipation (après la disparition du gaz), de l'intérieur vers l'extérieur :
+      // les petits grains sont soufflés par la pression de radiation (β > ½ :
+      // ils ne sont plus liés), les gros spiralent vers l'étoile (Poynting-
+      // Robertson). Au-delà du front, il reste une ceinture de débris.
+      const clr = U.clearOn.mul(smoothstep(U.clearR, U.clearR.mul(0.8), R));
+      If(clr.greaterThan(0.0), () => {
+        If(st.lessThan(0.2), () => {
+          acc.addAssign(p.mul(U.Ms.mul(0.85).mul(clr).div(r2.mul(r))));
+        }).Else(() => {
+          v.subAssign(v.mul(clr.mul(U.dt).mul(0.25)));
+        });
+      });
+      // Onde de choc de la supernova : coquille qui balaie tout vers l'extérieur
+      const xs = r.sub(U.snR).div(U.snW);
+      acc.addAssign(p.div(r).mul(U.snA.mul(exp(xs.mul(xs).negate()))));
+
+      // Gaz : rotation sub-képlérienne + relaxation exacte (exp) vers sa vitesse.
+      // Le gaz n'est présent qu'au voisinage du plan du disque (dans l'enveloppe
+      // en effondrement, les grains tombent en chute libre) et s'évanouit
+      // quand le disque se dissipe.
+      const Omega = sqrt(U.Ms).div(R.mul(sqrt(R)));
+      const vK = sqrt(U.Ms.div(R));
+      const tang = vec3(p.z.negate(), 0, p.x).div(R);
+      const vGas = tang.mul(vK.mul(float(1).sub(etaEff)));
+      const zH = p.y.div(diskH(R).mul(1.5).max(0.01));
+      const gasW = U.gasDens.mul(exp(zH.mul(zH).mul(-0.5)));
+      const ts = st.div(Omega);
+
+      v.addAssign(acc.mul(U.dt));
+      v.assign(vGas.add(v.sub(vGas).mul(exp(U.dt.mul(gasW).div(ts).negate()))));
+
+      // Turbulence du gaz (marche aléatoire)
+      const seed = idx.mul(8).add(eAct.element(M * 2).y.toUint().mul(1664525));
+      const kick = vec3(hash(seed).sub(0.5), hash(seed.add(1)).sub(0.5).mul(0.6), hash(seed.add(2)).sub(0.5));
+      v.addAssign(kick.mul(U.turb).mul(vK).mul(sqrt(U.dt.mul(Omega))).mul(gasW.mul(3.0)));
+
+      p.addAssign(v.mul(U.dt));
+
+      const rNew = length(p);
+      If(captured.greaterThanEqual(0), () => {
+        const base = captured.mul(4);
+        atomicAdd(eAccum.element(base), uint(1));
+        atomicAdd(eAccum.element(base.add(1)), V.w.toUint());
+        atomicAdd(eAccum.element(base.add(2)), P.w.mul(64.0).toUint());
+      });
+      const lost = rNew.lessThan(max(float(R_IN * 0.75), U.starR)).or(rNew.greaterThan(R_OUT * 3.2)).or(captured.greaterThanEqual(0));
+      If(lost, () => {
+        P.assign(vec4(p, -1.0)); // retiré pour de bon
+        H.assign(0);
+      }).Else(() => {
+        P.assign(vec4(p, P.w));
+        // En deçà de la ligne des glaces, la glace d'un caillou se sublime
+        // (il garde son rayon de naissance : la lignée reste visible).
+        V.assign(vec4(v, select(R.lessThan(U.snow.mul(0.95)), 0.0, V.w)));
+        If(H.greaterThan(0.0), () => {
+          H.assign(select(H.greaterThan(0.004), H.mul(exp(U.dt.mul(-0.55))), 0.0));
+        });
       });
     });
   })().compute(N, [PARTICLE_WG]);
@@ -306,7 +351,7 @@ export function createSim(renderer, N) {
       const v = eVel.element(i).xyz;
       const r2 = dot(p, p);
       const r = sqrt(r2);
-      const acc = p.negate().div(r2.mul(r)).toVar();
+      const acc = p.negate().mul(U.Ms.div(r2.mul(r))).toVar();
       Loop({ start: 0, end: M, type: 'int', name: 'k' }, ({ k }) => {
         const F = ePos.element(k);
         If(F.w.greaterThan(0.0).and(k.notEqual(i)), () => {
@@ -325,8 +370,10 @@ export function createSim(renderer, N) {
       // Amortissement par le gaz vers l'orbite circulaire + migration de type I
       const R = max(length(p.xz), 1e-3);
       const tang = vec3(p.z.negate(), 0, p.x).div(R);
-      const vCirc = tang.mul(sqrt(float(1).div(R)));
-      acc.addAssign(vCirc.sub(v).div(U.tauDamp));
+      const vCirc = tang.mul(sqrt(U.Ms.div(R)));
+      acc.addAssign(vCirc.sub(v).mul(U.gasDens).div(U.tauDamp)); // (pas de gaz → pas d'amortissement)
+      const xs = r.sub(U.snR).div(U.snW);
+      acc.addAssign(p.div(r).mul(U.snA.mul(0.6).mul(exp(xs.mul(xs).negate())))); // supernova
       acc.subAssign(tang.mul(gmass(E.w).mul(U.migK).div(R)));
       eAcc.element(i).assign(vec4(acc, 0));
     });
@@ -340,7 +387,8 @@ export function createSim(renderer, N) {
       const v = Vv.xyz.add(eAcc.element(i).xyz.mul(U.dtE)).toVar();
       const p = E.xyz.add(v.mul(U.dtE)).toVar();
       const r = length(p);
-      If(r.lessThan(R_IN * 0.5).or(r.greaterThan(40.0)), () => {
+      // tombée dans l'étoile (ou engloutie par la géante rouge), ou éjectée
+      If(r.lessThan(max(float(R_IN * 0.5), U.starR)).or(r.greaterThan(40.0)), () => {
         E.assign(vec4(p, 0.0));
       }).Else(() => {
         E.assign(vec4(p, E.w));
@@ -553,7 +601,7 @@ export function createSim(renderer, N) {
     const m = U.spawnMass;
     const ice = select(R.greaterThan(U.snow), 1.0, 0.0);
     ePos.element(i).assign(vec4(p, m));
-    eVel.element(i).assign(vec4(tang.mul(sqrt(float(1).div(R))), captureRadius(R, m)));
+    eVel.element(i).assign(vec4(tang.mul(sqrt(U.Ms.div(R))), captureRadius(R, m)));
     eInfo.element(i).assign(vec4(0, 0, 0, 1));
     eTot.element(i).assign(vec4(ice.mul(m), R.mul(m), 0, 0));
     eGas.element(i).assign(vec4(0));
@@ -562,12 +610,20 @@ export function createSim(renderer, N) {
 
   // ── Grille polaire : densité, profondeur optique, tête de lecture ──────────
   const clearGrid = Fn(() => {
-    atomicStore(grid.element(instanceIndex), uint(0));
-  })().compute(NR * NPHI, [256]);
+    If(instanceIndex.lessThan(uint(NR * NPHI + 1)), () => { atomicStore(grid.element(instanceIndex), uint(0)); });
+  })().compute(NR * NPHI + 1, [256]);
 
+  // Seuls les grains actifs et proches du plan comptent pour l'ombre du disque
+  // (pas l'enveloppe du nuage qui s'effondre au-dessus).
   const depositGrid = Fn(() => {
-    const p = pPos.element(instanceIndex).xyz;
-    atomicAdd(grid.element(cellOf(p)), uint(1));
+    const P = pPos.element(instanceIndex);
+    If(P.w.greaterThanEqual(0.0), () => {
+      atomicAdd(grid.element(NR * NPHI), uint(1));
+      const R = length(P.xz);
+      If(abs(P.y).lessThan(diskH(R).mul(3.0).add(0.05)), () => {
+        atomicAdd(grid.element(cellOf(P.xyz)), uint(1));
+      });
+    });
   })().compute(N, [PARTICLE_WG]);
 
   // Profondeur optique cumulée depuis l'étoile, le long de chaque rayon.
@@ -594,27 +650,17 @@ export function createSim(renderer, N) {
     });
     const rr = r.toFloat().add(0.5).mul((R_GRID - R_IN) / NR).add(R_IN);
     needle.element(r).assign(s.div(rr));
+    If(r.equal(0), () => { needle.element(NR).assign(atomicLoad(grid.element(NR * NPHI)).toFloat()); });
   })().compute(NR, [64]);
 
-  // ── Embryons initiaux (CPU, une fois) ──────────────────────────────────────
-  function seedEmbryos(count = 40) {
-    const P = ePos.value.array, V = eVel.value.array, I = eInfo.value.array;
-    const T = eTot.value.array, Ly = eLayers.value.array;
-    for (let i = 0; i < count; i++) {
-      const a = Math.exp(Math.log(0.55) + (Math.log(7.5) - Math.log(0.55)) * (i + Math.random() * 0.8) / count);
-      const ph = Math.random() * TAU;
-      const m = M_EARTH * Math.exp(Math.log(0.02) + Math.random() * Math.log(10)); // 0.02–0.2 M⊕
-      const ice = a > U.snow.value ? 1 : 0;
-      const v = Math.sqrt(1 / a);
-      P.set([a * Math.cos(ph), (Math.random() - 0.5) * 0.005, a * Math.sin(ph), m], i * 4);
-      const gm = m * (1 + (U.boost.value - 1) / (1 + m / (3 * M_EARTH)));
-      const rc = U.fHill.value * a * Math.cbrt(gm / 3);
-      V.set([-Math.sin(ph) * v, 0, Math.cos(ph) * v, rc], i * 4);
-      I.set([0, 0, 0, 1], i * 4);
-      T.set([ice * m, a * m, 0, 0], i * 4);
-      Ly.set([m, ice, a, 2], i * L * 4);
+  // ── Remise à zéro des embryons et des impacts (nouveau cycle) ─────────────
+  // Les planètes ne sont plus semées au départ : elles naissent pendant la
+  // phase de formation, là où la poussière s'accumule (cf. main.js).
+  function clearEmbryos() {
+    for (const b of [ePos, eVel, eAcc, eInfo, eTot, eLayers, eGas, imp, impMeta, eAct]) {
+      b.value.array.fill(0);
+      b.value.needsUpdate = true;
     }
-    for (const b of [ePos, eVel, eInfo, eTot, eLayers]) b.value.needsUpdate = true;
   }
 
   // ── API ────────────────────────────────────────────────────────────────────
@@ -625,8 +671,14 @@ export function createSim(renderer, N) {
     maxDtP: 0.011,
 
     async init() {
-      seedEmbryos();
-      await renderer.computeAsync(initParticles);
+      await this.reset(0);
+    },
+
+    // Nouveau cycle : un nuage tout neuf, plus aucune planète.
+    async reset(cycle) {
+      clearEmbryos();
+      U.cycleSeed.value = (cycle * 2654435761) >>> 0;
+      await renderer.computeAsync(initCloud);
       await renderer.computeAsync([clearGrid, depositGrid, opticalDepth, readNeedle]);
     },
 

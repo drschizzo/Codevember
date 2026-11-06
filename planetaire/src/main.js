@@ -1,6 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { createSim, M, L, NR, R_IN, R_OUT, R_GRID, M_EARTH, SOLID0, GAS0, GAS_TAU, NIMP } from './sim.js';
+import { createSim, M, L, NR, R_IN, R_OUT, R_GRID, M_EARTH, SOLID0, GAS0, NIMP } from './sim.js';
+import { createLifecycle, PHASES } from './lifecycle.js';
 import { createVisuals } from './visuals.js';
 import { Sonifier, noteName } from './audio.js';
 import { provenanceRGB, css } from './palette.js';
@@ -35,7 +36,7 @@ async function main() {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x010103);
   const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.01, 2000);
-  camera.position.set(0, 6.5, 12.5);
+  camera.position.set(0, 13, 30); // vue large : le nuage fait ~14 UA de rayon
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.minDistance = 0.6;
@@ -45,6 +46,7 @@ async function main() {
   await sim.init();
   const vis = createVisuals(renderer, scene, camera, sim);
   const audio = new Sonifier();
+  const life = createLifecycle();
 
   // ── État ───────────────────────────────────────────────────────────────────
   const state = {
@@ -295,6 +297,8 @@ async function main() {
       busy.n = true; timers.n = now;
       sim.readNeedle().then((n) => {
         state.needle = n;
+        state.active = n[NR];
+        state.dustFrac = state.active / N;
         if (!state.paused) audio.updateDisk(n, nUsed, radiusOf, state.dustFrac);
         drawGroove();
       }).finally(() => (busy.n = false));
@@ -303,7 +307,7 @@ async function main() {
 
   // ── Budgets de masse, impacts, planètes ────────────────────────────────────
   Object.assign(state, {
-    dustFrac: 1, gasFrac: 1, seed0: null, removedSolid: 0, removedGas: 0,
+    dustFrac: 1, gasFrac: 1, removedGas: 0, active: N,
     lastSerial: 0, prev: new Map(), slow: 0, shake: 0,
   });
 
@@ -334,25 +338,23 @@ async function main() {
         color: provenanceRGB(meanR), res: [],
       });
     }
-    // Planètes disparues sans impact (éjectées, tombées dans l'étoile) : leur masse quitte le système
+    // Planètes disparues sans impact : éjectées, tombées dans l'étoile ou
+    // englouties par la géante rouge — leur gaz quitte le budget du disque
     const alive = new Set(pl.map((p) => p.index));
     for (const [i, p] of state.prev) {
-      if (!alive.has(i) && !absorbed.has(i)) { state.removedSolid += p.m - p.g; state.removedGas += p.g; }
+      if (alive.has(i) || absorbed.has(i)) continue;
+      state.removedGas += p.g;
+      if (life.p.starR > 0 && p.a < life.p.starR + 0.25) toast(`${nameOf(i)} est engloutie par l’étoile`);
+      else if (p.a > 15) toast(`${nameOf(i)} est éjectée du système`);
     }
-    state.prev = new Map(pl.map((p) => [p.index, { m: p.m, g: p.gasE * M_EARTH }]));
+    state.prev = new Map(pl.map((p) => [p.index, { m: p.m, g: p.gasE * M_EARTH, a: p.a }]));
 
-    // Le disque n'est plus infini : la poussière disponible baisse à mesure que
-    // les planètes l'avalent, et chaque grain porte une part plus faible.
-    if (state.seed0 === null) state.seed0 = sumSolid;
-    const usedSolid = sumSolid + state.removedSolid - state.seed0;
-    const dustLeft = Math.max(0, SOLID0 - usedSolid);
-    state.dustFrac = dustLeft / SOLID0;
-    state.dustLeftE = dustLeft / M_EARTH;
-    sim.U.mp.value = dustLeft / N;
-    vis.V.dustK.value = 0.3 + 0.7 * Math.sqrt(state.dustFrac);
-    const gasLeft = Math.max(0, GAS0 * Math.exp(-state.simTime / GAS_TAU) - (sumGas + state.removedGas));
-    state.gasFrac = gasLeft / GAS0;
-    sim.U.gasAvail.value = state.gasFrac;
+    // Gaz : réservoir qui se dissipe (photoévaporation, cf. lifecycle) moins
+    // ce que les planètes ont capté. (La poussière, elle, est désormais
+    // comptée grain par grain : un grain avalé disparaît pour de bon.)
+    const gasLeft = Math.max(0, GAS0 * life.gasEnv - (sumGas + state.removedGas));
+    state.gasFrac = life.phase < 2 ? 1 : gasLeft / GAS0;
+    sim.U.gasAvail.value = life.phase === 2 ? state.gasFrac : 0;
 
     // Résonances de moyen mouvement entre voisines (rapport des périodes)
     const big = pl.filter((p) => p.mE > 0.3).sort((a, b) => a.a - b.a);
@@ -425,7 +427,7 @@ async function main() {
       const tau = 12 * Math.pow(mE, 0.35);                    // refroidissement
       const src = Math.min(0.5, 1.5 * p.rate / mE);               // chauffage par accrétion
       e.heat = Math.min(1, Math.max(0, e.heat + dt * (src - e.heat / tau)));
-      const Teq = 278 / Math.sqrt(Math.max(p.a, 0.2));          // K, étoile solaire
+      const Teq = 278 * Math.pow(life.p.L, 0.25) / Math.sqrt(Math.max(p.a, 0.2)); // K (luminosité réelle de l'étoile)
       const atmo = p.gasF > 0.08 ? 1 : ss(0.15, 1.5, mE) * ss(800, 400, Teq + 150 / mE);
       e.craters = Math.min(1, e.craters + dt * 0.012 * (1 - atmo)) * Math.exp(-e.heat * e.heat * dt * 0.6);
       const water = Math.max(p.ice, ss(0.9, 3.2, p.meanR) * 0.85); // matière hydratée née au-delà des glaces
@@ -511,9 +513,9 @@ async function main() {
     $('#stats').innerHTML = `
       <div><span>temps</span>${(state.simTime / (2 * Math.PI)).toFixed(1)} orbites à 1 UA</div>
       <div><span>planètes</span>${nPl} · ${state.planets.length - nPl} embryons</div>
-      <div><span>poussière libre</span>${state.dustLeftE.toFixed(0)} M⊕ <em>${bar(state.dustFrac)}</em></div>
+      <div><span>poussière</span>${(state.active * SOLID0 / N / M_EARTH).toFixed(0)} M⊕ <em>${bar(state.active / N)}</em></div>
       <div><span>gaz du disque</span>${(state.gasFrac * 100).toFixed(0)} % <em>${bar(state.gasFrac)}</em></div>
-      <div><span>grains</span>${(N / 1e6).toFixed(2)} M · ${state.fps.toFixed(0)} i/s</div>`;
+      <div><span>grains actifs</span>${(state.active / 1e6).toFixed(2)} M / ${(N / 1e6).toFixed(2)} M · ${state.fps.toFixed(0)} i/s</div>`;
   }
   const bar = (f) => `<u style="--f:${Math.max(0, Math.min(1, f)).toFixed(3)}"></u>`;
   listEl.addEventListener('click', (e) => {
@@ -561,6 +563,12 @@ async function main() {
     $('#overview').hidden = true;
   }
   $('#overview').addEventListener('click', overview);
+  // vue large du nuage (début de cycle) / retour à la vue du disque (allumage)
+  const CLOUD_VIEW = new THREE.Vector3(0, 13, 30);
+  function flyHome(dest, dur = 3) {
+    if (state.follow >= 0) return;
+    camMove = { t: 0, dur, fromPos: camera.position.clone(), fromTarget: controls.target.clone(), home: true, dest };
+  }
   const _f = new THREE.Vector3();
   const _up = new THREE.Vector3(0, 1, 0);
   function updateCamera(real) {
@@ -579,7 +587,7 @@ async function main() {
       if (here && !camMove.home) camMove.offset.applyAxisAngle(_up, -(Math.atan2(here.z, here.x) - Math.atan2(lastFollow.z, lastFollow.x)));
       const k = Math.min(1, camMove.t / camMove.dur), e = k * k * (3 - 2 * k);
       const toTarget = camMove.home ? HOME.target : here;
-      const toPos = camMove.home ? HOME.pos : here.clone().add(camMove.offset);
+      const toPos = camMove.home ? (camMove.dest || HOME.pos) : here.clone().add(camMove.offset);
       controls.target.lerpVectors(camMove.fromTarget, toTarget, e);
       camera.position.lerpVectors(camMove.fromPos, toPos, e);
       if (k >= 1) { if (camMove.home) controls.minDistance = 0.6; camMove = null; }
@@ -821,6 +829,82 @@ async function main() {
     }
   }
 
+  // ── Cycle de vie : du nuage à la supernova ──────────────────────────────────
+  state.lifeUI = 0;
+  function applyLife() {
+    const p = life.p, U = sim.U;
+    U.Ms.value = p.Ms; U.gasDens.value = p.gasDens;
+    U.clearOn.value = p.clearOn; U.clearR.value = p.clearR;
+    U.starR.value = p.starR; U.snA.value = p.snA; U.snR.value = p.snR; U.snW.value = p.snW;
+    U.snow.value = p.snow;
+    vis.setStar(p);
+  }
+  function onLifeEvent(e) {
+    if (e === 'ignition') {
+      toast('Allumage : la fusion de l’hydrogène démarre au cœur de l’étoile');
+      flyHome(null, 4);
+      state.burst = 1; audio.ignition();
+    } else if (e === 'clearing') toast('Le gaz a disparu : la lumière de l’étoile balaie le disque');
+    else if (e === 'mature') toast('Le système est formé');
+    else if (e === 'giant') { toast('L’étoile a épuisé son hydrogène : elle devient une supergéante rouge'); audio.giant(); }
+    else if (e === 'collapse') toast('Le cœur de fer s’effondre…');
+    else if (e === 'supernova') {
+      toast('Supernova !');
+      state.burst = 1; state.shake = 1; audio.supernova();
+    } else if (e === 'newcycle') startNewCycle();
+  }
+  // Naissance des embryons pendant la formation : là où il y a de la poussière
+  // (tirage pondéré par le profil radial lu sous la tête), loin des autres.
+  let spawnAcc = 0;
+  function spawnEmbryos(dt) {
+    spawnAcc += dt;
+    if (spawnAcc < 2.2 || !state.needle) return;
+    spawnAcc = 0;
+    const w = [];
+    let tot = 0;
+    for (let i = 0; i < nUsed; i++) { const r = radiusOf(i); const c = state.needle[i] * r * (r > 0.45 ? 1 : 0); w.push(c); tot += c; }
+    if (tot <= 0) return;
+    for (let attempt = 0; attempt < 6; attempt++) {
+      let u = Math.random() * tot, i = 0;
+      while (i < nUsed - 1 && (u -= w[i]) > 0) i++;
+      const a = radiusOf(i) * (0.97 + Math.random() * 0.06);
+      if (state.planets.some((q) => Math.abs(q.a - a) < 0.07 * a)) continue;
+      const free = freeSlot();
+      if (free < 0) return;
+      const ph = Math.random() * Math.PI * 2;
+      sim.spawn(free, new THREE.Vector3(a * Math.cos(ph), 0, a * Math.sin(ph)), M_EARTH * (0.02 + Math.random() * 0.1));
+      state.reserved.add(free);
+      return;
+    }
+  }
+  function startNewCycle() {
+    state.resetting = true;
+    if (state.follow >= 0) overview();
+    flyHome(CLOUD_VIEW, 4);
+    sim.reset(life.cycle).then(() => {
+      state.planets = []; state.prev = new Map(); state.removedGas = 0; state.lastSerial = 0;
+      state.absorbedBy?.clear(); state.reserved.clear(); state.layers = null;
+      state.selected = -1; state.autoSelect = true; vis.V.selected.value = -1;
+      evo.clear(); cross.clear(); pred.clear(); kin.pos = null; kin.t = state.simTime;
+      vis.updateOrbits([]);
+      renderList();
+      state.resetting = false;
+      toast(`Cycle ${life.cycle + 1} : un nouveau nuage, ensemencé par la supernova`);
+    });
+  }
+  const phasesEl = $('#phases');
+  phasesEl.innerHTML = PHASES.map((ph) => `<div title="${ph.name}"><u></u></div>`).join('');
+  function renderLife() {
+    const ph = PHASES[life.phase];
+    $('#cyc').textContent = `cycle ${life.cycle + 1}`;
+    [...phasesEl.children].forEach((el, i) => {
+      el.className = i < life.phase ? 'done' : i === life.phase ? 'now' : '';
+      el.firstChild.style.width = i === life.phase ? `${Math.min(100, life.p.progress * 100).toFixed(1)}%` : '';
+    });
+    const head = `<b>${ph.name}</b> <span class="dim">· en réalité ${ph.real}</span>`;
+    if ($('#phaseName').innerHTML !== head) { $('#phaseName').innerHTML = head; $('#phaseDesc').textContent = ph.desc; }
+  }
+
   // ── Boucle ─────────────────────────────────────────────────────────────────
   let last = performance.now();
   const shakeOff = new THREE.Vector3();
@@ -840,8 +924,17 @@ async function main() {
     //  de demander toujours plus de sous-pas — pas de spirale)
     const frameTime = Math.min(0.066 * warp, Math.min(0.05, real) * 0.96 * state.speed * timeScale * warp);
 
+    // cycle de vie : paramètres de l'étoile et du disque, événements
+    if (!state.paused && !state.resetting) {
+      const evs = life.update(frameTime, real, state.gasFrac);
+      applyLife();
+      for (const e of evs) onLifeEvent(e);
+      if (life.p.spawn) spawnEmbryos(frameTime);
+    }
+    if (++state.lifeUI % 8 === 0) renderLife();
+
     let dtSim = 0;
-    if (!state.paused && frameTime > 0) {
+    if (!state.paused && !state.resetting && frameTime > 0) {
       dtSim = frameTime;
       state.simTime += dtSim;
       const tick = state.simTime >= state.nextLayer;
