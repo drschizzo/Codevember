@@ -35,6 +35,11 @@ export const R_OUT = 9.0;      // bord externe
 export const R_GRID = 12.0;    // étendue de la grille
 export const M_EARTH = 3.0e-6; // masse terrestre en masses solaires
 export const TAU = Math.PI * 2;
+// Budgets de masse (le disque n'est plus un réservoir infini) :
+export const SOLID0 = 700 * M_EARTH;   // solides disponibles au départ
+export const GAS0 = 2500 * M_EARTH;    // gaz capturable par les cœurs massifs
+export const GAS_TAU = 160 * TAU;      // dissipation du gaz (~160 orbites à 1 UA)
+export const NIMP = 8;                 // anneau d'impacts récents
 
 const PARTICLE_WG = 256;
 
@@ -60,8 +65,22 @@ export function createSim(renderer, N) {
   const eAcc = instancedArray(M, 'vec4');   // accélération (scratch)
   const eInfo = instancedArray(M, 'vec4');  // couche en cours : masse, glace, Σr·m, nbCouches
   const eTot = instancedArray(M, 'vec4');   // totaux : glace, Σr·m, taux d'accrétion, impacts
-  const eLayers = instancedArray(M * L, 'vec4'); // masse, fraction glace, r moyen, type (0 accr, 1 impact, 2 graine)
+  const eLayers = instancedArray(M * L, 'vec4'); // masse, fraction glace, r moyen, type (0 accr, 1 impact, 2 graine, 3 gaz)
+  const eGas = instancedArray(M, 'vec4');   // gaz : couche en cours, total
+  // Impacts récents : [k] = position, w = masse de l'impacteur ;
+  //                    [NIMP + k] = n° de série, survivant, éjecta en attente, absorbé
+  const imp = instancedArray(NIMP * 2, 'vec4');
+  const impPos = { element: (k) => imp.element(k) };
+  const impInfo = { element: (k) => imp.element(int(k).add(NIMP)) };
+  const impMeta = instancedArray(1, 'vec4');    // x = nombre total d'impacts
+  const pHeat = instancedArray(N, 'float');     // chaleur des éjecta (rendu)
   const eAccum = instancedArray(M * 4, 'uint').toAtomic(); // n, nGlace, Σr·64
+  // Liste compacte des embryons actifs, reconstruite à chaque sous-pas : les
+  // grains ne bouclent que sur elle, avec des paramètres déjà calculés.
+  //   [2k]   = position xyz, masse gravitationnelle (avec boost)
+  //   [2k+1] = centre du piège de pression, amplitude du piège, rayon de capture, index
+  //   [2M].x = nombre d'actifs
+  const eAct = instancedArray(M * 2 + 1, 'vec4');
 
   const grid = instancedArray(NR * NPHI, 'uint').toAtomic();
   const tau = instancedArray(NR * NPHI, 'float');
@@ -75,7 +94,10 @@ export function createSim(renderer, N) {
     boost: uniform(25.0),        // amplification artistique de la gravité des embryons
     fHill: uniform(0.38),        // rayon de capture / rayon de Hill
     soft2: uniform(2.0e-4),
-    mp: uniform(0.012 / N),      // masse d'un grain
+    mp: uniform(SOLID0 / N),     // masse d'un grain (baisse quand le disque s'épuise)
+    gasAvail: uniform(1.0),      // fraction du gaz encore disponible (CPU)
+    mCrit: uniform(10.0 * M_EARTH), // masse critique du cœur : capture du gaz
+    gasK: uniform(0.035),        // taux de capture du gaz (en Ω)
     snow: uniform(2.7),          // ligne des glaces (UA)
     turb: uniform(0.0025),
     isoMass: uniform(6.0 * M_EARTH), // masse d'isolation (création des anneaux)
@@ -96,13 +118,20 @@ export function createSim(renderer, N) {
   };
 
   // ── Outils ─────────────────────────────────────────────────────────────────
+  const eSeed = (idx, serial) => idx.mul(13).add(serial.mul(104729.0).toUint()).add(uint(555));
   const gauss = (h1, h2) => sqrt(log(max(h1, 1e-7)).mul(-2)).mul(cos(h2.mul(TAU)));
   const stokesOf = (idx) => pow(10.0, mix(-2.0, 0.3, hash(idx.add(uint(918273)))));
   const isoMassAt = (a) => U.isoMass.mul(pow(a, 0.75));
+  // Masse gravitationnelle : le boost artistique (×25) accélère la croissance
+  // des petits embryons mais s'efface pour les gros (≈ ×1,2 pour une Jupiter),
+  // sinon une géante tirerait comme 20 Jupiter et disperserait tout le système.
+  const B_M = 3.0 * M_EARTH;
+  const gmass = (m) => m.mul(float(1).add(U.boost.sub(1.0).div(m.div(B_M).add(1.0))));
+  const hillR = (a, m) => U.fHill.mul(a).mul(pow(gmass(m).div(3.0), 1 / 3));
   // Au-delà de la masse d'isolation, la planète ouvre un piège de pression :
   // elle n'avale presque plus de cailloux (ils s'accumulent en anneau).
-  const captureRadius = (a, m) => U.fHill.mul(a).mul(pow(m.mul(U.boost).div(3.0), 1 / 3))
-    .mul(mix(1.0, 0.2, smoothstep(1.0, 4.0, m.div(isoMassAt(a)))));
+  const captureRadius = (a, m) => hillR(a, m)
+    .mul(mix(1.0, 0.04, smoothstep(0.8, 1.6, m.div(isoMassAt(a)))));
 
   function writeParticle(idx, seed, rA, rB) {
     const h1 = hash(seed), h2 = hash(seed.add(1)), h3 = hash(seed.add(2)), h4 = hash(seed.add(3));
@@ -136,22 +165,22 @@ export function createSim(renderer, N) {
     const etaEff = float(U.eta).toVar();
     const captured = int(-1).toVar();
 
-    Loop({ start: 0, end: M, type: 'int', name: 'j' }, ({ j }) => {
-      const E = ePos.element(j);
-      const m = E.w;
-      If(m.greaterThan(0.0), () => {
-        const d = E.xyz.sub(p);
-        const d2 = dot(d, d);
-        const d2s = d2.add(U.soft2);
-        acc.addAssign(d.mul(m.mul(U.boost).div(d2s.mul(sqrt(d2s)))));
-        const rc = eVel.element(j).w;
-        If(d2.lessThan(rc.mul(rc)), () => { captured.assign(j); });
-        // Piège de pression juste à l'extérieur des planètes massives :
-        // le gaz y devient super-képlérien → les grains s'accumulent en anneau.
-        const aj = length(E.xz);
-        const s = smoothstep(0.35, 1.0, m.div(isoMassAt(aj)));
-        const x = R.sub(aj.mul(1.18)).div(aj.mul(0.07));
-        etaEff.addAssign(s.mul(U.eta).mul(4.0).mul(x).mul(exp(x.mul(x).negate())));
+    const nAct = eAct.element(M * 2).x.toInt();
+    Loop({ start: int(0), end: nAct, type: 'int', name: 'j', condition: '<' }, ({ j }) => {
+      const A0 = eAct.element(j.mul(2));
+      const A1 = eAct.element(j.mul(2).add(1));
+      const d = A0.xyz.sub(p);
+      const d2 = dot(d, d);
+      const d2s = d2.add(U.soft2);
+      acc.addAssign(d.mul(A0.w.div(d2s.mul(sqrt(d2s)))));
+      If(d2.lessThan(A1.z.mul(A1.z)), () => { captured.assign(A1.w.toInt()); });
+      // Piège de pression juste à l'extérieur des planètes massives :
+      // le gaz y devient super-képlérien → les grains s'accumulent en anneau.
+      If(A1.y.greaterThan(0.0), () => {
+        const x = R.sub(A1.x).div(A1.x.mul(0.0593));
+        If(abs(x).lessThan(3.5), () => {
+          etaEff.addAssign(A1.y.mul(x).mul(exp(x.mul(x).negate())));
+        });
       });
     });
 
@@ -190,7 +219,42 @@ export function createSim(renderer, N) {
       atomicAdd(eAccum.element(base.add(2)), P.w.mul(64.0).toUint());
     });
 
-    If(lost, () => {
+    // Impact géant récent : une fraction des grains est arrachée et projetée
+    // depuis le point d'impact (nuage de débris chauds).
+    const eject = int(-1).toVar();
+    Loop({ start: 0, end: NIMP, type: 'int', name: 'k' }, ({ k }) => {
+      const I = impInfo.element(k);
+      If(I.z.greaterThan(0.5), () => {
+        const ml = impPos.element(k).w.div(M_EARTH);
+        const frac = clamp(ml.mul(0.012), 0.006, 0.03);
+        If(hash(idx.add(I.x.mul(7919.0).toUint())).lessThan(frac), () => { eject.assign(k); });
+      });
+    });
+
+    const H = pHeat.element(idx);
+    If(eject.greaterThanEqual(0), () => {
+      const I = impInfo.element(eject);
+      const IP = impPos.element(eject);
+      const s = I.y.toInt();
+      const Es = ePos.element(s);
+      const es = eSeed(idx, I.x);
+      const h1 = hash(es), h2 = hash(es.add(1)), h3 = hash(es.add(2)), h4 = hash(es.add(3));
+      const ct = h1.mul(2).sub(1), st = sqrt(max(float(1).sub(ct.mul(ct)), 0)), ph = h2.mul(TAU);
+      const dir = normalize(vec3(st.mul(cos(ph)), ct.mul(0.45), st.mul(sin(ph))));
+      const a = max(length(IP.xz), R_IN);
+      const as = max(length(Es.xz), R_IN);
+      const rc = hillR(as, Es.w).mul(0.5);
+      const pos = Es.xyz.add(dir.mul(rc.add(h3.mul(0.03))));
+      // vitesse orbitale (circulaire) du survivant + vitesse d'éjection
+      const vOrb = vec3(Es.z.negate(), 0, Es.x).div(as).mul(sqrt(float(1).div(as)));
+      const vej = sqrt(float(1).div(a)).mul(mix(0.05, 0.4, h4.mul(h4)));
+      const vel = vOrb.add(dir.mul(vej));
+      // (limite de 8 buffers par shader : les débris prennent la provenance du lieu d'impact)
+      P.assign(vec4(pos, a));
+      V.assign(vec4(vel, select(a.greaterThan(U.snow), 1.0, 0.0)));
+      H.assign(mix(0.7, 1.0, h3));
+    }).ElseIf(lost, () => {
+      H.assign(0);
       // Renaissance : la matière perdue est remplacée, pour moitié par un apport
       // du nuage parent au bord externe, pour moitié dans tout le disque.
       const sseed = idx.mul(4).add(U.frame.mul(747796405)).add(uint(12345));
@@ -199,8 +263,32 @@ export function createSim(renderer, N) {
     }).Else(() => {
       P.assign(vec4(p, P.w));
       V.assign(vec4(v, V.w));
+      If(H.greaterThan(0.0), () => { // la quasi-totalité des grains est froide : pas d'écriture
+        H.assign(select(H.greaterThan(0.004), H.mul(exp(U.dt.mul(-0.55))), 0.0));
+      });
     });
   })().compute(N, [PARTICLE_WG]);
+
+  // Les éjecta ne sont émis qu'une fois, au premier sous-pas qui suit l'impact.
+  const clearEjecta = Fn(() => {
+    impInfo.element(instanceIndex).z.assign(0);
+  })().compute(NIMP, [NIMP]);
+
+  // ── Liste compacte des embryons actifs (un thread, 64 itérations) ───────────
+  const buildActive = Fn(() => {
+    const n = int(0).toVar();
+    Loop({ start: 0, end: M, type: 'int', name: 'j' }, ({ j }) => {
+      const E = ePos.element(j);
+      If(E.w.greaterThan(0.0), () => {
+        const aj = length(E.xz);
+        const amp = smoothstep(0.35, 1.0, E.w.div(isoMassAt(aj))).mul(U.eta).mul(4.0);
+        eAct.element(n.mul(2)).assign(vec4(E.xyz, gmass(E.w)));
+        eAct.element(n.mul(2).add(1)).assign(vec4(aj.mul(1.18), amp, eVel.element(j).w, j.toFloat()));
+        n.addAssign(1);
+      });
+    });
+    eAct.element(M * 2).assign(vec4(n.toFloat(), 0, 0, 0));
+  })().compute(1, [1]);
 
   // ── Embryons : forces ──────────────────────────────────────────────────────
   const embryoForces = Fn(() => {
@@ -217,7 +305,7 @@ export function createSim(renderer, N) {
         If(F.w.greaterThan(0.0).and(k.notEqual(i)), () => {
           const d = F.xyz.sub(p);
           const d2 = dot(d, d).add(1.0e-4);
-          acc.addAssign(d.mul(F.w.mul(U.boost).div(d2.mul(sqrt(d2)))));
+          acc.addAssign(d.mul(gmass(F.w).div(d2.mul(sqrt(d2)))));
         });
       });
       const dw = U.wellPos.sub(p);
@@ -232,7 +320,7 @@ export function createSim(renderer, N) {
       const tang = vec3(p.z.negate(), 0, p.x).div(R);
       const vCirc = tang.mul(sqrt(float(1).div(R)));
       acc.addAssign(vCirc.sub(v).div(U.tauDamp));
-      acc.subAssign(tang.mul(E.w.mul(U.boost).mul(U.migK).div(R)));
+      acc.subAssign(tang.mul(gmass(E.w).mul(U.migK).div(R)));
       eAcc.element(i).assign(vec4(acc, 0));
     });
   })().compute(M, [64]);
@@ -268,7 +356,7 @@ export function createSim(renderer, N) {
           mt,
           a.x.mul(a.y).add(b.x.mul(b.y)).div(mt),
           a.x.mul(a.z).add(b.x.mul(b.z)).div(mt),
-          max(a.w, b.w),
+          select(a.w.equal(1.0).or(b.w.equal(1.0)), 1.0, max(a.w, b.w)),
         ));
       });
       n.assign(L / 2);
@@ -312,18 +400,41 @@ export function createSim(renderer, N) {
         info.x.assign(0); info.y.assign(0); info.z.assign(0);
       });
 
-      eVel.element(i).w.assign(captureRadius(length(E.xz), m));
+      // Capture du gaz : au-delà de la masse critique, le cœur s'entoure d'une
+      // enveloppe (emballement), limitée par l'ouverture d'un sillon et par
+      // le gaz qui reste dans le disque.
+      const G = eGas.element(i);
+      const a = max(length(E.xz), R_IN);
+      If(m.greaterThan(U.mCrit).and(U.gasAvail.greaterThan(0.0)), () => {
+        const mMax = pow(a, 0.4).mul(260.0 * M_EARTH);
+        const Om = pow(a, -1.5);
+        const dmg = m.mul(U.gasK).mul(Om).mul(U.frameDt).mul(U.gasAvail)
+          .mul(smoothstep(U.mCrit, U.mCrit.mul(2.0), m))
+          .mul(clamp(float(1).sub(m.div(mMax)), 0.0, 1.0));
+        m.addAssign(dmg);
+        E.w.assign(m);
+        G.x.addAssign(dmg);
+        G.y.addAssign(dmg);
+      });
+      If(U.layerTick.equal(uint(1)).and(G.x.greaterThan(0.0)), () => {
+        pushLayer(i, vec4(G.x, 0.0, 0.0, 3.0));
+        G.x.assign(0);
+      });
+
+      eVel.element(i).w.assign(captureRadius(a, m));
     });
   })().compute(M, [64]);
 
   // ── Embryons : fusions (un seul thread, M² / 2 paires) ─────────────────────
   const embryoMerge = Fn(() => {
+    // (mergeK × somme des rayons de Hill, cf. hillR)
     Loop({ start: 0, end: M, type: 'int', name: 'a' }, ({ a }) => {
       Loop({ start: a.add(1), end: int(M), type: 'int', name: 'b', condition: '<' }, ({ b }) => {
         const A = ePos.element(a), B = ePos.element(b);
         If(A.w.greaterThan(0.0).and(B.w.greaterThan(0.0)), () => {
           const d = length(A.xyz.sub(B.xyz));
-          const rm = eVel.element(a).w.add(eVel.element(b).w).mul(U.mergeK);
+          // rayon de fusion : fraction des sphères de Hill (indépendant de l'isolation)
+          const rm = hillR(length(A.xz), A.w).add(hillR(length(B.xz), B.w)).mul(U.mergeK);
           If(d.lessThan(rm), () => {
             const aHeavy = A.w.greaterThanEqual(B.w);
             const h = select(aHeavy, a, b).toVar();
@@ -331,9 +442,12 @@ export function createSim(renderer, N) {
             const H = ePos.element(h), Lw = ePos.element(l);
             const HV = eVel.element(h), LV = eVel.element(l);
             const mh = H.w.toVar(), ml = Lw.w.toVar();
-            const mt = mh.add(ml).toVar();
-            const pos = H.xyz.mul(mh).add(Lw.xyz.mul(ml)).div(mt).toVar();
-            const vel = HV.xyz.mul(mh).add(LV.xyz.mul(ml)).div(mt).toVar();
+            // centre de masse et quantité de mouvement conservés (sur la masse totale) ;
+            // ~8 % de l'impacteur part ensuite en débris
+            const msum = mh.add(ml).toVar();
+            const pos = H.xyz.mul(mh).add(Lw.xyz.mul(ml)).div(msum).toVar();
+            const vel = HV.xyz.mul(mh).add(LV.xyz.mul(ml)).div(msum).toVar();
+            const mt = mh.add(ml.mul(0.92)).toVar();
 
             // Fige la couche en cours du survivant puis ajoute la couche « impact »
             const info = eInfo.element(h);
@@ -343,10 +457,22 @@ export function createSim(renderer, N) {
               info.x.assign(0); info.y.assign(0); info.z.assign(0);
             });
             const TL = eTot.element(l);
-            pushLayer(h, vec4(ml, TL.x.div(ml), TL.y.div(ml), 1.0));
+            const mlSolid = max(ml.sub(eGas.element(l).y), 1e-20);
+            pushLayer(h, vec4(ml.mul(0.92), TL.x.div(mlSolid), TL.y.div(mlSolid), 1.0));
             const TH = eTot.element(h);
-            TH.x.addAssign(TL.x);
-            TH.y.addAssign(TL.y);
+            TH.x.addAssign(TL.x.mul(0.92));
+            TH.y.addAssign(TL.y.mul(0.92));
+            const GH = eGas.element(h), GL = eGas.element(l);
+            GH.y.addAssign(GL.y.mul(0.92));
+            GL.assign(vec4(0));
+
+            // Enregistre l'impact (anneau circulaire) pour le rendu et le son
+            const meta = impMeta.element(0);
+            const serial = meta.x.add(1.0);
+            meta.x.assign(serial);
+            const slot = serial.sub(floor(serial.div(NIMP)).mul(NIMP)).toInt();
+            impPos.element(slot).assign(vec4(pos, ml));
+            impInfo.element(slot).assign(vec4(serial, h.toFloat(), 1.0, l.toFloat()));
             TH.z.addAssign(ml.div(M_EARTH).mul(20.0));
             TH.w.addAssign(1.0);
 
@@ -371,6 +497,7 @@ export function createSim(renderer, N) {
     eVel.element(i).assign(vec4(tang.mul(sqrt(float(1).div(R))), captureRadius(R, m)));
     eInfo.element(i).assign(vec4(0, 0, 0, 1));
     eTot.element(i).assign(vec4(ice.mul(m), R.mul(m), 0, 0));
+    eGas.element(i).assign(vec4(0));
     eLayers.element(i.mul(L)).assign(vec4(m, ice, R, 2.0));
   })().compute(1, [1]);
 
@@ -421,7 +548,8 @@ export function createSim(renderer, N) {
       const ice = a > U.snow.value ? 1 : 0;
       const v = Math.sqrt(1 / a);
       P.set([a * Math.cos(ph), (Math.random() - 0.5) * 0.005, a * Math.sin(ph), m], i * 4);
-      const rc = U.fHill.value * a * Math.cbrt(m * U.boost.value / 3);
+      const gm = m * (1 + (U.boost.value - 1) / (1 + m / (3 * M_EARTH)));
+      const rc = U.fHill.value * a * Math.cbrt(gm / 3);
       V.set([-Math.sin(ph) * v, 0, Math.cos(ph) * v, rc], i * 4);
       I.set([0, 0, 0, 1], i * 4);
       T.set([ice * m, a * m, 0, 0], i * 4);
@@ -433,7 +561,7 @@ export function createSim(renderer, N) {
   // ── API ────────────────────────────────────────────────────────────────────
   let frame = 0;
   const sim = {
-    N, U, buffers: { pPos, pVel, ePos, eVel, eInfo, eTot, eLayers, tau, needle, grid },
+    N, U, buffers: { pPos, pVel, pHeat, ePos, eVel, eInfo, eTot, eGas, eLayers, tau, needle, grid },
     substeps: 4,
 
     async init() {
@@ -442,11 +570,18 @@ export function createSim(renderer, N) {
       await renderer.computeAsync([clearGrid, depositGrid, opticalDepth, readNeedle]);
     },
 
-    step(layerTick) {
+    // grid = false : saute la grille (ombre + tête de lecture), inutile entre
+    // deux images quand on avance en accéléré
+    step(layerTick, grid = true) {
       const list = [];
-      for (let s = 0; s < this.substeps; s++) list.push(stepParticles, embryoForces, embryoIntegrate);
+      for (let s = 0; s < this.substeps; s++) {
+        list.push(buildActive, stepParticles);
+        if (s === 0) list.push(clearEjecta);
+        list.push(embryoForces, embryoIntegrate);
+      }
       U.layerTick.value = layerTick ? 1 : 0;
-      list.push(embryoAccrete, embryoMerge, clearGrid, depositGrid, opticalDepth, readNeedle);
+      list.push(embryoAccrete, embryoMerge);
+      if (grid) list.push(clearGrid, depositGrid, opticalDepth, readNeedle);
       U.frame.value = ++frame;
       renderer.compute(list);
     },
@@ -460,8 +595,14 @@ export function createSim(renderer, N) {
 
     // Lectures asynchrones (petites) pour l'UI et le son
     async readEmbryos() {
-      const [p, v, t, inf] = await Promise.all([ePos, eVel, eTot, eInfo].map((b) => renderer.getArrayBufferAsync(b.value)));
-      return { pos: new Float32Array(p), vel: new Float32Array(v), tot: new Float32Array(t), info: new Float32Array(inf) };
+      const bufs = [ePos, eVel, eTot, eInfo, eGas, imp];
+      const [p, v, t, inf, g, im] = (await Promise.all(bufs.map((b) => renderer.getArrayBufferAsync(b.value)))).map((b) => new Float32Array(b));
+      return { pos: p, vel: v, tot: t, info: inf, gas: g, impPos: im.subarray(0, NIMP * 4), impInfo: im.subarray(NIMP * 4) };
+    },
+    // Position + vitesse des embryons (2 ko), lue à chaque image pour la caméra
+    async readKinematics() {
+      const [p, v] = await Promise.all([ePos, eVel].map((b) => renderer.getArrayBufferAsync(b.value)));
+      return { pos: new Float32Array(p), vel: new Float32Array(v) };
     },
     async readLayers() {
       return new Float32Array(await renderer.getArrayBufferAsync(eLayers.value));
