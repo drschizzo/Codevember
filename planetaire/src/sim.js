@@ -72,7 +72,8 @@ export function createSim(renderer, N) {
   const imp = instancedArray(NIMP * 2, 'vec4');
   const impPos = { element: (k) => imp.element(k) };
   const impInfo = { element: (k) => imp.element(int(k).add(NIMP)) };
-  const impMeta = instancedArray(1, 'vec4');    // x = nombre total d'impacts
+  const impMeta = instancedArray(1 + M, 'vec4'); // [0].x = nombre total d'impacts ; [1+a].x = candidat de fusion de a
+  const mergeW = { element: (a) => impMeta.element(int(a).add(1)) };
   const pHeat = instancedArray(N, 'float');     // chaleur des éjecta (rendu)
   const eAccum = instancedArray(M * 4, 'uint').toAtomic(); // n, nGlace, Σr·64
   // Liste compacte des embryons actifs, reconstruite à chaque sous-pas : les
@@ -88,7 +89,8 @@ export function createSim(renderer, N) {
 
   // ── Uniformes ──────────────────────────────────────────────────────────────
   const U = {
-    dt: uniform(0.004),
+    dt: uniform(0.008),          // pas des grains
+    dtE: uniform(0.004),         // pas des embryons (2 sous-pas par pas de grains)
     frame: uniform(0, 'uint'),
     eta: uniform(0.012),         // déficit de vitesse du gaz (pression)
     boost: uniform(25.0),        // amplification artistique de la gravité des embryons
@@ -203,7 +205,7 @@ export function createSim(renderer, N) {
     v.assign(vGas.add(v.sub(vGas).mul(exp(U.dt.div(ts).negate()))));
 
     // Turbulence (marche aléatoire)
-    const seed = idx.mul(8).add(U.frame.mul(1664525));
+    const seed = idx.mul(8).add(eAct.element(M * 2).y.toUint().mul(1664525));
     const kick = vec3(hash(seed).sub(0.5), hash(seed.add(1)).sub(0.5).mul(0.6), hash(seed.add(2)).sub(0.5));
     v.addAssign(kick.mul(U.turb).mul(vK).mul(sqrt(U.dt.mul(Omega)).mul(3.0)));
 
@@ -257,7 +259,7 @@ export function createSim(renderer, N) {
       H.assign(0);
       // Renaissance : la matière perdue est remplacée, pour moitié par un apport
       // du nuage parent au bord externe, pour moitié dans tout le disque.
-      const sseed = idx.mul(4).add(U.frame.mul(747796405)).add(uint(12345));
+      const sseed = idx.mul(4).add(U.frame.mul(747796405)).add(eAct.element(M * 2).y.toUint().mul(2891336453)).add(uint(12345));
       const rA = select(hash(sseed.add(7)).lessThan(U.infall), float(R_OUT * 0.82), float(R_IN * 1.2));
       writeParticle(idx, sseed, rA, R_OUT);
     }).Else(() => {
@@ -290,7 +292,9 @@ export function createSim(renderer, N) {
         n.addAssign(1);
       });
     });
-    eAct.element(M * 2).assign(vec4(n.toFloat(), 0, 0, 0));
+    // .y : compteur de sous-pas (graine aléatoire différente à chaque sous-pas)
+    const sub = eAct.element(M * 2).y;
+    eAct.element(M * 2).assign(vec4(n.toFloat(), select(sub.greaterThan(1.0e6), 0.0, sub.add(1.0)), 0, 0));
   })().compute(1, [1]);
 
   // ── Embryons : forces ──────────────────────────────────────────────────────
@@ -333,8 +337,8 @@ export function createSim(renderer, N) {
     const E = ePos.element(i);
     If(E.w.greaterThan(0.0), () => {
       const Vv = eVel.element(i);
-      const v = Vv.xyz.add(eAcc.element(i).xyz.mul(U.dt)).toVar();
-      const p = E.xyz.add(v.mul(U.dt)).toVar();
+      const v = Vv.xyz.add(eAcc.element(i).xyz.mul(U.dtE)).toVar();
+      const p = E.xyz.add(v.mul(U.dtE)).toVar();
       const r = length(p);
       If(r.lessThan(R_IN * 0.5).or(r.greaterThan(40.0)), () => {
         E.assign(vec4(p, 0.0));
@@ -408,7 +412,7 @@ export function createSim(renderer, N) {
       const T = eTot.element(i);
       T.x.addAssign(dIce);
       T.y.addAssign(dR);
-      T.z.assign(mix(T.z, dm.div(M_EARTH).div(U.frameDt), 0.04));
+      T.z.assign(mix(T.z, dm.div(M_EARTH).div(max(U.frameDt, 1e-4)), 0.04)); // (jamais ÷ 0 : un NaN ici blanchit l'écran via le bloom)
 
       If(U.layerTick.equal(uint(1)).and(info.x.greaterThan(0.0)), () => {
         const lm = info.x.toVar();
@@ -445,11 +449,33 @@ export function createSim(renderer, N) {
     });
   })().compute(M, [64]);
 
-  // ── Embryons : fusions (un seul thread, M² / 2 paires) ─────────────────────
-  const embryoMerge = Fn(() => {
-    // (mergeK × somme des rayons de Hill, cf. hillR)
-    Loop({ start: 0, end: M, type: 'int', name: 'a' }, ({ a }) => {
+  // ── Embryons : fusions ─────────────────────────────────────────────────────
+  // 1) détection en parallèle (un thread par embryon, il cherche un partenaire
+  //    plus loin dans la liste) — c'était 2 016 paires sur UN thread, ~2 ms ;
+  // 2) résolution sur un thread, seulement pour les rares candidats.
+  // Rayon de fusion : mergeK × somme des rayons de Hill (cf. hillR).
+  const mergeDetect = Fn(() => {
+    const a = int(instanceIndex);
+    const A = ePos.element(a);
+    const found = int(-1).toVar();
+    If(A.w.greaterThan(0.0), () => {
+      const ra = hillR(length(A.xz), A.w).toVar();
       Loop({ start: a.add(1), end: int(M), type: 'int', name: 'b', condition: '<' }, ({ b }) => {
+        const B = ePos.element(b);
+        If(B.w.greaterThan(0.0).and(found.lessThan(0)), () => {
+          const d = length(A.xyz.sub(B.xyz));
+          If(d.lessThan(ra.add(hillR(length(B.xz), B.w)).mul(U.mergeK)), () => { found.assign(b); });
+        });
+      });
+    });
+    mergeW.element(a).x.assign(found.toFloat());
+  })().compute(M, [64]);
+
+  const embryoMerge = Fn(() => {
+    Loop({ start: 0, end: M, type: 'int', name: 'a' }, ({ a }) => {
+      const bIdx = mergeW.element(a).x.toInt();
+      If(bIdx.greaterThanEqual(0), () => {
+        const b = bIdx;
         const A = ePos.element(a), B = ePos.element(b);
         If(A.w.greaterThan(0.0).and(B.w.greaterThan(0.0)), () => {
           const d = length(A.xyz.sub(B.xyz));
@@ -595,7 +621,8 @@ export function createSim(renderer, N) {
   let frame = 0;
   const sim = {
     N, U, buffers: { pPos, pVel, pHeat, ePos, eVel, eInfo, eTot, eGas, eLayers, tau, needle, grid },
-    substeps: 4,
+    // pas maximal des grains (≥ 100 pas par orbite au bord interne du disque)
+    maxDtP: 0.011,
 
     async init() {
       seedEmbryos();
@@ -603,20 +630,28 @@ export function createSim(renderer, N) {
       await renderer.computeAsync([clearGrid, depositGrid, opticalDepth, readNeedle]);
     },
 
-    // grid = false : saute la grille (ombre + tête de lecture), inutile entre
-    // deux images quand on avance en accéléré
-    step(layerTick, grid = true) {
+    // Avance la simulation de frameTime (unités de temps) en UNE soumission.
+    // Les grains (1 M, coûteux) prennent des pas ≤ maxDtP ; les embryons
+    // (64, quasi gratuits) font 2 sous-pas par pas de grains, pour la précision
+    // des rencontres proches. Retourne le temps effectivement simulé.
+    step(frameTime, layerTick) {
+      frameTime = Math.max(0, frameTime);
+      const nP = Math.max(1, Math.ceil(frameTime / this.maxDtP - 1e-9));
+      U.dt.value = frameTime / nP;
+      U.dtE.value = frameTime / nP / 2;
+      U.frameDt.value = frameTime;
       const list = [];
-      for (let s = 0; s < this.substeps; s++) {
+      for (let s = 0; s < nP; s++) {
         list.push(buildActive, stepParticles);
         if (s === 0) list.push(clearEjecta);
-        list.push(embryoForces, embryoIntegrate);
+        list.push(embryoForces, embryoIntegrate, embryoForces, embryoIntegrate);
       }
       U.layerTick.value = layerTick ? 1 : 0;
-      list.push(embryoAccrete, embryoMerge);
-      if (grid) list.push(clearGrid, depositGrid, opticalDepth, readNeedle);
+      list.push(embryoAccrete, mergeDetect, embryoMerge);
+      list.push(clearGrid, depositGrid, opticalDepth, readNeedle);
       U.frame.value = ++frame;
       renderer.compute(list);
+      return frameTime;
     },
 
     spawn(index, pos, mass) {
