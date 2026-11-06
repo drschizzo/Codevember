@@ -45,11 +45,12 @@ async function main() {
 
   // ── État ───────────────────────────────────────────────────────────────────
   const state = {
-    paused: false, speed: 1, simTime: 0, nextLayer: 0,
+    paused: false, speed: 2, simTime: 0, nextLayer: 0,
     planets: [], layers: null, selected: -1, autoSelect: true,
     fly: null, lastCount: 0, needle: null, fps: 60,
   };
-  const SPEEDS = [0.25, 0.5, 1, 1.5, 2];
+  // Au-delà de ×1, on enchaîne plusieurs pas par image (pas plus longs = instable)
+  const SPEEDS = [0.25, 0.5, 1, 2, 4, 8];
   const warp = Math.max(1, Math.min(16, Number(params.get('warp')) || 1)); // avance rapide (debug)
 
   // ── Interaction ────────────────────────────────────────────────────────────
@@ -130,7 +131,7 @@ async function main() {
   addEventListener('keydown', (e) => {
     if (e.target.tagName === 'INPUT') return;
     switch (e.key.toLowerCase()) {
-      case ' ': state.paused = !state.paused; toast(state.paused ? 'Pause' : 'Lecture'); e.preventDefault(); break;
+      case ' ': state.paused = !state.paused; syncSpeedUI(); toast(state.paused ? 'Pause' : 'Lecture'); e.preventDefault(); break;
       case 'e': launchFlyby(); break;
       case 'c': {
         const m = (vis.V.colorMode.value + 1) % 3;
@@ -154,9 +155,30 @@ async function main() {
   });
   function setSpeed(d) {
     const k = Math.max(0, Math.min(SPEEDS.length - 1, SPEEDS.indexOf(state.speed) + d));
-    state.speed = SPEEDS[k];
-    toast(`Vitesse ×${state.speed}`);
+    setSpeedTo(SPEEDS[k]);
   }
+  function setSpeedTo(v) {
+    state.speed = v;
+    if (state.paused) state.paused = false;
+    syncSpeedUI();
+    toast(`Vitesse ×${fmtSpeed(v)}`);
+  }
+  const fmtSpeed = (v) => ({ 0.25: '¼', 0.5: '½' })[v] || String(v);
+  const speedEl = $('#speed');
+  speedEl.innerHTML = `<button data-v="pause" title="Pause (Espace)">❚❚</button>` +
+    SPEEDS.map((v) => `<button data-v="${v}">×${fmtSpeed(v)}</button>`).join('');
+  speedEl.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.v === 'pause') { state.paused = !state.paused; syncSpeedUI(); toast(state.paused ? 'Pause' : 'Lecture'); }
+    else setSpeedTo(Number(b.dataset.v));
+  });
+  function syncSpeedUI() {
+    for (const b of speedEl.children) {
+      b.classList.toggle('on', b.dataset.v === 'pause' ? state.paused : !state.paused && Number(b.dataset.v) === state.speed);
+    }
+  }
+  syncSpeedUI();
 
 
   function launchFlyby() {
@@ -355,6 +377,9 @@ async function main() {
       const s = pl.find((p) => p.index === f.h);
       if (!s || state.paused) continue;
       vis.impact(f.h, pred.get(f.h) || [s.x, s.y, s.z], f.mlE);
+      // l'énergie du choc fond la surface : océan de magma, cratères effacés
+      const e = evo.get(f.h);
+      if (e) { e.heat = Math.min(1, e.heat + 0.45 + 1.5 * f.mlE / Math.max(s.mE, 0.05)); e.craters *= 0.15; }
       audio.impact(f.mlE, s.a, screenPan(s.x, s.y, s.z));
       state.slow = Math.max(state.slow, Math.min(1, 0.6 + 0.3 * Math.cbrt(f.mlE)));
       state.shake = Math.max(state.shake, Math.min(1, 0.4 + 0.4 * Math.cbrt(f.mlE)));
@@ -363,8 +388,63 @@ async function main() {
       toast(`Impact géant : ${nameOf(f.h)} absorbe ${nameOf(f.l)} (${fmtMass(f.mlE, true)})`);
     }
 
+    evolve(pl);
     vis.updateOrbits(pl.filter((p) => p.mE > 0.3 || p.selected));
     renderList();
+  }
+
+  // ── Évolution des planètes (sous-simulation légère, côté CPU) ──────────────
+  // Chaque planète a une petite « vie » qui pilote l'aspect de sa surface :
+  //  · chaleur interne : l'accrétion et les impacts géants la chauffent (océan
+  //    de magma, fissures incandescentes), elle refroidit ensuite d'autant plus
+  //    lentement qu'elle est massive ;
+  //  · cratères : une surface solide sans atmosphère se cratérise avec l'âge,
+  //    la fusion (magma, impact) efface tout ;
+  //  · eau : apportée par la matière née au-delà de la ligne des glaces (la
+  //    lignée !), son état dépend de la température d'équilibre à cette distance :
+  //    vapeur (trop chaud), océans (tempéré), banquise (froid) ;
+  //  · atmosphère : retenue seulement au-dessus de ~0,2 M⊕ ; fine et bleue si
+  //    tempérée, épaisse et jaunâtre (effet de serre) si chaude ;
+  //  · géantes : jeunes et chaudes (lueur rouge, bandes floues), elles se
+  //    contrastent en refroidissant.
+  const evo = new Map(); // index → { heat, craters, born }
+  const ss = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  function evolve(pl) {
+    const dt = Math.max(0, Math.min(5, state.simTime - (state.evoT ?? state.simTime)));
+    state.evoT = state.simTime;
+    for (const p of pl) {
+      let e = evo.get(p.index);
+      if (!e) { e = { heat: 0.85, craters: 0, born: state.simTime }; evo.set(p.index, e); }
+      const mE = Math.max(p.mE, 0.02);
+      const tau = 12 * Math.pow(mE, 0.35);                    // refroidissement
+      const src = Math.min(0.5, 1.5 * p.rate / mE);               // chauffage par accrétion
+      e.heat = Math.min(1, Math.max(0, e.heat + dt * (src - e.heat / tau)));
+      const Teq = 278 / Math.sqrt(Math.max(p.a, 0.2));          // K, étoile solaire
+      const atmo = p.gasF > 0.08 ? 1 : ss(0.15, 1.5, mE) * ss(800, 400, Teq + 150 / mE);
+      e.craters = Math.min(1, e.craters + dt * 0.012 * (1 - atmo)) * Math.exp(-e.heat * e.heat * dt * 0.6);
+      const water = Math.max(p.ice, ss(0.9, 3.2, p.meanR) * 0.85); // matière hydratée née au-delà des glaces
+      const molten = ss(0.35, 0.6, e.heat);
+      const ocean = Teq > 180 && Teq < 330 ? water * (1 - molten) : 0;
+      const iceSurf = Teq <= 180 ? water * (1 - molten) : 0;
+      const hot = ss(300, 420, Teq) * atmo;
+      const age = (state.simTime - e.born) / (2 * Math.PI);
+      Object.assign(e, { atmo, water, ocean, iceSurf, hot, Teq, age, molten });
+      p.evo = e;
+      vis.setEvo(p.index, [e.heat, ocean, iceSurf, e.craters], [atmo, hot, Math.min(1, age / 60), Teq / 1000]);
+    }
+    for (const i of evo.keys()) if (!pl.some((p) => p.index === i)) evo.delete(i);
+  }
+  function surfaceOf(p) {
+    const e = p.evo;
+    if (!e) return '';
+    if (p.gasF > 0.5) return e.heat > 0.3 ? 'jeune géante encore chaude' : 'atmosphère en bandes';
+    if (p.gasF > 0.08) return 'enveloppe d’hydrogène épaisse';
+    if (e.molten > 0.5) return 'océan de magma';
+    if (e.hot > 0.5) return 'atmosphère épaisse et brûlante';
+    if (e.ocean > 0.3) return 'océans d’eau liquide';
+    if (e.iceSurf > 0.3) return 'surface glacée';
+    if (e.craters > 0.4) return 'surface criblée de cratères';
+    return 'surface rocheuse';
   }
 
   // ── UI ─────────────────────────────────────────────────────────────────────
@@ -452,10 +532,12 @@ async function main() {
     select(i);
     state.follow = i;
     const at = followPos(new THREE.Vector3()) || new THREE.Vector3(p.x, p.y, p.z);
-    // vue de l'extérieur et un peu au-dessus : l'étoile reste en arrière-plan
+    // de côté, un peu vers l'étoile et au-dessus : la planète apparaît éclairée
+    // aux trois quarts (vue de l'extérieur, on ne verrait que sa face de nuit)
     const d = 0.3 + 7 * visRadius(p.mE);
     const radial = at.clone().setY(0).normalize();
-    const offset = radial.multiplyScalar(0.85).add(new THREE.Vector3(0, 0.5, 0)).normalize().multiplyScalar(d);
+    const tangent = new THREE.Vector3(-radial.z, 0, radial.x);
+    const offset = tangent.multiplyScalar(-0.9).addScaledVector(radial, -0.25).add(new THREE.Vector3(0, 0.4, 0)).normalize().multiplyScalar(d);
     camMove = { t: 0, dur: 1.6, fromPos: camera.position.clone(), fromTarget: controls.target.clone(), offset };
     controls.minDistance = 0.04;
     lastFollow.copy(at);
@@ -470,6 +552,7 @@ async function main() {
   }
   $('#overview').addEventListener('click', overview);
   const _f = new THREE.Vector3();
+  const _up = new THREE.Vector3(0, 1, 0);
   function updateCamera(real) {
     if (state.follow >= 0 && kin.pos && !pred.has(state.follow)) {
       // planète absorbée : on suit celle qui l'a avalée (l'info arrive un peu
@@ -483,6 +566,7 @@ async function main() {
     if (state.follow >= 0 && !here && camMove && !camMove.home) return; // attend la première prédiction
     if (camMove) {
       camMove.t += real;
+      if (here && !camMove.home) camMove.offset.applyAxisAngle(_up, -(Math.atan2(here.z, here.x) - Math.atan2(lastFollow.z, lastFollow.x)));
       const k = Math.min(1, camMove.t / camMove.dur), e = k * k * (3 - 2 * k);
       const toTarget = camMove.home ? HOME.target : here;
       const toPos = camMove.home ? HOME.pos : here.clone().add(camMove.offset);
@@ -490,10 +574,12 @@ async function main() {
       camera.position.lerpVectors(camMove.fromPos, toPos, e);
       if (k >= 1) { if (camMove.home) controls.minDistance = 0.6; camMove = null; }
     } else if (here) {
-      // accompagne la planète : on déplace caméra et cible du même mouvement
-      _v.subVectors(here, lastFollow);
-      camera.position.add(_v);
-      controls.target.add(_v);
+      // accompagne la planète dans un repère qui tourne avec elle autour de
+      // l'étoile : même éclairage en permanence (sinon on finit côté nuit)
+      const dAng = Math.atan2(here.z, here.x) - Math.atan2(lastFollow.z, lastFollow.x);
+      _v.subVectors(camera.position, controls.target).applyAxisAngle(_up, -dAng);
+      controls.target.copy(here);
+      camera.position.copy(here).add(_v);
     }
     if (here) lastFollow.copy(here);
   }
@@ -517,8 +603,12 @@ async function main() {
   const cut = $('#cut'), cctx = cut.getContext('2d');
   let cutGeom = null, cutHover = -1;
   const GAS_RGB = [0.87, 0.78, 0.62];
+  // types de strates : 0 accrétion, 2 embryon initial, 3 gaz capté,
+  // ≥ 10 matière d'un impacteur (10 + n° d'impact ; ,5 = son gaz)
+  const isGasL = (l) => l.type === 3 || (l.type >= 10 && l.type % 1 > 0.25);
+  const groupOf = (l) => (l.type >= 10 ? Math.floor(l.type) : 0);
   function layerColor(l) {
-    if (l.type === 3) return GAS_RGB;
+    if (isGasL(l)) return GAS_RGB;
     const c = provenanceRGB(l.r).map((v) => v * (1 - l.ice * 0.35) + l.ice * 0.35 * 0.95);
     return l.type === 2 ? c.map((v) => v * 0.6) : c;
   }
@@ -561,14 +651,34 @@ async function main() {
     for (let k = rings.length - 1; k >= 0; k--) {
       const { l, r1 } = rings[k];
       cctx.beginPath(); cctx.moveTo(cx, cy); cctx.arc(cx, cy, r1, -Math.PI / 2, Math.PI / 2); cctx.closePath();
-      cctx.fillStyle = css(layerColor(l), l.type === 3 ? 0.8 : 0.95);
+      cctx.fillStyle = css(layerColor(l), isGasL(l) ? 0.8 : 0.95);
       cctx.fill();
     }
     for (const { k, l, r1 } of rings) {
       cctx.beginPath(); cctx.arc(cx, cy, r1, -Math.PI / 2, Math.PI / 2);
-      cctx.strokeStyle = k === cutHover ? '#fff' : l.type === 1 ? 'rgba(255,170,90,0.95)' : 'rgba(0,0,0,0.35)';
-      cctx.lineWidth = k === cutHover ? 2 : l.type === 1 ? 1.8 : 0.6;
+      cctx.strokeStyle = 'rgba(0,0,0,0.35)'; cctx.lineWidth = 0.6;
       cctx.stroke();
+    }
+    // chaque impact = un groupe de couches (l'histoire de l'impacteur),
+    // bordé d'orange et marqué d'une accolade sur le bord droit
+    const groups = new Map();
+    for (const q of rings) {
+      const g = groupOf(q.l);
+      if (!g) continue;
+      const G = groups.get(g) || { r0: q.r0, r1: q.r1, m: 0 };
+      G.r0 = Math.min(G.r0, q.r0); G.r1 = Math.max(G.r1, q.r1); G.m += q.l.m;
+      groups.set(g, G);
+    }
+    for (const G of groups.values()) {
+      cctx.strokeStyle = 'rgba(255,170,90,0.95)'; cctx.lineWidth = 1.6;
+      for (const r of [G.r0, G.r1]) { if (r < 1) continue; cctx.beginPath(); cctx.arc(cx, cy, r, -Math.PI / 2, Math.PI / 2); cctx.stroke(); }
+      cctx.lineWidth = 2.5;
+      cctx.beginPath(); cctx.moveTo(cx + G.r0, cy); cctx.lineTo(cx + G.r1, cy); cctx.stroke();
+    }
+    if (rings[cutHover]) {
+      const { r1 } = rings[cutHover];
+      cctx.beginPath(); cctx.arc(cx, cy, r1, -Math.PI / 2, Math.PI / 2);
+      cctx.strokeStyle = '#fff'; cctx.lineWidth = 2; cctx.stroke();
     }
     cctx.strokeStyle = 'rgba(255,255,255,0.3)'; cctx.lineWidth = 1;
     cctx.beginPath(); cctx.moveTo(cx, cy - Rmax - 3); cctx.lineTo(cx, cy + Rmax + 3); cctx.stroke();
@@ -584,10 +694,12 @@ async function main() {
     notes.push({ pt: at(Rmax, -1.0), text: 'surface (récent)' });
     const seed = rings.find((q) => q.l.type === 2);
     if (seed) notes.push({ pt: at(Math.max(2, seed.r1 * 0.5), 0.15), text: 'cœur (ancien)' });
-    const imp = rings.filter((q) => q.l.type === 1);
-    if (imp.length) notes.push({ pt: at(imp[imp.length - 1].r1, 0.65), text: `impact${imp.length > 1 ? ` ×${imp.length}` : ''}` });
+    if (groups.size) {
+      const big = [...groups.values()].reduce((a, b) => (b.m > a.m ? b : a));
+      notes.push({ pt: at((big.r0 + big.r1) / 2, 0.02), text: `impact${groups.size > 1 ? `s (${groups.size})` : ''}` });
+    }
     const gasR = rings.filter((q) => q.l.type === 3);
-    if (gasR.length) notes.push({ pt: at((gasR[0].r0 + Rmax) / 2, -0.35), text: 'gaz' });
+    if (gasR.length) notes.push({ pt: at((gasR[0].r0 + Rmax) / 2, -0.35), text: 'gaz capté' });
     notes.sort((a, b) => a.pt[1] - b.pt[1]);
     const lx = cx + Rmax + 12;
     let lastY = -1e9;
@@ -605,12 +717,15 @@ async function main() {
     let detail = '<span class="dim">Survolez une strate pour la décrire.</span>';
     if (hv) {
       const l = hv.l, mE = l.m / M_EARTH;
-      detail = l.type === 3 ? `Strate ${hv.k + 1}/${n} · <b>gaz capté</b> du disque · ${fmtMass(mE)}`
-        : l.type === 1 ? `Strate ${hv.k + 1}/${n} · <b>impact géant</b> : un corps de ${fmtMass(mE)} absorbé d’un coup, matière née vers ${l.r.toFixed(1)} UA`
+      const g = groupOf(l);
+      detail = g ? `Strate ${hv.k + 1}/${n} · <b>apportée par un impact géant</b> : ${isGasL(l) ? 'gaz de l’impacteur' : `une couche de l’impacteur, née vers ${l.r.toFixed(1)} UA`} · ${fmtMass(mE)}`
+        : l.type === 3 ? `Strate ${hv.k + 1}/${n} · <b>gaz capté</b> du disque · ${fmtMass(mE)}`
         : l.type === 2 ? `Strate 1/${n} · <b>embryon initial</b> (${fmtMass(mE)}), né à ${l.r.toFixed(2)} UA`
         : `Strate ${hv.k + 1}/${n} · poussière accrétée : ${fmtMass(mE)}, née vers <b>${l.r.toFixed(1)} UA</b> · ${(l.ice * 100).toFixed(0)} % de glace`;
     }
+    const ev = p.evo;
     info.innerHTML = `<b>${nameOf(p.index)}</b> · ${kindOf(p)} · ${fmtMass(p.mE)} · orbite à ${p.a.toFixed(2)} UA<br>
+      ${ev ? `${surfaceOf(p)} · ≈ ${ev.Teq.toFixed(0)} K · âge ${ev.age.toFixed(0)} orbites<br>` : ''}
       ${p.gasF > 0.02 ? `gaz ${(p.gasF * 100).toFixed(0)} % · ` : ''}glace ${(p.ice * 100).toFixed(0)} % des solides · ${p.impacts.toFixed(0)} impact${p.impacts >= 2 ? 's' : ''} géant${p.impacts >= 2 ? 's' : ''}${p.res.length ? ' · résonance ' + [...new Set(p.res)].join(', ') : ''}<br>
       <span class="hover">${detail}</span>`;
   }
@@ -683,17 +798,18 @@ async function main() {
     // ralenti après un impact géant : le temps s'étire puis repart
     state.slow = Math.max(0, state.slow - real / 2.6);
     const timeScale = 1 - 0.8 * Math.pow(state.slow, 0.7);
-    sim.U.dt.value = 0.004 * state.speed * timeScale;
+    sim.U.dt.value = 0.004 * Math.min(1, state.speed) * timeScale;
+    const steps = Math.max(1, Math.round(state.speed)) * warp;
 
     let dtSim = 0;
     if (!state.paused) {
-      dtSim = sim.U.dt.value * sim.substeps * warp;
+      dtSim = sim.U.dt.value * sim.substeps * steps;
       state.simTime += dtSim;
-      sim.U.frameDt.value = dtSim / warp;
+      sim.U.frameDt.value = dtSim / steps;
       const tick = state.simTime >= state.nextLayer;
       if (tick) state.nextLayer = state.simTime + 2.5;
       updateFlyby(dtSim);
-      for (let w = 0; w < warp; w++) sim.step(tick && w === 0, w === warp - 1);
+      for (let w = 0; w < steps; w++) sim.step(tick && w === 0, w === steps - 1);
     }
     // positions de l'instant présent, PUIS caméra : sinon elle aurait une image de retard
     predictAll();
