@@ -18,7 +18,9 @@ async function main() {
   const MAX_PR = Math.min(devicePixelRatio, 2);
   renderer.setPixelRatio(MAX_PR);
   renderer.setSize(innerWidth, innerHeight);
-  renderer.toneMapping = THREE.AgXToneMapping;
+  // Neutral (Khronos) plutôt qu'AgX : garde la teinte des couleurs vives (géante rouge,
+  // rémanent, lave), qu'AgX délave vers le blanc
+  renderer.toneMapping = new URLSearchParams(location.search).has("agx") ? THREE.AgXToneMapping : THREE.NeutralToneMapping;
   renderer.toneMappingExposure = 1.1;
   await renderer.init();
   if (!renderer.backend.isWebGPUBackend) return fail('Cette expérience nécessite WebGPU (pas de repli WebGL).');
@@ -835,7 +837,7 @@ async function main() {
     const p = life.p, U = sim.U;
     U.Ms.value = p.Ms; U.gasDens.value = p.gasDens;
     U.clearOn.value = p.clearOn; U.clearR.value = p.clearR;
-    U.starR.value = p.starR; U.snA.value = p.snA; U.snR.value = p.snR; U.snW.value = p.snW;
+    U.starR.value = p.starR; U.outR.value = p.outR; U.snA.value = p.snA; U.snHeat.value = p.snHeat; U.snR.value = p.snR; U.snW.value = p.snW;
     U.snow.value = p.snow;
     vis.setStar(p);
   }
@@ -849,8 +851,12 @@ async function main() {
     else if (e === 'giant') { toast('L’étoile a épuisé son hydrogène : elle devient une supergéante rouge'); audio.giant(); }
     else if (e === 'collapse') toast('Le cœur de fer s’effondre…');
     else if (e === 'supernova') {
-      toast('Supernova !');
-      state.burst = 1; state.shake = 1; audio.supernova();
+      toast('Supernova ! L’étoile explose');
+      sim.supernova();                       // les éjecta stellaires partent
+      state.burst = 1.6; state.shake = 1; audio.supernova();
+      if (state.follow >= 0) overview();
+      controls.maxDistance = 140;
+      setTimeout(() => flyHome(new THREE.Vector3(0, 30, 70), 8), 400); // on recule pour voir l'expansion
     } else if (e === 'newcycle') startNewCycle();
   }
   // Naissance des embryons pendant la formation : là où il y a de la poussière
@@ -881,6 +887,7 @@ async function main() {
     state.resetting = true;
     if (state.follow >= 0) overview();
     flyHome(CLOUD_VIEW, 4);
+    setTimeout(() => (controls.maxDistance = 70), 4500);
     sim.reset(life.cycle).then(() => {
       state.planets = []; state.prev = new Map(); state.removedGas = 0; state.lastSerial = 0;
       state.absorbedBy?.clear(); state.reserved.clear(); state.layers = null;
@@ -922,7 +929,9 @@ async function main() {
     // 60 i/s) : à 120 i/s chaque image fait deux fois moins de travail.
     // (plafonné : si le GPU ne suit pas en accéléré, le temps ralentit au lieu
     //  de demander toujours plus de sous-pas — pas de spirale)
-    const frameTime = Math.min(0.066 * warp, Math.min(0.05, real) * 0.96 * state.speed * timeScale * warp);
+    // (la supernova se joue au plus à ×1 : c'est un moment à regarder)
+    const spd = life.phase === 6 ? Math.min(1, state.speed) : state.speed;
+    const frameTime = Math.min(0.066 * warp, Math.min(0.05, real) * 0.96 * spd * timeScale * warp);
 
     // cycle de vie : paramètres de l'étoile et du disque, événements
     if (!state.paused && !state.resetting) {
@@ -951,7 +960,7 @@ async function main() {
 
     // bouffée d'exposition : tout le système s'illumine un instant
     state.burst = Math.max(0, (state.burst || 0) - real * 1.4);
-    renderer.toneMappingExposure = 1.1 * (1 + (state.follow >= 0 ? 0.3 : 0.9) * state.burst * state.burst);
+    renderer.toneMappingExposure = 1.1 * (1 + (state.follow >= 0 ? 0.3 : 0.9) * state.burst * state.burst * (state.burst > 1 ? 3 : 1));
 
     // secousse de caméra
     state.shake = Math.max(0, state.shake - real * 1.2);
@@ -975,7 +984,7 @@ async function main() {
   const profJs = { loop: 0, poll: 0 };
 
   if (params.has('auto')) { $('#intro').classList.add('gone'); }
-  window.__planetaire = { sim, state, renderer, audio, launchFlyby, pred, kin, vis }; // (débogage)
+  window.__planetaire = { sim, state, renderer, audio, launchFlyby, pred, kin, vis, life }; // (débogage)
 }
 
 function fail(msg) {

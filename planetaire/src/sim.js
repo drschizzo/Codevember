@@ -23,7 +23,7 @@ import {
   Fn, If, Loop, instancedArray, instanceIndex, uniform, float, int, uint,
   vec3, vec4, hash, sqrt, exp, length, dot, normalize, max, min, mix,
   smoothstep, clamp, select, atomicAdd, atomicLoad, atomicStore, atan, cos,
-  sin, log, pow, floor, abs,
+  sin, log, pow, floor, abs, mx_fractal_noise_float,
 } from 'three/tsl';
 
 export const M = 64;           // embryons max
@@ -125,6 +125,9 @@ export function createSim(renderer, N) {
     snA: uniform(0.0),           // onde de choc de supernova : amplitude,
     snR: uniform(0.0),           //   rayon,
     snW: uniform(1.0),           //   épaisseur
+    outR: uniform(29.0),         // au-delà, un grain a quitté le système
+    snHeat: uniform(0.0),        // le choc chauffe à blanc ce qu'il traverse
+    ejV: uniform(2.7),           // vitesse des éjecta de la supernova (UA / unité de temps)
     cycleSeed: uniform(0, 'uint'),
     cloudR: uniform(14.0),       // nuage initial : rayon (UA),
     cloudOmega: uniform(0.0153), //   rotation solide (le bord tombe vers ~9 UA),
@@ -303,7 +306,9 @@ export function createSim(renderer, N) {
         atomicAdd(eAccum.element(base.add(1)), V.w.toUint());
         atomicAdd(eAccum.element(base.add(2)), P.w.mul(64.0).toUint());
       });
-      const lost = rNew.lessThan(max(float(R_IN * 0.75), U.starR)).or(rNew.greaterThan(R_OUT * 3.2)).or(captured.greaterThanEqual(0));
+      const lost = rNew.lessThan(max(float(R_IN * 0.75), U.starR)).or(rNew.greaterThan(U.outR)).or(captured.greaterThanEqual(0));
+      // l'onde de choc de la supernova chauffe à blanc les grains qu'elle traverse
+      If(U.snHeat.greaterThan(0.0), () => { H.assign(max(H, exp(xs.mul(xs).negate()).mul(U.snHeat))); });
       If(lost, () => {
         P.assign(vec4(p, -1.0)); // retiré pour de bon
         H.assign(0);
@@ -315,6 +320,28 @@ export function createSim(renderer, N) {
         If(H.greaterThan(0.0), () => {
           H.assign(select(H.greaterThan(0.004), H.mul(exp(U.dt.mul(-0.55))), 0.0));
         });
+      });
+    });
+  })().compute(N, [PARTICLE_WG]);
+
+  // ── Supernova : les grains retirés (la plupart, à ce stade) sont recyclés
+  // en éjecta stellaires, lancés depuis l'étoile dans toutes les directions.
+  // La vitesse dépend de la direction (bruit) : la coquille se déchire en
+  // « doigts » (instabilités de Rayleigh-Taylor), comme dans les vrais rémanents.
+  const snEject = Fn(() => {
+    const idx = instanceIndex;
+    const P = pPos.element(idx);
+    If(P.w.lessThan(0.0), () => {
+      const sd = idx.mul(11).add(U.cycleSeed.mul(7)).add(uint(99991));
+      const h1 = hash(sd), h2 = hash(sd.add(1)), h3 = hash(sd.add(2)), h4 = hash(sd.add(3));
+      If(h4.lessThan(0.85), () => {
+        const ct = h1.mul(2).sub(1), stt = sqrt(max(float(1).sub(ct.mul(ct)), 0)), ph = h2.mul(TAU);
+        const dir = vec3(stt.mul(cos(ph)), ct, stt.mul(sin(ph)));
+        const fingers = mx_fractal_noise_float(dir.mul(3.0).add(vec3(U.cycleSeed.toFloat().mul(0.013))), 3, 2.0, 0.5);
+        const speed = U.ejV.mul(fingers.mul(0.45).add(0.8).add(h3.mul(0.12)).max(0.15));
+        P.assign(vec4(dir.mul(h3.mul(0.1).add(0.05)), mix(0.36, 0.5, h3)));   // provenance : cœur de l'étoile
+        pVel.element(idx).assign(vec4(dir.mul(speed), 0.0));
+        pHeat.element(idx).assign(float(1));
       });
     });
   })().compute(N, [PARTICLE_WG]);
@@ -705,6 +732,8 @@ export function createSim(renderer, N) {
       renderer.compute(list);
       return frameTime;
     },
+
+    supernova() { renderer.compute(snEject); },
 
     spawn(index, pos, mass) {
       U.spawnIdx.value = index;
