@@ -28,7 +28,7 @@ export const PHASES = [
 ];
 
 // Durées (unités de simulation ; ×2 par défaut ≈ 1,92 unité/s)
-const T_CLOUD = 45, T_PROTO = 40, T_CLEAR = 220, T_MATURE = 160, T_GIANT = 140;
+const T_CLOUD = 45, T_PROTO = 40, T_CLEAR = 180, T_MATURE = 160, T_GIANT = 140;
 const GAS_TAU = 190;            // dissipation du gaz après l'allumage
 const SN_COLLAPSE = 0.9, SN_BOOM = 1.35, SN_END = 17; // secondes (à ×1)
 
@@ -49,6 +49,7 @@ export function createLifecycle() {
     t: 0,              // temps dans la phase (unités de simulation)
     tReal: 0,          // temps réel dans la phase (supernova)
     tIgn: -1,          // temps depuis l'allumage
+    beltIn: 4.5, beltOut: 6.0, // ceinture de débris (fixée au début de la dissipation)
     gasEnv: 1,         // gaz du disque restant (hors consommation par les planètes)
     // paramètres courants
     p: {},
@@ -66,7 +67,7 @@ export function createLifecycle() {
     const t = life.t;
     const p = {
       Ms: 1, L: 1, color: COL_MAIN, starI: STAR_I, outR: 29, starVisR: 0.15, starR: 0, jets: 0, ambient: 0.04,
-      sizeK: 1, gasDens: 1, clearOn: 0, clearR: 0, snA: 0, snR: 0, snW: 1, snHeat: 0, pulsar: 0, spawn: false, shell: 0, shellR: 0,
+      sizeK: 1, gasDens: 1, clearOn: 0, clearR: 0, clearR2: 1e3, beltLoss: 0, snA: 0, snR: 0, snW: 1, snHeat: 0, pulsar: 0, spawn: false, shell: 0, shellR: 0,
       progress: 0,
     };
 
@@ -104,13 +105,19 @@ export function createLifecycle() {
       if (gasLeftFrac < 0.04 || life.gasEnv < 0.05) { go(3); events.push('clearing'); }
     } else if (id === 'clear') {
       const k = t / T_CLEAR;
+      // Fronts à vitesse constante en échelle logarithmique (régulier à l'œil),
+      // qui se rejoignent sur la ceinture en 80 % de la phase.
+      const f = Math.min(1, k / 0.8);
       p.gasDens = 0; p.clearOn = 1;
-      p.clearR = lerp(0.3, 7.0, ss(0, 1, k));
+      p.clearR = 0.3 * Math.pow(life.beltIn / 0.3, f);
+      p.clearR2 = 30 * Math.pow(life.beltOut / 30, f);
+      p.beltLoss = 0.0015; p.outR = 16;
       p.progress = k;
       if (t >= T_CLEAR) { go(4); events.push('mature'); }
     } else if (id === 'mature') {
       const k = t / T_MATURE;
       p.gasDens = 0; p.L = lerp(1, 1.5, k);
+      p.clearOn = 1; p.clearR = life.beltIn; p.clearR2 = life.beltOut; p.beltLoss = 0.0012; p.outR = 16; // la ceinture s'érode lentement
       p.progress = k;
       if (t >= T_MATURE) { go(5); events.push('giant'); }
     } else if (id === 'giant') {
@@ -123,6 +130,8 @@ export function createLifecycle() {
       p.starVisR = lerp(0.15, 1.35, g);
       p.starR = Math.max(0, p.starVisR * 0.95 - 0.1); // engloutit ce qui passe sous sa surface
       p.Ms = lerp(1, 0.62, g);                         // vent stellaire : perte de masse
+      // la ceinture continue de s'éroder (et s'élargit avec la perte de masse)
+      p.clearOn = 1; p.clearR = Math.max(life.beltIn, p.starVisR * 2); p.clearR2 = life.beltOut * 1.6; p.beltLoss = 0.002; p.outR = 20;
       p.progress = k;
       if (t >= T_GIANT) { go(6); events.push('collapse'); }
     } else if (id === 'nova') {

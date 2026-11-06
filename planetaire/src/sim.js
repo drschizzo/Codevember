@@ -120,7 +120,9 @@ export function createSim(renderer, N) {
     Ms: uniform(1.0),            // masse centrale (G·M) : baisse quand l'étoile perd sa masse
     gasDens: uniform(1.0),       // densité relative du gaz du disque (0 = dissipé)
     clearOn: uniform(0.0),       // dissipation du disque en cours
-    clearR: uniform(0.0),        // front de dissipation (UA), progresse vers l'extérieur
+    clearR: uniform(0.0),        // front de dissipation intérieur (UA), progresse vers l'extérieur
+    clearR2: uniform(1.0e3),     // front extérieur, progresse vers l'intérieur (balaye disque externe et restes de l'enveloppe)
+    beltLoss: uniform(0.0),      // érosion collisionnelle (fraction retirée par unité de temps)
     starR: uniform(0.0),         // rayon physique de l'étoile (géante rouge : engloutit)
     snA: uniform(0.0),           // onde de choc de supernova : amplitude,
     snR: uniform(0.0),           //   rayon,
@@ -265,14 +267,27 @@ export function createSim(renderer, N) {
       // les petits grains sont soufflés par la pression de radiation (β > ½ :
       // ils ne sont plus liés), les gros spiralent vers l'étoile (Poynting-
       // Robertson). Au-delà du front, il reste une ceinture de débris.
-      const clr = U.clearOn.mul(smoothstep(U.clearR, U.clearR.mul(0.8), R));
-      If(clr.greaterThan(0.0), () => {
+      // Deux fronts se rejoignent sur la ceinture de débris : l'un part de
+      // l'étoile, l'autre balaie le disque externe et les restes de l'enveloppe.
+      const clrIn = U.clearOn.mul(smoothstep(U.clearR, U.clearR.mul(0.85), R));
+      const clrOut = U.clearOn.mul(smoothstep(U.clearR2, U.clearR2.mul(1.15), r));
+      If(clrIn.greaterThan(0.0), () => {
         If(st.lessThan(0.2), () => {
-          acc.addAssign(p.mul(U.Ms.mul(0.85).mul(clr).div(r2.mul(r))));
+          // poussière fine : β ≈ 0,6 → plus liée, elle dérive doucement vers l'extérieur
+          acc.addAssign(p.mul(U.Ms.mul(0.6).mul(clrIn).div(r2.mul(r))));
         }).Else(() => {
-          v.subAssign(v.mul(clr.mul(U.dt).mul(0.25)));
+          // gros grains : frein TANGENTIEL (Poynting-Robertson) → ils spiralent vers l'étoile
+          const tg = vec3(p.z.negate(), 0, p.x).div(R);
+          v.subAssign(tg.mul(dot(v, tg)).mul(clrIn.mul(U.dt).mul(float(0.05).div(R))));
         });
       });
+      If(clrOut.greaterThan(0.0), () => {
+        acc.addAssign(p.mul(U.Ms.mul(1.4).mul(clrOut).div(r2.mul(r)))); // nettement non liés : ils s'en vont
+      });
+      // érosion collisionnelle : broyés en poussière fine, les grains disparaissent
+      // (lentement dans la ceinture, plus vite dans les zones déjà balayées)
+      const erode = U.beltLoss.add(clrIn.max(clrOut).mul(0.07)).mul(U.dt);
+      const eroded = hash(idx.mul(3).add(eAct.element(M * 2).y.toUint().mul(2246822519))).lessThan(erode);
       // Onde de choc de la supernova : coquille qui balaie tout vers l'extérieur
       const xs = r.sub(U.snR).div(U.snW);
       acc.addAssign(p.div(r).mul(U.snA.mul(exp(xs.mul(xs).negate()))));
@@ -306,7 +321,7 @@ export function createSim(renderer, N) {
         atomicAdd(eAccum.element(base.add(1)), V.w.toUint());
         atomicAdd(eAccum.element(base.add(2)), P.w.mul(64.0).toUint());
       });
-      const lost = rNew.lessThan(max(float(R_IN * 0.75), U.starR)).or(rNew.greaterThan(U.outR)).or(captured.greaterThanEqual(0));
+      const lost = rNew.lessThan(max(float(R_IN * 0.75), U.starR)).or(rNew.greaterThan(U.outR)).or(captured.greaterThanEqual(0)).or(eroded);
       // l'onde de choc de la supernova chauffe à blanc les grains qu'elle traverse
       If(U.snHeat.greaterThan(0.0), () => { H.assign(max(H, exp(xs.mul(xs).negate()).mul(U.snHeat))); });
       If(lost, () => {
