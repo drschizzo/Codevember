@@ -22,13 +22,25 @@ Avertissement honnête : une étoile comme le Soleil finit en naine blanche, pas
 
 ## La machine (DA « mécanique »)
 
-Toute la simulation est présentée comme portée par un **planétaire en laiton** (`src/orrery.js`), comme les orreries du XVIIIᵉ siècle. La machine ne simule rien : elle lit l'état du GPU à chaque image et le rend tangible.
+Toute la simulation est présentée comme portée par un **planétaire en laiton** (`src/orrery.js`), comme les orreries du XVIIIᵉ siècle, enfermé sous une **cloche de verre**. La machine ne simule rien : elle lit l'état du GPU à chaque image et le rend tangible. Chaque pièce a une fonction, et la chaîne cinématique tient debout :
 
-- **Bras et tubes** : les 12 planètes les plus massives sont tenues chacune par un bras (avec contrepoids) fixé sur un tube. Les tubes sont concentriques autour de l'axe central : la planète la plus proche est sur l'arbre le plus fin et le plus haut. Une tige d'acier et une coupelle portent la planète.
-- **Engrenages = Kepler** : au pied de chaque tube, une roue engrène un pignon de l'arbre de renvoi. Le rapport des rayons suit la vitesse angulaire de la planète (ω ∝ a^−3/2) : les roues des planètes lointaines sont grandes, celles des proches petites.
-- **Peigne de boîte à musique** : la tête de lecture devient un peigne de lames d'acier le long de l'axe +X. Chaque planète, en passant, pince la lame de son rayon (lames longues = notes graves, au bord du disque).
-- **Barillet, balancier, échappement** : ils battent la mesure du temps simulé et s'arrêtent à la pause.
-- **Limbe gradué** (degrés, chiffres romains) porté par quatre arceaux, sur un socle tourné à la platine guillochée.
+```
+BARILLET (ressort = l'énergie d'un cycle de vie)
+  ├─▶ pignon de l'ARBRE DE RENVOI ─▶ pignons ─▶ ROUES des tubes ─▶ BRAS ─▶ planètes
+  │      (rapport roue / pignon = rapport des vitesses angulaires : Kepler)
+  └─▶ ROUE DE CENTRE ─▶ ROUE D'ÉCHAPPEMENT ⇄ ANCRE ⇄ BALANCIER (régulateur)
+```
+
+- **Bras et tubes** : les 12 planètes les plus massives sont tenues par un bras à contrepoids, fixé sur un tube concentrique (la plus proche sur l'arbre le plus fin et le plus haut). Une tige et une coupelle portent la planète ; une planète éjectée quitte la machine.
+- **Engrenages = Kepler** : l'arbre de renvoi tourne à la vitesse d'une orbite à 2,5 UA ; chaque roue de tube engrène un pignon dont le rapport suit ω ∝ a^−3/2. Toutes les dentures ont le même module : chaque étage roue + pignon totalise 40 dents (entraxe exact), et les dents tombent vraiment dans les creux (phases calées).
+- **Pièces usinées** : roues biseautées et alésées là où passe leur arbre, bagues et piliers tournés et chanfreinés, ponts à bouts ronds vissés sur leurs piliers, rubis sur les pivots. Les bras sont des tringles fixées par une bague à vis sur leur tube ; aucun bras ne traverse l'axe.
+- **Régulateur** : la roue d'échappement avance par à-coups, retenue par l'ancre que pousse le balancier. Le balancier bat donc d'autant plus vite que le temps s'écoule vite (×¼ … ×8), et s'arrête à la pause.
+- **Réserve de marche** : l'aiguille du cadran émaillé suit le ressort qui se détend pendant le cycle ; le cadran est gradué par les phases de la vie du système.
+- **Fin de cycle, et boucle** : à la supernova, le ressort est vide. Le **levier d'arrêt** bloque le balancier ; la **trémie** au sommet de la cloche aspire les débris pendant que la **couronne** remonte le barillet par une vis sans fin (le **cliquet** claque sur le **rochet**). Le levier se déclenche, la **vanne** s'ouvre, et les grains se déversent en filet le long de l'axe : ils remplissent le nouveau nuage de bas en haut, et chaque grain n'entre dans la dynamique qu'une fois arrivé à sa place (côté GPU, une « chaleur » négative code son heure de départ). Le premier nuage de la page naît de la même façon.
+- **Peigne de boîte à musique** = la tête de lecture, en acier, au-dessus du disque : la tige de chaque planète se prolonge en une **pointe** au-dessus de la bille, qui soulève la lame de son rayon. Les lames sont inclinées, si bien que seule leur pointe accroche, comme le picot d'un cylindre ; des masselottes lestent les lames graves. Le peigne se relève quand l'étoile enfle. Le **curseur de la ligne des glaces** glisse sur sa barre.
+- **Limbe gradué** (0° = tête de lecture), pieds et **arceaux** qui tiennent la cloche. Pour que le nuage initial tienne sous la cloche, il est resserré à 9,6 UA (rotation accélérée : le disque s'étend toujours jusqu'à ~9 UA).
+- **Objectif** : profondeur de champ (mise au point sur le centre visé ou la planète suivie ; le disque reste net, la machine se floute au premier et à l'arrière-plan) et flou de mouvement des rouages et de la machine quand la caméra bouge (les planètes et leurs bras n'en ont pas : suivies, elles resteraient floues). `?nolens` pour les couper.
+- Planètes grossies (×1,7) pour se lire comme des billes sur leurs tiges ; laiton patiné et satiné, pour laisser la vedette au disque.
 - L'interface reprend le thème : plaques de laiton vissées, petites capitales gravées.
 
 Touche **O** : ôter / remettre la machine (et revenir à l'ancienne DA). `?nomeca` : démarrer sans.
@@ -65,6 +77,7 @@ Paramètres d'URL :
 | `?peak=4` | pic de luminosité en HDR, en multiples du blanc de l’interface |
 | `?exposure=1.45` | exposition globale |
 | `?nomeca` | sans la machine (ancienne DA) |
+| `?nolens` | sans profondeur de champ ni flou de mouvement |
 
 ## Commandes
 

@@ -3,7 +3,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createSim, M, L, NR, R_IN, R_OUT, R_GRID, M_EARTH, SOLID0, GAS0, NIMP } from './sim.js';
 import { createLifecycle, PHASES } from './lifecycle.js';
 import { createVisuals } from './visuals.js';
-import { createOrrery } from './orrery.js';
+import { createOrrery, HOPPER } from './orrery.js';
 import { Sonifier, noteName } from './audio.js';
 import { provenanceRGB, css } from './palette.js';
 
@@ -52,16 +52,33 @@ async function main() {
   controls.maxDistance = 70;
 
   const sim = createSim(renderer, N);
+  // DA « mécanique » : le nuage initial doit tenir sous la cloche. On le
+  // resserre (14 → 9,6 UA) en accélérant sa rotation pour que le bord du
+  // disque retombe au même rayon (r_atterrissage = Ω² R⁴ : Ω = 3 / R²).
+  const MECA0 = !params.has('nomeca');
+  // Le nuage est en outre versé par la trémie au sommet de la cloche.
+  const setCloud = (m) => {
+    const R = m ? 9.6 : 14; sim.U.cloudR.value = R; sim.U.cloudOmega.value = m ? 3 / (R * R) : 0.0153;
+    sim.U.pourOn.value = m ? 1 : 0; sim.U.hopper.value.copy(HOPPER);
+  };
+  setCloud(MECA0);
   await sim.init();
   const EXPOSURE = Number(params.get('exposure')) || 1.45;
   const vis = createVisuals(renderer, scene, camera, sim, { hdr: HDR });
   // DA « mécanique » : la simulation est portée par un planétaire en laiton
   // (touche O pour l'ôter ; ?nomeca pour démarrer sans)
   const orrery = createOrrery(scene, renderer);
-  let meca = !params.has('nomeca');
-  const setMeca = (v) => { meca = v; orrery.setVisible(v); document.body.classList.toggle('meca', v); };
+  let meca = MECA0;
+  const PLANET_K = 1.7; // planètes en billes bien visibles sur leurs tiges
+  const setMeca = (v) => {
+    meca = v; orrery.setVisible(v); document.body.classList.toggle('meca', v);
+    vis.V.planetK.value = v ? PLANET_K : 1;
+    setCloud(v); // (s'applique au prochain nuage)
+  };
   setMeca(meca);
   const audio = new Sonifier();
+  orrery.onClick = () => audio.click();
+  orrery.onClack = () => audio.clack();
   const life = createLifecycle();
 
   // ── État ───────────────────────────────────────────────────────────────────
@@ -552,7 +569,7 @@ async function main() {
   const lastFollow = new THREE.Vector3();
   const visRadius = (mE) => {
     const Rp = mE < 2 ? Math.pow(mE, 0.28) : Math.min(11.5, 1.21 * Math.pow(mE / 2, 0.59));
-    return Math.max(0.005, 0.013 * Math.pow(Rp, 0.75)); // même formule que le shader
+    return Math.max(0.005, 0.013 * Math.pow(Rp, 0.75)) * vis.V.planetK.value; // même formule que le shader
   };
   function followPos(out) {
     const q = pred.get(state.follow);
@@ -859,6 +876,8 @@ async function main() {
     U.starR.value = p.starR; U.outR.value = p.outR; U.snA.value = p.snA; U.snHeat.value = p.snHeat; U.snR.value = p.snR; U.snW.value = p.snW;
     U.snow.value = p.snow;
     vis.setStar(p);
+    // versement du nuage : horloge de la phase « nuage » (au-delà, tout est lâché)
+    sim.U.pourT.value = life.phase === 0 ? life.t : 1e9;
     orrery.setStar(p.color, Math.pow(Math.max(p.L, 1e-3), 0.35), p.shell);
   }
   function onLifeEvent(e) {
@@ -984,6 +1003,7 @@ async function main() {
 
   // ── Boucle ─────────────────────────────────────────────────────────────────
   let last = performance.now();
+  const _fp = new THREE.Vector3();
   const shakeOff = new THREE.Vector3();
   // La simulation attend qu'on entre : tant que l'accueil est affiché, rien ne
   // tourne (ni calcul, ni rendu) — le cycle commence au clic.
@@ -1037,7 +1057,19 @@ async function main() {
     updateCamera(real);
     controls.update();
     vis.updateFx(state.paused ? 0 : real, (i) => pred.get(i));
-    if (meca) orrery.update(state.planets, pred, dtSim, real, !state.paused && !state.resetting);
+    if (meca) {
+      orrery.update(state.planets, pred, dtSim, real, !state.paused && !state.resetting, life, vis.V.planetK.value,
+        { t: life.phase === 0 ? life.t : 1e9, dur: sim.U.pourDur.value });
+      vis.V.collect.value = state.resetting ? vis.V.collect.value : orrery.collect;
+    } else vis.V.collect.value = 0;
+    // mise au point : sur la planète suivie, sinon sur le centre visé
+    {
+      const fp = state.follow >= 0 ? followPos(_fp) : null;
+      const fd = camera.position.distanceTo(fp || controls.target);
+      vis.V.focus.value += (fd - vis.V.focus.value) * Math.min(1, real * 4);
+      vis.V.focusRange.value = Math.max(0.25, vis.V.focus.value * 0.45);
+      vis.V.bokeh.value = meca ? 1.6 : 0.6;
+    }
     if (vis.updatePulsar(state.paused ? 0 : real)) audio.pulsarTick(); // un faisceau nous balaie : « tic »
 
     // bouffée d'exposition : tout le système s'illumine un instant
