@@ -2,42 +2,12 @@
 // réglages de rendu et des fonctions de rappel : il ne touche pas à la scène.
 import GUI from 'lil-gui';
 import { FINISHES, SETS, FINISH_DEFAULTS } from '../finishes.js';
-import { LAYER_TYPES, MOODS } from '../recipe.js';
+import { MOODS } from '../recipe.js';
+import { TYPES, P, HOLE_SHAPES } from '../types.js';
 import { ENV_PRESETS } from '../scene/env.js';
 import { QUALITY } from './settings.js';
 
 const opts = (o, label = (v) => v.label) => Object.fromEntries(Object.entries(o).map(([k, v]) => [label(v), k]));
-
-// paramètres de forme par type : [clé, libellé, min, max, pas]
-const GEO = {
-  cells: [
-    ['freq', 'Fréquence', 2, 12, 1], ['jitter', 'Désordre', 0, 0.5, 0.01], ['bar', 'Barreaux', 0.005, 0.3, 0.001],
-    ['round', 'Arrondi des trous', 0, 1, 0.01], ['barVar', 'Variation', 0, 1, 0.01], ['barFreq', 'Échelle variation', 0.3, 4, 0.01],
-    ['barGrad', 'Gradient', -1, 1, 0.01], ['closed', 'Cellules pleines', 0, 0.7, 0.01],
-  ],
-  slots: [
-    ['rows', 'Rangs', 3, 14, 1], ['cols', 'Secteurs', 6, 32, 1], ['twist', 'Torsion', -1, 1, 0.05], ['bottom', 'Calotte basse', 0.1, 0.5, 0.01],
-    ['bar', 'Barreaux', 0.005, 0.1, 0.001], ['barLat', 'Barreaux horizontaux', 0.5, 6, 0.05], ['barLon', 'Barreaux verticaux', 0.5, 6, 0.05],
-    ['round', 'Arrondi des trous', 0, 1, 0.01], ['barVar', 'Variation', 0, 1, 0.01], ['barGrad', 'Gradient', -1, 1, 0.01],
-  ],
-  voronoi: [
-    ['count', 'Nombre de cellules', 20, 800, 1], ['spiral', 'Spirale des germes', -2, 2, 0.01], ['jitter', 'Désordre', 0, 0.6, 0.01],
-    ['bar', 'Barreaux', 0.005, 0.3, 0.001], ['round', 'Arrondi des trous', 0, 1, 0.01], ['barVar', 'Variation', 0, 1, 0.01],
-    ['barFreq', 'Échelle variation', 0.3, 4, 0.01], ['barGrad', 'Gradient', -1, 1, 0.01], ['closed', 'Cellules pleines', 0, 0.7, 0.01],
-  ],
-  holes: [
-    ['petals', 'Pétales / côtés', 3, 10, 1], ['depth', 'Creux des pétales', 0, 0.7, 0.01], ['aspect', 'Allongement', 0.1, 1, 0.01],
-    ['holeScale', 'Taille de la forme', 0.3, 1, 0.01], ['orient', 'Orientation', 0, Math.PI, 0.01], ['swirl', 'Tourbillon', -3, 3, 0.01],
-    ['orientJitter', 'Orientation au hasard', 0, 2, 0.01],
-  ],
-  machining: [
-    ['pillow', 'Barreaux bombés', 0, 1.5, 0.01], ['step', 'Chambrage (largeur)', 0, 0.6, 0.01], ['stepDepth', 'Chambrage (profondeur)', 0.15, 0.8, 0.01],
-    ['rivets', 'Rivets', 0, 1.5, 0.01],
-  ],
-  tpms: [['freq', 'Fréquence', 1.5, 7, 0.05], ['wall', 'Paroi', -0.5, 0.5, 0.01]],
-  common: [['thickness', 'Épaisseur', 0.01, 0.22, 0.001], ['bevel', 'Biseau', 0, 0.04, 0.0005], ['portal', 'Oculus', 0.18, 0.5, 0.005]],
-  geode: [['crystals', 'Cristaux', 0, 2500, 10], ['crystalSize', 'Taille des cristaux', 0.03, 0.3, 0.005], ['crystalTilt', 'Dispersion', 0, 1.2, 0.01]],
-};
 
 const FIN = [
   ['metal', 'Métal', 0, 1, 0.01], ['rough', 'Rugosité', 0.02, 1, 0.01], ['bump', 'Relief', 0, 2, 0.01], ['scale', 'Échelle du motif', 0.2, 4, 0.01],
@@ -145,33 +115,30 @@ export function createUI({ recipe: getRecipe, render, on }) {
     fa.add(actions, 'remove').name('− Retirer la dernière');
     layerFolders.push(fa);
     R.layers.forEach((L, i) => {
-      const f = layerRoot.addFolder(`${i + 1}. ${LAYER_TYPES[L.type]} · ${SETS[L.set]?.label ?? 'sur mesure'}`).close();
+      const T = TYPES[L.type];
+      const f = layerRoot.addFolder(`${i + 1}. ${T.label} · ${SETS[L.set]?.label ?? 'sur mesure'}`).close();
       layerFolders.push(f);
       const geo = () => on.layerGeometry(i);
       const mat = () => on.layerMaterial(i);
       const act = { type: L.type, set: L.set, reroll: () => on.layerReroll(i), axis: () => on.layerAxis(i) };
-      f.add(act, 'type', opts(LAYER_TYPES, (v) => v)).name('Type').onChange((t) => on.layerType(i, t));
+      f.add(act, 'type', opts(TYPES)).name('Type').onChange((t) => on.layerType(i, t));
       f.add(act, 'reroll').name('⟳  Autre forme');
       const fg = f.addFolder('Forme').close();
       const g = L.geo;
-      const list = [...(GEO[L.type === 'geode' ? 'cells' : L.type] || []), ...GEO.common, ...(L.type === 'geode' ? GEO.geode : [])];
-      if (L.type === 'voronoi') fg.add(g, 'distribution', { 'Spirale de Fibonacci': 'fibonacci', 'Bruit bleu': 'random', 'Densité graduée': 'gradient' }).name('Germes').onChange(geo);
-      if (L.type === 'tpms') {
-        fg.add(g, 'surface', { Gyroïde: 'gyroid', 'Schwarz P': 'schwarz', Diamant: 'diamond', Neovius: 'neovius', 'I-WP': 'iwp', 'Fischer–Koch': 'fischer' }).name('Surface').onChange(geo);
-        fg.add(g, 'sheet').name('Feuille (sinon réseau)').onChange(geo);
-      }
-      for (const [k, label, a, b, s] of list) if (g[k] !== undefined) fg.add(g, k, a, b, s).name(label).onFinishChange(geo);
-      if (L.type !== 'tpms') fg.add(g, 'chamfer').name('Chanfrein plat').onChange(geo);
-      if (g.shape !== undefined) {
+      for (const [k, label, o] of T.selects || []) fg.add(g, k, o).name(label).onChange(geo);
+      for (const [k, label] of T.toggles || []) fg.add(g, k).name(label).onChange(geo);
+      for (const [k, label, a, b, s] of [...(T.params || []), ...P.common]) if (g[k] !== undefined) fg.add(g, k, a, b, s).name(label).onFinishChange(geo);
+      if (g.chamfer !== undefined && !T.noChamfer) fg.add(g, 'chamfer').name('Chanfrein plat').onChange(geo);
+      if (T.holes) {
         const fh = f.addFolder('Trous et usinage').close();
-        fh.add(g, 'shape', { Polygone: 'poly', Ellipse: 'ellipse', Étoile: 'star', Diaphragme: 'iris' }).name('Forme des trous').onChange(geo);
-        for (const [k, label, a, b, st] of [...GEO.holes, ...GEO.machining]) if (g[k] !== undefined) fh.add(g, k, a, b, st).name(label).onFinishChange(geo);
+        fh.add(g, 'shape', HOLE_SHAPES).name('Forme des trous').onChange(geo);
+        for (const [k, label, a, b, st] of [...P.holes, ...P.machining]) if (g[k] !== undefined) fh.add(g, k, a, b, st).name(label).onFinishChange(geo);
       }
 
       const fm = f.addFolder('Matériaux').close();
       fm.add(act, 'set', opts(SETS)).name('Jeu de matériaux').onChange((s) => on.layerSet(i, s));
       fm.add(L.finish, 'wear', 0, 1, 0.01).name('Usure des bords').onChange(mat);
-      if (L.finish.groove !== undefined && L.type !== 'tpms') {
+      if (L.finish.groove !== undefined && !T.noGroove) {
         fm.add(L.finish, 'groove', 0, 1, 0.01).name('Gravure').onChange(mat);
         fm.add(L.finish, 'grooveAt', 0.1, 0.9, 0.01).name('Gravure : position').onChange(mat);
       }
@@ -191,7 +158,7 @@ export function createUI({ recipe: getRecipe, render, on }) {
         for (const [k, l2, a, b, s] of FIN) fs.add(F, k, a, b, s).name(l2).onChange(mat);
         fs.addColor(F, 'sheenColor').name('Couleur du lustre').onChange(mat);
       }
-      if (L.type === 'geode') {
+      if (g.crystals !== undefined) {
         const fk = fm.addFolder('Cristaux').close();
         fk.addColor(L.crystal, 'tip').name('Pointe').onChange(geo);
         fk.addColor(L.crystal, 'base').name('Pied').onChange(geo);
