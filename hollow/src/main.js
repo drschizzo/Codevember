@@ -66,6 +66,7 @@ async function main() {
   if (!renderer.backend.isWebGPUBackend) toast('WebGPU indisponible : repli WebGL 2 (plus lent).', 5000);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
+  renderer.shadowMap.transmitted = true; // (vitraux : ombres colorées)
   renderer.toneMappingExposure = 1;
   const canvas = renderer.domElement;
   $('#app').appendChild(canvas);

@@ -146,6 +146,28 @@ export const TYPES = {
       }, rng);
     },
   },
+  vitrail: {
+    label: 'Vitrail', weight: 1.6, max: 1, holes: true,
+    sets: ['blackSteel', 'bronze', 'goldLeaf', 'obsidian', 'verdigris', 'carbon'],
+    params: [
+      ['freq', 'Fréquence', 2, 9, 1], ['theta', 'Angle de contact', 0.3, 1.4, 0.01], ['frame', 'Barreaux du cadre', 0.3, 3, 0.01],
+      ['star', 'Barreaux de l’étoile', 0.3, 3, 0.01], ['jitter', 'Désordre', 0, 0.5, 0.01], ...P.bars,
+    ],
+    selects: [['palette', 'Verres', { Cathédrale: 'cathedral', Tiffany: 'tiffany', Cobalt: 'cobalt', Braise: 'ember' }]],
+    toggles: [['panes', 'Verres']],
+    // une rosace : plombs (barreaux fins) et verres teintés, rétroéclairés par le cœur
+    geometry(rng) {
+      const girih = rng.chance(0.65), freq = girih ? rng.int(3, 4) : rng.int(4, 7);
+      const b = bars(rng, girih ? 1.1 / freq / 3.2 : 1.1 / freq, girih ? 0.12 : 0.1, girih ? 0.22 : 0.2);
+      Object.assign(b, { round: r2(rng.pick([0.2, 0.4, 0.7])), closed: 0, barVar: r2(rng.range(0, 0.2)) });
+      const h = holeDetails(rng);
+      return {
+        type: girih ? 'girih' : 'cells', freq, jitter: girih ? 0 : rng.pick([0, 0.15]), theta: r2(rng.range(0.6, 1.2)), frame: rng.pick([1.4, 2]), star: 1,
+        solidStar: false, ...b, ...h, shape: 'poly', holeScale: 1, step: 0, rivets: 0, setting: 'rivet',
+        panes: true, palette: rng.weighted([['cathedral', 3], ['tiffany', 1.5], ['cobalt', 1], ['ember', 1]]),
+      };
+    },
+  },
   shards: {
     label: 'Éclatée (kintsugi)', weight: 1.6, max: 1, holes: true,
     sets: ['kintsugi', 'celadon', 'obsidian', 'goldLeaf', 'nacre', 'bronze', 'chrome', 'blackSteel'],

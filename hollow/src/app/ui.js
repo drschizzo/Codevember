@@ -169,6 +169,11 @@ export function createUI({ recipe: getRecipe, render, on }) {
         for (const [k, l2, a, b, s] of FIN) fs.add(F, k, a, b, s).name(l2).onChange(mat);
         fs.addColor(F, 'sheenColor').name('Couleur du lustre').onChange(mat);
       }
+      if (g.panes && L.pane) {
+        const fv = fm.addFolder('Vitraux').close();
+        fv.add(L.pane, 'rough', 0, 0.6, 0.005).name('Verre martelé').onChange(mat);
+        fv.add(L.pane, 'glow', 0, 3, 0.01).name('Rétroéclairage').onChange(mat);
+      }
       if (g.setting === 'gem' && L.gem) {
         const fj = fm.addFolder('Pierres serties').close();
         const pick = { preset: '' };

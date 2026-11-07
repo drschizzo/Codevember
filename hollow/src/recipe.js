@@ -82,6 +82,7 @@ export function makeLayer(type, rng, seedTag, moodKey, avoidSet = null) {
     crystal: { tip: rng.pick(['#8a4fd6', '#c27be6', '#e0a24a', '#7fb8e8', '#e8e2f0']), base: '#efe9f2', rough: 0.03, dispersion: 0.45, ior: 1.55 },
     motion: { spin: rng.pick([-2, -1, 1, 2]), tumble: rng.pick([-1, 1, 1, 2]), axis: rng.dir().map(r2), phase: r2(rng.range(0, Math.PI * 2)) },
     gem: { ...rng.fork(`gem:${seedTag}`).pick(Object.values(GEMS)) },
+    pane: { rough: 0.12, glow: 0.6 },
   };
 }
 
@@ -133,6 +134,6 @@ function dustFor(rng, mood) {
 // recette partagée par une version antérieure : champs ajoutés depuis
 export function upgrade(R) {
   R.dust ??= dustFor(createRng(`${R.seed}:dust`), MOODS[R.mood] ?? MOODS.atelier);
-  for (const L of R.layers) L.gem ??= { ...GEMS.diamond };
+  for (const L of R.layers) { L.gem ??= { ...GEMS.diamond }; L.pane ??= { rough: 0.12, glow: 0.6 }; }
   return R;
 }

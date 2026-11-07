@@ -4,7 +4,7 @@
 import { createRng, createNoise3 } from '../rng.js';
 import { goldbergCells, slotCells, voronoiCells } from './cells.js';
 import { girihCells } from './girih.js';
-import { prepareCells, buildShell, crest } from './shell.js';
+import { prepareCells, buildShell, buildPanes, crest } from './shell.js';
 import { buildTPMS } from './tpms.js';
 import { buildArmillary } from './armillary.js';
 import { buildScales } from './scales.js';
@@ -51,13 +51,15 @@ function pack(o) {
   return out;
 }
 
-// Ornements d'un pavage percé : { crystals, gems, spines } (matrices d'instance)
+// Ornements d'un pavage percé : { crystals, gems, spines } (matrices
+// d'instance) et { panes } (vitraux : un maillage)
 function ornaments(spec) {
   const prepared = prepare(spec), out = {};
   if (spec.crystals > 0) out.crystals = placeCrystals(prepared, spec, createRng(`${spec.seed}:crystals`));
   const J = (spec.rivets || 0) > 0 || spec.spines > 0 ? junctions(prepared, spec) : null;
   if (spec.setting === 'gem' && spec.rivets > 0) out.gems = placeGems(J, spec, crest(spec), createRng(`${spec.seed}:gems`));
   if (spec.spines > 0) out.spines = placeSpines(J, spec, crest(spec), createRng(`${spec.seed}:spines`));
+  if (spec.panes) out.panes = buildPanes(prepared, spec);
   return out;
 }
 
