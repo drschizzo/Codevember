@@ -20,6 +20,19 @@ Avertissement honnête : une étoile comme le Soleil finit en naine blanche, pas
 
 **Rendu « cinéma »** : léger tone mapping Neutral, bloom doux, traînée anamorphique sur les sources intenses, aberration chromatique vers les bords, étalonnage (ombres froides, hautes lumières chaudes), vignettage et grain de pellicule.
 
+## La machine (DA « mécanique »)
+
+Toute la simulation est présentée comme portée par un **planétaire en laiton** (`src/orrery.js`), comme les orreries du XVIIIᵉ siècle. La machine ne simule rien : elle lit l'état du GPU à chaque image et le rend tangible.
+
+- **Bras et tubes** : les 12 planètes les plus massives sont tenues chacune par un bras (avec contrepoids) fixé sur un tube. Les tubes sont concentriques autour de l'axe central : la planète la plus proche est sur l'arbre le plus fin et le plus haut. Une tige d'acier et une coupelle portent la planète.
+- **Engrenages = Kepler** : au pied de chaque tube, une roue engrène un pignon de l'arbre de renvoi. Le rapport des rayons suit la vitesse angulaire de la planète (ω ∝ a^−3/2) : les roues des planètes lointaines sont grandes, celles des proches petites.
+- **Peigne de boîte à musique** : la tête de lecture devient un peigne de lames d'acier le long de l'axe +X. Chaque planète, en passant, pince la lame de son rayon (lames longues = notes graves, au bord du disque).
+- **Barillet, balancier, échappement** : ils battent la mesure du temps simulé et s'arrêtent à la pause.
+- **Limbe gradué** (degrés, chiffres romains) porté par quatre arceaux, sur un socle tourné à la platine guillochée.
+- L'interface reprend le thème : plaques de laiton vissées, petites capitales gravées.
+
+Touche **O** : ôter / remettre la machine (et revenir à l'ancienne DA). `?nomeca` : démarrer sans.
+
 ## Ce qui est simulé
 
 - **Lignée** : chaque grain de poussière garde son rayon de naissance et sa composition (roche en deçà de la ligne des glaces, glace au-delà). Les planètes qui se forment empilent ces souvenirs en **strates**. La coupe annotée montre leur histoire : l'embryon initial au cœur, les apports successifs, les **impacts géants** cerclés d'orange et, pour les géantes, l'**enveloppe de gaz**. Survoler une strate la décrit.
@@ -51,6 +64,7 @@ Paramètres d'URL :
 | `?sdr` / `?hdr` | force la sortie SDR ou HDR (par défaut : HDR si l’écran le permet) |
 | `?peak=4` | pic de luminosité en HDR, en multiples du blanc de l’interface |
 | `?exposure=1.45` | exposition globale |
+| `?nomeca` | sans la machine (ancienne DA) |
 
 ## Commandes
 
@@ -65,6 +79,7 @@ Paramètres d'URL :
 | **E** | une étoile vagabonde traverse le système |
 | **P** | migration planétaire (type I) on/off |
 | **C** | couleurs : provenance / roche-glace / température |
+| **O** | ôter / remettre la machine en laiton |
 | **+ / −**, Espace, **M**, **H** | vitesse (×¼ à ×8, boutons dans le panneau ; ×2 par défaut), pause, son, aide |
 
 ## Architecture GPU

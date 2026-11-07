@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createSim, M, L, NR, R_IN, R_OUT, R_GRID, M_EARTH, SOLID0, GAS0, NIMP } from './sim.js';
 import { createLifecycle, PHASES } from './lifecycle.js';
 import { createVisuals } from './visuals.js';
+import { createOrrery } from './orrery.js';
 import { Sonifier, noteName } from './audio.js';
 import { provenanceRGB, css } from './palette.js';
 
@@ -54,6 +55,12 @@ async function main() {
   await sim.init();
   const EXPOSURE = Number(params.get('exposure')) || 1.45;
   const vis = createVisuals(renderer, scene, camera, sim, { hdr: HDR });
+  // DA « mécanique » : la simulation est portée par un planétaire en laiton
+  // (touche O pour l'ôter ; ?nomeca pour démarrer sans)
+  const orrery = createOrrery(scene, renderer);
+  let meca = !params.has('nomeca');
+  const setMeca = (v) => { meca = v; orrery.setVisible(v); document.body.classList.toggle('meca', v); };
+  setMeca(meca);
   const audio = new Sonifier();
   const life = createLifecycle();
 
@@ -155,6 +162,7 @@ async function main() {
       }
       case 'm': audio.setMuted(!audio.muted); toast(audio.muted ? 'Son coupé' : 'Son actif'); break;
       case 'h': $('#help').classList.toggle('hidden'); break;
+      case 'o': setMeca(!meca); toast(meca ? 'Machine : visible' : 'Machine : ôtée'); break;
       case 'a': state.autoSelect = true; toast('Sélection automatique'); break;
       case '[': seekTo(life.phase - 1); break;
       case ']': seekTo(life.phase + 1); break;
@@ -286,6 +294,7 @@ async function main() {
       if (!p || p.mE < 0.3) continue;
       p.ping = performance.now();
       vis.pulse(i, a, p.selected ? [0.7, 0.95, 1.2] : p.color);
+      orrery.pluck(a, Math.min(1, Math.cbrt(p.mE / 10)));
       audio.planetNote({ a, mE: p.mE, gas: p.gasF, selected: p.selected, pan: screenPan(q[0], q[1], q[2]) });
       const dot = listRows.get(i)?.querySelector('.dot');
       if (dot) { dot.classList.remove('ping'); void dot.offsetWidth; dot.classList.add('ping'); }
@@ -850,6 +859,7 @@ async function main() {
     U.starR.value = p.starR; U.outR.value = p.outR; U.snA.value = p.snA; U.snHeat.value = p.snHeat; U.snR.value = p.snR; U.snW.value = p.snW;
     U.snow.value = p.snow;
     vis.setStar(p);
+    orrery.setStar(p.color, Math.pow(Math.max(p.L, 1e-3), 0.35), p.shell);
   }
   function onLifeEvent(e) {
     if (e === 'ignition') {
@@ -1027,6 +1037,7 @@ async function main() {
     updateCamera(real);
     controls.update();
     vis.updateFx(state.paused ? 0 : real, (i) => pred.get(i));
+    if (meca) orrery.update(state.planets, pred, dtSim, real, !state.paused && !state.resetting);
     if (vis.updatePulsar(state.paused ? 0 : real)) audio.pulsarTick(); // un faisceau nous balaie : « tic »
 
     // bouffée d'exposition : tout le système s'illumine un instant
@@ -1055,7 +1066,7 @@ async function main() {
   const profJs = { loop: 0, poll: 0 };
 
   if (params.has('auto')) { $('#intro').classList.add('gone'); }
-  window.__planetaire = { sim, state, renderer, audio, launchFlyby, pred, kin, vis, life }; // (débogage)
+  window.__planetaire = { sim, state, renderer, audio, launchFlyby, pred, kin, vis, life, orrery, camera, controls }; // (débogage)
 }
 
 function fail(msg) {

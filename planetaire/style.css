@@ -131,3 +131,73 @@ body.seeking #phases div.now u { background: var(--warm); }
   #intro h1 { font-size: 40px; }
   #intro .sub { font-size: 16px; }
 }
+
+/* ═══ DA « mécanique » : plaques de laiton vissées sur bois sombre ═══════════
+   (classe body.meca, posée par main.js ; touche O pour comparer) */
+body.meca {
+  --fg: #efe4cc; --dim: #a8977a; --accent: #d9b56c; --warm: #e08a4a;
+  --brass: #c9a25a; --brass-hi: #f0d9a0; --brass-lo: #6e5126;
+  --line: rgba(201, 162, 90, 0.22);
+  --glass: rgba(14, 10, 6, 0.82);
+  font: 400 13.5px/1.42 'EB Garamond', Georgia, serif;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+body.meca h2 { font: 600 12px/1.2 'Cormorant SC', serif; letter-spacing: .16em; text-transform: lowercase; color: var(--brass);
+  padding-bottom: 5px; border-bottom: 1px solid var(--line); box-shadow: 0 1px 0 rgba(0,0,0,.6); }
+/* plaque : filet double, vis aux quatre coins */
+body.meca #panel, body.meca #groove-wrap, body.meca #help {
+  border-radius: 5px; border: 1px solid var(--brass-lo);
+  background:
+    radial-gradient(circle at 9px 9px, var(--brass-hi) 0 1px, var(--brass) 1.6px, var(--brass-lo) 3px, transparent 3.6px),
+    radial-gradient(circle at calc(100% - 9px) 9px, var(--brass-hi) 0 1px, var(--brass) 1.6px, var(--brass-lo) 3px, transparent 3.6px),
+    radial-gradient(circle at 9px calc(100% - 9px), var(--brass-hi) 0 1px, var(--brass) 1.6px, var(--brass-lo) 3px, transparent 3.6px),
+    radial-gradient(circle at calc(100% - 9px) calc(100% - 9px), var(--brass-hi) 0 1px, var(--brass) 1.6px, var(--brass-lo) 3px, transparent 3.6px),
+    linear-gradient(160deg, rgba(34, 23, 13, 0.9), rgba(10, 7, 4, 0.9));
+  box-shadow: inset 0 0 0 3px rgba(0,0,0,.55), inset 0 0 0 4px rgba(201,162,90,.28), 0 10px 30px rgba(0,0,0,.6);
+  background-attachment: local, local, local, local, local;
+}
+body.meca #panel { padding: 18px 20px; }
+body.meca #title h1 { font: 600 38px/1 'Cormorant SC', serif; letter-spacing: .12em;
+  background: linear-gradient(180deg, var(--brass-hi), var(--brass) 55%, var(--brass-lo)); -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 1px 0 rgba(0,0,0,.8)); }
+body.meca #title p { color: var(--dim); font-family: 'EB Garamond', serif; font-size: 15px; }
+/* touches de laiton */
+body.meca #speed button, body.meca #phnav button, body.meca #auto, body.meca #overview {
+  font: 500 13px 'EB Garamond', serif; color: var(--brass); border-radius: 3px; border: 1px solid var(--brass-lo);
+  background: linear-gradient(#3a2a18, #1a1209); box-shadow: inset 0 1px 0 rgba(240,217,160,.18), 0 1px 2px rgba(0,0,0,.6); }
+body.meca #speed button:hover, body.meca #phnav button:not(:disabled):hover { color: var(--brass-hi); border-color: var(--brass); }
+body.meca #speed button.on, body.meca #auto.on, body.meca #overview {
+  color: #1a1007; border-color: var(--brass-hi); background: linear-gradient(#f0d9a0, #b98d45 60%, #8a6630);
+  box-shadow: inset 0 1px 2px rgba(0,0,0,.45), 0 0 10px rgba(217,181,108,.25); }
+body.meca #auto, body.meca #overview { font-size: 11px; padding: 0 7px; letter-spacing: .06em; text-transform: none; }
+/* frise des phases : graduation gravée */
+body.meca #phases span { height: 6px; border-radius: 1px; background: rgba(201,162,90,.10); box-shadow: inset 0 1px 1px rgba(0,0,0,.7); }
+body.meca #phases div.done span { background: var(--brass-lo); }
+body.meca #phases div.target span { background: rgba(224,138,74,.4); }
+body.meca #phases div:hover span { background: rgba(201,162,90,.35); }
+body.meca #phases u { background: linear-gradient(90deg, var(--brass), var(--brass-hi)); }
+body.meca #phaseName { font-size: 15px; }
+body.meca #phaseName b { font-weight: 500; color: var(--brass-hi); }
+body.meca #phaseName .dim, body.meca #phaseDesc { font-size: 13px; }
+body.meca #life h2 #cyc { color: var(--brass-hi); }
+body.meca #stats div { border-bottom: 1px dotted rgba(201,162,90,.14); padding: 1px 0; }
+body.meca #stats em { background: rgba(0,0,0,.5); box-shadow: inset 0 0 0 1px var(--brass-lo); border-radius: 1px; }
+body.meca #stats em u { background: var(--brass); }
+body.meca #list li { border-radius: 2px; }
+body.meca #list li.sel { background: rgba(201,162,90,.13); box-shadow: inset 2px 0 0 var(--brass); }
+body.meca #list .dot { box-shadow: 0 0 0 1.5px var(--brass-lo); }
+body.meca #list .chips i { border-color: var(--brass-lo); color: var(--dim); border-radius: 2px; font-size: 11px; }
+body.meca #list .chips b { color: #1a1007; background: var(--brass); border-radius: 2px; font-size: 11px; }
+body.meca .hint, body.meca .cap, body.meca #cutinfo, body.meca .legend { font-size: 13px; }
+body.meca .provlegend .ticks { font-size: 12px; }
+body.meca #help dt { color: var(--brass-hi); font-weight: 500; }
+body.meca #toast { font: 600 14px 'Cormorant SC', serif; letter-spacing: .08em; color: var(--brass-hi); border-radius: 3px;
+  border: 1px solid var(--brass-lo); background: linear-gradient(#2a1d10, #120c06); box-shadow: inset 0 0 0 2px rgba(0,0,0,.5), inset 0 0 0 3px rgba(201,162,90,.25), 0 6px 18px rgba(0,0,0,.6); }
+/* écran d'accueil */
+body.meca #intro h1 { font: 600 58px/1 'Cormorant SC', serif; letter-spacing: .14em;
+  background: linear-gradient(180deg, var(--brass-hi), var(--brass) 55%, var(--brass-lo)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+body.meca #intro button { font: 500 16px 'EB Garamond', serif; border-radius: 3px; color: #1a1007; border: 1px solid var(--brass-hi);
+  background: linear-gradient(#f0d9a0, #b98d45 60%, #8a6630); box-shadow: inset 0 1px 0 rgba(255,255,255,.4), 0 4px 14px rgba(0,0,0,.6); }
+body.meca #intro button:hover { background: linear-gradient(#fbe8b8, #c99a50 60%, #8a6630); }
+body.meca #intro button.ghost { background: transparent; color: var(--brass); border-color: var(--brass-lo); box-shadow: none; }
+body.meca #introBar u { background: var(--brass); }
