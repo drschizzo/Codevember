@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createSim, M, L, NR, R_IN, R_OUT, R_GRID, M_EARTH, SOLID0, GAS0, NIMP } from './sim.js';
 import { createLifecycle, PHASES } from './lifecycle.js';
 import { createVisuals } from './visuals.js';
+import { createOrrery, HOPPER } from './orrery.js';
 import { Sonifier, noteName } from './audio.js';
 import { provenanceRGB, css } from './palette.js';
 
@@ -27,7 +28,9 @@ async function main() {
   // (géante rouge, rémanent, lave), qu'AgX délave vers le blanc.
   // HDR : courbe maison dans visuals.js (épaule douce jusqu'au pic de l'écran).
   renderer.toneMapping = HDR ? THREE.NoToneMapping : params.has('agx') ? THREE.AgXToneMapping : THREE.NeutralToneMapping;
-  renderer.toneMappingExposure = 1; // (l'exposition est appliquée dans visuals.js)
+  renderer.toneMappingExposure = 1;
+  renderer.shadowMap.enabled = true; // (projecteur de la machine)
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap; // (l'exposition est appliquée dans visuals.js)
   await renderer.init();
   if (!renderer.backend.isWebGPUBackend) return fail('Cette expérience nécessite WebGPU (pas de repli WebGL).');
   $('#app').appendChild(renderer.domElement);
@@ -51,10 +54,34 @@ async function main() {
   controls.maxDistance = 70;
 
   const sim = createSim(renderer, N);
+  // DA « mécanique » : le nuage initial doit tenir sous la cloche. On le
+  // resserre (14 → 9,6 UA) en accélérant sa rotation pour que le bord du
+  // disque retombe au même rayon (r_atterrissage = Ω² R⁴ : Ω = 3 / R²).
+  const MECA0 = !params.has('nomeca');
+  // Le nuage est en outre versé par la trémie au sommet de la cloche.
+  const setCloud = (m) => {
+    const R = m ? 9.6 : 14; sim.U.cloudR.value = R; sim.U.cloudOmega.value = m ? 3 / (R * R) : 0.0153;
+    sim.U.pourOn.value = m ? 1 : 0; sim.U.hopper.value.copy(HOPPER);
+  };
+  setCloud(MECA0);
   await sim.init();
   const EXPOSURE = Number(params.get('exposure')) || 1.45;
   const vis = createVisuals(renderer, scene, camera, sim, { hdr: HDR });
+  // DA « mécanique » : la simulation est portée par un planétaire en laiton
+  // (touche O pour l'ôter ; ?nomeca pour démarrer sans)
+  const orrery = createOrrery(scene, renderer);
+  let meca = MECA0;
+  const LENS = !params.has('nolens');
+  const PLANET_K = 1.7; // planètes en billes bien visibles sur leurs tiges
+  const setMeca = (v) => {
+    meca = v; orrery.setVisible(v); document.body.classList.toggle('meca', v);
+    vis.V.planetK.value = v ? PLANET_K : 1;
+    setCloud(v); // (s'applique au prochain nuage)
+  };
+  setMeca(meca);
   const audio = new Sonifier();
+  orrery.onClick = () => audio.click();
+  orrery.onClack = () => audio.clack();
   const life = createLifecycle();
 
   // ── État ───────────────────────────────────────────────────────────────────
@@ -155,6 +182,7 @@ async function main() {
       }
       case 'm': audio.setMuted(!audio.muted); toast(audio.muted ? 'Son coupé' : 'Son actif'); break;
       case 'h': $('#help').classList.toggle('hidden'); break;
+      case 'o': setMeca(!meca); toast(meca ? 'Machine : visible' : 'Machine : ôtée'); break;
       case 'a': state.autoSelect = true; toast('Sélection automatique'); break;
       case '[': seekTo(life.phase - 1); break;
       case ']': seekTo(life.phase + 1); break;
@@ -286,6 +314,7 @@ async function main() {
       if (!p || p.mE < 0.3) continue;
       p.ping = performance.now();
       vis.pulse(i, a, p.selected ? [0.7, 0.95, 1.2] : p.color);
+      orrery.pluck(a, Math.min(1, Math.cbrt(p.mE / 10)));
       audio.planetNote({ a, mE: p.mE, gas: p.gasF, selected: p.selected, pan: screenPan(q[0], q[1], q[2]) });
       const dot = listRows.get(i)?.querySelector('.dot');
       if (dot) { dot.classList.remove('ping'); void dot.offsetWidth; dot.classList.add('ping'); }
@@ -397,6 +426,7 @@ async function main() {
       const e = evo.get(f.h);
       if (e) { e.heat = Math.min(1, e.heat + 0.45 + 1.5 * f.mlE / Math.max(s.mE, 0.05)); e.craters *= 0.15; }
       audio.impact(f.mlE, s.a, screenPan(s.x, s.y, s.z));
+      if (meca) orrery.strike(Math.min(1, f.mlE / 2)); // la cloche de la galerie
       // ralenti, secousse et éblouissement proportionnés à l'impacteur : les
       // petites collisions d'embryons (fréquentes au début) restent discrètes
       const big = Math.min(1, f.mlE / 2);
@@ -543,7 +573,7 @@ async function main() {
   const lastFollow = new THREE.Vector3();
   const visRadius = (mE) => {
     const Rp = mE < 2 ? Math.pow(mE, 0.28) : Math.min(11.5, 1.21 * Math.pow(mE / 2, 0.59));
-    return Math.max(0.005, 0.013 * Math.pow(Rp, 0.75)); // même formule que le shader
+    return Math.max(0.005, 0.013 * Math.pow(Rp, 0.75)) * vis.V.planetK.value; // même formule que le shader
   };
   function followPos(out) {
     const q = pred.get(state.follow);
@@ -850,6 +880,9 @@ async function main() {
     U.starR.value = p.starR; U.outR.value = p.outR; U.snA.value = p.snA; U.snHeat.value = p.snHeat; U.snR.value = p.snR; U.snW.value = p.snW;
     U.snow.value = p.snow;
     vis.setStar(p);
+    // versement du nuage : horloge de la phase « nuage » (au-delà, tout est lâché)
+    sim.U.pourT.value = life.phase === 0 ? life.t : 1e9;
+    orrery.setStar(p.color, Math.pow(Math.max(p.L, 1e-3), 0.35), p.shell);
   }
   function onLifeEvent(e) {
     if (e === 'ignition') {
@@ -974,6 +1007,7 @@ async function main() {
 
   // ── Boucle ─────────────────────────────────────────────────────────────────
   let last = performance.now();
+  const _fp = new THREE.Vector3(), _camV = new THREE.Vector3(), _camPrev = new THREE.Vector3();
   const shakeOff = new THREE.Vector3();
   // La simulation attend qu'on entre : tant que l'accueil est affiché, rien ne
   // tourne (ni calcul, ni rendu) — le cycle commence au clic.
@@ -1027,11 +1061,36 @@ async function main() {
     updateCamera(real);
     controls.update();
     vis.updateFx(state.paused ? 0 : real, (i) => pred.get(i));
+    if (meca) {
+      orrery.update(state.planets, pred, dtSim, real, !state.paused && !state.resetting, life, vis.V.planetK.value,
+        { t: life.phase === 0 ? life.t : 1e9, dur: sim.U.pourDur.value });
+      vis.V.collect.value = state.resetting ? vis.V.collect.value : orrery.collect;
+    } else vis.V.collect.value = 0;
+    // mise au point : sur la planète suivie, sinon sur le centre visé
+    {
+      const fp = state.follow >= 0 ? followPos(_fp) : null;
+      const fd = camera.position.distanceTo(fp || controls.target);
+      vis.V.focus.value += (fd - vis.V.focus.value) * Math.min(1, real * 4);
+      // objectif « macro » : faible profondeur de champ, flou de mouvement marqué
+      vis.V.focusRange.value = Math.max(0.2, vis.V.focus.value * 0.28);
+      vis.V.bokeh.value = meca ? 3.0 : 0.8;
+      vis.V.blurK.value = meca ? 1.0 : 0.4;
+      vis.V.aperture.value = LENS ? (meca ? 0.045 : 0.015) : 0;
+      // obturation : un peu plus d'une image de temps simulé (traînées des grains rapides)
+      vis.V.shutter.value = LENS ? dtSim * 1.6 : 0;
+      // vitesse de la caméra (lissée), pour des traînées relatives à elle
+      if (dtSim > 0) {
+        _camV.subVectors(camera.position, _camPrev).divideScalar(dtSim);
+        vis.V.camVel.value.lerp(_camV, 0.5);
+      }
+      _camPrev.copy(camera.position);
+      vis.V.planetFlux.value = meca ? 2.2 : 4.0;
+    }
     if (vis.updatePulsar(state.paused ? 0 : real)) audio.pulsarTick(); // un faisceau nous balaie : « tic »
 
     // bouffée d'exposition : tout le système s'illumine un instant
     state.burst = Math.max(0, (state.burst || 0) - real * 1.4);
-    vis.V.exposure.value = EXPOSURE * (1 + (state.follow >= 0 ? 0.3 : 0.9) * state.burst * state.burst * (state.burst > 1 ? 3 : 1));
+    vis.V.exposure.value = EXPOSURE * (meca ? 1.25 : 1) * (1 + (state.follow >= 0 ? 0.3 : 0.9) * state.burst * state.burst * (state.burst > 1 ? 3 : 1));
 
     // secousse de caméra
     state.shake = Math.max(0, state.shake - real * 1.2);
@@ -1055,7 +1114,7 @@ async function main() {
   const profJs = { loop: 0, poll: 0 };
 
   if (params.has('auto')) { $('#intro').classList.add('gone'); }
-  window.__planetaire = { sim, state, renderer, audio, launchFlyby, pred, kin, vis, life }; // (débogage)
+  window.__planetaire = { sim, state, renderer, audio, launchFlyby, pred, kin, vis, life, orrery, camera, controls }; // (débogage)
 }
 
 function fail(msg) {
