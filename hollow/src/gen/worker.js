@@ -9,6 +9,7 @@ import { buildTPMS } from './tpms.js';
 import { buildArmillary } from './armillary.js';
 import { buildScales } from './scales.js';
 import { buildWeave } from './weave.js';
+import { buildCoral } from './coral.js';
 import { placeCrystals } from './crystals.js';
 import { junctions, placeGems, placeSpines } from './jewels.js';
 import { buildNoiseVolume } from './noisevol.js';
@@ -26,6 +27,7 @@ const MESHES = {
   armillary: buildArmillary,
   scales: buildScales,
   weave: buildWeave,
+  coral: buildCoral,
 };
 
 function prepare(spec) {

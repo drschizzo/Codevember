@@ -134,9 +134,14 @@ export function tpmsField(spec) {
   return { field, fieldGrad, g3, R, Ri, Rm, half, k };
 }
 
-export function buildTPMS(spec, lod) {
+export const buildTPMS = (spec, lod) => buildImplicit(tpmsField(spec), lod);
+
+// Maillage d'un champ implicite taillé dans la coquille (surfaces minimales,
+// corail…) : F = { field(x, y, z, out), fieldGrad(x, y, z, G), Rm, half, k }.
+// field remplit out = [distance, part, rayon, distance à la coquille, distance au motif].
+export function buildImplicit(F, lod) {
   const res = TPMS_RES[lod];
-  const { field, fieldGrad, Rm, half, k: fillet } = tpmsField(spec);
+  const { field, fieldGrad, Rm, half, k: fillet } = F;
   const ext = 1.02, h = (2 * ext) / res, N = res + 1;
   const bandIn = Rm - half - 3 * h, bandOut = Rm + half + 3 * h;
   // grille de valeurs (seulement dans la bande, ailleurs : distance à la coquille)

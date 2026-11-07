@@ -15,7 +15,7 @@ const r2 = (x) => Math.round(x * 1000) / 1000;
 
 // constructeurs à champ implicite (surface nets) : pas de niveau d'ombre dédié,
 // seuils de détail relevés, normale recalculée par pixel quand c'est possible
-export const IMPLICIT = new Set(['tpms']);
+export const IMPLICIT = new Set(['tpms', 'coral']);
 
 // ── Réglages communs exposés dans le panneau : [clé, libellé, min, max, pas] ──
 export const P = {
@@ -235,6 +235,20 @@ export const TYPES = {
         type: 'voronoi', count, distribution: rng.pick(['fibonacci', 'random']), spiral: r2(rng.range(-0.5, 0.5)), jitter: 0.15, ...b, ...h,
         shape: rng.pick(['poly', 'poly', 'ellipse']), pillow: r2(rng.range(0.6, 1.1)), step: 0, rivets: 0.7, setting: 'rivet',
         pores: r2(rng.range(0.28, 0.42)), poreFreq: rng.int(60, 110), spines: r2(rng.range(0.1, 0.26)), spineDensity: r2(rng.range(0.4, 0.85)),
+      };
+    },
+  },
+  coral: {
+    label: 'Corail de Turing', weight: 1.5, max: 1, noGroove: true, noChamfer: true,
+    params: [['scale', 'Finesse du motif', 24, 72, 1], ['threshold', 'Seuil', 0.05, 0.35, 0.005], ['wall', 'Paroi', 0.01, 0.12, 0.001]],
+    selects: [['pattern', 'Motif', { 'Corail cerveau': 'coral', Labyrinthe: 'maze', Vers: 'worms', Taches: 'spots', Mitoses: 'mitosis' }]],
+    toggles: [['sheet', 'Parois (sinon réseau)']],
+    // motif de réaction-diffusion (Gray-Scott) taillé dans la coquille
+    geometry(rng) {
+      const pattern = rng.weighted([['coral', 3], ['maze', 2], ['worms', 1.2], ['spots', 1], ['mitosis', 1]]);
+      return {
+        type: 'coral', pattern, scale: rng.int(36, 54), iters: 5000, sheet: rng.chance(0.35),
+        threshold: r2(rng.range(0.16, 0.24)), wall: r2(rng.range(0.03, 0.06)), thickness: r2(rng.range(0.08, 0.13)), bevel: 0.01, chamfer: false,
       };
     },
   },

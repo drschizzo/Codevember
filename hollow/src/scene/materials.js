@@ -326,10 +326,11 @@ function pores(U, p, surfA) {
   return { open, dimple };
 }
 
-// tpms : { spec, U } pour une surface minimale (normale analytique) ;
-// rig : uniformes d'une couche à pièces animées (voir rig.js) ;
-// pore : uniformes des micro-perforations (radiolaire)
-export function buildShellMaterial(finish, U, tpms = null, rig = null, pore = null) {
+// Options : tpms : { spec, U } pour une surface minimale (normale analytique) ;
+// rig : uniformes d'une couche à pièces animées (voir rig.js) ; pore :
+// uniformes des micro-perforations (radiolaire) ; meshNormal : normale du
+// maillage telle quelle (champs implicites sans expression dans le shader)
+export function buildShellMaterial(finish, U, { tpms = null, rig = null, pore = null, meshNormal = false } = {}) {
   const fins = [finish.outer, finish.inner, finish.edge];
   const any = (pred) => fins.some(pred);
   const F = {
@@ -430,7 +431,7 @@ export function buildShellMaterial(finish, U, tpms = null, rig = null, pore = nu
   // cela, le saut de hauteur d'une finition à l'autre dessine un liseré dentelé
   const purity = smoothstep(0.55, 0.85, surfA.x.max(surfA.y).max(surfA.z));
   if (rig) m.positionNode = rigPosition(rig, G.phase, true);
-  const N0 = tpms ? transformNormalToView(tpmsNormal(tpms.spec, tpms.U)) : bevelNormal(!!rig);
+  const N0 = tpms ? transformNormalToView(tpmsNormal(tpms.spec, tpms.U)) : meshNormal ? normalViewGeometry : bevelNormal(!!rig);
   let H = get('h').mul(purity);
   if (pore) { // (perforations : la face est percée, et creusée en cuvette autour)
     const P = pores(pore, p, surfA);
