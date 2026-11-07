@@ -50,8 +50,12 @@ export function buildScales(spec, lod) {
     const th = thetaOf(((i + 0.5) / n) * total), sz = size(th);
     const z = cos(th), rr = sin(th), ph = i * GA;
     const c = [rr * cos(ph), rr * sin(ph), z];
-    const a = spacing * 0.72 * spec.size * sz;   // demi-longueur (vers le bas)
-    const b = spacing * 0.52 * spec.size * sz;   // demi-largeur
+    // près de la couronne, les écailles se serrent : un peu plus couvrantes, et
+    // presque à plat (elles ne se soulèvent qu'en s'éloignant de l'oculus)
+    const near = 1 - Math.min(1, Math.max(0, (th - theta0) / 0.55));
+    const snug = near * near * (3 - 2 * near);
+    const a = spacing * 0.72 * spec.size * sz * (1 + 0.18 * snug);   // demi-longueur (vers le bas)
+    const b = spacing * 0.52 * spec.size * sz * (1 + 0.12 * snug);   // demi-largeur
     const t = t0 * (0.55 + 0.45 * sz), dome = spec.dome * t;
     // repère : u vers le bas (sud), v vers l'est, normale c
     const east = Math.abs(z) > 0.999 ? tangentFrame(c)[0] : norm(cross(Z, c));
@@ -71,7 +75,7 @@ export function buildScales(spec, lod) {
     // charnière : bord haut (−u), axe −est (la pointe se soulève vers l'extérieur)
     const hinge = at(-a * 0.85, 0, t * 0.5);
     const wave = ((1 - z) * 1.3) % 1;
-    B.rig(hinge, [-east[0], -east[1], -east[2]], spec.lift, RIG.hinge, wave);
+    B.rig(hinge, [-east[0], -east[1], -east[2]], spec.lift * (1 - 0.9 * snug), RIG.hinge, wave);
     const v0 = B.n, i0 = B.ni;
     // faces : anneaux concentriques (fraction s du contour) et un centre
     const face = (top) => {
