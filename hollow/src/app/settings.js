@@ -16,17 +16,23 @@ export const RENDER_DEFAULTS = {
   ao: true, aoStrength: 0.85, aoRadius: 0.35,
   dof: false, focus: 0.85, focusRange: 0.5, bokeh: 2.5,
   motionBlur: 0.6, ca: 0.12, grain: 0.035, envFalloff: 0.3,
-  streaks: 0.35, streakLen: 6, halation: 0.35, dirt: 0.5,
+  streaks: 0.12, streakLen: 4, halation: 0.35, dirt: 0.5,
 };
 
 const STORE = 'hollow.render.v4';
+// réglages dont la valeur par défaut a changé : une valeur mémorisée avant
+// cette révision est oubliée (rev : révision des réglages mémorisés)
+const REV = 2, RESET = { 2: ['streaks', 'streakLen'] };
 
 export function loadRender() {
   try {
     const s = JSON.parse(localStorage.getItem(STORE) || 'null');
-    if (s && typeof s === 'object') return { ...RENDER_DEFAULTS, ...s };
+    if (s && typeof s === 'object') {
+      for (let r = (s.rev || 1) + 1; r <= REV; r++) for (const k of RESET[r] || []) delete s[k];
+      return { ...RENDER_DEFAULTS, ...s, rev: REV };
+    }
   } catch { /* stockage indisponible */ }
-  return { ...RENDER_DEFAULTS };
+  return { ...RENDER_DEFAULTS, rev: REV };
 }
 export function saveRender(r) {
   try { localStorage.setItem(STORE, JSON.stringify(r)); } catch { /* stockage indisponible */ }

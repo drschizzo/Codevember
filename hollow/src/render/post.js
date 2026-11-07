@@ -130,11 +130,12 @@ export function createPost(renderer, scene, camera, lights) {
       c = c.add(b.rgb.mul(vec3(1, 0.32, 0.12).mul(U.halation).add(lensDirt().mul(U.dirt)).add(1)));
     }
     if (cfg.streaks > 0) {
-      // traînées anamorphiques : les hautes lumières étirées à l'horizontale, bleutées
-      const hi = max(c.sub(vec3(U.hiCap.mul(0.45))), vec3(0));
+      // traînées anamorphiques : seules les lumières les plus vives (le cœur, un
+      // reflet franc) s'étirent à l'horizontale, en un filet à peine bleuté
+      const hi = max(c.sub(vec3(U.hiCap.mul(0.75))), vec3(0));
       const st = gaussianBlur(vec4(hi, 1), vec2(U.streakLen, 0), 10, { resolutionScale: 0.25 });
       nodes.streaks = st;
-      c = c.add(st.rgb.mul(vec3(0.55, 0.75, 1)).mul(U.streaks));
+      c = c.add(st.rgb.mul(vec3(0.8, 0.88, 1)).mul(U.streaks));
     }
 
     // étalonnage (linéaire, avant tone mapping)

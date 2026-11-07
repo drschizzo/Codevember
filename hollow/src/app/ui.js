@@ -87,7 +87,8 @@ export function createUI({ recipe: getRecipe, render, on }) {
     add(fCam, R.camera, 'sway', 0, 0.08, 0.001).name('Balancement').onChange(ch);
     add(fCam, R.camera, 'roll', 0, 0.2, 0.001).name('Roulis').onChange(ch);
     if (R.camera.ramp !== undefined) {
-      add(fCam, R.camera, 'ramp', 0, 0.9, 0.01).name('Ralenti au passage').onChange(ch);
+      add(fCam, R.camera, 'ramp', 0, 1, 0.01).name('Variations de vitesse').onChange(ch);
+      add(fCam, { reroll: () => on.rerollBeats() }, 'reroll').name('⟳  Autres variations');
       add(fCam, R.camera, 'kick', 0, 0.3, 0.005).name('Respiration du champ').onChange(ch);
     }
     add(fCam, on.camState, 'free').name('Caméra libre (souris)').onChange((v) => on.freeCam(v));
