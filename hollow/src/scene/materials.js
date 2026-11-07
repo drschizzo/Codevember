@@ -636,6 +636,13 @@ export function buildGemMaterial(U) {
 // le cœur (il rend la lumière qu'il reçoit) et projetant une ombre colorée
 // (castShadowNode : la lumière qui le traverse prend sa couleur).
 export const paneUniforms = (p) => ({ rough: uniform(p.rough), glow: uniform(p.glow) });
+// Naissance de l'ombre colorée. Une carte d'ombre colorée ne retient que le
+// projecteur le plus proche du cœur : un verre y masque tous les barreaux des
+// coquilles extérieures dans sa direction. Le vitrail qui naît au cœur, le plus
+// proche de tous, ferait donc d'un coup passer sa lumière à travers tout le nid.
+// Dans la carte d'ombre, chaque verre grandit depuis son centre pendant la
+// remontée (0 → 1, posé par le nid) : la lumière colorée arrive en douceur.
+const paneGrow = uniform(1).onObjectUpdate(({ object }) => object.userData.grow ?? 1);
 export function applyPane(U, p) { U.rough.value = p.rough; U.glow.value = p.glow; }
 export function buildPaneMaterial(U) {
   const m = new THREE.MeshPhysicalNodeMaterial({ transmission: 1, side: THREE.DoubleSide });
@@ -652,6 +659,8 @@ export function buildPaneMaterial(U) {
   const r = length(positionWorld);
   m.emissiveNode = haloEmission().add(c.mul(G.coreColor).mul(G.coreGlow).mul(G.coreR.mul(G.coreR).div(r.mul(r))).mul(U.glow));
   m.castShadowNode = vec4(c.mul(1.4).min(1), 1);
+  const ctr = attribute('center', 'vec3');
+  m.castShadowPositionNode = mix(ctr, positionGeometry, paneGrow);
   m.mrtNode = stableVelocity();
   return m;
 }
