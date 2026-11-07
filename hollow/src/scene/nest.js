@@ -39,6 +39,7 @@ function toGeometry(o, bounds = 1.05) {
   g.setAttribute('normal', new THREE.BufferAttribute(o.normal, 3, packed(o.normal)));
   if (o.tangent) g.setAttribute('tangent', new THREE.BufferAttribute(o.tangent, 4, packed(o.tangent)));
   if (o.surf) g.setAttribute('surf', new THREE.BufferAttribute(o.surf, 4, true));
+  if (o.bev) g.setAttribute('bev', new THREE.BufferAttribute(o.bev, 4, packed(o.bev)));
   if (o.index) g.setIndex(new THREE.BufferAttribute(o.index, 1));
   g.boundingSphere = new THREE.Sphere(new THREE.Vector3(), bounds);
   g.boundingBox = new THREE.Box3(new THREE.Vector3(-bounds, -bounds, -bounds), new THREE.Vector3(bounds, bounds, bounds));
@@ -274,7 +275,9 @@ export function createNest(scene, gen) {
       // sont choisis pour que l'écart entre deux niveaux reste sous le pixel
       // (surfaces minimales : maillage implicite plus exigeant, seuils relevés)
       const rpx = x <= 0 ? Infinity : ((s.D * s.ratio ** x) / s.D) * s.pxPerUnit * s.detail * (des.layer.type === 'tpms' ? 1.8 : 1);
-      let lod = rpx > 900 ? 0 : rpx > 220 ? 1 : 2;
+      // (la tranche a sa normale par pixel : les niveaux ne diffèrent plus que par
+      // la silhouette des biseaux, d'où des seuils plus hauts)
+      let lod = rpx > 1100 ? 0 : rpx > 280 ? 1 : 2;
       while (lod < 2 && !des.geoms[lod]) lod++;
       while (lod > 0 && !des.geoms[lod]) lod--;
       // (affichée dès l'intérieur du cœur, qui la cache : elle en sort sans apparaître)
