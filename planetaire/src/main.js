@@ -72,6 +72,7 @@ async function main() {
   const orrery = createOrrery(scene, renderer);
   let meca = MECA0;
   const LENS = !params.has('nolens');
+  const DOF = params.has('dof'); // profondeur de champ : coupée par défaut
   const PLANET_K = 1.7; // planètes en billes bien visibles sur leurs tiges
   const setMeca = (v) => {
     meca = v; orrery.setVisible(v); document.body.classList.toggle('meca', v);
@@ -1075,7 +1076,7 @@ async function main() {
       vis.V.focusRange.value = Math.max(0.2, vis.V.focus.value * 0.28);
       vis.V.bokeh.value = meca ? 3.0 : 0.8;
       vis.V.blurK.value = meca ? 1.0 : 0.4;
-      vis.V.aperture.value = LENS ? (meca ? 0.045 : 0.015) : 0;
+      vis.V.aperture.value = LENS && DOF ? (meca ? 0.045 : 0.015) : 0; // (bokeh des grains : seulement avec ?dof)
       // obturation : un peu plus d'une image de temps simulé (traînées des grains rapides)
       vis.V.shutter.value = LENS ? dtSim * 1.6 : 0;
       // vitesse de la caméra (lissée), pour des traînées relatives à elle
@@ -1085,6 +1086,8 @@ async function main() {
       }
       _camPrev.copy(camera.position);
       vis.V.planetFlux.value = meca ? 2.2 : 4.0;
+      vis.V.starK.value = meca ? 0.35 : 1.0;
+      vis.V.innerSoft.value = meca ? 1.0 : 0.0;
     }
     if (vis.updatePulsar(state.paused ? 0 : real)) audio.pulsarTick(); // un faisceau nous balaie : « tic »
 

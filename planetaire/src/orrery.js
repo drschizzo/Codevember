@@ -28,7 +28,7 @@
 import * as THREE from 'three/webgpu';
 import {
   vec3, vec4, mix, positionLocal, mx_noise_float, float, mrt, normalWorld, positionWorld, cameraPosition,
-  normalize, dot, abs, pow, max, min, reflect, uniform, smoothstep,
+  normalize, dot, abs, pow, max, min, reflect, uniform, smoothstep, time,
 } from 'three/tsl';
 import { R_IN, R_OUT } from './sim.js';
 
@@ -60,20 +60,24 @@ export const ss = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b 
 const pitchR = (n) => (n * MODULE) / 2;
 
 // ── Matériaux : laiton patiné et satiné (il ne doit pas voler la vedette) ──
-function brass(tone = [0.64, 0.56, 0.38], rough = 0.5) {
-  const m = new THREE.MeshStandardNodeMaterial({ metalness: 0.6, roughness: rough });
+// (Éclairage « cinéma » : le laiton est un VRAI métal. Il n'a presque pas de
+//  diffus : il lit ses reflets — les softbox de l'environnement, la lampe,
+//  l'étoile. C'est ce qui le rend précieux au lieu d'un jaune plat.)
+function brass(tone = [0.86, 0.6, 0.26], rough = 0.44) {
+  const m = new THREE.MeshStandardNodeMaterial({ metalness: 0.95, roughness: rough });
   const p = positionWorld;
   // laiton brossé (stries) et patine irrégulière ; coordonnées monde, pour
   // que les pièces instanciées ou mises à l'échelle gardent le même grain
   const brush = mx_noise_float(vec3(p.x.mul(14.0), p.y.mul(260.0), p.z.mul(14.0))).mul(0.5).add(0.5);
   const patina = mx_noise_float(p.mul(2.3)).mul(0.5).add(0.5);
-  m.colorNode = mix(vec3(...tone).mul(0.82), vec3(...tone), brush).mul(patina.mul(0.25).add(0.8));
-  m.roughnessNode = float(rough).add(brush.mul(0.12)).add(patina.mul(0.1));
+  m.colorNode = mix(vec3(...tone).mul(0.8), vec3(...tone), brush).mul(patina.mul(0.3).add(0.72));
+  m.roughnessNode = float(rough).add(brush.mul(0.1)).add(patina.mul(0.14));
+  m.metalnessNode = float(0.97).sub(patina.pow(3.0).mul(0.25)); // patine : oxyde, un peu diélectrique
   return m;
 }
-const steel = () => new THREE.MeshStandardNodeMaterial({ color: 0xb4bac2, metalness: 0.85, roughness: 0.2 }); // acier poli
-const blued = () => new THREE.MeshStandardNodeMaterial({ color: 0x2c4596, metalness: 0.75, roughness: 0.16 }); // acier bleui, très poli
-const ruby = () => new THREE.MeshStandardNodeMaterial({ color: 0x9a1028, roughness: 0.06, metalness: 0.1, emissive: 0x2a0208 });
+const steel = () => new THREE.MeshStandardNodeMaterial({ color: 0x737880, metalness: 1.0, roughness: 0.45 }); // (poli très fin, il renvoyait la lampe et l'étoile en éclats aveuglants)
+const blued = () => new THREE.MeshStandardNodeMaterial({ color: 0x24408f, metalness: 0.9, roughness: 0.36 }); // acier bleui
+const ruby = () => new THREE.MeshStandardNodeMaterial({ color: 0x9a1028, roughness: 0.16, metalness: 0.1, emissive: 0x2a0208 }); // (plus poli, chaque rubis scintillait en éclat blanc)
 const dark = () => new THREE.MeshStandardNodeMaterial({ color: 0x0c0a08, roughness: 0.7, metalness: 0.2 });
 
 // ── Géométries usinées ──────────────────────────────────────────────────────
@@ -267,27 +271,47 @@ function plateTexture() {
   return t;
 }
 
-// Petit ciel d'atelier pour les reflets du métal : pénombre chaude, deux
-// fenêtres et une lampe — juste de quoi faire luire les arêtes.
-function workshopEnv() {
-  const W = 512, H = 256, c = document.createElement('canvas');
-  c.width = W; c.height = H;
-  const g = c.getContext('2d');
-  const sky = g.createLinearGradient(0, 0, 0, H);
-  sky.addColorStop(0, '#9a9488'); sky.addColorStop(0.35, '#4c4640'); sky.addColorStop(0.5, '#1e1914'); sky.addColorStop(1, '#0a0807');
-  g.fillStyle = sky; g.fillRect(0, 0, W, H);
-  const glow = (x, y, rx, ry, col) => {
-    const gr = g.createRadialGradient(x, y, 0, x, y, Math.max(rx, ry));
-    gr.addColorStop(0, col); gr.addColorStop(1, 'rgba(0,0,0,0)');
-    g.save(); g.translate(x, y); g.scale(rx / Math.max(rx, ry), ry / Math.max(rx, ry)); g.translate(-x, -y);
-    g.fillStyle = gr; g.fillRect(0, 0, W, H); g.restore();
+// Environnement de STUDIO, en HDR (demi-flottants) : c'est lui que le métal
+// reflète. Un fond presque noir, et des sources FORMÉES — une grande softbox
+// chaude au-dessus (la lampe de musée), deux bandes verticales froides en
+// contre-jour, une fenêtre lointaine, un rebond chaud du plateau. Des reflets
+// nets et lisibles, comme les cartes de réflexion d'un plateau photo.
+function studioEnv() {
+  const W = 512, H = 256, data = new Uint16Array(W * H * 4);
+  const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  // source rectangulaire en (azimut, élévation), bords adoucis
+  const box = (az, el, phi, elev, w, h, soft) => {
+    let d = Math.abs(phi - az); d = Math.min(d, Math.PI * 2 - d);
+    return sstep(w + soft, w - soft, d * Math.cos(elev)) * sstep(h + soft, h - soft, Math.abs(elev - el));
   };
-  glow(140, 60, 90, 45, 'rgba(255,224,180,1)');
-  glow(360, 70, 110, 40, 'rgba(200,212,255,0.7)');
-  glow(250, 10, 260, 40, 'rgba(255,215,170,0.6)');
-  const t = new THREE.CanvasTexture(c);
+  const L = [ // [azimut, élévation, ½ largeur, ½ hauteur, flou, r, g, b]
+    [-2.45, 1.0, 0.42, 0.22, 0.05, 7.0, 6.2, 5.0],   // softbox tiède, haut-gauche-avant (lampe de musée)
+    [0.55, 0.12, 0.05, 0.55, 0.02, 0.7, 0.95, 1.5],  // bande froide, contre-jour droit
+    [-0.9, 0.2, 0.04, 0.45, 0.02, 0.45, 0.62, 1.0],  // bande froide, contre-jour gauche
+    [2.2, 0.35, 0.18, 0.12, 0.03, 0.9, 0.75, 0.55],  // fenêtre lointaine, tiède
+  ];
+  for (let j = 0; j < H; j++) {
+    const elev = ((j + 0.5) / H - 0.5) * Math.PI; // rangée 0 = nadir
+    for (let i = 0; i < W; i++) {
+      const phi = ((i + 0.5) / W - 0.5) * Math.PI * 2;
+      const y = Math.sin(elev);
+      // pénombre de l'atelier : un peu plus claire en haut, rebond chaud du plateau en bas
+      let r = 0.012 + 0.02 * Math.max(0, y), g = 0.011 + 0.02 * Math.max(0, y), b = 0.012 + 0.026 * Math.max(0, y);
+      const fl = sstep(-0.05, -0.5, y) * 0.05; r += fl * 1.0; g += fl * 0.62; b += fl * 0.36;
+      for (const [az, el, w, h, sf, lr, lg, lb] of L) {
+        const k = box(az, el, phi, elev, w, h, sf);
+        if (k > 0) { r += k * lr; g += k * lg; b += k * lb; }
+      }
+      const o = (j * W + i) * 4;
+      data[o] = THREE.DataUtils.toHalfFloat(r); data[o + 1] = THREE.DataUtils.toHalfFloat(g);
+      data[o + 2] = THREE.DataUtils.toHalfFloat(b); data[o + 3] = THREE.DataUtils.toHalfFloat(1);
+    }
+  }
+  const t = new THREE.DataTexture(data, W, H, THREE.RGBAFormat, THREE.HalfFloatType);
   t.mapping = THREE.EquirectangularReflectionMapping;
-  t.colorSpace = THREE.SRGBColorSpace;
+  t.colorSpace = THREE.LinearSRGBColorSpace;
+  t.magFilter = t.minFilter = THREE.LinearFilter;
+  t.needsUpdate = true;
   return t;
 }
 
@@ -345,9 +369,9 @@ function glassMaterial(k = 1) {
   const gm = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
   const V = normalize(cameraPosition.sub(positionWorld)), N = normalize(normalWorld);
   const fres = pow(float(1).sub(abs(dot(N, V))), 4.0);
-  const spec = pow(max(dot(reflect(V.negate(), N), normalize(vec3(-8, 14, 10))), 0), 90.0);
-  const spec2 = pow(max(dot(reflect(V.negate(), N), normalize(vec3(9, 6, -12))), 0), 30.0);
-  gm.colorNode = vec4(vec3(1.0, 0.96, 0.9).mul(fres.mul(0.07).add(spec.mul(0.18)).add(spec2.mul(0.05)).mul(k)), 1);
+  const spec = pow(max(dot(reflect(V.negate(), N), normalize(vec3(-5.5, 16, 6.5))), 0), 120.0);
+  const spec2 = pow(max(dot(reflect(V.negate(), N), normalize(vec3(6, 10, -11))), 0), 40.0);
+  gm.colorNode = vec4(vec3(1.0, 0.96, 0.9).mul(fres.mul(0.06).add(spec.mul(0.3)).add(spec2.mul(0.08)).mul(k)), 1);
   gm.mrtNode = mrt({ velocity: vec4(0) }); // (le verre ne brouille pas le flou de mouvement)
   return gm;
 }
@@ -357,12 +381,20 @@ export function createOrrery(scene, renderer) {
   root.name = 'orrery';
   scene.add(root);
   // (préfiltrée en PMREM : sans cela, les reflets du métal restent noirs)
+  //  Attaché matériau par matériau, et PAS via scene.environment : avec le
+  //  moteur WebGPU, l'environnement de la scène s'ajoute aussi aux matériaux
+  //  « basic » (poussière, verre, halos) — un studio HDR les voilerait de gris.
   let env = null;
-  scene.environmentIntensity = 1.1;
-  new THREE.PMREMGenerator(renderer).fromEquirectangularAsync(workshopEnv()).then((rt) => {
-    env = rt.texture;
-    if (root.visible) scene.environment = env;
-  });
+  const ENV_K = 0.8; // (plus haut, la softbox HDR se reflète en large tache blanche dans le métal satiné)
+  const applyEnv = () => {
+    if (!env) return;
+    root.traverse((o) => {
+      for (const m of o.material ? [].concat(o.material) : []) {
+        if (m.isMeshStandardMaterial && m.envMap !== env) { m.envMap = env; m.envMapIntensity = ENV_K; m.needsUpdate = true; }
+      }
+    });
+  };
+  new THREE.PMREMGenerator(renderer).fromEquirectangularAsync(studioEnv()).then((rt) => { env = rt.texture; applyEnv(); });
 
   const MB = brass(), MBd = brass([0.4, 0.34, 0.24], 0.55), MS = steel(), MBl = blued(), MR = ruby(), MK = dark();
   const MBz = brass([0.55, 0.38, 0.24], 0.4); // bronze des bagues et coussinets
@@ -397,33 +429,89 @@ export function createOrrery(scene, renderer) {
     return new THREE.Vector3(v.x + (b.x - v.x) * (t + ext / d), 0, v.z + (b.z - v.z) * (t + ext / d));
   };
 
-  // ── Lumières : l'étoile est la vraie source ; la lampe d'atelier, discrète,
-  //    ne fait que révéler les volumes quand l'étoile est faible ───────────
-  const starLight = new THREE.PointLight(0xffd6a0, 2, 0, 0.3);
+  // ── Lumières — plan « cinéma » ─────────────────────────────────────────
+  //  · CLÉ MOTIVÉE : l'étoile. Elle éclaire la machine d'en haut, au centre, et
+  //    porte des ombres RADIALES (piliers, bras, roues) sur la platine. Elle
+  //    raconte le cycle : rouge sombre au nuage, blanche à la maturité, rouge
+  //    sang de la géante, éclair blanc de la supernova.
+  //  · LUMIÈRE DE MUSÉE : un projecteur étroit, haut, qui pose une flaque de
+  //    lumière sur la machine et la laisse tomber dans le noir (pas d'éclairage
+  //    uniforme : l'œil va là où il y a de la lumière).
+  //  · CONTRE-JOURS froids (deux) : liserés sur les arêtes, la silhouette se
+  //    détache du fond. Chaud devant / froid derrière : le contraste coloré
+  //    donne la profondeur.
+  //  · Remplissage presque nul : ratio clé / remplissage ≈ 8:1, les ombres
+  //    restent des ombres — c'est l'environnement HDR qui fait vivre le métal.
+  const starLight = new THREE.PointLight(0xffd6a0, 2, 0, 2); // (décroissance physique en 1/d²)
+  starLight.castShadow = true;
+  starLight.shadow.mapSize.set(1024, 1024);
+  starLight.shadow.camera.near = 0.3; starLight.shadow.camera.far = 30;
+  starLight.shadow.bias = -0.002; starLight.shadow.normalBias = 0.03;
+  starLight.shadow.radius = 6;
   root.add(starLight);
-  // projecteur de musée : un cône chaud, en biais, qui découpe la machine et
-  // porte ses ombres (les bras et les roues s'ombrent sur la platine)
-  const lamp = new THREE.SpotLight(0xffe2c0, 130, 0, 0.66, 0.8, 1.1);
-  lamp.position.set(-6.5, 9.5, 8.5);
-  lamp.target.position.set(0.3, -2.2, 0.4);
+  const lamp = new THREE.SpotLight(0xfff0dc, 140, 0, 0.36, 0.85, 1.6); // ~4500 K : le laiton fournit lui-même le chaud
+  lamp.position.set(-5.5, 16, 6.5);
+  lamp.target.position.set(0, -3.4, 0);
   lamp.castShadow = true;
   lamp.shadow.mapSize.set(2048, 2048);
-  lamp.shadow.camera.near = 4; lamp.shadow.camera.far = 30;
+  lamp.shadow.camera.near = 8; lamp.shadow.camera.far = 40;
   lamp.shadow.bias = -0.0004; lamp.shadow.normalBias = 0.02;
-  lamp.shadow.radius = 3;
+  lamp.shadow.radius = 5;
   root.add(lamp, lamp.target);
-  // second projecteur, froid et rasant, pour sculpter la galerie des automates
-  const lamp2 = new THREE.SpotLight(0xc9d8ff, 80, 0, 0.6, 0.9, 1.05);
-  lamp2.position.set(8, -2.2, 7.5);
-  lamp2.target.position.set(0, -3.9, 0.5);
+  // projecteur froid et rasant : sculpte la galerie des automates (bas, à droite)
+  const lamp2 = new THREE.SpotLight(0xa9c2ff, 60, 0, 0.5, 1.0, 1.3);
+  lamp2.position.set(9, -2.6, 6.5);
+  lamp2.target.position.set(0, -4.0, 0.5);
   root.add(lamp2, lamp2.target);
-  // appoint : ciel froid, sol chaud (la pénombre de l'atelier)
-  const hemi = new THREE.HemisphereLight(0xa8b8e0, 0x5a3a20, 1.1);
+  // remplissage : à peine (ciel froid, plateau chaud)
+  const hemi = new THREE.HemisphereLight(0x8fa3d0, 0x3a2414, 0.3);
   root.add(hemi);
-  // contre-jour froid : liseré sur les arêtes, détache la machine du fond
-  const rim = new THREE.DirectionalLight(0xb8ccff, 0.8);
-  rim.position.set(7, -1.5, -12);
-  root.add(rim);
+  // contre-jours froids : liseré de part et d'autre
+  // (hauts, ~40° : rasants, ils se reflétaient en miroir dans les pièces
+  //  planes polies dès que la caméra descendait face à eux)
+  const rim = new THREE.DirectionalLight(0x9fbcff, 1.5);
+  rim.position.set(6, 10, -11);
+  const rim2 = new THREE.DirectionalLight(0xc8d6ff, 0.7);
+  rim2.position.set(-10, 7.5, -6);
+  root.add(rim, rim2);
+
+  // ── Plateau : la machine repose sur un velours sombre, dans la flaque de la
+  //    lampe (ombre de contact, sol qui se perd dans le noir) ──────────────
+  {
+    const fm = new THREE.MeshLambertNodeMaterial(); // (velours : diffus pur, aucun reflet du studio en incidence rasante)
+    const rr = positionWorld.xz.length();
+    const weave = mx_noise_float(positionWorld.mul(vec3(40, 1, 40))).mul(0.08).add(1.0);
+    const alb = vec3(0.16, 0.105, 0.07).mul(weave);
+    fm.colorNode = alb.mul(smoothstep(24.0, 6.0, rr));
+    // flaque de la lumière de plateau (un lumineux dédié, large et doux, qui
+    // ne touche que le velours), assombrie au pied du socle : ombre de contact
+    const pool = smoothstep(17.0, 3.0, rr).pow(1.6).mul(smoothstep(2.3, 4.2, rr).mul(0.85).add(0.15));
+    fm.emissiveNode = alb.mul(pool).mul(0.16);
+    // pas de vecteur vitesse : sinon, caméra en mouvement, le flou de mouvement
+    // étalait le sol à travers la poussière (additive, dessinée par-dessus)
+    fm.mrtNode = mrt({ velocity: vec4(0) }); // velours : boit la lumière, se perd dans le noir
+    const floor = add(new THREE.CircleGeometry(40, 96), fm, 0, Y_BASE - 1.252, 0);
+    floor.rotation.x = -Math.PI / 2;
+    floor.userData.noCast = true;
+  }
+
+  // ── Faisceau de la lampe : une poussière d'atelier en suspension rend le
+  //    cône visible (lumière volumétrique simulée, très discrète) ─────────
+  {
+    const top = lamp.position, bot = lamp.target.position;
+    const len = top.distanceTo(bot), rad = Math.tan(0.36) * len;
+    const bm = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+    const Vd = normalize(cameraPosition.sub(positionWorld)), Nn = normalize(normalWorld);
+    const edge = abs(dot(Nn, Vd)).pow(1.6);                  // plus dense au cœur du cône qu'au bord
+    const along = positionLocal.y.div(len).add(0.5);         // 0 en bas, 1 à la lampe
+    const motes = mx_noise_float(positionWorld.mul(1.3).add(vec3(0, time.mul(0.05), 0))).mul(0.35).add(0.75);
+    bm.colorNode = vec4(vec3(1.0, 0.86, 0.66).mul(edge).mul(smoothstep(0.0, 0.3, along)).mul(smoothstep(0.75, 0.45, along)).mul(motes).mul(0.012), 1);
+    bm.mrtNode = mrt({ velocity: vec4(0) });
+    const beam = add(new THREE.ConeGeometry(rad, len, 64, 1, true), bm);
+    beam.position.copy(top).add(bot).multiplyScalar(0.5);
+    beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), bot.clone().sub(top).normalize());
+    beam.renderOrder = 12;
+  }
 
   // ── Socle tourné + platine gravée ───────────────────────────────────────
   const PLATE_R = 2.56;
@@ -432,9 +520,9 @@ export function createOrrery(scene, renderer) {
     add(turned([[0, y - 1.25], [2.3, y - 1.25], [2.4, y - 1.22], [2.44, y - 1.17], [2.2, y - 1.1], [1.25, y - 0.92], [0.98, y - 0.72],
       [0.82, y - 0.5], [0.8, y - 0.42], [0.95, y - 0.3], [1.6, y - 0.21], [2.5, y - 0.14], [2.6, y - 0.1], [2.62, y - 0.07],
       [2.62, y - 0.035], [2.6, y - 0.02], [0, y - 0.02]], 96), MBd);
-    const pm = new THREE.MeshStandardNodeMaterial({ metalness: 0.6, roughness: 0.5 });
+    const pm = new THREE.MeshStandardNodeMaterial({ metalness: 0.9, roughness: 0.62 }); // (satinée : sous l'étoile, une platine polie devient un miroir aveuglant)
     pm.map = plateTexture();
-    pm.color = new THREE.Color(0.56, 0.5, 0.37);
+    pm.color = new THREE.Color(0.84, 0.6, 0.28);
     add(new THREE.CylinderGeometry(PLATE_R, PLATE_R, 0.02, 96), pm, 0, y - 0.01, 0);
     // chanfrein du bord de la platine
     add(turned([[PLATE_R, y], [PLATE_R, y - 0.02], [PLATE_R + 0.03, y - 0.02], [PLATE_R + 0.03, y - 0.012], [PLATE_R + 0.012, y]], 96), MB);
@@ -442,9 +530,9 @@ export function createOrrery(scene, renderer) {
 
   // ── Limbe gradué, pieds, arceaux, cloche de verre ───────────────────────
   {
-    const lm = new THREE.MeshStandardNodeMaterial({ metalness: 0.6, roughness: 0.45 });
+    const lm = new THREE.MeshStandardNodeMaterial({ metalness: 0.9, roughness: 0.5 });
     lm.map = limbTexture();
-    lm.color = new THREE.Color(0.62, 0.55, 0.39);
+    lm.color = new THREE.Color(0.86, 0.62, 0.3);
     const limb = add(new THREE.RingGeometry(LIMB_R0 + 0.02, LIMB_R1 - 0.02, 256, 1), lm, 0, -0.02, 0);
     limb.rotation.x = -Math.PI / 2;
     // tranche du limbe, chanfreinée dessus et dessous
@@ -1394,20 +1482,22 @@ export function createOrrery(scene, renderer) {
   // éclairage de la machine par l'étoile (couleur et luminosité du cycle de vie)
   function setStar(color, lightK, shell = 0) {
     // (couleur de l'étoile adoucie vers le blanc : le laiton reste du laiton)
-    starLight.color.setRGB(0.5 + 0.5 * color[0], 0.5 + 0.5 * color[1], 0.5 + 0.5 * color[2]);
-    starLight.intensity = 2.4 * Math.min(2.0, lightK) + 10 * shell;
+    // (couleur saturée aux deux tiers : la géante baigne la machine de rouge,
+    //  mais le laiton reste lisible)
+    starLight.color.setRGB(0.3 + 0.7 * color[0], 0.3 + 0.7 * color[1], 0.3 + 0.7 * color[2]);
+    starLight.intensity = 4.5 * Math.min(1.6, lightK) + 70 * shell;
   }
 
   function setVisible(v) {
     root.visible = v;
-    scene.environment = v ? env : null;
+    if (v) applyEnv(); // (pièces créées depuis)
   }
 
   // ombres : toute la mécanique en porte et en reçoit (pas le verre)
   root.traverse((o) => {
     if (!o.isMesh) return;
     const glass = o.material && o.material.blending === THREE.AdditiveBlending;
-    o.castShadow = !glass && !o.userData.isHeap;
+    o.castShadow = !glass && !o.userData.isHeap && !o.userData.noCast;
     o.receiveShadow = !glass;
   });
 
