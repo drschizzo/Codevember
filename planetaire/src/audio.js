@@ -24,23 +24,35 @@ const BASE = 73.42;                 // ré 1
 const STEPS = 17;                   // ~3,5 octaves du bord externe à l'étoile
 
 // Distance → degré de gamme → fréquence (logarithmique en rayon)
-export function degreeOf(a) {
+function degreeOf(a) {
   const n = Math.log(R_OUT / Math.max(a, R_IN)) / Math.log(R_OUT / R_IN);
   return Math.max(0, Math.min(STEPS, Math.round(n * STEPS)));
 }
-export function freqOfDegree(d, octave = 0) {
+function freqOfDegree(d, octave = 0) {
   const semi = SCALE[d % 5] + 12 * Math.floor(d / 5) + 12 * octave;
   return BASE * Math.pow(2, semi / 12);
 }
-const NOTE_NAMES = ['do', 'do♯', 'ré', 'ré♯', 'mi', 'fa', 'fa♯', 'sol', 'sol♯', 'la', 'la♯', 'si'];
-export function noteName(a) {
-  const d = degreeOf(a);
-  const midi = 38 + SCALE[d % 5] + 12 * Math.floor(d / 5) + 12; // BASE = ré (MIDI 38), +1 octave pour les planètes
-  return NOTE_NAMES[midi % 12] + (Math.floor(midi / 12) - 2);  // notation française (do3 = MIDI 60)
-}
 
 export class Sonifier {
-  constructor() { this.ctx = null; this.muted = false; }
+  constructor() { this.ctx = null; this.muted = false; this.noises = new Map(); }
+
+  // Tampon de bruit blanc de `dur` secondes, enveloppé par env(t ∈ [0, 1], i),
+  // construit une seule fois par clé.
+  noise(key, dur, env, channels = 1) {
+    let buf = this.noises.get(key);
+    if (!buf) {
+      const n = Math.max(1, Math.floor(this.ctx.sampleRate * dur));
+      buf = this.ctx.createBuffer(channels, n, this.ctx.sampleRate);
+      for (let c = 0; c < channels; c++) {
+        const d = buf.getChannelData(c);
+        for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * env(i / n, i);
+      }
+      this.noises.set(key, buf);
+    }
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf;
+    return src;
+  }
 
   start() {
     if (this.ctx) return;
@@ -137,7 +149,7 @@ export class Sonifier {
     this.drone.gain.setTargetAtTime(this.muted ? 0 : 0.012 + 0.03 * dustFrac, t, 1.5);
 
     // regroupe les anneaux par degré de gamme
-    const vals = new Float32Array(STEPS + 1);
+    const vals = (this.vals ||= new Float32Array(STEPS + 1)).fill(0);
     let total = 0;
     for (let i = 0; i < nUsed; i++) { vals[degreeOf(radiusOf(i))] += needle[i]; total += needle[i]; }
     const mean = total / (STEPS + 1) + 1e-6;
@@ -185,11 +197,7 @@ export class Sonifier {
     o.connect(g).connect(P); o.start(t); o.stop(t + 4.1);
 
     // craquement : bruit dont le filtre se referme
-    const n = ctx.createBufferSource();
-    const buf = ctx.createBuffer(1, ctx.sampleRate * 3, ctx.sampleRate);
-    const d = buf.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 3);
-    n.buffer = buf;
+    const n = this.noise('impact', 3, (t) => Math.pow(1 - t, 3));
     const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 2;
     lp.frequency.setValueAtTime(6000, t);
     lp.frequency.exponentialRampToValueAtTime(80, t + 2.5);
@@ -227,22 +235,14 @@ export class Sonifier {
   }
 
   // Supergéante : le bourdon descend et s'assombrit
-  giant() {
-    if (!this.ctx) return;
-    const t = this.ctx.currentTime;
-    this.mood = 0.3;
-  }
+  giant() { this.mood = 0.3; }
 
   // Supernova : effondrement (aspiration), puis déflagration et longue traîne
   supernova() {
     if (!this.ctx || this.muted) return;
     const ctx = this.ctx, t = ctx.currentTime;
     this.impact(60, 1, 0);
-    const n = ctx.createBufferSource();
-    const len = ctx.sampleRate * 9;
-    const buf = ctx.createBuffer(2, len, ctx.sampleRate);
-    for (let c = 0; c < 2; c++) { const d = buf.getChannelData(c); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2); }
-    n.buffer = buf;
+    const n = this.noise('supernova', 9, (t) => Math.pow(1 - t, 2), 2);
     const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 1;
     lp.frequency.setValueAtTime(9000, t); lp.frequency.exponentialRampToValueAtTime(60, t + 8);
     const g = ctx.createGain(); g.gain.value = 0.55;
@@ -260,11 +260,7 @@ export class Sonifier {
   pulsarTick() {
     if (!this.ctx || this.muted) return;
     const ctx = this.ctx, t = ctx.currentTime;
-    const n = ctx.createBufferSource();
-    const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.04), ctx.sampleRate);
-    const d = buf.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * 0.004));
-    n.buffer = buf;
+    const n = this.noise('tick', 0.04, (t, i) => Math.exp(-i / (ctx.sampleRate * 0.004)));
     const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2400; bp.Q.value = 1.2;
     const g = ctx.createGain(); g.gain.value = 0.5;
     n.connect(bp).connect(g).connect(this.bus); n.start(t);
@@ -280,11 +276,7 @@ export class Sonifier {
   _metal(freq, gain, decay, thump) {
     if (!this.ctx || this.muted) return;
     const ctx = this.ctx, t = ctx.currentTime;
-    const n = ctx.createBufferSource();
-    const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.06), ctx.sampleRate);
-    const d = buf.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * decay));
-    n.buffer = buf;
+    const n = this.noise(`metal${decay}`, 0.06, (t, i) => Math.exp(-i / (ctx.sampleRate * decay)));
     const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = freq * (0.9 + Math.random() * 0.2); bp.Q.value = 6;
     const g = ctx.createGain(); g.gain.value = gain;
     n.connect(bp).connect(g).connect(this.bus); n.start(t);
@@ -300,11 +292,8 @@ export class Sonifier {
     if (!this.ctx) return;
     const ctx = this.ctx, t = ctx.currentTime;
     if (!this.flyNoise) {
-      const n = ctx.createBufferSource();
-      const buf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
-      const d = buf.getChannelData(0);
-      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-      n.buffer = buf; n.loop = true;
+      const n = this.noise('wind', 2, () => 1);
+      n.loop = true;
       const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 3;
       const g = ctx.createGain(); g.gain.value = 0;
       const p = ctx.createStereoPanner();

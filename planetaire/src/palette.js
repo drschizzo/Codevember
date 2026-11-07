@@ -1,6 +1,7 @@
 // Palette de provenance : couleur d'un matériau selon son rayon de naissance.
 // Même formule côté GPU (TSL) et côté CPU (coupe des planètes, UI).
 import { vec3, mix, smoothstep } from 'three/tsl';
+import { ss } from './util.js';
 
 const STOPS = [
   [0.35, [1.0, 0.30, 0.12]],  // fer / silicates chauds
@@ -20,7 +21,6 @@ export function provenanceTSL(r) {
   return c;
 }
 
-const ss = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 export function provenanceRGB(r) {
   let c = STOPS[0][1].slice();
   for (let k = 1; k < STOPS.length; k++) {

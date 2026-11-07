@@ -9,8 +9,9 @@
 //    turbulence, pièges de pression créés par les planètes massives.
 //    Chaque grain porte son rayon de naissance (provenance) et sa composition
 //    (roche / glace selon la ligne des glaces).
-//  · M embryons planétaires : N-corps exact, accrétion atomique des grains,
-//    mémoire stratigraphique (L couches par planète), fusions = impacts géants.
+//  · M embryons planétaires : N-corps exact, accrétion atomique des grains
+//    (masse, glace, rayon moyen de naissance), capture du gaz, fusions =
+//    impacts géants.
 //  · Grille polaire (NR × NPHI) reconstruite à chaque frame : profondeur optique
 //    depuis l'étoile (ombrage du disque) et « tête de lecture » sonore.
 //
@@ -21,13 +22,12 @@
 import * as THREE from 'three/webgpu';
 import {
   Fn, If, Loop, instancedArray, instanceIndex, uniform, float, int, uint,
-  vec3, vec4, hash, sqrt, exp, length, dot, normalize, max, min, mix,
+  vec3, vec4, hash, sqrt, exp, length, dot, normalize, max, mix,
   smoothstep, clamp, select, atomicAdd, atomicLoad, atomicStore, atan, cos,
   sin, log, pow, floor, abs, mx_fractal_noise_float,
 } from 'three/tsl';
 
 export const M = 64;           // embryons max
-export const L = 32;           // couches stratigraphiques par planète
 export const NR = 192;         // grille polaire : anneaux radiaux
 export const NPHI = 256;       //                  secteurs angulaires
 export const R_IN = 0.35;      // bord interne du disque (sublimation)
@@ -38,13 +38,25 @@ export const TAU = Math.PI * 2;
 // Budgets de masse (le disque n'est plus un réservoir infini) :
 export const SOLID0 = 700 * M_EARTH;   // solides disponibles au départ
 export const GAS0 = 2500 * M_EARTH;    // gaz capturable par les cœurs massifs
-export const GAS_TAU = 160 * TAU;      // dissipation du gaz (~160 orbites à 1 UA)
 export const NIMP = 8;                 // anneau d'impacts récents
 
 const PARTICLE_WG = 256;
 
 // Hauteur du disque (évasé) — partagé avec le rendu.
 export const diskH = (R) => R.mul(0.035).mul(pow(R, 0.25));
+
+// Rayon affiché d'une planète de masse mE (M⊕), partagé par le shader des
+// planètes et la machine. Relation masse–rayon de Chen & Kipping (2017) :
+// rocheuses ∝ M^0.28, neptuniennes ∝ M^0.59, géantes ≈ 11 R⊕. Le rayon affiché
+// ∝ R^0.75 est exagéré pour rester visible ; une Jupiter reste plus petite que l'étoile.
+export function planetRadius(mE, k = 1) {
+  const Rp = mE < 2 ? Math.pow(mE, 0.28) : Math.min(11.5, 1.21 * Math.pow(mE / 2, 0.59));
+  return Math.max(0.005, 0.013 * Math.pow(Rp, 0.75)) * k;
+}
+export function planetRadiusNode(mE) {
+  const Rp = select(mE.lessThan(2.0), pow(mE, 0.28), pow(mE.div(2.0), 0.59).mul(1.21).min(11.5));
+  return pow(Rp, 0.75).mul(0.013).max(0.005);
+}
 
 // Index de cellule polaire pour une position (plan XZ).
 export function cellOf(p) {
@@ -63,10 +75,8 @@ export function createSim(renderer, N) {
   const ePos = instancedArray(M, 'vec4');   // xyz, w = masse (0 = inactif)
   const eVel = instancedArray(M, 'vec4');   // xyz, w = rayon de capture
   const eAcc = instancedArray(M, 'vec4');   // accélération (scratch)
-  const eInfo = instancedArray(M, 'vec4');  // couche en cours : masse, glace, Σr·m, nbCouches
   const eTot = instancedArray(M, 'vec4');   // totaux : glace, Σr·m, taux d'accrétion, impacts
-  const eLayers = instancedArray(M * L, 'vec4'); // masse, fraction glace, r moyen, type (0 accr, 1 impact, 2 graine, 3 gaz)
-  const eGas = instancedArray(M, 'vec4');   // gaz : couche en cours, total
+  const eGas = instancedArray(M, 'vec4');   // .y = gaz capté
   // Impacts récents : [k] = position, w = masse de l'impacteur ;
   //                    [NIMP + k] = n° de série, survivant, éjecta en attente, absorbé
   const imp = instancedArray(NIMP * 2, 'vec4');
@@ -91,7 +101,6 @@ export function createSim(renderer, N) {
   const U = {
     dt: uniform(0.008),          // pas des grains
     dtE: uniform(0.004),         // pas des embryons (2 sous-pas par pas de grains)
-    frame: uniform(0, 'uint'),
     eta: uniform(0.012),         // déficit de vitesse du gaz (pression)
     boost: uniform(25.0),        // amplification artistique de la gravité des embryons
     fHill: uniform(0.5),         // rayon de capture / rayon de Hill
@@ -111,7 +120,6 @@ export function createSim(renderer, N) {
     migK: uniform(0.0),          // migration de type I (désactivée par défaut)
     mergeK: uniform(0.6),
     kappa: uniform(0.004 * (1 << 20) / N),
-    layerTick: uniform(0, 'uint'),
     frameDt: uniform(0.016),
     spawnIdx: uniform(0, 'int'),
     spawnPos: uniform(new THREE.Vector3()),
@@ -470,43 +478,7 @@ export function createSim(renderer, N) {
     });
   })().compute(M, [64]);
 
-  // Empile une couche dans la mémoire d'une planète (type : 0 accrétion,
-  // 2 embryon initial, 3 gaz, ≥ 10 matière d'un impacteur — 10 + n° d'impact,
-  // + 0,5 pour son gaz). Si la pile est pleine, on fusionne la paire de
-  // couches voisines la plus légère, de préférence de même nature : les gros
-  // événements (impacts, enveloppe) restent lisibles, l'embryon initial aussi.
-  function pushLayer(i, layer) {
-    const info = eInfo.element(i);
-    const n = info.w.toInt().toVar();
-    If(n.greaterThanEqual(L), () => {
-      const best = int(1).toVar();
-      const bc = float(1e30).toVar();
-      Loop({ start: 1, end: L - 1, type: 'int', name: 'q' }, ({ q }) => {
-        const A = eLayers.element(i.mul(L).add(q)), B = eLayers.element(i.mul(L).add(q.add(1)));
-        const cost = A.x.add(B.x).mul(select(A.w.equal(B.w), 1.0, 6.0));
-        If(cost.lessThan(bc), () => { bc.assign(cost); best.assign(q); });
-      });
-      const a = eLayers.element(i.mul(L).add(best)).toVar();
-      const b = eLayers.element(i.mul(L).add(best.add(1))).toVar();
-      const mt = max(a.x.add(b.x), 1e-20);
-      const same = a.w.equal(b.w);
-      const heavy = select(a.x.greaterThanEqual(b.x), a, b);
-      eLayers.element(i.mul(L).add(best)).assign(vec4(
-        mt,
-        select(same, a.x.mul(a.y).add(b.x.mul(b.y)).div(mt), heavy.y),
-        select(same, a.x.mul(a.z).add(b.x.mul(b.z)).div(mt), heavy.z),
-        heavy.w,
-      ));
-      Loop({ start: best.add(1), end: int(L - 1), type: 'int', name: 'q2', condition: '<' }, ({ q2 }) => {
-        eLayers.element(i.mul(L).add(q2)).assign(eLayers.element(i.mul(L).add(q2.add(1))));
-      });
-      n.assign(L - 1);
-    });
-    eLayers.element(i.mul(L).add(n)).assign(layer);
-    info.w.assign(n.add(1).toFloat());
-  }
-
-  // ── Embryons : accrétion des grains capturés + stratigraphie ───────────────
+  // ── Embryons : accrétion des grains capturés ───────────────────────────────
   const embryoAccrete = Fn(() => {
     const i = int(instanceIndex);
     const base = i.mul(4);
@@ -525,28 +497,16 @@ export function createSim(renderer, N) {
       const m = E.w.add(dm).toVar();
       E.w.assign(m);
 
-      const info = eInfo.element(i);
-      info.x.addAssign(dm);
-      info.y.addAssign(dIce);
-      info.z.addAssign(dR);
-
       const T = eTot.element(i);
       T.x.addAssign(dIce);
       T.y.addAssign(dR);
       T.z.assign(mix(T.z, dm.div(M_EARTH).div(max(U.frameDt, 1e-4)), 0.04)); // (jamais ÷ 0 : un NaN ici blanchit l'écran via le bloom)
-
-      If(U.layerTick.equal(uint(1)).and(info.x.greaterThan(0.0)), () => {
-        const lm = info.x.toVar();
-        pushLayer(i, vec4(lm, info.y.div(lm), info.z.div(lm), 0.0));
-        info.x.assign(0); info.y.assign(0); info.z.assign(0);
-      });
 
       // Capture du gaz : au-delà de la masse critique, le cœur s'entoure d'une
       // enveloppe (emballement), limitée par l'ouverture d'un sillon et par
       // le gaz qui reste dans le disque.
       const G = eGas.element(i);
       const a = max(length(E.xz), R_IN);
-      // (gaz capté → couche de type 3)
       If(m.greaterThan(U.mCrit).and(U.gasAvail.greaterThan(0.0)), () => {
         const mMax = pow(a, 0.4).mul(260.0 * M_EARTH);
         const Om = pow(a, -1.5);
@@ -558,12 +518,7 @@ export function createSim(renderer, N) {
           .mul(smoothstep(1.2, U.snow, a).mul(0.985).add(0.015));
         m.addAssign(dmg);
         E.w.assign(m);
-        G.x.addAssign(dmg);
         G.y.addAssign(dmg);
-      });
-      If(U.layerTick.equal(uint(1)).and(G.x.greaterThan(0.0)), () => {
-        pushLayer(i, vec4(G.x, 0.0, 0.0, 3.0));
-        G.x.assign(0);
       });
 
       eVel.element(i).w.assign(captureRadius(a, m));
@@ -616,35 +571,12 @@ export function createSim(renderer, N) {
             const vel = HV.xyz.mul(mh).add(LV.xyz.mul(ml)).div(msum).toVar();
             const mt = mh.add(ml.mul(0.92)).toVar();
 
-            // Fige la couche en cours du survivant puis ajoute la couche « impact »
-            const info = eInfo.element(h);
-            If(info.x.greaterThan(0.0), () => {
-              const lm = info.x.toVar();
-              pushLayer(h, vec4(lm, info.y.div(lm), info.z.div(lm), 0.0));
-              info.x.assign(0); info.y.assign(0); info.z.assign(0);
-            });
             const TL = eTot.element(l);
-            // L'impacteur apporte toute sa propre histoire : ses couches sont
-            // recopiées (du cœur vers la surface) comme un groupe « impact ».
-            const meta0 = impMeta.element(0);
-            const gid = meta0.x.add(11.0).toVar(); // 10 + n° de cet impact
-            const nl = eInfo.element(l).w.toInt().toVar();
-            Loop({ start: int(0), end: nl, type: 'int', name: 'c', condition: '<' }, ({ c }) => {
-              const Ly = eLayers.element(l.mul(L).add(c)).toVar();
-              const isGas = Ly.w.equal(3.0).or(Ly.w.sub(floor(Ly.w)).greaterThan(0.25));
-              pushLayer(h, vec4(Ly.x.mul(0.92), Ly.y, Ly.z, select(isGas, gid.add(0.5), gid)));
-            });
-            // (plus la matière qu'il accrétait au moment du choc)
-            const IL = eInfo.element(l);
-            If(IL.x.greaterThan(0.0), () => {
-              pushLayer(h, vec4(IL.x.mul(0.92), IL.y.div(IL.x), IL.z.div(IL.x), gid));
-            });
             const TH = eTot.element(h);
             TH.x.addAssign(TL.x.mul(0.92));
             TH.y.addAssign(TL.y.mul(0.92));
-            const GH = eGas.element(h), GL = eGas.element(l);
-            GH.y.addAssign(GL.y.mul(0.92));
-            GL.assign(vec4(0));
+            eGas.element(h).y.addAssign(eGas.element(l).y.mul(0.92));
+            eGas.element(l).assign(vec4(0));
 
             // Enregistre l'impact (anneau circulaire) pour le rendu et le son
             const meta = impMeta.element(0);
@@ -675,10 +607,8 @@ export function createSim(renderer, N) {
     const ice = select(R.greaterThan(U.snow), 1.0, 0.0);
     ePos.element(i).assign(vec4(p, m));
     eVel.element(i).assign(vec4(tang.mul(sqrt(U.Ms.div(R))), captureRadius(R, m)));
-    eInfo.element(i).assign(vec4(0, 0, 0, 1));
     eTot.element(i).assign(vec4(ice.mul(m), R.mul(m), 0, 0));
     eGas.element(i).assign(vec4(0));
-    eLayers.element(i.mul(L)).assign(vec4(m, ice, R, 2.0));
   })().compute(1, [1]);
 
   // ── Grille polaire : densité, profondeur optique, tête de lecture ──────────
@@ -730,16 +660,16 @@ export function createSim(renderer, N) {
   // Les planètes ne sont plus semées au départ : elles naissent pendant la
   // phase de formation, là où la poussière s'accumule (cf. main.js).
   function clearEmbryos() {
-    for (const b of [ePos, eVel, eAcc, eInfo, eTot, eLayers, eGas, imp, impMeta, eAct]) {
+    for (const b of [ePos, eVel, eAcc, eTot, eGas, imp, impMeta, eAct]) {
       b.value.array.fill(0);
       b.value.needsUpdate = true;
     }
   }
 
   // ── API ────────────────────────────────────────────────────────────────────
-  let frame = 0;
+  const read = (b) => renderer.getArrayBufferAsync(b.value);
   const sim = {
-    N, U, buffers: { pPos, pVel, pHeat, ePos, eVel, eInfo, eTot, eGas, eLayers, tau, needle, grid },
+    N, U, buffers: { pPos, pVel, pHeat, ePos, eTot, eGas, tau },
     // pas maximal des grains (≥ 100 pas par orbite au bord interne du disque)
     maxDtP: 0.011,
 
@@ -758,8 +688,8 @@ export function createSim(renderer, N) {
     // Avance la simulation de frameTime (unités de temps) en UNE soumission.
     // Les grains (1 M, coûteux) prennent des pas ≤ maxDtP ; les embryons
     // (64, quasi gratuits) font 2 sous-pas par pas de grains, pour la précision
-    // des rencontres proches. Retourne le temps effectivement simulé.
-    step(frameTime, layerTick) {
+    // des rencontres proches.
+    step(frameTime) {
       frameTime = Math.max(0, frameTime);
       const nP = Math.max(1, Math.ceil(frameTime / this.maxDtP - 1e-9));
       U.dt.value = frameTime / nP;
@@ -771,12 +701,9 @@ export function createSim(renderer, N) {
         if (s === 0) list.push(clearEjecta);
         list.push(embryoForces, embryoIntegrate, embryoForces, embryoIntegrate);
       }
-      U.layerTick.value = layerTick ? 1 : 0;
       list.push(embryoAccrete, mergeDetect, embryoMerge);
       list.push(clearGrid, depositGrid, opticalDepth, readNeedle);
-      U.frame.value = ++frame;
       renderer.compute(list);
-      return frameTime;
     },
 
     supernova() { renderer.compute(snEject); },
@@ -790,20 +717,16 @@ export function createSim(renderer, N) {
 
     // Lectures asynchrones (petites) pour l'UI et le son
     async readEmbryos() {
-      const bufs = [ePos, eVel, eTot, eInfo, eGas, imp];
-      const [p, v, t, inf, g, im] = (await Promise.all(bufs.map((b) => renderer.getArrayBufferAsync(b.value)))).map((b) => new Float32Array(b));
-      return { pos: p, vel: v, tot: t, info: inf, gas: g, impPos: im.subarray(0, NIMP * 4), impInfo: im.subarray(NIMP * 4) };
+      const [pos, tot, gas, im] = (await Promise.all([ePos, eTot, eGas, imp].map(read))).map((b) => new Float32Array(b));
+      return { pos, tot, gas, impPos: im.subarray(0, NIMP * 4), impInfo: im.subarray(NIMP * 4) };
     },
     // Position + vitesse des embryons (2 ko), lue à chaque image pour la caméra
     async readKinematics() {
-      const [p, v] = await Promise.all([ePos, eVel].map((b) => renderer.getArrayBufferAsync(b.value)));
+      const [p, v] = await Promise.all([ePos, eVel].map(read));
       return { pos: new Float32Array(p), vel: new Float32Array(v) };
     },
-    async readLayers() {
-      return new Float32Array(await renderer.getArrayBufferAsync(eLayers.value));
-    },
     async readNeedle() {
-      return new Float32Array(await renderer.getArrayBufferAsync(needle.value));
+      return new Float32Array(await read(needle));
     },
   };
   return sim;

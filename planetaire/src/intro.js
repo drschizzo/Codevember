@@ -10,6 +10,7 @@
 //
 // Les grains portent la même couleur de provenance que dans la simulation.
 import { provenanceRGB } from './palette.js';
+import { clamp, ss, lerp, mixRGB as mixc } from './util.js';
 
 const canvas = document.getElementById('introAnim');
 if (canvas) run();
@@ -38,10 +39,6 @@ function run() {
   ];
 
   // ——— utilitaires ———
-  const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
-  const ss = (a, b, x) => { const t = clamp((x - a) / (b - a)); return t * t * (3 - 2 * t); };
-  const lerp = (a, b, t) => a + (b - a) * t;
-  const mixc = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
   let seed = 0x9e3779b9;
   const rnd = () => { // mulberry32 : même film à chaque boucle
     seed |= 0; seed = (seed + 0x6d2b79f5) | 0;
