@@ -126,8 +126,9 @@ export function placeGems(points, spec, top, rng) {
 // longues pour atteindre la coquille suivante (rapport ≈ 0,6 : marge de 0,3)
 export function placeSpines(points, spec, top, rng) {
   const out = [];
+  const clear = cos(spec.portal * 1.5); // (loin de l'oculus : la caméra passe)
   for (const v of points) {
-    if (!rng.chance(spec.spineDensity ?? 0.6)) continue;
+    if (!rng.chance(spec.spineDensity ?? 0.6) || v[2] > clear) continue;
     const L = spec.spines * rng.range(0.45, 1);
     const r = spec.bar * rng.range(0.22, 0.36);
     const [t1, t2] = tangentFrame(v), a = rng.range(0, PI * 2), tilt = rng.range(0, 0.25);

@@ -312,9 +312,24 @@ function bevelNormal(rigged = false) {
 }
 
 // ── Matériau d'une couche ────────────────────────────────────────────────────
+// ── Pores (radiolaire) ───────────────────────────────────────────────────────
+// Micro-perforations des faces, loin du bord des trous : des disques de
+// Worley taillés selon la direction depuis le centre (mêmes pores sur les deux
+// faces, on voit au travers), bordés d'une cuvette. U : { radius, freq }.
+export const poreUniforms = () => ({ radius: uniform(0.3), freq: uniform(80) });
+export function applyPores(U, geo) { U.radius.value = geo.pores || 0; U.freq.value = geo.poreFreq || 80; }
+function pores(U, p, surfA) {
+  const f1 = worley(normalize(p).mul(U.freq)).x;
+  const on = step(surfA.z, 0.5).mul(step(surfA.w, 0.72));
+  const open = f1.lessThan(U.radius).and(on.greaterThan(0.5));
+  const dimple = smoothstep(U.radius.mul(1.9), U.radius, f1).mul(on);
+  return { open, dimple };
+}
+
 // tpms : { spec, U } pour une surface minimale (normale analytique) ;
-// rig : uniformes d'une couche à pièces animées (voir rig.js)
-export function buildShellMaterial(finish, U, tpms = null, rig = null) {
+// rig : uniformes d'une couche à pièces animées (voir rig.js) ;
+// pore : uniformes des micro-perforations (radiolaire)
+export function buildShellMaterial(finish, U, tpms = null, rig = null, pore = null) {
   const fins = [finish.outer, finish.inner, finish.edge];
   const any = (pred) => fins.some(pred);
   const F = {
@@ -416,7 +431,13 @@ export function buildShellMaterial(finish, U, tpms = null, rig = null) {
   const purity = smoothstep(0.55, 0.85, surfA.x.max(surfA.y).max(surfA.z));
   if (rig) m.positionNode = rigPosition(rig, G.phase, true);
   const N0 = tpms ? transformNormalToView(tpmsNormal(tpms.spec, tpms.U)) : bevelNormal(!!rig);
-  let N = perturb(get('h').mul(purity).mul(0.0035).mul(world).mul(G.microDetail), N0);
+  let H = get('h').mul(purity);
+  if (pore) { // (perforations : la face est percée, et creusée en cuvette autour)
+    const P = pores(pore, p, surfA);
+    m.maskNode = P.open.not();
+    H = H.sub(P.dimple.mul(1.6));
+  }
+  let N = perturb(H.mul(0.0035).mul(world).mul(G.microDetail), N0);
   // (sans normalisation : la plupart des faces n'ont pas de facettes, vecteur nul)
   if (F.glit) N = normalize(N.add(modelViewMatrix.mul(vec4(get('glitter'), 0)).xyz.div(world).mul(0.22).mul(G.microDetail)));
   m.normalNode = N;
@@ -474,10 +495,14 @@ export const stableVelocity = () => mrt({ velocity: velocity.mul(still) });
 // ses barreaux s'élargissent depuis leur axe (proximité du bord < naissance),
 // ce qui évite tout saut dans la lumière du cœur.
 export const birth = uniform(1).onObjectUpdate(({ object }) => object.userData.birth ?? 1);
-export function buildShadowMaterial(rig = null) {
+export function buildShadowMaterial(rig = null, pore = null) {
   const m = new THREE.MeshBasicNodeMaterial();
   if (rig) m.positionNode = rigPosition(rig, G.phase, false);
-  m.maskShadowNode = attribute('surf', 'vec4').w.lessThanEqual(birth.mul(1.001));
+  const surfA = attribute('surf', 'vec4');
+  let mask = surfA.w.lessThanEqual(birth.mul(1.001));
+  // (les pores laissent passer la lumière : des points de lumière sur la couche suivante)
+  if (pore) mask = mask.and(pores(pore, positionLocal, surfA).open.not());
+  m.maskShadowNode = mask;
   return m;
 }
 

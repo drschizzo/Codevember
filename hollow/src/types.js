@@ -216,6 +216,28 @@ export const TYPES = {
       };
     },
   },
+  radiolarian: {
+    label: 'Radiolaire', weight: 1.6, max: 1, holes: true,
+    sets: ['celadon', 'nacre', 'chrome', 'titanium', 'goldLeaf', 'kintsugi', 'obsidian', 'bronze'],
+    params: [
+      ['count', 'Nombre de cellules', 20, 600, 1], ['jitter', 'Désordre', 0, 0.6, 0.01], ...P.bars,
+      ['pores', 'Pores (rayon)', 0, 0.48, 0.01], ['poreFreq', 'Pores (finesse)', 20, 200, 1],
+      ['spines', 'Épines (longueur)', 0, 0.35, 0.005], ['spineDensity', 'Épines (densité)', 0, 1, 0.01],
+    ],
+    selects: [['distribution', 'Germes', { 'Spirale de Fibonacci': 'fibonacci', 'Bruit bleu': 'random' }]],
+    // squelette de silice : barreaux larges et poreux, épines aux jonctions
+    geometry(rng) {
+      const count = rng.int(110, 300);
+      const b = bars(rng, Math.sqrt((4 * Math.PI) / count), 0.3, 0.42);
+      Object.assign(b, { round: 1, closed: 0, barVar: r2(rng.range(0, 0.3)) });
+      const h = holeDetails(rng);
+      return {
+        type: 'voronoi', count, distribution: rng.pick(['fibonacci', 'random']), spiral: r2(rng.range(-0.5, 0.5)), jitter: 0.15, ...b, ...h,
+        shape: rng.pick(['poly', 'poly', 'ellipse']), pillow: r2(rng.range(0.6, 1.1)), step: 0, rivets: 0.7, setting: 'rivet',
+        pores: r2(rng.range(0.28, 0.42)), poreFreq: rng.int(60, 110), spines: r2(rng.range(0.1, 0.26)), spineDensity: r2(rng.range(0.4, 0.85)),
+      };
+    },
+  },
   tpms: {
     label: 'Surface minimale', weight: 1.8, max: 1, noGroove: true, noChamfer: true,
     params: [['freq', 'Fréquence', 1.5, 7, 0.05], ['wall', 'Paroi', -0.5, 0.5, 0.01]],
