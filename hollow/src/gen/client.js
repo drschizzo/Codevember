@@ -4,7 +4,7 @@
 // Priorité : les niveaux de détail grossiers d'abord (la scène apparaît vite,
 // puis s'affine), et les demandes récentes avant les anciennes.
 
-const MAX_CACHE = 48;
+const MAX_CACHE = 72;
 
 export function createGenerator(size = Math.max(2, Math.min(6, (navigator.hardwareConcurrency || 4) - 1))) {
   const workers = Array.from({ length: size }, () => new Worker(new URL('./worker.js', import.meta.url), { type: 'module' }));
@@ -36,12 +36,12 @@ export function createGenerator(size = Math.max(2, Math.min(6, (navigator.hardwa
     }
   }
 
-  // spec : description d'une couche (sérialisable) ; lod : 0..2 ; what : 'mesh' | 'crystals'
+  // spec : description d'une couche (sérialisable) ; lod : 0..3 ; what : 'mesh' | 'crystals'
   function request(spec, lod, what = 'mesh') {
     const key = `${what}|${lod}|${JSON.stringify(spec)}`;
     if (cache.has(key)) { const p = cache.get(key); cache.delete(key); cache.set(key, p); return p; }
     const p = new Promise((resolve, reject) => {
-      queue.push({ id: nextId++, seq: seq++, prio: what === 'crystals' ? 1 : 2 - lod, spec, lod, what, resolve, reject });
+      queue.push({ id: nextId++, seq: seq++, prio: what === 'crystals' ? 1.5 : 3 - lod, spec, lod, what, resolve, reject });
       pump();
     });
     p.catch(() => cache.delete(key));

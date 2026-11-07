@@ -79,8 +79,9 @@ export function geometryFor(type, rng, seed) {
     const sheet = rng.chance(0.65);
     return {
       ...base, surface: rng.weighted([['gyroid', 3], ['schwarz', 1.2], ['diamond', 1.2], ['neovius', 1], ['iwp', 1], ['fischer', 0.8]]),
-      freq: r2(rng.range(2.6, 4.6)),
-      thickness: r2(rng.range(0.1, 0.17)), wall: r2(sheet ? rng.range(0.16, 0.32) : rng.range(-0.25, 0.25)), sheet,
+      freq: r2(rng.range(2.4, 4.2)),
+      // (feuille assez épaisse pour la grille : sinon elle se froisse)
+      thickness: r2(rng.range(0.1, 0.17)), wall: r2(sheet ? rng.range(0.26, 0.42) : rng.range(-0.25, 0.25)), sheet,
       bevel: r2(rng.range(0.006, 0.014)), chamfer: false,
     };
   }
@@ -169,13 +170,15 @@ export function generate(seed, force = {}) {
   });
 
   const coreK = Math.round(rng.range(...mood.coreK) / 50) * 50;
+  // (l'ancien tirage de l'intensité de la lampe est conservé, pour que chaque
+  // graine garde le reste de son éclairage ; l'intensité est fixée à 40)
   return {
     seed: String(seed), mood: moodKey,
     nest: { ratio: r2(rng.range(0.58, 0.66)), core: r2(rng.range(0.035, 0.06)) },
     loop: { duration: 24, dive: true, depth: 0.35 },
     camera: { fov: Math.round(rng.range(36, 48)), sway: r2(rng.range(0.015, 0.05)), roll: r2(rng.range(0, 0.06)) },
-    core: { color: kelvinToHex(coreK), intensity: r2(rng.range(28, 55)), glow: r2(rng.range(6, 13)), decay: 2, pulse: r2(rng.range(0, 0.15)), shadowSoft: 2 },
-    key: { color: kelvinToHex(mood.keyK), intensity: r2(rng.range(80, 120)), x: r2(rng.range(-0.45, -0.2)), y: r2(rng.range(0.2, 0.45)), angle: 0.85, penumbra: 0.9 },
+    core: { color: kelvinToHex(coreK), intensity: r2(rng.range(28, 55)), glow: r2(rng.range(6, 13)), halo: r2(rng.range(2.0, 2.8)), decay: 2, pulse: r2(rng.range(0, 0.15)), shadowSoft: 2 },
+    key: { color: kelvinToHex(mood.keyK), intensity: (rng.next(), 40), x: r2(rng.range(-0.45, -0.2)), y: r2(rng.range(0.2, 0.45)), angle: 0.85, penumbra: 0.9 },
     env: { preset: mood.env, intensity: r2(rng.range(0.9, 1.25)), rotation: r2(rng.range(0, Math.PI * 2)) },
     fog: { color: mood.bg, near: 1.5, far: 3.1 },
     layers,

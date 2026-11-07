@@ -26,6 +26,10 @@ Le panneau règle tout : graine et humeur, boucle (durée, plongée ou profondeu
 
 **Les instances.** Chaque coquille visible est une instance d’un modèle ; une instance garde sa couche d’une boucle à l’autre (phase « déroulée »), et une instance qui réapparaît a un vecteur vitesse nul à sa première image — sinon le flou de mouvement et l’anticrénelage temporel produisent un éclair. Toutes les coquilles rendues projettent l’ombre des deux lumières : aucune ne cesse d’en projeter en cours de route.
 
+**Les niveaux de détail.** Trois niveaux affichés, tous biseautés (rien n'apparaît ni ne disparaît d'un niveau à l'autre), choisis selon la taille de la coquille à l'écran en pixels ; un quatrième, grossier et à arêtes vives, ne sert qu'aux cartes d'ombre.
+
+**Le halo du cœur.** Près du cœur, les coquilles baignent dans sa lumière (émission qui ne dépend que du rayon) ; elles sont affichées dès l'intérieur du cœur, qui les cache, et en émergent fondues dans le rayonnement — la naissance d'une couche ne se voit jamais.
+
 **La naissance au cœur.** Les coquilles naissent dans le cœur lumineux. Pour que la lumière du cœur ne saute pas quand une nouvelle coquille commence à faire de l’ombre, celle-ci « pousse » dans la carte d’ombre : ses barreaux s’y élargissent progressivement depuis leur axe (masque d’ombre sur la proximité du bord), entièrement à l’intérieur du cœur.
 
 ## Géométrie (`src/gen/`, dans des Web Workers)
@@ -35,12 +39,14 @@ Le panneau règle tout : graine et humeur, boucle (durée, plongée ou profondeu
 - **Fentes** : grille latitude × longitude, éventuellement en spirale (les arêtes partagées entre rangs décalés sont subdivisées des deux côtés).
 - Chaque cellule est percée d’un trou : contour rétréci de la demi-largeur du barreau (barreaux d’égale largeur), arrondi (polygone → cercle), puis découpé selon une forme — ellipse orientée (jusqu’au tourbillon), étoile, diaphragme. Les trous traversent une vraie épaisseur, avec biseau arrondi ou chanfrein plat, éventuellement un chambrage (trou à épaulement) ; biseau et épaulement sont réduits localement là où ils se replieraient.
 - Détails usinés : barreaux bombés, rivets aux jonctions, gravure qui suit le contour des trous (dans le matériau). Maillage étanche, trois niveaux de détail.
-- **Surfaces minimales** (gyroïde, Schwarz P, diamant, Neovius, I-WP, Fischer–Koch) taillées dans la coquille, en feuille ou en réseau : surface nets, reprojection de Newton, congés par maximum lisse, alésage de l’oculus.
+- **Surfaces minimales** (gyroïde, Schwarz P, diamant, Neovius, I-WP, Fischer–Koch) taillées dans la coquille, en feuille ou en réseau : surface nets, reprojection de Newton, relaxation des sommets, congés par maximum lisse, alésage de l’oculus. Dans le shader, leur normale est recalculée à chaque pixel à partir du champ : les reflets ne trahissent pas la triangulation.
 - **Géode** : peu d’ouvertures, larges et irrégulières ; druse de cristaux prismatiques sur la face interne, jamais dans un trou.
 
 ## Matériaux (`src/scene/materials.js`)
 
 Trois finitions par coquille — face externe, face interne, tranche — choisies parmi une trentaine (métaux au F0 mesuré : laiton, or, cuivre, titane, chrome… ; émail craquelé, porcelaine, biscuit, velours, carbone sergé, nacre, obsidienne, basalte, druse, agate, verres). Le modèle physique est exploité en entier : vernis et sa propre normale, lustre, irisation à épaisseur variable, anisotropie (brossage circulaire), transmission avec dispersion et absorption, usure des bords révélant la tranche.
+
+Anticrénelage spéculaire (Kaplanyan) : là où la normale varie vite d'un pixel à l'autre, le lobe spéculaire s'élargit au lieu de scintiller ; le relief s'annule à la frontière entre deux finitions.
 
 Les motifs sont procéduraux mais ne calculent aucun bruit : ils échantillonnent un volume de bruit périodique (Perlin ×2, Worley F1 et F2−F1) précalculé au démarrage. Chaque pixel n’évalue que la finition de sa face. Les reliefs sont atténués à l’approche de la fréquence des pixels.
 

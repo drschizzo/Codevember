@@ -21,10 +21,13 @@ import { norm, dot, cross, add, sub, scale, tangentFrame, edgeSteps, angle } fro
 
 const { sqrt, cos, sin, PI, max, min, abs, ceil, floor } = Math;
 
-// Détail par niveau : 0 = héros, 1 = moyen, 2 = lointain / ombres
+// Détail par niveau : 0 = héros, 1 = moyen, 2 = lointain (tous trois affichés,
+// tous biseautés : d'un niveau à l'autre, rien n'apparaît ni ne disparaît),
+// 3 = ombres seulement (arêtes vives, contour grossier)
 export const LODS = [
   { spacing: 0.022, bevelSegs: 3, faceSeg: 0.07 },
-  { spacing: 0.036, bevelSegs: 2, faceSeg: 0.14 },
+  { spacing: 0.034, bevelSegs: 2, faceSeg: 0.12 },
+  { spacing: 0.05, bevelSegs: 1, faceSeg: 0.2 },
   { spacing: 0.075, bevelSegs: 0, faceSeg: 0.3 },
 ];
 
@@ -305,7 +308,7 @@ export function buildShell(prepared, spec, lod) {
       minHoleR = min(minHoleR, dist2(H2[k], info.O));
     }
     const b = sharp ? 0 : min(spec.bevel, spec.thickness * 0.45, minBar * 0.6);
-    const K = max(pillow ? (lod === 2 ? 1 : 3) : 0, ceil(fmax / L.faceSeg) - 1);
+    const K = max(pillow ? [3, 3, 2, 1][lod] : 0, ceil(fmax / L.faceSeg) - 1);
     // chambrage (trou à épaulement) : l'épaulement rétrécit le trou de `ledge`
     const ledge = !info.portal && (spec.step || 0) > 0 ? min(spec.step * minHoleR, minHoleR * 0.6) : 0;
     const Rs = R - spec.thickness * (spec.stepDepth ?? 0.45);
@@ -440,8 +443,8 @@ export function buildShell(prepared, spec, lod) {
   }
 
   // rivets aux jonctions des barreaux (dômes posés sur la crête)
-  if ((spec.rivets || 0) > 0 && lod < 2) {
-    const seen = new Set(), rr = spec.rivets * spec.bar * 0.5, segs = lod === 0 ? 12 : 7, rings = lod === 0 ? 4 : 2;
+  if ((spec.rivets || 0) > 0 && lod < 3) {
+    const seen = new Set(), rr = spec.rivets * spec.bar * 0.5, segs = [12, 8, 6][lod], rings = [4, 2, 1][lod];
     for (const info of prepared) for (const v of info.pts) {
       const k = `${Math.round(v[0] * 1e4)},${Math.round(v[1] * 1e4)},${Math.round(v[2] * 1e4)}`;
       if (seen.has(k) || v[2] > Math.cos(spec.portal * 0.9)) continue;

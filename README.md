@@ -8,6 +8,8 @@ Une plongée sans fond : des coquilles creuses emboîtées — alvéoles, fentes
 
 [Démo en ligne](https://drschizzo.github.io/Codevember/hollow/) · [documentation](hollow/README.md)
 
+[![Hollow](hollow/docs/capture.jpg)](https://drschizzo.github.io/Codevember/hollow/)
+
 ## [Planétaire](planetaire/)
 
 La vie d’un système planétaire, du nuage à la supernova, simulée sur GPU (WebGPU, three.js TSL) et présentée comme portée par un planétaire en laiton. Chaque grain de poussière conserve son rayon de naissance, qui détermine sa couleur ; le disque peut être sonifié comme un vinyle.

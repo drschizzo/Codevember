@@ -17,6 +17,7 @@ import { createUI } from './app/ui.js';
 import { loadRender, saveRender, applyQuality, RENDER_DEFAULTS } from './app/settings.js';
 import { exportLoop, exportPNG } from './app/capture.js';
 
+const DEFAULT_SEED = 'rryxnd'; // scène d'ouverture (sans ?seed=)
 const D = 4; // distance caméra–centre (toutes les longueurs de la scène en dépendent)
 const params = new URLSearchParams(location.search);
 const $ = (s) => document.querySelector(s);
@@ -92,7 +93,7 @@ async function main() {
   if (location.hash.startsWith('#r=')) {
     try { R = await unpackRecipe(location.hash.slice(3)); } catch { R = null; }
   }
-  R ??= generate(params.get('seed') || randomSeed());
+  R ??= generate(params.get('seed') || DEFAULT_SEED);
   let envKey = '';
 
   function syncEnv() {
@@ -137,13 +138,18 @@ async function main() {
     G.envFalloff.value = RENDER.envFalloff;
     G.microDetail.value = RENDER.microDetail;
     G.roughFloor.value = RENDER.roughFloor;
+    G.coreR.value = R.nest.core * D;
+    G.coreColor.value.set(R.core.color);
+    G.coreGlow.value = R.core.glow;
+    G.halo.value = R.core.halo ?? 2.4;
     scene.background.set(R.fog.color);
     scene.fog.color.set(R.fog.color);
     scene.fog.near = R.fog.near * D;
     scene.fog.far = R.fog.far * D;
     scene.environmentIntensity = R.env.intensity;
     scene.environmentRotation.set(0, R.env.rotation, 0);
-    const info = nest.update({ tau, phi: ph, cycle, dive, ratio: R.nest.ratio, D, coreRel: R.nest.core, detail: RENDER.detail });
+    const pxPerUnit = canvas.height / (2 * Math.tan((camera.fov * Math.PI) / 360)); // (pixels par unité à distance 1)
+    const info = nest.update({ tau, phi: ph, cycle, dive, ratio: R.nest.ratio, D, coreRel: R.nest.core, detail: RENDER.detail, pxPerUnit });
     shells = info?.shells ?? 0;
     lights.update(R, camera, D, Math.sin(ph * Math.PI * 4));
     post.update({ ...RENDER, focus: RENDER.focus * D, focusRange: RENDER.focusRange * D }, R);
