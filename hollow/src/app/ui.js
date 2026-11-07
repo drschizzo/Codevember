@@ -15,7 +15,7 @@ const FIN = [
   ['sheen', 'Lustre (velours)', 0, 1, 0.01], ['sheenRough', 'Rugosité lustre', 0, 1, 0.01],
   ['irid', 'Irisation', 0, 1, 0.01], ['iridIOR', 'Indice irisation', 1, 2.5, 0.01], ['iridMin', 'Couche mini (nm)', 0, 1200, 5], ['iridMax', 'Couche maxi (nm)', 0, 1200, 5],
   ['smudge', 'Traces de doigts', 0, 1, 0.01], ['glass', 'Transmission (verre)', 0, 1, 0.01], ['ior', 'Indice', 1, 2.4, 0.01],
-  ['dispersion', 'Dispersion', 0, 1, 0.01], ['attDist', 'Absorption', 0.02, 2, 0.01],
+  ['dispersion', 'Dispersion', 0, 1, 0.01], ['attDist', 'Absorption', 0.02, 2, 0.01], ['emit', 'Phosphorescence', 0, 3, 0.01],
 ];
 
 export function createUI({ recipe: getRecipe, render, on }) {
@@ -168,6 +168,7 @@ export function createUI({ recipe: getRecipe, render, on }) {
         fs.addColor(F, 'color2').name('Couleur 2').onChange(mat);
         for (const [k, l2, a, b, s] of FIN) fs.add(F, k, a, b, s).name(l2).onChange(mat);
         fs.addColor(F, 'sheenColor').name('Couleur du lustre').onChange(mat);
+        fs.addColor(F, 'emitColor').name('Couleur de la lueur').onChange(mat);
       }
       if (g.panes && L.pane) {
         const fv = fm.addFolder('Vitraux').close();

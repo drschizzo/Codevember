@@ -22,6 +22,7 @@ export const FINISH_DEFAULTS = {
   clearcoat: 0, ccRough: 0.05, sheen: 0, sheenColor: '#ffffff', sheenRough: 0.5,
   irid: 0, iridIOR: 1.8, iridMin: 250, iridMax: 650, aniso: 0, bump: 0, scale: 1, smudge: 0,
   glass: 0, ior: 1.5, dispersion: 0, attDist: 0.6,
+  emit: 0, emitColor: '#36e0ff', // (phosphorescence : une lueur qui pulse depuis le cœur)
 };
 
 // F0 des métaux (sRGB)
@@ -84,21 +85,21 @@ export const FINISHES = {
 // humeurs auxquelles le jeu appartient ; groove: false (pas de gravure),
 // only (jeu réservé à un type, jamais tiré au hasard).
 export const SETS = {
-  brassVelvet: { label: 'Laiton & velours', outer: 'brushedBrass', inner: 'velvet', edge: 'polishedBrass', wear: 0, chamfer: false, moods: ['atelier', 'luxe'] },
+  brassVelvet: { label: 'Laiton & velours', outer: 'brushedBrass', inner: 'velvet', edge: 'polishedBrass', wear: 0, chamfer: false, moods: ['sacré', 'atelier', 'luxe'] },
   anodizedDiamond: { label: 'Anodisé diamanté', outer: 'anodized', inner: 'anodizedMatte', edge: 'diamondCut', wear: 0.08, chamfer: true, moods: ['studio', 'nuit'] },
-  celadon: { label: 'Céladon craquelé', outer: 'glaze', inner: 'bisque', edge: 'bisque', wear: 0, chamfer: false, moods: ['atelier', 'pastel'] },
-  kintsugi: { label: 'Porcelaine & or', outer: 'porcelain', inner: 'hammeredGold', edge: 'polishedGold', wear: 0, chamfer: false, moods: ['luxe', 'pastel'] },
-  titanium: { label: 'Titane au feu', outer: 'oxideTitanium', inner: 'rawTitanium', edge: 'diamondCut', wear: 0.1, chamfer: true, moods: ['studio', 'irisé'] },
-  goldLeaf: { label: 'Or martelé', outer: 'hammeredGold', inner: 'polishedGold', edge: 'polishedGold', wear: 0, chamfer: false, moods: ['luxe', 'atelier'] },
-  carbon: { label: 'Carbone', outer: 'carbon', inner: 'carbonMatte', edge: 'brushedSteel', wear: 0.05, chamfer: true, moods: ['studio', 'nuit'] },
-  smoked: { label: 'Verre fumé', groove: false, outer: 'smokedGlass', inner: 'smokedGlass', edge: 'frostedGlass', wear: 0, chamfer: false, moods: ['studio', 'nuit', 'pastel'] },
-  amber: { label: 'Verre ambré', groove: false, outer: 'amberGlass', inner: 'amberGlass', edge: 'frostedGlass', wear: 0, chamfer: false, moods: ['atelier', 'luxe'] },
-  nacre: { label: 'Nacre', outer: 'nacre', inner: 'nacre', edge: 'nacre', wear: 0, chamfer: false, moods: ['irisé', 'pastel'] },
+  celadon: { label: 'Céladon craquelé', outer: 'glaze', inner: 'bisque', edge: 'bisque', wear: 0, chamfer: false, moods: ['clinique', 'atelier', 'pastel'] },
+  kintsugi: { label: 'Porcelaine & or', outer: 'porcelain', inner: 'hammeredGold', edge: 'polishedGold', wear: 0, chamfer: false, moods: ['clinique', 'sacré', 'luxe', 'pastel'] },
+  titanium: { label: 'Titane au feu', outer: 'oxideTitanium', inner: 'rawTitanium', edge: 'diamondCut', wear: 0.1, chamfer: true, moods: ['abysses', 'studio', 'irisé'] },
+  goldLeaf: { label: 'Or martelé', outer: 'hammeredGold', inner: 'polishedGold', edge: 'polishedGold', wear: 0, chamfer: false, moods: ['sacré', 'luxe', 'atelier'] },
+  carbon: { label: 'Carbone', outer: 'carbon', inner: 'carbonMatte', edge: 'brushedSteel', wear: 0.05, chamfer: true, moods: ['abysses', 'studio', 'nuit'] },
+  smoked: { label: 'Verre fumé', groove: false, outer: 'smokedGlass', inner: 'smokedGlass', edge: 'frostedGlass', wear: 0, chamfer: false, moods: ['abysses', 'studio', 'nuit', 'pastel'] },
+  amber: { label: 'Verre ambré', groove: false, outer: 'amberGlass', inner: 'amberGlass', edge: 'frostedGlass', wear: 0, chamfer: false, moods: ['sacré', 'atelier', 'luxe'] },
+  nacre: { label: 'Nacre', outer: 'nacre', inner: 'nacre', edge: 'nacre', wear: 0, chamfer: false, moods: ['clinique', 'irisé', 'pastel'] },
   geode: { label: 'Géode', only: true, groove: false, outer: 'basalt', inner: 'druse', edge: 'agate', wear: 0, chamfer: false, moods: ['atelier', 'luxe', 'nuit', 'irisé'] },
   verdigris: { label: 'Cuivre vert-de-gris', outer: 'verdigris', inner: 'polishedCopper', edge: 'polishedCopper', wear: 0.45, chamfer: false, moods: ['atelier'] },
-  obsidian: { label: 'Obsidienne', outer: 'obsidian', inner: 'basalt', edge: 'obsidian', wear: 0, chamfer: true, moods: ['nuit', 'luxe'] },
-  chrome: { label: 'Chrome', outer: 'chrome', inner: 'brushedSteel', edge: 'chrome', wear: 0, chamfer: false, moods: ['studio'] },
-  blackSteel: { label: 'Acier noirci', outer: 'blackenedSteel', inner: 'velvetNight', edge: 'brushedSteel', wear: 0.12, chamfer: true, moods: ['nuit', 'luxe'] },
+  obsidian: { label: 'Obsidienne', outer: 'obsidian', inner: 'basalt', edge: 'obsidian', wear: 0, chamfer: true, moods: ['abysses', 'nuit', 'luxe'] },
+  chrome: { label: 'Chrome', outer: 'chrome', inner: 'brushedSteel', edge: 'chrome', wear: 0, chamfer: false, moods: ['clinique', 'abysses', 'studio'] },
+  blackSteel: { label: 'Acier noirci', outer: 'blackenedSteel', inner: 'velvetNight', edge: 'brushedSteel', wear: 0.12, chamfer: true, moods: ['abysses', 'nuit', 'luxe'] },
   guilloche: { label: 'Émail guilloché', outer: 'guillocheEnamel', inner: 'polishedGold', edge: 'polishedGold', wear: 0, chamfer: false, moods: ['luxe', 'atelier', 'sacré'] },
   guillocheRuby: { label: 'Émail rubis', outer: 'guillocheRuby', inner: 'hammeredGold', edge: 'polishedGold', wear: 0, chamfer: false, moods: ['luxe', 'sacré'] },
   guillocheSilver: { label: 'Argent guilloché', outer: 'guillocheSilver', inner: 'blackCeramic', edge: 'chrome', wear: 0, chamfer: true, moods: ['studio', 'luxe', 'clinique'] },
@@ -109,7 +110,7 @@ export const SETS = {
   ceramicBlack: { label: 'Céramique noire', outer: 'blackCeramic', inner: 'brushedSteel', edge: 'diamondCut', wear: 0, chamfer: true, moods: ['studio', 'nuit', 'abysses'] },
   ceramicWhite: { label: 'Céramique blanche', outer: 'whiteCeramic', inner: 'porcelain', edge: 'chrome', wear: 0, chamfer: true, moods: ['clinique', 'pastel', 'studio'] },
   soap: { label: 'Bulle', outer: 'soapFilm', inner: 'soapFilm', edge: 'chrome', wear: 0, chamfer: false, moods: ['irisé', 'nuit', 'abysses'] },
-  bronze: { label: 'Bronze & cuivre', outer: 'bronzeDark', inner: 'polishedCopper', edge: 'polishedBrass', wear: 0.3, chamfer: false, moods: ['atelier'] },
+  bronze: { label: 'Bronze & cuivre', outer: 'bronzeDark', inner: 'polishedCopper', edge: 'polishedBrass', wear: 0.3, chamfer: false, moods: ['sacré', 'atelier'] },
 };
 
 // teintes d'anodisation et d'émail tirées selon l'humeur
