@@ -221,6 +221,7 @@ async function main() {
       if (forced) { L.set = forced; L.finish = finishesFor(forced, rng); }
       else if (SETS[L.set]?.only) { const N = makeLayer(t, rng, 'x', R.mood); L.set = N.set; L.finish = N.finish; }
       if (TYPES[t].noGroove) L.finish.groove = 0;
+      L.finish.seam = L.geo.burst ? 0.07 : 0;
       L.geo.chamfer = SETS[L.set]?.chamfer ?? false;
       layerChanged(i, true);
     },
@@ -234,6 +235,7 @@ async function main() {
       const L = R.layers[i];
       L.set = s;
       L.finish = finishesFor(s, rngUI());
+      if (L.geo.burst) L.finish.seam = 0.07;
       L.geo.chamfer = SETS[s].chamfer;
       layerChanged(i, true);
     },

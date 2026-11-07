@@ -79,7 +79,8 @@ function bars(rng, spacing, lo = 0.16, hi = 0.42) {
 }
 
 // ── Les types ────────────────────────────────────────────────────────────────
-// label, weight (fréquence du tirage), set (jeu de matériaux imposé), max
+// label, weight (fréquence du tirage), set (jeu de matériaux imposé), sets
+// (jeux préférés), max
 // (nombre maximal par scène), geometry(rng) → geo (sans la base commune),
 // params (réglages de forme), selects / toggles (listes, cases), holes (forme
 // des trous et usinage), noGroove (pas de gravure), noChamfer (pas de chanfrein)
@@ -143,6 +144,27 @@ export const TYPES = {
         type: 'girih', freq, jitter: 0, theta: r2(rng.range(0.55, 1.25)), frame: rng.pick([1, 1.4, 2]), star: rng.pick([0.7, 1, 1.3]),
         solidStar: rng.chance(0.2), ...b, ...h, shape: 'poly', holeScale: 1, iris: iris(rng),
       }, rng);
+    },
+  },
+  shards: {
+    label: 'Éclatée (kintsugi)', weight: 1.6, max: 1, holes: true,
+    sets: ['kintsugi', 'celadon', 'obsidian', 'goldLeaf', 'nacre', 'bronze', 'chrome', 'blackSteel'],
+    params: [
+      ['count', 'Nombre d’éclats', 20, 300, 1], ['jitter', 'Désordre', 0, 0.6, 0.01], ...P.bars,
+      ['burst', 'Écartement', 0, 0.3, 0.001], ['burstTurn', 'Rotation des éclats', 0, 1.5, 0.01], ['seam', 'Joint', 0, 0.015, 0.0001],
+    ],
+    // une coquille fêlée en éclats : écartés au fond, réassemblés au passage
+    geometry(rng) {
+      const count = rng.int(40, 140);
+      const b = bars(rng, Math.sqrt((4 * Math.PI) / count), 0.18, 0.32);
+      b.round = r2(rng.pick([0.5, 0.8, 1]));
+      b.closed = r2(rng.range(0.45, 0.8));
+      b.barVar = 0;
+      const h = holeDetails(rng);
+      return {
+        type: 'voronoi', count, distribution: 'random', spiral: 0, jitter: 0.3, ...b, ...h, rivets: 0, setting: 'rivet',
+        burst: r2(rng.range(0.05, 0.12)), burstTurn: r2(rng.range(0.3, 0.8)), seam: 0.0035,
+      };
     },
   },
   tpms: {

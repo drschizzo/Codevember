@@ -239,7 +239,7 @@ function surface(fin, U, p, pf) {
 // Ce qui, dans une couche, impose une recompilation quand cela change
 export function signature(f) {
   const s = (fin) => [fin.pattern, fin.sheen > 0, fin.clearcoat > 0, fin.irid > 0, fin.aniso > 0, fin.glass > 0, fin.dispersion > 0, fin.smudge > 0].join('');
-  return [s(f.outer), s(f.inner), s(f.edge), f.wear > 0, (f.groove || 0) > 0].join('|');
+  return [s(f.outer), s(f.inner), s(f.edge), f.wear > 0, (f.groove || 0) > 0, (f.seam || 0) > 0].join('|');
 }
 
 // ── Normale analytique des surfaces minimales ────────────────────────────────
@@ -321,7 +321,7 @@ export function buildShellMaterial(finish, U, tpms = null, rig = null) {
     cc: any((f) => f.clearcoat > 0), ccN: fins.some((f) => f.pattern === 'glaze'), sheen: any((f) => f.sheen > 0),
     irid: any((f) => f.irid > 0), aniso: any((f) => f.aniso > 0), glass: any((f) => f.glass > 0),
     disp: any((f) => f.glass > 0 && f.dispersion > 0), glit: fins.some((f) => f.pattern === 'glitter'),
-    smudge: any((f) => f.smudge > 0), wear: finish.wear > 0, groove: (finish.groove || 0) > 0,
+    smudge: any((f) => f.smudge > 0), wear: finish.wear > 0, groove: (finish.groove || 0) > 0, seam: (finish.seam || 0) > 0,
   };
 
   // membres de la structure : seulement ce que le modèle utilisera
@@ -374,6 +374,12 @@ export function buildShellMaterial(finish, U, tpms = null, rig = null) {
           const m = surfA.w.mul(0.62).add(n.mul(0.38)).add(n2);
           const worn = smoothstep(U.wear.oneMinus(), U.wear.oneMinus().add(0.06), m).mul(step(0.001, U.wear));
           for (const k of Object.keys(o)) o[k] = mix(o[k], e[k], worn);
+        }
+        if (F.seam) { // kintsugi : la finition de la tranche (l'or) borde les cassures, sur la face externe
+          const e = props(finish.edge, U.edge);
+          const w = pw.mul(1.2);
+          const k = smoothstep(U.seam.add(w), U.seam.sub(w).max(0), surfA.w);
+          for (const key of Object.keys(o)) o[key] = mix(o[key], e[key], k);
         }
         if (F.groove) { // gravure : un filet qui suit le contour du trou, à mi-barreau
           const w = pw.mul(1.5).max(0.03);

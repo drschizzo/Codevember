@@ -143,13 +143,14 @@ class Design {
     if (!this.U) {
       this.U = {
         outer: finishUniforms(f.outer), inner: finishUniforms(f.inner), edge: finishUniforms(f.edge),
-        wear: uniform(f.wear), groove: uniform(f.groove || 0), grooveAt: uniform(f.grooveAt ?? 0.5),
+        wear: uniform(f.wear), groove: uniform(f.groove || 0), grooveAt: uniform(f.grooveAt ?? 0.5), seam: uniform(f.seam || 0),
       };
     } else {
       applyFinish(this.U.outer, f.outer); applyFinish(this.U.inner, f.inner); applyFinish(this.U.edge, f.edge);
       this.U.wear.value = f.wear;
       this.U.groove.value = f.groove || 0;
       this.U.grooveAt.value = f.grooveAt ?? 0.5;
+      this.U.seam.value = f.seam || 0;
     }
     if (sig !== this.sig) {
       this.sig = sig;

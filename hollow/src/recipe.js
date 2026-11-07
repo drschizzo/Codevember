@@ -65,6 +65,7 @@ export const kelvinToHex = (K) => {
 export function makeLayer(type, rng, seedTag, moodKey, avoidSet = null) {
   const T = TYPES[type];
   let set = T.set;
+  if (!set && T.sets) set = rng.pick(T.sets.filter((k) => k !== avoidSet));
   if (!set) {
     const free = (k) => !SETS[k].only;
     const pool = Object.keys(SETS).filter((k) => free(k) && SETS[k].moods.includes(moodKey));
@@ -75,6 +76,7 @@ export function makeLayer(type, rng, seedTag, moodKey, avoidSet = null) {
   geo.chamfer = SETS[set].chamfer;
   const finish = finishesFor(set, rng);
   if (T.noGroove) finish.groove = 0; // (pas de contour de trou à suivre)
+  if (geo.burst) finish.seam = 0.07; // (kintsugi : un filet d'or le long des cassures)
   return {
     type, set, geo, finish,
     crystal: { tip: rng.pick(['#8a4fd6', '#c27be6', '#e0a24a', '#7fb8e8', '#e8e2f0']), base: '#efe9f2', rough: 0.03, dispersion: 0.45, ior: 1.55 },
