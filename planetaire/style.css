@@ -201,3 +201,7 @@ body.meca #intro button { font: 500 16px 'EB Garamond', serif; border-radius: 3p
 body.meca #intro button:hover { background: linear-gradient(#fbe8b8, #c99a50 60%, #8a6630); }
 body.meca #intro button.ghost { background: transparent; color: var(--brass); border-color: var(--brass-lo); box-shadow: none; }
 body.meca #introBar u { background: var(--brass); }
+
+/* Mode tournage (?film) : uniquement la scène */
+body.film > *:not(#app) { display: none !important; }
+body.film #app canvas { width: 100vw !important; height: 100vh !important; }

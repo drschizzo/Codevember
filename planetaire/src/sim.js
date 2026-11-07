@@ -128,6 +128,7 @@ export function createSim(renderer, N) {
     snR: uniform(0.0),           //   rayon,
     snW: uniform(1.0),           //   épaisseur
     outR: uniform(29.0),         // au-delà, un grain a quitté le système
+    bellR: uniform(0.0),         // DA mécanique : la cloche de verre retient tout (rebond inélastique ; 0 = pas de cloche)
     snHeat: uniform(0.0),        // le choc chauffe à blanc ce qu'il traverse
     ejV: uniform(2.7),           // vitesse des éjecta de la supernova (UA / unité de temps)
     cycleSeed: uniform(0, 'uint'),
@@ -328,6 +329,15 @@ export function createSim(renderer, N) {
       v.addAssign(kick.mul(U.turb).mul(vK).mul(sqrt(U.dt.mul(Omega))).mul(gasW.mul(3.0)));
 
       p.addAssign(v.mul(U.dt));
+      // la cloche de verre : rien ne la traverse ; un grain qui la touche
+      // rebondit en perdant l'essentiel de sa vitesse normale, et glisse
+      If(U.bellR.greaterThan(0.0).and(length(p).greaterThan(U.bellR)), () => {
+        const n = normalize(p);
+        p.assign(n.mul(U.bellR));
+        const vn = dot(v, n);
+        If(vn.greaterThan(0.0), () => { v.subAssign(n.mul(vn.mul(1.35))); });
+        v.mulAssign(0.97);
+      });
 
       const rNew = length(p);
       If(captured.greaterThanEqual(0), () => {
@@ -443,6 +453,12 @@ export function createSim(renderer, N) {
       const Vv = eVel.element(i);
       const v = Vv.xyz.add(eAcc.element(i).xyz.mul(U.dtE)).toVar();
       const p = E.xyz.add(v.mul(U.dtE)).toVar();
+      If(U.bellR.greaterThan(0.0).and(length(p).greaterThan(U.bellR.mul(0.97))), () => { // (les planètes aussi)
+        const n = normalize(p);
+        p.assign(n.mul(U.bellR.mul(0.97)));
+        const vn = dot(v, n);
+        If(vn.greaterThan(0.0), () => { v.subAssign(n.mul(vn.mul(1.35))); });
+      });
       const r = length(p);
       // tombée dans l'étoile (ou engloutie par la géante rouge), ou éjectée
       If(r.lessThan(max(float(R_IN * 0.5), U.starR)).or(r.greaterThan(40.0)), () => {

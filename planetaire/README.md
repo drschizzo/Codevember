@@ -84,7 +84,31 @@ Paramètres d'URL :
 | `?peak=4` | pic de luminosité en HDR, en multiples du blanc de l’interface |
 | `?exposure=1.45` | exposition globale |
 | `?nomeca` | sans la machine (ancienne DA) |
-| `?nolens` | sans profondeur de champ ni flou de mouvement |
+| `?dof` | remet la profondeur de champ (coupée par défaut) |
+| `?streak` | remet la traînée anamorphique (coupée par défaut) |
+| `?aa=msaa` / `?aa=0` | anticrénelage MSAA 4× (plus lent) ou aucun (défaut : SMAA) |
+| `?film` | mode tournage : le film de 3 min, rendu image par image (voir plus bas) |
+
+## Le film (`?film`)
+
+`src/film.js` réalise un film d'environ 3 minutes, sans texte, qui **boucle avec un sens** : la poussière d'étoile passe d'un cycle à l'autre. Sous la lampe, sur le velours vide, la machine se pose pièce à pièce (chaque pièce descend à la verticale jusqu'à sa place, de bas en haut) ; la trémie arrive la dernière avec la cloche, pleine de poussière d'étoile qui luit — les débris d'une étoile précédente — et verse le nuage. Le cycle se déroule ; quand l'étoile s'allume, la lampe de musée baisse. La supernova reste prisonnière de la cloche ; la trémie aspire ses débris et luit à nouveau. Puis l'horloger range la machine : les pièces remontent dans l'ordre inverse, la trémie pleine part avec la cloche, et la dernière image (le velours vide) est la première.
+
+C'est un **montage**, pas un accéléré : à l'écran le temps reste à ×1–×2 ; entre deux plans, la simulation avance hors champ (grands pas, sans rendu) jusqu'à l'état voulu pour le plan suivant. Les plans mettent en avant les motifs des grains (anneaux, sillages) et le peigne pincé par une planète ; **un impact géant interrompt le montage** : on coupe dessus, au ralenti.
+
+Rendu « film » (hors temps réel) :
+- chaque image est la **moyenne de 4 sous-images** (obturateur à 180° : vrai flou de mouvement, anticrénelage, scintillement des grains apaisé), chacune rendue en 2× ; tone mapping après la moyenne, en lumière linéaire ;
+- **reflets réels** : une sonde cube capte à chaque image le disque, l'étoile, la cloche, le velours et des panneaux de studio invisibles à la caméra ; le métal et le verre la reflètent ;
+- matériaux physiques : laiton verni aux sillons d'usinage, acier brossé, acier bleui irisé ; ombres en haute définition ;
+- en DA mécanique, **la cloche retient tout** (`bellR`) : nuage, débris de la supernova et planètes rebondissent sur le verre.
+
+Encodage par WebCodecs (H.264 en SDR ; en HDR, VP9 10 bits BT.2020 / PQ, blanc SDR à 203 nits), puis réencodage HEVC. `tools/tournage.mjs` pilote Chrome (puppeteer) et écrit le fichier. Paramètres : `w` (1920), `ss` (suréchantillonnage, 2), `tss` (sous-images, 4), `fps` (24), `mbps`, `hdr` et `peak` (pic HDR en multiples du blanc SDR), `stills=12,40` (images fixes seulement, pour prévisualiser), `aa=0`.
+
+```sh
+node tools/tournage.mjs "w=1920&ss=2&tss=4&aa=0&hdr&peak=5&mbps=60" hdr.mp4
+ffmpeg -i hdr.mp4 -pix_fmt yuv420p10le -c:v libx265 -crf 24 -tag:v hvc1 \
+  -x265-params "hdr10=1:repeat-headers=1:colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc:master-display=G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,1):max-cll=1015,180" \
+  -color_primaries bt2020 -color_trc smpte2084 -colorspace bt2020nc planetaire-film-hdr.mp4
+```
 
 ## Commandes
 
