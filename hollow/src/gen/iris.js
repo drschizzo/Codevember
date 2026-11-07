@@ -40,6 +40,10 @@ export function appendIris(B, spec, hole, lod) {
     return [rho * cos(phi), rho * sin(phi)];
   };
   const radius = (s, bottom) => r0 - drop * s - (bottom ? tb : 0);
+  // « proximité » (surf.w) : 0 au bord extérieur, 1 à la pointe. À la naissance
+  // de la coquille, les lames poussent dans la carte d'ombre depuis le bord,
+  // comme les barreaux : le diaphragme s'y referme peu à peu, sans saut.
+  const grow = (rho) => Math.round(Math.min(1, Math.max(0, 1 - rho / ro)) * 255);
   const to3 = (g, r) => { const d = norm([g[0], g[1], 1]); return [d[0] * r, d[1] * r, d[2] * r]; };
 
   // pivot : dans la partie cachée de la lame, à mi-largeur
@@ -82,7 +86,7 @@ export function appendIris(B, spec, hole, lod) {
         const s = b / ns, rho = (rhoEnd(s) * a) / nr;
         const p = to3(at(i, rho, s), radius(s, bottom));
         const n = norm(p);
-        B.vert(p, bottom ? [-n[0], -n[1], -n[2]] : n, bottom ? IN[0] : EDGE[0], bottom ? IN[1] : EDGE[1], bottom ? IN[2] : EDGE[2], 255);
+        B.vert(p, bottom ? [-n[0], -n[1], -n[2]] : n, bottom ? IN[0] : EDGE[0], bottom ? IN[1] : EDGE[1], bottom ? IN[2] : EDGE[2], grow(rho));
       }
       for (let a = 0; a < nr; a++) for (let b = 0; b < ns; b++) {
         const v = start + a * (ns + 1) + b;
@@ -107,8 +111,8 @@ export function appendIris(B, spec, hole, lod) {
       const d = norm(p1), nw = [ty / l, -tx / l, 0];
       const k0 = nw[0] * d[0] + nw[1] * d[1] + nw[2] * d[2];
       const n = norm([nw[0] - d[0] * k0, nw[1] - d[1] * k0, nw[2] - d[2] * k0]);
-      top.push(B.vert(p1, n, EDGE[0], EDGE[1], EDGE[2], 255));
-      bot.push(B.vert(p2, n, EDGE[0], EDGE[1], EDGE[2], 255));
+      top.push(B.vert(p1, n, EDGE[0], EDGE[1], EDGE[2], grow(rho)));
+      bot.push(B.vert(p2, n, EDGE[0], EDGE[1], EDGE[2], grow(rho)));
     }
     for (let k = 0; k + 1 < rim.length; k++) { B.triN(top[k], bot[k], bot[k + 1]); B.triN(top[k], bot[k + 1], top[k + 1]); }
   }

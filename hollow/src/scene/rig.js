@@ -20,13 +20,16 @@
 // position au repos (positionGeometry).
 import {
   Fn, attribute, uniform, vec4, float, floor, fract, step, abs, cos, sin, cross, dot, normalize, length, smoothstep, mix,
-  positionGeometry, normalLocal, tangentLocal, positionPrevious, varyingProperty,
+  positionGeometry, normalLocal, tangentLocal, positionPrevious, varyingProperty, modelScale, log,
 } from 'three/tsl';
+import { G } from './globals.js';
 
 const TAU = Math.PI * 2;
 
-// profondeur relative de la coquille rendue (posée par le nid sur chaque maillage)
-export const layerX = uniform(0).onObjectUpdate(({ object }) => object.userData.x ?? 0);
+// Profondeur relative de la coquille rendue, déduite de son échelle D·kˣ.
+// (Pas d'uniforme par objet : des exemplaires d'une même couche recevaient
+// parfois la valeur d'un autre — un diaphragme restait alors fermé au passage.)
+export const layerX = log(modelScale.x.div(G.D)).div(log(G.ratio));
 
 // normale de tranche et direction radiale tournées avec la pièce (fragment)
 export const rigBev = varyingProperty('vec4', 'vRigBev');

@@ -27,6 +27,7 @@ import { crystalGeometry } from '../gen/crystals.js';
 import { gemGeometry, spineGeometry } from '../gen/jewels.js';
 import { IMPLICIT } from '../types.js';
 import { isRigged, rigUniforms, applyRig } from './rig.js';
+import { G } from './globals.js';
 
 export const MAIN = 1, CORE = 2, KEY = 4; // masques de calques
 export const X_MIN = -2.3;                // au-delà (coquilles derrière la caméra) : noyées dans le brouillard
@@ -311,6 +312,7 @@ export function createNest(scene, gen) {
     const N = nest.designs.length;
     if (!N) return;
     const XB = nest.birthDepth(s.ratio, s.coreRel);
+    G.XB.value = XB;
     const C = Math.ceil((XB - X_MIN + 1) / N) + 1;
     for (const d of nest.designs) { d.ensureCopies(C); for (const c of d.copies) c.group.visible = false; }
     const xCore = Math.log(s.coreRel) / Math.log(s.ratio);
@@ -348,24 +350,17 @@ export function createNest(scene, gen) {
         m.renderOrder = x >= 0 ? 1 + x : 100 - x;
         m.userData.still = moved || !m.userData.on ? 0 : 1; // (vecteur vitesse nul à la première image)
         m.userData.on = on;
-        m.userData.x = x; // (pièces animées)
         m.layers.mask = on ? MAIN : 0;
       });
       if (shown) shells++;
       // ombres : toutes les couches, pour les deux lumières. (Aucune coquille ne
       // cesse d'en projeter tant qu'elle est rendue : sinon l'éclairage saute.)
       inst.proxy.layers.mask = des.geoms[3] ? KEY | CORE : 0;
-      inst.proxy.userData.birth = Math.min(1, Math.max(0, XB - x));
-      inst.proxy.userData.x = x;
       const cr = shown && rpx > 25 && x > X_MIN + 0.5;
       for (const m of inst.ornaments) {
         m.renderOrder = x >= 0 ? 1.5 + x : 100.5 - x;
         m.userData.still = moved || !m.userData.on ? 0 : 1;
         m.userData.on = cr;
-        m.userData.x = x;
-        // (vitraux : leur ombre colorée naît avec la coquille, voir paneGrow)
-        const g = Math.min(1, Math.max(0, (XB - 1.5 - x) / 2.5));
-        m.userData.grow = g * g * (3 - 2 * g);
         // (les épines projettent leur ombre tant que la coquille en projette)
         m.layers.mask = (cr ? MAIN : 0) | (m.castShadow && des.geoms[3] ? KEY | CORE : 0);
       }

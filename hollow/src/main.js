@@ -187,6 +187,7 @@ async function main() {
     if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); }
     G.phase.value = ph;
     G.D.value = D;
+    G.ratio.value = R.nest.ratio;
     G.envFalloff.value = RENDER.envFalloff;
     G.microDetail.value = RENDER.microDetail;
     G.roughFloor.value = RENDER.roughFloor;

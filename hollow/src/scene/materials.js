@@ -29,21 +29,13 @@ import {
 import { FINISH_KEYS } from '../finishes.js';
 import { NOISE_PERIOD } from '../gen/noisevol.js';
 import { tpmsParams } from '../gen/tpms.js';
-import { rigPosition, rigBev, rigRadial } from './rig.js';
+import { rigPosition, rigBev, rigRadial, layerX } from './rig.js';
+import { G } from './globals.js';
 
 const PI = Math.PI;
 
-// ── Uniformes partagés par toute la scène ────────────────────────────────────
-export const G = {
-  D: uniform(4),            // distance caméra–centre (échelle de la plongée)
-  envFalloff: uniform(0.6), // occultation de l'environnement vers le centre
-  phase: uniform(0),        // phase de la boucle [0, 1)
-  microDetail: uniform(1),  // intensité globale des micro-reliefs
-  roughFloor: uniform(0.12), // douceur des reflets : rugosité minimale (sources ponctuelles → reflets étendus)
-  // halo du cœur : près du cœur, les coquilles baignent dans sa lumière et s'y
-  // fondent — une coquille qui naît émerge du rayonnement, sans apparaître
-  coreR: uniform(0.2), coreColor: uniform(new THREE.Color(1, 0.8, 0.6)), coreGlow: uniform(10), halo: uniform(2.4),
-};
+// (uniformes partagés par toute la scène : voir globals.js)
+export { G };
 
 // ── Volume de bruit ──────────────────────────────────────────────────────────
 let noiseTexture = null;
@@ -557,7 +549,9 @@ export const stableVelocity = () => mrt({ velocity: velocity.mul(still) });
 // La couche qui vient de naître au cœur « pousse » dans la carte d'ombre :
 // ses barreaux s'élargissent depuis leur axe (proximité du bord < naissance),
 // ce qui évite tout saut dans la lumière du cœur.
-export const birth = uniform(1).onObjectUpdate(({ object }) => object.userData.birth ?? 1);
+// (calculée depuis la profondeur de l'objet, comme dans le nid : 0 → 1 pendant
+// la dernière unité de profondeur avant la naissance)
+export const birth = G.XB.sub(layerX).clamp(0, 1);
 export function buildShadowMaterial(rig = null, pore = null) {
   const m = new THREE.MeshBasicNodeMaterial();
   if (rig) m.positionNode = rigPosition(rig, G.phase, false);
@@ -642,7 +636,7 @@ export const paneUniforms = (p) => ({ rough: uniform(p.rough), glow: uniform(p.g
 // proche de tous, ferait donc d'un coup passer sa lumière à travers tout le nid.
 // Dans la carte d'ombre, chaque verre grandit depuis son centre pendant la
 // remontée (0 → 1, posé par le nid) : la lumière colorée arrive en douceur.
-const paneGrow = uniform(1).onObjectUpdate(({ object }) => object.userData.grow ?? 1);
+const paneGrow = smoothstep(0, 1, G.XB.sub(1.5).sub(layerX).div(2.5).clamp(0, 1));
 export function applyPane(U, p) { U.rough.value = p.rough; U.glow.value = p.glow; }
 export function buildPaneMaterial(U) {
   const m = new THREE.MeshPhysicalNodeMaterial({ transmission: 1, side: THREE.DoubleSide });
