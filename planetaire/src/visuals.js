@@ -8,6 +8,9 @@ import {
   mx_fractal_noise_float, mx_noise_float, mx_worley_noise_vec2, positionWorld, normalWorld, vec2, fract, screenCoordinate,
 } from 'three/tsl';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
+import { dof } from 'three/addons/tsl/display/DepthOfFieldNode.js';
+import { motionBlur } from 'three/addons/tsl/display/MotionBlur.js';
+import { mrt, output, velocity } from 'three/tsl';
 import { cellOf, diskH, M, R_IN, R_OUT, M_EARTH } from './sim.js';
 import { provenanceTSL, ROCK, ICE } from './palette.js';
 
@@ -50,6 +53,13 @@ export function createVisuals(renderer, scene, camera, sim, opts = {}) {
     exposure: uniform(1.45),
     // pic de l'écran HDR, en multiples du blanc de l'interface (?peak=)
     peak: uniform(Number(new URLSearchParams(location.search).get('peak')) || 4.0),
+    planetK: uniform(1.0),   // grossissement des planètes (DA mécanique : billes sur leurs tiges)
+    // objectif : distance de mise au point, profondeur de champ, flou de mouvement
+    focus: uniform(30.0),
+    focusRange: uniform(9.0),
+    bokeh: uniform(1.0),
+    blurK: uniform(0.5),
+    collect: uniform(0.0),   // fin de cycle : les débris sont aspirés par la trémie (0 → 1)
   };
 
   // ── Poussière ──────────────────────────────────────────────────────────────
@@ -57,7 +67,29 @@ export function createVisuals(renderer, scene, camera, sim, opts = {}) {
     const mat = new THREE.SpriteNodeMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
     const P = pPos.element(instanceIndex);
     const Vv = pVel.element(instanceIndex);
-    mat.positionNode = P.xyz;
+    // ── Trémie (DA mécanique) ──
+    // Versement : un grain en attente (chaleur < 0) vole de la buse à sa place
+    // le long d'une courbe qui descend l'axe puis s'évase, en tournant avec le nuage.
+    // Aspiration (fin de cycle) : le même chemin à l'envers, vers la buse.
+    const Hraw = pHeat.element(instanceIndex);
+    const U = sim.U, hop = U.hopper;
+    const jit = vec3(hash(instanceIndex.add(uint(31))).sub(0.5), 0, hash(instanceIndex.add(uint(57))).sub(0.5));
+    const along = (from, to, s) => { // de la buse (s=0) au grain (s=1)
+      const mid = vec3(0, to.y.mul(0.7).add(from.y.mul(0.3)), 0).add(jit.mul(0.35));
+      const u = float(1).sub(s);
+      const b = from.mul(u.mul(u)).add(mid.mul(u.mul(s).mul(2.0))).add(to.mul(s.mul(s)));
+      const sw = u.mul(1.8), cs = cos(sw), sn = sin(sw); // tourbillon
+      return vec3(b.x.mul(cs).sub(b.z.mul(sn)), b.y, b.x.mul(sn).add(b.z.mul(cs)));
+    };
+    const waiting = Hraw.lessThan(0.0);
+    const sPour = clamp(U.pourT.add(Hraw).div(U.pourFly), 0.0, 1.0);          // (Hraw = −heure de départ)
+    const dly = hash(instanceIndex.add(uint(911))).mul(0.6);
+    const sCol = clamp(V.collect.sub(dly).div(0.4), 0.0, 1.0);               // 0 = en place, 1 = aspiré
+    const pourPos = along(hop, P.xyz, smoothstep(0.0, 1.0, sPour));
+    const colPos = along(hop, P.xyz, float(1).sub(sCol.mul(sCol)));
+    mat.positionNode = select(waiting, pourPos, select(sCol.greaterThan(0.0), colPos, P.xyz));
+    const inFlight = select(waiting, float(1).sub(sPour), sCol);              // pour l'éclat
+    const hidden = select(waiting, sPour.lessThanEqual(0.0), sCol.greaterThanEqual(1.0));
 
     const R = length(P.xz);
     const t = tau.element(cellOf(P.xyz));
@@ -73,7 +105,7 @@ export function createVisuals(renderer, scene, camera, sim, opts = {}) {
     // lueur thermique du disque interne, même à l'ombre
     const thermal = vec3(1.0, 0.35, 0.1).mul(smoothstep(1.4, 0.35, R)).mul(0.25);
     // Éjecta d'impact : chauffés à blanc puis refroidissant vers l'orange
-    const heat = pHeat.element(instanceIndex);
+    const heat = max(Hraw, 0.0);
     const hot = vec3(1.0, 0.42, 0.12).mul(heat.mul(heat).mul(6.0)).add(vec3(1.0, 0.9, 0.7).mul(heat.pow(6.0).mul(10.0)));
     // (moins lumineux tout près de la caméra : pas de voile devant la planète suivie)
     const camD = length(P.xyz.sub(cameraPosition));
@@ -84,11 +116,12 @@ export function createVisuals(renderer, scene, camera, sim, opts = {}) {
     // Grain net : cœur plein, bord court (plus de halo flou)
     const d = length(uv().sub(0.5));
     const shape = smoothstep(0.5, 0.28, d);
-    mat.colorNode = vec4(col, shape);
+    // (dans le filet, des centaines de milliers de grains se superposent : on les atténue)
+    mat.colorNode = vec4(col.mul(float(1).sub(inFlight.mul(0.8))), shape);
     // Taille plafonnée en pixels : vus de près, les grains restent des points
     // fins au lieu de devenir des taches (utile quand on suit une planète).
     mat.scaleNode = V.size.mul(hash(instanceIndex).mul(0.8).add(0.6)).mul(heat.mul(1.6).add(1.0)).mul(clamp(camD.div(4.0), 0.06, 1.0))
-      .mul(V.sizeK).mul(select(P.w.greaterThanEqual(0.0), 1.0, 0.0)); // grain retiré : plus dessiné
+      .mul(V.sizeK).mul(select(P.w.greaterThanEqual(0.0), select(hidden, 0.0, 1.0), 0.0)); // grain retiré (ou dans la trémie) : plus dessiné
 
     const dust = new THREE.Sprite(mat);
     dust.count = sim.N;
@@ -333,7 +366,7 @@ export function createVisuals(renderer, scene, camera, sim, opts = {}) {
     // reste bien plus petite que l'étoile.
     const mE = m.div(M_EARTH);
     const Rp = select(mE.lessThan(2.0), pow(mE, 0.28), pow(mE.div(2.0), 0.59).mul(1.21).min(11.5));
-    const visR = select(E.w.greaterThan(0), pow(Rp, 0.75).mul(0.013).max(0.005), 0.0)
+    const visR = select(E.w.greaterThan(0), pow(Rp, 0.75).mul(0.013).max(0.005), 0.0).mul(V.planetK)
       .mul(pulseBuf.element(instanceIndex).mul(0.06).add(1.0)); // la planète « bat » (à peine) quand elle sonne
     mat.positionNode = positionLocal.mul(visR).add(E.xyz);
 
@@ -492,8 +525,25 @@ export function createVisuals(renderer, scene, camera, sim, opts = {}) {
   // ── Post-process : bloom + vignette ────────────────────────────────────────
   const pipeline = new THREE.RenderPipeline(renderer);
   const scenePass = pass(scene, camera);
-  const color = scenePass.getTextureNode('output');
   const qp = new URLSearchParams(location.search);
+  // Objectif (désactivable avec ?nolens) :
+  //  · flou de mouvement : vecteurs vitesse écrits par les objets opaques (les
+  //    roues qui tournent, les bras, la caméra qui orbite) ; les matériaux
+  //    additifs (poussière, halos, verre) n'écrivent pas de vitesse ;
+  //  · profondeur de champ : la poussière n'écrit pas de profondeur, donc là
+  //    où il n'y a que le fond on fait comme si c'était le plan net — le
+  //    disque reste net, la machine au premier et à l'arrière-plan se floute.
+  const lens = !qp.has('nolens');
+  if (lens) scenePass.setMRT(mrt({ output, velocity }));
+  const sharp = scenePass.getTextureNode('output');
+  let color = sharp;
+  if (lens) {
+    const vel = scenePass.getTextureNode('velocity');
+    const mb = motionBlur(color, vel.mul(V.blurK), 10);
+    const vz = scenePass.getViewZNode();
+    const vzF = select(vz.lessThan(-400.0), V.focus.negate(), vz);
+    color = dof(mb, vzF, V.focus, V.focusRange, V.bokeh);
+  }
   const useBloom = !qp.has('nobloom');
   const cine = !qp.has('nocine');
   // Rendu « cinéma » (désactivable avec ?nocine) :
@@ -516,8 +566,8 @@ export function createVisuals(renderer, scene, camera, sim, opts = {}) {
       for (let i = 1; i <= 12; i++) {
         const o = vec2(i * i * 0.0016, 0);
         const w = Math.exp(-i * 0.28);
-        const a1 = dot(color.sample(screenUV.add(o)).rgb, vec3(0.2126, 0.7152, 0.0722));
-        const a2 = dot(color.sample(screenUV.sub(o)).rgb, vec3(0.2126, 0.7152, 0.0722));
+        const a1 = dot(sharp.sample(screenUV.add(o)).rgb, vec3(0.2126, 0.7152, 0.0722));
+        const a2 = dot(sharp.sample(screenUV.sub(o)).rgb, vec3(0.2126, 0.7152, 0.0722));
         streak = streak.add(max(a1.sub(1.5), 0.0).add(max(a2.sub(1.5), 0.0)).mul(w));
       }
       out = out.add(vec3(0.5, 0.72, 1.0).mul(streak.min(4.0)).mul(0.06));
@@ -677,5 +727,16 @@ export function createVisuals(renderer, scene, camera, sim, opts = {}) {
   }
 
   let pulsarK = 0;
+  // les matériaux additifs n'écrivent pas de vitesse (sinon un million de
+  // grains additionneraient leurs vecteurs)
+  if (lens) {
+    const zeroVel = mrt({ velocity: vec4(0) });
+    scene.traverse((o) => {
+      const ms = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
+      // (ni les planètes : elles bougent par leur buffer, que le vecteur vitesse
+      //  ignore — suivies par la caméra, elles seraient étalées jusqu'à disparaître)
+      for (const m of ms) if (m.blending === THREE.AdditiveBlending || m.transparent || o.isInstancedMesh || o.count > 1) m.mrtNode = zeroVel;
+    });
+  }
   return { V, star, flyStar, updateOrbits, pipeline, impact, pulse, updateFx, setEvo, setStar, updatePulsar: (dt) => updatePulsar(dt, pulsarK) };
 }

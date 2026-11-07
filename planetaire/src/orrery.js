@@ -1,86 +1,202 @@
 // La machine : un planétaire (orrery) en laiton qui « porte » la simulation.
 //
 // Rien ici ne simule : la mécanique LIT l'état du GPU et le rend tangible.
-//  · chaque planète est tenue par un bras horizontal fixé sur un tube ; les
-//    tubes sont concentriques autour de l'axe central (la planète la plus
-//    proche sur l'arbre le plus fin et le plus haut, comme sur un vrai orrery) ;
-//  · au pied de chaque tube, une roue dentée ; elle engrène un pignon monté sur
-//    un arbre de renvoi. Le rapport roue / pignon suit la vitesse angulaire de
-//    la planète : la troisième loi de Kepler est écrite dans les dentures ;
-//  · la tête de lecture devient le peigne d'une boîte à musique : chaque
-//    planète, en passant, pince la lame qui correspond à son rayon (longues
-//    lames = notes graves, au bord du disque) ;
-//  · un balancier et une roue d'échappement battent la mesure du temps simulé ;
-//  · un limbe gradué cercle le disque, porté par quatre arceaux.
+// Chaque pièce a une fonction, et la chaîne cinématique est cohérente :
+//
+//   BARILLET (ressort = énergie d'un cycle de vie)
+//     ├─▶ pignon de l'ARBRE DE RENVOI ─▶ pignons ─▶ ROUES des tubes ─▶ BRAS ─▶ planètes
+//     │      (rapport roue / pignon = rapport des vitesses angulaires : Kepler)
+//     └─▶ ROUE DE CENTRE ─▶ ROUE D'ÉCHAPPEMENT ⇄ ANCRE ⇄ BALANCIER (régulateur)
+//
+//  · toutes les dentures ont le même module : les entraxes sont exacts et les
+//    dents s'engrènent vraiment (nombres de dents entiers, phases calées) ;
+//  · RÉSERVE DE MARCHE : l'aiguille suit le ressort qui se détend au fil du
+//    cycle ; le cadran est gradué par les phases de la vie du système ;
+//  · FIN DE CYCLE : le ressort est vide, le LEVIER D'ARRÊT bloque le balancier ;
+//    la TRÉMIE aspire les débris de la supernova pendant que la COURONNE
+//    remonte le barillet (le CLIQUET claque sur le ROCHET) ; le levier se
+//    déclenche, la VANNE s'ouvre et les grains se déversent : le nouveau nuage ;
+//  · PEIGNE de boîte à musique = la tête de lecture, au-dessus du disque :
+//    la POINTE qui prolonge la tige de chaque planète soulève la lame de son
+//    rayon (lames inclinées : seule la pointe accroche, comme un picot de
+//    cylindre). Il se relève quand l'étoile enfle. Le CURSEUR de la ligne des
+//    glaces glisse sur sa barre ;
+//  · LIMBE gradué, PIEDS et ARCEAUX qui portent la CLOCHE de verre.
+//
+// Les pièces sont « usinées » : biseaux, chanfreins, alésages là où un arbre
+// passe, ponts et piliers vissés — aucune pièce ne traverse une autre.
 import * as THREE from 'three/webgpu';
-import { vec3, mix, positionLocal, mx_noise_float, float } from 'three/tsl';
+import {
+  vec3, vec4, mix, positionLocal, mx_noise_float, float, mrt, normalWorld, positionWorld, cameraPosition,
+  normalize, dot, abs, pow, max, min, reflect, uniform, smoothstep,
+} from 'three/tsl';
 import { R_IN, R_OUT } from './sim.js';
 
 const K = 12;                          // bras (planètes portées) au maximum
 const Y_ARM0 = -0.42, DY_ARM = 0.12;   // hauteur des bras sous le plan du disque
-const Y_BASE = -3.3;                   // dessus du socle
-const Y_GEAR0 = Y_BASE + 0.12, DY_GEAR = 0.075;
-const LAY_D = 1.6, LAY_ANG = (3 * Math.PI) / 4; // arbre de renvoi
-const COMB_Y = -0.3, NTEETH = 44;
-const LIMB_R0 = 9.55, LIMB_R1 = 10.35;
-const MODULE = 0.06;                   // module des dentures (même pas pour toutes les roues)
+const Y_BASE = -3.3;                   // dessus de la platine
+const Y_GEAR0 = Y_BASE + 0.52, DY_GEAR = 0.07; // pile des roues (au-dessus du régulateur)
+const MODULE = 0.065;                  // module commun de toutes les dentures
+const LAY_N = 40;                      // dents roue + pignon d'un étage (entraxe = 40 × m / 2 = 1,3)
+const LAY_D = (LAY_N * MODULE) / 2;
+const OMEGA_L = 0.25;                  // vitesse de l'arbre de renvoi (rad / unité de temps) = une orbite à 2,5 UA
+const LIMB_R0 = 9.55, LIMB_R1 = 10.35, LIMB_RM = (LIMB_R0 + LIMB_R1) / 2;
+const DOME_H = 10.2;                   // hauteur de la cloche (le nuage initial tient dessous)
+export const HOPPER = new THREE.Vector3(0, DOME_H - 0.95, 0); // buse de la trémie
+// peigne (au-dessus du disque) : barre, lames inclinées, pointes des tiges
+const COMB_Z = 0.34, COMB_BAR_Y = 0.44, TOOTH_ROOT_Y = 0.41, TOOTH_TIP_Y = 0.3, TOOTH_TIP_Z = 0.035, PIN_TOP = 0.312;
+const NTEETH = 44;
+// part de chaque phase dans la réserve du ressort (même ordre que PHASES)
+const PHASE_W = [0.06, 0.06, 0.3, 0.14, 0.22, 0.14, 0.08];
+const PHASE_SHORT = ['nuage', 'proto', 'planètes', 'dissip.', 'maturité', 'géante', 'nova'];
+export const WIND0 = 0.62, WIND1 = 0.93; // fenêtre d'aspiration / remontage dans la supernova (progression)
 
-// Rayon affiché d'une planète (même formule que le shader de visuals.js)
-export function visRadius(mE) {
+// Rayon affiché d'une planète (même formule que le shader de visuals.js, × k)
+export function visRadius(mE, k = 1) {
   const Rp = mE < 2 ? Math.pow(mE, 0.28) : Math.min(11.5, 1.21 * Math.pow(mE / 2, 0.59));
-  return Math.max(0.005, 0.013 * Math.pow(Rp, 0.75));
+  return Math.max(0.005, 0.013 * Math.pow(Rp, 0.75)) * k;
 }
+export const ss = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+const pitchR = (n) => (n * MODULE) / 2;
 
-// ── Matériaux ────────────────────────────────────────────────────────────────
-function brass(tone = [0.8, 0.66, 0.4], rough = 0.4) {
+// ── Matériaux : laiton patiné et satiné (il ne doit pas voler la vedette) ──
+function brass(tone = [0.64, 0.56, 0.38], rough = 0.5) {
   const m = new THREE.MeshStandardNodeMaterial({ metalness: 0.6, roughness: rough });
-  // laiton brossé : fines stries et légères variations de patine
-  const p = positionLocal;
-  const brush = mx_noise_float(vec3(p.x.mul(3.0), p.y.mul(180.0), p.z.mul(3.0))).mul(0.5).add(0.5);
-  const patina = mx_noise_float(p.mul(1.7)).mul(0.5).add(0.5);
-  m.colorNode = mix(vec3(...tone).mul(0.82), vec3(...tone), brush).mul(patina.mul(0.18).add(0.88));
-  m.roughnessNode = float(rough).add(brush.mul(0.12)).add(patina.mul(0.08));
+  const p = positionWorld;
+  // laiton brossé (stries) et patine irrégulière ; coordonnées monde, pour
+  // que les pièces instanciées ou mises à l'échelle gardent le même grain
+  const brush = mx_noise_float(vec3(p.x.mul(14.0), p.y.mul(260.0), p.z.mul(14.0))).mul(0.5).add(0.5);
+  const patina = mx_noise_float(p.mul(2.3)).mul(0.5).add(0.5);
+  m.colorNode = mix(vec3(...tone).mul(0.82), vec3(...tone), brush).mul(patina.mul(0.25).add(0.8));
+  m.roughnessNode = float(rough).add(brush.mul(0.12)).add(patina.mul(0.1));
   return m;
 }
-const steel = () => new THREE.MeshStandardNodeMaterial({ color: 0xc4cad2, metalness: 0.6, roughness: 0.28 });
-const blued = () => new THREE.MeshStandardNodeMaterial({ color: 0x3550a0, metalness: 0.55, roughness: 0.25 });
+const steel = () => new THREE.MeshStandardNodeMaterial({ color: 0xa9afb7, metalness: 0.65, roughness: 0.3 });
+const blued = () => new THREE.MeshStandardNodeMaterial({ color: 0x2f4690, metalness: 0.55, roughness: 0.28 });
+const ruby = () => new THREE.MeshStandardNodeMaterial({ color: 0x9a1028, roughness: 0.1, metalness: 0.15 });
+const dark = () => new THREE.MeshStandardNodeMaterial({ color: 0x0c0a08, roughness: 0.7, metalness: 0.2 });
 
-// ── Géométries ───────────────────────────────────────────────────────────────
-// Roue dentée de rayon primitif 1, épaisseur 1 (axe y, centrée), n dents,
-// rayons évidés pour les grandes roues.
-const gearCache = new Map();
-function gearGeometry(n) {
-  if (gearCache.has(n)) return gearCache.get(n);
-  const m = 2 / n, out = 1 + m, root = 1 - 1.25 * m, p = (Math.PI * 2) / n;
-  const s = new THREE.Shape();
-  for (let i = 0; i < n; i++) {
-    const a = i * p;
-    const pts = [[root, a], [root, a + 0.22 * p], [out, a + 0.38 * p], [out, a + 0.62 * p], [root, a + 0.78 * p]];
-    pts.forEach(([r, t], j) => (i === 0 && j === 0 ? s.moveTo(r * Math.cos(t), r * Math.sin(t)) : s.lineTo(r * Math.cos(t), r * Math.sin(t))));
-  }
-  s.closePath();
-  if (n >= 18) {
-    const S = n >= 40 ? 6 : 5, hub = 0.26, rim = root - 0.16;
-    for (let k = 0; k < S; k++) {
-      const a0 = (k / S) * Math.PI * 2, a1 = ((k + 1) / S) * Math.PI * 2;
-      const dO = 0.09 / rim, dI = 0.09 / hub;
-      const h = new THREE.Path();
-      h.moveTo(rim * Math.cos(a0 + dO), rim * Math.sin(a0 + dO));
-      h.absarc(0, 0, rim, a0 + dO, a1 - dO, false);
-      h.lineTo(hub * Math.cos(a1 - dI), hub * Math.sin(a1 - dI));
-      h.absarc(0, 0, hub, a1 - dI, a0 + dI, true);
-      h.closePath();
-      s.holes.push(h);
-    }
-  }
-  const g = new THREE.ExtrudeGeometry(s, { depth: 1, bevelEnabled: false, curveSegments: 10 });
+// ── Géométries usinées ──────────────────────────────────────────────────────
+const cache = new Map();
+const cached = (key, make) => { if (!cache.has(key)) cache.set(key, make()); return cache.get(key); };
+// extrusion d'une forme 2D en plaque horizontale, centrée en y, biseautée
+function plate(shape, thick, bevel = 0.004, curve = 8) {
+  const bt = Math.min(bevel, thick * 0.3);
+  const g = new THREE.ExtrudeGeometry(shape, {
+    depth: Math.max(1e-4, thick - 2 * bt), bevelEnabled: true, bevelThickness: bt, bevelSize: bt * 0.9,
+    bevelSegments: 1, curveSegments: curve,
+  });
   g.rotateX(-Math.PI / 2);
-  g.translate(0, -0.5, 0);
+  g.translate(0, -(thick - 2 * bt) / 2, 0);
   g.computeVertexNormals();
-  gearCache.set(n, g);
   return g;
 }
-const teethFor = (r) => Math.max(8, Math.round((2 * r) / MODULE));
+const circlePath = (r, cx = 0, cy = 0) => { const h = new THREE.Path(); h.absarc(cx, cy, r, 0, Math.PI * 2, true); return h; };
+
+// Roue dentée à sa taille réelle (n dents, module commun), biseautée, avec
+// alésage pour l'arbre qui la traverse et rayons évidés si elle est grande.
+// Profil : flancs arrondis (approximation d'une développante), tête arrondie.
+function gearGeometry(n, thick, bore = 0.02) {
+  return cached(`g${n}|${thick}|${bore}`, () => {
+    const R = pitchR(n), out = R + MODULE * 0.95, root = R - MODULE * 1.2, p = (Math.PI * 2) / n;
+    const s = new THREE.Shape();
+    const pt = (r, a) => [r * Math.cos(a), r * Math.sin(a)];
+    for (let i = 0; i < n; i++) {
+      const a = i * p;
+      const prof = [[root, 0], [root, 0.18], [root + (R - root) * 0.55, 0.26], [R, 0.3], [R + (out - R) * 0.6, 0.35], [out, 0.42],
+        [out, 0.58], [R + (out - R) * 0.6, 0.65], [R, 0.7], [root + (R - root) * 0.55, 0.74], [root, 0.82]];
+      prof.forEach(([r, f], j) => { const [x, y] = pt(r, a + f * p); if (i === 0 && j === 0) s.moveTo(x, y); else s.lineTo(x, y); });
+    }
+    s.closePath();
+    const hub = Math.max(bore + 0.05, R * 0.2);
+    if (R > 0.36) {
+      const S = R > 0.8 ? 6 : 5, rim = root - Math.max(0.05, R * 0.1), w = Math.max(0.03, R * 0.07);
+      for (let k = 0; k < S; k++) {
+        const a0 = (k / S) * Math.PI * 2, a1 = ((k + 1) / S) * Math.PI * 2;
+        const h = new THREE.Path();
+        h.moveTo(...pt(rim, a0 + w / rim));
+        h.absarc(0, 0, rim, a0 + w / rim, a1 - w / rim, false);
+        h.lineTo(...pt(hub, a1 - w / hub));
+        h.absarc(0, 0, hub, a1 - w / hub, a0 + w / hub, true);
+        h.closePath();
+        s.holes.push(h);
+      }
+    }
+    if (bore > 0) s.holes.push(circlePath(bore));
+    return plate(s, thick, Math.min(0.006, thick * 0.25), 6);
+  });
+}
+// moyeu de roue / bague : pièce tournée creuse, chanfreinée
+function bushGeometry(rOut, h, rIn = 0, ch = null) {
+  return cached(`b${rOut}|${h}|${rIn}`, () => {
+    const c = ch ?? Math.min(h * 0.25, (rOut - rIn) * 0.3, 0.012);
+    const pts = rIn > 0
+      ? [[rIn, h / 2], [rIn, -h / 2], [rOut - c, -h / 2], [rOut, -h / 2 + c], [rOut, h / 2 - c], [rOut - c, h / 2], [rIn, h / 2]]
+      : [[0, -h / 2], [rOut - c, -h / 2], [rOut, -h / 2 + c], [rOut, h / 2 - c], [rOut - c, h / 2], [0, h / 2]];
+    return new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y)), 32);
+  });
+}
+// pièce tournée quelconque (profil [r, y])
+const turned = (pts, seg = 48) => new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y)), seg);
+// pont / bras plat : stade (bouts ronds) de 0 à len sur x, trous facultatifs
+function bridgeGeometry(len, w, thick, holes = []) {
+  return cached(`p${len.toFixed(3)}|${w}|${thick}|${holes.map((h) => h.join(',')).join(';')}`, () => {
+    const s = new THREE.Shape(), r = w / 2;
+    s.moveTo(0, -r); s.lineTo(len, -r); s.absarc(len, 0, r, -Math.PI / 2, Math.PI / 2, false);
+    s.lineTo(0, r); s.absarc(0, 0, r, Math.PI / 2, (3 * Math.PI) / 2, false);
+    for (const [x, hr] of holes) s.holes.push(circlePath(hr, x, 0));
+    return plate(s, thick, 0.006, 12);
+  });
+}
+// Rochet à dents de scie (ne tourne que dans un sens, retenu par le cliquet)
+function ratchetGeometry(n, R, thick, bore) {
+  return cached(`r${n}|${R}`, () => {
+    const root = R * 0.84, p = (Math.PI * 2) / n, s = new THREE.Shape();
+    for (let i = 0; i < n; i++) {
+      const a = i * p;
+      if (i === 0) s.moveTo(root * Math.cos(a), root * Math.sin(a));
+      s.lineTo(R * Math.cos(a + 0.9 * p), R * Math.sin(a + 0.9 * p));
+      s.lineTo(root * Math.cos(a + p), root * Math.sin(a + p));
+    }
+    s.holes.push(circlePath(bore));
+    return plate(s, thick, 0.004, 4);
+  });
+}
+// Roue d'échappement à dents en crochet (club teeth), 15 dents, 4 rayons
+function escapeGeometry(R, thick, bore) {
+  return cached(`e${R}`, () => {
+    const n = 15, p = (Math.PI * 2) / n, rim = R * 0.72, s = new THREE.Shape();
+    for (let i = 0; i < n; i++) {
+      const a = i * p;
+      const P = [[rim, 0], [R * 0.98, 0.38], [R, 0.5], [R * 0.93, 0.56], [rim, 0.4]];
+      P.forEach(([r, f], j) => { const x = r * Math.cos(a + f * p), y = r * Math.sin(a + f * p); if (i === 0 && j === 0) s.moveTo(x, y); else s.lineTo(x, y); });
+      s.lineTo(rim * Math.cos(a + p), rim * Math.sin(a + p));
+    }
+    const hub = bore + 0.03, rimIn = rim - 0.025, w = 0.018;
+    for (let k = 0; k < 4; k++) {
+      const a0 = (k / 4) * Math.PI * 2, a1 = ((k + 1) / 4) * Math.PI * 2, h = new THREE.Path();
+      h.moveTo(rimIn * Math.cos(a0 + w / rimIn), rimIn * Math.sin(a0 + w / rimIn));
+      h.absarc(0, 0, rimIn, a0 + w / rimIn, a1 - w / rimIn, false);
+      h.lineTo(hub * Math.cos(a1 - w / hub), hub * Math.sin(a1 - w / hub));
+      h.absarc(0, 0, hub, a1 - w / hub, a0 + w / hub, true);
+      h.closePath(); s.holes.push(h);
+    }
+    s.holes.push(circlePath(bore));
+    return plate(s, thick, 0.003, 4);
+  });
+}
+// Phase d'engrènement : une roue A (angle de rotation aA, n dents) entraîne B
+// (nb dents) dont le centre est dans la direction thC vue de A (angles monde,
+// atan2(z, x)). Renvoie l'angle de rotation de B (rotation.y) pour que ses
+// dents tombent dans les creux de A.
+function meshAngle(rotA, nA, nB, thC) {
+  const pA = (Math.PI * 2) / nA, pB = (Math.PI * 2) / nB;
+  // angle monde de la dent 0 : la forme est tracée dans le plan XY puis
+  // couchée (rotateX(-π/2)) : angle monde = −angle forme − rotation.y
+  const alpha = -0.5 * pA - rotA;
+  const beta = thC + Math.PI - pB / 2 - (alpha - thC) * (nA / nB);
+  return -0.5 * pB - beta;
+}
 
 // Gravure du limbe : graduations en degrés, chiffres, devise
 function limbTexture() {
@@ -175,192 +291,475 @@ function workshopEnv() {
   return t;
 }
 
+// Cadran de la réserve de marche : un arc de 270°, de « plein » à « vide »,
+// découpé en secteurs proportionnels à la part de chaque phase du cycle.
+// (angle dans le canevas : 135° = plein … 405° = vide, sens horaire)
+const dialAngle = (reserve) => ((135 + 270 * (1 - reserve)) * Math.PI) / 180;
+function dialTexture() {
+  const S = 512, C = S / 2, c = document.createElement('canvas');
+  c.width = c.height = S;
+  const g = c.getContext('2d');
+  g.fillStyle = '#fff'; g.fillRect(0, 0, S, S);
+  g.strokeStyle = g.fillStyle = '#3a2a14';
+  g.lineWidth = 3; g.beginPath(); g.arc(C, C, C * 0.96, 0, Math.PI * 2); g.stroke();
+  g.lineWidth = 2; g.beginPath(); g.arc(C, C, C * 0.82, dialAngle(1), dialAngle(0)); g.stroke();
+  g.beginPath(); g.arc(C, C, C * 0.9, dialAngle(1), dialAngle(0)); g.stroke();
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  let cum = 0;
+  const tick = (res, len, w) => {
+    const a = dialAngle(res);
+    g.lineWidth = w; g.beginPath();
+    g.moveTo(C + Math.cos(a) * C * (0.9 - len), C + Math.sin(a) * C * (0.9 - len));
+    g.lineTo(C + Math.cos(a) * C * 0.9, C + Math.sin(a) * C * 0.9); g.stroke();
+  };
+  for (let k = 0; k <= 40; k++) tick(k / 40, 0.05, 1.5);
+  PHASE_W.forEach((w, i) => {
+    tick(1 - cum, 0.16, 3.5);
+    const a = dialAngle(1 - cum - w / 2);
+    g.save(); g.translate(C + Math.cos(a) * C * 0.66, C + Math.sin(a) * C * 0.66); g.rotate(a + Math.PI / 2);
+    g.font = `500 ${S * 0.052}px "Cormorant Garamond", Georgia, serif`; g.fillText(PHASE_SHORT[i], 0, 0); g.restore();
+    cum += w;
+  });
+  tick(0, 0.16, 3.5);
+  g.font = `600 ${S * 0.07}px "Cormorant SC", Georgia, serif`;
+  g.fillText('réserve', C, C + C * 0.42);
+  g.font = `italic 400 ${S * 0.05}px "Cormorant Garamond", Georgia, serif`;
+  g.fillText('de marche', C, C + C * 0.56);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+
+// Demi-arceau elliptique, du limbe jusqu'au collier de la trémie
+class ArchCurve extends THREE.Curve {
+  constructor(dir, a, b, rEnd) { super(); this.dir = dir; this.a = a; this.b = b; this.te = Math.acos(rEnd / a); }
+  getPoint(t, out = new THREE.Vector3()) {
+    const th = this.te * t;
+    return out.set(this.dir.x * this.a * Math.cos(th), this.b * Math.sin(th) - 0.05, this.dir.z * this.a * Math.cos(th));
+  }
+}
+
+// verre : presque invisible, liseré au bord et reflets des deux lumières
+function glassMaterial(k = 1) {
+  const gm = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+  const V = normalize(cameraPosition.sub(positionWorld)), N = normalize(normalWorld);
+  const fres = pow(float(1).sub(abs(dot(N, V))), 4.0);
+  const spec = pow(max(dot(reflect(V.negate(), N), normalize(vec3(-8, 14, 10))), 0), 90.0);
+  const spec2 = pow(max(dot(reflect(V.negate(), N), normalize(vec3(9, 6, -12))), 0), 30.0);
+  gm.colorNode = vec4(vec3(1.0, 0.96, 0.9).mul(fres.mul(0.07).add(spec.mul(0.18)).add(spec2.mul(0.05)).mul(k)), 1);
+  gm.mrtNode = mrt({ velocity: vec4(0) }); // (le verre ne brouille pas le flou de mouvement)
+  return gm;
+}
+
 export function createOrrery(scene, renderer) {
   const root = new THREE.Group();
   root.name = 'orrery';
   scene.add(root);
   // (préfiltrée en PMREM : sans cela, les reflets du métal restent noirs)
   let env = null;
-  scene.environmentIntensity = 1.2;
+  scene.environmentIntensity = 0.55;
   new THREE.PMREMGenerator(renderer).fromEquirectangularAsync(workshopEnv()).then((rt) => {
     env = rt.texture;
     if (root.visible) scene.environment = env;
   });
 
-  const MB = brass(), MBd = brass([0.56, 0.44, 0.27], 0.45), MS = steel(), MBl = blued();
+  const MB = brass(), MBd = brass([0.4, 0.34, 0.24], 0.55), MS = steel(), MBl = blued(), MR = ruby(), MK = dark();
+  const MBz = brass([0.55, 0.38, 0.24], 0.4); // bronze des bagues et coussinets
+  const add = (geo, mat, x = 0, y = 0, z = 0, parent = root) => {
+    const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); parent.add(m); return m;
+  };
+  const up = new THREE.Vector3(0, 1, 0);
+  // vis à tête bombée fendue (bleuie), posée sur une surface à la hauteur y
+  const screwHead = turned([[0, 0], [1, 0], [1, 0.25], [0.85, 0.55], [0.5, 0.72], [0, 0.76]], 20);
+  const slotG = new THREE.BoxGeometry(2.1, 0.5, 0.22).translate(0, 0.62, 0);
+  const screw = (x, y, z, r = 0.028, parent = root, rot = Math.random() * 3) => {
+    const g = new THREE.Group(); g.position.set(x, y, z); g.scale.setScalar(r); g.rotation.y = rot;
+    add(screwHead, MBl, 0, 0, 0, g); add(slotG, MK, 0, 0, 0, g); parent.add(g); return g;
+  };
+  // pilier tourné de y0 à y1 (embase, fût, chanfreins)
+  const pillar = (x, z, y0, y1, r = 0.05, mat = MB) => {
+    const h = y1 - y0, c = Math.min(0.012, r * 0.25);
+    return add(turned([[0, 0], [r * 1.5, 0], [r * 1.5, 0.02], [r, 0.04], [r, h - c], [r - c, h], [0, h]], 24), mat, x, y0, z);
+  };
+  // arbre d'acier vertical
+  const arbor = (x, z, y0, y1, r = 0.018) => add(new THREE.CylinderGeometry(r, r, y1 - y0, 12).translate(0, (y1 - y0) / 2, 0), MS, x, y0, z);
+  // pont plat orienté de a vers b (points monde), à la hauteur y
+  const bridgeAB = (a, b, y, w, thick, ext0 = 0, ext1 = 0, holes = [], mat = MB) => {
+    const d = Math.hypot(b.x - a.x, b.z - a.z), ang = Math.atan2(b.z - a.z, b.x - a.x);
+    const m = add(bridgeGeometry(d + ext0 + ext1, w, thick, holes.map(([t, r]) => [t * d + ext0, r])), mat, a.x, y, a.z);
+    m.rotation.y = -ang;
+    m.translateX(-ext0);
+    return m;
+  };
+  const at = (v, t, b, ext = 0) => { // point sur le segment v→b, à t·d + ext
+    const d = Math.hypot(b.x - v.x, b.z - v.z);
+    return new THREE.Vector3(v.x + (b.x - v.x) * (t + ext / d), 0, v.z + (b.z - v.z) * (t + ext / d));
+  };
 
-  // ── Lumières : l'étoile éclaire la machine, une lampe d'atelier la révèle ─
+  // ── Lumières : l'étoile est la vraie source ; la lampe d'atelier, discrète,
+  //    ne fait que révéler les volumes quand l'étoile est faible ───────────
   const starLight = new THREE.PointLight(0xffd6a0, 2, 0, 0.3);
   root.add(starLight);
-  const lamp = new THREE.DirectionalLight(0xfff6ec, 5.5);
+  const lamp = new THREE.DirectionalLight(0xfff8f0, 3.2);
   lamp.position.set(-8, 14, 10);
   root.add(lamp);
-  const rim = new THREE.DirectionalLight(0x9fb6ff, 1.5);
+  const rim = new THREE.DirectionalLight(0xc8d4ff, 0.5);
   rim.position.set(9, -4, -12);
   root.add(rim);
 
   // ── Socle tourné + platine gravée ───────────────────────────────────────
+  const PLATE_R = 2.56;
   {
     const y = Y_BASE;
-    const prof = [[0, y - 1.25], [2.35, y - 1.25], [2.45, y - 1.17], [2.2, y - 1.1], [1.25, y - 0.92], [0.95, y - 0.7],
-      [0.8, y - 0.45], [0.95, y - 0.3], [1.6, y - 0.2], [2.55, y - 0.12], [2.62, y - 0.06], [2.62, y], [0, y]]
-      .map(([r, h]) => new THREE.Vector2(r, h));
-    const foot = new THREE.Mesh(new THREE.LatheGeometry(prof, 96), MBd);
-    root.add(foot);
-    const pm = new THREE.MeshStandardNodeMaterial({ metalness: 0.7, roughness: 0.42 });
-    const eng = plateTexture();
-    pm.map = eng;
-    pm.color = new THREE.Color(0.72, 0.6, 0.38);
-    const plate = new THREE.Mesh(new THREE.CylinderGeometry(2.58, 2.58, 0.02, 96), pm);
-    plate.position.y = y + 0.01;
-    // (UV du dessus d'un cylindre : planaires, la gravure se pose telle quelle)
-    root.add(plate);
+    add(turned([[0, y - 1.25], [2.3, y - 1.25], [2.4, y - 1.22], [2.44, y - 1.17], [2.2, y - 1.1], [1.25, y - 0.92], [0.98, y - 0.72],
+      [0.82, y - 0.5], [0.8, y - 0.42], [0.95, y - 0.3], [1.6, y - 0.21], [2.5, y - 0.14], [2.6, y - 0.1], [2.62, y - 0.07],
+      [2.62, y - 0.035], [2.6, y - 0.02], [0, y - 0.02]], 96), MBd);
+    const pm = new THREE.MeshStandardNodeMaterial({ metalness: 0.6, roughness: 0.5 });
+    pm.map = plateTexture();
+    pm.color = new THREE.Color(0.56, 0.5, 0.37);
+    add(new THREE.CylinderGeometry(PLATE_R, PLATE_R, 0.02, 96), pm, 0, y - 0.01, 0);
+    // chanfrein du bord de la platine
+    add(turned([[PLATE_R, y], [PLATE_R, y - 0.02], [PLATE_R + 0.03, y - 0.02], [PLATE_R + 0.03, y - 0.012], [PLATE_R + 0.012, y]], 96), MB);
   }
 
-  // ── Limbe gradué et ses arceaux ─────────────────────────────────────────
+  // ── Limbe gradué, pieds, arceaux, cloche de verre ───────────────────────
   {
-    const lm = new THREE.MeshStandardNodeMaterial({ metalness: 0.7, roughness: 0.36 });
+    const lm = new THREE.MeshStandardNodeMaterial({ metalness: 0.6, roughness: 0.45 });
     lm.map = limbTexture();
-    lm.color = new THREE.Color(0.8, 0.67, 0.42);
-    const ringGeo = new THREE.RingGeometry(LIMB_R0, LIMB_R1, 256, 1);
-    // (UV planaires sur le carré circonscrit au bord extérieur : la gravure tombe juste)
-    const limb = new THREE.Mesh(ringGeo, lm);
+    lm.color = new THREE.Color(0.62, 0.55, 0.39);
+    const limb = add(new THREE.RingGeometry(LIMB_R0 + 0.02, LIMB_R1 - 0.02, 256, 1), lm, 0, -0.02, 0);
     limb.rotation.x = -Math.PI / 2;
-    limb.position.y = -0.02;
-    root.add(limb);
-    // tranche du limbe
-    const edge = new THREE.Mesh(new THREE.CylinderGeometry(LIMB_R1, LIMB_R1, 0.12, 256, 1, true), MBd);
-    edge.position.y = -0.08;
-    root.add(edge);
-    const edge2 = new THREE.Mesh(new THREE.CylinderGeometry(LIMB_R0, LIMB_R0, 0.12, 256, 1, true), MBd);
-    edge2.position.y = -0.08;
-    root.add(edge2);
-    // arceaux : du limbe jusqu'au bord de la platine
+    // tranche du limbe, chanfreinée dessus et dessous
+    add(turned([[LIMB_R0 + 0.02, -0.02], [LIMB_R0, -0.035], [LIMB_R0, -0.125], [LIMB_R0 + 0.02, -0.14], [LIMB_R1 - 0.02, -0.14],
+      [LIMB_R1, -0.125], [LIMB_R1, -0.035], [LIMB_R1 - 0.02, -0.02]], 256), MBd);
+    // gorge où repose la cloche
+    add(turned([[LIMB_R1, -0.03], [LIMB_R1 + 0.09, -0.03], [LIMB_R1 + 0.1, -0.01], [LIMB_R1 + 0.1, 0.05], [LIMB_R1 + 0.08, 0.06],
+      [LIMB_R1 + 0.065, 0.02], [LIMB_R1 + 0.035, 0.02], [LIMB_R1 + 0.02, 0.06], [LIMB_R1, 0.05]], 256), MB);
     for (const a of [Math.PI / 4, (3 * Math.PI) / 4, (5 * Math.PI) / 4, (7 * Math.PI) / 4]) {
       const d = new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
-      const at = (r, y) => d.clone().multiplyScalar(r).setY(y);
-      const curve = new THREE.CubicBezierCurve3(at((LIMB_R0 + LIMB_R1) / 2, -0.14), at(9.9, -2.6), at(4.2, Y_BASE + 0.5), at(2.45, Y_BASE + 0.02));
-      root.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 64, 0.07, 12), MB));
-      const knob = new THREE.Mesh(new THREE.SphereGeometry(0.14, 20, 12), MB);
-      knob.position.copy(at((LIMB_R0 + LIMB_R1) / 2, -0.02));
-      knob.scale.y = 0.6;
-      root.add(knob);
+      const pt = (r, y) => d.clone().multiplyScalar(r).setY(y);
+      // pied : du dessous du limbe jusqu'au patin vissé sur la platine
+      const curve = new THREE.CubicBezierCurve3(pt(LIMB_RM, -0.14), pt(9.9, -2.6), pt(4.2, Y_BASE + 0.55), pt(2.38, Y_BASE + 0.07));
+      add(new THREE.TubeGeometry(curve, 64, 0.055, 14), MB);
+      const shoe = add(bridgeGeometry(0.34, 0.17, 0.05), MB, 0, Y_BASE + 0.025, 0);
+      shoe.position.copy(pt(2.2, Y_BASE + 0.025)); shoe.rotation.y = -a;
+      screw(...pt(2.45, Y_BASE + 0.05).toArray(), 0.03);
+      add(bushGeometry(0.075, 0.06), MB, ...pt(2.38, Y_BASE + 0.08).toArray());
+      // pommeau sur le limbe, d'où part l'arceau supérieur
+      const knob = add(turned([[0, 0], [0.13, 0], [0.15, 0.03], [0.12, 0.08], [0.07, 0.11], [0, 0.12]], 24), MB);
+      knob.position.copy(pt(LIMB_RM, -0.02));
+      add(new THREE.TubeGeometry(new ArchCurve(d, LIMB_RM, DOME_H + 0.02, 0.47), 160, 0.042, 12), MB);
     }
+    // collier de la trémie : les arceaux s'y arrêtent, la trémie le traverse
+    add(bushGeometry(0.5, 0.1, 0.13), MB, 0, DOME_H + 0.06, 0);
+    for (let k = 0; k < 4; k++) screw(Math.cos(k * Math.PI / 2 + 0.785) * 0.32, DOME_H + 0.11, Math.sin(k * Math.PI / 2 + 0.785) * 0.32, 0.025);
+    // cloche (ouverte au sommet pour le collier)
+    const dome = add(new THREE.SphereGeometry(1, 128, 48, 0, Math.PI * 2, 0.045, Math.PI / 2 - 0.045), glassMaterial());
+    dome.scale.set(LIMB_R1 + 0.05, DOME_H + 0.1, LIMB_R1 + 0.05);
+    dome.renderOrder = 10;
   }
 
-  // ── Peigne de la boîte à musique (= la tête de lecture, axe +X) ────────
+  // ── Trémie : réservoir de grains, entonnoir, vanne ─────────────────────
+  const heapLevel = uniform(0);
+  const valve = new THREE.Group();
+  {
+    const Gc = DOME_H + 0.78, GR = 0.55;
+    const globe = add(new THREE.SphereGeometry(GR, 48, 32), glassMaterial(1.6), 0, Gc, 0);
+    globe.renderOrder = 11;
+    // grains dans le réservoir : une sphère dont le dessus est arasé au niveau
+    const sm = new THREE.MeshStandardNodeMaterial({ roughness: 0.9, metalness: 0.0 });
+    const sp = positionLocal;
+    const sparkle = mx_noise_float(sp.mul(90.0)).mul(0.5).add(0.5);
+    sm.colorNode = mix(vec3(0.32, 0.22, 0.16), vec3(0.85, 0.62, 0.42), sparkle.pow(3.0));
+    sm.emissiveNode = vec3(0.9, 0.5, 0.3).mul(sparkle.pow(8.0)).mul(0.6);
+    sm.positionNode = vec3(sp.x, min(sp.y, heapLevel.mul(2 * (GR - 0.03)).sub(GR - 0.03)), sp.z);
+    const heap = add(new THREE.SphereGeometry(GR - 0.03, 40, 24), sm, 0, Gc, 0);
+    heap.userData.isHeap = true;
+    // monture : cerclage, chapeau et col
+    const band = add(new THREE.TorusGeometry(GR + 0.005, 0.022, 10, 64), MB, 0, Gc, 0);
+    band.rotation.x = Math.PI / 2;
+    add(turned([[0, 0], [0.2, 0], [0.22, 0.02], [0.18, 0.07], [0.06, 0.1], [0.05, 0.2], [0.08, 0.23], [0.05, 0.27], [0, 0.28]], 32), MB, 0, Gc + GR - 0.04, 0);
+    const neckY = Gc - GR;
+    add(turned([[0.13, -0.12], [0.19, -0.1], [0.21, -0.07], [0.21, 0.02], [0.16, 0.05], [0.13, 0.05]], 32), MB, 0, neckY, 0);
+    // entonnoir : du col jusqu'à la buse, à travers le collier
+    const y0 = neckY - 0.12, y1 = HOPPER.y + 0.08;
+    const fun = add(turned([[0.13, y0], [0.125, y0 - 0.25], [0.1, (y0 + y1) / 2], [0.06, y1 + 0.12], [0.05, y1], [0.065, y1 - 0.02],
+      [0.065, y1 - 0.06], [0.04, y1 - 0.08]], 32), MB);
+    fun.material = MB.clone(); fun.material.side = THREE.DoubleSide;
+    // vanne : boisseau et sa clé, qui pivote d'un quart de tour à l'ouverture
+    add(bushGeometry(0.075, 0.1), MBd, 0, y1 + 0.05, 0);
+    valve.position.set(0, y1 + 0.05, 0);
+    add(new THREE.CylinderGeometry(0.012, 0.012, 0.16, 8).rotateZ(Math.PI / 2).translate(0.15, 0, 0), MS, 0, 0, 0, valve);
+    add(bridgeGeometry(0.18, 0.05, 0.02), MBl, 0.22, 0, 0, valve).rotation.y = -Math.PI / 2;
+    root.add(valve);
+  }
+
+  // ── Peigne de la boîte à musique (= la tête de lecture), au-dessus du disque
+  // Il pivote sur un pilier planté dans le limbe (axe +X) ; il se relève quand
+  // l'étoile enfle, comme on relève un bras de lecture.
   const teeth = [];
+  const comb = new THREE.Group();
+  comb.position.set(LIMB_RM, COMB_BAR_Y, COMB_Z);
+  root.add(comb);
+  const snowSlider = new THREE.Group();
+  const COMB_X0 = R_IN * 0.7 - LIMB_RM; // bout intérieur (repère du peigne)
   {
-    const bar = new THREE.Mesh(new THREE.BoxGeometry(1, 0.06, 0.16), MB);
-    const x0 = R_IN * 0.6, x1 = LIMB_R0 + 0.3;
-    bar.scale.x = x1 - x0;
-    bar.position.set((x0 + x1) / 2, COMB_Y - 0.03, 0.2);
-    root.add(bar);
-    // vis bleuies le long de la barre
-    const screwG = new THREE.CylinderGeometry(0.035, 0.035, 0.02, 12);
-    for (let x = 0.8; x < x1; x += 1.1) {
-      const s = new THREE.Mesh(screwG, MBl);
-      s.position.set(x, COMB_Y + 0.005, 0.2);
-      root.add(s);
-    }
-    // lames : une par note, de plus en plus longues vers le bord (graves)
-    const tg = new THREE.BoxGeometry(1, 1, 1).translate(0, 0, -0.5);
+    pillar(LIMB_RM, COMB_Z, -0.02, COMB_BAR_Y - 0.03, 0.06);
+    // barre-talon : les lames en sortent, côté étoile
+    add(bridgeGeometry(-COMB_X0 + 0.07, 0.13, 0.045, [[-COMB_X0, 0.022]]), MS, COMB_X0, 0, 0, comb); // peigne d'acier, d'une pièce
+    screw(0, 0.0225, 0, 0.04, comb);
+    for (let x = COMB_X0 + 0.6; x < -0.3; x += 1.15) screw(x, 0.0225, 0.03, 0.02, comb);
+    const spacing = (R_OUT - R_IN) / NTEETH;
+    const rootZ = -0.062, dy = TOOTH_TIP_Y - TOOTH_ROOT_Y, dz = (TOOTH_TIP_Z - COMB_Z) - rootZ;
+    const Lt = Math.hypot(dy, dz), dirT = new THREE.Vector3(0, dy, dz).normalize();
+    const qBase = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), dirT);
+    const toothG = bridgeGeometry(Lt, spacing * 0.68, 0.012);
     for (let i = 0; i < NTEETH; i++) {
-      const r = R_IN + (i + 0.5) * (R_OUT - R_IN) / NTEETH;
-      const L = 0.16 + 0.34 * (i / (NTEETH - 1));
-      const mesh = new THREE.Mesh(tg, MS);
-      mesh.scale.set(((R_OUT - R_IN) / NTEETH) * 0.62, 0.018, L);
-      mesh.position.set(r, COMB_Y, 0.12);
-      root.add(mesh);
-      teeth.push({ mesh, r, L, amp: 0, t: 0, f: 26 - 14 * (i / NTEETH) });
+      const r = R_IN + (i + 0.5) * spacing;
+      const t = new THREE.Group();
+      t.position.set(r - LIMB_RM, TOOTH_ROOT_Y - COMB_BAR_Y, rootZ);
+      t.quaternion.copy(qBase);
+      // la lame est tracée de 0 à Lt sur x ; on la recentre sur sa largeur
+      const blade = add(toothG, MS, 0, 0, 0, t);
+      blade.rotation.x = 0;
+      // masselottes de plomb sous les lames graves (elles abaissent la note)
+      if (i > NTEETH * 0.45) {
+        const w = 0.02 + 0.05 * ((i - NTEETH * 0.45) / (NTEETH * 0.55));
+        add(new THREE.BoxGeometry(w * 2, 0.02, spacing * 0.5), MK, 0.05 + w, -0.016, 0, t);
+      }
+      comb.add(t);
+      teeth.push({ g: t, q0: qBase.clone(), r, amp: 0, t: 0, f: 26 - 14 * (i / NTEETH) });
     }
+    // curseur de la ligne des glaces, à cheval sur la barre
+    add(bridgeGeometry(0.1, 0.24, 0.12), MBl, -0.05, 0, 0, snowSlider);
+    add(new THREE.CylinderGeometry(0.008, 0.008, 0.2, 8).translate(0, 0.1, 0), MS, 0, 0.06, 0.06, snowSlider);
+    add(new THREE.OctahedronGeometry(0.035), MBl, 0, 0.28, 0.06, snowSlider);
+    screw(0, 0.06, -0.06, 0.02, snowSlider);
+    comb.add(snowSlider);
   }
 
-  // ── Axe central, arbre de renvoi, pont, roue motrice, balancier ─────────
-  const layP = new THREE.Vector3(Math.cos(LAY_ANG) * LAY_D, 0, Math.sin(LAY_ANG) * LAY_D);
+  // ── Axe central, tubes, arbre de renvoi et grand pont ───────────────────
+  const polar = (a, r) => new THREE.Vector2(Math.cos((a * Math.PI) / 180) * r, Math.sin((a * Math.PI) / 180) * r);
+  const W = (v) => new THREE.Vector3(-v.x, 0, -v.y); // repère local de la platine → monde (demi-tour)
+  const dLB = pitchR(10) + pitchR(22), dBC = pitchR(22) + pitchR(8), dCE = pitchR(10) + pitchR(8); // (roue de centre à 10 dents : elle passe à côté du tambour)
+  const Lp = polar(150, LAY_D);
+  const Bp = Lp.clone().add(polar(240, dLB));
+  const Cp = Bp.clone().add(polar(0, dBC));
+  const Ep = Cp.clone().add(polar(275, dCE));
+  const Fp = Ep.clone().add(polar(275, 0.4));
+  const BalP = Fp.clone().add(polar(275, 0.52));
+  const layP = W(Lp), bW = W(Bp), cW = W(Cp), eW = W(Ep), fW = W(Fp), balW = W(BalP);
+  const dW = new THREE.Vector3(-1.25, 0, 1.22);
   const gearTop = Y_GEAR0 + (K - 1) * DY_GEAR;
+  const bridgeY = gearTop + 0.09;
+  const angTo = (a, b) => Math.atan2(b.z - a.z, b.x - a.x);
   {
-    const spindle = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 1, 12).translate(0, 0.5, 0), MS);
-    spindle.position.y = Y_BASE;
-    spindle.scale.y = -0.08 - Y_BASE; // l'axe le plus fin monte jusque sous l'étoile
-    root.add(spindle);
-    const cup = new THREE.Mesh(new THREE.SphereGeometry(0.07, 24, 12, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), MB);
-    cup.material.side = THREE.DoubleSide;
-    cup.position.y = -0.09;
-    root.add(cup);
-    const lay = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1, 12).translate(0, 0.5, 0), MS);
-    lay.position.set(layP.x, Y_BASE, layP.z);
-    lay.scale.y = gearTop - Y_BASE + 0.18;
-    root.add(lay);
-    // pont (cock) qui tient le haut de l'arbre de renvoi
-    const bridge = new THREE.Mesh(new THREE.BoxGeometry(1, 0.05, 0.16), MB);
-    bridge.scale.x = LAY_D + 0.4;
-    bridge.position.set(layP.x / 2, gearTop + 0.16, layP.z / 2);
-    bridge.rotation.y = -LAY_ANG;
-    root.add(bridge);
-    for (const p of [layP, new THREE.Vector3()]) {
-      const jewel = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.03, 16), new THREE.MeshStandardNodeMaterial({ color: 0x8a0f22, roughness: 0.1, metalness: 0.2 }));
-      jewel.position.set(p.x, gearTop + 0.195, p.z);
-      root.add(jewel);
-    }
+    // l'arbre le plus fin monte de la platine jusqu'à l'étoile, qu'il porte dans une coupe
+    add(bushGeometry(0.08, 0.04, 0.02), MBz, 0, Y_BASE + 0.02, 0);
+    arbor(0, 0, Y_BASE, -0.1, 0.02);
+    add(turned([[0.02, -0.06], [0.035, -0.06], [0.05, -0.03], [0.075, 0.0], [0.08, 0.01], [0.07, 0.012], [0.045, -0.015], [0.02, -0.03]], 32), MB, 0, -0.08, 0)
+      .material = Object.assign(MB.clone(), { side: THREE.DoubleSide });
+    // arbre de renvoi
+    add(bushGeometry(0.09, 0.04, 0.035), MBz, layP.x, Y_BASE + 0.02, layP.z);
+    arbor(layP.x, layP.z, Y_BASE, bridgeY + 0.03, 0.035);
+    // grand pont : bague autour des tubes, palier de l'arbre de renvoi, pilier au bout
+    const pEnd = at(new THREE.Vector3(), 1, layP, 1.16);
+    const br = bridgeAB(new THREE.Vector3(), layP, bridgeY, 0.2, 0.05, 0, 1.16, [[0, 0.2], [1, 0.035]]);
+    void br;
+    add(bushGeometry(0.25, 0.07, 0.19), MBz, 0, bridgeY, 0);                       // coussinet des tubes
+    add(bushGeometry(0.07, 0.03, 0), MR, layP.x, bridgeY + 0.035, layP.z);         // rubis
+    pillar(pEnd.x, pEnd.z, Y_BASE, bridgeY - 0.025, 0.06);
+    screw(pEnd.x, bridgeY + 0.025, pEnd.z, 0.035);
+    screw(...at(new THREE.Vector3(), 0.5, layP).setY(bridgeY + 0.025).toArray(), 0.022);
   }
-  // roue motrice (barillet) et pignon au pied de l'arbre de renvoi
-  const drive = new THREE.Mesh(gearGeometry(teethFor(0.9)), MB);
-  const drivePin = new THREE.Mesh(gearGeometry(teethFor(0.22)), MS);
+
+  // ── Barillet, rouage du régulateur, échappement, balancier ─────────────
+  const Ylay = Y_BASE + 0.07, Ywheel = Y_BASE + 0.15, Yesc = Y_BASE + 0.235, YtrainBr = Y_BASE + 0.36;
+  const gm = (n, thick, bore, mat, p, y) => add(gearGeometry(n, thick, bore), mat, p.x, y, p.z);
+  const layPin = gm(10, 0.05, 0.035, MS, layP, Ylay);
+  const barrelGear = gm(22, 0.04, 0.04, MB, bW, Ylay);
+  const barrel = new THREE.Group(); barrel.position.copy(bW).setY(Y_BASE + 0.07); root.add(barrel);
+  // tambour (avec gorge de couvercle et gravure circulaire)
+  add(turned([[0.04, 0.02], [0.6, 0.02], [0.62, 0.035], [0.62, 0.23], [0.6, 0.25], [0.56, 0.25], [0.555, 0.24], [0.5, 0.24],
+    [0.495, 0.25], [0.04, 0.25]], 64), MBd, 0, 0, 0, barrel);
+  for (let k = 0; k < 3; k++) add(new THREE.CylinderGeometry(0.03, 0.03, 0.005, 12), MK, Math.cos(k * 2.1) * 0.38, 0.252, Math.sin(k * 2.1) * 0.38, barrel);
+  arbor(bW.x, bW.z, Y_BASE, Y_BASE + 0.46, 0.04);
+  // pont de barillet : pilier au bord de la platine, palier au-dessus de l'arbre
+  const outB = new THREE.Vector3(bW.x, 0, bW.z).normalize();
+  const bPil = bW.clone().addScaledVector(outB, 0.78);
+  const YbBr = Y_BASE + 0.355;
+  bridgeAB(bPil, bW, YbBr, 0.2, 0.04, 0.02, 0.16, [[1, 0.042]]);
+  pillar(bPil.x, bPil.z, Y_BASE, YbBr - 0.02, 0.055);
+  screw(bPil.x, YbBr + 0.02, bPil.z, 0.032);
+  // rochet sur l'arbre, au-dessus du pont ; cliquet et son ressort
+  const ratchet = add(ratchetGeometry(24, 0.26, 0.03, 0.04), MS, bW.x, YbBr + 0.04, bW.z);
+  screw(bW.x, YbBr + 0.055, bW.z, 0.05);
+  const side = new THREE.Vector3(-outB.z, 0, outB.x);
+  const clickPiv = bW.clone().addScaledVector(side, 0.36).addScaledVector(outB, 0.12);
+  const click = new THREE.Group(); click.position.copy(clickPiv).setY(YbBr + 0.04); root.add(click);
   {
-    const dirOut = layP.clone().normalize();
-    const side = new THREE.Vector3(-dirOut.z, 0, dirOut.x);
-    drive.position.copy(layP).addScaledVector(side, 1.12).setY(Y_BASE + 0.06);
-    drive.scale.set(0.9, 0.05, 0.9);
-    drivePin.position.copy(layP).setY(Y_BASE + 0.06);
-    drivePin.scale.set(0.22, 0.05, 0.22);
-    root.add(drive, drivePin);
-    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.62, 0.28, 48), MBd);
-    barrel.position.copy(drive.position).setY(Y_BASE + 0.23);
-    root.add(barrel);
-    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.04, 24), MBl);
-    cap.position.copy(barrel.position).setY(Y_BASE + 0.39);
-    root.add(cap);
+    const toR = angTo(clickPiv, bW);
+    click.rotation.y = -toR + 0.18;
+    click.userData.base = click.rotation.y;
+    add(bridgeGeometry(0.17, 0.05, 0.026), MS, 0, 0, 0, click);
+    screw(0, 0.015, 0, 0.022, click);
+    // ressort de cliquet (lame fine)
+    const spring = add(bridgeGeometry(0.22, 0.016, 0.02), MS, clickPiv.x, YbBr + 0.04, clickPiv.z);
+    spring.rotation.y = -toR - 1.3; spring.translateZ(0.04);
   }
-  // balancier spiral + roue d'échappement
+  // remontoir : couronne au bord du socle, tige, renvoi sur le rochet
+  const crownPos = outB.clone().multiplyScalar(2.86).setY(YbBr + 0.04);
+  const crownG = new THREE.Group(); crownG.position.copy(crownPos);
+  crownG.quaternion.setFromUnitVectors(up, outB);
+  root.add(crownG);
+  const crownWheel = add(gearGeometry(18, 0.09, 0), MB, 0, 0, 0, crownG); // couronne moletée
+  add(turned([[0, 0.045], [0.08, 0.045], [0.06, 0.08], [0, 0.09]], 20), MB, 0, 0, 0, crownG);
+  // la tige passe à côté du pont de barillet ; une vis sans fin à son bout
+  // entraîne le rochet
+  const stemG = new THREE.Group();
+  {
+    const OFF = 0.19, y = YbBr + 0.04;
+    const e0 = Math.sqrt(0.27 * 0.27 - OFF * OFF);
+    const a0 = bW.clone().addScaledVector(outB, e0 - 0.05).addScaledVector(side, OFF);
+    const a1 = bW.clone().addScaledVector(outB, 2.86 - bW.length() - 0.06).addScaledVector(side, OFF);
+    crownG.position.copy(a1).addScaledVector(outB, 0.06).setY(y);
+    stemG.position.copy(a0).setY(y);
+    stemG.quaternion.setFromUnitVectors(up, outB);
+    root.add(stemG);
+    const len = a0.distanceTo(a1);
+    add(new THREE.CylinderGeometry(0.02, 0.02, len, 10).translate(0, len / 2, 0), MS, 0, 0, 0, stemG);
+    const helix = [];
+    for (let i = 0; i <= 120; i++) { const t = i / 120, an = t * Math.PI * 2 * 4; helix.push(new THREE.Vector3(Math.cos(an) * 0.032, t * 0.16, Math.sin(an) * 0.032)); }
+    add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(helix), 160, 0.009, 6), MS, 0, 0, 0, stemG);
+    add(new THREE.CylinderGeometry(0.03, 0.03, 0.16, 12).translate(0, 0.08, 0), MS, 0, 0, 0, stemG);
+    // palier de la tige, vissé sur la platine
+    const blk = bW.clone().addScaledVector(outB, 2.5 - bW.length()).addScaledVector(side, OFF);
+    const h = y + 0.04 - Y_BASE;
+    const bl = add(bridgeGeometry(0.12, 0.12, h), MBd, blk.x, Y_BASE + h / 2, blk.z);
+    bl.rotation.y = -Math.atan2(outB.z, outB.x); bl.translateX(-0.06);
+    screw(blk.x, Y_BASE + h, blk.z, 0.022);
+  }
+  // roue de centre et échappement
+  const centerPin = gm(8, 0.05, 0.018, MS, cW, Ylay);
+  const centerWheel = gm(10, 0.03, 0.018, MB, cW, Ywheel);
+  const escPin = gm(8, 0.035, 0.018, MS, eW, Ywheel);
+  const escape = add(escapeGeometry(0.26, 0.022, 0.018), MS, eW.x, Yesc, eW.z);
+  for (const p of [cW, eW]) { arbor(p.x, p.z, Y_BASE, YtrainBr + 0.02); add(bushGeometry(0.05, 0.03, 0), MBz, p.x, Y_BASE + 0.015, p.z); }
+  // pont de rouage : un pilier au-delà de la roue de centre, rubis sur les pivots
+  {
+    const pA = at(cW, 0, eW, -0.7);
+    bridgeAB(pA, eW, YtrainBr, 0.15, 0.04, 0, 0.1, [[0.7 / (0.7 + cW.distanceTo(eW)), 0.018], [1, 0.018]]);
+    pillar(pA.x, pA.z, Y_BASE, YtrainBr - 0.02, 0.05);
+    screw(pA.x, YtrainBr + 0.02, pA.z, 0.03);
+    for (const p of [cW, eW]) add(bushGeometry(0.035, 0.025, 0), MR, p.x, YtrainBr + 0.028, p.z);
+  }
+  // ancre : palettes de rubis sur la roue d'échappement, fourchette vers le balancier
+  const anchor = new THREE.Group(); anchor.position.copy(fW).setY(Yesc); root.add(anchor);
+  {
+    const toE = angTo(fW, eW);
+    anchor.rotation.y = -toE;
+    anchor.userData.base = anchor.rotation.y;
+    // bras des palettes (en T), levier, fourchette
+    const arm = add(bridgeGeometry(0.34, 0.05, 0.02), MS, 0.14, 0, -0.17, anchor); arm.rotation.y = -Math.PI / 2;
+    add(bridgeGeometry(0.14, 0.05, 0.02), MS, 0, 0, 0, anchor);
+    for (const s of [-1, 1]) add(new THREE.BoxGeometry(0.06, 0.03, 0.025), MR, 0.17, 0, s * 0.17, anchor);
+    const lev = add(bridgeGeometry(0.44, 0.035, 0.02), MS, 0, 0, 0, anchor); lev.rotation.y = Math.PI;
+    for (const s of [-1, 1]) add(bridgeGeometry(0.05, 0.016, 0.02), MS, -0.44, 0, s * 0.028, anchor).rotation.y = Math.PI;
+    arbor(fW.x, fW.z, Y_BASE, Y_BASE + 0.33, 0.014);
+    // pont d'ancre (petit coq)
+    const perpF = new THREE.Vector3(-(eW.z - fW.z), 0, eW.x - fW.x).normalize();
+    const pa = fW.clone().addScaledVector(perpF, -0.3);
+    bridgeAB(pa, fW, Y_BASE + 0.32, 0.1, 0.03, 0, 0.06, [[1, 0.014]]);
+    pillar(pa.x, pa.z, Y_BASE, Y_BASE + 0.305, 0.04);
+    screw(pa.x, Y_BASE + 0.335, pa.z, 0.024);
+  }
+  // balancier spiral, sous son coq
   const balance = new THREE.Group();
-  const escape = new THREE.Mesh(gearGeometry(15), MS);
+  const Ybal = Y_BASE + 0.29;
+  balance.position.copy(balW).setY(Ybal);
   {
-    const a = -Math.PI / 4;
-    balance.position.set(Math.cos(a) * 1.75, Y_BASE + 0.32, Math.sin(a) * 1.75);
-    const rimB = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.028, 10, 64), MB);
-    rimB.rotation.x = Math.PI / 2;
-    balance.add(rimB);
+    add(turned([[0.335, -0.018], [0.38, -0.018], [0.385, -0.012], [0.385, 0.012], [0.38, 0.018], [0.335, 0.018], [0.33, 0.012], [0.33, -0.012]], 64), MB, 0, 0, 0, balance);
     for (let k = 0; k < 3; k++) {
-      const sp = new THREE.Mesh(new THREE.BoxGeometry(0.84, 0.02, 0.03), MB);
-      sp.rotation.y = (k / 3) * Math.PI;
-      balance.add(sp);
+      const a = add(bridgeGeometry(0.33, 0.03, 0.016), MB, 0, 0, 0, balance);
+      a.rotation.y = (k / 3) * Math.PI * 2;
     }
-    for (let k = 0; k < 8; k++) { // vis de réglage sur la serge
-      const s = new THREE.Mesh(new THREE.SphereGeometry(0.03, 8, 6), MS);
-      s.position.set(Math.cos((k / 8) * Math.PI * 2) * 0.45, 0, Math.sin((k / 8) * Math.PI * 2) * 0.45);
-      balance.add(s);
+    add(bushGeometry(0.045, 0.03, 0.012), MB, 0, 0, 0, balance);
+    for (let k = 0; k < 12; k++) {
+      const a = (k / 12) * Math.PI * 2;
+      const s = add(turned([[0, 0], [0.018, 0], [0.018, 0.012], [0.012, 0.02], [0, 0.022]], 10), MBl, Math.cos(a) * 0.385, 0, Math.sin(a) * 0.385, balance);
+      s.quaternion.setFromUnitVectors(up, new THREE.Vector3(Math.cos(a), 0, Math.sin(a)));
     }
+    add(bushGeometry(0.05, 0.02, 0.012), MS, 0, -0.04, 0, balance);  // plateau
+    add(new THREE.CylinderGeometry(0.008, 0.008, 0.03, 8), MR, 0.04, -0.055, 0, balance); // cheville
     root.add(balance);
-    // spiral (fixe en son centre : on le dessine en ligne bleuie)
     const pts = [];
-    for (let i = 0; i <= 400; i++) {
-      const t = i / 400, ang = t * Math.PI * 2 * 7, r = 0.03 + t * 0.26;
-      pts.push(new THREE.Vector3(Math.cos(ang) * r, 0.03, Math.sin(ang) * r));
+    for (let i = 0; i <= 500; i++) {
+      const t = i / 500, ang = t * Math.PI * 2 * 9, r = 0.03 + t * 0.2;
+      pts.push(new THREE.Vector3(Math.cos(ang) * r, 0.035, Math.sin(ang) * r));
     }
-    const hair = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicNodeMaterial({ color: 0x5f7ed8 }));
+    const hair = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicNodeMaterial({ color: 0x3a56b0 }));
     balance.add(hair);
     balance.userData.hair = hair;
-    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.32, 10), MS);
-    post.position.copy(balance.position).setY(Y_BASE + 0.16);
-    root.add(post);
-    escape.position.copy(balance.position).add(new THREE.Vector3(-0.62, 0, 0.22)).setY(Y_BASE + 0.2);
-    escape.scale.set(0.2, 0.025, 0.2);
-    root.add(escape);
+    arbor(balW.x, balW.z, Y_BASE, Y_BASE + 0.45, 0.012);
+    add(bushGeometry(0.04, 0.02, 0), MR, balW.x, Y_BASE + 0.01, balW.z);
+    // coq : pont en porte-à-faux au-dessus du balancier, piton du spiral
+    const sdB = new THREE.Vector3(-balW.z, 0, balW.x).normalize(); // de côté (le levier d'arrêt est de l'autre)
+    const foot = balW.clone().addScaledVector(sdB, 0.5);
+    bridgeAB(foot, balW, Y_BASE + 0.44, 0.15, 0.035, 0.05, 0.08, [[1, 0.012]]);
+    pillar(foot.x, foot.z, Y_BASE, Y_BASE + 0.4225, 0.06);
+    screw(foot.x, Y_BASE + 0.4575, foot.z, 0.035);
+    add(bushGeometry(0.04, 0.02, 0), MR, balW.x, Y_BASE + 0.465, balW.z);
+    const stud = balW.clone().addScaledVector(sdB, 0.23);
+    add(new THREE.CylinderGeometry(0.012, 0.012, 0.11, 8).translate(0, -0.055, 0), MS, stud.x, Y_BASE + 0.42, stud.z);
+  }
+  // levier d'arrêt : bloque la serge du balancier (pause, remontage) puis se
+  // déclenche pour libérer un nouveau cycle
+  const stop = new THREE.Group();
+  {
+    const sd = new THREE.Vector3(-balW.z, 0, balW.x).normalize();
+    const piv = balW.clone().addScaledVector(sd, -0.62).setY(Ybal);
+    stop.position.copy(piv);
+    const toBal = angTo(piv, balW);
+    stop.userData.on = -toBal;
+    stop.userData.off = -toBal + 0.6;
+    stop.rotation.y = stop.userData.off;
+    add(bridgeGeometry(0.2, 0.05, 0.03), MBl, 0, 0, 0, stop);
+    add(new THREE.BoxGeometry(0.04, 0.03, 0.04), MR, 0.215, 0, 0, stop);
+    arbor(piv.x, piv.z, Y_BASE, Ybal + 0.03, 0.014);
+    screw(0, 0.015, 0, 0.022, stop);
+    root.add(stop);
+  }
+  // cadran de la réserve de marche, posé sur trois pieds
+  const dial = new THREE.Group();
+  dial.position.copy(dW).setY(Y_BASE + 0.08);
+  dial.rotation.y = Math.PI / 2; // le haut du cadran vers le fond : lisible depuis la vue d'ensemble
+  root.add(dial);
+  {
+    const dm = new THREE.MeshStandardNodeMaterial({ metalness: 0.15, roughness: 0.55 });
+    dm.map = dialTexture();
+    dm.color = new THREE.Color(0.93, 0.88, 0.76); // émail un peu jauni
+    add(new THREE.CylinderGeometry(0.52, 0.52, 0.03, 64), dm, 0, 0.015, 0, dial);
+    add(turned([[0.5, 0], [0.56, 0], [0.57, 0.012], [0.57, 0.04], [0.555, 0.055], [0.52, 0.05], [0.5, 0.035]], 64), MB, 0, 0, 0, dial);
+    for (let k = 0; k < 3; k++) {
+      const a = (k / 3) * Math.PI * 2 + 0.5;
+      add(new THREE.CylinderGeometry(0.03, 0.035, 0.08, 12).translate(0, -0.04, 0), MB, Math.cos(a) * 0.45, 0, Math.sin(a) * 0.45, dial);
+    }
+  }
+  const hand = new THREE.Group(); hand.position.y = 0.045; dial.add(hand);
+  {
+    const s = new THREE.Shape(); // aiguille « poire »
+    s.moveTo(-0.08, 0); s.lineTo(0, -0.012); s.lineTo(0.3, -0.004); s.lineTo(0.4, 0); s.lineTo(0.3, 0.004); s.lineTo(0, 0.012); s.closePath();
+    add(plate(s, 0.008, 0.002), MBl, 0, 0, 0, hand);
+    add(bushGeometry(0.03, 0.02, 0), MBl, 0, 0, 0, hand);
   }
 
   // ── Pièces mobiles, une par planète portée ──────────────────────────────
-  const inst = (geo, mat, n) => {
+  // (matériaux à part, sans vecteur vitesse : ces pièces suivent les planètes)
+  const noVel = new Map();
+  const inst = (geo, mat0, n) => {
+    if (!noVel.has(mat0)) { const c = mat0.clone(); c.mrtNode = mrt({ velocity: vec4(0) }); noVel.set(mat0, c); }
+    const mat = noVel.get(mat0);
     const m = new THREE.InstancedMesh(geo, mat, n);
     m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     m.frustumCulled = false;
@@ -368,114 +767,185 @@ export function createOrrery(scene, renderer) {
     root.add(m);
     return m;
   };
-  const arms = inst(new THREE.BoxGeometry(1, 1, 1).translate(0.5, 0, 0), MB, K);
-  const stems = inst(new THREE.CylinderGeometry(1, 1, 1, 10).translate(0, 0.5, 0), MS, K);
-  const collars = inst(new THREE.CylinderGeometry(1, 0.55, 1, 20), MB, K);
-  const weights = inst(new THREE.CylinderGeometry(1, 1, 1, 24), MBd, K);
+  const rodX = new THREE.CylinderGeometry(1, 1, 1, 12).rotateZ(-Math.PI / 2).translate(0.5, 0, 0);
+  const rodY = new THREE.CylinderGeometry(1, 1, 1, 10).translate(0, 0.5, 0);
+  const HUB_IN = 0.72; // rapport alésage / diamètre des bagues instanciées
+  const arms = inst(rodX, MB, K);
+  const counters = inst(rodX, MB, K);
+  const weights = inst(turned([[0, -0.5], [0.85, -0.5], [1, -0.3], [1, 0.3], [0.85, 0.5], [0, 0.5]], 24), MBd, K);
+  const stems = inst(rodY, MS, K);
+  const pins = inst(rodY, MS, K);
+  const pinTips = inst(new THREE.SphereGeometry(1, 10, 8), MS, K);
+  const bosses = inst(bushGeometry(1, 1, 0, 0.18), MB, K);
+  const collars = inst(turned([[0, -0.5], [0.45, -0.5], [0.55, -0.2], [1, 0.4], [0.95, 0.5], [0.4, 0.1], [0, 0.1]], 24), MB, K);
   const tubes = inst(new THREE.CylinderGeometry(1, 1, 1, 24).translate(0, 0.5, 0), MB, K);
-  const hubs = inst(new THREE.CylinderGeometry(1, 1, 1, 24), MBd, K);
+  const hubs = inst(bushGeometry(1, 1, HUB_IN, 0.06), MBd, K);
+  const hubScrews = inst(new THREE.CylinderGeometry(1, 1, 1, 10).rotateZ(Math.PI / 2), MBl, K);
+  const gearHubs = inst(bushGeometry(1, 1, HUB_IN, 0.06), MB, K);
+  const pinHubs = inst(bushGeometry(1, 1, HUB_IN, 0.06), MS, K);
   const gears = [], pinions = [];
   for (let k = 0; k < K; k++) {
-    const g = new THREE.Mesh(gearGeometry(24), MB);
-    const p = new THREE.Mesh(gearGeometry(12), MS);
-    g.visible = p.visible = false;
-    root.add(g, p);
-    gears.push(g); pinions.push(p);
+    const g = add(gearGeometry(20, 0.028, 0.04), MB); const p = add(gearGeometry(20, 0.028, 0.035), MS);
+    g.visible = p.visible = false; gears.push(g); pinions.push(p);
   }
+  const tubeR = (j) => 0.035 + 0.013 * j;
+  const thLay = Math.atan2(layP.z, layP.x);
 
-  const track = new Map(); // index → { y, phi, cum }
+  const track = new Map(); // index → { y, phi }
   const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3();
-  const _up = new THREE.Vector3(0, 1, 0);
-  const place = (mesh, i, pos, rotY, scale) => {
-    _q.setFromAxisAngle(_up, rotY);
-    _m.compose(pos, _q, scale);
-    mesh.setMatrixAt(i, _m);
-  };
+  const place = (mesh, i, pos, rotY, scale) => { _q.setFromAxisAngle(up, rotY); _m.compose(pos, _q, scale); mesh.setMatrixAt(i, _m); };
 
-  let tReal = 0, layAng = 0, escStep = 0, escPrev = 0;
+  const S = { lay: 0, escCont: 0, ph: 0, amp: 0, reserve: 1, ratchet: 0, crown: 0, tooth: 0, stop: 1, cycle: -1, valve: 0, lift: 0 };
+  const api = { root, onClick: null, onClack: null, collect: 0 };
+  const zAxis = new THREE.Vector3(0, 0, 1), _qb = new THREE.Quaternion();
 
   // planets : liste de main.js ; pred : index → [x, y, z] (instant présent)
-  function update(planets, pred, dtSim, dtReal, running) {
-    tReal += dtReal;
-    const carried = planets.filter((p) => p.mE >= 0.1 && pred.has(p.index))
+  // life : cycle de vie ; k : échelle des planètes ; pour : {t, dur} du versement
+  function update(planets, pred, dtSim, dtReal, running, life, k = 1, pour = null) {
+    // ── bras, tubes, roues
+    const carried = planets.filter((p) => p.mE >= 0.1 && pred.has(p.index) && p.a < LIMB_R0 - 0.4 && p.a > 0.2)
       .sort((a, b) => b.m - a.m).slice(0, K)
       .sort((a, b) => a.a - b.a);
     const seen = new Set();
     let n = 0;
     for (const p of carried) {
-      const q = pred.get(p.index);
-      const [x, y, z] = q;
+      const [x, y, z] = pred.get(p.index);
       const a = Math.hypot(x, z), phi = Math.atan2(z, x);
       let tr = track.get(p.index);
       const yT = Y_ARM0 - n * DY_ARM;
-      if (!tr) { tr = { y: yT, phi, cum: 0 }; track.set(p.index, tr); }
-      let dphi = phi - tr.phi;
-      if (dphi > Math.PI) dphi -= Math.PI * 2; else if (dphi < -Math.PI) dphi += Math.PI * 2;
-      tr.cum += dphi; tr.phi = phi;
+      if (!tr) { tr = { y: yT }; track.set(p.index, tr); }
       tr.y += (yT - tr.y) * Math.min(1, dtReal * 3); // un bras qui change d'étage glisse sur son tube
       seen.add(p.index);
-      const k = n, ya = tr.y, vr = visRadius(p.mE);
-      const w = 0.045 + 0.035 * Math.min(1, Math.cbrt(p.mE / 30));
-      const back = 0.28 + 0.1 * (k % 3);
-      // bras (prolongé derrière l'axe jusqu'au contrepoids)
-      place(arms, k, _p.set(-Math.cos(phi) * back, ya, -Math.sin(phi) * back), -phi, _s.set(a + back, 0.03, w));
-      place(weights, k, _p.set(-Math.cos(phi) * back, ya, -Math.sin(phi) * back), 0, _s.set(0.05 + w, 0.07, 0.05 + w));
-      // tige verticale jusque sous la planète, coupelle qui la tient
+      const j = n, ya = tr.y, vr = visRadius(p.mE, k), rT = tubeR(j);
+      const ra = 0.014 + 0.008 * Math.min(1, Math.cbrt(p.mE / 30)); // rayon de la tringle
+      const rHub = rT / HUB_IN, back = 0.26 + 0.09 * (j % 3);
+      const cx = Math.cos(phi), cz = Math.sin(phi);
+      // bague serrée sur le tube (vis de pression), tringle jusqu'au bossage, contre-tringle et contrepoids
+      place(hubs, j, _p.set(0, ya, 0), 0, _s.set(rHub, 0.06, rHub));
+      place(hubScrews, j, _p.set(-cz * rHub, ya, cx * rHub), -phi, _s.set(0.012, 0.03, 0.012));
+      place(arms, j, _p.set(cx * rHub * 0.97, ya, cz * rHub * 0.97), -phi, _s.set(a - rHub * 0.97, ra, ra));
+      place(counters, j, _p.set(-cx * rHub * 0.97, ya, -cz * rHub * 0.97), Math.PI - phi, _s.set(back - rHub, ra, ra));
+      place(weights, j, _p.set(-cx * back, ya, -cz * back), -phi, _s.set(0.04 + 2 * ra, 0.07, 0.04 + 2 * ra));
+      place(bosses, j, _p.set(x, ya, z), 0, _s.set(ra * 1.9, ra * 2.6, ra * 1.9));
+      // tige : du bossage au dessous de la planète ; pointe : du dessus jusqu'au peigne
       const top = y - vr * 0.85;
-      place(stems, k, _p.set(x, ya, z), 0, _s.set(0.011, Math.max(0.01, top - ya), 0.011));
-      place(collars, k, _p.set(x, top, z), 0, _s.set(vr * 0.55 + 0.006, 0.006 + vr * 0.25, vr * 0.55 + 0.006));
-      // tube et moyeu
-      const gy = Y_GEAR0 + k * DY_GEAR, tr0 = 0.035 + 0.013 * k;
-      place(tubes, k, _p.set(0, gy, 0), 0, _s.set(tr0, ya - gy, tr0));
-      place(hubs, k, _p.set(0, ya, 0), 0, _s.set(tr0 + 0.035, 0.05, tr0 + 0.035));
-      // roue (solidaire du tube, donc du bras) et pignon du renvoi
-      // ω_planète / ω_renvoi = r_pignon / r_roue, avec r_roue + r_pignon = LAY_D
+      place(stems, j, _p.set(x, ya, z), 0, _s.set(0.009, Math.max(0.01, top - ya), 0.009));
+      place(collars, j, _p.set(x, top, z), 0, _s.setScalar(vr * 0.6 + 0.008));
+      const pin0 = y + vr * 0.9;
+      place(pins, j, _p.set(x, pin0, z), 0, _s.set(0.004, Math.max(0.005, PIN_TOP - pin0), 0.004));
+      place(pinTips, j, _p.set(x, PIN_TOP, z), 0, _s.setScalar(0.007));
+      // tube (de sa roue jusqu'à sa bague) ; roue (solidaire du tube, donc du bras)
+      const gy = Y_GEAR0 + j * DY_GEAR;
+      place(tubes, j, _p.set(0, gy, 0), 0, _s.set(rT, ya - gy, rT));
+      // rapport : ω_planète / ω_renvoi = n_pignon / n_roue, n_roue + n_pignon = 40
       const om = Math.pow(Math.max(a, 0.2), -1.5);
-      const rg = Math.min(1.35, Math.max(0.25, LAY_D / (1 + om)));
-      const rp = LAY_D - rg;
-      const ng = teethFor(rg), np = teethFor(rp);
-      const G = gears[k], P = pinions[k];
-      if (G.userData.n !== ng) { G.geometry = gearGeometry(ng); G.userData.n = ng; }
-      if (P.userData.n !== np) { P.geometry = gearGeometry(np); P.userData.n = np; }
+      const ng = Math.min(LAY_N - 8, Math.max(8, Math.round((LAY_N * OMEGA_L) / (OMEGA_L + om)))), np = LAY_N - ng;
+      const G = gears[j], P = pinions[j];
+      if (G.userData.n !== ng) { G.geometry = gearGeometry(ng, 0.028, rT); G.userData.n = ng; }
+      if (P.userData.n !== np) { P.geometry = gearGeometry(np, 0.028, 0.035); P.userData.n = np; }
       G.visible = P.visible = true;
-      G.position.set(0, gy, 0); G.scale.set(rg, 0.032, rg); G.rotation.y = -phi;
-      P.position.set(layP.x, gy, layP.z); P.scale.set(rp, 0.032, rp);
-      P.rotation.y = tr.cum * (rg / rp) + Math.PI / np; // engrène la roue (sens inverse)
+      G.position.set(0, gy, 0); G.rotation.y = -phi;
+      P.position.set(layP.x, gy, layP.z);
+      P.rotation.y = meshAngle(G.rotation.y, ng, np, thLay); // ses dents dans les creux de la roue
+      place(gearHubs, j, _p.set(0, gy + 0.03, 0), 0, _s.set(rHub * 0.95, 0.035, rHub * 0.95));
+      place(pinHubs, j, _p.set(layP.x, gy + 0.03, layP.z), 0, _s.set(0.035 / HUB_IN, 0.035, 0.035 / HUB_IN));
       n++;
     }
     for (const i of track.keys()) if (!seen.has(i)) track.delete(i);
-    for (let k = n; k < K; k++) gears[k].visible = pinions[k].visible = false;
-    for (const m of [arms, stems, collars, weights, tubes, hubs]) { m.count = n; m.instanceMatrix.needsUpdate = true; }
+    for (let j = n; j < K; j++) gears[j].visible = pinions[j].visible = false;
+    for (const m of [arms, counters, weights, stems, pins, pinTips, bosses, collars, tubes, hubs, hubScrews, gearHubs, pinHubs]) {
+      m.count = n; m.instanceMatrix.needsUpdate = true;
+    }
 
-    // renvoi, barillet : tournent avec le temps simulé
-    layAng += dtSim;
-    drivePin.rotation.y = layAng;
-    drive.rotation.y = -layAng * (0.22 / 0.9) + Math.PI / teethFor(0.9);
-    // balancier : 2,5 battements/s quand la machine tourne, s'amortit à l'arrêt
-    const amp = balance.userData.amp = (balance.userData.amp ?? 0) + ((running ? 1 : 0) - (balance.userData.amp ?? 0)) * Math.min(1, dtReal * 1.5);
-    const ph = (balance.userData.ph = (balance.userData.ph ?? 0) + dtReal * Math.PI * 2 * 1.25);
-    const ang = Math.sin(ph) * 2.4 * amp;
-    balance.rotation.y = ang;
+    // ── réserve de marche, aspiration et remontage (d'après le cycle de vie)
+    const ph = life.phase, pr = Math.min(1, life.p.progress || 0);
+    let cum = 0;
+    for (let i = 0; i < ph; i++) cum += PHASE_W[i];
+    let target, winding = false;
+    if (ph < 6) target = 1 - cum - PHASE_W[ph] * pr;
+    else if (pr < WIND0) target = PHASE_W[6] * (1 - pr / WIND0);
+    else { winding = pr < WIND1 + 0.05; target = ss(WIND0, WIND1, pr); }
+    const prevRes = S.reserve;
+    S.reserve += (target - S.reserve) * Math.min(1, dtReal * (winding ? 10 : 3));
+    const dRes = S.reserve - prevRes;
+    if (dRes > 0 && winding) {
+      S.ratchet += dRes * 6 * Math.PI * 2;      // six tours de ressort pour un cycle
+      S.crown += dRes * 6 * Math.PI * 2 * 1.45; // (rapport couronne / rochet)
+    }
+    ratchet.rotation.y = -S.ratchet;
+    crownWheel.rotation.y = S.crown;
+    stemG.rotation.set(0, 0, 0); stemG.quaternion.setFromUnitVectors(up, outB).multiply(_qb.setFromAxisAngle(up, S.crown));
+    const toothF = S.ratchet / ((Math.PI * 2) / 24), tooth = Math.floor(toothF);
+    if (tooth !== S.tooth) { S.tooth = tooth; if (winding && api.onClick) api.onClick(); }
+    click.rotation.y = click.userData.base - 0.25 * (toothF - tooth);
+    hand.rotation.y = -dialAngle(S.reserve);
+    // trémie : les débris remontent pendant le remontage ; au nouveau cycle la
+    // vanne s'ouvre et le réservoir se vide dans la cloche
+    api.collect = ph === 6 ? ss(WIND0, WIND1, pr) : 0;
+    let fill = 0, open = 0;
+    if (ph === 6) fill = api.collect;
+    else if (ph === 0 && pour) { fill = 1 - ss(0, pour.dur, pour.t); open = pour.t < pour.dur + 0.5 ? 1 : 0; }
+    heapLevel.value = fill;
+    S.valve += (open - S.valve) * Math.min(1, dtReal * 5);
+    valve.rotation.y = S.valve * Math.PI / 2;
+    root.children.forEach((c) => { if (c.userData.isHeap) c.visible = fill > 0.01; });
+
+    // ── levier d'arrêt
+    const held = !running || (ph === 6 && pr > WIND0 - 0.05);
+    if (life.cycle !== S.cycle) {
+      if (S.cycle >= 0 && api.onClack) api.onClack();
+      S.cycle = life.cycle;
+    }
+    S.stop += ((held ? 1 : 0) - S.stop) * Math.min(1, dtReal * (held ? 4 : 14));
+    stop.rotation.y = stop.userData.off + (stop.userData.on - stop.userData.off) * S.stop;
+
+    // ── rouage : l'arbre de renvoi tourne avec le temps simulé ; la roue
+    //    d'échappement avance par à-coups et tout le rouage la suit, dents
+    //    dans les creux (rapports exacts : 10/22, 22/8, 10/8)
+    const dLay = dtSim * OMEGA_L;
+    S.lay += dLay;
+    const R_ESC = (10 / 22) * (22 / 8) * (10 / 8);
+    S.escCont += dLay * R_ESC;
+    S.ph = S.escCont * 15; // une oscillation du balancier par dent d'échappement
+    const rate = dtReal > 0 ? (dLay * R_ESC * 15) / dtReal / (Math.PI * 2) : 0; // Hz
+    const half = Math.floor(S.ph / Math.PI), fr = Math.min(1, (S.ph / Math.PI - half) * 5);
+    const escRot = ((half + fr * fr * (3 - 2 * fr)) * Math.PI) / 15; // sens : renvoi + → échappement −  (rotation.y = −angle)
+    escape.rotation.y = escRot; escPin.rotation.y = escRot;
+    const cRot = meshAngle(escRot, 8, 10, angTo(eW, cW));
+    centerWheel.rotation.y = cRot; centerPin.rotation.y = cRot;
+    const bRot = meshAngle(cRot, 8, 22, angTo(cW, bW));
+    barrelGear.rotation.y = bRot; barrel.rotation.y = bRot;
+    layPin.rotation.y = meshAngle(bRot, 22, 10, angTo(bW, layP));
+    // balancier : amplitude réduite quand il bat très vite ou que le ressort
+    // faiblit ; immobilisé par le levier d'arrêt
+    const ampT = held ? 0 : Math.min(1, 0.35 + S.reserve * 4) / (1 + Math.max(0, rate - 5) / 5);
+    S.amp += (ampT - S.amp) * Math.min(1, dtReal * (held ? 6 : 2));
+    const bAng = Math.sin(S.ph) * 2.5 * S.amp;
+    balance.rotation.y = bAng;
     const hair = balance.userData.hair;
-    hair.scale.setScalar(1 + 0.04 * Math.sin(ph) * amp);
-    hair.rotation.y = -ang * 0.85;
-    // échappement : la roue avance d'une dent à chaque alternance
-    const half = Math.floor(ph / Math.PI);
-    if (half !== escPrev && amp > 0.2) escStep++;
-    escPrev = half;
-    const e = Math.min(1, (ph / Math.PI - half) * 6);
-    escape.rotation.y = -((escStep - 1 + e * e * (3 - 2 * e)) * (Math.PI * 2)) / 15;
+    hair.scale.set(1 + 0.05 * Math.sin(S.ph) * S.amp, 1, 1 + 0.05 * Math.sin(S.ph) * S.amp);
+    hair.rotation.y = -bAng * 0.85;
+    anchor.rotation.y = anchor.userData.base + 0.12 * Math.tanh(Math.sin(S.ph) * 5) * Math.min(1, S.amp * 3);
 
-    // lames du peigne : vibration amortie
+    // ── peigne : relevé si l'étoile enfle ; curseur de la ligne des glaces
+    const starR = life.p.starVisR || 0.06;
+    const liftT = Math.atan(Math.max(0, starR + 0.25 - (TOOTH_TIP_Y - 0.02)) / (LIMB_RM - R_IN));
+    S.lift += (liftT - S.lift) * Math.min(1, dtReal * 1.5);
+    comb.rotation.z = -S.lift;
+    const sx = Math.min(R_OUT, Math.max(R_IN, life.p.snow || 2.7)) - LIMB_RM;
+    snowSlider.position.x += (sx - snowSlider.position.x) * Math.min(1, dtReal * 2);
+    // lames : vibration amortie après le passage d'une pointe
     for (const t of teeth) {
-      if (t.amp < 1e-3) { if (t.mesh.rotation.x) t.mesh.rotation.x = 0; continue; }
+      if (t.amp < 1e-3) { if (t.amp !== 0) { t.amp = 0; t.g.quaternion.copy(t.q0); } continue; }
       t.t += dtReal;
       t.amp *= Math.exp(-dtReal * 3.2);
-      t.mesh.rotation.x = Math.sin(t.t * t.f * Math.PI * 2 / 6) * 0.25 * t.amp;
+      // la pointe soulève d'abord la lame, puis elle vibre
+      const bend = (t.t < 0.06 ? t.t / 0.06 : Math.cos((t.t - 0.06) * t.f * Math.PI * 2 / 6)) * 0.12 * t.amp;
+      t.g.quaternion.copy(t.q0).multiply(_qb.setFromAxisAngle(zAxis, bend));
     }
   }
 
-  // une planète croise la tête : elle pince la lame de son rayon
+  // une planète croise la tête : sa pointe soulève la lame de son rayon
   function pluck(a, strength = 1) {
     let best = null, bd = 1e9;
     for (const t of teeth) { const d = Math.abs(t.r - a); if (d < bd) { bd = d; best = t; } }
@@ -486,8 +956,9 @@ export function createOrrery(scene, renderer) {
 
   // éclairage de la machine par l'étoile (couleur et luminosité du cycle de vie)
   function setStar(color, lightK, shell = 0) {
-    starLight.color.setRGB(color[0], color[1], color[2]);
-    starLight.intensity = 1.6 * Math.min(2.0, lightK) + 12 * shell;
+    // (couleur de l'étoile adoucie vers le blanc : le laiton reste du laiton)
+    starLight.color.setRGB(0.5 + 0.5 * color[0], 0.5 + 0.5 * color[1], 0.5 + 0.5 * color[2]);
+    starLight.intensity = 1.4 * Math.min(2.0, lightK) + 10 * shell;
   }
 
   function setVisible(v) {
@@ -495,5 +966,5 @@ export function createOrrery(scene, renderer) {
     scene.environment = v ? env : null;
   }
 
-  return { root, update, pluck, setStar, setVisible };
+  return Object.assign(api, { update, pluck, setStar, setVisible });
 }
