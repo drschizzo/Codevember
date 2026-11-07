@@ -10,7 +10,12 @@
 //   plain, brushed (brossé circulaire, anisotrope), hammered (martelé),
 //   glaze (émail : peau d'orange + craquelure), weave (sergé de carbone),
 //   rock (basalte), glitter (druse scintillante), nacre, oxide (titane
-//   coloré au feu), velvet (velours), agate (bandes), patina (vert-de-gris)
+//   coloré au feu), velvet (velours), agate (bandes), patina (vert-de-gris),
+//   guilloche (grain d'orge sous émail), damascus (acier damassé), marble
+//   (marbre veiné), urushi (laque saupoudrée d'or), soap (film de savon)
+
+export const PATTERNS = ['plain', 'brushed', 'hammered', 'glaze', 'weave', 'rock', 'glitter', 'nacre', 'oxide', 'velvet', 'agate', 'patina',
+  'guilloche', 'damascus', 'marble', 'urushi', 'soap'];
 
 export const FINISH_DEFAULTS = {
   pattern: 'plain', color: '#888888', color2: '#444444', metal: 0, rough: 0.5,
@@ -59,6 +64,18 @@ export const FINISHES = {
   agate: F({ label: 'Agate', pattern: 'agate', color: '#e2d7cc', color2: '#5d4b70', rough: 0.12, clearcoat: 0.6, ccRough: 0.03, scale: 1 }),
   smokedGlass: F({ label: 'Verre fumé', pattern: 'plain', color: '#ffffff', color2: '#b7a796', rough: 0.02, glass: 1, ior: 1.5, dispersion: 0.25, attDist: 0.9, smudge: 0.2 }),
   frostedGlass: F({ label: 'Verre dépoli', pattern: 'plain', color: '#ffffff', color2: '#9aa6b0', rough: 0.42, glass: 1, ior: 1.5, attDist: 0.6 }),
+  // métiers d'art
+  guillocheEnamel: F({ label: 'Émail grand feu guilloché', pattern: 'guilloche', color: '#1d3f96', rough: 0.3, clearcoat: 1, ccRough: 0.015, bump: 0.7, scale: 1 }),
+  guillocheRuby: F({ label: 'Émail rubis guilloché', pattern: 'guilloche', color: '#8e1020', rough: 0.3, clearcoat: 1, ccRough: 0.015, bump: 0.7, scale: 1.3 }),
+  guillocheSilver: F({ label: 'Argent guilloché', pattern: 'guilloche', color: METAL.silver, metal: 1, rough: 0.16, bump: 0.55, scale: 0.8 }),
+  damascus: F({ label: 'Acier damassé', pattern: 'damascus', color: '#c9cbd0', color2: '#4d5056', metal: 1, rough: 0.28, bump: 0.3, scale: 1 }),
+  marble: F({ label: 'Marbre de Carrare', pattern: 'marble', color: '#eeeae4', color2: '#7a7670', rough: 0.14, clearcoat: 0.8, ccRough: 0.02, scale: 1 }),
+  marbleNoir: F({ label: 'Marbre Nero Marquina', pattern: 'marble', color: '#121214', color2: '#d8cfc0', rough: 0.12, clearcoat: 0.9, ccRough: 0.015, scale: 1.2 }),
+  urushi: F({ label: 'Laque urushi et or', pattern: 'urushi', color: '#090807', color2: METAL.gold, rough: 0.32, clearcoat: 1, ccRough: 0.012, bump: 1, scale: 1 }),
+  urushiRed: F({ label: 'Laque vermillon', pattern: 'urushi', color: '#6a0c0a', color2: METAL.gold, rough: 0.34, clearcoat: 1, ccRough: 0.015, bump: 1, scale: 0.7 }),
+  blackCeramic: F({ label: 'Céramique noire', pattern: 'plain', color: '#0d0d0f', rough: 0.1, clearcoat: 1, ccRough: 0.01, smudge: 0.25 }),
+  whiteCeramic: F({ label: 'Céramique blanche', pattern: 'plain', color: '#f1f0ec', rough: 0.2, clearcoat: 1, ccRough: 0.015 }),
+  soapFilm: F({ label: 'Film de savon', pattern: 'soap', color: '#09090b', rough: 0.04, clearcoat: 0.6, ccRough: 0.01, irid: 1, iridIOR: 1.33, iridMin: 120, iridMax: 900, scale: 1 }),
   amberGlass: F({ label: 'Verre ambré', pattern: 'plain', color: '#ffffff', color2: '#d17a1e', rough: 0.03, glass: 1, ior: 1.52, dispersion: 0.3, attDist: 0.25 }),
 };
 
@@ -82,6 +99,16 @@ export const SETS = {
   obsidian: { label: 'Obsidienne', outer: 'obsidian', inner: 'basalt', edge: 'obsidian', wear: 0, chamfer: true, moods: ['nuit', 'luxe'] },
   chrome: { label: 'Chrome', outer: 'chrome', inner: 'brushedSteel', edge: 'chrome', wear: 0, chamfer: false, moods: ['studio'] },
   blackSteel: { label: 'Acier noirci', outer: 'blackenedSteel', inner: 'velvetNight', edge: 'brushedSteel', wear: 0.12, chamfer: true, moods: ['nuit', 'luxe'] },
+  guilloche: { label: 'Émail guilloché', outer: 'guillocheEnamel', inner: 'polishedGold', edge: 'polishedGold', wear: 0, chamfer: false, moods: ['luxe', 'atelier', 'sacré'] },
+  guillocheRuby: { label: 'Émail rubis', outer: 'guillocheRuby', inner: 'hammeredGold', edge: 'polishedGold', wear: 0, chamfer: false, moods: ['luxe', 'sacré'] },
+  guillocheSilver: { label: 'Argent guilloché', outer: 'guillocheSilver', inner: 'blackCeramic', edge: 'chrome', wear: 0, chamfer: true, moods: ['studio', 'luxe', 'clinique'] },
+  damascus: { label: 'Damas', outer: 'damascus', inner: 'blackenedSteel', edge: 'brushedSteel', wear: 0.1, chamfer: true, moods: ['nuit', 'atelier', 'abysses'] },
+  marble: { label: 'Marbre & laiton', outer: 'marble', inner: 'polishedBrass', edge: 'polishedBrass', wear: 0, chamfer: true, moods: ['pastel', 'clinique', 'atelier'] },
+  nero: { label: 'Nero Marquina & or', outer: 'marbleNoir', inner: 'polishedGold', edge: 'polishedGold', wear: 0, chamfer: true, moods: ['luxe', 'nuit'] },
+  urushi: { label: 'Urushi', outer: 'urushi', inner: 'urushiRed', edge: 'polishedGold', wear: 0, chamfer: false, moods: ['luxe', 'atelier', 'sacré'] },
+  ceramicBlack: { label: 'Céramique noire', outer: 'blackCeramic', inner: 'brushedSteel', edge: 'diamondCut', wear: 0, chamfer: true, moods: ['studio', 'nuit', 'abysses'] },
+  ceramicWhite: { label: 'Céramique blanche', outer: 'whiteCeramic', inner: 'porcelain', edge: 'chrome', wear: 0, chamfer: true, moods: ['clinique', 'pastel', 'studio'] },
+  soap: { label: 'Bulle', outer: 'soapFilm', inner: 'soapFilm', edge: 'chrome', wear: 0, chamfer: false, moods: ['irisé', 'nuit', 'abysses'] },
   bronze: { label: 'Bronze & cuivre', outer: 'bronzeDark', inner: 'polishedCopper', edge: 'polishedBrass', wear: 0.3, chamfer: false, moods: ['atelier'] },
 };
 

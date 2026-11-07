@@ -24,7 +24,7 @@ import * as THREE from 'three/webgpu';
 import {
   Fn, If, struct, uniform, attribute, positionLocal, normalLocal, positionWorld, positionView, normalView, vec2, vec3, vec4,
   float, mat3, mix, smoothstep, clamp, abs, length, normalize, dot, cross, sin, floor, fract, mod, step, acos, sign,
-  dFdx, dFdy, fwidth, faceDirection, mrt, normalViewGeometry, positionGeometry, velocity, transformNormalToView, cos, max as tmax, texture3D, mx_cell_noise_vec3, modelViewMatrix, modelScale, cameraPosition,
+  dFdx, dFdy, fwidth, faceDirection, mrt, normalViewGeometry, positionGeometry, atan, velocity, transformNormalToView, cos, max as tmax, texture3D, mx_cell_noise_vec3, modelViewMatrix, modelScale, cameraPosition,
 } from 'three/tsl';
 import { FINISH_KEYS } from '../finishes.js';
 import { NOISE_PERIOD } from '../gen/noisevol.js';
@@ -230,6 +230,60 @@ function surface(fin, U, p, pf) {
       out.h = n.mul(0.5).add(0.5).add(crust.mul(0.2).mul(aa(60)));
       break;
     }
+    case 'guilloche': { // guilloché « grain d'orge » tourné autour de l'axe z, sous émail
+      // deux familles de sillons ondulés qui se croisent ; l'émail (vernis plat)
+      // est plus profond, donc plus sombre et plus saturé, au creux des sillons
+      const th = acos(clamp(p.z.div(length(p)), -1, 1));
+      const ph = atan(p.y, p.x);
+      const F = S.mul(240);
+      const w = sin(ph.mul(18)).mul(0.9).mul(smoothstep(0.05, 0.35, sin(th)));
+      const g = tmax(cos(th.mul(F).add(w)), cos(th.mul(F).sub(w))).mul(0.5).add(0.5);
+      const k = aa(240 / PI);
+      out.h = g.mul(k);
+      out.color = mix(U.color.mul(mix(float(1), float(0.5), k)), U.color, g.mul(k).add(k.oneMinus().mul(0.75)));
+      out.rough = U.rough.add(g.oneMinus().mul(0.08).mul(k));
+      break;
+    }
+    case 'damascus': { // acier damassé : couches repliées, deux tons, relief léger
+      const n = fbm(p.mul(S.mul(2.5)), 3);
+      const s = sin(dot(p, vec3(0.36, 0.48, 0.8)).add(n.mul(0.35)).mul(S.mul(90)));
+      const band = smoothstep(-0.35, 0.35, s).mul(aa(90 / (2 * PI))).add(aa(90 / (2 * PI)).oneMinus().mul(0.5));
+      out.color = mix(U.color2, U.color, band);
+      out.h = band.mul(0.4);
+      out.rough = mix(U.rough.add(0.12), U.rough, band);
+      break;
+    }
+    case 'marble': { // marbre : nuages, grandes veines et veinules
+      const n = fbm(p.mul(S.mul(2.2)), 4);
+      const v1 = abs(sin(p.x.add(p.y.mul(0.6)).mul(S.mul(9)).add(n.mul(7))));
+      const v2 = abs(sin(p.y.sub(p.z.mul(0.7)).mul(S.mul(23)).add(n.mul(11))));
+      const vein = smoothstep(0.1, 0, v1).mul(0.85).add(smoothstep(0.05, 0, v2).mul(0.4).mul(aa(23)));
+      const cloud = noise2(p.mul(S.mul(4))).mul(0.5).add(0.5);
+      out.color = mix(mix(U.color, U.color.mul(0.88), cloud.mul(0.5)), U.color2, vein.min(1));
+      out.rough = U.rough.add(vein.mul(0.04));
+      break;
+    }
+    case 'urushi': { // laque urushi saupoudrée d'or (maki-e) : paillettes en nuées
+      const q = p.mul(S.mul(140));
+      const cell = mx_cell_noise_vec3(floor(q));
+      const density = smoothstep(-0.15, 0.45, fbm(p.mul(S.mul(2.5)), 3));
+      // (paillette ronde, de taille et de place propres à la cellule)
+      const off = fract(q).sub(0.5).sub(cell.yzx.sub(0.5).mul(0.4));
+      const rad = cell.z.mul(0.2).add(0.18);
+      const flake = step(float(1).sub(density.mul(0.4)), cell.x).mul(smoothstep(rad, rad.mul(0.7), length(off))).mul(aa(140));
+      out.color = mix(U.color, U.color2, flake);
+      out.metal = flake;
+      out.rough = mix(U.rough, float(0.22), flake);
+      out.glitter = cell.sub(0.5).mul(0.9).mul(flake);
+      out.h = noise2(p.mul(S.mul(110))).mul(0.12).mul(aa(110));
+      break;
+    }
+    case 'soap': { // film de savon : l'épaisseur coule lentement (boucle parfaite)
+      const ph = G.phase.mul(2 * PI);
+      const n = fbm(p.mul(S.mul(1.6)).add(vec3(sin(ph), cos(ph), 0).mul(0.6)), 3);
+      out.iridT = mix(U.iridMin, U.iridMax, sin(p.z.mul(S.mul(4)).add(n.mul(3)).add(ph)).mul(0.5).add(0.5));
+      break;
+    }
     default: break;
   }
   out.h = out.h.mul(U.bump);
@@ -336,7 +390,7 @@ export function buildShellMaterial(finish, U, { tpms = null, rig = null, pore = 
   const F = {
     cc: any((f) => f.clearcoat > 0), ccN: fins.some((f) => f.pattern === 'glaze'), sheen: any((f) => f.sheen > 0),
     irid: any((f) => f.irid > 0), aniso: any((f) => f.aniso > 0), glass: any((f) => f.glass > 0),
-    disp: any((f) => f.glass > 0 && f.dispersion > 0), glit: fins.some((f) => f.pattern === 'glitter'),
+    disp: any((f) => f.glass > 0 && f.dispersion > 0), glit: fins.some((f) => f.pattern === 'glitter' || f.pattern === 'urushi'),
     smudge: any((f) => f.smudge > 0), wear: finish.wear > 0, groove: (finish.groove || 0) > 0, seam: (finish.seam || 0) > 0,
   };
 
