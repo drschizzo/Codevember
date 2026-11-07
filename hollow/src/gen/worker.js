@@ -14,7 +14,7 @@ function prepare(spec) {
   return prepareCells(cells, spec, noise, rng);
 }
 
-// Format compact des sommets (28 octets au lieu de 44) : normale en snorm16,
+// Format compact des sommets (28 octets au lieu de 44) : normale (et normale de tranche) en snorm16,
 // tangente en snorm8, indices sur 16 bits quand le maillage le permet.
 function pack(o) {
   const n = o.normal.length / 3;
@@ -22,7 +22,12 @@ function pack(o) {
   for (let i = 0; i < n * 3; i++) nor[i] = Math.round(Math.max(-1, Math.min(1, o.normal[i])) * 32767);
   for (let i = 0; i < n * 4; i++) tan[i] = Math.round(Math.max(-1, Math.min(1, o.tangent[i])) * 127);
   const index = n < 65536 ? Uint16Array.from(o.index) : o.index;
-  return { ...o, normal: nor, tangent: tan, index };
+  const out = { ...o, normal: nor, tangent: tan, index };
+  if (o.bev) { // (normale de tranche et angle du profil : snorm16)
+    out.bev = new Int16Array(n * 4);
+    for (let i = 0; i < n * 4; i++) out.bev[i] = Math.round(Math.max(-1, Math.min(1, o.bev[i])) * 32767);
+  }
+  return out;
 }
 
 function build({ spec, lod, what }) {
