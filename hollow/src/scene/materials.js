@@ -24,7 +24,7 @@ import * as THREE from 'three/webgpu';
 import {
   Fn, If, struct, uniform, attribute, positionLocal, normalLocal, positionWorld, positionView, normalView, vec2, vec3, vec4,
   float, mat3, mix, smoothstep, clamp, abs, length, normalize, dot, cross, sin, floor, fract, mod, step, acos, sign,
-  dFdx, dFdy, fwidth, faceDirection, mrt, velocity, transformNormalToView, cos, max as tmax, texture3D, mx_cell_noise_vec3, modelViewMatrix, modelScale, cameraPosition,
+  dFdx, dFdy, fwidth, faceDirection, mrt, normalViewGeometry, velocity, transformNormalToView, cos, max as tmax, texture3D, mx_cell_noise_vec3, modelViewMatrix, modelScale, cameraPosition,
 } from 'three/tsl';
 import { FINISH_KEYS } from '../finishes.js';
 import { NOISE_PERIOD } from '../gen/noisevol.js';
@@ -287,6 +287,28 @@ function tpmsNormal(spec, T) {
   return vec3(gx, gy, gz);
 }
 
+// ── Normale de la tranche (coquilles percées) ────────────────────────────────
+// Le maillage porte, sur la tranche, la normale horizontale du bord du trou et
+// l'angle du profil (attribut `bev`, voir gen/shell.js) : la normale
+// cos(a)·horizontale + sin(a)·radiale est recalculée à chaque pixel. Le biseau
+// reste parfaitement rond quel que soit son nombre de segments, et la diagonale
+// des quadrilatères ne se lit plus dans les reflets. Ailleurs (faces, rivets :
+// attribut nul), la normale du maillage.
+function bevelNormal() {
+  const bev = attribute('bev', 'vec4');
+  const r = normalize(positionLocal);
+  // (sans branche ni division par zéro : un `select` TSL devient un if/else,
+  // et la normale géométrique — variable partagée — n'y serait assignée que
+  // d'un côté ; un NaN, lui, se propagerait par les dérivées écran)
+  const on = step(0.5, length(bev.xyz));
+  const h = mix(vec3(1, 0, 0), bev.xyz, on);
+  const w0 = h.sub(r.mul(dot(h, r)));
+  const w = w0.div(length(w0).max(1e-5));
+  const a = bev.w.mul(PI / 2);
+  const n = modelViewMatrix.mul(vec4(w.mul(cos(a)).add(r.mul(sin(a))), 0)).xyz;
+  return normalize(mix(normalViewGeometry, n.div(length(n).max(1e-6)), on));
+}
+
 // ── Matériau d'une couche ────────────────────────────────────────────────────
 // tpms : { spec, U } pour une surface minimale (normale analytique)
 export function buildShellMaterial(finish, U, tpms = null) {
@@ -382,7 +404,7 @@ export function buildShellMaterial(finish, U, tpms = null) {
   // le relief s'annule à la frontière entre deux finitions (poids mêlés) : sans
   // cela, le saut de hauteur d'une finition à l'autre dessine un liseré dentelé
   const purity = smoothstep(0.55, 0.85, surfA.x.max(surfA.y).max(surfA.z));
-  const N0 = tpms ? transformNormalToView(tpmsNormal(tpms.spec, tpms.U)) : normalView;
+  const N0 = tpms ? transformNormalToView(tpmsNormal(tpms.spec, tpms.U)) : bevelNormal();
   let N = perturb(get('h').mul(purity).mul(0.0035).mul(world).mul(G.microDetail), N0);
   // (sans normalisation : la plupart des faces n'ont pas de facettes, vecteur nul)
   if (F.glit) N = normalize(N.add(modelViewMatrix.mul(vec4(get('glitter'), 0)).xyz.div(world).mul(0.22).mul(G.microDetail)));
@@ -398,7 +420,7 @@ export function buildShellMaterial(finish, U, tpms = null) {
     m.clearcoatNode = get('cc');
     m.clearcoatRoughnessNode = aaRough(soft(get('ccRough'), G.roughFloor.mul(0.7)));
     if (F.ccN) m.clearcoatNormalNode = perturb(get('ccH').mul(purity).mul(0.0008).mul(world), N0);
-    else if (tpms) m.clearcoatNormalNode = N0;
+    else m.clearcoatNormalNode = N0; // (le vernis suit aussi la normale par pixel)
   }
   if (F.sheen) { m.sheenNode = get('sheen'); m.sheenRoughnessNode = get('sheenRough'); }
   if (F.irid) {
