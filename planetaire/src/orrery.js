@@ -28,7 +28,7 @@
 import * as THREE from 'three/webgpu';
 import {
   vec3, vec4, mix, positionLocal, mx_noise_float, float, mrt, normalWorld, positionWorld, cameraPosition,
-  normalize, dot, abs, pow, max, min, reflect, uniform, smoothstep, time,
+  normalize, dot, abs, pow, max, min, reflect, uniform, smoothstep, time, bumpMap, length, sin, cubeTexture, reflectVector, uv,
 } from 'three/tsl';
 import { R_IN, R_OUT } from './sim.js';
 
@@ -63,8 +63,19 @@ const pitchR = (n) => (n * MODULE) / 2;
 // (Éclairage « cinéma » : le laiton est un VRAI métal. Il n'a presque pas de
 //  diffus : il lit ses reflets — les softbox de l'environnement, la lampe,
 //  l'étoile. C'est ce qui le rend précieux au lieu d'un jaune plat.)
+// Détail de surface (relief procédural, sans texture) : chaque pièce tournée
+// porte les sillons concentriques de l'outil (autour de son axe local), plus
+// de fines rayures ; un vernis (clearcoat) pose un second reflet, net, sur le
+// métal satiné — le laiton d'horlogerie.
+const machined = (period = 0.016) => {
+  const rl = length(positionLocal.xz);
+  const rings = sin(rl.mul(6.2832 / period)).mul(0.5).add(0.5);
+  const scratch = mx_noise_float(positionWorld.mul(vec3(3, 90, 3))).mul(0.5).add(0.5);
+  return rings.mul(0.7).add(scratch.mul(0.3));
+};
 function brass(tone = [0.86, 0.6, 0.26], rough = 0.44) {
-  const m = new THREE.MeshStandardNodeMaterial({ metalness: 0.95, roughness: rough });
+  const m = new THREE.MeshPhysicalNodeMaterial({ metalness: 0.95, roughness: rough, clearcoat: 0.45, clearcoatRoughness: 0.12 });
+  m.normalNode = bumpMap(machined(), 0.25);
   const p = positionWorld;
   // laiton brossé (stries) et patine irrégulière ; coordonnées monde, pour
   // que les pièces instanciées ou mises à l'échelle gardent le même grain
@@ -75,8 +86,15 @@ function brass(tone = [0.86, 0.6, 0.26], rough = 0.44) {
   m.metalnessNode = float(0.97).sub(patina.pow(3.0).mul(0.25)); // patine : oxyde, un peu diélectrique
   return m;
 }
-const steel = () => new THREE.MeshStandardNodeMaterial({ color: 0x737880, metalness: 1.0, roughness: 0.45 }); // (poli très fin, il renvoyait la lampe et l'étoile en éclats aveuglants)
-const blued = () => new THREE.MeshStandardNodeMaterial({ color: 0x24408f, metalness: 0.9, roughness: 0.36 }); // acier bleui
+const steel = () => { // acier brossé (poli très fin, il renvoyait la lampe et l'étoile en éclats aveuglants)
+  const m = new THREE.MeshPhysicalNodeMaterial({ color: 0x737880, metalness: 1.0, roughness: 0.42 });
+  m.normalNode = bumpMap(mx_noise_float(positionLocal.mul(vec3(4, 600, 4))).mul(0.5).add(0.5), 0.12);
+  return m;
+};
+// acier bleui au feu : la couche d'oxyde produit des interférences (irisation
+// bleu → pourpre selon l'angle), comme les vis et aiguilles d'horlogerie
+const blued = () => new THREE.MeshPhysicalNodeMaterial({ color: 0x1d3478, metalness: 0.9, roughness: 0.3,
+  iridescence: 0.85, iridescenceIOR: 1.7, iridescenceThicknessRange: [260, 420], clearcoat: 0.3, clearcoatRoughness: 0.1 });
 const ruby = () => new THREE.MeshStandardNodeMaterial({ color: 0x9a1028, roughness: 0.16, metalness: 0.1, emissive: 0x2a0208 }); // (plus poli, chaque rubis scintillait en éclat blanc)
 const dark = () => new THREE.MeshStandardNodeMaterial({ color: 0x0c0a08, roughness: 0.7, metalness: 0.2 });
 
@@ -365,14 +383,16 @@ class ArchCurve extends THREE.Curve {
 }
 
 // verre : presque invisible, liseré au bord et reflets des deux lumières
+const glassK = uniform(1); // reflets sur le verre (atténués par le tournage)
 function glassMaterial(k = 1) {
   const gm = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
   const V = normalize(cameraPosition.sub(positionWorld)), N = normalize(normalWorld);
   const fres = pow(float(1).sub(abs(dot(N, V))), 4.0);
   const spec = pow(max(dot(reflect(V.negate(), N), normalize(vec3(-5.5, 16, 6.5))), 0), 120.0);
   const spec2 = pow(max(dot(reflect(V.negate(), N), normalize(vec3(6, 10, -11))), 0), 40.0);
-  gm.colorNode = vec4(vec3(1.0, 0.96, 0.9).mul(fres.mul(0.06).add(spec.mul(0.3)).add(spec2.mul(0.08)).mul(k)), 1);
+  gm.colorNode = vec4(vec3(1.0, 0.96, 0.9).mul(fres.mul(0.06).add(spec.mul(0.14).add(spec2.mul(0.06)).mul(glassK)).mul(k)), 1);
   gm.mrtNode = mrt({ velocity: vec4(0) }); // (le verre ne brouille pas le flou de mouvement)
+  gm.userData.glass = k;
   return gm;
 }
 
@@ -493,8 +513,10 @@ export function createOrrery(scene, renderer) {
     const floor = add(new THREE.CircleGeometry(40, 96), fm, 0, Y_BASE - 1.252, 0);
     floor.rotation.x = -Math.PI / 2;
     floor.userData.noCast = true;
+    floor.userData.noAssemble = true;
   }
 
+  const beamK = uniform(1);
   // ── Faisceau de la lampe : une poussière d'atelier en suspension rend le
   //    cône visible (lumière volumétrique simulée, très discrète) ─────────
   {
@@ -505,9 +527,10 @@ export function createOrrery(scene, renderer) {
     const edge = abs(dot(Nn, Vd)).pow(1.6);                  // plus dense au cœur du cône qu'au bord
     const along = positionLocal.y.div(len).add(0.5);         // 0 en bas, 1 à la lampe
     const motes = mx_noise_float(positionWorld.mul(1.3).add(vec3(0, time.mul(0.05), 0))).mul(0.35).add(0.75);
-    bm.colorNode = vec4(vec3(1.0, 0.86, 0.66).mul(edge).mul(smoothstep(0.0, 0.3, along)).mul(smoothstep(0.75, 0.45, along)).mul(motes).mul(0.012), 1);
+    bm.colorNode = vec4(vec3(1.0, 0.86, 0.66).mul(edge).mul(smoothstep(0.0, 0.3, along)).mul(smoothstep(0.75, 0.45, along)).mul(motes).mul(0.012).mul(beamK), 1);
     bm.mrtNode = mrt({ velocity: vec4(0) });
     const beam = add(new THREE.ConeGeometry(rad, len, 64, 1, true), bm);
+    beam.userData.noAssemble = true;
     beam.position.copy(top).add(bot).multiplyScalar(0.5);
     beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), bot.clone().sub(top).normalize());
     beam.renderOrder = 12;
@@ -567,6 +590,7 @@ export function createOrrery(scene, renderer) {
 
   // ── Trémie : réservoir de grains, entonnoir, vanne ─────────────────────
   const heapLevel = uniform(0);
+  const heapGlow = uniform(1); // (luminosité de la poussière d'étoile dans la trémie)
   const valve = new THREE.Group();
   {
     const Gc = DOME_H + 0.78, GR = 0.55;
@@ -577,7 +601,9 @@ export function createOrrery(scene, renderer) {
     const sp = positionLocal;
     const sparkle = mx_noise_float(sp.mul(90.0)).mul(0.5).add(0.5);
     sm.colorNode = mix(vec3(0.32, 0.22, 0.16), vec3(0.85, 0.62, 0.42), sparkle.pow(3.0));
-    sm.emissiveNode = vec3(0.9, 0.5, 0.3).mul(sparkle.pow(8.0)).mul(0.6);
+    // poussière d'étoile (les débris du cycle précédent) : elle luit et scintille
+    const twinkle = mx_noise_float(sp.mul(60.0).add(vec3(0, time.mul(0.4), 0))).mul(0.5).add(0.5);
+    sm.emissiveNode = mix(vec3(1.0, 0.45, 0.18), vec3(1.0, 0.85, 0.6), sparkle).mul(sparkle.pow(5.0).mul(4.0).add(0.35)).mul(twinkle.mul(0.6).add(0.6)).mul(heapGlow);
     sm.positionNode = vec3(sp.x, min(sp.y, heapLevel.mul(2 * (GR - 0.03)).sub(GR - 0.03)), sp.z);
     const heap = add(new THREE.SphereGeometry(GR - 0.03, 40, 24), sm, 0, Gc, 0);
     heap.userData.isHeap = true;
@@ -1480,12 +1506,13 @@ export function createOrrery(scene, renderer) {
   }
 
   // éclairage de la machine par l'étoile (couleur et luminosité du cycle de vie)
+  let starLightK = 1;
   function setStar(color, lightK, shell = 0) {
     // (couleur de l'étoile adoucie vers le blanc : le laiton reste du laiton)
     // (couleur saturée aux deux tiers : la géante baigne la machine de rouge,
     //  mais le laiton reste lisible)
     starLight.color.setRGB(0.3 + 0.7 * color[0], 0.3 + 0.7 * color[1], 0.3 + 0.7 * color[2]);
-    starLight.intensity = 4.5 * Math.min(1.6, lightK) + 70 * shell;
+    starLight.intensity = (4.5 * Math.min(1.6, lightK) + 70 * shell) * starLightK;
   }
 
   function setVisible(v) {
@@ -1501,5 +1528,129 @@ export function createOrrery(scene, renderer) {
     o.receiveShadow = !glass;
   });
 
-  return Object.assign(api, { update, pluck, setStar, setVisible });
+  // ── Tournage : assemblage de la machine et variateur des lumières ───────
+  //  Comme un horloger : chaque pièce (enfant direct de la machine) DESCEND à
+  //  la verticale jusqu'à sa place, de bas en haut. Une pièce ne traverse
+  //  ainsi que l'espace encore vide au-dessus d'elle (les roues s'enfilent sur
+  //  leurs arbres, les ponts se posent sur leurs piliers) ; la descente est
+  //  longue, l'atterrissage ralenti. Le décalage est posé juste avant le rendu
+  //  et retiré juste après : les pièces animées par update() s'assemblent aussi.
+  let parts = null;
+  function prepAssembly() {
+    parts = [];
+    const box = new THREE.Box3();
+    for (const o of root.children) {
+      if (o.isLight || o.userData.noAssemble || o === lamp.target || o === lamp2.target) continue;
+      box.setFromObject(o);
+      if (box.isEmpty()) continue;
+      const glass = (o.material && o.material.blending === THREE.AdditiveBlending) || !!o.userData.isHeap; // (le tas arrive avec son globe)
+      parts.push({ o, y0: box.min.y, y1: box.max.y, r: Math.hypot((box.min.x + box.max.x) / 2, (box.min.z + box.max.z) / 2), glass });
+    }
+    // de bas en haut ; à hauteur égale, du centre vers le bord
+    parts.sort((a, b) => (a.glass - b.glass) || (a.y0 - b.y0) || (a.r - b.r));
+    const solid = parts.filter((p) => !p.glass), n = solid.length;
+    solid.forEach((p, i) => {
+      // départ réparti sur 0 → 0,72, par paquets : les pièces d'un même étage se posent ensemble
+      p.t0 = 0.72 * Math.pow(i / Math.max(1, n - 1), 1.1);
+      p.d = 0.16;
+      p.h = 7 + 1.2 * (p.y1 - p.y0);             // (assez haut pour entrer par le haut du cadre)
+    });
+    for (const p of parts) if (p.glass) { p.t0 = 0.76; p.d = 0.22; p.h = 13; } // la cloche, en dernier
+  }
+  const smoother = (u) => u * u * u * (u * (u * 6 - 15) + 10); // départ et atterrissage en douceur
+  const saved = [];
+  function assemblyApply(k) {
+    if (!parts) prepAssembly();
+    saved.length = 0;
+    if (k >= 1) return;
+    for (const p of parts) {
+      const u = Math.min(1, Math.max(0, (k - p.t0) / p.d));
+      if (u >= 1) continue;
+      const o = p.o;
+      saved.push([o, o.position.y, o.visible]);
+      if (u <= 0) { o.visible = false; continue; }
+      o.position.y += p.h * (1 - smoother(u));
+    }
+  }
+  function assemblyRestore() {
+    for (const [o, y, vis] of saved) { o.position.y = y; o.visible = vis; }
+    saved.length = 0;
+  }
+  // variateur : 0 = noir complet, 1 = plan lumière normal
+  const base = { lamp: lamp.intensity, lamp2: lamp2.intensity, hemi: hemi.intensity, rim: rim.intensity, rim2: rim2.intensity };
+  let lightLevel = 1;
+  function setLightLevel(k, starK = k) {
+    if (k === lightLevel && starK === starLightK) return;
+    lamp.intensity = base.lamp * k; lamp2.intensity = base.lamp2 * k; hemi.intensity = base.hemi * k;
+    rim.intensity = base.rim * k; rim2.intensity = base.rim2 * k; beamK.value = k;
+    starLight.intensity *= starK / Math.max(1e-4, starLightK); starLightK = starK;
+    if (Math.abs(k - lightLevel) > 1e-3 || k === 0 || k === 1) {
+      root.traverse((o) => { for (const m of o.material ? [].concat(o.material) : []) if (m.isMeshStandardMaterial) m.envMapIntensity = liveOn ? 0.75 : ENV_K * k; }); // (sonde vivante : l'étoile et le disque ne dépendent pas de la lampe)
+    }
+    lightLevel = k;
+  }
+
+  // ── Tournage : reflets réels ────────────────────────────────────────────
+  //  Une caméra cube, au-dessus de la platine, capte à chaque image ce qui
+  //  entoure la machine — le disque de poussière, l'étoile, la cloche, le
+  //  velours, et des panneaux de studio (softbox, bandes) qui n'existent que
+  //  pour les reflets (invisibles à la caméra du film). Le métal et le verre
+  //  reflètent cette image : le laiton reflète enfin le disque qui tourne
+  //  au-dessus de lui. (La machine elle-même n'y figure pas : la sonde est en
+  //  son centre.) Ombres en haute définition.
+  let liveOn = false;
+  function liveEnv(renderer, scene, { size = 384, layer = 2 } = {}) {
+    liveOn = true;
+    const rt = new THREE.CubeRenderTarget(size, { type: THREE.HalfFloatType, generateMipmaps: true });
+    const cam = new THREE.CubeCamera(0.05, 200, rt);
+    cam.position.set(0, -1.6, 0);
+    cam.layers.set(layer);
+    for (const c of cam.children) c.layers.set(layer);
+    scene.add(cam);
+    // tout ce qui n'est pas la machine apparaît dans les reflets
+    scene.traverse((o) => { let m = o, inM = false; while (m) { if (m === root) { inM = true; break; } m = m.parent; } if (!inM) o.layers.enable(layer); });
+    for (const o of root.children) if (o.userData.isHeap) o.layers.enable(layer); // (pas le verre : il lit la sonde, il ne peut pas y être rendu)
+    root.traverse((o) => { if (o.userData.noAssemble) o.layers.enable(layer); }); // (le velours, le faisceau)
+    // pas de vecteurs vitesse au tournage (le flou de mouvement vient des
+    // sous-images) : sans quoi ces matériaux n'ont aucune sortie dans la sonde
+    scene.traverse((o) => { for (const m of o.material ? [].concat(o.material) : []) if (m.mrtNode) m.mrtNode = null; });
+    // panneaux de studio (cartes de réflexion) : seulement dans les reflets
+    const card = (w, h, col, k, pos) => {
+      const m = new THREE.MeshBasicNodeMaterial({ side: THREE.DoubleSide });
+      // (bords très doux : une softbox diffusée, pas un rectangle)
+      const e = uv().sub(0.5).abs().mul(2.0);
+      m.colorNode = vec3(...col).mul(k).mul(beamK.add(0.0001)).mul(smoothstep(1.0, 0.45, e.x).mul(smoothstep(1.0, 0.45, e.y)));
+      const c = new THREE.Mesh(new THREE.PlaneGeometry(w, h), m);
+      c.position.copy(pos); c.lookAt(0, -1.5, 0); c.layers.set(layer);
+      scene.add(c); return c;
+    };
+    card(14, 7, [1.0, 0.88, 0.72], 3.2, lamp.position.clone().multiplyScalar(1.4));   // softbox de la lampe
+    card(1.6, 16, [0.62, 0.78, 1.0], 1.6, new THREE.Vector3(14, 4, -20));            // bande froide, contre-jour
+    card(1.2, 13, [0.7, 0.82, 1.0], 1.0, new THREE.Vector3(-22, 3, -9));             // bande froide, contre-jour
+    card(6, 4, [1.0, 0.86, 0.66], 0.6, new THREE.Vector3(-14, 6, 24));               // fenêtre lointaine
+    // le métal reflète la sonde (PMREM recalculé à chaque image)
+    root.traverse((o) => { for (const m of o.material ? [].concat(o.material) : []) if (m.isMeshStandardMaterial) { m.envMap = rt.texture; m.envMapIntensity = 0.75; m.needsUpdate = true; } });
+    env = rt.texture; // (les pièces ajoutées plus tard aussi : applyEnv)
+    // le verre reflète vraiment la scène (Fresnel)
+    root.traverse((o) => {
+      const m = o.material;
+      if (!o.isMesh || !m || m.blending !== THREE.AdditiveBlending || !m.userData.glass) return;
+      const V = normalize(cameraPosition.sub(positionWorld)), N = normalize(normalWorld);
+      const fres = pow(float(1).sub(abs(dot(N, V))), 5.0).mul(0.96).add(0.04);
+      m.colorNode = vec4(cubeTexture(rt.texture, reflectVector).rgb.mul(fres).mul(m.userData.glass * 0.9).mul(glassK.mul(0.6).add(0.4)), 1);
+      m.needsUpdate = true;
+    });
+    lamp.shadow.mapSize.set(4096, 4096); lamp.shadow.map?.dispose(); lamp.shadow.map = null; lamp.shadow.radius = 4;
+    starLight.shadow.mapSize.set(2048, 2048); starLight.shadow.map?.dispose(); starLight.shadow.map = null;
+    return {
+      update() {
+        const vis = root.visible;
+        cam.update(renderer, scene);
+        rt.texture.needsPMREMUpdate = true;
+        root.visible = vis;
+      },
+    };
+  }
+
+  return Object.assign(api, { update, pluck, setStar, setVisible, assemblyApply, assemblyRestore, setLightLevel, glassK, liveEnv, heapGlow });
 }

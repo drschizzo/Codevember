@@ -9,6 +9,9 @@ import { provenanceRGB, css } from './palette.js';
 
 const $ = (s) => document.querySelector(s);
 const params = new URLSearchParams(location.search);
+// ?film : mode tournage (film.js) — ni interface ni son, rendu image par image
+// à résolution fixe, temps virtuel, caméra et vitesse du temps pilotées.
+const FILM = params.has('film');
 
 async function main() {
   if (!navigator.gpu) return fail('WebGPU n’est pas disponible dans ce navigateur.');
@@ -59,9 +62,11 @@ async function main() {
   // disque retombe au même rayon (r_atterrissage = Ω² R⁴ : Ω = 3 / R²).
   const MECA0 = !params.has('nomeca');
   // Le nuage est en outre versé par la trémie au sommet de la cloche.
+  const BELL_R = 9.85; // rayon intérieur de la cloche (UA)
   const setCloud = (m) => {
     const R = m ? 9.6 : 14; sim.U.cloudR.value = R; sim.U.cloudOmega.value = m ? 3 / (R * R) : 0.0153;
     sim.U.pourOn.value = m ? 1 : 0; sim.U.hopper.value.copy(HOPPER);
+    sim.U.bellR.value = m ? BELL_R : 0; // (la cloche retient le nuage, les débris, les planètes)
   };
   setCloud(MECA0);
   await sim.init();
@@ -71,7 +76,7 @@ async function main() {
   // (touche O pour l'ôter ; ?nomeca pour démarrer sans)
   const orrery = createOrrery(scene, renderer);
   let meca = MECA0;
-  const LENS = !params.has('nolens');
+  const LENS = !params.has('nolens') && !FILM;
   const DOF = params.has('dof'); // profondeur de champ : coupée par défaut
   const PLANET_K = 1.7; // planètes en billes bien visibles sur leurs tiges
   const setMeca = (v) => {
@@ -844,6 +849,7 @@ async function main() {
   $('#enter-silent').addEventListener('click', () => $('#intro').classList.add('gone'));
 
   addEventListener('resize', () => {
+    if (FILM) return; // (résolution fixée par film.js)
     camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(innerWidth, innerHeight);
@@ -880,7 +886,8 @@ async function main() {
     U.clearOn.value = p.clearOn; U.clearR.value = p.clearR; U.clearR2.value = p.clearR2; U.beltLoss.value = p.beltLoss;
     U.starR.value = p.starR; U.outR.value = p.outR; U.snA.value = p.snA; U.snHeat.value = p.snHeat; U.snR.value = p.snR; U.snW.value = p.snW;
     U.snow.value = p.snow;
-    vis.setStar(p);
+    // la nébuleuse de la supernova reste prisonnière de la cloche
+    vis.setStar(meca && p.shellR > BELL_R * 0.7 ? { ...p, shellR: BELL_R * 0.7 } : p); // (sa coquille est bosselée : marge)
     // versement du nuage : horloge de la phase « nuage » (au-delà, tout est lâché)
     sim.U.pourT.value = life.phase === 0 ? life.t : 1e9;
     orrery.setStar(p.color, Math.pow(Math.max(p.L, 1e-3), 0.35), p.shell);
@@ -1013,14 +1020,15 @@ async function main() {
   // La simulation attend qu'on entre : tant que l'accueil est affiché, rien ne
   // tourne (ni calcul, ni rendu) — le cycle commence au clic.
   const introEl = $('#intro');
-  renderer.setAnimationLoop((now) => {
+  const filmHooks = (window.__filmHooks = {});
+  const frame = (now) => {
     if (!introEl.classList.contains('gone')) { last = now; return; }
     // (l'horodatage rAF peut précéder `last` à la 1re image : jamais de pas négatif)
     const tJs0 = PROF ? performance.now() : 0;
     const real = Math.min(0.1, Math.max(0, (now - last) / 1000));
     last = now;
     state.fps = state.fps * 0.95 + (1 / Math.max(real, 1e-3)) * 0.05;
-    adaptResolution(real);
+    if (!FILM) adaptResolution(real);
     // ralenti après un impact géant : le temps s'étire puis repart
     state.slow = Math.max(0, state.slow - real / 2.6);
     const timeScale = 1 - 0.8 * Math.pow(state.slow, 0.7);
@@ -1031,12 +1039,14 @@ async function main() {
     // (la supernova se joue au plus à ×1 : c'est un moment à regarder)
     const spd = life.phase === 6 ? Math.min(1, state.speed) : state.speed;
     let frameTime = Math.min(0.066 * warp, Math.min(0.05, real) * 0.96 * spd * timeScale * warp);
+    if (FILM) frameTime = (filmHooks.dtSim || 0) * timeScale; // (le réalisateur fixe la vitesse du temps)
     // navigation : avance rapide vers une phase (grands pas, tout à fond)
     if (state.seek >= 0 && !state.resetting) {
       if (life.phase >= state.seek) endSeek();
       else frameTime = 0.4;
     }
     sim.maxDtP = state.seek >= 0 ? 0.03 : 0.011;
+    if (FILM && filmHooks.maxDtP) sim.maxDtP = filmHooks.maxDtP; // (ellipses hors champ : grands pas)
 
     // cycle de vie : paramètres de l'étoile et du disque, événements
     if (!state.paused && !state.resetting) {
@@ -1059,9 +1069,9 @@ async function main() {
     // positions de l'instant présent, PUIS caméra : sinon elle aurait une image de retard
     predictAll();
     if (!state.paused) detectCrossings();
-    updateCamera(real);
-    controls.update();
-    vis.updateFx(state.paused ? 0 : real, (i) => pred.get(i));
+    if (FILM) filmHooks.camera?.(real);
+    else { updateCamera(real); controls.update(); }
+    vis.updateFx(state.paused && !FILM ? 0 : real, (i) => pred.get(i)); // (au tournage, éclairs et ondes s'éteignent même simulation à l'arrêt)
     if (meca) {
       orrery.update(state.planets, pred, dtSim, real, !state.paused && !state.resetting, life, vis.V.planetK.value,
         { t: life.phase === 0 ? life.t : 1e9, dur: sim.U.pourDur.value });
@@ -1100,7 +1110,9 @@ async function main() {
     const k = state.shake * state.shake * 0.04 * camera.position.length() / 14;
     shakeOff.set((Math.random() - 0.5) * k, (Math.random() - 0.5) * k, (Math.random() - 0.5) * k);
     camera.position.add(shakeOff);
-    vis.pipeline.render();
+    filmHooks.before?.();
+    if (!filmHooks.skipRender) filmHooks.render ? filmHooks.render() : vis.pipeline.render();
+    filmHooks.after?.();
     camera.position.sub(shakeOff);
     const tR = PROF ? performance.now() : 0;
     poll(now);
@@ -1112,11 +1124,19 @@ async function main() {
         window.__prof = { compute: renderer.info.compute.timestamp, render: renderer.info.render.timestamp };
       });
     }
-  });
+  };
+  if (FILM) window.__frame = frame; // (film.js appelle frame(t) lui-même, image par image)
+  else renderer.setAnimationLoop(frame);
   let profN = 0;
   const profJs = { loop: 0, poll: 0 };
 
-  if (params.has('auto')) { $('#intro').classList.add('gone'); }
+  if (params.has('auto') || FILM) { $('#intro').classList.add('gone'); }
+  if (FILM) {
+    document.body.classList.add('film');
+    audio.setMuted(true);
+    import('./film.js').then((m) => m.startFilm({ THREE, renderer, camera, controls, state, life, sim, vis, orrery, pred, frame, PHASES }))
+      .catch((e) => { console.error(e); window.__filmError = String(e?.stack || e); });
+  }
   window.__planetaire = { sim, state, renderer, audio, launchFlyby, pred, kin, vis, life, orrery, camera, controls }; // (débogage)
 }
 

@@ -66,12 +66,14 @@ export function createVisuals(renderer, scene, camera, sim, opts = {}) {
     aperture: uniform(0.0),  // cercle de confusion (unités monde) loin du plan net
     shutter: uniform(0.0),   // temps d'obturation (unités de simulation) : traînées de mouvement
     camVel: uniform(new THREE.Vector3()), // vitesse de la caméra (unités / unité de temps simulé)
-    planetFlux: uniform(4.0),
+    planetFlux: uniform(4.0), // éclairement maximal des planètes (abaissé en DA mécanique)
     starK: uniform(1.0),     // éclat de l'étoile (abaissé en DA mécanique : les planètes restent lisibles)
-    innerSoft: uniform(0.0), // adoucit l'éclairement des grains tout près de l'étoile // éclairement maximal des planètes (abaissé en DA mécanique)
+    grainK: uniform(1.0),    // grain de pellicule (coupé pour l'export vidéo : du bruit pur pour l'encodeur)
+    innerSoft: uniform(0.0), // adoucit l'éclairement des grains tout près de l'étoile
   };
 
   // ── Poussière ──────────────────────────────────────────────────────────────
+  let dustObj = null, planetsObj = null;
   {
     const mat = new THREE.SpriteNodeMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
     const P = pPos.element(instanceIndex);
@@ -156,6 +158,7 @@ export function createVisuals(renderer, scene, camera, sim, opts = {}) {
     dust.count = sim.N;
     dust.frustumCulled = false;
     scene.add(dust);
+    dustObj = dust;
   }
 
   // ── Fond d'étoiles ─────────────────────────────────────────────────────────
@@ -516,6 +519,7 @@ export function createVisuals(renderer, scene, camera, sim, opts = {}) {
     planets.count = M;
     planets.frustumCulled = false;
     scene.add(planets);
+    planetsObj = planets;
   }
 
   // ── Orbites (mises à jour depuis les lectures CPU) ─────────────────────────
@@ -568,7 +572,7 @@ export function createVisuals(renderer, scene, camera, sim, opts = {}) {
   //  · profondeur de champ : la poussière n'écrit pas de profondeur, donc là
   //    où il n'y a que le fond on fait comme si c'était le plan net — le
   //    disque reste net, la machine au premier et à l'arrière-plan se floute.
-  const lens = !qp.has('nolens');
+  const lens = !qp.has('nolens') && !qp.has('film'); // (tournage : le flou de mouvement vient des sous-images)
   const DOF = qp.has('dof');
   if (lens) scenePass.setMRT(mrt({ output, velocity }));
   const sharp = scenePass.getTextureNode('output');
@@ -640,7 +644,7 @@ export function createVisuals(renderer, scene, camera, sim, opts = {}) {
     const vig = smoothstep(1.0, 0.25, length(ctr.mul(vec2(1.25, 1.6))));
     // (hachage entier par pixel et par image : pas de motif, contrairement à fract(sin(·)))
     const pix = screenCoordinate.x.toUint().add(screenCoordinate.y.toUint().mul(uint(8191)));
-    const grain = hash(pix.add(fract(time.mul(0.37)).mul(1.0e6).toUint().mul(uint(131071)))).sub(0.5).mul(0.035);
+    const grain = hash(pix.add(fract(time.mul(0.37)).mul(1.0e6).toUint().mul(uint(131071)))).sub(0.5).mul(0.035).mul(V.grainK);
     out = out.mul(vig.mul(0.4).add(0.6)).add(grain.mul(float(1).sub(l.min(1.0).mul(0.6))).mul(0.5));
   } else {
     out = out.mul(smoothstep(1.25, 0.35, length(ctr).mul(1.6)));
@@ -795,5 +799,5 @@ export function createVisuals(renderer, scene, camera, sim, opts = {}) {
       for (const m of ms) if (m.blending === THREE.AdditiveBlending || m.transparent || o.isInstancedMesh || o.count > 1) m.mrtNode = zeroVel;
     });
   }
-  return { V, star, flyStar, updateOrbits, pipeline, impact, pulse, updateFx, setEvo, setStar, updatePulsar: (dt) => updatePulsar(dt, pulsarK) };
+  return { V, star, dust: dustObj, planets: planetsObj, pulsar, shell, flyStar, updateOrbits, pipeline, impact, pulse, updateFx, setEvo, setStar, updatePulsar: (dt) => updatePulsar(dt, pulsarK) };
 }
