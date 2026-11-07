@@ -12,7 +12,7 @@
 const { sin, cos, sqrt, abs, max, min, floor, ceil, PI, exp, log } = Math;
 const TAU = PI * 2;
 
-export const TPMS_RES = [176, 104, 60]; // résolution de grille par niveau de détail
+export const TPMS_RES = [224, 132, 76, 52]; // résolution de grille par niveau de détail (héros, moyen, lointain, ombres)
 
 // maximum lisse polynomial (k = largeur du congé)
 const smax = (a, b, k) => {
@@ -23,8 +23,9 @@ const smax = (a, b, k) => {
 
 export function tpmsField(spec) {
   const R = 1, Ri = 1 - spec.thickness, Rm = (R + Ri) / 2, half = spec.thickness / 2;
-  const f = spec.freq * TAU / 2; // périodes sur le rayon
-  const k = Math.max(spec.bevel * 2, 0.03); // congé d'au moins quelques mailles : pas d'arête en escalier
+  // (Fischer–Koch et I-WP contiennent des termes en 2X : fréquence réelle plus haute)
+  const f = (spec.freq * TAU / 2) * ({ fischer: 0.55, iwp: 0.75 }[spec.surface] ?? 1); // périodes sur le rayon
+  const k = Math.max(spec.bevel * 2, 0.035); // congé d'au moins quelques mailles : pas d'arête en escalier
   const wall = spec.wall;
   const portalR = Math.tan(spec.portal) * R; // alésage vu depuis le centre
   const kind = spec.surface;
@@ -55,12 +56,12 @@ export function tpmsField(spec) {
     if (out) { out[0] = d; out[1] = w; out[2] = r; out[3] = s; out[4] = t; }
     return d;
   };
-  return { field, R, Ri, Rm, half };
+  return { field, R, Ri, Rm, half, k };
 }
 
 export function buildTPMS(spec, lod) {
   const res = TPMS_RES[lod];
-  const { field, Rm, half } = tpmsField(spec);
+  const { field, Rm, half, k: fillet } = tpmsField(spec);
   const ext = 1.02, h = (2 * ext) / res, N = res + 1;
   const bandIn = Rm - half - 3 * h, bandOut = Rm + half + 3 * h;
   // grille de valeurs (seulement dans la bande, ailleurs : distance à la coquille)
@@ -82,7 +83,7 @@ export function buildTPMS(spec, lod) {
   const pos = [], nor = [], tan = [], surf = [];
   const tmp = [0, 0, 0, 0, 0];
   const grad = (x, y, z) => {
-    const e = h * 0.25;
+    const e = h * 0.2;
     const gx = field(x + e, y, z) - field(x - e, y, z), gy = field(x, y + e, z) - field(x, y - e, z), gz = field(x, y, z + e) - field(x, y, z - e);
     const l = sqrt(gx * gx + gy * gy + gz * gz) || 1;
     return [gx / l, gy / l, gz / l];
@@ -108,9 +109,12 @@ export function buildTPMS(spec, lod) {
       n++;
     }
     let x = -ext + (i + sx / n) * h, y = -ext + (j + sy / n) * h, z = -ext + (k + sz / n) * h;
-    // reprojection sur la surface (un pas de Newton, borné à la cellule)
-    for (let it = 0; it < 1; it++) {
-      const d = field(x, y, z), g = grad(x, y, z), s = max(-h * 0.5, min(h * 0.5, d));
+    // reprojection sur la surface (Newton) : les sommets se posent vraiment
+    // sur la surface, sinon les arêtes vives sortent en escalier
+    for (let it = 0; it < 4; it++) {
+      const d = field(x, y, z);
+      if (abs(d) < h * 1e-3) break;
+      const g = grad(x, y, z), s = max(-h, min(h, d));
       x -= g[0] * s; y -= g[1] * s; z -= g[2] * s;
     }
     field(x, y, z, tmp);
@@ -121,12 +125,13 @@ export function buildTPMS(spec, lod) {
     const l = sqrt(tx * tx + ty * ty);
     if (l < 1e-5) { tx = 1; ty = 0; } else { tx /= l; ty /= l; }
     tan.push(tx, ty, 0, 1);
-    // finitions : faces de la coquille (externe / interne) ou paroi de la surface minimale
-    const onShell = tmp[1] === 0, outer = tmp[2] > Rm;
-    const edge = onShell ? 0 : 1;
-    // proximité du bord : dans la zone du congé
-    const prox = onShell ? max(0, 1 - (tmp[3] - tmp[4]) / (spec.bevel * 4 + 1e-6)) : 1;
-    surf.push(onShell && outer ? 255 : 0, onShell && !outer ? 255 : 0, edge * 255, Math.round(min(1, prox) * 255));
+    // finitions : faces de la coquille (externe / interne) ou paroi de la surface
+    // minimale. Poids continu à travers le congé : la frontière entre les deux
+    // finitions est une courbe lisse, pas un escalier qui suit la grille.
+    const e = min(1, max(0, 0.5 + (tmp[4] - tmp[3]) / (fillet * 1.2 + 1e-6)));
+    const outer = tmp[2] > Rm;
+    const prox = 1 - abs(e - 0.5) * 2; // (proximité de l'arête : au milieu du congé)
+    surf.push(Math.round((outer ? 1 - e : 0) * 255), Math.round((outer ? 0 : 1 - e) * 255), Math.round(e * 255), Math.round(max(prox, e) * 255));
   }
 
   // un quadrilatère par arête de grille qui traverse la surface
@@ -142,8 +147,47 @@ export function buildTPMS(spec, lod) {
     if (v0 !== (at(i, j + 1, k) < 0)) quad(cv(i - 1, j, k - 1), cv(i - 1, j, k), cv(i, j, k), cv(i, j, k - 1), v0);
     if (v0 !== (at(i, j, k + 1) < 0)) quad(cv(i - 1, j - 1, k), cv(i, j - 1, k), cv(i, j, k), cv(i - 1, j, k), v0);
   }
-  // orientation : chaque triangle doit regarder du côté des normales du champ
   const P = new Float32Array(pos), Nn = new Float32Array(nor), I = new Uint32Array(idx);
+  const nv = P.length / 3;
+  // Relaxation : chaque sommet glisse vers la moyenne de ses voisins, puis est
+  // reprojeté sur la surface. Les sommets se répartissent régulièrement le
+  // long des arêtes au lieu de suivre la grille (plus de dents de scie).
+  {
+    const deg = new Uint32Array(nv + 1);
+    for (let t = 0; t < I.length; t++) deg[I[t] + 1] += 2;
+    for (let i = 0; i < nv; i++) deg[i + 1] += deg[i];
+    const adj = new Uint32Array(deg[nv]), fill = deg.slice(0, nv);
+    for (let t = 0; t < I.length; t += 3) for (let e = 0; e < 3; e++) {
+      const a = I[t + e], b = I[t + (e + 1) % 3];
+      adj[fill[a]++] = b; adj[fill[b]++] = a;
+    }
+    const Q = new Float32Array(P.length);
+    for (let pass = 0; pass < [3, 2, 1, 0][lod]; pass++) { // (grilles grossières : moins de passes, sinon des triangles se retournent)
+      for (let i = 0; i < nv; i++) {
+        let sx = 0, sy = 0, sz = 0;
+        const n0 = deg[i], n1 = deg[i + 1], n = n1 - n0;
+        if (!n) { Q[i * 3] = P[i * 3]; Q[i * 3 + 1] = P[i * 3 + 1]; Q[i * 3 + 2] = P[i * 3 + 2]; continue; }
+        for (let j = n0; j < n1; j++) { const o = adj[j] * 3; sx += P[o]; sy += P[o + 1]; sz += P[o + 2]; }
+        // moitié du chemin vers la moyenne (pas de rétrécissement : on reprojette)
+        Q[i * 3] = (P[i * 3] + sx / n) / 2; Q[i * 3 + 1] = (P[i * 3 + 1] + sy / n) / 2; Q[i * 3 + 2] = (P[i * 3 + 2] + sz / n) / 2;
+      }
+      for (let i = 0; i < nv; i++) {
+        let x = Q[i * 3], y = Q[i * 3 + 1], z = Q[i * 3 + 2];
+        for (let it = 0; it < 3; it++) {
+          const d = field(x, y, z);
+          if (abs(d) < h * 1e-3) break;
+          const g = grad(x, y, z), st = max(-h, min(h, d));
+          x -= g[0] * st; y -= g[1] * st; z -= g[2] * st;
+        }
+        P[i * 3] = x; P[i * 3 + 1] = y; P[i * 3 + 2] = z;
+      }
+    }
+    for (let i = 0; i < nv; i++) {
+      const g = grad(P[i * 3], P[i * 3 + 1], P[i * 3 + 2]);
+      Nn[i * 3] = g[0]; Nn[i * 3 + 1] = g[1]; Nn[i * 3 + 2] = g[2];
+    }
+  }
+  // orientation : chaque triangle doit regarder du côté des normales du champ
   for (let t = 0; t < I.length; t += 3) {
     const a = I[t] * 3, b = I[t + 1] * 3, c = I[t + 2] * 3;
     const ux = P[b] - P[a], uy = P[b + 1] - P[a + 1], uz = P[b + 2] - P[a + 2];
@@ -151,6 +195,27 @@ export function buildTPMS(spec, lod) {
     const cx = uy * vz - uz * vy, cy = uz * vx - ux * vz, cz = ux * vy - uy * vx;
     const s = cx * (Nn[a] + Nn[b] + Nn[c]) + cy * (Nn[a + 1] + Nn[b + 1] + Nn[c + 1]) + cz * (Nn[a + 2] + Nn[b + 2] + Nn[c + 2]);
     if (s < 0) { const tmpI = I[t + 1]; I[t + 1] = I[t + 2]; I[t + 2] = tmpI; }
+  }
+  // Normales : celles du champ (lisses), sauf là où le gradient est instable
+  // (feuilles minces, raccords des congés) — on prend alors la normale du
+  // maillage (moyenne des faces pondérée par l'aire).
+  const M = new Float32Array(P.length);
+  for (let t = 0; t < I.length; t += 3) {
+    const a = I[t] * 3, b = I[t + 1] * 3, c = I[t + 2] * 3;
+    const ux = P[b] - P[a], uy = P[b + 1] - P[a + 1], uz = P[b + 2] - P[a + 2];
+    const vx = P[c] - P[a], vy = P[c + 1] - P[a + 1], vz = P[c + 2] - P[a + 2];
+    const cx = uy * vz - uz * vy, cy = uz * vx - ux * vz, cz = ux * vy - uy * vx;
+    for (const o of [a, b, c]) { M[o] += cx; M[o + 1] += cy; M[o + 2] += cz; }
+  }
+  for (let o = 0; o < P.length; o += 3) {
+    const l = Math.hypot(M[o], M[o + 1], M[o + 2]);
+    if (l < 1e-20) continue;
+    const mx = M[o] / l, my = M[o + 1] / l, mz = M[o + 2] / l;
+    const d = mx * Nn[o] + my * Nn[o + 1] + mz * Nn[o + 2];
+    const w = d > 0.9 ? 0 : d < 0.6 ? 1 : (0.9 - d) / 0.3; // fondu entre les deux
+    let nx = Nn[o] * (1 - w) + mx * w, ny = Nn[o + 1] * (1 - w) + my * w, nz = Nn[o + 2] * (1 - w) + mz * w;
+    const nl = Math.hypot(nx, ny, nz) || 1;
+    Nn[o] = nx / nl; Nn[o + 1] = ny / nl; Nn[o + 2] = nz / nl;
   }
   return { position: P, normal: Nn, tangent: new Float32Array(tan), surf: new Uint8Array(surf), index: I };
 }

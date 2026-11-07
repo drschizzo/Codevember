@@ -116,6 +116,8 @@ export function createUI({ recipe: getRecipe, render, on }) {
     addC(fc, R.core, 'color').name('Cœur : couleur').onChange(ch);
     add(fc, R.core, 'intensity', 0, 200, 0.5).name('Cœur : intensité').onChange(ch);
     add(fc, R.core, 'glow', 0, 80, 0.5).name('Cœur : éclat').onChange(ch);
+    if (R.core.halo === undefined) R.core.halo = 2.4;
+    add(fc, R.core, 'halo', 1, 5, 0.01).name('Cœur : halo').onChange(ch);
     add(fc, R.core, 'decay', 0.5, 2.5, 0.01).name('Cœur : décroissance').onChange(ch);
     add(fc, R.core, 'pulse', 0, 0.5, 0.01).name('Cœur : pulsation').onChange(ch);
     add(fc, R.core, 'shadowSoft', 0, 8, 0.1).name('Cœur : douceur des ombres').onChange(ch);

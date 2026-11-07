@@ -190,7 +190,10 @@ export function voronoiCells({ count = 200, distribution = 'fibonacci', spiral =
     for (let i = 1; i < pts.length; i++) {
       const [e1, e2] = tangentFrame(pts[i]);
       pts[i] = norm(add(pts[i], add(scale(e1, rng.gauss() * s), scale(e2, rng.gauss() * s))));
-      if (pts[i][2] > cap) pts[i] = norm([pts[i][0], pts[i][1], cap - 0.01]);
+      if (pts[i][2] > cap - 0.01) { // rabattu sous la calotte de l'oculus
+        const z = cap - 0.01, r = sqrt(1 - z * z), l = Math.hypot(pts[i][0], pts[i][1]) || 1;
+        pts[i] = [(pts[i][0] / l) * r, (pts[i][1] / l) * r, z];
+      }
     }
   }
   const faces = hull(pts);
@@ -208,15 +211,18 @@ export function voronoiCells({ count = 200, distribution = 'fibonacci', spiral =
   });
 }
 
-// enveloppe convexe incrémentale (points sur la sphère, origine à l'intérieur)
+// enveloppe convexe incrémentale (points sur la sphère). Les faces sont
+// orientées par rapport à un point intérieur fixe : le barycentre du
+// tétraèdre initial (l'origine n'est pas toujours dans ce tétraèdre).
 function hull(P) {
   const n = P.length;
   const faces = [];      // [a, b, c, normale, vivante]
   const edge = new Map(); // arête orientée a→b → face
   const key = (a, b) => a * n + b;
+  let inner = [0, 0, 0];
   const addFace = (a, b, c) => {
     let nn = cross(sub(P[b], P[a]), sub(P[c], P[a]));
-    if (dot(nn, add(P[a], add(P[b], P[c]))) < 0) { [b, c] = [c, b]; nn = scale(nn, -1); }
+    if (dot(nn, sub(P[a], inner)) < 0) { [b, c] = [c, b]; nn = scale(nn, -1); }
     const f = { v: [a, b, c], n: nn, alive: true };
     const id = faces.length;
     faces.push(f);
@@ -232,6 +238,7 @@ function hull(P) {
   best = -1;
   const pn = cross(sub(P[i1], P[i0]), sub(P[i2], P[i0]));
   for (let i = 1; i < n; i++) { if (i === i1 || i === i2) continue; const d = abs(dot(pn, sub(P[i], P[i0]))); if (d > best) { best = d; i3 = i; } }
+  inner = scale(add(add(P[i0], P[i1]), add(P[i2], P[i3])), 0.25);
   addFace(i0, i1, i2); addFace(i0, i1, i3); addFace(i0, i2, i3); addFace(i1, i2, i3);
   for (let p = 0; p < n; p++) {
     if (p === i0 || p === i1 || p === i2 || p === i3) continue;

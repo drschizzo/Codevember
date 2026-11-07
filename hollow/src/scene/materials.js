@@ -24,7 +24,7 @@ import * as THREE from 'three/webgpu';
 import {
   Fn, If, struct, uniform, attribute, positionLocal, normalLocal, positionWorld, positionView, normalView, vec2, vec3, vec4,
   float, mat3, mix, smoothstep, clamp, abs, length, normalize, dot, cross, sin, floor, fract, mod, step, acos, sign,
-  dFdx, dFdy, fwidth, faceDirection, mrt, velocity, texture3D, mx_cell_noise_vec3, modelViewMatrix, modelScale, cameraPosition,
+  dFdx, dFdy, fwidth, faceDirection, mrt, velocity, transformNormalToView, cos, max as tmax, texture3D, mx_cell_noise_vec3, modelViewMatrix, modelScale, cameraPosition,
 } from 'three/tsl';
 import { FINISH_KEYS } from '../finishes.js';
 import { NOISE_PERIOD } from '../gen/noisevol.js';
@@ -38,6 +38,9 @@ export const G = {
   phase: uniform(0),        // phase de la boucle [0, 1)
   microDetail: uniform(1),  // intensité globale des micro-reliefs
   roughFloor: uniform(0.12), // douceur des reflets : rugosité minimale (sources ponctuelles → reflets étendus)
+  // halo du cœur : près du cœur, les coquilles baignent dans sa lumière et s'y
+  // fondent — une coquille qui naît émerge du rayonnement, sans apparaître
+  coreR: uniform(0.2), coreColor: uniform(new THREE.Color(1, 0.8, 0.6)), coreGlow: uniform(10), halo: uniform(2.4),
 };
 
 // ── Volume de bruit ──────────────────────────────────────────────────────────
@@ -216,8 +219,53 @@ export function signature(f) {
   return [s(f.outer), s(f.inner), s(f.edge), f.wear > 0, (f.groove || 0) > 0].join('|');
 }
 
+// ── Normale analytique des surfaces minimales ────────────────────────────────
+// Même champ que gen/tpms.js, évalué dans le shader : la normale (gradient par
+// différences centrées) est exacte à chaque pixel. Sur une finition miroir,
+// les reflets ne trahissent plus la triangulation.
+export function tpmsUniforms() {
+  return { f: uniform(10), wall: uniform(0.3), k: uniform(0.035), Rm: uniform(0.93), half: uniform(0.07), portalR: uniform(0.3) };
+}
+export function applyTpms(T, spec) {
+  T.f.value = ((spec.freq * Math.PI * 2) / 2) * ({ fischer: 0.55, iwp: 0.75 }[spec.surface] ?? 1);
+  T.wall.value = spec.wall;
+  T.k.value = Math.max(spec.bevel * 2, 0.035);
+  T.Rm.value = 1 - spec.thickness / 2;
+  T.half.value = spec.thickness / 2;
+  T.portalR.value = Math.tan(spec.portal);
+}
+function tpmsNormal(spec, T) {
+  const tp = (q) => {
+    const X = q.x.mul(T.f), Y = q.y.mul(T.f), Z = q.z.mul(T.f);
+    const cX = cos(X), cY = cos(Y), cZ = cos(Z), sX = sin(X), sY = sin(Y), sZ = sin(Z);
+    let g;
+    switch (spec.surface) {
+      case 'schwarz': g = cX.add(cY).add(cZ).div(1.9); break;
+      case 'diamond': g = sX.mul(sY).mul(sZ).add(sX.mul(cY).mul(cZ)).add(cX.mul(sY).mul(cZ)).add(cX.mul(cY).mul(sZ)).div(1.25); break;
+      case 'neovius': g = cX.add(cY).add(cZ).mul(3).add(cX.mul(cY).mul(cZ).mul(4)).div(6); break;
+      case 'iwp': g = cX.mul(cY).add(cY.mul(cZ)).add(cZ.mul(cX)).mul(2).sub(cos(X.mul(2)).add(cos(Y.mul(2))).add(cos(Z.mul(2)))).div(3); break;
+      case 'fischer': g = cos(X.mul(2)).mul(sY).mul(cZ).add(cX.mul(cos(Y.mul(2))).mul(sZ)).add(sX.mul(cY).mul(cos(Z.mul(2)))).div(1.4); break;
+      default: g = sX.mul(cY).add(sY.mul(cZ)).add(sZ.mul(cX)).div(1.5);
+    }
+    return (spec.sheet ? abs(g).sub(T.wall) : g.sub(T.wall)).div(T.f);
+  };
+  const smax = (a, b) => { const h = tmax(T.k.sub(abs(a.sub(b))), 0).div(T.k); return tmax(a, b).add(h.mul(h).mul(T.k).mul(0.25)); };
+  const field = (q) => {
+    const s = abs(length(q).sub(T.Rm)).sub(T.half);
+    const d = smax(s, tp(q));
+    const cyl = tmax(length(q.xy).sub(T.portalR.mul(q.z)), q.z.negate());
+    return smax(d, cyl.negate());
+  };
+  const p = positionLocal, e = 0.0015;
+  const gx = field(p.add(vec3(e, 0, 0))).sub(field(p.sub(vec3(e, 0, 0))));
+  const gy = field(p.add(vec3(0, e, 0))).sub(field(p.sub(vec3(0, e, 0))));
+  const gz = field(p.add(vec3(0, 0, e))).sub(field(p.sub(vec3(0, 0, e))));
+  return vec3(gx, gy, gz);
+}
+
 // ── Matériau d'une couche ────────────────────────────────────────────────────
-export function buildShellMaterial(finish, U) {
+// tpms : { spec, U } pour une surface minimale (normale analytique)
+export function buildShellMaterial(finish, U, tpms = null) {
   const fins = [finish.outer, finish.inner, finish.edge];
   const any = (pred) => fins.some(pred);
   const F = {
@@ -307,15 +355,26 @@ export function buildShellMaterial(finish, U) {
 
   // relief (hauteur en unités monde : la plongée garde le même grain à toute échelle)
   const world = modelScale.x;
-  let N = perturb(get('h').mul(0.0035).mul(world).mul(G.microDetail), normalView);
+  // le relief s'annule à la frontière entre deux finitions (poids mêlés) : sans
+  // cela, le saut de hauteur d'une finition à l'autre dessine un liseré dentelé
+  const purity = smoothstep(0.55, 0.85, surfA.x.max(surfA.y).max(surfA.z));
+  const N0 = tpms ? transformNormalToView(tpmsNormal(tpms.spec, tpms.U)) : normalView;
+  let N = perturb(get('h').mul(purity).mul(0.0035).mul(world).mul(G.microDetail), N0);
   // (sans normalisation : la plupart des faces n'ont pas de facettes, vecteur nul)
   if (F.glit) N = normalize(N.add(modelViewMatrix.mul(vec4(get('glitter'), 0)).xyz.div(world).mul(0.22).mul(G.microDetail)));
   m.normalNode = N;
+  // Anticrénelage spéculaire (Kaplanyan) : là où la normale varie fortement
+  // d'un pixel au voisin (congés serrés, arêtes fines), on élargit le lobe
+  // spéculaire au lieu de laisser un reflet scintiller en dents de scie.
+  const dN = dFdx(N).dot(dFdx(N)).add(dFdy(N).dot(dFdy(N)));
+  const aaRough = (r) => r.pow(4).add(dN.mul(0.5).min(0.18)).pow(0.25);
+  m.roughnessNode = aaRough(m.roughnessNode);
 
   if (F.cc) {
     m.clearcoatNode = get('cc');
-    m.clearcoatRoughnessNode = soft(get('ccRough'), G.roughFloor.mul(0.7));
-    if (F.ccN) m.clearcoatNormalNode = perturb(get('ccH').mul(0.0008).mul(world), normalView);
+    m.clearcoatRoughnessNode = aaRough(soft(get('ccRough'), G.roughFloor.mul(0.7)));
+    if (F.ccN) m.clearcoatNormalNode = perturb(get('ccH').mul(purity).mul(0.0008).mul(world), N0);
+    else if (tpms) m.clearcoatNormalNode = N0;
   }
   if (F.sheen) { m.sheenNode = get('sheen'); m.sheenRoughnessNode = get('sheenRough'); }
   if (F.irid) {
@@ -335,9 +394,17 @@ export function buildShellMaterial(finish, U) {
   // l'environnement s'éteint vers le centre du nid (lumière ambiante occultée par les couches)
   const r = length(positionWorld).div(G.D);
   m.aoNode = mix(float(1), clamp(r.pow(0.75), 0.04, 1), G.envFalloff);
+  m.emissiveNode = haloEmission();
   m.mrtNode = stableVelocity();
   return m;
 }
+
+// émission du halo (ne dépend que du rayon : identique d'une couche à l'autre)
+export const haloEmission = () => {
+  const r = length(positionWorld);
+  const f = smoothstep(G.coreR.mul(G.halo), G.coreR, r);
+  return G.coreColor.mul(G.coreGlow).mul(f.mul(f).mul(f));
+};
 
 // Vecteur vitesse nul pour un objet qui vient d'apparaître : sa matrice
 // « précédente » date de sa dernière apparition (autre taille, autre place) et
@@ -375,6 +442,7 @@ export function buildCrystalMaterial(U) {
   m.specularIntensityNode = float(1);
   m.metalnessNode = float(0);
   m.aoNode = mix(float(1), clamp(length(positionWorld).div(G.D).pow(0.75), 0.04, 1), G.envFalloff);
+  m.emissiveNode = haloEmission();
   m.mrtNode = stableVelocity();
   return m;
 }

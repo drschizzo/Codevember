@@ -20,7 +20,7 @@
 import * as THREE from 'three/webgpu';
 import { uniform } from 'three/tsl';
 import {
-  buildShellMaterial, buildShadowMaterial, finishUniforms, applyFinish, signature,
+  buildShellMaterial, buildShadowMaterial, finishUniforms, applyFinish, signature, tpmsUniforms, applyTpms,
   crystalUniforms, buildCrystalMaterial,
 } from './materials.js';
 import { crystalGeometry } from '../gen/crystals.js';
@@ -50,7 +50,7 @@ class Design {
   constructor(nest, index) {
     this.nest = nest;
     this.index = index;
-    this.geoms = [null, null, null];
+    this.geoms = [null, null, null, null]; // 0–2 : affichage ; 3 : ombres
     this.specKey = '';
     this.crystalKey = '';
     this.crystal = null; // { attrs: [InstancedBufferAttribute ×3] }
@@ -67,14 +67,14 @@ class Design {
     if (key !== this.specKey) {
       this.specKey = key;
       const token = key;
-      for (const lod of [2, 1, 0]) {
+      for (const lod of [3, 2, 1, 0]) {
         this.nest.gen.request(layer.geo, lod).then((out) => {
           if (this.specKey !== token || this.disposed) return;
           const old = this.geoms[lod];
           this.geoms[lod] = toGeometry(out);
           for (const c of this.copies) {
-            c.display[lod].geometry = this.geoms[lod];
-            if (lod === 2) c.proxy.geometry = this.geoms[2];
+            if (lod < 3) c.display[lod].geometry = this.geoms[lod];
+            else c.proxy.geometry = this.geoms[3];
           }
           if (old) old.dispose();
           this.nest.onProgress?.();
@@ -102,7 +102,10 @@ class Design {
 
   syncMaterial() {
     const f = this.layer.finish;
-    const sig = signature(f);
+    const g = this.layer.geo;
+    const isT = g.type === 'tpms';
+    const sig = signature(f) + (isT ? `|tpms:${g.surface}:${g.sheet}` : '');
+    if (isT) { this.TU ??= tpmsUniforms(); applyTpms(this.TU, g); }
     if (!this.U) {
       this.U = {
         outer: finishUniforms(f.outer), inner: finishUniforms(f.inner), edge: finishUniforms(f.edge),
@@ -117,7 +120,7 @@ class Design {
     if (sig !== this.sig) {
       this.sig = sig;
       const old = this.material;
-      this.material = buildShellMaterial(f, this.U);
+      this.material = buildShellMaterial(f, this.U, isT ? { spec: g, U: this.TU } : null);
       for (const c of this.copies) for (const m of c.display) m.material = this.material;
       if (old) old.dispose();
     }
@@ -158,13 +161,13 @@ class Design {
   ensureCopies(n) {
     while (this.copies.length < n) {
       const group = new THREE.Group();
-      const display = [0, 1, 2].map((l) => {
+      const display = [0, 1, 2].map((l) => { // (niveaux affichés ; le 3 sert aux ombres)
         const m = new THREE.Mesh(this.geoms[l] || placeholder, this.material);
         m.receiveShadow = true; m.castShadow = false; m.frustumCulled = false; m.layers.mask = 0;
         group.add(m);
         return m;
       });
-      const proxy = new THREE.Mesh(this.geoms[2] || placeholder, this.nest.shadowMat);
+      const proxy = new THREE.Mesh(this.geoms[3] || placeholder, this.nest.shadowMat);
       proxy.castShadow = true; proxy.receiveShadow = false; proxy.frustumCulled = false; proxy.layers.mask = 0;
       group.add(proxy);
       const c = { group, display, proxy, crystals: [] };
@@ -218,7 +221,7 @@ export function createNest(scene, gen) {
   // par le cœur pendant toute la croissance de son ombre
   nest.birthDepth = (ratio, coreRel) => Math.ceil(Math.log(coreRel) / Math.log(ratio)) + 1;
 
-  // s : { tau, phi, cycle, dive, ratio, D, coreRel, detail }
+  // s : { tau, phi, cycle, dive, ratio, D, coreRel, detail, pxPerUnit }
   // (cycle : nombre de boucles accomplies ; les instances gardent ainsi la même
   // couche d'une boucle à l'autre, et leurs vecteurs vitesse restent justes)
   nest.update = (s) => {
@@ -227,7 +230,6 @@ export function createNest(scene, gen) {
     const XB = nest.birthDepth(s.ratio, s.coreRel);
     const C = Math.ceil((XB - X_MIN + 1) / N) + 1;
     for (const d of nest.designs) { d.ensureCopies(C); for (const c of d.copies) c.group.visible = false; }
-    const t0 = 1.15 * s.detail, t1 = 2.8 * s.detail;
     const xCore = Math.log(s.coreRel) / Math.log(s.ratio);
     let shells = 0;
     const base = (s.cycle || 0) * N;
@@ -244,11 +246,14 @@ export function createNest(scene, gen) {
       inst.lastFrame = frame;
       inst.group.scale.setScalar(s.D * s.ratio ** x);
       des.orient(inst.group.quaternion, s.tau, s.phi, N, s.dive);
-      // affichage : meilleur niveau disponible (cachée si entièrement dans le cœur)
-      let lod = x < t0 ? 0 : x < t1 ? 1 : 2;
+      // niveau de détail selon la taille à l'écran (rayon en pixels) : les seuils
+      // sont choisis pour que l'écart entre deux niveaux reste sous le pixel
+      const rpx = x <= 0 ? Infinity : ((s.D * s.ratio ** x) / s.D) * s.pxPerUnit * s.detail;
+      let lod = rpx > 900 ? 0 : rpx > 220 ? 1 : 2;
       while (lod < 2 && !des.geoms[lod]) lod++;
       while (lod > 0 && !des.geoms[lod]) lod--;
-      const shown = des.geoms[lod] && x < xCore - 0.02;
+      // (affichée dès l'intérieur du cœur, qui la cache : elle en sort sans apparaître)
+      const shown = des.geoms[lod] && x < xCore + 0.8;
       inst.display.forEach((m, l) => {
         const on = shown && l === lod;
         m.userData.still = moved || !m.userData.on ? 0 : 1; // (vecteur vitesse nul à la première image)
@@ -258,9 +263,9 @@ export function createNest(scene, gen) {
       if (shown) shells++;
       // ombres : toutes les couches, pour les deux lumières. (Aucune coquille ne
       // cesse d'en projeter tant qu'elle est rendue : sinon l'éclairage saute.)
-      inst.proxy.layers.mask = des.geoms[2] ? KEY | CORE : 0;
+      inst.proxy.layers.mask = des.geoms[3] ? KEY | CORE : 0;
       inst.proxy.userData.birth = Math.min(1, Math.max(0, XB - x));
-      const cr = shown && x < 3.2 && x > X_MIN + 0.5;
+      const cr = shown && rpx > 25 && x > X_MIN + 0.5;
       for (const m of inst.crystals) {
         m.userData.still = moved || !m.userData.on ? 0 : 1;
         m.userData.on = cr;
