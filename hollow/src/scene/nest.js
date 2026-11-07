@@ -33,9 +33,11 @@ const _qz = new THREE.Quaternion(), _qa = new THREE.Quaternion(), _axis = new TH
 
 function toGeometry(o, bounds = 1.05) {
   const g = new THREE.BufferGeometry();
+  // (normale et tangente éventuellement entières, normalisées : voir gen/worker.js)
+  const packed = (a) => !(a instanceof Float32Array);
   g.setAttribute('position', new THREE.BufferAttribute(o.position, 3));
-  g.setAttribute('normal', new THREE.BufferAttribute(o.normal, 3));
-  if (o.tangent) g.setAttribute('tangent', new THREE.BufferAttribute(o.tangent, 4));
+  g.setAttribute('normal', new THREE.BufferAttribute(o.normal, 3, packed(o.normal)));
+  if (o.tangent) g.setAttribute('tangent', new THREE.BufferAttribute(o.tangent, 4, packed(o.tangent)));
   if (o.surf) g.setAttribute('surf', new THREE.BufferAttribute(o.surf, 4, true));
   if (o.index) g.setIndex(new THREE.BufferAttribute(o.index, 1));
   g.boundingSphere = new THREE.Sphere(new THREE.Vector3(), bounds);
@@ -279,6 +281,10 @@ export function createNest(scene, gen) {
       const shown = des.geoms[lod] && x < xCore + 0.8;
       inst.display.forEach((m, l) => {
         const on = shown && l === lod;
+        // d'avant en arrière (toutes les coquilles ont le même centre : le tri par
+        // distance de three.js serait indécis) — la coquille traversée, puis les
+        // suivantes vers le cœur ; les coquilles qui entourent la caméra en dernier
+        m.renderOrder = x >= 0 ? 1 + x : 100 - x;
         m.userData.still = moved || !m.userData.on ? 0 : 1; // (vecteur vitesse nul à la première image)
         m.userData.on = on;
         m.layers.mask = on ? MAIN : 0;
@@ -290,6 +296,7 @@ export function createNest(scene, gen) {
       inst.proxy.userData.birth = Math.min(1, Math.max(0, XB - x));
       const cr = shown && rpx > 25 && x > X_MIN + 0.5;
       for (const m of inst.crystals) {
+        m.renderOrder = x >= 0 ? 1.5 + x : 100.5 - x;
         m.userData.still = moved || !m.userData.on ? 0 : 1;
         m.userData.on = cr;
         m.layers.mask = cr ? MAIN : 0;

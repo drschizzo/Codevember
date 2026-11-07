@@ -57,7 +57,11 @@ class Buffers {
     this.surf[i4] = s0; this.surf[i4 + 1] = s1; this.surf[i4 + 2] = s2; this.surf[i4 + 3] = s3;
     return i;
   }
+  // (triangles d'aire nulle — deux sommets confondus — ignorés : biseau ou
+  // épaulement réduits à zéro par endroits)
+  same(i, j) { const p = this.pos, a = i * 3, b = j * 3; return p[a] === p[b] && p[a + 1] === p[b + 1] && p[a + 2] === p[b + 2]; }
   tri(a, b, c) {
+    if (this.same(a, b) || this.same(b, c) || this.same(c, a)) return;
     if (this.ni + 3 > this.icap) { const b2 = new Uint32Array(this.icap * 2); b2.set(this.idx); this.idx = b2; this.icap *= 2; }
     this.idx[this.ni++] = a; this.idx[this.ni++] = b; this.idx[this.ni++] = c;
   }
@@ -452,7 +456,8 @@ export function buildShell(prepared, spec, lod) {
       const [t1, t2] = tangentFrame(v);
       const base = scale(v, top - rr * 0.15);
       const start = B.n;
-      for (let j = 0; j <= rings; j++) {
+      // (anneaux sous le sommet seulement : le dernier se refermerait en un point)
+      for (let j = 0; j < rings; j++) {
         const phi = (PI / 2) * (j / rings), cr = cos(phi), sr = sin(phi);
         for (let i = 0; i < segs; i++) {
           const a = (i / segs) * PI * 2, dir = add(scale(t1, cos(a)), scale(t2, sin(a)));
@@ -463,7 +468,7 @@ export function buildShell(prepared, spec, lod) {
         if (j > 0) B.strip(start + (j - 1) * segs, start + j * segs, segs);
       }
       const apex = B.vert(add(base, scale(v, rr * 0.75)), v, 0, 0, 255, 255);
-      B.fan(start + rings * segs, apex, segs);
+      B.fan(start + (rings - 1) * segs, apex, segs);
     }
   }
   return B.result();

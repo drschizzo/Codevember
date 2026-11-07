@@ -5,6 +5,8 @@
 // puis s'affine), et les demandes récentes avant les anciennes.
 
 const MAX_CACHE = 72;
+const MAX_BYTES = 384 << 20; // (les tableaux restent en vie tant qu'ils sont en cache)
+const bytesOf = (out) => Object.values(out).reduce((a, v) => a + (ArrayBuffer.isView(v) ? v.byteLength : 0), 0);
 
 export function createGenerator(size = Math.max(2, Math.min(6, (navigator.hardwareConcurrency || 4) - 1))) {
   const workers = Array.from({ length: size }, () => new Worker(new URL('./worker.js', import.meta.url), { type: 'module' }));
@@ -36,6 +38,19 @@ export function createGenerator(size = Math.max(2, Math.min(6, (navigator.hardwa
     }
   }
 
+  // éviction des plus anciennes entrées : nombre et volume bornés
+  const sizes = new Map();
+  function trim() {
+    let total = 0;
+    for (const v of sizes.values()) total += v;
+    while (cache.size > 1 && (cache.size > MAX_CACHE || total > MAX_BYTES)) {
+      const k = cache.keys().next().value;
+      total -= sizes.get(k) || 0;
+      sizes.delete(k);
+      cache.delete(k);
+    }
+  }
+
   // spec : description d'une couche (sérialisable) ; lod : 0..3 ; what : 'mesh' | 'crystals'
   function request(spec, lod, what = 'mesh') {
     const key = `${what}|${lod}|${JSON.stringify(spec)}`;
@@ -44,9 +59,10 @@ export function createGenerator(size = Math.max(2, Math.min(6, (navigator.hardwa
       queue.push({ id: nextId++, seq: seq++, prio: what === 'crystals' ? 1.5 : 3 - lod, spec, lod, what, resolve, reject });
       pump();
     });
-    p.catch(() => cache.delete(key));
+    p.catch(() => { cache.delete(key); sizes.delete(key); });
+    p.then((out) => { if (cache.get(key) === p) { sizes.set(key, bytesOf(out)); trim(); } }, () => {});
     cache.set(key, p);
-    while (cache.size > MAX_CACHE) cache.delete(cache.keys().next().value);
+    trim();
     return p;
   }
 
