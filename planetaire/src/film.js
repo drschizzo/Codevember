@@ -28,15 +28,15 @@
 // Paramètres : &w=1920 &ss=2 &tss=4 &fps=24 &mbps=… &hdr &peak=5 ;
 // &stills=12,40 (images fixes seulement, SDR, pour prévisualiser).
 
-const ss = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
-const clamp01 = (x) => Math.min(1, Math.max(0, x));
-const ease = (u) => { u = clamp01(u); return u * u * (3 - 2 * u); };
+import { params as q } from './config.js';
+import { ss, clamp as clamp01 } from './util.js';
+
+const ease = (u) => ss(0, 1, u);
 const easeOut = (u) => 1 - Math.pow(1 - clamp01(u), 3);
 
 export async function startFilm(ctx) {
   const { THREE, renderer, camera, controls, state, life, vis, orrery, pred, frame } = ctx;
   const TSL = await import('three/tsl');
-  const q = new URLSearchParams(location.search);
   const FPS = Number(q.get('fps') || 24);
   const W = Number(q.get('w') || 1920), H = Math.round((W * 9) / 16);
   const SS = Number(q.get('ss') || 2);
@@ -179,7 +179,7 @@ export async function startFilm(ctx) {
   orrery.glassK.value = 0.35;
   vis.pipeline.outputColorTransform = false; vis.pipeline.needsUpdate = true; // (tone mapping après la moyenne)
   let scene = vis.star; while (scene.parent) scene = scene.parent;
-  const env = orrery.liveEnv(renderer, scene);
+  const env = orrery.liveEnv();
   camera.layers.set(0); // (les panneaux de studio n'existent que dans les reflets)
   const rtFull = new THREE.RenderTarget(W * SS, H * SS, { type: THREE.HalfFloatType, depthBuffer: false });
   const rtAcc = new THREE.RenderTarget(W, H, { type: THREE.HalfFloatType, depthBuffer: false });

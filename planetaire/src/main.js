@@ -1,115 +1,150 @@
+// Point d'entrée : crée le moteur, la simulation, le rendu, la machine, le son
+// et l'interface, puis les relie dans la boucle d'animation.
 import * as THREE from 'three/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { createSim, M, L, NR, R_IN, R_OUT, R_GRID, M_EARTH, SOLID0, GAS0, NIMP } from './sim.js';
+import { CONFIG } from './config.js';
+import { createSim, M, NR, R_IN, R_OUT, R_GRID, M_EARTH, GAS0, NIMP, planetRadius } from './sim.js';
 import { createLifecycle, PHASES } from './lifecycle.js';
-import { createVisuals } from './visuals.js';
-import { createOrrery, HOPPER } from './orrery.js';
+import { createVisuals } from './render/index.js';
+import { createOrrery, HOPPER, BELL_R } from './orrery/index.js';
 import { Sonifier } from './audio.js';
-import { provenanceRGB, css } from './palette.js';
+import { createKinematics } from './app/kinematics.js';
+import { readPlanets, createEvolution, nameOf, fmtMass, MIN_PLANET } from './app/planets.js';
+import { createCameraRig, CLOUD_VIEW } from './app/camera.js';
+import { createUI, fmtSpeed } from './app/ui.js';
 
-const $ = (s) => document.querySelector(s);
-const params = new URLSearchParams(location.search);
-// ?film : mode tournage (film.js) — ni interface ni son, rendu image par image
-// à résolution fixe, temps virtuel, caméra et vitesse du temps pilotées.
-const FILM = params.has('film');
+const SPEEDS = [0.25, 0.5, 1, 2, 4, 8];
+const PLANET_K = 1.7;            // DA mécanique : planètes grossies, billes sur leurs tiges
+const SPAWN_EVERY = 2.2;         // naissance d'embryons pendant la formation (unités de temps)
+const COLOR_MODES = ['Couleur : provenance', 'Couleur : roche / glace', 'Couleur : température'];
+
+function fail(msg) {
+  const intro = document.querySelector('#intro');
+  intro.classList.remove('gone');
+  intro.innerHTML = `<div class="card fail"><h1>Planétaire</h1><p>${msg}</p><p class="dim">Essayez Chrome, Edge ou Safari récents.</p></div>`;
+}
 
 async function main() {
   if (!navigator.gpu) return fail('WebGPU n’est pas disponible dans ce navigateur.');
+  const { film: FILM, hdr: HDR, n: N } = CONFIG;
 
-  // ?prof : chronométrage GPU (requêtes d'horodatage) affiché dans la console
-  const PROF = params.has('prof');
-  // Écran HDR (EDR sur Mac, HDR sous Windows) : sortie en virgule flottante sur
-  // un canevas « extended » — les hautes lumières (étoile, éclairs, supernova)
-  // dépassent le blanc de l'interface. ?sdr force le rendu classique.
-  const HDR = !params.has('sdr') && (params.has('hdr') || matchMedia('(dynamic-range: high)').matches);
-  // éclat du disque stellaire en HDR (multiplie starK) : l'étoile doit éblouir (?starhdr=)
-  const STAR_HDR = HDR ? Number(params.get('starhdr')) || 3.5 : 1;
-  const renderer = new THREE.WebGPURenderer({ antialias: false, powerPreference: 'high-performance', trackTimestamp: PROF,
+  // ── Moteur ─────────────────────────────────────────────────────────────────
+  // Écran HDR (EDR sur Mac, HDR sous Windows) : sortie en virgule flottante,
+  // les hautes lumières dépassent le blanc de l'interface ; courbe maison dans
+  // render/post.js. En SDR : tone mapping Neutral (garde la teinte des couleurs
+  // vives, qu'AgX délave vers le blanc).
+  const renderer = new THREE.WebGPURenderer({ antialias: false, powerPreference: 'high-performance', trackTimestamp: CONFIG.prof,
     ...(HDR ? { outputType: THREE.HalfFloatType } : {}) });
   const MAX_PR = Math.min(devicePixelRatio, 2);
   renderer.setPixelRatio(MAX_PR);
   renderer.setSize(innerWidth, innerHeight);
-  // SDR : Neutral (Khronos) plutôt qu'AgX — garde la teinte des couleurs vives
-  // (géante rouge, rémanent, lave), qu'AgX délave vers le blanc.
-  // HDR : courbe maison dans visuals.js (épaule douce jusqu'au pic de l'écran).
-  renderer.toneMapping = HDR ? THREE.NoToneMapping : params.has('agx') ? THREE.AgXToneMapping : THREE.NeutralToneMapping;
-  renderer.toneMappingExposure = 1;
-  renderer.shadowMap.enabled = true; // (projecteur de la machine)
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap; // (l'exposition est appliquée dans visuals.js)
+  renderer.toneMapping = HDR ? THREE.NoToneMapping : CONFIG.agx ? THREE.AgXToneMapping : THREE.NeutralToneMapping;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   await renderer.init();
   if (!renderer.backend.isWebGPUBackend) return fail('Cette expérience nécessite WebGPU (pas de repli WebGL).');
-  $('#app').appendChild(renderer.domElement);
+  document.querySelector('#app').appendChild(renderer.domElement);
   renderer.backend.device.lost.then((info) => {
     console.error('GPU perdu :', info.message);
-    if (info.reason !== 'destroyed') fail('Le GPU a été réinitialisé (' + info.message + '). Rechargez la page, éventuellement avec moins de grains : ?n=262144');
-    else fail('Le GPU a été perdu. Rechargez la page, éventuellement avec moins de grains : ?n=262144');
-    $('#intro').classList.remove('gone');
+    fail(`Le GPU a été ${info.reason !== 'destroyed' ? `réinitialisé (${info.message})` : 'perdu'}. Rechargez la page, éventuellement avec moins de grains : ?n=262144`);
   });
-
-
-  const N = Math.max(4096, Math.round((Number(params.get('n')) || (1 << 20)) / 256) * 256);
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x010103);
   const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.01, 2000);
-  camera.position.set(0, 13, 30); // vue large : le nuage fait ~14 UA de rayon
+  camera.position.copy(CLOUD_VIEW);
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.minDistance = 0.6;
   controls.maxDistance = 70;
 
+  // ── Modules ────────────────────────────────────────────────────────────────
   const sim = createSim(renderer, N);
-  // DA « mécanique » : le nuage initial doit tenir sous la cloche. On le
-  // resserre (14 → 9,6 UA) en accélérant sa rotation pour que le bord du
-  // disque retombe au même rayon (r_atterrissage = Ω² R⁴ : Ω = 3 / R²).
-  const MECA0 = !params.has('nomeca');
-  // Le nuage est en outre versé par la trémie au sommet de la cloche.
-  const BELL_R = 9.85; // rayon intérieur de la cloche (UA)
-  const setCloud = (m) => {
-    const R = m ? 9.6 : 14; sim.U.cloudR.value = R; sim.U.cloudOmega.value = m ? 3 / (R * R) : 0.0153;
-    sim.U.pourOn.value = m ? 1 : 0; sim.U.hopper.value.copy(HOPPER);
-    sim.U.bellR.value = m ? BELL_R : 0; // (la cloche retient le nuage, les débris, les planètes)
+  sim.U.hopper.value.copy(HOPPER);
+  // DA mécanique : le nuage initial doit tenir sous la cloche. On le resserre
+  // (14 → 9,6 UA) en accélérant sa rotation pour que le bord du disque retombe
+  // au même rayon (r_atterrissage = Ω² R⁴ : Ω = 3 / R²) ; il est versé par la
+  // trémie, et la cloche retient tout (nuage, débris, planètes).
+  const setCloud = (meca) => {
+    const R = meca ? 9.6 : 14;
+    sim.U.cloudR.value = R; sim.U.cloudOmega.value = meca ? 3 / (R * R) : 0.0153;
+    sim.U.pourOn.value = meca ? 1 : 0;
+    sim.U.bellR.value = meca ? BELL_R : 0;
   };
-  setCloud(MECA0);
+  setCloud(CONFIG.meca);
   await sim.init();
-  const EXPOSURE = Number(params.get('exposure')) || 1.45;
-  const vis = createVisuals(renderer, scene, camera, sim, { hdr: HDR });
-  // DA « mécanique » : la simulation est portée par un planétaire en laiton
-  // (touche O pour l'ôter ; ?nomeca pour démarrer sans)
-  const orrery = createOrrery(scene, renderer);
-  let meca = MECA0;
-  const LENS = !params.has('nolens') && !FILM;
-  const DOF = params.has('dof'); // profondeur de champ : coupée par défaut
-  const PLANET_K = 1.7; // planètes en billes bien visibles sur leurs tiges
-  const setMeca = (v) => {
-    meca = v; orrery.setVisible(v); document.body.classList.toggle('meca', v);
-    vis.V.planetK.value = v ? PLANET_K : 1;
-    setCloud(v); // (s'applique au prochain nuage)
-  };
-  setMeca(meca);
+  const vis = createVisuals(renderer, scene, camera, sim, CONFIG);
+  const V = vis.V;
+  const orrery = createOrrery(scene, renderer, { film: FILM });
   const audio = new Sonifier();
   audio.muted = true; // (le son est en option : bouton « son » ou touche M)
-  function toggleSound() {
-    audio.start(); // (premier geste de l'utilisateur : le contexte audio peut naître)
-    audio.setMuted(!audio.muted);
-    $('#sound').classList.toggle('on', !audio.muted);
-    orrery.setComb(!audio.muted); // (le peigne — la tête de lecture du son — sort ou rentre)
-    toast(audio.muted ? 'Son coupé' : 'Son actif');
-  }
-  $('#sound').addEventListener('click', toggleSound);
   orrery.onClick = () => audio.click();
   orrery.onClack = () => audio.clack();
   const life = createLifecycle();
+  const kin = createKinematics(sim);
+  const pred = kin.pred;
+  const evo = createEvolution(vis.setEvo);
+  const rig = createCameraRig(camera, controls);
 
   // ── État ───────────────────────────────────────────────────────────────────
   const state = {
-    paused: false, speed: 2, simTime: 0, nextLayer: 0,
-    planets: [], layers: null, selected: -1, autoSelect: true,
-    fly: null, lastCount: 0, needle: null, fps: 60,
+    paused: false, speed: 2, simTime: 0, resetting: false, seek: -1,
+    planets: [], selected: -1, autoSelect: true,
+    needle: null, dustFrac: 1, gasFrac: 1, removedGas: 0,
+    lastSerial: 0, prev: new Map(), absorbedBy: new Map(), reserved: new Set(),
+    slow: 0, shake: 0, burst: 0, fly: null, lostFor: 0,
   };
-  // Au-delà de ×1, on enchaîne plusieurs pas par image (pas plus longs = instable)
-  const SPEEDS = [0.25, 0.5, 1, 2, 4, 8];
-  const warp = Math.max(1, Math.min(16, Number(params.get('warp')) || 1)); // avance rapide (debug)
+
+  const ui = createUI({
+    speeds: SPEEDS, phases: PHASES,
+    onPause: () => togglePause(),
+    onSpeed: (v) => setSpeedTo(v),
+    onSeek: (i, relative) => seekTo(relative ? life.phase + i : i),
+    onFocus: (i) => focus(i),
+    onAuto: () => { state.autoSelect = !state.autoSelect; toast(state.autoSelect ? 'Sélection automatique : la plus massive' : 'Sélection figée'); },
+    onOverview: () => overview(),
+    onSound: () => toggleSound(),
+  });
+  // (silence pendant l'avance rapide, sauf messages forcés)
+  const toast = (msg, force) => { if (state.seek < 0 || force) ui.toast(msg); };
+
+  let meca = CONFIG.meca;
+  function setMeca(v) {
+    meca = v;
+    orrery.setVisible(v);
+    document.body.classList.toggle('meca', v);
+    setCloud(v); // (s'applique au prochain nuage)
+    // objectif « macro » et éclairages propres à chaque DA
+    V.planetK.value = v ? PLANET_K : 1;
+    V.bokeh.value = v ? 3.0 : 0.8;
+    V.blurK.value = v ? 1.0 : 0.4;
+    V.aperture.value = CONFIG.lens && CONFIG.dof ? (v ? 0.045 : 0.015) : 0;
+    V.planetFlux.value = v ? 2.2 : 4.0;
+    V.starK.value = v ? 0.35 : 1.0;
+    V.innerSoft.value = v ? 1.0 : 0.0;
+    if (!v) V.collect.value = 0;
+  }
+  setMeca(meca);
+
+  function toggleSound() {
+    audio.start(); // (premier geste de l'utilisateur : le contexte audio peut naître)
+    audio.setMuted(!audio.muted);
+    ui.setSound(!audio.muted);
+    orrery.setComb(!audio.muted); // (le peigne — la tête de lecture du son — sort ou rentre)
+    toast(audio.muted ? 'Son coupé' : 'Son actif');
+  }
+  function togglePause() {
+    state.paused = !state.paused;
+    ui.syncSpeed(state.speed, state.paused);
+    toast(state.paused ? 'Pause' : 'Lecture');
+  }
+  function setSpeedTo(v) {
+    state.speed = v; state.paused = false;
+    ui.syncSpeed(state.speed, state.paused);
+    toast(`Vitesse ×${fmtSpeed(v)}`);
+  }
+  const setSpeed = (d) => setSpeedTo(SPEEDS[Math.max(0, Math.min(SPEEDS.length - 1, SPEEDS.indexOf(state.speed) + d))]);
+  ui.syncSpeed(state.speed, state.paused);
 
   // ── Interaction ────────────────────────────────────────────────────────────
   const ray = new THREE.Raycaster();
@@ -118,33 +153,27 @@ async function main() {
   const onPlane = (e) => {
     ndc.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
     ray.setFromCamera(ndc, camera);
-    const hit = new THREE.Vector3();
-    return ray.ray.intersectPlane(plane, hit) ? hit : null;
+    return ray.ray.intersectPlane(plane, new THREE.Vector3());
   };
-
+  // puits gravitationnel (Maj + glisser) et son repère
   const wellMarker = new THREE.Mesh(new THREE.RingGeometry(0.18, 0.21, 64), new THREE.MeshBasicNodeMaterial({ transparent: true, side: THREE.DoubleSide }));
   wellMarker.material.color.setRGB(0.6, 0.9, 1.6);
   wellMarker.rotation.x = -Math.PI / 2;
   wellMarker.visible = false;
   scene.add(wellMarker);
+  const moveWell = (e) => { const p = onPlane(e); if (p) { sim.U.wellPos.value.copy(p); wellMarker.position.copy(p); } };
 
   let well = false, downAt = null;
   const el = renderer.domElement;
   el.addEventListener('pointerdown', (e) => {
     downAt = [e.clientX, e.clientY];
-    if (e.shiftKey) {
-      well = true; controls.enabled = false;
-      const p = onPlane(e);
-      if (p) { sim.U.wellPos.value.copy(p); wellMarker.position.copy(p); }
-      sim.U.wellMass.value = 0.015;
-      wellMarker.visible = true;
-    }
+    if (!e.shiftKey) return;
+    well = true; controls.enabled = false;
+    moveWell(e);
+    sim.U.wellMass.value = 0.015;
+    wellMarker.visible = true;
   });
-  el.addEventListener('pointermove', (e) => {
-    if (!well) return;
-    const p = onPlane(e);
-    if (p) { sim.U.wellPos.value.copy(p); wellMarker.position.copy(p); }
-  });
+  el.addEventListener('pointermove', (e) => { if (well) moveWell(e); });
   addEventListener('pointerup', (e) => {
     if (well) { well = false; controls.enabled = true; sim.U.wellMass.value = 0; wellMarker.visible = false; return; }
     if (downAt && Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) < 4 && e.target === el) pick(e);
@@ -155,50 +184,60 @@ async function main() {
     if (!p) return;
     const r = Math.hypot(p.x, p.z);
     if (r < R_IN * 1.3 || r > R_OUT * 1.1) return;
-    const free = freeSlot();
-    if (free < 0) return toast('Plus de place pour de nouveaux embryons.');
-    sim.spawn(free, p, 0.15 * M_EARTH);
-    state.reserved.add(free);
+    if (!spawn(p, 0.15 * M_EARTH)) return toast('Plus de place pour de nouveaux embryons.');
     toast(`Embryon semé à ${r.toFixed(2)} UA`);
   });
-  state.reserved = new Set();
-  function freeSlot() {
+
+  // sème un embryon dans un emplacement libre ; false s'il n'y en a plus
+  function spawn(pos, mass) {
+    const used = new Set(state.planets.map((p) => p.index));
     for (let i = 0; i < M; i++) {
-      if (state.reserved.has(i)) continue;
-      if (!state.planets.some((p) => p.index === i)) return i;
+      if (state.reserved.has(i) || used.has(i)) continue;
+      sim.spawn(i, pos, mass);
+      state.reserved.add(i); // (réservé jusqu'à ce que la lecture GPU le confirme)
+      return true;
     }
-    return -1;
+    return false;
   }
 
+  const _v = new THREE.Vector3();
+  const toScreen = (x, y, z) => _v.set(x, y, z).project(camera);
+  const screenPan = (x, y, z) => Math.max(-1, Math.min(1, toScreen(x, y, z).x));
   function pick(e) {
     let best = -1, bd = 22;
-    const v = new THREE.Vector3();
     for (const p of state.planets) {
-      v.set(p.x, p.y, p.z).project(camera);
-      const sx = (v.x * 0.5 + 0.5) * innerWidth, sy = (-v.y * 0.5 + 0.5) * innerHeight;
-      const d = Math.hypot(sx - e.clientX, sy - e.clientY);
+      const v = toScreen(p.x, p.y, p.z);
+      const d = Math.hypot((v.x * 0.5 + 0.5) * innerWidth - e.clientX, (-v.y * 0.5 + 0.5) * innerHeight - e.clientY);
       if (d < bd) { bd = d; best = p.index; }
     }
     if (best >= 0) select(best);
   }
   function select(i) {
     state.selected = i; state.autoSelect = false;
-    vis.V.selected.value = i;
+    V.selected.value = i;
+  }
+  const followPos = (out) => { const q = pred.get(rig.follow); return q ? out.set(q[0], q[1], q[2]) : null; };
+  function focus(i) {
+    const p = state.planets.find((q) => q.index === i);
+    if (!p) return;
+    select(i);
+    const q = pred.get(i) || [p.x, p.y, p.z];
+    rig.focus(i, new THREE.Vector3(...q), planetRadius(p.mE, V.planetK.value));
+    ui.setOverview(true);
+    toast(`Suivi de ${nameOf(i)} · Échap : vue d’ensemble`);
+  }
+  function overview() {
+    if (rig.overview()) ui.setOverview(false);
   }
 
   addEventListener('keydown', (e) => {
     if (e.target.tagName === 'INPUT') return;
     switch (e.key.toLowerCase()) {
-      case ' ': state.paused = !state.paused; syncSpeedUI(); toast(state.paused ? 'Pause' : 'Lecture'); e.preventDefault(); break;
+      case ' ': togglePause(); e.preventDefault(); break;
       case 'e': launchFlyby(); break;
-      case 'c': {
-        const m = (vis.V.colorMode.value + 1) % 3;
-        vis.V.colorMode.value = m;
-        toast(['Couleur : provenance', 'Couleur : roche / glace', 'Couleur : température'][m]);
-        break;
-      }
+      case 'c': V.colorMode.value = (V.colorMode.value + 1) % 3; toast(COLOR_MODES[V.colorMode.value]); break;
       case 'm': toggleSound(); break;
-      case 'h': $('#help').classList.toggle('hidden'); break;
+      case 'h': ui.toggleHelp(); break;
       case 'o': setMeca(!meca); toast(meca ? 'Machine : visible' : 'Machine : ôtée'); break;
       case 'a': state.autoSelect = true; toast('Sélection automatique'); break;
       case '[': seekTo(life.phase - 1); break;
@@ -207,48 +246,27 @@ async function main() {
       case '+': case '=': setSpeed(1); break;
       case '-': setSpeed(-1); break;
       case 'p': {
-        const i = sim.U.migK.value > 0 ? 0 : 2.0e-3;
-        sim.U.migK.value = i;
-        toast(i ? 'Migration planétaire : active' : 'Migration planétaire : inactive');
+        sim.U.migK.value = sim.U.migK.value > 0 ? 0 : 2.0e-3;
+        toast(sim.U.migK.value ? 'Migration planétaire : active' : 'Migration planétaire : inactive');
         break;
       }
     }
   });
-  function setSpeed(d) {
-    const k = Math.max(0, Math.min(SPEEDS.length - 1, SPEEDS.indexOf(state.speed) + d));
-    setSpeedTo(SPEEDS[k]);
-  }
-  function setSpeedTo(v) {
-    state.speed = v;
-    if (state.paused) state.paused = false;
-    syncSpeedUI();
-    toast(`Vitesse ×${fmtSpeed(v)}`);
-  }
-  const fmtSpeed = (v) => ({ 0.25: '¼', 0.5: '½' })[v] || String(v);
-  const speedEl = $('#speed');
-  speedEl.innerHTML = `<button data-v="pause" title="Pause (Espace)">❚❚</button>` +
-    SPEEDS.map((v) => `<button data-v="${v}">×${fmtSpeed(v)}</button>`).join('');
-  speedEl.addEventListener('click', (e) => {
-    const b = e.target.closest('button');
-    if (!b) return;
-    if (b.dataset.v === 'pause') { state.paused = !state.paused; syncSpeedUI(); toast(state.paused ? 'Pause' : 'Lecture'); }
-    else setSpeedTo(Number(b.dataset.v));
+
+  addEventListener('resize', () => {
+    if (FILM) return; // (résolution fixée par film.js)
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
   });
-  function syncSpeedUI() {
-    for (const b of speedEl.children) {
-      b.classList.toggle('on', b.dataset.v === 'pause' ? state.paused : !state.paused && Number(b.dataset.v) === state.speed);
-    }
-  }
-  syncSpeedUI();
 
-
+  // ── Étoile vagabonde ───────────────────────────────────────────────────────
   function launchFlyby() {
     if (state.fly) return;
     const th = Math.random() * Math.PI * 2, incl = (Math.random() - 0.5) * 0.6;
     const dir = new THREE.Vector3(Math.cos(th), Math.sin(incl), Math.sin(th)).normalize();
     const side = new THREE.Vector3(-dir.z, 0, dir.x).normalize();
-    const q = 6.5 + Math.random() * 4;
-    state.fly = { dir, start: side.multiplyScalar(q).addScaledVector(dir, -45), v: 1.1, t: 0 };
+    state.fly = { dir, start: side.multiplyScalar(6.5 + Math.random() * 4).addScaledVector(dir, -45), v: 1.1, t: 0 };
     sim.U.flyMass.value = 0.25;
     vis.flyStar.visible = true;
     toast('Une étoile vagabonde traverse le système…');
@@ -257,8 +275,7 @@ async function main() {
     const f = state.fly;
     if (!f) return;
     f.t += dt;
-    const p = f.start.clone().addScaledVector(f.dir, f.v * f.t);
-    sim.U.flyPos.value.copy(p);
+    const p = sim.U.flyPos.value.copy(f.start).addScaledVector(f.dir, f.v * f.t);
     vis.flyStar.position.copy(p);
     audio.flyby(p.length(), screenPan(p.x, p.y, p.z), p.dot(f.dir) < 0);
     if (f.v * f.t > 90) {
@@ -266,55 +283,8 @@ async function main() {
       audio.flyby(null);
     }
   }
-  const _v = new THREE.Vector3();
-  function screenPan(x, y, z) {
-    _v.set(x, y, z).project(camera);
-    return Math.max(-1, Math.min(1, _v.x));
-  }
 
-  // ── Lectures GPU → CPU (petites, asynchrones, jamais bloquantes) ──────────
-  const busy = { e: false, l: false, n: false };
-  const timers = { e: 0, l: 0, n: 0 };
-  const nUsed = Math.floor(((R_OUT - R_IN) / (R_GRID - R_IN)) * NR);
-  const radiusOf = (i) => R_IN + (i + 0.5) * (R_GRID - R_IN) / NR;
-  // ── Positions exactes à chaque image ───────────────────────────────────────
-  // On relit position + vitesse des embryons à chaque image (2 ko). La lecture
-  // arrive avec 1 à 3 images de retard, mais on sait de quel instant elle date :
-  // on la propage jusqu'à maintenant (problème à 2 corps, saute-mouton). Sur
-  // quelques centièmes d'unité de temps l'erreur est négligeable, d'où une
-  // caméra et des effets parfaitement accrochés aux planètes rendues par le GPU.
-  const kin = { pos: null, vel: null, t: -1 };
-  const pred = new Map(); // index → [x, y, z] à l'instant présent
-  let busyK = false;
-  function pollKin() {
-    if (busyK) return;
-    busyK = true;
-    const t = state.simTime;
-    sim.readKinematics().then((d) => { if (t >= kin.t) { kin.pos = d.pos; kin.vel = d.vel; kin.t = t; } })
-      .finally(() => (busyK = false));
-  }
-  function predictAll() {
-    pred.clear();
-    if (!kin.pos) return;
-    const span = Math.max(0, state.simTime - kin.t);
-    const n = Math.min(80, Math.ceil(span / 0.004));
-    const h = n ? span / n : 0;
-    for (let i = 0; i < M; i++) {
-      const o = i * 4;
-      if (kin.pos[o + 3] <= 0) continue;
-      let x = kin.pos[o], y = kin.pos[o + 1], z = kin.pos[o + 2];
-      let vx = kin.vel[o], vy = kin.vel[o + 1], vz = kin.vel[o + 2];
-      for (let k = 0; k < n; k++) { // même schéma que le GPU : vitesse puis position
-        const r2 = x * x + y * y + z * z, ir3 = 1 / (r2 * Math.sqrt(r2));
-        vx -= x * ir3 * h; vy -= y * ir3 * h; vz -= z * ir3 * h;
-        x += vx * h; y += vy * h; z += vz * h;
-      }
-      pred.set(i, [x, y, z]);
-    }
-  }
-
-  // Une planète croise la tête de lecture (axe +X) → elle joue sa note,
-  // s'illumine, et un repère s'allume sur la tête à son rayon.
+  // ── Notes : une planète croise la tête de lecture (axe +X) ────────────────
   const cross = new Map(); // index → { ang, last }
   function detectCrossings() {
     for (const [i, q] of pred) {
@@ -325,47 +295,42 @@ async function main() {
       c.ang = ang;
       if (!crossed) continue;
       const a = Math.hypot(q[0], q[2]);
-      if (state.simTime - c.last < Math.PI * Math.pow(a, 1.5)) continue;
+      if (state.simTime - c.last < Math.PI * Math.pow(a, 1.5)) continue; // (au plus une note par demi-orbite)
       c.last = state.simTime;
       const p = state.planets.find((pp) => pp.index === i);
-      if (!p || p.mE < 0.3) continue;
-      p.ping = performance.now();
-      vis.pulse(i, a, p.selected ? [0.7, 0.95, 1.2] : p.color);
+      if (!p || p.mE < MIN_PLANET) continue;
+      vis.pulse(i);
       orrery.pluck(a, Math.min(1, Math.cbrt(p.mE / 10)));
-      audio.planetNote({ a, mE: p.mE, gas: p.gasF, selected: p.selected, pan: screenPan(q[0], q[1], q[2]) });
-      const dot = listRows.get(i)?.querySelector('.dot');
-      if (dot) { dot.classList.remove('ping'); void dot.offsetWidth; dot.classList.add('ping'); }
+      audio.planetNote({ a, mE: p.mE, gas: p.gasF, selected: i === state.selected, pan: screenPan(q[0], q[1], q[2]) });
+      ui.ping(i);
     }
     for (const i of cross.keys()) if (!pred.has(i)) cross.delete(i);
   }
 
+  // ── Lectures GPU → CPU (petites, asynchrones, jamais bloquantes) ──────────
+  const nUsed = Math.floor(((R_OUT - R_IN) / (R_GRID - R_IN)) * NR);
+  const radiusOf = (i) => R_IN + (i + 0.5) * (R_GRID - R_IN) / NR;
+  const reads = { embryos: { busy: false, at: 0, every: 150 }, needle: { busy: false, at: 0, every: 60 } };
+  const throttle = (r, now, fn) => {
+    if (r.busy || now - r.at < r.every) return;
+    r.busy = true; r.at = now;
+    fn().finally(() => (r.busy = false));
+  };
   function poll(now) {
-    pollKin();
-    if (!busy.e && now - timers.e > 150) {
-      busy.e = true; timers.e = now;
-      const tReq = state.simTime; // l'état lu date de la requête : on compensera ce retard
-      sim.readEmbryos().then((d) => onEmbryos(d, tReq)).finally(() => (busy.e = false));
-    }
-    if (!busy.n && now - timers.n > 60) {
-      busy.n = true; timers.n = now;
-      sim.readNeedle().then((n) => {
-        state.needle = n;
-        state.active = n[NR];
-        state.dustFrac = state.active / N;
-        if (!state.paused) audio.updateDisk(n, nUsed, radiusOf, state.dustFrac);
-      }).finally(() => (busy.n = false));
-    }
+    if (state.simTime === 0) return; // (les buffers des embryons n'existent sur le GPU qu'après le premier pas)
+    kin.poll(state.simTime);
+    throttle(reads.embryos, now, () => sim.readEmbryos().then(onEmbryos));
+    throttle(reads.needle, now, () => sim.readNeedle().then((n) => {
+      state.needle = n;
+      state.dustFrac = n[NR] / N;
+      if (!state.paused) audio.updateDisk(n, nUsed, radiusOf, state.dustFrac);
+    }));
   }
 
-  // ── Budgets de masse, impacts, planètes ────────────────────────────────────
-  Object.assign(state, {
-    dustFrac: 1, gasFrac: 1, removedGas: 0, active: N,
-    lastSerial: 0, prev: new Map(), slow: 0, shake: 0,
-  });
-
-  const RATIOS = [[2, 1], [3, 2], [4, 3], [5, 3], [5, 4], [3, 1]];
-  function onEmbryos({ pos, tot, info, gas, impPos, impInfo }, tReq = state.simTime) {
-    // Impacts géants survenus depuis la dernière lecture
+  // ── État des planètes : impacts, disparitions, gaz, sélection ─────────────
+  function onEmbryos(data) {
+    // impacts géants survenus depuis la dernière lecture
+    const { impPos, impInfo } = data;
     const fresh = [];
     for (let k = 0; k < NIMP; k++) {
       const serial = impInfo[k * 4];
@@ -374,315 +339,158 @@ async function main() {
     fresh.sort((a, b) => a.serial - b.serial);
     const absorbed = new Set(fresh.map((f) => f.l));
 
-    const pl = [];
-    let sumSolid = 0, sumGas = 0;
-    for (let i = 0; i < M; i++) {
-      const m = pos[i * 4 + 3];
-      if (m <= 0) continue;
-      state.reserved.delete(i);
-      const x = pos[i * 4], y = pos[i * 4 + 1], z = pos[i * 4 + 2];
-      const g = gas[i * 4 + 1], solid = Math.max(m - g, 1e-20);
-      sumSolid += solid; sumGas += g;
-      const ice = tot[i * 4] / solid, meanR = tot[i * 4 + 1] / solid;
-      pl.push({
-        index: i, x, y, z, a: Math.hypot(x, z), phi: Math.atan2(z, x), m, mE: m / M_EARTH,
-        gasE: g / M_EARTH, gasF: g / m, ice, meanR, rate: tot[i * 4 + 2], impacts: tot[i * 4 + 3], nLayers: info[i * 4 + 3],
-        color: provenanceRGB(meanR), res: [],
-      });
-    }
-    // Planètes disparues sans impact : éjectées, tombées dans l'étoile ou
+    const pl = readPlanets(data);
+    for (const p of pl) state.reserved.delete(p.index);
+    // planètes disparues sans impact : éjectées, tombées dans l'étoile ou
     // englouties par la géante rouge — leur gaz quitte le budget du disque
     const alive = new Set(pl.map((p) => p.index));
     for (const [i, p] of state.prev) {
       if (alive.has(i) || absorbed.has(i)) continue;
-      state.removedGas += p.g;
+      state.removedGas += p.gas;
       if (life.p.starR > 0 && p.a < life.p.starR + 0.25) toast(`${nameOf(i)} est engloutie par l’étoile`);
       else if (p.a > 15) toast(`${nameOf(i)} est éjectée du système`);
     }
-    state.prev = new Map(pl.map((p) => [p.index, { m: p.m, g: p.gasE * M_EARTH, a: p.a }]));
+    state.prev = new Map(pl.map((p) => [p.index, { gas: p.gas, a: p.a }]));
 
-    // Gaz : réservoir qui se dissipe (photoévaporation, cf. lifecycle) moins
-    // ce que les planètes ont capté. (La poussière, elle, est désormais
-    // comptée grain par grain : un grain avalé disparaît pour de bon.)
+    // gaz : réservoir qui se dissipe (cf. lifecycle), moins ce que les planètes ont capté
+    const sumGas = pl.reduce((s, p) => s + p.gas, 0);
     const gasLeft = Math.max(0, GAS0 * life.gasEnv - (sumGas + state.removedGas));
     state.gasFrac = life.phase < 2 ? 1 : gasLeft / GAS0;
     sim.U.gasAvail.value = life.phase === 2 ? state.gasFrac : 0;
 
-    // Résonances de moyen mouvement entre voisines (rapport des périodes)
-    const big = pl.filter((p) => p.mE > 0.3).sort((a, b) => a.a - b.a);
-    for (let k = 0; k + 1 < big.length; k++) {
-      const P = Math.pow(big[k + 1].a / big[k].a, 1.5);
-      for (const [p, q] of RATIOS) {
-        if (Math.abs(P / (p / q) - 1) < 0.006) {
-          big[k].res.push(`${p}:${q}`); big[k + 1].res.push(`${p}:${q}`);
-          big[k].resonant = big[k + 1].resonant = true;
-        }
-      }
-    }
-
-    if (state.autoSelect || !pl.some((p) => p.index === state.selected)) {
+    if (state.autoSelect || !alive.has(state.selected)) {
       const heavy = pl.reduce((a, b) => (b.m > (a?.m ?? 0) ? b : a), null);
       state.selected = heavy ? heavy.index : -1;
-      vis.V.selected.value = state.selected;
+      V.selected.value = state.selected;
     }
-    for (const p of pl) p.selected = p.index === state.selected;
     state.planets = pl;
 
     for (const f of fresh) {
       state.lastSerial = f.serial;
-      (state.absorbedBy ||= new Map()).set(f.l, f.h);
+      state.absorbedBy.set(f.l, f.h);
       const s = pl.find((p) => p.index === f.h);
       if (!s || state.paused || state.seek >= 0) continue;
       vis.impact(f.h, pred.get(f.h) || [s.x, s.y, s.z], f.mlE);
-      // l'énergie du choc fond la surface : océan de magma, cratères effacés
-      const e = evo.get(f.h);
-      if (e) { e.heat = Math.min(1, e.heat + 0.45 + 1.5 * f.mlE / Math.max(s.mE, 0.05)); e.craters *= 0.15; }
+      evo.impact(f.h, f.mlE, s.mE);
       audio.impact(f.mlE, s.a, screenPan(s.x, s.y, s.z));
-      if (meca) orrery.strike(Math.min(1, f.mlE / 2)); // la cloche de la galerie
+      if (meca) orrery.strike(Math.min(1, f.mlE / 2));
       // ralenti, secousse et éblouissement proportionnés à l'impacteur : les
       // petites collisions d'embryons (fréquentes au début) restent discrètes
       const big = Math.min(1, f.mlE / 2);
       state.slow = Math.max(state.slow, 0.9 * big);
       state.shake = Math.max(state.shake, Math.min(1, 0.15 + 0.6 * big));
-      state.burst = Math.max(state.burst || 0, 0.8 * big * big);
-      s.flash = performance.now();
+      state.burst = Math.max(state.burst, 0.8 * big * big);
       toast(`Impact géant : ${nameOf(f.h)} absorbe ${nameOf(f.l)} (${fmtMass(f.mlE, true)})`);
     }
 
-    evolve(pl);
-    vis.updateOrbits(pl.filter((p) => p.mE > 0.3 || p.selected));
-    renderList();
+    evo.update(pl, state.simTime, life.p.L);
+    ui.renderPlanets(pl, state.selected, state.autoSelect);
   }
 
-  // ── Évolution des planètes (sous-simulation légère, côté CPU) ──────────────
-  // Chaque planète a une petite « vie » qui pilote l'aspect de sa surface :
-  //  · chaleur interne : l'accrétion et les impacts géants la chauffent (océan
-  //    de magma, fissures incandescentes), elle refroidit ensuite d'autant plus
-  //    lentement qu'elle est massive ;
-  //  · cratères : une surface solide sans atmosphère se cratérise avec l'âge,
-  //    la fusion (magma, impact) efface tout ;
-  //  · eau : apportée par la matière née au-delà de la ligne des glaces (la
-  //    lignée !), son état dépend de la température d'équilibre à cette distance :
-  //    vapeur (trop chaud), océans (tempéré), banquise (froid) ;
-  //  · atmosphère : retenue seulement au-dessus de ~0,2 M⊕ ; fine et bleue si
-  //    tempérée, épaisse et jaunâtre (effet de serre) si chaude ;
-  //  · géantes : jeunes et chaudes (lueur rouge, bandes floues), elles se
-  //    contrastent en refroidissant.
-  const evo = new Map(); // index → { heat, craters, born }
-  const ss = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
-  function evolve(pl) {
-    const dt = Math.max(0, Math.min(5, state.simTime - (state.evoT ?? state.simTime)));
-    state.evoT = state.simTime;
-    for (const p of pl) {
-      let e = evo.get(p.index);
-      if (!e) { e = { heat: 0.85, craters: 0, born: state.simTime }; evo.set(p.index, e); }
-      const mE = Math.max(p.mE, 0.02);
-      const tau = 12 * Math.pow(mE, 0.35);                    // refroidissement
-      const src = Math.min(0.5, 1.5 * p.rate / mE);               // chauffage par accrétion
-      e.heat = Math.min(1, Math.max(0, e.heat + dt * (src - e.heat / tau)));
-      const Teq = 278 * Math.pow(life.p.L, 0.25) / Math.sqrt(Math.max(p.a, 0.2)); // K (luminosité réelle de l'étoile)
-      const atmo = p.gasF > 0.08 ? 1 : ss(0.15, 1.5, mE) * ss(800, 400, Teq + 150 / mE);
-      e.craters = Math.min(1, e.craters + dt * 0.012 * (1 - atmo)) * Math.exp(-e.heat * e.heat * dt * 0.6);
-      const water = Math.max(p.ice, ss(0.9, 3.2, p.meanR) * 0.85); // matière hydratée née au-delà des glaces
-      const molten = ss(0.35, 0.6, e.heat);
-      const ocean = Teq > 180 && Teq < 330 ? water * (1 - molten) : 0;
-      const iceSurf = Teq <= 180 ? water * (1 - molten) : 0;
-      const hot = ss(300, 420, Teq) * atmo;
-      const age = (state.simTime - e.born) / (2 * Math.PI);
-      Object.assign(e, { atmo, water, ocean, iceSurf, hot, Teq, age, molten });
-      p.evo = e;
-      // (garde-fou : une valeur non finie ici contaminerait tout l'écran via le bloom)
-      const fin = (v) => (Number.isFinite(v) ? v : 0);
-      if (!Number.isFinite(e.heat)) e.heat = 0;
-      if (!Number.isFinite(e.craters)) e.craters = 0;
-      vis.setEvo(p.index, [e.heat, ocean, iceSurf, e.craters].map(fin), [atmo, hot, Math.min(1, age / 60), Teq / 1000].map(fin));
+  // ── Cycle de vie : du nuage à la supernova ──────────────────────────────────
+  function applyLife() {
+    const p = life.p, U = sim.U;
+    for (const k of ['Ms', 'gasDens', 'clearOn', 'clearR', 'clearR2', 'beltLoss', 'starR', 'outR', 'snA', 'snHeat', 'snR', 'snW', 'snow']) U[k].value = p[k];
+    // la nébuleuse de la supernova reste prisonnière de la cloche (sa coquille est bosselée : marge)
+    vis.setStar(meca && p.shellR > BELL_R * 0.7 ? { ...p, shellR: BELL_R * 0.7 } : p);
+    // versement du nuage : horloge de la phase « nuage » (au-delà, tout est lâché)
+    U.pourT.value = life.phase === 0 ? life.t : 1e9;
+    orrery.setStar(p.color, Math.pow(Math.max(p.L, 1e-3), 0.35), p.shell, p.starI * 0.35 * CONFIG.starHdr, p.starVisR);
+  }
+  function onLifeEvent(e) {
+    if (e === 'ignition') {
+      toast('Allumage : la fusion de l’hydrogène démarre au cœur de l’étoile');
+      rig.flyHome(null, 4);
+      if (state.seek < 0) { state.burst = 0.35; audio.ignition(); }
+    } else if (e === 'clearing') {
+      // la ceinture de débris se loge juste au-delà de la géante la plus lointaine
+      // (comme la ceinture de Kuiper au-delà de Neptune), ou vers 4,5 UA sans géante
+      const giants = state.planets.filter((p) => p.mE > 10 && p.a < 8.5);
+      const c = Math.min(7.8, Math.max(3.2, (giants.length ? Math.max(...giants.map((p) => p.a)) : 3) * 1.5));
+      life.beltIn = c * 0.85; life.beltOut = c * 1.15;
+      toast('Le gaz a disparu : la lumière de l’étoile balaie le disque');
+    } else if (e === 'mature') toast('Le système est formé');
+    else if (e === 'giant') { toast('L’étoile a épuisé son hydrogène : elle devient une supergéante rouge'); audio.giant(); }
+    else if (e === 'collapse') toast('Le cœur de fer s’effondre…');
+    else if (e === 'supernova') {
+      toast('Supernova ! L’étoile explose');
+      sim.supernova(); // les éjecta stellaires partent
+      state.burst = 1.6; state.shake = 1; audio.supernova();
+      if (rig.follow >= 0) overview();
+      controls.maxDistance = 140;
+      setTimeout(() => rig.flyHome(new THREE.Vector3(0, 30, 70), 8), 400); // on recule pour voir l'expansion
+    } else if (e === 'newcycle') startNewCycle();
+  }
+  // naissance des embryons pendant la formation : là où il y a de la poussière
+  // (tirage pondéré par le profil radial lu sous la tête), loin des autres
+  let spawnAcc = 0;
+  function spawnEmbryos(dt) {
+    spawnAcc += dt;
+    if (spawnAcc < SPAWN_EVERY || !state.needle) return;
+    spawnAcc = 0;
+    const w = [];
+    let tot = 0;
+    for (let i = 0; i < nUsed; i++) { const r = radiusOf(i), c = r > 0.45 ? state.needle[i] * r : 0; w.push(c); tot += c; }
+    if (tot <= 0) return;
+    for (let attempt = 0; attempt < 6; attempt++) {
+      let u = Math.random() * tot, i = 0;
+      while (i < nUsed - 1 && (u -= w[i]) > 0) i++;
+      const a = radiusOf(i) * (0.97 + Math.random() * 0.06);
+      if (state.planets.some((q) => Math.abs(q.a - a) < 0.07 * a)) continue;
+      const ph = Math.random() * Math.PI * 2;
+      spawn(new THREE.Vector3(a * Math.cos(ph), 0, a * Math.sin(ph)), M_EARTH * (0.02 + Math.random() * 0.1));
+      return;
     }
-    for (const i of evo.keys()) if (!pl.some((p) => p.index === i)) evo.delete(i);
   }
-  function surfaceOf(p) {
-    const e = p.evo;
-    if (!e) return '';
-    if (p.gasF > 0.5) return e.heat > 0.3 ? 'jeune géante encore chaude' : 'atmosphère en bandes';
-    if (p.gasF > 0.08) return 'enveloppe d’hydrogène épaisse';
-    if (e.molten > 0.5) return 'océan de magma';
-    if (e.hot > 0.5) return 'atmosphère épaisse et brûlante';
-    if (e.ocean > 0.3) return 'océans d’eau liquide';
-    if (e.iceSurf > 0.3) return 'surface glacée';
-    if (e.craters > 0.4) return 'surface criblée de cratères';
-    return 'surface rocheuse';
+  function startNewCycle(replay = false) {
+    state.resetting = true;
+    if (rig.follow >= 0) overview();
+    rig.flyHome(CLOUD_VIEW, 4);
+    setTimeout(() => (controls.maxDistance = 70), 4500);
+    sim.reset(life.cycle).then(() => {
+      Object.assign(state, { planets: [], prev: new Map(), removedGas: 0, lastSerial: 0, selected: -1, autoSelect: true });
+      state.absorbedBy.clear(); state.reserved.clear();
+      V.selected.value = -1;
+      evo.clear(); cross.clear(); kin.reset(state.simTime);
+      ui.renderPlanets([], -1, true);
+      state.resetting = false;
+      if (!replay) toast(`Cycle ${life.cycle + 1} : un nouveau nuage, ensemencé par la supernova`);
+    });
   }
 
-  // ── UI ─────────────────────────────────────────────────────────────────────
-  const NAMES = 'Aube Brume Cendre Dune Écume Faille Givre Houle Iris Jade Kaolin Lave Mica Nacre Onyx Perle Quartz Rouille Sel Talc Ulve Vesta Wolfram Xénon Yule Zircon Ambre Basalte Corail Diorite Éther Fusain'.split(' ');
-  const nameOf = (i) => NAMES[i % NAMES.length] + (i >= NAMES.length ? ' II' : '');
-  const fmtMass = (mE, plain) => (mE >= 30 ? `${(mE / 317.8).toFixed(2)} M${plain ? 'J' : '<sub>J</sub>'}` : `${mE.toFixed(mE < 1 ? 2 : 1)} M⊕`);
-  const kindOf = (p) => (p.mE < 0.3 ? 'embryon' : p.gasF > 0.5 ? 'géante gazeuse' : p.gasF > 0.08 ? 'mini-Neptune' : p.ice > 0.35 ? 'glacée' : 'rocheuse');
-
-  // Liste stable : on ne change sa composition (et son ordre) que si une
-  // planète naît, disparaît ou en dépasse nettement une autre ; sinon on met
-  // seulement à jour les chiffres. Les lignes ne bougent plus sous la souris.
-  const MAXL = 8;
-  let members = [];
-  const listRows = new Map();
-  const listEl = $('#list');
-  function renderList() {
-    const byIdx = new Map(state.planets.map((p) => [p.index, p]));
-    let next = members.filter((i) => byIdx.has(i) && (byIdx.get(i).mE >= 0.3 || i === state.selected));
-    const cands = state.planets.filter((p) => p.mE >= 0.3 && !next.includes(p.index)).sort((a, b) => b.m - a.m);
-    for (const c of cands) {
-      if (next.length < MAXL) { next.push(c.index); continue; }
-      const weakest = next.filter((i) => i !== state.selected).reduce((a, b) => (byIdx.get(b).m < byIdx.get(a).m ? b : a));
-      if (c.m > byIdx.get(weakest).m * 1.6) next[next.indexOf(weakest)] = c.index;
+  // ── Navigation entre les phases ─────────────────────────────────────────────
+  // Vers l'avant : avance rapide de la vraie simulation (le système se forme
+  // pour de bon). Vers l'arrière : on recommence le cycle depuis le nuage (on
+  // ne remonte pas le temps d'une vraie simulation), puis avance rapide.
+  function seekTo(i) {
+    i = Math.max(0, Math.min(PHASES.length - 1, i));
+    if (state.resetting) return;
+    if (life.phase === 6) return toast('Pendant la supernova, on regarde ! Un nouveau cycle suivra.');
+    if (state.seek >= 0 && i === state.seek) return; // (déjà en route)
+    if (i === life.phase && state.seek < 0) return toast(`Déjà en phase « ${PHASES[i].name} »`);
+    if (i < life.phase) {
+      life.restart();
+      startNewCycle(true);
+      if (i === 0) return;
     }
-    if (state.selected >= 0 && byIdx.has(state.selected) && !next.includes(state.selected)) next.push(state.selected);
-    const changed = next.length !== members.length || next.some((i) => !members.includes(i));
-    if (changed) {
-      members = next.sort((a, b) => byIdx.get(a).a - byIdx.get(b).a);
-      listEl.replaceChildren(...members.map((i) => {
-        let li = listRows.get(i);
-        if (!li) {
-          li = document.createElement('li');
-          li.dataset.i = i;
-          li.innerHTML = '<span class="dot"></span><span class="nm"></span><span class="num a"></span><span class="num m"></span><span class="chips"></span>';
-          li.querySelector('.nm').textContent = nameOf(i);
-          listRows.set(i, li);
-        }
-        return li;
-      }));
-      for (const i of listRows.keys()) if (!members.includes(i)) listRows.delete(i);
-    }
-    for (const i of members) {
-      const p = byIdx.get(i), li = listRows.get(i);
-      li.classList.toggle('sel', p.selected);
-      li.querySelector('.dot').style.background = css(p.color);
-      li.querySelector('.a').textContent = `${p.a.toFixed(2)} UA`;
-      li.querySelector('.m').innerHTML = fmtMass(p.mE);
-      const chips = `<i>${kindOf(p)}</i>`;
-      const c = li.querySelector('.chips');
-      if (c.innerHTML !== chips) c.innerHTML = chips;
-    }
-    $('#auto').classList.toggle('on', state.autoSelect);
-    drawInfo();
+    state.seek = i;
+    audio.setMuted(true, true);
+    ui.setSeeking(true);
+    toast(`Avance rapide vers « ${PHASES[i].name} »…`, true);
   }
-  listEl.addEventListener('click', (e) => {
-    const li = e.target.closest('li');
-    if (li) focus(Number(li.dataset.i));
-  });
-
-  // ── Caméra : suivre une planète choisie dans la liste ──────────────────────
-  // La caméra glisse jusqu'à la planète puis l'accompagne sur son orbite ;
-  // on peut toujours tourner autour et zoomer. Échap : vue d'ensemble.
-  const HOME = { pos: new THREE.Vector3(0, 6.5, 12.5), target: new THREE.Vector3() };
-  state.follow = -1;
-  let camMove = null;
-  const lastFollow = new THREE.Vector3();
-  const visRadius = (mE) => {
-    const Rp = mE < 2 ? Math.pow(mE, 0.28) : Math.min(11.5, 1.21 * Math.pow(mE / 2, 0.59));
-    return Math.max(0.005, 0.013 * Math.pow(Rp, 0.75)) * vis.V.planetK.value; // même formule que le shader
-  };
-  function followPos(out) {
-    const q = pred.get(state.follow);
-    return q ? out.set(q[0], q[1], q[2]) : null;
+  function endSeek() {
+    state.seek = -1;
+    audio.setMuted(audio.muted, false);
+    ui.setSeeking(false);
+    ui.hideToast();
+    toast(PHASES[life.phase].name, true);
+    rig.flyHome(life.phase === 0 ? CLOUD_VIEW : null, 2.5);
   }
-  function focus(i) {
-    const p = state.planets.find((q) => q.index === i);
-    if (!p) return;
-    select(i);
-    state.follow = i;
-    const at = followPos(new THREE.Vector3()) || new THREE.Vector3(p.x, p.y, p.z);
-    // de côté, un peu vers l'étoile et au-dessus : la planète apparaît éclairée
-    // aux trois quarts (vue de l'extérieur, on ne verrait que sa face de nuit)
-    const d = 0.3 + 7 * visRadius(p.mE);
-    const radial = at.clone().setY(0).normalize();
-    const tangent = new THREE.Vector3(-radial.z, 0, radial.x);
-    const offset = tangent.multiplyScalar(-0.9).addScaledVector(radial, -0.25).add(new THREE.Vector3(0, 0.4, 0)).normalize().multiplyScalar(d);
-    camMove = { t: 0, dur: 1.6, fromPos: camera.position.clone(), fromTarget: controls.target.clone(), offset };
-    controls.minDistance = 0.04;
-    lastFollow.copy(at);
-    $('#overview').hidden = false;
-    toast(`Suivi de ${nameOf(i)} · Échap : vue d’ensemble`);
-  }
-  function overview() {
-    if (state.follow < 0 && !camMove) return;
-    state.follow = -1;
-    camMove = { t: 0, dur: 1.6, fromPos: camera.position.clone(), fromTarget: controls.target.clone(), home: true };
-    $('#overview').hidden = true;
-  }
-  $('#overview').addEventListener('click', overview);
-  // vue large du nuage (début de cycle) / retour à la vue du disque (allumage)
-  const CLOUD_VIEW = new THREE.Vector3(0, 13, 30);
-  function flyHome(dest, dur = 3) {
-    if (state.follow >= 0) return;
-    camMove = { t: 0, dur, fromPos: camera.position.clone(), fromTarget: controls.target.clone(), home: true, dest };
-  }
-  const _f = new THREE.Vector3();
-  const _up = new THREE.Vector3(0, 1, 0);
-  function updateCamera(real) {
-    if (state.follow >= 0 && kin.pos && !pred.has(state.follow)) {
-      // planète absorbée : on suit celle qui l'a avalée (l'info arrive un peu
-      // après), sinon, passé un délai, retour à la vue d'ensemble
-      const heir = state.absorbedBy?.get(state.follow);
-      state.lostFor = (state.lostFor || 0) + real;
-      if (heir !== undefined && pred.has(heir)) { state.follow = heir; select(heir); state.lostFor = 0; }
-      else if (state.lostFor > 0.6) { state.lostFor = 0; overview(); }
-    } else state.lostFor = 0;
-    const here = state.follow >= 0 ? followPos(_f) : null;
-    if (state.follow >= 0 && !here && camMove && !camMove.home) return; // attend la première prédiction
-    if (camMove) {
-      camMove.t += real;
-      if (here && !camMove.home) camMove.offset.applyAxisAngle(_up, -(Math.atan2(here.z, here.x) - Math.atan2(lastFollow.z, lastFollow.x)));
-      const k = Math.min(1, camMove.t / camMove.dur), e = k * k * (3 - 2 * k);
-      const toTarget = camMove.home ? HOME.target : here;
-      const toPos = camMove.home ? (camMove.dest || HOME.pos) : here.clone().add(camMove.offset);
-      controls.target.lerpVectors(camMove.fromTarget, toTarget, e);
-      camera.position.lerpVectors(camMove.fromPos, toPos, e);
-      if (k >= 1) { if (camMove.home) controls.minDistance = 0.6; camMove = null; }
-    } else if (here) {
-      // accompagne la planète dans un repère qui tourne avec elle autour de
-      // l'étoile : même éclairage en permanence (sinon on finit côté nuit)
-      const dAng = Math.atan2(here.z, here.x) - Math.atan2(lastFollow.z, lastFollow.x);
-      _v.subVectors(camera.position, controls.target).applyAxisAngle(_up, -dAng);
-      controls.target.copy(here);
-      camera.position.copy(here).add(_v);
-    }
-    if (here) lastFollow.copy(here);
-  }
-  $('#auto').addEventListener('click', () => {
-    state.autoSelect = !state.autoSelect;
-    toast(state.autoSelect ? 'Sélection automatique : la plus massive' : 'Sélection figée');
-  });
-
-  // Fiche de la planète suivie : une ligne, sous la liste
-  function drawInfo() {
-    const p = state.planets.find((q) => q.index === state.selected);
-    const el = $('#pinfo');
-    const html = p ? `<b>${nameOf(p.index)}</b> · ${kindOf(p)} · ${fmtMass(p.mE)} · ${p.a.toFixed(2)} UA${p.evo && p.mE >= 0.3 ? ` · ${surfaceOf(p)}, ≈ ${p.evo.Teq.toFixed(0)} K` : ''}`
-      : 'Cliquez une planète pour la suivre.';
-    if (el.innerHTML !== html) el.innerHTML = html;
-  }
-
-  let toastTimer;
-  function toast(msg, force) {
-    if (state.seek >= 0 && !force) return; // (silence pendant l'avance rapide)
-    const t = $('#toast');
-    t.textContent = msg; t.classList.add('on');
-    clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('on'), 2400);
-  }
-
-  $('#enter').addEventListener('click', () => $('#intro').classList.add('gone'));
-
-  addEventListener('resize', () => {
-    if (FILM) return; // (résolution fixée par film.js)
-    camera.aspect = innerWidth / innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(innerWidth, innerHeight);
-  });
 
   // ── Résolution adaptative ───────────────────────────────────────────────────
-  // Filet de sécurité : si l'image moyenne dépasse 1/55 s pendant 2 s, on baisse
-  // la densité de pixels d'un cran ; s'il reste de la marge, on la remonte.
-  const PR_STEPS = [1, 1.25, 1.5, 1.75, 2].filter((p) => p <= MAX_PR);
-  if (!PR_STEPS.includes(MAX_PR)) PR_STEPS.push(MAX_PR);
+  // Si l'image moyenne dépasse 1/55 s pendant 2 s, la densité de pixels baisse
+  // d'un cran ; s'il reste de la marge, elle remonte.
+  const PR_STEPS = [...new Set([1, 1.25, 1.5, 1.75, 2].filter((p) => p < MAX_PR).concat(MAX_PR))];
   let prIdx = PR_STEPS.length - 1, prAcc = 0, prN = 0, prCool = 0;
   function adaptResolution(real) {
     if (real <= 0) return;
@@ -691,284 +499,128 @@ async function main() {
     const mean = prAcc / prN;
     prAcc = 0; prN = 0;
     if (prCool > 0 || state.paused) return;
-    let next = prIdx;
-    if (mean > 1 / 55 && prIdx > 0) next--;
-    else if (mean < 1 / 100 && prIdx < PR_STEPS.length - 1) next++;
-    if (next !== prIdx) {
-      prIdx = next; prCool = 4;
-      renderer.setPixelRatio(PR_STEPS[prIdx]);
-      renderer.setSize(innerWidth, innerHeight);
-    }
+    const next = mean > 1 / 55 ? Math.max(0, prIdx - 1) : mean < 1 / 100 ? Math.min(PR_STEPS.length - 1, prIdx + 1) : prIdx;
+    if (next === prIdx) return;
+    prIdx = next; prCool = 4;
+    renderer.setPixelRatio(PR_STEPS[prIdx]);
+    renderer.setSize(innerWidth, innerHeight);
   }
 
-  // ── Cycle de vie : du nuage à la supernova ──────────────────────────────────
-  state.lifeUI = 0;
-  function applyLife() {
-    const p = life.p, U = sim.U;
-    U.Ms.value = p.Ms; U.gasDens.value = p.gasDens;
-    U.clearOn.value = p.clearOn; U.clearR.value = p.clearR; U.clearR2.value = p.clearR2; U.beltLoss.value = p.beltLoss;
-    U.starR.value = p.starR; U.outR.value = p.outR; U.snA.value = p.snA; U.snHeat.value = p.snHeat; U.snR.value = p.snR; U.snW.value = p.snW;
-    U.snow.value = p.snow;
-    // la nébuleuse de la supernova reste prisonnière de la cloche
-    vis.setStar(meca && p.shellR > BELL_R * 0.7 ? { ...p, shellR: BELL_R * 0.7 } : p); // (sa coquille est bosselée : marge)
-    // versement du nuage : horloge de la phase « nuage » (au-delà, tout est lâché)
-    sim.U.pourT.value = life.phase === 0 ? life.t : 1e9;
-    orrery.setStar(p.color, Math.pow(Math.max(p.L, 1e-3), 0.35), p.shell, p.starI * 0.35 * STAR_HDR, p.starVisR); // (radiance du disque en DA mécanique : starK)
-  }
-  function onLifeEvent(e) {
-    if (e === 'ignition') {
-      toast('Allumage : la fusion de l’hydrogène démarre au cœur de l’étoile');
-      flyHome(null, 4);
-      if (state.seek < 0) { state.burst = 0.35; audio.ignition(); }
-    } else if (e === 'clearing') {
-      // La ceinture de débris se loge juste au-delà de la géante la plus lointaine
-      // (comme la ceinture de Kuiper au-delà de Neptune), ou vers 4,5 UA sans géante.
-      const giants = state.planets.filter((p) => p.mE > 10 && p.a < 8.5);
-      const aG = giants.length ? Math.max(...giants.map((p) => p.a)) : 3;
-      const c = Math.min(7.8, Math.max(3.2, aG * 1.5));
-      life.beltIn = c * 0.85; life.beltOut = c * 1.15;
-      toast('Le gaz a disparu : la lumière de l’étoile balaie le disque');
-    }
-    else if (e === 'mature') toast('Le système est formé');
-    else if (e === 'giant') { toast('L’étoile a épuisé son hydrogène : elle devient une supergéante rouge'); audio.giant(); }
-    else if (e === 'collapse') toast('Le cœur de fer s’effondre…');
-    else if (e === 'supernova') {
-      toast('Supernova ! L’étoile explose');
-      sim.supernova();                       // les éjecta stellaires partent
-      state.burst = 1.6; state.shake = 1; audio.supernova();
-      if (state.follow >= 0) overview();
-      controls.maxDistance = 140;
-      setTimeout(() => flyHome(new THREE.Vector3(0, 30, 70), 8), 400); // on recule pour voir l'expansion
-    } else if (e === 'newcycle') startNewCycle();
-  }
-  // Naissance des embryons pendant la formation : là où il y a de la poussière
-  // (tirage pondéré par le profil radial lu sous la tête), loin des autres.
-  let spawnAcc = 0;
-  function spawnEmbryos(dt) {
-    spawnAcc += dt;
-    if (spawnAcc < 2.2 || !state.needle) return;
-    spawnAcc = 0;
-    const w = [];
-    let tot = 0;
-    for (let i = 0; i < nUsed; i++) { const r = radiusOf(i); const c = state.needle[i] * r * (r > 0.45 ? 1 : 0); w.push(c); tot += c; }
-    if (tot <= 0) return;
-    for (let attempt = 0; attempt < 6; attempt++) {
-      let u = Math.random() * tot, i = 0;
-      while (i < nUsed - 1 && (u -= w[i]) > 0) i++;
-      const a = radiusOf(i) * (0.97 + Math.random() * 0.06);
-      if (state.planets.some((q) => Math.abs(q.a - a) < 0.07 * a)) continue;
-      const free = freeSlot();
-      if (free < 0) return;
-      const ph = Math.random() * Math.PI * 2;
-      sim.spawn(free, new THREE.Vector3(a * Math.cos(ph), 0, a * Math.sin(ph)), M_EARTH * (0.02 + Math.random() * 0.1));
-      state.reserved.add(free);
-      return;
-    }
-  }
-  function startNewCycle(replay = false) {
-    state.resetting = true;
-    if (state.follow >= 0) overview();
-    flyHome(CLOUD_VIEW, 4);
-    setTimeout(() => (controls.maxDistance = 70), 4500);
-    sim.reset(life.cycle).then(() => {
-      state.planets = []; state.prev = new Map(); state.removedGas = 0; state.lastSerial = 0;
-      state.absorbedBy?.clear(); state.reserved.clear(); state.layers = null;
-      state.selected = -1; state.autoSelect = true; vis.V.selected.value = -1;
-      evo.clear(); cross.clear(); pred.clear(); kin.pos = null; kin.t = state.simTime;
-      vis.updateOrbits([]);
-      renderList();
-      state.resetting = false;
-      if (!replay) toast(`Cycle ${life.cycle + 1} : un nouveau nuage, ensemencé par la supernova`);
-    });
-  }
-  const phasesEl = $('#phases');
-  phasesEl.innerHTML = PHASES.map((ph, i) => `<div data-i="${i}" title="${ph.name}"><span><u></u></span></div>`).join('');
-  $('#phPrev').addEventListener('click', () => seekTo(life.phase - 1));
-  $('#phNext').addEventListener('click', () => seekTo(life.phase + 1));
-  phasesEl.addEventListener('click', (e) => {
-    const d = e.target.closest('[data-i]');
-    if (d) seekTo(Number(d.dataset.i));
-  });
-
-  // ── Navigation entre les phases ─────────────────────────────────────────────
-  // Vers l'avant : avance rapide de la vraie simulation (le système se forme
-  // pour de bon, il n'est pas « truqué »). Vers l'arrière : on recommence le
-  // cycle depuis le nuage (on ne peut pas remonter le temps d'une vraie
-  // simulation), puis avance rapide si besoin — seulement pour une phase
-  // strictement antérieure : cliquer la phase en cours ne fait rien.
-  state.seek = -1;
-  function seekTo(i) {
-    i = Math.max(0, Math.min(PHASES.length - 1, i));
-    if (state.resetting) return;
-    if (life.phase === 6) { toast('Pendant la supernova, on regarde ! Un nouveau cycle suivra.'); return; }
-    if (state.seek >= 0 && i === state.seek) return;     // (déjà en route)
-    if (i === life.phase && state.seek < 0) { toast(`Déjà en phase « ${PHASES[i].name} »`); return; }
-    if (i < life.phase) {
-      life.restart();
-      startNewCycle(true);
-      if (i === 0) return;
-    }
-    state.seek = i;
-    audio.setMuted(true, true);
-    document.body.classList.add('seeking');
-    toast(`Avance rapide vers « ${PHASES[i].name} »…`, true);
-  }
-  function endSeek() {
-    state.seek = -1;
-    audio.setMuted(audio.muted, false);
-    document.body.classList.remove('seeking');
-    $('#toast').classList.remove('on');
-    toast(PHASES[life.phase].name, true);
-    if (state.follow < 0) flyHome(life.phase === 0 ? CLOUD_VIEW : null, 2.5);
-  }
-  function renderLife() {
-    const ph = PHASES[life.phase];
-    $('#cyc').textContent = `cycle ${life.cycle + 1}`;
-    [...phasesEl.children].forEach((el, i) => {
-      el.className = i < life.phase ? 'done' : i === life.phase ? 'now' : i === state.seek ? 'target' : '';
-      el.title = i < life.phase ? `${PHASES[i].name} — revenir en arrière recommence le cycle depuis le nuage`
-        : i === life.phase ? `${PHASES[i].name} (en cours)` : `Avancer jusqu’à : ${PHASES[i].name}`;
-      el.firstChild.firstChild.style.width = i === life.phase ? `${Math.min(100, life.p.progress * 100).toFixed(1)}%` : '';
-    });
-    $('#phPrev').disabled = life.phase === 0 || life.phase === 6;
-    $('#phNext').disabled = life.phase >= 5 || state.seek >= 0;
-    const head = `<b>${ph.name}</b> <span class="dim">· en réalité ${ph.real}</span>`;
-    if ($('#phaseName').innerHTML !== head) { $('#phaseName').innerHTML = head; $('#phaseDesc').textContent = ph.desc; }
+  // ── Profilage (?prof) ─────────────────────────────────────────────────────
+  const prof = { n: 0, loop: 0, poll: 0 };
+  function profile(t0, t1) {
+    prof.loop += t1 - t0; prof.poll += performance.now() - t1;
+    if (++prof.n % 30) return;
+    window.__profJs = { loop: (prof.loop / 30).toFixed(2), poll: (prof.poll / 30).toFixed(2), drawCalls: renderer.info.render.drawCalls };
+    prof.loop = prof.poll = 0;
+    Promise.all([renderer.resolveTimestampsAsync('compute'), renderer.resolveTimestampsAsync('render')])
+      .then(() => { window.__prof = { compute: renderer.info.compute.timestamp, render: renderer.info.render.timestamp }; });
   }
 
   // ── Boucle ─────────────────────────────────────────────────────────────────
-  let last = performance.now();
-  const _fp = new THREE.Vector3(), _camV = new THREE.Vector3(), _camPrev = new THREE.Vector3();
-  const shakeOff = new THREE.Vector3();
   // La simulation attend qu'on entre : tant que l'accueil est affiché, rien ne
-  // tourne (ni calcul, ni rendu) — le cycle commence au clic.
-  const introEl = $('#intro');
-  const filmHooks = (window.__filmHooks = {});
+  // tourne (ni calcul, ni rendu).
+  let last = performance.now(), frameCount = 0;
+  const _fp = new THREE.Vector3(), _camV = new THREE.Vector3(), _camPrev = new THREE.Vector3();
+  const hooks = (window.__filmHooks = {}); // (pilotage par film.js)
   const frame = (now) => {
-    if (!introEl.classList.contains('gone')) { last = now; return; }
-    // (l'horodatage rAF peut précéder `last` à la 1re image : jamais de pas négatif)
-    const tJs0 = PROF ? performance.now() : 0;
-    const real = Math.min(0.1, Math.max(0, (now - last) / 1000));
+    if (!ui.introGone) { last = now; return; }
+    const t0 = CONFIG.prof ? performance.now() : 0;
+    const real = Math.min(0.1, Math.max(0, (now - last) / 1000)); // (l'horodatage rAF peut précéder `last`)
     last = now;
-    state.fps = state.fps * 0.95 + (1 / Math.max(real, 1e-3)) * 0.05;
     if (!FILM) adaptResolution(real);
-    // ralenti après un impact géant : le temps s'étire puis repart
+    const running = !state.paused && !state.resetting;
+
+    // Temps simulé indexé sur le temps réel (0,96 unité/s à ×1), ralenti après
+    // un impact géant. Plafonné : si le GPU ne suit pas en accéléré, le temps
+    // ralentit au lieu de demander toujours plus de sous-pas. La supernova se
+    // joue au plus à ×1.
     state.slow = Math.max(0, state.slow - real / 2.6);
     const timeScale = 1 - 0.8 * Math.pow(state.slow, 0.7);
-    // Temps simulé indexé sur le temps réel (0,96 unité/s à ×1, comme avant à
-    // 60 i/s) : à 120 i/s chaque image fait deux fois moins de travail.
-    // (plafonné : si le GPU ne suit pas en accéléré, le temps ralentit au lieu
-    //  de demander toujours plus de sous-pas — pas de spirale)
-    // (la supernova se joue au plus à ×1 : c'est un moment à regarder)
     const spd = life.phase === 6 ? Math.min(1, state.speed) : state.speed;
-    let frameTime = Math.min(0.066 * warp, Math.min(0.05, real) * 0.96 * spd * timeScale * warp);
-    if (FILM) frameTime = (filmHooks.dtSim || 0) * timeScale; // (le réalisateur fixe la vitesse du temps)
-    // navigation : avance rapide vers une phase (grands pas, tout à fond)
-    if (state.seek >= 0 && !state.resetting) {
+    let frameTime = Math.min(0.066 * CONFIG.warp, Math.min(0.05, real) * 0.96 * spd * timeScale * CONFIG.warp);
+    if (FILM) frameTime = (hooks.dtSim || 0) * timeScale;
+    if (state.seek >= 0 && !state.resetting) { // avance rapide vers une phase : grands pas
       if (life.phase >= state.seek) endSeek();
       else frameTime = 0.4;
     }
-    sim.maxDtP = state.seek >= 0 ? 0.03 : 0.011;
-    if (FILM && filmHooks.maxDtP) sim.maxDtP = filmHooks.maxDtP; // (ellipses hors champ : grands pas)
+    sim.maxDtP = (FILM && hooks.maxDtP) || (state.seek >= 0 ? 0.03 : 0.011);
 
     // cycle de vie : paramètres de l'étoile et du disque, événements
-    if (!state.paused && !state.resetting) {
+    if (running) {
       const evs = life.update(frameTime, real, state.gasFrac);
       applyLife();
       for (const e of evs) onLifeEvent(e);
       if (life.p.spawn) spawnEmbryos(frameTime);
     }
-    if (++state.lifeUI % 8 === 0) renderLife();
+    if (++frameCount % 8 === 0) ui.renderLife(life, state.seek);
 
     let dtSim = 0;
-    if (!state.paused && !state.resetting && frameTime > 0) {
+    if (running && frameTime > 0) {
       dtSim = frameTime;
       state.simTime += dtSim;
-      const tick = state.simTime >= state.nextLayer;
-      if (tick) state.nextLayer = state.simTime + 2.5;
       updateFlyby(dtSim);
-      sim.step(dtSim, tick);
+      sim.step(dtSim);
     }
     // positions de l'instant présent, PUIS caméra : sinon elle aurait une image de retard
-    predictAll();
+    kin.predict(state.simTime);
     if (!state.paused) detectCrossings();
-    if (FILM) filmHooks.camera?.(real);
-    else { updateCamera(real); controls.update(); }
-    vis.updateFx(state.paused && !FILM ? 0 : real, (i) => pred.get(i)); // (au tournage, éclairs et ondes s'éteignent même simulation à l'arrêt)
-    if (meca) {
-      orrery.update(state.planets, pred, dtSim, real, !state.paused && !state.resetting, life, vis.V.planetK.value,
-        { t: life.phase === 0 ? life.t : 1e9, dur: sim.U.pourDur.value });
-      vis.V.collect.value = state.resetting ? vis.V.collect.value : orrery.collect;
-    } else vis.V.collect.value = 0;
-    // mise au point : sur la planète suivie, sinon sur le centre visé
-    {
-      const fp = state.follow >= 0 ? followPos(_fp) : null;
-      const fd = camera.position.distanceTo(fp || controls.target);
-      vis.V.focus.value += (fd - vis.V.focus.value) * Math.min(1, real * 4);
-      // objectif « macro » : faible profondeur de champ, flou de mouvement marqué
-      vis.V.focusRange.value = Math.max(0.2, vis.V.focus.value * 0.28);
-      vis.V.bokeh.value = meca ? 3.0 : 0.8;
-      vis.V.blurK.value = meca ? 1.0 : 0.4;
-      vis.V.aperture.value = LENS && DOF ? (meca ? 0.045 : 0.015) : 0; // (bokeh des grains : seulement avec ?dof)
-      // obturation : un peu plus d'une image de temps simulé (traînées des grains rapides)
-      vis.V.shutter.value = LENS ? dtSim * 1.6 : 0;
-      // vitesse de la caméra (lissée), pour des traînées relatives à elle
-      if (dtSim > 0) {
-        _camV.subVectors(camera.position, _camPrev).divideScalar(dtSim);
-        vis.V.camVel.value.lerp(_camV, 0.5);
-      }
-      _camPrev.copy(camera.position);
-      vis.V.planetFlux.value = meca ? 2.2 : 4.0;
-      vis.V.starK.value = meca ? 0.35 : 1.0;
-      vis.V.starHdr.value = STAR_HDR;
-      vis.V.limbAmt.value = HDR ? 0.3 : 0.6;
-      // (bloom plafonné à l'éclat qu'avait l'étoile avant le surplus HDR ; suit starI : la supernova garde son éclair)
-      vis.V.bloomCap.value = HDR ? Math.max(2, vis.V.starI.value * vis.V.starK.value * 1.6) : 1e4;
-      vis.V.innerSoft.value = meca ? 1.0 : 0.0;
+    if (FILM) hooks.camera?.(real);
+    else {
+      // planète suivie absorbée : on suit celle qui l'a avalée (l'info arrive un
+      // peu après), sinon, passé un délai, retour à la vue d'ensemble
+      if (rig.follow >= 0 && kin.ready && !pred.has(rig.follow)) {
+        const heir = state.absorbedBy.get(rig.follow);
+        state.lostFor += real;
+        if (heir !== undefined && pred.has(heir)) { rig.follow = heir; select(heir); state.lostFor = 0; }
+        else if (state.lostFor > 0.6) { state.lostFor = 0; overview(); }
+      } else state.lostFor = 0;
+      rig.update(real, rig.follow >= 0 ? followPos(_fp) : null);
+      controls.update();
     }
+    vis.updateFx(state.paused && !FILM ? 0 : real, (i) => pred.get(i)); // (au tournage, les effets s'éteignent même à l'arrêt)
+    if (meca) {
+      orrery.update(state.planets, pred, dtSim, real, running, life, V.planetK.value, { t: life.phase === 0 ? life.t : 1e9, dur: sim.U.pourDur.value });
+      if (!state.resetting) V.collect.value = orrery.collect;
+    }
+
+    // objectif : mise au point sur la planète suivie, sinon sur le centre visé
+    const fd = camera.position.distanceTo((rig.follow >= 0 && followPos(_fp)) || controls.target);
+    V.focus.value += (fd - V.focus.value) * Math.min(1, real * 4);
+    V.focusRange.value = Math.max(0.2, V.focus.value * 0.28);
+    // obturation : un peu plus d'une image de temps simulé ; traînées relatives à la caméra
+    V.shutter.value = CONFIG.lens ? dtSim * 1.6 : 0;
+    if (dtSim > 0) V.camVel.value.lerp(_camV.subVectors(camera.position, _camPrev).divideScalar(dtSim), 0.5);
+    _camPrev.copy(camera.position);
+    // (bloom plafonné à l'éclat de l'étoile avant le surplus HDR ; suit starI : la supernova garde son éclair)
+    V.bloomCap.value = HDR ? Math.max(2, V.starI.value * V.starK.value * 1.6) : 1e4;
     if (vis.updatePulsar(state.paused ? 0 : real)) audio.pulsarTick(); // un faisceau nous balaie : « tic »
 
     // bouffée d'exposition : tout le système s'illumine un instant
-    state.burst = Math.max(0, (state.burst || 0) - real * 1.4);
-    vis.V.exposure.value = EXPOSURE * (meca ? 1.25 : 1) * (1 + (state.follow >= 0 ? 0.3 : 0.9) * state.burst * state.burst * (state.burst > 1 ? 3 : 1));
+    state.burst = Math.max(0, state.burst - real * 1.4);
+    const b2 = state.burst * state.burst;
+    V.exposure.value = CONFIG.exposure * (meca ? 1.25 : 1) * (1 + (rig.follow >= 0 ? 0.3 : 0.9) * b2 * (state.burst > 1 ? 3 : 1));
 
-    // secousse de caméra
     state.shake = Math.max(0, state.shake - real * 1.2);
-    const k = state.shake * state.shake * 0.04 * camera.position.length() / 14;
-    shakeOff.set((Math.random() - 0.5) * k, (Math.random() - 0.5) * k, (Math.random() - 0.5) * k);
-    camera.position.add(shakeOff);
-    filmHooks.before?.();
-    if (!filmHooks.skipRender) filmHooks.render ? filmHooks.render() : vis.pipeline.render();
-    filmHooks.after?.();
-    camera.position.sub(shakeOff);
-    const tR = PROF ? performance.now() : 0;
+    rig.shake(state.shake);
+    hooks.before?.();
+    if (!hooks.skipRender) hooks.render ? hooks.render() : vis.pipeline.render();
+    hooks.after?.();
+    rig.unshake();
+    const t1 = CONFIG.prof ? performance.now() : 0;
     poll(now);
-    if (PROF) { profJs.loop += tR - tJs0; profJs.poll += performance.now() - tR; }
-    if (PROF && ++profN % 30 === 0) {
-      window.__profJs = { loop: (profJs.loop / 30).toFixed(2), poll: (profJs.poll / 30).toFixed(2) };
-      profJs.loop = profJs.poll = 0;
-      Promise.all([renderer.resolveTimestampsAsync('compute'), renderer.resolveTimestampsAsync('render')]).then(() => {
-        window.__prof = { compute: renderer.info.compute.timestamp, render: renderer.info.render.timestamp };
-      });
-    }
+    if (CONFIG.prof) profile(t0, t1);
   };
-  if (FILM) window.__frame = frame; // (film.js appelle frame(t) lui-même, image par image)
-  else renderer.setAnimationLoop(frame);
-  let profN = 0;
-  const profJs = { loop: 0, poll: 0 };
 
-  if (params.has('auto') || FILM) { $('#intro').classList.add('gone'); }
+  if (CONFIG.auto) ui.closeIntro();
   if (FILM) {
+    window.__frame = frame; // (film.js appelle frame(t) lui-même, image par image)
     document.body.classList.add('film');
     audio.setMuted(true);
     import('./film.js').then((m) => m.startFilm({ THREE, renderer, camera, controls, state, life, sim, vis, orrery, pred, frame, PHASES }))
       .catch((e) => { console.error(e); window.__filmError = String(e?.stack || e); });
-  }
-  window.__planetaire = { sim, state, renderer, audio, launchFlyby, pred, kin, vis, life, orrery, camera, controls }; // (débogage)
-}
-
-function fail(msg) {
-  $('#intro').innerHTML = `<div class="card fail"><h1>Planétaire</h1><p>${msg}</p><p class="dim">Essayez Chrome, Edge ou Safari récents.</p></div>`;
+  } else renderer.setAnimationLoop(frame);
+  window.__planetaire = { sim, state, renderer, audio, launchFlyby, pred, vis, life, orrery, camera, controls, rig }; // (débogage)
 }
 
 main().catch((e) => { console.error(e); fail('Erreur d’initialisation : ' + e.message); });

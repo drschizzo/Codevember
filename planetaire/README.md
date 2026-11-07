@@ -1,180 +1,210 @@
 # Planétaire
 
-Un système planétaire simulé entièrement sur le GPU (WebGPU + three.js TSL), de sa naissance à sa mort.
+La vie d’un système planétaire, du nuage de gaz à la supernova, simulée entièrement sur le GPU (WebGPU, three.js TSL). La simulation est présentée comme portée par un planétaire en laiton, sous une cloche de verre.
 
-L'interface reste volontairement sobre : la vitesse du temps, la frise des phases (une phrase par phase) et la liste des planètes, avec une ligne de fiche pour celle qu'on suit. Le son est en option (bouton « son » ou touche **M**), coupé par défaut.
+**Démo en ligne : [drschizzo.github.io/Codevember/planetaire](https://drschizzo.github.io/Codevember/planetaire/)** (navigateur compatible WebGPU requis)
 
-## Le cycle de vie
+![Le disque protoplanétaire et ses anneaux, sous la cloche, au-dessus de la machine en laiton](docs/capture.jpg)
 
-L'écran d'accueil le montre d'abord en miniature : un petit film de 20 s qui boucle (`src/intro.js`, Canvas 2D, indépendant de WebGPU). On y voit le nuage s'effondrer, l'étoile s'allumer, les planètes creuser leurs sillons, la supergéante, la supernova, puis un nouveau nuage. Les grains y portent déjà leur couleur de provenance. La vraie simulation ne démarre qu'au clic sur « Entrer ».
+## Lancer en local
 
-Une frise dans le panneau suit les phases. Pour chacune, elle indique sa vraie durée, car le film est très accéléré et de façon inégale.
-
-1. **Effondrement du nuage** : une sphère d'un million de grains, en rotation et turbulente, s'effondre. Chaque grain conserve son moment cinétique et rejoint le disque à son rayon centrifuge (modèle d'Ulrich / Cassen-Moosman). Ce rayon devient son « lieu de naissance ». Les grains proches de l'axe tombent sur l'étoile.
-2. **Protoétoile** : elle est rouge, ne brille que par sa contraction, et lance deux jets le long de l'axe.
-3. **Allumage** puis **formation des planètes** : la fusion démarre (éclair, accord). La luminosité monte, et avec elle la ligne des glaces. Les embryons naissent là où la poussière s'accumule, grossissent, se percutent et captent du gaz. Le gaz se dissipe.
-4. **Dissipation du disque** : sans gaz, la lumière souffle les poussières fines (pression de radiation), et les plus grosses spiralent vers l'étoile (Poynting-Robertson). Le disque se vide de l'intérieur vers l'extérieur et laisse une ceinture de débris. Le disque est fini : un grain avalé, tombé ou soufflé est retiré pour de bon.
-5. **Maturité**.
-6. **Supergéante rouge** : l'étoile enfle, rougit et perd de la masse, si bien que les orbites s'élargissent. Elle engloutit les planètes proches et réchauffe les lointaines : les glaces fondent, les océans s'évaporent.
-7. **Supernova** : le cœur s'effondre, un silence, puis l'explosion. Les grains retirés redeviennent des éjecta incandescents en « doigts » de Rayleigh-Taylor. L'onde de choc chauffe et balaie le disque, et le système, devenu non lié, se disperse. Il reste un rémanent animé (filaments Hα et [O III]) et un pulsar. Puis **un nouveau nuage** : le cycle recommence.
-
-Avertissement honnête : une étoile comme le Soleil finit en naine blanche, pas en supernova. Il faut plus de ~8 masses solaires, et une telle étoile vit seulement quelques dizaines de millions d'années. On l'assume ici pour boucler le cycle.
-
-**Rendu « cinéma »** : léger tone mapping Neutral, bloom doux, traînée anamorphique sur les sources intenses, aberration chromatique vers les bords, étalonnage (ombres froides, hautes lumières chaudes), vignettage et grain de pellicule.
-
-## La machine (DA « mécanique »)
-
-Toute la simulation est présentée comme portée par un **planétaire en laiton** (`src/orrery.js`), comme les orreries du XVIIIᵉ siècle, enfermé sous une **cloche de verre**. La machine ne simule rien : elle lit l'état du GPU à chaque image et le rend tangible. Chaque pièce a une fonction, et la chaîne cinématique tient debout :
-
-```
-BARILLET (ressort = l'énergie d'un cycle de vie)
-  ├─▶ pignon de l'ARBRE DE RENVOI ─▶ pignons ─▶ ROUES des tubes ─▶ BRAS ─▶ planètes
-  │      (rapport roue / pignon = rapport des vitesses angulaires : Kepler)
-  └─▶ ROUE DE CENTRE ─▶ ROUE D'ÉCHAPPEMENT ⇄ ANCRE ⇄ BALANCIER (régulateur)
-```
-
-- **Bras et tubes** : les 12 planètes les plus massives sont tenues par un bras à contrepoids, fixé sur un tube concentrique (la plus proche sur l'arbre le plus fin et le plus haut). Une tige et une coupelle portent la planète. Rien n'apparaît d'un coup : quand une planète est prise en charge, la tringle sort de sa bague puis la tige monte sous la bille ; quand elle disparaît (fusion, éjection, ou trop légère), le bras redescend et rentre en poursuivant son orbite képlérienne. Les roues glissent dans la pile quand l'ordre des rayons change, et des seuils à hystérésis évitent le clignotement autour de la masse limite.
-- **Engrenages = Kepler** : l'arbre de renvoi tourne à la vitesse d'une orbite à 2,5 UA ; chaque roue de tube engrène un pignon dont le rapport suit ω ∝ a^−3/2. Toutes les dentures ont le même module : chaque étage roue + pignon totalise 40 dents (entraxe exact), et les dents tombent vraiment dans les creux (phases calées).
-- **Pièces usinées** : roues biseautées et alésées là où passe leur arbre, bagues et piliers tournés et chanfreinés, ponts à bouts ronds vissés sur leurs piliers, rubis sur les pivots. Les bras sont des tringles fixées par une bague à vis sur leur tube ; aucun bras ne traverse l'axe.
-- **Régulateur** : la roue d'échappement avance par à-coups, retenue par l'ancre que pousse le balancier. Le balancier bat donc d'autant plus vite que le temps s'écoule vite (×¼ … ×8), et s'arrête à la pause.
-- **Réserve de marche** : l'aiguille du cadran émaillé suit le ressort qui se détend pendant le cycle ; le cadran est gradué par les phases de la vie du système.
-- **Fin de cycle, et boucle** : à la supernova, le ressort est vide. Le **levier d'arrêt** bloque le balancier ; la **trémie** au sommet de la cloche aspire les débris pendant que la **couronne** remonte le barillet par une vis sans fin (le **cliquet** claque sur le **rochet**). Le levier se déclenche, la **vanne** s'ouvre, et les grains se déversent en filet le long de l'axe : ils remplissent le nouveau nuage de bas en haut, et chaque grain n'entre dans la dynamique qu'une fois arrivé à sa place (côté GPU, une « chaleur » négative code son heure de départ). Le premier nuage de la page naît de la même façon.
-- **Peigne de boîte à musique** = la tête de lecture, en acier, au-dessus du disque : la tige de chaque planète se prolonge en une **pointe** au-dessus de la bille, qui soulève la lame de son rayon. Les lames sont inclinées, si bien que seule leur pointe accroche, comme le picot d'un cylindre ; des masselottes lestent les lames graves. Le peigne se relève quand l'étoile enfle. Il n'est là que si le son est actif : à l'activation, la barre sort de son pilier vers l'étoile, les lames en sortent une à une, puis les pointes montent sur les tiges ; à la coupure, tout rentre dans l'ordre inverse. Le **curseur de la ligne des glaces** glisse sur sa barre.
-- **Galerie des automates**, autour du pied du socle : une couronne de 88 dents, tirée par un **poids moteur** qui descend sur sa chaîne au fil du cycle (il remonte au remontage), entraîne une ronde de stations :
-  - **régulateur à boules** (Watt), dont les boules s'écartent avec la vitesse du temps ;
-  - **tambour à cames**, qui fait un tour par cycle : ses trois cames (luminosité de l'étoile, gaz du disque, ligne des glaces) poussent des crémaillères qui font tourner les aiguilles de trois cadrans ;
-  - **compteur à rouleaux** des orbites à 1 UA, avec le numéro du cycle ;
-  - **pompe à soufflet**, embrayée seulement pendant l'aspiration de fin de cycle ; sa conduite remonte le long d'un pied puis d'un arceau jusqu'à la trémie ;
-  - **cloche**, frappée par un marteau à chaque impact géant.
-- **Éclairage** : un projecteur de musée chaud porte les ombres de la machine sur elle-même ; un second projecteur, froid et rasant, sculpte la galerie ; s'y ajoutent une lumière d'appoint hémisphérique, un contre-jour froid et la lumière de l'étoile. L'acier est poli, l'acier bleui l'est encore plus, le laiton est satiné.
-- **Limbe gradué** (0° = tête de lecture), pieds et **arceaux** qui tiennent la cloche. Pour que le nuage initial tienne sous la cloche, il est resserré à 9,6 UA (rotation accélérée : le disque s'étend toujours jusqu'à ~9 UA).
-- **Objectif « macro »** : faible profondeur de champ (mise au point sur le centre visé ou sur la planète suivie) et flou de mouvement. La poussière n'écrit ni profondeur ni vitesse, donc l'objectif lui est appliqué grain par grain : hors du plan net, un grain s'étale en disque de bokeh (cercle de confusion ∝ |d − f| / f) ; en mouvement, il s'étire le long de son déplacement à l'écran pendant le temps d'obturation (à ×8, le disque interne file). L'énergie lumineuse est conservée. La machine reçoit une profondeur de champ et un flou de mouvement en post-traitement, mais les planètes et leurs bras n'en ont pas. `?nolens` coupe tout.
-- Planètes grossies (×1,7) pour se lire comme des billes sur leurs tiges ; laiton patiné et satiné, pour laisser la vedette au disque.
-- L'interface reprend le thème : plaques de laiton vissées, petites capitales gravées.
-
-Touche **O** : ôter / remettre la machine (et revenir à l'ancienne DA). `?nomeca` : démarrer sans.
-
-## Ce qui est simulé
-
-- **Provenance** : chaque grain de poussière garde son rayon de naissance et sa composition (roche en deçà de la ligne des glaces, glace au-delà), qui donnent sa couleur. Les planètes empilent cette matière en strates (calculées sur le GPU, plus affichées dans l'interface).
-- **Son (en option)** : comme un vinyle, le disque est lu par une **tête de lecture fixe** (le trait bleu), et c'est la rotation képlérienne qui fait défiler la matière dessous. Ce qui passe sous la tête joue, selon une règle unique : **la hauteur dépend de la distance à l'étoile** (aigu au centre, grave au bord, gamme pentatonique). Chaque planète sonne quand elle croise la tête : les internes battent vite, les lointaines rarement, et deux planètes en résonance 3:2 forment un motif 3 contre 2. Le timbre et la durée suivent la masse. Les anneaux de poussière pincent doucement leur note, et un bourdon s'assombrit à mesure que le disque s'épuise.
-- **Budgets de masse** : les solides sont comptés grain par grain (700 M⊕ au départ dans le nuage). Le gaz est un réservoir qui se dissipe après l'allumage. Au-delà de la *masse d'isolation*, une planète n'avale presque plus de cailloux. Au-delà de 10 M⊕, un cœur capte du gaz (emballement limité par l'ouverture d'un sillon) et devient une géante gazeuse. Les rayons affichés suivent la relation masse–rayon de Chen & Kipping (2017). Ils sont exagérés pour rester visibles, mais une Jupiter reste plus petite que l'étoile.
-- **Impacts géants** : éclair, onde de choc, ralenti, secousse et un nuage de débris incandescents arrachés au point d'impact, qui refroidissent en orbite.
-
-## Lancer
-
-Ouvrir `index.html` via n'importe quel serveur statique (les modules ES l'exigent) :
+Les modules ES exigent un serveur HTTP :
 
 ```sh
 cd planetaire && python3 -m http.server 8000
 # → http://localhost:8000
 ```
 
-Il faut un navigateur **WebGPU** (Chrome / Edge récents, Safari 26+). Il n'y a pas de repli WebGL, c'est volontaire.
+Navigateurs : Chrome ou Edge récents, Safari 26 et plus. Il n’y a pas de repli WebGL. three.js est chargé depuis un CDN (version figée dans `index.html`) ; aucune étape de construction n’est nécessaire.
 
-Paramètres d'URL :
+## Interface
+
+Le panneau donne la vitesse du temps, la frise des phases (avec une phrase par phase et sa durée réelle) et la liste des planètes, avec une ligne de fiche pour la planète sélectionnée. Le son est désactivé au démarrage (bouton « son » ou touche **M**).
+
+Un écran d’accueil montre le cycle complet en 20 secondes (`src/intro.js`, Canvas 2D, indépendant de WebGPU). La simulation démarre au clic sur « Entrer ».
+
+| geste | action |
+|---|---|
+| glisser / molette | tourner / zoomer |
+| **Maj + glisser** | puits gravitationnel : remuer le disque |
+| **double-clic** | semer un embryon de planète |
+| clic sur une planète | la sélectionner · **A** : retour à la sélection automatique (la plus massive) |
+| clic dans la liste | suivre la planète sur son orbite · **Échap** : vue d’ensemble |
+| clic sur la frise, **[ / ]** | aller à une phase (avance rapide, ou nouveau cycle pour revenir en arrière) |
+| **E** | une étoile vagabonde traverse le système |
+| **P** | migration planétaire (type I) on/off |
+| **C** | couleurs : provenance / roche-glace / température |
+| **O** | afficher / masquer la machine |
+| **+ / −**, Espace, **M**, **H** | vitesse (×¼ à ×8), pause, son, aide |
+
+## Paramètres d’URL
 
 | paramètre | effet |
 |---|---|
 | `?n=2097152` | nombre de grains (défaut 1 048 576) |
-| `?nobloom` | désactive le bloom (GPU modestes) |
-| `?warp=4` | avance rapide (4 pas de simulation par image) |
-| `?auto` | saute l'écran d'accueil |
-| `?nocine` | rendu sans post-traitement « cinéma » |
-| `?agx` | ancien tone mapping (AgX) |
-| `?sdr` / `?hdr` | force la sortie SDR ou HDR (par défaut : HDR si l’écran le permet) |
-| `?peak=4` | pic de luminosité en HDR, en multiples du blanc de l’interface |
-| `?starhdr=3.5` | éclat du disque stellaire en HDR (multiplie l’éclat de base ; 1 = comme en SDR) |
+| `?auto` | sans écran d’accueil |
+| `?warp=4` | avance rapide (multiplie le temps simulé par image) |
+| `?nomeca` | démarrer sans la machine |
+| `?sdr` / `?hdr` | forcer la sortie SDR ou HDR (défaut : HDR si l’écran le permet) |
+| `?peak=4` | pic de luminosité HDR, en multiples du blanc de l’interface |
+| `?starhdr=3.5` | éclat du disque stellaire en HDR (1 = comme en SDR) |
 | `?exposure=1.45` | exposition globale |
-| `?nomeca` | sans la machine (ancienne DA) |
-| `?dof` | remet la profondeur de champ (coupée par défaut) |
-| `?streak` | remet la traînée anamorphique (coupée par défaut) |
+| `?agx` | tone mapping AgX au lieu de Neutral (SDR) |
+| `?nobloom` | sans bloom |
+| `?nocine` | sans étalonnage, vignettage ni grain |
+| `?nolens` | sans flou de mouvement ni profondeur de champ |
+| `?dof` | profondeur de champ (désactivée par défaut) |
+| `?streak` | traînée anamorphique sur les sources intenses (désactivée par défaut) |
 | `?aa=msaa` / `?aa=0` | anticrénelage MSAA 4× (plus lent) ou aucun (défaut : SMAA) |
-| `?film` | mode tournage : le film de 3 min, rendu image par image (voir plus bas) |
+| `?prof` | chronométrage : `window.__prof` (GPU) et `window.__profJs` (JS, appels de rendu) |
+| `?film` | mode tournage (voir plus bas) |
 
-## Le film (`?film`)
+## Le cycle de vie
 
-`src/film.js` réalise un film d'environ 3 minutes, sans texte, qui **boucle avec un sens** : la poussière d'étoile passe d'un cycle à l'autre. Sous la lampe, sur le velours vide, la machine se pose pièce à pièce (chaque pièce descend à la verticale jusqu'à sa place, de bas en haut) ; la trémie arrive la dernière avec la cloche, pleine de poussière d'étoile qui luit — les débris d'une étoile précédente — et verse le nuage. Le cycle se déroule ; quand l'étoile s'allume, la lampe de musée baisse. La supernova reste prisonnière de la cloche ; la trémie aspire ses débris et luit à nouveau. Puis l'horloger range la machine : les pièces remontent dans l'ordre inverse, la trémie pleine part avec la cloche, et la dernière image (le velours vide) est la première.
+`src/lifecycle.js` fait avancer une horloge par phase et en déduit à chaque image les paramètres de l’étoile et du disque (masse, luminosité, gaz, ligne des glaces, fronts de dissipation, onde de choc). Les durées sont très comprimées, et de façon inégale ; la frise indique les durées réelles.
 
-C'est un **montage**, pas un accéléré : à l'écran le temps reste à ×1–×2 ; entre deux plans, la simulation avance hors champ (grands pas, sans rendu) jusqu'à l'état voulu pour le plan suivant. Les plans mettent en avant les motifs des grains (anneaux, sillages) et le peigne pincé par une planète ; **un impact géant interrompt le montage** : on coupe dessus, au ralenti.
+1. **Effondrement du nuage** : une sphère d’un million de grains, en rotation et turbulente. Chaque grain conserve son moment cinétique et rejoint le disque à son rayon centrifuge (modèle d’Ulrich / Cassen-Moosman), qui devient son lieu de naissance. Les grains proches de l’axe tombent sur l’étoile.
+2. **Protoétoile** : rouge, elle brille par contraction et émet deux jets le long de l’axe.
+3. **Formation des planètes** : la fusion démarre, la luminosité et la ligne des glaces montent. Les embryons naissent là où la poussière s’accumule, grossissent, se percutent et captent du gaz, qui se dissipe.
+4. **Dissipation du disque** : sans gaz, la pression de radiation souffle les poussières fines et l’effet Poynting-Robertson fait spiraler les plus grosses vers l’étoile. Il reste une ceinture de débris, placée au-delà de la géante la plus lointaine.
+5. **Maturité**.
+6. **Supergéante rouge** : l’étoile enfle, rougit et perd de la masse ; les orbites s’élargissent, les planètes proches sont englouties, les glaces des planètes lointaines fondent.
+7. **Supernova** : effondrement du cœur, puis explosion. Les grains retirés deviennent des éjecta en « doigts » de Rayleigh-Taylor, l’onde de choc balaie le disque et le système, devenu non lié, se disperse. Il reste un rémanent (filaments Hα et [O III]) et un pulsar. Un nouveau nuage commence le cycle suivant.
 
-Rendu « film » (hors temps réel) :
-- chaque image est la **moyenne de 4 sous-images** (obturateur à 180° : vrai flou de mouvement, anticrénelage, scintillement des grains apaisé), chacune rendue en 2× ; tone mapping après la moyenne, en lumière linéaire ;
-- **reflets réels** : une sonde cube capte à chaque image le disque, l'étoile, la cloche, le velours et des panneaux de studio invisibles à la caméra ; le métal et le verre la reflètent ;
-- matériaux physiques : laiton verni aux sillons d'usinage, acier brossé, acier bleui irisé ; ombres en haute définition ;
-- en DA mécanique, **la cloche retient tout** (`bellR`) : nuage, débris de la supernova et planètes rebondissent sur le verre.
+Une étoile comme le Soleil finit en naine blanche ; une supernova suppose plus de ~8 masses solaires et une vie de quelques dizaines de millions d’années. Le choix est fait ici pour boucler le cycle.
 
-Encodage par WebCodecs (H.264 en SDR ; en HDR, VP9 10 bits BT.2020 / PQ, blanc SDR à 203 nits), puis réencodage HEVC. `tools/tournage.mjs` pilote Chrome (puppeteer) et écrit le fichier. Paramètres : `w` (1920), `ss` (suréchantillonnage, 2), `tss` (sous-images, 4), `fps` (24), `mbps`, `hdr` et `peak` (pic HDR en multiples du blanc SDR), `stills=12,40` (images fixes seulement, pour prévisualiser), `aa=0`.
+## Ce qui est simulé
+
+- **Grains** : gravité de l’étoile et des embryons, traînée du gaz par relaxation exponentielle exacte (stable pour tout nombre de Stokes, distribués de 10⁻² à 2), turbulence, pièges de pression. Unités G·M★ = 1, distances en UA.
+- **Provenance** : chaque grain garde son rayon de naissance et sa composition (roche en deçà de la ligne des glaces, glace au-delà), qui donnent sa couleur. La glace d’un grain qui dérive en deçà de la ligne se sublime.
+- **Embryons** (64 au plus) : N-corps exact, amortissement par le gaz, migration de type I en option. La gravité des embryons est amplifiée (×25) pour que la formation se joue en quelques minutes ; ce facteur s’efface avec la masse (≈ ×1,2 pour une Jupiter).
+- **Accrétion** : les grains capturés sont comptés de façon atomique ; masse, glace et rayon moyen de naissance s’accumulent dans chaque planète. Au-delà de la masse d’isolation, une planète crée un maximum de pression juste à l’extérieur de son orbite : les grains s’y accumulent en anneau (comme sur les images ALMA de HL Tauri) et elle n’en avale presque plus.
+- **Gaz** : un réservoir qui se dissipe après l’allumage. Au-delà de 10 M⊕, un cœur capte du gaz (emballement limité par l’ouverture d’un sillon, très lent dans le disque interne chaud) et devient une géante gazeuse.
+- **Impacts géants** : fusions qui conservent centre de masse et quantité de mouvement, rayon de fusion fondé sur les sphères de Hill. Éclair, ondes de choc, ralenti, secousse et nuage de débris incandescents.
+- **Budgets de masse** : 700 M⊕ de solides au départ ; un grain avalé, tombé ou soufflé est retiré.
+- **Surfaces** (`src/app/planets.js`) : une sous-simulation par planète pilote l’aspect de sa surface : chaleur interne (océan de magma, fissures), cratères sur les surfaces sans atmosphère, eau selon la provenance et la température d’équilibre (vapeur, océans, banquise), atmosphère au-dessus de ~0,2 M⊕, bandes des géantes qui se contrastent en refroidissant.
+- **Rayons affichés** : relation masse–rayon de Chen & Kipping (2017), exagérée pour rester lisible.
+
+## La machine
+
+`src/orrery/` construit un planétaire en laiton qui lit l’état de la simulation et le rend tangible ; il ne simule rien lui-même.
+
+```
+BARILLET (ressort = énergie d'un cycle)
+  ├─▶ pignon de l'ARBRE DE RENVOI ─▶ pignons ─▶ ROUES des tubes ─▶ BRAS ─▶ planètes
+  │      (rapport roue / pignon = rapport des vitesses angulaires : Kepler)
+  └─▶ ROUE DE CENTRE ─▶ ROUE D'ÉCHAPPEMENT ⇄ ANCRE ⇄ BALANCIER
+```
+
+- **Bras** : les 12 planètes les plus massives sont portées par un bras à contrepoids sur un tube concentrique. Un bras sort de sa bague quand une planète est prise en charge et rentre en poursuivant son orbite quand elle disparaît ; des seuils à hystérésis évitent le clignotement.
+- **Engrenages** : l’arbre de renvoi tourne à la vitesse d’une orbite à 2,5 UA ; chaque roue de tube engrène un pignon dont le rapport suit ω ∝ a^−3/2. Toutes les dentures ont le même module (40 dents par étage, entraxe exact) et les phases sont calées pour que les dents tombent dans les creux.
+- **Régulateur** : la roue d’échappement avance par à-coups, le balancier bat d’autant plus vite que le temps s’écoule vite et s’arrête à la pause.
+- **Réserve de marche** : l’aiguille suit le ressort qui se détend pendant le cycle ; le cadran est gradué par phases.
+- **Fin de cycle** : à la supernova, le levier d’arrêt bloque le balancier, la trémie aspire les débris et la couronne remonte le barillet (le cliquet claque sur le rochet). Puis la vanne s’ouvre et les grains remplissent le nouveau nuage de bas en haut ; chaque grain n’entre dans la dynamique qu’une fois à sa place.
+- **Peigne de boîte à musique** : la tête de lecture du son. La pointe de chaque planète soulève la lame de son rayon. Le peigne sort quand le son est activé et se relève quand l’étoile enfle ; le curseur de la ligne des glaces glisse sur sa barre.
+- **Galerie des automates**, autour du socle, entraînée par un poids moteur : régulateur à boules (vitesse du temps), tambour à cames et trois cadrans (luminosité, gaz, ligne des glaces), compteur à rouleaux (orbites à 1 UA, numéro du cycle), pompe à soufflet (aspiration de fin de cycle), cloche frappée à chaque impact géant.
+- **Cloche de verre** : en présence de la machine, le nuage initial est resserré à 9,6 UA et la cloche retient grains, débris et planètes.
+- **Éclairage** : lumière de l’étoile (ombres portées), projecteur de musée, projecteur froid rasant sur la galerie, contre-jours, environnement de studio HDR pour les reflets du métal.
+- **Objectif** : flou de mouvement en post-traitement pour la machine ; pour les grains, qui n’écrivent ni profondeur ni vitesse, le flou de mouvement (et la profondeur de champ avec `?dof`) est appliqué grain par grain en conservant l’énergie lumineuse.
+
+## Son
+
+Le disque est lu comme un vinyle par une tête de lecture fixe (axe +X) ; la rotation képlérienne fait défiler la matière dessous. La hauteur dépend de la distance à l’étoile (aigu au centre, grave au bord, gamme pentatonique). Chaque planète sonne quand elle croise la tête : les planètes internes battent vite, deux planètes en résonance 3:2 forment un motif 3 contre 2. Timbre et durée suivent la masse. Les anneaux de poussière pincent leur note, et un bourdon s’assombrit à mesure que le disque s’épuise.
+
+## Architecture
+
+```
+planetaire/
+├── index.html, style.css
+├── src/
+│   ├── main.js          point d'entrée : création des modules, boucle d'animation
+│   ├── config.js        paramètres d'URL
+│   ├── util.js          fonctions mathématiques partagées
+│   ├── sim.js           simulation GPU (noyaux compute TSL), lectures GPU → CPU
+│   ├── lifecycle.js     phases du cycle → paramètres de l'étoile et du disque
+│   ├── palette.js       couleur de provenance (même formule en TSL et en JS)
+│   ├── audio.js         sonification (Web Audio)
+│   ├── intro.js         film d'accueil (Canvas 2D)
+│   ├── film.js          mode tournage
+│   ├── app/             côté CPU
+│   │   ├── kinematics.js  positions des planètes à l'instant présent
+│   │   ├── planets.js     lecture de l'état, évolution des surfaces, libellés
+│   │   ├── camera.js      vols, suivi d'une planète, secousse
+│   │   └── ui.js          panneau HTML
+│   ├── render/          rendu
+│   │   ├── index.js       uniformes partagés, assemblage
+│   │   ├── dust.js        poussière (sprites instanciés)
+│   │   ├── sky.js         fond d'étoiles
+│   │   ├── star.js        étoile, jets, pulsar, rémanent, étoile vagabonde
+│   │   ├── planets.js     planètes à surface procédurale
+│   │   ├── fx.js          impacts géants
+│   │   ├── post.js        post-traitement
+│   │   └── common.js      briques TSL partagées
+│   └── orrery/          la machine
+│       ├── index.js       construction et animation
+│       ├── layout.js      cotes
+│       ├── materials.js   laiton, acier, verre
+│       ├── geometry.js    roues, pièces tournées, ponts
+│       ├── textures.js    gravures, cadrans, environnement de studio
+│       ├── builder.js     pose des pièces (vis, piliers, arbres, ponts)
+│       ├── gallery.js     galerie des automates
+│       ├── batch.js       fusion des pièces statiques
+│       └── assembly.js    assemblage pièce à pièce (mode tournage)
+├── tools/tournage.mjs   pilote le mode tournage dans Chrome
+└── docs/capture.jpg
+```
+
+### Pipeline GPU
+
+Tout l’état vit dans des storage buffers ; rien ne transite par le CPU dans la boucle, sauf de petites lectures asynchrones.
+
+```
+par sous-pas de grains (≤ 0,011 unité de temps, une seule soumission par image) :
+  buildActive     1 thread    liste compacte des embryons actifs + paramètres précalculés
+  stepParticles   N threads   gravité, traînée, turbulence, pièges de pression, capture atomique
+  embryoForces    64 threads  N-corps exact, amortissement, migration     (×2 sous-pas)
+  embryoIntegrate 64 threads
+puis, une fois par image :
+  embryoAccrete   64 threads  lit et remet à zéro les compteurs atomiques, capture du gaz
+  mergeDetect     64 threads  candidats à la fusion, en parallèle
+  embryoMerge     1 thread    fusions (impacts géants)
+  clearGrid / depositGrid     histogramme polaire 192 × 256 (atomicAdd)
+  opticalDepth    256 threads profondeur optique depuis l'étoile → ombre du disque
+  readNeedle      192 threads densité sous la tête de lecture → son
+```
+
+Position et vitesse des embryons (2 ko) sont relues à chaque image. La lecture arrive avec quelques images de retard ; elle est datée et propagée jusqu’à l’instant présent (2 corps, saute-mouton), avec une erreur d’environ 10⁻⁵ UA. Caméra, effets et notes restent ainsi accrochés aux planètes dessinées par le GPU. Les autres lectures (état des planètes, impacts, profil radial) ont lieu toutes les 60 à 150 ms.
+
+### Performances
+
+Objectif : 120 images par seconde.
+
+- Le temps simulé suit le temps réel, et le travail par image est plafonné en accéléré (pas de spirale « image lente → plus de pas »).
+- Les grains lisent leurs paramètres dans une liste compacte des embryons actifs, reconstruite une fois par sous-pas.
+- Sur écran haute densité, les grains sont plus petits en unités-monde, avec un éclat compensé : environ 2,8 fois moins de pixels à remplir, le poste dominant du rendu.
+- Une résolution adaptative baisse la densité de pixels si l’image dépasse 1/55 s, et la remonte s’il reste de la marge.
+- Les pièces de la machine qui ne bougent pas les unes par rapport aux autres sont fusionnées par matériau au chargement (`orrery/batch.js`). Au démarrage, une image demande environ 380 appels de rendu au lieu de 1 100 (passe principale et passes d’ombre comprises), et le temps JavaScript par image passe d’environ 7 ms à 3,7 ms (mesuré avec `?prof`).
+- Géométries paramétrées, textures et tampons de bruit audio sont construits une seule fois.
+
+## Mode tournage (`?film`)
+
+`src/film.js` réalise un film d’environ 3 minutes, sans texte, qui boucle : la machine se pose pièce à pièce sur un velours, la trémie verse le nuage, le cycle se déroule, la supernova reste sous la cloche, la trémie aspire les débris, puis la machine est démontée dans l’ordre inverse. Entre deux plans, la simulation avance hors champ ; un impact géant interrompt le montage, au ralenti.
+
+Chaque image est la moyenne de 4 sous-images (obturateur à 180°), chacune rendue en 2× ; le tone mapping est appliqué après la moyenne. Une sonde cube fournit des reflets réels au métal et au verre. L’encodage se fait par WebCodecs (H.264 en SDR ; VP9 10 bits BT.2020 / PQ en HDR) et `tools/tournage.mjs` pilote Chrome (puppeteer-core) pour écrire le fichier.
+
+Paramètres : `w` (1920), `ss` (suréchantillonnage, 2), `tss` (sous-images, 4), `fps` (24), `mbps`, `hdr`, `peak`, `stills=12,40` (images fixes, pour prévisualiser).
 
 ```sh
+npm i puppeteer-core                     # une fois
+python3 -m http.server 8020              # dans planetaire/
 node tools/tournage.mjs "w=1920&ss=2&tss=4&aa=0&hdr&peak=5&mbps=60" hdr.mp4
 ffmpeg -i hdr.mp4 -pix_fmt yuv420p10le -c:v libx265 -crf 24 -tag:v hvc1 \
   -x265-params "hdr10=1:repeat-headers=1:colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc:master-display=G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,1):max-cll=1015,180" \
   -color_primaries bt2020 -color_trc smpte2084 -colorspace bt2020nc planetaire-film-hdr.mp4
 ```
 
-## Commandes
+Variables d’environnement de `tournage.mjs` : `CHROME` (chemin de Chrome, défaut macOS) et `BASE` (URL de la page, défaut `http://localhost:8020/`).
 
-| geste | action |
-|---|---|
-| glisser / molette | orbiter / zoomer |
-| **Maj + glisser** | puits gravitationnel : remuer le disque avec le doigt |
-| **double-clic** | semer un embryon de planète |
-| clic sur une planète | la sélectionner (fiche sous la liste) · **A** : retour au choix auto |
-| clic dans la liste | zoomer sur la planète et la suivre sur son orbite · **Échap** : vue d'ensemble |
-| clic sur la frise, **[ / ]** | aller à une phase du cycle : avance rapide de la vraie simulation, ou on recommence le cycle |
-| **E** | une étoile vagabonde traverse le système |
-| **P** | migration planétaire (type I) on/off |
-| **C** | couleurs : provenance / roche-glace / température |
-| **O** | ôter / remettre la machine en laiton |
-| **+ / −**, Espace, **M**, **H** | vitesse (×¼ à ×8, boutons dans le panneau ; ×2 par défaut), pause, son, aide |
+## Déploiement
 
-## Architecture GPU
-
-Tout l'état vit dans des storage buffers, et rien ne transite par le CPU dans la boucle. Seules de petites lectures asynchrones (≈ 40 ko, quelques fois par seconde) alimentent l'interface et le son.
-
-```
-par image (4 sous-pas) :
-  buildActive     1 thread    liste compacte des embryons actifs + paramètres précalculés
-  stepParticles   N threads   gravité étoile + embryons actifs, traînée du gaz (relaxation
-                              exponentielle exacte → stable pour tout nombre de Stokes),
-                              turbulence, pièges de pression, capture atomique
-  embryoForces    64 threads  N-corps exact + amortissement par le gaz + migration
-  embryoIntegrate 64 threads
-puis :
-  embryoAccrete   64 threads  lit/remet à zéro les compteurs atomiques, empile les strates
-  embryoMerge     1 thread    fusions (impacts géants), conservation de la quantité de mvt
-  clearGrid / depositGrid     histogramme polaire 192×256 (atomicAdd)
-  opticalDepth    256 threads profondeur optique cumulée depuis l'étoile → ombre du disque
-  readNeedle      192 threads densité sous la tête de lecture → son
-```
-
-- **Caméra et effets** : position + vitesse des embryons sont relues à chaque image (2 ko). La lecture arrive avec quelques images de retard, mais elle est datée, et on la propage jusqu'à l'instant présent (2 corps, saute-mouton). L'erreur mesurée est d'environ 10⁻⁵ UA, si bien que la caméra de suivi, les impacts et les notes restent accrochés aux planètes rendues par le GPU.
-- **Gravité « boostée »** : le facteur ×25 qui accélère la croissance des embryons s'efface avec la masse (≈ ×1,2 pour une Jupiter). Les fusions conservent le centre de masse et la quantité de mouvement, et leur rayon se base sur les sphères de Hill.
-- **Performances** (objectif 120 i/s) :
-  - Le temps simulé suit le temps réel. Les grains font des pas ≤ 0,011, et les embryons deux sous-pas par pas de grains, le tout en une seule soumission GPU par image.
-  - Le travail par image est plafonné en accéléré, pour éviter la spirale « image lente → plus de pas ».
-  - Les fusions sont détectées en parallèle ; c'était 2 016 paires sur un seul thread, soit ~2 ms.
-  - Sur écran Retina, les grains sont 0,6× plus petits en unités-monde, avec un éclat compensé : ~2,8× moins de pixels à remplir, poste dominant du rendu.
-  - Une résolution adaptative baisse la densité de pixels si l'image dépasse 1/55 s, et la remonte s'il reste de la marge.
-  - `?prof` active les requêtes d'horodatage GPU (`window.__prof`) et le temps JS par image (`window.__profJs`).
-
-- **Rendu** : 1 M de sprites instanciés qui lisent directement les buffers de simulation, sans copie. Ils sont ombrés par la profondeur optique (le bord interne projette son ombre, et les grains en surface du disque restent éclairés). Le tout est rendu en HDR avec tone mapping AgX et bloom.
-- **Physique** : unités G·M★ = 1, distances en UA. Les grains suivent une distribution de nombres de Stokes (10⁻² à 2), ce qui donne une dérive radiale différenciée. Au-delà de la *masse d'isolation*, une planète crée un maximum de pression juste à l'extérieur de son orbite. Le gaz y devient super-képlérien et les cailloux s'y accumulent en **anneau**, comme dans les images ALMA de HL Tauri. La gravité des embryons est amplifiée (`boost`) pour que la formation se joue en quelques minutes.
-- **Mémoire** : chaque planète a 32 strates (masse, fraction de glace, rayon moyen de naissance, type). Quand la pile est pleine, on fusionne la paire de couches voisines la plus légère et de même nature : les gros événements restent distincts. Lors d'un impact géant, les couches de l'impacteur sont recopiées dans le survivant, en un groupe bordé d'orange : on lit l'histoire des deux corps.
-- **Évolution des planètes** : une petite sous-simulation par planète pilote l'aspect de sa surface.
-  - La chaleur interne vient de l'accrétion et des impacts géants, puis se dissipe d'autant plus lentement que la planète est massive. Chaude, elle porte un océan de magma avec une croûte noire et des fissures incandescentes. Un monde glacé chauffé se resurface plutôt de glace jeune.
-  - Les cratères s'accumulent avec l'âge sur les surfaces sans atmosphère, et la fusion les efface.
-  - L'eau vient de la matière née au-delà de la ligne des glaces. Selon la température d'équilibre à cette distance, elle donne de la vapeur, des océans et des nuages, ou de la banquise.
-  - L'atmosphère n'est retenue qu'au-dessus de ~0,2 M⊕. Elle est fine et bleue si la planète est tempérée, épaisse et jaune (type Vénus) si elle est chaude.
-  - Les géantes jeunes luisent faiblement en rouge et ont des bandes floues, qui se contrastent en refroidissant.
-  - La couleur de surface suit la composition ; la provenance se lit dans la coupe. La coupe affiche aussi la température d'équilibre, l'âge et le type de surface.
-- **Composition** : la glace d'un caillou qui dérive en deçà de la ligne des glaces se sublime, et la capture du gaz est très lente dans le disque interne chaud. Les planètes internes restent donc surtout rocheuses.
-
-## Pistes pour la suite
-
-- Planètes en 3D raymarchées (SDF), avec une vraie coupe animée dans la scène.
-- Gaz explicite (grille hydrodynamique 2D) : spirales, vortex, lacunes de gaz.
-- Instabilité de streaming locale (zoom multi-échelle).
-- Vue « ALMA » : émission millimétrique synthétique + PSF interférométrique.
-- Enregistrement du sillon en fichier audio, ou export d'une « carte de lignée » du système.
+`.github/workflows/pages.yml` publie le dépôt sur GitHub Pages à chaque push sur `main` (page d’index à la racine et dossier `planetaire/`, sans `tools/` ni `docs/`). La source Pages du dépôt doit être réglée sur « GitHub Actions ».

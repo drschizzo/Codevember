@@ -6,9 +6,9 @@
 // choc…) que main.js transmet au GPU, plus quelques événements ponctuels.
 //
 // Les durées sont en unités de temps de la simulation (1 orbite à 1 UA = 2π) ;
-// la supernova se déroule en secondes réelles, pour rester spectaculaire à
-// toute vitesse. Les durées réelles des phases sont indiquées pour mémoire :
-// le film est très accéléré, et de façon inégale.
+// la supernova se joue au plus à ×1. Les durées réelles des phases sont
+// indiquées pour mémoire : la simulation est très accélérée, et de façon inégale.
+import { ss, lerp, mixRGB as mixc } from './util.js';
 
 export const PHASES = [
   { id: 'cloud', name: 'Effondrement du nuage', real: '~100 000 ans',
@@ -32,9 +32,6 @@ const T_CLOUD = 45, T_PROTO = 40, T_CLEAR = 180, T_MATURE = 160, T_GIANT = 140;
 const GAS_TAU = 190;            // dissipation du gaz après l'allumage
 const SN_COLLAPSE = 0.9, SN_BOOM = 1.35, SN_END = 17; // secondes (à ×1)
 
-const ss = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
-const lerp = (a, b, t) => a + (b - a) * t;
-const mixc = (a, b, t) => a.map((v, i) => lerp(v, b[i], t));
 
 const STAR_I = 4.2;               // éclat de surface de l'étoile sur la séquence principale
 const COL_PROTO = [1.0, 0.32, 0.1];

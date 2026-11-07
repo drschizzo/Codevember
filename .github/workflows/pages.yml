@@ -1,0 +1,41 @@
+# Publie les expériences sur GitHub Pages à chaque push sur main.
+# (Réglage du dépôt requis une fois : Settings → Pages → Source : « GitHub Actions ».)
+name: GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # site statique : la page d'index et chaque expérience, sans les outils ni la documentation
+      - name: Assembler le site
+        run: |
+          mkdir -p _site
+          cp index.html _site/
+          rsync -a --exclude tools --exclude docs --exclude '*.md' planetaire _site/
+          touch _site/.nojekyll
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4
