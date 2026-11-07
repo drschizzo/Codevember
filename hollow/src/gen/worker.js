@@ -6,6 +6,7 @@ import { goldbergCells, slotCells, voronoiCells } from './cells.js';
 import { girihCells } from './girih.js';
 import { prepareCells, buildShell, crest } from './shell.js';
 import { buildTPMS } from './tpms.js';
+import { buildArmillary } from './armillary.js';
 import { placeCrystals } from './crystals.js';
 import { junctions, placeGems, placeSpines } from './jewels.js';
 import { buildNoiseVolume } from './noisevol.js';
@@ -20,6 +21,7 @@ const TILINGS = {
 // Constructeurs à maillage propre : (spec, lod) → maillage
 const MESHES = {
   tpms: buildTPMS,
+  armillary: buildArmillary,
 };
 
 function prepare(spec) {
