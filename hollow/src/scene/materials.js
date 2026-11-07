@@ -569,6 +569,31 @@ export function buildGemMaterial(U) {
   return m;
 }
 
+// ── Vitraux ──────────────────────────────────────────────────────────────────
+// Verre teinté (couleur par sommet), martelé, transmissif ; rétroéclairé par
+// le cœur (il rend la lumière qu'il reçoit) et projetant une ombre colorée
+// (castShadowNode : la lumière qui le traverse prend sa couleur).
+export const paneUniforms = (p) => ({ rough: uniform(p.rough), glow: uniform(p.glow) });
+export function applyPane(U, p) { U.rough.value = p.rough; U.glow.value = p.glow; }
+export function buildPaneMaterial(U) {
+  const m = new THREE.MeshPhysicalNodeMaterial({ transmission: 1, side: THREE.DoubleSide });
+  const c = attribute('color', 'vec3'), world = modelScale.x, p = positionLocal;
+  const ham = noise(p.mul(38)).mul(0.6).add(noise2(p.mul(90)).mul(0.4));
+  m.colorNode = vec4(1, 1, 1, 1);
+  m.attenuationColorNode = c;
+  m.attenuationDistanceNode = float(0.012).mul(world);
+  m.thicknessNode = float(0.01).mul(world);
+  m.roughnessNode = U.rough.add(ham.mul(0.05)).clamp(0.02, 1);
+  m.normalNode = perturb(ham.mul(0.0012).mul(world), normalViewGeometry);
+  m.iorNode = float(1.52);
+  m.transmissionNode = float(1);
+  const r = length(positionWorld);
+  m.emissiveNode = haloEmission().add(c.mul(G.coreColor).mul(G.coreGlow).mul(G.coreR.mul(G.coreR).div(r.mul(r))).mul(U.glow));
+  m.castShadowNode = vec4(c.mul(1.4).min(1), 1);
+  m.mrtNode = stableVelocity();
+  return m;
+}
+
 // ── Cœur lumineux ────────────────────────────────────────────────────────────
 // Sphère émissive (en HDR) : assombrissement centre-bord comme une étoile,
 // granulation lente qui boucle (le bruit glisse sur un cercle de phase).

@@ -21,7 +21,7 @@ import * as THREE from 'three/webgpu';
 import { uniform } from 'three/tsl';
 import {
   buildShellMaterial, buildShadowMaterial, finishUniforms, applyFinish, signature, tpmsUniforms, applyTpms, poreUniforms, applyPores,
-  crystalUniforms, applyCrystal, buildCrystalMaterial, gemUniforms, applyGem, buildGemMaterial,
+  crystalUniforms, applyCrystal, buildCrystalMaterial, gemUniforms, applyGem, buildGemMaterial, paneUniforms, applyPane, buildPaneMaterial,
 } from './materials.js';
 import { crystalGeometry } from '../gen/crystals.js';
 import { gemGeometry, spineGeometry } from '../gen/jewels.js';
@@ -42,6 +42,7 @@ function toGeometry(o, bounds = 1.05) {
   g.setAttribute('normal', new THREE.BufferAttribute(o.normal, 3, packed(o.normal)));
   if (o.tangent) g.setAttribute('tangent', new THREE.BufferAttribute(o.tangent, 4, packed(o.tangent)));
   if (o.surf) g.setAttribute('surf', new THREE.BufferAttribute(o.surf, 4, true));
+  if (o.color) g.setAttribute('color', new THREE.BufferAttribute(o.color, 3));
   if (o.bev) g.setAttribute('bev', new THREE.BufferAttribute(o.bev, 4, packed(o.bev)));
   if (o.rigA) { g.setAttribute('rigA', new THREE.BufferAttribute(o.rigA, 4)); g.setAttribute('rigB', new THREE.BufferAttribute(o.rigB, 4)); }
   if (o.index) g.setIndex(new THREE.BufferAttribute(o.index, 1));
@@ -61,8 +62,9 @@ const ORNAMENTS = {
   crystals: { geos: [0, 1, 2].map((v) => toGeometry(crystalGeometry(v), 1.2)), material: (d) => d.crystalMat },
   gems: { geos: [toGeometry(gemGeometry(), 1.2)], material: (d) => d.gemMat },
   spines: { geos: [toGeometry(spineGeometry(), 1.2)], material: (d) => d.spineMat, shadow: true, selfShadow: false },
+  panes: { mesh: true, material: (d) => d.paneMat, shadow: true, selfShadow: false }, // (vitraux : un maillage, pas des instances)
 };
-const needsOrnaments = (g) => (g.crystals || 0) > 0 || (g.setting === 'gem' && g.rivets > 0) || (g.spines || 0) > 0;
+const needsOrnaments = (g) => (g.crystals || 0) > 0 || (g.setting === 'gem' && g.rivets > 0) || (g.spines || 0) > 0 || !!g.panes;
 
 class Design {
   constructor(nest, index) {
@@ -114,6 +116,7 @@ class Design {
     }
     if (this.crystalU) applyCrystal(this.crystalU, layer.crystal);
     if (this.gemU && layer.gem) applyGem(this.gemU, layer.gem);
+    if (this.paneU && layer.pane) applyPane(this.paneU, layer.pane);
   }
 
   // bascule atomique vers la nouvelle forme
@@ -179,6 +182,7 @@ class Design {
 
   setOrnaments(out) {
     for (const c of this.copies) { for (const m of c.ornaments) c.group.remove(m); c.ornaments = []; }
+    for (const o of this.orn) o.geometry?.dispose();
     this.orn = [];
     if (!out) return;
     if (out.crystals && !this.crystalMat) {
@@ -189,6 +193,11 @@ class Design {
       this.gemU = gemUniforms(this.layer.gem);
       this.gemMat = buildGemMaterial(this.gemU);
     }
+    if (out.panes && !this.paneMat) {
+      this.paneU = paneUniforms(this.layer.pane);
+      this.paneMat = buildPaneMaterial(this.paneU);
+    }
+    if (out.panes?.index.length) this.orn.push({ kind: 'panes', geometry: toGeometry(out.panes) });
     const attr = (m, idx) => {
       const a = new Float32Array(idx.length * 16);
       idx.forEach((i, k) => a.set(m.subarray(i * 16, i * 16 + 16), k * 16));
@@ -196,7 +205,7 @@ class Design {
     };
     for (const kind of Object.keys(ORNAMENTS)) {
       const o = out[kind];
-      if (!o || !o.count) continue;
+      if (!o || !o.count || ORNAMENTS[kind].mesh) continue;
       // une série d'instances par variante
       ORNAMENTS[kind].geos.forEach((_, v) => {
         const idx = [];
@@ -208,10 +217,11 @@ class Design {
   }
 
   attachOrnaments(c) {
-    c.ornaments = this.orn.map(({ kind, variant, attr }) => {
+    c.ornaments = this.orn.map(({ kind, variant, attr, geometry }) => {
       const K = ORNAMENTS[kind];
-      const m = new THREE.InstancedMesh(K.geos[variant], K.material(this), attr.count);
-      m.instanceMatrix = attr;
+      let m;
+      if (K.mesh) m = new THREE.Mesh(geometry, K.material(this));
+      else { m = new THREE.InstancedMesh(K.geos[variant], K.material(this), attr.count); m.instanceMatrix = attr; }
       m.frustumCulled = false;
       m.castShadow = !!K.shadow;
       m.receiveShadow = K.selfShadow !== false; // (cônes fins : leur propre ombre les noircirait)
@@ -265,6 +275,8 @@ class Design {
     this.shadowMat?.dispose();
     this.crystalMat?.dispose();
     this.gemMat?.dispose();
+    this.paneMat?.dispose();
+    for (const o of this.orn) o.geometry?.dispose();
   }
 }
 
