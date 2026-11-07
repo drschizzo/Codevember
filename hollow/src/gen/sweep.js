@@ -37,15 +37,20 @@ export function section(w, t, corner) {
 
 // Ruban balayé : path(s) → [d (direction radiale), S (travers, tangent à la sphère)]
 // pour s ∈ [0, 1] ; closed : boucle ; r : rayon de la face externe.
-// lift(s) (facultatif) : décalage radial le long du ruban (dessus-dessous d'un tressage)
-export function sweep(B, path, len, closed, r, w, t, lod, lift = null) {
+// lift(s) (facultatif) : décalage radial le long du ruban (dessus-dessous d'un tressage) ;
+// minPolar (facultatif) : aucun point plus près du pôle +z que cet angle — les
+// points en deçà glissent le long de leur méridien jusqu'au cercle (un ruban
+// coupé y est rogné en arc, et finit proprement sous une lunette)
+export function sweep(B, path, len, closed, r, w, t, lod, lift = null, minPolar = 0) {
+  const cz = cos(minPolar), sz = sin(minPolar);
   const L = SWEEP_LOD[lod], sec = section(w, t, L.corner), ns = sec.length;
   const n = max(closed ? 24 : 4, ceil(len / L.step)), rows = closed ? n : n + 1;
   const start = B.n;
   for (let j = 0; j < rows; j++) {
     const [d, S] = path(j / n), dl = lift ? lift(j / n) : 0;
     for (const [u, v, nu, nv, surf] of sec) {
-      const p = norm([d[0] + S[0] * (u / r), d[1] + S[1] * (u / r), d[2] + S[2] * (u / r)]);
+      let p = norm([d[0] + S[0] * (u / r), d[1] + S[1] * (u / r), d[2] + S[2] * (u / r)]);
+      if (minPolar > 0 && p[2] > cz) { const l = Math.hypot(p[0], p[1]) || 1; p = [(p[0] / l) * sz, (p[1] / l) * sz, cz]; }
       const rr = r + v + dl;
       const prox = 1 - min(1, abs(u) / (w / 2));
       B.vert([p[0] * rr, p[1] * rr, p[2] * rr], norm([S[0] * nu + p[0] * nv, S[1] * nu + p[1] * nv, S[2] * nu + p[2] * nv]), surf[0], surf[1], surf[2], Math.round(prox * 255));
