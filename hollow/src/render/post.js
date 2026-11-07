@@ -11,7 +11,7 @@
 import * as THREE from 'three/webgpu';
 import {
   pass, mrt, output, normalView, velocity, uniform, vec2, vec3, vec4, float,
-  dot, mix, max, smoothstep, length, screenUV, screenCoordinate, hash, uint, time, fract, renderOutput, pow, uv, floor, mx_cell_noise_float, screenSize,
+  dot, mix, max, smoothstep, length, select, screenUV, screenCoordinate, hash, uint, time, fract, renderOutput, pow, uv, floor, mx_cell_noise_float, screenSize,
 } from 'three/tsl';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import { ao } from 'three/addons/tsl/display/GTAONode.js';
@@ -76,7 +76,8 @@ export function createPost(renderer, scene, camera, lights) {
     const depth = scenePass.getTextureNode('depth');
 
     const base = scenePass.getTextureNode('output');
-    const vel = needVel ? scenePass.getTextureNode('velocity').xy.mul(vec2(0.5, -0.5)) : null; // NDC → UV
+    // (vitesse lue sous garde : NaN ou démesurée → nulle)
+    const vel = needVel ? (() => { const v = scenePass.getTextureNode('velocity').xy.mul(vec2(0.5, -0.5)); return select(length(v).lessThan(0.25), v, vec2(0)); })() : null; // NDC → UV
     // flou d'obturateur centré, sur une texture
     const shutter = (tex) => {
       const v = vel.mul(U.blur), n = 10;
@@ -103,6 +104,9 @@ export function createPost(renderer, scene, camera, lights) {
       color = vec4(color.rgb.add(U.godraysColor.mul(r).mul(U.godrays)), color.a);
     }
     if (cfg.aa === 'traa') {
+      // garde-fou : un pixel invalide (NaN, infini) ne doit jamais entrer dans
+      // l'historique, il y resterait jusqu'à son renouvellement complet
+      color = select(dot(color.rgb, color.rgb).lessThan(1e8), color, vec4(0, 0, 0, 1));
       const t = traa(color, depth, scenePass.getTextureNode('velocity'), camera);
       nodes.traa = t;
       color = t;

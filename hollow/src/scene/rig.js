@@ -51,25 +51,33 @@ export function rigPosition(U, phase, full) {
     const A = attribute('rigA', 'vec4'), Bv = attribute('rigB', 'vec4');
     const kind = floor(Bv.w.add(0.001)), rnd = fract(Bv.w);
     const is = (n) => step(abs(kind.sub(n)), 0.5);
-    const x = layerX;
-    const breath = sin(phase.mul(TAU * 2).add(rnd.mul(TAU))).mul(0.25).add(0.75);
-    const lift = mix(float(0.3), float(1), smoothstep(0.6, 3.0, x)).mul(breath);
-    const e = burstSpread(x);
-    const theta = A.w.mul(
-      is(1).mul(irisOpen(x)).add(is(2).mul(e).mul(rnd.add(0.3))).add(is(3).mul(lift)).add(is(4).mul(phase).mul(TAU)),
-    ).toVar('rigTheta');
-    const t = is(2).mul(U.burst).mul(rnd.add(0.5)).mul(e);
     const axis = Bv.xyz, b = A.xyz;
-    const c = cos(theta).toVar('rigCos'), s = sin(theta).toVar('rigSin');
-    const rot = (v) => v.mul(c).add(cross(axis, v).mul(s)).add(axis.mul(dot(axis, v)).mul(c.oneMinus()));
-    const p = b.add(rot(positionGeometry.sub(b))).add(b.div(length(b).max(1e-4)).mul(t)).toVar('rigP');
+    // transformation de la pièce pour une profondeur x et une phase données
+    const pose = (x, ph) => {
+      const breath = sin(ph.mul(TAU * 2).add(rnd.mul(TAU))).mul(0.25).add(0.75);
+      const lift = mix(float(0.3), float(1), smoothstep(0.6, 3.0, x)).mul(breath);
+      const e = burstSpread(x);
+      const theta = A.w.mul(
+        is(1).mul(irisOpen(x)).add(is(2).mul(e).mul(rnd.add(0.3))).add(is(3).mul(lift)).add(is(4).mul(ph).mul(TAU)),
+      );
+      const t = is(2).mul(U.burst).mul(rnd.add(0.5)).mul(e);
+      const c = cos(theta), s = sin(theta);
+      const rot = (v) => v.mul(c).add(cross(axis, v).mul(s)).add(axis.mul(dot(axis, v)).mul(c.oneMinus()));
+      return { rot, p: b.add(rot(positionGeometry.sub(b))).add(b.div(length(b).max(1e-4)).mul(t)) };
+    };
+    const now = pose(layerX, phase);
+    const p = now.p.toVar('rigP');
     if (full) {
+      const rot = now.rot;
       normalLocal.assign(rot(normalLocal));
       tangentLocal.assign(rot(tangentLocal));
       const bev = attribute('bev', 'vec4');
       rigBev.assign(vec4(rot(bev.xyz), bev.w));
       rigRadial.assign(rot(normalize(positionGeometry)));
-      positionPrevious.assign(p); // (pièces : pas de vecteur vitesse propre)
+      // position à l'image précédente (profondeur et phase d'alors) : le
+      // mouvement propre des pièces entre dans les vecteurs vitesse, sinon
+      // l'anticrénelage temporel garde l'image de lames qui ont déjà bougé
+      positionPrevious.assign(pose(layerX.add(G.dTau), G.phasePrev).p);
     }
     return p;
   })();

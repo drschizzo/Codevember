@@ -181,6 +181,13 @@ async function main() {
     // se répètent d'une boucle à l'autre : la boucle est intacte.
     const N = R.layers.length, t = ph * N;
     const { tau, open } = dive ? beatShift(t, N, R.camera) : { tau: R.loop.depth, open: 0 };
+    // (image précédente, pour les vecteurs vitesse des pièces animées ; un saut
+    // dans la boucle ne compte pas comme un mouvement)
+    let dTau = tau - curTau;
+    if (dTau < -N / 2) dTau += N; // (fin de boucle : τ repart de 0)
+    const jump = Math.abs(dTau) > 0.5;
+    G.dTau.value = jump ? 0 : dTau;
+    G.phasePrev.value = jump ? ph : G.phase.value;
     curTau = tau;
     if (camState.free) controls.update(); else rig(ph);
     const fov = R.camera.fov * (1 + (R.camera.kick ?? 0) * open);
