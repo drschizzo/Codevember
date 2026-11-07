@@ -5,11 +5,15 @@
 // graine.
 import { createRng } from './rng.js';
 import { FINISHES, SETS, TINTS } from './finishes.js';
-import { TYPES, geometryFor } from './types.js';
+import { TYPES, geometryFor, randomType } from './types.js';
 
 export { geometryFor, randomType } from './types.js';
 
 const r2 = (x) => Math.round(x * 1000) / 1000;
+
+// pavages percés classiques, et pièces d'exception (une au moins par scène)
+const CLASSIC = ['cells', 'voronoi', 'slots', 'girih'];
+const FEATURED = ['armillary', 'scales', 'weave', 'shards', 'radiolarian', 'coral', 'vitrail', 'tpms', 'geode'];
 
 // Humeurs : environnement de studio, couleur du cœur, fond, poussière
 export const MOODS = {
@@ -94,13 +98,13 @@ export function generate(seed, force = {}) {
   const mood = MOODS[moodKey];
   const N = rng.int(4, 6);
 
-  // types : variété garantie, au plus une géode et une surface minimale
-  const bag = [rng.pick(['cells', 'voronoi']), 'voronoi', 'slots'];
-  if (rng.chance(0.8)) bag.push('tpms');
-  if (rng.chance(0.5)) bag.push('geode');
-  while (bag.length < N) bag.push(rng.pick(['cells', 'voronoi', 'slots', 'tpms']));
-  for (let i = bag.length - 1; i > 0; i--) { const j = Math.floor(rng.next() * (i + 1)); [bag[i], bag[j]] = [bag[j], bag[i]]; }
-  const types = bag.slice(0, N);
+  // types : une coquille percée classique, une pièce d'exception, puis un
+  // tirage pondéré (chaque type rare au plus une fois), dans le désordre
+  const count = {};
+  const take = (t) => { count[t] = (count[t] || 0) + 1; return t; };
+  const types = [take(rng.pick(CLASSIC)), take(rng.pick(FEATURED))];
+  while (types.length < N) types.push(take(randomType(rng, count)));
+  for (let i = types.length - 1; i > 0; i--) { const j = Math.floor(rng.next() * (i + 1)); [types[i], types[j]] = [types[j], types[i]]; }
 
   let prevSet = null;
   const layers = types.map((type, i) => {
