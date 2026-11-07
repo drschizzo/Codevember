@@ -1,7 +1,7 @@
 // Panneau de réglages (lil-gui). Ce module ne connaît que la recette, les
 // réglages de rendu et des fonctions de rappel : il ne touche pas à la scène.
 import GUI from 'lil-gui';
-import { FINISHES, SETS, FINISH_DEFAULTS } from '../finishes.js';
+import { FINISHES, SETS, FINISH_DEFAULTS, PATTERNS } from '../finishes.js';
 import { MOODS, GEMS } from '../recipe.js';
 import { TYPES, P, HOLE_SHAPES, IRIS_PARAMS, SETTINGS } from '../types.js';
 import { ENV_PRESETS } from '../scene/env.js';
@@ -163,7 +163,7 @@ export function createUI({ recipe: getRecipe, render, on }) {
           fs.controllersRecursive().forEach((c) => c.updateDisplay());
           mat();
         });
-        fs.add(F, 'pattern', ['plain', 'brushed', 'hammered', 'glaze', 'weave', 'rock', 'glitter', 'nacre', 'oxide', 'velvet', 'agate', 'patina']).name('Motif').onChange(mat);
+        fs.add(F, 'pattern', PATTERNS).name('Motif').onChange(mat);
         fs.addColor(F, 'color').name('Couleur').onChange(mat);
         fs.addColor(F, 'color2').name('Couleur 2').onChange(mat);
         for (const [k, l2, a, b, s] of FIN) fs.add(F, k, a, b, s).name(l2).onChange(mat);
