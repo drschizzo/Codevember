@@ -11,6 +11,7 @@ import { createRng } from './rng.js';
 import { createGenerator } from './gen/client.js';
 import { createNest } from './scene/nest.js';
 import { createLights } from './scene/lights.js';
+import { createDust } from './scene/dust.js';
 import { makeEnvironment } from './scene/env.js';
 import { G, setNoiseVolume } from './scene/materials.js';
 import { createPost } from './render/post.js';
@@ -86,6 +87,7 @@ async function main() {
   setNoiseVolume(await gen.request({ seed: 'hollow-noise' }, 0, 'noise')); // (les matériaux en dépendent)
   const nest = createNest(scene, gen);
   const lights = createLights(scene);
+  const dust = createDust(scene);
   const post = createPost(renderer, scene, camera, lights);
   const RENDER = loadRender();
 
@@ -173,6 +175,7 @@ async function main() {
     const pxPerUnit = canvas.height / (2 * Math.tan((camera.fov * Math.PI) / 360)); // (pixels par unité à distance 1)
     const info = nest.update({ tau, phi: ph, cycle, dive, ratio: R.nest.ratio, D, coreRel: R.nest.core, detail: RENDER.detail, pxPerUnit });
     shells = info?.shells ?? 0;
+    dust.update({ tau, N: R.layers.length, ratio: R.nest.ratio, xMax: info?.birth ?? 6 }, R.dust);
     lights.update(R, camera, D, Math.sin(ph * Math.PI * 4));
     post.update({ ...RENDER, focus: RENDER.focus * D, focusRange: RENDER.focusRange * D }, R);
     post.render();
@@ -287,7 +290,7 @@ async function main() {
   applyRecipe();
   if (params.has('debug')) {
     window.hollow = {
-      renderer, scene, camera, controls, nest, lights, post, gen, RENDER, renderAt, on,
+      renderer, scene, camera, controls, nest, lights, dust, post, gen, RENDER, renderAt, on,
       get R() { return R; },
       seek: (p) => { phi = p; paused = true; },
       play: () => { paused = false; },
