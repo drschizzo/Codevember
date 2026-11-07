@@ -4,7 +4,7 @@ import { createSim, M, L, NR, R_IN, R_OUT, R_GRID, M_EARTH, SOLID0, GAS0, NIMP }
 import { createLifecycle, PHASES } from './lifecycle.js';
 import { createVisuals } from './visuals.js';
 import { createOrrery, HOPPER } from './orrery.js';
-import { Sonifier, noteName } from './audio.js';
+import { Sonifier } from './audio.js';
 import { provenanceRGB, css } from './palette.js';
 
 const $ = (s) => document.querySelector(s);
@@ -88,6 +88,15 @@ async function main() {
   };
   setMeca(meca);
   const audio = new Sonifier();
+  audio.muted = true; // (le son est en option : bouton « son » ou touche M)
+  function toggleSound() {
+    audio.start(); // (premier geste de l'utilisateur : le contexte audio peut naître)
+    audio.setMuted(!audio.muted);
+    $('#sound').classList.toggle('on', !audio.muted);
+    orrery.setComb(!audio.muted); // (le peigne — la tête de lecture du son — sort ou rentre)
+    toast(audio.muted ? 'Son coupé' : 'Son actif');
+  }
+  $('#sound').addEventListener('click', toggleSound);
   orrery.onClick = () => audio.click();
   orrery.onClack = () => audio.clack();
   const life = createLifecycle();
@@ -188,7 +197,7 @@ async function main() {
         toast(['Couleur : provenance', 'Couleur : roche / glace', 'Couleur : température'][m]);
         break;
       }
-      case 'm': audio.setMuted(!audio.muted); toast(audio.muted ? 'Son coupé' : 'Son actif'); break;
+      case 'm': toggleSound(); break;
       case 'h': $('#help').classList.toggle('hidden'); break;
       case 'o': setMeca(!meca); toast(meca ? 'Machine : visible' : 'Machine : ôtée'); break;
       case 'a': state.autoSelect = true; toast('Sélection automatique'); break;
@@ -337,10 +346,6 @@ async function main() {
       const tReq = state.simTime; // l'état lu date de la requête : on compensera ce retard
       sim.readEmbryos().then((d) => onEmbryos(d, tReq)).finally(() => (busy.e = false));
     }
-    if (!busy.l && now - timers.l > 500) {
-      busy.l = true; timers.l = now;
-      sim.readLayers().then((l) => { state.layers = l; drawCut(); }).finally(() => (busy.l = false));
-    }
     if (!busy.n && now - timers.n > 60) {
       busy.n = true; timers.n = now;
       sim.readNeedle().then((n) => {
@@ -348,7 +353,6 @@ async function main() {
         state.active = n[NR];
         state.dustFrac = state.active / N;
         if (!state.paused) audio.updateDisk(n, nUsed, radiusOf, state.dustFrac);
-        drawGroove();
       }).finally(() => (busy.n = false));
     }
   }
@@ -553,20 +557,13 @@ async function main() {
       li.querySelector('.dot').style.background = css(p.color);
       li.querySelector('.a').textContent = `${p.a.toFixed(2)} UA`;
       li.querySelector('.m').innerHTML = fmtMass(p.mE);
-      const chips = `<i>${kindOf(p)}</i><i>♪ ${noteName(p.a)}</i>` + [...new Set(p.res)].map((r) => `<b>${r}</b>`).join('');
+      const chips = `<i>${kindOf(p)}</i>`;
       const c = li.querySelector('.chips');
       if (c.innerHTML !== chips) c.innerHTML = chips;
     }
     $('#auto').classList.toggle('on', state.autoSelect);
-    const nPl = state.planets.filter((p) => p.mE > 0.3).length;
-    $('#stats').innerHTML = `
-      <div><span>temps</span>${(state.simTime / (2 * Math.PI)).toFixed(1)} orbites à 1 UA</div>
-      <div><span>planètes</span>${nPl} · ${state.planets.length - nPl} embryons</div>
-      <div><span>poussière</span>${(state.active * SOLID0 / N / M_EARTH).toFixed(0)} M⊕ <em>${bar(state.active / N)}</em></div>
-      <div><span>gaz du disque</span>${(state.gasFrac * 100).toFixed(0)} % <em>${bar(state.gasFrac)}</em></div>
-      <div><span>grains actifs</span>${(state.active / 1e6).toFixed(2)} M / ${(N / 1e6).toFixed(2)} M · ${state.fps.toFixed(0)} i/s</div>`;
+    drawInfo();
   }
-  const bar = (f) => `<u style="--f:${Math.max(0, Math.min(1, f)).toFixed(3)}"></u>`;
   listEl.addEventListener('click', (e) => {
     const li = e.target.closest('li');
     if (li) focus(Number(li.dataset.i));
@@ -655,185 +652,13 @@ async function main() {
     toast(state.autoSelect ? 'Sélection automatique : la plus massive' : 'Sélection figée');
   });
 
-  // Barre de couleur « lieu de naissance »
-  {
-    const stops = [];
-    for (let k = 0; k <= 24; k++) {
-      const r = R_IN + (R_OUT - R_IN) * k / 24;
-      stops.push(`${css(provenanceRGB(r))} ${(k / 24 * 100).toFixed(1)}%`);
-    }
-    $('#provbar').style.background = `linear-gradient(90deg, ${stops.join(',')})`;
-    $('.provlegend').style.setProperty('--snow', `${((sim.U.snow.value - R_IN) / (R_OUT - R_IN) * 100).toFixed(1)}%`);
-  }
-
-  // Coupe stratigraphique de la planète sélectionnée, annotée
-  const cut = $('#cut'), cctx = cut.getContext('2d');
-  let cutGeom = null, cutHover = -1;
-  const GAS_RGB = [0.87, 0.78, 0.62];
-  // types de strates : 0 accrétion, 2 embryon initial, 3 gaz capté,
-  // ≥ 10 matière d'un impacteur (10 + n° d'impact ; ,5 = son gaz)
-  const isGasL = (l) => l.type === 3 || (l.type >= 10 && l.type % 1 > 0.25);
-  const groupOf = (l) => (l.type >= 10 ? Math.floor(l.type) : 0);
-  function layerColor(l) {
-    if (isGasL(l)) return GAS_RGB;
-    const c = provenanceRGB(l.r).map((v) => v * (1 - l.ice * 0.35) + l.ice * 0.35 * 0.95);
-    return l.type === 2 ? c.map((v) => v * 0.6) : c;
-  }
-  function drawCut() {
-    const dpr = Math.min(devicePixelRatio, 2);
-    const W = cut.clientWidth, H = cut.clientHeight;
-    if (cut.width !== W * dpr) { cut.width = W * dpr; cut.height = H * dpr; }
-    cctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    cctx.clearRect(0, 0, W, H);
+  // Fiche de la planète suivie : une ligne, sous la liste
+  function drawInfo() {
     const p = state.planets.find((q) => q.index === state.selected);
-    const info = $('#cutinfo');
-    if (!p || !state.layers) { info.textContent = ''; cutGeom = null; return; }
-    const n = Math.max(1, Math.min(L, Math.round(p.nLayers)));
-    const layers = [];
-    for (let k = 0; k < n; k++) {
-      const o = (p.index * L + k) * 4;
-      layers.push({ m: state.layers[o], ice: state.layers[o + 1], r: state.layers[o + 2], type: state.layers[o + 3] });
-    }
-    const total = layers.reduce((s, l) => s + l.m, 0) || 1;
-    const Rmax = Math.min(H * 0.42, W * 0.32), cx = Rmax + 10, cy = H / 2 + 6;
-
-    // rayons de chaque strate (le volume suit la masse)
-    let cum = 0;
-    const rings = layers.map((l, k) => {
-      const r0 = Rmax * Math.cbrt(cum / total);
-      cum += l.m;
-      return { k, l, r0, r1: Rmax * Math.cbrt(cum / total) };
-    });
-    cutGeom = { cx, cy, Rmax, rings, p };
-
-    // moitié gauche : la planète vue de l'extérieur, éclairée
-    const outer = layers[layers.length - 1];
-    const oc = p.gasF > 0.3 ? GAS_RGB : layerColor(outer);
-    const g = cctx.createRadialGradient(cx - Rmax * 0.55, cy - Rmax * 0.35, Rmax * 0.05, cx, cy, Rmax);
-    g.addColorStop(0, css(oc, 1.25)); g.addColorStop(0.7, css(oc, 0.45)); g.addColorStop(1, 'rgb(5,5,10)');
-    cctx.beginPath(); cctx.arc(cx, cy, Rmax, Math.PI / 2, Math.PI * 1.5); cctx.closePath();
-    cctx.fillStyle = g; cctx.fill();
-
-    // moitié droite : les strates, du cœur (le plus ancien) à la surface (le plus récent)
-    for (let k = rings.length - 1; k >= 0; k--) {
-      const { l, r1 } = rings[k];
-      cctx.beginPath(); cctx.moveTo(cx, cy); cctx.arc(cx, cy, r1, -Math.PI / 2, Math.PI / 2); cctx.closePath();
-      cctx.fillStyle = css(layerColor(l), isGasL(l) ? 0.8 : 0.95);
-      cctx.fill();
-    }
-    for (const { k, l, r1 } of rings) {
-      cctx.beginPath(); cctx.arc(cx, cy, r1, -Math.PI / 2, Math.PI / 2);
-      cctx.strokeStyle = 'rgba(0,0,0,0.35)'; cctx.lineWidth = 0.6;
-      cctx.stroke();
-    }
-    // chaque impact = un groupe de couches (l'histoire de l'impacteur),
-    // bordé d'orange et marqué d'une accolade sur le bord droit
-    const groups = new Map();
-    for (const q of rings) {
-      const g = groupOf(q.l);
-      if (!g) continue;
-      const G = groups.get(g) || { r0: q.r0, r1: q.r1, m: 0 };
-      G.r0 = Math.min(G.r0, q.r0); G.r1 = Math.max(G.r1, q.r1); G.m += q.l.m;
-      groups.set(g, G);
-    }
-    for (const G of groups.values()) {
-      cctx.strokeStyle = 'rgba(255,170,90,0.95)'; cctx.lineWidth = 1.6;
-      for (const r of [G.r0, G.r1]) { if (r < 1) continue; cctx.beginPath(); cctx.arc(cx, cy, r, -Math.PI / 2, Math.PI / 2); cctx.stroke(); }
-      cctx.lineWidth = 2.5;
-      cctx.beginPath(); cctx.moveTo(cx + G.r0, cy); cctx.lineTo(cx + G.r1, cy); cctx.stroke();
-    }
-    if (rings[cutHover]) {
-      const { r1 } = rings[cutHover];
-      cctx.beginPath(); cctx.arc(cx, cy, r1, -Math.PI / 2, Math.PI / 2);
-      cctx.strokeStyle = '#fff'; cctx.lineWidth = 2; cctx.stroke();
-    }
-    cctx.strokeStyle = 'rgba(255,255,255,0.3)'; cctx.lineWidth = 1;
-    cctx.beginPath(); cctx.moveTo(cx, cy - Rmax - 3); cctx.lineTo(cx, cy + Rmax + 3); cctx.stroke();
-
-    // annotations
-    cctx.font = '500 9px Inter, sans-serif';
-    cctx.fillStyle = 'rgba(200,210,230,0.55)';
-    cctx.textAlign = 'center';
-    cctx.fillText('VUE', cx - Rmax / 2, cy - Rmax - 6);
-    cctx.fillText('COUPE', cx + Rmax / 2, cy - Rmax - 6);
-    const notes = [];
-    const at = (r, ang) => [cx + r * Math.cos(ang), cy + r * Math.sin(ang)];
-    notes.push({ pt: at(Rmax, -1.0), text: 'surface (récent)' });
-    const seed = rings.find((q) => q.l.type === 2);
-    if (seed) notes.push({ pt: at(Math.max(2, seed.r1 * 0.5), 0.15), text: 'cœur (ancien)' });
-    if (groups.size) {
-      const big = [...groups.values()].reduce((a, b) => (b.m > a.m ? b : a));
-      notes.push({ pt: at((big.r0 + big.r1) / 2, 0.02), text: `impact${groups.size > 1 ? `s (${groups.size})` : ''}` });
-    }
-    const gasR = rings.filter((q) => q.l.type === 3);
-    if (gasR.length) notes.push({ pt: at((gasR[0].r0 + Rmax) / 2, -0.35), text: 'gaz capté' });
-    notes.sort((a, b) => a.pt[1] - b.pt[1]);
-    const lx = cx + Rmax + 12;
-    let lastY = -1e9;
-    cctx.textAlign = 'left'; cctx.font = '400 10px Inter, sans-serif';
-    for (const nt of notes) {
-      const y = Math.max(nt.pt[1], lastY + 13, 10);
-      lastY = y;
-      cctx.strokeStyle = 'rgba(220,230,250,0.45)'; cctx.lineWidth = 0.8;
-      cctx.beginPath(); cctx.moveTo(nt.pt[0], nt.pt[1]); cctx.lineTo(lx - 3, y); cctx.stroke();
-      cctx.fillStyle = 'rgba(225,232,245,0.85)';
-      cctx.fillText(nt.text, lx, y + 3);
-    }
-
-    const hv = rings[cutHover];
-    let detail = '<span class="dim">Survolez une strate pour la décrire.</span>';
-    if (hv) {
-      const l = hv.l, mE = l.m / M_EARTH;
-      const g = groupOf(l);
-      detail = g ? `Strate ${hv.k + 1}/${n} · <b>apportée par un impact géant</b> : ${isGasL(l) ? 'gaz de l’impacteur' : `une couche de l’impacteur, née vers ${l.r.toFixed(1)} UA`} · ${fmtMass(mE)}`
-        : l.type === 3 ? `Strate ${hv.k + 1}/${n} · <b>gaz capté</b> du disque · ${fmtMass(mE)}`
-        : l.type === 2 ? `Strate 1/${n} · <b>embryon initial</b> (${fmtMass(mE)}), né à ${l.r.toFixed(2)} UA`
-        : `Strate ${hv.k + 1}/${n} · poussière accrétée : ${fmtMass(mE)}, née vers <b>${l.r.toFixed(1)} UA</b> · ${(l.ice * 100).toFixed(0)} % de glace`;
-    }
-    const ev = p.evo;
-    info.innerHTML = `<b>${nameOf(p.index)}</b> · ${kindOf(p)} · ${fmtMass(p.mE)} · orbite à ${p.a.toFixed(2)} UA<br>
-      ${ev ? `${surfaceOf(p)} · ≈ ${ev.Teq.toFixed(0)} K · âge ${ev.age.toFixed(0)} orbites<br>` : ''}
-      ${p.gasF > 0.02 ? `gaz ${(p.gasF * 100).toFixed(0)} % · ` : ''}glace ${(p.ice * 100).toFixed(0)} % des solides · ${p.impacts.toFixed(0)} impact${p.impacts >= 2 ? 's' : ''} géant${p.impacts >= 2 ? 's' : ''}${p.res.length ? ' · résonance ' + [...new Set(p.res)].join(', ') : ''}<br>
-      <span class="hover">${detail}</span>`;
-  }
-  cut.addEventListener('pointermove', (e) => {
-    if (!cutGeom) return;
-    const b = cut.getBoundingClientRect();
-    const dx = e.clientX - b.left - cutGeom.cx, dy = e.clientY - b.top - cutGeom.cy;
-    const d = Math.hypot(dx, dy);
-    let k = -1;
-    if (dx >= -2 && d <= cutGeom.Rmax) k = cutGeom.rings.findIndex((q) => d >= q.r0 && d <= q.r1 + 0.5);
-    if (k !== cutHover) { cutHover = k; drawCut(); }
-  });
-  cut.addEventListener('pointerleave', () => { cutHover = -1; drawCut(); });
-
-  // Sillon : densité sous la tête de lecture, en fonction du rayon
-  const gr = $('#groove'), gctx = gr.getContext('2d');
-  function drawGroove() {
-    const dpr = Math.min(devicePixelRatio, 2);
-    const W = gr.clientWidth, H = gr.clientHeight;
-    if (gr.width !== W * dpr) { gr.width = W * dpr; gr.height = H * dpr; }
-    gctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    gctx.clearRect(0, 0, W, H);
-    const d = state.needle;
-    if (!d) return;
-    let mx = 1e-6;
-    for (let i = 0; i < nUsed; i++) mx = Math.max(mx, d[i]);
-    const bw = W / nUsed;
-    for (let i = 0; i < nUsed; i++) {
-      const v = Math.pow(d[i] / mx, 0.6);
-      gctx.fillStyle = css(provenanceRGB(radiusOf(i)), 0.35 + v * 0.9);
-      const h = Math.max(1, v * (H - 16));
-      gctx.fillRect(i * bw, H - 14 - h, Math.max(1, bw - 0.5), h);
-    }
-    const now = performance.now();
-    for (const p of state.planets) {
-      if (p.mE < 0.3) continue;
-      const x = ((p.a - R_IN) / (R_OUT - R_IN)) * W;
-      const lit = Math.max(0, 1 - (now - (p.ping || 0)) / 700);
-      gctx.fillStyle = p.selected ? '#bfe9ff' : `rgba(255,255,255,${0.5 + 0.5 * lit})`;
-      gctx.beginPath(); gctx.arc(x, H - 6, (p.selected ? 3 : 2) + 3 * lit, 0, Math.PI * 2); gctx.fill();
-    }
+    const el = $('#pinfo');
+    const html = p ? `<b>${nameOf(p.index)}</b> · ${kindOf(p)} · ${fmtMass(p.mE)} · ${p.a.toFixed(2)} UA${p.evo && p.mE >= 0.3 ? ` · ${surfaceOf(p)}, ≈ ${p.evo.Teq.toFixed(0)} K` : ''}`
+      : 'Cliquez une planète pour la suivre.';
+    if (el.innerHTML !== html) el.innerHTML = html;
   }
 
   let toastTimer;
@@ -844,11 +669,7 @@ async function main() {
     clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('on'), 2400);
   }
 
-  $('#enter').addEventListener('click', () => {
-    audio.start();
-    $('#intro').classList.add('gone');
-  });
-  $('#enter-silent').addEventListener('click', () => $('#intro').classList.add('gone'));
+  $('#enter').addEventListener('click', () => $('#intro').classList.add('gone'));
 
   addEventListener('resize', () => {
     if (FILM) return; // (résolution fixée par film.js)

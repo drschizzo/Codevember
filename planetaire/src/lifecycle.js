@@ -12,19 +12,19 @@
 
 export const PHASES = [
   { id: 'cloud', name: 'Effondrement du nuage', real: '~100 000 ans',
-    desc: 'Un nuage de gaz et de poussière s’effondre sous son propre poids. En tournant, il s’aplatit : chaque grain rejoint le disque au rayon fixé par son moment cinétique.' },
+    desc: 'Un nuage de gaz et de poussière s’effondre et s’aplatit en disque.' },
   { id: 'proto', name: 'Protoétoile', real: '~1 million d’années',
-    desc: 'Au centre, la protoétoile grossit de la matière qui tombe. Elle ne brille que par la chaleur de sa contraction ; deux jets s’échappent le long de l’axe de rotation.' },
+    desc: 'Au centre, une jeune étoile grossit ; deux jets s’échappent de ses pôles.' },
   { id: 'disk', name: 'Formation des planètes', real: '1 à 10 millions d’années',
-    desc: 'La fusion de l’hydrogène a démarré. Dans le disque, les embryons grossissent, se percutent ; les plus gros captent du gaz et deviennent des géantes. Le gaz du disque se dissipe peu à peu.' },
+    desc: 'L’étoile s’allume. Dans le disque, des embryons grossissent et se percutent.' },
   { id: 'clear', name: 'Dissipation du disque', real: '~1 million d’années',
-    desc: 'Le gaz a disparu. La lumière de l’étoile souffle les poussières fines, les plus grosses spiralent vers elle : le disque se vide de l’intérieur vers l’extérieur. Au-delà reste une ceinture de débris.' },
-  { id: 'mature', name: 'Maturité', real: 'quelques millions d’années (étoile massive)',
-    desc: 'Le système est formé. L’étoile brille de plus en plus fort en consommant son hydrogène ; les surfaces des planètes évoluent.' },
+    desc: 'Le gaz disparaît ; la lumière de l’étoile vide le disque.' },
+  { id: 'mature', name: 'Maturité', real: 'quelques millions d’années',
+    desc: 'Le système est formé.' },
   { id: 'giant', name: 'Supergéante rouge', real: '~100 000 ans',
-    desc: 'Son cœur épuisé, l’étoile enfle et rougit. Elle perd de la masse (les orbites s’élargissent), engloutit les planètes proches et réchauffe les lointaines : les glaces fondent.' },
+    desc: 'L’étoile enfle, rougit et engloutit les planètes proches.' },
   { id: 'nova', name: 'Supernova', real: 'quelques heures, puis des siècles',
-    desc: 'Le cœur s’effondre en une étoile à neutrons et l’étoile explose. L’onde de choc balaie le système. Ses débris, enrichis en éléments lourds, ensemenceront un nouveau nuage.' },
+    desc: 'L’étoile explose. Ses débris formeront un nouveau nuage.' },
 ];
 
 // Durées (unités de simulation ; ×2 par défaut ≈ 1,92 unité/s)

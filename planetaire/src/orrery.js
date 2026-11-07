@@ -631,7 +631,12 @@ export function createOrrery(scene, renderer) {
   // ── Peigne de la boîte à musique (= la tête de lecture), au-dessus du disque
   // Il pivote sur un pilier planté dans le limbe (axe +X) ; il se relève quand
   // l'étoile enfle, comme on relève un bras de lecture.
-  const teeth = [];
+  // Il ne sert qu'au son : sans son, il est rentré dans son pilier. À
+  // l'activation, la barre sort du pilier vers l'étoile et chaque lame se
+  // déplie quand la barre l'a dépassée, puis les pointes montent sur les
+  // tiges ; à la coupure, tout se replie dans l'ordre inverse.
+  const teeth = [], combScrews = [];
+  const combBar = new THREE.Group();
   const comb = new THREE.Group();
   comb.position.set(LIMB_RM, COMB_BAR_Y, COMB_Z);
   root.add(comb);
@@ -640,9 +645,10 @@ export function createOrrery(scene, renderer) {
   {
     pillar(LIMB_RM, COMB_Z, -0.02, COMB_BAR_Y - 0.03, 0.06);
     // barre-talon : les lames en sortent, côté étoile
-    add(bridgeGeometry(-COMB_X0 + 0.07, 0.13, 0.045, [[-COMB_X0, 0.022]]), MS, COMB_X0, 0, 0, comb); // peigne d'acier, d'une pièce
+    add(bridgeGeometry(-COMB_X0 + 0.07, 0.13, 0.045, [[-COMB_X0, 0.022]]), MS, COMB_X0, 0, 0, combBar); // peigne d'acier, d'une pièce
+    comb.add(combBar); // (origine au pilier : la barre en sort par mise à l'échelle)
     screw(0, 0.0225, 0, 0.04, comb);
-    for (let x = COMB_X0 + 0.6; x < -0.3; x += 1.15) screw(x, 0.0225, 0.03, 0.02, comb);
+    for (let x = COMB_X0 + 0.6; x < -0.3; x += 1.15) combScrews.push({ g: screw(x, 0.0225, 0.03, 0.02, comb), x });
     const spacing = (R_OUT - R_IN) / NTEETH;
     const rootZ = -0.062, dy = TOOTH_TIP_Y - TOOTH_ROOT_Y, dz = (TOOTH_TIP_Z - COMB_Z) - rootZ;
     const Lt = Math.hypot(dy, dz), dirT = new THREE.Vector3(0, dy, dz).normalize();
@@ -662,7 +668,7 @@ export function createOrrery(scene, renderer) {
         add(new THREE.BoxGeometry(w * 2, 0.02, spacing * 0.5), MK, 0.05 + w, -0.016, 0, t);
       }
       comb.add(t);
-      teeth.push({ g: t, q0: qBase.clone(), r, amp: 0, t: 0, f: 26 - 14 * (i / NTEETH) });
+      teeth.push({ g: t, q0: qBase.clone(), r, x: r - LIMB_RM, amp: 0, t: 0, f: 26 - 14 * (i / NTEETH) });
     }
     // curseur de la ligne des glaces, à cheval sur la barre
     add(bridgeGeometry(0.1, 0.24, 0.12), MBl, -0.05, 0, 0, snowSlider);
@@ -951,9 +957,10 @@ export function createOrrery(scene, renderer) {
   const place = (mesh, i, pos, rotY, scale) => { _q.setFromAxisAngle(up, rotY); _m.compose(pos, _q, scale); mesh.setMatrixAt(i, _m); };
 
 
-  const S = { lay: 0, escCont: 0, ph: 0, amp: 0, reserve: 1, ratchet: 0, crown: 0, tooth: 0, stop: 1, cycle: -1, valve: 0, lift: 0 };
+  const S = { comb: 0, combT: 0, snowX: null, lay: 0, escCont: 0, ph: 0, amp: 0, reserve: 1, ratchet: 0, crown: 0, tooth: 0, stop: 1, cycle: -1, valve: 0, lift: 0 };
   const api = { root, onClick: null, onClack: null, collect: 0 };
-  const zAxis = new THREE.Vector3(0, 0, 1), _qb = new THREE.Quaternion();
+  const zAxis = new THREE.Vector3(0, 0, 1), xAxis = new THREE.Vector3(1, 0, 0), _qb = new THREE.Quaternion();
+  const COMB_DUR = 2.6, COMB_FOLD = 0.45; // durée de sortie du peigne (s) ; lames rentrées : relevées à l'horizontale (rad)
 
   // ═══ Galerie des automates ═════════════════════════════════════════════
   // Une plate-forme annulaire autour du pied du socle. Une grande couronne
@@ -1377,7 +1384,7 @@ export function createOrrery(scene, renderer) {
     let n = 0;
     for (const t of order) {
       const j = n, sl = t.s, e = t.e;
-      const eArm = ss(0, 0.55, e), eStem = ss(0.5, 0.9, e), ePin = ss(0.85, 1, e), eHub = ss(0, 0.25, e);
+      const eArm = ss(0, 0.55, e), eStem = ss(0.5, 0.9, e), ePin = ss(0.85, 1, e) * ss(0.78, 1, S.comb), eHub = ss(0, 0.25, e);
       const { x, y, z, a, phi } = t;
       const ya = Y_ARM0 - sl * DY_ARM, vr = visRadius(t.mE, k), rT = tubeR(sl);
       const ra = 0.014 + 0.008 * Math.min(1, Math.cbrt(t.mE / 30)); // rayon de la tringle
@@ -1498,21 +1505,39 @@ export function createOrrery(scene, renderer) {
     const liftT = Math.atan(Math.max(0, starR + 0.25 - (TOOTH_TIP_Y - 0.02)) / (LIMB_RM - R_IN));
     S.lift += (liftT - S.lift) * Math.min(1, dtReal * 1.5);
     comb.rotation.z = -S.lift;
+    // ── sortie / rentrée du peigne (son actif ou coupé), à vitesse constante
+    S.comb += Math.max(-dtReal / COMB_DUR, Math.min(dtReal / COMB_DUR, S.combT - S.comb));
+    const reach = smoother(ss(0, 0.8, S.comb));                 // la barre sort pendant les 4/5 du temps
+    combBar.scale.x = Math.max(1e-3, reach);
+    combBar.visible = reach > 1e-3;
+    const xEnd = COMB_X0 * reach;                                // bout de la barre (x < 0, vers l'étoile)
+    for (const c of combScrews) { const k = ss(0, 0.15, c.x - xEnd); c.g.scale.setScalar(0.02 * k); c.g.visible = k > 0; }
     const sx = Math.min(R_OUT, Math.max(R_IN, life.p.snow || 2.7)) - LIMB_RM;
-    snowSlider.position.x += (sx - snowSlider.position.x) * Math.min(1, dtReal * 2);
-    // lames : vibration amortie après le passage d'une pointe
+    S.snowX = S.snowX === null ? sx : S.snowX + (sx - S.snowX) * Math.min(1, dtReal * 2);
+    snowSlider.position.x = Math.max(S.snowX, xEnd + 0.05);    // (poussé par le bout de la barre quand elle rentre)
+    snowSlider.scale.setScalar(Math.max(1e-3, ss(0, 0.12, reach)));
+    snowSlider.visible = reach > 1e-3;
+    const fin = ss(0.8, 1, S.comb);                              // (les dernières lames finissent de se déplier)
+    // lames : rentrées dans la barre tant qu'elle ne les a pas dépassées,
+    // puis elles en sortent et s'abaissent ; vibration amortie après le passage d'une pointe
     for (const t of teeth) {
-      if (t.amp < 1e-3) { if (t.amp !== 0) { t.amp = 0; t.g.quaternion.copy(t.q0); } continue; }
-      t.t += dtReal;
-      t.amp *= Math.exp(-dtReal * 3.2);
+      const u = Math.min(1, Math.max(0, (t.x - xEnd) / 0.5 + fin));
+      t.g.visible = t.x - xEnd > 0;
+      if (t.amp >= 1e-3) { t.t += dtReal; t.amp *= Math.exp(-dtReal * 3.2); } else t.amp = 0;
+      if (u >= 1 && t.amp === 0 && t.u === 1) continue; // (au repos : rien à recalculer)
+      t.u = u;
       // la pointe soulève d'abord la lame, puis elle vibre
-      const bend = (t.t < 0.06 ? t.t / 0.06 : Math.cos((t.t - 0.06) * t.f * Math.PI * 2 / 6)) * 0.12 * t.amp;
-      t.g.quaternion.copy(t.q0).multiply(_qb.setFromAxisAngle(zAxis, bend));
+      const bend = t.amp ? (t.t < 0.06 ? t.t / 0.06 : Math.cos((t.t - 0.06) * t.f * Math.PI * 2 / 6)) * 0.12 * t.amp : 0;
+      // (rentrée : la lame se relève et glisse dans la barre — sa longueur suit u)
+      const us = smoother(u);
+      t.g.quaternion.setFromAxisAngle(xAxis, COMB_FOLD * (1 - us)).multiply(t.q0).multiply(_qb.setFromAxisAngle(zAxis, bend));
+      t.g.scale.set(Math.max(1e-3, us), 1, 1);
     }
   }
 
   // une planète croise la tête : sa pointe soulève la lame de son rayon
   function pluck(a, strength = 1) {
+    if (S.comb < 1) return; // (peigne rentré ou en mouvement)
     let best = null, bd = 1e9;
     for (const t of teeth) { const d = Math.abs(t.r - a); if (d < bd) { bd = d; best = t; } }
     if (!best) return;
@@ -1669,5 +1694,11 @@ export function createOrrery(scene, renderer) {
     };
   }
 
-  return Object.assign(api, { update, pluck, setStar, setVisible, assemblyApply, assemblyRestore, setLightLevel, glassK, liveEnv, heapGlow });
+  // son actif → peigne sorti ; immediate : sans animation (état initial)
+  function setComb(on, immediate = false) {
+    S.combT = on ? 1 : 0;
+    if (immediate) S.comb = S.combT;
+  }
+
+  return Object.assign(api, { update, pluck, setComb, setStar, setVisible, assemblyApply, assemblyRestore, setLightLevel, glassK, liveEnv, heapGlow });
 }
