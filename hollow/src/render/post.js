@@ -2,7 +2,8 @@
 // rayons volumétriques du cœur (raymarching de sa carte d'ombre), occlusion
 // ambiante (GTAO), anticrénelage temporel, flou de mouvement, profondeur de
 // champ, bloom, étalonnage (balance, contraste, saturation, vignettage),
-// aberration chromatique, tone mapping, grain.
+// traînées anamorphiques, halation, poussière sur la lentille, aberration
+// chromatique, tone mapping, grain.
 //
 // Les réglages continus sont des uniformes ; seules les options qui changent
 // la structure (activer un effet, changer d'anticrénelage) reconstruisent la
@@ -10,7 +11,7 @@
 import * as THREE from 'three/webgpu';
 import {
   pass, mrt, output, normalView, velocity, uniform, vec2, vec3, vec4, float,
-  dot, mix, max, smoothstep, length, screenUV, screenCoordinate, hash, uint, time, fract, renderOutput, pow, uv,
+  dot, mix, max, smoothstep, length, screenUV, screenCoordinate, hash, uint, time, fract, renderOutput, pow, uv, floor, mx_cell_noise_float, screenSize,
 } from 'three/tsl';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import { ao } from 'three/addons/tsl/display/GTAONode.js';
@@ -20,10 +21,28 @@ import { smaa } from 'three/addons/tsl/display/SMAANode.js';
 import { fxaa } from 'three/addons/tsl/display/FXAANode.js';
 import { dof } from 'three/addons/tsl/display/DepthOfFieldNode.js';
 import { chromaticAberration } from 'three/addons/tsl/display/ChromaticAberrationNode.js';
+import { gaussianBlur } from 'three/addons/tsl/display/GaussianBlurNode.js';
 
 const LUMA = vec3(0.2126, 0.7152, 0.0722);
 
 export const TONE_MAPPINGS = { agx: THREE.AgXToneMapping, aces: THREE.ACESFilmicToneMapping, neutral: THREE.NeutralToneMapping };
+
+// Poussière sur la lentille : des taches rondes et douces, de tailles et
+// d'intensités variées, à deux échelles (proportions de l'écran conservées)
+function lensDirt() {
+  const a = screenSize.x.div(screenSize.y);
+  const p = vec2(screenUV.x.mul(a), screenUV.y);
+  let d = float(0);
+  for (const [scale, w] of [[6, 0.7], [15, 0.45], [33, 0.3]]) {
+    const q = p.mul(scale), cell = floor(q), f = fract(q);
+    const h = mx_cell_noise_float(cell), h2 = mx_cell_noise_float(cell.add(17.3)), h3 = mx_cell_noise_float(cell.add(41.9));
+    const c = vec2(h.mul(0.6).add(0.2), h2.mul(0.6).add(0.2));
+    const r = h3.mul(0.3).add(0.12);
+    d = d.add(smoothstep(r, r.mul(0.3), length(f.sub(c))).mul(step05(h3)).mul(h.mul(0.6).add(0.4)).mul(w));
+  }
+  return d;
+}
+const step05 = (x) => smoothstep(0.45, 0.55, x);
 
 export function createPost(renderer, scene, camera, lights) {
   const pipeline = new THREE.RenderPipeline(renderer);
@@ -33,6 +52,7 @@ export function createPost(renderer, scene, camera, lights) {
     blur: uniform(0.6), focus: uniform(4), focusRange: uniform(2), bokeh: uniform(2),
     exposure: uniform(1), contrast: uniform(1), saturation: uniform(1), warmth: uniform(0), vignette: uniform(0.35),
     ca: uniform(0.2), grain: uniform(0.04), hiCap: uniform(3),
+    streaks: uniform(0.3), streakLen: uniform(6), halation: uniform(0.3), dirt: uniform(0.4),
   };
   let nodes = {};
   let key = '';
@@ -40,7 +60,7 @@ export function createPost(renderer, scene, camera, lights) {
   function build(cfg) {
     // (les rayons lisent la carte d'ombre du cœur : elle n'existe qu'après le premier rendu)
     const rays = cfg.godrays && !!lights.core.shadow.map;
-    const k = [cfg.aa, cfg.bloom, rays, cfg.ao, cfg.dof, cfg.motionBlur > 0, cfg.ca > 0].join();
+    const k = [cfg.aa, cfg.bloom, rays, cfg.ao, cfg.dof, cfg.motionBlur > 0, cfg.ca > 0, cfg.streaks > 0].join();
     if (k === key) return;
     key = k;
     for (const n of Object.values(nodes)) n?.dispose?.();
@@ -105,7 +125,16 @@ export function createPost(renderer, scene, camera, lights) {
     if (cfg.bloom) {
       const b = bloom(vec4(c, 1), cfg.bloomStrength, cfg.bloomRadius, cfg.bloomThreshold);
       nodes.bloom = b;
-      c = c.add(b.rgb);
+      // halation (pellicule : un liseré rouge orangé autour des hautes lumières)
+      // et poussière sur la lentille (révélée par la lumière diffusée)
+      c = c.add(b.rgb.mul(vec3(1, 0.32, 0.12).mul(U.halation).add(lensDirt().mul(U.dirt)).add(1)));
+    }
+    if (cfg.streaks > 0) {
+      // traînées anamorphiques : les hautes lumières étirées à l'horizontale, bleutées
+      const hi = max(c.sub(vec3(U.hiCap.mul(0.45))), vec3(0));
+      const st = gaussianBlur(vec4(hi, 1), vec2(U.streakLen, 0), 10, { resolutionScale: 0.25 });
+      nodes.streaks = st;
+      c = c.add(st.rgb.mul(vec3(0.55, 0.75, 1)).mul(U.streaks));
     }
 
     // étalonnage (linéaire, avant tone mapping)
@@ -147,6 +176,10 @@ export function createPost(renderer, scene, camera, lights) {
     U.ca.value = cfg.ca;
     U.grain.value = cfg.grain;
     U.hiCap.value = cfg.hiCap;
+    U.streaks.value = cfg.streaks ?? 0;
+    U.streakLen.value = cfg.streakLen ?? 6;
+    U.halation.value = cfg.halation ?? 0;
+    U.dirt.value = cfg.dirt ?? 0;
     U.focus.value = cfg.focus;
     U.focusRange.value = cfg.focusRange;
     U.bokeh.value = cfg.bokeh;

@@ -141,7 +141,7 @@ export function generate(seed, force = {}) {
     seed: String(seed), mood: moodKey,
     nest: { ratio: r2(rng.range(0.58, 0.66)), core: r2(rng.range(0.035, 0.06)) },
     loop: { duration: 24, dive: true, depth: 0.35 },
-    camera: { fov: Math.round(rng.range(36, 48)), sway: r2(rng.range(0.015, 0.05)), roll: r2(rng.range(0, 0.06)) },
+    camera: { fov: Math.round(rng.range(36, 48)), sway: r2(rng.range(0.015, 0.05)), roll: r2(rng.range(0, 0.06)), ramp: r2(look.range(0.25, 0.6)), kick: r2(look.range(0, 0.12)) },
     core: { kind: look.weighted([['star', 3], ['pearl', 1.4], ['gyro', 1.6]]), color: mood.coreColor ? look.pick(mood.coreColor) : kelvinToHex(coreK), intensity: r2(rng.range(28, 55)), glow: r2(rng.range(6, 13)), halo: r2(rng.range(2.0, 2.8)), decay: 2, pulse: r2(rng.range(0, 0.15)), shadowSoft: 2 },
     key: { color: kelvinToHex(mood.keyK), intensity: (rng.next(), 40), x: r2(rng.range(-0.45, -0.2)), y: r2(rng.range(0.2, 0.45)), angle: 0.85, penumbra: 0.9 },
     env: { preset: mood.env, intensity: (() => { const v = rng.range(0.9, 1.25); return r2(mood.envIntensity ? look.range(...mood.envIntensity) : v); })(), rotation: r2(rng.range(0, Math.PI * 2)) },
@@ -159,6 +159,7 @@ function dustFor(rng, mood) {
 // recette partagée par une version antérieure : champs ajoutés depuis
 export function upgrade(R) {
   R.core.kind ??= 'star';
+  R.camera.ramp ??= 0; R.camera.kick ??= 0;
   for (const L of R.layers) for (const k of ['outer', 'inner', 'edge']) L.finish[k] = { ...FINISH_DEFAULTS, ...L.finish[k] };
   R.dust ??= dustFor(createRng(`${R.seed}:dust`), MOODS[R.mood] ?? MOODS.atelier);
   for (const L of R.layers) { L.gem ??= { ...GEMS.diamond }; L.pane ??= { rough: 0.12, glow: 0.6 }; }
