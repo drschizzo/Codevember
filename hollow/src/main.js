@@ -6,6 +6,7 @@ import * as THREE from 'three/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { generate, geometryFor, finishesFor, makeLayer, randomType } from './recipe.js';
 import { SETS } from './finishes.js';
+import { TYPES } from './types.js';
 import { createRng } from './rng.js';
 import { createGenerator } from './gen/client.js';
 import { createNest } from './scene/nest.js';
@@ -212,8 +213,11 @@ async function main() {
       const L = R.layers[i], rng = rngUI();
       L.type = t;
       L.geo = geometryFor(t, rng, `${R.seed}:${i}:${rng.int(0, 1e6)}`);
-      if (t === 'geode') { L.set = 'geode'; L.finish = finishesFor('geode', rng); }
-      else if (L.set === 'geode') { const N = makeLayer(t, rng, 'x', R.mood); L.set = N.set; L.finish = N.finish; }
+      // (jeu imposé par le type, ou jeu réservé à l'ancien type : on en tire un autre)
+      const forced = TYPES[t].set;
+      if (forced) { L.set = forced; L.finish = finishesFor(forced, rng); }
+      else if (SETS[L.set]?.only) { const N = makeLayer(t, rng, 'x', R.mood); L.set = N.set; L.finish = N.finish; }
+      if (TYPES[t].noGroove) L.finish.groove = 0;
       L.geo.chamfer = SETS[L.set]?.chamfer ?? false;
       layerChanged(i, true);
     },
@@ -233,7 +237,9 @@ async function main() {
     layerAxis: (i) => { R.layers[i].motion.axis = rngUI().dir(); },
     addLayer: () => {
       const rng = rngUI();
-      R.layers.push(makeLayer(randomType(rng), rng, `${R.seed}:${R.layers.length}:${rng.int(0, 1e6)}`, R.mood));
+      const count = {};
+      for (const L of R.layers) count[L.type] = (count[L.type] || 0) + 1;
+      R.layers.push(makeLayer(randomType(rng, count), rng, `${R.seed}:${R.layers.length}:${rng.int(0, 1e6)}`, R.mood));
       nest.setRecipe(R); ui.rebuildLayers();
     },
     removeLayer: () => {

@@ -8,10 +8,20 @@ import { buildTPMS } from './tpms.js';
 import { placeCrystals } from './crystals.js';
 import { buildNoiseVolume } from './noisevol.js';
 
+// Pavages percés (gen/shell.js) : la forme des cellules
+const TILINGS = {
+  cells: (spec, rng) => goldbergCells(spec, rng),
+  voronoi: (spec, rng) => voronoiCells(spec, rng),
+  slots: (spec) => slotCells(spec),
+};
+// Constructeurs à maillage propre : (spec, lod) → maillage
+const MESHES = {
+  tpms: buildTPMS,
+};
+
 function prepare(spec) {
   const rng = createRng(spec.seed), noise = createNoise3(spec.seed);
-  const cells = spec.type === 'slots' ? slotCells(spec) : spec.type === 'voronoi' ? voronoiCells(spec, rng) : goldbergCells(spec, rng);
-  return prepareCells(cells, spec, noise, rng);
+  return prepareCells(TILINGS[spec.type](spec, rng), spec, noise, rng);
 }
 
 // Format compact des sommets (28 octets au lieu de 44) : normale (et normale de tranche) en snorm16,
@@ -33,7 +43,7 @@ function pack(o) {
 function build({ spec, lod, what }) {
   if (what === 'noise') return buildNoiseVolume(spec.seed);
   if (what === 'crystals') return placeCrystals(prepare(spec), spec, createRng(`${spec.seed}:crystals`));
-  if (spec.type === 'tpms') return pack(buildTPMS(spec, lod));
+  if (MESHES[spec.type]) return pack(MESHES[spec.type](spec, lod));
   return pack(buildShell(prepare(spec), spec, lod));
 }
 

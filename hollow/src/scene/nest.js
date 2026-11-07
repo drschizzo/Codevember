@@ -24,6 +24,7 @@ import {
   crystalUniforms, buildCrystalMaterial,
 } from './materials.js';
 import { crystalGeometry } from '../gen/crystals.js';
+import { IMPLICIT } from '../types.js';
 
 export const MAIN = 1, CORE = 2, KEY = 4; // masques de calques
 export const X_MIN = -2.3;                // au-delà (coquilles derrière la caméra) : noyées dans le brouillard
@@ -73,7 +74,7 @@ class Design {
     if (key !== this.specKey) {
       this.specKey = key;
       // (surfaces minimales : les ombres utilisent le niveau moyen, pas de niveau 3)
-      const isT = layer.geo.type === 'tpms', geode = layer.type === 'geode';
+      const isT = IMPLICIT.has(layer.geo.type), geode = (layer.geo.crystals || 0) > 0;
       const lods = isT ? [2, 1, 0] : [3, 2, 1, 0];
       const batch = { key, need: lods.length + (geode ? 1 : 0), got: 0, geoms: [null, null, null, null], crystals: null };
       this.pending = batch;
@@ -274,7 +275,7 @@ export function createNest(scene, gen) {
       // niveau de détail selon la taille à l'écran (rayon en pixels) : les seuils
       // sont choisis pour que l'écart entre deux niveaux reste sous le pixel
       // (surfaces minimales : maillage implicite plus exigeant, seuils relevés)
-      const rpx = x <= 0 ? Infinity : ((s.D * s.ratio ** x) / s.D) * s.pxPerUnit * s.detail * (des.layer.type === 'tpms' ? 1.8 : 1);
+      const rpx = x <= 0 ? Infinity : ((s.D * s.ratio ** x) / s.D) * s.pxPerUnit * s.detail * (IMPLICIT.has(des.layer.geo.type) ? 1.8 : 1);
       // (la tranche a sa normale par pixel : les niveaux ne diffèrent plus que par
       // la silhouette des biseaux, d'où des seuils plus hauts)
       let lod = rpx > 1100 ? 0 : rpx > 280 ? 1 : 2;

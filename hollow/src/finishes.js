@@ -64,7 +64,8 @@ export const FINISHES = {
 
 // Jeux de matériaux : [externe, interne, tranche], usure (la face externe
 // s'use jusqu'à la tranche près des bords), chanfrein plat ou biseau rond,
-// humeurs auxquelles le jeu appartient.
+// humeurs auxquelles le jeu appartient ; groove: false (pas de gravure),
+// only (jeu réservé à un type, jamais tiré au hasard).
 export const SETS = {
   brassVelvet: { label: 'Laiton & velours', outer: 'brushedBrass', inner: 'velvet', edge: 'polishedBrass', wear: 0, chamfer: false, moods: ['atelier', 'luxe'] },
   anodizedDiamond: { label: 'Anodisé diamanté', outer: 'anodized', inner: 'anodizedMatte', edge: 'diamondCut', wear: 0.08, chamfer: true, moods: ['studio', 'nuit'] },
@@ -73,10 +74,10 @@ export const SETS = {
   titanium: { label: 'Titane au feu', outer: 'oxideTitanium', inner: 'rawTitanium', edge: 'diamondCut', wear: 0.1, chamfer: true, moods: ['studio', 'irisé'] },
   goldLeaf: { label: 'Or martelé', outer: 'hammeredGold', inner: 'polishedGold', edge: 'polishedGold', wear: 0, chamfer: false, moods: ['luxe', 'atelier'] },
   carbon: { label: 'Carbone', outer: 'carbon', inner: 'carbonMatte', edge: 'brushedSteel', wear: 0.05, chamfer: true, moods: ['studio', 'nuit'] },
-  smoked: { label: 'Verre fumé', outer: 'smokedGlass', inner: 'smokedGlass', edge: 'frostedGlass', wear: 0, chamfer: false, moods: ['studio', 'nuit', 'pastel'] },
-  amber: { label: 'Verre ambré', outer: 'amberGlass', inner: 'amberGlass', edge: 'frostedGlass', wear: 0, chamfer: false, moods: ['atelier', 'luxe'] },
+  smoked: { label: 'Verre fumé', groove: false, outer: 'smokedGlass', inner: 'smokedGlass', edge: 'frostedGlass', wear: 0, chamfer: false, moods: ['studio', 'nuit', 'pastel'] },
+  amber: { label: 'Verre ambré', groove: false, outer: 'amberGlass', inner: 'amberGlass', edge: 'frostedGlass', wear: 0, chamfer: false, moods: ['atelier', 'luxe'] },
   nacre: { label: 'Nacre', outer: 'nacre', inner: 'nacre', edge: 'nacre', wear: 0, chamfer: false, moods: ['irisé', 'pastel'] },
-  geode: { label: 'Géode', outer: 'basalt', inner: 'druse', edge: 'agate', wear: 0, chamfer: false, moods: ['atelier', 'luxe', 'nuit', 'irisé'] },
+  geode: { label: 'Géode', only: true, groove: false, outer: 'basalt', inner: 'druse', edge: 'agate', wear: 0, chamfer: false, moods: ['atelier', 'luxe', 'nuit', 'irisé'] },
   verdigris: { label: 'Cuivre vert-de-gris', outer: 'verdigris', inner: 'polishedCopper', edge: 'polishedCopper', wear: 0.45, chamfer: false, moods: ['atelier'] },
   obsidian: { label: 'Obsidienne', outer: 'obsidian', inner: 'basalt', edge: 'obsidian', wear: 0, chamfer: true, moods: ['nuit', 'luxe'] },
   chrome: { label: 'Chrome', outer: 'chrome', inner: 'brushedSteel', edge: 'chrome', wear: 0, chamfer: false, moods: ['studio'] },
