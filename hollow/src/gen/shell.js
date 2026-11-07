@@ -207,7 +207,7 @@ export function prepareCells(cells, spec, noise, rng) {
       const n = noise.fbm(c[0] * spec.barFreq + 11, c[1] * spec.barFreq - 7, c[2] * spec.barFreq + 3, 3);
       const field = 1 + spec.barVar * n * 2 + spec.barGrad * dot(c, gAxis);
       w = (spec.bar / 2) * max(0.25, field);
-      if (rng.next() < spec.closed) continue; // cellule pleine
+      if (rng.next() < spec.closed || cell.solid) continue; // cellule pleine
     }
     const P1 = inset(P, ins.map((f) => f * w));
     if (!P1) continue;
