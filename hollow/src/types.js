@@ -200,6 +200,22 @@ export const TYPES = {
       };
     },
   },
+  weave: {
+    label: 'Vannerie', weight: 1.5, max: 1, noChamfer: true,
+    sets: ['brassVelvet', 'anodizedDiamond', 'titanium', 'goldLeaf', 'carbon', 'chrome', 'bronze', 'blackSteel', 'verdigris'],
+    params: [
+      ['strands', 'Brins par famille', 6, 40, 1], ['width', 'Largeur des brins', 0.3, 1, 0.01], ['wave', 'Ondulation', 0, 2, 0.01],
+      ['bias', 'Biais', 0, Math.PI / 2, 0.01],
+    ],
+    // deux familles de rubans tressés dessus-dessous
+    geometry(rng) {
+      return {
+        type: 'weave', strands: rng.int(12, 26), width: r2(rng.range(0.5, 0.85)), wave: r2(rng.range(0.8, 1.4)),
+        bias: r2(rng.pick([0, Math.PI / 4, rng.range(0, Math.PI / 2)])), thickness: r2(rng.range(0.012, 0.02)), bevel: 0,
+        iris: iris(rng, 0.3),
+      };
+    },
+  },
   tpms: {
     label: 'Surface minimale', weight: 1.8, max: 1, noGroove: true, noChamfer: true,
     params: [['freq', 'Fréquence', 1.5, 7, 0.05], ['wall', 'Paroi', -0.5, 0.5, 0.01]],
