@@ -22,6 +22,8 @@ async function main() {
   // un canevas « extended » — les hautes lumières (étoile, éclairs, supernova)
   // dépassent le blanc de l'interface. ?sdr force le rendu classique.
   const HDR = !params.has('sdr') && (params.has('hdr') || matchMedia('(dynamic-range: high)').matches);
+  // éclat du disque stellaire en HDR (multiplie starK) : l'étoile doit éblouir (?starhdr=)
+  const STAR_HDR = HDR ? Number(params.get('starhdr')) || 3.5 : 1;
   const renderer = new THREE.WebGPURenderer({ antialias: false, powerPreference: 'high-performance', trackTimestamp: PROF,
     ...(HDR ? { outputType: THREE.HalfFloatType } : {}) });
   const MAX_PR = Math.min(devicePixelRatio, 2);
@@ -890,7 +892,7 @@ async function main() {
     vis.setStar(meca && p.shellR > BELL_R * 0.7 ? { ...p, shellR: BELL_R * 0.7 } : p); // (sa coquille est bosselée : marge)
     // versement du nuage : horloge de la phase « nuage » (au-delà, tout est lâché)
     sim.U.pourT.value = life.phase === 0 ? life.t : 1e9;
-    orrery.setStar(p.color, Math.pow(Math.max(p.L, 1e-3), 0.35), p.shell);
+    orrery.setStar(p.color, Math.pow(Math.max(p.L, 1e-3), 0.35), p.shell, p.starI * 0.35 * STAR_HDR, p.starVisR); // (radiance du disque en DA mécanique : starK)
   }
   function onLifeEvent(e) {
     if (e === 'ignition') {
@@ -1097,6 +1099,10 @@ async function main() {
       _camPrev.copy(camera.position);
       vis.V.planetFlux.value = meca ? 2.2 : 4.0;
       vis.V.starK.value = meca ? 0.35 : 1.0;
+      vis.V.starHdr.value = STAR_HDR;
+      vis.V.limbAmt.value = HDR ? 0.3 : 0.6;
+      // (bloom plafonné à l'éclat qu'avait l'étoile avant le surplus HDR ; suit starI : la supernova garde son éclair)
+      vis.V.bloomCap.value = HDR ? Math.max(2, vis.V.starI.value * vis.V.starK.value * 1.6) : 1e4;
       vis.V.innerSoft.value = meca ? 1.0 : 0.0;
     }
     if (vis.updatePulsar(state.paused ? 0 : real)) audio.pulsarTick(); // un faisceau nous balaie : « tic »

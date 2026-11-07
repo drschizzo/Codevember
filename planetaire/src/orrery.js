@@ -29,6 +29,7 @@ import * as THREE from 'three/webgpu';
 import {
   vec3, vec4, mix, positionLocal, mx_noise_float, float, mrt, normalWorld, positionWorld, cameraPosition,
   normalize, dot, abs, pow, max, min, reflect, uniform, smoothstep, time, bumpMap, length, sin, cubeTexture, reflectVector, uv,
+  lights,
 } from 'three/tsl';
 import { R_IN, R_OUT } from './sim.js';
 
@@ -469,7 +470,8 @@ export function createOrrery(scene, renderer) {
   starLight.shadow.bias = -0.002; starLight.shadow.normalBias = 0.03;
   starLight.shadow.radius = 6;
   root.add(starLight);
-  const lamp = new THREE.SpotLight(0xfff0dc, 140, 0, 0.36, 0.85, 1.6); // ~4500 K : le laiton fournit lui-même le chaud
+  const starCupL = uniform(new THREE.Color(0, 0, 0)), starCupR = uniform(0.06); // radiance et rayon du disque stellaire (coupe)
+  const lamp =new THREE.SpotLight(0xfff0dc, 140, 0, 0.36, 0.85, 1.6); // ~4500 K : le laiton fournit lui-même le chaud
   lamp.position.set(-5.5, 16, 6.5);
   lamp.target.position.set(0, -3.4, 0);
   lamp.castShadow = true;
@@ -689,8 +691,21 @@ export function createOrrery(scene, renderer) {
     // l'arbre le plus fin monte de la platine jusqu'à l'étoile, qu'il porte dans une coupe
     add(bushGeometry(0.08, 0.04, 0.02), MBz, 0, Y_BASE + 0.02, 0);
     arbor(0, 0, Y_BASE, -0.1, 0.02);
-    add(turned([[0.02, -0.06], [0.035, -0.06], [0.05, -0.03], [0.075, 0.0], [0.08, 0.01], [0.07, 0.012], [0.045, -0.015], [0.02, -0.03]], 32), MB, 0, -0.08, 0)
-      .material = Object.assign(MB.clone(), { side: THREE.DoubleSide });
+    // La coupe est à ~0,1 du centre de la lumière ponctuelle de l'étoile : en
+    // 1/d², elle recevait ~100× ce que rend le disque stellaire, et son reflet
+    // brillait bien plus que l'étoile (une étoile « allumée par la base »).
+    // Elle ignore donc la lumière ponctuelle et reçoit à la place le reflet
+    // d'une sphère de radiance connue : jamais plus lumineux que l'étoile.
+    const cupM = brass();
+    cupM.side = THREE.DoubleSide;
+    cupM.lightsNode = lights([lamp, lamp2, hemi, rim, rim2]);
+    {
+      const d = length(positionWorld).max(1e-3);
+      const facing = max(dot(normalWorld, positionWorld.div(d).negate()), 0.0);
+      const view = starCupR.div(d).pow(2.0).mul(facing);                 // facteur de forme de la sphère
+      cupM.emissiveNode = vec3(0.95, 0.74, 0.44).mul(starCupL).mul(view.mul(1.6).min(0.85));
+    }
+    add(turned([[0.02, -0.06], [0.035, -0.06], [0.05, -0.03], [0.075, 0.0], [0.08, 0.01], [0.07, 0.012], [0.045, -0.015], [0.02, -0.03]], 32), cupM, 0, -0.08, 0);
     // arbre de renvoi
     add(bushGeometry(0.09, 0.04, 0.035), MBz, layP.x, Y_BASE + 0.02, layP.z);
     arbor(layP.x, layP.z, Y_BASE, bridgeY + 0.03, 0.035);
@@ -1507,7 +1522,9 @@ export function createOrrery(scene, renderer) {
 
   // éclairage de la machine par l'étoile (couleur et luminosité du cycle de vie)
   let starLightK = 1;
-  function setStar(color, lightK, shell = 0) {
+  function setStar(color, lightK, shell = 0, surface = 1, radius = 0.06) {
+    starCupL.value.setRGB(color[0] * surface, color[1] * surface, color[2] * surface);
+    starCupR.value = radius;
     // (couleur de l'étoile adoucie vers le blanc : le laiton reste du laiton)
     // (couleur saturée aux deux tiers : la géante baigne la machine de rouge,
     //  mais le laiton reste lisible)

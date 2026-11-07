@@ -82,6 +82,7 @@ Paramètres d'URL :
 | `?agx` | ancien tone mapping (AgX) |
 | `?sdr` / `?hdr` | force la sortie SDR ou HDR (par défaut : HDR si l’écran le permet) |
 | `?peak=4` | pic de luminosité en HDR, en multiples du blanc de l’interface |
+| `?starhdr=3.5` | éclat du disque stellaire en HDR (multiplie l’éclat de base ; 1 = comme en SDR) |
 | `?exposure=1.45` | exposition globale |
 | `?nomeca` | sans la machine (ancienne DA) |
 | `?dof` | remet la profondeur de champ (coupée par défaut) |
