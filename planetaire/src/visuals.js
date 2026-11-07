@@ -9,6 +9,7 @@ import {
   cameraViewMatrix, atan,
 } from 'three/tsl';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
+import { smaa } from 'three/addons/tsl/display/SMAANode.js';
 import { dof } from 'three/addons/tsl/display/DepthOfFieldNode.js';
 import { motionBlur } from 'three/addons/tsl/display/MotionBlur.js';
 import { mrt, output, velocity } from 'three/tsl';
@@ -65,7 +66,9 @@ export function createVisuals(renderer, scene, camera, sim, opts = {}) {
     aperture: uniform(0.0),  // cercle de confusion (unités monde) loin du plan net
     shutter: uniform(0.0),   // temps d'obturation (unités de simulation) : traînées de mouvement
     camVel: uniform(new THREE.Vector3()), // vitesse de la caméra (unités / unité de temps simulé)
-    planetFlux: uniform(4.0), // éclairement maximal des planètes (abaissé en DA mécanique)
+    planetFlux: uniform(4.0),
+    starK: uniform(1.0),     // éclat de l'étoile (abaissé en DA mécanique : les planètes restent lisibles)
+    innerSoft: uniform(0.0), // adoucit l'éclairement des grains tout près de l'étoile // éclairement maximal des planètes (abaissé en DA mécanique)
   };
 
   // ── Poussière ──────────────────────────────────────────────────────────────
@@ -103,7 +106,7 @@ export function createVisuals(renderer, scene, camera, sim, opts = {}) {
     // Les grains au-dessus du plan médian échappent à l'ombre du disque.
     const lift = exp(P.y.div(diskH(R).mul(0.55)).pow(2).negate());
     const shade = exp(t.mul(lift).negate());
-    const irr = shade.div(R.mul(0.55).add(0.35));
+    const irr = shade.div(R.mul(0.55).add(V.innerSoft.add(0.35)));
 
     const prov = provenanceTSL(P.w);
     const comp = mix(vec3(...ROCK), vec3(...ICE), Vv.w);
@@ -209,13 +212,13 @@ export function createVisuals(renderer, scene, camera, sim, opts = {}) {
     // granulation : la surface bouillonne (surtout visible sur la géante)
     const gran = mx_fractal_noise_float(normalLocal.mul(6.0).add(vec3(time.mul(0.05), 0, 0)), 3, 2.0, 0.5);
     const limb = max(dot(normalize(normalLocal), normalize(cameraPosition.sub(positionWorld))), 0.0).pow(0.4);
-    core.material.colorNode = V.starCol.mul(V.starI).mul(sin(time.mul(3.0)).mul(0.03).add(1.0)).mul(gran.mul(0.25).add(1.0)).mul(limb.mul(0.6).add(0.4));
+    core.material.colorNode = V.starCol.mul(V.starI).mul(V.starK).mul(sin(time.mul(3.0)).mul(0.03).add(1.0)).mul(gran.mul(0.25).add(1.0)).mul(limb.mul(0.6).add(0.4));
     core.scale.setScalar(0.15);
     star.add(core);
     star.userData.core = core;
     const hm = new THREE.SpriteNodeMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
     const d = length(uv().sub(0.5)).mul(2.0);
-    hm.colorNode = vec4(V.starCol.mul(V.starI).mul(0.25), exp(d.mul(6.0).negate()).sub(Math.exp(-6.0)).max(0));
+    hm.colorNode = vec4(V.starCol.mul(V.starI).mul(V.starK).mul(0.25), exp(d.mul(6.0).negate()).sub(Math.exp(-6.0)).max(0));
     const h = new THREE.Sprite(hm);
     h.scale.setScalar(1.3);
     star.add(h);
@@ -550,8 +553,14 @@ export function createVisuals(renderer, scene, camera, sim, opts = {}) {
 
   // ── Post-process : bloom + vignette ────────────────────────────────────────
   const pipeline = new THREE.RenderPipeline(renderer);
-  const scenePass = pass(scene, camera);
   const qp = new URLSearchParams(location.search);
+  // Anticrénelage des arêtes fines (tringles, tiges, dents d'engrenage) :
+  //  · par défaut SMAA en fin de chaîne (peu coûteux) ;
+  //  · ?aa=msaa : MSAA 4× sur la passe de scène, plus propre mais ~35 % plus
+  //    lent (le million de grains additifs est rendu en 4 échantillons) ;
+  //  · ?aa=0 : aucun. (WebGPU n'accepte que 1 ou 4 échantillons.)
+  const AA = qp.get('aa') ?? 'smaa';
+  const scenePass = pass(scene, camera, { samples: AA === 'msaa' ? 4 : 0 });
   // Objectif (désactivable avec ?nolens) :
   //  · flou de mouvement : vecteurs vitesse écrits par les objets opaques (les
   //    roues qui tournent, les bras, la caméra qui orbite) ; les matériaux
@@ -560,6 +569,7 @@ export function createVisuals(renderer, scene, camera, sim, opts = {}) {
   //    où il n'y a que le fond on fait comme si c'était le plan net — le
   //    disque reste net, la machine au premier et à l'arrière-plan se floute.
   const lens = !qp.has('nolens');
+  const DOF = qp.has('dof');
   if (lens) scenePass.setMRT(mrt({ output, velocity }));
   const sharp = scenePass.getTextureNode('output');
   let color = sharp;
@@ -568,7 +578,8 @@ export function createVisuals(renderer, scene, camera, sim, opts = {}) {
     const mb = motionBlur(color, vel.mul(V.blurK), 10);
     const vz = scenePass.getViewZNode();
     const vzF = select(vz.lessThan(-400.0), V.focus.negate(), vz);
-    color = dof(mb, vzF, V.focus, V.focusRange, V.bokeh);
+    // profondeur de champ : coupée par défaut (?dof pour la remettre)
+    color = DOF ? dof(mb, vzF, V.focus, V.focusRange, V.bokeh) : mb;
   }
   const useBloom = !qp.has('nobloom');
   const cine = !qp.has('nocine');
@@ -584,14 +595,23 @@ export function createVisuals(renderer, scene, camera, sim, opts = {}) {
   let out = color.rgb;
   if (useBloom) {
     const bl = bloom(color, 0.55, 0.65, 0.85);
-    out = out.add(bl);
-    if (cine) {
+    // halation : sur la pellicule, la lumière diffuse dans l'émulsion et revient
+    // teintée de rouge-orangé ; le halo des hautes lumières est donc plus chaud.
+    // (.rgb indispensable : ajouter le vec4 du bloom faisait entrer son alpha
+    //  dans la luminance de l'étalonnage, qui virait alors tout à l'ambre saturé)
+    out = out.add(bl.rgb.mul(cine ? vec3(1.1, 0.9, 0.74) : vec3(1)));
+    // traînée anamorphique : coupée par défaut (?streak pour la remettre) — signature
+    // des objectifs de cinémascope, elle contredit l'objectif macro sphérique de la DA
+    // et trace une ligne nette à travers l'étoile et chaque reflet du laiton
+    if (cine && qp.has('streak')) {
       // traînée anamorphique : échantillonnée dans l'image nette (pas dans le
       // bloom flou) pour rester une ligne fine ; seules les hautes lumières comptent
       let streak = float(0);
-      for (let i = 1; i <= 12; i++) {
-        const o = vec2(i * i * 0.0016, 0);
-        const w = Math.exp(-i * 0.28);
+      // (pas linéaire et serré : avec des pas en i², chaque échantillon recopiait
+      //  le disque de l'étoile — une rangée de « croissants » de part et d'autre)
+      for (let i = 1; i <= 24; i++) {
+        const o = vec2(i * 0.0055, 0);
+        const w = Math.exp(-i * 0.13) * 0.5;
         const a1 = dot(sharp.sample(screenUV.add(o)).rgb, vec3(0.2126, 0.7152, 0.0722));
         const a2 = dot(sharp.sample(screenUV.sub(o)).rgb, vec3(0.2126, 0.7152, 0.0722));
         streak = streak.add(max(a1.sub(1.5), 0.0).add(max(a2.sub(1.5), 0.0)).mul(w));
@@ -601,11 +621,22 @@ export function createVisuals(renderer, scene, camera, sim, opts = {}) {
   }
   out = out.mul(V.exposure);
   if (cine) {
+    // Étalonnage, dans l'espace linéaire de la scène (avant le tone mapping) :
+    //  · contraste « pellicule » autour du gris moyen (0,18), sur la luminance
+    //    seule : la teinte ne bouge pas, les ombres s'enfoncent, les hautes
+    //    lumières s'ouvrent ;
+    //  · split-toning complémentaire : ombres sarcelle, hautes lumières ambre
+    //    (la lumière chaude de l'étoile et de la lampe contre la nuit froide) ;
+    //  · noirs teintés, jamais morts : un plancher bleu nuit très bas.
+    const l0 = dot(out, vec3(0.2126, 0.7152, 0.0722)).max(1e-5);
+    const lc = select(l0.lessThan(0.18), pow(l0.div(0.18), 1.12).mul(0.18), l0); // (ombres seulement : les hautes lumières ne sont pas poussées)
+    out = out.mul(lc.div(l0));
     const l = dot(out, vec3(0.2126, 0.7152, 0.0722));
-    const tint = mix(vec3(0.97, 0.95, 1.06), vec3(1.05, 0.98, 0.93), smoothstep(0.02, 0.6, l)); // ombres bleutées (sans vert) → hautes lumières chaudes
+    const hi = smoothstep(0.03, 0.9, l);
+    const tint = mix(vec3(0.94, 0.99, 1.07), vec3(1.06, 0.99, 0.9), hi);   // sarcelle (sans vert) → ambre
     out = out.mul(tint);
-    out = out.sub(vec3(l, l, l)).mul(1.08).add(vec3(l, l, l));                                     // saturation légère
-    out = out.mul(smoothstep(0.0, 0.02, l).mul(0.1).add(0.9));           // noirs un peu plus profonds
+    out = out.sub(vec3(l, l, l)).mul(mix(float(1.0), float(1.1), hi)).add(vec3(l, l, l)); // saturation surtout dans la lumière
+    out = out.add(vec3(0.0006, 0.001, 0.0019).mul(float(1).sub(smoothstep(0.0, 0.02, l))));   // plancher bleu nuit
     const vig = smoothstep(1.0, 0.25, length(ctr.mul(vec2(1.25, 1.6))));
     // (hachage entier par pixel et par image : pas de motif, contrairement à fract(sin(·)))
     const pix = screenCoordinate.x.toUint().add(screenCoordinate.y.toUint().mul(uint(8191)));
@@ -627,7 +658,7 @@ export function createVisuals(renderer, scene, camera, sim, opts = {}) {
     const toned = out.mul(mt.div(m.max(1e-5)));
     out = mix(toned, vec3(mt, mt, mt), smoothstep(V.peak.mul(0.6), V.peak.mul(3.0), m).mul(0.7));
   }
-  pipeline.outputNode = vec4(out, 1.0);
+  pipeline.outputNode = AA === 'smaa' ? smaa(vec4(out, 1.0)) : vec4(out, 1.0);
 
   // ── Effets ──────────────────────────────────────────────────────────────────
   // · Impact géant : éclair + deux ondes de choc ORANGE, accrochés à la planète
