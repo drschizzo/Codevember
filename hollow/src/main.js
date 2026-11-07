@@ -196,7 +196,7 @@ async function main() {
   // ── Interface ──
   let phi = 0, paused = false, busy = false, frozen = false;
   const rngUI = () => createRng(`${R.seed}:${performance.now()}`);
-  const layerChanged = (i, rebuildUI = false) => { nest.syncLayer(i); if (rebuildUI) ui.rebuildLayers(); };
+  const layerChanged = (i, rebuildUI = false) => { nest.syncLayer(i); if (rebuildUI) ui?.rebuildLayers(); };
   const on = {
     camState,
     random: () => { R = generate(randomSeed()); applyRecipe(); },
@@ -243,16 +243,16 @@ async function main() {
       const count = {};
       for (const L of R.layers) count[L.type] = (count[L.type] || 0) + 1;
       R.layers.push(makeLayer(randomType(rng, count), rng, `${R.seed}:${R.layers.length}:${rng.int(0, 1e6)}`, R.mood));
-      nest.setRecipe(R); ui.rebuildLayers();
+      nest.setRecipe(R); ui?.rebuildLayers();
     },
     removeLayer: () => {
       if (R.layers.length <= 2) return toast('Il faut au moins deux couches.');
       R.layers.pop();
-      nest.setRecipe(R); ui.rebuildLayers();
+      nest.setRecipe(R); ui?.rebuildLayers();
     },
     renderChanged: () => applyRender(),
     quality: (k) => { applyQuality(RENDER, k); applyRender(); },
-    resetRender: () => { Object.assign(RENDER, RENDER_DEFAULTS); applyRender(); ui.refresh(); },
+    resetRender: () => { Object.assign(RENDER, RENDER_DEFAULTS); applyRender(); ui?.refresh(); },
     freeCam: (v) => {
       camState.free = v;
       controls.enabled = v;
@@ -295,6 +295,20 @@ async function main() {
       seek: (p) => { phi = p; paused = true; },
       play: () => { paused = false; },
       freeze: (v) => { frozen = v; },
+      // image fixe rendue à la demande (n images : historique de l'anticrénelage)
+      async shot(ph, n = 12) {
+        while (!nest.ready()) await new Promise((r) => setTimeout(r, 200));
+        frozen = true;
+        $('#loader').classList.add('gone');
+        document.body.classList.add('clean');
+        for (let i = 0; i < n; i++) { renderAt(ph); await renderer.backend.device?.queue.onSubmittedWorkDone(); }
+      },
+      // la couche i à la profondeur relative x (seule, ou dans la scène)
+      view(i, x, solo = true) {
+        const N = R.layers.length;
+        nest.solo = solo ? i : null;
+        return this.shot((((i - x) % N) + N) % N / N);
+      },
     };
   }
   addEventListener('resize', () => !busy && resize());

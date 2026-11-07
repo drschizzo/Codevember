@@ -126,6 +126,25 @@ export const TYPES = {
       }, rng);
     },
   },
+  girih: {
+    label: 'Moucharabieh', weight: 2.4, holes: true,
+    params: [
+      ['freq', 'Fréquence', 2, 8, 1], ['theta', 'Angle de contact', 0.3, 1.4, 0.01], ['frame', 'Barreaux du cadre', 0.3, 3, 0.01],
+      ['star', 'Barreaux de l’étoile', 0.3, 3, 0.01], ...P.bars,
+    ],
+    toggles: [['solidStar', 'Cœur des étoiles plein']],
+    geometry(rng) {
+      const freq = rng.int(3, 5);
+      const b = bars(rng, 1.1 / freq / 3.2, 0.15, 0.3);
+      b.round = r2(rng.pick([0.15, 0.3, 0.5, 0.7]));
+      b.closed = r2(rng.pick([0, 0, 0, 0.06]));
+      const h = holeDetails(rng);
+      return setting({
+        type: 'girih', freq, jitter: 0, theta: r2(rng.range(0.55, 1.25)), frame: rng.pick([1, 1.4, 2]), star: rng.pick([0.7, 1, 1.3]),
+        solidStar: rng.chance(0.2), ...b, ...h, shape: 'poly', holeScale: 1, iris: iris(rng),
+      }, rng);
+    },
+  },
   tpms: {
     label: 'Surface minimale', weight: 1.8, max: 1, noGroove: true, noChamfer: true,
     params: [['freq', 'Fréquence', 1.5, 7, 0.05], ['wall', 'Paroi', -0.5, 0.5, 0.01]],

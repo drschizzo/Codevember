@@ -3,6 +3,7 @@
 // transférés sans copie.
 import { createRng, createNoise3 } from '../rng.js';
 import { goldbergCells, slotCells, voronoiCells } from './cells.js';
+import { girihCells } from './girih.js';
 import { prepareCells, buildShell, crest } from './shell.js';
 import { buildTPMS } from './tpms.js';
 import { placeCrystals } from './crystals.js';
@@ -14,6 +15,7 @@ const TILINGS = {
   cells: (spec, rng) => goldbergCells(spec, rng),
   voronoi: (spec, rng) => voronoiCells(spec, rng),
   slots: (spec) => slotCells(spec),
+  girih: (spec, rng) => girihCells(goldbergCells(spec, rng), spec),
 };
 // Constructeurs à maillage propre : (spec, lod) → maillage
 const MESHES = {
