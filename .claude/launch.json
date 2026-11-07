@@ -20,6 +20,16 @@
         "planetaire"
       ],
       "port": 8001
+    },
+    {
+      "name": "planetaire-8002",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        ".claude/serve.py",
+        "8002",
+        "planetaire"
+      ],
+      "port": 8002
     }
   ]
 }

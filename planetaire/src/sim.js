@@ -134,6 +134,15 @@ export function createSim(renderer, N) {
     cloudR: uniform(14.0),       // nuage initial : rayon (UA),
     cloudOmega: uniform(0.0153), //   rotation solide (le bord tombe vers ~9 UA),
     cloudTurb: uniform(0.03),    //   vitesses turbulentes
+    // Versement du nuage par la trémie de la machine (DA mécanique) : chaque
+    // grain attend son tour (chaleur négative = −heure de départ), vole de la
+    // buse jusqu'à sa place (trajectoire dessinée par visuals.js), puis seulement
+    // entre dans la dynamique. Le nuage se remplit de bas en haut.
+    pourOn: uniform(0.0),
+    pourT: uniform(1.0e9),       // temps écoulé depuis le début du versement
+    pourDur: uniform(13.0),      // durée d'ouverture de la vanne
+    pourFly: uniform(2.4),       // durée du vol buse → place
+    hopper: uniform(new THREE.Vector3(0, 9.3, 0)), // buse
   };
 
   // ── Outils ─────────────────────────────────────────────────────────────────
@@ -179,7 +188,10 @@ export function createSim(renderer, N) {
     const rLand = U.cloudOmega.mul(U.cloudOmega).mul(Rp.mul(Rp).mul(Rp.mul(Rp)));
     pPos.element(idx).assign(vec4(q, clamp(rLand, 0.05, R_OUT * 1.4)));
     pVel.element(idx).assign(vec4(vel, 1.0)); // nuage froid : grains glacés
-    pHeat.element(idx).assign(float(0));
+    // heure de départ : du bas vers le haut du nuage, un peu mélangée
+    const fill = q.y.div(U.cloudR).mul(0.5).add(0.5).clamp(0.0, 1.0);
+    const tGo = U.pourDur.mul(fill.mul(0.8).add(hash(sd.add(12)).mul(0.2)));
+    pHeat.element(idx).assign(select(U.pourOn.greaterThan(0.5), tGo.add(1.0e-3).negate(), float(0)));
   })().compute(N, [PARTICLE_WG]);
 
   // ── Pas de temps des grains ────────────────────────────────────────────────
@@ -204,6 +216,9 @@ export function createSim(renderer, N) {
       });
     });
 
+    // grain encore dans la trémie ou en vol : figé ; arrivé, il est lâché
+    If(H.lessThan(0.0).and(U.pourT.greaterThanEqual(H.negate().add(U.pourFly))), () => { H.assign(0); });
+
     If(eject.greaterThanEqual(0), () => {
       const I = impInfo.element(eject);
       const IP = impPos.element(eject);
@@ -224,7 +239,7 @@ export function createSim(renderer, N) {
       P.assign(vec4(pos, a));
       V.assign(vec4(vOrb.add(dir.mul(vej)), select(a.greaterThan(U.snow), 1.0, 0.0)));
       H.assign(mix(0.7, 1.0, h3));
-    }).ElseIf(P.w.greaterThanEqual(0.0), () => {
+    }).ElseIf(P.w.greaterThanEqual(0.0).and(H.greaterThanEqual(0.0)), () => {
       const p = P.xyz.toVar();
       const v = V.xyz.toVar();
 
