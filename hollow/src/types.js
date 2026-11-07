@@ -54,6 +54,12 @@ function holeDetails(rng, slots = false) {
   };
 }
 
+// diaphragme de l'oculus (tiré après tout le reste : les formes existantes ne changent pas)
+function iris(rng, p = 0.35) {
+  return rng.chance(p) ? { blades: rng.int(6, 12), curl: r2(rng.range(0.5, 1.3)), overlap: r2(rng.range(0.35, 0.6)) } : { blades: 0, curl: 0.9, overlap: 0.45 };
+}
+export const IRIS_PARAMS = [['blades', 'Lames (0 : aucun)', 0, 16, 1], ['curl', 'Courbure', 0, 2, 0.01], ['overlap', 'Recouvrement', 0.1, 1, 0.01]];
+
 // barreaux d'un pavage percé (spacing : distance typique entre cellules)
 function bars(rng, spacing, lo = 0.16, hi = 0.42) {
   const thickness = rng.range(0.035, 0.075);
@@ -75,7 +81,7 @@ export const TYPES = {
     params: [['freq', 'Fréquence', 2, 12, 1], ['jitter', 'Désordre', 0, 0.5, 0.01], ...P.bars],
     geometry(rng) {
       const freq = rng.int(4, 9);
-      return { type: 'cells', freq, jitter: rng.pick([0, 0, 0.12, 0.25, 0.38]), ...bars(rng, 1.1 / freq), ...holeDetails(rng) };
+      return { type: 'cells', freq, jitter: rng.pick([0, 0, 0.12, 0.25, 0.38]), ...bars(rng, 1.1 / freq), ...holeDetails(rng), iris: iris(rng) };
     },
   },
   voronoi: {
@@ -89,7 +95,7 @@ export const TYPES = {
       b.closed = r2(rng.pick([0, 0, 0.05, 0.15]));
       return {
         type: 'voronoi', count, distribution: rng.weighted([['fibonacci', 3], ['random', 2], ['gradient', 1.5]]),
-        spiral: r2(rng.range(-1, 1)), jitter: rng.pick([0, 0, 0.15, 0.3]), ...b, ...holeDetails(rng),
+        spiral: r2(rng.range(-1, 1)), jitter: rng.pick([0, 0, 0.15, 0.3]), ...b, ...holeDetails(rng), iris: iris(rng),
       };
     },
   },
@@ -108,7 +114,7 @@ export const TYPES = {
         barLat: r2(rng.pick([1, 1.5, 2.5, 4])), barLon: r2(rng.pick([1, 1.5, 2.5])), round: r2(rng.range(0.3, 1)),
         barVar: r2(rng.range(0, 0.3)), barFreq: 1.5, barGrad: r2(rng.range(-0.3, 0.3)), closed: 0,
         thickness: r2(thickness), bevel: r2(thickness * rng.range(0.15, 0.35)), chamfer: false,
-        ...holeDetails(rng, true),
+        ...holeDetails(rng, true), iris: iris(rng),
       };
     },
   },

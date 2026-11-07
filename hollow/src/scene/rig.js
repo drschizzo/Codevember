@@ -1,0 +1,76 @@
+// Pièces animées d'une coquille : chaque sommet d'une pièce porte un mouvement
+// rigide (attributs rigA = pivot b, amplitude ; rigB = axe a, nature + tirage
+// propre à la pièce ; voir gen/mesh.js), appliqué dans le vertex shader :
+//
+//   p' = b + rotation(a, θ)·(p − b) + t·b̂
+//
+// θ et t ne dépendent que de la profondeur relative x de la coquille (uniforme
+// par objet) et de la phase de la boucle : la boucle reste parfaite, et la
+// carte d'ombre (même déformation) suit exactement l'image.
+//
+// Natures (RIG dans gen/mesh.js) :
+//   iris  : lame du diaphragme, θ = amplitude × ouverture(x) ; fermé au cœur,
+//           ouvert à l'approche du passage
+//   burst : éclat d'une coquille éclatée, écarté et tourné loin du passage,
+//           réassemblé à l'approche
+//   hinge : écaille soulevée autour de sa charnière, qui respire
+//   spin  : anneau qui tourne d'un nombre entier de tours par boucle
+//
+// Les motifs restent attachés aux pièces : le matériau les calcule sur la
+// position au repos (positionGeometry).
+import {
+  Fn, attribute, uniform, vec4, float, floor, fract, step, abs, cos, sin, cross, dot, normalize, length, smoothstep, mix,
+  positionGeometry, normalLocal, tangentLocal, positionPrevious, varyingProperty,
+} from 'three/tsl';
+
+const TAU = Math.PI * 2;
+
+// profondeur relative de la coquille rendue (posée par le nid sur chaque maillage)
+export const layerX = uniform(0).onObjectUpdate(({ object }) => object.userData.x ?? 0);
+
+// normale de tranche et direction radiale tournées avec la pièce (fragment)
+export const rigBev = varyingProperty('vec4', 'vRigBev');
+export const rigRadial = varyingProperty('vec3', 'vRigRadial');
+
+// réglages d'une couche animée
+export const rigUniforms = () => ({ burst: uniform(0) });
+export function applyRig(U, geo) { U.burst.value = geo.burst || 0; }
+
+// Courbes de mouvement selon la profondeur x (0 : coquille traversée)
+export const irisOpen = (x) => smoothstep(1.3, 0.45, x);
+export const burstSpread = (x) => smoothstep(0.25, 1.7, x).add(smoothstep(-0.5, -1.8, x).mul(0.5));
+
+// Position déformée (et, si `full`, normale, tangente, normale de tranche et
+// direction radiale : pour le matériau d'affichage ; l'ombre n'a besoin que de
+// la position).
+export function rigPosition(U, phase, full) {
+  return Fn(() => {
+    const A = attribute('rigA', 'vec4'), Bv = attribute('rigB', 'vec4');
+    const kind = floor(Bv.w.add(0.001)), rnd = fract(Bv.w);
+    const is = (n) => step(abs(kind.sub(n)), 0.5);
+    const x = layerX;
+    const breath = sin(phase.mul(TAU * 2).add(rnd.mul(TAU))).mul(0.25).add(0.75);
+    const lift = mix(float(0.3), float(1), smoothstep(0.6, 3.0, x)).mul(breath);
+    const e = burstSpread(x);
+    const theta = A.w.mul(
+      is(1).mul(irisOpen(x)).add(is(2).mul(e).mul(rnd.add(0.3))).add(is(3).mul(lift)).add(is(4).mul(phase).mul(TAU)),
+    ).toVar('rigTheta');
+    const t = is(2).mul(U.burst).mul(rnd.add(0.5)).mul(e);
+    const axis = Bv.xyz, b = A.xyz;
+    const c = cos(theta).toVar('rigCos'), s = sin(theta).toVar('rigSin');
+    const rot = (v) => v.mul(c).add(cross(axis, v).mul(s)).add(axis.mul(dot(axis, v)).mul(c.oneMinus()));
+    const p = b.add(rot(positionGeometry.sub(b))).add(b.div(length(b).max(1e-4)).mul(t)).toVar('rigP');
+    if (full) {
+      normalLocal.assign(rot(normalLocal));
+      tangentLocal.assign(rot(tangentLocal));
+      const bev = attribute('bev', 'vec4');
+      rigBev.assign(vec4(rot(bev.xyz), bev.w));
+      rigRadial.assign(rot(normalize(positionGeometry)));
+      positionPrevious.assign(p); // (pièces : pas de vecteur vitesse propre)
+    }
+    return p;
+  })();
+}
+
+// la couche a-t-elle des pièces animées ?
+export const isRigged = (geo) => !!(geo.iris?.blades || geo.burst || geo.type === 'armillary' || geo.type === 'scales');
