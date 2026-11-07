@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Planétaire — Lignée &amp; Sillons</title>
+  <title>Planétaire</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,500;1,300&family=Cormorant+SC:wght@500;600&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
@@ -23,55 +23,33 @@
 
   <header id="title">
     <h1>Planétaire</h1>
-    <p>Lignée &amp; Sillons — un disque protoplanétaire qui se souvient</p>
+    <p>La vie d’un système planétaire</p>
   </header>
 
   <aside id="panel">
-    <section><h2>Vitesse du temps</h2><div id="speed"></div></section>
+    <section><h2>Vitesse <button id="sound" title="Activer le son (touche M)">son</button></h2><div id="speed"></div></section>
     <section id="life">
-      <h2>Vie du système <span id="cyc"></span></h2>
-      <div id="phnav"><button id="phPrev" title="Phase précédente (touche [) — recommence le cycle">◂</button><div id="phases"></div><button id="phNext" title="Phase suivante (touche ]) — avance rapide de la simulation en cours">▸</button></div>
+      <h2>Phase <span id="cyc"></span></h2>
+      <div id="phnav"><button id="phPrev" title="Phase précédente (touche [) — recommence le cycle">◂</button><div id="phases"></div><button id="phNext" title="Phase suivante (touche ])">▸</button></div>
       <p id="phaseName"></p>
       <p id="phaseDesc"></p>
     </section>
-    <section id="stats"></section>
     <section>
       <h2>Planètes <button id="auto" title="Suivre automatiquement la plus massive (touche A)">auto</button><button id="overview" hidden title="Revenir à la vue d’ensemble (Échap)">vue d’ensemble</button></h2>
-      <p class="hint">Cliquez une planète pour la suivre de près.</p>
       <ul id="list"></ul>
-    </section>
-    <section>
-      <h2>Coupe — de quoi est faite la planète</h2>
-      <p class="cap">Une planète grossit par couches, comme un oignon : le cœur est la matière captée en premier, la surface la plus récente. <b>La couleur de chaque couche indique où cette matière est née</b> dans le disque.</p>
-      <canvas id="cut"></canvas>
-      <p id="cutinfo"></p>
-      <div class="provlegend">
-        <div id="provbar"></div>
-        <div class="ticks"><span>0,35 UA</span><span class="snow">▲ ligne des glaces</span><span>9 UA</span></div>
-      </div>
-      <p class="legend"><i class="imp"></i>impact géant <i style="--c:#dec79e"></i>gaz capté <i style="--c:#7a3a1e"></i>embryon initial</p>
+      <p id="pinfo"></p>
     </section>
   </aside>
-
-  <footer id="groove-wrap">
-    <h2>Sillon — ce que lit une tête fixe, de l’étoile au bord · ● une planète sonne (et s’illumine) en passant dessous</h2>
-    <canvas id="groove"></canvas>
-  </footer>
 
   <div id="help" class="hidden">
     <h2>Commandes</h2>
     <dl>
-      <dt>glisser</dt><dd>tourner autour · molette : zoom</dd>
-      <dt>Maj + glisser</dt><dd>puits gravitationnel : remuer le disque</dd>
+      <dt>glisser</dt><dd>tourner · molette : zoom</dd>
+      <dt>clic</dt><dd>suivre une planète · Échap : vue d’ensemble</dd>
       <dt>double-clic</dt><dd>semer un embryon de planète</dd>
-      <dt>clic</dt><dd>choisir une planète (coupe) · A : choix auto</dd>
-      <dt>clic dans la liste</dt><dd>zoomer et suivre la planète · Échap : vue d’ensemble</dd>
-      <dt>E</dt><dd>étoile vagabonde (survol)</dd>
-      <dt>P</dt><dd>migration planétaire on/off</dd>
-      <dt>C</dt><dd>couleur : provenance / composition / température</dd>
-      <dt>+ / −</dt><dd>vitesse (×¼ à ×8, aussi dans le panneau) · Espace : pause · M : son</dd>
-      <dt>[ / ]</dt><dd>phase précédente / suivante (ou cliquer la frise)</dd>
-      <dt>O</dt><dd>ôter / remettre la machine (planétaire en laiton)</dd>
+      <dt>Maj + glisser</dt><dd>remuer le disque</dd>
+      <dt>Espace</dt><dd>pause · + / − : vitesse</dd>
+      <dt>[ / ]</dt><dd>phase précédente / suivante</dd>
       <dt>H</dt><dd>afficher / masquer cette aide</dd>
     </dl>
   </div>
@@ -84,9 +62,8 @@
       <p id="introLabel"></p>
       <div id="introBar"><u></u></div>
       <h1>Planétaire</h1>
-      <p class="sub">La vie d’un système planétaire, du nuage à la supernova — et sa musique.</p>
-      <button id="enter">Entrer — avec le son</button>
-      <button id="enter-silent" class="ghost">sans le son</button>
+      <p class="sub">La vie d’un système planétaire, du nuage à la supernova.</p>
+      <button id="enter">Entrer</button>
     </div>
   </div>
 

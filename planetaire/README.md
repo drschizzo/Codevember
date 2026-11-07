@@ -1,6 +1,8 @@
-# Planétaire — *Lignée & Sillons*
+# Planétaire
 
-Un système planétaire simulé entièrement sur le GPU (WebGPU + three.js TSL), de sa naissance à sa mort, et qui **se souvient**.
+Un système planétaire simulé entièrement sur le GPU (WebGPU + three.js TSL), de sa naissance à sa mort.
+
+L'interface reste volontairement sobre : la vitesse du temps, la frise des phases (une phrase par phase) et la liste des planètes, avec une ligne de fiche pour celle qu'on suit. Le son est en option (bouton « son » ou touche **M**), coupé par défaut.
 
 ## Le cycle de vie
 
@@ -37,7 +39,7 @@ BARILLET (ressort = l'énergie d'un cycle de vie)
 - **Régulateur** : la roue d'échappement avance par à-coups, retenue par l'ancre que pousse le balancier. Le balancier bat donc d'autant plus vite que le temps s'écoule vite (×¼ … ×8), et s'arrête à la pause.
 - **Réserve de marche** : l'aiguille du cadran émaillé suit le ressort qui se détend pendant le cycle ; le cadran est gradué par les phases de la vie du système.
 - **Fin de cycle, et boucle** : à la supernova, le ressort est vide. Le **levier d'arrêt** bloque le balancier ; la **trémie** au sommet de la cloche aspire les débris pendant que la **couronne** remonte le barillet par une vis sans fin (le **cliquet** claque sur le **rochet**). Le levier se déclenche, la **vanne** s'ouvre, et les grains se déversent en filet le long de l'axe : ils remplissent le nouveau nuage de bas en haut, et chaque grain n'entre dans la dynamique qu'une fois arrivé à sa place (côté GPU, une « chaleur » négative code son heure de départ). Le premier nuage de la page naît de la même façon.
-- **Peigne de boîte à musique** = la tête de lecture, en acier, au-dessus du disque : la tige de chaque planète se prolonge en une **pointe** au-dessus de la bille, qui soulève la lame de son rayon. Les lames sont inclinées, si bien que seule leur pointe accroche, comme le picot d'un cylindre ; des masselottes lestent les lames graves. Le peigne se relève quand l'étoile enfle. Le **curseur de la ligne des glaces** glisse sur sa barre.
+- **Peigne de boîte à musique** = la tête de lecture, en acier, au-dessus du disque : la tige de chaque planète se prolonge en une **pointe** au-dessus de la bille, qui soulève la lame de son rayon. Les lames sont inclinées, si bien que seule leur pointe accroche, comme le picot d'un cylindre ; des masselottes lestent les lames graves. Le peigne se relève quand l'étoile enfle. Il n'est là que si le son est actif : à l'activation, la barre sort de son pilier vers l'étoile, les lames en sortent une à une, puis les pointes montent sur les tiges ; à la coupure, tout rentre dans l'ordre inverse. Le **curseur de la ligne des glaces** glisse sur sa barre.
 - **Galerie des automates**, autour du pied du socle : une couronne de 88 dents, tirée par un **poids moteur** qui descend sur sa chaîne au fil du cycle (il remonte au remontage), entraîne une ronde de stations :
   - **régulateur à boules** (Watt), dont les boules s'écartent avec la vitesse du temps ;
   - **tambour à cames**, qui fait un tour par cycle : ses trois cames (luminosité de l'étoile, gaz du disque, ligne des glaces) poussent des crémaillères qui font tourner les aiguilles de trois cadrans ;
@@ -54,8 +56,8 @@ Touche **O** : ôter / remettre la machine (et revenir à l'ancienne DA). `?nome
 
 ## Ce qui est simulé
 
-- **Lignée** : chaque grain de poussière garde son rayon de naissance et sa composition (roche en deçà de la ligne des glaces, glace au-delà). Les planètes qui se forment empilent ces souvenirs en **strates**. La coupe annotée montre leur histoire : l'embryon initial au cœur, les apports successifs, les **impacts géants** cerclés d'orange et, pour les géantes, l'**enveloppe de gaz**. Survoler une strate la décrit.
-- **Sillons** : comme un vinyle, le disque est lu par une **tête de lecture fixe** (le trait bleu), et c'est la rotation képlérienne qui fait défiler la matière dessous. Ce qui passe sous la tête joue, selon une règle unique : **la hauteur dépend de la distance à l'étoile** (aigu au centre, grave au bord, gamme pentatonique). Chaque planète sonne quand elle croise la tête : les internes battent vite, les lointaines rarement, et deux planètes en résonance 3:2 forment un motif 3 contre 2. Le timbre et la durée suivent la masse. Les anneaux de poussière pincent doucement leur note, et un bourdon s'assombrit à mesure que le disque s'épuise.
+- **Provenance** : chaque grain de poussière garde son rayon de naissance et sa composition (roche en deçà de la ligne des glaces, glace au-delà), qui donnent sa couleur. Les planètes empilent cette matière en strates (calculées sur le GPU, plus affichées dans l'interface).
+- **Son (en option)** : comme un vinyle, le disque est lu par une **tête de lecture fixe** (le trait bleu), et c'est la rotation képlérienne qui fait défiler la matière dessous. Ce qui passe sous la tête joue, selon une règle unique : **la hauteur dépend de la distance à l'étoile** (aigu au centre, grave au bord, gamme pentatonique). Chaque planète sonne quand elle croise la tête : les internes battent vite, les lointaines rarement, et deux planètes en résonance 3:2 forment un motif 3 contre 2. Le timbre et la durée suivent la masse. Les anneaux de poussière pincent doucement leur note, et un bourdon s'assombrit à mesure que le disque s'épuise.
 - **Budgets de masse** : les solides sont comptés grain par grain (700 M⊕ au départ dans le nuage). Le gaz est un réservoir qui se dissipe après l'allumage. Au-delà de la *masse d'isolation*, une planète n'avale presque plus de cailloux. Au-delà de 10 M⊕, un cœur capte du gaz (emballement limité par l'ouverture d'un sillon) et devient une géante gazeuse. Les rayons affichés suivent la relation masse–rayon de Chen & Kipping (2017). Ils sont exagérés pour rester visibles, mais une Jupiter reste plus petite que l'étoile.
 - **Impacts géants** : éclair, onde de choc, ralenti, secousse et un nuage de débris incandescents arrachés au point d'impact, qui refroidissent en orbite.
 
@@ -77,7 +79,7 @@ Paramètres d'URL :
 | `?n=2097152` | nombre de grains (défaut 1 048 576) |
 | `?nobloom` | désactive le bloom (GPU modestes) |
 | `?warp=4` | avance rapide (4 pas de simulation par image) |
-| `?auto` | saute l'écran d'accueil (sans le son) |
+| `?auto` | saute l'écran d'accueil |
 | `?nocine` | rendu sans post-traitement « cinéma » |
 | `?agx` | ancien tone mapping (AgX) |
 | `?sdr` / `?hdr` | force la sortie SDR ou HDR (par défaut : HDR si l’écran le permet) |
@@ -118,7 +120,7 @@ ffmpeg -i hdr.mp4 -pix_fmt yuv420p10le -c:v libx265 -crf 24 -tag:v hvc1 \
 | glisser / molette | orbiter / zoomer |
 | **Maj + glisser** | puits gravitationnel : remuer le disque avec le doigt |
 | **double-clic** | semer un embryon de planète |
-| clic sur une planète | l'inspecter (coupe stratigraphique) · **A** : retour au choix auto |
+| clic sur une planète | la sélectionner (fiche sous la liste) · **A** : retour au choix auto |
 | clic dans la liste | zoomer sur la planète et la suivre sur son orbite · **Échap** : vue d'ensemble |
 | clic sur la frise, **[ / ]** | aller à une phase du cycle : avance rapide de la vraie simulation, ou on recommence le cycle |
 | **E** | une étoile vagabonde traverse le système |
