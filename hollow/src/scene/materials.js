@@ -24,7 +24,7 @@ import * as THREE from 'three/webgpu';
 import {
   Fn, If, struct, uniform, attribute, positionLocal, normalLocal, positionWorld, positionView, normalView, vec2, vec3, vec4,
   float, mat3, mix, smoothstep, clamp, abs, length, normalize, dot, cross, sin, floor, fract, mod, step, acos, sign,
-  dFdx, dFdy, fwidth, faceDirection, mrt, normalViewGeometry, positionGeometry, atan, velocity, transformNormalToView, cos, max as tmax, texture3D, mx_cell_noise_vec3, modelViewMatrix, modelScale, cameraPosition,
+  dFdx, dFdy, fwidth, faceDirection, mrt, normalViewGeometry, positionGeometry, atan, modelWorldMatrix, velocity, transformNormalToView, cos, max as tmax, texture3D, mx_cell_noise_vec3, modelViewMatrix, modelScale, cameraPosition,
 } from 'three/tsl';
 import { FINISH_KEYS } from '../finishes.js';
 import { NOISE_PERIOD } from '../gen/noisevol.js';
@@ -657,17 +657,46 @@ export function buildPaneMaterial(U) {
 }
 
 // ── Cœur lumineux ────────────────────────────────────────────────────────────
-// Sphère émissive (en HDR) : assombrissement centre-bord comme une étoile,
-// granulation lente qui boucle (le bruit glisse sur un cercle de phase).
-export function buildCoreMaterial(U) {
+// Sphère émissive (en HDR), granulation lente qui boucle (le bruit glisse sur
+// un cercle de phase). kind : 'star' (assombrissement centre-bord, comme une
+// étoile), 'pearl' (perle de lumière : orient irisé qui tourne avec le regard).
+export function buildCoreMaterial(U, kind = 'star') {
   const m = new THREE.MeshBasicNodeMaterial();
   const ph = G.phase.mul(PI * 2);
   const loop = vec3(sin(ph), sin(ph.add(PI / 2)), 0).mul(0.9);
   const n = fbm(positionLocal.mul(2.8).add(loop), 3);
   const V = normalize(cameraPosition.sub(positionWorld));
   const mu = dot(normalize(positionWorld), V).clamp(0, 1);
-  const limb = mu.pow(0.45).mul(0.75).add(0.25);
   const pulse = sin(ph.mul(2)).mul(U.pulse).add(1);
-  m.colorNode = vec4(U.color.mul(U.glow).mul(limb).mul(n.mul(0.35).add(1)).mul(pulse), 1);
+  if (kind === 'pearl') {
+    // orient : couleurs de couche mince selon l'angle et des bandes lentes
+    const t = mu.mul(1.4).add(n.mul(0.6)).add(positionLocal.y.mul(0.8));
+    const film = vec3(cos(t.mul(PI * 2)), cos(t.mul(PI * 2).sub(2.1)), cos(t.mul(PI * 2).sub(4.2))).mul(0.25).add(0.75);
+    const sheen = mu.pow(0.6).mul(0.6).add(0.4);
+    m.colorNode = vec4(U.color.mul(U.glow).mul(0.55).mul(film).mul(sheen).mul(pulse), 1);
+  } else {
+    const limb = mu.pow(0.45).mul(0.75).add(0.25);
+    m.colorNode = vec4(U.color.mul(U.glow).mul(limb).mul(n.mul(0.35).add(1)).mul(pulse), 1);
+  }
+  return m;
+}
+
+// Couronne de l'étoile : une enveloppe additive, plus vive au limbe, parcourue
+// de jets (bruit en coordonnées de la sphère, qui boucle avec la phase)
+export function buildCoronaMaterial(U) {
+  const m = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+  const ph = G.phase.mul(PI * 2);
+  const V = normalize(cameraPosition.sub(positionWorld));
+  const mu = dot(normalize(positionWorld.sub(modelWorldMatrix.mul(vec4(0, 0, 0, 1)).xyz)), V).abs();
+  const jets = fbm(normalize(positionLocal).mul(3.5).add(vec3(sin(ph), cos(ph), 0).mul(0.5)), 3).mul(0.5).add(0.5);
+  const rim = smoothstep(0.0, 0.7, mu).mul(smoothstep(1.0, 0.55, mu));
+  m.colorNode = vec4(U.color.mul(U.glow).mul(rim.mul(jets.pow(2)).mul(0.35)), 1);
+  return m;
+}
+
+// Anneaux du gyroscope : émissifs, de la couleur du cœur
+export function buildRingMaterial(U) {
+  const m = new THREE.MeshBasicNodeMaterial();
+  m.colorNode = vec4(U.color.mul(U.glow).mul(0.6), 1);
   return m;
 }
