@@ -43,6 +43,7 @@ function toGeometry(o, bounds = 1.05) {
   if (o.tangent) g.setAttribute('tangent', new THREE.BufferAttribute(o.tangent, 4, packed(o.tangent)));
   if (o.surf) g.setAttribute('surf', new THREE.BufferAttribute(o.surf, 4, true));
   if (o.color) g.setAttribute('color', new THREE.BufferAttribute(o.color, 3));
+  if (o.center) g.setAttribute('center', new THREE.BufferAttribute(o.center, 3));
   if (o.bev) g.setAttribute('bev', new THREE.BufferAttribute(o.bev, 4, packed(o.bev)));
   if (o.rigA) { g.setAttribute('rigA', new THREE.BufferAttribute(o.rigA, 4)); g.setAttribute('rigB', new THREE.BufferAttribute(o.rigB, 4)); }
   if (o.index) g.setIndex(new THREE.BufferAttribute(o.index, 1));
@@ -362,6 +363,9 @@ export function createNest(scene, gen) {
         m.userData.still = moved || !m.userData.on ? 0 : 1;
         m.userData.on = cr;
         m.userData.x = x;
+        // (vitraux : leur ombre colorée naît avec la coquille, voir paneGrow)
+        const g = Math.min(1, Math.max(0, (XB - 1.5 - x) / 2.5));
+        m.userData.grow = g * g * (3 - 2 * g);
         // (les épines projettent leur ombre tant que la coquille en projette)
         m.layers.mask = (cr ? MAIN : 0) | (m.castShadow && des.geoms[3] ? KEY | CORE : 0);
       }

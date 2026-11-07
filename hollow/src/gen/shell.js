@@ -575,7 +575,7 @@ export function buildShell(prepared, spec, lod) {
 // Un verre teinté dans chaque trou, à mi-épaisseur, un peu plus grand que le
 // trou (ses bords se perdent dans la paroi). Couleur par verre, tirée d'une
 // palette selon le centre de la cellule. Maillage à part (matériau transmissif,
-// ombre colorée) : { position, normal, color, index }.
+// ombre colorée) : { position, normal, color, center (centre du verre), index }.
 export const PANE_PALETTES = {
   cathedral: ['#b0121f', '#1840b8', '#0f7a3a', '#d89a12', '#5a2a9a', '#c84a10'],
   tiffany: ['#d8a020', '#7aa83a', '#2f7f8a', '#c86a2a', '#e0c070', '#8a4a20'],
@@ -583,7 +583,7 @@ export const PANE_PALETTES = {
   ember: ['#e04010', '#f08020', '#c01818', '#f0b030', '#801010', '#f05a30'],
 };
 export function buildPanes(prepared, spec) {
-  const pos = [], nor = [], col = [], idx = [];
+  const pos = [], nor = [], col = [], idx = [], cen = [];
   const shape = SHAPES[spec.shape] || SHAPES.poly, Rp = 1 - spec.thickness / 2;
   const pal = (PANE_PALETTES[spec.palette] || PANE_PALETTES.cathedral).map((h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255));
   const hash = (c) => { const x = Math.sin(c[0] * 91.3 + c[1] * 47.9 + c[2] * 13.1) * 43758.5453; return x - Math.floor(x); };
@@ -595,13 +595,14 @@ export function buildPanes(prepared, spec) {
     const g3 = (g) => norm(add(c, add(scale(e1, g[0]), scale(e2, g[1]))));
     const start = pos.length / 3;
     const ctr = g3(info.O);
-    pos.push(...scale(ctr, Rp)); nor.push(...ctr); col.push(...color);
+    const pc = scale(ctr, Rp);
+    pos.push(...pc); nor.push(...ctr); col.push(...color); cen.push(...pc);
     rim.pts.forEach((p, k) => {
       const nw = rim.nws[k], d = g3([p[0] - nw[0] * 0.004, p[1] - nw[1] * 0.004]);
-      pos.push(...scale(d, Rp)); nor.push(...d); col.push(...color);
+      pos.push(...scale(d, Rp)); nor.push(...d); col.push(...color); cen.push(...pc);
     });
     const n = rim.pts.length;
     for (let k = 0; k < n; k++) idx.push(start, start + 1 + k, start + 1 + ((k + 1) % n));
   }
-  return { position: new Float32Array(pos), normal: new Float32Array(nor), color: new Float32Array(col), index: new Uint32Array(idx) };
+  return { position: new Float32Array(pos), normal: new Float32Array(nor), color: new Float32Array(col), center: new Float32Array(cen), index: new Uint32Array(idx) };
 }
