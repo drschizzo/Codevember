@@ -148,6 +148,7 @@ export function createUI({ recipe: getRecipe, render, on }) {
       const fm = f.addFolder('Matériaux').close();
       fm.add(act, 'set', opts(SETS)).name('Jeu de matériaux').onChange((s) => on.layerSet(i, s));
       fm.add(L.finish, 'wear', 0, 1, 0.01).name('Usure des bords').onChange(mat);
+      if (L.geo.burst) fm.add(L.finish, 'seam', 0, 0.3, 0.005).name('Filet d’or des cassures').onChange(mat);
       if (L.finish.groove !== undefined && !T.noGroove) {
         fm.add(L.finish, 'groove', 0, 1, 0.01).name('Gravure').onChange(mat);
         fm.add(L.finish, 'grooveAt', 0.1, 0.9, 0.01).name('Gravure : position').onChange(mat);

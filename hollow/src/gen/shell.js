@@ -18,7 +18,7 @@
 // finitions externe / interne / tranche, et proximité du bord du trou).
 
 import { norm, dot, cross, add, sub, scale, tangentFrame, edgeSteps, angle } from './cells.js';
-import { Buffers, OUT, IN, EDGE } from './mesh.js';
+import { Buffers, OUT, IN, EDGE, RIG } from './mesh.js';
 import { appendIris, portalHole } from './iris.js';
 import { junctions, appendJewelMounts } from './jewels.js';
 
@@ -263,6 +263,40 @@ export function buildShell(prepared, spec, lod) {
   const pillow = (spec.pillow || 0) > 0;
   const top = R + pillowH(spec, 0); // crête des barreaux (et plateau des cellules pleines)
 
+  // Coquille éclatée : chaque cellule est un éclat (pièce animée, voir
+  // scene/rig.js), bordé d'une paroi de cassure (finition de la tranche : l'or
+  // du kintsugi) et légèrement rétréci vers son centre (un joint fin, visible
+  // même réassemblé). Le tirage propre à l'éclat dépend de son centre : il est
+  // le même à tous les niveaux de détail.
+  const burst = (spec.burst || 0) > 0;
+  const piece = (info, Q, start) => {
+    const { c } = info, M = Q.length;
+    const o = B.n;
+    for (let k = 0; k < M; k++) {
+      const q = Q[k], t = sub(Q[(k + 1) % M], Q[(k - 1 + M) % M]);
+      let n = norm(cross(t, q));
+      if (dot(n, sub(q, c)) < 0) n = scale(n, -1);
+      B.vert(scale(q, top), n, EDGE[0], EDGE[1], EDGE[2], 0);
+      B.vert(scale(q, Ri), n, EDGE[0], EDGE[1], EDGE[2], 0);
+    }
+    for (let k = 0; k < M; k++) {
+      const a = o + 2 * k, b = o + 2 * ((k + 1) % M);
+      B.triN(a, a + 1, b + 1); B.triN(a, b + 1, b);
+    }
+    // joint : chaque sommet glisse vers le centre de l'éclat d'un angle fixe
+    const seam = spec.seam ?? 0.004;
+    for (let i = start; i < B.n; i++) {
+      const p = [B.pos[i * 3], B.pos[i * 3 + 1], B.pos[i * 3 + 2]], r = Math.hypot(...p), d = scale(p, 1 / r);
+      const ca = dot(d, c), a = Math.acos(Math.max(-1, Math.min(1, ca)));
+      if (a < seam * 2) continue;
+      const w = norm(sub(d, scale(c, ca))), a2 = a - seam;
+      const nd = add(scale(c, cos(a2)), scale(w, sin(a2)));
+      B.pos[i * 3] = nd[0] * r; B.pos[i * 3 + 1] = nd[1] * r; B.pos[i * 3 + 2] = nd[2] * r;
+    }
+    B.rig(null);
+  };
+  const hash = (c) => { const x = Math.sin(c[0] * 127.1 + c[1] * 311.7 + c[2] * 74.7) * 43758.5453; return x - Math.floor(x); };
+
   for (const info of prepared) {
     const { c, e1, e2, pts } = info;
     // contour échantillonné (mêmes points que la cellule voisine)
@@ -272,6 +306,12 @@ export function buildShell(prepared, spec, lod) {
       for (let s = 0; s < n; s++) Q.push(norm(add(a, scale(sub(b, a), s / n))));
     }
     const M = Q.length;
+    const start = B.n, shard = burst && !info.portal;
+    if (shard) {
+      const h = hash(c), az = h * PI * 2;
+      const axis = norm(add(scale(e1, cos(az)), scale(e2, sin(az))));
+      B.rig(scale(c, (R + Ri) / 2), axis, spec.burstTurn ?? 0.6, RIG.burst, hash(scale(c, 1.7)));
+    }
 
     if (info.closed) { // cellule pleine : anneaux concentriques (la sphère reste ronde)
       // dont le nombre de points décroît vers le centre (triangles bien
@@ -313,6 +353,7 @@ export function buildShell(prepared, spec, lod) {
         const C = B.vert(scale(c, r), scale(c, sg), S[0], S[1], S[2], 255);
         B.fan(prev, C, prevAng.length);
       }
+      if (shard) piece(info, Q, start);
       continue;
     }
 
@@ -517,6 +558,7 @@ export function buildShell(prepared, spec, lod) {
     };
     face(false);
     face(true);
+    if (shard) piece(info, Q, start);
   }
 
 
