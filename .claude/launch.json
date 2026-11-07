@@ -40,6 +40,16 @@
         "planetaire"
       ],
       "port": 8003
+    },
+    {
+      "name": "hollow",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        ".claude/serve.py",
+        "8010",
+        "hollow"
+      ],
+      "port": 8010
     }
   ]
 }

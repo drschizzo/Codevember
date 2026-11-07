@@ -1,0 +1,94 @@
+// Catalogue des finitions (une surface) et des jeux de matériaux (une
+// coquille : face externe, face interne, tranche).
+//
+// Les métaux portent leur F0 mesuré (converti en sRGB) : c'est la rugosité,
+// la micro-texture et l'environnement qui les différencient, pas une couleur
+// assombrie. Les diélectriques ont un albédo plausible (pas de noir pur, pas
+// de blanc pur).
+//
+// Motifs (calculés dans le shader, en coordonnées de la coquille) :
+//   plain, brushed (brossé circulaire, anisotrope), hammered (martelé),
+//   glaze (émail : peau d'orange + craquelure), weave (sergé de carbone),
+//   rock (basalte), glitter (druse scintillante), nacre, oxide (titane
+//   coloré au feu), velvet (velours), agate (bandes), patina (vert-de-gris)
+
+export const FINISH_DEFAULTS = {
+  pattern: 'plain', color: '#888888', color2: '#444444', metal: 0, rough: 0.5,
+  clearcoat: 0, ccRough: 0.05, sheen: 0, sheenColor: '#ffffff', sheenRough: 0.5,
+  irid: 0, iridIOR: 1.8, iridMin: 250, iridMax: 650, aniso: 0, bump: 0, scale: 1, smudge: 0,
+  glass: 0, ior: 1.5, dispersion: 0, attDist: 0.6,
+};
+
+// F0 des métaux (sRGB)
+export const METAL = {
+  gold: '#ffe29d', brass: '#e8cf8e', copper: '#fad0c0', silver: '#fcfaf5', aluminium: '#f2f3f3',
+  titanium: '#c2bbb3', chrome: '#c4c5c5', steel: '#c6c7c9', nickel: '#d4cdc0', bronze: '#d9b48c',
+};
+
+const F = (o) => ({ ...FINISH_DEFAULTS, ...o });
+
+export const FINISHES = {
+  // métaux
+  brushedBrass: F({ label: 'Laiton brossé', pattern: 'brushed', color: METAL.brass, metal: 1, rough: 0.3, aniso: 0.75, bump: 0.25, scale: 1, smudge: 0.25 }),
+  polishedBrass: F({ label: 'Laiton poli', pattern: 'plain', color: METAL.brass, metal: 1, rough: 0.1, smudge: 0.35 }),
+  hammeredGold: F({ label: 'Or martelé', pattern: 'hammered', color: METAL.gold, metal: 1, rough: 0.2, bump: 0.6, scale: 1 }),
+  polishedGold: F({ label: 'Or poli', pattern: 'plain', color: METAL.gold, metal: 1, rough: 0.07, smudge: 0.3 }),
+  brushedSteel: F({ label: 'Acier brossé', pattern: 'brushed', color: METAL.steel, metal: 1, rough: 0.28, aniso: 0.85, bump: 0.25 }),
+  chrome: F({ label: 'Chrome', pattern: 'plain', color: METAL.chrome, metal: 1, rough: 0.04, smudge: 0.5 }),
+  diamondCut: F({ label: 'Aluminium diamanté', pattern: 'brushed', color: METAL.aluminium, metal: 1, rough: 0.09, aniso: 0.5, bump: 0.08, scale: 2 }),
+  anodized: F({ label: 'Aluminium anodisé', pattern: 'brushed', color: '#3a64b0', metal: 1, rough: 0.34, aniso: 0.35, bump: 0.12, scale: 0.6 }),
+  anodizedMatte: F({ label: 'Anodisé mat', pattern: 'plain', color: '#3a64b0', metal: 1, rough: 0.55 }),
+  oxideTitanium: F({ label: 'Titane bleui au feu', pattern: 'oxide', color: METAL.titanium, metal: 1, rough: 0.22, irid: 1, iridIOR: 2.2, iridMin: 180, iridMax: 720, scale: 1 }),
+  rawTitanium: F({ label: 'Titane brut', pattern: 'brushed', color: METAL.titanium, metal: 1, rough: 0.38, aniso: 0.6, bump: 0.2 }),
+  polishedCopper: F({ label: 'Cuivre poli', pattern: 'plain', color: METAL.copper, metal: 1, rough: 0.12, smudge: 0.3 }),
+  verdigris: F({ label: 'Vert-de-gris', pattern: 'patina', color: '#5c9c88', color2: '#2f5e55', metal: 0, rough: 0.78, bump: 0.35, scale: 1 }),
+  bronzeDark: F({ label: 'Bronze patiné', pattern: 'hammered', color: '#8f6a45', metal: 1, rough: 0.42, bump: 0.35, scale: 1.6 }),
+  blackenedSteel: F({ label: 'Acier noirci', pattern: 'brushed', color: '#3b3d42', metal: 1, rough: 0.33, aniso: 0.6, bump: 0.2, irid: 0.35, iridIOR: 1.6, iridMin: 300, iridMax: 450 }),
+  // diélectriques
+  glaze: F({ label: 'Émail craquelé', pattern: 'glaze', color: '#8fb8a6', color2: '#3d4a44', rough: 0.4, clearcoat: 1, ccRough: 0.03, bump: 0.15, scale: 1 }),
+  porcelain: F({ label: 'Porcelaine', pattern: 'glaze', color: '#f1ede4', color2: '#c9bfae', rough: 0.35, clearcoat: 1, ccRough: 0.02, bump: 0.05, scale: 0.6 }),
+  bisque: F({ label: 'Biscuit mat', pattern: 'rock', color: '#e2d8c8', color2: '#cfc2ae', rough: 0.92, bump: 0.06, scale: 3 }),
+  velvet: F({ label: 'Velours', pattern: 'velvet', color: '#3a0714', color2: '#22040b', rough: 0.95, sheen: 1, sheenColor: '#ff5a72', sheenRough: 0.35 }),
+  velvetNight: F({ label: 'Velours nuit', pattern: 'velvet', color: '#0a1230', color2: '#050a1c', rough: 0.95, sheen: 1, sheenColor: '#6f8cff', sheenRough: 0.35 }),
+  carbon: F({ label: 'Carbone sergé', pattern: 'weave', color: '#121214', color2: '#08080a', rough: 0.32, clearcoat: 1, ccRough: 0.02, aniso: 0.7, bump: 0.2, scale: 1 }),
+  carbonMatte: F({ label: 'Carbone mat', pattern: 'weave', color: '#141416', color2: '#0b0b0d', rough: 0.55, aniso: 0.6, bump: 0.25, scale: 1 }),
+  nacre: F({ label: 'Nacre', pattern: 'nacre', color: '#efe6dc', color2: '#d6cfe6', rough: 0.28, clearcoat: 0.7, ccRough: 0.08, sheen: 0.4, sheenColor: '#f3d9ff', irid: 1, iridIOR: 1.55, iridMin: 280, iridMax: 640, bump: 0.12, scale: 1 }),
+  obsidian: F({ label: 'Obsidienne polie', pattern: 'plain', color: '#0c0b0d', rough: 0.06, clearcoat: 1, ccRough: 0.01, smudge: 0.5 }),
+  basalt: F({ label: 'Basalte', pattern: 'rock', color: '#4a443d', color2: '#7a6e60', rough: 0.86, bump: 2.2, scale: 1 }),
+  druse: F({ label: 'Druse', pattern: 'glitter', color: '#4a1f6e', color2: '#d9b8ff', rough: 0.3, bump: 0.6, scale: 1 }),
+  agate: F({ label: 'Agate', pattern: 'agate', color: '#e2d7cc', color2: '#5d4b70', rough: 0.12, clearcoat: 0.6, ccRough: 0.03, scale: 1 }),
+  smokedGlass: F({ label: 'Verre fumé', pattern: 'plain', color: '#ffffff', color2: '#b7a796', rough: 0.02, glass: 1, ior: 1.5, dispersion: 0.25, attDist: 0.9, smudge: 0.2 }),
+  frostedGlass: F({ label: 'Verre dépoli', pattern: 'plain', color: '#ffffff', color2: '#9aa6b0', rough: 0.42, glass: 1, ior: 1.5, attDist: 0.6 }),
+  amberGlass: F({ label: 'Verre ambré', pattern: 'plain', color: '#ffffff', color2: '#d17a1e', rough: 0.03, glass: 1, ior: 1.52, dispersion: 0.3, attDist: 0.25 }),
+};
+
+// Jeux de matériaux : [externe, interne, tranche], usure (la face externe
+// s'use jusqu'à la tranche près des bords), chanfrein plat ou biseau rond,
+// humeurs auxquelles le jeu appartient.
+export const SETS = {
+  brassVelvet: { label: 'Laiton & velours', outer: 'brushedBrass', inner: 'velvet', edge: 'polishedBrass', wear: 0, chamfer: false, moods: ['atelier', 'luxe'] },
+  anodizedDiamond: { label: 'Anodisé diamanté', outer: 'anodized', inner: 'anodizedMatte', edge: 'diamondCut', wear: 0.08, chamfer: true, moods: ['studio', 'nuit'] },
+  celadon: { label: 'Céladon craquelé', outer: 'glaze', inner: 'bisque', edge: 'bisque', wear: 0, chamfer: false, moods: ['atelier', 'pastel'] },
+  kintsugi: { label: 'Porcelaine & or', outer: 'porcelain', inner: 'hammeredGold', edge: 'polishedGold', wear: 0, chamfer: false, moods: ['luxe', 'pastel'] },
+  titanium: { label: 'Titane au feu', outer: 'oxideTitanium', inner: 'rawTitanium', edge: 'diamondCut', wear: 0.1, chamfer: true, moods: ['studio', 'irisé'] },
+  goldLeaf: { label: 'Or martelé', outer: 'hammeredGold', inner: 'polishedGold', edge: 'polishedGold', wear: 0, chamfer: false, moods: ['luxe', 'atelier'] },
+  carbon: { label: 'Carbone', outer: 'carbon', inner: 'carbonMatte', edge: 'brushedSteel', wear: 0.05, chamfer: true, moods: ['studio', 'nuit'] },
+  smoked: { label: 'Verre fumé', outer: 'smokedGlass', inner: 'smokedGlass', edge: 'frostedGlass', wear: 0, chamfer: false, moods: ['studio', 'nuit', 'pastel'] },
+  amber: { label: 'Verre ambré', outer: 'amberGlass', inner: 'amberGlass', edge: 'frostedGlass', wear: 0, chamfer: false, moods: ['atelier', 'luxe'] },
+  nacre: { label: 'Nacre', outer: 'nacre', inner: 'nacre', edge: 'nacre', wear: 0, chamfer: false, moods: ['irisé', 'pastel'] },
+  geode: { label: 'Géode', outer: 'basalt', inner: 'druse', edge: 'agate', wear: 0, chamfer: false, moods: ['atelier', 'luxe', 'nuit', 'irisé'] },
+  verdigris: { label: 'Cuivre vert-de-gris', outer: 'verdigris', inner: 'polishedCopper', edge: 'polishedCopper', wear: 0.45, chamfer: false, moods: ['atelier'] },
+  obsidian: { label: 'Obsidienne', outer: 'obsidian', inner: 'basalt', edge: 'obsidian', wear: 0, chamfer: true, moods: ['nuit', 'luxe'] },
+  chrome: { label: 'Chrome', outer: 'chrome', inner: 'brushedSteel', edge: 'chrome', wear: 0, chamfer: false, moods: ['studio'] },
+  blackSteel: { label: 'Acier noirci', outer: 'blackenedSteel', inner: 'velvetNight', edge: 'brushedSteel', wear: 0.12, chamfer: true, moods: ['nuit', 'luxe'] },
+  bronze: { label: 'Bronze & cuivre', outer: 'bronzeDark', inner: 'polishedCopper', edge: 'polishedBrass', wear: 0.3, chamfer: false, moods: ['atelier'] },
+};
+
+// teintes d'anodisation et d'émail tirées selon l'humeur
+export const TINTS = {
+  anodized: ['#3a64b0', '#b03a4a', '#2f8a72', '#7a4ab0', '#c07a2a', '#2a2e36', '#a8a39a'],
+  glaze: ['#8fb8a6', '#a9c4d6', '#e0b8a8', '#d8cfa0', '#6f8fa8', '#c9a6c4', '#9fb07a'],
+};
+
+// grandeurs à ne pas interpoler / exposer comme curseurs
+export const FINISH_KEYS = Object.keys(FINISH_DEFAULTS).filter((k) => k !== 'pattern');
