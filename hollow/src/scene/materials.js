@@ -292,7 +292,7 @@ function surface(fin, U, p, pf) {
 
 // Ce qui, dans une couche, impose une recompilation quand cela change
 export function signature(f) {
-  const s = (fin) => [fin.pattern, fin.sheen > 0, fin.clearcoat > 0, fin.irid > 0, fin.aniso > 0, fin.glass > 0, fin.dispersion > 0, fin.smudge > 0].join('');
+  const s = (fin) => [fin.pattern, fin.sheen > 0, fin.clearcoat > 0, fin.irid > 0, fin.aniso > 0, fin.glass > 0, fin.dispersion > 0, fin.smudge > 0, fin.emit > 0].join('');
   return [s(f.outer), s(f.inner), s(f.edge), f.wear > 0, (f.groove || 0) > 0, (f.seam || 0) > 0].join('|');
 }
 
@@ -391,7 +391,7 @@ export function buildShellMaterial(finish, U, { tpms = null, rig = null, pore = 
     cc: any((f) => f.clearcoat > 0), ccN: fins.some((f) => f.pattern === 'glaze'), sheen: any((f) => f.sheen > 0),
     irid: any((f) => f.irid > 0), aniso: any((f) => f.aniso > 0), glass: any((f) => f.glass > 0),
     disp: any((f) => f.glass > 0 && f.dispersion > 0), glit: fins.some((f) => f.pattern === 'glitter' || f.pattern === 'urushi'),
-    smudge: any((f) => f.smudge > 0), wear: finish.wear > 0, groove: (finish.groove || 0) > 0, seam: (finish.seam || 0) > 0,
+    smudge: any((f) => f.smudge > 0), emit: any((f) => f.emit > 0), wear: finish.wear > 0, groove: (finish.groove || 0) > 0, seam: (finish.seam || 0) > 0,
   };
 
   // membres de la structure : seulement ce que le modèle utilisera
@@ -405,6 +405,7 @@ export function buildShellMaterial(finish, U, { tpms = null, rig = null, pore = 
   if (F.disp) members.disp = 'float';
   if (F.glit) members.glitter = 'vec3';
   if (F.smudge) members.smudge = 'float';
+  if (F.emit) members.emit = 'vec3';
   const Surf = struct(members);
 
   // propriétés complètes d'une face (motif + uniformes) ; les motifs suivent
@@ -424,6 +425,7 @@ export function buildShellMaterial(finish, U, { tpms = null, rig = null, pore = 
     if (F.disp) o.disp = float(Uf.dispersion);
     if (F.glit) o.glitter = s.glitter;
     if (F.smudge) o.smudge = float(Uf.smudge);
+    if (F.emit) o.emit = Uf.emitColor.mul(Uf.emit);
     return o;
   };
   const surfA = attribute('surf', 'vec4');
@@ -528,6 +530,12 @@ export function buildShellMaterial(finish, U, { tpms = null, rig = null, pore = 
   const r = length(positionWorld).div(G.D);
   m.aoNode = mix(float(1), clamp(r.pow(0.75), 0.04, 1), G.envFalloff);
   m.emissiveNode = haloEmission();
+  // phosphorescence : des fronts de lumière fins partent du cœur (3 par boucle),
+  // sur une lueur de fond
+  if (F.emit) {
+    const wave = sin(G.phase.mul(PI * 6).sub(r.mul(14))).mul(0.5).add(0.5).pow(8);
+    m.emissiveNode = m.emissiveNode.add(get('emit').mul(wave.mul(1.6).add(0.08)));
+  }
   m.mrtNode = stableVelocity();
   return m;
 }

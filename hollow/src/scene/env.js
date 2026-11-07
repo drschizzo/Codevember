@@ -44,6 +44,25 @@ export const ENV_PRESETS = {
       [0.6, 0.1, 0.05, 0.6, 0.02, 1.4, 1.45, 1.5],
     ],
   },
+  // cyclorama blanc : tout baigne dans une lumière laiteuse, quelques bandes nettes
+  cyclo: {
+    label: 'Cyclorama blanc', ambient: [0.42, 0.42, 0.43], floor: [0.55, 0.55, 0.54],
+    lights: [
+      [-1.9, 0.8, 1.2, 0.6, 0.3, 2.4, 2.4, 2.45],
+      [0.7, 0.15, 0.05, 0.7, 0.02, 3.0, 3.0, 3.1],
+      [-0.6, 0.2, 0.04, 0.6, 0.02, 2.2, 2.25, 2.3],
+      [2.5, 0.4, 0.5, 0.3, 0.2, 1.4, 1.4, 1.42],
+    ],
+  },
+  // abysses : obscurité bleu-vert, bandes cyan et une lueur d'eau au-dessus
+  abyss: {
+    label: 'Abysses', ambient: [0.002, 0.006, 0.009], floor: [0.001, 0.003, 0.004],
+    lights: [
+      [-1.6, 1.2, 1.4, 0.25, 0.4, 0.25, 0.9, 1.1],
+      [0.7, 0.15, 0.04, 0.5, 0.02, 0.4, 1.8, 2.0],
+      [-2.4, 0.1, 0.03, 0.4, 0.015, 0.2, 1.1, 1.4],
+    ],
+  },
 };
 
 // (une nouvelle texture à chaque changement : le pré-filtrage PMREM est

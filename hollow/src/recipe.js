@@ -4,7 +4,7 @@
 // traitement, qualité) n'en font pas partie et survivent aux changements de
 // graine.
 import { createRng } from './rng.js';
-import { FINISHES, SETS, TINTS } from './finishes.js';
+import { FINISHES, SETS, TINTS, FINISH_DEFAULTS } from './finishes.js';
 import { TYPES, geometryFor, randomType } from './types.js';
 
 export { geometryFor, randomType } from './types.js';
@@ -15,7 +15,8 @@ const r2 = (x) => Math.round(x * 1000) / 1000;
 const CLASSIC = ['cells', 'voronoi', 'slots', 'girih'];
 const FEATURED = ['armillary', 'scales', 'weave', 'shards', 'radiolarian', 'coral', 'vitrail', 'tpms', 'geode'];
 
-// Humeurs : environnement de studio, couleur du cœur, fond, poussière
+// Humeurs : environnement de studio, couleur du cœur (température, ou teintes),
+// fond, poussière, brouillard, phosphorescence des tranches, pièces d'exception préférées
 export const MOODS = {
   atelier: { label: 'Atelier', env: 'atelier', coreK: [2300, 3000], keyK: 3600, bg: '#070605' },
   studio: { label: 'Studio', env: 'studio', coreK: [4200, 5600], keyK: 5600, bg: '#050608', dust: '#dfe3ea' },
@@ -23,6 +24,21 @@ export const MOODS = {
   nuit: { label: 'Nuit', env: 'night', coreK: [7000, 12000], keyK: 6500, bg: '#020307', dust: '#c9d6ff' },
   pastel: { label: 'Pastel', env: 'softbox', coreK: [3800, 5000], keyK: 5000, bg: '#09080a' },
   'irisé': { label: 'Irisé', env: 'studio', coreK: [5000, 8000], keyK: 6000, bg: '#040507' },
+  // porcelaine, céramique et chrome sur fond blanc : la profondeur se perd dans le blanc
+  clinique: {
+    label: 'Clinique', env: 'cyclo', coreK: [6000, 7500], keyK: 6500, bg: '#e8e6e1', dust: '#ffffff',
+    envIntensity: [0.9, 1.1], fog: { near: 1.3, far: 3.6 }, featured: ['shards', 'scales', 'armillary', 'radiolarian', 'coral', 'tpms'],
+  },
+  // nuit marine : un cœur cyan, des tranches phosphorescentes qui pulsent
+  abysses: {
+    label: 'Abysses', env: 'abyss', coreK: [9000, 12000], coreColor: ['#3fd8ff', '#46ffd0', '#5aa8ff'], keyK: 9000, bg: '#010609', dust: '#8ff0ff',
+    emit: [0.5, 1], emitColor: ['#36e0ff', '#3dffc0', '#7a7dff'], featured: ['radiolarian', 'coral', 'scales', 'tpms', 'weave'],
+  },
+  // or, émail et vitraux dans la pénombre d'une nef ; la poussière flotte dans les rayons
+  'sacré': {
+    label: 'Sacré', env: 'atelier', coreK: [1900, 2400], keyK: 2900, bg: '#0a0603', dust: '#ffd27a', dustAmount: [0.7, 1],
+    fog: { near: 1.2, far: 2.6 }, featured: ['vitrail', 'armillary', 'geode', 'girih'],
+  },
 };
 
 // Pierres serties : teinte (absorption), indice, dispersion
@@ -102,7 +118,7 @@ export function generate(seed, force = {}) {
   // tirage pondéré (chaque type rare au plus une fois), dans le désordre
   const count = {};
   const take = (t) => { count[t] = (count[t] || 0) + 1; return t; };
-  const types = [take(rng.pick(CLASSIC)), take(rng.pick(FEATURED))];
+  const types = [take(rng.pick(CLASSIC)), take(rng.pick(mood.featured ?? FEATURED))];
   while (types.length < N) types.push(take(randomType(rng, count)));
   for (let i = types.length - 1; i > 0; i--) { const j = Math.floor(rng.next() * (i + 1)); [types[i], types[j]] = [types[j], types[i]]; }
 
@@ -114,6 +130,11 @@ export function generate(seed, force = {}) {
   });
 
   const coreK = Math.round(rng.range(...mood.coreK) / 50) * 50;
+  const look = rng.fork('look'); // (tirages propres aux humeurs : le reste ne change pas)
+  if (mood.emit) {
+    const emit = r2(look.range(...mood.emit)), color = look.pick(mood.emitColor);
+    for (const L of layers) Object.assign(L.finish.edge, { emit, emitColor: color });
+  }
   // (l'ancien tirage de l'intensité de la lampe est conservé, pour que chaque
   // graine garde le reste de son éclairage ; l'intensité est fixée à 40)
   return {
@@ -121,10 +142,10 @@ export function generate(seed, force = {}) {
     nest: { ratio: r2(rng.range(0.58, 0.66)), core: r2(rng.range(0.035, 0.06)) },
     loop: { duration: 24, dive: true, depth: 0.35 },
     camera: { fov: Math.round(rng.range(36, 48)), sway: r2(rng.range(0.015, 0.05)), roll: r2(rng.range(0, 0.06)) },
-    core: { color: kelvinToHex(coreK), intensity: r2(rng.range(28, 55)), glow: r2(rng.range(6, 13)), halo: r2(rng.range(2.0, 2.8)), decay: 2, pulse: r2(rng.range(0, 0.15)), shadowSoft: 2 },
+    core: { color: mood.coreColor ? look.pick(mood.coreColor) : kelvinToHex(coreK), intensity: r2(rng.range(28, 55)), glow: r2(rng.range(6, 13)), halo: r2(rng.range(2.0, 2.8)), decay: 2, pulse: r2(rng.range(0, 0.15)), shadowSoft: 2 },
     key: { color: kelvinToHex(mood.keyK), intensity: (rng.next(), 40), x: r2(rng.range(-0.45, -0.2)), y: r2(rng.range(0.2, 0.45)), angle: 0.85, penumbra: 0.9 },
-    env: { preset: mood.env, intensity: r2(rng.range(0.9, 1.25)), rotation: r2(rng.range(0, Math.PI * 2)) },
-    fog: { color: mood.bg, near: 1.5, far: 3.1 },
+    env: { preset: mood.env, intensity: (() => { const v = rng.range(0.9, 1.25); return r2(mood.envIntensity ? look.range(...mood.envIntensity) : v); })(), rotation: r2(rng.range(0, Math.PI * 2)) },
+    fog: { color: mood.bg, near: mood.fog?.near ?? 1.5, far: mood.fog?.far ?? 3.1 },
     dust: dustFor(rng.fork('dust'), mood),
     layers,
   };
@@ -132,11 +153,12 @@ export function generate(seed, force = {}) {
 
 // poussière en suspension (tirage à part : le reste de la scène ne change pas)
 function dustFor(rng, mood) {
-  return { amount: r2(rng.range(0.3, 0.75)), size: r2(rng.range(0.8, 1.3)), color: mood.dust ?? '#e8c27a' };
+  return { amount: r2(rng.range(...(mood.dustAmount ?? [0.3, 0.75]))), size: r2(rng.range(0.8, 1.3)), color: mood.dust ?? '#e8c27a' };
 }
 
 // recette partagée par une version antérieure : champs ajoutés depuis
 export function upgrade(R) {
+  for (const L of R.layers) for (const k of ['outer', 'inner', 'edge']) L.finish[k] = { ...FINISH_DEFAULTS, ...L.finish[k] };
   R.dust ??= dustFor(createRng(`${R.seed}:dust`), MOODS[R.mood] ?? MOODS.atelier);
   for (const L of R.layers) { L.gem ??= { ...GEMS.diamond }; L.pane ??= { rough: 0.12, glow: 0.6 }; }
   return R;
