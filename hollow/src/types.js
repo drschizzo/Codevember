@@ -184,6 +184,22 @@ export const TYPES = {
       };
     },
   },
+  scales: {
+    label: 'Écailles', weight: 1.6, max: 1, noChamfer: true,
+    sets: ['goldLeaf', 'bronze', 'obsidian', 'nacre', 'titanium', 'brassVelvet', 'verdigris', 'anodizedDiamond', 'blackSteel'],
+    params: [
+      ['count', 'Nombre d’écailles', 60, 900, 1], ['size', 'Recouvrement', 0.6, 1.6, 0.01], ['pointed', 'Pointe', 0, 1, 0.01],
+      ['dome', 'Bombé', 0, 1.5, 0.01], ['lift', 'Soulèvement', 0, 0.8, 0.01],
+    ],
+    // plaques bombées en phyllotaxie, articulées, qui respirent
+    geometry(rng) {
+      return {
+        type: 'scales', count: rng.int(160, 420), size: r2(rng.range(0.95, 1.2)), pointed: r2(rng.range(0.35, 1)),
+        dome: r2(rng.range(0.3, 1)), thickness: r2(rng.range(0.012, 0.02)), lift: r2(rng.range(0.25, 0.5)), bevel: 0,
+        iris: iris(rng, 0.3),
+      };
+    },
+  },
   tpms: {
     label: 'Surface minimale', weight: 1.8, max: 1, noGroove: true, noChamfer: true,
     params: [['freq', 'Fréquence', 1.5, 7, 0.05], ['wall', 'Paroi', -0.5, 0.5, 0.01]],

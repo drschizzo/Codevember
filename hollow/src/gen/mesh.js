@@ -121,6 +121,24 @@ export class Buffers {
       else { this.triN(a, b, B0 + ((jb + j + 1) % nb)); j++; }
     }
   }
+  // normales lissées (moyenne des faces pondérée par l'aire) des sommets créés
+  // depuis v0, d'après les triangles ajoutés depuis i0 ; le sens des normales
+  // posées à la création est conservé
+  smooth(v0, i0) {
+    const n = this.n - v0, acc = new Float64Array(n * 3), P = this.pos, I = this.idx;
+    for (let t = i0; t < this.ni; t += 3) {
+      const a = I[t], b = I[t + 1], c = I[t + 2];
+      const x = cross(this.sub3(b, a), this.sub3(c, a));
+      for (const v of [a, b, c]) if (v >= v0) { const o = (v - v0) * 3; acc[o] += x[0]; acc[o + 1] += x[1]; acc[o + 2] += x[2]; }
+    }
+    for (let i = 0; i < n; i++) {
+      const o = i * 3, l = Math.hypot(acc[o], acc[o + 1], acc[o + 2]);
+      if (l < 1e-20) continue;
+      const v = (v0 + i) * 3, s = acc[o] * this.nor[v] + acc[o + 1] * this.nor[v + 1] + acc[o + 2] * this.nor[v + 2] < 0 ? -1 : 1;
+      for (let k = 0; k < 3; k++) this.nor[v + k] = (s * acc[o + k]) / l;
+    }
+    return P;
+  }
   sub3(i, j) { const p = this.pos; return [p[i * 3] - p[j * 3], p[i * 3 + 1] - p[j * 3 + 1], p[i * 3 + 2] - p[j * 3 + 2]]; }
   result() {
     const out = {
