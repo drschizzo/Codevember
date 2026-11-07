@@ -167,6 +167,23 @@ export const TYPES = {
       };
     },
   },
+  armillary: {
+    label: 'Sphère armillaire', weight: 1.5, max: 1, noChamfer: true,
+    params: [
+      ['width', 'Largeur des anneaux', 0.02, 0.14, 0.001], ['south', 'Anneau austral', 0.2, 0.9, 0.01], ['meridians', 'Méridiens', 0, 12, 1],
+      ['ecliptics', 'Écliptiques', 0, 3, 1], ['tilt', 'Inclinaison', 0, 0.9, 0.01],
+    ],
+    toggles: [['tropics', 'Tropiques'], ['beads', 'Perles-planètes']],
+    geometry(rng) {
+      return {
+        type: 'armillary', thickness: r2(rng.range(0.03, 0.05)), width: r2(rng.range(0.05, 0.08)), bevel: 0,
+        south: r2(rng.range(0.35, 0.6)), meridians: rng.pick([3, 4, 6, 8]), tropics: rng.chance(0.6),
+        ecliptics: rng.int(1, 3), tilt: r2(rng.range(0.35, 0.75)), beads: rng.chance(0.7),
+        spins: [rng.pick([1, -1, 2]), rng.pick([1, 2, -1]), rng.pick([-1, 1, 2, -2]), rng.pick([1, -2, 3]), rng.pick([2, -1])],
+        iris: iris(rng, 0.4),
+      };
+    },
+  },
   tpms: {
     label: 'Surface minimale', weight: 1.8, max: 1, noGroove: true, noChamfer: true,
     params: [['freq', 'Fréquence', 1.5, 7, 0.05], ['wall', 'Paroi', -0.5, 0.5, 0.01]],
