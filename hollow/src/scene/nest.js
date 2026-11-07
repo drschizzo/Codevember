@@ -324,11 +324,8 @@ export function createNest(scene, gen) {
       const des = nest.designs[j], inst = des.copies[copy];
       if (nest.solo != null && nest.solo !== j) continue; // (débogage : une seule couche)
       inst.group.visible = true;
-      // une instance qui reprend du service (autre couche, ou absente à l'image
-      // précédente) n'a pas d'historique de mouvement valable
-      const moved = inst.lastD !== d + base || inst.lastFrame !== frame - 1;
-      inst.lastD = d + base;
-      inst.lastFrame = frame;
+      // (une instance qui reprend du service a un historique de mouvement faux :
+      // son vecteur vitesse aberrant est écarté dans le matériau, voir stableVelocity)
       inst.group.scale.setScalar(s.D * s.ratio ** x);
       des.orient(inst.group.quaternion, s.tau, s.phi, N, s.dive);
       // niveau de détail selon la taille à l'écran (rayon en pixels) : les seuils
@@ -348,7 +345,6 @@ export function createNest(scene, gen) {
         // distance de three.js serait indécis) — la coquille traversée, puis les
         // suivantes vers le cœur ; les coquilles qui entourent la caméra en dernier
         m.renderOrder = x >= 0 ? 1 + x : 100 - x;
-        m.userData.still = moved || !m.userData.on ? 0 : 1; // (vecteur vitesse nul à la première image)
         m.userData.on = on;
         m.layers.mask = on ? MAIN : 0;
       });
@@ -359,7 +355,6 @@ export function createNest(scene, gen) {
       const cr = shown && rpx > 25 && x > X_MIN + 0.5;
       for (const m of inst.ornaments) {
         m.renderOrder = x >= 0 ? 1.5 + x : 100.5 - x;
-        m.userData.still = moved || !m.userData.on ? 0 : 1;
         m.userData.on = cr;
         // (les épines projettent leur ombre tant que la coquille en projette)
         m.layers.mask = (cr ? MAIN : 0) | (m.castShadow && des.geoms[3] ? KEY | CORE : 0);

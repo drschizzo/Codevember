@@ -14,5 +14,8 @@ export const G = {
   // plongée : rapport entre couches, profondeur de naissance (voir nest.js).
   // La profondeur relative d'un objet du nid se déduit de son échelle (D·kˣ).
   ratio: uniform(0.62), XB: uniform(7),
+  // image précédente : avancée de la plongée depuis (la profondeur d'un objet
+  // était x + dTau), et phase d'alors (mouvement propre des pièces animées)
+  dTau: uniform(0), phasePrev: uniform(0),
 };
 

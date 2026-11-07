@@ -24,7 +24,7 @@ import * as THREE from 'three/webgpu';
 import {
   Fn, If, struct, uniform, attribute, positionLocal, normalLocal, positionWorld, positionView, normalView, vec2, vec3, vec4,
   float, mat3, mix, smoothstep, clamp, abs, length, normalize, dot, cross, sin, floor, fract, mod, step, acos, sign,
-  dFdx, dFdy, fwidth, faceDirection, mrt, normalViewGeometry, positionGeometry, atan, modelWorldMatrix, velocity, transformNormalToView, cos, max as tmax, texture3D, mx_cell_noise_vec3, modelViewMatrix, modelScale, cameraPosition,
+  dFdx, dFdy, fwidth, faceDirection, mrt, normalViewGeometry, positionGeometry, atan, modelWorldMatrix, select, velocity, transformNormalToView, cos, max as tmax, texture3D, mx_cell_noise_vec3, modelViewMatrix, modelScale, cameraPosition,
 } from 'three/tsl';
 import { FINISH_KEYS } from '../finishes.js';
 import { NOISE_PERIOD } from '../gen/noisevol.js';
@@ -542,8 +542,14 @@ export const haloEmission = () => {
 // Vecteur vitesse nul pour un objet qui vient d'apparaître : sa matrice
 // « précédente » date de sa dernière apparition (autre taille, autre place) et
 // donnerait un flou de mouvement et une reprojection temporelle aberrants.
-const still = uniform(1).onObjectUpdate(({ object }) => object.userData.still ?? 1);
-export const stableVelocity = () => mrt({ velocity: velocity.mul(still) });
+// (Pas d'uniforme par objet pour cela : ces valeurs se mélangeaient entre
+// exemplaires d'une même couche — vitesses nulles ou énormes au hasard, d'où
+// des traînées et des images anciennes qui persistaient.) On écarte par pixel
+// toute vitesse aberrante : une coquille qui se déplace normalement ne
+// parcourt jamais le quart de l'écran d'une image à l'autre.
+// (Une sélection, pas une multiplication : une vitesse infinie fois 0 donnerait
+// NaN, qui contaminerait l'historique de l'anticrénelage temporel.)
+export const stableVelocity = () => mrt({ velocity: select(length(velocity.xy).lessThan(0.5), velocity, vec4(0)) });
 
 // ── Matériau d'ombre (maillage grossier) ─────────────────────────────────────
 // La couche qui vient de naître au cœur « pousse » dans la carte d'ombre :
