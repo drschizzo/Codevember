@@ -1,4 +1,4 @@
-// Volume de bruit périodique (64³, 4 canaux), calculé une fois au démarrage
+// Volume de bruit périodique (128³, 4 canaux, demi-flottants), calculé une fois au démarrage
 // dans un worker puis échantillonné par les matériaux (texture 3D, filtrage
 // trilinéaire) : un accès mémoire remplace des centaines d'instructions de
 // bruit procédural par pixel.
@@ -11,7 +11,7 @@
 
 import { createRng } from '../rng.js';
 
-export const NOISE_SIZE = 64;
+export const NOISE_SIZE = 128;
 export const NOISE_PERIOD = 4;
 
 export function buildNoiseVolume(seed = 'hollow-noise', N = NOISE_SIZE, P = NOISE_PERIOD) {
@@ -54,5 +54,12 @@ export function buildNoiseVolume(seed = 'hollow-noise', N = NOISE_SIZE, P = NOIS
     out[o + 2] = f1;
     out[o + 3] = f2 - f1;
   }
-  return { data: out, size: N, period: P };
+  // conversion en demi-flottants ici (dans le worker), pas sur le fil principal
+  const half = new Uint16Array(out.length), f32 = new Float32Array(1), u32 = new Uint32Array(f32.buffer);
+  for (let i = 0; i < out.length; i++) {
+    f32[0] = out[i];
+    const x = u32[0], sign = (x >>> 16) & 0x8000, e = ((x >>> 23) & 0xff) - 112, m = x & 0x7fffff;
+    half[i] = e <= 0 ? sign : e >= 31 ? sign | 0x7c00 : sign | (e << 10) | (m >>> 13);
+  }
+  return { data: half, size: N, period: P };
 }

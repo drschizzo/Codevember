@@ -52,7 +52,7 @@ class Design {
     this.index = index;
     this.geoms = [null, null, null, null]; // 0–2 : affichage ; 3 : ombres
     this.specKey = '';
-    this.crystalKey = '';
+    this.pending = null; // lot de géométries en cours de génération
     this.crystal = null; // { attrs: [InstancedBufferAttribute ×3] }
     this.copies = [];
     this.material = null;
@@ -63,33 +63,34 @@ class Design {
   set(layer) {
     this.layer = layer;
     this.syncMaterial();
-    const key = JSON.stringify(layer.geo);
+    // Géométrie (et cristaux) : tous les niveaux sont demandés ensemble et
+    // basculés d'un coup quand le dernier arrive — jamais de mélange entre
+    // l'ancienne et la nouvelle forme, ni de niveau qui change de forme.
+    const key = `${layer.type}|${JSON.stringify(layer.geo)}`;
     if (key !== this.specKey) {
       this.specKey = key;
-      const token = key;
-      for (const lod of [3, 2, 1, 0]) {
+      // (surfaces minimales : les ombres utilisent le niveau moyen, pas de niveau 3)
+      const isT = layer.geo.type === 'tpms', geode = layer.type === 'geode';
+      const lods = isT ? [2, 1, 0] : [3, 2, 1, 0];
+      const batch = { key, need: lods.length + (geode ? 1 : 0), got: 0, geoms: [null, null, null, null], crystals: null };
+      this.pending = batch;
+      const arrived = () => {
+        batch.got++;
+        this.nest.onProgress?.();
+        if (batch.got === batch.need && this.pending === batch) this.commit(batch, isT, geode);
+      };
+      for (const lod of lods) {
         this.nest.gen.request(layer.geo, lod).then((out) => {
-          if (this.specKey !== token || this.disposed) return;
-          const old = this.geoms[lod];
-          this.geoms[lod] = toGeometry(out);
-          for (const c of this.copies) {
-            if (lod < 3) c.display[lod].geometry = this.geoms[lod];
-            else c.proxy.geometry = this.geoms[3];
-          }
-          if (old) old.dispose();
-          this.nest.onProgress?.();
+          if (this.pending !== batch || this.disposed) return;
+          batch.geoms[lod] = toGeometry(out);
+          arrived();
         }).catch((e) => { if (e.message !== 'cancelled') console.error(e); });
       }
-    }
-    // cristaux (géode)
-    const ck = layer.type === 'geode' ? key : '';
-    if (ck !== this.crystalKey) {
-      this.crystalKey = ck;
-      this.setCrystals(null);
-      if (ck) {
+      if (geode) {
         this.nest.gen.request(layer.geo, 0, 'crystals').then((out) => {
-          if (this.crystalKey !== ck || this.disposed) return;
-          this.setCrystals(out);
+          if (this.pending !== batch || this.disposed) return;
+          batch.crystals = out;
+          arrived();
         }).catch((e) => console.error(e));
       }
     }
@@ -99,6 +100,24 @@ class Design {
       this.crystalU.rough.value = c.rough; this.crystalU.dispersion.value = c.dispersion; this.crystalU.ior.value = c.ior;
     }
   }
+
+  // bascule atomique vers la nouvelle forme
+  commit(batch, isT, geode) {
+    const old = [...this.geoms];
+    this.geoms = batch.geoms;
+    if (isT) this.geoms[3] = this.geoms[1]; // (ombres = niveau moyen)
+    for (const c of this.copies) {
+      c.display.forEach((m, l) => { m.geometry = this.geoms[l]; });
+      c.proxy.geometry = this.geoms[3];
+    }
+    for (const g of new Set(old)) if (g && !this.geoms.includes(g)) g.dispose(); // (une géométrie peut servir à deux niveaux)
+    this.setCrystals(geode ? batch.crystals : null);
+    this.pending = null;
+    this.nest.onProgress?.();
+  }
+
+  get ready() { return !this.pending && !!this.geoms[0]; }
+  get progress() { return this.pending ? this.pending.got / this.pending.need : 1; }
 
   syncMaterial() {
     const f = this.layer.finish;
@@ -195,7 +214,7 @@ class Design {
   dispose() {
     this.disposed = true;
     for (const c of this.copies) this.nest.root.remove(c.group);
-    for (const g of this.geoms) g?.dispose();
+    for (const g of new Set(this.geoms)) g?.dispose();
     this.material?.dispose();
     this.crystalMat?.dispose();
   }
@@ -216,6 +235,9 @@ export function createNest(scene, gen) {
     nest.designs.forEach((d, i) => d.set(L[i]));
   };
   nest.syncLayer = (i) => nest.designs[i]?.set(nest.designs[i].layer);
+  // toutes les couches ont leur forme définitive (tous niveaux, cristaux)
+  nest.ready = () => nest.designs.length > 0 && nest.designs.every((d) => d.ready);
+  nest.progress = () => (nest.designs.length ? nest.designs.reduce((a, d) => a + d.progress, 0) / nest.designs.length : 0);
 
   // profondeur de naissance (au cœur) : la première couche entièrement cachée
   // par le cœur pendant toute la croissance de son ombre
@@ -248,7 +270,8 @@ export function createNest(scene, gen) {
       des.orient(inst.group.quaternion, s.tau, s.phi, N, s.dive);
       // niveau de détail selon la taille à l'écran (rayon en pixels) : les seuils
       // sont choisis pour que l'écart entre deux niveaux reste sous le pixel
-      const rpx = x <= 0 ? Infinity : ((s.D * s.ratio ** x) / s.D) * s.pxPerUnit * s.detail;
+      // (surfaces minimales : maillage implicite plus exigeant, seuils relevés)
+      const rpx = x <= 0 ? Infinity : ((s.D * s.ratio ** x) / s.D) * s.pxPerUnit * s.detail * (des.layer.type === 'tpms' ? 1.8 : 1);
       let lod = rpx > 900 ? 0 : rpx > 220 ? 1 : 2;
       while (lod < 2 && !des.geoms[lod]) lod++;
       while (lod > 0 && !des.geoms[lod]) lod--;

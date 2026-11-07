@@ -105,9 +105,30 @@ async function main() {
     old?.dispose();
   }
 
+  // Écran de chargement : une nouvelle scène ne s'affiche que lorsque toutes ses
+  // coquilles ont leur forme définitive (tous niveaux de détail, cristaux) et
+  // que quelques images ont été rendues (pipelines compilés, historique TRAA).
+  const loading = { active: true, applied: false, settle: 0 };
+  function showLoader() {
+    loading.active = true;
+    loading.applied = false;
+    loading.settle = 0;
+    $('#loader').classList.remove('gone');
+    $('#loader p').textContent = 'génération des coquilles…';
+    $('#loadbar u').style.width = '0%';
+  }
+  let firstRecipe = true;
   function applyRecipe() {
-    nest.setRecipe(R);
-    syncEnv();
+    const recipe = R;
+    showLoader();
+    // (le fondu d'entrée de l'écran se termine avant que la scène ne change)
+    setTimeout(() => {
+      if (R !== recipe) return; // (une autre scène a été demandée entre-temps)
+      nest.setRecipe(R);
+      syncEnv();
+      loading.applied = true;
+    }, firstRecipe ? 0 : 280);
+    firstRecipe = false;
     ui?.rebuild();
     const url = new URL(location.href);
     url.searchParams.set('seed', R.seed);
@@ -280,14 +301,17 @@ async function main() {
   });
 
   // ── Boucle ──
-  let last = performance.now(), fpsAcc = 0, fpsN = 0, fpsT = 0, ready = false;
+  let last = performance.now(), fpsAcc = 0, fpsN = 0, fpsT = 0;
   renderer.setAnimationLoop((now) => {
     if (busy || frozen) return;
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
-    if (!paused) phi += dt / R.loop.duration;
+    if (!paused && !loading.active) phi += dt / R.loop.duration;
     renderAt(phi);
-    if (!ready && shells > 0) { ready = true; $('#loader').classList.add('gone'); }
+    if (loading.active) {
+      $('#loadbar u').style.width = `${(nest.progress() * 100).toFixed(1)}%`;
+      if (loading.applied && nest.ready() && ++loading.settle > 8) { loading.active = false; $('#loader').classList.add('gone'); }
+    }
     fpsAcc += dt; fpsN++;
     if ((fpsT += dt) > 0.5) { ui?.setFps(`${(fpsN / fpsAcc).toFixed(0)}  ·  ${shells} coquilles  ·  ${gen.busy() ? 'génération…' : 'prêt'}`); fpsAcc = fpsN = fpsT = 0; }
   });

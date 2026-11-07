@@ -26,6 +26,8 @@ Le panneau règle tout : graine et humeur, boucle (durée, plongée ou profondeu
 
 **Les instances.** Chaque coquille visible est une instance d’un modèle ; une instance garde sa couche d’une boucle à l’autre (phase « déroulée »), et une instance qui réapparaît a un vecteur vitesse nul à sa première image — sinon le flou de mouvement et l’anticrénelage temporel produisent un éclair. Toutes les coquilles rendues projettent l’ombre des deux lumières : aucune ne cesse d’en projeter en cours de route.
 
+**Le chargement.** Chaque couche demande tous ses niveaux de détail (et ses cristaux) en même temps et bascule d'un coup quand le dernier arrive : on ne voit jamais une forme se transformer. Une nouvelle scène reste derrière un écran de chargement (avec sa progression) jusqu'à ce que toutes ses couches soient prêtes et que quelques images aient été rendues.
+
 **Les niveaux de détail.** Trois niveaux affichés, tous biseautés (rien n'apparaît ni ne disparaît d'un niveau à l'autre), choisis selon la taille de la coquille à l'écran en pixels ; un quatrième, grossier et à arêtes vives, ne sert qu'aux cartes d'ombre.
 
 **Le halo du cœur.** Près du cœur, les coquilles baignent dans sa lumière (émission qui ne dépend que du rayon) ; elles sont affichées dès l'intérieur du cœur, qui les cache, et en émergent fondues dans le rayonnement — la naissance d'une couche ne se voit jamais.
