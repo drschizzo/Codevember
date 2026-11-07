@@ -24,9 +24,11 @@ export function buildWeave(spec, lod) {
   const r = 1 - h - t * 0.2;
   const cb = cos(spec.bias), sb = sin(spec.bias);
   const X = [cb, sb, 0], Y = [-sb, cb, 0];
-  const wl = 0.09; // largeur de la lunette
-  // (coupe sur le bord intérieur du brin : il ne mord jamais sur l'oculus)
-  const cap = cos(spec.portal + wl * 0.75 + w / 2);
+  // Lunette : un jonc rond. Les brins passent dessous : ils sont coupés là où
+  // leur axe entre dans l'oculus, et rognés en arc sur un cercle caché sous le
+  // jonc (aucun bout ne flotte dans le vide, aucun ne mord sur l'oculus).
+  const wl = 0.085;
+  const cap = cos(spec.portal + wl * 0.15), trim = spec.portal + wl * 0.3;
   const ang = (p, a) => acos(max(-1, min(1, dot(norm(p), a))));
   for (const [axis, other, sg] of [[X, Y, 1], [Y, X, -1]]) {
     for (let i = 0; i < n; i++) {
@@ -43,7 +45,7 @@ export function buildWeave(spec, lod) {
       }
       // (boucle complète hors de la calotte : un seul ruban fermé)
       if (runs.length === 1 && runs[0][0] === 0 && runs[0][1] === 1) {
-        sweep(B, path, 2 * PI * sin(beta), true, r, w, t, lod, lift);
+        sweep(B, path, 2 * PI * sin(beta), true, r, w, t, lod, lift, trim);
         continue;
       }
       // (un morceau qui touche s = 1 se poursuit au début : on les réunit)
@@ -55,13 +57,13 @@ export function buildWeave(spec, lod) {
         if (b - a < 0.01) continue;
         const sub = (s) => path(((a + (b - a) * s) % 1 + 1) % 1);
         const subLift = (s) => lift(((a + (b - a) * s) % 1 + 1) % 1);
-        sweep(B, sub, 2 * PI * sin(beta) * (b - a), false, r, w, t, lod, subLift);
+        sweep(B, sub, 2 * PI * sin(beta) * (b - a), false, r, w, t, lod, subLift, trim);
       }
     }
   }
-  // lunette de l'oculus
-  sweep(B, circle(Z, spec.portal + wl / 2), 2 * PI * sin(spec.portal), true, 1 + t * 0.3, wl, t * 2.4, lod);
-  if (spec.iris?.blades) appendIris(B, { ...spec, thickness: t * 2.4 + 0.004 }, Math.tan(spec.portal), lod);
+  // jonc de la lunette, épais et rond, qui couvre les bouts rognés
+  sweep(B, circle(Z, spec.portal + wl / 2), 2 * PI * sin(spec.portal), true, 1 + t * 0.9, wl, t * 3.6, lod);
+  if (spec.iris?.blades) appendIris(B, { ...spec, thickness: t * 2.7 + 0.004 }, Math.tan(spec.portal), lod);
   const out = B.result();
   if (lod === 3) delete out.bev;
   return out;
