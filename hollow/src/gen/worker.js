@@ -8,6 +8,7 @@ import { prepareCells, buildShell, crest } from './shell.js';
 import { buildTPMS } from './tpms.js';
 import { buildArmillary } from './armillary.js';
 import { buildScales } from './scales.js';
+import { buildWeave } from './weave.js';
 import { placeCrystals } from './crystals.js';
 import { junctions, placeGems, placeSpines } from './jewels.js';
 import { buildNoiseVolume } from './noisevol.js';
@@ -24,6 +25,7 @@ const MESHES = {
   tpms: buildTPMS,
   armillary: buildArmillary,
   scales: buildScales,
+  weave: buildWeave,
 };
 
 function prepare(spec) {
