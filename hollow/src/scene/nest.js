@@ -20,7 +20,7 @@
 import * as THREE from 'three/webgpu';
 import { uniform } from 'three/tsl';
 import {
-  buildShellMaterial, buildShadowMaterial, finishUniforms, applyFinish, signature, tpmsUniforms, applyTpms,
+  buildShellMaterial, buildShadowMaterial, finishUniforms, applyFinish, signature, tpmsUniforms, applyTpms, poreUniforms, applyPores,
   crystalUniforms, applyCrystal, buildCrystalMaterial, gemUniforms, applyGem, buildGemMaterial,
 } from './materials.js';
 import { crystalGeometry } from '../gen/crystals.js';
@@ -55,11 +55,12 @@ const placeholder = new THREE.BufferGeometry();
 // Ornements (instances) : géométries par variante, et matériau. Les épines
 // ont les finitions de la coquille (la tranche), dans leur propre matériau :
 // partagé avec les coquilles, le calcul des vecteurs vitesse se dérègle) et
-// projettent une ombre ; cristaux et pierres sont transmissifs, sans ombre.
+// projettent une ombre (sans en recevoir) ; cristaux et pierres sont
+// transmissifs, sans ombre.
 const ORNAMENTS = {
   crystals: { geos: [0, 1, 2].map((v) => toGeometry(crystalGeometry(v), 1.2)), material: (d) => d.crystalMat },
   gems: { geos: [toGeometry(gemGeometry(), 1.2)], material: (d) => d.gemMat },
-  spines: { geos: [toGeometry(spineGeometry(), 1.2)], material: (d) => d.spineMat, shadow: true },
+  spines: { geos: [toGeometry(spineGeometry(), 1.2)], material: (d) => d.spineMat, shadow: true, selfShadow: false },
 };
 const needsOrnaments = (g) => (g.crystals || 0) > 0 || (g.setting === 'gem' && g.rivets > 0) || (g.spines || 0) > 0;
 
@@ -136,8 +137,9 @@ class Design {
   syncMaterial() {
     const f = this.layer.finish;
     const g = this.layer.geo;
-    const isT = g.type === 'tpms', rig = isRigged(g);
-    const sig = signature(f) + (isT ? `|tpms:${g.surface}:${g.sheet}` : '') + (rig ? '|rig' : '');
+    const isT = g.type === 'tpms', rig = isRigged(g), pore = (g.pores || 0) > 0;
+    const sig = signature(f) + (isT ? `|tpms:${g.surface}:${g.sheet}` : '') + (rig ? '|rig' : '') + (pore ? '|pores' : '');
+    if (pore) { this.PU ??= poreUniforms(); applyPores(this.PU, g); }
     if (isT) { this.TU ??= tpmsUniforms(); applyTpms(this.TU, g); }
     if (rig) { this.RU ??= rigUniforms(); applyRig(this.RU, g); }
     if (!this.U) {
@@ -155,7 +157,7 @@ class Design {
     if (sig !== this.sig) {
       this.sig = sig;
       const old = this.material;
-      this.material = buildShellMaterial(f, this.U, isT ? { spec: g, U: this.TU } : null, rig ? this.RU : null);
+      this.material = buildShellMaterial(f, this.U, isT ? { spec: g, U: this.TU } : null, rig ? this.RU : null, pore ? this.PU : null);
       const oldSpine = this.spineMat;
       this.spineMat = buildShellMaterial(f, this.U);
       for (const c of this.copies) {
@@ -166,7 +168,7 @@ class Design {
       oldSpine?.dispose();
       // ombre : les pièces animées s'y déforment comme à l'image
       const oldShadow = this.shadowMat;
-      this.shadowMat = rig ? buildShadowMaterial(this.RU) : null;
+      this.shadowMat = rig || pore ? buildShadowMaterial(rig ? this.RU : null, pore ? this.PU : null) : null;
       for (const c of this.copies) c.proxy.material = this.shadowMat || this.nest.shadowMat;
       oldShadow?.dispose();
     }
@@ -209,7 +211,7 @@ class Design {
       m.instanceMatrix = attr;
       m.frustumCulled = false;
       m.castShadow = !!K.shadow;
-      m.receiveShadow = true;
+      m.receiveShadow = K.selfShadow !== false; // (cônes fins : leur propre ombre les noircirait)
       m.layers.mask = 0;
       m.userData.kind = kind;
       c.group.add(m);
