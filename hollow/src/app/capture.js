@@ -18,7 +18,7 @@ export function exportPNG(canvas, renderNow, name) {
   canvas.toBlob((b) => b && download(b, name), 'image/png');
 }
 
-// app : { canvas, setSize(w, h) | restore(), renderAt(phi), duration }
+// app : { canvas, setSize(w, h) | restore(), renderAt(phase déroulée), duration }
 export async function exportLoop(app, { width, height, fps, mbps }, onProgress, name) {
   if (!('VideoEncoder' in window)) throw new Error('WebCodecs indisponible dans ce navigateur.');
   const { Muxer, ArrayBufferTarget } = await import(MUXER);
@@ -42,7 +42,7 @@ export async function exportLoop(app, { width, height, fps, mbps }, onProgress, 
   app.setSize(w, h);
   try {
     // amorçage : l'anticrénelage temporel et le flou de mouvement ont besoin d'un historique
-    for (let i = -12; i < 0; i++) app.renderAt(((i / total) % 1 + 1) % 1);
+    for (let i = -12; i < 0; i++) app.renderAt(i / total); // (phase déroulée : continue avec la suite)
     for (let i = 0; i < total; i++) {
       if (failure) throw failure;
       app.renderAt(i / total);

@@ -20,6 +20,20 @@ const GEO = {
     ['bar', 'Barreaux', 0.005, 0.1, 0.001], ['barLat', 'Barreaux horizontaux', 0.5, 6, 0.05], ['barLon', 'Barreaux verticaux', 0.5, 6, 0.05],
     ['round', 'Arrondi des trous', 0, 1, 0.01], ['barVar', 'Variation', 0, 1, 0.01], ['barGrad', 'Gradient', -1, 1, 0.01],
   ],
+  voronoi: [
+    ['count', 'Nombre de cellules', 20, 800, 1], ['spiral', 'Spirale des germes', -2, 2, 0.01], ['jitter', 'Désordre', 0, 0.6, 0.01],
+    ['bar', 'Barreaux', 0.005, 0.3, 0.001], ['round', 'Arrondi des trous', 0, 1, 0.01], ['barVar', 'Variation', 0, 1, 0.01],
+    ['barFreq', 'Échelle variation', 0.3, 4, 0.01], ['barGrad', 'Gradient', -1, 1, 0.01], ['closed', 'Cellules pleines', 0, 0.7, 0.01],
+  ],
+  holes: [
+    ['petals', 'Pétales / côtés', 3, 10, 1], ['depth', 'Creux des pétales', 0, 0.7, 0.01], ['aspect', 'Allongement', 0.1, 1, 0.01],
+    ['holeScale', 'Taille de la forme', 0.3, 1, 0.01], ['orient', 'Orientation', 0, Math.PI, 0.01], ['swirl', 'Tourbillon', -3, 3, 0.01],
+    ['orientJitter', 'Orientation au hasard', 0, 2, 0.01],
+  ],
+  machining: [
+    ['pillow', 'Barreaux bombés', 0, 1.5, 0.01], ['step', 'Chambrage (largeur)', 0, 0.6, 0.01], ['stepDepth', 'Chambrage (profondeur)', 0.15, 0.8, 0.01],
+    ['rivets', 'Rivets', 0, 1.5, 0.01],
+  ],
   tpms: [['freq', 'Fréquence', 1.5, 7, 0.05], ['wall', 'Paroi', -0.5, 0.5, 0.01]],
   common: [['thickness', 'Épaisseur', 0.01, 0.22, 0.001], ['bevel', 'Biseau', 0, 0.04, 0.0005], ['portal', 'Oculus', 0.18, 0.5, 0.005]],
   geode: [['crystals', 'Cristaux', 0, 2500, 10], ['crystalSize', 'Taille des cristaux', 0.03, 0.3, 0.005], ['crystalTilt', 'Dispersion', 0, 1.2, 0.01]],
@@ -139,16 +153,26 @@ export function createUI({ recipe: getRecipe, render, on }) {
       const fg = f.addFolder('Forme').close();
       const g = L.geo;
       const list = [...(GEO[L.type === 'geode' ? 'cells' : L.type] || []), ...GEO.common, ...(L.type === 'geode' ? GEO.geode : [])];
+      if (L.type === 'voronoi') fg.add(g, 'distribution', { 'Spirale de Fibonacci': 'fibonacci', 'Bruit bleu': 'random', 'Densité graduée': 'gradient' }).name('Germes').onChange(geo);
       if (L.type === 'tpms') {
-        fg.add(g, 'surface', { Gyroïde: 'gyroid', 'Schwarz P': 'schwarz', Diamant: 'diamond' }).name('Surface').onChange(geo);
+        fg.add(g, 'surface', { Gyroïde: 'gyroid', 'Schwarz P': 'schwarz', Diamant: 'diamond', Neovius: 'neovius', 'I-WP': 'iwp', 'Fischer–Koch': 'fischer' }).name('Surface').onChange(geo);
         fg.add(g, 'sheet').name('Feuille (sinon réseau)').onChange(geo);
       }
       for (const [k, label, a, b, s] of list) if (g[k] !== undefined) fg.add(g, k, a, b, s).name(label).onFinishChange(geo);
       if (L.type !== 'tpms') fg.add(g, 'chamfer').name('Chanfrein plat').onChange(geo);
+      if (g.shape !== undefined) {
+        const fh = f.addFolder('Trous et usinage').close();
+        fh.add(g, 'shape', { Polygone: 'poly', Ellipse: 'ellipse', Étoile: 'star', Diaphragme: 'iris' }).name('Forme des trous').onChange(geo);
+        for (const [k, label, a, b, st] of [...GEO.holes, ...GEO.machining]) if (g[k] !== undefined) fh.add(g, k, a, b, st).name(label).onFinishChange(geo);
+      }
 
       const fm = f.addFolder('Matériaux').close();
       fm.add(act, 'set', opts(SETS)).name('Jeu de matériaux').onChange((s) => on.layerSet(i, s));
       fm.add(L.finish, 'wear', 0, 1, 0.01).name('Usure des bords').onChange(mat);
+      if (L.finish.groove !== undefined && L.type !== 'tpms') {
+        fm.add(L.finish, 'groove', 0, 1, 0.01).name('Gravure').onChange(mat);
+        fm.add(L.finish, 'grooveAt', 0.1, 0.9, 0.01).name('Gravure : position').onChange(mat);
+      }
       for (const [side, label] of [['outer', 'Face externe'], ['inner', 'Face interne'], ['edge', 'Tranche et biseaux']]) {
         const F = L.finish[side];
         const fs = fm.addFolder(`${label} · ${F.label}`).close();
@@ -190,10 +214,12 @@ export function createUI({ recipe: getRecipe, render, on }) {
   fRender.add(r, 'shadows', { Basses: 'low', Moyennes: 'medium', Hautes: 'high', 'Très hautes': 'ultra' }).name('Ombres').onChange(rch);
   fRender.add(r, 'detail', 0.5, 2.5, 0.05).name('Détail géométrique').onChange(rch);
   fRender.add(r, 'microDetail', 0, 2, 0.01).name('Micro-relief').onChange(rch);
+  fRender.add(r, 'roughFloor', 0, 0.4, 0.005).name('Douceur des reflets').onChange(rch);
   fRender.add(r, 'envFalloff', 0, 1, 0.01).name('Ombre ambiante au centre').onChange(rch);
   const ft = fRender.addFolder('Image').close();
   ft.add(r, 'toneMapping', { AgX: 'agx', ACES: 'aces', Neutre: 'neutral' }).name('Courbe').onChange(rch);
   ft.add(r, 'exposure', 0.1, 4, 0.01).name('Exposition').onChange(rch);
+  ft.add(r, 'hiCap', 1, 16, 0.1).name('Plafond des hautes lumières').onChange(rch);
   ft.add(r, 'contrast', 0.7, 1.5, 0.01).name('Contraste').onChange(rch);
   ft.add(r, 'saturation', 0, 2, 0.01).name('Saturation').onChange(rch);
   ft.add(r, 'warmth', -1, 1, 0.01).name('Température').onChange(rch);

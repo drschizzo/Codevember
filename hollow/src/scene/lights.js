@@ -62,8 +62,9 @@ export function createLights(scene) {
       key.intensity = kk.intensity;
       key.angle = kk.angle;
       key.penumbra = kk.penumbra;
-      // décalage dans le plan de l'écran, en fraction de D (reste dans l'oculus)
-      _v.set(kk.x * 0.3 * D, kk.y * 0.3 * D, 0).applyQuaternion(camera.quaternion);
+      // décalage dans le plan de l'écran, en fraction de D : assez faible pour que
+      // la lampe passe toujours bien à l'intérieur de l'oculus, loin du rebord
+      _v.set(kk.x * 0.12 * D, kk.y * 0.12 * D, 0).applyQuaternion(camera.quaternion);
       key.position.copy(camera.position).add(_v);
     },
   };

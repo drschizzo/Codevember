@@ -124,7 +124,10 @@ async function main() {
     camera.lookAt(s * 0.25 * Math.sin(w + 2.4), s * 0.2 * Math.cos(w), 0);
   }
   let shells = 0;
-  function renderAt(ph) {
+  // u : phase « déroulée » (le nombre de boucles accomplies en partie entière),
+  // pour que chaque instance de coquille garde sa couche d'une boucle à l'autre
+  function renderAt(u) {
+    const cycle = Math.floor(u), ph = u - cycle;
     const dive = R.loop.dive;
     const tau = dive ? ph * R.layers.length : R.loop.depth;
     if (camState.free) controls.update(); else rig(ph);
@@ -133,13 +136,14 @@ async function main() {
     G.D.value = D;
     G.envFalloff.value = RENDER.envFalloff;
     G.microDetail.value = RENDER.microDetail;
+    G.roughFloor.value = RENDER.roughFloor;
     scene.background.set(R.fog.color);
     scene.fog.color.set(R.fog.color);
     scene.fog.near = R.fog.near * D;
     scene.fog.far = R.fog.far * D;
     scene.environmentIntensity = R.env.intensity;
     scene.environmentRotation.set(0, R.env.rotation, 0);
-    const info = nest.update({ tau, phi: ph, dive, ratio: R.nest.ratio, D, coreRel: R.nest.core, detail: RENDER.detail });
+    const info = nest.update({ tau, phi: ph, cycle, dive, ratio: R.nest.ratio, D, coreRel: R.nest.core, detail: RENDER.detail });
     shells = info?.shells ?? 0;
     lights.update(R, camera, D, Math.sin(ph * Math.PI * 4));
     post.update({ ...RENDER, focus: RENDER.focus * D, focusRange: RENDER.focusRange * D }, R);
@@ -252,7 +256,7 @@ async function main() {
     window.hollow = {
       renderer, scene, camera, nest, lights, post, gen, RENDER, renderAt, on,
       get R() { return R; },
-      seek: (p) => { phi = ((p % 1) + 1) % 1; paused = true; },
+      seek: (p) => { phi = p; paused = true; },
       play: () => { paused = false; },
       freeze: (v) => { frozen = v; },
     };
@@ -265,8 +269,8 @@ async function main() {
     else if (e.key === 'n' || e.key === 'N') on.random();
     else if (e.key === 'h' || e.key === 'H') document.body.classList.toggle('clean');
     else if (e.key === 'f' || e.key === 'F') document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
-    else if (e.key === 'ArrowRight') phi = (phi + 0.01) % 1;
-    else if (e.key === 'ArrowLeft') phi = (phi + 0.99) % 1;
+    else if (e.key === 'ArrowRight') phi += 0.01;
+    else if (e.key === 'ArrowLeft') phi -= 0.01;
   });
 
   // ── Boucle ──
@@ -275,7 +279,7 @@ async function main() {
     if (busy || frozen) return;
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
-    if (!paused) phi = (phi + dt / R.loop.duration) % 1;
+    if (!paused) phi += dt / R.loop.duration;
     renderAt(phi);
     if (!ready && shells > 0) { ready = true; $('#loader').classList.add('gone'); }
     fpsAcc += dt; fpsN++;
