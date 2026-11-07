@@ -68,6 +68,12 @@ export function createVisuals(renderer, scene, camera, sim, opts = {}) {
     camVel: uniform(new THREE.Vector3()), // vitesse de la caméra (unités / unité de temps simulé)
     planetFlux: uniform(4.0), // éclairement maximal des planètes (abaissé en DA mécanique)
     starK: uniform(1.0),     // éclat de l'étoile (abaissé en DA mécanique : les planètes restent lisibles)
+    // HDR : le disque stellaire monte vers le pic de l'écran (éblouissant, plus
+    // plat : moins d'assombrissement centre-bord) ; le bloom, lui, ne voit pas
+    // ce surplus (bloomCap), sinon le halo noierait les planètes proches
+    starHdr: uniform(1.0),
+    limbAmt: uniform(0.6),
+    bloomCap: uniform(1e4),
     grainK: uniform(1.0),    // grain de pellicule (coupé pour l'export vidéo : du bruit pur pour l'encodeur)
     innerSoft: uniform(0.0), // adoucit l'éclairement des grains tout près de l'étoile
   };
@@ -215,7 +221,7 @@ export function createVisuals(renderer, scene, camera, sim, opts = {}) {
     // granulation : la surface bouillonne (surtout visible sur la géante)
     const gran = mx_fractal_noise_float(normalLocal.mul(6.0).add(vec3(time.mul(0.05), 0, 0)), 3, 2.0, 0.5);
     const limb = max(dot(normalize(normalLocal), normalize(cameraPosition.sub(positionWorld))), 0.0).pow(0.4);
-    core.material.colorNode = V.starCol.mul(V.starI).mul(V.starK).mul(sin(time.mul(3.0)).mul(0.03).add(1.0)).mul(gran.mul(0.25).add(1.0)).mul(limb.mul(0.6).add(0.4));
+    core.material.colorNode = V.starCol.mul(V.starI).mul(V.starK).mul(sin(time.mul(3.0)).mul(0.03).add(1.0)).mul(gran.mul(0.25).add(1.0)).mul(limb.sub(1.0).mul(V.limbAmt).add(1.0)).mul(V.starHdr);
     core.scale.setScalar(0.15);
     star.add(core);
     star.userData.core = core;
@@ -598,7 +604,7 @@ export function createVisuals(renderer, scene, camera, sim, opts = {}) {
   //  R et B en laissant G en place fabriquait un fantôme vert pour chaque grain)
   let out = color.rgb;
   if (useBloom) {
-    const bl = bloom(color, 0.55, 0.65, 0.85);
+    const bl = bloom(vec4(color.rgb.min(V.bloomCap), color.a), 0.55, 0.65, 0.85);
     // halation : sur la pellicule, la lumière diffuse dans l'émulsion et revient
     // teintée de rouge-orangé ; le halo des hautes lumières est donc plus chaud.
     // (.rgb indispensable : ajouter le vec4 du bloom faisait entrer son alpha
