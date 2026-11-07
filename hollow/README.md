@@ -35,7 +35,7 @@ Le panneau règle tout : graine et humeur, boucle (durée, plongée ou profondeu
 
 **Les pièces animées.** Diaphragmes, éclats, écailles et anneaux sont des pièces rigides du maillage : chaque sommet porte un pivot, un axe, une amplitude et une nature (`rigA`, `rigB`), et le vertex shader applique la rotation et la translation, qui ne dépendent que de la profondeur relative *x* de la coquille et de la phase (`src/scene/rig.js`). La carte d’ombre subit la même déformation ; les motifs des matériaux restent attachés aux pièces (position au repos).
 
-**La chorégraphie.** La plongée ralentit au passage de chaque oculus (l’avancée est remappée sur chaque couche, f − a·sin(2πf)/2π) et le champ s’ouvre légèrement à ce moment-là ; tout reste périodique.
+**La chorégraphie.** Chaque passage d’oculus a sa propre respiration — ralenti plus ou moins appuyé, passage filé ou accélération, de durée variable : τ = t − Σ a·w·K((t − k)/w), avec K(x) = x − 3x³ + 3x⁵ − x⁷, dont la dérivée (1 − 7x²)(1 − x²)² est d’intégrale nulle. La vitesse reste positive et continue, chaque passage tombe sur un entier ; le champ s’ouvre un peu dans les ralentis.
 
 **La naissance au cœur.** Les coquilles naissent dans le cœur lumineux. Pour que la lumière du cœur ne saute pas quand une nouvelle coquille commence à faire de l’ombre, celle-ci « pousse » dans la carte d’ombre : ses barreaux s’y élargissent progressivement depuis leur axe (masque d’ombre sur la proximité du bord), entièrement à l’intérieur du cœur.
 

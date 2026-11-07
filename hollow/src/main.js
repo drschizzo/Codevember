@@ -4,7 +4,7 @@
 // par « Copier le lien »), ?ui=0 (sans panneau), ?export (panneau d'export ouvert).
 import * as THREE from 'three/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { generate, geometryFor, finishesFor, makeLayer, randomType, upgrade } from './recipe.js';
+import { generate, geometryFor, finishesFor, makeLayer, randomType, upgrade, beatsFor } from './recipe.js';
 import { SETS } from './finishes.js';
 import { TYPES } from './types.js';
 import { createRng } from './rng.js';
@@ -39,6 +39,25 @@ async function unpackRecipe(str) {
   const b = Uint8Array.from(bin, (c) => c.charCodeAt(0));
   const s = new Blob([b]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
   return JSON.parse(await new Response(s).text());
+}
+
+// Variation de vitesse autour du passage k (t entier) : τ = t − Σ a·w·K((t − k)/w),
+// K(x) = x − 3x³ + 3x⁵ − x⁷ (primitive de k(x) = (1 − 7x²)(1 − x²)², d'intégrale
+// nulle) : la vitesse vaut 1 − a au passage, remonte jusqu'à 1 + 0,65·a de part
+// et d'autre, et rejoint 1 sans à-coup en ±w ; τ(k) = k. a > 0 : ralenti ;
+// a < 0 : accélération. beats : un battement par couche, { a, w }.
+const K7 = (x) => x - 3 * x ** 3 + 3 * x ** 5 - x ** 7;
+function beatShift(t, N, cam) {
+  const beats = cam.beats?.length ? cam.beats : [{ a: 1, w: 0.5 }];
+  const amp = cam.ramp ?? 0;
+  let tau = t, open = 0;
+  for (let k = Math.round(t) - 1; k <= Math.round(t) + 1; k++) {
+    const b = beats[(((k % N) + N) % N) % beats.length], x = (t - k) / b.w;
+    if (Math.abs(x) >= 1) continue;
+    tau -= amp * b.a * b.w * K7(x);
+    open += Math.max(0, b.a) * (1 - x * x) ** 2;
+  }
+  return { tau, open };
 }
 
 function fail(msg) {
@@ -156,16 +175,15 @@ async function main() {
   function renderAt(u) {
     const cycle = Math.floor(u), ph = u - cycle;
     const dive = R.loop.dive;
-    // Chorégraphie : la plongée ralentit au passage de chaque oculus (avancée
-    // remappée sur chaque couche, f − a·sin(2πf)/2π : pente 1 − a au passage) et
-    // le champ s'ouvre un peu à ce moment-là. Tout reste périodique : la boucle
-    // est intacte.
-    const steps = ph * R.layers.length, f = steps - Math.floor(steps);
-    const ramp = R.camera.ramp ?? 0, kick = R.camera.kick ?? 0;
-    const tau = dive ? Math.floor(steps) + f - (ramp * Math.sin(2 * Math.PI * f)) / (2 * Math.PI) : R.loop.depth;
+    // Chorégraphie : chaque passage d'oculus a sa propre « respiration » (voir
+    // beatShift) — un ralenti plus ou moins appuyé, un passage filé, une
+    // accélération — et le champ s'ouvre un peu dans les ralentis. Les passages
+    // se répètent d'une boucle à l'autre : la boucle est intacte.
+    const N = R.layers.length, t = ph * N;
+    const { tau, open } = dive ? beatShift(t, N, R.camera) : { tau: R.loop.depth, open: 0 };
     curTau = tau;
     if (camState.free) controls.update(); else rig(ph);
-    const fov = R.camera.fov * (1 + (dive ? kick * (0.5 + 0.5 * Math.cos(2 * Math.PI * f)) ** 4 : 0));
+    const fov = R.camera.fov * (1 + (R.camera.kick ?? 0) * open);
     if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); }
     G.phase.value = ph;
     G.D.value = D;
@@ -252,6 +270,7 @@ async function main() {
       layerChanged(i, true);
     },
     layerAxis: (i) => { R.layers[i].motion.axis = rngUI().dir(); },
+    rerollBeats: () => { R.camera.beats = beatsFor(rngUI(), 6); },
     addLayer: () => {
       const rng = rngUI();
       const count = {};
