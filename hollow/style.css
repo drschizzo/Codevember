@@ -30,9 +30,11 @@ body.clean #title, body.clean #hint, body.clean .lil-gui.root { opacity: 0; poin
 #progress div { height: 3px; background: rgba(255,255,255,.1); border-radius: 2px; margin-top: 8px; overflow: hidden; }
 #progress u { display: block; height: 100%; width: 0; background: #e9c48a; }
 
-#loader { position: fixed; inset: 0; display: grid; place-content: center; text-align: center; background: #050506; transition: opacity 1.4s; z-index: 5; }
+#loader { position: fixed; inset: 0; display: grid; place-content: center; justify-items: center; text-align: center; background: #050506; transition: opacity .25s; z-index: 5; }
+#loadbar { width: 180px; height: 2px; margin-top: 18px; background: rgba(255, 240, 220, 0.1); border-radius: 1px; overflow: hidden; }
+#loadbar u { display: block; height: 100%; width: 0; background: #e9c48a; transition: width .3s; }
 #loader p { color: var(--dim); margin-top: 10px; font: italic 300 15px Fraunces, Georgia, serif; }
-#loader.gone { opacity: 0; pointer-events: none; }
+#loader.gone { opacity: 0; pointer-events: none; transition: opacity 1.2s; }
 #loader.error p { color: #ff9b8a; font-style: normal; max-width: 40em; }
 
 @media (max-width: 640px) {

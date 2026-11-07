@@ -12,7 +12,10 @@
 const { sin, cos, sqrt, abs, max, min, floor, ceil, PI, exp, log } = Math;
 const TAU = PI * 2;
 
-export const TPMS_RES = [224, 132, 76, 52]; // résolution de grille par niveau de détail (héros, moyen, lointain, ombres)
+// résolution de grille par niveau de détail (héros, moyen, lointain). Les ombres
+// utilisent le niveau moyen (voir nest.js) : plus grossier, le maillage d'ombre
+// se replie aux congés et laisse fuir la lumière en éclats triangulaires.
+export const TPMS_RES = [224, 132, 76, 132];
 
 // maximum lisse polynomial (k = largeur du congé)
 const smax = (a, b, k) => {
@@ -21,13 +24,25 @@ const smax = (a, b, k) => {
   return max(a, b) + h * h * k * 0.25;
 };
 
+// Paramètres effectifs du champ (partagés avec le shader, qui recalcule la normale) :
+//  · fréquence (Fischer–Koch et I-WP contiennent des termes en 2X) ;
+//  · paroi : une feuille d'au moins ≈ 0,065 d'épaisseur (≈ 4 mailles au niveau
+//    moyen) — plus mince, elle se maille en dents de scie ;
+//  · congé : le maximum lisse polynomial n'arrondit que sur ≈ k/4 ; k ≈ 0,09,
+//    mais jamais plus large que la feuille.
+export function tpmsParams(spec) {
+  const f = (spec.freq * TAU / 2) * ({ fischer: 0.55, iwp: 0.75 }[spec.surface] ?? 1);
+  const wall = spec.sheet ? Math.min(0.62, Math.max(spec.wall, 0.0325 * f)) : spec.wall;
+  const sheetT = spec.sheet ? (2 * wall) / f : Infinity;
+  const k = Math.min(Math.max(spec.bevel * 6, 0.09), sheetT * 1.6);
+  return { f, wall, k };
+}
+
 export function tpmsField(spec) {
   const R = 1, Ri = 1 - spec.thickness, Rm = (R + Ri) / 2, half = spec.thickness / 2;
-  // (Fischer–Koch et I-WP contiennent des termes en 2X : fréquence réelle plus haute)
-  const f = (spec.freq * TAU / 2) * ({ fischer: 0.55, iwp: 0.75 }[spec.surface] ?? 1); // périodes sur le rayon
-  const k = Math.max(spec.bevel * 2, 0.035); // congé d'au moins quelques mailles : pas d'arête en escalier
-  const wall = spec.wall;
+  const { f, wall, k } = tpmsParams(spec);
   const portalR = Math.tan(spec.portal) * R; // alésage vu depuis le centre
+  const portalCos = Math.cos(spec.portal);
   const kind = spec.surface;
   // valeur implicite normalisée (≈ distance) de la surface minimale
   const T = (x, y, z) => {
@@ -50,7 +65,7 @@ export function tpmsField(spec) {
     let d = smax(s, t, k);
     let w = s > t ? 0 : 1;
     // alésage de l'oculus : on retire le cylindre (demi-espace z > 0)
-    const cyl = max(sqrt(x * x + y * y) - portalR * (z / R), -z);
+    const cyl = max((sqrt(x * x + y * y) - portalR * (z / R)) * portalCos, -z); // (vraie distance au cône)
     const cut = -cyl;
     if (cut > d - k) { d = smax(d, cut, k); if (cut > s && cut > t) w = 1; }
     if (out) { out[0] = d; out[1] = w; out[2] = r; out[3] = s; out[4] = t; }
@@ -88,6 +103,23 @@ export function buildTPMS(spec, lod) {
     const l = sqrt(gx * gx + gy * gy + gz * gz) || 1;
     return [gx / l, gy / l, gz / l];
   };
+  // Projection sur la surface par dichotomie le long de la normale locale,
+  // dans ±r : robuste aux arêtes fines (Newton peut sauter de l'autre côté
+  // d'une feuille mince). Renvoie null s'il n'y a pas de surface à portée.
+  const project = (x, y, z, r) => {
+    const g = grad(x, y, z);
+    const at = (t) => field(x + g[0] * t, y + g[1] * t, z + g[2] * t);
+    let lo = -r, hi = r, flo = at(lo), fhi = at(hi);
+    const f0 = field(x, y, z);
+    // racine la plus proche : d'abord du côté où le champ change de signe
+    if ((f0 < 0) !== (fhi < 0)) { lo = 0; flo = f0; } else if ((f0 < 0) !== (flo < 0)) { hi = 0; fhi = f0; } else return null;
+    for (let it = 0; it < 18; it++) {
+      const m = (lo + hi) / 2, fm = at(m);
+      if ((fm < 0) === (flo < 0)) { lo = m; flo = fm; } else { hi = m; fhi = fm; }
+    }
+    const t = (lo + hi) / 2;
+    return [x + g[0] * t, y + g[1] * t, z + g[2] * t];
+  };
   const EDGES = [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7]];
   const corner = new Float32Array(8);
   for (let k = 0; k < res; k++) for (let j = 0; j < res; j++) for (let i = 0; i < res; i++) {
@@ -111,11 +143,9 @@ export function buildTPMS(spec, lod) {
     let x = -ext + (i + sx / n) * h, y = -ext + (j + sy / n) * h, z = -ext + (k + sz / n) * h;
     // reprojection sur la surface (Newton) : les sommets se posent vraiment
     // sur la surface, sinon les arêtes vives sortent en escalier
-    for (let it = 0; it < 4; it++) {
-      const d = field(x, y, z);
-      if (abs(d) < h * 1e-3) break;
-      const g = grad(x, y, z), s = max(-h, min(h, d));
-      x -= g[0] * s; y -= g[1] * s; z -= g[2] * s;
+    {
+      const q = project(x, y, z, h);
+      if (q) { x = q[0]; y = q[1]; z = q[2]; }
     }
     field(x, y, z, tmp);
     const g = grad(x, y, z);
@@ -128,7 +158,7 @@ export function buildTPMS(spec, lod) {
     // finitions : faces de la coquille (externe / interne) ou paroi de la surface
     // minimale. Poids continu à travers le congé : la frontière entre les deux
     // finitions est une courbe lisse, pas un escalier qui suit la grille.
-    const e = min(1, max(0, 0.5 + (tmp[4] - tmp[3]) / (fillet * 1.2 + 1e-6)));
+    const e = min(1, max(0, 0.5 + (tmp[4] - tmp[3]) / (fillet * 0.4 + 1e-6)));
     const outer = tmp[2] > Rm;
     const prox = 1 - abs(e - 0.5) * 2; // (proximité de l'arête : au milieu du congé)
     surf.push(Math.round((outer ? 1 - e : 0) * 255), Math.round((outer ? 0 : 1 - e) * 255), Math.round(e * 255), Math.round(max(prox, e) * 255));
@@ -172,14 +202,10 @@ export function buildTPMS(spec, lod) {
         Q[i * 3] = (P[i * 3] + sx / n) / 2; Q[i * 3 + 1] = (P[i * 3 + 1] + sy / n) / 2; Q[i * 3 + 2] = (P[i * 3 + 2] + sz / n) / 2;
       }
       for (let i = 0; i < nv; i++) {
-        let x = Q[i * 3], y = Q[i * 3 + 1], z = Q[i * 3 + 2];
-        for (let it = 0; it < 3; it++) {
-          const d = field(x, y, z);
-          if (abs(d) < h * 1e-3) break;
-          const g = grad(x, y, z), st = max(-h, min(h, d));
-          x -= g[0] * st; y -= g[1] * st; z -= g[2] * st;
-        }
-        P[i * 3] = x; P[i * 3 + 1] = y; P[i * 3 + 2] = z;
+        // le sommet lissé est reposé sur la surface ; s'il n'y en a pas à moins
+        // d'une demi-maille (arête fine), il garde sa place
+        const q = project(Q[i * 3], Q[i * 3 + 1], Q[i * 3 + 2], h * 0.5);
+        if (q) { P[i * 3] = q[0]; P[i * 3 + 1] = q[1]; P[i * 3 + 2] = q[2]; }
       }
     }
     for (let i = 0; i < nv; i++) {

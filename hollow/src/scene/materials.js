@@ -28,6 +28,7 @@ import {
 } from 'three/tsl';
 import { FINISH_KEYS } from '../finishes.js';
 import { NOISE_PERIOD } from '../gen/noisevol.js';
+import { tpmsParams } from '../gen/tpms.js';
 
 const PI = Math.PI;
 
@@ -46,9 +47,7 @@ export const G = {
 // ── Volume de bruit ──────────────────────────────────────────────────────────
 let noiseTexture = null;
 export function setNoiseVolume({ data, size }) {
-  const half = new Uint16Array(data.length);
-  for (let i = 0; i < data.length; i++) half[i] = THREE.DataUtils.toHalfFloat(data[i]);
-  const t = new THREE.Data3DTexture(half, size, size, size);
+  const t = new THREE.Data3DTexture(data, size, size, size); // (déjà en demi-flottants)
   t.format = THREE.RGBAFormat;
   t.type = THREE.HalfFloatType;
   t.minFilter = t.magFilter = THREE.LinearFilter;
@@ -67,6 +66,28 @@ const fbm = (p, oct = 4) => {
   let s = float(0), a = 0.5, q = p;
   for (let i = 0; i < oct; i++) { s = s.add(noise(q).mul(a)); q = ROT.mul(q).mul(2.03); a *= 0.5; }
   return s;
+};
+
+// ── Worley analytique ────────────────────────────────────────────────────────
+// Pour les motifs à arêtes vives (craquelures, coups de marteau, piqûres) : le
+// volume de bruit, interpolé linéairement, dessinerait des escaliers de près.
+// Calcul exact au pixel : 27 cellules voisines, hachage sans sinus (Hoskins).
+const hash33 = (c) => {
+  let q = fract(c.mul(vec3(0.1031, 0.103, 0.0973)));
+  q = q.add(dot(q, q.yxz.add(33.33)));
+  return fract(q.xxy.add(q.yxx).mul(q.zyx));
+};
+// renvoie vec2(F1, F2) (distances au germe le plus proche et au suivant, en cellules)
+const worley = (p) => {
+  const i = floor(p), f = fract(p);
+  let f1 = float(8), f2 = float(8);
+  for (let z = -1; z <= 1; z++) for (let y = -1; y <= 1; y++) for (let x = -1; x <= 1; x++) {
+    const o = vec3(x, y, z);
+    const d = length(o.add(hash33(i.add(o))).sub(f));
+    f2 = f2.min(f1.max(d));
+    f1 = f1.min(d);
+  }
+  return vec2(f1, f2);
 };
 
 // ── Relief : perturbation de la normale par les dérivées écran d'une hauteur
@@ -115,14 +136,15 @@ function surface(fin, U, p, pf) {
       break;
     }
     case 'hammered': { // coups de marteau : coupelles autour des germes de Worley
-      const w = NZ(p.mul(S.mul(24))).z.min(1);
+      const w = worley(p.mul(S.mul(24))).x.min(1);
       out.h = w.mul(w).mul(aa(24));
       out.rough = U.rough.add(w.oneMinus().mul(0.06));
       break;
     }
     case 'glaze': { // émail : peau d'orange sous le vernis, craquelure, émail plus épais au creux
-      const c = NZ(p.mul(S.mul(8)));
-      const crack = smoothstep(0.06, 0.0, c.w).mul(aa(40));
+      const c = worley(p.mul(S.mul(8)));
+      const fw = pf.mul(S).mul(8); // empreinte du pixel, en cellules : le trait reste net sans crénelage
+      const crack = smoothstep(fw.mul(1.5).add(0.045), fw.mul(0.5), c.y.sub(c.x)).mul(aa(40));
       const pool = noise(p.mul(S.mul(3))).mul(0.5).add(0.5);
       out.color = mix(mix(U.color, U.color.mul(0.8), pool.mul(0.45)), U.color2, crack.mul(0.85));
       out.rough = U.rough.add(crack.mul(0.3));
@@ -153,8 +175,8 @@ function surface(fin, U, p, pf) {
     case 'rock': { // basalte : bosses en chou-fleur, relief fractal, piqûres, deux tons
       const n = fbm(p.mul(S.mul(5)), 4);
       const n2 = fbm(p.mul(S.mul(1.7)).add(13.1), 2);
-      const lumps = NZ(p.mul(S.mul(9))).z.oneMinus();
-      const pits = NZ(p.mul(S.mul(34)).add(5.3)).z;
+      const lumps = worley(p.mul(S.mul(9))).x.oneMinus();
+      const pits = worley(p.mul(S.mul(34)).add(5.3)).x;
       out.h = n.mul(0.5).add(lumps.mul(0.7).mul(aa(9))).add(smoothstep(0, 0.3, pits).mul(0.25).mul(aa(34)));
       out.color = mix(U.color, U.color2, smoothstep(-0.25, 0.35, n2)).mul(n.mul(0.25).add(lumps.mul(0.15)).add(0.85));
       out.rough = U.rough.add(n.mul(0.08));
@@ -224,15 +246,17 @@ export function signature(f) {
 // différences centrées) est exacte à chaque pixel. Sur une finition miroir,
 // les reflets ne trahissent plus la triangulation.
 export function tpmsUniforms() {
-  return { f: uniform(10), wall: uniform(0.3), k: uniform(0.035), Rm: uniform(0.93), half: uniform(0.07), portalR: uniform(0.3) };
+  return { f: uniform(10), wall: uniform(0.3), k: uniform(0.09), Rm: uniform(0.93), half: uniform(0.07), portalR: uniform(0.3), portalCos: uniform(1) };
 }
 export function applyTpms(T, spec) {
-  T.f.value = ((spec.freq * Math.PI * 2) / 2) * ({ fischer: 0.55, iwp: 0.75 }[spec.surface] ?? 1);
-  T.wall.value = spec.wall;
-  T.k.value = Math.max(spec.bevel * 2, 0.035);
+  const { f, wall, k } = tpmsParams(spec); // (mêmes valeurs que le maillage)
+  T.f.value = f;
+  T.wall.value = wall;
+  T.k.value = k;
   T.Rm.value = 1 - spec.thickness / 2;
   T.half.value = spec.thickness / 2;
   T.portalR.value = Math.tan(spec.portal);
+  T.portalCos.value = Math.cos(spec.portal);
 }
 function tpmsNormal(spec, T) {
   const tp = (q) => {
@@ -253,7 +277,7 @@ function tpmsNormal(spec, T) {
   const field = (q) => {
     const s = abs(length(q).sub(T.Rm)).sub(T.half);
     const d = smax(s, tp(q));
-    const cyl = tmax(length(q.xy).sub(T.portalR.mul(q.z)), q.z.negate());
+    const cyl = tmax(length(q.xy).sub(T.portalR.mul(q.z)).mul(T.portalCos), q.z.negate());
     return smax(d, cyl.negate());
   };
   const p = positionLocal, e = 0.0015;
