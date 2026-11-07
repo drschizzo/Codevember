@@ -20,7 +20,7 @@ import { loadRender, saveRender, applyQuality, RENDER_DEFAULTS } from './app/set
 import { exportLoop, exportPNG } from './app/capture.js';
 import { createSound } from './app/sound.js';
 
-const DEFAULT_SEED = 'nef'; // scène d'ouverture (sans ?seed=)
+const DEFAULT_SEED = 'ce0gkq'; // scène d'ouverture (sans ?seed=)
 const D = 4; // distance caméra–centre (toutes les longueurs de la scène en dépendent)
 const params = new URLSearchParams(location.search);
 const $ = (s) => document.querySelector(s);
