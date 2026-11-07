@@ -28,7 +28,9 @@ async function main() {
   // (géante rouge, rémanent, lave), qu'AgX délave vers le blanc.
   // HDR : courbe maison dans visuals.js (épaule douce jusqu'au pic de l'écran).
   renderer.toneMapping = HDR ? THREE.NoToneMapping : params.has('agx') ? THREE.AgXToneMapping : THREE.NeutralToneMapping;
-  renderer.toneMappingExposure = 1; // (l'exposition est appliquée dans visuals.js)
+  renderer.toneMappingExposure = 1;
+  renderer.shadowMap.enabled = true; // (projecteur de la machine)
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap; // (l'exposition est appliquée dans visuals.js)
   await renderer.init();
   if (!renderer.backend.isWebGPUBackend) return fail('Cette expérience nécessite WebGPU (pas de repli WebGL).');
   $('#app').appendChild(renderer.domElement);
@@ -69,6 +71,7 @@ async function main() {
   // (touche O pour l'ôter ; ?nomeca pour démarrer sans)
   const orrery = createOrrery(scene, renderer);
   let meca = MECA0;
+  const LENS = !params.has('nolens');
   const PLANET_K = 1.7; // planètes en billes bien visibles sur leurs tiges
   const setMeca = (v) => {
     meca = v; orrery.setVisible(v); document.body.classList.toggle('meca', v);
@@ -423,6 +426,7 @@ async function main() {
       const e = evo.get(f.h);
       if (e) { e.heat = Math.min(1, e.heat + 0.45 + 1.5 * f.mlE / Math.max(s.mE, 0.05)); e.craters *= 0.15; }
       audio.impact(f.mlE, s.a, screenPan(s.x, s.y, s.z));
+      if (meca) orrery.strike(Math.min(1, f.mlE / 2)); // la cloche de la galerie
       // ralenti, secousse et éblouissement proportionnés à l'impacteur : les
       // petites collisions d'embryons (fréquentes au début) restent discrètes
       const big = Math.min(1, f.mlE / 2);
@@ -1003,7 +1007,7 @@ async function main() {
 
   // ── Boucle ─────────────────────────────────────────────────────────────────
   let last = performance.now();
-  const _fp = new THREE.Vector3();
+  const _fp = new THREE.Vector3(), _camV = new THREE.Vector3(), _camPrev = new THREE.Vector3();
   const shakeOff = new THREE.Vector3();
   // La simulation attend qu'on entre : tant que l'accueil est affiché, rien ne
   // tourne (ni calcul, ni rendu) — le cycle commence au clic.
@@ -1067,14 +1071,26 @@ async function main() {
       const fp = state.follow >= 0 ? followPos(_fp) : null;
       const fd = camera.position.distanceTo(fp || controls.target);
       vis.V.focus.value += (fd - vis.V.focus.value) * Math.min(1, real * 4);
-      vis.V.focusRange.value = Math.max(0.25, vis.V.focus.value * 0.45);
-      vis.V.bokeh.value = meca ? 1.6 : 0.6;
+      // objectif « macro » : faible profondeur de champ, flou de mouvement marqué
+      vis.V.focusRange.value = Math.max(0.2, vis.V.focus.value * 0.28);
+      vis.V.bokeh.value = meca ? 3.0 : 0.8;
+      vis.V.blurK.value = meca ? 1.0 : 0.4;
+      vis.V.aperture.value = LENS ? (meca ? 0.045 : 0.015) : 0;
+      // obturation : un peu plus d'une image de temps simulé (traînées des grains rapides)
+      vis.V.shutter.value = LENS ? dtSim * 1.6 : 0;
+      // vitesse de la caméra (lissée), pour des traînées relatives à elle
+      if (dtSim > 0) {
+        _camV.subVectors(camera.position, _camPrev).divideScalar(dtSim);
+        vis.V.camVel.value.lerp(_camV, 0.5);
+      }
+      _camPrev.copy(camera.position);
+      vis.V.planetFlux.value = meca ? 2.2 : 4.0;
     }
     if (vis.updatePulsar(state.paused ? 0 : real)) audio.pulsarTick(); // un faisceau nous balaie : « tic »
 
     // bouffée d'exposition : tout le système s'illumine un instant
     state.burst = Math.max(0, (state.burst || 0) - real * 1.4);
-    vis.V.exposure.value = EXPOSURE * (1 + (state.follow >= 0 ? 0.3 : 0.9) * state.burst * state.burst * (state.burst > 1 ? 3 : 1));
+    vis.V.exposure.value = EXPOSURE * (meca ? 1.25 : 1) * (1 + (state.follow >= 0 ? 0.3 : 0.9) * state.burst * state.burst * (state.burst > 1 ? 3 : 1));
 
     // secousse de caméra
     state.shake = Math.max(0, state.shake - real * 1.2);
