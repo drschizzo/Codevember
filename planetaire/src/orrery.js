@@ -71,9 +71,9 @@ function brass(tone = [0.64, 0.56, 0.38], rough = 0.5) {
   m.roughnessNode = float(rough).add(brush.mul(0.12)).add(patina.mul(0.1));
   return m;
 }
-const steel = () => new THREE.MeshStandardNodeMaterial({ color: 0xa9afb7, metalness: 0.65, roughness: 0.3 });
-const blued = () => new THREE.MeshStandardNodeMaterial({ color: 0x2f4690, metalness: 0.55, roughness: 0.28 });
-const ruby = () => new THREE.MeshStandardNodeMaterial({ color: 0x9a1028, roughness: 0.1, metalness: 0.15 });
+const steel = () => new THREE.MeshStandardNodeMaterial({ color: 0xb4bac2, metalness: 0.85, roughness: 0.2 }); // acier poli
+const blued = () => new THREE.MeshStandardNodeMaterial({ color: 0x2c4596, metalness: 0.75, roughness: 0.16 }); // acier bleui, très poli
+const ruby = () => new THREE.MeshStandardNodeMaterial({ color: 0x9a1028, roughness: 0.06, metalness: 0.1, emissive: 0x2a0208 });
 const dark = () => new THREE.MeshStandardNodeMaterial({ color: 0x0c0a08, roughness: 0.7, metalness: 0.2 });
 
 // ── Géométries usinées ──────────────────────────────────────────────────────
@@ -358,7 +358,7 @@ export function createOrrery(scene, renderer) {
   scene.add(root);
   // (préfiltrée en PMREM : sans cela, les reflets du métal restent noirs)
   let env = null;
-  scene.environmentIntensity = 0.55;
+  scene.environmentIntensity = 1.1;
   new THREE.PMREMGenerator(renderer).fromEquirectangularAsync(workshopEnv()).then((rt) => {
     env = rt.texture;
     if (root.visible) scene.environment = env;
@@ -401,11 +401,28 @@ export function createOrrery(scene, renderer) {
   //    ne fait que révéler les volumes quand l'étoile est faible ───────────
   const starLight = new THREE.PointLight(0xffd6a0, 2, 0, 0.3);
   root.add(starLight);
-  const lamp = new THREE.DirectionalLight(0xfff8f0, 3.2);
-  lamp.position.set(-8, 14, 10);
-  root.add(lamp);
-  const rim = new THREE.DirectionalLight(0xc8d4ff, 0.5);
-  rim.position.set(9, -4, -12);
+  // projecteur de musée : un cône chaud, en biais, qui découpe la machine et
+  // porte ses ombres (les bras et les roues s'ombrent sur la platine)
+  const lamp = new THREE.SpotLight(0xffe2c0, 130, 0, 0.66, 0.8, 1.1);
+  lamp.position.set(-6.5, 9.5, 8.5);
+  lamp.target.position.set(0.3, -2.2, 0.4);
+  lamp.castShadow = true;
+  lamp.shadow.mapSize.set(2048, 2048);
+  lamp.shadow.camera.near = 4; lamp.shadow.camera.far = 30;
+  lamp.shadow.bias = -0.0004; lamp.shadow.normalBias = 0.02;
+  lamp.shadow.radius = 3;
+  root.add(lamp, lamp.target);
+  // second projecteur, froid et rasant, pour sculpter la galerie des automates
+  const lamp2 = new THREE.SpotLight(0xc9d8ff, 80, 0, 0.6, 0.9, 1.05);
+  lamp2.position.set(8, -2.2, 7.5);
+  lamp2.target.position.set(0, -3.9, 0.5);
+  root.add(lamp2, lamp2.target);
+  // appoint : ciel froid, sol chaud (la pénombre de l'atelier)
+  const hemi = new THREE.HemisphereLight(0xa8b8e0, 0x5a3a20, 1.1);
+  root.add(hemi);
+  // contre-jour froid : liseré sur les arêtes, détache la machine du fond
+  const rim = new THREE.DirectionalLight(0xb8ccff, 0.8);
+  rim.position.set(7, -1.5, -12);
   root.add(rim);
 
   // ── Socle tourné + platine gravée ───────────────────────────────────────
@@ -738,7 +755,7 @@ export function createOrrery(scene, renderer) {
   {
     const dm = new THREE.MeshStandardNodeMaterial({ metalness: 0.15, roughness: 0.55 });
     dm.map = dialTexture();
-    dm.color = new THREE.Color(0.93, 0.88, 0.76); // émail un peu jauni
+    dm.color = new THREE.Color(0.5, 0.47, 0.4); // émail un peu jauni (sous le projecteur)
     add(new THREE.CylinderGeometry(0.52, 0.52, 0.03, 64), dm, 0, 0.015, 0, dial);
     add(turned([[0.5, 0], [0.56, 0], [0.57, 0.012], [0.57, 0.04], [0.555, 0.055], [0.52, 0.05], [0.5, 0.035]], 64), MB, 0, 0, 0, dial);
     for (let k = 0; k < 3; k++) {
@@ -783,76 +800,494 @@ export function createOrrery(scene, renderer) {
   const hubScrews = inst(new THREE.CylinderGeometry(1, 1, 1, 10).rotateZ(Math.PI / 2), MBl, K);
   const gearHubs = inst(bushGeometry(1, 1, HUB_IN, 0.06), MB, K);
   const pinHubs = inst(bushGeometry(1, 1, HUB_IN, 0.06), MS, K);
-  const gears = [], pinions = [];
+  // réserve de roues et de pignons (une paire par bras)
+  const gearPool = [];
   for (let k = 0; k < K; k++) {
     const g = add(gearGeometry(20, 0.028, 0.04), MB); const p = add(gearGeometry(20, 0.028, 0.035), MS);
-    g.visible = p.visible = false; gears.push(g); pinions.push(p);
+    g.visible = p.visible = false; gearPool.push({ g, p });
   }
   const tubeR = (j) => 0.035 + 0.013 * j;
   const thLay = Math.atan2(layP.z, layP.x);
 
-  const track = new Map(); // index → { y, phi }
+  // Suivi des bras : un bras ne surgit jamais d'un coup. Quand une planète est
+  // prise en charge, son bras sort de la bague (la tringle s'allonge, puis la
+  // tige monte sous la bille) ; quand elle disparaît (fusion, éjection, ou elle
+  // n'est plus parmi les plus massives), le bras redescend et rentre en
+  // continuant de tourner à la vitesse képlérienne. Sa roue glisse dans la pile
+  // quand l'ordre des rayons change. Seuils à hystérésis : pas de clignotement
+  // autour de la masse limite.
+  const track = new Map(); // index → { alive, e, s, x, y, z, a, phi, mE, pair }
+  const M_IN = 0.12, M_OUT = 0.06, SWAP = 1.6;
   const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3();
   const place = (mesh, i, pos, rotY, scale) => { _q.setFromAxisAngle(up, rotY); _m.compose(pos, _q, scale); mesh.setMatrixAt(i, _m); };
+
 
   const S = { lay: 0, escCont: 0, ph: 0, amp: 0, reserve: 1, ratchet: 0, crown: 0, tooth: 0, stop: 1, cycle: -1, valve: 0, lift: 0 };
   const api = { root, onClick: null, onClack: null, collect: 0 };
   const zAxis = new THREE.Vector3(0, 0, 1), _qb = new THREE.Quaternion();
 
+  // ═══ Galerie des automates ═════════════════════════════════════════════
+  // Une plate-forme annulaire autour du pied du socle. Une grande couronne
+  // dentée (88 dents), tirée par un POIDS MOTEUR qui descend au fil du cycle,
+  // entraîne une ronde de stations ; chacune lit un aspect de la simulation :
+  //   · RÉGULATEUR À BOULES : les boules s'écartent avec la vitesse du temps ;
+  //   · TAMBOUR À CAMES (le programme du cycle) : trois cames — luminosité de
+  //     l'étoile, gaz du disque, ligne des glaces — poussent des crémaillères
+  //     qui font tourner les aiguilles de trois cadrans ;
+  //   · COMPTEUR À ROULEAUX : orbites à 1 UA et numéro du cycle ;
+  //   · POMPE À SOUFFLET : aspire les débris à la fin du cycle ; sa conduite
+  //     remonte le long d'un pied et d'un arceau jusqu'à la trémie ;
+  //   · CLOCHE : frappée à chaque impact géant.
+  const G = {};
+  {
+    const Yg = Y_BASE - 0.62, RIN = 0.93, ROUT = 3.85;
+    const RING_N = 88, RING_R = pitchR(RING_N);
+    G.Yg = Yg;
+    // plate-forme (anneau tourné, bord mouluré) et consoles sous la plate-forme
+    add(turned([[RIN, 0], [ROUT - 0.03, 0], [ROUT, 0.015], [ROUT, 0.045], [ROUT - 0.02, 0.06], [ROUT - 0.08, 0.06], [ROUT - 0.09, 0.045],
+      [RIN + 0.05, 0.045], [RIN, 0.03]], 128), MBd, 0, Yg - 0.06, 0);
+    add(bushGeometry(RIN + 0.1, 0.12, RIN - 0.03), MB, 0, Yg - 0.04, 0);
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2 + Math.PI / 8;
+      const s = new THREE.Shape(); // console en équerre, chantournée
+      s.moveTo(0, 0); s.lineTo(1.6, 0); s.lineTo(1.6, -0.06);
+      s.quadraticCurveTo(0.6, -0.12, 0.12, -0.55); s.lineTo(0, -0.55); s.closePath();
+      const g = new THREE.ExtrudeGeometry(s, { depth: 0.04, bevelEnabled: true, bevelThickness: 0.006, bevelSize: 0.006, bevelSegments: 1 });
+      g.translate(0, 0, -0.02);
+      const m = add(g, MB, Math.cos(a) * (RIN - 0.02), Yg - 0.06, Math.sin(a) * (RIN - 0.02));
+      m.rotation.y = -a;
+    }
+    // couronne motrice, posée sur huit galets
+    {
+      const s = new THREE.Shape(), R = RING_R, out = R + MODULE * 0.95, root = R - MODULE * 1.2, p = (Math.PI * 2) / RING_N;
+      for (let i = 0; i < RING_N; i++) {
+        const a = i * p;
+        const prof = [[root, 0], [root, 0.18], [R, 0.3], [out, 0.42], [out, 0.58], [R, 0.7], [root, 0.82]];
+        prof.forEach(([r, f], j) => { const x = r * Math.cos(a + f * p), y = r * Math.sin(a + f * p); if (i === 0 && j === 0) s.moveTo(x, y); else s.lineTo(x, y); });
+      }
+      s.holes.push(circlePath(R - 0.32));
+      for (let k = 0; k < 24; k++) s.holes.push(circlePath(0.05, Math.cos((k / 24) * Math.PI * 2) * (R - 0.2), Math.sin((k / 24) * Math.PI * 2) * (R - 0.2)));
+      G.ring = add(plate(s, 0.05, 0.006, 4), MB, 0, Yg + 0.075, 0);
+      for (let k = 0; k < 8; k++) {
+        const a = (k / 8) * Math.PI * 2;
+        const roller = add(bushGeometry(0.045, 0.04, 0), MS, Math.cos(a) * (RING_R - 0.17), Yg + 0.025, Math.sin(a) * (RING_R - 0.17));
+        roller.rotation.z = Math.PI / 2; roller.rotation.y = -a;
+      }
+    }
+    // une station : pinion vertical qui engrène la couronne, à l'angle th
+    G.stations = [];
+    const station = (thDeg, n) => {
+      const th = (thDeg * Math.PI) / 180, r = RING_R + pitchR(n);
+      const pos = new THREE.Vector3(Math.cos(th) * r, Yg + 0.075, Math.sin(th) * r);
+      const pin = add(gearGeometry(n, 0.05, 0.022), MS, pos.x, pos.y, pos.z);
+      arbor(pos.x, pos.z, Yg - 0.01, Yg + 0.14, 0.022);
+      add(bushGeometry(0.06, 0.03, 0.022), MBz, pos.x, Yg + 0.015, pos.z);
+      const st = { th, n, pos, pin, rot: 0 };
+      G.stations.push(st);
+      return st;
+    };
+
+    // ── poids moteur : tambour (axe vertical), poulie de renvoi, chaîne, poids
+    {
+      const st = station(-6, 14);
+      const { pos } = st;
+      G.drum = add(turned([[0.022, 0], [0.2, 0], [0.2, 0.02], [0.17, 0.03], [0.17, 0.22], [0.2, 0.23], [0.2, 0.25], [0.022, 0.25]], 40), MB, pos.x, Yg + 0.1, pos.z);
+      for (let k = 0; k < 8; k++) add(new THREE.TorusGeometry(0.172, 0.008, 6, 40).rotateX(Math.PI / 2), MS, pos.x, Yg + 0.14 + k * 0.022, pos.z);
+      arbor(pos.x, pos.z, Yg + 0.1, Yg + 0.42, 0.022);
+      // potence et poulie au bord de la plate-forme
+      const out = new THREE.Vector3(Math.cos(st.th), 0, Math.sin(st.th));
+      const tan = new THREE.Vector3(-out.z, 0, out.x);
+      const pul = out.clone().multiplyScalar(ROUT + 0.12).addScaledVector(tan, 0.2).setY(Yg + 0.2);
+      G.pulleyPos = pul;
+      const arm = bridgeAB(out.clone().multiplyScalar(ROUT - 0.2).addScaledVector(tan, 0.2), pul, Yg + 0.03, 0.1, 0.04, 0, 0.08);
+      void arm;
+      pillar(pul.x - out.x * 0.0, pul.z, Yg + 0.05, Yg + 0.1, 0.03);
+      const pg = new THREE.Group(); pg.position.copy(pul); pg.rotation.y = -Math.atan2(tan.z, tan.x); root.add(pg);
+      G.pulley = add(turned([[0.02, -0.025], [0.14, -0.025], [0.14, -0.015], [0.11, 0], [0.14, 0.015], [0.14, 0.025], [0.02, 0.025]], 32), MB, 0, 0, 0, pg);
+      G.pulley.rotation.x = Math.PI / 2;
+      for (const s of [-1, 1]) add(bridgeGeometry(0.2, 0.06, 0.02), MBd, 0, -0.1, s * 0.045, pg).rotation.z = Math.PI / 2;
+      // chaîne (maillons instanciés) et poids
+      const linkG = new THREE.TorusGeometry(0.022, 0.006, 6, 12);
+      linkG.scale(1, 1.7, 1);
+      G.links = new THREE.InstancedMesh(linkG, MS, 160);
+      G.links.instanceMatrix.setUsage(THREE.DynamicDrawUsage); G.links.frustumCulled = false; G.links.castShadow = true;
+      root.add(G.links);
+      G.chainX = pul.clone().addScaledVector(out, 0.14); // point de chute
+      G.weight = new THREE.Group(); root.add(G.weight);
+      add(turned([[0, 0], [0.16, 0], [0.18, 0.03], [0.18, 0.5], [0.15, 0.56], [0.06, 0.6], [0.04, 0.64], [0, 0.64]], 40), MB, 0, -0.64, 0, G.weight);
+      add(new THREE.TorusGeometry(0.035, 0.009, 6, 16), MS, 0, 0.0, 0, G.weight);
+      for (let k = 0; k < 3; k++) add(new THREE.TorusGeometry(0.182, 0.006, 6, 40).rotateX(Math.PI / 2), MBd, 0, -0.5 + k * 0.18, 0, G.weight);
+    }
+
+    // ── régulateur à boules (Watt)
+    {
+      const st = station(68, 12), { pos } = st;
+      const H = 1.25;
+      arbor(pos.x, pos.z, Yg + 0.1, Yg + H, 0.02);
+      G.gov = new THREE.Group(); G.gov.position.set(pos.x, Yg + H, pos.z); root.add(G.gov);
+      add(turned([[0.02, -0.05], [0.07, -0.05], [0.08, -0.03], [0.08, 0.02], [0.05, 0.05], [0.02, 0.06]], 24), MB, 0, 0, 0, G.gov);
+      add(turned([[0, 0], [0.04, 0], [0.03, 0.08], [0.012, 0.16], [0, 0.18]], 16), MB, 0, 0.05, 0, G.gov);
+      G.govArms = []; G.govLinks = [];
+      for (const s of [0, Math.PI]) {
+        const side = new THREE.Group(); side.rotation.y = s; G.gov.add(side);
+        const arm = new THREE.Group(); side.add(arm);
+        add(new THREE.CylinderGeometry(0.01, 0.01, 0.5, 8).translate(0, -0.25, 0), MS, 0, 0, 0, arm);
+        add(new THREE.SphereGeometry(0.075, 24, 16), MB, 0, -0.52, 0, arm);
+        G.govArms.push(arm);
+        const link = new THREE.Group(); side.add(link);
+        add(new THREE.CylinderGeometry(0.008, 0.008, 0.26, 8).translate(0, -0.13, 0), MS, 0, 0, 0, link);
+        G.govLinks.push(link);
+      }
+      G.sleeve = add(bushGeometry(0.05, 0.08, 0.02), MBz, pos.x, Yg + H - 0.4, pos.z);
+      // levier de l'étrangleur (il freine le poids si la machine s'emballe)
+      G.govLever = add(bridgeGeometry(0.4, 0.04, 0.02), MBl, pos.x, Yg + H - 0.4, pos.z);
+      const bkt = pillar(pos.x + Math.cos(st.th) * 0.42, pos.z + Math.sin(st.th) * 0.42, Yg, Yg + H - 0.42, 0.03);
+      void bkt;
+      G.govLever.rotation.y = -st.th;
+    }
+
+    // ── tambour à cames (programme du cycle) et colonne des cadrans
+    {
+      const st = station(180, 12), { pos } = st;
+      const out = new THREE.Vector3(Math.cos(st.th), 0, Math.sin(st.th)), tan = new THREE.Vector3(-out.z, 0, out.x);
+      arbor(pos.x, pos.z, Yg + 0.1, Yg + 0.75, 0.024);
+      // roue à vis sans fin (réduction énorme : un tour par cycle)
+      const ww = add(gearGeometry(40, 0.03, 0.024), MB, pos.x, Yg + 0.16, pos.z);
+      G.wormWheel = ww;
+      const wormP = pos.clone().addScaledVector(tan, pitchR(40) + 0.04);
+      const helix = [];
+      for (let i = 0; i <= 140; i++) { const t = i / 140, an = t * Math.PI * 2 * 5; helix.push(new THREE.Vector3(Math.cos(an) * 0.04, t * 0.22 - 0.11, Math.sin(an) * 0.04)); }
+      G.worm = new THREE.Group(); G.worm.position.copy(wormP).setY(Yg + 0.16);
+      G.worm.quaternion.setFromUnitVectors(up, out); root.add(G.worm);
+      add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(helix), 200, 0.01, 6), MS, 0, 0, 0, G.worm);
+      add(new THREE.CylinderGeometry(0.035, 0.035, 0.2, 12), MS, 0, 0, 0, G.worm);
+      add(new THREE.CylinderGeometry(0.012, 0.012, 0.5, 8), MS, 0, 0, 0, G.worm);
+      for (const s of [-1, 1]) pillar(wormP.x + out.x * s * 0.22, wormP.z + out.z * s * 0.22, Yg, Yg + 0.15, 0.025);
+      // trois cames : profil = la grandeur au fil du cycle (angle = fraction du cycle)
+      const prog = [
+        (f) => { // luminosité de l'étoile
+          const c = PHASE_W.reduce((a, w, i) => (a.push((a[i - 1] || 0) + w), a), []);
+          if (f < c[1]) return 0.1 + 0.15 * f / c[1];
+          if (f < c[2]) return 0.25 + 0.3 * ss(c[1], c[1] + 0.06, f);
+          if (f < c[4]) return 0.55 + 0.1 * (f - c[2]) / (c[4] - c[2]);
+          if (f < c[5]) return 0.65 + 0.35 * ss(c[4], c[5], f);
+          return 1 - 0.85 * ss(c[5], 1, f);
+        },
+        (f) => { // gaz du disque
+          const c = PHASE_W.reduce((a, w, i) => (a.push((a[i - 1] || 0) + w), a), []);
+          return f < c[1] ? 1 : f < c[2] ? 1 - ss(c[1], c[2], f) : 0.02;
+        },
+        (f) => { // ligne des glaces (∝ √L)
+          return Math.sqrt(prog[0](f));
+        },
+      ];
+      G.cams = []; G.racks = []; G.needles = [];
+      const R0 = 0.16, AMP = 0.11, DELTA = Math.atan2(out.z, out.x) + Math.PI; // les poussoirs regardent vers l'axe du socle
+      prog.forEach((F, i) => {
+        const y = Yg + 0.3 + i * 0.14;
+        const s = new THREE.Shape(), NP = 180;
+        for (let k = 0; k <= NP; k++) {
+          const phi = (k / NP) * Math.PI * 2;
+          const f = (((phi + DELTA) / (Math.PI * 2)) % 1 + 1) % 1;
+          const r = R0 + AMP * F(f);
+          if (k === 0) s.moveTo(r * Math.cos(phi), r * Math.sin(phi)); else s.lineTo(r * Math.cos(phi), r * Math.sin(phi));
+        }
+        s.holes.push(circlePath(0.024));
+        const cam = add(plate(s, 0.04, 0.005, 2), [MB, MS, MBd][i], pos.x, y, pos.z);
+        G.cams.push(cam);
+        // poussoir : galet, tige coulissante, crémaillère
+        const rack = new THREE.Group(); root.add(rack);
+        rack.userData = { F, R0, AMP, y, dir: new THREE.Vector3(Math.cos(DELTA), 0, Math.sin(DELTA)) };
+        add(bushGeometry(0.03, 0.03, 0), MS, 0, 0, 0, rack);
+        add(new THREE.CylinderGeometry(0.012, 0.012, 0.6, 8).rotateZ(Math.PI / 2).translate(0.32, 0, 0), MS, 0, 0, 0, rack);
+        const teethR = new THREE.Group(); rack.add(teethR);
+        add(new THREE.BoxGeometry(0.22, 0.03, 0.025), MB, 0.52, 0, -0.02, rack);
+        for (let k = 0; k < 9; k++) add(new THREE.BoxGeometry(0.012, 0.03, 0.02), MB, 0.43 + k * 0.022, 0, -0.04, rack);
+        rack.rotation.y = -DELTA;
+        G.racks.push(rack);
+        // guide du poussoir
+        const gp = pos.clone().addScaledVector(rack.userData.dir, 0.42);
+        pillar(gp.x, gp.z, Yg, y - 0.02, 0.03);
+        add(bushGeometry(0.03, 0.04, 0.012), MBz, gp.x, y, gp.z).rotation.z = Math.PI / 2;
+      });
+      // colonne des cadrans, entre le tambour et le socle
+      const colP = pos.clone().addScaledVector(out, -0.85);
+      G.colP = colP;
+      add(turned([[0, 0], [0.12, 0], [0.12, 0.03], [0.07, 0.06], [0.06, 0.9], [0.08, 0.93], [0.08, 0.96], [0, 0.96]], 24), MB, colP.x, Yg, colP.z);
+      const dTex = (label, c0, c1) => {
+        const S = 256, c = document.createElement('canvas'); c.width = c.height = S;
+        const g = c.getContext('2d'); g.fillStyle = '#efe6d2'; g.fillRect(0, 0, S, S);
+        g.strokeStyle = g.fillStyle = '#2a1e10'; g.lineWidth = 3; g.beginPath(); g.arc(S / 2, S / 2, S * 0.46, 0, Math.PI * 2); g.stroke();
+        for (let k = 0; k <= 10; k++) { const a = Math.PI * (0.75 + 1.5 * k / 10); g.lineWidth = k % 5 ? 2 : 4; g.beginPath(); g.moveTo(S / 2 + Math.cos(a) * S * 0.34, S / 2 + Math.sin(a) * S * 0.34); g.lineTo(S / 2 + Math.cos(a) * S * 0.42, S / 2 + Math.sin(a) * S * 0.42); g.stroke(); }
+        g.textAlign = 'center'; g.font = `600 ${S * 0.11}px "Cormorant SC", Georgia, serif`; g.fillText(label, S / 2, S * 0.72);
+        g.font = `italic ${S * 0.08}px "Cormorant Garamond", Georgia, serif`; g.fillText(c0, S * 0.24, S * 0.9); g.fillText(c1, S * 0.76, S * 0.9);
+        const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+      };
+      [['lumière', 'faible', 'vive'], ['gaz', 'vide', 'plein'], ['glaces', 'près', 'loin']].forEach(([l, a, b], i) => {
+        const dg = new THREE.Group(); dg.position.copy(colP).setY(Yg + 0.3 + i * 0.25).addScaledVector(out, 0.09);
+        dg.quaternion.setFromUnitVectors(up, out); // face vers l'extérieur
+        root.add(dg);
+        const mm = new THREE.MeshStandardNodeMaterial({ metalness: 0.1, roughness: 0.5 }); mm.map = dTex(l, a, b);
+        add(new THREE.CylinderGeometry(0.11, 0.11, 0.015, 40), mm, 0, 0, 0, dg).rotation.y = Math.PI / 2;
+        add(new THREE.TorusGeometry(0.115, 0.012, 8, 40).rotateX(Math.PI / 2), MB, 0, 0.008, 0, dg);
+        const nd = new THREE.Group(); nd.position.y = 0.012; dg.add(nd);
+        add(new THREE.BoxGeometry(0.004, 0.005, 0.09).translate(0, 0, -0.04), MBl, 0, 0, 0, nd);
+        G.needles.push(nd);
+      });
+    }
+
+    // ── compteur à rouleaux (orbites, cycle)
+    {
+      const st = station(108, 10), { pos } = st;
+      const out = new THREE.Vector3(Math.cos(st.th), 0, Math.sin(st.th)), tan = new THREE.Vector3(-out.z, 0, out.x);
+      const S = 512, c = document.createElement('canvas'); c.width = S; c.height = 64;
+      const g = c.getContext('2d'); g.fillStyle = '#16100a'; g.fillRect(0, 0, S, 64);
+      g.fillStyle = '#efe4cc'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = '600 46px "EB Garamond", Georgia, serif';
+      for (let d = 0; d < 10; d++) { g.save(); g.translate((d + 0.5) * S / 10, 32); g.rotate(-Math.PI / 2); g.fillText(String(d), 0, 2); g.restore(); }
+      const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+      const dm = new THREE.MeshStandardNodeMaterial({ roughness: 0.6, metalness: 0.1 }); dm.map = tex;
+      const cp = pos.clone().addScaledVector(out, 0.35).setY(Yg + 0.42);
+      G.counter = new THREE.Group(); G.counter.position.copy(cp);
+      G.counter.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), tan); root.add(G.counter);
+      G.digits = [];
+      const N = 6;
+      for (let k = 0; k < N; k++) {
+        const x = (k - (N - 1) / 2) * 0.1 + (k === N - 1 ? 0.06 : 0);
+        const w = add(new THREE.CylinderGeometry(0.06, 0.06, 0.08, 40, 1, true).rotateZ(Math.PI / 2), k === N - 1 ? MBd : dm, x, 0, 0, G.counter);
+        w.material = k === N - 1 ? dm : dm;
+        G.digits.push(w);
+        add(new THREE.CylinderGeometry(0.064, 0.064, 0.012, 40).rotateZ(Math.PI / 2), MB, x + 0.046, 0, 0, G.counter);
+      }
+      // bâti : joues, axe, fenêtre
+      for (const s of [-1, 1]) add(bridgeGeometry(0.3, 0.16, 0.025), MB, s * 0.36, -0.3, 0, G.counter).rotation.z = Math.PI / 2;
+      add(new THREE.CylinderGeometry(0.012, 0.012, 0.78, 8).rotateZ(Math.PI / 2), MS, 0, 0, 0, G.counter);
+      const fr = new THREE.Shape(); fr.moveTo(-0.38, -0.09); fr.lineTo(0.38, -0.09); fr.lineTo(0.38, 0.09); fr.lineTo(-0.38, 0.09); fr.closePath();
+      const hole = new THREE.Path(); hole.moveTo(-0.3, -0.035); hole.lineTo(0.3, -0.035); hole.lineTo(0.3, 0.035); hole.lineTo(-0.3, 0.035); hole.closePath(); fr.holes.push(hole);
+      const front = add(plate(fr, 0.015, 0.004), MB, 0, 0, 0.07, G.counter); front.rotation.x = Math.PI / 2;
+      // renvoi d'angle (pignons coniques) entre la station et l'axe des rouleaux
+      add(new THREE.ConeGeometry(0.05, 0.05, 16, 1, true).translate(0, 0.025, 0), MS, pos.x, Yg + 0.14, pos.z);
+      arbor(pos.x, pos.z, Yg + 0.1, Yg + 0.3, 0.015);
+    }
+
+    // ── pompe à soufflet et sa conduite jusqu'à la trémie
+    {
+      const st = station(252, 12), { pos } = st;
+      const out = new THREE.Vector3(Math.cos(st.th), 0, Math.sin(st.th)), tan = new THREE.Vector3(-out.z, 0, out.x);
+      // plateau excentrique (embrayé seulement pendant l'aspiration)
+      G.crank = new THREE.Group(); G.crank.position.copy(pos).setY(Yg + 0.13); root.add(G.crank);
+      add(bushGeometry(0.16, 0.03, 0.022), MB, 0, 0, 0, G.crank);
+      add(new THREE.CylinderGeometry(0.018, 0.018, 0.06, 10), MS, 0.11, 0.04, 0, G.crank);
+      // soufflet : accordéon tourné, couché le long de la tangente
+      const bp = pos.clone().addScaledVector(tan, 0.75).setY(Yg + 0.2);
+      G.bellows = new THREE.Group(); G.bellows.position.copy(bp);
+      G.bellows.quaternion.setFromUnitVectors(up, tan.clone().negate()); root.add(G.bellows);
+      const acc = []; for (let k = 0; k <= 12; k++) acc.push([k % 2 ? 0.1 : 0.14, k / 12]);
+      const leather = new THREE.MeshStandardNodeMaterial({ color: 0x3a1c10, roughness: 0.85, metalness: 0 });
+      G.bellowsBody = add(turned([[0, 0], ...acc, [0, 1]], 24), leather, 0, 0, 0, G.bellows);
+      add(bushGeometry(0.16, 0.025, 0), MB, 0, 0, 0, G.bellows);
+      G.bellowsCap = add(bushGeometry(0.16, 0.025, 0), MB, 0, 0.3, 0, G.bellows);
+      G.rod = add(new THREE.CylinderGeometry(0.012, 0.012, 1, 8).rotateZ(Math.PI / 2).translate(0.5, 0, 0), MS, 0, Yg + 0.2, 0);
+      G.bellowsBase = bp;
+      const fixed = bp.clone().addScaledVector(tan, 0.05);
+      pillar(fixed.x, fixed.z, Yg, Yg + 0.06, 0.06);
+      // conduite : du soufflet au bord de la platine, le long du pied (225°), puis de l'arceau, jusqu'au collier
+      const a = (5 * Math.PI) / 4 + 0.035;
+      const d = new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
+      const ptd = (r, y) => d.clone().multiplyScalar(r).setY(y);
+      const leg = new THREE.CubicBezierCurve3(ptd(LIMB_RM, -0.14), ptd(9.9, -2.6), ptd(4.2, Y_BASE + 0.55), ptd(2.38, Y_BASE + 0.07));
+      const arch = new ArchCurve(d, LIMB_RM - 0.02, DOME_H - 0.05, 0.56);
+      const pts = [bp.clone().addScaledVector(tan, 0.02).setY(Yg + 0.2), bp.clone().addScaledVector(out, 0.25).setY(Yg + 0.35)];
+      for (let i = 10; i >= 1; i--) pts.push(leg.getPoint(i / 10 * 0.98 + 0.02).add(new THREE.Vector3(0, 0.1, 0)));
+      for (let i = 1; i <= 24; i++) pts.push(arch.getPoint(i / 24).add(new THREE.Vector3(0, 0.1, 0)));
+      const pipeC = new THREE.CatmullRomCurve3(pts);
+      add(new THREE.TubeGeometry(pipeC, 400, 0.028, 10), MB);
+      for (let k = 1; k < 30; k++) { // colliers de fixation
+        const t = k / 30, p = pipeC.getPoint(t), tg = pipeC.getTangent(t);
+        add(new THREE.TorusGeometry(0.034, 0.008, 6, 16), MBd, p.x, p.y, p.z).quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tg);
+      }
+    }
+
+    // ── cloche et son marteau (impacts géants)
+    {
+      const th = (292 * Math.PI) / 180, r = 3.25;
+      const out = new THREE.Vector3(Math.cos(th), 0, Math.sin(th)), tan = new THREE.Vector3(-out.z, 0, out.x);
+      const p = out.clone().multiplyScalar(r);
+      pillar(p.x, p.z, Yg, Yg + 1.0, 0.035);
+      const top = p.clone().setY(Yg + 1.0);
+      const gal = add(bridgeGeometry(0.42, 0.06, 0.03), MB, top.x, top.y, top.z); gal.rotation.y = -Math.atan2(tan.z, tan.x);
+      const bellP = top.clone().addScaledVector(tan, 0.36);
+      G.bell = add(turned([[0.005, 0.02], [0.05, 0], [0.09, -0.06], [0.11, -0.18], [0.16, -0.27], [0.165, -0.29], [0.14, -0.285],
+        [0.1, -0.2], [0.08, -0.08], [0.04, -0.02], [0.005, 0.0]], 40), MBz, bellP.x, bellP.y - 0.03, bellP.z);
+      G.bell.material = Object.assign(MBz.clone(), { side: THREE.DoubleSide });
+      G.hammer = new THREE.Group(); G.hammer.position.copy(p).setY(Yg + 0.62).addScaledVector(tan, 0.02);
+      G.hammer.rotation.y = -Math.atan2(tan.z, tan.x); root.add(G.hammer);
+      add(new THREE.CylinderGeometry(0.008, 0.008, 0.42, 8).rotateZ(Math.PI / 2).translate(0.21, 0, 0), MS, 0, 0, 0, G.hammer);
+      add(new THREE.SphereGeometry(0.04, 16, 12), MBl, 0.42, 0, 0, G.hammer);
+      add(bushGeometry(0.03, 0.04, 0), MB, 0, 0, 0, G.hammer).rotation.x = Math.PI / 2;
+      G.hammerT = 1;
+    }
+  }
+
+  // la cloche sonne : impact géant (k ~ intensité)
+  api.strike = (k = 1) => { G.hammerT = 0; G.hammerK = Math.min(1, 0.4 + k); };
+
+  function updateGallery(dtSim, dtReal, life, rate, reserve, collect, simTime) {
+    const ringRot = S.lay * 0.18;
+    G.ring.rotation.y = ringRot;
+    for (const st of G.stations) {
+      st.rot = meshAngle(ringRot, 88, st.n, st.th);
+      st.pin.rotation.y = st.rot;
+    }
+    const [drumSt, govSt, camSt, cntSt, pumpSt] = G.stations;
+    // poids : descend quand le ressort se détend, remonte au remontage
+    G.drum.rotation.y = drumSt.rot;
+    const len = 0.35 + 2.4 * (1 - reserve);
+    const top = G.chainX.clone().setY(G.Yg + 0.2 - 0.14);
+    const pitch = 0.064, nL = Math.min(160, Math.ceil(len / pitch));
+    for (let i = 0; i < nL; i++) {
+      _q.setFromAxisAngle(up, i % 2 ? Math.PI / 2 : 0);
+      _m.compose(_p.set(top.x, top.y - i * pitch, top.z), _q, _s.set(1, 1, 1));
+      G.links.setMatrixAt(i, _m);
+    }
+    G.links.count = nL; G.links.instanceMatrix.needsUpdate = true;
+    G.weight.position.set(top.x, top.y - len - 0.02, top.z);
+    G.pulley.rotation.y = -len / 0.12;
+    // régulateur : rotation rapide ; les boules s'écartent avec la vitesse
+    G.gov.rotation.y = govSt.rot * 3;
+    const sp = Math.min(1, rate / 6);
+    const ang = 0.25 + 0.75 * sp + 0.03 * Math.sin(simTime * 3);
+    G.govArms.forEach((a) => { a.rotation.z = ang; a.position.x = 0.03; });
+    const ballX = 0.03 + Math.sin(ang) * 0.27, ballY = -Math.cos(ang) * 0.27;
+    const sleeveY = -0.4 + 0.18 * sp;
+    G.govLinks.forEach((l) => { l.position.set(ballX, ballY, 0); l.rotation.z = -Math.atan2(ballX - 0.02, ballY - sleeveY); });
+    G.sleeve.position.y = G.gov.position.y + sleeveY;
+    G.govLever.position.y = G.sleeve.position.y;
+    // tambour à cames : un tour par cycle (fraction du cycle écoulée)
+    const frac = 1 - reserve;
+    const camRot = -frac * Math.PI * 2;
+    G.cams.forEach((c) => { c.rotation.y = camRot; });
+    G.wormWheel.rotation.y = camRot;
+    G.worm.rotation.set(0, 0, 0); G.worm.quaternion.setFromUnitVectors(up, new THREE.Vector3(Math.cos(camSt.th), 0, Math.sin(camSt.th))).multiply(_qb.setFromAxisAngle(up, frac * 40 * Math.PI * 2));
+    G.racks.forEach((rk, i) => {
+      const { F, R0, AMP, y, dir } = rk.userData;
+      const r = R0 + AMP * F(((frac % 1) + 1) % 1);
+      rk.position.copy(camSt.pos).addScaledVector(dir, r + 0.03).setY(y);
+      G.needles[i].rotation.y = -(Math.PI * 0.75) + 1.5 * Math.PI * ((r - R0) / AMP) - Math.PI / 2;
+    });
+    // compteur : orbites à 1 UA (5 rouleaux) + cycle
+    const orbits = simTime / (Math.PI * 2);
+    let carry = orbits;
+    for (let k = 0; k < 5; k++) {
+      const v = carry % 10, lower = k === 0 ? 0 : (orbits / Math.pow(10, k - 1)) % 10;
+      const val = k === 0 ? v : Math.floor(v) + (lower > 9 ? lower - 9 : 0);
+      G.digits[4 - k].rotation.x = -(val / 10) * Math.PI * 2;
+      carry = carry / 10;
+    }
+    G.digits[5].rotation.x = -((life.cycle + 1) % 10 / 10) * Math.PI * 2;
+    // pompe : embrayée pendant l'aspiration
+    S.pump = (S.pump || 0) + ((collect > 0 && collect < 1 ? 1 : 0) - (S.pump || 0)) * Math.min(1, dtReal * 4);
+    S.pumpA = (S.pumpA || 0) + dtReal * 9 * S.pump;
+    G.crank.rotation.y = -S.pumpA;
+    G.crank.position.y = G.Yg + 0.13 + 0.03 * (1 - S.pump);
+    const tan = new THREE.Vector3(-Math.sin(pumpSt.th), 0, Math.cos(pumpSt.th));
+    const pinW = new THREE.Vector3(Math.cos(S.pumpA) * 0.11, 0, -Math.sin(S.pumpA) * 0.11).add(pumpSt.pos);
+    const stroke = pinW.clone().sub(pumpSt.pos).dot(tan);
+    const capD = 0.3 + stroke * 0.6 * S.pump;
+    G.bellowsBody.scale.set(1, capD, 1);
+    G.bellowsCap.position.y = capD;
+    const capW = G.bellowsBase.clone().addScaledVector(tan, -capD);
+    G.rod.position.copy(pinW).setY(G.Yg + 0.2);
+    G.rod.scale.x = Math.max(0.05, pinW.distanceTo(capW.setY(pinW.y)));
+    G.rod.rotation.y = -Math.atan2(capW.z - pinW.z, capW.x - pinW.x);
+    // cloche
+    G.hammerT += dtReal;
+    const h = G.hammerT;
+    const lift = h < 0.25 ? h / 0.25 : h < 0.32 ? 1 - (h - 0.25) / 0.07 : Math.max(0, -0.15 * Math.exp(-(h - 0.32) * 8) * Math.cos((h - 0.32) * 30));
+    G.hammer.rotation.z = lift * 0.6 * (G.hammerK || 1);
+    G.bell.rotation.z = h > 0.32 && h < 2 ? Math.sin((h - 0.32) * 25) * 0.04 * Math.exp(-(h - 0.32) * 2) : 0;
+  }
+
   // planets : liste de main.js ; pred : index → [x, y, z] (instant présent)
   // life : cycle de vie ; k : échelle des planètes ; pour : {t, dur} du versement
   function update(planets, pred, dtSim, dtReal, running, life, k = 1, pour = null) {
     // ── bras, tubes, roues
-    const carried = planets.filter((p) => p.mE >= 0.1 && pred.has(p.index) && p.a < LIMB_R0 - 0.4 && p.a > 0.2)
-      .sort((a, b) => b.m - a.m).slice(0, K)
-      .sort((a, b) => a.a - b.a);
-    const seen = new Set();
+    const ok = (p) => pred.has(p.index) && p.a < LIMB_R0 - 0.4 && p.a > 0.2;
+    const byIdx = new Map(planets.map((p) => [p.index, p]));
+    // planètes perdues ou devenues trop légères : leur bras rentre
+    for (const [i, t] of track) {
+      const p = byIdx.get(i);
+      if (t.alive && (!p || !ok(p) || p.mE < M_OUT)) t.alive = false;
+    }
+    // nouvelles planètes : un bras libre, ou on remplace la plus légère si
+    // la nouvelle est nettement plus massive
+    const cands = planets.filter((p) => ok(p) && p.mE >= M_IN && !(track.get(p.index)?.alive)).sort((a, b) => b.m - a.m);
+    for (const p of cands) {
+      const old = track.get(p.index);
+      if (old) { old.alive = true; continue; } // (bras en train de rentrer : il ressort)
+      if (track.size >= K) {
+        const alive = [...track.entries()].filter(([, t]) => t.alive).sort((a, b) => a[1].mE - b[1].mE);
+        if (alive.length && p.mE > alive[0][1].mE * SWAP) alive[0][1].alive = false;
+        continue; // (le bras libéré servira quand il sera rentré)
+      }
+      const used = new Set([...track.values()].map((t) => t.pair));
+      const pair = gearPool.find((q) => !used.has(q));
+      track.set(p.index, { alive: true, e: 0, s: -1, phi: 0, pair, mE: p.mE });
+    }
+    // positions : planète vivante → position du GPU ; bras qui rentre → il
+    // poursuit son orbite képlérienne à partir de la dernière position connue
+    for (const [i, t] of track) {
+      const q = t.alive ? pred.get(i) : null;
+      if (q) { t.x = q[0]; t.y = q[1]; t.z = q[2]; t.a = Math.hypot(q[0], q[2]); t.phi = Math.atan2(q[2], q[0]); t.mE = byIdx.get(i).mE; }
+      else if (t.a) { t.phi += dtSim * Math.pow(t.a, -1.5); t.x = t.a * Math.cos(t.phi); t.z = t.a * Math.sin(t.phi); }
+      t.e = Math.max(0, Math.min(1, t.e + (t.alive ? dtReal / 1.3 : -dtReal / 1.0)));
+    }
+    for (const [i, t] of track) if (!t.alive && t.e <= 0) { t.pair.g.visible = t.pair.p.visible = false; track.delete(i); }
+    // étages : par rayon croissant (la plus proche en haut) ; glissement doux
+    const order = [...track.values()].filter((t) => t.a).sort((a, b) => a.a - b.a);
+    order.forEach((t, j) => { t.s = t.s < 0 ? j : t.s + (j - t.s) * Math.min(1, dtReal * 2.5); });
     let n = 0;
-    for (const p of carried) {
-      const [x, y, z] = pred.get(p.index);
-      const a = Math.hypot(x, z), phi = Math.atan2(z, x);
-      let tr = track.get(p.index);
-      const yT = Y_ARM0 - n * DY_ARM;
-      if (!tr) { tr = { y: yT }; track.set(p.index, tr); }
-      tr.y += (yT - tr.y) * Math.min(1, dtReal * 3); // un bras qui change d'étage glisse sur son tube
-      seen.add(p.index);
-      const j = n, ya = tr.y, vr = visRadius(p.mE, k), rT = tubeR(j);
-      const ra = 0.014 + 0.008 * Math.min(1, Math.cbrt(p.mE / 30)); // rayon de la tringle
-      const rHub = rT / HUB_IN, back = 0.26 + 0.09 * (j % 3);
+    for (const t of order) {
+      const j = n, sl = t.s, e = t.e;
+      const eArm = ss(0, 0.55, e), eStem = ss(0.5, 0.9, e), ePin = ss(0.85, 1, e), eHub = ss(0, 0.25, e);
+      const { x, y, z, a, phi } = t;
+      const ya = Y_ARM0 - sl * DY_ARM, vr = visRadius(t.mE, k), rT = tubeR(sl);
+      const ra = 0.014 + 0.008 * Math.min(1, Math.cbrt(t.mE / 30)); // rayon de la tringle
+      const rHub = rT / HUB_IN, back = 0.26 + 0.09 * (Math.round(sl) % 3);
       const cx = Math.cos(phi), cz = Math.sin(phi);
-      // bague serrée sur le tube (vis de pression), tringle jusqu'au bossage, contre-tringle et contrepoids
-      place(hubs, j, _p.set(0, ya, 0), 0, _s.set(rHub, 0.06, rHub));
-      place(hubScrews, j, _p.set(-cz * rHub, ya, cx * rHub), -phi, _s.set(0.012, 0.03, 0.012));
-      place(arms, j, _p.set(cx * rHub * 0.97, ya, cz * rHub * 0.97), -phi, _s.set(a - rHub * 0.97, ra, ra));
-      place(counters, j, _p.set(-cx * rHub * 0.97, ya, -cz * rHub * 0.97), Math.PI - phi, _s.set(back - rHub, ra, ra));
-      place(weights, j, _p.set(-cx * back, ya, -cz * back), -phi, _s.set(0.04 + 2 * ra, 0.07, 0.04 + 2 * ra));
-      place(bosses, j, _p.set(x, ya, z), 0, _s.set(ra * 1.9, ra * 2.6, ra * 1.9));
-      // tige : du bossage au dessous de la planète ; pointe : du dessus jusqu'au peigne
-      const top = y - vr * 0.85;
-      place(stems, j, _p.set(x, ya, z), 0, _s.set(0.009, Math.max(0.01, top - ya), 0.009));
-      place(collars, j, _p.set(x, top, z), 0, _s.setScalar(vr * 0.6 + 0.008));
+      const reach = rHub * 0.97 + (a - rHub * 0.97) * eArm;           // bout de la tringle
+      const tx = cx * reach, tz = cz * reach;
+      // bague serrée sur le tube (vis de pression), tringle, contre-tringle et contrepoids
+      place(hubs, j, _p.set(0, ya, 0), 0, _s.set(rHub * eHub, 0.06, rHub * eHub));
+      place(hubScrews, j, _p.set(-cz * rHub, ya, cx * rHub), -phi, _s.set(0.012 * eHub, 0.03 * eHub, 0.012 * eHub));
+      place(arms, j, _p.set(cx * rHub * 0.97, ya, cz * rHub * 0.97), -phi, _s.set(Math.max(1e-3, reach - rHub * 0.97), ra * eHub, ra * eHub));
+      const bk = rHub + (back - rHub) * eArm;
+      place(counters, j, _p.set(-cx * rHub * 0.97, ya, -cz * rHub * 0.97), Math.PI - phi, _s.set(Math.max(1e-3, bk - rHub), ra * eHub, ra * eHub));
+      place(weights, j, _p.set(-cx * bk, ya, -cz * bk), -phi, _s.set((0.04 + 2 * ra) * eHub, 0.07 * eHub, (0.04 + 2 * ra) * eHub));
+      place(bosses, j, _p.set(tx, ya, tz), 0, _s.set(ra * 1.9 * eHub, ra * 2.6 * eHub, ra * 1.9 * eHub));
+      // tige : monte du bossage jusque sous la planète ; pointe au-dessus
+      const top = y - vr * 0.85, stemTop = ya + (top - ya) * eStem;
+      place(stems, j, _p.set(tx, ya, tz), 0, _s.set(0.009 * eHub, Math.max(0.005, stemTop - ya), 0.009 * eHub));
+      place(collars, j, _p.set(tx, stemTop, tz), 0, _s.setScalar((vr * 0.6 + 0.008) * eStem));
       const pin0 = y + vr * 0.9;
-      place(pins, j, _p.set(x, pin0, z), 0, _s.set(0.004, Math.max(0.005, PIN_TOP - pin0), 0.004));
-      place(pinTips, j, _p.set(x, PIN_TOP, z), 0, _s.setScalar(0.007));
+      place(pins, j, _p.set(x, pin0, z), 0, _s.set(0.004 * ePin, Math.max(0.001, (PIN_TOP - pin0) * ePin), 0.004 * ePin));
+      place(pinTips, j, _p.set(x, pin0 + (PIN_TOP - pin0) * ePin, z), 0, _s.setScalar(0.007 * ePin));
       // tube (de sa roue jusqu'à sa bague) ; roue (solidaire du tube, donc du bras)
-      const gy = Y_GEAR0 + j * DY_GEAR;
-      place(tubes, j, _p.set(0, gy, 0), 0, _s.set(rT, ya - gy, rT));
+      const gy = Y_GEAR0 + sl * DY_GEAR;
+      place(tubes, j, _p.set(0, gy, 0), 0, _s.set(rT, Math.max(1e-3, (ya - gy)), rT));
       // rapport : ω_planète / ω_renvoi = n_pignon / n_roue, n_roue + n_pignon = 40
       const om = Math.pow(Math.max(a, 0.2), -1.5);
       const ng = Math.min(LAY_N - 8, Math.max(8, Math.round((LAY_N * OMEGA_L) / (OMEGA_L + om)))), np = LAY_N - ng;
-      const G = gears[j], P = pinions[j];
-      if (G.userData.n !== ng) { G.geometry = gearGeometry(ng, 0.028, rT); G.userData.n = ng; }
+      const { g: G, p: P } = t.pair, bore = tubeR(Math.round(sl));
+      if (G.userData.n !== ng || G.userData.b !== bore) { G.geometry = gearGeometry(ng, 0.028, bore); G.userData.n = ng; G.userData.b = bore; }
       if (P.userData.n !== np) { P.geometry = gearGeometry(np, 0.028, 0.035); P.userData.n = np; }
       G.visible = P.visible = true;
-      G.position.set(0, gy, 0); G.rotation.y = -phi;
-      P.position.set(layP.x, gy, layP.z);
+      G.position.set(0, gy, 0); G.rotation.y = -phi; G.scale.set(eHub, 1, eHub);
+      P.position.set(layP.x, gy, layP.z); P.scale.set(eHub, 1, eHub);
       P.rotation.y = meshAngle(G.rotation.y, ng, np, thLay); // ses dents dans les creux de la roue
       place(gearHubs, j, _p.set(0, gy + 0.03, 0), 0, _s.set(rHub * 0.95, 0.035, rHub * 0.95));
-      place(pinHubs, j, _p.set(layP.x, gy + 0.03, layP.z), 0, _s.set(0.035 / HUB_IN, 0.035, 0.035 / HUB_IN));
+      place(pinHubs, j, _p.set(layP.x, gy + 0.03, layP.z), 0, _s.set(0.035 / HUB_IN * eHub, 0.035, 0.035 / HUB_IN * eHub));
       n++;
     }
-    for (const i of track.keys()) if (!seen.has(i)) track.delete(i);
-    for (let j = n; j < K; j++) gears[j].visible = pinions[j].visible = false;
     for (const m of [arms, counters, weights, stems, pins, pinTips, bosses, collars, tubes, hubs, hubScrews, gearHubs, pinHubs]) {
       m.count = n; m.instanceMatrix.needsUpdate = true;
     }
@@ -927,6 +1362,8 @@ export function createOrrery(scene, renderer) {
     hair.rotation.y = -bAng * 0.85;
     anchor.rotation.y = anchor.userData.base + 0.12 * Math.tanh(Math.sin(S.ph) * 5) * Math.min(1, S.amp * 3);
 
+    updateGallery(dtSim, dtReal, life, rate, S.reserve, api.collect, S.lay / OMEGA_L);
+
     // ── peigne : relevé si l'étoile enfle ; curseur de la ligne des glaces
     const starR = life.p.starVisR || 0.06;
     const liftT = Math.atan(Math.max(0, starR + 0.25 - (TOOTH_TIP_Y - 0.02)) / (LIMB_RM - R_IN));
@@ -958,13 +1395,21 @@ export function createOrrery(scene, renderer) {
   function setStar(color, lightK, shell = 0) {
     // (couleur de l'étoile adoucie vers le blanc : le laiton reste du laiton)
     starLight.color.setRGB(0.5 + 0.5 * color[0], 0.5 + 0.5 * color[1], 0.5 + 0.5 * color[2]);
-    starLight.intensity = 1.4 * Math.min(2.0, lightK) + 10 * shell;
+    starLight.intensity = 2.4 * Math.min(2.0, lightK) + 10 * shell;
   }
 
   function setVisible(v) {
     root.visible = v;
     scene.environment = v ? env : null;
   }
+
+  // ombres : toute la mécanique en porte et en reçoit (pas le verre)
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    const glass = o.material && o.material.blending === THREE.AdditiveBlending;
+    o.castShadow = !glass && !o.userData.isHeap;
+    o.receiveShadow = !glass;
+  });
 
   return Object.assign(api, { update, pluck, setStar, setVisible });
 }

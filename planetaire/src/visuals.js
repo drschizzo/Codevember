@@ -6,6 +6,7 @@ import {
   smoothstep, varying, hash, positionLocal, normalLocal, normalize, dot, select, min,
   pass, screenUV, pow, clamp, instancedArray, cbrt, sin, cos, time, cameraPosition, abs, uint,
   mx_fractal_noise_float, mx_noise_float, mx_worley_noise_vec2, positionWorld, normalWorld, vec2, fract, screenCoordinate,
+  cameraViewMatrix, atan,
 } from 'three/tsl';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import { dof } from 'three/addons/tsl/display/DepthOfFieldNode.js';
@@ -60,6 +61,11 @@ export function createVisuals(renderer, scene, camera, sim, opts = {}) {
     bokeh: uniform(1.0),
     blurK: uniform(0.5),
     collect: uniform(0.0),   // fin de cycle : les débris sont aspirés par la trémie (0 → 1)
+    // objectif appliqué aux grains eux-mêmes (ils n'écrivent ni profondeur ni vitesse) :
+    aperture: uniform(0.0),  // cercle de confusion (unités monde) loin du plan net
+    shutter: uniform(0.0),   // temps d'obturation (unités de simulation) : traînées de mouvement
+    camVel: uniform(new THREE.Vector3()), // vitesse de la caméra (unités / unité de temps simulé)
+    planetFlux: uniform(4.0), // éclairement maximal des planètes (abaissé en DA mécanique)
   };
 
   // ── Poussière ──────────────────────────────────────────────────────────────
@@ -87,7 +93,8 @@ export function createVisuals(renderer, scene, camera, sim, opts = {}) {
     const sCol = clamp(V.collect.sub(dly).div(0.4), 0.0, 1.0);               // 0 = en place, 1 = aspiré
     const pourPos = along(hop, P.xyz, smoothstep(0.0, 1.0, sPour));
     const colPos = along(hop, P.xyz, float(1).sub(sCol.mul(sCol)));
-    mat.positionNode = select(waiting, pourPos, select(sCol.greaterThan(0.0), colPos, P.xyz));
+    const posW = select(waiting, pourPos, select(sCol.greaterThan(0.0), colPos, P.xyz));
+    mat.positionNode = posW;
     const inFlight = select(waiting, float(1).sub(sPour), sCol);              // pour l'éclat
     const hidden = select(waiting, sPour.lessThanEqual(0.0), sCol.greaterThanEqual(1.0));
 
@@ -113,15 +120,34 @@ export function createVisuals(renderer, scene, camera, sim, opts = {}) {
     const lightC = V.starCol.mul(V.lightK.min(1.2)); // (plafonné : sinon la poussière sature devant une géante)
     const col = varying(base.mul(irr.mul(V.light).mul(lightC).add(V.ambient)).add(thermal.mul(V.lightK.min(1.0))).mul(V.alpha.mul(V.dustK)).mul(nearK).add(hot.mul(0.5))); // (grains du nuage plus gros ET pas atténués : la nébuleuse se voit)
 
-    // Grain net : cœur plein, bord court (plus de halo flou)
-    const d = length(uv().sub(0.5));
-    const shape = smoothstep(0.5, 0.28, d);
-    // (dans le filet, des centaines de milliers de grains se superposent : on les atténue)
-    mat.colorNode = vec4(col.mul(float(1).sub(inFlight.mul(0.8))), shape);
     // Taille plafonnée en pixels : vus de près, les grains restent des points
     // fins au lieu de devenir des taches (utile quand on suit une planète).
-    mat.scaleNode = V.size.mul(hash(instanceIndex).mul(0.8).add(0.6)).mul(heat.mul(1.6).add(1.0)).mul(clamp(camD.div(4.0), 0.06, 1.0))
+    const sz = V.size.mul(hash(instanceIndex).mul(0.8).add(0.6)).mul(heat.mul(1.6).add(1.0)).mul(clamp(camD.div(4.0), 0.06, 1.0))
       .mul(V.sizeK).mul(select(P.w.greaterThanEqual(0.0), select(hidden, 0.0, 1.0), 0.0)); // grain retiré (ou dans la trémie) : plus dessiné
+    // ── Objectif sur les grains ──
+    //  · profondeur de champ : hors du plan net, le grain s'étale en disque
+    //    (cercle de confusion ∝ |d − f| / f), plus doux et moins lumineux ;
+    //  · flou de mouvement : il s'étire le long de son déplacement à l'écran
+    //    pendant le temps d'obturation (les grains internes, rapides, filent).
+    //  L'énergie (surface × éclat) est conservée.
+    const vp = cameraViewMatrix.mul(vec4(posW, 1.0)).xyz;
+    const depth = vp.z.negate().max(0.01);
+    const coc = abs(depth.sub(V.focus)).div(V.focus.max(0.5)).mul(V.aperture).min(depth.mul(0.012));
+    const moving = select(waiting.or(sCol.greaterThan(0.0)), 0.0, 1.0);
+    // (vitesse RELATIVE à la caméra : quand elle suit une planète, les grains
+    //  qui l'accompagnent sont immobiles à l'écran et ne doivent pas filer)
+    const vd = cameraViewMatrix.mul(vec4(Vv.xyz.sub(V.camVel).mul(V.shutter).mul(moving), 0.0)).xyz;
+    const streak = length(vd.xy).min(depth.mul(0.025));
+    const sx = sz.add(coc).add(streak), sy = sz.add(coc);
+    mat.scaleNode = vec2(sx, sy);
+    mat.rotationNode = atan(vd.y, vd.x.add(1e-9));
+    const energy = varying(sz.mul(sz).div(sx.mul(sy).max(1e-12)));
+    const soft = varying(coc.div(sz.add(coc).max(1e-9)));
+    // Grain net : cœur plein, bord court ; flou : disque doux
+    const d = length(uv().sub(0.5));
+    const shape = smoothstep(0.5, mix(0.28, 0.0, soft), d);
+    // (dans le filet, des centaines de milliers de grains se superposent : on les atténue)
+    mat.colorNode = vec4(col.mul(float(1).sub(inFlight.mul(0.8))).mul(energy), shape);
 
     const dust = new THREE.Sprite(mat);
     dust.count = sim.N;
@@ -468,7 +494,7 @@ export function createVisuals(renderer, scene, camera, sim, opts = {}) {
     // ── Éclairage : flux ∝ 1/a (adouci), terminateur doux, pas de surexposition
     // (décroissance très adoucie : en vrai ∝ 1/a², mais les planètes lointaines
     //  doivent rester lisibles ; en HDR la face éclairée peut dépasser le blanc)
-    const flux = clamp(float(2.4).mul(V.lightK).div(pow(aV.max(0.4), 0.5)), 0.3, 4.0);
+    const flux = clamp(float(2.4).mul(V.lightK).div(pow(aV.max(0.4), 0.5)), 0.3, V.planetFlux);
     const ndl = max(dot(n, toStar), 0.0);
     const lit = smoothstep(-0.05, 0.6, dot(n, toStar)).mul(0.35).add(ndl.mul(0.65));
     // liseré (Fresnel) : seulement au bord du disque vu depuis la caméra
