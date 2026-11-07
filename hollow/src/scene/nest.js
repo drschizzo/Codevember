@@ -104,10 +104,15 @@ class Design {
     const f = this.layer.finish;
     const sig = signature(f);
     if (!this.U) {
-      this.U = { outer: finishUniforms(f.outer), inner: finishUniforms(f.inner), edge: finishUniforms(f.edge), wear: uniform(f.wear) };
+      this.U = {
+        outer: finishUniforms(f.outer), inner: finishUniforms(f.inner), edge: finishUniforms(f.edge),
+        wear: uniform(f.wear), groove: uniform(f.groove || 0), grooveAt: uniform(f.grooveAt ?? 0.5),
+      };
     } else {
       applyFinish(this.U.outer, f.outer); applyFinish(this.U.inner, f.inner); applyFinish(this.U.edge, f.edge);
       this.U.wear.value = f.wear;
+      this.U.groove.value = f.groove || 0;
+      this.U.grooveAt.value = f.grooveAt ?? 0.5;
     }
     if (sig !== this.sig) {
       this.sig = sig;
@@ -198,6 +203,7 @@ export function createNest(scene, gen) {
   root.name = 'nest';
   scene.add(root);
   const nest = { root, gen, shadowMat: buildShadowMaterial(), designs: [], onProgress: null, solo: null };
+  let frame = 0;
 
   // applique la recette (les couches inchangées ne sont pas reconstruites)
   nest.setRecipe = (recipe) => {
@@ -212,7 +218,9 @@ export function createNest(scene, gen) {
   // par le cœur pendant toute la croissance de son ombre
   nest.birthDepth = (ratio, coreRel) => Math.ceil(Math.log(coreRel) / Math.log(ratio)) + 1;
 
-  // s : { tau, phi, dive, ratio, D, coreRel, detail }
+  // s : { tau, phi, cycle, dive, ratio, D, coreRel, detail }
+  // (cycle : nombre de boucles accomplies ; les instances gardent ainsi la même
+  // couche d'une boucle à l'autre, et leurs vecteurs vitesse restent justes)
   nest.update = (s) => {
     const N = nest.designs.length;
     if (!N) return;
@@ -222,12 +230,18 @@ export function createNest(scene, gen) {
     const t0 = 1.15 * s.detail, t1 = 2.8 * s.detail;
     const xCore = Math.log(s.coreRel) / Math.log(s.ratio);
     let shells = 0;
+    const base = (s.cycle || 0) * N;
     for (let d = Math.ceil(s.tau + X_MIN); d <= Math.floor(s.tau + XB); d++) {
       const x = d - s.tau;
-      const j = ((d % N) + N) % N, copy = ((Math.floor(d / N) % C) + C) % C;
+      const j = ((d % N) + N) % N, copy = ((Math.floor((d + base) / N) % C) + C) % C;
       const des = nest.designs[j], inst = des.copies[copy];
       if (nest.solo != null && nest.solo !== j) continue; // (débogage : une seule couche)
       inst.group.visible = true;
+      // une instance qui reprend du service (autre couche, ou absente à l'image
+      // précédente) n'a pas d'historique de mouvement valable
+      const moved = inst.lastD !== d + base || inst.lastFrame !== frame - 1;
+      inst.lastD = d + base;
+      inst.lastFrame = frame;
       inst.group.scale.setScalar(s.D * s.ratio ** x);
       des.orient(inst.group.quaternion, s.tau, s.phi, N, s.dive);
       // affichage : meilleur niveau disponible (cachée si entièrement dans le cœur)
@@ -235,15 +249,30 @@ export function createNest(scene, gen) {
       while (lod < 2 && !des.geoms[lod]) lod++;
       while (lod > 0 && !des.geoms[lod]) lod--;
       const shown = des.geoms[lod] && x < xCore - 0.02;
-      inst.display.forEach((m, l) => { m.layers.mask = shown && l === lod ? MAIN : 0; });
+      inst.display.forEach((m, l) => {
+        const on = shown && l === lod;
+        m.userData.still = moved || !m.userData.on ? 0 : 1; // (vecteur vitesse nul à la première image)
+        m.userData.on = on;
+        m.layers.mask = on ? MAIN : 0;
+      });
       if (shown) shells++;
-      // ombres : toutes les couches pour la lampe frontale ; pour le cœur, celles
-      // entre le cœur et la caméra (au-delà, la lumière du cœur est nulle)
-      inst.proxy.layers.mask = des.geoms[2] ? KEY | (x > -0.35 ? CORE : 0) : 0;
+      // ombres : toutes les couches, pour les deux lumières. (Aucune coquille ne
+      // cesse d'en projeter tant qu'elle est rendue : sinon l'éclairage saute.)
+      inst.proxy.layers.mask = des.geoms[2] ? KEY | CORE : 0;
       inst.proxy.userData.birth = Math.min(1, Math.max(0, XB - x));
-      const cr = shown && x < 3.2 && x > X_MIN + 0.5 ? MAIN : 0;
-      for (const m of inst.crystals) m.layers.mask = cr;
+      const cr = shown && x < 3.2 && x > X_MIN + 0.5;
+      for (const m of inst.crystals) {
+        m.userData.still = moved || !m.userData.on ? 0 : 1;
+        m.userData.on = cr;
+        m.layers.mask = cr ? MAIN : 0;
+      }
     }
+    // les instances inutilisées perdent leur historique
+    for (const des of nest.designs) for (const c of des.copies) if (!c.group.visible) {
+      for (const m of c.display) m.userData.on = false;
+      for (const m of c.crystals) m.userData.on = false;
+    }
+    frame++;
     return { shells, birth: XB };
   };
   return nest;

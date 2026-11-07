@@ -1,4 +1,5 @@
-// Surfaces minimales triplement périodiques (gyroïde, Schwarz P, diamant)
+// Surfaces minimales triplement périodiques (gyroïde, Schwarz P, diamant,
+// Neovius, I-WP de Schoen, Fischer–Koch S)
 // taillées dans une coquille sphérique : une matière poreuse, creuse par
 // essence. Maillage par « surface nets » sur une grille restreinte à la bande
 // de la coquille, sommets reprojetés sur la surface (Newton), normales issues
@@ -33,6 +34,9 @@ export function tpmsField(spec) {
     let g;
     if (kind === 'schwarz') g = (cos(X) + cos(Y) + cos(Z)) / 1.9;
     else if (kind === 'diamond') g = (sin(X) * sin(Y) * sin(Z) + sin(X) * cos(Y) * cos(Z) + cos(X) * sin(Y) * cos(Z) + cos(X) * cos(Y) * sin(Z)) / 1.25;
+    else if (kind === 'neovius') g = (3 * (cos(X) + cos(Y) + cos(Z)) + 4 * cos(X) * cos(Y) * cos(Z)) / 6;
+    else if (kind === 'iwp') g = (2 * (cos(X) * cos(Y) + cos(Y) * cos(Z) + cos(Z) * cos(X)) - (cos(2 * X) + cos(2 * Y) + cos(2 * Z))) / 3;
+    else if (kind === 'fischer') g = (cos(2 * X) * sin(Y) * cos(Z) + cos(X) * cos(2 * Y) * sin(Z) + sin(X) * cos(Y) * cos(2 * Z)) / 1.4;
     else g = (sin(X) * cos(Y) + sin(Y) * cos(Z) + sin(Z) * cos(X)) / 1.5;
     // feuille épaisse (sheet) ou réseau plein (network)
     return (spec.sheet ? abs(g) - wall : g - wall) / f;

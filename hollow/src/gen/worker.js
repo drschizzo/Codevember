@@ -2,7 +2,7 @@
 // détail) ou ses cristaux, hors du fil principal ; les tampons sont
 // transférés sans copie.
 import { createRng, createNoise3 } from '../rng.js';
-import { goldbergCells, slotCells } from './cells.js';
+import { goldbergCells, slotCells, voronoiCells } from './cells.js';
 import { prepareCells, buildShell } from './shell.js';
 import { buildTPMS } from './tpms.js';
 import { placeCrystals } from './crystals.js';
@@ -10,7 +10,7 @@ import { buildNoiseVolume } from './noisevol.js';
 
 function prepare(spec) {
   const rng = createRng(spec.seed), noise = createNoise3(spec.seed);
-  const cells = spec.type === 'slots' ? slotCells(spec) : goldbergCells(spec, rng);
+  const cells = spec.type === 'slots' ? slotCells(spec) : spec.type === 'voronoi' ? voronoiCells(spec, rng) : goldbergCells(spec, rng);
   return prepareCells(cells, spec, noise, rng);
 }
 

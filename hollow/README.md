@@ -24,14 +24,18 @@ Le panneau règle tout : graine et humeur, boucle (durée, plongée ou profondeu
 
 **Le passage.** Chaque coquille a un oculus sur son pôle +z. Elles culbutent pendant leur remontée et se stabilisent, oculus face à la caméra, à l’approche du passage (seule la rotation autour de l’axe de visée reste libre). La lampe frontale, solidaire de la caméra, franchit les oculus avec elle : aucune coquille ne change jamais de côté par rapport à elle, donc ses ombres ne sautent jamais.
 
+**Les instances.** Chaque coquille visible est une instance d’un modèle ; une instance garde sa couche d’une boucle à l’autre (phase « déroulée »), et une instance qui réapparaît a un vecteur vitesse nul à sa première image — sinon le flou de mouvement et l’anticrénelage temporel produisent un éclair. Toutes les coquilles rendues projettent l’ombre des deux lumières : aucune ne cesse d’en projeter en cours de route.
+
 **La naissance au cœur.** Les coquilles naissent dans le cœur lumineux. Pour que la lumière du cœur ne saute pas quand une nouvelle coquille commence à faire de l’ombre, celle-ci « pousse » dans la carte d’ombre : ses barreaux s’y élargissent progressivement depuis leur axe (masque d’ombre sur la proximité du bord), entièrement à l’intérieur du cœur.
 
 ## Géométrie (`src/gen/`, dans des Web Workers)
 
-- **Alvéoles** : dual d’une icosphère géodésique (cellules de Goldberg), désordre réglable (vers un pavage de Voronoï), centres écartés du pôle pour former l’oculus.
+- **Alvéoles** : dual d’une icosphère géodésique (cellules de Goldberg), désordre réglable, centres écartés du pôle pour former l’oculus.
+- **Voronoï** : vrai pavage de Voronoï sphérique (enveloppe convexe incrémentale des germes) ; germes en spirale de Fibonacci, en bruit bleu ou à densité graduée.
 - **Fentes** : grille latitude × longitude, éventuellement en spirale (les arêtes partagées entre rangs décalés sont subdivisées des deux côtés).
-- Chaque cellule est percée d’un trou : contour rétréci de la demi-largeur du barreau (barreaux d’égale largeur), puis arrondi (polygone → cercle). Les trous traversent une vraie épaisseur, avec biseau arrondi ou chanfrein plat ; maillage étanche, trois niveaux de détail.
-- **Surfaces minimales** (gyroïde, Schwarz P, diamant) taillées dans la coquille, en feuille ou en réseau : surface nets, reprojection de Newton, congés par maximum lisse, alésage de l’oculus.
+- Chaque cellule est percée d’un trou : contour rétréci de la demi-largeur du barreau (barreaux d’égale largeur), arrondi (polygone → cercle), puis découpé selon une forme — ellipse orientée (jusqu’au tourbillon), étoile, diaphragme. Les trous traversent une vraie épaisseur, avec biseau arrondi ou chanfrein plat, éventuellement un chambrage (trou à épaulement) ; biseau et épaulement sont réduits localement là où ils se replieraient.
+- Détails usinés : barreaux bombés, rivets aux jonctions, gravure qui suit le contour des trous (dans le matériau). Maillage étanche, trois niveaux de détail.
+- **Surfaces minimales** (gyroïde, Schwarz P, diamant, Neovius, I-WP, Fischer–Koch) taillées dans la coquille, en feuille ou en réseau : surface nets, reprojection de Newton, congés par maximum lisse, alésage de l’oculus.
 - **Géode** : peu d’ouvertures, larges et irrégulières ; druse de cristaux prismatiques sur la face interne, jamais dans un trou.
 
 ## Matériaux (`src/scene/materials.js`)
@@ -42,4 +46,4 @@ Les motifs sont procéduraux mais ne calculent aucun bruit : ils échantillonnen
 
 ## Performances
 
-Mesuré à 2× (≈ 4,5 Mpx), toutes options actives : ≈ 10 ms par image. Ombres : les cartes d’ombre ne voient que des maillages simplifiés (calques dédiés) ; le cœur n’y inclut que les coquilles situées entre lui et la caméra. Géométrie générée hors du fil principal, en parallèle, avec cache.
+Toutes options actives, ≈ 11 ms par image à 1× (≈ 1,1 Mpx) et ≈ 23 ms à 2× selon les scènes (le verre transmissif est le plus coûteux) ; la qualité « Haute » rend à 1,5×. Ombres : les cartes d’ombre ne voient que des maillages simplifiés (calques dédiés) ; le cœur n’y inclut que les coquilles situées entre lui et la caméra. Géométrie générée hors du fil principal, en parallèle, avec cache.

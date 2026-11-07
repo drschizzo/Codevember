@@ -32,7 +32,7 @@ export function createPost(renderer, scene, camera, lights) {
     godrays: uniform(0.6), godraysColor: uniform(new THREE.Color()), aoStrength: uniform(0.8),
     blur: uniform(0.6), focus: uniform(4), focusRange: uniform(2), bokeh: uniform(2),
     exposure: uniform(1), contrast: uniform(1), saturation: uniform(1), warmth: uniform(0), vignette: uniform(0.35),
-    ca: uniform(0.2), grain: uniform(0.04),
+    ca: uniform(0.2), grain: uniform(0.04), hiCap: uniform(3),
   };
   let nodes = {};
   let key = '';
@@ -92,9 +92,18 @@ export function createPost(renderer, scene, camera, lights) {
       nodes.dof = d;
       color = d;
     }
+    // Hautes lumières : épaule douce sur la composante max (la teinte est
+    // conservée) — au-delà de cap/2 les valeurs tendent vers cap. Le bloom ne
+    // reçoit donc jamais de pics extrêmes (pas de halos d'un reflet ponctuel).
     let c = color.rgb;
+    {
+      const m = max(c.r, max(c.g, c.b)).max(1e-5), k = U.hiCap.mul(0.5);
+      const over = m.sub(k).max(0);
+      const mt = m.min(k).add(over.div(over.div(U.hiCap.sub(k)).add(1)));
+      c = c.mul(mt.div(m));
+    }
     if (cfg.bloom) {
-      const b = bloom(color, cfg.bloomStrength, cfg.bloomRadius, cfg.bloomThreshold);
+      const b = bloom(vec4(c, 1), cfg.bloomStrength, cfg.bloomRadius, cfg.bloomThreshold);
       nodes.bloom = b;
       c = c.add(b.rgb);
     }
@@ -137,6 +146,7 @@ export function createPost(renderer, scene, camera, lights) {
     U.vignette.value = cfg.vignette;
     U.ca.value = cfg.ca;
     U.grain.value = cfg.grain;
+    U.hiCap.value = cfg.hiCap;
     U.focus.value = cfg.focus;
     U.focusRange.value = cfg.focusRange;
     U.bokeh.value = cfg.bokeh;

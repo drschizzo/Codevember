@@ -24,7 +24,7 @@ import * as THREE from 'three/webgpu';
 import {
   Fn, If, struct, uniform, attribute, positionLocal, normalLocal, positionWorld, positionView, normalView, vec2, vec3, vec4,
   float, mat3, mix, smoothstep, clamp, abs, length, normalize, dot, cross, sin, floor, fract, mod, step, acos, sign,
-  dFdx, dFdy, fwidth, faceDirection, texture3D, mx_cell_noise_vec3, modelViewMatrix, modelScale, cameraPosition,
+  dFdx, dFdy, fwidth, faceDirection, mrt, velocity, texture3D, mx_cell_noise_vec3, modelViewMatrix, modelScale, cameraPosition,
 } from 'three/tsl';
 import { FINISH_KEYS } from '../finishes.js';
 import { NOISE_PERIOD } from '../gen/noisevol.js';
@@ -37,6 +37,7 @@ export const G = {
   envFalloff: uniform(0.6), // occultation de l'environnement vers le centre
   phase: uniform(0),        // phase de la boucle [0, 1)
   microDetail: uniform(1),  // intensité globale des micro-reliefs
+  roughFloor: uniform(0.12), // douceur des reflets : rugosité minimale (sources ponctuelles → reflets étendus)
 };
 
 // ── Volume de bruit ──────────────────────────────────────────────────────────
@@ -126,18 +127,24 @@ function surface(fin, U, p, pf) {
       out.ccH = noise2(p.mul(S.mul(160))).mul(aa(160));
       break;
     }
-    case 'weave': { // sergé de carbone, projeté sur trois plans (triplanaire)
+    case 'weave': { // sergé 2/2 de carbone, projeté sur trois plans (triplanaire) : mèches, fibres
       const weave = (uv) => {
-        const s = uv.mul(S.mul(70)), c = floor(s), f = fract(s);
-        const over = mod(c.x.add(c.y), 2.0);
-        return vec2(mix(sin(f.y.mul(PI)), sin(f.x.mul(PI)), over), over);
+        const s = uv.mul(S.mul(110)), c = floor(s), f = fract(s);
+        // sergé : le motif dessus/dessous se décale d'une mèche à chaque rang (diagonales)
+        const over = step(1.0, mod(c.x.add(c.y), 4.0)).mul(step(mod(c.x.add(c.y), 4.0), 2.99));
+        const along = mix(f.x, f.y, over);   // position le long de la mèche
+        const across = mix(f.y, f.x, over);  // position en travers
+        const bulge = sin(across.mul(PI)).mul(sin(along.mul(PI)).mul(0.35).add(0.65));
+        const fiber = sin(across.mul(PI * 14)).mul(0.5).add(0.5); // fibres parallèles dans la mèche
+        return vec3(bulge, over, fiber);
       };
       const nw = abs(normalLocal).pow(4.0);
       const r = weave(p.yz).mul(nw.x).add(weave(p.zx).mul(nw.y)).add(weave(p.xy).mul(nw.z)).div(nw.x.add(nw.y).add(nw.z));
-      const k = aa(70);
-      out.h = r.x.mul(k);
+      const k = aa(110), kf = aa(110 * 14);
+      out.h = r.x.mul(k).add(r.z.mul(0.15).mul(kf));
       out.aniso = mix(vec2(1, 0), vec2(0, 1), r.y).mul(U.aniso);
-      out.color = mix(U.color, U.color2, r.y.mul(0.6).mul(k)).mul(r.x.mul(0.3).mul(k).add(0.85));
+      out.color = mix(U.color, U.color2, r.y.mul(0.35).mul(k)).mul(r.x.mul(0.25).mul(k).add(0.85)).mul(r.z.mul(0.1).mul(kf).add(0.95));
+      out.rough = U.rough.add(r.z.mul(0.05).mul(kf));
       break;
     }
     case 'rock': { // basalte : bosses en chou-fleur, relief fractal, piqûres, deux tons
@@ -206,7 +213,7 @@ function surface(fin, U, p, pf) {
 // Ce qui, dans une couche, impose une recompilation quand cela change
 export function signature(f) {
   const s = (fin) => [fin.pattern, fin.sheen > 0, fin.clearcoat > 0, fin.irid > 0, fin.aniso > 0, fin.glass > 0, fin.dispersion > 0, fin.smudge > 0].join('');
-  return [s(f.outer), s(f.inner), s(f.edge), f.wear > 0].join('|');
+  return [s(f.outer), s(f.inner), s(f.edge), f.wear > 0, (f.groove || 0) > 0].join('|');
 }
 
 // ── Matériau d'une couche ────────────────────────────────────────────────────
@@ -217,7 +224,7 @@ export function buildShellMaterial(finish, U) {
     cc: any((f) => f.clearcoat > 0), ccN: fins.some((f) => f.pattern === 'glaze'), sheen: any((f) => f.sheen > 0),
     irid: any((f) => f.irid > 0), aniso: any((f) => f.aniso > 0), glass: any((f) => f.glass > 0),
     disp: any((f) => f.glass > 0 && f.dispersion > 0), glit: fins.some((f) => f.pattern === 'glitter'),
-    smudge: any((f) => f.smudge > 0), wear: finish.wear > 0,
+    smudge: any((f) => f.smudge > 0), wear: finish.wear > 0, groove: (finish.groove || 0) > 0,
   };
 
   // membres de la structure : seulement ce que le modèle utilisera
@@ -252,8 +259,11 @@ export function buildShellMaterial(finish, U) {
     return o;
   };
   const surfA = attribute('surf', 'vec4');
+  // (empreinte du pixel dans l'espace « proximité du bord » : la gravure ne crénelle pas)
+  const pw = fwidth(surfA.w).toVar('proxFootprint');
   const evaluate = Fn(() => {
     pf.assign(length(fwidth(p)));
+    pw.assign(fwidth(surfA.w));
     const out = Surf().toVar();
     const write = (o) => { for (const k of Object.keys(members)) out.get(k).assign(o[k]); };
     If(surfA.y.greaterThan(0.5), () => write(props(finish.inner, U.inner)))
@@ -266,6 +276,13 @@ export function buildShellMaterial(finish, U) {
           const m = surfA.w.mul(0.62).add(n.mul(0.38)).add(n2);
           const worn = smoothstep(U.wear.oneMinus(), U.wear.oneMinus().add(0.06), m).mul(step(0.001, U.wear));
           for (const k of Object.keys(o)) o[k] = mix(o[k], e[k], worn);
+        }
+        if (F.groove) { // gravure : un filet qui suit le contour du trou, à mi-barreau
+          const w = pw.mul(1.5).max(0.03);
+          const band = smoothstep(w, w.mul(0.3), abs(surfA.w.sub(U.grooveAt))).mul(U.groove);
+          o.h = o.h.sub(band.mul(1.4));
+          o.color = o.color.mul(band.mul(-0.3).add(1));
+          o.rough = o.rough.add(band.mul(0.12));
         }
         write(o);
       });
@@ -283,7 +300,10 @@ export function buildShellMaterial(finish, U) {
     const sm = smoothstep(0.1, 0.45, fbm(p.mul(2.2).add(7.3), 3)).mul(noise2(p.mul(140)).mul(0.25).add(0.75));
     rough = rough.add(sm.mul(get('smudge')).mul(0.35));
   }
-  m.roughnessNode = rough.clamp(0.02, 1);
+  // plancher doux (√(r² + f²)) : l'ordre des finitions est conservé, mais aucun
+  // reflet ne se réduit à un point brûlé
+  const soft = (r, f) => r.mul(r).add(f.mul(f)).sqrt().clamp(0.02, 1);
+  m.roughnessNode = soft(rough, G.roughFloor);
 
   // relief (hauteur en unités monde : la plongée garde le même grain à toute échelle)
   const world = modelScale.x;
@@ -294,7 +314,7 @@ export function buildShellMaterial(finish, U) {
 
   if (F.cc) {
     m.clearcoatNode = get('cc');
-    m.clearcoatRoughnessNode = get('ccRough');
+    m.clearcoatRoughnessNode = soft(get('ccRough'), G.roughFloor.mul(0.7));
     if (F.ccN) m.clearcoatNormalNode = perturb(get('ccH').mul(0.0008).mul(world), normalView);
   }
   if (F.sheen) { m.sheenNode = get('sheen'); m.sheenRoughnessNode = get('sheenRough'); }
@@ -315,8 +335,15 @@ export function buildShellMaterial(finish, U) {
   // l'environnement s'éteint vers le centre du nid (lumière ambiante occultée par les couches)
   const r = length(positionWorld).div(G.D);
   m.aoNode = mix(float(1), clamp(r.pow(0.75), 0.04, 1), G.envFalloff);
+  m.mrtNode = stableVelocity();
   return m;
 }
+
+// Vecteur vitesse nul pour un objet qui vient d'apparaître : sa matrice
+// « précédente » date de sa dernière apparition (autre taille, autre place) et
+// donnerait un flou de mouvement et une reprojection temporelle aberrants.
+const still = uniform(1).onObjectUpdate(({ object }) => object.userData.still ?? 1);
+export const stableVelocity = () => mrt({ velocity: velocity.mul(still) });
 
 // ── Matériau d'ombre (maillage grossier) ─────────────────────────────────────
 // La couche qui vient de naître au cœur « pousse » dans la carte d'ombre :
@@ -341,13 +368,14 @@ export function buildCrystalMaterial(U) {
   m.attenuationColorNode = mix(U.base, U.tip, smoothstep(0.0, 0.7, y));
   m.attenuationDistanceNode = float(0.05).mul(modelScale.x);
   m.thicknessNode = float(0.04).mul(modelScale.x);
-  m.roughnessNode = mix(float(0.45), U.rough, smoothstep(0.0, 0.45, y));
+  m.roughnessNode = mix(float(0.45), U.rough, smoothstep(0.0, 0.45, y)).max(G.roughFloor.mul(0.5));
   m.transmissionNode = float(1);
   m.iorNode = U.ior;
   m.dispersionNode = U.dispersion;
   m.specularIntensityNode = float(1);
   m.metalnessNode = float(0);
   m.aoNode = mix(float(1), clamp(length(positionWorld).div(G.D).pow(0.75), 0.04, 1), G.envFalloff);
+  m.mrtNode = stableVelocity();
   return m;
 }
 

@@ -16,9 +16,27 @@ export const MOODS = {
   'irisé': { label: 'Irisé', env: 'studio', coreK: [5000, 8000], keyK: 6000, bg: '#040507' },
 };
 
-export const LAYER_TYPES = { cells: 'Alvéoles', slots: 'Fentes', tpms: 'Surface minimale', geode: 'Géode' };
+export const LAYER_TYPES = { cells: 'Alvéoles', voronoi: 'Voronoï', slots: 'Fentes', tpms: 'Surface minimale', geode: 'Géode' };
 
 const r2 = (x) => Math.round(x * 1000) / 1000;
+
+// forme des trous et détails usinés (alvéoles, Voronoï, fentes)
+function holeDetails(rng, type) {
+  const shape = type === 'slots'
+    ? rng.weighted([['poly', 4], ['ellipse', 2.5], ['iris', 1]])
+    : rng.weighted([['poly', 4], ['ellipse', 2], ['star', 1.3], ['iris', 1.6]]);
+  const d = {
+    shape,
+    petals: shape === 'star' ? rng.int(4, 7) : rng.int(5, 8),
+    depth: r2(rng.range(0.2, 0.42)), aspect: r2(rng.range(0.28, 0.62)),
+    holeScale: r2(shape === 'poly' ? 1 : rng.range(0.78, 1)),
+    orient: r2(rng.range(0, Math.PI)), swirl: rng.pick([0, 0, 0.6, 1.2, -0.8]), orientJitter: rng.pick([0, 0, 0, 0.7]),
+    pillow: rng.chance(0.4) ? r2(rng.range(0.4, 1)) : 0,
+    step: rng.chance(0.3) ? r2(rng.range(0.2, 0.45)) : 0, stepDepth: r2(rng.range(0.3, 0.6)),
+    rivets: rng.chance(0.3) ? r2(rng.range(0.5, 0.9)) : 0,
+  };
+  return d;
+}
 
 // géométrie d'une couche (la graine de la couche fixe les détails aléatoires)
 export function geometryFor(type, rng, seed) {
@@ -31,6 +49,19 @@ export function geometryFor(type, rng, seed) {
       bar: r2(spacing * rng.range(0.16, 0.42)), round: r2(rng.pick([0, 0.35, 0.7, 1, 1])),
       barVar: r2(rng.range(0, 0.45)), barFreq: r2(rng.range(0.8, 2.5)), barGrad: r2(rng.range(-0.5, 0.5)),
       closed: r2(rng.pick([0, 0, 0.04, 0.12])), thickness: r2(thickness), bevel: r2(thickness * rng.range(0.15, 0.35)), chamfer: false,
+      ...holeDetails(rng, type),
+    };
+  }
+  if (type === 'voronoi') {
+    const count = rng.int(60, 420), spacing = Math.sqrt((4 * Math.PI) / count);
+    const thickness = rng.range(0.035, 0.075);
+    return {
+      ...base, count, distribution: rng.weighted([['fibonacci', 3], ['random', 2], ['gradient', 1.5]]),
+      spiral: r2(rng.range(-1, 1)), jitter: rng.pick([0, 0, 0.15, 0.3]),
+      bar: r2(spacing * rng.range(0.14, 0.38)), round: r2(rng.pick([0.35, 0.7, 1, 1])),
+      barVar: r2(rng.range(0, 0.4)), barFreq: r2(rng.range(0.8, 2.5)), barGrad: r2(rng.range(-0.5, 0.5)),
+      closed: r2(rng.pick([0, 0, 0.05, 0.15])), thickness: r2(thickness), bevel: r2(thickness * rng.range(0.15, 0.35)), chamfer: false,
+      ...holeDetails(rng, type),
     };
   }
   if (type === 'slots') {
@@ -41,12 +72,14 @@ export function geometryFor(type, rng, seed) {
       barLat: r2(rng.pick([1, 1.5, 2.5, 4])), barLon: r2(rng.pick([1, 1.5, 2.5])), round: r2(rng.range(0.3, 1)),
       barVar: r2(rng.range(0, 0.3)), barFreq: 1.5, barGrad: r2(rng.range(-0.3, 0.3)), closed: 0,
       thickness: r2(thickness), bevel: r2(thickness * rng.range(0.15, 0.35)), chamfer: false,
+      ...holeDetails(rng, type),
     };
   }
   if (type === 'tpms') {
     const sheet = rng.chance(0.65);
     return {
-      ...base, surface: rng.weighted([['gyroid', 3], ['schwarz', 1.5], ['diamond', 1.5]]), freq: r2(rng.range(2.6, 4.6)),
+      ...base, surface: rng.weighted([['gyroid', 3], ['schwarz', 1.2], ['diamond', 1.2], ['neovius', 1], ['iwp', 1], ['fischer', 0.8]]),
+      freq: r2(rng.range(2.6, 4.6)),
       thickness: r2(rng.range(0.1, 0.17)), wall: r2(sheet ? rng.range(0.16, 0.32) : rng.range(-0.25, 0.25)), sheet,
       bevel: r2(rng.range(0.006, 0.014)), chamfer: false,
     };
@@ -65,7 +98,12 @@ export function geometryFor(type, rng, seed) {
 export function finishesFor(setKey, rng) {
   const set = SETS[setKey];
   const pick = (k) => ({ ...FINISHES[k], preset: k });
-  const out = { outer: pick(set.outer), inner: pick(set.inner), edge: pick(set.edge), wear: set.wear };
+  const out = {
+    outer: pick(set.outer), inner: pick(set.inner), edge: pick(set.edge), wear: set.wear,
+    // gravure qui suit le contour des trous (sauf verre et pierre)
+    groove: !['smoked', 'amber', 'geode'].includes(setKey) && rng.chance(0.35) ? r2(rng.range(0.5, 1)) : 0,
+    grooveAt: r2(rng.range(0.35, 0.75)),
+  };
   // une même teinte d'anodisation ou d'émail pour les faces d'une couche
   if (set.outer === 'anodized') {
     const tint = rng.pick(TINTS.anodized);
@@ -96,15 +134,16 @@ export function makeLayer(type, rng, seedTag, moodKey, avoidSet = null) {
   }
   const geo = geometryFor(type, rng.fork(`geo:${seedTag}`), seedTag);
   geo.chamfer = SETS[set].chamfer;
+  const finish = finishesFor(set, rng);
+  if (type === 'tpms' || type === 'geode') finish.groove = 0; // (pas de contour de trou à suivre)
   return {
-    type, set, geo,
-    finish: finishesFor(set, rng),
+    type, set, geo, finish,
     crystal: { tip: rng.pick(['#8a4fd6', '#c27be6', '#e0a24a', '#7fb8e8', '#e8e2f0']), base: '#efe9f2', rough: 0.03, dispersion: 0.45, ior: 1.55 },
     motion: { spin: rng.pick([-2, -1, 1, 2]), tumble: rng.pick([-1, 1, 1, 2]), axis: rng.dir().map(r2), phase: r2(rng.range(0, Math.PI * 2)) },
   };
 }
 
-export function randomType(rng) { return rng.weighted([['cells', 4], ['slots', 2.5], ['tpms', 1.5], ['geode', 1]]); }
+export function randomType(rng) { return rng.weighted([['cells', 3], ['voronoi', 3], ['slots', 2.5], ['tpms', 1.8], ['geode', 1]]); }
 
 // force : { mood } pour imposer une humeur (le reste du tirage est inchangé)
 export function generate(seed, force = {}) {
@@ -115,10 +154,10 @@ export function generate(seed, force = {}) {
   const N = rng.int(4, 6);
 
   // types : variété garantie, au plus une géode et une surface minimale
-  const bag = ['cells', 'cells', 'slots'];
-  if (rng.chance(0.75)) bag.push('tpms');
-  if (rng.chance(0.55)) bag.push('geode');
-  while (bag.length < N) bag.push(rng.pick(['cells', 'slots', 'cells']));
+  const bag = [rng.pick(['cells', 'voronoi']), 'voronoi', 'slots'];
+  if (rng.chance(0.8)) bag.push('tpms');
+  if (rng.chance(0.5)) bag.push('geode');
+  while (bag.length < N) bag.push(rng.pick(['cells', 'voronoi', 'slots', 'tpms']));
   for (let i = bag.length - 1; i > 0; i--) { const j = Math.floor(rng.next() * (i + 1)); [bag[i], bag[j]] = [bag[j], bag[i]]; }
   const types = bag.slice(0, N);
 
@@ -135,9 +174,9 @@ export function generate(seed, force = {}) {
     nest: { ratio: r2(rng.range(0.58, 0.66)), core: r2(rng.range(0.035, 0.06)) },
     loop: { duration: 24, dive: true, depth: 0.35 },
     camera: { fov: Math.round(rng.range(36, 48)), sway: r2(rng.range(0.015, 0.05)), roll: r2(rng.range(0, 0.06)) },
-    core: { color: kelvinToHex(coreK), intensity: r2(rng.range(28, 55)), glow: r2(rng.range(10, 22)), decay: 2, pulse: r2(rng.range(0, 0.15)), shadowSoft: 2 },
-    key: { color: kelvinToHex(mood.keyK), intensity: r2(rng.range(160, 240)), x: r2(rng.range(-0.45, -0.2)), y: r2(rng.range(0.2, 0.45)), angle: 0.85, penumbra: 0.9 },
-    env: { preset: mood.env, intensity: r2(rng.range(1.1, 1.6)), rotation: r2(rng.range(0, Math.PI * 2)) },
+    core: { color: kelvinToHex(coreK), intensity: r2(rng.range(28, 55)), glow: r2(rng.range(6, 13)), decay: 2, pulse: r2(rng.range(0, 0.15)), shadowSoft: 2 },
+    key: { color: kelvinToHex(mood.keyK), intensity: r2(rng.range(80, 120)), x: r2(rng.range(-0.45, -0.2)), y: r2(rng.range(0.2, 0.45)), angle: 0.85, penumbra: 0.9 },
+    env: { preset: mood.env, intensity: r2(rng.range(0.9, 1.25)), rotation: r2(rng.range(0, Math.PI * 2)) },
     fog: { color: mood.bg, near: 1.5, far: 3.1 },
     layers,
   };
