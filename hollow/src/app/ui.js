@@ -3,7 +3,7 @@
 import GUI from 'lil-gui';
 import { FINISHES, SETS, FINISH_DEFAULTS } from '../finishes.js';
 import { MOODS } from '../recipe.js';
-import { TYPES, P, HOLE_SHAPES } from '../types.js';
+import { TYPES, P, HOLE_SHAPES, IRIS_PARAMS } from '../types.js';
 import { ENV_PRESETS } from '../scene/env.js';
 import { QUALITY } from './settings.js';
 
@@ -133,6 +133,10 @@ export function createUI({ recipe: getRecipe, render, on }) {
         const fh = f.addFolder('Trous et usinage').close();
         fh.add(g, 'shape', HOLE_SHAPES).name('Forme des trous').onChange(geo);
         for (const [k, label, a, b, st] of [...P.holes, ...P.machining]) if (g[k] !== undefined) fh.add(g, k, a, b, st).name(label).onFinishChange(geo);
+      }
+      if (g.iris) {
+        const fi = f.addFolder('Diaphragme de l’oculus').close();
+        for (const [k, label, a, b, st] of IRIS_PARAMS) fi.add(g.iris, k, a, b, st).name(label).onFinishChange(geo);
       }
 
       const fm = f.addFolder('Matériaux').close();

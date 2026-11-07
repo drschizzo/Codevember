@@ -24,11 +24,12 @@ import * as THREE from 'three/webgpu';
 import {
   Fn, If, struct, uniform, attribute, positionLocal, normalLocal, positionWorld, positionView, normalView, vec2, vec3, vec4,
   float, mat3, mix, smoothstep, clamp, abs, length, normalize, dot, cross, sin, floor, fract, mod, step, acos, sign,
-  dFdx, dFdy, fwidth, faceDirection, mrt, normalViewGeometry, velocity, transformNormalToView, cos, max as tmax, texture3D, mx_cell_noise_vec3, modelViewMatrix, modelScale, cameraPosition,
+  dFdx, dFdy, fwidth, faceDirection, mrt, normalViewGeometry, positionGeometry, velocity, transformNormalToView, cos, max as tmax, texture3D, mx_cell_noise_vec3, modelViewMatrix, modelScale, cameraPosition,
 } from 'three/tsl';
 import { FINISH_KEYS } from '../finishes.js';
 import { NOISE_PERIOD } from '../gen/noisevol.js';
 import { tpmsParams } from '../gen/tpms.js';
+import { rigPosition, rigBev, rigRadial } from './rig.js';
 
 const PI = Math.PI;
 
@@ -293,10 +294,11 @@ function tpmsNormal(spec, T) {
 // cos(a)·horizontale + sin(a)·radiale est recalculée à chaque pixel. Le biseau
 // reste parfaitement rond quel que soit son nombre de segments, et la diagonale
 // des quadrilatères ne se lit plus dans les reflets. Ailleurs (faces, rivets :
-// attribut nul), la normale du maillage.
-function bevelNormal() {
-  const bev = attribute('bev', 'vec4');
-  const r = normalize(positionLocal);
+// attribut nul), la normale du maillage. (Pièces animées : normale de tranche
+// et direction radiale tournées avec la pièce, voir rig.js.)
+function bevelNormal(rigged = false) {
+  const bev = rigged ? rigBev : attribute('bev', 'vec4');
+  const r = normalize(rigged ? rigRadial : positionLocal);
   // (sans branche ni division par zéro : un `select` TSL devient un if/else,
   // et la normale géométrique — variable partagée — n'y serait assignée que
   // d'un côté ; un NaN, lui, se propagerait par les dérivées écran)
@@ -310,8 +312,9 @@ function bevelNormal() {
 }
 
 // ── Matériau d'une couche ────────────────────────────────────────────────────
-// tpms : { spec, U } pour une surface minimale (normale analytique)
-export function buildShellMaterial(finish, U, tpms = null) {
+// tpms : { spec, U } pour une surface minimale (normale analytique) ;
+// rig : uniformes d'une couche à pièces animées (voir rig.js)
+export function buildShellMaterial(finish, U, tpms = null, rig = null) {
   const fins = [finish.outer, finish.inner, finish.edge];
   const any = (pred) => fins.some(pred);
   const F = {
@@ -334,8 +337,9 @@ export function buildShellMaterial(finish, U, tpms = null) {
   if (F.smudge) members.smudge = 'float';
   const Surf = struct(members);
 
-  // propriétés complètes d'une face (motif + uniformes)
-  const p = positionLocal;
+  // propriétés complètes d'une face (motif + uniformes) ; les motifs suivent
+  // les pièces animées (position au repos)
+  const p = rig ? positionGeometry : positionLocal;
   // empreinte du pixel : calculée avant les branches (les dérivées n'y sont pas définies)
   const pf = length(fwidth(p)).toVar('pixelFootprint');
   const props = (fin, Uf) => {
@@ -404,7 +408,8 @@ export function buildShellMaterial(finish, U, tpms = null) {
   // le relief s'annule à la frontière entre deux finitions (poids mêlés) : sans
   // cela, le saut de hauteur d'une finition à l'autre dessine un liseré dentelé
   const purity = smoothstep(0.55, 0.85, surfA.x.max(surfA.y).max(surfA.z));
-  const N0 = tpms ? transformNormalToView(tpmsNormal(tpms.spec, tpms.U)) : bevelNormal();
+  if (rig) m.positionNode = rigPosition(rig, G.phase, true);
+  const N0 = tpms ? transformNormalToView(tpmsNormal(tpms.spec, tpms.U)) : bevelNormal(!!rig);
   let N = perturb(get('h').mul(purity).mul(0.0035).mul(world).mul(G.microDetail), N0);
   // (sans normalisation : la plupart des faces n'ont pas de facettes, vecteur nul)
   if (F.glit) N = normalize(N.add(modelViewMatrix.mul(vec4(get('glitter'), 0)).xyz.div(world).mul(0.22).mul(G.microDetail)));
@@ -463,8 +468,9 @@ export const stableVelocity = () => mrt({ velocity: velocity.mul(still) });
 // ses barreaux s'élargissent depuis leur axe (proximité du bord < naissance),
 // ce qui évite tout saut dans la lumière du cœur.
 export const birth = uniform(1).onObjectUpdate(({ object }) => object.userData.birth ?? 1);
-export function buildShadowMaterial() {
+export function buildShadowMaterial(rig = null) {
   const m = new THREE.MeshBasicNodeMaterial();
+  if (rig) m.positionNode = rigPosition(rig, G.phase, false);
   m.maskShadowNode = attribute('surf', 'vec4').w.lessThanEqual(birth.mul(1.001));
   return m;
 }

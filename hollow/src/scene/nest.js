@@ -25,6 +25,7 @@ import {
 } from './materials.js';
 import { crystalGeometry } from '../gen/crystals.js';
 import { IMPLICIT } from '../types.js';
+import { isRigged, rigUniforms, applyRig } from './rig.js';
 
 export const MAIN = 1, CORE = 2, KEY = 4; // masques de calques
 export const X_MIN = -2.3;                // au-delà (coquilles derrière la caméra) : noyées dans le brouillard
@@ -41,6 +42,7 @@ function toGeometry(o, bounds = 1.05) {
   if (o.tangent) g.setAttribute('tangent', new THREE.BufferAttribute(o.tangent, 4, packed(o.tangent)));
   if (o.surf) g.setAttribute('surf', new THREE.BufferAttribute(o.surf, 4, true));
   if (o.bev) g.setAttribute('bev', new THREE.BufferAttribute(o.bev, 4, packed(o.bev)));
+  if (o.rigA) { g.setAttribute('rigA', new THREE.BufferAttribute(o.rigA, 4)); g.setAttribute('rigB', new THREE.BufferAttribute(o.rigB, 4)); }
   if (o.index) g.setIndex(new THREE.BufferAttribute(o.index, 1));
   g.boundingSphere = new THREE.Sphere(new THREE.Vector3(), bounds);
   g.boundingBox = new THREE.Box3(new THREE.Vector3(-bounds, -bounds, -bounds), new THREE.Vector3(bounds, bounds, bounds));
@@ -126,9 +128,10 @@ class Design {
   syncMaterial() {
     const f = this.layer.finish;
     const g = this.layer.geo;
-    const isT = g.type === 'tpms';
-    const sig = signature(f) + (isT ? `|tpms:${g.surface}:${g.sheet}` : '');
+    const isT = g.type === 'tpms', rig = isRigged(g);
+    const sig = signature(f) + (isT ? `|tpms:${g.surface}:${g.sheet}` : '') + (rig ? '|rig' : '');
     if (isT) { this.TU ??= tpmsUniforms(); applyTpms(this.TU, g); }
+    if (rig) { this.RU ??= rigUniforms(); applyRig(this.RU, g); }
     if (!this.U) {
       this.U = {
         outer: finishUniforms(f.outer), inner: finishUniforms(f.inner), edge: finishUniforms(f.edge),
@@ -143,9 +146,14 @@ class Design {
     if (sig !== this.sig) {
       this.sig = sig;
       const old = this.material;
-      this.material = buildShellMaterial(f, this.U, isT ? { spec: g, U: this.TU } : null);
+      this.material = buildShellMaterial(f, this.U, isT ? { spec: g, U: this.TU } : null, rig ? this.RU : null);
       for (const c of this.copies) for (const m of c.display) m.material = this.material;
       if (old) old.dispose();
+      // ombre : les pièces animées s'y déforment comme à l'image
+      const oldShadow = this.shadowMat;
+      this.shadowMat = rig ? buildShadowMaterial(this.RU) : null;
+      for (const c of this.copies) c.proxy.material = this.shadowMat || this.nest.shadowMat;
+      oldShadow?.dispose();
     }
   }
 
@@ -190,7 +198,7 @@ class Design {
         group.add(m);
         return m;
       });
-      const proxy = new THREE.Mesh(this.geoms[3] || placeholder, this.nest.shadowMat);
+      const proxy = new THREE.Mesh(this.geoms[3] || placeholder, this.shadowMat || this.nest.shadowMat);
       proxy.castShadow = true; proxy.receiveShadow = false; proxy.frustumCulled = false; proxy.layers.mask = 0;
       group.add(proxy);
       const c = { group, display, proxy, crystals: [] };
@@ -220,6 +228,7 @@ class Design {
     for (const c of this.copies) this.nest.root.remove(c.group);
     for (const g of new Set(this.geoms)) g?.dispose();
     this.material?.dispose();
+    this.shadowMat?.dispose();
     this.crystalMat?.dispose();
   }
 }
@@ -291,6 +300,7 @@ export function createNest(scene, gen) {
         m.renderOrder = x >= 0 ? 1 + x : 100 - x;
         m.userData.still = moved || !m.userData.on ? 0 : 1; // (vecteur vitesse nul à la première image)
         m.userData.on = on;
+        m.userData.x = x; // (pièces animées)
         m.layers.mask = on ? MAIN : 0;
       });
       if (shown) shells++;
@@ -298,6 +308,7 @@ export function createNest(scene, gen) {
       // cesse d'en projeter tant qu'elle est rendue : sinon l'éclairage saute.)
       inst.proxy.layers.mask = des.geoms[3] ? KEY | CORE : 0;
       inst.proxy.userData.birth = Math.min(1, Math.max(0, XB - x));
+      inst.proxy.userData.x = x;
       const cr = shown && rpx > 25 && x > X_MIN + 0.5;
       for (const m of inst.crystals) {
         m.renderOrder = x >= 0 ? 1.5 + x : 100.5 - x;
