@@ -2,8 +2,8 @@
 // réglages de rendu et des fonctions de rappel : il ne touche pas à la scène.
 import GUI from 'lil-gui';
 import { FINISHES, SETS, FINISH_DEFAULTS } from '../finishes.js';
-import { MOODS } from '../recipe.js';
-import { TYPES, P, HOLE_SHAPES, IRIS_PARAMS } from '../types.js';
+import { MOODS, GEMS } from '../recipe.js';
+import { TYPES, P, HOLE_SHAPES, IRIS_PARAMS, SETTINGS } from '../types.js';
 import { ENV_PRESETS } from '../scene/env.js';
 import { QUALITY } from './settings.js';
 
@@ -133,6 +133,7 @@ export function createUI({ recipe: getRecipe, render, on }) {
         const fh = f.addFolder('Trous et usinage').close();
         fh.add(g, 'shape', HOLE_SHAPES).name('Forme des trous').onChange(geo);
         for (const [k, label, a, b, st] of [...P.holes, ...P.machining]) if (g[k] !== undefined) fh.add(g, k, a, b, st).name(label).onFinishChange(geo);
+        if (g.setting !== undefined) fh.add(g, 'setting', SETTINGS).name('Jonctions').onChange(() => { geo(); on.layerGeometry(i, true); });
       }
       if (g.iris) {
         const fi = f.addFolder('Diaphragme de l’oculus').close();
@@ -161,6 +162,15 @@ export function createUI({ recipe: getRecipe, render, on }) {
         fs.addColor(F, 'color2').name('Couleur 2').onChange(mat);
         for (const [k, l2, a, b, s] of FIN) fs.add(F, k, a, b, s).name(l2).onChange(mat);
         fs.addColor(F, 'sheenColor').name('Couleur du lustre').onChange(mat);
+      }
+      if (g.setting === 'gem' && L.gem) {
+        const fj = fm.addFolder('Pierres serties').close();
+        const pick = { preset: '' };
+        fj.add(pick, 'preset', opts(GEMS)).name('Pierre').onChange((k) => { Object.assign(L.gem, GEMS[k]); fj.controllersRecursive().forEach((c) => c.updateDisplay()); mat(); });
+        fj.addColor(L.gem, 'color').name('Teinte').onChange(mat);
+        fj.add(L.gem, 'ior', 1.4, 2.5, 0.01).name('Indice').onChange(mat);
+        fj.add(L.gem, 'dispersion', 0, 1.5, 0.01).name('Dispersion (feu)').onChange(mat);
+        fj.add(L.gem, 'depth', 0.05, 3, 0.01).name('Transparence').onChange(mat);
       }
       if (g.crystals !== undefined) {
         const fk = fm.addFolder('Cristaux').close();

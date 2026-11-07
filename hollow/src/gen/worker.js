@@ -3,9 +3,10 @@
 // transférés sans copie.
 import { createRng, createNoise3 } from '../rng.js';
 import { goldbergCells, slotCells, voronoiCells } from './cells.js';
-import { prepareCells, buildShell } from './shell.js';
+import { prepareCells, buildShell, crest } from './shell.js';
 import { buildTPMS } from './tpms.js';
 import { placeCrystals } from './crystals.js';
+import { junctions, placeGems, placeSpines } from './jewels.js';
 import { buildNoiseVolume } from './noisevol.js';
 
 // Pavages percés (gen/shell.js) : la forme des cellules
@@ -40,9 +41,19 @@ function pack(o) {
   return out;
 }
 
+// Ornements d'un pavage percé : { crystals, gems, spines } (matrices d'instance)
+function ornaments(spec) {
+  const prepared = prepare(spec), out = {};
+  if (spec.crystals > 0) out.crystals = placeCrystals(prepared, spec, createRng(`${spec.seed}:crystals`));
+  const J = (spec.rivets || 0) > 0 || spec.spines > 0 ? junctions(prepared, spec) : null;
+  if (spec.setting === 'gem' && spec.rivets > 0) out.gems = placeGems(J, spec, crest(spec), createRng(`${spec.seed}:gems`));
+  if (spec.spines > 0) out.spines = placeSpines(J, spec, crest(spec), createRng(`${spec.seed}:spines`));
+  return out;
+}
+
 function build({ spec, lod, what }) {
   if (what === 'noise') return buildNoiseVolume(spec.seed);
-  if (what === 'crystals') return placeCrystals(prepare(spec), spec, createRng(`${spec.seed}:crystals`));
+  if (what === 'ornaments') return ornaments(spec);
   if (MESHES[spec.type]) return pack(MESHES[spec.type](spec, lod));
   return pack(buildShell(prepare(spec), spec, lod));
 }
@@ -51,7 +62,10 @@ self.onmessage = ({ data }) => {
   const t0 = performance.now();
   try {
     const out = build(data);
-    const transfer = Object.values(out).filter((v) => ArrayBuffer.isView(v)).map((v) => v.buffer);
+    // (tampons transférés sans copie, y compris un niveau plus bas : ornements)
+    const transfer = [];
+    const walk = (o) => { for (const v of Object.values(o)) { if (ArrayBuffer.isView(v)) transfer.push(v.buffer); else if (v && typeof v === 'object') walk(v); } };
+    walk(out);
     self.postMessage({ id: data.id, out, ms: performance.now() - t0 }, transfer);
   } catch (e) {
     self.postMessage({ id: data.id, error: `${e.message}\n${e.stack}` });

@@ -479,6 +479,10 @@ export function buildShadowMaterial(rig = null) {
 export function crystalUniforms(c) {
   return { tip: uniform(new THREE.Color(c.tip)), base: uniform(new THREE.Color(c.base)), rough: uniform(c.rough), dispersion: uniform(c.dispersion), ior: uniform(c.ior) };
 }
+export function applyCrystal(U, c) {
+  U.tip.value.set(c.tip); U.base.value.set(c.base);
+  U.rough.value = c.rough; U.dispersion.value = c.dispersion; U.ior.value = c.ior;
+}
 export function buildCrystalMaterial(U) {
   const m = new THREE.MeshPhysicalNodeMaterial({ transmission: 1 });
   const y = positionLocal.y.clamp(0, 1);
@@ -495,6 +499,40 @@ export function buildCrystalMaterial(U) {
   m.metalnessNode = float(0);
   m.aoNode = mix(float(1), clamp(length(positionWorld).div(G.D).pow(0.75), 0.04, 1), G.envFalloff);
   m.emissiveNode = haloEmission();
+  m.mrtNode = stableVelocity();
+  return m;
+}
+
+// ── Pierres serties ──────────────────────────────────────────────────────────
+// Taille brillant à facettes planes : le « feu » vient de la dispersion et des
+// reflets de l'environnement ; la teinte, de l'absorption dans la pierre.
+export function gemUniforms(g) {
+  return { color: uniform(new THREE.Color(g.color)), ior: uniform(g.ior), dispersion: uniform(g.dispersion), depth: uniform(g.depth ?? 0.4) };
+}
+export function applyGem(U, g) {
+  U.color.value.set(g.color); U.ior.value = g.ior; U.dispersion.value = g.dispersion; U.depth.value = g.depth ?? 0.4;
+}
+export function buildGemMaterial(U) {
+  const m = new THREE.MeshPhysicalNodeMaterial({ transmission: 1 });
+  m.colorNode = vec4(1, 1, 1, 1);
+  m.attenuationColorNode = U.color;
+  m.attenuationDistanceNode = U.depth.mul(0.01).mul(modelScale.x);
+  m.thicknessNode = float(0.01).mul(modelScale.x);
+  m.roughnessNode = G.roughFloor.mul(0.15).max(0.015);
+  m.transmissionNode = float(1);
+  m.iorNode = U.ior;
+  m.dispersionNode = U.dispersion;
+  m.specularIntensityNode = float(1);
+  m.metalnessNode = float(0);
+  // « feu » : les reflets des facettes se teintent (couche mince), et la pierre
+  // rend la lumière du cœur qu'elle reçoit (décroissance en 1/r²)
+  m.iridescenceNode = float(0.45);
+  m.iridescenceIORNode = float(1.6);
+  m.iridescenceThicknessNode = float(380);
+  const r = length(positionWorld);
+  const glow = G.coreR.mul(G.coreR).div(r.mul(r)).mul(G.coreGlow).mul(0.5);
+  m.aoNode = mix(float(1), clamp(r.div(G.D).pow(0.75), 0.04, 1), G.envFalloff);
+  m.emissiveNode = haloEmission().add(G.coreColor.mul(U.color).mul(glow));
   m.mrtNode = stableVelocity();
   return m;
 }

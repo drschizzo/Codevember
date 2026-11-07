@@ -5,9 +5,9 @@
 // (normale horizontale de la tranche et angle du profil : la normale du biseau
 // est recalculée à chaque pixel), et, pour les pièces animées, rigA / rigB.
 
-import { cross } from './cells.js';
+import { cross, tangentFrame } from './cells.js';
 
-const { sqrt, PI, max, abs } = Math;
+const { sqrt, PI, max, abs, cos, sin } = Math;
 
 // natures de pièces animées (voir scene/rig.js)
 export const RIG = { none: 0, iris: 1, burst: 2, hinge: 3, spin: 4 };
@@ -133,3 +133,29 @@ export class Buffers {
   }
 }
 
+
+// Pièce de révolution autour de l'axe unitaire v, à partir de base : profil
+// [[rayon, hauteur], …] parcouru de l'extérieur vers l'intérieur par le haut
+// (normales : à droite du sens de parcours). surf : poids des finitions.
+export function revolve(B, base, v, profile, segs, surf = EDGE, prox = 255) {
+  const [t1, t2] = tangentFrame(v);
+  const np = profile.length, start = B.n;
+  for (let j = 0; j < np; j++) {
+    const a = profile[Math.max(0, j - 1)], b = profile[Math.min(np - 1, j + 1)];
+    let nr = b[1] - a[1], nh = -(b[0] - a[0]);
+    const l = sqrt(nr * nr + nh * nh) || 1;
+    nr /= l; nh /= l;
+    const [r, h] = profile[j];
+    for (let i = 0; i < segs; i++) {
+      const t = (i / segs) * PI * 2, c = cos(t), s = sin(t);
+      const d = [t1[0] * c + t2[0] * s, t1[1] * c + t2[1] * s, t1[2] * c + t2[2] * s];
+      B.vert(
+        [base[0] + d[0] * r + v[0] * h, base[1] + d[1] * r + v[1] * h, base[2] + d[2] * r + v[2] * h],
+        [d[0] * nr + v[0] * nh, d[1] * nr + v[1] * nh, d[2] * nr + v[2] * nh],
+        surf[0], surf[1], surf[2], prox,
+      );
+    }
+    if (j > 0) B.strip(start + (j - 1) * segs, start + j * segs, segs);
+  }
+  return start + (np - 1) * segs; // (dernier anneau)
+}
