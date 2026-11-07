@@ -138,7 +138,7 @@ class Design {
     const f = this.layer.finish;
     const g = this.layer.geo;
     const isT = g.type === 'tpms', rig = isRigged(g), pore = (g.pores || 0) > 0;
-    const sig = signature(f) + (isT ? `|tpms:${g.surface}:${g.sheet}` : '') + (rig ? '|rig' : '') + (pore ? '|pores' : '');
+    const sig = `${signature(f)}|${g.type}` + (isT ? `|tpms:${g.surface}:${g.sheet}` : '') + (rig ? '|rig' : '') + (pore ? '|pores' : '');
     if (pore) { this.PU ??= poreUniforms(); applyPores(this.PU, g); }
     if (isT) { this.TU ??= tpmsUniforms(); applyTpms(this.TU, g); }
     if (rig) { this.RU ??= rigUniforms(); applyRig(this.RU, g); }
@@ -157,7 +157,10 @@ class Design {
     if (sig !== this.sig) {
       this.sig = sig;
       const old = this.material;
-      this.material = buildShellMaterial(f, this.U, isT ? { spec: g, U: this.TU } : null, rig ? this.RU : null, pore ? this.PU : null);
+      this.material = buildShellMaterial(f, this.U, {
+        tpms: isT ? { spec: g, U: this.TU } : null, rig: rig ? this.RU : null, pore: pore ? this.PU : null,
+        meshNormal: IMPLICIT.has(g.type) && !isT,
+      });
       const oldSpine = this.spineMat;
       this.spineMat = buildShellMaterial(f, this.U);
       for (const c of this.copies) {
