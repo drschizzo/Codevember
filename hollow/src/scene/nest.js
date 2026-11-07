@@ -21,9 +21,10 @@ import * as THREE from 'three/webgpu';
 import { uniform } from 'three/tsl';
 import {
   buildShellMaterial, buildShadowMaterial, finishUniforms, applyFinish, signature, tpmsUniforms, applyTpms,
-  crystalUniforms, buildCrystalMaterial,
+  crystalUniforms, applyCrystal, buildCrystalMaterial, gemUniforms, applyGem, buildGemMaterial,
 } from './materials.js';
 import { crystalGeometry } from '../gen/crystals.js';
+import { gemGeometry, spineGeometry } from '../gen/jewels.js';
 import { IMPLICIT } from '../types.js';
 import { isRigged, rigUniforms, applyRig } from './rig.js';
 
@@ -49,8 +50,18 @@ function toGeometry(o, bounds = 1.05) {
   return g;
 }
 
-const crystalGeos = [0, 1, 2].map((v) => toGeometry(crystalGeometry(v), 1.2));
 const placeholder = new THREE.BufferGeometry();
+
+// Ornements (instances) : géométries par variante, et matériau. Les épines
+// ont les finitions de la coquille (la tranche), dans leur propre matériau :
+// partagé avec les coquilles, le calcul des vecteurs vitesse se dérègle) et
+// projettent une ombre ; cristaux et pierres sont transmissifs, sans ombre.
+const ORNAMENTS = {
+  crystals: { geos: [0, 1, 2].map((v) => toGeometry(crystalGeometry(v), 1.2)), material: (d) => d.crystalMat },
+  gems: { geos: [toGeometry(gemGeometry(), 1.2)], material: (d) => d.gemMat },
+  spines: { geos: [toGeometry(spineGeometry(), 1.2)], material: (d) => d.spineMat, shadow: true },
+};
+const needsOrnaments = (g) => (g.crystals || 0) > 0 || (g.setting === 'gem' && g.rivets > 0) || (g.spines || 0) > 0;
 
 class Design {
   constructor(nest, index) {
@@ -59,31 +70,31 @@ class Design {
     this.geoms = [null, null, null, null]; // 0–2 : affichage ; 3 : ombres
     this.specKey = '';
     this.pending = null; // lot de géométries en cours de génération
-    this.crystal = null; // { attrs: [InstancedBufferAttribute ×3] }
+    this.orn = []; // ornements : [{ kind, variant, attr }]
     this.copies = [];
     this.material = null;
     this.sig = '';
   }
 
-  // (re)lit la couche de la recette : géométrie (asynchrone), matériau, cristaux
+  // (re)lit la couche de la recette : géométrie (asynchrone), matériau, ornements
   set(layer) {
     this.layer = layer;
     this.syncMaterial();
-    // Géométrie (et cristaux) : tous les niveaux sont demandés ensemble et
+    // Géométrie (et ornements) : tous les niveaux sont demandés ensemble et
     // basculés d'un coup quand le dernier arrive — jamais de mélange entre
     // l'ancienne et la nouvelle forme, ni de niveau qui change de forme.
     const key = `${layer.type}|${JSON.stringify(layer.geo)}`;
     if (key !== this.specKey) {
       this.specKey = key;
       // (surfaces minimales : les ombres utilisent le niveau moyen, pas de niveau 3)
-      const isT = IMPLICIT.has(layer.geo.type), geode = (layer.geo.crystals || 0) > 0;
+      const isT = IMPLICIT.has(layer.geo.type), orn = needsOrnaments(layer.geo);
       const lods = isT ? [2, 1, 0] : [3, 2, 1, 0];
-      const batch = { key, need: lods.length + (geode ? 1 : 0), got: 0, geoms: [null, null, null, null], crystals: null };
+      const batch = { key, need: lods.length + (orn ? 1 : 0), got: 0, geoms: [null, null, null, null], ornaments: null };
       this.pending = batch;
       const arrived = () => {
         batch.got++;
         this.nest.onProgress?.();
-        if (batch.got === batch.need && this.pending === batch) this.commit(batch, isT, geode);
+        if (batch.got === batch.need && this.pending === batch) this.commit(batch, isT);
       };
       for (const lod of lods) {
         this.nest.gen.request(layer.geo, lod).then((out) => {
@@ -92,23 +103,20 @@ class Design {
           arrived();
         }).catch((e) => { if (e.message !== 'cancelled') console.error(e); });
       }
-      if (geode) {
-        this.nest.gen.request(layer.geo, 0, 'crystals').then((out) => {
+      if (orn) {
+        this.nest.gen.request(layer.geo, 0, 'ornaments').then((out) => {
           if (this.pending !== batch || this.disposed) return;
-          batch.crystals = out;
+          batch.ornaments = out;
           arrived();
         }).catch((e) => console.error(e));
       }
     }
-    if (this.crystalU) {
-      const c = layer.crystal;
-      this.crystalU.tip.value.set(c.tip); this.crystalU.base.value.set(c.base);
-      this.crystalU.rough.value = c.rough; this.crystalU.dispersion.value = c.dispersion; this.crystalU.ior.value = c.ior;
-    }
+    if (this.crystalU) applyCrystal(this.crystalU, layer.crystal);
+    if (this.gemU && layer.gem) applyGem(this.gemU, layer.gem);
   }
 
   // bascule atomique vers la nouvelle forme
-  commit(batch, isT, geode) {
+  commit(batch, isT) {
     const old = [...this.geoms];
     this.geoms = batch.geoms;
     if (isT) this.geoms[3] = this.geoms[1]; // (ombres = niveau moyen)
@@ -117,7 +125,7 @@ class Design {
       c.proxy.geometry = this.geoms[3];
     }
     for (const g of new Set(old)) if (g && !this.geoms.includes(g)) g.dispose(); // (une géométrie peut servir à deux niveaux)
-    this.setCrystals(geode ? batch.crystals : null);
+    this.setOrnaments(batch.ornaments);
     this.pending = null;
     this.nest.onProgress?.();
   }
@@ -147,8 +155,14 @@ class Design {
       this.sig = sig;
       const old = this.material;
       this.material = buildShellMaterial(f, this.U, isT ? { spec: g, U: this.TU } : null, rig ? this.RU : null);
-      for (const c of this.copies) for (const m of c.display) m.material = this.material;
+      const oldSpine = this.spineMat;
+      this.spineMat = buildShellMaterial(f, this.U);
+      for (const c of this.copies) {
+        for (const m of c.display) m.material = this.material;
+        for (const m of c.ornaments) if (m.userData.kind === 'spines') m.material = this.spineMat;
+      }
       if (old) old.dispose();
+      oldSpine?.dispose();
       // ombre : les pièces animées s'y déforment comme à l'image
       const oldShadow = this.shadowMat;
       this.shadowMat = rig ? buildShadowMaterial(this.RU) : null;
@@ -157,33 +171,46 @@ class Design {
     }
   }
 
-  setCrystals(out) {
-    for (const c of this.copies) { for (const m of c.crystals) c.group.remove(m); c.crystals = []; }
-    this.crystal = null;
+  setOrnaments(out) {
+    for (const c of this.copies) { for (const m of c.ornaments) c.group.remove(m); c.ornaments = []; }
+    this.orn = [];
     if (!out) return;
-    if (!this.crystalMat) {
+    if (out.crystals && !this.crystalMat) {
       this.crystalU = crystalUniforms(this.layer.crystal);
       this.crystalMat = buildCrystalMaterial(this.crystalU);
     }
-    // une série d'instances par variante de cristal
-    const attrs = [0, 1, 2].map((v) => {
-      const idx = [];
-      for (let i = 0; i < out.count; i++) if (out.variants[i] === v) idx.push(i);
+    if (out.gems && !this.gemMat) {
+      this.gemU = gemUniforms(this.layer.gem);
+      this.gemMat = buildGemMaterial(this.gemU);
+    }
+    const attr = (m, idx) => {
       const a = new Float32Array(idx.length * 16);
-      idx.forEach((i, k) => a.set(out.matrices.subarray(i * 16, i * 16 + 16), k * 16));
+      idx.forEach((i, k) => a.set(m.subarray(i * 16, i * 16 + 16), k * 16));
       return new THREE.InstancedBufferAttribute(a, 16);
-    });
-    this.crystal = { attrs };
-    for (const c of this.copies) this.attachCrystals(c);
+    };
+    for (const kind of Object.keys(ORNAMENTS)) {
+      const o = out[kind];
+      if (!o || !o.count) continue;
+      // une série d'instances par variante
+      ORNAMENTS[kind].geos.forEach((_, v) => {
+        const idx = [];
+        for (let i = 0; i < o.count; i++) if ((o.variants?.[i] ?? 0) === v) idx.push(i);
+        if (idx.length) this.orn.push({ kind, variant: v, attr: attr(o.matrices, idx) });
+      });
+    }
+    for (const c of this.copies) this.attachOrnaments(c);
   }
 
-  attachCrystals(c) {
-    if (!this.crystal) return;
-    c.crystals = this.crystal.attrs.map((attr, v) => {
-      const m = new THREE.InstancedMesh(crystalGeos[v], this.crystalMat, attr.count);
+  attachOrnaments(c) {
+    c.ornaments = this.orn.map(({ kind, variant, attr }) => {
+      const K = ORNAMENTS[kind];
+      const m = new THREE.InstancedMesh(K.geos[variant], K.material(this), attr.count);
       m.instanceMatrix = attr;
       m.frustumCulled = false;
+      m.castShadow = !!K.shadow;
+      m.receiveShadow = true;
       m.layers.mask = 0;
+      m.userData.kind = kind;
       c.group.add(m);
       return m;
     });
@@ -201,8 +228,8 @@ class Design {
       const proxy = new THREE.Mesh(this.geoms[3] || placeholder, this.shadowMat || this.nest.shadowMat);
       proxy.castShadow = true; proxy.receiveShadow = false; proxy.frustumCulled = false; proxy.layers.mask = 0;
       group.add(proxy);
-      const c = { group, display, proxy, crystals: [] };
-      this.attachCrystals(c);
+      const c = { group, display, proxy, ornaments: [] };
+      this.attachOrnaments(c);
       this.nest.root.add(group);
       this.copies.push(c);
     }
@@ -228,8 +255,10 @@ class Design {
     for (const c of this.copies) this.nest.root.remove(c.group);
     for (const g of new Set(this.geoms)) g?.dispose();
     this.material?.dispose();
+    this.spineMat?.dispose();
     this.shadowMat?.dispose();
     this.crystalMat?.dispose();
+    this.gemMat?.dispose();
   }
 }
 
@@ -310,17 +339,19 @@ export function createNest(scene, gen) {
       inst.proxy.userData.birth = Math.min(1, Math.max(0, XB - x));
       inst.proxy.userData.x = x;
       const cr = shown && rpx > 25 && x > X_MIN + 0.5;
-      for (const m of inst.crystals) {
+      for (const m of inst.ornaments) {
         m.renderOrder = x >= 0 ? 1.5 + x : 100.5 - x;
         m.userData.still = moved || !m.userData.on ? 0 : 1;
         m.userData.on = cr;
-        m.layers.mask = cr ? MAIN : 0;
+        m.userData.x = x;
+        // (les épines projettent leur ombre tant que la coquille en projette)
+        m.layers.mask = (cr ? MAIN : 0) | (m.castShadow && des.geoms[3] ? KEY | CORE : 0);
       }
     }
     // les instances inutilisées perdent leur historique
     for (const des of nest.designs) for (const c of des.copies) if (!c.group.visible) {
       for (const m of c.display) m.userData.on = false;
-      for (const m of c.crystals) m.userData.on = false;
+      for (const m of c.ornaments) m.userData.on = false;
     }
     frame++;
     return { shells, birth: XB };

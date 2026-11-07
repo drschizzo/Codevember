@@ -20,6 +20,7 @@
 import { norm, dot, cross, add, sub, scale, tangentFrame, edgeSteps, angle } from './cells.js';
 import { Buffers, OUT, IN, EDGE } from './mesh.js';
 import { appendIris, portalHole } from './iris.js';
+import { junctions, appendJewelMounts } from './jewels.js';
 
 const { sqrt, cos, sin, PI, max, min, abs, ceil, floor } = Math;
 
@@ -244,6 +245,8 @@ export const inHole = (info, x, margin = 0) => !info.closed && dist2(closest(inf
 
 // hauteur des barreaux bombés (au-dessus de R), selon la proximité du bord du trou
 const pillowH = (spec, prox) => (spec.pillow || 0) * spec.thickness * 0.55 * (1 - prox * prox);
+// rayon de la crête des barreaux (où se posent les ornements)
+export const crest = (spec) => 1 + pillowH(spec, 0);
 
 // ── Maillage ─────────────────────────────────────────────────────────────────
 export function buildShell(prepared, spec, lod) {
@@ -517,31 +520,8 @@ export function buildShell(prepared, spec, lod) {
   }
 
 
-  // rivets aux jonctions des barreaux (dômes posés sur la crête)
-  if ((spec.rivets || 0) > 0 && lod < 3) {
-    const seen = new Set(), rr = spec.rivets * spec.bar * 0.5, segs = [12, 8, 6][lod], rings = [4, 2, 1][lod];
-    for (const info of prepared) for (const v of info.pts) {
-      const k = `${Math.round(v[0] * 1e4)},${Math.round(v[1] * 1e4)},${Math.round(v[2] * 1e4)}`;
-      if (seen.has(k) || v[2] > Math.cos(spec.portal * 0.9)) continue;
-      seen.add(k);
-      const [t1, t2] = tangentFrame(v);
-      const base = scale(v, top - rr * 0.15);
-      const start = B.n;
-      // (anneaux sous le sommet seulement : le dernier se refermerait en un point)
-      for (let j = 0; j < rings; j++) {
-        const phi = (PI / 2) * (j / rings), cr = cos(phi), sr = sin(phi);
-        for (let i = 0; i < segs; i++) {
-          const a = (i / segs) * PI * 2, dir = add(scale(t1, cos(a)), scale(t2, sin(a)));
-          const pos = add(base, add(scale(dir, rr * cr), scale(v, rr * 0.75 * sr)));
-          const n = norm(add(scale(dir, cr * 0.75), scale(v, sr)));
-          B.vert(pos, n, 0, 0, 255, 255);
-        }
-        if (j > 0) B.strip(start + (j - 1) * segs, start + j * segs, segs);
-      }
-      const apex = B.vert(add(base, scale(v, rr * 0.75)), v, 0, 0, 255, 255);
-      B.fan(start + (rings - 1) * segs, apex, segs);
-    }
-  }
+  // rivets ou chatons aux jonctions des barreaux (posés sur la crête)
+  if ((spec.rivets || 0) > 0 && lod < 3) appendJewelMounts(B, junctions(prepared, spec), spec, top, lod);
   // diaphragme de l'oculus (lames animées)
   if (spec.iris?.blades) appendIris(B, spec, portalHole(prepared.find((i) => i.portal)), lod);
   const out = B.result();

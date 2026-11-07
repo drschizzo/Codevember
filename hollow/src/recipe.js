@@ -21,6 +21,16 @@ export const MOODS = {
   'irisé': { label: 'Irisé', env: 'studio', coreK: [5000, 8000], keyK: 6000, bg: '#040507' },
 };
 
+// Pierres serties : teinte (absorption), indice, dispersion
+export const GEMS = {
+  diamond: { label: 'Diamant', color: '#fbfcff', ior: 2.42, dispersion: 1, depth: 2 },
+  sapphire: { label: 'Saphir', color: '#1f4fd8', ior: 1.77, dispersion: 0.45, depth: 0.25 },
+  ruby: { label: 'Rubis', color: '#d01838', ior: 1.77, dispersion: 0.45, depth: 0.25 },
+  emerald: { label: 'Émeraude', color: '#1aa05a', ior: 1.58, dispersion: 0.3, depth: 0.3 },
+  amethyst: { label: 'Améthyste', color: '#8a3fd0', ior: 1.55, dispersion: 0.3, depth: 0.35 },
+  citrine: { label: 'Citrine', color: '#f0a020', ior: 1.55, dispersion: 0.3, depth: 0.35 },
+};
+
 // finitions d'une couche à partir d'un jeu (copie profonde, teintes tirées)
 export function finishesFor(setKey, rng) {
   const set = SETS[setKey];
@@ -69,6 +79,7 @@ export function makeLayer(type, rng, seedTag, moodKey, avoidSet = null) {
     type, set, geo, finish,
     crystal: { tip: rng.pick(['#8a4fd6', '#c27be6', '#e0a24a', '#7fb8e8', '#e8e2f0']), base: '#efe9f2', rough: 0.03, dispersion: 0.45, ior: 1.55 },
     motion: { spin: rng.pick([-2, -1, 1, 2]), tumble: rng.pick([-1, 1, 1, 2]), axis: rng.dir().map(r2), phase: r2(rng.range(0, Math.PI * 2)) },
+    gem: { ...rng.fork(`gem:${seedTag}`).pick(Object.values(GEMS)) },
   };
 }
 
@@ -109,4 +120,10 @@ export function generate(seed, force = {}) {
     fog: { color: mood.bg, near: 1.5, far: 3.1 },
     layers,
   };
+}
+
+// recette partagée par une version antérieure : champs ajoutés depuis
+export function upgrade(R) {
+  for (const L of R.layers) L.gem ??= { ...GEMS.diamond };
+  return R;
 }

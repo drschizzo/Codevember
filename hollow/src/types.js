@@ -60,6 +60,14 @@ function iris(rng, p = 0.35) {
 }
 export const IRIS_PARAMS = [['blades', 'Lames (0 : aucun)', 0, 16, 1], ['curl', 'Courbure', 0, 2, 0.01], ['overlap', 'Recouvrement', 0.1, 1, 0.01]];
 
+// sertissage : les rivets deviennent des chatons garnis de pierres (tiré en dernier)
+function setting(geo, rng) {
+  if (!geo.rivets && rng.chance(0.18)) geo.rivets = r2(rng.range(0.6, 1));
+  geo.setting = geo.rivets > 0 && rng.chance(0.55) ? 'gem' : 'rivet';
+  return geo;
+}
+export const SETTINGS = { Rivets: 'rivet', 'Pierres serties': 'gem' };
+
 // barreaux d'un pavage percé (spacing : distance typique entre cellules)
 function bars(rng, spacing, lo = 0.16, hi = 0.42) {
   const thickness = rng.range(0.035, 0.075);
@@ -81,7 +89,7 @@ export const TYPES = {
     params: [['freq', 'Fréquence', 2, 12, 1], ['jitter', 'Désordre', 0, 0.5, 0.01], ...P.bars],
     geometry(rng) {
       const freq = rng.int(4, 9);
-      return { type: 'cells', freq, jitter: rng.pick([0, 0, 0.12, 0.25, 0.38]), ...bars(rng, 1.1 / freq), ...holeDetails(rng), iris: iris(rng) };
+      return setting({ type: 'cells', freq, jitter: rng.pick([0, 0, 0.12, 0.25, 0.38]), ...bars(rng, 1.1 / freq), ...holeDetails(rng), iris: iris(rng) }, rng);
     },
   },
   voronoi: {
@@ -93,10 +101,10 @@ export const TYPES = {
       const b = bars(rng, Math.sqrt((4 * Math.PI) / count), 0.14, 0.38);
       b.round = r2(rng.pick([0.35, 0.7, 1, 1]));
       b.closed = r2(rng.pick([0, 0, 0.05, 0.15]));
-      return {
+      return setting({
         type: 'voronoi', count, distribution: rng.weighted([['fibonacci', 3], ['random', 2], ['gradient', 1.5]]),
         spiral: r2(rng.range(-1, 1)), jitter: rng.pick([0, 0, 0.15, 0.3]), ...b, ...holeDetails(rng), iris: iris(rng),
-      };
+      }, rng);
     },
   },
   slots: {
@@ -108,14 +116,14 @@ export const TYPES = {
     ],
     geometry(rng) {
       const thickness = rng.range(0.035, 0.07);
-      return {
+      return setting({
         type: 'slots', rows: rng.int(4, 9), cols: rng.int(9, 22), twist: rng.pick([0, 0, 0.5, 1, 0.25, -0.5]),
         bottom: r2(rng.range(0.18, 0.32)), bar: r2(rng.range(0.018, 0.045)),
         barLat: r2(rng.pick([1, 1.5, 2.5, 4])), barLon: r2(rng.pick([1, 1.5, 2.5])), round: r2(rng.range(0.3, 1)),
         barVar: r2(rng.range(0, 0.3)), barFreq: 1.5, barGrad: r2(rng.range(-0.3, 0.3)), closed: 0,
         thickness: r2(thickness), bevel: r2(thickness * rng.range(0.15, 0.35)), chamfer: false,
         ...holeDetails(rng, true), iris: iris(rng),
-      };
+      }, rng);
     },
   },
   tpms: {

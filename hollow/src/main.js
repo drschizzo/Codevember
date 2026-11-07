@@ -4,7 +4,7 @@
 // par « Copier le lien »), ?ui=0 (sans panneau), ?export (panneau d'export ouvert).
 import * as THREE from 'three/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { generate, geometryFor, finishesFor, makeLayer, randomType } from './recipe.js';
+import { generate, geometryFor, finishesFor, makeLayer, randomType, upgrade } from './recipe.js';
 import { SETS } from './finishes.js';
 import { TYPES } from './types.js';
 import { createRng } from './rng.js';
@@ -92,7 +92,7 @@ async function main() {
   // ── Recette ──
   let R;
   if (location.hash.startsWith('#r=')) {
-    try { R = await unpackRecipe(location.hash.slice(3)); } catch { R = null; }
+    try { R = upgrade(await unpackRecipe(location.hash.slice(3))); } catch { R = null; }
   }
   R ??= generate(params.get('seed') || DEFAULT_SEED);
   let envKey = '';
@@ -207,7 +207,7 @@ async function main() {
     togglePause: () => { paused = !paused; toast(paused ? 'Pause' : 'Lecture', 900); },
     recipeChanged: () => {},
     envChanged: () => syncEnv(),
-    layerGeometry: (i) => layerChanged(i),
+    layerGeometry: (i, rebuildUI = false) => layerChanged(i, rebuildUI),
     layerMaterial: (i) => layerChanged(i),
     layerType: (i, t) => {
       const L = R.layers[i], rng = rngUI();
@@ -287,7 +287,7 @@ async function main() {
   applyRecipe();
   if (params.has('debug')) {
     window.hollow = {
-      renderer, scene, camera, nest, lights, post, gen, RENDER, renderAt, on,
+      renderer, scene, camera, controls, nest, lights, post, gen, RENDER, renderAt, on,
       get R() { return R; },
       seek: (p) => { phi = p; paused = true; },
       play: () => { paused = false; },
