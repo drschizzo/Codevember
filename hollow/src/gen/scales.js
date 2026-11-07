@@ -6,10 +6,11 @@
 //
 // Écaille : contour en écusson, pointe vers le bas (s'éloignant de l'oculus),
 // dôme d'épaisseur variable ; face externe, face interne, tranche.
-// La calotte de l'oculus reste libre, cerclée d'une lunette fixe.
+// Vers l'oculus, les écailles rapetissent en spirale jusqu'à une couronne :
+// un jonc fin bordé de perles, sous lequel se glisse la première rangée.
 
 import { norm, cross, dot, tangentFrame } from './cells.js';
-import { Buffers, OUT, IN, EDGE, RIG } from './mesh.js';
+import { Buffers, OUT, IN, EDGE, RIG, revolve } from './mesh.js';
 import { sweep, circle } from './sweep.js';
 import { appendIris } from './iris.js';
 
@@ -21,18 +22,37 @@ export function buildScales(spec, lod) {
   const B = new Buffers(1 << 16);
   const [no, nr] = RES[lod];
   const n = spec.count, GA = PI * (3 - sqrt(5));
-  const cap = cos(spec.portal + 0.05);
-  const spacing = sqrt((4 * PI) / n);
-  const a = spacing * 0.72 * spec.size;   // demi-longueur (vers le bas)
-  const b = spacing * 0.52 * spec.size;   // demi-largeur
-  const t = spec.thickness, dome = spec.dome * t;
-  const rb = 1 - t * 1.4;                 // rayon de la face interne au repos
+  const t0 = spec.thickness;
+  const rb = 1 - t0 * 1.4;                // rayon de la face interne au repos
+  // ── Couronne de l'oculus : un jonc fin bordé de perles, sous lequel se
+  // glisse la première rangée d'écailles
+  const wl = 0.05, jonc = spec.portal + wl / 2;
+  const beadR = 0.011, beadAt = spec.portal + wl + beadR * 1.2;
+  // ── Placement : spirale de Fibonacci à densité variable. Les écailles
+  // rapetissent vers l'oculus (taille relative `size(θ)`, du sommet `apex` à 1),
+  // comme au sommet d'une pomme de pin ; la densité suit 1 / taille², et la
+  // spirale reste continue (angle d'or). θ_i inverse l'aire cumulée pondérée.
+  const theta0 = beadAt + beadR * 0.5;
+  const apex = spec.apex ?? 0.42;
+  const size = (th) => { const k = Math.min(1, Math.max(0, (th - theta0) / 0.95)); return apex + (1 - apex) * k * k * (3 - 2 * k); };
+  const M = 2048, F = new Float64Array(M + 1), TH = (j) => theta0 + ((PI - theta0) * j) / M;
+  for (let j = 0; j < M; j++) { const th = (TH(j) + TH(j + 1)) / 2; F[j + 1] = F[j] + (sin(th) / size(th) ** 2) * ((PI - theta0) / M); }
+  const total = F[M];
+  const thetaOf = (q) => { // aire cumulée → angle polaire
+    let lo = 0, hi = M;
+    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (F[m] < q) lo = m; else hi = m; }
+    return TH(lo) + ((q - F[lo]) / Math.max(1e-12, F[hi] - F[lo])) * (TH(hi) - TH(lo));
+  };
+  // écart entre écailles de taille 1 (aire pondérée totale répartie sur n)
+  const spacing = sqrt((2 * PI * total) / n);
 
   for (let i = 0; i < n; i++) {
-    const z = 1 - (2 * (i + 0.5)) / n;
-    if (z > cap) continue;
-    const rr = sqrt(max(0, 1 - z * z)), ph = i * GA;
+    const th = thetaOf(((i + 0.5) / n) * total), sz = size(th);
+    const z = cos(th), rr = sin(th), ph = i * GA;
     const c = [rr * cos(ph), rr * sin(ph), z];
+    const a = spacing * 0.72 * spec.size * sz;   // demi-longueur (vers le bas)
+    const b = spacing * 0.52 * spec.size * sz;   // demi-largeur
+    const t = t0 * (0.55 + 0.45 * sz), dome = spec.dome * t;
     // repère : u vers le bas (sud), v vers l'est, normale c
     const east = Math.abs(z) > 0.999 ? tangentFrame(c)[0] : norm(cross(Z, c));
     const u = cross(east, c);
@@ -88,10 +108,18 @@ export function buildScales(spec, lod) {
     }
   }
   B.rig(null);
-  // lunette de l'oculus (fixe)
-  const wl = spacing * 0.5;
-  sweep(B, circle(Z, spec.portal + wl / 2), 2 * PI * sin(spec.portal), true, 1, wl, t * 2, lod);
-  if (spec.iris?.blades) appendIris(B, { ...spec, thickness: t * 2 + 0.004 }, Math.tan(spec.portal), lod);
+  // jonc et rang de perles (fixes)
+  sweep(B, circle(Z, jonc), 2 * PI * sin(jonc), true, 1 + t0 * 0.9, wl, t0 * 3.2, lod);
+  if (lod < 3) {
+    const nb = Math.round((2 * PI * sin(beadAt)) / (beadR * 2.3)), segs = [12, 9, 6][lod], rings = [8, 6, 4][lod];
+    const prof = [];
+    for (let j = 0; j <= rings; j++) { const q = -PI / 2 + (PI * j) / rings; prof.push([beadR * cos(q) + 1e-5, beadR * sin(q) + beadR]); }
+    for (let k = 0; k < nb; k++) {
+      const [d] = circle(Z, beadAt)(k / nb), r0 = rb + t0 * 0.6;
+      revolve(B, [d[0] * r0, d[1] * r0, d[2] * r0], d, prof, segs);
+    }
+  }
+  if (spec.iris?.blades) appendIris(B, { ...spec, thickness: t0 * 2.3 + 0.004 }, Math.tan(spec.portal), lod);
   const out = B.result();
   if (lod === 3) delete out.bev;
   return out;

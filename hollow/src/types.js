@@ -211,14 +211,14 @@ export const TYPES = {
     sets: ['goldLeaf', 'bronze', 'obsidian', 'nacre', 'titanium', 'brassVelvet', 'verdigris', 'anodizedDiamond', 'blackSteel'],
     params: [
       ['count', 'Nombre d’écailles', 60, 900, 1], ['size', 'Recouvrement', 0.6, 1.6, 0.01], ['pointed', 'Pointe', 0, 1, 0.01],
-      ['dome', 'Bombé', 0, 1.5, 0.01], ['lift', 'Soulèvement', 0, 0.8, 0.01],
+      ['dome', 'Bombé', 0, 1.5, 0.01], ['lift', 'Soulèvement', 0, 0.8, 0.01], ['apex', 'Écailles au sommet', 0.2, 1, 0.01],
     ],
     // plaques bombées en phyllotaxie, articulées, qui respirent
     geometry(rng) {
       return {
         type: 'scales', count: rng.int(160, 420), size: r2(rng.range(0.95, 1.2)), pointed: r2(rng.range(0.35, 1)),
         dome: r2(rng.range(0.3, 1)), thickness: r2(rng.range(0.012, 0.02)), lift: r2(rng.range(0.25, 0.5)), bevel: 0,
-        iris: iris(rng, 0.3),
+        iris: iris(rng, 0.3), apex: r2(rng.range(0.32, 0.5)),
       };
     },
   },
