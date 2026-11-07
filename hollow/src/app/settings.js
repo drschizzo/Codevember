@@ -16,6 +16,7 @@ export const RENDER_DEFAULTS = {
   ao: true, aoStrength: 0.85, aoRadius: 0.35,
   dof: false, focus: 0.85, focusRange: 0.5, bokeh: 2.5,
   motionBlur: 0.6, ca: 0.12, grain: 0.035, envFalloff: 0.3,
+  streaks: 0.35, streakLen: 6, halation: 0.35, dirt: 0.5,
 };
 
 const STORE = 'hollow.render.v4';

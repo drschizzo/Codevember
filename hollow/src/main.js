@@ -155,9 +155,16 @@ async function main() {
   function renderAt(u) {
     const cycle = Math.floor(u), ph = u - cycle;
     const dive = R.loop.dive;
-    const tau = dive ? ph * R.layers.length : R.loop.depth;
+    // Chorégraphie : la plongée ralentit au passage de chaque oculus (avancée
+    // remappée sur chaque couche, f − a·sin(2πf)/2π : pente 1 − a au passage) et
+    // le champ s'ouvre un peu à ce moment-là. Tout reste périodique : la boucle
+    // est intacte.
+    const steps = ph * R.layers.length, f = steps - Math.floor(steps);
+    const ramp = R.camera.ramp ?? 0, kick = R.camera.kick ?? 0;
+    const tau = dive ? Math.floor(steps) + f - (ramp * Math.sin(2 * Math.PI * f)) / (2 * Math.PI) : R.loop.depth;
     if (camState.free) controls.update(); else rig(ph);
-    if (camera.fov !== R.camera.fov) { camera.fov = R.camera.fov; camera.updateProjectionMatrix(); }
+    const fov = R.camera.fov * (1 + (dive ? kick * (0.5 + 0.5 * Math.cos(2 * Math.PI * f)) ** 4 : 0));
+    if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); }
     G.phase.value = ph;
     G.D.value = D;
     G.envFalloff.value = RENDER.envFalloff;

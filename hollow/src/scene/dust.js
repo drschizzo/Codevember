@@ -26,7 +26,7 @@ function flake() {
   const g = new THREE.OctahedronGeometry(1, 0);
   g.scale(1, 0.25, 0.8);
   g.computeVertexNormals();
-  return g.toNonIndexed();
+  return g;
 }
 
 export function createDust(scene) {

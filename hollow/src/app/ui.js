@@ -85,6 +85,10 @@ export function createUI({ recipe: getRecipe, render, on }) {
     add(fCam, R.camera, 'fov', 18, 80, 0.5).name('Champ (°)').onChange(ch);
     add(fCam, R.camera, 'sway', 0, 0.08, 0.001).name('Balancement').onChange(ch);
     add(fCam, R.camera, 'roll', 0, 0.2, 0.001).name('Roulis').onChange(ch);
+    if (R.camera.ramp !== undefined) {
+      add(fCam, R.camera, 'ramp', 0, 0.9, 0.01).name('Ralenti au passage').onChange(ch);
+      add(fCam, R.camera, 'kick', 0, 0.3, 0.005).name('Respiration du champ').onChange(ch);
+    }
     add(fCam, on.camState, 'free').name('Caméra libre (souris)').onChange((v) => on.freeCam(v));
 
     const fc = fLight;
@@ -242,6 +246,10 @@ export function createUI({ recipe: getRecipe, render, on }) {
   fl.add(r, 'focus', 0.1, 2, 0.01).name('Mise au point (× distance)').onChange(rch);
   fl.add(r, 'focusRange', 0.02, 2, 0.01).name('Zone nette').onChange(rch);
   fl.add(r, 'bokeh', 0, 8, 0.05).name('Bokeh').onChange(rch);
+  fl.add(r, 'streaks', 0, 2, 0.01).name('Traînées anamorphiques').onChange(rch);
+  fl.add(r, 'streakLen', 1, 16, 0.1).name('Traînées : longueur').onChange(rch);
+  fl.add(r, 'halation', 0, 1.5, 0.01).name('Halation').onChange(rch);
+  fl.add(r, 'dirt', 0, 2, 0.01).name('Poussière sur la lentille').onChange(rch);
   fRender.add({ reset: () => on.resetRender() }, 'reset').name('Réglages par défaut');
 
   return {
