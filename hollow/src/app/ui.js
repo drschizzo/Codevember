@@ -77,6 +77,11 @@ export function createUI({ recipe: getRecipe, render, on }) {
     add(fNest, R.fog, 'near', 0.5, 4, 0.01).name('Brouillard : début').onChange(ch);
     add(fNest, R.fog, 'far', 1, 6, 0.01).name('Brouillard : fin').onChange(ch);
     addC(fNest, R.fog, 'color').name('Fond').onChange(ch);
+    if (R.dust) {
+      add(fNest, R.dust, 'amount', 0, 1, 0.01).name('Poussière d’or').onChange(ch);
+      add(fNest, R.dust, 'size', 0.2, 3, 0.01).name('Poussière : taille').onChange(ch);
+      addC(fNest, R.dust, 'color').name('Poussière : teinte').onChange(ch);
+    }
     add(fCam, R.camera, 'fov', 18, 80, 0.5).name('Champ (°)').onChange(ch);
     add(fCam, R.camera, 'sway', 0, 0.08, 0.001).name('Balancement').onChange(ch);
     add(fCam, R.camera, 'roll', 0, 0.2, 0.001).name('Roulis').onChange(ch);

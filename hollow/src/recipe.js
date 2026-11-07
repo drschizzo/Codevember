@@ -11,12 +11,12 @@ export { geometryFor, randomType } from './types.js';
 
 const r2 = (x) => Math.round(x * 1000) / 1000;
 
-// Humeurs : environnement de studio, couleur du cœur, fond, jeux préférés
+// Humeurs : environnement de studio, couleur du cœur, fond, poussière
 export const MOODS = {
   atelier: { label: 'Atelier', env: 'atelier', coreK: [2300, 3000], keyK: 3600, bg: '#070605' },
-  studio: { label: 'Studio', env: 'studio', coreK: [4200, 5600], keyK: 5600, bg: '#050608' },
+  studio: { label: 'Studio', env: 'studio', coreK: [4200, 5600], keyK: 5600, bg: '#050608', dust: '#dfe3ea' },
   luxe: { label: 'Écrin', env: 'atelier', coreK: [2000, 2600], keyK: 3200, bg: '#060405' },
-  nuit: { label: 'Nuit', env: 'night', coreK: [7000, 12000], keyK: 6500, bg: '#020307' },
+  nuit: { label: 'Nuit', env: 'night', coreK: [7000, 12000], keyK: 6500, bg: '#020307', dust: '#c9d6ff' },
   pastel: { label: 'Pastel', env: 'softbox', coreK: [3800, 5000], keyK: 5000, bg: '#09080a' },
   'irisé': { label: 'Irisé', env: 'studio', coreK: [5000, 8000], keyK: 6000, bg: '#040507' },
 };
@@ -118,12 +118,19 @@ export function generate(seed, force = {}) {
     key: { color: kelvinToHex(mood.keyK), intensity: (rng.next(), 40), x: r2(rng.range(-0.45, -0.2)), y: r2(rng.range(0.2, 0.45)), angle: 0.85, penumbra: 0.9 },
     env: { preset: mood.env, intensity: r2(rng.range(0.9, 1.25)), rotation: r2(rng.range(0, Math.PI * 2)) },
     fog: { color: mood.bg, near: 1.5, far: 3.1 },
+    dust: dustFor(rng.fork('dust'), mood),
     layers,
   };
 }
 
+// poussière en suspension (tirage à part : le reste de la scène ne change pas)
+function dustFor(rng, mood) {
+  return { amount: r2(rng.range(0.3, 0.75)), size: r2(rng.range(0.8, 1.3)), color: mood.dust ?? '#e8c27a' };
+}
+
 // recette partagée par une version antérieure : champs ajoutés depuis
 export function upgrade(R) {
+  R.dust ??= dustFor(createRng(`${R.seed}:dust`), MOODS[R.mood] ?? MOODS.atelier);
   for (const L of R.layers) L.gem ??= { ...GEMS.diamond };
   return R;
 }
