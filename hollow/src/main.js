@@ -18,6 +18,7 @@ import { createPost } from './render/post.js';
 import { createUI } from './app/ui.js';
 import { loadRender, saveRender, applyQuality, RENDER_DEFAULTS } from './app/settings.js';
 import { exportLoop, exportPNG } from './app/capture.js';
+import { createSound } from './app/sound.js';
 
 const DEFAULT_SEED = 'rryxnd'; // scène d'ouverture (sans ?seed=)
 const D = 4; // distance caméra–centre (toutes les longueurs de la scène en dépendent)
@@ -149,7 +150,7 @@ async function main() {
     camera.up.set(Math.sin(roll), Math.cos(roll), 0);
     camera.lookAt(s * 0.25 * Math.sin(w + 2.4), s * 0.2 * Math.cos(w), 0);
   }
-  let shells = 0;
+  let shells = 0, curTau = 0;
   // u : phase « déroulée » (le nombre de boucles accomplies en partie entière),
   // pour que chaque instance de coquille garde sa couche d'une boucle à l'autre
   function renderAt(u) {
@@ -162,6 +163,7 @@ async function main() {
     const steps = ph * R.layers.length, f = steps - Math.floor(steps);
     const ramp = R.camera.ramp ?? 0, kick = R.camera.kick ?? 0;
     const tau = dive ? Math.floor(steps) + f - (ramp * Math.sin(2 * Math.PI * f)) / (2 * Math.PI) : R.loop.depth;
+    curTau = tau;
     if (camState.free) controls.update(); else rig(ph);
     const fov = R.camera.fov * (1 + (dive ? kick * (0.5 + 0.5 * Math.cos(2 * Math.PI * f)) ** 4 : 0));
     if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); }
@@ -203,6 +205,7 @@ async function main() {
 
   // ── Interface ──
   let phi = 0, paused = false, busy = false, frozen = false;
+  const sound = createSound();
   const rngUI = () => createRng(`${R.seed}:${performance.now()}`);
   const layerChanged = (i, rebuildUI = false) => { nest.syncLayer(i); if (rebuildUI) ui?.rebuildLayers(); };
   const on = {
@@ -216,6 +219,7 @@ async function main() {
       await navigator.clipboard.writeText(url.href).then(() => toast('Lien copié (scène et retouches)'), () => toast(url.href, 8000));
     },
     togglePause: () => { paused = !paused; toast(paused ? 'Pause' : 'Lecture', 900); },
+    toggleSound: () => toast(sound.toggle() ? 'Son' : 'Silence', 900),
     recipeChanged: () => {},
     envChanged: () => syncEnv(),
     layerGeometry: (i, rebuildUI = false) => layerChanged(i, rebuildUI),
@@ -328,6 +332,7 @@ async function main() {
     if (e.code === 'Space') { e.preventDefault(); on.togglePause(); }
     else if (e.key === 'n' || e.key === 'N') on.random();
     else if (e.key === 'h' || e.key === 'H') document.body.classList.toggle('clean');
+    else if (e.key === 's' || e.key === 'S') on.toggleSound();
     else if (e.key === 'f' || e.key === 'F') document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
     else if (e.key === 'ArrowRight') phi += 0.01;
     else if (e.key === 'ArrowLeft') phi -= 0.01;
@@ -341,6 +346,7 @@ async function main() {
     last = now;
     if (!paused && !loading.active) phi += dt / R.loop.duration;
     renderAt(phi);
+    if (!loading.active) sound.update({ tau: curTau, phase: phi - Math.floor(phi), N: R.layers.length, layers: R.layers, mood: R.mood });
     if (loading.active) {
       $('#loadbar u').style.width = `${(nest.progress() * 100).toFixed(1)}%`;
       if (loading.applied && nest.ready() && ++loading.settle > 8) { loading.active = false; $('#loader').classList.add('gone'); }

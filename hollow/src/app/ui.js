@@ -37,6 +37,7 @@ export function createUI({ recipe: getRecipe, render, on }) {
   gui.add(top, 'random').name('⟳  Nouvelle scène  (N)');
   gui.add(top, 'link').name('Copier le lien de cette scène');
   gui.add(top, 'pause').name('Pause / lecture  (espace)');
+  gui.add({ sound: () => on.toggleSound() }, 'sound').name('Son / silence  (S)');
   const fpsCtl = gui.add(state, 'fps').name('Images / s').disable();
 
   // ── Export ──
