@@ -23,7 +23,22 @@ import { LIP_RING } from '../gen/tess.js';
 
 const WG = 64;
 
-const COMMON = /* wgsl */`
+// Images enregistrées : positions quantifiées sur 16 bits dans [−R, R]³
+// (8 octets par particule et par image au lieu de 16 ; précision 1,2·10⁻⁴,
+// un demi-centième d'arête — la membrane au repos a un rayon de 1).
+const FRAME_RANGE = 4;
+const FRAME_BYTES = 8;
+const FRAMES = /* wgsl */`
+fn packPos(x: vec3f) -> vec2u {
+  let q = x / f32(${2 * FRAME_RANGE}) + 0.5;
+  return vec2u(pack2x16unorm(q.xy), pack2x16unorm(vec2f(q.z, 0.0)));
+}
+fn unpackPos(v: vec2u) -> vec3f {
+  return (vec3f(unpack2x16unorm(v.x), unpack2x16unorm(v.y).x) - 0.5) * f32(${2 * FRAME_RANGE});
+}
+`;
+
+const COMMON = FRAMES + /* wgsl */`
 struct C {
   np: u32, nb: u32, nCols: u32, nParts: u32,
   F: u32, SUB: u32, iters: u32, nf: u32,
@@ -47,7 +62,7 @@ struct Glob { first: atomic<u32>, rsum: atomic<u32>, rcount: atomic<u32>, pbits:
 @group(0) @binding(4) var<storage, read_write> bonds: array<f32>;
 @group(0) @binding(5) var<storage, read_write> geo: array<f32>;
 @group(0) @binding(6) var<storage, read_write> glob: Glob;
-@group(0) @binding(7) var<storage, read_write> frames: array<vec4f>;
+@group(0) @binding(7) var<storage, read_write> frames: array<vec2u>;
 @group(0) @binding(8) var<uniform> c: C;
 @group(0) @binding(9) var<uniform> p: P;
 
@@ -278,7 +293,7 @@ fn strainOf(i: u32) -> f32 {
 }
 @compute @workgroup_size(${WG}) fn record(@builtin(global_invocation_id) g: vec3u) {
   let i = g.x; if (i >= c.np) { return; }
-  frames[p.frame * c.np + i] = vec4f(st[3u * i].xyz, 0.0);
+  frames[p.frame * c.np + i] = packPos(st[3u * i].xyz);
 }
 @compute @workgroup_size(${WG}) fn radius(@builtin(global_invocation_id) g: vec3u) {
   let i = g.x; if (i >= c.np) { return; }
@@ -308,7 +323,7 @@ fn strainOf(i: u32) -> f32 {
 
 // fibrilles : instants de rupture et de claquage
 const FIB = COMMON + /* wgsl */`
-@group(0) @binding(0) var<storage, read_write> frames: array<vec4f>;
+@group(0) @binding(0) var<storage, read_write> frames: array<vec2u>;
 @group(0) @binding(1) var<storage, read_write> bonds: array<f32>;
 @group(0) @binding(2) var<storage, read_write> fib: array<f32>;
 @group(0) @binding(3) var<storage, read_write> fout: array<vec4f>;
@@ -323,8 +338,8 @@ const FIB = COMMON + /* wgsl */`
   if (tb >= 0.0) {
     brk = tb * f32(c.F - 1u);
     for (var f = u32(ceil(brk)); f < c.F; f++) {
-      let A = mix(frames[f * c.np + a].xyz, frames[f * c.np + an].xyz, u);
-      let B = mix(frames[f * c.np + b].xyz, frames[f * c.np + bn].xyz, u);
+      let A = mix(unpackPos(frames[f * c.np + a]), unpackPos(frames[f * c.np + an]), u);
+      let B = mix(unpackPos(frames[f * c.np + b]), unpackPos(frames[f * c.np + bn]), u);
       if (length(A - B) > snapLen) { snap = f32(f) + 0.5; break; }
     }
   }
@@ -347,9 +362,9 @@ const FIB = COMMON + /* wgsl */`
 // arêtes (cur.w). Le matériau en tire la rugosité d'anticrénelage du reflet,
 // continue d'un triangle à l'autre (des dérivées écran de la normale
 // interpolée seraient constantes par triangle : facettes dans le reflet).
-const POSE = /* wgsl */`
+const POSE = FRAMES + /* wgsl */`
 struct U { np: u32, nl: u32, F: u32, lipOff: u32, f: f32, fPrev: f32, lipT: f32, ringOff: u32 };
-@group(0) @binding(0) var<storage, read_write> frames: array<vec4f>;
+@group(0) @binding(0) var<storage, read_write> frames: array<vec2u>;
 @group(0) @binding(1) var<storage, read_write> csr: array<u32>;
 @group(0) @binding(2) var<storage, read_write> bonds: array<f32>;
 @group(0) @binding(3) var<storage, read_write> pmeta: array<vec4f>;
@@ -362,7 +377,7 @@ struct U { np: u32, nl: u32, F: u32, lipOff: u32, f: f32, fPrev: f32, lipT: f32,
 // position à l'image f : spline de Catmull-Rom entre les images enregistrées.
 // Au ralenti, une image enregistrée couvre plusieurs images affichées : une
 // interpolation linéaire y briserait la vitesse à chaque image enregistrée.
-fn frame(k: u32, i: u32) -> vec3f { return frames[min(k, u.F - 1u) * u.np + i].xyz; }
+fn frame(k: u32, i: u32) -> vec3f { return unpackPos(frames[min(k, u.F - 1u) * u.np + i]); }
 fn at(i: u32, f: f32) -> vec3f {
   let ff = clamp(f, 0.0, f32(u.F - 1u));
   let k = u32(floor(ff)); let t = fract(ff);
@@ -552,7 +567,7 @@ export async function simulate(device, prep, S, fibOut, onProgress) {
   metaF.set(prep.meta);
   const B = {
     st: buf(device, st0), xn: buf(device, xn0), meta: buf(device, metaF), csr: buf(device, concatU32(prep.csr, prep.lipData, prep.ring)), bonds: buf(device, prep.bonds),
-    geo: buf(device, geo), glob: buf(device, new Uint32Array([0xffffffff, 0, 0, 0])), frames: emptyBuf(device, np * F * 16),
+    geo: buf(device, geo), glob: buf(device, new Uint32Array([0xffffffff, 0, 0, 0])), frames: emptyBuf(device, np * F * FRAME_BYTES),
   };
   // pression initiale estimée (sphère de rayon 1 : p = 2T, T ≈ √3·ε/α)
   const p0 = (S.pressure ?? 1) * 2 * Math.sqrt(3) * (S.pre + 0.01) / S.stretch;
