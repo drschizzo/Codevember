@@ -1,8 +1,10 @@
-// Chaîne de rendu : passe de scène (MRT : couleur HDR, normales, vitesses,
-// réflectance), réflexions en espace écran (SSR), occlusion ambiante (GTAO), anticrénelage temporel, flou de mouvement, profondeur de
-// champ, bloom, étalonnage (balance, contraste, saturation, vignettage),
-// traînées anamorphiques, halation, poussière sur la lentille, aberration
-// chromatique, tone mapping, grain.
+// Chaîne de rendu : pré-passe (profondeur, normales) et occlusion ambiante
+// (GTAO, appliquée à l'éclairage indirect pendant la passe de scène), passe de
+// scène (MRT : couleur HDR, vitesses, réflectance), réflexions en espace écran
+// (SSR), anticrénelage temporel, flou de mouvement, profondeur de champ,
+// bloom, traînées anamorphiques, halation, poussière sur la lentille,
+// étalonnage (balance, contraste, saturation, vignettage), tone mapping,
+// aberration chromatique, anticrénelage d'image (SMAA, FXAA), grain.
 //
 // Les réglages continus sont des uniformes ; seules les options qui changent
 // la structure (activer un effet, changer d'anticrénelage) reconstruisent la
@@ -11,7 +13,7 @@ import * as THREE from 'three/webgpu';
 import {
   pass, mrt, output, normalView, velocity, uniform, vec2, vec3, vec4, float,
   dot, mix, max, smoothstep, length, select, screenUV, screenCoordinate, hash, uint, time, fract, renderOutput, pow, uv, floor, mx_cell_noise_float, screenSize,
-  roughness, specularColorBlended, positionViewDirection,
+  roughness, specularColorBlended, positionViewDirection, builtinAOContext,
 } from 'three/tsl';
 import { ssr } from 'three/addons/tsl/display/SSRNode.js';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
@@ -64,10 +66,33 @@ export function createPost(renderer, scene, camera) {
     for (const n of Object.values(nodes)) n?.dispose?.();
     nodes = {};
 
-    const needVel = cfg.aa === 'traa' || cfg.motionBlur > 0;
+    const useTraa = cfg.aa === 'traa', needVel = useTraa || cfg.motionBlur > 0;
     const scenePass = pass(scene, camera);
+    nodes.scenePass = scenePass;
+
+    // Occlusion ambiante : elle n'assombrit que l'éclairage indirect (studio,
+    // ambiance), jamais la lumière directe ni les reflets. Elle doit donc être
+    // connue pendant la passe de scène : une pré-passe de profondeur et de
+    // normales la calcule, et la passe de scène la lit dans ses matériaux.
+    // (La pré-passe n'évalue pas l'éclairage : son seul rendu est la normale.)
+    let normals = null;
+    if (cfg.ao) {
+      const prePass = pass(scene, camera);
+      prePass.transparent = false;
+      prePass.setMRT(mrt({ output: normalView })); // (cible en demi-flottants : pas d'encodage)
+      nodes.prePass = prePass;
+      normals = prePass.getTextureNode('output');
+      const aoPass = ao(prePass.getTextureNode('depth'), normals, camera);
+      aoPass.resolutionScale = 0.5;
+      aoPass.radius.value = 0.35;
+      aoPass.thickness.value = 0.6;
+      aoPass.useTemporalFiltering = useTraa;
+      nodes.ao = aoPass;
+      scenePass.contextNode = builtinAOContext(mix(float(1), aoPass.getTextureNode().sample(screenUV).r, U.aoStrength));
+    }
+
     const outs = { output };
-    if (cfg.ao || cfg.ssr) outs.normal = normalView; // (cibles en demi-flottants : pas d'encodage)
+    if (cfg.ssr && !normals) outs.normal = normalView;
     if (needVel) outs.velocity = velocity;
     // pour les réflexions en espace écran : la réflectance (Fresnel de Schlick
     // à partir de F0 — couleur de base d'un métal, ~4 % d'un diélectrique) et
@@ -79,20 +104,25 @@ export function createPost(renderer, scene, camera) {
     }
     scenePass.setMRT(mrt(outs));
     if (outs.refl) scenePass.getTexture('refl').type = THREE.UnsignedByteType;
-    nodes.scenePass = scenePass;
+    normals ??= outs.normal ? scenePass.getTextureNode('normal') : null;
     const depth = scenePass.getTextureNode('depth');
-
     const base = scenePass.getTextureNode('output');
-    // (vitesse lue sous garde : NaN ou démesurée → nulle)
-    const vel = needVel ? (() => { const v = scenePass.getTextureNode('velocity').xy.mul(vec2(0.5, -0.5)); return select(length(v).lessThan(0.25), v, vec2(0)); })() : null; // NDC → UV
-    // flou d'obturateur centré, sur une texture
-    const shutter = (tex) => {
+
+    // Flou d'obturateur centré, sur une texture. Il vient après l'anticrénelage
+    // temporel : celui-ci reprojette alors une image nette, sans traînées
+    // fantômes sur les barres fines.
+    // (vitesse lue sous garde : NaN ou démesurée → nulle ; NDC → UV)
+    const vel = needVel ? (() => { const v = scenePass.getTextureNode('velocity').xy.mul(vec2(0.5, -0.5)); return select(length(v).lessThan(0.25), v, vec2(0)); })() : null;
+    const blur = (tex) => {
+      if (!(cfg.motionBlur > 0)) return tex;
       const v = vel.mul(U.blur), n = 10;
       let acc = tex.sample(uv());
       for (let i = 1; i < n; i++) acc = acc.add(tex.sample(uv().add(v.mul(i / (n - 1) - 0.5))));
       return acc.div(n);
     };
-    let color = cfg.motionBlur > 0 ? shutter(base) : base;
+
+    // (sans anticrénelage temporel, le flou porte sur la passe de scène)
+    let color = useTraa ? base : blur(base);
     if (cfg.ssr) {
       // Réflexions en espace écran : les objets exposés et les doublures
       // reflètent ce qui est réellement autour d'eux (parois de la cellule,
@@ -104,29 +134,19 @@ export function createPost(renderer, scene, camera) {
       // rendue ensuite. Au-delà d'une rugosité moyenne, le reflet est laissé à
       // l'environnement.
       const w = max(refl.r, max(refl.g, refl.b)).mul(smoothstep(0.6, 0.25, refl.a));
-      const r = ssr(base, depth, scenePass.getTextureNode('normal'), { metalnessNode: w, roughnessNode: refl.a, reflectNonMetals: false, camera });
+      const r = ssr(base, depth, normals, { metalnessNode: w, roughnessNode: refl.a, reflectNonMetals: false, camera });
       const tint = refl.rgb.div(max(refl.r, max(refl.g, refl.b)).max(1e-3));
       r.resolutionScale = cfg.ssrRes;
       nodes.ssr = r;
       color = vec4(color.rgb.add(r.rgb.mul(tint).mul(U.ssrMix)), color.a);
     }
-    if (cfg.ao) {
-      const aoPass = ao(depth, scenePass.getTextureNode('normal'), camera);
-      aoPass.resolutionScale = 0.5;
-      aoPass.radius.value = 0.35;
-      aoPass.thickness.value = 0.6;
-      aoPass.useTemporalFiltering = cfg.aa === 'traa';
-      nodes.ao = aoPass;
-      const a = aoPass.getTextureNode().sample(screenUV).r;
-      color = vec4(color.rgb.mul(mix(float(1), a, U.aoStrength)), color.a);
-    }
-    if (cfg.aa === 'traa') {
+    if (useTraa) {
       // garde-fou : un pixel invalide (NaN, infini) ne doit jamais entrer dans
       // l'historique, il y resterait jusqu'à son renouvellement complet
       color = select(dot(color.rgb, color.rgb).lessThan(1e8), color, vec4(0, 0, 0, 1));
       const t = traa(color, depth, scenePass.getTextureNode('velocity'), camera);
       nodes.traa = t;
-      color = t;
+      color = blur(t.getTextureNode());
     }
     if (cfg.dof) {
       const d = dof(color, scenePass.getViewZNode(), U.focus, U.focusRange, U.bokeh);
@@ -173,13 +193,14 @@ export function createPost(renderer, scene, camera) {
 
     let out = renderOutput(vec4(c, 1));
     if (cfg.ca > 0) out = chromaticAberration(out, U.ca, vec2(0.5, 0.5), 1.1);
-    // grain (après tone mapping, plus discret dans les hautes lumières)
+    if (cfg.aa === 'smaa') out = smaa(out);
+    else if (cfg.aa === 'fxaa') out = fxaa(out);
+    // grain, en dernier (l'anticrénelage le lisserait) : après tone mapping,
+    // plus discret dans les hautes lumières
     const pix = screenCoordinate.x.toUint().add(screenCoordinate.y.toUint().mul(uint(8191)));
     const g = hash(pix.add(fract(time.mul(0.37)).mul(1e6).toUint().mul(uint(131071)))).sub(0.5);
     const lo = dot(out.rgb, LUMA);
     out = vec4(out.rgb.add(g.mul(U.grain).mul(float(1).sub(lo.mul(0.6)))), 1);
-    if (cfg.aa === 'smaa') out = smaa(out);
-    else if (cfg.aa === 'fxaa') out = fxaa(out);
     pipeline.outputNode = out;
     pipeline.needsUpdate = true;
   }

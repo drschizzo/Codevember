@@ -104,6 +104,9 @@ export function createGuides(group) {
     const glow = uniformArray(new Array(6).fill(0), 'float');
     const sm = new THREE.Mesh(new THREE.BufferGeometry(), seamMaterial(SM, colors, glow));
     sm.frustumCulled = false;
+    // (invisible jusqu'à sa géométrie : un premier rendu sans attributs
+    // figerait le shader sans « position » ni « face »)
+    sm.visible = false;
     group.add(sm);
     seams.push({ mesh: sm, M: SM, colors, glow });
   }

@@ -148,9 +148,8 @@ Le sol est procédural : laque satinée anthracite (reflets adoucis), béton cir
 - **Lumière** : un projecteur avec ombres douces et deux contre-jours, fixes dans le monde (la caméra tourne, les ombres restent), et un studio HDR pour les reflets. Éclairage sélectif : chaque cellule ne reçoit que ces trois lumières et sa propre lumière d'écrin (les lumières d'écrin, sans ombre, traversaient sinon les parois pleines).
 - **Post-traitement** (repris de Hollow) :
   - réflexions en espace écran ;
-  - occlusion ambiante ;
-  - anticrénelage temporel ;
-  - flou de mouvement ;
+  - occlusion ambiante, calculée sur une pré-passe de profondeur et de normales et appliquée dans les matériaux à l'éclairage indirect seulement (elle n'assombrit ni la lumière directe ni les reflets) ;
+  - anticrénelage temporel, puis flou de mouvement (l'historique reste net) ;
   - profondeur de champ ;
   - bloom, halation, traînées anamorphiques ;
   - poussière sur la lentille ;
