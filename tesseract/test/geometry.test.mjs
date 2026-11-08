@@ -170,5 +170,5 @@ test('la boucle courte (par défaut) visite quatre pièces distinctes et revient
     assert.equal(cells[4], cells[0]);
     assert.ok(isIdentity(stepOrientations(R.moves)[4]));
   }
-  assert.equal(generate('czyt01').moves.length, 4);
+  assert.equal(generate('atl45i').moves.length, 4);
 });
