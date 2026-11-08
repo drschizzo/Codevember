@@ -25,6 +25,7 @@ const TARGET = 1.9; // rayon de l'objet à l'écran (unités du monde)
 const params = new URLSearchParams(location.search);
 const $ = (s) => document.querySelector(s);
 const randomSeed = () => Math.random().toString(36).slice(2, 8);
+const DEFAULT_SEED = 'bprpfo'; // (la scène de l'ouverture, sans ?seed=)
 
 async function packRecipe(R) {
   const s = new Blob([JSON.stringify(R)]).stream().pipeThrough(new CompressionStream('deflate-raw'));
@@ -82,7 +83,7 @@ async function main() {
 
   let R;
   if (location.hash.startsWith('#r=')) { try { R = upgrade(await unpackRecipe(location.hash.slice(3))); } catch { R = null; } }
-  R ??= generate(params.get('seed') || randomSeed());
+  R ??= generate(params.get('seed') || DEFAULT_SEED);
 
   let envKey = '';
   function syncEnv() {
