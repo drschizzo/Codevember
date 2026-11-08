@@ -16,6 +16,10 @@ import { apply, normalOf, project, embedLocal, smoothstep } from '../math4.js';
 import { G } from './globals.js';
 
 const CEILING = 0.72; // hauteur de la source, en demi-côtés de cellule (l'objet en fait au plus 0,55)
+// En voyage, chaque pièce n'est éclairée que par sa propre lampe (éclairage
+// sélectif, voir tesseract.js) : elle doit remplacer celles des six pièces
+// voisines, qui traversaient autrefois les parois.
+const VOYAGE_GAIN = 3.5;
 
 export function createPracticals(group, scene) {
   const lights = Array.from({ length: 8 }, () => {
@@ -57,7 +61,7 @@ export function createPracticals(group, scene) {
         L.position.copy(_v);
         L.color.set(V.practicalColor);
         if (kv > 0) L.color.lerp(_tint.setHSL((c * 0.137 + 0.05) % 1, 0.55, 0.62), 0.35 * kv);
-        L.intensity = V.practical * (1 - out) * scale * scale * size ** 1.6 * (1 - 0.25 * kv);
+        L.intensity = V.practical * (1 - out) * scale * scale * size ** 1.6 * (1 + (VOYAGE_GAIN - 1) * kv);
         L.distance = 2.4 * scale * size * (1 + 0.25 * kv);
       }
     },

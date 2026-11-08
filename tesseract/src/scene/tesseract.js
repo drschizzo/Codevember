@@ -8,7 +8,7 @@
 // varie qu'en partie avec l'étendue du patron (déplié, il est bien plus grand
 // que plié), soulevé au besoin pour ne jamais traverser le sol.
 import * as THREE from 'three/webgpu';
-import { uniform, uniformArray } from 'three/tsl';
+import { uniform, uniformArray, lights } from 'three/tsl';
 import { stateAt, cellTransforms, cellMatrix, apply, project, timelineFor, stepOrientations, depthOf, foldOrder, normalOf, smoothstep } from '../math4.js';
 import { voyageFrames, voyageBlend } from './voyage.js';
 import { meshUniforms, setMatrix } from './project.js';
@@ -42,7 +42,8 @@ function axisAngle(a, t) {
 const mul3 = (A, B) => { const o = new Array(9); for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) o[r * 3 + c] = A[r * 3] * B[c] + A[r * 3 + 1] * B[3 + c] + A[r * 3 + 2] * B[6 + c]; return o; };
 const normv = (v) => { const l = Math.hypot(...v) || 1; return v.map((x) => x / l); };
 
-export function createTesseract(scene, gen) {
+// studioLights : lumières du plateau, qui éclairent toutes les cellules
+export function createTesseract(scene, gen, { studioLights = [] } = {}) {
   const group = new THREE.Group();
   scene.add(group);
   let R = null, cache = null, refRadius = 0, generation = 0, pendingCount = 0, totalCount = 1, readyFlag = false;
@@ -62,6 +63,11 @@ export function createTesseract(scene, gen) {
   }
   const guides = createGuides(group);
   const practicals = createPracticals(group, scene);
+  // Éclairage sélectif : chaque cellule ne reçoit que les lumières du plateau
+  // et sa propre lumière d'écrin. Sans ombre, celle-ci traverserait sinon les
+  // parois pleines et éclairerait la doublure des cellules voisines ; et
+  // chaque pixel évaluerait onze lumières au lieu de quatre.
+  const cellLights = practicals.lights.map((L) => lights([...studioLights, L]));
   const pieceOf = (c, role) => pieces[c * ROLES.length + ROLES.indexOf(role)];
   let frameU = null; // uniformes de finition de l'ossature (partagés par les huit cellules)
 
@@ -92,6 +98,7 @@ export function createTesseract(scene, gen) {
       P.mesh.material = buildPieceMaterial(fin, U, P.M, { shadowTint: tint, reveal: P.role === 'panel' || P.role === 'glass', depth: P.role === 'frame', content: P.role === 'content', merge: P.role === 'frame' });
       P.sig = signature(fin);
     }
+    P.mesh.material.lightsNode = cellLights[P.c];
     old?.dispose();
   }
   const finishUniformsFor = (fin) => ({ outer: finishUniforms(fin.outer), inner: finishUniforms(fin.inner), edge: finishUniforms(fin.edge), wear: uniform(fin.wear || 0) });

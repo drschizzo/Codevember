@@ -74,8 +74,8 @@ async function main() {
 
   const gen = createGenerator();
   setNoiseVolume(await gen.request({ seed: 'tesseract-noise' }, 'noise'));
-  const tess = createTesseract(scene, gen);
   const stage = createStage(scene);
+  const tess = createTesseract(scene, gen, { studioLights: [stage.key, stage.rim, stage.rim2] });
   const post = createPost(renderer, scene, camera);
   const overlay = createOverlay();
   const RENDER = loadRender();
