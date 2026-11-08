@@ -30,7 +30,7 @@ jobs:
         run: |
           mkdir -p _site
           cp index.html _site/
-          rsync -a --exclude tools --exclude docs --exclude '*.md' planetaire hollow _site/
+          rsync -a --exclude tools --exclude docs --exclude '*.md' planetaire hollow tesseract membrane _site/
           touch _site/.nojekyll
 
       - uses: actions/configure-pages@v5
