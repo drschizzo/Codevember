@@ -88,7 +88,7 @@ export function createUI({ recipe: getRecipe, render, on }) {
     add(fScene, R.loop, 'duration', 6, 120, 1).name('Durée de la boucle (s)').onChange(ch);
     add(fScene, R.net, 'shape', NET_SHAPES).name('Patron déplié').onChange((v) => on.netChanged(v));
     add(fScene, { reroll: () => on.netChanged(R.net.shape) }, 'reroll').name('⟳  Autre patron');
-    add(fScene, R, 'moveMode', { 'Un seul plan (4 quarts de tour)': 'same', 'Plans mêlés': 'mixed' }).name('Rotations 4D').onChange(() => on.movesChanged());
+    add(fScene, R, 'moveMode', { 'Toutes les cellules (8 quarts de tour)': 'tour', 'Un seul plan (4 quarts de tour)': 'same', 'Plans mêlés': 'mixed' }).name('Rotations 4D').onChange(() => on.movesChanged());
     add(fScene, { reroll: () => on.movesChanged() }, 'reroll').name(`⟳  Autre séquence (${R.moves.map(moveLabel).join(' · ')})`);
 
     R.view ??= { ...VIEW_DEFAULTS };
