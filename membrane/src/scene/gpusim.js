@@ -337,14 +337,16 @@ const FIB = COMMON + /* wgsl */`
 // premier anneau (moitié la particule, moitié ses voisines). Le maillage simulé
 // est volontairement désordonné : sans ce lissage, le reflet d'une peau
 // humide dessine ses arêtes. Les arêtes ne traversent pas une couture
-// rompue (sommets dédoublés) : les lèvres restent franches.
+// rompue (sommets dédoublés) : les lèvres restent franches. Le long d'une
+// couture intacte, les copies d'un sommet lissent sur la réunion de leurs
+// anneaux : même résultat des deux côtés, aucun pli.
 //
 // Courbure : variation de la normale par unité de longueur, moyenne sur les
 // arêtes (cur.w). Le matériau en tire la rugosité d'anticrénelage du reflet,
 // continue d'un triangle à l'autre (des dérivées écran de la normale
 // interpolée seraient constantes par triangle : facettes dans le reflet).
 const POSE = /* wgsl */`
-struct U { np: u32, nl: u32, F: u32, lipOff: u32, f: f32, fPrev: f32, lipT: f32, pad: f32 };
+struct U { np: u32, nl: u32, F: u32, lipOff: u32, f: f32, fPrev: f32, lipT: f32, ringOff: u32 };
 @group(0) @binding(0) var<storage, read_write> frames: array<vec4f>;
 @group(0) @binding(1) var<storage, read_write> csr: array<u32>;
 @group(0) @binding(2) var<storage, read_write> bonds: array<f32>;
@@ -362,8 +364,21 @@ fn at(i: u32, f: f32) -> vec3f {
 }
 fn tNow() -> f32 { return u.f / f32(u.F - 1u); }
 fn intact(k: u32) -> bool { let tb = bonds[k * 8u + 3u]; return tb < 0.0 || tb > tNow(); }
-// les lèvres sont rangées à la suite des tables de voisinage
+// lèvres et anneaux sont rangés à la suite des tables de voisinage
 fn lip(k: u32) -> u32 { return csr[u.lipOff + k]; }
+const PARTNER = 0x80000000u;
+fn rg(k: u32) -> u32 { return csr[u.ringOff + k]; }
+// somme des normales brutes des voisines par une arête, et leur nombre
+fn ringSum(i: u32) -> vec4f {
+  var s = vec3f(0.0); var k = 0.0;
+  var r = rg(i); let e = rg(i + 1u);
+  while (r < e) {
+    let v = rg(r);
+    if ((v & PARTNER) != 0u) { r += 2u; continue; }
+    s += raw[v].xyz; k += 1.0; r += 1u;
+  }
+  return vec4f(s, k);
+}
 
 @compute @workgroup_size(${WG}) fn interp(@builtin(global_invocation_id) g: vec3u) {
   let i = g.x; if (i >= u.np) { return; }
@@ -394,23 +409,26 @@ fn triSum(i: u32) -> vec4f {
 }
 @compute @workgroup_size(${WG}) fn smoothNormals(@builtin(global_invocation_id) g: vec3u) {
   let i = g.x; if (i >= u.np) { return; }
-  let ri = raw[i];
-  var s = vec3f(0.0); var k = 0.0;
-  for (var r = csr[i]; r < csr[i + 1u]; r += 8u) {
-    let kind = csr[r + 1u];
-    if (kind == 0u || (kind == 2u && intact(csr[r + 3u]))) { s += raw[csr[r]].xyz; k += 1.0; }
+  var own = raw[i].xyz; var nbr = ringSum(i); var ns = 1.0;
+  var r = rg(i); let e = rg(i + 1u);
+  while (r < e) {
+    let v = rg(r);
+    if ((v & PARTNER) == 0u) { r += 1u; continue; }
+    if (intact(rg(r + 1u))) { let j = v & ~PARTNER; own += raw[j].xyz; nbr += ringSum(j); ns += 1.0; }
+    r += 2u;
   }
-  let n = ri.xyz * max(k, 1.0) + s;
-  nor[i] = vec4f(select(ri.xyz, normalize(n), length(n) > 1e-9), ri.w);
+  let n = own * (max(nbr.w, 1.0) / ns) + nbr.xyz;
+  nor[i] = vec4f(select(raw[i].xyz, normalize(n), length(n) > 1e-9), raw[i].w);
 }
 @compute @workgroup_size(${WG}) fn curvature(@builtin(global_invocation_id) g: vec3u) {
   let i = g.x; if (i >= u.np) { return; }
   let x = cur[i].xyz; let n = nor[i].xyz;
   var s = 0.0; var k = 0.0;
-  for (var r = csr[i]; r < csr[i + 1u]; r += 8u) {
-    if (csr[r + 1u] != 0u) { continue; }
-    let j = csr[r];
-    s += length(nor[j].xyz - n) / max(length(cur[j].xyz - x), 1e-6); k += 1.0;
+  var r = rg(i); let e = rg(i + 1u);
+  while (r < e) {
+    let v = rg(r);
+    if ((v & PARTNER) != 0u) { r += 2u; continue; }
+    s += length(nor[v].xyz - n) / max(length(cur[v].xyz - x), 1e-6); k += 1.0; r += 1u;
   }
   cur[i].w = s / max(k, 1.0);
 }
@@ -426,9 +444,14 @@ fn triSum(i: u32) -> vec4f {
   }
   e -= n * dot(e, n);
   e = select(vec3f(0.0), normalize(e), length(e) > 1e-9);
+  // écartement des lèvres : distance aux partenaires dont le lien est rompu
   var sep = 0.0;
-  for (var r = csr[pi]; r < csr[pi + 1u]; r += 8u) {
-    if (csr[r + 1u] == 2u && !intact(csr[r + 3u])) { sep = max(sep, length(x - cur[csr[r]].xyz)); }
+  var r = rg(pi); let re = rg(pi + 1u);
+  while (r < re) {
+    let v = rg(r);
+    if ((v & PARTNER) == 0u) { r += 1u; continue; }
+    if (!intact(rg(r + 1u))) { sep = max(sep, length(x - cur[v & ~PARTNER].xyz)); }
+    r += 2u;
   }
   let cc = min(1.0, sep / (u.lipT * 3.0 + 1e-6));
   let rr = u.lipT * cc;
@@ -456,8 +479,15 @@ function pipelines(device) {
   const simL = device.createBindGroupLayout({ entries: [0, 1, 2, 3, 4, 5, 6, 7].map(sto).concat([uni(8), uni(9, true)]) });
   const fibL = device.createBindGroupLayout({ entries: [0, 1, 2, 3].map(sto).concat([uni(4)]) });
   const poseL = device.createBindGroupLayout({ entries: [0, 1, 2, 3, 4, 5, 6, 7].map(sto).concat([uni(8)]) });
-  const mod = (code) => device.createShaderModule({ code });
-  const sim = mod(SIM), fib = mod(FIB), pose = mod(POSE);
+  // (une erreur de compilation n'apparaît sinon qu'en cascade de « pipeline invalide »)
+  const mod = (code, label) => {
+    const m = device.createShaderModule({ code, label });
+    m.getCompilationInfo().then((info) => {
+      for (const e of info.messages) if (e.type === 'error') console.error(`WGSL ${label} ${e.lineNum}:${e.linePos} ${e.message}`);
+    });
+    return m;
+  };
+  const sim = mod(SIM, 'sim'), fib = mod(FIB, 'fib'), pose = mod(POSE, 'pose');
   const mk = (layout, module, entryPoint) => device.createComputePipeline({ layout: device.createPipelineLayout({ bindGroupLayouts: [layout] }), compute: { module, entryPoint } });
   P = {
     simL, fibL, poseL,
@@ -479,14 +509,20 @@ const buf = (device, data, usage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_
   b.unmap();
   return b;
 };
-const concatU32 = (a, b) => { const c = new Uint32Array(a.length + b.length); c.set(a); c.set(b, a.length); return c; };
+const concatU32 = (...parts) => {
+  const c = new Uint32Array(parts.reduce((n, p) => n + p.length, 0));
+  let o = 0;
+  for (const p of parts) { c.set(p, o); o += p.length; }
+  return c;
+};
 const emptyBuf = (device, size) => device.createBuffer({ size: Math.max(16, Math.ceil(size / 16) * 16), usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC });
 
 // ── Simulation d'une couche ──────────────────────────────────────────────────
 // prep : sortie de gen/prep.js ; S : paramètres ; fibOut : tampon GPU (nf × vec4)
-// qui reçoit les instants des fibrilles. Rend { frames, meta, csr, lipOff, bonds }
-// (csr : tables de voisinage, puis lèvres à partir de lipOff — un seul tampon,
-// la pose étant à la limite des 8 tampons de stockage par étape).
+// qui reçoit les instants des fibrilles. Rend { frames, meta, csr, lipOff,
+// ringOff, bonds } (csr : tables de voisinage, puis lèvres à partir de lipOff
+// et anneaux à partir de ringOff — un seul tampon, la pose étant à la limite
+// des 8 tampons de stockage par étape).
 export async function simulate(device, prep, S, fibOut, onProgress) {
   const P = pipelines(device);
   const np = prep.np, nb = prep.nb, F = S.frames, SUB = S.substeps;
@@ -502,7 +538,7 @@ export async function simulate(device, prep, S, fibOut, onProgress) {
   const metaF = new Float32Array(np * 8);
   metaF.set(prep.meta);
   const B = {
-    st: buf(device, st0), xn: buf(device, xn0), meta: buf(device, metaF), csr: buf(device, concatU32(prep.csr, prep.lipData)), bonds: buf(device, prep.bonds),
+    st: buf(device, st0), xn: buf(device, xn0), meta: buf(device, metaF), csr: buf(device, concatU32(prep.csr, prep.lipData, prep.ring)), bonds: buf(device, prep.bonds),
     geo: buf(device, geo), glob: buf(device, new Uint32Array([0xffffffff, 0, 0, 0])), frames: emptyBuf(device, np * F * 16),
   };
   // pression initiale estimée (sphère de rayon 1 : p = 2T, T ≈ √3·ε/α)
@@ -600,7 +636,8 @@ export async function simulate(device, prep, S, fibOut, onProgress) {
   for (let k = 0; k < nb; k++) if (bf[k * 8 + 3] >= 0) { broken++; first = Math.min(first, bf[k * 8 + 3]); }
   for (const k of ['st', 'xn', 'geo', 'glob']) B[k].destroy();
   cBuf.destroy(); pBuf.destroy();
-  return { frames: B.frames, meta: B.meta, csr: B.csr, lipOff: prep.csr.length, bonds: B.bonds, stats: { broken, firstTear: first } };
+  const lipOff = prep.csr.length, ringOff = lipOff + prep.lipData.length;
+  return { frames: B.frames, meta: B.meta, csr: B.csr, lipOff, ringOff, bonds: B.bonds, stats: { broken, firstTear: first } };
 }
 
 // ── Pose d'une couche ────────────────────────────────────────────────────────
@@ -614,7 +651,7 @@ export function createPoser(device, gpu, prep, S, out) {
       .concat([{ binding: 8, resource: { buffer: ub } }]),
   });
   const data = new ArrayBuffer(32), du = new Uint32Array(data), df = new Float32Array(data);
-  du.set([prep.np, prep.nl, S.frames, gpu.lipOff]);
+  du.set([prep.np, prep.nl, S.frames, gpu.lipOff]); du[7] = gpu.ringOff;
   const lipT = S.thick * S.lip * 0.5;
   return {
     // encode la pose à l'image f (et fPrev pour les vecteurs vitesse)
