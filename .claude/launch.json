@@ -80,6 +80,16 @@
         "membrane"
       ],
       "port": 8031
+    },
+    {
+      "name": "tesseract-8021",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        ".claude/serve.py",
+        "8021",
+        "tesseract"
+      ],
+      "port": 8021
     }
   ]
 }
