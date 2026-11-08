@@ -310,7 +310,7 @@ export function createUI({ recipe: getRecipe, render, on }) {
   fx.add(r, 'ssrDistance', 0.2, 6, 0.05).name('Portée').onChange(rch);
   fx.add(r, 'ssrThickness', 0.005, 0.3, 0.005).name('Épaisseur des parois').onChange(rch);
   fx.add(r, 'ssrBlur', { 'Net': 1, 'Moyen': 2, 'Doux': 3 }).name('Flou des reflets mats').onChange(rch);
-  fx.add(r, 'nestEnv', 0, 1, 0.01).name('Studio vu de l’intérieur').onChange(rch);
+  fx.add(r, 'nestEnv', 0, 1, 0.01).name('Studio vu d’une cellule fermée').onChange(rch);
   fx.add(r, 'crystalThick', 0.2, 2, 0.01).name('Épaisseur des cristaux').onChange(rch);
   const fl = fRender.addFolder('Objectif').close();
   fl.add(r, 'motionBlur', 0, 2, 0.01).name('Flou de mouvement').onChange(rch);

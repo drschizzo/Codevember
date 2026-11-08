@@ -12,7 +12,7 @@ import { uniform, lights } from 'three/tsl';
 import { stateAt, cellTransforms, cellMatrix, apply, project, timelineFor, stepOrientations, depthOf, foldOrder, normalOf, smoothstep } from '../math4.js';
 import { voyageFrames, voyageBlend } from './voyage.js';
 import { meshUniforms, setMatrix, cellReveal } from './project.js';
-import { faceLayout, voyageDoors, computeOpenings } from './reveal.js';
+import { faceLayout, voyageDoors, computeOpenings, cellOpenness } from './reveal.js';
 import { buildPieceMaterial, buildGemMaterial, finishUniforms, applyFinish, signature, gemUniforms, applyGem } from './materials.js';
 import { G } from './globals.js';
 import { createGuides } from './guides.js';
@@ -113,7 +113,7 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
   // ajourage des six faces de chaque cellule (voir reveal.js), partagé par
   // ses panneaux et son verre
   const reveals = Array.from({ length: 8 }, cellReveal);
-  const openArrays = reveals.map((u) => u.open.array);
+  const openArrays = reveals.map((u) => u.open.array), openness = new Array(8);
   let frameU = null; // uniformes de finition de l'ossature (partagés par les huit cellules)
 
   const finishOf = (P) => {
@@ -132,7 +132,7 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
     const cell = R.cells[P.c];
     if (P.role === 'content' && cell.content.type === 'gem') {
       P.gemU = gemUniforms(cell.content.gem);
-      P.mesh.material = buildGemMaterial(P.gemU, P.M);
+      P.mesh.material = buildGemMaterial(P.gemU, P.M, reveals[P.c].openness);
       P.sig = 'gem';
     } else {
       const fin = finishOf(P);
@@ -140,7 +140,7 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
       if (P.role === 'frame') { frameU ??= finishUniformsFor(fin); U = frameU; } else { U = finishUniformsFor(fin); }
       P.F = U;
       const tint = P.role === 'glass' ? U.outer.color2 : null;
-      P.mesh.material = buildPieceMaterial(fin, U, P.M, { shadowTint: tint, reveal: P.role === 'panel' || P.role === 'glass' ? reveals[P.c] : null, depth: P.role === 'frame', content: P.role === 'content', merge: P.role === 'frame' });
+      P.mesh.material = buildPieceMaterial(fin, U, P.M, { shadowTint: tint, reveal: P.role === 'panel' || P.role === 'glass' ? reveals[P.c] : null, depth: P.role === 'frame', openness: P.role === 'content' ? reveals[P.c].openness : null, merge: P.role === 'frame' });
       P.sig = signature(fin);
     }
     P.mesh.material.lightsNode = (P.role === 'content' ? objectLights : cellLights)[P.c];
@@ -392,6 +392,7 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
     if (!view) return;
     practicals.aim(pos);
     computeOpenings(openArrays, { ...view, viewPos: pos, camLocal: group.worldToLocal(_cam.copy(pos)) });
+    cellOpenness(view.layout, openArrays, openness).forEach((k, c) => { reveals[c].openness.value = k; });
   }
 
   // la chorégraphie, le patron ou les mouvements ont changé (rien à reconstruire)
