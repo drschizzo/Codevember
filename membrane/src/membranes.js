@@ -71,10 +71,12 @@ export const MEMBRANES = {
     sss: 1, sssColor: '#ff2414', sssPower: 2.5, whiten: 0.6, whitenColor: '#ffb8b0', lipColor: '#ff6f5f',
     pre: 0.08, stretch: 2.2e-5, strength: 0.32, curl: 0.45, curlKick: 0.6, damping: 1.4, leak: 0.08, fibrils: 0.05, warp: 0.06, branch: 0.2,
   }),
+  // (fumé plutôt qu'opaque : de face, la lumière du cœur le traverse en
+  // grenat ; tendu, il s'éclaircit ; de biais, il reste noir)
   latexBlack: M({
-    label: 'Latex noir', scatter: '#141116', absorb: '#3a2430', density: 2.6, clarity: 0.04, blur: 0.3,
+    label: 'Latex noir', scatter: '#141116', absorb: '#6a4452', density: 1.6, clarity: 0.04, blur: 0.3,
     rough: 0.1, spec: 0.7, wet: 0.9, wetRough: 0.015, wetWave: 0.15, mottle: 0.1, wrinkles: 0.9,
-    sss: 0.2, sssColor: '#ff3a52', whiten: 0.5, whitenColor: '#8f7f88', lipColor: '#3a3036',
+    sss: 0.5, sssColor: '#ff3a52', whiten: 0.5, whitenColor: '#8f7f88', lipColor: '#3a3036',
     pre: 0.08, stretch: 2.2e-5, strength: 0.32, curl: 0.45, curlKick: 0.6, damping: 1.4, leak: 0.08, fibrils: 0.04, warp: 0.06, branch: 0.2,
   }),
   vellum: M({
@@ -91,8 +93,10 @@ export const MEMBRANES = {
     thick: 0.03, stretch: 1.6e-5, bend: 3e-4, strength: 0.3, curl: 0.1, curlKick: 0.15, damping: 3, leak: 0.4,
     lip: 2, fibrils: 0.4, fibSnap: 0.07, fibRadius: 0.005, warp: 0.08,
   }),
+  // (l'or battu transmet un peu de vert, mais faiblement et diffusé par le
+  // froissé : transmission saturée et nette, le cœur apparaissait en taches fluo)
   goldLeaf: M({
-    label: 'Feuille d’or', scatter: '#000000', absorb: '#4e9a3c', density: 2.2, clarity: 0.9, blur: 0.08,
+    label: 'Feuille d’or', scatter: '#000000', absorb: '#66786a', density: 3.4, clarity: 0.05, blur: 0.6,
     metal: 1, metalColor: '#ffe29d', rough: 0.17, spec: 1, wet: 0, mottle: 0.2, wrinkles: 1.6,
     sss: 0, whiten: 0, edgeWhite: 0, lipColor: '#ffd98a', lipDensity: 6,
     thick: 0.006, pre: 0.01, stretch: 4e-6, bend: 2e-5, strength: 0.06, strengthVar: 0.5, curl: 0.15, curlKick: 0.25, damping: 1.2,

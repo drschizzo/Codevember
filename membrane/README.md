@@ -117,7 +117,7 @@ Le modèle physique s'ajoute par-dessus :
 - film humide, un vernis à sa propre normale ondulante ;
 - lustre ;
 - irisation, dont l'épaisseur du film suit 1/J : la couleur change quand la bulle s'étire ;
-- feuille de métal : l'or battu transmet le vert, froissé en permanence ;
+- feuille de métal : l'or battu, froissé en permanence, transmet une faible lueur verte, diffusée ;
 - plis de compression, fibres du vélin et de la soie ;
 - anticrénelage spéculaire : la variance de la normale dans le pixel vient du relief et de la courbure par sommet, continue d'un triangle à l'autre (les dérivées écran de la normale interpolée, constantes par triangle, dessineraient les facettes dans le reflet).
 
