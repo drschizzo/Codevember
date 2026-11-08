@@ -281,7 +281,7 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
     return { c, r };
   };
 
-  const euler = new THREE.Euler(), q = new THREE.Quaternion(), v = new THREE.Vector3();
+  const euler = new THREE.Euler(), q = new THREE.Quaternion(), v = new THREE.Vector3(), _p = new THREE.Vector3();
   const cellA = new Array(8); // matrice de chaque cellule (ossature, panneaux)
   let view = null; // ce que l'ajourage retient de la dernière image
   // ph : phase de la boucle ; reset : pas de mouvement depuis l'image précédente
@@ -328,7 +328,7 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
     v.set(c[0], c[1], c[2]).applyQuaternion(q).multiplyScalar(s);
     // point le plus bas : l'objet ne traverse jamais le sol
     let minY = Infinity;
-    for (const p of pts) { const y = new THREE.Vector3(p[0], p[1], p[2]).applyQuaternion(q).y * s - v.y; minY = Math.min(minY, y); }
+    for (const p of pts) minY = Math.min(minY, _p.set(p[0], p[1], p[2]).applyQuaternion(q).y * s - v.y);
     const lift = Math.max(0, floorY + 0.06 * target - minY);
     group.position.set(-v.x, -v.y + lift, -v.z);
 

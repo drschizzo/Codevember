@@ -191,7 +191,6 @@ async function main() {
     if (camState.free) controls.update(); else rigCamera(ph);
     camera.updateMatrixWorld();
     tess.setViewer(camera.position);
-    // (en voyage, la coupe côté caméra n'a plus de sens : on est dedans)
     const kp = info?.kp ?? 0, kc = info?.kc ?? 0, sc = info?.scale ?? 1;
     overlay.draw(info, R, RENDER);
     stage.update(R, floorY, { kc, kp, camera, scale: sc, lamp: R.voyage?.lamp ?? 1 });
@@ -221,6 +220,11 @@ async function main() {
     }, R);
     post.render();
   }
+  // Rendu hors de la boucle d'animation (export, images de mise au point).
+  // Les nœuds rafraîchis une fois par image (passe de scène, cartes d'ombre,
+  // vitesses) ne le sont que si le numéro d'image avance, ce que seule la
+  // boucle fait : on l'avance à la main. (API privée de three 0.186 : à
+  // revérifier à chaque mise à jour.)
   function renderStep(u) {
     renderer._nodes?.nodeFrame?.update();
     renderAt(u);
