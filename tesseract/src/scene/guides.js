@@ -187,7 +187,7 @@ export function createGuides(group, scene) {
         // décalée vers le « plafond » de la pièce (au centre, elle serait
         // dans l'objet) et chaque pièce a sa nuance.
         const ctr = apply(T[c], normalOf(c));
-        const off = apply(T[c], embedLocal(c, [0, 0.42 * kv, 0], 1));
+        const off = apply(T[c], embedLocal(c, [0, 0.72 * kv, 0], 1));
         const p = project(off, G.d.value, G.inflate.value);
         const p0 = project(ctr, G.d.value, G.inflate.value);
         const p1 = project(apply(T[c], embedLocal(c, [0.3, 0, 0], 1)), G.d.value, G.inflate.value);
