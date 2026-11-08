@@ -21,7 +21,7 @@ Rendu physique en three.js (WebGPU, TSL). La scène est entièrement procédural
 | F | plein écran |
 
 Paramètres d'URL :
-- `?seed=…` : une scène ;
+- `?seed=…` : une scène (par défaut `bprpfo`) ;
 - `#r=…` : une scène retouchée, produite par « Copier le lien » ;
 - `?ui=0` : sans panneau ;
 - `?debug` : outils dans `window.tess`, dont `shot(phase)` (une image fixe à une phase donnée), `at('travel', 1, 0.5)` (la phase d'un moment du voyage) et `send(nom)` (l'image rendue, envoyée à un collecteur local sur le port 8099).
