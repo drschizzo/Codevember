@@ -296,7 +296,7 @@ export const stableVelocity = () => mrt({ velocity: select(length(velocity.xy).l
 // finish : { outer, inner, edge, wear } (finitions complètes) ; U : leurs
 // uniformes ({ outer, inner, edge, wear }) ; M : uniformes du maillage
 // (matrice 4D, voir project.js) ; opts.shadowTint : ombre colorée (verre)
-export function buildPieceMaterial(finish, U, M, { shadowTint = null, open = null, depth = false, content = false, merge = false } = {}) {
+export function buildPieceMaterial(finish, U, M, { shadowTint = null, reveal = null, depth = false, content = false, merge = false } = {}) {
   const fins = [finish.outer, finish.inner, finish.edge];
   const any = (pred) => fins.some(pred);
   const F = {
@@ -365,9 +365,9 @@ export function buildPieceMaterial(finish, U, M, { shadowTint = null, open = nul
 
   const m = new THREE.MeshPhysicalNodeMaterial({ side: THREE.DoubleSide });
   const pre = merge ? frameMerge(M) : null;
-  m.positionNode = projectPosition(M, true, open, pre);
-  m.castShadowPositionNode = projectPosition(M, false, open, pre);
-  if (open) { const mask = revealMask(attribute('pat', 'vec3')); m.maskNode = mask; m.maskShadowNode = mask; }
+  m.positionNode = projectPosition(M, true, reveal, pre);
+  m.castShadowPositionNode = projectPosition(M, false, reveal, pre);
+  if (reveal) { m.maskNode = revealMask(true); m.maskShadowNode = revealMask(false); }
   m.colorNode = vec4(get('color'), 1);
   m.metalnessNode = get('metal');
   let rough = get('rough');

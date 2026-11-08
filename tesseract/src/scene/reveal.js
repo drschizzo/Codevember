@@ -23,14 +23,16 @@ const PASS = { far: 0.36, near: 0.1, lat: 1.05 };
 // porte : rayon (espace projeté) autour de son centre où elle est effacée / pleine
 const DOOR = { near: 0.12, far: 0.32 };
 
-// centre de chaque face de la cellule c, dans ses coordonnées locales (sur le
-// plan des panneaux : même ancrage que leur géométrie, voir gen/cell.js)
-export function faceAnchors(R) {
+// Disposition des faces de chaque cellule, dans ses coordonnées locales :
+// layout[c][f] = { anchor, grid } — anchor, le centre de la face sur le plan
+// des panneaux (même ancrage que leur géométrie, voir gen/cell.js) ; grid,
+// la trame d'une tôle perforée [n trous par côté, demi-côté a] ou [0, 0]
+export function faceLayout(R) {
   return R.cells.map((cell) => cell.faces.map((kind, f) => {
-    const t = kind === 'glass' || kind === 'leaded' ? cell.glassT : cell.panelT;
-    const a = [0, 0, 0];
-    a[f >> 1] = (f & 1 ? 1 : -1) * panelSeat(R.frame, t).plane;
-    return a;
+    const seat = panelSeat(R.frame, kind === 'glass' || kind === 'leaded' ? cell.glassT : cell.panelT);
+    const anchor = [0, 0, 0];
+    anchor[f >> 1] = (f & 1 ? 1 : -1) * seat.plane;
+    return { anchor, grid: kind === 'perf' ? [cell.perf.n, seat.ext] : [0, 0] };
   }));
 }
 
@@ -59,17 +61,17 @@ const dist3 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 const map4 = (A, l) => [0, 1, 2, 3].map((r) => A[r * 4] * l[0] + A[r * 4 + 1] * l[1] + A[r * 4 + 2] * l[2] + A[r * 4 + 3]);
 
 // Ouvertures des faces, écrites dans out[c] (tableaux de six nombres).
-//   A : matrice de chaque cellule ; anchors : faceAnchors(R)
+//   A : matrice de chaque cellule ; layout : faceLayout(R)
 //   d, inflate : projection ; toWorld : matrice monde du groupe
 //   viewPos : caméra (monde) ; camLocal : caméra (espace projeté)
 //   shell : { amount, lo, hi } ; cutaway ; pass (0 ou 1) ; doors : voyageDoors
 const _pa = new THREE.Vector3(), _pc = new THREE.Vector3();
-export function computeOpenings(out, { A, anchors, d, inflate, toWorld, viewPos, camLocal, shell, cutaway, pass, doors }) {
+export function computeOpenings(out, { A, layout, d, inflate, toWorld, viewPos, camLocal, shell, cutaway, pass, doors }) {
   for (let c = 0; c < 8; c++) {
     const pc = project(map4(A[c], [0, 0, 0]), d, inflate);
     _pc.set(pc[0], pc[1], pc[2]).applyMatrix4(toWorld);
     for (let f = 0; f < 6; f++) {
-      const y = map4(A[c], anchors[c][f]), pl = project(y, d, inflate);
+      const y = map4(A[c], layout[c][f].anchor), pl = project(y, d, inflate);
       let open = smoothstep(shell.lo, shell.hi, y[3]) * shell.amount;
       // coupe : la face (de la cellule vers son centre, une fois projetée)
       // regarde-t-elle la caméra ?

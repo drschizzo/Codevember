@@ -11,8 +11,8 @@ import * as THREE from 'three/webgpu';
 import { uniform, lights } from 'three/tsl';
 import { stateAt, cellTransforms, cellMatrix, apply, project, timelineFor, stepOrientations, depthOf, foldOrder, normalOf, smoothstep } from '../math4.js';
 import { voyageFrames, voyageBlend } from './voyage.js';
-import { meshUniforms, setMatrix, faceOpenings } from './project.js';
-import { faceAnchors, voyageDoors, computeOpenings } from './reveal.js';
+import { meshUniforms, setMatrix, cellReveal } from './project.js';
+import { faceLayout, voyageDoors, computeOpenings } from './reveal.js';
 import { buildPieceMaterial, buildGemMaterial, finishUniforms, applyFinish, signature, gemUniforms, applyGem } from './materials.js';
 import { G } from './globals.js';
 import { createGuides } from './guides.js';
@@ -70,10 +70,10 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
   // chaque pixel évaluerait onze lumières au lieu de quatre.
   const cellLights = practicals.lights.map((L) => lights([...studioLights, L]));
   const pieceOf = (c, role) => pieces[c * ROLES.length + ROLES.indexOf(role)];
-  // ajourage : ouverture des six faces de chaque cellule (voir reveal.js),
-  // partagée par ses panneaux et son verre
-  const cellOpen = Array.from({ length: 8 }, faceOpenings);
-  const openArrays = cellOpen.map((u) => u.array);
+  // ajourage des six faces de chaque cellule (voir reveal.js), partagé par
+  // ses panneaux et son verre
+  const reveals = Array.from({ length: 8 }, cellReveal);
+  const openArrays = reveals.map((u) => u.open.array);
   let frameU = null; // uniformes de finition de l'ossature (partagés par les huit cellules)
 
   const finishOf = (P) => {
@@ -100,7 +100,7 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
       if (P.role === 'frame') { frameU ??= finishUniformsFor(fin); U = frameU; } else { U = finishUniformsFor(fin); }
       P.F = U;
       const tint = P.role === 'glass' ? U.outer.color2 : null;
-      P.mesh.material = buildPieceMaterial(fin, U, P.M, { shadowTint: tint, open: P.role === 'panel' || P.role === 'glass' ? cellOpen[P.c] : null, depth: P.role === 'frame', content: P.role === 'content', merge: P.role === 'frame' });
+      P.mesh.material = buildPieceMaterial(fin, U, P.M, { shadowTint: tint, reveal: P.role === 'panel' || P.role === 'glass' ? reveals[P.c] : null, depth: P.role === 'frame', content: P.role === 'content', merge: P.role === 'frame' });
       P.sig = signature(fin);
     }
     P.mesh.material.lightsNode = cellLights[P.c];
@@ -136,6 +136,7 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
     readyFlag = false;
     guides.setRecipe(R);
     cache = makeCache();
+    syncLayout();
     const jobs = [gen.request(frameSpec(), 'frame')];
     for (let c = 0; c < 8; c++) { jobs.push(gen.request({ cell: cellSpec(c), frame: frameSpec() }, 'panels')); jobs.push(gen.request(contentSpec(c), 'content')); }
     totalCount = jobs.length; pendingCount = jobs.length;
@@ -154,17 +155,22 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
     }, (e) => console.error(e));
   }
 
+  // disposition des faces (ancrages, trames des tôles perforées)
+  function syncLayout() {
+    cache.layout = faceLayout(R);
+    cache.layout.forEach((faces, c) => faces.forEach(({ grid }, f) => reveals[c].grid.array[f].set(grid[0], grid[1])));
+  }
+
   function makeCache() {
     const C = { timeline: timelineFor(R), Q: stepOrientations(R.moves), depth: depthOf(R.net.parent), order: foldOrder(R.net.parent) };
     C.frames = voyageFrames(R, C);
-    C.anchors = faceAnchors(R);
     return C;
   }
 
   // une cellule (ou l'ossature) a changé de forme : nouvelles géométries
   function syncGeometry(c = null) {
     if (!R) return;
-    cache.anchors = faceAnchors(R); // (faces, épaisseurs ou ossature changées)
+    syncLayout(); // (faces, épaisseurs ou ossature changées)
     const gen0 = generation;
     if (c === null) { // ossature (et panneaux : leur assise dépend de l'ossature)
       guides.setRecipe(R);
@@ -325,7 +331,7 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
     practicals.update(R, T, s);
     // (l'ajourage dépend aussi de la caméra : voir setViewer)
     view = {
-      A: cellA, anchors: cache.anchors, d: G.d.value, inflate: G.inflate.value, toWorld: group.matrixWorld, shell,
+      A: cellA, layout: cache.layout, d: G.d.value, inflate: G.inflate.value, toWorld: group.matrixWorld, shell,
       // coupe côté caméra : sans objet de l'intérieur ; parois traversées :
       // ouvertes dès que le voyage commence (la caméra est alors loin)
       cutaway: R.view.cutaway * (1 - kp), pass: kp > 0.001,
@@ -346,11 +352,12 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
   function refresh() {
     if (!R) return;
     cache = makeCache();
+    syncLayout();
     refRadius = 0;
   }
 
   return {
-    group, guides, practicals, setRecipe, refresh, syncGeometry, syncMaterial, update, setViewer, pieces,
+    group, guides, practicals, reveals, setRecipe, refresh, syncGeometry, syncMaterial, update, setViewer, pieces,
     ready: () => readyFlag,
     progress: () => (totalCount ? 1 - pendingCount / totalCount : 1),
     // (après un saut dans la boucle : pas de vecteurs vitesse)

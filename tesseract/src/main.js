@@ -184,6 +184,7 @@ async function main() {
     G.roughFloor.value = RENDER.roughFloor;
     G.nestEnv.value = RENDER.nestEnv;
     G.crystalThick.value = RENDER.crystalThick;
+    G.dither.value = RENDER.aa === 'traa' ? 1 : 0; // (bord des trous tramé, moyenné par l'anticrénelage temporel)
     const floorY = -R.floor.level * TARGET;
     // (le tesseract d'abord : la caméra du voyage se règle sur son état)
     info = tess.update(ph, { target: TARGET, floorY, reset });

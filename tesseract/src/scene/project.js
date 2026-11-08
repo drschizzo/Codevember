@@ -20,15 +20,18 @@
 // côté caméra, parois traversées pendant le voyage, portes) : l'ouverture de
 // chaque face est calculée en JS une fois par image (voir reveal.js) ; le
 // shader la lit selon la face de la pièce (attribut `anchor`) et perce la
-// plaque de trous qui grandissent jusqu'à l'effacer (voir revealMask).
+// plaque de trous qui grandissent jusqu'à l'effacer (voir revealMask). Une
+// tôle perforée s'ajoure par ses propres trous, qui s'agrandissent : une
+// seconde trame par-dessus la sienne dessinerait du moiré.
 //
 // Le même calcul, avec les paramètres de l'image précédente, donne la
 // position précédente (vecteurs vitesse : flou de mouvement, anticrénelage
 // temporel) ; la carte d'ombre reçoit la même déformation.
 import * as THREE from 'three/webgpu';
 import {
-  Fn, uniform, uniformArray, vec3, vec4, float, length, cross, positionGeometry, normalLocal, tangentLocal, positionPrevious,
-  varyingProperty, abs, dot, pow, attribute, smoothstep, fract, mat2, mix, step,
+  Fn, uniform, uniformArray, vec2, vec3, vec4, float, length, cross, positionGeometry, normalLocal, tangentLocal, positionPrevious,
+  varyingProperty, abs, dot, pow, attribute, smoothstep, fract, mat2, mix, step, floor, fwidth,
+  interleavedGradientNoise, screenCoordinate, frameId,
 } from 'three/tsl';
 import { G } from './globals.js';
 
@@ -73,27 +76,49 @@ export const localScale = varyingProperty('float', 'vLocalScale');
 export function meshUniforms() {
   return { A: uniform(new THREE.Matrix4()), Aprev: uniform(new THREE.Matrix4()) };
 }
-// ouverture des six faces d'une cellule (0 : pleine ; 1 : effacée), partagée
-// par ses panneaux et son verre (voir reveal.js)
-export const faceOpenings = () => uniformArray(new Array(6).fill(0), 'float');
+// Ajourage des six faces d'une cellule, partagé par ses panneaux et son verre
+// (voir reveal.js) : open, l'ouverture (0 : pleine ; 1 : effacée) ; grid, la
+// trame de la tôle perforée (n trous par côté sur [−a, a]², ou n = 0 : trame
+// à 45° par défaut)
+export const cellReveal = () => ({
+  open: uniformArray(new Array(6).fill(0), 'float'),
+  grid: uniformArray(Array.from({ length: 6 }, () => new THREE.Vector2()), 'vec2'),
+});
 // matrice ligne-major (math4.cellMatrix) → uniforme
 export function setMatrix(u, m) {
   u.value.set(m[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7], m[8], m[9], m[10], m[11], m[12], m[13], m[14], m[15]);
 }
 
-// ouverture du panneau (0 : plein ; 1 : effacé)
+// ouverture du panneau (0 : plein ; 1 : effacé), et position du point dans la
+// trame des trous (en carreaux : un trou au centre de chacun)
 export const revealOpen = varyingProperty('float', 'vReveal');
+const revealUV = varyingProperty('vec2', 'vRevealUV');
 // coordonnée w (profondeur 4D) du sommet, avant projection
 export const depthW = varyingProperty('float', 'vDepthW');
 // couleur de la profondeur 4D (froid → chaud quand w va de −1 à 1)
 export const depthColor = (w) => mix(G.depthCold, G.depthWarm, smoothstep(-1, 1, w));
 
-// masque d'ajourage : trous ronds sur une trame à 45° dans le plan de la
-// pièce, de rayon croissant avec l'ouverture
-export function revealMask(pat) {
-  const q = mat2(0.7071, -0.7071, 0.7071, 0.7071).mul(pat.xy).mul(G.revealDensity);
-  const d = fract(q).sub(0.5).length();
-  return d.greaterThan(revealOpen.mul(0.78));
+// Masque d'ajourage : trous ronds au centre des carreaux de la trame, de
+// rayon croissant avec l'ouverture (0,78 carreau : la face est effacée). Le
+// bord est tramé sur l'épaisseur d'un pixel, au hasard et autrement à chaque
+// image (dither : passe principale sous anticrénelage temporel, qui le
+// moyenne) : un seuil franc crénelait les bords en mouvement.
+export function revealMask(dither = false) {
+  const d = fract(revealUV).sub(0.5).length();
+  const radius = revealOpen.mul(0.78);
+  const w = fwidth(d).max(1e-4);
+  const cover = smoothstep(w.negate(), w, d.sub(radius)).max(step(radius, 1e-4));
+  if (!dither) return cover.greaterThan(0.5);
+  const shift = vec2(frameId.toFloat().mod(16).mul(5.588238));
+  const noise = mix(float(0.5), interleavedGradientNoise(screenCoordinate.xy.add(shift)), G.dither);
+  return cover.greaterThan(noise);
+}
+
+// axes du plan de la face f (voir gen/cell.js, faceFrame) : X = e₍ₖ₊₁₎, Y = e₍ₖ₊₂₎
+const eq = (a, b) => step(abs(a.sub(b)), 0.5);
+function faceAxes(f) {
+  const k = floor(f.mul(0.5));
+  return { X: vec3(eq(k, 2), eq(k, 0), eq(k, 1)), Y: vec3(eq(k, 1), eq(k, 2), eq(k, 0)) };
 }
 
 // face d'une pièce de panneau (2k + (σ > 0)) d'après son ancrage, le centre
@@ -114,13 +139,26 @@ export function frameMerge(U) {
   };
 }
 
+// ajourage d'un sommet de panneau : ouverture de sa face et position dans la
+// trame (celle de la tôle perforée, ou la trame à 45° dans le plan du motif)
+function assignReveal(reveal, l) {
+  const f = faceOfAnchor(attribute('anchor', 'vec3')).toVar('revealFace');
+  const fi = f.toInt();
+  revealOpen.assign(reveal.open.element(fi));
+  const g = reveal.grid.element(fi), { X, Y } = faceAxes(f);
+  const perf = vec2(dot(l, X), dot(l, Y)).add(g.y).mul(g.x.div(g.y.mul(2).max(1e-3)));
+  const lattice = mat2(0.7071, -0.7071, 0.7071, 0.7071).mul(attribute('pat', 'vec3').xy).mul(G.revealDensity);
+  revealUV.assign(mix(lattice, perf, step(0.5, g.x)));
+}
+
 // U : uniformes du maillage ; full : passe principale (normale, tangente,
-// relief, position précédente) ou carte d'ombre (position seule) ; open :
-// ouvertures des faces (panneaux) ; pre : déformation locale avant projection
-export function projectPosition(U, full, open = null, pre = null) {
+// relief, position précédente) ou carte d'ombre (position seule) ; reveal :
+// ajourage des faces (panneaux, voir cellReveal) ; pre : déformation locale
+// avant projection
+export function projectPosition(U, full, reveal = null, pre = null) {
   return Fn(() => {
     const l = pre ? pre(positionGeometry).toVar('lMerged') : positionGeometry;
-    if (open) revealOpen.assign(open.element(faceOfAnchor(attribute('anchor', 'vec3')).toInt()));
+    if (reveal) assignReveal(reveal, l);
     if (!full) return mapPoint(l, U.A, G.d, G.inflate);
     const { y, p, jx, jy, jz } = projectWithJacobian(l, U.A, G.d, G.inflate);
     depthW.assign(y.w);
