@@ -31,7 +31,7 @@ import * as THREE from 'three/webgpu';
 import {
   Fn, uniform, uniformArray, vec2, vec3, vec4, float, length, cross, positionGeometry, normalLocal, tangentLocal, positionPrevious,
   varyingProperty, abs, dot, pow, attribute, smoothstep, fract, mat2, mix, step, floor, fwidth,
-  interleavedGradientNoise, screenCoordinate, frameId,
+  interleavedGradientNoise, screenCoordinate, frameId, max as tmax,
 } from 'three/tsl';
 import { G } from './globals.js';
 
@@ -94,6 +94,8 @@ export function setMatrix(u, m) {
 // trame des trous (en carreaux : un trou au centre de chacun)
 export const revealOpen = varyingProperty('float', 'vReveal');
 const revealUV = varyingProperty('vec2', 'vRevealUV');
+// position projetée (espace local du groupe) : le passage de la caméra (voir revealMask)
+const projP = varyingProperty('vec3', 'vProjP');
 // coordonnée w (profondeur 4D) du sommet, avant projection
 export const depthW = varyingProperty('float', 'vDepthW');
 // couleur de la profondeur 4D (froid → chaud quand w va de −1 à 1)
@@ -108,7 +110,15 @@ export function revealMask(dither = false) {
   const d = fract(revealUV).sub(0.5).length();
   const radius = revealOpen.mul(0.78);
   const w = fwidth(d).max(1e-4);
-  const cover = smoothstep(w.negate(), w, d.sub(radius)).max(step(radius, 1e-4));
+  let cover = smoothstep(w.negate(), w, d.sub(radius)).max(step(radius, 1e-4));
+  // Passage de la caméra (plongée et remontée) : un trou net, rond, percé dans
+  // chaque paroi le long du rayon qu'elle suit (G.tunnelDir, depuis le centre),
+  // un peu plus large au loin où les pièces sont projetées plus grandes. Il
+  // s'ouvre devant elle et se referme derrière (G.tunnel).
+  const t = dot(projP, G.tunnelDir), perp = length(projP.sub(G.tunnelDir.mul(t)));
+  const R = tmax(G.tunnelR, t.mul(G.tunnelTan)).mul(G.tunnel).mul(step(0, t));
+  const wt = fwidth(perp).max(1e-4);
+  cover = cover.min(smoothstep(wt.negate(), wt, perp.sub(R)).max(step(R, 1e-4)));
   if (!dither) return cover.greaterThan(0.5);
   const shift = vec2(frameId.toFloat().mod(16).mul(5.588238));
   const noise = mix(float(0.5), interleavedGradientNoise(screenCoordinate.xy.add(shift)), G.dither);
@@ -160,8 +170,13 @@ export function projectPosition(U, full, reveal = null, pre = null) {
   return Fn(() => {
     const l = pre ? pre(positionGeometry).toVar('lMerged') : positionGeometry;
     if (reveal) assignReveal(reveal, l);
-    if (!full) return mapPoint(l, U.A, G.d, G.inflate);
+    if (!full) {
+      const p0 = mapPoint(l, U.A, G.d, G.inflate);
+      if (reveal) projP.assign(p0);
+      return p0;
+    }
     const { y, p, jx, jy, jz } = projectWithJacobian(l, U.A, G.d, G.inflate);
+    if (reveal) projP.assign(p);
     depthW.assign(y.w);
     const n = normalLocal;
     const cn = cross(jy, jz).mul(n.x).add(cross(jz, jx).mul(n.y)).add(cross(jx, jy).mul(n.z));

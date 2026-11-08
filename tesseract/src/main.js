@@ -25,7 +25,7 @@ const TARGET = 1.9; // rayon de l'objet à l'écran (unités du monde)
 const params = new URLSearchParams(location.search);
 const $ = (s) => document.querySelector(s);
 const randomSeed = () => Math.random().toString(36).slice(2, 8);
-const DEFAULT_SEED = 'czyt01'; // (la scène de l'ouverture, sans ?seed=)
+const DEFAULT_SEED = 'atl45i'; // (la scène de l'ouverture, sans ?seed=)
 
 async function packRecipe(R) {
   const s = new Blob([JSON.stringify(R)]).stream().pipeThrough(new CompressionStream('deflate-raw'));
@@ -149,6 +149,7 @@ async function main() {
     let fov = K.fov;
     // voyage intérieur : la caméra entre dans l'hypersphère (voir scene/voyage.js)
     const st = info?.state, kc = info?.kc ?? 0;
+    G.tunnel.value = 0;
     if (st?.seg !== undefined && ['plunge', 'dwell', 'travel', 'surface'].includes(st.phase) && info.frames) {
       const g = tess.group, qi = g.quaternion.clone().invert();
       const tl = info.timeline;
@@ -160,6 +161,11 @@ async function main() {
         uIn: axisAt(tl.find((p) => p.k === 'plunge').a),
         uOut: axisAt(tl.find((p) => p.k === 'surface').b),
       };
+      // passage percé dans les parois : il s'ouvre devant la caméra et se
+      // referme derrière elle (voir scene/project.js, revealMask)
+      const ss = (a, b, x) => { const u = Math.min(1, Math.max(0, (x - a) / (b - a))); return u * u * (3 - 2 * u); };
+      if (st.phase === 'plunge') { G.tunnelDir.value.copy(out.uIn); G.tunnel.value = ss(0.06, 0.22, st.f) * (1 - ss(0.66, 0.8, st.f)); }
+      else if (st.phase === 'surface') { G.tunnelDir.value.copy(out.uOut); G.tunnel.value = ss(0.2, 0.34, st.f) * (1 - ss(0.78, 0.94, st.f)); }
       const P = insidePose(st, R, info.frames, out);
       const pos = P.pos, fwd = P.fwd.normalize(), up = P.up.normalize();
       g.localToWorld(pos);
