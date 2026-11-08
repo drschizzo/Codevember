@@ -14,7 +14,8 @@
 //   whiten   : blanchiment sous tension (craquelures du polymère, fibres
 //              qui se séparent avant la rupture)
 //   fibers   : fibres (vélin, soie), mottle : irrégularité de l'épaisseur,
-//   wrinkles : plis de compression
+//   wrinkles : plis de compression — orientés par la compression simulée,
+//              d'une longueur d'onde tirée de l'épaisseur (wrinkleScale : ×)
 //   irid     : interférences (film mince) ; l'épaisseur du film suit 1/J
 //   metal    : feuille de métal battu (l'or transmet le vert)
 //   bire     : photoélasticité — retard (nm) par unité d'écart des étirements
@@ -44,7 +45,7 @@ export const MEMBRANE_DEFAULTS = {
   sheen: 0, sheenColor: '#ffffff', sheenRough: 0.4, irid: 0, iridIOR: 1.35, iridNm: 380,
   metal: 0, metalColor: '#ffe29d',
   vessels: 0, vesselColor: '#5a0a12', vesselRelief: 0.6, capillary: 0,
-  fibers: 0, fiberScale: 1, mottle: 0.35, mottleScale: 1, wrinkles: 0.25,
+  fibers: 0, fiberScale: 1, mottle: 0.35, mottleScale: 1, wrinkles: 0.25, wrinkleScale: 1,
   whiten: 0.4, whitenColor: '#fff6ee', edgeWhite: 0.3,
   sss: 1, sssColor: '#ff8a66', sssPower: 3, sssDistort: 0.2,
   lipDensity: 3, lipColor: '#fff0e6', bire: 1400,
@@ -145,7 +146,7 @@ export const MEMBRANES = {
 // grandeurs d'aspect (uniformes : retouche sans nouvelle simulation)
 export const LOOK_KEYS = ['scatter', 'absorb', 'density', 'clarity', 'blur', 'refract', 'rough', 'spec', 'wet', 'wetRough', 'wetWave',
   'sheen', 'sheenColor', 'sheenRough', 'irid', 'iridIOR', 'iridNm', 'metal', 'metalColor', 'vessels', 'vesselColor', 'vesselRelief', 'capillary',
-  'fibers', 'fiberScale', 'mottle', 'mottleScale', 'wrinkles', 'whiten', 'whitenColor', 'edgeWhite', 'sss', 'sssColor', 'sssPower', 'sssDistort',
+  'fibers', 'fiberScale', 'mottle', 'mottleScale', 'wrinkles', 'wrinkleScale', 'whiten', 'whitenColor', 'edgeWhite', 'sss', 'sssColor', 'sssPower', 'sssDistort',
   'lipDensity', 'lipColor', 'bire'];
 // grandeurs de comportement (nouvelle simulation)
 export const PHYS_KEYS = ['thick', 'pre', 'stretch', 'bend', 'strength', 'strengthVar', 'init', 'curl', 'curlWidth', 'curlKick', 'curlSign',

@@ -164,6 +164,7 @@ async function main() {
     scene.fog.color.set(R.bg);
     scene.fog.near = R.fog.near * D;
     scene.fog.far = R.fog.far * D;
+    G.fogNear.value = scene.fog.near; G.fogFar.value = scene.fog.far;
     scene.environmentIntensity = R.env.intensity;
     scene.environmentRotation.set(0, R.env.rotation, 0);
     post.update({ ...RENDER, focus: D * RENDER.focus * 0.6, focusRange: RENDER.focusRange * D }, R);

@@ -20,7 +20,7 @@ import { G } from './globals.js';
 
 // ── Pondérations spectrales ──────────────────────────────────────────────────
 const LAMBDAS = [];
-const NL = 16;
+const NL = 12; // (écart de 25 nm : pas de repliement en deçà de 5 µm de retard)
 for (let i = 0; i < NL; i++) LAMBDAS.push(400 + (300 * (i + 0.5)) / NL);
 const g = (l, mu, s1, s2) => { const t = (l - mu) / (l < mu ? s1 : s2); return Math.exp(-0.5 * t * t); };
 const cie = (l) => [

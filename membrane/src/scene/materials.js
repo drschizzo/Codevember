@@ -280,7 +280,7 @@ function surface(fin, U, p, pf, pn) {
   return out;
 }
 
-export { noise, noise2, fbm, worley, perturb, NZ };
+export { noise, noise2, fbm, worley, perturb, NZ, hash33 };
 
 // Ce qui, dans un matériau, impose une recompilation quand cela change
 export function signature(f) {

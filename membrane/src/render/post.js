@@ -116,6 +116,9 @@ export function createPost(renderer, scene, camera) {
       aoPass.radius.value = 0.35;
       aoPass.thickness.value = 0.6;
       aoPass.useTemporalFiltering = cfg.aa === 'traa';
+      // (l'anticrénelage temporel accumule déjà les échantillons d'une image à
+      // l'autre : la moitié suffit, 1 ms de gagnée)
+      aoPass.samples.value = cfg.aa === 'traa' ? 8 : 16;
       nodes.ao = aoPass;
       const a = aoPass.getTextureNode().sample(screenUV).r;
       color = vec4(color.rgb.mul(mix(float(1), a, U.aoStrength)), color.a);

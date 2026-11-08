@@ -77,10 +77,10 @@ Une couche de 20 000 particules (120 images, 16 sous-pas, 6 passes) se simule en
 - courbure, dont le matériau tire l'anticrénelage du reflet ;
 - dilatation de surface J : la membrane s'amincit en 1/J ;
 - endommagement près des déchirures ;
-- déviateur de la déformation, pour la photoélasticité (voir plus bas) ;
+- déviateur de la déformation, pour la photoélasticité, et tenseur de compression, pour les plis (voir plus bas) ;
 - sommets des lèvres : une demi-ellipse de cinq sommets autour du bord libre, repliée tant que la couture tient.
 
-Le rendu lit ces tampons directement. Les instants de rupture et de claquage des fibrilles sont calculés une fois, sur le GPU.
+Une couche close ou finie (même image que la fois précédente) n'est pas reposée : ses tampons sont déjà justes. Le rendu lit ces tampons directement. Les instants de rupture et de claquage des fibrilles sont calculés une fois, sur le GPU.
 
 **Les vaisseaux** (`vessels.js`). Ils sont obtenus par colonisation de l'espace à partir de racines près du pédoncule, et leur rayon suit le modèle des tuyaux. Le réseau est rastérisé dans une carte octaédrique de la direction au repos.
 
@@ -113,25 +113,33 @@ La matière est une couche mince diffusante :
 
 Ce qui est derrière la membrane est une copie de l'image, propre à chaque couche et prise au moment où elle est dessinée. Les couches intérieures sont déjà là, et l'ordre de dessin le garantit : faces arrière de l'extérieur vers l'intérieur, puis faces avant de l'intérieur vers l'extérieur. La part non diffusée y est vue nette, la part diffusée floue (niveaux de mipmap), le tout réfracté selon la normale et l'épaisseur.
 
+**Faces arrière sans copie.** Quand la caméra est hors d'une couche, sa face arrière n'est vue qu'au travers de sa face avant (ou au fond de la coupe ouverte). La face avant réfracte et floute déjà ce qu'elle laisse passer, si bien qu'une copie propre à la face arrière, avec ses mipmaps et sa copie de profondeur, ne servirait qu'à flouter deux fois. La face arrière se mélange alors directement à l'image, par le matériel : lumière propre + fond × transmission moyenne. Elle écrit vitesses et normales (alpha 1) et une réflectance nulle (alpha 0, pour la cible de réflectance). Le passage de l'une à l'autre ne se voit pas : en approchant du seuil, la version avec copie perd progressivement réfraction, flou, teinte, plis et reflets en espace écran, jusqu'à donner exactement l'image de la version mélangée, brume comprise. Mesuré de part et d'autre du seuil, l'écart est celui de deux images voisines. Gain : 3,5 ms par image.
+
 Le modèle physique s'ajoute par-dessus :
 - translucidité de la lumière venue de derrière : les lames se dessinent en ombres chinoises ;
 - film humide, un vernis à sa propre normale ondulante ;
 - lustre ;
 - irisation, dont l'épaisseur du film suit 1/J : la couleur change quand la bulle s'étire ;
 - feuille de métal : l'or battu, froissé en permanence, transmet une faible lueur verte, diffusée ;
-- plis de compression, fibres du vélin et de la soie ;
+- plis de compression (voir plus bas), fibres du vélin et de la soie ;
 - anticrénelage spéculaire : la variance de la normale dans le pixel vient du relief et de la courbure par sommet, continue d'un triangle à l'autre (les dérivées écran de la normale interpolée, constantes par triangle, dessineraient les facettes dans le reflet).
 
 **La photoélasticité** (`photo.js`, et `STRAIN` dans `gpusim.js`). Un film de polymère tendu devient biréfringent : entre deux polariseurs, la contrainte, invisible, se lit en franges colorées. La membrane le fait à partir de sa propre simulation :
 - à chaque image, un shader de calcul tire de chaque triangle le gradient de la déformation F (du repos à la pose), puis le tenseur b = F·Fᵀ, ses étirements principaux λ₁ ≥ λ₂ et leurs directions. Il garde le déviateur logarithmique ½·ln(λ₁/λ₂)·(d₁d₁ᵀ − d₂d₂ᵀ), moyenné par aire autour de chaque particule, soudé à travers les coutures intactes, puis lissé. Une tension égale dans toutes les directions ne donne rien : un œuf gonflé reste noir entre polariseurs croisés. La déformation est mesurée depuis la forme au repos, et non depuis les longueurs relâchées : un lambeau étiré plastiquement garde sa biréfringence, comme un film plastique que l'on a tiré ;
 - au pixel, le tenseur passe dans le repère de la vue et se projette sur le plan de l'image. On en tire l'écart Δ et l'axe θ, puis le retard Γ = C·Δ·h, où h est l'épaisseur traversée : amincie en 1/J et allongée en incidence rasante, d'où les franges serrées des silhouettes ;
-- le calcul de Jones est fait pour 16 longueurs d'onde : polariseur, membrane (lame de retard), lame teinte sensible facultative (550 nm, à 45°), puis analyseur croisé ou parallèle. Les intensités sont intégrées avec les fonctions colorimétriques CIE 1931 (approximation de Wyman, Sloan et Shirley) et normalisées sur le blanc. On retrouve l'échelle de Michel-Lévy : gris, blanc, jaune, orange, pourpre à 550 nm, bleu, vert, rose… En polarisation circulaire, les bandes sombres de l'axe (isoclines) disparaissent et il ne reste que les franges de même retard (isochromes). Si les polariseurs tournent (un nombre entier de demi-tours par boucle), les isoclines balaient la membrane.
+- le calcul de Jones est fait pour 12 longueurs d'onde : polariseur, membrane (lame de retard), lame teinte sensible facultative (550 nm, à 45°), puis analyseur croisé ou parallèle. Les intensités sont intégrées avec les fonctions colorimétriques CIE 1931 (approximation de Wyman, Sloan et Shirley) et normalisées sur le blanc. On retrouve l'échelle de Michel-Lévy : gris, blanc, jaune, orange, pourpre à 550 nm, bleu, vert, rose… En polarisation circulaire, les bandes sombres de l'axe (isoclines) disparaissent et il ne reste que les franges de même retard (isochromes). Si les polariseurs tournent (un nombre entier de demi-tours par boucle), les isoclines balaient la membrane.
 
 Seule la lumière qui traverse la membrane passe entre les polariseurs : ce que l'on voit au travers, et la translucidité du contre-jour. La diffusion dépolarise et le reflet reste blanc. On voit alors ce que la simulation sait et que l'œil ne voit pas : la contrainte qui s'accumule sous les lames pendant les assauts, en franges de plus en plus nombreuses, là où la membrane va céder ; les lobes autour du front de déchirure ; puis le relâchement en arrière de la fissure, et les lambeaux étirés qui restent irisés. Chaque couche est traitée comme si elle était seule entre ses deux polariseurs, ce qui est une approximation : les retards de couches successives ne se composent pas.
 
 ![Photoélasticité : polariseurs croisés, lame teinte sensible, champ clair, linéaire](docs/photoelasticite.jpg)
 
-**Les fibrilles.** Elles sont construites dans le vertex shader. Le filament s'étire et s'amincit à volume constant, ploie, puis claque ; chaque moitié se rétracte vers sa lèvre en oscillant et s'épaissit.
+**Les plis** (`wrinkleSlope` dans `membrane.js`). Un film mince ne supporte pas la compression : il flambe en plis parallèles à la tension, comme un film étirable tiré entre deux doigts. Le maillage simulé est trop grossier pour les résoudre, mais il sait où la matière est comprimée, dans quel sens et de combien :
+- la pose garde, dans le repère au repos (les plis restent attachés à la matière), le tenseur W = c·k·kᵀ, où k est la direction de compression (vecteur propre de C = FᵀF pour la plus petite valeur propre) et c = max(0, (1 − précontrainte) − λ₂) la compression au-delà de la longueur relâchée. Une membrane gonflée n'en a pas ; une membrane poussée par les lames en a autour d'elles, les lambeaux relâchés en ont partout ;
+- la longueur d'onde suit la loi de Cerda et Mahadevan, λ ∝ √(t·L), où t est l'épaisseur de la membrane : la bulle plisse fin, la gélatine large. L'amplitude A = (λ/π)·√c fait passer dans l'ondulation le surplus de longueur de la matière comprimée ;
+- les plis sont un bruit de phaseurs (Tricard et al., 2019) : des noyaux de Gabor orientés selon k, dont on ne garde que la phase. Les bandes ont un contraste constant et suivent l'orientation sans se rompre ;
+- tout est analytique : le gradient de la hauteur, exprimé sur l'écran par les dérivées de la position au repos (prises hors de la branche), perturbe la normale. Seuls les pixels où la pente dépasse 2° évaluent le bruit, et une face mélangée n'en calcule pas. Coût : environ 0,6 ms par image.
+
+**Les fibrilles.** Elles sont construites dans le vertex shader. Le filament s'étire et s'amincit à volume constant, ploie, puis claque. Chaque moitié se rétracte alors vers sa lèvre en oscillant, s'épaissit en goutte et se love. Un filament est fait de deux tubes, un par moitié : ils partagent leur anneau du milieu tant que le fil tient, puis se séparent au claquage, et la pointe de chacun se referme. Aucun tronçon n'enjambe l'écart entre les lèvres. Sur les matières humides, un fil qui s'amincit se résout en chapelet de gouttelettes (instabilité de Plateau-Rayleigh, au pas d'environ 9 rayons). Un fil plus fin qu'un pixel est dessiné à un pixel de large, et n'occupe qu'une part des pixels égale à sa couverture réelle : c'est un tramage renouvelé à chaque image, lissé par l'anticrénelage temporel. Il s'estompe au lieu de tracer une ligne dure. Six fils sur dix claquent tôt.
 
 **L'armature.** Elle reprend les quarante finitions de Hollow et Tesseract : métaux au F0 mesuré, émail guilloché, damas, laque urushi, marbres, céramiques, nacre, carbone…
 
@@ -174,8 +182,9 @@ Une scène tire une matière dominante, parfois une seconde, et des armatures di
 
 - **Préparation** d'une couche dans le worker : 0,4 s pour 20 000 particules (mesuré dans Node).
 - **Simulation** sur le GPU (160 images, 16 sous-pas, 6 passes) : environ 5 s par couche ; une scène de trois couches est prête en 15 à 20 s, mesurée dans un panneau de navigateur masqué, donc ralenti.
-- **Rendu** : environ 27 ms par image à 1,8 Mpx (26 sans le maillage fin des couches proches), poses, copies de l'image et de la profondeur comprises, mesuré dans un panneau de navigateur. Les copies de l'image (une par face de membrane, mipmaps comprises) en prennent environ 6 ; celles de la profondeur, environ 1 (« Flou selon la profondeur »).
-- **Photoélasticité** : environ 1,8 ms par image à 1,9 Mpx (calcul de la déformation et intégration spectrale), et seulement si la lumière polarisée est allumée.
+- **Rendu** : environ 26 ms par image à 1,9 Mpx en qualité haute, plis compris, mesuré dans un panneau de navigateur (contre 32 avant les économies ci-dessous). Les postes, retirés un à un : copies de l'image environ 2,5 (6 avant les faces arrière mélangées), reflets en espace écran 3,4, occlusion ambiante 0,5 (8 échantillons, que l'anticrénelage temporel accumule d'une image à l'autre ; 1,6 avec 16), maillage fin des couches proches 1,1, bloom 0,7, plis 0,6.
+- **Économies** : faces arrière sans copie (−3,5 ms), occlusion ambiante à 8 échantillons (−1,1 ms), poses des couches immobiles mises en cache.
+- **Photoélasticité** : environ 3 ms par image (calcul de la déformation et intégration spectrale), et seulement si la lumière polarisée est allumée.
 - **Mémoire** : les images enregistrées pèsent environ 25 Mo par couche différente.
 
 [![Membrane](docs/capture.jpg)](https://drschizzo.github.io/Codevember/membrane/)

@@ -238,7 +238,7 @@ export function prepareMembrane(S, arm) {
     let nk = k;
     for (const p of adj[b.i]) { const ks = byP.get(p); if (ks) for (const k2 of ks) if (adj[bonds[k2].j].includes(b.j)) { nk = k2; break; } if (nk !== k) break; }
     const strands = 1 + Math.floor(frng.next() * S.fibPer);
-    for (let s = 0; s < strands; s++) fibs.push({ k, a: b.i, an: bonds[nk].i, b: b.j, bn: bonds[nk].j, u: frng.next(), snap: S.fibSnap * exp(frng.gauss() * 0.45), r: S.fibRadius * (0.5 + frng.next()), sag: frng.next() * 2 - 1, seed: frng.next() });
+    for (let s = 0; s < strands; s++) fibs.push({ k, a: b.i, an: bonds[nk].i, b: b.j, bn: bonds[nk].j, u: frng.next(), snap: S.fibSnap * exp(frng.gauss() * 0.45) * (frng.next() < 0.6 ? 0.35 : 1), r: S.fibRadius * (0.5 + frng.next()), sag: frng.next() * 2 - 1, seed: frng.next() });
   }
   const fibData = new Float32Array(fibs.length * 8);
   fibs.forEach((f, i) => fibData.set([f.a, f.an, f.b, f.bn, f.u, f.snap, f.k, 0], i * 8));
@@ -303,18 +303,23 @@ function ringTable(np, adj, bonds) {
 
 // ── Fibrilles : maillage (K tronçons × R sommets) ────────────────────────────
 function fibrilMesh(list) {
-  const K = 14, R = 5, nvf = (K + 1) * R, n = list.length;
+  // Deux tubes par filament, un par moitié (fTime.y : 0, côté A ; 1, côté B),
+  // qui partagent leur anneau du milieu tant que le fil tient et se séparent
+  // quand il claque : aucun tronçon n'enjambe l'écart entre les lèvres.
+  // (48 tronçons : de quoi dessiner les perles des fils humides)
+  const K = 48, H = K / 2, R = 5, nRing = 2 * (H + 1), nvf = nRing * R, n = list.length;
   const fIdx = new Float32Array(n * nvf * 4), fPar = new Float32Array(n * nvf * 4), fTime = new Float32Array(n * nvf * 4);
   const index = [];
   list.forEach((fb, s) => {
-    for (let k = 0; k <= K; k++) for (let r = 0; r < R; r++) {
-      const o = (s * nvf + k * R + r) * 4;
+    for (let side = 0; side < 2; side++) for (let k = 0; k <= H; k++) for (let r = 0; r < R; r++) {
+      const ring = side * (H + 1) + k;
+      const o = (s * nvf + ring * R + r) * 4;
       fIdx.set([fb.a, fb.an, fb.b, fb.bn], o);
-      fPar.set([fb.u, k / K, (r / R) * PI * 2, fb.r], o);
-      fTime.set([s, 0, fb.sag, fb.seed], o);
+      fPar.set([fb.u, (side * H + k) / K, (r / R) * PI * 2, fb.r], o);
+      fTime.set([s, side, fb.sag, fb.seed], o);
     }
-    for (let k = 0; k < K; k++) for (let r = 0; r < R; r++) {
-      const a = s * nvf + k * R + r, b = s * nvf + k * R + ((r + 1) % R), c = a + R, d = b + R;
+    for (let side = 0; side < 2; side++) for (let k = 0; k < H; k++) for (let r = 0; r < R; r++) {
+      const a = s * nvf + (side * (H + 1) + k) * R + r, b = s * nvf + (side * (H + 1) + k) * R + ((r + 1) % R), c = a + R, d = b + R;
       index.push(a, c, b, b, c, d);
     }
   });

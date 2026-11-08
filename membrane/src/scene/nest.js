@@ -34,6 +34,11 @@ export const MAIN = 1, KEY = 2, BACK = 4;
 export const XMIN = -2.2, XMAX = 3.6;
 // en deçà, la membrane prend le maillage de rendu fin (grande à l'écran)
 const X_DETAIL = 1.4;
+// au-delà, la caméra est hors de la couche : sa face arrière n'est vue qu'au
+// travers de sa face avant (elle se mélange à l'image sans copie). Entre
+// X_BLEND − 0,25 et X_BLEND, la version avec copie converge vers ce résultat :
+// le passage de l'une à l'autre ne se voit pas.
+const X_BLEND = 0.35;
 
 const Z = new THREE.Vector3(0, 0, 1);
 const _q1 = new THREE.Quaternion();
@@ -79,6 +84,13 @@ class Template {
     if (!this.AU) { this.AU = mkU(f); this.AU2 = mkU(f2); } else { setU(this.AU, f); setU(this.AU2, f2); }
     // photoélasticité : seulement en lumière polarisée, et pour une matière biréfringente
     look.photo = (R.polar?.amount ?? 0) > 0 && look.bire > 0;
+    // plis orientés par la compression simulée
+    look.wrinkle = look.wrinkles > 0;
+    // longueur d'onde des plis (rayon de la couche = 1) : loi de Cerda et
+    // Mahadevan, λ ∝ √(t·L), t : épaisseur de la membrane, L : longueur de
+    // la zone tendue (ici, l'écartement des pièces de l'armature, ≈ 0,2)
+    if (!this.L.wrLen) this.L.wrLen = uniform(0.1);
+    this.L.wrLen.value = 1.6 * Math.sqrt(lv.phys.thick * 0.2) * (look.wrinkleScale ?? 1);
     this.sig = `${lookSignature(look)}|${signature(f)}|${signature(f2)}`;
     if (key !== this.key) {
       this.key = key;
@@ -135,11 +147,16 @@ class Template {
   dispose() { this.disposed = true; this.free(this.data); this.vessels?.dispose(); }
 }
 
+// un maillage de membrane porte plusieurs matériaux (avec ou sans copie de
+// l'image, mélangé) : on les libère tous, une fois chacun
+const disposeVariants = (m) => new Set([m.material, m.userData.full, m.userData.lite, m.userData.blend].filter(Boolean)).forEach((x) => x.dispose());
+
 class Slot {
   constructor(nest, j) {
     this.nest = nest; this.j = j;
     this.group = new THREE.Group();
-    this.S = { f: uniform(0), fPrev: uniform(0), vis: uniform(1) };
+    // (blendK : approche du seuil où la face arrière sera mélangée, voir X_BLEND)
+    this.S = { f: uniform(0), fPrev: uniform(0), vis: uniform(1), blendK: uniform(0) };
     this.RU = { t: uniform(0), tPrev: uniform(0), dur: uniform(0.5), vis: uniform(1), style: uniform(0), sn: uniform(0), sa: uniform(0), sf: uniform(0), seedOff: uniform(new THREE.Vector3()) };
     this.meshes = {};
     this.built = '';
@@ -155,7 +172,7 @@ class Slot {
     const key = `${T.index}:${T.version}:${T.sig}:${depthBlur}`;
     if (key === this.built) return true;
     this.built = key;
-    for (const m of Object.values(this.meshes)) { this.group.remove(m); m.material.dispose(); if (m.userData.lite) m.userData.lite.dispose(); }
+    for (const m of Object.values(this.meshes)) { this.group.remove(m); disposeVariants(m); }
     this.meshes = {};
     const d = T.data, spec = T.lookSpec, n = this.nest;
     // tampons de pose de l'instance (écrits par le GPU à chaque image) — refaits
@@ -163,14 +180,16 @@ class Slot {
     const VV = d.prep.VV;
     if (!this.pose || this.pose.VV !== VV) {
       if (this.pose) for (const k of ['cur', 'prv', 'nor', 'str']) n.freeAttr(this.pose[k]);
-      // (str : déviateur de la déformation, deux vec4 par sommet — photoélasticité)
-      this.pose = { VV, cur: n.storageAttr(VV), prv: n.storageAttr(VV), nor: n.storageAttr(VV), str: n.storageAttr(2 * VV) };
+      // (str : déviateur de la déformation et tenseur de compression, trois vec4
+      // par sommet — photoélasticité, plis)
+      this.pose = { VV, cur: n.storageAttr(VV), prv: n.storageAttr(VV), nor: n.storageAttr(VV), str: n.storageAttr(3 * VV) };
     }
     this.poser?.dispose();
+    const strain = spec.photo || spec.wrinkle;
     this.poser = createPoser(n.renderer.backend.device, d.gpu, d.prep, d.S, {
-      cur: n.gpuBuffer(this.pose.cur), prv: n.gpuBuffer(this.pose.prv), nor: n.gpuBuffer(this.pose.nor), str: spec.photo ? n.gpuBuffer(this.pose.str) : null,
+      cur: n.gpuBuffer(this.pose.cur), prv: n.gpuBuffer(this.pose.prv), nor: n.gpuBuffer(this.pose.nor), str: strain ? n.gpuBuffer(this.pose.str) : null,
     });
-    const PT = { ...this.pose, str: spec.photo ? this.pose.str : null, fibT: d.fibT, nf: d.prep.nf };
+    const PT = { ...this.pose, str: strain ? this.pose.str : null, fibT: d.fibT, nf: d.prep.nf };
     this.RU.dur.value = T.lv.arm.dur;
     { const a = T.lv.arm, n = a.struggle ?? 0; this.RU.style.value = a.style ?? 0; this.RU.sn.value = n; this.RU.sa.value = a.strAmp ?? 0.35; this.RU.sf.value = n > 0 ? (a.strFrac ?? 0.5) : 0; }
     this.RU.seedOff.value.set(this.j * 1.37, T.index * 2.11, 0.5);
@@ -188,6 +207,8 @@ class Slot {
     this.meshes.front = mk(d.geo.lo, buildMembraneMaterial(PT, this.S, T.L, spec, { ...opts, side: THREE.FrontSide }), 100, false);
     // variantes sans copie de l'image (couches lointaines : derrière la caméra, ou au cœur)
     this.meshes.back.userData.full = this.meshes.back.material;
+    // (face arrière d'une couche vue de l'extérieur : mélangée sans copie)
+    this.meshes.back.userData.blend = buildMembraneMaterial(PT, this.S, T.L, spec, { ...opts, side: THREE.BackSide, backdrop: false, blend: true });
     this.meshes.back.userData.lite = buildMembraneMaterial(PT, this.S, T.L, spec, { ...opts, side: THREE.BackSide, backdrop: false });
     this.meshes.front.userData.full = this.meshes.front.material;
     this.meshes.front.userData.lite = buildMembraneMaterial(PT, this.S, T.L, spec, { ...opts, side: THREE.FrontSide, backdrop: false });
@@ -198,7 +219,7 @@ class Slot {
   dispose() {
     this.poser?.dispose();
     if (this.pose) for (const k of ['cur', 'prv', 'nor', 'str']) this.nest.freeAttr(this.pose[k]);
-    for (const m of Object.values(this.meshes)) { m.material.dispose(); if (m.userData.lite && m.userData.lite !== m.material) m.userData.lite.dispose(); if (m.userData.full && m.userData.full !== m.material) m.userData.full.dispose(); }
+    for (const m of Object.values(this.meshes)) disposeVariants(m);
     this.nest.root.remove(this.group);
   }
 }
@@ -255,6 +276,7 @@ export function createNest(scene, gen, renderer) {
       // (leurs lambeaux ont quitté le champ ; la brume fait le reste)
       const fadeOut = R.nest.fade ?? [-0.95, -0.2];
       sl.S.vis.value = ss(XMAX - 0.4, XMAX - 1.1, x) * ss(fadeOut[0], fadeOut[1], x);
+      { const t = Math.min(1, Math.max(0, (x - (X_BLEND - 0.25)) / 0.25)); sl.S.blendK.value = t; }
       // taille et orientation. Chaque couche repose dans la coupe de la
       // précédente : leur orientation relative est fixe (même vitesse de
       // rotation pour toutes, un décalage propre à chaque modèle) — rien ne
@@ -270,7 +292,9 @@ export function createNest(scene, gen, renderer) {
       // niveau de détail : mêmes attributs, le matériau reste valable
       const geo = s.render.detail && x < X_DETAIL ? T.data.geo.hi : T.data.geo.lo;
       for (const k of ['back', 'front']) {
-        const m = me[k], want = useBackdrop ? m.userData.full : m.userData.lite;
+        // une face arrière n'a besoin de sa copie de l'image que si on la voit
+        // directement : caméra dedans, ou tout près
+        const m = me[k], want = !useBackdrop ? m.userData.lite : k === 'back' && x > X_BLEND && m.userData.blend ? m.userData.blend : m.userData.full;
         if (m.material !== want) m.material = want;
         m.geometry = geo;
         m.layers.mask = memOn ? MAIN : 0;
