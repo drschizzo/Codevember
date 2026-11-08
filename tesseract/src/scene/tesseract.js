@@ -304,8 +304,14 @@ export function createTesseract(scene, gen) {
     // vient se poser sur les arêtes exactes
     // (pendant le voyage, chaque pièce reprend son ossature : vue de
     // l'intérieur, elle a ses colonnes dans les douze angles)
-    const fm = Math.min(1, Math.max(0, (st.fold - 0.86) / 0.14)), merge = fm * fm * (3 - 2 * fm) * (1 - kp);
+    // L'ossature fusionnée ne dessine que le contour extérieur : les arêtes
+    // du côté de l'œil 4D (w ≈ 1). Les autres s'effacent (pendant un quart
+    // de tour, le contour change et les barres s'allument et s'éteignent
+    // avec lui). Dans l'hypersphère, plus d'ossature du tout.
+    const fm = Math.min(1, Math.max(0, (st.fold - 0.86) / 0.14)), merge = fm * fm * (3 - 2 * fm);
     G.merge.value = merge;
+    G.panelShrink.value = merge * (1 - kp);
+    const sm = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
     G.frameW.value = R.frame.w;
     // matrices de chaque pièce
     for (let cc = 0; cc < 8; cc++) {
@@ -317,8 +323,15 @@ export function createTesseract(scene, gen) {
       const Afr = cellMatrix(T[cc], cc, insetM);
       const Pf = pieceOf(cc, 'frame');
       const nodeless = R.frame.node === 'none';
+      const A1 = cellMatrix(T[cc], cc, 1);
+      const wOf = (l) => A1[12] * l[0] + A1[13] * l[1] + A1[14] * l[2] + A1[15];
       for (let i = 0; i < 20; i++) {
-        Pf.M.bars.array[i] = i >= 12 && nodeless ? (owner[cc][i] ? merge : 0) : owner[cc][i] ? 1 : 1 - merge;
+        let l;
+        if (i < 12) { const a = i >> 2; l = [0, 0, 0]; l[(a + 1) % 3] = i & 2 ? 1 : -1; l[(a + 2) % 3] = i & 1 ? 1 : -1; }
+        else { const j = i - 12; l = [j & 4 ? 1 : -1, j & 2 ? 1 : -1, j & 1 ? 1 : -1]; }
+        const outer = sm(0.55, 0.95, wOf(l));
+        const kept = owner[cc][i] ? 1 - merge + merge * outer : 1 - merge;
+        Pf.M.bars.array[i] = (i >= 12 && nodeless ? (owner[cc][i] ? merge * outer : 0) : kept) * (1 - kp);
       }
       // objet exposé : tourne d'un nombre entier de tours par boucle
       // la cellule qui passe à l'extérieur (vers l'œil 4D) rentre son objet :
