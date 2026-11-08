@@ -28,7 +28,7 @@ import {
 } from 'three/tsl';
 import { FINISH_KEYS } from '../finishes.js';
 import { NOISE_PERIOD } from '../gen/noisevol.js';
-import { projectPosition, localScale, revealMask } from './project.js';
+import { projectPosition, localScale, revealMask, depthW, depthColor } from './project.js';
 import { G } from './globals.js';
 
 const PI = Math.PI;
@@ -296,7 +296,7 @@ export const stableVelocity = () => mrt({ velocity: select(length(velocity.xy).l
 // finish : { outer, inner, edge, wear } (finitions complètes) ; U : leurs
 // uniformes ({ outer, inner, edge, wear }) ; M : uniformes du maillage
 // (matrice 4D, voir project.js) ; opts.shadowTint : ombre colorée (verre)
-export function buildPieceMaterial(finish, U, M, { shadowTint = null, reveal = false } = {}) {
+export function buildPieceMaterial(finish, U, M, { shadowTint = null, reveal = false, depth = false } = {}) {
   const fins = [finish.outer, finish.inner, finish.edge];
   const any = (pred) => fins.some(pred);
   const F = {
@@ -411,6 +411,8 @@ export function buildPieceMaterial(finish, U, M, { shadowTint = null, reveal = f
     if (F.disp) m.dispersionNode = get('disp');
   }
   if (F.emit) m.emissiveNode = get('emit');
+  // profondeur 4D en couleur (ossature, pendant la rotation)
+  if (depth) { const e = depthColor(depthW).mul(G.depthTint); m.emissiveNode = m.emissiveNode ? m.emissiveNode.add(e) : e; }
   if (shadowTint) m.castShadowNode = vec4(shadowTint, 1);
   m.mrtNode = stableVelocity();
   return m;

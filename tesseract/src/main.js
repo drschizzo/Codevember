@@ -5,7 +5,7 @@
 // window.tess, dont shot(phase) : une image fixe à une phase donnée).
 import * as THREE from 'three/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { generate, makeCell, finishesFor } from './recipe.js';
+import { generate, makeCell, finishesFor, upgrade } from './recipe.js';
 import { randomNet, randomMoves } from './math4.js';
 import { createRng } from './rng.js';
 import { createGenerator } from './gen/client.js';
@@ -17,6 +17,7 @@ import { createPost } from './render/post.js';
 import { createUI } from './app/ui.js';
 import { loadRender, saveRender, applyQuality, RENDER_DEFAULTS } from './app/settings.js';
 import { exportLoop, exportPNG } from './app/capture.js';
+import { createOverlay, drawOverlay } from './app/overlay.js';
 
 const TARGET = 1.9; // rayon de l'objet à l'écran (unités du monde)
 const params = new URLSearchParams(location.search);
@@ -74,10 +75,11 @@ async function main() {
   const tess = createTesseract(scene, gen);
   const stage = createStage(scene);
   const post = createPost(renderer, scene, camera);
+  const overlay = createOverlay();
   const RENDER = loadRender();
 
   let R;
-  if (location.hash.startsWith('#r=')) { try { R = await unpackRecipe(location.hash.slice(3)); } catch { R = null; } }
+  if (location.hash.startsWith('#r=')) { try { R = upgrade(await unpackRecipe(location.hash.slice(3))); } catch { R = null; } }
   R ??= generate(params.get('seed') || randomSeed());
 
   let envKey = '';
@@ -118,7 +120,11 @@ async function main() {
     const az = K.az + w * K.orbit + K.sway * 0.35 * Math.sin(w);
     const el = K.elev + K.sway * 0.06 * Math.sin(2 * w + 0.7);
     // recul : l'objet occupe ~60 % de la demi-hauteur (ou de la demi-largeur, en portrait)
-    const d = (K.dist * TARGET) / (0.6 * Math.tan((K.fov * Math.PI) / 360) * Math.min(1, camera.aspect));
+    // travelling : la caméra s'approche quand le tesseract est plié (il est
+    // alors plus petit, et l'on veut voir l'intérieur des cellules)
+    const fold = info?.state ? Math.min(1, Math.max(0, info.state.fold)) : 0;
+    const close = 1 - (R.view?.dolly ?? 0) * 0.3 * fold * fold * (3 - 2 * fold);
+    const d = close * (K.dist * TARGET) / (0.6 * Math.tan((K.fov * Math.PI) / 360) * Math.min(1, camera.aspect));
     camera.position.set(Math.sin(az) * Math.cos(el) * d, Math.sin(el) * d, Math.cos(az) * Math.cos(el) * d);
     camera.up.set(0, 1, 0);
     camera.lookAt(0, -0.15, 0);
@@ -135,9 +141,12 @@ async function main() {
     G.phase.value = ph;
     G.microDetail.value = RENDER.microDetail;
     G.roughFloor.value = RENDER.roughFloor;
+    G.cutaway.value = R.view.cutaway;
     if (camState.free) controls.update(); else rigCamera(ph);
     const floorY = -R.floor.level * TARGET;
+    G.viewPos.value.copy(camera.position);
     info = tess.update(ph, { target: TARGET, floorY, reset });
+    overlay.draw(info, R, RENDER);
     stage.update(R, floorY);
     scene.background.set(R.bg);
     scene.fog.color.set(R.bg);
@@ -209,6 +218,8 @@ async function main() {
       try {
         await exportLoop({
           canvas, duration: R.loop.duration, renderAt: renderStep,
+          // (légendes et analogie composées sur chaque image)
+          overlay: (ctx, w, h) => drawOverlay(ctx, w, h, info, R, RENDER),
           setSize: (w, h) => { renderer.setPixelRatio(1); renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); },
           restore: () => { canvas.style.width = ''; canvas.style.height = ''; resize(); },
         }, o, (p) => { $('#progress u').style.width = `${(p * 100).toFixed(1)}%`; }, `tesseract-${R.seed}-${o.width}x${o.height}.mp4`);
@@ -249,6 +260,8 @@ async function main() {
     if (e.code === 'Space') { e.preventDefault(); on.togglePause(); }
     else if (e.key === 'n' || e.key === 'N') on.random();
     else if (e.key === 'h' || e.key === 'H') document.body.classList.toggle('clean');
+    else if (e.key === 'l' || e.key === 'L') { RENDER.captions = !RENDER.captions; saveRender(RENDER); }
+    else if (e.key === 'a' || e.key === 'A') { RENDER.analogy = !RENDER.analogy; saveRender(RENDER); }
     else if (e.key === 'f' || e.key === 'F') document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
     else if (e.key === 'ArrowRight') phi += 0.005;
     else if (e.key === 'ArrowLeft') phi -= 0.005;

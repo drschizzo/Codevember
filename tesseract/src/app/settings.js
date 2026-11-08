@@ -9,6 +9,7 @@ export const QUALITY = {
 
 export const RENDER_DEFAULTS = {
   quality: 'high',
+  captions: false, analogy: false, // aides affichées à la demande (touches L et A)
   pixelRatio: 1.5, aa: 'traa', shadows: 'high', microDetail: 1,
   toneMapping: 'agx', exposure: 1.1, contrast: 1.08, saturation: 1.05, warmth: 0, vignette: 0.45,
   bloom: true, bloomStrength: 0.06, bloomRadius: 0.4, bloomThreshold: 1.6, hiCap: 4, roughFloor: 0.08,

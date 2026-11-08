@@ -252,6 +252,65 @@ export function tube(B, pts, r, nr = 12, s = OUT, caps = true) {
   }
 }
 
+// ── Révolution autour de l'axe z ─────────────────────────────────────────────
+// prof : [{ r, z, nr, nz, s }] (une arête vive : deux points confondus aux
+// normales différentes) ; M pas angulaires
+export function lathe(B, prof, M = 48) {
+  for (let j = 0; j + 1 < prof.length; j++) {
+    const a = prof[j], b = prof[j + 1];
+    if (a.r === b.r && a.z === b.z) continue;
+    const rows = [a, b].map((q) => Array.from({ length: M }, (_, i) => {
+      const ph = (2 * PI * i) / M, d = [cos(ph), sin(ph), 0];
+      return B.vert([d[0] * q.r, d[1] * q.r, q.z], norm([d[0] * q.nr, d[1] * q.nr, q.nz]), q.s, [-sin(ph), cos(ph), 0]);
+    }));
+    B.grid(rows, true);
+  }
+}
+// profil fermé à arêtes vives à partir de points (r, z) et de finitions par côté
+export function sharpProfile(pts, surfs) {
+  const out = [];
+  let area = 0;
+  for (let i = 0; i < pts.length; i++) { const a = pts[i], b = pts[(i + 1) % pts.length]; area += a[0] * b[1] - b[0] * a[1]; }
+  const o = area >= 0 ? 1 : -1;
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i], b = pts[(i + 1) % pts.length];
+    const d = [b[0] - a[0], b[1] - a[1]], l = Math.hypot(d[0], d[1]) || 1;
+    const n = [(o * d[1]) / l, (-o * d[0]) / l];
+    out.push({ r: a[0], z: a[1], nr: n[0], nz: n[1], s: surfs[i] }, { r: b[0], z: b[1], nr: n[0], nz: n[1], s: surfs[i] });
+  }
+  return out;
+}
+
+// ── Polyèdre à facettes planes (sommets, faces) ──────────────────────────────
+export function polyhedron(B, V, F, size, s = OUT) {
+  for (const f of F) {
+    const P = f.map((i) => mul(V[i], size));
+    const c = P.reduce((a, b) => add(a, b), [0, 0, 0]).map((x) => x / P.length);
+    let n = norm(cross(sub(P[1], P[0]), sub(P[2], P[0])));
+    if (dot(n, c) < 0) n = mul(n, -1);
+    const ids = P.map((p) => B.vert(p, n, s));
+    for (let k = 1; k + 1 < ids.length; k++) B.tri(ids[0], ids[k], ids[k + 1]);
+  }
+}
+export function icosahedron() {
+  const t = (1 + Math.sqrt(5)) / 2;
+  const V = [[-1, t, 0], [1, t, 0], [-1, -t, 0], [1, -t, 0], [0, -1, t], [0, 1, t], [0, -1, -t], [0, 1, -t], [t, 0, -1], [t, 0, 1], [-t, 0, -1], [-t, 0, 1]].map(norm);
+  const F = [[0, 11, 5], [0, 5, 1], [0, 1, 7], [0, 7, 10], [0, 10, 11], [1, 5, 9], [5, 11, 4], [11, 10, 2], [10, 7, 6], [7, 1, 8], [3, 9, 4], [3, 4, 2], [3, 2, 6], [3, 6, 8], [3, 8, 9], [4, 9, 5], [2, 4, 11], [6, 2, 10], [8, 6, 7], [9, 8, 1]];
+  return { V, F };
+}
+// dodécaèdre : dual de l'icosaèdre (un sommet par face, une face par sommet)
+export function dodecahedron() {
+  const I = icosahedron();
+  const V = I.F.map((f) => norm(f.map((i) => I.V[i]).reduce((a, b) => add(a, b), [0, 0, 0])));
+  const F = I.V.map((v, vi) => {
+    const fs = I.F.map((f, fi) => [f, fi]).filter(([f]) => f.includes(vi)).map(([, fi]) => fi);
+    // ordre angulaire autour du sommet
+    const a = norm(cross(v, Math.abs(v[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0])), b = cross(v, a);
+    return fs.sort((x, y) => Math.atan2(dot(V[x], b), dot(V[x], a)) - Math.atan2(dot(V[y], b), dot(V[y], a)));
+  });
+  return { V, F };
+}
+
 // ── Taille brillant (pierre), table vers +y, rondiste de rayon 1 ─────────────
 export function gem(B, c, size, s = OUT) {
   const ring = (n, r, y, off) => Array.from({ length: n }, (_, i) => { const a = ((i + off) / n) * PI * 2; return [r * cos(a), y, r * sin(a)]; });

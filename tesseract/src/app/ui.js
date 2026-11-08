@@ -3,7 +3,7 @@
 import GUI from 'lil-gui';
 import { FINISHES, SETS, FINISH_DEFAULTS, PATTERNS } from '../finishes.js';
 import {
-  MOODS, KINDS, FACE_KINDS, CONTENT_TYPES, FRAME_STYLES, NODE_STYLES, HOLE_SHAPES, HOLE_GRADS, NET_SHAPES, FLOORS, GEMS,
+  MOODS, KINDS, FACE_KINDS, CONTENT_TYPES, FRAME_STYLES, NODE_STYLES, HOLE_SHAPES, HOLE_GRADS, NET_SHAPES, FLOORS, GEMS, STUD_MODES, LEAD_PATTERNS, VIEW_DEFAULTS,
 } from '../recipe.js';
 import { CELL_NAMES, moveLabel } from '../math4.js';
 import { ENV_PRESETS } from '../scene/env.js';
@@ -63,6 +63,7 @@ export function createUI({ recipe: getRecipe, render, on }) {
   fExp.add(exp, 'png').name('Image (PNG)');
 
   const fScene = gui.addFolder('Scène');
+  const fView = gui.addFolder('Lisibilité et intérieur');
   const fChor = gui.addFolder('Chorégraphie').close();
   const fProj = gui.addFolder('Projection 4D').close();
   const fCam = gui.addFolder('Caméra').close();
@@ -88,6 +89,18 @@ export function createUI({ recipe: getRecipe, render, on }) {
     add(fScene, { reroll: () => on.netChanged(R.net.shape) }, 'reroll').name('⟳  Autre patron');
     add(fScene, R, 'moveMode', { 'Un seul plan (4 quarts de tour)': 'same', 'Plans mêlés': 'mixed' }).name('Rotations 4D').onChange(() => on.movesChanged());
     add(fScene, { reroll: () => on.movesChanged() }, 'reroll').name(`⟳  Autre séquence (${R.moves.map(moveLabel).join(' · ')})`);
+
+    R.view ??= { ...VIEW_DEFAULTS };
+    const V = R.view;
+    add(fView, V, 'ghost', 0, 2, 0.01).name('Fantôme de la forme pliée').onChange(ch);
+    add(fView, V, 'seams', 0, 2, 0.01).name('Liserés des faces appariées').onChange(ch);
+    add(fView, V, 'depth', 0, 2, 0.01).name('Profondeur 4D en couleur').onChange(ch);
+    add(fView, render, 'captions').name('Légendes des étapes (L)').listen().onChange(() => on.renderChanged?.());
+    add(fView, render, 'analogy').name('Analogie 3D, encart (A)').listen().onChange(() => on.renderChanged?.());
+    add(fView, V, 'cutaway', 0, 1, 0.01).name('Coupe côté caméra').onChange(ch);
+    add(fView, V, 'practical', 0, 30, 0.1).name('Lumières d’écrin').onChange(ch);
+    addC(fView, V, 'practicalColor').name('Lumières d’écrin : teinte').onChange(ch);
+    add(fView, V, 'dolly', 0, 1, 0.01).name('Rapprochement (plié)').onChange(ch);
 
     const C = R.chor;
     add(fChor, C, 'open', 0.05, 4, 0.01).name('Pause dépliée').onChange(ch);
@@ -170,6 +183,18 @@ export function createUI({ recipe: getRecipe, render, on }) {
       fl.add(cell.louvre, 'n', 3, 20, 1).name('Lames').onFinishChange(geo);
       fl.add(cell.louvre, 'angle', -1.4, 1.4, 0.01).name('Inclinaison des lames').onFinishChange(geo);
       fl.add(cell.grid, 'n', 3, 20, 1).name('Joncs de la grille').onFinishChange(geo);
+      const fo = f.addFolder('Autres panneaux').close();
+      fo.add(cell.stud, 'mode', STUD_MODES).name('Relief').onChange(geo);
+      fo.add(cell.stud, 'n', 2, 12, 1).name('Relief : nombre par côté').onFinishChange(geo);
+      fo.add(cell.stud, 'height', 0.1, 1.2, 0.01).name('Relief : hauteur').onFinishChange(geo);
+      fo.add(cell.corr, 'n', 1, 12, 1).name('Ondulations').onFinishChange(geo);
+      fo.add(cell.corr, 'amp', 0.05, 0.6, 0.01).name('Ondulations : amplitude').onFinishChange(geo);
+      fo.add(cell.leaded, 'pattern', LEAD_PATTERNS).name('Vitrail : réseau').onChange(geo);
+      fo.add(cell.leaded, 'n', 1, 8, 1).name('Vitrail : divisions').onFinishChange(geo);
+      fo.add(cell.bars, 'n', 3, 20, 1).name('Barreaux').onFinishChange(geo);
+      fo.add(cell.bars, 'cross').name('Barreaux : traverse').onChange(geo);
+      fo.add(cell.target, 'n', 2, 12, 1).name('Cible : anneaux').onFinishChange(geo);
+      fo.add(cell.target, 'fill', 0.1, 0.95, 0.01).name('Cible : largeur des anneaux').onFinishChange(geo);
       const fm = f.addFolder('Matériaux').close();
       fm.add({ set: cell.panelSet }, 'set', opts(SETS)).name('Jeu des panneaux').onChange((s) => on.cellSet(c, s));
       fm.add(cell.panel, 'wear', 0, 1, 0.01).name('Usure').onChange(mat);
