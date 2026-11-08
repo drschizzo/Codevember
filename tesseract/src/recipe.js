@@ -2,7 +2,7 @@
 // objet JSON (partageable par lien) ; le panneau la modifie en place.
 import { createRng } from './rng.js';
 import { FINISHES, SETS, TINTS } from './finishes.js';
-import { randomNet, randomMoves, ROOT } from './math4.js';
+import { randomNet, randomMoves, ROOT, voyageSeconds } from './math4.js';
 
 const r2 = (x) => Math.round(x * 100) / 100;
 const r3 = (x) => Math.round(x * 1000) / 1000;
@@ -160,9 +160,11 @@ export function makeCell(kind, rng, mood, seed) {
     default: break;
   }
   const panelSet = rng.pick(M.panels);
+  // (chaque pièce a son objet : le voyage intérieur s'y arrête ; tirage à
+  // part pour celles qui n'en avaient pas, le reste de la scène est inchangé)
+  const CONTENTS = [['pearl', 3], ['gem', 2 * (M.gems ?? 0.25) * 4], ['rings', 2], ['cube', 1.2], ['saturn', 1.5], ['mini', 1.5], ['knot', 2], ['ico', 1.2], ['dodeca', 1.2], ['stack', 1.2]];
   const contentType = kind === 'squelette' || kind === 'vitrine' || rng.chance(0.6)
-    ? rng.weighted([['pearl', 3], ['gem', 2 * (M.gems ?? 0.25) * 4], ['rings', 2], ['cube', 1.2], ['saturn', 1.5], ['mini', 1.5], ['knot', 2], ['ico', 1.2], ['dodeca', 1.2], ['stack', 1.2]])
-    : 'none';
+    ? rng.weighted(CONTENTS) : rng.fork('content').weighted(CONTENTS);
   // (tirage indépendant : les graines existantes gardent le reste de leur scène)
   const cx = rng.fork('crystal'), picked = rng.pick(M.contents);
   const contentSet = contentType !== 'gem' && cx.chance(M.crystal ?? 0.3)
@@ -228,7 +230,7 @@ export function generate(seed, opts = {}) {
   capPerforated(cells);
 
   const steps = moves.length;
-  return {
+  const R = {
     v: 1, seed: String(seed), mood: moodKey,
     loop: { duration: Math.round(steps * rng.range(6.5, 9)) },
     net: { shape: netShape, parent },
@@ -254,7 +256,11 @@ export function generate(seed, opts = {}) {
     bg: M.bg,
     view: { ...VIEW_DEFAULTS, practicalColor: M.practical ?? VIEW_DEFAULTS.practicalColor },
     fog: { near: 9, far: 26 },
+    voyage: { ...VOYAGE_DEFAULTS },
   };
+  // (le voyage a sa propre durée : une halte par pièce, une traversée par mouvement)
+  if (R.voyage.on) R.loop.duration = Math.round(voyageSeconds(R));
+  return R;
 }
 
 export const rootCell = ROOT;
@@ -266,10 +272,20 @@ export const rootCell = ROOT;
 //   s'approche pendant les pauses
 export const VIEW_DEFAULTS = { ghost: 0.7, seams: 1, depth: 0.6, cutaway: 0.55, practical: 6, practicalColor: '#ffd9a8', dolly: 0.35 };
 
+// Le voyage intérieur (voir math4.js et scene/voyage.js) : durées (plongée,
+// halte dans une pièce, traversée, remontée), écart de la caméra à l'axe de
+// la traversée et rayon de son tour autour de l'objet, champ, lampe,
+// brouillard, ajourage des parois vues de l'intérieur, taille des objets
+export const VOYAGE_DEFAULTS = {
+  on: true, plunge: 4.2, dwell: 2.8, travel: 3.6, surface: 4,
+  radius: 0.42, orbitR: 0.62, fov: 68, lamp: 1, fogNear: 1.4, fogFar: 6.5, see: 0.9, objScale: 0.27,
+};
+
 // Recette ancienne (lien partagé) : on complète ce qui manque
 export function upgrade(R) {
   const D = { stud: { n: 6, mode: 'pyramid', height: 0.5 }, corr: { n: 5, amp: 0.3 }, leaded: { n: 3, pattern: 'diamond' }, bars: { n: 9, cross: true }, target: { n: 5, fill: 0.5 } };
   for (const c of R.cells) for (const [k, v] of Object.entries(D)) c[k] ??= { ...v };
   R.view ??= { ...VIEW_DEFAULTS };
+  R.voyage ??= { ...VOYAGE_DEFAULTS, on: false }; // (scène partagée avant le voyage : telle quelle)
   return R;
 }

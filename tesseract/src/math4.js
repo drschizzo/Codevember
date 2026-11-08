@@ -236,6 +236,7 @@ export function stepTimeline(ch) {
 //   turn : fraction du mouvement en cours, move : ce mouvement
 //   fold : pliage moyen (0 déplié, 1 plié)
 export function stateAt(ph, R, cache) {
+  if (R.voyage?.on) return voyageStateAt(ph, R, cache);
   const { moves, chor } = R;
   const n = moves.length;
   const u = (((ph % 1) + 1) % 1) * n;
@@ -337,4 +338,72 @@ export function project(y, d, inflate) {
   }
   const s = d / Math.max(d - p[3], 0.05);
   return [p[0] * s, p[1] * s, p[2] * s];
+}
+
+// ── Le voyage intérieur ──────────────────────────────────────────────────────
+// Gonflé jusqu'au bout (3-sphère de rayon 2) et vu depuis un œil 4D posé sur
+// cette sphère (d = 2), le tesseract est projeté stéréographiquement : c'est,
+// à une échelle près, ce que verrait un habitant de l'hypersphère placé au pôle
+// opposé à l'œil, c'est-à-dire au centre du cube intérieur (l'origine de
+// l'espace projeté). Les directions depuis l'origine sont exactes : les grands
+// cercles qui y passent deviennent des droites.
+//
+// Les huit cellules pavent l'hypersphère : ce sont huit pièces, chacune
+// accolée à six autres. Et un quart de tour dans un plan qui contient w — le
+// mouvement même de la boucle — déplace l'univers entier le long d'un grand
+// cercle : vu du centre, on traverse la paroi et l'on passe dans la pièce
+// voisine. Quatre quarts de tour dans le même plan : on marche tout droit, on
+// traverse quatre pièces, et l'on revient à son point de départ.
+//
+// Déroulé : pause dépliée, pliage, pause, plongée (l'œil 4D se pose sur la
+// sphère, la caméra entre), puis pour chaque mouvement une halte dans la pièce
+// et une traversée, une dernière halte, la remontée et le dépliage.
+export const VOYAGE_PHASES = ['open', 'fold', 'hold', 'plunge', 'dwell', 'travel', 'surface', 'unfold'];
+export function voyageTimeline(R) {
+  const C = R.chor, V = R.voyage, n = R.moves.length;
+  const segs = [['open', C.open], ['fold', C.fold], ['hold', C.hold], ['plunge', V.plunge]];
+  for (let i = 0; i < n; i++) segs.push(['dwell', V.dwell, i], ['travel', V.travel, i]);
+  segs.push(['dwell', V.dwell, n], ['surface', V.surface], ['unfold', C.unfold]);
+  const tot = segs.reduce((a, s) => a + Math.max(0.001, s[1]), 0);
+  let acc = 0;
+  return segs.map(([k, w, i = 0]) => { const a = acc; acc += Math.max(0.001, w) / tot; return { k, i, a, b: acc }; });
+}
+export const voyageSeconds = (R) => {
+  const C = R.chor, V = R.voyage, n = R.moves.length;
+  return C.open + C.fold + C.hold + V.plunge + (n + 1) * V.dwell + n * V.travel + V.surface + C.unfold;
+};
+export const timelineFor = (R) => (R.voyage?.on ? voyageTimeline(R) : stepTimeline(R.chor));
+
+export function voyageStateAt(ph, R, cache) {
+  const { moves, chor } = R;
+  const n = moves.length;
+  const u = ((ph % 1) + 1) % 1;
+  const tl = cache.timeline;
+  let j = 0;
+  while (j < tl.length - 1 && u >= tl[j].b) j++;
+  const seg = tl[j], f = clamp01((u - seg.a) / (seg.b - seg.a));
+  const order = cache.order, depth = cache.depth, maxD = Math.max(1, ...depth);
+  const stagger = chor.stagger;
+  const hingeFold = (x, rank) => easeBack((x - (stagger * rank) / 7) / (1 - stagger), chor.antic);
+  const theta = new Array(8).fill(Math.PI / 2);
+  let foldMean = 0;
+  for (let s = 0; s < 8; s++) {
+    let fs;
+    if (seg.k === 'open') fs = 0;
+    else if (seg.k === 'fold') fs = hingeFold(f, order[s]);
+    else if (seg.k === 'unfold') fs = 1 - hingeFold(f, 7 - order[s]);
+    else fs = 1;
+    if (s === ROOT) continue;
+    theta[s] = (Math.PI / 2) * (1 - fs);
+    foldMean += clamp01(fs) / 7;
+  }
+  let Q = cache.Q[0], move = null, turn = 0, step = 0;
+  if (seg.k === 'dwell') { Q = cache.Q[seg.i]; step = Math.min(n - 1, seg.i); }
+  if (seg.k === 'travel') {
+    Q = cache.Q[seg.i]; move = moves[seg.i]; step = seg.i;
+    // (un léger recul avant l'élan, un léger dépassement à l'arrivée)
+    turn = easeBack(f, 0.06 + 0.25 * chor.turnAntic);
+  }
+  if (seg.k === 'surface') step = n - 1;
+  return { Q, theta, turn, move, fold: foldMean, step, phase: seg.k, v: u, maxD, seg: j, room: seg.i, f };
 }

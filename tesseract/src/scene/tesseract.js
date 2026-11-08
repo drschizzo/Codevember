@@ -9,7 +9,8 @@
 // que plié), soulevé au besoin pour ne jamais traverser le sol.
 import * as THREE from 'three/webgpu';
 import { uniform } from 'three/tsl';
-import { stateAt, cellTransforms, cellMatrix, apply, project, stepTimeline, stepOrientations, depthOf, foldOrder, normalOf } from '../math4.js';
+import { stateAt, cellTransforms, cellMatrix, apply, project, timelineFor, stepOrientations, depthOf, foldOrder, normalOf } from '../math4.js';
+import { voyageFrames, voyageBlend } from './voyage.js';
 import { meshUniforms, setMatrix } from './project.js';
 import { buildPieceMaterial, buildGemMaterial, finishUniforms, applyFinish, signature, gemUniforms, applyGem } from './materials.js';
 import { G } from './globals.js';
@@ -118,9 +119,7 @@ export function createTesseract(scene, gen) {
     const gen0 = ++generation;
     readyFlag = false;
     guides.setRecipe(R);
-    cache = {
-      timeline: stepTimeline(R.chor), Q: stepOrientations(R.moves), depth: depthOf(R.net.parent), order: foldOrder(R.net.parent),
-    };
+    cache = makeCache();
     const jobs = [gen.request(frameSpec(), 'frame')];
     for (let c = 0; c < 8; c++) { jobs.push(gen.request({ cell: cellSpec(c), frame: frameSpec() }, 'panels')); jobs.push(gen.request(contentSpec(c), 'content')); }
     totalCount = jobs.length; pendingCount = jobs.length;
@@ -137,6 +136,33 @@ export function createTesseract(scene, gen) {
       for (const P of pieces) P.prev = null;
       readyFlag = true;
     }, (e) => console.error(e));
+  }
+
+  function makeCache() {
+    const C = { timeline: timelineFor(R), Q: stepOrientations(R.moves), depth: depthOf(R.net.parent), order: foldOrder(R.net.parent) };
+    C.frames = voyageFrames(R, C);
+    return C;
+  }
+
+  // Portes du voyage : la paroi entre la pièce où l'on se tient et la suivante
+  // s'ajoure à la fin de la halte (on voit déjà où l'on va), reste ouverte
+  // pendant la traversée et se referme derrière soi.
+  function doorAt(T, i, amount, slot) {
+    const F = cache.frames, a = F.rooms[i], b = F[i]?.cell;
+    if (b === undefined || amount <= 0) { slot.value.set(0, 0, 50, 0); return; }
+    const x = normalOf(a).map((v, k) => v + normalOf(b)[k]);
+    const p = project(apply(T[a], x), G.d.value, G.inflate.value);
+    slot.value.set(p[0], p[1], p[2], amount);
+  }
+  function setDoors(st, T) {
+    const n = R.moves.length, f = st.f ?? 0, sm = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+    let prev = [0, 0], next = [0, 0];
+    if (st.phase === 'dwell') {
+      if (st.room > 0) prev = [st.room - 1, 1 - sm(0, 0.35, f)];
+      if (st.room < n) next = [st.room, sm(0.45, 0.95, f)];
+    } else if (st.phase === 'travel') next = [st.room, 1];
+    doorAt(T, prev[0], prev[1], G.door0);
+    doorAt(T, next[0], next[1], G.door1);
   }
 
   // une cellule (ou l'ossature) a changé de forme : nouvelles géométries
@@ -190,13 +216,13 @@ export function createTesseract(scene, gen) {
   // points témoins : coins et centre de chaque cellule (cadrage)
   const probe = [];
   for (const x of [-1, 1]) for (const y of [-1, 1]) for (const z of [-1, 1]) probe.push([x, y, z, 1]);
-  function projectedPoints(T, inset) {
+  function projectedPoints(T, inset, inflate) {
     const pts = [];
     for (let c = 0; c < 8; c++) {
       const A = cellMatrix(T[c], c, inset);
       for (const l of probe) {
         const y = [0, 1, 2, 3].map((r) => A[r * 4] * l[0] + A[r * 4 + 1] * l[1] + A[r * 4 + 2] * l[2] + A[r * 4 + 3]);
-        pts.push(project(y, R.proj.d, G.inflate.value));
+        pts.push(project(y, R.proj.d, inflate));
       }
     }
     return pts;
@@ -220,20 +246,30 @@ export function createTesseract(scene, gen) {
     G.dPrev.value = G.d.value;
     G.inflatePrev.value = G.inflate.value;
     // gonflement : seulement plié (déplié, le patron reste fait de cubes)
-    G.inflate.value = R.proj.inflate * Math.min(1, Math.max(0, st.fold)) ** 2;
-    G.d.value = R.proj.d;
-    G.reveal.value = R.proj.reveal ?? 1;
-    G.revealLo.value = R.proj.revealLo ?? -0.5;
-    G.revealHi.value = R.proj.revealHi ?? 0.85;
+    const inflate0 = R.proj.inflate * Math.min(1, Math.max(0, st.fold)) ** 2;
+    // voyage intérieur : l'œil 4D se pose sur l'hypersphère (projection
+    // stéréographique exacte, voir math4.js)
+    const { kp, kc } = voyageBlend(st);
+    const lerp = (a, b, t) => a + (b - a) * t;
+    G.inflate.value = lerp(inflate0, 1, kp);
+    G.d.value = lerp(R.proj.d, 2, kp);
+    // De l'intérieur, plus de coque à effacer : toutes les parois s'ajourent
+    // un peu, d'autant plus qu'elles sont loin de la pièce où l'on se tient
+    // (on voit les pièces voisines, et celles d'après par leurs ajours).
+    const see = R.voyage?.see ?? 0.9;
+    G.reveal.value = lerp(R.proj.reveal ?? 1, see, kp);
+    G.revealLo.value = lerp(R.proj.revealLo ?? -0.5, -2.2, kp);
+    G.revealHi.value = lerp(R.proj.revealHi ?? 0.85, 2.6, kp);
+    G.pass.value = kc;
     if (reset) { G.dPrev.value = G.d.value; G.inflatePrev.value = G.inflate.value; }
 
-    // cadrage
-    const pts = projectedPoints(T, inset);
+    // cadrage (celui de la vue extérieure, même pendant le voyage)
+    const pts = projectedPoints(T, inset, inflate0);
     const { c, r } = radiusOf(pts);
     if (!refRadius || reset) {
       // rayon de référence : le tesseract plié
       const T0 = cellTransforms({ ...st, move: null, theta: new Array(8).fill(0), Q: cache.Q[0] }, R.net.parent);
-      refRadius = radiusOf(projectedPoints(T0, inset)).r;
+      refRadius = radiusOf(projectedPoints(T0, inset, R.proj.inflate)).r;
     }
     const a = R.proj.framing;
     const s = (target * R.proj.size) / (refRadius ** (1 - a) * r ** a);
@@ -256,27 +292,33 @@ export function createTesseract(scene, gen) {
       // la cellule qui passe à l'extérieur (vers l'œil 4D) rentre son objet :
       // projeté, il se superposerait à celui de la cellule intérieure
       const w = apply(T[cc], normalOf(cc))[3];
-      const t = Math.min(1, Math.max(0, (w - 0.3) / 0.6)), shrink = 1 - (R.proj.reveal ?? 1) * t * t * (3 - 2 * t);
-      const rot = mul3(axisAngle(normv(con.axis), Math.PI * 2 * con.turns * ph), axisAngle(normv(con.tilt), 0.6)).map((x) => x * Math.max(1e-3, shrink));
+      const t = Math.min(1, Math.max(0, (w - 0.3) / 0.6)), shrink = 1 - Math.max(R.proj.reveal ?? 1, kp) * t * t * (3 - 2 * t);
+      // (en voyage, l'objet se fait plus petit : la caméra passe tout près)
+      const vs = lerp(1, Math.min(1, (R.voyage?.objScale ?? 0.27) / con.size), kp);
+      const k3 = Math.max(1e-3, shrink) * vs;
+      const rot = mul3(axisAngle(normv(con.axis), Math.PI * 2 * con.turns * ph), axisAngle(normv(con.tilt), 0.6)).map((x) => x * k3);
       const Aco = cellMatrix(T[cc], cc, inset, { m3: rot, t3: [0, 0, 0] });
       for (const role of ROLES) {
         const P = pieceOf(cc, role);
         if (!P.has) continue;
         const A = role === 'content' ? Aco : Afr;
+        // (objet rentré : invisible ; près de l'œil 4D, sa projection exploserait)
+        if (role === 'content') { const on = shrink > 0.02; P.mesh.visible = on; P.mesh.castShadow = on; }
         setMatrix(P.M.Aprev, reset || !P.prev ? A : P.prev);
         setMatrix(P.M.A, A);
         P.prev = A;
       }
     }
+    setDoors(st, T);
     group.updateMatrixWorld();
     guides.update(R, st, T, inset, s);
-    return { state: st, scale: s, lift, timeline: cache.timeline };
+    return { state: st, scale: s, lift, timeline: cache.timeline, kp, kc, frames: cache.frames };
   }
 
   // la chorégraphie, le patron ou les mouvements ont changé (rien à reconstruire)
   function refresh() {
     if (!R) return;
-    cache = { timeline: stepTimeline(R.chor), Q: stepOrientations(R.moves), depth: depthOf(R.net.parent), order: foldOrder(R.net.parent) };
+    cache = makeCache();
     refRadius = 0;
   }
 

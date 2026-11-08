@@ -2,6 +2,10 @@
 
 Le cabinet replié. Un écrin de huit cubes, couché à plat en patron (la croix du *Corpus Hypercubus* de Dalí, ou une autre forme), se replie dans une direction qui n'existe pas. L'hypercube tourne d'un quart de tour en 4D : le cube intérieur passe à l'extérieur. Puis il se déplie à nouveau. Le patron est le même, mais les cellules ont changé de place. Après quelques étapes, chacune a retrouvé la sienne : la boucle est parfaite par construction.
 
+Puis la caméra entre. L'œil 4D se pose sur l'hypersphère, l'espace se referme sur lui-même, et le cube du centre devient une pièce où l'on se tient. Vue de l'intérieur, chaque rotation 4D de la boucle est un voyage : l'univers glisse, une paroi s'ajoure, et l'on passe dans la pièce voisine. Huit pièces, chacune accolée à six autres ; on va de l'une à l'autre sans jamais revenir sur ses pas, et l'on se retrouve au point de départ. Avec quatre quarts de tour dans le même plan, on marche tout droit et l'on fait le tour de l'univers.
+
+![Le voyage intérieur : la plongée, une traversée, une halte](docs/voyage.jpg)
+
 Rendu physique en three.js (WebGPU, TSL). La scène est entièrement procédurale : une graine produit une scène, et l'on peut en générer autant que l'on veut.
 
 ## Utilisation
@@ -20,9 +24,10 @@ Paramètres d'URL :
 - `?seed=…` : une scène ;
 - `#r=…` : une scène retouchée, produite par « Copier le lien » ;
 - `?ui=0` : sans panneau ;
-- `?debug` : outils dans `window.tess`, dont `shot(phase)`, une image fixe à une phase donnée.
+- `?debug` : outils dans `window.tess`, dont `shot(phase)` (une image fixe à une phase donnée), `at('travel', 1, 0.5)` (la phase d'un moment du voyage) et `send(nom)` (l'image rendue, envoyée à un collecteur local sur le port 8099).
 
 Le panneau règle tout :
+- **Voyage intérieur** : activé ou non, durées (plongée, halte dans chaque pièce, traversée, remontée), écart de la caméra à l'axe de la traversée, rayon de son tour autour de l'objet, champ, lampe, ajourage des parois vues de l'intérieur, taille des objets, brouillard.
 - **Scène** : humeur, durée, patron, séquence de rotations 4D.
 - **Chorégraphie** : durée de chaque temps, décalage entre cellules, anticipation et rebond.
 - **Projection 4D** : distance de l'œil 4D, gonflement stéréographique, écart entre cellules, ajourage, cadrage, inclinaison.
@@ -74,6 +79,26 @@ Légendes et encart sont masqués par défaut et s'affichent à la demande (touc
 
 **Le cadrage.** L'objet reste centré, à une taille qui ne suit qu'en partie l'étendue du patron (déplié, il est bien plus grand que plié). Il est soulevé au besoin pour ne jamais traverser le sol.
 
+## Le voyage intérieur (`src/scene/voyage.js`)
+
+**L'idée.** Gonflé jusqu'au bout, le tesseract devient la 3-sphère de rayon 2, pavée par ses huit cellules. Quand l'œil 4D se pose sur cette sphère (d = 2), la perspective devient une projection stéréographique. Celle-ci envoie le pôle opposé à l'œil (le centre du cube intérieur) à l'origine, et les grands cercles qui y passent sur des droites. Une caméra placée à l'origine voit donc chaque point de l'hypersphère dans sa vraie direction : c'est la vue d'un habitant de cet univers. La projection et le reste du rendu ne changent pas ; seuls deux réglages bougent (gonflement 1, distance 2).
+
+**Une rotation est un voyage.** Un quart de tour dans un plan qui contient w déplace l'univers le long d'un grand cercle passant par la caméra. Vue du centre, la pièce voisine arrive par une droite, traverse la paroi commune et vient se poser autour de la caméra : on a changé de pièce. Une rotation double y ajoute un roulis autour de la direction du voyage (un tire-bouchon). La séquence de mouvements a pour produit l'identité, donc le voyage revient à la première pièce. En mode « un seul plan », on traverse quatre pièces en ligne droite avant de revenir au point de départ.
+
+**La boucle.**
+1. pause dépliée, pliage, pause ;
+2. la plongée : l'œil 4D se pose sur la sphère (la coque extérieure enfle et passe derrière la caméra), puis la caméra entre dans le cube du centre ;
+3. pour chaque mouvement, une halte puis une traversée ;
+4. une dernière halte dans la première pièce, la remontée, le dépliage.
+
+La durée de la boucle suit : environ 35 à 45 s.
+
+**La caméra.** Pendant une traversée, elle se tient à l'écart de l'axe, sur une diagonale de la porte (le plus loin possible des barres de l'ossature), et regarde presque droit devant. L'objet de la pièce suivante arrive par l'axe et passe sous elle. Pendant une halte, elle tourne autour de l'objet de la pièce : son repère passe de celui de la traversée précédente à celui de la suivante (interpolation sphérique), et son regard va de la porte d'arrivée à l'objet, puis à la porte de départ. Entrée et sortie se raccordent à la caméra extérieure. Le champ s'élargit à l'intérieur, et chaque pièce a désormais son objet.
+
+**Les portes.** La paroi entre la pièce où l'on se tient et la suivante se perce à la fin de la halte (même trame de trous que l'ajourage, qui grandissent jusqu'à l'effacer). On voit déjà où l'on va. Elle reste ouverte pendant la traversée et se referme derrière soi. Toute paroi que la caméra s'apprête à traverser s'ouvre de la même façon (distance de la caméra au plan de la face). De l'intérieur, il n'y a plus de coque à effacer : toutes les parois s'ajourent un peu, d'autant plus qu'elles sont loin.
+
+**La lumière.** Il n'y a pas de sol dans l'hypersphère : le plateau s'éloigne et les contre-jours s'éteignent. Le projecteur principal glisse jusqu'à la caméra et devient une lampe qu'elle porte. Sa carte d'ombre voit les mêmes parois ajourées : leurs trous se projettent dans les pièces suivantes. Le brouillard se resserre à l'échelle des pièces, et le studio ne se reflète presque plus.
+
 ## Géométrie (`src/gen/`, dans des Web Workers)
 
 - **Ossature** : barres profilées balayées le long des arêtes, subdivisées pour que la projection gonflée puisse les courber. Cinq profils :
@@ -85,7 +110,7 @@ Légendes et encart sont masqués par défaut et s'affichent à la demande (touc
 
   Nœuds d'angle en boîte arrondie, sphère ou pommeau. Les chanfreins et congés reçoivent la finition polie, les plats la finition brossée (brossage le long de la barre).
 - **Panneaux** : plaques (faces externe et interne, chant), verre teinté, persiennes inclinées, grille de joncs tissés dessus-dessous, pointes de diamant, clous ou caissons, tôle ondulée, vitrail serti de plombs (losanges ou carreaux), barreaux à traverse, cible d'anneaux concentriques, et tôle perforée. Cette dernière a des trous en superellipse (rond, carré, losange, étoile, fente) ou hexagonaux, à chanfrein poli et paroi usinée. Leur taille suit un motif : centre, bord, diagonale, vague ou hasard. Les carreaux voisins partagent exactement leurs points de bord.
-- **Objets exposés** : perle, pierre taille brillant, gyroscope à trois anneaux, cube, Saturne, nœud de trèfle, icosaèdre, dodécaèdre, pile de jetons, et un petit cube d'ossature en mise en abyme. Chacun tourne d'un nombre entier de tours par boucle.
+- **Objets exposés** (un par cellule) : perle, pierre taille brillant, gyroscope à trois anneaux, cube, Saturne, nœud de trèfle, icosaèdre, dodécaèdre, pile de jetons, et un petit cube d'ossature en mise en abyme. Chacun tourne d'un nombre entier de tours par boucle.
 
 ## Matériaux (`src/scene/materials.js`)
 
@@ -126,4 +151,4 @@ Le sol est procédural : laque noire, béton ciré, damier de marbre, parquet de
 
 ## Performances
 
-Environ 24 ms par image à 2,4 Mpx (≈ 760 000 triangles, ombres, anticrénelage temporel, huit lumières d'écrin), dont environ 2,5 ms pour les réflexions en espace écran à demi-résolution. La tôle perforée est plafonnée à dix-huit faces par scène.
+Environ 24 ms par image à 2,4 Mpx (≈ 760 000 triangles, ombres, anticrénelage temporel, huit lumières d'écrin), dont environ 2,5 ms pour les réflexions en espace écran à demi-résolution. La tôle perforée est plafonnée à dix-huit faces par scène. Le voyage intérieur coûte environ 1,5 ms de plus par image (mesuré à 1,8 Mpx : 11 ms dehors, 12,5 ms dedans).
