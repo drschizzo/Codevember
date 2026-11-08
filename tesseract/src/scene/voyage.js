@@ -98,12 +98,43 @@ const basisQ = (D, O) => {
   const Z = new THREE.Vector3().crossVectors(D, O);
   return new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(D, O, Z));
 };
-// repère d'entrée / de sortie : déduit de la caméra extérieure
-const frameFromOutside = (out) => {
-  const D = out.fwd.clone().normalize();
-  const O = out.up.clone().addScaledVector(D, -out.up.dot(D));
-  if (O.lengthSq() < 1e-6) O.set(0, 1, 0).addScaledVector(D, -D.y);
-  return { D, O: O.normalize() };
+// ── Entrée et sortie ─────────────────────────────────────────────────────────
+// La projection ne fait que multiplier (x, y, z) par un nombre positif : la
+// direction depuis l'origine d'un point du tesseract ne dépend que de lui. Or
+// toutes les arêtes (l'ossature) ont deux coordonnées de même valeur absolue,
+// et chaque objet exposé est sur un axe. Un rayon issu de l'origine dans la
+// direction (1, 0.38, 0.38) (ou l'une de ses images par symétrie) ne croise
+// donc aucune barre, quelle que soit la projection, et passe loin des objets.
+// La caméra rejoint ce rayon à l'extérieur, en glissant sur une sphère qui
+// englobe tout, puis le suit jusqu'au cube du centre, le regard sur son objet.
+export function entryAxis(posL) {
+  const a = [posL.x, posL.y, posL.z], k = a.reduce((m, v, i) => (Math.abs(v) > Math.abs(a[m]) ? i : m), 0);
+  const u = a.map((v, i) => (i === k ? Math.sign(v) || 1 : 0.38 * (Math.sign(v) || 1)));
+  return new THREE.Vector3(...u).normalize();
+}
+const ENTRY_R = 0.6; // (arrêt à l'intérieur, entre l'objet et la paroi)
+const _q = new THREE.Quaternion();
+// g : 0 (pose extérieure) → 1 (dans le cube du centre) ; upL : le haut du
+// monde dans le repère local
+export function dockPose(g, out, u, upL) {
+  const a = sm(0, 0.35, g), b = sm(0.3, 1, g);
+  const R0 = Math.max(out.pos.length(), 6);
+  const d0 = out.pos.clone().normalize();
+  const dir = d0.clone().applyQuaternion(_q.setFromUnitVectors(d0, u).slerp(new THREE.Quaternion(), 1 - a));
+  // (approche à vitesse relative constante : logarithmique)
+  const rho = R0 * (ENTRY_R / R0) ** b;
+  const pos = dir.multiplyScalar(rho);
+  const look = pos.clone().normalize().negate();
+  const fwd = out.fwd.clone().lerp(look, a).normalize();
+  const up = upL.clone().addScaledVector(fwd, -upL.dot(fwd));
+  if (up.lengthSq() < 1e-6) up.copy(out.up);
+  return { pos, fwd, up: up.normalize() };
+}
+// repère de la pièce à l'arrivée de la plongée : O le long du rayon, D vers le haut
+const frameOnAxis = (u, upL) => {
+  const D = upL.clone().addScaledVector(u, -upL.dot(u));
+  if (D.lengthSq() < 1e-6) D.set(1, 0, 0).addScaledVector(u, -u.x);
+  return { D: D.normalize(), O: u.clone() };
 };
 
 // pose de la caméra dans un repère (D, O) : à r de l'axe, regard incliné de
@@ -124,16 +155,18 @@ function poseIn(q, r, beta, tau) {
 // exprimée dans le même repère (entrée et sortie s'y raccordent)
 export function insidePose(st, R, frames, out) {
   const V = R.voyage, n = R.moves.length;
-  const io = frameFromOutside(out);
-  const qIO = basisQ(io.D, io.O);
-  const qOf = (i) => (i < 0 || i >= n ? qIO : basisQ(frames[i].D, frames[i].O));
+  // (out.uIn, out.uOut : rayons d'entrée et de sortie ; out.upL : le haut)
+  const fin = frameOnAxis(out.uIn, out.upL), fout = frameOnAxis(out.uOut, out.upL);
+  const qIn = basisQ(fin.D, fin.O), qOut = basisQ(fout.D, fout.O);
+  const qOf = (i) => (i < 0 ? qIn : i >= n ? qOut : basisQ(frames[i].D, frames[i].O));
   const bT = 0.13, bL = 1.45; // regard : droit devant / sur l'objet
   const rT = V.radius, rL = V.orbitR, k = rT / 0.42; // (écart réglable)
-  const io0 = { b0: bT, b1: bT, t0: 0, t1: 0, r: 0.42 };
+  const io0 = { b0: Math.PI / 2, b1: Math.PI / 2, t0: 0, t1: 0, r: (ENTRY_R * 0.42) / rT };
   const P = (i) => (i < 0 || i >= n ? io0 : frames[i]);
   const f = st.f, lerp = (a, b, t) => a + (b - a) * t;
   switch (st.phase) {
-    case 'plunge': case 'surface': return poseIn(qIO, rT, bT, 0);
+    case 'plunge': return dockPose(f, out, out.uIn, out.upL);
+    case 'surface': return dockPose(1 - f, out, out.uOut, out.upL);
     case 'travel': {
       const S = P(st.room), e = smoother(f);
       // (un peu de vie : le regard plonge vers l'objet qui passe)
@@ -157,6 +190,6 @@ export function insidePose(st, R, frames, out) {
       const tau = lerp(wrap(A.t1), B.t0, sm(0.18, 0.82, f)) + orb * Math.sin(Math.PI * f) * (1 - Math.abs(2 * f - 1) ** 3);
       return poseIn(q, r, b, tau);
     }
-    default: return poseIn(qIO, rT, bT, 0);
+    default: return { pos: out.pos.clone(), fwd: out.fwd.clone(), up: out.up.clone() };
   }
 }

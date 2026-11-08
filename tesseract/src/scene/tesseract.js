@@ -260,7 +260,10 @@ export function createTesseract(scene, gen) {
     G.reveal.value = lerp(R.proj.reveal ?? 1, see, kp);
     G.revealLo.value = lerp(R.proj.revealLo ?? -0.5, -2.2, kp);
     G.revealHi.value = lerp(R.proj.revealHi ?? 0.85, 2.6, kp);
-    G.pass.value = kc;
+    // (parois traversées : ouvertes dès que le voyage commence, la caméra
+    // est alors loin ; part du voyage pour l'éclairage)
+    G.pass.value = kp > 0.001 ? 1 : 0;
+    G.voyageK.value = kc;
     if (reset) { G.dPrev.value = G.d.value; G.inflatePrev.value = G.inflate.value; }
 
     // cadrage (celui de la vue extérieure, même pendant le voyage)

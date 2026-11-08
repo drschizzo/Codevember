@@ -180,7 +180,7 @@ export function createGuides(group, scene) {
         // cellule passe à l'extérieur (son objet s'est rentré)
         const w = apply(T[c], normalOf(c))[3];
         const out = smooth(0.3, 0.9, w) * (R.proj.reveal ?? 1);
-        const kv = G.pass.value; // (voyage intérieur)
+        const kv = G.voyageK.value; // (voyage intérieur)
         // En voyage, chaque pièce est éclairée à sa taille projetée (les
         // pièces voisines, plus loin de la caméra, sont projetées plus
         // grandes) : on les voit éclairées avant d'y entrer. La lampe est
