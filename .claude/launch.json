@@ -60,6 +60,16 @@
         "tesseract"
       ],
       "port": 8020
+    },
+    {
+      "name": "membrane",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        ".claude/serve.py",
+        "8030",
+        "membrane"
+      ],
+      "port": 8030
     }
   ]
 }
