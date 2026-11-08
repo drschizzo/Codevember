@@ -296,7 +296,7 @@ export const stableVelocity = () => mrt({ velocity: select(length(velocity.xy).l
 // finish : { outer, inner, edge, wear } (finitions complètes) ; U : leurs
 // uniformes ({ outer, inner, edge, wear }) ; M : uniformes du maillage
 // (matrice 4D, voir project.js) ; opts.shadowTint : ombre colorée (verre)
-export function buildPieceMaterial(finish, U, M, { shadowTint = null, reveal = false, depth = false } = {}) {
+export function buildPieceMaterial(finish, U, M, { shadowTint = null, reveal = false, depth = false, content = false } = {}) {
   const fins = [finish.outer, finish.inner, finish.edge];
   const any = (pred) => fins.some(pred);
   const F = {
@@ -405,7 +405,9 @@ export function buildPieceMaterial(finish, U, M, { shadowTint = null, reveal = f
   if (F.glass) {
     m.transmissionNode = get('glass');
     m.iorNode = get('ior');
-    m.thicknessNode = float(0.03).mul(world);
+    // tôle de verre mince, ou cristal massif (objet exposé) : la lumière y
+    // parcourt toute l'épaisseur de l'objet, qui réfracte la cellule derrière lui
+    m.thicknessNode = (content ? G.crystalThick.mul(0.7) : float(0.03)).mul(world);
     m.attenuationColorNode = get('att');
     m.attenuationDistanceNode = get('attDist').mul(world).mul(0.25);
     if (F.disp) m.dispersionNode = get('disp');
@@ -414,6 +416,9 @@ export function buildPieceMaterial(finish, U, M, { shadowTint = null, reveal = f
   // profondeur 4D en couleur (ossature, pendant la rotation)
   if (depth) { const e = depthColor(depthW).mul(G.depthTint); m.emissiveNode = m.emissiveNode ? m.emissiveNode.add(e) : e; }
   if (shadowTint) m.castShadowNode = vec4(shadowTint, 1);
+  // l'objet exposé est enfermé : il ne voit du studio que ce que laissent
+  // passer les ajours (le reste de ses reflets vient des réflexions en espace écran)
+  if (content) m.aoNode = G.nestEnv;
   m.mrtNode = stableVelocity();
   return m;
 }
@@ -434,7 +439,7 @@ export function buildGemMaterial(U, M) {
   m.normalNode = normalViewGeometry.mul(faceDirection);
   m.attenuationColorNode = U.color;
   m.attenuationDistanceNode = U.depth.mul(0.1).mul(world);
-  m.thicknessNode = float(0.12).mul(world);
+  m.thicknessNode = G.crystalThick.mul(0.3).mul(world);
   m.roughnessNode = G.roughFloor.mul(0.15).max(0.015);
   m.transmissionNode = float(1);
   m.iorNode = U.ior;
@@ -445,6 +450,7 @@ export function buildGemMaterial(U, M) {
   m.iridescenceIORNode = float(1.6);
   m.iridescenceThicknessNode = float(380);
   m.castShadowNode = vec4(U.color.mul(0.8).add(0.2), 1);
+  m.aoNode = G.nestEnv;
   m.mrtNode = stableVelocity();
   return m;
 }

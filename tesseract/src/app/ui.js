@@ -282,6 +282,16 @@ export function createUI({ recipe: getRecipe, render, on }) {
   fa.add(r, 'ao').name('Active').onChange(rch);
   fa.add(r, 'aoStrength', 0, 1, 0.01).name('Intensité').onChange(rch);
   fa.add(r, 'aoRadius', 0.05, 1.5, 0.01).name('Rayon').onChange(rch);
+  const fx = fRender.addFolder('Reflets et réfraction').close();
+  fx.add(r, 'ssr').name('Reflets réels (espace écran)').onChange(rch);
+  fx.add(r, 'ssrIntensity', 0, 2, 0.01).name('Intensité des reflets').onChange(rch);
+  fx.add(r, 'ssrQuality', 0.1, 1, 0.01).name('Qualité (pas du rayon)').onChange(rch);
+  fx.add(r, 'ssrRes', { 'Demi': 0.5, 'Pleine': 1 }).name('Résolution').onChange(rch);
+  fx.add(r, 'ssrDistance', 0.2, 6, 0.05).name('Portée').onChange(rch);
+  fx.add(r, 'ssrThickness', 0.005, 0.3, 0.005).name('Épaisseur des parois').onChange(rch);
+  fx.add(r, 'ssrBlur', { 'Net': 1, 'Moyen': 2, 'Doux': 3 }).name('Flou des reflets mats').onChange(rch);
+  fx.add(r, 'nestEnv', 0, 1, 0.01).name('Studio vu de l’intérieur').onChange(rch);
+  fx.add(r, 'crystalThick', 0.2, 2, 0.01).name('Épaisseur des cristaux').onChange(rch);
   const fl = fRender.addFolder('Objectif').close();
   fl.add(r, 'motionBlur', 0, 2, 0.01).name('Flou de mouvement').onChange(rch);
   fl.add(r, 'dof').name('Profondeur de champ').onChange(rch);
