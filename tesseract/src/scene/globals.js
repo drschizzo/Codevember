@@ -10,6 +10,7 @@ export const G = {
   // ajourage : densité de la trame de trous (les ouvertures des faces sont
   // calculées en JS, voir reveal.js)
   revealDensity: uniform(9),
+  dither: uniform(1),         // bord des trous tramé (1 sous anticrénelage temporel)
   // part du voyage intérieur (éclairage des pièces)
   voyageK: uniform(0),
   // profondeur 4D (w) lue en couleur sur l'ossature et le fantôme : froid loin
