@@ -1,0 +1,567 @@
+// Simulation de la membrane sur le GPU (shaders de calcul WebGPU, sur le
+// périphérique du moteur de rendu), et pose de chaque couche à chaque image.
+//
+// Dynamique par positions (XPBD à petits pas), résolue « par particule » :
+// chaque fil de calcul rassemble les corrections de toutes les contraintes qui
+// touchent sa particule (arêtes, flexion, liens des coutures) et les applique
+// à une copie (Jacobi, deux tampons alternés). Pas d'atomiques, pas de
+// coloration de graphe : tout est déterministe.
+//
+// Par sous-pas : prédiction (pression, air, frémissement, retroussement,
+// impulsion d'enroulement), résolution (plusieurs passes), collisions avec
+// l'armature (pose précalculée pour chaque sous-pas) et avec la couche
+// suivante, ruptures (un fil par lien : étirement autour du lien, fatigue,
+// dégrafage de l'avant), vitesses. Par image : enregistrement des positions.
+//
+// Pose (à chaque image, pour chaque couche affichée) : positions interpolées
+// entre deux images enregistrées, position à l'image précédente, normales
+// (soudées à travers les coutures encore intactes), dilatation de surface J,
+// endommagement, et sommets des lèvres. Le rendu les lit directement dans ses
+// tampons (aucun aller-retour par le processeur).
+
+const WG = 64;
+
+const COMMON = /* wgsl */`
+struct C {
+  np: u32, nb: u32, nCols: u32, nParts: u32,
+  F: u32, SUB: u32, iters: u32, nf: u32,
+  h: f32, T: f32, damping: f32, drag: f32,
+  flutter: f32, peel: f32, relax: f32, leak: f32,
+  curl: f32, curlW: f32, curlKick: f32, aE: f32,
+  aF: f32, strength: f32, fatigue: f32, rin: f32,
+  margin: f32, friction: f32, gain: f32, omega: f32,
+  inflate: f32, pre: f32, settleDamp: f32, armDur: f32,
+};
+struct P { s: u32, settle: u32, frame: u32, pad: u32, t: f32, tPrev: f32, pad2: f32, pad3: f32 };
+`;
+
+const SIM = COMMON + /* wgsl */`
+struct Glob { first: atomic<u32>, rsum: atomic<u32>, rcount: atomic<u32>, pbits: atomic<u32> };
+@group(0) @binding(0) var<storage, read_write> st: array<vec4f>;
+@group(0) @binding(1) var<storage, read_write> xn: array<vec4f>;
+@group(0) @binding(2) var<storage, read_write> pmeta: array<vec4f>;
+@group(0) @binding(3) var<storage, read_write> csr: array<u32>;
+@group(0) @binding(4) var<storage, read_write> bonds: array<f32>;
+@group(0) @binding(5) var<storage, read_write> geo: array<f32>;
+@group(0) @binding(6) var<storage, read_write> glob: Glob;
+@group(0) @binding(7) var<storage, read_write> frames: array<vec4f>;
+@group(0) @binding(8) var<uniform> c: C;
+@group(0) @binding(9) var<uniform> p: P;
+
+const PI = 3.14159265;
+
+fn hash3(q: vec3f) -> f32 { return fract(sin(dot(q, vec3f(127.1, 311.7, 74.7))) * 43758.5453); }
+fn vnoise(q: vec3f) -> f32 {
+  let i = floor(q); let f = fract(q); let u = f * f * (3.0 - 2.0 * f);
+  let a = mix(mix(hash3(i), hash3(i + vec3f(1, 0, 0)), u.x), mix(hash3(i + vec3f(0, 1, 0)), hash3(i + vec3f(1, 1, 0)), u.x), u.y);
+  let b = mix(mix(hash3(i + vec3f(0, 0, 1)), hash3(i + vec3f(1, 0, 1)), u.x), mix(hash3(i + vec3f(0, 1, 1)), hash3(i + vec3f(1, 1, 1)), u.x), u.y);
+  return mix(a, b, u.z) * 2.0 - 1.0;
+}
+fn tStep() -> f32 { return 1.0 / f32((c.F - 1u) * c.SUB); }
+fn tFirst() -> f32 { let f = atomicLoad(&glob.first); if (f == 0xffffffffu) { return -1.0; } return f32(f) * tStep(); }
+fn broken(k: u32) -> f32 { return bonds[k * 8u + 3u]; }
+fn ease(u0: f32) -> f32 { let u = clamp(u0, 0.0, 1.0); return u * u * u * (u * (u * 6.0 - 15.0) + 10.0); }
+fn pressure() -> f32 {
+  let p0 = bitcast<f32>(atomicLoad(&glob.pbits));
+  if (p.settle == 1u) { return p0; }
+  let tf = tFirst();
+  if (tf < 0.0) { return p0 * (1.0 + c.inflate * ease(p.t / c.armDur)); }
+  return p0 * (1.0 + c.inflate * ease(tf / c.armDur)) * exp(-(p.t - tf) * c.T / c.leak);
+}
+
+// pose d'une pièce au sous-pas s : p' = σR·p + T
+struct Pose { R: mat3x3f, T: vec3f, sig: f32 };
+fn pose(s: u32, k: u32) -> Pose {
+  let o = c.nCols * 20u + (s * c.nParts + k) * 16u;
+  var r: Pose;
+  r.R = transpose(mat3x3f(geo[o], geo[o + 1u], geo[o + 2u], geo[o + 3u], geo[o + 4u], geo[o + 5u], geo[o + 6u], geo[o + 7u], geo[o + 8u]));
+  r.T = vec3f(geo[o + 9u], geo[o + 10u], geo[o + 11u]);
+  r.sig = geo[o + 12u];
+  return r;
+}
+fn applyP(q: Pose, v: vec3f) -> vec3f { return q.R * v * q.sig + q.T; }
+fn unapplyP(q: Pose, v: vec3f) -> vec3f { return transpose(q.R) * (v - q.T) / q.sig; }
+
+@compute @workgroup_size(${WG}) fn predict(@builtin(global_invocation_id) g: vec3u) {
+  let i = g.x; if (i >= c.np) { return; }
+  let m0 = pmeta[2u * i]; let m1 = pmeta[2u * i + 1u];
+  let w = m0.w;
+  let x = st[3u * i].xyz;
+  if (w == 0.0) { st[3u * i + 1u] = vec4f(m0.xyz, 0.0); st[3u * i] = vec4f(m0.xyz, 0.0); st[3u * i + 2u] = vec4f(0.0); return; }
+  var v = st[3u * i + 2u].xyz;
+  // normale (et force de pression) depuis les triangles, positions de xn (fin du pas précédent)
+  var n = vec3f(0.0);
+  let t0 = csr[c.np + 1u + i]; let t1 = csr[c.np + 2u + i];
+  for (var k = t0; k < t1; k += 2u) {
+    let a = xn[csr[k]].xyz - x; let b = xn[csr[k + 1u]].xyz - x;
+    n += cross(a, b);
+  }
+  v += n * (pressure() * c.h / 6.0);
+  let nl = length(n);
+  let nh = select(normalize(x), n / nl, nl > 1e-12);
+  let tf = tFirst();
+  if (p.settle == 0u) {
+    v -= nh * dot(v, nh) * min(1.0, c.drag * c.h);
+    let nb = u32(m1.y);
+    if (tf >= 0.0 && nb > 0u) {
+      // frémissement des lambeaux
+      v += nh * vnoise(x * 2.5 + vec3f(p.t * 4.1, 0.0, p.t * 2.2)) * c.flutter * c.h;
+      // impulsion d'enroulement, à la rupture du lien voisin
+      let tb = broken(nb - 1u);
+      if (tb >= 0.0 && p.t - tb < tStep() * 1.5 && m1.z <= 1.0) { v += nh * c.curlKick; }
+    }
+    // retroussement : vers l'arrière le long du méridien, et dehors
+    if (tf >= 0.0 && m1.x > 0.0) {
+      let pa = c.peel * min(1.0, (p.t - tf) * c.T / 0.25) * m1.x * c.h;
+      let r = normalize(x); let rho = max(length(r.xy), 1e-6);
+      let th = vec3f(r.z * r.x / rho, r.z * r.y / rho, -rho);
+      v += (th + r * 0.6) * pa;
+    }
+  }
+  let damp = select(c.damping, c.damping * 6.0 + c.settleDamp, p.settle == 1u);
+  v *= exp(-damp * c.h);
+  st[3u * i + 1u] = vec4f(x, w);
+  st[3u * i] = vec4f(x + v * c.h, w);
+  st[3u * i + 2u] = vec4f(v, 0.0);
+}
+
+fn solveOne(i: u32, src: u32) -> vec3f {
+  let m0 = pmeta[2u * i]; let w = m0.w;
+  var x: vec3f; if (src == 0u) { x = st[3u * i].xyz; } else { x = xn[i].xyz; }
+  if (w == 0.0) { return x; }
+  let tf = tFirst();
+  var d = vec3f(0.0); var db = vec3f(0.0); var nc = 0.0; var nbd = 0.0;
+  let r0 = csr[i]; let r1 = csr[i + 1u];
+  for (var r = r0; r < r1; r += 8u) {
+    let j = csr[r]; let kind = csr[r + 1u];
+    var xj: vec3f; if (src == 0u) { xj = st[3u * j].xyz; } else { xj = xn[j].xyz; }
+    let wj = pmeta[2u * j].w; let ws = w + wj;
+    let e = x - xj; let l = length(e);
+    if (kind == 2u) {
+      if (broken(csr[r + 3u]) < 0.0) { db += (xj - x) * (w / ws); nbd += 1.0; }
+      continue;
+    }
+    if (l < 1e-9) { continue; }
+    var L = bitcast<f32>(csr[r + 2u]);
+    var al = c.aE;
+    if (kind == 0u) {
+      // relaxation plastique des lambeaux (à l'avant, après la première rupture)
+      if (c.relax > 0.0 && tf >= 0.0 && l > L && p.settle == 0u) {
+        let pw = min(pmeta[2u * i + 1u].x, pmeta[2u * j + 1u].x);
+        if (pw > 0.0) { L += (l - L) * min(1.0, c.relax * c.h) * pw; csr[r + 2u] = bitcast<u32>(L); }
+      }
+      if (l < L) { al = c.aE * 8.0; }
+    } else {
+      let bA = csr[r + 3u]; let bB = csr[r + 4u];
+      if ((bA > 0u && broken(bA - 1u) >= 0.0) || (bB > 0u && broken(bB - 1u) >= 0.0)) { continue; }
+      al = c.aF;
+      let nk = csr[r + 5u];
+      if (c.curl > 0.0 && nk > 0u) {
+        let tb = broken(nk - 1u);
+        if (tb >= 0.0) { let act = min(1.0, (p.t - tb) / 0.12); L *= 1.0 - c.curl * act * exp(-bitcast<f32>(csr[r + 6u]) / c.curlW); }
+      }
+    }
+    d += e * (-(l - L) / (ws + al) / l * w);
+    nc += 1.0;
+  }
+  // Jacobi moyenné : stable quel que soit le nombre de contraintes
+  return x + d * (c.omega / max(1.0, nc)) + db / max(1.0, nbd);
+}
+@compute @workgroup_size(${WG}) fn solveA(@builtin(global_invocation_id) g: vec3u) { let i = g.x; if (i >= c.np) { return; } xn[i] = vec4f(solveOne(i, 0u), pmeta[2u * i].w); }
+@compute @workgroup_size(${WG}) fn solveB(@builtin(global_invocation_id) g: vec3u) { let i = g.x; if (i >= c.np) { return; } st[3u * i] = vec4f(solveOne(i, 1u), pmeta[2u * i].w); }
+
+@compute @workgroup_size(${WG}) fn collide(@builtin(global_invocation_id) g: vec3u) {
+  let i = g.x; if (i >= c.np) { return; }
+  if (pmeta[2u * i].w == 0.0) { return; }
+  var x = st[3u * i].xyz;
+  let xp = st[3u * i + 1u].xyz;
+  let r2 = dot(x, x);
+  if (r2 < c.rin * c.rin) { x *= c.rin / sqrt(r2); }
+  let s = p.s; let sp = select(s - 1u, s, s == 0u);
+  for (var q = 0u; q < c.nCols; q++) {
+    let o = q * 20u;
+    let k = u32(geo[o + 1u]);
+    let P = pose(s, k);
+    let bc = applyP(P, vec3f(geo[o + 16u], geo[o + 17u], geo[o + 18u]));
+    let br = geo[o + 19u] * P.sig + 0.03;
+    if (dot(x - bc, x - bc) > br * br) { continue; }
+    var lp = unapplyP(P, x);
+    var hit = false;
+    if (geo[o] < 0.5) {
+      let R = geo[o + 2u]; let Tk = geo[o + 3u]; let th0 = geo[o + 4u]; let th1 = geo[o + 5u];
+      let phi = geo[o + 6u]; let tw = geo[o + 7u]; let wd = geo[o + 8u]; let tip = geo[o + 9u]; let mm = geo[o + 10u];
+      let r = length(lp); let top = R + c.margin + mm;
+      if (r > top || r < R - Tk - 0.12) { continue; }
+      let th = acos(clamp(lp.z / r, -1.0, 1.0));
+      let sv = (th - th0) / (th1 - th0);
+      if (sv < -0.03 || sv > 1.0) { continue; }
+      var dd = atan2(lp.y, lp.x) - (phi + tw * (th - th0));
+      dd = dd - 2.0 * PI * floor((dd + PI) / (2.0 * PI));
+      let tipK = min(1.0, max(0.0, sv) / tip);
+      let hw = wd * pow(max(sin(tipK * PI * 0.5), 1e-6), 0.7) + (c.margin + Tk * 0.5) / max(0.05, sin(th));
+      if (abs(dd) > hw) { continue; }
+      let edge = max(0.0, (abs(dd) / hw - 0.82) / 0.18);
+      let tgt = top - Tk * 0.6 * edge * edge;
+      if (r >= tgt) { continue; }
+      lp *= tgt / r; hit = true;
+    } else {
+      let p0 = vec3f(geo[o + 2u], geo[o + 3u], geo[o + 4u]); let p1 = vec3f(geo[o + 5u], geo[o + 6u], geo[o + 7u]);
+      let rr = geo[o + 8u] + c.margin;
+      let ab = p1 - p0; let tt = clamp(dot(lp - p0, ab) / max(1e-12, dot(ab, ab)), 0.0, 1.0);
+      let cp = p0 + ab * tt; let dv = lp - cp; let dl = length(dv);
+      if (dl >= rr || dl < 1e-9) { continue; }
+      lp = cp + dv * (rr / dl); hit = true;
+    }
+    if (hit && c.friction > 0.0) {
+      let lq = unapplyP(pose(sp, k), xp);
+      let nn = normalize(lp); let dv = lp - lq; let tv = dv - nn * dot(dv, nn);
+      lp -= tv * c.friction;
+    }
+    x = applyP(P, lp);
+  }
+  st[3u * i] = vec4f(x, pmeta[2u * i].w);
+}
+
+// étirement maximal (par rapport au repos) des arêtes d'une particule
+fn strainOf(i: u32) -> f32 {
+  var m = 0.0;
+  let x = st[3u * i].xyz; let xr = pmeta[2u * i].xyz;
+  for (var r = csr[i]; r < csr[i + 1u]; r += 8u) {
+    if (csr[r + 1u] != 0u) { continue; }
+    let j = csr[r];
+    let l = length(x - st[3u * j].xyz); let l0 = length(xr - pmeta[2u * j].xyz);
+    m = max(m, l / l0 - 1.0);
+  }
+  return m;
+}
+@compute @workgroup_size(${WG}) fn bondsK(@builtin(global_invocation_id) g: vec3u) {
+  let k = g.x; if (k >= c.nb) { return; }
+  if (bonds[k * 8u + 3u] >= 0.0) { return; }
+  let i = u32(bonds[k * 8u]); let j = u32(bonds[k * 8u + 1u]);
+  let s = max(strainOf(i), strainOf(j));
+  let fat = ease((p.t - 0.2) / 0.45);
+  let thr = bonds[k * 8u + 2u] * (1.0 - c.fatigue * fat);
+  let tf = tFirst();
+  let forced = tf >= 0.0 && p.t > tf + bonds[k * 8u + 4u];
+  if (s > thr || forced) { bonds[k * 8u + 3u] = p.t; atomicMin(&glob.first, p.s); }
+}
+@compute @workgroup_size(${WG}) fn velocity(@builtin(global_invocation_id) g: vec3u) {
+  let i = g.x; if (i >= c.np) { return; }
+  let x = st[3u * i].xyz;
+  st[3u * i + 2u] = vec4f((x - st[3u * i + 1u].xyz) / c.h, 0.0);
+  xn[i] = vec4f(x, pmeta[2u * i].w);
+}
+@compute @workgroup_size(${WG}) fn record(@builtin(global_invocation_id) g: vec3u) {
+  let i = g.x; if (i >= c.np) { return; }
+  frames[p.frame * c.np + i] = vec4f(st[3u * i].xyz, 0.0);
+}
+@compute @workgroup_size(${WG}) fn radius(@builtin(global_invocation_id) g: vec3u) {
+  let i = g.x; if (i >= c.np) { return; }
+  let m0 = pmeta[2u * i];
+  if (m0.w > 0.0 && m0.z > 0.0) { atomicAdd(&glob.rsum, u32(length(st[3u * i].xyz) * 1000.0)); atomicAdd(&glob.rcount, 1u); }
+}
+@compute @workgroup_size(1) fn adjust() {
+  let n = atomicLoad(&glob.rcount);
+  if (n > 0u) {
+    let mr = f32(atomicLoad(&glob.rsum)) / 1000.0 / f32(n);
+    let p0 = bitcast<f32>(atomicLoad(&glob.pbits));
+    atomicStore(&glob.pbits, bitcast<u32>(max(0.0, p0 * (1.0 + c.gain * (1.0 - mr)))));
+  }
+  atomicStore(&glob.rsum, 0u); atomicStore(&glob.rcount, 0u);
+}
+@compute @workgroup_size(${WG}) fn thresholds(@builtin(global_invocation_id) g: vec3u) {
+  let k = g.x; if (k >= c.nb) { return; }
+  let i = u32(bonds[k * 8u]); let j = u32(bonds[k * 8u + 1u]);
+  bonds[k * 8u + 2u] = max(strainOf(i), strainOf(j)) + c.strength * bonds[k * 8u + 5u];
+}
+@compute @workgroup_size(${WG}) fn still(@builtin(global_invocation_id) g: vec3u) {
+  let i = g.x; if (i >= c.np) { return; }
+  st[3u * i + 2u] = vec4f(0.0);
+  xn[i] = st[3u * i];
+}
+`;
+
+// fibrilles : instants de rupture et de claquage
+const FIB = COMMON + /* wgsl */`
+@group(0) @binding(0) var<storage, read_write> frames: array<vec4f>;
+@group(0) @binding(1) var<storage, read_write> bonds: array<f32>;
+@group(0) @binding(2) var<storage, read_write> fib: array<f32>;
+@group(0) @binding(3) var<storage, read_write> fout: array<vec4f>;
+@group(0) @binding(4) var<uniform> c: C;
+@compute @workgroup_size(${WG}) fn main(@builtin(global_invocation_id) g: vec3u) {
+  let k = g.x; if (k >= c.nf) { return; }
+  let o = k * 8u;
+  let a = u32(fib[o]); let an = u32(fib[o + 1u]); let b = u32(fib[o + 2u]); let bn = u32(fib[o + 3u]);
+  let u = fib[o + 4u]; let snapLen = fib[o + 5u]; let bk = u32(fib[o + 6u]);
+  let tb = bonds[bk * 8u + 3u];
+  var brk = 1e6; var snap = 1e6;
+  if (tb >= 0.0) {
+    brk = tb * f32(c.F - 1u);
+    for (var f = u32(ceil(brk)); f < c.F; f++) {
+      let A = mix(frames[f * c.np + a].xyz, frames[f * c.np + an].xyz, u);
+      let B = mix(frames[f * c.np + b].xyz, frames[f * c.np + bn].xyz, u);
+      if (length(A - B) > snapLen) { snap = f32(f) + 0.5; break; }
+    }
+  }
+  fout[k] = vec4f(brk, snap, 0.0, 0.0);
+}
+`;
+
+// pose d'une couche à une image donnée
+const POSE = /* wgsl */`
+struct U { np: u32, nl: u32, F: u32, pad: u32, f: f32, fPrev: f32, lipT: f32, pad2: f32 };
+@group(0) @binding(0) var<storage, read_write> frames: array<vec4f>;
+@group(0) @binding(1) var<storage, read_write> csr: array<u32>;
+@group(0) @binding(2) var<storage, read_write> bonds: array<f32>;
+@group(0) @binding(3) var<storage, read_write> pmeta: array<vec4f>;
+@group(0) @binding(4) var<storage, read_write> lips: array<u32>;
+@group(0) @binding(5) var<storage, read_write> cur: array<vec4f>;
+@group(0) @binding(6) var<storage, read_write> prv: array<vec4f>;
+@group(0) @binding(7) var<storage, read_write> nor: array<vec4f>;
+@group(0) @binding(8) var<uniform> u: U;
+
+fn at(i: u32, f: f32) -> vec3f {
+  let ff = clamp(f, 0.0, f32(u.F - 1u));
+  let f0 = u32(floor(ff)); let f1 = min(f0 + 1u, u.F - 1u);
+  return mix(frames[f0 * u.np + i].xyz, frames[f1 * u.np + i].xyz, fract(ff));
+}
+fn tNow() -> f32 { return u.f / f32(u.F - 1u); }
+fn intact(k: u32) -> bool { let tb = bonds[k * 8u + 3u]; return tb < 0.0 || tb > tNow(); }
+
+@compute @workgroup_size(${WG}) fn interp(@builtin(global_invocation_id) g: vec3u) {
+  let i = g.x; if (i >= u.np) { return; }
+  cur[i] = vec4f(at(i, u.f), 0.0);
+  prv[i] = vec4f(at(i, u.fPrev), 0.0);
+}
+fn triSum(i: u32) -> vec4f {
+  var n = vec3f(0.0);
+  let x = cur[i].xyz;
+  for (var k = csr[u.np + 1u + i]; k < csr[u.np + 2u + i]; k += 2u) { n += cross(cur[csr[k]].xyz - x, cur[csr[k + 1u]].xyz - x); }
+  return vec4f(n, length(n) / 6.0);
+}
+@compute @workgroup_size(${WG}) fn normals(@builtin(global_invocation_id) g: vec3u) {
+  let i = g.x; if (i >= u.np) { return; }
+  var s = triSum(i); var a0 = pmeta[2u * i + 1u].w;
+  // soudure à travers les coutures intactes
+  for (var r = csr[i]; r < csr[i + 1u]; r += 8u) {
+    if (csr[r + 1u] == 2u && intact(csr[r + 3u])) { let j = csr[r]; s += triSum(j); a0 += pmeta[2u * j + 1u].w; }
+  }
+  let n = select(normalize(cur[i].xyz), normalize(s.xyz), length(s.xyz) > 1e-12);
+  nor[i] = vec4f(n, s.w / max(a0, 1e-9));
+  // endommagement (près d'une couture rompue)
+  let m1 = pmeta[2u * i + 1u];
+  var dmg = 0.0;
+  let nb = u32(m1.y);
+  if (nb > 0u) { let tb = bonds[(nb - 1u) * 8u + 3u]; if (tb >= 0.0 && tb <= tNow()) { dmg = exp(-m1.z / 1.6) * min(1.0, (tNow() - tb) / 0.08 + 0.2); } }
+  prv[i].w = dmg;
+}
+@compute @workgroup_size(${WG}) fn lipsK(@builtin(global_invocation_id) g: vec3u) {
+  let l = g.x; if (l >= u.nl) { return; }
+  let o = l * 8u; let pi = lips[o]; let ne = lips[o + 1u];
+  let x = cur[pi].xyz; let n = nor[pi].xyz;
+  var e = vec3f(0.0);
+  for (var q = 0u; q < ne; q++) {
+    let xj = cur[lips[o + 2u + 2u * q]].xyz; let xk = cur[lips[o + 3u + 2u * q]].xyz;
+    let ed = xj - x; let m = (x + xj) * 0.5 - xk;
+    e += m - ed * (dot(m, ed) / max(dot(ed, ed), 1e-12));
+  }
+  e -= n * dot(e, n);
+  e = select(vec3f(0.0), normalize(e), length(e) > 1e-9);
+  var sep = 0.0;
+  for (var r = csr[pi]; r < csr[pi + 1u]; r += 8u) {
+    if (csr[r + 1u] == 2u && !intact(csr[r + 3u])) { sep = max(sep, length(x - cur[csr[r]].xyz)); }
+  }
+  let cc = min(1.0, sep / (u.lipT * 3.0 + 1e-6));
+  let rr = u.lipT * cc;
+  let d0 = n; let d1 = e * 1.25; let d2 = -n;
+  let n0 = normalize(n * 0.6 + e * 0.4 + vec3f(0, 0, 1e-6)); let n2 = normalize(-n * 0.6 + e * 0.4 + vec3f(0, 0, 1e-6));
+  let n1 = select(n, e, length(e) > 0.5);
+  let base = u.np + l * 3u;
+  let dp = prv[pi].xyz - x;
+  let J = nor[pi].w;
+  cur[base] = vec4f(x + d0 * rr, 0.0); cur[base + 1u] = vec4f(x + d1 * rr, 0.0); cur[base + 2u] = vec4f(x + d2 * rr, 0.0);
+  prv[base] = vec4f(x + d0 * rr + dp, cc); prv[base + 1u] = vec4f(x + d1 * rr + dp, cc); prv[base + 2u] = vec4f(x + d2 * rr + dp, cc);
+  nor[base] = vec4f(n0, J); nor[base + 1u] = vec4f(n1, J); nor[base + 2u] = vec4f(n2, J);
+}
+`;
+
+// ── Pipelines (par périphérique) ─────────────────────────────────────────────
+const cache = new WeakMap();
+function pipelines(device) {
+  let P = cache.get(device);
+  if (P) return P;
+  const sto = (b) => ({ binding: b, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } });
+  const uni = (b, dyn = false) => ({ binding: b, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform', hasDynamicOffset: dyn } });
+  const simL = device.createBindGroupLayout({ entries: [0, 1, 2, 3, 4, 5, 6, 7].map(sto).concat([uni(8), uni(9, true)]) });
+  const fibL = device.createBindGroupLayout({ entries: [0, 1, 2, 3].map(sto).concat([uni(4)]) });
+  const poseL = device.createBindGroupLayout({ entries: [0, 1, 2, 3, 4, 5, 6, 7].map(sto).concat([uni(8)]) });
+  const mod = (code) => device.createShaderModule({ code });
+  const sim = mod(SIM), fib = mod(FIB), pose = mod(POSE);
+  const mk = (layout, module, entryPoint) => device.createComputePipeline({ layout: device.createPipelineLayout({ bindGroupLayouts: [layout] }), compute: { module, entryPoint } });
+  P = {
+    simL, fibL, poseL,
+    predict: mk(simL, sim, 'predict'), solveA: mk(simL, sim, 'solveA'), solveB: mk(simL, sim, 'solveB'), collide: mk(simL, sim, 'collide'),
+    bonds: mk(simL, sim, 'bondsK'), velocity: mk(simL, sim, 'velocity'), record: mk(simL, sim, 'record'), radius: mk(simL, sim, 'radius'),
+    adjust: mk(simL, sim, 'adjust'), thresholds: mk(simL, sim, 'thresholds'), still: mk(simL, sim, 'still'),
+    fib: mk(fibL, fib, 'main'),
+    interp: mk(poseL, pose, 'interp'), normals: mk(poseL, pose, 'normals'), lips: mk(poseL, pose, 'lipsK'),
+  };
+  cache.set(device, P);
+  return P;
+}
+
+const buf = (device, data, usage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC) => {
+  const size = Math.max(16, Math.ceil(data.byteLength / 16) * 16);
+  const b = device.createBuffer({ size, usage, mappedAtCreation: true });
+  new Uint8Array(b.getMappedRange()).set(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
+  b.unmap();
+  return b;
+};
+const emptyBuf = (device, size) => device.createBuffer({ size: Math.max(16, Math.ceil(size / 16) * 16), usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC });
+
+// ── Simulation d'une couche ──────────────────────────────────────────────────
+// prep : sortie de gen/prep.js ; S : paramètres ; fibOut : tampon GPU (nf × vec4)
+// qui reçoit les instants des fibrilles. Rend { frames, meta, csr, bonds, lips }.
+export async function simulate(device, prep, S, fibOut, onProgress) {
+  const P = pipelines(device);
+  const np = prep.np, nb = prep.nb, F = S.frames, SUB = S.substeps;
+  const h = S.duration / (F - 1) / SUB;
+  // état : x, x au début du pas, v
+  const st0 = new Float32Array(np * 12), xn0 = new Float32Array(np * 4);
+  for (let i = 0; i < np; i++) {
+    const m = prep.meta.subarray(i * 8, i * 8 + 4);
+    st0.set(m, i * 12); st0.set(m, i * 12 + 4); xn0.set(m, i * 4);
+  }
+  const geo = new Float32Array(prep.cols.length + prep.poses.length);
+  geo.set(prep.cols); geo.set(prep.poses, prep.cols.length);
+  const metaF = new Float32Array(np * 8);
+  metaF.set(prep.meta);
+  const B = {
+    st: buf(device, st0), xn: buf(device, xn0), meta: buf(device, metaF), csr: buf(device, prep.csr), bonds: buf(device, prep.bonds),
+    geo: buf(device, geo), glob: buf(device, new Uint32Array([0xffffffff, 0, 0, 0])), frames: emptyBuf(device, np * F * 16),
+  };
+  // pression initiale estimée (sphère de rayon 1 : p = 2T, T ≈ √3·ε/α)
+  const p0 = (S.pressure ?? 1) * 2 * Math.sqrt(3) * (S.pre + 0.01) / S.stretch;
+  device.queue.writeBuffer(B.glob, 12, new Float32Array([p0]));
+  const settleSteps = S.settle * SUB, runSteps = (F - 1) * SUB;
+  const consts = new ArrayBuffer(128), cu = new Uint32Array(consts), cf = new Float32Array(consts);
+  cu.set([np, nb, prep.nCols, prep.nParts, F, SUB, S.iters ?? 6, prep.nf]);
+  cf.set([h, S.duration, S.damping, S.drag, S.flutter, S.peel, S.relax, S.leak, S.curl, S.curlWidth, S.curlKick * (S.curlSign || 1), S.stretch / (h * h),
+    S.bend / (h * h), S.strength, S.fatigue, S.inner * 1.06, S.thick * 0.5 + 0.004, S.friction, S.pressureGain ?? 2, S.omega ?? 1.6,
+    S.inflate ?? 0, S.pre, 6, S.armDur ?? 0.5], 8);
+  const cBuf = buf(device, new Uint8Array(consts), GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST);
+  // paramètres par sous-pas (décalages dynamiques de 256 octets)
+  const nRec = settleSteps + runSteps + 1;
+  const pRec = new ArrayBuffer(nRec * 256), pu = new Uint32Array(pRec), pf = new Float32Array(pRec);
+  const rec = (r, s, settle, frame, t, tPrev) => { const o = r * 64; pu[o] = s; pu[o + 1] = settle; pu[o + 2] = frame; pf[o + 4] = t; pf[o + 5] = tPrev; };
+  for (let r = 0; r < settleSteps; r++) rec(r, 0, 1, 0, 0, 0);
+  const dt = 1 / runSteps;
+  for (let r = 0; r < runSteps; r++) { const s = r + 1; rec(settleSteps + r, s, 0, Math.floor((s - 1) / SUB) + 1, s * dt, (s - 1) * dt); }
+  rec(nRec - 1, 0, 1, 0, 0, 0); // (enregistrement de l'image 0)
+  const pBuf = buf(device, new Uint8Array(pRec), GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST);
+  const bg = device.createBindGroup({
+    layout: P.simL,
+    entries: [B.st, B.xn, B.meta, B.csr, B.bonds, B.geo, B.glob, B.frames].map((b, i) => ({ binding: i, resource: { buffer: b } }))
+      .concat([{ binding: 8, resource: { buffer: cBuf } }, { binding: 9, resource: { buffer: pBuf, size: 32 } }]),
+  });
+  const gP = Math.ceil(np / WG), gB = Math.max(1, Math.ceil(nb / WG));
+  const iters = S.iters ?? 6;
+  const skip = S.skip || {}; // (mise au point)
+  const step = (pass, r, settle) => {
+    pass.setBindGroup(0, bg, [r * 256]);
+    if (!skip.predict) { pass.setPipeline(P.predict); pass.dispatchWorkgroups(gP); }
+    if (!skip.solve) {
+      for (let k = 0; k < iters; k++) { pass.setPipeline(k % 2 ? P.solveB : P.solveA); pass.dispatchWorkgroups(gP); }
+      if (iters % 2) { pass.setPipeline(P.solveB); pass.dispatchWorkgroups(gP); } // (la dernière passe écrit dans st)
+    }
+    if (!skip.collide) { pass.setPipeline(P.collide); pass.dispatchWorkgroups(gP); }
+    if (!settle) { pass.setPipeline(P.bonds); pass.dispatchWorkgroups(gB); }
+    if (!skip.velocity) { pass.setPipeline(P.velocity); pass.dispatchWorkgroups(gP); }
+  };
+  const submit = async (fn) => {
+    const enc = device.createCommandEncoder();
+    const pass = enc.beginComputePass();
+    fn(pass);
+    pass.end();
+    device.queue.submit([enc.finish()]);
+    await device.queue.onSubmittedWorkDone();
+  };
+  // mise en place (armature fermée) et réglage de la pression
+  for (let f0 = 0; f0 < S.settle; f0 += 10) {
+    await submit((pass) => {
+      for (let f = f0; f < Math.min(S.settle, f0 + 10); f++) {
+        for (let k = 0; k < SUB; k++) step(pass, f * SUB + k, true);
+        pass.setBindGroup(0, bg, [0]);
+        pass.setPipeline(P.radius); pass.dispatchWorkgroups(gP);
+        pass.setPipeline(P.adjust); pass.dispatchWorkgroups(1);
+      }
+    });
+    onProgress?.((f0 / S.settle) * 0.25);
+  }
+  await submit((pass) => {
+    pass.setBindGroup(0, bg, [(nRec - 1) * 256]);
+    pass.setPipeline(P.still); pass.dispatchWorkgroups(gP);
+    pass.setPipeline(P.thresholds); pass.dispatchWorkgroups(gB);
+    pass.setPipeline(P.record); pass.dispatchWorkgroups(gP);
+  });
+  // éclosion
+  const CH = 8;
+  for (let f0 = 1; f0 < F; f0 += CH) {
+    await submit((pass) => {
+      for (let f = f0; f < Math.min(F, f0 + CH); f++) {
+        for (let k = 0; k < SUB; k++) step(pass, settleSteps + (f - 1) * SUB + k, false);
+        pass.setBindGroup(0, bg, [(settleSteps + f * SUB - 1) * 256]);
+        pass.setPipeline(P.record); pass.dispatchWorkgroups(gP);
+      }
+    });
+    onProgress?.(0.25 + 0.75 * (f0 / F));
+  }
+  // fibrilles
+  if (prep.nf > 0 && fibOut) {
+    const fibBuf = buf(device, prep.fibData);
+    const fbg = device.createBindGroup({ layout: P.fibL, entries: [B.frames, B.bonds, fibBuf, fibOut].map((b, i) => ({ binding: i, resource: { buffer: b } })).concat([{ binding: 4, resource: { buffer: cBuf } }]) });
+    await submit((pass) => { pass.setBindGroup(0, fbg); pass.setPipeline(P.fib); pass.dispatchWorkgroups(Math.ceil(prep.nf / WG)); });
+    fibBuf.destroy();
+  }
+  // statistiques (lecture des liens)
+  const rd = device.createBuffer({ size: nb * 32 || 16, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
+  const enc = device.createCommandEncoder();
+  enc.copyBufferToBuffer(B.bonds, 0, rd, 0, nb * 32 || 16);
+  device.queue.submit([enc.finish()]);
+  await rd.mapAsync(GPUMapMode.READ);
+  const bf = new Float32Array(rd.getMappedRange().slice(0));
+  rd.unmap(); rd.destroy();
+  let broken = 0, first = 1;
+  for (let k = 0; k < nb; k++) if (bf[k * 8 + 3] >= 0) { broken++; first = Math.min(first, bf[k * 8 + 3]); }
+  for (const k of ['st', 'xn', 'geo', 'glob']) B[k].destroy();
+  cBuf.destroy(); pBuf.destroy();
+  return { frames: B.frames, meta: B.meta, csr: B.csr, bonds: B.bonds, lips: buf(device, prep.lipData), stats: { broken, firstTear: first } };
+}
+
+// ── Pose d'une couche ────────────────────────────────────────────────────────
+export function createPoser(device, gpu, prep, S, out) {
+  const P = pipelines(device);
+  const ub = device.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+  const bg = device.createBindGroup({
+    layout: P.poseL,
+    entries: [gpu.frames, gpu.csr, gpu.bonds, gpu.meta, gpu.lips, out.cur, out.prv, out.nor].map((b, i) => ({ binding: i, resource: { buffer: b } }))
+      .concat([{ binding: 8, resource: { buffer: ub } }]),
+  });
+  const data = new ArrayBuffer(32), du = new Uint32Array(data), df = new Float32Array(data);
+  du.set([prep.np, prep.nl, S.frames, 0]);
+  const lipT = S.thick * S.lip * 0.5;
+  return {
+    // encode la pose à l'image f (et fPrev pour les vecteurs vitesse)
+    encode(enc, f, fPrev) {
+      df[4] = f; df[5] = fPrev; df[6] = lipT;
+      device.queue.writeBuffer(ub, 0, data);
+      const pass = enc.beginComputePass();
+      pass.setBindGroup(0, bg);
+      pass.setPipeline(P.interp); pass.dispatchWorkgroups(Math.ceil(prep.np / WG));
+      pass.setPipeline(P.normals); pass.dispatchWorkgroups(Math.ceil(prep.np / WG));
+      if (prep.nl) { pass.setPipeline(P.lips); pass.dispatchWorkgroups(Math.ceil(prep.nl / WG)); }
+      pass.end();
+    },
+    dispose() { ub.destroy(); },
+  };
+}
