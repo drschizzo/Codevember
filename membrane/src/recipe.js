@@ -90,6 +90,13 @@ export const MOODS = {
     membranes: { bubble: 4, silk: 2, gel: 2 }, sets: ['titanium', 'nacre', 'soap', 'anodizedDiamond', 'chrome'],
     arms: { calyx: 2, iris: 3, pod: 1, ribs: 2, crown: 2, cage: 2 },
   },
+  // le nid entre deux polariseurs : la tension devient couleur
+  polariscope: {
+    label: 'Polariscope', env: 'night', bg: '#06060a', keyK: 6200, back: ['#ffffff', '#f4f0ff'], core: '#fff4e8', envIntensity: [0.3, 0.55],
+    membranes: { gelatin: 5, gel: 1.5, silk: 1, chorion: 0.5 }, sets: ['chrome', 'blackSteel', 'obsidian', 'ceramicBlack', 'titanium'],
+    arms: { calyx: 3, iris: 3, pod: 2, ribs: 2, crown: 2.5, cage: 2, claws: 2 },
+    polar: true, glow: [7, 11], // (une table lumineuse au fond : ce qui traverse les franges)
+  },
   rouge: {
     label: 'Rouge', env: 'studio', bg: '#070303', keyK: 5200, back: ['#ff4030', '#ffd0b0'], core: '#ff7050',
     membranes: { latex: 4, latexBlack: 2, chorion: 2 }, sets: ['obsidian', 'blackSteel', 'guillocheRuby', 'chrome', 'ceramicBlack'],
@@ -145,7 +152,7 @@ export const SIM_DEFAULTS = { res: 44, frames: 160, substeps: 16, duration: 3.6,
 // ── Scène ────────────────────────────────────────────────────────────────────
 export function generate(seed, opts = {}) {
   const rng = createRng(seed);
-  const mood = opts.mood && MOODS[opts.mood] ? opts.mood : rng.weighted([['organique', 4], ['clinique', 1.5], ['abysses', 2], ['joaillerie', 2], ['atelier', 2], ['irise', 1.5], ['rouge', 2]]);
+  const mood = opts.mood && MOODS[opts.mood] ? opts.mood : rng.weighted([['organique', 4], ['clinique', 1.5], ['abysses', 2], ['joaillerie', 2], ['atelier', 2], ['irise', 1.5], ['rouge', 2], ['polariscope', 2]]);
   const M = MOODS[mood];
   const N = opts.levels ?? rng.weighted([[2, 1], [3, 4], [4, 1.5]]);
   const levels = [];
@@ -170,10 +177,11 @@ export function generate(seed, opts = {}) {
     levels,
     key: { color: kelvinToHex(M.keyK), intensity: r2(rng.range(0.8, 1.4) * light), x: r2(rng.range(-0.9, -0.3)), y: r2(rng.range(0.4, 0.9)), angle: 0.7, penumbra: 0.8, soft: 4 },
     back: { color: rng.pick(M.back), intensity: r2(rng.range(0.5, 1.1) * light), x: r2(rng.range(-0.3, 0.3)), y: r2(rng.range(-0.2, 0.4)), angle: 0.5, soft: 5 },
-    core: { color: M.core, intensity: r2(rng.range(0.04, 0.1)), decay: 0.5, glow: r2(rng.range(3, 7)) },
+    core: { color: M.core, intensity: r2(rng.range(0.04, 0.1)), decay: 0.5, glow: r2(rng.range(...(M.glow ?? [3, 7]))) },
     env: { preset: M.env, intensity: r2(rng.range(...(M.envIntensity ?? [0.5, 0.9]))), rotation: r2(rng.range(0, Math.PI * 2)) },
     bg: M.bg,
     fog: { near: 2.2, far: 7 },
+    polar: makePolar(M.polar ? rng : null),
   };
   // le ralenti tombe sur la rupture (fin des assauts, en moyenne)
   const tTear = levels.reduce((s, l) => s + l.arm.dur * (l.arm.strFrac ?? 0) + 0.05, 0) / levels.length;
@@ -181,8 +189,21 @@ export function generate(seed, opts = {}) {
   return R;
 }
 
+// Lumière polarisée (photoélasticité) : sans rng, éteinte
+export const POLAR_MODES = { 'Linéaire': 'linear', 'Circulaire (sans isoclines)': 'circular', 'Lame teinte sensible': 'plate' };
+export function makePolar(rng) {
+  if (!rng) return { amount: 0, cross: true, mode: 'circular', angle: 0, turns: 0, gain: 1 };
+  // (la lame teinte sensible se regarde entre polariseurs croisés : fond pourpre)
+  const mode = rng.weighted([['plate', 3], ['circular', 3], ['linear', 1]]);
+  return {
+    amount: r2(rng.range(0.82, 0.95)), cross: mode === 'plate' || rng.chance(0.6), mode,
+    angle: r2(rng.range(0, Math.PI)), turns: rng.pick([0, 0, 1, -1]), gain: r2(rng.range(0.9, 1.5)),
+  };
+}
+
 // une recette d'une version antérieure (lien partagé)
 export function upgrade(R) {
+  R.polar = { ...makePolar(null), ...R.polar };
   R.sim = { ...SIM_DEFAULTS, ...R.sim };
   for (const lv of R.levels) {
     if (!lv.accentFinish) { lv.accentSet = lv.armSet; lv.accentFinish = JSON.parse(JSON.stringify(lv.armFinish)); }

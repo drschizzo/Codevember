@@ -12,5 +12,13 @@ export const G = {
   sssBoost: uniform(1),       // intensité globale de la translucidité
   armEnv: uniform(0.6),       // part du studio que l'armature voit au travers de sa membrane
   bgColor: uniform(new THREE.Color(0, 0, 0)),
+  // lumière polarisée (photoélasticité, voir photo.js)
+  polar: uniform(0),          // part polarisée de la lumière qui traverse les membranes
+  polCross: uniform(1),       // analyseur croisé (1, champ sombre) ou parallèle (0, champ clair)
+  polCirc: uniform(0),        // polarisation circulaire (sans isoclines)
+  polPlate: uniform(0),       // lame teinte sensible
+  polAngle: uniform(0),       // angle du polariseur (rad)
+  polTurns: uniform(0),       // demi-tours des polariseurs par boucle (entier : boucle parfaite)
+  polGain: uniform(1),        // sensibilité globale (× celle de la matière)
   coreColor: uniform(new THREE.Color(1, 0.7, 0.45)), coreGlow: uniform(8),
 };

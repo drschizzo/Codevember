@@ -497,6 +497,95 @@ fn triSum(i: u32) -> vec4f {
 }
 `;
 
+// Déformation (photoélasticité). Pour chaque triangle : gradient de la
+// déformation F (du triangle au repos au triangle posé), tenseur de Cauchy-Green
+// gauche b = F·Fᵀ dans le plan déformé, ses étirements principaux λ₁ ≥ λ₂ et
+// leurs directions d₁, d₂. La biréfringence d'un film tendu ne dépend que de
+// l'écart des étirements : on garde le déviateur logarithmique
+//   E = ½·ln(λ₁/λ₂)·(d₁d₁ᵀ − d₂d₂ᵀ)
+// (nul sous tension égale dans toutes les directions : une bulle gonflée reste
+// noire entre polariseurs croisés), moyenné par aire sur les triangles de la
+// particule (soudé à travers les coutures intactes), puis lissé sur le premier
+// anneau. Le déformé est mesuré depuis la géométrie au repos, pas depuis les
+// longueurs relaxées : un lambeau étiré plastiquement garde sa biréfringence
+// (orientation des chaînes du polymère), comme un film plastique que l'on a tiré.
+// str[2i] = (Exx, Eyy, Ezz), str[2i + 1] = (Exy, Eyz, Ezx), repère de la couche.
+const STRAIN = FRAMES + /* wgsl */`
+struct U { np: u32, nl: u32, F: u32, lipOff: u32, f: f32, fPrev: f32, lipT: f32, ringOff: u32 };
+@group(0) @binding(0) var<storage, read_write> cur: array<vec4f>;
+@group(0) @binding(1) var<storage, read_write> pmeta: array<vec4f>;
+@group(0) @binding(2) var<storage, read_write> csr: array<u32>;
+@group(0) @binding(3) var<storage, read_write> bonds: array<f32>;
+@group(0) @binding(4) var<storage, read_write> tmp: array<vec4f>;
+@group(0) @binding(5) var<storage, read_write> str: array<vec4f>;
+@group(0) @binding(6) var<uniform> u: U;
+const PARTNER = 0x80000000u;
+fn tNow() -> f32 { return u.f / f32(u.F - 1u); }
+fn intact(k: u32) -> bool { let tb = bonds[k * 8u + 3u]; return tb < 0.0 || tb > tNow(); }
+fn rg(k: u32) -> u32 { return csr[u.ringOff + k]; }
+struct Acc { a: vec3f, b: vec3f, w: f32 };
+fn triDev(i: u32) -> Acc {
+  var r: Acc; r.a = vec3f(0.0); r.b = vec3f(0.0); r.w = 0.0;
+  let x0 = cur[i].xyz; let X0 = pmeta[2u * i].xyz;
+  for (var k = csr[u.np + 1u + i]; k < csr[u.np + 2u + i]; k += 2u) {
+    let j = csr[k]; let l = csr[k + 1u];
+    let e1 = pmeta[2u * j].xyz - X0; let e2 = pmeta[2u * l].xyz - X0;
+    let d1 = cur[j].xyz - x0; let d2 = cur[l].xyz - x0;
+    let nR = cross(e1, e2); let A2 = length(nR); let la = length(e1);
+    let nD = cross(d1, d2); let lD = length(nD); let ld = length(d1);
+    if (A2 < 1e-12 || la < 1e-9 || lD < 1e-12 || ld < 1e-9) { continue; }
+    // repère orthonormé du triangle au repos, F = Ds·Dm⁻¹ (3×2)
+    let ue = e1 / la; let ve = cross(nR / A2, ue);
+    let b = dot(e2, ue); let c = dot(e2, ve);
+    let f0 = d1 / la; let f1 = (d2 - d1 * (b / la)) / c;
+    // b = F·Fᵀ dans le repère (p, q) du triangle déformé
+    let p = d1 / ld; let q = cross(nD / lD, p);
+    let f0p = dot(f0, p); let f0q = dot(f0, q); let f1p = dot(f1, p); let f1q = dot(f1, q);
+    let A = f0p * f0p + f1p * f1p; let D = f0q * f0q + f1q * f1q; let C = f0p * f0q + f1p * f1q;
+    let m = 0.5 * (A + D); let hd = 0.5 * (A - D); let rr = sqrt(hd * hd + C * C);
+    r.w += A2;
+    if (rr < 1e-9) { continue; }
+    // ln(λ₁/λ₂) = ½·ln(λ₁²/λ₂²) ; cos 2α, sin 2α de la direction principale
+    let dl = 0.5 * log((m + rr) / max(m - rr, 1e-6));
+    let c2 = hd / rr; let s2 = C / rr;
+    let k2 = 0.5 * dl * A2;
+    r.a += k2 * (c2 * (p * p - q * q) + s2 * 2.0 * p * q);
+    r.b += k2 * (c2 * (p * p.yzx - q * q.yzx) + s2 * (p * q.yzx + q * p.yzx));
+  }
+  return r;
+}
+@compute @workgroup_size(${WG}) fn strainK(@builtin(global_invocation_id) g: vec3u) {
+  let i = g.x; if (i >= u.np) { return; }
+  var s = triDev(i);
+  for (var r = csr[i]; r < csr[i + 1u]; r += 8u) {
+    if (csr[r + 1u] == 2u && intact(csr[r + 3u])) { let t = triDev(csr[r]); s.a += t.a; s.b += t.b; s.w += t.w; }
+  }
+  let w = max(s.w, 1e-12);
+  tmp[2u * i] = vec4f(s.a / w, 0.0); tmp[2u * i + 1u] = vec4f(s.b / w, 0.0);
+}
+@compute @workgroup_size(${WG}) fn strainSmooth(@builtin(global_invocation_id) g: vec3u) {
+  let i = g.x; if (i >= u.np) { return; }
+  var a = vec3f(0.0); var b = vec3f(0.0); var k = 0.0;
+  var r = rg(i); let e = rg(i + 1u);
+  while (r < e) {
+    let v = rg(r);
+    if ((v & PARTNER) != 0u) { r += 2u; continue; }
+    a += tmp[2u * v].xyz; b += tmp[2u * v + 1u].xyz; k += 1.0; r += 1u;
+  }
+  // moitié la particule, moitié ses voisines
+  let kk = max(k, 1.0);
+  str[2u * i] = vec4f(0.5 * tmp[2u * i].xyz + 0.5 * a / kk, 0.0);
+  str[2u * i + 1u] = vec4f(0.5 * tmp[2u * i + 1u].xyz + 0.5 * b / kk, 0.0);
+}
+// sommets des lèvres : ceux de leur particule
+@compute @workgroup_size(${WG}) fn strainLips(@builtin(global_invocation_id) g: vec3u) {
+  let l = g.x; if (l >= u.nl) { return; }
+  let pi = csr[u.lipOff + l * 8u];
+  let a = str[2u * pi]; let b = str[2u * pi + 1u];
+  for (var k = 0u; k < ${LIP_RING}u; k++) { let o = u.np + l * ${LIP_RING}u + k; str[2u * o] = a; str[2u * o + 1u] = b; }
+}
+`;
+
 // ── Pipelines (par périphérique) ─────────────────────────────────────────────
 const cache = new WeakMap();
 function pipelines(device) {
@@ -507,6 +596,7 @@ function pipelines(device) {
   const simL = device.createBindGroupLayout({ entries: [0, 1, 2, 3, 4, 5, 6, 7].map(sto).concat([uni(8), uni(9, true)]) });
   const fibL = device.createBindGroupLayout({ entries: [0, 1, 2, 3].map(sto).concat([uni(4)]) });
   const poseL = device.createBindGroupLayout({ entries: [0, 1, 2, 3, 4, 5, 6, 7].map(sto).concat([uni(8)]) });
+  const strL = device.createBindGroupLayout({ entries: [0, 1, 2, 3, 4, 5].map(sto).concat([uni(6)]) });
   // (une erreur de compilation n'apparaît sinon qu'en cascade de « pipeline invalide »)
   const mod = (code, label) => {
     const m = device.createShaderModule({ code, label });
@@ -515,10 +605,11 @@ function pipelines(device) {
     });
     return m;
   };
-  const sim = mod(SIM, 'sim'), fib = mod(FIB, 'fib'), pose = mod(POSE, 'pose');
+  const sim = mod(SIM, 'sim'), fib = mod(FIB, 'fib'), pose = mod(POSE, 'pose'), strain = mod(STRAIN, 'strain');
   const mk = (layout, module, entryPoint) => device.createComputePipeline({ layout: device.createPipelineLayout({ bindGroupLayouts: [layout] }), compute: { module, entryPoint } });
   P = {
-    simL, fibL, poseL,
+    simL, fibL, poseL, strL,
+    strain: mk(strL, strain, 'strainK'), strainSmooth: mk(strL, strain, 'strainSmooth'), strainLips: mk(strL, strain, 'strainLips'),
     predict: mk(simL, sim, 'predict'), solveA: mk(simL, sim, 'solveA'), solveB: mk(simL, sim, 'solveB'), collide: mk(simL, sim, 'collide'),
     bonds: mk(simL, sim, 'bondsK'), velocity: mk(simL, sim, 'velocity'), record: mk(simL, sim, 'record'), radius: mk(simL, sim, 'radius'),
     adjust: mk(simL, sim, 'adjust'), thresholds: mk(simL, sim, 'thresholds'), still: mk(simL, sim, 'still'),
@@ -681,6 +772,16 @@ export function createPoser(device, gpu, prep, S, out) {
   const data = new ArrayBuffer(32), du = new Uint32Array(data), df = new Float32Array(data);
   du.set([prep.np, prep.nl, S.frames, gpu.lipOff]); du[7] = gpu.ringOff;
   const lipT = S.thick * S.lip * 0.5;
+  // déformation (photoélasticité), seulement si le matériau la lit
+  let sbg = null, stmp = null;
+  if (out.str) {
+    stmp = emptyBuf(device, prep.np * 32);
+    sbg = device.createBindGroup({
+      layout: P.strL,
+      entries: [out.cur, gpu.meta, gpu.csr, gpu.bonds, stmp, out.str].map((b, i) => ({ binding: i, resource: { buffer: b } }))
+        .concat([{ binding: 6, resource: { buffer: ub } }]),
+    });
+  }
   return {
     // encode la pose à l'image f (et fPrev pour les vecteurs vitesse)
     encode(enc, f, fPrev) {
@@ -691,8 +792,14 @@ export function createPoser(device, gpu, prep, S, out) {
       const gP = Math.ceil(prep.np / WG);
       for (const k of ['interp', 'normals', 'smoothNormals', 'curvature']) { pass.setPipeline(P[k]); pass.dispatchWorkgroups(gP); }
       if (prep.nl) { pass.setPipeline(P.lips); pass.dispatchWorkgroups(Math.ceil(prep.nl / WG)); }
+      if (sbg) {
+        pass.setBindGroup(0, sbg);
+        pass.setPipeline(P.strain); pass.dispatchWorkgroups(gP);
+        pass.setPipeline(P.strainSmooth); pass.dispatchWorkgroups(gP);
+        if (prep.nl) { pass.setPipeline(P.strainLips); pass.dispatchWorkgroups(Math.ceil(prep.nl / WG)); }
+      }
       pass.end();
     },
-    dispose() { ub.destroy(); raw.destroy(); },
+    dispose() { ub.destroy(); raw.destroy(); stmp?.destroy(); },
   };
 }

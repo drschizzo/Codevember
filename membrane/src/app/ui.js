@@ -2,7 +2,7 @@
 // réglages de rendu et des fonctions de rappel : il ne touche pas à la scène.
 import GUI from 'lil-gui';
 import { FINISHES, SETS, FINISH_DEFAULTS, PATTERNS } from '../finishes.js';
-import { MOODS, ARMATURES, ORDERS, POLYS, STYLES, CUPS, RINGS, HEADS } from '../recipe.js';
+import { MOODS, ARMATURES, ORDERS, POLYS, STYLES, CUPS, RINGS, HEADS, POLAR_MODES } from '../recipe.js';
 import { MEMBRANES } from '../membranes.js';
 import { ENV_PRESETS } from '../scene/env.js';
 import { QUALITY } from './settings.js';
@@ -40,6 +40,9 @@ const LOOK = [
   ['Tension et lèvres', [
     ['whiten', 'Blanchiment sous tension', 0, 1, 0.01], ['whitenColor', 'Blanchiment : couleur', 'color'], ['edgeWhite', 'Blanchiment des bords', 0, 1, 0.01],
     ['lipDensity', 'Épaisseur optique des lèvres', 0, 8, 0.01], ['lipColor', 'Couleur des lèvres', 'color'],
+  ]],
+  ['Photoélasticité', [
+    ['bire', 'Biréfringence sous tension (nm)', 0, 8000, 10],
   ]],
 ];
 // Comportement (nouvelle simulation)
@@ -241,6 +244,15 @@ export function createUI({ recipe: getRecipe, render, on, nest }) {
     addC(R, 'bg').name('Fond');
     add(R.fog, 'near', 0.5, 8, 0.01).name('Brume : début');
     add(R.fog, 'far', 1, 20, 0.01).name('Brume : fin');
+    // lumière polarisée : la tension des membranes devient couleur
+    const P = R.polar;
+    let wasOn = P.amount > 0;
+    add(P, 'amount', 0, 1, 0.01).name('Polarisation (photoélasticité)').onChange((v) => { if ((v > 0) !== wasOn) { wasOn = v > 0; on.polarChanged(); } });
+    add(P, 'cross').name('Polariseurs croisés (champ sombre)');
+    add(P, 'mode', POLAR_MODES).name('Polarisation : nature');
+    add(P, 'angle', 0, Math.PI, 0.01).name('Polariseur : angle');
+    add(P, 'turns', -2, 2, 1).name('Polariseurs : demi-tours / boucle');
+    add(P, 'gain', 0, 4, 0.01).name('Sensibilité (×)');
   }
 
   // ── Rendu ──

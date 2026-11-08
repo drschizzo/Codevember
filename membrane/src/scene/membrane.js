@@ -29,6 +29,7 @@ import {
 import { noise, noise2, fbm, worley, perturb, stableVelocity } from './materials.js';
 import { LOOK_KEYS } from '../membranes.js';
 import { G } from './globals.js';
+import { photoelastic } from './photo.js';
 
 const PI = Math.PI;
 
@@ -72,7 +73,7 @@ export function applyLook(U, spec) {
   for (const k of LOOK_KEYS) { if (U[k].value.isColor) U[k].value.set(spec[k]); else U[k].value = spec[k]; }
 }
 // ce qui impose une recompilation
-export const lookSignature = (s) => [s.sheen > 0, s.irid > 0, s.metal > 0, s.wet > 0, s.fibers > 0, s.vessels > 0 || s.capillary > 0].join('');
+export const lookSignature = (s) => [s.sheen > 0, s.irid > 0, s.metal > 0, s.wet > 0, s.fibers > 0, s.vessels > 0 || s.capillary > 0, !!s.photo].join('');
 
 // ── Lecture de la pose (tampons écrits par le GPU, voir gpusim.js) ──────────
 // T : { VV, cur, prv, nor } (attributs de stockage de l'instance)
@@ -83,11 +84,15 @@ const poseReader = (T) => ({
   cur: storage(T.cur, 'vec4', T.VV).toReadOnly(),
   prv: storage(T.prv, 'vec4', T.VV).toReadOnly(),
   nor: storage(T.nor, 'vec4', T.VV).toReadOnly(),
+  // déviateur de la déformation (photoélasticité) : deux vec4 par sommet
+  str: T.str ? storage(T.str, 'vec4', 2 * T.VV).toReadOnly() : null,
 });
 
 const vJ = varyingProperty('float', 'vMemJ');
 const vDmg = varyingProperty('float', 'vMemDmg');
 const vCurv = varyingProperty('float', 'vMemCurv');
+const vStrA = varyingProperty('vec3', 'vMemStrA');
+const vStrB = varyingProperty('vec3', 'vMemStrB');
 
 // Triangle PN (Vlachos et al., 2001) : points de contrôle du patch cubique
 // tirés des positions P et normales N des coins ; w : barycentriques.
@@ -116,7 +121,7 @@ function pnNormal(P1, P2, P3, N1, N2, N3, w) {
   return normalize(n.add(vec3(0, 0, 1e-7)));
 }
 
-export function membranePosition(T, S, full) {
+export function membranePosition(T, S, full, photo = false) {
   const B = poseReader(T);
   return Fn(() => {
     const t = attribute('tri', 'vec3'), bw = attribute('bary', 'vec2');
@@ -132,6 +137,11 @@ export function membranePosition(T, S, full) {
       vCurv.assign(lerp(c1.w, c2.w, c3.w));
       const q1 = B.prv.element(i1), q2 = B.prv.element(i2), q3 = B.prv.element(i3);
       vDmg.assign(lerp(q1.w, q2.w, q3.w));
+      if (photo && B.str) {
+        const sa = (i) => B.str.element(i.mul(2)).xyz, sb = (i) => B.str.element(i.mul(2).add(1)).xyz;
+        vStrA.assign(lerp(sa(i1), sa(i2), sa(i3)));
+        vStrB.assign(lerp(sb(i1), sb(i2), sb(i3)));
+      }
       // (normales de l'image courante : l'écart est négligeable sur une image)
       positionPrevious.assign(pnPosition(q1.xyz, q2.xyz, q3.xyz, n1.xyz, n2.xyz, n3.xyz, w));
     }
@@ -172,7 +182,8 @@ function specularAA(N, N0, curv) {
 // opts.backdrop : voir au travers (copie de l'image) ; opts.vessels : carte
 export function buildMembraneMaterial(T, S, L, spec, { side = THREE.FrontSide, backdrop = true, vessels = null, depthBlur = true } = {}) {
   const m = new THREE.MeshSSSNodeMaterial({ side });
-  m.positionNode = membranePosition(T, S, true);
+  const photo = !!spec.photo;
+  m.positionNode = membranePosition(T, S, true, photo);
   const p = normalize(attribute('rest', 'vec3'));
   const lip = attribute('kind', 'float');
   const J = vJ.max(0.15), dmg = vDmg.clamp(0, 1);
@@ -212,6 +223,14 @@ export function buildMembraneMaterial(T, S, L, spec, { side = THREE.FrontSide, b
   // blanchiment : tension (crazing), voisinage d'une déchirure, lèvres
   const wh = smoothstep(1.04, 1.6, J).mul(L.whiten).add(dmg.mul(L.edgeWhite)).add(lip.mul(0.35)).clamp(0, 1).mul(vis);
   Tr = Tr.mul(wh.mul(-0.55).add(1));
+  // photoélasticité : ce qui traverse la membrane, entre polariseurs, se colore
+  // selon l'écart des étirements principaux (voir photo.js). Seule la lumière
+  // transmise est concernée : la diffusion dépolarise, le reflet reste blanc.
+  let pol = vec3(1);
+  if (photo) {
+    const P = photoelastic(vStrA, vStrB, L.bire.mul(G.polGain), hv.min(4));
+    pol = mix(vec3(1), P, G.polar.mul(vis));
+  }
   const Tavg = dot(Tr, vec3(1 / 3));
   const crisp = pow(Tr, vec3(L.clarity.oneMinus().mul(4).add(1)));
   const diffused = Tr.sub(crisp).max(vec3(0));
@@ -253,7 +272,7 @@ export function buildMembraneMaterial(T, S, L, spec, { side = THREE.FrontSide, b
     m.iridescenceThicknessNode = L.iridNm.mul(n1.mul(0.6).add(1)).div(J).clamp(60, 1400);
   }
   // translucidité : lumière venue de derrière, teintée par la traversée
-  m.thicknessColorNode = L.sssColor.mul(Tr.add(0.12).min(vec3(1))).mul(L.sss).mul(G.sssBoost).mul(vis).mul(lip.mul(0.8).add(1));
+  m.thicknessColorNode = L.sssColor.mul(Tr.add(0.12).min(vec3(1))).mul(pol).mul(L.sss).mul(G.sssBoost).mul(vis).mul(lip.mul(0.8).add(1));
   m.thicknessDistortionNode = L.sssDistort;
   m.thicknessPowerNode = L.sssPower;
   m.thicknessScaleNode = float(2);
@@ -281,11 +300,11 @@ export function buildMembraneMaterial(T, S, L, spec, { side = THREE.FrontSide, b
     const lod = L.blur.mul(G.backdropBlur).mul(h.min(3).mul(0.25).add(0.75)).mul(levels).mul(0.85).mul(near);
     const sharp = bd.sample(uv).level(float(0));
     const soft2 = bd.sample(uv).level(lod);
-    const through = sharp.rgb.mul(crisp).add(soft2.rgb.mul(diffused));
+    const through = sharp.rgb.mul(crisp).add(soft2.rgb.mul(diffused)).mul(pol);
     m.emissiveNode = through.mul(fres.oneMinus()).mul(spec.metal > 0 ? L.metal.mul(-0.3).add(1) : float(1));
   } else {
     // sans copie de l'image : on laisse passer la couleur du fond (approximation)
-    m.emissiveNode = G.bgColor.mul(crisp.add(diffused)).mul(fres.oneMinus());
+    m.emissiveNode = G.bgColor.mul(crisp.add(diffused)).mul(pol).mul(fres.oneMinus());
   }
   m.mrtNode = stableVelocity();
   return m;
