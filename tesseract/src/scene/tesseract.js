@@ -29,6 +29,7 @@ function toGeometry(o) {
   g.setAttribute('surf', new THREE.BufferAttribute(o.surf, 4, true));
   g.setAttribute('pat', new THREE.BufferAttribute(o.pat, 3));
   g.setAttribute('anchor', new THREE.BufferAttribute(o.anchor, 3));
+  g.setAttribute('span', new THREE.BufferAttribute(o.span, 1));
   g.setIndex(new THREE.BufferAttribute(o.index, 1));
   // (positions calculées dans le shader : boîte englobante large, et pas d'élimination)
   g.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 50);
@@ -65,10 +66,12 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
   const guides = createGuides(group);
   const practicals = createPracticals(group, scene);
   // Éclairage sélectif : chaque cellule ne reçoit que les lumières du plateau
-  // et sa propre lumière d'écrin. Sans ombre, celle-ci traverserait sinon les
+  // et sa propre lumière d'écrin (sans ombre, celle-ci traverserait sinon les
   // parois pleines et éclairerait la doublure des cellules voisines ; et
-  // chaque pixel évaluerait onze lumières au lieu de quatre.
+  // chaque pixel évaluerait toutes les lumières) ; son objet exposé reçoit en
+  // plus sa lumière de vedette.
   const cellLights = practicals.lights.map((L) => lights([...studioLights, L]));
+  const objectLights = practicals.lights.map((L, c) => lights([...studioLights, L, practicals.heroes[c]]));
   const pieceOf = (c, role) => pieces[c * ROLES.length + ROLES.indexOf(role)];
   // ajourage des six faces de chaque cellule (voir reveal.js), partagé par
   // ses panneaux et son verre
@@ -103,7 +106,7 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
       P.mesh.material = buildPieceMaterial(fin, U, P.M, { shadowTint: tint, reveal: P.role === 'panel' || P.role === 'glass' ? reveals[P.c] : null, depth: P.role === 'frame', content: P.role === 'content', merge: P.role === 'frame' });
       P.sig = signature(fin);
     }
-    P.mesh.material.lightsNode = cellLights[P.c];
+    P.mesh.material.lightsNode = (P.role === 'content' ? objectLights : cellLights)[P.c];
     old?.dispose();
   }
   const finishUniformsFor = (fin) => ({ outer: finishUniforms(fin.outer), inner: finishUniforms(fin.inner), edge: finishUniforms(fin.edge), wear: uniform(fin.wear || 0) });
@@ -340,11 +343,13 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
     return { state: st, scale: s, lift, timeline: cache.timeline, kp, kc, frames: cache.frames };
   }
 
-  // Ajourage des faces pour la caméra du film (position monde), une fois
-  // celle-ci placée : la carte d'ombre voit les mêmes ouvertures.
+  // Ce qui dépend de la caméra du film (position monde), une fois celle-ci
+  // placée : les lumières de vedette, et l'ajourage des faces (la carte
+  // d'ombre voit les mêmes ouvertures).
   const _cam = new THREE.Vector3();
   function setViewer(pos) {
     if (!view) return;
+    practicals.aim(pos);
     computeOpenings(openArrays, { ...view, viewPos: pos, camLocal: group.worldToLocal(_cam.copy(pos)) });
   }
 

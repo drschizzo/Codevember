@@ -101,6 +101,7 @@ export function createUI({ recipe: getRecipe, render, on }) {
     add(fView, V, 'cutaway', 0, 1, 0.01).name('Coupe côté caméra').onChange(ch);
     add(fView, V, 'practical', 0, 30, 0.1).name('Lumières d’écrin').onChange(ch);
     addC(fView, V, 'practicalColor').name('Lumières d’écrin : teinte').onChange(ch);
+    add(fView, V, 'hero', 0, 3, 0.01).name('Lumière de vedette (objets)').onChange(ch);
     add(fView, V, 'dolly', 0, 1, 0.01).name('Rapprochement (plié)').onChange(ch);
 
     const Vy = R.voyage;

@@ -268,9 +268,10 @@ export const rootCell = ROOT;
 // Lisibilité et vue sur l'intérieur (réglages par défaut)
 //   ghost : silhouette du tesseract plié (destination) ; seams : liserés des
 //   faces appariées ; depth : profondeur 4D en couleur ; cutaway : panneaux
-//   ajourés côté caméra ; practical : lumières d'écrin ; dolly : la caméra
+//   ajourés côté caméra ; practical : lumières d'écrin ; hero : lumière de
+//   vedette de chaque objet exposé (× la lumière d'écrin) ; dolly : la caméra
 //   s'approche pendant les pauses
-export const VIEW_DEFAULTS = { ghost: 0, seams: 1, depth: 0.6, cutaway: 0.55, practical: 6, practicalColor: '#ffd9a8', dolly: 0.35 };
+export const VIEW_DEFAULTS = { ghost: 0, seams: 1, depth: 0.6, cutaway: 0.55, practical: 6, practicalColor: '#ffd9a8', hero: 0.9, dolly: 0.35 };
 
 // Le voyage intérieur (voir math4.js et scene/voyage.js) : durées (plongée,
 // halte dans une pièce, traversée, remontée), écart de la caméra à l'axe de
@@ -285,7 +286,7 @@ export const VOYAGE_DEFAULTS = {
 export function upgrade(R) {
   const D = { stud: { n: 6, mode: 'pyramid', height: 0.5 }, corr: { n: 5, amp: 0.3 }, leaded: { n: 3, pattern: 'diamond' }, bars: { n: 9, cross: true }, target: { n: 5, fill: 0.5 } };
   for (const c of R.cells) for (const [k, v] of Object.entries(D)) c[k] ??= { ...v };
-  R.view ??= { ...VIEW_DEFAULTS };
+  R.view = { ...VIEW_DEFAULTS, ...R.view };
   R.voyage ??= { ...VOYAGE_DEFAULTS, on: false }; // (scène partagée avant le voyage : telle quelle)
   return R;
 }
