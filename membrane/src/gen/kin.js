@@ -17,20 +17,32 @@ export const ease = (u) => { u = u < 0 ? 0 : u > 1 ? 1 : u; return u * u * u * (
 
 // Les assauts : avant de s'ouvrir pour de bon, l'armature pousse n fois, de
 // plus en plus fort (amplitude a·(0,45 + 0,55·k/n), en temps « ouverture »),
-// et recule entre deux — poussée vive, retour plus lent. Ils occupent la
+// et recule entre deux (montée et retour en sinus carré : sans à-coup). Ils occupent la
 // fraction f du déploiement ; l'ouverture finale prend le reste.
 //   S = { n, a, f } ; n = 0 : pas d'assaut.
 export function struggle(u, S) {
   if (!S || S.n <= 0 || S.f <= 0) return u;
   if (u >= S.f) return (u - S.f) / (1 - S.f);
   const w = (u / S.f) * S.n, k = Math.floor(w), v = w - k;
-  return S.a * (0.45 + (0.55 * (k + 1)) / S.n) * Math.sin(Math.PI * v ** 0.75) ** 2;
+  return S.a * (0.45 + (0.55 * (k + 1)) / S.n) * Math.sin(Math.PI * v) ** 2;
+}
+
+// Allures (P.st.style) : 0 douce ; 1 franche, avec un dépassement qui se pose ;
+// 2 par crans (mécanique : cinq arrêts) ; 3 élastique (oscille en s'ouvrant)
+const cl = (u) => (u < 0 ? 0 : u > 1 ? 1 : u);
+export function shape(u0, style) {
+  const u = cl(u0);
+  if (style === 1) return ease(u / 0.8) + 0.09 * Math.sin(Math.PI * cl((u - 0.7) / 0.3));
+  if (style === 2) { const k = 5, w = u * k, f = Math.min(Math.floor(w), k - 1); return (f + ease(w - f)) / k; }
+  if (style === 3) return ease(u) + 0.5 * Math.sin(3 * Math.PI * u) * u * (1 - u) * (1 - u);
+  return ease(u);
 }
 
 export function partEases(P, t, dur) {
   const u = struggle(Math.min(1, Math.max(0, (t - P.delay) / dur)), P.st);
-  if (P.mode === 1) { const ex = ease(u / 0.45); return { r: ease((u - 0.35) / 0.65), x: ex, s: ex }; }
-  const e = ease(u);
+  const sty = P.st?.style ?? 0;
+  if (P.mode === 1) { const ex = shape(u / 0.45, sty); return { r: shape((u - 0.35) / 0.65, sty), x: ex, s: ex }; }
+  const e = shape(u, sty);
   return { r: e, x: e, s: e };
 }
 

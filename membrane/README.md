@@ -42,7 +42,7 @@ Une retouche d'aspect est immédiate. Une retouche de comportement ou d'armature
 
 **L'éclosion.** Elle se joue entre *x* = début et *x* = fin. La simulation, enregistrée image par image dans un tampon du GPU, et l'armature avancent avec *x*. Le ralenti autour de la déchirure est une déformation du temps τ(*t*) dont la vitesse reste positive et continue, et qui retombe sur ses pieds à chaque couche.
 
-**La résistance.** Avant de céder, la membrane encaisse. L'armature mène de deux à quatre assauts, de plus en plus forts : elle pousse vivement, recule plus lentement, et repousse. Pour la cage, ce sont des à-coups de pression. Pendant les assauts, la membrane se tend, bombe, blanchit, puis revient ; elle ne peut pas se rompre. La rupture vient avec la poussée finale, quand la matière se fatigue. Les assauts sont écrits une seule fois et reproduits à l'identique dans la cinématique (JS), le vertex shader et la simulation GPU. Le ralenti de la chorégraphie tombe sur l'instant de la rupture.
+**La résistance.** Avant de céder, la membrane encaisse. L'armature mène de deux à quatre assauts, de plus en plus forts : elle pousse, recule, et repousse, sans à-coup (montée et retour en sinus carré). Pour la cage, ce sont des à-coups de pression. Pendant les assauts, la membrane se tend, bombe, blanchit, puis revient ; elle ne peut pas se rompre. Des à-coups de pression les accompagnent, si bien que toute la membrane respire sous l'effort. Les matières sont assez souples pour que la déformation se lise, même le vélin ou la feuille d'or, et la membrane blanchit dès qu'elle s'étire un peu. La rupture vient avec la poussée finale, quand la matière se fatigue. Les assauts sont écrits une seule fois et reproduits à l'identique dans la cinématique (JS), le vertex shader et la simulation GPU. Le ralenti de la chorégraphie tombe sur l'instant de la rupture.
 
 **Pas de saut d'éclairage.** Une armature qui passe derrière la caméra s'efface en fondu, par un tramage renouvelé à chaque image et lissé par l'anticrénelage temporel. Son ombre s'efface avec elle : aucune ombre, aucune lumière vue au travers des membranes ne disparaît d'un coup. La luminance moyenne de l'image, mesurée sur toute une boucle, varie sans marche.
 
@@ -65,7 +65,7 @@ Une retouche d'aspect est immédiate. Une retouche de comportement ou d'armature
 - flexion ;
 - pression intérieure, réglée pendant la mise en place, qui monte (cage) puis fuit dès la première rupture ;
 - collisions avec l'armature et avec l'œuf suivant, avec frottement ;
-- freinage de l'air et frémissement des lambeaux.
+- freinage de l'air (selon la normale, et quadratique : les grandes vitesses sont freinées, plafonnées) et frémissement des lambeaux.
 
 Un fil par lien décide des ruptures : étirement autour du lien, seuil propre à chaque lien, fatigue, dégrafage de l'avant. La rupture se propage d'elle-même. Les lèvres s'enroulent, les lambeaux se relâchent et se retroussent.
 
@@ -83,12 +83,19 @@ Le rendu lit ces tampons directement. Les instants de rupture et de claquage des
 **Les vaisseaux** (`vessels.js`). Ils sont obtenus par colonisation de l'espace à partir de racines près du pédoncule, et leur rayon suit le modèle des tuyaux. Le réseau est rastérisé dans une carte octaédrique de la direction au repos.
 
 **L'armature** (`armature.js`, `kin.js`). Chaque pièce est rigide, à un facteur d'échelle près, et suit une loi de déploiement (gonflement, extension) puis d'ouverture autour d'une charnière. Les natures :
-- **calice** : lames bombées en quartiers ;
+- **calice** : lames bombées en quartiers, éventuellement feuilletées (jusqu'à trois lames empilées, qui tournent autour de la même charnière et se déploient en éventail) ;
 - **iris** : lames vrillées qui pivotent presque à plat, comme un diaphragme ;
 - **gousse** : deux à quatre mâchoires nervurées ;
 - **ombrelle** : des baleines le long des méridiens ;
 - **couronne** : des épingles montées sur la couronne de charnières, qui coulissent (la tête perlée tend puis perce la membrane) puis s'inclinent ;
-- **cage** : un icosaèdre, un dodécaèdre ou un octaèdre fixe, sous la membrane ; c'est la membrane qui gonfle et cède au milieu des faces.
+- **cage** : un icosaèdre, un dodécaèdre ou un octaèdre fixe, sous la membrane ; c'est la membrane qui gonfle et cède au milieu des faces ;
+- **serres** : des cornes effilées et articulées (phalanges), dont la pointe se recourbe vers l'œuf comme une griffe.
+
+Les épingles de la couronne portent une perle, un disque (tampon) ou une pointe. Le socle varie lui aussi : coupe lisse, cannelée ou ajourée (côtes et anneaux), couronne de charnières lisse ou perlée.
+
+**Les allures.** Une armature s'ouvre de l'une de quatre façons : douce ; franche, avec un dépassement qui se pose ; par crans, comme un mécanisme ; ou élastique, en oscillant. L'allure est reproduite à l'identique dans la cinématique et le vertex shader.
+
+**Deux jeux de matériaux.** Le socle (coupe, tige, rayons, couronnes) prend un second jeu de matériaux de l'humeur. Quand l'armature alterne, une pièce sur deux le prend aussi.
 
 ## Rendu (`src/scene/`)
 

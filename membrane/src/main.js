@@ -203,6 +203,7 @@ async function main() {
     resim,
     look: (i) => nest.syncLevel(i, R),
     armSet: (i, s) => { R.levels[i].armSet = s; R.levels[i].armFinish = finishesFor(s, rngUI()); nest.syncLevel(i, R); ui?.rebuildLevels(); },
+    accentSet: (i, s) => { R.levels[i].accentSet = s; R.levels[i].accentFinish = finishesFor(s, rngUI()); nest.syncLevel(i, R); ui?.rebuildLevels(); },
     armKind: (i, k) => { R.levels[i].arm = makeArmature(k, rngUI()); resim(i); ui?.rebuildLevels(); },
     membrane: (i, k) => { const m = makeMembrane(k, rngUI()); Object.assign(R.levels[i], { membrane: k, look: m.look, phys: m.phys }); resim(i); ui?.rebuildLevels(); },
     rerollLevel: (i) => { R.levels[i] = makeLevel(rngUI(), R.mood); resim(i); ui?.rebuildLevels(); },

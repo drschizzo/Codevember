@@ -2,7 +2,7 @@
 // réglages de rendu et des fonctions de rappel : il ne touche pas à la scène.
 import GUI from 'lil-gui';
 import { FINISHES, SETS, FINISH_DEFAULTS, PATTERNS } from '../finishes.js';
-import { MOODS, ARMATURES, ORDERS, POLYS } from '../recipe.js';
+import { MOODS, ARMATURES, ORDERS, POLYS, STYLES, CUPS, RINGS, HEADS } from '../recipe.js';
 import { MEMBRANES } from '../membranes.js';
 import { ENV_PRESETS } from '../scene/env.js';
 import { QUALITY } from './settings.js';
@@ -59,11 +59,12 @@ const PHYS = [
 // Armature (nouvelle simulation)
 const ARM = {
   common: [['struggle', 'Assauts avant la rupture', 0, 6, 1], ['strAmp', 'Assauts : force', 0.05, 0.8, 0.01], ['strFrac', 'Assauts : part du déploiement', 0.1, 0.8, 0.01], ['dur', 'Durée du déploiement', 0.2, 0.95, 0.01], ['stagger', 'Décalage entre pièces', 0, 0.4, 0.01], ['jitter', 'Irrégularité des angles', 0, 0.4, 0.01], ['thick', 'Épaisseur', 0.01, 0.06, 0.001]],
-  calyx: [['n', 'Lames', 2, 10, 1], ['width', 'Largeur', 0.5, 0.99, 0.01], ['tip', 'Pointe', 0.05, 0.8, 0.01], ['hinge', 'Charnière (°)', 95, 140, 1], ['angle', 'Ouverture (°)', 40, 150, 1], ['ridge', 'Nervure', 0, 3, 0.01]],
+  calyx: [['rows', 'Rangs de lames (feuilleté)', 1, 3, 1], ['n', 'Lames', 2, 10, 1], ['width', 'Largeur', 0.5, 0.99, 0.01], ['tip', 'Pointe', 0.05, 0.8, 0.01], ['hinge', 'Charnière (°)', 95, 140, 1], ['angle', 'Ouverture (°)', 40, 150, 1], ['ridge', 'Nervure', 0, 3, 0.01]],
   iris: [['n', 'Lames', 3, 12, 1], ['width', 'Largeur', 0.5, 0.99, 0.01], ['tip', 'Pointe', 0.05, 0.8, 0.01], ['hinge', 'Charnière (°)', 95, 140, 1], ['angle', 'Ouverture (°)', 40, 150, 1], ['twist', 'Vrille', -2, 2, 0.01], ['tilt', 'Axe : de la tangente (0) au rayon (1,57)', 0, 1.57, 0.01], ['swell', 'Gonflement', 0, 0.4, 0.01], ['ridge', 'Nervure', 0, 3, 0.01]],
   pod: [['n', 'Mâchoires', 2, 4, 1], ['width', 'Largeur', 0.6, 0.99, 0.01], ['tip', 'Pointe', 0.02, 0.6, 0.01], ['hinge', 'Charnière (°)', 100, 145, 1], ['angle', 'Ouverture (°)', 40, 150, 1], ['ridge', 'Nervure', 0, 3, 0.01]],
   ribs: [['n', 'Baleines', 4, 24, 1], ['hinge', 'Charnière (°)', 95, 140, 1], ['angle', 'Ouverture (°)', 40, 150, 1]],
-  crown: [['n', 'Épingles', 6, 40, 1], ['head', 'Têtes (× épaisseur)', 0.6, 3, 0.01], ['hinge', 'Couronne (°)', 95, 140, 1], ['spread', 'Étendue (°)', 30, 90, 1], ['ext', 'Coulissement', 0.02, 0.4, 0.01], ['angle', 'Ouverture (°)', 0, 120, 1]],
+  crown: [['headStyle', 'Têtes', HEADS], ['n', 'Épingles', 6, 40, 1], ['head', 'Têtes (× épaisseur)', 0.6, 3, 0.01], ['hinge', 'Couronne (°)', 95, 140, 1], ['spread', 'Étendue (°)', 30, 90, 1], ['ext', 'Coulissement', 0.02, 0.4, 0.01], ['angle', 'Ouverture (°)', 0, 120, 1]],
+  claws: [['n', 'Serres', 3, 9, 1], ['hinge', 'Charnière (°)', 100, 135, 1], ['angle', 'Ouverture (°)', 40, 150, 1], ['claw', 'Épaisseur des serres', 0.5, 2, 0.01], ['hook', 'Crochet', 0, 1, 0.01], ['reach', 'Portée (° du pôle)', 4, 30, 1]],
   cage: [['poly', 'Polyèdre', POLYS], ['inflate', 'Gonflement de la membrane (× pression)', 0, 5, 0.01]],
 };
 
@@ -179,11 +180,21 @@ export function createUI({ recipe: getRecipe, render, on, nest }) {
         else fa.add(lv.arm, k, a, b, s).name(l).onFinishChange(rs);
       }
       if (lv.arm.kind !== 'cage') fa.add(lv.arm, 'order', ORDERS).name('Ordre d’ouverture').onChange(rs);
+      lv.arm.style ??= 0; lv.arm.cup ??= 'smooth'; lv.arm.ringStyle ??= 'torus'; lv.arm.alternate ??= false;
+      fa.add(lv.arm, 'style', STYLES).name('Allure').onChange(rs);
+      fa.add(lv.arm, 'cup', CUPS).name('Coupe (socle)').onChange(rs);
+      fa.add(lv.arm, 'ringStyle', RINGS).name('Couronne de charnières').onChange(rs);
+      fa.add(lv.arm, 'alternate').name('Matériaux alternés').onChange(rs);
       fa.add({ s: () => { lv.arm.seed = Math.floor(Math.random() * 1e6); rs(); } }, 's').name('⟳  Autre orientation');
       const fm = fa.addFolder('Matériaux').close();
       fm.add({ set: lv.armSet }, 'set', opts(SETS)).name('Jeu de matériaux').onChange((s) => on.armSet(i, s));
       fm.add(lv.armFinish, 'wear', 0, 1, 0.01).name('Usure').onChange(() => on.look(i));
       finishFolders(fm, lv.armFinish, () => on.look(i));
+      if (lv.accentFinish) {
+        const fs2 = fa.addFolder('Matériaux du socle (second jeu)').close();
+        fs2.add({ set: lv.accentSet }, 'set', opts(SETS)).name('Jeu de matériaux').onChange((s2) => on.accentSet(i, s2));
+        finishFolders(fs2, lv.accentFinish, () => on.look(i));
+      }
       // membrane
       const fmb = f.addFolder('Membrane : aspect').close();
       fmb.add(act, 'mem', opts(MEMBRANES)).name('Matière (nouvelle simulation)').onChange((k) => on.membrane(i, k));

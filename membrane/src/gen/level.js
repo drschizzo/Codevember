@@ -12,7 +12,7 @@ export function tearPattern(A, arm, M) {
   };
   switch (A.kind) {
     case 'iris': return { ...base, kind: 'star', twist: A.twist };
-    case 'calyx': case 'pod': case 'ribs': return { ...base, kind: 'star' };
+    case 'calyx': case 'pod': case 'ribs': case 'claws': return { ...base, kind: 'star' };
     case 'crown': return { ...base, kind: 'sites', sites: arm.sites, sectors: M.sectors ?? 4, pole: rad(13), end: rad(A.spread + 14) };
     case 'cage': return { ...base, kind: 'faces', faces: cageFaces(A, arm.parts[0]), end: Math.PI };
     default: return { ...base, kind: 'star' };
@@ -27,7 +27,8 @@ export function buildLevel({ arm: A, mem: M, sim: Q, inner }) {
     // (couronne : aucune épingle au pôle — la calotte doit céder d'elle-même)
     init: A.kind === 'crown' ? Math.max(M.init, 0.85) : M.init,
     // (cage : la membrane gonfle jusqu'à céder)
-    inflate: A.kind === 'cage' ? (A.inflate ?? 2) : 0,
+    // (les à-coups de pression accompagnent les assauts ; la cage, elle, gonfle)
+    inflate: A.kind === 'cage' ? (A.inflate ?? 2) : (A.surge ?? 0.4),
     pattern: tearPattern(A, arm, M),
   };
   const t0 = performance.now();
@@ -36,5 +37,5 @@ export function buildLevel({ arm: A, mem: M, sim: Q, inner }) {
   // paramètres de la simulation (lus par le GPU)
   prep.params = S;
   delete prep.params.pattern;
-  return { armature: arm.mesh, prep };
+  return { armature: arm.mesh, accent: arm.accent, prep };
 }
