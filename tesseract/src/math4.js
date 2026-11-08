@@ -175,6 +175,7 @@ const sameM = (A, B) => A.every((x, i) => Math.abs(x - B[i]) < 1e-9);
 export function randomMoves(rng, mode = 'mixed', allowDouble = true) {
   const pool = MOVES.filter((m) => allowDouble || m.b === undefined);
   if (mode === 'tour') { const tour = randomTour(rng, pool); if (tour) return tour; }
+  if (mode === 'short') { const tour = randomTour(rng, pool, 4); if (tour) return tour; const m = rng.pick(pool); return [m, m, m, m]; }
   if (mode === 'same') { const m = rng.pick(pool); return [m, m, m, m]; }
   for (let tries = 0; tries < 4000; tries++) {
     const L = rng.pick([3, 4, 4]);
@@ -207,12 +208,12 @@ export function innerCell(Q) {
   return cellOf(k, n[k]);
 }
 
-// Tour complet : huit mouvements dont le produit est l'identité et qui font
-// passer le cube intérieur par les huit cellules, une fois chacune, avant de
-// revenir à la première (voyage intérieur : on visite toutes les pièces).
+// Tour de n pièces (huit : le tour complet) : n mouvements dont le produit
+// est l'identité et qui font passer le cube intérieur par n cellules
+// distinctes, une fois chacune, avant de revenir à la première.
 // Recherche en profondeur, mouvements essayés dans un ordre tiré au hasard ;
 // null si elle n'aboutit pas assez vite.
-function randomTour(rng, pool, budget = 50000) {
+function randomTour(rng, pool, n = 8, budget = 50000) {
   const shuffled = () => {
     const a = [...pool];
     for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rng.next() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
@@ -221,7 +222,7 @@ function randomTour(rng, pool, budget = 50000) {
   const seq = [], visited = new Set([innerCell(ident().m)]);
   const search = (Q) => {
     if (--budget < 0) return false;
-    if (seq.length === 7) {
+    if (seq.length === n - 1) {
       const last = pool.find((m) => isIdent(mulM(moveMatrix(m), Q)));
       if (last) seq.push(last);
       return !!last;

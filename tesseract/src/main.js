@@ -25,7 +25,7 @@ const TARGET = 1.9; // rayon de l'objet à l'écran (unités du monde)
 const params = new URLSearchParams(location.search);
 const $ = (s) => document.querySelector(s);
 const randomSeed = () => Math.random().toString(36).slice(2, 8);
-const DEFAULT_SEED = 'bprpfo'; // (la scène de l'ouverture, sans ?seed=)
+const DEFAULT_SEED = 'czyt01'; // (la scène de l'ouverture, sans ?seed=)
 
 async function packRecipe(R) {
   const s = new Blob([JSON.stringify(R)]).stream().pipeThrough(new CompressionStream('deflate-raw'));
@@ -182,6 +182,7 @@ async function main() {
     lastPhase = ph;
     G.phase.value = ph;
     G.microDetail.value = RENDER.microDetail;
+    G.patina.value = RENDER.patina;
     G.roughFloor.value = RENDER.roughFloor;
     G.nestEnv.value = RENDER.nestEnv;
     G.crystalThick.value = RENDER.crystalThick;
@@ -214,10 +215,13 @@ async function main() {
     const focusOut = camera.position.length(), focusIn = tess.group.position.distanceTo(camera.position);
     const focusDist = (focusOut + (focusIn - focusOut) * kc) * RENDER.focus;
     // (dans les pièces, tout est proche : halo et flou de mouvement atténués,
-    // sinon l'image entière se voile)
+    // sinon l'image entière se voile ; reflets en espace écran aussi : des
+    // parois polies qui se reflètent l'une l'autre font une galerie des
+    // glaces où l'œil ne sait plus où se poser)
     post.update({
       ...RENDER, focus: focusDist, focusRange: RENDER.focusRange * TARGET * 2,
       halation: RENDER.halation * (1 - 0.7 * kc), dirt: RENDER.dirt * (1 - 0.6 * kc), motionBlur: RENDER.motionBlur * (1 - 0.5 * kc),
+      ssrIntensity: RENDER.ssrIntensity * (1 - 0.6 * kc),
     }, R);
     post.render();
   }

@@ -140,7 +140,7 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
       if (P.role === 'frame') { frameU ??= finishUniformsFor(fin); U = frameU; } else { U = finishUniformsFor(fin); }
       P.F = U;
       const tint = P.role === 'glass' ? U.outer.color2 : null;
-      P.mesh.material = buildPieceMaterial(fin, U, P.M, { shadowTint: tint, reveal: P.role === 'panel' || P.role === 'glass' ? reveals[P.c] : null, depth: P.role === 'frame', openness: P.role === 'content' ? reveals[P.c].openness : null, merge: P.role === 'frame' });
+      P.mesh.material = buildPieceMaterial(fin, U, P.M, { shadowTint: tint, reveal: P.role === 'panel' || P.role === 'glass' ? reveals[P.c] : null, depth: P.role === 'frame', openness: P.role === 'content' ? reveals[P.c].openness : null, merge: P.role === 'frame', patina: P.role === 'panel' });
       P.sig = signature(fin);
     }
     P.mesh.material.lightsNode = (P.role === 'content' ? objectLights : cellLights)[P.c];
@@ -169,7 +169,7 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
   }
 
   const frameSpec = () => ({ ...R.frame, finish: undefined, set: undefined });
-  const cellSpec = (c) => { const k = R.cells[c]; return { seed: k.seed, faces: k.faces, panelT: k.panelT, glassT: k.glassT, perf: k.perf, louvre: k.louvre, grid: k.grid, stud: k.stud, corr: k.corr, leaded: k.leaded, bars: k.bars, target: k.target }; };
+  const cellSpec = (c) => { const k = R.cells[c]; return { seed: k.seed, faces: k.faces, panelT: k.panelT, glassT: k.glassT, perf: k.perf, louvre: k.louvre, grid: k.grid, stud: k.stud, corr: k.corr, leaded: k.leaded, bars: k.bars, target: k.target, miura: k.miura, ripple: k.ripple, twist: k.twist, scales: k.scales, comb: k.comb, oculus: k.oculus }; };
   const contentSpec = (c) => { const k = R.cells[c].content; return { type: k.type, size: k.size }; };
 
   // Demande toutes les géométries ; la scène bascule d'un coup quand tout est arrivé.
@@ -301,12 +301,13 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
     const lerp = (a, b, t) => a + (b - a) * t;
     G.inflate.value = lerp(inflate0, 1, kp);
     G.d.value = lerp(R.proj.d, 2, kp);
-    // De l'intérieur, plus de coque à effacer : toutes les parois s'ajourent
-    // un peu, d'autant plus qu'elles sont loin de la pièce où l'on se tient
-    // (on voit les pièces voisines, et celles d'après par leurs ajours).
+    // De l'intérieur, plus de coque à effacer : les parois s'ajourent d'autant
+    // plus qu'elles sont loin de la pièce où l'on se tient (on voit les pièces
+    // d'après par les ajours des voisines) ; celles de la pièce restent
+    // pleines (w = −1) : seules les portes s'y ouvrent, l'œil sait où se poser.
     const shell = {
       amount: lerp(R.proj.reveal ?? 1, R.voyage?.see ?? 0.9, kp),
-      lo: lerp(R.proj.revealLo ?? -0.5, -2.2, kp), hi: lerp(R.proj.revealHi ?? 0.85, 2.6, kp),
+      lo: lerp(R.proj.revealLo ?? -0.5, -0.75, kp), hi: lerp(R.proj.revealHi ?? 0.85, 2.6, kp),
     };
     G.voyageK.value = kc; // (part du voyage, pour l'éclairage)
     if (reset) { G.dPrev.value = G.d.value; G.inflatePrev.value = G.inflate.value; }
@@ -355,7 +356,8 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
       const w = apply(T[cc], normalOf(cc))[3];
       const t = Math.min(1, Math.max(0, (w - 0.3) / 0.6)), shrink = 1 - Math.max(R.proj.reveal ?? 1, kp) * t * t * (3 - 2 * t);
       // (en voyage, l'objet se fait plus petit : la caméra passe tout près)
-      const vs = lerp(1, Math.min(1, (R.voyage?.objScale ?? 0.27) / con.size), kp);
+      // (et dès que la caméra entre : elle se pose tout près du centre)
+      const vs = lerp(1, Math.min(1, (R.voyage?.objScale ?? 0.27) / con.size), Math.max(kp, kc));
       const k3 = Math.max(1e-3, shrink) * vs;
       const rot = mul3(axisAngle(normv(con.axis), Math.PI * 2 * con.turns * ph), axisAngle(normv(con.tilt), 0.6)).map((x) => x * k3);
       const Aco = cellMatrix(T[cc], cc, inset, { m3: rot, t3: [0, 0, 0] });
@@ -392,7 +394,10 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
     if (!view) return;
     practicals.aim(pos);
     computeOpenings(openArrays, { ...view, viewPos: pos, camLocal: group.worldToLocal(_cam.copy(pos)) });
-    cellOpenness(view.layout, openArrays, openness).forEach((k, c) => { reveals[c].openness.value = k; });
+    // (dans les pièces du voyage, les parois restent pleines : un plancher,
+    // sinon pierres et cristaux, qui ne vivent que de reflets, virent au noir)
+    const floor = 0.55 * G.voyageK.value;
+    cellOpenness(view.layout, openArrays, openness).forEach((k, c) => { reveals[c].openness.value = Math.max(k, floor); });
   }
 
   // la chorégraphie, le patron ou les mouvements ont changé (rien à reconstruire)

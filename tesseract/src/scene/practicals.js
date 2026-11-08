@@ -78,11 +78,15 @@ export function createPracticals(group, scene) {
         L.position.copy(_v);
         L.color.set(V.practicalColor);
         if (kv > 0) L.color.lerp(_tint.setHSL((c * 0.137 + 0.05) % 1, 0.55, 0.62), 0.35 * kv);
-        L.intensity = V.practical * (1 - out) * scale * scale * size ** 1.6 * (1 + (VOYAGE_GAIN - 1) * kv);
+        const base = V.practical * (1 - out) * scale * scale * size ** 1.6;
+        L.intensity = base * (1 + (VOYAGE_GAIN - 1) * kv);
         L.distance = 2.4 * scale * size * (1 + 0.25 * kv);
-        const H = heroes[c];
+        // (la vedette ne prend pas le gain du voyage, fait pour les parois, et
+        // compense son rapprochement : l'objet reçoit autant que dehors ; sinon
+        // il recevait une dizaine de fois plus et brûlait, surtout clair)
+        const H = heroes[c], reach = HERO.far + (HERO.near - HERO.far) * kv;
         H.color.copy(L.color);
-        H.intensity = L.intensity * V.hero;
+        H.intensity = base * V.hero * (reach / HERO.far) ** 2;
       }
     },
     // place les lumières de vedette pour la caméra du film (position monde)
