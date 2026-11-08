@@ -124,7 +124,7 @@ class Template {
   }
   free(d) {
     if (!d) return;
-    for (const k of ['frames', 'meta', 'csr', 'bonds', 'lips']) d.gpu?.[k]?.destroy();
+    for (const k of ['frames', 'meta', 'csr', 'bonds']) d.gpu?.[k]?.destroy();
     d.geo?.dispose(); d.fib?.dispose(); d.arm?.dispose(); d.arm2?.dispose();
   }
   get ready() { return !!this.data && !this.pending && !!this.vessels; }
