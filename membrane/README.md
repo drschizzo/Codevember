@@ -71,12 +71,13 @@ Un fil par lien décide des ruptures : étirement autour du lien, seuil propre �
 
 Une couche de 20 000 particules (120 images, 16 sous-pas, 6 passes) se simule en moins de 3 s.
 
-**L'enregistrement et la pose.** Le GPU enregistre la position de chaque particule à chaque image. À l'affichage, un autre shader de calcul pose chaque couche visible :
-- positions interpolées, et position à l'image précédente (vecteurs vitesse) ;
-- normales soudées à travers les coutures encore intactes ;
+**L'enregistrement et la pose.** Le GPU enregistre la position de chaque particule à chaque image, quantifiée sur 16 bits (un demi-centième d'arête). À l'affichage, un autre shader de calcul pose chaque couche visible :
+- positions interpolées par une spline de Catmull-Rom (au ralenti, la vitesse reste continue d'une image enregistrée à l'autre), et position à l'image précédente (vecteurs vitesse) ;
+- normales soudées à travers les coutures encore intactes, puis lissées sur le premier anneau (le maillage simulé est volontairement désordonné : sans ce lissage, le reflet dessinerait ses arêtes) ;
+- courbure, dont le matériau tire l'anticrénelage du reflet ;
 - dilatation de surface J : la membrane s'amincit en 1/J ;
 - endommagement près des déchirures ;
-- sommets des lèvres : un demi-tube autour du bord libre, replié tant que la couture tient.
+- sommets des lèvres : une demi-ellipse de cinq sommets autour du bord libre, repliée tant que la couture tient.
 
 Le rendu lit ces tampons directement. Les instants de rupture et de claquage des fibrilles sont calculés une fois, sur le GPU.
 
@@ -99,7 +100,7 @@ Les épingles de la couronne portent une perle, un disque (tampon) ou une pointe
 
 ## Rendu (`src/scene/`)
 
-**La membrane** (`membrane.js`). Le vertex shader lit la simulation (deux images interpolées) et place les milieux d'arête sur le patch cubique des triangles PN : les silhouettes et les lambeaux enroulés restent courbes, quatre fois plus fins que le maillage simulé. La position à l'image précédente donne les vecteurs vitesse.
+**La membrane** (`membrane.js`, `gen/tess.js`). Chaque triangle simulé est découpé en n² triangles, que le vertex shader pose sur le patch cubique des triangles PN défini par les positions et normales de ses trois particules, normale quadratique comprise : les silhouettes et les lambeaux enroulés restent courbes. Deux niveaux de détail : ×16 pour les couches proches, ×4 pour les lointaines ; le passage de l'un à l'autre est invisible. La position à l'image précédente donne les vecteurs vitesse.
 
 La matière est une couche mince diffusante :
 - l'épaisseur relative vaut irrégularité × vaisseaux × fibres / J ;
@@ -118,7 +119,7 @@ Le modèle physique s'ajoute par-dessus :
 - irisation, dont l'épaisseur du film suit 1/J : la couleur change quand la bulle s'étire ;
 - feuille de métal : l'or battu transmet le vert, froissé en permanence ;
 - plis de compression, fibres du vélin et de la soie ;
-- anticrénelage spéculaire.
+- anticrénelage spéculaire : la variance de la normale dans le pixel vient du relief et de la courbure par sommet, continue d'un triangle à l'autre (les dérivées écran de la normale interpolée, constantes par triangle, dessineraient les facettes dans le reflet).
 
 **Les fibrilles.** Elles sont construites dans le vertex shader. Le filament s'étire et s'amincit à volume constant, ploie, puis claque ; chaque moitié se rétracte vers sa lèvre en oscillant et s'épaissit.
 
@@ -159,7 +160,7 @@ Une scène tire une matière dominante, parfois une seconde, et des armatures di
 
 - **Préparation** d'une couche dans le worker : 0,4 s pour 20 000 particules (mesuré dans Node).
 - **Simulation** sur le GPU (160 images, 16 sous-pas, 6 passes) : environ 5 s par couche ; une scène de trois couches est prête en 15 à 20 s, mesurée dans un panneau de navigateur masqué, donc ralenti.
-- **Rendu** : environ 24 ms par image à 1,8 Mpx, poses, copies de l'image et de la profondeur comprises.
-- **Mémoire** : les images enregistrées pèsent environ 38 Mo par couche différente.
+- **Rendu** : environ 27 ms par image à 1,8 Mpx (26 sans le maillage fin des couches proches), poses, copies de l'image et de la profondeur comprises, mesuré dans un panneau de navigateur. Les copies de l'image (une par face de membrane, mipmaps comprises) en prennent environ 6 ; celles de la profondeur, environ 1 (« Flou selon la profondeur »).
+- **Mémoire** : les images enregistrées pèsent environ 25 Mo par couche différente.
 
 [![Membrane](docs/capture.jpg)](https://drschizzo.github.io/Codevember/membrane/)
