@@ -18,6 +18,7 @@ export const G = {
   // les deux portes du voyage (centre projeté, ouverture) : la précédente se
   // referme, la suivante s'ouvre avant la traversée
   voyageK: uniform(0),
+  merge: uniform(0), frameW: uniform(0.06), // fusion des ossatures, tesseract plié (voir project.js)
   door0: uniform(new THREE.Vector4(0, 0, 50, 0)), door1: uniform(new THREE.Vector4(0, 0, 50, 0)),
   // profondeur 4D (w) lue en couleur sur l'ossature et le fantôme : froid loin
   // de l'œil 4D, chaud tout près

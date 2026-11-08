@@ -28,7 +28,7 @@ import {
 } from 'three/tsl';
 import { FINISH_KEYS } from '../finishes.js';
 import { NOISE_PERIOD } from '../gen/noisevol.js';
-import { projectPosition, localScale, revealMask, depthW, depthColor } from './project.js';
+import { projectPosition, localScale, revealMask, depthW, depthColor, frameMerge, panelMerge } from './project.js';
 import { G } from './globals.js';
 
 const PI = Math.PI;
@@ -296,7 +296,7 @@ export const stableVelocity = () => mrt({ velocity: select(length(velocity.xy).l
 // finish : { outer, inner, edge, wear } (finitions complètes) ; U : leurs
 // uniformes ({ outer, inner, edge, wear }) ; M : uniformes du maillage
 // (matrice 4D, voir project.js) ; opts.shadowTint : ombre colorée (verre)
-export function buildPieceMaterial(finish, U, M, { shadowTint = null, reveal = false, depth = false, content = false } = {}) {
+export function buildPieceMaterial(finish, U, M, { shadowTint = null, reveal = false, depth = false, content = false, merge = false } = {}) {
   const fins = [finish.outer, finish.inner, finish.edge];
   const any = (pred) => fins.some(pred);
   const F = {
@@ -364,8 +364,9 @@ export function buildPieceMaterial(finish, U, M, { shadowTint = null, reveal = f
   const get = (k) => S.get(k);
 
   const m = new THREE.MeshPhysicalNodeMaterial({ side: THREE.DoubleSide });
-  m.positionNode = projectPosition(M, true, reveal);
-  m.castShadowPositionNode = projectPosition(M, false, reveal);
+  const pre = merge ? frameMerge(M) : reveal ? panelMerge : null;
+  m.positionNode = projectPosition(M, true, reveal, pre);
+  m.castShadowPositionNode = projectPosition(M, false, reveal, pre);
   if (reveal) { const mask = revealMask(attribute('pat', 'vec3')); m.maskNode = mask; m.maskShadowNode = mask; }
   m.colorNode = vec4(get('color'), 1);
   m.metalnessNode = get('metal');

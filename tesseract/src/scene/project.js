@@ -27,7 +27,7 @@
 import * as THREE from 'three/webgpu';
 import {
   Fn, uniform, vec3, vec4, float, length, cross, normalize, positionGeometry, normalLocal, tangentLocal, positionPrevious,
-  varyingProperty, abs, dot, pow, attribute, smoothstep, fract, vec2, mat2, modelWorldMatrix, max, mix,
+  varyingProperty, abs, dot, pow, attribute, smoothstep, fract, vec2, mat2, modelWorldMatrix, max, mix, step, sign,
 } from 'three/tsl';
 import { G } from './globals.js';
 
@@ -65,9 +65,42 @@ export function revealMask(pat) {
   return d.greaterThan(revealOpen.mul(0.78));
 }
 
-export function projectPosition(U, full, reveal = false) {
+// Fusion des ossatures (voir gen/cell.js, buildFrame) : une fois le
+// tesseract plié, chaque arête est partagée par trois cellules et chaque
+// sommet par quatre. Une seule garde sa barre (poids 1), recentrée sur l'arête
+// exacte ; les autres se rétractent dans leur axe (poids → 0). U.bars : poids
+// des douze barres et des huit nœuds de la cellule ; G.merge : part de fusion.
+export function frameMerge(U) {
+  return (l) => {
+    const anc = attribute('anchor', 'vec3');
+    const m = abs(anc);
+    const free = vec3(step(5, m.x), step(5, m.y), step(5, m.z)); // (axe d'une barre)
+    const isBar = free.x.add(free.y).add(free.z);
+    const sg = step(0, anc);
+    const id = mix(sg.x.mul(4).add(sg.y.mul(2)).add(sg.z).add(12), dot(m, free).sub(10), isBar);
+    const wgt = U.bars.element(id.add(0.5).toInt());
+    const fixed = vec3(1).sub(free);
+    const ctr = anc.mul(fixed).add(l.mul(free));
+    const shift = sign(anc).mul(fixed).sub(anc.mul(fixed)).mul(G.merge);
+    // (fusionnées, les barres s'épaississent un peu : recentrées sur l'arête,
+    // elles dépassent ainsi des panneaux qui les bordent)
+    return ctr.add(l.sub(ctr).mul(wgt.mul(G.merge.mul(0.2).add(1)))).add(shift);
+  };
+}
+
+// Panneaux, une fois les ossatures fusionnées : ils se resserrent dans leur
+// plan (autour du centre de leur face, l'attribut anchor) et flottent dans
+// l'ossature, qui reste visible tout autour.
+export const panelMerge = (l) => {
+  const anc = attribute('anchor', 'vec3');
+  const nm = step(0.5, abs(anc)); // (axe normal de la face)
+  const k = float(1).sub(G.merge.mul(G.frameW).mul(2.6));
+  return l.mul(nm.add(nm.oneMinus().mul(k)));
+};
+
+export function projectPosition(U, full, reveal = false, pre = null) {
   return Fn(() => {
-    const l = positionGeometry;
+    const l = pre ? pre(positionGeometry).toVar('lMerged') : positionGeometry;
     if (reveal) {
       const anc = attribute('anchor', 'vec3');
       const w = U.A.mul(vec4(anc, 1)).w;
