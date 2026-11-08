@@ -186,6 +186,8 @@ export function buildArmature(spec) {
   const sites = [];
   const R = A.radius ?? 0.955, T = A.thick, thH = rad(A.hinge);
   const dur = A.dur;
+  // assauts (voir kin.js)
+  const st = { n: A.struggle ?? 0, a: A.strAmp ?? 0.35, f: (A.struggle ?? 0) > 0 ? (A.strFrac ?? 0.5) : 0 };
   const stagger = (i, n) => {
     const order = A.order === 'spiral' ? i / n : A.order === 'random' ? rng.next() : A.order === 'alternate' ? (i % 2) * 0.5 : 0;
     return order * A.stagger;
@@ -197,7 +199,7 @@ export function buildArmature(spec) {
     for (let i = 0; i < n; i++) {
       const phi = phi0 + (2 * PI * i) / n;
       // (la nervure reste sous la membrane : la lame est d'autant plus basse)
-      const L = { phi, th0: rad(2.5), th1: thH, w, tip: A.tip, twist: kind === 'iris' ? A.twist : 0, R: R - A.ridge * T * 0.75, T, ridge: A.ridge, louver: kind === 'iris' ? T * 2.6 : 0 };
+      const L = { phi, th0: rad(2.5), th1: thH, w, tip: A.tip, twist: kind === 'iris' ? A.twist : 0, R: R - A.ridge * T * 0.75, T, ridge: A.ridge, louver: kind === 'iris' ? T * 3.4 : 0 };
       const b = sph(thH, phi + L.twist * (thH - L.th0), L.R - T * 0.5);
       const tip = sph(L.th0 + 0.1, phi, R);
       const a = hingeAxis(b, tip, kind === 'iris' ? A.tilt : 0);
@@ -343,8 +345,8 @@ export function buildArmature(spec) {
   if (A.kind !== 'cage') torusMesh(B, ringZ, ringR, T * 0.75, EDGE);
   const mesh = B.out();
   return {
-    mesh, dur, phi0, sites,
-    parts: parts.map(({ b, a, th, ext, dir, sc, mode, delay, cols, bound, verts }) => ({ b, a, th, ext, dir, sc, mode, delay, cols, bound, verts })),
+    mesh, dur, phi0, sites, st,
+    parts: parts.map(({ b, a, th, ext, dir, sc, mode, delay, cols, bound, verts }) => ({ b, a, th, ext, dir, sc, mode, delay, cols, bound, verts, st })),
   };
 }
 

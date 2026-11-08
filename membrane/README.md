@@ -42,7 +42,11 @@ Une retouche d'aspect est immédiate. Une retouche de comportement ou d'armature
 
 **L'éclosion.** Elle se joue entre *x* = début et *x* = fin. La simulation, enregistrée image par image dans un tampon du GPU, et l'armature avancent avec *x*. Le ralenti autour de la déchirure est une déformation du temps τ(*t*) dont la vitesse reste positive et continue, et qui retombe sur ses pieds à chaque couche.
 
-**Rien ne flotte.** Chaque œuf repose dans une coupe, au centre de l'armature de la couche précédente. Une tige relie cette coupe au pôle arrière de la membrane, que la coupe de la couche précédente reçoit à son tour. Des rayons relient la coupe à la couronne de charnières (ou aux sommets bas de la cage). Toutes les couches tournent à la même vitesse : leur orientation relative est fixe, rien ne glisse. Un contrôle automatique vérifie, à plusieurs instants de l'ouverture, qu'aucune pièce ne pénètre une autre ni l'œuf suivant. C'est ce qui a conduit à monter les lames de l'iris en persienne, à les ouvrir ensemble et à limiter leur rotation.
+**La résistance.** Avant de céder, la membrane encaisse. L'armature mène de deux à quatre assauts, de plus en plus forts : elle pousse vivement, recule plus lentement, et repousse. Pour la cage, ce sont des à-coups de pression. Pendant les assauts, la membrane se tend, bombe, blanchit, puis revient ; elle ne peut pas se rompre. La rupture vient avec la poussée finale, quand la matière se fatigue. Les assauts sont écrits une seule fois et reproduits à l'identique dans la cinématique (JS), le vertex shader et la simulation GPU. Le ralenti de la chorégraphie tombe sur l'instant de la rupture.
+
+**Pas de saut d'éclairage.** Une armature qui passe derrière la caméra s'efface en fondu, par un tramage renouvelé à chaque image et lissé par l'anticrénelage temporel. Son ombre s'efface avec elle : aucune ombre, aucune lumière vue au travers des membranes ne disparaît d'un coup. La luminance moyenne de l'image, mesurée sur toute une boucle, varie sans marche.
+
+**Rien ne flotte.** Chaque œuf repose dans une coupe, au centre de l'armature de la couche précédente. Une tige relie cette coupe au pôle arrière de la membrane, que la coupe de la couche précédente reçoit à son tour. Des rayons relient la coupe à la couronne de charnières (ou aux sommets bas de la cage). Toutes les couches tournent à la même vitesse : leur orientation relative est fixe, rien ne glisse. Les pièces qui gonflent le font autour de leur charnière, et restent donc attachées. Un contrôle automatique vérifie, à plusieurs instants de l'ouverture, qu'aucune pièce ne pénètre une autre ni l'œuf suivant. C'est ce qui a conduit à monter les lames de l'iris en persienne, à les ouvrir ensemble et à limiter leur rotation.
 
 **Les instances.** M emplacements, M multiple de N ; l'emplacement *j* montre toujours le modèle *j* mod N. Il ne change de couche qu'en passant de derrière la caméra au cœur lumineux, invisible aux deux bouts : jamais de changement de géométrie, jamais de saut visible.
 
@@ -147,7 +151,7 @@ Une scène tire une matière dominante, parfois une seconde, et des armatures di
 ## Performances
 
 - **Préparation** d'une couche dans le worker : 0,4 s pour 20 000 particules (mesuré dans Node).
-- **Simulation** sur le GPU : 2,6 à 2,8 s par couche ; une scène de trois couches est prête en 14 s environ, mesurée dans un panneau de navigateur masqué, donc ralenti.
+- **Simulation** sur le GPU (160 images, 16 sous-pas, 6 passes) : environ 5 s par couche ; une scène de trois couches est prête en 15 à 20 s, mesurée dans un panneau de navigateur masqué, donc ralenti.
 - **Rendu** : environ 24 ms par image à 1,8 Mpx, poses, copies de l'image et de la profondeur comprises.
 - **Mémoire** : les images enregistrées pèsent environ 38 Mo par couche différente.
 

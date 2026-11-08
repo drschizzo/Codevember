@@ -1,7 +1,8 @@
 // Cinématique de l'armature : chaque pièce est rigide (à un facteur d'échelle
 // près) et suit, au temps normalisé t ∈ [0, 1] de l'éclosion,
 //
-//   q  = p·(1 + sc·e_s) + dir·ext·e_x        (déploiement : gonflement, extension)
+//   q  = b + (p − b)·(1 + sc·e_s) + dir·ext·e_x   (déploiement : gonflement autour
+//        de la charnière — la pièce reste attachée —, extension)
 //   p' = b + R(a, th·e_r)·(q − b)            (ouverture autour d'une charnière)
 //
 // u = clamp((t − delay) / dur) ; e(u) = 6u⁵ − 15u⁴ + 10u³ (départ et arrivée
@@ -14,8 +15,20 @@
 
 export const ease = (u) => { u = u < 0 ? 0 : u > 1 ? 1 : u; return u * u * u * (u * (u * 6 - 15) + 10); };
 
+// Les assauts : avant de s'ouvrir pour de bon, l'armature pousse n fois, de
+// plus en plus fort (amplitude a·(0,45 + 0,55·k/n), en temps « ouverture »),
+// et recule entre deux — poussée vive, retour plus lent. Ils occupent la
+// fraction f du déploiement ; l'ouverture finale prend le reste.
+//   S = { n, a, f } ; n = 0 : pas d'assaut.
+export function struggle(u, S) {
+  if (!S || S.n <= 0 || S.f <= 0) return u;
+  if (u >= S.f) return (u - S.f) / (1 - S.f);
+  const w = (u / S.f) * S.n, k = Math.floor(w), v = w - k;
+  return S.a * (0.45 + (0.55 * (k + 1)) / S.n) * Math.sin(Math.PI * v ** 0.75) ** 2;
+}
+
 export function partEases(P, t, dur) {
-  const u = Math.min(1, Math.max(0, (t - P.delay) / dur));
+  const u = struggle(Math.min(1, Math.max(0, (t - P.delay) / dur)), P.st);
   if (P.mode === 1) { const ex = ease(u / 0.45); return { r: ease((u - 0.35) / 0.65), x: ex, s: ex }; }
   const e = ease(u);
   return { r: e, x: e, s: e };
@@ -32,8 +45,8 @@ export function partPose(P, t, dur) {
     z * x * k - y * s, z * y * k + x * s, c + z * z * k,
   ];
   const sig = 1 + P.sc * E.s;
-  const d = [P.dir[0] * P.ext * E.x - P.b[0], P.dir[1] * P.ext * E.x - P.b[1], P.dir[2] * P.ext * E.x - P.b[2]];
-  // p' = R·(σp + d) + b = (σR)·p + (R·d + b)
+  const d = [P.dir[0] * P.ext * E.x - P.b[0] * sig, P.dir[1] * P.ext * E.x - P.b[1] * sig, P.dir[2] * P.ext * E.x - P.b[2] * sig];
+  // p' = R·(σ(p − b) + dir·ext) + b = (σR)·p + (R·d + b), d = dir·ext − σb
   const M = R.map((v) => v * sig);
   const T = [
     R[0] * d[0] + R[1] * d[1] + R[2] * d[2] + P.b[0],

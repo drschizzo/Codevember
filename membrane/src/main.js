@@ -145,6 +145,7 @@ async function main() {
     const N = R.levels.length;
     const tau = cycle * N + choreo(ph * N, R.chor);
     G.phase.value = ph;
+    G.frame.value = (G.frame.value + 1) % 65536;
     G.microDetail.value = RENDER.microDetail;
     G.roughFloor.value = RENDER.roughFloor;
     G.backdropBlur.value = RENDER.backdropBlur;

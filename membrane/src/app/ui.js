@@ -58,7 +58,7 @@ const PHYS = [
 ];
 // Armature (nouvelle simulation)
 const ARM = {
-  common: [['dur', 'Durée de l’ouverture', 0.2, 0.9, 0.01], ['stagger', 'Décalage entre pièces', 0, 0.4, 0.01], ['jitter', 'Irrégularité des angles', 0, 0.4, 0.01], ['thick', 'Épaisseur', 0.01, 0.06, 0.001]],
+  common: [['struggle', 'Assauts avant la rupture', 0, 6, 1], ['strAmp', 'Assauts : force', 0.05, 0.8, 0.01], ['strFrac', 'Assauts : part du déploiement', 0.1, 0.8, 0.01], ['dur', 'Durée du déploiement', 0.2, 0.95, 0.01], ['stagger', 'Décalage entre pièces', 0, 0.4, 0.01], ['jitter', 'Irrégularité des angles', 0, 0.4, 0.01], ['thick', 'Épaisseur', 0.01, 0.06, 0.001]],
   calyx: [['n', 'Lames', 2, 10, 1], ['width', 'Largeur', 0.5, 0.99, 0.01], ['tip', 'Pointe', 0.05, 0.8, 0.01], ['hinge', 'Charnière (°)', 95, 140, 1], ['angle', 'Ouverture (°)', 40, 150, 1], ['ridge', 'Nervure', 0, 3, 0.01]],
   iris: [['n', 'Lames', 3, 12, 1], ['width', 'Largeur', 0.5, 0.99, 0.01], ['tip', 'Pointe', 0.05, 0.8, 0.01], ['hinge', 'Charnière (°)', 95, 140, 1], ['angle', 'Ouverture (°)', 40, 150, 1], ['twist', 'Vrille', -2, 2, 0.01], ['tilt', 'Axe : de la tangente (0) au rayon (1,57)', 0, 1.57, 0.01], ['swell', 'Gonflement', 0, 0.4, 0.01], ['ridge', 'Nervure', 0, 3, 0.01]],
   pod: [['n', 'Mâchoires', 2, 4, 1], ['width', 'Largeur', 0.6, 0.99, 0.01], ['tip', 'Pointe', 0.02, 0.6, 0.01], ['hinge', 'Charnière (°)', 100, 145, 1], ['angle', 'Ouverture (°)', 40, 150, 1], ['ridge', 'Nervure', 0, 3, 0.01]],

@@ -33,16 +33,17 @@ export const POLYS = { 'Icosaèdre': 'ico', 'Dodécaèdre': 'dodeca', 'Octaèdre
 export function makeArmature(kind, rng) {
   const A = {
     kind, seed: rng.int(0, 1e6), n: 5, width: 0.88, tip: 0.3, hinge: 120, angle: 110, thick: 0.03, ridge: 1.2,
-    dur: r2(rng.range(0.42, 0.62)), stagger: r2(rng.range(0, 0.22)), order: rng.pick(['none', 'spiral', 'spiral', 'alternate', 'random']), jitter: r2(rng.range(0, 0.15)),
+    // déploiement (fraction de l'éclosion) : assauts puis ouverture
+    dur: r2(rng.range(0.62, 0.78)), struggle: rng.int(2, 4), strAmp: r2(rng.range(0.28, 0.42)), strFrac: r2(rng.range(0.5, 0.62)), stagger: r2(rng.range(0, 0.22)), order: rng.pick(['none', 'spiral', 'spiral', 'alternate', 'random']), jitter: r2(rng.range(0, 0.15)),
     twist: 0, tilt: 0, spread: 75, ext: 0.3, poly: 'ico', swell: 0, head: 1.4,
   };
   switch (kind) {
     case 'calyx': Object.assign(A, { n: rng.int(3, 8), width: r2(rng.range(0.78, 0.95)), tip: r2(rng.range(0.18, 0.45)), hinge: rng.int(112, 128), angle: rng.int(95, 132), thick: r3(rng.range(0.022, 0.04)), ridge: r2(rng.range(0, 1.8)) }); break;
-    case 'iris': Object.assign(A, { n: rng.int(5, 9), width: r2(rng.range(0.85, 0.98)), tip: r2(rng.range(0.15, 0.3)), hinge: rng.int(112, 124), angle: rng.int(26, 32), thick: r3(rng.range(0.02, 0.032)), ridge: r2(rng.range(0, 1)), twist: r2(rng.sign() * rng.range(0.4, 1.0)), tilt: r2(rng.range(1.32, 1.45)), swell: r2(rng.range(0.15, 0.25)), stagger: 0 }); break; // (un diaphragme : toutes les lames ensemble)
+    case 'iris': Object.assign(A, { n: rng.int(5, 9), width: r2(rng.range(0.84, 0.93)), tip: r2(rng.range(0.15, 0.3)), hinge: rng.int(112, 124), angle: rng.int(24, 28), thick: r3(rng.range(0.02, 0.032)), ridge: r2(rng.range(0, 1)), twist: r2(rng.sign() * rng.range(0.4, 1.0)), tilt: r2(rng.range(1.32, 1.45)), swell: r2(rng.range(0, 0.04)), stagger: 0 }); break; // (un diaphragme : toutes les lames ensemble)
     case 'pod': Object.assign(A, { n: rng.int(2, 3), width: r2(rng.range(0.9, 0.97)), tip: r2(rng.range(0.08, 0.2)), hinge: rng.int(118, 132), angle: rng.int(100, 125), thick: r3(rng.range(0.035, 0.05)), ridge: r2(rng.range(1, 2.2)), stagger: r2(rng.range(0, 0.08)) }); break;
     case 'ribs': Object.assign(A, { n: rng.int(8, 16), hinge: rng.int(112, 126), angle: rng.int(95, 125), thick: r3(rng.range(0.02, 0.03)) }); break;
     case 'crown': Object.assign(A, { n: rng.int(10, 22), spread: rng.int(50, 75), ext: r2(rng.range(0.12, 0.22)), angle: rng.int(45, 85), thick: r3(rng.range(0.022, 0.034)), hinge: rng.int(108, 120), head: r2(rng.range(1.3, 2)) }); break;
-    case 'cage': Object.assign(A, { poly: rng.pick(['ico', 'ico', 'dodeca', 'octa']), inflate: r2(rng.range(1.5, 2.6)), thick: r3(rng.range(0.022, 0.036)), hinge: 180, dur: r2(rng.range(0.4, 0.6)), stagger: 0 }); break;
+    case 'cage': Object.assign(A, { poly: rng.pick(['ico', 'ico', 'dodeca', 'octa']), inflate: r2(rng.range(1.5, 2.6)), thick: r3(rng.range(0.022, 0.036)), hinge: 180, dur: r2(rng.range(0.6, 0.75)), stagger: 0 }); break;
     default: break;
   }
   return A;
@@ -128,7 +129,7 @@ export function makeLevel(rng, mood, opts = {}) {
   };
 }
 
-export const SIM_DEFAULTS = { res: 44, frames: 120, substeps: 16, duration: 2.4, settle: 50, iters: 4 };
+export const SIM_DEFAULTS = { res: 44, frames: 160, substeps: 16, duration: 3.6, settle: 50, iters: 6 };
 
 // ── Scène ────────────────────────────────────────────────────────────────────
 export function generate(seed, opts = {}) {
@@ -151,7 +152,7 @@ export function generate(seed, opts = {}) {
   const R = {
     v: VERSION, seed, mood,
     loop: { beat: r2(rng.range(6.5, 9)) }, // secondes par couche
-    nest: { ratio: r2(rng.range(0.42, 0.5)), open: r2(rng.range(1.75, 2.05)), end: -0.35, spin: r2(rng.sign() * rng.range(0.15, 0.45)), fade: [-0.95, -0.2] },
+    nest: { ratio: r2(rng.range(0.42, 0.5)), open: r2(rng.range(2.25, 2.5)), end: -0.35, spin: r2(rng.sign() * rng.range(0.15, 0.45)), fade: [-0.95, -0.2] },
     chor: { slow: r2(rng.range(0.35, 0.75)), width: r2(rng.range(0.3, 0.45)), at: 1.45 },
     camera: { fov: r2(rng.range(34, 44)), sway: r2(rng.range(0.1, 0.5)), roll: r2(rng.range(-0.2, 0.2)), rollTurns: rng.pick([0, 0, 1, -1]) },
     sim: { ...SIM_DEFAULTS },
@@ -163,6 +164,9 @@ export function generate(seed, opts = {}) {
     bg: M.bg,
     fog: { near: 2.2, far: 7 },
   };
+  // le ralenti tombe sur la rupture (fin des assauts, en moyenne)
+  const tTear = levels.reduce((s, l) => s + l.arm.dur * (l.arm.strFrac ?? 0) + 0.05, 0) / levels.length;
+  R.chor.at = r2(R.nest.open - (R.nest.open - R.nest.end) * tTear);
   return R;
 }
 

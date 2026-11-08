@@ -102,7 +102,8 @@ class Template {
   // la préparation est arrivée du worker : simulation sur le GPU
   async commit(out, job) {
     const n = this.nest, dev = n.renderer.backend.device;
-    const prep = out.prep, S = { ...prep.params, armDur: this.lv.arm.dur };
+    const prep = out.prep, a = this.lv.arm, ns = a.struggle ?? 0;
+    const S = { ...prep.params, armDur: a.dur, st: { n: ns, a: a.strAmp ?? 0.35, f: ns > 0 ? (a.strFrac ?? 0.5) : 0 } };
     const fibT = n.storageAttr(Math.max(1, prep.nf));
     const t0 = performance.now();
     const gpu = await simulate(dev, prep, S, prep.nf ? n.gpuBuffer(fibT) : null, (k) => { this.simProgress = k; n.onProgress?.(); });
@@ -133,7 +134,7 @@ class Slot {
     this.nest = nest; this.j = j;
     this.group = new THREE.Group();
     this.S = { f: uniform(0), fPrev: uniform(0), vis: uniform(1) };
-    this.RU = { t: uniform(0), tPrev: uniform(0), dur: uniform(0.5), seedOff: uniform(new THREE.Vector3()) };
+    this.RU = { t: uniform(0), tPrev: uniform(0), dur: uniform(0.5), vis: uniform(1), sn: uniform(0), sa: uniform(0), sf: uniform(0), seedOff: uniform(new THREE.Vector3()) };
     this.meshes = {};
     this.built = '';
     this.lastX = null;
@@ -161,6 +162,7 @@ class Slot {
     this.poser = createPoser(n.renderer.backend.device, d.gpu, d.prep, d.S, { cur: n.gpuBuffer(this.pose.cur), prv: n.gpuBuffer(this.pose.prv), nor: n.gpuBuffer(this.pose.nor) });
     const PT = { ...this.pose, fibT: d.fibT, nf: d.prep.nf };
     this.RU.dur.value = T.lv.arm.dur;
+    { const a = T.lv.arm, n = a.struggle ?? 0; this.RU.sn.value = n; this.RU.sa.value = a.strAmp ?? 0.35; this.RU.sf.value = n > 0 ? (a.strFrac ?? 0.5) : 0; }
     this.RU.seedOff.value.set(this.j * 1.37, T.index * 2.11, 0.5);
     const mk = (geo, mat, order, shadow) => {
       const m = new THREE.Mesh(geo, mat);
@@ -262,7 +264,10 @@ export function createNest(scene, gen, renderer) {
       // de l'intérieur vers l'extérieur
       me.back.renderOrder = 10 + (x - XMIN);
       me.front.renderOrder = 100 + (XMAX - x);
-      me.arm.layers.mask = MAIN | (x > -0.8 ? KEY | BACK : 0);
+      // l'armature s'efface (avec son ombre) quand sa couche passe derrière la
+      // caméra : aucune ombre ne disparaît d'un coup
+      sl.RU.vis.value = ss(-1.75, -0.95, x) * ss(XMAX - 0.3, XMAX - 0.9, x);
+      me.arm.layers.mask = sl.RU.vis.value > 0.001 ? MAIN | KEY | BACK : 0;
       if (me.fib) me.fib.layers.mask = sOf(x) > 0 && memOn ? MAIN : 0;
       if (memOn) poses.push([sl, sl.S.f.value, sl.S.fPrev.value]);
     }
