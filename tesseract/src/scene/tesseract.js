@@ -31,9 +31,43 @@ function toGeometry(o) {
   g.setAttribute('anchor', new THREE.BufferAttribute(o.anchor, 3));
   g.setAttribute('span', new THREE.BufferAttribute(o.span, 1));
   g.setIndex(new THREE.BufferAttribute(o.index, 1));
-  // (positions calculées dans le shader : boîte englobante large, et pas d'élimination)
-  g.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 50);
   return g;
+}
+// Géométrie qui partage les tampons d'une autre : les huit ossatures ont les
+// mêmes sommets (seule leur matrice 4D diffère). Libérer l'une libère les
+// tampons de toutes : elles sont toujours remplacées ensemble, dans la même
+// tâche, avant l'image suivante.
+function shareGeometry(src) {
+  const g = new THREE.BufferGeometry();
+  for (const [k, a] of Object.entries(src.attributes)) g.setAttribute(k, a);
+  g.setIndex(src.index);
+  return g;
+}
+
+// Sphère englobante d'une cellule dans l'espace projeté (les positions sont
+// calculées dans le shader : three ne peut pas la déduire des sommets). Elle
+// est tirée de 27 points de la cellule (sommets, milieux des arêtes et des
+// faces, centre) et élargie pour les arcs du gonflement ; une cellule qui
+// touche presque l'œil 4D se projette à l'infini : elle n'est jamais éliminée.
+const SAMPLES = [];
+for (const x of [-1, 0, 1]) for (const y of [-1, 0, 1]) for (const z of [-1, 0, 1]) SAMPLES.push([x, y, z]);
+const BOUNDS_MARGIN = 1.25, NEAR_EYE = 0.35;
+function cellSphere(A, d, inflate, out) {
+  let cx = 0, cy = 0, cz = 0;
+  const pts = SAMPLES.map((l) => {
+    const y = [0, 1, 2, 3].map((r) => A[r * 4] * l[0] + A[r * 4 + 1] * l[1] + A[r * 4 + 2] * l[2] + A[r * 4 + 3]);
+    const k = 1 + inflate * (2 / (Math.hypot(...y) || 1) - 1);
+    if (d - y[3] * k < NEAR_EYE) return null;
+    const p = project(y, d, inflate);
+    cx += p[0]; cy += p[1]; cz += p[2];
+    return p;
+  });
+  if (pts.includes(null)) { out.center.set(0, 0, 0); out.radius = Infinity; return; }
+  const n = pts.length;
+  out.center.set(cx / n, cy / n, cz / n);
+  let r = 0;
+  for (const p of pts) r = Math.max(r, Math.hypot(p[0] - out.center.x, p[1] - out.center.y, p[2] - out.center.z));
+  out.radius = r * BOUNDS_MARGIN;
 }
 
 // rotation 3D (ligne-major) d'axe a et d'angle t
@@ -52,9 +86,12 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
 
   // pièce : un maillage, ses uniformes 4D, son matériau
   const pieces = [];
+  // sphère englobante de chaque cellule (espace projeté), partagée par ses
+  // pièces : three élimine ainsi celles qui sortent du champ, pour la caméra
+  // comme pour la carte d'ombre
+  const bounds = Array.from({ length: 8 }, () => new THREE.Sphere(new THREE.Vector3(), Infinity));
   for (let c = 0; c < 8; c++) for (const role of ROLES) {
     const mesh = new THREE.Mesh(new THREE.BufferGeometry(), null);
-    mesh.frustumCulled = false;
     mesh.visible = false;
     mesh.castShadow = true;
     mesh.receiveShadow = true;
@@ -111,19 +148,24 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
   }
   const finishUniformsFor = (fin) => ({ outer: finishUniforms(fin.outer), inner: finishUniforms(fin.inner), edge: finishUniforms(fin.edge), wear: uniform(fin.wear || 0) });
 
-  function setGeometry(P, out) {
+  // geo : la nouvelle géométrie de la pièce, ou null (pièce absente)
+  function setGeometry(P, geo) {
     const old = P.mesh.geometry;
-    if (out) {
-      P.mesh.geometry = toGeometry(out);
-      P.has = true;
-    } else {
-      P.mesh.geometry = new THREE.BufferGeometry();
-      P.has = false;
-    }
+    P.has = !!geo;
+    P.mesh.geometry = geo ?? new THREE.BufferGeometry();
+    P.mesh.geometry.boundingSphere = bounds[P.c];
     old.dispose();
     if (P.has) buildMaterial(P);
     P.mesh.visible = P.has;
     P.mesh.castShadow = P.has;
+  }
+
+  // panneaux, verre et (s'il est donné) objet exposé de la cellule c
+  const geometryOf = (out) => (out ? toGeometry(out) : null);
+  function setPanels(c, panels, content) {
+    setGeometry(pieceOf(c, 'panel'), geometryOf(panels.panel));
+    setGeometry(pieceOf(c, 'glass'), geometryOf(panels.glass));
+    if (content !== undefined) setGeometry(pieceOf(c, 'content'), R.cells[c].content.type === 'none' ? null : geometryOf(content));
   }
 
   const frameSpec = () => ({ ...R.frame, finish: undefined, set: undefined });
@@ -146,12 +188,11 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
     jobs.forEach((j) => j.then(() => { if (gen0 === generation) pendingCount--; }, () => {}));
     Promise.all(jobs).then(([frame, ...rest]) => {
       if (gen0 !== generation) return;
+      const frameGeo = toGeometry(frame);
       for (let c = 0; c < 8; c++) {
         const panels = rest[2 * c], content = rest[2 * c + 1];
-        setGeometry(pieceOf(c, 'frame'), frame);
-        setGeometry(pieceOf(c, 'panel'), panels.panel);
-        setGeometry(pieceOf(c, 'glass'), panels.glass);
-        setGeometry(pieceOf(c, 'content'), R.cells[c].content.type === 'none' ? null : content);
+        setGeometry(pieceOf(c, 'frame'), shareGeometry(frameGeo));
+        setPanels(c, panels, content);
       }
       for (const P of pieces) P.prev = null;
       readyFlag = true;
@@ -181,15 +222,14 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
       Promise.all(jobs).then(([frame, ...panels]) => {
         if (gen0 !== generation) return;
         frameU = null;
-        for (let i = 0; i < 8; i++) { setGeometry(pieceOf(i, 'frame'), frame); setGeometry(pieceOf(i, 'panel'), panels[i].panel); setGeometry(pieceOf(i, 'glass'), panels[i].glass); }
+        const frameGeo = toGeometry(frame);
+        for (let i = 0; i < 8; i++) { setGeometry(pieceOf(i, 'frame'), shareGeometry(frameGeo)); setPanels(i, panels[i]); }
       });
       return;
     }
     Promise.all([gen.request({ cell: cellSpec(c), frame: frameSpec() }, 'panels'), gen.request(contentSpec(c), 'content')]).then(([panels, content]) => {
       if (gen0 !== generation) return;
-      setGeometry(pieceOf(c, 'panel'), panels.panel);
-      setGeometry(pieceOf(c, 'glass'), panels.glass);
-      setGeometry(pieceOf(c, 'content'), R.cells[c].content.type === 'none' ? null : content);
+      setPanels(c, panels, content);
     });
   }
 
@@ -308,6 +348,7 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
       Pf.M.keep.value = keep;
       const Afr = cellMatrix(T[cc], cc, inset);
       cellA[cc] = Afr;
+      cellSphere(Afr, G.d.value, G.inflate.value, bounds[cc]);
       // objet exposé : tourne d'un nombre entier de tours par boucle
       // la cellule qui passe à l'extérieur (vers l'œil 4D) rentre son objet :
       // projeté, il se superposerait à celui de la cellule intérieure
