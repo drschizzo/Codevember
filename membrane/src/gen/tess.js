@@ -19,7 +19,7 @@
 
 import { V3 } from './geo.js';
 
-export const LIP_RING = 3;
+export const LIP_RING = 5;
 
 // src : { ctri, nt, np, rest, boundary, lipOf, nl } ; n : découpage d'une arête
 export function renderMesh({ ctri, nt, np, rest, boundary, lipOf, nl }, n) {

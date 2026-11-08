@@ -462,17 +462,23 @@ fn triSum(i: u32) -> vec4f {
   }
   let cc = min(1.0, sep / (u.lipT * 3.0 + 1e-6));
   let rr = u.lipT * cc;
-  let d0 = n; let d1 = e * 1.25; let d2 = -n;
-  let n0 = normalize(n * 0.6 + e * 0.4 + vec3f(0, 0, 1e-6)); let n2 = normalize(-n * 0.6 + e * 0.4 + vec3f(0, 0, 1e-6));
-  let n1 = select(n, e, length(e) > 0.5);
   let base = u.np + l * ${LIP_RING}u;
   let dp = prv[pi].xyz - x;
   let J = nor[pi].w;
   // (courbure du bourrelet : un demi-tour sur le rayon de la lèvre)
   let kc = max(cur[pi].w, 1.0 / max(u.lipT, 1e-4));
-  cur[base] = vec4f(x + d0 * rr, kc); cur[base + 1u] = vec4f(x + d1 * rr, kc); cur[base + 2u] = vec4f(x + d2 * rr, kc);
-  prv[base] = vec4f(x + d0 * rr + dp, cc); prv[base + 1u] = vec4f(x + d1 * rr + dp, cc); prv[base + 2u] = vec4f(x + d2 * rr + dp, cc);
-  nor[base] = vec4f(n0, J); nor[base + 1u] = vec4f(n1, J); nor[base + 2u] = vec4f(n2, J);
+  // bourrelet : demi-ellipse de la face avant (n) à la face arrière (−n), en
+  // passant par le bord (e, un peu plus loin), normales de l'ellipse
+  for (var k = 0u; k < ${LIP_RING}u; k++) {
+    let th = 3.14159265 * f32(k) / f32(${LIP_RING - 1}u);
+    let ct = cos(th); let st = sin(th);
+    let p = x + (n * ct + e * (1.25 * st)) * rr;
+    let nn = n * ct + e * (st / 1.25);
+    let nk = select(select(n, -n, ct < 0.0), normalize(nn), length(nn) > 1e-3);
+    cur[base + k] = vec4f(p, kc);
+    prv[base + k] = vec4f(p + dp, cc);
+    nor[base + k] = vec4f(nk, J);
+  }
 }
 `;
 
