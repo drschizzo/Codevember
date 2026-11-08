@@ -16,7 +16,7 @@
 // interpolé de la traversée précédente à la suivante), le regard passe de la
 // porte d'arrivée à l'objet, puis à la porte suivante.
 import * as THREE from 'three/webgpu';
-import { cellTransforms, apply, normalOf, smoother, ROOT } from '../math4.js';
+import { cellTransforms, apply, normalOf, smoother, ROOT, hash01 } from '../math4.js';
 
 const sm = (a, b, x) => smoother((x - a) / (b - a));
 
@@ -44,18 +44,22 @@ export function voyageFrames(R, cache) {
     for (let k = 0; k < 8; k++) if (apply(T1[k], normalOf(k))[3] < apply(T1[c], normalOf(c))[3]) c = k;
     const p = apply(T0[c], normalOf(c));
     const D = new THREE.Vector3(p[0], p[1], p[2]).normalize();
-    // diagonales de la porte (perpendiculaires à D) : la plus haute, et proche
-    // de la précédente
+    // diagonales de la porte (perpendiculaires à D) : tirées au hasard, en
+    // préférant le haut et la proximité de la précédente
     const ax = [0, 1, 2].filter((a) => Math.abs([D.x, D.y, D.z][a]) < 0.5);
-    let best = null, score = -Infinity;
+    let best = null, score = -Infinity, j = 0;
     for (const sb of [-1, 1]) for (const sc of [-1, 1]) {
       const v = [0, 0, 0]; v[ax[0]] = sb; v[ax[1]] = sc;
       const O = new THREE.Vector3(...v).normalize();
-      const s = O.y * 1.5 + O.dot(new THREE.Vector3(...Oprev)) * 0.6 + (O.x + O.z) * 0.01;
+      const s = O.y * 0.6 + O.dot(new THREE.Vector3(...Oprev)) * 0.3 + 1.6 * hash01(`${R.seed}:diag${i}:${j++}`);
       if (s > score) { score = s; best = O; }
     }
     Oprev = best.toArray();
-    out.push({ D, O: best, cell: c });
+    // allure de la traversée, jamais deux fois la même de suite
+    let style = pickStyle(R.seed, i, 0);
+    for (let k = 1; i > 0 && style === out[i - 1].style && k < 6; k++) style = pickStyle(R.seed, i, k);
+    const turn = hash01(`${R.seed}:sens${i}`) < 0.5 ? -1 : 1;
+    out.push({ D, O: best, cell: c, style, ...STYLES[style](turn) });
   }
   // pièce de chaque halte : le cube intérieur au départ et à l'arrivée, puis
   // la cellule arrivée à chaque traversée
@@ -63,6 +67,32 @@ export function voyageFrames(R, cache) {
   out.rooms[n] = ROOT;
   return out;
 }
+
+// Allures d'une traversée : regard (β), roulis autour de l'axe (τ : la caméra
+// tourne aussi autour de l'axe, à la distance r), au départ (0) et à
+// l'arrivée (1).
+//   avant : droit devant, l'objet suivant arrive et passe sous la caméra ;
+//   arrière : on regarde la pièce que l'on quitte s'éloigner, l'objet
+//     suivant entre dans le champ par derrière et se pose ;
+//   côté : le regard sur l'axe, l'objet suivant traverse le champ en frôlant ;
+//   tonneau : un tour complet autour de l'axe ;
+//   spirale : un quart de tour autour de l'axe, regard plongeant.
+const STYLES = {
+  avant: () => ({ b0: 0.13, b1: 0.13, t0: 0, t1: 0, r: 0.42 }),
+  arriere: (s) => ({ b0: Math.PI - 0.22, b1: Math.PI - 0.5, t0: 0, t1: 0.3 * s, r: 0.4 }),
+  cote: (s) => ({ b0: 1.25, b1: 1.4, t0: 0, t1: 0.5 * s, r: 0.46 }),
+  tonneau: (s) => ({ b0: 0.18, b1: 0.18, t0: 0, t1: 2 * Math.PI * s, r: 0.4 }),
+  spirale: (s) => ({ b0: 0.5, b1: 0.35, t0: 0, t1: (Math.PI / 2) * s, r: 0.48 }),
+};
+const STYLE_W = [['avant', 1.6], ['arriere', 1.2], ['cote', 1.4], ['tonneau', 1], ['spirale', 1.3]];
+function pickStyle(seed, i, k) {
+  const tot = STYLE_W.reduce((a, [, w]) => a + w, 0);
+  let x = hash01(`${seed}:allure${i}:${k}`) * tot;
+  for (const [n, w] of STYLE_W) if ((x -= w) < 0) return n;
+  return 'avant';
+}
+// (angle ramené dans ]−π, π] : un tour complet ne se défait pas à l'arrivée)
+const wrap = (a) => a - 2 * Math.PI * Math.round(a / (2 * Math.PI));
 
 const basisQ = (D, O) => {
   const Z = new THREE.Vector3().crossVectors(D, O);
@@ -98,25 +128,34 @@ export function insidePose(st, R, frames, out) {
   const qIO = basisQ(io.D, io.O);
   const qOf = (i) => (i < 0 || i >= n ? qIO : basisQ(frames[i].D, frames[i].O));
   const bT = 0.13, bL = 1.45; // regard : droit devant / sur l'objet
-  const rT = V.radius, rL = V.orbitR;
-  const f = st.f;
+  const rT = V.radius, rL = V.orbitR, k = rT / 0.42; // (écart réglable)
+  const io0 = { b0: bT, b1: bT, t0: 0, t1: 0, r: 0.42 };
+  const P = (i) => (i < 0 || i >= n ? io0 : frames[i]);
+  const f = st.f, lerp = (a, b, t) => a + (b - a) * t;
   switch (st.phase) {
     case 'plunge': case 'surface': return poseIn(qIO, rT, bT, 0);
     case 'travel': {
-      // (un peu de vie : le regard plonge vers l'objet qui passe, léger roulis)
-      const b = bT + 0.1 * Math.sin(Math.PI * f) ** 2;
-      return poseIn(qOf(st.room), rT, b, 0.12 * Math.sin(Math.PI * f));
+      const S = P(st.room), e = smoother(f);
+      // (un peu de vie : le regard plonge vers l'objet qui passe)
+      const b = lerp(S.b0, S.b1, sm(0.15, 0.85, f)) + 0.08 * Math.sin(Math.PI * f) ** 2 * Math.sign(Math.PI / 2 - S.b0 + 1e-6);
+      return poseIn(qOf(st.room), S.r * k, b, lerp(S.t0, S.t1, e) + 0.08 * Math.sin(Math.PI * f));
     }
     case 'dwell': {
-      const i = st.room;
+      const i = st.room, A = P(i - 1), B = P(i);
       const qa = qOf(i - 1), qb = qOf(i);
       // (pièce vide : le regard ne s'attarde pas sur son centre)
       const empty = R.cells[frames.rooms?.[i] ?? ROOT]?.content.type === 'none';
-      const look = (sm(0, 0.3, f) - sm(0.68, 1, f)) * (empty ? 0.45 : 1);
+      const w = empty ? 0.45 : 1;
+      const lIn = sm(0, 0.3, f) * w, lOut = sm(0.68, 1, f);
+      // regard et distance : fin de la traversée → objet → début de la suivante
+      const bMid = lerp(A.b1, bL, lIn), rMid = lerp(A.r * k, rL, lIn);
+      const b = lerp(bMid, B.b0, lOut), r = lerp(rMid, B.r * k, lOut);
       const q = qa.clone().slerp(qb, sm(0.18, 0.82, f));
-      // (même porte à l'arrivée et au départ : un petit tour de l'objet quand même)
+      // tour de l'objet : sens et ampleur propres à chaque halte
       const same = qa.angleTo(qb) < 0.2 ? 1 : 0.35;
-      return poseIn(q, rT + (rL - rT) * look, bT + (bL - bT) * look, same * 0.9 * Math.sin(Math.PI * f) * look);
+      const orb = (hash01(`${R.seed}:orbite${i}`) * 2 - 1) * 1.4 * same;
+      const tau = lerp(wrap(A.t1), B.t0, sm(0.18, 0.82, f)) + orb * Math.sin(Math.PI * f) * (1 - Math.abs(2 * f - 1) ** 3);
+      return poseIn(q, r, b, tau);
     }
     default: return poseIn(qIO, rT, bT, 0);
   }

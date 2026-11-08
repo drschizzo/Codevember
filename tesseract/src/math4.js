@@ -362,15 +362,26 @@ export const VOYAGE_PHASES = ['open', 'fold', 'hold', 'plunge', 'dwell', 'travel
 export function voyageTimeline(R) {
   const C = R.chor, V = R.voyage, n = R.moves.length;
   const segs = [['open', C.open], ['fold', C.fold], ['hold', C.hold], ['plunge', V.plunge]];
-  for (let i = 0; i < n; i++) segs.push(['dwell', V.dwell, i], ['travel', V.travel, i]);
+  // (chaque traversée a son allure : plus ou moins rapide, et sa halte aussi)
+  for (let i = 0; i < n; i++) segs.push(['dwell', V.dwell * pace(R, i, 'd'), i], ['travel', V.travel * pace(R, i, 't'), i]);
   segs.push(['dwell', V.dwell, n], ['surface', V.surface], ['unfold', C.unfold]);
   const tot = segs.reduce((a, s) => a + Math.max(0.001, s[1]), 0);
   let acc = 0;
   return segs.map(([k, w, i = 0]) => { const a = acc; acc += Math.max(0.001, w) / tot; return { k, i, a, b: acc }; });
 }
+// facteur de durée propre à une traversée ou à une halte (tiré de la graine)
+export const pace = (R, i, k) => 0.75 + 0.55 * hash01(`${R.seed}:${k}${i}`);
+export function hash01(str) {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+  h ^= h >>> 13; h = Math.imul(h, 0x5bd1e995); h ^= h >>> 15;
+  return (h >>> 0) / 4294967296;
+}
 export const voyageSeconds = (R) => {
   const C = R.chor, V = R.voyage, n = R.moves.length;
-  return C.open + C.fold + C.hold + V.plunge + (n + 1) * V.dwell + n * V.travel + V.surface + C.unfold;
+  let t = C.open + C.fold + C.hold + V.plunge + V.dwell + V.surface + C.unfold;
+  for (let i = 0; i < n; i++) t += V.dwell * pace(R, i, 'd') + V.travel * pace(R, i, 't');
+  return t;
 };
 export const timelineFor = (R) => (R.voyage?.on ? voyageTimeline(R) : stepTimeline(R.chor));
 
