@@ -91,7 +91,11 @@ function floorMaterial(kind, U, lightsNode) {
   return m;
 }
 
-const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3();
+const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _r = new THREE.Vector3();
+// lampe portée (voyage) : décalage depuis l'œil, en haut, à droite, en arrière
+// (× l'échelle du tesseract) ; confondue avec l'œil, elle aplatirait tout :
+// ses ombres seraient cachées derrière les objets
+const LAMP = { up: 0.16, right: 0.1, back: 0.04 };
 
 export function createStage(scene) {
   const U = { tint: uniform(new THREE.Color(1, 1, 1)) };
@@ -153,7 +157,8 @@ export function createStage(scene) {
       if (kc > 0 && vc.camera) {
         const C = vc.camera, s = vc.scale ?? 1;
         const fwd = _a.set(0, 0, -1).applyQuaternion(C.quaternion), up = _b.set(0, 1, 0).applyQuaternion(C.quaternion);
-        _c.copy(C.position).addScaledVector(up, 0.09 * s).addScaledVector(fwd, -0.04 * s);
+        const right = _r.crossVectors(fwd, up);
+        _c.copy(C.position).addScaledVector(up, LAMP.up * s).addScaledVector(right, LAMP.right * s).addScaledVector(fwd, -LAMP.back * s);
         key.position.lerp(_c, kc);
         key.target.position.lerp(_c.addScaledVector(fwd, 3 * s), kc);
         key.intensity = k.intensity * (1 - kc) + (vc.lamp ?? 1) * 4 * (k.intensity / 700) * s * s * kc;
