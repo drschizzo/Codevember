@@ -22,7 +22,7 @@
 
 import * as THREE from 'three/webgpu';
 import {
-  Fn, If, struct, uniform, attribute, positionView, positionGeometry, vec2, vec3, vec4,
+  Fn, If, struct, uniform, attribute, positionView, positionGeometry, vec2, vec3, vec4, screenCoordinate, hash, uint,
   float, mat3, mix, smoothstep, clamp, abs, length, normalize, dot, cross, sin, floor, fract, mod, step, acos, sign,
   dFdx, dFdy, fwidth, faceDirection, mrt, normalViewGeometry, atan, select, velocity, cos, max as tmax, texture3D, mx_cell_noise_vec3, modelViewMatrix, modelScale,
 } from 'three/tsl';
@@ -417,6 +417,13 @@ export function buildPieceMaterial(finish, U, M, { shadowTint = null, content = 
   // l'armature est enfermée dans sa membrane : elle ne voit du studio que ce
   // que la membrane laisse passer
   if (content) m.aoNode = content;
+  // fondu (couche qui s'éloigne derrière la caméra) : tramage aléatoire renouvelé
+  // à chaque image, lissé par l'anticrénelage temporel ; l'ombre suit
+  if (M.vis) {
+    const px = screenCoordinate.x.toUint().add(screenCoordinate.y.toUint().mul(uint(8191))).add(G.frame.toUint().mul(uint(131071)));
+    const keep = hash(px).lessThan(M.vis);
+    m.maskNode = keep; m.maskShadowNode = keep;
+  }
   m.mrtNode = stableVelocity();
   return m;
 }

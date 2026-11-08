@@ -31,6 +31,7 @@ struct C {
   aF: f32, strength: f32, fatigue: f32, rin: f32,
   margin: f32, friction: f32, gain: f32, omega: f32,
   inflate: f32, pre: f32, settleDamp: f32, armDur: f32,
+  sn: f32, sa: f32, sf: f32, guard: f32,
 };
 struct P { s: u32, settle: u32, frame: u32, pad: u32, t: f32, tPrev: f32, pad2: f32, pad3: f32 };
 `;
@@ -61,12 +62,23 @@ fn tStep() -> f32 { return 1.0 / f32((c.F - 1u) * c.SUB); }
 fn tFirst() -> f32 { let f = atomicLoad(&glob.first); if (f == 0xffffffffu) { return -1.0; } return f32(f) * tStep(); }
 fn broken(k: u32) -> f32 { return bonds[k * 8u + 3u]; }
 fn ease(u0: f32) -> f32 { let u = clamp(u0, 0.0, 1.0); return u * u * u * (u * (u * 6.0 - 15.0) + 10.0); }
+// les assauts (voir gen/kin.js)
+fn struggle(u: f32) -> f32 {
+  if (c.sn <= 0.0 || c.sf <= 0.0) { return u; }
+  if (u >= c.sf) { return (u - c.sf) / (1.0 - c.sf); }
+  let w = u / c.sf * c.sn; let k = floor(w); let v = w - k;
+  let s = sin(PI * pow(max(v, 1e-6), 0.75));
+  return c.sa * (0.45 + 0.55 * (k + 1.0) / c.sn) * s * s;
+}
+// fin des assauts, en temps de simulation
+fn tStruggle() -> f32 { return c.armDur * c.sf; }
+fn inflation(t: f32) -> f32 { return ease(struggle(clamp(t / c.armDur, 0.0, 1.0))); }
 fn pressure() -> f32 {
   let p0 = bitcast<f32>(atomicLoad(&glob.pbits));
   if (p.settle == 1u) { return p0; }
   let tf = tFirst();
-  if (tf < 0.0) { return p0 * (1.0 + c.inflate * ease(p.t / c.armDur)); }
-  return p0 * (1.0 + c.inflate * ease(tf / c.armDur)) * exp(-(p.t - tf) * c.T / c.leak);
+  if (tf < 0.0) { return p0 * (1.0 + c.inflate * inflation(p.t)); }
+  return p0 * (1.0 + c.inflate * inflation(tf)) * exp(-(p.t - tf) * c.T / c.leak);
 }
 
 // pose d'une pièce au sous-pas s : p' = σR·p + T
@@ -239,8 +251,13 @@ fn strainOf(i: u32) -> f32 {
   if (bonds[k * 8u + 3u] >= 0.0) { return; }
   let i = u32(bonds[k * 8u]); let j = u32(bonds[k * 8u + 1u]);
   let s = max(strainOf(i), strainOf(j));
-  let fat = ease((p.t - 0.2) / 0.45);
-  let thr = bonds[k * 8u + 2u] * (1.0 - c.fatigue * fat);
+  // la matière résiste pendant les assauts (garde), puis se fatigue
+  let ts = tStruggle();
+  // pendant les assauts, la membrane encaisse : elle se déforme et revient
+  if (ts > 0.0 && p.t < ts * 0.92) { return; }
+  let fat = ease((p.t - ts - 0.08) / 0.4);
+  let guard = 1.0 + c.guard * (1.0 - ease((p.t - ts * 0.9) / max(ts * 0.1, 0.02)));
+  let thr = bonds[k * 8u + 2u] * (1.0 - c.fatigue * fat) * guard;
   let tf = tFirst();
   let forced = tf >= 0.0 && p.t > tf + bonds[k * 8u + 4u];
   if (s > thr || forced) { bonds[k * 8u + 3u] = p.t; atomicMin(&glob.first, p.s); }
@@ -444,11 +461,11 @@ export async function simulate(device, prep, S, fibOut, onProgress) {
   const p0 = (S.pressure ?? 1) * 2 * Math.sqrt(3) * (S.pre + 0.01) / S.stretch;
   device.queue.writeBuffer(B.glob, 12, new Float32Array([p0]));
   const settleSteps = S.settle * SUB, runSteps = (F - 1) * SUB;
-  const consts = new ArrayBuffer(128), cu = new Uint32Array(consts), cf = new Float32Array(consts);
+  const consts = new ArrayBuffer(144), cu = new Uint32Array(consts), cf = new Float32Array(consts);
   cu.set([np, nb, prep.nCols, prep.nParts, F, SUB, S.iters ?? 6, prep.nf]);
   cf.set([h, S.duration, S.damping, S.drag, S.flutter, S.peel, S.relax, S.leak, S.curl, S.curlWidth, S.curlKick * (S.curlSign || 1), S.stretch / (h * h),
     S.bend / (h * h), S.strength, S.fatigue, S.inner * 1.06, S.thick * 0.5 + 0.004, S.friction, S.pressureGain ?? 2, S.omega ?? 1.6,
-    S.inflate ?? 0, S.pre, 6, S.armDur ?? 0.5], 8);
+    S.inflate ?? 0, S.pre, 6, S.armDur ?? 0.5, S.st?.n ?? 0, S.st?.a ?? 0, S.st?.f ?? 0, S.guard ?? 0.7], 8);
   const cBuf = buf(device, new Uint8Array(consts), GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST);
   // paramètres par sous-pas (décalages dynamiques de 256 octets)
   const nRec = settleSteps + runSteps + 1;
