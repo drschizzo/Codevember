@@ -145,7 +145,7 @@ Le sol est procédural : laque satinée anthracite (reflets adoucis), béton cir
   - Surréaliste (damier de marbre, patron de Dalí) ;
   - Irisé.
 - **Archétypes de cellule** : vitrine, écrin, moucharabieh, persiennes, grille tissée, squelette, cage à barreaux, vitrail, pointes de diamant, tôle ondulée, cible, et cabinet composite (chaque face tirée à part).
-- **Lumière** : un projecteur avec ombres douces et deux contre-jours, fixes dans le monde (la caméra tourne, les ombres restent), et un studio HDR pour les reflets.
+- **Lumière** : un projecteur avec ombres douces et deux contre-jours, fixes dans le monde (la caméra tourne, les ombres restent), et un studio HDR pour les reflets. Éclairage sélectif : chaque cellule ne reçoit que ces trois lumières et sa propre lumière d'écrin (les lumières d'écrin, sans ombre, traversaient sinon les parois pleines).
 - **Post-traitement** (repris de Hollow) :
   - réflexions en espace écran ;
   - occlusion ambiante ;
