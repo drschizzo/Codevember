@@ -34,7 +34,7 @@ jobs:
           cp index.html _site/
           for d in */; do
             d=${d%/}
-            if [ -f "$d/index.html" ]; then
+            if [ "$d" != _site ] && [ -f "$d/index.html" ]; then
               echo "expérience : $d"
               rsync -a --exclude tools --exclude docs --exclude '*.md' "$d" _site/
             fi
