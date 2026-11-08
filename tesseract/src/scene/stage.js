@@ -3,16 +3,17 @@
 // sont fixes dans le monde : la caméra tourne, les ombres restent.
 import * as THREE from 'three/webgpu';
 import {
-  positionWorld, vec2, vec3, vec4, float, mix, smoothstep, abs, floor, fract, length, sin, uniform, normalViewGeometry, max as tmax,
+  positionWorld, vec2, vec3, vec4, float, mix, smoothstep, abs, floor, fract, length, sin, uniform, normalViewGeometry, max as tmax, lights,
 } from 'three/tsl';
 import { noise, noise2, fbm, worley, perturb, stableVelocity } from './materials.js';
 
 // ── Sol ──────────────────────────────────────────────────────────────────────
 // kind : gloss (laque noire), concrete (béton ciré), checker (damier de
 // marbre), cyclo (blanc mat, se perd dans le fond), oak (parquet de chêne),
-// velvet (velours)
-function floorMaterial(kind, U) {
+// velvet (velours) ; lightsNode : les lumières qui l'éclairent
+function floorMaterial(kind, U, lightsNode) {
   const m = new THREE.MeshPhysicalNodeMaterial();
+  m.lightsNode = lightsNode;
   const p = positionWorld.xz, p3 = vec3(p.x, 0, p.y);
   let color = vec3(0.02), rough = float(0.5), h = float(0);
   switch (kind) {
@@ -109,6 +110,9 @@ export function createStage(scene) {
   const rim2 = new THREE.SpotLight(0xffffff, 40, 0, 0.6, 0.9, 2);
   rim.castShadow = false; rim2.castShadow = false;
   scene.add(key, key.target, rim, rim.target, rim2, rim2.target);
+  // le sol n'est éclairé que par le plateau (les lumières des cellules, sans
+  // ombre, le traverseraient depuis l'intérieur des cellules fermées)
+  const studioLights = lights([key, rim, rim2]);
 
   const SHADOW_SIZES = { low: 1024, medium: 2048, high: 2048, ultra: 4096 };
   const place = (L, az, el, dist) => {
@@ -128,7 +132,7 @@ export function createStage(scene) {
       if (kind !== floorKind) {
         floorKind = kind;
         const old = floorMesh.material;
-        floorMesh.material = kind === 'none' ? null : floorMaterial(kind, U);
+        floorMesh.material = kind === 'none' ? null : floorMaterial(kind, U, studioLights);
         old?.dispose();
       }
       const k = R.key;

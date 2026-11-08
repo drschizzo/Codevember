@@ -105,9 +105,12 @@ export function applyFinish(U, fin) {
 }
 
 // ── Motifs ───────────────────────────────────────────────────────────────────
-// p : position locale (rayon ≈ 1) ; pf : empreinte du pixel (unités locales).
+// p : position locale (rayon ≈ 1) ; pf : empreinte du pixel (unités locales) ;
+// pn : normale dans le repère du motif ; lines : part des traits fins
+// (veines, craquelures) que la pièce peut porter — sur une barre fine, une
+// veine coupée de biais se lit comme un cheveu.
 // Renvoie les propriétés de la surface (nœuds).
-function surface(fin, U, p, pf, pn) {
+function surface(fin, U, p, pf, pn, lines) {
   const S = U.scale;
   const aa = (freq) => smoothstep(0.7, 0.2, pf.mul(S).mul(freq)); // fréquence (cycles / unité) → atténuation
   const out = {
@@ -134,7 +137,7 @@ function surface(fin, U, p, pf, pn) {
     case 'glaze': { // émail : peau d'orange sous le vernis, craquelure, émail plus épais au creux
       const c = worley(p.mul(S.mul(8)));
       const fw = pf.mul(S).mul(8); // empreinte du pixel, en cellules : le trait reste net sans crénelage
-      const crack = smoothstep(fw.mul(1.5).add(0.045), fw.mul(0.5), c.y.sub(c.x)).mul(aa(40));
+      const crack = smoothstep(fw.mul(1.5).add(0.045), fw.mul(0.5), c.y.sub(c.x)).mul(aa(40)).mul(lines);
       const pool = noise(p.mul(S.mul(3))).mul(0.5).add(0.5);
       out.color = mix(mix(U.color, U.color.mul(0.8), pool.mul(0.45)), U.color2, crack.mul(0.85));
       out.rough = U.rough.add(crack.mul(0.3));
@@ -247,7 +250,7 @@ function surface(fin, U, p, pf, pn) {
       const n = fbm(p.mul(S.mul(2.2)), 4);
       const v1 = abs(sin(p.x.add(p.y.mul(0.6)).mul(S.mul(9)).add(n.mul(7))));
       const v2 = abs(sin(p.y.sub(p.z.mul(0.7)).mul(S.mul(23)).add(n.mul(11))));
-      const vein = smoothstep(0.1, 0, v1).mul(0.85).add(smoothstep(0.05, 0, v2).mul(0.4).mul(aa(23)));
+      const vein = smoothstep(0.1, 0, v1).mul(0.85).add(smoothstep(0.05, 0, v2).mul(0.4).mul(aa(23))).mul(lines);
       const cloud = noise2(p.mul(S.mul(4))).mul(0.5).add(0.5);
       out.color = mix(mix(U.color, U.color.mul(0.88), cloud.mul(0.5)), U.color2, vein.min(1));
       out.rough = U.rough.add(vein.mul(0.04));
@@ -323,8 +326,10 @@ export function buildPieceMaterial(finish, U, M, { shadowTint = null, reveal = n
   // normale dans le repère du motif (dérivées écran : hors des branches)
   const pn = vec3(0, 0, 1).toVar('patNormal');
   const surfA = attribute('surf', 'vec4');
+  // traits fins : effacés sur les pièces plus fines qu'environ 0,03 (voir gen/mesh.js, span)
+  const lines = smoothstep(0.012, 0.045, attribute('span', 'float'));
   const props = (fin, Uf) => {
-    const s = surface(fin, Uf, p, pf, pn);
+    const s = surface(fin, Uf, p, pf, pn, lines);
     // nuance propre à la pièce (chaque barre, chaque latte) : rugosité et teinte
     const piece = surfA.w.sub(0.5);
     const o = { color: s.color.mul(piece.mul(0.06).add(1)), rough: s.rough.add(piece.mul(0.05)).clamp(0.02, 1), metal: s.metal, h: s.h };

@@ -79,6 +79,7 @@ export function buildFrame(f) {
   const B = new Buffers(1 << 15), rng = createRng(`frame:${f.seed}`);
   const e = 1 - f.w, nh = nodeHalf(f), prof = profileOf(f);
   const segPerUnit = 16;
+  B.span = f.w;
   // Point d'ancrage de chaque pièce (voir scene/project.js, frameMerge) :
   // barre : son axe, la coordonnée libre remplacée par 10 + numéro de barre ;
   // nœud : son centre. Une fois le tesseract plié, les ossatures des cellules
@@ -107,6 +108,7 @@ export function buildFrame(f) {
   // nœuds affleurants : leur face externe s'arrête à l'angle du cube (ils ne
   // débordent pas sur la cellule voisine du patron)
   const en = 1 - Math.max(nh, f.w);
+  B.span = nh;
   if (nh > 0) for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
     B.piece = rng.int(0, 255);
     const c = [sx * en, sy * en, sz * en];
@@ -259,6 +261,7 @@ function perforated(B, a, t, P, rng) {
 function louvres(B, f, a, t, P, rng) {
   const n = P.n, pitch = (2 * a) / n, ph = P.angle;
   const F = B.xf;
+  B.span = pitch * 0.62;
   for (let i = 0; i < n; i++) {
     B.piece = rng.int(0, 255);
     const y = -a + pitch * (i + 0.5);
@@ -274,6 +277,7 @@ function louvres(B, f, a, t, P, rng) {
 // Grille tissée : joncs ronds dessus-dessous
 function woven(B, a, P, rng) {
   const n = P.n, q2 = (2 * a) / n, rr = Math.min(q2 * 0.2, 0.03), amp = rr * 1.05;
+  B.span = rr;
   const steps = n * 10;
   for (let j = 0; j < n; j++) {
     const y = -a + q2 * (j + 0.5);
@@ -295,6 +299,7 @@ function woven(B, a, P, rng) {
 function studded(B, a, t, P, rng) {
   plate(B, a, t);
   const n = P.n, q = a / n, h = q * P.height;
+  B.span = q * 0.86;
   for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
     B.piece = rng.int(0, 255);
     const cx = -a + q * (2 * i + 1), cy = -a + q * (2 * j + 1), b = q * 0.86;
@@ -372,6 +377,7 @@ function clipLine(n, c, a) {
 function leaded(B, G, a, t, P) {
   plate(G, a, t);
   const n = P.n, w = Math.max(0.006, a * 0.012), h = t / 2 + 0.004;
+  B.span = w;
   const fams = P.pattern === 'grid' ? [[1, 0], [0, 1]] : [[Math.SQRT1_2, Math.SQRT1_2], [Math.SQRT1_2, -Math.SQRT1_2]];
   const span = P.pattern === 'grid' ? a : a * Math.SQRT2;
   for (const nn of fams) for (let i = 1; i < (P.pattern === 'grid' ? n : 2 * n); i++) {
@@ -384,6 +390,7 @@ function leaded(B, G, a, t, P) {
 // Barreaux : joncs ronds parallèles, une traverse plate au milieu
 function bars(B, a, P, rng) {
   const n = P.n, pitch = (2 * a) / n, r = Math.min(pitch * 0.2, 0.022);
+  B.span = r;
   for (let i = 0; i < n; i++) {
     B.piece = rng.int(0, 255);
     const x = -a + pitch * (i + 0.5), pts = [];
@@ -400,10 +407,12 @@ function target(B, a, t, P, rng) {
     B.piece = rng.int(0, 255);
     const r1 = a * (0.98 - (i / n) * 0.9), r0 = r1 - (a * 0.9) / n * P.fill;
     if (r0 <= 0.01) continue;
+    B.span = (r1 - r0) / 2;
     lathe(B, sharpProfile([[r0, -t / 2], [r1, -t / 2], [r1, t / 2], [r0, t / 2]], [IN, EDGE, OUT, EDGE]), 96);
   }
   B.xf = keep;
   B.piece = rng.int(0, 255);
+  B.span = t * 0.6;
   bar(B, [-a, 0], [a, 0], t * 0.6, t * 0.6);
   bar(B, [0, -a], [0, a], t * 0.6, t * 0.6);
 }
@@ -423,6 +432,7 @@ export function buildPanels(cell, f) {
     B.piece = rng.int(0, 255);
     B.patOff = [rng.range(-3, 3), rng.range(-3, 3), rng.range(-3, 3)];
     B.anchor = F.o;
+    B.span = a; G.span = a; // (largeur d'une plaque ; les pièces fines la précisent)
     if (kind === 'plate' || kind === 'glass') plate(B, a, t);
     else if (kind === 'perf') perforated(B, a, t, cell.perf, rng);
     else if (kind === 'louvre') { B.noFrame(); B.xf = F; louvres(B, f, a, t, cell.louvre, rng); }
@@ -440,6 +450,7 @@ export function buildPanels(cell, f) {
 // ── Objet exposé au centre de la cellule ─────────────────────────────────────
 export function buildContent(c) {
   const B = new Buffers(1 << 13), s = c.size;
+  B.span = s;
   switch (c.type) {
     case 'pearl': sphere(B, [0, 0, 0], s, 64, 32, OUT); break;
     case 'gem': gem(B, [0, 0, 0], s, OUT); break;
@@ -450,9 +461,11 @@ export function buildContent(c) {
         B.piece = i * 80;
         const [X, Y, Z] = frames[i];
         B.frame([0, 0, 0], X, Y, Z);
+        B.span = s * 0.045;
         torus(B, [0, 0, 0], r, s * 0.045, 96, 14, i === 1 ? EDGE : OUT);
       });
       B.noFrame();
+      B.span = s * 0.22;
       sphere(B, [0, 0, 0], s * 0.22, 32, 16, EDGE);
       break;
     }
@@ -460,6 +473,7 @@ export function buildContent(c) {
     case 'saturn': {
       sphere(B, [0, 0, 0], s * 0.62, 48, 24, OUT);
       B.frame([0, 0, 0], [1, 0, 0], [0, 0.94, 0.34], [0, -0.34, 0.94]);
+      B.span = s * 0.035;
       torus(B, [0, 0, 0], s, s * 0.035, 96, 10, EDGE);
       torus(B, [0, 0, 0], s * 0.86, s * 0.02, 96, 8, EDGE);
       B.noFrame();
@@ -467,6 +481,7 @@ export function buildContent(c) {
     }
     case 'mini': { // mise en abyme : un petit cube d'ossature
       const e = s * 0.8, r = s * 0.06;
+      B.span = r;
       for (let a = 0; a < 3; a++) for (const sb of [-1, 1]) for (const sc of [-1, 1]) {
         const b = (a + 1) % 3, cc = (a + 2) % 3, pts = [];
         for (let k = 0; k <= 12; k++) { const p = [0, 0, 0]; p[a] = -e + (2 * e * k) / 12; p[b] = sb * e; p[cc] = sc * e; pts.push(p); }
@@ -481,6 +496,7 @@ export function buildContent(c) {
         const u = (2 * PI * k) / 360, r = cos(3 * u) + 2;
         pts.push([r * cos(2 * u) * s * 0.3, r * sin(2 * u) * s * 0.3, -sin(3 * u) * s * 0.3]);
       }
+      B.span = s * 0.11;
       tube(B, pts, s * 0.11, 24, OUT, false);
       break;
     }
@@ -488,6 +504,7 @@ export function buildContent(c) {
     case 'dodeca': { const D = dodecahedron(); polyhedron(B, D.V, D.F, s * 0.85, OUT); break; }
     case 'stack': { // pile de jetons, légèrement décalés
       const n = 7, h = s * 0.12, r = s * 0.62;
+      B.span = r;
       for (let i = 0; i < n; i++) {
         B.piece = i * 36;
         const z = -((n - 1) * h) / 2 + i * h, ox = 0.03 * s * sin(i * 2.1), oy = 0.03 * s * cos(i * 1.7);

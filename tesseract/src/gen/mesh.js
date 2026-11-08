@@ -4,7 +4,10 @@
 // normalisés : poids des finitions externe / interne / tranche, et un tirage
 // propre à la pièce — chaque latte, chaque barre a sa nuance), pat
 // (coordonnées du motif dans le repère de la pièce), anchor (centre de la
-// face d'un panneau : il s'ajoure quand cette face regarde l'œil 4D).
+// face d'un panneau : il s'ajoure quand cette face regarde l'œil 4D), span
+// (largeur de la surface visible de la pièce, en unités locales : le rayon
+// d'une barre, le demi-côté d'une plaque ; les motifs à traits fins s'y
+// adaptent, voir scene/materials.js).
 //
 // Les triangles sont orientés d'après les normales des sommets (sens direct
 // vu du côté de la normale) : l'orientation est cohérente dans tout le
@@ -29,6 +32,8 @@ export class Buffers {
     this.n = 0; this.cap = cap; this.ni = 0; this.icap = cap * 2;
     this.pos = new Float32Array(cap * 3); this.nor = new Float32Array(cap * 3);
     this.tan = new Float32Array(cap * 4); this.surf = new Uint8Array(cap * 4); this.pat = new Float32Array(cap * 3); this.anc = new Float32Array(cap * 3);
+    this.spn = new Float32Array(cap);
+    this.span = 1; // largeur de la pièce en cours
     this.anchor = [0, 0, 0]; // point d'ancrage de la pièce (centre de la face d'un panneau) : voir scene/project.js
     this.patOff = [0, 0, 0]; // décalage des coordonnées du motif (chaque face a son propre veinage)
     this.idx = new Uint32Array(this.icap);
@@ -38,6 +43,7 @@ export class Buffers {
   grow() {
     const g = (a, k) => { const b = new a.constructor(this.cap * 2 * k); b.set(a); return b; };
     this.pos = g(this.pos, 3); this.nor = g(this.nor, 3); this.tan = g(this.tan, 4); this.surf = g(this.surf, 4); this.pat = g(this.pat, 3); this.anc = g(this.anc, 3);
+    this.spn = g(this.spn, 1);
     this.cap *= 2;
   }
   // repère courant (les primitives sont construites dans un repère local)
@@ -62,6 +68,7 @@ export class Buffers {
     // coordonnées du motif : dans le repère de la pièce (une plaque a son motif
     // dans son plan, quelle que soit la face qu'elle occupe)
     this.anc[i3] = this.anchor[0]; this.anc[i3 + 1] = this.anchor[1]; this.anc[i3 + 2] = this.anchor[2];
+    this.spn[i] = this.span;
     this.pat[i3] = p[0] + this.patOff[0]; this.pat[i3 + 1] = p[1] + this.patOff[1]; this.pat[i3 + 2] = p[2] + this.patOff[2];
     return i;
   }
@@ -88,7 +95,8 @@ export class Buffers {
   out() {
     return {
       position: this.pos.slice(0, this.n * 3), normal: this.nor.slice(0, this.n * 3), tangent: this.tan.slice(0, this.n * 4),
-      surf: this.surf.slice(0, this.n * 4), pat: this.pat.slice(0, this.n * 3), anchor: this.anc.slice(0, this.n * 3), index: this.idx.slice(0, this.ni),
+      surf: this.surf.slice(0, this.n * 4), pat: this.pat.slice(0, this.n * 3), anchor: this.anc.slice(0, this.n * 3), span: this.spn.slice(0, this.n),
+      index: this.idx.slice(0, this.ni),
     };
   }
 }

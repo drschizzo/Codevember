@@ -123,7 +123,7 @@ La durée de la boucle suit : environ 35 à 45 s.
 
 Ce sont ceux de Hollow : une quarantaine de finitions et vingt-six jeux. On y trouve des métaux au F0 mesuré, de l'émail grand feu guilloché, de l'acier damassé, des marbres, de la laque urushi saupoudrée d'or, de la nacre, du titane bleui au feu, du film de savon, du velours et du carbone sergé.
 
-Chaque pièce porte trois finitions (externe, interne, tranche). Les motifs sont calculés dans le repère de la pièce et restent attachés à la matière pendant le pliage 4D : chaque face a son propre veinage, et chaque barre ou latte sa nuance. Le modèle physique est exploité en entier : vernis, lustre, irisation, anisotropie, transmission avec dispersion et absorption, usure. Le verre et les pierres projettent des ombres colorées.
+Chaque pièce porte trois finitions (externe, interne, tranche). Les motifs sont calculés dans le repère de la pièce et restent attachés à la matière pendant le pliage 4D : chaque face a son propre veinage, et chaque barre ou latte sa nuance. Les traits fins (veines du marbre, craquelures de l'émail) s'effacent sur les pièces plus fines qu'eux : sur un barreau, une veine coupée de biais se lisait comme un cheveu. Le modèle physique est exploité en entier : vernis, lustre, irisation, anisotropie, transmission avec dispersion et absorption, usure. Le verre et les pierres projettent des ombres colorées.
 
 **Reflets et réfraction à l'intérieur des cellules.** Un objet exposé est enfermé : il ne voit du studio que ce que laissent passer les ajours. Son reflet de l'environnement est donc atténué (« Studio vu de l'intérieur »). Ce qu'il reflète vraiment, ce sont les parois de sa cellule, ses voisins et le plateau, grâce aux réflexions en espace écran (post-traitement) :
 - le reflet est un miroir sans bruit, adouci par un flou selon la rugosité, et laissé à l'environnement au-delà d'une rugosité moyenne ;
@@ -145,7 +145,7 @@ Le sol est procédural : laque satinée anthracite (reflets adoucis), béton cir
   - Surréaliste (damier de marbre, patron de Dalí) ;
   - Irisé.
 - **Archétypes de cellule** : vitrine, écrin, moucharabieh, persiennes, grille tissée, squelette, cage à barreaux, vitrail, pointes de diamant, tôle ondulée, cible, et cabinet composite (chaque face tirée à part).
-- **Lumière** : un projecteur avec ombres douces et deux contre-jours, fixes dans le monde (la caméra tourne, les ombres restent), et un studio HDR pour les reflets. Éclairage sélectif : chaque cellule ne reçoit que ces trois lumières et sa propre lumière d'écrin (les lumières d'écrin, sans ombre, traversaient sinon les parois pleines).
+- **Lumière** : un projecteur avec ombres douces et deux contre-jours, fixes dans le monde (la caméra tourne, les ombres restent), et un studio HDR pour les reflets. Éclairage sélectif : chaque cellule ne reçoit que ces trois lumières et sa propre lumière d'écrin (les lumières d'écrin, sans ombre, traversaient sinon les parois pleines), et le sol que les trois lumières du plateau. Chaque objet exposé a en plus sa lumière de vedette, placée du côté de la caméra et au-dessus, qui le détache de sa doublure sans éclairer celle-ci.
 - **Post-traitement** (repris de Hollow) :
   - réflexions en espace écran ;
   - occlusion ambiante, calculée sur une pré-passe de profondeur et de normales et appliquée dans les matériaux à l'éclairage indirect seulement (elle n'assombrit ni la lumière directe ni les reflets) ;
