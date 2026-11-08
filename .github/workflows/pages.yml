@@ -25,12 +25,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # site statique : la page d'index et chaque expérience, sans les outils ni la documentation
+      # site statique : la page d'index et chaque expérience — tout dossier de
+      # premier niveau qui contient un index.html (une expérience par dossier),
+      # sans les outils ni la documentation
       - name: Assembler le site
         run: |
           mkdir -p _site
           cp index.html _site/
-          rsync -a --exclude tools --exclude docs --exclude '*.md' planetaire hollow tesseract membrane _site/
+          for d in */; do
+            d=${d%/}
+            if [ -f "$d/index.html" ]; then
+              echo "expérience : $d"
+              rsync -a --exclude tools --exclude docs --exclude '*.md' "$d" _site/
+            fi
+          done
           touch _site/.nojekyll
 
       - uses: actions/configure-pages@v5
