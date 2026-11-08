@@ -10,6 +10,11 @@
 //               lien voisin (enroulement) + 1, distance à ce lien, —]
 //   2 lien    : [j (partenaire), 2, —, lien]
 // Triangles : pour chaque particule, les deux autres coins (sens direct).
+// Anneaux (pose : lissage des normales, courbure) : pour chaque particule, ses
+// voisines par une arête (un mot), et ses partenaires de couture
+// (RING_PARTNER | j, puis le lien) — huit fois moins à lire que les tables.
+
+export const RING_PARTNER = 0x80000000;
 
 import { geodesic, triNeighbors, V3 } from './geo.js';
 import { labelTriangles, findSeams } from './tear.js';
@@ -218,6 +223,9 @@ export function prepareMembrane(S, arm) {
   const lipData = new Uint32Array(nl * 8);
   lipP.forEach((p, l) => { const e = bEdges[l].slice(0, 6); lipData.set([p, e.length / 2, ...e], l * 8); });
 
+  // ── Anneaux ──
+  const ring = ringTable(np, adj, bonds);
+
   // ── Fibrilles : ancrages (le partenaire voisin le long de la couture) ──
   const frng = rng.fork('fib');
   const byP = new Map();
@@ -273,10 +281,22 @@ export function prepareMembrane(S, arm) {
 
   return {
     np, nb, nl, nf: fibs.length, VV: np + nl * 3, meanEdge, nParts, nCols: cols.length, nSteps,
-    meta, csr, bonds: bondBuf, lipData, fibData, poses, cols: colBuf,
+    meta, csr, bonds: bondBuf, lipData, ring, fibData, poses, cols: colBuf,
     geo, fib,
     info: { particles: np, triangles: nt, bonds: nb, seams: seams.length, lips: nl, fibrils: fibs.length },
   };
+}
+
+// ── Anneaux : [début de chaque particule (np + 1)] puis les entrées ─────────
+function ringTable(np, adj, bonds) {
+  const part = Array.from({ length: np }, () => []);
+  bonds.forEach((b, k) => { part[b.i].push((RING_PARTNER | b.j) >>> 0, k); part[b.j].push((RING_PARTNER | b.i) >>> 0, k); });
+  const n = adj.reduce((s, a) => s + a.length, 0) + part.reduce((s, a) => s + a.length, 0);
+  const out = new Uint32Array(np + 1 + n);
+  let o = np + 1;
+  for (let i = 0; i < np; i++) { out[i] = o; out.set(adj[i], o); o += adj[i].length; out.set(part[i], o); o += part[i].length; }
+  out[np] = o;
+  return out;
 }
 
 // ── Fibrilles : maillage (K tronçons × R sommets) ────────────────────────────
