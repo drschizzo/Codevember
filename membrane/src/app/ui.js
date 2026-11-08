@@ -35,7 +35,7 @@ const LOOK = [
   ]],
   ['Vaisseaux, fibres, plis', [
     ['vessels', 'Vaisseaux', 0, 2, 0.01], ['vesselColor', 'Sang (absorption)', 'color'], ['vesselRelief', 'Vaisseaux : relief', 0, 2, 0.01], ['capillary', 'Capillaires', 0, 2, 0.01],
-    ['fibers', 'Fibres', 0, 2, 0.01], ['fiberScale', 'Fibres : échelle', 0.3, 4, 0.01], ['wrinkles', 'Plis de compression', 0, 2, 0.01],
+    ['fibers', 'Fibres', 0, 2, 0.01], ['fiberScale', 'Fibres : échelle', 0.3, 4, 0.01], ['wrinkles', 'Plis de compression', 0, 2, 0.01], ['wrinkleScale', 'Plis : longueur d’onde (×)', 0.3, 3, 0.01],
   ]],
   ['Tension et lèvres', [
     ['whiten', 'Blanchiment sous tension', 0, 1, 0.01], ['whitenColor', 'Blanchiment : couleur', 'color'], ['edgeWhite', 'Blanchiment des bords', 0, 1, 0.01],

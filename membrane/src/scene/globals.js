@@ -12,6 +12,7 @@ export const G = {
   sssBoost: uniform(1),       // intensité globale de la translucidité
   armEnv: uniform(0.6),       // part du studio que l'armature voit au travers de sa membrane
   bgColor: uniform(new THREE.Color(0, 0, 0)),
+  fogNear: uniform(2), fogFar: uniform(7), // (brume linéaire de la scène)
   // lumière polarisée (photoélasticité, voir photo.js)
   polar: uniform(0),          // part polarisée de la lumière qui traverse les membranes
   polCross: uniform(1),       // analyseur croisé (1, champ sombre) ou parallèle (0, champ clair)

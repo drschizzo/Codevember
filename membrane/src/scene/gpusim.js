@@ -509,9 +509,20 @@ fn triSum(i: u32) -> vec4f {
 // anneau. Le déformé est mesuré depuis la géométrie au repos, pas depuis les
 // longueurs relaxées : un lambeau étiré plastiquement garde sa biréfringence
 // (orientation des chaînes du polymère), comme un film plastique que l'on a tiré.
-// str[2i] = (Exx, Eyy, Ezz), str[2i + 1] = (Exy, Eyz, Ezx), repère de la couche.
+//
+// Plis. Un film mince ne supporte pas la compression : il flambe en plis
+// parallèles à la tension. Le maillage simulé est trop grossier pour les
+// résoudre, mais il sait où la matière est comprimée et dans quel sens : on
+// garde, dans le repère au repos (les plis restent attachés à la matière), le
+// tenseur W = c·k·kᵀ, où k est la direction de compression (vecteur propre de
+// C = FᵀF pour la plus petite valeur propre) et c = max(0, (1 − pre) − λ₂) la
+// compression au-delà de la longueur relâchée. Le matériau en tire des plis
+// (voir wrinkles dans membrane.js).
+//
+// str[3i] = (Exx, Eyy, Ezz, Wxx), str[3i + 1] = (Exy, Eyz, Ezx, Wyy),
+// str[3i + 2] = (Wzz, Wxy, Wyz, Wzx), repère de la couche.
 const STRAIN = FRAMES + /* wgsl */`
-struct U { np: u32, nl: u32, F: u32, lipOff: u32, f: f32, fPrev: f32, lipT: f32, ringOff: u32 };
+struct U { np: u32, nl: u32, F: u32, lipOff: u32, f: f32, fPrev: f32, lipT: f32, ringOff: u32, pre: f32, q0: f32, q1: f32, q2: f32 };
 @group(0) @binding(0) var<storage, read_write> cur: array<vec4f>;
 @group(0) @binding(1) var<storage, read_write> pmeta: array<vec4f>;
 @group(0) @binding(2) var<storage, read_write> csr: array<u32>;
@@ -523,9 +534,9 @@ const PARTNER = 0x80000000u;
 fn tNow() -> f32 { return u.f / f32(u.F - 1u); }
 fn intact(k: u32) -> bool { let tb = bonds[k * 8u + 3u]; return tb < 0.0 || tb > tNow(); }
 fn rg(k: u32) -> u32 { return csr[u.ringOff + k]; }
-struct Acc { a: vec3f, b: vec3f, w: f32 };
+struct Acc { a: vec3f, b: vec3f, wa: vec3f, wb: vec3f, w: f32 };
 fn triDev(i: u32) -> Acc {
-  var r: Acc; r.a = vec3f(0.0); r.b = vec3f(0.0); r.w = 0.0;
+  var r: Acc; r.a = vec3f(0.0); r.b = vec3f(0.0); r.wa = vec3f(0.0); r.wb = vec3f(0.0); r.w = 0.0;
   let x0 = cur[i].xyz; let X0 = pmeta[2u * i].xyz;
   for (var k = csr[u.np + 1u + i]; k < csr[u.np + 2u + i]; k += 2u) {
     let j = csr[k]; let l = csr[k + 1u];
@@ -544,6 +555,18 @@ fn triDev(i: u32) -> Acc {
     let A = f0p * f0p + f1p * f1p; let D = f0q * f0q + f1q * f1q; let C = f0p * f0q + f1p * f1q;
     let m = 0.5 * (A + D); let hd = 0.5 * (A - D); let rr = sqrt(hd * hd + C * C);
     r.w += A2;
+    // compression (repère au repos) : C = FᵀF dans (ue, ve)
+    let C00 = dot(f0, f0); let C11 = dot(f1, f1); let C01 = dot(f0, f1);
+    let cm = 0.5 * (C00 + C11); let ch = 0.5 * (C00 - C11); let cr = sqrt(ch * ch + C01 * C01);
+    let cmp = max(0.0, (1.0 - u.pre) - sqrt(max(cm - cr, 0.0)));
+    if (cmp > 0.0) {
+      // k ⟂ direction principale : k·kᵀ = ½(I − cos2α(ueueᵀ − veveᵀ) − sin2α(ueveᵀ + veueᵀ))
+      var c2c = 1.0; var s2c = 0.0;
+      if (cr > 1e-9) { c2c = ch / cr; s2c = C01 / cr; }
+      let kw = 0.5 * cmp * A2;
+      r.wa += kw * ((ue * ue + ve * ve) - c2c * (ue * ue - ve * ve) - s2c * 2.0 * ue * ve);
+      r.wb += kw * ((ue * ue.yzx + ve * ve.yzx) - c2c * (ue * ue.yzx - ve * ve.yzx) - s2c * (ue * ve.yzx + ve * ue.yzx));
+    }
     if (rr < 1e-9) { continue; }
     // ln(λ₁/λ₂) = ½·ln(λ₁²/λ₂²) ; cos 2α, sin 2α de la direction principale
     let dl = 0.5 * log((m + rr) / max(m - rr, 1e-6));
@@ -558,31 +581,33 @@ fn triDev(i: u32) -> Acc {
   let i = g.x; if (i >= u.np) { return; }
   var s = triDev(i);
   for (var r = csr[i]; r < csr[i + 1u]; r += 8u) {
-    if (csr[r + 1u] == 2u && intact(csr[r + 3u])) { let t = triDev(csr[r]); s.a += t.a; s.b += t.b; s.w += t.w; }
+    if (csr[r + 1u] == 2u && intact(csr[r + 3u])) { let t = triDev(csr[r]); s.a += t.a; s.b += t.b; s.wa += t.wa; s.wb += t.wb; s.w += t.w; }
   }
   let w = max(s.w, 1e-12);
-  tmp[2u * i] = vec4f(s.a / w, 0.0); tmp[2u * i + 1u] = vec4f(s.b / w, 0.0);
+  let wa = s.wa / w; let wb = s.wb / w;
+  tmp[3u * i] = vec4f(s.a / w, wa.x); tmp[3u * i + 1u] = vec4f(s.b / w, wa.y); tmp[3u * i + 2u] = vec4f(wa.z, wb);
 }
 @compute @workgroup_size(${WG}) fn strainSmooth(@builtin(global_invocation_id) g: vec3u) {
   let i = g.x; if (i >= u.np) { return; }
-  var a = vec3f(0.0); var b = vec3f(0.0); var k = 0.0;
+  var a = vec4f(0.0); var b = vec4f(0.0); var c = vec4f(0.0); var k = 0.0;
   var r = rg(i); let e = rg(i + 1u);
   while (r < e) {
     let v = rg(r);
     if ((v & PARTNER) != 0u) { r += 2u; continue; }
-    a += tmp[2u * v].xyz; b += tmp[2u * v + 1u].xyz; k += 1.0; r += 1u;
+    a += tmp[3u * v]; b += tmp[3u * v + 1u]; c += tmp[3u * v + 2u]; k += 1.0; r += 1u;
   }
   // moitié la particule, moitié ses voisines
-  let kk = max(k, 1.0);
-  str[2u * i] = vec4f(0.5 * tmp[2u * i].xyz + 0.5 * a / kk, 0.0);
-  str[2u * i + 1u] = vec4f(0.5 * tmp[2u * i + 1u].xyz + 0.5 * b / kk, 0.0);
+  let kk = 0.5 / max(k, 1.0);
+  str[3u * i] = 0.5 * tmp[3u * i] + a * kk;
+  str[3u * i + 1u] = 0.5 * tmp[3u * i + 1u] + b * kk;
+  str[3u * i + 2u] = 0.5 * tmp[3u * i + 2u] + c * kk;
 }
 // sommets des lèvres : ceux de leur particule
 @compute @workgroup_size(${WG}) fn strainLips(@builtin(global_invocation_id) g: vec3u) {
   let l = g.x; if (l >= u.nl) { return; }
   let pi = csr[u.lipOff + l * 8u];
-  let a = str[2u * pi]; let b = str[2u * pi + 1u];
-  for (var k = 0u; k < ${LIP_RING}u; k++) { let o = u.np + l * ${LIP_RING}u + k; str[2u * o] = a; str[2u * o + 1u] = b; }
+  let a = str[3u * pi]; let b = str[3u * pi + 1u]; let c = str[3u * pi + 2u];
+  for (var k = 0u; k < ${LIP_RING}u; k++) { let o = u.np + l * ${LIP_RING}u + k; str[3u * o] = a; str[3u * o + 1u] = b; str[3u * o + 2u] = c; }
 }
 `;
 
@@ -762,29 +787,34 @@ export async function simulate(device, prep, S, fibOut, onProgress) {
 // ── Pose d'une couche ────────────────────────────────────────────────────────
 export function createPoser(device, gpu, prep, S, out) {
   const P = pipelines(device);
-  const ub = device.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+  const ub = device.createBuffer({ size: 48, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
   const raw = emptyBuf(device, prep.np * 16); // (normales avant lissage)
   const bg = device.createBindGroup({
     layout: P.poseL,
     entries: [gpu.frames, gpu.csr, gpu.bonds, gpu.meta, raw, out.cur, out.prv, out.nor].map((b, i) => ({ binding: i, resource: { buffer: b } }))
       .concat([{ binding: 8, resource: { buffer: ub } }]),
   });
-  const data = new ArrayBuffer(32), du = new Uint32Array(data), df = new Float32Array(data);
-  du.set([prep.np, prep.nl, S.frames, gpu.lipOff]); du[7] = gpu.ringOff;
+  const data = new ArrayBuffer(48), du = new Uint32Array(data), df = new Float32Array(data);
+  du.set([prep.np, prep.nl, S.frames, gpu.lipOff]); du[7] = gpu.ringOff; df[8] = S.pre ?? 0;
   const lipT = S.thick * S.lip * 0.5;
-  // déformation (photoélasticité), seulement si le matériau la lit
+  // déformation (photoélasticité, plis), seulement si le matériau la lit
   let sbg = null, stmp = null;
   if (out.str) {
-    stmp = emptyBuf(device, prep.np * 32);
+    stmp = emptyBuf(device, prep.np * 48);
     sbg = device.createBindGroup({
       layout: P.strL,
       entries: [out.cur, gpu.meta, gpu.csr, gpu.bonds, stmp, out.str].map((b, i) => ({ binding: i, resource: { buffer: b } }))
         .concat([{ binding: 6, resource: { buffer: ub } }]),
     });
   }
+  // (dernière pose calculée : une couche close ou finie ne bouge plus, ses
+  // tampons sont déjà justes — on ne refait rien)
+  let lastF = NaN, lastFPrev = NaN;
   return {
     // encode la pose à l'image f (et fPrev pour les vecteurs vitesse)
     encode(enc, f, fPrev) {
+      if (f === lastF && fPrev === lastFPrev) return;
+      lastF = f; lastFPrev = fPrev;
       df[4] = f; df[5] = fPrev; df[6] = lipT;
       device.queue.writeBuffer(ub, 0, data);
       const pass = enc.beginComputePass();
