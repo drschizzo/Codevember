@@ -14,7 +14,7 @@
 // dégrafage de l'avant), vitesses. Par image : enregistrement des positions.
 //
 // Pose (à chaque image, pour chaque couche affichée) : positions interpolées
-// entre deux images enregistrées, position à l'image précédente, normales
+// entre les images enregistrées (Catmull-Rom), position à l'image précédente, normales
 // (soudées à travers les coutures encore intactes, puis lissées), courbure,
 // dilatation de surface J, endommagement, et sommets des lèvres. Le rendu les lit directement dans ses
 // tampons (aucun aller-retour par le processeur).
@@ -357,10 +357,15 @@ struct U { np: u32, nl: u32, F: u32, lipOff: u32, f: f32, fPrev: f32, lipT: f32,
 @group(0) @binding(7) var<storage, read_write> nor: array<vec4f>;
 @group(0) @binding(8) var<uniform> u: U;
 
+// position à l'image f : spline de Catmull-Rom entre les images enregistrées.
+// Au ralenti, une image enregistrée couvre plusieurs images affichées : une
+// interpolation linéaire y briserait la vitesse à chaque image enregistrée.
+fn frame(k: u32, i: u32) -> vec3f { return frames[min(k, u.F - 1u) * u.np + i].xyz; }
 fn at(i: u32, f: f32) -> vec3f {
   let ff = clamp(f, 0.0, f32(u.F - 1u));
-  let f0 = u32(floor(ff)); let f1 = min(f0 + 1u, u.F - 1u);
-  return mix(frames[f0 * u.np + i].xyz, frames[f1 * u.np + i].xyz, fract(ff));
+  let k = u32(floor(ff)); let t = fract(ff);
+  let p0 = frame(max(k, 1u) - 1u, i); let p1 = frame(k, i); let p2 = frame(k + 1u, i); let p3 = frame(k + 2u, i);
+  return p1 + 0.5 * t * ((p2 - p0) + t * ((2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) + t * (3.0 * (p1 - p2) + p3 - p0)));
 }
 fn tNow() -> f32 { return u.f / f32(u.F - 1u); }
 fn intact(k: u32) -> bool { let tb = bonds[k * 8u + 3u]; return tb < 0.0 || tb > tNow(); }
