@@ -103,6 +103,7 @@ async function main() {
     setTimeout(() => {
       if (R !== recipe) return;
       tess.setRecipe(R);
+      phi = 0; // (chaque scène commence par le patron déplié)
       syncEnv();
       loading.applied = true;
       resetMotion = true;
