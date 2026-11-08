@@ -223,6 +223,16 @@ async function main() {
     camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
   }
+  // Rendu hors de la boucle d'animation (export, image fixe, débogage). three.js
+  // ne refait la passe de scène, les cartes d'ombre et les vecteurs vitesse de
+  // la caméra qu'une fois par « image » de son compteur, qui n'avance que dans
+  // setAnimationLoop : plusieurs rendus dans le même tour de boucle
+  // réutiliseraient la première image (vidéo exportée aux images dupliquées).
+  function renderStep(u) {
+    renderer._nodes?.nodeFrame?.update();
+    renderAt(u);
+  }
+
   function applyRender() {
     resize();
     lights.setShadowQuality(RENDER.shadows);
@@ -300,7 +310,7 @@ async function main() {
       if (v) controls.target.set(0, 0, 0);
       toast(v ? 'Caméra libre : la plongée n’est plus alignée sur les oculus' : 'Caméra du film', 2600);
     },
-    exportPNG: () => exportPNG(canvas, () => renderAt(phi), `hollow-${R.seed}.png`),
+    exportPNG: () => exportPNG(canvas, () => renderStep(phi), `hollow-${R.seed}.png`),
     exportVideo: async (o) => {
       if (busy) return;
       busy = true;
@@ -309,7 +319,7 @@ async function main() {
       $('#progress').classList.add('on');
       try {
         await exportLoop({
-          canvas, duration: R.loop.duration, renderAt,
+          canvas, duration: R.loop.duration, renderAt: renderStep,
           setSize: (w, h) => { renderer.setPixelRatio(1); renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); },
           restore: () => { canvas.style.width = ''; canvas.style.height = ''; resize(); },
         }, o, (p) => { $('#progress u').style.width = `${(p * 100).toFixed(1)}%`; }, `hollow-${R.seed}-${o.width}x${o.height}.mp4`);
@@ -331,7 +341,7 @@ async function main() {
   applyRecipe();
   if (params.has('debug')) {
     window.hollow = {
-      renderer, scene, camera, controls, nest, lights, dust, post, gen, RENDER, renderAt, on,
+      renderer, scene, camera, controls, nest, lights, dust, post, gen, RENDER, renderAt: renderStep, on,
       get R() { return R; },
       seek: (p) => { phi = p; paused = true; },
       play: () => { paused = false; },
@@ -342,7 +352,7 @@ async function main() {
         frozen = true;
         $('#loader').classList.add('gone');
         document.body.classList.add('clean');
-        for (let i = 0; i < n; i++) { renderAt(ph); await renderer.backend.device?.queue.onSubmittedWorkDone(); }
+        for (let i = 0; i < n; i++) { renderStep(ph); await renderer.backend.device?.queue.onSubmittedWorkDone(); }
       },
       // la couche i à la profondeur relative x (seule, ou dans la scène)
       view(i, x, solo = true) {

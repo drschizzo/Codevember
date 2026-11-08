@@ -201,5 +201,5 @@ export function createPost(renderer, scene, camera, lights) {
     renderer.toneMapping = TONE_MAPPINGS[cfg.toneMapping] ?? THREE.AgXToneMapping;
   }
 
-  return { pipeline, update, render: () => pipeline.render(), U };
+  return { pipeline, update, render: () => pipeline.render(), U, get nodes() { return nodes; } };
 }
