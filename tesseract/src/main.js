@@ -18,7 +18,7 @@ import { createUI } from './app/ui.js';
 import { loadRender, saveRender, applyQuality, RENDER_DEFAULTS } from './app/settings.js';
 import { exportLoop, exportPNG } from './app/capture.js';
 import { createOverlay, drawOverlay } from './app/overlay.js';
-import { insidePose } from './scene/voyage.js';
+import { insidePose, entryAxis } from './scene/voyage.js';
 import { voyageSeconds } from './math4.js';
 
 const TARGET = 1.9; // rayon de l'objet à l'écran (unités du monde)
@@ -118,32 +118,49 @@ async function main() {
   }
 
   // ── Rendu d'une phase ──
-  function rigCamera(ph) {
+  // pose extérieure (repère du monde) à la phase ph ; fold : pliage moyen
+  function outsideCamera(ph, fold, target) {
     const K = R.camera, w = ph * Math.PI * 2;
     const az = K.az + w * K.orbit + K.sway * 0.35 * Math.sin(w);
     const el = K.elev + K.sway * 0.06 * Math.sin(2 * w + 0.7);
     // recul : l'objet occupe ~60 % de la demi-hauteur (ou de la demi-largeur, en portrait)
     // travelling : la caméra s'approche quand le tesseract est plié (il est
     // alors plus petit, et l'on veut voir l'intérieur des cellules)
-    const fold = info?.state ? Math.min(1, Math.max(0, info.state.fold)) : 0;
     // (et déplié, le patron est vu d'un peu plus près)
     const close = (1 - (R.view?.dolly ?? 0) * 0.3 * fold * fold * (3 - 2 * fold)) * (1 - 0.28 * (1 - fold));
     const d = close * (K.dist * TARGET) / (0.6 * Math.tan((K.fov * Math.PI) / 360) * Math.min(1, camera.aspect));
-    camera.position.set(Math.sin(az) * Math.cos(el) * d, Math.sin(el) * d, Math.cos(az) * Math.cos(el) * d);
+    return target.set(Math.sin(az) * Math.cos(el) * d, Math.sin(el) * d, Math.cos(az) * Math.cos(el) * d);
+  }
+  // rayon d'entrée (ou de sortie) : choisi d'après la caméra extérieure au
+  // début de la plongée (ou à la fin de la remontée), dans le repère local
+  const _e = new THREE.Euler(), _gq = new THREE.Quaternion();
+  function axisAt(ph) {
+    const g = tess.group, p = outsideCamera(ph, 1, new THREE.Vector3());
+    _gq.setFromEuler(_e.set(R.proj.tiltX, Math.PI * 2 * R.proj.spin * ph, R.proj.tiltZ, 'YXZ')).invert();
+    return entryAxis(p.sub(g.position).divideScalar(g.scale.x).applyQuaternion(_gq));
+  }
+  function rigCamera(ph) {
+    const K = R.camera;
+    const fold = info?.state ? Math.min(1, Math.max(0, info.state.fold)) : 0;
+    outsideCamera(ph, fold, camera.position);
     camera.up.set(0, 1, 0);
     camera.lookAt(0, -0.15, 0);
     let fov = K.fov;
     // voyage intérieur : la caméra entre dans l'hypersphère (voir scene/voyage.js)
-    const kc = info?.kc ?? 0;
-    if (kc > 0 && info.frames) {
+    const st = info?.state, kc = info?.kc ?? 0;
+    if (st?.seg !== undefined && ['plunge', 'dwell', 'travel', 'surface'].includes(st.phase) && info.frames) {
       const g = tess.group, qi = g.quaternion.clone().invert();
+      const tl = info.timeline;
       const out = {
         pos: g.worldToLocal(camera.position.clone()),
         fwd: _f.set(0, 0, -1).applyQuaternion(camera.quaternion).applyQuaternion(qi).clone(),
         up: _u.set(0, 1, 0).applyQuaternion(camera.quaternion).applyQuaternion(qi).clone(),
+        upL: new THREE.Vector3(0, 1, 0).applyQuaternion(qi),
+        uIn: axisAt(tl.find((p) => p.k === 'plunge').a),
+        uOut: axisAt(tl.find((p) => p.k === 'surface').b),
       };
-      const P = insidePose(info.state, R, info.frames, out);
-      const pos = out.pos.lerp(P.pos, kc), fwd = out.fwd.lerp(P.fwd, kc).normalize(), up = out.up.lerp(P.up, kc).normalize();
+      const P = insidePose(st, R, info.frames, out);
+      const pos = P.pos, fwd = P.fwd.normalize(), up = P.up.normalize();
       g.localToWorld(pos);
       fwd.applyQuaternion(g.quaternion); up.applyQuaternion(g.quaternion);
       camera.position.copy(pos);

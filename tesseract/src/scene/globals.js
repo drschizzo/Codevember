@@ -17,6 +17,7 @@ export const G = {
   camLocal: uniform(new THREE.Vector3(0, 0, 50)), pass: uniform(0), passNear: uniform(0.1), passFar: uniform(0.36), passLat: uniform(1.05),
   // les deux portes du voyage (centre projeté, ouverture) : la précédente se
   // referme, la suivante s'ouvre avant la traversée
+  voyageK: uniform(0),
   door0: uniform(new THREE.Vector4(0, 0, 50, 0)), door1: uniform(new THREE.Vector4(0, 0, 50, 0)),
   // profondeur 4D (w) lue en couleur sur l'ossature et le fantôme : froid loin
   // de l'œil 4D, chaud tout près

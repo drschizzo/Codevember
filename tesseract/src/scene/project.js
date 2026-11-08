@@ -83,7 +83,9 @@ export function projectPosition(U, full, reveal = false) {
       const nl = normalize(pl.sub(pcl).add(vec3(1e-6, 0, 0)));
       const rel = G.camLocal.sub(pl), dn = dot(rel, nl);
       const lat = length(rel.sub(nl.mul(dn)));
-      const pass = smoothstep(G.passFar, G.passNear, abs(dn)).mul(smoothstep(G.passLat, G.passLat.mul(0.75), lat)).mul(G.pass);
+      // (à l'échelle de la face : loin du centre, la projection agrandit tout)
+      const sf = length(pl.sub(pcl)).div(0.83).clamp(0.6, 8);
+      const pass = smoothstep(G.passFar.mul(sf), G.passNear.mul(sf), abs(dn)).mul(smoothstep(G.passLat.mul(sf), G.passLat.mul(sf).mul(0.75), lat)).mul(G.pass);
       const door = max(
         smoothstep(0.32, 0.12, length(pl.sub(G.door0.xyz))).mul(G.door0.w),
         smoothstep(0.32, 0.12, length(pl.sub(G.door1.xyz))).mul(G.door1.w));
