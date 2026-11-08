@@ -88,6 +88,8 @@ function floorMaterial(kind, U) {
   return m;
 }
 
+const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3();
+
 export function createStage(scene) {
   const U = { tint: uniform(new THREE.Color(1, 1, 1)) };
   const floorMesh = new THREE.Mesh(new THREE.PlaneGeometry(120, 120, 1, 1).rotateX(-Math.PI / 2), null);
@@ -115,7 +117,11 @@ export function createStage(scene) {
   return {
     floor: floorMesh, key, rim, rim2,
     setShadowQuality(q) { const s = SHADOW_SIZES[q] || 2048; key.shadow.mapSize.set(s, s); },
-    update(R, floorY) {
+    // vc : voyage intérieur (kc : part de la caméra intérieure, kp : de la
+    // projection stéréographique ; scale : échelle du tesseract). Le
+    // projecteur principal devient une lampe portée par la caméra : sa lumière
+    // passe par les ajours et dessine leurs ombres dans les pièces suivantes.
+    update(R, floorY, vc = {}) {
       const kind = R.floor.kind;
       if (kind !== floorKind) {
         floorKind = kind;
@@ -123,18 +129,35 @@ export function createStage(scene) {
         floorMesh.material = kind === 'none' ? null : floorMaterial(kind, U);
         old?.dispose();
       }
-      floorMesh.visible = kind !== 'none';
-      floorMesh.position.y = floorY;
       const k = R.key;
       key.color.set(k.color); key.intensity = k.intensity; key.angle = k.angle; key.penumbra = k.penumbra;
       key.shadow.radius = k.soft;
       place(key, k.az, k.el, 11);
       const r = R.rim;
-      rim.color.set(r.color); rim.intensity = r.intensity;
+      const kc = vc.kc ?? 0, kp = vc.kp ?? 0;
+      rim.color.set(r.color); rim.intensity = r.intensity * (1 - kp) ** 2;
       place(rim, r.az, r.el, 10);
       const r2 = R.rim2;
-      rim2.color.set(r2.color); rim2.intensity = r2.intensity;
+      rim2.color.set(r2.color); rim2.intensity = r2.intensity * (1 - kp) ** 2;
       place(rim2, r2.az, r2.el, 10);
+      // (le sol s'éloigne : il n'y a pas de sol dans l'hypersphère)
+      floorMesh.position.y = floorY - 60 * kp * kp;
+      floorMesh.visible = kind !== 'none' && kp < 0.999;
+      const sc = key.shadow.camera;
+      if (kc > 0 && vc.camera) {
+        const C = vc.camera, s = vc.scale ?? 1;
+        const fwd = _a.set(0, 0, -1).applyQuaternion(C.quaternion), up = _b.set(0, 1, 0).applyQuaternion(C.quaternion);
+        _c.copy(C.position).addScaledVector(up, 0.09 * s).addScaledVector(fwd, -0.04 * s);
+        key.position.lerp(_c, kc);
+        key.target.position.lerp(_c.addScaledVector(fwd, 3 * s), kc);
+        key.intensity = k.intensity * (1 - kc) + (vc.lamp ?? 1) * 4 * (k.intensity / 700) * s * s * kc;
+        key.angle = k.angle + (0.85 - k.angle) * kc;
+        key.penumbra = k.penumbra + (0.95 - k.penumbra) * kc;
+        key.shadow.radius = k.soft * (1 - kc) + 2 * kc;
+        sc.near = 3 + (0.02 * s - 3) * kc;
+        sc.far = 30 + (12 * s - 30) * kc;
+      } else { sc.near = 3; sc.far = 30; }
+      sc.updateProjectionMatrix();
     },
   };
 }

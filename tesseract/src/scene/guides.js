@@ -186,7 +186,8 @@ export function createGuides(group, scene) {
         const L = lights[c];
         L.position.copy(_v);
         L.color.set(V.practicalColor);
-        L.intensity = V.practical * (1 - out) * scale * scale;
+        // (en voyage, la lampe de la caméra prend le relais : lumières adoucies)
+        L.intensity = V.practical * (1 - out) * scale * scale * (1 - 0.5 * G.pass.value);
         L.distance = 2.4 * scale;
       }
     },

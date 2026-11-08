@@ -18,6 +18,8 @@ import { createUI } from './app/ui.js';
 import { loadRender, saveRender, applyQuality, RENDER_DEFAULTS } from './app/settings.js';
 import { exportLoop, exportPNG } from './app/capture.js';
 import { createOverlay, drawOverlay } from './app/overlay.js';
+import { insidePose } from './scene/voyage.js';
+import { voyageSeconds } from './math4.js';
 
 const TARGET = 1.9; // rayon de l'objet à l'écran (unités du monde)
 const params = new URLSearchParams(location.search);
@@ -128,8 +130,28 @@ async function main() {
     camera.position.set(Math.sin(az) * Math.cos(el) * d, Math.sin(el) * d, Math.cos(az) * Math.cos(el) * d);
     camera.up.set(0, 1, 0);
     camera.lookAt(0, -0.15, 0);
-    if (camera.fov !== K.fov) { camera.fov = K.fov; camera.updateProjectionMatrix(); }
+    let fov = K.fov;
+    // voyage intérieur : la caméra entre dans l'hypersphère (voir scene/voyage.js)
+    const kc = info?.kc ?? 0;
+    if (kc > 0 && info.frames) {
+      const g = tess.group, qi = g.quaternion.clone().invert();
+      const out = {
+        pos: g.worldToLocal(camera.position.clone()),
+        fwd: _f.set(0, 0, -1).applyQuaternion(camera.quaternion).applyQuaternion(qi).clone(),
+        up: _u.set(0, 1, 0).applyQuaternion(camera.quaternion).applyQuaternion(qi).clone(),
+      };
+      const P = insidePose(info.state, R, info.frames, out);
+      const pos = out.pos.lerp(P.pos, kc), fwd = out.fwd.lerp(P.fwd, kc).normalize(), up = out.up.lerp(P.up, kc).normalize();
+      g.localToWorld(pos);
+      fwd.applyQuaternion(g.quaternion); up.applyQuaternion(g.quaternion);
+      camera.position.copy(pos);
+      camera.up.copy(up);
+      camera.lookAt(_t.copy(pos).add(fwd));
+      fov = K.fov + ((R.voyage.fov ?? 68) - K.fov) * kc;
+    }
+    if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); }
   }
+  const _f = new THREE.Vector3(), _u = new THREE.Vector3(), _t = new THREE.Vector3();
   let lastPhase = 0, info = null;
   function renderAt(u) {
     const ph = u - Math.floor(u);
@@ -143,20 +165,28 @@ async function main() {
     G.roughFloor.value = RENDER.roughFloor;
     G.nestEnv.value = RENDER.nestEnv;
     G.crystalThick.value = RENDER.crystalThick;
-    G.cutaway.value = R.view.cutaway;
-    if (camState.free) controls.update(); else rigCamera(ph);
     const floorY = -R.floor.level * TARGET;
-    G.viewPos.value.copy(camera.position);
+    // (le tesseract d'abord : la caméra du voyage se règle sur son état)
     info = tess.update(ph, { target: TARGET, floorY, reset });
+    if (camState.free) controls.update(); else rigCamera(ph);
+    camera.updateMatrixWorld();
+    G.viewPos.value.copy(camera.position);
+    tess.group.worldToLocal(G.camLocal.value.copy(camera.position));
+    // (en voyage, la coupe côté caméra n'a plus de sens : on est dedans)
+    const kp = info?.kp ?? 0, kc = info?.kc ?? 0, sc = info?.scale ?? 1;
+    G.cutaway.value = R.view.cutaway * (1 - kp);
     overlay.draw(info, R, RENDER);
-    stage.update(R, floorY);
+    stage.update(R, floorY, { kc, kp, camera, scale: sc, lamp: R.voyage?.lamp ?? 1 });
     scene.background.set(R.bg);
     scene.fog.color.set(R.bg);
-    scene.fog.near = R.fog.near;
-    scene.fog.far = R.fog.far;
-    scene.environmentIntensity = R.env.intensity;
+    const V = R.voyage ?? {};
+    scene.fog.near = R.fog.near + ((V.fogNear ?? 1.4) * sc - R.fog.near) * kc;
+    scene.fog.far = R.fog.far + ((V.fogFar ?? 6.5) * sc - R.fog.far) * kc;
+    // (un univers clos : le studio ne s'y reflète presque plus)
+    scene.environmentIntensity = R.env.intensity * (1 - 0.65 * kp);
     scene.environmentRotation.set(0, R.env.rotation, 0);
-    const focusDist = camera.position.length() * RENDER.focus;
+    const focusOut = camera.position.length(), focusIn = tess.group.position.distanceTo(camera.position);
+    const focusDist = (focusOut + (focusIn - focusOut) * kc) * RENDER.focus;
     post.update({ ...RENDER, focus: focusDist, focusRange: RENDER.focusRange * TARGET * 2 }, R);
     post.render();
   }
@@ -185,6 +215,7 @@ async function main() {
     random: () => { R = generate(randomSeed()); applyRecipe(); },
     regenerate: (seed) => { if (seed && seed !== R.seed) { R = generate(seed); applyRecipe(); } },
     moodChanged: () => { R = generate(R.seed, { mood: R.mood }); applyRecipe(); },
+    voyageChanged: () => { R.loop.duration = R.voyage.on ? Math.round(voyageSeconds(R)) : Math.round(R.moves.length * 7.5); tess.refresh(); ui?.rebuild(); },
     copyLink: async () => {
       const url = new URL(location.href);
       url.hash = `r=${await packRecipe(R)}`;
@@ -194,7 +225,7 @@ async function main() {
     recipeChanged: () => tess.refresh(),
     envChanged: () => syncEnv(),
     netChanged: (shape) => { R.net.shape = shape; R.net.parent = randomNet(rngUI(), shape); tess.refresh(); },
-    movesChanged: () => { R.moves = randomMoves(rngUI(), R.moveMode, true); tess.refresh(); ui?.rebuild(); },
+    movesChanged: () => { R.moves = randomMoves(rngUI(), R.moveMode, true); if (R.voyage?.on) R.loop.duration = Math.round(voyageSeconds(R)); tess.refresh(); ui?.rebuild(); },
     frameGeometry: () => tess.syncGeometry(null),
     frameSet: (s) => { R.frame.set = s; R.frame.finish = finishesFor(s, rngUI()); tess.syncMaterial(null); ui?.rebuild(); },
     frameMaterial: () => tess.syncMaterial(null),
@@ -247,6 +278,24 @@ async function main() {
       get info() { return info; },
       seek: (p) => { phi = p; paused = true; },
       play: () => { paused = false; frozen = false; },
+      // phase d'un moment du voyage : at('travel', 1, 0.5)
+      at(k, i = 0, f = 0) { const t = info?.timeline?.find((p) => p.k === k && p.i === i); return t ? t.a + (t.b - t.a) * f : null; },
+      // image rendue, envoyée à un collecteur local (mise au point, panneau masqué)
+      async send(name, scale = 0.5, url = 'http://127.0.0.1:8099/') {
+        const w = canvas.width, h = canvas.height;
+        const rt = new THREE.RenderTarget(w, h, { type: THREE.UnsignedByteType });
+        renderer.setRenderTarget(rt); post.render(); renderer.setRenderTarget(null);
+        const px = await renderer.readRenderTargetPixelsAsync(rt, 0, 0, w, h);
+        rt.dispose();
+        const c = new OffscreenCanvas(w, h), img = c.getContext('2d').createImageData(w, h), stride = Math.ceil((w * 4) / 256) * 256;
+        for (let y = 0; y < h; y++) img.data.set(px.subarray(y * stride, y * stride + w * 4), y * w * 4);
+        c.getContext('2d').putImageData(img, 0, 0);
+        const sc = new OffscreenCanvas(Math.round(w * scale), Math.round(h * scale));
+        sc.getContext('2d').drawImage(c, 0, 0, sc.width, sc.height);
+        const b = await sc.convertToBlob({ type: 'image/jpeg', quality: 0.88 });
+        await fetch(url + name, { method: 'POST', body: b });
+        return b.size;
+      },
       async shot(ph, n = 12) {
         while (!tess.ready()) await new Promise((r) => setTimeout(r, 200));
         frozen = true;

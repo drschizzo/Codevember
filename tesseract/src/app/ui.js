@@ -63,7 +63,8 @@ export function createUI({ recipe: getRecipe, render, on }) {
   fExp.add(exp, 'png').name('Image (PNG)');
 
   const fScene = gui.addFolder('Scène');
-  const fView = gui.addFolder('Lisibilité et intérieur');
+  const fVoy = gui.addFolder('Voyage intérieur');
+  const fView = gui.addFolder('Lisibilité et intérieur').close();
   const fChor = gui.addFolder('Chorégraphie').close();
   const fProj = gui.addFolder('Projection 4D').close();
   const fCam = gui.addFolder('Caméra').close();
@@ -101,6 +102,24 @@ export function createUI({ recipe: getRecipe, render, on }) {
     add(fView, V, 'practical', 0, 30, 0.1).name('Lumières d’écrin').onChange(ch);
     addC(fView, V, 'practicalColor').name('Lumières d’écrin : teinte').onChange(ch);
     add(fView, V, 'dolly', 0, 1, 0.01).name('Rapprochement (plié)').onChange(ch);
+
+    const Vy = R.voyage;
+    if (Vy) {
+      const vch = () => on.voyageChanged();
+      add(fVoy, Vy, 'on').name('Voyage intérieur').onChange(vch);
+      add(fVoy, Vy, 'plunge', 1, 10, 0.1).name('Plongée (s)').onChange(vch);
+      add(fVoy, Vy, 'dwell', 0.5, 8, 0.1).name('Halte dans chaque pièce (s)').onChange(vch);
+      add(fVoy, Vy, 'travel', 1, 10, 0.1).name('Traversée (s)').onChange(vch);
+      add(fVoy, Vy, 'surface', 1, 10, 0.1).name('Remontée (s)').onChange(vch);
+      add(fVoy, Vy, 'radius', 0.1, 0.6, 0.01).name('Écart à l’axe de la traversée').onChange(ch);
+      add(fVoy, Vy, 'orbitR', 0.3, 0.8, 0.01).name('Rayon du tour de l’objet').onChange(ch);
+      add(fVoy, Vy, 'fov', 30, 110, 0.5).name('Champ intérieur (°)').onChange(ch);
+      add(fVoy, Vy, 'lamp', 0, 4, 0.01).name('Lampe de la caméra').onChange(ch);
+      add(fVoy, Vy, 'see', 0, 1, 0.01).name('Parois ajourées (de l’intérieur)').onChange(ch);
+      add(fVoy, Vy, 'objScale', 0.12, 0.55, 0.01).name('Taille des objets').onChange(ch);
+      add(fVoy, Vy, 'fogNear', 0, 6, 0.01).name('Brouillard : début').onChange(ch);
+      add(fVoy, Vy, 'fogFar', 1, 14, 0.01).name('Brouillard : fin').onChange(ch);
+    }
 
     const C = R.chor;
     add(fChor, C, 'open', 0.05, 4, 0.01).name('Pause dépliée').onChange(ch);

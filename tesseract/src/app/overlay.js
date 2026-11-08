@@ -11,7 +11,7 @@
 // carré du fond passe devant), puis se déplie. Couleurs : la profondeur, comme
 // sur l'objet (froid loin de l'œil, chaud tout près).
 
-import { AXES } from '../math4.js';
+import { AXES, CELL_NAMES } from '../math4.js';
 
 const COLD = [59, 123, 255], WARM = [255, 138, 59];
 const mixc = (t) => COLD.map((c, i) => Math.round(c + (WARM[i] - c) * Math.min(1, Math.max(0, t))));
@@ -106,6 +106,37 @@ function captionAlpha(act, st, tl) {
   return smooth((st.v - mv.a) / F) * smooth((still.b - st.v) / F);
 }
 
+// Légendes du voyage intérieur : une par moment (repli, plongée, traversée,
+// halte, remontée, dépliage), qui reste jusqu'à la fin du moment suivant
+// quand celui-ci n'a pas la sienne.
+function voyageCaption(st, R, tl) {
+  const seg = tl[st.seg], n = R.moves.length, F = 0.012;
+  const fade = (a, b) => smooth((st.v - a) / F) * smooth((b - st.v) / F);
+  const mv = R.moves[seg.i];
+  const plane = (m) => `${AXES[m.a]}–w${m.b !== undefined ? ` et ${AXES[m.b]}–${AXES[m.c]}` : ''}`;
+  const next = tl[st.seg + 1], prev = tl[st.seg - 1];
+  switch (seg.k) {
+    case 'fold': case 'hold': {
+      const a = tl.find((p) => p.k === 'fold'), b = tl.find((p) => p.k === 'hold');
+      return ['Le repli', 'chaque cube pivote autour d’une face partagée, vers une direction perpendiculaire aux trois autres', fade(a.a, b.b)];
+    }
+    case 'plunge': return ['Entrer dans l’hypercube', 'l’œil 4D se pose sur l’hypersphère : le cube du centre devient une pièce, et l’on y entre', fade(seg.a, next.b)];
+    case 'travel': return [`Quart de tour dans le plan ${plane(mv)}`, 'vu de l’intérieur, une rotation 4D est un voyage : l’univers glisse, on passe dans la pièce voisine', fade(seg.a, seg.i < n - 1 ? next.b : seg.b)];
+    case 'dwell': {
+      if (seg.i === 0) return ['Entrer dans l’hypercube', 'l’œil 4D se pose sur l’hypersphère : le cube du centre devient une pièce, et l’on y entre', fade(prev.a, seg.b)];
+      if (seg.i < n) return [`Quart de tour dans le plan ${plane(R.moves[seg.i - 1])}`, 'vu de l’intérieur, une rotation 4D est un voyage : l’univers glisse, on passe dans la pièce voisine', fade(prev.a, seg.b)];
+      return [`De retour dans la cellule ${CELL_NAMES[6]}`, 'huit pièces, chacune accolée à six autres : sans jamais revenir sur ses pas, on est revenu au point de départ', fade(seg.a, seg.b)];
+    }
+    case 'surface': return ['La remontée', 'l’œil 4D quitte l’hypersphère : les pièces redeviennent un cube dans un cube', fade(seg.a, seg.b)];
+    case 'unfold': case 'open': {
+      const a = tl.find((p) => p.k === 'unfold'), b = tl.find((p) => p.k === 'open');
+      if (seg.k === 'open') return ['Le dépliage', 'le même patron revient, garni des mêmes cubes', smooth((b.b - st.v) / F)];
+      return ['Le dépliage', 'le même patron revient, garni des mêmes cubes', smooth((st.v - a.a) / F)];
+    }
+    default: return ['', '', 0];
+  }
+}
+
 // dessine la couche sur un contexte 2D de taille W × H (pixels) ; S : réglages
 // d'affichage (captions, analogy)
 export function drawOverlay(ctx, W, H, info, R, S) {
@@ -113,10 +144,11 @@ export function drawOverlay(ctx, W, H, info, R, S) {
   if (!st || !S || (!S.captions && !S.analogy)) return;
   const u = Math.min(W, H) / 1000;
   if (S.captions && tl) {
-    const act = ACT[st.phase];
-    const [title, sub] = captionFor(act, st, R);
+    let title, sub, alpha;
+    if (st.seg !== undefined) [title, sub, alpha] = voyageCaption(st, R, tl);
+    else { const act = ACT[st.phase]; [title, sub] = captionFor(act, st, R); alpha = captionAlpha(act, st, tl); }
     ctx.save();
-    ctx.globalAlpha = captionAlpha(act, st, tl);
+    ctx.globalAlpha = alpha;
     ctx.textAlign = 'center';
     ctx.fillStyle = 'rgba(245,240,232,0.95)';
     ctx.shadowColor = 'rgba(0,0,0,0.6)';

@@ -73,10 +73,21 @@ export function projectPosition(U, full, reveal = false) {
       const w = U.A.mul(vec4(anc, 1)).w;
       // coupe côté caméra : la face (de la cellule vers le centre de la face,
       // une fois projetée) regarde-t-elle la caméra ?
-      const pa = modelWorldMatrix.mul(vec4(mapPoint(anc, U.A, G.d, G.inflate), 1)).xyz;
-      const pc = modelWorldMatrix.mul(vec4(mapPoint(vec3(0), U.A, G.d, G.inflate), 1)).xyz;
+      const pl = mapPoint(anc, U.A, G.d, G.inflate), pcl = mapPoint(vec3(0), U.A, G.d, G.inflate);
+      const pa = modelWorldMatrix.mul(vec4(pl, 1)).xyz;
+      const pc = modelWorldMatrix.mul(vec4(pcl, 1)).xyz;
       const facing = dot(normalize(pa.sub(pc)), normalize(G.viewPos.sub(pa)));
-      revealOpen.assign(max(smoothstep(G.revealLo, G.revealHi, w).mul(G.reveal), smoothstep(0.2, 0.85, facing).mul(G.cutaway)));
+      // voyage intérieur : la paroi que la caméra approche se perce et
+      // s'efface (distance de la caméra au plan de la face, et à son centre
+      // dans ce plan)
+      const nl = normalize(pl.sub(pcl).add(vec3(1e-6, 0, 0)));
+      const rel = G.camLocal.sub(pl), dn = dot(rel, nl);
+      const lat = length(rel.sub(nl.mul(dn)));
+      const pass = smoothstep(G.passFar, G.passNear, abs(dn)).mul(smoothstep(G.passLat, G.passLat.mul(0.75), lat)).mul(G.pass);
+      const door = max(
+        smoothstep(0.32, 0.12, length(pl.sub(G.door0.xyz))).mul(G.door0.w),
+        smoothstep(0.32, 0.12, length(pl.sub(G.door1.xyz))).mul(G.door1.w));
+      revealOpen.assign(max(max(smoothstep(G.revealLo, G.revealHi, w).mul(G.reveal), smoothstep(0.2, 0.85, facing).mul(G.cutaway)), max(pass, door)));
     }
     depthW.assign(U.A.mul(vec4(l, 1)).w);
     const p = mapPoint(l, U.A, G.d, G.inflate).toVar('p4');
