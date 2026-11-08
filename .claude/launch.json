@@ -50,6 +50,16 @@
         "hollow"
       ],
       "port": 8010
+    },
+    {
+      "name": "tesseract",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        ".claude/serve.py",
+        "8020",
+        "tesseract"
+      ],
+      "port": 8020
     }
   ]
 }
