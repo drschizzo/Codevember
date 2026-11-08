@@ -26,7 +26,12 @@ export const ARMATURES = {
   ribs: { label: 'Ombrelle (baleines)' },
   crown: { label: 'Couronne d’épines' },
   cage: { label: 'Cage polyédrique' },
+  claws: { label: 'Serres (griffes)' },
 };
+export const STYLES = { 'Douce': 0, 'Franche (dépassement)': 1, 'Par crans': 2, 'Élastique': 3 };
+export const CUPS = { 'Lisse': 'smooth', 'Cannelée': 'fluted', 'Ajourée': 'lattice' };
+export const RINGS = { 'Tore': 'torus', 'Perlée': 'beaded' };
+export const HEADS = { 'Perle': 'pearl', 'Disque': 'disc', 'Pointe': 'cone' };
 export const ORDERS = { 'Ensemble': 'none', 'En spirale': 'spiral', 'Alternées': 'alternate', 'Au hasard': 'random' };
 export const POLYS = { 'Icosaèdre': 'ico', 'Dodécaèdre': 'dodeca', 'Octaèdre': 'octa' };
 
@@ -34,15 +39,19 @@ export function makeArmature(kind, rng) {
   const A = {
     kind, seed: rng.int(0, 1e6), n: 5, width: 0.88, tip: 0.3, hinge: 120, angle: 110, thick: 0.03, ridge: 1.2,
     // déploiement (fraction de l'éclosion) : assauts puis ouverture
-    dur: r2(rng.range(0.62, 0.78)), struggle: rng.int(2, 4), strAmp: r2(rng.range(0.28, 0.42)), strFrac: r2(rng.range(0.5, 0.62)), stagger: r2(rng.range(0, 0.22)), order: rng.pick(['none', 'spiral', 'spiral', 'alternate', 'random']), jitter: r2(rng.range(0, 0.15)),
+    dur: r2(rng.range(0.62, 0.78)), struggle: rng.int(2, 4), strAmp: r2(rng.range(0.24, 0.38)), surge: r2(rng.range(0.12, 0.3)), strFrac: r2(rng.range(0.5, 0.62)), stagger: r2(rng.range(0, 0.22)), order: rng.pick(['none', 'spiral', 'spiral', 'alternate', 'random']), jitter: r2(rng.range(0, 0.15)),
     twist: 0, tilt: 0, spread: 75, ext: 0.3, poly: 'ico', swell: 0, head: 1.4,
+    // allure, socle, alternance des matériaux
+    style: rng.weighted([[0, 3], [1, 2], [2, 1.5], [3, 1.5]]), cup: rng.pick(['smooth', 'fluted', 'lattice']), ringStyle: rng.pick(['torus', 'torus', 'beaded']),
+    alternate: rng.chance(0.4), rows: 1, headStyle: 'pearl',
   };
   switch (kind) {
-    case 'calyx': Object.assign(A, { n: rng.int(3, 8), width: r2(rng.range(0.78, 0.95)), tip: r2(rng.range(0.18, 0.45)), hinge: rng.int(112, 128), angle: rng.int(95, 132), thick: r3(rng.range(0.022, 0.04)), ridge: r2(rng.range(0, 1.8)) }); break;
+    case 'calyx': Object.assign(A, { rows: rng.weighted([[1, 3], [2, 2], [3, 1]]), n: rng.int(3, 8), width: r2(rng.range(0.78, 0.95)), tip: r2(rng.range(0.18, 0.45)), hinge: rng.int(112, 128), angle: rng.int(95, 132), thick: r3(rng.range(0.022, 0.04)), ridge: r2(rng.range(0, 1.8)) }); break;
     case 'iris': Object.assign(A, { n: rng.int(5, 9), width: r2(rng.range(0.84, 0.93)), tip: r2(rng.range(0.15, 0.3)), hinge: rng.int(112, 124), angle: rng.int(24, 28), thick: r3(rng.range(0.02, 0.032)), ridge: r2(rng.range(0, 1)), twist: r2(rng.sign() * rng.range(0.4, 1.0)), tilt: r2(rng.range(1.32, 1.45)), swell: r2(rng.range(0, 0.04)), stagger: 0 }); break; // (un diaphragme : toutes les lames ensemble)
     case 'pod': Object.assign(A, { n: rng.int(2, 3), width: r2(rng.range(0.9, 0.97)), tip: r2(rng.range(0.08, 0.2)), hinge: rng.int(118, 132), angle: rng.int(100, 125), thick: r3(rng.range(0.035, 0.05)), ridge: r2(rng.range(1, 2.2)), stagger: r2(rng.range(0, 0.08)) }); break;
     case 'ribs': Object.assign(A, { n: rng.int(8, 16), hinge: rng.int(112, 126), angle: rng.int(95, 125), thick: r3(rng.range(0.02, 0.03)) }); break;
-    case 'crown': Object.assign(A, { n: rng.int(10, 22), spread: rng.int(50, 75), ext: r2(rng.range(0.12, 0.22)), angle: rng.int(45, 85), thick: r3(rng.range(0.022, 0.034)), hinge: rng.int(108, 120), head: r2(rng.range(1.3, 2)) }); break;
+    case 'crown': Object.assign(A, { n: rng.int(10, 22), spread: rng.int(50, 75), ext: r2(rng.range(0.12, 0.22)), angle: rng.int(45, 85), thick: r3(rng.range(0.022, 0.034)), hinge: rng.int(108, 120), head: r2(rng.range(1.3, 2)), headStyle: rng.pick(['pearl', 'pearl', 'disc', 'cone']) }); break;
+    case 'claws': Object.assign(A, { n: rng.int(4, 7), hinge: rng.int(112, 126), angle: rng.int(95, 125), thick: r3(rng.range(0.028, 0.04)), claw: r2(rng.range(0.9, 1.4)), hook: r2(rng.range(0.3, 0.7)), reach: rng.int(7, 14) }); break;
     case 'cage': Object.assign(A, { poly: rng.pick(['ico', 'ico', 'dodeca', 'octa']), inflate: r2(rng.range(1.5, 2.6)), thick: r3(rng.range(0.022, 0.036)), hinge: 180, dur: r2(rng.range(0.6, 0.75)), stagger: 0 }); break;
     default: break;
   }
@@ -54,7 +63,7 @@ export const MOODS = {
   organique: {
     label: 'Organique', env: 'atelier', bg: '#0a0504', keyK: 3300, back: ['#ff8a5c', '#ffb07a'], core: '#ffb27a',
     membranes: { chorion: 5, wax: 2, latex: 1 }, sets: ['brassVelvet', 'goldLeaf', 'bronze', 'kintsugi', 'nacre', 'urushi'],
-    arms: { calyx: 4, iris: 2, pod: 2, ribs: 2, crown: 1.5, cage: 1 },
+    arms: { calyx: 4, iris: 2, pod: 2, ribs: 2, crown: 1.5, cage: 1, claws: 2 },
   },
   clinique: {
     label: 'Clinique', env: 'cyclo', bg: '#d8d5cf', keyK: 6500, back: ['#ffffff', '#eef4ff'], core: '#ffffff', envIntensity: [0.25, 0.4], light: 0.7,
@@ -64,7 +73,7 @@ export const MOODS = {
   abysses: {
     label: 'Abysses', env: 'abyss', bg: '#010508', keyK: 8000, back: ['#3fd8ff', '#2a8cff'], core: '#5ff0ff',
     membranes: { gel: 4, bubble: 2, chorion: 1 }, sets: ['titanium', 'carbon', 'blackSteel', 'chrome', 'obsidian'],
-    arms: { calyx: 1, iris: 3, pod: 1, ribs: 2, crown: 3, cage: 2 },
+    arms: { calyx: 1, iris: 3, pod: 1, ribs: 2, crown: 3, cage: 2, claws: 2.5 },
   },
   joaillerie: {
     label: 'Joaillerie', env: 'studio', bg: '#060505', keyK: 4200, back: ['#ffd9a0', '#ffffff'], core: '#ffd28a',
@@ -74,7 +83,7 @@ export const MOODS = {
   atelier: {
     label: 'Atelier', env: 'atelier', bg: '#0b0907', keyK: 3600, back: ['#ffc070', '#ffe0b0'], core: '#ffc88a',
     membranes: { vellum: 4, silk: 2, wax: 1 }, sets: ['brassVelvet', 'marble', 'damascus', 'verdigris', 'bronze'],
-    arms: { calyx: 2, iris: 1, pod: 2, ribs: 3, crown: 1, cage: 3 },
+    arms: { calyx: 2, iris: 1, pod: 2, ribs: 3, crown: 1, cage: 3, claws: 1.5 },
   },
   irise: {
     label: 'Irisé', env: 'night', bg: '#04050a', keyK: 7000, back: ['#9fd0ff', '#ff9fe0', '#a0ffd8'], core: '#e0d0ff',
@@ -84,7 +93,7 @@ export const MOODS = {
   rouge: {
     label: 'Rouge', env: 'studio', bg: '#070303', keyK: 5200, back: ['#ff4030', '#ffd0b0'], core: '#ff7050',
     membranes: { latex: 4, latexBlack: 2, chorion: 2 }, sets: ['obsidian', 'blackSteel', 'guillocheRuby', 'chrome', 'ceramicBlack'],
-    arms: { calyx: 3, iris: 2, pod: 3, ribs: 1, crown: 2, cage: 1 },
+    arms: { calyx: 3, iris: 2, pod: 3, ribs: 1, crown: 2, cage: 1, claws: 2.5 },
   },
 };
 
@@ -119,11 +128,13 @@ export function makeLevel(rng, mood, opts = {}) {
   const kind = opts.kind ?? rng.weighted(Object.entries(M.arms));
   const memKey = opts.membrane ?? rng.weighted(Object.entries(M.membranes));
   const set = rng.pick(M.sets);
+  // second jeu (socle, et une pièce sur deux) : un autre jeu de l'humeur
+  const others = M.sets.filter((k) => k !== set), set2 = rng.pick(others.length ? others : M.sets);
   const mem = makeMembrane(memKey, rng);
   return {
     seed: `${rng.int(0, 1e9)}`,
     arm: makeArmature(kind, rng),
-    armSet: set, armFinish: finishesFor(set, rng),
+    armSet: set, armFinish: finishesFor(set, rng), accentSet: set2, accentFinish: finishesFor(set2, rng),
     membrane: memKey, look: mem.look, phys: mem.phys,
     motion: { roll: r3(rng.range(0, Math.PI * 2)) },
   };
@@ -174,6 +185,7 @@ export function generate(seed, opts = {}) {
 export function upgrade(R) {
   R.sim = { ...SIM_DEFAULTS, ...R.sim };
   for (const lv of R.levels) {
+    if (!lv.accentFinish) { lv.accentSet = lv.armSet; lv.accentFinish = JSON.parse(JSON.stringify(lv.armFinish)); }
     lv.look = { ...MEMBRANE_DEFAULTS, ...MEMBRANES[lv.membrane], ...lv.look };
     lv.phys = { ...MEMBRANE_DEFAULTS, ...MEMBRANES[lv.membrane], ...lv.phys };
   }

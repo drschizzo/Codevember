@@ -11,8 +11,9 @@
 //   pod   : gousse — deux ou trois mâchoires larges, épaisses, nervurées
 //   ribs  : ombrelle — de nombreuses baleines (joncs) le long des méridiens
 //   crown : couronne d'épines — des aiguilles sortent, percent, puis s'inclinent
-//   cage  : polyèdre (arcs et nœuds) qui gonfle et tend la membrane jusqu'à
-//           la rupture, face par face
+//   cage  : polyèdre fixe sous la membrane, qui gonfle jusqu'à céder, face
+//           par face
+//   claws : griffes — cornes articulées dont la pointe se recourbe en serre
 //
 // Sortie : les pièces (cinématique, voir kin.js) avec leurs volumes de
 // collision (pour la simulation), et le maillage (attributs rigA–rigD : la
@@ -35,7 +36,7 @@ class RigBuffers extends Buffers {
     this.rA.push(r.b[0], r.b[1], r.b[2], r.th);
     this.rB.push(r.a[0], r.a[1], r.a[2], r.ext);
     this.rC.push(r.delay, r.sc, r.mode, this.piece / 255);
-    this.rD.push(r.dir[0], r.dir[1], r.dir[2], 0);
+    this.rD.push(r.dir[0], r.dir[1], r.dir[2], r.sa ?? 1);
     return i;
   }
   out() {
@@ -180,36 +181,58 @@ const rad = (d) => (d * PI) / 180;
 // ── Armature complète ────────────────────────────────────────────────────────
 export function buildArmature(spec) {
   const A = spec, rng = createRng(`arm:${A.seed}`);
-  const B = new RigBuffers();
+  // deux jeux de matériaux : principal (lames, épingles…) et second (socle,
+  // et une pièce sur deux quand l'armature alterne)
+  const Bm = new RigBuffers(), Ba = new RigBuffers();
+  let B = Bm;
   const parts = [];
   let phi0 = 0, cageFeet = null;
   const sites = [];
   const R = A.radius ?? 0.955, T = A.thick, thH = rad(A.hinge);
   const dur = A.dur;
   // assauts (voir kin.js)
-  const st = { n: A.struggle ?? 0, a: A.strAmp ?? 0.35, f: (A.struggle ?? 0) > 0 ? (A.strFrac ?? 0.5) : 0 };
+  const st = { n: A.struggle ?? 0, a: A.strAmp ?? 0.35, f: (A.struggle ?? 0) > 0 ? (A.strFrac ?? 0.5) : 0, style: A.style ?? 0 };
   const stagger = (i, n) => {
     const order = A.order === 'spiral' ? i / n : A.order === 'random' ? rng.next() : A.order === 'alternate' ? (i % 2) * 0.5 : 0;
     return order * A.stagger;
   };
   const piece = () => { B.piece = rng.int(0, 255); };
+  const alt = (i) => { B = A.alternate && i % 2 ? Ba : Bm; };
+  const rowRadii = [];
   const blades = (kind) => {
     const n = A.n, w = (PI / n) * A.width;
     phi0 = rng.next() * PI * 2;
-    for (let i = 0; i < n; i++) {
-      const phi = phi0 + (2 * PI * i) / n;
-      // (la nervure reste sous la membrane : la lame est d'autant plus basse)
-      const L = { phi, th0: rad(2.5), th1: thH, w, tip: A.tip, twist: kind === 'iris' ? A.twist : 0, R: R - A.ridge * T * 0.75, T, ridge: A.ridge, louver: kind === 'iris' ? T * 3.4 : 0 };
-      const b = sph(thH, phi + L.twist * (thH - L.th0), L.R - T * 0.5);
-      const tip = sph(L.th0 + 0.1, phi, R);
-      const a = hingeAxis(b, tip, kind === 'iris' ? A.tilt : 0);
-      const P = { b, a, th: rad(A.angle) * (1 + (rng.next() - 0.5) * A.jitter), ext: 0, dir: [0, 0, 1], sc: kind === 'iris' ? A.swell : 0, mode: 0, delay: stagger(i, n), cols: [{ t: 0, L, m: A.ridge * T * 0.75 }], bound: luneBound(L) };
-      parts.push(P);
-      B.rig = P; piece();
-      luneMesh(B, L);
-      // charnière : un manchon le long de l'axe
-      tubeMesh(B, [sub(b, mul(a, T * 2.4)), b, add(b, mul(a, T * 2.4))], T * 0.62, 14, EDGE);
+    // rangs (calice feuilleté) : sous chaque lame, d'autres lames emboîtées,
+    // un peu plus basses et plus étroites ; elles s'ouvrent un peu moins (elles
+    // restent sous celle qui les couvre) et se déploient en éventail
+    const rows = kind === 'calyx' ? (A.rows ?? 1) : 1;
+    const delays = Array.from({ length: n }, (_, i) => stagger(i, n)); // (même instant pour une lame et celles qu'elle couvre)
+    for (let r = 0; r < rows; r++) {
+      const R0 = R - A.ridge * T * 0.75 - r * T * (1.5 + A.ridge * 0.9);
+      for (let i = 0; i < n; i++) {
+        const phi = phi0 + (2 * PI * i) / n;
+        // (la nervure reste sous la membrane : la lame est d'autant plus basse)
+        const L = { phi, th0: rad(2.5 + 3 * r), th1: thH, w: w * (1 - 0.08 * r), tip: A.tip, twist: kind === 'iris' ? A.twist : 0, R: R0, T, ridge: A.ridge, louver: kind === 'iris' ? T * 3.4 : 0 };
+        // (les lames empilées tournent autour de la charnière de la lame qui les
+        // couvre : un angle plus petit les garde dessous à tout instant)
+        const b = sph(thH, phi + L.twist * (thH - L.th0), R - A.ridge * T * 0.75 - T * 0.5);
+        const tip = sph(L.th0 + 0.1, phi, R);
+        const a = hingeAxis(b, tip, kind === 'iris' ? A.tilt : 0);
+        const P = { b, a, th: rad(A.angle) * (1 - 0.14 * r) * (1 + (rng.next() - 0.5) * A.jitter * (r ? 0 : 1)), ext: 0, dir: [0, 0, 1], sc: kind === 'iris' ? A.swell : 0, mode: 0,
+          delay: delays[i], cols: r === 0 ? [{ t: 0, L, m: A.ridge * T * 0.75 }] : [], bound: luneBound(L),
+          // (les rangs intérieurs restent fermés pendant les assauts)
+          sa: r === 0 ? 1 : 0 };
+        parts.push(P);
+        alt(i + r);
+        B.rig = P; piece();
+        luneMesh(B, L);
+        // charnière : un manchon le long de l'axe (et, pour les lames empilées,
+        // une patte qui rejoint l'axe commun)
+        if (r === 0) tubeMesh(B, [sub(b, mul(a, T * 2.4)), b, add(b, mul(a, T * 2.4))], T * 0.62, 14, EDGE);
+        else tubeMesh(B, [sph(thH - 0.02, phi, L.R - T * 0.5), b], T * 0.45, 10, EDGE);
+      }
     }
+    B = Bm;
   };
   switch (A.kind) {
     case 'calyx': case 'iris': case 'pod': blades(A.kind); break;
@@ -224,11 +247,47 @@ export function buildArmature(spec) {
         for (let k = 0; k < 40; k += 4) cols.push({ t: 1, p0: pts[k], p1: pts[min(40, k + 4)], r: T * 0.55 + 0.006 });
         const P = { b, a, th: rad(A.angle) * (1 + (rng.next() - 0.5) * A.jitter), ext: 0, dir: [0, 0, 1], sc: 0, mode: 0, delay: stagger(i, n), cols, bound: boundOf(pts, 0.05) };
         parts.push(P);
+        alt(i);
         B.rig = P; piece();
         tubeMesh(B, pts, (u) => T * 0.42 * (0.55 + 0.45 * sqrt(u)), 12, OUT);
         sphereMesh(B, pts[0], T * 0.55, EDGE);
         tubeMesh(B, [sub(b, mul(a, T * 1.6)), b, add(b, mul(a, T * 1.6))], T * 0.6, 12, EDGE);
       }
+      B = Bm;
+      break;
+    }
+    case 'claws': {
+      // griffes : des cornes effilées le long des méridiens, articulées
+      // (phalanges), dont la pointe se recourbe vers l'œuf comme une serre ;
+      // elles s'ouvrent en arrière
+      const n = A.n;
+      phi0 = rng.next() * PI * 2;
+      const q = A.inner ?? 0.46;
+      for (let i = 0; i < n; i++) {
+        const phi = phi0 + (2 * PI * i) / n, pts = [];
+        const NP = 48, thT = rad(A.reach ?? 10);
+        for (let k = 0; k <= NP; k++) {
+          const u = k / NP, th = thH + (thT - thH) * u;
+          // la serre : la pointe plonge vers l'intérieur sur le dernier quart
+          const hook = max(0, (u - 0.72) / 0.28) ** 2;
+          const r = R - T * 1.2 - hook * (R - T - (q + 0.12)) * (A.hook ?? 0.5);
+          pts.push(sph(th, phi, r));
+        }
+        const b = pts[0], a = hingeAxis(b, pts[NP]);
+        const rad0 = T * (A.claw ?? 1.1);
+        const radius = (u) => rad0 * (1 - 0.88 * u ** 1.3) + 0.002;
+        const cols = [];
+        for (let k = 0; k < NP; k += 4) cols.push({ t: 1, p0: pts[k], p1: pts[min(NP, k + 4)], r: radius(k / NP) + 0.004 });
+        const P = { b, a, th: rad(A.angle) * (1 + (rng.next() - 0.5) * A.jitter), ext: 0, dir: [0, 0, 1], sc: 0, mode: 0, delay: stagger(i, n), cols, bound: boundOf(pts, 0.06) };
+        parts.push(P);
+        alt(i);
+        B.rig = P; piece();
+        tubeMesh(B, pts, radius, 16, OUT);
+        // phalanges : bagues aux articulations
+        for (const u of [0.33, 0.62]) { const k = Math.round(u * NP); sphereMesh(B, pts[k], radius(u) * 1.25, EDGE, 20, 12); }
+        tubeMesh(B, [sub(b, mul(a, T * 2)), b, add(b, mul(a, T * 2))], rad0 * 0.9, 14, EDGE);
+      }
+      B = Bm;
       break;
     }
     case 'crown': {
@@ -259,15 +318,26 @@ export function buildArmature(spec) {
         const P = { b: base, a, th: rad(A.angle) * (0.7 + 0.6 * u), ext: A.ext, dir: d, sc: 0, mode: 1, delay: stagger(i, n) + u * 0.08,
           cols: [{ t: 1, p0: add(base, mul(d, 0.05)), p1: tgt, r: r0 + 0.006 }, { t: 1, p0: tgt, p1: tgt, r: head }], bound: boundOf([base, tgt], head + 0.06) };
         parts.push(P);
+        alt(i);
         B.rig = P; piece();
         const pts = [];
         for (let k = 0; k <= 24; k++) pts.push(add(base, mul(sub(tgt, base), k / 24)));
         tubeMesh(B, pts, (s) => r0 * (1 - s * 0.45), 12, OUT);
-        // tête d'épingle : une perle polie, qui tend la membrane avant de la percer
-        sphereMesh(B, tgt, head, EDGE, 28, 16);
+        // tête : une perle polie, un disque (tampon) ou une pointe ; elle tend la
+        // membrane avant de la percer
+        if (A.headStyle === 'disc') {
+          const pad = [];
+          for (let k = 0; k <= 6; k++) pad.push(add(tgt, mul(d, head * (k / 6 - 0.5) * 0.7)));
+          tubeMesh(B, pad, (s) => head * (0.92 + 0.08 * sin(s * PI)), 28, EDGE, true);
+        } else if (A.headStyle === 'cone') {
+          const cn = [];
+          for (let k = 0; k <= 10; k++) cn.push(add(tgt, mul(d, head * (k / 10 - 0.6) * 1.6)));
+          tubeMesh(B, cn, (s) => head * 0.75 * (1 - s) ** 1.1 + 0.002, 20, EDGE, true);
+        } else sphereMesh(B, tgt, head, EDGE, 28, 16);
         // pied : rotule sur la couronne
         sphereMesh(B, base, T * 0.9, EDGE);
       }
+      B = Bm;
       break;
     }
     case 'cage': {
@@ -304,6 +374,7 @@ export function buildArmature(spec) {
   // pôle arrière de la membrane (où la coupe de la couche précédente la
   // reçoit) ; des rayons relient la coupe à la couronne de charnières (ou aux
   // pieds de la cage). Rien ne flotte.
+  B = Ba;
   B.rig = { b: [0, 0, 0], th: 0, a: [1, 0, 0], ext: 0, dir: [0, 0, 1], delay: 0, sc: 0, mode: 0 };
   B.piece = 128;
   const q = A.inner ?? 0.46, gap = 0.012;
@@ -317,21 +388,35 @@ export function buildArmature(spec) {
   }
   emitGrid(B, cupRows, () => IN, true);
   torusMesh(B, cupR * cos(cupTh), cupR * sin(cupTh), T * 0.45, EDGE, 64, 10);
-  const cupOut = [];
-  for (let k = 0; k <= 12; k++) {
-    const th = cupTh + (PI - cupTh) * (k / 12), row = [];
-    for (let i = 0; i < 64; i++) row.push(sph(th, (2 * PI * i) / 64, cupR + T * 0.8));
-    cupOut.push(row);
+  if (A.cup === 'lattice') {
+    // coupe ajourée : des côtes en méridiens et deux anneaux
+    const nr = 12;
+    for (let i = 0; i < nr; i++) {
+      const pts = [];
+      for (let k = 0; k <= 16; k++) pts.push(sph(cupTh + (PI - cupTh) * (k / 16), (2 * PI * i) / nr, cupR + T * 0.5));
+      tubeMesh(B, pts, T * 0.38, 10, OUT);
+    }
+    for (const th of [cupTh + 0.25, cupTh + 0.55]) torusMesh(B, (cupR + T * 0.5) * cos(th), (cupR + T * 0.5) * sin(th), T * 0.3, EDGE, 64, 8);
+  } else {
+    // coupe pleine, lisse ou à cannelures
+    const fl = A.cup === 'fluted' ? 14 : 0;
+    const cupOut = [];
+    for (let k = 0; k <= 12; k++) {
+      const th = cupTh + (PI - cupTh) * (k / 12), row = [];
+      for (let i = 0; i < 96; i++) { const ph = (2 * PI * i) / 96; row.push(sph(th, ph, cupR + T * 0.8 + (fl ? T * 0.35 * Math.abs(cos(ph * fl * 0.5)) * sin(((k / 12) * PI)) : 0))); }
+      cupOut.push(row);
+    }
+    emitGrid(B, cupOut.reverse(), () => OUT, true);
   }
-  emitGrid(B, cupOut.reverse(), () => OUT, true);
   // tige jusqu'au pôle arrière, avec sa collerette contre la membrane
   tubeMesh(B, [[0, 0, -(cupR + T * 0.7)], [0, 0, -0.995]], T * 0.9, 16, OUT, false);
   torusMesh(B, -0.985, T * 2.2, T * 0.6, EDGE, 32, 8);
   // rayons : du bord de la coupe aux charnières (ou aux pieds de la cage)
-  const Rring = (['calyx', 'iris', 'pod'].includes(A.kind) ? R - A.ridge * T * 0.75 : R) - T * 0.5;
+  const Rring = rowRadii.length ? rowRadii[rowRadii.length - 1] : R - T * (A.kind === 'claws' ? 1.2 : 0.5);
   const ringR = Rring * sin(thH), ringZ = Rring * cos(thH);
-  const feet = cageFeet || Array.from({ length: A.kind === 'ribs' ? Math.min(A.n, 8) : A.kind === 'crown' ? 6 : A.n }, (_, i) => {
-    const ph = phi0 + (2 * PI * i) / (A.kind === 'ribs' ? Math.min(A.n, 8) : A.kind === 'crown' ? 6 : A.n);
+  const nFeet = A.kind === 'ribs' ? Math.min(A.n, 8) : A.kind === 'crown' ? 6 : A.n;
+  const feet = cageFeet || Array.from({ length: nFeet }, (_, i) => {
+    const ph = phi0 + (2 * PI * i) / nFeet;
     return [ringR * cos(ph), ringR * sin(ph), ringZ];
   });
   for (const f of feet) {
@@ -342,11 +427,24 @@ export function buildArmature(spec) {
     for (let k = 0; k <= 12; k++) { const t = k / 12; pts.push(add(add(mul(s0, (1 - t) * (1 - t)), mul(mid, 2 * t * (1 - t))), mul(f, t * t))); }
     tubeMesh(B, pts, (t) => T * (0.42 - 0.12 * t), 10, OUT);
   }
-  if (A.kind !== 'cage') torusMesh(B, ringZ, ringR, T * 0.75, EDGE);
-  const mesh = B.out();
+  // couronne(s) de charnières : tore lisse, ou perlée
+  const rings = rowRadii.length ? rowRadii.map((r0) => [r0 * cos(thH), r0 * sin(thH)]) : [[ringZ, ringR]];
+  // (rangs : des entretoises relient les couronnes, au droit de chaque rayon)
+  if (rings.length > 1) for (const f of feet) {
+    const ph = atan2(f[1], f[0]);
+    tubeMesh(B, [[rings[rings.length - 1][1] * cos(ph), rings[rings.length - 1][1] * sin(ph), rings[rings.length - 1][0]], [rings[0][1] * cos(ph), rings[0][1] * sin(ph), rings[0][0]]], T * 0.4, 10, EDGE);
+  }
+  if (A.kind !== 'cage') for (const [z, rr] of rings) {
+    if (A.ringStyle === 'beaded') {
+      const nb = Math.round((2 * PI * rr) / (T * 1.7));
+      for (let i = 0; i < nb; i++) { const ph = (2 * PI * i) / nb; sphereMesh(B, [rr * cos(ph), rr * sin(ph), z], T * 0.8, EDGE, 14, 8); }
+      torusMesh(B, z, rr, T * 0.4, IN);
+    } else torusMesh(B, z, rr, T * 0.75, EDGE);
+  }
+  const mesh = Bm.out(), accent = Ba.out();
   return {
-    mesh, dur, phi0, sites, st,
-    parts: parts.map(({ b, a, th, ext, dir, sc, mode, delay, cols, bound, verts }) => ({ b, a, th, ext, dir, sc, mode, delay, cols, bound, verts, st })),
+    mesh, accent, dur, phi0, sites, st,
+    parts: parts.map(({ b, a, th, ext, dir, sc, mode, delay, cols, bound, verts, sa }) => ({ b, a, th, ext, dir, sc, mode, delay, cols, bound, verts, st: { ...st, a: st.a * (sa ?? 1) } })),
   };
 }
 

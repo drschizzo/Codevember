@@ -67,7 +67,7 @@ fn struggle(u: f32) -> f32 {
   if (c.sn <= 0.0 || c.sf <= 0.0) { return u; }
   if (u >= c.sf) { return (u - c.sf) / (1.0 - c.sf); }
   let w = u / c.sf * c.sn; let k = floor(w); let v = w - k;
-  let s = sin(PI * pow(max(v, 1e-6), 0.75));
+  let s = sin(PI * v);
   return c.sa * (0.45 + 0.55 * (k + 1.0) / c.sn) * s * s;
 }
 // fin des assauts, en temps de simulation
@@ -124,7 +124,7 @@ fn unapplyP(q: Pose, v: vec3f) -> vec3f { return transpose(q.R) * (v - q.T) / q.
     }
     // retroussement : vers l'arrière le long du méridien, et dehors
     if (tf >= 0.0 && m1.x > 0.0) {
-      let pa = c.peel * min(1.0, (p.t - tf) * c.T / 0.25) * m1.x * c.h;
+      let pa = c.peel * min(1.0, (p.t - tf) * c.T / 0.25) * m1.x * c.h * (1.0 - smoothstep(1.25, 1.9, length(x)));
       let r = normalize(x); let rho = max(length(r.xy), 1e-6);
       let th = vec3f(r.z * r.x / rho, r.z * r.y / rho, -rho);
       v += (th + r * 0.6) * pa;
@@ -132,6 +132,12 @@ fn unapplyP(q: Pose, v: vec3f) -> vec3f { return transpose(q.R) * (v - q.T) / q.
   }
   let damp = select(c.damping, c.damping * 6.0 + c.settleDamp, p.settle == 1u);
   v *= exp(-damp * c.h);
+  // traînée quadratique de l'air (les grandes vitesses sont freinées) et
+  // vitesse plafonnée : un lambeau ne part jamais « en éclats »
+  let sp = length(v);
+  v /= 1.0 + 1.6 * sp * c.h;
+  let sp2 = length(v);
+  if (sp2 > 2.5) { v *= 2.5 / sp2; }
   st[3u * i + 1u] = vec4f(x, w);
   st[3u * i] = vec4f(x + v * c.h, w);
   st[3u * i + 2u] = vec4f(v, 0.0);

@@ -166,7 +166,7 @@ export function buildMembraneMaterial(T, S, L, spec, { side = THREE.FrontSide, b
   const blood = cov.mul(vr.mul(0.75).add(0.25)).add(cap.mul(0.25)).add(halo.mul(0.06));
   Tr = Tr.mul(pow(L.vesselColor.max(vec3(1e-3)), vec3(blood.mul(vis).max(1e-4))));
   // blanchiment : tension (crazing), voisinage d'une déchirure, lèvres
-  const wh = smoothstep(1.12, 2.1, J).mul(L.whiten).add(dmg.mul(L.edgeWhite)).add(lip.mul(0.35)).clamp(0, 1).mul(vis);
+  const wh = smoothstep(1.04, 1.6, J).mul(L.whiten).add(dmg.mul(L.edgeWhite)).add(lip.mul(0.35)).clamp(0, 1).mul(vis);
   Tr = Tr.mul(wh.mul(-0.55).add(1));
   const Tavg = dot(Tr, vec3(1 / 3));
   const crisp = pow(Tr, vec3(L.clarity.oneMinus().mul(4).add(1)));

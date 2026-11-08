@@ -71,9 +71,11 @@ class Template {
     const look = { ...MEMBRANE_DEFAULTS, ...lv.look };
     if (!this.L) this.L = lookUniforms(look); else applyLook(this.L, look);
     const f = lv.armFinish;
-    if (!this.AU) this.AU = { outer: finishUniforms(f.outer), inner: finishUniforms(f.inner), edge: finishUniforms(f.edge), wear: uniform(f.wear) };
-    else { applyFinish(this.AU.outer, f.outer); applyFinish(this.AU.inner, f.inner); applyFinish(this.AU.edge, f.edge); this.AU.wear.value = f.wear; }
-    this.sig = `${lookSignature(look)}|${signature(f)}`;
+    const mkU = (f) => ({ outer: finishUniforms(f.outer), inner: finishUniforms(f.inner), edge: finishUniforms(f.edge), wear: uniform(f.wear) });
+    const setU = (U, f) => { applyFinish(U.outer, f.outer); applyFinish(U.inner, f.inner); applyFinish(U.edge, f.edge); U.wear.value = f.wear; };
+    const f2 = lv.accentFinish ?? f;
+    if (!this.AU) { this.AU = mkU(f); this.AU2 = mkU(f2); } else { setU(this.AU, f); setU(this.AU2, f2); }
+    this.sig = `${lookSignature(look)}|${signature(f)}|${signature(f2)}`;
     if (key !== this.key) {
       this.key = key;
       const job = { key };
@@ -111,7 +113,7 @@ class Template {
     const old = this.data;
     this.data = {
       prep, S, gpu, fibT, F: S.frames,
-      geo: membraneGeometry(prep.geo), fib: prep.nf ? fibrilGeometry(prep.fib) : null, arm: armatureGeometry(out.armature),
+      geo: membraneGeometry(prep.geo), fib: prep.nf ? fibrilGeometry(prep.fib) : null, arm: armatureGeometry(out.armature), arm2: out.accent?.index.length ? armatureGeometry(out.accent) : null,
     };
     this.info = { ...prep.info, ...gpu.stats, gpuMs: Math.round(performance.now() - t0) };
     this.version++;
@@ -123,7 +125,7 @@ class Template {
   free(d) {
     if (!d) return;
     for (const k of ['frames', 'meta', 'csr', 'bonds', 'lips']) d.gpu?.[k]?.destroy();
-    d.geo?.dispose(); d.fib?.dispose(); d.arm?.dispose();
+    d.geo?.dispose(); d.fib?.dispose(); d.arm?.dispose(); d.arm2?.dispose();
   }
   get ready() { return !!this.data && !this.pending && !!this.vessels; }
   dispose() { this.disposed = true; this.free(this.data); this.vessels?.dispose(); }
@@ -134,7 +136,7 @@ class Slot {
     this.nest = nest; this.j = j;
     this.group = new THREE.Group();
     this.S = { f: uniform(0), fPrev: uniform(0), vis: uniform(1) };
-    this.RU = { t: uniform(0), tPrev: uniform(0), dur: uniform(0.5), vis: uniform(1), sn: uniform(0), sa: uniform(0), sf: uniform(0), seedOff: uniform(new THREE.Vector3()) };
+    this.RU = { t: uniform(0), tPrev: uniform(0), dur: uniform(0.5), vis: uniform(1), style: uniform(0), sn: uniform(0), sa: uniform(0), sf: uniform(0), seedOff: uniform(new THREE.Vector3()) };
     this.meshes = {};
     this.built = '';
     this.lastX = null;
@@ -162,7 +164,7 @@ class Slot {
     this.poser = createPoser(n.renderer.backend.device, d.gpu, d.prep, d.S, { cur: n.gpuBuffer(this.pose.cur), prv: n.gpuBuffer(this.pose.prv), nor: n.gpuBuffer(this.pose.nor) });
     const PT = { ...this.pose, fibT: d.fibT, nf: d.prep.nf };
     this.RU.dur.value = T.lv.arm.dur;
-    { const a = T.lv.arm, n = a.struggle ?? 0; this.RU.sn.value = n; this.RU.sa.value = a.strAmp ?? 0.35; this.RU.sf.value = n > 0 ? (a.strFrac ?? 0.5) : 0; }
+    { const a = T.lv.arm, n = a.struggle ?? 0; this.RU.style.value = a.style ?? 0; this.RU.sn.value = n; this.RU.sa.value = a.strAmp ?? 0.35; this.RU.sf.value = n > 0 ? (a.strFrac ?? 0.5) : 0; }
     this.RU.seedOff.value.set(this.j * 1.37, T.index * 2.11, 0.5);
     const mk = (geo, mat, order, shadow) => {
       const m = new THREE.Mesh(geo, mat);
@@ -172,6 +174,7 @@ class Slot {
     };
     const armMat = buildPieceMaterial(T.lv.armFinish, T.AU, this.RU, { content: G.armEnv });
     this.meshes.arm = mk(d.arm, armMat, 0, true);
+    if (d.arm2) this.meshes.arm2 = mk(d.arm2, buildPieceMaterial(T.lv.accentFinish ?? T.lv.armFinish, T.AU2, this.RU, { content: G.armEnv }), 0, true);
     const opts = { vessels: T.vessels };
     this.meshes.back = mk(d.geo, buildMembraneMaterial(PT, this.S, T.L, spec, { ...opts, side: THREE.BackSide }), 10, false);
     this.meshes.front = mk(d.geo, buildMembraneMaterial(PT, this.S, T.L, spec, { ...opts, side: THREE.FrontSide }), 100, false);
@@ -268,6 +271,7 @@ export function createNest(scene, gen, renderer) {
       // caméra : aucune ombre ne disparaît d'un coup
       sl.RU.vis.value = ss(-1.75, -0.95, x) * ss(XMAX - 0.3, XMAX - 0.9, x);
       me.arm.layers.mask = sl.RU.vis.value > 0.001 ? MAIN | KEY | BACK : 0;
+      if (me.arm2) me.arm2.layers.mask = me.arm.layers.mask;
       if (me.fib) me.fib.layers.mask = sOf(x) > 0 && memOn ? MAIN : 0;
       if (memOn) poses.push([sl, sl.S.f.value, sl.S.fPrev.value]);
     }
