@@ -155,6 +155,16 @@ Le sol est procédural : laque satinée anthracite (reflets adoucis), béton cir
   - poussière sur la lentille ;
   - aberration chromatique, grain.
 
+## Tests
+
+Les invariants de la géométrie se vérifient sans navigateur (Node 22 ou plus récent) :
+
+```bash
+node --test 'tesseract/test/*.test.mjs'
+```
+
+Ils couvrent les charnières et les patrons (arbres couvrants sans chevauchement), les mouvements (symétries de l'hypercube dont la suite se referme), la boucle (la fin rejoint le début, avec ou sans voyage), la jacobienne du vertex shader (comparée aux différences finies de la projection) et l'accord entre l'ajourage et la géométrie (ancrage et trame de chaque face).
+
 ## Performances
 
 Environ 24 ms par image à 2,4 Mpx (≈ 760 000 triangles, ombres, anticrénelage temporel, huit lumières d'écrin), dont environ 2,5 ms pour les réflexions en espace écran à demi-résolution. La tôle perforée est plafonnée à dix-huit faces par scène. Le voyage intérieur coûte environ 1,5 ms de plus par image (mesuré à 1,8 Mpx : 11 ms dehors, 12,5 ms dedans).
