@@ -415,13 +415,16 @@ export function voyageTimeline(R) {
   const C = R.chor, V = R.voyage, n = R.moves.length;
   const segs = [['open', C.open], ['fold', C.fold], ['hold', C.hold], ['plunge', V.plunge]];
   // (chaque traversée a son allure : plus ou moins rapide, et sa halte aussi)
-  for (let i = 0; i < n; i++) segs.push(['dwell', V.dwell * pace(R, i, 'd'), i], ['travel', V.travel * pace(R, i, 't'), i]);
-  segs.push(['dwell', V.dwell, n], ['surface', V.surface], ['unfold', C.unfold]);
+  // (la première et la dernière halte, qui raccordent l'entrée et la sortie,
+  // ont plus à tourner : un peu plus de temps)
+  for (let i = 0; i < n; i++) segs.push(['dwell', V.dwell * pace(R, i, 'd') * (i === 0 ? EDGE_DWELL : 1), i], ['travel', V.travel * pace(R, i, 't'), i]);
+  segs.push(['dwell', V.dwell * EDGE_DWELL, n], ['surface', V.surface], ['unfold', C.unfold]);
   const tot = segs.reduce((a, s) => a + Math.max(0.001, s[1]), 0);
   let acc = 0;
   return segs.map(([k, w, i = 0]) => { const a = acc; acc += Math.max(0.001, w) / tot; return { k, i, a, b: acc }; });
 }
 // facteur de durée propre à une traversée ou à une halte (tiré de la graine)
+const EDGE_DWELL = 1.4;
 export const pace = (R, i, k) => 0.75 + 0.55 * hash01(`${R.seed}:${k}${i}`);
 export function hash01(str) {
   let h = 2166136261;
@@ -431,8 +434,8 @@ export function hash01(str) {
 }
 export const voyageSeconds = (R) => {
   const C = R.chor, V = R.voyage, n = R.moves.length;
-  let t = C.open + C.fold + C.hold + V.plunge + V.dwell + V.surface + C.unfold;
-  for (let i = 0; i < n; i++) t += V.dwell * pace(R, i, 'd') + V.travel * pace(R, i, 't');
+  let t = C.open + C.fold + C.hold + V.plunge + V.dwell * EDGE_DWELL + V.surface + C.unfold;
+  for (let i = 0; i < n; i++) t += V.dwell * pace(R, i, 'd') * (i === 0 ? EDGE_DWELL : 1) + V.travel * pace(R, i, 't');
   return t;
 };
 export const timelineFor = (R) => (R.voyage?.on ? voyageTimeline(R) : stepTimeline(R.chor));
@@ -464,8 +467,9 @@ export function voyageStateAt(ph, R, cache) {
   if (seg.k === 'dwell') { Q = cache.Q[seg.i]; step = Math.min(n - 1, seg.i); }
   if (seg.k === 'travel') {
     Q = cache.Q[seg.i]; move = moves[seg.i]; step = seg.i;
-    // (un léger recul avant l'élan, un léger dépassement à l'arrivée)
-    turn = easeBack(f, 0.06 + 0.25 * chor.turnAntic);
+    // (un soupçon de recul avant l'élan et de dépassement à l'arrivée : vu de
+    // l'intérieur, davantage se lit comme un à-coup)
+    turn = easeBack(f, 0.02 + 0.06 * chor.turnAntic);
   }
   if (seg.k === 'surface') step = n - 1;
   return { Q, theta, turn, move, fold: foldMean, step, phase: seg.k, v: u, maxD, seg: j, room: seg.i, f };

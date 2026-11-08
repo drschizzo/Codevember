@@ -18,7 +18,7 @@ import { createUI } from './app/ui.js';
 import { loadRender, saveRender, applyQuality, RENDER_DEFAULTS } from './app/settings.js';
 import { exportLoop, exportPNG } from './app/capture.js';
 import { createOverlay, drawOverlay } from './app/overlay.js';
-import { insidePose, entryAxis } from './scene/voyage.js';
+import { smoothInsidePose, entryAxis } from './scene/voyage.js';
 import { voyageSeconds } from './math4.js';
 
 const TARGET = 1.9; // rayon de l'objet à l'écran (unités du monde)
@@ -166,7 +166,7 @@ async function main() {
       const ss = (a, b, x) => { const u = Math.min(1, Math.max(0, (x - a) / (b - a))); return u * u * (3 - 2 * u); };
       if (st.phase === 'plunge') { G.tunnelDir.value.copy(out.uIn); G.tunnel.value = ss(0.06, 0.22, st.f) * (1 - ss(0.66, 0.8, st.f)); }
       else if (st.phase === 'surface') { G.tunnelDir.value.copy(out.uOut); G.tunnel.value = ss(0.2, 0.34, st.f) * (1 - ss(0.78, 0.94, st.f)); }
-      const P = insidePose(st, R, info.frames, out);
+      const P = smoothInsidePose(ph, st, R, info.frames, out, tl, R.loop.duration);
       const pos = P.pos, fwd = P.fwd.normalize(), up = P.up.normalize();
       g.localToWorld(pos);
       fwd.applyQuaternion(g.quaternion); up.applyQuaternion(g.quaternion);

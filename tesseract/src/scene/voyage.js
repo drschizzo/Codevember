@@ -39,9 +39,26 @@ export function voyageBlend(st) {
 }
 
 // repères des traversées : direction d'arrivée D et diagonale O de la porte
+// direction (repère local) d'où la caméra extérieure regarde à la phase ph :
+// la même que main.js (orbite, inclinaison et rotation du tesseract), au
+// décalage du groupe près — elle sert à prévoir les rayons d'entrée et de
+// sortie, et donc la pose de la caméra à l'arrivée et au départ
+const _eu = new THREE.Euler(), _gq = new THREE.Quaternion();
+function outsideDir(R, ph) {
+  const K = R.camera, w = ph * Math.PI * 2;
+  const az = K.az + w * K.orbit + K.sway * 0.35 * Math.sin(w), el = K.elev + K.sway * 0.06 * Math.sin(2 * w + 0.7);
+  _gq.setFromEuler(_eu.set(R.proj.tiltX, Math.PI * 2 * R.proj.spin * ph, R.proj.tiltZ, 'YXZ')).invert();
+  return new THREE.Vector3(Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el)).applyQuaternion(_gq);
+}
+
 export function voyageFrames(R, cache) {
   const n = R.moves.length, out = [];
-  let Oprev = [0.5, 0.7, 0.5];
+  // (la caméra entre en regardant le centre, le long du rayon d'entrée ; elle
+  // ressort de même : les traversées extrêmes se choisissent en conséquence)
+  const tl = cache.timeline, plunge = tl.find((p) => p.k === 'plunge'), surface = tl.find((p) => p.k === 'surface');
+  const fwdIn = plunge ? entryAxis(outsideDir(R, plunge.a)).negate() : null;
+  const fwdOut = surface ? entryAxis(outsideDir(R, surface.b)).negate() : null;
+  let Oprev = [0.5, 0.7, 0.5], prevEnd = fwdIn ? { fwd: fwdIn, tau: 0 } : null;
   for (let i = 0; i < n; i++) {
     const base = { theta: new Array(8).fill(0), move: null, turn: 0 };
     const T0 = cellTransforms({ ...base, Q: cache.Q[i] }, R.net.parent);
@@ -50,21 +67,35 @@ export function voyageFrames(R, cache) {
     for (let k = 0; k < 8; k++) if (apply(T1[k], normalOf(k))[3] < apply(T1[c], normalOf(c))[3]) c = k;
     const p = apply(T0[c], normalOf(c));
     const D = new THREE.Vector3(p[0], p[1], p[2]).normalize();
-    // diagonales de la porte (perpendiculaires à D) : tirées au hasard, en
-    // préférant le haut et la proximité de la précédente
+    // diagonale de la porte (perpendiculaire à D) et allure de la traversée :
+    // parmi les candidates, celles qui commencent près de là où la précédente
+    // a fini l'emportent (la halte entre les deux n'a pas à faire volte-face),
+    // avec une part de hasard pour la variété ; jamais deux fois la même allure
+    // de suite. (Le roulis est porté d'une traversée à l'autre : voir insidePose.)
     const ax = [0, 1, 2].filter((a) => Math.abs([D.x, D.y, D.z][a]) < 0.5);
+    const turn = hash01(`${R.seed}:sens${i}`) < 0.5 ? -1 : 1;
     let best = null, score = -Infinity, j = 0;
     for (const sb of [-1, 1]) for (const sc of [-1, 1]) {
       const v = [0, 0, 0]; v[ax[0]] = sb; v[ax[1]] = sc;
       const O = new THREE.Vector3(...v).normalize();
-      const s = O.y * 0.6 + O.dot(new THREE.Vector3(...Oprev)) * 0.3 + 1.6 * hash01(`${R.seed}:diag${i}:${j++}`);
-      if (s > score) { score = s; best = O; }
+      for (const [name, wgt] of STYLE_W) {
+        if (i > 0 && name === out[i - 1].style) continue;
+        const S = STYLES[name](turn);
+        let sc0 = O.y * 0.25 + O.dot(new THREE.Vector3(...Oprev)) * 0.15 + 0.9 * hash01(`${R.seed}:allure${i}:${j++}`) * wgt / 1.6;
+        if (prevEnd) sc0 += 1.4 * poseIn(basisQ(D, O), S.r, S.b0, prevEnd.tau).fwd.dot(prevEnd.fwd);
+        // (dernière traversée : finir près du regard de la sortie, sans roulis à défaire)
+        if (i === n - 1 && fwdOut) {
+          const tEnd = (prevEnd ? prevEnd.tau : 0) + S.t1 - S.t0;
+          sc0 += 1.0 * poseIn(basisQ(D, O), S.r, S.b1, tEnd).fwd.dot(fwdOut) + 0.4 * Math.cos(tEnd);
+        }
+        if (sc0 > score) { score = sc0; best = { O, style: name, S }; }
+      }
     }
-    Oprev = best.toArray();
-    // allure de la traversée, jamais deux fois la même de suite
-    let style = pickStyle(R.seed, i, 0);
-    for (let k = 1; i > 0 && style === out[i - 1].style && k < 6; k++) style = pickStyle(R.seed, i, k);
-    const turn = hash01(`${R.seed}:sens${i}`) < 0.5 ? -1 : 1;
+    Oprev = best.O.toArray();
+    const style = best.style;
+    const tauEnd = (prevEnd ? prevEnd.tau : 0) + best.S.t1 - best.S.t0;
+    prevEnd = { fwd: poseIn(basisQ(D, best.O), best.S.r, best.S.b1, tauEnd).fwd, tau: tauEnd };
+    best = best.O;
     out.push({ D, O: best, cell: c, style, ...STYLES[style](turn) });
   }
   // pièce de chaque halte : le cube intérieur au départ et à l'arrivée, puis
@@ -81,22 +112,16 @@ export function voyageFrames(R, cache) {
 //   arrière : on regarde la pièce que l'on quitte s'éloigner, l'objet
 //     suivant entre dans le champ par derrière et se pose ;
 //   côté : le regard sur l'axe, l'objet suivant traverse le champ en frôlant ;
-//   tonneau : un tour complet autour de l'axe ;
+//   tonneau : un demi-tour autour de l'axe ;
 //   spirale : un quart de tour autour de l'axe, regard plongeant.
 const STYLES = {
   avant: () => ({ b0: 0.13, b1: 0.13, t0: 0, t1: 0, r: 0.42 }),
   arriere: (s) => ({ b0: Math.PI - 0.22, b1: Math.PI - 0.5, t0: 0, t1: 0.3 * s, r: 0.4 }),
   cote: (s) => ({ b0: 1.25, b1: 1.4, t0: 0, t1: 0.5 * s, r: 0.38 }),
-  tonneau: (s) => ({ b0: 0.18, b1: 0.18, t0: 0, t1: 2 * Math.PI * s, r: 0.39 }),
+  tonneau: (s) => ({ b0: 0.18, b1: 0.18, t0: 0, t1: Math.PI * s, r: 0.39 }),
   spirale: (s) => ({ b0: 0.5, b1: 0.35, t0: 0, t1: (Math.PI / 2) * s, r: 0.38 }),
 };
 const STYLE_W = [['avant', 1.6], ['arriere', 1.2], ['cote', 1.4], ['tonneau', 1], ['spirale', 1.3]];
-function pickStyle(seed, i, k) {
-  const tot = STYLE_W.reduce((a, [, w]) => a + w, 0);
-  let x = hash01(`${seed}:allure${i}:${k}`) * tot;
-  for (const [n, w] of STYLE_W) if ((x -= w) < 0) return n;
-  return 'avant';
-}
 // (angle ramené dans ]−π, π] : un tour complet ne se défait pas à l'arrivée)
 const wrap = (a) => a - 2 * Math.PI * Math.round(a / (2 * Math.PI));
 
@@ -123,7 +148,8 @@ const _q = new THREE.Quaternion();
 // g : 0 (pose extérieure) → 1 (dans le cube du centre) ; upL : le haut du
 // monde dans le repère local
 export function dockPose(g, out, u, upL) {
-  const a = sm(0, 0.35, g), b = sm(0.3, 1, g);
+  // (glissement vers le rayon et approche se chevauchent : pas de virage sec)
+  const a = sm(0, 0.55, g), b = sm(0.2, 1, g);
   const R0 = Math.max(out.pos.length(), 6);
   const d0 = out.pos.clone().normalize();
   const dir = d0.clone().applyQuaternion(_q.setFromUnitVectors(d0, u).slerp(new THREE.Quaternion(), 1 - a));
@@ -170,6 +196,13 @@ export function insidePose(st, R, frames, out) {
   const io0 = { b0: Math.PI / 2, b1: Math.PI / 2, t0: 0, t1: 0, r: (ENTRY_R * 0.42) / rT };
   const P = (i) => (i < 0 || i >= n ? io0 : frames[i]);
   const f = st.f, lerp = (a, b, t) => a + (b - a) * t;
+  // Roulis porté d'une traversée à la suivante : il n'y a pas de haut dans
+  // l'hypersphère, inutile de défaire pendant chaque halte le roulis de la
+  // traversée précédente (un demi-tour s'ajoutait aux autres gestes). Il ne se
+  // défait qu'une fois, pendant la dernière halte, avant la remontée.
+  const off = [0];
+  for (let i = 1; i < n; i++) off[i] = frames[i - 1].t1 + off[i - 1] - frames[i].t0;
+  const roll0 = (i) => (i >= 0 && i < n ? off[i] : 0);
   switch (st.phase) {
     case 'plunge': return dockPose(Math.min(1, f / DOCK), out, out.uIn, out.upL);
     case 'surface': return dockPose(Math.min(1, (1 - f) / DOCK), out, out.uOut, out.upL);
@@ -177,7 +210,7 @@ export function insidePose(st, R, frames, out) {
       const S = P(st.room), e = smoother(f);
       // (un peu de vie : le regard plonge vers l'objet qui passe)
       const b = lerp(S.b0, S.b1, sm(0.15, 0.85, f)) + 0.08 * Math.sin(Math.PI * f) ** 2 * Math.sign(Math.PI / 2 - S.b0 + 1e-6);
-      return poseIn(qOf(st.room), S.r * k, b, lerp(S.t0, S.t1, e) + 0.08 * Math.sin(Math.PI * f));
+      return poseIn(qOf(st.room), S.r * k, b, lerp(S.t0, S.t1, e) + roll0(st.room) + 0.08 * Math.sin(Math.PI * f));
     }
     case 'dwell': {
       const i = st.room, A = P(i - 1), B = P(i);
@@ -185,17 +218,58 @@ export function insidePose(st, R, frames, out) {
       // (pièce vide : le regard ne s'attarde pas sur son centre)
       const empty = R.cells[frames.rooms?.[i] ?? ROOT]?.content.type === 'none';
       const w = empty ? 0.45 : 1;
-      const lIn = sm(0, 0.3, f) * w, lOut = sm(0.68, 1, f);
+      // (les trois gestes de la halte — regarder l'objet, en faire un peu le
+      // tour, se tourner vers la porte suivante — s'étalent et se chevauchent
+      // sur toute sa durée : le regard ne tourne jamais vite)
+      const lIn = sm(0, 0.45, f) * w, lOut = sm(0.55, 1, f);
       // regard et distance : fin de la traversée → objet → début de la suivante
       const bMid = lerp(A.b1, bL, lIn), rMid = lerp(A.r * k, rL, lIn);
       const b = lerp(bMid, B.b0, lOut), r = lerp(rMid, B.r * k, lOut);
-      const q = qa.clone().slerp(qb, sm(0.18, 0.82, f));
+      const q = qa.clone().slerp(qb, sm(0.04, 0.96, f));
       // tour de l'objet : sens et ampleur propres à chaque halte
       const same = qa.angleTo(qb) < 0.2 ? 1 : 0.35;
-      const orb = (hash01(`${R.seed}:orbite${i}`) * 2 - 1) * 1.4 * same;
-      const tau = lerp(wrap(A.t1), B.t0, sm(0.18, 0.82, f)) + orb * Math.sin(Math.PI * f) * (1 - Math.abs(2 * f - 1) ** 3);
+      const orb = (hash01(`${R.seed}:orbite${i}`) * 2 - 1) * 0.6 * same;
+      const tA = A.t1 + roll0(i - 1), tB = B.t0 + roll0(i);
+      const tau = lerp(i >= n ? wrap(tA) : tA, tB, sm(0.04, 0.96, f)) + orb * Math.sin(Math.PI * f) * (1 - Math.abs(2 * f - 1) ** 3);
       return poseIn(q, r, b, tau);
     }
     default: return { pos: out.pos.clone(), fwd: out.fwd.clone(), up: out.up.clone() };
   }
+}
+
+// Pose intérieure lissée dans le temps : pendant les haltes et les
+// traversées, la pose est la moyenne (noyau gaussien, σ ≈ 0,3 s) des poses
+// voisines sur la trajectoire. Les gestes successifs (regarder l'objet, en
+// faire le tour, se tourner vers la porte) se fondent les uns dans les autres,
+// sans changement de direction brusque. Calculée sur la trajectoire elle-même
+// (pas d'historique) : la boucle se referme et l'export rend la même chose.
+// Le lissage s'efface près de la plongée et de la remontée (la pose y est
+// raccordée telle quelle). tl : la chronologie ; T : durée de la boucle (s).
+const SIGMA = 0.3, TAPS = [-2, -1.5, -1, -0.5, 0, 0.5, 1, 1.5, 2];
+export function smoothInsidePose(ph, st, R, frames, out, tl, T) {
+  const P0 = insidePose(st, R, frames, out);
+  if (st.phase !== 'dwell' && st.phase !== 'travel') return P0;
+  const inside = tl.filter((p) => p.k === 'dwell' || p.k === 'travel');
+  const a = inside[0].a, b = inside[inside.length - 1].b, sp = SIGMA / T;
+  // (part du lissage : nulle à moins de 2σ de l'entrée ou de la sortie)
+  const edge = Math.min(ph - a, b - ph) / sp;
+  const amt = Math.min(1, Math.max(0, (edge - 2) / 1.5));
+  if (amt <= 0) return P0;
+  const pos = new THREE.Vector3(), fwd = new THREE.Vector3(), up = new THREE.Vector3();
+  let wsum = 0;
+  for (const x of TAPS) {
+    const q = Math.min(b - 1e-6, Math.max(a, ph + x * sp));
+    const seg = inside.find((p) => q >= p.a && q < p.b) ?? inside[inside.length - 1];
+    const P = insidePose({ phase: seg.k, room: seg.i, f: (q - seg.a) / (seg.b - seg.a) }, R, frames, out);
+    const w = Math.exp(-0.5 * x * x);
+    pos.addScaledVector(P.pos, w); fwd.addScaledVector(P.fwd, w); up.addScaledVector(P.up, w);
+    wsum += w;
+  }
+  pos.divideScalar(wsum); fwd.normalize();
+  up.addScaledVector(fwd, -up.dot(fwd)).normalize();
+  return {
+    pos: P0.pos.clone().lerp(pos, amt),
+    fwd: P0.fwd.clone().lerp(fwd, amt).normalize(),
+    up: P0.up.clone().lerp(up, amt).normalize(),
+  };
 }
