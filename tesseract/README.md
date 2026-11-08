@@ -11,6 +11,8 @@ Rendu physique en three.js (WebGPU, TSL). La scène est entièrement procédural
 | N | nouvelle scène (nouvelle graine) |
 | Espace | pause / lecture |
 | ← / → | avancer ou reculer dans la boucle |
+| L | afficher / masquer les légendes des étapes |
+| A | afficher / masquer l'analogie 3D |
 | H | masquer l'interface |
 | F | plein écran |
 
@@ -56,6 +58,20 @@ Les courbes ont de l'anticipation et du rebond (le mouvement recule un peu avant
 
 **L'ajourage.** Plié, le tesseract est enveloppé par sa cellule extérieure et par les faces des cellules latérales qui la touchent : elles cacheraient tout. Les panneaux se percent de trous ronds, sur une trame à 45°, qui grandissent avec la coordonnée w du centre de leur face. La coque tournée vers l'œil 4D s'efface, les faces latérales s'ajourent à moitié et le cube intérieur reste plein. Tout se referme quand les cellules reviennent se coucher dans le patron. L'objet exposé de la cellule extérieure se rétracte : projeté, il se superposerait à celui de la cellule intérieure.
 
+**Lisibilité** (`src/scene/guides.js`, `src/app/overlay.js`). Une rotation dans un plan qui contient une quatrième direction ne se représente pas : on donne au regard des prises.
+- **Le fantôme** : la silhouette du tesseract plié, en arêtes fines et lumineuses, à l'endroit exact où les cellules vont se poser. Déplié, on voit déjà la destination.
+- **Les liserés appariés**, comme les languettes d'une maquette en papier : chaque face porte un cadre lumineux de la couleur de la face qu'elle rejoindra (une couleur par paire, 24 paires). Il s'avive à mesure que la distance 4D entre les deux faces diminue, et s'éteint au contact. Les faces jointes par une charnière du patron ne s'allument jamais.
+- **La profondeur 4D en couleur** : froid loin de l'œil 4D, chaud tout près, sur le fantôme et (discrètement, pendant le quart de tour) sur l'ossature.
+- **Les légendes** de chaque mouvement (« Le repli », « Quart de tour dans le plan y–w », « Le dépliage »). Chacune apparaît quand le mouvement commence et s'efface à la fin de la pause qui le suit : le texte ne change jamais sur une image immobile.
+- **L'analogie 3D**, en encart : la même histoire une dimension plus bas. Une croix de six carrés se replie en cube, que l'on voit de face (un carré dans un carré, comme le tesseract est un cube dans un cube). Le cube fait un quart de tour : le carré du fond passe devant.
+
+Légendes et encart sont masqués par défaut et s'affichent à la demande (touches L et A, ou le dossier « Lisibilité et intérieur »). Ce choix est mémorisé et ne change pas d'une scène à l'autre. Quand ils sont affichés, ils sont aussi composés sur chaque image de la vidéo exportée.
+
+**Vue sur l'intérieur.**
+- **Coupe côté caméra** : les panneaux tournés vers la caméra s'ajourent aussi (même trame de trous ; la carte d'ombre voit la même coupe).
+- **Lumières d'écrin** : une petite source au cœur de chaque cellule éclaire la doublure, fait briller l'objet et filtre par les ajours. Elle s'éteint quand la cellule passe à l'extérieur.
+- **Rapprochement** : la caméra s'approche quand le tesseract est plié.
+
 **Le cadrage.** L'objet reste centré, à une taille qui ne suit qu'en partie l'étendue du patron (déplié, il est bien plus grand que plié). Il est soulevé au besoin pour ne jamais traverser le sol.
 
 ## Géométrie (`src/gen/`, dans des Web Workers)
@@ -68,8 +84,8 @@ Les courbes ont de l'anticipation et du rebond (le mouvement recule un peu avant
   - profilé d'aluminium rainuré.
 
   Nœuds d'angle en boîte arrondie, sphère ou pommeau. Les chanfreins et congés reçoivent la finition polie, les plats la finition brossée (brossage le long de la barre).
-- **Panneaux** : plaques (faces externe et interne, chant), verre teinté, persiennes inclinées, grille de joncs tissés dessus-dessous, et tôle perforée. Cette dernière a des trous en superellipse (rond, carré, losange, étoile), à chanfrein poli et paroi usinée. Leur taille suit un motif : centre, bord, diagonale, vague ou hasard. Les carreaux voisins partagent exactement leurs points de bord.
-- **Objets exposés** : perle, pierre taille brillant, gyroscope à trois anneaux, cube, Saturne, et un petit cube d'ossature en mise en abyme. Chacun tourne d'un nombre entier de tours par boucle.
+- **Panneaux** : plaques (faces externe et interne, chant), verre teinté, persiennes inclinées, grille de joncs tissés dessus-dessous, pointes de diamant, clous ou caissons, tôle ondulée, vitrail serti de plombs (losanges ou carreaux), barreaux à traverse, cible d'anneaux concentriques, et tôle perforée. Cette dernière a des trous en superellipse (rond, carré, losange, étoile, fente) ou hexagonaux, à chanfrein poli et paroi usinée. Leur taille suit un motif : centre, bord, diagonale, vague ou hasard. Les carreaux voisins partagent exactement leurs points de bord.
+- **Objets exposés** : perle, pierre taille brillant, gyroscope à trois anneaux, cube, Saturne, nœud de trèfle, icosaèdre, dodécaèdre, pile de jetons, et un petit cube d'ossature en mise en abyme. Chacun tourne d'un nombre entier de tours par boucle.
 
 ## Matériaux (`src/scene/materials.js`)
 
@@ -89,7 +105,7 @@ Le sol est procédural : laque noire, béton ciré, damier de marbre, parquet de
   - Nuit ;
   - Surréaliste (damier de marbre, patron de Dalí) ;
   - Irisé.
-- **Archétypes de cellule** : vitrine, écrin, moucharabieh, persiennes, grille tissée, squelette.
+- **Archétypes de cellule** : vitrine, écrin, moucharabieh, persiennes, grille tissée, squelette, cage à barreaux, vitrail, pointes de diamant, tôle ondulée, cible, et cabinet composite (chaque face tirée à part).
 - **Lumière** : un projecteur avec ombres douces et deux contre-jours, fixes dans le monde (la caméra tourne, les ombres restent), et un studio HDR pour les reflets.
 - **Post-traitement** (repris de Hollow) :
   - occlusion ambiante ;
@@ -102,4 +118,4 @@ Le sol est procédural : laque noire, béton ciré, damier de marbre, parquet de
 
 ## Performances
 
-Environ 16 ms par image à 2,6 Mpx (≈ 760 000 triangles, ombres, anticrénelage temporel). La tôle perforée est plafonnée à dix-huit faces par scène.
+Environ 24 ms par image à 2,6 Mpx (≈ 760 000 triangles, ombres, anticrénelage temporel, huit lumières d'écrin). La tôle perforée est plafonnée à dix-huit faces par scène.

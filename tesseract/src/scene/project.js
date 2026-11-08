@@ -27,7 +27,7 @@
 import * as THREE from 'three/webgpu';
 import {
   Fn, uniform, vec3, vec4, float, length, cross, normalize, positionGeometry, normalLocal, tangentLocal, positionPrevious,
-  varyingProperty, abs, dot, pow, attribute, smoothstep, fract, vec2, mat2,
+  varyingProperty, abs, dot, pow, attribute, smoothstep, fract, vec2, mat2, modelWorldMatrix, max, mix,
 } from 'three/tsl';
 import { G } from './globals.js';
 
@@ -52,6 +52,10 @@ export function setMatrix(u, m) {
 
 // ouverture du panneau (0 : plein ; 1 : effacé)
 export const revealOpen = varyingProperty('float', 'vReveal');
+// coordonnée w (profondeur 4D) du sommet, avant projection
+export const depthW = varyingProperty('float', 'vDepthW');
+// couleur de la profondeur 4D (froid → chaud quand w va de −1 à 1)
+export const depthColor = (w) => mix(G.depthCold, G.depthWarm, smoothstep(-1, 1, w));
 
 // masque d'ajourage : trous ronds sur une trame à 45° dans le plan de la
 // pièce, de rayon croissant avec l'ouverture
@@ -65,9 +69,16 @@ export function projectPosition(U, full, reveal = false) {
   return Fn(() => {
     const l = positionGeometry;
     if (reveal) {
-      const w = U.A.mul(vec4(attribute('anchor', 'vec3'), 1)).w;
-      revealOpen.assign(smoothstep(G.revealLo, G.revealHi, w).mul(G.reveal));
+      const anc = attribute('anchor', 'vec3');
+      const w = U.A.mul(vec4(anc, 1)).w;
+      // coupe côté caméra : la face (de la cellule vers le centre de la face,
+      // une fois projetée) regarde-t-elle la caméra ?
+      const pa = modelWorldMatrix.mul(vec4(mapPoint(anc, U.A, G.d, G.inflate), 1)).xyz;
+      const pc = modelWorldMatrix.mul(vec4(mapPoint(vec3(0), U.A, G.d, G.inflate), 1)).xyz;
+      const facing = dot(normalize(pa.sub(pc)), normalize(G.viewPos.sub(pa)));
+      revealOpen.assign(max(smoothstep(G.revealLo, G.revealHi, w).mul(G.reveal), smoothstep(0.2, 0.85, facing).mul(G.cutaway)));
     }
+    depthW.assign(U.A.mul(vec4(l, 1)).w);
     const p = mapPoint(l, U.A, G.d, G.inflate).toVar('p4');
     if (full) {
       const e = 0.003;

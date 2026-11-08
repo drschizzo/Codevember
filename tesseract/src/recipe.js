@@ -23,53 +23,53 @@ export const kelvinToHex = (K) => {
 // des contre-jours
 export const MOODS = {
   atelier: {
-    label: 'Atelier', env: 'atelier', bg: '#0b0907', keyK: 3400, rim: ['#ffb070', '#ffd9a8'], floor: ['concrete', 'oak'],
+    label: 'Atelier', practical: '#ffc890', env: 'atelier', bg: '#0b0907', keyK: 3400, rim: ['#ffb070', '#ffd9a8'], floor: ['concrete', 'oak'],
     frames: ['brassVelvet', 'bronze', 'blackSteel', 'damascus', 'goldLeaf'],
     panels: ['brassVelvet', 'verdigris', 'bronze', 'marble', 'urushi', 'guilloche', 'damascus'],
     contents: ['goldLeaf', 'nacre', 'marble', 'bronze', 'urushi'],
-    kinds: { vitrine: 2, ecrin: 3, moucharabieh: 3, persienne: 2, tissage: 2, squelette: 1 },
+    kinds: { vitrine: 2, ecrin: 3, moucharabieh: 3, persienne: 2, tissage: 2, squelette: 1, cage: 2, vitrail: 1.5, cloute: 2, industriel: 2.5, cible: 1.5, mixte: 3 },
   },
   studio: {
-    label: 'Studio', env: 'studio', bg: '#07080a', keyK: 5600, rim: ['#9fc4ff', '#ffffff'], floor: ['gloss', 'concrete'],
+    label: 'Studio', practical: '#fff1e0', env: 'studio', bg: '#07080a', keyK: 5600, rim: ['#9fc4ff', '#ffffff'], floor: ['gloss', 'concrete'],
     frames: ['carbon', 'anodizedDiamond', 'ceramicBlack', 'titanium', 'chrome', 'blackSteel'],
     panels: ['carbon', 'anodizedDiamond', 'ceramicBlack', 'guillocheSilver', 'titanium', 'ceramicWhite'],
     contents: ['chrome', 'ceramicWhite', 'titanium', 'nacre', 'ceramicBlack'],
-    kinds: { vitrine: 3, ecrin: 2, moucharabieh: 3, persienne: 3, tissage: 1, squelette: 1 },
+    kinds: { vitrine: 3, ecrin: 2, moucharabieh: 3, persienne: 3, tissage: 1, squelette: 1, cage: 2, vitrail: 1, cloute: 2, industriel: 2.5, cible: 2, mixte: 3 },
   },
   ecrin: {
-    label: 'Écrin', env: 'atelier', bg: '#070405', keyK: 3000, rim: ['#ffc58a', '#ff8fa0'], floor: ['gloss', 'velvet'],
+    label: 'Écrin', practical: '#ffb878', env: 'atelier', bg: '#070405', keyK: 3000, rim: ['#ffc58a', '#ff8fa0'], floor: ['gloss', 'velvet'],
     frames: ['goldLeaf', 'brassVelvet', 'urushi', 'nero', 'guilloche'],
     panels: ['guilloche', 'guillocheRuby', 'urushi', 'nero', 'brassVelvet', 'kintsugi'],
     contents: ['goldLeaf', 'nacre', 'urushi', 'guilloche'],
-    kinds: { vitrine: 3, ecrin: 4, moucharabieh: 2, persienne: 1, tissage: 1, squelette: 1 }, gems: 0.55,
+    kinds: { vitrine: 3, ecrin: 4, moucharabieh: 2, persienne: 1, tissage: 1, squelette: 1, cage: 1.5, vitrail: 2.5, cloute: 3, industriel: 0.5, cible: 2, mixte: 3 }, gems: 0.55,
   },
   clinique: {
-    label: 'Clinique', env: 'cyclo', bg: '#dedcd7', keyK: 6500, rim: ['#ffffff', '#e8f0ff'], floor: ['cyclo'], envIntensity: [0.32, 0.45], keyScale: 0.6,
+    label: 'Clinique', practical: '#ffffff', env: 'cyclo', bg: '#dedcd7', keyK: 6500, rim: ['#ffffff', '#e8f0ff'], floor: ['cyclo'], envIntensity: [0.32, 0.45], keyScale: 0.6,
     frames: ['ceramicWhite', 'chrome', 'guillocheSilver', 'anodizedDiamond'],
     panels: ['ceramicWhite', 'kintsugi', 'celadon', 'nacre', 'marble', 'chrome'],
     contents: ['chrome', 'nacre', 'kintsugi', 'ceramicBlack'],
-    kinds: { vitrine: 3, ecrin: 2, moucharabieh: 3, persienne: 2, tissage: 2, squelette: 1 },
+    kinds: { vitrine: 3, ecrin: 2, moucharabieh: 3, persienne: 2, tissage: 2, squelette: 1, cage: 1.5, vitrail: 1.5, cloute: 2, industriel: 1, cible: 2.5, mixte: 3 },
   },
   nuit: {
-    label: 'Nuit', env: 'night', bg: '#030407', keyK: 7000, rim: ['#5b8cff', '#ff4fa0', '#46e0ff', '#a070ff'], floor: ['gloss'],
+    label: 'Nuit', practical: '#9fd0ff', env: 'night', bg: '#030407', keyK: 7000, rim: ['#5b8cff', '#ff4fa0', '#46e0ff', '#a070ff'], floor: ['gloss'],
     frames: ['blackSteel', 'titanium', 'carbon', 'anodizedDiamond', 'ceramicBlack'],
     panels: ['titanium', 'anodizedDiamond', 'carbon', 'blackSteel', 'soap', 'obsidian'],
     contents: ['chrome', 'soap', 'titanium', 'obsidian'],
-    kinds: { vitrine: 3, ecrin: 1, moucharabieh: 3, persienne: 3, tissage: 2, squelette: 1 },
+    kinds: { vitrine: 3, ecrin: 1, moucharabieh: 3, persienne: 3, tissage: 2, squelette: 1, cage: 2, vitrail: 1.5, cloute: 1.5, industriel: 2, cible: 2, mixte: 3 },
   },
   dali: {
-    label: 'Surréaliste', env: 'softbox', bg: '#120d09', keyK: 4300, rim: ['#ffcf8a', '#9fb8ff'], floor: ['checker'], envIntensity: [0.55, 0.75],
+    label: 'Surréaliste', practical: '#ffd59a', env: 'softbox', bg: '#120d09', keyK: 4300, rim: ['#ffcf8a', '#9fb8ff'], floor: ['checker'], envIntensity: [0.55, 0.75],
     frames: ['goldLeaf', 'brassVelvet', 'ceramicWhite', 'nero'],
     panels: ['marble', 'nero', 'kintsugi', 'celadon', 'guilloche', 'nacre'],
     contents: ['nacre', 'goldLeaf', 'marble', 'chrome'],
-    kinds: { vitrine: 3, ecrin: 3, moucharabieh: 2, persienne: 1, tissage: 1, squelette: 2 },
+    kinds: { vitrine: 3, ecrin: 3, moucharabieh: 2, persienne: 1, tissage: 1, squelette: 2, cage: 2, vitrail: 3, cloute: 1.5, industriel: 0.5, cible: 2, mixte: 3 },
   },
   irise: {
-    label: 'Irisé', env: 'studio', bg: '#05060a', keyK: 6000, rim: ['#8fd0ff', '#ffa8e0'], floor: ['gloss'],
+    label: 'Irisé', practical: '#e8d8ff', env: 'studio', bg: '#05060a', keyK: 6000, rim: ['#8fd0ff', '#ffa8e0'], floor: ['gloss'],
     frames: ['titanium', 'chrome', 'blackSteel'],
     panels: ['soap', 'nacre', 'titanium', 'chrome'],
     contents: ['soap', 'nacre', 'titanium', 'chrome'],
-    kinds: { vitrine: 4, ecrin: 1, moucharabieh: 2, persienne: 2, tissage: 1, squelette: 1 }, gems: 0.4,
+    kinds: { vitrine: 4, ecrin: 1, moucharabieh: 2, persienne: 2, tissage: 1, squelette: 1, cage: 1.5, vitrail: 2.5, cloute: 1.5, industriel: 1, cible: 2, mixte: 3 }, gems: 0.4,
   },
 };
 
@@ -81,12 +81,26 @@ export const KINDS = {
   persienne: { label: 'Persiennes' },
   tissage: { label: 'Grille tissée' },
   squelette: { label: 'Squelette' },
+  cage: { label: 'Cage à barreaux' },
+  vitrail: { label: 'Vitrail' },
+  cloute: { label: 'Pointes de diamant' },
+  industriel: { label: 'Tôle ondulée' },
+  cible: { label: 'Cible' },
+  mixte: { label: 'Cabinet composite' },
 };
-export const FACE_KINDS = { Ouvert: 'open', Plaque: 'plate', Verre: 'glass', 'Tôle perforée': 'perf', Persiennes: 'louvre', 'Grille tissée': 'grid' };
-export const CONTENT_TYPES = { Rien: 'none', Perle: 'pearl', Pierre: 'gem', Gyroscope: 'rings', Cube: 'cube', Saturne: 'saturn', 'Mise en abyme': 'mini' };
+export const FACE_KINDS = {
+  Ouvert: 'open', Plaque: 'plate', Verre: 'glass', 'Tôle perforée': 'perf', Persiennes: 'louvre', 'Grille tissée': 'grid',
+  'Pointes / caissons': 'stud', 'Tôle ondulée': 'corrugated', Vitrail: 'leaded', Barreaux: 'bars', Cible: 'target',
+};
+export const CONTENT_TYPES = {
+  Rien: 'none', Perle: 'pearl', Pierre: 'gem', Gyroscope: 'rings', Cube: 'cube', Saturne: 'saturn', 'Mise en abyme': 'mini',
+  'Nœud de trèfle': 'knot', Icosaèdre: 'ico', Dodécaèdre: 'dodeca', 'Pile de jetons': 'stack',
+};
 export const FRAME_STYLES = { 'Carré chanfreiné': 'square', Rond: 'round', Tube: 'tube', Cornière: 'angle', 'Profilé rainuré': 'extrusion' };
 export const NODE_STYLES = { Cube: 'cube', Sphère: 'sphere', Pommeau: 'knob', Aucun: 'none' };
-export const HOLE_SHAPES = { Rond: 'circle', Carré: 'square', Losange: 'diamond', Étoile: 'cross' };
+export const HOLE_SHAPES = { Rond: 'circle', Carré: 'square', Losange: 'diamond', Étoile: 'cross', Hexagone: 'hex', Fente: 'slot' };
+export const STUD_MODES = { 'Pointes de diamant': 'pyramid', Clous: 'dome', Caissons: 'coffer' };
+export const LEAD_PATTERNS = { Losanges: 'diamond', Carreaux: 'grid' };
 export const HOLE_GRADS = { Uniforme: 'uniform', Centre: 'radial', Bord: 'edge', Diagonale: 'diagonal', Vague: 'wave', Hasard: 'random' };
 export const NET_SHAPES = { 'Croix de Dalí': 'dali', Croix: 'cross', Serpent: 'chain', Libre: 'random' };
 export const FLOORS = { Aucun: 'none', 'Laque noire': 'gloss', 'Béton ciré': 'concrete', 'Damier de marbre': 'checker', Cyclorama: 'cyclo', Chêne: 'oak', Velours: 'velvet' };
@@ -131,24 +145,41 @@ export function makeCell(kind, rng, mood, seed) {
     case 'persienne': for (let f = 0; f < 6; f++) faces[f] = f >> 1 === 1 ? 'plate' : 'louvre'; break;
     case 'tissage': faces.fill('grid'); if (rng.chance(0.4)) faces[side()] = 'glass'; break;
     case 'squelette': faces.fill('open'); if (rng.chance(0.4)) faces[side()] = 'glass'; break;
+    case 'cage': faces.fill('bars'); faces[2] = 'plate'; faces[3] = rng.chance(0.5) ? 'plate' : 'perf'; break;
+    case 'vitrail': faces.fill('leaded'); if (rng.chance(0.4)) faces[side()] = 'open'; break;
+    case 'cloute': faces.fill('stud'); for (let i = 0, n = rng.int(1, 2); i < n; i++) faces[side()] = rng.chance(0.5) ? 'open' : 'glass'; break;
+    case 'industriel': for (let f = 0; f < 6; f++) faces[f] = f >> 1 === 1 ? 'perf' : 'corrugated'; faces[side()] = 'open'; break;
+    case 'cible': for (let f = 0; f < 6; f++) faces[f] = f >> 1 === 2 ? 'glass' : 'target'; break;
+    case 'mixte': { // chaque face tirée à part, au moins deux faces qui laissent voir
+      const pool = [['plate', 2], ['glass', 2], ['perf', 2], ['louvre', 1.5], ['grid', 1], ['stud', 1.5], ['corrugated', 1], ['leaded', 1.5], ['bars', 1.5], ['target', 1], ['open', 1]];
+      for (let f = 0; f < 6; f++) faces[f] = rng.weighted(pool);
+      const see = ['glass', 'open', 'bars', 'leaded', 'target', 'grid'];
+      while (faces.filter((x) => see.includes(x)).length < 2) faces[side()] = rng.pick(see);
+      break;
+    }
     default: break;
   }
   const panelSet = rng.pick(M.panels);
   const contentType = kind === 'squelette' || kind === 'vitrine' || rng.chance(0.6)
-    ? rng.weighted([['pearl', 3], ['gem', 2 * (M.gems ?? 0.25) * 4], ['rings', 2], ['cube', 1.5], ['saturn', 1.5], ['mini', 1.5]])
+    ? rng.weighted([['pearl', 3], ['gem', 2 * (M.gems ?? 0.25) * 4], ['rings', 2], ['cube', 1.2], ['saturn', 1.5], ['mini', 1.5], ['knot', 2], ['ico', 1.2], ['dodeca', 1.2], ['stack', 1.2]])
     : 'none';
   const contentSet = rng.pick(M.contents);
   const gemKey = rng.pick(Object.keys(GEMS));
   return {
     kind, seed, faces,
     panelT: r3(rng.range(0.018, 0.032)), glassT: r3(rng.range(0.012, 0.022)),
-    perf: { n: rng.int(5, 9), shape: rng.weighted([['circle', 4], ['square', 2], ['diamond', 2], ['cross', 1.2]]), grad: rng.weighted([['radial', 3], ['edge', 2], ['diagonal', 2], ['wave', 2], ['uniform', 1.5], ['random', 1]]), min: r2(rng.range(0, 0.3)), max: r2(rng.range(0.7, 0.95)), twist: rng.chance(0.3) ? r2(rng.range(0, Math.PI / 2)) : 0 },
+    perf: { n: rng.int(5, 9), shape: rng.weighted([['circle', 4], ['square', 2], ['diamond', 2], ['cross', 1.2], ['hex', 2.5], ['slot', 2]]), grad: rng.weighted([['radial', 3], ['edge', 2], ['diagonal', 2], ['wave', 2], ['uniform', 1.5], ['random', 1]]), min: r2(rng.range(0, 0.3)), max: r2(rng.range(0.7, 0.95)), twist: rng.chance(0.3) ? r2(rng.range(0, Math.PI / 2)) : 0 },
     louvre: { n: rng.int(6, 12), angle: r2(rng.range(0.35, 0.95) * rng.sign()) },
     grid: { n: rng.int(6, 12) },
+    stud: { n: rng.int(4, 9), mode: rng.weighted([['pyramid', 3], ['dome', 2], ['coffer', 2]]), height: r2(rng.range(0.35, 0.8)) },
+    corr: { n: rng.int(3, 8), amp: r2(rng.range(0.2, 0.45)) },
+    leaded: { n: rng.int(2, 5), pattern: rng.weighted([['diamond', 3], ['grid', 2]]) },
+    bars: { n: rng.int(6, 13), cross: rng.chance(0.6) },
+    target: { n: rng.int(3, 8), fill: r2(rng.range(0.35, 0.75)) },
     panelSet, panel: finishesFor(panelSet, rng),
     glass: glassFinish(rng, rng.chance(0.2)),
     content: {
-      type: contentType, size: r2(rng.range(0.32, 0.5)), set: contentSet, finish: finishesFor(contentSet, rng),
+      type: contentType, size: r2(rng.range(0.38, 0.55)), set: contentSet, finish: finishesFor(contentSet, rng),
       gem: { ...GEMS[gemKey], key: gemKey }, axis: rng.dir().map(r3), turns: rng.pick([1, 1, 2, -1, -2]), tilt: rng.dir().map(r3),
     },
   };
@@ -218,8 +249,24 @@ export function generate(seed, opts = {}) {
     env: { preset: M.env, intensity: r2(M.envIntensity ? rng.range(...M.envIntensity) : rng.range(0.5, 0.85)), rotation: r2(rng.range(0, Math.PI * 2)) },
     floor: { kind: rng.pick(M.floor), level: r2(rng.range(1.25, 1.45)), reflect: r2(rng.range(0.4, 0.8)) },
     bg: M.bg,
+    view: { ...VIEW_DEFAULTS, practicalColor: M.practical ?? VIEW_DEFAULTS.practicalColor },
     fog: { near: 9, far: 26 },
   };
 }
 
 export const rootCell = ROOT;
+
+// Lisibilité et vue sur l'intérieur (réglages par défaut)
+//   ghost : silhouette du tesseract plié (destination) ; seams : liserés des
+//   faces appariées ; depth : profondeur 4D en couleur ; cutaway : panneaux
+//   ajourés côté caméra ; practical : lumières d'écrin ; dolly : la caméra
+//   s'approche pendant les pauses
+export const VIEW_DEFAULTS = { ghost: 0.7, seams: 1, depth: 0.6, cutaway: 0.55, practical: 6, practicalColor: '#ffd9a8', dolly: 0.35 };
+
+// Recette ancienne (lien partagé) : on complète ce qui manque
+export function upgrade(R) {
+  const D = { stud: { n: 6, mode: 'pyramid', height: 0.5 }, corr: { n: 5, amp: 0.3 }, leaded: { n: 3, pattern: 'diamond' }, bars: { n: 9, cross: true }, target: { n: 5, fill: 0.5 } };
+  for (const c of R.cells) for (const [k, v] of Object.entries(D)) c[k] ??= { ...v };
+  R.view ??= { ...VIEW_DEFAULTS };
+  return R;
+}

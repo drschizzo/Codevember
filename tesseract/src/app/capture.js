@@ -39,6 +39,7 @@ export async function exportLoop(app, { width, height, fps, mbps }, onProgress, 
   encoder.configure({ codec, width: w, height: h, bitrate: mbps * 1e6, framerate: fps, bitrateMode: 'variable', latencyMode: 'quality' });
 
   const total = Math.round(app.duration * fps);
+  let comp = null;
   app.setSize(w, h);
   try {
     // amorçage : l'anticrénelage temporel et le flou de mouvement ont besoin d'un historique
@@ -46,7 +47,15 @@ export async function exportLoop(app, { width, height, fps, mbps }, onProgress, 
     for (let i = 0; i < total; i++) {
       if (failure) throw failure;
       app.renderAt(i / total);
-      const frame = new VideoFrame(app.canvas, { timestamp: Math.round((i * 1e6) / fps), duration: Math.round(1e6 / fps) });
+      let src = app.canvas;
+      if (app.overlay) { // couche 2D composée sur l'image
+        comp ??= new OffscreenCanvas(w, h);
+        const cx = comp.getContext('2d');
+        cx.drawImage(app.canvas, 0, 0, w, h);
+        app.overlay(cx, w, h);
+        src = comp;
+      }
+      const frame = new VideoFrame(src, { timestamp: Math.round((i * 1e6) / fps), duration: Math.round(1e6 / fps) });
       encoder.encode(frame, { keyFrame: i % (fps * 2) === 0 });
       frame.close();
       if (encoder.encodeQueueSize > 6) await new Promise((r) => encoder.addEventListener('dequeue', r, { once: true }));

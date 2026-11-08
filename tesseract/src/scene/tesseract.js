@@ -13,6 +13,7 @@ import { stateAt, cellTransforms, cellMatrix, apply, project, stepTimeline, step
 import { meshUniforms, setMatrix } from './project.js';
 import { buildPieceMaterial, buildGemMaterial, finishUniforms, applyFinish, signature, gemUniforms, applyGem } from './materials.js';
 import { G } from './globals.js';
+import { createGuides } from './guides.js';
 
 const ROLES = ['frame', 'panel', 'glass', 'content'];
 
@@ -55,6 +56,7 @@ export function createTesseract(scene, gen) {
     group.add(mesh);
     pieces.push({ c, role, mesh, M: meshUniforms(), F: null, gemU: null, sig: '', prev: null, has: false });
   }
+  const guides = createGuides(group, scene);
   const pieceOf = (c, role) => pieces[c * ROLES.length + ROLES.indexOf(role)];
   let frameU = null; // uniformes de finition de l'ossature (partagés par les huit cellules)
 
@@ -82,7 +84,7 @@ export function createTesseract(scene, gen) {
       if (P.role === 'frame') { frameU ??= finishUniformsFor(fin); U = frameU; } else { U = finishUniformsFor(fin); }
       P.F = U;
       const tint = P.role === 'glass' ? U.outer.color2 : null;
-      P.mesh.material = buildPieceMaterial(fin, U, P.M, { shadowTint: tint, reveal: P.role === 'panel' || P.role === 'glass' });
+      P.mesh.material = buildPieceMaterial(fin, U, P.M, { shadowTint: tint, reveal: P.role === 'panel' || P.role === 'glass', depth: P.role === 'frame' });
       P.sig = signature(fin);
     }
     old?.dispose();
@@ -105,7 +107,7 @@ export function createTesseract(scene, gen) {
   }
 
   const frameSpec = () => ({ ...R.frame, finish: undefined, set: undefined });
-  const cellSpec = (c) => { const k = R.cells[c]; return { seed: k.seed, faces: k.faces, panelT: k.panelT, glassT: k.glassT, perf: k.perf, louvre: k.louvre, grid: k.grid }; };
+  const cellSpec = (c) => { const k = R.cells[c]; return { seed: k.seed, faces: k.faces, panelT: k.panelT, glassT: k.glassT, perf: k.perf, louvre: k.louvre, grid: k.grid, stud: k.stud, corr: k.corr, leaded: k.leaded, bars: k.bars, target: k.target }; };
   const contentSpec = (c) => { const k = R.cells[c].content; return { type: k.type, size: k.size }; };
 
   // Demande toutes les géométries ; la scène bascule d'un coup quand tout est arrivé.
@@ -115,6 +117,7 @@ export function createTesseract(scene, gen) {
     refRadius = 0;
     const gen0 = ++generation;
     readyFlag = false;
+    guides.setRecipe(R);
     cache = {
       timeline: stepTimeline(R.chor), Q: stepOrientations(R.moves), depth: depthOf(R.net.parent), order: foldOrder(R.net.parent),
     };
@@ -141,6 +144,7 @@ export function createTesseract(scene, gen) {
     if (!R) return;
     const gen0 = generation;
     if (c === null) { // ossature (et panneaux : leur assise dépend de l'ossature)
+      guides.setRecipe(R);
       const jobs = [gen.request(frameSpec(), 'frame'), ...Array.from({ length: 8 }, (_, i) => gen.request({ cell: cellSpec(i), frame: frameSpec() }, 'panels'))];
       Promise.all(jobs).then(([frame, ...panels]) => {
         if (gen0 !== generation) return;
@@ -264,7 +268,9 @@ export function createTesseract(scene, gen) {
         P.prev = A;
       }
     }
-    return { state: st, scale: s, lift };
+    group.updateMatrixWorld();
+    guides.update(R, st, T, inset, s);
+    return { state: st, scale: s, lift, timeline: cache.timeline };
   }
 
   // la chorégraphie, le patron ou les mouvements ont changé (rien à reconstruire)
@@ -275,7 +281,7 @@ export function createTesseract(scene, gen) {
   }
 
   return {
-    group, setRecipe, refresh, syncGeometry, syncMaterial, update, pieces,
+    group, guides, setRecipe, refresh, syncGeometry, syncMaterial, update, pieces,
     ready: () => readyFlag,
     progress: () => (totalCount ? 1 - pendingCount / totalCount : 1),
     // (après un saut dans la boucle : pas de vecteurs vitesse)
