@@ -383,7 +383,7 @@ export const VIEW_DEFAULTS = { ghost: 0, seams: 1, depth: 0.6, cutaway: 0.55, pr
 // la traversée et rayon de son tour autour de l'objet, champ, lampe,
 // brouillard, ajourage des parois vues de l'intérieur, taille des objets
 export const VOYAGE_DEFAULTS = {
-  on: true, plunge: 4.2, dwell: 2.8, travel: 3.6, surface: 4,
+  on: true, plunge: 4.2, dwell: 3.4, travel: 3.6, surface: 4,
   radius: 0.42, orbitR: 0.62, fov: 68, lamp: 1, fogNear: 1.4, fogFar: 6.5, see: 0.9, objScale: 0.27,
 };
 
