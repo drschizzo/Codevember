@@ -254,6 +254,7 @@ export function createUI({ recipe: getRecipe, render, on, nest }) {
   fm.add(r, 'detail').name('Maillage fin des couches proches').onChange(rch);
   fm.add(r, 'backdrop').name('Voir au travers (copie par couche)').onChange(rch);
   fm.add(r, 'backdropBlur', 0, 2, 0.01).name('Flou au travers (×)').onChange(rch);
+  fm.add(r, 'depthBlur').name('Flou selon la profondeur').onChange(rch);
   fm.add(r, 'grazing', 0, 1, 0.01).name('Silhouettes (épaisseur rasante)').onChange(rch);
   fm.add(r, 'sssBoost', 0, 3, 0.01).name('Translucidité (×)').onChange(rch);
   fm.add(r, 'armEnv', 0, 1, 0.01).name('Studio vu de l’intérieur').onChange(rch);

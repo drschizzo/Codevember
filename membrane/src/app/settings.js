@@ -1,7 +1,7 @@
 // Réglages de rendu : indépendants de la graine, mémorisés dans le navigateur.
 
 export const QUALITY = {
-  draft: { label: 'Brouillon', pixelRatio: 1, aa: 'fxaa', shadows: 'low', ao: false, ssr: false, motionBlur: 0, backdrop: true, detail: false },
+  draft: { label: 'Brouillon', pixelRatio: 1, aa: 'fxaa', shadows: 'low', ao: false, ssr: false, motionBlur: 0, backdrop: true, depthBlur: false, detail: false },
   standard: { label: 'Standard', pixelRatio: 1.25, aa: 'smaa', shadows: 'medium', ao: true, ssr: false, motionBlur: 0.5, backdrop: true, detail: true },
   high: { label: 'Haute', pixelRatio: 1.5, aa: 'traa', shadows: 'high', ao: true, ssr: true, ssrRes: 0.5, ssrQuality: 0.5, motionBlur: 0.6, backdrop: true, detail: true },
   cinema: { label: 'Cinéma', pixelRatio: 2, aa: 'traa', shadows: 'ultra', ao: true, ssr: true, ssrRes: 1, ssrQuality: 0.8, motionBlur: 0.8, backdrop: true, detail: true },

@@ -145,11 +145,12 @@ class Slot {
     nest.root.add(this.group);
   }
   get tpl() { return this.nest.templates[this.j % this.nest.templates.length]; }
-  // (re)construit maillages et matériaux quand le modèle a changé
-  sync() {
+  // (re)construit maillages et matériaux quand le modèle, ou un réglage qui
+  // les recompile (depthBlur : flou au travers selon la profondeur), a changé
+  sync(depthBlur) {
     const T = this.tpl;
     if (!T?.data || !T.vessels) return false;
-    const key = `${T.index}:${T.version}:${T.sig}`;
+    const key = `${T.index}:${T.version}:${T.sig}:${depthBlur}`;
     if (key === this.built) return true;
     this.built = key;
     for (const m of Object.values(this.meshes)) { this.group.remove(m); m.material.dispose(); if (m.userData.lite) m.userData.lite.dispose(); }
@@ -177,7 +178,7 @@ class Slot {
     const armMat = buildPieceMaterial(T.lv.armFinish, T.AU, this.RU, { content: G.armEnv });
     this.meshes.arm = mk(d.arm, armMat, 0, true);
     if (d.arm2) this.meshes.arm2 = mk(d.arm2, buildPieceMaterial(T.lv.accentFinish ?? T.lv.armFinish, T.AU2, this.RU, { content: G.armEnv }), 0, true);
-    const opts = { vessels: T.vessels };
+    const opts = { vessels: T.vessels, depthBlur };
     this.meshes.back = mk(d.geo.lo, buildMembraneMaterial(PT, this.S, T.L, spec, { ...opts, side: THREE.BackSide }), 10, false);
     this.meshes.front = mk(d.geo.lo, buildMembraneMaterial(PT, this.S, T.L, spec, { ...opts, side: THREE.FrontSide }), 100, false);
     // variantes sans copie de l'image (couches lointaines : derrière la caméra, ou au cœur)
@@ -220,7 +221,8 @@ export function createNest(scene, gen, renderer) {
   nest.ready = () => nest.templates.length > 0 && nest.templates.every((t) => t.ready);
   nest.progress = () => (nest.templates.length ? nest.templates.reduce((a, t) => a + (t.ready ? 1 : (t.simProgress ?? 0) * 0.9), 0) / nest.templates.length : 0);
 
-  // s : { tau (déroulée), D, R, reset, backdrop (voir au travers), detail (maillage fin de près) }
+  // s : { tau (déroulée), D, R, reset, render } ; réglages de rendu lus ici :
+  // backdrop (voir au travers), depthBlur, detail (maillage fin de près)
   nest.update = (s) => {
     const R = s.R, M = nest.slots.length, N = nest.templates.length;
     if (!M) return { shown: 0 };
@@ -229,7 +231,7 @@ export function createNest(scene, gen, renderer) {
     let shown = 0;
     const poses = [];
     for (const sl of nest.slots) {
-      const ok = sl.sync();
+      const ok = sl.sync(s.render.depthBlur);
       const x = XMIN + ((((sl.j - s.tau - XMIN) % M) + M) % M);
       const T = sl.tpl, lv = T?.lv;
       const visible = ok && x < XMAX;
@@ -258,10 +260,10 @@ export function createNest(scene, gen, renderer) {
       if (!visible) { for (const m of Object.values(sl.meshes)) m.layers.mask = 0; continue; }
       shown++;
       const me = sl.meshes;
-      const useBackdrop = x > bd[0] && x < bd[1] && s.backdrop;
+      const useBackdrop = x > bd[0] && x < bd[1] && s.render.backdrop;
       const memOn = sl.S.vis.value > 0.002;
       // niveau de détail : mêmes attributs, le matériau reste valable
-      const geo = s.detail && x < X_DETAIL ? T.data.geo.hi : T.data.geo.lo;
+      const geo = s.render.detail && x < X_DETAIL ? T.data.geo.hi : T.data.geo.lo;
       for (const k of ['back', 'front']) {
         const m = me[k], want = useBackdrop ? m.userData.full : m.userData.lite;
         if (m.material !== want) m.material = want;

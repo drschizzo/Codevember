@@ -153,7 +153,7 @@ async function main() {
     G.grazing.value = RENDER.grazing ?? 1;
     G.armEnv.value = RENDER.armEnv;
     if (camState.free) controls.update(); else rigCamera(ph);
-    info = nest.update({ tau, D, R, reset: resetMotion, backdrop: RENDER.backdrop, detail: RENDER.detail });
+    info = nest.update({ tau, D, R, reset: resetMotion, render: RENDER });
     resetMotion = false;
     lights.update(R, camera, D, D * R.nest.ratio ** (XMAX - 0.6));
     scene.background.set(R.bg);
@@ -261,7 +261,7 @@ async function main() {
         for (let i = 0; i < 6; i++) {
           renderer._nodes.nodeFrame.update();
           renderAt(0);
-          nest.update({ tau: j - x, D, R, reset: i === 0, backdrop: RENDER.backdrop, detail: RENDER.detail });
+          nest.update({ tau: j - x, D, R, reset: i === 0, render: RENDER });
           if (!all) nest.slots.forEach((s, jj) => { if (jj !== j) s.group.visible = false; });
           camera.position.copy(d).multiplyScalar(k * q ** x); camera.up.set(0, 1, 0); camera.lookAt(0, 0, 0); camera.updateMatrixWorld();
           lights.update(R, camera, D, D * q ** (XMAX - 0.6));
