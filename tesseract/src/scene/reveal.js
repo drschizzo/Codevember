@@ -1,0 +1,96 @@
+// L'ajourage des parois : à chaque image, l'ouverture de chaque face de chaque
+// cellule (0 : pleine ; 1 : effacée). Elle est constante sur une face : on la
+// calcule ici, une fois par face (48 valeurs), et le vertex shader des
+// panneaux la lit (voir project.js) au lieu de la recalculer à chaque sommet.
+//
+// Quatre raisons d'ouvrir une face, la plus forte l'emporte :
+//  • la coque : plié, le tesseract est enveloppé par sa cellule extérieure et
+//    par les faces latérales qui la touchent ; une face s'ajoure d'autant plus
+//    que la coordonnée w de son centre est grande (proche de l'œil 4D) ;
+//  • la coupe côté caméra : une face tournée vers la caméra s'ajoure aussi ;
+//  • le passage (voyage intérieur) : la paroi que la caméra approche se perce
+//    (distance de la caméra au plan de la face, et à son centre dans ce plan) ;
+//  • les portes (voyage intérieur) : la paroi entre la pièce où l'on se tient
+//    et la suivante s'ouvre à la fin de la halte, reste ouverte pendant la
+//    traversée et se referme derrière soi.
+import * as THREE from 'three/webgpu';
+import { apply, normalOf, project, smoothstep } from '../math4.js';
+import { panelSeat } from '../gen/cell.js';
+
+// passage : distances (à l'échelle de la face projetée) au plan de la face
+// où elle est encore pleine / déjà effacée, et demi-largeur de l'ouverture
+const PASS = { far: 0.36, near: 0.1, lat: 1.05 };
+// porte : rayon (espace projeté) autour de son centre où elle est effacée / pleine
+const DOOR = { near: 0.12, far: 0.32 };
+
+// centre de chaque face de la cellule c, dans ses coordonnées locales (sur le
+// plan des panneaux : même ancrage que leur géométrie, voir gen/cell.js)
+export function faceAnchors(R) {
+  return R.cells.map((cell) => cell.faces.map((kind, f) => {
+    const t = kind === 'glass' || kind === 'leaded' ? cell.glassT : cell.panelT;
+    const a = [0, 0, 0];
+    a[f >> 1] = (f & 1 ? 1 : -1) * panelSeat(R.frame, t).plane;
+    return a;
+  }));
+}
+
+// Portes du voyage pour l'état st : [précédente, suivante], chacune
+// { p : centre projeté de la paroi commune, open : ouverture }
+export function voyageDoors(st, R, frames, T, d, inflate) {
+  const n = R.moves.length, f = st.f ?? 0;
+  const door = (i, open) => {
+    const a = frames.rooms[i], b = frames[i]?.cell;
+    if (b === undefined || open <= 0) return null;
+    const x = normalOf(a).map((v, k) => v + normalOf(b)[k]);
+    return { p: project(apply(T[a], x), d, inflate), open };
+  };
+  if (st.phase === 'dwell') {
+    return [
+      st.room > 0 ? door(st.room - 1, 1 - smoothstep(0, 0.35, f)) : null,
+      st.room < n ? door(st.room, smoothstep(0.45, 0.95, f)) : null,
+    ];
+  }
+  if (st.phase === 'travel') return [null, door(st.room, 1)];
+  return [null, null];
+}
+
+const dist3 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+// point local l → 4D par la matrice ligne-major A (math4.cellMatrix)
+const map4 = (A, l) => [0, 1, 2, 3].map((r) => A[r * 4] * l[0] + A[r * 4 + 1] * l[1] + A[r * 4 + 2] * l[2] + A[r * 4 + 3]);
+
+// Ouvertures des faces, écrites dans out[c] (tableaux de six nombres).
+//   A : matrice de chaque cellule ; anchors : faceAnchors(R)
+//   d, inflate : projection ; toWorld : matrice monde du groupe
+//   viewPos : caméra (monde) ; camLocal : caméra (espace projeté)
+//   shell : { amount, lo, hi } ; cutaway ; pass (0 ou 1) ; doors : voyageDoors
+const _pa = new THREE.Vector3(), _pc = new THREE.Vector3();
+export function computeOpenings(out, { A, anchors, d, inflate, toWorld, viewPos, camLocal, shell, cutaway, pass, doors }) {
+  for (let c = 0; c < 8; c++) {
+    const pc = project(map4(A[c], [0, 0, 0]), d, inflate);
+    _pc.set(pc[0], pc[1], pc[2]).applyMatrix4(toWorld);
+    for (let f = 0; f < 6; f++) {
+      const y = map4(A[c], anchors[c][f]), pl = project(y, d, inflate);
+      let open = smoothstep(shell.lo, shell.hi, y[3]) * shell.amount;
+      // coupe : la face (de la cellule vers son centre, une fois projetée)
+      // regarde-t-elle la caméra ?
+      if (cutaway > 0) {
+        _pa.set(pl[0], pl[1], pl[2]).applyMatrix4(toWorld);
+        const nx = _pa.x - _pc.x, ny = _pa.y - _pc.y, nz = _pa.z - _pc.z;
+        const vx = viewPos.x - _pa.x, vy = viewPos.y - _pa.y, vz = viewPos.z - _pa.z;
+        const facing = (nx * vx + ny * vy + nz * vz) / (Math.hypot(nx, ny, nz) * Math.hypot(vx, vy, vz) || 1);
+        open = Math.max(open, smoothstep(0.2, 0.85, facing) * cutaway);
+      }
+      if (pass) {
+        // (à l'échelle de la face : loin du centre, la projection agrandit tout)
+        const half = dist3(pl, pc), sf = Math.min(8, Math.max(0.6, half / 0.83));
+        const nl = [(pl[0] - pc[0]) / (half || 1), (pl[1] - pc[1]) / (half || 1), (pl[2] - pc[2]) / (half || 1)];
+        const rel = [camLocal.x - pl[0], camLocal.y - pl[1], camLocal.z - pl[2]];
+        const dn = rel[0] * nl[0] + rel[1] * nl[1] + rel[2] * nl[2];
+        const lat = Math.hypot(rel[0] - nl[0] * dn, rel[1] - nl[1] * dn, rel[2] - nl[2] * dn);
+        open = Math.max(open, smoothstep(PASS.far * sf, PASS.near * sf, Math.abs(dn)) * smoothstep(PASS.lat * sf, PASS.lat * sf * 0.75, lat));
+      }
+      for (const door of doors) if (door) open = Math.max(open, smoothstep(DOOR.far, DOOR.near, dist3(pl, door.p)) * door.open);
+      out[c][f] = open;
+    }
+  }
+}

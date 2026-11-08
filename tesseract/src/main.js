@@ -189,11 +189,9 @@ async function main() {
     info = tess.update(ph, { target: TARGET, floorY, reset });
     if (camState.free) controls.update(); else rigCamera(ph);
     camera.updateMatrixWorld();
-    G.viewPos.value.copy(camera.position);
-    tess.group.worldToLocal(G.camLocal.value.copy(camera.position));
+    tess.setViewer(camera.position);
     // (en voyage, la coupe côté caméra n'a plus de sens : on est dedans)
     const kp = info?.kp ?? 0, kc = info?.kc ?? 0, sc = info?.scale ?? 1;
-    G.cutaway.value = R.view.cutaway * (1 - kp);
     overlay.draw(info, R, RENDER);
     stage.update(R, floorY, { kc, kp, camera, scale: sc, lamp: R.voyage?.lamp ?? 1 });
     // (dans l'hypersphère, le lointain est sombre : la teinte de la scène,
