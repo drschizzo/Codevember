@@ -82,8 +82,7 @@ export function buildFrame(f) {
   // Point d'ancrage de chaque pièce (voir scene/project.js, frameMerge) :
   // barre : son axe, la coordonnée libre remplacée par 10 + numéro de barre ;
   // nœud : son centre. Une fois le tesseract plié, les ossatures des cellules
-  // fusionnent : chaque barre se recentre sur l'arête, et les doublons se
-  // rétractent dans leur axe.
+  // intérieures se rétractent dans leurs axes.
   for (let a = 0; a < 3; a++) {
     const b = (a + 1) % 3, c = (a + 2) % 3;
     for (const sb of [-1, 1]) for (const sc of [-1, 1]) {
@@ -107,16 +106,13 @@ export function buildFrame(f) {
   }
   // nœuds affleurants : leur face externe s'arrête à l'angle du cube (ils ne
   // débordent pas sur la cellule voisine du patron)
-  // (sans nœud : de petits nœuds quand même, qui n'apparaissent qu'à la
-  // fusion, pour couvrir la jonction des barres aux sommets)
-  const nodeless = nh === 0, nhh = nodeless ? f.w * 1.45 : nh;
-  const en = 1 - Math.max(nhh, f.w);
-  if (nhh > 0) for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
+  const en = 1 - Math.max(nh, f.w);
+  if (nh > 0) for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
     B.piece = rng.int(0, 255);
     const c = [sx * en, sy * en, sz * en];
     B.anchor = c;
-    if (f.node === 'sphere') sphere(B, c, nhh, 28, 16, OUT);
-    else roundedBox(B, c, [nhh, nhh, nhh], nhh * (f.node === 'knob' ? 0.55 : 0.22), 4, EDGE, OUT);
+    if (f.node === 'sphere') sphere(B, c, nh, 28, 16, OUT);
+    else roundedBox(B, c, [nh, nh, nh], nh * (f.node === 'knob' ? 0.55 : 0.22), 4, EDGE, OUT);
   }
   B.anchor = [0, 0, 0];
   return B.out();

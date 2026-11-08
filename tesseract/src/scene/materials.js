@@ -28,7 +28,7 @@ import {
 } from 'three/tsl';
 import { FINISH_KEYS } from '../finishes.js';
 import { NOISE_PERIOD } from '../gen/noisevol.js';
-import { projectPosition, localScale, revealMask, depthW, depthColor, frameMerge, panelMerge } from './project.js';
+import { projectPosition, localScale, revealMask, depthW, depthColor, frameMerge } from './project.js';
 import { G } from './globals.js';
 
 const PI = Math.PI;
@@ -364,7 +364,7 @@ export function buildPieceMaterial(finish, U, M, { shadowTint = null, reveal = f
   const get = (k) => S.get(k);
 
   const m = new THREE.MeshPhysicalNodeMaterial({ side: THREE.DoubleSide });
-  const pre = merge ? frameMerge(M) : reveal ? panelMerge : null;
+  const pre = merge ? frameMerge(M) : null;
   m.positionNode = projectPosition(M, true, reveal, pre);
   m.castShadowPositionNode = projectPosition(M, false, reveal, pre);
   if (reveal) { const mask = revealMask(attribute('pat', 'vec3')); m.maskNode = mask; m.maskShadowNode = mask; }
