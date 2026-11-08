@@ -1,4 +1,4 @@
-// Aides à la lecture du pliage 4D, et lumière dans les cellules.
+// Aides à la lecture du pliage 4D.
 //
 // Un cerveau humain ne se représente pas une rotation dans un plan qui
 // contient une quatrième direction. On lui donne donc des prises :
@@ -18,11 +18,10 @@
 //    opposé à l'œil 4D, chaud tout près. Pendant le quart de tour, on voit le
 //    cube intérieur (bleu) passer à l'extérieur (orange).
 //
-// Et des lumières d'écrin : une petite source au cœur de chaque cellule, qui
-// éclaire la doublure, fait briller l'objet exposé et filtre par les ajours.
+// (Les lumières d'écrin sont dans practicals.js.)
 import * as THREE from 'three/webgpu';
 import { Fn, vec4, attribute, positionGeometry, uniformArray, uniform } from 'three/tsl';
-import { cellTransforms, cellMatrix, apply, normalOf, project, cellAxis, cellSign, cellOf } from '../math4.js';
+import { cellTransforms, cellMatrix, apply, cellAxis, cellSign, cellOf, embedLocal, smoothstep } from '../math4.js';
 import { meshUniforms, setMatrix, mapPoint, depthW, depthColor } from './project.js';
 import { buildFrame } from '../gen/cell.js';
 import { G } from './globals.js';
@@ -89,10 +88,10 @@ function seamMaterial(M, colors, glow) {
 // couleurs vives et bien séparées (angle d'or sur la roue des teintes)
 const pairColor = (i) => new THREE.Color().setHSL((i * 0.618034) % 1, 0.85, 0.55);
 
-export function createGuides(group, scene) {
+export function createGuides(group) {
   const U = { ghost: uniform(0) };
   const ghostGeo = ghostGeometry();
-  const ghosts = [], seams = [], lights = [];
+  const ghosts = [], seams = [];
   let seamGeo = null, seamKey = '';
   for (let c = 0; c < 8; c++) {
     const M = meshUniforms();
@@ -107,10 +106,6 @@ export function createGuides(group, scene) {
     sm.frustumCulled = false;
     group.add(sm);
     seams.push({ mesh: sm, M: SM, colors, glow });
-    const L = new THREE.PointLight(0xffffff, 0, 1, 2);
-    L.castShadow = false;
-    scene.add(L);
-    lights.push(L);
   }
 
   // partenaire d'une face : la cellule dont la normale est la direction de la face
@@ -129,9 +124,8 @@ export function createGuides(group, scene) {
     }
   }
 
-  const _v = new THREE.Vector3(), _tint = new THREE.Color();
-  return {
-    seams, ghosts, lights,
+    return {
+    seams, ghosts,
     setRecipe(R) {
       setPairs(R.net.parent);
       const e = 1 - R.frame.w, key = `${R.frame.w}|${R.frame.style}`;
@@ -168,48 +162,15 @@ export function createGuides(group, scene) {
           const d = partner(c, f), fd = faceToward(d, c);
           const lc = [0, 0, 0]; lc[f >> 1] = f & 1 ? 1 : -1;
           const ld = [0, 0, 0]; ld[fd >> 1] = fd & 1 ? 1 : -1;
-          const pa = apply(T[c], [...embedLocal(c, lc, inset)]), pb = apply(T[d], [...embedLocal(d, ld, inset)]);
+          const pa = apply(T[c], embedLocal(c, lc, inset)), pb = apply(T[d], embedLocal(d, ld, inset));
           const dist = Math.hypot(pa[0] - pb[0], pa[1] - pb[1], pa[2] - pb[2], pa[3] - pb[3]);
-          const near = smooth(2.6, 0.35, dist), off = smooth(gap + 0.02, gap + 0.25, dist);
+          const near = smoothstep(2.6, 0.35, dist), off = smoothstep(gap + 0.02, gap + 0.25, dist);
           const g = V.seams * (0.5 + 3.5 * near * near) * off * 2.4;
           seams[c].glow.array[f] = g;
           any = Math.max(any, g);
         }
         seams[c].mesh.visible = any > 0.02;
-        // lumière d'écrin : au centre projeté de la cellule ; éteinte quand la
-        // cellule passe à l'extérieur (son objet s'est rentré)
-        const w = apply(T[c], normalOf(c))[3];
-        const out = smooth(0.3, 0.9, w) * (R.proj.reveal ?? 1);
-        const kv = G.voyageK.value; // (voyage intérieur)
-        // En voyage, chaque pièce est éclairée à sa taille projetée (les
-        // pièces voisines, plus loin de la caméra, sont projetées plus
-        // grandes) : on les voit éclairées avant d'y entrer. La lampe est
-        // décalée vers le « plafond » de la pièce (au centre, elle serait
-        // dans l'objet) et chaque pièce a sa nuance.
-        const ctr = apply(T[c], normalOf(c));
-        const off = apply(T[c], embedLocal(c, [0, 0.72 * kv, 0], 1));
-        const p = project(off, G.d.value, G.inflate.value);
-        const p0 = project(ctr, G.d.value, G.inflate.value);
-        const p1 = project(apply(T[c], embedLocal(c, [0.3, 0, 0], 1)), G.d.value, G.inflate.value);
-        const lam = Math.min(4, Math.hypot(p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]) / 0.3);
-        const size = 1 + (lam - 1) * kv;
-        _v.set(p[0], p[1], p[2]);
-        group.localToWorld(_v);
-        const L = lights[c];
-        L.position.copy(_v);
-        L.color.set(V.practicalColor);
-        if (kv > 0) L.color.lerp(_tint.setHSL((c * 0.137 + 0.05) % 1, 0.55, 0.62), 0.35 * kv);
-        L.intensity = V.practical * (1 - out) * scale * scale * size ** 1.6 * (1 - 0.25 * kv);
-        L.distance = 2.4 * scale * size * (1 + 0.25 * kv);
       }
     },
   };
-}
-
-const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
-// point local de la cellule c (retrait inset) → 4D, avant la transformation de la cellule
-function embedLocal(c, l, inset) {
-  const k = cellAxis(c), o = [0, 1, 2, 3].filter((x) => x !== k), x = normalOf(c);
-  o.forEach((a, i) => { x[a] += l[i] * inset; });
-  return x;
 }
