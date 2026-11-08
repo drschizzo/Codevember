@@ -26,7 +26,7 @@ import {
   Fn, attribute, uniform, vec2, vec3, vec4, float, int, ivec2, mix, max, min, clamp, smoothstep, normalize, dot, cross, length, abs, pow, exp, step, sin, cos,
   storage, texture, varyingProperty, normalLocal, positionPrevious, viewportMipTexture, screenUV, screenSize, positionViewDirection,
   faceDirection, normalViewGeometry, log2, modelScale, sign, dFdx, dFdy, fract,
-  viewportDepthTexture, perspectiveDepthToViewZ, cameraNear, cameraFar, positionView,
+  viewportDepthTexture, perspectiveDepthToViewZ, cameraNear, cameraFar, positionView, cameraProjectionMatrix,
 } from 'three/tsl';
 import { noise, noise2, fbm, worley, perturb, stableVelocity } from './materials.js';
 import { LOOK_KEYS } from '../membranes.js';
@@ -73,7 +73,8 @@ export const lookSignature = (s) => [s.sheen > 0, s.irid > 0, s.metal > 0, s.wet
 
 // ── Lecture de la pose (tampons écrits par le GPU, voir gpusim.js) ──────────
 // T : { VV, cur, prv, nor } (attributs de stockage de l'instance)
-//   cur[i] = position ; prv[i] = position à l'image précédente, w : endommagement
+//   cur[i] = position, w : courbure (variation de la normale par unité de
+//   longueur) ; prv[i] = position à l'image précédente, w : endommagement
 //   nor[i] = normale, w : dilatation de surface J
 const poseReader = (T) => ({
   cur: storage(T.cur, 'vec4', T.VV).toReadOnly(),
@@ -83,6 +84,7 @@ const poseReader = (T) => ({
 
 const vJ = varyingProperty('float', 'vMemJ');
 const vDmg = varyingProperty('float', 'vMemDmg');
+const vCurv = varyingProperty('float', 'vMemCurv');
 
 export function membranePosition(T, S, full) {
   const B = poseReader(T);
@@ -96,7 +98,8 @@ export function membranePosition(T, S, full) {
       const w01 = dot(d, na.xyz), w10 = dot(d, nb.xyz).negate();
       return pa.add(pb).mul(0.5).sub(na.xyz.mul(w01).add(nb.xyz.mul(w10)).mul(0.125));
     };
-    const pa = B.cur.element(ia).xyz, pb = B.cur.element(ib).xyz;
+    const ca = B.cur.element(ia), cb = B.cur.element(ib);
+    const pa = ca.xyz, pb = cb.xyz;
     const p = mid(pa, pb).toVar('memP');
     if (full) {
       const d = pb.sub(pa), s = na.xyz.add(nb.xyz);
@@ -105,6 +108,7 @@ export function membranePosition(T, S, full) {
       const nn = mix(na.xyz, n, step(1e-4, length(n)));
       normalLocal.assign(normalize(nn.add(vec3(0, 0, 1e-7))));
       vJ.assign(na.w.add(nb.w).mul(0.5));
+      vCurv.assign(ca.w.add(cb.w).mul(0.5));
       const qa = B.prv.element(ia), qb = B.prv.element(ib);
       vDmg.assign(qa.w.add(qb.w).mul(0.5));
       positionPrevious.assign(mid(qa.xyz, qb.xyz));
@@ -121,6 +125,24 @@ const octUV = (d) => {
   const xy = mix(n.xy, fold, step(n.z, 0));
   return xy.mul(0.5).add(0.5);
 };
+
+// ── Anticrénelage du reflet ──────────────────────────────────────────────────
+// Variance de la normale dans l'empreinte du pixel, ajoutée à α² (Kaplanyan,
+// Tokuyoshi) : celle du relief (dérivées écran de l'écart à la normale
+// géométrique), et celle de la forme, tirée de la courbure κ (par sommet,
+// continue) et de la taille du pixel à cette distance (isotrope, allongée en
+// incidence rasante). Les dérivées écran de la normale interpolée, elles,
+// sont constantes par triangle : le reflet dessinerait les facettes.
+function specularAA(N, N0, curv) {
+  const bump = N.sub(N0);
+  const dB = dFdx(bump).dot(dFdx(bump)).add(dFdy(bump).dot(dFdy(bump)));
+  // taille du pixel en unités locales (rayon de la couche au repos ≈ 1)
+  const px = positionView.z.negate().mul(2).div(cameraProjectionMatrix.element(1).y.mul(screenSize.y)).div(modelScale.x);
+  const cosV = abs(dot(N0, positionViewDirection)).max(0.2);
+  const gN = curv.mul(px);
+  const dN = dB.add(gN.mul(gN).mul(cosV.mul(cosV).reciprocal().add(1)));
+  return (r) => r.pow(4).add(dN.mul(0.5).min(0.18)).pow(0.25);
+}
 
 // ── Matériau ─────────────────────────────────────────────────────────────────
 // T : tampons de pose de l'instance ; S : uniformes de l'instance (f, fPrev, vis) ;
@@ -192,8 +214,7 @@ export function buildMembraneMaterial(T, S, L, spec, { side = THREE.FrontSide, b
   const N0 = normalViewGeometry.mul(faceDirection);
   const N = perturb(H.mul(0.0028).mul(world).mul(G.microDetail).mul(vis), N0);
   m.normalNode = N;
-  const dN = dFdx(N).dot(dFdx(N)).add(dFdy(N).dot(dFdy(N)));
-  const aaRough = (r) => r.pow(4).add(dN.mul(0.5).min(0.18)).pow(0.25);
+  const aaRough = specularAA(N, N0, vCurv);
   const soft = (r, f) => r.mul(r).add(f.mul(f)).sqrt().clamp(0.02, 1);
   m.roughnessNode = aaRough(soft(L.rough.add(fib.mul(0.08)).add(lip.mul(0.12)).add(wh.mul(0.1)).add(wr.mul(0.06)), G.roughFloor));
   if (spec.wet > 0) {
