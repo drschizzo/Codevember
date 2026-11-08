@@ -291,6 +291,12 @@ export function signature(f) {
   return [s(f.outer), s(f.inner), s(f.edge), (f.wear || 0) > 0].join('|');
 }
 
+// L'objet exposé est enfermé : il ne voit du studio (éclairage indirect et
+// reflets de l'environnement) que ce que laissent passer les parois de sa
+// cellule, de G.nestEnv (enfermé) à tout (à l'air libre) ; le reste de ses
+// reflets vient des réflexions en espace écran.
+const studioSeen = (openness) => mix(G.nestEnv, float(1), openness);
+
 // Vecteur vitesse sous garde : une valeur aberrante (NaN, infinie, démesurée)
 // est remplacée par zéro — par sélection, pas par multiplication (∞ × 0 = NaN).
 export const stableVelocity = () => mrt({ velocity: select(length(velocity.xy).lessThan(0.5), velocity, vec4(0)) });
@@ -298,8 +304,10 @@ export const stableVelocity = () => mrt({ velocity: select(length(velocity.xy).l
 // ── Matériau d'une pièce de cellule ──────────────────────────────────────────
 // finish : { outer, inner, edge, wear } (finitions complètes) ; U : leurs
 // uniformes ({ outer, inner, edge, wear }) ; M : uniformes du maillage
-// (matrice 4D, voir project.js) ; opts.shadowTint : ombre colorée (verre)
-export function buildPieceMaterial(finish, U, M, { shadowTint = null, reveal = null, depth = false, content = false, merge = false } = {}) {
+// (matrice 4D, voir project.js) ; opts.shadowTint : ombre colorée (verre) ;
+// opts.openness : objet exposé, part du studio que voit sa cellule
+export function buildPieceMaterial(finish, U, M, { shadowTint = null, reveal = null, depth = false, openness = null, merge = false } = {}) {
+  const content = openness !== null;
   const fins = [finish.outer, finish.inner, finish.edge];
   const any = (pred) => fins.some(pred);
   const F = {
@@ -422,9 +430,7 @@ export function buildPieceMaterial(finish, U, M, { shadowTint = null, reveal = n
   // profondeur 4D en couleur (ossature, pendant la rotation)
   if (depth) { const e = depthColor(depthW).mul(G.depthTint); m.emissiveNode = m.emissiveNode ? m.emissiveNode.add(e) : e; }
   if (shadowTint) m.castShadowNode = vec4(shadowTint, 1);
-  // l'objet exposé est enfermé : il ne voit du studio que ce que laissent
-  // passer les ajours (le reste de ses reflets vient des réflexions en espace écran)
-  if (content) m.aoNode = G.nestEnv;
+  if (content) m.aoNode = studioSeen(openness);
   m.mrtNode = stableVelocity();
   return m;
 }
@@ -436,7 +442,7 @@ export function gemUniforms(g) {
 export function applyGem(U, g) {
   U.color.value.set(g.color); U.ior.value = g.ior; U.dispersion.value = g.dispersion; U.depth.value = g.depth ?? 0.4;
 }
-export function buildGemMaterial(U, M) {
+export function buildGemMaterial(U, M, openness) {
   const m = new THREE.MeshPhysicalNodeMaterial({ transmission: 1, side: THREE.DoubleSide });
   m.positionNode = projectPosition(M, true);
   m.castShadowPositionNode = projectPosition(M, false);
@@ -456,7 +462,7 @@ export function buildGemMaterial(U, M) {
   m.iridescenceIORNode = float(1.6);
   m.iridescenceThicknessNode = float(380);
   m.castShadowNode = vec4(U.color.mul(0.8).add(0.2), 1);
-  m.aoNode = G.nestEnv;
+  m.aoNode = studioSeen(openness);
   m.mrtNode = stableVelocity();
   return m;
 }

@@ -79,10 +79,11 @@ export function meshUniforms() {
 // Ajourage des six faces d'une cellule, partagé par ses panneaux et son verre
 // (voir reveal.js) : open, l'ouverture (0 : pleine ; 1 : effacée) ; grid, la
 // trame de la tôle perforée (n trous par côté sur [−a, a]², ou n = 0 : trame
-// à 45° par défaut)
+// à 45° par défaut) ; openness, la part du studio que voit l'objet exposé
 export const cellReveal = () => ({
   open: uniformArray(new Array(6).fill(0), 'float'),
   grid: uniformArray(Array.from({ length: 6 }, () => new THREE.Vector2()), 'vec2'),
+  openness: uniform(0),
 });
 // matrice ligne-major (math4.cellMatrix) → uniforme
 export function setMatrix(u, m) {

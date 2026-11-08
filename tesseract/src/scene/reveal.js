@@ -21,17 +21,21 @@ import { panelSeat } from '../gen/cell.js';
 const PASS = { far: 0.36, near: 0.1, lat: 1.05 };
 // porte : rayon (espace projeté) autour de son centre où elle est effacée / pleine
 const DOOR = { near: 0.12, far: 0.32 };
+// part de la lumière du studio qu'une face laisse passer, pleine, selon sa
+// nature (voir cellOpenness)
+const FACE_CLEAR = { open: 1, glass: 0.85, bars: 0.7, leaded: 0.6, grid: 0.5, target: 0.45, louvre: 0.35, perf: 0.3 };
 
 // Disposition des faces de chaque cellule, dans ses coordonnées locales :
 // layout[c][f] = { anchor, grid } — anchor, le centre de la face sur le plan
 // des panneaux (même ancrage que leur géométrie, voir gen/cell.js) ; grid,
-// la trame d'une tôle perforée [n trous par côté, demi-côté a] ou [0, 0]
+// la trame d'une tôle perforée [n trous par côté, demi-côté a] ou [0, 0] ;
+// clear, la part du studio qu'elle laisse passer quand elle est pleine
 export function faceLayout(R) {
   return R.cells.map((cell) => cell.faces.map((kind, f) => {
     const seat = panelSeat(R.frame, kind === 'glass' || kind === 'leaded' ? cell.glassT : cell.panelT);
     const anchor = [0, 0, 0];
     anchor[f >> 1] = (f & 1 ? 1 : -1) * seat.plane;
-    return { anchor, grid: kind === 'perf' ? [cell.perf.n, seat.ext] : [0, 0] };
+    return { anchor, grid: kind === 'perf' ? [cell.perf.n, seat.ext] : [0, 0], clear: FACE_CLEAR[kind] ?? 0 };
   }));
 }
 
@@ -94,4 +98,16 @@ export function computeOpenings(out, { A, layout, d, inflate, toWorld, viewPos, 
       out[c][f] = open;
     }
   }
+}
+
+// Part du studio que voit l'objet exposé de chaque cellule (0 : enfermé ;
+// 1 : à l'air libre) : la moyenne, sur les six faces, de ce que chacune
+// laisse passer selon sa nature et son ajourage (open : computeOpenings).
+export function cellOpenness(layout, open, out) {
+  for (let c = 0; c < 8; c++) {
+    let sum = 0;
+    for (let f = 0; f < 6; f++) { const k = layout[c][f].clear; sum += k + (1 - k) * open[c][f]; }
+    out[c] = sum / 6;
+  }
+  return out;
 }
