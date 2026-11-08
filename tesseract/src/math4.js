@@ -214,6 +214,8 @@ export function easeBack(t, b) {
   return t < 0.5 ? ((2 * t) ** 2 * ((c + 1) * 2 * t - c)) / 2 : ((2 * t - 2) ** 2 * ((c + 1) * (2 * t - 2) + c) + 2) / 2;
 }
 export const smoother = (t) => { t = clamp01(t); return t * t * t * (t * (t * 6 - 15) + 10); };
+// smoothstep de a à b (a > b : décroissant)
+export const smoothstep = (a, b, x) => { const t = clamp01((x - a) / (b - a)); return t * t * (3 - 2 * t); };
 
 // ── Chorégraphie ─────────────────────────────────────────────────────────────
 // Chaque étape de la boucle : pause dépliée, pliage (les cellules se replient
@@ -326,6 +328,13 @@ export function cellMatrix(T, c, scale = 1, local = null) {
     out[r * 4 + 3] = s;
   }
   return out; // ligne-major
+}
+// point local l de la cellule c (retrait inset) → 4D, avant la transformation
+// de la cellule
+export function embedLocal(c, l, inset = 1) {
+  const k = cellAxis(c), x = normalOf(c);
+  [0, 1, 2, 3].filter((a) => a !== k).forEach((a, i) => { x[a] += l[i] * inset; });
+  return x;
 }
 
 // Projection 4D → 3D (même calcul que le shader, voir scene/project.js) :

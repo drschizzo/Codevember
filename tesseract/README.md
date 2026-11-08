@@ -74,7 +74,7 @@ Légendes et encart sont masqués par défaut et s'affichent à la demande (touc
 
 **Vue sur l'intérieur.**
 - **Coupe côté caméra** : les panneaux tournés vers la caméra s'ajourent aussi (même trame de trous ; la carte d'ombre voit la même coupe).
-- **Lumières d'écrin** : une petite source au cœur de chaque cellule éclaire la doublure, fait briller l'objet et filtre par les ajours. Elle s'éteint quand la cellule passe à l'extérieur.
+- **Lumières d'écrin** (`src/scene/practicals.js`) : une petite source sous le plafond de chaque cellule, au-dessus de l'objet, éclaire la doublure, fait briller l'objet et filtre par les ajours. Au centre, elle serait dans l'objet, qui ne recevrait rien. Elle s'éteint quand la cellule passe à l'extérieur.
 - **Rapprochement** : la caméra s'approche quand le tesseract est plié.
 
 **Le cadrage.** L'objet reste centré, à une taille qui ne suit qu'en partie l'étendue du patron (déplié, il est bien plus grand que plié). Il est soulevé au besoin pour ne jamais traverser le sol.

@@ -9,12 +9,13 @@
 // que plié), soulevé au besoin pour ne jamais traverser le sol.
 import * as THREE from 'three/webgpu';
 import { uniform, uniformArray } from 'three/tsl';
-import { stateAt, cellTransforms, cellMatrix, apply, project, timelineFor, stepOrientations, depthOf, foldOrder, normalOf } from '../math4.js';
+import { stateAt, cellTransforms, cellMatrix, apply, project, timelineFor, stepOrientations, depthOf, foldOrder, normalOf, smoothstep } from '../math4.js';
 import { voyageFrames, voyageBlend } from './voyage.js';
 import { meshUniforms, setMatrix } from './project.js';
 import { buildPieceMaterial, buildGemMaterial, finishUniforms, applyFinish, signature, gemUniforms, applyGem } from './materials.js';
 import { G } from './globals.js';
 import { createGuides } from './guides.js';
+import { createPracticals } from './practicals.js';
 
 const ROLES = ['frame', 'panel', 'glass', 'content'];
 
@@ -59,7 +60,8 @@ export function createTesseract(scene, gen) {
     if (role === 'frame') M.bars = uniformArray(new Array(20).fill(1), 'float');
     pieces.push({ c, role, mesh, M, F: null, gemU: null, sig: '', prev: null, has: false });
   }
-  const guides = createGuides(group, scene);
+  const guides = createGuides(group);
+  const practicals = createPracticals(group, scene);
   const pieceOf = (c, role) => pieces[c * ROLES.length + ROLES.indexOf(role)];
   let frameU = null; // uniformes de finition de l'ossature (partagés par les huit cellules)
 
@@ -157,11 +159,11 @@ export function createTesseract(scene, gen) {
     slot.value.set(p[0], p[1], p[2], amount);
   }
   function setDoors(st, T) {
-    const n = R.moves.length, f = st.f ?? 0, sm = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+    const n = R.moves.length, f = st.f ?? 0;
     let prev = [0, 0], next = [0, 0];
     if (st.phase === 'dwell') {
-      if (st.room > 0) prev = [st.room - 1, 1 - sm(0, 0.35, f)];
-      if (st.room < n) next = [st.room, sm(0.45, 0.95, f)];
+      if (st.room > 0) prev = [st.room - 1, 1 - smoothstep(0, 0.35, f)];
+      if (st.room < n) next = [st.room, smoothstep(0.45, 0.95, f)];
     } else if (st.phase === 'travel') next = [st.room, 1];
     doorAt(T, prev[0], prev[1], G.door0);
     doorAt(T, next[0], next[1], G.door1);
@@ -296,11 +298,10 @@ export function createTesseract(scene, gen) {
     // contour passe d'une cellule à l'autre. Dans l'hypersphère, plus
     // d'ossature du tout.
     const fm = Math.min(1, Math.max(0, (st.fold - 0.86) / 0.14)), merge = fm * fm * (3 - 2 * fm);
-    const sm = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
     // matrices de chaque pièce
     for (let cc = 0; cc < 8; cc++) {
       const cell = R.cells[cc], con = cell.content;
-      const outer = sm(0.55, 0.95, apply(T[cc], normalOf(cc))[3]);
+      const outer = smoothstep(0.55, 0.95, apply(T[cc], normalOf(cc))[3]);
       const keep = (1 - merge + merge * outer) * (1 - kp);
       const Pf = pieceOf(cc, 'frame');
       Pf.M.bars.array.fill(keep);
@@ -329,6 +330,7 @@ export function createTesseract(scene, gen) {
     setDoors(st, T);
     group.updateMatrixWorld();
     guides.update(R, st, T, inset, s);
+    practicals.update(R, T, s);
     return { state: st, scale: s, lift, timeline: cache.timeline, kp, kc, frames: cache.frames };
   }
 
@@ -340,7 +342,7 @@ export function createTesseract(scene, gen) {
   }
 
   return {
-    group, guides, setRecipe, refresh, syncGeometry, syncMaterial, update, pieces,
+    group, guides, practicals, setRecipe, refresh, syncGeometry, syncMaterial, update, pieces,
     ready: () => readyFlag,
     progress: () => (totalCount ? 1 - pendingCount / totalCount : 1),
     // (après un saut dans la boucle : pas de vecteurs vitesse)
