@@ -270,7 +270,7 @@ export const rootCell = ROOT;
 //   faces appariées ; depth : profondeur 4D en couleur ; cutaway : panneaux
 //   ajourés côté caméra ; practical : lumières d'écrin ; dolly : la caméra
 //   s'approche pendant les pauses
-export const VIEW_DEFAULTS = { ghost: 0.7, seams: 1, depth: 0.6, cutaway: 0.55, practical: 6, practicalColor: '#ffd9a8', dolly: 0.35 };
+export const VIEW_DEFAULTS = { ghost: 0, seams: 1, depth: 0.6, cutaway: 0.55, practical: 6, practicalColor: '#ffd9a8', dolly: 0.35 };
 
 // Le voyage intérieur (voir math4.js et scene/voyage.js) : durées (plongée,
 // halte dans une pièce, traversée, remontée), écart de la caméra à l'axe de

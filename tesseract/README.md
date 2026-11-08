@@ -64,7 +64,7 @@ Les courbes ont de l'anticipation et du rebond (le mouvement recule un peu avant
 **L'ajourage.** Plié, le tesseract est enveloppé par sa cellule extérieure et par les faces des cellules latérales qui la touchent : elles cacheraient tout. Les panneaux se percent de trous ronds, sur une trame à 45°, qui grandissent avec la coordonnée w du centre de leur face. La coque tournée vers l'œil 4D s'efface, les faces latérales s'ajourent à moitié et le cube intérieur reste plein. Tout se referme quand les cellules reviennent se coucher dans le patron. L'objet exposé de la cellule extérieure se rétracte : projeté, il se superposerait à celui de la cellule intérieure.
 
 **Lisibilité** (`src/scene/guides.js`, `src/app/overlay.js`). Une rotation dans un plan qui contient une quatrième direction ne se représente pas : on donne au regard des prises.
-- **Le fantôme** : la silhouette du tesseract plié, en arêtes fines et lumineuses, à l'endroit exact où les cellules vont se poser. Déplié, on voit déjà la destination.
+- **Le fantôme** (désactivé par défaut) : la silhouette du tesseract plié, en arêtes fines et lumineuses, à l'endroit exact où les cellules vont se poser. Déplié, on voit déjà la destination.
 - **Les liserés appariés**, comme les languettes d'une maquette en papier : chaque face porte un cadre lumineux de la couleur de la face qu'elle rejoindra (une couleur par paire, 24 paires). Il s'avive à mesure que la distance 4D entre les deux faces diminue, et s'éteint au contact. Les faces jointes par une charnière du patron ne s'allument jamais.
 - **La profondeur 4D en couleur** : froid loin de l'œil 4D, chaud tout près, sur le fantôme et (discrètement, pendant le quart de tour) sur l'ossature.
 - **Les légendes** de chaque mouvement (« Le repli », « Quart de tour dans le plan y–w », « Le dépliage »). Chacune apparaît quand le mouvement commence et s'efface à la fin de la pause qui le suit : le texte ne change jamais sur une image immobile.
@@ -93,11 +93,16 @@ Légendes et encart sont masqués par défaut et s'affichent à la demande (touc
 
 La durée de la boucle suit : environ 35 à 45 s.
 
-**La caméra.** Pendant une traversée, elle se tient à l'écart de l'axe, sur une diagonale de la porte (le plus loin possible des barres de l'ossature), et regarde presque droit devant. L'objet de la pièce suivante arrive par l'axe et passe sous elle. Pendant une halte, elle tourne autour de l'objet de la pièce : son repère passe de celui de la traversée précédente à celui de la suivante (interpolation sphérique), et son regard va de la porte d'arrivée à l'objet, puis à la porte de départ. Entrée et sortie se raccordent à la caméra extérieure. Le champ s'élargit à l'intérieur, et chaque pièce a désormais son objet.
+**La caméra.** Pendant une traversée, elle se tient à l'écart de l'axe, sur une diagonale de la porte (le plus loin possible des barres de l'ossature), tirée au hasard. Chaque traversée a son allure, jamais deux fois la même de suite, et sa durée :
+- *avant* : droit devant, l'objet de la pièce suivante arrive et passe sous la caméra ;
+- *arrière* : on regarde s'éloigner la pièce que l'on quitte, l'objet suivant entre dans le champ par derrière ;
+- *côté* : le regard sur l'axe, l'objet suivant traverse le champ en frôlant la caméra ;
+- *tonneau* : un tour complet autour de l'axe ;
+- *spirale* : un quart de tour autour de l'axe, regard plongeant. Pendant une halte, elle tourne autour de l'objet de la pièce (sens et ampleur propres à chaque halte) : son repère passe de celui de la traversée précédente à celui de la suivante (interpolation sphérique), et son regard va de la porte d'arrivée à l'objet, puis à la porte de départ. Entrée et sortie se raccordent à la caméra extérieure. Le champ s'élargit à l'intérieur, et chaque pièce a désormais son objet.
 
 **Les portes.** La paroi entre la pièce où l'on se tient et la suivante se perce à la fin de la halte (même trame de trous que l'ajourage, qui grandissent jusqu'à l'effacer). On voit déjà où l'on va. Elle reste ouverte pendant la traversée et se referme derrière soi. Toute paroi que la caméra s'apprête à traverser s'ouvre de la même façon (distance de la caméra au plan de la face). De l'intérieur, il n'y a plus de coque à effacer : toutes les parois s'ajourent un peu, d'autant plus qu'elles sont loin.
 
-**La lumière.** Il n'y a pas de sol dans l'hypersphère : le plateau s'éloigne et les contre-jours s'éteignent. Le projecteur principal glisse jusqu'à la caméra et devient une lampe qu'elle porte. Sa carte d'ombre voit les mêmes parois ajourées : leurs trous se projettent dans les pièces suivantes. Le brouillard se resserre à l'échelle des pièces, et le studio ne se reflète presque plus.
+**La lumière.** Il n'y a pas de sol dans l'hypersphère : le plateau s'éloigne et les contre-jours s'éteignent. Chaque pièce garde sa lumière d'écrin, réglée à sa taille projetée (les pièces voisines, plus loin de la caméra, sont projetées plus grandes). On les voit donc éclairées avant d'y entrer. Cette lumière est décalée vers le « plafond » de la pièce et légèrement teintée, d'une nuance propre à chaque pièce. Le projecteur principal glisse jusqu'à la caméra et devient une lampe qu'elle porte. Sa carte d'ombre voit les mêmes parois ajourées : leurs trous se projettent dans les pièces suivantes. Le brouillard se resserre à l'échelle des pièces, et le studio ne se reflète presque plus.
 
 ## Géométrie (`src/gen/`, dans des Web Workers)
 
@@ -125,7 +130,7 @@ Chaque pièce porte trois finitions (externe, interne, tranche). Les motifs sont
 
 Les cristaux massifs (cristal, saphir, quartz fumé) sont tirés pour environ un objet sur trois, indépendamment du reste de la scène. Ils ont une épaisseur optique à leur taille : ils réfractent, inversée et teintée, la paroi qui se trouve derrière eux.
 
-Le sol est procédural : laque noire, béton ciré, damier de marbre, parquet de chêne verni, velours ou cyclorama.
+Le sol est procédural : laque satinée anthracite (reflets adoucis), béton ciré, damier de marbre, parquet de chêne verni, velours ou cyclorama.
 
 ## Scène
 

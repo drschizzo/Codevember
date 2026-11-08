@@ -129,7 +129,7 @@ export function createGuides(group, scene) {
     }
   }
 
-  const _v = new THREE.Vector3();
+  const _v = new THREE.Vector3(), _tint = new THREE.Color();
   return {
     seams, ghosts, lights,
     setRecipe(R) {
@@ -180,15 +180,27 @@ export function createGuides(group, scene) {
         // cellule passe à l'extérieur (son objet s'est rentré)
         const w = apply(T[c], normalOf(c))[3];
         const out = smooth(0.3, 0.9, w) * (R.proj.reveal ?? 1);
-        const p = project(apply(T[c], normalOf(c)), G.d.value, G.inflate.value);
+        const kv = G.pass.value; // (voyage intérieur)
+        // En voyage, chaque pièce est éclairée à sa taille projetée (les
+        // pièces voisines, plus loin de la caméra, sont projetées plus
+        // grandes) : on les voit éclairées avant d'y entrer. La lampe est
+        // décalée vers le « plafond » de la pièce (au centre, elle serait
+        // dans l'objet) et chaque pièce a sa nuance.
+        const ctr = apply(T[c], normalOf(c));
+        const off = apply(T[c], embedLocal(c, [0, 0.42 * kv, 0], 1));
+        const p = project(off, G.d.value, G.inflate.value);
+        const p0 = project(ctr, G.d.value, G.inflate.value);
+        const p1 = project(apply(T[c], embedLocal(c, [0.3, 0, 0], 1)), G.d.value, G.inflate.value);
+        const lam = Math.min(4, Math.hypot(p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]) / 0.3);
+        const size = 1 + (lam - 1) * kv;
         _v.set(p[0], p[1], p[2]);
         group.localToWorld(_v);
         const L = lights[c];
         L.position.copy(_v);
         L.color.set(V.practicalColor);
-        // (en voyage, la lampe de la caméra prend le relais : lumières adoucies)
-        L.intensity = V.practical * (1 - out) * scale * scale * (1 - 0.5 * G.pass.value);
-        L.distance = 2.4 * scale;
+        if (kv > 0) L.color.lerp(_tint.setHSL((c * 0.137 + 0.05) % 1, 0.55, 0.62), 0.35 * kv);
+        L.intensity = V.practical * (1 - out) * scale * scale * size ** 1.6 * (1 - 0.25 * kv);
+        L.distance = 2.4 * scale * size * (1 + 0.25 * kv);
       }
     },
   };

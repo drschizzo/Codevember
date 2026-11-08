@@ -125,7 +125,8 @@ async function main() {
     // travelling : la caméra s'approche quand le tesseract est plié (il est
     // alors plus petit, et l'on veut voir l'intérieur des cellules)
     const fold = info?.state ? Math.min(1, Math.max(0, info.state.fold)) : 0;
-    const close = 1 - (R.view?.dolly ?? 0) * 0.3 * fold * fold * (3 - 2 * fold);
+    // (et déplié, le patron est vu d'un peu plus près)
+    const close = (1 - (R.view?.dolly ?? 0) * 0.3 * fold * fold * (3 - 2 * fold)) * (1 - 0.28 * (1 - fold));
     const d = close * (K.dist * TARGET) / (0.6 * Math.tan((K.fov * Math.PI) / 360) * Math.min(1, camera.aspect));
     camera.position.set(Math.sin(az) * Math.cos(el) * d, Math.sin(el) * d, Math.cos(az) * Math.cos(el) * d);
     camera.up.set(0, 1, 0);

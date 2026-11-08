@@ -17,11 +17,13 @@ function floorMaterial(kind, U) {
   let color = vec3(0.02), rough = float(0.5), h = float(0);
   switch (kind) {
     case 'gloss': {
-      color = vec3(0.012, 0.012, 0.013);
-      rough = float(0.06).add(fbm(p3.mul(0.6), 3).mul(0.03));
+      // laque satinée gris anthracite : assez claire pour que l'ombre s'y lise,
+      // reflets adoucis (un miroir noir renvoyait des traînées du studio)
+      color = vec3(0.055, 0.053, 0.052).mul(U.tint);
+      rough = float(0.26).add(fbm(p3.mul(0.6), 3).mul(0.05));
       h = noise(p3.mul(9)).mul(0.25); // peau d'orange de la laque
-      m.clearcoatNode = float(1);
-      m.clearcoatRoughnessNode = float(0.02);
+      m.clearcoatNode = float(0.45);
+      m.clearcoatRoughnessNode = float(0.16);
       break;
     }
     case 'concrete': {
@@ -40,13 +42,13 @@ function floorMaterial(kind, U) {
       const n = fbm(p3.mul(1.3).add(vec3(odd.mul(17), 0, 0)), 4);
       const vein = smoothstep(0.08, 0, abs(sin(p.x.mul(2.3).add(p.y.mul(1.4)).add(n.mul(6))))).mul(0.8);
       const white = mix(vec3(0.82, 0.8, 0.77), vec3(0.45, 0.44, 0.42), vein);
-      const black = mix(vec3(0.018, 0.017, 0.016), vec3(0.6, 0.55, 0.48), vein.mul(0.7));
+      const black = mix(vec3(0.04, 0.038, 0.035), vec3(0.6, 0.55, 0.48), vein.mul(0.7));
       const grout = smoothstep(0.012, 0.004, tmax(abs(f.x.sub(0.5)), abs(f.y.sub(0.5))).oneMinus());
       color = mix(mix(white, black, odd), vec3(0.3, 0.28, 0.25), grout);
-      rough = mix(float(0.07), float(0.6), grout).add(n.mul(0.02));
+      rough = mix(float(0.16), float(0.6), grout).add(n.mul(0.02));
       h = grout.negate();
-      m.clearcoatNode = float(0.8);
-      m.clearcoatRoughnessNode = float(0.03);
+      m.clearcoatNode = float(0.6);
+      m.clearcoatRoughnessNode = float(0.1);
       break;
     }
     case 'cyclo': {
