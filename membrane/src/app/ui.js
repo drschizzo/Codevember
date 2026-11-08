@@ -251,6 +251,7 @@ export function createUI({ recipe: getRecipe, render, on, nest }) {
   fRender.add(r, 'aa', { Temporel: 'traa', SMAA: 'smaa', FXAA: 'fxaa', Aucun: 'none' }).name('Anticrénelage').onChange(rch);
   fRender.add(r, 'shadows', { Basses: 'low', Moyennes: 'medium', Hautes: 'high', 'Très hautes': 'ultra' }).name('Ombres').onChange(rch);
   const fm = fRender.addFolder('Membranes').close();
+  fm.add(r, 'detail').name('Maillage fin des couches proches').onChange(rch);
   fm.add(r, 'backdrop').name('Voir au travers (copie par couche)').onChange(rch);
   fm.add(r, 'backdropBlur', 0, 2, 0.01).name('Flou au travers (×)').onChange(rch);
   fm.add(r, 'grazing', 0, 1, 0.01).name('Silhouettes (épaisseur rasante)').onChange(rch);

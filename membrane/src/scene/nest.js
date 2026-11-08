@@ -32,6 +32,8 @@ import { simulate, createPoser } from './gpusim.js';
 
 export const MAIN = 1, KEY = 2, BACK = 4;
 export const XMIN = -2.2, XMAX = 3.6;
+// en deçà, la membrane prend le maillage de rendu fin (grande à l'écran)
+const X_DETAIL = 1.4;
 
 const Z = new THREE.Vector3(0, 0, 1);
 const _q1 = new THREE.Quaternion();
@@ -113,7 +115,7 @@ class Template {
     const old = this.data;
     this.data = {
       prep, S, gpu, fibT, F: S.frames,
-      geo: membraneGeometry(prep.geo), fib: prep.nf ? fibrilGeometry(prep.fib) : null, arm: armatureGeometry(out.armature), arm2: out.accent?.index.length ? armatureGeometry(out.accent) : null,
+      geo: { lo: membraneGeometry(prep.geo.lo), hi: membraneGeometry(prep.geo.hi) }, fib: prep.nf ? fibrilGeometry(prep.fib) : null, arm: armatureGeometry(out.armature), arm2: out.accent?.index.length ? armatureGeometry(out.accent) : null,
     };
     this.info = { ...prep.info, ...gpu.stats, gpuMs: Math.round(performance.now() - t0) };
     this.version++;
@@ -125,7 +127,7 @@ class Template {
   free(d) {
     if (!d) return;
     for (const k of ['frames', 'meta', 'csr', 'bonds']) d.gpu?.[k]?.destroy();
-    d.geo?.dispose(); d.fib?.dispose(); d.arm?.dispose(); d.arm2?.dispose();
+    d.geo?.lo.dispose(); d.geo?.hi.dispose(); d.fib?.dispose(); d.arm?.dispose(); d.arm2?.dispose();
   }
   get ready() { return !!this.data && !this.pending && !!this.vessels; }
   dispose() { this.disposed = true; this.free(this.data); this.vessels?.dispose(); }
@@ -176,8 +178,8 @@ class Slot {
     this.meshes.arm = mk(d.arm, armMat, 0, true);
     if (d.arm2) this.meshes.arm2 = mk(d.arm2, buildPieceMaterial(T.lv.accentFinish ?? T.lv.armFinish, T.AU2, this.RU, { content: G.armEnv }), 0, true);
     const opts = { vessels: T.vessels };
-    this.meshes.back = mk(d.geo, buildMembraneMaterial(PT, this.S, T.L, spec, { ...opts, side: THREE.BackSide }), 10, false);
-    this.meshes.front = mk(d.geo, buildMembraneMaterial(PT, this.S, T.L, spec, { ...opts, side: THREE.FrontSide }), 100, false);
+    this.meshes.back = mk(d.geo.lo, buildMembraneMaterial(PT, this.S, T.L, spec, { ...opts, side: THREE.BackSide }), 10, false);
+    this.meshes.front = mk(d.geo.lo, buildMembraneMaterial(PT, this.S, T.L, spec, { ...opts, side: THREE.FrontSide }), 100, false);
     // variantes sans copie de l'image (couches lointaines : derrière la caméra, ou au cœur)
     this.meshes.back.userData.full = this.meshes.back.material;
     this.meshes.back.userData.lite = buildMembraneMaterial(PT, this.S, T.L, spec, { ...opts, side: THREE.BackSide, backdrop: false });
@@ -218,7 +220,7 @@ export function createNest(scene, gen, renderer) {
   nest.ready = () => nest.templates.length > 0 && nest.templates.every((t) => t.ready);
   nest.progress = () => (nest.templates.length ? nest.templates.reduce((a, t) => a + (t.ready ? 1 : (t.simProgress ?? 0) * 0.9), 0) / nest.templates.length : 0);
 
-  // s : { tau (déroulée), D, R, reset }
+  // s : { tau (déroulée), D, R, reset, backdrop (voir au travers), detail (maillage fin de près) }
   nest.update = (s) => {
     const R = s.R, M = nest.slots.length, N = nest.templates.length;
     if (!M) return { shown: 0 };
@@ -258,9 +260,12 @@ export function createNest(scene, gen, renderer) {
       const me = sl.meshes;
       const useBackdrop = x > bd[0] && x < bd[1] && s.backdrop;
       const memOn = sl.S.vis.value > 0.002;
+      // niveau de détail : mêmes attributs, le matériau reste valable
+      const geo = s.detail && x < X_DETAIL ? T.data.geo.hi : T.data.geo.lo;
       for (const k of ['back', 'front']) {
         const m = me[k], want = useBackdrop ? m.userData.full : m.userData.lite;
         if (m.material !== want) m.material = want;
+        m.geometry = geo;
         m.layers.mask = memOn ? MAIN : 0;
       }
       // ordre : faces arrière de l'extérieur vers l'intérieur, puis faces avant

@@ -1,6 +1,6 @@
 // Préparation d'une membrane pour la simulation sur GPU (dans un worker) :
 // maillage, motif de déchirure, coutures lissées, sommets dédoublés, liens,
-// tables de voisinage, lèvres, fibrilles, géométrie de rendu, et la pose de
+// tables de voisinage, lèvres, fibrilles, géométrie de rendu (gen/tess.js), et la pose de
 // l'armature à chaque sous-pas. La dynamique elle-même tourne sur le GPU
 // (voir scene/gpusim.js).
 //
@@ -19,6 +19,7 @@ export const RING_PARTNER = 0x80000000;
 import { geodesic, triNeighbors, V3 } from './geo.js';
 import { labelTriangles, findSeams } from './tear.js';
 import { partPose } from './kin.js';
+import { renderMesh, LIP_RING } from './tess.js';
 import { createRng } from '../rng.js';
 
 const { min, max, acos, cos, PI, exp } = Math;
@@ -243,8 +244,9 @@ export function prepareMembrane(S, arm) {
   fibs.forEach((f, i) => fibData.set([f.a, f.an, f.b, f.bn, f.u, f.snap, f.k, 0], i * 8));
   const fib = fibrilMesh(fibs);
 
-  // ── Géométrie de rendu ──
-  const geo = renderGeometry(ctri, nt, np, rest, boundary, lipOf, nl);
+  // ── Géométrie de rendu : deux niveaux de détail (couches lointaines, proches) ──
+  const src = { ctri, nt, np, rest, boundary, lipOf, nl };
+  const geo = { lo: renderMesh(src, 2), hi: renderMesh(src, 4) };
 
   // ── Armature : pose à chaque sous-pas (mise en place comprise : t = 0) ──
   const F = S.frames, SUB = S.substeps, nParts = arm.parts.length;
@@ -280,7 +282,7 @@ export function prepareMembrane(S, arm) {
   cols.forEach((r, i) => colBuf.set(r, i * 20));
 
   return {
-    np, nb, nl, nf: fibs.length, VV: np + nl * 3, meanEdge, nParts, nCols: cols.length, nSteps,
+    np, nb, nl, nf: fibs.length, VV: np + nl * LIP_RING, meanEdge, nParts, nCols: cols.length, nSteps,
     meta, csr, bonds: bondBuf, lipData, ring, fibData, poses, cols: colBuf,
     geo, fib,
     info: { particles: np, triangles: nt, bonds: nb, seams: seams.length, lips: nl, fibrils: fibs.length },
@@ -317,41 +319,4 @@ function fibrilMesh(list) {
     }
   });
   return { count: n, fIdx, fPar, fTime, index: Uint32Array.from(index) };
-}
-
-// ── Géométrie de rendu : triangles subdivisés (milieux d'arête) et lèvres ───
-function renderGeometry(ctri, nt, np, rest, boundary, lipOf, nl) {
-  const vab = [], rst = [], kind = [];
-  const addV = (a, b, k, r) => { vab.push(a, b); rst.push(...r); kind.push(k); return vab.length / 2 - 1; };
-  const R = (i) => [rest[i * 3], rest[i * 3 + 1], rest[i * 3 + 2]];
-  for (let i = 0; i < np; i++) addV(i, i, 0, R(i));
-  const mid = new Map();
-  const midOf = (a, b) => {
-    const k = ek(a, b);
-    let m = mid.get(k);
-    if (m === undefined) { m = addV(min(a, b), max(a, b), 0, V3.norm(V3.add(R(a), R(b)))); mid.set(k, m); }
-    return m;
-  };
-  const index = [];
-  for (let t = 0; t < nt; t++) {
-    const a = ctri[t * 3], b = ctri[t * 3 + 1], c = ctri[t * 3 + 2];
-    const ab = midOf(a, b), bc = midOf(b, c), ca = midOf(c, a);
-    index.push(a, ab, ca, ab, b, bc, ca, bc, c, ab, bc, ca);
-  }
-  const lipStart = vab.length / 2;
-  const lipPart = new Int32Array(nl);
-  for (let p = 0; p < np; p++) if (lipOf[p] >= 0) lipPart[lipOf[p]] = p;
-  for (let l = 0; l < nl; l++) for (let k = 0; k < 3; k++) { const vi = np + l * 3 + k; addV(vi, vi, 1, R(lipPart[l])); }
-  const directed = new Set();
-  for (let t = 0; t < nt; t++) for (let k = 0; k < 3; k++) directed.add(ctri[t * 3 + k] * 1048576 + ctri[t * 3 + ((k + 1) % 3)]);
-  for (const [a, b] of boundary) {
-    const la = lipStart + lipOf[a] * 3, lb = lipStart + lipOf[b] * 3;
-    const flip = !directed.has(a * 1048576 + b);
-    for (let k = 0; k < 2; k++) {
-      const q = [la + k, lb + k, lb + k + 1, la + k + 1];
-      if (flip) index.push(q[0], q[2], q[1], q[0], q[3], q[2]);
-      else index.push(q[0], q[1], q[2], q[0], q[2], q[3]);
-    }
-  }
-  return { vab: Float32Array.from(vab), rest: Float32Array.from(rst), kind: Uint8Array.from(kind), index: Uint32Array.from(index), np };
 }

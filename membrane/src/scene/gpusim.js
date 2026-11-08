@@ -19,6 +19,8 @@
 // dilatation de surface J, endommagement, et sommets des lèvres. Le rendu les lit directement dans ses
 // tampons (aucun aller-retour par le processeur).
 
+import { LIP_RING } from '../gen/tess.js';
+
 const WG = 64;
 
 const COMMON = /* wgsl */`
@@ -463,7 +465,7 @@ fn triSum(i: u32) -> vec4f {
   let d0 = n; let d1 = e * 1.25; let d2 = -n;
   let n0 = normalize(n * 0.6 + e * 0.4 + vec3f(0, 0, 1e-6)); let n2 = normalize(-n * 0.6 + e * 0.4 + vec3f(0, 0, 1e-6));
   let n1 = select(n, e, length(e) > 0.5);
-  let base = u.np + l * 3u;
+  let base = u.np + l * ${LIP_RING}u;
   let dp = prv[pi].xyz - x;
   let J = nor[pi].w;
   // (courbure du bourrelet : un demi-tour sur le rayon de la lèvre)
