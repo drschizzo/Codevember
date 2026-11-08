@@ -163,7 +163,10 @@ export function makeCell(kind, rng, mood, seed) {
   const contentType = kind === 'squelette' || kind === 'vitrine' || rng.chance(0.6)
     ? rng.weighted([['pearl', 3], ['gem', 2 * (M.gems ?? 0.25) * 4], ['rings', 2], ['cube', 1.2], ['saturn', 1.5], ['mini', 1.5], ['knot', 2], ['ico', 1.2], ['dodeca', 1.2], ['stack', 1.2]])
     : 'none';
-  const contentSet = rng.pick(M.contents);
+  // (tirage indépendant : les graines existantes gardent le reste de leur scène)
+  const cx = rng.fork('crystal'), picked = rng.pick(M.contents);
+  const contentSet = contentType !== 'gem' && cx.chance(M.crystal ?? 0.3)
+    ? cx.weighted([['crystal', 3], ['crystalBlue', 1], ['crystalSmoke', 1]]) : picked;
   const gemKey = rng.pick(Object.keys(GEMS));
   return {
     kind, seed, faces,

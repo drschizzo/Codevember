@@ -93,6 +93,13 @@ Ce sont ceux de Hollow : une quarantaine de finitions et vingt-six jeux. On y tr
 
 Chaque pièce porte trois finitions (externe, interne, tranche). Les motifs sont calculés dans le repère de la pièce et restent attachés à la matière pendant le pliage 4D : chaque face a son propre veinage, et chaque barre ou latte sa nuance. Le modèle physique est exploité en entier : vernis, lustre, irisation, anisotropie, transmission avec dispersion et absorption, usure. Le verre et les pierres projettent des ombres colorées.
 
+**Reflets et réfraction à l'intérieur des cellules.** Un objet exposé est enfermé : il ne voit du studio que ce que laissent passer les ajours. Son reflet de l'environnement est donc atténué (« Studio vu de l'intérieur »). Ce qu'il reflète vraiment, ce sont les parois de sa cellule, ses voisins et le plateau, grâce aux réflexions en espace écran (post-traitement) :
+- le reflet est un miroir sans bruit, adouci par un flou selon la rugosité, et laissé à l'environnement au-delà d'une rugosité moyenne ;
+- son intensité suit le Fresnel de chaque surface (fort pour un métal, rasant pour un diélectrique) ;
+- il prend la couleur du métal : l'or reflète doré.
+
+Les cristaux massifs (cristal, saphir, quartz fumé) sont tirés pour environ un objet sur trois, indépendamment du reste de la scène. Ils ont une épaisseur optique à leur taille : ils réfractent, inversée et teintée, la paroi qui se trouve derrière eux.
+
 Le sol est procédural : laque noire, béton ciré, damier de marbre, parquet de chêne verni, velours ou cyclorama.
 
 ## Scène
@@ -108,6 +115,7 @@ Le sol est procédural : laque noire, béton ciré, damier de marbre, parquet de
 - **Archétypes de cellule** : vitrine, écrin, moucharabieh, persiennes, grille tissée, squelette, cage à barreaux, vitrail, pointes de diamant, tôle ondulée, cible, et cabinet composite (chaque face tirée à part).
 - **Lumière** : un projecteur avec ombres douces et deux contre-jours, fixes dans le monde (la caméra tourne, les ombres restent), et un studio HDR pour les reflets.
 - **Post-traitement** (repris de Hollow) :
+  - réflexions en espace écran ;
   - occlusion ambiante ;
   - anticrénelage temporel ;
   - flou de mouvement ;
@@ -118,4 +126,4 @@ Le sol est procédural : laque noire, béton ciré, damier de marbre, parquet de
 
 ## Performances
 
-Environ 24 ms par image à 2,6 Mpx (≈ 760 000 triangles, ombres, anticrénelage temporel, huit lumières d'écrin). La tôle perforée est plafonnée à dix-huit faces par scène.
+Environ 24 ms par image à 2,4 Mpx (≈ 760 000 triangles, ombres, anticrénelage temporel, huit lumières d'écrin), dont environ 2,5 ms pour les réflexions en espace écran à demi-résolution. La tôle perforée est plafonnée à dix-huit faces par scène.

@@ -84,7 +84,7 @@ export function createTesseract(scene, gen) {
       if (P.role === 'frame') { frameU ??= finishUniformsFor(fin); U = frameU; } else { U = finishUniformsFor(fin); }
       P.F = U;
       const tint = P.role === 'glass' ? U.outer.color2 : null;
-      P.mesh.material = buildPieceMaterial(fin, U, P.M, { shadowTint: tint, reveal: P.role === 'panel' || P.role === 'glass', depth: P.role === 'frame' });
+      P.mesh.material = buildPieceMaterial(fin, U, P.M, { shadowTint: tint, reveal: P.role === 'panel' || P.role === 'glass', depth: P.role === 'frame', content: P.role === 'content' });
       P.sig = signature(fin);
     }
     old?.dispose();

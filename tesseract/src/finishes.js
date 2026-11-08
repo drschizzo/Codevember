@@ -77,6 +77,11 @@ export const FINISHES = {
   blackCeramic: F({ label: 'Céramique noire', pattern: 'plain', color: '#0d0d0f', rough: 0.1, clearcoat: 1, ccRough: 0.01, smudge: 0.25 }),
   whiteCeramic: F({ label: 'Céramique blanche', pattern: 'plain', color: '#f1f0ec', rough: 0.2, clearcoat: 1, ccRough: 0.015 }),
   soapFilm: F({ label: 'Film de savon', pattern: 'soap', color: '#09090b', rough: 0.04, clearcoat: 0.6, ccRough: 0.01, irid: 1, iridIOR: 1.33, iridMin: 120, iridMax: 900, scale: 1 }),
+  // cristaux massifs (objets exposés) : ils réfractent l'intérieur de la cellule
+  crystal: F({ label: 'Cristal', pattern: 'plain', color: '#ffffff', color2: '#f4f7fb', rough: 0.008, glass: 1, ior: 1.62, dispersion: 0.9, attDist: 4 }),
+  crystalBlue: F({ label: 'Cristal saphir', pattern: 'plain', color: '#ffffff', color2: '#3d6fd8', rough: 0.01, glass: 1, ior: 1.7, dispersion: 0.6, attDist: 0.5 }),
+  crystalSmoke: F({ label: 'Quartz fumé', pattern: 'plain', color: '#ffffff', color2: '#7a6250', rough: 0.01, glass: 1, ior: 1.55, dispersion: 0.5, attDist: 0.45 }),
+  crystalFrost: F({ label: 'Cristal satiné', pattern: 'plain', color: '#ffffff', color2: '#dfe7ee', rough: 0.2, glass: 1, ior: 1.55, dispersion: 0.3, attDist: 2 }),
   amberGlass: F({ label: 'Verre ambré', pattern: 'plain', color: '#ffffff', color2: '#d17a1e', rough: 0.03, glass: 1, ior: 1.52, dispersion: 0.3, attDist: 0.25 }),
 };
 
@@ -107,6 +112,9 @@ export const SETS = {
   marble: { label: 'Marbre & laiton', outer: 'marble', inner: 'polishedBrass', edge: 'polishedBrass', wear: 0, chamfer: true, moods: ['pastel', 'clinique', 'atelier'] },
   nero: { label: 'Nero Marquina & or', outer: 'marbleNoir', inner: 'polishedGold', edge: 'polishedGold', wear: 0, chamfer: true, moods: ['luxe', 'nuit'] },
   urushi: { label: 'Urushi', outer: 'urushi', inner: 'urushiRed', edge: 'polishedGold', wear: 0, chamfer: false, moods: ['luxe', 'atelier', 'sacré'] },
+  crystal: { label: 'Cristal', only: true, groove: false, outer: 'crystal', inner: 'crystal', edge: 'crystalFrost', wear: 0, chamfer: false, moods: [] },
+  crystalBlue: { label: 'Cristal saphir', only: true, groove: false, outer: 'crystalBlue', inner: 'crystalBlue', edge: 'crystal', wear: 0, chamfer: false, moods: [] },
+  crystalSmoke: { label: 'Quartz fumé', only: true, groove: false, outer: 'crystalSmoke', inner: 'crystalSmoke', edge: 'crystalFrost', wear: 0, chamfer: false, moods: [] },
   ceramicBlack: { label: 'Céramique noire', outer: 'blackCeramic', inner: 'brushedSteel', edge: 'diamondCut', wear: 0, chamfer: true, moods: ['studio', 'nuit', 'abysses'] },
   ceramicWhite: { label: 'Céramique blanche', outer: 'whiteCeramic', inner: 'porcelain', edge: 'chrome', wear: 0, chamfer: true, moods: ['clinique', 'pastel', 'studio'] },
   soap: { label: 'Bulle', outer: 'soapFilm', inner: 'soapFilm', edge: 'chrome', wear: 0, chamfer: false, moods: ['irisé', 'nuit', 'abysses'] },

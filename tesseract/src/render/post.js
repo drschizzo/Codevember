@@ -1,5 +1,5 @@
-// Chaîne de rendu : passe de scène (MRT : couleur HDR, normales, vitesses),
-// occlusion ambiante (GTAO), anticrénelage temporel, flou de mouvement, profondeur de
+// Chaîne de rendu : passe de scène (MRT : couleur HDR, normales, vitesses,
+// réflectance), réflexions en espace écran (SSR), occlusion ambiante (GTAO), anticrénelage temporel, flou de mouvement, profondeur de
 // champ, bloom, étalonnage (balance, contraste, saturation, vignettage),
 // traînées anamorphiques, halation, poussière sur la lentille, aberration
 // chromatique, tone mapping, grain.
@@ -11,7 +11,9 @@ import * as THREE from 'three/webgpu';
 import {
   pass, mrt, output, normalView, velocity, uniform, vec2, vec3, vec4, float,
   dot, mix, max, smoothstep, length, select, screenUV, screenCoordinate, hash, uint, time, fract, renderOutput, pow, uv, floor, mx_cell_noise_float, screenSize,
+  roughness, specularColorBlended, positionViewDirection,
 } from 'three/tsl';
+import { ssr } from 'three/addons/tsl/display/SSRNode.js';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import { ao } from 'three/addons/tsl/display/GTAONode.js';
 import { traa } from 'three/addons/tsl/display/TRAANode.js';
@@ -46,7 +48,7 @@ export function createPost(renderer, scene, camera) {
   const pipeline = new THREE.RenderPipeline(renderer);
   pipeline.outputColorTransform = false; // (tone mapping dans la chaîne, avant l'anticrénelage)
   const U = {
-    aoStrength: uniform(0.8),
+    aoStrength: uniform(0.8), ssrMix: uniform(1),
     blur: uniform(0.6), focus: uniform(4), focusRange: uniform(2), bokeh: uniform(2),
     exposure: uniform(1), contrast: uniform(1), saturation: uniform(1), warmth: uniform(0), vignette: uniform(0.35),
     ca: uniform(0.2), grain: uniform(0.04), hiCap: uniform(3),
@@ -56,7 +58,7 @@ export function createPost(renderer, scene, camera) {
   let key = '';
 
   function build(cfg) {
-    const k = [cfg.aa, cfg.bloom, cfg.ao, cfg.dof, cfg.motionBlur > 0, cfg.ca > 0, cfg.streaks > 0].join();
+    const k = [cfg.aa, cfg.bloom, cfg.ao, cfg.ssr, cfg.ssrRes, cfg.dof, cfg.motionBlur > 0, cfg.ca > 0, cfg.streaks > 0].join();
     if (k === key) return;
     key = k;
     for (const n of Object.values(nodes)) n?.dispose?.();
@@ -65,9 +67,18 @@ export function createPost(renderer, scene, camera) {
     const needVel = cfg.aa === 'traa' || cfg.motionBlur > 0;
     const scenePass = pass(scene, camera);
     const outs = { output };
-    if (cfg.ao) outs.normal = normalView; // (cibles en demi-flottants : pas d'encodage)
+    if (cfg.ao || cfg.ssr) outs.normal = normalView; // (cibles en demi-flottants : pas d'encodage)
     if (needVel) outs.velocity = velocity;
+    // pour les réflexions en espace écran : la réflectance (Fresnel de Schlick
+    // à partir de F0 — couleur de base d'un métal, ~4 % d'un diélectrique) et
+    // la rugosité, dans une seule cible 8 bits (WebGPU limite à 32 octets par
+    // pixel le total des cibles, et une cible 8 bits en compte 8)
+    if (cfg.ssr) {
+      const f0 = specularColorBlended, k = float(1).sub(normalView.dot(positionViewDirection).abs().clamp(0, 1)).pow(5);
+      outs.refl = vec4(f0.add(vec3(1).sub(f0).mul(k)), roughness);
+    }
     scenePass.setMRT(mrt(outs));
+    if (outs.refl) scenePass.getTexture('refl').type = THREE.UnsignedByteType;
     nodes.scenePass = scenePass;
     const depth = scenePass.getTextureNode('depth');
 
@@ -82,6 +93,23 @@ export function createPost(renderer, scene, camera) {
       return acc.div(n);
     };
     let color = cfg.motionBlur > 0 ? shutter(base) : base;
+    if (cfg.ssr) {
+      // Réflexions en espace écran : les objets exposés et les doublures
+      // reflètent ce qui est réellement autour d'eux (parois de la cellule,
+      // voisins, plateau), pas seulement l'environnement de studio. Le reflet
+      // est prémultiplié par la réflectance : il s'ajoute à l'image.
+      const refl = scenePass.getTextureNode('refl');
+      // Reflet miroir (sans bruit), adouci par un flou selon la rugosité ;
+      // la passe le pondère par un scalaire, la teinte (l'or reflète doré) est
+      // rendue ensuite. Au-delà d'une rugosité moyenne, le reflet est laissé à
+      // l'environnement.
+      const w = max(refl.r, max(refl.g, refl.b)).mul(smoothstep(0.6, 0.25, refl.a));
+      const r = ssr(base, depth, scenePass.getTextureNode('normal'), { metalnessNode: w, roughnessNode: refl.a, reflectNonMetals: false, camera });
+      const tint = refl.rgb.div(max(refl.r, max(refl.g, refl.b)).max(1e-3));
+      r.resolutionScale = cfg.ssrRes;
+      nodes.ssr = r;
+      color = vec4(color.rgb.add(r.rgb.mul(tint).mul(U.ssrMix)), color.a);
+    }
     if (cfg.ao) {
       const aoPass = ao(depth, scenePass.getTextureNode('normal'), camera);
       aoPass.resolutionScale = 0.5;
@@ -181,6 +209,15 @@ export function createPost(renderer, scene, camera) {
       nodes.bloom.threshold.value = cfg.bloomThreshold;
     }
     if (nodes.ao) nodes.ao.radius.value = cfg.aoRadius;
+    if (nodes.ssr) {
+      const r = nodes.ssr;
+      U.ssrMix.value = cfg.ssrIntensity;
+      r.quality.value = cfg.ssrQuality;
+      r.maxDistance.value = cfg.ssrDistance;
+      r.thickness.value = cfg.ssrThickness;
+      r.maxLuminance.value = cfg.hiCap * 2;
+      if (r.blurQuality !== cfg.ssrBlur) r.blurQuality = cfg.ssrBlur;
+    }
     renderer.toneMapping = TONE_MAPPINGS[cfg.toneMapping] ?? THREE.AgXToneMapping;
   }
 

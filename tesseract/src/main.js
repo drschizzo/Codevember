@@ -141,6 +141,8 @@ async function main() {
     G.phase.value = ph;
     G.microDetail.value = RENDER.microDetail;
     G.roughFloor.value = RENDER.roughFloor;
+    G.nestEnv.value = RENDER.nestEnv;
+    G.crystalThick.value = RENDER.crystalThick;
     G.cutaway.value = R.view.cutaway;
     if (camState.free) controls.update(); else rigCamera(ph);
     const floorY = -R.floor.level * TARGET;
