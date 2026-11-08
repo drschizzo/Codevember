@@ -167,4 +167,6 @@ Ils couvrent les charnières et les patrons (arbres couvrants sans chevauchement
 
 ## Performances
 
-Environ 24 ms par image à 2,4 Mpx (≈ 760 000 triangles, ombres, anticrénelage temporel, huit lumières d'écrin), dont environ 2,5 ms pour les réflexions en espace écran à demi-résolution. La tôle perforée est plafonnée à dix-huit faces par scène. Le voyage intérieur coûte environ 1,5 ms de plus par image (mesuré à 1,8 Mpx : 11 ms dehors, 12,5 ms dedans).
+Mesuré à 1,9 Mpx en qualité Haute (anticrénelage temporel, réflexions en espace écran, occlusion ambiante, ombres), graine `k3v9pa` : environ 9,7 ms par image dehors, 10,8 ms pendant une traversée et 12,6 ms pendant une halte (avant l'éclairage sélectif et l'élimination des cellules hors champ : 13,9, 16,7 et 23,2 ms). L'image est limitée par les fragments : le nombre de lumières évaluées par pixel compte bien plus que le nombre de sommets. La tôle perforée est plafonnée à dix-huit faces par scène.
+
+Au chargement d'une scène, la génération des shaders gèle la page une à quatre secondes, sous l'écran de chargement (`renderer.compileAsync` a été essayé : il ne supprime pas ce gel).
