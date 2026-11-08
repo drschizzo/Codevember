@@ -1,13 +1,11 @@
 // La membrane à l'image : maillage animé par la texture de simulation, et
 // matériau d'une couche mince diffusante.
 //
-// Sommets (vertex shader) : chaque sommet rendu lit une ou deux particules de
-// la simulation (attribut vab) à l'image f (interpolée entre deux images
-// enregistrées). Un sommet de milieu d'arête est placé sur le patch cubique
-// défini par les positions et normales de ses deux extrémités (triangles PN) :
-// les silhouettes et les lambeaux enroulés restent courbes, quatre fois plus
-// fins que le maillage simulé. La position à l'image précédente donne les
-// vecteurs vitesse.
+// Sommets (vertex shader) : chaque sommet rendu lit les trois particules de
+// son triangle simulé (attribut tri, voir gen/tess.js) dans la pose de
+// l'image, et se place sur le patch cubique des triangles PN défini par leurs
+// positions et normales ; sa normale suit l'interpolation quadratique des
+// triangles PN. La position à l'image précédente donne les vecteurs vitesse.
 //
 // Matière (fragment) :
 //   - épaisseur relative h = (irrégularité × vaisseaux × fibres) / J : une
@@ -34,11 +32,16 @@ import { G } from './globals.js';
 
 const PI = Math.PI;
 
+// (tous les niveaux de détail ont les mêmes attributs : un maillage peut
+// passer de l'un à l'autre sans recompiler son matériau)
 export function membraneGeometry(geo) {
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(geo.rest, 3));
+  // (la normale vient du vertex shader, mais three.js lit encore l'attribut :
+  // sans lui, l'éclairage des faces est faux — faces arrière noires)
   g.setAttribute('normal', new THREE.BufferAttribute(geo.rest, 3));
-  g.setAttribute('vab', new THREE.BufferAttribute(geo.vab, 2));
+  g.setAttribute('tri', new THREE.BufferAttribute(geo.tri, 3));
+  g.setAttribute('bary', new THREE.BufferAttribute(geo.bary, 2));
   g.setAttribute('rest', new THREE.BufferAttribute(geo.rest, 3));
   g.setAttribute('kind', new THREE.BufferAttribute(Float32Array.from(geo.kind), 1));
   g.setIndex(new THREE.BufferAttribute(geo.index, 1));
@@ -86,32 +89,51 @@ const vJ = varyingProperty('float', 'vMemJ');
 const vDmg = varyingProperty('float', 'vMemDmg');
 const vCurv = varyingProperty('float', 'vMemCurv');
 
+// Triangle PN (Vlachos et al., 2001) : points de contrôle du patch cubique
+// tirés des positions P et normales N des coins ; w : barycentriques.
+function pnPosition(P1, P2, P3, N1, N2, N3, w) {
+  const e = (Pi, Pj, Ni) => Pi.mul(2).add(Pj).sub(Ni.mul(dot(Pj.sub(Pi), Ni))).div(3);
+  const b210 = e(P1, P2, N1), b120 = e(P2, P1, N2), b021 = e(P2, P3, N2);
+  const b012 = e(P3, P2, N3), b102 = e(P3, P1, N3), b201 = e(P1, P3, N1);
+  const E = b210.add(b120).add(b021).add(b012).add(b102).add(b201).div(6);
+  const b111 = E.mul(1.5).sub(P1.add(P2).add(P3).div(6));
+  const [a, b, c] = [w.x, w.y, w.z];
+  return P1.mul(a.mul(a).mul(a)).add(P2.mul(b.mul(b).mul(b))).add(P3.mul(c.mul(c).mul(c)))
+    .add(b210.mul(a.mul(a).mul(b)).add(b120.mul(a.mul(b).mul(b))).add(b201.mul(a.mul(a).mul(c)))
+      .add(b021.mul(b.mul(b).mul(c))).add(b102.mul(a.mul(c).mul(c))).add(b012.mul(b.mul(c).mul(c))).mul(3))
+    .add(b111.mul(a.mul(b).mul(c).mul(6)));
+}
+// normale quadratique : milieux d'arête réfléchis par le plan médian de l'arête
+function pnNormal(P1, P2, P3, N1, N2, N3, w) {
+  const h = (Pi, Pj, Ni, Nj) => {
+    const d = Pj.sub(Pi), s = Ni.add(Nj);
+    const n = s.sub(d.mul(dot(d, s).mul(2).div(dot(d, d).max(1e-12))));
+    return mix(Ni, normalize(n.add(vec3(0, 0, 1e-9))), step(1e-4, length(n)));
+  };
+  const [a, b, c] = [w.x, w.y, w.z];
+  const n = N1.mul(a.mul(a)).add(N2.mul(b.mul(b))).add(N3.mul(c.mul(c)))
+    .add(h(P1, P2, N1, N2).mul(a.mul(b))).add(h(P2, P3, N2, N3).mul(b.mul(c))).add(h(P3, P1, N3, N1).mul(a.mul(c)));
+  return normalize(n.add(vec3(0, 0, 1e-7)));
+}
+
 export function membranePosition(T, S, full) {
   const B = poseReader(T);
   return Fn(() => {
-    const ab = attribute('vab', 'vec2');
-    const ia = int(ab.x.add(0.5)), ib = int(ab.y.add(0.5));
-    const na = B.nor.element(ia), nb = B.nor.element(ib);
-    // milieu d'arête sur le patch cubique (triangles PN)
-    const mid = (pa, pb) => {
-      const d = pb.sub(pa);
-      const w01 = dot(d, na.xyz), w10 = dot(d, nb.xyz).negate();
-      return pa.add(pb).mul(0.5).sub(na.xyz.mul(w01).add(nb.xyz.mul(w10)).mul(0.125));
-    };
-    const ca = B.cur.element(ia), cb = B.cur.element(ib);
-    const pa = ca.xyz, pb = cb.xyz;
-    const p = mid(pa, pb).toVar('memP');
+    const t = attribute('tri', 'vec3'), bw = attribute('bary', 'vec2');
+    const w = vec3(bw.x.add(bw.y).oneMinus(), bw.x, bw.y);
+    const i1 = int(t.x.add(0.5)), i2 = int(t.y.add(0.5)), i3 = int(t.z.add(0.5));
+    const n1 = B.nor.element(i1), n2 = B.nor.element(i2), n3 = B.nor.element(i3);
+    const c1 = B.cur.element(i1), c2 = B.cur.element(i2), c3 = B.cur.element(i3);
+    const lerp = (x1, x2, x3) => x1.mul(w.x).add(x2.mul(w.y)).add(x3.mul(w.z));
+    const p = pnPosition(c1.xyz, c2.xyz, c3.xyz, n1.xyz, n2.xyz, n3.xyz, w).toVar('memP');
     if (full) {
-      const d = pb.sub(pa), s = na.xyz.add(nb.xyz);
-      const v = dot(d, s).mul(2).div(dot(d, d).max(1e-12));
-      const n = s.sub(d.mul(v));
-      const nn = mix(na.xyz, n, step(1e-4, length(n)));
-      normalLocal.assign(normalize(nn.add(vec3(0, 0, 1e-7))));
-      vJ.assign(na.w.add(nb.w).mul(0.5));
-      vCurv.assign(ca.w.add(cb.w).mul(0.5));
-      const qa = B.prv.element(ia), qb = B.prv.element(ib);
-      vDmg.assign(qa.w.add(qb.w).mul(0.5));
-      positionPrevious.assign(mid(qa.xyz, qb.xyz));
+      normalLocal.assign(pnNormal(c1.xyz, c2.xyz, c3.xyz, n1.xyz, n2.xyz, n3.xyz, w));
+      vJ.assign(lerp(n1.w, n2.w, n3.w));
+      vCurv.assign(lerp(c1.w, c2.w, c3.w));
+      const q1 = B.prv.element(i1), q2 = B.prv.element(i2), q3 = B.prv.element(i3);
+      vDmg.assign(lerp(q1.w, q2.w, q3.w));
+      // (normales de l'image courante : l'écart est négligeable sur une image)
+      positionPrevious.assign(pnPosition(q1.xyz, q2.xyz, q3.xyz, n1.xyz, n2.xyz, n3.xyz, w));
     }
     return p;
   })();
