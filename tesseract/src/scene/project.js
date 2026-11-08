@@ -94,7 +94,7 @@ export function frameMerge(U) {
 export const panelMerge = (l) => {
   const anc = attribute('anchor', 'vec3');
   const nm = step(0.5, abs(anc)); // (axe normal de la face)
-  const k = float(1).sub(G.merge.mul(G.frameW).mul(2.6));
+  const k = float(1).sub(G.panelShrink.mul(G.frameW).mul(2.6));
   return l.mul(nm.add(nm.oneMinus().mul(k)));
 };
 
