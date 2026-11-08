@@ -79,14 +79,21 @@ export function buildFrame(f) {
   const B = new Buffers(1 << 15), rng = createRng(`frame:${f.seed}`);
   const e = 1 - f.w, nh = nodeHalf(f), prof = profileOf(f);
   const segPerUnit = 16;
+  // Point d'ancrage de chaque pièce (voir scene/project.js, frameMerge) :
+  // barre : son axe, la coordonnée libre remplacée par 10 + numéro de barre ;
+  // nœud : son centre. Une fois le tesseract plié, les ossatures des cellules
+  // fusionnent : chaque barre se recentre sur l'arête, et les doublons se
+  // rétractent dans leur axe.
   for (let a = 0; a < 3; a++) {
     const b = (a + 1) % 3, c = (a + 2) % 3;
     for (const sb of [-1, 1]) for (const sc of [-1, 1]) {
       B.piece = rng.int(0, 255);
       const o = add(sgnv(AX[b], sb * e), sgnv(AX[c], sc * e));
-      // les barres entrent dans les nœuds ; sans nœud, elles vont jusqu'au bout
-      // et se recouvrent à l'angle (assemblage à plat)
-      const t1 = nh > 0 ? e - nh * 0.6 : 1;
+      B.anchor = o.map((v, i) => (i === a ? 10 + a * 4 + (sb > 0 ? 2 : 0) + (sc > 0 ? 1 : 0) : v));
+      // les barres entrent dans les nœuds ; sans nœud, elles s'assemblent
+      // bout à bout (celles de x vont jusqu'à l'angle, celles de y et z
+      // s'arrêtent contre elles : pas de faces superposées)
+      const t1 = nh > 0 ? e - nh * 0.6 : a === 0 ? 1 : 1 - 2 * f.w;
       sweep(B, prof, o, AX[a], sgnv(AX[b], sb), sgnv(AX[c], sc), -t1, t1, Math.ceil(2 * t1 * segPerUnit));
       if (f.style === 'tube') { // bagues aux extrémités du tube
         for (const s of [-1, 1]) {
@@ -98,12 +105,20 @@ export function buildFrame(f) {
       }
     }
   }
-  if (nh > 0) for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
+  // nœuds affleurants : leur face externe s'arrête à l'angle du cube (ils ne
+  // débordent pas sur la cellule voisine du patron)
+  // (sans nœud : de petits nœuds quand même, qui n'apparaissent qu'à la
+  // fusion, pour couvrir la jonction des barres aux sommets)
+  const nodeless = nh === 0, nhh = nodeless ? f.w * 1.45 : nh;
+  const en = 1 - Math.max(nhh, f.w);
+  if (nhh > 0) for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
     B.piece = rng.int(0, 255);
-    const c = [sx * e, sy * e, sz * e];
-    if (f.node === 'sphere') sphere(B, c, nh, 28, 16, OUT);
-    else roundedBox(B, c, [nh, nh, nh], nh * (f.node === 'knob' ? 0.55 : 0.22), 4, EDGE, OUT);
+    const c = [sx * en, sy * en, sz * en];
+    B.anchor = c;
+    if (f.node === 'sphere') sphere(B, c, nhh, 28, 16, OUT);
+    else roundedBox(B, c, [nhh, nhh, nhh], nhh * (f.node === 'knob' ? 0.55 : 0.22), 4, EDGE, OUT);
   }
+  B.anchor = [0, 0, 0];
   return B.out();
 }
 

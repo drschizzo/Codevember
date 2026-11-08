@@ -113,7 +113,9 @@ La durée de la boucle suit : environ 35 à 45 s.
   - cornière, dont les ailes portent les panneaux ;
   - profilé d'aluminium rainuré.
 
-  Nœuds d'angle en boîte arrondie, sphère ou pommeau. Les chanfreins et congés reçoivent la finition polie, les plats la finition brossée (brossage le long de la barre).
+  Nœuds d'angle en boîte arrondie, sphère ou pommeau, affleurants (ils ne débordent jamais sur la cellule voisine du patron). Sans nœuds, les barres s'assemblent bout à bout.
+
+  **Fusion des ossatures.** Plié, chaque arête de l'hypercube est partagée par trois cellules et chaque sommet par quatre : huit ossatures complètes s'y empileraient (96 barres, 64 nœuds). À la toute fin du pliage, une seule cellule garde chaque arête (celle de plus petit axe) et chaque sommet (les cellules ±X). Sa barre se recentre sur l'arête exacte, le retrait entre cellules s'annule, et les doublons se rétractent dans leur axe. Il reste un squelette d'hypercube unique, de 32 barres et 16 nœuds. Les panneaux se resserrent un peu dans leur plan et flottent dans l'ossature. Pendant le voyage intérieur, chaque pièce reprend son ossature, pour garder ses colonnes dans les douze angles. Les chanfreins et congés reçoivent la finition polie, les plats la finition brossée (brossage le long de la barre).
 - **Panneaux** : plaques (faces externe et interne, chant), verre teinté, persiennes inclinées, grille de joncs tissés dessus-dessous, pointes de diamant, clous ou caissons, tôle ondulée, vitrail serti de plombs (losanges ou carreaux), barreaux à traverse, cible d'anneaux concentriques, et tôle perforée. Cette dernière a des trous en superellipse (rond, carré, losange, étoile, fente) ou hexagonaux, à chanfrein poli et paroi usinée. Leur taille suit un motif : centre, bord, diagonale, vague ou hasard. Les carreaux voisins partagent exactement leurs points de bord.
 - **Objets exposés** (un par cellule) : perle, pierre taille brillant, gyroscope à trois anneaux, cube, Saturne, nœud de trèfle, icosaèdre, dodécaèdre, pile de jetons, et un petit cube d'ossature en mise en abyme. Chacun tourne d'un nombre entier de tours par boucle.
 

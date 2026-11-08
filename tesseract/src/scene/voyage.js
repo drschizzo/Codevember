@@ -80,9 +80,9 @@ export function voyageFrames(R, cache) {
 const STYLES = {
   avant: () => ({ b0: 0.13, b1: 0.13, t0: 0, t1: 0, r: 0.42 }),
   arriere: (s) => ({ b0: Math.PI - 0.22, b1: Math.PI - 0.5, t0: 0, t1: 0.3 * s, r: 0.4 }),
-  cote: (s) => ({ b0: 1.25, b1: 1.4, t0: 0, t1: 0.5 * s, r: 0.46 }),
-  tonneau: (s) => ({ b0: 0.18, b1: 0.18, t0: 0, t1: 2 * Math.PI * s, r: 0.4 }),
-  spirale: (s) => ({ b0: 0.5, b1: 0.35, t0: 0, t1: (Math.PI / 2) * s, r: 0.48 }),
+  cote: (s) => ({ b0: 1.25, b1: 1.4, t0: 0, t1: 0.5 * s, r: 0.38 }),
+  tonneau: (s) => ({ b0: 0.18, b1: 0.18, t0: 0, t1: 2 * Math.PI * s, r: 0.39 }),
+  spirale: (s) => ({ b0: 0.5, b1: 0.35, t0: 0, t1: (Math.PI / 2) * s, r: 0.38 }),
 };
 const STYLE_W = [['avant', 1.6], ['arriere', 1.2], ['cote', 1.4], ['tonneau', 1], ['spirale', 1.3]];
 function pickStyle(seed, i, k) {

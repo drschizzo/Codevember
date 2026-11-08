@@ -8,8 +8,8 @@
 // varie qu'en partie avec l'étendue du patron (déplié, il est bien plus grand
 // que plié), soulevé au besoin pour ne jamais traverser le sol.
 import * as THREE from 'three/webgpu';
-import { uniform } from 'three/tsl';
-import { stateAt, cellTransforms, cellMatrix, apply, project, timelineFor, stepOrientations, depthOf, foldOrder, normalOf } from '../math4.js';
+import { uniform, uniformArray } from 'three/tsl';
+import { stateAt, cellTransforms, cellMatrix, apply, project, timelineFor, stepOrientations, depthOf, foldOrder, normalOf, cellAxis } from '../math4.js';
 import { voyageFrames, voyageBlend } from './voyage.js';
 import { meshUniforms, setMatrix } from './project.js';
 import { buildPieceMaterial, buildGemMaterial, finishUniforms, applyFinish, signature, gemUniforms, applyGem } from './materials.js';
@@ -55,8 +55,20 @@ export function createTesseract(scene, gen) {
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     group.add(mesh);
-    pieces.push({ c, role, mesh, M: meshUniforms(), F: null, gemU: null, sig: '', prev: null, has: false });
+    const M = meshUniforms();
+    if (role === 'frame') M.bars = uniformArray(new Array(20).fill(1), 'float');
+    pieces.push({ c, role, mesh, M, F: null, gemU: null, sig: '', prev: null, has: false });
   }
+  // Ossatures fusionnées (tesseract plié) : chaque arête (trois cellules) est
+  // gardée par la cellule dont l'axe est le plus petit, chaque sommet (quatre
+  // cellules) par les cellules ±X. owner[c][i] : barres 0..11 (axe libre a,
+  // signes des deux autres), nœuds 12..19 (signes x, y, z).
+  const owner = Array.from({ length: 8 }, (_, c) => {
+    const k = cellAxis(c), o = [0, 1, 2, 3].filter((x) => x !== k), out = [];
+    for (let a = 0; a < 3; a++) for (let q = 0; q < 4; q++) out.push(k < o[(a + 1) % 3] && k < o[(a + 2) % 3]);
+    for (let q = 0; q < 8; q++) out.push(k === 0);
+    return out;
+  });
   const guides = createGuides(group, scene);
   const pieceOf = (c, role) => pieces[c * ROLES.length + ROLES.indexOf(role)];
   let frameU = null; // uniformes de finition de l'ossature (partagés par les huit cellules)
@@ -85,7 +97,7 @@ export function createTesseract(scene, gen) {
       if (P.role === 'frame') { frameU ??= finishUniformsFor(fin); U = frameU; } else { U = finishUniformsFor(fin); }
       P.F = U;
       const tint = P.role === 'glass' ? U.outer.color2 : null;
-      P.mesh.material = buildPieceMaterial(fin, U, P.M, { shadowTint: tint, reveal: P.role === 'panel' || P.role === 'glass', depth: P.role === 'frame', content: P.role === 'content' });
+      P.mesh.material = buildPieceMaterial(fin, U, P.M, { shadowTint: tint, reveal: P.role === 'panel' || P.role === 'glass', depth: P.role === 'frame', content: P.role === 'content', merge: P.role === 'frame' });
       P.sig = signature(fin);
     }
     old?.dispose();
@@ -287,10 +299,27 @@ export function createTesseract(scene, gen) {
     const lift = Math.max(0, floorY + 0.06 * target - minY);
     group.position.set(-v.x, -v.y + lift, -v.z);
 
+    // fusion des ossatures : à la toute fin du pliage (les charnières sont
+    // closes), les barres en double se rétractent et l'ossature sans retrait
+    // vient se poser sur les arêtes exactes
+    // (pendant le voyage, chaque pièce reprend son ossature : vue de
+    // l'intérieur, elle a ses colonnes dans les douze angles)
+    const fm = Math.min(1, Math.max(0, (st.fold - 0.86) / 0.14)), merge = fm * fm * (3 - 2 * fm) * (1 - kp);
+    G.merge.value = merge;
+    G.frameW.value = R.frame.w;
     // matrices de chaque pièce
     for (let cc = 0; cc < 8; cc++) {
       const cell = R.cells[cc], con = cell.content;
-      const Afr = cellMatrix(T[cc], cc, inset);
+      // (sans retrait une fois fusionné : les panneaux affleurent contre les
+      // barres ; ceux de deux cellules voisines restent distincts, chacun
+      // en deçà de l'arête dans sa cellule)
+      const insetM = inset + (1 - inset) * merge;
+      const Afr = cellMatrix(T[cc], cc, insetM);
+      const Pf = pieceOf(cc, 'frame');
+      const nodeless = R.frame.node === 'none';
+      for (let i = 0; i < 20; i++) {
+        Pf.M.bars.array[i] = i >= 12 && nodeless ? (owner[cc][i] ? merge : 0) : owner[cc][i] ? 1 : 1 - merge;
+      }
       // objet exposé : tourne d'un nombre entier de tours par boucle
       // la cellule qui passe à l'extérieur (vers l'œil 4D) rentre son objet :
       // projeté, il se superposerait à celui de la cellule intérieure
@@ -300,7 +329,7 @@ export function createTesseract(scene, gen) {
       const vs = lerp(1, Math.min(1, (R.voyage?.objScale ?? 0.27) / con.size), kp);
       const k3 = Math.max(1e-3, shrink) * vs;
       const rot = mul3(axisAngle(normv(con.axis), Math.PI * 2 * con.turns * ph), axisAngle(normv(con.tilt), 0.6)).map((x) => x * k3);
-      const Aco = cellMatrix(T[cc], cc, inset, { m3: rot, t3: [0, 0, 0] });
+      const Aco = cellMatrix(T[cc], cc, insetM, { m3: rot, t3: [0, 0, 0] });
       for (const role of ROLES) {
         const P = pieceOf(cc, role);
         if (!P.has) continue;
