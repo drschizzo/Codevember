@@ -130,6 +130,18 @@ class Design {
       c.display.forEach((m, l) => { m.geometry = this.geoms[l]; });
       c.proxy.geometry = this.geoms[3];
     }
+    // Matériaux neufs avec la géométrie neuve. three.js compile un objet de
+    // rendu (maillage, matériau) d'après les attributs de la géométrie qu'il
+    // porte à ce moment-là ; un échange de géométrie ne fait ensuite que
+    // remplacer les tampons, sans recompiler. Or le nouveau matériau d'une
+    // scène est posé tout de suite, et la géométrie n'arrive qu'ensuite : les
+    // copies rendues pendant le chargement étaient compilées sans rigA/rigB
+    // (pièces animées figées dans leur pose de repos : diaphragme fermé,
+    // éclats immobiles, ombres fausses), et le restaient — on les retrouvait
+    // en début de scène puis toutes les C boucles. Reconstruire les matériaux
+    // (et libérer les anciens) jette ces objets de rendu, passe d'ombre comprise.
+    this.sig = '';
+    this.syncMaterial();
     for (const g of new Set(old)) if (g && !this.geoms.includes(g)) g.dispose(); // (une géométrie peut servir à deux niveaux)
     this.setOrnaments(batch.ornaments);
     this.pending = null;
@@ -174,10 +186,20 @@ class Design {
       }
       if (old) old.dispose();
       oldSpine?.dispose();
-      // ombre : les pièces animées s'y déforment comme à l'image
+      // Ombre : les pièces animées s'y déforment comme à l'image.
+      // Chaque couche a TOUJOURS son propre matériau d'ombre, libéré quand il
+      // change. Dans la passe d'ombre, three.js met l'objet de rendu en cache
+      // sous (maillage, matériau d'ombre de la lumière) : un changement du
+      // matériau du maillage passe inaperçu (les nœuds n'entrent pas dans la
+      // clé), et le pipeline compilé avec l'ancien reste utilisé — seul un
+      // dispose() de l'ancien matériau l'invalide. Avec un matériau partagé
+      // (jamais libéré), une couche qui devenait animée après un changement de
+      // scène gardait l'ombre d'une coquille figée : diaphragme fermé dans la
+      // carte d'ombre pendant qu'il s'ouvrait à l'image (taches de lumière,
+      // ouverture désynchronisée), pores sans lumière, naissance sans masque.
       const oldShadow = this.shadowMat;
-      this.shadowMat = rig || pore ? buildShadowMaterial(rig ? this.RU : null, pore ? this.PU : null) : null;
-      for (const c of this.copies) c.proxy.material = this.shadowMat || this.nest.shadowMat;
+      this.shadowMat = buildShadowMaterial(rig ? this.RU : null, pore ? this.PU : null);
+      for (const c of this.copies) c.proxy.material = this.shadowMat;
       oldShadow?.dispose();
     }
   }
@@ -243,7 +265,7 @@ class Design {
         group.add(m);
         return m;
       });
-      const proxy = new THREE.Mesh(this.geoms[3] || placeholder, this.shadowMat || this.nest.shadowMat);
+      const proxy = new THREE.Mesh(this.geoms[3] || placeholder, this.shadowMat);
       proxy.castShadow = true; proxy.receiveShadow = false; proxy.frustumCulled = false; proxy.layers.mask = 0;
       group.add(proxy);
       const c = { group, display, proxy, ornaments: [] };
@@ -286,7 +308,7 @@ export function createNest(scene, gen) {
   const root = new THREE.Group();
   root.name = 'nest';
   scene.add(root);
-  const nest = { root, gen, shadowMat: buildShadowMaterial(), designs: [], onProgress: null, solo: null };
+  const nest = { root, gen, designs: [], onProgress: null, solo: null };
   let frame = 0;
 
   // applique la recette (les couches inchangées ne sont pas reconstruites)
