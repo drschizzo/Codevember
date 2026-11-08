@@ -170,7 +170,7 @@ async function main() {
     }
     if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); }
   }
-  const _f = new THREE.Vector3(), _u = new THREE.Vector3(), _t = new THREE.Vector3();
+  const _f = new THREE.Vector3(), _u = new THREE.Vector3(), _t = new THREE.Vector3(), _dark = new THREE.Color();
   let lastPhase = 0, info = null;
   function renderAt(u) {
     const ph = u - Math.floor(u);
@@ -196,8 +196,16 @@ async function main() {
     G.cutaway.value = R.view.cutaway * (1 - kp);
     overlay.draw(info, R, RENDER);
     stage.update(R, floorY, { kc, kp, camera, scale: sc, lamp: R.voyage?.lamp ?? 1 });
+    // (dans l'hypersphère, le lointain est sombre : la teinte de la scène,
+    // très assombrie ; un fond clair, vu par tous les ajours, noyait l'image
+    // dans un voile laiteux)
     scene.background.set(R.bg);
-    scene.fog.color.set(R.bg);
+    if (kc > 0) {
+      const L = 0.2126 * scene.background.r + 0.7152 * scene.background.g + 0.0722 * scene.background.b;
+      _dark.copy(scene.background).multiplyScalar(Math.min(1, 0.012 / Math.max(L, 1e-4)));
+      scene.background.lerp(_dark, Math.min(1, kc * 1.3));
+    }
+    scene.fog.color.copy(scene.background);
     const V = R.voyage ?? {};
     scene.fog.near = R.fog.near + ((V.fogNear ?? 1.4) * sc - R.fog.near) * kc;
     scene.fog.far = R.fog.far + ((V.fogFar ?? 6.5) * sc - R.fog.far) * kc;
@@ -206,7 +214,12 @@ async function main() {
     scene.environmentRotation.set(0, R.env.rotation, 0);
     const focusOut = camera.position.length(), focusIn = tess.group.position.distanceTo(camera.position);
     const focusDist = (focusOut + (focusIn - focusOut) * kc) * RENDER.focus;
-    post.update({ ...RENDER, focus: focusDist, focusRange: RENDER.focusRange * TARGET * 2 }, R);
+    // (dans les pièces, tout est proche : halo et flou de mouvement atténués,
+    // sinon l'image entière se voile)
+    post.update({
+      ...RENDER, focus: focusDist, focusRange: RENDER.focusRange * TARGET * 2,
+      halation: RENDER.halation * (1 - 0.7 * kc), dirt: RENDER.dirt * (1 - 0.6 * kc), motionBlur: RENDER.motionBlur * (1 - 0.5 * kc),
+    }, R);
     post.render();
   }
   function renderStep(u) {
