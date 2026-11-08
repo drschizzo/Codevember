@@ -152,6 +152,9 @@ async function main() {
     G.sssBoost.value = RENDER.sssBoost;
     G.grazing.value = RENDER.grazing ?? 1;
     G.armEnv.value = RENDER.armEnv;
+    const pz = R.polar;
+    G.polar.value = pz.amount; G.polCross.value = pz.cross ? 1 : 0; G.polCirc.value = pz.mode === 'circular' ? 1 : 0;
+    G.polPlate.value = pz.mode === 'plate' ? 1 : 0; G.polAngle.value = pz.angle; G.polTurns.value = Math.round(pz.turns); G.polGain.value = pz.gain;
     if (camState.free) controls.update(); else rigCamera(ph);
     info = nest.update({ tau, D, R, reset: resetMotion, render: RENDER });
     resetMotion = false;
@@ -200,6 +203,8 @@ async function main() {
     togglePause: () => { paused = !paused; toast(paused ? 'Pause' : 'Lecture', 900); },
     recipeChanged: () => {},
     envChanged: () => syncEnv(),
+    // (allumer ou éteindre la lumière polarisée recompile les membranes)
+    polarChanged: () => R.levels.forEach((_, k) => nest.syncLevel(k, R)),
     resim,
     look: (i) => nest.syncLevel(i, R),
     armSet: (i, s) => { R.levels[i].armSet = s; R.levels[i].armFinish = finishesFor(s, rngUI()); nest.syncLevel(i, R); ui?.rebuildLevels(); },

@@ -70,6 +70,16 @@
         "membrane"
       ],
       "port": 8030
+    },
+    {
+      "name": "membrane-8031",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        ".claude/serve.py",
+        "8031",
+        "membrane"
+      ],
+      "port": 8031
     }
   ]
 }

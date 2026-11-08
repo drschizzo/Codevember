@@ -77,6 +77,8 @@ class Template {
     const setU = (U, f) => { applyFinish(U.outer, f.outer); applyFinish(U.inner, f.inner); applyFinish(U.edge, f.edge); U.wear.value = f.wear; };
     const f2 = lv.accentFinish ?? f;
     if (!this.AU) { this.AU = mkU(f); this.AU2 = mkU(f2); } else { setU(this.AU, f); setU(this.AU2, f2); }
+    // photoélasticité : seulement en lumière polarisée, et pour une matière biréfringente
+    look.photo = (R.polar?.amount ?? 0) > 0 && look.bire > 0;
     this.sig = `${lookSignature(look)}|${signature(f)}|${signature(f2)}`;
     if (key !== this.key) {
       this.key = key;
@@ -160,12 +162,15 @@ class Slot {
     // seulement si la taille change
     const VV = d.prep.VV;
     if (!this.pose || this.pose.VV !== VV) {
-      if (this.pose) for (const k of ['cur', 'prv', 'nor']) n.freeAttr(this.pose[k]);
-      this.pose = { VV, cur: n.storageAttr(VV), prv: n.storageAttr(VV), nor: n.storageAttr(VV) };
+      if (this.pose) for (const k of ['cur', 'prv', 'nor', 'str']) n.freeAttr(this.pose[k]);
+      // (str : déviateur de la déformation, deux vec4 par sommet — photoélasticité)
+      this.pose = { VV, cur: n.storageAttr(VV), prv: n.storageAttr(VV), nor: n.storageAttr(VV), str: n.storageAttr(2 * VV) };
     }
     this.poser?.dispose();
-    this.poser = createPoser(n.renderer.backend.device, d.gpu, d.prep, d.S, { cur: n.gpuBuffer(this.pose.cur), prv: n.gpuBuffer(this.pose.prv), nor: n.gpuBuffer(this.pose.nor) });
-    const PT = { ...this.pose, fibT: d.fibT, nf: d.prep.nf };
+    this.poser = createPoser(n.renderer.backend.device, d.gpu, d.prep, d.S, {
+      cur: n.gpuBuffer(this.pose.cur), prv: n.gpuBuffer(this.pose.prv), nor: n.gpuBuffer(this.pose.nor), str: spec.photo ? n.gpuBuffer(this.pose.str) : null,
+    });
+    const PT = { ...this.pose, str: spec.photo ? this.pose.str : null, fibT: d.fibT, nf: d.prep.nf };
     this.RU.dur.value = T.lv.arm.dur;
     { const a = T.lv.arm, n = a.struggle ?? 0; this.RU.style.value = a.style ?? 0; this.RU.sn.value = n; this.RU.sa.value = a.strAmp ?? 0.35; this.RU.sf.value = n > 0 ? (a.strFrac ?? 0.5) : 0; }
     this.RU.seedOff.value.set(this.j * 1.37, T.index * 2.11, 0.5);
@@ -192,7 +197,7 @@ class Slot {
   }
   dispose() {
     this.poser?.dispose();
-    if (this.pose) for (const k of ['cur', 'prv', 'nor']) this.nest.freeAttr(this.pose[k]);
+    if (this.pose) for (const k of ['cur', 'prv', 'nor', 'str']) this.nest.freeAttr(this.pose[k]);
     for (const m of Object.values(this.meshes)) { m.material.dispose(); if (m.userData.lite && m.userData.lite !== m.material) m.userData.lite.dispose(); if (m.userData.full && m.userData.full !== m.material) m.userData.full.dispose(); }
     this.nest.root.remove(this.group);
   }
