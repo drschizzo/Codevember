@@ -8,10 +8,11 @@
 // varie qu'en partie avec l'étendue du patron (déplié, il est bien plus grand
 // que plié), soulevé au besoin pour ne jamais traverser le sol.
 import * as THREE from 'three/webgpu';
-import { uniform, uniformArray, lights } from 'three/tsl';
+import { uniform, lights } from 'three/tsl';
 import { stateAt, cellTransforms, cellMatrix, apply, project, timelineFor, stepOrientations, depthOf, foldOrder, normalOf, smoothstep } from '../math4.js';
 import { voyageFrames, voyageBlend } from './voyage.js';
-import { meshUniforms, setMatrix } from './project.js';
+import { meshUniforms, setMatrix, faceOpenings } from './project.js';
+import { faceAnchors, voyageDoors, computeOpenings } from './reveal.js';
 import { buildPieceMaterial, buildGemMaterial, finishUniforms, applyFinish, signature, gemUniforms, applyGem } from './materials.js';
 import { G } from './globals.js';
 import { createGuides } from './guides.js';
@@ -58,7 +59,7 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
     mesh.receiveShadow = true;
     group.add(mesh);
     const M = meshUniforms();
-    if (role === 'frame') M.bars = uniformArray(new Array(20).fill(1), 'float');
+    if (role === 'frame') M.keep = uniform(1); // (ossature en place / rentrée)
     pieces.push({ c, role, mesh, M, F: null, gemU: null, sig: '', prev: null, has: false });
   }
   const guides = createGuides(group);
@@ -69,6 +70,10 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
   // chaque pixel évaluerait onze lumières au lieu de quatre.
   const cellLights = practicals.lights.map((L) => lights([...studioLights, L]));
   const pieceOf = (c, role) => pieces[c * ROLES.length + ROLES.indexOf(role)];
+  // ajourage : ouverture des six faces de chaque cellule (voir reveal.js),
+  // partagée par ses panneaux et son verre
+  const cellOpen = Array.from({ length: 8 }, faceOpenings);
+  const openArrays = cellOpen.map((u) => u.array);
   let frameU = null; // uniformes de finition de l'ossature (partagés par les huit cellules)
 
   const finishOf = (P) => {
@@ -95,7 +100,7 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
       if (P.role === 'frame') { frameU ??= finishUniformsFor(fin); U = frameU; } else { U = finishUniformsFor(fin); }
       P.F = U;
       const tint = P.role === 'glass' ? U.outer.color2 : null;
-      P.mesh.material = buildPieceMaterial(fin, U, P.M, { shadowTint: tint, reveal: P.role === 'panel' || P.role === 'glass', depth: P.role === 'frame', content: P.role === 'content', merge: P.role === 'frame' });
+      P.mesh.material = buildPieceMaterial(fin, U, P.M, { shadowTint: tint, open: P.role === 'panel' || P.role === 'glass' ? cellOpen[P.c] : null, depth: P.role === 'frame', content: P.role === 'content', merge: P.role === 'frame' });
       P.sig = signature(fin);
     }
     P.mesh.material.lightsNode = cellLights[P.c];
@@ -152,33 +157,14 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
   function makeCache() {
     const C = { timeline: timelineFor(R), Q: stepOrientations(R.moves), depth: depthOf(R.net.parent), order: foldOrder(R.net.parent) };
     C.frames = voyageFrames(R, C);
+    C.anchors = faceAnchors(R);
     return C;
-  }
-
-  // Portes du voyage : la paroi entre la pièce où l'on se tient et la suivante
-  // s'ajoure à la fin de la halte (on voit déjà où l'on va), reste ouverte
-  // pendant la traversée et se referme derrière soi.
-  function doorAt(T, i, amount, slot) {
-    const F = cache.frames, a = F.rooms[i], b = F[i]?.cell;
-    if (b === undefined || amount <= 0) { slot.value.set(0, 0, 50, 0); return; }
-    const x = normalOf(a).map((v, k) => v + normalOf(b)[k]);
-    const p = project(apply(T[a], x), G.d.value, G.inflate.value);
-    slot.value.set(p[0], p[1], p[2], amount);
-  }
-  function setDoors(st, T) {
-    const n = R.moves.length, f = st.f ?? 0;
-    let prev = [0, 0], next = [0, 0];
-    if (st.phase === 'dwell') {
-      if (st.room > 0) prev = [st.room - 1, 1 - smoothstep(0, 0.35, f)];
-      if (st.room < n) next = [st.room, smoothstep(0.45, 0.95, f)];
-    } else if (st.phase === 'travel') next = [st.room, 1];
-    doorAt(T, prev[0], prev[1], G.door0);
-    doorAt(T, next[0], next[1], G.door1);
   }
 
   // une cellule (ou l'ossature) a changé de forme : nouvelles géométries
   function syncGeometry(c = null) {
     if (!R) return;
+    cache.anchors = faceAnchors(R); // (faces, épaisseurs ou ossature changées)
     const gen0 = generation;
     if (c === null) { // ossature (et panneaux : leur assise dépend de l'ossature)
       guides.setRecipe(R);
@@ -247,6 +233,8 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
   };
 
   const euler = new THREE.Euler(), q = new THREE.Quaternion(), v = new THREE.Vector3();
+  const cellA = new Array(8); // matrice de chaque cellule (ossature, panneaux)
+  let view = null; // ce que l'ajourage retient de la dernière image
   // ph : phase de la boucle ; reset : pas de mouvement depuis l'image précédente
   function update(ph, { target = 1.9, floorY = -2.6, reset = false } = {}) {
     if (!R || !readyFlag) return null;
@@ -267,14 +255,11 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
     // De l'intérieur, plus de coque à effacer : toutes les parois s'ajourent
     // un peu, d'autant plus qu'elles sont loin de la pièce où l'on se tient
     // (on voit les pièces voisines, et celles d'après par leurs ajours).
-    const see = R.voyage?.see ?? 0.9;
-    G.reveal.value = lerp(R.proj.reveal ?? 1, see, kp);
-    G.revealLo.value = lerp(R.proj.revealLo ?? -0.5, -2.2, kp);
-    G.revealHi.value = lerp(R.proj.revealHi ?? 0.85, 2.6, kp);
-    // (parois traversées : ouvertes dès que le voyage commence, la caméra
-    // est alors loin ; part du voyage pour l'éclairage)
-    G.pass.value = kp > 0.001 ? 1 : 0;
-    G.voyageK.value = kc;
+    const shell = {
+      amount: lerp(R.proj.reveal ?? 1, R.voyage?.see ?? 0.9, kp),
+      lo: lerp(R.proj.revealLo ?? -0.5, -2.2, kp), hi: lerp(R.proj.revealHi ?? 0.85, 2.6, kp),
+    };
+    G.voyageK.value = kc; // (part du voyage, pour l'éclairage)
     if (reset) { G.dPrev.value = G.d.value; G.inflatePrev.value = G.inflate.value; }
 
     // cadrage (celui de la vue extérieure, même pendant le voyage)
@@ -311,8 +296,9 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
       const outer = smoothstep(0.55, 0.95, apply(T[cc], normalOf(cc))[3]);
       const keep = (1 - merge + merge * outer) * (1 - kp);
       const Pf = pieceOf(cc, 'frame');
-      Pf.M.bars.array.fill(keep);
+      Pf.M.keep.value = keep;
       const Afr = cellMatrix(T[cc], cc, inset);
+      cellA[cc] = Afr;
       // objet exposé : tourne d'un nombre entier de tours par boucle
       // la cellule qui passe à l'extérieur (vers l'œil 4D) rentre son objet :
       // projeté, il se superposerait à celui de la cellule intérieure
@@ -334,11 +320,26 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
         P.prev = A;
       }
     }
-    setDoors(st, T);
     group.updateMatrixWorld();
     guides.update(R, st, T, inset, s);
     practicals.update(R, T, s);
+    // (l'ajourage dépend aussi de la caméra : voir setViewer)
+    view = {
+      A: cellA, anchors: cache.anchors, d: G.d.value, inflate: G.inflate.value, toWorld: group.matrixWorld, shell,
+      // coupe côté caméra : sans objet de l'intérieur ; parois traversées :
+      // ouvertes dès que le voyage commence (la caméra est alors loin)
+      cutaway: R.view.cutaway * (1 - kp), pass: kp > 0.001,
+      doors: voyageDoors(st, R, cache.frames, T, G.d.value, G.inflate.value),
+    };
     return { state: st, scale: s, lift, timeline: cache.timeline, kp, kc, frames: cache.frames };
+  }
+
+  // Ajourage des faces pour la caméra du film (position monde), une fois
+  // celle-ci placée : la carte d'ombre voit les mêmes ouvertures.
+  const _cam = new THREE.Vector3();
+  function setViewer(pos) {
+    if (!view) return;
+    computeOpenings(openArrays, { ...view, viewPos: pos, camLocal: group.worldToLocal(_cam.copy(pos)) });
   }
 
   // la chorégraphie, le patron ou les mouvements ont changé (rien à reconstruire)
@@ -349,7 +350,7 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
   }
 
   return {
-    group, guides, practicals, setRecipe, refresh, syncGeometry, syncMaterial, update, pieces,
+    group, guides, practicals, setRecipe, refresh, syncGeometry, syncMaterial, update, setViewer, pieces,
     ready: () => readyFlag,
     progress: () => (totalCount ? 1 - pendingCount / totalCount : 1),
     // (après un saut dans la boucle : pas de vecteurs vitesse)
