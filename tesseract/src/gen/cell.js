@@ -188,10 +188,23 @@ function holeShape(P) {
   };
 }
 
+// Relie deux anneaux fermés de M et M/2 sommets alignés (le sommet k du petit
+// anneau en face du sommet 2k du grand) : trois triangles par pas du petit.
+function stitchRings(B, outer, inner) {
+  const m = inner.length;
+  for (let k = 0; k < m; k++) {
+    const o0 = outer[2 * k], o1 = outer[2 * k + 1], o2 = outer[(2 * k + 2) % outer.length];
+    const i0 = inner[k], i1 = inner[(k + 1) % m];
+    B.tri(o0, o1, i0); B.tri(o1, i1, i0); B.tri(o1, o2, i1);
+  }
+}
+
 // Tôle perforée : n × n carreaux, chacun percé d'un trou (superellipse
 // d'exposant ex, tournée de rot) dont la taille suit un motif ; arêtes du trou
 // chanfreinées (facettes polies). Les carreaux voisins partagent exactement
-// les mêmes points le long de leur bord commun.
+// les mêmes points le long de leur bord commun (M points sur le pourtour de
+// chaque carreau) ; un petit trou n'en prend que la moitié (des triangles
+// minuscules coûtent cher à pixelliser, sans rien ajouter à l'image).
 function perforated(B, a, t, P, rng) {
   const n = P.n, q = a / n, M = 24, ch = Math.min(t * 0.32, q * 0.12);
   const shape = holeShape(P);
@@ -213,8 +226,8 @@ function perforated(B, a, t, P, rng) {
     B.piece = rng.int(0, 255);
     const cx = -a + q * (2 * i + 1), cy = -a + q * (2 * j + 1);
     const r = holeR(cx, cy, i, j) * q * shape.k;
-    const ring = (fn, z, nfn, s) => Array.from({ length: M }, (_, k) => {
-      const th = (2 * PI * k) / M, p = fn(th);
+    const ring = (fn, z, nfn, s, m = M) => Array.from({ length: m }, (_, k) => {
+      const th = (2 * PI * k) / m, p = fn(th);
       return B.vert([cx + p[0], cy + p[1], z], nfn(th, p), s);
     });
     const upN = () => [0, 0, 1], dnN = () => [0, 0, -1];
@@ -231,13 +244,14 @@ function perforated(B, a, t, P, rng) {
     const wallN = (th) => { const g = holeN(th); return [-g[0], -g[1], 0]; };
     const chUp = (th) => { const g = holeN(th); return norm([-g[0], -g[1], 1]); };
     const chDn = (th) => { const g = holeN(th); return norm([-g[0], -g[1], -1]); };
-    const Ho = hole(r + ch), Hi = hole(r);
-    const S0 = ring(sq, t / 2, upN, OUT), C0 = ring(Ho, t / 2, upN, OUT);
-    const C0b = ring(Ho, t / 2, chUp, EDGE), H0 = ring(Hi, t / 2 - ch, chUp, EDGE);
-    const H0b = ring(Hi, t / 2 - ch, wallN, EDGE), H1 = ring(Hi, -t / 2 + ch, wallN, EDGE);
-    const H1b = ring(Hi, -t / 2 + ch, chDn, EDGE), C1 = ring(Ho, -t / 2, chDn, EDGE);
-    const C1b = ring(Ho, -t / 2, dnN, IN), S1 = ring(sq, -t / 2, dnN, IN);
-    B.grid([S0, C0], true); B.grid([C0b, H0], true); B.grid([H0b, H1], true); B.grid([H1b, C1], true); B.grid([C1b, S1], true);
+    const Ho = hole(r + ch), Hi = hole(r), m = r < q * 0.45 ? M / 2 : M;
+    const S0 = ring(sq, t / 2, upN, OUT), C0 = ring(Ho, t / 2, upN, OUT, m);
+    const C0b = ring(Ho, t / 2, chUp, EDGE, m), H0 = ring(Hi, t / 2 - ch, chUp, EDGE, m);
+    const H0b = ring(Hi, t / 2 - ch, wallN, EDGE, m), H1 = ring(Hi, -t / 2 + ch, wallN, EDGE, m);
+    const H1b = ring(Hi, -t / 2 + ch, chDn, EDGE, m), C1 = ring(Ho, -t / 2, chDn, EDGE, m);
+    const C1b = ring(Ho, -t / 2, dnN, IN, m), S1 = ring(sq, -t / 2, dnN, IN);
+    const link = (outer, inner) => (inner.length === outer.length ? B.grid([outer, inner], true) : stitchRings(B, outer, inner));
+    link(S0, C0); B.grid([C0b, H0], true); B.grid([H0b, H1], true); B.grid([H1b, C1], true); link(S1, C1b);
   }
   // chant du panneau
   B.piece = rng.int(0, 255);
