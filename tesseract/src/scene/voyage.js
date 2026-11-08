@@ -20,14 +20,20 @@ import { cellTransforms, apply, normalOf, smoother, ROOT, hash01 } from '../math
 
 const sm = (a, b, x) => smoother((x - a) / (b - a));
 
-// part de la projection stéréographique (kp) et de la caméra intérieure (kc)
+// part de la projection stéréographique (kp) et de la caméra intérieure (kc).
+// On entre d'abord dans le tesseract plié (un cube dans un cube, lisible), et
+// l'espace ne se referme en hypersphère qu'une fois la caméra dans le cube du
+// centre : vu du dehors, ce gonflement n'est qu'une boule bosselée et percée
+// où l'on ne comprend rien ; vu du dedans, c'est l'univers qui se referme
+// autour de la pièce. La remontée fait l'inverse.
+const DOCK = 0.62; // part de la plongée consacrée à l'entrée
 export function voyageBlend(st) {
   if (st?.seg === undefined) return { kp: 0, kc: 0 };
   const f = st.f;
   switch (st.phase) {
-    case 'plunge': return { kp: sm(0, 0.5, f), kc: sm(0.28, 1, f) };
+    case 'plunge': return { kp: sm(DOCK - 0.04, 1, f), kc: sm(0, DOCK, f) };
     case 'dwell': case 'travel': return { kp: 1, kc: 1 };
-    case 'surface': return { kp: 1 - sm(0.5, 1, f), kc: 1 - sm(0, 0.72, f) };
+    case 'surface': return { kp: 1 - sm(0, 1 - DOCK + 0.04, f), kc: 1 - sm(1 - DOCK, 1, f) };
     default: return { kp: 0, kc: 0 };
   }
 }
@@ -165,8 +171,8 @@ export function insidePose(st, R, frames, out) {
   const P = (i) => (i < 0 || i >= n ? io0 : frames[i]);
   const f = st.f, lerp = (a, b, t) => a + (b - a) * t;
   switch (st.phase) {
-    case 'plunge': return dockPose(f, out, out.uIn, out.upL);
-    case 'surface': return dockPose(1 - f, out, out.uOut, out.upL);
+    case 'plunge': return dockPose(Math.min(1, f / DOCK), out, out.uIn, out.upL);
+    case 'surface': return dockPose(Math.min(1, (1 - f) / DOCK), out, out.uOut, out.upL);
     case 'travel': {
       const S = P(st.room), e = smoother(f);
       // (un peu de vie : le regard plonge vers l'objet qui passe)

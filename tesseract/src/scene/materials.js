@@ -24,7 +24,7 @@ import * as THREE from 'three/webgpu';
 import {
   Fn, If, struct, uniform, attribute, positionView, vec2, vec3, vec4,
   float, mat3, mix, smoothstep, clamp, abs, length, normalize, dot, cross, sin, floor, fract, mod, step, acos, sign,
-  dFdx, dFdy, fwidth, faceDirection, mrt, normalViewGeometry, atan, select, velocity, cos, max as tmax, texture3D, mx_cell_noise_vec3, modelViewMatrix, modelScale,
+  dFdx, dFdy, fwidth, faceDirection, mrt, normalViewGeometry, atan, select, velocity, cos, max as tmax, min as tmin, positionGeometry, texture3D, mx_cell_noise_vec3, modelViewMatrix, modelScale,
 } from 'three/tsl';
 import { FINISH_KEYS } from '../finishes.js';
 import { NOISE_PERIOD } from '../gen/noisevol.js';
@@ -306,7 +306,8 @@ export const stableVelocity = () => mrt({ velocity: select(length(velocity.xy).l
 // uniformes ({ outer, inner, edge, wear }) ; M : uniformes du maillage
 // (matrice 4D, voir project.js) ; opts.shadowTint : ombre colorée (verre) ;
 // opts.openness : objet exposé, part du studio que voit sa cellule
-export function buildPieceMaterial(finish, U, M, { shadowTint = null, reveal = null, depth = false, openness = null, merge = false } = {}) {
+// opts.patina : parois (encrassement aux jonctions, marbrure, rugosité inégale)
+export function buildPieceMaterial(finish, U, M, { shadowTint = null, reveal = null, depth = false, openness = null, merge = false, patina = false } = {}) {
   const content = openness !== null;
   const fins = [finish.outer, finish.inner, finish.edge];
   const any = (pred) => fins.some(pred);
@@ -381,9 +382,26 @@ export function buildPieceMaterial(finish, U, M, { shadowTint = null, reveal = n
   m.positionNode = projectPosition(M, true, reveal, pre);
   m.castShadowPositionNode = projectPosition(M, false, reveal, pre);
   if (reveal) { m.maskNode = revealMask(true); m.maskShadowNode = revealMask(false); }
-  m.colorNode = vec4(get('color'), 1);
+  let color = get('color'), rough = get('rough');
+  // Patine des parois : ce qui fait croire à une matière sans y ajouter de
+  // dessin (rien de net, rien de fin) —
+  //  • encrassement aux jonctions : plus sombre et plus mat là où la paroi
+  //    rejoint l'ossature et dans les coins des pièces, irrégulier ;
+  //  • marbrure : une teinte qui varie de quelques pour cent, à grande échelle ;
+  //  • rugosité inégale : le reflet n'est jamais parfaitement uniforme.
+  // La distance à l'arête vient de la position au repos (repère de la
+  // cellule) : la deuxième plus grande coordonnée vaut ~0,93 au bord du panneau.
+  if (patina) {
+    const a = abs(positionGeometry), hi = tmax(a.x, tmax(a.y, a.z)), lo = tmin(a.x, tmin(a.y, a.z));
+    const mid = a.x.add(a.y).add(a.z).sub(hi).sub(lo);
+    const blot = fbm(p.mul(2.1).add(3.7), 2).mul(0.5).add(0.5);
+    const grime = smoothstep(0.62, 0.95, mid.add(blot.sub(0.5).mul(0.2))).mul(G.patina);
+    const mottle = fbm(p.mul(1.3).add(11.1), 2).mul(0.16).mul(G.patina);
+    color = color.mul(mottle.add(1)).mul(grime.mul(-0.34).add(1).max(0.4));
+    rough = rough.add(fbm(p.mul(3.4).add(5.2), 2).mul(0.12).mul(G.patina)).add(grime.mul(0.2)).clamp(0.02, 1);
+  }
+  m.colorNode = vec4(color, 1);
   m.metalnessNode = get('metal');
-  let rough = get('rough');
   if (F.smudge) {
     const sm = smoothstep(0.1, 0.45, fbm(p.mul(2.2).add(7.3), 3)).mul(noise2(p.mul(140)).mul(0.25).add(0.75));
     rough = rough.add(sm.mul(get('smudge')).mul(0.35));
@@ -423,7 +441,9 @@ export function buildPieceMaterial(finish, U, M, { shadowTint = null, reveal = n
     // parcourt toute l'épaisseur de l'objet, qui réfracte la cellule derrière lui
     m.thicknessNode = (content ? G.crystalThick.mul(0.7) : float(0.03)).mul(world);
     m.attenuationColorNode = get('att');
-    m.attenuationDistanceNode = get('attDist').mul(world).mul(0.25);
+    // (absorption : de l'ordre d'une longueur sur l'épaisseur d'un cristal ;
+    // au-delà, saphir et quartz fumé viraient au noir)
+    m.attenuationDistanceNode = get('attDist').mul(world).mul(content ? 1 : 0.25);
     if (F.disp) m.dispersionNode = get('disp');
   }
   if (F.emit) m.emissiveNode = get('emit');
@@ -450,7 +470,7 @@ export function buildGemMaterial(U, M, openness) {
   m.colorNode = vec4(1, 1, 1, 1);
   m.normalNode = normalViewGeometry.mul(faceDirection);
   m.attenuationColorNode = U.color;
-  m.attenuationDistanceNode = U.depth.mul(0.1).mul(world);
+  m.attenuationDistanceNode = U.depth.mul(0.45).mul(world); // (pierre colorée : teinte profonde, pas noire)
   m.thicknessNode = G.crystalThick.mul(0.3).mul(world);
   m.roughnessNode = G.roughFloor.mul(0.15).max(0.015);
   m.transmissionNode = float(1);

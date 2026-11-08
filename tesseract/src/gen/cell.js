@@ -206,7 +206,7 @@ function stitchRings(B, outer, inner) {
 // chaque carreau) ; un petit trou n'en prend que la moitié (des triangles
 // minuscules coûtent cher à pixelliser, sans rien ajouter à l'image).
 function perforated(B, a, t, P, rng) {
-  const n = P.n, q = a / n, M = 24, ch = Math.min(t * 0.32, q * 0.12);
+  const n = P.n, q = a / n, M = P.M ?? 24, ch = Math.min(t * 0.32, q * 0.12);
   const shape = holeShape(P);
   const holeR = (x, y, i, j) => { // fraction du demi-carreau
     const d = Math.hypot(x, y) / (a * 1.4142);
@@ -361,14 +361,28 @@ function corrugated(B, a, t, P) {
 }
 
 // barre droite (boîte arrondie) entre deux points du plan du panneau
-function bar(B, p0, p1, w, h, z = 0) {
+// (options : r, rayon des congés, 0 pour des arêtes vives, bien moins de
+// sommets ; surf, finition des plats ; nSub, subdivision)
+function bar(B, p0, p1, w, h, z = 0, { r = Math.min(w, h) * 0.45, surf = OUT, nSub = 10 } = {}) {
   const keep = B.xf, d = sub(p1, p0), L = Math.hypot(d[0], d[1]);
   if (L < 1e-4) return;
   const dx = d[0] / L, dy = d[1] / L, c = [(p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2];
   const X = add(mul(keep.X, dx), mul(keep.Y, dy)), Y = add(mul(keep.X, -dy), mul(keep.Y, dx));
   B.xf = { o: add(keep.o, add(add(mul(keep.X, c[0]), mul(keep.Y, c[1])), mul(keep.Z, z))), X, Y, Z: keep.Z };
-  roundedBox(B, [0, 0, 0], [L / 2, w, h], Math.min(w, h) * 0.45, 10, EDGE, OUT, [1, 0, 0]);
+  roundedBox(B, [0, 0, 0], [L / 2, w, h], r, nSub, EDGE, surf, [1, 0, 0]);
   B.xf = keep;
+}
+// segment [p0, p1] rogné au carré [-a, a]² (Liang–Barsky), ou null
+function clipSeg(p0, p1, a) {
+  let t0 = 0, t1 = 1;
+  const dx = p1[0] - p0[0], dy = p1[1] - p0[1];
+  for (const [p, q] of [[-dx, p0[0] + a], [dx, a - p0[0]], [-dy, p0[1] + a], [dy, a - p0[1]]]) {
+    if (abs(p) < 1e-12) { if (q < 0) return null; continue; }
+    const r = q / p;
+    if (p < 0) { if (r > t1) return null; if (r > t0) t0 = r; } else { if (r < t0) return null; if (r < t1) t1 = r; }
+  }
+  if (t1 - t0 < 1e-6) return null;
+  return [[p0[0] + t0 * dx, p0[1] + t0 * dy], [p0[0] + t1 * dx, p0[1] + t1 * dy]];
 }
 // segment de la droite {p : p·n = c} contenu dans le carré [-a, a]²
 function clipLine(n, c, a) {
@@ -431,6 +445,202 @@ function target(B, a, t, P, rng) {
   bar(B, [0, -a], [0, a], t * 0.6, t * 0.6);
 }
 
+// ── Motifs ajoutés ───────────────────────────────────────────────────────────
+// Chacun ne porte qu'une idée, lisible de loin : un relief (pli, onde) ou un
+// ajour (rosace, alvéoles, lames), ou un vêtement (écailles). room : la place disponible vers
+// l'extérieur du cube (le relief ne déborde pas sur la cellule voisine).
+
+// Plaque d'épaisseur t dont le plan moyen suit z = h(x, y) (nulle au bord) ;
+// N × N carreaux, normales par différences centrées, chants droits.
+function heightPlate(B, a, t, h, N) {
+  const e = a / N;
+  const nrm = (x, y) => norm([-(h(x + e, y) - h(x - e, y)) / (2 * e), -(h(x, y + e) - h(x, y - e)) / (2 * e), 1]);
+  for (const side of [1, -1]) {
+    const rows = [];
+    for (let j = 0; j <= N; j++) {
+      const y = -a + (2 * a * j) / N, row = [];
+      for (let i = 0; i <= N; i++) {
+        const x = -a + (2 * a * i) / N, n = nrm(x, y);
+        row.push(B.vert([x, y, h(x, y) + (side * t) / 2], side > 0 ? n : mul(n, -1), side > 0 ? OUT : IN, [1, 0, 0]));
+      }
+      rows.push(row);
+    }
+    B.grid(rows);
+  }
+  edgeBand(B, a, t, 8);
+}
+// chant droit d'une plaque plane au bord (quatre rubans)
+function edgeBand(B, a, t, per) {
+  for (let side = 0; side < 4; side++) {
+    const rows = [t / 2, -t / 2].map((z) => Array.from({ length: per + 1 }, (_, k) => {
+      const u = -a + (2 * a * k) / per;
+      const p = [[a, u], [-u, a], [-a, -u], [u, -a]][side], nn = [[1, 0], [0, 1], [-1, 0], [0, -1]][side];
+      return B.vert([p[0], p[1], z], [nn[0], nn[1], 0], EDGE);
+    }));
+    B.grid(rows);
+  }
+}
+
+// Onde : des cercles concentriques autour d'une source (centre, coin) ou de
+// deux (leurs ondes interfèrent), comme une goutte sur une eau de métal ;
+// l'amplitude s'éteint au bord, qui reste plan contre l'ossature.
+function ripple(B, a, t, P, room) {
+  const lam = a / P.n, A = Math.min(P.amp * lam * 0.3, room * 0.7, 0.05);
+  const src = P.src === 'corner' ? [[-a, -a]] : P.src === 'pair' ? [[-a * 0.42, -a * 0.3], [a * 0.42, a * 0.3]] : [[0, 0]];
+  const env = (x, y) => (1 - (abs(x) / a) ** 6) * (1 - (abs(y) / a) ** 6);
+  const h = (x, y) => {
+    let z = 0;
+    for (const [sx, sy] of src) z += cos((2 * PI * Math.hypot(x - sx, y - sy)) / lam);
+    return (A * z * env(x, y)) / src.length;
+  };
+  heightPlate(B, a, t, h, Math.min(96, Math.max(48, Math.ceil(16 * P.n * (P.src === 'corner' ? 1.4 : 1)))));
+}
+
+// Pli Miura (l'origami des panneaux solaires, et du tesseract qui se plie) :
+// des parallélogrammes plans, en chevrons, alternativement crête et vallée.
+// Facettes à normale propre (arêtes vives) ; les deux rangées du bord
+// redescendent dans le plan du panneau.
+function miura(B, a, t, P, room) {
+  const nx = P.n, ny = P.rows, dx = (2 * a) / nx, dy = (2 * a) / ny;
+  const H = Math.min(P.h * dy, 2 * (room * 0.85 - t / 2)), sh = P.s * dy;
+  const V = (i, j) => {
+    const inner = j > 0 && j < ny;
+    return [-a + i * dx, -a + j * dy + (inner ? (i % 2 ? sh / 2 : -sh / 2) : 0), inner ? (j % 2 ? H / 2 : -H / 2) : 0];
+  };
+  const tri = (p, q, r, side) => {
+    const o = [0, 0, (side * t) / 2], P0 = add(p, o), P1 = add(q, o), P2 = add(r, o);
+    let n = norm(cross(sub(P1, P0), sub(P2, P0)));
+    if (n[2] * side < 0) n = mul(n, -1);
+    const sf = side > 0 ? OUT : IN;
+    B.tri(B.vert(P0, n, sf, [1, 0, 0]), B.vert(P1, n, sf, [1, 0, 0]), B.vert(P2, n, sf, [1, 0, 0]));
+  };
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+    B.piece = (i * 37 + j * 91) & 255;
+    const p00 = V(i, j), p10 = V(i + 1, j), p11 = V(i + 1, j + 1), p01 = V(i, j + 1);
+    for (const side of [1, -1]) { tri(p00, p10, p11, side); tri(p00, p11, p01, side); }
+  }
+  // chants : x = ±a (ligne brisée), y = ±a (droits)
+  for (const i of [0, nx]) {
+    const sx = i ? 1 : -1;
+    const rows = [1, -1].map((side) => Array.from({ length: ny + 1 }, (_, j) => B.vert(add(V(i, j), [0, 0, (side * t) / 2]), [sx, 0, 0], EDGE)));
+    B.grid(rows);
+  }
+  for (const j of [0, ny]) {
+    const sy = j ? 1 : -1;
+    const rows = [1, -1].map((side) => Array.from({ length: nx + 1 }, (_, i) => B.vert(add(V(i, j), [0, 0, (side * t) / 2]), [0, sy, 0], EDGE)));
+    B.grid(rows);
+  }
+}
+
+// Lames vrillées (façade cinétique) : des ailettes dont l'angle tourne le
+// long de leur longueur (une surface réglée, comme un ruban qu'on tord) et
+// d'une ailette à l'autre ; la lumière glisse sur elles en dégradé.
+function twisted(B, a, t, P, rng) {
+  const n = P.n, pitch = (2 * a) / n, hw = pitch * 0.42, th = Math.max(t * 0.4, 0.006), K = 28;
+  B.span = hw;
+  for (let i = 0; i < n; i++) {
+    B.piece = rng.int(0, 255);
+    const y = -a + pitch * (i + 0.5), yr = y / a;
+    const st = Array.from({ length: K + 1 }, (_, k) => {
+      const x = -a + (2 * a * k) / K, th0 = P.base + (P.twist / 2) * (x / a) + P.ramp * yr;
+      const Y = [0, cos(th0), sin(th0)], Z = [0, -sin(th0), cos(th0)];
+      return { o: [x, y, 0], Y, Z };
+    });
+    // quatre côtés : (coin a, coin b, normale)
+    const sides = [[[-1, 1], [1, 1], (q) => q.Z, OUT], [[1, 1], [1, -1], (q) => q.Y, EDGE], [[1, -1], [-1, -1], (q) => mul(q.Z, -1), IN], [[-1, -1], [-1, 1], (q) => mul(q.Y, -1), EDGE]];
+    const pt = (q, [u, v]) => add(q.o, add(mul(q.Y, u * hw), mul(q.Z, v * th)));
+    for (const [ca, cb, nf, sf] of sides) B.grid(st.map((q) => [B.vert(pt(q, ca), nf(q), sf, [1, 0, 0]), B.vert(pt(q, cb), nf(q), sf, [1, 0, 0])]));
+    for (const [q, sx] of [[st[0], -1], [st[K], 1]]) { // bouts
+      const c = [[-1, 1], [1, 1], [1, -1], [-1, -1]].map((cc) => B.vert(pt(q, cc), [sx, 0, 0], EDGE));
+      B.quad(c[0], c[1], c[2], c[3]);
+    }
+  }
+}
+
+// Écailles : des disques bombés à ourlet poli, inclinés et superposés rang
+// par rang comme des tuiles (ou une armure, une pomme de pin), sur les deux
+// faces d'une plaque. Ce sont des pièces de métal : finition externe des deux
+// côtés (la doublure reste sur la plaque du fond). Chaque écaille a sa
+// nuance et accroche la lumière à part : un frémissement régulier, calme à
+// distance.
+function scales(B, a, t, P, rng, room) {
+  plate(B, a, t);
+  const q = (2 * a) / P.n, rs = q * 0.56, dy = q * 0.55, hd = rs * P.dome, th = Math.max(t * 0.3, 0.005);
+  // (inclinaison bornée par la place vers l'extérieur ; le haut de chaque
+  // écaille se glisse sous le rang du dessus et dans la plaque)
+  const sn = Math.max(0.08, Math.min(sin(P.tilt), (Math.min(room * 0.95, 0.08) - th - hd) / (1.5 * rs))), c = Math.sqrt(1 - sn * sn);
+  const lift = rs * sn * 0.5 + th;
+  // profil : dôme, puis un ourlet roulé et poli sur le pourtour (il accroche
+  // la lumière et dessine chaque écaille), chant, dessous
+  const top = (r) => hd * (1 - (r / rs) ** 2);
+  const rb = rs * 0.075, rc = rs - rb, zc = top(rc - rb);
+  const prof = (sf) => {
+    const out = [];
+    for (let k = 0; k <= 4; k++) { const r = ((rc - rb) * k) / 4, d = (2 * hd * r) / (rs * rs), l = Math.hypot(d, 1); out.push({ r, z: top(r), nr: d / l, nz: 1 / l, s: sf }); }
+    for (let k = 0; k <= 4; k++) { const an = PI - (PI * k) / 4; out.push({ r: rc + rb * cos(an), z: zc + rb * sin(an) * 0.8, nr: cos(an), nz: sin(an), s: EDGE }); }
+    out.push({ r: rs, z: -th, nr: 1, nz: 0, s: EDGE }, { r: rs, z: -th, nr: 0, nz: -1, s: sf }, { r: 0, z: -th, nr: 0, nz: -1, s: sf });
+    return out;
+  };
+  B.span = rs;
+  const keep = B.xf, W = (v) => add(add(mul(keep.X, v[0]), mul(keep.Y, v[1])), mul(keep.Z, v[2]));
+  const lim = a - rs * 0.7;
+  for (const side of [1, -1]) {
+    const pr = prof(OUT), Y = W([0, c, -side * sn]), Z = W([0, side * sn, side * c]), X = W([1, 0, 0]);
+    for (let j = 0, y = a - rs * 0.6; y > -a + rs * 0.5; j++, y -= dy) {
+      for (let x = -a + q * (j & 1 ? 1 : 0.5); x <= lim + 1e-6; x += q) {
+        if (x < -lim - 1e-6) continue;
+        B.piece = rng.int(0, 255);
+        B.xf = { o: add(keep.o, W([x, y, side * (t / 2 + lift)])), X, Y, Z };
+        lathe(B, pr, 16);
+      }
+    }
+  }
+  B.xf = keep;
+}
+
+// Nid d'abeille : des alvéoles hexagonales profondes (une grille de
+// radiateur, une ruche). De face on voit au travers ; de biais, les cloisons
+// se referment et font écran : la paroi change avec le regard.
+function honeycomb(B, a, t, P, rng, room) {
+  const R = (2 * a) / (P.n * Math.sqrt(3)), D = Math.min(0.22, Math.max(0.06, P.depth * R * 1.2));
+  const zc = Math.min(D / 2, room * 0.8) - D / 2, w = Math.max(0.004, R * 0.035);
+  B.span = Math.max(w, D / 2);
+  const swap = (p) => (P.rot ? [p[1], p[0]] : p);
+  const seen = new Set(), dxh = Math.sqrt(3) * R;
+  for (let j = -1; (j - 1) * 1.5 * R <= 2 * a + R; j++) for (let i = -1; (i - 1) * dxh <= 2 * a + R; i++) {
+    const cx = -a + i * dxh + (j & 1 ? dxh / 2 : 0), cy = -a + j * 1.5 * R;
+    for (let k = 0; k < 6; k++) {
+      const a0 = PI / 6 + (k * PI) / 3, a1 = a0 + PI / 3;
+      const p0 = [cx + R * cos(a0), cy + R * sin(a0)], p1 = [cx + R * cos(a1), cy + R * sin(a1)];
+      const key = `${((p0[0] + p1[0]) * 500).toFixed(0)},${((p0[1] + p1[1]) * 500).toFixed(0)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const c = clipSeg(swap(p0), swap(p1), a);
+      if (!c) continue;
+      B.piece = rng.int(0, 255);
+      bar(B, c[0], c[1], w, D / 2, zc, { r: 0, surf: (nn) => (abs(nn[2]) > 0.5 ? EDGE : OUT), nSub: 8 });
+    }
+  }
+}
+
+// Rosace : un oculus (un seul grand trou, chanfrein poli) et ses rayons, un
+// moyeu, parfois un cercle de remplage ; sans rayon, c'est un œil-de-bœuf.
+function rosace(B, a, t, P, rng) {
+  perforated(B, a, t, { n: 1, shape: 'circle', grad: 'uniform', min: P.r, max: P.r, twist: 0, M: 96 }, rng);
+  const r = P.r * a * 0.92, hub = r * 0.14, w = Math.max(t * 0.55, 0.008), h = t * 0.42;
+  if (P.spokes > 0) {
+    B.span = w;
+    for (let k = 0; k < P.spokes; k++) {
+      B.piece = rng.int(0, 255);
+      const an = PI / 2 + (2 * PI * k) / P.spokes, d = [cos(an), sin(an)];
+      bar(B, [d[0] * hub * 0.8, d[1] * hub * 0.8], [d[0] * (r + t * 0.3), d[1] * (r + t * 0.3)], w, h, 0, { surf: plateSurf, nSub: 6 });
+    }
+    B.span = hub;
+    lathe(B, sharpProfile([[0, -t * 0.6], [hub, -t * 0.6], [hub, t * 0.6], [0, t * 0.6]], [IN, EDGE, OUT, EDGE]), 40);
+    if (P.ring && P.spokes >= 6) { B.span = w; torus(B, [0, 0, 0], r * 0.56, w * 0.8, 96, 10, EDGE); }
+  }
+}
+
 // Panneaux d'une cellule : { panel, glass } (deux maillages : le verre a son
 // propre matériau)
 export function buildPanels(cell, f) {
@@ -456,6 +666,12 @@ export function buildPanels(cell, f) {
     else if (kind === 'leaded') { leaded(B, G, a, t, cell.leaded); G.noFrame(); }
     else if (kind === 'bars') bars(B, a, cell.bars, rng);
     else if (kind === 'target') target(B, a, t, cell.target, rng);
+    else if (kind === 'ripple') ripple(B, a, t, cell.ripple, 1 - seat.plane);
+    else if (kind === 'miura') miura(B, a, t, cell.miura, 1 - seat.plane);
+    else if (kind === 'twist') twisted(B, a, t, cell.twist, rng);
+    else if (kind === 'scales') scales(B, a, t, cell.scales, rng, 1 - seat.plane);
+    else if (kind === 'comb') honeycomb(B, a, t, cell.comb, rng, 1 - seat.plane);
+    else if (kind === 'oculus') rosace(B, a, t, cell.oculus, rng);
     B.noFrame();
   }
   return { panel: P.n ? P.out() : null, glass: G.n ? G.out() : null };
@@ -534,7 +750,143 @@ export function buildContent(c) {
       B.noFrame();
       break;
     }
+    case 'mobius': mobius(B, s); break;
+    case 'hyper': hypercube(B, s); break;
+    case 'ammonite': ammonite(B, s); break;
+    case 'egg': egg(B, s); break;
+    case 'urchin': urchin(B, s); break;
     default: return null;
   }
   return B.out();
+}
+
+// ── Objets ajoutés ───────────────────────────────────────────────────────────
+
+// Ruban de Möbius : une bande épaisse qui fait un demi-tour sur elle-même.
+// Elle n'a qu'une face (finition externe partout) et qu'un bord (poli). Le
+// profil est symétrique par le demi-tour : la dernière rangée se recoud à la
+// première, décalée d'un demi-profil.
+function mobius(B, s) {
+  const R0 = s * 0.72, W = s * 0.25, T = s * 0.035, K = 240, nw = 8;
+  const prof = [];
+  for (let i = 0; i <= nw; i++) prof.push([-W + (2 * W * i) / nw, T, 0, 1, OUT]);
+  prof.push([W, T, 1, 0, EDGE], [W, -T, 1, 0, EDGE]);
+  for (let i = 0; i <= nw; i++) prof.push([W - (2 * W * i) / nw, -T, 0, -1, OUT]);
+  prof.push([-W, -T, -1, 0, EDGE], [-W, T, -1, 0, EDGE]);
+  const P = prof.length, half = P / 2;
+  B.span = W;
+  const rows = [];
+  for (let k = 0; k < K; k++) {
+    const u = (2 * PI * k) / K, rad = [cos(u), sin(u), 0], c = mul(rad, R0), Tg = [-sin(u), cos(u), 0];
+    const d = add(mul(rad, cos(u / 2)), [0, 0, sin(u / 2)]), n = add(mul(rad, sin(u / 2)), [0, 0, -cos(u / 2)]);
+    rows.push(prof.map(([v, o, nv, no, sf]) => B.vert(add(c, add(mul(d, v), mul(n, o))), norm(add(mul(d, nv), mul(n, no))), sf, Tg)));
+  }
+  for (let k = 0; k < K; k++) {
+    const A = rows[k], last = k === K - 1, Bn = rows[last ? 0 : k + 1];
+    for (let j = 0; j < P; j++) {
+      const j1 = (j + 1) % P, b0 = last ? (j + half) % P : j, b1 = last ? (j1 + half) % P : j1;
+      B.quad(A[j], A[j1], Bn[b1], Bn[b0]);
+    }
+  }
+}
+
+// Hypercube filaire : le tesseract en perspective (un cube dans un cube,
+// sommets reliés), posé dans l'une de ses propres cellules. Cube extérieur,
+// cube intérieur et liaisons ont chacun leur finition.
+function hypercube(B, s) {
+  const e = [s * 0.82, s * 0.38], r = s * 0.032, V = [];
+  for (const h of e) for (const x of [-1, 1]) for (const y of [-1, 1]) for (const z of [-1, 1]) V.push([x * h, y * h, z * h]);
+  const rod = (p, q, sf) => { const pts = []; for (let k = 0; k <= 10; k++) pts.push(add(p, mul(sub(q, p), k / 10))); tube(B, pts, r, 10, sf, false); };
+  B.span = r;
+  for (let c = 0; c < 2; c++) for (let i = 0; i < 8; i++) for (let b = 0; b < 3; b++) {
+    const j = i ^ (1 << b);
+    if (j > i) { B.piece = c * 120 + i * 9; rod(V[c * 8 + i], V[c * 8 + j], c ? IN : OUT); }
+  }
+  for (let i = 0; i < 8; i++) { B.piece = 60 + i * 20; rod(V[i], V[8 + i], EDGE); }
+  B.span = r * 1.8;
+  for (let i = 0; i < 16; i++) sphere(B, V[i], r * (i < 8 ? 1.9 : 1.6), 14, 8, EDGE);
+}
+
+// Ammonite : un tube qui s'enroule en spirale logarithmique, et grossit d'un
+// facteur g à chaque tour, juste assez pour que les tours se touchent ; des
+// côtes en relief ; l'ouverture montre l'intérieur (nacre, finition interne).
+function ammonite(B, s) {
+  const g = 3.1, b = Math.log(g) / (2 * PI), turns = 2.7, K = 300, M = 28, ribs = 24;
+  const kf = ((g - 1) / (g + 1)) * 0.96, th0 = -turns * 2 * PI;
+  const rho = (th) => kf * Math.exp(b * th) * (1 + 0.06 * Math.pow(0.5 + 0.5 * cos(ribs * th), 3));
+  const ctr = (th) => mul([cos(th), sin(th), 0], Math.exp(b * th));
+  // cadrage : boîte englobante du dernier tour, ramenée au rayon s
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (let k = 0; k <= 200; k++) {
+    const th = -2 * PI + (2 * PI * k) / 200, c = ctr(th), r = rho(th);
+    x0 = Math.min(x0, c[0] - r); x1 = Math.max(x1, c[0] + r); y0 = Math.min(y0, c[1] - r); y1 = Math.max(y1, c[1] + r);
+  }
+  const sc = (2 * s) / Math.max(x1 - x0, y1 - y0), off = [-(x0 + x1) / 2, -(y0 + y1) / 2, 0];
+  const at = (th) => {
+    const c = ctr(th), dc = mul(add(mul([cos(th), sin(th), 0], b), [-sin(th), cos(th), 0]), Math.exp(b * th));
+    const ds = Math.hypot(dc[0], dc[1]), T = [dc[0] / ds, dc[1] / ds, 0], N = [T[1], -T[0], 0];
+    const e = 1e-4, drds = (rho(th + e) - rho(th - e)) / (2 * e) / ds;
+    return { c: mul(add(c, off), sc), T, N, r: rho(th) * sc, drds };
+  };
+  const ring = (q, f, sf, inward) => Array.from({ length: M }, (_, i) => {
+    const ph = (2 * PI * i) / M, dir = add(mul(q.N, cos(ph)), [0, 0, sin(ph)]);
+    let n = norm(sub(dir, mul(q.T, q.drds)));
+    if (inward) n = mul(n, -1);
+    return B.vert(add(q.c, mul(dir, q.r * f)), n, sf, q.T);
+  });
+  const Q = Array.from({ length: K + 1 }, (_, k) => at(th0 + ((-th0) * k) / K));
+  B.span = s * 0.25;
+  B.grid(Q.map((q) => ring(q, 1, OUT, false)), true);
+  B.grid(Q.map((q) => ring(q, 0.88, IN, true)), true);
+  const L = Q[K]; // lèvre de l'ouverture
+  B.grid([1, 0.88].map((f) => Array.from({ length: M }, (_, i) => {
+    const ph = (2 * PI * i) / M, dir = add(mul(L.N, cos(ph)), [0, 0, sin(ph)]);
+    return B.vert(add(L.c, mul(dir, L.r * f)), L.T, EDGE, L.T);
+  })), true);
+}
+
+// Œuf résille : un œuf tourné, ceint d'une bague, pris dans six méridiens
+// fins et coiffé d'une perle (finition polie).
+function egg(B, s) {
+  const Hz = s * 0.95, Rr = s * 0.66, NZ = 80;
+  const rz = (z) => { const u = z / Hz; return Rr * Math.sqrt(Math.max(0, 1 - u * u)) * (1 - 0.13 * u); };
+  const prof = [];
+  for (let k = 0; k <= NZ; k++) {
+    const th = PI - (PI * k) / NZ, z = Hz * cos(th), e = 1e-4;
+    const z0 = Math.max(-Hz, z - e), z1 = Math.min(Hz, z + e), dr = (rz(z1) - rz(z0)) / (z1 - z0 || 1);
+    let nr = 1, nz = -dr; const l = Math.hypot(nr, nz); nr /= l; nz /= l;
+    if (k === 0) { nr = 0; nz = -1; } if (k === NZ) { nr = 0; nz = 1; }
+    prof.push({ r: k === 0 || k === NZ ? 0 : rz(z), z, nr, nz, s: OUT });
+  }
+  B.span = Rr;
+  lathe(B, prof, 72);
+  const zb = -Hz * 0.08, rb = rz(zb), bh = s * 0.05;
+  B.span = bh;
+  lathe(B, sharpProfile([[rb - s * 0.01, zb - bh], [rb + s * 0.022, zb - bh], [rb + s * 0.022, zb + bh], [rb - s * 0.01, zb + bh]], [EDGE, EDGE, EDGE, EDGE]), 96);
+  B.span = s * 0.012;
+  for (let m = 0; m < 6; m++) {
+    const an = (m * PI) / 3, d = [cos(an), sin(an)], pts = [];
+    for (let k = 3; k <= NZ - 3; k++) { const z = Hz * cos(PI - (PI * k) / NZ), rr = rz(z) + s * 0.01; pts.push([d[0] * rr, d[1] * rr, z]); }
+    tube(B, pts, s * 0.012, 8, EDGE, true);
+  }
+  B.span = s * 0.07;
+  sphere(B, [0, 0, Hz + s * 0.045], s * 0.07, 20, 12, EDGE);
+}
+
+// Oursin (phyllotaxie) : une sphère hérissée de pointes posées selon l'angle
+// d'or ; les spirales de Fibonacci se lisent d'elles-mêmes.
+function urchin(B, s) {
+  const rc = s * 0.6, N = 144, ga = PI * (3 - Math.sqrt(5)), rb = rc * 0.115, hs = s * 0.3;
+  B.span = rc;
+  sphere(B, [0, 0, 0], rc, 48, 24, OUT);
+  B.span = rb;
+  const l = Math.hypot(hs, rb), nr = hs / l, nz = rb / l;
+  for (let i = 0; i < N; i++) {
+    B.piece = (i * 53) & 255;
+    const z = 1 - (2 * (i + 0.5)) / N, rr = Math.sqrt(1 - z * z), an = i * ga, n = [rr * cos(an), rr * sin(an), z];
+    const X = norm(cross(n, abs(n[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0])), Y = cross(n, X);
+    B.frame(mul(n, rc * 0.98), X, Y, n);
+    lathe(B, [{ r: rb, z: 0, nr, nz, s: EDGE }, { r: rb * 0.18, z: hs * 0.85, nr, nz, s: EDGE }, { r: rb * 0.18, z: hs * 0.85, nr: 0.4, nz: 0.92, s: EDGE }, { r: 0, z: hs * 0.92, nr: 0, nz: 1, s: EDGE }], 10);
+    B.noFrame();
+  }
 }

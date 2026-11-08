@@ -23,7 +23,7 @@ const PASS = { far: 0.36, near: 0.1, lat: 1.05 };
 const DOOR = { near: 0.12, far: 0.32 };
 // part de la lumière du studio qu'une face laisse passer, pleine, selon sa
 // nature (voir cellOpenness)
-const FACE_CLEAR = { open: 1, glass: 0.85, bars: 0.7, leaded: 0.6, grid: 0.5, target: 0.45, louvre: 0.35, perf: 0.3 };
+const FACE_CLEAR = { open: 1, glass: 0.85, bars: 0.7, leaded: 0.6, comb: 0.5, grid: 0.5, target: 0.45, oculus: 0.4, twist: 0.4, louvre: 0.35, perf: 0.3 };
 
 // Disposition des faces de chaque cellule, dans ses coordonnées locales :
 // layout[c][f] = { anchor, grid } — anchor, le centre de la face sur le plan

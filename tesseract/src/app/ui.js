@@ -3,7 +3,7 @@
 import GUI from 'lil-gui';
 import { FINISHES, SETS, FINISH_DEFAULTS, PATTERNS } from '../finishes.js';
 import {
-  MOODS, KINDS, FACE_KINDS, CONTENT_TYPES, FRAME_STYLES, NODE_STYLES, HOLE_SHAPES, HOLE_GRADS, NET_SHAPES, FLOORS, GEMS, STUD_MODES, LEAD_PATTERNS, VIEW_DEFAULTS,
+  MOODS, KINDS, FACE_KINDS, CONTENT_TYPES, FRAME_STYLES, NODE_STYLES, HOLE_SHAPES, HOLE_GRADS, NET_SHAPES, FLOORS, GEMS, STUD_MODES, LEAD_PATTERNS, RIPPLE_SOURCES, VIEW_DEFAULTS,
 } from '../recipe.js';
 import { CELL_NAMES, moveLabel } from '../math4.js';
 import { ENV_PRESETS } from '../scene/env.js';
@@ -88,7 +88,7 @@ export function createUI({ recipe: getRecipe, render, on }) {
     add(fScene, R.loop, 'duration', 6, 120, 1).name('Durée de la boucle (s)').onChange(ch);
     add(fScene, R.net, 'shape', NET_SHAPES).name('Patron déplié').onChange((v) => on.netChanged(v));
     add(fScene, { reroll: () => on.netChanged(R.net.shape) }, 'reroll').name('⟳  Autre patron');
-    add(fScene, R, 'moveMode', { 'Toutes les cellules (8 quarts de tour)': 'tour', 'Un seul plan (4 quarts de tour)': 'same', 'Plans mêlés': 'mixed' }).name('Rotations 4D').onChange(() => on.movesChanged());
+    add(fScene, R, 'moveMode', { 'Quatre pièces (4 quarts de tour)': 'short', 'Toutes les cellules (8 quarts de tour)': 'tour', 'Un seul plan (4 quarts de tour)': 'same', 'Plans mêlés': 'mixed' }).name('Rotations 4D').onChange(() => on.movesChanged());
     add(fScene, { reroll: () => on.movesChanged() }, 'reroll').name(`⟳  Autre séquence (${R.moves.map(moveLabel).join(' · ')})`);
 
     R.view ??= { ...VIEW_DEFAULTS };
@@ -215,6 +215,27 @@ export function createUI({ recipe: getRecipe, render, on }) {
       fo.add(cell.bars, 'cross').name('Barreaux : traverse').onChange(geo);
       fo.add(cell.target, 'n', 2, 12, 1).name('Cible : anneaux').onFinishChange(geo);
       fo.add(cell.target, 'fill', 0.1, 0.95, 0.01).name('Cible : largeur des anneaux').onFinishChange(geo);
+      const fn = f.addFolder('Motifs : pli, onde, lames, écailles, alvéoles, rosace').close();
+      fn.add(cell.miura, 'n', 2, 12, 1).name('Pli Miura : colonnes').onFinishChange(geo);
+      fn.add(cell.miura, 'rows', 2, 12, 2).name('Pli Miura : rangées').onFinishChange(geo);
+      fn.add(cell.miura, 'h', 0.1, 1.2, 0.01).name('Pli Miura : profondeur').onFinishChange(geo);
+      fn.add(cell.miura, 's', 0, 1, 0.01).name('Pli Miura : chevrons').onFinishChange(geo);
+      fn.add(cell.ripple, 'src', RIPPLE_SOURCES).name('Onde : source').onChange(geo);
+      fn.add(cell.ripple, 'n', 1, 8, 1).name('Onde : cercles').onFinishChange(geo);
+      fn.add(cell.ripple, 'amp', 0.05, 1, 0.01).name('Onde : amplitude').onFinishChange(geo);
+      fn.add(cell.twist, 'n', 4, 20, 1).name('Lames vrillées : nombre').onFinishChange(geo);
+      fn.add(cell.twist, 'twist', -3.2, 3.2, 0.01).name('Lames vrillées : torsion').onFinishChange(geo);
+      fn.add(cell.twist, 'ramp', -1.6, 1.6, 0.01).name('Lames vrillées : dégradé').onFinishChange(geo);
+      fn.add(cell.twist, 'base', -1.6, 1.6, 0.01).name('Lames vrillées : angle').onFinishChange(geo);
+      fn.add(cell.scales, 'n', 2, 10, 1).name('Écailles : par rang').onFinishChange(geo);
+      fn.add(cell.scales, 'tilt', 0, 0.8, 0.01).name('Écailles : inclinaison').onFinishChange(geo);
+      fn.add(cell.scales, 'dome', 0, 0.4, 0.01).name('Écailles : bombé').onFinishChange(geo);
+      fn.add(cell.comb, 'n', 2, 9, 1).name('Alvéoles : par côté').onFinishChange(geo);
+      fn.add(cell.comb, 'depth', 0.2, 1.5, 0.01).name('Alvéoles : profondeur').onFinishChange(geo);
+      fn.add(cell.comb, 'rot').name('Alvéoles : tournées').onChange(geo);
+      fn.add(cell.oculus, 'r', 0.3, 0.9, 0.01).name('Rosace : ouverture').onFinishChange(geo);
+      fn.add(cell.oculus, 'spokes', 0, 16, 1).name('Rosace : rayons').onFinishChange(geo);
+      fn.add(cell.oculus, 'ring').name('Rosace : remplage').onChange(geo);
       const fm = f.addFolder('Matériaux').close();
       fm.add({ set: cell.panelSet }, 'set', opts(SETS)).name('Jeu des panneaux').onChange((s) => on.cellSet(c, s));
       fm.add(cell.panel, 'wear', 0, 1, 0.01).name('Usure').onChange(mat);
@@ -282,6 +303,7 @@ export function createUI({ recipe: getRecipe, render, on }) {
   fRender.add(r, 'aa', { Temporel: 'traa', SMAA: 'smaa', FXAA: 'fxaa', Aucun: 'none' }).name('Anticrénelage').onChange(rch);
   fRender.add(r, 'shadows', { Basses: 'low', Moyennes: 'medium', Hautes: 'high', 'Très hautes': 'ultra' }).name('Ombres').onChange(rch);
   fRender.add(r, 'microDetail', 0, 2, 0.01).name('Micro-relief').onChange(rch);
+  fRender.add(r, 'patina', 0, 2, 0.01).name('Patine des parois').onChange(rch);
   fRender.add(r, 'roughFloor', 0, 0.4, 0.005).name('Douceur des reflets').onChange(rch);
   const ft = fRender.addFolder('Image').close();
   ft.add(r, 'toneMapping', { AgX: 'agx', ACES: 'aces', Neutre: 'neutral' }).name('Courbe').onChange(rch);

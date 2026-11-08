@@ -9,7 +9,7 @@ import {
 } from '../src/math4.js';
 import { generate } from '../src/recipe.js';
 import { createRng } from '../src/rng.js';
-import { buildPanels } from '../src/gen/cell.js';
+import { buildPanels, buildContent } from '../src/gen/cell.js';
 import { faceLayout } from '../src/scene/reveal.js';
 
 const close = (a, b, eps = 1e-9) => a.every((x, i) => Math.abs(x - b[i]) < eps);
@@ -70,8 +70,6 @@ test('le tour complet fait passer le cube intérieur par les huit cellules, une 
     assert.ok(isIdentity(Q[8]));
     assert.equal(new Set(Q.slice(0, 8).map(innerCell)).size, 8);
   }
-  // c'est la séquence par défaut d'une scène
-  assert.equal(generate('bprpfo').moves.length, 8);
 });
 
 test('la boucle est parfaite : la fin rejoint le début, avec ou sans voyage', () => {
@@ -141,4 +139,36 @@ test('matrice d’une cellule : son centre local va au centre 4D de la cellule',
     const A = cellMatrix(T[c], c, 1);
     assert.ok(close([A[3], A[7], A[11], A[15]], normalOf(c)));
   }
+});
+
+test('motifs et objets ajoutés : maillages finis, contenus dans la cellule ; vocabulaire restreint par scène', () => {
+  const finite = (m) => m && [m.position, m.normal].every((a) => a.every(Number.isFinite));
+  const R = generate('motifs');
+  for (const kind of ['miura', 'ripple', 'twist', 'scales', 'comb', 'oculus']) for (const cell of R.cells) {
+    const c = { ...cell, faces: [kind, 'open', 'open', 'open', 'open', 'open'] };
+    const { panel } = buildPanels(c, R.frame);
+    assert.ok(finite(panel), kind);
+    let mx = 0; for (const v of panel.position) mx = Math.max(mx, Math.abs(v));
+    assert.ok(mx < 1.03, `${kind} déborde : ${mx}`);
+  }
+  for (const type of ['mobius', 'hyper', 'ammonite', 'egg', 'urchin']) {
+    const m = buildContent({ type, size: 0.5 });
+    assert.ok(finite(m), type);
+    let mx = 0; for (const v of m.position) mx = Math.max(mx, Math.abs(v));
+    assert.ok(mx > 0.3 && mx < 0.6, `${type} : ${mx}`);
+  }
+  for (let i = 0; i < 40; i++) assert.ok(new Set(generate(`voc${i}`).cells.map((c) => c.kind)).size <= 5);
+});
+
+test('la boucle courte (par défaut) visite quatre pièces distinctes et revient à la première', () => {
+  for (let i = 0; i < 40; i++) {
+    const R = generate(`court${i}`);
+    assert.equal(R.moveMode, 'short');
+    const cells = stepOrientations(R.moves).map(innerCell);
+    assert.equal(R.moves.length, 4);
+    assert.equal(new Set(cells.slice(0, 4)).size, 4, `${R.seed} : ${cells}`);
+    assert.equal(cells[4], cells[0]);
+    assert.ok(isIdentity(stepOrientations(R.moves)[4]));
+  }
+  assert.equal(generate('czyt01').moves.length, 4);
 });
