@@ -2,7 +2,7 @@
 
 Le cabinet replié. Un écrin de huit cubes, couché à plat en patron (la croix du *Corpus Hypercubus* de Dalí, ou une autre forme), se replie dans une direction qui n'existe pas. L'hypercube tourne d'un quart de tour en 4D : le cube intérieur passe à l'extérieur. Puis il se déplie à nouveau. Le patron est le même, mais les cellules ont changé de place. Après quelques étapes, chacune a retrouvé la sienne : la boucle est parfaite par construction.
 
-Puis la caméra entre. L'œil 4D se pose sur l'hypersphère, l'espace se referme sur lui-même, et le cube du centre devient une pièce où l'on se tient. Vue de l'intérieur, chaque rotation 4D de la boucle est un voyage : l'univers glisse, une paroi s'ajoure, et l'on passe dans la pièce voisine. Huit pièces, chacune accolée à six autres ; on va de l'une à l'autre sans jamais revenir sur ses pas, et l'on se retrouve au point de départ. Avec quatre quarts de tour dans le même plan, on marche tout droit et l'on fait le tour de l'univers.
+Puis la caméra entre. L'œil 4D se pose sur l'hypersphère, l'espace se referme sur lui-même, et le cube du centre devient une pièce où l'on se tient. Vue de l'intérieur, chaque rotation 4D de la boucle est un voyage : l'univers glisse, une paroi s'ajoure, et l'on passe dans la pièce voisine. Huit pièces, chacune accolée à six autres ; on les visite toutes, une fois chacune, sans jamais revenir sur ses pas, et l'on se retrouve au point de départ. Avec quatre quarts de tour dans le même plan, on marche tout droit et l'on fait le tour de l'univers.
 
 ![Le voyage intérieur : la plongée, une traversée, une halte](docs/voyage.jpg)
 
@@ -51,7 +51,7 @@ La normale est transportée par la jacobienne de la projection (n' = cof(J)·n),
 
 **Le patron** (`src/math4.js`). Un patron est un arbre couvrant des cellules, de racine −W. Chaque cellule pivote autour du carré qu'elle partage avec son parent, dans le plan de leurs deux normales. À π/2, toutes sont couchées dans l'hyperplan w = −1. Un patron tiré au hasard est vérifié : deux cellules n'y tombent jamais au même endroit. Il existe 261 patrons du tesseract à symétrie près.
 
-**La boucle.** Chaque étape fait un quart de tour dans un plan contenant w, éventuellement doublé d'un quart de tour dans le plan orthogonal (rotation isocline). C'est une symétrie de l'hypercube. La séquence est tirée de façon que le produit des mouvements soit l'identité, sans aller-retour ni retour à un état déjà vu. Chaque étape suit le même déroulé :
+**La boucle.** Chaque étape fait un quart de tour dans un plan contenant w, éventuellement doublé d'un quart de tour dans le plan orthogonal (rotation isocline). C'est une symétrie de l'hypercube. La séquence est tirée de façon que le produit des mouvements soit l'identité, sans aller-retour ni retour à un état déjà vu. Par défaut, elle fait le tour complet : huit mouvements qui font passer le cube intérieur par les huit cellules, une fois chacune (recherche en profondeur parmi les mouvements). On peut aussi choisir un seul plan (quatre quarts de tour) ou des plans mêlés (trois ou quatre mouvements). Chaque étape suit le même déroulé :
 1. pause dépliée ;
 2. pliage échelonné, les feuilles de l'arbre d'abord ;
 3. pause ;
@@ -83,7 +83,7 @@ Légendes et encart sont masqués par défaut et s'affichent à la demande (touc
 
 **L'idée.** Gonflé jusqu'au bout, le tesseract devient la 3-sphère de rayon 2, pavée par ses huit cellules. Quand l'œil 4D se pose sur cette sphère (d = 2), la perspective devient une projection stéréographique. Celle-ci envoie le pôle opposé à l'œil (le centre du cube intérieur) à l'origine, et les grands cercles qui y passent sur des droites. Une caméra placée à l'origine voit donc chaque point de l'hypersphère dans sa vraie direction : c'est la vue d'un habitant de cet univers. La projection et le reste du rendu ne changent pas ; seuls deux réglages bougent (gonflement 1, distance 2).
 
-**Une rotation est un voyage.** Un quart de tour dans un plan qui contient w déplace l'univers le long d'un grand cercle passant par la caméra. Vue du centre, la pièce voisine arrive par une droite, traverse la paroi commune et vient se poser autour de la caméra : on a changé de pièce. Une rotation double y ajoute un roulis autour de la direction du voyage (un tire-bouchon). La séquence de mouvements a pour produit l'identité, donc le voyage revient à la première pièce. En mode « un seul plan », on traverse quatre pièces en ligne droite avant de revenir au point de départ.
+**Une rotation est un voyage.** Un quart de tour dans un plan qui contient w déplace l'univers le long d'un grand cercle passant par la caméra. Vue du centre, la pièce voisine arrive par une droite, traverse la paroi commune et vient se poser autour de la caméra : on a changé de pièce. Une rotation double y ajoute un roulis autour de la direction du voyage (un tire-bouchon). La séquence de mouvements a pour produit l'identité, donc le voyage revient à la première pièce, après avoir visité les huit (tour complet, par défaut). En mode « un seul plan », on traverse quatre pièces en ligne droite avant de revenir au point de départ.
 
 **La boucle.**
 1. pause dépliée, pliage, pause ;
@@ -91,7 +91,7 @@ Légendes et encart sont masqués par défaut et s'affichent à la demande (touc
 3. pour chaque mouvement, une halte puis une traversée ;
 4. une dernière halte dans la première pièce, la remontée, le dépliage.
 
-La durée de la boucle suit : environ 35 à 45 s.
+La durée de la boucle suit : environ 70 s pour le tour des huit pièces.
 
 **La caméra.** Pendant une traversée, elle se tient à l'écart de l'axe, sur une diagonale de la porte (le plus loin possible des barres de l'ossature), tirée au hasard. Chaque traversée a son allure, jamais deux fois la même de suite, et sa durée :
 - *avant* : droit devant, l'objet de la pièce suivante arrive et passe sous la caméra ;

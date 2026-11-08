@@ -169,10 +169,12 @@ const isIdent = (M) => M.every((x, i) => Math.abs(x - (i % 5 === 0 ? 1 : 0)) < 1
 const sameM = (A, B) => A.every((x, i) => Math.abs(x - B[i]) < 1e-9);
 // suite de mouvements dont le produit est l'identité : la boucle se referme
 // (chaque étape montre le même patron, garni d'autres cellules)
-// mode : 'same' (un seul plan, 4 quarts de tour), 'mixed' (3 ou 4 mouvements
-// différents), 'double' (rotations doubles admises)
+// mode : 'tour' (huit mouvements : le cube intérieur passe par les huit
+// cellules), 'same' (un seul plan, 4 quarts de tour), 'mixed' (3 ou 4
+// mouvements différents) ; allowDouble : rotations doubles admises
 export function randomMoves(rng, mode = 'mixed', allowDouble = true) {
   const pool = MOVES.filter((m) => allowDouble || m.b === undefined);
+  if (mode === 'tour') { const tour = randomTour(rng, pool); if (tour) return tour; }
   if (mode === 'same') { const m = rng.pick(pool); return [m, m, m, m]; }
   for (let tries = 0; tries < 4000; tries++) {
     const L = rng.pick([3, 4, 4]);
@@ -196,6 +198,46 @@ export function randomMoves(rng, mode = 'mixed', allowDouble = true) {
   const m = rng.pick(pool);
   return [m, m, m, m];
 }
+// cellule intérieure (celle qui fait face à −w, au centre de la projection)
+// pour l'orientation Q : Q·n_c = −e_w, donc n_c = Qᵀ·(−e_w), l'opposée de la
+// dernière ligne de Q
+export function innerCell(Q) {
+  const n = [0, 1, 2, 3].map((k) => -Q[12 + k]);
+  const k = n.findIndex((x) => Math.abs(x) > 0.5);
+  return cellOf(k, n[k]);
+}
+
+// Tour complet : huit mouvements dont le produit est l'identité et qui font
+// passer le cube intérieur par les huit cellules, une fois chacune, avant de
+// revenir à la première (voyage intérieur : on visite toutes les pièces).
+// Recherche en profondeur, mouvements essayés dans un ordre tiré au hasard ;
+// null si elle n'aboutit pas assez vite.
+function randomTour(rng, pool, budget = 50000) {
+  const shuffled = () => {
+    const a = [...pool];
+    for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rng.next() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+    return a;
+  };
+  const seq = [], visited = new Set([innerCell(ident().m)]);
+  const search = (Q) => {
+    if (--budget < 0) return false;
+    if (seq.length === 7) {
+      const last = pool.find((m) => isIdent(mulM(moveMatrix(m), Q)));
+      if (last) seq.push(last);
+      return !!last;
+    }
+    for (const m of shuffled()) {
+      const Qn = mulM(moveMatrix(m), Q), c = innerCell(Qn);
+      if (visited.has(c)) continue;
+      seq.push(m); visited.add(c);
+      if (search(Qn)) return true;
+      seq.pop(); visited.delete(c);
+    }
+    return false;
+  };
+  return search(ident().m) ? seq : null;
+}
+
 // orientation au début de chaque étape : Q₀ = I, Qₖ₊₁ = gₖ·Qₖ
 export function stepOrientations(moves) {
   const Q = [ident().m];

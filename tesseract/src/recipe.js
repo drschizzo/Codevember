@@ -205,7 +205,10 @@ export function generate(seed, opts = {}) {
 
   const netShape = rng.weighted([['dali', 2.5], ['cross', 1.5], ['chain', 1], ['random', 2]]);
   const parent = randomNet(rng.fork('net'), netShape);
-  const moveMode = rng.weighted([['same', 1], ['mixed', 3]]);
+  // tour complet : le voyage visite les huit pièces (un tirage est consommé
+  // comme autrefois, pour que chaque graine garde le reste de sa scène)
+  rng.next();
+  const moveMode = 'tour';
   const moves = randomMoves(rng.fork('moves'), moveMode, rng.chance(0.6));
 
   const frameStyle = rng.weighted([['square', 3], ['round', 1.5], ['tube', 1.5], ['angle', 1.5], ['extrusion', 1.5]]);
@@ -236,8 +239,8 @@ export function generate(seed, opts = {}) {
     net: { shape: netShape, parent },
     moveMode, moves,
     chor: {
-      open: r2(rng.range(0.7, 1.4)), fold: r2(rng.range(1.4, 2.2)), hold: r2(rng.range(0.4, 0.9)), turn: r2(rng.range(1.6, 2.6)),
-      rest: r2(rng.range(0.4, 0.9)), unfold: r2(rng.range(1.4, 2.2)), stagger: r2(rng.range(0.35, 0.7)), antic: r2(rng.range(0.15, 0.45)), turnAntic: r2(rng.range(0.1, 0.35)),
+      open: r2(rng.range(0.7, 1.4)), fold: r2(rng.range(2.1, 3.2)), hold: r2(rng.range(0.4, 0.9)), turn: r2(rng.range(1.6, 2.6)),
+      rest: r2(rng.range(0.4, 0.9)), unfold: r2(rng.range(2.1, 3.2)), stagger: r2(rng.range(0.35, 0.7)), antic: r2(rng.range(0.15, 0.45)), turnAntic: r2(rng.range(0.1, 0.35)),
     },
     proj: {
       d: r2(rng.range(2.6, 3.6)), inflate: rng.chance(0.3) ? r2(rng.range(0.4, 1)) : 0, inset: r3(rng.range(0.9, 0.96)),

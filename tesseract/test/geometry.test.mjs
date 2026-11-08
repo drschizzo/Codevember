@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   ROOT, DALI, ident, apply, hinge, unfoldTransforms, normalOf, validNet, randomNet, randomMoves, moveMatrix,
-  stepOrientations, MOVES, stateAt, cellTransforms, cellMatrix, timelineFor, depthOf, foldOrder, project,
+  stepOrientations, innerCell, MOVES, stateAt, cellTransforms, cellMatrix, timelineFor, depthOf, foldOrder, project,
 } from '../src/math4.js';
 import { generate } from '../src/recipe.js';
 import { createRng } from '../src/rng.js';
@@ -60,6 +60,18 @@ test('les mouvements sont des symétries de l’hypercube, et leur suite se refe
       if (mode !== 'same') assert.equal(new Set(seen).size, seen.length);
     }
   }
+});
+
+test('le tour complet fait passer le cube intérieur par les huit cellules, une fois chacune', () => {
+  for (let i = 0; i < 40; i++) {
+    const moves = randomMoves(createRng(`tour:${i}`), 'tour', i % 2 === 0);
+    assert.equal(moves.length, 8);
+    const Q = stepOrientations(moves);
+    assert.ok(isIdentity(Q[8]));
+    assert.equal(new Set(Q.slice(0, 8).map(innerCell)).size, 8);
+  }
+  // c'est la séquence par défaut d'une scène
+  assert.equal(generate('bprpfo').moves.length, 8);
 });
 
 test('la boucle est parfaite : la fin rejoint le début, avec ou sans voyage', () => {
