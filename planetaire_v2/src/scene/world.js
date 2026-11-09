@@ -316,7 +316,7 @@ export function createWorld({ orbit, L, lite = false, shadows, seed, layer = 1, 
 
   return {
     group, plate, machine, globes, local, flare, N, RG, rg, yGlobe, update, setScale, setNext, miniature, rig, syncRig, setTarget, glassFade,
-    bg, epi, orbit: o, params: p, info: o.info, L,
+    bg, env, epi, orbit: o, params: p, info: o.info, L,
     dispose() {
       for (const g of geos) g.dispose(); machine.dispose(); trail.dispose(); env.dispose();
       rig.removeFromParent(); key.shadow.dispose?.(); atmo.dispose();

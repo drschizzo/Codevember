@@ -86,17 +86,23 @@ export function createPool(size = Math.max(2, Math.min(8, (navigator.hardwareCon
   }
 
   // conception de la machine d'une orbite (dans un worker libre) ; la
-  // conception rendue n'a pas de fonction : withPivots (mech/design.js) la complète
+  // conception rendue n'a pas de fonction : withPivots (mech/design.js) la complète.
+  // Plusieurs conceptions peuvent être demandées à la fois : chacune va au
+  // worker le moins chargé et écoute sa propre réponse.
   function design(orbit) {
     const job = ++jobId;
-    const w = workers.find((x) => !x.busy) || workers[0];
+    const load = (x) => (x.busy ? 1 : 0) + (x.designs || 0);
+    const w = workers.reduce((a, b) => (load(b) < load(a) ? b : a));
+    w.designs = (w.designs || 0) + 1;
     return new Promise((resolve, reject) => {
-      const prev = w.onmessage;
-      w.onmessage = (e) => {
-        if (e.data.job !== job) { if (prev) prev(e); return; }
-        w.onmessage = prev;
-        if (e.data.ok) resolve(e.data.design); else reject(new Error(e.data.reason));
+      const done = (f) => { w.removeEventListener('message', onMsg); w.removeEventListener('error', onErr); w.designs--; f(); };
+      const onMsg = (e) => {
+        if (e.data.job !== job) return;
+        done(() => (e.data.ok ? resolve(e.data.design) : reject(new Error(e.data.reason))));
       };
+      const onErr = (ev) => done(() => reject(new Error(ev.message || 'erreur du worker')));
+      w.addEventListener('message', onMsg);
+      w.addEventListener('error', onErr);
       w.postMessage({ type: 'design', job, coef: orbit.coef, params: orbit.params, size: orbit.info.size });
     });
   }

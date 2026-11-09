@@ -150,7 +150,9 @@ export function createAtmosphere({ atmo, keyColor, bg, floorY, plateY, plateR, R
       mats.push(m);
       const p = new THREE.Mesh(geo, m);
       p.rotation.x = -Math.PI / 2;
-      p.position.y = floorY + 0.02 + 0.06 * l + 0.02 * l * l;
+      // (la plus haute reste 10 cm sous le plateau : à sa hauteur exacte, elle
+      // scintillait contre lui, en triangles, surtout sur un plateau de métal)
+      p.position.y = Math.min(floorY + 0.02 + 0.05 * l + 0.012 * l * l, plateY - 0.1 + 0.01 * (l - layers + 1));
       p.renderOrder = 4;
       group.add(p);
     }
