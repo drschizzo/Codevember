@@ -6,7 +6,7 @@ Expériences de creative coding, publiées sur [drschizzo.github.io/Codevember](
 
 L’éclosion sans fin : un solide géométrique dort dans une membrane translucide et vascularisée. Son armature se déploie (sépales, lames, mâchoires, baleines, épingles, polyèdre), tend la membrane jusqu’à la déchirure, simulée et non animée à la main : lèvres qui s’enroulent, filaments qui claquent, lambeaux qui se retroussent. La caméra plonge vers l’œuf suivant. Diffusion sous la surface, scènes procédurales à partir d’une graine, matériaux physiques (three.js WebGPU / TSL), boucle parfaite exportable en MP4.
 
-[Démo en ligne](https://drschizzo.github.io/Codevember/membrane/) · [documentation](membrane/README.md)
+[Démo en ligne](https://drschizzo.github.io/Codevember/membrane/) · [version légère](https://drschizzo.github.io/Codevember/membrane/?mobile=1) (appareils peu puissants : téléphones, tablettes, portables modestes) · [documentation](membrane/README.md)
 
 [![Membrane](membrane/docs/capture.jpg)](https://drschizzo.github.io/Codevember/membrane/)
 
@@ -14,7 +14,7 @@ L’éclosion sans fin : un solide géométrique dort dans une membrane transluc
 
 Le cabinet replié : un écrin de huit cubes posé à plat en patron se replie dans une quatrième direction pour former un hypercube. Puis la caméra y entre : l’œil 4D se pose sur l’hypersphère, le cube du centre devient une pièce, et chaque rotation 4D devient un voyage d’une pièce à la suivante, à travers des parois qui s’ajourent, jusqu’à revenir au point de départ. Scènes procédurales à partir d’une graine, matériaux physiques (three.js WebGPU / TSL), boucle parfaite exportable en MP4, et des aides pour suivre le pliage : fantôme de la forme pliée, liserés des faces appariées, profondeur 4D en couleur, analogie 3D.
 
-[Démo en ligne](https://drschizzo.github.io/Codevember/tesseract/) · [documentation](tesseract/README.md)
+[Démo en ligne](https://drschizzo.github.io/Codevember/tesseract/) · [version légère](https://drschizzo.github.io/Codevember/tesseract/?mobile=1) (appareils peu puissants : téléphones, tablettes, portables modestes) · [documentation](tesseract/README.md)
 
 [![Tesseract](tesseract/docs/capture.jpg)](https://drschizzo.github.io/Codevember/tesseract/)
 
@@ -22,7 +22,7 @@ Le cabinet replié : un écrin de huit cubes posé à plat en patron se replie d
 
 Une plongée sans fond : des coquilles creuses emboîtées — alvéoles, fentes, surfaces minimales, géode — générées de façon procédurale à partir d’une graine, rendues en matériaux physiques (three.js WebGPU / TSL) et animées en boucle parfaite, exportable en MP4.
 
-[Démo en ligne](https://drschizzo.github.io/Codevember/hollow/) · [documentation](hollow/README.md)
+[Démo en ligne](https://drschizzo.github.io/Codevember/hollow/) · [version légère](https://drschizzo.github.io/Codevember/hollow/?mobile=1) (appareils peu puissants : téléphones, tablettes, portables modestes) · [documentation](hollow/README.md)
 
 [![Hollow](hollow/docs/capture.jpg)](https://drschizzo.github.io/Codevember/hollow/)
 
