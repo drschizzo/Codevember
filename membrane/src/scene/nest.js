@@ -43,11 +43,11 @@ const X_BLEND = 0.35;
 // (copie, chaîne de mipmaps : une dizaine de passes, et sur un GPU mobile à
 // tuiles, autant de vidages de la mémoire de tuile). Au-delà de X_FRONT, la
 // face avant d'une couche (petite à l'écran) se mélange elle aussi sans
-// copie, comme la face arrière au-delà de X_BLEND : il reste trois ou quatre
-// copies par image au lieu de six à huit. Même convergence sans saut (blendF).
-// (Le mélange matériel ne transmet que la moyenne de la teinte : à 0,8, la
-// couche suivante, encore grande à l'écran, pâlissait nettement — d'où 1,4.)
-const X_FRONT = 1.4;
+// copie, en deux passages (fond × transmission teintée, puis lumière propre :
+// la teinte est conservée, seuls la réfraction et le flou manquent) : il reste
+// deux ou trois copies par image au lieu de six à huit. Même convergence sans
+// saut (blendF).
+const X_FRONT = 0.8;
 // Simulation allégée (mode mobile) : maillage simulé un peu plus grossier
 // (≈ 2/3 des particules), moins d'images enregistrées (interpolées en
 // Catmull-Rom à l'affichage : le mouvement reste continu) et de sous-pas ;
@@ -228,7 +228,11 @@ class Slot {
     this.meshes.back.userData.lite = buildMembraneMaterial(PT, this.S, T.L, spec, { ...opts, side: THREE.BackSide, backdrop: false });
     this.meshes.front.userData.full = this.meshes.front.material;
     this.meshes.front.userData.lite = buildMembraneMaterial(PT, this.S, T.L, spec, { ...opts, side: THREE.FrontSide, backdrop: false });
-    if (n.lite) this.meshes.front.userData.blend = buildMembraneMaterial(PT, this.S, T.L, spec, { ...opts, side: THREE.FrontSide, backdrop: false, blend: true });
+    if (n.lite) {
+      // (deux passages : fond × transmission teintée, puis lumière propre — voir membrane.js)
+      this.meshes.front.userData.blend = buildMembraneMaterial(PT, this.S, T.L, spec, { ...opts, side: THREE.FrontSide, backdrop: false, blend: 'add' });
+      this.meshes.frontMul = mk(d.geo.lo, buildMembraneMaterial(PT, this.S, T.L, spec, { ...opts, side: THREE.FrontSide, backdrop: false, blend: 'mul' }), 100, false);
+    }
     if (d.fib) this.meshes.fib = mk(d.fib, buildFibrilMaterial(PT, this.S, T.L, spec), 0, false);
     this.lastX = null;
     return true;
@@ -317,11 +321,16 @@ export function createNest(scene, gen, renderer, { lite = false } = {}) {
         if (m.material !== want) m.material = want;
         m.geometry = geo;
         m.layers.mask = memOn ? MAIN : 0;
+        if (k === 'front' && me.frontMul) {
+          me.frontMul.geometry = geo;
+          me.frontMul.layers.mask = memOn && want === m.userData.blend ? MAIN : 0;
+        }
       }
       // ordre : faces arrière de l'extérieur vers l'intérieur, puis faces avant
       // de l'intérieur vers l'extérieur
       me.back.renderOrder = 10 + (x - XMIN);
       me.front.renderOrder = 100 + (XMAX - x);
+      if (me.frontMul) me.frontMul.renderOrder = me.front.renderOrder - 0.001;
       // l'armature s'efface (avec son ombre) quand sa couche passe derrière la
       // caméra : aucune ombre ne disparaît d'un coup
       sl.RU.vis.value = ss(-1.75, -0.95, x) * ss(XMAX - 0.3, XMAX - 0.9, x);
