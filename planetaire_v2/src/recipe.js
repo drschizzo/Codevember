@@ -42,21 +42,21 @@ export const MATTERS = {
 // Humeurs : studio, lumières, matières et natures préférées, couleur des astres
 export const MOODS = {
   atelier: {
-    label: 'Atelier d’horloger', env: 'atelier', envIntensity: 0.45, bg: '#050403', floor: '#0d0b09',
+    arch: [['horlogerie', 3], ['classique', 1]], label: 'Atelier d’horloger', env: 'atelier', envIntensity: 0.45, bg: '#050403', floor: '#0d0b09',
     key: { color: '#ffe2c0', intensity: 6 }, rim: { color: '#bcd2ff', intensity: 0.5 }, warmth: 0.1,
     plate: ['bronze', 'laitonBrosse', 'emailBleu'], arms: ['laiton', 'or'], arms2: ['acierBleui', 'acierPoli'], gears: ['laiton', 'or', 'cuivre'], pins: ['acierPoli', 'acierBleui'], foot: ['laiton', 'bronze'],
     finish: ['guilloche', 'soleil', 'perlage'], globes: [['cardan', 2], ['armillaire', 2], ['griffes', 1]], tints: ['clair', 'ambre'], trace: [['verre', 3], ['or', 1], ['gravure', 1]],
     body: '#ffc489', glass: '#07080a',
   },
   observatoire: {
-    label: 'Observatoire', env: 'night', envIntensity: 0.6, bg: '#020307', floor: '#05070c',
+    arch: [['astrolabe', 2], ['classique', 2]], label: 'Observatoire', env: 'night', envIntensity: 0.6, bg: '#020307', floor: '#05070c',
     key: { color: '#9fb8ff', intensity: 3 }, rim: { color: '#7d9cff', intensity: 0.8 }, warmth: -0.25,
     plate: ['laqueNoire', 'marbreNoir', 'acierBleui', 'emailBleu'], arms: ['argent', 'acierPoli'], arms2: ['acierBleui', 'laiton'], gears: ['laiton', 'argent'], pins: ['chrome'], foot: ['acierNoirci', 'argent'],
     finish: ['lisse', 'soleil'], globes: [['armillaire', 2], ['verre', 2], ['cardan', 1]], tints: ['clair', 'bleute', 'fume'], trace: [['verre', 2], ['gravure', 1]],
     body: '#cfe0ff', glass: '#05070b',
   },
   clinique: {
-    label: 'Clinique', env: 'studio', envIntensity: 0.9, bg: '#d9d6d0', floor: '#cfccc6',
+    arch: [['horlogerie', 2], ['classique', 1], ['astrolabe', 1]], label: 'Clinique', env: 'studio', envIntensity: 0.9, bg: '#d9d6d0', floor: '#cfccc6',
     key: { color: '#ffffff', intensity: 7 }, rim: { color: '#ffffff', intensity: 0.6 }, warmth: 0,
     plate: ['porcelaine', 'marbreBlanc'], arms: ['chrome', 'acierPoli'], arms2: ['porcelaine', 'chrome'], gears: ['chrome', 'laiton'], pins: ['chrome'], foot: ['chrome', 'porcelaine'],
     finish: ['lisse', 'perlage'], globes: [['verre', 3], ['griffes', 1]], tints: ['clair'], trace: [['verre', 2], ['aucune', 1]],
@@ -64,7 +64,7 @@ export const MOODS = {
   },
   // cabinet de curiosités : bois cirés, nacre, or ; lumière de bougie
   cabinet: {
-    label: 'Cabinet de curiosités', env: 'atelier', envIntensity: 0.35, bg: '#070403', floor: '#120905',
+    arch: [['classique', 2], ['astrolabe', 1], ['horlogerie', 1]], label: 'Cabinet de curiosités', env: 'atelier', envIntensity: 0.35, bg: '#070403', floor: '#120905',
     key: { color: '#ffc98a', intensity: 4.5 }, rim: { color: '#ffd9b0', intensity: 0.3 }, warmth: 0.3,
     plate: ['noyer', 'ebene', 'nacre'], arms: ['or', 'laiton'], arms2: ['nacre', 'ebene', 'orRose'], gears: ['or', 'laiton'], pins: ['or'], foot: ['ebene', 'noyer'],
     finish: ['lisse', 'guilloche'], globes: [['lanterne', 2], ['griffes', 2], ['armillaire', 1]], tints: ['ambre', 'vert', 'clair'], trace: [['or', 2], ['verre', 1]],
@@ -72,7 +72,7 @@ export const MOODS = {
   },
   // forge : fonte, cuivre et métal en fusion
   forge: {
-    label: 'Forge', env: 'atelier', envIntensity: 0.25, bg: '#030202', floor: '#0a0807',
+    arch: [['atelier', 4], ['classique', 1]], label: 'Forge', env: 'atelier', envIntensity: 0.25, bg: '#030202', floor: '#0a0807',
     key: { color: '#ff9a5a', intensity: 3 }, rim: { color: '#ff6a2a', intensity: 0.4 }, warmth: 0.35,
     plate: ['fonte', 'ardoise', 'acierNoirci'], arms: ['cuivre', 'fonte'], arms2: ['acierNoirci', 'bronze'], gears: ['cuivre', 'bronze'], pins: ['acierNoirci'], foot: ['fonte'],
     finish: ['lisse', 'perlage'], globes: [['lanterne', 2], ['cardan', 2]], tints: ['fume', 'ambre'], trace: [['gravure', 2], ['verre', 2]],
@@ -80,7 +80,7 @@ export const MOODS = {
   },
   // sacré : or, émaux, pénombre d'une nef
   sacre: {
-    label: 'Sacré', env: 'atelier', envIntensity: 0.3, bg: '#060402', floor: '#0c0804',
+    arch: [['astrolabe', 2], ['horlogerie', 1], ['classique', 1]], label: 'Sacré', env: 'atelier', envIntensity: 0.3, bg: '#060402', floor: '#0c0804',
     key: { color: '#ffd28a', intensity: 5 }, rim: { color: '#9ab4ff', intensity: 0.35 }, warmth: 0.25,
     plate: ['emailBleu', 'emailRouge', 'marbreNoir'], arms: ['or'], arms2: ['or', 'orRose'], gears: ['or'], pins: ['or'], foot: ['or', 'marbreNoir'],
     finish: ['soleil', 'guilloche'], globes: [['griffes', 2], ['armillaire', 2], ['lanterne', 1]], tints: ['ambre', 'clair'], trace: [['or', 2], ['verre', 1]],
@@ -102,7 +102,7 @@ export function generateLayer(rng, moodKey) {
     mood: moodKey,
     // contraintes sur l'orbite (null : tirées de la graine)
     orbit: { N: null, sym: null, omega: null },
-    stage: { finish: rng.pick(M.finish), finishScale: r2(rng.range(0.7, 1.4)) },
+    stage: { archetype: rng.weighted(M.arch), finish: rng.pick(M.finish), finishScale: r2(rng.range(0.7, 1.4)) },
     matters: { plate: rng.pick(M.plate), arms: rng.pick(M.arms), arms2: rng.pick(M.arms2), gears: rng.pick(M.gears), pins: rng.pick(M.pins), foot: rng.pick(M.foot) },
     bodies: { globe: rng.weighted(M.globes), tint: rng.pick(M.tints), irid: r2(rng.range(0, 0.6)), color: M.body, flare: r2(rng.range(1.2, 2.2)), light: r2(rng.range(0.1, 0.16)) },
     trace: { kind: rng.weighted(M.trace), show: true, cool: r2(rng.range(4.5, 7.5)), thick: r2(rng.range(0.8, 1.3)), glow: 1, glass: M.glass },

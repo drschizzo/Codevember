@@ -76,7 +76,7 @@ export function createWorld({ orbit, L, lite = false, shadows, seed }) {
 
   // la machine (les bras retenus tracent la courbe à ARM_TOL près)
   const epi = epicycles(coef, p, 1, { tol: ARM_TOL, max: 14 });
-  const machine = createMachine({ arms: epi.arms, N, mats, omegaFrac: p.omegaFrac, yFloor: Y_FLOOR });
+  const machine = createMachine({ arms: epi.arms, N, mats, omegaFrac: p.omegaFrac, yFloor: Y_FLOOR, archetype: L.stage.archetype });
   const plate = new THREE.Group();
   plate.add(machine.group);
   group.add(plate, machine.stand);
