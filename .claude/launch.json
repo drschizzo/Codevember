@@ -90,6 +90,16 @@
         "tesseract"
       ],
       "port": 8021
+    },
+    {
+      "name": "planetaire_v2",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        ".claude/serve.py",
+        "8040",
+        "planetaire_v2"
+      ],
+      "port": 8040
     }
   ]
 }
