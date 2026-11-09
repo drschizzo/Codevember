@@ -21,7 +21,7 @@ export function heatColor(h) {
 }
 
 // natures : astres (perle, gemme, metal, lanterne), traces (verre, or, gravure, aucune)
-export function createOrbitVisual({ curve, N, radius = 0.0065, ring = 10, shadows = { bodies: 3, size: 512 }, bodyKind = 'perle', traceKind = 'verre', pinsMat = null }) {
+export function createOrbitVisual({ curve, N, radius = 0.0065, ring = 10, shadows = { bodies: 3, size: 512 }, bodyKind = 'perle', traceKind = 'verre', pinsMat = null, bodies: withBodies = true }) {
   const n = curve.length / 2;
   const group = new THREE.Group();
   const U = {
@@ -100,7 +100,7 @@ export function createOrbitVisual({ curve, N, radius = 0.0065, ring = 10, shadow
   if (shellMat) mats.push(shellMat);
   let lightBase = 0.12;
   const lightK = bodyKind === 'metal' ? 0.25 : bodyKind === 'gemme' ? 0.7 : 1;
-  for (let j = 0; j < N; j++) {
+  for (let j = 0; j < (withBodies ? N : 0); j++) {
     // embrasement : chaque astre a sa propre intensité (il s'avive quand il en frôle un autre)
     const boost = uniform(1);
     const m = new THREE.Group();
@@ -132,7 +132,7 @@ export function createOrbitVisual({ curve, N, radius = 0.0065, ring = 10, shadow
   }
 
   // intensité de chaque astre (1 : au repos)
-  const setBoost = (j, k) => { bodies[j].userData.boost.value = k; bodies[j].userData.light.intensity = lightBase * lightK * k; };
+  const setBoost = (j, k) => { if (!bodies[j]) return; bodies[j].userData.boost.value = k; bodies[j].userData.light.intensity = lightBase * lightK * k; };
 
   // réglages de la recette (astres, verre)
   function setStyle(R) {

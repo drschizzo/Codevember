@@ -1,10 +1,15 @@
-// Point d'entrée : recette, recherche de l'orbite, scène, panneau, boucle de rendu.
+// Point d'entrée : recette, recherche des orbites, mondes emboîtés, plongée,
+// panneau, boucle de rendu.
 //
-// La scène : un plateau qui tourne à ω = p/q sur un pied, dans un studio. Sur
-// le plateau, la courbe de la chorégraphie est fixe ; les bras de la machine
-// de Fourier tournent à des vitesses entières et portent les astres. Dans le
-// studio, les astres suivent donc exactement la solution newtonienne. Après q
-// périodes, le plateau a fait p tours : la boucle est parfaite.
+// La plongée. Chaque astre est une boule de verre qui contient le monde
+// suivant (sa machine, son sol, son studio), réduit d'un facteur k. La couche
+// d montre le modèle d mod M ; τ ∈ [0, M) avance d'une couche par segment.
+// Dans un segment (u ∈ [0, 1)), on regarde d'abord la machine, puis la
+// caméra entre dans une boule : c'est le monde qui subit une similitude
+// A(s)⁻¹, A(s) = translation p·(1 − kˢ)/(1 − k) ∘ homothétie kˢ, de point
+// fixe la boule visée (en p). À s = 1, la couche suivante occupe exactement
+// la place de la précédente : on change de racine sans que rien ne bouge. Tout
+// ne dépend que de τ : la boucle (M segments) est parfaite par construction.
 //
 // Paramètres d'URL : ?seed=… (la scène), #r=… (une scène retouchée, partagée
 // par « Copier le lien »), ?ui=0 (sans panneau), ?mobile=1 / ?mobile=0 (version
@@ -12,26 +17,23 @@
 import * as THREE from 'three/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createPool } from './orbit/client.js';
-import { ARM_TOL } from './orbit/search.js';
-import { epicycles, sampleArms } from './scene/epicycles.js';
-import { createOrbitVisual } from './scene/orbit3d.js';
-import { createMachine, materials } from './scene/machine.js';
-import { makeEnvironment } from './scene/env.js';
+import { createWorld } from './scene/world.js';
 import { createPost } from './render/post.js';
 import { exportLoop, exportPNG } from './app/capture.js';
 import { createLoader } from './app/loader.js';
 import { createUI } from './app/ui.js';
 import { loadRender, saveRender, applyQuality, defaultsFor, SHADOWS } from './app/settings.js';
 import { wantsMobile, switchMobile, createGovernor, createPacer, bindTouch } from './app/mobile.js';
-import { beatsFor, warp, shotsFor, cameraAt } from './scene/choreo.js';
-import { generate, upgrade, orbitOverrides, packRecipe, unpackRecipe, MATTERS } from './recipe.js';
+import { generate, generateLayer, upgrade, orbitOverrides, packRecipe, unpackRecipe, MOODS } from './recipe.js';
+import { createRng } from './rng.js';
 
 const TAU = Math.PI * 2;
 const params = new URLSearchParams(location.search);
 const DEFAULT_SEED = '17';
-const Y_FLOOR = -0.72;
 const $ = (s) => document.querySelector(s);
 const randomSeed = () => Math.random().toString(36).slice(2, 8);
+const ss5 = (x) => { const t = Math.min(1, Math.max(0, x)); return t * t * t * (t * (t * 6 - 15) + 10); };
+const MAX_BODIES = 9;
 
 let toastTimer = 0;
 function toast(msg, ms = 2200) {
@@ -42,16 +44,17 @@ function toast(msg, ms = 2200) {
 }
 
 async function main() {
-  const pixelRatio = () => Math.min(devicePixelRatio || 1, RENDER.pixelRatio) * (RENDER.dynRes ? governor.scale : 1);
   const loader = createLoader($('#loader'));
   loader.show();
   // ── Version mobile (fixée au chargement) ──
   const LITE = wantsMobile(params);
   if (LITE) document.body.classList.add('lite');
   const RENDER = loadRender(LITE);
+  const S = { worlds: [], k: [], target: [], tau: 0, paused: false, busy: true, run: 0, exporting: false, root: -1 };
   // résolution dynamique : vise ~45 images / s, entre 50 et 100 % de la résolution de base
   const governor = createGovernor({ target: 1 / 45, min: 0.5, max: 1, onChange: () => !S.busy && resize() });
   const pace = createPacer(() => RENDER.maxFps);
+  const pixelRatio = () => Math.min(devicePixelRatio || 1, RENDER.pixelRatio) * (RENDER.dynRes ? governor.scale : 1);
 
   // ── Moteur ──
   const renderer = new THREE.WebGPURenderer({ antialias: false, powerPreference: 'high-performance' });
@@ -64,37 +67,18 @@ async function main() {
   $('#app').appendChild(canvas);
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color();
-  const camera = new THREE.PerspectiveCamera(30, innerWidth / innerHeight, 0.05, 40);
+  scene.background = new THREE.Color(0x050403);
+  const camera = new THREE.PerspectiveCamera(30, innerWidth / innerHeight, 0.01, 60);
   const controls = new OrbitControls(camera, canvas);
   controls.enabled = false; controls.enableDamping = true;
-  controls.target.set(0, -0.14, 0);
+  controls.target.set(0, -0.16, 0);
+  const root = new THREE.Group(); // reçoit la similitude de la plongée
+  scene.add(root);
 
-  // ── Studio : sol, pied, lumières ──
-  const mats = materials();
-  const floorMat = new THREE.MeshStandardNodeMaterial({ roughness: 0.95 });
-  const floor = new THREE.Mesh(new THREE.CircleGeometry(12, 96), floorMat);
-  floor.rotation.x = -Math.PI / 2; floor.position.y = Y_FLOOR; floor.receiveShadow = true;
-  scene.add(floor);
-
-  const key = new THREE.SpotLight(0xffffff, 6, 0, 0.42, 0.85, 2);
-  key.position.set(-2.4, 3.6, 1.7);
-  key.target.position.set(0, -0.34, 0);
-  key.castShadow = true;
-  key.shadow.bias = -0.0004; key.shadow.normalBias = 0.01;
-  scene.add(key, key.target);
-  const rimLight = new THREE.DirectionalLight(0xffffff, 0.5);
-  rimLight.position.set(1.8, 1.4, -2.6);
-  scene.add(rimLight);
-
-  // la monture (posée, sous cloche, ou retournée et suspendue au plafond) ; le
-  // plateau y tourne à ω : tout ce qu'il porte est dans le repère de la courbe
-  const rig = new THREE.Group();
-  scene.add(rig);
-  const plate = new THREE.Group();
-  rig.add(plate);
-  const bellMat = new THREE.MeshPhysicalNodeMaterial({ color: 0xffffff, metalness: 0, roughness: 0.03, transparent: true, opacity: 0.09, depthWrite: false, clearcoat: 1 });
-  let bell = null;
+  // lumières des astres : un jeu fixe (pas de recompilation des matériaux quand
+  // le nombre d'astres change), placé sur les boules du monde courant, puis
+  // passé à celles du monde suivant à la fin de la plongée
+  const bodyLights = Array.from({ length: MAX_BODIES }, () => { const l = new THREE.PointLight(0xffc489, 0, 0, 2); root.add(l); return l; });
 
   const post = createPost(renderer, scene, camera, null);
 
@@ -104,210 +88,199 @@ async function main() {
     try { R = upgrade(await unpackRecipe(location.hash.slice(3))); } catch { R = null; }
   }
   R ??= generate(params.get('seed') || DEFAULT_SEED);
+  const M = () => R.layers.length;
+  const layerSeed = (m) => (m ? `${R.seed}/${m}` : R.seed);
 
-  // ── État ──
   // (mobile : moins de workers, la recherche ne doit pas étouffer le rendu)
   const pool = createPool(LITE ? Math.max(2, Math.min(3, (navigator.hardwareConcurrency || 4) - 1)) : undefined);
-  const S = { flip: 1, finishKey: '', orbit: null, coef: null, p: null, visual: null, machine: null, q: 1, duration: 10, L: 0, paused: false, busy: false, run: 0, envKey: '' };
-  const pos = new Float64Array(2);
-  let bodyXY = new Float64Array(2);
-  const world = [];
+  const orbits = [];
 
-  // L ∈ [0, 1) : phase de la boucle (q périodes). Le temps de l'orbite est
-  // déformé (ralentis sur les passages serrés) ; la caméra, elle, vit en
-  // temps réel.
-  function setTime(L) {
-    S.L = ((L % 1) + 1) % 1;
-    if (!S.visual) return;
-    const { N, omega } = S.p;
-    const { tau, open } = warp(TAU * S.q * S.L, S.beats);
-    const th = omega * tau, c = Math.cos(th), sn = Math.sin(th), f = S.flip;
-    plate.rotation.y = th;
-    S.visual.phase.value = ((tau / TAU) % 1 + 1) % 1;
-    // la machine place les astres au bout de leurs chaînes
-    S.machine.update(tau, bodyXY);
-    for (let j = 0; j < N; j++) {
-      const x = bodyXY[2 * j], y = bodyXY[2 * j + 1];
-      S.visual.bodies[j].position.set(x, S.bodyY, -y);
-      // position dans le studio (plateau tourné de θ autour de +y)
-      // (monture suspendue : retournée d'un demi-tour autour de x)
-      world[j] = [x * c - y * sn, f * S.machine.yBody, f * (-x * sn - y * c)];
-    }
-    // embrasement : un astre s'avive quand il en frôle un autre
-    for (let j = 0; j < N; j++) {
-      let d = Infinity;
-      for (let i = 0; i < N; i++) if (i !== j) d = Math.min(d, Math.hypot(bodyXY[2 * i] - bodyXY[2 * j], bodyXY[2 * i + 1] - bodyXY[2 * j + 1]));
-      S.visual.setBoost(j, 1 + R.bodies.flare * Math.exp(-((d / (1.7 * S.ratio)) ** 2)));
-    }
-    if (!R.motion.free) placeCamera(S.L, open);
-  }
-
-  // caméra : suite de plans tirée de la graine ; mise au point sur la cible
+  // ── caméra de base d'une couche : périodique en u (même pose à u = 0 et 1)
   const fitFor = () => {
     const vf = (30 * Math.PI) / 360, hf = Math.atan(Math.tan(vf) * camera.aspect);
-    return 1.5 / Math.tan(Math.min(vf * 1.25, hf));
+    return 1.55 / Math.tan(Math.min(vf * 1.2, hf));
   };
-  function placeCamera(L, open = 0) {
-    const M = S.machine;
-    const f = S.flip;
-    const cam = cameraAt(L, S.shots, { fit: fitFor(), open, flip: f < 0, body: (j) => world[j], y: { plate: f * M.yPlate, body: f * M.yBody, top: f * M.yTop } });
-    camera.position.set(...cam.pos);
-    camera.lookAt(...cam.target);
-    if (Math.abs(camera.fov - cam.fov) > 1e-4) { camera.fov = cam.fov; camera.updateProjectionMatrix(); }
-    focusOn(cam.target);
+  function poseParams(m, u) {
+    const c = R.layers[m].camera;
+    return { az: c.az + c.sweep * Math.sin(TAU * u), el: c.el + 0.06 * Math.cos(TAU * u) };
   }
-  function focusOn(t) {
-    const d = camera.position.distanceTo(new THREE.Vector3(...t));
-    post.U.focus.value = d;
-    post.U.focusRange.value = RENDER.focusSpread * d;
-  }
-
-  // ── Réglages à vif : matières, astres, verre, lumières ──
-  function applyLive() {
-    mats.apply(R.matters, MATTERS);
-    if (S.finishKey !== `${R.stage.finish}`) { S.finishKey = `${R.stage.finish}`; mats.setFinish(R.stage.finish, R.stage.finishScale); }
-    mats.plateFinish.scale.value = R.stage.finishScale;
-    floorMat.color.set(R.light.floor);
-    scene.background.set(R.light.bg);
-    // fond clair : légende et indications en sombre
-    const bg = new THREE.Color(R.light.bg);
-    document.body.classList.toggle('light', 0.2126 * bg.r + 0.7152 * bg.g + 0.0722 * bg.b > 0.3);
-    if (R.light.env !== S.envKey) {
-      S.envKey = R.light.env;
-      const old = scene.environment;
-      scene.environment = makeEnvironment(R.light.env, 0, LITE ? 512 : 1024);
-      old?.dispose();
+  // pose de la caméra ; pendant la plongée, elle glisse de l'angle de la couche
+  // courante (a) vers celui de la suivante (b), pour arriver exactement sur la
+  // pose de départ de b
+  function basePose(m, u, next = null, s = 0) {
+    const A = poseParams(m, u);
+    let { az, el } = A;
+    if (next !== null && s > 0) {
+      const B = poseParams(next, u - 1);
+      const dAz = Math.atan2(Math.sin(B.az - A.az), Math.cos(B.az - A.az));
+      az = A.az + dAz * s; el = A.el + (B.el - A.el) * s;
     }
-    scene.environmentIntensity = R.light.envIntensity;
-    key.color.set(R.light.key.color); key.intensity = R.light.key.intensity;
-    rimLight.color.set(R.light.rim.color); rimLight.intensity = R.light.rim.intensity;
-    S.visual?.setStyle(R);
-    post.U.warmth.value = RENDER.warmth + R.light.warmth;
+    // la caméra reste dans la coque du monde (rayon RG) : au-delà, on élargit le champ
+    const want = fitFor(), r = Math.min(want, 4.3);
+    const pos = new THREE.Vector3(Math.cos(az) * Math.cos(el) * r, -0.16 + Math.sin(el) * r, Math.sin(az) * Math.cos(el) * r);
+    return { pos, target: new THREE.Vector3(0, -0.16, 0), fov: want > 4.3 ? 30 * (want / 4.3) : 30 };
   }
 
+  // ── construction des mondes (après la recherche des orbites)
+  function buildWorlds() {
+    for (const W of S.worlds) { W.group.removeFromParent(); W.dispose(); }
+    const sh = SHADOWS[RENDER.shadows] || SHADOWS.high;
+    S.worlds = R.layers.map((L, m) => createWorld({ orbit: orbits[m], L, lite: LITE, shadows: sh, seed: layerSeed(m) }));
+    S.k = S.worlds.map((W, m) => W.setNext(S.worlds[(m + 1) % M()]));
+    // boule visée : la plus proche de la caméra au début de la plongée
+    S.target = S.worlds.map((W, m) => {
+      const h = R.motion.hold;
+      W.update(h);
+      const cam = basePose(m, h).pos;
+      let best = 0, bd = Infinity;
+      W.local.forEach((p, j) => { const d = p.distanceTo(cam); if (d < bd) { bd = d; best = j; } });
+      return best;
+    });
+    S.root = -1;
+    applyLive();
+  }
+
+  // ── la plongée : état complet à l'instant τ (pure fonction de τ)
+  const tmp = new THREE.Vector3(), col = new THREE.Color();
+  function setTime(tau) {
+    const Mn = M();
+    S.tau = ((tau % Mn) + Mn) % Mn;
+    if (!S.worlds.length) return;
+    const d = Math.floor(S.tau), u = S.tau - d;
+    const a = d % Mn, b = (d + 1) % Mn, c = (d + 2) % Mn;
+    const Wa = S.worlds[a], Wb = S.worlds[b], Wc = S.worlds[c];
+    // emboîtement : b dans la boule visée de a, c dans celle de b
+    if (S.root !== a) {
+      S.root = a;
+      for (const W of S.worlds) W.group.removeFromParent();
+      for (const W of S.worlds) for (const G of W.globes) if (G.mini) G.mini.visible = true;
+      root.add(Wa.group); Wa.group.scale.setScalar(1);
+      const Ga = Wa.globes[S.target[a]], Gb = Wb.globes[S.target[b]];
+      Ga.inner.add(Wb.group); Wb.group.scale.setScalar(S.k[a]); Ga.mini.visible = false;
+      if (Mn > 2) { Gb.inner.add(Wc.group); Wc.group.scale.setScalar(S.k[b]); Gb.mini.visible = false; }
+      scene.background.copy(Wa.bg);
+      caption();
+      applyLive();
+    }
+    Wa.update(u);
+    Wb.update(u - 1);
+    if (Mn > 2) Wc.update(u - 2);
+    // similitude : zoom de point fixe la boule visée
+    const h = R.motion.hold, s = ss5((u - h) / (1 - h)), k = S.k[a];
+    const p = Wa.local[S.target[a]];
+    const ks = Math.pow(k, s), tr = tmp.copy(p).multiplyScalar((1 - ks) / (1 - k));
+    root.scale.setScalar(1 / ks);
+    root.position.copy(tr).multiplyScalar(-1 / ks);
+    // échelle de chaque monde dans l'image : lumières à l'échelle
+    const sa = 1 / ks, sb = k / ks;
+    Wa.setScale(sa); Wb.setScale(sb); if (Mn > 2) Wc.setScale(sb * S.k[b]);
+    // lumières des astres : celles du monde courant s'éteignent quand on entre
+    // dans la boule, celles du monde suivant s'allument (positions dans le repère de la racine)
+    const handoff = s > 0.85;
+    const W = handoff ? Wb : Wa, fade = handoff ? ss5((s - 0.85) / 0.15) : 1 - ss5((s - 0.7) / 0.15);
+    const base = W.L.bodies.light * (handoff ? sb * sb : sa * sa) * fade;
+    col.set(W.L.bodies.color);
+    for (let j = 0; j < MAX_BODIES; j++) {
+      const l = bodyLights[j];
+      if (j >= W.N) { l.intensity = 0; continue; }
+      if (handoff) l.position.copy(W.local[j]).multiplyScalar(k).add(p); else l.position.copy(W.local[j]);
+      l.intensity = base * W.flare[j];
+      l.color.copy(col);
+    }
+    // caméra (fixe dans l'image, pose de base de la couche) ; mise au point
+    // sur la machine, puis sur la boule visée
+    if (!R.motion.free) {
+      const pose = basePose(a, u, b, s);
+      camera.position.copy(pose.pos); camera.lookAt(pose.target);
+      if (Math.abs(camera.fov - pose.fov) > 1e-4) { camera.fov = pose.fov; camera.updateProjectionMatrix(); }
+      const g = new THREE.Vector3().copy(p).sub(tr).multiplyScalar(1 / ks); // boule visée, dans l'image
+      const focusPt = pose.target.clone().lerp(g, ss5(s * 3));
+      post.U.focus.value = camera.position.distanceTo(focusPt);
+      post.U.focusRange.value = RENDER.focusSpread * post.U.focus.value;
+    }
+  }
+
+  // ── Réglages à vif
+  function applyLive() {
+    const Wa = S.worlds[Math.max(0, S.root)];
+    if (Wa) post.U.warmth.value = RENDER.warmth + Wa.L.light.warmth;
+  }
   function applyRender() {
     if (!RENDER.dynRes) governor.reset();
     renderer.setPixelRatio(pixelRatio());
     renderer.setSize(innerWidth, innerHeight);
-    const sh = SHADOWS[RENDER.shadows] || SHADOWS.high;
-    if (key.shadow.mapSize.x !== sh.key) { key.shadow.mapSize.set(sh.key, sh.key); key.shadow.map?.dispose(); key.shadow.map = null; }
-    post.update({ ...RENDER, lite: LITE, focus: post.U.focus.value, focusRange: post.U.focusRange.value, warmth: RENDER.warmth + R.light.warmth }, null);
+    post.update({ ...RENDER, lite: LITE, focus: post.U.focus.value, focusRange: post.U.focusRange.value, warmth: RENDER.warmth }, null);
+    applyLive();
     saveRender(RENDER);
   }
 
-  // ── Mise en scène (ralentis, plans), recalculée quand la recette change ──
-  function applyMotion() {
-    if (!S.p) return;
-    S.duration = S.q * R.motion.period;
-    S.beats = beatsFor(S.coef, S.p, S.q, R.seed, R.motion.slowmo);
-    S.shots = shotsFor(R.seed, S.duration, S.p.N, R.motion.shotLength);
-    controls.enabled = R.motion.free;
-    if (R.motion.free) controls.target.set(0, -0.14, 0);
-  }
-
   function caption() {
-    const p = S.p, o = S.orbit;
+    const Wa = S.worlds[Math.max(0, S.root)];
+    if (!Wa) return;
+    const p = Wa.params;
     const [pw, qw] = p.omegaFrac;
-    const parts = [`${p.N} corps`];
-    if (p.sym) parts.push(`${p.sym.m} pétales${p.sym.mirror ? ', miroir' : ''}`);
+    const parts = [MOODS[Wa.L.mood].label, `${p.N} corps`];
+    if (p.sym) parts.push(`${p.sym.m} pétales`);
     parts.push(pw ? `plateau : ${qw === 1 ? pw : `${pw}/${qw}`} tour par période` : 'plateau fixe');
-    parts.push(`${S.arms} bras · ${S.machine.design.trains.filter(Boolean).reduce((a, t) => a + t.gears.length, 0) * p.N + (S.machine.design.trains[1] ? 1 - p.N : 0)} roues`);
-    if (o.rho !== undefined) parts.push(o.rho < 1.01 ? 'stable' : 'instable');
+    const gears = Wa.machine.design.trains.filter(Boolean).reduce((x, t) => x + t.gears.length, 0) * p.N;
+    parts.push(`${Wa.epi.arms.length} bras · ${gears} roues`);
     $('#title p').textContent = parts.join(' · ');
-    $('#seed').textContent = `graine ${R.seed}`;
-    ui?.setInfo(`${p.N} corps · ${o.info.crossings} croisements${o.rho !== undefined ? (o.rho < 1.01 ? ' · stable' : ' · instable') : ''}`);
+    $('#seed').textContent = `graine ${R.seed} · couche ${Math.max(0, S.root) + 1} / ${M()}`;
+    ui?.setInfo(`${p.N} corps · ${Wa.info.crossings} croisements`);
   }
 
-  // ── Construction de la scène autour de l'orbite trouvée ──
-  function buildScene() {
-    if (S.visual) { plate.remove(S.visual.group, S.machine.group); rig.remove(S.machine.stand); S.visual.dispose(); S.machine.dispose(); }
-    if (bell) { rig.remove(bell); bell.geometry.dispose(); bell = null; }
-    const p = S.p, sh = SHADOWS[RENDER.shadows] || SHADOWS.high;
-    // la machine : les bras retenus tracent la courbe à ARM_TOL près (au plus
-    // 14) ; astres et verre suivent la courbe qu'elle trace
-    const epi = epicycles(S.coef, p, 1, { tol: ARM_TOL, max: 14 });
-    const curve = sampleArms(epi.arms, 2400);
-    S.visual = createOrbitVisual({ curve, N: p.N, radius: 0.0065 * R.trace.thick, shadows: { bodies: sh.bodies, size: sh.body }, bodyKind: R.bodies.kind, traceKind: R.trace.kind, pinsMat: mats.pins });
-    S.machine = createMachine({ arms: epi.arms, N: p.N, mats, omegaFrac: p.omegaFrac, yFloor: Y_FLOOR });
-    plate.add(S.machine.group, S.visual.group);
-    rig.add(S.machine.stand);
-    // monture
-    S.flip = R.stage.presentation === 'suspendue' ? -1 : 1;
-    rig.rotation.x = S.flip < 0 ? Math.PI : 0;
-    if (R.stage.presentation === 'cloche') {
-      // cloche de verre posée sur le jonc du plateau (profil tourné)
-      const Rb = S.machine.plateR + 0.01, H = S.machine.yTop - S.machine.yPlate + 0.32, pts = [];
-      for (let i = 0; i <= 24; i++) { const a = (i / 24) * (Math.PI / 2); pts.push(new THREE.Vector2(Rb * Math.cos(a) + 0.0001, H - 0.45 * Rb + 0.45 * Rb * Math.sin(a))); }
-      pts.unshift(new THREE.Vector2(Rb, 0));
-      pts.push(new THREE.Vector2(0.03, H + 0.02), new THREE.Vector2(0.0001, H + 0.05));
-      bell = new THREE.Mesh(new THREE.LatheGeometry(pts.reverse(), 96), bellMat);
-      bell.position.y = S.machine.yPlate;
-      bell.renderOrder = 10;
-      rig.add(bell);
-    }
-    // les astres au sommet ; le verre filé à leur hauteur, la gravure à fleur du plateau
-    const yTrace = R.trace.kind === 'gravure' ? S.machine.yPlate + 0.0015 : S.machine.yBody;
-    S.visual.group.position.y = yTrace;
-    S.bodyY = S.machine.yBody - yTrace;
-    key.target.position.set(0, S.flip * S.machine.yPlate, 0);
-    // monture suspendue : la lampe éclaire la machine de côté, par en dessous du plateau
-    key.position.set(-2.4, S.flip < 0 ? -0.1 : 3.6, 1.7);
-    S.arms = epi.arms.length; S.fidelity = epi.residual;
-    bodyXY = new Float64Array(2 * p.N);
-    applyLive();
-    applyMotion();
-    caption();
-    setTime(S.L);
-  }
-
-  // recherche de l'orbite (graine et contraintes de la recette), puis la scène
-  async function load() {
+  // ── recherche des orbites de toutes les couches (sous les yeux), puis les mondes
+  async function load(only = null) {
     const run = ++S.run;
     S.busy = true;
     loader.show();
-    const r = await pool.search(R.seed, { over: { ...orbitOverrides(R), maxArms: 14 }, onSnap: (i, s) => loader.snap(i, s), onTry: (i) => loader.drop(i) });
-    if (run !== S.run) return;
-    if (!r.ok) {
-      const constrained = Object.keys(orbitOverrides(R)).length > 0;
-      loader.error(constrained ? 'Aucune orbite avec ces contraintes : une autre graine…' : `Aucune orbite pour la graine « ${R.seed} » : une autre graine…`);
-      setTimeout(() => { if (run !== S.run) return; R.seed = randomSeed(); load(); }, 1400);
-      return;
+    for (let m = 0; m < M(); m++) {
+      if (only !== null && m !== only && orbits[m]) continue;
+      loader.text(`couche ${m + 1} / ${M()} : recherche d’une orbite…`);
+      let seed = layerSeed(m), r = null;
+      for (let tries = 0; tries < 6; tries++) {
+        r = await pool.search(seed, { over: { ...orbitOverrides(R.layers[m]), maxArms: 14 }, onSnap: (i, sn) => loader.snap(i, sn), onTry: (i) => loader.drop(i) });
+        if (run !== S.run) return;
+        if (r.ok) break;
+        seed = `${seed}+`;
+      }
+      if (!r.ok) { loader.error('Aucune orbite avec ces contraintes.'); return; }
+      orbits[m] = r.orbit;
     }
-    const o = r.orbit, p = o.params, k = 1 / o.info.size;
-    // l'orbite, ramenée à une taille 1
-    Object.assign(S, { orbit: o, coef: Float64Array.from(o.coef, (v) => v * k), p, q: p.omegaFrac[1], ratio: o.info.ratio, L: 0 });
     const url = new URL(location.href);
     url.searchParams.set('seed', R.seed); url.hash = ''; history.replaceState(null, '', url);
-    buildScene();
+    loader.text('construction des machines…');
+    await new Promise((res) => setTimeout(res, 0));
+    buildWorlds();
     ui?.build();
-    // quelques images pour compiler les matériaux derrière l'écran
+    setTime(S.tau);
     for (let i = 0; i < 3; i++) { await post.render(); await new Promise((res) => requestAnimationFrame(res)); }
     if (run !== S.run) return;
     loader.hide();
     S.busy = false;
-    const st = await pool.stability(o);
-    if (run !== S.run) return;
-    o.rho = st.rho;
-    caption();
   }
 
   // ── Panneau ──
-  const newScene = (seed, opts) => { R = generate(seed, opts); ui?.build(); load(); };
   const on = {
-    random: () => newScene(randomSeed()),
-    regenerate: (seed) => newScene(seed || randomSeed()),
+    random: () => { R = generate(randomSeed()); orbits.length = 0; S.tau = 0; ui?.build(); load(); },
+    regenerate: (seed) => { R = generate(seed || randomSeed()); orbits.length = 0; S.tau = 0; ui?.build(); load(); },
     copyLink: async () => {
       const url = new URL(location.href);
       url.hash = `r=${await packRecipe(R)}`;
       try { await navigator.clipboard.writeText(url.href); toast('Lien copié.'); } catch { toast(url.href, 6000); }
     },
     togglePause: () => { S.paused = !S.paused; },
-    orbitChanged: () => load(),
-    moodChanged: () => { const keep = R.orbit; R = generate(R.seed, { mood: R.mood }); R.orbit = keep; ui?.build(); applyLive(); },
-    recipeChanged: () => applyLive(),
-    rebuild: () => S.p && buildScene(),
-    motionChanged: () => { applyMotion(); setTime(S.L); },
-    renderChanged: () => { const sh = S.visual && S.visual.bodies.filter((b) => b.userData.light.castShadow).length; applyRender(); if (S.p && sh !== (SHADOWS[RENDER.shadows] || SHADOWS.high).bodies) buildScene(); },
+    orbitChanged: (m) => { orbits[m] = null; load(m); },
+    moodChanged: (m) => {
+      const keep = R.layers[m].orbit;
+      R.layers[m] = generateLayer(createRng(`recipe:${R.seed}`).fork(`layer${m}:${R.layers[m].mood}`), R.layers[m].mood);
+      R.layers[m].orbit = keep;
+      ui?.build(); rebuild();
+    },
+    recipeChanged: () => rebuild(),
+    rebuild: () => rebuild(),
+    motionChanged: () => { controls.enabled = R.motion.free; },
+    renderChanged: () => { applyRender(); rebuild(); },
     qualityChanged: (q) => {
       if ((q === 'mobile') !== LITE) { toast('Rechargement…', 0); return switchMobile(q === 'mobile'); }
       applyQuality(RENDER, q); ui?.refreshRender(); on.renderChanged();
@@ -316,10 +289,13 @@ async function main() {
     exportVideo: (o) => exportVideo(o),
     exportPNG: () => exportPNG(canvas, () => post.render(), `choregraphie-${R.seed}.png`),
   };
+  let rebuildTimer = 0;
+  function rebuild() {
+    clearTimeout(rebuildTimer);
+    rebuildTimer = setTimeout(() => { if (orbits.length === M() && orbits.every(Boolean)) { buildWorlds(); setTime(S.tau); } }, 80);
+  }
   const ui = params.get('ui') === '0' ? null : createUI({ recipe: () => R, render: RENDER, on });
   ui?.build();
-  // écran tactile : une touche met en pause, deux touches tirent une nouvelle
-  // orbite, un appui long masque l'interface (panneau replié au départ)
   if (LITE || matchMedia?.('(pointer: coarse)').matches) {
     ui?.gui.close();
     bindTouch(canvas, {
@@ -335,11 +311,10 @@ async function main() {
   function frame(now) {
     requestAnimationFrame(frame);
     if (!pace(now)) return; // (écrans 90 / 120 Hz : cadence plafonnée)
-    const dt0 = (now - last) / 1000;
-    const dt = Math.min(0.1, dt0); last = now;
+    const dt0 = (now - last) / 1000, dt = Math.min(0.1, dt0); last = now;
     if (RENDER.dynRes && !S.busy) governor.frame(dt0);
-    if (!S.paused && S.visual && !S.exporting) setTime(S.L + dt / S.duration);
-    if (R.motion.free) { controls.update(); focusOn([controls.target.x, controls.target.y, controls.target.z]); }
+    if (!S.paused && S.worlds.length && !S.exporting) setTime(S.tau + dt / R.motion.segment);
+    if (R.motion.free) controls.update();
     post.render();
     frames++;
     if (now - fpsT > 500) { ui?.setFps(`${(frames * 1000 / (now - fpsT)).toFixed(0)}${RENDER.dynRes ? `  ·  ${Math.round(governor.scale * 100)} %` : ''}`); frames = 0; fpsT = now; }
@@ -355,14 +330,14 @@ async function main() {
 
   // ── Export ──
   async function exportVideo({ width = 1920, height = 1080, fps = 30, mbps = 24 } = {}) {
-    if (S.busy || !S.visual) return;
+    if (S.busy || !S.worlds.length) return;
     S.busy = true; S.exporting = true;
     const bar = $('#progress');
     bar.classList.add('on');
     try {
       await exportLoop({
-        canvas, duration: S.duration,
-        renderAt: (u) => { setTime(u); post.render(); },
+        canvas, duration: R.motion.segment * M(),
+        renderAt: (v) => { setTime(v * M()); post.render(); },
         setSize: (w, h) => { renderer.setPixelRatio(1); renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); },
         restore: () => { canvas.style.width = ''; canvas.style.height = ''; resize(); },
       }, { width, height, fps, mbps }, (f) => { $('#progress u').style.width = `${(f * 100).toFixed(1)}%`; }, `choregraphie-${R.seed}.mp4`);
@@ -373,17 +348,17 @@ async function main() {
 
   addEventListener('keydown', (e) => {
     if (e.metaKey || e.ctrlKey || e.altKey || e.target.closest?.('input, select, textarea')) return;
-    const k = e.key.toLowerCase();
-    if (k === 'n') on.random();
-    else if (k === ' ') { S.paused = !S.paused; e.preventDefault(); }
-    else if (k === 'arrowright' || k === 'arrowleft') { S.paused = true; setTime(S.L + (k === 'arrowright' ? 1 : -1) / 240); }
-    else if (k === 'h') document.body.classList.toggle('clean');
-    else if (k === 'f') (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()).catch(() => {});
-    else if (k === 'e') exportVideo();
-    else if (k === 'p') on.exportPNG();
+    const kk = e.key.toLowerCase();
+    if (kk === 'n') on.random();
+    else if (kk === ' ') { S.paused = !S.paused; e.preventDefault(); }
+    else if (kk === 'arrowright' || kk === 'arrowleft') { S.paused = true; setTime(S.tau + (kk === 'arrowright' ? 1 : -1) / 120); }
+    else if (kk === 'h') document.body.classList.toggle('clean');
+    else if (kk === 'f') (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()).catch(() => {});
+    else if (kk === 'e') exportVideo();
+    else if (kk === 'p') on.exportPNG();
   });
 
-  if (params.has('debug')) window.chor = { S, get R() { return R; }, setTime, render: () => post.render(), renderer, scene, camera, controls, post, load, on };
+  if (params.has('debug')) window.chor = { S, get R() { return R; }, setTime, render: () => post.render(), renderer, scene, camera, controls, post, load, on, root };
   load();
 }
 

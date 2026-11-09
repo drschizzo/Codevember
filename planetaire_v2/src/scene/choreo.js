@@ -71,8 +71,15 @@ export function beatsFor(coef, p, q, seed, strength = 1) {
   return { beats, loop: TAU * q, dMin };
 }
 
-// temps de l'orbite déformé ; open ∈ [0, 1] : profondeur du ralenti en cours
+// temps de l'orbite déformé ; open ∈ [0, 1] : profondeur du ralenti en cours.
+// (la correction est périodique, de période B.loop : on la calcule sur t ramené
+// dans [0, B.loop), pour tout t)
 export function warp(t, B) {
+  const tm = ((t % B.loop) + B.loop) % B.loop;
+  const r = warp0(tm, B);
+  return { tau: t + (r.tau - tm), open: r.open };
+}
+function warp0(t, B) {
   let tau = t, open = 0;
   for (const b of B.beats) {
     for (const off of [-B.loop, 0, B.loop]) {

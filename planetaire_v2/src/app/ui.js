@@ -1,7 +1,8 @@
 // Panneau de réglages (lil-gui). Ce module ne connaît que la recette, les
 // réglages de rendu et des fonctions de rappel : il ne touche pas à la scène.
 import GUI from 'lil-gui';
-import { MOODS, MATTERS, PRESENTATIONS, FINISHES, BODY_KINDS, TRACE_KINDS } from '../recipe.js';
+import { MOODS, MATTERS, FINISHES, TRACE_KINDS } from '../recipe.js';
+import { GLOBE_KINDS, GLASS_TINTS } from '../scene/world.js';
 import { ENV_PRESETS } from '../scene/env.js';
 import { QUALITY, SHADOWS } from './settings.js';
 import { symmetryOptions } from '../orbit/symmetry.js';
@@ -32,99 +33,102 @@ export function createUI({ recipe: getRecipe, render: RENDER, on }) {
   fExp.add(exp, 'go').name('Exporter la boucle (MP4)  (E)');
   fExp.add(exp, 'png').name('Image (PNG)  (P)');
 
-  const fOrbit = gui.addFolder('Orbite');
-  const fScene = gui.addFolder('Scène').close();
-  const fMat = gui.addFolder('Matières').close();
-  const fBodies = gui.addFolder('Astres').close();
-  const fTrace = gui.addFolder('Trace').close();
-  const fMotion = gui.addFolder('Mise en scène').close();
-  const fLight = gui.addFolder('Lumières').close();
+  const fDive = gui.addFolder('Plongée');
+  const fLayers = gui.addFolder('Couches');
   const fRender = gui.addFolder('Rendu').close();
+  const inv = (o) => Object.fromEntries(Object.entries(o).map(([k, v]) => [v, k]));
 
   // ── Recette (reconstruite à chaque nouvelle scène) ──
-  let ctls = [];
+  let ctls = [], folders = [];
   function build() {
     const R = getRecipe();
     top.seed = R.seed; seedCtl.updateDisplay();
     for (const c of ctls) c.destroy();
-    ctls = [];
+    for (const f of folders) f.destroy();
+    ctls = []; folders = [];
     const add = (f, o, k, ...a) => { const c = f.add(o, k, ...a); ctls.push(c); return c; };
     const addC = (f, o, k) => { const c = f.addColor(o, k); ctls.push(c); return c; };
     const live = () => on.recipeChanged();
 
-    // orbite : contraintes du solveur (« auto » : tirées de la graine)
-    const o = {
-      N: R.orbit.N ? String(R.orbit.N) : 'auto',
-      sym: R.orbit.sym === null || R.orbit.sym === undefined ? 'auto' : R.orbit.sym === 'none' ? 'none' : `${R.orbit.sym.m}/${R.orbit.sym.l}${R.orbit.sym.mirror ? 'M' : ''}`,
-      omega: R.orbit.omega ? R.orbit.omega.join('/') : 'auto',
-    };
-    add(fOrbit, o, 'N', { Auto: 'auto', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8', 9: '9' }).name('Corps').onChange((v) => {
-      R.orbit.N = v === 'auto' ? null : Number(v);
-      R.orbit.sym = null; // (les classes dépendent du nombre de corps)
-      build(); on.orbitChanged();
-    });
-    const symChoices = { Auto: 'auto', Aucune: 'none' };
-    if (R.orbit.N) {
-      for (const c of symmetryOptions(R.orbit.N)) {
-        symChoices[`${c.m} pétales (l = ${c.l})${c.weak ? ' ·  fragile' : ''}`] = `${c.m}/${c.l}`;
-        symChoices[`${c.m} pétales (l = ${c.l}), miroir${c.weak ? ' ·  fragile' : ''}`] = `${c.m}/${c.l}M`;
+    add(fDive, R.motion, 'segment', 6, 40, 0.5).name('Durée d’une couche (s)');
+    add(fDive, R.motion, 'hold', 0.1, 0.85, 0.01).name('Part avant la plongée');
+    add(fDive, R.motion, 'free').name('Caméra libre (souris)').onChange(() => on.motionChanged());
+    add(fDive, state, 'info').name('Couche à l’écran').disable();
+
+    R.layers.forEach((L, m) => {
+      const f = fLayers.addFolder(`Couche ${m + 1} — ${MOODS[L.mood].label}`).close();
+      folders.push(f);
+      // orbite : contraintes du solveur (« auto » : tirées de la graine)
+      const fo = f.addFolder('Orbite');
+      const o = {
+        N: L.orbit.N ? String(L.orbit.N) : 'auto',
+        sym: L.orbit.sym === null || L.orbit.sym === undefined ? 'auto' : L.orbit.sym === 'none' ? 'none' : `${L.orbit.sym.m}/${L.orbit.sym.l}${L.orbit.sym.mirror ? 'M' : ''}`,
+        omega: L.orbit.omega ? L.orbit.omega.join('/') : 'auto',
+      };
+      add(fo, o, 'N', { Auto: 'auto', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8', 9: '9' }).name('Corps').onChange((v) => {
+        L.orbit.N = v === 'auto' ? null : Number(v);
+        L.orbit.sym = null; // (les classes dépendent du nombre de corps)
+        build(); on.orbitChanged(m);
+      });
+      const symChoices = { Auto: 'auto', Aucune: 'none' };
+      if (L.orbit.N) {
+        for (const c of symmetryOptions(L.orbit.N)) {
+          symChoices[`${c.m} pétales (l = ${c.l})${c.weak ? ' · fragile' : ''}`] = `${c.m}/${c.l}`;
+          symChoices[`${c.m} pétales (l = ${c.l}), miroir${c.weak ? ' · fragile' : ''}`] = `${c.m}/${c.l}M`;
+        }
       }
-    }
-    add(fOrbit, o, 'sym', symChoices).name(R.orbit.N ? 'Symétrie' : 'Symétrie (choisir N)').onChange((v) => {
-      if (v === 'auto') R.orbit.sym = null;
-      else if (v === 'none') R.orbit.sym = 'none';
-      else { const [m, l] = v.replace('M', '').split('/').map(Number); R.orbit.sym = { m, l, mirror: v.endsWith('M') }; }
-      on.orbitChanged();
+      add(fo, o, 'sym', symChoices).name(L.orbit.N ? 'Symétrie' : 'Symétrie (choisir N)').onChange((v) => {
+        if (v === 'auto') L.orbit.sym = null;
+        else if (v === 'none') L.orbit.sym = 'none';
+        else { const [mm, l] = v.replace('M', '').split('/').map(Number); L.orbit.sym = { m: mm, l, mirror: v.endsWith('M') }; }
+        on.orbitChanged(m);
+      });
+      add(fo, o, 'omega', ['auto', ...FRACTIONS]).name('Plateau (tours / période)').onChange((v) => {
+        L.orbit.omega = v === 'auto' ? null : v.split('/').map(Number);
+        on.orbitChanged(m);
+      });
+      // humeur et plateau
+      add(f, L, 'mood', opts(MOODS)).name('Humeur (retire la couche)').onChange(() => on.moodChanged(m));
+      add(f, L.stage, 'finish', inv(FINISHES)).name('Plateau : finition').onChange(live);
+      add(f, L.stage, 'finishScale', 0.3, 3, 0.01).name('Plateau : échelle du motif').onFinishChange(live);
+      // matières
+      const fm = f.addFolder('Matières').close();
+      const mat = opts(MATTERS);
+      for (const [k, name] of [['plate', 'Plateau'], ['arms', 'Bras'], ['arms2', 'Bras (alternés)'], ['gears', 'Roues'], ['pins', 'Tenons, goupilles, montures'], ['foot', 'Pied, bâti']]) add(fm, L.matters, k, mat).name(name).onChange(live);
+      // astres
+      const fb = f.addFolder('Astres').close();
+      add(fb, L.bodies, 'globe', inv(GLOBE_KINDS)).name('Monture').onChange(live);
+      add(fb, L.bodies, 'tint', Object.fromEntries(Object.keys(GLASS_TINTS).map((k) => [k, k]))).name('Verre').onChange(live);
+      add(fb, L.bodies, 'irid', 0, 1, 0.01).name('Irisation').onFinishChange(live);
+      addC(fb, L.bodies, 'color').name('Lumière').onChange(live);
+      add(fb, L.bodies, 'flare', 0, 4, 0.01).name('Embrasement aux passages');
+      add(fb, L.bodies, 'light', 0, 0.5, 0.005).name('Lumière portée');
+      // trace
+      const ft = f.addFolder('Trace').close();
+      add(ft, L.trace, 'kind', inv(TRACE_KINDS)).name('Nature').onChange(live);
+      add(ft, L.trace, 'show').name('Visible').onChange(live);
+      add(ft, L.trace, 'cool', 1, 20, 0.1).name('Refroidissement').onFinishChange(live);
+      add(ft, L.trace, 'thick', 0.3, 3, 0.01).name('Épaisseur').onFinishChange(live);
+      add(ft, L.trace, 'glow', 0, 3, 0.01).name('Incandescence').onFinishChange(live);
+      addC(ft, L.trace, 'glass').name('Verre froid').onChange(live);
+      // rythme et caméra
+      const fr = f.addFolder('Rythme et caméra').close();
+      add(fr, L.motion, 'slowmo', 0, 1.4, 0.01).name('Ralentis').onFinishChange(live);
+      add(fr, L.motion, 'periodsPerLayer', 0.25, 3, 0.05).name('Périodes par couche').onFinishChange(live);
+      add(fr, L.camera, 'az', 0, 6.28, 0.01).name('Caméra : azimut').onFinishChange(live);
+      add(fr, L.camera, 'el', 0.05, 1.3, 0.01).name('Caméra : élévation').onFinishChange(live);
+      add(fr, L.camera, 'sweep', -1.2, 1.2, 0.01).name('Caméra : balayage').onFinishChange(live);
+      // lumières
+      const fl = f.addFolder('Lumières').close();
+      add(fl, L.light, 'env', opts(ENV_PRESETS)).name('Studio (reflets)').onChange(live);
+      add(fl, L.light, 'envIntensity', 0, 2, 0.01).name('Intensité du studio').onFinishChange(live);
+      addC(fl, L.light, 'bg').name('Fond').onFinishChange(live);
+      addC(fl, L.light, 'floor').name('Sol').onFinishChange(live);
+      addC(fl, L.light.key, 'color').name('Lampe : couleur').onFinishChange(live);
+      add(fl, L.light.key, 'intensity', 0, 20, 0.1).name('Lampe : intensité').onFinishChange(live);
+      addC(fl, L.light.rim, 'color').name('Contre-jour : couleur').onFinishChange(live);
+      add(fl, L.light.rim, 'intensity', 0, 3, 0.01).name('Contre-jour : intensité').onFinishChange(live);
     });
-    add(fOrbit, o, 'omega', ['auto', ...FRACTIONS]).name('Plateau (tours / période)').onChange((v) => {
-      R.orbit.omega = v === 'auto' ? null : v.split('/').map(Number);
-      on.orbitChanged();
-    });
-    add(fOrbit, state, 'info').name('Orbite trouvée').disable();
-
-    // scène
-    add(fScene, R, 'mood', opts(MOODS)).name('Humeur (nouvelle scène)').onChange(() => on.moodChanged());
-    const inv = (o) => Object.fromEntries(Object.entries(o).map(([k, v]) => [v, k]));
-    add(fScene, R.stage, 'presentation', inv(PRESENTATIONS)).name('Présentation').onChange(() => on.rebuild());
-    add(fScene, R.stage, 'finish', inv(FINISHES)).name('Plateau : finition').onChange(live);
-    add(fScene, R.stage, 'finishScale', 0.3, 3, 0.01).name('Plateau : échelle du motif').onChange(live);
-
-    // matières
-    const mat = opts(MATTERS);
-    for (const [k, name] of [['plate', 'Plateau'], ['arms', 'Bras'], ['arms2', 'Bras (alternés)'], ['gears', 'Roues'], ['pins', 'Tenons, goupilles, vis'], ['foot', 'Pied, bâti']]) {
-      add(fMat, R.matters, k, mat).name(name).onChange(live);
-    }
-
-    // astres
-    add(fBodies, R.bodies, 'kind', Object.fromEntries(Object.entries(BODY_KINDS).map(([k, v]) => [v, k]))).name('Nature').onChange(() => on.rebuild());
-    addC(fBodies, R.bodies, 'color').name('Couleur').onChange(live);
-    add(fBodies, R.bodies, 'glow', 0.2, 3, 0.01).name('Éclat').onChange(live);
-    add(fBodies, R.bodies, 'flare', 0, 4, 0.01).name('Embrasement aux passages').onChange(live);
-    add(fBodies, R.bodies, 'light', 0, 0.5, 0.005).name('Lumière portée').onChange(live);
-
-    // verre filé
-    add(fTrace, R.trace, 'kind', Object.fromEntries(Object.entries(TRACE_KINDS).map(([k, v]) => [v, k]))).name('Nature').onChange(() => on.rebuild());
-    add(fTrace, R.trace, 'show').name('Visible').onChange(live);
-    add(fTrace, R.trace, 'cool', 1, 20, 0.1).name('Refroidissement').onChange(live);
-    add(fTrace, R.trace, 'thick', 0.3, 3, 0.01).name('Épaisseur (nouvelle scène)').onFinishChange(() => on.rebuild());
-    add(fTrace, R.trace, 'glow', 0, 3, 0.01).name('Incandescence').onChange(live);
-    addC(fTrace, R.trace, 'glass').name('Verre froid').onChange(live);
-
-    // mise en scène
-    add(fMotion, R.motion, 'period', 4, 30, 0.5).name('Durée d’une période (s)').onFinishChange(() => on.motionChanged());
-    add(fMotion, R.motion, 'slowmo', 0, 1.4, 0.01).name('Ralentis').onFinishChange(() => on.motionChanged());
-    add(fMotion, R.motion, 'shotLength', 3, 20, 0.5).name('Durée des plans (s)').onFinishChange(() => on.motionChanged());
-    add(fMotion, R.motion, 'free').name('Caméra libre (souris)').onChange(() => on.motionChanged());
-
-    // lumières
-    add(fLight, R.light, 'env', opts(ENV_PRESETS)).name('Studio (reflets)').onChange(live);
-    add(fLight, R.light, 'envIntensity', 0, 2, 0.01).name('Intensité du studio').onChange(live);
-    addC(fLight, R.light, 'bg').name('Fond').onChange(live);
-    addC(fLight, R.light, 'floor').name('Sol').onChange(live);
-    addC(fLight, R.light.key, 'color').name('Lampe : couleur').onChange(live);
-    add(fLight, R.light.key, 'intensity', 0, 20, 0.1).name('Lampe : intensité').onChange(live);
-    addC(fLight, R.light.rim, 'color').name('Contre-jour : couleur').onChange(live);
-    add(fLight, R.light.rim, 'intensity', 0, 3, 0.01).name('Contre-jour : intensité').onChange(live);
   }
 
   // ── Rendu (indépendant de la scène, mémorisé) ──
