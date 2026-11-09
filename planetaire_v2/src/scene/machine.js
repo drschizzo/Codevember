@@ -31,13 +31,22 @@ export function materials() {
   const m = Object.fromEntries(ROLES.map((r) => [r, make()]));
   // rubis des paliers
   m.jewel = new THREE.MeshPhysicalNodeMaterial({ color: new THREE.Color().setRGB(0.55, 0.01, 0.04), metalness: 0, roughness: 0.04, clearcoat: 1, clearcoatRoughness: 0.02 });
+  // fond des sillons : la matière du plateau, assombrie et mate
+  // (les courbes tournent dans un sens ou dans l'autre : rubans visibles des deux côtés)
+  m.groove = new THREE.MeshPhysicalNodeMaterial({ metalness: 0.6, roughness: 0.75, side: THREE.DoubleSide });
+  m.lip = new THREE.MeshPhysicalNodeMaterial({ metalness: 1, roughness: 0.18, side: THREE.DoubleSide });
   m.apply = (matters, table) => {
     for (const role of ROLES) {
       const t = table[matters[role]], x = m[role];
       if (!t) continue;
       x.color.setRGB(...t.color); x.metalness = t.metal; x.roughness = t.rough;
       x.clearcoat = t.coat; x.clearcoatRoughness = 0.08;
+      x.iridescence = t.irid || 0; x.sheen = t.sheen || 0;
     }
+    const pl = table[matters.plate];
+    if (pl) { m.groove.color.setRGB(...pl.color.map((c) => c * 0.22)); m.groove.metalness = pl.metal * 0.6; }
+    const pn = table[matters.pins];
+    if (pn) { m.lip.color.setRGB(...pn.color); m.lip.metalness = pn.metal; }
   };
   return m;
 }
@@ -126,7 +135,41 @@ function meshOffsets(zs) {
   return off;
 }
 
+// ruban posé à plat le long d'une courbe fermée du plan (sillon) : y constant,
+// largeur w ; coordonnées (x, y) → (x, h, −y)
+function ribbonGeometry(pts, w, h) {
+  const n = pts.length / 2, pos = new Float32Array(n * 2 * 3), nrm = new Float32Array(n * 2 * 3), idx = [];
+  for (let i = 0; i < n; i++) {
+    const a = (i + n - 1) % n, b = (i + 1) % n;
+    let tx = pts[2 * b] - pts[2 * a], ty = pts[2 * b + 1] - pts[2 * a + 1];
+    const l = Math.hypot(tx, ty) || 1; tx /= l; ty /= l;
+    const nx = -ty, ny = tx, x = pts[2 * i], y = pts[2 * i + 1];
+    for (let sd = 0; sd < 2; sd++) {
+      const o = (i * 2 + sd) * 3, f = sd ? -w / 2 : w / 2;
+      pos[o] = x + nx * f; pos[o + 1] = h; pos[o + 2] = -(y + ny * f);
+      nrm[o + 1] = 1;
+    }
+    const i2 = (i + 1) % n;
+    idx.push(i * 2, i2 * 2, i * 2 + 1, i2 * 2, i2 * 2 + 1, i * 2 + 1);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+  g.setIndex(idx);
+  return g;
+}
+
 // ── La machine ───────────────────────────────────────────────────────────────
+//
+// Montage suspendu : l'étoile des bras 0 en haut du tube central, chaque bras
+// un étage plus bas que celui qui le porte, son train d'engrenages sous lui ;
+// les astres en bas, juste au-dessus du plateau. Les bras qui le peuvent
+// reposent sur une colonne dont le patin glisse dans un sillon du plateau
+// (mech/design.js choisit où la poser pour qu'aucune pièce ne la croise).
+
+export const Y_PLATE = -0.34;
+const CLEAR = 0.075;      // du plateau au dessous de la pile (place des astres)
+const GAP = 0.003;        // jeu entre un bras et le train qu'il porte
 
 export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72 }) {
   const D = designMachine(arms, N);
@@ -137,11 +180,13 @@ export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72 }) {
   const keep = (g) => (geos.add(g), g);
   const mesh = (g, m, shadow = true) => { const o = new THREE.Mesh(g, m); o.castShadow = shadow; o.receiveShadow = true; return o; };
 
-  // ── hauteurs : plateau, puis les dalles, puis le plan des astres (y = 0)
-  const yPlate = Math.min(-0.34, -(0.05 + D.height + 0.07));
-  const y0 = yPlate + 0.05;
-  const yBar = (i, j) => y0 + D.base[i] + D.level[i][j] * SLAB;
-  const yGear = (i, j) => yBar(i, j) + GEAR_DY + GEAR_T / 2; // plan médian du train porté par le bras i
+  // ── hauteurs
+  const yPlate = Y_PLATE;
+  const yTop = yPlate + CLEAR + D.height;
+  const slabTop = (i, j) => yTop - D.base[i] - D.level[i][j] * SLAB;
+  const yBar = (i, j) => slabTop(i, j) - BAR_T / 2;                       // milieu du bras
+  const yGear = (i, j) => slabTop(i, j) - BAR_T - GAP - GEAR_T / 2;       // milieu du train porté par le bras i
+  const yGroove = yPlate + 0.0004, yTrail = yPlate + 0.0045, yBody = yPlate + 0.036;
 
   // ── plateau, jonc, graduations
   let reach = 0;
@@ -168,24 +213,51 @@ export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72 }) {
     group.add(ticks);
   }
 
-  // ── centre : poteau fixe au plateau (porte la roue solaire), tube (porte l'étoile)
+  // ── sillons : la courbe décrite par chaque patin (la même pour toutes les chaînes)
+  const P = new Float64Array(2 * n + 2);
+  const grooveCurves = [];
+  D.supports.forEach((u, a) => {
+    if (u === null) return;
+    const m = 1600, pts = new Float32Array(m * 2);
+    for (let s = 0; s < m; s++) {
+      D.pivots((TAU * s) / m, P);
+      pts[2 * s] = P[2 * a] + u * (P[2 * a + 2] - P[2 * a]);
+      pts[2 * s + 1] = P[2 * a + 1] + u * (P[2 * a + 3] - P[2 * a + 1]);
+    }
+    grooveCurves.push({ a, pts });
+    const floor = mesh(keep(ribbonGeometry(pts, 0.016, yGroove)), mats.groove, false);
+    group.add(floor);
+    for (const sd of [-1, 1]) {
+      // lèvres du sillon (chanfrein qui accroche la lumière)
+      const lipPts = new Float32Array(pts.length);
+      for (let s = 0; s < m; s++) {
+        const a2 = (s + m - 1) % m, b2 = (s + 1) % m;
+        let tx = pts[2 * b2] - pts[2 * a2], ty = pts[2 * b2 + 1] - pts[2 * a2 + 1];
+        const l = Math.hypot(tx, ty) || 1;
+        lipPts[2 * s] = pts[2 * s] - (ty / l) * sd * 0.0088;
+        lipPts[2 * s + 1] = pts[2 * s + 1] + (tx / l) * sd * 0.0088;
+      }
+      group.add(mesh(keep(ribbonGeometry(lipPts, 0.0018, yPlate + 0.0007)), mats.lip, false));
+    }
+  });
+
+  // ── centre : canon fixe (porte la roue solaire), tube tournant (porte l'étoile)
   const train0 = D.trains[1];
   const ySun = yGear(0, 0);
-  const post = mesh(keep(cyl(0.0055, ySun + GEAR_T + 0.012 - yPlate)), mats.pins);
-  post.position.y = yPlate;
-  group.add(post);
-  const finial = mesh(keep(new THREE.SphereGeometry(0.009, 16, 10)), mats.pins);
-  finial.position.y = ySun + GEAR_T + 0.016;
-  group.add(finial);
-  const starHub = mesh(keep(cyl(0.02, BAR_T * 1.8, 32)), mats.arms);
-  starHub.position.y = yBar(0, 0) - BAR_T * 0.4;
-  group.add(starHub);
+  const sleeve = mesh(keep(cyl(0.018, ySun - GEAR_T / 2 - yPlate, 32)), mats.foot);
+  sleeve.position.y = yPlate; group.add(sleeve);
   let sun = null;
   if (train0) {
     sun = mesh(gearGeometry(train0.gears[0].z, train0.gears[0].r), mats.gears);
     sun.position.y = ySun;
     group.add(sun);
   }
+  const starHub = mesh(keep(cyl(0.022, BAR_T * 1.8, 32)), mats.arms);
+  starHub.position.y = yBar(0, 0) - BAR_T * 0.9;
+  group.add(starHub);
+  const finial = mesh(keep(new THREE.SphereGeometry(0.012, 20, 12)), mats.pins);
+  finial.position.y = yBar(0, 0) + BAR_T * 0.9 + 0.008;
+  group.add(finial);
 
   // ── les chaînes
   const chains = [];
@@ -195,7 +267,7 @@ export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72 }) {
     const ch = { arm: [], idlers: [], tipA: [] };
     for (let i = 0; i < n; i++) {
       const g = new THREE.Group();
-      const yb = yBar(i, j), oy = yb + BAR_T / 2; // origine du groupe : milieu du bras
+      const oy = yBar(i, j); // origine du groupe : milieu du bras
       g.position.y = oy;
       g.add(mesh(barGeos[i], i % 2 ? mats.arms2 : mats.arms));
       // contrepoids
@@ -203,7 +275,7 @@ export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72 }) {
       const cwm = mesh(keep(cyl(cwR, BAR_T * 2.4, 24)), mats.arms);
       cwm.position.set(-D.cw[i], -BAR_T * 1.2, 0);
       g.add(cwm);
-      // moyeu et rubis
+      // moyeu, rubis, vis
       const hubR = Math.max(0.0045, D.barW[i] * 0.42);
       const hub = mesh(keep(cyl(hubR, BAR_T * 1.6, 20)), mats.pins);
       hub.position.y = -BAR_T * 0.8;
@@ -218,57 +290,67 @@ export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72 }) {
           g.add(screw);
         }
       }
-      // train porté par ce bras (mène le bras i + 1) : renvois sur tenons
+      const bottom = -BAR_T / 2; // dessous du bras, dans son repère
+      // train porté par ce bras (mène le bras i + 1), sous lui : renvois sur tenons
       const tr = D.trains[i + 1], idl = [];
       if (tr) {
         tr.gears.forEach((gear, gi) => {
           if (gear.role !== 'I') return;
-          const stud = mesh(keep(cyl(STUD_R, GEAR_DY + GEAR_T - BAR_T / 2 + 0.002, 10)), mats.pins);
-          stud.position.set(gear.x, BAR_T / 2, 0);
+          const yg = yGear(i, j) - oy;
+          const stud = mesh(keep(cyl(STUD_R, bottom - (yg - GEAR_T / 2 - 0.0015))), mats.pins);
+          stud.position.set(gear.x, yg - GEAR_T / 2 - 0.0015, 0);
           g.add(stud);
           const gm = mesh(gearGeometry(gear.z, gear.r), mats.gears);
-          gm.position.set(gear.x, yGear(i, j) - oy, 0);
+          gm.position.set(gear.x, yg, 0);
           g.add(gm);
           idl.push({ m: gm, z: gear.z, off: tr.off[gi], sign: gi % 2 ? -1 : 1, zA: tr.gears[0].z });
         });
       }
       ch.idlers.push(idl);
+      // au bout du bras : l'axe qui porte le bras suivant (et, sous lui, la roue A
+      // du train suivant, solidaire de ce bras)
+      const u = D.supports[i];
       if (i < n - 1) {
-        // au bout du bras : le tenon qui porte le bras suivant, et au-dessus la
-        // roue A du train suivant, fixée à ce bras
         const trNext = D.trains[i + 2];
-        const yTop = trNext ? yGear(i + 1, j) + GEAR_T / 2 + 0.003 : yBar(i + 1, j) + BAR_T + 0.003;
-        const stud = mesh(keep(cyl(STUD_R * 1.3, yTop - (yb + BAR_T))), mats.pins);
-        stud.position.set(L[i], BAR_T / 2, 0);
-        g.add(stud);
+        const yLow = (trNext ? yGear(i + 1, j) - GEAR_T / 2 : yBar(i + 1, j) - BAR_T / 2) - 0.003 - oy;
+        if (u !== 1) {
+          const axle = mesh(keep(cyl(STUD_R * 1.3, bottom - yLow)), mats.pins);
+          axle.position.set(L[i], yLow, 0);
+          g.add(axle);
+        }
         if (trNext) {
           const A = mesh(gearGeometry(trNext.gears[0].z, trNext.gears[0].r), mats.gears);
           A.position.set(L[i], yGear(i + 1, j) - oy, 0);
           g.add(A);
           ch.tipA.push({ A, i });
         }
-      } else {
-        // dernier bras : la goupille qui porte l'astre, et son chaton
-        const pin = mesh(keep(cyl(0.0032, -0.03 - (yb + BAR_T))), mats.pins);
-        pin.position.set(L[i], BAR_T / 2, 0);
-        g.add(pin);
-        const cup = mesh(keep(new THREE.CylinderGeometry(0.014, 0.005, 0.012, 20)), mats.pins);
-        cup.position.set(L[i], -0.024 - oy, 0);
-        g.add(cup);
       }
-      // roue B du train précédent : solidaire de ce bras, sous lui, et son canon
+      // colonne et patin : du dessous du bras jusqu'au sillon
+      if (u !== null) {
+        const x = u * L[i], yFoot = yPlate + 0.006 - oy;
+        const col = mesh(keep(cyl(0.0034, bottom - yFoot)), mats.pins);
+        col.position.set(x, yFoot, 0);
+        g.add(col);
+        const shoe = mesh(keep(cyl(0.0065, 0.006, 20, 0.0045)), mats.foot);
+        shoe.position.set(x, yPlate + 0.0004 - oy, 0);
+        g.add(shoe);
+        const collar = mesh(keep(cyl(0.006, 0.004, 20)), mats.pins);
+        collar.position.set(x, bottom - 0.004, 0);
+        g.add(collar);
+      }
+      // roue B du train précédent : solidaire de ce bras, au-dessus de lui, et son canon
       const trPrev = D.trains[i];
       if (trPrev) {
         const gB = trPrev.gears[trPrev.gears.length - 1];
-        const yB = yGear(i - 1, j);
+        const yB = yGear(i - 1, j) - oy;
         const B = mesh(gearGeometry(gB.z, gB.r), mats.gears);
-        B.position.y = yB - oy;
+        B.position.y = yB;
         B.userData.off = trPrev.off[trPrev.gears.length - 1];
         g.add(B);
-        const canonH = yb - (yB + GEAR_T / 2);
+        const canonH = yB - GEAR_T / 2 - BAR_T / 2;
         if (canonH > 0) {
           const canon = mesh(keep(cyl(Math.max(STUD_R * 2.2, hubR * 0.8), canonH + 0.0005, 16)), mats.arms);
-          canon.position.y = yB + GEAR_T / 2 - oy;
+          canon.position.y = BAR_T / 2;
           g.add(canon);
         }
         g.userData.B = B;
@@ -287,13 +369,11 @@ export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72 }) {
   const big = Math.round(3 * Math.max(Math.abs(pw), Math.abs(pw + k[0] * qw))); // |Ω_arbre| · q
   const pair = (a, b) => { const g = (x, y) => (y ? g(y, x % y) : x), gg = g(a, b); a /= gg; b /= gg; const t = Math.max(1, Math.ceil(12 / Math.min(a, b))); return [a * t, b * t]; };
   const wheels = [];
-  // couronne du plateau (anneau vissé sous le plateau) et roue du tube (sous le pont)
   if (OmP !== 0) wheels.push({ y: yRing, Om: OmP, speedQ: Math.abs(pw), onTube: false });
   if (OmT !== 0) wheels.push({ y: yT, Om: OmT, speedQ: Math.abs(pw + k[0] * qw), onTube: true });
   for (const w of wheels) {
     const [zW, zP] = pair(big, w.speedQ);
-    // sens : un engrènement direct inverse le sens ; il faut que tous les
-    // pignons de l'arbre tournent dans le même sens (renvoi si besoin)
+    // tous les pignons de l'arbre tournent dans le même sens : renvoi si besoin
     w.idler = wheels.length === 2 && w.onTube && Math.sign(OmT) !== Math.sign(OmP);
     const zI = w.idler ? 14 : 0;
     const m = (2 * d) / (zW + zP + 2 * zI);
@@ -314,10 +394,9 @@ export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72 }) {
     }
     w.off = meshOffsets(zI ? [zW, zI, zP] : [zW, zP]);
   }
-  // canon du plateau, tube central, pont, bâti, arbre, pilier, boîtier, pied
-  const sleeve = mesh(keep(cyl(0.03, yPlate - 0.035 - yUB, 40)), mats.foot);
-  sleeve.position.y = yUB; group.add(sleeve);
-  const tube = mesh(keep(cyl(0.012, yBar(0, 0) + BAR_T - (yFrame + 0.006), 24)), mats.arms);
+  const plateSleeve = mesh(keep(cyl(0.03, yPlate - 0.035 - yUB, 40)), mats.foot);
+  plateSleeve.position.y = yUB; group.add(plateSleeve);
+  const tube = mesh(keep(cyl(0.008, yBar(0, 0) + BAR_T - (yFrame + 0.006), 24)), mats.arms);
   tube.position.y = yFrame + 0.006; group.add(tube);
   const bridge = mesh(keep(new THREE.BoxGeometry(d + 0.06, 0.01, 0.045)), mats.foot);
   bridge.position.set((d + 0.03) / 2 - 0.015, yUB - 0.005, 0); stand.add(bridge);
@@ -338,7 +417,6 @@ export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72 }) {
   base.position.y = yFloor + 0.02; stand.add(base);
 
   // ── animation : tau, temps de l'orbite ; bodyXY reçoit la position des astres
-  const P = new Float64Array(2 * n + 2);
   function update(tau, bodyXY) {
     for (let j = 0; j < N; j++) {
       const t = tau + (TAU * j) / N, ch = chains[j];
@@ -349,29 +427,25 @@ export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72 }) {
         g.rotation.y = k[i] * t + phi[i];
         const psi = ((i ? k[i - 1] : 0) - k[i]) * t;
         for (const it of ch.idlers[i]) it.m.rotation.y = it.sign * (it.zA / it.z) * psi + it.off;
-        // B (solidaire de ce bras) : angle fixe dans son repère
         if (g.userData.B) g.userData.B.rotation.y = g.userData.B.userData.off + phi[i - 1] - phi[i];
       }
-      // A du train suivant (solidaire du bras i) : angle fixe dans son repère
       for (const { A, i } of ch.tipA) A.rotation.y = phi[i + 1] - phi[i];
       bodyXY[2 * j] = P[2 * n]; bodyXY[2 * j + 1] = P[2 * n + 1];
     }
     if (sun) sun.rotation.y = phi[0];
-    // sous le plateau : roues (angle dans le studio = Ω τ), renvoi, pignons
     for (const w of wheels) {
-      const aW = w.Om * tau;                 // angle (studio) de la roue
-      if (w.onTube) w.wheel.rotation.y = k[0] * tau; // (le tube est dans le repère du plateau)
+      const aW = w.Om * tau;
+      if (w.onTube) w.wheel.rotation.y = k[0] * tau;
       if (w.zI) {
         w.idlerM.rotation.y = -(w.zW / w.zI) * aW + w.off[1];
         w.pinion.rotation.y = (w.zW / w.zP) * aW + w.off[2];
       } else w.pinion.rotation.y = -(w.zW / w.zP) * aW + w.off[1];
-      // (couronne : vissée au plateau, son angle est celui du plateau)
     }
     if (wheels[0]) shaft.rotation.y = wheels[0].pinion.rotation.y;
   }
 
   return {
-    group, stand, update, design: D, yPlate, plateR,
+    group, stand, update, design: D, yPlate, yTop, yBody, yTrail, plateR, grooveCurves,
     dispose() { for (const g of geos) g.dispose(); },
   };
 }

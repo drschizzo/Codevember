@@ -113,9 +113,9 @@ async function main() {
     S.machine.update(tau, bodyXY);
     for (let j = 0; j < N; j++) {
       const x = bodyXY[2 * j], y = bodyXY[2 * j + 1];
-      S.visual.bodies[j].position.set(x, 0, -y);
+      S.visual.bodies[j].position.set(x, S.bodyY, -y);
       // position dans le studio (plateau tourné de θ autour de +y)
-      world[j] = [x * c - y * sn, 0, -x * sn - y * c];
+      world[j] = [x * c - y * sn, S.machine.yBody, -x * sn - y * c];
     }
     // embrasement : un astre s'avive quand il en frôle un autre
     for (let j = 0; j < N; j++) {
@@ -132,7 +132,8 @@ async function main() {
     return 1.5 / Math.tan(Math.min(vf * 1.25, hf));
   };
   function placeCamera(L, open = 0) {
-    const cam = cameraAt(L, S.shots, { fit: fitFor(), open, body: (j) => world[j] });
+    const M = S.machine;
+    const cam = cameraAt(L, S.shots, { fit: fitFor(), open, body: (j) => world[j], y: { plate: M.yPlate, body: M.yBody, top: M.yTop } });
     camera.position.set(...cam.pos);
     camera.lookAt(...cam.target);
     if (Math.abs(camera.fov - cam.fov) > 1e-4) { camera.fov = cam.fov; camera.updateProjectionMatrix(); }
@@ -209,6 +210,9 @@ async function main() {
     S.machine = createMachine({ arms: epi.arms, N: p.N, mats, omegaFrac: p.omegaFrac, yFloor: Y_FLOOR });
     plate.add(S.machine.group, S.visual.group);
     scene.add(S.machine.stand);
+    // le verre est coulé dans le sillon de l'orbite ; les astres glissent juste au-dessus
+    S.visual.group.position.y = S.machine.yTrail;
+    S.bodyY = S.machine.yBody - S.machine.yTrail;
     key.target.position.set(0, S.machine.yPlate, 0);
     S.arms = epi.arms.length; S.fidelity = epi.residual;
     bodyXY = new Float64Array(2 * p.N);
