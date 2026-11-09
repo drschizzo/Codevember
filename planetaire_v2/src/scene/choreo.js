@@ -92,14 +92,14 @@ const SWEEP = { ensemble: 0.9, rasant: 0.6, zenith: 0.45, astre: 0.8, machine: 0
 const SHOTS = {
   // plan d'ensemble : la machine entière, en légère plongée
   ensemble: (u, s, c) => ({ az: s.az0 + s.dir * SWEEP.ensemble * u, el: 0.62, r: 1, ty: (c.y.body + c.y.top) / 2, fov: 30 }),
-  // rasant : à hauteur des astres, la forêt des colonnes et des bras
+  // rasant : à hauteur des astres, au-dessus de la forêt des roues
   rasant: (u, s, c) => ({ az: s.az0 + s.dir * SWEEP.rasant * u, el: 0.1, r: 0.78, ty: c.y.body + 0.03, fov: 30 }),
   // zénith : la courbe et ses sillons vus comme un dessin
   zenith: (u, s, c) => ({ az: s.az0 + s.dir * SWEEP.zenith * u, el: 1.38, r: 0.98, ty: c.y.plate, fov: 30 }),
   // astre : on suit l'un d'eux de près
   astre: (u, s, c) => ({ az: s.az0 + s.dir * SWEEP.astre * u, el: 0.34, r: 0.5, follow: c.body(s.body), ty: c.y.body + 0.05, fov: 28 }),
   // machine : les étages de roues, depuis le bas
-  machine: (u, s, c) => ({ az: s.az0 + s.dir * SWEEP.machine * u, el: 0.16, r: 0.55, ty: (c.y.body + c.y.top) / 2, fov: 30 }),
+  machine: (u, s, c) => ({ az: s.az0 + s.dir * SWEEP.machine * u, el: 0.16, r: 0.55, ty: (c.y.plate + c.y.top) / 2, fov: 30 }),
 };
 
 export function shotsFor(seed, duration, N, shotLength = 6) {
