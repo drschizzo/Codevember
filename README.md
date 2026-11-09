@@ -28,7 +28,7 @@ Une plongée sans fond : des coquilles creuses emboîtées — alvéoles, fentes
 
 ## [Chorégraphies](planetaire_v2/) (Planétaire v2)
 
-Un planétaire qui calcule des ciels qui n'existent pas encore. Chaque graine lance, sous les yeux, la recherche d'une chorégraphie du problème à N corps : N masses égales qui se poursuivent sur une même courbe, solution exacte des équations de Newton, souvent inédite. La machine qui la trace est conçue par le calcul (trains d'engrenages aux rapports exacts, dents calées, étages sans collision, étoile sur galets dans des sillons gravés) ; le plateau tourne à une vitesse rationnelle, d'où une boucle parfaite. Ralentis rythmés sur les passages serrés, plans de caméra, six humeurs, trois montures (three.js WebGPU / TSL), export MP4.
+Un planétaire qui calcule des ciels qui n'existent pas encore. Chaque graine lance, sous les yeux, la recherche de chorégraphies du problème à N corps (N masses égales sur une même courbe, solutions exactes des équations de Newton), conçoit par le calcul les machines qui les tracent (trains d'engrenages aux rapports exacts, étages sans collision, galets dans des sillons gravés, quatre archétypes : horlogerie, planétaire classique, atelier, astrolabe) et les emboîte : chaque astre est une boule de verre qui contient le monde suivant, et la caméra plonge de l'un à l'autre en boucle parfaite. Six humeurs, rendu physique (three.js WebGPU / TSL), export MP4.
 
 [Démo en ligne](https://drschizzo.github.io/Codevember/planetaire_v2/) · [version légère](https://drschizzo.github.io/Codevember/planetaire_v2/?mobile=1) · [documentation](planetaire_v2/README.md)
 
