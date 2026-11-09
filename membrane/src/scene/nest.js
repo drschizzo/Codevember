@@ -43,9 +43,11 @@ const X_BLEND = 0.35;
 // (copie, chaîne de mipmaps : une dizaine de passes, et sur un GPU mobile à
 // tuiles, autant de vidages de la mémoire de tuile). Au-delà de X_FRONT, la
 // face avant d'une couche (petite à l'écran) se mélange elle aussi sans
-// copie, comme la face arrière au-delà de X_BLEND : il reste deux ou trois
+// copie, comme la face arrière au-delà de X_BLEND : il reste trois ou quatre
 // copies par image au lieu de six à huit. Même convergence sans saut (blendF).
-const X_FRONT = 0.8;
+// (Le mélange matériel ne transmet que la moyenne de la teinte : à 0,8, la
+// couche suivante, encore grande à l'écran, pâlissait nettement — d'où 1,4.)
+const X_FRONT = 1.4;
 // Simulation allégée (mode mobile) : maillage simulé un peu plus grossier
 // (≈ 2/3 des particules), moins d'images enregistrées (interpolées en
 // Catmull-Rom à l'affichage : le mouvement reste continu) et de sous-pas ;
