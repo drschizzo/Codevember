@@ -38,6 +38,7 @@ export const MIN_TEETH = 10;
 const MARGIN = 0.012;           // jeu entre pièces mobiles
 const COL_R = 0.008;
 const SHAFT_R = 0.009;          // axe d'un pivot (tenon, canon, roue B)
+const STUD_R = 0.0055;          // tenon (scene/machine.js)
 
 // fraction irréductible approchant un rapport (les k sont entiers : exact)
 function frac(num, den) {
@@ -339,5 +340,93 @@ export function designMachine(arms, N, { samples = 160, tries = 24 } = {}) {
     if (better) best = d;
     if (best.collisions === 0 && (best.supported === best.n || t >= 7) && t >= 1) break;
   }
+  best.portals = portals(best);
   return best;
+}
+
+// ── Les passages. Sur les machines les plus complexes, certains croisements
+// sont inévitables : les grands bras d'une chaîne balaient les axes verticaux
+// des chaînes voisines, et les conflits forment une boucle qu'aucun étagement
+// ne défait. La machine les gère : à la hauteur du bras qui arrive, l'axe
+// s'ouvre (un portail, voir scene/machine.js) le temps que le bras passe, puis
+// se referme. Tout ne dépend que de τ : on calcule d'avance, pour chaque élément
+// vertical (axe du pivot p de la chaîne j, ou goupille de l'astre si p = n),
+// chaque dalle qu'il rencontre et les fenêtres de temps de la rencontre.
+//   portals[j][p] = [{ i, j2, l0, l1, win: [[τ0, τ1], …] }]  (τ sur [0, 2π), τ1
+//   peut dépasser 2π ; l0…l1 : niveaux ouverts, ceux de la dalle i de la chaîne
+//   j2, ou, si deux axes se croisent (p2 donné), ceux qu'ils partagent : l'un des
+//   deux s'ouvre sur toute cette hauteur)
+const PORTAL_CLEAR = 0.008; // jeu autour de l'axe pendant le passage
+export function portals(D) {
+  const { n, N, L, cw, barW, trains, level, base } = D;
+  const lv = (i, j) => Math.round((base[i] + level[i][j] * SLAB) / SLAB);
+  // rayon de l'élément vertical (axe et canon, ou goupille), tel que construit
+  const vR = (p) => (p >= n ? 0.007 : Math.max(STUD_R * 2.2, Math.max(0.009, barW[p] * 0.5) * 0.8));
+  const vmax = L.reduce((a, l, i) => a + Math.abs(D.k[i]) * l, 0);
+  const S = Math.min(12000, Math.max(3000, Math.ceil((vmax * TAU) / 0.002)));
+  const Q = new Float64Array(S * N * (2 * n + 2)), P = new Float64Array(2 * n + 2), st = 2 * n + 2;
+  for (let s = 0; s < S; s++) for (let j = 0; j < N; j++) { D.pivots((TAU * s) / S + (TAU * j) / N, P); Q.set(P, (s * N + j) * st); }
+  const dist = (x, y, o, i) => {
+    const x0 = Q[o + 2 * i], y0 = Q[o + 2 * i + 1], ux = (Q[o + 2 * i + 2] - x0) / (L[i] || 1), uy = (Q[o + 2 * i + 3] - y0) / (L[i] || 1);
+    const sl = (x - x0) * ux + (y - y0) * uy, w = Math.abs((y - y0) * ux - (x - x0) * uy);
+    let d = Math.hypot(sl - Math.max(-cw[i], Math.min(L[i], sl)), w) - Math.max(barW[i] / 2, 0.009);
+    d = Math.min(d, Math.hypot(sl + cw[i], w) - Math.max(0.006, barW[i] * 0.95));
+    const tr = trains[i + 1];
+    if (tr) for (const g of tr.gears) d = Math.min(d, Math.hypot(sl - g.x, w) - (g.r + tr.m));
+    return d;
+  };
+  const out = Array.from({ length: N }, () => Array.from({ length: n + 1 }, () => []));
+  for (let j = 0; j < N; j++) for (let p = 1; p <= n; p++) {
+    const lo = lv(p - 1, j), hi = p < n ? lv(p, j) : Infinity, r = vR(p) + PORTAL_CLEAR;
+    for (let j2 = 0; j2 < N; j2++) {
+      if (j2 === j) continue;
+      for (let i = 1; i < n; i++) {
+        const l2 = lv(i, j2);
+        if (l2 < lo || l2 > hi) continue;
+        const hit = new Uint8Array(S);
+        let any = false;
+        for (let s = 0; s < S; s++) {
+          const a = (s * N + j) * st, b = (s * N + j2) * st, x = Q[a + 2 * p], y = Q[a + 2 * p + 1];
+          // (axe confondu avec le pivot ou le bout de cette dalle : montage concentrique)
+          if (Math.hypot(x - Q[b + 2 * i], y - Q[b + 2 * i + 1]) < 1e-9 || Math.hypot(x - Q[b + 2 * i + 2], y - Q[b + 2 * i + 3]) < 1e-9) continue;
+          if (dist(x, y, b, i) < r) { hit[s] = 1; any = true; }
+        }
+        if (!any) continue;
+        const win = [];
+        for (let s = 0; s < S; s++) {
+          if (!hit[s] || hit[(s + S - 1) % S]) continue;
+          let e = s;
+          while (hit[(e + 1) % S] && e - s < S) e++;
+          win.push([(TAU * (s - 1)) / S, (TAU * (e + 2)) / S]);
+        }
+        if (!win.length) win.push([0, TAU * 2]); // (toujours en contact)
+        out[j][p].push({ i, j2, l0: l2, l1: l2, win });
+      }
+    }
+  }
+  // deux axes verticaux qui se croisent (chaînes j < j2) : le premier s'ouvre
+  const range = (j, p) => [lv(p - 1, j), p < n ? lv(p, j) : Infinity];
+  for (let j = 0; j < N; j++) for (let p = 1; p <= n; p++) for (let j2 = j + 1; j2 < N; j2++) for (let p2 = 1; p2 <= n; p2++) {
+    const [a0, a1] = range(j, p), [b0, b1] = range(j2, p2), l0 = Math.max(a0, b0), l1 = Math.min(a1, b1);
+    if (l0 > l1) continue;
+    const r = vR(p) + vR(p2) + PORTAL_CLEAR;
+    const hit = new Uint8Array(S);
+    let any = false;
+    for (let s = 0; s < S; s++) {
+      const a = (s * N + j) * st, b = (s * N + j2) * st, d = Math.hypot(Q[a + 2 * p] - Q[b + 2 * p2], Q[a + 2 * p + 1] - Q[b + 2 * p2 + 1]);
+      if (d > 1e-9 && d < r) { hit[s] = 1; any = true; }
+    }
+    if (!any) continue;
+    const win = [];
+    for (let s = 0; s < S; s++) {
+      if (!hit[s] || hit[(s + S - 1) % S]) continue;
+      let e = s;
+      while (hit[(e + 1) % S] && e - s < S) e++;
+      win.push([(TAU * (s - 1)) / S, (TAU * (e + 2)) / S]);
+    }
+    if (!win.length) win.push([0, TAU * 2]);
+    // (une goupille s'ouvre jusqu'au sommet de la pile)
+    out[j][p].push({ p2, j2, l0, l1: Math.min(l1, Math.round(D.height / SLAB)), win });
+  }
+  return out;
 }
