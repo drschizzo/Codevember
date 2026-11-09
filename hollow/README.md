@@ -15,7 +15,9 @@ Rendu physique en three.js (WebGPU, TSL). Scène entièrement procédurale : une
 | H | masquer l’interface |
 | F | plein écran |
 
-Paramètres d’URL : `?seed=…` (une scène), `#r=…` (une scène retouchée, produite par « Copier le lien »), `?ui=0` (sans panneau), `?debug` (outils de mesure dans `window.hollow`, dont `view(couche, x)` : une couche à une profondeur donnée, en image fixe).
+Sur écran tactile : une touche met en pause, deux touches tirent une nouvelle scène, un appui long masque l’interface (le panneau reste replié au démarrage).
+
+Paramètres d’URL : `?seed=…` (une scène), `#r=…` (une scène retouchée, produite par « Copier le lien »), `?ui=0` (sans panneau), `?mobile=1` / `?mobile=0` (version mobile imposée / interdite), `?debug` (outils de mesure dans `window.hollow`, dont `view(couche, x)` : une couche à une profondeur donnée, en image fixe).
 
 Le panneau règle tout : graine et humeur, boucle (durée, plongée ou profondeur fixe), nid (rapport entre couches, taille du cœur, brouillard), caméra, lumières (cœur, lampe frontale, studio HDR), chaque couche (type, forme, matériaux des trois faces, mouvement), et le rendu (qualité, anticrénelage, ombres, détail, tone mapping, bloom, rayons, occlusion, flou de mouvement, profondeur de champ, aberration chromatique, grain). L’export produit une boucle MP4 (H.264) rendue image par image à la résolution et à la cadence choisies, et une image PNG.
 
@@ -84,3 +86,13 @@ Un type de couche se déclare à un seul endroit, `src/types.js` (tirage de la f
 ## Performances
 
 Toutes options actives, ≈ 11 ms par image à 1× (≈ 1,1 Mpx) et ≈ 23 ms à 2× selon les scènes (le verre transmissif est le plus coûteux) ; la qualité « Haute » rend à 1,5×. Ombres : les cartes d’ombre ne voient que des maillages simplifiés (calques dédiés) ; le cœur n’y inclut que les coquilles situées entre lui et la caméra. Géométrie générée hors du fil principal, en parallèle, avec cache.
+
+## Version mobile
+
+Choisie d’office sur un téléphone ou une tablette (écran tactile et petit écran), imposée par `?mobile=1`, ou par la qualité « Mobile » du panneau (la page se recharge : les matériaux sont compilés autrement). Elle a ses propres réglages mémorisés. Ce qui change, du plus au moins coûteux :
+
+- **Résolution** : base 1,25 × CSS au lieu des 3 × d’un téléphone (≈ 6 fois moins de pixels), puis *résolution dynamique* : la taille de rendu suit le temps d’image mesuré (cible ≈ 45 i/s) entre 50 et 100 % de cette base, par paliers, avec un plafond mémorisé pour ne pas osciller. Cadence plafonnée à 60 i/s (écrans 90 / 120 Hz).
+- **Chaîne d’image** : une seule cible de scène (ni normales ni vecteurs vitesse : plus de MRT), FXAA au lieu de l’anticrénelage temporel, ni occlusion ambiante ni flou de mouvement ; rayons du cœur et bloom en quart de résolution (18 pas de raymarching au lieu de 48) ; ni traînées anamorphiques, ni poussière sur la lentille, ni aberration chromatique. Étalonnage, halation et grain restent dans la passe finale.
+- **Ombres** : cube du cœur en 512 ; la lampe frontale ne projette plus d’ombre (elle est presque à l’œil, son ombre se cache derrière ce qui la projette) : une passe d’ombre de moins.
+- **Matériaux** : Worley lu dans le volume de bruit (canaux F1, F2 − F1) au lieu de 27 cellules évaluées par pixel (martelé, émail, basalte, pores) ; fBm limité à deux octaves ; verre, cristaux et vitraux sans transmission physique (copie de l’image et mipmaps à chaque image, objets rendus deux fois) mais en verre composité, teinté, plus opaque de biais (Fresnel) ; pierres serties en cabochons opaques à feu irisé ; normale des surfaces minimales par différences avant (4 évaluations du champ au lieu de 6).
+- **Géométrie** : le niveau de détail le plus fin n’est jamais généré (seuils de détail à 0,6) ; quatre fois moins de paillettes d’or, un peu plus grandes ; sphères du cœur et anneaux allégés ; studio HDR en 512 × 256 ; trois workers au plus.

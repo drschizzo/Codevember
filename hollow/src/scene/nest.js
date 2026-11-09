@@ -93,7 +93,10 @@ class Design {
       this.specKey = key;
       // (surfaces minimales : les ombres utilisent le niveau moyen, pas de niveau 3)
       const isT = IMPLICIT.has(layer.geo.type), orn = needsOrnaments(layer.geo);
-      const lods = isT ? [2, 1, 0] : [3, 2, 1, 0];
+      // (mobile : le niveau le plus fin n'est jamais généré — moitié moins de
+      // travail pour les workers et de mémoire, il ne servait qu'aux coquilles
+      // de plus de 1100 px de rayon)
+      const lods = (isT ? [2, 1, 0] : [3, 2, 1, 0]).filter((l) => l === 3 || l >= this.nest.minLod);
       const batch = { key, need: lods.length + (orn ? 1 : 0), got: 0, geoms: [null, null, null, null], ornaments: null };
       this.pending = batch;
       const arrived = () => {
@@ -126,6 +129,7 @@ class Design {
     const old = [...this.geoms];
     this.geoms = batch.geoms;
     if (isT) this.geoms[3] = this.geoms[1]; // (ombres = niveau moyen)
+    for (let l = this.nest.minLod - 1; l >= 0; l--) this.geoms[l] = this.geoms[l + 1]; // (mobile : niveaux fins absents)
     for (const c of this.copies) {
       c.display.forEach((m, l) => { m.geometry = this.geoms[l]; });
       c.proxy.geometry = this.geoms[3];
@@ -304,11 +308,11 @@ class Design {
   }
 }
 
-export function createNest(scene, gen) {
+export function createNest(scene, gen, { minLod = 0 } = {}) {
   const root = new THREE.Group();
   root.name = 'nest';
   scene.add(root);
-  const nest = { root, gen, designs: [], onProgress: null, solo: null };
+  const nest = { root, gen, designs: [], onProgress: null, solo: null, minLod };
   let frame = 0;
 
   // applique la recette (les couches inchangées ne sont pas reconstruites)

@@ -1,7 +1,8 @@
 // Point d'entrée : moteur, scène, génération, interface, boucle de rendu.
 //
 // Paramètres d'URL : ?seed=… (la scène), #r=… (une scène retouchée, partagée
-// par « Copier le lien »), ?ui=0 (sans panneau), ?export (panneau d'export ouvert).
+// par « Copier le lien »), ?ui=0 (sans panneau), ?export (panneau d'export ouvert),
+// ?mobile=1 / ?mobile=0 (version allégée imposée / interdite ; voir app/mobile.js).
 import * as THREE from 'three/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { generate, geometryFor, finishesFor, makeLayer, randomType, upgrade, beatsFor } from './recipe.js';
@@ -13,10 +14,11 @@ import { createNest } from './scene/nest.js';
 import { createLights } from './scene/lights.js';
 import { createDust } from './scene/dust.js';
 import { makeEnvironment } from './scene/env.js';
-import { G, setNoiseVolume } from './scene/materials.js';
+import { G, setNoiseVolume, setLite } from './scene/materials.js';
 import { createPost } from './render/post.js';
 import { createUI } from './app/ui.js';
-import { loadRender, saveRender, applyQuality, RENDER_DEFAULTS } from './app/settings.js';
+import { loadRender, saveRender, applyQuality, defaultsFor } from './app/settings.js';
+import { wantsMobile, switchMobile, createGovernor, createPacer, bindTouch } from './app/mobile.js';
 import { exportLoop, exportPNG } from './app/capture.js';
 import { createSound } from './app/sound.js';
 
@@ -80,6 +82,10 @@ async function main() {
     window.hollowErrors = [];
     console.error = (...a) => { orig(...a); if (window.hollowErrors.push(String(a[0]).slice(0, 300)) <= 3) console.log('[pile]', new Error().stack); };
   }
+  // ── Version mobile (fixée au chargement) ──
+  const LITE = wantsMobile(params);
+  setLite(LITE);
+  if (LITE) document.body.classList.add('lite');
   // ── Moteur ──
   const renderer = new THREE.WebGPURenderer({ antialias: false, powerPreference: 'high-performance' });
   try { await renderer.init(); } catch (e) { return fail(`Impossible d’initialiser le rendu : ${e.message}`); }
@@ -104,13 +110,17 @@ async function main() {
   const camState = { free: false };
 
   // ── Modules ──
-  const gen = createGenerator();
+  // (mobile : moins de workers, la génération ne doit pas étouffer le rendu)
+  const gen = createGenerator(LITE ? Math.max(2, Math.min(3, (navigator.hardwareConcurrency || 4) - 1)) : undefined);
   setNoiseVolume(await gen.request({ seed: 'hollow-noise' }, 0, 'noise')); // (les matériaux en dépendent)
-  const nest = createNest(scene, gen);
-  const lights = createLights(scene);
-  const dust = createDust(scene);
+  const nest = createNest(scene, gen, { minLod: LITE ? 1 : 0 });
+  const lights = createLights(scene, { lite: LITE });
+  const dust = createDust(scene, { lite: LITE });
   const post = createPost(renderer, scene, camera, lights);
-  const RENDER = loadRender();
+  const RENDER = loadRender(LITE);
+  // résolution dynamique : vise ~45 images / s, entre 50 et 100 % de la résolution de base
+  const governor = createGovernor({ target: 1 / 45, min: 0.5, max: 1, onChange: () => !busy && resize() });
+  const pace = createPacer(() => RENDER.maxFps);
 
   // ── Recette ──
   let R;
@@ -125,7 +135,7 @@ async function main() {
     if (k === envKey) return;
     envKey = k;
     const old = scene.environment;
-    scene.environment = makeEnvironment(k);
+    scene.environment = makeEnvironment(k, 0, LITE ? 512 : 1024);
     old?.dispose();
   }
 
@@ -218,7 +228,7 @@ async function main() {
   }
 
   function resize() {
-    renderer.setPixelRatio(Math.min(devicePixelRatio, RENDER.pixelRatio));
+    renderer.setPixelRatio(Math.min(devicePixelRatio, RENDER.pixelRatio) * (RENDER.dynRes ? governor.scale : 1));
     renderer.setSize(innerWidth, innerHeight);
     camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
@@ -234,6 +244,7 @@ async function main() {
   }
 
   function applyRender() {
+    if (!RENDER.dynRes) governor.reset();
     resize();
     lights.setShadowQuality(RENDER.shadows);
     saveRender(RENDER);
@@ -302,8 +313,12 @@ async function main() {
       nest.setRecipe(R); ui?.rebuildLayers();
     },
     renderChanged: () => applyRender(),
-    quality: (k) => { applyQuality(RENDER, k); applyRender(); },
-    resetRender: () => { Object.assign(RENDER, RENDER_DEFAULTS); applyRender(); ui?.refresh(); },
+    quality: (k) => {
+      // (entrer dans le mode mobile ou en sortir recompile les matériaux : rechargement)
+      if ((k === 'mobile') !== LITE) { toast('Rechargement…', 0); return switchMobile(k === 'mobile'); }
+      applyQuality(RENDER, k); applyRender();
+    },
+    resetRender: () => { Object.assign(RENDER, defaultsFor(LITE)); applyRender(); ui?.refresh(); },
     freeCam: (v) => {
       camState.free = v;
       controls.enabled = v;
@@ -336,6 +351,19 @@ async function main() {
   };
   const ui = params.get('ui') === '0' ? null : createUI({ recipe: () => R, render: RENDER, on });
   if (ui && params.has('export')) ui.gui.folders[0]?.open();
+  // Écran tactile : le panneau reste replié (il couvrirait l'image) ; une touche
+  // met en pause, deux touches tirent une nouvelle scène, un appui long masque
+  // l'interface.
+  const touch = LITE || !!matchMedia?.('(pointer: coarse)').matches;
+  let hinted = false;
+  if (touch) {
+    if (!params.has('export')) ui?.gui.close();
+    bindTouch(canvas, {
+      onTap: () => on.togglePause(),
+      onDoubleTap: () => on.random(),
+      onLongPress: () => document.body.classList.toggle('clean'),
+    });
+  }
 
   applyRender();
   applyRecipe();
@@ -379,17 +407,23 @@ async function main() {
   let last = performance.now(), fpsAcc = 0, fpsN = 0, fpsT = 0;
   renderer.setAnimationLoop((now) => {
     if (busy || frozen) return;
+    if (!pace(now)) return; // (écrans 90 / 120 Hz : cadence plafonnée)
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
+    if (RENDER.dynRes && !loading.active) governor.frame(dt); // (pas pendant le chargement : les workers faussent la mesure)
     if (!paused && !loading.active) phi += dt / R.loop.duration;
     renderAt(phi);
     if (!loading.active) sound.update({ tau: curTau, phase: phi - Math.floor(phi), N: R.layers.length, layers: R.layers, mood: R.mood });
     if (loading.active) {
       $('#loadbar u').style.width = `${(nest.progress() * 100).toFixed(1)}%`;
-      if (loading.applied && nest.ready() && ++loading.settle > 8) { loading.active = false; $('#loader').classList.add('gone'); }
+      if (loading.applied && nest.ready() && ++loading.settle > 8) {
+        loading.active = false;
+        $('#loader').classList.add('gone');
+        if (touch && !hinted) { hinted = true; toast('touche : pause · deux touches : nouvelle scène · appui long : masquer', 4500); }
+      }
     }
     fpsAcc += dt; fpsN++;
-    if ((fpsT += dt) > 0.5) { ui?.setFps(`${(fpsN / fpsAcc).toFixed(0)}  ·  ${shells} coquilles  ·  ${gen.busy() ? 'génération…' : 'prêt'}`); fpsAcc = fpsN = fpsT = 0; }
+    if ((fpsT += dt) > 0.5) { ui?.setFps(`${(fpsN / fpsAcc).toFixed(0)}  ·  ${shells} coquilles  ·  ${RENDER.dynRes ? `${Math.round(governor.scale * 100)} %  ·  ` : ''}${gen.busy() ? 'génération…' : 'prêt'}`); fpsAcc = fpsN = fpsT = 0; }
   });
 }
 

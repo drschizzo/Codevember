@@ -20,6 +20,9 @@ import { MAIN, X_MIN } from './nest.js';
 
 const TAU = Math.PI * 2;
 const MAX = 6000;
+// mobile : quatre fois moins de paillettes, un peu plus grandes (la même
+// impression de poudre d'or, au quart du coût en sommets et en surdessin)
+const LITE_COUNT = 0.25, LITE_SIZE = 1.35;
 
 // paillette : octaèdre aplati
 function flake() {
@@ -29,7 +32,7 @@ function flake() {
   return g;
 }
 
-export function createDust(scene) {
+export function createDust(scene, { lite = false } = {}) {
   const rng = createRng('hollow-dust');
   // par paillette : direction (hors du cône de passage de la caméra), profondeur
   // propre (fraction de période), tirage (taille, vitesse de rotation, axe)
@@ -74,7 +77,7 @@ export function createDust(scene) {
   m.metalnessNode = float(0.75);
   m.roughnessNode = float(0.35);
   m.positionNode = Fn(() => {
-    positionPrevious.assign(place(U.tauPrev, false));
+    if (!lite) positionPrevious.assign(place(U.tauPrev, false)); // (sans vecteurs vitesse en mobile)
     return place(U.tau, true);
   })();
   // près du cœur, les paillettes rougeoient dans son halo
@@ -94,7 +97,7 @@ export function createDust(scene) {
     mesh, U,
     // s : { tau, N, ratio, xMax } ; R.dust : { amount, size, color }
     update(s, dust) {
-      mesh.count = Math.round(MAX * Math.min(1, Math.max(0, dust?.amount ?? 0)));
+      mesh.count = Math.round(MAX * (lite ? LITE_COUNT : 1) * Math.min(1, Math.max(0, dust?.amount ?? 0)));
       mesh.visible = mesh.count > 0;
       U.tauPrev.value = last ?? s.tau;
       U.tau.value = s.tau;
@@ -102,7 +105,7 @@ export function createDust(scene) {
       U.ratio.value = s.ratio;
       U.period.value = s.N * Math.ceil((s.xMax - xMin) / s.N);
       U.xMax.value = s.xMax;
-      U.size.value = dust?.size ?? 1;
+      U.size.value = (dust?.size ?? 1) * (lite ? LITE_SIZE : 1);
       U.color.value.set(dust?.color ?? '#e8c27a');
     },
     // (saut dans la boucle : pas de vecteur vitesse)

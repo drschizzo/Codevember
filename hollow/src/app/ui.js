@@ -212,8 +212,10 @@ export function createUI({ recipe: getRecipe, render, on }) {
   const r = render;
   fRender.add(r, 'quality', opts(QUALITY)).name('Qualité').onChange((k) => { on.quality(k); fRender.controllersRecursive().forEach((c) => c.updateDisplay()); });
   fRender.add(r, 'pixelRatio', 0.5, 2, 0.05).name('Résolution (× écran)').onChange(rch);
+  fRender.add(r, 'dynRes').name('Résolution dynamique').onChange(rch);
+  fRender.add(r, 'maxFps', { Libre: 0, '30 i/s': 30, '60 i/s': 60 }).name('Cadence maximale').onChange(rch);
   fRender.add(r, 'aa', { Temporel: 'traa', SMAA: 'smaa', FXAA: 'fxaa', Aucun: 'none' }).name('Anticrénelage').onChange(rch);
-  fRender.add(r, 'shadows', { Basses: 'low', Moyennes: 'medium', Hautes: 'high', 'Très hautes': 'ultra' }).name('Ombres').onChange(rch);
+  fRender.add(r, 'shadows', { Mobile: 'mobile', Basses: 'low', Moyennes: 'medium', Hautes: 'high', 'Très hautes': 'ultra' }).name('Ombres').onChange(rch);
   fRender.add(r, 'detail', 0.5, 2.5, 0.05).name('Détail géométrique').onChange(rch);
   fRender.add(r, 'microDetail', 0, 2, 0.01).name('Micro-relief').onChange(rch);
   fRender.add(r, 'roughFloor', 0, 0.4, 0.005).name('Douceur des reflets').onChange(rch);
