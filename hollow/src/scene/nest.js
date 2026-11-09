@@ -377,13 +377,16 @@ export function createNest(scene, gen, { minLod = 0 } = {}) {
       if (shown) shells++;
       // ombres : toutes les couches, pour les deux lumières. (Aucune coquille ne
       // cesse d'en projeter tant qu'elle est rendue : sinon l'éclairage saute.)
-      inst.proxy.layers.mask = des.geoms[3] ? KEY | CORE : 0;
+      // (mobile : la coquille la plus extérieure ne projette rien — son ombre
+      // tomberait sur la couche suivante vers l'extérieur, qui n'est plus rendue)
+      const caster = !(nest.minLod > 0 && x < X_MIN + 1);
+      inst.proxy.layers.mask = des.geoms[3] && caster ? KEY | CORE : 0;
       const cr = shown && rpx > 25 && x > X_MIN + 0.5;
       for (const m of inst.ornaments) {
         m.renderOrder = x >= 0 ? 1.5 + x : 100.5 - x;
         m.userData.on = cr;
         // (les épines projettent leur ombre tant que la coquille en projette)
-        m.layers.mask = (cr ? MAIN : 0) | (m.castShadow && des.geoms[3] ? KEY | CORE : 0);
+        m.layers.mask = (cr ? MAIN : 0) | (m.castShadow && des.geoms[3] && caster ? KEY | CORE : 0);
       }
     }
     // les instances inutilisées perdent leur historique
