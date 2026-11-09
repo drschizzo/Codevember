@@ -20,7 +20,8 @@ export function heatColor(h) {
   return mix(c2, vec3(1.0, 0.9, 0.74), smoothstep(0.72, 1.0, h));
 }
 
-export function createOrbitVisual({ curve, N, radius = 0.0065, ring = 10, shadows = { bodies: 3, size: 512 } }) {
+// natures : astres (perle, gemme, metal, lanterne), traces (verre, or, gravure, aucune)
+export function createOrbitVisual({ curve, N, radius = 0.0065, ring = 10, shadows = { bodies: 3, size: 512 }, bodyKind = 'perle', traceKind = 'verre', pinsMat = null }) {
   const n = curve.length / 2;
   const group = new THREE.Group();
   const U = {
@@ -66,27 +67,59 @@ export function createOrbitVisual({ curve, N, radius = 0.0065, ring = 10, shadow
   // puis redevient un fil de verre sombre et brillant
   const glow = exp(float(1).sub(heat).mul(U.cool.negate()));
   const mat = new THREE.MeshPhysicalNodeMaterial({ color: 0x07080a, roughness: 0.05, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.03 });
-  mat.emissiveNode = heatColor(glow).mul(glow.mul(glow).mul(6).add(pow(glow, 16).mul(10))).mul(U.glow);
+  let heatK = 1;
+  if (traceKind === 'or') {
+    // fil d'or étiré : métal, à peine rougeoyant derrière l'astre
+    mat.metalness = 1; mat.roughness = 0.18; mat.clearcoat = 0; heatK = 0.45;
+  } else if (traceKind === 'gravure') {
+    // gravure : un sillon sombre et mat, dont le fond rougeoie derrière la pointe
+    mat.metalness = 0.3; mat.roughness = 0.8; mat.clearcoat = 0; heatK = 1.4;
+  }
+  mat.emissiveNode = heatColor(glow).mul(glow.mul(glow).mul(6).add(pow(glow, 16).mul(10))).mul(U.glow).mul(heatK);
   // le verre encore mou est plus épais : une goutte qui s'étire derrière l'astre
-  mat.positionNode = positionLocal.add(normalLocal.mul(max(pow(glow, 4), 0).mul(radius * 1.4)));
+  if (traceKind === 'verre') mat.positionNode = positionLocal.add(normalLocal.mul(max(pow(glow, 4), 0).mul(radius * 1.4)));
   const tube = new THREE.Mesh(geo, mat);
   tube.receiveShadow = true;
+  if (traceKind === 'gravure') tube.scale.y = 0.15; // (à fleur du plateau)
+  tube.userData.kind = traceKind;
   group.add(tube);
 
-  // ── astres : un cœur incandescent, une lumière chacun
-  const bodies = [], mats = [];
-  const coreGeo = new THREE.SphereGeometry(0.026, 32, 16);
+  // ── astres : chacun une lumière, et selon sa nature
+  //   perle : un cœur incandescent ; gemme : une pierre taillée irisée autour
+  //   d'un petit cœur ; métal : une bille polie qui reflète tout (sans feu) ;
+  //   lanterne : un cœur dans une cage de deux anneaux
+  const bodies = [], mats = [], geos = [];
+  const G = (g) => (geos.push(g), g);
+  const coreGeo = G(new THREE.SphereGeometry(bodyKind === 'perle' ? 0.026 : bodyKind === 'lanterne' ? 0.014 : 0.011, 32, 16));
+  const gemGeo = bodyKind === 'gemme' ? G(new THREE.IcosahedronGeometry(0.03, 0)) : null;
+  const ballGeo = bodyKind === 'metal' ? G(new THREE.SphereGeometry(0.026, 48, 24)) : null;
+  const ringGeo = bodyKind === 'lanterne' ? G(new THREE.TorusGeometry(0.028, 0.0016, 8, 48)) : null;
+  const shellMat = bodyKind === 'gemme'
+    ? new THREE.MeshPhysicalNodeMaterial({ metalness: 0, roughness: 0.02, clearcoat: 1, iridescence: 0.8, iridescenceIOR: 1.6, transparent: true, opacity: 0.55, flatShading: true })
+    : bodyKind === 'metal' ? new THREE.MeshPhysicalNodeMaterial({ color: 0xf2f2f4, metalness: 1, roughness: 0.04 }) : null;
+  if (shellMat) mats.push(shellMat);
   let lightBase = 0.12;
+  const lightK = bodyKind === 'metal' ? 0.25 : bodyKind === 'gemme' ? 0.7 : 1;
   for (let j = 0; j < N; j++) {
     // embrasement : chaque astre a sa propre intensité (il s'avive quand il en frôle un autre)
     const boost = uniform(1);
-    const coreMat = new THREE.MeshStandardNodeMaterial({ color: 0x000000, roughness: 1 });
-    coreMat.emissiveNode = U.bodyColor.mul(boost.mul(U.bodyGlow).mul(18));
-    mats.push(coreMat);
-    const m = new THREE.Mesh(coreGeo, coreMat);
+    const m = new THREE.Group();
+    if (bodyKind !== 'metal') {
+      const coreMat = new THREE.MeshStandardNodeMaterial({ color: 0x000000, roughness: 1 });
+      coreMat.emissiveNode = U.bodyColor.mul(boost.mul(U.bodyGlow).mul(bodyKind === 'perle' ? 18 : 30));
+      mats.push(coreMat);
+      m.add(new THREE.Mesh(coreGeo, coreMat));
+    }
+    if (gemGeo) { const g = new THREE.Mesh(gemGeo, shellMat); g.rotation.set(j * 0.7, j * 1.3, 0); g.castShadow = true; m.add(g); }
+    if (ballGeo) { const b = new THREE.Mesh(ballGeo, shellMat); b.castShadow = true; m.add(b); }
+    if (ringGeo) {
+      for (const [rx, rz] of [[Math.PI / 2, 0], [0, Math.PI / 2], [Math.PI / 2, Math.PI / 2]]) {
+        const r = new THREE.Mesh(ringGeo, pinsMat); r.rotation.set(rx, 0, rz); r.castShadow = true; m.add(r);
+      }
+    }
     m.userData.boost = boost;
     const light = new THREE.PointLight(0xffc489, lightBase, 0, 2);
-    if (j < shadows.bodies) {
+    if (j < shadows.bodies && bodyKind !== 'metal') {
       light.castShadow = true;
       light.shadow.mapSize.set(shadows.size, shadows.size);
       light.shadow.camera.near = 0.03; light.shadow.camera.far = 6;
@@ -99,14 +132,17 @@ export function createOrbitVisual({ curve, N, radius = 0.0065, ring = 10, shadow
   }
 
   // intensité de chaque astre (1 : au repos)
-  const setBoost = (j, k) => { bodies[j].userData.boost.value = k; bodies[j].userData.light.intensity = lightBase * k; };
+  const setBoost = (j, k) => { bodies[j].userData.boost.value = k; bodies[j].userData.light.intensity = lightBase * lightK * k; };
 
   // réglages de la recette (astres, verre)
   function setStyle(R) {
     U.cool.value = R.trace.cool;
     U.glow.value = R.trace.glow;
-    mat.color.set(R.trace.glass);
-    tube.visible = R.trace.show;
+    if (traceKind === 'verre') mat.color.set(R.trace.glass);
+    if (traceKind === 'or') mat.color.setRGB(1, 0.77, 0.34);
+    if (traceKind === 'gravure') mat.color.set(R.trace.glass);
+    tube.visible = R.trace.show && traceKind !== 'aucune';
+    if (shellMat && bodyKind === 'gemme') shellMat.color.set(R.bodies.color);
     U.bodyColor.value.set(R.bodies.color);
     U.bodyGlow.value = R.bodies.glow;
     lightBase = R.bodies.light;
@@ -115,6 +151,6 @@ export function createOrbitVisual({ curve, N, radius = 0.0065, ring = 10, shadow
 
   return {
     group, bodies, phase: U.phase, setBoost, setStyle,
-    dispose() { geo.dispose(); mat.dispose(); coreGeo.dispose(); for (const m of mats) m.dispose(); for (const b of bodies) b.children[0].dispose(); },
+    dispose() { geo.dispose(); mat.dispose(); for (const g of geos) g.dispose(); for (const m of mats) m.dispose(); for (const b of bodies) b.userData.light.dispose(); },
   };
 }

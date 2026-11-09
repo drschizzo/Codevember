@@ -135,10 +135,13 @@ export function cameraAt(L, shots, ctx) {
     return { az: c.az, el: c.el, r: c.r * ctx.fit, tx, ty: c.ty, tz, fov: c.fov };
   };
   let P = pose(k, u);
+  // monture suspendue : on regarde la machine par en dessous, sans descendre sous le sol
+  const flipEl = (Q) => { if (ctx.flip) Q.el = Q.el > 1 ? -0.22 : Q.el > 0.5 ? -0.17 : -0.06; return Q; };
+  P = flipEl(P);
   // fondu avec le plan précédent (début de plan) ou suivant (fin de plan)
   let Q = null, w = 0;
-  if (u < H) { Q = pose(k - 1, 1 + u); w = 0.5 - 0.5 * ss5(u / H); }
-  else if (u > 1 - H) { Q = pose(k + 1, u - 1); w = 0.5 * ss5((u - (1 - H)) / H); }
+  if (u < H) { Q = flipEl(pose(k - 1, 1 + u)); w = 0.5 - 0.5 * ss5(u / H); }
+  else if (u > 1 - H) { Q = flipEl(pose(k + 1, u - 1)); w = 0.5 * ss5((u - (1 - H)) / H); }
   if (Q) {
     const az = P.az + wrapPi(Q.az - P.az) * w;
     const m = (a, b) => a + (b - a) * w;

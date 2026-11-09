@@ -1,7 +1,7 @@
 // Panneau de réglages (lil-gui). Ce module ne connaît que la recette, les
 // réglages de rendu et des fonctions de rappel : il ne touche pas à la scène.
 import GUI from 'lil-gui';
-import { MOODS, MATTERS } from '../recipe.js';
+import { MOODS, MATTERS, PRESENTATIONS, FINISHES, BODY_KINDS, TRACE_KINDS } from '../recipe.js';
 import { ENV_PRESETS } from '../scene/env.js';
 import { QUALITY, SHADOWS } from './settings.js';
 import { symmetryOptions } from '../orbit/symmetry.js';
@@ -36,7 +36,7 @@ export function createUI({ recipe: getRecipe, render: RENDER, on }) {
   const fScene = gui.addFolder('Scène').close();
   const fMat = gui.addFolder('Matières').close();
   const fBodies = gui.addFolder('Astres').close();
-  const fTrace = gui.addFolder('Verre filé').close();
+  const fTrace = gui.addFolder('Trace').close();
   const fMotion = gui.addFolder('Mise en scène').close();
   const fLight = gui.addFolder('Lumières').close();
   const fRender = gui.addFolder('Rendu').close();
@@ -84,6 +84,10 @@ export function createUI({ recipe: getRecipe, render: RENDER, on }) {
 
     // scène
     add(fScene, R, 'mood', opts(MOODS)).name('Humeur (nouvelle scène)').onChange(() => on.moodChanged());
+    const inv = (o) => Object.fromEntries(Object.entries(o).map(([k, v]) => [v, k]));
+    add(fScene, R.stage, 'presentation', inv(PRESENTATIONS)).name('Présentation').onChange(() => on.rebuild());
+    add(fScene, R.stage, 'finish', inv(FINISHES)).name('Plateau : finition').onChange(live);
+    add(fScene, R.stage, 'finishScale', 0.3, 3, 0.01).name('Plateau : échelle du motif').onChange(live);
 
     // matières
     const mat = opts(MATTERS);
@@ -92,12 +96,14 @@ export function createUI({ recipe: getRecipe, render: RENDER, on }) {
     }
 
     // astres
+    add(fBodies, R.bodies, 'kind', Object.fromEntries(Object.entries(BODY_KINDS).map(([k, v]) => [v, k]))).name('Nature').onChange(() => on.rebuild());
     addC(fBodies, R.bodies, 'color').name('Couleur').onChange(live);
     add(fBodies, R.bodies, 'glow', 0.2, 3, 0.01).name('Éclat').onChange(live);
     add(fBodies, R.bodies, 'flare', 0, 4, 0.01).name('Embrasement aux passages').onChange(live);
     add(fBodies, R.bodies, 'light', 0, 0.5, 0.005).name('Lumière portée').onChange(live);
 
     // verre filé
+    add(fTrace, R.trace, 'kind', Object.fromEntries(Object.entries(TRACE_KINDS).map(([k, v]) => [v, k]))).name('Nature').onChange(() => on.rebuild());
     add(fTrace, R.trace, 'show').name('Visible').onChange(live);
     add(fTrace, R.trace, 'cool', 1, 20, 0.1).name('Refroidissement').onChange(live);
     add(fTrace, R.trace, 'thick', 0.3, 3, 0.01).name('Épaisseur (nouvelle scène)').onFinishChange(() => on.rebuild());
