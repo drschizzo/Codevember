@@ -1,147 +1,136 @@
-// L'écran de génération : on regarde le calcul se faire.
-//
-// Au centre, l'essai en tête (le plus petit indice encore en lice) : sa courbe,
-// un fil de lumière qui se tortille pendant la descente, et ses N astres qui la
-// parcourent déjà, avec leur traîne. Dessous, une rangée de vignettes, une par
-// essai de la graine : en cours (la courbe bouge), raté (la courbe se fige et
-// s'éteint, avec la raison : collision, Lagrange, frôlement…), trouvé (en or).
-// Quand une orbite est trouvée, elle reste au centre, en or, pendant la
-// construction des machines.
-const TAU = Math.PI * 2;
-const GOLD = [255, 214, 150], DIM = [150, 140, 128];
+// L'écran de génération : on regarde le calcul se faire, et on le comprend.
+// Le dessin (la courbe de l'essai en tête et ses astres, une vignette par essai)
+// est fait dans un worker (loaderWorker.js, sur un OffscreenCanvas) : il reste
+// fluide même quand le thread principal construit les machines ou compile les
+// shaders. Ici, les textes : ce que cherche le moteur, l'étape de l'essai en
+// tête, la raison de chaque rejet, et les quatre étapes du chargement.
+// (Sans OffscreenCanvas, on se contente des textes.)
+
+// raisons de rejet du solveur (orbit/search.js) : un mot pour la vignette, une
+// phrase pour la ligne d'explication
+const REASONS = {
+  collision: ['collision', 'deux astres se sont percutés en cours de route'],
+  Lagrange: ['polygone', 'il est retombé sur la solution la plus simple, un polygone d’astres qui tourne en bloc (Lagrange)'],
+  'frôlement': ['trop serrée', 'deux astres s’y frôlent de trop près pour qu’une machine les porte'],
+  plane: ['plane', 'la courbe s’est aplatie'],
+  'parcourue plusieurs fois': ['déjà vue', 'c’est une orbite plus simple, parcourue plusieurs fois'],
+  'non résolue': ['imprécise', 'la courbe n’obéit pas assez exactement à la loi de Newton'],
+  'non convergée': ['imprécise', 'le calcul n’a pas convergé vers une solution exacte'],
+  'trop de bras': ['trop complexe', 'il faudrait trop d’engrenages pour la tracer'],
+  'continuation rompue': ['égarée', 'le calcul a perdu la solution en chemin'],
+  'Newton égaré': ['égarée', 'le calcul a perdu la solution en chemin'],
+};
+const reasonOf = (r = '') => REASONS[r] || (r.startsWith('erreur') || r.startsWith('worker') ? ['erreur', 'le calcul a échoué'] : [r || 'écarté', r || 'écarté']);
+
+// étape du solveur (orbit/search.js) → phrase
+function stageText(stage = '') {
+  const e = /^ε\s*([\d.]+)/.exec(stage);
+  if (e) return Number(e[1]) > 0 ? 'descente : la courbe se déforme vers moins d’action, les astres se repoussent encore un peu pour ne pas se percuter' : 'descente sous la seule gravité';
+  if (/K\s*\d+/.test(stage)) return `polissage (méthode de Newton, ${/K\s*(\d+)/.exec(stage)[1]} harmoniques) : la courbe devient une solution exacte`;
+  return 'la courbe se déforme';
+}
+
+const STEPS = ['orbit', 'design', 'build', 'render'];
 
 export function createLoader(el) {
-  const canvas = el.querySelector('canvas'), ctx = canvas.getContext('2d');
-  const label = el.querySelector('p');
+  const canvas = el.querySelector('canvas');
+  const msg = el.querySelector('.msg'), lead = el.querySelector('.lead'), head = el.querySelector('.tries .head'), why = el.querySelector('.why');
+  const what = el.querySelector('.what');
   const txt = el.querySelector('.txt');
+  const steps = [...el.querySelectorAll('.steps li')];
   const status = document.createElement('small'); status.className = 'status';
   const bar = document.createElement('div'); bar.className = 'actions';
   txt.append(status, bar);
-  // essais : index → { pts, N, action, state: 'run' | 'fail' | 'ok', reason, t (dernier changement) }
-  const tries = new Map();
-  let raf = 0, on = false, searching = false, seed = '', maxTries = 24, found = null;
-
-  // taille et centre d'une courbe (les essais n'ont pas tous la même échelle)
-  const frame = (pts) => {
-    let cx = 0, cy = 0, n = pts.length / 2, s = 0;
-    for (let i = 0; i < n; i++) { cx += pts[2 * i]; cy += pts[2 * i + 1]; }
-    cx /= n; cy /= n;
-    for (let i = 0; i < n; i++) s = Math.max(s, Math.hypot(pts[2 * i] - cx, pts[2 * i + 1] - cy));
-    return { cx, cy, s: s || 1 };
-  };
-  const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
-
-  function path(pts, X, Y, R, f) {
-    const n = pts.length / 2;
-    ctx.beginPath();
-    for (let i = 0; i <= n; i++) {
-      const q = i % n, x = X + R * (pts[2 * q] - f.cx), y = Y - R * (pts[2 * q + 1] - f.cy);
-      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
-    }
+  const whatBase = what.innerHTML;
+  let worker = null;
+  if (canvas.transferControlToOffscreen) {
+    try {
+      worker = new Worker(new URL('./loaderWorker.js', import.meta.url), { type: 'module' });
+      const off = canvas.transferControlToOffscreen();
+      worker.postMessage({ type: 'init', canvas: off }, [off]);
+    } catch { worker = null; }
   }
-
-  // la grande courbe et ses astres
-  function hero(tr, X, Y, R, now, dpr, gold) {
-    const f = frame(tr.pts), k = R / f.s, n = tr.pts.length / 2;
-    const col = gold ? GOLD : [255, 224, 170];
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    // halo, puis le fil
-    ctx.strokeStyle = rgba(col, gold ? 0.12 : 0.06); ctx.lineWidth = 7 * dpr;
-    path(tr.pts, X, Y, k, f); ctx.stroke();
-    ctx.strokeStyle = rgba(col, gold ? 0.85 : 0.55); ctx.lineWidth = 1.3 * dpr;
-    path(tr.pts, X, Y, k, f); ctx.stroke();
-    // les astres : N points à 1/N de période l'un de l'autre, avec une traîne
-    const N = tr.N || 3, ph = (now / 9000) % 1;
-    for (let j = 0; j < N; j++) {
-      const u = (ph + j / N) % 1;
-      for (let s = 14; s >= 0; s--) {
-        const v = ((u - s * 0.006) % 1 + 1) % 1, i = Math.floor(v * n) % n;
-        const x = X + k * (tr.pts[2 * i] - f.cx), y = Y - k * (tr.pts[2 * i + 1] - f.cy);
-        const a = s ? 0.5 * (1 - s / 15) : 1, r = (s ? 2.2 : 3.4) * dpr * (1 - s / 22);
-        if (!s) {
-          const g = ctx.createRadialGradient(x, y, 0, x, y, 16 * dpr);
-          g.addColorStop(0, rgba(col, 0.55)); g.addColorStop(1, rgba(col, 0));
-          ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, 16 * dpr, 0, TAU); ctx.fill();
-        }
-        ctx.fillStyle = rgba(s ? col : [255, 246, 230], a);
-        ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
-      }
-    }
-  }
-
-  function draw() {
-    raf = requestAnimationFrame(draw);
-    const now = performance.now();
+  const post = (m, tr) => worker?.postMessage(m, tr || []);
+  const size = () => {
     const dpr = Math.min(2, devicePixelRatio || 1);
-    const W = Math.round(canvas.clientWidth * dpr), H = Math.round(canvas.clientHeight * dpr);
-    if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
-    ctx.clearRect(0, 0, W, H);
-    const small = W < 700 * dpr;
-    // ── vignettes (une par essai), sous la courbe
-    const cols = small ? 8 : 12;
-    const cell = Math.min((W * 0.86) / cols, (small ? 46 : 58) * dpr), gridW = cell * cols, pitch = cell + 16 * dpr; // (place pour la raison)
-    const gx = (W - gridW) / 2, gy = H * (small ? 0.54 : 0.58);
-    for (let i = 0; i < maxTries; i++) {
-      const tr = tries.get(i), cx = gx + cell * ((i % cols) + 0.5), cy = gy + pitch * Math.floor(i / cols) + cell * 0.5, r = cell * 0.36;
-      if (!tr || !tr.pts) {
-        ctx.strokeStyle = rgba(DIM, tr ? 0.35 : 0.12); ctx.lineWidth = dpr;
-        ctx.beginPath(); ctx.arc(cx, cy, r * 0.5, 0, TAU); ctx.stroke();
-        if (tr?.state === 'fail') { ctx.fillStyle = rgba(DIM, 0.5); ctx.beginPath(); ctx.arc(cx, cy, 1.5 * dpr, 0, TAU); ctx.fill(); }
-        continue;
-      }
-      const f = frame(tr.pts), age = (now - tr.t) / 1000;
-      let col = [233, 196, 138], a = 0.75;
-      if (tr.state === 'fail') { col = DIM; a = 0.18 + 0.5 * Math.exp(-age * 2.5); }
-      if (tr.state === 'ok') { col = GOLD; a = 1; }
-      ctx.strokeStyle = rgba(col, a); ctx.lineWidth = (tr.state === 'ok' ? 1.4 : 1) * dpr;
-      path(tr.pts, cx, cy, r / f.s, f); ctx.stroke();
-      if (tr.state === 'ok') { ctx.strokeStyle = rgba(GOLD, 0.6); ctx.lineWidth = dpr; ctx.strokeRect(cx - cell / 2 + 2 * dpr, cy - cell / 2 + 2 * dpr, cell - 4 * dpr, cell - 4 * dpr); }
-      if (tr.state === 'fail' && tr.reason && age < 1.6) {
-        ctx.fillStyle = rgba([255, 170, 150], Math.min(1, 1.6 - age) * 0.8);
-        ctx.font = `${10 * dpr}px Inter, system-ui, sans-serif`; ctx.textAlign = 'center';
-        ctx.fillText(tr.reason, cx, cy + cell * 0.5 + 10 * dpr);
-      }
-    }
-    // ── au centre : l'orbite trouvée, sinon l'essai en tête
-    let lead = found !== null ? tries.get(found) : null;
-    if (!lead) for (const i of [...tries.keys()].sort((a, b) => a - b)) { const t = tries.get(i); if (t.state === 'run' && t.pts) { lead = t; break; } }
-    const HX = W / 2, HY = H * (small ? 0.32 : 0.34), HR = Math.min(W * 0.36, H * (small ? 0.2 : 0.24));
-    if (lead) hero(lead, HX, HY, HR, now, dpr, lead.state === 'ok');
-    if (searching && !el.classList.contains('error')) {
-      const done = [...tries.values()].filter((t) => t.state === 'fail').length;
-      const head = lead && found === null ? ` · action ${lead.action.toFixed(4)}` : '';
-      label.textContent = `graine ${seed} · ${done} essai${done > 1 ? 's' : ''} écarté${done > 1 ? 's' : ''} sur ${maxTries}${head}`;
-    }
-  }
-  const start = () => { if (!on) { on = true; draw(); } };
+    post({ type: 'size', w: Math.round(canvas.clientWidth * dpr), h: Math.round(canvas.clientHeight * dpr), dpr });
+  };
+  size();
+  addEventListener('resize', size);
+
+  // état des essais (pour les textes)
+  let seed = '', max = 24, N = 0, fails = 0, found = null, searching = false, lastLead = 0;
+  const running = new Map(); // indice → { stage, action }
+  const done = new Set();
+  const setHead = () => {
+    head.textContent = searching || found !== null
+      ? `les ${max} essais de la graine ${seed} · ${fails} écarté${fails > 1 ? 's' : ''}${found !== null ? ` · essai ${found + 1} retenu` : ''}`
+      : '';
+  };
+  const setLead = (force = false) => {
+    const t = performance.now();
+    if (!force && t - lastLead < 150) return;
+    lastLead = t;
+    if (found !== null) { lead.textContent = `essai ${found + 1} : une chorégraphie exacte de ${N} astres. Ses astres la parcourent déjà.`; return; }
+    if (!searching) { lead.textContent = ''; return; }
+    const ids = [...running.keys()].filter((i) => !done.has(i)).sort((a, b) => a - b);
+    if (!ids.length) { lead.textContent = 'tirage des courbes de départ…'; return; }
+    const r = running.get(ids[0]);
+    lead.textContent = `essai ${ids[0] + 1} : ${stageText(r.stage)}`;
+  };
+  const setWhat = () => {
+    what.innerHTML = N ? whatBase.replace('des astres de même masse', `${N} astres de même masse`) : whatBase;
+  };
+  const setStep = (k) => {
+    const i = STEPS.indexOf(k);
+    steps.forEach((li, j) => { li.classList.toggle('on', j === i); li.classList.toggle('done', j < i); });
+  };
+  const start = () => { size(); post({ type: 'start' }); };
 
   return {
-    show(text = 'recherche d’une orbite…') {
-      tries.clear(); found = null; searching = false; label.textContent = text;
+    show(text = 'recherche d’une trajectoire…') {
+      searching = false; found = null; N = 0; running.clear(); done.clear(); fails = 0;
+      msg.textContent = text; lead.textContent = ''; head.textContent = ''; why.textContent = '';
+      setWhat(); setStep('orbit');
       el.classList.remove('gone', 'error');
+      document.body.classList.add('loading');
       bar.replaceChildren(); status.textContent = '';
+      post({ type: 'clear' });
       start();
     },
+    // étape du chargement : orbit, design, build, render
+    step: setStep,
     // une nouvelle recherche (une graine, au plus max essais)
-    begin(s, max = 24) { tries.clear(); found = null; seed = s; maxTries = max; searching = true; },
+    begin(s, m = 24) {
+      seed = s; max = m; fails = 0; found = null; searching = true; running.clear(); done.clear();
+      why.textContent = '';
+      post({ type: 'begin', max: m });
+      setStep('orbit'); setHead(); setLead(true);
+      msg.textContent = `recherche d’une trajectoire : jusqu’à ${m} essais en parallèle`;
+    },
     snap(i, s) {
-      const t = tries.get(i) || { state: 'run', t: performance.now() };
-      t.pts = s.pts; t.action = s.action; t.N = s.N || t.N;
-      tries.set(i, t);
+      const pts = Float32Array.from(s.pts);
+      post({ type: 'snap', i, pts, N: s.N }, [pts.buffer]);
+      if (s.N && s.N !== N) { N = s.N; setWhat(); }
+      running.set(i, { stage: s.stage, action: s.action });
+      setLead();
     },
     // fin d'un essai : { ok, reason }
     result(i, r) {
-      const t = tries.get(i) || {};
-      t.state = r.ok ? 'ok' : 'fail'; t.reason = r.reason; t.t = performance.now();
-      tries.set(i, t);
-      if (r.ok && (found === null || i < found)) found = i;
+      done.add(i);
+      const [short, long] = reasonOf(r.reason);
+      post({ type: 'result', i, ok: !!r.ok, reason: r.ok ? '' : short });
+      if (r.ok) { if (found === null || i < found) found = i; why.textContent = ''; }
+      else { fails++; if (found === null) why.textContent = `essai ${i + 1} écarté : ${long}.`; }
+      setHead(); setLead(true);
     },
-    text(t) { searching = false; label.textContent = t; },
+    text(t) { searching = false; msg.textContent = t; setLead(true); },
     status(t) { status.textContent = t; },
     // un échec : le message, et des boutons pour repartir ({ label, run })
     error(t, actions = []) {
       el.classList.remove('gone');
-      el.classList.add('error'); searching = false; label.textContent = t; status.textContent = 'N : nouvelle graine';
+      document.body.classList.remove('loading');
+      el.classList.add('error'); searching = false; msg.textContent = t; status.textContent = 'N : nouvelle graine';
       start();
       bar.replaceChildren(...actions.map(({ label: l, run }) => {
         const b = document.createElement('button');
@@ -149,6 +138,9 @@ export function createLoader(el) {
         return b;
       }));
     },
-    hide() { el.classList.add('gone'); on = false; cancelAnimationFrame(raf); tries.clear(); found = null; },
+    // (contrôle : images dessinées par le worker)
+    stats: () => new Promise((res) => { if (!worker) return res(null); worker.onmessage = (e) => res(e.data); post({ type: 'stats' }); }),
+    // (le dessin s'arrête à la fin du fondu)
+    hide() { el.classList.add('gone'); document.body.classList.remove('loading'); searching = false; setTimeout(() => { if (el.classList.contains('gone')) post({ type: 'stop' }); }, 1500); },
   };
 }

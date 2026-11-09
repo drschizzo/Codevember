@@ -85,5 +85,21 @@ export function createPool(size = Math.max(2, Math.min(8, (navigator.hardwareCon
     });
   }
 
-  return { size, search, stability };
+  // conception de la machine d'une orbite (dans un worker libre) ; la
+  // conception rendue n'a pas de fonction : withPivots (mech/design.js) la complète
+  function design(orbit) {
+    const job = ++jobId;
+    const w = workers.find((x) => !x.busy) || workers[0];
+    return new Promise((resolve, reject) => {
+      const prev = w.onmessage;
+      w.onmessage = (e) => {
+        if (e.data.job !== job) { if (prev) prev(e); return; }
+        w.onmessage = prev;
+        if (e.data.ok) resolve(e.data.design); else reject(new Error(e.data.reason));
+      };
+      w.postMessage({ type: 'design', job, coef: orbit.coef, params: orbit.params, size: orbit.info.size });
+    });
+  }
+
+  return { size, search, stability, design };
 }
