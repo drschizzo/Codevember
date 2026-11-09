@@ -35,7 +35,6 @@ const DEFAULT_SEED = '17';
 const $ = (s) => document.querySelector(s);
 const randomSeed = () => Math.random().toString(36).slice(2, 8);
 const ss5 = (x) => { const t = Math.min(1, Math.max(0, x)); return t * t * t * (t * (t * 6 - 15) + 10); };
-const MAX_BODIES = 9;
 
 let toastTimer = 0;
 function toast(msg, ms = 2200) {
@@ -52,7 +51,7 @@ async function main() {
   const LITE = wantsMobile(params);
   if (LITE) document.body.classList.add('lite');
   const RENDER = loadRender(LITE);
-  const S = { worlds: [], k: [], target: [], tau: 0, paused: false, busy: true, run: 0, exporting: false, root: -1 };
+  const S = { worlds: [], k: [], target: [], tau: 0, paused: false, busy: true, run: 0, exporting: false, root: -1, good: null };
   // résolution dynamique : vise ~45 images / s, entre 50 et 100 % de la résolution de base
   const governor = createGovernor({ target: 1 / 45, min: 0.5, max: 1, onChange: () => !S.busy && resize() });
   const pace = createPacer(() => RENDER.maxFps);
@@ -76,11 +75,6 @@ async function main() {
   controls.target.set(0, -0.16, 0);
   const root = new THREE.Group(); // reçoit la similitude de la plongée
   scene.add(root);
-
-  // lumières des astres : un jeu fixe (pas de recompilation des matériaux quand
-  // le nombre d'astres change), placé sur les boules du monde courant, puis
-  // passé à celles du monde suivant à la fin de la plongée
-  const bodyLights = Array.from({ length: MAX_BODIES }, () => { const l = new THREE.PointLight(0xffc489, 0, 0, 2); root.add(l); return l; });
 
   const post = createPost(renderer, scene, camera, null);
 
@@ -131,10 +125,25 @@ async function main() {
   }
 
   // ── construction des mondes (après la recherche des orbites)
-  function buildWorlds() {
-    for (const W of S.worlds) { W.group.removeFromParent(); W.dispose(); }
+  // (onStep(i) : un monde de plus est construit ; la construction peut échouer :
+  // l'ancienne scène reste alors en place)
+  async function buildWorlds(onStep = null) {
     const sh = SHADOWS[RENDER.shadows] || SHADOWS.high;
-    S.worlds = Array.from({ length: INST }, (_, m) => createWorld({ orbit: orbits[layerOf(m)], L: R.layers[layerOf(m)], lite: LITE, shadows: sh, seed: layerSeed(m) }));
+    const made = [];
+    try {
+      for (let m = 0; m < INST; m++) {
+        if (onStep) { onStep(m); await new Promise((res) => setTimeout(res, 0)); }
+        // calque 1 + m : la lampe de chaque monde n'ombre que lui
+        made.push(createWorld({ orbit: orbits[layerOf(m)], L: R.layers[layerOf(m)], lite: LITE, shadows: sh, seed: layerSeed(m), layer: 1 + m }));
+      }
+    } catch (e) {
+      for (const W of made) W.dispose();
+      throw e;
+    }
+    for (const W of S.worlds) { W.group.removeFromParent(); W.dispose(); }
+    S.worlds = made;
+    // les lumières de chaque monde, dans un ordre fixe (voir world.js)
+    for (const W of S.worlds) scene.add(W.rig);
     S.k = S.worlds.map((W, m) => W.setNext(S.worlds[(m + 1) % M()]));
     // boule visée : la plus proche de la caméra au début de la plongée
     S.target = S.worlds.map((W, m) => {
@@ -145,6 +154,7 @@ async function main() {
       W.local.forEach((p, j) => { const d = p.distanceTo(cam); if (d < bd) { bd = d; best = j; } });
       return best;
     });
+    S.worlds.forEach((W, m) => W.setTarget(S.target[m]));
     S.root = -1;
     applyLive();
   }
@@ -161,12 +171,12 @@ async function main() {
     // emboîtement : b dans la boule visée de a, c dans celle de b
     if (S.root !== a) {
       S.root = a;
-      for (const W of S.worlds) W.group.removeFromParent();
+      for (const W of S.worlds) { W.group.removeFromParent(); W.group.visible = true; }
       for (const W of S.worlds) for (const G of W.globes) if (G.mini) G.mini.visible = true;
       root.add(Wa.group); Wa.group.scale.setScalar(1);
       const Ga = Wa.globes[S.target[a]], Gb = Wb.globes[S.target[b]];
       Ga.inner.add(Wb.group); Wb.group.scale.setScalar(S.k[a]); Ga.mini.visible = false;
-      if (Mn > 2) { Gb.inner.add(Wc.group); Wc.group.scale.setScalar(S.k[b]); Gb.mini.visible = false; }
+      if (Mn > 2) { Gb.inner.add(Wc.group); Wc.group.scale.setScalar(S.k[b]); }
       scene.background.copy(Wa.bg);
       caption();
       applyLive();
@@ -180,26 +190,26 @@ async function main() {
     const ks = Math.pow(k, s), tr = tmp.copy(p).multiplyScalar((1 - ks) / (1 - k));
     root.scale.setScalar(1 / ks);
     root.position.copy(tr).multiplyScalar(-1 / ks);
-    // la monture de la boule visée s'ouvre pendant la plongée (ses anneaux
-    // s'écartent et sortent du champ) ; les autres restent fermées
-    for (const W of [Wa, Wb, Wc]) for (const G of W.globes) G.mount.group.scale.setScalar(1);
-    Wa.globes[S.target[a]].mount.group.scale.setScalar(1 + 7 * ss5(s / 0.6));
-    // échelle de chaque monde dans l'image : lumières à l'échelle
-    const sa = 1 / ks, sb = k / ks;
-    Wa.setScale(sa); Wb.setScale(sb); if (Mn > 2) Wc.setScale(sb * S.k[b]);
-    // lumières des astres : celles du monde courant s'éteignent quand on entre
-    // dans la boule, celles du monde suivant s'allument (positions dans le repère de la racine)
-    const handoff = s > 0.85;
-    const W = handoff ? Wb : Wa, fade = handoff ? ss5((s - 0.85) / 0.15) : 1 - ss5((s - 0.7) / 0.15);
-    const base = W.L.bodies.light * (handoff ? sb * sb : sa * sa) * fade;
-    col.set(W.L.bodies.color);
-    for (let j = 0; j < MAX_BODIES; j++) {
-      const l = bodyLights[j];
-      if (j >= W.N) { l.intensity = 0; continue; }
-      if (handoff) l.position.copy(W.local[j]).multiplyScalar(k).add(p); else l.position.copy(W.local[j]);
-      l.intensity = base * W.flare[j];
-      l.color.copy(col);
+    // la monture de la boule visée s'efface quand on s'en approche, puis son
+    // verre quand il remplit l'image ; tout revient à l'identique d'une couche à
+    // l'autre (ce sont les réglages du monde courant ; les autres sont pleins)
+    for (const W of [Wa, Wb, Wc]) { W.mountFade.value = 1; W.glassFade.value = 1; }
+    Wa.mountFade.value = 1 - ss5(s / 0.45);
+    Wa.glassFade.value = 1 - ss5((s - 0.45) / 0.4);
+    // échelle de chaque monde dans l'image : chaque monde n'est éclairé que par
+    // ses propres lumières, à son échelle (intensité × échelle²) : rien ne
+    // s'allume ni ne s'éteint, la plongée est auto-similaire
+    const sa = 1 / ks, sb = k / ks, sc = sb * S.k[b];
+    Wa.setScale(sa); Wb.setScale(sb);
+    if (Mn > 2) {
+      // le troisième monde n'occupe que quelques pixels tant qu'on n'a pas
+      // plongé : sa miniature suffit (des milliers d'appels de dessin en moins)
+      const show = sc > 0.3 * S.k[b];
+      Wc.group.visible = show;
+      Wb.globes[S.target[b]].mini.visible = !show;
+      Wc.setScale(sc, show);
     }
+    for (let m = 0; m < Mn; m++) S.worlds[m].syncRig();
     // caméra (fixe dans l'image, pose de base de la couche) ; mise au point
     // sur la machine, puis sur la boule visée
     if (!R.motion.free) {
@@ -242,33 +252,78 @@ async function main() {
     ui?.setInfo(`${p.N} corps · ${Wa.info.crossings} croisements`);
   }
 
-  // ── recherche des orbites de toutes les couches (sous les yeux), puis les mondes
+  // ── recherche des orbites de toutes les couches (sous les yeux), puis les mondes.
+  // Chaque échec (aucune orbite, essai planté, machine impossible à construire,
+  // recherche trop longue) est dit à l'écran, avec de quoi repartir : une autre
+  // graine, réessayer, ou revenir à la dernière scène qui marchait.
+  const SEARCH_TIMEOUT = 40000;
+  function fail(msg, err) {
+    if (err) console.error(err);
+    S.busy = !S.worlds.length;
+    const actions = [{ label: 'Autre graine', run: () => on.random() }, { label: 'Réessayer', run: () => { orbits.length = 0; load(); } }];
+    if (S.good) actions.push({ label: 'Revenir à la scène précédente', run: () => restoreGood() });
+    loader.error(msg, actions);
+  }
+  function restoreGood() {
+    R = JSON.parse(JSON.stringify(S.good.R));
+    orbits.length = 0; orbits.push(...S.good.orbits);
+    ui?.build();
+    load();
+  }
   async function load(only = null) {
     const run = ++S.run;
     S.busy = true;
     loader.show();
     for (let m = 0; m < R.layers.length; m++) {
       if (only !== null && m !== only && orbits[m]) continue;
+      if (only === null && orbits[m]) continue;
       loader.text(R.layers.length > 1 ? `couche ${m + 1} / ${R.layers.length} : recherche d’une orbite…` : 'recherche d’une orbite…');
       let seed = layerSeed(m), r = null;
-      for (let tries = 0; tries < 6; tries++) {
-        r = await pool.search(seed, { over: { ...orbitOverrides(R.layers[m]), maxArms: 14 }, onSnap: (i, sn) => loader.snap(i, sn), onTry: (i) => loader.drop(i) });
+      const TRIES = 6;
+      for (let tries = 0; tries < TRIES; tries++) {
+        loader.status(tries ? `graine ${seed} sans orbite : essai ${tries + 1} / ${TRIES}` : '');
+        try {
+          r = await pool.search(seed, { timeout: SEARCH_TIMEOUT, over: { ...orbitOverrides(R.layers[m]), maxArms: 14 }, onSnap: (i, sn) => loader.snap(i, sn), onTry: (i) => loader.drop(i) });
+        } catch (e) {
+          if (run !== S.run) return;
+          return fail(`La recherche d’orbite a échoué (${e.message}).`, e);
+        }
         if (run !== S.run) return;
         if (r.ok) break;
+        if (r.reason === 'timeout') return fail('La recherche d’orbite a pris trop de temps (plus de 40 s). Ces contraintes sont peut-être trop difficiles.');
         seed = `${seed}+`;
       }
-      if (!r.ok) { loader.error('Aucune orbite avec ces contraintes.'); return; }
+      if (!r.ok) return fail(`Aucune orbite trouvée avec ces contraintes (${TRIES} graines essayées).`);
       orbits[m] = r.orbit;
     }
     const url = new URL(location.href);
     url.searchParams.set('seed', R.seed); url.hash = ''; history.replaceState(null, '', url);
-    loader.text('construction des machines…');
-    await new Promise((res) => setTimeout(res, 0));
-    buildWorlds();
-    ui?.build();
-    setTime(S.tau);
+    loader.status('');
+    try {
+      await buildWorlds((m) => loader.text(`construction des machines… ${m + 1} / ${INST}`));
+      if (run !== S.run) return;
+      ui?.build();
+      S.root = -1;
+      setTime(S.tau);
+    } catch (e) {
+      if (run !== S.run) return;
+      return fail(`La machine de cette orbite n’a pas pu être construite (${e.message}).`, e);
+    }
+    loader.text('préparation du rendu…');
+    await new Promise((res) => setTimeout(res, 30));
+    // un rendu en fin de plongée d'abord : les trois mondes et leurs ombres y
+    // sont dessinés, leurs matériaux sont donc compilés maintenant, pas au
+    // premier passage (sinon un gel d'une demi-seconde à la première plongée)
+    const tau0 = S.tau;
+    // (nodeFrame : sans nouvelle image, la passe de scène réutiliserait la précédente)
+    const fresh = () => renderer._nodes?.nodeFrame?.update?.();
+    setTime(Math.floor(tau0) + 0.97);
+    fresh(); await post.render();
+    setTime(tau0);
+    fresh();
     for (let i = 0; i < 3; i++) { await post.render(); await new Promise((res) => requestAnimationFrame(res)); }
     if (run !== S.run) return;
+    S.good = { R: JSON.parse(JSON.stringify(R)), orbits: orbits.slice() };
     loader.hide();
     S.busy = false;
   }
@@ -305,7 +360,10 @@ async function main() {
   let rebuildTimer = 0;
   function rebuild() {
     clearTimeout(rebuildTimer);
-    rebuildTimer = setTimeout(() => { if (orbits.length >= R.layers.length && orbits.slice(0, R.layers.length).every(Boolean)) { buildWorlds(); setTime(S.tau); } }, 80);
+    rebuildTimer = setTimeout(async () => {
+      if (!(orbits.length >= R.layers.length && orbits.slice(0, R.layers.length).every(Boolean))) return;
+      try { await buildWorlds(); S.root = -1; setTime(S.tau); } catch (e) { console.error(e); toast(`Réglage impossible : ${e.message}`, 5000); }
+    }, 80);
   }
   const ui = params.get('ui') === '0' ? null : createUI({ recipe: () => R, render: RENDER, on });
   ui?.build();

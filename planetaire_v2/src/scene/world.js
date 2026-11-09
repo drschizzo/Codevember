@@ -10,7 +10,7 @@
 // suivant réduit de k = rg / RG : vue de l'intérieur, elle est exactement ce
 // monde.
 import * as THREE from 'three/webgpu';
-import { positionLocal, mix, smoothstep, uniform, vec3 } from 'three/tsl';
+import { positionLocal, mix, smoothstep, uniform, vec2, vec3, vec4, float, length, lights, output, normalView, positionViewDirection, abs, dot, pow, fract, screenCoordinate, frameId } from 'three/tsl';
 import { epicycles, sampleArms } from './epicycles.js';
 import { createOrbitVisual } from './orbit3d.js';
 import { createMachine, materials } from './machine.js';
@@ -60,7 +60,12 @@ function globeMount(kind, rg, metal, keep) {
 
 // ── Un monde ─────────────────────────────────────────────────────────────────
 
-export function createWorld({ orbit, L, lite = false, shadows, seed }) {
+// bruit de gradient entrelacé (IGN), décalé à chaque image : un fondu par
+// pointillés que l'anticrénelage temporel lisse en vraie transparence
+const ign = () => fract(float(52.9829189).mul(fract(dot(screenCoordinate.xy.add(vec2(float(frameId).mul(5.588238))), vec2(0.06711056, 0.00583715)))));
+
+// layer : le calque propre à ce monde (sa lampe n'ombre que lui)
+export function createWorld({ orbit, L, lite = false, shadows, seed, layer = 1 }) {
   const o = orbit, p = o.params, N = p.N;
   const kScale = 1 / o.info.size;
   const coef = Float64Array.from(o.coef, (v) => v * kScale);
@@ -89,14 +94,31 @@ export function createWorld({ orbit, L, lite = false, shadows, seed }) {
 
   // sol et coque de fond (vue de l'intérieur ; un dégradé de studio)
   const RG = 5.2;
+  // Le sol se fond dans la coque : pas de bord ni d'horizon nets. La coque est un
+  // cyclorama (un dégradé vertical, plus sombre et plus dense vers le bas) ; le
+  // sol, éclairé près de la machine, glisse vers la couleur de la coque au ras
+  // du sol (la même, au même endroit), et une brume légère monte du sol pour
+  // effacer la ligne où ils se rejoignent.
+  const bg = new THREE.Color(L.light.bg);
+  const bgU = uniform(bg);
+  const shellAt = (y) => mix(bgU.mul(0.8), bgU.mul(1.9), smoothstep(-0.3, 0.6, y));
+  const horizon = shellAt(float(Y_FLOOR / RG));
   const floorMat = new THREE.MeshStandardNodeMaterial({ color: L.light.floor, roughness: 0.95 });
-  const floor = new THREE.Mesh(keep(new THREE.CircleGeometry(RG * 0.985, 128)), floorMat);
+  {
+    const r = length(positionLocal.xy).div(RG);
+    const f = smoothstep(0.34, 0.9, r);
+    floorMat.outputNode = vec4(mix(output.rgb, horizon, f.mul(f).mul(float(3).sub(f.mul(2)))), output.a);
+  }
+  const floor = new THREE.Mesh(keep(new THREE.CircleGeometry(Math.sqrt(RG * RG - Y_FLOOR * Y_FLOOR) * 0.998, 160)), floorMat);
   floor.rotation.x = -Math.PI / 2; floor.position.y = Y_FLOOR; floor.receiveShadow = true;
   group.add(floor);
-  const bg = new THREE.Color(L.light.bg);
   const shellMat = new THREE.MeshBasicNodeMaterial({ side: THREE.BackSide });
-  const bgU = uniform(bg);
-  shellMat.colorNode = mix(bgU.mul(0.8), bgU.mul(1.9), smoothstep(-0.3, 0.6, positionLocal.y.div(RG)));
+  {
+    const y = positionLocal.y.div(RG);
+    // brume au ras du sol : la coque reprend la couleur de l'horizon juste au-dessus du sol
+    const haze = smoothstep(Y_FLOOR / RG + 0.22, Y_FLOOR / RG, y);
+    shellMat.colorNode = mix(shellAt(y), horizon, haze);
+  }
   const shell = new THREE.Mesh(keep(new THREE.SphereGeometry(RG, 64, 32)), shellMat);
   shell.castShadow = false; shell.receiveShadow = false;
   group.add(shell);
@@ -111,14 +133,41 @@ export function createWorld({ orbit, L, lite = false, shadows, seed }) {
   const rim = new THREE.SpotLight(L.light.rim.color, 1, 0, 0.6, 1, 2);
   rim.position.set(1.8, 1.6, -2.8);
   rim.target.position.set(0, machine.yPlate, 0);
-  group.add(key, key.target, rim, rim.target);
+  // les lumières de ce monde sont dans un gréement à part, placé directement
+  // dans la scène (main.js recopie sur lui la position du monde à chaque image) :
+  // l'ordre des lumières de la scène ne change donc jamais quand les mondes
+  // s'emboîtent autrement (three.js recompilerait sinon tous les matériaux, d'où
+  // un gel à chaque plongée)
+  const rig = new THREE.Group();
+  rig.matrixAutoUpdate = false;
+  rig.add(key, key.target, rim, rim.target);
+  key.shadow.camera.layers.mask = 1 << layer; // (n'ombre que ce monde)
+  const bodyLights = Array.from({ length: N }, () => { const l = new THREE.PointLight(L.bodies.color, 0, 0, 2); rig.add(l); return l; });
 
   // ── astres : boules de verre sur cardan (elles restent droites quand le plateau tourne)
   const rg = Math.min(0.075, 0.38 * o.info.ratio);
   const yGlobe = machine.yBody + rg - 0.018;
-  const glassMat = new THREE.MeshPhysicalNodeMaterial({ color: GLASS_TINTS[L.bodies.tint] || '#ffffff', metalness: 0, roughness: 0.02, transparent: true, opacity: 0.16, depthWrite: false, clearcoat: 1, clearcoatRoughness: 0.02, iridescence: L.bodies.irid ?? 0.2 });
-  const glassGeo = keep(new THREE.SphereGeometry(rg, 48, 24));
+  // Le verre : presque invisible de face, de plus en plus réfléchissant vers le
+  // bord (Fresnel), avec un liseré clair ; la boule visée s'efface quand elle
+  // remplit l'image (on la traverse sans voile)
+  const tint = new THREE.Color(GLASS_TINTS[L.bodies.tint] || '#ffffff');
+  const glassFade = uniform(1);
+  const makeGlass = (fade) => {
+    const m = new THREE.MeshPhysicalNodeMaterial({ color: tint, metalness: 0, roughness: 0.03, transparent: true, depthWrite: false, clearcoat: 1, clearcoatRoughness: 0.02, iridescence: L.bodies.irid ?? 0.2, iridescenceIOR: 1.4 });
+    const nv = abs(dot(normalView, positionViewDirection)).clamp(0, 1);
+    const fr = pow(float(1).sub(nv), 4);
+    m.opacityNode = mix(float(0.05), float(0.9), fr).mul(fade ?? 1);
+    // liseré : une fine couronne lumineuse teintée au ras de la silhouette
+    m.emissiveNode = vec3(tint.r, tint.g, tint.b).mul(pow(float(1).sub(nv), 10).mul(0.35)).mul(fade ?? 1);
+    return m;
+  };
+  const glassMat = makeGlass(null), glassMatT = makeGlass(glassFade);
+  const glassGeo = keep(new THREE.SphereGeometry(rg, 96, 64));
   const globes = [];
+  // monture de la boule visée : même métal, mais elle s'efface (pointillés lissés
+  // par l'anticrénelage) quand la caméra s'en approche, au lieu de s'écarter
+  const mountFade = uniform(1);
+  const mountMat = new THREE.MeshPhysicalNodeMaterial();
   for (let j = 0; j < N; j++) {
     const g = new THREE.Group();
     const glass = new THREE.Mesh(glassGeo, glassMat);
@@ -127,15 +176,31 @@ export function createWorld({ orbit, L, lite = false, shadows, seed }) {
     const mount = globeMount(L.bodies.globe, rg, mats.pins, keep);
     g.add(inner, glass, mount.group);
     plate.add(g);
-    globes.push({ group: g, inner, mount, mini: null });
+    globes.push({ group: g, inner, mount, mini: null, glass });
   }
 
-  // tout ce monde reflète son propre studio
+  // monture visée : copie du métal des goupilles (réglé par la recette)
+  mountMat.copy(mats.pins);
+  mountMat.maskNode = ign().lessThan(mountFade);
+  mountMat.maskShadowNode = mountFade.greaterThan(0.5);
+
+  // tout ce monde reflète son propre studio, et n'est éclairé que par ses
+  // propres lumières (lampe, contre-jour, astres) : un monde emboîté n'est pas
+  // inondé par celles du monde qui le contient, et la plongée est auto-similaire
+  const lightsNode = lights([key, rim, ...bodyLights]);
+  const lit = new Set([mountMat, glassMatT]);
   group.traverse((x) => {
     if (!x.material || x.material === shellMat) return;
-    x.material.envMap = env;
-    x.material.envMapIntensity = L.light.envIntensity;
+    lit.add(x.material);
   });
+  for (const m of lit) {
+    m.envMap = env;
+    m.envMapIntensity = L.light.envIntensity;
+    if (!m.isMeshBasicMaterial && !m.isLineBasicMaterial) m.lightsNode = lightsNode;
+  }
+  // (le calque de ce monde, pour son ombre ; les miniatures s'y ajoutent dans setNext)
+  const tag = (o) => o.traverse((x) => x.layers.enable(layer));
+  tag(group);
 
   // ── temps : le monde ne dépend que de u (sa profondeur relative), donc d'une
   // couche à la même couche, une boucle plus tard, tout est identique
@@ -169,11 +234,29 @@ export function createWorld({ orbit, L, lite = false, shadows, seed }) {
   }
 
   // échelle de ce monde dans l'image : les lumières suivent (intensité × échelle²)
-  function setScale(sc) {
+  function setScale(sc, shadow = true) {
     key.intensity = L.light.key.intensity * sc * sc;
     rim.intensity = L.light.rim.intensity * 6 * sc * sc;
     key.shadow.camera.near = 0.3 * sc; key.shadow.camera.far = 12 * sc;
     key.distance = 0;
+    key.shadow.autoUpdate = shadow; // (monde invisible : carte d'ombre figée)
+    const b = L.bodies.light * sc * sc;
+    for (let j = 0; j < N; j++) { bodyLights[j].position.copy(local[j]); bodyLights[j].intensity = b * flare[j]; }
+  }
+
+  // le gréement des lumières suit le monde (sa transformation dans la scène)
+  function syncRig() {
+    group.updateWorldMatrix(true, false);
+    rig.matrix.copy(group.matrixWorld);
+    rig.matrixWorldNeedsUpdate = true;
+  }
+
+  // la boule visée par la plongée : son verre et sa monture s'effacent à vif
+  function setTarget(j) {
+    globes.forEach((G, i) => {
+      G.glass.material = i === j ? glassMatT : glassMat;
+      G.mount.group.traverse((x) => { if (x.isMesh) x.material = i === j ? mountMat : mats.pins; });
+    });
   }
 
   // la miniature du monde suivant, pour les boules qui ne sont pas visées
@@ -184,31 +267,40 @@ export function createWorld({ orbit, L, lite = false, shadows, seed }) {
       const m = new THREE.Group();
       m.scale.setScalar(k);
       m.add(next.miniature());
+      tag(m);
       G.inner.add(m);
       G.mini = m;
     }
     return k;
   }
 
-  // ce qu'il faut pour être la miniature d'un autre monde
+  // ce qu'il faut pour être la miniature d'un autre monde (matières sans
+  // lumière : la miniature est dans la boule d'un autre monde, loin des siennes)
+  const miniFloor = new THREE.MeshBasicNodeMaterial();
+  miniFloor.colorNode = mix(vec3(...new THREE.Color(L.light.floor).multiplyScalar(0.35).toArray()), horizon, smoothstep(0.34, 0.9, length(positionLocal.xy).div(RG)));
+  const miniPlate = new THREE.MeshBasicNodeMaterial({ color: new THREE.Color(...(MATTERS[L.matters.plate]?.color || [0.5, 0.4, 0.3])).multiplyScalar(0.45) });
   function miniature() {
     const m = new THREE.Group();
     const sh = new THREE.Mesh(shell.geometry, shellMat); m.add(sh);
-    const fl = new THREE.Mesh(floor.geometry, floorMat); fl.rotation.x = -Math.PI / 2; fl.position.y = Y_FLOOR; m.add(fl);
+    const fl = new THREE.Mesh(floor.geometry, miniFloor); fl.rotation.x = -Math.PI / 2; fl.position.y = Y_FLOOR; m.add(fl);
     const lineMat = new THREE.LineBasicNodeMaterial({ color: new THREE.Color(L.bodies.color).multiplyScalar(4) });
     const pts = [];
     for (let i = 0; i < curve.length / 2; i += 4) pts.push(new THREE.Vector3(curve[2 * i], machine.yBody, -curve[2 * i + 1]));
     pts.push(pts[0].clone()); // (courbe fermée)
     const line = new THREE.Line(keep(new THREE.BufferGeometry().setFromPoints(pts)), lineMat);
     m.add(line);
-    const pl = new THREE.Mesh(keep(new THREE.CylinderGeometry(machine.plateR, machine.plateR, 0.035, 64)), mats.plate);
+    const pl = new THREE.Mesh(keep(new THREE.CylinderGeometry(machine.plateR, machine.plateR, 0.035, 64)), miniPlate);
     pl.position.y = machine.yPlate - 0.0175; m.add(pl);
     return m;
   }
 
   return {
-    group, plate, machine, globes, local, flare, N, RG, rg, yGlobe, update, setScale, setNext, miniature,
+    group, plate, machine, globes, local, flare, N, RG, rg, yGlobe, update, setScale, setNext, miniature, rig, syncRig, setTarget, glassFade, mountFade,
     bg, epi, orbit: o, params: p, info: o.info, L,
-    dispose() { for (const g of geos) g.dispose(); machine.dispose(); trail.dispose(); env.dispose(); },
+    dispose() {
+      for (const g of geos) g.dispose(); machine.dispose(); trail.dispose(); env.dispose();
+      rig.removeFromParent(); key.shadow.dispose?.();
+      for (const m of [floorMat, shellMat, glassMat, glassMatT, mountMat, miniFloor, miniPlate, ...lit]) m.dispose();
+    },
   };
 }

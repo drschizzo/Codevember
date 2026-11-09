@@ -5,6 +5,10 @@
 export function createLoader(el) {
   const canvas = el.querySelector('canvas'), ctx = canvas.getContext('2d');
   const label = el.querySelector('p');
+  const txt = el.querySelector('.txt');
+  const status = document.createElement('small'); status.className = 'status';
+  const bar = document.createElement('div'); bar.className = 'actions';
+  txt.append(status, bar);
   const snaps = new Map();
   let raf = 0, on = false;
 
@@ -32,6 +36,7 @@ export function createLoader(el) {
       ctx.stroke();
     });
     const s = live[0];
+    if (el.classList.contains('error')) return;
     label.textContent = `recherche d’une orbite · essai ${[...snaps.keys()].sort((a, b) => a - b)[0]} · action ${s.action.toFixed(4)}`;
   }
 
@@ -39,12 +44,24 @@ export function createLoader(el) {
     show(text = 'recherche d’une orbite…') {
       snaps.clear(); label.textContent = text;
       el.classList.remove('gone', 'error');
+      bar.replaceChildren(); status.textContent = '';
       if (!on) { on = true; draw(); }
     },
     snap(i, s) { snaps.set(i, s); },
     drop(i) { snaps.delete(i); },
-    text(t) { label.textContent = t; },
-    error(t) { el.classList.add('error'); label.textContent = t; },
+    text(t) { snaps.clear(); label.textContent = t; },
+    status(t) { status.textContent = t; },
+    // un échec : le message, et des boutons pour repartir ({ label, run })
+    error(t, actions = []) {
+      el.classList.remove('gone');
+      el.classList.add('error'); label.textContent = t; status.textContent = 'N : nouvelle graine';
+      if (!on) { on = true; draw(); }
+      bar.replaceChildren(...actions.map(({ label: l, run }) => {
+        const b = document.createElement('button');
+        b.textContent = l; b.onclick = () => run();
+        return b;
+      }));
+    },
     hide() { el.classList.add('gone'); on = false; cancelAnimationFrame(raf); snaps.clear(); },
   };
 }

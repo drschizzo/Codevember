@@ -19,6 +19,7 @@
 // rotation d'angle θ autour de +y est la rotation du plan.
 import * as THREE from 'three/webgpu';
 import { uniform, positionLocal, float, vec2, sin, atan, length, fract, smoothstep, mix, abs, floor, mx_cell_noise_float } from 'three/tsl';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { designMachine, SLAB } from '../mech/design.js';
 import { createDrive } from '../mech/drive.js';
 
@@ -238,6 +239,86 @@ export function ribbonGeometry(pts, w, h) {
   g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
   g.setIndex(idx);
   return g;
+}
+
+// ── Fusion des pièces fixes ──────────────────────────────────────────────────
+function mergeStatic(roots, update, keep) {
+  const P = new Float64Array(2 * 64);
+  const seen = new Map(); // mesh → matrice locale au premier instant
+  const moved = new Set();
+  [0.37, 2.91, 5.13].forEach((tau, s) => {
+    update(tau, P);
+    for (const r of roots) r.traverse((o) => {
+      if (!o.isMesh) return;
+      o.updateMatrix();
+      if (!s) seen.set(o, o.matrix.clone());
+      else if (!o.matrix.equals(seen.get(o))) moved.add(o);
+    });
+  });
+  const parents = new Set();
+  for (const o of seen.keys()) parents.add(o.parent);
+  for (const parent of parents) {
+    const buckets = new Map();
+    for (const o of parent.children) {
+      if (!o.isMesh || o.isInstancedMesh || moved.has(o) || o.children.length || !o.visible || o.renderOrder) continue;
+      const k = `${o.material.id}:${o.castShadow}:${o.receiveShadow}`;
+      if (!buckets.has(k)) buckets.set(k, []);
+      buckets.get(k).push(o);
+    }
+    for (const list of buckets.values()) {
+      if (list.length < 2) continue;
+      const geos = list.map((o) => {
+        let g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+        for (const name of Object.keys(g.attributes)) if (name !== 'position' && name !== 'normal') g.deleteAttribute(name);
+        g.clearGroups();
+        return g.applyMatrix4(o.matrix);
+      });
+      const merged = mergeGeometries(geos, false);
+      for (const g of geos) g.dispose();
+      if (!merged) continue;
+      const m = new THREE.Mesh(keep(merged), list[0].material);
+      m.castShadow = list[0].castShadow; m.receiveShadow = list[0].receiveShadow;
+      for (const o of list) parent.remove(o);
+      parent.add(m);
+    }
+  }
+}
+
+// ── Chaînes instanciées ──────────────────────────────────────────────────────
+// Les bras restent des groupes (détachés de la scène) qui portent les
+// transformations ; leurs pièces sont dessinées par des InstancedMesh (une
+// instance par chaîne), avec leurs propres matières (une matière partagée entre
+// objets instanciés et non instanciés fausse les vitesses de l'anticrénelage).
+function instanceChains(chains, group, n, N) {
+  const parts = [];
+  const clones = new Map();
+  const matFor = (m) => { if (!clones.has(m)) clones.set(m, m.clone()); return clones.get(m); };
+  for (let i = 0; i < n; i++) {
+    const gs = chains.map((ch) => ch.arm[i]);
+    const kids = gs[0].children;
+    // même structure dans toutes les chaînes (sinon, ce bras reste tel quel) ;
+    // les pièces fusionnées sont des copies identiques d'une chaîne à l'autre
+    const nv = (c) => c.geometry.attributes.position.count;
+    const same = gs.every((g) => g.children.length === kids.length && g.children.every((c, ci) => c.isMesh && !c.children.length && c.material === kids[ci].material && nv(c) === nv(kids[ci])));
+    if (!same) continue;
+    kids.forEach((c0, ci) => {
+      const im = new THREE.InstancedMesh(c0.geometry, matFor(c0.material), N);
+      im.castShadow = c0.castShadow; im.receiveShadow = c0.receiveShadow;
+      im.frustumCulled = false; // (les instances bougent : la sphère englobante serait fausse)
+      group.add(im);
+      parts.push({ im, gs, src: gs.map((g) => g.children[ci]) });
+    });
+    for (const g of gs) g.removeFromParent();
+  }
+  const M4 = new THREE.Matrix4();
+  const groups = new Set(parts.flatMap((p) => p.gs));
+  return () => {
+    for (const g of groups) g.updateMatrix();
+    for (const { im, gs, src } of parts) {
+      for (let j = 0; j < N; j++) { src[j].updateMatrix(); im.setMatrixAt(j, M4.multiplyMatrices(gs[j].matrix, src[j].matrix)); }
+      im.instanceMatrix.needsUpdate = true;
+    }
+  };
 }
 
 // ── La machine ───────────────────────────────────────────────────────────────
@@ -518,8 +599,20 @@ export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72, archet
     if (armillary) armillary.rotation.y = tau * 0.2;
   }
 
+  // ── pièces fixes fusionnées : chaque bras, le plateau et le bâti portent des
+  // dizaines de pièces solidaires (vis, rubis, colonnes, galets, roues calées…)
+  // qui ne bougent pas dans le repère de leur parent. On les repère en faisant
+  // tourner la machine à trois instants, puis on fusionne, parent par parent,
+  // celles qui partagent une matière : 4 à 6 fois moins d'appels de dessin.
+  mergeStatic([group, stand], update, keep);
+  // puis les N chaînes, identiques à un décalage de phase près : chaque pièce
+  // d'un bras devient un seul dessin instancié N fois
+  const syncInstances = instanceChains(chains, group, n, N);
+  const updateAll = (tau, xy) => { update(tau, xy); syncInstances(); };
+  syncInstances();
+
   return {
-    group, stand, update, design: D, yPlate, yTop, yBody, plateR, bezelR: drive.bezelR, grooveCurves,
+    group, stand, update: updateAll, design: D, yPlate, yTop, yBody, plateR, bezelR: drive.bezelR, grooveCurves,
     dispose() { for (const g of geos) g.dispose(); },
   };
 }
