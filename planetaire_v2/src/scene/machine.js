@@ -20,7 +20,7 @@
 import * as THREE from 'three/webgpu';
 import { uniform, positionLocal, float, vec2, sin, atan, length, fract, smoothstep, mix, abs, floor, mx_cell_noise_float } from 'three/tsl';
 import { designMachine, SLAB } from '../mech/design.js';
-import { createComplications } from '../mech/complications.js';
+import { createDrive } from '../mech/drive.js';
 
 const TAU = Math.PI * 2;
 const BAR_T = 0.005, GEAR_T = 0.0035, GEAR_DY = 0.008; // épaisseurs ; hauteur du train au-dessus du bras
@@ -65,6 +65,7 @@ export function materials() {
   m.groove = new THREE.MeshPhysicalNodeMaterial({ metalness: 0.6, roughness: 0.75, side: THREE.DoubleSide });
   m.lip = new THREE.MeshPhysicalNodeMaterial({ metalness: 1, roughness: 0.18, side: THREE.DoubleSide });
   m.bridge = m.arms;
+  m.bezel = m.foot;
   m.apply = (matters, table) => {
     for (const role of ROLES) {
       const t = table[matters[role]], x = m[role];
@@ -85,8 +86,8 @@ export function materials() {
 // ── Géométries ───────────────────────────────────────────────────────────────
 
 // pose une forme du plan (x, y) à plat : (x, 0, −y), épaisseur centrée sur 0
-export function flat(shape, thick, bevel = 0.25) {
-  const g = new THREE.ExtrudeGeometry(shape, { depth: thick, bevelEnabled: bevel > 0, bevelThickness: thick * bevel * 0.5, bevelSize: thick * bevel * 0.5, bevelSegments: 1, curveSegments: 8 });
+export function flat(shape, thick, bevel = 0.25, curveSegments = 8) {
+  const g = new THREE.ExtrudeGeometry(shape, { depth: thick, bevelEnabled: bevel > 0, bevelThickness: thick * bevel * 0.5, bevelSize: thick * bevel * 0.5, bevelSegments: 1, curveSegments });
   g.translate(0, 0, -thick / 2);
   g.rotateX(-Math.PI / 2);
   return g;
@@ -284,9 +285,9 @@ export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72, archet
   // ── plateau, jonc, graduations
   let reach = 0;
   for (const l of L) reach += l;
-  // le plateau a une couronne au-delà de ce que balaient les chaînes : les complications
-  const rIn = reach + 0.12;
-  const plateR = Math.max(1.6, rIn + 0.5);
+  // le plateau : un peu plus que ce que balaient les chaînes ; le mouvement est
+  // sur un bâti fixe autour de lui (mech/drive.js)
+  const plateR = Math.max(1.3, reach + 0.22);
   const plate = mesh(keep(new THREE.CylinderGeometry(plateR, plateR, 0.035, 180)), mats.plate);
   plate.position.y = yPlate - 0.0175;
   group.add(plate);
@@ -354,9 +355,6 @@ export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72, archet
   finial.position.y = ySun + GEAR_T / 2 + 0.01;
   group.add(finial);
 
-  // ── complications de la couronne, gravure du centre
-  const comp = createComplications({ archetype, rIn, plateR, yPlate, mats, keep, styleGear: AR.gear });
-  group.add(comp.group);
   // planétaire classique : sphère armillaire au sommet du poteau, si aucun astre
   // ne passe au-dessus du centre
   let armillary = null;
@@ -495,60 +493,9 @@ export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72, archet
     chains.push(ch);
   }
 
-  // ── sous le plateau
-  const [pw, qw] = omegaFrac;
-  const OmP = pw / qw, OmT = pw / qw + k[0]; // vitesses (studio) du plateau et du tube
-  const d = 0.6;                           // entraxe de l'arbre de renvoi
-  const yRing = yPlate - 0.035 - 0.004, yUB = yRing - 0.03, yT = yUB - 0.03, yFrame = yT - 0.045;
-  const big = Math.round(3 * Math.max(Math.abs(pw), Math.abs(pw + k[0] * qw))); // |Ω_arbre| · q
-  const pair = (a, b) => { const g = (x, y) => (y ? g(y, x % y) : x), gg = g(a, b); a /= gg; b /= gg; const t = Math.max(1, Math.ceil(12 / Math.min(a, b))); return [a * t, b * t]; };
-  const wheels = [];
-  if (OmP !== 0) wheels.push({ y: yRing, Om: OmP, speedQ: Math.abs(pw), onTube: false });
-  if (OmT !== 0) wheels.push({ y: yT, Om: OmT, speedQ: Math.abs(pw + k[0] * qw), onTube: true });
-  for (const w of wheels) {
-    const [zW, zP] = pair(big, w.speedQ);
-    // tous les pignons de l'arbre tournent dans le même sens : renvoi si besoin
-    w.idler = wheels.length === 2 && w.onTube && Math.sign(OmT) !== Math.sign(OmP);
-    const zI = w.idler ? 14 : 0;
-    const m = (2 * d) / (zW + zP + 2 * zI);
-    w.zW = zW; w.zP = zP; w.zI = zI;
-    const rW = (m * zW) / 2, rP = (m * zP) / 2, rI = (m * zI) / 2;
-    w.wheel = mesh(gearGeometry(zW, rW, { thick: 0.006, ring: w.onTube ? 0 : Math.min(0.035, rW * 0.12) }), mats.gears);
-    w.wheel.position.y = w.y;
-    group.add(w.wheel);
-    w.pinion = mesh(gearGeometry(zP, rP, { thick: 0.006 }), mats.gears);
-    w.pinion.position.set(d, w.y, 0);
-    stand.add(w.pinion);
-    if (zI) {
-      w.idlerM = mesh(gearGeometry(zI, rI, { thick: 0.006 }), mats.gears);
-      w.idlerM.position.set(rW + rI, w.y, 0);
-      stand.add(w.idlerM);
-      const st = mesh(keep(cyl(STUD_R, 0.02)), mats.pins);
-      st.position.set(rW + rI, w.y - 0.02, 0); stand.add(st);
-    }
-    w.off = meshOffsets(zI ? [zW, zI, zP] : [zW, zP]);
-  }
-  const plateSleeve = mesh(keep(cyl(0.03, yPlate - 0.035 - yUB, 40)), mats.foot); // (canon du plateau, sous lui)
-  plateSleeve.position.y = yUB; group.add(plateSleeve);
-  const tube = mesh(keep(cyl(0.012, yBar(0, 0) + BAR_T / 2 - (yFrame + 0.006), 24)), mats.arms);
-  tube.position.y = yFrame + 0.006; group.add(tube);
-  const bridge = mesh(keep(new THREE.BoxGeometry(d + 0.06, 0.01, 0.045)), mats.foot);
-  bridge.position.set((d + 0.03) / 2 - 0.015, yUB - 0.005, 0); stand.add(bridge);
-  const frame = mesh(keep(new THREE.CylinderGeometry(d + 0.1, d + 0.1, 0.024, 120)), mats.foot);
-  frame.position.y = yFrame - 0.012; stand.add(frame);
-  const bearing = mesh(keep(cyl(0.03, 0.012, 32)), mats.pins);
-  bearing.position.y = yFrame; stand.add(bearing);
-  const pillar = mesh(keep(cyl(0.01, yUB - 0.01 - yFrame, 20)), mats.foot);
-  pillar.position.set(d + 0.03, yFrame, 0.03); stand.add(pillar);
-  const shaft = mesh(keep(cyl(0.0055, yRing + 0.01 - yFrame, 16)), mats.pins);
-  shaft.position.set(d, yFrame, 0); stand.add(shaft);
-  const box = mesh(keep(new THREE.CylinderGeometry(0.16, 0.19, 0.12, 64)), mats.foot);
-  box.position.y = yFrame - 0.024 - 0.06; stand.add(box);
-  const footTop = yFrame - 0.024 - 0.12;
-  const foot = mesh(keep(cyl(0.11, footTop - yFloor - 0.04, 48, 0.07)), mats.foot);
-  foot.position.y = yFloor + 0.04; stand.add(foot);
-  const base = mesh(keep(new THREE.CylinderGeometry(0.42, 0.46, 0.04, 96)), mats.foot);
-  base.position.y = yFloor + 0.02; stand.add(base);
+  // ── le mouvement : bâti, rouage, échappement ou vapeur, arbre de sortie,
+  // denture du plateau, roue du tube central, pied
+  const drive = createDrive({ archetype, plateR, yPlate, yFloor, k0: k[0], omegaFrac, mats, keep, plateGroup: group, stand, styleGear: AR.gear, yTubeTop: yBar(0, 0) + BAR_T / 2 });
 
   // ── animation : tau, temps de l'orbite ; bodyXY reçoit la position des astres
   function update(tau, bodyXY) {
@@ -567,21 +514,12 @@ export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72, archet
       bodyXY[2 * j] = P[2 * n]; bodyXY[2 * j + 1] = P[2 * n + 1];
     }
     if (sun) sun.rotation.y = phi[0];
-    for (const w of wheels) {
-      const aW = w.Om * tau;
-      if (w.onTube) w.wheel.rotation.y = k[0] * tau;
-      if (w.zI) {
-        w.idlerM.rotation.y = -(w.zW / w.zI) * aW + w.off[1];
-        w.pinion.rotation.y = (w.zW / w.zP) * aW + w.off[2];
-      } else w.pinion.rotation.y = -(w.zW / w.zP) * aW + w.off[1];
-    }
-    if (wheels[0]) shaft.rotation.y = wheels[0].pinion.rotation.y;
-    comp.update(tau);
+    drive.update(tau);
     if (armillary) armillary.rotation.y = tau * 0.2;
   }
 
   return {
-    group, stand, update, design: D, yPlate, yTop, yBody, plateR, grooveCurves,
+    group, stand, update, design: D, yPlate, yTop, yBody, plateR, bezelR: drive.bezelR, grooveCurves,
     dispose() { for (const g of geos) g.dispose(); },
   };
 }

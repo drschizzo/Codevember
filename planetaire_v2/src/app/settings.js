@@ -19,7 +19,7 @@ export const SHADOWS = {
 
 export const RENDER_DEFAULTS = {
   quality: 'high', pixelRatio: 1.5, aa: 'smaa', shadows: 'high',
-  toneMapping: 'agx', exposure: 1.0, contrast: 1.12, saturation: 1.05, warmth: 0, vignette: 0.45,
+  toneMapping: 'agx', exposure: 1.2, contrast: 1.08, saturation: 1.05, warmth: 0, vignette: 0.45,
   bloom: true, bloomStrength: 0.09, bloomRadius: 0.4, bloomThreshold: 1.4, hiCap: 6,
   godrays: false, ao: false,
   dof: true, bokeh: 1.3, focusSpread: 0.55,
@@ -38,7 +38,7 @@ export const MOBILE_DEFAULTS = {
 };
 export const defaultsFor = (lite) => (lite ? MOBILE_DEFAULTS : RENDER_DEFAULTS);
 
-const STORE = 'choregraphies.render.v1';
+const STORE = 'choregraphies.render.v2';
 
 // (le mode mobile a ses propres réglages mémorisés)
 export function loadRender(lite = false) {

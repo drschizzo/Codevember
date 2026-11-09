@@ -96,7 +96,7 @@ export function createWorld({ orbit, L, lite = false, shadows, seed }) {
   const bg = new THREE.Color(L.light.bg);
   const shellMat = new THREE.MeshBasicNodeMaterial({ side: THREE.BackSide });
   const bgU = uniform(bg);
-  shellMat.colorNode = mix(bgU.mul(0.55), bgU.mul(1.25), smoothstep(-0.3, 0.6, positionLocal.y.div(RG)));
+  shellMat.colorNode = mix(bgU.mul(0.8), bgU.mul(1.9), smoothstep(-0.3, 0.6, positionLocal.y.div(RG)));
   const shell = new THREE.Mesh(keep(new THREE.SphereGeometry(RG, 64, 32)), shellMat);
   shell.castShadow = false; shell.receiveShadow = false;
   group.add(shell);
@@ -171,7 +171,7 @@ export function createWorld({ orbit, L, lite = false, shadows, seed }) {
   // échelle de ce monde dans l'image : les lumières suivent (intensité × échelle²)
   function setScale(sc) {
     key.intensity = L.light.key.intensity * sc * sc;
-    rim.intensity = L.light.rim.intensity * 4 * sc * sc;
+    rim.intensity = L.light.rim.intensity * 6 * sc * sc;
     key.shadow.camera.near = 0.3 * sc; key.shadow.camera.far = 12 * sc;
     key.distance = 0;
   }

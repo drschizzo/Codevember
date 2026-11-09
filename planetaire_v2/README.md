@@ -1,6 +1,6 @@
 # Planétaire v2 : Chorégraphies
 
-Un planétaire est une machine qui calcule le ciel. Celui-ci calcule des ciels qui n'existent pas encore : chaque graine lance la recherche de **chorégraphies** du problème à N corps (N masses égales qui se poursuivent sur une même courbe fermée, solutions exactes des équations de Newton), conçoit pour chacune la machine à engrenages qui la trace pour de bon, et les emboîte : **chaque astre est une boule de verre qui contient le monde suivant**, et la caméra plonge de l'un à l'autre en boucle parfaite. Rendu physique en three.js (WebGPU, TSL). Rien n'est téléchargé hors three.js : orbites, machines, matières et studios sont calculés en quelques secondes à partir de la graine.
+Un planétaire est une machine qui calcule le ciel. Celui-ci calcule des ciels qui n'existent pas encore : chaque graine lance la recherche de **chorégraphies** du problème à N corps (N masses égales qui se poursuivent sur une même courbe fermée, solutions exactes des équations de Newton), conçoit pour chacune la machine à engrenages qui la trace pour de bon, et la met en abîme : **chaque astre est une boule de verre qui contient la même scène**, et la caméra y plonge sans fin, en boucle parfaite. Rendu physique en three.js (WebGPU, TSL). Rien n'est téléchargé hors three.js : orbites, machines, matières et studios sont calculés en quelques secondes à partir de la graine.
 
 La page de test du solveur seul reste dans `proto/`.
 
@@ -30,21 +30,21 @@ Paramètres d'URL : `?seed=…` (une scène), `#r=…` (une scène retouchée, p
 Le panneau règle tout :
 - **Orbite** : contraintes du solveur (nombre de corps, classe de symétrie, rotation du plateau p/q) ; chaque changement relance la recherche, sous les yeux ;
 - **Plongée** : durée d'une couche, part avant la plongée, caméra libre ;
-- **Couches** (une par monde) : orbite, humeur, archétype de machine, plateau, matières, astres (monture, verre, irisation, lumière), trace, rythme et caméra, lumières ;
+- **Couche** (le monde) : orbite, humeur, archétype de machine, plateau, matières, astres (monture, verre, irisation, lumière), trace, rythme et caméra, lumières ;
 - **Lumières** et **Rendu** (qualité, résolution dynamique, ombres, étalonnage, bloom, profondeur de champ…) ; **Export** (MP4, PNG).
 
 ## La recette (`src/recipe.js`)
 
-Une scène, ce sont **trois couches** (trois mondes emboîtés, le dernier contient le premier) et le rythme de la plongée. Chaque couche tire, à partir de la graine :
+Une scène, c'est un monde (chaque astre en contient une copie exacte) et le rythme de la plongée. Le monde tire, à partir de la graine :
 - son **orbite** (nombre de corps, classe de symétrie, rotation du plateau p/q, tirés ou imposés) ;
-- son **humeur**, toujours différente de celle des autres couches : Atelier d'horloger, Observatoire, Clinique (porcelaine et chrome sur fond clair), Cabinet de curiosités, Forge, Sacré. Elle choisit le studio, les lumières, et oriente les tirages suivants ;
+- son **humeur** : Atelier d'horloger, Observatoire, Clinique (porcelaine et chrome sur fond clair), Cabinet de curiosités, Forge, Sacré. Elle choisit le studio, les lumières, et oriente les tirages suivants ;
 - son **archétype de machine** : mouvement d'horlogerie, planétaire classique, atelier, astrolabe ;
 - ses **astres** : boule de verre (claire, fumée, bleutée, ambrée, verte, plus ou moins irisée) dans une monture (jonc, cardan à deux anneaux, cage armillaire, sertie à griffes, lanterne) ;
 - son **plateau** (vingt-quatre matières, finitions guilloché, soleil, perlage), ses **matières**, sa **trace** (verre filé, fil d'or, gravure rougeoyante, aucune), son rythme (ralentis, périodes par couche) et l'angle de sa caméra.
 
 ## La scène (`src/main.js`, `src/scene/`)
 
-**La plongée** (`main.js`, `scene/world.js`). Chaque couche est un monde complet (machine, sol, coque de studio vue de l'intérieur, lampe et contre-jour, matières et studio HDR propres). Chaque astre est une boule de verre sur cardan (elle reste droite quand le plateau tourne) : la boule visée contient le monde suivant réduit d'un facteur k = rayon de la boule / rayon de la coque ; les autres, sa miniature. Dans chaque couche, on regarde d'abord la machine, puis la caméra entre dans la boule la plus proche. C'est le monde qui subit une similitude A(s)⁻¹, A(s) = translation p·(1 − kˢ)/(1 − k) ∘ homothétie kˢ, de point fixe la boule visée : elle grandit en glissant vers le centre de l'image, et à s = 1 la couche suivante occupe exactement la place de la précédente (vérifié : position et échelle identiques à 10⁻¹⁴ près aux trois raccords, bouclage compris). Vue de l'intérieur, la boule montre la coque du monde suivant, qui cache la machine géante qu'on quitte. Tout ne dépend que de τ et chaque monde ne dépend que de sa profondeur relative, comme dans Hollow : la boucle (trois couches) est parfaite par construction. Les lumières sont à l'échelle de leur couche (intensité × échelle²) ; un jeu fixe de lumières d'astres passe du monde courant au monde suivant à la fin de la plongée ; l'angle de caméra glisse d'une couche à la suivante.
+**La plongée** (`main.js`, `scene/world.js`). Le monde est complet (machine, sol, coque de studio vue de l'intérieur, lampe et contre-jour, matières et studio HDR propres). Chaque astre est une boule de verre sur cardan (elle reste droite quand le plateau tourne) qui contient **la même scène**, réduite d'un facteur k = rayon de la boule / rayon de la coque : la boule visée en contient un exemplaire complet, les autres sa miniature. Trois exemplaires du monde sont emboîtés à la fois. Dans chaque couche, on regarde d'abord la machine, puis la caméra entre dans la boule la plus proche. C'est le monde qui subit une similitude A(s)⁻¹, A(s) = translation p·(1 − kˢ)/(1 − k) ∘ homothétie kˢ, de point fixe la boule visée : elle grandit en glissant vers le centre de l'image, et à s = 1 la couche suivante occupe exactement la place de la précédente (vérifié : position et échelle identiques à 10⁻¹⁴ près aux trois raccords, bouclage compris). Vue de l'intérieur, la boule montre la coque du monde suivant, qui cache la machine géante qu'on quitte. Tout ne dépend que de τ et chaque monde ne dépend que de sa profondeur relative, comme dans Hollow : la scène à τ + 1 est identique à la scène à τ (vérifié : écart nul), la boucle dure une couche et la plongée est infinie. Les lumières sont à l'échelle de leur couche (intensité × échelle²) ; un jeu fixe de lumières d'astres passe du monde courant au monde suivant à la fin de la plongée.
 
 **Le plateau tourne.** Une orbite trouvée dans un repère tournant à ω est une vraie solution dans le repère fixe : le plateau tourne à ω comme une platine ; sur lui, la courbe est fixe, et la machine la trace. ω est rationnel (p/q, q ≤ 5).
 
@@ -53,12 +53,12 @@ Une scène, ce sont **trois couches** (trois mondes emboîtés, le dernier conti
 - *Trains.* Le bras i doit tourner à kᵢ − kᵢ₋₁ par rapport au bras qui le porte : roue A solidaire du bras i−2 (la roue solaire du plateau pour le premier), renvois sur tenons le long du bras porteur, roue B solidaire du bras mené ; rapport exact, rationnel, dents entières, parité des renvois imposée par le sens, module calculé pour que la chaîne tombe sur la longueur du bras, dents calées dans les creux (vérifié : 1 014 paires, écart < 10⁻¹² de pas). En atelier, la transmission est une courroie, ouverte ou croisée selon le sens.
 - *Étages.* L'étoile des bras 0 juste au-dessus du plateau, chaque bras un étage plus haut, les astres au sommet. Répartition par coloration d'un graphe de conflits échantillonné sur la période ; aucune collision sur 255 orbites.
 - *Supports.* Tout est porté. L'étoile roule sur deux galets par bras dont les patins glissent dans deux sillons circulaires du plateau ; les bras supérieurs reçoivent une colonne et un sillon là où aucune pièce ne la croise, sinon ils sont en porte-à-faux sur leurs axes. Sous le plateau : couronne, canon, pont, tube central, arbre de renvoi.
-- *Archétypes* (roues, bras, transmission, couronne) :
-  - **horlogerie** : roues à cinq bras, ponts ajourés ; balancier spiral qui oscille, échappement à ancre qui avance par crans, rouage engrené tout autour de la couronne jusqu'au barillet (rochet, cliquet), ponts vissés sur rubis ;
-  - **planétaire classique** : roues à ajours ronds, bras en lyre ; anneau zodiacal en douze plaques, cadran émaillé, sphère armillaire au sommet du poteau si aucun astre n'y passe ;
-  - **atelier** : roues pleines, bras en treillis, courroies ; volant à manivelle et bielle, régulateur à boules, rouage de fonte ;
-  - **astrolabe** : roues à huit bras, bras ajourés ; araignée qui tourne sur un tympan gravé.
-- *Plateau.* Une couronne au-delà de ce que balaient les chaînes porte les complications ; le centre est gravé (cercles, lignes horaires) et creusé des sillons.
+- *Archétypes* (roues, bras, transmission) : **horlogerie** (roues à cinq bras, ponts ajourés), **planétaire classique** (roues à ajours ronds, bras en lyre, sphère armillaire au sommet si aucun astre n'y passe), **atelier** (roues pleines, bras en treillis, courroies ouvertes ou croisées selon le sens), **astrolabe** (roues à huit bras, bras ajourés).
+
+**Le mouvement** (`mech/drive.js`). Ce qui fait tourner la machine est posé sur un bâti fixe autour du plateau, et chaque pièce sert. Un arbre de sortie engrène, par un petit pignon, la **denture taillée au bord du plateau** (le plateau tourne à ω) et, par-dessous, la roue du tube central (l'étoile des bras 0, à ω + k₀) ; ses vitesses découlent de celle du plateau par des rapports de dents exacts.
+- *Horlogerie, classique, astrolabe* : le **barillet** (l'énergie, avec rochet, cliquet et clé de remontoir) mène l'arbre par un rouage ; de l'autre côté, un pignon de l'arbre, une roue de champ et son pignon (démultiplication composée) mènent la **roue d'échappement** ; l'ancre et le **balancier spiral** règlent la marche (le balancier bat au rythme des dents, environ 2 Hz) ; des **cadrans émaillés** sont menés par des roues du rouage ; roues sous des ponts vissés sur rubis, posés sur des piliers. Classique : anneau zodiacal sur le bâti, parcouru par un index fixé au plateau.
+- *Atelier* : une **machine à vapeur** (cylindre, piston, crosse, bielle, manivelle) fait tourner un **volant**, qui mène l'arbre par une **courroie** ; une courroie croisée entraîne le **régulateur à boules** ; un compteur est mené par un pignon du volant.
+- Chaque roue est calée sur celle qui la mène (arbre cinématique) : rien ne tourne pour rien, rien ne glisse.
 
 **Le verre filé** (`orbit3d.js`). Un seul tube, fixe sur le plateau, suit toute la courbe. Au point d'abscisse s, le dernier passage d'un astre date de fract(N·(φ − s)) / N période : la chaleur se calcule dans le shader à partir de la seule phase φ. Le verre rougeoie derrière l'astre, refroidit (couleur de corps noir, puis fil de verre sombre et brillant), et l'astre suivant arrive pour le ranimer. Le verre encore mou est un peu plus épais.
 
@@ -68,7 +68,7 @@ Une scène, ce sont **trois couches** (trois mondes emboîtés, le dernier conti
 
 **L'écran de génération** (`app/loader.js`). Pas de barre de progression : on regarde la recherche, les courbes des essais en cours qui se tortillent puis se posent sur une solution. Une graine sans orbite passe la main à une autre.
 
-**Cadence.** ~80 images/s en 1920 × 1080 (Mac, Chrome) avec trois mondes rendus à la fois.
+**Cadence.** ~100 images/s en 1280 × 760 (Mac, Chrome) avec trois exemplaires du monde rendus à la fois.
 
 ## Version mobile (`src/app/mobile.js`)
 

@@ -1,9 +1,11 @@
 // Point d'entrée : recette, recherche des orbites, mondes emboîtés, plongée,
 // panneau, boucle de rendu.
 //
-// La plongée. Chaque astre est une boule de verre qui contient le monde
-// suivant (sa machine, son sol, son studio), réduit d'un facteur k. La couche
-// d montre le modèle d mod M ; τ ∈ [0, M) avance d'une couche par segment.
+// La plongée. Chaque astre est une boule de verre qui contient le même monde
+// (sa machine, son sol, son studio), réduit d'un facteur k : la plongée est
+// auto-similaire, infinie. Trois exemplaires du monde sont emboîtés (le
+// courant, celui de la boule visée, celui de sa boule) ; τ avance d'une couche
+// par segment, et la boucle dure un segment.
 // Dans un segment (u ∈ [0, 1)), on regarde d'abord la machine, puis la
 // caméra entre dans une boule : c'est le monde qui subit une similitude
 // A(s)⁻¹, A(s) = translation p·(1 − kˢ)/(1 − k) ∘ homothétie kˢ, de point
@@ -88,8 +90,11 @@ async function main() {
     try { R = upgrade(await unpackRecipe(location.hash.slice(3))); } catch { R = null; }
   }
   R ??= generate(params.get('seed') || DEFAULT_SEED);
-  const M = () => R.layers.length;
-  const layerSeed = (m) => (m ? `${R.seed}/${m}` : R.seed);
+  // trois exemplaires du même monde (la couche m de la recette, ici une seule)
+  const INST = 3;
+  const M = () => INST;
+  const layerOf = (m) => m % R.layers.length;
+  const layerSeed = (m) => (layerOf(m) ? `${R.seed}/${layerOf(m)}` : R.seed);
 
   // (mobile : moins de workers, la recherche ne doit pas étouffer le rendu)
   const pool = createPool(LITE ? Math.max(2, Math.min(3, (navigator.hardwareConcurrency || 4) - 1)) : undefined);
@@ -102,7 +107,7 @@ async function main() {
     return (pr + 0.05) / Math.tan(Math.min(vf * 1.25, hf));
   };
   function poseParams(m, u) {
-    const c = R.layers[m].camera;
+    const c = R.layers[layerOf(m)].camera;
     return { az: c.az + c.sweep * Math.sin(TAU * u), el: c.el + 0.06 * Math.cos(TAU * u) };
   }
   // pose de la caméra ; pendant la plongée, elle glisse de l'angle de la couche
@@ -118,8 +123,8 @@ async function main() {
     }
     // la caméra reste dans la coque du monde (rayon RG) : au-delà, on élargit le champ
     // (cadrage serré : la machine et le début de la couronne)
-    const pr = S.worlds[m] ? S.worlds[m].machine.plateR * 0.86 : 1.4;
-    const prN = next !== null && S.worlds[next] ? S.worlds[next].machine.plateR * 0.86 : pr;
+    const pr = S.worlds[m] ? S.worlds[m].machine.bezelR * 0.82 : 1.6;
+    const prN = next !== null && S.worlds[next] ? S.worlds[next].machine.bezelR * 0.82 : pr;
     const want = fitFor(pr + (prN - pr) * s), r = Math.min(want, 4.3);
     const pos = new THREE.Vector3(Math.cos(az) * Math.cos(el) * r, -0.16 + Math.sin(el) * r, Math.sin(az) * Math.cos(el) * r);
     return { pos, target: new THREE.Vector3(0, -0.16, 0), fov: want > 4.3 ? 30 * (want / 4.3) : 30 };
@@ -129,7 +134,7 @@ async function main() {
   function buildWorlds() {
     for (const W of S.worlds) { W.group.removeFromParent(); W.dispose(); }
     const sh = SHADOWS[RENDER.shadows] || SHADOWS.high;
-    S.worlds = R.layers.map((L, m) => createWorld({ orbit: orbits[m], L, lite: LITE, shadows: sh, seed: layerSeed(m) }));
+    S.worlds = Array.from({ length: INST }, (_, m) => createWorld({ orbit: orbits[layerOf(m)], L: R.layers[layerOf(m)], lite: LITE, shadows: sh, seed: layerSeed(m) }));
     S.k = S.worlds.map((W, m) => W.setNext(S.worlds[(m + 1) % M()]));
     // boule visée : la plus proche de la caméra au début de la plongée
     S.target = S.worlds.map((W, m) => {
@@ -229,7 +234,7 @@ async function main() {
     const gears = Wa.machine.design.trains.filter(Boolean).reduce((x, t) => x + t.gears.length, 0) * p.N;
     parts.push(`${Wa.epi.arms.length} bras · ${gears} roues`);
     $('#title p').textContent = parts.join(' · ');
-    $('#seed').textContent = `graine ${R.seed} · couche ${Math.max(0, S.root) + 1} / ${M()}`;
+    $('#seed').textContent = `graine ${R.seed}`;
     ui?.setInfo(`${p.N} corps · ${Wa.info.crossings} croisements`);
   }
 
@@ -238,9 +243,9 @@ async function main() {
     const run = ++S.run;
     S.busy = true;
     loader.show();
-    for (let m = 0; m < M(); m++) {
+    for (let m = 0; m < R.layers.length; m++) {
       if (only !== null && m !== only && orbits[m]) continue;
-      loader.text(`couche ${m + 1} / ${M()} : recherche d’une orbite…`);
+      loader.text(R.layers.length > 1 ? `couche ${m + 1} / ${R.layers.length} : recherche d’une orbite…` : 'recherche d’une orbite…');
       let seed = layerSeed(m), r = null;
       for (let tries = 0; tries < 6; tries++) {
         r = await pool.search(seed, { over: { ...orbitOverrides(R.layers[m]), maxArms: 14 }, onSnap: (i, sn) => loader.snap(i, sn), onTry: (i) => loader.drop(i) });
@@ -296,7 +301,7 @@ async function main() {
   let rebuildTimer = 0;
   function rebuild() {
     clearTimeout(rebuildTimer);
-    rebuildTimer = setTimeout(() => { if (orbits.length === M() && orbits.every(Boolean)) { buildWorlds(); setTime(S.tau); } }, 80);
+    rebuildTimer = setTimeout(() => { if (orbits.length >= R.layers.length && orbits.slice(0, R.layers.length).every(Boolean)) { buildWorlds(); setTime(S.tau); } }, 80);
   }
   const ui = params.get('ui') === '0' ? null : createUI({ recipe: () => R, render: RENDER, on });
   ui?.build();
@@ -340,8 +345,8 @@ async function main() {
     bar.classList.add('on');
     try {
       await exportLoop({
-        canvas, duration: R.motion.segment * M(),
-        renderAt: (v) => { setTime(v * M()); post.render(); },
+        canvas, duration: R.motion.segment * R.layers.length,
+        renderAt: (v) => { setTime(v * R.layers.length); post.render(); },
         setSize: (w, h) => { renderer.setPixelRatio(1); renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); },
         restore: () => { canvas.style.width = ''; canvas.style.height = ''; resize(); },
       }, { width, height, fps, mbps }, (f) => { $('#progress u').style.width = `${(f * 100).toFixed(1)}%`; }, `choregraphie-${R.seed}.mp4`);
