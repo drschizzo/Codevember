@@ -38,7 +38,6 @@ function globeMount(kind, rg, metal, keep) {
     m.rotation.set(rx, 0, rz); m.castShadow = true; g.add(m); return m;
   };
   const rings = [];
-  let lid = null;
   if (kind === 'verre') ring(rg * 1.01, rg * 0.035, Math.PI / 2);
   else if (kind === 'cardan') { rings.push(ring(rg * 1.12, rg * 0.04, 0, 0)); rings.push(ring(rg * 1.22, rg * 0.04, Math.PI / 2, 0)); }
   else if (kind === 'armillaire') {
@@ -51,16 +50,15 @@ function globeMount(kind, rg, metal, keep) {
       claw.rotation.set(0, -a, -Math.PI / 2 - 0.15); claw.castShadow = true; g.add(claw);
     }
   } else if (kind === 'lanterne') {
-    const n = 8, bar = keep(new THREE.CylinderGeometry(rg * 0.02, rg * 0.02, rg * 2.1, 6));
+    // (barreaux découpés en hauteur : le passage de la caméra se calcule sur les sommets de la monture)
+    const n = 8, bar = keep(new THREE.CylinderGeometry(rg * 0.02, rg * 0.02, rg * 2.1, 6, 16));
     for (let i = 0; i < n; i++) { const b = new THREE.Mesh(bar, metal); const a = (i / n) * TAU; b.position.set(Math.cos(a) * rg * 1.06, 0, Math.sin(a) * rg * 1.06); b.castShadow = true; g.add(b); }
-    // (le couvercle : l'anneau du haut et le chapeau, qui se soulèvent pour
-    // laisser entrer la caméra)
-    lid = new THREE.Group(); g.add(lid);
-    for (const y of [-1, 1]) { const r = ring(rg * 1.06, rg * 0.03, Math.PI / 2); r.position.y = y * rg * 1.04; if (y > 0) lid.add(r); }
+    // (le chapeau reste en place : la caméra entre par le côté, entre deux barreaux)
+    for (const y of [-1, 1]) ring(rg * 1.06, rg * 0.03, Math.PI / 2).position.y = y * rg * 1.04;
     const cap = new THREE.Mesh(keep(new THREE.ConeGeometry(rg * 0.5, rg * 0.4, 24)), metal);
-    cap.position.y = rg * 1.3; cap.castShadow = true; lid.add(cap);
+    cap.position.y = rg * 1.3; cap.castShadow = true; g.add(cap);
   }
-  return { group: g, rings, lid, lift: rg * 1.8 };
+  return { group: g, rings };
 }
 
 // ── Un monde ─────────────────────────────────────────────────────────────────
