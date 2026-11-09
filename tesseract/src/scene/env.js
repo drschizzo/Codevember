@@ -66,6 +66,8 @@ export const ENV_PRESETS = {
 
 // (une nouvelle texture à chaque changement : le pré-filtrage PMREM est
 // associé à la texture)
+// (W : largeur de la carte ; 512 en mobile, quatre fois moins de pixels à
+// calculer et à préfiltrer, pour des reflets à peine plus doux)
 export function makeEnvironment(key = 'studio', warmth = 0, W = 1024) {
   const H = W / 2;
   const data = new Uint16Array(W * H * 4);

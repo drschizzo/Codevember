@@ -177,3 +177,18 @@ Ils couvrent les charnières et les patrons (arbres couvrants sans chevauchement
 Mesuré à 1,9 Mpx en qualité Haute (anticrénelage temporel, réflexions en espace écran, occlusion ambiante, ombres), graine `k3v9pa` : environ 9,7 ms par image dehors, 10,8 ms pendant une traversée et 12,6 ms pendant une halte (avant l'éclairage sélectif et l'élimination des cellules hors champ : 13,9, 16,7 et 23,2 ms). L'image est limitée par les fragments : le nombre de lumières évaluées par pixel compte bien plus que le nombre de sommets. La tôle perforée est plafonnée à dix-huit faces par scène.
 
 Au chargement d'une scène, la génération des shaders gèle la page une à quatre secondes, sous l'écran de chargement (`renderer.compileAsync` a été essayé : il ne supprime pas ce gel).
+
+## Version mobile
+
+Choisie d’office sur un téléphone ou une tablette (écran tactile et petit écran), imposée par `?mobile=1` (interdite par `?mobile=0`), ou par la qualité « Mobile » du panneau (la page se recharge : les matériaux sont compilés autrement). Elle a ses propres réglages mémorisés. Sur écran tactile : une touche met en pause, deux touches tirent une nouvelle scène, un appui long masque l’interface. Mesuré en rendu logiciel sur un écran de téléphone (390 × 844 à 3 ×) : environ 3,8 fois moins de temps par image qu’en qualité « Haute », avant même la résolution dynamique.
+
+- **Résolution** : base 1,25 × CSS, puis résolution dynamique (cible ≈ 45 i/s, entre 50 et 100 % de cette base, par paliers, sans oscillation) ; cadence plafonnée à 60 i/s.
+- **Chaîne d’image** : plus de pré-passe de profondeur et de normales (la scène n’est rendue qu’une fois), ni GTAO, ni réflexions en espace écran, ni anticrénelage temporel, flou de mouvement, aberration chromatique, traînées ou poussière sur la lentille ; une seule cible de scène ; bloom en quart de résolution ; FXAA. Étalonnage, halation et grain restent.
+- **Projection 4D** : sans vecteurs vitesse, plus de seconde projection par sommet (celle de l’image précédente) ; la jacobienne en forme fermée est conservée (normales exactes).
+- **Occlusion imitée** : sur les parois, la lumière indirecte s’éteint aux jonctions avec l’ossature et dans les coins, d’après la distance au bord déjà calculée pour la patine (presque gratuit).
+- **Motifs** : patine des parois en deux lectures du volume de bruit au lieu de six, fBm à deux octaves, Worley sur 2 × 2 × 2 cellules au lieu de 27 (germes resserrés : arêtes toujours nettes de près).
+- **Verre** : plus de transmission physique (copie de l’image et mipmaps, pièces double face rendues deux fois) mais un verre composité en une passe, dont l’opacité imite l’absorption de sa teinte et croît de biais (Fresnel) ; l’ombre colorée est conservée. Pierres taillées en cabochons opaques vernis à feu irisé.
+- **Lumières** : le second contre-jour, le plus faible, est retiré (une lumière de moins par pixel), le premier renforcé ; carte d’ombre du projecteur en 1024 ; studio HDR en 512 de large ; deux à trois workers.
+
+Différences visibles : sans réflexions en espace écran, les objets polis ne reflètent plus que le studio ; le verre ne réfracte plus ; le bord des trous d’ajourage, tranché net puis lissé par le FXAA, peut scintiller un peu en mouvement.
+

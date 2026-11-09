@@ -29,10 +29,25 @@ import {
 import { FINISH_KEYS } from '../finishes.js';
 import { NOISE_PERIOD } from '../gen/noisevol.js';
 import { projectPosition, localScale, revealMask, depthW, depthColor, frameMerge } from './project.js';
-import { G } from './globals.js';
+import { G, MODE } from './globals.js';
 
 const PI = Math.PI;
 export { G };
+
+// ── Mode allégé (mobile) ─────────────────────────────────────────────────────
+// Fixé au chargement, avant la construction du premier matériau. Ce qui change :
+//  - Worley sur les 8 cellules voisines au lieu de 27 (voir worley8) ;
+//  - fBm limité à deux octaves ; patine des parois en deux lectures du volume
+//    au lieu de six ;
+//  - verre, cristaux : plus de transmission physique (copie de l'image et
+//    chaîne de mipmaps à chaque image, objets double face rendus deux fois)
+//    mais un verre « composité » (mélange alpha teinté, opacité de Fresnel) ;
+//    les pierres taillées deviennent des cabochons opaques à feu irisé ;
+//  - occlusion ambiante (pré-passe et GTAO absentes) imitée aux jonctions des
+//    parois, là où elle se voyait ;
+//  - pas de vecteurs vitesse (ni seconde projection 4D par sommet).
+export const setLite = (v) => { MODE.lite = !!v; };
+export const isLite = () => MODE.lite;
 
 // ── Volume de bruit ──────────────────────────────────────────────────────────
 let noiseTexture = null;
@@ -53,6 +68,7 @@ const noise2 = (p) => NZ(p).y;
 // rotation entre octaves (cache la périodicité, évite les alignements sur les axes)
 const ROT = mat3(0.0, 0.8, 0.6, -0.8, 0.36, -0.48, -0.6, -0.48, 0.64);
 const fbm = (p, oct = 4) => {
+  if (MODE.lite) oct = Math.min(oct, 2);
   let s = float(0), a = 0.5, q = p;
   for (let i = 0; i < oct; i++) { s = s.add(noise(q).mul(a)); q = ROT.mul(q).mul(2.03); a *= 0.5; }
   return s;
@@ -68,7 +84,25 @@ const hash33 = (c) => {
   return fract(q.xxy.add(q.yxx).mul(q.zyx));
 };
 // renvoie vec2(F1, F2) (distances au germe le plus proche et au suivant, en cellules)
+// Mobile : 8 cellules au lieu de 27 — les 2 × 2 × 2 cellules les plus proches
+// du point, germes resserrés au centre de leur cellule (0,2 à 0,8) pour que le
+// plus proche y soit presque toujours. Les arêtes restent nettes (le volume de
+// bruit, interpolé, les dessinait en escalier de près, sur un panneau vu à
+// quelques centimètres pendant le voyage), pour un tiers du calcul.
+const worley8 = (p) => {
+  const fl = floor(p), f0 = fract(p);
+  const i = fl.add(step(0.5, f0).sub(1)), f = p.sub(i);
+  let f1 = float(8), f2 = float(8);
+  for (let z = 0; z <= 1; z++) for (let y = 0; y <= 1; y++) for (let x = 0; x <= 1; x++) {
+    const o = vec3(x, y, z);
+    const d = length(o.add(hash33(i.add(o)).mul(0.6).add(0.2)).sub(f));
+    f2 = f2.min(f1.max(d));
+    f1 = f1.min(d);
+  }
+  return vec2(f1, f2);
+};
 const worley = (p) => {
+  if (MODE.lite) return worley8(p);
   const i = floor(p), f = fract(p);
   let f1 = float(8), f2 = float(8);
   for (let z = -1; z <= 1; z++) for (let y = -1; y <= 1; y++) for (let x = -1; x <= 1; x++) {
@@ -299,7 +333,7 @@ const studioSeen = (openness) => mix(G.nestEnv, float(1), openness);
 
 // Vecteur vitesse sous garde : une valeur aberrante (NaN, infinie, démesurée)
 // est remplacée par zéro — par sélection, pas par multiplication (∞ × 0 = NaN).
-export const stableVelocity = () => mrt({ velocity: select(length(velocity.xy).lessThan(0.5), velocity, vec4(0)) });
+export const stableVelocity = () => MODE.lite ? null : mrt({ velocity: select(length(velocity.xy).lessThan(0.5), velocity, vec4(0)) });
 
 // ── Matériau d'une pièce de cellule ──────────────────────────────────────────
 // finish : { outer, inner, edge, wear } (finitions complètes) ; U : leurs
@@ -394,11 +428,18 @@ export function buildPieceMaterial(finish, U, M, { shadowTint = null, reveal = n
   if (patina) {
     const a = abs(positionGeometry), hi = tmax(a.x, tmax(a.y, a.z)), lo = tmin(a.x, tmin(a.y, a.z));
     const mid = a.x.add(a.y).add(a.z).sub(hi).sub(lo);
-    const blot = fbm(p.mul(2.1).add(3.7), 2).mul(0.5).add(0.5);
+    // (mobile : les trois bruits en deux lectures du volume — ses deux canaux
+    // de gradient sont indépendants)
+    const lo2 = MODE.lite ? NZ(p.mul(1.7).add(3.7)) : null;
+    const blot = (MODE.lite ? lo2.x.mul(0.5) : fbm(p.mul(2.1).add(3.7), 2)).mul(0.5).add(0.5);
     const grime = smoothstep(0.62, 0.95, mid.add(blot.sub(0.5).mul(0.2))).mul(G.patina);
-    const mottle = fbm(p.mul(1.3).add(11.1), 2).mul(0.16).mul(G.patina);
+    const mottle = (MODE.lite ? lo2.y.mul(0.5) : fbm(p.mul(1.3).add(11.1), 2)).mul(0.16).mul(G.patina);
     color = color.mul(mottle.add(1)).mul(grime.mul(-0.34).add(1).max(0.4));
-    rough = rough.add(fbm(p.mul(3.4).add(5.2), 2).mul(0.12).mul(G.patina)).add(grime.mul(0.2)).clamp(0.02, 1);
+    rough = rough.add((MODE.lite ? noise(p.mul(3.4).add(5.2)).mul(0.5) : fbm(p.mul(3.4).add(5.2), 2)).mul(0.12).mul(G.patina)).add(grime.mul(0.2)).clamp(0.02, 1);
+    // occlusion ambiante imitée (mobile, sans GTAO) : la lumière indirecte se
+    // retire des jonctions avec l'ossature et des coins, où la passe d'AO
+    // l'assombrissait ; l'encrassement y est déjà
+    if (MODE.lite) m.aoNode = smoothstep(0.7, 0.99, mid).mul(-0.45).add(1).mul(smoothstep(0.85, 0.99, hi.add(lo).mul(0.5)).mul(-0.25).add(1));
   }
   m.colorNode = vec4(color, 1);
   m.metalnessNode = get('metal');
@@ -434,7 +475,8 @@ export function buildPieceMaterial(finish, U, M, { shadowTint = null, reveal = n
     m.iridescenceThicknessNode = get('iridT');
   }
   if (F.aniso) m.anisotropyNode = get('aniso');
-  if (F.glass) {
+  if (F.glass && MODE.lite) liteGlass(m, get('glass'), get('att'), content ? 0.25 : 0.08);
+  else if (F.glass) {
     m.transmissionNode = get('glass');
     m.iorNode = get('ior');
     // tôle de verre mince, ou cristal massif (objet exposé) : la lumière y
@@ -463,6 +505,7 @@ export function applyGem(U, g) {
   U.color.value.set(g.color); U.ior.value = g.ior; U.dispersion.value = g.dispersion; U.depth.value = g.depth ?? 0.4;
 }
 export function buildGemMaterial(U, M, openness) {
+  if (MODE.lite) return buildLiteGem(U, M, openness);
   const m = new THREE.MeshPhysicalNodeMaterial({ transmission: 1, side: THREE.DoubleSide });
   m.positionNode = projectPosition(M, true);
   m.castShadowPositionNode = projectPosition(M, false);
@@ -484,5 +527,50 @@ export function buildGemMaterial(U, M, openness) {
   m.castShadowNode = vec4(U.color.mul(0.8).add(0.2), 1);
   m.aoNode = studioSeen(openness);
   m.mrtNode = stableVelocity();
+  return m;
+}
+
+// ── Mode allégé : verre et pierres ───────────────────────────────────────────
+// Verre allégé : la surface devient semi-transparente (mélange alpha), d'autant
+// plus opaque qu'on la voit de biais (Fresnel de Schlick, n ≈ 1,5) ; sa
+// couleur est celle que la lumière prend en la traversant. Les reflets
+// restent ceux du modèle physique, l'ombre colorée aussi (castShadowNode).
+// L'écriture de profondeur est conservée, une seule passe (pas de rendu face
+// arrière puis face avant) : une pièce de verre cache sa propre face arrière,
+// mais laisse voir la cellule derrière elle.
+function liteGlass(m, glass, tint, base = 0.12) {
+  const V = positionView.negate().normalize();
+  const fres = float(1).sub(abs(dot(normalize(m.normalNode), V))).pow(5);
+  m.transparent = true;
+  m.depthWrite = true;
+  m.forceSinglePass = true;
+  // (un verre teinté absorbe : plus sa teinte est sombre, moins il laisse voir
+  // derrière lui — l'alpha imite cette absorption, qu'on obtiendrait sinon par
+  // multiplication avec l'image transmise)
+  const clear = dot(tint, vec3(0.2126, 0.7152, 0.0722)).clamp(0, 1).sqrt();
+  const b0 = mix(float(0.82), float(base), clear);
+  m.opacityNode = mix(float(1), mix(b0, float(1), fres.mul(0.96).add(0.04)), glass);
+  // (le verre clair ne diffuse presque rien : sa teinte, très assombrie, et ses reflets)
+  m.colorNode = vec4(mix(m.colorNode.rgb, tint.mul(0.08), glass), 1);
+  m.metalnessNode = mix(m.metalnessNode, float(0), glass);
+}
+// Pierre allégée : cabochon opaque, teinte profonde, vernis net et feu irisé
+function buildLiteGem(U, M, openness) {
+  const m = new THREE.MeshPhysicalNodeMaterial({ side: THREE.DoubleSide });
+  m.positionNode = projectPosition(M, true);
+  m.castShadowPositionNode = projectPosition(M, false);
+  m.colorNode = vec4(U.color.mul(0.55), 1);
+  m.normalNode = normalViewGeometry.mul(faceDirection);
+  m.roughnessNode = G.roughFloor.mul(0.15).max(0.015);
+  m.metalnessNode = float(0);
+  m.specularIntensityNode = float(1);
+  m.iorNode = U.ior;
+  m.clearcoatNode = float(1);
+  m.clearcoatRoughnessNode = float(0.02);
+  m.iridescenceNode = U.dispersion.mul(0.6).add(0.2);
+  m.iridescenceIORNode = float(1.6);
+  m.iridescenceThicknessNode = float(380);
+  m.castShadowNode = vec4(U.color.mul(0.8).add(0.2), 1);
+  m.aoNode = studioSeen(openness);
   return m;
 }
