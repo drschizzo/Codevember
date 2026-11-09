@@ -87,7 +87,7 @@ export function createUI({ recipe: getRecipe, render: RENDER, on }) {
 
     // matières
     const mat = opts(MATTERS);
-    for (const [k, name] of [['plate', 'Plateau'], ['arms', 'Bras'], ['arms2', 'Bras (alternés)'], ['pins', 'Goupilles, moyeux'], ['foot', 'Pied']]) {
+    for (const [k, name] of [['plate', 'Plateau'], ['arms', 'Bras'], ['arms2', 'Bras (alternés)'], ['gears', 'Roues'], ['pins', 'Tenons, goupilles, vis'], ['foot', 'Pied, bâti']]) {
       add(fMat, R.matters, k, mat).name(name).onChange(live);
     }
 

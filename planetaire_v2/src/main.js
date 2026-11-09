@@ -11,10 +11,10 @@
 import * as THREE from 'three/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createPool } from './orbit/client.js';
-import { curveAt } from './orbit/action.js';
-import { epicycles, sampleCurve } from './scene/epicycles.js';
+import { ARM_TOL } from './orbit/search.js';
+import { epicycles, sampleArms } from './scene/epicycles.js';
 import { createOrbitVisual } from './scene/orbit3d.js';
-import { createMachine, materials, Y_PLATE } from './scene/machine.js';
+import { createMachine, materials } from './scene/machine.js';
 import { makeEnvironment } from './scene/env.js';
 import { createPost } from './render/post.js';
 import { exportLoop, exportPNG } from './app/capture.js';
@@ -67,17 +67,10 @@ async function main() {
   const floor = new THREE.Mesh(new THREE.CircleGeometry(12, 96), floorMat);
   floor.rotation.x = -Math.PI / 2; floor.position.y = Y_FLOOR; floor.receiveShadow = true;
   scene.add(floor);
-  const footH = Y_PLATE - 0.035 - Y_FLOOR;
-  const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.11, footH, 48), mats.foot);
-  foot.position.y = Y_FLOOR + footH / 2; foot.castShadow = foot.receiveShadow = true;
-  scene.add(foot);
-  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.46, 0.04, 96), mats.foot);
-  base.position.y = Y_FLOOR + 0.02; base.castShadow = base.receiveShadow = true;
-  scene.add(base);
 
   const key = new THREE.SpotLight(0xffffff, 6, 0, 0.42, 0.85, 2);
   key.position.set(-2.4, 3.6, 1.7);
-  key.target.position.set(0, Y_PLATE, 0);
+  key.target.position.set(0, -0.34, 0);
   key.castShadow = true;
   key.shadow.bias = -0.0004; key.shadow.normalBias = 0.01;
   scene.add(key, key.target);
@@ -116,12 +109,13 @@ async function main() {
     const th = omega * tau, c = Math.cos(th), sn = Math.sin(th);
     plate.rotation.y = th;
     S.visual.phase.value = ((tau / TAU) % 1 + 1) % 1;
+    // la machine place les astres au bout de leurs chaînes
+    S.machine.update(tau, bodyXY);
     for (let j = 0; j < N; j++) {
-      curveAt(S.coef, S.p, tau + (TAU * j) / N, pos);
-      bodyXY[2 * j] = pos[0]; bodyXY[2 * j + 1] = pos[1];
-      S.visual.bodies[j].position.set(pos[0], 0, -pos[1]);
+      const x = bodyXY[2 * j], y = bodyXY[2 * j + 1];
+      S.visual.bodies[j].position.set(x, 0, -y);
       // position dans le studio (plateau tourné de θ autour de +y)
-      world[j] = [pos[0] * c - pos[1] * sn, 0, -pos[0] * sn - pos[1] * c];
+      world[j] = [x * c - y * sn, 0, -x * sn - y * c];
     }
     // embrasement : un astre s'avive quand il en frôle un autre
     for (let j = 0; j < N; j++) {
@@ -129,7 +123,6 @@ async function main() {
       for (let i = 0; i < N; i++) if (i !== j) d = Math.min(d, Math.hypot(bodyXY[2 * i] - bodyXY[2 * j], bodyXY[2 * i + 1] - bodyXY[2 * j + 1]));
       S.visual.setBoost(j, 1 + R.bodies.flare * Math.exp(-((d / (1.7 * S.ratio)) ** 2)));
     }
-    S.machine.update(tau, bodyXY);
     if (!R.motion.free) placeCamera(S.L, open);
   }
 
@@ -197,7 +190,7 @@ async function main() {
     const parts = [`${p.N} corps`];
     if (p.sym) parts.push(`${p.sym.m} pétales${p.sym.mirror ? ', miroir' : ''}`);
     parts.push(pw ? `plateau : ${qw === 1 ? pw : `${pw}/${qw}`} tour par période` : 'plateau fixe');
-    parts.push(`${S.arms} bras`);
+    parts.push(`${S.arms} bras · ${S.machine.design.trains.filter(Boolean).reduce((a, t) => a + t.gears.length, 0) * p.N + (S.machine.design.trains[1] ? 1 - p.N : 0)} roues`);
     if (o.rho !== undefined) parts.push(o.rho < 1.01 ? 'stable' : 'instable');
     $('#title p').textContent = parts.join(' · ');
     $('#seed').textContent = `graine ${R.seed}`;
@@ -206,14 +199,18 @@ async function main() {
 
   // ── Construction de la scène autour de l'orbite trouvée ──
   function buildScene() {
-    if (S.visual) { plate.remove(S.visual.group, S.machine.group); S.visual.dispose(); S.machine.dispose(); }
+    if (S.visual) { plate.remove(S.visual.group, S.machine.group); scene.remove(S.machine.stand); S.visual.dispose(); S.machine.dispose(); }
     const p = S.p, sh = SHADOWS[RENDER.shadows] || SHADOWS.high;
-    const curve = sampleCurve(S.coef, p, 2400);
-    const epi = epicycles(S.coef, p, 1, { tol: 0.003, max: 8 });
+    // la machine : les bras retenus tracent la courbe à ARM_TOL près (au plus
+    // 14) ; astres et verre suivent la courbe qu'elle trace
+    const epi = epicycles(S.coef, p, 1, { tol: ARM_TOL, max: 14 });
+    const curve = sampleArms(epi.arms, 2400);
     S.visual = createOrbitVisual({ curve, N: p.N, radius: 0.0065 * R.trace.thick, shadows: { bodies: sh.bodies, size: sh.body } });
-    S.machine = createMachine({ arms: epi.arms, N: p.N, mats });
+    S.machine = createMachine({ arms: epi.arms, N: p.N, mats, omegaFrac: p.omegaFrac, yFloor: Y_FLOOR });
     plate.add(S.machine.group, S.visual.group);
-    S.arms = epi.arms.length;
+    scene.add(S.machine.stand);
+    key.target.position.set(0, S.machine.yPlate, 0);
+    S.arms = epi.arms.length; S.fidelity = epi.residual;
     bodyXY = new Float64Array(2 * p.N);
     applyLive();
     applyMotion();
@@ -226,7 +223,7 @@ async function main() {
     const run = ++S.run;
     S.busy = true;
     loader.show();
-    const r = await pool.search(R.seed, { over: orbitOverrides(R), onSnap: (i, s) => loader.snap(i, s), onTry: (i) => loader.drop(i) });
+    const r = await pool.search(R.seed, { over: { ...orbitOverrides(R), maxArms: 14 }, onSnap: (i, s) => loader.snap(i, s), onTry: (i) => loader.drop(i) });
     if (run !== S.run) return;
     if (!r.ok) {
       const constrained = Object.keys(orbitOverrides(R)).length > 0;
@@ -327,7 +324,7 @@ async function main() {
     else if (k === 'p') on.exportPNG();
   });
 
-  if (params.has('debug')) window.chor = { S, get R() { return R; }, setTime, render: () => post.render(), renderer, scene, camera, post, load, on };
+  if (params.has('debug')) window.chor = { S, get R() { return R; }, setTime, render: () => post.render(), renderer, scene, camera, controls, post, load, on };
   load();
 }
 

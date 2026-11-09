@@ -32,19 +32,19 @@ export const MOODS = {
   atelier: {
     label: 'Atelier d’horloger', env: 'atelier', envIntensity: 0.45, bg: '#050403', floor: '#0d0b09',
     key: { color: '#ffe2c0', intensity: 6 }, rim: { color: '#bcd2ff', intensity: 0.5 }, warmth: 0.1,
-    plate: ['bronze', 'laitonBrosse'], arms: ['laiton', 'or'], arms2: ['acierBleui', 'acierPoli'], pins: ['acierPoli'],
+    plate: ['bronze', 'laitonBrosse'], arms: ['laiton', 'or'], arms2: ['acierBleui', 'acierPoli'], gears: ['laiton', 'or', 'cuivre'], pins: ['acierPoli'],
     body: '#ffc489', glass: '#07080a',
   },
   observatoire: {
     label: 'Observatoire', env: 'night', envIntensity: 0.6, bg: '#020307', floor: '#05070c',
     key: { color: '#9fb8ff', intensity: 3 }, rim: { color: '#7d9cff', intensity: 0.8 }, warmth: -0.25,
-    plate: ['laqueNoire', 'marbreNoir', 'acierBleui'], arms: ['argent', 'acierPoli'], arms2: ['acierBleui', 'laiton'], pins: ['chrome'],
+    plate: ['laqueNoire', 'marbreNoir', 'acierBleui'], arms: ['argent', 'acierPoli'], arms2: ['acierBleui', 'laiton'], gears: ['laiton', 'argent'], pins: ['chrome'],
     body: '#cfe0ff', glass: '#05070b',
   },
   clinique: {
     label: 'Clinique', env: 'studio', envIntensity: 0.9, bg: '#d9d6d0', floor: '#cfccc6',
     key: { color: '#ffffff', intensity: 7 }, rim: { color: '#ffffff', intensity: 0.6 }, warmth: 0,
-    plate: ['porcelaine'], arms: ['chrome', 'acierPoli'], arms2: ['porcelaine', 'chrome'], pins: ['chrome'],
+    plate: ['porcelaine'], arms: ['chrome', 'acierPoli'], arms2: ['porcelaine', 'chrome'], gears: ['chrome', 'laiton'], pins: ['chrome'],
     body: '#ffd9a8', glass: '#0c0d0f',
   },
 };
@@ -60,7 +60,7 @@ export function generate(seed, { mood } = {}) {
     v: 1, seed: String(seed), mood: moodKey,
     // contraintes sur l'orbite (null : tirées de la graine)
     orbit: { N: null, sym: null, omega: null },
-    matters: { plate: rng.pick(M.plate), arms: rng.pick(M.arms), arms2: rng.pick(M.arms2), pins: rng.pick(M.pins), foot: rng.pick(M.arms) },
+    matters: { plate: rng.pick(M.plate), arms: rng.pick(M.arms), arms2: rng.pick(M.arms2), gears: rng.pick(M.gears), pins: rng.pick(M.pins), foot: rng.pick(M.arms) },
     bodies: { color: M.body, glow: r2(rng.range(0.85, 1.15)), flare: r2(rng.range(1.2, 2.2)), light: r2(rng.range(0.1, 0.16)) },
     trace: { show: true, cool: r2(rng.range(4.5, 7.5)), thick: r2(rng.range(0.8, 1.3)), glow: 1, glass: M.glass },
     motion: { period: Math.round(rng.range(8, 12)), slowmo: r2(rng.range(0.8, 1.15)), shotLength: 6, free: false },

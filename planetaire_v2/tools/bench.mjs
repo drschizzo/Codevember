@@ -29,7 +29,7 @@ if (!isMainThread) {
   const results = [];
   const t0 = Date.now();
   await Promise.all(Array.from({ length: threads }, () => new Promise((done) => {
-    const w = new Worker(new URL(import.meta.url), { workerData: { stability: true, maxAttempts: 24, ...(mode && mode !== 'mixte' && { over: { mode } }) } });
+    const w = new Worker(new URL(import.meta.url), { workerData: { stability: true, maxAttempts: 24, over: { ...(mode && mode !== 'mixte' && { mode }), ...(process.env.ARMS && { maxArms: Number(process.env.ARMS) }) } } });
     const next = () => {
       const s = seeds.shift();
       if (s === undefined) { w.terminate(); done(); return; }
