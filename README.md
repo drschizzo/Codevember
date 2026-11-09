@@ -26,6 +26,12 @@ Une plongée sans fond : des coquilles creuses emboîtées — alvéoles, fentes
 
 [![Hollow](hollow/docs/capture.jpg)](https://drschizzo.github.io/Codevember/hollow/)
 
+## [Chorégraphies](planetaire_v2/) (Planétaire v2)
+
+Un planétaire qui calcule des ciels qui n'existent pas encore. Chaque graine lance, sous les yeux, la recherche d'une chorégraphie du problème à N corps : N masses égales qui se poursuivent sur une même courbe, solution exacte des équations de Newton, souvent inédite. La machine qui la trace est conçue par le calcul (trains d'engrenages aux rapports exacts, dents calées, étages sans collision, étoile sur galets dans des sillons gravés) ; le plateau tourne à une vitesse rationnelle, d'où une boucle parfaite. Ralentis rythmés sur les passages serrés, plans de caméra, six humeurs, trois montures (three.js WebGPU / TSL), export MP4.
+
+[Démo en ligne](https://drschizzo.github.io/Codevember/planetaire_v2/) · [version légère](https://drschizzo.github.io/Codevember/planetaire_v2/?mobile=1) · [documentation](planetaire_v2/README.md)
+
 ## [Planétaire](planetaire/)
 
 La vie d’un système planétaire, du nuage à la supernova, simulée sur GPU (WebGPU, three.js TSL) et présentée comme portée par un planétaire en laiton. Chaque grain de poussière conserve son rayon de naissance, qui détermine sa couleur ; le disque peut être sonifié comme un vinyle.
