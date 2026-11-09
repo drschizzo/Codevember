@@ -340,33 +340,49 @@ function mergeStatic(roots, update, keep) {
 // transformations ; leurs pièces sont dessinées par des InstancedMesh (une
 // instance par chaîne), avec leurs propres matières (une matière partagée entre
 // objets instanciés et non instanciés fausse les vitesses de l'anticrénelage).
-function instanceChains(chains, group, n, N) {
+function instanceChains(chains, group, n) {
   const parts = [];
   const clones = new Map();
   const matFor = (m) => { if (!clones.has(m)) clones.set(m, m.clone()); return clones.get(m); };
+  // signature d'une pièce : matière, sommets et boîte englobante. Les chaînes
+  // ne sont pas toutes identiques : d'une chaîne à l'autre, un même bras peut
+  // être à un autre étage, et ses pièces fusionnées (goupille, chaton, axe,
+  // colonnes) n'ont alors pas la même hauteur. On n'instancie ensemble que les
+  // chaînes dont les pièces sont exactement les mêmes.
+  const sig = (c) => {
+    if (!c.isMesh || c.children.length) return null;
+    const g = c.geometry;
+    if (!g.boundingBox) g.computeBoundingBox();
+    const b = g.boundingBox, r = (x) => Math.round(x * 1e5);
+    return `${c.material.id}:${g.attributes.position.count}:${r(b.min.x)},${r(b.min.y)},${r(b.min.z)},${r(b.max.x)},${r(b.max.y)},${r(b.max.z)}`;
+  };
   for (let i = 0; i < n; i++) {
-    const gs = chains.map((ch) => ch.arm[i]);
-    const kids = gs[0].children;
-    // même structure dans toutes les chaînes (sinon, ce bras reste tel quel) ;
-    // les pièces fusionnées sont des copies identiques d'une chaîne à l'autre
-    const nv = (c) => c.geometry.attributes.position.count;
-    const same = gs.every((g) => g.children.length === kids.length && g.children.every((c, ci) => c.isMesh && !c.children.length && c.material === kids[ci].material && nv(c) === nv(kids[ci])));
-    if (!same) continue;
-    kids.forEach((c0, ci) => {
-      const im = new THREE.InstancedMesh(c0.geometry, matFor(c0.material), N);
-      im.castShadow = c0.castShadow; im.receiveShadow = c0.receiveShadow;
-      im.frustumCulled = false; // (les instances bougent : la sphère englobante serait fausse)
-      group.add(im);
-      parts.push({ im, gs, src: gs.map((g) => g.children[ci]) });
-    });
-    for (const g of gs) g.removeFromParent();
+    const byShape = new Map();
+    for (const ch of chains) {
+      const g = ch.arm[i], ss = g.children.map(sig);
+      if (ss.includes(null)) continue; // (ce bras reste tel quel)
+      const key = ss.join('|');
+      if (!byShape.has(key)) byShape.set(key, []);
+      byShape.get(key).push(g);
+    }
+    for (const gs of byShape.values()) {
+      const kids = gs[0].children;
+      kids.forEach((c0, ci) => {
+        const im = new THREE.InstancedMesh(c0.geometry, matFor(c0.material), gs.length);
+        im.castShadow = c0.castShadow; im.receiveShadow = c0.receiveShadow;
+        im.frustumCulled = false; // (les instances bougent : la sphère englobante serait fausse)
+        group.add(im);
+        parts.push({ im, gs, src: gs.map((g) => g.children[ci]) });
+      });
+      for (const g of gs) g.removeFromParent();
+    }
   }
   const M4 = new THREE.Matrix4();
   const groups = new Set(parts.flatMap((p) => p.gs));
   return () => {
     for (const g of groups) g.updateMatrix();
     for (const { im, gs, src } of parts) {
-      for (let j = 0; j < N; j++) { src[j].updateMatrix(); im.setMatrixAt(j, M4.multiplyMatrices(gs[j].matrix, src[j].matrix)); }
+      for (let j = 0; j < gs.length; j++) { src[j].updateMatrix(); im.setMatrixAt(j, M4.multiplyMatrices(gs[j].matrix, src[j].matrix)); }
       im.instanceMatrix.needsUpdate = true;
     }
   };
@@ -395,8 +411,10 @@ export const ARCHETYPES = {
   astrolabe: { label: 'Astrolabe', gear: 'spokes8', bar: 'scroll', belts: false },
 };
 
-export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72, archetype = 'horlogerie' }) {
-  const D = designMachine(arms, N);
+// design : la conception déjà calculée (dans un worker, voir orbit/client.js) ;
+// sinon elle est calculée ici
+export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72, archetype = 'horlogerie', design = null }) {
+  const D = design || designMachine(arms, N);
   const AR = ARCHETYPES[archetype] || ARCHETYPES.horlogerie;
   const GS = { style: AR.gear };
   const n = D.n, k = D.k, L = D.L, phi = D.phi;
@@ -678,7 +696,7 @@ export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72, archet
   mergeStatic([group, stand], update, keep);
   // puis les N chaînes, identiques à un décalage de phase près : chaque pièce
   // d'un bras devient un seul dessin instancié N fois
-  const syncInstances = instanceChains(chains, group, n, N);
+  const syncInstances = instanceChains(chains, group, n);
   const updateAll = (tau, xy) => { update(tau, xy); syncInstances(); };
   syncInstances();
 

@@ -28,6 +28,7 @@ import { loadRender, saveRender, applyQuality, defaultsFor, SHADOWS } from './ap
 import { wantsMobile, switchMobile, createGovernor, createPacer, bindTouch } from './app/mobile.js';
 import { generate, generateLayer, upgrade, orbitOverrides, packRecipe, unpackRecipe, MOODS } from './recipe.js';
 import { createRng } from './rng.js';
+import { withPivots } from './mech/design.js';
 
 const TAU = Math.PI * 2;
 const params = new URLSearchParams(location.search);
@@ -128,14 +129,22 @@ async function main() {
   // ── construction des mondes (après la recherche des orbites)
   // (onStep(i) : un monde de plus est construit ; la construction peut échouer :
   // l'ancienne scène reste alors en place)
+  // conceptions des machines, par orbite (calculées dans un worker, une seule
+  // fois pour les trois mondes et pour les réglages qui suivent)
+  const designs = new WeakMap();
+  async function designOf(orbit) {
+    if (!designs.has(orbit)) designs.set(orbit, withPivots(await pool.design(orbit)));
+    return designs.get(orbit);
+  }
   async function buildWorlds(onStep = null) {
     const sh = SHADOWS[RENDER.shadows] || SHADOWS.high;
     const made = [];
+    for (let l = 0; l < R.layers.length; l++) await designOf(orbits[l]);
     try {
       for (let m = 0; m < INST; m++) {
         if (onStep) { onStep(m); await new Promise((res) => setTimeout(res, 0)); }
         // calque 1 + m : la lampe de chaque monde n'ombre que lui
-        made.push(createWorld({ orbit: orbits[layerOf(m)], L: R.layers[layerOf(m)], lite: LITE, shadows: sh, seed: layerSeed(m), layer: 1 + m }));
+        made.push(createWorld({ orbit: orbits[layerOf(m)], L: R.layers[layerOf(m)], lite: LITE, shadows: sh, seed: layerSeed(m), layer: 1 + m, design: designs.get(orbits[layerOf(m)]) }));
       }
     } catch (e) {
       for (const W of made) W.dispose();
@@ -156,8 +165,76 @@ async function main() {
       return best;
     });
     S.worlds.forEach((W, m) => W.setTarget(S.target[m]));
+    S.passage = S.worlds.map((W, m) => passage(m));
     S.root = -1;
     applyLive();
+  }
+
+  // ── la monture de la boule visée livre passage à la caméra. Au début de la
+  // plongée, ses anneaux ralentissent et s'arrêtent, et la cage pivote (autour
+  // de la verticale) jusqu'à présenter un vide sur la trajectoire de la caméra :
+  // celle-ci passe entre les montants, et la monture sort du cadre d'elle-même.
+  // La trajectoire est connue d'avance (tout ne dépend que de τ) : on
+  // l'échantillonne là où elle traverse la monture et l'on cherche l'angle qui
+  // l'en écarte le plus, en tournant le moins possible.
+  const RING_STOP = 0.15; // (durée, en couche, du ralentissement des anneaux)
+  function passage(m) {
+    const W = S.worlds[m], j = S.target[m], G = W.globes[j], h = R.motion.hold, k = S.k[m];
+    const next = (m + 1) % M();
+    // anneaux : angle et vitesse au début de la plongée, angle d'arrêt
+    W.update(h);
+    const a0 = G.mount.rings.map((r) => r.rotation.y);
+    W.update(h + 1e-3);
+    const sp = G.mount.rings.map((r, i) => (r.rotation.y - a0[i]) / 1e-3);
+    const stop = a0.map((a, i) => a + sp[i] * RING_STOP * 0.5);
+    // sommets de la monture (dans son repère, anneaux arrêtés)
+    G.mount.rings.forEach((r, i) => { r.rotation.y = stop[i]; });
+    if (G.mount.lid) G.mount.lid.position.y = G.mount.lift; // (couvercle soulevé)
+    G.mount.group.rotation.y = 0;
+    G.mount.group.updateMatrixWorld(true);
+    const inv = new THREE.Matrix4().copy(G.mount.group.matrixWorld).invert(), mm = new THREE.Matrix4(), v = new THREE.Vector3();
+    const verts = [];
+    let total = 0;
+    G.mount.group.traverse((o) => { if (o.isMesh) total += o.geometry.attributes.position.count; });
+    const step = Math.max(1, Math.ceil(total / 1500));
+    G.mount.group.traverse((o) => {
+      if (!o.isMesh) return;
+      mm.multiplyMatrices(inv, o.matrixWorld);
+      const pos = o.geometry.attributes.position;
+      for (let i = 0; i < pos.count; i += step) verts.push(v.fromBufferAttribute(pos, i).applyMatrix4(mm).clone());
+    });
+    // trajectoire de la caméra dans le repère du monde, relative à la boule
+    const path = [];
+    for (let q = 0; q <= 200; q++) {
+      const u = h + (1 - h) * (q / 200), s = ss5((u - h) / (1 - h)), ks = Math.pow(k, s);
+      W.update(u);
+      const p = W.local[j];
+      const cam = basePose(m, u, next, s).pos.multiplyScalar(ks).add(p.clone().multiplyScalar((1 - ks) / (1 - k)));
+      const rel = cam.sub(p);
+      const d = rel.length();
+      if (d > W.rg * 0.85 && d < W.rg * 1.8) path.push(rel);
+    }
+    let best = { yaw: 0, score: -Infinity };
+    const cand = [];
+    if (path.length && verts.length) {
+      for (let q = 0; q < 144; q++) {
+        const yaw = ((q / 144) * 2 - 1) * Math.PI, c = Math.cos(yaw), sn = Math.sin(yaw);
+        let dmin = Infinity;
+        for (const p of path) for (const w of verts) {
+          // (rotation de la monture d'angle yaw autour de y)
+          const x = w.x * c + w.z * sn, z = -w.x * sn + w.z * c;
+          const d = Math.hypot(x - p.x, w.y - p.y, z - p.z);
+          if (d < dmin) dmin = d;
+        }
+        cand.push({ yaw, score: Math.min(dmin, W.rg * 0.4), clear: dmin / W.rg });
+      }
+      // parmi les angles presque aussi dégagés que le meilleur, le plus petit
+      // (les montures ont des symétries : beaucoup d'angles se valent)
+      const top = Math.max(...cand.map((c) => c.score));
+      best = cand.filter((c) => c.score >= top - 0.03 * W.rg).sort((x, y) => Math.abs(x.yaw) - Math.abs(y.yaw))[0];
+    }
+    if (G.mount.lid) G.mount.lid.position.y = 0;
+    return { yaw: best.yaw, clear: best.clear, samples: path.length, a0, sp };
   }
 
   // ── la plongée : état complet à l'instant τ (pure fonction de τ)
@@ -194,8 +271,18 @@ async function main() {
     // la monture de la boule visée s'efface quand on s'en approche, puis son
     // verre quand il remplit l'image ; tout revient à l'identique d'une couche à
     // l'autre (ce sont les réglages du monde courant ; les autres sont pleins)
-    for (const W of [Wa, Wb, Wc]) { W.mountFade.value = 1; W.glassFade.value = 1; }
-    Wa.mountFade.value = 1 - ss5(s / 0.45);
+    for (const W of [Wa, Wb, Wc]) {
+      W.glassFade.value = 1;
+      for (const G of W.globes) { G.mount.group.rotation.y = 0; if (G.mount.lid) G.mount.lid.position.y = 0; }
+    }
+    const Ps = S.passage?.[a];
+    if (Ps && u > h) {
+      const G = Wa.globes[S.target[a]];
+      const x = Math.min(1, (u - h) / RING_STOP);
+      G.mount.rings.forEach((r, i) => { r.rotation.y = Ps.a0[i] + Ps.sp[i] * RING_STOP * (x - x * x / 2); });
+      G.mount.group.rotation.y = Ps.yaw * ss5(s / 0.5);
+      if (G.mount.lid) G.mount.lid.position.y = G.mount.lift * ss5(s / 0.5);
+    }
     Wa.glassFade.value = 1 - ss5((s - 0.45) / 0.4);
     // échelle de chaque monde dans l'image : chaque monde n'est éclairé que par
     // ses propres lumières, à son échelle (intensité × échelle²) : rien ne
@@ -282,7 +369,7 @@ async function main() {
       let seed = layerSeed(m), r = null;
       const TRIES = 6;
       for (let tries = 0; tries < TRIES; tries++) {
-        loader.status(tries ? `graine ${seed} sans orbite : essai ${tries + 1} / ${TRIES}` : '');
+        loader.status(tries ? `la graine précédente n’a donné aucune chorégraphie : nouvelle graine (${tries + 1} / ${TRIES})` : '');
         try {
           loader.begin(seed, 24);
           r = await pool.search(seed, { maxAttempts: 24, timeout: SEARCH_TIMEOUT, over: { ...orbitOverrides(R.layers[m]), maxArms: 14 }, onSnap: (i, sn) => loader.snap(i, sn), onTry: (i, res) => loader.result(i, res) });
@@ -302,7 +389,12 @@ async function main() {
     url.searchParams.set('seed', R.seed); url.hash = ''; history.replaceState(null, '', url);
     loader.status('');
     try {
-      await buildWorlds((m) => loader.text(`construction des machines… ${m + 1} / ${INST}`));
+      loader.step('design');
+      loader.text('conception de la machine : un bras par cercle de la courbe (épicycles), des engrenages aux rapports exacts, des étages sans collision…');
+      await designOf(orbits[0]);
+      if (run !== S.run) return;
+      loader.step('build');
+      await buildWorlds((m) => loader.text(`construction de la machine, du sol et du studio (${m + 1} / ${INST} : chaque astre contient le monde suivant)…`));
       if (run !== S.run) return;
       ui?.build();
       S.root = -1;
@@ -311,7 +403,8 @@ async function main() {
       if (run !== S.run) return;
       return fail(`La machine de cette orbite n’a pas pu être construite (${e.message}).`, e);
     }
-    loader.text('préparation du rendu…');
+    loader.step('render');
+    loader.text('préparation du rendu (compilation des matières et des lumières)…');
     await new Promise((res) => setTimeout(res, 30));
     await warm();
     for (let i = 0; i < 3; i++) { await post.render(); await new Promise((res) => requestAnimationFrame(res)); }
@@ -434,7 +527,7 @@ async function main() {
     else if (kk === 'p') on.exportPNG();
   });
 
-  if (params.has('debug')) window.chor = { S, get R() { return R; }, setTime, render: () => post.render(), renderer, scene, camera, controls, post, load, on, root };
+  if (params.has('debug')) window.chor = { loader, S, get R() { return R; }, setTime, render: () => post.render(), renderer, scene, camera, controls, post, load, on, root };
   load();
 }
 

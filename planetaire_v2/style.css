@@ -13,6 +13,8 @@ html, body { height: 100%; background: #050403; color: var(--fg); overflow: hidd
 #hint { position: fixed; right: 18px; bottom: 16px; color: var(--dim); font-size: 11px; letter-spacing: .04em; pointer-events: none; opacity: .7; transition: opacity .4s; }
 body.light #title h1 { color: #1d1b18; } body.light #title p, body.light #title small, body.light #hint { color: #4e4a44; }
 body.clean #title, body.clean #hint, body.clean .lil-gui.root { opacity: 0; pointer-events: none; }
+/* (pendant le chargement, le panneau s'efface : il recouvrirait l'explication ; il revient en cas d'échec) */
+body.loading .lil-gui.root { opacity: 0; pointer-events: none; }
 
 /* panneau */
 .lil-gui.root { --background-color: var(--glass); --widget-color: rgba(255, 245, 230, 0.07); --hover-color: rgba(255, 245, 230, 0.12);
@@ -32,15 +34,30 @@ body.clean #title, body.clean #hint, body.clean .lil-gui.root { opacity: 0; poin
 #progress div { height: 3px; background: rgba(255,255,255,.1); border-radius: 2px; margin-top: 8px; overflow: hidden; }
 #progress u { display: block; height: 100%; width: 0; background: #e9c48a; }
 
-/* écran de génération : le calcul de l'orbite, en direct */
+/* écran de génération : le calcul de l'orbite, en direct (dessin : app/loaderWorker.js) */
 #loader { position: fixed; inset: 0; background: #050403; z-index: 5; transition: opacity .25s; }
 #loader canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
-#loader .txt { position: absolute; left: 0; right: 0; bottom: 7vh; text-align: center; pointer-events: none; }
-#loader p { color: var(--dim); margin-top: 10px; font: italic 300 15px Fraunces, Georgia, serif; font-variant-numeric: tabular-nums; }
 #loader.gone { opacity: 0; pointer-events: none; transition: opacity 1.4s; }
-#loader.error p { color: #ff9b8a; font-style: normal; max-width: min(560px, calc(100% - 32px)); margin-left: auto; margin-right: auto; }
-#loader .status { display: block; min-height: 1.4em; margin-top: 6px; color: var(--dim); opacity: .7; font-size: 11px; letter-spacing: .04em; }
-#loader .actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 18px; pointer-events: auto; }
+#loader .intro { position: absolute; top: 5vh; left: 0; right: 0; text-align: center; padding: 0 16px; pointer-events: none; }
+#loader .what { max-width: 620px; margin: 12px auto 0; color: var(--dim); font: 300 13.5px/1.55 Inter, system-ui, sans-serif; }
+#loader .what em { font: italic 300 15px Fraunces, Georgia, serif; color: var(--fg); }
+#loader .lead { position: absolute; top: 51.5vh; left: 0; right: 0; text-align: center; color: #e9c48a; font: italic 300 15px Fraunces, Georgia, serif; font-variant-numeric: tabular-nums; pointer-events: none; padding: 0 16px; }
+#loader .tries { position: absolute; top: 56vh; left: 0; right: 0; display: flex; justify-content: center; gap: 22px; flex-wrap: wrap; color: var(--dim); font-size: 11.5px; letter-spacing: .03em; pointer-events: none; padding: 0 16px; }
+#loader .legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin: 0 5px 0 10px; vertical-align: 0; }
+#loader .legend i.run { background: #e9c48a; } #loader .legend i.fail { background: #6e6a62; } #loader .legend i.ok { background: none; border: 1px solid #ffd696; border-radius: 2px; }
+#loader .why { position: absolute; top: calc(61vh + 160px); left: 0; right: 0; text-align: center; color: #c9a99a; font-size: 12px; pointer-events: none; padding: 0 16px; min-height: 1.4em; }
+#loader .txt { position: absolute; left: 0; right: 0; bottom: 4vh; text-align: center; pointer-events: none; padding: 0 16px; }
+#loader .steps { counter-reset: st; display: flex; justify-content: center; gap: 6px; list-style: none; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: rgba(143,138,130,.55); }
+#loader .steps li { padding: 4px 10px; border-radius: 999px; border: 1px solid transparent; counter-increment: st; }
+#loader .steps li::before { content: counter(st) ' · '; opacity: .6; }
+#loader .steps li.on { color: #e9c48a; border-color: rgba(233,196,138,.4); }
+#loader .steps li.done { color: var(--dim); }
+#loader .steps li.done::before { content: '✓ '; opacity: 1; }
+#loader .msg { color: var(--dim); margin-top: 10px; font: italic 300 14px Fraunces, Georgia, serif; }
+#loader .status { display: block; min-height: 1.4em; margin-top: 4px; color: var(--dim); opacity: .7; font-size: 11px; letter-spacing: .04em; }
+#loader.error .msg { color: #ff9b8a; font-style: normal; max-width: min(560px, calc(100% - 32px)); margin-left: auto; margin-right: auto; }
+#loader.error .lead, #loader.error .tries, #loader.error .why { opacity: .35; }
+#loader .actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 14px; pointer-events: auto; }
 #loader .actions:empty { display: none; }
 #loader .actions button { font: 400 12px Inter, system-ui, sans-serif; letter-spacing: .03em; color: var(--fg); background: rgba(255, 245, 230, 0.07);
   border: 1px solid var(--line); border-radius: 999px; padding: 8px 16px; cursor: pointer; transition: background .2s; }
@@ -48,6 +65,7 @@ body.clean #title, body.clean #hint, body.clean .lil-gui.root { opacity: 0; poin
 #loader .actions button:first-child { border-color: rgba(233, 196, 138, 0.5); color: #e9c48a; }
 
 @media (max-width: 640px) {
+  #loader .what { font-size: 12px; } #loader .intro h1 { font-size: 30px; } #loader .tries { gap: 8px; top: 54vh; } #loader .why { top: calc(58vh + 140px); }
   #title { left: 16px; right: 16px; bottom: 16px; } #title h1 { font-size: 30px; } #title p { font-size: 13px; } #hint { display: none; }
   .lil-gui.root { right: 8px !important; top: 8px !important; width: calc(100% - 16px) !important; max-height: 50%; }
 }

@@ -5,6 +5,9 @@ import { createRng } from '../rng.js';
 import { attempt } from './search.js';
 import { sampleCurve } from './classify.js';
 import { monodromyRadius, closure } from './integrate.js';
+import { ARM_TOL } from './search.js';
+import { epicycles } from '../scene/epicycles.js';
+import { designMachine } from '../mech/design.js';
 
 const SNAP_MS = 40;
 
@@ -26,6 +29,16 @@ self.onmessage = (e) => {
       type: 'attempt', job: m.job, index: m.index, ok: r.ok, reason: r.reason, strategy: r.strategy, ms: r.ms,
       ...(r.ok && { coef: r.coef, params: r.params, action: r.action, residual: r.residual, info: r.info }),
     });
+  } else if (m.type === 'design') {
+    // conception de la machine (étages, trains, galets) : la partie lourde de
+    // la construction, faite ici plutôt que sur le thread principal
+    try {
+      const k = 1 / m.size, coef = Float64Array.from(m.coef, (v) => v * k);
+      const epi = epicycles(coef, m.params, 1, { tol: ARM_TOL, max: 14 });
+      const D = designMachine(epi.arms, m.params.N);
+      delete D.pivots;
+      self.postMessage({ type: 'design', job: m.job, ok: true, design: D });
+    } catch (err) { self.postMessage({ type: 'design', job: m.job, ok: false, reason: err?.message || String(err) }); }
   } else if (m.type === 'stability') {
     const t0 = performance.now();
     const rho = monodromyRadius(m.coef, m.params, m.size);

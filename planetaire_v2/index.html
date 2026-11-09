@@ -35,10 +35,25 @@
 
   <div id="loader">
     <canvas></canvas>
-    <div class="txt">
+    <header class="intro">
       <h1>Chorégraphies</h1>
-      <p>recherche d’une orbite…</p>
+      <p class="what">Le moteur cherche une <em>chorégraphie</em> : des astres de même masse qui se poursuivent sur une seule courbe fermée, sous la seule gravité de Newton. Chaque essai part d’une courbe tirée au hasard et la déforme jusqu’à ce que les astres obéissent exactement aux lois du mouvement.</p>
+    </header>
+    <p class="lead"></p>
+    <div class="tries">
+      <p class="head"></p>
+      <p class="legend"><i class="run"></i>en cours <i class="fail"></i>écarté <i class="ok"></i>retenu</p>
     </div>
+    <p class="why"></p>
+    <footer class="txt">
+      <ol class="steps">
+        <li data-step="orbit">trajectoire</li>
+        <li data-step="design">machine</li>
+        <li data-step="build">construction</li>
+        <li data-step="render">rendu</li>
+      </ol>
+      <p class="msg">recherche d’une orbite…</p>
+    </footer>
   </div>
 
   <script type="module" src="src/main.js"></script>

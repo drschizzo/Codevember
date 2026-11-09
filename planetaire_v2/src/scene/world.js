@@ -38,6 +38,7 @@ function globeMount(kind, rg, metal, keep) {
     m.rotation.set(rx, 0, rz); m.castShadow = true; g.add(m); return m;
   };
   const rings = [];
+  let lid = null;
   if (kind === 'verre') ring(rg * 1.01, rg * 0.035, Math.PI / 2);
   else if (kind === 'cardan') { rings.push(ring(rg * 1.12, rg * 0.04, 0, 0)); rings.push(ring(rg * 1.22, rg * 0.04, Math.PI / 2, 0)); }
   else if (kind === 'armillaire') {
@@ -52,21 +53,20 @@ function globeMount(kind, rg, metal, keep) {
   } else if (kind === 'lanterne') {
     const n = 8, bar = keep(new THREE.CylinderGeometry(rg * 0.02, rg * 0.02, rg * 2.1, 6));
     for (let i = 0; i < n; i++) { const b = new THREE.Mesh(bar, metal); const a = (i / n) * TAU; b.position.set(Math.cos(a) * rg * 1.06, 0, Math.sin(a) * rg * 1.06); b.castShadow = true; g.add(b); }
-    for (const y of [-1, 1]) { const r = ring(rg * 1.06, rg * 0.03, Math.PI / 2); r.position.y = y * rg * 1.04; }
+    // (le couvercle : l'anneau du haut et le chapeau, qui se soulèvent pour
+    // laisser entrer la caméra)
+    lid = new THREE.Group(); g.add(lid);
+    for (const y of [-1, 1]) { const r = ring(rg * 1.06, rg * 0.03, Math.PI / 2); r.position.y = y * rg * 1.04; if (y > 0) lid.add(r); }
     const cap = new THREE.Mesh(keep(new THREE.ConeGeometry(rg * 0.5, rg * 0.4, 24)), metal);
-    cap.position.y = rg * 1.3; cap.castShadow = true; g.add(cap);
+    cap.position.y = rg * 1.3; cap.castShadow = true; lid.add(cap);
   }
-  return { group: g, rings };
+  return { group: g, rings, lid, lift: rg * 1.8 };
 }
 
 // ── Un monde ─────────────────────────────────────────────────────────────────
 
-// bruit de gradient entrelacé (IGN), décalé à chaque image : un fondu par
-// pointillés que l'anticrénelage temporel lisse en vraie transparence
-const ign = () => fract(float(52.9829189).mul(fract(dot(screenCoordinate.xy.add(vec2(float(frameId).mul(5.588238))), vec2(0.06711056, 0.00583715)))));
-
 // layer : le calque propre à ce monde (sa lampe n'ombre que lui)
-export function createWorld({ orbit, L, lite = false, shadows, seed, layer = 1 }) {
+export function createWorld({ orbit, L, lite = false, shadows, seed, layer = 1, design = null }) {
   const o = orbit, p = o.params, N = p.N;
   const kScale = 1 / o.info.size;
   const coef = Float64Array.from(o.coef, (v) => v * kScale);
@@ -82,16 +82,22 @@ export function createWorld({ orbit, L, lite = false, shadows, seed, layer = 1 }
 
   // la machine (les bras retenus tracent la courbe à ARM_TOL près)
   const epi = epicycles(coef, p, 1, { tol: ARM_TOL, max: 14 });
-  const machine = createMachine({ arms: epi.arms, N, mats, omegaFrac: p.omegaFrac, yFloor: Y_FLOOR, archetype: L.stage.archetype });
+  const machine = createMachine({ arms: epi.arms, N, mats, omegaFrac: p.omegaFrac, yFloor: Y_FLOOR, archetype: L.stage.archetype, design });
   const plate = new THREE.Group();
   plate.add(machine.group);
   group.add(plate, machine.stand);
   // verre filé, sous les boules
   const curve = sampleArms(epi.arms, 2400);
   const rg0 = Math.min(0.075, 0.38 * o.info.ratio); // (rayon des boules, voir plus bas)
-  const trail = createOrbitVisual({ curve, N, gap: rg0, radius: 0.0042 * L.trace.thick, traceKind: L.trace.kind, bodies: false });
+  // la gravure est au ras du plateau : si la courbe en sort (les astres
+  // survolent le bâti), elle flotterait dans le vide ; la trace devient alors du
+  // verre filé, en hauteur, sous les astres
+  let curveR = 0;
+  for (let i = 0; i < curve.length; i += 2) curveR = Math.max(curveR, Math.hypot(curve[i], curve[i + 1]));
+  const traceKind = L.trace.kind === 'gravure' && curveR > machine.plateR - 0.03 ? 'verre' : L.trace.kind;
+  const trail = createOrbitVisual({ curve, N, gap: rg0, radius: 0.0042 * L.trace.thick, traceKind, bodies: false });
   trail.setStyle(L);
-  trail.group.position.y = L.trace.kind === 'gravure' ? machine.yPlate + 0.0015 : machine.yBody - 0.03;
+  trail.group.position.y = traceKind === 'gravure' ? machine.yPlate + 0.0015 : machine.yBody - 0.03;
   plate.add(trail.group);
 
   // sol et coque de fond (vue de l'intérieur ; un dégradé de studio)
@@ -186,10 +192,6 @@ export function createWorld({ orbit, L, lite = false, shadows, seed, layer = 1 }
   const glassMat = makeGlass(null), glassMatT = makeGlass(glassFade);
   const glassGeo = keep(new THREE.SphereGeometry(rg, 96, 64));
   const globes = [];
-  // monture de la boule visée : même métal, mais elle s'efface (pointillés lissés
-  // par l'anticrénelage) quand la caméra s'en approche, au lieu de s'écarter
-  const mountFade = uniform(1);
-  const mountMat = new THREE.MeshPhysicalNodeMaterial();
   for (let j = 0; j < N; j++) {
     const g = new THREE.Group();
     const glass = new THREE.Mesh(glassGeo, glassMat);
@@ -201,16 +203,11 @@ export function createWorld({ orbit, L, lite = false, shadows, seed, layer = 1 }
     globes.push({ group: g, inner, mount, mini: null, glass });
   }
 
-  // monture visée : copie du métal des goupilles (réglé par la recette)
-  mountMat.copy(mats.pins);
-  mountMat.maskNode = ign().lessThan(mountFade);
-  mountMat.maskShadowNode = mountFade.greaterThan(0.5);
-
   // tout ce monde reflète son propre studio, et n'est éclairé que par ses
   // propres lumières (lampe, contre-jour, astres) : un monde emboîté n'est pas
   // inondé par celles du monde qui le contient, et la plongée est auto-similaire
   const lightsNode = lights([key, rim, ...bodyLights]);
-  const lit = new Set([mountMat, glassMatT]);
+  const lit = new Set([glassMatT]);
   group.traverse((x) => {
     if (!x.material || x.material === shellMat || x.material === capMat || x.material.userData.unlit) return;
     lit.add(x.material);
@@ -276,12 +273,10 @@ export function createWorld({ orbit, L, lite = false, shadows, seed, layer = 1 }
     atmo.sync(group.matrixWorld, key.position, key.target.position);
   }
 
-  // la boule visée par la plongée : son verre et sa monture s'effacent à vif
+  // la boule visée par la plongée : son verre s'efface quand il remplit l'image
+  // (sa monture, elle, pivote pour laisser passer la caméra : voir main.js)
   function setTarget(j) {
-    globes.forEach((G, i) => {
-      G.glass.material = i === j ? glassMatT : glassMat;
-      G.mount.group.traverse((x) => { if (x.isMesh) x.material = i === j ? mountMat : mats.pins; });
-    });
+    globes.forEach((G, i) => { G.glass.material = i === j ? glassMatT : glassMat; });
   }
 
   // la miniature du monde suivant, pour les boules qui ne sont pas visées
@@ -320,12 +315,12 @@ export function createWorld({ orbit, L, lite = false, shadows, seed, layer = 1 }
   }
 
   return {
-    group, plate, machine, globes, local, flare, N, RG, rg, yGlobe, update, setScale, setNext, miniature, rig, syncRig, setTarget, glassFade, mountFade,
+    group, plate, machine, globes, local, flare, N, RG, rg, yGlobe, update, setScale, setNext, miniature, rig, syncRig, setTarget, glassFade,
     bg, epi, orbit: o, params: p, info: o.info, L,
     dispose() {
       for (const g of geos) g.dispose(); machine.dispose(); trail.dispose(); env.dispose();
       rig.removeFromParent(); key.shadow.dispose?.(); atmo.dispose();
-      for (const m of [floorMat, shellMat, capMat, glassMat, glassMatT, mountMat, miniFloor, miniPlate, ...lit]) m.dispose();
+      for (const m of [floorMat, shellMat, capMat, glassMat, glassMatT, miniFloor, miniPlate, ...lit]) m.dispose();
     },
   };
 }

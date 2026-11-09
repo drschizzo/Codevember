@@ -37,6 +37,7 @@ export const SLAB = 0.034;     // épaisseur d'une dalle (bras + train)
 export const MIN_TEETH = 10;
 const MARGIN = 0.012;           // jeu entre pièces mobiles
 const COL_R = 0.008;
+const SHAFT_R = 0.009;          // axe d'un pivot (tenon, canon, roue B)
 
 // fraction irréductible approchant un rapport (les k sont entiers : exact)
 function frac(num, den) {
@@ -176,6 +177,20 @@ function designOrder(arms, N, samples) {
     return [P[2 * a] + u * (P[2 * a + 2] - P[2 * a]), P[2 * a + 1] + u * (P[2 * a + 3] - P[2 * a + 1])];
   };
   const hits = (s, x, y, j2, i2) => pointSeg(x, y, seg[s][j2][i2]) < halfW[i2] + COL_R + MARGIN;
+  // un axe vertical en (x, y) traverse-t-il la vraie forme de la dalle (i2, j2)
+  // (barre, contrepoids, roues du train) ? Un axe confondu avec le pivot de la
+  // dalle est un montage coaxial, pas une collision.
+  const shaftHits = (s, x, y, j2, i2) => {
+    const P = piv[s][j2], x0 = P[2 * i2], y0 = P[2 * i2 + 1];
+    if (Math.hypot(x - x0, y - y0) < 1e-6) return false;
+    const r = SHAFT_R + 0.004;
+    if (pointSeg(x, y, seg[s][j2][i2]) < barW[i2] / 2 + r) return true;
+    const ux = (P[2 * i2 + 2] - x0) / (L[i2] || 1), uy = (P[2 * i2 + 3] - y0) / (L[i2] || 1);
+    if (Math.hypot(x - (x0 - ux * cw[i2]), y - (y0 - uy * cw[i2])) < Math.max(0.006, barW[i2] * 0.95) + r) return true;
+    const tr = trains[i2 + 1];
+    if (tr) for (const g of tr.gears) if (Math.hypot(x - (x0 + ux * g.x), y - (y0 + uy * g.x)) < g.r + tr.m + r) return true;
+    return false;
+  };
   for (let a = 0; a < n; a++) {
     // l'étoile (rang 0) ne croise jamais rien : deux galets par bras, sous le
     // pivot et à mi-longueur (deux sillons circulaires)
@@ -202,41 +217,70 @@ function designOrder(arms, N, samples) {
   //   - au dernier rang, la goupille qui monte de (i, j) jusqu'à l'astre et
   //     croise (i, j2) exige que (i, j2) soit plus basse.
   // Un cycle venant d'une colonne la fait retirer ; sinon c'est une collision.
+  // Les contraintes sont pondérées par la part du temps où elles comptent :
+  // quand elles forment un cycle (deux axes qui montent chacun à travers le
+  // bras de l'autre : aucun étagement ne convient), on renonce à la plus brève,
+  // et la collision qui reste est comptée en fraction de période.
   const level = Array.from({ length: n }, () => new Array(N).fill(0));
   const S = new Array(n).fill(1);
   let collisions = 0;
+  const share = (test) => { let c = 0; for (let s = 0; s < samples; s++) if (test(s)) c++; return c / samples; };
   for (let i = 1; i < n; i++) {
     for (let attempt = 0; attempt < 2; attempt++) {
-      const before = Array.from({ length: N }, () => new Set()); // before[j] ∋ j2 : j2 plus bas que j
+      // w.get(j)?.get(j2) = poids de « j2 plus bas que j »
+      const w = Array.from({ length: N }, () => new Map());
+      const add = (hi, lo, f) => { if (f > 0) w[hi].set(lo, Math.max(w[hi].get(lo) || 0, f)); };
       for (let j = 0; j < N; j++) {
         for (let j2 = 0; j2 < N; j2++) {
           if (j2 === j) continue;
-          for (let s = 0; s < samples; s++) {
-            if (i === n - 1 && hits(s, piv[s][j][2 * n], piv[s][j][2 * n + 1], j2, i)) { before[j].add(j2); break; }
-          }
-          if (supports[i] !== null) {
-            for (let s = 0; s < samples; s++) {
-              const [cx, cy] = colAt(s, j, i, supports[i][0]);
-              if (hits(s, cx, cy, j2, i)) { before[j2].add(j); break; }
-            }
-          }
+          // goupille de l'astre (dernier rang) : monte à travers les dalles plus hautes
+          if (i === n - 1) add(j, j2, share((s) => hits(s, piv[s][j][2 * n], piv[s][j][2 * n + 1], j2, i)));
+          // colonne de galet : descend à travers les dalles plus basses
+          if (supports[i] !== null) add(j2, j, share((s) => { const [cx, cy] = colAt(s, j, i, supports[i][0]); return hits(s, cx, cy, j2, i); }));
+          // l'axe qui monte de (i, j), au bout du bras, vers le bras suivant de
+          // sa chaîne traverse les dalles plus hautes de ce rang ; celui qui
+          // monte du rang inférieur jusqu'au pivot de (i, j), les plus basses
+          if (i < n - 1) add(j, j2, share((s) => shaftHits(s, piv[s][j][2 * i + 2], piv[s][j][2 * i + 3], j2, i)));
+          add(j2, j, share((s) => shaftHits(s, piv[s][j][2 * i], piv[s][j][2 * i + 1], j2, i)));
         }
       }
-      const order = [], seen = new Array(N).fill(0);
-      let cycle = false;
-      const visit = (j) => {
-        if (seen[j] === 2) return;
-        if (seen[j] === 1) { cycle = true; return; }
-        seen[j] = 1;
-        for (const j2 of before[j]) visit(j2);
-        seen[j] = 2; order.push(j);
+      // cycles : on cherche un cycle, on retire son arête la plus légère, etc.
+      const findCycle = () => {
+        const seen = new Array(N).fill(0), stack = [];
+        let found = null;
+        const visit = (j) => {
+          if (found) return;
+          seen[j] = 1; stack.push(j);
+          for (const j2 of w[j].keys()) {
+            if (found) return;
+            if (seen[j2] === 1) { found = stack.slice(stack.indexOf(j2)); return; }
+            if (!seen[j2]) visit(j2);
+          }
+          stack.pop(); seen[j] = 2;
+        };
+        for (let j = 0; j < N && !found; j++) if (!seen[j]) visit(j);
+        return found;
       };
+      let cyc = findCycle();
+      // (un cycle dû à la colonne : on retire d'abord la colonne)
+      if (cyc && supports[i] !== null && attempt === 0) { supports[i] = null; continue; }
+      while (cyc) {
+        let best = null;
+        for (let q = 0; q < cyc.length; q++) {
+          const a = cyc[q], b = cyc[(q + 1) % cyc.length], f = w[a].get(b);
+          if (!best || f < best.f) best = { a, b, f };
+        }
+        w[best.a].delete(best.b);
+        collisions += best.f;
+        cyc = findCycle();
+      }
+      // ordre topologique (les plus bas d'abord), puis niveaux
+      const order = [], seen = new Array(N).fill(0);
+      const visit = (j) => { if (seen[j]) return; seen[j] = 1; for (const j2 of w[j].keys()) visit(j2); order.push(j); };
       for (let j = 0; j < N; j++) visit(j);
-      if (cycle && supports[i] !== null && attempt === 0) { supports[i] = null; continue; }
-      if (cycle) collisions++;
       for (const j of order) {
         let lv = 0;
-        for (const j2 of before[j]) if (order.indexOf(j2) < order.indexOf(j)) lv = Math.max(lv, level[i][j2] + 1);
+        for (const j2 of w[j].keys()) lv = Math.max(lv, level[i][j2] + 1);
         const used = new Set([...conflict[i][j]].filter((j2) => order.indexOf(j2) < order.indexOf(j)).map((j2) => level[i][j2]));
         while (used.has(lv)) lv++;
         level[i][j] = lv;
@@ -260,10 +304,23 @@ function designOrder(arms, N, samples) {
   };
 }
 
+// une conception reçue d'un worker (sans fonction) : on lui rend ses pivots
+export function withPivots(D) {
+  const { n, k, L, phi } = D, P = new Float64Array(2 * n + 2);
+  D.pivots = (t, out) => {
+    let x = 0, y = 0;
+    P[0] = 0; P[1] = 0;
+    for (let i = 0; i < n; i++) { const a = k[i] * t + phi[i]; x += L[i] * Math.cos(a); y += L[i] * Math.sin(a); P[2 * i + 2] = x; P[2 * i + 3] = y; }
+    if (out) out.set(P);
+    return out || P;
+  };
+  return D;
+}
+
 // plusieurs ordres de sommation des bras (le plus long d'abord, puis des
 // permutations tirées) : on garde la machine qui a le moins de collisions,
 // puis la plus basse
-export function designMachine(arms, N, { samples = 160, tries = 8 } = {}) {
+export function designMachine(arms, N, { samples = 160, tries = 24 } = {}) {
   let best = null;
   let seed = 12345;
   const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
@@ -280,7 +337,7 @@ export function designMachine(arms, N, { samples = 160, tries = 8 } = {}) {
     const better = !best || d.collisions < best.collisions
       || (d.collisions === best.collisions && (d.supported > best.supported || (d.supported === best.supported && d.height < best.height)));
     if (better) best = d;
-    if (best.collisions === 0 && best.supported === best.n && t >= 1) break;
+    if (best.collisions === 0 && (best.supported === best.n || t >= 7) && t >= 1) break;
   }
   return best;
 }
