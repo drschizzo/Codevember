@@ -20,6 +20,7 @@ import { createAction } from './action.js';
 import { lbfgs } from './lbfgs.js';
 import { newton } from './newton.js';
 import { pickSymmetry, initialGuessSym } from './symmetry.js';
+import { epicycles } from '../scene/epicycles.js';
 import { analyze, residual, spectrum as spectrumOf } from './classify.js';
 import { closure, monodromyRadius } from './integrate.js';
 
@@ -208,6 +209,13 @@ export function attempt(p, rng, { onIter = null, index = 0 } = {}) {
   }
   if (r2.gnorm > 1e-6) return reject('non convergée');
   if (!(res.residual < RESIDUAL)) return reject('non résolue');
+  // machine : l'orbite doit pouvoir être tracée par au plus maxArms bras à
+  // ARM_REJECT près de la taille (sinon la machine ne dessinerait pas la
+  // vraie solution : au-delà de ~1 %, l'écart se verrait)
+  if (p.maxArms) {
+    const epi = epicycles(x, q, info.size, { tol: ARM_TOL, max: p.maxArms });
+    if (epi.residual > ARM_REJECT) return reject('trop de bras');
+  }
   return { ...base, ...res, ok: true, ms: now() - t0 };
 }
 
@@ -219,6 +227,7 @@ function prolong(x, nv) {
 }
 
 const RESIDUAL = 1e-4;
+export const ARM_TOL = 0.003, ARM_REJECT = 0.01;
 const SYM_TRIES = 12, SYM_TRIES_WEAK = 4; // (classe faible : le polygone y gagne presque toujours)
 const STRONG = [0.2, 0.05, 0.01, 0];
 const EPS0 = 0.2;

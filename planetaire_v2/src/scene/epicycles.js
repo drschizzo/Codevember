@@ -54,3 +54,15 @@ export function sampleCurve(coef, params, n) {
   }
   return pts;
 }
+
+// courbe tracée par la machine (somme des bras retenus), repère du plateau
+export function sampleArms(arms, n) {
+  const pts = new Float32Array(n * 2);
+  for (let i = 0; i < n; i++) {
+    const t = (TAU * i) / n;
+    let x = 0, y = 0;
+    for (const a of arms) { const c = Math.cos(a.k * t), s = Math.sin(a.k * t); x += a.re * c - a.im * s; y += a.re * s + a.im * c; }
+    pts[2 * i] = x; pts[2 * i + 1] = y;
+  }
+  return pts;
+}
