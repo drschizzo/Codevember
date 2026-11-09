@@ -38,7 +38,14 @@ body.clean #title, body.clean #hint, body.clean .lil-gui.root { opacity: 0; poin
 #loader .txt { position: absolute; left: 0; right: 0; bottom: 12vh; text-align: center; pointer-events: none; }
 #loader p { color: var(--dim); margin-top: 10px; font: italic 300 15px Fraunces, Georgia, serif; font-variant-numeric: tabular-nums; }
 #loader.gone { opacity: 0; pointer-events: none; transition: opacity 1.4s; }
-#loader.error p { color: #ff9b8a; font-style: normal; }
+#loader.error p { color: #ff9b8a; font-style: normal; max-width: min(560px, calc(100% - 32px)); margin-left: auto; margin-right: auto; }
+#loader .status { display: block; min-height: 1.4em; margin-top: 6px; color: var(--dim); opacity: .7; font-size: 11px; letter-spacing: .04em; }
+#loader .actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 18px; pointer-events: auto; }
+#loader .actions:empty { display: none; }
+#loader .actions button { font: 400 12px Inter, system-ui, sans-serif; letter-spacing: .03em; color: var(--fg); background: rgba(255, 245, 230, 0.07);
+  border: 1px solid var(--line); border-radius: 999px; padding: 8px 16px; cursor: pointer; transition: background .2s; }
+#loader .actions button:hover { background: rgba(255, 245, 230, 0.16); }
+#loader .actions button:first-child { border-color: rgba(233, 196, 138, 0.5); color: #e9c48a; }
 
 @media (max-width: 640px) {
   #title { left: 16px; right: 16px; bottom: 16px; } #title h1 { font-size: 30px; } #title p { font-size: 13px; } #hint { display: none; }

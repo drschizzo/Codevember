@@ -19,7 +19,9 @@ self.onmessage = (e) => {
       const pts = sampleCurve(x, { D: act.D, K: act.K }, 240);
       self.postMessage({ type: 'snap', job: m.job, index: m.index, stage, it, action: f, gnorm: g, pts }, [pts.buffer]);
     } : null;
-    const r = attempt(m.params, createRng(`orbit:${m.seed}:${m.index}`), { onIter, index: m.index });
+    let r;
+    try { r = attempt(m.params, createRng(`orbit:${m.seed}:${m.index}`), { onIter, index: m.index }); }
+    catch (err) { r = { ok: false, reason: `erreur : ${err?.message || err}`, ms: 0 }; } // (un essai planté est un essai raté)
     self.postMessage({
       type: 'attempt', job: m.job, index: m.index, ok: r.ok, reason: r.reason, strategy: r.strategy, ms: r.ms,
       ...(r.ok && { coef: r.coef, params: r.params, action: r.action, residual: r.residual, info: r.info }),

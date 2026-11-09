@@ -5,21 +5,26 @@
 import { orbitParams } from './search.js';
 
 export function createPool(size = Math.max(2, Math.min(8, (navigator.hardwareConcurrency || 4) - 1))) {
-  const workers = Array.from({ length: size }, () => {
+  const spawn = () => {
     const w = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
     w.busy = false;
     return w;
-  });
+  };
+  const workers = Array.from({ length: size }, spawn);
+  // un worker qui s'emballe (recherche trop longue) est remplacé
+  const respawn = () => { for (let i = 0; i < workers.length; i++) { workers[i].terminate(); workers[i] = spawn(); } };
   let jobId = 0;
 
   // recherche d'une graine ; onSnap(index, snap) pendant la descente, onTry(index, essai)
-  function search(seed, { maxAttempts = 24, onSnap = null, onTry = null, over } = {}) {
+  // timeout (ms) : au-delà, la recherche rend { ok: false, reason: 'timeout' }
+  function search(seed, { maxAttempts = 24, onSnap = null, onTry = null, over, timeout = 0 } = {}) {
     const job = ++jobId;
     const params = orbitParams(seed, over);
     const t0 = performance.now();
     const results = new Map();
     let next = 0, cancelled = false;
     return new Promise((resolve) => {
+      let timer = 0;
       const settle = () => {
         for (let i = 0; i < maxAttempts; i++) {
           const r = results.get(i);
@@ -32,6 +37,7 @@ export function createPool(size = Math.max(2, Math.min(8, (navigator.hardwareCon
       const finish = (out) => {
         if (cancelled) return;
         cancelled = true;
+        clearTimeout(timer);
         const tries = [...results.entries()].sort((a, b) => a[0] - b[0]).map(([i, r]) => ({ index: i, ok: r.ok, reason: r.reason, ms: r.ms }))
           .filter((t) => out.index === undefined || t.index <= out.index);
         resolve({ seed, params, ...out, tries, ms: performance.now() - t0 });
@@ -50,8 +56,16 @@ export function createPool(size = Math.max(2, Math.min(8, (navigator.hardwareCon
             if (!settle()) launch(w); else w.busy = false;
           }
         };
+        // un worker qui plante (erreur hors de l'essai) : l'essai est raté
+        w.onerror = (ev) => {
+          ev.preventDefault?.();
+          if (cancelled || results.has(index)) return;
+          results.set(index, { ok: false, reason: `worker : ${ev.message || 'erreur'}` });
+          if (!settle()) launch(w); else w.busy = false;
+        };
         w.postMessage({ type: 'attempt', job, seed, index, params, live: !!onSnap });
       };
+      if (timeout) timer = setTimeout(() => { if (!cancelled) { respawn(); finish({ ok: false, reason: 'timeout' }); } }, timeout);
       for (const w of workers) launch(w);
     });
   }
