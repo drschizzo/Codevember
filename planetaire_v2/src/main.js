@@ -7,7 +7,8 @@
 // périodes, le plateau a fait p tours : la boucle est parfaite.
 //
 // Paramètres d'URL : ?seed=… (la scène), #r=… (une scène retouchée, partagée
-// par « Copier le lien »), ?ui=0 (sans panneau), ?debug (outils dans window.chor).
+// par « Copier le lien »), ?ui=0 (sans panneau), ?mobile=1 / ?mobile=0 (version
+// allégée imposée / interdite), ?debug (outils dans window.chor).
 import * as THREE from 'three/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createPool } from './orbit/client.js';
@@ -20,7 +21,8 @@ import { createPost } from './render/post.js';
 import { exportLoop, exportPNG } from './app/capture.js';
 import { createLoader } from './app/loader.js';
 import { createUI } from './app/ui.js';
-import { loadRender, saveRender, applyQuality, RENDER_DEFAULTS, SHADOWS } from './app/settings.js';
+import { loadRender, saveRender, applyQuality, defaultsFor, SHADOWS } from './app/settings.js';
+import { wantsMobile, switchMobile, createGovernor, createPacer, bindTouch } from './app/mobile.js';
 import { beatsFor, warp, shotsFor, cameraAt } from './scene/choreo.js';
 import { generate, upgrade, orbitOverrides, packRecipe, unpackRecipe, MATTERS } from './recipe.js';
 
@@ -40,14 +42,21 @@ function toast(msg, ms = 2200) {
 }
 
 async function main() {
+  const pixelRatio = () => Math.min(devicePixelRatio || 1, RENDER.pixelRatio) * (RENDER.dynRes ? governor.scale : 1);
   const loader = createLoader($('#loader'));
   loader.show();
-  const RENDER = loadRender();
+  // ── Version mobile (fixée au chargement) ──
+  const LITE = wantsMobile(params);
+  if (LITE) document.body.classList.add('lite');
+  const RENDER = loadRender(LITE);
+  // résolution dynamique : vise ~45 images / s, entre 50 et 100 % de la résolution de base
+  const governor = createGovernor({ target: 1 / 45, min: 0.5, max: 1, onChange: () => !S.busy && resize() });
+  const pace = createPacer(() => RENDER.maxFps);
 
   // ── Moteur ──
   const renderer = new THREE.WebGPURenderer({ antialias: false, powerPreference: 'high-performance' });
   try { await renderer.init(); } catch (e) { return loader.error(`Impossible d’initialiser le rendu : ${e.message}`); }
-  renderer.setPixelRatio(RENDER.pixelRatio);
+  renderer.setPixelRatio(pixelRatio());
   renderer.setSize(innerWidth, innerHeight);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -97,7 +106,8 @@ async function main() {
   R ??= generate(params.get('seed') || DEFAULT_SEED);
 
   // ── État ──
-  const pool = createPool();
+  // (mobile : moins de workers, la recherche ne doit pas étouffer le rendu)
+  const pool = createPool(LITE ? Math.max(2, Math.min(3, (navigator.hardwareConcurrency || 4) - 1)) : undefined);
   const S = { flip: 1, finishKey: '', orbit: null, coef: null, p: null, visual: null, machine: null, q: 1, duration: 10, L: 0, paused: false, busy: false, run: 0, envKey: '' };
   const pos = new Float64Array(2);
   let bodyXY = new Float64Array(2);
@@ -165,7 +175,7 @@ async function main() {
     if (R.light.env !== S.envKey) {
       S.envKey = R.light.env;
       const old = scene.environment;
-      scene.environment = makeEnvironment(R.light.env, 0, 1024);
+      scene.environment = makeEnvironment(R.light.env, 0, LITE ? 512 : 1024);
       old?.dispose();
     }
     scene.environmentIntensity = R.light.envIntensity;
@@ -176,11 +186,12 @@ async function main() {
   }
 
   function applyRender() {
-    renderer.setPixelRatio(RENDER.pixelRatio);
+    if (!RENDER.dynRes) governor.reset();
+    renderer.setPixelRatio(pixelRatio());
     renderer.setSize(innerWidth, innerHeight);
     const sh = SHADOWS[RENDER.shadows] || SHADOWS.high;
     if (key.shadow.mapSize.x !== sh.key) { key.shadow.mapSize.set(sh.key, sh.key); key.shadow.map?.dispose(); key.shadow.map = null; }
-    post.update({ ...RENDER, focus: post.U.focus.value, focusRange: post.U.focusRange.value, warmth: RENDER.warmth + R.light.warmth }, null);
+    post.update({ ...RENDER, lite: LITE, focus: post.U.focus.value, focusRange: post.U.focusRange.value, warmth: RENDER.warmth + R.light.warmth }, null);
     saveRender(RENDER);
   }
 
@@ -297,29 +308,46 @@ async function main() {
     rebuild: () => S.p && buildScene(),
     motionChanged: () => { applyMotion(); setTime(S.L); },
     renderChanged: () => { const sh = S.visual && S.visual.bodies.filter((b) => b.userData.light.castShadow).length; applyRender(); if (S.p && sh !== (SHADOWS[RENDER.shadows] || SHADOWS.high).bodies) buildScene(); },
-    qualityChanged: (q) => { applyQuality(RENDER, q); ui?.refreshRender(); on.renderChanged(); },
-    resetRender: () => { Object.assign(RENDER, RENDER_DEFAULTS); ui?.refreshRender(); on.renderChanged(); },
+    qualityChanged: (q) => {
+      if ((q === 'mobile') !== LITE) { toast('Rechargement…', 0); return switchMobile(q === 'mobile'); }
+      applyQuality(RENDER, q); ui?.refreshRender(); on.renderChanged();
+    },
+    resetRender: () => { Object.assign(RENDER, defaultsFor(LITE)); ui?.refreshRender(); on.renderChanged(); },
     exportVideo: (o) => exportVideo(o),
     exportPNG: () => exportPNG(canvas, () => post.render(), `choregraphie-${R.seed}.png`),
   };
   const ui = params.get('ui') === '0' ? null : createUI({ recipe: () => R, render: RENDER, on });
   ui?.build();
+  // écran tactile : une touche met en pause, deux touches tirent une nouvelle
+  // orbite, un appui long masque l'interface (panneau replié au départ)
+  if (LITE || matchMedia?.('(pointer: coarse)').matches) {
+    ui?.gui.close();
+    bindTouch(canvas, {
+      onTap: () => !R.motion.free && on.togglePause(),
+      onDoubleTap: () => on.random(),
+      onLongPress: () => document.body.classList.toggle('clean'),
+    });
+  }
   applyRender();
 
   // ── Boucle ──
   let last = performance.now(), frames = 0, fpsT = last;
   function frame(now) {
     requestAnimationFrame(frame);
-    const dt = Math.min(0.1, (now - last) / 1000); last = now;
+    if (!pace(now)) return; // (écrans 90 / 120 Hz : cadence plafonnée)
+    const dt0 = (now - last) / 1000;
+    const dt = Math.min(0.1, dt0); last = now;
+    if (RENDER.dynRes && !S.busy) governor.frame(dt0);
     if (!S.paused && S.visual && !S.exporting) setTime(S.L + dt / S.duration);
     if (R.motion.free) { controls.update(); focusOn([controls.target.x, controls.target.y, controls.target.z]); }
     post.render();
     frames++;
-    if (now - fpsT > 500) { ui?.setFps((frames * 1000 / (now - fpsT)).toFixed(0)); frames = 0; fpsT = now; }
+    if (now - fpsT > 500) { ui?.setFps(`${(frames * 1000 / (now - fpsT)).toFixed(0)}${RENDER.dynRes ? `  ·  ${Math.round(governor.scale * 100)} %` : ''}`); frames = 0; fpsT = now; }
   }
   requestAnimationFrame(frame);
 
   function resize() {
+    renderer.setPixelRatio(pixelRatio());
     renderer.setSize(innerWidth, innerHeight);
     camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
   }
@@ -336,7 +364,7 @@ async function main() {
         canvas, duration: S.duration,
         renderAt: (u) => { setTime(u); post.render(); },
         setSize: (w, h) => { renderer.setPixelRatio(1); renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); },
-        restore: () => { canvas.style.width = ''; canvas.style.height = ''; renderer.setPixelRatio(RENDER.pixelRatio); resize(); },
+        restore: () => { canvas.style.width = ''; canvas.style.height = ''; resize(); },
       }, { width, height, fps, mbps }, (f) => { $('#progress u').style.width = `${(f * 100).toFixed(1)}%`; }, `choregraphie-${R.seed}.mp4`);
     } catch (e) { toast(`Export impossible : ${e.message}`, 5000); }
     bar.classList.remove('on');

@@ -131,6 +131,8 @@ export function createUI({ recipe: getRecipe, render: RENDER, on }) {
   const rc = () => on.renderChanged();
   fRender.add(RENDER, 'quality', opts(QUALITY)).name('Qualité').onChange((v) => on.qualityChanged(v));
   fRender.add(RENDER, 'pixelRatio', 0.5, 2, 0.05).name('Résolution').onFinishChange(rc);
+  fRender.add(RENDER, 'dynRes').name('Résolution dynamique').onChange(rc);
+  fRender.add(RENDER, 'maxFps', { Libre: 0, 30: 30, 60: 60 }).name('Cadence maximale').onChange(rc);
   fRender.add(RENDER, 'aa', { SMAA: 'smaa', FXAA: 'fxaa', 'Temporel (TRAA)': 'traa', Aucun: 'none' }).name('Anticrénelage').onChange(rc);
   fRender.add(RENDER, 'shadows', Object.fromEntries(Object.keys(SHADOWS).map((k) => [k, k]))).name('Ombres').onChange(rc);
   fRender.add(RENDER, 'toneMapping', { AgX: 'agx', ACES: 'aces', Neutre: 'neutral' }).name('Tone mapping').onChange(rc);
