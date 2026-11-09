@@ -41,6 +41,6 @@ body.clean #title, body.clean #hint, body.clean .lil-gui.root { opacity: 0; poin
 #loader.error p { color: #ff9b8a; font-style: normal; }
 
 @media (max-width: 640px) {
-  #title { left: 16px; bottom: 16px; } #title h1 { font-size: 30px; } #hint { display: none; }
+  #title { left: 16px; right: 16px; bottom: 16px; } #title h1 { font-size: 30px; } #title p { font-size: 13px; } #hint { display: none; }
   .lil-gui.root { right: 8px !important; top: 8px !important; width: calc(100% - 16px) !important; max-height: 50%; }
 }
