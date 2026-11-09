@@ -27,7 +27,7 @@ import {
   viewportDepthTexture, perspectiveDepthToViewZ, cameraNear, cameraFar, positionView, cameraProjectionMatrix,
   If, select, floor, atan, sqrt, fwidth, mrt, modelViewMatrix, screenCoordinate, hash, uint, velocity, normalView, roughness, specularColorBlended,
 } from 'three/tsl';
-import { noise, noise2, fbm, worley, perturb, stableVelocity, hash33 } from './materials.js';
+import { noise, noise2, fbm, worley, perturb, stableVelocity, hash33, isLite, ditherThreshold } from './materials.js';
 import { LOOK_KEYS } from '../membranes.js';
 import { G } from './globals.js';
 import { photoelastic } from './photo.js';
@@ -155,7 +155,8 @@ export function membranePosition(T, S, full, photo = false, wrinkle = false) {
         }
       }
       // (normales de l'image courante : l'écart est négligeable sur une image)
-      positionPrevious.assign(pnPosition(q1.xyz, q2.xyz, q3.xyz, n1.xyz, n2.xyz, n3.xyz, w));
+      // (mode allégé : pas de vecteurs vitesse, une évaluation du patch en moins)
+      if (!isLite()) positionPrevious.assign(pnPosition(q1.xyz, q2.xyz, q3.xyz, n1.xyz, n2.xyz, n3.xyz, w));
     }
     return p;
   })();
@@ -204,8 +205,13 @@ const wrinkleSlope = (L, vis) => Fn(() => {
     // bruit de phaseurs, en longueurs d'onde ; cellules de 1,5 λ, un noyau par cellule
     const x = pr.div(lam), CS = 1.5, q = floor(x.div(CS));
     let zr = float(0), zi = float(0);
-    for (let oz = -1; oz <= 1; oz++) for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
-      const cell = q.add(vec3(ox, oy, oz));
+    // Mode allégé : 8 cellules au lieu de 27 — la cellule du pixel et ses
+    // voisines du côté le plus proche sur chaque axe. Le noyau (écart type
+    // 0,37 cellule) ne porte guère au-delà d'une demi-cellule : les noyaux
+    // omis sont tous à plus d'une demi-cellule du pixel.
+    const lite = isLite(), sgn = lite ? step(0.5, fract(x.div(CS))).mul(2).sub(1) : null, R0 = lite ? 0 : -1;
+    for (let oz = R0; oz <= 1; oz++) for (let oy = R0; oy <= 1; oy++) for (let ox = R0; ox <= 1; ox++) {
+      const cell = lite ? q.add(vec3(ox, oy, oz).mul(sgn)) : q.add(vec3(ox, oy, oz));
       const hc = hash33(cell);
       const d = x.sub(cell.add(hc).mul(CS));
       const w = exp(dot(d, d).mul(-1 / (2 * 0.55 * 0.55)));
@@ -265,7 +271,9 @@ export function buildMembraneMaterial(T, S, L, spec, { side = THREE.FrontSide, b
   // plis ne se verraient pas)
   const photo = !!spec.photo && !!T.str, wrinkle = !!spec.wrinkle && !!T.str && !blend;
   // approche du seuil où la face arrière sera mélangée (0 : loin, 1 : au seuil)
-  const kb = side === THREE.BackSide && backdrop && !blend && S.blendK ? S.blendK : float(0);
+  // (mode allégé : les faces avant lointaines sont mélangées elles aussi, voir
+  // nest.js ; elles convergent de même, avec blendF)
+  const kb = !backdrop || blend ? float(0) : side === THREE.BackSide ? (S.blendK ?? float(0)) : isLite() && S.blendF ? S.blendF : float(0);
   m.positionNode = membranePosition(T, S, true, photo, wrinkle);
   const p = normalize(attribute('rest', 'vec3'));
   const lip = attribute('kind', 'float');
@@ -497,8 +505,8 @@ export function fibrilPosition(T, S, full, L = null) {
     if (full) {
       normalLocal.assign(now.n);
       vFibCov.assign(now.r.div(rDraw.max(1e-9)).clamp(0, 1));
-      const pv = shape(B.prv, S.fPrev);
-      positionPrevious.assign(pv.c.add(pv.n.mul(select(pv.r.greaterThan(1e-7), pv.r.max(px.mul(0.7)), float(0)))));
+      const pv = isLite() ? null : shape(B.prv, S.fPrev);
+      if (pv) positionPrevious.assign(pv.c.add(pv.n.mul(select(pv.r.greaterThan(1e-7), pv.r.max(px.mul(0.7)), float(0)))));
     }
     return now.c.add(now.n.mul(rDraw));
   })();
@@ -522,8 +530,7 @@ export function buildFibrilMaterial(T, S, L, spec) {
   // opaque, la profondeur reste juste. Matière à demi transparente : un fil
   // liquide laisse passer une partie de la lumière.
   const cov = vFibCov.mul(spec.metal > 0 ? 1 : 0.8);
-  const pxId = screenCoordinate.x.toUint().add(screenCoordinate.y.toUint().mul(uint(8191))).add(G.frame.toUint().mul(uint(131071)));
-  m.maskNode = hash(pxId.add(uint(77))).lessThan(cov);
+  m.maskNode = ditherThreshold(77).lessThan(cov);
   m.mrtNode = stableVelocity();
   return m;
 }

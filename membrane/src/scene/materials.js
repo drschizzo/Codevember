@@ -34,6 +34,18 @@ import { G } from './globals.js';
 const PI = Math.PI;
 export { G };
 
+// ── Mode allégé (mobile) ─────────────────────────────────────────────────────
+// Fixé au chargement, avant la construction du premier matériau (les
+// matériaux sont compilés différemment). Ici : Worley lu dans le volume de
+// bruit (canaux F1, F2 − F1) au lieu des 27 cellules évaluées à chaque pixel ;
+// fBm limité à deux octaves ; pas de vecteurs vitesse ; tramage des fondus
+// fixe (sans anticrénelage temporel, un tramage renouvelé à chaque image
+// fourmillerait) ; armature de verre sans transmission physique. Voir aussi
+// membrane.js, photo.js, nest.js et lights.js.
+let LITE = false;
+export const setLite = (v) => { LITE = !!v; };
+export const isLite = () => LITE;
+
 // ── Volume de bruit ──────────────────────────────────────────────────────────
 let noiseTexture = null;
 export function setNoiseVolume({ data, size }) {
@@ -53,6 +65,7 @@ const noise2 = (p) => NZ(p).y;
 // rotation entre octaves (cache la périodicité, évite les alignements sur les axes)
 const ROT = mat3(0.0, 0.8, 0.6, -0.8, 0.36, -0.48, -0.6, -0.48, 0.64);
 const fbm = (p, oct = 4) => {
+  if (LITE) oct = Math.min(oct, 2);
   let s = float(0), a = 0.5, q = p;
   for (let i = 0; i < oct; i++) { s = s.add(noise(q).mul(a)); q = ROT.mul(q).mul(2.03); a *= 0.5; }
   return s;
@@ -69,6 +82,7 @@ const hash33 = (c) => {
 };
 // renvoie vec2(F1, F2) (distances au germe le plus proche et au suivant, en cellules)
 const worley = (p) => {
+  if (LITE) { const w = NZ(p); return vec2(w.z, w.z.add(w.w)); } // (volume : F1, F2 − F1)
   const i = floor(p), f = fract(p);
   let f1 = float(8), f2 = float(8);
   for (let z = -1; z <= 1; z++) for (let y = -1; y <= 1; y++) for (let x = -1; x <= 1; x++) {
@@ -282,6 +296,18 @@ function surface(fin, U, p, pf, pn) {
 
 export { noise, noise2, fbm, worley, perturb, NZ, hash33 };
 
+// Seuil de tramage d'un fondu (pixel gardé si seuil < couverture) : aléatoire
+// et renouvelé à chaque image (lissé par l'anticrénelage temporel) ; en mode
+// allégé, bruit de gradient entrelacé (Jimenez) fixe à l'écran — un voile
+// régulier et stable, sans fourmillement. salt : décorrélation entre objets.
+export const ditherThreshold = (salt = 0) => {
+  if (LITE) {
+    const x = screenCoordinate.x.add(salt * 5.588238), y = screenCoordinate.y.add(salt * 3.1);
+    return fract(fract(x.mul(0.06711056).add(y.mul(0.00583715))).mul(52.9829189));
+  }
+  return hash(screenCoordinate.x.toUint().add(screenCoordinate.y.toUint().mul(uint(8191))).add(G.frame.toUint().mul(uint(131071))).add(uint(salt)));
+};
+
 // Ce qui, dans un matériau, impose une recompilation quand cela change
 export function signature(f) {
   const s = (fin) => [fin.pattern, fin.sheen > 0, fin.clearcoat > 0, fin.irid > 0, fin.aniso > 0, fin.glass > 0, fin.dispersion > 0, fin.smudge > 0, fin.emit > 0].join('');
@@ -290,7 +316,7 @@ export function signature(f) {
 
 // Vecteur vitesse sous garde : une valeur aberrante (NaN, infinie, démesurée)
 // est remplacée par zéro — par sélection, pas par multiplication (∞ × 0 = NaN).
-export const stableVelocity = () => mrt({ velocity: select(length(velocity.xy).lessThan(0.5), velocity, vec4(0)) });
+export const stableVelocity = () => LITE ? null : mrt({ velocity: select(length(velocity.xy).lessThan(0.5), velocity, vec4(0)) });
 
 // ── Matériau d'une pièce de cellule ──────────────────────────────────────────
 // finish : { outer, inner, edge, wear } (finitions complètes) ; U : leurs
@@ -402,7 +428,14 @@ export function buildPieceMaterial(finish, U, M, { shadowTint = null, content = 
     m.iridescenceThicknessNode = get('iridT');
   }
   if (F.aniso) m.anisotropyNode = get('aniso');
-  if (F.glass) {
+  if (F.glass && LITE) {
+    // verre allégé : une baguette de verre sombre, teintée par son absorption,
+    // brillante sous son vernis (pas de copie de l'image ni de double passe)
+    m.colorNode = vec4(mix(get('color'), get('att').mul(0.3), get('glass')), 1);
+    m.metalnessNode = mix(get('metal'), float(0), get('glass'));
+    m.clearcoatNode = F.cc ? get('cc').max(get('glass')) : get('glass');
+    if (!F.cc) m.clearcoatRoughnessNode = float(0.03);
+  } else if (F.glass) {
     m.transmissionNode = get('glass');
     m.iorNode = get('ior');
     // tôle de verre mince, ou cristal massif (objet exposé) : la lumière y
@@ -420,8 +453,7 @@ export function buildPieceMaterial(finish, U, M, { shadowTint = null, content = 
   // fondu (couche qui s'éloigne derrière la caméra) : tramage aléatoire renouvelé
   // à chaque image, lissé par l'anticrénelage temporel ; l'ombre suit
   if (M.vis) {
-    const px = screenCoordinate.x.toUint().add(screenCoordinate.y.toUint().mul(uint(8191))).add(G.frame.toUint().mul(uint(131071)));
-    const keep = hash(px).lessThan(M.vis);
+    const keep = ditherThreshold().lessThan(M.vis);
     m.maskNode = keep; m.maskShadowNode = keep;
   }
   m.mrtNode = stableVelocity();

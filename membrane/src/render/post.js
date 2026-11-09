@@ -4,6 +4,11 @@
 // traînées anamorphiques, halation, poussière sur la lentille, aberration
 // chromatique, tone mapping, grain.
 //
+// Version mobile (cfg.lite) : une seule cible de scène (ni normales, ni
+// vitesses, ni réflectance), bloom en quart de résolution, ni traînées, ni
+// poussière sur la lentille, ni aberration chromatique ; étalonnage,
+// halation et grain tiennent dans la même passe finale.
+//
 // Les réglages continus sont des uniformes ; seules les options qui changent
 // la structure (activer un effet, changer d'anticrénelage) reconstruisent la
 // chaîne.
@@ -58,7 +63,7 @@ export function createPost(renderer, scene, camera) {
   let key = '';
 
   function build(cfg) {
-    const k = [cfg.aa, cfg.bloom, cfg.ao, cfg.ssr, cfg.ssrRes, cfg.dof, cfg.motionBlur > 0, cfg.ca > 0, cfg.streaks > 0].join();
+    const k = [cfg.aa, cfg.bloom, cfg.ao, cfg.ssr, cfg.ssrRes, cfg.dof, cfg.motionBlur > 0, cfg.ca > 0, cfg.streaks > 0, cfg.dirt > 0, !!cfg.lite].join();
     if (k === key) return;
     key = k;
     for (const n of Object.values(nodes)) n?.dispose?.();
@@ -148,10 +153,12 @@ export function createPost(renderer, scene, camera) {
     }
     if (cfg.bloom) {
       const b = bloom(vec4(c, 1), cfg.bloomStrength, cfg.bloomRadius, cfg.bloomThreshold);
+      if (cfg.lite) b.setResolutionScale(0.25); // (le bloom est flou par nature)
       nodes.bloom = b;
       // halation (pellicule : un liseré rouge orangé autour des hautes lumières)
       // et poussière sur la lentille (révélée par la lumière diffusée)
-      c = c.add(b.rgb.mul(vec3(1, 0.32, 0.12).mul(U.halation).add(lensDirt().mul(U.dirt)).add(1)));
+      const glow = vec3(1, 0.32, 0.12).mul(U.halation);
+      c = c.add(b.rgb.mul((cfg.dirt > 0 ? glow.add(lensDirt().mul(U.dirt)) : glow).add(1)));
     }
     if (cfg.streaks > 0) {
       // traînées anamorphiques : seules les lumières les plus vives (le cœur, un

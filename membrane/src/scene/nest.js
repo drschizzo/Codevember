@@ -39,6 +39,19 @@ const X_DETAIL = 1.4;
 // X_BLEND − 0,25 et X_BLEND, la version avec copie converge vers ce résultat :
 // le passage de l'une à l'autre ne se voit pas.
 const X_BLEND = 0.35;
+// Mode allégé : chaque face qui voit au travers prend sa copie de l'image
+// (copie, chaîne de mipmaps : une dizaine de passes, et sur un GPU mobile à
+// tuiles, autant de vidages de la mémoire de tuile). Au-delà de X_FRONT, la
+// face avant d'une couche (petite à l'écran) se mélange elle aussi sans
+// copie, comme la face arrière au-delà de X_BLEND : il reste deux ou trois
+// copies par image au lieu de six à huit. Même convergence sans saut (blendF).
+const X_FRONT = 0.8;
+// Simulation allégée (mode mobile) : maillage simulé un peu plus grossier
+// (≈ 2/3 des particules), moins d'images enregistrées (interpolées en
+// Catmull-Rom à l'affichage : le mouvement reste continu) et de sous-pas ;
+// la déchirure garde sa dynamique, le calcul au chargement et la mémoire des
+// images sont presque divisés par deux.
+const liteSim = (s) => ({ ...s, res: Math.min(s.res, 36), frames: Math.min(s.frames, 120), substeps: Math.min(s.substeps, 13), settle: Math.min(s.settle, 40) });
 
 const Z = new THREE.Vector3(0, 0, 1);
 const _q1 = new THREE.Quaternion();
@@ -73,6 +86,7 @@ class Template {
   set(lv, R) {
     this.lv = lv;
     const spec = levelSpec(lv, R);
+    if (this.nest.lite) spec.sim = liteSim(spec.sim);
     const key = JSON.stringify(spec);
     // aspect : uniformes (sans recompilation tant que la signature ne change pas)
     const look = { ...MEMBRANE_DEFAULTS, ...lv.look };
@@ -156,7 +170,7 @@ class Slot {
     this.nest = nest; this.j = j;
     this.group = new THREE.Group();
     // (blendK : approche du seuil où la face arrière sera mélangée, voir X_BLEND)
-    this.S = { f: uniform(0), fPrev: uniform(0), vis: uniform(1), blendK: uniform(0) };
+    this.S = { f: uniform(0), fPrev: uniform(0), vis: uniform(1), blendK: uniform(0), blendF: uniform(0) };
     this.RU = { t: uniform(0), tPrev: uniform(0), dur: uniform(0.5), vis: uniform(1), style: uniform(0), sn: uniform(0), sa: uniform(0), sf: uniform(0), seedOff: uniform(new THREE.Vector3()) };
     this.meshes = {};
     this.built = '';
@@ -212,6 +226,7 @@ class Slot {
     this.meshes.back.userData.lite = buildMembraneMaterial(PT, this.S, T.L, spec, { ...opts, side: THREE.BackSide, backdrop: false });
     this.meshes.front.userData.full = this.meshes.front.material;
     this.meshes.front.userData.lite = buildMembraneMaterial(PT, this.S, T.L, spec, { ...opts, side: THREE.FrontSide, backdrop: false });
+    if (n.lite) this.meshes.front.userData.blend = buildMembraneMaterial(PT, this.S, T.L, spec, { ...opts, side: THREE.FrontSide, backdrop: false, blend: true });
     if (d.fib) this.meshes.fib = mk(d.fib, buildFibrilMaterial(PT, this.S, T.L, spec), 0, false);
     this.lastX = null;
     return true;
@@ -224,10 +239,10 @@ class Slot {
   }
 }
 
-export function createNest(scene, gen, renderer) {
+export function createNest(scene, gen, renderer, { lite = false } = {}) {
   const root = new THREE.Group();
   scene.add(root);
-  const nest = { root, gen, renderer, templates: [], slots: [], onProgress: null, onError: null };
+  const nest = { root, gen, renderer, lite, templates: [], slots: [], onProgress: null, onError: null };
   // attribut de stockage de three.js, et son tampon GPU (écrit par nos shaders de calcul)
   nest.storageAttr = (count) => new THREE.StorageBufferAttribute(new Float32Array(count * 4), 4);
   nest.gpuBuffer = (attr) => { renderer.backend.createStorageAttribute(attr); return renderer.backend.get(attr).buffer; };
@@ -277,6 +292,7 @@ export function createNest(scene, gen, renderer) {
       const fadeOut = R.nest.fade ?? [-0.95, -0.2];
       sl.S.vis.value = ss(XMAX - 0.4, XMAX - 1.1, x) * ss(fadeOut[0], fadeOut[1], x);
       { const t = Math.min(1, Math.max(0, (x - (X_BLEND - 0.25)) / 0.25)); sl.S.blendK.value = t; }
+      sl.S.blendF.value = Math.min(1, Math.max(0, (x - (X_FRONT - 0.25)) / 0.25));
       // taille et orientation. Chaque couche repose dans la coupe de la
       // précédente : leur orientation relative est fixe (même vitesse de
       // rotation pour toutes, un décalage propre à chaque modèle) — rien ne
@@ -294,7 +310,8 @@ export function createNest(scene, gen, renderer) {
       for (const k of ['back', 'front']) {
         // une face arrière n'a besoin de sa copie de l'image que si on la voit
         // directement : caméra dedans, ou tout près
-        const m = me[k], want = !useBackdrop ? m.userData.lite : k === 'back' && x > X_BLEND && m.userData.blend ? m.userData.blend : m.userData.full;
+        const mixed = k === 'back' ? x > X_BLEND : x > X_FRONT; // (face avant : mode allégé seulement, voir X_FRONT)
+        const m = me[k], want = !useBackdrop ? m.userData.lite : mixed && m.userData.blend ? m.userData.blend : m.userData.full;
         if (m.material !== want) m.material = want;
         m.geometry = geo;
         m.layers.mask = memOn ? MAIN : 0;
