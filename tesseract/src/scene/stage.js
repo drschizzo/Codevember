@@ -97,7 +97,10 @@ const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3
 // ses ombres seraient cachées derrière les objets
 const LAMP = { up: 0.16, right: 0.1, back: 0.04 };
 
-export function createStage(scene) {
+// lite (mobile) : le second contre-jour, le plus faible des trois, n'éclaire plus
+// rien (une lumière de moins évaluée à chaque pixel de chaque pièce et du sol) ;
+// le premier reprend une part de sa lumière. Carte d'ombre de 1024².
+export function createStage(scene, { lite = false } = {}) {
   const U = { tint: uniform(new THREE.Color(1, 1, 1)) };
   const floorMesh = new THREE.Mesh(new THREE.PlaneGeometry(120, 120, 1, 1).rotateX(-Math.PI / 2), null);
   floorMesh.receiveShadow = true;
@@ -116,16 +119,18 @@ export function createStage(scene) {
   scene.add(key, key.target, rim, rim.target, rim2, rim2.target);
   // le sol n'est éclairé que par le plateau (les lumières des cellules, sans
   // ombre, le traverseraient depuis l'intérieur des cellules fermées)
-  const studioLights = lights([key, rim, rim2]);
+  if (lite) rim2.visible = false;
+  const studio = lite ? [key, rim] : [key, rim, rim2];
+  const studioLights = lights(studio);
 
-  const SHADOW_SIZES = { low: 1024, medium: 2048, high: 2048, ultra: 4096 };
+  const SHADOW_SIZES = { mobile: 1024, low: 1024, medium: 2048, high: 2048, ultra: 4096 };
   const place = (L, az, el, dist) => {
     L.position.set(Math.sin(az) * Math.cos(el) * dist, Math.sin(el) * dist, Math.cos(az) * Math.cos(el) * dist);
     L.target.position.set(0, 0, 0);
   };
 
   return {
-    floor: floorMesh, key, rim, rim2,
+    floor: floorMesh, key, rim, rim2, studio,
     setShadowQuality(q) { const s = SHADOW_SIZES[q] || 2048; key.shadow.mapSize.set(s, s); },
     // vc : voyage intérieur (kc : part de la caméra intérieure, kp : de la
     // projection stéréographique ; scale : échelle du tesseract). Le
@@ -145,7 +150,7 @@ export function createStage(scene) {
       place(key, k.az, k.el, 11);
       const r = R.rim;
       const kc = vc.kc ?? 0, kp = vc.kp ?? 0;
-      rim.color.set(r.color); rim.intensity = r.intensity * (1 - kp) ** 2;
+      rim.color.set(r.color); rim.intensity = r.intensity * (1 - kp) ** 2 * (lite ? 1 + 0.5 * R.rim2.intensity / Math.max(1, r.intensity) : 1);
       place(rim, r.az, r.el, 10);
       const r2 = R.rim2;
       rim2.color.set(r2.color); rim2.intensity = r2.intensity * (1 - kp) ** 2;

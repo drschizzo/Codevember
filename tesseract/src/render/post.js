@@ -6,6 +6,14 @@
 // étalonnage (balance, contraste, saturation, vignettage), tone mapping,
 // aberration chromatique, anticrénelage d'image (SMAA, FXAA), grain.
 //
+// Version mobile (cfg.lite) : une seule passe de scène, une seule cible (ni
+// pré-passe, ni normales, ni vitesses, ni réflectance), bloom en quart de
+// résolution, pas de traînées, de poussière sur la lentille ni d'aberration
+// chromatique ; l'étalonnage, la halation et le grain tiennent dans la passe
+// finale. (L'occlusion ambiante est imitée dans les matériaux, voir
+// materials.js ; les réflexions en espace écran cèdent la place à
+// l'environnement.)
+//
 // Les réglages continus sont des uniformes ; seules les options qui changent
 // la structure (activer un effet, changer d'anticrénelage) reconstruisent la
 // chaîne.
@@ -60,7 +68,7 @@ export function createPost(renderer, scene, camera) {
   let key = '';
 
   function build(cfg) {
-    const k = [cfg.aa, cfg.bloom, cfg.ao, cfg.ssr, cfg.ssrRes, cfg.dof, cfg.motionBlur > 0, cfg.ca > 0, cfg.streaks > 0].join();
+    const k = [cfg.aa, cfg.bloom, cfg.ao, cfg.ssr, cfg.ssrRes, cfg.dof, cfg.motionBlur > 0, cfg.ca > 0, cfg.streaks > 0, cfg.dirt > 0, !!cfg.lite].join();
     if (k === key) return;
     key = k;
     for (const n of Object.values(nodes)) n?.dispose?.();
@@ -165,10 +173,12 @@ export function createPost(renderer, scene, camera) {
     }
     if (cfg.bloom) {
       const b = bloom(vec4(c, 1), cfg.bloomStrength, cfg.bloomRadius, cfg.bloomThreshold);
+      if (cfg.lite) b.setResolutionScale(0.25); // (un halo large : le quart de résolution ne se voit pas)
       nodes.bloom = b;
       // halation (pellicule : un liseré rouge orangé autour des hautes lumières)
       // et poussière sur la lentille (révélée par la lumière diffusée)
-      c = c.add(b.rgb.mul(vec3(1, 0.32, 0.12).mul(U.halation).add(lensDirt().mul(U.dirt)).add(1)));
+      const glow = vec3(1, 0.32, 0.12).mul(U.halation);
+      c = c.add(b.rgb.mul((cfg.dirt > 0 ? glow.add(lensDirt().mul(U.dirt)) : glow).add(1)));
     }
     if (cfg.streaks > 0) {
       // traînées anamorphiques : seules les lumières les plus vives (le cœur, un

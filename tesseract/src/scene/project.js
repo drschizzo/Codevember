@@ -33,7 +33,7 @@ import {
   varyingProperty, abs, dot, pow, attribute, smoothstep, fract, mat2, mix, step, floor, fwidth,
   interleavedGradientNoise, screenCoordinate, frameId, max as tmax,
 } from 'three/tsl';
-import { G } from './globals.js';
+import { G, MODE } from './globals.js';
 
 // point local → espace projeté
 export const mapPoint = (l, A, d, infl) => {
@@ -185,7 +185,9 @@ export function projectPosition(U, full, reveal = null, pre = null) {
     const ct = jx.mul(t.x).add(jy.mul(t.y)).add(jz.mul(t.z));
     tangentLocal.assign(ct.div(length(ct).max(1e-9)));
     localScale.assign(pow(abs(dot(jx, cross(jy, jz))).max(1e-9), 1 / 3));
-    positionPrevious.assign(mapPoint(l, U.Aprev, G.dPrev, G.inflatePrev));
+    // (mobile : ni vecteurs vitesse ni anticrénelage temporel, la seconde
+    // projection 4D par sommet — celle de l'image précédente — est épargnée)
+    if (!MODE.lite) positionPrevious.assign(mapPoint(l, U.Aprev, G.dPrev, G.inflatePrev));
     return p;
   })();
 }

@@ -2,6 +2,11 @@
 import * as THREE from 'three/webgpu';
 import { uniform } from 'three/tsl';
 
+// Mode allégé (mobile) : fixé au chargement, avant la construction du premier
+// matériau (voir materials.js, setLite). Simple drapeau JS : il change ce que
+// les shaders contiennent, pas une valeur qu'ils lisent.
+export const MODE = { lite: false };
+
 export const G = {
   phase: uniform(0),          // phase de la boucle [0, 1)
   // projection 4D → 3D (voir project.js) : distance de l'œil 4D, gonflement
