@@ -5,6 +5,11 @@
 // traînées anamorphiques, halation, poussière sur la lentille, aberration
 // chromatique, tone mapping, grain.
 //
+// Version mobile (cfg.lite) : une seule cible de scène (ni normales ni
+// vitesses), rayons du cœur et bloom en quart de résolution avec moins de pas,
+// pas de traînées, de poussière sur la lentille ni d'aberration chromatique ;
+// le reste (étalonnage, halation, grain) tient dans la même passe finale.
+//
 // Les réglages continus sont des uniformes ; seules les options qui changent
 // la structure (activer un effet, changer d'anticrénelage) reconstruisent la
 // chaîne.
@@ -60,7 +65,7 @@ export function createPost(renderer, scene, camera, lights) {
   function build(cfg) {
     // (les rayons lisent la carte d'ombre du cœur : elle n'existe qu'après le premier rendu)
     const rays = cfg.godrays && !!lights.core.shadow.map;
-    const k = [cfg.aa, cfg.bloom, rays, cfg.ao, cfg.dof, cfg.motionBlur > 0, cfg.ca > 0, cfg.streaks > 0].join();
+    const k = [cfg.aa, cfg.bloom, rays, cfg.ao, cfg.dof, cfg.motionBlur > 0, cfg.ca > 0, cfg.streaks > 0, cfg.dirt > 0, !!cfg.lite].join();
     if (k === key) return;
     key = k;
     for (const n of Object.values(nodes)) n?.dispose?.();
@@ -98,12 +103,13 @@ export function createPost(renderer, scene, camera, lights) {
     }
     if (rays) {
       const g = godrays(depth, camera, lights.core);
-      g.raymarchSteps.value = 48;
+      g.raymarchSteps.value = cfg.lite ? 18 : 48;
+      if (cfg.lite) g.resolutionScale = 0.25; // (les rayons sont flous par nature : un quart de résolution suffit)
       nodes.godrays = g;
       const r = g.getTextureNode().sample(screenUV).r;
       color = vec4(color.rgb.add(U.godraysColor.mul(r).mul(U.godrays)), color.a);
     }
-    if (cfg.aa === 'traa') {
+    if (cfg.aa === 'traa' && needVel) {
       // garde-fou : un pixel invalide (NaN, infini) ne doit jamais entrer dans
       // l'historique, il y resterait jusqu'à son renouvellement complet
       color = select(dot(color.rgb, color.rgb).lessThan(1e8), color, vec4(0, 0, 0, 1));
@@ -128,10 +134,12 @@ export function createPost(renderer, scene, camera, lights) {
     }
     if (cfg.bloom) {
       const b = bloom(vec4(c, 1), cfg.bloomStrength, cfg.bloomRadius, cfg.bloomThreshold);
+      if (cfg.lite) b.setResolutionScale(0.25);
       nodes.bloom = b;
       // halation (pellicule : un liseré rouge orangé autour des hautes lumières)
       // et poussière sur la lentille (révélée par la lumière diffusée)
-      c = c.add(b.rgb.mul(vec3(1, 0.32, 0.12).mul(U.halation).add(lensDirt().mul(U.dirt)).add(1)));
+      const glow = vec3(1, 0.32, 0.12).mul(U.halation);
+      c = c.add(b.rgb.mul((cfg.dirt > 0 ? glow.add(lensDirt().mul(U.dirt)) : glow).add(1)));
     }
     if (cfg.streaks > 0) {
       // traînées anamorphiques : seules les lumières les plus vives (le cœur, un

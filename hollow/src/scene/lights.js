@@ -9,9 +9,13 @@ import { uniform } from 'three/tsl';
 import { CORE, KEY, MAIN } from './nest.js';
 import { buildCoreMaterial, buildCoronaMaterial, buildRingMaterial, G } from './materials.js';
 
-const SHADOW_SIZES = { low: [512, 1024], medium: [1024, 2048], high: [1024, 2048], ultra: [2048, 4096] };
+// [cœur (cube, 6 faces), lampe frontale] ; mobile : la lampe frontale ne
+// projette plus d'ombre. Elle est presque confondue avec l'œil, et l'ombre
+// d'une lumière placée à l'œil se cache derrière l'objet qui la projette : on
+// économise une passe d'ombre entière pour une différence à peine visible.
+const SHADOW_SIZES = { mobile: [512, 0], low: [512, 1024], medium: [1024, 2048], high: [1024, 2048], ultra: [2048, 4096] };
 
-export function createLights(scene) {
+export function createLights(scene, { lite = false } = {}) {
   const core = new THREE.PointLight(0xffffff, 40, 0, 2);
   core.castShadow = true;
   core.shadow.camera.near = 0.03;
@@ -26,18 +30,18 @@ export function createLights(scene) {
   // coquilles, un nombre entier de tours par boucle)
   const U = { color: uniform(new THREE.Color()), glow: uniform(15), pulse: uniform(0) };
   const coreMats = { star: buildCoreMaterial(U, 'star'), pearl: buildCoreMaterial(U, 'pearl') };
-  const coreMesh = new THREE.Mesh(new THREE.SphereGeometry(1, 96, 48), coreMats.star);
+  const coreMesh = new THREE.Mesh(new THREE.SphereGeometry(1, lite ? 48 : 96, lite ? 24 : 48), coreMats.star);
   coreMesh.layers.mask = MAIN;
   coreMesh.castShadow = false;
   scene.add(coreMesh);
-  const corona = new THREE.Mesh(new THREE.SphereGeometry(1, 64, 32), buildCoronaMaterial(U));
+  const corona = new THREE.Mesh(new THREE.SphereGeometry(1, lite ? 32 : 64, lite ? 16 : 32), buildCoronaMaterial(U));
   corona.layers.mask = MAIN;
   corona.renderOrder = 1000;
   scene.add(corona);
   const ringMat = buildRingMaterial(U);
   const RINGS = [[1.7, [0.3, 1, 0.2], 1], [2.1, [1, 0.2, 0.5], -1], [2.5, [0.4, 0.3, 1], 2]];
   const rings = RINGS.map(([, axis]) => {
-    const m = new THREE.Mesh(new THREE.TorusGeometry(1, 0.022, 8, 128), ringMat);
+    const m = new THREE.Mesh(new THREE.TorusGeometry(1, 0.022, lite ? 6 : 8, lite ? 72 : 128), ringMat);
     m.userData.axis = new THREE.Vector3(...axis).normalize();
     m.castShadow = true; m.receiveShadow = false;
     scene.add(m);
@@ -62,7 +66,8 @@ export function createLights(scene) {
       const [c, k] = SHADOW_SIZES[q] || SHADOW_SIZES.high;
       // (le moteur redimensionne la carte d'ombre d'après mapSize à chaque image)
       core.shadow.mapSize.set(c, c);
-      key.shadow.mapSize.set(k, k);
+      key.castShadow = k > 0;
+      if (k) key.shadow.mapSize.set(k, k);
     },
     // R : recette ; D : distance de la caméra au centre
     update(R, camera, D, pulse) {

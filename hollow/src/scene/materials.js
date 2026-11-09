@@ -34,6 +34,24 @@ import { G } from './globals.js';
 
 const PI = Math.PI;
 
+// ── Mode allégé (mobile) ─────────────────────────────────────────────────────
+// Fixé au chargement, avant la construction du premier matériau (les
+// matériaux sont compilés différemment). Ce qui change :
+//  - Worley lu dans le volume de bruit (canaux F1, F2 − F1) au lieu des 27
+//    cellules évaluées à chaque pixel ;
+//  - fBm limité à deux octaves (la troisième et la quatrième ne se voient pas
+//    à la résolution d'un téléphone) ;
+//  - verre, cristaux, vitraux : plus de transmission physique (copie de
+//    l'image et chaîne de mipmaps à chaque image, objets rendus deux fois) mais
+//    un verre « composité » (mélange alpha teinté, opacité de Fresnel) ; les
+//    pierres serties deviennent des cabochons opaques à feu irisé ;
+//  - surfaces minimales : normale analytique par différences avant (4
+//    évaluations du champ au lieu de 6) ;
+//  - pas de vecteurs vitesse (ni anticrénelage temporel, ni flou de mouvement).
+let LITE = false;
+export const setLite = (v) => { LITE = !!v; };
+export const isLite = () => LITE;
+
 // (uniformes partagés par toute la scène : voir globals.js)
 export { G };
 
@@ -56,6 +74,7 @@ const noise2 = (p) => NZ(p).y;
 // rotation entre octaves (cache la périodicité, évite les alignements sur les axes)
 const ROT = mat3(0.0, 0.8, 0.6, -0.8, 0.36, -0.48, -0.6, -0.48, 0.64);
 const fbm = (p, oct = 4) => {
+  if (LITE) oct = Math.min(oct, 2);
   let s = float(0), a = 0.5, q = p;
   for (let i = 0; i < oct; i++) { s = s.add(noise(q).mul(a)); q = ROT.mul(q).mul(2.03); a *= 0.5; }
   return s;
@@ -72,6 +91,7 @@ const hash33 = (c) => {
 };
 // renvoie vec2(F1, F2) (distances au germe le plus proche et au suivant, en cellules)
 const worley = (p) => {
+  if (LITE) { const w = NZ(p); return vec2(w.z, w.z.add(w.w)); } // (volume : F1, F2 − F1)
   const i = floor(p), f = fract(p);
   let f1 = float(8), f2 = float(8);
   for (let z = -1; z <= 1; z++) for (let y = -1; y <= 1; y++) for (let x = -1; x <= 1; x++) {
@@ -328,6 +348,10 @@ function tpmsNormal(spec, T) {
     return smax(d, cyl.negate());
   };
   const p = positionLocal, e = 0.0015;
+  if (LITE) { // (différences avant : 4 évaluations au lieu de 6)
+    const f0 = field(p).toVar();
+    return vec3(field(p.add(vec3(e, 0, 0))).sub(f0), field(p.add(vec3(0, e, 0))).sub(f0), field(p.add(vec3(0, 0, e))).sub(f0));
+  }
   const gx = field(p.add(vec3(e, 0, 0))).sub(field(p.sub(vec3(e, 0, 0))));
   const gy = field(p.add(vec3(0, e, 0))).sub(field(p.sub(vec3(0, e, 0))));
   const gz = field(p.add(vec3(0, 0, e))).sub(field(p.sub(vec3(0, 0, e))));
@@ -510,7 +534,8 @@ export function buildShellMaterial(finish, U, { tpms = null, rig = null, pore = 
     m.iridescenceThicknessNode = get('iridT');
   }
   if (F.aniso) m.anisotropyNode = get('aniso');
-  if (F.glass) {
+  if (F.glass && LITE) liteGlass(m, get('glass'), get('att'));
+  else if (F.glass) {
     m.transmissionNode = get('glass');
     m.iorNode = get('ior');
     m.thicknessNode = float(0.05).mul(world);
@@ -532,6 +557,24 @@ export function buildShellMaterial(finish, U, { tpms = null, rig = null, pore = 
   return m;
 }
 
+// Verre allégé : la surface devient semi-transparente (mélange alpha), d'autant
+// plus opaque qu'on la voit de biais (Fresnel de Schlick, n ≈ 1,5) ; sa
+// couleur est celle que la lumière prend en la traversant. Les reflets
+// (environnement, lumières) restent ceux du modèle physique. L'écriture de
+// profondeur est conservée : une coquille de verre cache sa propre face
+// arrière (pas de tri par triangle), mais laisse voir tout le nid derrière elle.
+function liteGlass(m, glass, tint, base = 0.12) {
+  const V = positionView.negate().normalize();
+  const fres = float(1).sub(abs(dot(normalize(m.normalNode ?? normalView), V))).pow(5);
+  const a = mix(float(1), mix(float(base), float(1), fres.mul(0.96).add(0.04)), glass);
+  m.transparent = true;
+  m.depthWrite = true;
+  m.opacityNode = a;
+  // (le verre clair laisse passer la teinte : la couleur diffuse la porte, assombrie)
+  m.colorNode = vec4(mix(m.colorNode.rgb, tint.mul(0.35), glass), 1);
+  m.metalnessNode = mix(m.metalnessNode ?? float(0), float(0), glass);
+}
+
 // émission du halo (ne dépend que du rayon : identique d'une couche à l'autre)
 export const haloEmission = () => {
   const r = length(positionWorld);
@@ -549,7 +592,7 @@ export const haloEmission = () => {
 // parcourt jamais le quart de l'écran d'une image à l'autre.
 // (Une sélection, pas une multiplication : une vitesse infinie fois 0 donnerait
 // NaN, qui contaminerait l'historique de l'anticrénelage temporel.)
-export const stableVelocity = () => mrt({ velocity: select(length(velocity.xy).lessThan(0.5), velocity, vec4(0)) });
+export const stableVelocity = () => LITE ? null : mrt({ velocity: select(length(velocity.xy).lessThan(0.5), velocity, vec4(0)) });
 
 // ── Matériau d'ombre (maillage grossier) ─────────────────────────────────────
 // La couche qui vient de naître au cœur « pousse » dans la carte d'ombre :
@@ -578,6 +621,7 @@ export function applyCrystal(U, c) {
   U.rough.value = c.rough; U.dispersion.value = c.dispersion; U.ior.value = c.ior;
 }
 export function buildCrystalMaterial(U) {
+  if (LITE) return buildLiteCrystal(U);
   const m = new THREE.MeshPhysicalNodeMaterial({ transmission: 1 });
   const y = positionLocal.y.clamp(0, 1);
   // pied laiteux et dépoli (inclusions), pointe limpide et saturée (améthyste, citrine…)
@@ -607,6 +651,7 @@ export function applyGem(U, g) {
   U.color.value.set(g.color); U.ior.value = g.ior; U.dispersion.value = g.dispersion; U.depth.value = g.depth ?? 0.4;
 }
 export function buildGemMaterial(U) {
+  if (LITE) return buildLiteGem(U);
   const m = new THREE.MeshPhysicalNodeMaterial({ transmission: 1 });
   m.colorNode = vec4(1, 1, 1, 1);
   m.attenuationColorNode = U.color;
@@ -645,7 +690,7 @@ export const paneUniforms = (p) => ({ rough: uniform(p.rough), glow: uniform(p.g
 const paneGrow = smoothstep(0, 1, G.XB.sub(1.5).sub(layerX).div(2.5).clamp(0, 1));
 export function applyPane(U, p) { U.rough.value = p.rough; U.glow.value = p.glow; }
 export function buildPaneMaterial(U) {
-  const m = new THREE.MeshPhysicalNodeMaterial({ transmission: 1, side: THREE.DoubleSide });
+  const m = new THREE.MeshPhysicalNodeMaterial(LITE ? { side: THREE.DoubleSide } : { transmission: 1, side: THREE.DoubleSide });
   const c = attribute('color', 'vec3'), world = modelScale.x, p = positionLocal;
   const ham = noise(p.mul(38)).mul(0.6).add(noise2(p.mul(90)).mul(0.4));
   m.colorNode = vec4(1, 1, 1, 1);
@@ -655,13 +700,59 @@ export function buildPaneMaterial(U) {
   m.roughnessNode = U.rough.add(ham.mul(0.05)).clamp(0.02, 1);
   m.normalNode = perturb(ham.mul(0.0012).mul(world), normalViewGeometry);
   m.iorNode = float(1.52);
-  m.transmissionNode = float(1);
+  if (LITE) {
+    // vitrail allégé : verre coloré semi-transparent, sa lumière propre fait le reste
+    m.colorNode = vec4(c.mul(0.6), 1);
+    m.transparent = true;
+    m.depthWrite = false;
+    m.opacityNode = float(0.55);
+  } else m.transmissionNode = float(1);
   const r = length(positionWorld);
   m.emissiveNode = haloEmission().add(c.mul(G.coreColor).mul(G.coreGlow).mul(G.coreR.mul(G.coreR).div(r.mul(r))).mul(U.glow));
   m.castShadowNode = vec4(c.mul(1.4).min(1), 1);
   const ctr = attribute('center', 'vec3');
   m.castShadowPositionNode = mix(ctr, positionGeometry, paneGrow);
   m.mrtNode = stableVelocity();
+  return m;
+}
+
+// Cristaux allégés : prismes semi-transparents, pied laiteux et pointe teintée,
+// plus opaques de biais ; lumière du cœur qu'ils renvoient (halo).
+function buildLiteCrystal(U) {
+  const m = new THREE.MeshPhysicalNodeMaterial();
+  const y = positionLocal.y.clamp(0, 1);
+  const tint = mix(U.base, U.tip, smoothstep(0.0, 0.7, y));
+  m.colorNode = vec4(tint, 1);
+  m.roughnessNode = mix(float(0.45), U.rough, smoothstep(0.0, 0.45, y)).max(G.roughFloor.mul(0.5));
+  m.metalnessNode = float(0);
+  m.specularIntensityNode = float(1);
+  m.iorNode = U.ior;
+  // (le feu de la dispersion, imité par une couche mince)
+  m.iridescenceNode = U.dispersion.mul(0.5);
+  m.iridescenceIORNode = float(1.5);
+  m.iridescenceThicknessNode = float(420);
+  liteGlass(m, smoothstep(0.0, 0.5, y).mul(0.7).add(0.25), tint, 0.25);
+  m.aoNode = mix(float(1), clamp(length(positionWorld).div(G.D).pow(0.75), 0.04, 1), G.envFalloff);
+  m.emissiveNode = haloEmission();
+  return m;
+}
+// Pierres allégées : cabochons opaques, teinte profonde, reflets vifs et feu irisé
+function buildLiteGem(U) {
+  const m = new THREE.MeshPhysicalNodeMaterial();
+  m.colorNode = vec4(U.color.mul(0.55), 1);
+  m.roughnessNode = G.roughFloor.mul(0.15).max(0.015);
+  m.metalnessNode = float(0);
+  m.specularIntensityNode = float(1);
+  m.iorNode = U.ior;
+  m.clearcoatNode = float(1);
+  m.clearcoatRoughnessNode = float(0.02);
+  m.iridescenceNode = U.dispersion.mul(0.6).add(0.2);
+  m.iridescenceIORNode = float(1.6);
+  m.iridescenceThicknessNode = float(380);
+  const r = length(positionWorld);
+  const glow = G.coreR.mul(G.coreR).div(r.mul(r)).mul(G.coreGlow).mul(0.6);
+  m.aoNode = mix(float(1), clamp(r.div(G.D).pow(0.75), 0.04, 1), G.envFalloff);
+  m.emissiveNode = haloEmission().add(G.coreColor.mul(U.color).mul(glow));
   return m;
 }
 
