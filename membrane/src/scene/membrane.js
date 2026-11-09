@@ -401,6 +401,20 @@ export function buildMembraneMaterial(T, S, L, spec, { side = THREE.FrontSide, b
     m.blending = THREE.CustomBlending;
     m.blendSrc = THREE.OneFactor; m.blendDst = THREE.OneMinusSrcAlphaFactor;
     m.blendSrcAlpha = THREE.ZeroFactor; m.blendDstAlpha = THREE.OneFactor;
+    if (blend === 'mul') {
+      // Mode allégé, face avant lointaine, en deux passages sans copie de
+      // l'image : celui-ci multiplie le fond par la transmission teintée
+      // (fond × teinte, embrumée comme la lumière propre), le suivant ('add')
+      // ajoute la lumière propre. Le mélange « over » ne transmet qu'une
+      // moyenne grise : une couche orange y devenait laiteuse.
+      const tTint = crisp.add(diffused).mul(pol).mul(fres.oneMinus()).mul(metalK);
+      m.outputNode = vec4(mix(tTint, vec3(1), fogF), 1);
+      m.blendSrc = THREE.ZeroFactor; m.blendDst = THREE.SrcColorFactor;
+      m.depthWrite = false;
+      m.mrtNode = null;
+      return m;
+    }
+    if (blend === 'add') { m.blendDst = THREE.OneFactor; m.opacityNode = float(1); }
     m.mrtNode = mrt({ velocity: vec4(sv.xy, 0, 1), normal: vec4(normalView, 1), refl: vec4(0, 0, 0, 1) });
     return m;
   } else if (backdrop) {
@@ -427,7 +441,10 @@ export function buildMembraneMaterial(T, S, L, spec, { side = THREE.FrontSide, b
     const sharp = bd.sample(uv).level(float(0));
     const soft2 = bd.sample(uv).level(lod);
     const through = sharp.rgb.mul(crisp).add(soft2.rgb.mul(diffused)).mul(pol);
-    m.emissiveNode = mix(through.mul(fres.oneMinus()).mul(metalK), sharp.rgb.mul(tMean), kb);
+    // (mode allégé, face avant : la version mélangée garde la teinte — voir
+    // 'mul' — ; à kb = 1, réfraction et flou sont nuls et `through` vaut déjà
+    // exactement ce qu'elle transmet)
+    m.emissiveNode = isLite() && side === THREE.FrontSide ? through.mul(fres.oneMinus()).mul(metalK) : mix(through.mul(fres.oneMinus()).mul(metalK), sharp.rgb.mul(tMean), kb);
     if (side === THREE.BackSide) {
       // réflectance pour les reflets en espace écran (comme dans post.js), qui
       // s'éteint avec kb, comme sur la face mélangée
