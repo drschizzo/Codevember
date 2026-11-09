@@ -57,7 +57,7 @@ async function main() {
   const LITE = wantsMobile(params);
   if (LITE) document.body.classList.add('lite');
   const RENDER = loadRender(LITE);
-  const S = { worlds: [], k: [], target: [], tau: 0, paused: false, busy: true, run: 0, exporting: false, loading: false, root: -1, good: null };
+  const S = { worlds: [], k: [], target: [], tau: 0, paused: false, busy: true, run: 0, exporting: false, loading: false, landing: false, handoff: false, root: -1, good: null };
   // résolution dynamique : vise ~45 images / s, entre 50 et 100 % de la résolution de base
   const governor = createGovernor({ target: 1 / 45, min: 0.5, max: 1, onChange: () => !S.busy && resize() });
   const pace = createPacer(() => RENDER.maxFps);
@@ -142,7 +142,12 @@ async function main() {
     let { az, el } = A;
     if (next !== null && s > 0) {
       const B = poseParams(next, u - 1);
-      const dAz = Math.atan2(Math.sin(B.az - A.az), Math.cos(B.az - A.az));
+      // le plus court chemin d'un azimut à l'autre, choisi une fois pour toute la
+      // plongée sur les angles de base des deux couches : choisi à chaque instant
+      // (les deux azimuts balancent avec u), il changeait de sens quand l'écart
+      // passait par un demi-tour, et la caméra sautait de l'autre côté de la boule
+      const a0 = R.layers[layerOf(m)].camera.az, b0 = R.layers[layerOf(next)].camera.az;
+      const dAz = Math.atan2(Math.sin(b0 - a0), Math.cos(b0 - a0)) + (B.az - b0) - (A.az - a0);
       az = A.az + dAz * s; el = A.el + (B.el - A.el) * s;
     }
     // la caméra reste dans la coque du monde (rayon RG) : au-delà, on élargit le champ
@@ -154,6 +159,17 @@ async function main() {
     const pos = new THREE.Vector3(Math.cos(az) * Math.cos(el) * r, -0.16 + Math.sin(el) * r, Math.sin(az) * Math.cos(el) * r);
     return { pos, target: new THREE.Vector3(0, -0.16, 0), fov: want > 4.3 ? 30 * (want / 4.3) : 30 };
   }
+
+  // ── la boule visée dans l'image pendant la plongée. Le monde subit la
+  // similitude x → (x − tr) / kˢ ; avec tr = p·(1 − kˢ·a(s)), la boule (en p,
+  // qui bouge : elle suit son orbite) est dessinée en p·a(s). a vaut 1 au début
+  // (rien ne bouge quand la plongée commence) et 0 bien avant la fin : la boule
+  // glisse vers le centre de l'image tant qu'elle est petite, puis y reste
+  // fixée pendant qu'elle grandit. (Avec un zoom de point fixe p, a(s) =
+  // (kˢ − k) / (kˢ·(1 − k)) : la boule ne se centrait qu'à la toute fin, et
+  // remplissait déjà l'image en se promenant encore au gré de son orbite ; la
+  // caméra semblait la chercher.) À s = 1, tr = p : le raccord est inchangé.
+  const glide = (s) => 1 - ss5(s / 0.5);
 
   // ── construction des mondes (après la recherche des orbites)
   // (onStep(i) : un monde de plus est construit ; la construction peut échouer :
@@ -173,7 +189,7 @@ async function main() {
       for (let m = 0; m < INST; m++) {
         if (onStep) { onStep(m); await new Promise((res) => setTimeout(res, 0)); }
         // calque 1 + m : la lampe de chaque monde n'ombre que lui
-        made.push(createWorld({ orbit: orbits[layerOf(m)], L: R.layers[layerOf(m)], lite: LITE, shadows: sh, seed: layerSeed(m), layer: 1 + m, design: designs.get(orbits[layerOf(m)]) }));
+        made.push(createWorld({ orbit: orbits[layerOf(m)], L: R.layers[layerOf(m)], lite: LITE, shadows: sh, seed: layerSeed(m), layer: 1 + m, design: designs.get(orbits[layerOf(m)]), hold: () => R.motion.hold }));
       }
     } catch (e) {
       for (const W of made) W.dispose();
@@ -238,7 +254,7 @@ async function main() {
       const u = h + (1 - h) * (q / 200), s = ss5((u - h) / (1 - h)), ks = Math.pow(k, s);
       W.update(u);
       const p = W.local[j];
-      const cam = basePose(m, u, next, s).pos.multiplyScalar(ks).add(p.clone().multiplyScalar((1 - ks) / (1 - k)));
+      const cam = basePose(m, u, next, s).pos.multiplyScalar(ks).add(p.clone().multiplyScalar(1 - ks * glide(s)));
       const rel = cam.sub(p);
       const d = rel.length();
       if (d > W.rg * 0.85 && d < W.rg * 1.8) path.push(rel);
@@ -291,10 +307,10 @@ async function main() {
     Wa.update(u);
     Wb.update(u - 1);
     if (Mn > 2) Wc.update(u - 2);
-    // similitude : zoom de point fixe la boule visée
+    // similitude : zoom sur la boule visée, qui glisse vers le centre de l'image (voir glide)
     const h = R.motion.hold, s = ss5((u - h) / (1 - h)), k = S.k[a];
     const p = Wa.local[S.target[a]];
-    const ks = Math.pow(k, s), tr = tmp.copy(p).multiplyScalar((1 - ks) / (1 - k));
+    const ks = Math.pow(k, s), tr = tmp.copy(p).multiplyScalar(1 - ks * glide(s));
     root.scale.setScalar(1 / ks);
     root.position.copy(tr).multiplyScalar(-1 / ks);
     // la monture de la boule visée s'efface quand on s'en approche, puis son
@@ -395,13 +411,12 @@ async function main() {
     marks.length = 0; mark('search');
     S.busy = true;
     // (pendant le chargement : pipelines asynchrones, et la boucle ne dessine plus la scène)
+    S.landing = false; S.handoff = false;
     S.loading = true; pipes.on = !params.has('syncpipes'); // (?syncpipes : l'ancienne compilation, pour comparer)
     loader.show();
-    let shown = 0; // (la couche dont l'orbite est au centre de l'écran de chargement)
     for (let m = 0; m < R.layers.length; m++) {
       if (only !== null && m !== only && orbits[m]) continue;
       if (only === null && orbits[m]) continue;
-      shown = m;
       loader.layer(m, R.layers.map((_, i) => !!orbits[i]));
       let seed = layerSeed(m), r = null;
       const TRIES = 6;
@@ -431,7 +446,11 @@ async function main() {
       // (les trois machines sont conçues en parallèle, chacune dans un worker)
       const Ds = await Promise.all(R.layers.map((_, l) => designOf(orbits[l])));
       if (run !== S.run) return;
-      loader.machine(Ds[shown]);
+      // (le schéma montre désormais le monde sur lequel la scène s'ouvre, tel qu'on le verra)
+      loader.scene(Ds[0], {
+        omega: orbits[0].params.omega, rate: (TAU * R.layers[0].motion.periodsPerLayer) / R.motion.segment,
+        rot: R.layers[0].camera.az - Math.PI / 2,
+      });
       mark('build'); loader.step('build');
       await buildWorlds(() => {});
       if (run !== S.run) return;
@@ -451,6 +470,17 @@ async function main() {
     if (run !== S.run) return;
     S.good = { R: JSON.parse(JSON.stringify(R)), orbits: orbits.slice() };
     mark('done');
+    // le schéma se cale sur la scène (même instant, même perspective), puis
+    // l'écran s'efface sur le même mouvement ; la scène attend, immobile
+    if (S.tau <= R.motion.hold) {
+      S.landing = true;
+      setTime(S.tau); await post.render();
+      await loader.land(scenePose(), 1500);
+      S.landing = false;
+      if (run !== S.run) return;
+      S.handoff = true;
+      setTimeout(() => { if (run === S.run) S.handoff = false; }, 1800);
+    }
     loader.hide();
     S.busy = false;
   }
@@ -541,7 +571,7 @@ async function main() {
     },
     resetRender: () => { Object.assign(RENDER, defaultsFor(LITE)); ui?.refreshRender(); on.renderChanged(); },
     exportVideo: (o) => exportVideo(o),
-    exportPNG: () => exportPNG(canvas, () => post.render(), `choregraphie-${R.seed}.png`),
+    exportPNG: () => exportPNG(canvas, () => post.render(), `orrery-${R.seed}.png`),
   };
   let rebuildTimer = 0;
   function rebuild() {
@@ -567,6 +597,17 @@ async function main() {
   // leurs matrices de l'image précédente, pour leurs vitesses)
   const endFrame = () => { if (RENDER.aa === 'traa' || RENDER.motionBlur > 0) for (const W of S.worlds) W.machine.afterRender(); };
 
+  // l'état du premier monde, pour l'écran de chargement : temps de l'orbite,
+  // angle du plateau, hauteur des astres, et la matrice qui projette un point
+  // de ce monde sur l'écran
+  const PV = new THREE.Matrix4();
+  function scenePose() {
+    const W = S.worlds[0];
+    camera.updateMatrixWorld(); W.group.updateWorldMatrix(true, false);
+    PV.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse).multiply(W.group.matrixWorld);
+    return { tau: W.clock.tau, th: W.clock.th, y: W.yGlobe, M: PV.toArray() };
+  }
+
   // ── Boucle ──
   let last = performance.now(), frames = 0, fpsT = last;
   function frame(now) {
@@ -574,9 +615,10 @@ async function main() {
     if (!pace(now)) return; // (écrans 90 / 120 Hz : cadence plafonnée)
     const dt0 = (now - last) / 1000, dt = Math.min(0.1, dt0); last = now;
     if (RENDER.dynRes && !S.busy) governor.frame(dt0);
-    if (!S.paused && S.worlds.length && !S.exporting) setTime(S.tau + dt / R.motion.segment);
+    if (!S.paused && S.worlds.length && !S.exporting && !S.loading && !S.landing) setTime(S.tau + dt / R.motion.segment);
     if (R.motion.free) controls.update();
-    if (!S.loading) { post.render(); endFrame(); } // (chargement : la scène est préparée dans warm())
+    if (!S.loading) { post.render(); endFrame(); }
+    if (S.handoff) loader.pose(scenePose()); // (chargement : la scène est préparée dans warm())
     frames++;
     if (now - fpsT > 500) { ui?.setFps(`${(frames * 1000 / (now - fpsT)).toFixed(0)}${RENDER.dynRes ? `  ·  ${Math.round(governor.scale * 100)} %` : ''}`); frames = 0; fpsT = now; }
   }
@@ -601,7 +643,7 @@ async function main() {
         renderAt: (v) => { setTime(v * R.layers.length); post.render(); endFrame(); },
         setSize: (w, h) => { renderer.setPixelRatio(1); renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); },
         restore: () => { canvas.style.width = ''; canvas.style.height = ''; resize(); },
-      }, { width, height, fps, mbps }, (f) => { $('#progress u').style.width = `${(f * 100).toFixed(1)}%`; }, `choregraphie-${R.seed}.mp4`);
+      }, { width, height, fps, mbps }, (f) => { $('#progress u').style.width = `${(f * 100).toFixed(1)}%`; }, `orrery-${R.seed}.mp4`);
     } catch (e) { toast(`Export impossible : ${e.message}`, 5000); }
     bar.classList.remove('on');
     S.busy = false; S.exporting = false;

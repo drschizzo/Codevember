@@ -66,7 +66,8 @@ function globeMount(kind, rg, metal, keep) {
 // ── Un monde ─────────────────────────────────────────────────────────────────
 
 // layer : le calque propre à ce monde (sa lampe n'ombre que lui)
-export function createWorld({ orbit, L, lite = false, shadows, seed, layer = 1, design = null }) {
+// hold() : la part de la couche avant la plongée (voir le ralenti, plus bas)
+export function createWorld({ orbit, L, lite = false, shadows, seed, layer = 1, design = null, hold = () => 1 }) {
   const o = orbit, p = o.params, N = p.N;
   const kScale = 1 / o.info.size;
   const coef = Float64Array.from(o.coef, (v) => v * kScale);
@@ -230,11 +231,27 @@ export function createWorld({ orbit, L, lite = false, shadows, seed, layer = 1, 
   const local = Array.from({ length: N }, () => new THREE.Vector3()); // centres des boules (repère du monde)
   let flare = new Float64Array(N);
 
+  const clock = { tau: 0, th: 0 }; // (temps de l'orbite et angle du plateau à la dernière mise à jour)
+  // Le ralenti de la plongée. Quand la caméra part vers une boule, le temps de
+  // ce monde ralentit (jusqu'à 8 % de son allure, en 40 % de la plongée) : la
+  // boule visée, fixée au centre de l'image, ne bouge presque plus, et la
+  // machine, agrandie des dizaines de fois, ne défile plus autour d'elle (elle
+  // basculait d'un côté à l'autre de la boule en un instant, comme dans un
+  // miroir). Le monde qu'on rejoint, lui, tourne à son allure. Tout reste une
+  // fonction de u : T(u) = u avant la plongée, puis l'intégrale de l'allure.
+  const SLOW = 0.08;
+  const localTime = (u) => {
+    const h = hold();
+    if (u <= h) return u;
+    const d = 0.4 * (1 - h), x = Math.min(1, (u - h) / d);
+    return h + d * (x - (1 - SLOW) * (x * x * x - (x * x * x * x) / 2)) + SLOW * Math.max(0, u - h - d);
+  };
   function update(u) {
-    const { tau, open } = warp(Omega * u, beats);
+    const { tau, open } = warp(Omega * localTime(u), beats);
     atmo.update(u * 14); // (secondes : une couche dure de 12 à 16 s)
     const th = p.omega * tau, c = Math.cos(th), s = Math.sin(th);
     plate.rotation.y = th;
+    clock.tau = tau; clock.th = th;
     trail.phase.value = ((tau / TAU) % 1 + 1) % 1;
     machine.update(tau, bodyXY);
     for (let j = 0; j < N; j++) {
@@ -316,7 +333,7 @@ export function createWorld({ orbit, L, lite = false, shadows, seed, layer = 1, 
 
   return {
     group, plate, machine, globes, local, flare, N, RG, rg, yGlobe, update, setScale, setNext, miniature, rig, syncRig, setTarget, glassFade,
-    bg, env, epi, orbit: o, params: p, info: o.info, L,
+    bg, env, clock, epi, orbit: o, params: p, info: o.info, L,
     dispose() {
       for (const g of geos) g.dispose(); machine.dispose(); trail.dispose(); env.dispose();
       rig.removeFromParent(); key.shadow.dispose?.(); atmo.dispose();

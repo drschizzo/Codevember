@@ -12,7 +12,7 @@ const opts = (o, label = (v) => v.label) => Object.fromEntries(Object.entries(o)
 const FRACTIONS = ['0/1', '1/1', '-1/1', '1/2', '-1/2', '1/3', '-1/3', '2/3', '-2/3', '1/4', '-1/4', '3/4', '-3/4', '1/5', '-1/5', '2/5', '-2/5', '3/5', '-3/5', '4/5', '-4/5', '6/5', '-6/5'];
 
 export function createUI({ recipe: getRecipe, render: RENDER, on }) {
-  const gui = new GUI({ title: 'Chorégraphies', width: 320 });
+  const gui = new GUI({ title: 'Orrery', width: 320 });
   gui.domElement.id = 'gui';
   const state = { fps: '', info: '' };
 
