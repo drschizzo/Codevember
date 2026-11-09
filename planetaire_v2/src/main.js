@@ -180,6 +180,10 @@ async function main() {
     const ks = Math.pow(k, s), tr = tmp.copy(p).multiplyScalar((1 - ks) / (1 - k));
     root.scale.setScalar(1 / ks);
     root.position.copy(tr).multiplyScalar(-1 / ks);
+    // la monture de la boule visée s'ouvre pendant la plongée (ses anneaux
+    // s'écartent et sortent du champ) ; les autres restent fermées
+    for (const W of [Wa, Wb, Wc]) for (const G of W.globes) G.mount.group.scale.setScalar(1);
+    Wa.globes[S.target[a]].mount.group.scale.setScalar(1 + 7 * ss5(s / 0.6));
     // échelle de chaque monde dans l'image : lumières à l'échelle
     const sa = 1 / ks, sb = k / ks;
     Wa.setScale(sa); Wb.setScale(sb); if (Mn > 2) Wc.setScale(sb * S.k[b]);
