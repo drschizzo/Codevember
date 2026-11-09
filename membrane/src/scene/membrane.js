@@ -414,7 +414,9 @@ export function buildMembraneMaterial(T, S, L, spec, { side = THREE.FrontSide, b
     const levels = log2(screenSize.y).sub(1);
     // flou selon la distance entre la membrane et ce qui est derrière (verre
     // dépoli) : ce qui la touche reste net, le lointain se dissout
-    let near = float(1);
+    // (sans copie de la profondeur, mode allégé : un flou moyen plutôt que le
+    // flou maximal, qui délavait les couches profondes dans la lueur du cœur)
+    let near = float(isLite() ? 0.35 : 1);
     if (depthBlur) {
       const dz = viewportDepthTexture(uv, null, new THREE.DepthTexture());
       const behind = perspectiveDepthToViewZ(dz.r, cameraNear, cameraFar);
