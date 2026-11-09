@@ -92,3 +92,17 @@ export function pickSymmetry(rng, N) {
   else if (weak.length && rng.chance(0.5)) { pick = rng.pick(weak); isWeak = true; }
   return pick && { ...pick, mirror: rng.chance(0.5), weak: isWeak };
 }
+
+// classes proposées au panneau pour N corps : [{ m, l, weak }]
+export function symmetryOptions(N) {
+  const out = [];
+  for (let m = 2; m <= 9; m++) {
+    for (let l = 1; l < m; l++) {
+      if (gcd(l, m) !== 1) continue;
+      const k = lowestFrequency({ N, sym: { m, l } });
+      if (!k || Math.abs(k) > 2 * N) continue;
+      out.push({ m, l, weak: gcd(Math.abs(k), N) === 1 });
+    }
+  }
+  return out;
+}

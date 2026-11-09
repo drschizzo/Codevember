@@ -13,13 +13,20 @@ export const Y_PLATE = -0.34;     // dessus du plateau
 const Y_ARM0 = -0.3, DY = 0.03;   // étage du premier bras, pas entre étages
 const ARM_W = 0.018, ARM_T = 0.006;
 
+// matières par rôle (plateau, bras, bras alternés, goupilles, pied), réglées
+// à vif depuis la recette
 export function materials() {
-  const brass = new THREE.MeshPhysicalNodeMaterial({ color: new THREE.Color().setRGB(0.86, 0.64, 0.33), metalness: 1, roughness: 0.26, clearcoat: 0.4, clearcoatRoughness: 0.12 });
-  // plateau : bronze patiné, sombre, pour que le verre incandescent domine
-  const plate = new THREE.MeshPhysicalNodeMaterial({ color: new THREE.Color().setRGB(0.3, 0.2, 0.11), metalness: 1, roughness: 0.42, clearcoat: 0.5, clearcoatRoughness: 0.2 });
-  const steel = new THREE.MeshPhysicalNodeMaterial({ color: new THREE.Color().setRGB(0.1, 0.14, 0.32), metalness: 1, roughness: 0.2, clearcoat: 0.6, clearcoatRoughness: 0.08 });
-  const bright = new THREE.MeshPhysicalNodeMaterial({ color: new THREE.Color().setRGB(0.92, 0.92, 0.9), metalness: 1, roughness: 0.14 });
-  return { brass, plate, steel, bright };
+  const make = () => new THREE.MeshPhysicalNodeMaterial({ metalness: 1, roughness: 0.3 });
+  const m = { plate: make(), arms: make(), arms2: make(), pins: make(), foot: make() };
+  m.apply = (matters, table) => {
+    for (const role of ['plate', 'arms', 'arms2', 'pins', 'foot']) {
+      const t = table[matters[role]], x = m[role];
+      if (!t) continue;
+      x.color.setRGB(...t.color); x.metalness = t.metal; x.roughness = t.rough;
+      x.clearcoat = t.coat; x.clearcoatRoughness = 0.08;
+    }
+  };
+  return m;
 }
 
 // roue dentée plate (dans le plan xz), dentures trapézoïdales, moyeu percé
@@ -67,11 +74,11 @@ export function createMachine({ arms, N, mats }) {
   plate.position.y = Y_PLATE - 0.0175;
   plate.receiveShadow = true; plate.castShadow = true;
   group.add(plate);
-  const rim = new THREE.Mesh(keep(new THREE.TorusGeometry(plateR, 0.012, 12, 200)), mats.brass);
+  const rim = new THREE.Mesh(keep(new THREE.TorusGeometry(plateR, 0.012, 12, 200)), mats.arms);
   rim.rotation.x = Math.PI / 2; rim.position.y = Y_PLATE;
   group.add(rim);
   const tickGeo = keep(new THREE.BoxGeometry(0.05, 0.004, 0.005));
-  const ticks = new THREE.InstancedMesh(tickGeo, mats.bright, 120);
+  const ticks = new THREE.InstancedMesh(tickGeo, mats.pins, 120);
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
   for (let i = 0; i < 120; i++) {
     const a = (i / 120) * TAU, long = i % 10 === 0 ? 2 : i % 5 === 0 ? 1.5 : 1;
@@ -85,7 +92,7 @@ export function createMachine({ arms, N, mats }) {
 
   // arbre central : des tubes coaxiaux qui portent les premiers bras
   const top0 = Y_ARM0 + (N - 1) / N * DY + 0.01;
-  const arbor = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.02, 0.026, top0 - Y_PLATE, 32)), mats.brass);
+  const arbor = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.02, 0.026, top0 - Y_PLATE, 32)), mats.arms);
   arbor.position.y = (top0 + Y_PLATE) / 2;
   arbor.castShadow = true;
   group.add(arbor);
@@ -102,20 +109,20 @@ export function createMachine({ arms, N, mats }) {
     arms.forEach((a, i) => {
       const y = Y_ARM0 + (i + j / N) * DY;
       ch.ys.push(y);
-      const bar = new THREE.Mesh(barGeo, i % 2 ? mats.steel : mats.brass);
+      const bar = new THREE.Mesh(barGeo, i % 2 ? mats.arms2 : mats.arms);
       bar.castShadow = bar.receiveShadow = true;
       group.add(bar); ch.bars.push(bar);
-      const hub = new THREE.Mesh(hubGeo, mats.bright);
+      const hub = new THREE.Mesh(hubGeo, mats.pins);
       hub.castShadow = true;
       group.add(hub); ch.hubs.push(hub);
       // roue au pivot : son nombre de dents dit la vitesse du bras
       const teeth = Math.min(60, 10 + 3 * Math.abs(a.k));
       const r = Math.min(0.07, Math.max(0.028, Math.abs(a.re) + Math.abs(a.im)) * 0.25 + 0.022);
-      const gear = new THREE.Mesh(gearGeometry(teeth, r, 0.005), i % 2 ? mats.brass : mats.steel);
+      const gear = new THREE.Mesh(gearGeometry(teeth, r, 0.005), i % 2 ? mats.arms : mats.arms2);
       gear.castShadow = true; gear.receiveShadow = true;
       group.add(gear); ch.gears.push(gear);
     });
-    ch.pin = new THREE.Mesh(pinGeo, mats.bright);
+    ch.pin = new THREE.Mesh(pinGeo, mats.pins);
     ch.pin.castShadow = true;
     group.add(ch.pin);
     chains.push(ch);
