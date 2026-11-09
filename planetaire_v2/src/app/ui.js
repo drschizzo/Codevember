@@ -3,6 +3,7 @@
 import GUI from 'lil-gui';
 import { MOODS, MATTERS, FINISHES, TRACE_KINDS } from '../recipe.js';
 import { GLOBE_KINDS, GLASS_TINTS } from '../scene/world.js';
+import { ARCHETYPES } from '../scene/machine.js';
 import { ENV_PRESETS } from '../scene/env.js';
 import { QUALITY, SHADOWS } from './settings.js';
 import { symmetryOptions } from '../orbit/symmetry.js';
@@ -89,6 +90,7 @@ export function createUI({ recipe: getRecipe, render: RENDER, on }) {
       });
       // humeur et plateau
       add(f, L, 'mood', opts(MOODS)).name('Humeur (retire la couche)').onChange(() => on.moodChanged(m));
+      add(f, L.stage, 'archetype', opts(ARCHETYPES)).name('Machine').onChange(live);
       add(f, L.stage, 'finish', inv(FINISHES)).name('Plateau : finition').onChange(live);
       add(f, L.stage, 'finishScale', 0.3, 3, 0.01).name('Plateau : échelle du motif').onFinishChange(live);
       // matières

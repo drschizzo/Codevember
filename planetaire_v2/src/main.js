@@ -96,9 +96,10 @@ async function main() {
   const orbits = [];
 
   // ── caméra de base d'une couche : périodique en u (même pose à u = 0 et 1)
-  const fitFor = () => {
+  // distance qui cadre le plateau (rayon pr) en largeur comme en hauteur
+  const fitFor = (pr = 1.6) => {
     const vf = (30 * Math.PI) / 360, hf = Math.atan(Math.tan(vf) * camera.aspect);
-    return 1.55 / Math.tan(Math.min(vf * 1.2, hf));
+    return (pr + 0.05) / Math.tan(Math.min(vf * 1.25, hf));
   };
   function poseParams(m, u) {
     const c = R.layers[m].camera;
@@ -116,7 +117,10 @@ async function main() {
       az = A.az + dAz * s; el = A.el + (B.el - A.el) * s;
     }
     // la caméra reste dans la coque du monde (rayon RG) : au-delà, on élargit le champ
-    const want = fitFor(), r = Math.min(want, 4.3);
+    // (cadrage serré : la machine et le début de la couronne)
+    const pr = S.worlds[m] ? S.worlds[m].machine.plateR * 0.86 : 1.4;
+    const prN = next !== null && S.worlds[next] ? S.worlds[next].machine.plateR * 0.86 : pr;
+    const want = fitFor(pr + (prN - pr) * s), r = Math.min(want, 4.3);
     const pos = new THREE.Vector3(Math.cos(az) * Math.cos(el) * r, -0.16 + Math.sin(el) * r, Math.sin(az) * Math.cos(el) * r);
     return { pos, target: new THREE.Vector3(0, -0.16, 0), fov: want > 4.3 ? 30 * (want / 4.3) : 30 };
   }

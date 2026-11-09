@@ -20,6 +20,7 @@
 import * as THREE from 'three/webgpu';
 import { uniform, positionLocal, float, vec2, sin, atan, length, fract, smoothstep, mix, abs, floor, mx_cell_noise_float } from 'three/tsl';
 import { designMachine, SLAB } from '../mech/design.js';
+import { createComplications } from '../mech/complications.js';
 
 const TAU = Math.PI * 2;
 const BAR_T = 0.005, GEAR_T = 0.0035, GEAR_DY = 0.008; // épaisseurs ; hauteur du train au-dessus du bras
@@ -54,10 +55,16 @@ export function materials() {
     m.plate.colorNode = PF.color.mul(float(1).sub(v.mul(0.12).mul(PF.amp)));
     m.plate.needsUpdate = true;
   };
+  // émail des cadrans, encre des graduations, vis bleuies, courroies
+  m.dial = new THREE.MeshPhysicalNodeMaterial({ color: new THREE.Color().setRGB(0.86, 0.85, 0.8), metalness: 0, roughness: 0.25, clearcoat: 1 });
+  m.ink = new THREE.MeshStandardNodeMaterial({ color: 0x050505, roughness: 0.6 });
+  m.screw = new THREE.MeshPhysicalNodeMaterial({ color: new THREE.Color().setRGB(0.05, 0.08, 0.3), metalness: 1, roughness: 0.2, clearcoat: 0.6 });
+  m.belt = new THREE.MeshStandardNodeMaterial({ color: new THREE.Color().setRGB(0.05, 0.025, 0.015), roughness: 0.7 });
   // fond des sillons : la matière du plateau, assombrie et mate
   // (les courbes tournent dans un sens ou dans l'autre : rubans visibles des deux côtés)
   m.groove = new THREE.MeshPhysicalNodeMaterial({ metalness: 0.6, roughness: 0.75, side: THREE.DoubleSide });
   m.lip = new THREE.MeshPhysicalNodeMaterial({ metalness: 1, roughness: 0.18, side: THREE.DoubleSide });
+  m.bridge = m.arms;
   m.apply = (matters, table) => {
     for (const role of ROLES) {
       const t = table[matters[role]], x = m[role];
@@ -78,7 +85,7 @@ export function materials() {
 // ── Géométries ───────────────────────────────────────────────────────────────
 
 // pose une forme du plan (x, y) à plat : (x, 0, −y), épaisseur centrée sur 0
-function flat(shape, thick, bevel = 0.25) {
+export function flat(shape, thick, bevel = 0.25) {
   const g = new THREE.ExtrudeGeometry(shape, { depth: thick, bevelEnabled: bevel > 0, bevelThickness: thick * bevel * 0.5, bevelSize: thick * bevel * 0.5, bevelSegments: 1, curveSegments: 8 });
   g.translate(0, 0, -thick / 2);
   g.rotateX(-Math.PI / 2);
@@ -89,14 +96,24 @@ function flat(shape, thick, bevel = 0.25) {
 // bras (rayons) pour les grandes roues, ou couronne (anneau) ; une denture plus
 // fine que le pixel devient un simple disque
 const gearCache = new Map();
-function gearGeometry(z, r, { thick = GEAR_T, ring = 0 } = {}) {
-  const key = `${z}:${r.toFixed(5)}:${thick}:${ring}`;
+// styles : spokes5 (horlogerie), spokes8 (astrolabe), holes (planétaire
+// classique : ajours ronds), solid (atelier : pleine), pulley (poulie lisse),
+// escape (roue d'échappement : dents pointues)
+export function gearGeometry(z, r, { thick = GEAR_T, ring = 0, style = 'spokes5' } = {}) {
+  const key = `${z}:${r.toFixed(5)}:${thick}:${ring}:${style}`;
   if (gearCache.has(key)) return gearCache.get(key);
   const m = (2 * r) / z, p = TAU / z;
   const rTip = r + m, rRoot = Math.max(r * 0.5, r - 1.25 * m);
   const shape = new THREE.Shape();
-  if (m < 0.0014) shape.absarc(0, 0, r, 0, TAU, false);
-  else {
+  if (m < 0.0014 || style === 'pulley') shape.absarc(0, 0, style === 'pulley' ? r : r, 0, TAU, false);
+  else if (style === 'escape') {
+    for (let i = 0; i < z; i++) {
+      const a = i * p;
+      const pts = [[rRoot, a - 0.42 * p], [rTip * 1.04, a + 0.05 * p], [rTip * 0.96, a + 0.18 * p], [rRoot, a + 0.3 * p]];
+      pts.forEach(([rr, b], kk) => (i === 0 && kk === 0 ? shape.moveTo(rr * Math.cos(b), rr * Math.sin(b)) : shape.lineTo(rr * Math.cos(b), rr * Math.sin(b))));
+    }
+    shape.closePath();
+  } else {
     for (let i = 0; i < z; i++) {
       const a = i * p;
       const pts = [[rRoot, a - 0.3 * p], [rTip, a - 0.13 * p], [rTip, a + 0.13 * p], [rRoot, a + 0.3 * p]];
@@ -107,10 +124,23 @@ function gearGeometry(z, r, { thick = GEAR_T, ring = 0 } = {}) {
   const bore = new THREE.Path();
   bore.absarc(0, 0, ring ? rRoot - ring : Math.max(STUD_R * 1.15, r * 0.1), 0, TAU, true);
   shape.holes.push(bore);
-  // bras de roue (horlogerie) : 5 ajours entre moyeu et serge
-  if (!ring && r > 0.035) {
-    const ns = 5, rIn = r * 0.26, rOut = rRoot - Math.max(0.006, r * 0.1);
-    const gapO = Math.max(0.005, r * 0.06) / rOut, gapI = Math.max(0.005, r * 0.06) / rIn;
+  // ajours : ronds (classique), ou bras de roue entre moyeu et serge
+  if (!ring && style === 'holes' && r > 0.025) {
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * TAU, h = new THREE.Path();
+      h.absarc(Math.cos(a) * r * 0.56, Math.sin(a) * r * 0.56, r * 0.17, 0, TAU, true);
+      shape.holes.push(h);
+    }
+  } else if (!ring && style === 'pulley' && r > 0.025) {
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * TAU + 0.4, h = new THREE.Path();
+      h.absarc(Math.cos(a) * r * 0.55, Math.sin(a) * r * 0.55, r * 0.2, 0, TAU, true);
+      shape.holes.push(h);
+    }
+  } else if (!ring && (style === 'spokes5' || style === 'spokes8' || style === 'escape') && r > 0.03) {
+    const ns = style === 'spokes8' ? 8 : style === 'escape' ? 4 : 5, rIn = r * 0.26, rOut = rRoot - Math.max(0.006, r * 0.1);
+    const wSp = style === 'spokes8' ? 0.035 : 0.06;
+    const gapO = Math.max(0.004, r * wSp) / rOut, gapI = Math.max(0.004, r * wSp) / rIn;
     for (let s = 0; s < ns; s++) {
       const a0 = (s / ns) * TAU, a1 = ((s + 1) / ns) * TAU;
       const h = new THREE.Path();
@@ -126,11 +156,37 @@ function gearGeometry(z, r, { thick = GEAR_T, ring = 0 } = {}) {
 }
 
 // bras : un plat aux bouts arrondis, de −cw (contrepoids) à L, ajouré s'il est long
-function barGeometry(L, w, cw) {
+// styles : plain (horlogerie : pont ajouré), lyre (classique : effilé vers le
+// bout), truss (atelier : treillis à ajours triangulaires), scroll (astrolabe :
+// chapelet d'ajours ronds)
+function barGeometry(L, w, cw, style = 'plain') {
   const s = new THREE.Shape(), h = w / 2;
+  if (style === 'lyre') {
+    s.moveTo(L, -h * 0.55);
+    s.absarc(L, 0, h * 0.55, -Math.PI / 2, Math.PI / 2, false);
+    s.lineTo(0, h * 1.35);
+    s.absarc(-cw, 0, h * 1.35, Math.PI / 2, (3 * Math.PI) / 2, false);
+    s.lineTo(L, -h * 0.55);
+    if (L > 0.1) { const ho = new THREE.Path(); ho.absarc(L * 0.16, 0, h * 0.62, 0, TAU, true); s.holes.push(ho); }
+    return flat(s, BAR_T, 0.3);
+  }
   s.absarc(L, 0, h, -Math.PI / 2, Math.PI / 2, false);
   s.absarc(-cw, 0, h * 1.25, Math.PI / 2, (3 * Math.PI) / 2, false);
   s.closePath();
+  if (style === 'truss' && L > 0.1) {
+    const n = Math.max(2, Math.floor((L * 0.8) / (w * 1.3))), step = (L * 0.8) / n, x0 = L * 0.1, hh = h * 0.55;
+    for (let i = 0; i < n; i++) {
+      const xa = x0 + i * step + w * 0.12, xb = x0 + (i + 1) * step - w * 0.12, up = i % 2 ? 1 : -1, t = new THREE.Path();
+      t.moveTo(xa, -up * hh); t.lineTo(xb, -up * hh); t.lineTo((xa + xb) / 2, up * hh); t.closePath();
+      s.holes.push(t);
+    }
+    return flat(s, BAR_T, 0.3);
+  }
+  if (style === 'scroll' && L > 0.08) {
+    const n = Math.max(1, Math.floor((L * 0.75) / (w * 1.1)));
+    for (let i = 0; i < n; i++) { const ho = new THREE.Path(); ho.absarc(L * 0.14 + (i + 0.5) * ((L * 0.72) / n), 0, h * 0.5, 0, TAU, true); s.holes.push(ho); }
+    return flat(s, BAR_T, 0.3);
+  }
   if (L > 0.14) {
     const a = L * 0.2, b = L * 0.8, hh = h * 0.42, hole = new THREE.Path();
     hole.absarc(b, 0, hh, -Math.PI / 2, Math.PI / 2, false);
@@ -142,13 +198,13 @@ function barGeometry(L, w, cw) {
 }
 
 // cylindre posé sur y = 0
-const cyl = (r, h, seg = 20, r2 = r) => { const g = new THREE.CylinderGeometry(r2, r, Math.max(h, 1e-4), seg); g.translate(0, Math.max(h, 1e-4) / 2, 0); return g; };
+export const cyl = (r, h, seg = 20, r2 = r) => { const g = new THREE.CylinderGeometry(r2, r, Math.max(h, 1e-4), seg); g.translate(0, Math.max(h, 1e-4) / 2, 0); return g; };
 
 // ── Calage des dents ─────────────────────────────────────────────────────────
 // gears alignées sur +x (centres croissants), angles relatifs à t = 0 : la
 // première dent de la première roue pointe vers +x ; chaque roue suivante
 // présente un creux à la dent qui la mène
-function meshOffsets(zs) {
+export function meshOffsets(zs) {
   const off = [0];
   for (let g = 1; g < zs.length; g++) {
     const pPrev = TAU / zs[g - 1], p = TAU / zs[g];
@@ -161,7 +217,7 @@ function meshOffsets(zs) {
 
 // ruban posé à plat le long d'une courbe fermée du plan (sillon) : y constant,
 // largeur w ; coordonnées (x, y) → (x, h, −y)
-function ribbonGeometry(pts, w, h) {
+export function ribbonGeometry(pts, w, h) {
   const n = pts.length / 2, pos = new Float32Array(n * 2 * 3), nrm = new Float32Array(n * 2 * 3), idx = [];
   for (let i = 0; i < n; i++) {
     const a = (i + n - 1) % n, b = (i + 1) % n;
@@ -198,8 +254,18 @@ const CLEAR = 0.035;      // du plateau au dessous de la pile (hauteur des galet
 const BODY_CLEAR = 0.07;  // du sommet de la pile au plan des astres
 const GAP = 0.003;        // jeu entre un bras et le train qu'il porte
 
-export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72 }) {
+// archétypes : style des roues, des bras, transmission (courroies : atelier)
+export const ARCHETYPES = {
+  horlogerie: { label: 'Mouvement d’horlogerie', gear: 'spokes5', bar: 'plain', belts: false },
+  classique: { label: 'Planétaire classique', gear: 'holes', bar: 'lyre', belts: false },
+  atelier: { label: 'Atelier (courroies)', gear: 'solid', bar: 'truss', belts: true },
+  astrolabe: { label: 'Astrolabe', gear: 'spokes8', bar: 'scroll', belts: false },
+};
+
+export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72, archetype = 'horlogerie' }) {
   const D = designMachine(arms, N);
+  const AR = ARCHETYPES[archetype] || ARCHETYPES.horlogerie;
+  const GS = { style: AR.gear };
   const n = D.n, k = D.k, L = D.L, phi = D.phi;
   const group = new THREE.Group();   // tourne avec le plateau
   const stand = new THREE.Group();   // fixe (studio)
@@ -218,7 +284,9 @@ export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72 }) {
   // ── plateau, jonc, graduations
   let reach = 0;
   for (const l of L) reach += l;
-  const plateR = Math.max(1.38, reach + 0.18);
+  // le plateau a une couronne au-delà de ce que balaient les chaînes : les complications
+  const rIn = reach + 0.12;
+  const plateR = Math.max(1.6, rIn + 0.5);
   const plate = mesh(keep(new THREE.CylinderGeometry(plateR, plateR, 0.035, 180)), mats.plate);
   plate.position.y = yPlate - 0.0175;
   group.add(plate);
@@ -275,7 +343,7 @@ export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72 }) {
   post.position.y = yPlate; group.add(post);
   let sun = null;
   if (train0) {
-    sun = mesh(gearGeometry(train0.gears[0].z, train0.gears[0].r), mats.gears);
+    sun = mesh(gearGeometry(train0.gears[0].z, train0.gears[0].r, AR.belts ? { style: 'pulley' } : GS), mats.gears);
     sun.position.y = ySun;
     group.add(sun);
   }
@@ -286,9 +354,30 @@ export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72 }) {
   finial.position.y = ySun + GEAR_T / 2 + 0.01;
   group.add(finial);
 
+  // ── complications de la couronne, gravure du centre
+  const comp = createComplications({ archetype, rIn, plateR, yPlate, mats, keep, styleGear: AR.gear });
+  group.add(comp.group);
+  // planétaire classique : sphère armillaire au sommet du poteau, si aucun astre
+  // ne passe au-dessus du centre
+  let armillary = null;
+  {
+    let rMin = Infinity;
+    const Pq = new Float64Array(2 * n + 2);
+    for (let s = 0; s < 256; s++) { D.pivots((TAU * s) / 256, Pq); rMin = Math.min(rMin, Math.hypot(Pq[2 * n], Pq[2 * n + 1])); }
+    if (archetype === 'classique' && rMin > 0.2) {
+      armillary = new THREE.Group();
+      const ra = 0.07;
+      for (let i = 0; i < 3; i++) { const t = mesh(keep(new THREE.TorusGeometry(ra, 0.003, 8, 64)), mats.arms); t.rotation.set(Math.PI / 2 + (i === 1 ? 0.41 : 0), i * 1.05, 0); armillary.add(t); }
+      const globe = mesh(keep(new THREE.SphereGeometry(ra * 0.3, 24, 12)), mats.arms2); armillary.add(globe);
+      armillary.position.y = yPlate + CLEAR + D.height + 0.04;
+      group.add(armillary);
+      group.add(Object.assign(mesh(keep(cyl(0.004, armillary.position.y - yPlate)), mats.pins), { position: new THREE.Vector3(0, yPlate, 0) }));
+    }
+  }
+
   // ── les chaînes
   const chains = [];
-  const barGeos = L.map((l, i) => keep(barGeometry(l, D.barW[i], D.cw[i])));
+  const barGeos = L.map((l, i) => keep(barGeometry(l, D.barW[i], D.cw[i], AR.bar)));
   for (const tr of D.trains) if (tr) tr.off = meshOffsets(tr.gears.map((g) => g.z));
   for (let j = 0; j < N; j++) {
     const ch = { arm: [], idlers: [], tipA: [] };
@@ -320,14 +409,27 @@ export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72 }) {
       const top = BAR_T / 2, bottom = -BAR_T / 2; // dessus et dessous du bras, dans son repère
       // train porté par ce bras (mène le bras i + 1), au-dessus de lui : renvois sur tenons
       const tr = D.trains[i + 1], idl = [];
-      if (tr) {
+      if (tr && AR.belts) {
+        // courroie de A à B : ouverte si le rapport est positif, croisée sinon
+        const rA = tr.gears[0].r, rB = tr.gears[tr.gears.length - 1].r, Ld = L[i], yb = yGear(i, j) - oy, pts = [];
+        if (tr.ratio > 0) {
+          const al = Math.asin(Math.max(-1, Math.min(1, (rA - rB) / Ld)));
+          for (let q = 0; q <= 32; q++) { const b = Math.PI / 2 + al + (q / 32) * (Math.PI - 2 * al); pts.push(new THREE.Vector3(Math.cos(b) * rA, yb, -Math.sin(b) * rA)); }
+          for (let q = 0; q <= 32; q++) { const b = -Math.PI / 2 - al + (q / 32) * (Math.PI + 2 * al); pts.push(new THREE.Vector3(Ld + Math.cos(b) * rB, yb, -Math.sin(b) * rB)); }
+        } else {
+          const be = Math.acos(Math.max(-1, Math.min(1, (rA + rB) / Ld)));
+          for (let q = 0; q <= 32; q++) { const b = be + (q / 32) * (TAU - 2 * be); pts.push(new THREE.Vector3(Math.cos(b) * rA, yb + 0.0012 * Math.sin(q / 5), -Math.sin(b) * rA)); }
+          for (let q = 0; q <= 32; q++) { const b = Math.PI - be - (q / 32) * (TAU - 2 * be); pts.push(new THREE.Vector3(Ld + Math.cos(b) * rB, yb, -Math.sin(b) * rB)); }
+        }
+        g.add(mesh(keep(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, true), 200, Math.max(0.0012, rB * 0.06), 5, true)), mats.belt, false));
+      } else if (tr) {
         tr.gears.forEach((gear, gi) => {
           if (gear.role !== 'I') return;
           const yg = yGear(i, j) - oy;
           const stud = mesh(keep(cyl(STUD_R, yg + GEAR_T / 2 + 0.0015 - top)), mats.pins);
           stud.position.set(gear.x, top, 0);
           g.add(stud);
-          const gm = mesh(gearGeometry(gear.z, gear.r), mats.gears);
+          const gm = mesh(gearGeometry(gear.z, gear.r, GS), mats.gears);
           gm.position.set(gear.x, yg, 0);
           g.add(gm);
           idl.push({ m: gm, z: gear.z, off: tr.off[gi], sign: gi % 2 ? -1 : 1, zA: tr.gears[0].z });
@@ -344,7 +446,7 @@ export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72 }) {
         axle.position.set(L[i], top, 0);
         g.add(axle);
         if (trNext) {
-          const A = mesh(gearGeometry(trNext.gears[0].z, trNext.gears[0].r), mats.gears);
+          const A = mesh(gearGeometry(trNext.gears[0].z, trNext.gears[0].r, AR.belts ? { style: 'pulley' } : GS), mats.gears);
           A.position.set(L[i], yGear(i + 1, j) - oy, 0);
           g.add(A);
           ch.tipA.push({ A, i });
@@ -375,7 +477,7 @@ export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72 }) {
       if (trPrev) {
         const gB = trPrev.gears[trPrev.gears.length - 1];
         const yB = yGear(i - 1, j) - oy;
-        const B = mesh(gearGeometry(gB.z, gB.r), mats.gears);
+        const B = mesh(gearGeometry(gB.z, gB.r, AR.belts ? { style: 'pulley' } : GS), mats.gears);
         B.position.y = yB;
         B.userData.off = trPrev.off[trPrev.gears.length - 1];
         g.add(B);
@@ -474,6 +576,8 @@ export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72 }) {
       } else w.pinion.rotation.y = -(w.zW / w.zP) * aW + w.off[1];
     }
     if (wheels[0]) shaft.rotation.y = wheels[0].pinion.rotation.y;
+    comp.update(tau);
+    if (armillary) armillary.rotation.y = tau * 0.2;
   }
 
   return {
