@@ -391,7 +391,7 @@ async function main() {
     try {
       loader.step('design');
       loader.text('conception de la machine : un bras par cercle de la courbe (épicycles), des engrenages aux rapports exacts, des étages sans collision…');
-      await designOf(orbits[0]);
+      loader.machine(await designOf(orbits[0]));
       if (run !== S.run) return;
       loader.step('build');
       await buildWorlds((m) => loader.text(`construction de la machine, du sol et du studio (${m + 1} / ${INST} : chaque astre contient le monde suivant)…`));

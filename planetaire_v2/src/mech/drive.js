@@ -16,7 +16,11 @@
 // (ou de diamètres de poulies) exacts, et chaque roue est calée sur celle qui la
 // mène : rien ne tourne pour rien, rien ne glisse.
 import * as THREE from 'three/webgpu';
-import { gearGeometry, cyl, ribbonGeometry, flat } from '../scene/machine.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { gearGeometry, cyl, cylC, ribbonGeometry, flat } from '../scene/machine.js';
+
+// pavé aux arêtes arrondies (pièces de structure : elles accrochent la lumière)
+const rbox = (w, h, d) => new RoundedBoxGeometry(w, h, d, 2, 0.22 * Math.min(w, h, d));
 
 const TAU = Math.PI * 2;
 const gcd = (a, b) => (b ? gcd(b, a % b) : Math.abs(a));
@@ -218,9 +222,9 @@ export function createDrive({ archetype, plateR, yPlate, yFloor, k0, omegaFrac, 
       atS(mesh(keep(cyl(rB * 0.92, 0.026, 64)), mats.gears), x, y, yL1 - 0.03);
       const iRat = add({ x, y, z: 36, r: rB * 0.7, coax: iB });
       wheel(iRat, yL1 + 0.016, { style: 'escape', mat: mats.arms2, noStud: true });
-      const click = mesh(keep(new THREE.BoxGeometry(0.04, 0.003, 0.007)), mats.arms2);
+      const click = mesh(keep(rbox(0.04, 0.003, 0.007)), mats.arms2);
       click.rotation.y = a + 1.9; atS(click, x + Math.cos(a + 0.9) * rB * 0.85, y + Math.sin(a + 0.9) * rB * 0.85, yL1 + 0.013);
-      const key = mesh(keep(new THREE.BoxGeometry(0.012, 0.03, 0.012)), mats.pins); atS(key, x, y, yL1 + 0.02);
+      const key = mesh(keep(rbox(0.012, 0.03, 0.012)), mats.pins); atS(key, x, y, yL1 + 0.02);
       bridgeOver(x, y, yL1 + 0.036);
     }
     // côté échappement (niveau 2) : pignon de l'arbre, roue de champ et son
@@ -294,10 +298,10 @@ export function createDrive({ archetype, plateR, yPlate, yFloor, k0, omegaFrac, 
     const crankR = rF * 0.6, lRod = rF * 2.4, aC = aF + Math.PI / 2; // axe du cylindre : tangent au cercle
     const ux = Math.cos(aC), uy = Math.sin(aC);
     const cylLen = 0.16, cx0 = fx + ux * (lRod + crankR + 0.04), cy0 = fy + uy * (lRod + crankR + 0.04);
-    const cylM = mesh(keep(new THREE.CylinderGeometry(0.035, 0.035, cylLen, 32)), mats.foot);
+    const cylM = mesh(keep(cylC(0.035, cylLen, 32, 0.035, 0.006)), mats.foot);
     cylM.rotation.z = Math.PI / 2; cylM.rotation.y = aC; atS(cylM, cx0 + ux * cylLen / 2, cy0 + uy * cylLen / 2, yL1 + 0.045);
-    const rod = mesh(keep(new THREE.BoxGeometry(1, 0.008, 0.012)), mats.arms2); stand.add(rod);
-    const head = mesh(keep(new THREE.BoxGeometry(0.03, 0.025, 0.03)), mats.arms); stand.add(head);
+    const rod = mesh(keep(rbox(1, 0.008, 0.012)), mats.arms2); stand.add(rod);
+    const head = mesh(keep(rbox(0.03, 0.025, 0.03)), mats.arms); stand.add(head);
     const prodM = mesh(keep(new THREE.CylinderGeometry(0.006, 0.006, 1, 10)), mats.pins); stand.add(prodM);
     const pinC = mesh(keep(cyl(0.008, 0.02)), mats.pins); stand.add(pinC);
     anim.push((tau, ang) => {
@@ -406,18 +410,18 @@ export function createDrive({ archetype, plateR, yPlate, yFloor, k0, omegaFrac, 
   plateSleeve.position.y = yUB; plateGroup.add(plateSleeve);
   const tubeM = mesh(keep(cyl(0.012, yTubeTop - (yFrame + 0.006), 24)), mats.arms);
   tubeM.position.y = yFrame + 0.006; plateGroup.add(tubeM);
-  const bridgeU = mesh(keep(new THREE.BoxGeometry(rO + 0.06, 0.01, 0.05)), mats.foot);
+  const bridgeU = mesh(keep(rbox(rO + 0.06, 0.01, 0.05)), mats.foot);
   bridgeU.position.set(rO / 2, yUB - 0.005, 0); stand.add(bridgeU);
-  const frame = mesh(keep(new THREE.CylinderGeometry(rO + 0.1, rO + 0.1, 0.024, 120)), mats.foot);
+  const frame = mesh(keep(cylC(rO + 0.1, 0.024, 120, rO + 0.1, 0.006)), mats.foot);
   frame.position.y = yFrame - 0.012; stand.add(frame);
   // colonnes qui portent le bâti
   for (let i = 0; i < 6; i++) { const a = (i / 6) * TAU + 0.26; atS(mesh(keep(cyl(0.016, yB - 0.03 - yFrame, 20)), mats.foot), (bIn + bOut) / 2 * Math.cos(a), (bIn + bOut) / 2 * Math.sin(a), yFrame); }
-  const box = mesh(keep(new THREE.CylinderGeometry(0.16, 0.19, 0.12, 64)), mats.foot);
+  const box = mesh(keep(cylC(0.19, 0.12, 64, 0.16, 0.012)), mats.foot);
   box.position.y = yFrame - 0.024 - 0.06; stand.add(box);
   const footTop = yFrame - 0.024 - 0.12;
   const foot = mesh(keep(cyl(0.11, footTop - yFloor - 0.04, 48, 0.07)), mats.foot);
   foot.position.y = yFloor + 0.04; stand.add(foot);
-  const base = mesh(keep(new THREE.CylinderGeometry(0.42, 0.46, 0.04, 96)), mats.foot);
+  const base = mesh(keep(cylC(0.46, 0.04, 96, 0.42, 0.008)), mats.foot);
   base.position.y = yFloor + 0.02; stand.add(base);
 
   // ── gravure du centre du plateau (à plat, sous la machine)

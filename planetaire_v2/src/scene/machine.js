@@ -19,7 +19,7 @@
 // rotation d'angle θ autour de +y est la rotation du plan.
 import * as THREE from 'three/webgpu';
 import { uniform, positionLocal, normalLocal, float, vec2, vec3, sin, atan, length, fract, smoothstep, mix, abs, floor, max, fwidth, mx_cell_noise_float, materialColor, materialRoughness, materialMetalness } from 'three/tsl';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { mergeGeometries, toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
 import { designMachine, SLAB } from '../mech/design.js';
 import { createDrive } from '../mech/drive.js';
 
@@ -114,6 +114,20 @@ export function materials() {
   // (les courbes tournent dans un sens ou dans l'autre : rubans visibles des deux côtés)
   m.groove = new THREE.MeshPhysicalNodeMaterial({ metalness: 0.6, roughness: 0.75, side: THREE.DoubleSide });
   m.lip = new THREE.MeshPhysicalNodeMaterial({ metalness: 1, roughness: 0.18, side: THREE.DoubleSide });
+  // portail : un tronçon d'axe qui s'ouvre depuis son milieu (ouverture et
+  // hauteur propres à chaque objet), bords embrasés d'or
+  {
+    const open = uniform(0).onObjectUpdate(({ object }) => object.userData.open || 0);
+    const hh = uniform(0.03).onObjectUpdate(({ object }) => object.userData.h || 0.03);
+    const d = abs(positionLocal.y.sub(hh.mul(0.5)));
+    const edge = open.mul(hh.mul(0.5).add(0.003));
+    const glow = smoothstep(edge.add(0.007), edge, d).mul(smoothstep(0, 0.08, open));
+    const pm = new THREE.MeshPhysicalNodeMaterial({ metalness: 1, roughness: 0.25, side: THREE.DoubleSide });
+    pm.maskNode = d.greaterThan(edge);
+    pm.maskShadowNode = d.greaterThan(edge);
+    pm.emissiveNode = vec3(1.0, 0.62, 0.28).mul(glow.mul(glow).mul(9));
+    m.portal = pm;
+  }
   m.bridge = m.arms;
   m.bezel = m.foot;
   workMetal(m.arms, 'cotes'); workMetal(m.arms2, 'cotes');
@@ -130,19 +144,69 @@ export function materials() {
     if (pl) { PF.rough.value = pl.rough; PF.color.value.setRGB(...pl.color); }
     if (pl) { m.groove.color.setRGB(...pl.color.map((c) => c * 0.22)); m.groove.metalness = pl.metal * 0.6; }
     const pn = table[matters.pins];
-    if (pn) { m.lip.color.setRGB(...pn.color); m.lip.metalness = pn.metal; }
+    if (pn) { m.lip.color.setRGB(...pn.color); m.lip.metalness = pn.metal; m.portal.color.setRGB(...pn.color); m.portal.metalness = pn.metal; m.portal.roughness = pn.rough; }
   };
   return m;
 }
 
 // ── Géométries ───────────────────────────────────────────────────────────────
 
-// pose une forme du plan (x, y) à plat : (x, 0, −y), épaisseur centrée sur 0
-export function flat(shape, thick, bevel = 0.25, curveSegments = 8) {
-  const g = new THREE.ExtrudeGeometry(shape, { depth: thick, bevelEnabled: bevel > 0, bevelThickness: thick * bevel * 0.5, bevelSize: thick * bevel * 0.5, bevelSegments: 1, curveSegments });
-  g.translate(0, 0, -thick / 2);
+// pose une forme du plan (x, y) à plat : (x, 0, −y), épaisseur centrée sur 0.
+// Arêtes adoucies : un arrondi en quart de cercle (trois facettes) aux normales
+// lissées, qui accroche la lumière sous tous les angles (un chanfrein unique, à
+// normales plates, ne brille que sous un seul) ; les angles vifs du contour
+// (dents, ajours) restent vifs (normales lissées sous 50° seulement).
+// bevel : taille de l'arrondi en fraction de l'épaisseur ; size : taille
+// imposée (en mètres), pour les pièces aux détails fins (dentures).
+const CREASE = (50 * Math.PI) / 180;
+export function flat(shape, thick, bevel = 0.25, curveSegments = 12, size = null) {
+  const b = size ?? thick * bevel * 0.5;
+  const g0 = new THREE.ExtrudeGeometry(shape, { depth: thick - (b > 0 ? 2 * b : 0), bevelEnabled: b > 0, bevelThickness: b, bevelSize: b, bevelOffset: -b, bevelSegments: 3, curveSegments });
+  g0.deleteAttribute('uv');
+  const g = b > 0 ? toCreasedNormals(g0, CREASE) : g0;
+  if (g !== g0) g0.dispose();
+  g.translate(0, 0, -thick / 2 + (b > 0 ? b : 0));
   g.rotateX(-Math.PI / 2);
   return g;
+}
+
+// solide de révolution autour de y, profil (r, y) en partant de l'axe, au
+// bas : chaque point porte sa normale (nr, ny). Normales lisses le long du profil.
+function revolve(prof, seg) {
+  const m = prof.length, pos = new Float32Array((seg + 1) * m * 3), nrm = new Float32Array((seg + 1) * m * 3), idx = [];
+  for (let s = 0; s <= seg; s++) {
+    const a = (s / seg) * TAU, c = Math.cos(a), sn = Math.sin(a);
+    for (let i = 0; i < m; i++) {
+      const [r, y, nr, ny] = prof[i], o = (s * m + i) * 3;
+      pos[o] = r * c; pos[o + 1] = y; pos[o + 2] = -r * sn;
+      nrm[o] = nr * c; nrm[o + 1] = ny; nrm[o + 2] = -nr * sn;
+    }
+  }
+  for (let s = 0; s < seg; s++) for (let i = 0; i < m - 1; i++) {
+    const a = s * m + i, b = (s + 1) * m + i;
+    idx.push(a, b, a + 1, b, b + 1, a + 1);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+  g.setIndex(idx);
+  return g;
+}
+
+// cylindre (ou tronc de cône : r en bas, r2 en haut) aux arêtes arrondies,
+// posé sur y = 0 ; l'arrondi est proportionné à la pièce
+function roundCyl(r, h, seg, r2 = r, fillet = null) {
+  const f = Math.max(0, Math.min(fillet ?? 0.2 * Math.min(r, r2), 0.42 * h, 0.45 * Math.min(r, r2)));
+  if (f < 1e-5) { const g = new THREE.CylinderGeometry(r2, r, h, seg); g.translate(0, h / 2, 0); return g; }
+  // normale du flanc (vers l'extérieur) ; centres des arrondis, tangents au fond et au flanc
+  const L = Math.hypot(h, r - r2), nsr = h / L, nsy = (r - r2) / L;
+  const xb = r - (f * (1 + nsy)) / nsr, xt = r2 - (f * (1 - nsy)) / nsr;
+  const aS = Math.atan2(nsy, nsr), prof = [[0, 0, 0, -1], [xb, 0, 0, -1]];
+  const K = 4;
+  for (let q = 1; q <= K; q++) { const a = -Math.PI / 2 + (q / K) * (aS + Math.PI / 2); prof.push([xb + f * Math.cos(a), f + f * Math.sin(a), Math.cos(a), Math.sin(a)]); }
+  for (let q = 0; q < K; q++) { const a = aS + (q / K) * (Math.PI / 2 - aS); prof.push([xt + f * Math.cos(a), h - f + f * Math.sin(a), Math.cos(a), Math.sin(a)]); }
+  prof.push([xt, h, 0, 1], [0, h, 0, 1]);
+  return revolve(prof, seg);
 }
 
 // roue dentée : dents trapézoïdales centrées sur les angles 2πi/z, alésage,
@@ -203,7 +267,8 @@ export function gearGeometry(z, r, { thick = GEAR_T, ring = 0, style = 'spokes5'
       shape.holes.push(h);
     }
   }
-  const g = flat(shape, thick, 0.3);
+  // (arrondi à l'échelle de la denture : il ne doit pas manger les dents)
+  const g = flat(shape, thick, 0.3, 12, Math.min(thick * 0.18, m * 0.22));
   gearCache.set(key, g);
   return g;
 }
@@ -221,7 +286,7 @@ function barGeometry(L, w, cw, style = 'plain') {
     s.absarc(-cw, 0, h * 1.35, Math.PI / 2, (3 * Math.PI) / 2, false);
     s.lineTo(L, -h * 0.55);
     if (L > 0.1) { const ho = new THREE.Path(); ho.absarc(L * 0.16, 0, h * 0.62, 0, TAU, true); s.holes.push(ho); }
-    return flat(s, BAR_T, 0.3);
+    return flat(s, BAR_T, 0.42);
   }
   s.absarc(L, 0, h, -Math.PI / 2, Math.PI / 2, false);
   s.absarc(-cw, 0, h * 1.25, Math.PI / 2, (3 * Math.PI) / 2, false);
@@ -233,12 +298,12 @@ function barGeometry(L, w, cw, style = 'plain') {
       t.moveTo(xa, -up * hh); t.lineTo(xb, -up * hh); t.lineTo((xa + xb) / 2, up * hh); t.closePath();
       s.holes.push(t);
     }
-    return flat(s, BAR_T, 0.3);
+    return flat(s, BAR_T, 0.42);
   }
   if (style === 'scroll' && L > 0.08) {
     const n = Math.max(1, Math.floor((L * 0.75) / (w * 1.1)));
     for (let i = 0; i < n; i++) { const ho = new THREE.Path(); ho.absarc(L * 0.14 + (i + 0.5) * ((L * 0.72) / n), 0, h * 0.5, 0, TAU, true); s.holes.push(ho); }
-    return flat(s, BAR_T, 0.3);
+    return flat(s, BAR_T, 0.42);
   }
   if (L > 0.14) {
     const a = L * 0.2, b = L * 0.8, hh = h * 0.42, hole = new THREE.Path();
@@ -247,11 +312,12 @@ function barGeometry(L, w, cw, style = 'plain') {
     hole.closePath();
     s.holes.push(hole);
   }
-  return flat(s, BAR_T, 0.3);
+  return flat(s, BAR_T, 0.42);
 }
 
-// cylindre posé sur y = 0
-export const cyl = (r, h, seg = 20, r2 = r) => { const g = new THREE.CylinderGeometry(r2, r, Math.max(h, 1e-4), seg); g.translate(0, Math.max(h, 1e-4) / 2, 0); return g; };
+// cylindre posé sur y = 0 (arêtes arrondies) ; cylC : centré sur y = 0
+export const cyl = (r, h, seg = 20, r2 = r, fillet = null) => roundCyl(r, Math.max(h, 1e-4), seg, r2, fillet);
+export const cylC = (r, h, seg = 20, r2 = r, fillet = null) => { const g = cyl(r, h, seg, r2, fillet); g.translate(0, -Math.max(h, 1e-4) / 2, 0); return g; };
 
 // ── Calage des dents ─────────────────────────────────────────────────────────
 // gears alignées sur +x (centres croissants), angles relatifs à t = 0 : la
@@ -311,7 +377,7 @@ function mergeStatic(roots, update, keep) {
   for (const parent of parents) {
     const buckets = new Map();
     for (const o of parent.children) {
-      if (!o.isMesh || o.isInstancedMesh || moved.has(o) || o.children.length || !o.visible || o.renderOrder) continue;
+      if (!o.isMesh || o.isInstancedMesh || moved.has(o) || o.children.length || !o.visible || o.renderOrder || o.userData.anim) continue;
       const k = `${o.material.id}:${o.castShadow}:${o.receiveShadow}`;
       if (!buckets.has(k)) buckets.set(k, []);
       buckets.get(k).push(o);
@@ -350,7 +416,7 @@ function instanceChains(chains, group, n) {
   // colonnes) n'ont alors pas la même hauteur. On n'instancie ensemble que les
   // chaînes dont les pièces sont exactement les mêmes.
   const sig = (c) => {
-    if (!c.isMesh || c.children.length) return null;
+    if (!c.isMesh || c.children.length || c.userData.anim) return null; // (portail : son ouverture est propre à chaque chaîne)
     const g = c.geometry;
     if (!g.boundingBox) g.computeBoundingBox();
     const b = g.boundingBox, r = (x) => Math.round(x * 1e5);
@@ -458,7 +524,7 @@ export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72, archet
     const Pq = new Float64Array(2 * n + 2);
     for (let s = 0; s < 720; s++) { D.pivots((TAU * s) / 720, Pq); bodyReach = Math.max(bodyReach, Math.hypot(Pq[2 * n], Pq[2 * n + 1])); }
   }
-  const plate = mesh(keep(new THREE.CylinderGeometry(plateR, plateR, 0.06, 180)), mats.plate);
+  const plate = mesh(keep(cylC(plateR, 0.06, 180, plateR, 0.008)), mats.plate);
   plate.position.y = yPlate - 0.03;
   group.add(plate);
   const rim = mesh(keep(new THREE.TorusGeometry(plateR - 0.02, 0.016, 12, 220)), mats.arms);
@@ -539,8 +605,45 @@ export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72, archet
       const globe = mesh(keep(new THREE.SphereGeometry(ra * 0.3, 24, 12)), mats.arms2); armillary.add(globe);
       armillary.position.y = yPlate + CLEAR + D.height + 0.04;
       group.add(armillary);
-      group.add(Object.assign(mesh(keep(cyl(0.004, armillary.position.y - yPlate)), mats.pins), { position: new THREE.Vector3(0, yPlate, 0) }));
+      const rod = mesh(keep(cyl(0.004, armillary.position.y - yPlate)), mats.pins);
+      rod.position.y = yPlate; group.add(rod);
     }
+  }
+
+  // ── les passages (portails). Là où une dalle d'une autre chaîne traverse
+  // forcément un axe vertical (mech/design.js, portals), l'axe s'ouvre à la
+  // hauteur de cette dalle le temps qu'elle passe : le tronçon s'efface depuis
+  // son milieu, ses bords s'embrasent d'or, puis il se referme. gapsOf(j, p) :
+  // tronçons (hauteurs du monde) de l'axe p de la chaîne j, avec leurs fenêtres.
+  const gapsOf = (j, p) => {
+    const lvY = (l) => yPlate + CLEAR + l * SLAB;
+    const list = (D.portals?.[j]?.[p] || []).map(({ l0, l1, win }) => (
+      // (de sous le contrepoids, qui descend sous le bras, au-dessus du train)
+      { y0: lvY(l0) - 0.011, y1: lvY(l1) + BAR_T + GAP + GEAR_T + 0.004, win: win.slice() }
+    )).sort((a, b) => a.y0 - b.y0);
+    const out = [];
+    for (const q of list) {
+      const last = out[out.length - 1];
+      if (last && q.y0 <= last.y1) { last.y1 = Math.max(last.y1, q.y1); last.win.push(...q.win); } else out.push(q);
+    }
+    return out;
+  };
+  const portalsList = [];
+  // axe de rayon r, en x le long du bras, de yA à yB (repère du groupe g, dont
+  // l'origine est à la hauteur oy) : tronçons fixes et tronçons qui s'ouvrent
+  function shaft(g, oy, r, x, yA, yB, gaps, mat) {
+    const cuts = gaps.map((q) => [Math.max(q.y0 - oy, yA), Math.min(q.y1 - oy, yB), q.win]).filter((c) => c[1] - c[0] > 1e-4);
+    let y = yA;
+    const piece = (a, b, m) => { const o = mesh(keep(cyl(r, b - a, 16)), m); o.position.set(x, a, 0); g.add(o); return o; };
+    for (const [a, b, win] of cuts) {
+      if (a > y + 1e-4) piece(y, a, mat);
+      const o = piece(Math.max(a, y), b, mats.portal);
+      o.userData.anim = true; o.userData.open = 0; o.userData.h = b - Math.max(a, y); o.userData.win = win;
+      o.castShadow = true;
+      portalsList.push(o);
+      y = Math.max(y, b);
+    }
+    if (yB > y + 1e-4) piece(y, yB, mat);
   }
 
   // ── les chaînes
@@ -554,13 +657,16 @@ export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72, archet
       const oy = yBar(i, j); // origine du groupe : milieu du bras
       g.position.y = oy;
       g.add(mesh(barGeos[i], i % 2 ? mats.arms2 : mats.arms));
+      // quincaillerie du rang (réduite d'un facteur σ dans la tête de la chaîne,
+      // pour qu'elle tienne autour de son astre : voir mech/design.js)
+      const sc = D.hw ? D.hw[i] : 1;
       // contrepoids
-      const cwR = Math.max(0.006, D.barW[i] * 0.95);
+      const cwR = D.cwR ? D.cwR[i] : Math.max(0.006, D.barW[i] * 0.95);
       const cwm = mesh(keep(cyl(cwR, BAR_T * 2.4, 24)), mats.arms);
       cwm.position.set(-D.cw[i], -BAR_T * 1.2, 0);
       g.add(cwm);
       // moyeu, rubis, vis
-      const hubR = Math.max(0.009, D.barW[i] * 0.5);
+      const hubR = D.hubR ? D.hubR[i] : Math.max(0.009, D.barW[i] * 0.5);
       const hub = mesh(keep(cyl(hubR, BAR_T * 1.6, 20)), mats.pins);
       hub.position.y = -BAR_T * 0.8;
       g.add(hub);
@@ -594,7 +700,7 @@ export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72, archet
         tr.gears.forEach((gear, gi) => {
           if (gear.role !== 'I') return;
           const yg = yGear(i, j) - oy;
-          const stud = mesh(keep(cyl(STUD_R, yg + GEAR_T / 2 + 0.0015 - top)), mats.pins);
+          const stud = mesh(keep(cyl(STUD_R * sc, yg + GEAR_T / 2 + 0.0015 - top)), mats.pins);
           stud.position.set(gear.x, top, 0);
           g.add(stud);
           const gm = mesh(gearGeometry(gear.z, gear.r, GS), mats.gears);
@@ -610,9 +716,7 @@ export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72, archet
       if (i < n - 1) {
         const trNext = D.trains[i + 2];
         const yHigh = (trNext ? yGear(i + 1, j) + GEAR_T / 2 : yBar(i + 1, j) + BAR_T / 2) + 0.003 - oy;
-        const axle = mesh(keep(cyl(STUD_R * 1.3, yHigh - top)), mats.pins);
-        axle.position.set(L[i], top, 0);
-        g.add(axle);
+        shaft(g, oy, STUD_R * 1.3 * sc, L[i], top, yHigh, gapsOf(j, i + 1), mats.pins);
         if (trNext) {
           const A = mesh(gearGeometry(trNext.gears[0].z, trNext.gears[0].r, AR.belts ? { style: 'pulley' } : GS), mats.gears);
           A.position.set(L[i], yGear(i + 1, j) - oy, 0);
@@ -620,9 +724,7 @@ export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72, archet
           ch.tipA.push({ A, i });
         }
       } else {
-        const pin = mesh(keep(cyl(0.007, yBody - 0.03 - (oy + top))), mats.pins);
-        pin.position.set(L[i], top, 0);
-        g.add(pin);
+        shaft(g, oy, 0.007 * sc, L[i], top, yBody - 0.03 - oy, gapsOf(j, n), mats.pins);
         const cup = mesh(keep(new THREE.CylinderGeometry(0.02, 0.009, 0.016, 20)), mats.pins);
         cup.position.set(L[i], yBody - 0.024 - oy, 0);
         g.add(cup);
@@ -651,9 +753,7 @@ export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72, archet
         g.add(B);
         const canonH = bottom - (yB + GEAR_T / 2);
         if (canonH > 0) {
-          const canon = mesh(keep(cyl(Math.max(STUD_R * 2.2, hubR * 0.8), canonH + 0.0005, 16)), mats.arms);
-          canon.position.y = yB + GEAR_T / 2;
-          g.add(canon);
+          shaft(g, oy, D.canonR ? D.canonR[i] : Math.max(STUD_R * 2.2, hubR * 0.8), 0, yB + GEAR_T / 2, bottom + 0.0005, gapsOf(j, i), mats.arms);
         }
         g.userData.B = B;
       }
@@ -686,6 +786,16 @@ export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72, archet
     if (sun) sun.rotation.y = phi[0];
     drive.update(tau);
     if (armillary) armillary.rotation.y = tau * 0.2;
+    // portails : ouverts pendant les fenêtres, avec une rampe avant et après
+    if (portalsList.length) {
+      const x = ((tau % TAU) + TAU) % TAU, R = 0.035 * TAU;
+      const ss = (a, b, v) => { const u = Math.min(1, Math.max(0, (v - a) / (b - a))); return u * u * (3 - 2 * u); };
+      for (const o of portalsList) {
+        let op = 0;
+        for (const [a, b] of o.userData.win) for (const v of [x, x + TAU, x - TAU]) op = Math.max(op, ss(a - R, a, v) * (1 - ss(b, b + R, v)));
+        o.userData.open = op;
+      }
+    }
   }
 
   // ── pièces fixes fusionnées : chaque bras, le plateau et le bâti portent des
