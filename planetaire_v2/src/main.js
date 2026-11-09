@@ -234,9 +234,10 @@ async function main() {
       bell.renderOrder = 10;
       rig.add(bell);
     }
-    // le verre est coulé dans le sillon de l'orbite ; les astres glissent juste au-dessus
-    S.visual.group.position.y = S.machine.yTrail;
-    S.bodyY = S.machine.yBody - S.machine.yTrail;
+    // les astres au sommet ; le verre filé à leur hauteur, la gravure à fleur du plateau
+    const yTrace = R.trace.kind === 'gravure' ? S.machine.yPlate + 0.0015 : S.machine.yBody;
+    S.visual.group.position.y = yTrace;
+    S.bodyY = S.machine.yBody - yTrace;
     key.target.position.set(0, S.flip * S.machine.yPlate, 0);
     // monture suspendue : la lampe éclaire la machine de côté, par en dessous du plateau
     key.position.set(-2.4, S.flip < 0 ? -0.1 : 3.6, 1.7);

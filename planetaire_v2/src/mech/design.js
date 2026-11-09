@@ -18,9 +18,9 @@
 // A – renvois – B tombe exactement sur la longueur du bras :
 //     m · (z_A + z_B + 2 Σ z_renvois) / 2 = |c_{i−1}|.
 //
-// ── Les étages. La machine est suspendue : l'étoile des bras 0 en haut du
-// poteau central, chaque bras un étage plus bas que celui qui le porte, les
-// astres en bas, juste au-dessus du plateau. Chaque pivot repose sur une
+// ── Les étages. L'étoile des bras 0 juste au-dessus du plateau, chaque bras
+// un étage plus haut que celui qui le porte, les astres au sommet, au-dessus
+// de toutes les roues. Chaque pivot repose sur une
 // colonne qui descend jusqu'au plateau, où son patin glisse dans un sillon
 // (la courbe que ce pivot décrit). Chaque bras et le train qu'il porte forment
 // une « dalle ». Deux dalles de même rang qui se croisent doivent être à des
@@ -161,56 +161,63 @@ function designOrder(arms, N, samples) {
       }
     }
   }
-  // ── galets porteurs. Chaque bras a repose sur une colonne qui descend
-  // jusqu'au plateau, où son patin glisse dans un sillon. La colonne est fixée
-  // sous le bras, à la fraction u de sa longueur (u = 1 : sous le pivot
-  // suivant ; pour le dernier bras, c'est la colonne de l'astre). Elle traverse
-  // tous les étages plus bas : on cherche une position u telle qu'aucune dalle
-  // plus basse (de n'importe quelle chaîne) ne passe jamais dessus.
-  // positions candidates : sous le pivot, puis de plus en plus près du pied,
-  // enfin au bout du contrepoids (u < 0)
+  // ── galets porteurs. La pile monte depuis le plateau : l'étoile des bras 0
+  // juste au-dessus de lui, chaque bras un étage plus haut que celui qui le
+  // porte, les astres au sommet. Un bras peut reposer sur une colonne qui
+  // descend de son dessous jusqu'au plateau, où son patin glisse dans un
+  // sillon ; fixée à la fraction u de sa longueur (u = 1 : sous le pivot
+  // suivant, dont elle prolonge l'axe ; u < 0 : sous le contrepoids). Elle
+  // traverse les étages plus bas : on cherche une position telle qu'aucune
+  // dalle plus basse (de n'importe quelle chaîne) ne passe jamais dessus.
   const U = [1, 0.95, 0.9, 0.85, 0.8, 0.75, 0.7, 0.65, 0.6, 0.55, 0.5, 0.45, 0.4, 0.35, 0.3, 0.25];
   const supports = [];
   const colAt = (s, j, a, u) => {
     const P = piv[s][j];
     return [P[2 * a] + u * (P[2 * a + 2] - P[2 * a]), P[2 * a + 1] + u * (P[2 * a + 3] - P[2 * a + 1])];
   };
+  const hits = (s, x, y, j2, i2) => pointSeg(x, y, seg[s][j2][i2]) < halfW[i2] + COL_R + MARGIN;
   for (let a = 0; a < n; a++) {
+    // l'étoile (rang 0) ne croise jamais rien : deux galets par bras, sous le
+    // pivot et à mi-longueur (deux sillons circulaires)
+    if (a === 0) { supports.push(L[0] > 0.25 ? [1, 0.55] : [1]); continue; }
     let found = null;
-    for (const u of (a === n - 1 ? [1] : [...U, -cw[a] / (L[a] || 1)])) {
+    for (const u of [...U, -cw[a] / (L[a] || 1)]) {
       let ok = true;
       for (let s = 0; s < samples && ok; s++) {
         for (let j = 0; j < N && ok; j++) {
           const [cx, cy] = colAt(s, j, a, u);
           for (let j2 = 0; j2 < N && ok; j2++) {
-            for (let i2 = a; i2 < n && ok; i2++) {
-              if (i2 === a && j2 === j) continue;                  // son propre bras
-              if (j2 === j && i2 === a + 1 && u === 1) continue;    // le bras qu'il porte (coaxial)
-              if (i2 === a && j2 !== j) continue;                   // même rang : réglé par les étages
-              if (pointSeg(cx, cy, seg[s][j2][i2]) < halfW[i2] + COL_R + MARGIN) ok = false;
-            }
+            for (let i2 = 0; i2 < a && ok; i2++) if (hits(s, cx, cy, j2, i2)) ok = false;
           }
         }
       }
       if (ok) { found = u; break; }
     }
-    supports.push(found);
+    supports.push(found === null ? null : [found]);
   }
-  // au même rang, une colonne ne doit pas croiser une dalle plus basse : contrainte
-  // d'ordre entre étages ; si elle est impossible (cycle), la colonne est retirée
+
+  // ── étages (rang 0 en bas). Au rang i, deux contraintes d'ordre :
+  //   - une colonne qui descend de la dalle (i, j) et croise la dalle (i, j2)
+  //     exige que (i, j2) soit plus haute ;
+  //   - au dernier rang, la goupille qui monte de (i, j) jusqu'à l'astre et
+  //     croise (i, j2) exige que (i, j2) soit plus basse.
+  // Un cycle venant d'une colonne la fait retirer ; sinon c'est une collision.
   const level = Array.from({ length: n }, () => new Array(N).fill(0));
   const S = new Array(n).fill(1);
   let collisions = 0;
   for (let i = 1; i < n; i++) {
     for (let attempt = 0; attempt < 2; attempt++) {
-      const before = Array.from({ length: N }, () => new Set());
-      if (supports[i] !== null) {
-        for (let j = 0; j < N; j++) {
-          for (let j2 = 0; j2 < N; j2++) {
-            if (j2 === j) continue;
+      const before = Array.from({ length: N }, () => new Set()); // before[j] ∋ j2 : j2 plus bas que j
+      for (let j = 0; j < N; j++) {
+        for (let j2 = 0; j2 < N; j2++) {
+          if (j2 === j) continue;
+          for (let s = 0; s < samples; s++) {
+            if (i === n - 1 && hits(s, piv[s][j][2 * n], piv[s][j][2 * n + 1], j2, i)) { before[j].add(j2); break; }
+          }
+          if (supports[i] !== null) {
             for (let s = 0; s < samples; s++) {
-              const [cx, cy] = colAt(s, j, i, supports[i]);
-              if (pointSeg(cx, cy, seg[s][j2][i]) < halfW[i] + COL_R + MARGIN) { before[j].add(j2); break; }
+              const [cx, cy] = colAt(s, j, i, supports[i][0]);
+              if (hits(s, cx, cy, j2, i)) { before[j2].add(j); break; }
             }
           }
         }
@@ -225,10 +232,8 @@ function designOrder(arms, N, samples) {
         seen[j] = 2; order.push(j);
       };
       for (let j = 0; j < N; j++) visit(j);
-      if (cycle) {
-        if (i === n - 1) { collisions++; } // (la colonne de l'astre ne peut pas être retirée)
-        else { supports[i] = null; continue; }
-      }
+      if (cycle && supports[i] !== null && attempt === 0) { supports[i] = null; continue; }
+      if (cycle) collisions++;
       for (const j of order) {
         let lv = 0;
         for (const j2 of before[j]) if (order.indexOf(j2) < order.indexOf(j)) lv = Math.max(lv, level[i][j2] + 1);
