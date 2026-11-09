@@ -58,7 +58,9 @@ Une scène, c'est un monde (chaque astre en contient une copie exacte) et le ryt
 **Le mouvement** (`mech/drive.js`). Ce qui fait tourner la machine est posé sur un bâti fixe autour du plateau, et chaque pièce sert. Un arbre de sortie engrène, par un petit pignon, la **denture taillée au bord du plateau** (le plateau tourne à ω) et, par-dessous, la roue du tube central (l'étoile des bras 0, à ω + k₀) ; ses vitesses découlent de celle du plateau par des rapports de dents exacts.
 - *Horlogerie, classique, astrolabe* : le **barillet** (l'énergie, avec rochet, cliquet et clé de remontoir) mène l'arbre par un rouage ; de l'autre côté, un pignon de l'arbre, une roue de champ et son pignon (démultiplication composée) mènent la **roue d'échappement** ; l'ancre et le **balancier spiral** règlent la marche (le balancier bat au rythme des dents, environ 2 Hz) ; des **cadrans émaillés** sont menés par des roues du rouage ; roues sous des ponts vissés sur rubis, posés sur des piliers. Classique : anneau zodiacal sur le bâti, parcouru par un index fixé au plateau.
 - *Atelier* : une **machine à vapeur** (cylindre, piston, crosse, bielle, manivelle) fait tourner un **volant**, qui mène l'arbre par une **courroie** ; une courroie croisée entraîne le **régulateur à boules** ; un compteur est mené par un pignon du volant.
+- *Satellites.* Tout autour du bâti, des pignons engrènent la couronne dentée et mènent chacun un petit mécanisme : cadran des tours, phase de lune (deux lunes d'or sous un guichet), réserve de marche, ou, en atelier, poulie, courroie et volant. La couronne est la roue de distribution de toute la machine ; quand le plateau est fixe (ω = 0), elle est montée sur le bâti et tourne seule, menée par l'arbre.
 - Chaque roue est calée sur celle qui la mène (arbre cinématique) : rien ne tourne pour rien, rien ne glisse.
+- *Proportions.* Le plateau est ajusté au plus près de ce que balaient les chaînes et le bâti est étroit, pour que la machinerie soit rassemblée ; les pièces ont des épaisseurs d'horlogerie de grand volume (bras de 12 mm, roues de 9, plateau de 6 cm, tenons et colonnes doublés), les roues des trains peuvent atteindre la moitié de la longueur du bras.
 
 **Le verre filé** (`orbit3d.js`). Un seul tube, fixe sur le plateau, suit toute la courbe. Au point d'abscisse s, le dernier passage d'un astre date de fract(N·(φ − s)) / N période : la chaleur se calcule dans le shader à partir de la seule phase φ. Le verre rougeoie derrière l'astre, refroidit (couleur de corps noir, puis fil de verre sombre et brillant), et l'astre suivant arrive pour le ranimer. Le verre encore mou est un peu plus épais.
 
@@ -68,7 +70,7 @@ Une scène, c'est un monde (chaque astre en contient une copie exacte) et le ryt
 
 **L'écran de génération** (`app/loader.js`). Pas de barre de progression : on regarde la recherche, les courbes des essais en cours qui se tortillent puis se posent sur une solution. Une graine sans orbite passe la main à une autre.
 
-**Cadence.** ~100 images/s en 1280 × 760 (Mac, Chrome) avec trois exemplaires du monde rendus à la fois.
+**Cadence.** 70 à 100 images/s en 1280 × 760 (Mac, Chrome) selon l'archétype, avec trois exemplaires du monde rendus à la fois.
 
 ## Version mobile (`src/app/mobile.js`)
 

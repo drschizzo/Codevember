@@ -33,10 +33,10 @@
 const TAU = Math.PI * 2;
 const gcd = (a, b) => (b ? gcd(b, a % b) : Math.abs(a));
 
-export const SLAB = 0.016;     // épaisseur d'une dalle (bras + train)
+export const SLAB = 0.034;     // épaisseur d'une dalle (bras + train)
 export const MIN_TEETH = 10;
-const MARGIN = 0.008;           // jeu entre pièces mobiles
-const COL_R = 0.004;
+const MARGIN = 0.012;           // jeu entre pièces mobiles
+const COL_R = 0.008;
 
 // fraction irréductible approchant un rapport (les k sont entiers : exact)
 function frac(num, den) {
@@ -62,7 +62,7 @@ export function designTrain(L, p, q) {
     zI = Math.max(MIN_TEETH, Math.round(Math.min(zA, zB) * 0.8));
     m = (2 * L) / (zA + zB + 2 * n * zI);
     const rmax = (m * Math.max(zA, zB, n ? zI : 0)) / 2;
-    if (rmax <= L / 3 || n >= 7) break;
+    if (rmax <= L / 2.2 || n >= 7) break;
   }
   const gears = [{ role: 'A', z: zA, x: 0 }];
   let x = (m * zA) / 2;
@@ -90,7 +90,7 @@ function designOrder(arms, N, samples) {
   }
 
   // ── largeur utile de chaque dalle (bras, contrepoids, roues)
-  const barW = L.map((l) => Math.min(0.02, Math.max(0.006, 0.012 + 0.012 * l)));
+  const barW = L.map((l) => Math.min(0.045, Math.max(0.014, 0.016 + 0.03 * l)));
   const halfW = L.map((l, i) => {
     const tr = trains[i + 1];
     return Math.max(barW[i] / 2, tr ? Math.max(...tr.gears.map((g) => g.r)) : 0) + 0.006;

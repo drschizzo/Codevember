@@ -23,8 +23,8 @@ import { designMachine, SLAB } from '../mech/design.js';
 import { createDrive } from '../mech/drive.js';
 
 const TAU = Math.PI * 2;
-const BAR_T = 0.005, GEAR_T = 0.0035, GEAR_DY = 0.008; // épaisseurs ; hauteur du train au-dessus du bras
-const STUD_R = 0.0028;
+const BAR_T = 0.012, GEAR_T = 0.009, GEAR_DY = 0.016; // épaisseurs ; hauteur du train au-dessus du bras
+const STUD_R = 0.0055;
 
 // matières par rôle, réglées à vif depuis la recette
 export const ROLES = ['plate', 'arms', 'arms2', 'gears', 'pins', 'foot'];
@@ -251,9 +251,9 @@ export function ribbonGeometry(pts, w, h) {
 // (mech/design.js choisit où la poser pour qu'aucune pièce ne la croise).
 
 export const Y_PLATE = -0.34;
-const CLEAR = 0.035;      // du plateau au dessous de la pile (hauteur des galets de l'étoile)
+const CLEAR = 0.05;      // du plateau au dessous de la pile (hauteur des galets de l'étoile)
 const BODY_CLEAR = 0.07;  // du sommet de la pile au plan des astres
-const GAP = 0.003;        // jeu entre un bras et le train qu'il porte
+const GAP = 0.004;        // jeu entre un bras et le train qu'il porte
 
 // archétypes : style des roues, des bras, transmission (courroies : atelier)
 export const ARCHETYPES = {
@@ -287,11 +287,11 @@ export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72, archet
   for (const l of L) reach += l;
   // le plateau : un peu plus que ce que balaient les chaînes ; le mouvement est
   // sur un bâti fixe autour de lui (mech/drive.js)
-  const plateR = Math.max(1.3, reach + 0.22);
-  const plate = mesh(keep(new THREE.CylinderGeometry(plateR, plateR, 0.035, 180)), mats.plate);
-  plate.position.y = yPlate - 0.0175;
+  const plateR = Math.max(1.15, reach + 0.12);
+  const plate = mesh(keep(new THREE.CylinderGeometry(plateR, plateR, 0.06, 180)), mats.plate);
+  plate.position.y = yPlate - 0.03;
   group.add(plate);
-  const rim = mesh(keep(new THREE.TorusGeometry(plateR, 0.012, 12, 220)), mats.arms);
+  const rim = mesh(keep(new THREE.TorusGeometry(plateR - 0.02, 0.016, 12, 220)), mats.arms);
   rim.rotation.x = Math.PI / 2; rim.position.y = yPlate;
   group.add(rim);
   {
@@ -320,7 +320,7 @@ export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72, archet
       pts[2 * s + 1] = P[2 * a + 1] + u * (P[2 * a + 3] - P[2 * a + 1]);
     }
     grooveCurves.push({ a, pts });
-    const floor = mesh(keep(ribbonGeometry(pts, 0.016, yGroove)), mats.groove, false);
+    const floor = mesh(keep(ribbonGeometry(pts, 0.032, yGroove)), mats.groove, false);
     group.add(floor);
     for (const sd of [-1, 1]) {
       // lèvres du sillon (chanfrein qui accroche la lumière)
@@ -329,10 +329,10 @@ export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72, archet
         const a2 = (s + m - 1) % m, b2 = (s + 1) % m;
         let tx = pts[2 * b2] - pts[2 * a2], ty = pts[2 * b2 + 1] - pts[2 * a2 + 1];
         const l = Math.hypot(tx, ty) || 1;
-        lipPts[2 * s] = pts[2 * s] - (ty / l) * sd * 0.0088;
-        lipPts[2 * s + 1] = pts[2 * s + 1] + (tx / l) * sd * 0.0088;
+        lipPts[2 * s] = pts[2 * s] - (ty / l) * sd * 0.017;
+        lipPts[2 * s + 1] = pts[2 * s + 1] + (tx / l) * sd * 0.017;
       }
-      group.add(mesh(keep(ribbonGeometry(lipPts, 0.0018, yPlate + 0.0007)), mats.lip, false));
+      group.add(mesh(keep(ribbonGeometry(lipPts, 0.003, yPlate + 0.0007)), mats.lip, false));
     }
   }));
 
@@ -340,7 +340,7 @@ export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72, archet
   // l'étoile), tube tournant autour de lui (porte l'étoile)
   const train0 = D.trains[1];
   const ySun = yGear(0, 0);
-  const post = mesh(keep(cyl(0.0055, ySun + GEAR_T / 2 + 0.006 - yPlate)), mats.pins);
+  const post = mesh(keep(cyl(0.011, ySun + GEAR_T / 2 + 0.01 - yPlate)), mats.pins);
   post.position.y = yPlate; group.add(post);
   let sun = null;
   if (train0) {
@@ -348,10 +348,10 @@ export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72, archet
     sun.position.y = ySun;
     group.add(sun);
   }
-  const starHub = mesh(keep(cyl(0.022, BAR_T * 1.8, 32)), mats.arms);
+  const starHub = mesh(keep(cyl(0.045, BAR_T * 1.8, 32)), mats.arms);
   starHub.position.y = yBar(0, 0) - BAR_T * 0.9;
   group.add(starHub);
-  const finial = mesh(keep(new THREE.SphereGeometry(0.009, 20, 12)), mats.pins);
+  const finial = mesh(keep(new THREE.SphereGeometry(0.018, 20, 12)), mats.pins);
   finial.position.y = ySun + GEAR_T / 2 + 0.01;
   group.add(finial);
 
@@ -390,7 +390,7 @@ export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72, archet
       cwm.position.set(-D.cw[i], -BAR_T * 1.2, 0);
       g.add(cwm);
       // moyeu, rubis, vis
-      const hubR = Math.max(0.0045, D.barW[i] * 0.42);
+      const hubR = Math.max(0.009, D.barW[i] * 0.5);
       const hub = mesh(keep(cyl(hubR, BAR_T * 1.6, 20)), mats.pins);
       hub.position.y = -BAR_T * 0.8;
       g.add(hub);
@@ -450,23 +450,23 @@ export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72, archet
           ch.tipA.push({ A, i });
         }
       } else {
-        const pin = mesh(keep(cyl(0.0032, yBody - 0.03 - (oy + top))), mats.pins);
+        const pin = mesh(keep(cyl(0.007, yBody - 0.03 - (oy + top))), mats.pins);
         pin.position.set(L[i], top, 0);
         g.add(pin);
-        const cup = mesh(keep(new THREE.CylinderGeometry(0.014, 0.005, 0.012, 20)), mats.pins);
+        const cup = mesh(keep(new THREE.CylinderGeometry(0.02, 0.009, 0.016, 20)), mats.pins);
         cup.position.set(L[i], yBody - 0.024 - oy, 0);
         g.add(cup);
       }
       // galets : colonnes du dessous du bras jusqu'aux sillons, patins
       for (const u of D.supports[i] || []) {
         const x = u * L[i], yFoot = yPlate + 0.006 - oy;
-        const col = mesh(keep(cyl(0.0034, bottom - yFoot)), mats.pins);
+        const col = mesh(keep(cyl(0.008, bottom - yFoot)), mats.pins);
         col.position.set(x, yFoot, 0);
         g.add(col);
-        const shoe = mesh(keep(cyl(0.0065, 0.006, 20, 0.0045)), mats.foot);
+        const shoe = mesh(keep(cyl(0.014, 0.01, 20, 0.009)), mats.foot);
         shoe.position.set(x, yPlate + 0.0004 - oy, 0);
         g.add(shoe);
-        const collar = mesh(keep(cyl(0.006, 0.004, 20)), mats.pins);
+        const collar = mesh(keep(cyl(0.013, 0.008, 20)), mats.pins);
         collar.position.set(x, bottom - 0.004, 0);
         g.add(collar);
       }
