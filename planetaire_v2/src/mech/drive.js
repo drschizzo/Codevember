@@ -47,22 +47,25 @@ export function createDrive({ archetype, plateR, yPlate, yFloor, k0, omegaFrac, 
   const OmP = pw / qw, OmT = pw / qw + k0;
 
   // ── denture du plateau (une couronne taillée au bord) ; module ~0,011
-  const zR = Math.round((2 * plateR) / 0.011);
-  const rimGear = mesh(gearGeometry(zR, plateR, { thick: 0.03, ring: 0.03, style: 'solid' }), mats.gears);
-  atP(rimGear, 0, 0, yPlate - 0.0175);
+  const zR = Math.round((2 * plateR) / 0.016);
+  const rimGear = mesh(gearGeometry(zR, plateR, { thick: 0.05, ring: 0.045, style: 'solid' }), mats.gears);
+  if (OmP !== 0) atP(rimGear, 0, 0, yPlate - 0.03); else atS(rimGear, 0, 0, yPlate - 0.03);
 
   // ── arbre de sortie : vitesse Ω_D, pignon p1 (denture du plateau), pignon p2 (roue du tube)
+  // la couronne dentée : vissée au plateau s'il tourne ; sinon, montée sur le
+  // bâti et menée seule par l'arbre (elle distribue le mouvement aux satellites)
+  const OmRing = OmP !== 0 ? OmP : 0.6;
   let zP1 = 0, OmD;
-  if (OmP !== 0) {
+  {
     // un vrai pignon (12 à 40 dents) : l'arbre tourne vite, la denture du plateau démultiplie
-    zP1 = Math.max(12, Math.min(40, Math.round((zR * Math.abs(OmP)) / 8)));
-    OmD = -OmP * (zR / zP1);
-  } else OmD = -OmT * 4;
+    zP1 = Math.max(12, Math.min(40, Math.round((zR * Math.abs(OmRing)) / 8)));
+    OmD = -OmRing * (zR / zP1);
+  }
   const rP1 = zP1 ? (plateR * zP1) / zR : 0;
   const rO = plateR + (zP1 ? rP1 : 0.05);
   const ARB = { x: rO, y: 0, z: 1 };
   // roue du tube : rapport |Ω_D / Ω_T| en dents ; renvoi si les sens l'exigent
-  const yRim = yPlate - 0.0175, yUB = yPlate - 0.07, yT = yUB - 0.03, yFrame = yT - 0.05;
+  const yRim = yPlate - 0.03, yUB = yPlate - 0.09, yT = yUB - 0.03, yFrame = yT - 0.05;
   let tube = null;
   if (OmT !== 0) {
     let a = Math.abs(Math.round(OmD * qw * 1000)), b = Math.abs(Math.round(OmT * qw * 1000));
@@ -76,11 +79,11 @@ export function createDrive({ archetype, plateR, yPlate, yFloor, k0, omegaFrac, 
   }
 
   // ── bâti : couronne fixe autour du plateau, gravée
-  const bIn = plateR + 0.016, bOut = plateR + 0.62, yB = yPlate - 0.04;
+  const bIn = plateR + 0.022, bOut = plateR + 0.46, yB = yPlate - 0.065;
   {
     const s = new THREE.Shape(); s.absarc(0, 0, bOut, 0, TAU, false);
     const h = new THREE.Path(); h.absarc(0, 0, bIn, 0, TAU, true); s.holes.push(h);
-    atS(mesh(keep(flat(s, 0.03, 0.15, 160)), mats.bezel), 0, 0, yB - 0.015);
+    atS(mesh(keep(flat(s, 0.05, 0.15, 160)), mats.bezel), 0, 0, yB - 0.025);
     // graduation du bord (et, selon l'archétype, zodiaque ou heures)
     const nT = archetype === 'astrolabe' ? 96 : 120, tick = keep(new THREE.BoxGeometry(0.04, 0.0012, 0.004));
     const ticks = new THREE.InstancedMesh(tick, mats.ink, nT);
@@ -109,26 +112,30 @@ export function createDrive({ archetype, plateR, yPlate, yFloor, k0, omegaFrac, 
   }
 
   // ── pièces de l'arbre de sortie
-  const yL1 = yPlate + 0.012, yL2 = yPlate + 0.026; // niveaux du rouage (au-dessus du plateau)
-  atS(mesh(keep(cyl(0.007, yL2 + 0.01 - yFrame, 16)), mats.pins), rO, 0, yFrame);
+  const yL1 = yPlate + 0.018, yL2 = yPlate + 0.05; // niveaux du rouage (au-dessus du plateau)
+  atS(mesh(keep(cyl(0.012, yL2 + 0.025 - yFrame, 16)), mats.pins), rO, 0, yFrame);
   const nodes = [];
   const add = (n) => (nodes.push(n), nodes.length - 1);
   const iArb = add({ ...ARB, drive: (tau) => OmD * tau });
   const meshes = []; // [nodeIndex, mesh]
   const wheel = (i, h, opts = {}) => {
-    const n = nodes[i], m = mesh(gearGeometry(n.z, n.r, { thick: opts.thick ?? 0.005, style: opts.style ?? styleGear }), opts.mat ?? mats.gears);
+    const n = nodes[i], m = mesh(gearGeometry(n.z, n.r, { thick: opts.thick ?? 0.012, style: opts.style ?? styleGear }), opts.mat ?? mats.gears);
     atS(m, n.x, n.y, h); meshes.push([i, m]);
-    if (!opts.noStud) atS(mesh(keep(cyl(0.004, h - yB)), mats.pins), n.x, n.y, yB);
+    if (!opts.noStud) atS(mesh(keep(cyl(0.008, h - yB)), mats.pins), n.x, n.y, yB);
     return m;
   };
   if (zP1) {
     const i = add({ x: rO, y: 0, z: zP1, r: rP1, coax: iArb });
-    wheel(i, yRim, { thick: 0.028, style: 'solid', noStud: true });
+    wheel(i, yRim, { thick: 0.048, style: 'solid', noStud: true });
     // (la denture du plateau : son angle est celui du plateau, calé pour engrener ce pignon)
     const pp = TAU / zP1, pr = TAU / zR;
     const fP = ((((Math.PI - 0) / pp) % 1) + 1) % 1; // pignon à t = 0 : contact vers le centre (angle π)
     rimGear.rotation.y = -(((0.5 - fP) % 1 + 1) % 1) * pr;
   }
+  const rimOff = rimGear.rotation.y;
+  if (OmP === 0) anim.push((tau) => { rimGear.rotation.y = OmRing * tau + rimOff; });
+  // la couronne dans l'arbre cinématique (angle dans le studio)
+  const iRim = add({ x: 0, y: 0, z: zR, r: plateR, drive: (tau) => OmRing * tau, off: rimOff });
   if (tube) {
     // sous le plateau : roue du tube (dans le repère du plateau) et pignon (ou renvoi)
     const tw = mesh(gearGeometry(tube.zT, tube.rT, { thick: 0.006, style: 'spokes5' }), mats.gears);
@@ -146,7 +153,7 @@ export function createDrive({ archetype, plateR, yPlate, yFloor, k0, omegaFrac, 
   }
 
   // ── rouage, selon l'archétype ; roues placées sur le cercle rT du bâti
-  const rT = plateR + 0.3;
+  const rT = plateR + 0.22;
   const onCircle = (from, rr, dirSign) => {
     // centre sur le cercle rT à la distance rr du centre « from » (côté dirSign)
     const d0 = Math.hypot(from.x, from.y), a0 = Math.atan2(from.y, from.x);
@@ -155,15 +162,15 @@ export function createDrive({ archetype, plateR, yPlate, yFloor, k0, omegaFrac, 
     return { x: rT * Math.cos(a), y: rT * Math.sin(a) };
   };
   const bridgeOver = (x, y, h) => {
-    const a = Math.atan2(y, x), len = bOut - 0.04 - Math.hypot(x, y), w = 0.024;
+    const a = Math.atan2(y, x), len = bOut - 0.04 - Math.hypot(x, y), w = 0.042;
     const s = new THREE.Shape();
     s.absarc(0, 0, w * 0.8, Math.PI / 2, (3 * Math.PI) / 2, false);
     s.lineTo(len, -w * 0.45); s.absarc(len, 0, w * 0.45, -Math.PI / 2, Math.PI / 2, false); s.closePath();
-    const b = mesh(keep(flat(s, 0.004, 0.4)), mats.bridge); b.rotation.y = a; atS(b, x, y, h);
-    atS(mesh(keep(cyl(0.0045, 0.0012, 12)), mats.jewel, false), x, y, h + 0.002);
+    const b = mesh(keep(flat(s, 0.01, 0.4)), mats.bridge); b.rotation.y = a; atS(b, x, y, h);
+    atS(mesh(keep(cyl(0.008, 0.002, 12)), mats.jewel, false), x, y, h + 0.01);
     const ex = x + Math.cos(a) * len, ey = y + Math.sin(a) * len;
-    atS(mesh(keep(cyl(0.005, 0.0016, 12)), mats.screw, false), ex, ey, h + 0.002);
-    atS(mesh(keep(cyl(0.007, h - yB)), mats.pins), ex, ey, yB);
+    atS(mesh(keep(cyl(0.01, 0.003, 12)), mats.screw, false), ex, ey, h + 0.01);
+    atS(mesh(keep(cyl(0.012, h - yB)), mats.pins), ex, ey, yB);
   };
   const dial = (parentIdx, h, rate) => {
     // cadran mené par une petite roue qui engrène une roue du rouage, vers l'extérieur
@@ -171,22 +178,22 @@ export function createDrive({ archetype, plateR, yPlate, yFloor, k0, omegaFrac, 
     const x = p.x + Math.cos(a) * (p.r + rd), y = p.y + Math.sin(a) * (p.r + rd);
     const i = add({ x, y, z: zD, r: rd, parent: parentIdx });
     wheel(i, h);
-    atS(mesh(keep(cyl(rD * 1.08, 0.006, 48)), mats.arms), x, y, h + 0.008);
-    atS(mesh(keep(cyl(rD, 0.007, 48)), mats.dial), x, y, h + 0.008);
+    atS(mesh(keep(cyl(rD * 1.08, 0.008, 48)), mats.arms), x, y, h + 0.01);
+    atS(mesh(keep(cyl(rD, 0.009, 48)), mats.dial), x, y, h + 0.01);
     const tick = keep(new THREE.BoxGeometry(rD * 0.16, 0.001, rD * 0.025)), ticks = new THREE.InstancedMesh(tick, mats.ink, 12);
     const M = new THREE.Matrix4(), q = new THREE.Quaternion(), s1 = new THREE.Vector3(1, 1, 1), pp = new THREE.Vector3();
-    for (let k = 0; k < 12; k++) { const b = (k / 12) * TAU; q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -b); pp.set(x + Math.cos(b) * rD * 0.82, h + 0.0156, -(y + Math.sin(b) * rD * 0.82)); ticks.setMatrixAt(k, M.compose(pp, q, s1)); }
+    for (let k = 0; k < 12; k++) { const b = (k / 12) * TAU; q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -b); pp.set(x + Math.cos(b) * rD * 0.82, h + 0.0195, -(y + Math.sin(b) * rD * 0.82)); ticks.setMatrixAt(k, M.compose(pp, q, s1)); }
     stand.add(ticks);
     const hs = new THREE.Shape(); hs.moveTo(-rD * 0.15, -rD * 0.05); hs.lineTo(rD * 0.8, -rD * 0.012); hs.lineTo(rD * 0.8, rD * 0.012); hs.lineTo(-rD * 0.15, rD * 0.05); hs.closePath();
-    const hand = mesh(keep(flat(hs, 0.0012, 0)), mats.screw, false);
-    atS(hand, x, y, h + 0.0165);
+    const hand = mesh(keep(flat(hs, 0.002, 0)), mats.screw, false);
+    atS(hand, x, y, h + 0.0205);
     meshes.push([i, hand]);
     void rate;
   };
 
   if (archetype !== 'atelier') {
     // côté barillet (niveau 1) : roue de l'arbre, rouage, barillet
-    const z1 = 60, m1 = 0.0034, r1 = (m1 * z1) / 2;
+    const z1 = 60, m1 = 0.0044, r1 = (m1 * z1) / 2;
     const iW1 = add({ x: rO, y: 0, z: z1, r: r1, coax: iArb });
     wheel(iW1, yL1, { noStud: true });
     let prev = iW1;
@@ -198,7 +205,7 @@ export function createDrive({ archetype, plateR, yPlate, yFloor, k0, omegaFrac, 
       prev = add({ ...c, z, r, parent: prev });
       wheel(prev, yL1);
       placed.push(prev);
-      if (placed.length % 2) bridgeOver(c.x, c.y, yL1 + 0.012);
+      if (placed.length % 2) bridgeOver(c.x, c.y, yL1 + 0.022);
     }
     dial(placed[1], yL1, 1);
     // barillet : tambour denté, rochet et cliquet, clé de remontoir
@@ -210,28 +217,28 @@ export function createDrive({ archetype, plateR, yPlate, yFloor, k0, omegaFrac, 
       wheel(iB, yL1, { style: 'solid', thick: 0.006 });
       atS(mesh(keep(cyl(rB * 0.92, 0.026, 64)), mats.gears), x, y, yL1 - 0.03);
       const iRat = add({ x, y, z: 36, r: rB * 0.7, coax: iB });
-      wheel(iRat, yL1 + 0.012, { style: 'escape', mat: mats.arms2, noStud: true });
+      wheel(iRat, yL1 + 0.016, { style: 'escape', mat: mats.arms2, noStud: true });
       const click = mesh(keep(new THREE.BoxGeometry(0.04, 0.003, 0.007)), mats.arms2);
       click.rotation.y = a + 1.9; atS(click, x + Math.cos(a + 0.9) * rB * 0.85, y + Math.sin(a + 0.9) * rB * 0.85, yL1 + 0.013);
       const key = mesh(keep(new THREE.BoxGeometry(0.012, 0.03, 0.012)), mats.pins); atS(key, x, y, yL1 + 0.02);
-      bridgeOver(x, y, yL1 + 0.024);
+      bridgeOver(x, y, yL1 + 0.036);
     }
     // côté échappement (niveau 2) : pignon de l'arbre, roue de champ et son
     // pignon (démultiplication composée), roue d'échappement, ancre, balancier
-    const zE1 = 10, m2 = 0.0032, rE1 = (m2 * zE1) / 2;
+    const zE1 = 10, m2 = 0.0042, rE1 = (m2 * zE1) / 2;
     const iE1 = add({ x: rO, y: 0, z: zE1, r: rE1, coax: iArb });
     wheel(iE1, yL2, { noStud: true, style: 'solid' });
     const zX = 60, rX = (m2 * zX) / 2, cX = onCircle(nodes[iE1], rE1 + rX, -1);
     const iX = add({ ...cX, z: zX, r: rX, parent: iE1 });
     wheel(iX, yL2);
-    bridgeOver(cX.x, cX.y, yL2 + 0.014);
+    bridgeOver(cX.x, cX.y, yL2 + 0.034);
     const zx = 10, rx = (m2 * zx) / 2;
     const ix = add({ ...cX, z: zx, r: rx, coax: iX });
-    wheel(ix, yL2 + 0.008, { noStud: true, style: 'solid' });
+    wheel(ix, yL2 + 0.014, { noStud: true, style: 'solid' });
     const zE = 20, rE = (m2 * zE) / 2;
     const aEsc = Math.atan2(cX.y, cX.x) - 2 * Math.asin((rx + rE) / (2 * rT));
     const pv = add({ x: rT * Math.cos(aEsc), y: rT * Math.sin(aEsc), z: zE, r: rE, parent: ix });
-    wheel(pv, yL2 + 0.008, { style: 'escape' });
+    wheel(pv, yL2 + 0.014, { style: 'escape' });
     dial(iX, yL2, 1);
     // ancre et balancier : le balancier bat deux fois par dent de la roue d'échappement
     const E = nodes[pv], aE = Math.atan2(E.y, E.x), rb = 0.075;
@@ -244,9 +251,9 @@ export function createDrive({ archetype, plateR, yPlate, yFloor, k0, omegaFrac, 
     const sp = [];
     for (let i = 0; i <= 300; i++) { const tt = i / 300, rr = rb * (0.12 + 0.6 * tt), b = tt * TAU * 9; sp.push(new THREE.Vector3(Math.cos(b) * rr, 0.006, Math.sin(b) * rr)); }
     bal.add(mesh(keep(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(sp), 600, 0.0007, 4, false)), mats.gears, false));
-    atS(bal, bx, by, yL2 + 0.008);
+    atS(bal, bx, by, yL2 + 0.014);
     atS(mesh(keep(cyl(0.004, yL2 - yB)), mats.pins), bx, by, yB);
-    bridgeOver(bx, by, yL2 + 0.014);
+    bridgeOver(bx, by, yL2 + 0.034);
     const anchor = new THREE.Group();
     anchor.add(mesh(keep(new THREE.BoxGeometry(Math.hypot(E.x - bx, E.y - by) * 0.7, 0.003, 0.006)), mats.arms2));
     for (const sd of [-1, 1]) { const st = mesh(keep(new THREE.BoxGeometry(0.008, 0.0035, 0.004)), mats.jewel, false); st.position.set(sd * 0.02, 0, 0.007); anchor.add(st); }
@@ -325,8 +332,77 @@ export function createDrive({ archetype, plateR, yPlate, yFloor, k0, omegaFrac, 
     void fly;
   }
 
+  // ── satellites : tout autour du bâti, chacun mené par un pignon qui engrène
+  // la couronne ; cadran de tours, phase de lune, réserve, ou (atelier) poulies
+  {
+    const used = nodes.filter((n) => n.r && Math.hypot(n.x, n.y) > plateR * 0.9).map((n) => Math.atan2(n.y, n.x));
+    const free = (a) => used.every((b) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b))) > 0.42);
+    const kinds = archetype === 'atelier' ? ['pulley', 'dial', 'pulley'] : ['dial', 'moon', 'reserve'];
+    let placedN = 0;
+    for (let i = 0; i < 48; i++) {
+      const a = (i / 48) * TAU + 0.05;
+      if (!free(a)) continue;
+      const kind = kinds[placedN % kinds.length];
+      placedN++;
+      used.push(a);
+      const zS = 16, rS = (plateR * zS) / zR, rS0 = plateR + rS;
+      const ca = Math.cos(a), sa = Math.sin(a);
+      // pignon sur la couronne, roue au-dessus, roue extérieure
+      const iP = add({ x: rS0 * ca, y: rS0 * sa, z: zS, r: rS, parent: iRim });
+      wheel(iP, yRim, { thick: 0.048, style: 'solid', noStud: true });
+      atS(mesh(keep(cyl(0.01, yL1 + 0.02 - (yRim - 0.03))), mats.pins), rS0 * ca, rS0 * sa, yRim - 0.03);
+      const m = 0.0044;
+      if (kind === 'pulley') {
+        const iPu = add({ x: rS0 * ca, y: rS0 * sa, z: 1, r: 0.05, coax: iP });
+        wheel(iPu, yL1, { style: 'pulley', thick: 0.016, noStud: true });
+        const rOut = rS0 + 0.05 + 0.2, ox = rOut * ca, oy = rOut * sa;
+        const rF = 0.085;
+        const iF = add({ x: ox, y: oy, z: 1, r: rF, drive: (tau) => OmRing * tau * (-zR / zS) * (0.05 / rF) });
+        wheel(iF, yL1, { style: 'pulley', thick: 0.02 });
+        // courroie ouverte (mêmes sens), tracée entre les deux poulies
+        const pts = [], L = Math.hypot(ox - rS0 * ca, oy - rS0 * sa), ang = a, r1 = 0.05, r2 = rF, al = Math.asin((r1 - r2) / L);
+        for (let q = 0; q <= 40; q++) { const b = ang + Math.PI / 2 + al + (q / 40) * (Math.PI - 2 * al); pts.push(new THREE.Vector3(rS0 * ca + Math.cos(b) * r1, yL1, -(rS0 * sa + Math.sin(b) * r1))); }
+        for (let q = 0; q <= 40; q++) { const b = ang - Math.PI / 2 - al + (q / 40) * (Math.PI + 2 * al); pts.push(new THREE.Vector3(ox + Math.cos(b) * r2, yL1, -(oy + Math.sin(b) * r2))); }
+        stand.add(mesh(keep(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, true), 200, 0.005, 6, true)), mats.belt, false));
+        continue;
+      }
+      const zW = 40, rW = (m * zW) / 2;
+      const iW = add({ x: rS0 * ca, y: rS0 * sa, z: zW, r: rW, coax: iP });
+      wheel(iW, yL1, { noStud: true });
+      const zD = kind === 'moon' ? 59 : 48, rD = (m * zD) / 2, rDc = rS0 + rW + rD;
+      const iD = add({ x: rDc * ca, y: rDc * sa, z: zD, r: rD, parent: iW });
+      wheel(iD, yL1);
+      bridgeOver(rS0 * ca, rS0 * sa, yL1 + 0.022);
+      const x = rDc * ca, y = rDc * sa, h = yL1 + 0.012;
+      if (kind === 'moon') {
+        // disque de lune (deux lunes d'or sur le ciel) sous un guichet
+        const disk = new THREE.Group();
+        disk.add(mesh(keep(cyl(rD * 0.95, 0.004, 48)), mats.screw, false));
+        for (const sd of [-1, 1]) { const mo = mesh(keep(cyl(rD * 0.28, 0.0045, 32)), mats.arms, false); mo.position.set(sd * rD * 0.55, 0, 0); disk.add(mo); }
+        atS(disk, x, y, h);
+        meshes.push([iD, disk]);
+        const cover = new THREE.Shape(); cover.absarc(0, 0, rD * 1.02, 0, TAU, false);
+        const win = new THREE.Path(); win.absarc(0, rD * 0.25, rD * 0.62, Math.PI * 0.05, Math.PI * 0.95, false); win.lineTo(-rD * 0.6, rD * 0.25); win.closePath();
+        cover.holes.push(win);
+        const cv = mesh(keep(flat(cover, 0.004, 0.3, 32)), mats.arms); cv.rotation.y = a - Math.PI / 2;
+        atS(cv, x, y, h + 0.006);
+      } else {
+        // cadran : tours de la couronne, ou réserve de marche (24 divisions)
+        atS(mesh(keep(cyl(rD * 0.92, 0.008, 48)), mats.dial), x, y, h);
+        const nT = kind === 'reserve' ? 24 : 12, tick = keep(new THREE.BoxGeometry(rD * 0.14, 0.001, rD * 0.022)), ticks = new THREE.InstancedMesh(tick, mats.ink, nT);
+        const M = new THREE.Matrix4(), q = new THREE.Quaternion(), s1 = new THREE.Vector3(1, 1, 1), pp = new THREE.Vector3();
+        for (let k2 = 0; k2 < nT; k2++) { const b = (k2 / nT) * TAU; q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -b); pp.set(x + Math.cos(b) * rD * 0.75, h + 0.0085, -(y + Math.sin(b) * rD * 0.75)); ticks.setMatrixAt(k2, M.compose(pp, q, s1)); }
+        stand.add(ticks);
+        const hs = new THREE.Shape(); hs.moveTo(-rD * 0.12, -rD * 0.05); hs.lineTo(rD * 0.72, -rD * 0.014); hs.lineTo(rD * 0.72, rD * 0.014); hs.lineTo(-rD * 0.12, rD * 0.05); hs.closePath();
+        const hand = mesh(keep(flat(hs, 0.002, 0)), mats.screw, false);
+        atS(hand, x, y, h + 0.009);
+        meshes.push([iD, hand]);
+      }
+    }
+  }
+
   // ── sous le plateau : canon (le plateau repose sur le pont), tube central, pont, bâti, pied
-  const plateSleeve = mesh(keep(cyl(0.03, yPlate - 0.035 - yUB, 40)), mats.foot);
+  const plateSleeve = mesh(keep(cyl(0.04, yPlate - 0.06 - yUB, 40)), mats.foot);
   plateSleeve.position.y = yUB; plateGroup.add(plateSleeve);
   const tubeM = mesh(keep(cyl(0.012, yTubeTop - (yFrame + 0.006), 24)), mats.arms);
   tubeM.position.y = yFrame + 0.006; plateGroup.add(tubeM);
