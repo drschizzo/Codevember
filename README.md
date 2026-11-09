@@ -26,7 +26,7 @@ Une plongée sans fond : des coquilles creuses emboîtées — alvéoles, fentes
 
 [![Hollow](hollow/docs/capture.jpg)](https://drschizzo.github.io/Codevember/hollow/)
 
-## [Chorégraphies](planetaire_v2/) (Planétaire v2)
+## [Orrery](planetaire_v2/) (Planétaire v2)
 
 Un planétaire qui calcule des ciels qui n'existent pas encore. Chaque graine lance, sous les yeux, la recherche de chorégraphies du problème à N corps (N masses égales sur une même courbe, solutions exactes des équations de Newton), conçoit par le calcul les machines qui les tracent (trains d'engrenages aux rapports exacts, étages sans collision, galets dans des sillons gravés, quatre archétypes : horlogerie, planétaire classique, atelier, astrolabe) et la met en abîme : chaque astre est une boule de verre qui contient la même scène, où la caméra plonge sans fin, en boucle parfaite. Le mouvement qui fait tourner le plateau est visible et fonctionnel (barillet, rouage, échappement et balancier, ou machine à vapeur, volant, courroies et régulateur). Six humeurs, rendu physique (three.js WebGPU / TSL), export MP4.
 

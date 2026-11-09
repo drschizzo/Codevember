@@ -55,8 +55,15 @@ export function createLoader(el) {
     },
     // fin d'un essai : { ok, reason }
     result(i, r) { post({ type: 'result', i, ok: !!r.ok }); },
-    // la machine conçue : ses bras apparaissent sur la courbe
-    machine(D) { post({ type: 'machine', mech: { k: Array.from(D.k), L: Array.from(D.L), phi: Array.from(D.phi), N: D.N } }); },
+    // le monde sur lequel la scène va s'ouvrir : sa machine D (les bras), et
+    // info = { omega, rate (rad d'orbite / s), rot (orientation de la caméra) }
+    scene(D, info) { post({ type: 'scene', scene: { k: Array.from(D.k), L: Array.from(D.L), phi: Array.from(D.phi), N: D.N, ...info } }); },
+    // atterrissage : en ms millisecondes, le schéma rejoint l'état de la scène
+    // (pose = { tau, th, M, y } : temps de l'orbite, angle du plateau, matrice
+    // de projection, hauteur des astres) ; la promesse est tenue à l'arrivée
+    land(pose, ms) { post({ type: 'land', pose, ms }); return new Promise((res) => setTimeout(res, worker ? ms : 0)); },
+    // (pendant le fondu : l'état de la scène, à chaque image)
+    pose(pose) { post({ type: 'pose', pose }); },
     // (les étapes se lisent dans l'anneau : plus de légende)
     text() {},
     status(t) { if (el.classList.contains('error')) status.textContent = t; },
