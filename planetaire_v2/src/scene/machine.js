@@ -18,6 +18,7 @@
 // Coordonnées : le plan (x, y) de l'orbite est posé en (x, h, −y) ; une
 // rotation d'angle θ autour de +y est la rotation du plan.
 import * as THREE from 'three/webgpu';
+import { uniform, positionLocal, float, vec2, sin, atan, length, fract, smoothstep, mix, abs, floor, mx_cell_noise_float } from 'three/tsl';
 import { designMachine, SLAB } from '../mech/design.js';
 
 const TAU = Math.PI * 2;
@@ -31,6 +32,28 @@ export function materials() {
   const m = Object.fromEntries(ROLES.map((r) => [r, make()]));
   // rubis des paliers
   m.jewel = new THREE.MeshPhysicalNodeMaterial({ color: new THREE.Color().setRGB(0.55, 0.01, 0.04), metalness: 0, roughness: 0.04, clearcoat: 1, clearcoatRoughness: 0.02 });
+  // finition du plateau : motif procédural sur la rugosité et la teinte
+  // (guilloché : vagues concentriques ; soleil : rayons fins ; perlage : cercles
+  // brossés qui se chevauchent), dans le repère du plateau
+  const PF = { scale: uniform(1), amp: uniform(0), rough: uniform(0.3), color: uniform(new THREE.Color()) };
+  m.plateFinish = PF;
+  m.setFinish = (kind, scale = 1) => {
+    const p = vec2(positionLocal.x, positionLocal.z).mul(PF.scale);
+    const r = length(p), th = atan(p.y, p.x);
+    let v = float(0);
+    if (kind === 'guilloche') v = sin(r.mul(140).add(sin(th.mul(24)).mul(1.6))).mul(0.5).add(0.5);
+    else if (kind === 'soleil') v = sin(th.mul(720)).mul(0.5).add(0.5).mul(smoothstep(0.05, 0.25, r));
+    else if (kind === 'perlage') {
+      const q = p.mul(28), c = floor(q), f = fract(q).sub(0.5);
+      const ring = fract(length(f).mul(9).add(mx_cell_noise_float(c).mul(3)));
+      v = smoothstep(0.2, 0.8, ring).mul(smoothstep(0.5, 0.38, length(f)));
+    }
+    PF.scale.value = scale;
+    PF.amp.value = kind === 'lisse' ? 0 : 1;
+    m.plate.roughnessNode = PF.rough.add(v.sub(0.5).mul(0.22).mul(PF.amp)).clamp(0.02, 1);
+    m.plate.colorNode = PF.color.mul(float(1).sub(v.mul(0.12).mul(PF.amp)));
+    m.plate.needsUpdate = true;
+  };
   // fond des sillons : la matière du plateau, assombrie et mate
   // (les courbes tournent dans un sens ou dans l'autre : rubans visibles des deux côtés)
   m.groove = new THREE.MeshPhysicalNodeMaterial({ metalness: 0.6, roughness: 0.75, side: THREE.DoubleSide });
@@ -44,6 +67,7 @@ export function materials() {
       x.iridescence = t.irid || 0; x.sheen = t.sheen || 0;
     }
     const pl = table[matters.plate];
+    if (pl) { PF.rough.value = pl.rough; PF.color.value.setRGB(...pl.color); }
     if (pl) { m.groove.color.setRGB(...pl.color.map((c) => c * 0.22)); m.groove.metalness = pl.metal * 0.6; }
     const pn = table[matters.pins];
     if (pn) { m.lip.color.setRGB(...pn.color); m.lip.metalness = pn.metal; }

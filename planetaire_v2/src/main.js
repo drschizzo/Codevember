@@ -78,9 +78,14 @@ async function main() {
   rimLight.position.set(1.8, 1.4, -2.6);
   scene.add(rimLight);
 
-  // le plateau tourne à ω : tout ce qu'il porte est dans le repère de la courbe
+  // la monture (posée, sous cloche, ou retournée et suspendue au plafond) ; le
+  // plateau y tourne à ω : tout ce qu'il porte est dans le repère de la courbe
+  const rig = new THREE.Group();
+  scene.add(rig);
   const plate = new THREE.Group();
-  scene.add(plate);
+  rig.add(plate);
+  const bellMat = new THREE.MeshPhysicalNodeMaterial({ color: 0xffffff, metalness: 0, roughness: 0.03, transparent: true, opacity: 0.09, depthWrite: false, clearcoat: 1 });
+  let bell = null;
 
   const post = createPost(renderer, scene, camera, null);
 
@@ -93,7 +98,7 @@ async function main() {
 
   // ── État ──
   const pool = createPool();
-  const S = { orbit: null, coef: null, p: null, visual: null, machine: null, q: 1, duration: 10, L: 0, paused: false, busy: false, run: 0, envKey: '' };
+  const S = { flip: 1, finishKey: '', orbit: null, coef: null, p: null, visual: null, machine: null, q: 1, duration: 10, L: 0, paused: false, busy: false, run: 0, envKey: '' };
   const pos = new Float64Array(2);
   let bodyXY = new Float64Array(2);
   const world = [];
@@ -106,7 +111,7 @@ async function main() {
     if (!S.visual) return;
     const { N, omega } = S.p;
     const { tau, open } = warp(TAU * S.q * S.L, S.beats);
-    const th = omega * tau, c = Math.cos(th), sn = Math.sin(th);
+    const th = omega * tau, c = Math.cos(th), sn = Math.sin(th), f = S.flip;
     plate.rotation.y = th;
     S.visual.phase.value = ((tau / TAU) % 1 + 1) % 1;
     // la machine place les astres au bout de leurs chaînes
@@ -115,7 +120,8 @@ async function main() {
       const x = bodyXY[2 * j], y = bodyXY[2 * j + 1];
       S.visual.bodies[j].position.set(x, S.bodyY, -y);
       // position dans le studio (plateau tourné de θ autour de +y)
-      world[j] = [x * c - y * sn, S.machine.yBody, -x * sn - y * c];
+      // (monture suspendue : retournée d'un demi-tour autour de x)
+      world[j] = [x * c - y * sn, f * S.machine.yBody, f * (-x * sn - y * c)];
     }
     // embrasement : un astre s'avive quand il en frôle un autre
     for (let j = 0; j < N; j++) {
@@ -133,7 +139,8 @@ async function main() {
   };
   function placeCamera(L, open = 0) {
     const M = S.machine;
-    const cam = cameraAt(L, S.shots, { fit: fitFor(), open, body: (j) => world[j], y: { plate: M.yPlate, body: M.yBody, top: M.yTop } });
+    const f = S.flip;
+    const cam = cameraAt(L, S.shots, { fit: fitFor(), open, flip: f < 0, body: (j) => world[j], y: { plate: f * M.yPlate, body: f * M.yBody, top: f * M.yTop } });
     camera.position.set(...cam.pos);
     camera.lookAt(...cam.target);
     if (Math.abs(camera.fov - cam.fov) > 1e-4) { camera.fov = cam.fov; camera.updateProjectionMatrix(); }
@@ -148,6 +155,8 @@ async function main() {
   // ── Réglages à vif : matières, astres, verre, lumières ──
   function applyLive() {
     mats.apply(R.matters, MATTERS);
+    if (S.finishKey !== `${R.stage.finish}`) { S.finishKey = `${R.stage.finish}`; mats.setFinish(R.stage.finish, R.stage.finishScale); }
+    mats.plateFinish.scale.value = R.stage.finishScale;
     floorMat.color.set(R.light.floor);
     scene.background.set(R.light.bg);
     // fond clair : légende et indications en sombre
@@ -200,20 +209,37 @@ async function main() {
 
   // ── Construction de la scène autour de l'orbite trouvée ──
   function buildScene() {
-    if (S.visual) { plate.remove(S.visual.group, S.machine.group); scene.remove(S.machine.stand); S.visual.dispose(); S.machine.dispose(); }
+    if (S.visual) { plate.remove(S.visual.group, S.machine.group); rig.remove(S.machine.stand); S.visual.dispose(); S.machine.dispose(); }
+    if (bell) { rig.remove(bell); bell.geometry.dispose(); bell = null; }
     const p = S.p, sh = SHADOWS[RENDER.shadows] || SHADOWS.high;
     // la machine : les bras retenus tracent la courbe à ARM_TOL près (au plus
     // 14) ; astres et verre suivent la courbe qu'elle trace
     const epi = epicycles(S.coef, p, 1, { tol: ARM_TOL, max: 14 });
     const curve = sampleArms(epi.arms, 2400);
-    S.visual = createOrbitVisual({ curve, N: p.N, radius: 0.0065 * R.trace.thick, shadows: { bodies: sh.bodies, size: sh.body } });
+    S.visual = createOrbitVisual({ curve, N: p.N, radius: 0.0065 * R.trace.thick, shadows: { bodies: sh.bodies, size: sh.body }, bodyKind: R.bodies.kind, traceKind: R.trace.kind, pinsMat: mats.pins });
     S.machine = createMachine({ arms: epi.arms, N: p.N, mats, omegaFrac: p.omegaFrac, yFloor: Y_FLOOR });
     plate.add(S.machine.group, S.visual.group);
-    scene.add(S.machine.stand);
+    rig.add(S.machine.stand);
+    // monture
+    S.flip = R.stage.presentation === 'suspendue' ? -1 : 1;
+    rig.rotation.x = S.flip < 0 ? Math.PI : 0;
+    if (R.stage.presentation === 'cloche') {
+      // cloche de verre posée sur le jonc du plateau (profil tourné)
+      const Rb = S.machine.plateR + 0.01, H = S.machine.yTop - S.machine.yPlate + 0.32, pts = [];
+      for (let i = 0; i <= 24; i++) { const a = (i / 24) * (Math.PI / 2); pts.push(new THREE.Vector2(Rb * Math.cos(a) + 0.0001, H - 0.45 * Rb + 0.45 * Rb * Math.sin(a))); }
+      pts.unshift(new THREE.Vector2(Rb, 0));
+      pts.push(new THREE.Vector2(0.03, H + 0.02), new THREE.Vector2(0.0001, H + 0.05));
+      bell = new THREE.Mesh(new THREE.LatheGeometry(pts.reverse(), 96), bellMat);
+      bell.position.y = S.machine.yPlate;
+      bell.renderOrder = 10;
+      rig.add(bell);
+    }
     // le verre est coulé dans le sillon de l'orbite ; les astres glissent juste au-dessus
     S.visual.group.position.y = S.machine.yTrail;
     S.bodyY = S.machine.yBody - S.machine.yTrail;
-    key.target.position.set(0, S.machine.yPlate, 0);
+    key.target.position.set(0, S.flip * S.machine.yPlate, 0);
+    // monture suspendue : la lampe éclaire la machine de côté, par en dessous du plateau
+    key.position.set(-2.4, S.flip < 0 ? -0.1 : 3.6, 1.7);
     S.arms = epi.arms.length; S.fidelity = epi.residual;
     bodyXY = new Float64Array(2 * p.N);
     applyLive();
