@@ -36,7 +36,7 @@ import { withPivots } from './mech/design.js';
 
 const TAU = Math.PI * 2;
 const params = new URLSearchParams(location.search);
-const DEFAULT_SEED = '17';
+const DEFAULT_SEED = 'bwkwvk';
 const $ = (s) => document.querySelector(s);
 const randomSeed = () => Math.random().toString(36).slice(2, 8);
 const ss5 = (x) => { const t = Math.min(1, Math.max(0, x)); return t * t * t * (t * (t * 6 - 15) + 10); };
