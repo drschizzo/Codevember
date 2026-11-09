@@ -18,13 +18,17 @@
 // A – renvois – B tombe exactement sur la longueur du bras :
 //     m · (z_A + z_B + 2 Σ z_renvois) / 2 = |c_{i−1}|.
 //
-// ── Les étages. Chaque bras et le train qu'il porte forment une « dalle ».
-// Les dalles de même rang de deux astres différents qui se croisent (à un
-// instant quelconque de la période) doivent être à des hauteurs différentes ;
-// la goupille d'un astre, qui monte du bout de sa chaîne jusqu'au plan des
-// astres, doit passer au-dessus des dalles qu'elle croise. On répartit les
-// dalles par coloration de ce graphe de conflits ; ce qui ne peut pas être
-// résolu est compté comme collision.
+// ── Les étages. La machine est suspendue : l'étoile des bras 0 en haut du
+// poteau central, chaque bras un étage plus bas que celui qui le porte, les
+// astres en bas, juste au-dessus du plateau. Chaque pivot repose sur une
+// colonne qui descend jusqu'au plateau, où son patin glisse dans un sillon
+// (la courbe que ce pivot décrit). Chaque bras et le train qu'il porte forment
+// une « dalle ». Deux dalles de même rang qui se croisent doivent être à des
+// hauteurs différentes ; une colonne ne doit croiser aucune dalle plus basse
+// qu'elle (au même rang, c'est une contrainte d'ordre ; aux rangs inférieurs,
+// une collision). On répartit les dalles par coloration du graphe de conflits,
+// et l'on essaie plusieurs ordres de sommation des bras (l'extrémité de la
+// chaîne n'en dépend pas) pour garder le meilleur.
 
 const TAU = Math.PI * 2;
 const gcd = (a, b) => (b ? gcd(b, a % b) : Math.abs(a));
@@ -32,7 +36,7 @@ const gcd = (a, b) => (b ? gcd(b, a % b) : Math.abs(a));
 export const SLAB = 0.016;     // épaisseur d'une dalle (bras + train)
 export const MIN_TEETH = 10;
 const MARGIN = 0.008;           // jeu entre pièces mobiles
-const PIN_R = 0.0035;
+const COL_R = 0.004;
 
 // fraction irréductible approchant un rapport (les k sont entiers : exact)
 function frac(num, den) {
@@ -68,7 +72,7 @@ export function designTrain(L, p, q) {
   return { m, gears, n, ratio: (negative ? -1 : 1) * (zA / zB) };
 }
 
-export function designMachine(arms, N, { samples = 192 } = {}) {
+function designOrder(arms, N, samples) {
   const n = arms.length;
   const k = arms.map((a) => a.k);
   const L = arms.map((a) => a.amp);
@@ -109,21 +113,22 @@ export function designMachine(arms, N, { samples = 192 } = {}) {
 
   // ── segments (avec contrepoids) de toutes les chaînes à chaque instant
   const seg = []; // seg[s][j][i] = [x0, y0, x1, y1]
-  const body = []; // body[s][j] = [x, y]
+  const piv = []; // piv[s][j] = pivots
   for (let s = 0; s < samples; s++) {
     const t = (TAU * s) / samples;
     const S = [], B = [];
     for (let j = 0; j < N; j++) {
       const Pj = Float64Array.from(pivots(t + (TAU * j) / N));
+      B.push(Pj);
       const row = [];
       for (let i = 0; i < n; i++) {
         const x0 = Pj[2 * i], y0 = Pj[2 * i + 1], x1 = Pj[2 * i + 2], y1 = Pj[2 * i + 3];
         const ux = (x1 - x0) / (L[i] || 1), uy = (y1 - y0) / (L[i] || 1);
         row.push([x0 - ux * cw[i], y0 - uy * cw[i], x1, y1]);
       }
-      S.push(row); B.push([Pj[2 * n], Pj[2 * n + 1]]);
+      S.push(row);
     }
-    seg.push(S); body.push(B);
+    seg.push(S); piv.push(B);
   }
 
   // ── conflits entre dalles de même rang, et entre goupilles et dalles
@@ -156,50 +161,84 @@ export function designMachine(arms, N, { samples = 192 } = {}) {
       }
     }
   }
-  // goupille de j au-dessus de la dalle (i, j2) qu'elle croise : below[j2][i] ∋ j
-  // (la dalle doit être plus basse que le point de départ de la goupille)
-  const pinHits = []; // [jPin, i, jSlab]
-  for (let j = 0; j < N; j++) {
-    for (let j2 = 0; j2 < N; j2++) {
-      if (j2 === j) continue;
-      for (let i = 0; i < n; i++) {
-        for (let s = 0; s < samples; s++) {
-          if (pointSeg(body[s][j][0], body[s][j][1], seg[s][j2][i]) < halfW[i] + PIN_R + MARGIN) { pinHits.push([j, i, j2]); break; }
+  // ── galets porteurs. Chaque bras a repose sur une colonne qui descend
+  // jusqu'au plateau, où son patin glisse dans un sillon. La colonne est fixée
+  // sous le bras, à la fraction u de sa longueur (u = 1 : sous le pivot
+  // suivant ; pour le dernier bras, c'est la colonne de l'astre). Elle traverse
+  // tous les étages plus bas : on cherche une position u telle qu'aucune dalle
+  // plus basse (de n'importe quelle chaîne) ne passe jamais dessus.
+  // positions candidates : sous le pivot, puis de plus en plus près du pied,
+  // enfin au bout du contrepoids (u < 0)
+  const U = [1, 0.95, 0.9, 0.85, 0.8, 0.75, 0.7, 0.65, 0.6, 0.55, 0.5, 0.45, 0.4, 0.35, 0.3, 0.25];
+  const supports = [];
+  const colAt = (s, j, a, u) => {
+    const P = piv[s][j];
+    return [P[2 * a] + u * (P[2 * a + 2] - P[2 * a]), P[2 * a + 1] + u * (P[2 * a + 3] - P[2 * a + 1])];
+  };
+  for (let a = 0; a < n; a++) {
+    let found = null;
+    for (const u of (a === n - 1 ? [1] : [...U, -cw[a] / (L[a] || 1)])) {
+      let ok = true;
+      for (let s = 0; s < samples && ok; s++) {
+        for (let j = 0; j < N && ok; j++) {
+          const [cx, cy] = colAt(s, j, a, u);
+          for (let j2 = 0; j2 < N && ok; j2++) {
+            for (let i2 = a; i2 < n && ok; i2++) {
+              if (i2 === a && j2 === j) continue;                  // son propre bras
+              if (j2 === j && i2 === a + 1 && u === 1) continue;    // le bras qu'il porte (coaxial)
+              if (i2 === a && j2 !== j) continue;                   // même rang : réglé par les étages
+              if (pointSeg(cx, cy, seg[s][j2][i2]) < halfW[i2] + COL_R + MARGIN) ok = false;
+            }
+          }
         }
       }
+      if (ok) { found = u; break; }
     }
+    supports.push(found);
   }
-
-  // ── étages. Rang i : bande d'épaisseur S_i dalles ; la goupille de j part du
-  // haut de sa dernière dalle. Une dalle (i, j2) croisée par la goupille de j
-  // doit être sous la dernière dalle de j : si i < n − 1, c'est automatique
-  // (bandes empilées) ; au dernier rang, c'est une contrainte d'ordre.
+  // au même rang, une colonne ne doit pas croiser une dalle plus basse : contrainte
+  // d'ordre entre étages ; si elle est impossible (cycle), la colonne est retirée
   const level = Array.from({ length: n }, () => new Array(N).fill(0));
   const S = new Array(n).fill(1);
   let collisions = 0;
   for (let i = 1; i < n; i++) {
-    const last = i === n - 1;
-    // contraintes d'ordre au dernier rang : niveau(j2) < niveau(j)
-    const before = Array.from({ length: N }, () => new Set());
-    if (last) for (const [j, ii, j2] of pinHits) if (ii === i) before[j].add(j2);
-    // ordre de traitement : tri topologique (les cycles sont des collisions)
-    const order = [], seen = new Array(N).fill(0);
-    const visit = (j) => {
-      if (seen[j] === 2) return;
-      if (seen[j] === 1) { collisions++; return; }
-      seen[j] = 1;
-      for (const j2 of before[j]) visit(j2);
-      seen[j] = 2; order.push(j);
-    };
-    for (let j = 0; j < N; j++) visit(j);
-    for (const j of order) {
-      let lv = 0;
-      for (const j2 of before[j]) if (order.indexOf(j2) < order.indexOf(j)) lv = Math.max(lv, level[i][j2] + 1);
-      const used = new Set([...conflict[i][j]].filter((j2) => order.indexOf(j2) < order.indexOf(j)).map((j2) => level[i][j2]));
-      while (used.has(lv)) lv++;
-      level[i][j] = lv;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const before = Array.from({ length: N }, () => new Set());
+      if (supports[i] !== null) {
+        for (let j = 0; j < N; j++) {
+          for (let j2 = 0; j2 < N; j2++) {
+            if (j2 === j) continue;
+            for (let s = 0; s < samples; s++) {
+              const [cx, cy] = colAt(s, j, i, supports[i]);
+              if (pointSeg(cx, cy, seg[s][j2][i]) < halfW[i] + COL_R + MARGIN) { before[j].add(j2); break; }
+            }
+          }
+        }
+      }
+      const order = [], seen = new Array(N).fill(0);
+      let cycle = false;
+      const visit = (j) => {
+        if (seen[j] === 2) return;
+        if (seen[j] === 1) { cycle = true; return; }
+        seen[j] = 1;
+        for (const j2 of before[j]) visit(j2);
+        seen[j] = 2; order.push(j);
+      };
+      for (let j = 0; j < N; j++) visit(j);
+      if (cycle) {
+        if (i === n - 1) { collisions++; } // (la colonne de l'astre ne peut pas être retirée)
+        else { supports[i] = null; continue; }
+      }
+      for (const j of order) {
+        let lv = 0;
+        for (const j2 of before[j]) if (order.indexOf(j2) < order.indexOf(j)) lv = Math.max(lv, level[i][j2] + 1);
+        const used = new Set([...conflict[i][j]].filter((j2) => order.indexOf(j2) < order.indexOf(j)).map((j2) => level[i][j2]));
+        while (used.has(lv)) lv++;
+        level[i][j] = lv;
+      }
+      S[i] = Math.max(...level[i]) + 1;
+      break;
     }
-    S[i] = Math.max(...level[i]) + 1;
   }
 
   // hauteur de chaque dalle (base de la bande + sous-étage), à partir de 0
@@ -210,8 +249,33 @@ export function designMachine(arms, N, { samples = 192 } = {}) {
   return {
     arms, N, n, k, L, phi, trains, barW, halfW, cw, level, S, base, height, collisions,
     conflicts: conflict.map((c) => c.reduce((a, s) => a + s.size, 0) / 2),
-    pinHits: pinHits.length,
+    supports, supported: supports.filter((u) => u !== null).length,
     // pivots d'une chaîne (repère du plateau)
     pivots: (t, out) => { pivots(t); if (out) out.set(P); return out || P; },
   };
+}
+
+// plusieurs ordres de sommation des bras (le plus long d'abord, puis des
+// permutations tirées) : on garde la machine qui a le moins de collisions,
+// puis la plus basse
+export function designMachine(arms, N, { samples = 160, tries = 8 } = {}) {
+  let best = null;
+  let seed = 12345;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  for (let t = 0; t < tries; t++) {
+    let order = arms.slice();
+    if (t > 0) {
+      // le premier bras (le plus long) reste en tête : l'étoile du centre
+      const rest = order.slice(1);
+      for (let i = rest.length - 1; i > 0; i--) { const k = Math.floor(rnd() * (i + 1)); [rest[i], rest[k]] = [rest[k], rest[i]]; }
+      order = [order[0], ...rest];
+    }
+    const d = designOrder(order, N, samples);
+    // le moins de collisions, puis le plus de galets, puis le plus bas
+    const better = !best || d.collisions < best.collisions
+      || (d.collisions === best.collisions && (d.supported > best.supported || (d.supported === best.supported && d.height < best.height)));
+    if (better) best = d;
+    if (best.collisions === 0 && best.supported === best.n && t >= 1) break;
+  }
+  return best;
 }
