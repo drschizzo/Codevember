@@ -20,12 +20,13 @@ export function heatColor(h) {
   return mix(c2, vec3(1.0, 0.9, 0.74), smoothstep(0.72, 1.0, h));
 }
 
-const LIGHT = 0.12;
-
-export function createOrbitVisual({ curve, N, radius = 0.0065, ring = 10 }) {
+export function createOrbitVisual({ curve, N, radius = 0.0065, ring = 10, shadows = { bodies: 3, size: 512 } }) {
   const n = curve.length / 2;
   const group = new THREE.Group();
-  const phase = uniform(0);
+  const U = {
+    phase: uniform(0), cool: uniform(6), glow: uniform(1),
+    bodyColor: uniform(new THREE.Color(1, 0.86, 0.66)), bodyGlow: uniform(1),
+  };
 
   // ── tube : anneaux le long de la courbe fermée, repère (tangente, haut, normale)
   const pos = new Float32Array(n * ring * 3), nrm = new Float32Array(n * ring * 3), sAttr = new Float32Array(n * ring);
@@ -60,35 +61,34 @@ export function createOrbitVisual({ curve, N, radius = 0.0065, ring = 10 }) {
   geo.setAttribute('s', new THREE.BufferAttribute(sAttr, 1));
   geo.setIndex(new THREE.BufferAttribute(idx, 1));
 
-  const heat = float(1).sub(fract(float(N).mul(phase.sub(attribute('s', 'float')))));
+  const heat = float(1).sub(fract(float(N).mul(U.phase.sub(attribute('s', 'float')))));
   // refroidissement exponentiel : le verre ne rougeoie qu'en arrière de l'astre,
   // puis redevient un fil de verre sombre et brillant
-  const glow = exp(float(1).sub(heat).mul(-6));
+  const glow = exp(float(1).sub(heat).mul(U.cool.negate()));
   const mat = new THREE.MeshPhysicalNodeMaterial({ color: 0x07080a, roughness: 0.05, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.03 });
-  mat.emissiveNode = heatColor(glow).mul(glow.mul(glow).mul(6).add(pow(glow, 16).mul(10)));
+  mat.emissiveNode = heatColor(glow).mul(glow.mul(glow).mul(6).add(pow(glow, 16).mul(10))).mul(U.glow);
   // le verre encore mou est plus épais : une goutte qui s'étire derrière l'astre
   mat.positionNode = positionLocal.add(normalLocal.mul(max(pow(glow, 4), 0).mul(radius * 1.4)));
   const tube = new THREE.Mesh(geo, mat);
-  tube.castShadow = false; tube.receiveShadow = true;
+  tube.receiveShadow = true;
   group.add(tube);
 
   // ── astres : un cœur incandescent, une lumière chacun
-  const bodies = [];
+  const bodies = [], mats = [];
   const coreGeo = new THREE.SphereGeometry(0.026, 32, 16);
-  const mats = [];
+  let lightBase = 0.12;
   for (let j = 0; j < N; j++) {
     // embrasement : chaque astre a sa propre intensité (il s'avive quand il en frôle un autre)
     const boost = uniform(1);
     const coreMat = new THREE.MeshStandardNodeMaterial({ color: 0x000000, roughness: 1 });
-    coreMat.emissiveNode = vec3(1.0, 0.86, 0.66).mul(boost.mul(18));
+    coreMat.emissiveNode = U.bodyColor.mul(boost.mul(U.bodyGlow).mul(18));
     mats.push(coreMat);
     const m = new THREE.Mesh(coreGeo, coreMat);
     m.userData.boost = boost;
-    const light = new THREE.PointLight(0xffc489, LIGHT, 0, 2);
-    // ombres : les trois premiers astres seulement (une carte cubique chacun)
-    if (j < 3) {
+    const light = new THREE.PointLight(0xffc489, lightBase, 0, 2);
+    if (j < shadows.bodies) {
       light.castShadow = true;
-      light.shadow.mapSize.set(512, 512);
+      light.shadow.mapSize.set(shadows.size, shadows.size);
       light.shadow.camera.near = 0.03; light.shadow.camera.far = 6;
       light.shadow.bias = -0.002; light.shadow.radius = 3;
     }
@@ -97,11 +97,24 @@ export function createOrbitVisual({ curve, N, radius = 0.0065, ring = 10 }) {
     group.add(m);
     bodies.push(m);
   }
+
   // intensité de chaque astre (1 : au repos)
-  const setBoost = (j, k) => { bodies[j].userData.boost.value = k; bodies[j].userData.light.intensity = LIGHT * k; };
+  const setBoost = (j, k) => { bodies[j].userData.boost.value = k; bodies[j].userData.light.intensity = lightBase * k; };
+
+  // réglages de la recette (astres, verre)
+  function setStyle(R) {
+    U.cool.value = R.trace.cool;
+    U.glow.value = R.trace.glow;
+    mat.color.set(R.trace.glass);
+    tube.visible = R.trace.show;
+    U.bodyColor.value.set(R.bodies.color);
+    U.bodyGlow.value = R.bodies.glow;
+    lightBase = R.bodies.light;
+    for (const b of bodies) b.userData.light.color.set(R.bodies.color);
+  }
 
   return {
-    group, bodies, phase, setBoost,
+    group, bodies, phase: U.phase, setBoost, setStyle,
     dispose() { geo.dispose(); mat.dispose(); coreGeo.dispose(); for (const m of mats) m.dispose(); for (const b of bodies) b.children[0].dispose(); },
   };
 }

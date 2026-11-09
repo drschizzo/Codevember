@@ -11,7 +11,16 @@ html, body { height: 100%; background: #050403; color: var(--fg); overflow: hidd
 #title p { color: var(--dim); font: italic 300 15px Fraunces, Georgia, serif; margin-top: 4px; }
 #title small { color: var(--dim); opacity: .6; font-size: 11px; letter-spacing: .04em; }
 #hint { position: fixed; right: 18px; bottom: 16px; color: var(--dim); font-size: 11px; letter-spacing: .04em; pointer-events: none; opacity: .7; transition: opacity .4s; }
-body.clean #title, body.clean #hint { opacity: 0; }
+body.light #title h1 { color: #1d1b18; } body.light #title p, body.light #title small, body.light #hint { color: #4e4a44; }
+body.clean #title, body.clean #hint, body.clean .lil-gui.root { opacity: 0; pointer-events: none; }
+
+/* panneau */
+.lil-gui.root { --background-color: var(--glass); --widget-color: rgba(255, 245, 230, 0.07); --hover-color: rgba(255, 245, 230, 0.12);
+  --focus-color: rgba(255, 245, 230, 0.18); --number-color: #e9c48a; --string-color: #e9c48a; --title-background-color: rgba(255, 245, 230, 0.06);
+  --font-family: Inter, system-ui, sans-serif; --font-size: 11px; --widget-height: 19px; --name-width: 46%;
+  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+  top: 14px !important; right: 14px !important; max-height: calc(100% - 28px); transition: opacity .4s; }
+.lil-gui .title { letter-spacing: .04em; }
 
 #toast { position: fixed; left: 50%; top: 22px; transform: translate(-50%, -8px); padding: 7px 14px; border-radius: 999px; max-width: calc(100% - 32px);
   background: var(--glass); backdrop-filter: blur(12px); border: 1px solid var(--line); opacity: 0; transition: all .3s; pointer-events: none; }
@@ -33,4 +42,5 @@ body.clean #title, body.clean #hint { opacity: 0; }
 
 @media (max-width: 640px) {
   #title { left: 16px; bottom: 16px; } #title h1 { font-size: 30px; } #hint { display: none; }
+  .lil-gui.root { right: 8px !important; top: 8px !important; width: calc(100% - 16px) !important; max-height: 50%; }
 }

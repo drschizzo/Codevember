@@ -34,20 +34,26 @@ for (const q of [1, 2, 3, 4, 5]) {
 
 export const STRATEGIES = ['spectre', 'tresse', 'boucles', 'entrelacs'];
 
+// over : contraintes imposées (N, sym — null pour aucune —, omegaFrac [p, q]) ;
+// les tirages se font toujours dans le même ordre, si bien qu'une graine sans
+// contrainte donne toujours la même orbite
 export function orbitParams(seed, over = {}) {
+  const { N: oN, sym: oSym, omegaFrac: oFrac, ...rest } = over;
   const rng = createRng(`orbit:${seed}`);
-  const N = rng.weighted([[3, 3], [4, 3], [5, 3], [6, 2], [7, 2], [8, 1], [9, 1]]);
+  const N0 = rng.weighted([[3, 3], [4, 3], [5, 3], [6, 2], [7, 2], [8, 1], [9, 1]]);
+  const N = oN ?? N0;
   // l'espace est en attente : sans symétrie imposée, la minimisation aplatit
   // toute courbe gauche (voir README, « Ce qui reste à faire »)
-  const D = over.D ?? 2;
+  const D = rest.D ?? 2;
   // vitesse du repère tournant : rationnelle, ω = p/q. Le plateau du planétaire
   // tourne à ω ; après q périodes il a fait p tours entiers : la boucle est
   // parfaite, et tous les rapports d'engrenage sont rationnels
-  const [pw, qw] = rng.chance(0.3) ? [0, 1] : rng.weighted(FRACTIONS);
-  const omega = pw / qw;
+  const drawn = rng.chance(0.3) ? [0, 1] : rng.weighted(FRACTIONS);
+  const [pw, qw] = oFrac ?? drawn;
   // classe de symétrie (plan seulement) : m pétales, miroir
-  const sym = D === 2 ? pickSymmetry(rng, N) : null;
-  return { N, D, omega, omegaFrac: [pw, qw], sym, Kc: 12, K: 32, Kmax: 128, ...over };
+  const symDrawn = D === 2 ? pickSymmetry(rng, N) : null;
+  const sym = oSym !== undefined ? oSym : symDrawn;
+  return { N, D, omega: pw / qw, omegaFrac: [pw, qw], sym, Kc: 12, K: 32, Kmax: 128, ...rest };
 }
 
 // courbe de départ : quelques harmoniques dominantes (permises : k non multiple

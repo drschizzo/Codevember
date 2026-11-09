@@ -39,7 +39,7 @@ function minPair(coef, p, t, a, b) {
 }
 
 // ralentis sur une boucle de q périodes (temps de l'orbite, 0 … 2πq)
-export function beatsFor(coef, p, q, seed) {
+export function beatsFor(coef, p, q, seed, strength = 1) {
   const rng = createRng(`choreo:${seed}`);
   const { N } = p, span = TAU / N, n = 256;
   const a = new Float64Array(2), b = new Float64Array(2);
@@ -66,7 +66,7 @@ export function beatsFor(coef, p, q, seed) {
   for (let k = 0; k < count; k++) {
     // un silence de temps en temps : la pulsation respire
     const silent = count > 3 && rng.chance(0.18);
-    beats.push({ t: tMin + k * gap, a: silent ? 0 : accents[k % accents.length], w: Math.min(0.42 * gap, 0.9) });
+    beats.push({ t: tMin + k * gap, a: silent ? 0 : Math.min(0.92, accents[k % accents.length] * strength), w: Math.min(0.42 * gap, 0.9) });
   }
   return { beats, loop: TAU * q, dMin };
 }
@@ -102,9 +102,9 @@ const SHOTS = {
   machine: (u, s) => ({ az: s.az0 + s.dir * SWEEP.machine * u, el: 0.22, r: 0.55, ty: -0.27, fov: 30 }),
 };
 
-export function shotsFor(seed, duration, N) {
+export function shotsFor(seed, duration, N, shotLength = 6) {
   const rng = createRng(`shots:${seed}`);
-  const count = Math.max(2, Math.round(duration / 6));
+  const count = Math.max(2, Math.round(duration / shotLength));
   const kinds = ['ensemble'];
   const pool = ['rasant', 'zenith', 'astre', 'machine', 'ensemble'];
   while (kinds.length < count) {
