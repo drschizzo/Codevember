@@ -260,8 +260,10 @@ export function createUI({ recipe: getRecipe, render, on, nest }) {
   const r = render;
   fRender.add(r, 'quality', opts(QUALITY)).name('Qualité').onChange((k) => { on.quality(k); fRender.controllersRecursive().forEach((c) => c.updateDisplay()); });
   fRender.add(r, 'pixelRatio', 0.5, 2, 0.05).name('Résolution (× écran)').onChange(rch);
+  fRender.add(r, 'dynRes').name('Résolution dynamique').onChange(rch);
+  fRender.add(r, 'maxFps', { Libre: 0, '30 i/s': 30, '60 i/s': 60 }).name('Cadence maximale').onChange(rch);
   fRender.add(r, 'aa', { Temporel: 'traa', SMAA: 'smaa', FXAA: 'fxaa', Aucun: 'none' }).name('Anticrénelage').onChange(rch);
-  fRender.add(r, 'shadows', { Basses: 'low', Moyennes: 'medium', Hautes: 'high', 'Très hautes': 'ultra' }).name('Ombres').onChange(rch);
+  fRender.add(r, 'shadows', { Mobile: 'mobile', Basses: 'low', Moyennes: 'medium', Hautes: 'high', 'Très hautes': 'ultra' }).name('Ombres').onChange(rch);
   const fm = fRender.addFolder('Membranes').close();
   fm.add(r, 'detail').name('Maillage fin des couches proches').onChange(rch);
   fm.add(r, 'backdrop').name('Voir au travers (copie par couche)').onChange(rch);

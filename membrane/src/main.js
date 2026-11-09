@@ -2,7 +2,8 @@
 //
 // Paramètres d'URL : ?seed=… (la scène), #r=… (une scène retouchée, partagée
 // par « Copier le lien »), ?ui=0 (sans panneau), ?debug (outils dans
-// window.membrane, dont shot(u) : une image fixe à une phase donnée).
+// window.membrane, dont shot(u) : une image fixe à une phase donnée),
+// ?mobile=1 / ?mobile=0 (version allégée imposée / interdite ; voir app/mobile.js).
 import * as THREE from 'three/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { generate, makeLevel, makeArmature, makeMembrane, finishesFor, upgrade, MOODS } from './recipe.js';
@@ -11,11 +12,12 @@ import { createGenerator } from './gen/client.js';
 import { createNest, XMAX, MAIN } from './scene/nest.js';
 import { createLights } from './scene/lights.js';
 import { makeEnvironment } from './scene/env.js';
-import { setNoiseVolume } from './scene/materials.js';
+import { setNoiseVolume, setLite } from './scene/materials.js';
 import { G } from './scene/globals.js';
 import { createPost } from './render/post.js';
 import { createUI } from './app/ui.js';
-import { loadRender, saveRender, applyQuality, RENDER_DEFAULTS } from './app/settings.js';
+import { loadRender, saveRender, applyQuality, defaultsFor } from './app/settings.js';
+import { wantsMobile, switchMobile, createGovernor, createPacer, bindTouch } from './app/mobile.js';
 import { exportLoop, exportPNG } from './app/capture.js';
 
 const D = 1; // distance caméra–centre (échelle de la plongée)
@@ -68,6 +70,10 @@ function toast(msg, ms = 2200) {
 }
 
 async function main() {
+  // ── Version mobile (fixée au chargement) ──
+  const LITE = wantsMobile(params);
+  setLite(LITE);
+  if (LITE) document.body.classList.add('lite');
   const renderer = new THREE.WebGPURenderer({ antialias: false, powerPreference: 'high-performance' });
   try { await renderer.init(); } catch (e) { return fail(`Impossible d’initialiser le rendu : ${e.message}`); }
   // (la simulation des membranes tourne en shaders de calcul WebGPU)
@@ -87,13 +93,18 @@ async function main() {
   controls.enableDamping = true;
   const camState = { free: false };
 
-  const gen = createGenerator();
+  // (mobile : moins de workers, la préparation ne doit pas étouffer le rendu)
+  const gen = createGenerator(LITE ? Math.max(2, Math.min(3, (navigator.hardwareConcurrency || 4) - 1)) : undefined);
   setNoiseVolume(await gen.request({ seed: 'membrane-noise' }, 'noise'));
-  const nest = createNest(scene, gen, renderer);
+  const nest = createNest(scene, gen, renderer, { lite: LITE });
   nest.onError = (e) => toast(`Simulation impossible : ${e.message}`, 6000);
-  const lights = createLights(scene);
+  const lights = createLights(scene, { lite: LITE });
   const post = createPost(renderer, scene, camera);
-  const RENDER = loadRender();
+  const RENDER = loadRender(LITE);
+  // résolution dynamique : vise ~45 images / s, entre 50 et 100 % de la résolution de base
+  let busy = false;
+  const governor = createGovernor({ target: 1 / 45, min: 0.5, max: 1, onChange: () => !busy && resize() });
+  const pace = createPacer(() => RENDER.maxFps);
 
   let R;
   if (location.hash.startsWith('#r=')) { try { R = upgrade(await unpackRecipe(location.hash.slice(3))); } catch { R = null; } }
@@ -105,7 +116,8 @@ async function main() {
     if (R.env.preset === envKey) return;
     envKey = R.env.preset;
     const old = scene.environment;
-    scene.environment = makeEnvironment(envKey);
+    // (mobile : carte de 512 px, quatre fois moins de pixels à calculer et à préfiltrer)
+    scene.environment = makeEnvironment(envKey, 0, LITE ? 512 : 1024);
     old?.dispose();
   }
 
@@ -176,19 +188,20 @@ async function main() {
   }
 
   function resize() {
-    renderer.setPixelRatio(Math.min(devicePixelRatio, RENDER.pixelRatio));
+    renderer.setPixelRatio(Math.min(devicePixelRatio, RENDER.pixelRatio) * (RENDER.dynRes ? governor.scale : 1));
     renderer.setSize(innerWidth, innerHeight);
     camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
   }
   function applyRender() {
+    if (!RENDER.dynRes) governor.reset();
     resize();
     lights.setShadowQuality(RENDER.shadows);
     saveRender(RENDER);
   }
 
   // ── Interface ──
-  let phi = 0, paused = false, busy = false, frozen = false;
+  let phi = 0, paused = false, frozen = false;
   const rngUI = () => createRng(`${R.seed}:${performance.now()}`);
   const on = {
     camState,
@@ -214,8 +227,12 @@ async function main() {
     membrane: (i, k) => { const m = makeMembrane(k, rngUI()); Object.assign(R.levels[i], { membrane: k, look: m.look, phys: m.phys }); resim(i); ui?.rebuildLevels(); },
     rerollLevel: (i) => { R.levels[i] = makeLevel(rngUI(), R.mood); resim(i); ui?.rebuildLevels(); },
     renderChanged: () => applyRender(),
-    quality: (k) => { applyQuality(RENDER, k); applyRender(); },
-    resetRender: () => { Object.assign(RENDER, RENDER_DEFAULTS); applyRender(); ui?.refresh(); },
+    quality: (k) => {
+      // (entrer dans le mode mobile ou en sortir recompile les matériaux : rechargement)
+      if ((k === 'mobile') !== LITE) { toast('Rechargement…', 0); return switchMobile(k === 'mobile'); }
+      applyQuality(RENDER, k); applyRender();
+    },
+    resetRender: () => { Object.assign(RENDER, defaultsFor(LITE)); applyRender(); ui?.refresh(); },
     freeCam: (v) => { camState.free = v; controls.enabled = v; if (v) controls.target.set(0, 0, 0); toast(v ? 'Caméra libre' : 'Caméra du film', 1600); },
     exportPNG: () => exportPNG(canvas, () => renderStep(phi), `membrane-${R.seed}.png`),
     exportVideo: async (o) => {
@@ -242,6 +259,19 @@ async function main() {
     },
   };
   ui = params.get('ui') === '0' ? null : createUI({ recipe: () => R, render: RENDER, on, nest });
+  // Écran tactile : le panneau reste replié (il couvrirait l'image) ; une touche
+  // met en pause, deux touches tirent une nouvelle scène, un appui long masque
+  // l'interface.
+  const touch = LITE || !!matchMedia?.('(pointer: coarse)').matches;
+  let hinted = false;
+  if (touch) {
+    ui?.gui.close();
+    bindTouch(canvas, {
+      onTap: () => on.togglePause(),
+      onDoubleTap: () => on.random(),
+      onLongPress: () => document.body.classList.toggle('clean'),
+    });
+  }
 
   applyRender();
   applyRecipe();
@@ -308,19 +338,25 @@ async function main() {
   let last = performance.now(), fpsAcc = 0, fpsN = 0, fpsT = 0;
   renderer.setAnimationLoop((now) => {
     if (busy || frozen) return;
+    if (!pace(now)) return; // (écrans 90 / 120 Hz : cadence plafonnée)
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
+    if (RENDER.dynRes && !loading.active) governor.frame(dt); // (pas pendant le chargement : simulation et workers faussent la mesure)
     if (!paused && !loading.active) phi += dt / (R.loop.beat * R.levels.length);
     renderAt(phi);
     if (loading.active) {
       const k = nest.progress(), el = (performance.now() - loading.t0) / 1000;
       // (progression : couches prêtes, et une estimation du temps de simulation)
       $('#loadbar u').style.width = `${Math.min(99, (k * 0.7 + Math.min(1, el / 9) * 0.3) * 100).toFixed(1)}%`;
-      if (nest.ready() && ++loading.settle > 8) { loading.active = false; $('#loader').classList.add('gone'); }
+      if (nest.ready() && ++loading.settle > 8) {
+        loading.active = false;
+        $('#loader').classList.add('gone');
+        if (touch && !hinted) { hinted = true; toast('touche : pause · deux touches : nouvelle scène · appui long : masquer', 4500); }
+      }
     }
     fpsAcc += dt; fpsN++;
     if ((fpsT += dt) > 0.5) {
-      ui?.setFps(`${(fpsN / fpsAcc).toFixed(0)}  ·  ${info?.shown ?? 0} couches`);
+      ui?.setFps(`${(fpsN / fpsAcc).toFixed(0)}  ·  ${info?.shown ?? 0} couches${RENDER.dynRes ? `  ·  ${Math.round(governor.scale * 100)} %` : ''}`);
       fpsAcc = fpsN = fpsT = 0;
     }
   });

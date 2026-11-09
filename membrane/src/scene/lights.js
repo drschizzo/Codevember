@@ -13,9 +13,11 @@ import { vec4, float, positionViewDirection, normalView, dot, abs, pow, mix, vie
 import { KEY, BACK, MAIN } from './nest.js';
 import { G } from './globals.js';
 
-const SHADOW_SIZES = { low: 1024, medium: 2048, high: 2048, ultra: 4096 };
+// (mobile : 1024, quatre fois moins de texels à rendre et à filtrer ; les
+// ombres de l'armature sont adoucies par la pénombre, la perte ne se voit guère)
+const SHADOW_SIZES = { mobile: 1024, low: 1024, medium: 2048, high: 2048, ultra: 4096 };
 
-export function createLights(scene) {
+export function createLights(scene, { lite = false } = {}) {
   // (sans atténuation : une source lointaine — les membranes qui frôlent la
   // caméra ne s'embrasent pas)
   const key = new THREE.SpotLight(0xffffff, 10, 0, 0.6, 0.8, 0);
@@ -42,10 +44,21 @@ export function createLights(scene) {
   const glowMat = new THREE.MeshBasicNodeMaterial();
   const facing = abs(dot(normalView, positionViewDirection)).clamp(0, 1);
   const a = pow(facing, float(1.5));
-  const behind = viewportTexture(screenUV).rgb;
-  glowMat.colorNode = vec4(mix(behind, G.coreColor.mul(G.coreGlow).mul(pow(facing, float(3)).add(0.15)), a), 1);
+  const col = G.coreColor.mul(G.coreGlow).mul(pow(facing, float(3)).add(0.15));
+  if (lite) {
+    // mode allégé : le même mélange mix(fond, lueur, a), fait par le matériel
+    // (mélange alpha) au lieu d'une copie de l'image. Dessinée après les
+    // objets opaques et avant les membranes (renderOrder), elle écrit sa
+    // profondeur : le résultat est identique, sans copie.
+    glowMat.colorNode = vec4(col, a);
+    glowMat.transparent = true;
+    glowMat.depthWrite = true;
+  } else {
+    const behind = viewportTexture(screenUV).rgb;
+    glowMat.colorNode = vec4(mix(behind, col, a), 1);
+  }
   glowMat.fog = false;
-  const glow = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 24), glowMat);
+  const glow = new THREE.Mesh(new THREE.SphereGeometry(1, lite ? 32 : 48, lite ? 16 : 24), glowMat);
   glow.layers.mask = MAIN;
   glow.renderOrder = 5; // (avant les membranes : elles le voient au travers)
   scene.add(glow);

@@ -19,7 +19,10 @@ Paramètres d'URL :
 - `#r=…` : une scène retouchée, produite par « Copier le lien » ;
 - `?ui=0` : sans panneau ;
 - `?debug` : outils dans `window.membrane`, dont `shot(u)` (une image fixe à une phase donnée) et `level(j, x)` (une couche seule, vue de l'extérieur, à la profondeur x) ;
-- `?fast` : simulation grossière, pour la mise au point.
+- `?fast` : simulation grossière, pour la mise au point ;
+- `?mobile=1` / `?mobile=0` : version mobile imposée / interdite (sans paramètre : selon l'appareil, ou le dernier choix du panneau).
+
+Sur écran tactile : une touche met en pause, deux touches tirent une nouvelle scène, un appui long masque l'interface ; le panneau reste replié.
 
 Le panneau règle tout :
 - **Scène** : humeur, nombre de couches différentes, durée.
@@ -186,5 +189,13 @@ Une scène tire une matière dominante, parfois une seconde, et des armatures di
 - **Économies** : faces arrière sans copie (−3,5 ms), occlusion ambiante à 8 échantillons (−1,1 ms), poses des couches immobiles mises en cache.
 - **Photoélasticité** : environ 3 ms par image (calcul de la déformation et intégration spectrale), et seulement si la lumière polarisée est allumée.
 - **Mémoire** : les images enregistrées pèsent environ 25 Mo par couche différente.
+
+### Version mobile
+
+Choisie au chargement (écran tactile et petit écran, `?mobile=1`, ou la qualité « Mobile » du panneau, qui recharge la page) : les matériaux sont compilés autrement. Ses réglages sont mémorisés à part.
+- **Copies de l'image** : la face avant d'une couche lointaine (au-delà de x = 0,8, petite à l'écran) se mélange à l'image par le matériel, comme la face arrière au-delà de x = 0,35, avec la même convergence sans saut ; il reste deux ou trois copies (et leurs mipmaps) par image au lieu de six à huit — sur un GPU mobile à tuiles, chaque copie vide la mémoire de tuile. Pas de flou selon la profondeur au travers (une copie de la profondeur par membrane). La lueur du cœur se mélange par le matériel au lieu de lire une copie de l'image (résultat identique).
+- **Simulation** : 36 au lieu de 44 subdivisions (≈ 2/3 des particules), 120 images enregistrées au lieu de 160 (interpolées en Catmull-Rom), 13 sous-pas au lieu de 16 : préparation, calcul au chargement et mémoire presque divisés par deux, la dynamique de la déchirure est la même.
+- **Matière** : Worley lu dans le volume de bruit, fBm à deux octaves, bruit de phaseurs des plis sur 8 cellules au lieu de 27, photoélasticité sur 7 longueurs d'onde au lieu de 12, pas de vecteurs vitesse (une évaluation du patch PN en moins par sommet), armature de verre sans transmission (verre sombre vernis), tramage des fondus fixe à l'écran (sans anticrénelage temporel, un tramage renouvelé fourmillerait).
+- **Image** : 1,25 × la résolution CSS au plus, résolution dynamique (50 à 100 %, visée ~45 i/s), cadence plafonnée à 60 i/s ; maillage grossier des couches, ombres en 1024, environnement en 512 ; ni reflets en espace écran, ni occlusion ambiante, ni anticrénelage temporel (FXAA), ni flou de mouvement ; bloom en quart de résolution ; ni traînées, ni poussière sur la lentille, ni aberration chromatique.
 
 [![Membrane](docs/capture.jpg)](https://drschizzo.github.io/Codevember/membrane/)

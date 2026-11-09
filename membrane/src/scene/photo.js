@@ -17,11 +17,15 @@
 // disparaissent : il ne reste que les franges de même retard (isochromes).
 import { Fn, vec3, float, sin, cos, atan, sqrt, dot, mix, modelViewMatrix, modelScale } from 'three/tsl';
 import { G } from './globals.js';
+import { isLite } from './materials.js';
 
 // ── Pondérations spectrales ──────────────────────────────────────────────────
-const LAMBDAS = [];
+// (mode allégé : 7 longueurs d'onde au lieu de 12 — écart de 43 nm, franges
+// justes jusqu'au troisième ordre environ, au-delà les teintes pâlissent un
+// peu plus tôt : presque deux fois moins de sinus et cosinus par pixel)
 const NL = 12; // (écart de 25 nm : pas de repliement en deçà de 5 µm de retard)
-for (let i = 0; i < NL; i++) LAMBDAS.push(400 + (300 * (i + 0.5)) / NL);
+const lambdas = (n) => Array.from({ length: n }, (_, i) => 400 + (300 * (i + 0.5)) / n);
+const LAMBDAS = lambdas(NL);
 const g = (l, mu, s1, s2) => { const t = (l - mu) / (l < mu ? s1 : s2); return Math.exp(-0.5 * t * t); };
 const cie = (l) => [
   1.056 * g(l, 599.8, 37.9, 31.0) + 0.362 * g(l, 442.0, 16.0, 26.7) - 0.065 * g(l, 501.1, 20.4, 26.2),
@@ -29,14 +33,19 @@ const cie = (l) => [
   1.217 * g(l, 437.0, 11.8, 36.0) + 0.681 * g(l, 459.0, 26.0, 13.8),
 ];
 const toRGB = ([X, Y, Z]) => [3.2406 * X - 1.5372 * Y - 0.4986 * Z, -0.9689 * X + 1.8758 * Y + 0.0415 * Z, 0.0557 * X - 0.204 * Y + 1.057 * Z];
-const W = LAMBDAS.map((l) => toRGB(cie(l)));
-{
+// (poids normalisés sur le blanc)
+const weights = (Ls) => {
+  const W = Ls.map((l) => toRGB(cie(l)));
   const sum = [0, 1, 2].map((c) => W.reduce((s, w) => s + w[c], 0));
   for (const w of W) for (let c = 0; c < 3; c++) w[c] /= sum[c];
-}
+  return W;
+};
+const W = weights(LAMBDAS);
 // lame teinte sensible (onde entière à 550 nm) : sin et cos de son demi-retard
 const PLATE = 550;
-const PL = LAMBDAS.map((l) => [Math.sin((Math.PI * PLATE) / l), Math.cos((Math.PI * PLATE) / l)]);
+const plateTable = (Ls) => Ls.map((l) => [Math.sin((Math.PI * PLATE) / l), Math.cos((Math.PI * PLATE) / l)]);
+const PL = plateTable(LAMBDAS);
+const LITE_L = lambdas(7), LITE_W = weights(LITE_L), LITE_PL = plateTable(LITE_L);
 
 // teinte de Michel-Lévy (JS, pour vérifier la table : Γ en nm, polariseurs croisés)
 export function michelLevy(G0) {
@@ -68,10 +77,11 @@ export const photoelastic = Fn(([A, B, C, h]) => {
   const C1 = cos(t2), S1 = sin(t2);
   const plate = G.polPlate, circ = G.polCirc, cross = G.polCross;
   let rgb = vec3(0);
-  LAMBDAS.forEach((l, i) => {
+  const [Ls, Ws, PLs] = isLite() ? [LITE_L, LITE_W, LITE_PL] : [LAMBDAS, W, PL];
+  Ls.forEach((l, i) => {
     const d = gamma.mul(Math.PI / l);
     const s1 = sin(d), c1 = cos(d);
-    const s2 = plate.mul(PL[i][0]), c2 = mix(float(1), float(PL[i][1]), plate);
+    const s2 = plate.mul(PLs[i][0]), c2 = mix(float(1), float(PLs[i][1]), plate);
     // polariseurs croisés : composante transmise par l'analyseur (Jones)
     const re = s1.mul(s2).mul(C1);
     const im = s2.mul(c1).add(c2.mul(s1).mul(S1));
@@ -79,7 +89,7 @@ export const photoelastic = Fn(([A, B, C, h]) => {
     const ic = mix(lin, s1.mul(s1), circ);
     // analyseur parallèle : le complément (lames sans pertes)
     const I = mix(ic.oneMinus(), ic, cross);
-    rgb = rgb.add(vec3(...W[i]).mul(I));
+    rgb = rgb.add(vec3(...Ws[i]).mul(I));
   });
   return rgb.max(vec3(0));
 });
