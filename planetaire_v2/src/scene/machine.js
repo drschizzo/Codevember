@@ -18,7 +18,7 @@
 // Coordonnées : le plan (x, y) de l'orbite est posé en (x, h, −y) ; une
 // rotation d'angle θ autour de +y est la rotation du plan.
 import * as THREE from 'three/webgpu';
-import { uniform, positionLocal, normalLocal, float, vec2, vec3, sin, atan, length, fract, smoothstep, mix, abs, floor, max, fwidth, mx_cell_noise_float, materialColor, materialRoughness, materialMetalness } from 'three/tsl';
+import { uniform, positionLocal, normalLocal, positionPrevious, attribute, Fn, mat3, mat4, vec4, dot, float, vec2, vec3, sin, atan, length, fract, smoothstep, mix, abs, floor, max, fwidth, mx_cell_noise_float, materialColor, materialRoughness, materialMetalness } from 'three/tsl';
 import { mergeGeometries, toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
 import { designMachine, SLAB } from '../mech/design.js';
 import { createDrive } from '../mech/drive.js';
@@ -403,13 +403,34 @@ function mergeStatic(roots, update, keep) {
 
 // ── Chaînes instanciées ──────────────────────────────────────────────────────
 // Les bras restent des groupes (détachés de la scène) qui portent les
-// transformations ; leurs pièces sont dessinées par des InstancedMesh (une
-// instance par chaîne), avec leurs propres matières (une matière partagée entre
-// objets instanciés et non instanciés fausse les vitesses de l'anticrénelage).
-function instanceChains(chains, group, n) {
+// transformations ; leurs pièces sont dessinées par instanciation (une
+// instance par chaîne), avec leurs propres matières.
+//
+// Pas d'InstancedMesh : three.js compile un shader par InstancedMesh (la clé
+// de son cache contient l'identifiant de l'objet, et le tampon des matrices
+// porte un nom unique dans le code), soit plusieurs centaines de shaders pour
+// trois machines, et l'essentiel du temps de chargement. Ici, chaque pièce est
+// un Mesh ordinaire dont la géométrie porte la matrice de chaque instance
+// (attributs im0…im3, et ip0…ip3 pour l'image précédente : les vitesses de
+// l'anticrénelage temporel) ; la matière les applique dans son positionNode.
+// Toutes les pièces d'une même matière partagent alors le même shader.
+const instanced = (mat) => {
+  const m = mat.clone();
+  const col = (p) => [0, 1, 2, 3].map((i) => attribute(`${p}${i}`, 'vec4'));
+  const cur = col('im'), prev = col('ip');
+  m.positionNode = Fn(() => {
+    positionPrevious.assign(mat4(...prev).mul(vec4(positionLocal, 1)).xyz);
+    // (matrice de rotation et d'échelle : colonnes orthogonales)
+    const c0 = cur[0].xyz, c1 = cur[1].xyz, c2 = cur[2].xyz;
+    normalLocal.assign(mat3(c0, c1, c2).mul(normalLocal.div(vec3(dot(c0, c0), dot(c1, c1), dot(c2, c2)))));
+    return mat4(...cur).mul(vec4(positionLocal, 1)).xyz;
+  })();
+  return m;
+};
+function instanceChains(chains, group, n, keep) {
   const parts = [];
   const clones = new Map();
-  const matFor = (m) => { if (!clones.has(m)) clones.set(m, m.clone()); return clones.get(m); };
+  const matFor = (m) => { if (!clones.has(m)) clones.set(m, instanced(m)); return clones.get(m); };
   // signature d'une pièce : matière, sommets et boîte englobante. Les chaînes
   // ne sont pas toutes identiques : d'une chaîne à l'autre, un même bras peut
   // être à un autre étage, et ses pièces fusionnées (goupille, chaton, axe,
@@ -434,24 +455,40 @@ function instanceChains(chains, group, n) {
     for (const gs of byShape.values()) {
       const kids = gs[0].children;
       kids.forEach((c0, ci) => {
-        const im = new THREE.InstancedMesh(c0.geometry, matFor(c0.material), gs.length);
+        // la géométrie de la pièce (position et normale, partagées), plus les matrices des instances
+        const ig = keep(new THREE.InstancedBufferGeometry());
+        ig.setIndex(c0.geometry.index);
+        ig.setAttribute('position', c0.geometry.attributes.position);
+        ig.setAttribute('normal', c0.geometry.attributes.normal);
+        ig.instanceCount = gs.length;
+        const bufs = ['im', 'ip'].map((p) => {
+          const ib = new THREE.InstancedInterleavedBuffer(new Float32Array(16 * gs.length), 16, 1).setUsage(THREE.DynamicDrawUsage);
+          for (let q = 0; q < 4; q++) ig.setAttribute(`${p}${q}`, new THREE.InterleavedBufferAttribute(ib, 4, 4 * q));
+          return ib;
+        });
+        const im = new THREE.Mesh(ig, matFor(c0.material));
         im.castShadow = c0.castShadow; im.receiveShadow = c0.receiveShadow;
         im.frustumCulled = false; // (les instances bougent : la sphère englobante serait fausse)
         group.add(im);
-        parts.push({ im, gs, src: gs.map((g) => g.children[ci]) });
+        parts.push({ cur: bufs[0], prev: bufs[1], gs, src: gs.map((g) => g.children[ci]) });
       });
       for (const g of gs) g.removeFromParent();
     }
   }
   const M4 = new THREE.Matrix4();
   const groups = new Set(parts.flatMap((p) => p.gs));
-  return () => {
+  let primed = false;
+  // les matrices de l'image qu'on vient de dessiner deviennent les précédentes
+  const after = () => { for (const { cur, prev } of parts) { prev.array.set(cur.array); prev.needsUpdate = true; } };
+  const sync = () => {
     for (const g of groups) g.updateMatrix();
-    for (const { im, gs, src } of parts) {
-      for (let j = 0; j < gs.length; j++) { src[j].updateMatrix(); im.setMatrixAt(j, M4.multiplyMatrices(gs[j].matrix, src[j].matrix)); }
-      im.instanceMatrix.needsUpdate = true;
+    for (const { cur, gs, src } of parts) {
+      for (let j = 0; j < gs.length; j++) { src[j].updateMatrix(); M4.multiplyMatrices(gs[j].matrix, src[j].matrix).toArray(cur.array, 16 * j); }
+      cur.needsUpdate = true;
     }
+    if (!primed) { primed = true; after(); }
   };
+  return { sync, after };
 }
 
 // ── La machine ───────────────────────────────────────────────────────────────
@@ -806,12 +843,13 @@ export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72, archet
   mergeStatic([group, stand], update, keep);
   // puis les N chaînes, identiques à un décalage de phase près : chaque pièce
   // d'un bras devient un seul dessin instancié N fois
-  const syncInstances = instanceChains(chains, group, n);
-  const updateAll = (tau, xy) => { update(tau, xy); syncInstances(); };
-  syncInstances();
+  const inst = instanceChains(chains, group, n, keep);
+  const updateAll = (tau, xy) => { update(tau, xy); inst.sync(); };
+  inst.sync();
 
   return {
-    group, stand, update: updateAll, design: D, yPlate, yTop, yBody, plateR, bodyReach, bezelR: drive.bezelR, grooveCurves,
+    // (afterRender : à appeler après chaque image quand le rendu utilise les vitesses)
+    group, stand, update: updateAll, afterRender: inst.after, design: D, yPlate, yTop, yBody, plateR, bodyReach, bezelR: drive.bezelR, grooveCurves,
     dispose() { for (const g of geos) g.dispose(); },
   };
 }

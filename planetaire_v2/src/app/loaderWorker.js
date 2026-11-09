@@ -12,7 +12,10 @@
 //   - dès que la machine est conçue, ses bras (les épicycles) apparaissent :
 //     des cercles portés par des cercles, qui tracent la courbe au bout de
 //     chaque chaîne ;
-//   - un anneau fin en quatre arcs suit le chargement : trajectoire, machine,
+//   - sous la couronne, trois médaillons : les trois mondes de la plongée.
+//     Celui dont on cherche l'orbite palpite ; une orbite trouvée vient s'y
+//     ranger, en petit ;
+//   - un anneau fin en quatre arcs suit le chargement : trajectoires, machines,
 //     construction, rendu.
 const TAU = Math.PI * 2;
 const GOLD = [255, 214, 150], AMBER = [233, 196, 138], DIM = [150, 140, 128], FAIL = [190, 120, 105];
@@ -20,6 +23,15 @@ let canvas = null, ctx = null, dpr = 1, W = 0, H = 0;
 const tries = new Map();
 let maxTries = 24, found = null, running = false, step = 0, stepT = 0, error = false;
 let mech = null; // { k, L, phi, N } : les bras de la machine
+let prog = null, progShown = 0; // avancement réel de l'étape en cours, quand il est connu
+// les mondes de la plongée : la couche en cours, celles qui ont déjà leur
+// orbite, et les courbes trouvées ({ pts, f, t })
+const worlds = { cur: 0, have: [false, false, false], kept: [] };
+// l'orbite trouvée de la couche en cours rejoint son médaillon
+const keep = () => {
+  const tr = found !== null ? tries.get(found) : null;
+  if (tr?.pts && !worlds.kept[worlds.cur]) worlds.kept[worlds.cur] = { pts: tr.pts, f: frame(tr.pts), t: now() };
+};
 const now = () => performance.now();
 const raf = self.requestAnimationFrame ? (f) => self.requestAnimationFrame(f) : (f) => setTimeout(() => f(now()), 16);
 const ease = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
@@ -96,10 +108,33 @@ function hero(tr, X, Y, R, t, gold) {
 }
 
 let frames = 0; // (images dessinées : contrôle de fluidité, ?debug)
+// (trous de plus de 40 ms entre deux images : { at : horloge absolue, ms })
+let lastDraw = 0;
+const gaps = [];
+// (?debug) sonde du processus graphique : une lecture d'un pixel WebGL fait
+// l'aller-retour jusqu'à lui ; si elle tarde, c'est qu'il est bloqué (par la
+// compilation d'un shader, par exemple), et l'affichage de la page avec lui,
+// même si ce worker, lui, continue de tourner
+const stalls = [];
+function probe() {
+  const gl = new OffscreenCanvas(4, 4).getContext('webgl');
+  if (!gl) return;
+  const px = new Uint8Array(4);
+  setInterval(() => {
+    const t0 = now();
+    gl.clear(gl.COLOR_BUFFER_BIT); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    const d = now() - t0;
+    if (d > 25 && stalls.length < 400) stalls.push({ at: Math.round(performance.timeOrigin + t0), ms: Math.round(d) });
+  }, 20);
+}
+
 function draw(t) {
   if (!running) return;
   raf(draw);
   frames++;
+  const n = now();
+  if (lastDraw && n - lastDraw > 40 && gaps.length < 200) gaps.push({ at: Math.round(performance.timeOrigin + n), ms: Math.round(n - lastDraw) });
+  lastDraw = n;
   if (!ctx) return;
   if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
   ctx.clearRect(0, 0, W, H);
@@ -110,7 +145,7 @@ function draw(t) {
   // ── au centre : l'orbite trouvée, sinon l'essai en tête
   let lead = found !== null ? tries.get(found) : null;
   if (!lead) for (const i of [...tries.keys()].sort((a, b) => a - b)) { const tr = tries.get(i); if (tr.state === 'run' && tr.pts) { lead = tr; break; } }
-  if (lead) hero(lead, X, Y, R * 0.78, t, lead.state === 'ok');
+  if (lead?.pts) hero(lead, X, Y, R * 0.78, t, lead.state === 'ok');
 
   // ── la couronne des essais
   const RC = R * 1.18;
@@ -145,6 +180,31 @@ function draw(t) {
     }
   }
 
+  // ── les mondes de la plongée : un médaillon par couche
+  {
+    const n = worlds.have.length, r = R * 0.105, y = Y + R * 1.62, dx = r * 3.4;
+    for (let i = 0; i < n; i++) {
+      const x = X + (i - (n - 1) / 2) * dx, k = worlds.kept[i];
+      const searching = step === 0 && i === worlds.cur && !k;
+      ctx.lineWidth = dpr;
+      ctx.strokeStyle = rgba(k || worlds.have[i] ? AMBER : DIM, k || worlds.have[i] ? 0.4 : searching ? 0.3 + 0.25 * Math.sin(t / 260) : 0.16);
+      ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.stroke();
+      if (k) {
+        const e = ease((t - k.t) / 700);
+        ctx.strokeStyle = rgba(GOLD, 0.85 * e); ctx.lineWidth = 0.9 * dpr; ctx.lineJoin = 'round';
+        path(k.pts, x, y, (r * 0.74 * (1.6 - 0.6 * e)) / k.f.s, k.f); ctx.stroke();
+      } else if (worlds.have[i]) {
+        ctx.fillStyle = rgba(AMBER, 0.6);
+        ctx.beginPath(); ctx.arc(x, y, 1.6 * dpr, 0, TAU); ctx.fill();
+      }
+      // (un trait relie les médaillons : chaque monde est dans les astres du précédent)
+      if (i < n - 1) {
+        ctx.strokeStyle = rgba(DIM, 0.2);
+        ctx.beginPath(); ctx.moveTo(x + r * 1.25, y); ctx.lineTo(x + dx - r * 1.25, y); ctx.stroke();
+      }
+    }
+  }
+
   // ── l'anneau du chargement : quatre arcs (trajectoire, machine, construction, rendu)
   const RA = R * 1.32, gap = 0.06;
   ctx.lineCap = 'round'; ctx.lineWidth = 1.2 * dpr;
@@ -153,7 +213,11 @@ function draw(t) {
     ctx.strokeStyle = rgba(DIM, 0.16);
     ctx.beginPath(); ctx.arc(X, Y, RA, a0, a1); ctx.stroke();
     let p = s < step ? 1 : 0;
-    if (s === step && !error) p = 1 - Math.exp(-(t - stepT) / 2500); // (on ne sait pas la durée : l'arc avance en ralentissant)
+    if (s === step && !error) {
+      // (durée inconnue : l'arc avance en ralentissant ; connue : il suit l'avancement réel)
+      if (prog === null) p = 1 - Math.exp(-(t - stepT) / 2500);
+      else { progShown += (prog - progShown) * 0.12; p = progShown; }
+    }
     if (p > 0) {
       ctx.strokeStyle = rgba(s < step ? AMBER : GOLD, s < step ? 0.55 : 0.9);
       ctx.beginPath(); ctx.arc(X, Y, RA, a0, a0 + (a1 - a0) * p); ctx.stroke();
@@ -166,11 +230,13 @@ self.onmessage = (e) => {
   const m = e.data;
   if (m.type === 'init') { canvas = m.canvas; ctx = canvas.getContext('2d'); }
   else if (m.type === 'size') { W = m.w; H = m.h; dpr = m.dpr; }
-  else if (m.type === 'start') { if (!running) { running = true; raf(draw); } }
+  else if (m.type === 'start') { if (!running) { running = true; lastDraw = 0; raf(draw); } }
   else if (m.type === 'stop') { running = false; tries.clear(); found = null; mech = null; if (ctx) ctx.clearRect(0, 0, W, H); }
+  else if (m.type === 'layer') { keep(); worlds.cur = m.layer; worlds.have = m.have; worlds.kept[m.layer] = null; tries.clear(); found = null; mech = null; }
   else if (m.type === 'begin') { tries.clear(); found = null; mech = null; maxTries = m.max; error = false; }
-  else if (m.type === 'clear') { tries.clear(); found = null; mech = null; step = 0; stepT = now(); error = false; }
-  else if (m.type === 'step') { if (m.step !== step) { step = m.step; stepT = now(); } }
+  else if (m.type === 'clear') { tries.clear(); found = null; mech = null; step = 0; stepT = now(); error = false; prog = null; progShown = 0; worlds.kept = []; worlds.cur = 0; }
+  else if (m.type === 'step') { if (m.step > 0) keep(); if (m.step !== step) { step = m.step; stepT = now(); prog = null; progShown = 0; } }
+  else if (m.type === 'progress') prog = m.f;
   else if (m.type === 'error') error = m.on;
   else if (m.type === 'machine') {
     const { k, L, phi } = m.mech, n = 720, pts = new Float32Array(2 * n);
@@ -182,7 +248,8 @@ self.onmessage = (e) => {
     }
     mech = { ...m.mech, pts, t: now() };
   }
-  else if (m.type === 'stats') self.postMessage({ type: 'stats', frames, t: now() });
+  else if (m.type === 'stats') self.postMessage({ type: 'stats', frames, t: now(), gaps: gaps.splice(0), stalls: stalls.splice(0) });
+  else if (m.type === 'probe') probe();
   else if (m.type === 'snap') {
     const tr = tries.get(m.i) || { state: 'run', t: now() };
     tr.pts = m.pts; tr.f = null; tr.N = m.N || tr.N;

@@ -111,6 +111,17 @@
       ],
       "port": 8047,
       "autoPort": false
+    },
+    {
+      "name": "planetaire_v2-8048",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        ".claude/serve.py",
+        "8048",
+        "planetaire_v2"
+      ],
+      "port": 8048,
+      "autoPort": false
     }
   ]
 }

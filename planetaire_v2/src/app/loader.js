@@ -43,6 +43,10 @@ export function createLoader(el) {
     },
     // étape du chargement : orbit, design, build, render
     step: setStep,
+    // avancement réel de l'étape en cours (0 à 1), quand il est connu
+    progress(f) { post({ type: 'progress', f }); },
+    // la couche dont on cherche l'orbite ; have[i] : la couche i a déjà la sienne
+    layer(m, have) { post({ type: 'layer', layer: m, have }); },
     // une nouvelle recherche (une graine, au plus m essais)
     begin(s, m = 24) { post({ type: 'begin', max: m }); setStep('orbit'); },
     snap(i, s) {
@@ -69,6 +73,8 @@ export function createLoader(el) {
         return b;
       }));
     },
+    // (contrôle, ?debug : sonde du processus graphique, voir loaderWorker.js)
+    probe() { post({ type: 'probe' }); },
     // (contrôle : images dessinées par le worker)
     stats: () => new Promise((res) => { if (!worker) return res(null); worker.onmessage = (e) => res(e.data); post({ type: 'stats' }); }),
     // (le dessin s'arrête à la fin du fondu)

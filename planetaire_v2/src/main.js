@@ -1,11 +1,15 @@
 // Point d'entrée : recette, recherche des orbites, mondes emboîtés, plongée,
 // panneau, boucle de rendu.
 //
-// La plongée. Chaque astre est une boule de verre qui contient le même monde
-// (sa machine, son sol, son studio), réduit d'un facteur k : la plongée est
-// auto-similaire, infinie. Trois exemplaires du monde sont emboîtés (le
-// courant, celui de la boule visée, celui de sa boule) ; τ avance d'une couche
-// par segment, et la boucle dure un segment.
+// La plongée. Chaque astre est une boule de verre qui contient un autre monde
+// (sa machine, son sol, son studio), réduit d'un facteur k. La recette décrit
+// trois mondes différents (orbite, humeur, machine, matières) : les astres du
+// premier contiennent le deuxième, ceux du deuxième le troisième, ceux du
+// troisième le premier. Les trois sont emboîtés à la fois (le courant, celui
+// de la boule visée, celui de sa boule) ; τ avance d'une couche par segment, et
+// la boucle dure trois segments : on plonge dans trois boules, puis tout
+// recommence. Les trois mondes sont entièrement construits et compilés pendant
+// l'écran de chargement : rien ne se crée pendant la plongée.
 // Dans un segment (u ∈ [0, 1)), on regarde d'abord la machine, puis la
 // caméra entre dans une boule : c'est le monde qui subit une similitude
 // A(s)⁻¹, A(s) = translation p·(1 − kˢ)/(1 − k) ∘ homothétie kˢ, de point
@@ -48,11 +52,12 @@ function toast(msg, ms = 2200) {
 async function main() {
   const loader = createLoader($('#loader'));
   loader.show();
+  if (params.has('debug')) loader.probe();
   // ── Version mobile (fixée au chargement) ──
   const LITE = wantsMobile(params);
   if (LITE) document.body.classList.add('lite');
   const RENDER = loadRender(LITE);
-  const S = { worlds: [], k: [], target: [], tau: 0, paused: false, busy: true, run: 0, exporting: false, root: -1, good: null };
+  const S = { worlds: [], k: [], target: [], tau: 0, paused: false, busy: true, run: 0, exporting: false, loading: false, root: -1, good: null };
   // résolution dynamique : vise ~45 images / s, entre 50 et 100 % de la résolution de base
   const governor = createGovernor({ target: 1 / 45, min: 0.5, max: 1, onChange: () => !S.busy && resize() });
   const pace = createPacer(() => RENDER.maxFps);
@@ -79,13 +84,37 @@ async function main() {
 
   const post = createPost(renderer, scene, camera, null);
 
+  // ── Compilation sans gel de l'écran de chargement. three.js crée ses
+  // pipelines de rendu de façon synchrone au premier dessin : le processus
+  // graphique du navigateur est alors bloqué pendant la compilation de chaque
+  // shader, et avec lui tout l'affichage de la page (l'écran de chargement se
+  // fige, bien qu'il soit dessiné dans un worker). Pendant le chargement, on
+  // les demande donc en asynchrone (compilées en parallèle, hors du fil
+  // d'affichage) : tant qu'une pipeline n'est pas prête, three.js saute les
+  // objets qui l'utilisent (c'est son traitement d'une pipeline en erreur), et
+  // l'on redessine jusqu'à ce qu'il n'en manque plus.
+  const pipes = { on: false, pending: [], made: 0 };
+  {
+    const be = renderer.backend, create = be.createRenderPipeline.bind(be);
+    be.createRenderPipeline = (renderObject, promises) => {
+      if (!pipes.on || promises) return create(renderObject, promises);
+      const list = [];
+      create(renderObject, list);
+      const data = be.get(renderObject.pipeline);
+      data.error = true;
+      pipes.made++;
+      pipes.pending.push(Promise.all(list).then(() => { if (data.pipeline) data.error = false; }));
+    };
+    pipes.flush = async () => { while (pipes.pending.length) await Promise.all(pipes.pending.splice(0)); };
+  }
+
   // ── Recette ──
   let R = null;
   if (location.hash.startsWith('#r=')) {
     try { R = upgrade(await unpackRecipe(location.hash.slice(3))); } catch { R = null; }
   }
   R ??= generate(params.get('seed') || DEFAULT_SEED);
-  // trois exemplaires du même monde (la couche m de la recette, ici une seule)
+  // trois mondes emboîtés : le monde m est la couche m de la recette
   const INST = 3;
   const M = () => INST;
   const layerOf = (m) => m % R.layers.length;
@@ -139,7 +168,7 @@ async function main() {
   async function buildWorlds(onStep = null) {
     const sh = SHADOWS[RENDER.shadows] || SHADOWS.high;
     const made = [];
-    for (let l = 0; l < R.layers.length; l++) await designOf(orbits[l]);
+    await Promise.all(R.layers.map((_, l) => designOf(orbits[l]))); // (un worker par machine)
     try {
       for (let m = 0; m < INST; m++) {
         if (onStep) { onStep(m); await new Promise((res) => setTimeout(res, 0)); }
@@ -348,6 +377,7 @@ async function main() {
   function fail(msg, err) {
     if (err) console.error(err);
     S.busy = !S.worlds.length;
+    S.loading = false; pipes.on = false;
     const actions = [{ label: 'Autre graine', run: () => on.random() }, { label: 'Réessayer', run: () => { orbits.length = 0; load(); } }];
     if (S.good) actions.push({ label: 'Revenir à la scène précédente', run: () => restoreGood() });
     loader.error(msg, actions);
@@ -358,14 +388,21 @@ async function main() {
     ui?.build();
     load();
   }
+  const marks = [];
+  const mark = (k) => marks.push({ k, at: Math.round(performance.timeOrigin + performance.now()) });
   async function load(only = null) {
     const run = ++S.run;
+    marks.length = 0; mark('search');
     S.busy = true;
+    // (pendant le chargement : pipelines asynchrones, et la boucle ne dessine plus la scène)
+    S.loading = true; pipes.on = !params.has('syncpipes'); // (?syncpipes : l'ancienne compilation, pour comparer)
     loader.show();
+    let shown = 0; // (la couche dont l'orbite est au centre de l'écran de chargement)
     for (let m = 0; m < R.layers.length; m++) {
       if (only !== null && m !== only && orbits[m]) continue;
       if (only === null && orbits[m]) continue;
-      loader.text(R.layers.length > 1 ? `couche ${m + 1} / ${R.layers.length} : recherche d’une orbite…` : 'recherche d’une orbite…');
+      shown = m;
+      loader.layer(m, R.layers.map((_, i) => !!orbits[i]));
       let seed = layerSeed(m), r = null;
       const TRIES = 6;
       for (let tries = 0; tries < TRIES; tries++) {
@@ -389,12 +426,14 @@ async function main() {
     url.searchParams.set('seed', R.seed); url.hash = ''; history.replaceState(null, '', url);
     loader.status('');
     try {
-      loader.step('design');
+      mark('design'); loader.step('design');
       loader.text('conception de la machine : un bras par cercle de la courbe (épicycles), des engrenages aux rapports exacts, des étages sans collision…');
-      loader.machine(await designOf(orbits[0]));
+      // (les trois machines sont conçues en parallèle, chacune dans un worker)
+      const Ds = await Promise.all(R.layers.map((_, l) => designOf(orbits[l])));
       if (run !== S.run) return;
-      loader.step('build');
-      await buildWorlds((m) => loader.text(`construction de la machine, du sol et du studio (${m + 1} / ${INST} : chaque astre contient le monde suivant)…`));
+      loader.machine(Ds[shown]);
+      mark('build'); loader.step('build');
+      await buildWorlds(() => {});
       if (run !== S.run) return;
       ui?.build();
       S.root = -1;
@@ -403,27 +442,76 @@ async function main() {
       if (run !== S.run) return;
       return fail(`La machine de cette orbite n’a pas pu être construite (${e.message}).`, e);
     }
-    loader.step('render');
-    loader.text('préparation du rendu (compilation des matières et des lumières)…');
+    mark('render'); loader.step('render');
     await new Promise((res) => setTimeout(res, 30));
-    await warm();
+    try { await warm(true, () => run === S.run, (f) => loader.progress(f)); } catch (e) { if (run === S.run) return fail(`Le rendu n’a pas pu être préparé (${e.message}).`, e); }
+    if (run !== S.run) return;
+    pipes.on = false; S.loading = false;
     for (let i = 0; i < 3; i++) { await post.render(); await new Promise((res) => requestAnimationFrame(res)); }
     if (run !== S.run) return;
     S.good = { R: JSON.parse(JSON.stringify(R)), orbits: orbits.slice() };
+    mark('done');
     loader.hide();
     S.busy = false;
   }
 
-  // un rendu en fin de plongée : les trois mondes et leurs ombres y sont
-  // dessinés, leurs matériaux sont donc compilés tout de suite, pas au premier
-  // passage (sinon un gel d'une demi-seconde à la première plongée)
+  // Préparation du rendu : tout ce que la boucle dessinera est dessiné une fois
+  // ici, pour que les matériaux, les ombres et les studios des trois mondes
+  // soient compilés avant la première image, pas au premier passage (un gel à
+  // chaque plongée, sinon). On passe par les six moments qui comptent (avant
+  // et en fin de plongée, dans chacun des trois mondes), sans tri par le champ
+  // de la caméra (un objet hors champ ne serait pas compilé).
+  // deferred : pendant l'écran de chargement, les pipelines sont compilées en
+  // asynchrone (voir pipes) ; on redessine tant qu'il en manque.
   // (nodeFrame : sans nouvelle image, la passe de scène réutiliserait la précédente)
-  async function warm() {
+  async function warm(deferred = false, alive = () => true, onProgress = null) {
     const tau0 = S.tau, fresh = () => renderer._nodes?.nodeFrame?.update?.();
-    setTime(Math.floor(tau0) + 0.97);
-    fresh(); await post.render();
-    setTime(tau0);
-    fresh();
+    const culled = [];
+    scene.traverse((o) => { if (o.frustumCulled) { o.frustumCulled = false; culled.push(o); } });
+    const pause = () => new Promise((res) => setTimeout(res, 0));
+    const hidden = [];
+    try {
+      const views = [];
+      for (let d = 0; d < M(); d++) views.push(d + 0.97, d + R.motion.hold * 0.5);
+      if (deferred) {
+        // d'abord par petits lots d'objets : un premier dessin de toute la scène
+        // d'un coup enverrait d'un bloc toutes les géométries et tous les shaders
+        // au processus graphique (un gel de l'affichage), et tiendrait la page
+        // plusieurs secondes sans rendre la main
+        scene.traverse((o) => { if ((o.isMesh || o.isLine || o.isPoints || o.isSprite) && o.visible) hidden.push(o); });
+        for (const o of hidden) o.visible = false;
+        setTime(views[0]);
+        for (let i = 0; i < hidden.length;) {
+          // (un lot : des objets six par six, jusqu'à 4 shaders nouveaux ou 30 ms)
+          const t0 = performance.now(), before = pipes.made;
+          do {
+            for (let n = 0; n < 6 && i < hidden.length; n++) hidden[i++].visible = true;
+            fresh(); await post.render();
+          } while (i < hidden.length && pipes.made - before < 4 && performance.now() - t0 < 30);
+          onProgress?.(i / hidden.length);
+          await pause(); if (!alive()) return;
+        }
+        mark(`lots (${hidden.length} objets, ${pipes.made} shaders)`);
+        await pipes.flush();
+        // (les studios ont été préfiltrés avec des pipelines pas encore prêtes :
+        // à refaire, un par image)
+        for (const W of S.worlds) { W.env.needsPMREMUpdate = true; fresh(); await post.render(); await pipes.flush(); await pause(); }
+        mark('studios');
+      }
+      for (let round = 0; round < 6; round++) {
+        const before = pipes.made;
+        for (const tau of views) {
+          setTime(tau); fresh(); await post.render();
+          if (deferred) { await pipes.flush(); await pause(); if (!alive()) return; }
+        }
+        if (!deferred || pipes.made === before) break;
+      }
+    } finally {
+      for (const o of hidden) o.visible = true;
+      for (const o of culled) o.frustumCulled = true;
+      setTime(tau0);
+      fresh();
+    }
   }
 
   // ── Panneau ──
@@ -475,6 +563,10 @@ async function main() {
   }
   applyRender();
 
+  // (anticrénelage temporel, flou de mouvement : les pièces instanciées gardent
+  // leurs matrices de l'image précédente, pour leurs vitesses)
+  const endFrame = () => { if (RENDER.aa === 'traa' || RENDER.motionBlur > 0) for (const W of S.worlds) W.machine.afterRender(); };
+
   // ── Boucle ──
   let last = performance.now(), frames = 0, fpsT = last;
   function frame(now) {
@@ -484,7 +576,7 @@ async function main() {
     if (RENDER.dynRes && !S.busy) governor.frame(dt0);
     if (!S.paused && S.worlds.length && !S.exporting) setTime(S.tau + dt / R.motion.segment);
     if (R.motion.free) controls.update();
-    post.render();
+    if (!S.loading) { post.render(); endFrame(); } // (chargement : la scène est préparée dans warm())
     frames++;
     if (now - fpsT > 500) { ui?.setFps(`${(frames * 1000 / (now - fpsT)).toFixed(0)}${RENDER.dynRes ? `  ·  ${Math.round(governor.scale * 100)} %` : ''}`); frames = 0; fpsT = now; }
   }
@@ -506,7 +598,7 @@ async function main() {
     try {
       await exportLoop({
         canvas, duration: R.motion.segment * R.layers.length,
-        renderAt: (v) => { setTime(v * R.layers.length); post.render(); },
+        renderAt: (v) => { setTime(v * R.layers.length); post.render(); endFrame(); },
         setSize: (w, h) => { renderer.setPixelRatio(1); renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); },
         restore: () => { canvas.style.width = ''; canvas.style.height = ''; resize(); },
       }, { width, height, fps, mbps }, (f) => { $('#progress u').style.width = `${(f * 100).toFixed(1)}%`; }, `choregraphie-${R.seed}.mp4`);
@@ -527,7 +619,7 @@ async function main() {
     else if (kk === 'p') on.exportPNG();
   });
 
-  if (params.has('debug')) window.chor = { loader, S, get R() { return R; }, setTime, render: () => post.render(), renderer, scene, camera, controls, post, load, on, root };
+  if (params.has('debug')) window.chor = { marks, pipes, warm, loader, S, get R() { return R; }, setTime, render: () => post.render(), renderer, scene, camera, controls, post, load, on, root };
   load();
 }
 
