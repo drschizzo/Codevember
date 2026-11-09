@@ -234,7 +234,6 @@ async function main() {
     const stop = a0.map((a, i) => a + sp[i] * RING_STOP * 0.5);
     // sommets de la monture (dans son repère, anneaux arrêtés)
     G.mount.rings.forEach((r, i) => { r.rotation.y = stop[i]; });
-    if (G.mount.lid) G.mount.lid.position.y = G.mount.lift; // (couvercle soulevé)
     G.mount.group.rotation.y = 0;
     G.mount.group.updateMatrixWorld(true);
     const inv = new THREE.Matrix4().copy(G.mount.group.matrixWorld).invert(), mm = new THREE.Matrix4(), v = new THREE.Vector3();
@@ -278,7 +277,6 @@ async function main() {
       const top = Math.max(...cand.map((c) => c.score));
       best = cand.filter((c) => c.score >= top - 0.03 * W.rg).sort((x, y) => Math.abs(x.yaw) - Math.abs(y.yaw))[0];
     }
-    if (G.mount.lid) G.mount.lid.position.y = 0;
     return { yaw: best.yaw, clear: best.clear, samples: path.length, a0, sp };
   }
 
@@ -318,7 +316,7 @@ async function main() {
     // l'autre (ce sont les réglages du monde courant ; les autres sont pleins)
     for (const W of [Wa, Wb, Wc]) {
       W.glassFade.value = 1;
-      for (const G of W.globes) { G.mount.group.rotation.y = 0; if (G.mount.lid) G.mount.lid.position.y = 0; }
+      for (const G of W.globes) G.mount.group.rotation.y = 0;
     }
     const Ps = S.passage?.[a];
     if (Ps && u > h) {
@@ -326,7 +324,6 @@ async function main() {
       const x = Math.min(1, (u - h) / RING_STOP);
       G.mount.rings.forEach((r, i) => { r.rotation.y = Ps.a0[i] + Ps.sp[i] * RING_STOP * (x - x * x / 2); });
       G.mount.group.rotation.y = Ps.yaw * ss5(s / 0.5);
-      if (G.mount.lid) G.mount.lid.position.y = G.mount.lift * ss5(s / 0.5);
     }
     Wa.glassFade.value = 1 - ss5((s - 0.45) / 0.4);
     // échelle de chaque monde dans l'image : chaque monde n'est éclairé que par
