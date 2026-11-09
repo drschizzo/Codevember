@@ -1,6 +1,6 @@
 # Planétaire v2 : Chorégraphies
 
-Un planétaire est une machine qui calcule le ciel. Celui-ci calcule des ciels qui n'existent pas encore : chaque graine lance la recherche d'une **chorégraphie** du problème à N corps, N masses égales qui se poursuivent sur une même courbe fermée (le huit de Moore, Chenciner et Montgomery en est la plus célèbre), puis conçoit la machine à engrenages qui la trace pour de bon, et la met en scène en boucle parfaite. Rendu physique en three.js (WebGPU, TSL). Rien n'est téléchargé hors three.js : orbite, machine, matières et studio sont calculés en quelques secondes, à partir de la graine.
+Un planétaire est une machine qui calcule le ciel. Celui-ci calcule des ciels qui n'existent pas encore : chaque graine lance la recherche de **chorégraphies** du problème à N corps (N masses égales qui se poursuivent sur une même courbe fermée, solutions exactes des équations de Newton), conçoit pour chacune la machine à engrenages qui la trace pour de bon, et les emboîte : **chaque astre est une boule de verre qui contient le monde suivant**, et la caméra plonge de l'un à l'autre en boucle parfaite. Rendu physique en three.js (WebGPU, TSL). Rien n'est téléchargé hors three.js : orbites, machines, matières et studios sont calculés en quelques secondes à partir de la graine.
 
 La page de test du solveur seul reste dans `proto/`.
 
@@ -29,48 +29,46 @@ Paramètres d'URL : `?seed=…` (une scène), `#r=…` (une scène retouchée, p
 
 Le panneau règle tout :
 - **Orbite** : contraintes du solveur (nombre de corps, classe de symétrie, rotation du plateau p/q) ; chaque changement relance la recherche, sous les yeux ;
-- **Scène** : humeur, monture, finition et motif du plateau ;
-- **Matières** : plateau, bras, bras alternés, roues, tenons et vis, pied et bâti (vingt-quatre matières) ;
-- **Astres** et **Trace** : nature, couleur, éclat, embrasement, refroidissement, épaisseur ;
-- **Mise en scène** : durée d'une période, force des ralentis, durée des plans, caméra libre ;
+- **Plongée** : durée d'une couche, part avant la plongée, caméra libre ;
+- **Couches** (une par monde) : orbite, humeur, archétype de machine, plateau, matières, astres (monture, verre, irisation, lumière), trace, rythme et caméra, lumières ;
 - **Lumières** et **Rendu** (qualité, résolution dynamique, ombres, étalonnage, bloom, profondeur de champ…) ; **Export** (MP4, PNG).
 
 ## La recette (`src/recipe.js`)
 
-Tout découle de la graine, et tout se règle :
-- **Six humeurs** : Atelier d'horloger, Observatoire, Clinique (porcelaine et chrome sur fond clair), Cabinet de curiosités (bois cirés, nacre, or), Forge (fonte, cuivre), Sacré (or et émaux). Chacune choisit son studio, ses lumières, et oriente tous les tirages suivants.
-- **Trois montures** : sur pied ; sous cloche de verre ; suspendue au plafond (retournée, vue par en dessous, lampe rasante).
-- **Plateau** : vingt-quatre matières (métaux, émaux de Sèvres, marbres, ardoise, ébène et noyer cirés, nacre, titane anodisé…), finitions procédurales (guilloché, soleil, perlage).
-- **Astres** : perle incandescente, gemme taillée irisée, bille de métal poli, lanterne à anneaux.
-- **Traces** : verre filé, fil d'or, gravure rougeoyante à fleur du plateau, aucune.
-- **Orbite** : nombre de corps, classe de symétrie et rotation du plateau, tirés ou imposés.
+Une scène, ce sont **trois couches** (trois mondes emboîtés, le dernier contient le premier) et le rythme de la plongée. Chaque couche tire, à partir de la graine :
+- son **orbite** (nombre de corps, classe de symétrie, rotation du plateau p/q, tirés ou imposés) ;
+- son **humeur**, toujours différente de celle des autres couches : Atelier d'horloger, Observatoire, Clinique (porcelaine et chrome sur fond clair), Cabinet de curiosités, Forge, Sacré. Elle choisit le studio, les lumières, et oriente les tirages suivants ;
+- son **archétype de machine** : mouvement d'horlogerie, planétaire classique, atelier, astrolabe ;
+- ses **astres** : boule de verre (claire, fumée, bleutée, ambrée, verte, plus ou moins irisée) dans une monture (jonc, cardan à deux anneaux, cage armillaire, sertie à griffes, lanterne) ;
+- son **plateau** (vingt-quatre matières, finitions guilloché, soleil, perlage), ses **matières**, sa **trace** (verre filé, fil d'or, gravure rougeoyante, aucune), son rythme (ralentis, périodes par couche) et l'angle de sa caméra.
 
 ## La scène (`src/main.js`, `src/scene/`)
 
-**Le plateau tourne.** Une orbite trouvée dans un repère tournant à ω est une vraie solution dans le repère fixe. On la montre ainsi : le plateau tourne à ω comme une platine ; sur lui, la courbe de la chorégraphie est fixe, et la machine la trace. Vus du studio, les astres suivent exactement la solution newtonienne. ω est rationnel (p/q, q ≤ 5) : après q périodes, le plateau a fait p tours et tout revient : **boucle parfaite** (vérifiée : écart < 10⁻⁷ entre le début et la fin, astres, plateau, caméra et verre compris).
+**La plongée** (`main.js`, `scene/world.js`). Chaque couche est un monde complet (machine, sol, coque de studio vue de l'intérieur, lampe et contre-jour, matières et studio HDR propres). Chaque astre est une boule de verre sur cardan (elle reste droite quand le plateau tourne) : la boule visée contient le monde suivant réduit d'un facteur k = rayon de la boule / rayon de la coque ; les autres, sa miniature. Dans chaque couche, on regarde d'abord la machine, puis la caméra entre dans la boule la plus proche. C'est le monde qui subit une similitude A(s)⁻¹, A(s) = translation p·(1 − kˢ)/(1 − k) ∘ homothétie kˢ, de point fixe la boule visée : elle grandit en glissant vers le centre de l'image, et à s = 1 la couche suivante occupe exactement la place de la précédente (vérifié : position et échelle identiques à 10⁻¹⁴ près aux trois raccords, bouclage compris). Vue de l'intérieur, la boule montre la coque du monde suivant, qui cache la machine géante qu'on quitte. Tout ne dépend que de τ et chaque monde ne dépend que de sa profondeur relative, comme dans Hollow : la boucle (trois couches) est parfaite par construction. Les lumières sont à l'échelle de leur couche (intensité × échelle²) ; un jeu fixe de lumières d'astres passe du monde courant au monde suivant à la fin de la plongée ; l'angle de caméra glisse d'une couche à la suivante.
+
+**Le plateau tourne.** Une orbite trouvée dans un repère tournant à ω est une vraie solution dans le repère fixe : le plateau tourne à ω comme une platine ; sur lui, la courbe est fixe, et la machine la trace. ω est rationnel (p/q, q ≤ 5).
 
 **La machine** (`mech/design.js`, `scene/machine.js`), conçue et vérifiée par le calcul :
-- *Épicycles.* La courbe z(t) = Σ c_k e^{ikt} est une somme de cercles : pour chaque astre, une chaîne de bras de longueurs |c_k| qui tournent aux vitesses entières k par rapport au plateau. On garde les plus longs jusqu'à 0,3 % de la taille de l'orbite (14 au plus) ; la recherche écarte les orbites qu'une telle machine ne tracerait pas à 1 % près. Les astres sont au bout des chaînes : c'est la machine qui dessine l'orbite.
-- *Trains d'engrenages.* Le bras i doit tourner à kᵢ − kᵢ₋₁ par rapport au bras qui le porte. Une roue A solidaire du bras i−2 (la roue solaire, fixée au plateau, pour le premier), des renvois sur tenons le long du bras porteur, une roue B solidaire du bras mené : rapport exact (kᵢ − kᵢ₋₁)/(kᵢ₋₂ − kᵢ₋₁), rationnel, dents entières ; la parité des renvois fixe le sens ; le module est calculé pour que la chaîne tombe exactement sur la longueur du bras. Les dents sont calées dans les creux (vérifié : 1 014 paires, écart < 10⁻¹² de pas).
-- *Étages.* L'étoile des bras 0 juste au-dessus du plateau, chaque bras un étage plus haut que celui qui le porte, son train au-dessus de lui ; les astres au sommet, sur leurs goupilles, au-dessus de toutes les roues. Les dalles qui se croisent sont réparties par coloration d'un graphe de conflits échantillonné sur la période ; plusieurs ordres de sommation des bras sont essayés. Aucune collision sur 255 orbites.
-- *Supports.* Tout est porté : roues sur tenons, bras sur canons et axes, étoile sur le tube central, roue solaire sur le poteau. L'étoile, qui porte toute la machine, roule sur deux galets par bras dont les patins glissent dans deux **sillons circulaires** gravés dans le plateau. Les bras supérieurs reçoivent une colonne et un sillon là où aucune pièce ne la croise ; c'est rare, car l'étoile balaie tout le disque sous eux, et ils restent alors en porte-à-faux sur leurs axes, comme en horlogerie.
-- *Sous le plateau.* Montage concentrique : couronne dentée vissée sous le plateau, dont le canon repose sur un pont ; tube central qui traverse le canon et porte sa roue sous le pont ; arbre de renvoi tenu entre le bâti et le pont par un pilier ; le mouvement est dans le boîtier du pied.
+- *Épicycles.* La courbe z(t) = Σ c_k e^{ikt} est une somme de cercles : pour chaque astre, une chaîne de bras de longueurs |c_k| qui tournent aux vitesses entières k par rapport au plateau. On garde les plus longs jusqu'à 0,3 % de la taille de l'orbite (14 au plus) ; la recherche écarte les orbites qu'une telle machine ne tracerait pas à 1 % près. Les astres sont au bout des chaînes.
+- *Trains.* Le bras i doit tourner à kᵢ − kᵢ₋₁ par rapport au bras qui le porte : roue A solidaire du bras i−2 (la roue solaire du plateau pour le premier), renvois sur tenons le long du bras porteur, roue B solidaire du bras mené ; rapport exact, rationnel, dents entières, parité des renvois imposée par le sens, module calculé pour que la chaîne tombe sur la longueur du bras, dents calées dans les creux (vérifié : 1 014 paires, écart < 10⁻¹² de pas). En atelier, la transmission est une courroie, ouverte ou croisée selon le sens.
+- *Étages.* L'étoile des bras 0 juste au-dessus du plateau, chaque bras un étage plus haut, les astres au sommet. Répartition par coloration d'un graphe de conflits échantillonné sur la période ; aucune collision sur 255 orbites.
+- *Supports.* Tout est porté. L'étoile roule sur deux galets par bras dont les patins glissent dans deux sillons circulaires du plateau ; les bras supérieurs reçoivent une colonne et un sillon là où aucune pièce ne la croise, sinon ils sont en porte-à-faux sur leurs axes. Sous le plateau : couronne, canon, pont, tube central, arbre de renvoi.
+- *Archétypes* (roues, bras, transmission, couronne) :
+  - **horlogerie** : roues à cinq bras, ponts ajourés ; balancier spiral qui oscille, échappement à ancre qui avance par crans, rouage engrené tout autour de la couronne jusqu'au barillet (rochet, cliquet), ponts vissés sur rubis ;
+  - **planétaire classique** : roues à ajours ronds, bras en lyre ; anneau zodiacal en douze plaques, cadran émaillé, sphère armillaire au sommet du poteau si aucun astre n'y passe ;
+  - **atelier** : roues pleines, bras en treillis, courroies ; volant à manivelle et bielle, régulateur à boules, rouage de fonte ;
+  - **astrolabe** : roues à huit bras, bras ajourés ; araignée qui tourne sur un tympan gravé.
+- *Plateau.* Une couronne au-delà de ce que balaient les chaînes porte les complications ; le centre est gravé (cercles, lignes horaires) et creusé des sillons.
 
 **Le verre filé** (`orbit3d.js`). Un seul tube, fixe sur le plateau, suit toute la courbe. Au point d'abscisse s, le dernier passage d'un astre date de fract(N·(φ − s)) / N période : la chaleur se calcule dans le shader à partir de la seule phase φ. Le verre rougeoie derrière l'astre, refroidit (couleur de corps noir, puis fil de verre sombre et brillant), et l'astre suivant arrive pour le ranimer. Le verre encore mou est un peu plus épais.
 
-**Les astres.** Une lumière ponctuelle chacun (ombres portées pour les premiers, selon la qualité) : leurs flaques de lumière et les ombres des roues balaient le plateau.
-
 **Le studio.** Sol, lampe principale (ombres), contre-jour, environnement HDR calculé (ceux de Hollow). Chaîne d'image de Hollow : bloom, halation, traînées, poussière sur la lentille, étalonnage, AgX, grain, profondeur de champ.
 
-**La mise en scène** (`choreo.js`). Tout est fonction de la seule phase L de la boucle :
-- *Les ralentis.* Le temps de l'orbite est déformé autour des passages serrés (plus courtes approches entre deux astres) avec le noyau de Hollow, τ(t) = t − Σ a·w·K((t − t_b)/w), K(x) = x − 3x³ + 3x⁵ − x⁷ : la vitesse tombe à 1 − a au passage, se rattrape de part et d'autre, et le temps total de la boucle est conservé. Par symétrie, un passage serré revient N fois par période : c'est une **pulsation dictée par la physique** (au plus ~4 temps par période), dont la graine choisit les accents (forts, faibles, quelques silences). La vitesse du temps reste entre ~0,3 et ~1,4.
-- *Le temps double.* La caméra vit en temps réel : pendant un ralenti, le monde ralentit, pas elle ; le champ s'ouvre un peu. Les astres s'embrasent quand ils en frôlent un autre (cœur et lumière jusqu'à ~2,8 fois plus vifs).
-- *Les plans.* Une suite de plans tirée de la graine, un toutes les ~6 s : **ensemble** (légère plongée), **rasant** (à hauteur du plateau, les astres en rangée de lanternes), **zénith** (la courbe comme un dessin), **astre** (on en suit un de près), **machine** (contre-plongée sur les roues). Fondus en coordonnées sphériques (azimut par le plus court chemin, élévation, distance, cible) : la caméra tourne autour de la machine sans la traverser. Les azimuts de départ sont répartis pour que la suite se referme sur un nombre entier de tours (sans saut à la couture). Profondeur de champ : mise au point sur la cible du plan.
-- Mesuré sur six graines : couture < 10⁻¹¹, vitesse de caméra ~0,6 unité/s en moyenne, 2,2 au plus (pendant un fondu).
+**Le rythme** (`choreo.js`). Le temps de chaque orbite est déformé autour des passages serrés (plus courtes approches entre deux astres) avec le noyau de Hollow, τ(t) = t − Σ a·w·K((t − t_b)/w), K(x) = x − 3x³ + 3x⁵ − x⁷ : la vitesse tombe au passage, se rattrape de part et d'autre, sans changer la durée totale. Par symétrie, un passage serré revient N fois par période : une pulsation dictée par la physique, dont la graine choisit les accents ; les astres s'embrasent quand ils se frôlent.
 
 **L'écran de génération** (`app/loader.js`). Pas de barre de progression : on regarde la recherche, les courbes des essais en cours qui se tortillent puis se posent sur une solution. Une graine sans orbite passe la main à une autre.
 
-**Cadence.** 95 à 120 images/s en 1920 × 1080 (Mac, Chrome) selon la machine.
+**Cadence.** ~80 images/s en 1920 × 1080 (Mac, Chrome) avec trois mondes rendus à la fois.
 
 ## Version mobile (`src/app/mobile.js`)
 
@@ -122,7 +120,7 @@ La stabilité (rayon spectral de la monodromie ≈ 1) a été contre-vérifiée 
 
 **Scène**
 - **Mise en scène, suite** : vue embarquée dans le repère d'un astre ; plans pilotés par les temps forts (couper sur un passage serré) ; anticipation des fondus.
-- **Monture suspendue** : vue par en dessous, elle reste sombre dans les humeurs les moins éclairées (Forge) ; un éclairage propre à cette monture serait à régler.
+- **La plongée** : entrer dans la boule au moment d'un passage serré (l'embrasement) ; varier la boule visée et la trajectoire d'approche.
 - **Matières** : vrai verre (transmission, dispersion) pour le sillage et les gemmes ; les finitions à motifs de la famille (émail grand feu, damas, urushi…).
 - **Son** : comme Hollow, avec le spectre de Fourier de l'orbite comme timbre.
 - **Supports** : les bras supérieurs restent le plus souvent en porte-à-faux ; une piste serait des chariots sur l'étoile elle-même plutôt que sur le plateau.
