@@ -42,6 +42,7 @@ export const MATTERS = {
 // Humeurs : studio, lumières, matières et natures préférées, couleur des astres
 export const MOODS = {
   atelier: {
+    atmo: { dust: 1, beam: 0.8, haze: 0.35, embers: 0 },
     arch: [['horlogerie', 3], ['classique', 1]], label: 'Atelier d’horloger', env: 'atelier', envIntensity: 0.95, bg: '#0f0c09', floor: '#1a140f',
     key: { color: '#ffe2c0', intensity: 11 }, rim: { color: '#bcd2ff', intensity: 0.8 }, warmth: 0.1,
     plate: ['bronze', 'laitonBrosse', 'emailBleu'], arms: ['laiton', 'or'], arms2: ['acierBleui', 'acierPoli'], gears: ['laiton', 'or', 'cuivre'], pins: ['acierPoli', 'acierBleui'], foot: ['laiton', 'bronze'],
@@ -49,6 +50,7 @@ export const MOODS = {
     body: '#ffc489', glass: '#07080a',
   },
   observatoire: {
+    atmo: { dust: 0.6, beam: 1.1, haze: 0.55, embers: 0 },
     arch: [['astrolabe', 2], ['classique', 2]], label: 'Observatoire', env: 'night', envIntensity: 1.1, bg: '#0a1020', floor: '#0e1424',
     key: { color: '#b4c8ff', intensity: 8 }, rim: { color: '#8fa8ff', intensity: 1.2 }, warmth: -0.25,
     plate: ['emailBleu', 'acierBleui', 'argent', 'marbreNoir'], arms: ['argent', 'acierPoli'], arms2: ['acierBleui', 'laiton'], gears: ['laiton', 'argent'], pins: ['chrome'], foot: ['acierNoirci', 'argent'],
@@ -56,6 +58,7 @@ export const MOODS = {
     body: '#cfe0ff', glass: '#05070b',
   },
   clinique: {
+    atmo: { dust: 0.25, beam: 0.25, haze: 0.15, embers: 0 },
     arch: [['horlogerie', 2], ['classique', 1], ['astrolabe', 1]], label: 'Clinique', env: 'studio', envIntensity: 0.9, bg: '#d9d6d0', floor: '#cfccc6',
     key: { color: '#ffffff', intensity: 7 }, rim: { color: '#ffffff', intensity: 0.6 }, warmth: 0,
     plate: ['porcelaine', 'marbreBlanc'], arms: ['chrome', 'acierPoli'], arms2: ['porcelaine', 'chrome'], gears: ['chrome', 'laiton'], pins: ['chrome'], foot: ['chrome', 'porcelaine'],
@@ -64,6 +67,7 @@ export const MOODS = {
   },
   // cabinet de curiosités : bois cirés, nacre, or ; lumière de bougie
   cabinet: {
+    atmo: { dust: 1.2, beam: 0.8, haze: 0.45, embers: 0 },
     arch: [['classique', 2], ['astrolabe', 1], ['horlogerie', 1]], label: 'Cabinet de curiosités', env: 'atelier', envIntensity: 0.85, bg: '#170e08', floor: '#22150c',
     key: { color: '#ffc98a', intensity: 10 }, rim: { color: '#ffd9b0', intensity: 0.6 }, warmth: 0.3,
     plate: ['noyer', 'ebene', 'nacre'], arms: ['or', 'laiton'], arms2: ['nacre', 'ebene', 'orRose'], gears: ['or', 'laiton'], pins: ['or'], foot: ['ebene', 'noyer'],
@@ -72,6 +76,7 @@ export const MOODS = {
   },
   // forge : fonte, cuivre et métal en fusion
   forge: {
+    atmo: { dust: 0.5, beam: 0.6, haze: 0.9, embers: 1 },
     arch: [['atelier', 4], ['classique', 1]], label: 'Forge', env: 'atelier', envIntensity: 0.8, bg: '#120c09', floor: '#1c140f',
     key: { color: '#ffb07a', intensity: 9 }, rim: { color: '#ff7a3a', intensity: 0.8 }, warmth: 0.35,
     plate: ['cuivre', 'bronze', 'fonte'], arms: ['cuivre', 'fonte'], arms2: ['acierNoirci', 'bronze'], gears: ['cuivre', 'bronze'], pins: ['acierNoirci'], foot: ['fonte'],
@@ -80,6 +85,7 @@ export const MOODS = {
   },
   // sacré : or, émaux, pénombre d'une nef
   sacre: {
+    atmo: { dust: 0.9, beam: 1.3, haze: 0.75, embers: 0 },
     arch: [['astrolabe', 2], ['horlogerie', 1], ['classique', 1]], label: 'Sacré', env: 'atelier', envIntensity: 0.85, bg: '#140e07', floor: '#1e150b',
     key: { color: '#ffd28a', intensity: 10 }, rim: { color: '#9ab4ff', intensity: 0.7 }, warmth: 0.25,
     plate: ['emailBleu', 'emailRouge', 'or'], arms: ['or'], arms2: ['or', 'orRose'], gears: ['or'], pins: ['or'], foot: ['or', 'marbreNoir'],
@@ -109,6 +115,8 @@ export function generateLayer(rng, moodKey) {
     motion: { slowmo: r2(rng.range(0.8, 1.15)), periodsPerLayer: r2(rng.range(0.8, 1.3)) },
     camera: { az: r2(rng.range(0, Math.PI * 2)), el: r2(rng.range(0.42, 0.72)), sweep: r2(rng.range(0.25, 0.6)) * rng.sign() },
     light: { env: M.env, envIntensity: M.envIntensity, bg: M.bg, floor: M.floor, warmth: M.warmth, key: { ...M.key }, rim: { ...M.rim } },
+    // atmosphère (tirée en dernier : les tirages précédents ne changent pas)
+    atmo: Object.fromEntries(Object.entries(M.atmo).map(([k, v]) => [k, r2(v * rng.range(0.8, 1.2))])),
   };
 }
 

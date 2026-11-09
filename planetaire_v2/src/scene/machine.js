@@ -18,7 +18,7 @@
 // Coordonnées : le plan (x, y) de l'orbite est posé en (x, h, −y) ; une
 // rotation d'angle θ autour de +y est la rotation du plan.
 import * as THREE from 'three/webgpu';
-import { uniform, positionLocal, float, vec2, sin, atan, length, fract, smoothstep, mix, abs, floor, mx_cell_noise_float } from 'three/tsl';
+import { uniform, positionLocal, normalLocal, float, vec2, vec3, sin, atan, length, fract, smoothstep, mix, abs, floor, max, fwidth, mx_cell_noise_float, materialColor, materialRoughness, materialMetalness } from 'three/tsl';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { designMachine, SLAB } from '../mech/design.js';
 import { createDrive } from '../mech/drive.js';
@@ -26,6 +26,51 @@ import { createDrive } from '../mech/drive.js';
 const TAU = Math.PI * 2;
 const BAR_T = 0.012, GEAR_T = 0.009, GEAR_DY = 0.016; // épaisseurs ; hauteur du train au-dessus du bras
 const STUD_R = 0.0055;
+
+// ── Finitions d'horlogerie ───────────────────────────────────────────────────
+// Sur les faces supérieures (normale verticale) : un décor propre au rôle de
+// la pièce, qui module la rugosité et, à peine, la teinte ; sur les chants et
+// les biseaux : l'anglage, poli miroir, qui accroche la lumière. Une variation
+// lente de la rugosité évite l'aspect « synthétique ». Tout est dans le repère
+// de la pièce (le décor tourne avec elle) et s'efface quand il devient plus fin
+// que le pixel. La couleur, la rugosité et le métal restent ceux de la matière
+// (réglés par la recette) ; le décor ne marque que les métaux.
+//   côtes : côtes de Genève (bandes parallèles brossées en arcs) — bras, ponts
+//   soleil : soleillage (rayons brossés depuis l'axe) — roues
+//   tournage : cercles fins concentriques — bâti, pied, colonnes
+//   poli : seulement l'anglage et la variation — goupilles, vis
+function workMetal(mat, kind) {
+  const p = positionLocal;
+  const top = smoothstep(0.8, 0.95, abs(normalLocal.y));
+  // variation lente (deux sinus croisés : pas de bruit coûteux)
+  const slow = sin(p.x.mul(23).add(sin(p.z.mul(17)).mul(2))).mul(sin(p.z.mul(29).add(p.y.mul(13)))).mul(0.5);
+  let v = float(0), freq = null;
+  if (kind === 'cotes') {
+    // bandes d'environ 9 mm le long du bras, au profil arrondi
+    const b = p.z.mul(110);
+    const f = fract(b).sub(0.5);
+    v = float(1).sub(f.mul(f).mul(4));
+    freq = b;
+  } else if (kind === 'soleil') {
+    const th = atan(p.z, p.x), r = length(vec2(p.x, p.z));
+    const a = th.mul(260);
+    v = sin(a).mul(0.5).add(0.5).mul(smoothstep(0.004, 0.02, r));
+    freq = a;
+  } else if (kind === 'tournage') {
+    const a = length(vec2(p.x, p.z)).mul(700);
+    v = sin(a).mul(0.5).add(0.5);
+    freq = a;
+  }
+  // (le décor s'efface sous le pixel : pas de moiré)
+  const fade = freq ? smoothstep(0.6, 0.15, fwidth(freq)) : float(0);
+  const deco = v.sub(0.5).mul(fade).mul(top).mul(materialMetalness);
+  const edge = float(1).sub(top);
+  const rough = materialRoughness.mul(mix(float(1), float(0.3), edge.mul(materialMetalness)))
+    .add(deco.mul(0.16)).add(slow.mul(0.05).mul(materialRoughness)).clamp(0.03, 1);
+  mat.roughnessNode = rough;
+  // (les chants polis sont un peu plus clairs, le décor creuse à peine la teinte)
+  mat.colorNode = materialColor.mul(float(1).add(edge.mul(0.06)).sub(deco.mul(0.1)).sub(slow.mul(0.03)));
+}
 
 // matières par rôle, réglées à vif depuis la recette
 export const ROLES = ['plate', 'arms', 'arms2', 'gears', 'pins', 'foot'];
@@ -42,18 +87,22 @@ export function materials() {
   m.setFinish = (kind, scale = 1) => {
     const p = vec2(positionLocal.x, positionLocal.z).mul(PF.scale);
     const r = length(p), th = atan(p.y, p.x);
-    let v = float(0);
-    if (kind === 'guilloche') v = sin(r.mul(140).add(sin(th.mul(24)).mul(1.6))).mul(0.5).add(0.5);
-    else if (kind === 'soleil') v = sin(th.mul(720)).mul(0.5).add(0.5).mul(smoothstep(0.05, 0.25, r));
+    // (motifs fins, à l'échelle des pièces : quelques millimètres ; ils
+    // s'effacent quand ils deviennent plus fins que le pixel)
+    let v = float(0), freq = float(0);
+    if (kind === 'guilloche') { const a = r.mul(520).add(sin(th.mul(36)).mul(2.2)); v = sin(a).mul(0.5).add(0.5); freq = a; }
+    else if (kind === 'soleil') { const a = th.mul(900); v = sin(a).mul(0.5).add(0.5).mul(smoothstep(0.05, 0.25, r)); freq = a; }
     else if (kind === 'perlage') {
-      const q = p.mul(28), c = floor(q), f = fract(q).sub(0.5);
+      const q = p.mul(55), c = floor(q), f = fract(q).sub(0.5);
       const ring = fract(length(f).mul(9).add(mx_cell_noise_float(c).mul(3)));
       v = smoothstep(0.2, 0.8, ring).mul(smoothstep(0.5, 0.38, length(f)));
+      freq = q.x.mul(9);
     }
+    v = mix(float(0.5), v, smoothstep(0.7, 0.2, fwidth(freq)));
     PF.scale.value = scale;
     PF.amp.value = kind === 'lisse' ? 0 : 1;
-    m.plate.roughnessNode = PF.rough.add(v.sub(0.5).mul(0.22).mul(PF.amp)).clamp(0.02, 1);
-    m.plate.colorNode = PF.color.mul(float(1).sub(v.mul(0.12).mul(PF.amp)));
+    m.plate.roughnessNode = PF.rough.add(v.sub(0.5).mul(0.14).mul(PF.amp)).clamp(0.02, 1);
+    m.plate.colorNode = PF.color.mul(float(1).sub(v.mul(0.07).mul(PF.amp)));
     m.plate.needsUpdate = true;
   };
   // émail des cadrans, encre des graduations, vis bleuies, courroies
@@ -67,6 +116,8 @@ export function materials() {
   m.lip = new THREE.MeshPhysicalNodeMaterial({ metalness: 1, roughness: 0.18, side: THREE.DoubleSide });
   m.bridge = m.arms;
   m.bezel = m.foot;
+  workMetal(m.arms, 'cotes'); workMetal(m.arms2, 'cotes');
+  workMetal(m.gears, 'soleil'); workMetal(m.foot, 'tournage'); workMetal(m.pins, 'poli');
   m.apply = (matters, table) => {
     for (const role of ROLES) {
       const t = table[matters[role]], x = m[role];
@@ -364,11 +415,31 @@ export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72, archet
   const yGroove = yPlate + 0.0004, yBody = yTop + BODY_CLEAR;
 
   // ── plateau, jonc, graduations
-  let reach = 0;
-  for (const l of L) reach += l;
-  // le plateau : un peu plus que ce que balaient les chaînes ; le mouvement est
-  // sur un bâti fixe autour de lui (mech/drive.js)
-  const plateR = Math.max(1.15, reach + 0.12);
+  // le plateau ne porte que ce qui repose sur lui : l'étoile des bras 0 (avec
+  // ses roues et ses contrepoids) et les sillons où glissent les galets. Les
+  // bras des étages supérieurs le surplombent librement ; le mouvement est sur
+  // un bâti fixe autour de lui (mech/drive.js)
+  let sweep = 0;
+  {
+    const Pq = new Float64Array(2 * n + 2);
+    for (let s = 0; s < 720; s++) {
+      D.pivots((TAU * s) / 720, Pq);
+      const x1 = Pq[2], y1 = Pq[3];
+      sweep = Math.max(sweep, Math.hypot(x1, y1) + D.halfW[0], D.cw[0] + Math.max(0.006, D.barW[0] * 0.95));
+      // galets : patin de rayon 0.014 dans un sillon de 0.032 bordé de lèvres
+      D.supports.forEach((us, a) => (us || []).forEach((u) => {
+        const px = Pq[2 * a] + u * (Pq[2 * a + 2] - Pq[2 * a]), py = Pq[2 * a + 1] + u * (Pq[2 * a + 3] - Pq[2 * a + 1]);
+        sweep = Math.max(sweep, Math.hypot(px, py) + 0.022);
+      }));
+    }
+  }
+  const plateR = Math.max(0.45, sweep + 0.06);
+  // ce que balaient les astres (pour le cadrage : ils peuvent survoler le bâti)
+  let bodyReach = 0;
+  {
+    const Pq = new Float64Array(2 * n + 2);
+    for (let s = 0; s < 720; s++) { D.pivots((TAU * s) / 720, Pq); bodyReach = Math.max(bodyReach, Math.hypot(Pq[2 * n], Pq[2 * n + 1])); }
+  }
   const plate = mesh(keep(new THREE.CylinderGeometry(plateR, plateR, 0.06, 180)), mats.plate);
   plate.position.y = yPlate - 0.03;
   group.add(plate);
@@ -612,7 +683,7 @@ export function createMachine({ arms, N, mats, omegaFrac, yFloor = -0.72, archet
   syncInstances();
 
   return {
-    group, stand, update: updateAll, design: D, yPlate, yTop, yBody, plateR, bezelR: drive.bezelR, grooveCurves,
+    group, stand, update: updateAll, design: D, yPlate, yTop, yBody, plateR, bodyReach, bezelR: drive.bezelR, grooveCurves,
     dispose() { for (const g of geos) g.dispose(); },
   };
 }

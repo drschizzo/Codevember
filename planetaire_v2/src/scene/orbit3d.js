@@ -11,7 +11,7 @@
 // Coordonnées : la courbe (x, y) du plan est posée en (x, 0, −y) ; une
 // rotation du plateau d'angle θ autour de +y est alors la rotation du plan.
 import * as THREE from 'three/webgpu';
-import { uniform, attribute, float, vec3, mix, smoothstep, fract, pow, exp, positionLocal, normalLocal, max } from 'three/tsl';
+import { uniform, attribute, float, vec2, vec3, mix, smoothstep, fract, pow, exp, positionLocal, normalLocal, max, min, length } from 'three/tsl';
 
 // verre en fusion → verre froid (approximation d'un corps noir)
 export function heatColor(h) {
@@ -21,7 +21,7 @@ export function heatColor(h) {
 }
 
 // natures : astres (perle, gemme, metal, lanterne), traces (verre, or, gravure, aucune)
-export function createOrbitVisual({ curve, N, radius = 0.0065, ring = 10, shadows = { bodies: 3, size: 512 }, bodyKind = 'perle', traceKind = 'verre', pinsMat = null, bodies: withBodies = true }) {
+export function createOrbitVisual({ curve, N, gap = 0, radius = 0.0065, ring = 10, shadows = { bodies: 3, size: 512 }, bodyKind = 'perle', traceKind = 'verre', pinsMat = null, bodies: withBodies = true }) {
   const n = curve.length / 2;
   const group = new THREE.Group();
   const U = {
@@ -76,8 +76,20 @@ export function createOrbitVisual({ curve, N, radius = 0.0065, ring = 10, shadow
     mat.metalness = 0.3; mat.roughness = 0.8; mat.clearcoat = 0; heatK = 1.4;
   }
   mat.emissiveNode = heatColor(glow).mul(glow.mul(glow).mul(6).add(pow(glow, 16).mul(10))).mul(U.glow).mul(heatK);
+  // gap > 0 : le fil naît de chaque boule et s'y résorbe (rayon nul sous elle),
+  // au lieu de traverser sa goupille et son chaton : il s'amincit à moins de
+  // 2·gap du centre d'un astre (positions des astres sur le plateau : U.bodies)
+  U.bodies = Array.from({ length: N }, () => uniform(new THREE.Vector2(1e3, 1e3)));
+  const center = positionLocal.sub(normalLocal.mul(radius));
+  let taper = float(1);
+  if (gap > 0) {
+    let d = float(1e3);
+    for (const b of U.bodies) d = min(d, length(vec2(center.x, center.z.negate()).sub(b)));
+    taper = smoothstep(gap * 0.75, gap * 2.1, d);
+  }
   // le verre encore mou est plus épais : une goutte qui s'étire derrière l'astre
-  if (traceKind === 'verre') mat.positionNode = positionLocal.add(normalLocal.mul(max(pow(glow, 4), 0).mul(radius * 1.4)));
+  const swell = traceKind === 'verre' ? max(pow(glow, 4), 0).mul(radius * 1.4) : float(0);
+  mat.positionNode = center.add(normalLocal.mul(swell.add(radius).mul(taper)));
   const tube = new THREE.Mesh(geo, mat);
   tube.receiveShadow = true;
   if (traceKind === 'gravure') tube.scale.y = 0.15; // (à fleur du plateau)
@@ -150,7 +162,7 @@ export function createOrbitVisual({ curve, N, radius = 0.0065, ring = 10, shadow
   }
 
   return {
-    group, bodies, phase: U.phase, setBoost, setStyle,
+    group, bodies, phase: U.phase, bodyUniforms: U.bodies, setBoost, setStyle,
     dispose() { geo.dispose(); mat.dispose(); for (const g of geos) g.dispose(); for (const m of mats) m.dispose(); for (const b of bodies) b.userData.light.dispose(); },
   };
 }

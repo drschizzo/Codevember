@@ -17,7 +17,7 @@ self.onmessage = (e) => {
       if (t - last < SNAP_MS) return;
       last = t;
       const pts = sampleCurve(x, { D: act.D, K: act.K }, 240);
-      self.postMessage({ type: 'snap', job: m.job, index: m.index, stage, it, action: f, gnorm: g, pts }, [pts.buffer]);
+      self.postMessage({ type: 'snap', job: m.job, index: m.index, stage, it, action: f, gnorm: g, pts, N: m.params.N }, [pts.buffer]);
     } : null;
     let r;
     try { r = attempt(m.params, createRng(`orbit:${m.seed}:${m.index}`), { onIter, index: m.index }); }
