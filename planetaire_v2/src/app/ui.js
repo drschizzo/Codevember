@@ -120,6 +120,12 @@ export function createUI({ recipe: getRecipe, render: RENDER, on }) {
       add(fr, L.camera, 'az', 0, 6.28, 0.01).name('Caméra : azimut').onFinishChange(live);
       add(fr, L.camera, 'el', 0.05, 1.3, 0.01).name('Caméra : élévation').onFinishChange(live);
       add(fr, L.camera, 'sweep', -1.2, 1.2, 0.01).name('Caméra : balayage').onFinishChange(live);
+      // atmosphère
+      const fa = f.addFolder('Atmosphère').close();
+      add(fa, L.atmo, 'dust', 0, 2, 0.01).name('Poussières').onFinishChange(live);
+      add(fa, L.atmo, 'beam', 0, 2, 0.01).name('Faisceau').onFinishChange(live);
+      add(fa, L.atmo, 'haze', 0, 2, 0.01).name('Brume au sol').onFinishChange(live);
+      add(fa, L.atmo, 'embers', 0, 2, 0.01).name('Braises').onFinishChange(live);
       // lumières
       const fl = f.addFolder('Lumières').close();
       add(fl, L.light, 'env', opts(ENV_PRESETS)).name('Studio (reflets)').onChange(live);

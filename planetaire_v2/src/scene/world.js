@@ -15,6 +15,7 @@ import { epicycles, sampleArms } from './epicycles.js';
 import { createOrbitVisual } from './orbit3d.js';
 import { createMachine, materials } from './machine.js';
 import { makeEnvironment } from './env.js';
+import { createAtmosphere } from './atmosphere.js';
 import { beatsFor, warp } from './choreo.js';
 import { ARM_TOL } from '../orbit/search.js';
 import { MATTERS } from '../recipe.js';
@@ -87,7 +88,8 @@ export function createWorld({ orbit, L, lite = false, shadows, seed, layer = 1 }
   group.add(plate, machine.stand);
   // verre filé, sous les boules
   const curve = sampleArms(epi.arms, 2400);
-  const trail = createOrbitVisual({ curve, N, radius: 0.0065 * L.trace.thick, traceKind: L.trace.kind, bodies: false });
+  const rg0 = Math.min(0.075, 0.38 * o.info.ratio); // (rayon des boules, voir plus bas)
+  const trail = createOrbitVisual({ curve, N, gap: rg0, radius: 0.0042 * L.trace.thick, traceKind: L.trace.kind, bodies: false });
   trail.setStyle(L);
   trail.group.position.y = L.trace.kind === 'gravure' ? machine.yPlate + 0.0015 : machine.yBody - 0.03;
   plate.add(trail.group);
@@ -122,6 +124,15 @@ export function createWorld({ orbit, L, lite = false, shadows, seed, layer = 1 }
   const shell = new THREE.Mesh(keep(new THREE.SphereGeometry(RG, 64, 32)), shellMat);
   shell.castShadow = false; shell.receiveShadow = false;
   group.add(shell);
+  // fond de la coque, vu de l'extérieur : la calotte sous le sol, tournée vers
+  // dehors. De l'intérieur on ne la voit jamais (le sol la cache, et ses faces
+  // sont de dos) ; quand ce monde est dans une boule, elle cache ce qui est
+  // sous la boule (son chaton, sa goupille), qu'on verrait sinon au travers
+  const capMat = new THREE.MeshBasicNodeMaterial({ side: THREE.FrontSide });
+  capMat.colorNode = horizon;
+  const thF = Math.acos(Y_FLOOR / RG) - 0.02;
+  const cap = new THREE.Mesh(keep(new THREE.SphereGeometry(RG * 0.999, 64, 12, 0, TAU, thF, Math.PI - thF)), capMat);
+  group.add(cap);
 
   // lampe et contre-jour (projecteurs : leur intensité suit l'échelle du monde)
   const key = new THREE.SpotLight(L.light.key.color, 1, 0, 0.42, 0.85, 2);
@@ -144,9 +155,20 @@ export function createWorld({ orbit, L, lite = false, shadows, seed, layer = 1 }
   key.shadow.camera.layers.mask = 1 << layer; // (n'ombre que ce monde)
   const bodyLights = Array.from({ length: N }, () => { const l = new THREE.PointLight(L.bodies.color, 0, 0, 2); rig.add(l); return l; });
 
+  // atmosphère : poussières, faisceau, brume, braises (voir atmosphere.js)
+  const atmo = createAtmosphere({
+    atmo: L.atmo || { dust: 0.8, beam: 0.8, haze: 0.4, embers: 0 }, keyColor: L.light.key.color, bg: L.light.bg,
+    floorY: Y_FLOOR, plateY: machine.yPlate, plateR: machine.plateR, RG, lite,
+    keyPos: key.position.toArray(), keyTarget: key.target.position.toArray(), keyAngle: key.angle,
+  });
+  group.add(atmo.group);
+
   // ── astres : boules de verre sur cardan (elles restent droites quand le plateau tourne)
   const rg = Math.min(0.075, 0.38 * o.info.ratio);
-  const yGlobe = machine.yBody + rg - 0.018;
+  // la boule repose sur le chaton (coupe de rayon 0,02 dont le bord est à
+  // yBody − 0,016) sans y entrer : rien de la goupille ne paraît dedans
+  const cupR = 0.02, cupTop = machine.yBody - 0.016;
+  const yGlobe = cupTop + Math.sqrt(Math.max(0, rg * rg - cupR * cupR)) + 0.0004;
   // Le verre : presque invisible de face, de plus en plus réfléchissant vers le
   // bord (Fresnel), avec un liseré clair ; la boule visée s'efface quand elle
   // remplit l'image (on la traverse sans voile)
@@ -190,7 +212,7 @@ export function createWorld({ orbit, L, lite = false, shadows, seed, layer = 1 }
   const lightsNode = lights([key, rim, ...bodyLights]);
   const lit = new Set([mountMat, glassMatT]);
   group.traverse((x) => {
-    if (!x.material || x.material === shellMat) return;
+    if (!x.material || x.material === shellMat || x.material === capMat || x.material.userData.unlit) return;
     lit.add(x.material);
   });
   for (const m of lit) {
@@ -213,6 +235,7 @@ export function createWorld({ orbit, L, lite = false, shadows, seed, layer = 1 }
 
   function update(u) {
     const { tau, open } = warp(Omega * u, beats);
+    atmo.update(u * 14); // (secondes : une couche dure de 12 à 16 s)
     const th = p.omega * tau, c = Math.cos(th), s = Math.sin(th);
     plate.rotation.y = th;
     trail.phase.value = ((tau / TAU) % 1 + 1) % 1;
@@ -223,6 +246,7 @@ export function createWorld({ orbit, L, lite = false, shadows, seed, layer = 1 }
       G.group.rotation.y = -th; // (cardan : la boule reste droite dans le studio)
       for (const [i, r] of G.mount.rings.entries()) r.rotation.y = (i ? -1 : 1) * tau * 0.7;
       local[j].set(x * c - y * s, yGlobe, -x * s - y * c);
+      trail.bodyUniforms[j].value.set(x, y);
     }
     // embrasement : un astre s'avive quand il en frôle un autre
     for (let j = 0; j < N; j++) {
@@ -249,6 +273,7 @@ export function createWorld({ orbit, L, lite = false, shadows, seed, layer = 1 }
     group.updateWorldMatrix(true, false);
     rig.matrix.copy(group.matrixWorld);
     rig.matrixWorldNeedsUpdate = true;
+    atmo.sync(group.matrixWorld, key.position, key.target.position);
   }
 
   // la boule visée par la plongée : son verre et sa monture s'effacent à vif
@@ -299,8 +324,8 @@ export function createWorld({ orbit, L, lite = false, shadows, seed, layer = 1 }
     bg, epi, orbit: o, params: p, info: o.info, L,
     dispose() {
       for (const g of geos) g.dispose(); machine.dispose(); trail.dispose(); env.dispose();
-      rig.removeFromParent(); key.shadow.dispose?.();
-      for (const m of [floorMat, shellMat, glassMat, glassMatT, mountMat, miniFloor, miniPlate, ...lit]) m.dispose();
+      rig.removeFromParent(); key.shadow.dispose?.(); atmo.dispose();
+      for (const m of [floorMat, shellMat, capMat, glassMat, glassMatT, mountMat, miniFloor, miniPlate, ...lit]) m.dispose();
     },
   };
 }

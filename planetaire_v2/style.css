@@ -35,7 +35,7 @@ body.clean #title, body.clean #hint, body.clean .lil-gui.root { opacity: 0; poin
 /* écran de génération : le calcul de l'orbite, en direct */
 #loader { position: fixed; inset: 0; background: #050403; z-index: 5; transition: opacity .25s; }
 #loader canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
-#loader .txt { position: absolute; left: 0; right: 0; bottom: 12vh; text-align: center; pointer-events: none; }
+#loader .txt { position: absolute; left: 0; right: 0; bottom: 7vh; text-align: center; pointer-events: none; }
 #loader p { color: var(--dim); margin-top: 10px; font: italic 300 15px Fraunces, Georgia, serif; font-variant-numeric: tabular-nums; }
 #loader.gone { opacity: 0; pointer-events: none; transition: opacity 1.4s; }
 #loader.error p { color: #ff9b8a; font-style: normal; max-width: min(560px, calc(100% - 32px)); margin-left: auto; margin-right: auto; }

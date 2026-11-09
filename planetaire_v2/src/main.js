@@ -117,8 +117,9 @@ async function main() {
     }
     // la caméra reste dans la coque du monde (rayon RG) : au-delà, on élargit le champ
     // (cadrage serré : la machine et le début de la couronne)
-    const pr = S.worlds[m] ? S.worlds[m].machine.bezelR * 0.82 : 1.6;
-    const prN = next !== null && S.worlds[next] ? S.worlds[next].machine.bezelR * 0.82 : pr;
+    const frame = (W) => Math.max(W.machine.bezelR * 0.82, W.machine.bodyReach + 0.1);
+    const pr = S.worlds[m] ? frame(S.worlds[m]) : 1.6;
+    const prN = next !== null && S.worlds[next] ? frame(S.worlds[next]) : pr;
     const want = fitFor(pr + (prN - pr) * s), r = Math.min(want, 4.3);
     const pos = new THREE.Vector3(Math.cos(az) * Math.cos(el) * r, -0.16 + Math.sin(el) * r, Math.sin(az) * Math.cos(el) * r);
     return { pos, target: new THREE.Vector3(0, -0.16, 0), fov: want > 4.3 ? 30 * (want / 4.3) : 30 };
@@ -283,7 +284,8 @@ async function main() {
       for (let tries = 0; tries < TRIES; tries++) {
         loader.status(tries ? `graine ${seed} sans orbite : essai ${tries + 1} / ${TRIES}` : '');
         try {
-          r = await pool.search(seed, { timeout: SEARCH_TIMEOUT, over: { ...orbitOverrides(R.layers[m]), maxArms: 14 }, onSnap: (i, sn) => loader.snap(i, sn), onTry: (i) => loader.drop(i) });
+          loader.begin(seed, 24);
+          r = await pool.search(seed, { maxAttempts: 24, timeout: SEARCH_TIMEOUT, over: { ...orbitOverrides(R.layers[m]), maxArms: 14 }, onSnap: (i, sn) => loader.snap(i, sn), onTry: (i, res) => loader.result(i, res) });
         } catch (e) {
           if (run !== S.run) return;
           return fail(`La recherche d’orbite a échoué (${e.message}).`, e);
@@ -311,21 +313,24 @@ async function main() {
     }
     loader.text('préparation du rendu…');
     await new Promise((res) => setTimeout(res, 30));
-    // un rendu en fin de plongée d'abord : les trois mondes et leurs ombres y
-    // sont dessinés, leurs matériaux sont donc compilés maintenant, pas au
-    // premier passage (sinon un gel d'une demi-seconde à la première plongée)
-    const tau0 = S.tau;
-    // (nodeFrame : sans nouvelle image, la passe de scène réutiliserait la précédente)
-    const fresh = () => renderer._nodes?.nodeFrame?.update?.();
-    setTime(Math.floor(tau0) + 0.97);
-    fresh(); await post.render();
-    setTime(tau0);
-    fresh();
+    await warm();
     for (let i = 0; i < 3; i++) { await post.render(); await new Promise((res) => requestAnimationFrame(res)); }
     if (run !== S.run) return;
     S.good = { R: JSON.parse(JSON.stringify(R)), orbits: orbits.slice() };
     loader.hide();
     S.busy = false;
+  }
+
+  // un rendu en fin de plongée : les trois mondes et leurs ombres y sont
+  // dessinés, leurs matériaux sont donc compilés tout de suite, pas au premier
+  // passage (sinon un gel d'une demi-seconde à la première plongée)
+  // (nodeFrame : sans nouvelle image, la passe de scène réutiliserait la précédente)
+  async function warm() {
+    const tau0 = S.tau, fresh = () => renderer._nodes?.nodeFrame?.update?.();
+    setTime(Math.floor(tau0) + 0.97);
+    fresh(); await post.render();
+    setTime(tau0);
+    fresh();
   }
 
   // ── Panneau ──
@@ -362,7 +367,7 @@ async function main() {
     clearTimeout(rebuildTimer);
     rebuildTimer = setTimeout(async () => {
       if (!(orbits.length >= R.layers.length && orbits.slice(0, R.layers.length).every(Boolean))) return;
-      try { await buildWorlds(); S.root = -1; setTime(S.tau); } catch (e) { console.error(e); toast(`Réglage impossible : ${e.message}`, 5000); }
+      try { await buildWorlds(); S.root = -1; setTime(S.tau); await warm(); } catch (e) { console.error(e); toast(`Réglage impossible : ${e.message}`, 5000); }
     }, 80);
   }
   const ui = params.get('ui') === '0' ? null : createUI({ recipe: () => R, render: RENDER, on });
