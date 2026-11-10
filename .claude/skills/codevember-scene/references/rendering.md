@@ -1,0 +1,54 @@
+# Rendu : géométrie, matériaux, lumière, image
+
+## Géométrie usinée
+
+- **Aucune arête vive** sur une pièce manufacturée : congés en quart de cercle aux normales **calculées à la main** (tangentes à la face et au flanc ; un lissage aveugle fait onduler les faces plates triangulées en éventail sous un métal poli — Orrery `filletNormals`). Un chanfrein plat ne brille que sous un angle ; un arrondi accroche toujours un filet de lumière. Les angles du contour (dents, ajours) restent nets (lissage sous 50° seulement). Arrondi proportionné à la pièce (au module pour une denture).
+- **Trois rôles de surface** par sommet (attribut `surf` u8×4 normalisé : poids externe / interne / tranche, et un tirage propre à la pièce pour sa nuance) : chaque pixel n'évalue que la finition de sa face.
+- **Courbes exactes** puis rééchantillonnage selon la longueur d'arc et la courbure (chaque pointe, chaque congé reçoit les points qu'il lui faut) ; pas de triangle nul, retourné ni en aiguille ; maillage étanche ; triangles orientés d'après les normales des sommets.
+- **Normales recalculées au pixel** quand la triangulation trahirait le reflet : tranche des trous à partir de l'angle du profil (Hollow), surfaces implicites à partir du gradient du champ, normales soudées et lissées sur le premier anneau pour une surface simulée (Membrane), patchs PN pour les silhouettes courbes.
+- **Niveaux de détail** choisis selon la taille à l'écran en pixels, tous biseautés, qui arrivent ensemble ; un niveau grossier à arêtes vives réservé aux cartes d'ombre (calques dédiés).
+- **Détails à l'échelle** (millimètres d'une pièce d'horlogerie de grand volume) : rivets, gravures qui suivent le contour, côtes de Genève, soleillage, perlage, anglage poli ; ils s'effacent sous le pixel (pas de moiré).
+- **Instanciation sans `InstancedMesh`** quand il y a beaucoup de pièces identiques : `InstancedBufferGeometry` et matrice en attributs, appliquée dans `positionNode` (un shader par matériau au lieu d'un par objet). Fusionner les pièces fixes par matière.
+
+## Matériaux (`scene/materials.js`, `finishes.js`)
+
+- `MeshPhysicalNodeMaterial` exploité en entier : vernis à sa propre normale, lustre (velours), irisation à épaisseur variable, anisotropie (brossage), transmission avec dispersion et absorption, émission, usure qui révèle la tranche.
+- **Finitions** : métaux au F0 mesuré (sRGB : or `#ffe29d`, laiton `#e8cf8e`, cuivre `#fad0c0`, argent `#fcfaf5`, titane `#c2bbb3`, chrome `#c4c5c5`…) différenciés par rugosité et micro-texture, jamais par une couleur assombrie ; diélectriques à albédo plausible (ni noir ni blanc purs). Métiers d'art : émail grand feu sur guilloché, acier damassé, marbres (Carrare, Nero Marquina), laque urushi saupoudrée d'or, nacre, titane bleui au feu, film de savon, velours, carbone sergé, vert-de-gris, céladon craquelé, porcelaine, biscuit.
+- **Motifs procéduraux sans bruit calculé** : ils échantillonnent le volume de bruit périodique précalculé (`texture3D`, Perlin ×2, Worley F1 et F2−F1) ; les fonctions MaterialX (`mx_noise_*`, `mx_worley_*`) coûtent des dizaines de ms. Motifs dans le repère de la pièce au repos (`positionGeometry` + décalage par pièce) : ils restent attachés à la matière quand elle bouge ou se déforme.
+- **Relief** : perturbation de normale de Mikkelsen (dérivées écran d'une hauteur), `bumpMap` ne marche pas sur une hauteur procédurale ; reliefs et traits fins atténués à l'approche de la fréquence du pixel (et sur les pièces plus fines qu'eux).
+- **Anticrénelage spéculaire** (Kaplanyan) : lobe élargi là où la normale varie vite ; rugosité plancher (`roughFloor`) pour que les reflets de sources ponctuelles ne scintillent pas.
+- **Uniformes partout** ; `signature(finish)` liste ce qui impose une recompilation (motif, vernis, lustre, irisation, anisotropie, transmission, dispersion, traces, émission, usure).
+- **Verre et pierres** : ombres colorées (`renderer.shadowMap.transmitted = true` + `castShadowNode`), dispersion ; en mode allégé, verre composité (alpha teinté, opacité de Fresnel), pierres en cabochons opaques à feu irisé.
+- **Couche mince diffusante** (Membrane) : Beer-Lambert, épaisseur optique h/cos en incidence rasante (silhouette plus dense que le centre), translucidité au contre-jour, flou de ce qui est vu au travers selon la distance (copie de l'image par couche + mipmaps, ordre de dessin maîtrisé).
+- **Enfermement** : un objet dans une cage ne voit du studio que ce que la cage laisse passer (`aoNode` ou facteur d'environnement selon l'ouverture réelle).
+
+## Lumière
+
+- **Une lampe principale** (SpotLight, ombres PCF douces, `decay` 2, ~550–850 cd à 9 unités) placée haut et de côté ; **deux contre-jours** (300–500 et 60–200) qui détachent les silhouettes ; fixes dans le monde (la caméra tourne, les ombres restent) ou solidaires de la caméra quand le geste l'exige (Hollow : lampe frontale qui traverse les oculus, Membrane).
+- **Studio HDR calculé** (`env.js`, demi-flottants, 1024×512 ; 512 en mobile) : fond très sombre et sources formées (boîtes à lumière, bandes, fenêtre, rebond du sol) aux bords adoucis ; un préréglage par humeur (studio, atelier, nuit, boîte à lumière, cyclorama blanc, abysses), rotation et intensité dans la recette. C'est lui que les métaux reflètent : soigne-le autant que les lampes.
+- **Lumières de vedette et d'écrin** : une petite source par objet exposé, côté caméra, qui le détache de son fond sans éclairer le fond ; lumière sous plafond qui filtre par les ajours (Tesseract).
+- **Éclairage sélectif** : `material.lightsNode = lights([...])` — chaque matériau n'évalue que ses lumières ; **tout matériau sans liste évalue toutes les lumières de la scène** (le sol plein écran a coûté +11 ms).
+- **Dosage** : une même lampe brûle une pièce blanche et laisse une laque noire dans le noir. Mesure au posemètre (`meter()` : luminance de la passe de scène avant étalonnage ; viser une médiane ~0,1–0,4 sur le sujet, < 2 % de brûlé, part de noir cohérente avec l'humeur) et règle la puissance d'après la clarté de ce qu'elle éclaire (Tesseract `dose.js`), dans la recette. Jamais d'auto-exposition : le film doit boucler.
+- **Le transparent se lit sur du clair** : un verre (ou tout matériau transmissif) devant un fond noir ne montre que du noir, sa teinte disparaît et il ne reste que ses reflets. Comme en photographie de verrerie, donne-lui un « fond clair » : une lueur douce peinte sur la paroi du studio, toujours à l'opposé de la caméra (Calcin : émission du cyclorama selon l'angle entre le point et la direction opposée à la caméra), dosée par humeur ; ou un contre-jour qui découpe les chants (« fond noir »), mais en le sachant.
+- **Le sol n'est pas un miroir** : un sol vernis reflète les boîtes à lumière du studio en grands rectangles, plus visibles que le sujet. Rugosité ≥ 0,6 sans vernis, ou reflets volontaires et contrôlés. Préfère un cyclorama continu (le sol se courbe en paroi : plat, gorge, mur) à un plan et un fond, qui dessinent un horizon.
+- **Émission modulée** : une émission uniforme (fluorescence, lueur) aplatit un objet en aplat de couleur ; module-la par le Fresnel, l'épaisseur, les chants.
+- **Atmosphère** : brouillard dont la couleur est une version très sombre de la teinte de la scène, poussières qui s'allument dans le cône de la lampe, faisceau diffusé, nappes au ras du sol, braises, poussière d'or — sans tampon, positions hachées (Orrery `atmosphere.js` : ~2 ms).
+- **Rebond** si la scène est fermée : sonde cubique 128 px rendue depuis le centre, une face toutes les deux images, mip le plus flou le long de la normale (diffus), mip selon la rugosité le long du reflet (spéculaire) ; elle voit des doublures unies éclairées par les mêmes lumières (Tesseract `probe.js`, ~0,3 ms).
+- **Caustiques** : réseau de filets à la teinte de la pierre, sur le mur opposé à la lampe, dérivant en boucle (deux lectures du volume de bruit).
+
+## Ombres et contacts
+
+Les ombres ancrent les objets. Sans elles, tout flotte, même avec une physique juste.
+- **Couverture de la carte d'ombre** : la carte d'un projecteur couvre tout son cône. Un faisceau large (soleil, boîte à lumière) dilue la résolution jusqu'à faire disparaître les ombres. Resserre-la sur la zone utile (`shadow.focus` pour un SpotLight, frustum serré pour une DirectionalLight), indépendamment de l'ouverture du faisceau.
+- **Les lumières d'appoint ne lavent pas les ombres** : les contre-jours et les remplissages sans ombre éclairent aussi le sol sous l'objet et effacent son ombre. Limite-les au sujet par éclairage sélectif (`material.lightsNode = lights([...])` sur le sol), et dose l'environnement diffus.
+- **Les matières transparentes portent ombre** : une ombre teintée assez dense dans les parois, franche sous les parties épaisses ; jamais aussi claire que le jour (`castShadowNode`).
+- **Contact** : occlusion ambiante, et une ombre qui se resserre et se durcit quand l'objet s'approche de la surface.
+- Vérifie sur une vue rasante et sur une image rendue avec la seule lampe principale.
+
+## Chaîne d'image (`render/post.js`, commune)
+
+Pré-passe profondeur + normales → GTAO appliquée **à l'éclairage indirect seulement** (`builtinAOContext`) → passe de scène MRT (couleur HDR, vitesses, réflectance + rugosité en 8 bits) → SSR (miroir adouci selon la rugosité, pondéré par le Fresnel, teinté par le métal) → TRAA (sous garde anti-NaN) → flou d'obturateur sur la texture (après le TRAA : l'historique reste net) → profondeur de champ → épaule douce des hautes lumières (`hiCap`) → bloom, halation (liseré rouge orangé), poussière sur la lentille → traînées anamorphiques → étalonnage linéaire (exposition, température, contraste sur la luminance, saturation, virage ombres / lumières de l'humeur, vignettage) → tone mapping AgX → aberration chromatique → SMAA / FXAA → grain (après tout, plus discret dans les hautes lumières).
+
+Les réglages continus sont des uniformes ; seules les options de structure reconstruisent la chaîne. Ajoute un effet propre au thème quand il sert le geste (Hollow : rayons du cœur par `godrays` ; Membrane : photoélasticité).
+
+**Rendu accumulé** pour l'export : moyenne de N rendus complets décalés dans le temps (obturateur 180°), sur la lentille (vraie profondeur de champ), dans le pixel (anticrénelage) et sur la lampe (vraie pénombre), TRAA et flou calculé coupés (`render/accum.js`, `jitter` de `rng.js`).
