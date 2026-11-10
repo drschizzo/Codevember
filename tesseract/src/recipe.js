@@ -18,6 +18,8 @@ export const kelvinToHex = (K) => {
 };
 
 // ── Humeurs ──────────────────────────────────────────────────────────────────
+// grade : étalonnage (contraste, saturation, teinte des ombres et des hautes
+// lumières : chaque humeur a sa signature de couleur, voir render/post.js) ;
 // env : studio HDR ; floor : sol ; kinds : poids des archétypes de cellule ;
 // objects : objets exposés favoris (multiplient leur poids) ; rim : teintes
 // des contre-jours ; tints : couleurs d'accent (anodisation, laque : une seule
@@ -61,6 +63,7 @@ export const MOODS = {
       ['blackSteel', 'biscuit', 'laque', ['bronze', 'celadon'], ['goldLeaf', 'urushi', 'nacre']],
     ],
     tints: ['#17402f', '#152c5a', '#6e1712', '#8a5a1e'], glass: ['#b7a796', '#c9b07a', '#a8c2b0', '#d17a1e'],
+    grade: { contrast: 1.04, saturation: 0.97, shadows: [0.94, 0.99, 1.07], highlights: [1.05, 1.0, 0.93] },
     kinds: KINDS_W.atelier, objects: { ammonite: 2.5, egg: 1.5, hyper: 1 },
   },
   studio: {
@@ -74,6 +77,7 @@ export const MOODS = {
       ['chrome', 'carbon', 'biscuit', ['titanium', 'marble'], ['nacre', 'chrome', 'ceramicBlack']],
     ],
     tints: ['#3a64b0', '#b03a4a', '#c07a2a', '#2f8a72'], glass: ['#9fb3c4', '#e6e2da', '#7d93b8'],
+    grade: { contrast: 1.06, saturation: 0.92, shadows: [0.96, 1.0, 1.06], highlights: [1.0, 1.0, 1.0] },
     kinds: KINDS_W.studio, objects: { hyper: 2.5, mobius: 2 },
   },
   ecrin: {
@@ -87,6 +91,7 @@ export const MOODS = {
       ['guilloche', 'biscuit', 'blackSteel', ['kintsugi', 'guillocheRuby'], ['goldLeaf', 'nacre', 'urushi']],
     ],
     tints: ['#5c0f1c', '#0f2a5c', '#0e3b2e', '#2e1238'], glass: ['#b7a796', '#c9b07a', '#c4a3b8', '#d17a1e'],
+    grade: { contrast: 1.07, saturation: 1.07, shadows: [1.04, 0.95, 1.03], highlights: [1.05, 1.0, 0.94] },
     kinds: KINDS_W.ecrin, objects: { egg: 3, urchin: 2 }, gems: 0.55,
   },
   clinique: {
@@ -100,6 +105,7 @@ export const MOODS = {
       ['chrome', 'biscuit', 'ceramicBlack', ['marble', 'celadon'], ['kintsugi', 'chrome', 'nacre']],
     ],
     tints: ['#a9c4d6', '#d8a8a0', '#9fb8a0', '#c9b98a'], glass: ['#e6e2da', '#9fb3c4', '#a8c2b0'],
+    grade: { contrast: 0.98, saturation: 0.9, shadows: [0.98, 1.0, 1.03], highlights: [1.0, 1.0, 1.0] },
     kinds: KINDS_W.clinique, objects: { mobius: 2.5, egg: 2 },
   },
   nuit: {
@@ -115,6 +121,7 @@ export const MOODS = {
       ['ceramicBlack', 'acier', 'soap', ['damascus', 'guilloche'], ['chrome', 'titanium', 'nacre']],
     ],
     tints: ['#3a64b0', '#7a4ab0', '#b03a4a', '#2f8a72'], glass: ['#7d93b8', '#9fb3c4', '#c4a3b8'],
+    grade: { contrast: 1.05, saturation: 1.05, shadows: [0.88, 0.98, 1.16], highlights: [0.99, 1.0, 1.04] },
     kinds: KINDS_W.nuit, objects: { hyper: 2.5, urchin: 2 },
   },
   dali: {
@@ -128,6 +135,7 @@ export const MOODS = {
       ['goldLeaf', 'ceramicBlack', 'biscuit', ['celadon', 'marble'], ['nacre', 'chrome', 'goldLeaf']],
     ],
     tints: ['#a8402a', '#1d4a7a', '#2f5d4a', '#c9a13a'], glass: ['#e6e2da', '#c9b07a', '#a8c2b0', '#b7a796'],
+    grade: { contrast: 1.03, saturation: 1.0, shadows: [0.97, 0.97, 1.07], highlights: [1.06, 1.01, 0.92] },
     kinds: KINDS_W.dali, objects: { egg: 2.5, ammonite: 2, mobius: 1.5 },
   },
   irise: {
@@ -141,6 +149,7 @@ export const MOODS = {
       ['titanium', 'acier', 'soap', ['nacre', 'anodizedDiamond'], ['nacre', 'chrome', 'soap']],
     ],
     tints: ['#7a4ab0', '#3a64b0', '#2f8a72'], glass: ['#e6e2da', '#c4a3b8', '#9fb3c4'],
+    grade: { contrast: 1.03, saturation: 1.1, shadows: [0.98, 0.94, 1.09], highlights: [0.98, 1.03, 1.02] },
     kinds: KINDS_W.irise, objects: { urchin: 2.5, mobius: 2 }, gems: 0.4,
   },
 };
@@ -506,7 +515,7 @@ export function generate(seed, opts = {}) {
 
   const steps = moves.length;
   const R = {
-    v: 1, seed: String(seed), mood: moodKey, palette,
+    v: 1, seed: String(seed), mood: moodKey, palette, grade: M.grade,
     loop: { duration: Math.round(steps * rng.range(6.5, 9)) },
     net: { shape: netShape, parent },
     moveMode, moves,

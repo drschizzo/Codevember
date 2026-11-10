@@ -9,14 +9,16 @@
 // que plié), soulevé au besoin pour ne jamais traverser le sol.
 import * as THREE from 'three/webgpu';
 import { uniform, lights } from 'three/tsl';
-import { stateAt, cellTransforms, cellMatrix, apply, project, timelineFor, stepOrientations, depthOf, foldOrder, normalOf, smoothstep } from '../math4.js';
+import { stateAt, cellTransforms, cellMatrix, apply, project, timelineFor, stepOrientations, depthOf, foldOrder, normalOf, smoothstep, embedLocal } from '../math4.js';
 import { voyageFrames, voyageBlend } from './voyage.js';
 import { meshUniforms, setMatrix, cellReveal } from './project.js';
 import { faceLayout, voyageDoors, computeOpenings, cellOpenness } from './reveal.js';
 import { buildPieceMaterial, buildGemMaterial, finishUniforms, applyFinish, signature, gemUniforms, applyGem } from './materials.js';
 import { G } from './globals.js';
 import { createGuides } from './guides.js';
-import { createPracticals } from './practicals.js';
+import { createPracticals, roomGain, heroGain } from './practicals.js';
+import { buildProbeMaterial, PROBE_LAYER } from './probe.js';
+import { MODE, DOORS } from './globals.js';
 
 const ROLES = ['frame', 'panel', 'glass', 'content'];
 
@@ -98,7 +100,16 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
     group.add(mesh);
     const M = meshUniforms();
     if (role === 'frame') M.keep = uniform(1); // (ossature en place / rentrée)
-    pieces.push({ c, role, mesh, M, F: null, gemU: null, sig: '', prev: null, has: false });
+    pieces.push({ c, role, mesh, M, F: null, gemU: null, sig: '', prev: null, has: false, twin: null });
+  }
+  // doublures des panneaux pour la sonde de pièce (calque 1 : voir probe.js)
+  if (!MODE.lite) for (const P of pieces) {
+    if (P.role !== 'panel') continue;
+    P.twin = new THREE.Mesh(new THREE.BufferGeometry(), null);
+    P.twin.layers.set(PROBE_LAYER);
+    P.twin.visible = false;
+    P.twin.frustumCulled = false;
+    group.add(P.twin);
   }
   const guides = createGuides(group);
   const practicals = createPracticals(group, scene);
@@ -132,7 +143,7 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
     const cell = R.cells[P.c];
     if (P.role === 'content' && cell.content.type === 'gem') {
       P.gemU = gemUniforms(cell.content.gem);
-      P.mesh.material = buildGemMaterial(P.gemU, P.M, reveals[P.c].openness);
+      P.mesh.material = buildGemMaterial(P.gemU, P.M, reveals[P.c].openness, reveals[P.c].gi);
       P.sig = 'gem';
     } else {
       const fin = finishOf(P);
@@ -140,11 +151,20 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
       if (P.role === 'frame') { frameU ??= finishUniformsFor(fin); U = frameU; } else { U = finishUniformsFor(fin); }
       P.F = U;
       const tint = P.role === 'glass' ? U.outer.color2 : null;
-      P.mesh.material = buildPieceMaterial(fin, U, P.M, { shadowTint: tint, reveal: P.role === 'panel' || P.role === 'glass' ? reveals[P.c] : null, depth: P.role === 'frame', openness: P.role === 'content' ? reveals[P.c].openness : null, merge: P.role === 'frame', patina: P.role === 'panel' });
+      P.mesh.material = buildPieceMaterial(fin, U, P.M, { shadowTint: tint, reveal: P.role === 'panel' || P.role === 'glass' ? reveals[P.c] : null, depth: P.role === 'frame', openness: P.role === 'content' ? reveals[P.c].openness : null, merge: P.role === 'frame', patina: P.role === 'panel', gi: P.role === 'panel' || P.role === 'content' ? reveals[P.c].gi : null, caustic: P.role === 'panel' ? { color: reveals[P.c].caustic, dir: reveals[P.c].causticDir } : null });
       P.sig = signature(fin);
     }
     P.mesh.material.lightsNode = (P.role === 'content' ? objectLights : cellLights)[P.c];
     old?.dispose();
+    if (P.twin) { // (la doublure suit : mêmes uniformes de finition, même géométrie)
+      const og = P.twin.geometry, om = P.twin.material;
+      // (géométrie : seulement si elle a changé ; la libérer libère les
+      // tampons qu'elle partage avec le panneau)
+      if (og.index !== P.mesh.geometry.index) { P.twin.geometry = shareGeometry(P.mesh.geometry); og.dispose(); }
+      P.twin.material = buildProbeMaterial(P.F, P.M, reveals[P.c]);
+      P.twin.material.lightsNode = cellLights[P.c];
+      om?.dispose();
+    }
   }
   const finishUniformsFor = (fin) => ({ outer: finishUniforms(fin.outer), inner: finishUniforms(fin.inner), edge: finishUniforms(fin.edge), wear: uniform(fin.wear || 0) });
 
@@ -158,6 +178,7 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
     if (P.has) buildMaterial(P);
     P.mesh.visible = P.has;
     P.mesh.castShadow = P.has;
+    if (P.twin) P.twin.visible = P.has;
   }
 
   // panneaux, verre et (s'il est donné) objet exposé de la cellule c
@@ -208,7 +229,33 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
   function makeCache() {
     const C = { timeline: timelineFor(R), Q: stepOrientations(R.moves), depth: depthOf(R.net.parent), order: foldOrder(R.net.parent) };
     C.frames = voyageFrames(R, C);
+    // plafond de la pièce de chaque halte : celle de ses six faces qui est le
+    // plus en haut pour la caméra (voir voyage.js, ups)
+    C.ceil = (C.frames.rooms ?? []).map((c, i) => {
+      const T = cellTransforms({ theta: new Array(8).fill(0), move: null, turn: 0, Q: C.Q[Math.min(i, C.Q.length - 1)] }, R.net.parent);
+      const up = C.frames.ups[i];
+      let best = 3, score = -Infinity;
+      for (let f = 0; f < 6; f++) {
+        const l = [0, 0, 0]; l[f >> 1] = f & 1 ? 1 : -1;
+        const p = project(apply(T[c], embedLocal(c, l)), 2, 1), n = Math.hypot(...p) || 1;
+        const s = (p[0] * up.x + p[1] * up.y + p[2] * up.z) / n;
+        if (s > score) { score = s; best = f; }
+      }
+      return best;
+    });
     return C;
+  }
+  // face du plafond de chaque cellule à l'état st : celle de sa halte pour les
+  // pièces visitées (la première pièce l'est deux fois : son plafond change à
+  // mi-voyage, quand elle est au plus loin), la face +y pour les autres
+  const ceilings = new Array(8).fill(3);
+  function ceilingsAt(st) {
+    ceilings.fill(3);
+    const rooms = cache.frames.rooms;
+    if (!rooms || st.seg === undefined) return ceilings;
+    const n = rooms.length - 1, late = (st.room ?? 0) > n / 2;
+    rooms.forEach((c, i) => { if (i === 0 && late) return; if (i === n && !late) return; ceilings[c] = cache.ceil[i]; });
+    return ceilings;
   }
 
   // une cellule (ou l'ossature) a changé de forme : nouvelles géométries
@@ -378,16 +425,58 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
     }
     group.updateMatrixWorld();
     guides.update(R, st, T, inset, s);
-    practicals.update(R, T, s);
+    practicals.update(R, T, s, ceilingsAt(st));
     // (l'ajourage dépend aussi de la caméra : voir setViewer)
     view = {
       A: cellA, layout: cache.layout, d: G.d.value, inflate: G.inflate.value, toWorld: group.matrixWorld, shell,
       // coupe côté caméra : sans objet de l'intérieur ; parois traversées :
       // ouvertes dès que le voyage commence (la caméra est alors loin)
-      cutaway: R.view.cutaway * (1 - kp), pass: kp > 0.001,
-      doors: voyageDoors(st, R, cache.frames, T, G.d.value, G.inflate.value),
+      // (plus de paroi percée à l'approche de la caméra : elle passe par les portes)
+      cutaway: R.view.cutaway * (1 - kp), pass: false, doors: [],
     };
-    return { state: st, scale: s, lift, timeline: cache.timeline, kp, kc, frames: cache.frames };
+    // portes du voyage : deux iris (voir reveal.js, project.js)
+    const doors = voyageDoors(st, R, cache.frames, T, G.d.value, G.inflate.value);
+    let rim = 0;
+    for (let i = 0; i < DOORS; i++) {
+      const D = doors[i];
+      G.doorR.array[i] = D ? D.r : 0;
+      if (!D) continue;
+      G.doorP.array[i].set(...D.p); G.doorN.array[i].set(...D.n); G.doorU.array[i].set(...D.u); G.doorV.array[i].set(...D.v);
+      rim = Math.max(rim, D.open);
+    }
+    view.doorList = doors;
+    G.doorRim.value.set(R.view.practicalColor).multiplyScalar(1.8 * Math.min(1, rim * 4) * (R.view.doorRim ?? 1));
+    return { state: st, scale: s, lift, timeline: cache.timeline, kp, kc, frames: cache.frames, top: topLight(st) };
+  }
+
+  // Plafond (la lampe d'écrin) et objet de la pièce où l'on se tient, dans le
+  // monde, et sa puissance (voir practicals.js) : pendant une traversée, de la
+  // pièce quittée à la suivante, autour du passage de la paroi.
+  const _top = { pos: new THREE.Vector3(), target: new THREE.Vector3(), gain: 1 }, _white = new THREE.Color(1, 1, 1);
+  function topLight(st) {
+    if (st.seg === undefined || !cache.frames.rooms) { for (const r of reveals) { r.gi.value = 0; r.caustic.value.setRGB(0, 0, 0); } return null; }
+    const rooms = cache.frames.rooms, i = Math.min(st.room ?? 0, rooms.length - 1);
+    const a = rooms[i] ?? rooms[0], b = st.phase === 'travel' ? cache.frames[i]?.cell ?? a : a;
+    const w = st.phase === 'travel' ? smoothstep(0.3, 0.7, st.f) : 0;
+    _top.pos.copy(practicals.lights[a].position).lerp(practicals.lights[b].position, w);
+    _top.target.copy(practicals.centers[a]).lerp(practicals.centers[b], w);
+    // (le projecteur est d'abord la lumière de l'objet : dosé sur lui, un peu sur la pièce)
+    const dose = (c) => heroGain(R.cells[c].content) ** 0.8 * roomGain(R.cells[c]) ** 0.25;
+    _top.gain = dose(a) * (1 - w) + dose(b) * w;
+    // part de la sonde : entière dans la pièce où l'on se tient (elle y est
+    // juste), réduite dans les autres (elle n'y est qu'une vraisemblance)
+    const kc = G.voyageK.value;
+    for (let c = 0; c < 8; c++) {
+      const here = (c === a ? 1 - w : 0) + (c === b ? w : 0);
+      reveals[c].gi.value = kc * (0.3 + 0.7 * here);
+      // caustiques : la teinte de la pierre ou du cristal, là où le projecteur l'éclaire
+      const con = R.cells[c].content, tint = con.type === 'gem' ? con.gem.color : con.finish.outer.glass ? con.finish.outer.color2 : null;
+      if (tint && con.type !== 'none') reveals[c].caustic.value.set(tint).lerp(_white, 0.45).multiplyScalar(kc * (0.12 + 0.88 * here) * 0.55 * (R.view.caustics ?? 1));
+      else reveals[c].caustic.value.setRGB(0, 0, 0);
+      const face = ceilings[c], dv = reveals[c].causticDir.value.set(0, 0, 0);
+      dv.setComponent(face >> 1, face & 1 ? -1 : 1);
+    }
+    return _top;
   }
 
   // Ce qui dépend de la caméra du film (position monde), une fois celle-ci
@@ -397,7 +486,16 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
   function setViewer(pos) {
     if (!view) return;
     practicals.aim(pos);
-    computeOpenings(openArrays, { ...view, viewPos: pos, camLocal: group.worldToLocal(_cam.copy(pos)) });
+    const camLocal = group.worldToLocal(_cam.copy(pos));
+    computeOpenings(openArrays, { ...view, viewPos: pos, camLocal });
+    // Un iris s'élargit quand la caméra le franchit, jusqu'à avaler la paroi
+    // (il se resserre derrière elle) : son cadre ne frôle jamais l'objectif,
+    // et ne couvre pas l'écran de près.
+    (view.doorList ?? []).forEach((D, i) => {
+      if (!D) return;
+      const dn = Math.abs((camLocal.x - D.p[0]) * D.n[0] + (camLocal.y - D.p[1]) * D.n[1] + (camLocal.z - D.p[2]) * D.n[2]);
+      G.doorR.array[i] = D.r * (1 + 0.55 * smoothstep(0.5 * D.half, 0.14 * D.half, dn));
+    });
     // (dans les pièces du voyage, les parois restent pleines : un plancher,
     // sinon pierres et cristaux, qui ne vivent que de reflets, virent au noir)
     const floor = 0.55 * G.voyageK.value;

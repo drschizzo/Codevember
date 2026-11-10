@@ -43,10 +43,10 @@ export async function exportLoop(app, { width, height, fps, mbps }, onProgress, 
   app.setSize(w, h);
   try {
     // amorçage : l'anticrénelage temporel et le flou de mouvement ont besoin d'un historique
-    for (let i = -12; i < 0; i++) app.renderAt(i / total); // (phase déroulée : continue avec la suite)
+    if (app.prime !== false) for (let i = -12; i < 0; i++) app.renderAt(i / total); // (phase déroulée : continue avec la suite)
     for (let i = 0; i < total; i++) {
       if (failure) throw failure;
-      app.renderAt(i / total);
+      app.renderAt(i / total, i, total);
       let src = app.canvas;
       if (app.overlay) { // couche 2D composée sur l'image
         comp ??= new OffscreenCanvas(w, h);
@@ -59,7 +59,7 @@ export async function exportLoop(app, { width, height, fps, mbps }, onProgress, 
       encoder.encode(frame, { keyFrame: i % (fps * 2) === 0 });
       frame.close();
       if (encoder.encodeQueueSize > 6) await new Promise((r) => encoder.addEventListener('dequeue', r, { once: true }));
-      if (i % 4 === 0) { onProgress?.(i / total); await new Promise((r) => setTimeout(r, 0)); }
+      if (i % 4 === 0 || app.prime === false) { onProgress?.(i / total); await new Promise((r) => setTimeout(r, 0)); }
     }
     await encoder.flush();
     muxer.finalize();

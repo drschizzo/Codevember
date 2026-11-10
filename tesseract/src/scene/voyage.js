@@ -102,6 +102,19 @@ export function voyageFrames(R, cache) {
   // la cellule arrivée à chaque traversée
   out.rooms = [ROOT, ...out.map((F) => F.cell)];
   out.rooms[n] = ROOT;
+  // Le haut de la caméra au milieu de chaque halte (repère local) : il n'y a
+  // pas de haut dans l'hypersphère, c'est donc elle qui désigne le plafond de
+  // la pièce, là où se tiennent sa lampe et sa gorge lumineuse (voir
+  // tesseract.js, practicals.js). Une lampe posée sur une face quelconque se
+  // retrouvait à côté de la caméra, ou derrière elle.
+  out.ups = out.rooms.map((_, i) => {
+    const seg = tl.find((p) => p.k === 'dwell' && p.i === i);
+    if (!seg || !plunge || !surface) return new THREE.Vector3(0, 1, 0);
+    const ph = (seg.a + seg.b) / 2;
+    _gq.setFromEuler(_eu.set(R.proj.tiltX, Math.PI * 2 * R.proj.spin * ph, R.proj.tiltZ, 'YXZ')).invert();
+    const o = { uIn: fwdIn.clone().negate(), uOut: fwdOut.clone().negate(), upL: new THREE.Vector3(0, 1, 0).applyQuaternion(_gq) };
+    return insidePose({ phase: 'dwell', room: i, f: 0.5 }, R, out, o).up;
+  });
   return out;
 }
 

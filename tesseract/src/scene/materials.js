@@ -28,8 +28,9 @@ import {
 } from 'three/tsl';
 import { FINISH_KEYS } from '../finishes.js';
 import { NOISE_PERIOD } from '../gen/noisevol.js';
-import { projectPosition, localScale, revealMask, depthW, depthColor, frameMerge } from './project.js';
+import { projectPosition, localScale, revealMask, depthW, depthColor, frameMerge, doorGlow } from './project.js';
 import { G, MODE } from './globals.js';
+import { probeLight } from './probe.js';
 
 const PI = Math.PI;
 export { G };
@@ -341,7 +342,11 @@ export const stableVelocity = () => MODE.lite ? null : mrt({ velocity: select(le
 // (matrice 4D, voir project.js) ; opts.shadowTint : ombre colorée (verre) ;
 // opts.openness : objet exposé, part du studio que voit sa cellule
 // opts.patina : parois (encrassement aux jonctions, marbrure, rugosité inégale)
-export function buildPieceMaterial(finish, U, M, { shadowTint = null, reveal = null, depth = false, openness = null, merge = false, patina = false } = {}) {
+// opts.gi : part de la sonde de pièce (rebond diffus des murs ; sur l'objet
+// exposé, leur reflet aussi : voir probe.js)
+// opts.caustic : lumière qu'une pierre ou un cristal jette sur les parois
+// ({ color, dir } : teinte, direction où elle tombe)
+export function buildPieceMaterial(finish, U, M, { shadowTint = null, reveal = null, depth = false, openness = null, merge = false, patina = false, gi = null, caustic = null } = {}) {
   const content = openness !== null;
   const fins = [finish.outer, finish.inner, finish.edge];
   const any = (pred) => fins.some(pred);
@@ -491,6 +496,30 @@ export function buildPieceMaterial(finish, U, M, { shadowTint = null, reveal = n
   if (F.emit) m.emissiveNode = get('emit');
   // profondeur 4D en couleur (ossature, pendant la rotation)
   if (depth) { const e = depthColor(depthW).mul(G.depthTint); m.emissiveNode = m.emissiveNode ? m.emissiveNode.add(e) : e; }
+  // Caustiques : une pierre ou un cristal éclairé jette sur les murs un
+  // réseau de filets de lumière, à sa teinte, qui tourne avec lui. Deux nappes
+  // de crêtes du volume de bruit, lues dans la direction du mur depuis le
+  // centre de la pièce (deux lectures : presque gratuit) ; elles dérivent en
+  // boucle parfaite.
+  if (caustic && !MODE.lite) {
+    const ph = G.phase.mul(2 * PI * 3);
+    const drift = vec3(sin(ph), cos(ph), sin(ph.add(2.1))).mul(0.3);
+    const dir = normalize(positionGeometry), q = dir.mul(3.1).add(drift);
+    const ridge = (n) => float(1).sub(abs(n)).clamp(0, 1).pow(16);
+    const net = ridge(noise(q)).add(ridge(noise2(q.mul(1.83).add(vec3(4.3, 1.7, 2.9)).sub(drift))).mul(0.7));
+    // (la tache est du côté opposé à la lampe : là où tombe la lumière qui a traversé l'objet)
+    const e = caustic.color.mul(net).mul(smoothstep(0.1, 0.95, dot(dir, caustic.dir))).mul(color.add(0.03));
+    m.emissiveNode = m.emissiveNode ? m.emissiveNode.add(e) : e;
+  }
+  // lisière lumineuse des portes du voyage (parois et verre)
+  if (reveal) { const e = G.doorRim.mul(doorGlow()); m.emissiveNode = m.emissiveNode ? m.emissiveNode.add(e) : e; }
+  if (gi && !MODE.lite) {
+    // (le verre ne diffuse rien ; une paroi ne prend de la sonde que le rebond
+    // diffus : ses reflets sont ceux de l'espace écran)
+    const base = F.glass ? color.mul(get('glass').oneMinus()) : color;
+    const e = probeLight(N, base, get('metal'), m.roughnessNode, { specular: content ? 1 : 0 }).mul(gi);
+    m.emissiveNode = m.emissiveNode ? m.emissiveNode.add(e) : e;
+  }
   if (shadowTint) m.castShadowNode = vec4(shadowTint, 1);
   if (content) m.aoNode = studioSeen(openness);
   m.mrtNode = stableVelocity();
@@ -504,7 +533,7 @@ export function gemUniforms(g) {
 export function applyGem(U, g) {
   U.color.value.set(g.color); U.ior.value = g.ior; U.dispersion.value = g.dispersion; U.depth.value = g.depth ?? 0.4;
 }
-export function buildGemMaterial(U, M, openness) {
+export function buildGemMaterial(U, M, openness, gi = null) {
   if (MODE.lite) return buildLiteGem(U, M, openness);
   const m = new THREE.MeshPhysicalNodeMaterial({ transmission: 1, side: THREE.DoubleSide });
   m.positionNode = projectPosition(M, true);
@@ -524,6 +553,8 @@ export function buildGemMaterial(U, M, openness) {
   m.iridescenceNode = float(0.4);
   m.iridescenceIORNode = float(1.6);
   m.iridescenceThicknessNode = float(380);
+  // (une pierre vit de reflets : ceux de sa pièce)
+  if (gi) m.emissiveNode = probeLight(m.normalNode, vec3(1), float(0), m.roughnessNode, { diffuse: 0 }).mul(gi);
   m.castShadowNode = vec4(U.color.mul(0.8).add(0.2), 1);
   m.aoNode = studioSeen(openness);
   m.mrtNode = stableVelocity();

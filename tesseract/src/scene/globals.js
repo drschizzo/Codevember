@@ -1,11 +1,14 @@
 // Uniformes partagés par toute la scène.
 import * as THREE from 'three/webgpu';
-import { uniform } from 'three/tsl';
+import { uniform, uniformArray } from 'three/tsl';
 
 // Mode allégé (mobile) : fixé au chargement, avant la construction du premier
 // matériau (voir materials.js, setLite). Simple drapeau JS : il change ce que
 // les shaders contiennent, pas une valeur qu'ils lisent.
 export const MODE = { lite: false };
+// nombre d'iris (portes du voyage) : les deux de la traversée, et ceux de
+// l'enfilade (un tour en ligne droite ouvre ses quatre portes à la fois)
+export const DOORS = 4;
 
 export const G = {
   phase: uniform(0),          // phase de la boucle [0, 1)
@@ -27,6 +30,16 @@ export const G = {
   // revealMask) : ouverture, direction du rayon (espace projeté), rayon du trou
   // près du centre et sa croissance au loin
   tunnel: uniform(0), tunnelDir: uniform(new THREE.Vector3(1, 0, 0)), tunnelR: uniform(0.3), tunnelTan: uniform(0.3),         // patine des parois (encrassement aux jonctions, marbrure)
+  // portes du voyage : des iris (celui qu'on vient de franchir, celui qu'on
+  // va franchir, ceux de l'enfilade), percés dans la paroi commune à deux pièces (voir project.js,
+  // revealMask) — centre, normale et deux axes du plan (espace projeté ; ils
+  // tournent avec les lames), rayon (0 : fermé) ; couleur de la lisière
+  doorP: uniformArray(Array.from({ length: DOORS }, () => new THREE.Vector3()), 'vec3'),
+  doorN: uniformArray(Array.from({ length: DOORS }, () => new THREE.Vector3(1, 0, 0)), 'vec3'),
+  doorU: uniformArray(Array.from({ length: DOORS }, () => new THREE.Vector3(0, 1, 0)), 'vec3'),
+  doorV: uniformArray(Array.from({ length: DOORS }, () => new THREE.Vector3(0, 0, 1)), 'vec3'),
+  doorR: uniformArray(new Array(DOORS).fill(0), 'float'),
+  doorRim: uniform(new THREE.Color(0, 0, 0)),
   roughFloor: uniform(0.08),  // rugosité minimale (reflets jamais réduits à un point)
   nestEnv: uniform(0.45),     // part du studio encore visible depuis l'intérieur d'une cellule
   crystalThick: uniform(1),   // épaisseur optique des cristaux massifs (× leur taille)

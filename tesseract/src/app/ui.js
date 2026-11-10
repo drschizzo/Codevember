@@ -53,12 +53,14 @@ export function createUI({ recipe: getRecipe, render, on }) {
   gui.add(top, 'pause').name('Pause / lecture  (espace)');
   const fpsCtl = gui.add(state, 'fps').name('Images / s').disable();
 
-  const exp = { width: 1920, height: 1080, fps: 60, mbps: 40, go: () => on.exportVideo({ ...exp }), png: () => on.exportPNG() };
+  const exp = { width: 1920, height: 1080, fps: 60, mbps: 40, samples: 1, go: () => on.exportVideo({ ...exp }), png: () => on.exportPNG({ ...exp }) };
   const fExp = gui.addFolder('Export').close();
   fExp.add(exp, 'width', { '1280': 1280, '1920': 1920, '2560': 2560, '3840': 3840, '1080 (carré)': 1080 }).name('Largeur');
   fExp.add(exp, 'height', { '720': 720, '1080': 1080, '1440': 1440, '2160': 2160, '1920 (vertical)': 1920 }).name('Hauteur');
   fExp.add(exp, 'fps', [24, 30, 50, 60]).name('Images / s');
   fExp.add(exp, 'mbps', 8, 120, 1).name('Débit (Mb/s)');
+  // (rendu accumulé : flou de mouvement, profondeur de champ et pénombres vrais ; N fois plus long)
+  fExp.add(exp, 'samples', { 'Temps réel (1)': 1, '8 passes': 8, '16 passes': 16, '32 passes': 32, '64 passes': 64 }).name('Rendu accumulé');
   fExp.add(exp, 'go').name('Exporter la boucle (MP4)');
   fExp.add(exp, 'png').name('Image (PNG)');
 
@@ -115,7 +117,7 @@ export function createUI({ recipe: getRecipe, render, on }) {
       add(fVoy, Vy, 'radius', 0.1, 0.6, 0.01).name('Écart à l’axe de la traversée').onChange(ch);
       add(fVoy, Vy, 'orbitR', 0.3, 0.8, 0.01).name('Rayon du tour de l’objet').onChange(ch);
       add(fVoy, Vy, 'fov', 30, 110, 0.5).name('Champ intérieur (°)').onChange(ch);
-      add(fVoy, Vy, 'lamp', 0, 4, 0.01).name('Lampe de la caméra').onChange(ch);
+      add(fVoy, Vy, 'lamp', 0, 4, 0.01).name('Projecteur de la pièce').onChange(ch);
       add(fVoy, Vy, 'see', 0, 1, 0.01).name('Parois ajourées (de l’intérieur)').onChange(ch);
       add(fVoy, Vy, 'objScale', 0.12, 0.55, 0.01).name('Taille des objets').onChange(ch);
       add(fVoy, Vy, 'fogNear', 0, 6, 0.01).name('Brouillard : début').onChange(ch);

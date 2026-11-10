@@ -92,10 +92,14 @@ function floorMaterial(kind, U, lightsNode) {
 }
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _r = new THREE.Vector3();
-// lampe portée (voyage) : décalage depuis l'œil, en haut, à droite, en arrière
-// (× l'échelle du tesseract) ; confondue avec l'œil, elle aplatirait tout :
-// ses ombres seraient cachées derrière les objets
-const LAMP = { up: 0.16, right: 0.1, back: 0.04 };
+// En voyage, le projecteur (le seul à porter une ombre) quitte le plateau
+// pour le plafond de la pièce où l'on se tient : une douche, décalée vers la
+// caméra (part du rayon), qui modèle l'objet et pose son ombre sur le mur du
+// fond. Portée par la caméra, comme auparavant, elle éclairait de face comme
+// un flash : ni modelé, ni ombre visible.
+// reach : portée (en échelles du tesseract) — la pièce et ses abords ; au-delà,
+// ni lumière ni ombre : la carte d'ombre ne rend que les cellules proches.
+const TOP = { toward: 0.38, angle: 0.88, power: 2.4, reach: 3.4 };
 
 // lite (mobile) : le second contre-jour, le plus faible des trois, n'éclaire plus
 // rien (une lumière de moins évaluée à chaque pixel de chaque pièce et du sol) ;
@@ -148,6 +152,8 @@ export function createStage(scene, { lite = false } = {}) {
       key.color.set(k.color); key.intensity = k.intensity; key.angle = k.angle; key.penumbra = k.penumbra;
       key.shadow.radius = k.soft;
       place(key, k.az, k.el, 11);
+      // (rendu accumulé : le projecteur a une taille, son ombre une pénombre)
+      if (vc.jitter) key.position.addScaledVector(vc.jitter, 0.45);
       const r = R.rim;
       const kc = vc.kc ?? 0, kp = vc.kp ?? 0;
       rim.color.set(r.color); rim.intensity = r.intensity * (1 - kp) ** 2 * (lite ? 1 + 0.5 * R.rim2.intensity / Math.max(1, r.intensity) : 1);
@@ -159,20 +165,26 @@ export function createStage(scene, { lite = false } = {}) {
       floorMesh.position.y = floorY - 60 * kp * kp;
       floorMesh.visible = kind !== 'none' && kp < 0.999;
       const sc = key.shadow.camera;
-      if (kc > 0 && vc.camera) {
-        const C = vc.camera, s = vc.scale ?? 1;
-        const fwd = _a.set(0, 0, -1).applyQuaternion(C.quaternion), up = _b.set(0, 1, 0).applyQuaternion(C.quaternion);
-        const right = _r.crossVectors(fwd, up);
-        _c.copy(C.position).addScaledVector(up, LAMP.up * s).addScaledVector(right, LAMP.right * s).addScaledVector(fwd, -LAMP.back * s);
+      if (kc > 0 && vc.top) {
+        // vc.top : { pos : plafond de la pièce, target : son objet } (monde)
+        const s = vc.scale ?? 1, T = vc.top;
+        const axis = _a.subVectors(T.pos, T.target), h = axis.length();
+        const side = _b.subVectors(vc.camera.position, T.target);
+        side.addScaledVector(axis, -side.dot(axis) / Math.max(1e-9, h * h));
+        if (side.lengthSq() > 1e-9) side.normalize(); else side.set(0, 0, 0);
+        _c.copy(T.pos).addScaledVector(side, TOP.toward * h);
+        // (échantillon de lentille de l'export accumulé : la source a une taille, l'ombre une pénombre)
+        if (vc.jitter) _c.addScaledVector(vc.jitter, 0.06 * h);
         key.position.lerp(_c, kc);
-        key.target.position.lerp(_c.addScaledVector(fwd, 3 * s), kc);
-        key.intensity = k.intensity * (1 - kc) + (vc.lamp ?? 1) * 4 * (k.intensity / 700) * s * s * kc;
-        key.angle = k.angle + (0.85 - k.angle) * kc;
-        key.penumbra = k.penumbra + (0.95 - k.penumbra) * kc;
-        key.shadow.radius = k.soft * (1 - kc) + 2 * kc;
-        sc.near = 3 + (0.02 * s - 3) * kc;
-        sc.far = 30 + (12 * s - 30) * kc;
-      } else { sc.near = 3; sc.far = 30; }
+        key.target.position.lerp(T.target, kc);
+        key.intensity = k.intensity * (1 - kc) + (vc.lamp ?? 1) * TOP.power * (vc.gain ?? 1) * (k.intensity / 700) * s * s * kc;
+        key.angle = k.angle + (TOP.angle - k.angle) * kc;
+        key.penumbra = k.penumbra + (1 - k.penumbra) * kc;
+        key.shadow.radius = k.soft * (1 - kc) + 3 * kc;
+        sc.near = 3 + (0.05 * s - 3) * kc;
+        sc.far = 30 + (TOP.reach * s - 30) * kc;
+        key.distance = 80 + (TOP.reach * s - 80) * kc;
+      } else { sc.near = 3; sc.far = 30; key.distance = 0; }
       sc.updateProjectionMatrix();
     },
   };

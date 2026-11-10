@@ -69,7 +69,7 @@ export const FINISHES = {
   guillocheEnamel: F({ label: 'Émail grand feu guilloché', pattern: 'guilloche', color: '#1d3f96', rough: 0.3, clearcoat: 1, ccRough: 0.015, bump: 0.7, scale: 1 }),
   guillocheRuby: F({ label: 'Émail rubis guilloché', pattern: 'guilloche', color: '#8e1020', rough: 0.3, clearcoat: 1, ccRough: 0.015, bump: 0.7, scale: 1.3 }),
   guillocheSilver: F({ label: 'Argent guilloché', pattern: 'guilloche', color: METAL.silver, metal: 1, rough: 0.16, bump: 0.55, scale: 0.8 }),
-  damascus: F({ label: 'Acier damassé', pattern: 'damascus', color: '#c9cbd0', color2: '#4d5056', metal: 1, rough: 0.28, bump: 0.3, scale: 1 }),
+  damascus: F({ label: 'Acier damassé', pattern: 'damascus', color: '#c9cbd0', color2: '#4d5056', metal: 1, rough: 0.28, bump: 0.3, scale: 2.4 }), // (à l'échelle d'un mur vu de près : des moirures, pas des zébrures)
   marble: F({ label: 'Marbre de Carrare', pattern: 'marble', color: '#eeeae4', color2: '#7a7670', rough: 0.14, clearcoat: 0.8, ccRough: 0.02, scale: 1 }),
   marbleNoir: F({ label: 'Marbre Nero Marquina', pattern: 'marble', color: '#121214', color2: '#d8cfc0', rough: 0.12, clearcoat: 0.9, ccRough: 0.015, scale: 1.2 }),
   urushi: F({ label: 'Laque urushi et or', pattern: 'urushi', color: '#090807', color2: METAL.gold, rough: 0.32, clearcoat: 1, ccRough: 0.012, bump: 1, scale: 1 }),
