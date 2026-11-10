@@ -72,6 +72,8 @@ Un planétaire qui calcule des ciels qui n'existent pas encore. Chaque graine la
 
 [Démo en ligne](https://drschizzo.github.io/Codevember/planetaire_v2/) · [version légère](https://drschizzo.github.io/Codevember/planetaire_v2/?mobile=1) · [documentation](planetaire_v2/README.md)
 
+[![Orrery](planetaire_v2/docs/capture.jpg)](https://drschizzo.github.io/Codevember/planetaire_v2/)
+
 ## [Planétaire](planetaire/)
 
 La vie d’un système planétaire, du nuage à la supernova, simulée sur GPU (WebGPU, three.js TSL) et présentée comme portée par un planétaire en laiton. Chaque grain de poussière conserve son rayon de naissance, qui détermine sa couleur ; le disque peut être sonifié comme un vinyle.
