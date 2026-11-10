@@ -142,6 +142,16 @@
         "fold"
       ],
       "port": 8060
+    },
+    {
+      "name": "tangle",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        ".claude/serve.py",
+        "8070",
+        "tangle"
+      ],
+      "port": 8070
     }
   ]
 }

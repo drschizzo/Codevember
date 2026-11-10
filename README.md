@@ -2,6 +2,14 @@
 
 Expériences de creative coding, publiées sur [drschizzo.github.io/Codevember](https://drschizzo.github.io/Codevember/).
 
+## [Tangle](tangle/)
+
+Le tour de trop. Un banc d’essai de torsion, pièce de cabinet de physique : un moteur tourne le mandrin, la corde qui pend dessous se tord — sa rayure s’enroule en hélice — puis, au seuil de Greenhill, elle flambe d’un coup en une boucle qui s’enroule sur elle-même en torsade (un plectonème) et remonte le balancier. La came du compte-tours écarte la barre : le balancier, libéré, tourne, la torsade se déroule, la corde revient droite. Trois cycles en crescendo (la rayure seule, une boucle, la torsade), trois familles (le cordon qui se tord en torsade, la paire dont les brins se commettent en hélice, la spirale peu tendue qui se love d’un bout à l’autre). Tiges de Cosserat intégrées par XPBD à petits pas, contacts, enlacement conservé (Lk = Tw + Wr, vérifié par des tests), came calculée d’après le plan, sept décors, scènes procédurales à partir d’une graine, boucle parfaite exportable en MP4.
+
+[Démo en ligne](https://drschizzo.github.io/Codevember/tangle/) · [version légère](https://drschizzo.github.io/Codevember/tangle/?mobile=1) · [documentation](tangle/README.md) · [concept](tangle/docs/concept.md)
+
+[![Tangle](tangle/docs/capture.jpg)](https://drschizzo.github.io/Codevember/tangle/)
+
 ## [Fold](fold/)
 
 La feuille qui se replie. Des plantes sensibles au toucher, dans leur pot, sous une cloche, dans une caisse de Ward ou sur une paillasse : une goutte grossit au toit de verre ou au bec d’une burette, tombe et frappe une feuille, et toute la feuille se ferme, la vague partant du point d’impact ; à la fin, un marteau de laboratoire frappe le pot et toute la plante se ferme, de bas en haut ; puis tout se rouvre en accéléré. Quatre familles, quatre plis : la sensitive ferme ses folioles en peigne et laisse tomber ses pétioles, le Biophytum les rabat vers le bas, le trèfle plie ses trois folioles en deux et les laisse retomber comme un parapluie, la dionée claque ses deux lobes ciliés. Propagation du signal sur le graphe vasculaire, pli rigide sans interpénétration vérifié par des tests, contact exact de chaque cause, limbes épais et translucides, sept décors, scènes procédurales à partir d’une graine, boucle parfaite exportable en MP4.
