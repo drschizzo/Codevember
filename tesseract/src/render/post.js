@@ -61,6 +61,8 @@ export function createPost(renderer, scene, camera) {
     aoStrength: uniform(0.8), ssrMix: uniform(1),
     blur: uniform(0.6), focus: uniform(4), focusRange: uniform(2), bokeh: uniform(2),
     exposure: uniform(1), contrast: uniform(1), saturation: uniform(1), warmth: uniform(0), vignette: uniform(0.35),
+    // virage de l'humeur : teinte des ombres et des hautes lumières (voir recipe.js, grade)
+    shadowTint: uniform(new THREE.Color(1, 1, 1)), highTint: uniform(new THREE.Color(1, 1, 1)),
     ca: uniform(0.2), grain: uniform(0.04), hiCap: uniform(3),
     streaks: uniform(0.3), streakLen: uniform(6), halation: uniform(0.3), dirt: uniform(0.4),
   };
@@ -197,6 +199,8 @@ export function createPost(renderer, scene, camera) {
     c = c.mul(pow(l0.div(0.18), U.contrast.sub(1)));
     const l = dot(c, LUMA);
     c = mix(vec3(l, l, l), c, U.saturation);
+    // virage : les ombres tirent vers une teinte, les lumières vers une autre
+    c = c.mul(mix(U.shadowTint, U.highTint, smoothstep(0.02, 0.55, l)));
     const ctr = screenUV.sub(0.5);
     c = c.mul(mix(float(1), smoothstep(0.95, 0.2, length(ctr.mul(vec2(1.2, 1.45)))), U.vignette));
     c = max(c, vec3(0));
@@ -220,9 +224,13 @@ export function createPost(renderer, scene, camera) {
     U.aoStrength.value = cfg.aoStrength;
     U.blur.value = cfg.motionBlur;
     U.exposure.value = cfg.exposure;
-    U.contrast.value = cfg.contrast;
-    U.saturation.value = cfg.saturation;
+    // (étalonnage de l'humeur, par-dessus les réglages du panneau)
+    const gr = R?.grade ?? {};
+    U.contrast.value = cfg.contrast * (gr.contrast ?? 1);
+    U.saturation.value = cfg.saturation * (gr.saturation ?? 1);
     U.warmth.value = cfg.warmth;
+    U.shadowTint.value.setRGB(...(gr.shadows ?? [1, 1, 1]));
+    U.highTint.value.setRGB(...(gr.highlights ?? [1, 1, 1]));
     U.vignette.value = cfg.vignette;
     U.ca.value = cfg.ca;
     U.grain.value = cfg.grain;

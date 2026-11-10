@@ -89,3 +89,15 @@ export function createNoise3(seed) {
 export const clamp = (x, a, b) => (x < a ? a : x > b ? b : x);
 export const smoothstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 export const lerp = (a, b, t) => a + (b - a) * t;
+
+// ── Décalages du rendu accumulé (voir render/accum.js) ───────────────────────
+// suite de Halton (base b), décalée d'une rotation r propre à l'image
+const halton = (i, b) => { let f = 1, r = 0; for (let k = i + 1; k > 0; k = Math.floor(k / b)) { f /= b; r += f * (k % b); } return r; };
+const hash = (n) => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+// décalages du rendu i de l'image `frame` : temps (−½ … ½), lentille et lampe
+// (disques de rayon 1), pixel (−½ … ½)
+export function jitter(i, frame = 0) {
+  const u = (b, k) => { const v = halton(i, b) + hash(frame * 7 + k); return v - Math.floor(v); };
+  const disc = (a, b) => { const r = Math.sqrt(a), t = 2 * Math.PI * b; return [r * Math.cos(t), r * Math.sin(t)]; };
+  return { time: u(2, 0) - 0.5, lens: disc(u(3, 1), u(5, 2)), pixel: [u(7, 3) - 0.5, u(11, 4) - 0.5], light: disc(u(13, 5), u(17, 6)) };
+}

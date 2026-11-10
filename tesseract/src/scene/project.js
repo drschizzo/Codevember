@@ -44,7 +44,7 @@ import {
   varyingProperty, abs, dot, pow, attribute, smoothstep, fract, mat2, mix, step, floor, fwidth,
   interleavedGradientNoise, screenCoordinate, frameId, max as tmax,
 } from 'three/tsl';
-import { G, MODE } from './globals.js';
+import { G, MODE, DOORS } from './globals.js';
 
 // point local → espace projeté
 export const mapPoint = (l, A, d, infl) => {
@@ -91,10 +91,17 @@ export function meshUniforms() {
 // (voir reveal.js) : open, l'ouverture (0 : pleine ; 1 : effacée) ; grid, la
 // trame de la tôle perforée (n trous par côté sur [−a, a]², ou n = 0 : trame
 // à 45° par défaut) ; openness, la part du studio que voit l'objet exposé
+// gi : part de la sonde de pièce (voir probe.js) que reçoit la cellule
 export const cellReveal = () => ({
   open: uniformArray(new Array(6).fill(0), 'float'),
   grid: uniformArray(Array.from({ length: 6 }, () => new THREE.Vector2()), 'vec2'),
   openness: uniform(0),
+  gi: uniform(0),
+  // caustiques : teinte et intensité de la lumière que l'objet de la cellule
+  // (pierre, cristal) jette sur ses parois ; nulle pour un objet opaque
+  caustic: uniform(new THREE.Color(0, 0, 0)),
+  // (direction où tombe la lumière qui a traversé l'objet : à l'opposé du plafond)
+  causticDir: uniform(new THREE.Vector3(0, -1, 0)),
 });
 // matrice ligne-major (math4.cellMatrix) → uniforme
 export function setMatrix(u, m) {
@@ -135,10 +142,44 @@ export function revealMask(dither = false) {
   const R = tmax(G.tunnelR, t.mul(G.tunnelTan)).mul(G.tunnel).mul(step(0, t));
   const wt = fwidth(perp).max(1e-4);
   cover = cover.min(smoothstep(wt.negate(), wt, perp.sub(R)).max(step(R, 1e-4)));
+  // Portes du voyage : des iris (voir irisEdge)
+  for (let i = 0; i < DOORS; i++) {
+    const { d, guard, on } = irisEdge(i);
+    const wd = fwidth(d).max(1e-4);
+    cover = cover.min(smoothstep(wd.negate(), wd, d).max(guard.oneMinus()).max(on.oneMinus()));
+  }
   if (!dither) return cover.greaterThan(0.5);
   const shift = vec2(frameId.toFloat().mod(16).mul(5.588238));
   const noise = mix(float(0.5), interleavedGradientNoise(screenCoordinate.xy.add(shift)), G.dither);
   return cover.greaterThan(noise);
+}
+
+// Iris i (porte du voyage) : un octogone qui s'ouvre en tournant, comme un
+// diaphragme, dans la paroi commune à deux pièces. d : distance signée à son
+// bord (négative dans l'ouverture) ; guard : 1 près du plan de la porte (seule
+// cette paroi est percée, ses deux panneaux dos à dos compris) ; on : 1 s'il
+// est ouvert. Tout se lit dans la position projetée : aucun varying de plus.
+// (Les axes u et v du plan tournent avec les lames, en JS : l'octogone se
+// calcule alors sans trigonométrie — ses côtés sont à l'apothème R sur les
+// axes et sur les diagonales. Les nœuds sont mémorisés : le masque et la
+// lisière partagent le même calcul.)
+const irisMemo = [];
+function irisEdge(i) {
+  if (irisMemo[i]) return irisMemo[i];
+  const q = projP.sub(G.doorP.element(i)), R = G.doorR.element(i);
+  const x = abs(dot(q, G.doorU.element(i))), y = abs(dot(q, G.doorV.element(i)));
+  const d = tmax(tmax(x, y), x.add(y).mul(Math.SQRT1_2)).sub(R);
+  return (irisMemo[i] = { d, guard: step(abs(dot(q, G.doorN.element(i))), R.mul(0.55)), on: step(1e-4, R), R });
+}
+// lisière lumineuse des iris (à verser dans l'émission des parois) : un filet
+// au bord de l'ouverture, qui en fait une porte et non un trou
+export function doorGlow() {
+  let g = float(0);
+  for (let i = 0; i < DOORS; i++) {
+    const { d, guard, on, R } = irisEdge(i);
+    g = g.add(smoothstep(R.mul(0.04), R.mul(0.008), d).mul(step(0, d)).mul(guard).mul(on));
+  }
+  return g;
 }
 
 // axes du plan de la face f (voir gen/cell.js, faceFrame) : X = e₍ₖ₊₁₎, Y = e₍ₖ₊₂₎

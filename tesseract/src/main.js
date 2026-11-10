@@ -15,6 +15,8 @@ import { createStage } from './scene/stage.js';
 import { makeEnvironment } from './scene/env.js';
 import { G, setNoiseVolume, setLite } from './scene/materials.js';
 import { createPost } from './render/post.js';
+import { createProbe, PROBE } from './scene/probe.js';
+import { createAccumulator, jitter } from './render/accum.js';
 import { createUI } from './app/ui.js';
 import { loadRender, saveRender, applyQuality, defaultsFor } from './app/settings.js';
 import { wantsMobile, switchMobile, createGovernor, createPacer, bindTouch } from './app/mobile.js';
@@ -85,6 +87,7 @@ async function main() {
   const stage = createStage(scene, { lite: LITE });
   const tess = createTesseract(scene, gen, { studioLights: stage.studio });
   const post = createPost(renderer, scene, camera);
+  const probe = LITE ? null : createProbe(renderer, scene);
   const overlay = createOverlay();
   const RENDER = loadRender(LITE);
   // résolution dynamique : vise ~45 images / s, entre 50 et 100 % de la résolution de base
@@ -104,11 +107,11 @@ async function main() {
     old?.dispose();
   }
 
-  const loading = { active: true, applied: false, settle: 0 };
+  const loading = { active: true, applied: false, settle: 0, warm: false };
   let ui = null, firstRecipe = true, resetMotion = true;
   function applyRecipe() {
     const recipe = R;
-    loading.active = true; loading.applied = false; loading.settle = 0;
+    loading.active = true; loading.applied = false; loading.settle = 0; loading.warm = false;
     $('#loader').classList.remove('gone');
     $('#loadbar u').style.width = '0%';
     setTimeout(() => {
@@ -187,9 +190,12 @@ async function main() {
     }
     if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); }
   }
-  const _f = new THREE.Vector3(), _u = new THREE.Vector3(), _t = new THREE.Vector3(), _dark = new THREE.Color();
+  const _f = new THREE.Vector3(), _u = new THREE.Vector3(), _t = new THREE.Vector3(), _j = new THREE.Vector3(), _dark = new THREE.Color();
+  // ouverture de la lentille du rendu accumulé (rayon, en part de la distance de mise au point)
+  const LENS = { wide: 0.005, inside: 0.004 };
   let lastPhase = 0, info = null;
-  function renderAt(u) {
+  // sub : décalages d'une passe du rendu accumulé (voir render/accum.js)
+  function renderAt(u, sub = null) {
     const ph = u - Math.floor(u);
     // (un saut dans la boucle n'est pas un mouvement : pas de vecteurs vitesse)
     let dph = Math.abs(ph - lastPhase); dph = Math.min(dph, 1 - dph);
@@ -202,16 +208,36 @@ async function main() {
     G.roughFloor.value = RENDER.roughFloor;
     G.nestEnv.value = RENDER.nestEnv;
     G.crystalThick.value = RENDER.crystalThick;
-    G.dither.value = RENDER.aa === 'traa' ? 1 : 0; // (bord des trous tramé, moyenné par l'anticrénelage temporel)
+    G.dither.value = RENDER.aa === 'traa' || sub ? 1 : 0; // (bord des trous tramé, moyenné par l'anticrénelage temporel ou par l'accumulation)
     const floorY = -R.floor.level * TARGET;
     // (le tesseract d'abord : la caméra du voyage se règle sur son état)
     info = tess.update(ph, { target: TARGET, floorY, reset });
     if (camState.free) controls.update(); else rigCamera(ph);
+    const kc0 = info?.kc ?? 0;
+    const focusOut = camera.position.length(), focusIn = tess.group.position.distanceTo(camera.position);
+    const focusDist = (focusOut + (focusIn - focusOut) * kc0) * RENDER.focus;
+    if (sub) {
+      // la lentille a un diamètre : la caméra se décale dans son plan et vise
+      // toujours le point de netteté (ouverture : part de la distance de mise
+      // au point)
+      const ap = focusDist * (kc0 > 0.5 ? LENS.inside : LENS.wide) * (RENDER.lens ?? 1);
+      _f.set(0, 0, -1).applyQuaternion(camera.quaternion);
+      _t.copy(camera.position).addScaledVector(_f, focusDist);
+      _f.set(1, 0, 0).applyQuaternion(camera.quaternion); _u.set(0, 1, 0).applyQuaternion(camera.quaternion);
+      camera.position.addScaledVector(_f, sub.lens[0] * ap).addScaledVector(_u, sub.lens[1] * ap);
+      camera.up.copy(_u);
+      camera.lookAt(_t);
+      // (et un décalage dans le pixel : anticrénelage)
+      camera.setViewOffset(canvas.width, canvas.height, sub.pixel[0], sub.pixel[1], canvas.width, canvas.height);
+    } else if (camera.view?.enabled) camera.clearViewOffset();
     camera.updateMatrixWorld();
     tess.setViewer(camera.position);
     const kp = info?.kp ?? 0, kc = info?.kc ?? 0, sc = info?.scale ?? 1;
     overlay.draw(info, R, RENDER);
-    stage.update(R, floorY, { kc, kp, camera, scale: sc, lamp: R.voyage?.lamp ?? 1 });
+    stage.update(R, floorY, { kc, kp, camera, scale: sc, lamp: R.voyage?.lamp ?? 1, top: info?.top, gain: info?.top?.gain ?? 1, jitter: sub ? _j.set(sub.light[0], 0, sub.light[1]) : null });
+    // sonde de pièce (voir scene/probe.js) : une face par image, dans les pièces
+    PROBE.k.value = probe && info?.top ? kc * (RENDER.probe ?? 1) : 0;
+    if (PROBE.k.value > 0.01) probe.update(info.top.target, 0.03 * sc, reset); else probe?.invalidate();
     // (dans l'hypersphère, le lointain est sombre : la teinte de la scène,
     // très assombrie ; un fond clair, vu par tous les ajours, noyait l'image
     // dans un voile laiteux)
@@ -228,8 +254,6 @@ async function main() {
     // (un univers clos : le studio ne s'y reflète presque plus)
     scene.environmentIntensity = R.env.intensity * (1 - 0.65 * kp);
     scene.environmentRotation.set(0, R.env.rotation, 0);
-    const focusOut = camera.position.length(), focusIn = tess.group.position.distanceTo(camera.position);
-    const focusDist = (focusOut + (focusIn - focusOut) * kc) * RENDER.focus;
     // (dans les pièces, tout est proche : halo et flou de mouvement atténués,
     // sinon l'image entière se voile ; reflets en espace écran aussi : des
     // parois polies qui se reflètent l'une l'autre font une galerie des
@@ -238,6 +262,8 @@ async function main() {
       ...RENDER, focus: focusDist, focusRange: RENDER.focusRange * TARGET * 2,
       halation: RENDER.halation * (1 - 0.7 * kc), dirt: RENDER.dirt * (1 - 0.6 * kc), motionBlur: RENDER.motionBlur * (1 - 0.5 * kc),
       ssrIntensity: RENDER.ssrIntensity * (1 - 0.6 * kc),
+      // (rendu accumulé : ni anticrénelage temporel ni flou de mouvement calculé, la moyenne les fait)
+      ...(sub ? { aa: 'none', motionBlur: 0, dof: false } : {}),
     }, R);
     post.render();
   }
@@ -249,6 +275,34 @@ async function main() {
   function renderStep(u) {
     renderer._nodes?.nodeFrame?.update();
     renderAt(u);
+  }
+  // Amorçage, sous l'écran de chargement : quelques images du voyage, pour
+  // que les shaders qui n'y servent que là (sonde de pièce et ses doublures,
+  // gorges lumineuses, portes) soient compilés avant le film. Sans cela la
+  // première image de la plongée gelait la page une demi-seconde, et
+  // l'animation repartait par un à-coup.
+  function warmUp() {
+    const tl = info?.timeline;
+    if (!tl || !R.voyage?.on) return;
+    const at = (k, f) => { const s = tl.find((p) => p.k === k); return s ? s.a + (s.b - s.a) * f : null; };
+    for (const ph of [at('plunge', 0.5), at('plunge', 0.97), at('dwell', 0.5), at('dwell', 0.97), at('travel', 0.5), at('surface', 0.5)]) if (ph !== null) renderStep(ph);
+    probe?.invalidate();
+    resetMotion = true;
+  }
+  // Image accumulée (voir render/accum.js) : n passes autour de la phase u,
+  // moyennées sur le canevas. frame : numéro de l'image (décorrèle les
+  // décalages d'une image à l'autre) ; shutter : durée d'obturation, en phase.
+  const accum = createAccumulator(renderer);
+  function renderAccum(u, n, frame = 0, shutter = 0) {
+    accum.begin(canvas.width, canvas.height);
+    for (let i = 0; i < n; i++) {
+      const sub = jitter(i, frame);
+      renderer._nodes?.nodeFrame?.update();
+      renderAt(u + sub.time * shutter, sub);
+      accum.add(1 / n);
+    }
+    camera.clearViewOffset();
+    accum.present();
   }
 
   function resize() {
@@ -307,7 +361,7 @@ async function main() {
     },
     resetRender: () => { Object.assign(RENDER, defaultsFor(LITE)); applyRender(); ui?.refresh(); },
     freeCam: (v) => { camState.free = v; controls.enabled = v; if (v) controls.target.set(0, -0.15, 0); toast(v ? 'Caméra libre' : 'Caméra du film', 1600); },
-    exportPNG: () => exportPNG(canvas, () => renderStep(phi), `tesseract-${R.seed}.png`),
+    exportPNG: (o = {}) => exportPNG(canvas, () => (o.samples > 1 ? renderAccum(phi, o.samples) : renderStep(phi)), `tesseract-${R.seed}.png`),
     exportVideo: async (o) => {
       if (busy) return;
       busy = true;
@@ -316,7 +370,9 @@ async function main() {
       $('#progress').classList.add('on');
       try {
         await exportLoop({
-          canvas, duration: R.loop.duration, renderAt: renderStep,
+          canvas, duration: R.loop.duration,
+          // (obturateur ouvert la moitié de l'intervalle entre deux images)
+          renderAt: o.samples > 1 ? (u, i, total) => renderAccum(u, o.samples, i, 0.5 / total) : renderStep, prime: !(o.samples > 1),
           // (légendes et analogie composées sur chaque image)
           overlay: (ctx, w, h) => drawOverlay(ctx, w, h, info, R, RENDER),
           setSize: (w, h) => { renderer.setPixelRatio(1); renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); },
@@ -352,7 +408,7 @@ async function main() {
   applyRecipe();
   if (params.has('debug')) {
     window.tess = {
-      renderer, scene, camera, tess, stage, post, gen, RENDER, renderAt: renderStep, on, G,
+      renderer, scene, camera, tess, stage, post, probe, gen, RENDER, renderAt: renderStep, on, G, warmUp,
       get R() { return R; },
       get info() { return info; },
       seek: (p) => { phi = p; paused = true; },
@@ -374,6 +430,43 @@ async function main() {
         const b = await sc.convertToBlob({ type: 'image/jpeg', quality: 0.88 });
         await fetch(url + name, { method: 'POST', body: b });
         return b.size;
+      },
+      // posemètre : luminance de la passe de scène (HDR, avant étalonnage),
+      // sur toute l'image et sur son centre (box : demi-côté, en part de la
+      // hauteur) — médiane, 90e et 99e centiles, part de noir et de brûlé
+      async meter(box = 0.18) {
+        const rt = post.nodes.scenePass.renderTarget, w = rt.width, h = rt.height;
+        const px = await renderer.readRenderTargetPixelsAsync(rt, 0, 0, w, h, 0);
+        const half = px instanceof Uint16Array, val = (i) => (half ? THREE.DataUtils.fromHalfFloat(px[i]) : px[i]);
+        const stride = Math.ceil((w * (half ? 8 : 16)) / 256) * 256 / (half ? 2 : 4);
+        const all = [], mid = [], b = box * h;
+        for (let y = 0; y < h; y += 3) for (let x = 0; x < w; x += 3) {
+          const i = y * stride + x * 4, L = 0.2126 * val(i) + 0.7152 * val(i + 1) + 0.0722 * val(i + 2);
+          if (!(L >= 0)) continue;
+          all.push(L);
+          if (Math.abs(x - w / 2) < b && Math.abs(y - h / 2) < b) mid.push(L);
+        }
+        const stat = (a) => { a.sort((p, q) => p - q); const q = (t) => +a[Math.min(a.length - 1, Math.floor(t * a.length))].toFixed(3); return { p50: q(0.5), p90: q(0.9), p99: q(0.99), noir: +(a.filter((v) => v < 0.01).length / a.length).toFixed(2), brule: +(a.filter((v) => v > RENDER.hiCap * 0.5).length / a.length).toFixed(3) }; };
+        return { image: stat(all), centre: stat(mid) };
+      },
+      // image accumulée (n passes, obturation en phase) envoyée au collecteur
+      async sendAccum(name, ph, n = 16, shutter = 0, scale = 0.5, url = 'http://127.0.0.1:8099/') {
+        frozen = true;
+        renderAccum(ph, n, 0, shutter);
+        await renderer.backend.device?.queue.onSubmittedWorkDone();
+        const rt = accum.sum, w = rt.width, h = rt.height;
+        const px = await renderer.readRenderTargetPixelsAsync(rt, 0, 0, w, h);
+        const c = new OffscreenCanvas(w, h), img = c.getContext('2d').createImageData(w, h), stride = (Math.ceil((w * 8) / 256) * 256) / 2;
+        const enc = (v) => 255 * (v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055);
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+          const i = y * stride + x * 4, o = (y * w + x) * 4;
+          for (let k = 0; k < 3; k++) img.data[o + k] = enc(Math.min(1, Math.max(0, THREE.DataUtils.fromHalfFloat(px[i + k]))));
+          img.data[o + 3] = 255;
+        }
+        c.getContext('2d').putImageData(img, 0, 0);
+        const sc = new OffscreenCanvas(Math.round(w * scale), Math.round(h * scale));
+        sc.getContext('2d').drawImage(c, 0, 0, sc.width, sc.height);
+        await fetch(url + name, { method: 'POST', body: await sc.convertToBlob({ type: 'image/jpeg', quality: 0.9 }) });
       },
       async shot(ph, n = 12) {
         while (!tess.ready()) await new Promise((r) => setTimeout(r, 200));
@@ -408,6 +501,7 @@ async function main() {
     renderAt(phi);
     if (loading.active) {
       $('#loadbar u').style.width = `${(tess.progress() * 100).toFixed(1)}%`;
+      if (loading.applied && tess.ready() && !loading.warm && info) { loading.warm = true; warmUp(); }
       if (loading.applied && tess.ready() && ++loading.settle > 8) {
         loading.active = false;
         $('#loader').classList.add('gone');

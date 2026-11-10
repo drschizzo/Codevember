@@ -19,8 +19,10 @@ import { panelSeat } from '../gen/cell.js';
 // passage : distances (à l'échelle de la face projetée) au plan de la face
 // où elle est encore pleine / déjà effacée, et demi-largeur de l'ouverture
 const PASS = { far: 0.36, near: 0.1, lat: 1.05 };
-// porte : rayon (espace projeté) autour de son centre où elle est effacée / pleine
-const DOOR = { near: 0.12, far: 0.32 };
+// porte : rayon de l'iris grand ouvert (part du demi-côté de la paroi : la
+// caméra la franchit à l'écart de son centre, sur une diagonale) et rotation
+// de ses lames pendant qu'il s'ouvre
+const DOOR = { radius: 0.8, spin: 0.9 };
 // part de la lumière du studio qu'une face laisse passer, pleine, selon sa
 // nature (voir cellOpenness)
 const FACE_CLEAR = { open: 1, glass: 0.85, bars: 0.7, leaded: 0.6, comb: 0.5, grid: 0.5, target: 0.45, oculus: 0.4, twist: 0.4, louvre: 0.35, perf: 0.3 };
@@ -39,17 +41,45 @@ export function faceLayout(R) {
   }));
 }
 
-// Portes du voyage pour l'état st : [précédente, suivante], chacune
-// { p : centre projeté de la paroi commune, open : ouverture }
+// Portes du voyage pour l'état st : [précédente, suivante], chacune un iris
+// dans la paroi commune à deux pièces — p : son centre projeté ; n : sa
+// normale ; u, v : deux axes de son plan (tournés avec ses lames, de spin) ;
+// r : son rayon (il s'ouvre) ; half : demi-côté de la paroi ; open : son ouverture
 export function voyageDoors(st, R, frames, T, d, inflate) {
   const n = R.moves.length, f = st.f ?? 0;
-  const door = (i, open) => {
-    const a = frames.rooms[i], b = frames[i]?.cell;
+  const sub = (p, q) => [p[0] - q[0], p[1] - q[1], p[2] - q[2]];
+  const unit = (v) => { const l = Math.hypot(...v) || 1; return v.map((x) => x / l); };
+  const cross = (p, q) => [p[1] * q[2] - p[2] * q[1], p[2] * q[0] - p[0] * q[2], p[0] * q[1] - p[1] * q[0]];
+  const door = (i, open) => wall(frames.rooms[i], frames[i]?.cell, open);
+  const wall = (a, b, open) => {
     if (b === undefined || open <= 0) return null;
-    const x = normalOf(a).map((v, k) => v + normalOf(b)[k]);
-    return { p: project(apply(T[a], x), d, inflate), open };
+    const na = normalOf(a), nb = normalOf(b), x = na.map((v, k) => v + nb[k]);
+    const p = project(apply(T[a], x), d, inflate);
+    // demi-côté de la paroi : du centre au milieu d'un de ses bords (un axe
+    // qui n'est celui d'aucune des deux pièces)
+    const k = [0, 1, 2, 3].find((j) => na[j] === 0 && nb[j] === 0);
+    const e = x.slice(); e[k] += 1;
+    const edge = sub(project(apply(T[a], e), d, inflate), p), half = Math.hypot(...edge);
+    const nrm = unit(sub(project(apply(T[b], nb), d, inflate), project(apply(T[a], na), d, inflate)));
+    const u = unit(sub(edge, nrm.map((c) => c * (edge[0] * nrm[0] + edge[1] * nrm[1] + edge[2] * nrm[2]))));
+    const ease = open * open * (3 - 2 * open);
+    // (les lames tournent en s'ouvrant : les axes du plan tournent avec elles)
+    const v = cross(nrm, u), spin = DOOR.spin * (1 - ease), cs = Math.cos(spin), sn = Math.sin(spin);
+    return {
+      p, n: nrm, u: u.map((c, j) => c * cs + v[j] * sn), v: v.map((c, j) => c * cs - u[j] * sn),
+      r: DOOR.radius * half * ease, half, spin, open,
+    };
   };
   if (st.phase === 'dwell') {
+    // L'enfilade : un tour en ligne droite (quatre pièces sur un grand cercle)
+    // aligne ses quatre portes. À la dernière halte, revenu dans la première
+    // pièce, elles s'ouvrent toutes, l'une après l'autre : on regarde le long
+    // du cercle entier, et l'on voit que le couloir se referme sur lui-même.
+    const r = frames.rooms;
+    if (st.room === n && n === 4 && r[2] === (r[0] ^ 1) && r[3] === (r[1] ^ 1) && R.voyage?.enfilade !== false) {
+      const close = 1 - smoothstep(0.7, 0.92, f), op = (t) => smoothstep(t, t + 0.2, f) * close;
+      return [wall(r[3], r[0], close), wall(r[0], r[1], op(0.08)), wall(r[1], r[2], op(0.16)), wall(r[2], r[3], op(0.24))];
+    }
     return [
       st.room > 0 ? door(st.room - 1, 1 - smoothstep(0, 0.35, f)) : null,
       st.room < n ? door(st.room, smoothstep(0.45, 0.95, f)) : null,
@@ -94,7 +124,6 @@ export function computeOpenings(out, { A, layout, d, inflate, toWorld, viewPos, 
         const lat = Math.hypot(rel[0] - nl[0] * dn, rel[1] - nl[1] * dn, rel[2] - nl[2] * dn);
         open = Math.max(open, smoothstep(PASS.far * sf, PASS.near * sf, Math.abs(dn)) * smoothstep(PASS.lat * sf, PASS.lat * sf * 0.75, lat));
       }
-      for (const door of doors) if (door) open = Math.max(open, smoothstep(DOOR.far, DOOR.near, dist3(pl, door.p)) * door.open);
       out[c][f] = open;
     }
   }
