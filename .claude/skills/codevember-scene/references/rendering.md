@@ -13,6 +13,21 @@
 - **Détails à l'échelle** (millimètres d'une pièce d'horlogerie de grand volume) : rivets, gravures qui suivent le contour, côtes de Genève, soleillage, perlage, anglage poli ; ils s'effacent sous le pixel (pas de moiré).
 - **Instanciation sans `InstancedMesh`** quand il y a beaucoup de pièces identiques : `InstancedBufferGeometry` et matrice en attributs, appliquée dans `positionNode` (un shader par matériau au lieu d'un par objet). Fusionner les pièces fixes par matière.
 
+## Matières cuites (roche, écorce, sol)
+
+Une matière naturelle vue en macro ne tient pas avec du bruit calculé au pixel : elle demande un relief à plusieurs échelles, des formes reconnaissables et une couleur qui en découle.
+- **Cuire une fois, lire deux fois** : dans un worker, une carte de hauteur haute résolution (~1 024², quelques dixièmes de mm par texel) avec sa pente, son occlusion (creux sous la moyenne locale, deux rayons de flou) et une carte couleur + rugosité tirée du même calcul. Sur le GPU : **déplacement** des sommets d'un maillage dense (WebGPU n'a pas de geometry shader ; un vertex shader qui lit la carte en `level(0)` fait le travail) et **normal map** au pixel, plus un micro-relief procédural sous le texel pour le gros plan. Demi-flottants pour ce qui est filtré (les textures `float32` ne sont pas filtrables par défaut), mipmaps pour le plan large.
+- **Prévisualiser la carte seule** dans Node : une image de la couleur ombrée par la pente (lumière rasante), assemblée en planche avec PIL. C'est dix fois plus rapide que de passer par la scène, et c'est là qu'on voit ce qui fait faux.
+- **Ce qui fait faux** : la régularité graphique. Un réseau de fissures de Voronoï trop dense et trop fin (des carreaux), des grains en points (du poivre, du béton de galets), des lichens en disques plats ou en anneaux, des stries parfaitement parallèles, des arêtes vives que l'usure aurait arrondies. Le réel : peu de grandes diaclases aux épaules arrondies, une usure à trois échelles (cm, mm, grain), des cristaux en mosaïque peu contrastée, des taches rares et texturées (aréoles, points), des teintes dérivées d'une même famille.
+- **Une seule surface pour tout** : la même fonction de relief sert au maillage, à poser les objets (chaque pied planté sur la vraie surface, fissures comprises) et à toute carte qui en dépend (où l'eau reste, où la vie se réfugie) — sinon les objets flottent au-dessus des creux.
+
+## Formes faites de milliers d'éléments
+
+- Une **enveloppe** (dôme, nappe, volume) d'abord, calculée d'après ce qu'elle représente, adoucie à l'échelle de l'objet (pas de bord en falaise quand le champ qui la définit est raide : moyenner ce champ sur la taille de l'objet) ; puis les éléments plantés **dans** l'enveloppe et orientés selon sa normale, leur partie visible affleurant à sa surface.
+- Le **corps** de l'enveloppe est visible entre les éléments : il porte le même motif qu'eux, peint en relief (normales perturbées, translucidité), assez dense pour qu'on ne voie jamais un aplat. C'est lui qui fait la densité ; la géométrie fait le gros plan.
+- Quand l'enveloppe grandit ou rétrécit, enveloppe et éléments suivent **la même loi** (même fonction, mêmes seuils) : sinon on voit les tiges au-dessus du corps, ou le corps sans ses éléments.
+- Niveaux de détail : gabarit fin près du lieu du gros plan (connu par la trajectoire de la caméra), grossier ailleurs, même shader.
+
 ## Matériaux (`scene/materials.js`, `finishes.js`)
 
 - `MeshPhysicalNodeMaterial` exploité en entier : vernis à sa propre normale, lustre (velours), irisation à épaisseur variable, anisotropie (brossage), transmission avec dispersion et absorption, émission, usure qui révèle la tranche.

@@ -18,7 +18,7 @@ Ordre : en tête **Graine** (champ), **⟳ Nouvelle scène (N)**, **Copier le li
 - **Tout ce que tire la recette est réglable.** Les libellés sont en français, explicites, avec l'unité (« Durée (s) », « Tours sur l'axe / boucle ») ; les grandeurs entières (tours) ont un pas de 1.
 - Une retouche d'aspect est immédiate (uniformes) ; une retouche de forme relance la génération de cet élément seul, l'ancienne version restant affichée jusqu'à l'arrivée de la nouvelle ; changer d'humeur tire une nouvelle scène de la même graine dans cette humeur ; « ⟳ Autre forme », « ⟳ Autres variations » retirent un seul aspect.
 - Le panneau ne touche jamais à la scène : il modifie la recette (ou les réglages de rendu) et appelle un rappel `on.*`.
-- Les réglages de rendu sont indépendants de la graine et mémorisés (`localStorage`, clé `<nom>.render.v1`, séparée pour le mobile). Les qualités : Mobile (recharge la page), Brouillon, Standard, Haute (défaut), Cinéma.
+- Les réglages de rendu sont indépendants de la graine et mémorisés (`localStorage`, clé `<nom>.render.v1`, séparée pour le mobile). **Quand tu changes une valeur par défaut** (profondeur de champ, exposition…), incrémente la version de la clé : sinon le navigateur de l'utilisateur garde l'ancienne valeur mémorisée et il ne voit pas la correction (y compris dans tes propres captures de mise au point). Les qualités : Mobile (recharge la page), Brouillon, Standard, Haute (défaut), Cinéma.
 
 ## Export (`app/capture.js`)
 
