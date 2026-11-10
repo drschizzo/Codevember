@@ -122,6 +122,16 @@
       ],
       "port": 8048,
       "autoPort": false
+    },
+    {
+      "name": "calcin",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        ".claude/serve.py",
+        "8050",
+        "calcin"
+      ],
+      "port": 8050
     }
   ]
 }
