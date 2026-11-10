@@ -27,7 +27,7 @@
 
 ## Lumière
 
-- **Une lampe principale** (SpotLight, ombres PCF douces, `decay` 2, ~550–850 cd à 9 unités) placée haut et de côté ; **deux contre-jours** (300–500 et 60–200) qui détachent les silhouettes ; fixes dans le monde (la caméra tourne, les ombres restent) ou solidaires de la caméra quand le geste l'exige (Hollow : lampe frontale qui traverse les oculus, Membrane).
+- (Schéma par défaut, à remplacer quand l'humeur le demande — soleil, fenêtre, lueur, lumière noire, source interne ; les intensités citées sont celles des projets passés, à redoser au posemètre.) **Une lampe principale** (SpotLight, ombres PCF douces, `decay` 2, ~550–850 cd à 9 unités) placée haut et de côté ; **deux contre-jours** (300–500 et 60–200) qui détachent les silhouettes ; fixes dans le monde (la caméra tourne, les ombres restent) ou solidaires de la caméra quand le geste l'exige (Hollow : lampe frontale qui traverse les oculus, Membrane).
 - **Studio HDR calculé** (`env.js`, demi-flottants, 1024×512 ; 512 en mobile) : fond très sombre et sources formées (boîtes à lumière, bandes, fenêtre, rebond du sol) aux bords adoucis ; un préréglage par humeur (studio, atelier, nuit, boîte à lumière, cyclorama blanc, abysses), rotation et intensité dans la recette. C'est lui que les métaux reflètent : soigne-le autant que les lampes.
 - **Lumières de vedette et d'écrin** : une petite source par objet exposé, côté caméra, qui le détache de son fond sans éclairer le fond ; lumière sous plafond qui filtre par les ajours (Tesseract).
 - **Éclairage sélectif** : `material.lightsNode = lights([...])` — chaque matériau n'évalue que ses lumières ; **tout matériau sans liste évalue toutes les lumières de la scène** (le sol plein écran a coûté +11 ms).
