@@ -40,7 +40,10 @@ const COPY = [
   ['tesseract/src/app/settings.js', 'src/app/settings.js', [[/tesseract\.render\.v1/, `${name}.render.v1`], [/\n\s*captions: false, analogy: false,[^\n]*/, '']]],
   ['tesseract/src/app/mobile.js', 'src/app/mobile.js'],
   ['tesseract/src/app/capture.js', 'src/app/capture.js'],
-  ['tesseract/src/render/post.js', 'src/render/post.js'],
+  ['tesseract/src/render/post.js', 'src/render/post.js', [
+    // (exposition fixe propre à l'humeur : R.grade.exposure, réglée au posemètre)
+    [/U\.exposure\.value = cfg\.exposure;/, "U.exposure.value = cfg.exposure * (R?.grade?.exposure ?? 1); // (exposition fixe de l'humeur)"],
+  ]],
   ['tesseract/src/render/accum.js', 'src/render/accum.js'],
   ['tesseract/src/scene/env.js', 'src/scene/env.js', [[/from '\.\.\/math4\.js'/, "from '../rng.js'"]]],
   ['tesseract/src/gen/noisevol.js', 'src/gen/noisevol.js', [[/'tesseract-noise'/, `'${name}-noise'`]]],
