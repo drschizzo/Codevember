@@ -41,7 +41,7 @@ La boucle passe par trois états — la perle gelée, l'étoile, la goutte — p
 
 ## Le cœur : pousser, puis fondre
 
-**La croissance** (`src/gen/growth.js`) est le modèle mésoscopique de Gravner et Griffeath (*Physica D* 237, 2008) sur un réseau hexagonal : la vapeur diffuse, se dépose sur les cellules du bord (en partie en glace, en partie en couche quasi liquide), une cellule s'attache selon le nombre de ses voisines attachées (seuils β, α, θ), une part fond. Les pointes, qui voient plus de vapeur, avancent plus vite et se ramifient ; les faces planes avancent ensemble. Selon les paramètres, dendrites stellaires, fougères, plaques hexagonales, plaques à secteurs, larges branches ; un second jeu de paramètres pris en cours de croissance donne les étoiles à centre en plaque et les plaques à anneau, comme les cristaux dont l'air change pendant la chute. La masse de glace de chaque cellule fait le relief : nervures, arêtes des secteurs, marques des étapes de croissance.
+**La croissance** (`src/gen/growth.js`) est le modèle mésoscopique de Gravner et Griffeath (*Physica D* 237, 2008) sur un réseau hexagonal : la vapeur diffuse, se dépose sur les cellules du bord (en partie en glace, en partie en couche quasi liquide), une cellule s'attache selon le nombre de ses voisines attachées (seuils β, α, θ), une part fond. Les pointes, qui voient plus de vapeur, avancent plus vite et se ramifient ; les faces planes avancent ensemble. Selon les paramètres, dendrites stellaires, fougères, peignes, échelles, larges branches ; un second jeu de paramètres pris en cours de croissance donne les étoiles à centre en plaque, les plaques à secteurs prolongés de dendrites, les étoiles prises dans une plaque, comme les cristaux dont l'air change pendant la chute (aucune plaque n'est un simple hexagone qui grandit). La masse de glace de chaque cellule fait le relief : nervures, arêtes des secteurs, marques des étapes de croissance.
 
 **Le maillage animé** (`src/gen/crystal.js`, `src/scene/ice.js`) : chaque cellule est un sommet ; le vertex shader calcule son épaisseur à l'instant t d'une valeur signée v = (h + ½h₀)·g(t − T)·(1 − m(s − M)) − ½h₀, où T est l'instant d'attachement de la cellule et M son instant de fonte. Le bord du cristal est la ligne v = 0, interpolée dans les triangles : il avance et recule entre les cellules, sans marches. La normale est recomposée à partir des gradients de h, T et M rangés dans les attributs. Le film fait avancer le **rayon** à vitesse constante (la simulation, elle, accélère à mesure que les pointes s'allongent) : on garde la réciproque exacte, cellule par cellule, du rayon atteint en fonction de T.
 
@@ -63,15 +63,17 @@ Le fond est le support lui-même, flou dans la profondeur de champ d'une macro.
 | Humeur | Support | Lumière | Valeur | Cadrage |
 | --- | --- | --- | --- | --- |
 | Laine | jersey de laine au niveau des fibres | boîte douce de face, soleil bas | sombre | plongée oblique |
-| Verre | plaque de verre sur table lumineuse | transmise, d'en dessous | très claire | presque de dessus |
+| Verre | une vitre en hiver, ses poussières ; derrière, le ciel flou de l'heure bleue | de face, diffuseur ovale | moyenne, froide | plongée |
 | Velours | velours noir (Bentley) | rasante et dure | très sombre | ras du support |
 | Houx | feuille de houx vernissée, nervures | plein jour, d'en haut | moyenne, verte | oblique bas |
-| Rheinberg | lame de saphir au microscope | champ coloré, anneau d'une autre couleur | colorée | de dessus |
+| Rheinberg | lame de saphir au microscope, diaphragme de champ à dix lamelles | champ sombre, anneau de lumière chaude | sombre, lumineuse | plongée |
 | Ardoise | ardoise feuilletée, paillettes de mica | ciel couvert | gris moyen | oblique |
 
 **La laine** (`src/gen/wool.js`) suit le modèle de fil procédural de Zhao, Luan et Bala (SIGGRAPH 2016) dans la forme qu'en donnent Wu et Yuksel (*Real-time fiber-level cloth rendering*, I3D 2017) : les rangs d'un jersey (mailles en V, jambes en avant, têtes passées derrière), deux brins retordus, une section de brin elliptique, des fibres de 17 µm en hélice dont la distance à l'axe migre (R(θ) = Rᵢ/2·(R_max + R_min + (R_max − R_min)·cos(θᵢ + sθ)), Rᵢ selon la densité de Zhao et al.), des périodes en boucle et d'autres rompues en poils, une « fibre de cœur » unique striée en hélice pour les fibres du centre, un reflet de tube anisotrope le long de la fibre, une ombre ambiante selon la distance au centre du fil, et des ombres portées calculées sur de simples tubes. Le cristal repose sur les fibres les plus hautes de son emprise.
 
-**Les causes du froid** (`src/scene/frost.js`) : un givre d'aiguilles de 20 à 60 µm qui pousse sur le support au retour du froid et fond au premier soleil, avant le cristal ; une poussière de diamant qui tombe pendant le froid, en un nombre entier de passages par boucle.
+**Les causes du froid** : un givre qui pousse au retour du froid et fond au premier soleil, avant le cristal — sur la laine, des aiguilles de 20 à 60 µm à la pointe des fibres (`src/scene/frost.js`) ; sur les supports plats, un semis clairsemé de petits cristaux dans la matière, jeté au hasard, dont les facettes scintillent (pastilles de bokeh dans le flou) ; une poussière de diamant qui ne se voit que quand une facette renvoie la lumière, en un nombre entier de passages par boucle.
+
+**Le contact** (`src/scene/contact.js`) : la glace porte une ombre (un double opaque qui laisse passer une part de la lumière : la transmission physique de three.js n'en porte pas), et la matière du support et des fibres calcule une ombre de contact exactement sous la glace à l'instant t (une carte d'emprise du cristal donne, par texel, ses instants d'attachement et de fonte) et au pied de chaque perle. Le support se relève en cyclorama derrière le sujet : pas d'horizon, un dégradé de la même matière dans le flou de la macro.
 
 **La caméra** (`src/camera.js`) : une macro sur rail qui respire avec le sujet — elle recule pendant que l'étoile pousse, avance pendant qu'elle se rassemble en goutte (rapport des distances ≤ 2,5), un seul balancement lent en azimut ; trajectoire lissée (noyau gaussien périodique), pointe sous 25°/s, accélération bornée (test à 120 i/s).
 
@@ -87,7 +89,7 @@ Treize tests : la croissance a la symétrie d'ordre 6 sans bruit et l'attachemen
 
 ## Performances
 
-Génération d'une scène : 0,5 à 3,5 s pour la croissance, le maillage et la fonte enregistrée, 0,5 s pour la laine (workers). Temps d'image mesuré dans le panneau de navigateur de l'application (GPU d'un Mac, panneau masqué), qualité Haute, 1,8 Mpx, graine k2 (laine, le décor le plus lourd : ~570 000 sommets de fibres) : **7,3 ms** l'étoile entière, **8,3 ms** pendant la fonte ; version mobile (graine k6, velours) : 3,5 ms. Raccord de boucle : écart des matrices ≤ 2·10⁻⁸ ; 207 pipelines compilées sous l'écran de chargement.
+Génération d'une scène : 0,5 à 3,5 s pour la croissance, le maillage et la fonte enregistrée, 0,5 s pour la laine (workers). Temps d'image mesuré dans le panneau de navigateur de l'application (GPU d'un Mac, panneau masqué), qualité Haute, 1,8 Mpx, graine k2 (laine, le décor le plus lourd : ~570 000 sommets de fibres, profondeur de champ et ombre de contact comprises) : **9,2 ms** ; version mobile (graine k6, velours) : 3,5 ms. Raccord de boucle : écart des matrices ≤ 2·10⁻⁸ ; 207 pipelines compilées sous l'écran de chargement.
 
 ## Version mobile
 

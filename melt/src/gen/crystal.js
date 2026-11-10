@@ -310,7 +310,26 @@ export function buildCrystal(spec) {
   const cellArea = (SQ3 / 2) * s * s;
   for (let k = 0; k < nC; k++) Vice += H[k] * cellArea;
 
+  // carte d'emprise (repère du cristal) : pour l'ombre de contact sur le
+  // support. Par texel : instant d'attachement, instant de fonte, épaisseur,
+  // présence (RGBA8, filtrée linéairement)
+  const CG = 256, ext = (rmax + 3) * s;
+  const cov = new Uint8Array(CG * CG * 4);
+  const SQ = Math.sqrt(3) / 2;
+  for (let j = 0; j < CG; j++) for (let i = 0; i < CG; i++) {
+    const x = ((i + 0.5) / CG * 2 - 1) * ext / s, y = ((j + 0.5) / CG * 2 - 1) * ext / s;
+    const r = Math.round(y / SQ), q = Math.round(x - r / 2);
+    const o4 = (j * CG + i) * 4;
+    cov[o4] = 255; cov[o4 + 1] = 0; cov[o4 + 2] = 0; cov[o4 + 3] = 0;
+    if (Math.abs(q) > L.R || Math.abs(r) > L.R) continue;
+    const ci = L.idx(q, r), k = vid[ci];
+    if (k < 0 || k >= nC) continue;
+    cov[o4] = Math.round(Math.min(1, Tn[k]) * 255); cov[o4 + 1] = Math.round(Mn[k] * 255);
+    cov[o4 + 2] = Math.round(Math.min(1, H[k] / (thick || 1e-3)) * 255); cov[o4 + 3] = 255;
+  }
+
   return {
+    cover: { data: cov, size: CG, ext },
     position: pos, index, A, B, C,
     nCells: nC, cell: s, steps, rmax, radius: (rmax + 0.5) * s, thick: h0,
     // durée de vie d'une cellule au front (en unités de T) : sert à la rampe g

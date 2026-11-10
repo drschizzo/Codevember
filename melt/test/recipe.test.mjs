@@ -28,13 +28,15 @@ test('toutes les humeurs, familles et formes sont tirées', () => {
 test('humeurs : un décor chacune (support, cadrage, valeur différents)', () => {
   const kinds = new Set(MOOD_KEYS.map((k) => MOODS[k].sub.kind));
   assert.equal(kinds.size, MOOD_KEYS.length);
-  // au moins une très claire, une très sombre, une colorée
+  // des valeurs étagées : une très sombre, des moyennes (la glace claire ne
+  // se lit pas sur un fond blanc : pas de fond très clair)
   const lum = (hex) => { const c = parseInt(hex.slice(1), 16); return (0.2126 * (c >> 16) + 0.7152 * ((c >> 8) & 255) + 0.0722 * (c & 255)) / 255; };
   const L = MOOD_KEYS.map((k) => lum(MOODS[k].bg));
-  assert.ok(Math.max(...L) > 0.8 && Math.min(...L) < 0.02);
-  // cadrages : du ras du support (< 25°) à la vue de dessus (> 75°)
+  assert.ok(Math.max(...L) > 0.15 && Math.min(...L) < 0.02 && new Set(L.map((l) => Math.round(l * 10))).size >= 3);
+  // cadrages : du ras du support (< 25°) à la plongée (> 65° ; jamais tout à
+  // fait de dessus : l'image y perd sa profondeur)
   const els = MOOD_KEYS.map((k) => MOODS[k].cam.el);
-  assert.ok(Math.min(...els.map((e) => e[0])) < 25 && Math.max(...els.map((e) => e[1])) > 75);
+  assert.ok(Math.min(...els.map((e) => e[0])) < 25 && Math.max(...els.map((e) => e[1])) > 65 && Math.max(...els.map((e) => e[1])) < 80);
 });
 
 test('lampes presque blanches (le soleil d’hiver un peu chaud)', () => {

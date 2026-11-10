@@ -35,21 +35,25 @@ export const FAMILIES = {
       ladder: { label: 'en échelle', growth: LADDER },
       platecenter: { label: 'à centre en plaque', growth: HEX, then: { at: 0.3, growth: STELLAR } },
       tipped: { label: 'à bouts en plaques', growth: TIPPED },
+      broadfern: { label: 'à larges branches fougères', growth: BROAD, then: { at: 0.4, growth: FERN } },
+      tipstar: { label: 'à secteurs puis dendrites', growth: TIPPED, then: { at: 0.5, growth: STELLAR } },
     },
     thick: 0.032, // épaisseur des bras (mm)
     size: [2.4, 3.6], // diamètre (mm)
   },
+  // (pas de plaque hexagonale nue : sa croissance n'est qu'un hexagone qui
+  // grandit ; chaque plaque change de régime en route, comme dans l'air)
   plate: {
     label: 'Plaque',
     forms: {
-      hex: { label: 'plaque hexagonale', growth: HEX },
-      sector: { label: 'plaque à secteurs', growth: SECTOR },
       broad: { label: 'à larges branches', growth: BROAD },
-      ringed: { label: 'plaque à anneau', growth: SECTOR, then: { at: 0.55, growth: HEX } },
+      sectorbranch: { label: 'à secteurs et larges branches', growth: SECTOR, then: { at: 0.4, growth: BROAD } },
       starplate: { label: 'plaque étoilée', growth: HEX, then: { at: 0.5, growth: BROAD } },
+      sectorstar: { label: 'à secteurs prolongés de dendrites', growth: SECTOR, then: { at: 0.45, growth: STELLAR } },
+      framed: { label: 'étoile prise dans une plaque', growth: STELLAR, then: { at: 0.6, growth: HEX } },
     },
     thick: 0.026,
-    size: [1.6, 2.6],
+    size: [1.8, 2.8],
   },
   column: {
     label: 'Colonne',

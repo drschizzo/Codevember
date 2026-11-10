@@ -28,7 +28,7 @@ test('croissance : symétrie d’ordre 6 sans bruit, attachement définitif', ()
 });
 
 const C = buildCrystal({ ...crystalSpec(generate('t1', { family: 'star', form: 'dendrite' })), R: 70 });
-const P = buildCrystal({ ...crystalSpec(generate('t2', { family: 'plate', form: 'sector' })), R: 70 });
+const P = buildCrystal({ ...crystalSpec(generate('t2', { family: 'plate', form: 'sectorstar' })), R: 70 });
 const K = buildCrystal({ ...crystalSpec(generate('t3', { family: 'column', form: 'needle' })), R: 70 });
 
 test('fonte : chaque cellule fond avant son chemin vers le centre ; le centre en dernier', () => {

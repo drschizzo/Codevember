@@ -38,7 +38,7 @@ export function createIceUniforms() {
 }
 
 // épaisseur signée et son gradient (repère du cristal, mm)
-function field(U, t, s) {
+export function field(U, t, s) {
   const A = attribute('ca', 'vec4'), B = attribute('cb', 'vec4'), C = attribute('cc', 'vec4');
   const h = A.x, T = A.y, M = A.z;
   const xg = t.sub(T).div(U.tau), xm = s.sub(M).div(U.tauM);
@@ -97,8 +97,7 @@ export function buildIceMaterial(U, { backlit = null } = {}) {
     const up = normalize(cameraViewMatrix.mul(vec4(0, 1, 0, 0)).xyz);
     const d2 = refract(d1, up, 1.31); // (sortie par le dessous, vers la table lumineuse)
     const bad = dot(d2, d2).lessThan(0.5); // (réflexion totale : aucun rayon ne sort)
-    const cosd = clamp(dot(normalize(d2), V), -1, 1);
-    const Lb = select(bad, vec3(0), backlight(backlit, cosd));
+    const Lb = select(bad, vec3(0), backlight(backlit, normalize(d2), V));
     const fres = pow(float(1).sub(abs(dot(N, positionViewDirection))), 5).mul(0.97).add(0.02);
     m.colorNode = vec4(0, 0, 0, 1);
     m.emissiveNode = Lb.mul(float(1).sub(fres));
@@ -107,7 +106,7 @@ export function buildIceMaterial(U, { backlit = null } = {}) {
     // partie après des réflexions totales sur ses nervures et ses marches ; une
     // part diffuse, plus forte là où la surface s'incline (nervures, bords)
     const slope = float(1).sub(abs(normalLocal.z)).mul(8).clamp(0, 1);
-    const scatter = mix(float(0.05), float(0.28), slope).mul(float(1).sub(wet.mul(0.6)));
+    const scatter = mix(float(0.12), float(0.42), slope).mul(float(1).sub(wet.mul(0.6)));
     m.transmissionNode = float(1).sub(scatter);
     m.colorNode = vec4(U.tint, 1);
     m.thicknessNode = vThick.max(0).mul(6);
@@ -137,4 +136,16 @@ export function iceGeometry(o) {
   g.setIndex(new THREE.BufferAttribute(o.index, 1));
   g.boundingSphere = new THREE.Sphere(new THREE.Vector3(), o.radius + 0.1);
   return g;
+}
+
+// ombre de la glace : un double opaque (une matière à transmission ne porte
+// pas d'ombre dans three.js), qui laisse passer une bonne part de la lumière ;
+// son masque est recalculé depuis les attributs (les variables du vertex
+// shader principal ne passent pas dans la passe d'ombre)
+export function buildIceShadow(U, iceMat) {
+  const m = new THREE.MeshBasicNodeMaterial();
+  m.positionNode = iceMat.positionNode;
+  m.castShadowNode = vec4(0.62, 0.66, 0.72, 1);
+  m.maskShadowNode = field(U, U.tg, U.sm).v.greaterThan(0.0004);
+  return m;
 }

@@ -40,19 +40,20 @@ export const MOODS = {
     grade: { exposure: 1.7, contrast: 1.04, saturation: 1.02, shadows: [0.92, 0.97, 1.1], highlights: [1.03, 1.0, 0.96] },
   },
   verre: {
-    label: 'Verre', sub: { kind: 'glass', color: '#f4f6f8', color2: '#dfe6ee' }, theta: 0.55,
-    bg: '#e9edf1', env: 'cyclo', envI: [0.25, 0.35],
-    key: { K: 6500, I: 0.35, az: [-0.4, 0.4], el: 1.2, soft: 1 }, rim: { K: 6500, I: 0.2 },
-    sun: { K: 5200, I: 0.8, el: [0.6, 0.9] },
-    cam: { el: [68, 80], fov: 28 },
-    sky: { ambient: [0.35, 0.37, 0.4], box: [1.4, 1.42, 1.45], boxW: 0.6, boxH: 0.4, strip: [2, 2, 2], stripOff: 1.4, stripEl: 0.7, floor: [0.6, 0.62, 0.65] },
-    grade: { exposure: 0.75, contrast: 1.0, saturation: 0.9, shadows: [0.95, 0.98, 1.04], highlights: [1, 1, 1] },
+    // une vitre en hiver, à l'heure bleue : le flocon posé sur le verre, éclairé de face ; derrière, le ciel flou
+    label: 'Verre', sub: { kind: 'glass', color: '#3c5476', color2: '#0c1626' }, theta: 0.55,
+    bg: '#3c5476', env: 'cyclo', envI: [1.3, 1.6], fog: [40, 90], // (la brume ne voile pas la vitre)
+    key: { K: 6500, I: 1.1, az: [-0.5, 0.5], el: 1.0, soft: 1 }, rim: { K: 6500, I: 0.6 },
+    sun: { K: 5000, I: 1.6, el: [0.35, 0.6] },
+    cam: { el: [50, 64], fov: 28 },
+    sky: { ambient: [0.05, 0.06, 0.08], box: [2.6, 2.65, 2.75], boxW: 0.5, boxH: 0.32, strip: [3, 3, 3.1], stripOff: 1.3, stripEl: 0.6, floor: [0.02, 0.025, 0.03] },
+    grade: { exposure: 1.0, contrast: 1.06, saturation: 0.95, shadows: [0.95, 0.98, 1.05], highlights: [1.02, 1, 0.98] },
   },
   velours: {
     label: 'Velours', sub: { kind: 'velvet', color: '#060607', color2: '#121216' }, theta: 1.9,
     bg: '#020203', env: 'night', envI: [0.25, 0.35],
     key: { K: 6000, I: 0.6, az: [2.6, 3.4], el: 0.35, soft: 0.25 }, rim: { K: 7000, I: 1.2 },
-    sun: { K: 5000, I: 1.3, el: [0.2, 0.32] },
+    sun: { K: 5200, I: 0.8, el: [0.2, 0.32] },
     cam: { el: [14, 22], fov: 26 },
     sky: { ambient: [0.003, 0.003, 0.004], box: [1.8, 1.85, 1.95], boxW: 0.3, boxH: 0.18, strip: [4, 4, 4.2], stripOff: 1.0, stripEl: 0.3, floor: [0.002, 0.002, 0.002] },
     grade: { exposure: 1.6, contrast: 1.12, saturation: 0.95, shadows: [0.94, 0.97, 1.06], highlights: [1.02, 1.0, 0.98] },
@@ -67,11 +68,11 @@ export const MOODS = {
     grade: { exposure: 1.25, contrast: 1.05, saturation: 1.05, shadows: [0.95, 1.0, 1.04], highlights: [1.03, 1.01, 0.95] },
   },
   rheinberg: {
-    label: 'Rheinberg', sub: { kind: 'sapphire', color: '#16305e', color2: '#f0a040' }, theta: 0.5,
-    bg: '#0c1426', env: 'night', envI: [0.15, 0.25],
+    label: 'Rheinberg', sub: { kind: 'sapphire', color: '#0d1a33', color2: '#ffcf7a' }, theta: 0.5,
+    bg: '#05080f', env: 'night', envI: [0.15, 0.25],
     key: { K: 6500, I: 0.25, az: [-0.3, 0.3], el: 1.3, soft: 1 }, rim: { K: 6500, I: 0.15 },
     sun: { K: 5600, I: 0.5, el: [0.9, 1.2] },
-    cam: { el: [78, 88], fov: 26 },
+    cam: { el: [58, 72], fov: 26 },
     sky: { ambient: [0.01, 0.012, 0.02], box: [0.7, 0.72, 0.8], boxW: 0.4, boxH: 0.4, strip: [1, 1, 1.1], stripOff: 1.2, stripEl: 0.9, floor: [0.01, 0.01, 0.02] },
     grade: { exposure: 1.0, contrast: 1.05, saturation: 1.1, shadows: [1, 1, 1], highlights: [1, 1, 1] },
   },
@@ -79,16 +80,19 @@ export const MOODS = {
     label: 'Ardoise', sub: { kind: 'slate', color: '#26292e', color2: '#3a3e44' }, theta: 1.1,
     bg: '#2a2d31', env: 'cyclo', envI: [0.45, 0.6],
     key: { K: 6800, I: 0.8, az: [-0.3, 0.3], el: 1.35, soft: 1 }, rim: { K: 6500, I: 0.3 },
-    sun: { K: 5400, I: 2.2, el: [0.9, 1.15] },
+    sun: { K: 5400, I: 2.0, el: [0.32, 0.48] }, // (rasant : il sculpte le grain de l'ardoise)
     cam: { el: [50, 60], fov: 30 },
     sky: { ambient: [0.07, 0.072, 0.078], box: [2.4, 2.42, 2.48], boxW: 0.55, boxH: 0.35, strip: [1.5, 1.5, 1.55], stripOff: 1.5, stripEl: 0.7, floor: [0.03, 0.03, 0.033] },
-    grade: { exposure: 1.7, contrast: 1.02, saturation: 0.85, shadows: [0.97, 0.99, 1.03], highlights: [1, 1, 1] },
+    grade: { exposure: 1.4, contrast: 1.02, saturation: 0.85, shadows: [0.97, 0.99, 1.03], highlights: [1, 1, 1] },
   },
 };
 export const MOOD_KEYS = Object.keys(MOODS);
 
-// palettes de Rheinberg : [champ (lumière directe), anneau (lumière déviée)]
-export const RHEINBERG = [['#13305f', '#f2a43a'], ['#1d4a2a', '#f05a6e'], ['#3a1650', '#7fe3d0'], ['#0e2a3a', '#f6e27a']];
+// palettes de Rheinberg : [champ (lumière directe), anneau (lumière déviée)].
+// Un champ sombre et une lumière déviée chaude et claire : l'image se lit
+// comme de la lumière dans la pénombre (pas de couleurs complémentaires
+// saturées, qui font « fausse couleur »)
+export const RHEINBERG = [['#0d1a33', '#ffcf7a'], ['#08121c', '#fff1d6'], ['#10203a', '#f6d9a0'], ['#0a1626', '#ffd9a8']];
 
 export function generate(seed, overrides = {}) {
   const rng = createRng(seed);
@@ -103,6 +107,9 @@ export function generate(seed, overrides = {}) {
   const sunAz = rl.range(-Math.PI, Math.PI);
   const sub = { ...M.sub };
   if (sub.kind === 'sapphire') [sub.color, sub.color2] = rm.pick(RHEINBERG);
+  // (verre : la table lumineuse en dégradé, deux teintes pour les pentes)
+  // (verre : le ciel derrière la vitre, du clair au soutenu)
+  if (sub.kind === 'glass') [sub.color, sub.color2] = rm.pick([['#3c5476', '#0c1626'], ['#544a48', '#16141c'], ['#2f5258', '#0a1a1e'], ['#48466a', '#131226']]);
   if (sub.kind === 'wool') sub.color = rm.pick(['#26387a', '#6a1c24', '#3a3d44', '#2f4a32', '#7a6a58']);
 
   return {
@@ -128,7 +135,7 @@ export function generate(seed, overrides = {}) {
     sub,
     env: { intensity: r2(rl.range(...M.envI)) },
     sky: JSON.parse(JSON.stringify(M.sky)),
-    fog: { color: M.bg, near: 10, far: 24 },
+    fog: { color: M.bg, near: M.fog?.[0] ?? 10, far: M.fog?.[1] ?? 24 },
     grade: { ...M.grade },
   };
 }
