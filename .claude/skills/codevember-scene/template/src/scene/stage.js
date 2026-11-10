@@ -92,7 +92,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
         slot.mesh.visible = true;
         group.add(slot.mesh);
         pending--;
-      }, (e) => { console.error(e); pending--; });
+      }).catch((e) => { console.error(e); pending--; }); // (.catch : rattrape aussi une erreur levée dans le traitement de la réponse)
     });
     // sol
     const fk = finishKey(R.floor.finish);

@@ -24,7 +24,7 @@ Ces règles viennent de retours précis de l'utilisateur sur Orrery et Tesseract
 10. **Humeurs successives différentes** quand une scène en enchaîne plusieurs (Orrery : trois mondes, trois humeurs, au moins une froide ou claire).
 11. **Variété d'une graine à l'autre**, pas dans l'image : une scène évite de montrer deux fois le même objet ; aucune matière sur plus de la moitié des pièces.
 12. **Patine, pas propreté** : variation lente de rugosité et de teinte de quelques pour cent, encrassement aux jonctions et dans les coins, traces de doigts sur les surfaces polies, usure des arêtes qui révèle la tranche ; jamais de dessin qui se répète à l'œil.
-13. **Le fond n'est pas un vide** : cyclorama ou coque dont le sol se fond (pas d'horizon net), brume au ras du sol, fond qui prend une version très sombre de la teinte de la scène ; une humeur claire (Clinique) baisse ses lampes et son studio (`keyScale` 0,6, studio 0,32–0,45) au lieu d'être brûlée.
+13. **Le fond sert le sujet, il n'est pas un paysage** : un arrière-plan d'accessoires (troncs, herbes, objets lointains) qui n'est pas travaillé au niveau du sujet fait décor de carton et distrait — préfère un fond neutre (dégradé, cyclorama, brume) dont la valeur et la teinte changent d'une humeur à l'autre ; une lueur ou des trouées colorées dans le fond se remarquent comme des défauts dès qu'elles bougent. **Le fond n'est pas un vide** non plus : cyclorama ou coque dont le sol se fond (pas d'horizon net), brume au ras du sol, fond qui prend une version très sombre de la teinte de la scène ; une humeur claire (Clinique) baisse ses lampes et son studio (`keyScale` 0,6, studio 0,32–0,45) au lieu d'être brûlée.
 
 14. **Des décors, pas des teintes.** Une humeur se définit d'abord par son décor (fond clair ou noir, sol, accessoires, atmosphère), sa lumière (soleil dur, boîte à lumière, stroboscope de côté, lueur de four, rayons colorés, lumière noire) et sa valeur, avant sa couleur. Calcin, premier essai : six humeurs, un seul décor (fond sombre et lueur colorée) : « les scènes se ressemblent beaucoup ». Chaque humeur a aussi son cadrage (gros plan bas, plongée, plan large).
 15. **Crédible avant d'être beau** : le support de chaque objet est visible (sol, socle, plateau, fil, pince), chaque événement a sa cause à l'écran, la gravité s'applique à tout ce qui n'est pas tenu. Une image belle mais impossible (un objet qui flotte, une poussière qui monte seule) est refusée.
@@ -34,6 +34,10 @@ Ces règles viennent de retours précis de l'utilisateur sur Orrery et Tesseract
 Écris-les dans `test/accords.test.mjs` (modèle : `tesseract/test/accords.test.mjs`, `planetaire_v2/tools/accords.mjs`) :
 - sur **tous les accords** : jeux existants et tirables, familles ≥ 3, l'or pas sur deux rôles majeurs, motif et contrepoint de familles différentes ;
 - sur **400 graines** : part de métal chaud ≤ 50 %, un motif signature au plus (+ contrepoint), aucune matière sur plus de N pièces, l'objet tranche sur son fond (familles ou valeurs différentes), chaque humeur tirée.
+
+## Les références
+
+Mets les premiers rendus à côté des photographies de référence du sujet (SKILL.md, règle 15) : échelle, densité, forme d'ensemble, couleur dominante, lumière. Les écarts d'échelle et de densité se corrigent avant tout le reste ; aucun réglage de matière ne rattrape une forme d'ensemble fausse.
 
 ## Le jugement sur image
 

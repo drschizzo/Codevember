@@ -26,6 +26,14 @@ Quand `tabs_context` dit que le panneau est masqué : `requestAnimationFrame` es
 
 Le plus utile est de voir le film d'une graine étape par étape, et plusieurs humeurs côte à côte. En `?debug`, définis une fois un petit outil qui parcourt une liste `[graine, étape, part, nom]`, régénère si besoin, rend (`run`, `shot`) et envoie (`send`), puis assemble les images en planches (PIL, nom en surimpression) et regarde-les. Une planche « 4 graines × 4 temps » après chaque correction visuelle ; une planche « 10 temps » d'une graine pour juger la chorégraphie. Ce sont ces planches qui ont montré, sur Calcin, le verre invisible sur fond noir, les reflets du studio dans le sol et la fluorescence plate — aucun test ne les aurait vus.
 
+## Les courbes avant les images
+
+Un modèle animé (simulation, champ, plan de mouvements) s'inspecte d'abord en **courbes** dans Node : une ligne par grandeur (couverture, ouverture moyenne, eau, intensité du soleil, distance de la caméra) échantillonnée sur toute la boucle. Un aller-retour non voulu, un temps trop bref suivi d'un long vide, un état qui ne revient pas à son départ s'y voient en une seconde, alors qu'il faut un film entier pour les voir à l'image (et l'utilisateur les prend pour des bugs). Écris ensuite la forme attendue en test : intervalles où la grandeur croît, décroît, reste basse.
+
+## Planches ciblées
+
+Garde dans l'outil de planche la possibilité d'**imposer** l'humeur ou la famille d'une graine (par exemple `graine:humeur:famille`), pour comparer toutes les humeurs ou toutes les familles d'un coup après une correction. Quand le panneau est masqué et qu'une planche prend plusieurs minutes, lance-la en tâche détachée et avance sur autre chose (README, tests) pendant qu'elle tourne.
+
 ## Ce que les planches ne montrent pas d'elles-mêmes
 
 - **Les événements** : filme une fenêtre de ± 0,5 s autour de chaque cause, à quelques images d'écart. Un décalage de quelques dixièmes entre la cause et l'effet casse tout, et ne se voit qu'ainsi (ou en direct).

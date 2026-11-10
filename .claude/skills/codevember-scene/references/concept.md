@@ -45,6 +45,8 @@ Garde la piste qui a le meilleur total sans note inférieure à 3 ; une piste pe
 - *Déclinaison* : liste les familles de l'objet principal et, pour chacune, en une phrase, son **mouvement** propre (pas sa taille ni sa couleur). Si deux familles bougent de la même façon, ce sont des variantes, pas des familles : il en faut au moins trois vraiment distinctes.
 - *Scénario* : raconte la boucle comme un film muet, plan par plan (« la goutte tombe sur la feuille de gauche ; toute la feuille se ferme de la pointe vers la tige ; elle se rouvre ; … »). Chaque effet est entier et cadré ; aucun plan ne montre un effet partiel qu'on ne sait pas lire. La structure doit avoir une forme (montée, réponse, retour), pas une liste.
 
+**e quater. L'épreuve des références** : décris trois à cinq photographies réelles du sujet (ou demande-les) et ce qu'elles imposent d'échelle, de densité, de forme d'ensemble et de lumière ; vérifie que la piste retenue peut l'atteindre dans le budget, et comment (voir rendering.md, « Formes faites de milliers d'éléments »).
+
 **f. Annoncer** le concept retenu à l'utilisateur en quelques lignes (titre, image, boucle, variations) et continuer sans attendre, sauf thème vraiment ambigu.
 
 ## 1. Chercher le geste
@@ -59,6 +61,8 @@ Liste dix images du thème, puis garde celle qui contient un mouvement **révers
 | Graviter / entrer | Orrery : les astres se poursuivent, on entre dans une boule de verre qui contient le monde suivant | orbites périodiques exactes + emboîtement de trois mondes |
 
 Le cycle de transformations est le schéma le moins exploité du dépôt : une matière passe par plusieurs états et revient au premier par un autre chemin (sable → verre → éclats → sable ; eau → glace → fêlure → fonte ; graine → fleur → fruit → graine), chaque passage changeant la forme. Il donne à la fois un geste fort et des variations d'un état à l'autre dans la même boucle.
+
+Si le sujet est une **masse** (une colonie, un tapis, une foule, un nuage), préfère un geste **collectif** à la somme de gestes individuels : un front qui avance, une propagation, une croissance et un retrait, une onde qui traverse — il se lit sans légende, il donne l'échelle, et il évite de refaire le geste d'un projet précédent (des éléments qui s'ouvrent un à un sont un pli, quel que soit l'objet).
 
 Autres gestes possibles : croître puis se résorber (cristallisation, réaction-diffusion à phase périodique), tisser / défaire, respirer (dilatation périodique), s'assembler (éclaté → assemblé → éclaté), passer d'une échelle à l'autre (zoom infini), circuler (fluide sur un tore, courants périodiques), se refléter (kaléidoscope dont le groupe tourne d'un cran).
 
