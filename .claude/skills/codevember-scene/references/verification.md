@@ -17,7 +17,7 @@ Quand `tabs_context` dit que le panneau est masqué : `requestAnimationFrame` es
 2. **Chargement** : `pipes.made` (shaders compilés sous l'écran), aucune compilation après (relancer `pipes.made` après une boucle complète : inchangé).
 3. **Raccord** : `seam(u)` < 1e-6 à plusieurs u ; test Node du raccord de la cinématique.
 4. **Planche** : `sheet(['a1', …8 graines], [0, 0.2, 0.4, 0.6, 0.8])`, assemblée et regardée image par image (voir art-direction.md, « Le jugement sur image »). Au moins une graine par humeur.
-5. **Posemètre** : `meter()` sur chaque humeur — brûlé < 2–3 %, médiane du centre cohérente avec l'humeur, pas de sujet perdu dans le noir.
+5. **Posemètre** : `meter()` sur chaque humeur (`meters(['graine:humeur', …])` du gabarit les mesure toutes d'un coup) — brûlé < 2–3 %, médiane du centre cohérente avec l'humeur, pas de sujet perdu dans le noir.
 6. **Temps d'image** : `bench(ph)` aux phases les plus chargées ; noter les chiffres dans le README.
 7. **Tests** : `node --test '<projet>/test/*.test.mjs'` (invariants du cœur, recette, direction artistique sur 400 graines).
 8. **Export** : un MP4 court (petite résolution) et un PNG, au moins une fois.

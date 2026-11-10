@@ -360,12 +360,27 @@ async function main() {
         return b.size;
       },
       // planche : les graines × les phases, chaque image envoyée au collecteur
+      // (une graine peut s'écrire « graine:humeur:famille » : l'humeur et la
+      // famille sont alors imposées — pour comparer toutes les humeurs d'un coup)
       async sheet(seeds, phases = [0, 0.2, 0.4, 0.6, 0.8], prefix = 'sheet') {
         for (const s of seeds) {
-          R = generate(String(s)); applyRecipe();
+          const [sd, mood, family] = String(s).split(':');
+          R = generate(sd, { ...(mood ? { mood } : {}), ...(family ? { family } : {}) }); applyRecipe();
           await new Promise((r) => setTimeout(r, 400));
           for (const ph of phases) { await this.shot(ph); await this.send(`${prefix}-${s}-${String(Math.round(ph * 100)).padStart(3, '0')}.jpg`); }
         }
+      },
+      // posemètre de plusieurs scènes : { graine: [[médiane du centre, médiane de l'image, brûlé] par phase] }
+      async meters(seeds, phases = [0.3, 0.6]) {
+        const out = {};
+        for (const s of seeds) {
+          const [sd, mood, family] = String(s).split(':');
+          R = generate(sd, { ...(mood ? { mood } : {}), ...(family ? { family } : {}) }); applyRecipe();
+          await new Promise((r) => setTimeout(r, 400));
+          out[s] = [];
+          for (const ph of phases) { await this.shot(ph); const m = await this.meter(); out[s].push([m.centre.p50, m.image.p50, m.image.brule]); }
+        }
+        return out;
       },
       // posemètre : luminance de la passe de scène (HDR, avant étalonnage) sur
       // l'image et sur son centre — médiane, centiles, part de noir et de brûlé
