@@ -9,7 +9,8 @@ import * as THREE from 'three/webgpu';
 import { clock, TL, sstep } from '../timeline.js';
 import { crystalSpec } from '../recipe.js';
 import { capBase, capVolume, MAX_BLOBS } from '../gen/crystal.js';
-import { createIceUniforms, buildIceMaterial, iceGeometry } from './ice.js';
+import { createIceUniforms, buildIceMaterial, buildIceShadow, iceGeometry } from './ice.js';
+import { createContact, setCover, contactAO, packBlobs } from './contact.js';
 import { createWaterUniforms, buildWaterMaterial, buildWaterShadow, capGeometry, SHADOW_LAYER } from './water.js';
 import { createSubstrate } from './substrate.js';
 import { createFrost } from './frost.js';
@@ -40,15 +41,17 @@ export function createStage(scene, gen, { lite = false } = {}) {
   if (lite) rim.visible = false;
   for (const l of [sun, key, rim]) { scene.add(l); scene.add(l.target); }
 
+  // ── Uniformes du cristal, de l'eau, du contact ──
+  const IU = createIceUniforms(), WU = createWaterUniforms(), BL = createBacklight(), CT = createContact();
+
   // ── Le support ──
-  const substrate = createSubstrate(scene, gen, { lite });
+  const substrate = createSubstrate(scene, gen, { lite, contact: () => contactAO(CT, IU, WU) });
   const frost = createFrost(scene, { lite });
   let frostSet = null;
 
   // ── Le cristal et l'eau (repère du cristal : plan xy, couché sur y = 0) ──
   const group = new THREE.Group();
   scene.add(group);
-  const IU = createIceUniforms(), WU = createWaterUniforms(), BL = createBacklight();
   const ice = new THREE.Mesh(new THREE.BufferGeometry());
   ice.castShadow = false; ice.receiveShadow = true;
   ice.frustumCulled = false;
@@ -61,14 +64,19 @@ export function createStage(scene, gen, { lite = false } = {}) {
   waterShadow.layers.set(SHADOW_LAYER);
   waterShadow.castShadow = true;
   waterShadow.frustumCulled = false;
-  group.add(ice, water, waterShadow);
+  const iceShadow = new THREE.Mesh(new THREE.BufferGeometry());
+  iceShadow.layers.set(SHADOW_LAYER);
+  iceShadow.castShadow = true;
+  iceShadow.frustumCulled = false;
+  group.add(ice, water, waterShadow, iceShadow);
 
   let R = null, C = null, pending = 0, version = 0, backlitKey = null;
 
   function makeMaterials() {
     const bl = substrate.backlit() ? BL : null;
-    for (const m of [ice.material, water.material, waterShadow.material]) if (m && m.dispose) m.dispose();
+    for (const m of [ice.material, water.material, waterShadow.material, iceShadow.material]) if (m && m.dispose) m.dispose();
     ice.material = buildIceMaterial(IU, { backlit: bl });
+    iceShadow.material = buildIceShadow(IU, ice.material);
     water.material = buildWaterMaterial(WU, { backlit: bl });
     waterShadow.material = buildWaterShadow(WU, water.material);
   }
@@ -77,7 +85,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
     R = recipe;
     const v = ++version;
     C = null;
-    ice.visible = water.visible = waterShadow.visible = false;
+    ice.visible = water.visible = waterShadow.visible = iceShadow.visible = false;
     const spec = crystalSpec(R, lite);
     substrate.setRecipe(R, spec.size / 2 + 0.25);
     if (R.sub.kind === 'glass' || R.sub.kind === 'sapphire') setBacklight(BL, R.sub);
@@ -86,13 +94,15 @@ export function createStage(scene, gen, { lite = false } = {}) {
       if (v !== version) return;
       ice.geometry.dispose();
       ice.geometry = iceGeometry(o);
+      iceShadow.geometry = ice.geometry;
+      setCover(CT, o.cover);
       C = o;
       const thSub = R.water.theta;
       C.Vbead = capVolume(R.water.bead, thSub);
       C.dropR = capBase(C.Vbead + C.Vwater, thSub);
       IU.tau.value = o.tau; IU.tauM.value = o.tauMelt; IU.h0.value = o.thick;
       makeMaterials(); // (matériaux APRÈS la géométrie)
-      ice.visible = water.visible = waterShadow.visible = true;
+      ice.visible = water.visible = waterShadow.visible = iceShadow.visible = true;
       pending = 0;
     }).catch((e) => { console.error(e); pending = 0; throw e; });
   }
@@ -162,15 +172,18 @@ export function createStage(scene, gen, { lite = false } = {}) {
     if (frostSet !== R && substrate.ready() && substrate.frostPoints) { frost.setRecipe(R, substrate.frostPoints, R.crystal.size / 2 + 0.15); frostSet = R; }
     { const php = G.phasePrev.value - Math.floor(G.phasePrev.value); frost.update(k, clock(php, C ?? {}), ph, php); }
     group.rotation.set(-Math.PI / 2, 0, R.crystal.spin);
+    CT.spin.value = R.crystal.spin;
     if (!C) return;
     // cristal
     const kp = clock(G.phasePrev.value, C);
     IU.tg.value = k.tg; IU.sm.value = k.sm; IU.tgP.value = kp.tg; IU.smP.value = kp.sm;
     IU.wet.value = k.wet;
+    IU.relief.value = 1;
     // eau
     const a = blobsAt(ph, k, WU.cur), b = blobsAt(G.phasePrev.value - Math.floor(G.phasePrev.value), kp, WU.prev);
     WU.theta.value = a.th; WU.theta0.value = a.th0; WU.thetaP.value = b.th; WU.theta0P.value = b.th0;
     WU.BL.array = WU.cur; WU.BLP.array = WU.prev;
+    packBlobs(CT, WU.cur);
     WU.freezeFront.value = k.frozen * 1.4 - 0.2;
     // (la pointe se soulève quand le gel atteint le sommet, et s'efface dès que la perle fond)
     WU.tip.value = sstep((k.frozen - 0.72) / 0.28);

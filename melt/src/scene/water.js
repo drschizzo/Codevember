@@ -86,14 +86,14 @@ export function buildWaterMaterial(U, { backlit = null } = {}) {
     const up = normalize(cameraViewMatrix.mul(vec4(0, 1, 0, 0)).xyz);
     const d2 = refract(d1, up, 1.333);
     const bad = dot(d2, d2).lessThan(0.5);
-    const Lb = select(bad, vec3(0), backlight(backlit, clamp(dot(normalize(d2), V), -1, 1)));
+    const Lb = select(bad, vec3(0), backlight(backlit, normalize(d2), V));
     const fres = pow(float(1).sub(abs(dot(N, positionViewDirection))), 5).mul(0.97).add(0.02);
     m.colorNode = vec4(mix(vec3(0), vec3(0.75, 0.78, 0.82), fz), 1);
     m.emissiveNode = mix(Lb, backlit.field.mul(0.35), fz.mul(0.8)).mul(float(1).sub(fres));
   } else if (!lite) {
     m.colorNode = vec4(mix(vec3(1), vec3(0.93, 0.95, 0.98), fz), 1);
     m.transmissionNode = mix(float(1), float(0.25), fz);
-    m.thicknessNode = float(0.25);
+    m.thicknessNode = vH.mul(1.6); // (une goutte épaisse renverse le fond derrière elle)
   } else {
     m.transparent = true;
     m.colorNode = vec4(mix(vec3(0.5, 0.55, 0.6), vec3(0.9, 0.93, 0.97), fz), 1);

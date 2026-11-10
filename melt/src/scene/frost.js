@@ -12,7 +12,7 @@
 import * as THREE from 'three/webgpu';
 import {
   Fn, attribute, uniform, vec3, vec4, float, normalize, cross, mix, smoothstep, fract, sin, cos, positionLocal, normalLocal,
-  positionPrevious, max as tmax, clamp, length,
+  positionPrevious, max as tmax, clamp, length, abs, dot, normalView, positionViewDirection,
 } from 'three/tsl';
 import { createRng } from '../rng.js';
 import { stableVelocity, isLite } from './materials.js';
@@ -95,11 +95,16 @@ export function createFrost(scene, { lite = false } = {}) {
       if (!isLite()) positionPrevious.assign(at(U.dustP));
       return at(U.dust);
     })();
-    m.colorNode = vec4(0.9, 0.93, 1, 1);
-    m.roughnessNode = float(0.03);
+    // une plaquette ne se voit que quand sa facette renvoie la lumière vers
+    // l'objectif : un éclat bref (dans le flou, une pastille de bokeh), sinon rien
+    m.colorNode = vec4(0, 0, 0, 1);
+    m.roughnessNode = float(0.05);
     m.metalnessNode = float(0);
-    m.specularIntensityNode = float(1);
-    m.emissiveNode = vec3(0.04, 0.045, 0.05);
+    m.specularIntensityNode = float(0.4);
+    const face = abs(dot(normalView, positionViewDirection));
+    m.emissiveNode = vec3(0.85, 0.9, 1).mul(smoothstep(0.86, 0.99, face).mul(6)).mul(U.cold);
+    m.transparent = true;
+    m.opacityNode = smoothstep(0.7, 0.95, face).mul(U.cold);
     m.mrtNode = stableVelocity();
     return m;
   }

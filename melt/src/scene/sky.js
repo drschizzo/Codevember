@@ -41,9 +41,11 @@ export function makeSky(R, W = 1024) {
         const tx = -Math.sin(boxAz), tz = Math.cos(boxAz);
         const ux = -Math.sin(boxEl) * Math.cos(boxAz), uy = Math.cos(boxEl), uz = -Math.sin(boxEl) * Math.sin(boxAz);
         const a = Math.atan2(dx * tx + dz * tz, dot), e = Math.atan2(dx * ux + y * uy + dz * uz, dot);
-        const k = ss(bw + 0.06, bw - 0.06, Math.abs(a)) * ss(bh + 0.06, bh - 0.06, Math.abs(e));
-        // (un peu plus claire au centre, comme un diffuseur)
-        const c = k * (0.85 + 0.15 * Math.cos(Math.min(1, Math.hypot(a / bw, e / bh)) * 1.57));
+        // (un diffuseur ovale aux bords très doux : dans une goutte, un reflet de
+        // fenêtre floue, pas un rectangle)
+        const q = Math.hypot(a / bw, e / bh);
+        const k = ss(1.25, 0.55, q);
+        const c = k * (0.8 + 0.2 * Math.cos(Math.min(1, q) * 1.57));
         r += c * box[0]; g += c * box[1]; b += c * box[2];
       }
       // bande étroite (arêtes)

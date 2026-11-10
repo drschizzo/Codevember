@@ -29,7 +29,7 @@ export function subjectRadius(u, C, R) {
 export function cameraPath(R, C, aspect = 1.5) {
   const n = CAM_SAMPLES, Cm = R.camera;
   const fov = Cm.fov * DEG, tanH = Math.tan(fov / 2) * Math.min(1.6, Math.max(0.8, aspect)); // (demi-largeur)
-  const rmin = Math.max(0.55, C.radius / 2.4); // (rapport des distances ≤ 2,5)
+  const rmin = Math.max(0.6, C.radius / 1.8); // (rapport des distances ≤ 1,8 : la goutte ne remplit pas le cadre)
   const raw = new Float64Array(n);
   for (let i = 0; i < n; i++) {
     const r = Math.max(rmin, subjectRadius(i / n, C, R) * 1.08);
