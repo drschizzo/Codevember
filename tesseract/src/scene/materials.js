@@ -413,7 +413,7 @@ export function buildPieceMaterial(finish, U, M, { shadowTint = null, reveal = n
 
   const m = new THREE.MeshPhysicalNodeMaterial({ side: THREE.DoubleSide });
   const pre = merge ? frameMerge(M) : null;
-  m.positionNode = projectPosition(M, true, reveal, pre);
+  m.positionNode = projectPosition(M, true, reveal, pre, depth);
   m.castShadowPositionNode = projectPosition(M, false, reveal, pre);
   if (reveal) { m.maskNode = revealMask(true); m.maskShadowNode = revealMask(false); }
   let color = get('color'), rough = get('rough');

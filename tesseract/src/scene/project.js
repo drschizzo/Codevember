@@ -27,9 +27,20 @@
 // Le même calcul, avec les paramètres de l'image précédente, donne la
 // position précédente (vecteurs vitesse : flou de mouvement, anticrénelage
 // temporel) ; la carte d'ombre reçoit la même déformation.
+//
+// Budget de varyings : WebGPU accorde 16 entrées au fragment shader, sens de
+// la face (front_facing, matériaux double face) compris, donc 15 varyings. Au
+// delà, le pipeline n'est pas créé et la pièce disparaît de l'image (seule son
+// ombre reste). Un panneau anisotrope en prend déjà 11 hors de ce fichier
+// (positions courante et précédente pour les vitesses, position de vue,
+// direction de vue, position monde, normale, tangente, attributs pat, surf,
+// tangent et position), 12 avec span (motifs à traits fins) ; ce fichier s'en
+// tient donc à deux, l'ajourage (vec3) et l'échelle locale : 14 au plus. Ce
+// que le fragment ne lit pas n'est pas interpolé (vDepthW hors de l'ossature),
+// et la position projetée est relue dans positionLocal.
 import * as THREE from 'three/webgpu';
 import {
-  Fn, uniform, uniformArray, vec2, vec3, vec4, float, length, cross, positionGeometry, normalLocal, tangentLocal, positionPrevious,
+  Fn, uniform, uniformArray, vec2, vec3, vec4, float, length, cross, positionGeometry, positionLocal, normalLocal, tangentLocal, positionPrevious,
   varyingProperty, abs, dot, pow, attribute, smoothstep, fract, mat2, mix, step, floor, fwidth,
   interleavedGradientNoise, screenCoordinate, frameId, max as tmax,
 } from 'three/tsl';
@@ -90,13 +101,18 @@ export function setMatrix(u, m) {
   u.value.set(m[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7], m[8], m[9], m[10], m[11], m[12], m[13], m[14], m[15]);
 }
 
-// ouverture du panneau (0 : plein ; 1 : effacé), et position du point dans la
-// trame des trous (en carreaux : un trou au centre de chacun)
-export const revealOpen = varyingProperty('float', 'vReveal');
-const revealUV = varyingProperty('vec2', 'vRevealUV');
-// position projetée (espace local du groupe) : le passage de la caméra (voir revealMask)
-const projP = varyingProperty('vec3', 'vProjP');
-// coordonnée w (profondeur 4D) du sommet, avant projection
+// ajourage, en un seul varying : xy, position du point dans la trame des trous
+// (en carreaux : un trou au centre de chacun) ; z, ouverture du panneau (0 :
+// plein ; 1 : effacé)
+const revealVar = varyingProperty('vec3', 'vReveal');
+const revealUV = revealVar.xy;
+export const revealOpen = revealVar.z;
+// position projetée (espace local du groupe), pour le passage de la caméra
+// (voir revealMask) : c'est la valeur que rend projectPosition, donc
+// positionLocal, que les vecteurs vitesse font déjà interpoler
+const projP = positionLocal;
+// coordonnée w (profondeur 4D) du sommet, avant projection (ossature et
+// fantôme : interpolée seulement là où elle est lue, voir projectPosition)
 export const depthW = varyingProperty('float', 'vDepthW');
 // couleur de la profondeur 4D (froid → chaud quand w va de −1 à 1)
 export const depthColor = (w) => mix(G.depthCold, G.depthWarm, smoothstep(-1, 1, w));
@@ -155,29 +171,23 @@ export function frameMerge(U) {
 function assignReveal(reveal, l) {
   const f = faceOfAnchor(attribute('anchor', 'vec3')).toVar('revealFace');
   const fi = f.toInt();
-  revealOpen.assign(reveal.open.element(fi));
   const g = reveal.grid.element(fi), { X, Y } = faceAxes(f);
   const perf = vec2(dot(l, X), dot(l, Y)).add(g.y).mul(g.x.div(g.y.mul(2).max(1e-3)));
   const lattice = mat2(0.7071, -0.7071, 0.7071, 0.7071).mul(attribute('pat', 'vec3').xy).mul(G.revealDensity);
-  revealUV.assign(mix(lattice, perf, step(0.5, g.x)));
+  revealVar.assign(vec3(mix(lattice, perf, step(0.5, g.x)), reveal.open.element(fi)));
 }
 
 // U : uniformes du maillage ; full : passe principale (normale, tangente,
 // relief, position précédente) ou carte d'ombre (position seule) ; reveal :
 // ajourage des faces (panneaux, voir cellReveal) ; pre : déformation locale
-// avant projection
-export function projectPosition(U, full, reveal = null, pre = null) {
+// avant projection ; depth : le matériau lit la profondeur 4D (depthW)
+export function projectPosition(U, full, reveal = null, pre = null, depth = false) {
   return Fn(() => {
     const l = pre ? pre(positionGeometry).toVar('lMerged') : positionGeometry;
     if (reveal) assignReveal(reveal, l);
-    if (!full) {
-      const p0 = mapPoint(l, U.A, G.d, G.inflate);
-      if (reveal) projP.assign(p0);
-      return p0;
-    }
+    if (!full) return mapPoint(l, U.A, G.d, G.inflate);
     const { y, p, jx, jy, jz } = projectWithJacobian(l, U.A, G.d, G.inflate);
-    if (reveal) projP.assign(p);
-    depthW.assign(y.w);
+    if (depth) depthW.assign(y.w);
     const n = normalLocal;
     const cn = cross(jy, jz).mul(n.x).add(cross(jz, jx).mul(n.y)).add(cross(jx, jy).mul(n.z));
     normalLocal.assign(cn.div(length(cn).max(1e-9)));
