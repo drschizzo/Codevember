@@ -19,7 +19,7 @@
 // rotation d'angle θ autour de +y est la rotation du plan.
 import * as THREE from 'three/webgpu';
 import { uniform, positionLocal, normalLocal, positionPrevious, attribute, Fn, mat3, mat4, vec4, dot, float, vec2, vec3, sin, atan, length, fract, smoothstep, mix, abs, floor, max, fwidth, mx_cell_noise_float, materialColor, materialRoughness, materialMetalness } from 'three/tsl';
-import { mergeGeometries, toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { designMachine, SLAB } from '../mech/design.js';
 import { createDrive } from '../mech/drive.js';
 
@@ -159,12 +159,67 @@ export function materials() {
 // bevel : taille de l'arrondi en fraction de l'épaisseur ; size : taille
 // imposée (en mètres), pour les pièces aux détails fins (dentures).
 const CREASE = (50 * Math.PI) / 180;
+
+// Normales d'une extrusion à arêtes arrondies (géométrie non indexée, axe z ;
+// faces à z = zLo et zHi, flancs entre z = wLo et wHi). Un lissage aveugle
+// (toCreasedNormals) penche les normales du bord des faces : la face plate,
+// triangulée en longs éventails, se met à onduler d'un bord à l'autre. Ici
+// l'arrondi est tangent à ses deux voisins : au bord d'une face la normale est
+// exactement celle de la face, au bord d'un flanc elle est horizontale, et le
+// lissage (pondéré par l'angle, sous CREASE) ne joue qu'entre les deux et le
+// long du contour.
+function filletNormals(g, zLo, zHi, wLo, wHi) {
+  const P = g.attributes.position.array, N = g.attributes.normal.array, nT = P.length / 9;
+  const eps = 1e-6 + 1e-4 * (zHi - zLo), cosC = Math.cos(CREASE);
+  const fn = new Float32Array(nT * 3), wt = new Float32Array(nT * 3), at = new Map();
+  const key = (o) => `${Math.round(P[o] * 2e6)},${Math.round(P[o + 1] * 2e6)},${Math.round(P[o + 2] * 2e6)}`;
+  for (let t = 0; t < nT; t++) {
+    const o = t * 9;
+    const ux = P[o + 3] - P[o], uy = P[o + 4] - P[o + 1], uz = P[o + 5] - P[o + 2];
+    const vx = P[o + 6] - P[o], vy = P[o + 7] - P[o + 1], vz = P[o + 8] - P[o + 2];
+    let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    const l = Math.hypot(nx, ny, nz) || 1;
+    fn[t * 3] = nx /= l; fn[t * 3 + 1] = ny /= l; fn[t * 3 + 2] = nz /= l;
+    for (let c = 0; c < 3; c++) {
+      // angle du triangle en ce sommet (poids du lissage)
+      const a = o + c * 3, b = o + ((c + 1) % 3) * 3, d = o + ((c + 2) % 3) * 3;
+      const ex = P[b] - P[a], ey = P[b + 1] - P[a + 1], ez = P[b + 2] - P[a + 2];
+      const fx = P[d] - P[a], fy = P[d + 1] - P[a + 1], fz = P[d + 2] - P[a + 2];
+      const den = Math.hypot(ex, ey, ez) * Math.hypot(fx, fy, fz);
+      wt[t * 3 + c] = den > 0 ? Math.acos(Math.max(-1, Math.min(1, (ex * fx + ey * fy + ez * fz) / den))) : 0;
+      const k = key(a);
+      let list = at.get(k);
+      if (!list) at.set(k, (list = []));
+      list.push(t * 3 + c);
+    }
+  }
+  for (let t = 0; t < nT; t++) for (let c = 0; c < 3; c++) {
+    const o = t * 9 + c * 3, z = P[o + 2];
+    let nx, ny, nz;
+    if (z < zLo + eps) { nx = 0; ny = 0; nz = -1; }
+    else if (z > zHi - eps) { nx = 0; ny = 0; nz = 1; }
+    else {
+      nx = ny = nz = 0;
+      for (const j of at.get(key(o))) {
+        const u = (j / 3) | 0;
+        if (fn[t * 3] * fn[u * 3] + fn[t * 3 + 1] * fn[u * 3 + 1] + fn[t * 3 + 2] * fn[u * 3 + 2] < cosC) continue;
+        nx += fn[u * 3] * wt[j]; ny += fn[u * 3 + 1] * wt[j]; nz += fn[u * 3 + 2] * wt[j];
+      }
+      if (z > wLo - eps && z < wHi + eps) nz = 0; // flanc : normale horizontale
+      const l = Math.hypot(nx, ny, nz);
+      if (l > 1e-9) { nx /= l; ny /= l; nz /= l; } else { nx = fn[t * 3]; ny = fn[t * 3 + 1]; nz = fn[t * 3 + 2]; }
+    }
+    N[o] = nx; N[o + 1] = ny; N[o + 2] = nz;
+  }
+  g.attributes.normal.needsUpdate = true;
+}
+
 export function flat(shape, thick, bevel = 0.25, curveSegments = 12, size = null) {
   const b = size ?? thick * bevel * 0.5;
   const g0 = new THREE.ExtrudeGeometry(shape, { depth: thick - (b > 0 ? 2 * b : 0), bevelEnabled: b > 0, bevelThickness: b, bevelSize: b, bevelOffset: -b, bevelSegments: 3, curveSegments });
   g0.deleteAttribute('uv');
-  const g = b > 0 ? toCreasedNormals(g0, CREASE) : g0;
-  if (g !== g0) g0.dispose();
+  const g = g0;
+  if (b > 0) filletNormals(g, -b, thick - b, 0, thick - 2 * b);
   g.translate(0, 0, -thick / 2 + (b > 0 ? b : 0));
   g.rotateX(-Math.PI / 2);
   return g;
