@@ -2,6 +2,14 @@
 
 Expériences de creative coding, publiées sur [drschizzo.github.io/Codevember](https://drschizzo.github.io/Codevember/).
 
+## [Moss](moss/)
+
+La reviviscence. Une année de mousse sur sa pierre, en accéléré : à la sécheresse, il n’en reste que des îlots bruns dans les fissures ; les averses passent en bandes, la roche fonce, les îlots reverdissent d’un coup ; pendant les pluies, la mousse se propage en coussins denses (un voile vert de protonéma, puis des dômes de rosettes serrées qui se rejoignent) ; la sécheresse la fait reculer dans ses refuges. Propagation de Fisher-KPP forcée par les saisons et intégrée jusqu’à son orbite périodique, coussins en dômes dont les tiges suivent la normale, roches (granit, calcaire, grès) et écorces procédurales cuites dans un worker et appliquées en déplacement et en normal map, lichens aréolés, quatre familles, six décors, boucle parfaite exportable en MP4.
+
+[Démo en ligne](https://drschizzo.github.io/Codevember/moss/) · [version légère](https://drschizzo.github.io/Codevember/moss/?mobile=1) · [documentation](moss/README.md) · [concept](moss/docs/concept.md)
+
+[![Moss](moss/docs/capture.jpg)](https://drschizzo.github.io/Codevember/moss/)
+
 ## [Tangle](tangle/)
 
 Le tour de trop. Un banc d’essai de torsion, pièce de cabinet de physique : un moteur tourne le mandrin, la corde qui pend dessous se tord — sa rayure s’enroule en hélice — puis, au seuil de Greenhill, elle flambe d’un coup en une boucle qui s’enroule sur elle-même en torsade (un plectonème) et remonte le balancier. La came du compte-tours écarte la barre : le balancier, libéré, tourne, la torsade se déroule, la corde revient droite. Trois cycles en crescendo (la rayure seule, une boucle, la torsade), trois familles (le cordon qui se tord en torsade, la paire dont les brins se commettent en hélice, la spirale peu tendue qui se love d’un bout à l’autre). Tiges de Cosserat intégrées par XPBD à petits pas, contacts, enlacement conservé (Lk = Tw + Wr, vérifié par des tests), came calculée d’après le plan, sept décors, scènes procédurales à partir d’une graine, boucle parfaite exportable en MP4.

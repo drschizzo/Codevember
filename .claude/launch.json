@@ -152,6 +152,16 @@
         "tangle"
       ],
       "port": 8070
+    },
+    {
+      "name": "moss",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        ".claude/serve.py",
+        "8080",
+        "moss"
+      ],
+      "port": 8080
     }
   ]
 }
