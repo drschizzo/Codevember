@@ -305,9 +305,13 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
     // plus qu'elles sont loin de la pièce où l'on se tient (on voit les pièces
     // d'après par les ajours des voisines) ; celles de la pièce restent
     // pleines (w = −1) : seules les portes s'y ouvrent, l'œil sait où se poser.
+    // Les parois latérales des pièces voisines (w ≈ 0) restent pleines elles
+    // aussi : leurs trous, minuscules, ne laissaient rien voir et semaient un
+    // pointillé sur tous les fonds, un motif de plus derrière chaque motif.
+    // Seules les parois lointaines s'ajourent, par des trous qui se lisent.
     const shell = {
       amount: lerp(R.proj.reveal ?? 1, R.voyage?.see ?? 0.9, kp),
-      lo: lerp(R.proj.revealLo ?? -0.5, -0.75, kp), hi: lerp(R.proj.revealHi ?? 0.85, 2.6, kp),
+      lo: lerp(R.proj.revealLo ?? -0.5, 0.1, kp), hi: lerp(R.proj.revealHi ?? 0.85, 1.85, kp),
     };
     G.voyageK.value = kc; // (part du voyage, pour l'éclairage)
     if (reset) { G.dPrev.value = G.d.value; G.inflatePrev.value = G.inflate.value; }

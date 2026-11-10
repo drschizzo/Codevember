@@ -16,7 +16,16 @@ export const cellOf = (k, s) => 2 * k + (s > 0 ? 1 : 0);
 export const opposite = (c) => c ^ 1;
 export const adjacent = (a, b) => cellAxis(a) !== cellAxis(b);
 export const normalOf = (c) => { const n = [0, 0, 0, 0]; n[cellAxis(c)] = cellSign(c); return n; };
-export const CELL_NAMES = ['−X', '+X', '−Y', '+Y', '−Z', '+Z', '−W', '+W'];
+// Paroi partagée : la face f (2 × axe local + signe) de la cellule c touche la
+// cellule voisine b par sa face g. Chacun des 24 carrés de l'hypercube est
+// ainsi porté par deux panneaux, dos à dos (voir embedLocal pour l'ordre des
+// axes locaux).
+const otherAxes = (k) => [0, 1, 2, 3].filter((x) => x !== k);
+export function twinFace(c, f) {
+  const ax = otherAxes(c >> 1)[f >> 1], b = 2 * ax + (f & 1);
+  return [b, 2 * otherAxes(ax).indexOf(c >> 1) + (c & 1)];
+}
+export const CELL_NAMES =['−X', '+X', '−Y', '+Y', '−Z', '+Z', '−W', '+W'];
 export const ROOT = cellOf(W, -1); // cellule « socle » du patron : −W
 
 // ── Applications affines ─────────────────────────────────────────────────────

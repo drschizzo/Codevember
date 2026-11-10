@@ -76,6 +76,10 @@ export const FINISHES = {
   urushiRed: F({ label: 'Laque vermillon', pattern: 'urushi', color: '#6a0c0a', color2: METAL.gold, rough: 0.34, clearcoat: 1, ccRough: 0.015, bump: 1, scale: 0.7 }),
   blackCeramic: F({ label: 'Céramique noire', pattern: 'plain', color: '#0d0d0f', rough: 0.1, clearcoat: 1, ccRough: 0.01, smudge: 0.25 }),
   whiteCeramic: F({ label: 'Céramique blanche', pattern: 'plain', color: '#f1f0ec', rough: 0.2, clearcoat: 1, ccRough: 0.015 }),
+  // unis (ils portent les motifs de forme : rien n'y dessine)
+  lacquer: F({ label: 'Laque unie', pattern: 'plain', color: '#152c5a', rough: 0.3, clearcoat: 1, ccRough: 0.02, smudge: 0.2 }),
+  lacquerMatte: F({ label: 'Laque mate', pattern: 'plain', color: '#152c5a', rough: 0.62 }),
+  pearlPaint: F({ label: 'Laqué gris perle', pattern: 'plain', color: '#b4b8bd', rough: 0.5 }),
   soapFilm: F({ label: 'Film de savon', pattern: 'soap', color: '#09090b', rough: 0.04, clearcoat: 0.6, ccRough: 0.01, irid: 1, iridIOR: 1.33, iridMin: 120, iridMax: 900, scale: 1 }),
   // cristaux massifs (objets exposés) : ils réfractent l'intérieur de la cellule
   crystal: F({ label: 'Cristal', pattern: 'plain', color: '#ffffff', color2: '#f4f7fb', rough: 0.008, glass: 1, ior: 1.62, dispersion: 0.9, attDist: 4 }),
@@ -116,13 +120,18 @@ export const SETS = {
   crystalBlue: { label: 'Cristal saphir', only: true, groove: false, outer: 'crystalBlue', inner: 'crystalBlue', edge: 'crystal', wear: 0, chamfer: false, moods: [] },
   crystalSmoke: { label: 'Quartz fumé', only: true, groove: false, outer: 'crystalSmoke', inner: 'crystalSmoke', edge: 'crystalFrost', wear: 0, chamfer: false, moods: [] },
   ceramicBlack: { label: 'Céramique noire', outer: 'blackCeramic', inner: 'brushedSteel', edge: 'diamondCut', wear: 0, chamfer: true, moods: ['studio', 'nuit', 'abysses'] },
-  ceramicWhite: { label: 'Céramique blanche', outer: 'whiteCeramic', inner: 'porcelain', edge: 'chrome', wear: 0, chamfer: true, moods: ['clinique', 'pastel', 'studio'] },
+  ceramicWhite: { label: 'Céramique blanche', outer: 'whiteCeramic', inner: 'bisque', edge: 'chrome', wear: 0, chamfer: true, moods: ['clinique', 'pastel', 'studio'] },
   soap: { label: 'Bulle', outer: 'soapFilm', inner: 'soapFilm', edge: 'chrome', wear: 0, chamfer: false, moods: ['irisé', 'nuit', 'abysses'] },
+  laque: { label: 'Laque unie', outer: 'lacquer', inner: 'lacquerMatte', edge: 'polishedBrass', wear: 0, chamfer: false, moods: ['luxe', 'atelier', 'sacré'] },
+  biscuit: { label: 'Biscuit', outer: 'bisque', inner: 'bisque', edge: 'whiteCeramic', wear: 0, chamfer: false, moods: ['clinique', 'pastel', 'atelier'] },
+  acier: { label: 'Acier brossé', outer: 'brushedSteel', inner: 'pearlPaint', edge: 'chrome', wear: 0.06, chamfer: true, moods: ['studio', 'nuit', 'atelier'] },
   bronze: { label: 'Bronze & cuivre', outer: 'bronzeDark', inner: 'polishedCopper', edge: 'polishedBrass', wear: 0.3, chamfer: false, moods: ['sacré', 'atelier'] },
 };
 
-// teintes d'anodisation et d'émail tirées selon l'humeur
+// teintes d'anodisation, d'émail et de laque (par défaut ; chaque humeur a
+// les siennes, voir recipe.js : une scène n'a qu'une couleur d'accent)
 export const TINTS = {
+  lacquer: ['#152c5a', '#6e1712', '#17402f', '#2e1238', '#b07a2c'],
   anodized: ['#3a64b0', '#b03a4a', '#2f8a72', '#7a4ab0', '#c07a2a', '#2a2e36', '#a8a39a'],
   glaze: ['#8fb8a6', '#a9c4d6', '#e0b8a8', '#d8cfa0', '#6f8fa8', '#c9a6c4', '#9fb07a'],
 };

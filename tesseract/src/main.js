@@ -6,7 +6,7 @@
 // ?mobile=1 / ?mobile=0 (version allégée imposée / interdite ; voir app/mobile.js).
 import * as THREE from 'three/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { generate, makeCell, finishesFor, upgrade } from './recipe.js';
+import { generate, makeCell, finishesFor, upgrade, ornate } from './recipe.js';
 import { randomNet, randomMoves } from './math4.js';
 import { createRng } from './rng.js';
 import { createGenerator } from './gen/client.js';
@@ -267,6 +267,10 @@ async function main() {
   // ── Interface ──
   let phi = 0, paused = false, busy = false, frozen = false;
   const rngUI = () => createRng(`${R.seed}:${performance.now()}`);
+  const cellCtx = (c) => {
+    const others = R.cells.filter((_, i) => i !== c), tally = (get) => others.reduce((o, k) => { const v = get(k); o[v] = (o[v] || 0) + 1; return o; }, {});
+    return { palette: R.palette, motifs: [...new Set(others.flatMap((k) => k.faces.filter(ornate)))], usedContent: tally((k) => k.content.type), usedObjects: tally((k) => k.content.set) };
+  };
   const on = {
     camState,
     random: () => { R = generate(randomSeed()); applyRecipe(); },
@@ -284,14 +288,15 @@ async function main() {
     netChanged: (shape) => { R.net.shape = shape; R.net.parent = randomNet(rngUI(), shape); tess.refresh(); },
     movesChanged: () => { R.moves = randomMoves(rngUI(), R.moveMode, true); if (R.voyage?.on) R.loop.duration = Math.round(voyageSeconds(R)); tess.refresh(); ui?.rebuild(); },
     frameGeometry: () => tess.syncGeometry(null),
-    frameSet: (s) => { R.frame.set = s; R.frame.finish = finishesFor(s, rngUI()); tess.syncMaterial(null); ui?.rebuild(); },
+    frameSet: (s) => { R.frame.set = s; R.frame.finish = finishesFor(s, rngUI(), R.palette); tess.syncMaterial(null); ui?.rebuild(); },
     frameMaterial: () => tess.syncMaterial(null),
     cellGeometry: (c) => tess.syncGeometry(c),
     cellMaterial: (c) => tess.syncMaterial(c),
-    cellKind: (c, k) => { R.cells[c] = makeCell(k, rngUI(), R.mood, rngUI().int(0, 1e6)); tess.syncGeometry(c); ui?.rebuildCells(); },
-    cellReroll: (c) => { R.cells[c] = makeCell(R.cells[c].kind, rngUI(), R.mood, rngUI().int(0, 1e6)); tess.syncGeometry(c); ui?.rebuildCells(); },
-    cellSet: (c, s) => { R.cells[c].panelSet = s; R.cells[c].panel = finishesFor(s, rngUI()); tess.syncMaterial(c); ui?.rebuildCells(); },
-    contentSet: (c, s) => { const k = R.cells[c].content; k.set = s; k.finish = finishesFor(s, rngUI()); tess.syncMaterial(c); ui?.rebuildCells(); },
+    // (une cellule retirée au panneau reste dans la palette et les motifs de la scène)
+    cellKind: (c, k) => { R.cells[c] = makeCell(k, rngUI(), R.mood, rngUI().int(0, 1e6), cellCtx(c)); tess.syncGeometry(c); ui?.rebuildCells(); },
+    cellReroll: (c) => { R.cells[c] = makeCell(R.cells[c].kind, rngUI(), R.mood, rngUI().int(0, 1e6), cellCtx(c)); tess.syncGeometry(c); ui?.rebuildCells(); },
+    cellSet: (c, s) => { R.cells[c].panelSet = s; R.cells[c].panel = finishesFor(s, rngUI(), R.palette); tess.syncMaterial(c); ui?.rebuildCells(); },
+    contentSet: (c, s) => { const k = R.cells[c].content; k.set = s; k.finish = finishesFor(s, rngUI(), R.palette); tess.syncMaterial(c); ui?.rebuildCells(); },
     contentAxis: (c) => { R.cells[c].content.axis = rngUI().dir(); },
     rebuildCells: () => ui?.rebuildCells(),
     renderChanged: () => applyRender(),
