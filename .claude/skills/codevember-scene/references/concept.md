@@ -21,7 +21,7 @@ C'est l'étape qui décide de tout. La première idée qui vient est presque tou
 **c. Produire au moins huit pistes**, de gestes et de schémas de boucle différents (voir loop.md : périodique, plongée, cycle de symétries, cycle de transformations, phases décalées…), chacune en trois lignes : l'image, le geste, la boucle, le cœur technique.
 
 **d. Les noter** de 1 à 5 sur six critères, dans un tableau :
-- *originalité* : face aux clichés, et face aux projets du dépôt (trois sur quatre sont déjà des plongées sans fin : une plongée de plus doit être exceptionnelle pour passer) ;
+- *originalité* : face aux clichés, et face aux projets du dépôt — leurs gestes (plongées sans fin, éclosions, bris, plis), leurs causes (pendule, marteau, goutte…), leurs montures, décors et grammaires de caméra : une piste qui les reprend doit être exceptionnelle pour passer ;
 - *esthétique* : potentiel de lumière et de matière (réfraction, émission, diffusion, reflets, contrastes de familles), beauté d'une image fixe prise au hasard ;
 - *boucle* : intérêt du schéma (une transformation qui revient par un autre chemin vaut mieux qu'un aller-retour ; un fondu ou une lecture à l'envers vaut 1), et lisibilité du geste sans légende ;
 - *cœur technique* : un vrai algorithme, vérifiable, qui produit la variété ;

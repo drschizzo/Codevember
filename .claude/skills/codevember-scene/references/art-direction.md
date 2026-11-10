@@ -1,6 +1,6 @@
 # Direction artistique
 
-Ces règles viennent de retours précis de l'utilisateur sur Orrery et Tesseract. Elles se vérifient sur des **rendus**, jamais sur la liste des matières.
+Ces règles viennent de retours précis de l'utilisateur sur Orrery et Tesseract. Elles se vérifient sur des **rendus**, jamais sur la liste des matières. Elles **bornent**, elles ne dictent pas une palette ni des décors : chaque projet compose ses propres accords et invente ses propres humeurs (ne reprends pas telles quelles Atelier, Studio, Clinique, Nuit, Serre, Velours…), propres à son thème.
 
 ## Ce que l'utilisateur a refusé
 
@@ -19,7 +19,7 @@ Ces règles viennent de retours précis de l'utilisateur sur Orrery et Tesseract
 5. **Une image, une idée** : un motif signature par scène, parfois un contrepoint de nature opposée (un écran qui laisse voir contre un relief plein), et pas d'autre ; tous les éléments d'un motif ont le même dessin. Une pièce porte soit un motif sur un jeu uni, soit une matière riche (marbre, émail guilloché, laque, damas, vert-de-gris), jamais les deux, jamais ni l'un ni l'autre. Un seul élément orné par paroi partagée.
 6. **L'objet tranche sur son fond** : pas de nacre dans la nacre, d'or devant le laiton, de noir dans le noir ; contraste de valeur d'abord, puis de famille.
 7. **Verre clair** (teinté, jamais dépoli) ; cristaux massifs rares (une graine sur trois) mais à vraie épaisseur optique.
-8. **Lampes presque blanches** (≥ 4700 K, `kelvinToHex`) : la chaleur d'une humeur vient de son fond, de sa brume, de ses contre-jours, de ses accents et de son étalonnage.
+8. **Lampes presque blanches** (≥ 4700 K, `kelvinToHex`) : la chaleur d'une humeur vient de son fond, de sa brume, de ses contre-jours, de ses accents et de son étalonnage. C'est un garde-fou contre le tout-or, pas une interdiction : une lumière colorée que le thème justifie (vitrail, four, néon, lumière noire) est permise si l'objet garde ses matières lisibles.
 9. **Étalonnage par humeur** (`grade`) : contraste, saturation, teinte des ombres et des hautes lumières (ombres froides et lumières chaudes à l'Atelier, ombres bleues la Nuit, aubergine dans l'Écrin), par-dessus les réglages du panneau.
 10. **Humeurs successives différentes** quand une scène en enchaîne plusieurs (Orrery : trois mondes, trois humeurs, au moins une froide ou claire).
 11. **Variété d'une graine à l'autre**, pas dans l'image : une scène évite de montrer deux fois le même objet ; aucune matière sur plus de la moitié des pièces.
