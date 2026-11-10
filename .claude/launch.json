@@ -162,6 +162,16 @@
         "moss"
       ],
       "port": 8080
+    },
+    {
+      "name": "melt",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        ".claude/serve.py",
+        "8090",
+        "melt"
+      ],
+      "port": 8090
     }
   ]
 }

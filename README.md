@@ -2,6 +2,14 @@
 
 Expériences de creative coding, publiées sur [drschizzo.github.io/Codevember](https://drschizzo.github.io/Codevember/).
 
+## [Melt](melt/)
+
+Le dégel d’une étoile. En macro, sur un gant de laine, un velours, une vitre ou une feuille de houx : une perle de glace dressée en pointe, d’où sort un hexagone qui pousse en étoile, en accéléré, dans l’air glacé (givre sur les fibres, poussière de diamant) ; le soleil sort, la surface se mouille et brille, les pointes s’arrondissent en perles qui remontent les branches en les avalant, et toute l’étoile se rassemble en une goutte au centre ; la goutte s’évapore, puis regèle de bas en haut et se dresse en pointe. Croissance par le modèle de Gravner et Griffeath (diffusion de la vapeur, attachement selon la courbure), fonte en perles qui conserve l’eau et suit les branches vers le centre, trois familles (l’étoile qui se rétracte, la plaque qui se resserre en collier, la colonne qui se rompt en chapelet de Plateau-Rayleigh), tricot rendu au niveau des fibres (modèle de fil procédural de Zhao et al., fibres de cœur de Wu et Yuksel), éclairage de Rheinberg calculé par la déviation des rayons, six décors, boucle parfaite exportable en MP4.
+
+[Démo en ligne](https://drschizzo.github.io/Codevember/melt/) · [version légère](https://drschizzo.github.io/Codevember/melt/?mobile=1) · [documentation](melt/README.md) · [concept](melt/docs/concept.md)
+
+[![Melt](melt/docs/capture.jpg)](https://drschizzo.github.io/Codevember/melt/)
+
 ## [Moss](moss/)
 
 La reviviscence. Une année de mousse sur sa pierre, en accéléré : à la sécheresse, il n’en reste que des îlots bruns dans les fissures ; les averses passent en bandes, la roche fonce, les îlots reverdissent d’un coup ; pendant les pluies, la mousse se propage en coussins denses (un voile vert de protonéma, puis des dômes de rosettes serrées qui se rejoignent) ; la sécheresse la fait reculer dans ses refuges. Propagation de Fisher-KPP forcée par les saisons et intégrée jusqu’à son orbite périodique, coussins en dômes dont les tiges suivent la normale, roches (granit, calcaire, grès) et écorces procédurales cuites dans un worker et appliquées en déplacement et en normal map, lichens aréolés, quatre familles, six décors, boucle parfaite exportable en MP4.
