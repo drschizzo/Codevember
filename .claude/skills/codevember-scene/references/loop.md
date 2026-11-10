@@ -53,10 +53,12 @@ La vitesse et son intégrale s'écrivent en forme fermée (montée en smoothstep
 
 ## Caméra
 
-- Périodique en u, lisse, lente : regard < 30°/s en moyenne dans les moments calmes (Tesseract mesurait 80°/s avec des pointes à 220°/s avant lissage). Lisser la pose par un noyau gaussien (σ ≈ 0,3 s) calculé sur la trajectoire elle-même (la boucle se referme, l'export rend la même chose).
+- Périodique en u, lisse, lente : ~10°/s en moyenne, pointes < 25°/s (Tesseract mesurait 80°/s avec des pointes à 220°/s avant lissage). Lisser la pose par un noyau gaussien (σ ≈ 0,8 s) calculé sur la trajectoire échantillonnée elle-même (la boucle se referme, l'export rend la même chose), interpoler en Catmull-Rom, et tester l'accélération image par image à 120 i/s.
+- Les obstacles (cloche, caisse, pot, table) : une distance minimale exacte, calculée sur la trajectoire échantillonnée (définie partout, donc continue), appliquée comme plancher par un maximum adouci ; jamais un recul par paliers image par image (Fold, c2p3j5 : la caméra sautait d'avant en arrière au bord de la cloche).
 - Un azimut qui va d'une couche à l'autre choisit son sens **une fois** pour tout le trajet (choisi à chaque instant, il change de sens en route).
 - Une cible qui grossit glisse d'abord vers le centre de l'image tant qu'elle est petite, puis y reste fixée (Orrery).
 - Jamais de coupe franche ni d'insert : l'utilisateur les a refusés (« animation complètement erratique »). Une fois la caméra réglée et validée, **ne plus y toucher** sans demande ; vérifier par une signature de pose (somme des positions / quaternions / fov sur la boucle) qu'elle n'a pas bougé.
+- **Pas de grands écarts de cadrage** entre deux plans (Fold, premier essai : du macro à 12 cm au plan large à 6 u en quelques secondes, azimuts qui sautent d'un événement à l'autre → « mouvements un peu erratiques ») : distances dans un rapport ≤ 2,5, azimut qui tourne dans un seul sens sur toute la boucle (une lente révolution autour du sujet, sur laquelle on ne fait que glisser la cible), transitions de 3 s au moins, lissage σ ≈ 0,8 s ; un test borne la vitesse angulaire de pointe (≤ 25°/s) et la variation de distance.
 - Caméra libre (OrbitControls) en option dans le panneau ; la caméra du film reprend quand on la décoche.
 
 ## Rien n'apparaît, rien ne disparaît, rien ne saute

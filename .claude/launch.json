@@ -132,6 +132,16 @@
         "calcin"
       ],
       "port": 8050
+    },
+    {
+      "name": "fold",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        ".claude/serve.py",
+        "8060",
+        "fold"
+      ],
+      "port": 8060
     }
   ]
 }

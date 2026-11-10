@@ -41,6 +41,10 @@ Garde la piste qui a le meilleur total sans note inférieure à 3 ; une piste pe
 - *Variété* : un tableau des humeurs avec, pour chacune, le décor (fond, sol, accessoires), la lumière (nature, direction, dureté), la valeur (claire, sombre, moyenne), le cadrage. Pas deux lignes semblables ; au moins une humeur très claire, une très sombre, une en plein jour.
 - *Ambition* : la liste des éléments de construction de l'objet (Calcin, après correction : pied, jambe, bouton, anse, bouchon, côtes optiques, torsade, lobes, bord festonné, filigrane, verre doublé) et des variantes ; viser ce qu'un conservateur de musée trouverait digne d'une vitrine.
 
+**e ter. Deux épreuves de plus** (après Fold, premier essai sous le nom de Sensitive) :
+- *Déclinaison* : liste les familles de l'objet principal et, pour chacune, en une phrase, son **mouvement** propre (pas sa taille ni sa couleur). Si deux familles bougent de la même façon, ce sont des variantes, pas des familles : il en faut au moins trois vraiment distinctes.
+- *Scénario* : raconte la boucle comme un film muet, plan par plan (« la goutte tombe sur la feuille de gauche ; toute la feuille se ferme de la pointe vers la tige ; elle se rouvre ; … »). Chaque effet est entier et cadré ; aucun plan ne montre un effet partiel qu'on ne sait pas lire. La structure doit avoir une forme (montée, réponse, retour), pas une liste.
+
 **f. Annoncer** le concept retenu à l'utilisateur en quelques lignes (titre, image, boucle, variations) et continuer sans attendre, sauf thème vraiment ambigu.
 
 ## 1. Chercher le geste
