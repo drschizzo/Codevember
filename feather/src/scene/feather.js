@@ -12,11 +12,11 @@ import * as THREE from 'three/webgpu';
 import {
   Fn, attribute, positionLocal, normalLocal, positionPrevious, vec2, vec3, vec4, float, int, dot, normalize, mix,
   abs, uniform, uniformArray, texture, clamp, pow, sin, cos, exp, max as tmax, min as tmin, select, cross, normalViewGeometry,
-  varyingProperty, hash, fract, length, positionGeometry, frameId, step, fwidth,
+  varyingProperty, hash, fract, length, positionGeometry, frameId, step, fwidth, normalView, positionViewDirection,
 } from 'three/tsl';
 import { isLite, stableVelocity, perturb } from './materials.js';
 import { G } from './globals.js';
-import { SCHED, BARB_STRIDE } from '../gen/feather.js';
+import { SCHED, BARB_STRIDE, CONTACT } from '../gen/feather.js';
 
 const sst = (a, b, x) => { const t = clamp(x.sub(a).div(float(b).sub(a)), 0, 1); return t.mul(t).mul(t.mul(-2).add(3)); };
 const smootherT = (a, b, x) => { const t = clamp(x.sub(a).div(b - a), 0, 1); return t.mul(t).mul(t).mul(t.mul(t.mul(6).sub(15)).add(10)); };
@@ -25,7 +25,7 @@ const qrot = (q, v) => { const t = cross(q.xyz, v).mul(2); return v.add(t.mul(q.
 
 // ── Le calendrier (gen/feather.js, SCHED) ────────────────────────────────────
 const growthT = (u, L) => {
-  const gp = tmin(float(0.3), float(SCHED.pushLen).div(L));
+  const gp = float(SCHED.pushFrac);
   return gp.mul(smootherT(SCHED.push[0], SCHED.push[1], u)).add(float(1).sub(gp).mul(smootherT(SCHED.grow[0], SCHED.grow[1], u)));
 };
 const sinkT = (u, L, cal, over) => mix(L.mul(over), cal.mul(0.85).mul(L), growthT(u, L));
@@ -40,11 +40,23 @@ const barbArcT = (alpha, curl, l) => {
   return vec2(cos(alpha.sub(c.mul(l))).sub(cos(alpha)).div(c), sin(alpha).sub(sin(alpha.sub(c.mul(l)))).div(c));
 };
 
-// état d'une plume dans le tableau (4 vec4 : repère, quaternion, temps, forme)
-export const FSTRIDE = 4;
+// contact (gen/feather.js, contactPush) : K = (étendue, x0, y0, r), Q = (fente, tente)
+const contactPushT = (p, K, Q) => {
+  const r = K.w, ext = tmax(K.x, 1e-3), dx = p.x.sub(K.y), dy = p.y.sub(K.z), ax = abs(dx);
+  const along = select(dy.greaterThanEqual(0), float(1).sub(sst(ext.mul(0.7), ext, dy)), float(1).sub(sst(r.mul(0.5), r.add(0.4), dy.negate())));
+  const push = tmax(r.add(CONTACT.margin).sub(ax), 0).mul(along).mul(Q.x);
+  const lift = Q.y.mul(along).mul(float(1).sub(sst(r, r.add(1.2), ax)));
+  const sg = clamp(dx.div(0.015), -1, 1);
+  const over = r.add(CONTACT.margin).mul(float(1).sub(abs(sg))).mul(along).mul(Q.x);
+  return p.add(vec3(sg.mul(push), 0, lift.add(over)));
+};
+
+// état d'une plume dans le tableau (5 vec4 : position et échelle, quaternion,
+// temps et usure, contact K, contact C)
+export const FSTRIDE = 5;
 const stOf = (A, f) => {
   const i = int(f.add(0.5)).mul(FSTRIDE);
-  return { P: A.element(i), Q: A.element(i.add(1)), T: A.element(i.add(2)), K: A.element(i.add(3)) };
+  return { P: A.element(i), Q: A.element(i.add(1)), T: A.element(i.add(2)), K: A.element(i.add(3)), C: A.element(i.add(4)) };
 };
 
 // La pose (gen/feather.js, barbPose). b0..b3 : la barbe ; tv : (t, v, arête) ;
@@ -92,13 +104,16 @@ function barbPoseT(b0, b1, b2, b3, tv, st, FU, ridgeK = 0.7) {
   const pz = z.add(nz.mul(off)).add(tmax(gl.z, mix(float(-0.6), float(-0.03), smootherT(SCHED.settle[0], SCHED.settle[1], u))).mul(sag));
   // croissance, puis courbure du rachis
   const yy = py.sub(sinkT(u, L, FU.calamus, FU.over));
-  const k = safeK(st.K.x.mul(bendAtT(u)));
+  const k = safeK(FU.kb.mul(st.P.w).mul(bendAtT(u)));
   const yc = tmax(yy, 0);
   const Ny = sin(k.mul(yc)), Nz = cos(k.mul(yc));
   let p = vec3(px, Ny.div(k).add(Ny.mul(pz)), Nz.sub(1).div(k).add(Nz.mul(pz)));
   const tilt = v.negate().mul(ridgeK).mul(ridge.add(0.4));
   const cx = nx.add(tilt.mul(tx)), cz = nz.add(tilt.mul(tz));
   const n = normalize(vec3(cx, Ny.mul(cz), Nz.mul(cz)));
+  // contact (gen/feather.js, contactPush) : le tuyau d'une plume voisine écarte
+  // les barbes autour du point où il perce celle-ci — K = (courbure, x0, y0, r)
+  p = contactPushT(p, st.K, st.C);
   // caché (dans le follicule, ou plume masquée) : replié au follicule
   const hide = yy.lessThan(0).or(st.T.w.lessThan(0.5));
   p = select(hide, vec3(0, -0.05, 0), p);
@@ -143,7 +158,7 @@ export function createLook() {
     base: uniform(new THREE.Color()), mark: uniform(new THREE.Color()), down: uniform(new THREE.Color()),
     rachis: uniform(new THREE.Color()), sheath: uniform(new THREE.Color()),
     eye0: uniform(new THREE.Color()), eye1: uniform(new THREE.Color()), eye2: uniform(new THREE.Color()), eye3: uniform(new THREE.Color()), eye4: uniform(new THREE.Color()),
-    irid: uniform(0), iridLo: uniform(400), iridHi: uniform(500), blue: uniform(0), sheen: uniform(0.5),
+    irid: uniform(0), iridLo: uniform(400), iridHi: uniform(500), bragg: uniform(0), iridMark: uniform(0), blue: uniform(0), sheen: uniform(0.5),
     translucency: uniform(1), bleach: uniform(0.18),
   };
 }
@@ -151,7 +166,7 @@ export function createLook() {
 // barbs : le maillage des barbes d'un ensemble de plumes (héroïnes ou voisines).
 // FS, FSP : états courant et précédent ; FU : famille ; LK : aspect ;
 // PAT : texture du motif ; moving : calcule la pose de l'image précédente
-export function barbMaterial({ FS, FSP, FU, LK, PAT, moving }) {
+export function barbMaterial({ FS, FSP, FU, LK, PAT, moving, tile = false }) {
   const lite = isLite();
   const m = new THREE.MeshSSSNodeMaterial({ side: THREE.DoubleSide });
   const vA = varyingProperty('vec4', 'vA'); // (motif x, motif z, t, v)
@@ -160,13 +175,13 @@ export function barbMaterial({ FS, FSP, FU, LK, PAT, moving }) {
     const b0 = attribute('b0', 'vec4'), b1 = attribute('b1', 'vec4'), b2 = attribute('b2', 'vec4'), b3 = attribute('b3', 'vec4');
     const tv = positionGeometry;
     const st = stOf(FS, b2.x);
-    const P = barbPoseT(b0, b1, b2, b3, tv, st, FU, moving ? 0.45 : 0.2); // (voisines : un ruban vaut plusieurs barbes, arête adoucie)
+    const P = barbPoseT(b0, b1, b2, b3, tv, st, FU, tile ? 0.2 : 0.45); // (voisines : un ruban vaut plusieurs barbes, arête adoucie)
     if (full) {
       normalLocal.assign(P.nw);
       vA.assign(vec4(P.pat, tv.x, tv.y));
       vB.assign(vec4(P.zip, b1.w, st.T.y, b2.y));
       if (!lite) {
-        positionPrevious.assign(moving ? barbPoseT(b0, b1, b2, b3, tv, stOf(FSP, b2.x), FU, 0.45).world : P.world);
+        positionPrevious.assign(moving ? barbPoseT(b0, b1, b2, b3, tv, stOf(FSP, b2.x), FU, tile ? 0.2 : 0.45).world : P.world);
       }
     }
     return P.world;
@@ -193,6 +208,23 @@ export function barbMaterial({ FS, FSP, FU, LK, PAT, moving }) {
   const fadeS = float(1).sub(sst(0.12, 0.35, fwidth(t.mul(260 / (2 * Math.PI)))));
   const striae = sin(t.mul(260).add(rnd.mul(40)).add(v.mul(3))).mul(0.5).mul(fadeS).add(0.5);
   col = col.mul(rnd.sub(0.5).mul(0.08).add(1)).mul(striae.mul(0.12).add(0.94));
+  // couleur structurale (paon, faisan, corbeau, pigeon) : les barbules portent un
+  // empilement régulier de bâtonnets de mélanine dans la kératine, qui
+  // réfléchit une longueur d'onde selon la loi de Bragg ; elle glisse vers le
+  // bleu quand on regarde en biais : λ = λ₀ √(1 − sin²θ / n²), n ≈ 2 (indice
+  // effectif de l'empilement kératine-mélanine-air : le vert du paon tourne
+  // au bleu, pas au violet).
+  // Le fond pigmentaire, lui, est sombre (la mélanine) : la couleur est dans
+  // le reflet, qui tourne avec la lumière et le regard.
+  const ringL = mix(mix(mix(mix(float(540), float(595), sst(0.02, 0.1, e)), float(505), sst(0.22, 0.3, e)), float(478), sst(0.42, 0.5, e)), float(452), sst(0.62, 0.7, e));
+  const lam0 = mix(LK.bragg, ringL, sst(0.0, 0.03, e).mul(LK.bragg.greaterThan(0).select(float(1), float(0))));
+  const cosV = abs(dot(normalView, positionViewDirection)).clamp(0, 1);
+  const lam = lam0.mul(float(1).sub(float(1).sub(cosV.mul(cosV)).div(2.0 * 2.0)).sqrt());
+  const gs = (c, w) => exp(lam.sub(c).div(w).pow(2).negate());
+  const bragg = mix(vec3(gs(605, 50).add(gs(430, 24).mul(0.12)), gs(540, 45), gs(455, 38)), vec3(0.6), 0.15);
+  // (le faisan : seules ses marques noires sont irisées, le fond cuivré est pigmentaire)
+  const irid = LK.irid.mul(float(1).sub(plum)).mul(float(1).sub(T.a)).mul(mix(float(1), T.r, LK.iridMark));
+  col = mix(col, col.mul(0.3), irid.mul(0.8));
   m.colorNode = col;
   // frange des barbules : le bord du ruban est un peigne (tramé : lissé par le TRAA)
   const edge = abs(v);
@@ -201,17 +233,18 @@ export function barbMaterial({ FS, FSP, FU, LK, PAT, moving }) {
   const cover = mix(float(1), sst(1.0, 0.35, edge).add(comb.mul(0.35)), float(1).sub(zip).mul(0.85).add(plum.mul(0.3)).clamp(0, 1));
   const thr = lite ? float(0.5) : fract(hash(positionGeometry.xy.mul(97.1).add(rnd.mul(13)).add(float(frameId).mul(0.618))).add(0.0));
   m.maskNode = cover.greaterThan(thr.mul(0.9).add(0.05));
-  m.roughnessNode = mix(float(0.42), float(0.6), plum).add(wear.mul(0.08));
+  // (passe d'ombre : les varyings vA, vB n'y sont pas calculés — un masque qui
+  // les lit y donnerait n'importe quoi, et changerait d'un coup)
+  m.maskShadowNode = float(1).greaterThan(0);
+  m.roughnessNode = mix(float(0.42), float(0.6), plum).add(wear.mul(0.08)).sub(irid.mul(0.12)); // (les barbules irisées sont plus lisses : reflet plus net)
   m.metalnessNode = float(0);
-  m.specularIntensityNode = float(0.55);
-  // lustre de velours des barbules (le « sheen » d'une plume)
-  m.sheenNode = col.mul(0.6).add(0.08).mul(LK.sheen);
-  m.sheenRoughnessNode = float(0.45);
-  // irisation : film mince équivalent de la kératine à mélanine
-  m.iridescenceNode = LK.irid.mul(T.b.mul(0.5).add(0.5)).mul(float(1).sub(plum)).mul(float(1).sub(T.a));
-  m.iridescenceIORNode = float(1.56);
-  m.iridescenceThicknessNode = mix(LK.iridLo, LK.iridHi, rnd.mul(0.3).add(patz.mul(0.7)));
-  // bleu structural (kératine spongieuse) : une couleur qui ne vient pas du pigment
+  m.specularIntensityNode = mix(float(0.55), float(1), irid);
+  m.specularColorNode = mix(vec3(1), bragg.mul(2.4), irid);
+  // lustre de velours des barbules (le « sheen » d'une plume) ; sur une plume
+  // irisée, il prend la couleur structurale (les barbules orientées en tous
+  // sens renvoient une part du reflet de Bragg hors de la direction miroir)
+  m.sheenNode = mix(col.mul(0.6).add(0.08), bragg.mul(0.9), irid).mul(LK.sheen.add(irid.mul(0.6)));
+  m.sheenRoughnessNode = mix(float(0.45), float(0.3), irid);
   // relief : arête du ramus et barbules
   const H = striae.mul(0.4).add(float(1).sub(edge).mul(0.6)).mul(0.004);
   m.normalNode = perturb(H, normalViewGeometry);
@@ -245,7 +278,7 @@ const rachisPoint = (s, st, FU, dorsal = true) => {
   // (roulé, le rachis est sur la génératrice dorsale du tube, à ρ de l'axe)
   const off = dorsal && FU.rhoTex ? texture(FU.rhoTex, vec2(s, 0.5)).level(0).r.mul(float(1).sub(unrollT(u, s))).mul(float(1).sub(FU.radial)) : float(0);
   const yy = s.mul(L).sub(sinkT(u, L, FU.calamus, FU.over));
-  const k = safeK(st.K.x.mul(bendAtT(u)));
+  const k = safeK(FU.kb.mul(st.P.w).mul(bendAtT(u)));
   const yc = tmax(yy, 0);
   return { p: vec3(0, sin(k.mul(yc)).div(k).add(sin(k.mul(yc)).mul(off)), cos(k.mul(yc)).sub(1).div(k).add(cos(k.mul(yc)).mul(off))), T: vec3(0, cos(k.mul(yc)), sin(k.mul(yc)).negate()), N: vec3(0, sin(k.mul(yc)), cos(k.mul(yc))), hide: yy.lessThan(0) };
 };
@@ -279,6 +312,7 @@ export function rachisMaterial({ FS, FSP, FU, LK, moving, offset = 0 }) {
     const X = vec3(1, 0, 0);
     const off = X.mul(c.mul(r)).add(R.N.mul(sn.mul(r).mul(0.8)));
     let p = R.p.add(off);
+    p = contactPushT(p, st.K, st.C);
     p = select(R.hide.or(st.T.w.lessThan(0.5)), vec3(0, -0.05, 0), p);
     if (full) {
       normalLocal.assign(qrot(st.Q, normalize(X.mul(c).add(R.N.mul(sn)))));
@@ -316,8 +350,12 @@ export function sheathMaterial({ FS, FSP, FU, LK, idx = 0 }) {
     const ctr = R.p;
     const X = vec3(1, 0, 0);
     let p = ctr.add(X.mul(c.mul(r))).add(R.N.mul(sn.mul(r)));
-    // bouché à la pointe (le rayon y tend vers 0) ; caché sous la peau
-    p = select(R.hide.or(st.T.w.lessThan(0.5)), vec3(0, -0.05, 0), p);
+    // bouché à la pointe (le rayon y tend vers 0) ; caché sous la peau ; et
+    // retiré de la géométrie là où il s'est effrité (au-delà du bord tramé) :
+    // la passe d'ombre ne voit pas les varyings du masque — sans cela, la gaine
+    // effritée continuait de porter son ombre, puis disparaissait d'un bloc
+    const goneV = st.T.x.sub(releaseAtT(s)).greaterThan(0.014);
+    p = select(R.hide.or(st.T.w.lessThan(0.5)).or(goneV), vec3(0, -0.05, 0), p);
     if (full) {
       normalLocal.assign(qrot(st.Q, normalize(X.mul(c).add(R.N.mul(sn)))));
       vS.assign(vec2(s, atanLike(c, sn)));
@@ -334,6 +372,7 @@ export function sheathMaterial({ FS, FSP, FU, LK, idx = 0 }) {
   const flake = fract(sin(s.mul(173.1).add(ang.mul(7.3))).mul(4375.5));
   const gone = u.sub(front).add(flake.mul(0.012));
   m.maskNode = gone.lessThan(0.0);
+  m.maskShadowNode = float(1).greaterThan(0); // (l'ombre suit la géométrie, voir goneV)
   // kératine cireuse, bleu-gris, translucide ; crêtes hélicoïdales des barbes
   // vues au travers ; plus sombre vers la base (la pulpe)
   const helix = sin(ang.mul(28).add(s.mul(180))).mul(0.5).add(0.5);

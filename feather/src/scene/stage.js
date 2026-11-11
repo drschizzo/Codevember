@@ -7,15 +7,16 @@
 import * as THREE from 'three/webgpu';
 import {
   uniform, uniformArray, vec3, vec4, float, mix, normalize, positionWorld, cameraPosition, dot, pow, max as tmax, smoothstep, normalWorld,
+  attribute, sin, hash, positionGeometry,
 } from 'three/tsl';
 import { barbGeometry, barbMaterial, rachisGeometry, rachisMaterial, sheathMaterial, createLook, FSTRIDE, tubeTemplate } from './feather.js';
 import { isLite, stableVelocity, noise } from './materials.js';
 import { BIRDS } from '../families.js';
-import { growth, bendOf, layoutPlumage, featherFrame, betaAt, LIE_BETA, settleAt, wearAt, ejection, LIE, SCHED, qrot } from '../gen/feather.js';
+import { growth, bendOf, tileContacts, layoutPlumage, featherFrame, betaAt, LIE_BETA, settleAt, wearAt, ejection, LIE, SCHED, qrot } from '../gen/feather.js';
 import { cameraPath } from '../camera.js';
 
 const SHADOW = { mobile: 1024, low: 1024, medium: 2048, high: 2048, ultra: 4096 };
-const MAXF = 256;
+const MAXF = 300; // (5 vec4 par plume : 1 500 vec4, 24 Ko par tableau)
 
 // quaternion (x, y, z, w) : produit et rotation autour d'un axe
 const qmul = (a, b) => [
@@ -69,6 +70,31 @@ export function createStage(scene, gen, { lite = false } = {}) {
   body.castShadow = false;
   scene.add(body);
 
+  // ── Le sous-duvet : des houppes frisées entre les plumes (gen/down.js) ──
+  const downU = { color: uniform(new THREE.Color()), tip: uniform(new THREE.Color()) };
+  function downMaterial() {
+    const m = new THREE.MeshSSSNodeMaterial({ side: THREE.DoubleSide });
+    const tv = attribute('tv', 'vec2');
+    const t = tv.x, edge = tv.y.abs();
+    // plus sombre au pied (l'ombre de la houppe), plus clair aux pointes
+    m.colorNode = mix(downU.color, downU.tip, smoothstep(0.1, 1.0, t));
+    m.roughnessNode = float(0.75);
+    m.metalnessNode = float(0);
+    m.sheenNode = downU.tip.mul(0.6);
+    m.sheenRoughnessNode = float(0.5);
+    // frange des barbules : tramée (lissée par le TRAA)
+    const comb = sin(t.mul(90).add(edge.mul(9))).mul(0.5).add(0.5);
+    m.maskNode = smoothstep(1.0, 0.3, edge).add(comb.mul(0.3)).greaterThan(hash(positionGeometry.xy.mul(311.7)).mul(0.8).add(0.1));
+    m.thicknessColorNode = downU.tip.mul(0.5);
+    m.thicknessPowerNode = float(3);
+    m.thicknessScaleNode = float(3);
+    m.mrtNode = stableVelocity();
+    return m;
+  }
+  const downMesh = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicNodeMaterial());
+  downMesh.receiveShadow = true; downMesh.castShadow = false; downMesh.visible = false; downMesh.frustumCulled = false;
+  scene.add(downMesh);
+
   // ── Les plumes ──
   const group = new THREE.Group();
   scene.add(group);
@@ -76,7 +102,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
   const arrP = Array.from({ length: MAXF * FSTRIDE }, () => new THREE.Vector4());
   const FS = uniformArray(arr, 'vec4'), FSP = uniformArray(arrP, 'vec4');
   const LK = createLook(), LKT = createLook(); // (LKT : les voisines, quand elles ne sont pas de la famille héroïne)
-  const mkFU = () => ({ L: uniform(6), radial: uniform(0), calamus: uniform(0.1), over: uniform(1.08), r0: uniform(0.05), rhoTex: null });
+  const mkFU = () => ({ L: uniform(6), radial: uniform(0), calamus: uniform(0.1), over: uniform(1.08), r0: uniform(0.05), kb: uniform(0.05), rhoTex: null });
   const FU = mkFU(), FUT = mkFU();
   let meshes = [], R = null, lay = null, cam = null, pending = 0, version = 0, nTiles = 0;
   let texs = [], lastPh = 0;
@@ -92,6 +118,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
     R = recipe;
     const v = ++version;
     pending = 1;
+    downMesh.visible = false;
     const P = R.shape, T = R.tile ?? P;
     lay = layoutPlumage(P, R.seed, { lite, tile: R.tile });
     cam = cameraPath(R, lay);
@@ -122,6 +149,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
         F.rhoTex = rhoOf(rho);
         F.L.value = S.L; F.radial.value = S.radial ? 1 : 0; F.calamus.value = S.calamus; F.over.value = S.over;
         F.r0.value = S.radial ? 0.035 : Math.max(0.03, S.L * 0.0085);
+        F.kb.value = bendOf(S, lay.Rd); // (courbure du rachis ; × l'échelle de chaque plume)
         return F.rhoTex;
       };
       const patTex = patOf(o.tex), patT = o.ttex ? patOf(o.ttex) : patTex;
@@ -141,10 +169,10 @@ export function createStage(scene, gen, { lite = false } = {}) {
         tileT.set(o.tile, j * o.tile.length);
         for (let i = 0; i < nt; i++) { const q = (j * nt + i) * 16; tileT[q + 8] = j + 2; tileT[q + 9] = (tileT[q + 9] + j * 0.618) % 1; }
       }
-      if (nTiles) add(new THREE.Mesh(barbGeometry(tileT, lite ? 7 : 11), barbMaterial({ FS, FSP, FU: FT, LK: LT, PAT: patT, moving: false })));
+      if (nTiles) add(new THREE.Mesh(barbGeometry(tileT, lite ? 7 : 11), barbMaterial({ FS, FSP, FU: FT, LK: LT, PAT: patT, moving: true, tile: true })));
       // (duvet : un court calamus)
       add(new THREE.Mesh(P.radial ? rachisGeometry(2, 8, 8) : rachisGeometry(2), rachisMaterial({ FS, FSP, FU, LK, moving: true, offset: 0 })));
-      if (nTiles) add(new THREE.Mesh(rachisGeometry(nTiles, 16, 5), rachisMaterial({ FS, FSP, FU: FT, LK: LT, moving: false, offset: 2 })));
+      if (nTiles) add(new THREE.Mesh(rachisGeometry(nTiles, 16, 5), rachisMaterial({ FS, FSP, FU: FT, LK: LT, moving: true, offset: 2 })));
       // la gaine de la plume nouvelle
       const tpl = tubeTemplate(64, 20);
       const sg = new THREE.BufferGeometry();
@@ -160,9 +188,26 @@ export function createStage(scene, gen, { lite = false } = {}) {
         const fr = featherFrame(lay.Rd, t.th, t.ph, LIE_BETA(T.radial), LIE.omega, t.yaw);
         tileState.push({ p: fr.p, q: fr.q, scale: t.scale, wear: t.wear, rnd: t.rnd });
       }
-      pending = 0;
+      pending--;
       lastPh = -1;
-    }).catch((e) => { console.error(e); pending = 0; });
+    }).catch((e) => { console.error(e); pending = Math.max(0, pending - 1); });
+    // le sous-duvet (statique, cuit dans le monde) : il arrive avec la plume
+    pending++;
+    gen.request({ shape: P, tile: R.tile, seed: R.seed, lite }, 'down').then((o) => {
+      if (v !== version) return;
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(o.position, 3));
+      g.setAttribute('normal', new THREE.BufferAttribute(o.normal, 3));
+      g.setAttribute('tv', new THREE.BufferAttribute(o.tv, 2));
+      g.setIndex(new THREE.BufferAttribute(o.index, 1));
+      g.computeBoundingSphere();
+      downMesh.geometry.dispose();
+      downMesh.geometry = g;
+      downMesh.material.dispose();
+      downMesh.material = downMaterial();
+      downMesh.visible = true;
+      pending--;
+    }).catch((e) => { console.error(e); pending = Math.max(0, pending - 1); });
     syncLook();
   }
 
@@ -171,21 +216,26 @@ export function createStage(scene, gen, { lite = false } = {}) {
     LK.base.value.set(K.base); LK.mark.value.set(K.mark); LK.down.value.set(K.down); LK.rachis.value.set(K.rachis); LK.sheath.value.set(K.sheath);
     const eye = K.eye ?? ['#000000', '#000000', '#000000', '#000000', '#000000'];
     [LK.eye0, LK.eye1, LK.eye2, LK.eye3, LK.eye4].forEach((u, i) => u.value.set(eye[i]));
-    LK.irid.value = K.irid; LK.iridLo.value = K.iridLo; LK.iridHi.value = K.iridHi; LK.blue.value = K.blue;
+    LK.irid.value = K.irid; LK.iridLo.value = K.iridLo; LK.iridHi.value = K.iridHi; LK.bragg.value = K.bragg ?? 0; LK.iridMark.value = K.iridMark ?? 0; LK.blue.value = K.blue;
     LK.sheen.value = K.sheen; LK.translucency.value = K.translucency;
     bodyU.color.value.set(K.down).lerp(new THREE.Color(K.base), 0.4).multiplyScalar(0.6); // (le duvet sous les plumes)
     // les voisines d'une autre famille (le duvet parmi les plumes de couverture)
     for (const k of Object.keys(LK)) if (LKT[k]) { const a = LK[k].value; if (a?.isColor) LKT[k].value.copy(a); else LKT[k].value = a; }
     const Bd = BIRDS[R.bird];
+    downU.color.value.set(K.down).lerp(new THREE.Color(Bd.tileBase ?? K.base), 0.35).multiplyScalar(0.55);
+    downU.tip.value.set(K.down).multiplyScalar(0.92);
     if (R.tile && Bd.tileBase) { LKT.base.value.set(Bd.tileBase); LKT.mark.value.set(Bd.tileMark); LKT.sheen.value = 0.5; LKT.down.value.set(Bd.tileBase).lerp(new THREE.Color(K.down), 0.5); }
   }
 
   // écrit l'état d'une plume i : position, quaternion, (temps, usure, tirage, visible), (courbure)
-  function put(i, p, q, scale, t, wear, rnd, vis, k) {
-    arr[i * 4].set(p[0], p[1], p[2], scale);
-    arr[i * 4 + 1].set(q[0], q[1], q[2], q[3]);
-    arr[i * 4 + 2].set(t, wear, rnd, vis);
-    arr[i * 4 + 3].set(k, 0, 0, 0);
+  // (K : contact avec le tuyau — étendue de la fente, x0, y0, r ; voir tileContacts)
+  const F = FSTRIDE;
+  function put(i, p, q, scale, t, wear, rnd, vis, K = null) {
+    arr[i * F].set(p[0], p[1], p[2], scale);
+    arr[i * F + 1].set(q[0], q[1], q[2], q[3]);
+    arr[i * F + 2].set(t, wear, rnd, vis);
+    if (K) { arr[i * F + 3].set(K.ext, K.x0, K.y0, K.r); arr[i * F + 4].set(K.split, K.tent, 0, 0); }
+    else { arr[i * F + 3].set(0, 0, 0, 0); arr[i * F + 4].set(0, 0, 0, 0); }
   }
 
   const _v = new THREE.Vector3();
@@ -194,11 +244,11 @@ export function createStage(scene, gen, { lite = false } = {}) {
     const P = R.shape;
     const k = bendOf(P, lay.Rd);
     const jump = lastPh < 0 || Math.abs(ph - lastPh) > 0.02;
-    for (let i = 0; i < (2 + nTiles) * 4; i++) arrP[i].copy(arr[i]);
+    for (let i = 0; i < (2 + nTiles) * FSTRIDE; i++) arrP[i].copy(arr[i]);
     // la nouvelle plume (0)
     const st = settleAt(ph);
     const fr = featherFrame(lay.Rd, lay.thH, 0, betaAt(ph, P.radial), (P.radial ? 0 : LIE.omega) * st);
-    put(0, fr.p, fr.q, 1, ph, wearAt(ph), 0.5, 1, k);
+    put(0, fr.p, fr.q, 1, ph, wearAt(ph), 0.5, 1);
     // l'ancienne (1) : la pose de la nouvelle à u = 1, poussée puis chassée
     const ej = ejection(ph, P, lay);
     const fo = featherFrame(lay.Rd, ej.th, 0, betaAt(1, P.radial), P.radial ? 0 : LIE.omega);
@@ -207,11 +257,16 @@ export function createStage(scene, gen, { lite = false } = {}) {
     q = qmul(qaxis(qrot(q, [0, 1, 0]), ej.roll), q);
     void Y;
     const vis = ph < SCHED.fall[1] + 0.05 && !ej.gone ? 1 : 0;
-    put(1, [fo.p[0] + fo.n[0] * ej.lift, fo.p[1] + fo.n[1] * ej.lift, fo.p[2] + fo.n[2] * ej.lift], q, 1, 1, 1, 0.5, vis, k);
+    put(1, [fo.p[0] + ej.off[0], fo.p[1] + ej.off[1], fo.p[2] + ej.off[2]], q, 1, 1, 1, 0.5, vis);
     // les voisines
-    const kt = bendOf(R.tile ?? P, lay.Rd);
-    for (let j = 0; j < nTiles; j++) { const t = tileState[j]; put(j + 2, t.p, t.q, t.scale, 1, t.wear, t.rnd, 1, kt * t.scale); }
-    if (jump) for (let i = 0; i < (2 + nTiles) * 4; i++) arrP[i].copy(arr[i]);
+    // les voisines, et leur contact avec le tuyau qui sort (gen/feather.js, tileContacts)
+    const kt = bendOf(R.tile ?? P, lay.Rd), T = R.tile ?? P;
+    const C = tileContacts(P, lay, ph, R.tile);
+    for (let j = 0; j < nTiles; j++) {
+      const t = tileState[j], c = C[j];
+      put(j + 2, t.p, t.q, t.scale, 1, t.wear, t.rnd, 1, c.tent > 0 || c.split > 0 ? c : null);
+    }
+    if (jump) for (let i = 0; i < (2 + nTiles) * FSTRIDE; i++) arrP[i].copy(arr[i]);
     lastPh = ph;
 
     // fond, brume, lumières (fixes dans le monde : les ombres ne bougent pas)
@@ -255,10 +310,10 @@ export function createStage(scene, gen, { lite = false } = {}) {
     // l'ancienne, à u → 1 la nouvelle (les deux instances échangent leur rôle
     // au raccord ; l'image, elle, est la même)
     state: () => {
-      const vis = (i) => arr[i * 4 + 2].w > 0.5 && arr[i * 4 + 2].x > 1e-6 && (i > 1 || growth(arr[i * 4 + 2].x, R.shape.L) > 0);
-      const heroes = [0, 1].filter(vis).sort((a, b) => arr[b * 4 + 2].x - arr[a * 4 + 2].x);
+      const vis = (i) => arr[i * F + 2].w > 0.5 && arr[i * F + 2].x > 1e-6 && (i > 1 || growth(arr[i * F + 2].x, R.shape.L) > 0);
+      const heroes = [0, 1].filter(vis).sort((a, b) => arr[b * F + 2].x - arr[a * F + 2].x);
       const ids = [...heroes, ...Array.from({ length: nTiles }, (_, j) => j + 2)];
-      return ids.flatMap((i) => [arr[i * 4], arr[i * 4 + 1], arr[i * 4 + 2]]);
+      return ids.flatMap((i) => [arr[i * F], arr[i * F + 1], arr[i * F + 2], arr[i * F + 3], arr[i * F + 4]]);
     },
     layout: () => lay,
     ready: () => pending === 0,

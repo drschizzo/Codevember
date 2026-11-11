@@ -89,9 +89,9 @@ export function createUI({ recipe: getRecipe, render, on, moods }) {
 
     const K = R.look, lk = () => on.lookChanged();
     for (const [k, l] of [['base', 'Fond du vexille'], ['mark', 'Motif'], ['down', 'Duvet'], ['rachis', 'Rachis'], ['sheath', 'Gaine']]) addC(fLook, K, k).name(l).onChange(lk);
-    add(fLook, K, 'irid', 0, 1, 0.01).name('Irisation').onChange(lk);
-    add(fLook, K, 'iridLo', 100, 900, 1).name('Irisation : épaisseur min (nm)').onChange(lk);
-    add(fLook, K, 'iridHi', 100, 900, 1).name('Irisation : épaisseur max (nm)').onChange(lk);
+    add(fLook, K, 'irid', 0, 1, 0.01).name('Couleur structurale (irisation)').onChange(lk);
+    add(fLook, K, 'bragg', 0, 700, 1).name('Longueur d\'onde de Bragg λ₀ (nm)').onChange(lk);
+    add(fLook, K, 'iridMark', 0, 1, 1).name('Irisée sur le motif seul').onChange(lk);
     add(fLook, K, 'sheen', 0, 1.5, 0.01).name('Lustre des barbules').onChange(lk);
     add(fLook, K, 'translucency', 0, 2, 0.01).name('Translucidité').onChange(lk);
 

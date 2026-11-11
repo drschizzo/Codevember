@@ -31,7 +31,7 @@ function rawPose(R, lay, u) {
   // (la caméra ne suit pas la chute : elle reste sur le follicule, l'ancienne sort du cadre)
   const ej = ejection(Math.min(u, SCHED.fall[0]), P, lay);
   const fo = featherFrame(lay.Rd, ej.th, 0, betaAt(1, P.radial));
-  const tOld = add(add(fo.p, scl(fo.n, ej.lift)), qrot(fo.q, rachisPoint(P.radial ? 0.3 : 0.45, { u: 1, L, k, cal: P.calamus, radial: P.radial, over: P.over }).p));
+  const tOld = add(add(fo.p, ej.off), qrot(fo.q, rachisPoint(P.radial ? 0.3 : 0.45, { u: 1, L, k, cal: P.calamus, radial: P.radial, over: P.over }).p));
   const w = smoother(0.04, 0.24, u);
   const target = add(scl(tOld, 1 - w), scl(tNew, w));
   // distance (en longueurs de plume), plongée, azimut : trois respirations
