@@ -2,83 +2,168 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#050506">
+  <meta name="description" content="Codevember : un thème par jour, une scène procédurale par thème — simulations et géométries génératives, rendu physique en WebGPU, boucles parfaites.">
   <title>Codevember</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;1,9..144,300&family=Inter:wght@300;400&display=swap" rel="stylesheet">
   <style>
-    :root { color-scheme: dark; }
-    body { margin: 0; min-height: 100vh; display: grid; place-content: center; padding: 24px 16px; box-sizing: border-box;
-      background: #010103; color: #e9eef7; font: 16px/1.5 system-ui, sans-serif; }
-    h1 { font-weight: 300; letter-spacing: .04em; margin: 0 0 16px; }
-    ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 18px; }
-    a { color: #d9b56c; font-size: 18px; }
-    p { color: #8a93a6; margin: 4px 0 0; max-width: 36em; }
-    a.lite { font-size: 13px; color: #8a93a6; margin-left: 10px; }
+    :root { color-scheme: dark; --bg: #050506; --fg: #ece8e1; --dim: #8f8a82; --gold: #e9c48a; --line: rgba(255, 240, 220, 0.1); }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { background: var(--bg); }
+    body { color: var(--fg); font: 300 15px/1.55 Inter, system-ui, sans-serif; min-height: 100vh; -webkit-font-smoothing: antialiased; }
+    a { color: inherit; text-decoration: none; }
+    .wrap { max-width: 1240px; margin: 0 auto; padding: 0 max(16px, env(safe-area-inset-left)); }
+
+    /* ── en-tête : le nom, une phrase, le mois (trente jours, ceux qui existent allumés) ── */
+    header { padding: clamp(56px, 12vh, 120px) 0 clamp(36px, 7vh, 64px); }
+    h1 { font: 300 clamp(44px, 8vw, 84px)/1 Fraunces, Georgia, serif; letter-spacing: .01em; }
+    .lede { margin-top: 18px; max-width: 34em; color: var(--dim); font: italic 300 clamp(16px, 2vw, 19px)/1.5 Fraunces, Georgia, serif; }
+    .month { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 30px; align-items: center; }
+    .month a, .month span { width: 9px; height: 9px; border-radius: 50%; border: 1px solid rgba(255, 240, 220, .18); }
+    .month a { background: var(--gold); border-color: var(--gold); opacity: .85; transition: transform .2s, opacity .2s; }
+    .month a:hover, .month a:focus-visible { transform: scale(1.5); opacity: 1; }
+    .month small { margin-left: 10px; color: var(--dim); font-size: 12px; letter-spacing: .06em; }
+
+    /* ── les jours ── */
+    .days { list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: clamp(28px, 4vw, 44px) clamp(20px, 3vw, 32px); padding-bottom: 72px; }
+    .day > a { display: block; outline: none; }
+    .frame { position: relative; aspect-ratio: 16 / 10; border-radius: 10px; overflow: hidden; background: #000; border: 1px solid var(--line); }
+    .frame img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: opacity .9s ease, transform 6s cubic-bezier(.2, .6, .2, 1); }
+    .frame .scene { opacity: 0; transform: scale(1.04); }
+    /* (survol : le dessin du chargement cède la place à la scène, comme à l'ouverture d'un projet) */
+    .day > a:hover .scene, .day > a:focus-visible .scene, .day.show .scene { opacity: 1; transform: scale(1); }
+    .day > a:hover .art, .day > a:focus-visible .art { transform: scale(1.06); }
+    .day > a:focus-visible .frame { outline: 1px solid var(--gold); outline-offset: 3px; }
+    .meta { display: flex; align-items: baseline; gap: 14px; margin-top: 14px; }
+    .num { color: var(--gold); font-size: 11px; letter-spacing: .16em; text-transform: uppercase; white-space: nowrap; }
+    h2 { font: 300 27px/1.1 Fraunces, Georgia, serif; letter-spacing: .01em; }
+    .tag { margin-top: 4px; color: var(--fg); opacity: .78; font: italic 300 16px/1.4 Fraunces, Georgia, serif; }
+    .how { margin-top: 6px; color: var(--dim); font-size: 13px; }
+    .lite { margin-top: 8px; display: inline-block; color: var(--dim); font-size: 12px; letter-spacing: .03em; border-bottom: 1px solid transparent; transition: color .2s, border-color .2s; }
+    .lite:hover, .lite:focus-visible { color: var(--gold); border-color: rgba(233, 196, 138, .4); }
+
+    footer { border-top: 1px solid var(--line); padding: 26px 0 40px; color: var(--dim); font-size: 12.5px; display: flex; flex-wrap: wrap; gap: 8px 28px; justify-content: space-between; }
+    footer kbd { font: 400 11px Inter, system-ui, sans-serif; border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; color: var(--fg); }
+    @media (prefers-reduced-motion: reduce) { .frame img { transition: opacity .4s; transform: none !important; } }
   </style>
 </head>
 <body>
-  <main>
-    <h1>Codevember</h1>
-    <ul>
-      <li>
-        <a href="rust/">Rust</a>
-        <a class="lite" href="rust/?mobile=1" title="Pour les appareils peu puissants : téléphones, tablettes, portables modestes">version légère</a>
-        <p>La remise à nu : une pièce rivetée et boulonnée — nœud de treillis, vanne, roue de locomotive, porte étanche — rouille sous les averses d’une saison en accéléré, depuis le pied des rivets et le creux des angles jusqu’à la croûte écaillée ; puis une machine la décape en temps réel — portique laser, sablage sur plateau tournant, bain d’électrolyse — et la rouille revient. Corrosion calculée sur la géométrie (temps d’humectation, loi de dose, aération différentielle, front géodésique, ruissellement), décapage en forme fermée, six décors, rendu physique (WebGPU), boucle parfaite, export vidéo.</p>
-      </li>
-      <li>
-        <a href="caustic/">Caustic</a>
-        <a class="lite" href="caustic/?mobile=1" title="Pour les appareils peu puissants : téléphones, tablettes, portables modestes">version légère</a>
-        <p>Le foyer des ondes : dans une cuve vue à travers sa vitre, des plongeurs poussent des ondes qui convergent ; à l’instant où elles se rejoignent, la surface devient une lentille et la caustique au fond dessine une diatomée, un oursin, une méduse, une rosace — puis se défait en anneaux. Transport optimal (Monge-Ampère), ondes de capillarité-gravité exactes par FFT sur le GPU, caustiques par déformation de maillage avec dispersion, trois familles (le foyer, le cristal de Faraday, l’allée de Kármán), sept décors, rendu physique (WebGPU), boucle parfaite, export vidéo.</p>
-      </li>
-      <li>
-        <a href="melt/">Melt</a>
-        <a class="lite" href="melt/?mobile=1" title="Pour les appareils peu puissants : téléphones, tablettes, portables modestes">version légère</a>
-        <p>Le dégel d’une étoile : en macro, un cristal de neige pousse d’une gouttelette gelée, puis le soleil sort et il fond — ses branches se rétractent en perles qui remontent vers le centre et s’y rassemblent en une goutte, qui regèle en pointe. Croissance simulée (Gravner-Griffeath), fonte en perles qui conserve l’eau, trois familles (étoile, plaque, colonne qui fond en chapelet), six décors dont un tricot au niveau des fibres et un éclairage de Rheinberg, rendu physique (WebGPU), boucle parfaite, export vidéo.</p>
-      </li>
-      <li>
-        <a href="moss/">Moss</a>
-        <a class="lite" href="moss/?mobile=1" title="Pour les appareils peu puissants : téléphones, tablettes, portables modestes">version légère</a>
-        <p>La reviviscence : une année de mousse sur sa pierre en accéléré — réfugiée dans les fissures à la sécheresse, elle reverdit à la première averse puis s’étend en coussins denses sur la roche, avant de se retirer. Propagation de Fisher-KPP forcée par les saisons, coussins en dômes de milliers de rosettes, roches et écorces procédurales cuites (déplacement et normal map, lichens), quatre familles, six décors, rendu physique (WebGPU), boucle parfaite, export vidéo.</p>
-      </li>
-      <li>
-        <a href="tangle/">Tangle</a>
-        <a class="lite" href="tangle/?mobile=1" title="Pour les appareils peu puissants : téléphones, tablettes, portables modestes">version légère</a>
-        <p>Le tour de trop : un banc d’essai tord une corde suspendue ; sa rayure s’enroule, puis d’un coup elle fait une boucle et s’enroule sur elle-même en torsade, en remontant le balancier ; une came écarte la barre, le balancier tourne et tout se démêle. Trois cycles en crescendo, trois familles (cordon, paire, spirale), sept décors, tiges de Cosserat simulées avec contacts (Lk = Tw + Wr vérifié), rendu physique (WebGPU), boucle parfaite, export vidéo.</p>
-      </li>
-      <li>
-        <a href="fold/">Fold</a>
-        <a class="lite" href="fold/?mobile=1" title="Pour les appareils peu puissants : téléphones, tablettes, portables modestes">version légère</a>
-        <p>La feuille qui se replie : une goutte frappe une feuille, toute la feuille se ferme ; un marteau frappe le pot, toute la plante se ferme, puis se rouvre en accéléré. Quatre manières de plier : la sensitive en peigne, le Biophytum vers le bas, le trèfle en parapluie, la dionée qui claque. Sept décors, signal propagé sur le graphe de la plante, pli sans interpénétration, rendu physique (WebGPU), boucle parfaite, export vidéo.</p>
-      </li>
-      <li>
-        <a href="calcin/">Calcin</a>
-        <a class="lite" href="calcin/?mobile=1" title="Pour les appareils peu puissants : téléphones, tablettes, portables modestes">version légère</a>
-        <p>Le verre brisé, refondu, soufflé, brisé : une pièce de verrier monte d’un bain en fusion, refroidit, puis un pendule, un haut-parleur, un marteau ou un chalumeau la brise ; en caméra rapide, les éclats tombent, se couchent et fondent en bain pour la suivante. Sept décors, fracture exacte, rendu physique (WebGPU), boucle parfaite, export vidéo.</p>
-      </li>
-      <li>
-        <a href="membrane/">Membrane</a>
-        <a class="lite" href="membrane/?mobile=1" title="Pour les appareils peu puissants : téléphones, tablettes, portables modestes">version légère</a>
-        <p>L’éclosion sans fin : des membranes vascularisées se tendent et se déchirent sur leur armature, en simulation physique ; rendu physique avec diffusion sous la surface (WebGPU), scènes générées à partir d’une graine, boucle parfaite, export vidéo.</p>
-      </li>
-      <li>
-        <a href="hollow/">Hollow</a>
-        <a class="lite" href="hollow/?mobile=1" title="Pour les appareils peu puissants : téléphones, tablettes, portables modestes">version légère</a>
-        <p>Une plongée sans fond dans des coquilles creuses emboîtées, générées à partir d’une graine : rendu physique (WebGPU), boucle parfaite, export vidéo.</p>
-      </li>
-      <li>
-        <a href="tesseract/">Tesseract</a>
-        <a class="lite" href="tesseract/?mobile=1" title="Pour les appareils peu puissants : téléphones, tablettes, portables modestes">version légère</a>
-        <p>Un écrin de huit cubes se replie en hypercube, puis la caméra y entre et voyage de pièce en pièce dans l’hypersphère, au fil des rotations 4D : rendu physique (WebGPU), scènes générées à partir d’une graine, boucle parfaite, export vidéo.</p>
-      </li>
-      <li>
-        <a href="planetaire_v2/">Orrery</a>
-        <a class="lite" href="planetaire_v2/?mobile=1" title="Pour les appareils peu puissants : téléphones, tablettes, portables modestes">version légère</a>
-        <p>Planétaire v2 : chaque graine cherche une orbite inédite du problème à N corps (une chorégraphie, solution exacte des équations de Newton), conçoit la machine à engrenages qui la trace, et la met en scène : rendu physique (WebGPU), boucle parfaite, export vidéo.</p>
-      </li>
-      <li>
-        <a href="planetaire/">Planétaire</a>
-        <p>La vie d’un système planétaire, du nuage à la supernova, simulée sur GPU (WebGPU). Nécessite un navigateur compatible WebGPU.</p>
-      </li>
-    </ul>
-  </main>
+  <div class="wrap">
+    <header>
+      <h1>Codevember</h1>
+      <p class="lede">Un thème par jour, une scène par thème. Chaque scène est entièrement calculée — simulation, mathématiques, géométrie générative — rendue en lumière physique, et tourne en boucle parfaite. Une graine, une scène : chaque visite peut en tirer une nouvelle.</p>
+      <nav class="month" aria-label="Les jours de novembre"></nav>
+    </header>
+
+    <ol class="days">
+      <li class="day" id="d01" data-dir="fold"><a href="fold/">
+        <div class="frame"><img class="art" decoding="async" fetchpriority="high" src="home/fold-art.jpg" alt="Dessin du chargement de Fold : la plante pousse puis se replie" width="640" height="400"><img class="scene" decoding="async" data-src="home/fold-scene.jpg" alt="" width="640" height="400"></div>
+        <div class="meta"><span class="num">Day 01</span><h2>Fold</h2></div>
+        <p class="tag">La feuille qui se replie</p>
+        <p class="how">Un choc, et toute la plante se ferme : signal propagé sur le graphe de la plante, pli sans interpénétration.</p>
+      </a><a class="lite" href="fold/?mobile=1">version légère</a></li>
+
+      <li class="day" id="d02" data-dir="calcin"><a href="calcin/">
+        <div class="frame"><img class="art" decoding="async" fetchpriority="high" src="home/shatter-art.jpg" alt="Dessin du chargement de Shatter : le sable fond en verre" width="640" height="400"><img class="scene" decoding="async" data-src="home/shatter-scene.jpg" alt="" width="640" height="400"></div>
+        <div class="meta"><span class="num">Day 02</span><h2>Shatter</h2></div>
+        <p class="tag">Le verre brisé, refondu, soufflé, brisé</p>
+        <p class="how">Une pièce de verrier monte du bain, se brise en caméra rapide, et ses éclats refondent : fracture exacte.</p>
+      </a><a class="lite" href="calcin/?mobile=1">version légère</a></li>
+
+      <li class="day" id="d03" data-dir="melt"><a href="melt/">
+        <div class="frame"><img class="art" decoding="async" fetchpriority="high" src="home/melt-art.jpg" alt="Dessin du chargement de Melt : un cristal de neige pousse" width="640" height="400"><img class="scene" decoding="async" data-src="home/melt-scene.jpg" alt="" width="640" height="400"></div>
+        <div class="meta"><span class="num">Day 03</span><h2>Melt</h2></div>
+        <p class="tag">Le dégel d’une étoile</p>
+        <p class="how">Un cristal de neige pousse, puis fond en perles qui remontent vers son cœur : croissance de Gravner-Griffeath.</p>
+      </a><a class="lite" href="melt/?mobile=1">version légère</a></li>
+
+      <li class="day" id="d04" data-dir="tangle"><a href="tangle/">
+        <div class="frame"><img class="art" decoding="async" src="home/tangle-art.jpg" alt="Dessin du chargement de Tangle : la corde se tord en boucle" width="640" height="400"><img class="scene" decoding="async" data-src="home/tangle-scene.jpg" alt="" width="640" height="400"></div>
+        <div class="meta"><span class="num">Day 04</span><h2>Tangle</h2></div>
+        <p class="tag">Le tour de trop</p>
+        <p class="how">Une corde tordue tour après tour fait soudain une boucle, puis tout se démêle : tiges de Cosserat, Lk = Tw + Wr.</p>
+      </a><a class="lite" href="tangle/?mobile=1">version légère</a></li>
+
+      <li class="day" id="d05" data-dir="moss"><a href="moss/">
+        <div class="frame"><img class="art" decoding="async" src="home/moss-art.jpg" alt="Dessin du chargement de Moss : la mousse s'étend sous les averses" width="640" height="400"><img class="scene" decoding="async" data-src="home/moss-scene.jpg" alt="" width="640" height="400"></div>
+        <div class="meta"><span class="num">Day 05</span><h2>Moss</h2></div>
+        <p class="tag">La reviviscence</p>
+        <p class="how">Une année de mousse sur sa pierre : réfugiée dans les fissures, elle reverdit à l’averse — Fisher-KPP au fil des saisons.</p>
+      </a><a class="lite" href="moss/?mobile=1">version légère</a></li>
+
+      <li class="day" id="d06" data-dir="planetaire_v2"><a href="planetaire_v2/">
+        <div class="frame"><img class="art" decoding="async" src="home/orrery-art.jpg" alt="Dessin du chargement d'Orrery : la recherche d'une orbite" width="640" height="400"><img class="scene" decoding="async" data-src="home/orrery-scene.jpg" alt="" width="640" height="400"></div>
+        <div class="meta"><span class="num">Day 06</span><h2>Orrery</h2></div>
+        <p class="tag">La chorégraphie des astres</p>
+        <p class="how">Chaque graine trouve une orbite inédite du problème à N corps, et la machine à engrenages qui la trace.</p>
+      </a><a class="lite" href="planetaire_v2/?mobile=1">version légère</a></li>
+
+      <li class="day" id="d07" data-dir="hollow"><a href="hollow/">
+        <div class="frame"><img class="art" decoding="async" loading="lazy" src="home/hollow-art.jpg" alt="Dessin du chargement de Hollow : des coquilles emboîtées" width="640" height="400"><img class="scene" decoding="async" data-src="home/hollow-scene.jpg" alt="" width="640" height="400"></div>
+        <div class="meta"><span class="num">Day 07</span><h2>Hollow</h2></div>
+        <p class="tag">La plongée sans fond</p>
+        <p class="how">Des coquilles creuses emboîtées à l’infini, chacune vue par l’oculus de la précédente.</p>
+      </a><a class="lite" href="hollow/?mobile=1">version légère</a></li>
+
+      <li class="day" id="d08" data-dir="tesseract"><a href="tesseract/">
+        <div class="frame"><img class="art" decoding="async" loading="lazy" src="home/tesseract-art.jpg" alt="Dessin du chargement de Tesseract : le patron 4D se replie" width="640" height="400"><img class="scene" decoding="async" data-src="home/tesseract-scene.jpg" alt="" width="640" height="400"></div>
+        <div class="meta"><span class="num">Day 08</span><h2>Tesseract</h2></div>
+        <p class="tag">L’écrin qui se replie en hypercube</p>
+        <p class="how">Huit cubes se replient en hypercube, puis la caméra y voyage de pièce en pièce au fil des rotations 4D.</p>
+      </a><a class="lite" href="tesseract/?mobile=1">version légère</a></li>
+
+      <li class="day" id="d09" data-dir="membrane"><a href="membrane/">
+        <div class="frame"><img class="art" decoding="async" loading="lazy" src="home/membrane-art.jpg" alt="Dessin du chargement de Membrane : la membrane se déchire" width="640" height="400"><img class="scene" decoding="async" data-src="home/membrane-scene.jpg" alt="" width="640" height="400"></div>
+        <div class="meta"><span class="num">Day 09</span><h2>Membrane</h2></div>
+        <p class="tag">L’éclosion sans fin</p>
+        <p class="how">Des membranes vascularisées se tendent et se déchirent sur leur armature, simulées sur le GPU.</p>
+      </a><a class="lite" href="membrane/?mobile=1">version légère</a></li>
+
+      <li class="day" id="d10" data-dir="caustic"><a href="caustic/">
+        <div class="frame"><img class="art" decoding="async" loading="lazy" src="home/caustic-art.jpg" alt="Dessin du chargement de Caustic : la lumière se rassemble sur le motif" width="640" height="400"><img class="scene" decoding="async" data-src="home/caustic-scene.jpg" alt="" width="640" height="400"></div>
+        <div class="meta"><span class="num">Day 10</span><h2>Caustic</h2></div>
+        <p class="tag">Le foyer des ondes</p>
+        <p class="how">Des ondes convergent et la surface devient une lentille : la caustique dessine une diatomée — transport optimal.</p>
+      </a><a class="lite" href="caustic/?mobile=1">version légère</a></li>
+
+      <li class="day" id="d11" data-dir="rust"><a href="rust/">
+        <div class="frame"><img class="art" decoding="async" loading="lazy" src="home/rust-art.jpg" alt="Dessin du chargement de Rust : le front de rouille" width="640" height="400"><img class="scene" decoding="async" data-src="home/rust-scene.jpg" alt="" width="640" height="400"></div>
+        <div class="meta"><span class="num">Day 11</span><h2>Rust</h2></div>
+        <p class="tag">La remise à nu</p>
+        <p class="how">Une pièce rivetée rouille sous les averses d’une saison, puis une machine la décape — corrosion calculée sur la géométrie.</p>
+      </a><a class="lite" href="rust/?mobile=1">version légère</a></li>
+    </ol>
+
+    <footer>
+      <span>WebGPU requis : Chrome, Edge, Safari 26 ou Firefox récents. Sur téléphone, la version légère s’impose d’elle-même.</span>
+      <span>Dans chaque scène : <kbd>N</kbd> nouvelle graine · <kbd>espace</kbd> pause · <kbd>H</kbd> masquer · <kbd>F</kbd> plein écran</span>
+    </footer>
+  </div>
+
+  <script>
+    // Le mois : trente pastilles, les jours parus allumés (liens vers leur carte).
+    (() => {
+      const days = [...document.querySelectorAll('.day')], nav = document.querySelector('.month');
+      for (let d = 1; d <= 30; d++) {
+        const card = days[d - 1];
+        const el = document.createElement(card ? 'a' : 'span');
+        if (card) { el.href = `#${card.id}`; el.title = `Day ${String(d).padStart(2, '0')} · ${card.querySelector('h2').textContent}`; }
+        nav.append(el);
+      }
+      const n = document.createElement('small'); n.textContent = `${days.length} / 30`; nav.append(n);
+      // Les images des scènes ne sont demandées qu'au premier survol (ou, sur un
+      // écran tactile, quand la carte passe au milieu de l'écran) : la page
+      // n'attend que les dessins.
+      const load = (li) => { const s = li.querySelector('.scene'); if (s && !s.src) s.src = s.dataset.src; };
+      for (const li of days) for (const ev of ['pointerenter', 'focusin', 'touchstart']) li.addEventListener(ev, () => load(li), { once: true, passive: true });
+      if (matchMedia('(hover: none)').matches && 'IntersectionObserver' in window) {
+        const io = new IntersectionObserver((es) => { for (const e of es) { if (e.isIntersecting) load(e.target); e.target.classList.toggle('show', e.isIntersecting); } }, { rootMargin: '-35% 0px -35% 0px' });
+        days.forEach((li) => io.observe(li));
+      }
+    })();
+  </script>
 </body>
 </html>

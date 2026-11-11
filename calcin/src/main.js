@@ -150,7 +150,7 @@ async function main() {
     url.searchParams.set('seed', R.seed);
     url.hash = '';
     history.replaceState(null, '', url);
-    document.title = `Calcin · ${R.seed}`;
+    document.title = `Shatter · ${R.seed}`;
   }
 
   // Préparation : pipelines asynchrones, rendus aux moments qui comptent

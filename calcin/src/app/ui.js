@@ -24,7 +24,7 @@ const MECH_PARAMS = {
 };
 
 export function createUI({ recipe: getRecipe, render, on, moods }) {
-  const gui = new GUI({ title: 'Calcin', width: 330 });
+  const gui = new GUI({ title: 'Shatter', width: 330 });
   const state = { fps: '' };
 
   // ── En tête : graine et actions ──

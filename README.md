@@ -50,13 +50,13 @@ La feuille qui se replie. Des plantes sensibles au toucher, dans leur pot, sous 
 
 [![Fold](fold/docs/capture.jpg)](https://drschizzo.github.io/Codevember/fold/)
 
-## [Calcin](calcin/)
+## [Shatter](calcin/)
 
 Le verre brisé, refondu, soufflé, brisé. D’un bain de verre en fusion monte une pièce de verrier (verre à pied, carafe à anse et bouchon, amphore, flacon…), côtelée, torse ou festonnée, parfois filigranée. Elle refroidit, puis une machine la brise : pendule à bille d’acier, haut-parleur, marteau de percussion, chalumeau. La scène est filmée en caméra rapide : les éclats tombent sous une gravité vraie, se couchent sur la sole, puis fondent en bain pour la pièce suivante. Fracture exacte dans une métrique propre à chaque déclencheur, physique analytique dans les shaders, sept décors (atelier et son four, stroboscope, laboratoire, plein soleil, lumière noire, cathédrale, givre), scènes procédurales à partir d’une graine, boucle parfaite exportable en MP4.
 
 [Démo en ligne](https://drschizzo.github.io/Codevember/calcin/) · [version légère](https://drschizzo.github.io/Codevember/calcin/?mobile=1) · [documentation](calcin/README.md) · [concept](calcin/docs/concept.md)
 
-[![Calcin](calcin/docs/capture.jpg)](https://drschizzo.github.io/Codevember/calcin/)
+[![Shatter](calcin/docs/capture.jpg)](https://drschizzo.github.io/Codevember/calcin/)
 
 ## [Membrane](membrane/)
 

@@ -1,4 +1,4 @@
-// Calcin — dessin de l'écran de chargement (dans le worker de loaderWorker.js).
+// Shatter — dessin de l'écran de chargement (dans le worker de loaderWorker.js).
 //
 // Le verre se fait avec du sable (et du verre brisé). Au départ, un sablier :
 // un filet de sable tombe sur un tas. Dès que la recette arrive, le sable
