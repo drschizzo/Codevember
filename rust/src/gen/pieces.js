@@ -16,7 +16,7 @@
 // EDGE laiton / bronze), `stand` (le support : OUT chêne, IN acier peint),
 // `info` (boîte englobante, points de levage, hauteur du crochet).
 import { Buffers, OUT, IN, EDGE, add, sub, mul, norm, cross, dot } from './mesh.js';
-import { frame, P, slab, prism, angleProfile, revolve, rivet, bolt, stud, hexPrism, washer, threadEnd, loft, roundPoly, ringSweep, eyeBolt, earClip } from './parts.js';
+import { frame, P, slab, slabRing, prism, angleProfile, revolve, rivet, bolt, stud, hexPrism, washer, threadEnd, loft, roundPoly, ringSweep, eyeBolt, padeye, earClip } from './parts.js';
 import { roundedBox } from './mesh.js';
 import { createRng } from '../rng.js';
 
@@ -182,16 +182,21 @@ function buildNode(p, rng) {
     const onChord = abs(q[1] - (y0 + gc)) < 1e-6;
     rivetsOn([q], sd * (tg / 2 + (onChord ? tc : tm)), sd);
   }
-  // ── pitons de levage : sur les deux barres extrêmes, dessus de l'aile
+  // ── oreilles de levage : au bout des deux barres extrêmes, une plaque
+  // serrée entre les deux cornières (dans le jeu du gousset), rivetée,
+  // qui dépasse vers le haut — côté pointe de l'aile ou côté talon (entre les
+  // ailes saillantes) selon le sens de la barre
   const bySpread = members.slice().sort((a, b) => a.th - b.th);
   for (const m of [bySpread[0], bySpread[bySpread.length - 1]]) {
-    const s = m.s0 + m.len - 0.06;
-    const q = [m.dir[0] * s + m.e[0] * (0.72 * am), wy + m.dir[1] * s + m.e[1] * (0.72 * am)];
-    // (vissé dans le chant de l'aile dans le plan, vers le haut de la barre)
-    const nrm = [m.e[0], m.e[1], 0];
-    const up = nrm[1] < 0 ? mul(nrm, -1) : nrm;
-    const base = [q[0] + (up === nrm ? 0 : -0.0) , q[1], 0];
-    lifts.push(eyeBolt(B, [base[0] + up[0] * (up === nrm ? 0 : am), base[1] + up[1] * (up === nrm ? 0 : am), tg / 2 + tm / 2], up, [0, 0, 1], 0.018, STEEL));
+    B.piece = rng.int(0, 255);
+    const s = m.s0 + m.len - 0.07;
+    const toe = m.e[1] >= 0, up = toe ? [m.e[0], m.e[1], 0] : [-m.e[0], -m.e[1], 0];
+    const v = toe ? 0.72 * am : -0.28 * am;
+    const base = [m.dir[0] * s + m.e[0] * v, wy + m.dir[1] * s + m.e[1] * v, 0];
+    lifts.push(padeye(B, base, up, [0, 0, 1], STEEL, { inset: 0.06, t: tg }));
+    // rivet à travers les deux cornières et l'oreille
+    const vr = toe ? 0.72 * am - 0.03 : -0.28 * am + 0.042, q = [m.dir[0] * s + m.e[0] * vr, wy + m.dir[1] * s + m.e[1] * vr];
+    for (const sd of [1, -1]) rivet(B, [q[0], q[1], sd * (tg / 2 + tm)], [0, 0, sd], 0.014, STEEL);
   }
   // ── support : deux cales de chêne sous les ailes de la membrure
   for (const xs of [-1, 1]) {
@@ -263,7 +268,7 @@ function buildValve(p, rng) {
   revolve(B, frame([0, yN, 0], [0, 1, 0], [1, 0, 0]), [[0, 0], [rp * 0.95, 0], [rp * 0.95, yF - yN - 0.05], [rp * 1.0, yF - yN - 0.03], [Db / 2 - 0.006, yF - yN - 0.006], [Db / 2, yF - yN], [Db / 2, yF - yN + 0.018], [Db / 2 - 0.004, yF - yN + 0.022], [0, yF - yN + 0.022]], CAST, { M: 64, smooth: 0.5 });
   B.piece = rng.int(0, 255);
   const yb = yF + 0.022, hb = 0.16;
-  revolve(B, frame([0, yb, 0], [0, 1, 0], [1, 0, 0]), [[0, 0], [Db / 2 - 0.004, 0], [Db / 2, 0.004], [Db / 2, 0.018], [Db / 2 - 0.006, 0.022], [rp * 0.9, 0.03], [rp * 0.75, hb * 0.6], [rp * 0.55, hb * 0.85], [0.055, hb], [0.055, hb + 0.06], [0.07, hb + 0.06], [0.07, hb + 0.075], [0, hb + 0.075]], CAST, { M: 64, smooth: 0.5 });
+  revolve(B, frame([0, yb, 0], [0, 1, 0], [1, 0, 0]), [[0, 0], [Db / 2 - 0.004, 0], [Db / 2, 0.004], [Db / 2, 0.018], [Db / 2 - 0.006, 0.022], [rp * 0.9, 0.03], [rp * 0.75, hb * 0.6], [rp * 0.55, hb * 0.85], [0.055, hb], [0.055, hb + 0.055], [0.095, hb + 0.058], [0.095, hb + 0.075], [0, hb + 0.075]], CAST, { M: 64, smooth: 0.5 });
   flangeBolts(yF, nbb, Db / 2 - 0.025, 0.016, frame([0, yF + 0.011, 0], [0, 1, 0], [1, 0, 0]), 0.011);
   // presse-étoupe (bronze) et ses deux goujons
   const yG = yb + hb + 0.075;
@@ -271,7 +276,11 @@ function buildValve(p, rng) {
   revolve(B, frame([0, yG, 0], [0, 1, 0], [1, 0, 0]), [[0, 0], [0.045, 0], [0.045, 0.03], [0.04, 0.034], [0.03, 0.034], [0.03, 0.05], [0, 0.05]], BRONZE, { M: 40, smooth: 0.6 });
   B.piece = rng.int(0, 255);
   slab(B, { o: [0, yG + 0.03, 0], X: [1, 0, 0], Y: [0, 0, -1], Z: [0, 1, 0] }, roundPoly([[-0.1, -0.03], [0.1, -0.03], [0.1, 0.03], [-0.1, 0.03]], 0.03, 6), 0.016, 0.004, BRONZE);
-  for (const s of [-1, 1]) stud(B, [s * 0.075, yG + 0.03 + 0.008, 0], [0, 1, 0], 0.012, 0.03, STEEL);
+  for (const s of [-1, 1]) {
+    stud(B, [s * 0.075, yG + 0.03 + 0.008, 0], [0, 1, 0], 0.012, 0.03, STEEL);
+    // (la tige du goujon descend à travers le fouloir dans le bossage du chapeau)
+    revolve(B, frame([s * 0.075, yG - 0.012, 0], [0, 1, 0], [1, 0, 0]), [[0, 0], [0.006, 0], [0.006, 0.05], [0, 0.05]], STEEL, { M: 12 });
+  }
   // arcade : deux bras qui montent du chapeau vers la tête
   const yT = yG + 0.3;
   for (const s of [-1, 1]) {
@@ -309,21 +318,23 @@ function buildValve(p, rng) {
   }
   // pitons sur les brides pleines
   const lifts = [];
-  for (const s of [-1, 1]) { B.piece = rng.int(0, 255); lifts.push(eyeBolt(B, [s * (L + 0.012), yp + Df / 2, 0], [0, 1, 0], [1, 0, 0], 0.016, STEEL)); }
+  for (const s of [-1, 1]) { B.piece = rng.int(0, 255); lifts.push(eyeBolt(B, [s * (L - tf / 2), yp + Df / 2, 0], [0, 1, 0], [1, 0, 0], 0.011, STEEL)); }
   // ── support : deux sellettes (cale de chêne + berceau peint)
   for (const s of [-1, 1]) {
     const x = s * (L * 0.62);
     S.piece = rng.int(0, 255);
-    const hB = yp - rp - 0.05;
+    // berceau (acier peint) cintré au rayon du tuyau, qui le porte ; semelle
+    // sous le berceau ; cale de chêne sous la semelle
+    const yc0 = yp - rp - 0.012, hB = yc0 - 0.024;
     block(S, [x, hB / 2, 0], [0.09, hB / 2, 0.2]);
     S.piece = rng.int(0, 255);
-    // berceau : plaque cintrée sous la conduite
     const prof = [];
-    for (let j = 0; j <= 14; j++) { const a = -PI / 2 - 0.9 + (1.8 * j) / 14; prof.push([cos(a) * (rp + 0.008), sin(a) * (rp + 0.008)]); }
-    for (let j = 14; j >= 0; j--) { const a = -PI / 2 - 0.9 + (1.8 * j) / 14; prof.push([cos(a) * (rp + 0.02), sin(a) * (rp + 0.02)]); }
+    for (let j = 0; j <= 14; j++) { const a = -PI / 2 - 0.9 + (1.8 * j) / 14; prof.push([cos(a) * rp, sin(a) * rp]); }
+    for (let j = 14; j >= 0; j--) { const a = -PI / 2 - 0.9 + (1.8 * j) / 14; prof.push([cos(a) * (rp + 0.012), sin(a) * (rp + 0.012)]); }
     prism(S, { o: [x, yp, 0], X: [0, 0, 1], Y: [0, 1, 0], Z: [-1, 0, 0] }, prof, -0.035, 0.035, PAINT, { smooth: 0.5 });
-    // (le berceau repose sur la cale : pieds)
-    roundedBox(S, [x, hB + 0.012, 0], [0.04, 0.012, rp * 0.9], 0.004, 3, PAINT, PAINT);
+    roundedBox(S, [x, hB + 0.012, 0], [0.045, 0.012, rp * 0.9], 0.004, 3, PAINT, PAINT);
+    // âme verticale qui relie le berceau à la semelle
+    roundedBox(S, [x, (hB + 0.024 + yp - rp * 0.6) / 2, 0], [0.006, (yp - rp * 0.6 - hB - 0.024) / 2, rp * 0.75], 0.002, 2, PAINT, PAINT);
   }
   return { B, S, lifts };
 }
@@ -395,10 +406,12 @@ function buildWheel(p, rng) {
   revolve(B, Fz(-0.6), [[0, 0], [0.085, 0], [0.09, 0.005], [0.09, 0.5], [0.095, 0.5], [0.095, 0.71], [0.08, 0.72], [0.06, 0.73], [0, 0.73]], STEEL, { M: 48, smooth: 0.6 });
   hexPrism(B, frame([0, yc, 0.11], [0, 0, 1]), 0.12, 0.05, STEEL, { both: true });
   threadEnd(B, [0, yc, 0.16], [0, 0, 1], 0.06, 0.025, 0.006, STEEL);
-  // pitons de levage : vissés dans le bandage, en haut, de part et d'autre
-  // (les élingues montent droit au crochet sans rien traverser)
-  const lifts = [];
-  for (const s of [-1, 1]) { B.piece = rng.int(0, 255); const a = PI / 2 + s * 0.32, d = [cos(a), sin(a), 0]; lifts.push(eyeBolt(B, [d[0] * R, yc + d[1] * R, 0.012], d, [0, 0, 1], 0.016, STEEL)); }
+  // levage : deux élingues en étrangloir, l'une autour du maneton (devant la
+  // roue), l'autre autour de l'essieu (derrière) ; elles montent à la
+  // verticale, hors du plan de la roue, jusqu'à un palonnier (voir machinery.js)
+  const pinZ = 0.12, axZ = -0.5;
+  const lifts = [[cp[0], cp[1] + 0.05 + 0.009, pinZ], [0, yc + 0.09 + 0.009, axZ]];
+  const loops = [{ c: [cp[0], cp[1], pinZ], r: 0.05 + 0.009 }, { c: [0, yc, axZ], r: 0.09 + 0.009 }];
   // ── support : coupon de rail sur deux traverses, cales, chevalet sous l'essieu
   {
     // rail (profil Vignole) le long de x, à z = boudin
@@ -418,7 +431,7 @@ function buildWheel(p, rng) {
     const ze = -0.4;
     block(S, [0, (yc - 0.09) / 2, ze], [0.22, (yc - 0.09) / 2 - 0.0, 0.08]);
   }
-  return { B, S, lifts };
+  return { B, S, lifts, loops, spreader: true };
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -428,16 +441,18 @@ function buildDoor(p, rng) {
   const B = new Buffers(1 << 17), S = new Buffers();
   const W = p.width, H = p.height, base = 0.12;
   const bw = W + 0.42, bh = H + 0.36;
-  const cy = base + 0.07 + bh / 2; // centre de la cloison
+  // (l'ouverture est remontée de 10 cm dans la cloison : la poignée du taquet
+  // du bas reste au-dessus de la cornière du pied)
+  const cy = base + 0.17 + bh / 2; // centre de l'ouverture
   const tb = 0.01;
   const XY = (z) => ({ o: [0, cy, z], X: [1, 0, 0], Y: [0, 1, 0], Z: [0, 0, 1] });
-  // cloison
-  B.piece = rng.int(0, 255);
-  slab(B, XY(tb / 2), roundPoly([[-bw / 2, -bh / 2], [bw / 2, -bh / 2], [bw / 2, bh / 2], [-bw / 2, bh / 2]], 0.02, 3), tb, 0.003, STEEL);
   // contour de la porte (rectangle à grands congés, ou ovale)
   const opening = p.oval
     ? Array.from({ length: 64 }, (_, i) => { const a = (i / 64) * 2 * PI; const c = cos(a), s = sin(a); return [W / 2 * Math.sign(c) * abs(c) ** 0.6, H / 2 * Math.sign(s) * abs(s) ** 0.6]; })
     : roundPoly([[-W / 2, -H / 2], [W / 2, -H / 2], [W / 2, H / 2], [-W / 2, H / 2]], 0.16, 8);
+  // cloison percée de l'ouverture (le battant la ferme depuis l'avant)
+  B.piece = rng.int(0, 255);
+  slabRing(B, XY(tb / 2), roundPoly([[-bw / 2, -bh / 2 - 0.1], [bw / 2, -bh / 2 - 0.1], [bw / 2, bh / 2], [-bw / 2, bh / 2]], 0.02, 3), opening, tb, STEEL);
   // hiloire : cornière balayée le long du contour, aile à plat sur la cloison
   const ca = 0.075, ct = 0.011;
   B.piece = rng.int(0, 255);
@@ -459,7 +474,7 @@ function buildDoor(p, rng) {
   const ccwOpen = (() => { let a = 0; for (let i = 0; i < oc.length; i++) { const p0 = oc[i], q = oc[(i + 1) % oc.length]; a += p0[0] * q[1] - q[0] * p0[1]; } return a < 0 ? oc.slice().reverse() : oc; })();
   for (const q of along(ccwOpen, ca * 0.6, 0.085)) { B.piece = rng.int(0, 255); rivet(B, [q[0], cy + q[1], tb + ct], [0, 0, 1], 0.017, STEEL); }
   // battant : tôle posée contre l'arête de l'aile saillante, débordant de 3 cm
-  const zl = tb + ca + 0.004, tl = 0.012;
+  const zl = tb + ca - 0.0005, tl = 0.012; // (le battant porte sur l'arête de l'aile)
   const leaf = along(ccwOpen, 0.03, 0.02);
   B.piece = rng.int(0, 255);
   slab(B, XY(zl + tl / 2), leaf, tl, 0.004, STEEL);
@@ -492,7 +507,7 @@ function buildDoor(p, rng) {
     B.piece = rng.int(0, 255);
     revolve(B, frame([c[0], c[1], tb + 0.012], [0, 0, 1], [1, 0, 0]), [[0, 0], [0.022, 0], [0.022, 0.07], [0.018, 0.075], [0, 0.076]], STEEL, { M: 24, smooth: 0.7 });
     // bras : du tourillon vers l'intérieur, au-dessus du battant (coin)
-    const tipIn = 0.07, zA = zs + 0.014;
+    const tipIn = 0.07, zA = zs + 0.0105; // (le coin du bras serre le battant)
     const pts = [];
     for (let j = 0; j <= 10; j++) { const t = j / 10; pts.push([c[0] - out2[0] * (tipIn * t) , c[1] - out2[1] * (tipIn * t), tb + 0.075 + (zA - tb - 0.075) * min(1, t * 1.6)]); }
     loft(B, pts, (i) => [0.016, 0.011], STEEL, { nr: 12, up: [0, 0, 1], caps: true });
@@ -502,26 +517,31 @@ function buildDoor(p, rng) {
     loft(B, hp, () => [0.011, 0.011], STEEL, { nr: 12, up: [0, 0, 1] });
     revolve(B, frame(hp[10], [out2[0], out2[1], 0.15]), (() => { const pr = [[0, -0.018]]; for (let j = 1; j < 10; j++) { const a = -PI / 2 + (PI * j) / 10; pr.push([0.018 * cos(a), 0.018 * sin(a)]); } pr.push([0, 0.018]); return pr; })(), STEEL, { M: 16, smooth: 1.2 });
   }
-  // charnières (côté gauche) : pentures rivetées sur le battant, nœuds et axe
+  // charnières (côté gauche) : penture rivetée sur le battant qui se termine
+  // par un nœud ; console rivetée à la cloison, qui porte le second nœud ;
+  // un axe à tête traverse les deux
   for (const hy of [H * 0.3, -H * 0.3]) {
     B.piece = rng.int(0, 255);
-    const x0 = -W / 2 - 0.03, y = cy + hy;
-    slab(B, { o: [0, 0, zs + 0.005], X: [1, 0, 0], Y: [0, 1, 0], Z: [0, 0, 1] }, roundPoly([[x0 - 0.02, y - 0.035], [x0 + 0.34, y - 0.025], [x0 + 0.36, y], [x0 + 0.34, y + 0.025], [x0 - 0.02, y + 0.035]], 0.01, 3), 0.01, 0.003, STEEL);
+    const x0 = -W / 2 - 0.03, y = cy + hy, zk = zs + 0.012, xk = x0 - 0.045, rk = 0.02;
+    slab(B, { o: [0, 0, zs + 0.005], X: [1, 0, 0], Y: [0, 1, 0], Z: [0, 0, 1] }, roundPoly([[xk, y - 0.03], [x0 + 0.34, y - 0.025], [x0 + 0.36, y], [x0 + 0.34, y + 0.025], [xk, y + 0.03]], 0.01, 3), 0.01, 0.003, STEEL);
     for (const xr of [0.08, 0.17, 0.26]) rivet(B, [x0 + xr, y, zs + 0.01], [0, 0, 1], 0.014, STEEL);
-    B.piece = rng.int(0, 255);
-    const xk = x0 - 0.05;
-    revolve(B, frame([xk, y - 0.07, (tb + zs) / 2 + 0.02], [0, 1, 0], [1, 0, 0]), [[0, 0], [0.024, 0], [0.026, 0.004], [0.026, 0.136], [0.024, 0.14], [0, 0.14]], STEEL, { M: 24, smooth: 0.7 });
-    revolve(B, frame([xk, y + 0.07, (tb + zs) / 2 + 0.02], [0, 1, 0], [1, 0, 0]), [[0, 0], [0.012, 0], [0.012, 0.02], [0.02, 0.022], [0.02, 0.032], [0, 0.034]], STEEL, { M: 16, smooth: 0.7 });
-    // patte de cloison
-    slab(B, { o: [0, 0, tb + 0.005], X: [1, 0, 0], Y: [0, 1, 0], Z: [0, 0, 1] }, roundPoly([[xk - 0.09, y - 0.06], [xk + 0.01, y - 0.06], [xk + 0.01, y + 0.06], [xk - 0.09, y + 0.06]], 0.01, 3), 0.01, 0.003, STEEL);
-    for (const yr of [-0.035, 0.035]) rivet(B, [xk - 0.06, y + yr, tb + 0.01], [0, 0, 1], 0.014, STEEL);
+    // nœud de la penture (haut) et nœud de la console (bas)
+    revolve(B, frame([xk, y, zk], [0, 1, 0], [1, 0, 0]), [[0.006, 0], [rk, 0], [rk + 0.002, 0.003], [rk + 0.002, 0.057], [rk, 0.06], [0.006, 0.06]], STEEL, { M: 24, smooth: 0.7 });
+    revolve(B, frame([xk, y - 0.062, zk], [0, 1, 0], [1, 0, 0]), [[0.006, 0], [rk, 0], [rk + 0.002, 0.003], [rk + 0.002, 0.057], [rk, 0.06], [0.006, 0.06]], STEEL, { M: 24, smooth: 0.7 });
+    // axe à tête
+    revolve(B, frame([xk, y - 0.07, zk], [0, 1, 0], [1, 0, 0]), [[0, 0], [0.008, 0], [0.008, 0.14], [0.014, 0.142], [0.014, 0.152], [0, 0.153]], STEEL, { M: 16, smooth: 0.8 });
+    // console : plaque dans le plan (x, z) qui va de la cloison au nœud bas,
+    // pied plat riveté sur la cloison
+    slab(B, { o: [0, y - 0.032, 0], X: [1, 0, 0], Y: [0, 0, 1], Z: [0, 1, 0] }, roundPoly([[xk - 0.07, tb], [xk + 0.005, tb], [xk + 0.005, zk], [xk - 0.02, zk + 0.012], [xk - 0.07, tb + 0.03]], 0.004, 2), 0.012, 0.003, STEEL);
+    slab(B, { o: [0, 0, tb + 0.005], X: [1, 0, 0], Y: [0, 1, 0], Z: [0, 0, 1] }, roundPoly([[xk - 0.1, y - 0.07], [xk + 0.005, y - 0.07], [xk + 0.005, y + 0.005], [xk - 0.1, y + 0.005]], 0.008, 3), 0.01, 0.003, STEEL);
+    for (const yr of [-0.05, -0.012]) rivet(B, [xk - 0.08, y + yr, tb + 0.01], [0, 0, 1], 0.012, STEEL);
   }
   // plaque de laiton (accent) rivetée aux quatre coins
   {
     B.piece = rng.int(0, 255);
     const py = cy + H * 0.36, pw = 0.2, ph = 0.07, px = p.oval ? 0 : -W * 0.22;
-    slab(B, { o: [px, py, zs + 0.0025], X: [1, 0, 0], Y: [0, 1, 0], Z: [0, 0, 1] }, roundPoly([[-pw / 2, -ph / 2], [pw / 2, -ph / 2], [pw / 2, ph / 2], [-pw / 2, ph / 2]], 0.008, 3), 0.004, 0.0015, BRONZE);
-    for (const [a, b] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) rivet(B, [px + a * (pw / 2 - 0.014), py + b * (ph / 2 - 0.014), zs + 0.0045], [0, 0, 1], 0.007, BRONZE, 10);
+    slab(B, { o: [px, py, zs + 0.0019], X: [1, 0, 0], Y: [0, 1, 0], Z: [0, 0, 1] }, roundPoly([[-pw / 2, -ph / 2], [pw / 2, -ph / 2], [pw / 2, ph / 2], [-pw / 2, ph / 2]], 0.008, 3), 0.004, 0.0015, BRONZE);
+    for (const [a, b] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) rivet(B, [px + a * (pw / 2 - 0.014), py + b * (ph / 2 - 0.014), zs + 0.0039], [0, 0, 1], 0.007, BRONZE, 10);
   }
   // pied : cornière rivetée au bas de la cloison, sur deux madriers ; goussets derrière
   B.piece = rng.int(0, 255);
@@ -537,7 +557,12 @@ function buildDoor(p, rng) {
   for (const xs of [-1, 1]) { S.piece = rng.int(0, 255); block(S, [xs * (bw / 2 - 0.2), base / 2, -0.1], [0.08, base / 2, 0.36]); }
   // pitons en haut de la cloison
   const lifts = [];
-  for (const s of [-1, 1]) { B.piece = rng.int(0, 255); lifts.push(eyeBolt(B, [s * (bw / 2 - 0.12), yb + bh, tb / 2], [0, 1, 0], [1, 0, 0], 0.018, STEEL)); }
+  for (const s of [-1, 1]) {
+    B.piece = rng.int(0, 255);
+    const x = s * (bw / 2 - 0.12);
+    lifts.push(padeye(B, [x, yb + bh, tb + 0.006], [0, 1, 0], [0, 0, 1], STEEL, { inset: 0.07, t: 0.012 }));
+    for (const dx of [-0.022, 0.022]) rivet(B, [x + dx, yb + bh - 0.045, tb + 0.012], [0, 0, 1], 0.012, STEEL);
+  }
   return { B, S, lifts };
 }
 
@@ -566,8 +591,34 @@ export function pieceParams(family, rng) {
 
 export function buildPiece({ family, params, seed }) {
   const rng = createRng(`${seed}:${family}`);
-  const { B, S, lifts } = FAMILIES[family].build(params, rng);
+  const { B, S, lifts, loops = [], spreader = false } = FAMILIES[family].build(params, rng);
   const body = B.out(), stand = S.out();
   const [lo, hi] = bbox(body.position);
-  return { body, stand, info: { lo, hi, lifts, verts: B.n, standVerts: S.n } };
+  return { body, stand, info: { lo, hi, lifts, loops, spreader, hook: hookPoint(body.position, lifts, hi, spreader), verts: B.n, standVerts: S.n } };
+}
+
+// point du crochet : au-dessus du milieu des points de levage, assez haut
+// pour qu'aucune élingue ne passe à moins de 3 cm de la pièce (on monte le
+// crochet par pas de 2 cm jusqu'à ce que les deux segments soient dégagés).
+// Avec un palonnier, le crochet est au-dessus du palonnier, lui-même
+// au-dessus de la pièce.
+export function hookPoint(pos, lifts, hi, spreader) {
+  const mx = (lifts[0][0] + lifts[1][0]) / 2, mz = (lifts[0][2] + lifts[1][2]) / 2;
+  if (spreader) return [mx, hi[1] + 0.12 + 0.45, mz];
+  const clear = (h) => {
+    for (const L of lifts) {
+      const H = [mx, h, mz], d = [H[0] - L[0], H[1] - L[1], H[2] - L[2]], len = Math.hypot(...d);
+      for (let i = 0; i < pos.length; i += 3) {
+        const v = [pos[i] - L[0], pos[i + 1] - L[1], pos[i + 2] - L[2]];
+        const t = (v[0] * d[0] + v[1] * d[1] + v[2] * d[2]) / (len * len);
+        if (t * len < 0.07 || t > 1) continue; // (près de l'oreille : contact voulu)
+        const q = [v[0] - d[0] * t, v[1] - d[1] * t, v[2] - d[2] * t];
+        if (q[0] * q[0] + q[1] * q[1] + q[2] * q[2] < 0.03 * 0.03) return false;
+      }
+    }
+    return true;
+  };
+  let h = Math.max(lifts[0][1], lifts[1][1]) + 0.32;
+  while (h < hi[1] + 1.5 && !clear(h)) h += 0.02;
+  return [mx, h, mz];
 }

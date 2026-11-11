@@ -383,3 +383,61 @@ export function eyeBolt(B, p, n, t, d, s) {
   B.noFrame();
   return add(c, mul(n, R)); // point d'accroche (haut de l'anneau)
 }
+
+// oreille de levage : plaque percée (le trou est réel : couronne de
+// révolution) dont le pied est fixé à la pièce, et la manille (anneau) qui
+// passe dans le trou et porte sur son bord haut quand on lève.
+// base : point du bord d'où sort l'oreille ; up : direction de l'oreille ;
+// nrm : normale de la plaque (axe du trou) ; inset : longueur du pied
+// engagée dans la pièce ; t : épaisseur. Renvoie le haut de la manille.
+export function padeye(B, base, up, nrm, s, { inset = 0.04, t = 0.012, ringS = s } = {}) {
+  up = norm(up); nrm = norm(nrm);
+  const side = cross(up, nrm);
+  slab(B, { o: base, X: side, Y: up, Z: nrm }, roundPoly([[-0.04, -inset], [0.04, -inset], [0.04, 0], [0.023, 0.03], [-0.023, 0.03], [-0.04, 0]], [0.004, 0.004, 0.01, 0.004, 0.004, 0.01], 3), t, Math.min(0.003, t / 2 - 1e-4), s);
+  const hc = add(base, mul(up, 0.055));
+  revolve(B, { o: add(hc, mul(nrm, -t / 2)), X: up, Y: side, Z: nrm }, [[0.013, 0], [0.034, 0], [0.034, t], [0.013, t], [0.013, 0]], s, { M: 32, smooth: 0.5 });
+  const Rr = 0.03, c = add(hc, mul(up, 0.006 + Rr));
+  use(B, { o: c, X: up, Y: nrm, Z: side });
+  const rows = [];
+  for (let j = 0; j <= 10; j++) {
+    const th = (2 * PI * j) / 10, row = [];
+    for (let i = 0; i < 32; i++) { const ph = (2 * PI * i) / 32, dd = [cos(ph), sin(ph), 0], nn = [cos(th) * dd[0], cos(th) * dd[1], sin(th)]; row.push(B.vert([dd[0] * Rr + nn[0] * 0.006, dd[1] * Rr + nn[1] * 0.006, nn[2] * 0.006], nn, ringS)); }
+    rows.push(row);
+  }
+  B.grid(rows, true);
+  B.noFrame();
+  return add(c, mul(up, Rr + 0.006));
+}
+
+// tôle percée : contour extérieur et ouverture (tous deux convexes autour de
+// l'origine du repère), épaisseur t selon Z centrée. Faces planes cousues
+// rayon par rayon (même angle sur les deux contours), chants droits arrondis
+// par leurs normales.
+export function slabRing(B, F, outer, inner, t, s, N = 160) {
+  use(B, F);
+  const at = (poly, a) => { // intersection du rayon d'angle a avec le contour
+    const d = [cos(a), sin(a)];
+    let best = 0;
+    for (let i = 0; i < poly.length; i++) {
+      const p = poly[i], q = poly[(i + 1) % poly.length], e = [q[0] - p[0], q[1] - p[1]];
+      const den = d[0] * e[1] - d[1] * e[0]; if (abs(den) < 1e-12) continue;
+      const tt = (p[0] * e[1] - p[1] * e[0]) / den, u = (p[0] * d[1] - p[1] * d[0]) / den;
+      if (tt > 0 && u >= -1e-9 && u <= 1 + 1e-9) best = Math.max(best, tt);
+    }
+    return [d[0] * best, d[1] * best];
+  };
+  const O = [], I = [];
+  for (let k = 0; k < N; k++) { const a = (2 * PI * k) / N; O.push(at(outer, a)); I.push(at(inner, a)); }
+  for (const [z, nz] of [[t / 2, 1], [-t / 2, -1]]) {
+    const ro = O.map((p) => B.vert([p[0], p[1], z], [0, 0, nz], s, [1, 0, 0])), ri = I.map((p) => B.vert([p[0], p[1], z], [0, 0, nz], s, [1, 0, 0]));
+    B.grid([ro, ri], true);
+  }
+  // chants (normales sortantes de la matière : vers l'extérieur sur le contour
+  // extérieur, vers le centre de l'ouverture sur le contour intérieur)
+  for (const [P2, sg] of [[O, 1], [I, -1]]) {
+    const Nn = P2.map((p, k) => { const a = P2[(k + N - 1) % N], b = P2[(k + 1) % N]; const tn = norm([b[0] - a[0], b[1] - a[1], 0]); return [tn[1] * sg, -tn[0] * sg, 0]; });
+    const rows = [-t / 2, t / 2].map((z) => P2.map((p, k) => B.vert([p[0], p[1], z], Nn[k], s, [0, 0, 1])));
+    B.grid(rows, true);
+  }
+  B.noFrame();
+}

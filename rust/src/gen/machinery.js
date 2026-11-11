@@ -280,8 +280,34 @@ function buildBath(s) {
     for (let k = 0; k <= 16; k++) { const a = -PI / 2 + (k / 16) * PI * 1.35; hk.push([hxp + 0.045 * sin(a) * -1, hy + 0.0 - 0.045 * cos(a) + 0.045 * 0, hzp]); }
     loft(B, [[hxp + 0.0, hy + 0.08, hzp], ...hk], (i) => [0.014, 0.011], STEEL, { nr: 12, up: [0, 0, 1], caps: true });
     // élingues : chaînes du crochet aux pitons
-    // élingues : chaînes de la manille du crochet aux pitons
-    for (const lp of lifts) chainRun(B, [hxp, hy - 0.035, hzp], lp, 0.042, 0.009, 0.004);
+    if (s.spreader) {
+      // palonnier (poutrelle) au-dessus de la pièce ; deux chaînes du crochet à
+      // ses bouts ; deux élingues verticales des bouts aux étrangloirs
+      const yb2 = hy - 0.45, ends = lifts.map((L) => [L[0], yb2, L[2]]);
+      const d = sub(ends[1], ends[0]), len = Math.hypot(...d), ax = norm(d);
+      const F = { o: ends[0], X: ax, Y: [0, 1, 0], Z: norm(cross(ax, [0, 1, 0])) };
+      // (axe du palonnier : X du repère ; le profil d'I est dans (Z, Y))
+      ibeam(B, { o: ends[0], X: F.Z, Y: [0, 1, 0], Z: ax }, 0.1, 0.06, 0.006, 0.008, -0.05, len + 0.05, PAINT);
+      for (const E of ends) {
+        // oreille soudée sous le palonnier et anneau
+        revolve(B, frame(add(E, [0, -0.05, 0]), F.Z), [[0.012, -0.006], [0.03, -0.006], [0.03, 0.006], [0.012, 0.006], [0.012, -0.006]], PAINT, { M: 24 });
+        chainRun(B, add(E, [0, 0.05, 0]), [hxp, hy - 0.035, hzp], 0.042, 0.009, 0.004);
+      }
+      lifts.forEach((L, i) => chainRun(B, L, add(ends[i], [0, -0.06, 0]), 0.042, 0.009, 0.004));
+      // étrangloirs : une boucle de maillons autour du maneton et de l'essieu
+      for (const lp of s.loops ?? []) {
+        const n = Math.max(8, Math.round((2 * Math.PI * lp.r) / 0.033)), F2 = [];
+        for (let k = 0; k < n; k++) {
+          const a = (k / n) * 2 * Math.PI, c = add(lp.c, [Math.cos(a) * lp.r, Math.sin(a) * lp.r, 0]), t = [-Math.sin(a), Math.cos(a), 0];
+          const Y = k % 2 ? [0, 0, 1] : [Math.cos(a), Math.sin(a), 0];
+          chainLink(B, { o: c, X: t, Y, Z: cross(t, Y) }, 0.042, 0.009, 0.004, STEEL, 20, 8);
+          F2.push(c);
+        }
+      }
+    } else {
+      // élingues : chaînes de la manille du crochet aux oreilles
+      for (const lp of lifts) chainRun(B, [hxp, hy - 0.035, hzp], lp, 0.042, 0.009, 0.004);
+    }
     // chaîne de levage (vers le palan, longue : la part au-dessus du palan est masquée)
     chainRun(B, [hxp, hy + 0.225, hzp], [hxp, hy + 3.3, hzp], 0.044, 0.009, 0.004);
     parts.hook = B.out();

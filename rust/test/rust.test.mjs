@@ -123,7 +123,7 @@ test('sablage : le plateau fait un nombre entier de tours ; la buse atteint chaq
 test('bain : la pièce descend toute entière sous le niveau, remonte, et ressort décapée', () => {
   for (const fam of Object.keys(FAMILIES)) {
     const { R, P } = scene('z9', 'bain', fam);
-    const plan = bathPlan(R, P.info.lo, P.info.hi, P.info.lifts);
+    const plan = bathPlan(R, P.info.lo, P.info.hi, P.info.lifts, P.info.hook);
     const U = plan.u;
     assert.ok(P.info.hi[1] + bathOffset(plan, (U.down1 + U.up0) / 2) < plan.L, 'le haut de la pièce reste hors du bain');
     assert.ok(P.info.lo[1] + plan.rest > 0.05, 'au repos, la pièce touche le sol');
@@ -209,7 +209,7 @@ test('rien ne se traverse : machines et pièce à tous les instants', async () =
     // bain : la pièce reste dans la fosse (marges) et au-dessus de son fond
     {
       const { R, P } = scene('z9', 'bain', fam);
-      const plan = bathPlan(R, P.info.lo, P.info.hi, P.info.lifts);
+      const plan = bathPlan(R, P.info.lo, P.info.hi, P.info.lifts, P.info.hook);
       const T = plan.tank;
       assert.ok(P.info.lo[0] > T.cx - T.hx + 0.05 && P.info.hi[0] < T.cx + T.hx - 0.05 && P.info.lo[2] > T.cz - T.hz + 0.08 && P.info.hi[2] < T.cz + T.hz - 0.08);
       for (let u = 0; u < 1; u += 0.001) assert.ok(P.info.lo[1] + bathOffset(plan, u) > -T.depth + 0.05, `${fam} : la pièce touche le fond en ${u}`);
@@ -224,5 +224,33 @@ test('lien partagé : une recette retouchée se relit à l\'identique', async ()
     R.rust.pits = 30; R.camera.fov = 28;
     const back = upgrade(JSON.parse(JSON.stringify(R)));
     assert.deepEqual(back, R);
+  }
+});
+
+test('aucune pièce ne flotte : chaque élément touche le sol de proche en proche', async () => {
+  const { floatingGroups } = await import('../src/gen/audit.js');
+  for (const fam of Object.keys(FAMILIES)) for (const s of ['a1', 'b7', 'k3']) {
+    const R = generate(s, { family: fam });
+    const P = buildPiece({ family: fam, params: R.piece.params, seed: s });
+    const A = floatingGroups([['pièce', P.body], ['support', P.stand]]);
+    assert.equal(A.groups.length, 0, `${fam}/${s} : ${JSON.stringify(A.groups)}`);
+  }
+});
+
+test('les élingues ne traversent pas la pièce', () => {
+  for (const fam of Object.keys(FAMILIES)) for (const s of ['a1', 'b7']) {
+    const R = generate(s, { family: fam });
+    const P = buildPiece({ family: fam, params: R.piece.params, seed: s });
+    const pos = P.body.position, I = P.info;
+    const segs = I.spreader ? I.lifts.map((L) => [L, [L[0], I.hook[1] - 0.5, L[2]]]) : I.lifts.map((L) => [L, I.hook]);
+    for (const [A, B] of segs) {
+      const d = B.map((v, k) => v - A[k]), len = Math.hypot(...d);
+      for (let i = 0; i < pos.length; i += 3) {
+        const v = [pos[i] - A[0], pos[i + 1] - A[1], pos[i + 2] - A[2]], t = (v[0] * d[0] + v[1] * d[1] + v[2] * d[2]) / (len * len);
+        if (t * len < 0.07 || t > 1) continue;
+        const q = v.map((x, k) => x - d[k] * t);
+        assert.ok(Math.hypot(...q) >= 0.025, `${fam}/${s} : l'élingue passe à ${Math.hypot(...q).toFixed(3)} m de la pièce`);
+      }
+    }
   }
 });
