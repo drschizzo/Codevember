@@ -182,6 +182,16 @@
         "caustic"
       ],
       "port": 8100
+    },
+    {
+      "name": "rust",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        ".claude/serve.py",
+        "8110",
+        "rust"
+      ],
+      "port": 8110
     }
   ]
 }
