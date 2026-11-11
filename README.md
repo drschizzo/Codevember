@@ -2,6 +2,14 @@
 
 Expériences de creative coding, publiées sur [drschizzo.github.io/Codevember](https://drschizzo.github.io/Codevember/).
 
+## [Mirage](mirage/)
+
+L'objet qui n'est pas là. Un mirascope : deux coupes d'argent poli posées l'une sur l'autre, chaque sommet au foyer de l'autre, celle du haut percée. Une toupie, une montre de poche ou une bougie chauffe-plat repose au fond ; on la voit flotter dans l'ouverture, nette et en relief — une image réelle, faite de rayons qui se croisent dans le vide, tournée d'un demi-tour. Une crémaillère soulève le couvercle : l'image s'enfonce dans la cavité et s'éteint (ses rayons s'échappent par le jour entre les coupes), la caméra descend découvrir l'objet au fond, puis le couvercle redescend et l'image revient. Lancer de rayons au pixel en TSL (intersections rayon–paraboloïde sous forme stable, neuf rebonds sur l'argent, objets en SDF de révolution posés exactement sur le fond courbe, flamme intégrée le long des rayons), image d'un point trouvée par moindres carrés sur ses rayons sortants (en f + h, vérifiée par des tests), mécanisme à crémaillère emboîté par la profondeur, trois familles, quatre décors pensés pour que l'argent ait quelque chose à refléter, écran de chargement qui trace les rayons d'un point jusqu'à son image, boucle parfaite exportable en MP4.
+
+[Démo en ligne](https://drschizzo.github.io/Codevember/mirage/) · [version légère](https://drschizzo.github.io/Codevember/mirage/?mobile=1) · [documentation](mirage/README.md) · [concept](mirage/docs/concept.md)
+
+[![Mirage](mirage/docs/capture.jpg)](https://drschizzo.github.io/Codevember/mirage/)
+
 ## [Tension](tension/)
 
 Ce qui tient ne pousse pas. Des sculptures de tenségrité — des barres d'acier qui ne se touchent pas, tenues en l'air par des câbles — avancent sur un sol nu sans roue ni pied : de petits treuils enroulent leurs propres câbles. Le Culbute, un prisme à six barres, se penche jusqu'à basculer (au ralenti de caméra rapide) ; la Chenille fait courir une onde de contraction sur ses patins à écailles ; le Cerceau, une roue de vélo, laisse tomber son moyeu vers l'avant et roule après lui. Forme d'équilibre trouvée par relaxation (la torsion π/2 − π/n du prisme), dynamique XPBD à câbles unilatéraux, contact et frottement anisotrope, amortissement structural des modes mous, culbutes trouvées par simulation et rejouées par les symétries du prisme, cycle limite refermé par point fixe, câbles mous en arc de longueur exacte, sol invariant par le pas, trois familles, sept décors, écran de chargement qui tend la structure puis dessine la chronophotographie du pas, boucle parfaite exportable en MP4.
