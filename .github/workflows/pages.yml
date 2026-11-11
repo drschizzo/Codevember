@@ -27,11 +27,12 @@ jobs:
 
       # site statique : la page d'index et chaque expérience — tout dossier de
       # premier niveau qui contient un index.html (une expérience par dossier),
-      # sans les outils ni la documentation
+      # sans les outils ni la documentation ; plus les vignettes de l’accueil (home/)
       - name: Assembler le site
         run: |
           mkdir -p _site
           cp index.html _site/
+          cp -r home _site/   # (vignettes de la page d'accueil)
           for d in */; do
             d=${d%/}
             if [ "$d" != _site ] && [ -f "$d/index.html" ]; then
