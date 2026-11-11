@@ -2,6 +2,14 @@
 
 Expériences de creative coding, publiées sur [drschizzo.github.io/Codevember](https://drschizzo.github.io/Codevember/).
 
+## [Labyrinth](labyrinth/)
+
+Le dédale qu’on retourne. On ne marche pas dans ce labyrinthe : on le tourne. Un automate de noyer, de marbre ou de laque incline un plateau de quelques degrés par deux manivelles et deux bielles, ou fait pivoter un disque dressé par une courroie, et la gravité conduit une bille de 12 mm à travers les couloirs : elle roule, bute au fond d’une impasse, chute d’un couloir à l’autre, saute d’anneau en anneau, trouve la sortie ; une rigole ou une poche de noria la rend à l’entrée. Labyrinthes tirés uniformément parmi les arbres couvrants (algorithme de Wilson) sur des grilles carrées et polaires, bille qui roule sans glisser sur un plan incliné ou tournant (équation de Weltner), film du Plateau piloté le long du chemin, rotations du Cadran et de la Roue trouvées par une recherche en largeur sur des rotations simulées, trois familles, six décors, écran de chargement qui rejoue le calcul, boucle parfaite exportable en MP4.
+
+[Démo en ligne](https://drschizzo.github.io/Codevember/labyrinth/) · [version légère](https://drschizzo.github.io/Codevember/labyrinth/?mobile=1) · [documentation](labyrinth/README.md) · [concept](labyrinth/docs/concept.md)
+
+[![Labyrinth](labyrinth/docs/capture.jpg)](https://drschizzo.github.io/Codevember/labyrinth/)
+
 ## [Feather](feather/)
 
 La plume en tuyau. Dans le plumage d’un oiseau, une plume nouvelle pousse roulée dans sa gaine de kératine et chasse l’ancienne, qui glisse sur le dos et tombe ; la gaine s’effrite de la pointe vers la base, les deux moitiés du tube s’ouvrent comme un livre et deviennent les vexilles, sans s’étirer ; les barbes, d’abord libres, s’agrafent l’une à l’autre et le motif — barres, chevrons, taches, ocelle — apparaît en entier ; la plume se couche dans sa rangée, s’use, et la suivante la chasse. Croissance dans le collier du follicule d’après Prum et Williamson (hélices des crêtes de barbes, déroulement isométrique), motif déposé rangée par rangée par une réaction-diffusion activateur-inhibiteur sur l’anneau du collier, barbes posées dans le vertex shader, plumage en tuiles qui ne se traversent pas ; quatre familles (le vexille qui s’ouvre et s’agrafe, l’ocelle du paon, la houppe du duvet, la cascade de l’autruche), douze oiseaux, sept décors, boucle parfaite exportable en MP4.

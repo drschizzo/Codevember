@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#050506">
+  <title>Labyrinth · défis techniques</title>
+  <meta name="description" content="Comment Labyrinth est calculé : labyrinthes uniformes de Wilson, bille qui roule sur un plan incliné ou tournant, pilote du plateau, recherche en largeur sur des rotations simulées, bielles et boucle parfaite.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+  <link rel="stylesheet" href="../home/explainer.css">
+</head>
+<body>
+  <nav class="top"><div class="in">
+    <a href="../">Codevember</a><span class="day">Day 13</span><span class="crumb">Labyrinth · défis techniques</span>
+    <span class="sp"></span><a class="open" href="./">Ouvrir la scène</a>
+  </div></nav>
+
+  <main>
+    <header class="hero">
+      <div class="kicker">Day 13 · Labyrinth · le dédale qu'on retourne</div>
+      <h1>Comment un automate conduit une bille à travers un labyrinthe en le tournant</h1>
+      <p class="lede">On ne déplace jamais la bille : un plateau s'incline de quelques degrés, ou un disque dressé pivote, et la gravité fait le reste. Le labyrinthe est tiré au hasard, mais le trajet doit réussir à coup sûr, ne rien traverser, et revenir exactement à son point de départ pour que le film boucle. Tout le film est donc une simulation physique, planifiée puis enregistrée.</p>
+    </header>
+
+    <figure class="cover">
+      <img src="docs/capture.jpg" alt="Une roue labyrinthe de noyer à filets de nickel sur son chevalet, la courroie et la poulie du moteur au pied" width="1920" height="1080">
+      <figcaption>Cabinet, Roue (graine s7) : le disque penché de 12° tourne sur un palier porté par un chevalet ; la bille d'acier reste en bas pendant que le labyrinthe tourne au-dessus d'elle. Au pied, la poulie du moteur et la courroie ronde.</figcaption>
+    </figure>
+
+    <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
+
+    <article>
+      <section id="wilson">
+        <h2><span class="n">01</span>Le labyrinthe est un arbre couvrant tiré uniformément</h2>
+        <span class="src">src/gen/maze.js · wilson()</span>
+        <p>Un labyrinthe parfait — un seul chemin entre deux cellules — est un arbre couvrant de la grille des cellules. Les algorithmes usuels ont chacun leur signature : le retour arrière en profondeur creuse de longs couloirs sinueux et peu d'impasses, Prim et Kruskal hérissent le labyrinthe de culs-de-sac d'une cellule. Pour que le labyrinthe ne trahisse pas sa fabrication, on le tire <em>uniformément</em> parmi tous les arbres couvrants, par l'algorithme de Wilson : depuis une cellule hors de l'arbre, une marche aléatoire erre ; chaque fois qu'elle recoupe son propre tracé, la boucle est effacée ; quand elle touche l'arbre, ce qui reste d'elle y est greffé et devient couloir.</p>
+        <p>La même fonction travaille sur une grille rectangulaire et sur une grille polaire (anneaux subdivisés) : elle ne voit qu'une liste de voisins.</p>
+        <figure id="fig-wilson"><figcaption><b>La marche à boucles effacées, rejouée.</b> Le module du projet, avec sa graine : la marche en cours en ambre, les couloirs greffés en clair. La première marche est longue (l'arbre n'a qu'une cellule), les suivantes de plus en plus courtes. C'est aussi l'écran de chargement de la scène.</figcaption></figure>
+        <div class="note check"><b>Vérifié</b><p>Sur une grille 2 × 2, les quatre arbres couvrants sortent chacun environ 1 000 fois sur 4 000 tirages (écart toléré : 120). Chaque labyrinthe de la scène a exactement <i>N</i> − 1 passages et est connexe.</p></div>
+      </section>
+
+      <section id="anneaux">
+        <h2><span class="n">02</span>Toute brèche laisse passer la bille</h2>
+        <span class="src">src/gen/maze.js · polarRings()</span>
+        <p>Les cellules font 22 mm, les parois 4 mm d'épaisseur, et un poteau de 2,7 mm de rayon couvre chaque jonction. La bille fait 12 mm. Sur une grille carrée, un passage laisse 22 − 2 × 2,7 = 16,6 mm : rien à craindre. Sur une grille polaire, la largeur d'une cellule dépend du rayon : si l'on double le nombre de secteurs trop tôt, les cellules intérieures deviennent plus étroites que la bille.</p>
+        <p>La règle : un anneau double son nombre de secteurs seulement si, après doublement, chaque cellule garde au moins 0,92 × 22 mm d'arc <em>à son rayon intérieur</em> — là où la brèche est la plus étroite. La chambre centrale fait 22 mm de rayon.</p>
+        <div class="note trap"><b>Le piège</b><p>Avec une chambre de 15 mm, la brèche vers le premier anneau mesurait 15 mm de corde moins deux poteaux : 9,6 mm pour une bille de 12. Le pilote poussait la bille contre l'arc sans jamais passer, et le film échouait (« bille bloquée »).</p></div>
+        <figure id="fig-anneaux"><figcaption><b>Les anneaux et leurs brèches.</b> En rouge, les brèches entre poteaux plus étroites que la bille. Le seuil du projet (0,92) n'en laisse aucune ; abaissez-le pour voir la règle naïve échouer.</figcaption></figure>
+      </section>
+
+      <section id="weltner">
+        <h2><span class="n">03</span>Une bille qui roule sur un disque qui tourne n'obéit pas à Coriolis</h2>
+        <span class="src">src/gen/physics.js · step()</span>
+        <p>La bille roule sans glisser : sur un plan incliné de θ, elle accélère de <span>\(\tfrac57 g\sin\theta\)</span>, pas de <span>\(g\sin\theta\)</span>, parce qu'une part de l'énergie la fait tourner. Sur le Cadran et la Roue, le plan lui-même tourne. On serait tenté d'écrire les forces d'inertie du repère tournant (centrifuge, Coriolis) et de les multiplier par 5/7 ; c'est faux. Le contact sans glissement avec une surface qui se déplace change tout : sur un plateau tournant horizontal, une bille décrit un cercle à <span>\(\tfrac27\Omega\)</span> (Weltner, 1979). Dans le repère inertiel :</p>
+        <div class="eq">\[ \dot{\mathbf v} = \tfrac57\,\frac{\mathbf F}{m} + \tfrac27\left(\dot\Omega\times\mathbf x + \Omega\times\mathbf v\right) \]</div>
+        <p>Ramenée dans le repère du disque, où sont les parois (<i>J</i> : rotation d'un quart de tour) :</p>
+        <div class="eq">\[ \mathbf a = \tfrac57\left(\mathbf g_\parallel + \Omega^2\mathbf x - \dot\Omega\,J\mathbf x\right) - \tfrac{12}{7}\,\Omega\,J\mathbf v \]</div>
+        <p>Le pas est de 1/960 s. Les contacts sont des distances signées à des capsules, des arcs épaissis, des poteaux et au cadre ; choc à restitution 0,38 au-dessus de 25 mm/s, contact au repos en dessous ; frottement contre la paroi (le point de contact équatorial glisse à la vitesse de la bille) ; résistance au roulement 0,0035 ; sur les disques, un amortissement de 0,9 s⁻¹, sans lequel la bille au fond d'un anneau se balance plusieurs secondes comme un pendule.</p>
+        <div class="note trap"><b>Le piège</b><p>L'équation juste ne suffit pas : intégrée en Euler semi-implicite au pas de 1/960 s, une bille lancée sur un plateau tournant revenait 25 mm à côté de son point de départ après un tour de 14 s (les termes d'inertie couplent position et vitesse). La partie lisse est intégrée au point milieu : l'écart tombe à 0,008 mm.</p></div>
+        <figure id="fig-weltner"><figcaption><b>Une bille lancée à 60 mm/s sur un plateau tournant, sans gravité motrice.</b> Trajectoire vue d'en haut, dans le repère du laboratoire, calculée par <code>step()</code> du projet : un cercle parcouru à 2/7 de la vitesse du plateau. En pointillé, ce que donnerait « Coriolis × 5/7 ».</figcaption></figure>
+      </section>
+
+      <section id="pilote">
+        <h2><span class="n">04</span>Le pilote du plateau anticipe le temps de bascule</h2>
+        <span class="src">src/gen/plan.js · simulatePlateau()</span>
+        <p>Sur le Plateau, le film n'est pas une trajectoire imposée : c'est une simulation pilotée. Le pilote suit le chemin — la solution, plus une à trois impasses de 2 à 5 cellules visitées jusqu'au fond, puis le tour de la rigole jusqu'à l'entrée — et commande les deux angles du cardan. La gravité voulue <span>\(\mathbf g_\parallel = \tfrac75\mathbf a\)</span> donne les angles par <span>\(\mathbf g_\parallel = (g\sin\beta\cos\alpha,\ -g\sin\alpha)\)</span>, bornés à 5,5° et tournés par des servomoteurs à 40°/s au plus.</p>
+        <p>La vitesse visée au point <i>s</i> du chemin est la plus petite des vitesses qui permettent de s'arrêter (ou de passer un coude à 55 mm/s) au point suivant, en tenant compte du temps que met le plateau à basculer :</p>
+        <div class="eq">\[ v(s) = \min_k \sqrt{v_k^2 + 2\,a_f\,\max(0,\ s_k - s - v\,\tau)},\quad \tau = 0{,}16\ \text{s} \]</div>
+        <div class="note trap"><b>Le piège</b><p>Sans le terme <span>\(v\tau\)</span>, la bille arrivait au premier coude à 141 mm/s, le plateau mettait 0,4 s à s'incliner dans l'autre sens, et elle dépassait le coude de 19 mm — assez pour s'engager dans le couloir voisin, où le pilote la poussait contre une paroi. Une branche d'impasse coupée à 5 cellules alors qu'elle continuait plus loin a produit le même blocage : seules les impasses entières sont visitées.</p></div>
+        <figure id="fig-pilote"><figcaption><b>Un film de Plateau, relu.</b> Labyrinthe 9 × 7 de la graine choisie, simulé par le module du projet au chargement de la page (quelques dixièmes de seconde). La flèche est la gravité dans le plan du plateau ; la traînée, les deux dernières secondes de la bille.</figcaption></figure>
+      </section>
+
+      <section id="recherche">
+        <h2><span class="n">05</span>Les rotations du cadran sont trouvées par une recherche sur des rotations simulées</h2>
+        <span class="src">src/gen/plan.js · searchDisc()</span>
+        <p>Sur un disque dressé, on ne pilote pas la bille : on choisit des rotations, et la bille fait ce que la gravité lui dicte — chuter jusqu'à la paroi suivante, rebondir, rester en bas d'un anneau, être soulevée par une cloison. Plutôt que de modéliser ces comportements, on les <em>simule</em>. Un état est la cellule où la bille s'arrête et l'angle du disque au huitième de tour ; une transition est une rotation de ±90° ou 180° (±45° aussi pour la Roue) à secousse minimale, suivie de l'arrêt de la bille. La recherche en largeur trouve la plus courte suite de rotations qui fait sortir la bille par la porte de sortie. Le film est la suite exacte de ces simulations : ce qu'on voit est ce qui a été cherché.</p>
+        <p>Ensuite le retour : le disque tourne dans un seul sens, une <b>poche</b> qui coupe la rigole soulève la bille comme une noria, et au sommet — où la gravité pointe vers le centre — elle retombe par l'entrée.</p>
+        <div class="note trap"><b>Le piège</b><p>Le premier Cadran s'arrêtait après le retour à un angle quelconque (248°) : la gravité n'était plus alignée sur les couloirs, la bille finissait dans des coins, et la recherche ne trouvait que 5 états. Le Cadran s'arrête désormais sur un multiple de 90°.</p></div>
+        <figure id="fig-recherche"><figcaption><b>Un Cadran, relu.</b> Labyrinthe 7 × 7 planifié par le module du projet (recherche comprise) ; la liste des rotations s'affiche à côté. Le disque est dessiné de face, sans son inclinaison de 12°.</figcaption></figure>
+        <div class="note"><b>La graine reste maîtresse</b><p>Si un labyrinthe ne donne pas un bon film — moins de 4 ou plus de 12 rotations, plus de 52 s, raccord non atteint —, on essaie <code>graine~1</code>, <code>graine~2</code>… La scène reste entièrement déterminée par la graine, et l'écran de chargement rejoue le labyrinthe retenu.</p></div>
+      </section>
+
+      <section id="bielles">
+        <h2><span class="n">06</span>Les bielles gardent leur longueur</h2>
+        <span class="src">src/kin.js · crankAngle()</span>
+        <p>Le plateau tourne autour du centre d'un cardan, <span>\(R = R_x(\alpha)\,R_y(\beta)\)</span>. Deux moteurs posés sur le socle portent chacun une manivelle de 15 mm ; une bielle de 66 mm à rotules relie le maneton à un point 12 mm sous la dalle, sous le bord proche (α) et sous le bord gauche (β). L'angle de la manivelle n'est pas une approximation linéaire de l'inclinaison : il est résolu par Newton pour que la distance du maneton à la rotule reste exactement 66 mm. Pour 5,5°, les manivelles tournent d'environ 35°.</p>
+        <figure id="fig-bielle"><figcaption><b>Une bielle-manivelle, vue de côté.</b> L'inclinaison du plateau commande ; l'angle de la manivelle est celui que calcule <code>plateauPose()</code>. La longueur affichée ne bouge pas.</figcaption></figure>
+        <div class="note check"><b>Vérifié</b><p>Sur toute la boucle : bielles à 66 mm près de 10⁻⁶ mm, manivelles sous ±69°, maneton au-dessus du socle, dessous de la dalle au-dessus des carters des moteurs. Pour les disques : le plateau balayé passe au-dessus du socle et la poulie reste sous son bord, visible.</p></div>
+      </section>
+
+      <section id="boucle">
+        <h2><span class="n">07</span>La boucle se referme par un point fixe</h2>
+        <span class="src">src/gen/plan.js · simulateFilm(), close()</span>
+        <p>Une simulation ne revient jamais exactement à son point de départ. Le film commence donc à l'état où il finit : on simule depuis un état, on prend l'état d'arrivée comme nouveau départ, et l'on recommence jusqu'à un écart sous 0,03 mm (Plateau) ou 0,05 mm (disques). Le reste — quelques centièmes de millimètre, bille arrêtée — est fondu dans la dernière demi-seconde. Le disque finit à un nombre entier de tours de son départ, la poulie (rapport 5) aussi. L'orientation propre de la bille, qui se voit sur une agate, est raccordée par une rotation résiduelle répartie sur toute la boucle.</p>
+        <div class="note check"><b>Vérifié</b><p>Aucune traversée de paroi sur aucune image du film (sept scènes, trois familles), avec un témoin qui doit échouer ; raccord de la caméra et de toutes les pièces sous 3·10⁻⁷ ; aucun saut d'une image à l'autre ; la bille ne part pas tant que le plateau est à plat ; caméra sous 25°/s.</p></div>
+      </section>
+
+      <section id="budget">
+        <h2><span class="n">08</span>Budget</h2>
+        <div class="tbl"><table>
+          <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
+          <tbody>
+            <tr><td>Labyrinthe (Wilson) et film du Plateau</td><td>worker</td><td class="num">0,1 – 0,4 s</td></tr>
+            <tr><td>Film d'un disque (recherche en largeur, essais de labyrinthes)</td><td>worker</td><td class="num">0,1 – 10 s</td></tr>
+            <tr><td>Maillages de l'appareil</td><td>worker</td><td class="num">20 – 50 ms</td></tr>
+            <tr><td>Image, qualité Haute, 1920 × 1080 (six humeurs)</td><td>GPU</td><td class="num">4,8 – 9,3 ms</td></tr>
+            <tr><td>Pipelines compilées sous l'écran de chargement</td><td>GPU</td><td class="num">55</td></tr>
+          </tbody>
+        </table></div>
+        <p>Temps d'image mesurés dans le panneau de navigateur de l'application, sur le GPU d'un Mac, panneau masqué (rendus d'affilée, boucle arrêtée).</p>
+      </section>
+    </article>
+    <footer class="end">
+      <a href="./">Ouvrir Labyrinth</a>
+      <a href="https://github.com/drschizzo/Codevember/blob/main/labyrinth/README.md">README</a>
+      <a href="https://github.com/drschizzo/Codevember/blob/main/labyrinth/docs/concept.md">La démarche</a>
+      <span class="sp"></span>
+      <a href="../">Tous les jours</a>
+    </footer>
+  </main>
+
+  <script type="module">
+    import { demo, C, TAU, lerp, label, alpha, arrow } from '../home/explainer.js';
+    import { buildMaze, polarRings, DIM } from './src/gen/maze.js';
+    import { step, newBall } from './src/gen/physics.js';
+    import { simulateFilm } from './src/gen/plan.js';
+    import { layout, plateauPose, sampleFilm, mat } from './src/kin.js';
+
+    // dessin d'un labyrinthe (parois) dans un rectangle
+    function drawWalls(g, M, cx, cy, k, rot = 0, col = C.ink) {
+      const c = Math.cos(rot), s = Math.sin(rot), P = (x, y) => [cx + (x * c - y * s) * k, cy - (x * s + y * c) * k];
+      g.strokeStyle = col; g.lineWidth = Math.max(1, DIM.hw * 2 * k); g.lineCap = 'round';
+      for (const w of M.walls) {
+        g.beginPath();
+        if (w.t === 'seg') { g.moveTo(...P(w.ax, w.ay)); g.lineTo(...P(w.bx, w.by)); }
+        else if (w.t === 'arc') { for (let i = 0; i <= 16; i++) { const a = w.a0 + (w.a1 - w.a0) * i / 16; const p = P(w.cx + w.r * Math.cos(a), w.cy + w.r * Math.sin(a)); i ? g.lineTo(...p) : g.moveTo(...p); } }
+        else if (w.t === 'outRect') { const q = [[-w.hx, -w.hy], [w.hx, -w.hy], [w.hx, w.hy], [-w.hx, w.hy]].map(([x, y]) => P(x, y)); g.moveTo(...q[0]); for (const p of q.slice(1)) g.lineTo(...p); g.closePath(); }
+        else if (w.t === 'outCircle') { for (let i = 0; i <= 64; i++) { const a = i / 64 * TAU, p = P(w.r * Math.cos(a), w.r * Math.sin(a)); i ? g.lineTo(...p) : g.moveTo(...p); } }
+        g.stroke();
+      }
+    }
+
+    // ── 01 · Wilson ──
+    demo('#fig-wilson', {
+      title: 'Wilson, marche à boucles effacées', aspect: 1.9, animate: true,
+      controls: [{ key: 'speed', label: 'Pas par image', min: 1, max: 40, step: 1, value: 6 }],
+      buttons: [{ label: 'Autre graine', onClick: (d) => { d.state.seed = (d.state.seed ?? 0) + 1; d.reset(); } }],
+      setup(d) {
+        const ev = [];
+        const M = buildMaze({ topo: 'grid', nx: 15, ny: 8, c: 22, seed: `w${d.state.seed ?? 0}`, family: 'plateau' }, { walk: (u, v) => ev.push([0, u, v]), graft: (E) => ev.push([1, E]) });
+        Object.assign(d.state, { M, ev, k: 0, walk: [], carved: [] });
+      },
+      draw(g, d) {
+        const S = d.state, M = S.M, k = Math.min(d.h * 0.9 / (8 * 22), d.w * 0.9 / (15 * 22));
+        for (let i = 0; i < d.s.speed && S.k < S.ev.length; i++, S.k++) {
+          const e = S.ev[S.k];
+          if (e[0] === 0) { if (!S.walk.length) S.walk.push(e[1]); const j = S.walk.indexOf(e[2]); if (j >= 0) S.walk.length = j + 1; else S.walk.push(e[2]); }
+          else { S.carved.push(...e[1]); S.walk = []; }
+        }
+        if (S.k >= S.ev.length && (S.hold = (S.hold ?? 0) + d.dt) > 2.5) { S.seed = (S.seed ?? 0) + 1; d.reset(); return; }
+        const P = (i) => [d.w / 2 + M.cells[i].x * k, d.h / 2 - M.cells[i].y * k];
+        g.lineCap = 'round'; g.strokeStyle = alpha(C.c1, .55); g.lineWidth = 22 * k * .6;
+        for (const [a, b] of S.carved) { g.beginPath(); g.moveTo(...P(a)); g.lineTo(...P(b)); g.stroke(); }
+        if (S.walk.length > 1) { g.strokeStyle = C.c2; g.lineWidth = 2; g.beginPath(); S.walk.forEach((c, i) => (i ? g.lineTo(...P(c)) : g.moveTo(...P(c)))); g.stroke(); }
+        d.status(`${S.carved.length + 1} / ${M.cells.length} cellules · marche en cours : ${S.walk.length}`);
+      },
+    });
+
+    // ── 02 · anneaux ──
+    demo('#fig-anneaux', {
+      title: 'Brèches d’une grille polaire', aspect: 1.9,
+      controls: [{ key: 'th', label: 'Seuil de doublement (× c)', min: 0.5, max: 1.2, step: .01, value: .92 }, { key: 'r0', label: 'Rayon de la chambre (mm)', min: 12, max: 30, step: 1, value: 22 }],
+      draw(g, d) {
+        const c = 22, K = 7, r0 = d.s.r0, radii = [0, r0];
+        for (let k = 1; k < K; k++) radii.push(r0 + k * c);
+        const counts = [1]; let n = 6;
+        for (let k = 1; k < K; k++) { if (k > 1 && TAU * radii[k] / (2 * n) >= d.s.th * c) n *= 2; counts.push(n); }
+        const kk = d.h * .46 / radii[K], cx = d.w * .36, cy = d.h / 2;
+        let bad = 0, minGap = Infinity;
+        for (let k = 1; k < K; k++) {
+          const gap = 2 * radii[k] * Math.sin(Math.PI / counts[k]) - 2 * DIM.post; // corde de la brèche moins deux poteaux
+          minGap = Math.min(minGap, gap);
+          const ok = gap >= 2 * DIM.ball + 1; if (!ok) bad++;
+          g.strokeStyle = ok ? alpha(C.ink, .7) : C.c3; g.lineWidth = ok ? 1.2 : 2.5;
+          g.beginPath(); g.arc(cx, cy, radii[k] * kk, 0, TAU); g.stroke();
+          g.strokeStyle = alpha(C.ink, .35); g.lineWidth = 1;
+          for (let j = 0; j < counts[k]; j++) { const a = j / counts[k] * TAU; g.beginPath(); g.moveTo(cx + Math.cos(a) * radii[k] * kk, cy - Math.sin(a) * radii[k] * kk); g.lineTo(cx + Math.cos(a) * radii[k + 1] * kk, cy - Math.sin(a) * radii[k + 1] * kk); g.stroke(); }
+          label(g, `anneau ${k} : ${counts[k]} secteurs, brèche ${gap.toFixed(1)} mm`, d.w * .66, 24 + k * 20, { color: ok ? C.dim : C.c3 });
+        }
+        g.strokeStyle = alpha(C.ink, .7); g.beginPath(); g.arc(cx, cy, radii[K] * kk, 0, TAU); g.stroke();
+        g.fillStyle = C.c2; g.beginPath(); g.arc(cx, cy - (radii[1] + radii[2]) / 2 * kk, DIM.ball * kk, 0, TAU); g.fill();
+        d.status(bad ? `${bad} anneau(x) infranchissable(s) — plus petite brèche ${minGap.toFixed(1)} mm < 12 mm` : `plus petite brèche ${minGap.toFixed(1)} mm : la bille passe partout`);
+      },
+    });
+
+    // ── 03 · Weltner ──
+    demo('#fig-weltner', {
+      title: 'Bille sur un plateau tournant', aspect: 1.9,
+      controls: [{ key: 'W', label: 'Vitesse du plateau Ω (tr/s)', min: 0.05, max: 0.6, step: .01, value: .25 }],
+      draw(g, d) {
+        const W = d.s.W * TAU, world = { walls: [], always: [], near: () => [] };
+        const cx = d.w / 2, cy = d.h / 2, k = d.h * .4 / 120;
+        // repère du plateau → laboratoire : x_lab = R(φ)·x ; vitesse initiale nulle par rapport au laboratoire
+        const b = newBall(80, 0); b.vx = -60; b.vy = -W * 80; // (lancée à 60 mm/s dans le labo ; vitesse relative au plateau : v − Ω×x)
+        const pts = [], dt = 1 / 960, T = 2 * 7 / 2 / d.s.W; // deux tours de la bille (période 7/(2Ω))
+        for (let t = 0; t < T; t += dt) {
+          step(world, b, { gx: 0, gy: 0, gn: 0, W, dW: 0, damp: 0 }, dt);
+          const ph = W * (t + dt), c = Math.cos(ph), s = Math.sin(ph);
+          if (Math.round(t / dt) % 8 === 0) pts.push([b.x * c - b.y * s, b.x * s + b.y * c]);
+        }
+        g.strokeStyle = alpha(C.ink, .15); g.beginPath(); g.arc(cx, cy, 120 * k, 0, TAU); g.stroke();
+        g.strokeStyle = C.c1; g.lineWidth = 2; g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(cx + x * k, cy - y * k) : g.moveTo(cx + x * k, cy - y * k))); g.stroke();
+        // « Coriolis × 5/7 » (repère tournant, sans le terme 2/7) : intégration naïve
+        let x = 80, y = 0, vx = -60, vy = -W * 80; const naive = [];
+        for (let t = 0; t < T; t += dt) {
+          const ax = 5 / 7 * (W * W * x + 2 * W * vy), ay = 5 / 7 * (W * W * y - 2 * W * vx);
+          vx += ax * dt; vy += ay * dt; x += vx * dt; y += vy * dt;
+          const ph = W * t, c = Math.cos(ph), s = Math.sin(ph), X = x * c - y * s, Y = x * s + y * c;
+          if (Math.hypot(X, Y) < 140 && Math.round(t / dt) % 8 === 0) naive.push([X, Y]);
+        }
+        g.setLineDash([4, 4]); g.strokeStyle = alpha(C.c3, .8); g.lineWidth = 1.4; g.beginPath(); naive.forEach(([x2, y2], i) => (i ? g.lineTo(cx + x2 * k, cy - y2 * k) : g.moveTo(cx + x2 * k, cy - y2 * k))); g.stroke(); g.setLineDash([]);
+        label(g, 'Weltner (projet)', 16, 22, { color: C.c1 }); label(g, 'Coriolis × 5/7', 16, 40, { color: C.c3 });
+        d.status(`période d’un tour de bille : ${(7 / (2 * d.s.W)).toFixed(1)} s pour un plateau à ${(1 / d.s.W).toFixed(1)} s`);
+      },
+    });
+
+    // ── 04 · film du Plateau ──
+    const plate = (() => {
+      for (let i = 0; i < 6; i++) {
+        try {
+          const spec = { family: 'plateau', topo: 'grid', nx: 9, ny: 7, c: 22, r0: 22, seed: `x${i}`, detours: 2, lap: 'short', turn: 1 };
+          const M = buildMaze(spec); return { M, F: simulateFilm(M, spec) };
+        } catch {}
+      }
+    })();
+    demo('#fig-pilote', {
+      title: 'Plateau : le film simulé, relu', aspect: 1.9, animate: true,
+      draw(g, d) {
+        if (!plate) return;
+        const { M, F } = plate, k = Math.min(d.h * .9 / (2 * M.race.rim.hy), d.w * .6 / (2 * M.race.rim.hx)), cx = d.w * .36, cy = d.h / 2;
+        drawWalls(g, M, cx, cy, k, 0, alpha(C.ink, .75));
+        const t = d.t % F.duration, s = sampleFilm(F, t);
+        // traînée
+        g.strokeStyle = alpha(C.c2, .55); g.lineWidth = 1.5; g.beginPath();
+        for (let i = Math.max(0, Math.floor(t * F.rate) - 240); i < t * F.rate; i++) { const X = cx + F.x[i] * k, Y = cy - F.y[i] * k; i ? g.lineTo(X, Y) : g.moveTo(X, Y); }
+        g.stroke();
+        g.fillStyle = C.c1; g.beginPath(); g.arc(cx + s.x * k, cy - s.y * k, DIM.ball * k, 0, TAU); g.fill();
+        // gravité dans le plan
+        const gx = Math.sin(s.b) * Math.cos(s.a), gy = -Math.sin(s.a), m = d.w * .82, n = d.h / 2;
+        g.strokeStyle = alpha(C.ink, .3); g.beginPath(); g.arc(m, n, 50, 0, TAU); g.stroke();
+        arrow(g, m, n, m + gx / Math.sin(0.096) * 50, n - gy / Math.sin(0.096) * 50, { color: C.c3, width: 2 });
+        label(g, 'g∥ (5,5° au bord)', m, n + 72, { align: 'center' });
+        const ev = F.events.filter((e) => e[1] <= t * F.rate).map((e) => e[0]);
+        d.status(`${t.toFixed(1)} / ${F.duration.toFixed(1)} s · α ${(s.a * 57.3).toFixed(1)}° β ${(s.b * 57.3).toFixed(1)}° · ${ev.length ? ev[ev.length - 1] : 'départ'}`);
+      },
+    });
+
+    // ── 05 · recherche du Cadran ──
+    const cad = (() => {
+      for (let i = 0; i < 10; i++) {
+        try {
+          const spec = { family: 'cadran', topo: 'grid', nx: 7, ny: 7, c: 22, r0: 22, seed: `q${i}`, turn: 1 };
+          const M = buildMaze(spec), F = simulateFilm(M, spec);
+          if (F.moves.length >= 4 && F.moves.length <= 12) return { M, F };
+        } catch {}
+      }
+    })();
+    demo('#fig-recherche', {
+      title: 'Cadran : rotations trouvées par recherche en largeur', aspect: 1.9, animate: true,
+      draw(g, d) {
+        if (!cad) return;
+        const { M, F } = cad, k = d.h * .44 / Math.hypot(M.race.rim.hx, M.race.rim.hy), cx = d.w * .36, cy = d.h / 2;
+        const t = d.t % F.duration, s = sampleFilm(F, t);
+        drawWalls(g, M, cx, cy, k, s.a, alpha(C.ink, .75));
+        const c = Math.cos(s.a), sn = Math.sin(s.a);
+        g.fillStyle = C.c1; g.beginPath(); g.arc(cx + (s.x * c - s.y * sn) * k, cy - (s.x * sn + s.y * c) * k, DIM.ball * k, 0, TAU); g.fill();
+        arrow(g, cx, cy + d.h * .46 - 30, cx, cy + d.h * .46 - 6, { color: C.dim }); label(g, 'g', cx + 8, cy + d.h * .46 - 14);
+        const done = F.events.filter((e) => e[0] === 'turn' && e[1] <= t * F.rate).length;
+        F.moves.forEach((m, i) => label(g, `${i + 1}. ${m > 0 ? '+' : ''}${Math.round(m * 57.3)}°`, d.w * .74, 26 + i * 18, { color: i < done ? C.ink : C.faint }));
+        d.status(`${F.moves.length} rotations, puis le retour par la poche · ${t.toFixed(1)} / ${F.duration.toFixed(1)} s`);
+      },
+    });
+
+    // ── 06 · bielle-manivelle ──
+    const LP = layout(buildMaze({ family: 'plateau', topo: 'grid', nx: 11, ny: 9, c: 22, r0: 22, seed: 'k', turn: 1 }), 'plateau');
+    demo('#fig-bielle', {
+      title: 'Bielle-manivelle du bord proche', aspect: 1.9,
+      controls: [{ key: 'al', label: 'Inclinaison α (°)', min: -5.5, max: 5.5, step: .1, value: 3 }],
+      draw(g, d) {
+        const P = plateauPose(LP, d.s.al * Math.PI / 180, 0), m = P.motors[0], M0 = LP.motors[0];
+        // vue de côté : axe horizontal = Z monde, vertical = Y ; mm → px
+        const k = d.h * .8 / 200, ox = d.w * .5, oy = d.h * .92, Q = (p) => [ox - p[2] * k, oy - p[1] * k];
+        g.fillStyle = alpha(C.ink, .08); g.fillRect(ox - LP.plinth.hz * k, oy - LP.plinth.h * k, 2 * LP.plinth.hz * k, LP.plinth.h * k);
+        // la dalle et la colonne, posées par la matrice du cardan
+        const e0 = Q(mat.apply(P.B, [0, -LP.slab / 2, -LP.out.hy])), e1 = Q(mat.apply(P.B, [0, -LP.slab / 2, LP.out.hy])), c0 = Q([0, LP.pivotY, 0]);
+        g.strokeStyle = alpha(C.ink, .5); g.lineWidth = 6; g.beginPath(); g.moveTo(c0[0], oy - LP.plinth.h * k); g.lineTo(...c0); g.stroke();
+        g.lineWidth = LP.slab * k; g.strokeStyle = alpha(C.c1, .6); g.beginPath(); g.moveTo(...e0); g.lineTo(...e1); g.stroke();
+        // moteur, manivelle, bielle
+        const Mm = Q(M0.M); g.strokeStyle = alpha(C.ink, .4); g.lineWidth = 1; g.beginPath(); g.arc(Mm[0], Mm[1], LP.motorR * k, 0, TAU); g.stroke();
+        const C1 = Q(m.C), P1 = Q(m.P);
+        g.strokeStyle = C.c2; g.lineWidth = 4; g.beginPath(); g.moveTo(...Mm); g.lineTo(...C1); g.stroke();
+        g.strokeStyle = C.ink; g.lineWidth = 3; g.beginPath(); g.moveTo(...C1); g.lineTo(...P1); g.stroke();
+        for (const p of [C1, P1]) { g.fillStyle = C.c3; g.beginPath(); g.arc(p[0], p[1], 4, 0, TAU); g.fill(); }
+        label(g, 'manivelle', Mm[0] + 30, Mm[1] + 4, { color: C.c2 }); label(g, 'bielle', (C1[0] + P1[0]) / 2 + 10, (C1[1] + P1[1]) / 2);
+        const L = Math.hypot(m.P[0] - m.C[0], m.P[1] - m.C[1], m.P[2] - m.C[2]);
+        d.status(`manivelle ${(m.g * 57.3).toFixed(1)}° · bielle ${L.toFixed(6)} mm`);
+      },
+    });
+  </script>
+</body>
+</html>
