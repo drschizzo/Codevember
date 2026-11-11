@@ -9,19 +9,20 @@
 // gaussien périodique (σ = 0,7 s) : la boucle se referme, l'export rend la
 // même chose que la lecture.
 import { FAMILIES } from './families.js';
-import { bendOf, bodyFrame, featherFrame, betaAt, rachisPoint, qrot, ejection, layoutPlumage, mix, sstep, smoother, SCHED } from './gen/feather.js';
+import { bendOf, bodyFrame, featherFrame, betaAt, betaSolved, rachisPoint, qrot, ejection, layoutPlumage, mix, sstep, smoother, SCHED } from './gen/feather.js';
 
 const N = 720;
 const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 const scl = (a, k) => [a[0] * k, a[1] * k, a[2] * k];
 
 // pose brute (avant lissage) à la phase u
-function rawPose(R, lay, u) {
+function rawPose(R, lay, u, path) {
+  const beta = (x) => (path ? betaSolved(path, x) : betaAt(x, R.shape.radial));
   const P = R.shape, C = R.camera, L = P.L;
   const { n, d, e, p: root } = bodyFrame(lay.Rd, lay.thH, 0);
   const k = bendOf(P, lay.Rd);
   // la nouvelle plume : milieu de sa partie sortie
-  const fr = featherFrame(lay.Rd, lay.thH, 0, betaAt(u, P.radial));
+  const fr = featherFrame(lay.Rd, lay.thH, 0, beta(u));
   const S = { u, L, k, cal: P.calamus, radial: P.radial, over: P.over };
   const len = P.radial ? 0.6 : 1;
   const ptNew = rachisPoint(Math.max(P.calamus, 1 - 0.5 * visibleFrac(S)) * len, S).p;
@@ -30,7 +31,7 @@ function rawPose(R, lay, u) {
   // l'ancienne plume (couchée, puis chassée) : son milieu
   // (la caméra ne suit pas la chute : elle reste sur le follicule, l'ancienne sort du cadre)
   const ej = ejection(Math.min(u, SCHED.fall[0]), P, lay);
-  const fo = featherFrame(lay.Rd, ej.th, 0, betaAt(1, P.radial));
+  const fo = featherFrame(lay.Rd, ej.th, 0, beta(1));
   const tOld = add(add(fo.p, ej.off), qrot(fo.q, rachisPoint(P.radial ? 0.3 : 0.45, { u: 1, L, k, cal: P.calamus, radial: P.radial, over: P.over }).p));
   const w = smoother(0.04, 0.24, u);
   const target = add(scl(tOld, 1 - w), scl(tNew, w));
@@ -58,9 +59,9 @@ function visibleFrac(S) {
 }
 
 // trajectoire lissée, échantillonnée sur la boucle : { at(u) → { pos, target, dist } }
-export function cameraPath(R, lay = null) {
+export function cameraPath(R, lay = null, path = null) {
   lay ??= layoutPlumage(R.shape, R.seed, { tile: R.tile });
-  const raw = Array.from({ length: N }, (_, i) => rawPose(R, lay, i / N));
+  const raw = Array.from({ length: N }, (_, i) => rawPose(R, lay, i / N, path));
   const sig = (0.7 / R.loop.duration) * N; // (σ en échantillons)
   const W = Math.ceil(sig * 3);
   const ker = Array.from({ length: 2 * W + 1 }, (_, j) => Math.exp(-0.5 * ((j - W) / sig) ** 2));

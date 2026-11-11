@@ -16,7 +16,7 @@ import {
 } from 'three/tsl';
 import { isLite, stableVelocity, perturb } from './materials.js';
 import { G } from './globals.js';
-import { SCHED, BARB_STRIDE, CONTACT } from '../gen/feather.js';
+import { SCHED, BARB_STRIDE } from '../gen/feather.js';
 
 const sst = (a, b, x) => { const t = clamp(x.sub(a).div(float(b).sub(a)), 0, 1); return t.mul(t).mul(t.mul(-2).add(3)); };
 const smootherT = (a, b, x) => { const t = clamp(x.sub(a).div(b - a), 0, 1); return t.mul(t).mul(t).mul(t.mul(t.mul(6).sub(15)).add(10)); };
@@ -40,23 +40,13 @@ const barbArcT = (alpha, curl, l) => {
   return vec2(cos(alpha.sub(c.mul(l))).sub(cos(alpha)).div(c), sin(alpha).sub(sin(alpha.sub(c.mul(l)))).div(c));
 };
 
-// contact (gen/feather.js, contactPush) : K = (étendue, x0, y0, r), Q = (fente, tente)
-const contactPushT = (p, K, Q) => {
-  const r = K.w, ext = tmax(K.x, 1e-3), dx = p.x.sub(K.y), dy = p.y.sub(K.z), ax = abs(dx);
-  const along = select(dy.greaterThanEqual(0), float(1).sub(sst(ext.mul(0.7), ext, dy)), float(1).sub(sst(r.mul(0.5), r.add(0.4), dy.negate())));
-  const push = tmax(r.add(CONTACT.margin).sub(ax), 0).mul(along).mul(Q.x);
-  const lift = Q.y.mul(along).mul(float(1).sub(sst(r, r.add(1.2), ax)));
-  const sg = clamp(dx.div(0.015), -1, 1);
-  const over = r.add(CONTACT.margin).mul(float(1).sub(abs(sg))).mul(along).mul(Q.x);
-  return p.add(vec3(sg.mul(push), 0, lift.add(over)));
-};
-
-// état d'une plume dans le tableau (5 vec4 : position et échelle, quaternion,
-// temps et usure, contact K, contact C)
-export const FSTRIDE = 5;
+// état d'une plume dans le tableau (3 vec4 : position et échelle, quaternion,
+// temps, usure, tirage, visible) ; les voisines ne se déforment pas, elles
+// bougent en bloc (gen/collide.js)
+export const FSTRIDE = 3;
 const stOf = (A, f) => {
   const i = int(f.add(0.5)).mul(FSTRIDE);
-  return { P: A.element(i), Q: A.element(i.add(1)), T: A.element(i.add(2)), K: A.element(i.add(3)), C: A.element(i.add(4)) };
+  return { P: A.element(i), Q: A.element(i.add(1)), T: A.element(i.add(2)) };
 };
 
 // La pose (gen/feather.js, barbPose). b0..b3 : la barbe ; tv : (t, v, arête) ;
@@ -111,9 +101,6 @@ function barbPoseT(b0, b1, b2, b3, tv, st, FU, ridgeK = 0.7) {
   const tilt = v.negate().mul(ridgeK).mul(ridge.add(0.4));
   const cx = nx.add(tilt.mul(tx)), cz = nz.add(tilt.mul(tz));
   const n = normalize(vec3(cx, Ny.mul(cz), Nz.mul(cz)));
-  // contact (gen/feather.js, contactPush) : le tuyau d'une plume voisine écarte
-  // les barbes autour du point où il perce celle-ci — K = (courbure, x0, y0, r)
-  p = contactPushT(p, st.K, st.C);
   // caché (dans le follicule, ou plume masquée) : replié au follicule
   const hide = yy.lessThan(0).or(st.T.w.lessThan(0.5));
   p = select(hide, vec3(0, -0.05, 0), p);
@@ -312,7 +299,6 @@ export function rachisMaterial({ FS, FSP, FU, LK, moving, offset = 0 }) {
     const X = vec3(1, 0, 0);
     const off = X.mul(c.mul(r)).add(R.N.mul(sn.mul(r).mul(0.8)));
     let p = R.p.add(off);
-    p = contactPushT(p, st.K, st.C);
     p = select(R.hide.or(st.T.w.lessThan(0.5)), vec3(0, -0.05, 0), p);
     if (full) {
       normalLocal.assign(qrot(st.Q, normalize(X.mul(c).add(R.N.mul(sn)))));

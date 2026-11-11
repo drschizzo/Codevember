@@ -111,7 +111,7 @@ export const BIRDS = {
   },
   autruche: {
     label: 'Autruche', family: 'plume', base: '#1a1919', mark: '#121111', down: '#2c2a29', rachis: '#e8e3da', sheath: '#565e68',
-    pattern: { program: 'plain', white: [0.1, 0.25] }, irid: [0.2, 300, 380], bragg: 430, blue: 0,
+    pattern: { program: 'plain' }, irid: [0.2, 300, 380], bragg: 430, blue: 0,
   },
   aigrette: {
     label: 'Aigrette', family: 'plume', base: '#f1eee7', mark: '#e3ded4', down: '#f6f4f0', rachis: '#f3efe6', sheath: '#a3acb6',

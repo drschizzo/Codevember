@@ -8,9 +8,10 @@ import { FAMILIES } from '../src/families.js';
 import { createRng } from '../src/rng.js';
 import {
   shapeOf, barbTable, barbPose, barbArc, BARB_STRIDE, SCHED, growth, unroll, zipAt, releaseAt, bendAt, settleAt, wearAt,
-  layoutPlumage, featherFrame, pinTip, bendOf, tubeRadius, tileContacts, contactPush, contactRadius, rachisPoint, settleAt as settleAt2, betaAt, bodyFrame, qrot, LIE, ejection, sinkAt,
+  layoutPlumage, featherFrame, pinTip, bendOf, tubeRadius, rachisPoint, betaAt, bodyFrame, qrot, LIE, ejection, sinkAt,
 } from '../src/gen/feather.js';
 import { cameraPath } from '../src/camera.js';
+import { solveScene, sceneCrossings } from '../src/gen/collide.js';
 import { simulateCollar, featherTexture, PROGRAMS } from '../src/gen/pattern.js';
 
 const barb = (T, i) => [...T.slice(i * BARB_STRIDE, (i + 1) * BARB_STRIDE)];
@@ -123,78 +124,60 @@ test('le plumage : les rangées se recouvrent comme des tuiles, sans se traverse
   }
 });
 
-test('le tuyau ne traverse aucune plume voisine : elles se fendent autour de lui', () => {
-  for (const seed of ['nqbh3w', 'c3', 'h1', 'pen']) {
-    for (const fam of ['vexille', 'plume', 'ocelle']) {
-      const R = generate(seed, { family: fam });
-      const P = R.shape, lay = layoutPlumage(P, R.seed, { tile: R.tile });
-      const T = R.tile ?? P, TB = barbTable(T, `${R.seed}:tile`, 6);
-      const kt = bendOf(T, lay.Rd);
-      let worst = Infinity, where = '';
-      for (let u = 0.14; u <= 0.72; u += 0.02) {
-        const C = tileContacts(P, lay, u, R.tile);
-        const fr = featherFrame(lay.Rd, lay.thH, 0, betaAt(u), LIE.omega * settleAt(u));
-        const S = { u, L: P.L, k: bendOf(P, lay.Rd), cal: P.calamus, over: P.over };
-        const axis = [];
-        for (let i = 0; i <= 60; i++) { const r = rachisPoint(i / 60, S); if (!r.hidden) axis.push({ s: i / 60, w: qrot(fr.q, r.p).map((v, j) => v + fr.p[j]) }); }
-        C.forEach((c, j) => {
-          if (!(c.split > 0.99)) return; // (percée, la fente ouverte : elle doit laisser passer le tuyau)
-          const t = lay.tiles[j];
-          const f = featherFrame(lay.Rd, t.th, t.ph, Math.PI / 2 - LIE.eps, LIE.omega, t.yaw);
-          const St = { u: 1, L: T.L, k: kt * t.scale, wear: t.wear, g: [0, 0, -1], radial: false, cal: T.calamus, over: T.over };
-          for (let b = 0; b < TB.length / BARB_STRIDE; b += 2) {
-            const B = barb(TB, b);
-            if (B[7] > 0.35) continue; // (pas de base duveteuse sur les voisines)
-            for (let i = 0; i <= 10; i++) {
-              const r = barbPose(B, i / 10, 0, 0, St);
-              if (r.hidden) continue;
-              // (la ligne même de la fente, 0,15 mm de large, passe par-dessus le tuyau
-              // en douceur : on ne la compte pas)
-              if (Math.abs(r.p[0] - c.x0) < 0.02) continue;
-              const q = contactPush(r.p, [c.ext, c.x0, c.y0, c.r], [c.split, c.tent]);
-              const w = qrot(f.q, q.map((x) => x * t.scale)).map((v, k) => v + f.p[k]);
-              // distance à l'axe du tuyau, rapportée à son rayon
-              for (const a of axis) {
-                const d = Math.hypot(w[0] - a.w[0], w[1] - a.w[1], w[2] - a.w[2]);
-                // (roulée, la gaine ; déroulée, la plume n'est plus qu'un plan mince : son rachis)
-                const rr = tubeRadius(P, a.s) * (1 - Math.min(1, unroll(u, a.s))) + 0.05;
-                if (d / rr < worst) { worst = d / rr; where = `${seed}/${fam} u=${u.toFixed(2)} tuile ${j}`; }
-              }
-            }
-          }
-        });
-      }
-      assert.ok(worst > 0.85, `une barbe voisine dans le tuyau (${worst.toFixed(2)} × r, ${where})`);
+// Le banc des traversées (gen/collide.js) : la scène telle qu'elle est rendue
+// — la plume, l'ancienne, les voisines écartées —, toutes ses barbes et ses
+// rachis en lignes brisées, et la surface pleine de chaque plume en carte de
+// hauteur : une ligne qui passe d'un côté à l'autre d'une surface la traverse.
+const SOLVED = new Map();
+function solvedOf(seed, over = {}) {
+  const key = `${seed}:${JSON.stringify(over)}`;
+  if (!SOLVED.has(key)) {
+    const R = generate(seed, over), P = R.shape, T = R.tile ?? P, lay = layoutPlumage(P, R.seed, { tile: R.tile });
+    const tables = { hero: barbTable(P, R.seed), tile: barbTable(T, `${R.seed}:tile`, 10) };
+    SOLVED.set(key, { R, lay, tables, solved: solveScene(R, lay, tables) });
+  }
+  return SOLVED.get(key);
+}
+
+test('rien ne traverse rien : la plume, l’ancienne et les voisines, sur toute la boucle', () => {
+  // vexilles : rien au-delà de 0,3 mm ; l'autruche et le paon (barbes libres,
+  // comme des cheveux) : leurs barbes se mêlent, seules comptent les traversées
+  // des parties pleines (vexille agrafé, disque de l'œil, rachis)
+  for (const [seed, over, max] of [['33', {}, 0.03], ['nqbh3w', {}, 0.03], ['o', {}, 0.03], ['h1', { family: 'vexille' }, 0.03], ['u', {}, 0.15]]) {
+    const { R, lay, tables, solved } = solvedOf(seed, over);
+    let worst = { depth: 0 }, at = 0;
+    for (let i = 0; i <= 100; i++) {
+      const c = sceneCrossings(R, lay, i / 100, tables, solved);
+      if (c.depth > worst.depth) { worst = c; at = i / 100; }
     }
+    assert.ok(worst.depth < max, `${seed} (${R.family}) : traversée de ${worst.depth.toFixed(3)} cm à u = ${at.toFixed(2)} (${worst.pair})`);
   }
 });
 
-test('les voisines bougent sans à-coup, image par image, et tout est au repos au raccord', () => {
-  // 60 images par seconde sur une boucle de 36 s : le déplacement des barbes
-  // des voisines (fente et tente) d'une image à la suivante reste petit, et le
-  // contact est nul à u → 1 comme à u = 0 (la voisine ne retombe pas au raccord)
-  for (const seed of ['33', 'nqbh3w', 'a', 'o', 'u']) {
-    const R = generate(seed), P = R.shape, T = R.tile ?? P, lay = layoutPlumage(P, R.seed, { tile: R.tile });
-    const TB = barbTable(T, `${R.seed}:tile`, 5), kt = bendOf(T, lay.Rd);
-    const N = 36 * 60;
-    const frames = Array.from({ length: N + 1 }, (_, f) => tileContacts(P, lay, f / N, R.tile));
-    for (const c of [...frames[0], ...frames[N - 1], ...frames[N]]) assert.ok(!(c.tent > 1e-4) && !(c.split > 1e-4), `${seed} : contact au raccord`);
-    const touched = new Set(); frames.forEach((C) => C.forEach((c, j) => (c.tent > 0 || c.split > 0) && touched.add(j)));
-    let worst = 0, at = '';
-    for (const j of touched) {
-      const t = lay.tiles[j];
-      const St = { u: 1, L: T.L, k: kt * t.scale, wear: t.wear, g: [0, 0, -1], radial: false, cal: T.calamus, over: T.over };
-      const base = [];
-      for (let b = 0; b < TB.length / BARB_STRIDE; b += 3) for (let i = 0; i <= 6; i++) { const r = barbPose(barb(TB, b), i / 6, 0, 0, St); if (!r.hidden) base.push(r.p); }
-      let prev = null;
-      frames.forEach((C, fi) => {
-        const c = C[j];
-        const cur = base.map((p) => contactPush(p, [c.ext, c.x0, c.y0, c.r], [c.split, c.tent]).map((v) => v * t.scale));
-        if (prev) for (let q = 0; q < cur.length; q++) { const d = Math.hypot(cur[q][0] - prev[q][0], cur[q][1] - prev[q][1], cur[q][2] - prev[q][2]); if (d > worst) { worst = d; at = `u=${(fi / N).toFixed(4)} voisine ${j}`; } }
-        prev = cur;
-      });
+test('le banc voit les traversées : sans le solveur, la plume traverse ses voisines', () => {
+  const { R, lay, tables } = solvedOf('33');
+  let n = 0;
+  for (let i = 0; i <= 50; i++) if (sceneCrossings(R, lay, i / 50, tables, null).depth > 0.05) n++;
+  assert.ok(n > 10, `seulement ${n} instants détectés sans solveur`);
+});
+
+test('les mouvements résolus sont continus, lents, monotones à la pose, et bouclent', () => {
+  for (const seed of ['33', 'nqbh3w', 'u']) {
+    const { R, lay, solved } = solvedOf(seed);
+    const N = solved.beta.length - 1, T = R.tile ?? R.shape;
+    // la pose ne remonte jamais pendant qu'elle se couche ; le raccord
+    for (let i = 1; i <= N; i++) if (i / N > SCHED.settle[0] - 0.05) assert.ok(solved.beta[i] >= solved.beta[i - 1] - 1e-6, `${seed} : la plume remonte`);
+    for (const [, tab] of solved.tiles) assert.ok(Math.abs(tab[0] - tab[N * 2]) < 1e-6 && Math.abs(tab[1] - tab[N * 2 + 1]) < 1e-6, `${seed} : une voisine ne boucle pas`);
+    // à 60 i/s, la pointe d'une voisine bouge de moins de 2 mm par image
+    const frames = R.loop.duration * 60;
+    let worst = 0;
+    for (const [, tab] of solved.tiles) for (let i = 1; i <= N; i++) {
+      const dang = Math.hypot(tab[i * 2] - tab[(i - 1) * 2], tab[i * 2 + 1] - tab[(i - 1) * 2 + 1]);
+      worst = Math.max(worst, (dang * T.L) / (frames / N));
     }
-    assert.ok(worst < 0.15, `${seed} : saut de ${worst.toFixed(3)} cm en une image (${at})`);
+    assert.ok(worst < 0.2, `${seed} : ${worst.toFixed(3)} cm par image`);
+    for (let i = 1; i <= N; i++) assert.ok(Math.abs(solved.old[i] - solved.old[i - 1]) * T.L < 2, 'ancienne plume');
+    void lay;
   }
 });
 

@@ -312,7 +312,7 @@ export function featherFrame(Rd, th, ph, beta, omega = 0, yaw = 0) {
 
 // La plume couchée : soulevée de ε au-dessus de la pente (les rangées se
 // recouvrent comme des tuiles), roulée de ω (recouvrement latéral)
-export const LIE = { eps: 0.1, omega: 0.07, erect: 0.62 };
+export const LIE = { eps: 0.16, omega: 0.07, erect: 0.62 };
 export const LIE_BETA = (radial) => (radial ? 0.85 : Math.PI / 2 - LIE.eps);
 // (le duvet ne se couche pas : une houppe reste dressée, penchée vers la queue)
 export const betaAt = (u, radial = false) => mix(LIE.erect, LIE_BETA(radial), settleAt(u));
@@ -393,138 +393,9 @@ export function ejection(u, P, lay) {
   return { th, off, tilt: a1 * (1 - k), roll, gone: sl / Rd > 1.3, base: null };
 }
 
-// ── Le contact : le tuyau soulève puis fend les plumes qui le recouvrent ─────
-// Les plumes des rangées du dessus couvrent le follicule ; le tuyau qui sort
-// passe dessous, puis à travers. Pour chaque voisine, à chaque instant, on
-// exprime l'axe du tuyau dans le repère de la voisine (rachis courbé compris) :
-//   - tant que la pointe est dessous, la voisine se drape sur elle : une tente
-//     dont la hauteur est juste ce qu'il faut pour passer au-dessus de la
-//     pointe et de son rayon (0 quand la pointe est loin) ;
-//   - quand la pointe perce la surface, la voisine se fend le long de ses
-//     barbes, progressivement (la fente s'ouvre sur les 5 premiers mm de
-//     percée), et retombe à moitié sur le tuyau qui la traverse ;
-//   - tout s'éteint en douceur quand le point de contact sort de la voisine
-//     ou rejoint la peau (pendant que la plume se couche).
-// Aucune grandeur ne saute d'une image à l'autre : c'est une fonction continue
-// du temps (vérifié image par image dans les tests). La voisine ne pivote
-// pas en bloc : seules ses barbes bougent, autour du contact.
-export const CONTACT = { margin: 0.16, open: 0.5, fade: 0.6 };
-
-// tube effectif autour de l'axe, à la hauteur s : roulé, la gaine ; déroulé,
-// la base du vexille qui fend la plume du dessus
-export const contactRadius = (P, u, s) => {
-  const lam = Math.min(1, unroll(u, s));
-  return tubeRadius(P, s) * (1 - lam) + lam * 0.45 * (halfWidth(P, s, 1) + halfWidth(P, s, -1)) * 0.5 + 0.08;
-};
-
-// décalage d'un point (repère local de la voisine, non mis à l'échelle) par le
-// contact K = [étendue, x0, y0, r] et Q = [fente 0–1, hauteur de tente (cm)].
-// La plume se fend le long de ses barbes (une raie, comme une chevelure) : le
-// décalage est latéral, plein au droit du tuyau, et s'éteint vers sa base en
-// un rayon, vers sa pointe sur la longueur où le tuyau la longe ; la tente
-// soulève les barbes autour du contact.
-export function contactPush(p, K, Q) {
-  const [ext, x0, y0, r] = K, [split, tent] = Q;
-  if (!(split > 0) && !(tent > 0)) return p;
-  const dx = p[0] - x0, dy = p[1] - y0, ax = Math.abs(dx);
-  const along = dy >= 0 ? 1 - sstep(Math.max(ext, 1e-3) * 0.7, Math.max(ext, 1e-3), dy) : 1 - sstep(r * 0.5, r + 0.4, -dy);
-  const push = Math.max(0, r + CONTACT.margin - ax) * along * split;
-  const lift = tent * along * (1 - sstep(r, r + 1.2, ax));
-  // (le côté de la fente s'adoucit sur 0,15 mm : une barbe pile au droit du
-  // tuyau ne saute pas d'un côté à l'autre quand le contact glisse ; celle-là
-  // passe par-dessus le tuyau)
-  const sg = clamp(dx / 0.015, -1, 1);
-  const over = (r + CONTACT.margin) * (1 - Math.abs(sg)) * along * split;
-  return [p[0] + sg * push, p[1], p[2] + lift + over];
-}
-
-const qinv = (q) => [-q[0], -q[1], -q[2], q[3]];
-const NOCONTACT = () => ({ ext: 0, x0: 0, y0: 0, r: 0, split: 0, tent: 0 });
-// Les contacts de toutes les voisines à l'instant u (T : la forme des voisines).
-export function tileContacts(P, lay, u, tile = null) {
-  const T = tile ?? P;
-  const out = lay.tiles.map(NOCONTACT);
-  if (P.radial || growth(u, P.L) <= 0) return out;
-  const fr = featherFrame(lay.Rd, lay.thH, 0, betaAt(u, P.radial), LIE.omega * settleAt(u));
-  const k = bendOf(P, lay.Rd), S = { u, L: P.L, k, cal: P.calamus, radial: false, over: P.over };
-  // l'axe du tuyau, dans le monde, échantillonné exactement de la peau à la
-  // pointe (des points fixes en s feraient naître le contact d'un coup, quand
-  // le deuxième point sort de la peau)
-  const sSkin = sinkAt(u, P.L, P.calamus, P.over) / P.L;
-  if (sSkin >= 1) return out;
-  const axis = [];
-  for (let i = 0; i <= 64; i++) {
-    const s = Math.max(0, sSkin) + (1 - Math.max(0, sSkin)) * (i / 64) + (i === 0 ? 1e-6 : 0), r = rachisPoint(Math.min(1, s), S);
-    axis.push({ s: Math.min(1, s), w: qrot(fr.q, r.p).map((v, j) => v + fr.p[j]) });
-  }
-  const kt = bendOf(T, lay.Rd), root = fr.p, reach = (P.L + T.L) * 1.1;
-  lay.tiles.forEach((t, j) => {
-    const f = featherFrame(lay.Rd, t.th, t.ph, LIE_BETA(T.radial), LIE.omega, t.yaw);
-    if (Math.hypot(f.p[0] - root[0], f.p[1] - root[1], f.p[2] - root[2]) > reach) return;
-    const kl = kt * t.scale, iq = qinv(f.q);
-    const loc = axis.map((a) => {
-      const l = qrot(iq, a.w.map((v, i) => v - f.p[i])).map((v) => v / t.scale);
-      return { s: a.s, l, h: l[2] + (1 - Math.cos(kl * l[1])) / Math.max(kl, 1e-6), len: 0 };
-    });
-    // (longueur sortie de la peau jusqu'à chaque point : continue dans le temps)
-    for (const q of loc) q.len = Math.max(0, (q.s - sSkin) * P.L);
-    const tip = loc[loc.length - 1];
-    // le point de contact : où l'axe perce la surface en montant (le dernier, le plus près de la pointe)
-    let c = null;
-    for (let i = loc.length - 1; i > 0; i--) {
-      const a = loc[i - 1], b = loc[i];
-      if (a.h < 0 && b.h >= 0) {
-        const m = a.h / (a.h - b.h);
-        const dl = b.l.map((v, q) => v - a.l[q]), sinA = Math.abs(b.h - a.h) / Math.max(1e-6, Math.hypot(dl[0], dl[1], b.h - a.h));
-        const sc = a.s + (b.s - a.s) * m;
-        c = { x0: a.l[0] + dl[0] * m, y0: a.l[1] + dl[1] * m, s: sc, len: Math.max(0, (sc - sSkin) * P.L), sinA, pierced: true };
-        break;
-      }
-    }
-    if (!c) {
-      // pas encore percée : seule la pointe qui arrive par-dessous la soulève
-      // (un rachis couché sous la voisine ne la touche pas : les rangées sont
-      // étagées pour cela)
-      if (!(tip.h < 0)) return;
-      const a = loc[loc.length - 2], dl = tip.l.map((v, q) => v - a.l[q]);
-      const sinA = Math.abs(tip.h - a.h) / Math.max(1e-6, Math.hypot(dl[0], dl[1], tip.h - a.h));
-      c = { x0: tip.l[0], y0: tip.l[1], s: tip.s, len: tip.len, depth: tip.h, sinA, pierced: false };
-    }
-    let r = 0;
-    for (let q = -0.03; q <= 0.18; q += 0.03) r = Math.max(r, contactRadius(P, u, clamp(c.s + q, 0, 1)));
-    r /= t.scale;
-    // poids : le contact s'éteint en douceur hors de la voisine, et quand il rejoint la peau
-    const sy = clamp(c.y0 / T.L, 0, 1);
-    const halfW = Math.max(halfWidth(T, sy, 1), halfWidth(T, sy, -1));
-    const wFoot = (1 - sstep(halfW + r, halfW + r + CONTACT.fade, Math.abs(c.x0))) * sstep(-CONTACT.fade, 0, c.y0) * (1 - sstep(T.L * 0.55, T.L * 1.0, c.y0)); // (vers sa pointe, la voisine se relâche progressivement : elle n'est plus tenue)
-    // (drapée : le contact naît quand la pointe sort de la peau ; percée, il
-    // reste plein jusqu'à la peau pendant la pousse — c'est là que la plume du
-    // dessus couvre le follicule — et ne s'éteint en y arrivant que pendant
-    // que la plume se couche, quand le point de percée glisse vers elle)
-    const lying = smoother(SCHED.settle[0] - 0.08, SCHED.settle[0], u);
-    const wSkin = sstep(0, 0.2, tip.len) * (c.pierced ? 1 - lying * (1 - sstep(0, CONTACT.fade, c.len)) : 1);
-    // (le tuyau qui se couche devient parallèle à la voisine : le point de
-    // percée file le long d'elle ; le contact s'éteint avec l'angle, qui, lui,
-    // varie lentement)
-    const wGraze = sstep(0.05, 0.25, c.sinA);
-    // (couchée, la plume est à sa place dans sa rangée : plus aucun contact, comme
-    // au début de la boucle)
-    const wEnd = 1 - smoother(SCHED.settle[1] - 0.02, SCHED.settle[1] + 0.05, u);
-    const w = wFoot * wSkin * wGraze * wEnd;
-    if (!(w > 0)) return;
-    let split, tent;
-    if (c.pierced) {
-      // la fente s'ouvre à mesure que la pointe dépasse la surface ; la plume retombe à moitié
-      // (quand la plume se couche, le tuyau glisse sous la voisine : la fente se
-      // referme et la voisine se drape sur lui — une barbe au droit du tuyau
-      // changerait sinon de côté de la fente d'une image à l'autre)
-      const p = sstep(0, CONTACT.open, tip.h) * (1 - smoother(SCHED.settle[0] - 0.06, SCHED.settle[0] + 0.08, u));
-      split = p; tent = (r + CONTACT.margin) * (1 - 0.5 * p);
-    } else {
-      // drapée sur la pointe : juste assez haute pour passer au-dessus
-      split = 0; tent = Math.max(0, r + CONTACT.margin + c.depth);
-    }
-    out[j] = { ext: r / Math.max(c.sinA, 0.1) + 0.8, x0: c.x0, y0: c.y0, r, split: split * w, tent: tent * w };
-  });
-  return out;
+// ── La pose résolue (gen/collide.js, solveSettle) ──────────────────────────
+// lecture de la pose résolue (interpolation linéaire, continue)
+export function betaSolved(path, u) {
+  const N = path.length - 1, x = clamp(u, 0, 1) * N, i = Math.min(N - 1, Math.floor(x)), f = x - i;
+  return path[i] * (1 - f) + path[i + 1] * f;
 }

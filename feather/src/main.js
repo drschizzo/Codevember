@@ -127,7 +127,10 @@ async function main() {
   const loading = { active: true, applied: false, warming: false, settle: 0 };
   // étapes de l'écran de chargement (libellés propres au thème) ; le dessin
   // (app/loaderArt.js) reçoit ce que la recette en dit, par loader.art()
-  const STEPS = [['build', 'le collier dépose le motif'], ['compile', 'la lumière se prépare'], ['settle', 'premières images']];
+  // (la première étape est la plus longue : le motif, puis la résolution des
+  // contacts — chaque instant de la boucle, chaque voisine — dont l'avancement
+  // réel vient du worker)
+  const STEPS = [['build', 'les plumes cherchent leur place'], ['compile', 'la lumière se prépare'], ['settle', 'premières images']];
   let firstRecipe = true;
   function applyRecipe() {
     const recipe = R;

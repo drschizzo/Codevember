@@ -14,6 +14,7 @@ export function createGenerator(size = Math.max(2, Math.min(6, (navigator.hardwa
   workers.forEach((w) => {
     w.onmessage = ({ data }) => {
       const job = pending.get(data.id);
+      if (data.progress !== undefined) { job?.onProgress?.(data.progress); return; } // (avancement d'un long calcul)
       pending.delete(data.id);
       idle.push(w);
       if (data.error) job.reject(new Error(data.error)); else job.resolve(data.out);
@@ -31,10 +32,10 @@ export function createGenerator(size = Math.max(2, Math.min(6, (navigator.hardwa
     }
   }
 
-  function request(spec, what) {
+  function request(spec, what, onProgress = null) {
     const key = `${what}|${JSON.stringify(spec)}`;
-    if (cache.has(key)) { const p = cache.get(key); cache.delete(key); cache.set(key, p); return p; }
-    const p = new Promise((resolve, reject) => { queue.push({ id: nextId++, spec, what, resolve, reject }); pump(); });
+    if (cache.has(key)) { const p = cache.get(key); cache.delete(key); cache.set(key, p); onProgress?.(1); return p; }
+    const p = new Promise((resolve, reject) => { queue.push({ id: nextId++, spec, what, resolve, reject, onProgress }); pump(); });
     p.catch(() => cache.delete(key));
     cache.set(key, p);
     while (cache.size > MAX_CACHE) cache.delete(cache.keys().next().value);

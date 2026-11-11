@@ -12,11 +12,12 @@ import {
 import { barbGeometry, barbMaterial, rachisGeometry, rachisMaterial, sheathMaterial, createLook, FSTRIDE, tubeTemplate } from './feather.js';
 import { isLite, stableVelocity, noise } from './materials.js';
 import { BIRDS } from '../families.js';
-import { growth, bendOf, tileContacts, layoutPlumage, featherFrame, betaAt, LIE_BETA, settleAt, wearAt, ejection, LIE, SCHED, qrot } from '../gen/feather.js';
+import { growth, bendOf, layoutPlumage, featherFrame, betaAt, betaSolved, LIE_BETA, settleAt, wearAt, ejection, LIE, SCHED, qrot } from '../gen/feather.js';
 import { cameraPath } from '../camera.js';
+import { sceneState } from '../gen/collide.js';
 
 const SHADOW = { mobile: 1024, low: 1024, medium: 2048, high: 2048, ultra: 4096 };
-const MAXF = 300; // (5 vec4 par plume : 1 500 vec4, 24 Ko par tableau)
+const MAXF = 300; // (3 vec4 par plume : 900 vec4, 14 Ko par tableau)
 
 // quaternion (x, y, z, w) : produit et rotation autour d'un axe
 const qmul = (a, b) => [
@@ -105,8 +106,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
   const mkFU = () => ({ L: uniform(6), radial: uniform(0), calamus: uniform(0.1), over: uniform(1.08), r0: uniform(0.05), kb: uniform(0.05), rhoTex: null });
   const FU = mkFU(), FUT = mkFU();
   let meshes = [], R = null, lay = null, cam = null, pending = 0, version = 0, nTiles = 0;
-  let texs = [], lastPh = 0;
-  const tileState = [];
+  let texs = [], lastPh = 0, path = null, solved = null, solveProgress = 0;
 
   function clear() {
     for (const m of meshes) { group.remove(m); m.geometry.dispose(); m.material.dispose(); }
@@ -121,11 +121,12 @@ export function createStage(scene, gen, { lite = false } = {}) {
     downMesh.visible = false;
     const P = R.shape, T = R.tile ?? P;
     lay = layoutPlumage(P, R.seed, { lite, tile: R.tile });
+    path = null; solved = null; solveProgress = 0;
     cam = cameraPath(R, lay);
     nTiles = Math.min(lay.tiles.length, MAXF - 2);
     body.scale.setScalar(lay.Rd - 0.15);
     body.position.set(0, -lay.Rd, 0);
-    gen.request({ shape: P, pattern: R.pattern, seed: R.seed, lite, tileShape: R.tile, tilePattern: R.tilePattern }, 'feather').then((o) => {
+    gen.request({ shape: P, pattern: R.pattern, seed: R.seed, lite, tileShape: R.tile, tilePattern: R.tilePattern }, 'feather', (f) => { if (v === version) solveProgress = f; }).then((o) => {
       if (v !== version) return;
       clear();
       for (const t of texs) t.dispose();
@@ -152,6 +153,12 @@ export function createStage(scene, gen, { lite = false } = {}) {
         F.kb.value = bendOf(S, lay.Rd); // (courbure du rachis ; × l'échelle de chaque plume)
         return F.rhoTex;
       };
+      // la scène résolue (gen/collide.js) : pose, ancienne plume, voisines qui s'écartent
+      const NB = o.beta.length;
+      solved = { beta: o.beta, old: o.old, tiles: new Map() };
+      o.idx.forEach((j, k) => solved.tiles.set(j, o.moves.subarray(k * NB * 2, (k + 1) * NB * 2)));
+      path = o.beta;
+      cam = cameraPath(R, lay, path); // (la caméra suit la pose résolue)
       const patTex = patOf(o.tex), patT = o.ttex ? patOf(o.ttex) : patTex;
       texs = [patTex, setFU(FU, P, o.rho)];
       if (o.ttex) texs.push(patT, setFU(FUT, T, o.trho));
@@ -181,13 +188,6 @@ export function createStage(scene, gen, { lite = false } = {}) {
       sg.setIndex(tpl.index);
       sg.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e4);
       add(new THREE.Mesh(sg, sheathMaterial({ FS, FSP, FU, LK, idx: 0 })));
-      // les tuiles : repères fixes
-      tileState.length = 0;
-      for (let j = 0; j < nTiles; j++) {
-        const t = lay.tiles[j];
-        const fr = featherFrame(lay.Rd, t.th, t.ph, LIE_BETA(T.radial), LIE.omega, t.yaw);
-        tileState.push({ p: fr.p, q: fr.q, scale: t.scale, wear: t.wear, rnd: t.rnd });
-      }
       pending--;
       lastPh = -1;
     }).catch((e) => { console.error(e); pending = Math.max(0, pending - 1); });
@@ -227,15 +227,12 @@ export function createStage(scene, gen, { lite = false } = {}) {
     if (R.tile && Bd.tileBase) { LKT.base.value.set(Bd.tileBase); LKT.mark.value.set(Bd.tileMark); LKT.sheen.value = 0.5; LKT.down.value.set(Bd.tileBase).lerp(new THREE.Color(K.down), 0.5); }
   }
 
-  // écrit l'état d'une plume i : position, quaternion, (temps, usure, tirage, visible), (courbure)
-  // (K : contact avec le tuyau — étendue de la fente, x0, y0, r ; voir tileContacts)
+  // écrit l'état d'une plume i : position et échelle, quaternion, (temps, usure, tirage, visible)
   const F = FSTRIDE;
-  function put(i, p, q, scale, t, wear, rnd, vis, K = null) {
+  function put(i, p, q, scale, t, wear, rnd, vis) {
     arr[i * F].set(p[0], p[1], p[2], scale);
     arr[i * F + 1].set(q[0], q[1], q[2], q[3]);
     arr[i * F + 2].set(t, wear, rnd, vis);
-    if (K) { arr[i * F + 3].set(K.ext, K.x0, K.y0, K.r); arr[i * F + 4].set(K.split, K.tent, 0, 0); }
-    else { arr[i * F + 3].set(0, 0, 0, 0); arr[i * F + 4].set(0, 0, 0, 0); }
   }
 
   const _v = new THREE.Vector3();
@@ -245,26 +242,12 @@ export function createStage(scene, gen, { lite = false } = {}) {
     const k = bendOf(P, lay.Rd);
     const jump = lastPh < 0 || Math.abs(ph - lastPh) > 0.02;
     for (let i = 0; i < (2 + nTiles) * FSTRIDE; i++) arrP[i].copy(arr[i]);
-    // la nouvelle plume (0)
-    const st = settleAt(ph);
-    const fr = featherFrame(lay.Rd, lay.thH, 0, betaAt(ph, P.radial), (P.radial ? 0 : LIE.omega) * st);
-    put(0, fr.p, fr.q, 1, ph, wearAt(ph), 0.5, 1);
-    // l'ancienne (1) : la pose de la nouvelle à u = 1, poussée puis chassée
-    const ej = ejection(ph, P, lay);
-    const fo = featherFrame(lay.Rd, ej.th, 0, betaAt(1, P.radial), P.radial ? 0 : LIE.omega);
-    const X = fo.X, Y = fo.Y;
-    let q = qmul(qaxis(X, -ej.tilt), fo.q);
-    q = qmul(qaxis(qrot(q, [0, 1, 0]), ej.roll), q);
-    void Y;
-    const vis = ph < SCHED.fall[1] + 0.05 && !ej.gone ? 1 : 0;
-    put(1, [fo.p[0] + ej.off[0], fo.p[1] + ej.off[1], fo.p[2] + ej.off[2]], q, 1, 1, 1, 0.5, vis);
-    // les voisines
-    // les voisines, et leur contact avec le tuyau qui sort (gen/feather.js, tileContacts)
-    const kt = bendOf(R.tile ?? P, lay.Rd), T = R.tile ?? P;
-    const C = tileContacts(P, lay, ph, R.tile);
-    for (let j = 0; j < nTiles; j++) {
-      const t = tileState[j], c = C[j];
-      put(j + 2, t.p, t.q, t.scale, 1, t.wear, t.rnd, 1, c.tent > 0 || c.split > 0 ? c : null);
+    // toutes les plumes, exactement comme le banc des traversées les voit
+    // (gen/collide.js, sceneState) : la nouvelle, l'ancienne, les voisines
+    // écartées ou au repos
+    for (const o of sceneState(R, lay, ph, solved)) {
+      if (o.kind === 'tile' && o.tile >= nTiles) continue;
+      put(o.id, o.p, o.q, o.scale, o.u, o.wear, o.rnd, o.vis);
     }
     if (jump) for (let i = 0; i < (2 + nTiles) * FSTRIDE; i++) arrP[i].copy(arr[i]);
     lastPh = ph;
@@ -304,7 +287,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
   return {
     setRecipe, update, setShadowQuality, syncLook, group, key, rim, fill, body,
     syncFinishes: syncLook,
-    refreshCamera: () => { if (R && lay) cam = cameraPath(R, lay); },
+    refreshCamera: () => { if (R && lay) cam = cameraPath(R, lay, path); },
     cameraAt: (ph) => cam?.at(ph) ?? { pos: [0, 10, 30], target: [0, 0, 0], dist: 30 },
     // état des plumes visibles, la plume couchée d'abord : à u = 0 c'est
     // l'ancienne, à u → 1 la nouvelle (les deux instances échangent leur rôle
@@ -313,10 +296,10 @@ export function createStage(scene, gen, { lite = false } = {}) {
       const vis = (i) => arr[i * F + 2].w > 0.5 && arr[i * F + 2].x > 1e-6 && (i > 1 || growth(arr[i * F + 2].x, R.shape.L) > 0);
       const heroes = [0, 1].filter(vis).sort((a, b) => arr[b * F + 2].x - arr[a * F + 2].x);
       const ids = [...heroes, ...Array.from({ length: nTiles }, (_, j) => j + 2)];
-      return ids.flatMap((i) => [arr[i * F], arr[i * F + 1], arr[i * F + 2], arr[i * F + 3], arr[i * F + 4]]);
+      return ids.flatMap((i) => [arr[i * F], arr[i * F + 1], arr[i * F + 2]]);
     },
     layout: () => lay,
     ready: () => pending === 0,
-    progress: () => (pending ? 0.3 : 1),
+    progress: () => (pending ? 0.05 + 0.9 * solveProgress : 1),
   };
 }
