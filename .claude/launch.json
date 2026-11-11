@@ -202,6 +202,16 @@
         "."
       ],
       "port": 8120
+    },
+    {
+      "name": "feather",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        ".claude/serve.py",
+        "8130",
+        "feather"
+      ],
+      "port": 8130
     }
   ]
 }

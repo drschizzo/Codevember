@@ -45,7 +45,8 @@ const COPY = [
     [/U\.exposure\.value = cfg\.exposure;/, "U.exposure.value = cfg.exposure * (R?.grade?.exposure ?? 1); // (exposition fixe de l'humeur)"],
   ]],
   ['tesseract/src/render/accum.js', 'src/render/accum.js'],
-  ['tesseract/src/scene/env.js', 'src/scene/env.js', [[/from '\.\.\/math4\.js'/, "from '../rng.js'"]]],
+  ['tesseract/src/scene/env.js', 'src/scene/env.js'],
+  ['moss/src/gen/envmap.js', 'src/gen/envmap.js'], // (pixels du studio, calculés hors du fil principal ; scene/env.js en dépend)
   ['tesseract/src/gen/noisevol.js', 'src/gen/noisevol.js', [[/'tesseract-noise'/, `'${name}-noise'`]]],
   ['tesseract/src/gen/client.js', 'src/gen/client.js'],
   ['membrane/src/gen/mesh.js', 'src/gen/mesh.js'],

@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#050506">
+  <title>Feather · défis techniques</title>
+  <meta name="description" content="Comment Feather est calculé : une plume qui pousse roulée dans sa gaine puis se déroule sans s'étirer, un motif déposé par réaction-diffusion dans le collier du follicule, des barbes posées dans le vertex shader, un plumage en tuiles.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+  <link rel="stylesheet" href="../home/explainer.css">
+</head>
+<body>
+  <nav class="top"><div class="in">
+    <a href="../">Codevember</a><span class="day">Day 12</span><span class="crumb">Feather · défis techniques</span>
+    <span class="sp"></span><a class="open" href="./">Ouvrir la scène</a>
+  </div></nav>
+
+  <main>
+    <header class="hero">
+      <div class="kicker">Day 12 · Feather · la plume en tuyau</div>
+      <h1>Comment une plume sort de son tuyau</h1>
+      <p class="lede">Une plume ne pousse pas à plat : elle sort du follicule roulée dans une gaine de kératine, puis la gaine s'effrite et le vexille se déroule. Feather calcule ce geste : la forme vient d'un modèle de croissance dans le collier du follicule, le déroulement est une isométrie exacte, le motif est déposé rangée par rangée par une réaction-diffusion, et chacune des quelque 240 barbes de la plume est posée dans le vertex shader par la même formule que dans les tests.</p>
+    </header>
+
+    <figure class="cover">
+      <img src="docs/capture.jpg" alt="Une plume de martin-pêcheur déroulée au-dessus de son plumage, à contre-jour" width="1600" height="900">
+      <figcaption>Martin-pêcheur, contre-jour : la plume nouvelle vient de se dérouler, ses barbes sont agrafées ; autour, les plumes voisines couchées en rangées.</figcaption>
+    </figure>
+
+    <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
+
+    <article>
+      <section id="tube">
+        <h2><span class="n">01</span>La plume pousse roulée, et sa forme vient du tube</h2>
+        <span class="src">src/gen/feather.js · halfWidth(), barbTable()</span>
+        <p>Dans le collier du follicule, un anneau de cellules à la base du tube, les crêtes des barbes naissent du côté postérieur et montent en hélice jusqu'au côté antérieur, où elles se soudent au rachis (Prum et Williamson, 2001). Ce qui sort du follicule est donc un cylindre dont la circonférence est la largeur totale du vexille ; les barbes y sont des hélices.</p>
+        <p>On décrit la plume par son contour déroulé : une demi-largeur par côté, large tôt (la base duveteuse s'évase vite) et arrondie ou effilée à la pointe, avec une asymétrie qui sépare les deux vexilles. Chaque barbe part du rachis à un angle α (plus ouvert à la base) et se courbe vers la pointe ; sa longueur est cherchée par point fixe pour que son extrémité touche le contour. Le tube a alors pour rayon</p>
+        <div class="eq">\[ \rho(s) = \frac{W_g(s) + W_d(s)}{2\pi} \]</div>
+        <p>plafonné à 0,06 L : un vexille très large (l'autruche) s'enroule sur plus d'un tour, comme un parchemin.</p>
+        <figure id="fig-tube"><figcaption><b>Le même vexille, roulé et déroulé.</b> À gauche, le tube vu de face : les barbes y sont des hélices ; à droite, le plan. Le curseur règle l'angle des barbes et l'asymétrie ; les barbes sont celles de <code>barbTable</code>, posées par <code>barbPose</code> (simplifié : sans courbure du rachis).</figcaption></figure>
+      </section>
+
+      <section id="isometrie">
+        <h2><span class="n">02</span>Le déroulement ne change la longueur d'aucune barbe</h2>
+        <span class="src">src/gen/feather.js · barbPose()</span>
+        <p>L'approche naïve — interpoler entre la position roulée et la position plane — raccourcit les barbes d'un tiers au milieu du geste (64 % de leur longueur à λ = 0,5) : la plume se froisse en s'ouvrant. Une surface roulée qui se déroule sans s'étirer est une surface développable dont seule la courbure change. Une tranche du tube est un arc de longueur σ et de courbure \(\kappa = (1-\lambda)/\rho\) :</p>
+        <div class="eq">\[ x = \pm\frac{\sin \kappa\sigma}{\kappa}, \qquad z = -\frac{1-\cos\kappa\sigma}{\kappa} + \rho\,(1-\lambda) \]</div>
+        <p>λ passe de 0 (roulé) à 1 (plan) avec un léger rebond élastique, \(1 - e^{-4x}(\cos 5x + 0{,}8 \sin 5x)\), de dérivée nulle au départ. Le second terme centre le tube roulé sur l'axe du follicule : le rachis est sur sa génératrice dorsale et revient sur l'axe en s'ouvrant.</p>
+        <div class="note trap"><b>Le piège</b><p>Avec un λ lu à la hauteur de chaque point, le front qui descend la plume donne à une même barbe deux courbures différentes : elle s'étirait de 50 %. Le test d'isométrie l'a vu ; chaque barbe lit maintenant un seul λ, à mi-hauteur. Le front descend de barbe en barbe.</p></div>
+        <div class="note check"><b>Vérifié</b><p>La longueur de chaque barbe, mesurée sur 400 segments à sept instants du déroulement, reste à 0,2 % de sa longueur à plat (l'écart restant vient de l'échantillonnage d'une hélice).</p></div>
+        <figure id="fig-iso"><figcaption><b>Une tranche du tube qui s'ouvre.</b> En haut, l'isométrie : l'arc garde sa longueur ; en bas, l'interpolation linéaire entre le cercle et le segment, dont la longueur s'effondre puis remonte.</figcaption></figure>
+      </section>
+
+      <section id="collier">
+        <h2><span class="n">03</span>Le motif est déposé dans le collier : le temps devient la longueur</h2>
+        <span class="src">src/gen/pattern.js · simulateCollar()</span>
+        <p>Le pigment est déposé dans le collier pendant la croissance : ce qui sort du collier au temps τ se retrouve, la plume déroulée, à la hauteur \(z = 1-\tau\) (la pointe est formée en premier). On simule donc une réaction-diffusion activateur-inhibiteur sur l'anneau seulement — 128 cellules, périodiques —, et chaque instant écrit une rangée du plan déroulé (Prum et Williamson, 2002). Le modèle est un Gierer-Meinhardt avec saturation :</p>
+        <div class="eq">\[ \partial_t a = D_a \partial_{xx} a + \frac{r\,a^2}{h\,(1 + k a^2)} - \mu_a a + s, \qquad \partial_t h = D_h \partial_{xx} h + r\,a^2 - \mu_h h \]</div>
+        <p>Un inhibiteur lent (\(\mu_h &lt; \mu_a\)) fait osciller tout l'anneau d'un bloc : des <b>barres</b>. Un inhibiteur rapide et diffusant (\(D_h/D_a = 75\)) donne une instabilité de Turing sur l'anneau ; pulsée dans le temps, elle dépose des <b>rangées de taches</b>. Un Turing fin qui dérive dépose des <b>stries</b> ; une source au rachis, une <b>flammèche</b>. Le champ est ensuite seuillé à sa médiane adoucie pour couvrir la part demandée par l'oiseau.</p>
+        <figure id="fig-collier"><figcaption><b>Le collier au travail.</b> La simulation de <code>pattern.js</code>, avec ses paramètres, déposée rangée par rangée de la pointe vers la base ; la bande claire est le collier. C'est aussi le dessin de l'écran de chargement.</figcaption></figure>
+      </section>
+
+      <section id="chevrons">
+        <h2><span class="n">04</span>Un collier oblique plie les barres en chevrons</h2>
+        <span class="src">src/gen/pattern.js · PROGRAMS.chevrons.slant</span>
+        <p>Les chevrons du faisan et de la perdrix ne demandent pas un autre système : il suffit que le collier ne sorte pas à la même hauteur partout. Si le bord de la plume quitte le collier plus tôt que le rachis, une même oscillation se dépose plus bas au rachis qu'au bord, et la barre se plie. Dans le code, la rangée déposée à la colonne x lit l'instant \(\tau + \text{slant}\,(1-|x|)\) d'une mémoire de quelques rangées d'avance.</p>
+        <figure id="fig-chevrons"><figcaption><b>Des barres aux chevrons.</b> La même simulation de barres, lue à travers un collier de plus en plus oblique (0 : barres droites ; 0,16 : les chevrons du faisan).</figcaption></figure>
+      </section>
+
+      <section id="horloge">
+        <h2><span class="n">05</span>Une seule horloge, des temps qui ne reviennent jamais en arrière</h2>
+        <span class="src">src/gen/feather.js · SCHED, growth(), releaseAt(), zipAt()</span>
+        <p>Croissance, front de déroulement, agrafage, courbure du rachis, pose et usure lisent une seule table de bornes, et la caméra lit la plume. Chaque courbe est monotone dans son temps : un agrafage qui se déferait, une plume qui remonterait se liraient comme des bogues. La chute de l'ancienne plume est filmée en caméra rapide (vrai temps ÷ 8) : la croissance s'y arrête, comme dans un accéléré qui ralentit sur un événement. Elle glisse le long du méridien du corps, a = g(sin θ − μ cos θ) avec μ = 0,45, et passe derrière sa courbe.</p>
+        <div class="note check"><b>Vérifié</b><p>Un test parcourt la boucle par pas de 1/2000 et vérifie que chaque grandeur ne décroît jamais ; qu'à u = 0 la plume nouvelle est entièrement dans le follicule ; qu'à u = 1 elle est exactement la plume couchée et usée du début (écart &lt; 10⁻⁵ cm).</p></div>
+        <figure id="fig-horloge"><figcaption><b>Les courbes du film.</b> Les fonctions de <code>feather.js</code>, sur une boucle ; le curseur montre l'instant et la plume correspondante, posée par <code>barbPose</code> et vue de face (projection simplifiée).</figcaption></figure>
+      </section>
+
+      <section id="agrafage">
+        <h2><span class="n">06</span>Libres, les barbes s'écartent ; agrafées, elles font une surface</h2>
+        <span class="src">src/gen/feather.js · barbPose() · zipAt()</span>
+        <p>Une barbe libérée de la gaine n'est pas encore accrochée à ses voisines : elle s'écarte de quelques degrés et ondule, et des jours s'ouvrent dans le vexille. Le front d'agrafage suit le front de déroulement avec un retard de 0,025 boucle et avance du rachis vers le bord : les crochets des barbules referment les jours de proche en proche. Les familles diffèrent par là : les barbes de l'autruche n'ont pas de crochets et retombent sous leur poids ; celles du paon ne s'agrafent que dans le disque de l'œil ; le duvet n'a pas de rachis et s'ouvre en étoile.</p>
+        <p>À la fin de la boucle, l'usure raccourcit les pointes jusqu'à 45 % pour les barbes les plus exposées et décroche une barbe sur dix, qui s'écarte : c'est la plume usée qui sera chassée.</p>
+        <figure id="fig-zip"><figcaption><b>Le front d'agrafage.</b> Un côté du vexille, posé par <code>barbPose</code> à l'instant choisi : les barbes libres (claires) s'écartent et ondulent, les barbes agrafées (or) se rangent ; « Usure » montre la plume à la fin de la boucle.</figcaption></figure>
+      </section>
+
+      <section id="plumage">
+        <h2><span class="n">07</span>Le plumage se recouvre comme des tuiles</h2>
+        <span class="src">src/gen/feather.js · layoutPlumage(), featherFrame()</span>
+        <p>Le dos de l'oiseau est une sphère de rayon 2,8 à 3 L, couverte de plumes couchées en rangées décalées. Une plume couchée suit la courbure du corps (bornée à 0,9/R pour ne jamais y rentrer) et en est soulevée de ε = 0,1 rad : sa hauteur croît le long du rachis. La rangée suivante part 0,36 L plus bas : sur leur recouvrement, la plume du dessus est toujours plus haute, d'environ \(0{,}36\,L\sin\varepsilon\). Dans une rangée, un roulis de 0,07 rad fait chevaucher les plumes comme des écailles. Les deux tuiles de la rangée du dessus qui couvriraient le follicule s'écartent : le tuyau sort entre elles.</p>
+        <div class="note check"><b>Vérifié</b><p>Pour trois familles, la hauteur du rachis couché au-dessus du corps croît le long de la plume ; aucune tuile ne couvre la fente ; et, à tous les instants (pas de 0,025), aucun point témoin des barbes ne passe sous le corps dessiné, hors de la bouche du follicule.</p></div>
+        <figure id="fig-tuiles"><figcaption><b>Coupe du plumage.</b> Les rachis couchés sur le corps, le long de la pente ; ε règle le soulèvement, le pas la distance entre rangées. En rouge, les recouvrements où une plume passerait sous la suivante.</figcaption></figure>
+      </section>
+
+      <section id="vertex">
+        <h2><span class="n">08</span>Chaque barbe est un ruban posé dans le vertex shader</h2>
+        <span class="src">src/scene/feather.js · barbPoseT(), barbMaterial()</span>
+        <p>La plume héroïne compte 2 × 110 à 2 × 140 barbes, le plumage une centaine de plumes en gabarit grossier, soit 5 000 à 12 000 instances. Pas d'<code>InstancedMesh</code> (three.js compile un shader par objet) : un maillage ordinaire dont la géométrie porte, par barbe, quatre vec4 dans un seul tampon entrelacé (racine, côté, longueur, angle, courbure, rayons du tube, part duveteuse, plume, tirage, largeur, agrafable, affaissement, écart, ondulation, usure). L'état de chaque plume — repère, temps local, usure, courbure — tient dans un tableau d'uniformes de 256 × 4 vec4, recopié à chaque image dans un second tableau pour les vecteurs vitesse.</p>
+        <p>Un ruban a 22 segments sur 3 sommets : bord, arête, bord. La normale s'incline en travers pour que l'arête du ramus accroche un filet de lumière ; la frange des barbules est un peigne tramé, lissé par l'anticrénelage temporel. Le motif est lu dans le plan déroulé (deux coordonnées interpolées), la translucidité éclaire le vexille au contre-jour et dessine le motif en ombre chinoise ; l'irisation est un film mince d'épaisseur 300 à 620 nm selon l'oiseau.</p>
+        <div class="note trap"><b>Le piège</b><p>Un bout de barbe carré, multiplié par cent, dessine un contour en dents de scie ; trop effilé, il dessine des épines. La barbe s'amincit de 30 % le long de sa longueur, puis de 40 % de plus sur son dernier tiers.</p></div>
+      </section>
+
+      <section id="budget">
+        <h2><span class="n">09</span>Budget</h2>
+        <div class="tbl"><table>
+          <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
+          <tbody id="budget-rows">
+            <tr><td>Motif du collier (128 × 192, réaction-diffusion)</td><td>worker</td><td class="num">10 – 90 ms</td></tr>
+            <tr><td>Tables des barbes, profil du tube</td><td>worker</td><td class="num">&lt; 5 ms</td></tr>
+            <tr><td>Trajectoire de caméra (720 poses, lissage gaussien)</td><td>fil principal</td><td class="num">10 – 30 ms</td></tr>
+            <tr><td>Image, vexille au contre-jour, 1,8 Mpx, qualité Haute</td><td>GPU</td><td class="num">5,5 ms</td></tr>
+            <tr><td>Image, duvet parmi les couvertures (le plus lourd)</td><td>GPU</td><td class="num">6,2 – 7,3 ms</td></tr>
+            <tr><td>Image, version mobile, 1,2 Mpx</td><td>GPU</td><td class="num">2,7 ms</td></tr>
+            <tr><td>Barbes à l'écran (héroïne + voisines)</td><td>vertex</td><td class="num">5 000 – 12 000 rubans</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+    </article>
+
+    <footer class="end">
+      <a href="./">Ouvrir Feather</a>
+      <a href="https://github.com/drschizzo/Codevember/blob/main/feather/README.md">README</a>
+      <a href="https://github.com/drschizzo/Codevember/blob/main/feather/docs/concept.md">La démarche</a>
+      <span class="sp"></span>
+      <a href="../">Tous les jours</a>
+    </footer>
+  </main>
+
+  <script type="module">
+    import { demo, C, TAU, lerp, clamp, label, alpha } from '../home/explainer.js';
+    import { shapeOf, barbTable, barbPose, BARB_STRIDE, SCHED, growth, zipAt, bendAt, settleAt, wearAt, sinkAt } from './src/gen/feather.js';
+    import { simulateCollar, normalizePattern, PROGRAMS } from './src/gen/pattern.js';
+    import { createRng } from './src/rng.js';
+
+    const P0 = shapeOf('vexille', createRng('explainer'));
+    const barbsOf = (P, seed = 'x', dens) => { const T = barbTable(P, seed, dens); const out = []; for (let i = 0; i < T.length / BARB_STRIDE; i++) out.push([...T.slice(i * BARB_STRIDE, (i + 1) * BARB_STRIDE)]); return out; };
+    const state = (P, u, wear = 0) => ({ u, L: P.L, k: 0, wear, g: [0, -1, 0], radial: P.radial, cal: P.calamus, over: P.over });
+
+    // ── 01 · le tube et le plan ────────────────────────────────────────────
+    demo('#fig-tube', {
+      title: 'Roulé, déroulé', aspect: 2,
+      controls: [
+        { key: 'alpha', label: 'Angle des barbes (rad)', min: 0.45, max: 1.0, step: .01, value: P0.alpha },
+        { key: 'asym', label: 'Asymétrie', min: -0.35, max: 0.35, step: .01, value: 0.15 },
+      ],
+      draw(g, d) {
+        const P = { ...P0, alpha: d.s.alpha, asym: d.s.asym, wave: 0, droop: 0 };
+        const B = barbsOf(P, 'tube', 9);
+        const sc = d.h * 0.86 / P.L, base = d.h * 0.94;
+        for (const [ox, u, name] of [[d.w * 0.25, 0.39, 'dans la gaine'], [d.w * 0.7, 1, 'déroulé']]) {
+          const S = state(P, u);
+          for (const b of B) {
+            const side = b[1];
+            g.strokeStyle = side > 0 ? alpha(C.c1, .85) : alpha(C.c2, .85); g.lineWidth = 1;
+            g.beginPath(); let started = false;
+            // (roulée : juste avant le passage du front, décalée de ce qui reste à sortir)
+            const dy = u < 1 ? sinkAt(0.335, P.L, P.calamus, P.over) - sinkAt(1, P.L, P.calamus, P.over) : 0;
+            for (let i = 0; i <= 16; i++) {
+              const r = barbPose(b, i / 16, 0, 0, { ...S, u: u < 1 ? 0.335 : 1 });
+              const X = ox + r.p[0] * sc, Y = base - (r.p[1] + dy) * sc;
+              if (!started) { g.moveTo(X, Y); started = true; } else g.lineTo(X, Y);
+            }
+            g.globalAlpha = 1; g.stroke();
+          }
+          g.strokeStyle = C.ink; g.lineWidth = 1.5; g.beginPath(); g.moveTo(ox, base); g.lineTo(ox, base - P.L * (1 - P.calamus * 0.85) * sc); g.stroke();
+          label(g, name, ox, 18, { align: 'center', color: C.dim });
+        }
+        d.status(`α = ${d.s.alpha.toFixed(2)} rad · asymétrie ${d.s.asym.toFixed(2)}`);
+      },
+    });
+
+    // ── 02 · isométrie ─────────────────────────────────────────────────────
+    demo('#fig-iso', {
+      title: 'Une tranche qui s’ouvre', aspect: 2.2, animate: true,
+      controls: [{ key: 'lam', label: 'λ (0 roulé → 1 plan)', min: 0, max: 1, step: .005, value: .4 }],
+      buttons: [{ key: 'auto', label: 'Animer', toggle: true, value: true }],
+      draw(g, d) {
+        let lam = d.s.lam;
+        if (d.s.auto) { lam = 0.5 - 0.5 * Math.cos(d.t * 0.8); }
+        const rho = 1, half = Math.PI * rho, sc = Math.min(d.w / 9, d.h / 5.2);
+        const rows = [[d.h * 0.3, 'isométrie : courbure (1 − λ)/ρ'], [d.h * 0.78, 'interpolation linéaire cercle → segment']];
+        rows.forEach(([cy, name], r) => {
+          const cx = d.w * 0.5; let len = 0, prev = null;
+          g.strokeStyle = r ? C.c3 : C.c1; g.lineWidth = 2.2; g.beginPath();
+          for (let i = -60; i <= 60; i++) {
+            const sg = Math.abs(i) / 60 * half, side = Math.sign(i) || 1;
+            let x, z;
+            if (!r) { const k = Math.max(1e-4, (1 - lam) / rho), a = k * sg; x = side * Math.sin(a) / k; z = -(1 - Math.cos(a)) / k + rho * (1 - lam); }
+            else { const a = sg / rho; const xc = side * Math.sin(a) * rho, zc = rho * Math.cos(a); x = lerp(xc, side * sg, lam); z = lerp(zc, 0, lam); }
+            const X = cx + x * sc, Y = cy - z * sc * 0.9;
+            if (prev) len += Math.hypot(x - prev[0], z - prev[1]);
+            prev = [x, z];
+            i === -60 ? g.moveTo(X, Y) : g.lineTo(X, Y);
+          }
+          g.stroke();
+          g.fillStyle = C.ink; g.beginPath(); g.arc(cx, cy - (r ? rho : rho * (1 - lam)) * sc * 0.9 * (r ? lerp(1, 0, lam) : 1), 3.5, 0, TAU); g.fill();
+          label(g, name, 14, cy - d.h * 0.17, { color: C.dim });
+          label(g, `longueur ${(len / (2 * half) * 100).toFixed(1)} %`, d.w - 14, cy - d.h * 0.17, { align: 'right', color: r ? C.c3 : C.c1, size: 14, font: 'Fraunces' });
+        });
+        d.status(`λ = ${lam.toFixed(2)}`);
+      },
+    });
+
+    // ── 03 · le collier ────────────────────────────────────────────────────
+    {
+      const progs = Object.keys(PROGRAMS).filter((k) => k !== 'plain');
+      let cache = {};
+      demo('#fig-collier', {
+        title: 'Réaction-diffusion dans le collier', aspect: 2, animate: true,
+        buttons: progs.map((k, i) => ({ label: { bars: 'Barres', chevrons: 'Chevrons', spots: 'Taches', streaks: 'Stries', shaft: 'Flammèche' }[k] ?? k, onClick: (d) => { d.state.prog = k; d.state.t0 = d.t; } })),
+        setup(d) { d.state.prog = 'bars'; d.state.t0 = 0; },
+        draw(g, d) {
+          const k = d.state.prog, nx = 96, nz = 144;
+          if (!cache[k]) {
+            const f = normalizePattern(simulateCollar(k, 'explainer', { nx, nz }), { bars: 0.3, chevrons: 0.34, spots: 0.2, streaks: 0.3, shaft: 0.18 }[k] ?? 0.3);
+            const c = new OffscreenCanvas(nx, nz), x = c.getContext('2d'), id = x.createImageData(nx, nz);
+            for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) { const v = f[(nz - 1 - j) * nx + i], o = (j * nx + i) * 4; id.data[o] = 214 - 170 * v; id.data[o + 1] = 168 - 140 * v; id.data[o + 2] = 112 - 92 * v; id.data[o + 3] = 255; }
+            x.putImageData(id, 0, 0); cache[k] = c;
+          }
+          const r = clamp(((d.t - d.state.t0) * 0.22) % 1.25), H = d.h * 0.86, W = H / nz * nx * 1.1, x0 = d.w / 2 - W / 2, y0 = d.h * 0.07;
+          g.save(); g.beginPath(); g.rect(x0, y0, W, H * r); g.clip(); g.imageSmoothingEnabled = true; g.drawImage(cache[k], x0, y0, W, H); g.restore();
+          g.strokeStyle = C.line; g.strokeRect(x0, y0, W, H);
+          const yb = y0 + H * r;
+          if (r < 1) { const gr = g.createLinearGradient(0, yb - 10, 0, yb + 10); gr.addColorStop(0, 'rgba(255,236,200,0)'); gr.addColorStop(.5, 'rgba(255,236,200,.55)'); gr.addColorStop(1, 'rgba(255,236,200,0)'); g.fillStyle = gr; g.fillRect(x0 - 10, yb - 10, W + 20, 20); }
+          label(g, 'pointe', x0 - 10, y0 + 10, { align: 'right' }); label(g, 'base', x0 - 10, y0 + H, { align: 'right' });
+          label(g, 'bord', x0, y0 + H + 16, { align: 'center', size: 11 }); label(g, 'rachis', x0 + W / 2, y0 + H + 16, { align: 'center', size: 11 }); label(g, 'bord', x0 + W, y0 + H + 16, { align: 'center', size: 11 });
+          const P = PROGRAMS[k];
+          d.status(`D<sub>h</sub>/D<sub>a</sub> = ${(P.Dh / P.Da).toFixed(0)} · μ<sub>h</sub> = ${P.mh}`);
+        },
+      });
+    }
+
+    // ── 04 · chevrons ──────────────────────────────────────────────────────
+    {
+      const cache = new Map();
+      demo('#fig-chevrons', {
+        title: 'Collier oblique', aspect: 2.2,
+        controls: [{ key: 'slant', label: 'Obliquité du collier', min: 0, max: 0.24, step: .02, value: .16 }],
+        draw(g, d) {
+          const nx = 96, nz = 120, key = d.s.slant.toFixed(2);
+          if (!cache.has(key)) {
+            const f = normalizePattern(simulateCollar({ ...PROGRAMS.chevrons, slant: d.s.slant }, 'chev', { nx, nz }), 0.32);
+            const c = new OffscreenCanvas(nx, nz), x = c.getContext('2d'), id = x.createImageData(nx, nz);
+            for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) { const v = f[(nz - 1 - j) * nx + i], o = (j * nx + i) * 4; id.data[o] = 190 - 165 * v; id.data[o + 1] = 110 - 95 * v; id.data[o + 2] = 54 - 44 * v; id.data[o + 3] = 255; }
+            x.putImageData(id, 0, 0); cache.set(key, c);
+          }
+          const H = d.h * 0.86, W = H * 0.9, x0 = d.w / 2 - W / 2, y0 = d.h * 0.07;
+          g.imageSmoothingEnabled = true; g.drawImage(cache.get(key), x0, y0, W, H);
+          // la ligne du collier, oblique
+          g.strokeStyle = alpha(C.c1, .9); g.lineWidth = 2; g.beginPath();
+          const yc = y0 + H * 0.55;
+          g.moveTo(x0, yc + d.s.slant * H * 0); g.lineTo(x0 + W / 2, yc + d.s.slant * H); g.lineTo(x0 + W, yc); g.stroke();
+          label(g, 'collier', x0 + W + 10, yc + 4, { color: C.c1 });
+          d.status(`slant = ${d.s.slant.toFixed(2)}`);
+        },
+      });
+    }
+
+    // ── 05 · l'horloge ─────────────────────────────────────────────────────
+    {
+      const P = { ...P0, wave: 0.05 };
+      const B = barbsOf(P, 'clock', 9);
+      demo('#fig-horloge', {
+        title: 'Les courbes du film', aspect: 2, animate: true,
+        controls: [{ key: 'u', label: 'Phase u', min: 0, max: 1, step: .002, value: .5 }],
+        buttons: [{ key: 'play', label: 'Lecture', toggle: true, value: true }],
+        draw(g, d) {
+          const u = d.s.play ? (d.t * 0.04) % 1 : d.s.u;
+          const W = d.w * 0.62, H = d.h - 40, x0 = 14, y0 = 20;
+          const curves = [
+            ['croissance', (x) => growth(x, P.L), C.c2],
+            ['front (pointe → base)', (x) => clamp((x - SCHED.front[0]) / (SCHED.front[1] - SCHED.front[0])), C.c1],
+            ['agrafage (milieu)', (x) => zipAt(x, 0.5, 0.5), C.c3],
+            ['courbure', bendAt, C.c4],
+            ['pose', settleAt, C.ink],
+            ['usure', wearAt, C.dim],
+          ];
+          g.strokeStyle = C.grid; g.strokeRect(x0, y0, W, H);
+          curves.forEach(([name, f, col], k) => {
+            g.strokeStyle = col; g.lineWidth = 1.6; g.beginPath();
+            for (let i = 0; i <= 300; i++) { const x = i / 300, X = x0 + x * W, Y = y0 + H - f(x) * (H - 8) - 4; i ? g.lineTo(X, Y) : g.moveTo(X, Y); }
+            g.stroke(); label(g, name, x0 + 6, y0 + 14 + k * 15, { color: col, size: 11 });
+          });
+          g.strokeStyle = C.ink; g.setLineDash([3, 3]); g.beginPath(); g.moveTo(x0 + u * W, y0); g.lineTo(x0 + u * W, y0 + H); g.stroke(); g.setLineDash([]);
+          // la plume à cet instant, vue de face
+          const S = state(P, u, wearAt(u)), cx = d.w * 0.82, base = d.h * 0.92, sc = (d.h * 0.8) / P.L;
+          for (const b of B) {
+            g.strokeStyle = b[11] > 0.5 ? alpha(C.c1, .9) : alpha(C.ink, .5); g.lineWidth = 1; g.beginPath(); let st = false;
+            for (let i = 0; i <= 10; i++) { const r = barbPose(b, i / 10, 0, 0, S); if (r.hidden) continue; const X = cx + r.p[0] * sc, Y = base - r.p[1] * sc; st ? g.lineTo(X, Y) : (g.moveTo(X, Y), st = true); }
+            g.stroke();
+          }
+          g.strokeStyle = C.dim; g.beginPath(); g.moveTo(cx - P.L * sc * 0.35, base); g.lineTo(cx + P.L * sc * 0.35, base); g.stroke();
+          label(g, 'peau', cx + P.L * sc * 0.36, base + 4, { size: 11 });
+          d.status(`u = ${u.toFixed(3)}`);
+        },
+      });
+    }
+
+    // ── 06 · l'agrafage ────────────────────────────────────────────────────
+    {
+      const P = { ...P0, asym: 0 };
+      const B = barbsOf(P, 'zip', 18).filter((b) => b[1] > 0);
+      demo('#fig-zip', {
+        title: 'Libres puis agrafées', aspect: 2.2,
+        controls: [{ key: 'u', label: 'Phase u', min: 0.36, max: 0.72, step: .002, value: .5 }],
+        buttons: [{ key: 'worn', label: 'Usure', toggle: true, value: false }],
+        draw(g, d) {
+          const u = d.s.worn ? 1 : d.s.u;
+          const S = state(P, u, d.s.worn ? 1 : 0);
+          // la plume couchée sur le côté : le rachis horizontal
+          const sc = Math.min(d.w * 0.9 / P.L, d.h * 0.85 / (P.W * 0.62)), x0 = d.w * 0.05, y0 = d.h * 0.88;
+          for (const b of B) {
+            const z = barbPose(b, 0.5, 0, 0, S).zip;
+            g.strokeStyle = z > 0.5 ? C.c1 : alpha(C.ink, .55); g.lineWidth = 1.1; g.beginPath(); let st = false;
+            for (let i = 0; i <= 14; i++) { const r = barbPose(b, i / 14, 0, 0, S); const X = x0 + r.p[1] * sc, Y = y0 - Math.hypot(r.p[0], r.p[2]) * sc * Math.sign(r.p[0] || 1); st ? g.lineTo(X, Y) : (g.moveTo(X, Y), st = true); }
+            g.stroke();
+          }
+          g.strokeStyle = C.ink; g.lineWidth = 2; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x0 + P.L * sc, y0); g.stroke();
+          d.status(d.s.worn ? 'u = 1 : usée' : `u = ${u.toFixed(3)} · front à s = ${clamp(1 - (u - SCHED.front[0]) / (SCHED.front[1] - SCHED.front[0])).toFixed(2)}`);
+        },
+      });
+    }
+
+    // ── 07 · les tuiles ────────────────────────────────────────────────────
+    demo('#fig-tuiles', {
+      title: 'Coupe du plumage', aspect: 2.4,
+      controls: [
+        { key: 'eps', label: 'Soulèvement ε (rad)', min: 0, max: 0.25, step: .01, value: .1 },
+        { key: 'step', label: 'Pas des rangées (× L)', min: 0.2, max: 0.7, step: .01, value: .36 },
+      ],
+      draw(g, d) {
+        const L = 6, Rd = 3 * L, k = 0.9 / Rd, cx = d.w * 0.5, cy = d.h * 0.1 + Rd * 0, sc = Math.min(d.w / (L * 4.4), d.h / (L * 1.25));
+        const toScr = (th, h) => { const r = Rd + h; return [cx + Math.sin(th - 0.55) * r * sc, d.h * 0.98 - (Math.cos(th - 0.55) * r - Rd * Math.cos(0.75)) * sc]; };
+        // corps
+        g.strokeStyle = C.dim; g.lineWidth = 1.5; g.beginPath();
+        for (let i = 0; i <= 120; i++) { const th = 0.05 + i / 120 * 1.1; const [X, Y] = toScr(th, 0); i ? g.lineTo(X, Y) : g.moveTo(X, Y); }
+        g.stroke();
+        const rows = [];
+        for (let r = 0; r < 9; r++) {
+          const th0 = 0.1 + r * d.s.step * L / Rd, pts = [];
+          for (let i = 0; i <= 30; i++) {
+            const y = i / 30 * L;
+            // rachis couché : courbure k, soulevé de ε ; hauteur au-dessus du corps
+            const ang = d.s.eps - k * y + y / Rd;
+            const h = y * Math.sin(d.s.eps) - (k - 1 / Rd) * y * y / 2 * -1 * 0 + (1 / Rd - k) * y * y / 2;
+            pts.push([th0 + y / Rd, h]);
+            void ang;
+          }
+          rows.push(pts);
+        }
+        // recouvrements : la plume du dessus doit rester au-dessus
+        let bad = 0;
+        rows.forEach((pts, r) => {
+          g.strokeStyle = r % 2 ? C.c1 : C.c2; g.lineWidth = 2; g.beginPath();
+          pts.forEach(([th, h], i) => { const [X, Y] = toScr(th, h); i ? g.lineTo(X, Y) : g.moveTo(X, Y); });
+          g.stroke();
+          const nxt = rows[r + 1];
+          if (nxt) for (const [th, h] of nxt) { const q = pts.find((p) => Math.abs(p[0] - th) < L / Rd / 60); if (q && q[1] < h) { const [X, Y] = toScr(th, h); g.fillStyle = C.c3; g.fillRect(X - 1.5, Y - 1.5, 3, 3); bad++; } }
+        });
+        d.status(bad ? `${bad} points où une plume passe sous la suivante` : 'aucun croisement');
+      },
+    });
+  </script>
+</body>
+</html>

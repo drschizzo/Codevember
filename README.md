@@ -2,6 +2,14 @@
 
 Expériences de creative coding, publiées sur [drschizzo.github.io/Codevember](https://drschizzo.github.io/Codevember/).
 
+## [Feather](feather/)
+
+La plume en tuyau. Dans le plumage d’un oiseau, une plume nouvelle pousse roulée dans sa gaine de kératine et chasse l’ancienne, qui glisse sur le dos et tombe ; la gaine s’effrite de la pointe vers la base, les deux moitiés du tube s’ouvrent comme un livre et deviennent les vexilles, sans s’étirer ; les barbes, d’abord libres, s’agrafent l’une à l’autre et le motif — barres, chevrons, taches, ocelle — apparaît en entier ; la plume se couche dans sa rangée, s’use, et la suivante la chasse. Croissance dans le collier du follicule d’après Prum et Williamson (hélices des crêtes de barbes, déroulement isométrique), motif déposé rangée par rangée par une réaction-diffusion activateur-inhibiteur sur l’anneau du collier, barbes posées dans le vertex shader, plumage en tuiles qui ne se traversent pas ; quatre familles (le vexille qui s’ouvre et s’agrafe, l’ocelle du paon, la houppe du duvet, la cascade de l’autruche), douze oiseaux, sept décors, boucle parfaite exportable en MP4.
+
+[Démo en ligne](https://drschizzo.github.io/Codevember/feather/) · [version légère](https://drschizzo.github.io/Codevember/feather/?mobile=1) · [documentation](feather/README.md) · [concept](feather/docs/concept.md)
+
+[![Feather](feather/docs/capture.jpg)](https://drschizzo.github.io/Codevember/feather/)
+
 ## [Rust](rust/)
 
 La remise à nu. Une pièce de métal construite comme une vraie — un nœud de treillis riveté, une vanne sur sa tuyauterie, une roue motrice de locomotive, une porte étanche de navire, avec ses centaines de rivets et ses boulons à six pans — rouille sous les averses d’une saison en accéléré : la rouille naît au pied des rivets et dans les angles, là où l’eau reste, s’étend de proche en proche sur les plats, coule en traînées, s’épaissit en croûte qui cloque et s’écaille. Puis une machine se met en place et la décape en temps réel : un portique laser qui balaie la pièce rangée après rangée dans une gerbe d’étincelles, une sableuse dont le cône de grenaille descend en hélice sur la pièce qui tourne, ou un palan qui la plonge dans une fosse d’électrolyse et la ressort ruisselante ; et la rouille revient. Corrosion atmosphérique calculée sur la géométrie (temps d’humectation, concavité, ciel visible, stagnation, front géodésique, ruissellement), loi de dose et stratification de la rouille dans le shader, instant de décapage en forme fermée pour chaque machine, six décors, boucle parfaite exportable en MP4.
