@@ -70,7 +70,7 @@ export const FAMILIES = {
 export const BIRDS = {
   pigeon: {
     label: 'Pigeon', family: 'vexille', base: '#8d929a', mark: '#2a2a30', down: '#c9c8c6', rachis: '#e3ded6', sheath: '#6f7c8c',
-    pattern: { program: 'bars', cover: 0.3 }, irid: [0.35, 380, 520], blue: 0,
+    pattern: { program: 'bars', cover: 0.3 }, irid: [0.35, 380, 520], bragg: 520, blue: 0,
   },
   effraie: {
     label: 'Effraie', family: 'vexille', base: '#d5a66b', mark: '#6c645c', down: '#f1ede4', rachis: '#efe6d6', sheath: '#8b8f98',
@@ -82,7 +82,7 @@ export const BIRDS = {
   },
   faisan: {
     label: 'Faisan', family: 'vexille', base: '#b8682c', mark: '#141012', down: '#b8a796', rachis: '#d6b48c', sheath: '#6c6a72',
-    pattern: { program: 'chevrons', cover: 0.36 }, irid: [0.7, 420, 620], blue: 0,
+    pattern: { program: 'chevrons', cover: 0.36 }, irid: [0.9, 420, 620], bragg: 560, iridMark: 1, blue: 0,
   },
   perdrix: {
     label: 'Perdrix', family: 'vexille', base: '#9a7a52', mark: '#2c2118', down: '#cdc3b4', rachis: '#e8dcc6', sheath: '#7b7f88',
@@ -90,15 +90,15 @@ export const BIRDS = {
   },
   corbeau: {
     label: 'Corbeau', family: 'vexille', base: '#17171b', mark: '#0d0d10', down: '#3a3a40', rachis: '#141416', sheath: '#3c4450',
-    pattern: { program: 'plain' }, irid: [0.9, 330, 470], blue: 0,
+    pattern: { program: 'plain' }, irid: [0.9, 330, 470], bragg: 450, blue: 0,
   },
   martin: {
     label: 'Martin-pêcheur', family: 'vexille', base: '#17a2c4', mark: '#0d3c63', down: '#5a5f66', rachis: '#2b3a46', sheath: '#4c5a66',
-    pattern: { program: 'shaft', cover: 0.18 }, irid: [0.25, 300, 420], blue: 1,
+    pattern: { program: 'shaft', cover: 0.18 }, irid: [0.25, 300, 420], bragg: 485, blue: 1,
   },
   paon: {
     label: 'Paon', family: 'ocelle', base: '#4f7a2a', mark: '#2f2a14', down: '#6f6a50', rachis: '#cfc39a', sheath: '#5d6a5a',
-    pattern: { program: 'plain', eye: [0.86, 0.95, 0.12] }, irid: [0.95, 300, 560], blue: 0,
+    pattern: { program: 'plain', eye: [0.86, 0.95, 0.12] }, irid: [0.95, 300, 560], bragg: 535, blue: 0,
     eye: ['#0d0f3a', '#153f8f', '#1fa59a', '#9c7a32', '#3f6d22'],
   },
   eider: {
@@ -111,7 +111,7 @@ export const BIRDS = {
   },
   autruche: {
     label: 'Autruche', family: 'plume', base: '#1a1919', mark: '#121111', down: '#2c2a29', rachis: '#e8e3da', sheath: '#565e68',
-    pattern: { program: 'plain', white: [0.1, 0.25] }, irid: [0.2, 300, 380], blue: 0,
+    pattern: { program: 'plain', white: [0.1, 0.25] }, irid: [0.2, 300, 380], bragg: 430, blue: 0,
   },
   aigrette: {
     label: 'Aigrette', family: 'plume', base: '#f1eee7', mark: '#e3ded4', down: '#f6f4f0', rachis: '#f3efe6', sheath: '#a3acb6',

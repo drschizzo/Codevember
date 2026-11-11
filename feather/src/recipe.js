@@ -124,7 +124,7 @@ export function generate(seed, overrides = {}) {
     tile, tilePattern: tile ? { ...(B.tilePattern ?? { program: 'plain' }), seed: `${seed}:tile` } : null,
     look: {
       base: B.base, mark: B.mark, down: B.down, rachis: B.rachis, sheath: B.sheath, eye: B.eye ?? null,
-      irid: B.irid[0], iridLo: B.irid[1], iridHi: B.irid[2], blue: B.blue, sheen: family === 'duvet' ? 0.9 : 0.5, translucency: 1,
+      irid: B.irid[0], iridLo: B.irid[1], iridHi: B.irid[2], bragg: B.bragg ?? 0, iridMark: B.iridMark ?? 0, blue: B.blue, sheen: family === 'duvet' ? 0.9 : 0.5, translucency: 1,
     },
     camera: { fov: M.cam.fov, el: r2(M.cam.el + rc.range(-0.06, 0.06)), az: r2((M.cam.az + rc.range(-0.1, 0.1)) * (rc.range(0, 1) < 0.5 ? -1 : 1)), d: r2(M.cam.d * rc.range(0.95, 1.08)), drift: r2(rc.range(0.18, 0.32)) },
     light: { key: light(M.key), rim: light(M.rim), fill: light(M.fill) },

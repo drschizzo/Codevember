@@ -8,7 +8,7 @@ import { FAMILIES } from '../src/families.js';
 import { createRng } from '../src/rng.js';
 import {
   shapeOf, barbTable, barbPose, barbArc, BARB_STRIDE, SCHED, growth, unroll, zipAt, releaseAt, bendAt, settleAt, wearAt,
-  layoutPlumage, featherFrame, bendOf, tubeRadius, betaAt, bodyFrame, qrot, LIE, ejection, sinkAt,
+  layoutPlumage, featherFrame, pinTip, bendOf, tubeRadius, tileContacts, contactPush, contactRadius, rachisPoint, settleAt as settleAt2, betaAt, bodyFrame, qrot, LIE, ejection, sinkAt,
 } from '../src/gen/feather.js';
 import { cameraPath } from '../src/camera.js';
 import { simulateCollar, featherTexture, PROGRAMS } from '../src/gen/pattern.js';
@@ -83,19 +83,22 @@ test('la boucle se referme : la plume à u = 1 est la plume couchée et usée du
 });
 
 test('la poussée : la base de l’ancienne plume repose exactement sur la pointe du tuyau', () => {
-  for (const fam of ['vexille', 'plume']) {
+  for (const fam of ['vexille', 'plume', 'ocelle']) {
     const P = shapeOf(fam, createRng(`push-${fam}`));
     const lay = layoutPlumage(P, 'push');
+    const root = bodyFrame(lay.Rd, lay.thH, 0).p;
+    let lifted = 0;
     for (let u = 0; u <= SCHED.push[1]; u += SCHED.push[1] / 20) {
-      const ej = ejection(u, P, lay);
-      // hauteur de la pointe du tuyau au-dessus de la peau : longueur émergée
-      const tip = Math.max(0, P.L - sinkAt(u, P.L, P.calamus, P.over));
-      assert.ok(Math.abs(ej.base - tip) < 1e-6, `u = ${u} : ${ej.base} ≠ ${tip}`);
+      const ej = ejection(u, P, lay), tip = pinTip(u, P, lay);
+      const base = root.map((v, i) => v + ej.off[i]);
+      assert.ok(Math.hypot(base[0] - tip[0], base[1] - tip[1], base[2] - tip[2]) < 1e-9, `u = ${u}`);
+      lifted = Math.max(lifted, ej.tilt);
     }
-    // ensuite elle s'en va, vers la queue, et finit hors du plumage visible
-    const late = ejection(SCHED.fall[1], P, lay);
-    assert.ok(late.gone && late.th > lay.thH);
-    // elle glisse vers la queue, de plus en plus vite, sans jamais remonter
+    // (et elle se soulève assez pour qu'on le voie : plus de 5°)
+    assert.ok(lifted > 0.09, `${fam} : soulevée de ${(lifted * 180 / Math.PI).toFixed(1)}°`);
+    // ensuite elle s'en va vers la queue, sans jamais remonter, et n'est retirée que derrière la courbe du dos
+    const late = ejection(SCHED.fall[1] + 0.05, P, lay);
+    assert.ok(late.gone && late.th > lay.thH + 1.3);
     let pth = -1;
     for (let u = SCHED.fall[0]; u <= SCHED.fall[1]; u += 0.002) { const e = ejection(u, P, lay); assert.ok(e.th >= pth); pth = e.th; }
   }
@@ -117,14 +120,89 @@ test('le plumage : les rangées se recouvrent comme des tuiles, sans se traverse
       assert.ok(h > 0 && h > prev - 1e-9, `${fam} s = ${s} : h = ${h}`);
       prev = h;
     }
-    // aucune tuile ne recouvre le follicule de la plume héroïne (la fente)
-    const root = bodyFrame(lay.Rd, lay.thH, 0).p;
-    for (const t of lay.tiles.filter((t) => t.k === -1)) {
-      const f = featherFrame(lay.Rd, t.th, t.ph, betaAt(1), LIE.omega);
-      const tipLoc = qrot(f.q, [0, P.L * 0.9, 0]).map((v, i) => v + f.p[i]);
-      const lat = Math.abs(tipLoc[0] - root[0]);
-      assert.ok(lat > Math.max(0.25, P.radial ? 0 : P.W * 0.12), `${fam} : tuile au-dessus du follicule (${lat})`);
+  }
+});
+
+test('le tuyau ne traverse aucune plume voisine : elles se fendent autour de lui', () => {
+  for (const seed of ['nqbh3w', 'c3', 'h1', 'pen']) {
+    for (const fam of ['vexille', 'plume', 'ocelle']) {
+      const R = generate(seed, { family: fam });
+      const P = R.shape, lay = layoutPlumage(P, R.seed, { tile: R.tile });
+      const T = R.tile ?? P, TB = barbTable(T, `${R.seed}:tile`, 6);
+      const kt = bendOf(T, lay.Rd);
+      let worst = Infinity, where = '';
+      for (let u = 0.14; u <= 0.72; u += 0.02) {
+        const C = tileContacts(P, lay, u, R.tile);
+        const fr = featherFrame(lay.Rd, lay.thH, 0, betaAt(u), LIE.omega * settleAt(u));
+        const S = { u, L: P.L, k: bendOf(P, lay.Rd), cal: P.calamus, over: P.over };
+        const axis = [];
+        for (let i = 0; i <= 60; i++) { const r = rachisPoint(i / 60, S); if (!r.hidden) axis.push({ s: i / 60, w: qrot(fr.q, r.p).map((v, j) => v + fr.p[j]) }); }
+        C.forEach((c, j) => {
+          if (!(c.split > 0.99)) return; // (percée, la fente ouverte : elle doit laisser passer le tuyau)
+          const t = lay.tiles[j];
+          const f = featherFrame(lay.Rd, t.th, t.ph, Math.PI / 2 - LIE.eps, LIE.omega, t.yaw);
+          const St = { u: 1, L: T.L, k: kt * t.scale, wear: t.wear, g: [0, 0, -1], radial: false, cal: T.calamus, over: T.over };
+          for (let b = 0; b < TB.length / BARB_STRIDE; b += 2) {
+            const B = barb(TB, b);
+            if (B[7] > 0.35) continue; // (pas de base duveteuse sur les voisines)
+            for (let i = 0; i <= 10; i++) {
+              const r = barbPose(B, i / 10, 0, 0, St);
+              if (r.hidden) continue;
+              // (la ligne même de la fente, 0,15 mm de large, passe par-dessus le tuyau
+              // en douceur : on ne la compte pas)
+              if (Math.abs(r.p[0] - c.x0) < 0.02) continue;
+              const q = contactPush(r.p, [c.ext, c.x0, c.y0, c.r], [c.split, c.tent]);
+              const w = qrot(f.q, q.map((x) => x * t.scale)).map((v, k) => v + f.p[k]);
+              // distance à l'axe du tuyau, rapportée à son rayon
+              for (const a of axis) {
+                const d = Math.hypot(w[0] - a.w[0], w[1] - a.w[1], w[2] - a.w[2]);
+                // (roulée, la gaine ; déroulée, la plume n'est plus qu'un plan mince : son rachis)
+                const rr = tubeRadius(P, a.s) * (1 - Math.min(1, unroll(u, a.s))) + 0.05;
+                if (d / rr < worst) { worst = d / rr; where = `${seed}/${fam} u=${u.toFixed(2)} tuile ${j}`; }
+              }
+            }
+          }
+        });
+      }
+      assert.ok(worst > 0.85, `une barbe voisine dans le tuyau (${worst.toFixed(2)} × r, ${where})`);
     }
+  }
+});
+
+test('les voisines bougent sans à-coup, image par image, et tout est au repos au raccord', () => {
+  // 60 images par seconde sur une boucle de 36 s : le déplacement des barbes
+  // des voisines (fente et tente) d'une image à la suivante reste petit, et le
+  // contact est nul à u → 1 comme à u = 0 (la voisine ne retombe pas au raccord)
+  for (const seed of ['33', 'nqbh3w', 'a', 'o', 'u']) {
+    const R = generate(seed), P = R.shape, T = R.tile ?? P, lay = layoutPlumage(P, R.seed, { tile: R.tile });
+    const TB = barbTable(T, `${R.seed}:tile`, 5), kt = bendOf(T, lay.Rd);
+    const N = 36 * 60;
+    const frames = Array.from({ length: N + 1 }, (_, f) => tileContacts(P, lay, f / N, R.tile));
+    for (const c of [...frames[0], ...frames[N - 1], ...frames[N]]) assert.ok(!(c.tent > 1e-4) && !(c.split > 1e-4), `${seed} : contact au raccord`);
+    const touched = new Set(); frames.forEach((C) => C.forEach((c, j) => (c.tent > 0 || c.split > 0) && touched.add(j)));
+    let worst = 0, at = '';
+    for (const j of touched) {
+      const t = lay.tiles[j];
+      const St = { u: 1, L: T.L, k: kt * t.scale, wear: t.wear, g: [0, 0, -1], radial: false, cal: T.calamus, over: T.over };
+      const base = [];
+      for (let b = 0; b < TB.length / BARB_STRIDE; b += 3) for (let i = 0; i <= 6; i++) { const r = barbPose(barb(TB, b), i / 6, 0, 0, St); if (!r.hidden) base.push(r.p); }
+      let prev = null;
+      frames.forEach((C, fi) => {
+        const c = C[j];
+        const cur = base.map((p) => contactPush(p, [c.ext, c.x0, c.y0, c.r], [c.split, c.tent]).map((v) => v * t.scale));
+        if (prev) for (let q = 0; q < cur.length; q++) { const d = Math.hypot(cur[q][0] - prev[q][0], cur[q][1] - prev[q][1], cur[q][2] - prev[q][2]); if (d > worst) { worst = d; at = `u=${(fi / N).toFixed(4)} voisine ${j}`; } }
+        prev = cur;
+      });
+    }
+    assert.ok(worst < 0.15, `${seed} : saut de ${worst.toFixed(3)} cm en une image (${at})`);
+  }
+});
+
+test('l’ancienne plume ne saute pas quand elle se libère', () => {
+  for (const fam of ['vexille', 'plume', 'ocelle']) {
+    const P = shapeOf(fam, createRng(`ej-${fam}`)), lay = layoutPlumage(P, 'ej');
+    const a = ejection(SCHED.fall[0] - 1e-6, P, lay), b = ejection(SCHED.fall[0] + 1e-6, P, lay);
+    assert.ok(Math.abs(a.tilt - b.tilt) < 1e-3 && Math.hypot(...a.off.map((v, i) => v - b.off[i])) < 1e-3 && Math.abs(a.th - b.th) < 1e-6 && Math.abs(b.roll) < 1e-3, fam);
   }
 });
 

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#050506">
   <title>Feather · défis techniques</title>
-  <meta name="description" content="Comment Feather est calculé : une plume qui pousse roulée dans sa gaine puis se déroule sans s'étirer, un motif déposé par réaction-diffusion dans le collier du follicule, des barbes posées dans le vertex shader, un plumage en tuiles.">
+  <meta name="description" content="Comment Feather est calculé : une plume qui pousse roulée dans sa gaine puis se déroule sans s'étirer, un motif déposé par réaction-diffusion dans le collier du follicule, un tuyau qui fend les plumes du dessus, une couleur structurale de Bragg, des barbes posées dans le vertex shader, un plumage en tuiles.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
@@ -75,7 +75,7 @@
       <section id="horloge">
         <h2><span class="n">05</span>Une seule horloge, des temps qui ne reviennent jamais en arrière</h2>
         <span class="src">src/gen/feather.js · SCHED, growth(), releaseAt(), zipAt()</span>
-        <p>Croissance, front de déroulement, agrafage, courbure du rachis, pose et usure lisent une seule table de bornes, et la caméra lit la plume. Chaque courbe est monotone dans son temps : un agrafage qui se déferait, une plume qui remonterait se liraient comme des bogues. La chute de l'ancienne plume est filmée en caméra rapide (vrai temps ÷ 8) : la croissance s'y arrête, comme dans un accéléré qui ralentit sur un événement. Elle glisse le long du méridien du corps, a = g(sin θ − μ cos θ) avec μ = 0,45, et passe derrière sa courbe.</p>
+        <p>Croissance, front de déroulement, agrafage, courbure du rachis, pose et usure lisent une seule table de bornes, et la caméra lit la plume. Chaque courbe est monotone dans son temps : un agrafage qui se déferait, une plume qui remonterait se liraient comme des bogues. Le tuyau sort d'abord sous l'ancienne plume, qui repose sur sa pointe (le contact est exact) et se soulève en couvercle ; libérée, sa chute est filmée en caméra rapide (vrai temps ÷ 8) : la croissance s'y arrête, comme dans un accéléré qui ralentit sur un événement. Elle glisse le long du méridien du corps, a = g(sin θ − μ cos θ) avec μ = 0,45, et passe derrière sa courbe.</p>
         <div class="note check"><b>Vérifié</b><p>Un test parcourt la boucle par pas de 1/2000 et vérifie que chaque grandeur ne décroît jamais ; qu'à u = 0 la plume nouvelle est entièrement dans le follicule ; qu'à u = 1 elle est exactement la plume couchée et usée du début (écart &lt; 10⁻⁵ cm).</p></div>
         <figure id="fig-horloge"><figcaption><b>Les courbes du film.</b> Les fonctions de <code>feather.js</code>, sur une boucle ; le curseur montre l'instant et la plume correspondante, posée par <code>barbPose</code> et vue de face (projection simplifiée).</figcaption></figure>
       </section>
@@ -91,31 +91,60 @@
       <section id="plumage">
         <h2><span class="n">07</span>Le plumage se recouvre comme des tuiles</h2>
         <span class="src">src/gen/feather.js · layoutPlumage(), featherFrame()</span>
-        <p>Le dos de l'oiseau est une sphère de rayon 2,8 à 3 L, couverte de plumes couchées en rangées décalées. Une plume couchée suit la courbure du corps (bornée à 0,9/R pour ne jamais y rentrer) et en est soulevée de ε = 0,1 rad : sa hauteur croît le long du rachis. La rangée suivante part 0,36 L plus bas : sur leur recouvrement, la plume du dessus est toujours plus haute, d'environ \(0{,}36\,L\sin\varepsilon\). Dans une rangée, un roulis de 0,07 rad fait chevaucher les plumes comme des écailles. Les deux tuiles de la rangée du dessus qui couvriraient le follicule s'écartent : le tuyau sort entre elles.</p>
-        <div class="note check"><b>Vérifié</b><p>Pour trois familles, la hauteur du rachis couché au-dessus du corps croît le long de la plume ; aucune tuile ne couvre la fente ; et, à tous les instants (pas de 0,025), aucun point témoin des barbes ne passe sous le corps dessiné, hors de la bouche du follicule.</p></div>
+        <p>Le dos de l'oiseau est une sphère de rayon 2,8 à 3 L, couverte de plumes couchées en rangées décalées. Une plume couchée suit la courbure du corps (bornée à 0,9/R pour ne jamais y rentrer) et en est soulevée de ε = 0,1 rad : sa hauteur croît le long du rachis. La rangée suivante part 0,3 L plus bas (deux cents plumes environ, dont on ne voit que le bout) : sur leur recouvrement, la plume du dessus est toujours plus haute, d'environ \(0{,}3\,L\sin\varepsilon\). Dans une rangée, un roulis de 0,07 rad fait chevaucher les plumes comme des écailles. Sous elles, la peau n'est jamais nue : des rosettes de duvet frisé, couchées à plat (moins d'un millimètre), cuites une fois en un maillage statique.</p>
+        <div class="note check"><b>Vérifié</b><p>Pour trois familles, la hauteur du rachis couché au-dessus du corps croît le long de la plume ; et, à tous les instants (pas de 0,025), aucun point témoin des barbes ne passe sous le corps dessiné, hors de la bouche du follicule.</p></div>
         <figure id="fig-tuiles"><figcaption><b>Coupe du plumage.</b> Les rachis couchés sur le corps, le long de la pente ; ε règle le soulèvement, le pas la distance entre rangées. En rouge, les recouvrements où une plume passerait sous la suivante.</figcaption></figure>
       </section>
 
+
+      <section id="contact">
+        <h2><span class="n">08</span>Le tuyau fend la plume du dessus</h2>
+        <span class="src">src/gen/feather.js · tileContacts(), contactPush()</span>
+        <p>Les rangées du dessus couvrent le follicule : à 0,3 L par rangée, la pointe de la plume de deux rangées plus haut passe encore au-dessus. Le tuyau qui sort la traversait. À chaque image, pour chaque voisine proche, on exprime l'axe du tuyau dans le repère de la voisine (rachis courbé compris) :</p>
+        <ul>
+          <li>tant que la pointe est <b>dessous</b>, la voisine se drape sur elle : une tente juste assez haute pour passer au-dessus de la pointe et de son rayon ;</li>
+          <li>quand la pointe <b>perce</b> la surface — y compris tout près de la peau, là où la plume du dessus couvre le follicule — la voisine se fend le long de ses barbes — chaque barbe s'écarte latéralement jusqu'à \(r + 0{,}16\) cm de l'axe, sur toute la longueur où le tuyau la longe (\(r/\sin\alpha + 0{,}8\) cm vers sa pointe, α l'angle sous lequel il la perce) — progressivement, sur les 5 premiers millimètres de percée, et retombe à moitié sur lui ;</li>
+          <li>quand la plume se <b>couche</b>, la fente se referme et la voisine se drape sur elle ; une fois la plume à sa place, plus aucun contact.</li>
+        </ul>
+        <p>La voisine ne pivote pas en bloc : seules ses barbes bougent. Les six nombres du contact (étendue, x₀, y₀, r, fente, tente) tiennent dans les deux derniers des cinq vec4 de l'état de chaque plume ; le vertex shader applique le même décalage que le JS.</p>
+        <div class="note trap"><b>Le piège</b><p>Un contact « tout ou rien » se lit comme un bogue : une voisine soulevée de 3° en une image quand la pointe la perce, qui retombe d'un coup quand elle la quitte — et, une fois la plume couchée, un drapé qui ne s'éteignait jamais et disparaissait au raccord de la boucle, en un flash. Tout est maintenant une fonction continue du temps ; quatre sauts plus discrets ont été trouvés image par image : la longueur sortie comptée en points échantillonnés, le point de percée qui file quand le tuyau devient parallèle à la voisine, une barbe pile au droit du tuyau qui change de côté de la fente (le côté est adouci sur 0,15 mm, et cette ligne passe par-dessus le tuyau), une fente qui se referme trop vite, un contact qui naissait quand le deuxième point échantillonné de l'axe sortait de la peau. Repousser les barbes hors d'un disque, enfin, les entassait en bourrelet : une raie latérale se lit comme une vraie plume fendue.</p></div>
+        <div class="note check"><b>Vérifié</b><p>Image par image à 60 i/s, aucune barbe voisine ne bouge de plus de 1,5 mm (1,25 mm au plus mesuré, contre 8 à 19 mm avant) ; le contact est nul au raccord ; une fois la fente ouverte, aucune barbe des voisines ne reste dans le tuyau (quatre graines, trois familles, tous les 0,02 de boucle).</p></div>
+        <figure id="fig-contact"><figcaption><b>Une voisine fendue.</b> Les barbes d'une vraie voisine (<code>barbTable</code>, posées à plat par <code>barbPose</code>), décalées par <code>contactPush</code> ; glisser pour déplacer le point de contact, le curseur règle le rayon du tuyau et la rasance.</figcaption></figure>
+      </section>
+
+      <section id="bragg">
+        <h2><span class="n">09</span>La couleur du paon est dans le reflet</h2>
+        <span class="src">src/scene/feather.js · barbMaterial()</span>
+        <p>Le vert du paon n'est pas un pigment : ses barbules portent un cristal de bâtonnets de mélanine dans la kératine, qui réfléchit une bande de longueurs d'onde selon la loi de Bragg (Zi et al., 2003). Le fond, lui, est brun sombre (la mélanine). La couleur est donc dans le <i>reflet</i> : elle naît et meurt avec la lumière et le regard, et glisse vers le bleu quand on regarde en biais :</p>
+        <div class="eq">\[ \lambda(\theta) = \lambda_0\,\sqrt{1 - \frac{\sin^2\theta}{n^2}} \]</div>
+        <p>Dans le shader, θ vient de la normale et du regard ; λ est convertie en couleur par trois gaussiennes (605, 540 et 455 nm) et sert de couleur spéculaire (et de lustre, pour les barbules orientées en tous sens) sur un albédo assombri de 70 %. λ₀ vaut 450 nm pour le corbeau, 535 pour le paon, 560 pour le faisan — et, dans l'œil du paon, une par anneau : 452 au centre, 478, 505, puis 595 pour l'anneau bronze. Le faisan n'est irisé que sur ses marques noires.</p>
+        <div class="note trap"><b>Le piège</b><p>Avec l'indice de la kératine seule (n = 1,56), le vert du paon tournait au violet, puis au rose en rasance : une image en fausse couleur. L'empilement kératine-mélanine-air a un indice effectif plus fort ; avec n ≈ 2, le vert tourne au bleu, comme sur une vraie plume.</p></div>
+        <figure id="fig-bragg"><figcaption><b>La teinte selon l'angle.</b> La formule du shader, recopiée : la couleur réfléchie de θ = 0 (de face) à 80°, pour λ₀ et n choisis. La démo ne montre que le reflet, sans le fond pigmentaire.</figcaption></figure>
+      </section>
+
       <section id="vertex">
-        <h2><span class="n">08</span>Chaque barbe est un ruban posé dans le vertex shader</h2>
+        <h2><span class="n">10</span>Chaque barbe est un ruban posé dans le vertex shader</h2>
         <span class="src">src/scene/feather.js · barbPoseT(), barbMaterial()</span>
-        <p>La plume héroïne compte 2 × 110 à 2 × 140 barbes, le plumage une centaine de plumes en gabarit grossier, soit 5 000 à 12 000 instances. Pas d'<code>InstancedMesh</code> (three.js compile un shader par objet) : un maillage ordinaire dont la géométrie porte, par barbe, quatre vec4 dans un seul tampon entrelacé (racine, côté, longueur, angle, courbure, rayons du tube, part duveteuse, plume, tirage, largeur, agrafable, affaissement, écart, ondulation, usure). L'état de chaque plume — repère, temps local, usure, courbure — tient dans un tableau d'uniformes de 256 × 4 vec4, recopié à chaque image dans un second tableau pour les vecteurs vitesse.</p>
-        <p>Un ruban a 22 segments sur 3 sommets : bord, arête, bord. La normale s'incline en travers pour que l'arête du ramus accroche un filet de lumière ; la frange des barbules est un peigne tramé, lissé par l'anticrénelage temporel. Le motif est lu dans le plan déroulé (deux coordonnées interpolées), la translucidité éclaire le vexille au contre-jour et dessine le motif en ombre chinoise ; l'irisation est un film mince d'épaisseur 300 à 620 nm selon l'oiseau.</p>
+        <p>La plume héroïne compte 2 × 110 à 2 × 140 barbes, le plumage deux cents plumes en gabarit grossier, soit 10 000 à 15 000 instances. Pas d'<code>InstancedMesh</code> (three.js compile un shader par objet) : un maillage ordinaire dont la géométrie porte, par barbe, quatre vec4 dans un seul tampon entrelacé (racine, côté, longueur, angle, courbure, rayons du tube, part duveteuse, plume, tirage, largeur, agrafable, affaissement, écart, ondulation, usure). L'état de chaque plume — repère, temps local, usure, courbure — tient dans un tableau d'uniformes de 256 × 4 vec4, recopié à chaque image dans un second tableau pour les vecteurs vitesse.</p>
+        <p>Un ruban a 22 segments sur 3 sommets : bord, arête, bord. La normale s'incline en travers pour que l'arête du ramus accroche un filet de lumière ; la frange des barbules est un peigne tramé, lissé par l'anticrénelage temporel. Le motif est lu dans le plan déroulé (deux coordonnées interpolées), la translucidité éclaire le vexille au contre-jour et dessine le motif en ombre chinoise.</p>
         <div class="note trap"><b>Le piège</b><p>Un bout de barbe carré, multiplié par cent, dessine un contour en dents de scie ; trop effilé, il dessine des épines. La barbe s'amincit de 30 % le long de sa longueur, puis de 40 % de plus sur son dernier tiers.</p></div>
+        <div class="note trap"><b>Le piège</b><p>Une ombre en bande sur le vexille disparaissait d'un coup quand la plume finissait de se dérouler. C'était l'ombre de la gaine : masquée à l'écran une fois effritée, elle restait entière dans la carte d'ombre, car three.js y réutilise le masque du matériau (<code>maskNode</code>) sans les variables interpolées qu'il lit — puis elle disparaissait d'un bloc. La gaine effritée est retirée de la géométrie elle-même, et chaque matériau masqué a un masque d'ombre explicite (<code>maskShadowNode</code>).</p></div>
       </section>
 
       <section id="budget">
-        <h2><span class="n">09</span>Budget</h2>
+        <h2><span class="n">11</span>Budget</h2>
         <div class="tbl"><table>
           <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
           <tbody id="budget-rows">
             <tr><td>Motif du collier (128 × 192, réaction-diffusion)</td><td>worker</td><td class="num">10 – 90 ms</td></tr>
             <tr><td>Tables des barbes, profil du tube</td><td>worker</td><td class="num">&lt; 5 ms</td></tr>
             <tr><td>Trajectoire de caméra (720 poses, lissage gaussien)</td><td>fil principal</td><td class="num">10 – 30 ms</td></tr>
-            <tr><td>Image, vexille au contre-jour, 1,8 Mpx, qualité Haute</td><td>GPU</td><td class="num">5,5 ms</td></tr>
-            <tr><td>Image, duvet parmi les couvertures (le plus lourd)</td><td>GPU</td><td class="num">6,2 – 7,3 ms</td></tr>
-            <tr><td>Image, version mobile, 1,2 Mpx</td><td>GPU</td><td class="num">2,7 ms</td></tr>
-            <tr><td>Barbes à l'écran (héroïne + voisines)</td><td>vertex</td><td class="num">5 000 – 12 000 rubans</td></tr>
+            <tr><td>Sous-duvet (rosettes cuites en un maillage)</td><td>worker</td><td class="num">50 – 100 ms</td></tr>
+            <tr><td>Contacts du tuyau avec ses voisines</td><td>fil principal, par image</td><td class="num">&lt; 0,5 ms</td></tr>
+            <tr><td>Image, 3,2 Mpx, qualité Haute (ocelle, plume, vexille)</td><td>GPU</td><td class="num">11 – 14,5 ms</td></tr>
+            <tr><td>Image, 3,2 Mpx, duvet parmi les couvertures (le plus lourd)</td><td>GPU</td><td class="num">17 – 17,5 ms</td></tr>
+            <tr><td>Image, version mobile, 0,85 Mpx</td><td>GPU</td><td class="num">1,9 ms</td></tr>
+            <tr><td>Barbes à l'écran (héroïne + voisines) ; sous-duvet</td><td>vertex</td><td class="num">≈ 15 000 rubans ; 100 – 200 k sommets</td></tr>
           </tbody>
         </table></div>
       </section>
@@ -132,7 +161,7 @@
 
   <script type="module">
     import { demo, C, TAU, lerp, clamp, label, alpha } from '../home/explainer.js';
-    import { shapeOf, barbTable, barbPose, BARB_STRIDE, SCHED, growth, zipAt, bendAt, settleAt, wearAt, sinkAt } from './src/gen/feather.js';
+    import { shapeOf, barbTable, barbPose, BARB_STRIDE, SCHED, growth, zipAt, bendAt, settleAt, wearAt, sinkAt, contactPush } from './src/gen/feather.js';
     import { simulateCollar, normalizePattern, PROGRAMS } from './src/gen/pattern.js';
     import { createRng } from './src/rng.js';
 
@@ -325,12 +354,73 @@
       });
     }
 
+
+    // ── 08 · le contact ────────────────────────────────────────────────────
+    {
+      const T = { ...P0, asym: 0, wave: 0, droop: 0 };
+      const TB = barbsOf(T, 'contact', 12).filter((b) => b[7] < 0.35);
+      const S = state(T, 1);
+      demo('#fig-contact', {
+        title: 'contactPush', aspect: 1.8,
+        controls: [
+          { key: 'r', label: 'Rayon du tuyau (cm)', min: 0, max: 0.6, step: .01, value: .3 },
+          { key: 'a', label: 'Rasance α (°)', min: 8, max: 80, step: 1, value: 25 },
+        ],
+        setup(d) { d.state.x0 = 0.35; d.state.y0 = T.L * 0.55; },
+        pointer(d, e) { if (!e.down) return; const sc = d.state.sc; d.state.x0 = (e.y - d.h / 2) / sc * -1; d.state.y0 = (e.x - d.state.ox) / sc; },
+        draw(g, d) {
+          const sc = Math.min(d.w * 0.9 / T.L, d.h * 0.9 / (T.W * 1.1)), ox = d.w * 0.05;
+          d.state.sc = sc; d.state.ox = ox;
+          const K = [d.s.r / Math.sin(d.s.a * Math.PI / 180) + 0.8, d.state.x0, d.state.y0, d.s.r], Q = [1, (d.s.r + 0.16) * 0.5];
+          for (const b of TB) {
+            g.strokeStyle = alpha(C.c1, .75); g.lineWidth = 1; g.beginPath(); let st = false;
+            for (let i = 0; i <= 14; i++) {
+              const r = barbPose(b, i / 14, 0, 0, S); if (r.hidden) continue;
+              const q = contactPush(r.p, K, Q);
+              const X = ox + q[1] * sc, Y = d.h / 2 - q[0] * sc;
+              st ? g.lineTo(X, Y) : (g.moveTo(X, Y), st = true);
+            }
+            g.stroke();
+          }
+          g.strokeStyle = C.ink; g.lineWidth = 2; g.beginPath(); g.moveTo(ox, d.h / 2); g.lineTo(ox + T.L * sc, d.h / 2); g.stroke();
+          // le tuyau, vu de dessus : sa trace dans le plan
+          g.fillStyle = alpha(C.c3, .35); g.strokeStyle = C.c3; g.beginPath();
+          g.ellipse(ox + d.state.y0 * sc, d.h / 2 - d.state.x0 * sc, d.s.r / Math.sin(d.s.a * Math.PI / 180) * sc, d.s.r * sc, 0, 0, TAU); g.fill(); g.stroke();
+          label(g, 'glisser pour déplacer le tuyau', d.w - 12, d.h - 12, { align: 'right', size: 11.5, color: C.faint });
+          d.status(`r = ${d.s.r.toFixed(2)} cm · fente ${K[0].toFixed(1)} cm`);
+        },
+      });
+    }
+
+    // ── 09 · Bragg ─────────────────────────────────────────────────────────
+    demo('#fig-bragg', {
+      title: 'Loi de Bragg', aspect: 2.6,
+      controls: [
+        { key: 'l0', label: 'λ₀ (nm)', min: 420, max: 620, step: 1, value: 535 },
+        { key: 'n', label: 'Indice effectif n', min: 1.3, max: 2.4, step: .01, value: 2.0 },
+      ],
+      draw(g, d) {
+        const gs = (l, c, w) => Math.exp(-(((l - c) / w) ** 2));
+        const N = 160, x0 = 30, W = d.w - 60, H = d.h * 0.5, y0 = d.h * 0.18;
+        for (let i = 0; i < N; i++) {
+          const th = (i / (N - 1)) * 80 * Math.PI / 180;
+          const lam = d.s.l0 * Math.sqrt(1 - Math.sin(th) ** 2 / (d.s.n * d.s.n));
+          let c = [gs(lam, 605, 50) + 0.12 * gs(lam, 430, 24), gs(lam, 540, 45), gs(lam, 455, 38)].map((v) => v * 0.85 + 0.6 * 0.15);
+          g.fillStyle = `rgb(${c.map((v) => Math.round(255 * Math.min(1, v ** (1 / 2.2)))).join(',')})`;
+          g.fillRect(x0 + (i / N) * W, y0, W / N + 1, H);
+        }
+        for (const deg of [0, 20, 40, 60, 80]) label(g, `${deg}°`, x0 + (deg / 80) * W, y0 + H + 16, { align: 'center', size: 11 });
+        const lEnd = d.s.l0 * Math.sqrt(1 - Math.sin(80 * Math.PI / 180) ** 2 / (d.s.n * d.s.n));
+        d.status(`${d.s.l0} nm de face → ${lEnd.toFixed(0)} nm à 80°`);
+      },
+    });
+
     // ── 07 · les tuiles ────────────────────────────────────────────────────
     demo('#fig-tuiles', {
       title: 'Coupe du plumage', aspect: 2.4,
       controls: [
         { key: 'eps', label: 'Soulèvement ε (rad)', min: 0, max: 0.25, step: .01, value: .1 },
-        { key: 'step', label: 'Pas des rangées (× L)', min: 0.2, max: 0.7, step: .01, value: .36 },
+        { key: 'step', label: 'Pas des rangées (× L)', min: 0.2, max: 0.7, step: .01, value: .3 },
       ],
       draw(g, d) {
         const L = 6, Rd = 3 * L, k = 0.9 / Rd, cx = d.w * 0.5, cy = d.h * 0.1 + Rd * 0, sc = Math.min(d.w / (L * 4.4), d.h / (L * 1.25));
