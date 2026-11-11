@@ -1,0 +1,737 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#050506">
+  <title>Rust · défis techniques</title>
+  <meta name="description" content="Comment Rust fait rouiller une pièce rivetée là où l'eau reste, puis la décape : temps d'humectation calculé sur la géométrie, front géodésique, coulures, loi de dose dans le shader, laser en boustrophédon, sablage en hélice, bain d'électrolyse, pièces qui ne flottent pas.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+  <link rel="stylesheet" href="../home/explainer.css">
+</head>
+<body>
+  <nav class="top"><div class="in">
+    <a href="../">Codevember</a><span class="day">Day 11</span><span class="crumb">Rust · défis techniques</span>
+    <span class="sp"></span><a class="open" href="./">Ouvrir la scène</a>
+  </div></nav>
+
+  <main>
+    <header class="hero">
+      <div class="kicker">Day 11 · Rust · la remise à nu</div>
+      <h1>Comment une pièce rouille là où l’eau reste</h1>
+      <p class="lede">Une pièce rivetée rouille sous les averses d’une saison en accéléré : d’abord au pied des rivets et dans les angles, puis sur les plats, en coulures sous chaque tête. Une machine la remet à nu en temps réel, et la rouille revient. Aucune texture n’est peinte : la rouille est calculée sur la géométrie de la pièce, et chaque outil a sa forme fermée qui dit à quel instant il atteint chaque point.</p>
+    </header>
+
+    <figure class="cover">
+      <img src="docs/capture.jpg" alt="Une pièce rivetée couverte de rouille dans un décor neutre" width="1600" height="900">
+      <figcaption>Fin de saison : la croûte la plus épaisse est dans les creux et au pied des têtes, les traînées descendent sous chaque source. Le laiton et le bronze ne rouillent pas, ils brunissent.</figcaption>
+    </figure>
+
+    <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
+
+    <article>
+
+      <section id="horloge">
+        <h2><span class="n">01</span>Une saison entière sur une seule horloge</h2>
+        <span class="src">src/timeline.js</span>
+        <p>Le film tient en une boucle de 44 à 52 secondes : le métal nu, trois à cinq averses en accéléré, la mise en place de la machine, le décapage en temps réel, le retrait. Tout ce qui varie (pluie, ciel, eau sur la pièce, rouille, machine, caméra) lit des fonctions pures d’une seule phase \(u \in [0, 1)\). Aucun état ne s’accumule d’une image à l’autre : on peut sauter à n’importe quel instant, reculer, exporter image par image.</p>
+        <p>La grandeur qui pilote la rouille n’est pas le temps du film mais le <strong>temps d’humectation</strong> cumulé \(\tau\) (la norme ISO 9223 mesure la corrosivité d’une atmosphère par le temps pendant lequel l’acier est mouillé). Il n’avance que pendant une averse et le séchage qui la suit, car la rouille éclair paraît en séchant :</p>
+        <div class="eq">\[ \tau(u) = \min\Big(1,\; \sum_k w_k\, s_5\!\Big(\frac{u - s_k}{e_k - s_k + d}\Big)\Big), \qquad w_k \propto \frac{1}{1 + 0{,}25\,k}, \]</div>
+        <p>où \([s_k, e_k]\) est la \(k\)-ième averse, \(d\) le séchage (45 % d’un créneau d’averse) et \(s_5\) le polynôme de degré 5 qui raccorde dérivées première et seconde. La première averse pèse le plus : c’est elle qui fait la rouille éclair sur l’acier nu. \(\tau\) vaut 0 avant la première, 1 après la dernière, et ne bouge plus ensuite.</p>
+        <p>La boucle se ferme <em>par construction</em>. La rouille visible d’un point est \(h(x, \tau(u))\) tant que l’outil ne l’a pas atteint, 0 ensuite ; à \(u = 1\) comme à \(u = 0\), tout point atteint est nu. Reste le piège des points que l’outil n’atteint jamais (le dessous d’une tête, une face cachée) : avec \(\tau\) revenu à 0, ils perdraient leur rouille d’un coup au raccord. Le shader leur donne donc un \(\tau\) effectif constant, égal à 1, pendant toute la boucle.</p>
+        <pre><code>const tauE = mix(float(1), U.tau, reached);   // jamais atteint : τ = 1</code></pre>
+        <figure id="fig-clock" class="wide"><figcaption><b>Les courbes de la boucle, portées telles quelles depuis <code>timeline.js</code>.</b> En haut, \(\tau(u)\), la pluie, l’eau sur la pièce et le ciel couvert ; les bandes bleues sont les averses tirées. En bas, l’épaisseur relative de rouille de deux points : l’un décapé à \(u = 0{,}6\), l’autre jamais atteint. Glissez sur la figure pour déplacer l’instant. La démo ne montre pas la rouille réelle d’un point, qui dépend aussi de son instant d’apparition (section 03).</figcaption></figure>
+      </section>
+
+      <section id="humectation">
+        <h2><span class="n">02</span>La rouille commence là où l’eau reste</h2>
+        <span class="src">src/gen/corrosion.js · concavity(), skyView()</span>
+        <p>Une texture de rouille plaquée met la même tache orange partout. Sur une vraie pièce, la rouille a une géographie : elle a besoin d’eau, et l’eau ne se répartit pas uniformément. Rust tire environ 200&#8239;000 points uniformément sur toute la surface (rivets et boulons compris, pas de 4,5 mm), dans un worker, et calcule en chacun les termes qui décident du temps d’humectation.</p>
+        <p>La <strong>concavité</strong>, à deux rayons (\(r = 1{,}2\) cm et 4 cm), est la hauteur moyenne des voisins au-dessus du plan tangent :</p>
+        <div class="eq">\[ c_r(x) = \frac{1}{r}\,\frac{\sum_j w_j\,(p_j - x)\cdot n}{\sum_j w_j}, \qquad w_j = 1 - \frac{|p_j - x|^2}{r^2}. \]</div>
+        <p>Positive dans les angles rentrants et au pied des têtes de rivet, où l’aération différentielle (Evans) fait une anode : la rouille commence là. Négative sur les arêtes, qui perdent leur protection en premier. Le <strong>ciel visible</strong> est la part de quinze directions vers le haut (la verticale inclinée par le vent, puis deux couronnes à 62° et 38°) que rien ne masque, par rayons dans une grille d’occupation de 2 cm, depuis un point décalé de 3 cm le long de la normale. La <strong>stagnation</strong> combine une face tournée vers le haut, un creux et le ciel. L’humectation est alors une somme bornée :</p>
+        <div class="eq">\[ w = \min\big(1,\; 0{,}12 + 0{,}38\,\text{pluie} + 0{,}55\,\text{stagnation} + \text{creux} + 0{,}3\,\text{arête} + \text{abri}\big). \]</div>
+        <p>L’abri compte aussi : une face qui ne voit pas le ciel reçoit moins de pluie, mais sèche mal (condensation), d’où \((1 - \text{ciel})\) fois 0,35, et 0,6 pour une face tournée vers le bas. Le laiton et le bronze ont \(w = 0\).</p>
+        <div class="note trap"><b>L’autre face d’une tôle</b><p>Une cornière a des ailes de quelques millimètres. Au rayon de 4 cm, les points de la face opposée tombent dans le voisinage, sous le plan tangent : toute l’aile paraît convexe, comme une arête. Les voisins dont la normale s’oppose à celle du point (\(n_i \cdot n_j < -0{,}3\)) sont donc écartés.</p></div>
+        <figure id="fig-wet"><figcaption><b>Une cornière en coupe, avec deux rivets.</b> Concavité, ciel et humectation calculés par les formules de <code>corrosion.js</code> sur 2 mm d’échantillonnage. Simplifications : une coupe plane au lieu d’une surface, cinq directions de ciel au lieu de quinze. Survolez le contour pour lire les termes d’un point ; désactivez l’exclusion de l’autre face pour voir l’aile verticale devenir une « arête ».</figcaption></figure>
+      </section>
+
+      <section id="front">
+        <h2><span class="n">03</span>Les taches s’étendent à vitesse finie</h2>
+        <span class="src">src/gen/corrosion.js · Dijkstra sur les voxels</span>
+        <p>L’humectation donne à chaque point un instant d’apparition local, en temps d’humectation :</p>
+        <div class="eq">\[ t_0 = (1 - t)^{1{,}25}, \qquad t = \operatorname{clamp}\Big(\frac{w - 0{,}28}{0{,}72}\Big). \]</div>
+        <p>Pris seul, ce champ fait apparaître la rouille partout à la fois sur une face uniforme, en « fondu ». Or la rouille gagne de proche en proche : elle part d’un creux et s’étend sur le plat qui l’entoure. Les valeurs sont donc moyennées dans un volume (environ 1 cm par voxel, 150 voxels sur la plus grande dimension), puis l’instant d’apparition final est une <strong>distance géodésique</strong> : un Dijkstra sur les voxels occupés, 26 voisins, à la vitesse \(v = 0{,}25\) m par unité de \(\tau\).</p>
+        <div class="eq">\[ t_0(y) \leftarrow \min\big(t_0(y),\; t_0(x) + |x - y| / v\big). \]</div>
+        <p>Parcourir le volume plutôt que l’espace libre garantit que le front suit la surface : il contourne une aile au lieu de sauter d’une tôle à l’autre à travers le vide. Le résultat est écrit dans un volume RGBA 8 bits que le shader lit en trilinéaire : R l’instant d’apparition, G la concavité, B la coulure, A l’humectation. Deux passes de dilatation remplissent les voxels vides voisins de la surface, pour que le filtrage ne mélange pas de zéros.</p>
+        <figure id="fig-front"><figcaption><b>Un gousset vu de face, 60 × 40 voxels de 1 cm.</b> La carte d’humectation est construite à la main d’après les termes de la section 02 (arêtes, pied des rivets, rebord de la cornière où l’eau stagne, abri dessous) ; le seuil, la loi \((1 - t)^{1{,}25}\) et le Dijkstra sont ceux du code, en 8 voisins au lieu de 26. Les couleurs sont celles de l’écran de chargement, qui montre ce même front sur la vraie pièce pendant le calcul. Sans le front, une face dégagée (\(w \approx 0{,}35\)) n’apparaît qu’à \(\tau \approx 0{,}88\) ; avec lui, elle est gagnée bien avant depuis les rivets voisins.</figcaption></figure>
+      </section>
+
+      <section id="coulures">
+        <h2><span class="n">04</span>Les coulures descendent de voxel en voxel</h2>
+        <span class="src">src/gen/corrosion.js · ruissellement</span>
+        <p>Sous chaque rivet, chaque boulon, chaque arête, l’eau qui ruisselle emporte des oxydes et les dépose en traînées. Chaque voxel est une source proportionnelle à son humectation et à son ciel visible (\(0{,}55\,w\,\text{ciel}\)) ; la charge descend la gravité, couche par couche, du haut du volume vers le bas, en ne passant que par des voxels occupés :</p>
+        <div class="eq">\[ S(k) = \max\Big(0{,}55\,w_k\,\text{ciel}_k,\;\; 0{,}972\,\max_{j \in \text{dessus}(k)} \omega_j\, S(j)\Big), \quad \omega = 1,\ 0{,}8,\ 0{,}62. \]</div>
+        <p>Le voisin juste au-dessus transmet entièrement, les voisins de biais un peu moins : la traînée s’évase légèrement en descendant. Avec un facteur 0,972 par voxel, sa demi-longueur est \(\ln 2 / \ln(1/0{,}972) \approx 24\) voxels, soit environ 25 cm. Le <code>max</code>, plutôt qu’une somme, empêche les traînées de s’additionner jusqu’à saturer le bas de la pièce. Dans le shader, la coulure n’apparaît qu’avec \(\tau\) (de 0,12 à 0,7) et elle est modulée par un bruit étiré selon la gravité (fréquence 55 par mètre en travers, 3,5 en long), qui la découpe en filets.</p>
+        <figure id="fig-streak"><figcaption><b>Les traînées du même gousset.</b> Propagation portée telle quelle (en 2D, seuls les poids 1 et 0,8 interviennent). Par défaut, le champ brut du canal B : les traînées sous les rivets, et le rideau qui descend du rebord de la cornière, où l’eau stagne. Chaque voxel étant aussi une source, le fond n’est jamais nul. Le bouton applique la modulation du shader : facteur 1,6, \(\operatorname{smoothstep}(0{,}12;\ 0{,}7;\ \tau)\) et bruit étiré.</figcaption></figure>
+      </section>
+
+      <section id="dose">
+        <h2><span class="n">05</span>La loi de dose, dans le shader</h2>
+        <span class="src">src/scene/rust.js</span>
+        <p>Le champ ne dit que <em>quand</em> la rouille paraît. Le reste se calcule au pixel, à chaque image, à partir de \(\tau\). L’instant d’apparition est d’abord retardé autour de germes : un Worley 3D exact (27 cellules, hachage sans sinus) donne les piqûres, nées d’inclusions ou de défauts de la calamine, et un fBm les irrégularités :</p>
+        <div class="eq">\[ o = \operatorname{clamp}\big(t_0 + 0{,}16\,n_1 + 0{,}09\,F_1 - 0{,}03\big), \qquad h = k\,\sqrt{\frac{\max(\tau - o,\,0)}{\max(1 - o,\ 0{,}08)}}, \quad k = 0{,}45 + 0{,}55\,w. \]</div>
+        <p>L’épaisseur suit la <strong>loi de dose</strong> de l’acier au carbone (ISO 9224 : perte \(\propto t^n\), \(n \approx 0{,}5\)) : la couche freine l’oxygène, la croissance ralentit. La normalisation par \(1 - o\) garantit que chaque point atteint son épaisseur \(k\) en fin de saison, même apparu tard. Les taches naissent aux germes (là où \(F_1\) est petit) et s’étendent en disques qui se rejoignent.</p>
+        <p>La couleur est une <strong>stratification</strong> lue sur l’épaisseur : voile de lépidocrocite orange, assez mince pour que le métal se voie au travers (opacité 0,5 tant que \(h < 0{,}22\)), brun de goethite, brun sombre, magnétite presque noire dans les creux (\(c > 0{,}02\)), orange vif sur les arêtes. Deux fBm ajoutent des plaques d’environ 5 cm plus orangées ou plus sombres. Le relief vient ensuite, par perturbation de normale (Mikkelsen) : la rouille gonfle (Pilling-Bedworth), cloque, et la croûte épaisse se fend en écailles aux bords relevés, par plaques. Après le décapage, les piqûres restent dans l’acier : elles sont calculées sur l’épaisseur de fin de saison, identique d’une boucle à l’autre.</p>
+        <div class="note trap"><b>Un NaN dans la lueur du laser</b><p>L’acier tout juste décapé luit un instant : \(e^{-(u - t_c)/0{,}0025}\). Avant le passage de la ligne, \(u - t_c < 0\) et l’exponentielle explose ; multipliée par un masque nul, elle donne \(\infty \times 0\), soit NaN, qui noircit des pixels puis contamine le flou. L’argument est borné par <code>max(freshT, 0)</code> avant l’exponentielle.</p></div>
+        <figure id="fig-dose" class="wide"><figcaption><b>Trois rivets du gousset, couleur de base calculée au pixel.</b> Formules de couverture, d’épaisseur et de stratification portées depuis <code>rust.js</code>, Worley 3D exact compris ; le fBm du volume de bruit est remplacé par un bruit de gradient 2D, l’éclairage par un simple ombrage des têtes. Ni écailles, ni cloques, ni eau. Le métal apparaît en gris de son F0, comme dans <code>colorNode</code>.</figcaption></figure>
+      </section>
+
+      <section id="laser">
+        <h2><span class="n">06</span>Le laser balaie en boustrophédon</h2>
+        <span class="src">src/machines.js · laserPlan(), laserCleanTime()</span>
+        <p>La rouille ne recule que sous l’outil. Il faut donc, pour chaque point, l’instant <em>exact</em> où l’outil l’atteint, calculé de la même façon en JavaScript (pour la trajectoire de la machine et les tests) et dans le shader (pour la rouille). Pas de simulation de décapage, pas de carte peinte au fil du temps : une forme fermée.</p>
+        <p>Le portique roule de derrière la pièce, tête relevée, puis la tête descend à 20 cm devant la face. Son miroir galvanométrique balaie une ligne verticale de hauteur \(w\) (7,5 à 10 cm) ; la tête parcourt la pièce en \(n = \max(3, \operatorname{round}(H / w))\) rangées, de haut en bas, une sur deux dans chaque sens. Chaque rangée ne couvre que la <strong>largeur de la pièce à sa hauteur</strong>, lue sur la carte de profondeur vue de face (cellules de 4 mm), plus 3,5 cm de chaque côté ; sa durée est proportionnelle à cette largeur plus 0,12, et le passage d’une rangée à la suivante coûte \(0{,}22 + 0{,}4\,\Delta x\). Les durées sont ensuite ramenées à la fenêtre du décapage, de \(u = 0{,}44\) à \(0{,}86\). L’instant de décapage d’un point de la rangée \(k\) :</p>
+        <div class="eq">\[ t_c(x) = t_0^{(k)} + \operatorname{clamp}\Big(\frac{x - x_s^{(k)}}{x_e^{(k)} - x_s^{(k)}}\Big)\,\big(t_1^{(k)} - t_0^{(k)}\big). \]</div>
+        <p>Les rangées (64 au plus) passent au shader dans un tableau d’uniformes ; le shader retrouve la sienne par \(\lfloor (y_{\text{haut}} - y)/w \rfloor\). Un point n’est atteint que si sa face regarde la tête (\(n_z > -0{,}12\)) et s’il n’est pas masqué : sa profondeur doit être à moins de \(0{,}012 + 0{,}16\,\operatorname{clamp}((0{,}6 - n_z)/0{,}6)\) de la carte de face, une tolérance qui croît pour les faces rasantes que la tête balaie un peu de biais. Un test vérifie qu’à l’instant \(t_c\) la ligne est exactement sur le point, et qu’elle n’y était pas 0,002 plus tôt.</p>
+        <figure id="fig-laser" class="wide"><figcaption><b>Une vanne vue de face, décapée par le laser.</b> <code>laserPlan</code>, <code>laserHead</code> et <code>laserCleanTime</code> portés tels quels, sur une carte de face en cellules de 1 cm ; ni masquage ni rouille partielle (chaque cellule est rouillée ou nue). Le bouton compare avec des rangées de pleine largeur : la ligne passe plus de temps dans le vide, et chaque rangée utile est balayée plus vite.</figcaption></figure>
+      </section>
+
+      <section id="sablage">
+        <h2><span class="n">07</span>La sableuse décrit une hélice</h2>
+        <span class="src">src/machines.js · turnPlan(), turnCleanS()</span>
+        <p>Pour le sablage, c’est la pièce qui bouge : elle tourne sur un plateau pendant que la buse, inclinée de 0,22 à 0,38 rad vers le bas, descend. Le plateau fait un <strong>nombre entier</strong> de tours \(N\) (6 à 9, à vitesse constante adoucie sur les 6 % du début et de la fin), si bien que la pièce revient à son orientation de départ. La buse décrit, dans le repère de la pièce, une hélice. Pour ne laisser aucune bande rouillée entre deux spires, son pas doit rester sous l’empreinte du jet : \(N\) est augmenté tant que</p>
+        <div class="eq">\[ \frac{y_{\text{haut}} - y_{\text{bas}}}{N} > 0{,}75\ \text{empreinte}. \]</div>
+        <p>Une face est atteinte quand la buse est à sa hauteur et qu’elle <em>se tourne vers la buse</em>. Son azimut \(\varphi\) est celui de sa normale horizontale, ou de sa position pour une face presque horizontale, que le jet incliné touche d’en haut. Avec \(s\) la progression du plateau, \(s_1\) l’instant où le bas de l’empreinte atteint la hauteur du point et \(\varphi_b\) l’azimut de la buse :</p>
+        <div class="eq">\[ s^* = s_1 + \frac{\operatorname{mod}\big(\pm(\varphi_b - \varphi) - 2\pi N s_1,\ 2\pi\big)}{2\pi N}. \]</div>
+        <p>Le masquage se lit dans 32 cartes de profondeur horizontales (une par direction, cellules de 1 cm, tuilées 8 × 4 dans une seule texture) : une face cachée par une autre partie de la pièce dans la direction d’où elle voit la buse reste rouillée. La colonne de la sableuse se place de profil par rapport à la caméra, pour qu’on voie le jet de côté.</p>
+        <figure id="fig-turn" class="wide"><figcaption><b>Une colonne de 80 cm, déroulée : azimut en abscisse, hauteur en ordonnée.</b> <code>turnPlan</code>, <code>turnS</code> et la formule de \(s^*\) portés tels quels, sur un cylindre aux normales radiales et sans masquage. Le rectangle est l’empreinte de la buse vue dans le repère de la pièce (0,35 rad de large, la durée du fondu du décapage) ; les points sont ses passages précédents. Élargissez l’empreinte ou réduisez les tours : \(N\) remonte de lui-même pour que l’hélice ne laisse pas de bande.</figcaption></figure>
+      </section>
+
+      <section id="bain">
+        <h2><span class="n">08</span>Le bain : le front est le niveau du liquide</h2>
+        <span class="src">src/machines.js · bathPlan(), bathOffset()</span>
+        <p>Le troisième outil n’a pas de trajectoire à calculer, mais une chorégraphie à tenir. La pièce pend au crochet d’un palan au-dessus d’une fosse d’électrolyse dont le couvercle roule sur le côté. Elle descend pendant les premiers 20 % de la fenêtre (décalée à \(u \in [0{,}45;\ 0{,}87]\)), jusqu’à ce que son sommet soit 7 cm sous le niveau ; elle y reste 32 à 42 % de la fenêtre (le film accélère pendant l’immersion, les bulles d’hydrogène montent) ; puis elle remonte à vitesse constante, adoucie sur 12 % aux deux bouts. Un point est nu dès qu’il repasse au-dessus du niveau pendant la remontée :</p>
+        <div class="eq">\[ \text{décapé}(p, u) = \big[u \ge u_{\text{remontée}}\big] \wedge \big[p_y + \text{décalage}(u) > L\big]. \]</div>
+        <p>Le front visible est donc la ligne d’eau qui descend sur la pièce et découvre l’acier ruisselant (le shader ajoute un vernis d’eau qui sèche). Les tests vérifient que la pièce passe tout entière sous le niveau, que la descente et la remontée sont monotones, qu’aucun point n’est décapé avant la remontée et que tous le sont à la fin.</p>
+      </section>
+
+      <section id="coherence">
+        <h2><span class="n">09</span>Rien ne flotte, aucune élingue ne traverse</h2>
+        <span class="src">src/gen/audit.js · src/gen/pieces.js · hookPoint()</span>
+        <p>Une pièce construite par programme accumule de petites incohérences : une charnière à un millimètre de son battant, une plaque posée au-dessus de sa tôle, un piton vissé dans un chant. Au rendu, rien ne se voit ; à la rouille, tout se voit, car une pièce flottante n’a pas de pied où l’eau stagne. Un audit les cherche : le maillage est soudé, découpé en composantes connexes (union-find), chaque composante est échantillonnée tous les 2,5 mm, et deux composantes se touchent si deux de leurs points sont à moins de 2,5 mm. Tout groupe qui ne rejoint pas le sol de proche en proche flotte. Un test l’exige sur trois graines par famille.</p>
+        <p>Pour le bain, la pièce est levée par deux élingues, de ses oreilles jusqu’au crochet. Si le crochet est trop bas, une élingue traverse la pièce (le volant d’une vanne, par exemple). La hauteur du crochet est donc <em>calculée</em> : partant de 32 cm au-dessus des oreilles, il monte par pas de 2 cm jusqu’à ce qu’aucun point de la pièce ne soit à moins de 3 cm d’une élingue, en dehors des 7 premiers centimètres, où le contact avec l’oreille est voulu. La roue, trop large, est levée autrement : un palonnier au-dessus d’elle et deux élingues verticales en étrangloir autour du maneton et de l’essieu.</p>
+        <figure id="fig-hook"><figcaption><b>Une vanne levée par ses deux brides.</b> <code>hookPoint</code> porté tel quel, en coupe plane, sur les points d’une silhouette échantillonnée au centimètre. En pointillé rouge, les élingues à la hauteur de départ et les points qu’elles frôlent ; en clair, la position retenue.</figcaption></figure>
+        <div class="note check"><b>Ce que l’audit a trouvé</b><p>Le commit qui l’a introduit a remis au contact les berceaux de la vanne, le battant de la porte sur son hiloire, les bras des taquets sur le battant, la plaque de laiton sur sa tôle et les goujons du presse-étoupe dans leur bossage ; les pitons vissés dans des chants sont devenus des oreilles percées avec manille.</p></div>
+      </section>
+
+      <section id="budget">
+        <h2><span class="n">10</span>Budget</h2>
+        <p>Toute la géométrie et le champ de corrosion sont calculés dans un worker pendant l’écran de chargement ; le rendu ne fait que lire le volume et les cartes d’accès.</p>
+        <div class="tbl"><table>
+          <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
+          <tbody>
+            <tr><td>Géométrie de la pièce</td><td>worker</td><td class="num">30 à 80 ms</td></tr>
+            <tr><td>Champ de corrosion (concavités, 15 rayons de ciel par point, Dijkstra, ruissellement, 32 cartes de profondeur)</td><td>worker</td><td class="num">2 à 4 s</td></tr>
+            <tr><td>Même champ, mesuré sous Node pour cette page (graine a1) : vanne, roue, nœud, porte</td><td>Node</td><td class="num">2,5 · 3,0 · 3,7 · 4,6 s</td></tr>
+            <tr><td>Points de surface correspondants</td><td>mémoire</td><td class="num">208&#8239;000 à 369&#8239;000</td></tr>
+            <tr><td>Volume RGBA 8 bits (nœud 155 × 87 × 23, roue 155 × 155 × 103)</td><td>GPU</td><td class="num">1,2 à 9,9 Mo</td></tr>
+            <tr><td>Machine (géométrie et trajectoire)</td><td>worker</td><td class="num">quelques dizaines de ms</td></tr>
+            <tr><td>Image, qualité Haute, 1,8 Mpx (porte, sablage, atelier)</td><td>GPU</td><td class="num">15 à 16 ms</td></tr>
+            <tr><td>Image, version mobile, 1,2 Mpx (laser)</td><td>GPU</td><td class="num">6,3 ms</td></tr>
+          </tbody>
+        </table></div>
+        <p>Le poste le plus lourd de l’image est le matériau de la rouille : deux Worley exacts (germes et écailles) et plusieurs fBm lus dans le volume de bruit, avant la chaîne d’image. La version mobile lit le Worley dans le volume de bruit, limite les fBm à deux octaves et échantillonne la surface au pas de 6 mm au lieu de 4,5. Treize tests tiennent l’ensemble : l’horloge et son raccord, la rouille qui commence dans les creux, l’instant exact de chaque outil, la caméra, la recette, la direction artistique, aucune interpénétration, aucun élément flottant, aucune élingue qui traverse.</p>
+      </section>
+    </article>
+
+    <footer class="end">
+      <a href="./">Ouvrir Rust</a>
+      <a href="https://github.com/drschizzo/Codevember/blob/main/rust/README.md">README</a>
+      <a href="https://github.com/drschizzo/Codevember/blob/main/rust/docs/concept.md">La démarche</a>
+      <span class="sp"></span>
+      <a href="../">Tous les jours</a>
+    </footer>
+  </main>
+
+  <script type="module">
+    import { demo, C, TAU, lerp, clamp, alpha, label, rng } from '../home/explainer.js';
+
+    // ── outils communs ────────────────────────────────────────────────────
+    const sstep = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+    const mod = (a, b) => a - b * Math.floor(a / b);
+    const toS = (c) => 255 * (c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055);
+    const STEEL = [150, 152, 155];
+    const loadRamp = (a) => { const k = Math.min(1, a / 0.6); return [200 - 120 * k, 92 - 60 * k, 34 - 22 * k]; }; // app/loadmap.js
+    const rgb = (c) => `rgb(${c.map((v) => Math.round(clamp(v, 0, 255))).join(',')})`;
+    function legend(g, items, x, y) {
+      g.save(); g.font = '400 11.5px Inter, system-ui, sans-serif';
+      for (const [col, name] of items) { g.fillStyle = col; g.fillRect(x, y - 4, 12, 3); label(g, name, x + 16, y, { size: 11.5, color: C.dim }); x += 26 + g.measureText(name).width; }
+      g.restore();
+    }
+    function pixelCanvas() { const c = document.createElement('canvas'); return [c, c.getContext('2d')]; }
+
+    // bruit de gradient 2D (remplace le volume de bruit) et fbm à rotation
+    const grad = (i, j) => { let h = (i * 374761393 + j * 668265263) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); const a = ((h ^ (h >>> 16)) >>> 0) / 4294967296 * TAU; return [Math.cos(a), Math.sin(a)]; };
+    function noise(x, y) {
+      const i = Math.floor(x), j = Math.floor(y), fx = x - i, fy = y - j;
+      const f = (t) => t * t * t * (t * (t * 6 - 15) + 10), u = f(fx), v = f(fy);
+      const d = (a, b) => { const g = grad(i + a, j + b); return g[0] * (fx - a) + g[1] * (fy - b); };
+      return 1.6 * lerp(lerp(d(0, 0), d(1, 0), u), lerp(d(0, 1), d(1, 1), u), v);
+    }
+    function fbm(x, y, oct) { let s = 0, a = .5; for (let k = 0; k < oct; k++) { s += a * noise(x, y); const nx = .8 * x - .6 * y, ny = .6 * x + .8 * y; x = nx * 2.03; y = ny * 2.03; a *= .5; } return s; }
+    // Worley 3D exact, hachage de Hoskins (materials.js), évalué sur le plan z = 0
+    const fr = (x) => x - Math.floor(x);
+    function hash33(cx, cy, cz) {
+      let qx = fr(cx * .1031), qy = fr(cy * .103), qz = fr(cz * .0973);
+      const dd = qx * (qy + 33.33) + qy * (qx + 33.33) + qz * (qz + 33.33);
+      qx += dd; qy += dd; qz += dd;
+      return [fr((qx + qy) * qz), fr((qx + qx) * qy), fr((qy + qx) * qx)];
+    }
+    function worleyF1(x, y) {
+      const ix = Math.floor(x), iy = Math.floor(y), fx = x - ix, fy = y - iy; let f1 = 8;
+      for (let oz = -1; oz <= 1; oz++) for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
+        const h = hash33(ix + ox, iy + oy, oz);
+        const d = Math.hypot(ox + h[0] - fx, oy + h[1] - fy, oz + h[2]);
+        if (d < f1) f1 = d;
+      }
+      return f1;
+    }
+
+    // ── 01 · l'horloge ────────────────────────────────────────────────────
+    {
+      const PH = { rain0: .04, rain1: .36, setup0: .36, clean0: .44, clean1: .86, retract1: .95 };
+      const s5 = (t) => { t = clamp(t); return t * t * t * (t * (6 * t - 15) + 10); };
+      const makeShowers = (T, n, r) => { const span = T.rain1 - T.rain0, slot = span / n, out = []; for (let k = 0; k < n; k++) { const d = slot * r.range(.32, .42); const s = T.rain0 + k * slot + slot * r.range(.04, .12); out.push([+s.toFixed(4), +(s + d).toFixed(4)]); } return out; };
+      const showerWeights = (n) => { const w = Array.from({ length: n }, (_, k) => 1 / (1 + .25 * k)); const s = w.reduce((a, b) => a + b, 0); return w.map((x) => x / s); };
+      const tauAt = (R, u) => { const S = R.timing.showers, W = showerWeights(S.length), dry = R.timing.dry; let t = 0; for (let k = 0; k < S.length; k++) { const [s, e] = S[k]; t += W[k] * s5((u - s) / (e - s + dry)); } return Math.min(1, t); };
+      const rainAt = (R, u) => { let r = 0; for (const [s, e] of R.timing.showers) { const d = e - s; r = Math.max(r, sstep(s, s + d * .2, u) * (1 - sstep(e - d * .25, e, u))); } return r; };
+      const wetAt = (R, u) => { let w = 0; const dry = R.timing.dry; for (const [s, e] of R.timing.showers) { const up = sstep(s, s + (e - s) * .3, u); const down = u > e ? Math.exp(-(u - e) / (dry * .45)) : 1; w = Math.max(w, up * down * (u < s ? 0 : 1)); } return w; };
+      const overcastAt = (R, u) => { let c = 0; for (const [s, e] of R.timing.showers) { const d = e - s; c = Math.max(c, sstep(s - d * .35, s + d * .15, u) * (1 - sstep(e, e + d * .6, u))); } return c; };
+      let seed = 3;
+      const mk = (n) => { const r0 = rng(seed * 131 + n * 7); const r = { range: (a, b) => a + (b - a) * r0() }; return { timing: { ...PH, showers: makeShowers(PH, n, r), dry: +((PH.rain1 - PH.rain0) / n * .45).toFixed(4) } }; };
+      const RUST = '#c4622a';
+      demo('#fig-clock', {
+        title: 'Une boucle, une phase u', aspect: 2.1,
+        controls: [{ key: 'n', label: 'Nombre d’averses', min: 3, max: 5, step: 1, value: 4 }],
+        buttons: [{ label: 'Autre tirage', onClick: () => { seed++; } }],
+        setup(d) { d.state.u = .3; },
+        pointer(d, e) { const L = d.state.L; if (L && (e.down || e.type === 'down')) d.state.u = clamp((e.x - L.x0) / (L.x1 - L.x0), 0, .9999); },
+        draw(g, d) {
+          const R = mk(d.s.n), { w, h } = d, x0 = 40, x1 = w - 14, a0 = 30, a1 = h * .56, b0 = h * .66, b1 = h - 44;
+          d.state.L = { x0, x1 };
+          const X = (u) => lerp(x0, x1, u), Ya = (v) => lerp(a1, a0, v), Yb = (v) => lerp(b1, b0, v);
+          const bands = [[0, PH.rain0, ''], [PH.rain0, PH.rain1, 'averses (accéléré)'], [PH.setup0, PH.clean0, 'mise en place'], [PH.clean0, PH.clean1, 'décapage (temps réel)'], [PH.clean1, PH.retract1, 'retrait'], [PH.retract1, 1, '']];
+          bands.forEach(([a, b, name], i) => {
+            g.fillStyle = alpha(C.ink, i % 2 ? .045 : .015); g.fillRect(X(a), a0, X(b) - X(a), b1 - a0);
+            if (name) label(g, name, (X(a) + X(b)) / 2, b1 + (i === 2 || i === 4 ? 30 : 16), { align: 'center', size: 11 });
+          });
+          for (const [s, e] of R.timing.showers) { g.fillStyle = alpha(C.c2, .13); g.fillRect(X(s), a0, X(e) - X(s), a1 - a0); }
+          g.strokeStyle = C.grid; g.lineWidth = 1;
+          for (const y of [Ya(0), Ya(1), Yb(0), Yb(1)]) { g.beginPath(); g.moveTo(x0, y); g.lineTo(x1, y); g.stroke(); }
+          label(g, '0', x0 - 6, Ya(0) + 4, { align: 'right', size: 11 }); label(g, '1', x0 - 6, Ya(1) + 4, { align: 'right', size: 11 });
+          label(g, '0', x0 - 6, Yb(0) + 4, { align: 'right', size: 11 }); label(g, '1', x0 - 6, Yb(1) + 4, { align: 'right', size: 11 });
+          const curve = (f, Y, col, lw, dash = []) => { g.strokeStyle = col; g.lineWidth = lw; g.setLineDash(dash); g.beginPath(); for (let i = 0; i <= 600; i++) { const u = i / 600 * .99999, y = Y(f(u)); i ? g.lineTo(X(u), y) : g.moveTo(X(u), y); } g.stroke(); g.setLineDash([]); };
+          curve((u) => overcastAt(R, u), Ya, alpha(C.ink, .45), 1.2, [2, 3]);
+          curve((u) => wetAt(R, u), Ya, alpha(C.c2, .7), 1.3, [5, 3]);
+          curve((u) => rainAt(R, u), Ya, C.c2, 1.5);
+          curve((u) => tauAt(R, u), Ya, C.c1, 2.4);
+          legend(g, [[C.c1, 'τ (humectation)'], [C.c2, 'pluie'], [alpha(C.c2, .7), 'eau sur la pièce'], [alpha(C.ink, .45), 'ciel couvert']], x0, 14);
+          // rouille de deux points (épaisseur relative, apparition à τ = 0)
+          const uc = .6;
+          curve((u) => (u < uc ? Math.sqrt(tauAt(R, u)) : 0), Yb, RUST, 2);
+          curve(() => 1, Yb, alpha(RUST, .55), 1.4, [5, 4]);
+          label(g, 'jamais atteint : τ effectif = 1', x1 - 4, Yb(1) - 5, { align: 'right', size: 11, color: alpha(RUST, .9) });
+          label(g, 'décapé à u = 0,6', X(uc) + 6, Yb(.12), { size: 11, color: RUST });
+          // curseur
+          const u = d.state.u, t = tauAt(R, u);
+          g.strokeStyle = alpha(C.ink, .5); g.setLineDash([3, 3]); g.beginPath(); g.moveTo(X(u), a0); g.lineTo(X(u), b1); g.stroke(); g.setLineDash([]);
+          g.fillStyle = C.c1; g.beginPath(); g.arc(X(u), Ya(t), 4.5, 0, TAU); g.fill();
+          d.status(`u = ${u.toFixed(3)} · τ = ${t.toFixed(3)} · pluie ${rainAt(R, u).toFixed(2)}`);
+        },
+      });
+    }
+
+    // ── 02 · la cornière en coupe ─────────────────────────────────────────
+    {
+      const poly = [], P = (x, y) => poly.push([x, y]);
+      const arc = (cx, cy, r, a0, a1, n) => { for (let i = 1; i <= n; i++) { const a = a0 + (a1 - a0) * i / n; P(cx + r * Math.cos(a), cy + r * Math.sin(a)); } };
+      const t = .012, Lw = .15, rf = .008, rr = .011;
+      P(0, 0); P(Lw, 0); P(Lw, t);
+      P(.08 + rr, t); arc(.08, t, rr, 0, Math.PI, 18);
+      P(t + rf, t); arc(t + rf, t + rf, rf, -Math.PI / 2, -Math.PI, 8);
+      P(t, .09 - rr); arc(t, .09, rr, -Math.PI / 2, Math.PI / 2, 18);
+      P(t, Lw); P(0, Lw);
+      // échantillons tous les 2 mm, normale sortante
+      const S = [];
+      for (let k = 0; k < poly.length; k++) {
+        const a = poly[k], b = poly[(k + 1) % poly.length], dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy); if (L < 1e-9) continue;
+        const m = Math.max(1, Math.round(L / .002));
+        for (let i = 0; i < m; i++) { const f = (i + .5) / m; S.push({ x: a[0] + dx * f, y: a[1] + dy * f, nx: dy / L, ny: -dx / L }); }
+      }
+      const inside = (x, y) => { let c = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const [xi, yi] = poly[i], [xj, yj] = poly[j]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c; } return c; };
+      function concavity(r, excl) {
+        const r2 = r * r;
+        return S.map((p) => { let sw = 0, sh = 0; for (const q of S) { const dx = q.x - p.x, dy = q.y - p.y, d2 = dx * dx + dy * dy; if (d2 > r2) continue; if (excl && p.nx * q.nx + p.ny * q.ny < -.3) continue; const w = 1 - d2 / r2; sw += w; sh += w * (dx * p.nx + dy * p.ny); } return sw > 0 ? sh / sw / r : 0; });
+      }
+      // ciel : la verticale inclinée par le vent et deux couronnes (62°, 38°), ici deux directions chacune
+      const lo = [-.04, -.04], hi = [Lw + .04, Lw + .04];
+      const dirs = [[.15, 1]]; for (const el of [62, 38]) for (const sd of [1, -1]) { const e = el * Math.PI / 180; dirs.push([Math.cos(e) * sd + .15 * .5, Math.sin(e)]); }
+      const wts = dirs.map((d) => d[1]), sumW = wts.reduce((a, b) => a + b, 0), D = dirs.map(([x, y]) => { const l = Math.hypot(x, y); return [x / l, y / l]; });
+      const sky = S.map((p) => {
+        const ox = p.x + p.nx * .03, oy = p.y + p.ny * .03; let s = 0;
+        D.forEach(([dx, dy], k) => {
+          if (dx * p.nx + dy * p.ny < -.05) return;
+          let free = true;
+          for (let tt = .02; tt < 1.4; tt += .014) { const x = ox + dx * tt, y = oy + dy * tt; if (x < lo[0] || y < lo[1] || x > hi[0] || y > hi[1]) break; if (inside(x, y)) { free = false; break; } }
+          if (free) s += wts[k];
+        });
+        return s / sumW;
+      });
+      let cache = null;
+      const compute = (excl) => {
+        if (cache && cache.excl === excl) return cache;
+        const c1 = concavity(.012, excl), c2 = concavity(.04, excl);
+        const tow = S.map((p, i) => {
+          const up = p.ny;
+          const pl = sstep(.55, .92, up) * (.35 + .65 * sstep(0, .1, c2[i])) * (.4 + .6 * sky[i]);
+          const crev = sstep(.025, .16, c1[i]) * .8 + sstep(.02, .12, c2[i]) * .35;
+          const edge = sstep(.04, .22, -c1[i]);
+          const rain = sky[i] * (.4 + .6 * Math.max(0, up));
+          const shelter = (1 - sky[i]) * (up < -.3 ? .6 : .35);
+          return { w: Math.min(1, .12 + .38 * rain + .55 * pl + crev + .3 * edge + shelter), pl, crev, edge, rain, shelter };
+        });
+        return (cache = { excl, c1, c2, tow });
+      };
+      let chan = 'w';
+      const rampW = (v) => v < .5 ? STEEL.map((s, k) => lerp(s, [200, 92, 34][k], v / .5)) : [200, 92, 34].map((s, k) => lerp(s, [80, 32, 12][k], (v - .5) / .5));
+      demo('#fig-wet', {
+        title: 'Humectation d’une cornière', aspect: 1.75,
+        buttons: [
+          { label: 'Humectation', onClick: () => { chan = 'w'; } },
+          { label: 'Concavité 1,2 cm', onClick: () => { chan = 'c1'; } },
+          { label: 'Concavité 4 cm', onClick: () => { chan = 'c2'; } },
+          { label: 'Ciel', onClick: () => { chan = 'sky'; } },
+          { key: 'excl', label: 'Écarter l’autre face', toggle: true, value: true },
+        ],
+        setup(d) { let b = 1e9; S.forEach((p, i) => { const dd = Math.hypot(p.x - t - rf * .3, p.y - t - rf * .3); if (dd < b) { b = dd; d.state.sel = i; } }); },
+        pointer(d, e) {
+          const T = d.state.T; if (!T) return;
+          let best = -1, bd = 1e9; S.forEach((p, i) => { const dd = Math.hypot(T.X(p.x) - e.x, T.Y(p.y) - e.y); if (dd < bd) { bd = dd; best = i; } });
+          if (bd < 30) d.state.sel = best;
+        },
+        draw(g, d) {
+          const R = compute(d.s.excl), { w, h } = d;
+          const sc = Math.min((h - 40) / (Lw + .03), w * .55 / (Lw + .03)), ox = 30, oy = h - 26;
+          const X = (x) => ox + x * sc, Y = (y) => oy - y * sc; d.state.T = { X, Y };
+          g.fillStyle = alpha(C.ink, .07); g.strokeStyle = alpha(C.ink, .25); g.lineWidth = 1; g.beginPath(); poly.forEach(([x, y], i) => i ? g.lineTo(X(x), Y(y)) : g.moveTo(X(x), Y(y))); g.closePath(); g.fill(); g.stroke();
+          const val = (i) => chan === 'w' ? R.tow[i].w : chan === 'c1' ? R.c1[i] : chan === 'c2' ? R.c2[i] : sky[i];
+          const colOf = (i) => {
+            const v = val(i);
+            if (chan === 'w') return rgb(rampW(clamp((v - .28) / .72)));
+            if (chan === 'sky') return alpha(C.c2, .15 + .85 * v);
+            const k = clamp(Math.abs(v) / .2); return v > 0 ? rgb(STEEL.map((s, q) => lerp(s, [214, 110, 40][q], k))) : rgb(STEEL.map((s, q) => lerp(s, [70, 130, 210][q], k)));
+          };
+          S.forEach((p, i) => { g.fillStyle = colOf(i); g.beginPath(); g.arc(X(p.x) + p.nx * 3, Y(p.y) - p.ny * 3, 2.6, 0, TAU); g.fill(); });
+          // point choisi
+          const i = d.state.sel, p = S[i];
+          if (p) {
+            g.strokeStyle = C.ink; g.lineWidth = 1.4; g.beginPath(); g.arc(X(p.x) + p.nx * 3, Y(p.y) - p.ny * 3, 6, 0, TAU); g.stroke();
+            const x = Math.max(X(Lw) + 40, w * .62), tw = R.tow[i];
+            const rows = [['concavité 1,2 cm', R.c1[i].toFixed(3)], ['concavité 4 cm', R.c2[i].toFixed(3)], ['ciel visible', sky[i].toFixed(2)], ['stagnation', tw.pl.toFixed(2)], ['creux', tw.crev.toFixed(2)], ['arête', tw.edge.toFixed(2)], ['abri', tw.shelter.toFixed(2)], ['humectation w', tw.w.toFixed(2)], ['apparition locale t₀', Math.pow(1 - clamp((tw.w - .28) / .72), 1.25).toFixed(2)]];
+            rows.forEach(([n, v], k) => { const y = 34 + k * Math.min(26, (h - 50) / 9); label(g, n, x, y, { size: 12, color: k >= 7 ? C.ink : C.dim }); label(g, v, w - 14, y, { size: 14, align: 'right', font: 'Fraunces', color: k === 7 ? C.c1 : C.ink }); });
+          }
+          d.status({ w: 'humectation w', c1: 'concavité au rayon 1,2 cm', c2: 'concavité au rayon 4 cm', sky: 'part du ciel visible' }[chan] + (d.s.excl ? '' : ' · autre face comptée'));
+        },
+      });
+    }
+
+    // ── 03-05 · le gousset : humectation, front, coulures ────────────────
+    const GW = 60, GH = 40, VOX = .01, SPREAD = .25;
+    const RIV = []; for (let k = 0; k < 6; k++) RIV.push([.08 + k * .088, .24]); for (const x of [.12, .24, .36, .48]) RIV.push([x, .07]); for (const x of [.15, .3, .45]) RIV.push([x, .37]);
+    const ANG = { x0: .03, x1: .57, y0: .18, y1: .30 };
+    const PLATE = (() => {
+      const N = GW * GH, tow = new Float32Array(N), skyv = new Float32Array(N), conc = new Float32Array(N), shade = new Float32Array(N);
+      for (let j = 0; j < GH; j++) for (let i = 0; i < GW; i++) {
+        const x = (i + .5) * VOX, y = (j + .5) * VOX, k = j * GW + i;
+        let sky = .6, up = 0, c1 = 0, c2 = 0, sh = 1;
+        const inA = x >= ANG.x0 && x <= ANG.x1 && y >= ANG.y0 && y <= ANG.y1, alongA = x > ANG.x0 && x < ANG.x1;
+        if (inA) sh = 1.1;
+        if (!inA && alongA && y > ANG.y1 && y < ANG.y1 + .016) { up = 1; sky = .9; c2 = .08; sh = 1.2; }   // rebord : l'eau stagne
+        if (!inA && alongA && y < ANG.y0 && y > ANG.y0 - .025) { sky = .25; sh = .78; }                    // sous l'aile, à l'abri
+        let de = Math.min(x, .6 - x, y, .4 - y); if (inA) de = Math.min(de, x - ANG.x0, ANG.x1 - x, y - ANG.y0, ANG.y1 - y);
+        if (de < .012) c1 = -.15;
+        if (!inA) { const dA = Math.max(ANG.x0 - x, x - ANG.x1, ANG.y0 - y, y - ANG.y1); if (dA > 0 && dA < .012) c1 = Math.max(c1, .15); } // pied de la cornière
+        for (const [rx, ry] of RIV) { const r = Math.hypot(x - rx, y - ry); if (r < .011) { if (r > .007) c1 = Math.min(c1, -.12); } else if (r < .022) c1 = Math.max(c1, .2 * (1 - Math.abs(r - .013) / .009)); }
+        const pl = sstep(.55, .92, up) * (.35 + .65 * sstep(0, .1, c2)) * (.4 + .6 * sky);
+        const crev = sstep(.025, .16, c1) * .8 + sstep(.02, .12, c2) * .35, edge = sstep(.04, .22, -c1);
+        const rain = sky * (.4 + .6 * Math.max(0, up)), shelter = (1 - sky) * (up < -.3 ? .6 : .35);
+        tow[k] = Math.min(1, .12 + .38 * rain + .55 * pl + crev + .3 * edge + shelter); skyv[k] = sky; conc[k] = clamp(c1 + .5 * c2, -.227, .227); shade[k] = sh;
+      }
+      // apparition locale, puis front géodésique (Dijkstra, 8 voisins)
+      const local = new Float32Array(N), front = new Float64Array(N);
+      for (let k = 0; k < N; k++) { const t = clamp((tow[k] - .28) / .72); local[k] = (1 - t) ** 1.25; front[k] = local[k]; }
+      const hp = [], hv = [];
+      const push = (p, v) => { let i = hp.length; hp.push(p); hv.push(v); while (i > 0) { const j = (i - 1) >> 1; if (hp[j] <= hp[i]) break; [hp[i], hp[j]] = [hp[j], hp[i]]; [hv[i], hv[j]] = [hv[j], hv[i]]; i = j; } };
+      const pop = () => { const top = [hp[0], hv[0]], lp = hp.pop(), lv = hv.pop(); if (hp.length) { hp[0] = lp; hv[0] = lv; let i = 0; for (;;) { const l = 2 * i + 1, r = l + 1; let m = i; if (l < hp.length && hp[l] < hp[m]) m = l; if (r < hp.length && hp[r] < hp[m]) m = r; if (m === i) break; [hp[i], hp[m]] = [hp[m], hp[i]]; [hv[i], hv[m]] = [hv[m], hv[i]]; i = m; } } return top; };
+      for (let k = 0; k < N; k++) push(front[k], k);
+      const done = new Uint8Array(N);
+      while (hp.length) {
+        const [o, k] = pop(); if (done[k] || o > front[k]) continue; done[k] = 1;
+        const x = k % GW, y = Math.floor(k / GW);
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          if (!dx && !dy) continue; const xx = x + dx, yy = y + dy; if (xx < 0 || yy < 0 || xx >= GW || yy >= GH) continue;
+          const kk = yy * GW + xx; if (done[kk]) continue; const no = o + VOX * Math.hypot(dx, dy) / SPREAD;
+          if (no < front[kk]) { front[kk] = no; push(no, kk); }
+        }
+      }
+      // coulures : du haut vers le bas, max(source, 0,972 × voisin du dessus pondéré)
+      const streak = new Float32Array(N);
+      for (let j = GH - 1; j >= 0; j--) for (let i = 0; i < GW; i++) {
+        const k = j * GW + i, src = tow[k] * skyv[k] * .55; let carry = 0;
+        if (j + 1 < GH) for (let dx = -1; dx <= 1; dx++) { const xx = i + dx; if (xx < 0 || xx >= GW) continue; carry = Math.max(carry, streak[(j + 1) * GW + xx] * (dx ? .8 : 1)); }
+        streak[k] = Math.max(src, carry * .972);
+      }
+      const bil = (A, x, y) => { const fx = clamp(x / VOX - .5, 0, GW - 1.001), fy = clamp(y / VOX - .5, 0, GH - 1.001), i = Math.floor(fx), j = Math.floor(fy), u = fx - i, v = fy - j, k = j * GW + i; return lerp(lerp(A[k], A[k + 1], u), lerp(A[k + GW], A[k + GW + 1], u), v); };
+      return { tow, skyv, conc, shade, local, front, streak, bil };
+    })();
+    function drawRivets(g, X, Y, sc, only) {
+      for (const [rx, ry] of RIV) { if (only && !only(rx, ry)) continue; g.strokeStyle = 'rgba(0,0,0,.35)'; g.lineWidth = 1; g.beginPath(); g.arc(X(rx), Y(ry), .011 * sc, 0, TAU); g.stroke(); }
+    }
+    function plateFrame(d) { const sc = Math.min((d.h - 16) / .4, (d.w * .68 - 16) / .6), ox = 12, oy = (d.h - .4 * sc) / 2; return { sc, ox, oy, X: (x) => ox + x * sc, Y: (y) => oy + (.4 - y) * sc }; }
+
+    // ── 03 · front géodésique ─────────────────────────────────────────────
+    {
+      const [off, og] = pixelCanvas(); off.width = GW; off.height = GH; const img = og.createImageData(GW, GH);
+      demo('#fig-front', {
+        title: 'Instant d’apparition', aspect: 1.9, animate: true,
+        controls: [{ key: 'tau', label: 'Temps d’humectation τ (à l’arrêt)', min: 0, max: 1, step: .005, value: .3, fmt: (v) => v.toFixed(2) }],
+        buttons: [{ key: 'play', label: 'Lecture', toggle: true, value: true }, { key: 'geo', label: 'Front géodésique', toggle: true, value: true }],
+        draw(g, d) {
+          const tau = d.s.play ? Math.min(1, ((d.t / 3.2) % 1.25)) : d.s.tau;
+          const O = d.s.geo ? PLATE.front : PLATE.local; let cov = 0;
+          for (let j = 0; j < GH; j++) for (let i = 0; i < GW; i++) {
+            const k = j * GW + i, o = ((GH - 1 - j) * GW + i) * 4, sh = PLATE.shade[k], age = tau - O[k];
+            let c = STEEL.slice();
+            if (age > 0) { cov++; const r = loadRamp(age), m = Math.min(1, age / .04); c = c.map((v, q) => v + (r[q] - v) * m); }
+            img.data[o] = c[0] * sh; img.data[o + 1] = c[1] * sh; img.data[o + 2] = c[2] * sh; img.data[o + 3] = 255;
+          }
+          og.putImageData(img, 0, 0);
+          const F = plateFrame(d); g.imageSmoothingEnabled = true; g.drawImage(off, F.ox, F.oy, .6 * F.sc, .4 * F.sc);
+          drawRivets(g, F.X, F.Y, F.sc);
+          // légende
+          const lx = F.ox + .6 * F.sc + 18, lw = Math.max(20, d.w - lx - 14);
+          label(g, 'τ', lx, 26, { size: 12 }); label(g, tau.toFixed(2), lx, 54, { size: 22, font: 'Fraunces', color: C.ink });
+          label(g, 'surface rouillée', lx, 88, { size: 12 }); label(g, `${Math.round(cov / (GW * GH) * 100)} %`, lx, 116, { size: 22, font: 'Fraunces', color: C.c1 });
+          for (let i = 0; i < 40; i++) { const a = i / 40 * .6; g.fillStyle = rgb(loadRamp(a)); g.fillRect(lx + i / 40 * lw, d.h - 46, lw / 40 + .5, 10); }
+          label(g, 'jeune', lx, d.h - 22, { size: 11 }); label(g, 'épaisse', lx + lw, d.h - 22, { size: 11, align: 'right' });
+          d.status(d.s.geo ? 'front géodésique, v = 0,25 m par unité de τ' : 'apparition locale seule');
+        },
+      });
+    }
+
+    // ── 04 · coulures ─────────────────────────────────────────────────────
+    {
+      const [off, og] = pixelCanvas();
+      let key = '';
+      const heat = (v) => v < .5 ? [lerp(34, 150, v / .5), lerp(36, 70, v / .5), lerp(40, 30, v / .5)] : [lerp(150, 250, (v - .5) / .5), lerp(70, 210, (v - .5) / .5), lerp(30, 150, (v - .5) / .5)];
+      demo('#fig-streak', {
+        title: 'Coulures', aspect: 1.9,
+        controls: [{ key: 'tau', label: 'Temps d’humectation τ', min: 0, max: 1, step: .01, value: .85, fmt: (v) => v.toFixed(2) }],
+        buttons: [{ key: 'mod', label: 'Modulation du shader', toggle: true, value: false }],
+        draw(g, d) {
+          const F = plateFrame(d), W = Math.max(2, Math.round(.6 * F.sc / 2)), H = Math.max(2, Math.round(.4 * F.sc / 2));
+          const k2 = `${W}x${H}:${d.s.tau}:${d.s.mod}`;
+          if (k2 !== key) {
+            key = k2; off.width = W; off.height = H; const img = og.createImageData(W, H), px = img.data;
+            const st = sstep(.12, .7, d.s.tau), stain = [.43, .17, .055].map(toS), PL = [112, 114, 118];
+            for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+              const x = (i + .5) / W * .6, y = .4 - (j + .5) / H * .4, o = (j * W + i) * 4;
+              const sF = Math.min(1, PLATE.bil(PLATE.streak, x, y) * 1.6);
+              const sh = PLATE.bil(PLATE.shade, x, y);
+              if (!d.s.mod) { const c = heat(sF); for (let q = 0; q < 3; q++) px[o + q] = c[q] * (.75 + .25 * sh); px[o + 3] = 255; continue; }
+              const stripes = sstep(-.05, .35, fbm(x * 55, y * 3.5, 2));
+              const sv = clamp(sF * 1.6 * st * stripes, 0, .85) * .7;
+              for (let q = 0; q < 3; q++) px[o + q] = lerp(PL[q], stain[q], sv) * sh;
+              px[o + 3] = 255;
+            }
+            og.putImageData(img, 0, 0);
+          }
+          g.imageSmoothingEnabled = true; g.drawImage(off, F.ox, F.oy, .6 * F.sc, .4 * F.sc);
+          drawRivets(g, F.X, F.Y, F.sc);
+          const lx = F.ox + .6 * F.sc + 18;
+          label(g, 'facteur par voxel', lx, 26, { size: 12 }); label(g, '0,972', lx, 52, { size: 20, font: 'Fraunces', color: C.ink });
+          label(g, 'demi-longueur', lx, 84, { size: 12 }); label(g, '≈ 24 voxels', lx, 110, { size: 20, font: 'Fraunces', color: C.c1 });
+          if (d.s.mod) { label(g, 'smoothstep(0,12 ; 0,7 ; τ)', lx, 142, { size: 12 }); label(g, sstep(.12, .7, d.s.tau).toFixed(2), lx, 168, { size: 20, font: 'Fraunces', color: C.ink }); }
+          else { const lw = Math.max(20, d.w - lx - 14); for (let i = 0; i < 40; i++) { g.fillStyle = rgb(heat(i / 39)); g.fillRect(lx + i / 40 * lw, d.h - 46, lw / 40 + .5, 10); } label(g, '0', lx, d.h - 22, { size: 11 }); label(g, 'canal B = 1', lx + lw, d.h - 22, { size: 11, align: 'right' }); }
+          d.status(d.s.mod ? 'champ × 1,6 × smoothstep(τ) × bruit étiré' : 'champ brut : canal B du volume');
+        },
+      });
+    }
+
+    // ── 05 · la loi de dose au pixel ──────────────────────────────────────
+    {
+      const [off, og] = pixelCanvas();
+      const RX = [.10, .42], RY = [.16, .32];
+      const cFlash = [.62, .3, .085], cYoung = [.42, .165, .05], cMature = [.22, .085, .033], cOld = [.11, .05, .026], cBlack = [.032, .028, .026];
+      const mix3 = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
+      const Lt = (() => { const v = [-.45, .55, .7], l = Math.hypot(...v); return v.map((x) => x / l); })();
+      let key = '', stats = { h: 0, cov: 0 };
+      demo('#fig-dose', {
+        title: 'Couverture, épaisseur, strates', aspect: 2,
+        controls: [
+          { key: 'tau', label: 'Temps d’humectation τ', min: 0, max: 1, step: .01, value: .1, fmt: (v) => v.toFixed(2) },
+          { key: 'pits', label: 'Germes (cellules par mètre)', min: 12, max: 40, step: 1, value: 20 },
+        ],
+        draw(g, d) {
+          const W = Math.max(2, Math.round(d.w / 2)), H = Math.max(2, Math.round(d.h / 2));
+          const k2 = `${W}x${H}:${d.s.tau}:${d.s.pits}`;
+          if (k2 !== key) {
+            key = k2; off.width = W; off.height = H; const img = og.createImageData(W, H), px = img.data;
+            const tau = d.s.tau, tarn = sstep(0, .6, tau); let sh = 0, sc = 0;
+            for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+              const x = lerp(RX[0], RX[1], (i + .5) / W), y = lerp(RY[1], RY[0], (j + .5) / H), o = (j * W + i) * 4;
+              const onset = PLATE.bil(PLATE.front, x, y), tow = PLATE.bil(PLATE.tow, x, y), conc = PLATE.bil(PLATE.conc, x, y);
+              const wP = worleyF1(x * d.s.pits, y * d.s.pits), n1 = fbm(x * 7, y * 7, 3), n2 = noise(x * 140, y * 140), n3 = noise(x * 520 + 11, y * 520);
+              const oo = clamp(onset + n1 * .16 + wP * .09 - .03), age = tau - oo;
+              const cov = sstep(0, .03, age), kTh = .45 + tow * .55;
+              const h = clamp(Math.sqrt(Math.max(age, 0) / Math.max(1 - oo, .08)) * kTh);
+              const blot = fbm(x * 19, y * 19, 3), blot2 = fbm(x * 46 + 7.1, y * 46 + 7.1, 2), hv = h + n1 * .22 + blot * .25;
+              let col = mix3(cFlash, cYoung, sstep(.05, .32, hv));
+              col = mix3(col, cMature, sstep(.3, .7, hv));
+              col = mix3(col, cOld, sstep(.65, 1.05, hv) * .7);
+              col = mix3(col, cYoung.map((v) => v * 1.25), sstep(.12, .38, blot2) * .55);
+              col = mix3(col, cOld.map((v) => v * .8), sstep(-.15, -.38, blot2) * sstep(.3, .8, h) * .6);
+              col = mix3(col, cBlack, sstep(.02, .14, conc) * sstep(.25, .75, h) * .85);
+              col = mix3(col, cFlash.map((v) => v * 1.08), sstep(.04, .2, -conc) * .4);
+              const gr = (n2 * .2 + .92) * (n3 * .12 + 1); col = col.map((v) => v * gr);
+              const rustA = cov * lerp(.5, 1, sstep(0, .22, h));
+              const metal = .56 * (1 - tarn * .25);
+              let alb = [0, 1, 2].map((q) => lerp(metal, col[q], rustA));
+              // ombrage simple des têtes de rivet (dômes)
+              let lit = .86;
+              for (const [rx, ry] of RIV) { const dx = (x - rx) / .011, dy = (y - ry) / .011, r2 = dx * dx + dy * dy; if (r2 < 1) { const nz = Math.sqrt(1 - r2); lit = .32 + .72 * Math.max(0, dx * Lt[0] + dy * Lt[1] + nz * Lt[2]); } else if (r2 < 1.5) lit = .62; }
+              for (let q = 0; q < 3; q++) px[o + q] = toS(alb[q] * lit);
+              px[o + 3] = 255; sh += h * cov; sc += cov;
+            }
+            og.putImageData(img, 0, 0); stats = { h: sc ? sh / sc : 0, cov: sc / (W * H) };
+          }
+          g.imageSmoothingEnabled = true; g.drawImage(off, 0, 0, d.w, d.h);
+          d.status(`couverture ${Math.round(stats.cov * 100)} % · épaisseur moyenne ${stats.h.toFixed(2)}`);
+        },
+      });
+    }
+
+    // ── 06 · le laser ─────────────────────────────────────────────────────
+    // silhouette d'une vanne vue de face (m) : brides en ±ex, volant de rayon rv
+    const valve = (ex = .45, rv = .18) => (x, y) => {
+      const ax = Math.abs(x);
+      if (ax <= .55 && y >= .30 && y <= .46) return true;                        // conduite
+      if (ax >= ex - .025 && ax <= ex + .025 && y >= .18 && y <= .58) return true; // brides
+      if (((x / .2) ** 2 + ((y - .38) / .24) ** 2) <= 1) return true;            // corps
+      if (ax <= .09 && y >= .58 && y <= .72) return true;                         // chapeau
+      if (ax <= .015 && y >= .72 && y <= .82) return true;                        // tige
+      if (ax <= rv && y >= .80 && y <= .84) return true;                          // volant (de chant)
+      if (ax >= .25 && ax <= .33 && y >= 0 && y <= .31) return true;              // sellettes
+      return false;
+    };
+    {
+      const cell = .01, lo = [-.56, 0], hi = [.56, .86], fw = Math.round((hi[0] - lo[0]) / cell), fh = Math.round((hi[1] - lo[1]) / cell);
+      const inV = valve(), data = new Float32Array(fw * fh).fill(-1e3);
+      for (let j = 0; j < fh; j++) for (let i = 0; i < fw; i++) if (inV(lo[0] + (i + .5) * cell, lo[1] + (j + .5) * cell)) data[j * fw + i] = 0;
+      const front = { data, w: fw, h: fh, lo, cell };
+      const T = { clean0: .44, clean1: .86 };
+      function laserPlan(M, full) {
+        const yTop = hi[1] + .004, yBot = lo[1] - .004;
+        const n = Math.max(3, Math.round((yTop - yBot) / M.band)), w = (yTop - yBot) / n, rows = [];
+        for (let k = 0; k < n; k++) {
+          const y1 = yTop - k * w, y0 = y1 - w; let x0 = 1e9, x1 = -1e9;
+          const j0 = Math.max(0, Math.floor((y0 - front.lo[1]) / front.cell)), j1 = Math.min(front.h - 1, Math.ceil((y1 - front.lo[1]) / front.cell));
+          for (let j = j0; j <= j1; j++) for (let i = 0; i < front.w; i++) if (front.data[j * front.w + i] > -999) { const x = front.lo[0] + (i + .5) * front.cell; x0 = Math.min(x0, x); x1 = Math.max(x1, x); }
+          if (x0 > x1) { x0 = -.05; x1 = .05; }
+          if (full) { x0 = lo[0]; x1 = hi[0]; }
+          x0 -= .035; x1 += .035;
+          const ltr = (k % 2 === 0) === !!M.startLeft;
+          rows.push({ y0, y1, xs: ltr ? x0 : x1, xe: ltr ? x1 : x0, t0: 0, t1: 0 });
+        }
+        const sweep = rows.map((r) => Math.abs(r.xe - r.xs) + .12), step = rows.map((r, k) => (k ? .22 + Math.abs(r.xs - rows[k - 1].xe) * .4 : 0));
+        const total = sweep.reduce((a, b) => a + b, 0) + step.reduce((a, b) => a + b, 0);
+        let t = T.clean0; const kk = (T.clean1 - T.clean0) / total;
+        rows.forEach((r, i) => { t += step[i] * kk; r.t0 = t; t += sweep[i] * kk; r.t1 = t; });
+        return { n, w, yTop, yBot, rows, total };
+      }
+      function laserHead(plan, u) {
+        const R = plan.rows, last = R[R.length - 1], yc = (r) => (r.y0 + r.y1) / 2;
+        if (u <= R[0].t0) return { x: R[0].xs, y: yc(R[0]), on: 0, k: 0 };
+        if (u >= last.t1) return { x: last.xe, y: yc(last), on: 0, k: R.length - 1 };
+        for (let k = 0; k < R.length; k++) {
+          const r = R[k];
+          if (u <= r.t1) {
+            if (u >= r.t0) return { x: r.xs + (r.xe - r.xs) * ((u - r.t0) / (r.t1 - r.t0)), y: yc(r), on: 1, k };
+            const p = R[k - 1], s = sstep(p.t1, r.t0, u);
+            return { x: p.xe + (r.xs - p.xe) * s, y: yc(p) + (yc(r) - yc(p)) * s, on: 0, k };
+          }
+        }
+        return { x: last.xe, y: yc(last), on: 0, k: R.length - 1 };
+      }
+      function laserCleanTime(plan, p) {
+        const k = Math.floor((plan.yTop - p[1]) / plan.w); if (k < 0 || k >= plan.n) return Infinity;
+        const r = plan.rows[k], f = clamp((p[0] - r.xs) / (r.xe - r.xs)); return r.t0 + f * (r.t1 - r.t0);
+      }
+      const [off, og] = pixelCanvas(); off.width = fw; off.height = fh; const img = og.createImageData(fw, fh);
+      let cache = null;
+      demo('#fig-laser', {
+        title: 'Portique laser', aspect: 1.75, animate: true,
+        controls: [{ key: 'band', label: 'Hauteur de la ligne w', min: .075, max: .1, step: .001, value: .085, fmt: (v) => `${(v * 100).toFixed(1)} cm` }],
+        buttons: [{ key: 'full', label: 'Rangées de pleine largeur', toggle: true, value: false }, { key: 'left', label: 'Partir de gauche', toggle: true, value: true }],
+        draw(g, d) {
+          const ck = `${d.s.band}:${d.s.full}:${d.s.left}`;
+          if (!cache || cache.k !== ck) {
+            const plan = laserPlan({ band: d.s.band, startLeft: d.s.left }, d.s.full), tc = new Float32Array(fw * fh).fill(Infinity);
+            for (let j = 0; j < fh; j++) for (let i = 0; i < fw; i++) if (data[j * fw + i] > -999) tc[j * fw + i] = laserCleanTime(plan, [lo[0] + (i + .5) * cell, lo[1] + (j + .5) * cell]);
+            const ref = laserPlan({ band: d.s.band, startLeft: d.s.left }, false), fullP = laserPlan({ band: d.s.band, startLeft: d.s.left }, true);
+            cache = { k: ck, plan, tc, ratio: ref.total / fullP.total };
+          }
+          const { plan, tc } = cache;
+          const span = .46, u = .42 + ((d.t * .034) % span);
+          for (let j = 0; j < fh; j++) for (let i = 0; i < fw; i++) {
+            const k = j * fw + i, o = ((fh - 1 - j) * fw + i) * 4;
+            if (data[k] < -999) { img.data[o + 3] = 0; continue; }
+            let c;
+            if (u < tc[k]) c = [128, 58, 26];
+            else { const hot = Math.exp(-(u - tc[k]) / .0025); c = [lerp(178, 255, hot), lerp(182, 150, hot), lerp(186, 60, hot)]; }
+            img.data[o] = c[0]; img.data[o + 1] = c[1]; img.data[o + 2] = c[2]; img.data[o + 3] = 255;
+          }
+          og.putImageData(img, 0, 0);
+          const sc = Math.min((d.h - 24) / (hi[1] - lo[1] + .02), (d.w * .7) / (hi[0] - lo[0] + .1)), ox = 16 + .05 * sc, oy = 12;
+          const X = (x) => ox + (x - lo[0]) * sc, Y = (y) => oy + (hi[1] + .01 - y) * sc;
+          g.imageSmoothingEnabled = false; g.drawImage(off, X(lo[0]), Y(hi[1]), (hi[0] - lo[0]) * sc, (hi[1] - lo[1]) * sc);
+          // rangées
+          g.lineWidth = 1;
+          plan.rows.forEach((r) => { g.strokeStyle = alpha(C.ink, .14); g.strokeRect(X(Math.min(r.xs, r.xe)), Y(r.y1), Math.abs(r.xe - r.xs) * sc, (r.y1 - r.y0) * sc); });
+          const hd = laserHead(plan, u);
+          if (hd.on) { g.strokeStyle = 'rgba(255,248,235,.95)'; g.lineWidth = 2.5; g.beginPath(); g.moveTo(X(hd.x), Y(hd.y + plan.w / 2)); g.lineTo(X(hd.x), Y(hd.y - plan.w / 2)); g.stroke(); g.fillStyle = 'rgba(255,190,120,.25)'; g.beginPath(); g.arc(X(hd.x), Y(hd.y), 14, 0, TAU); g.fill(); }
+          else { g.strokeStyle = alpha(C.ink, .6); g.setLineDash([2, 3]); g.beginPath(); g.moveTo(X(hd.x), Y(hd.y + plan.w / 2)); g.lineTo(X(hd.x), Y(hd.y - plan.w / 2)); g.stroke(); g.setLineDash([]); }
+          // panneau
+          const lx = X(hi[0]) + 24, rw = d.w - 14;
+          const row = (k, n, v, col = C.ink) => { label(g, n, lx, 30 + k * 34, { size: 12 }); label(g, v, rw, 30 + k * 34, { size: 17, align: 'right', font: 'Fraunces', color: col }); };
+          row(0, 'u', u.toFixed(3)); row(1, 'rangées n', String(plan.n)); row(2, 'rangée', `${hd.k + 1} / ${plan.n}`); row(3, 'temps / pleine largeur', `${Math.round(cache.ratio * 100)} %`, C.c1);
+          d.status(u < T.clean0 ? 'mise en place' : u > T.clean1 ? 'retrait' : hd.on ? 'balayage' : 'descente à la rangée suivante');
+        },
+      });
+    }
+
+    // ── 07 · sablage en hélice ────────────────────────────────────────────
+    {
+      const T = { clean0: .44, clean1: .86 }, RAMP = .06, Hp = .8;
+      const Iramp = (x) => { const t = x / RAMP; return RAMP * (t * t * t - (t * t * t * t) / 2); };
+      const turnS = (u) => { const x = (u - T.clean0) / (T.clean1 - T.clean0); if (x <= 0) return 0; if (x >= 1) return 1; const tot = 1 - RAMP; if (x < RAMP) return Iramp(x) / tot; if (x > 1 - RAMP) return 1 - Iramp(1 - x) / tot; return (Iramp(RAMP) + (x - RAMP)) / tot; };
+      const turnPlan = (M) => { const yTop = Hp + M.foot * .5, yBot = 0 - M.foot * .25; let N = M.turns; while ((yTop - yBot) / N > M.foot * .75) N++; return { N, yTop, yBot, foot: M.foot, dir: 1, az: 0 }; };
+      const nozzleY = (p, s) => p.yTop - (p.yTop - p.yBot) * s;
+      const cleanS = (p, phi, y) => { const s1 = Math.max(0, (p.yTop - y - p.foot / 2) / (p.yTop - p.yBot)); return s1 + mod(p.dir * (p.az - phi) - TAU * p.N * s1, TAU) / (TAU * p.N); };
+      const GWs = 180, GHs = 80, [off, og] = pixelCanvas(); off.width = GWs; off.height = GHs; const img = og.createImageData(GWs, GHs);
+      let cache = null;
+      demo('#fig-turn', {
+        title: 'Plateau tournant', aspect: 2, animate: true,
+        controls: [
+          { key: 'turns', label: 'Tours demandés', min: 3, max: 9, step: 1, value: 6 },
+          { key: 'foot', label: 'Empreinte du jet', min: .08, max: .25, step: .005, value: .17, fmt: (v) => `${Math.round(v * 100)} cm` },
+        ],
+        draw(g, d) {
+          const ck = `${d.s.turns}:${d.s.foot}`;
+          if (!cache || cache.k !== ck) { const p = turnPlan({ turns: d.s.turns, foot: d.s.foot }), ss = new Float32Array(GWs * GHs); for (let j = 0; j < GHs; j++) for (let i = 0; i < GWs; i++) ss[j * GWs + i] = cleanS(p, (i + .5) / GWs * TAU, (j + .5) / GHs * Hp); cache = { k: ck, p, ss }; }
+          const { p, ss } = cache, u = .42 + ((d.t * .03) % .46), s = turnS(u), fade = .35 / (TAU * p.N);
+          for (let j = 0; j < GHs; j++) for (let i = 0; i < GWs; i++) {
+            const k = j * GWs + i, o = ((GHs - 1 - j) * GWs + i) * 4, r = 1 - sstep(ss[k], ss[k] + fade, s);
+            img.data[o] = lerp(176, 128, r); img.data[o + 1] = lerp(178, 58, r); img.data[o + 2] = lerp(180, 26, r); img.data[o + 3] = 255;
+          }
+          og.putImageData(img, 0, 0);
+          const x0 = 50, x1 = d.w * .74, y0 = 14, y1 = d.h - 30, yA = p.yBot - p.foot * .3, yB = p.yTop + p.foot * .55, X = (phi) => lerp(x0, x1, phi / TAU), Y = (y) => lerp(y1, y0, (y - yA) / (yB - yA));
+          g.imageSmoothingEnabled = true; g.drawImage(off, x0, Y(Hp), x1 - x0, Y(0) - Y(Hp));
+          g.strokeStyle = C.grid; g.lineWidth = 1; g.strokeRect(x0, Y(Hp), x1 - x0, Y(0) - Y(Hp));
+          ['0', 'π/2', 'π', '3π/2', '2π'].forEach((t, i) => label(g, t, lerp(x0, x1, i / 4), y1 + 18, { align: 'center', size: 11 }));
+          label(g, '80 cm', x0 - 6, Y(Hp) + 4, { align: 'right', size: 11 }); label(g, '0', x0 - 6, Y(0) + 4, { align: 'right', size: 11 });
+          // passages précédents de la buse (dans le repère de la pièce)
+          g.fillStyle = alpha(C.c2, .55);
+          for (let q = 0; q <= 900; q++) { const sq = q / 900 * s, phi = mod(p.az - p.dir * TAU * p.N * sq, TAU), y = nozzleY(p, sq); if (y > Hp + p.foot / 2 || y < -p.foot / 2) continue; g.fillRect(X(phi) - 1, Y(y) - 1, 2, 2); }
+          // empreinte actuelle
+          const phiN = mod(p.az - p.dir * TAU * p.N * s, TAU), yN = nozzleY(p, s);
+          g.save(); g.beginPath(); g.rect(x0, y0, x1 - x0, y1 - y0); g.clip();
+          g.strokeStyle = C.c1; g.lineWidth = 1.8;
+          for (const sh of [-TAU, 0, TAU]) g.strokeRect(X(phiN + sh) - (.35 / TAU) * (x1 - x0) / 2, Y(yN + p.foot / 2), (.35 / TAU) * (x1 - x0), Y(yN - p.foot / 2) - Y(yN + p.foot / 2));
+          g.restore();
+          const lx = x1 + 22, rw = d.w - 14, pitch = (p.yTop - p.yBot) / p.N;
+          const row = (k, n, v, col = C.ink) => { label(g, n, lx, 30 + k * 34, { size: 12 }); label(g, v, rw, 30 + k * 34, { size: 17, align: 'right', font: 'Fraunces', color: col }); };
+          row(0, 'tours N', String(p.N), p.N > d.s.turns ? C.c1 : C.ink); row(1, 'pas de l’hélice', `${(pitch * 100).toFixed(1)} cm`); row(2, 'pas / empreinte', (pitch / p.foot).toFixed(2)); row(3, 'progression s', s.toFixed(3));
+          d.status(p.N > d.s.turns ? `N porté de ${d.s.turns} à ${p.N} : pas ≤ 0,75 empreinte` : 'pas déjà sous 0,75 empreinte');
+        },
+      });
+    }
+
+    // ── 09 · hauteur du crochet ───────────────────────────────────────────
+    {
+      function hookPoint(pos, lifts, hiY) {
+        const mx = (lifts[0][0] + lifts[1][0]) / 2;
+        const clear = (h) => {
+          const bad = [];
+          for (const L of lifts) {
+            const H = [mx, h], dd = [H[0] - L[0], H[1] - L[1]], len = Math.hypot(...dd);
+            for (const p of pos) {
+              const v = [p[0] - L[0], p[1] - L[1]], t = (v[0] * dd[0] + v[1] * dd[1]) / (len * len);
+              if (t * len < .07 || t > 1) continue;
+              const q = [v[0] - dd[0] * t, v[1] - dd[1] * t];
+              if (q[0] * q[0] + q[1] * q[1] < .03 * .03) bad.push(p);
+            }
+          }
+          return bad;
+        };
+        const h0 = Math.max(lifts[0][1], lifts[1][1]) + .32; let h = h0, steps = 0, bad0 = clear(h0);
+        while (h < hiY + 1.5 && clear(h).length) { h += .02; steps++; }
+        return { mx, h, h0, steps, bad0 };
+      }
+      let cache = null;
+      demo('#fig-hook', {
+        title: 'Hauteur du crochet', aspect: 1.5,
+        controls: [
+          { key: 'ex', label: 'Écart des brides', min: .3, max: .5, step: .01, value: .45, fmt: (v) => `±${Math.round(v * 100)} cm` },
+          { key: 'rv', label: 'Rayon du volant', min: .06, max: .26, step: .01, value: .18, fmt: (v) => `${Math.round(v * 100)} cm` },
+        ],
+        draw(g, d) {
+          const ck = `${d.s.ex}:${d.s.rv}`;
+          if (!cache || cache.k !== ck) {
+            const f = valve(d.s.ex, d.s.rv), pos = [];
+            for (let y = .005; y < .86; y += .01) for (let x = -.555; x < .56; x += .01) if (f(x, y)) pos.push([x, y]);
+            const lifts = [[-d.s.ex, .58 + .03], [d.s.ex, .58 + .03]];
+            cache = { k: ck, pos, lifts, H: hookPoint(pos, lifts, .84) };
+          }
+          const { pos, lifts, H } = cache, top = Math.max(H.h, .95) + .06;
+          const sc = Math.min((d.h - 20) / top, (d.w - 30) / 1.2), ox = d.w / 2, oy = d.h - 10;
+          const X = (x) => ox + x * sc, Y = (y) => oy - y * sc;
+          g.fillStyle = alpha(C.ink, .3); for (const p of pos) g.fillRect(X(p[0]) - sc * .005, Y(p[1]) - sc * .005, sc * .01 + .5, sc * .01 + .5);
+          g.strokeStyle = C.grid; g.beginPath(); g.moveTo(X(-.6), Y(0)); g.lineTo(X(.6), Y(0)); g.stroke();
+          // départ
+          g.strokeStyle = alpha(C.c3, .9); g.lineWidth = 1.3; g.setLineDash([4, 4]);
+          for (const L of lifts) { g.beginPath(); g.moveTo(X(L[0]), Y(L[1])); g.lineTo(X(H.mx), Y(H.h0)); g.stroke(); }
+          g.setLineDash([]);
+          g.fillStyle = C.c3; for (const p of H.bad0) { g.beginPath(); g.arc(X(p[0]), Y(p[1]), 2.4, 0, TAU); g.fill(); }
+          // retenu : gaine de 3 cm et élingues
+          for (const L of lifts) {
+            g.strokeStyle = alpha(C.c4, .18); g.lineWidth = .06 * sc; g.lineCap = 'round'; g.beginPath(); g.moveTo(X(L[0]), Y(L[1])); g.lineTo(X(H.mx), Y(H.h)); g.stroke();
+            g.strokeStyle = C.ink; g.lineWidth = 1.6; g.lineCap = 'butt'; g.beginPath(); g.moveTo(X(L[0]), Y(L[1])); g.lineTo(X(H.mx), Y(H.h)); g.stroke();
+            g.fillStyle = C.c1; g.beginPath(); g.arc(X(L[0]), Y(L[1]), 4, 0, TAU); g.fill();
+          }
+          g.strokeStyle = C.c1; g.lineWidth = 2.2; g.beginPath(); g.arc(X(H.mx), Y(H.h) + 7, 7, -Math.PI * .9, Math.PI * .6); g.stroke();
+          label(g, 'crochet', X(H.mx) + 14, Y(H.h) + 4, { color: C.c1 });
+          label(g, 'départ : oreilles + 32 cm', X(H.mx) + 14, Y(H.h0) + 4, { color: C.c3, size: 11 });
+          d.status(H.steps ? `crochet monté de ${H.steps} pas de 2 cm (${(H.h - H.h0).toFixed(2)} m)` : 'dégagé dès la hauteur de départ');
+        },
+      });
+    }
+  </script>
+</body>
+</html>

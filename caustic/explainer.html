@@ -1,0 +1,985 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#050506">
+  <title>Caustic · défis techniques</title>
+  <meta name="description" content="Comment Caustic fait dessiner la lumière au fond d'une cuve : transport optimal (Monge-Ampère), loi de Snell inversée, ondes de capillarité-gravité lues à l'envers, horloge de caméra rapide, FFT WGSL en mémoire partagée, caustique par déformation de maillage.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+  <link rel="stylesheet" href="../home/explainer.css">
+</head>
+<body>
+  <nav class="top"><div class="in">
+    <a href="../">Codevember</a><span class="day">Day 10</span><span class="crumb">Caustic · défis techniques</span>
+    <span class="sp"></span><a class="open" href="./">Ouvrir la scène</a>
+  </div></nav>
+
+  <main>
+    <header class="hero">
+      <div class="kicker">Day 10 · Caustic · le foyer des ondes</div>
+      <h1>Comment une surface d’eau dessine avec la lumière</h1>
+      <p class="lede">Sur le pourtour d’une cuve, des plongeurs poussent des ondes. Elles accourent vers le centre et, à l’instant où elles se rejoignent, la surface prend exactement la forme d’une lentille calculée : au fond, la lumière se rassemble en une diatomée, un oursin, une rosace. Puis le dessin se défait en anneaux. Rien n’est peint : chaque image est la réfraction, rayon par rayon, d’une surface obtenue par transport optimal et propagée par la vraie relation de dispersion des ondes.</p>
+    </header>
+
+    <figure class="cover">
+      <img src="docs/capture.jpg" alt="Une diatomée dessinée par la lumière au fond d’une cuve émaillée" width="1483" height="1228">
+      <figcaption>Une diatomée dessinée par la lumière au fond de la cuve émaillée de l’Atelier (graine c41). Le fond n’est éclairé que par la lumière qui a traversé la surface : entre les traits, il ne reste que 32 % de l’éclairement de l’eau calme.</figcaption>
+    </figure>
+
+    <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
+
+    <article>
+
+      <section id="transport">
+        <h2><span class="n">01</span>La lumière n’est pas créée, elle est déplacée</h2>
+        <span class="src">src/gen/motifs.js · src/gen/transport.js</span>
+        <p>Une surface d’eau ne fabrique pas de lumière : elle ne fait que la dévier. Pour qu’un trait brille, il faut prendre la lumière ailleurs. Le dessin est donc d’abord une <strong>densité cible</strong> \(\nu\) de moyenne exactement 1 : hors du disque du dessin (rayon de 0,66 à 0,8 du demi-côté, raccord adouci), \(\nu = 1\) et la lumière ne bouge pas ; dedans, le fond tombe à 32 % et la lumière ainsi libérée se rassemble sur les traits. Les recouvrements de traits sont saturés en douceur (\(1 - e^{-1{,}6\,a}\)) pour éviter les points brûlés.</p>
+        <p>Il faut ensuite une application \(T\) qui envoie la lumière uniforme de la lentille sur cette densité, sans plis : c’est le <strong>transport optimal</strong>. Pour le coût quadratique, \(T = \nabla u\) avec \(u\) convexe, et la conservation de la lumière s’écrit comme une équation de <strong>Monge-Ampère</strong> :</p>
+        <div class="eq">\[ \mu(x) = \nu\big(\nabla u(x)\big)\,\det D^2 u(x). \]</div>
+        <p>Cette équation est fortement non linéaire. La méthode de Benamou, Froese et Oberman (2010) la ramène à une suite d’équations de Poisson grâce à une identité sur les dérivées secondes, \((\Delta u)^2 = (u_{xx} - u_{yy})^2 + 4u_{xy}^2 + 4\det D^2 u\) : on remplace le déterminant par ce qu’il doit valoir et on itère</p>
+        <div class="eq">\[ \Delta u^{(n+1)} = \sqrt{(u_{xx} - u_{yy})^2 + 4u_{xy}^2 + 4 f}, \qquad f = \frac{\mu}{\nu(\nabla u^{(n)})}. \]</div>
+        <p>Chaque itération est une équation de Poisson, résolue exactement par FFT après extension impaire du domaine (condition de Dirichlet : \(u = |x|^2/2\) au bord, donc \(T\) est l’identité au bord, là où \(\nu = 1\)). Une relaxation de 0,9 stabilise la suite. Dans la scène : grille de 256², 30 à 40 itérations jusqu’à un résidu relatif \(|\det D^2u - f|/f\) inférieur à 0,2 %, environ 2,7 s dans un worker. Les trois dessins d’une boucle se calculent en parallèle, et l’écran de chargement montre justement leur grille se déformer.</p>
+        <figure id="fig-ot" class="wide"><figcaption><b>Le transport optimal, itération par itération.</b> À gauche, la cible \(\nu\) produite par le vrai générateur de motifs ; à droite, la lumière poussée par \(T = \nabla u\) et la grille de la lentille déformée par \(T\). Le solveur est celui de <code>transport.js</code>, porté tel quel (FFT, Poisson de Dirichlet, itération de Benamou-Froese-Oberman) ; seule la grille est réduite à 64² pour tourner au rythme de la page.</figcaption></figure>
+        <div class="note check"><b>Ce que les tests vérifient</b><p>Pour chacune des six séries : la lumière totale de la cible est conservée à \(10^{-6}\) près, le résidu converge, et la densité effectivement poussée par \(T\) (chaque cellule source étalée sur l’aire de son image) est corrélée à plus de 0,8 avec la cible.</p></div>
+      </section>
+
+      <section id="snell">
+        <h2><span class="n">02</span>La loi de Snell, à l’envers</h2>
+        <span class="src">src/optics.js · snellNormal() · src/gen/lens.js</span>
+        <p>Le transport dit où chaque point de la lentille doit envoyer sa lumière, pas quelle forme doit avoir l’eau. La loi de Snell-Descartes se lit dans les deux sens : connaissant le rayon incident \(i\) (soleil ou lampe proche) et la direction voulue \(t\) dans l’eau, la normale qui réalise cette déviation est simplement</p>
+        <div class="eq">\[ n \;\parallel\; n_1\, i - n_2\, t, \]</div>
+        <p>orientée vers le haut. Ses pentes \(-n_x/n_y\), \(-n_z/n_y\) donnent le gradient de la hauteur. On en retire la pente que la surface au repos produirait seule (sous une lampe proche, l’eau plane dévie déjà les rayons et grandit l’image), puis on intègre : \(\nabla^2 h = \partial_x h_x + \partial_z h_z\), équation de Poisson de Neumann au sens des moindres carrés, résolue par FFT après extension paire.</p>
+        <p>Deux précautions font de cette lentille une surface d’eau crédible. L’intégration se fait sur une grille <strong>deux fois plus grande</strong> que le dessin, de même pas : les pentes y sont ramenées à zéro entre 84 et 94 % du demi-côté, et les bords de la grille, où la hauteur revient à zéro, tombent hors de la cuve. Et la cuve est profonde, 45 cm : le transport ne déplace la lumière que localement, donc les pentes restent faibles, de 0,13 à 0,24, pour une flèche de 12 à 17 mm d’après le README.</p>
+        <figure id="fig-snell"><figcaption><b>Une lentille d’eau en coupe.</b> Un dessin à une dimension (des traits de lumière symétriques), transporté par la fonction de répartition (en 1D, le transport optimal est le réarrangement monotone), puis converti en pentes par <code>snellNormal()</code> et intégré. En haut, le relief, exagéré ; au milieu, un rayon sur six, retracé par <code>refract()</code> à travers la surface obtenue ; en bas, l’éclairement mesuré au fond (or) contre la cible (pointillé bleu). Cuve de 45 cm, lentille de 52 cm, eau à 545 nm. Sous un soleil oblique, le léger décalage des traits vient de la hauteur de la surface, que le calcul néglige comme <code>lens.js</code> (les rayons partent du niveau au repos) : avec \(h = 0\) et les mêmes pentes, les traits tombent à 1 mm de la cible. Pentes et flèche de cette coupe ne sont pas celles de la scène, qui travaille en deux dimensions.</figcaption></figure>
+      </section>
+
+      <section id="retournement">
+        <h2><span class="n">03</span>L’onde qui converge est l’onde qui diverge, lue à l’envers</h2>
+        <span class="src">src/optics.js · omega() · src/gen/waves.js</span>
+        <p>Il reste à faire apparaître cette lentille au milieu d’une eau calme. Personne ne sait pousser une forme arbitraire à travers une surface libre ; en revanche, une forme posée sur l’eau et lâchée à vitesse nulle se défait d’une façon parfaitement connue. Chaque mode de Fourier oscille à sa pulsation \(\omega(k)\), celle des <strong>ondes de capillarité-gravité</strong> en profondeur finie, et s’amortit par la viscosité :</p>
+        <div class="eq">\[ \hat H(k, \tau) = \hat H_0(k)\,\cos\!\big(\omega(k)\,\tau\big)\,e^{-2\nu k^2 |\tau|}, \qquad \omega^2 = \Big(g k + \frac{\sigma}{\rho} k^3\Big)\tanh(k H). \]</div>
+        <p>Le cosinus est pair. L’état à \(-\tau\) est donc exactement l’état à \(+\tau\) : la lentille qui se disperse en anneaux, lue à l’envers, est une suite d’anneaux qui convergent et se résolvent en lentille. C’est le principe du <strong>miroir à retournement temporel</strong> de Mathias Fink, réalisé sur des ondes d’eau par Bacot, Labousse, Eddi, Fink et Fort (<em>Nature Physics</em>, 2016). Les plongeurs, sur le pourtour, sont la cause visible : ils émettent avant le dessin et absorbent après.</p>
+        <p>La dispersion est ce qui rend le geste lisible. Les rides très courtes (tension superficielle) et les longues ondes (pesanteur) vont vite ; entre les deux, la vitesse de groupe passe par un minimum d’environ 18 cm/s vers 4,4 cm de longueur d’onde. Un dessin fait de toutes les échelles arrive donc en fronts successifs, les détails fins et les grandes masses en avance, et le dessin se « met au point » en dernier.</p>
+        <figure id="fig-disp"><figcaption><b>Vitesses de phase et de groupe des ondes de capillarité-gravité.</b> Fonctions <code>omega()</code> et <code>groupVelocity()</code> de <code>optics.js</code>, avec \(\sigma/\rho = 7{,}28\cdot10^{-5}\) m³/s². En eau peu profonde, les ondes longues sont bridées à \(\sqrt{gH}\) ; le minimum de la vitesse de groupe ne bouge pas.</figcaption></figure>
+        <figure id="fig-tr" class="wide"><figcaption><b>Le retournement temporel, en coupe.</b> La lentille de la figure précédente (cinq traits, soleil au zénith) est posée sur un domaine périodique de 1,2 m et 1&#8239;024 points, filtrée au-delà de 0,72 fois Nyquist comme dans <code>lens.js</code>, puis propagée mode par mode. En haut, la surface ; en bas, l’éclairement au fond de la cuve (60 cm), calculé à chaque image. Faites varier \(\tau\) : \(-\tau\) et \(+\tau\) donnent la même image. En une dimension, les fronts sont des droites ; dans la cuve, ce sont des anneaux.</figcaption></figure>
+        <div class="note check"><b>Au bit près</b><p>Un test propage un spectre hermitien à \(+0{,}3\) s et à \(-0{,}3\) s et compare hauteurs et pentes : l’écart est inférieur à \(10^{-12}\). Un autre trace la caustique sur le processeur à \(\tau = 0\) et vérifie qu’elle redessine la cible (corrélation supérieure à 0,8, contraste supérieur à 0,4).</p></div>
+      </section>
+
+      <section id="ride">
+        <h2><span class="n">04</span>Un frisson, pas un réseau de piscine</h2>
+        <span class="src">src/gen/ambient.js · src/recipe.js</span>
+        <p>Une eau parfaitement plane entre deux dessins paraît morte. La surface porte donc une <strong>ride de fond</strong> : un champ aléatoire de petites ondes capillaires, anneau log-normal de nombres d’onde autour de \(k_0\) = 160 à 260 rad/m, étalé autour d’une direction, normalisé pour que l’amplitude de la recette soit l’écart type en mètres.</p>
+        <p>La difficulté est l’échelle. Une ondulation d’amplitude \(a\) et de nombre d’onde \(k\) focalise sur un fond à la profondeur \(H\) dès que</p>
+        <div class="eq">\[ H\left(1 - \frac{1}{n}\right) a\,k^2 \gtrsim 1, \]</div>
+        <p>c’est-à-dire dès que les rayons voisins se croisent avant le fond. À 45 cm de profondeur et pour des rides capillaires, quelques centièmes de millimètre suffisent. Le premier réglage, \(7\cdot10^{-5}\) m, transformait tout le fond en réseau de piscine : le dessin s’y perdait. Les humeurs utilisent maintenant 6 à \(9\cdot10^{-6}\) m, soit un frisson qui module la lumière sans la plier.</p>
+        <figure id="fig-ripple"><figcaption><b>La ride de fond et le dessin.</b> Même coupe que plus haut : un champ de rides construit comme dans <code>ambient.js</code> (anneau log-normal de largeur 0,35 autour de \(k_0\) = 260 rad/m, le haut de la plage de la recette), ajouté à la lentille au foyer. Le bandeau affiche le critère paraxial en une dimension, \(H(1 - 1/n)\max|h''|\) : au-delà de 1, des plis apparaissent et le fond devient un réseau. Comparez \(7\cdot10^{-6}\) m (le réglage actuel) à \(7\cdot10^{-5}\) m (le premier).</figcaption></figure>
+        <div class="note"><b>Une boucle exacte, même pour le bruit</b><p>La ride de fond est faite d’ondes progressives \(\tfrac12[a(k)e^{-i\omega t} + \overline{a(-k)}\,e^{i\omega t}]\), réelles par construction. Chaque pulsation est arrondie au multiple entier de \(2\pi/T_\text{phys}\) le plus proche, avec \(T_\text{phys}\) le temps physique d’une boucle : l’écart à la vraie dispersion reste inférieur à 0,1 %, et la ride revient exactement à son état initial.</p></div>
+      </section>
+
+      <section id="horloge">
+        <h2><span class="n">05</span>Une seule horloge, et un ralenti en forme fermée</h2>
+        <span class="src">src/timeline.js · foyerClock()</span>
+        <p>Les ondes convergent en quelques dixièmes de seconde : à vitesse réelle, le dessin ne serait qu’un éclair. Le film adopte la convention de la caméra rapide. Une boucle de 36 s porte trois dessins, à 6, 18 et 30 s ; hors des dessins, le temps physique avance à 0,4 fois le temps réel, et autour de chacun il ralentit jusqu’à 0,006 fois, sur une bosse lisse de demi-largeur \(w\) = 3 s :</p>
+        <div class="eq">\[ v(t) = v_n - (v_n - v_\text{min}) \sum_j b\!\left(\frac{t - t_j}{w}\right), \qquad b(x) = (1 - x^2)^3. \]</div>
+        <p>Le temps physique est l’intégrale de cette vitesse. Plutôt qu’une quadrature, la primitive du polynôme \(b\) est écrite en forme fermée, \(B(x) = x - x^3 + \tfrac35 x^5 - \tfrac17 x^7\), avec \(B(\pm1) = \pm\tfrac{16}{35}\) :</p>
+        <pre><code>const P = (t) => {
+  let s = vn * t;
+  for (const c of tj) s -= (vn - vmin) * w * (B7((t - c) / w) - B7(-c / w));
+  return s;
+};</code></pre>
+        <p>Tout lit cette horloge : le temps propre \(\tau_j\) de chaque dessin (nul à l’instant du dessin), sa fenêtre \(W_j\) (les plongeurs émettent puis absorbent, nulle aux bords de son créneau), la ride de fond (qui ralentit avec le reste), la caméra (qui descend vers le fond quand les ondes convergent). Comme \(\tau_j\) ne dépend que de \((u - u_j) \bmod 1\), que \(W_j\) s’annule au raccord et que la ride est périodique, la boucle est parfaite par construction : l’écart mesuré au raccord est inférieur à \(2\cdot10^{-9}\).</p>
+        <figure id="fig-clock"><figcaption><b>L’horloge du foyer sur une boucle.</b> <code>foyerClock()</code> et <code>B7()</code> portés tels quels, avec la recette de la scène (\(T\) = 36 s, \(v_n\) = 0,4, fenêtre de 0,62 à 0,95 du demi-créneau). En haut, la vitesse du temps physique (échelle logarithmique) ; en bas, le temps propre \(\tau_j\) de chaque dessin, tracé là où sa fenêtre est ouverte. Le ralenti aplatit \(\tau_j\) autour de zéro : c’est la seconde où le dessin tient.</figcaption></figure>
+      </section>
+
+      <section id="fft">
+        <h2><span class="n">06</span>Deux FFT 1&#8239;024² par image, en mémoire partagée</h2>
+        <span class="src">src/scene/waves.js</span>
+        <p>Le domaine des ondes fait 1,2 m de côté, deux fois la cuve, sur une grille de 1&#8239;024² (1,2 mm par point). À chaque image, le GPU doit assembler le spectre de l’instant, revenir dans l’espace par FFT inverse, et en tirer la hauteur et les deux pentes. Trois shaders de calcul WGSL, exécutés directement sur le périphérique WebGPU de three.js, s’en chargent.</p>
+        <p><strong>L’assemblage</strong> évalue pour chaque mode la somme des trois dessins, \(W_j\cos(\omega\tau_j)e^{-2\nu k^2|\tau_j|}\hat H_j\), plus la ride de fond. Il faut ensuite trois champs réels : \(h\), \(\partial_x h\) et \(\partial_z h\). Deux champs réels tiennent dans une seule transformée complexe : si \(\hat S\) est le spectre de la hauteur, on transforme \(i k_x \hat S + i\,(i k_z \hat S)\), dont la partie réelle est \(\partial_x h\) et la partie imaginaire \(\partial_z h\).</p>
+        <pre><code>A[c] = S;
+B[c] = vec2f(-kv.x * S.y - kv.y * S.x, kv.x * S.x - kv.y * S.y);</code></pre>
+        <p><strong>La FFT</strong> se fait en deux passes, lignes puis colonnes. Dans chaque passe, un groupe de travail de 256 fils prend une ligne entière, la charge en mémoire partagée dans l’ordre bit-inversé, enchaîne les dix étapes de Cooley-Tukey séparées par une simple barrière de groupe, et la réécrit. Aucun aller-retour en mémoire globale entre les étapes. Les \(2 \times 1\,024\) groupes d’une passe traitent ensemble les deux tableaux \(A\) et \(B\).</p>
+        <p><strong>La finalisation</strong> écrit \((h, \partial_x h, \partial_z h)\) en mètres dans un tampon de stockage que three.js lit directement comme attribut : le maillage de la caustique, le rendu de la surface et les plongeurs lisent tous le même tampon. Chaque plongeur suit la hauteur de l’eau à sa place : la cause et l’effet coïncident par construction. C’est aussi là que s’ajoutent les termes analytiques des deux autres familles : réseaux d’ondes stationnaires de Faraday sous l’enveloppe de leur front, et fossettes de Lamb-Oseen des tourbillons de Kármán, avec leurs pentes exactes.</p>
+        <div class="note"><b>Ondes, caustique, coupes et flous : 2,3 ms</b><p>Mesuré à 1,8 Mpx sur la graine c41 : l’assemblage, les deux FFT 1&#8239;024², la caustique en trois longueurs d’onde, les huit coupes et leurs flous tiennent ensemble en 2,3 ms. La version mobile passe à 512².</p></div>
+      </section>
+
+      <section id="maillage">
+        <h2><span class="n">07</span>La caustique est un maillage qui se plie</h2>
+        <span class="src">src/scene/caustics.js</span>
+        <p>Le tracé de photons classique lance des rayons au hasard et compte ceux qui tombent dans chaque pixel : bruité, et d’autant plus que la lumière est concentrée. Caustic suit la méthode inverse, la <strong>déformation de maillage</strong>. Un maillage couvre la surface, un sommet par point de la grille des ondes (262&#8239;144 sommets dans la cuve). Le vertex shader lit \((h, \partial_x h, \partial_z h)\), calcule la normale, réfracte le rayon incident par Snell et pose le sommet là où le rayon touche le fond.</p>
+        <p>Chaque triangle porte la lumière qu’il a interceptée en haut (incidence, facteur de Fresnel, absorption de l’eau sur le trajet, ombre du rebord et du poteau) et l’étale sur son aire d’arrivée. L’éclairement est donc le rapport des aires. Le rapport n’est même pas calculé par triangle : le fragment shader le lit au pixel, par les <strong>dérivées écran</strong> de la position de départ, exactes pour un triangle plat :</p>
+        <pre><code>const a = abs(dFdx(vSrc.x).mul(dFdy(vSrc.y)).sub(dFdx(vSrc.y).mul(dFdy(vSrc.x))));
+const E = min(vFlux.mul(a).div(texel), U.eMax);</code></pre>
+        <p>Le mélange est additif : là où la surface replie plusieurs nappes sur le même point, leurs lumières s’ajoutent. Les plis de la caustique sont exactement les lignes où des triangles <strong>se retournent</strong>. Le résultat est sans bruit, et l’énergie est conservée par construction.</p>
+        <p>La nappe est rendue trois fois, à 630, 545 et 465 nm, chacune avec l’indice de l’eau de Quan et Fry (1,3318, 1,3345, 1,3383) et son absorption de Pope et Fry : les plis se bordent de franges colorées. Un flou à la taille angulaire de la source vient ensuite : 0,53° pour le soleil, soit un pli de ~2 mm de large à 45 cm sous l’eau ; une lampe dépolie donne un réseau plus doux. Huit coupes à des profondeurs intermédiaires, rangées dans un atlas en une seule longueur d’onde, donnent la lumière dans le volume : les rideaux de lumière.</p>
+        <figure id="fig-mesh" class="wide"><figcaption><b>Une nappe de 26&#8239;000 sommets, réfractée vers le fond.</b> Sept ondes planes périodiques, propagées à leur vraie pulsation \(\omega(k)\), sur un carré de 24 cm ; soleil au zénith. Chaque triangle dépose sa lumière (flux × aire de départ) sur son aire d’arrivée. Les triangles retournés sont comptés ; la grille déformée montre les plis. La démo dépose les petits triangles en un point (bilinéaire) et ne pixellise que les grands, là où le GPU pixellise tout, puis floute d’environ un millimètre comme la source ; la dispersion réelle décale les franges de moins d’un pixel ici, d’où le facteur d’exagération.</figcaption></figure>
+      </section>
+
+      <section id="fond">
+        <h2><span class="n">08</span>Le fond n’est éclairé que par l’eau</h2>
+        <span class="src">src/scene/stage.js · src/scene/caustics.js</span>
+        <p>Une caustique ne se lit que sur un écran pâle et seulement si rien d’autre ne l’éclaire. Le fond de la cuve ne reçoit donc <strong>aucune</strong> lumière directe : uniquement la texture de caustique, en éclairement relatif (1 pour une eau plane). Son matériau donne l’échelle : grains de sable de 0,7 mm, carreaux de faïence de 3 cm à joints de 1,8 mm, lits de travertin. L’exposition est fixée par humeur au posemètre : fond uniforme vers 0,2, traits du dessin quatre à cinq fois plus lumineux, en bloom.</p>
+        <p>Les parois reçoivent deux lumières. Le <strong>rebond du fond</strong> : la tache de soleil est une grande source diffuse ; on lit la vraie lumière du fond, réduite à 128² et adoucie (\(\sigma \approx\) 3 cm), en cinq points devant la paroi, à des distances proportionnelles à la hauteur du point. Le bas d’une paroi s’allume face à la tache et reste sombre face à l’ombre. Et la <strong>caustique directe</strong>, quand la lumière réfractée frappe la paroi de biais : l’éclairement horizontal de la coupe à cette profondeur, multiplié par \(|t\cdot n|/|t_y|\).</p>
+        <p>La surface elle-même est rendue par un lancer de rayon analytique. Vue d’en haut : reflet du studio et scintillement de la source pondérés par Fresnel, le fond vu à travers les vagues. Vue d’en dessous, à travers la vitre : au-delà de 48,5° (à 545 nm), la réflexion est totale, et la surface devient un miroir ondulant qui renvoie le fond, percé de la <strong>fenêtre de Snell</strong> où brille la source.</p>
+        <figure id="fig-fresnel"><figcaption><b>La surface vue des deux côtés.</b> Facteur de réflexion de <code>fresnel()</code>, lumière non polarisée, eau à 545 nm. Depuis l’air (bleu), l’eau ne reflète presque rien jusqu’à la rasance ; depuis l’eau (or), la réflexion devient totale au-delà de l’angle critique. À gauche, l’épaisseur des rayons est proportionnelle à l’énergie réfléchie et transmise.</figcaption></figure>
+        <div class="note trap"><b>Quatre causes de bruit, isolées une à une</b><p>En rasance, la surface vue au travers fourmillait. Il y avait quatre causes : l’albédo fin du fond lu le long de rayons réfractés (une version unie sert pour ces vues) ; des rides plus fines que le pixel (pentes moyennées sur 6 mm pour le seul rendu de la surface) ; un niveau de mip implicite lu dans une branche (niveau 0 explicite) ; et surtout l’occlusion ambiante d’écran appliquée à des matériaux qui calculent toute leur lumière eux-mêmes. Ces matériaux écrivent désormais leur sortie directement.</p></div>
+        <div class="note trap"><b>Un rebond qui recopiait le dessin</b><p>Lu en quelques points nets, le rebond du fond reproduisait le dessin sur la paroi, comme un reflet. Un rebond diffus intègre un demi-hémisphère : d’où la lumière du fond réduite et fortement adoucie avant d’être lue.</p></div>
+      </section>
+
+      <section id="budget">
+        <h2><span class="n">09</span>Budget</h2>
+        <p>Les transports optimaux tournent pendant l’écran de chargement, dans des workers ; à chaque image, le GPU ne fait que propager et réfracter. Mesures du README, graine c41 (Atelier), 1&#8239;483 × 1&#8239;228 (1,8 Mpx), qualité Haute, 30 rendus d’affilée.</p>
+        <div class="tbl"><table>
+          <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
+          <tbody>
+            <tr><td>Transport optimal d’un dessin (256², 30 à 40 itérations)</td><td>worker</td><td class="num">~2,7 s</td></tr>
+            <tr><td>Chargement d’une scène Foyer (trois transports en parallèle, puis compilation)</td><td>workers + GPU</td><td class="num">~6 s</td></tr>
+            <tr><td>Ondes (assemblage, deux FFT 1&#8239;024²) + caustique (3 × 262&#8239;144 sommets) + huit coupes + flous</td><td>GPU</td><td class="num">2,3 ms</td></tr>
+            <tr><td>Image complète, au dessin (u = 0,5)</td><td>GPU</td><td class="num">9,1 ms</td></tr>
+            <tr><td>Image complète, entre deux dessins (u = 0)</td><td>GPU</td><td class="num">8,8 ms</td></tr>
+            <tr><td>Graine 5z6vio (Heure dorée), image complète</td><td>GPU</td><td class="num">5,9 ms</td></tr>
+            <tr><td>Version mobile (512², une longueur d’onde, quatre coupes), 1&#8239;050 × 870</td><td>GPU</td><td class="num">2,0 ms</td></tr>
+            <tr><td>Pipelines compilées après le chargement, sur une boucle entière</td><td>GPU</td><td class="num">0</td></tr>
+            <tr><td>Écart au raccord de la boucle</td><td>—</td><td class="num">&lt; 2·10⁻⁹</td></tr>
+          </tbody>
+        </table></div>
+        <p>Les tests tiennent la physique et la mise en scène : indice et dispersion de l’eau, Snell (la normale calculée fait la déviation demandée), Fresnel et réflexion totale, vitesse de groupe minimale, FFT et solveurs de Poisson, transport optimal sur toutes les séries, lentille (pentes inférieures à 0,3, rien ne bouge hors du dessin, contraste au foyer), retournement temporel, horloge monotone et raccord, caméra périodique sous 25°/s, familles Faraday et Kármán périodiques, lentille contenue dans la cuve pour toutes les humeurs.</p>
+      </section>
+    </article>
+
+    <footer class="end">
+      <a href="./">Ouvrir Caustic</a>
+      <a href="https://github.com/drschizzo/Codevember/blob/main/caustic/README.md">README</a>
+      <a href="https://github.com/drschizzo/Codevember/blob/main/caustic/docs/concept.md">La démarche</a>
+      <span class="sp"></span>
+      <a href="../">Tous les jours</a>
+    </footer>
+  </main>
+
+  <script type="module">
+    import { demo, C, TAU, lerp, clamp, smooth, alpha, label, arrow, rng } from '../home/explainer.js';
+    const fr = (v, d = 2) => v.toFixed(d).replace('.', ',');
+
+    // ── Code porté depuis src/optics.js ─────────────────────────────────────
+    function nWater(lambda, T = 20) {
+      return 1.31405 - 2.02e-6 * T * T + (15.868 - 0.00423 * T) / lambda - 4382 / (lambda * lambda) + 1.1455e6 / (lambda * lambda * lambda);
+    }
+    const GRAV = 9.81, SIGMA_RHO = 7.28e-5, NU = 1.0e-6;
+    const omega = (k, depth) => Math.sqrt((GRAV * k + SIGMA_RHO * k * k * k) * Math.tanh(k * depth));
+    const groupVelocity = (k, depth) => { const e = k * 1e-4 + 1e-9; return (omega(k + e, depth) - omega(k - e, depth)) / (2 * e); };
+    const damping = (k) => 2 * NU * k * k;
+    const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    const vlen = (a) => Math.hypot(a[0], a[1], a[2]);
+    const vnorm = (a) => { const l = vlen(a) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+    function refract(i, n, eta) {
+      const c = dot(n, i);
+      const k = 1 - eta * eta * (1 - c * c);
+      if (k < 0) return null;
+      const s = eta * c + Math.sqrt(k);
+      return [eta * i[0] - s * n[0], eta * i[1] - s * n[1], eta * i[2] - s * n[2]];
+    }
+    function fresnel(cosI, n1, n2) {
+      const ci = Math.min(1, Math.abs(cosI));
+      const si = Math.sqrt(Math.max(0, 1 - ci * ci));
+      const st = (n1 / n2) * si;
+      if (st >= 1) return 1;
+      const ct = Math.sqrt(1 - st * st);
+      const rs = (n1 * ci - n2 * ct) / (n1 * ci + n2 * ct);
+      const rp = (n1 * ct - n2 * ci) / (n1 * ct + n2 * ci);
+      return 0.5 * (rs * rs + rp * rp);
+    }
+    function snellNormal(i, t, n1, n2) {
+      const v = [n1 * i[0] - n2 * t[0], n1 * i[1] - n2 * t[1], n1 * i[2] - n2 * t[2]];
+      const n = vnorm(v);
+      return n[1] < 0 ? [-n[0], -n[1], -n[2]] : n;
+    }
+    // (src/gen/lens.js)
+    const incident = (light, P) => light.kind === 'sun' ? vnorm(light.dir) : vnorm([P[0] - light.pos[0], P[1] - light.pos[1], P[2] - light.pos[2]]);
+    function flatLanding(light, P, H, n2) {
+      const i = incident(light, P);
+      const t = refract(i, [0, 1, 0], 1 / n2);
+      const s = (-H - P[1]) / t[1];
+      return [P[0] + t[0] * s, -H, P[2] + t[2] * s];
+    }
+
+    // ── Code porté depuis src/gen/fft.js ────────────────────────────────────
+    function fft1(re, im, n, inv = false, off = 0, stride = 1) {
+      for (let i = 1, j = 0; i < n; i++) {
+        let bit = n >> 1;
+        for (; j & bit; bit >>= 1) j ^= bit;
+        j ^= bit;
+        if (i < j) {
+          const a = off + i * stride, b = off + j * stride;
+          let t = re[a]; re[a] = re[b]; re[b] = t;
+          t = im[a]; im[a] = im[b]; im[b] = t;
+        }
+      }
+      for (let len = 2; len <= n; len <<= 1) {
+        const ang = ((inv ? 2 : -2) * Math.PI) / len;
+        const wr = Math.cos(ang), wi = Math.sin(ang);
+        const half = len >> 1;
+        for (let i = 0; i < n; i += len) {
+          let cr = 1, ci = 0;
+          for (let k = 0; k < half; k++) {
+            const a = off + (i + k) * stride, b = off + (i + k + half) * stride;
+            const xr = re[b] * cr - im[b] * ci, xi = re[b] * ci + im[b] * cr;
+            re[b] = re[a] - xr; im[b] = im[a] - xi;
+            re[a] += xr; im[a] += xi;
+            const t = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = t;
+          }
+        }
+      }
+      if (inv) for (let i = 0; i < n; i++) { re[off + i * stride] /= n; im[off + i * stride] /= n; }
+    }
+    function fft2(re, im, n, inv = false) {
+      for (let y = 0; y < n; y++) fft1(re, im, n, inv, y * n, 1);
+      for (let x = 0; x < n; x++) fft1(re, im, n, inv, x, n);
+    }
+    function poissonDirichlet(f, m, h) {
+      const P = 2 * (m + 1);
+      const re = new Float64Array(P * P), im = new Float64Array(P * P);
+      for (let y = 0; y < m; y++) for (let x = 0; x < m; x++) {
+        const v = f[y * m + x];
+        const X1 = x + 1, Y1 = y + 1, X2 = P - X1, Y2 = P - Y1;
+        re[Y1 * P + X1] = v; re[Y1 * P + X2] = -v; re[Y2 * P + X1] = -v; re[Y2 * P + X2] = v;
+      }
+      fft2(re, im, P);
+      for (let q = 0; q < P; q++) for (let p = 0; p < P; p++) {
+        const lam = (2 * Math.cos((2 * Math.PI * p) / P) - 2 + 2 * Math.cos((2 * Math.PI * q) / P) - 2) / (h * h);
+        const i = q * P + p;
+        if (lam === 0) { re[i] = 0; im[i] = 0; } else { re[i] /= lam; im[i] /= lam; }
+      }
+      fft2(re, im, P, true);
+      const u = new Float64Array(m * m);
+      for (let y = 0; y < m; y++) for (let x = 0; x < m; x++) u[y * m + x] = re[(y + 1) * P + x + 1];
+      return u;
+    }
+
+    // ── 01 · transport optimal ─────────────────────────────────────────────
+    {
+      // src/gen/motifs.js : la toile et les séries (copiées), générateur remplacé
+      function canvas(m) {
+        const a = new Float64Array(m * m);
+        const px = 2 / m;
+        const toI = (v) => ((v + 1) / 2) * m - 0.5;
+        const splat = (x0, y0, x1, y1, fn) => {
+          const i0 = Math.max(0, Math.floor(toI(x0))), i1 = Math.min(m - 1, Math.ceil(toI(x1)));
+          const j0 = Math.max(0, Math.floor(toI(y0))), j1 = Math.min(m - 1, Math.ceil(toI(y1)));
+          for (let j = j0; j <= j1; j++) {
+            const y = ((j + 0.5) / m) * 2 - 1;
+            for (let i = i0; i <= i1; i++) { const x = ((i + 0.5) / m) * 2 - 1; const v = fn(x, y); if (v > 0) a[j * m + i] += v; }
+          }
+        };
+        const prof = (d, w) => { const q = d / Math.max(w, px * 0.6); return q < 3 ? Math.exp(-q * q) : 0; };
+        return {
+          a, m, px,
+          dot(x, y, w, k = 1) { const R = 3 * Math.max(w, px); splat(x - R, y - R, x + R, y + R, (X, Y) => k * prof(Math.hypot(X - x, Y - y), w)); },
+          seg(xa, ya, xb, yb, w, k = 1) {
+            const R = 3 * Math.max(w, px);
+            const dx = xb - xa, dy = yb - ya, L2 = dx * dx + dy * dy || 1e-12;
+            splat(Math.min(xa, xb) - R, Math.min(ya, yb) - R, Math.max(xa, xb) + R, Math.max(ya, yb) + R, (X, Y) => {
+              const t = Math.max(0, Math.min(1, ((X - xa) * dx + (Y - ya) * dy) / L2));
+              return k * prof(Math.hypot(X - xa - t * dx, Y - ya - t * dy), w);
+            });
+          },
+          ring(cx, cy, R, w, k = 1) { const E = R + 3 * Math.max(w, px); splat(cx - E, cy - E, cx + E, cy + E, (X, Y) => k * prof(Math.abs(Math.hypot(X - cx, Y - cy) - R), w)); },
+          poly(pts, w, k = 1, closed = false) { const n = pts.length; for (let i = 0; i < n - (closed ? 0 : 1); i++) { const p = pts[i], q = pts[(i + 1) % n]; this.seg(p[0], p[1], q[0], q[1], w, k); } },
+        };
+      }
+      const rot = (x, y, a) => [x * Math.cos(a) - y * Math.sin(a), x * Math.sin(a) + y * Math.cos(a)];
+      function diatom(c, rg, level) {
+        const ribs = [16, 24, 32][level] + 8 * rg.int(0, 1);
+        const w = 0.012;
+        c.ring(0, 0, 0.93, w * 1.3, 1.2); c.ring(0, 0, 0.86, w * 0.8, 0.7);
+        const r0 = 0.16 + 0.04 * rg.next();
+        c.ring(0, 0, r0, w, 1);
+        if (level >= 1) c.ring(0, 0, r0 * 0.45, w * 0.8, 0.8);
+        const sectors = level === 2 ? 6 + 2 * rg.int(0, 1) : 0;
+        for (let i = 0; i < ribs; i++) {
+          const a = (i / ribs) * TAU;
+          const [x0, y0] = rot(r0, 0, a), [x1, y1] = rot(0.86, 0, a);
+          c.seg(x0, y0, x1, y1, w * 0.75, 0.9);
+          const am = a + Math.PI / ribs, rows = 4 + 2 * level;
+          for (let k = 0; k < rows; k++) {
+            const r = r0 + ((k + 0.7) / rows) * (0.84 - r0), s = 0.012 + 0.016 * (r / 0.86);
+            const sec = sectors ? Math.floor(((am / TAU) * sectors) % sectors) % 2 : 0;
+            const [x, y] = rot(r, 0, am);
+            c.dot(x, y, s * (sec ? 0.6 : 1), sec ? 0.7 : 1.1);
+          }
+        }
+        if (sectors) for (let i = 0; i < sectors; i++) { const [x1, y1] = rot(0.86, 0, (i / sectors) * TAU); c.seg(0, 0, x1, y1, w * 1.4, 0.8); }
+      }
+      function urchin(c, rg, level) {
+        const n5 = 5, petal = level >= 1;
+        c.ring(0, 0, 0.92, 0.014, 1.1);
+        for (let i = 0; i < n5; i++) { const [x, y] = rot(0.1, 0, (i / n5) * TAU + Math.PI / n5); c.dot(x, y, 0.028, 1.2); }
+        c.ring(0, 0, 0.055, 0.01, 1);
+        for (let i = 0; i < n5; i++) {
+          const a = (i / n5) * TAU, rows = 13 + 4 * level;
+          for (const side of [-1, 1]) for (let k = 0; k < rows; k++) {
+            const t = (k + 0.5) / rows, r = 0.16 + t * (petal ? 0.6 : 0.74);
+            const width = petal ? 0.13 * Math.sin(Math.PI * Math.min(1, t * 1.05)) + 0.02 : 0.05 + 0.05 * Math.sin(Math.PI * t);
+            const [x, y] = rot(r, side * width, a);
+            c.dot(x, y, 0.012 + 0.006 * t, 1);
+            if (level >= 1) { const [x2, y2] = rot(r, side * (width + 0.03), a); c.dot(x2, y2, 0.009, 0.7); }
+          }
+          const am = a + Math.PI / n5, tub = 3 + level * 2;
+          for (let k = 0; k < tub; k++) {
+            const r = 0.25 + (k / Math.max(1, tub - 1)) * 0.55, spread = 0.05 + 0.13 * (r - 0.2);
+            for (const s of k % 2 ? [-1, 1] : [0]) { const [x, y] = rot(r, s * spread, am); const big = 0.026 + 0.02 * r; c.dot(x, y, big * 0.45, 1.3); c.ring(x, y, big, 0.006, 0.6); }
+          }
+        }
+      }
+      function rosette(c, rg, level) {
+        const n = [6, 8, 12][level], w = 0.012;
+        c.ring(0, 0, 0.93, w * 1.2, 1);
+        const r = 0.3;
+        for (let i = 0; i < n; i++) { const [x, y] = rot(r, 0, (i / n) * TAU); c.ring(x, y, r, w, 1); }
+        c.ring(0, 0, r, w, 1);
+        if (level >= 1) for (let i = 0; i < n; i++) { const [x, y] = rot(0.62, 0, ((i + 0.5) / n) * TAU); c.ring(x, y, 0.24, w * 0.8, 0.8); }
+        if (level >= 2) for (let i = 0; i < 2 * n; i++) { const [x, y] = rot(0.84, 0, (i / (2 * n)) * TAU); c.dot(x, y, 0.022, 1.2); }
+        c.dot(0, 0, 0.04, 1.5);
+      }
+      function phyllo(c, rg, level) {
+        const N = [180, 320, 520][level], golden = Math.PI * (3 - Math.sqrt(5)), R = 0.88;
+        for (let i = 1; i <= N; i++) { const r = R * Math.sqrt(i / N), a = i * golden; const [x, y] = rot(r, 0, a); c.dot(x, y, (0.55 * R) / Math.sqrt(N) * (0.6 + 0.5 * r), 1.1); }
+        c.ring(0, 0, 0.95, 0.012, 0.8);
+      }
+      function radiolarian(c, rg, level) {
+        const shells = 2 + level, sym = [6, 8, 10][level];
+        for (let s = 0; s < shells; s++) {
+          const R = 0.3 + (s / Math.max(1, shells - 1)) * 0.55;
+          c.ring(0, 0, R, 0.011, 1);
+          const cells = Math.round(sym * (1 + s));
+          for (let i = 0; i < cells; i++) {
+            const a = (i / cells) * TAU + (s % 2) * (Math.PI / cells);
+            const [x, y] = rot(R, 0, a);
+            c.dot(x, y, 0.018, 1);
+            if (s > 0) { const r0 = 0.3 + ((s - 1) / Math.max(1, shells - 1)) * 0.55; const [x0, y0] = rot(r0, 0, a + Math.PI / cells); c.seg(x0, y0, x, y, 0.008, 0.7); }
+          }
+        }
+        for (let i = 0; i < sym; i++) { const a = (i / sym) * TAU; const [x0, y0] = rot(0.85, 0, a), [x1, y1] = rot(0.96, 0, a); c.seg(x0, y0, x1, y1, 0.014, 1.2); }
+        c.dot(0, 0, 0.09, 1.2);
+      }
+      const SERIES = { diatom: ['Diatomée', diatom], urchin: ['Oursin', urchin], rosette: ['Rosace', rosette], phyllo: ['Capitule', phyllo], radiolarian: ['Radiolaire', radiolarian] };
+      const mkRng = (seed) => { const r = rng(seed); return { next: r, int: (lo, hi) => lo + Math.floor(r() * (hi - lo + 1)) }; };
+      function target(series, level, m, { rIn = 0.66, rOut = 0.8, floor = 0.32 } = {}) {
+        const c = canvas(m);
+        SERIES[series][1](c, mkRng(41 + level), level);
+        const sample = (x, y) => {
+          const fx = ((x + 1) / 2) * m - 0.5, fy = ((y + 1) / 2) * m - 0.5;
+          const i = Math.floor(fx), j = Math.floor(fy), u = fx - i, v = fy - j;
+          const g = (ii, jj) => (ii < 0 || jj < 0 || ii >= m || jj >= m ? 0 : c.a[jj * m + ii]);
+          return (1 - v) * ((1 - u) * g(i, j) + u * g(i + 1, j)) + v * ((1 - u) * g(i, j + 1) + u * g(i + 1, j + 1));
+        };
+        const a = new Float64Array(m * m), w = new Float64Array(m * m);
+        let sw = 0, swm = 0;
+        for (let j = 0; j < m; j++) for (let i = 0; i < m; i++) {
+          const x = ((i + 0.5) / m) * 2 - 1, y = ((j + 0.5) / m) * 2 - 1, r = Math.hypot(x, y);
+          const v = 1 - Math.exp(-1.6 * sample(x / rIn, y / rIn));
+          const t = Math.min(1, Math.max(0, (rOut - r) / (rOut - rIn))), ww = t * t * (3 - 2 * t);
+          a[j * m + i] = v; w[j * m + i] = ww; sw += ww; swm += ww * v;
+        }
+        const cm = swm / sw, k = (1 - floor) / Math.max(cm, 1e-6);
+        const out = new Float64Array(m * m);
+        for (let i = 0; i < m * m; i++) out[i] = 1 + w[i] * k * (a[i] - cm);
+        return out;
+      }
+      // src/gen/transport.js, découpé en pas
+      function sampler(a, n) {
+        return (x, y) => {
+          const fx = Math.min(n - 1, Math.max(0, x * n - 0.5)), fy = Math.min(n - 1, Math.max(0, y * n - 0.5));
+          const i = Math.min(n - 2, Math.floor(fx)), j = Math.min(n - 2, Math.floor(fy));
+          const u = fx - i, v = fy - j, k = j * n + i;
+          return (1 - v) * ((1 - u) * a[k] + u * a[k + 1]) + v * ((1 - u) * a[k + n] + u * a[k + n + 1]);
+        };
+      }
+      const m = 63, nt = 64, M = m + 2, hh = 1 / (m + 1), relax = 0.9, tol = 2e-3;
+      function otInit(nu) {
+        const u = new Float64Array(M * M);
+        for (let j = 0; j < M; j++) for (let i = 0; i < M; i++) { const x = i * hh, y = j * hh; u[j * M + i] = 0.5 * (x * x + y * y); }
+        return { nu, nuAt: sampler(nu, nt), u, rhs: new Float64Array(m * m), it: 0, res: NaN, done: false, hist: [] };
+      }
+      function otStep(S) {
+        const { u, rhs, nuAt } = S;
+        let res = 0;
+        for (let j = 1; j <= m; j++) for (let i = 1; i <= m; i++) {
+          const k = j * M + i;
+          const uxx = (u[k + 1] - 2 * u[k] + u[k - 1]) / (hh * hh);
+          const uyy = (u[k + M] - 2 * u[k] + u[k - M]) / (hh * hh);
+          const uxy = (u[k + M + 1] - u[k + M - 1] - u[k - M + 1] + u[k - M - 1]) / (4 * hh * hh);
+          const gx = (u[k + 1] - u[k - 1]) / (2 * hh), gy = (u[k + M] - u[k - M]) / (2 * hh);
+          const f = 1 / Math.max(nuAt(gx, gy), 1e-3);
+          const det = uxx * uyy - uxy * uxy;
+          res += Math.abs(det - f) / f;
+          const d = uxx - uyy;
+          rhs[(j - 1) * m + (i - 1)] = Math.sqrt(Math.max(0, d * d + 4 * uxy * uxy + 4 * f)) - 2;
+        }
+        S.res = res / (m * m); S.hist.push(S.res);
+        if (S.res < tol) { S.done = true; return; }
+        const phi = poissonDirichlet(rhs, m, hh);
+        for (let j = 1; j <= m; j++) for (let i = 1; i <= m; i++) {
+          const k = j * M + i, x = i * hh, y = j * hh;
+          u[k] = (1 - relax) * u[k] + relax * (0.5 * (x * x + y * y) + phi[(j - 1) * m + (i - 1)]);
+        }
+        S.it++;
+        if (S.it >= 80) S.done = true;
+      }
+      function otMap(S) {
+        const { u } = S, Tx = new Float64Array(M * M), Ty = new Float64Array(M * M);
+        for (let j = 0; j < M; j++) for (let i = 0; i < M; i++) {
+          const k = j * M + i;
+          Tx[k] = i === 0 ? (u[k + 1] - u[k]) / hh : i === M - 1 ? (u[k] - u[k - 1]) / hh : (u[k + 1] - u[k - 1]) / (2 * hh);
+          Ty[k] = j === 0 ? (u[k + M] - u[k]) / hh : j === M - 1 ? (u[k] - u[k - M]) / hh : (u[k + M] - u[k - M]) / (2 * hh);
+          if (i === 0 || j === 0 || i === M - 1 || j === M - 1) { Tx[k] = i * hh; Ty[k] = j * hh; }
+        }
+        return { Tx, Ty };
+      }
+      function pushForward({ Tx, Ty }, n) {
+        const acc = new Float64Array(n * n);
+        for (let j = 0; j < M - 1; j++) for (let i = 0; i < M - 1; i++) {
+          const a = j * M + i, b = a + 1, c = a + M + 1, d = a + M;
+          const cx = 0.25 * (Tx[a] + Tx[b] + Tx[c] + Tx[d]), cy = 0.25 * (Ty[a] + Ty[b] + Ty[c] + Ty[d]);
+          const ix = Math.min(n - 1, Math.max(0, Math.floor(cx * n))), iy = Math.min(n - 1, Math.max(0, Math.floor(cy * n)));
+          acc[iy * n + ix] += hh * hh;
+        }
+        for (let k = 0; k < n * n; k++) acc[k] *= n * n;
+        return acc;
+      }
+      const toCanvas = (arr, n, vmax) => {
+        const cv = document.createElement('canvas'); cv.width = cv.height = n;
+        const g = cv.getContext('2d'), img = g.createImageData(n, n);
+        for (let k = 0; k < n * n; k++) {
+          const v = Math.pow(clamp(arr[k] / vmax), .6);
+          img.data[4 * k] = 18 + 237 * v; img.data[4 * k + 1] = 16 + 218 * v; img.data[4 * k + 2] = 14 + 180 * v; img.data[4 * k + 3] = 255;
+        }
+        g.putImageData(img, 0, 0); return cv;
+      };
+      let series = 'diatom';
+      const newProblem = (d) => {
+        const nu = target(series, d.s.level, nt);
+        let mx = 0; for (const v of nu) mx = Math.max(mx, v);
+        d.state = { S: otInit(nu), clock: 0, vmax: mx, tgt: toCanvas(nu, nt, mx) };
+      };
+      demo('#fig-ot', {
+        title: 'Monge-Ampère par Poisson', aspect: 2.1, animate: true,
+        controls: [{ key: 'level', label: 'Dessin de la série (crescendo)', min: 0, max: 2, step: 1, value: 1, onChange: (d) => newProblem(d) }],
+        buttons: [
+          ...Object.entries(SERIES).map(([k, [name]]) => ({ label: name, onClick: (d) => { series = k; newProblem(d); } })),
+          { label: 'Recommencer', onClick: (d) => newProblem(d) },
+        ],
+        setup(d) { newProblem(d); },
+        draw(g, d) {
+          const st = d.state, S = st.S;
+          st.clock += d.dt;
+          if (!S.done && (st.clock > .14 || S.it === 0 && !S.hist.length)) { st.clock = 0; otStep(S); st.T = otMap(S); st.push = toCanvas(pushForward(st.T, nt), nt, st.vmax); }
+          if (!st.T) { st.T = otMap(S); st.push = toCanvas(pushForward(st.T, nt), nt, st.vmax); }
+          const { w, h } = d, gap = 26, sz = Math.min(h - 46, (w - 3 * gap - 150) / 2);
+          const y0 = 30, xA = gap, xB = xA + sz + gap;
+          g.imageSmoothingEnabled = true;
+          g.drawImage(st.tgt, xA, y0, sz, sz); g.drawImage(st.push, xB, y0, sz, sz);
+          label(g, 'cible ν', xA, y0 - 10); label(g, 'lumière poussée par T = ∇u, grille déformée', xB, y0 - 10);
+          // grille déformée
+          const { Tx, Ty } = st.T; g.strokeStyle = alpha(C.c2, .55); g.lineWidth = .8;
+          for (let j = 0; j < M; j += 4) { g.beginPath(); for (let i = 0; i < M; i++) { const k = j * M + i, X = xB + Tx[k] * sz, Y = y0 + Ty[k] * sz; i ? g.lineTo(X, Y) : g.moveTo(X, Y); } g.stroke(); }
+          for (let i = 0; i < M; i += 4) { g.beginPath(); for (let j = 0; j < M; j++) { const k = j * M + i, X = xB + Tx[k] * sz, Y = y0 + Ty[k] * sz; j ? g.lineTo(X, Y) : g.moveTo(X, Y); } g.stroke(); }
+          // résidu
+          const px0 = xB + sz + gap, px1 = w - 12, py0 = y0 + 18, py1 = y0 + sz - 20;
+          if (px1 - px0 > 60) {
+            label(g, 'résidu (log)', px0, y0 - 10);
+            const Y = (r) => lerp(py0, py1, clamp((Math.log10(Math.max(r, 1e-4)) - 1) / (Math.log10(1e-3) - 1)));
+            g.strokeStyle = C.grid; g.lineWidth = 1;
+            for (const r of [10, 1, .1, .01, .001]) { g.beginPath(); g.moveTo(px0, Y(r)); g.lineTo(px1, Y(r)); g.stroke(); label(g, r >= 1 ? `${r * 100} %` : `${+(r * 100).toFixed(1)} %`, px1, Y(r) - 3, { align: 'right', size: 10.5, color: C.faint }); }
+            g.strokeStyle = C.c3; g.setLineDash([3, 4]); g.beginPath(); g.moveTo(px0, Y(tol)); g.lineTo(px1, Y(tol)); g.stroke(); g.setLineDash([]);
+            g.strokeStyle = C.c1; g.lineWidth = 1.8; g.beginPath();
+            S.hist.forEach((r, i) => { const X = lerp(px0, px1, i / 45); i ? g.lineTo(X, Y(r)) : g.moveTo(X, Y(r)); }); g.stroke();
+            label(g, 'itérations →', px1, py1 + 16, { align: 'right', size: 11, color: C.faint });
+          }
+          d.status(`${SERIES[series][0].toLowerCase()} · itération ${S.hist.length} · résidu ${fr(S.res * 100)} %${S.done ? ' · convergé' : ''}`);
+        },
+      });
+    }
+
+    // ── Outils 1D communs (02, 03, 04) ─────────────────────────────────────
+    const H0 = .45, SIDE = .52, N2 = nWater(545), NW = 1024, LW = 1.2, DXW = LW / NW;
+    function target1D(lines, nt) { // la cible de motifs.js, réduite à une dimension
+      const rIn = .66, rOut = .8, floor = .32, wl = .028;
+      const pos = Array.from({ length: lines }, (_, i) => -.86 + 1.72 * (i + .5) / lines);
+      const a = new Float64Array(nt), w = new Float64Array(nt); let sw = 0, swm = 0;
+      for (let i = 0; i < nt; i++) {
+        const x = (i + .5) / nt * 2 - 1, X = x / rIn;
+        let s = 0; if (Math.abs(X) < 1.05) for (const p of pos) s += Math.exp(-(((X - p) / wl) ** 2));
+        const v = 1 - Math.exp(-1.6 * s), t = clamp((rOut - Math.abs(x)) / (rOut - rIn)), ww = t * t * (3 - 2 * t);
+        a[i] = v; w[i] = ww; sw += ww; swm += ww * v;
+      }
+      const cm = swm / sw, k = (1 - floor) / cm, out = new Float64Array(nt);
+      for (let i = 0; i < nt; i++) out[i] = 1 + w[i] * k * (a[i] - cm);
+      return out;
+    }
+    function lens1D(lines, light, mm = 512) {
+      const nt = 512, nu = target1D(lines, nt);
+      // transport 1D : réarrangement monotone (inverse de la fonction de répartition)
+      const F = new Float64Array(nt + 1); for (let i = 0; i < nt; i++) F[i + 1] = F[i] + nu[i] / nt;
+      const Tm = new Float64Array(mm + 1); let j = 0;
+      for (let i = 0; i <= mm; i++) { const q = i / mm * F[nt]; while (j < nt - 1 && F[j + 1] < q) j++; Tm[i] = (j + (q - F[j]) / Math.max(F[j + 1] - F[j], 1e-12)) / nt; }
+      // centre : là où la surface au repos envoie le centre du dessin
+      let cx = 0; for (let it = 0; it < 4; it++) cx += 0 - flatLanding(light, [cx, 0, 0], H0, N2)[0];
+      const L0 = flatLanding(light, [cx, 0, 0], H0, N2), L1 = flatLanding(light, [cx + SIDE / 2, 0, 0], H0, N2);
+      const mag = Math.abs(L1[0] - L0[0]) / (SIDE / 2);
+      const slope = new Float64Array(mm + 1), xs = new Float64Array(mm + 1);
+      let maxSlope = 0;
+      for (let i = 0; i <= mm; i++) {
+        const px = i / mm, P = [cx + (px - .5) * SIDE, 0, 0]; xs[i] = P[0];
+        const X = L0[0] + (Tm[i] - .5) * SIDE * mag;
+        const t = vnorm([X - P[0], -H0, 0]);
+        const n = snellNormal(incident(light, P), t, 1, N2);
+        const fl = flatLanding(light, P, H0, N2), t0 = vnorm([fl[0] - P[0], -H0, 0]);
+        const n0 = snellNormal(incident(light, P), t0, 1, N2);
+        const r = Math.abs(px - .5) * 2, tt = clamp((.94 - r) / (.94 - .84)), wt = tt * tt * (3 - 2 * tt);
+        slope[i] = (-n[0] / n[1] + n0[0] / n0[1]) * wt;
+        maxSlope = Math.max(maxSlope, Math.abs(slope[i]));
+      }
+      const dx = SIDE / mm, h = new Float64Array(mm + 1);
+      for (let i = 1; i <= mm; i++) h[i] = h[i - 1] + .5 * (slope[i] + slope[i - 1]) * dx;
+      const drift = h[mm]; for (let i = 0; i <= mm; i++) h[i] -= drift * i / mm; // raccord (moindres carrés en 2D)
+      let maxH = 0; for (const v of h) maxH = Math.max(maxH, Math.abs(v));
+      return { xs, h, slope, nu, nt, maxSlope, maxH, cx, L0: L0[0], mag };
+    }
+    // caustique 1D par « déformation de maillage » : chaque segment de surface
+    // étale sa lumière sur son segment d'arrivée (comme les triangles du GPU)
+    function landing(x, h, s, light, n2) {
+      const nU = [-s, 1, 0], n = vnorm(nU), inc = incident(light, [x, h, 0]);
+      const t = refract(inc, n, 1 / n2); if (!t) return null;
+      const d = (-H0 - h) / t[1];
+      return { X: x + t[0] * d, f: Math.max(0, dot([-inc[0], -inc[1], -inc[2]], nU)) * (1 - fresnel(dot([-inc[0], -inc[1], -inc[2]], n), 1, n2)) };
+    }
+    function caustic1D(xs, h, sl, light, x0, x1, bins, n2 = N2) {
+      const out = new Float64Array(bins), bw = (x1 - x0) / bins;
+      const inc0 = -incident(light, [0, 0, 0])[1], f0 = inc0 * (1 - fresnel(inc0, 1, n2));
+      let prev = landing(xs[0], h[0], sl[0], light, n2);
+      for (let i = 1; i < xs.length; i++) {
+        const cur = landing(xs[i], h[i], sl[i], light, n2);
+        if (prev && cur) {
+          const E = .5 * (prev.f + cur.f) * (xs[i] - xs[i - 1]);
+          let a = (Math.min(prev.X, cur.X) - x0) / bw, b = (Math.max(prev.X, cur.X) - x0) / bw;
+          if (b - a < 1e-9) { const k = Math.floor(a); if (k >= 0 && k < bins) out[k] += E; }
+          else for (let k = Math.max(0, Math.floor(a)); k < Math.min(bins, Math.ceil(b)); k++) out[k] += E * (Math.min(b, k + 1) - Math.max(a, k)) / (b - a);
+        }
+        prev = cur;
+      }
+      for (let k = 0; k < bins; k++) out[k] /= bw * f0;
+      return out;
+    }
+    const sunAt = (elDeg) => { const e = elDeg * Math.PI / 180; return { kind: 'sun', dir: [Math.cos(e), -Math.sin(e), 0] }; };
+    const stripCv = document.createElement('canvas'), stripG = stripCv.getContext('2d');
+    function strip(g, E, x, y, wd, ht) { // bandeau de lumière, un texel par case
+      stripCv.width = E.length; stripCv.height = 1; const im = stripG.createImageData(E.length, 1);
+      for (let i = 0; i < E.length; i++) { const v = 1 - Math.exp(-E[i] * .6); im.data[4 * i] = 255 * v; im.data[4 * i + 1] = 236 * v; im.data[4 * i + 2] = 200 * v; im.data[4 * i + 3] = 255; }
+      stripG.putImageData(im, 0, 0); g.imageSmoothingEnabled = true; g.drawImage(stripCv, x, y, wd, ht);
+    }
+    function plotCurve(g, arr, X, Y, col, wdt = 1.6) { g.strokeStyle = col; g.lineWidth = wdt; g.beginPath(); for (let i = 0; i < arr.length; i++) { const x = X(i), y = Y(arr[i]); i ? g.lineTo(x, y) : g.moveTo(x, y); } g.stroke(); }
+
+    // ── 02 · la lentille en coupe ──────────────────────────────────────────
+    {
+      let cache = null;
+      demo('#fig-snell', {
+        title: 'Snell inversé', aspect: 1.45,
+        controls: [
+          { key: 'lines', label: 'Traits du dessin', min: 2, max: 9, step: 1, value: 5 },
+          { key: 'el', label: 'Élévation du soleil', min: 45, max: 90, step: 1, value: 72, fmt: (v) => `${v}°` },
+        ],
+        draw(g, d) {
+          const key = `${d.s.lines}:${d.s.el}`;
+          if (!cache || cache.key !== key) {
+            const light = sunAt(d.s.el), Ls = lens1D(d.s.lines, light);
+            // surface prolongée à plat de part et d'autre
+            const dx = SIDE / 512, xs = [], hs = [], ss = [];
+            for (let x = -.42; x < Ls.xs[0]; x += dx) { xs.push(x); hs.push(0); ss.push(0); }
+            for (let i = 0; i < Ls.xs.length; i++) { xs.push(Ls.xs[i]); hs.push(Ls.h[i]); ss.push(Ls.slope[i]); }
+            for (let x = Ls.xs[Ls.xs.length - 1] + dx; x < .42; x += dx) { xs.push(x); hs.push(0); ss.push(0); }
+            const bins = 260, X0 = -.3, X1 = .3, E = caustic1D(xs, hs, ss, light, X0, X1, bins);
+            cache = { key, light, Ls, xs, hs, ss, E, bins, X0, X1 };
+          }
+          const { light, Ls, xs, hs, ss, E, bins, X0, X1 } = cache, { w, h } = d;
+          const xl = 40, xr = w - 14, X = (x) => lerp(xl, xr, (x - X0) / (X1 - X0));
+          const ys = h * .2, yb = h * .66, sc = (yb - ys) / H0, ex = (h * .1) / Math.max(Ls.maxH, 1e-6);
+          // eau
+          g.fillStyle = alpha(C.c2, .06); g.fillRect(xl, ys, xr - xl, yb - ys);
+          // rayons
+          for (let i = 0; i < xs.length; i += 6) {
+            if (xs[i] < X0 - .05 || xs[i] > X1 + .05) continue;
+            const lp = landing(xs[i], hs[i], ss[i], light, N2); if (!lp) continue;
+            const inc = incident(light, [0, 0, 0]);
+            const xa = X(xs[i] - inc[0] / -inc[1] * (h * .16) / sc);
+            g.strokeStyle = alpha(C.ink, .07); g.lineWidth = .7; g.beginPath(); g.moveTo(xa, ys - h * .16); g.lineTo(X(xs[i]), ys); g.stroke();
+            g.strokeStyle = alpha(C.c1, .22); g.beginPath(); g.moveTo(X(xs[i]), ys); g.lineTo(X(lp.X), yb); g.stroke();
+          }
+          // relief exagéré
+          g.strokeStyle = C.c2; g.lineWidth = 1.8; g.beginPath(); let first = true;
+          for (let i = 0; i < xs.length; i++) { if (xs[i] < X0 || xs[i] > X1) continue; const y = ys - hs[i] * ex; first ? g.moveTo(X(xs[i]), y) : g.lineTo(X(xs[i]), y); first = false; } g.stroke();
+          g.strokeStyle = C.line; g.lineWidth = 1; g.beginPath(); g.moveTo(xl, yb); g.lineTo(xr, yb); g.stroke();
+          label(g, `surface (relief × ${Math.round(ex * sc > 0 ? ex / sc : 0)})`, xl, ys - h * .13, { color: C.c2 });
+          label(g, 'fond, 45 cm plus bas', xl, yb - 6, { size: 11, color: C.faint });
+          // éclairement
+          const e0 = h * .72, e1 = h - 22, Emax = 4.5, YE = (v) => lerp(e1, e0, clamp(v / Emax));
+          g.strokeStyle = C.grid; for (const v of [0, 1, 2, 3, 4]) { g.beginPath(); g.moveTo(xl, YE(v)); g.lineTo(xr, YE(v)); g.stroke(); label(g, String(v), xl - 6, YE(v) + 4, { align: 'right', size: 11 }); }
+          // cible, ramenée au fond (grandissement)
+          g.setLineDash([4, 3]); g.strokeStyle = C.c2; g.lineWidth = 1.3; g.beginPath();
+          for (let i = 0; i < Ls.nt; i++) { const x = Ls.L0 + ((i + .5) / Ls.nt - .5) * SIDE * Ls.mag; const y = YE(Ls.nu[i]); i ? g.lineTo(X(x), y) : g.moveTo(X(x), y); } g.stroke(); g.setLineDash([]);
+          plotCurve(g, E, (i) => X(X0 + (i + .5) * (X1 - X0) / bins), YE, C.c1, 1.7);
+          label(g, 'éclairement au fond (1 = eau plane)', xl + 4, e0 - 6, { size: 11 });
+          d.status(`pente max ${fr(Ls.maxSlope, 3)} · flèche ${fr(Ls.maxH * 1000, 1)} mm`);
+        },
+      });
+    }
+
+    // ── 03 · dispersion ────────────────────────────────────────────────────
+    demo('#fig-disp', {
+      title: 'Ondes de capillarité-gravité', aspect: 2.1,
+      controls: [{ key: 'H', label: 'Profondeur d’eau', min: .02, max: 1, step: .01, value: .45, fmt: (v) => `${Math.round(v * 100)} cm` }],
+      draw(g, d) {
+        const { w, h } = d, x0 = 48, x1 = w - 14, y0 = 16, y1 = h - 34, la0 = Math.log10(.002), la1 = Math.log10(2), vmax = 1.4;
+        const X = (lam) => lerp(x0, x1, (Math.log10(lam) - la0) / (la1 - la0)), Y = (v) => lerp(y1, y0, v / vmax);
+        g.strokeStyle = C.grid; g.lineWidth = 1;
+        for (const lam of [.002, .005, .01, .02, .05, .1, .2, .5, 1, 2]) { g.beginPath(); g.moveTo(X(lam), y0); g.lineTo(X(lam), y1); g.stroke(); label(g, lam < .01 ? `${lam * 1000} mm` : lam < 1 ? `${Math.round(lam * 100)} cm` : `${lam} m`, X(lam), y1 + 16, { align: 'center', size: 11 }); }
+        for (let v = 0; v <= vmax + 1e-9; v += .2) { g.beginPath(); g.moveTo(x0, Y(v)); g.lineTo(x1, Y(v)); g.stroke(); label(g, `${(v * 100).toFixed(0)}`, x0 - 6, Y(v) + 4, { align: 'right', size: 11 }); }
+        label(g, 'cm/s', x0 + 4, y0 + 10, { size: 11 });
+        const cp = [], cg = [];
+        for (let i = 0; i <= 300; i++) { const lam = 10 ** lerp(la0, la1, i / 300), k = TAU / lam; cp.push([lam, omega(k, d.s.H) / k]); cg.push([lam, groupVelocity(k, d.s.H)]); }
+        const line = (arr, col, wd) => { g.strokeStyle = col; g.lineWidth = wd; g.beginPath(); arr.forEach(([l, v], i) => i ? g.lineTo(X(l), Y(Math.min(v, vmax))) : g.moveTo(X(l), Y(Math.min(v, vmax)))); g.stroke(); };
+        line(cp, C.c2, 1.6); line(cg, C.c1, 2.2);
+        let mn = cg[0]; for (const p of cg) if (p[1] < mn[1]) mn = p;
+        g.fillStyle = C.c1; g.beginPath(); g.arc(X(mn[0]), Y(mn[1]), 4.5, 0, TAU); g.fill();
+        label(g, `minimum ${fr(mn[1] * 100, 1)} cm/s à λ = ${fr(mn[0] * 100, 1)} cm`, X(mn[0]) + 8, Y(mn[1]) + 18, { color: C.c1 });
+        label(g, 'vitesse de phase ω/k', X(.0045), y0 + 30, { color: C.c2 });
+        label(g, 'vitesse de groupe dω/dk', X(.0045), y0 + 46, { color: C.c1 });
+        label(g, 'capillarité ←', x0 + 6, y1 - 8, { size: 11, color: C.faint }); label(g, '→ pesanteur', X(.3), y1 - 8, { size: 11, color: C.faint });
+        d.status(`√(gH) = ${(Math.sqrt(9.81 * d.s.H) * 100).toFixed(0)} cm/s`);
+      },
+    });
+
+    // ── Le domaine des ondes en 1D (03, 04) ─────────────────────────────────
+    const kOf = (p) => (p <= NW / 2 ? p : p - NW) * TAU / LW;
+    const lensWave = (() => {
+      const light = sunAt(90), Ls = lens1D(5, light);
+      // pose sur la grille du domaine (embedLens, fenêtre 0,06) puis spectre filtré (spectrum, cut 0,72)
+      const field = new Float64Array(NW), side = SIDE;
+      for (let i = 0; i < NW; i++) {
+        const x = -LW / 2 + (i + .5) * DXW, u = (x - Ls.cx) / side + .5;
+        if (u <= 0 || u >= 1) continue;
+        const f = u * (Ls.xs.length - 1), a = Math.min(Ls.xs.length - 2, Math.floor(f)), s = f - a;
+        const e = Math.min(u, 1 - u) / .06, wgt = e >= 1 ? 1 : e * e * (3 - 2 * e);
+        field[i] = ((1 - s) * Ls.h[a] + s * Ls.h[a + 1]) * wgt;
+      }
+      const re = Float64Array.from(field), im = new Float64Array(NW);
+      fft1(re, im, NW);
+      for (let p = 0; p < NW; p++) { const r = Math.abs((p <= NW / 2 ? p : p - NW) / (NW / 2)) / .72; const gk = r < 1 ? 1 : Math.exp(-((r - 1) ** 2) * 40); re[p] *= gk; im[p] *= gk; }
+      return { re, im, light, Ls };
+    })();
+    // h et h' à l'instant τ, en une seule transformée inverse : Z = Ĥ + i·(i k Ĥ)
+    function evolve1(specs, tau) {
+      const zr = new Float64Array(NW), zi = new Float64Array(NW);
+      for (let p = 0; p < NW; p++) {
+        const kx = kOf(p), k = Math.abs(kx);
+        let a = 0, b = 0;
+        for (const s of specs) { const gk = s.static ? s.amp : s.amp * Math.cos(omega(k, H0) * tau) * Math.exp(-damping(k) * Math.abs(tau)); a += s.re[p] * gk; b += s.im[p] * gk; }
+        zr[p] = a - kx * a; zi[p] = b - kx * b;
+      }
+      fft1(zr, zi, NW, true);
+      const xs = new Float64Array(NW + 1), h = new Float64Array(NW + 1), sl = new Float64Array(NW + 1);
+      for (let i = 0; i <= NW; i++) { xs[i] = -LW / 2 + (i + .5) * DXW; h[i] = zr[i % NW]; sl[i] = zi[i % NW]; }
+      return { xs, h, sl };
+    }
+
+    // ── 03 · retournement temporel ──────────────────────────────────────────
+    {
+      let hmax0 = 0; { const f = evolve1([{ ...lensWave, amp: 1 }], 0); for (const v of f.h) hmax0 = Math.max(hmax0, Math.abs(v)); }
+      demo('#fig-tr', {
+        title: 'Convergence et dispersion', aspect: 2.15, animate: true,
+        controls: [{ key: 'tau', label: 'Temps physique τ depuis le dessin', min: -1.6, max: 1.6, step: .01, value: -.45, fmt: (v) => `${v >= 0 ? '+' : '−'}${fr(Math.abs(v))} s` }],
+        buttons: [{ key: 'play', label: 'Lecture', toggle: true, value: false }, { key: 'flip', label: 'Voir −τ', toggle: true, value: false }],
+        setup(d) { d.state.key = null; },
+        draw(g, d) {
+          const st = d.state;
+          if (d.s.play) {
+            st.ph = ((st.ph ?? (d.s.tau + 1.6) / 3.2) + d.dt / 9) % 1;
+            // ralenti autour du foyer, comme la caméra rapide
+            const x = st.ph * 2 - 1; d.s.tau = 1.6 * Math.sign(x) * Math.pow(Math.abs(x), 1.8);
+          } else st.ph = null;
+          const tau = d.s.flip ? -d.s.tau : d.s.tau;
+          if (st.key !== tau) { st.key = tau; st.f = evolve1([{ ...lensWave, amp: 1 }], tau); st.E = caustic1D(st.f.xs, st.f.h, st.f.sl, lensWave.light, -.3, .3, 300); }
+          const { f, E } = st, { w, h } = d, xl = 44, xr = w - 14;
+          // surface sur tout le domaine
+          const s0 = 22, s1 = h * .36, sm = (s0 + s1) / 2, XS = (x) => lerp(xl, xr, (x + LW / 2) / LW);
+          g.fillStyle = alpha(C.c2, .05); g.fillRect(XS(-.3), s0 - 6, XS(.3) - XS(-.3), s1 - s0 + 12);
+          g.strokeStyle = C.grid; g.beginPath(); g.moveTo(xl, sm); g.lineTo(xr, sm); g.stroke();
+          const hs = (s1 - s0) / 2 / hmax0;
+          g.strokeStyle = C.c2; g.lineWidth = 1.5; g.beginPath();
+          for (let i = 0; i <= NW; i++) { const y = sm - f.h[i] * hs; i ? g.lineTo(XS(f.xs[i]), y) : g.moveTo(XS(f.xs[i]), y); } g.stroke();
+          label(g, `surface sur 1,2 m (échelle : ±${fr(hmax0 * 1000, 1)} mm)`, xl, s0 - 8, { size: 11, color: C.c2 });
+          label(g, 'cuve', XS(0), s1 + 16, { align: 'center', size: 11, color: C.faint });
+          // éclairement au fond de la cuve
+          const e0 = h * .5, e1 = h - 22, Emax = 4.5, YE = (v) => lerp(e1, e0, clamp(v / Emax)), XE = (i) => lerp(xl, xr, (i + .5) / 300);
+          g.strokeStyle = C.grid; for (const v of [0, 1, 2, 3, 4]) { g.beginPath(); g.moveTo(xl, YE(v)); g.lineTo(xr, YE(v)); g.stroke(); label(g, String(v), xl - 6, YE(v) + 4, { align: 'right', size: 11 }); }
+          // bandeau de lumière
+          strip(g, E, xl, e0 - 20, xr - xl, 12);
+          plotCurve(g, E, XE, YE, C.c1, 1.6);
+          label(g, 'éclairement au fond de la cuve (60 cm)', xl + 4, e0 - 28, { size: 11 });
+          d.status(Math.abs(tau) < .02 ? 'τ = 0 : la lentille, le dessin' : `τ = ${tau >= 0 ? '+' : '−'}${fr(Math.abs(tau))} s · ${tau < 0 ? 'les fronts convergent' : 'les fronts repartent'}`);
+        },
+      });
+    }
+
+    // ── 04 · ride de fond ───────────────────────────────────────────────────
+    {
+      function ripple(seed) { // ambient.js en 1D : anneau log-normal autour de k0, écart type 1
+        const r = rng(seed), gauss = () => Math.sqrt(-2 * Math.log(r() + 1e-12)) * Math.cos(TAU * r());
+        const re = new Float64Array(NW), im = new Float64Array(NW), k0 = 260;
+        for (let p = 1; p < NW / 2; p++) {
+          const k = kOf(p), lr = Math.log(k / k0), amp = Math.exp(-(lr * lr) / (2 * .35 * .35)) / k;
+          const a = amp * gauss(), b = amp * gauss();
+          re[p] = a; im[p] = b; re[NW - p] = a; im[NW - p] = -b;
+        }
+        const tr = Float64Array.from(re), ti = Float64Array.from(im); fft1(tr, ti, NW, true);
+        let s = 0; for (const v of tr) s += v * v; const rms = Math.sqrt(s / NW);
+        for (let p = 0; p < NW; p++) { re[p] /= rms; im[p] /= rms; }
+        return { re, im, static: true };
+      }
+      let rip = ripple(3);
+      demo('#fig-ripple', {
+        title: 'Seuil de focalisation', aspect: 2.15,
+        controls: [{ key: 'la', label: 'Amplitude de la ride (écart type)', min: -6, max: -4, step: .01, value: Math.log10(7e-6), fmt: (v) => `${fr(10 ** v * 1e6, 1)} µm` }],
+        buttons: [{ key: 'lens', label: 'Dessin au foyer', toggle: true, value: true }, { label: '7 µm', onClick: (d) => { d.s.la = Math.log10(7e-6); syncRange(d, 'la'); } }, { label: '70 µm', onClick: (d) => { d.s.la = Math.log10(7e-5); syncRange(d, 'la'); } }, { label: 'Autre tirage', onClick: () => { rip = ripple(Math.floor(Math.random() * 1e6)); } }],
+        draw(g, d) {
+          const a = 10 ** d.s.la, specs = [{ ...rip, amp: a }];
+          if (d.s.lens) specs.push({ ...lensWave, amp: 1 });
+          const f = evolve1(specs, 0), E = caustic1D(f.xs, f.h, f.sl, lensWave.light, -.3, .3, 300);
+          // critère : H (1 − 1/n) max |h''| dans la cuve (ride seule)
+          const fRip = evolve1([{ ...rip, amp: a }], 0);
+          let curv = 0; for (let i = 1; i < NW; i++) { if (Math.abs(fRip.xs[i]) > .3) continue; curv = Math.max(curv, Math.abs(fRip.sl[i + 1] - fRip.sl[i - 1]) / (2 * DXW)); }
+          const crit = H0 * (1 - 1 / N2) * curv;
+          const { w, h } = d, xl = 44, xr = w - 14, XE = (i) => lerp(xl, xr, (i + .5) / 300);
+          const e0 = 50, e1 = h - 22, Emax = 4.5, YE = (v) => lerp(e1, e0, clamp(v / Emax));
+          g.strokeStyle = C.grid; for (const v of [0, 1, 2, 3, 4]) { g.beginPath(); g.moveTo(xl, YE(v)); g.lineTo(xr, YE(v)); g.stroke(); label(g, String(v), xl - 6, YE(v) + 4, { align: 'right', size: 11 }); }
+          strip(g, E, xl, 16, xr - xl, 14);
+          plotCurve(g, E, XE, YE, crit > 1 ? C.c3 : C.c1, 1.6);
+          label(g, 'éclairement au fond de la cuve (60 cm)', xl + 4, e0 - 6, { size: 11 });
+          d.status(`H(1 − 1/n)·max|h″| = ${fr(crit)} · ${crit > 1 ? 'les rides focalisent : réseau de piscine' : 'sous le seuil : un frisson'}`);
+        },
+      });
+      function syncRange(d, key) { const inp = d.fig.querySelectorAll('.ctl input[type=range]')[0]; if (inp) { inp.value = d.s[key]; inp.dispatchEvent(new Event('input')); } }
+    }
+
+    // ── 05 · l'horloge ──────────────────────────────────────────────────────
+    {
+      const B7 = (x) => { if (x >= 1) return 16 / 35; if (x <= -1) return -16 / 35; const x2 = x * x; return x * (1 - x2 + (3 / 5) * x2 * x2 - (x2 * x2 * x2) / 7); };
+      const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+      function foyerClock(R) {
+        const T = R.loop.duration, n = R.foyer.events.length, { vn, vmin, w } = R.foyer.slow;
+        const tj = R.foyer.events.map((_, j) => ((j + 0.5) / n) * T), slot = T / n;
+        const P = (t) => { let s = vn * t; for (const c of tj) s -= (vn - vmin) * w * (B7((t - c) / w) - B7(-c / w)); return s; };
+        const total = P(T);
+        return {
+          T, total, slot, tj,
+          speed: (u) => { const t = (u - Math.floor(u)) * T; let v = vn; for (const c of tj) { const x = (t - c) / w; if (Math.abs(x) < 1) v -= (vn - vmin) * (1 - x * x) ** 3; } return v; },
+          events(u) {
+            const t = (u - Math.floor(u)) * T, Pt = P(t);
+            return tj.map((c) => {
+              let dt = t - c, tau = Pt - P(c);
+              if (dt > T / 2) { dt -= T; tau -= total; } else if (dt < -T / 2) { dt += T; tau += total; }
+              const win = 1 - sstep(R.foyer.fade[0] * slot / 2, R.foyer.fade[1] * slot / 2, Math.abs(dt));
+              return { tau, w: win, dt };
+            });
+          },
+        };
+      }
+      demo('#fig-clock', {
+        title: 'Temps du film et temps de l’eau', aspect: 1.75,
+        controls: [
+          { key: 'lv', label: 'Vitesse au dessin v_min', min: -3, max: -.5, step: .01, value: Math.log10(.006), fmt: (v) => `× ${(10 ** v).toFixed(v < -2 ? 4 : 3).replace('.', ',')}` },
+          { key: 'w', label: 'Demi-largeur du ralenti w', min: 1, max: 5.5, step: .1, value: 3, fmt: (v) => `${v.toFixed(1).replace('.', ',')} s` },
+        ],
+        draw(g, d) {
+          const vmin = 10 ** d.s.lv, Rc = { loop: { duration: 36 }, foyer: { events: [0, 1, 2], slow: { vn: .4, vmin, w: d.s.w }, fade: [.62, .95] } };
+          const K = foyerClock(Rc), { w, h } = d, xl = 50, xr = w - 14, X = (t) => lerp(xl, xr, t / 36);
+          // vitesse
+          const a0 = 18, a1 = h * .38, Yv = (v) => lerp(a1, a0, (Math.log10(v) + 3) / 3);
+          g.strokeStyle = C.grid; g.lineWidth = 1;
+          for (const v of [.001, .01, .1, 1]) { g.beginPath(); g.moveTo(xl, Yv(v)); g.lineTo(xr, Yv(v)); g.stroke(); label(g, `×${v}`.replace('.', ','), xl - 6, Yv(v) + 4, { align: 'right', size: 11 }); }
+          for (let t = 0; t <= 36; t += 6) { g.beginPath(); g.moveTo(X(t), a0); g.lineTo(X(t), h - 26); g.stroke(); label(g, `${t} s`, X(t), h - 10, { align: 'center', size: 11 }); }
+          g.strokeStyle = C.ink; g.lineWidth = 1.8; g.beginPath();
+          for (let i = 0; i <= 600; i++) { const u = i / 600, y = Yv(K.speed(u - 1e-9 * (i === 600))); i ? g.lineTo(X(u * 36), y) : g.moveTo(X(u * 36), y); } g.stroke();
+          label(g, 'v(t) : secondes d’eau par seconde de film', xl + 6, a0 + 12, { size: 11, color: C.ink });
+          // temps propre de chaque dessin
+          const b0 = h * .48, b1 = h - 30, tmax = 4, Yt = (tau) => lerp(b1, b0, (tau + tmax) / (2 * tmax));
+          for (const v of [-4, -2, 0, 2, 4]) { g.strokeStyle = v ? C.grid : alpha(C.ink, .35); g.beginPath(); g.moveTo(xl, Yt(v)); g.lineTo(xr, Yt(v)); g.stroke(); label(g, `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v)} s`, xl - 6, Yt(v) + 4, { align: 'right', size: 11 }); }
+          const cols = [C.c2, C.c1, C.c4];
+          for (let j = 0; j < 3; j++) {
+            let prev = null;
+            for (let i = 0; i <= 900; i++) {
+              const u = i / 900 - 1e-9 * (i === 900), e = K.events(u)[j], x = X(u * 36), y = Yt(clamp(e.tau, -tmax, tmax));
+              if (prev && e.w > .002 && Math.abs(e.tau) < tmax) { g.strokeStyle = alpha(cols[j], .25 + .75 * e.w); g.lineWidth = 2; g.beginPath(); g.moveTo(prev[0], prev[1]); g.lineTo(x, y); g.stroke(); }
+              prev = [x, y];
+            }
+            label(g, `τ${'₁₂₃'[j]}`, X(K.tj[j]) + 6, Yt(0) - 8, { color: cols[j] });
+          }
+          label(g, 'temps propre τⱼ de chaque dessin (trait plein : fenêtre ouverte)', xl + 6, b0 - 6, { size: 11 });
+          d.status(`${K.total.toFixed(2).replace('.', ',')} s d’eau par boucle de 36 s`);
+        },
+      });
+    }
+
+    // ── 07 · caustique par déformation de maillage ─────────────────────────
+    {
+      const S = .24, G = 160, B = 160;
+      const R0 = rng(11), waves = [];
+      while (waves.length < 7) {
+        const p = Math.round((R0() * 2 - 1) * 12), q = Math.round((R0() * 2 - 1) * 12), k = Math.hypot(p, q) * TAU / S;
+        if (k < 110 || k > 320) continue;
+        waves.push({ kx: p * TAU / S, kz: q * TAU / S, k, ph: R0() * TAU, a: .6 + .8 * R0() });
+      }
+      const norm = Math.sqrt(waves.reduce((s, wv) => s + wv.a * wv.a / 2, 0));
+      const kmean = Math.sqrt(waves.reduce((s, wv) => s + wv.a * wv.a * wv.k * wv.k, 0) / waves.reduce((s, wv) => s + wv.a * wv.a, 0));
+      const NV = (G + 1) * (G + 1);
+      const LX = new Float32Array(NV), LZ = new Float32Array(NV), FL = new Float32Array(NV);
+      const acc = [new Float32Array(B * B), new Float32Array(B * B), new Float32Array(B * B)];
+      const off = document.createElement('canvas'); off.width = off.height = B; const og = off.getContext('2d'); const img = og.createImageData(B, B);
+      const SH = new Float32Array(NV), SX = new Float32Array(NV), SZ = new Float32Array(NV);
+      function surface(t, amp, depth) { // hauteur et pentes, une fois pour les trois longueurs d'onde
+        const dx = S / G, om = waves.map((wv) => omega(wv.k, depth));
+        for (let j = 0; j <= G; j++) for (let i = 0; i <= G; i++) {
+          const x = i * dx, z = j * dx; let hh = 0, hx = 0, hz = 0;
+          waves.forEach((wv, q) => { const ph = wv.kx * x + wv.kz * z - om[q] * t + wv.ph, A = amp * wv.a / norm, sn = Math.sin(ph); hh += A * Math.cos(ph); hx -= A * sn * wv.kx; hz -= A * sn * wv.kz; });
+          const v = j * (G + 1) + i; SH[v] = hh; SX[v] = hx; SZ[v] = hz;
+        }
+      }
+      function nappe(depth, n2, out) {
+        out.fill(0);
+        const dx = S / G, pxs = B / S, inc = [0, -1, 0];
+        for (let j = 0; j <= G; j++) for (let i = 0; i <= G; i++) {
+          const v = j * (G + 1) + i, x = i * dx, z = j * dx;
+          const nU = [-SX[v], 1, -SZ[v]], n = vnorm(nU), tr = refract(inc, n, 1 / n2), s = (-depth - SH[v]) / tr[1];
+          LX[v] = (x + tr[0] * s) * pxs; LZ[v] = (z + tr[2] * s) * pxs;
+          const ci = n[1]; FL[v] = Math.max(0, nU[1]) * (1 - (0.02 + 0.98 * Math.pow(1 - ci, 5)));
+        }
+        const A0 = (B / G) ** 2 / 2; let flips = 0;
+        const dep = (x, z, E) => { // dépôt bilinéaire, domaine périodique
+          const fx = x - .5, fz = z - .5, a = Math.floor(fx), b = Math.floor(fz), u = fx - a, v = fz - b;
+          const ia = ((a % B) + B) % B, ib = ((b % B) + B) % B, ia1 = (ia + 1) % B, ib1 = (ib + 1) % B;
+          out[ib * B + ia] += E * (1 - u) * (1 - v); out[ib * B + ia1] += E * u * (1 - v); out[ib1 * B + ia] += E * (1 - u) * v; out[ib1 * B + ia1] += E * u * v;
+        };
+        const tri = (p, q, r) => {
+          const ax = LX[p], az = LZ[p], bx = LX[q], bz = LZ[q], cx = LX[r], cz = LZ[r];
+          const ar = ((bx - ax) * (cz - az) - (cx - ax) * (bz - az)) / 2;
+          if (ar < 0) flips++;
+          const E = (FL[p] + FL[q] + FL[r]) / 3 * A0, aa = Math.abs(ar);
+          if (aa < 2.5) { dep((ax + bx + cx) / 3, (az + bz + cz) / 3, E); return; }
+          const irr = E / aa, x0 = Math.floor(Math.min(ax, bx, cx)), x1 = Math.ceil(Math.max(ax, bx, cx)), z0 = Math.floor(Math.min(az, bz, cz)), z1 = Math.ceil(Math.max(az, bz, cz));
+          const sg = Math.sign(ar);
+          for (let zz = z0; zz < z1; zz++) for (let xx = x0; xx < x1; xx++) {
+            const px = xx + .5, pz = zz + .5;
+            const w0 = ((bx - px) * (cz - pz) - (cx - px) * (bz - pz)) * sg, w1 = ((cx - px) * (az - pz) - (ax - px) * (cz - pz)) * sg, w2 = ((ax - px) * (bz - pz) - (bx - px) * (az - pz)) * sg;
+            if (w0 >= 0 && w1 >= 0 && w2 >= 0) out[(((zz % B) + B) % B) * B + (((xx % B) + B) % B)] += irr;
+          }
+        };
+        for (let j = 0; j < G; j++) for (let i = 0; i < G; i++) { const a = j * (G + 1) + i, b = a + 1, c = a + G + 1, dd = c + 1; tri(a, b, c); tri(b, dd, c); }
+        return flips;
+      }
+      const tmpB = new Float32Array(B * B), KB = [.12, .23, .3, .23, .12];
+      function blur(a) {
+        for (let j = 0; j < B; j++) for (let i = 0; i < B; i++) { let s = 0; for (let q = -2; q <= 2; q++) s += KB[q + 2] * a[j * B + (i + q + B) % B]; tmpB[j * B + i] = s; }
+        for (let j = 0; j < B; j++) for (let i = 0; i < B; i++) { let s = 0; for (let q = -2; q <= 2; q++) s += KB[q + 2] * tmpB[((j + q + B) % B) * B + i]; a[j * B + i] = s; }
+      }
+      demo('#fig-mesh', {
+        title: 'Déformation de maillage', aspect: 1.9, animate: true,
+        controls: [
+          { key: 'amp', label: 'Amplitude des ondes (écart type)', min: .02, max: .3, step: .005, value: .12, fmt: (v) => `${v.toFixed(3).replace('.', ',')} mm` },
+          { key: 'depth', label: 'Profondeur du fond', min: .05, max: .6, step: .01, value: .45, fmt: (v) => `${Math.round(v * 100)} cm` },
+          { key: 'disp', label: 'Dispersion (exagération)', min: 1, max: 60, step: 1, value: 25, fmt: (v) => `× ${v}` },
+        ],
+        buttons: [{ key: 'play', label: 'Lecture', toggle: true, value: true }, { key: 'rgb', label: 'Trois longueurs d’onde', toggle: true, value: true }, { key: 'grid', label: 'Grille déformée', toggle: true, value: false }],
+        setup(d) { d.state.t = 0; d.state.key = ''; },
+        draw(g, d) {
+          const st = d.state; if (d.s.play) st.t += d.dt * .5;
+          const tq = Math.floor(st.t * 40) / 40; // 20 mises à jour par seconde
+          const key = `${tq}:${d.s.amp}:${d.s.depth}:${d.s.disp}:${d.s.rgb}:${d.s.grid}`;
+          if (st.key !== key) {
+            st.key = key; const amp = d.s.amp / 1000;
+            const n0 = nWater(545);
+            surface(tq, amp, d.s.depth);
+            if (d.s.rgb) { [630, 465, 545].forEach((l) => { const c = l === 630 ? 0 : l === 545 ? 1 : 2; const fl = nappe(d.s.depth, n0 + d.s.disp * (nWater(l) - n0), acc[c]); if (c === 1) st.flips = fl; }); }
+            else { st.flips = nappe(d.s.depth, n0, acc[1]); acc[0].set(acc[1]); acc[2].set(acc[1]); }
+            // flou de la taille angulaire de la source (σ ≈ 0,8 texel, soit ~1,2 mm)
+            for (const a of acc) blur(a);
+            const tint = [1, .96, .86]; st.mx = 0;
+            for (let k = 0; k < B * B; k++) {
+              for (let c = 0; c < 3; c++) { const v = Math.min(acc[c][k], 60); if (c === 1) st.mx = Math.max(st.mx, v); img.data[4 * k + c] = 255 * tint[c] * Math.pow(1 - Math.exp(-v * .42), .85); }
+              img.data[4 * k + 3] = 255;
+            }
+            og.putImageData(img, 0, 0);
+            st.crit = d.s.depth * (1 - 1 / n0) * amp * kmean * kmean;
+            // (la nappe verte, calculée en dernier, reste dans LX/LZ pour la grille)
+            st.gx = Float32Array.from(LX); st.gz = Float32Array.from(LZ);
+          }
+          const { w, h } = d, sz = Math.min(h - 20, w * .62), x0 = 10, y0 = 10;
+          g.imageSmoothingEnabled = true; g.drawImage(off, x0, y0, sz, sz);
+          if (d.s.grid) {
+            g.save(); g.beginPath(); g.rect(x0, y0, sz, sz); g.clip();
+            const k = sz / B; g.strokeStyle = alpha(C.c2, .5); g.lineWidth = .7;
+            for (let j = 0; j <= G; j += 8) { g.beginPath(); for (let i = 0; i <= G; i++) { const v = j * (G + 1) + i, X = x0 + st.gx[v] * k, Y = y0 + st.gz[v] * k; i ? g.lineTo(X, Y) : g.moveTo(X, Y); } g.stroke(); }
+            for (let i = 0; i <= G; i += 8) { g.beginPath(); for (let j = 0; j <= G; j++) { const v = j * (G + 1) + i, X = x0 + st.gx[v] * k, Y = y0 + st.gz[v] * k; j ? g.lineTo(X, Y) : g.moveTo(X, Y); } g.stroke(); }
+            g.restore();
+          }
+          const tx = x0 + sz + 22, row = (i, a, b, col = C.ink) => { label(g, a, tx, 36 + i * 46, { size: 11.5, color: C.dim }); label(g, b, tx, 56 + i * 46, { size: 17, color: col, font: 'Fraunces' }); };
+          row(0, 'triangles retournés (plis)', `${st.flips.toLocaleString('fr-FR')} sur ${(2 * G * G).toLocaleString('fr-FR')}`, st.flips ? C.c1 : C.c4);
+          row(1, 'éclairement max (plafonné à 60)', `× ${st.mx.toFixed(1).replace('.', ',')}`);
+          row(2, 'H(1 − 1/n)·a·k² (k quadratique moyen)', st.crit.toFixed(2).replace('.', ','), st.crit > 1 ? C.c1 : C.c2);
+          label(g, 'carré de 24 cm, vu de dessus', tx, h - 16, { size: 11, color: C.faint });
+          d.status(st.flips ? 'des nappes se replient : plis et fronces' : 'aucun pli : la lumière ondule sans se croiser');
+        },
+      });
+    }
+
+    // ── 08 · Fresnel des deux côtés ─────────────────────────────────────────
+    demo('#fig-fresnel', {
+      title: 'Réflexion et fenêtre de Snell', aspect: 2.1,
+      controls: [{ key: 'th', label: 'Angle d’incidence', min: 0, max: 89, step: .5, value: 52, fmt: (v) => `${v}°` }],
+      buttons: [{ key: 'below', label: 'Vu de dessous', toggle: true, value: true }],
+      draw(g, d) {
+        const { w, h } = d, th = d.s.th * Math.PI / 180, below = d.s.below;
+        const n1 = below ? N2 : 1, n2 = below ? 1 : N2, R = fresnel(Math.cos(th), n1, n2);
+        // croquis
+        const cx = w * .2, cy = h * .5, L = Math.min(w * .17, h * .42);
+        g.fillStyle = alpha(C.c2, .08); g.fillRect(cx - L * 1.2, cy, L * 2.4, L * 1.1);
+        g.strokeStyle = C.line; g.lineWidth = 1; g.beginPath(); g.moveTo(cx - L * 1.2, cy); g.lineTo(cx + L * 1.2, cy); g.stroke();
+        label(g, 'air', cx - L * 1.15, cy - 8, { size: 11 }); label(g, 'eau', cx - L * 1.15, cy + 16, { size: 11 });
+        const sy = below ? 1 : -1;
+        const ix = cx - Math.sin(th) * L, iy = cy + sy * Math.cos(th) * L;
+        g.strokeStyle = C.ink; g.lineWidth = 2.2; g.beginPath(); g.moveTo(ix, iy); g.lineTo(cx, cy); g.stroke();
+        g.strokeStyle = C.c1; g.lineWidth = .6 + 5 * R; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.sin(th) * L, cy + sy * Math.cos(th) * L); g.stroke();
+        const st = n1 / n2 * Math.sin(th);
+        if (st < 1) { const tt = Math.asin(st); g.strokeStyle = C.c2; g.lineWidth = .6 + 5 * (1 - R); g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.sin(tt) * L, cy - sy * Math.cos(tt) * L); g.stroke(); }
+        // courbes
+        const x0 = w * .44, x1 = w - 14, y0 = 18, y1 = h - 30, X = (a) => lerp(x0, x1, a / 90), Y = (r) => lerp(y1, y0, r);
+        g.strokeStyle = C.grid; g.lineWidth = 1;
+        for (let a = 0; a <= 90; a += 15) { g.beginPath(); g.moveTo(X(a), y0); g.lineTo(X(a), y1); g.stroke(); label(g, `${a}°`, X(a), y1 + 16, { align: 'center', size: 11 }); }
+        for (const r of [0, .25, .5, .75, 1]) { g.beginPath(); g.moveTo(x0, Y(r)); g.lineTo(x1, Y(r)); g.stroke(); label(g, `${r * 100} %`, x0 - 6, Y(r) + 4, { align: 'right', size: 11 }); }
+        const curve = (a1, a2, col, wd) => { g.strokeStyle = col; g.lineWidth = wd; g.beginPath(); for (let i = 0; i <= 300; i++) { const a = i / 300 * 89.9, y = Y(fresnel(Math.cos(a * Math.PI / 180), a1, a2)); i ? g.lineTo(X(a), y) : g.moveTo(X(a), y); } g.stroke(); };
+        curve(1, N2, C.c2, below ? 1.2 : 2.2); curve(N2, 1, C.c1, below ? 2.2 : 1.2);
+        const crit = Math.asin(1 / N2) * 180 / Math.PI;
+        g.setLineDash([3, 4]); g.strokeStyle = alpha(C.c1, .6); g.beginPath(); g.moveTo(X(crit), y0); g.lineTo(X(crit), y1); g.stroke(); g.setLineDash([]);
+        label(g, `angle critique ${crit.toFixed(1).replace('.', ',')}°`, X(crit) - 6, y0 + 40, { align: 'right', color: C.c1, size: 11.5 });
+        g.fillStyle = below ? C.c1 : C.c2; g.beginPath(); g.arc(X(d.s.th), Y(R), 4.5, 0, TAU); g.fill();
+        label(g, 'depuis l’eau', x0 + 6, y0 + 12, { color: C.c1, size: 11.5 }); label(g, 'depuis l’air', x0 + 6, y0 + 28, { color: C.c2, size: 11.5 });
+        d.status(`réfléchi ${(R * 100).toFixed(1).replace('.', ',')} %${R >= 1 ? ' · réflexion totale' : ''}`);
+      },
+    });
+  </script>
+</body>
+</html>

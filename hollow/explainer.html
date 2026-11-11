@@ -1,0 +1,877 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#050506">
+  <title>Hollow · défis techniques</title>
+  <meta name="description" content="Comment Hollow plonge sans fin dans des coquilles creuses : une boucle parfaite par construction, une vitesse propre à chaque passage, des trous au bord exact, des entrelacs de Hankin, des surfaces minimales et un corail de Turing maillés sans escalier, des pièces animées dans le vertex shader, des biseaux ronds à trois segments.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+  <link rel="stylesheet" href="../home/explainer.css">
+</head>
+<body>
+  <nav class="top"><div class="in">
+    <a href="../">Codevember</a><span class="day">Day 07</span><span class="crumb">Hollow · défis techniques</span>
+    <span class="sp"></span><a class="open" href="./">Ouvrir la scène</a>
+  </div></nav>
+
+  <main>
+    <header class="hero">
+      <div class="kicker">Day 07 · Hollow · la plongée sans fond</div>
+      <h1>Comment tomber sans fin dans des coquilles creuses</h1>
+      <p class="lede">Des sphères percées s’emboîtent les unes dans les autres. La caméra franchit l’oculus de chacune, découvre la suivante, toujours différente, et finit par retrouver la première sans qu’aucune couture ne se voie. Au centre, un cœur de lumière dont les rayons filtrent par les ajours. Tout sort d’une graine : pavages, maillages, matériaux, mouvements.</p>
+    </header>
+
+    <figure class="cover">
+      <img src="docs/capture.jpg" alt="Des coquilles percées emboîtées autour d’un cœur lumineux" width="1600" height="1000">
+      <figcaption>Une scène de Hollow. Chaque coquille est un maillage étanche à épaisseur réelle, généré dans un worker ; le cœur éclaire la suivante à travers les trous de la précédente.</figcaption>
+    </figure>
+
+    <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
+
+    <article>
+
+      <section id="nid">
+        <h2><span class="n">01</span>Une boucle parfaite par construction</h2>
+        <span class="src">src/scene/nest.js</span>
+        <p>Une plongée qui ne finit jamais ne peut pas être une animation enregistrée : il faut qu’au bout d’un tour la scène soit <em>exactement</em> celle du départ, au pixel près, sans fondu. Hollow l’obtient par la seule géométrie. La scène tire \(N\) modèles de coquille (4 à 6) ; la couche d’indice entier \(d\) utilise le modèle \(d \bmod N\) et a pour rayon</p>
+        <div class="eq">\[ r_d = D\,k^{\,x}, \qquad x = d - \tau, \]</div>
+        <p>où \(D\) est la distance de la caméra au centre, \(k\) le rapport entre couches (0,58 à 0,66) et \(\tau\) l’avancée de la plongée. La coquille à \(x = 0\) passe exactement par la caméra : c’est celle qu’on traverse. Quand \(\tau\) augmente de \(N\), chaque couche prend la place de celle qui portait le même modèle \(N\) rangs plus haut. La scène à \(\tau + N\) est donc identique à la scène à \(\tau\).</p>
+        <p>La règle qui en découle tient toute la conception : <strong>rien ne doit dépendre d’autre chose que de \(x\)</strong>. Taille, lumière reçue, brouillard, niveau de détail, ouverture du diaphragme, ombre portée : tout est fonction de la profondeur relative, jamais de l’indice de la couche ni du temps absolu. Une couche est affichée de \(x = -2{,}3\) (derrière la caméra, noyée dans le brouillard) jusqu’à la <em>profondeur de naissance</em> \(x_B = \lceil \ln c / \ln k \rceil + 1\), où \(c\) est le rayon relatif du cœur (0,035 à 0,06) : la première couche entièrement cachée par le cœur.</p>
+        <p>Les coquilles culbutent pendant leur remontée puis s’immobilisent, oculus face à la caméra, avant le passage. L’angle de culbute est un nombre <em>entier</em> de tours, mené par une rampe \(6u^5 - 15u^4 + 10u^3\) : il revient à l’identité au passage, et seule la rotation autour de l’axe de visée reste libre.</p>
+        <figure id="fig-nest" class="wide"><figcaption><b>Le nid en coupe.</b> La caméra est à droite, sur la coquille \(x = 0\) ; chaque couleur est un modèle. Faites glisser horizontalement pour avancer ou reculer la plongée : après \(N\) couches, l’image revient identique. Les couches plus profondes que \(x_c + 0{,}8\) existent mais restent cachées dans le cœur. Simplification : la culbute est dessinée dans le plan de coupe, alors qu’elle tourne autour d’un axe tiré dans l’espace.</figcaption></figure>
+        <h3>Des exemplaires qui gardent leur couche</h3>
+        <p>Chaque coquille visible est un exemplaire (un groupe three.js) de son modèle ; il en faut \(\lceil (x_B - x_{\min} + 1)/N \rceil + 1\) par modèle. Le choix de l’exemplaire n’est pas libre : il est calculé depuis la phase « déroulée » (le nombre de boucles accomplies est gardé en partie entière), si bien qu’un exemplaire garde la même couche d’une boucle à l’autre. Sans cela, un exemplaire qui saute d’une couche à une autre emporte sa matrice de l’image précédente, et le flou de mouvement comme l’anticrénelage temporel produisent un éclair d’une image.</p>
+        <div class="note"><b>Trier soi-même</b><p>Toutes les coquilles ont le même centre : le tri par distance de three.js est indécis. L’ordre de rendu est fixé d’après \(x\) : la coquille traversée, puis les suivantes vers le cœur (<code>renderOrder = 1 + x</code>), et celles qui entourent la caméra en dernier (<code>100 − x</code>).</p></div>
+      </section>
+
+      <section id="respiration">
+        <h2><span class="n">02</span>Chaque passage a sa respiration</h2>
+        <span class="src">src/main.js · beatShift() · src/recipe.js · beatsFor()</span>
+        <p>À vitesse constante, la plongée devient vite mécanique. Hollow donne à chaque passage d’oculus son propre tempo : ralenti appuyé, passage filé, ou accélération. La difficulté est de le faire sans abîmer la boucle : le temps de la scène \(\tau\) doit rester croissant, continu jusqu’à sa dérivée, et tomber sur un entier à chaque passage, pour que la coquille soit bien dans la caméra à cet instant.</p>
+        <p>La vitesse est modulée par un noyau polynomial centré sur chaque passage \(k\), de demi-largeur \(w\) :</p>
+        <div class="eq">\[ \tau(t) = t - \sum_k a_k\,w_k\,K\!\left(\frac{t-k}{w_k}\right), \]</div>
+        <div class="eq">\[ K(x) = x - 3x^3 + 3x^5 - x^7, \qquad K'(x) = (1-7x^2)(1-x^2)^2. \]</div>
+        <p>\(K\) est impair et s’annule en \(0\) et en \(\pm 1\) : \(\tau(k) = k\) exactement, et l’intégrale de \(K'\) est nulle, donc ce que le ralenti fait perdre est rendu de part et d’autre, à l’intérieur de la fenêtre. La vitesse vaut \(1 - a\) au passage, remonte jusqu’à \(1 + 0{,}65\,a\) autour, puis rejoint 1 sans à-coup, puisque \(K'\) et sa dérivée s’annulent en \(\pm 1\). Une seule condition reste à tenir, \(a < 1\), pour que le temps n’arrête jamais ni ne recule.</p>
+        <p>Chaque scène tire six battements, repris en boucle : ralenti (poids 3, \(a\) entre 0,45 et 1), passage filé (poids 1,4, \(a\) entre −0,1 et 0,15) ou accélération (poids 1,2, \(a\) entre −0,85 et −0,4), avec \(w\) entre 0,28 et 0,5. Une amplitude globale de 0,55 à 0,85 multiplie le tout : la vitesse ne descend jamais sous 0,15. Dans les ralentis, le champ de la caméra s’ouvre un peu, de 0 à 12 %, selon \(\sum \max(0, a)\,(1-x^2)^2\).</p>
+        <figure id="fig-beat"><figcaption><b>Une boucle de plongée.</b> En haut, la vitesse \(d\tau/dt\) ; en bas, l’écart \(\tau - t\), qui revient à zéro à chaque passage (points). Fonctions <code>K7</code>, <code>beatShift</code> et <code>beatsFor</code> portées telles quelles ; le tirage utilise le générateur de la page, pas celui du projet.</figcaption></figure>
+        <div class="note trap"><b>Le saut de fin de boucle</b><p>Les pièces animées ont besoin de \(\tau\) à l’image précédente pour leurs vecteurs vitesse. En fin de boucle, \(\tau\) repart de 0 : l’écart est ramené dans \([-N/2, N/2]\), et un saut de plus d’une demi-couche (une avance image par image, par exemple) n’est pas compté comme un mouvement.</p></div>
+      </section>
+
+      <section id="trou">
+        <h2><span class="n">03</span>Le bord du trou est une courbe exacte</h2>
+        <span class="src">src/gen/shell.js · prepareCells(), holeRim()</span>
+        <p>Une coquille percée part d’un pavage de la sphère : alvéoles de Goldberg (dual d’une icosphère), Voronoï sphérique (enveloppe convexe des germes), fentes, ou entrelacs. Chaque cellule doit devenir un trou, avec des barreaux d’égale largeur partout, des angles plus ou moins arrondis, parfois une forme imposée (ellipse, étoile, diaphragme). Les premières versions cherchaient ce bord par dichotomie, et 2 à 7 % des triangles sortaient étirés en aiguilles.</p>
+        <p>Le bord est désormais construit exactement, dans le plan gnomonique de la cellule (projection depuis le centre de la sphère, qui garde les grands cercles droits) :</p>
+        <ol>
+          <li>le contour \(P\) est rétréci de la demi-largeur du barreau, arête par arête : intersection de demi-plans, découpée par Sutherland-Hodgman dans un grand carré. On obtient \(P_1\) ;</li>
+          <li>un rayon de congé \(r_c = 0{,}97\,\text{arrondi}\cdot\rho\) est choisi, \(\rho\) étant la distance du centre de \(P_1\) à son côté le plus proche ; \(P_1\) est rétréci une seconde fois de \(r_c\), ce qui donne le noyau \(P_2\) ;</li>
+          <li>le trou est la <strong>somme de Minkowski</strong> \(P_2 \oplus \text{disque}(r_c)\) : un polygone aux coins arrondis dont la distance de sortie depuis le centre, dans une direction donnée, est exacte et sans itération (le côté décalé de \(r_c\), ou le cercle d’un sommet) ;</li>
+          <li>une forme imposée est combinée par un minimum lisse de largeur \(0{,}2\,\rho\) : un congé là où la forme coupe le polygone, comme l’aurait laissé une fraise.</li>
+        </ol>
+        <p>La courbe, évaluée en 1&#8239;024 directions, est ensuite <strong>rééchantillonnée selon un coût</strong> qui combine longueur et rotation de la tangente :</p>
+        <div class="eq">\[ c_j = \max\!\left(\frac{\ell_j}{\text{pas}},\ \min\!\left(\frac{\Delta\theta_j}{\theta_{\max}},\ 8\,\frac{\ell_j}{\text{pas}}\right)\right). \]</div>
+        <p>Les points sont répartis à coût cumulé constant. Les longs côtés reçoivent un point par pas, les congés un point par \(\theta_{\max}\) de rotation, et un angle vif (beaucoup de rotation sur une longueur nulle) pas plus d’un point par huitième de pas. Pas et rotation dépendent du niveau de détail : 0,022 et 0,14 rad au plus fin, 0,075 et 0,45 rad pour le maillage des ombres.</p>
+        <figure id="fig-rim"><figcaption><b>Une cellule percée, avec le code du projet.</b> En fin trait, la cellule ; en tirets, \(P_1\) (barreaux) ; en pointillés, le noyau \(P_2\). Le bord du trou est tracé avec ses points. Fonctions <code>inset</code>, <code>roundedExit</code>, <code>smin</code>, formes et <code>holeRim</code> portées telles quelles, sur une cellule plane de la taille d’une alvéole de fréquence 6. « Pas uniforme » retire le critère de rotation.</figcaption></figure>
+        <p>Biseau, paroi et épaulement sont des décalages de ce bord le long de sa normale exacte. Les faces suivent des colonnes perpendiculaires au bord, cousues au contour de la cellule, que la voisine partage avec le même nombre de points : le maillage est étanche. Résultat mesuré : moins de 1 % de triangles étirés, aucun triangle nul ni retourné, et jusqu’à trois fois moins de triangles sur les pièces les plus chargées.</p>
+      </section>
+
+      <section id="hankin">
+        <h2><span class="n">04</span>Des étoiles par la méthode de Hankin</h2>
+        <span class="src">src/gen/girih.js</span>
+        <p>Le moucharabieh dessine des entrelacs étoilés sur la sphère. La méthode de Hankin (1925) les obtient à partir de n’importe quel pavage : du milieu \(m_k\) de chaque arête partent deux rayons, inclinés d’un même <em>angle de contact</em> \(\theta\) par rapport à l’arête. Le rayon de \(m_k\) qui file vers le sommet \(V_{k+1}\) croise celui de \(m_{k+1}\) en un point \(X_k\). Les lignes \(m\)–\(X\)–\(m\) tracent une étoile par cellule ; sur les alvéoles de Goldberg (hexagones et douze pentagones), des étoiles à six et cinq branches, dont les pointes se rejoignent au milieu des arêtes.</p>
+        <p>Il ne suffit pas de dessiner les lignes : il faut des <em>trous</em> que le mailleur de la section précédente sait percer, c’est-à-dire des cellules convexes. Chaque cellule est donc redécoupée en un polygone central \((X_0 \ldots X_{n-1})\), une pointe d’étoile par arête \((X_{k-1}, m_k, X_k)\) et un cerf-volant par sommet \((m_k, V_{k+1}, m_{k+1}, X_k)\). Chaque côté porte un facteur de largeur de barreau : le cadre du pavage d’origine peut être plus épais (×1, ×1,4 ou ×2) que les lignes de l’étoile.</p>
+        <p>Les milieux sont calculés de la même manière des deux côtés de l’arête (<code>norm(a + b)</code>) : les deux cellules voisines partagent exactement ces points, et le maillage reste étanche. Une cellule trop irrégulière pour l’angle choisi (un morceau non convexe ou d’aire nulle) est gardée entière, milieux compris.</p>
+        <figure id="fig-hankin" class="wide"><figcaption><b>Le moucharabieh sur un pavage d’hexagones.</b> L’angle de contact règle l’étoile : petit, des pointes fines et un grand polygone central ; grand, l’étoile se referme. Le désordre déplace les sommets du pavage : au-delà d’un certain point, des cellules ne se découpent plus en morceaux convexes et restent entières (contour rouge). Calcul des \(X_k\) et des morceaux porté de <code>girihCells</code>, dans le plan au lieu de la sphère ; les trous sont rétrécis par la même intersection de demi-plans qu’en section 03.</figcaption></figure>
+      </section>
+
+      <section id="tpms">
+        <h2><span class="n">05</span>Des surfaces minimales sans escalier</h2>
+        <span class="src">src/gen/tpms.js · tpmsField(), buildImplicit()</span>
+        <p>Une autre famille de coquilles n’est pas percée mais <em>taillée</em> dans une matière poreuse : une surface minimale triplement périodique (gyroïde, Schwarz P, diamant, Neovius, I-WP, Fischer-Koch S). Le gyroïde, par exemple, est le lieu</p>
+        <div class="eq">\[ g = \sin X \cos Y + \sin Y \cos Z + \sin Z \cos X = 0, \qquad (X, Y, Z) = f\,(x, y, z). \]</div>
+        <p>La coquille est l’intersection de deux champs de distance approchée : la couronne \(s = |r - R_m| - e/2\) et la surface épaissie \(t = (|g| - \text{paroi})/f\) (feuille) ou \((g - \text{paroi})/f\) (réseau). Une intersection franche laisserait des arêtes vives ; elle est adoucie par un <strong>maximum lisse polynomial</strong>, qui pose un congé comme sur une pièce usinée :</p>
+        <div class="eq">\[ \operatorname{smax}(a, b) = \max(a, b) + \frac{h^2 k}{4}, \qquad h = \frac{\max(k - |a - b|,\,0)}{k}. \]</div>
+        <p>L’oculus est alésé de la même façon (un cône retiré par un second maximum lisse). Deux contraintes chiffrées viennent de la grille : la feuille fait au moins 0,065 d’épaisseur pour un rayon de 1 (environ quatre mailles au niveau moyen ; plus mince, elle se maille en dents de scie), et le congé vaut environ 0,09 sans jamais dépasser 1,6 fois l’épaisseur de la feuille.</p>
+        <h3>Surface nets, puis reprojection</h3>
+        <p>Le champ est échantillonné sur une grille de 224, 132 ou 76 mailles par côté selon le niveau, mais seulement dans la bande de la coquille (ailleurs, rien ne change de signe). Le maillage est celui des <strong>surface nets</strong> : un sommet par maille traversée, à la moyenne des croisements sur ses arêtes, et un quadrilatère par arête de grille qui change de signe. Seul, ce sommet moyen ne se pose pas sur la surface : les congés et les arêtes ressortent en escalier qui suit la grille.</p>
+        <p>Chaque sommet est donc <strong>reprojeté</strong> le long de la normale locale, dans \(\pm h\) : la racine est d’abord encadrée (plus robuste que Newton sur une feuille mince, où il sauterait de l’autre côté), puis trouvée par fausse position, variante d’Illinois, en quelques évaluations. Une relaxation suit (trois, deux puis une passe selon le niveau) : chaque sommet glisse à mi-chemin vers la moyenne de ses voisins, puis est reprojeté. Les sommets se répartissent le long des arêtes au lieu de suivre la grille.</p>
+        <figure id="fig-tpms" class="wide"><figcaption><b>Une coupe de la coquille de gyroïde, maillée en deux dimensions.</b> Le fond est le champ exact (matière en sombre doré). En bleu, le maillage : surface nets seuls, puis avec reprojection et relaxation. L’écart affiché est la valeur moyenne du champ au milieu des arêtes, en mailles. Champ, maximum lisse, paramètres et projection d’Illinois portés de <code>tpms.js</code> ; la démo travaille dans un plan de coupe, et la direction de projection y vient de différences centrées au lieu du gradient analytique.</figcaption></figure>
+        <div class="note check"><b>Deux fois plus vite, même maillage</b><p>Le gradient analytique du champ (six surfaces, maximum lisse et alésage compris) remplace six évaluations par une ; la fausse position remplace dix-huit dichotomies ; seules les mailles de la bande sont parcourues. Les sommets restent sur la surface à \(10^{-8}\) près, avec le même nombre de triangles, et le niveau le plus fin passe de 2,5–4,1 s à 1,2–1,8 s de génération.</p></div>
+        <p>Dans le shader, la normale n’est pas lue dans le maillage : elle est recalculée à chaque pixel à partir du champ, si bien que les reflets ne trahissent jamais la triangulation.</p>
+      </section>
+
+      <section id="corail">
+        <h2><span class="n">06</span>Un corail qui pousse sur une icosphère</h2>
+        <span class="src">src/gen/coral.js</span>
+        <p>Le corail de Turing applique la même taille à un motif qui n’a pas d’expression analytique : une réaction-diffusion de <strong>Gray-Scott</strong>, simulée sur la sphère. Deux espèces \(u\) et \(v\) diffusent ; \(v\) se reproduit en consommant \(u\), qui est réalimenté au taux \(F\), et \(v\) disparaît au taux \(F + k\) :</p>
+        <div class="eq">\[ u \leftarrow u + \Delta u - u v^2 + F(1 - u), \qquad v \leftarrow v + 0{,}5\,\Delta v + u v^2 - (F + k)\,v. \]</div>
+        <p>Une grille carrée ne se pose pas sur une sphère sans pôles ni coutures. La simulation tourne donc sur les sommets d’une <strong>icosphère</strong> (fréquence 36 à 54, soit 13&#8239;000 à 29&#8239;000 sommets), avec un laplacien de graphe : moyenne des voisins moins la valeur. Presque tous les sommets ont six voisins, douze en ont cinq ; la moyenne s’en accommode. Quarante germes, des calottes de 0,06 à 0,14 rad, lancent la réaction, et 5&#8239;000 itérations la mènent à son motif. Le couple \((F, k)\) fixe la famille : corail cerveau (0,0545 ; 0,062), labyrinthe (0,029 ; 0,057), vers (0,078 ; 0,061), taches (0,03 ; 0,062), mitoses (0,0367 ; 0,0649).</p>
+        <figure id="fig-coral" class="wide"><figcaption><b>La réaction, itération par itération.</b> Pas de temps, coefficients, germes et laplacien « moyenne des voisins » portés de <code>simulate()</code>, sur un réseau plan à six voisins de même taille qu’une icosphère de fréquence 39 (environ 15&#8239;000 sommets), refermé sur lui-même. En doré, la matière gardée dans la coquille : \(v\) au-dessus du seuil (réseau) ou \(v\) proche du seuil (feuille). Dans la démo, le motif « vers » ne garde parfois que quelques vers après 5&#8239;000 itérations.</figcaption></figure>
+        <p>Pour mailler, le champ doit être lisible en tout point de l’espace. La direction est projetée (projection gnomonique) sur la face d’icosaèdre qui la contient, et la valeur interpolée exactement sur le réseau triangulaire de cette face. La distance approchée au motif est \((\text{seuil} - v)/6\), 6 étant la pente typique du motif ; le congé est de 0,03, et le gradient vient de différences centrées. Le reste (surface nets, reprojection, relaxation) est le mailleur des surfaces minimales, mis en commun.</p>
+      </section>
+
+      <section id="pieces">
+        <h2><span class="n">07</span>Les pièces bougent dans le vertex shader, ombre comprise</h2>
+        <span class="src">src/scene/rig.js · src/gen/iris.js · src/scene/materials.js</span>
+        <p>Diaphragmes d’oculus, éclats de kintsugi, écailles et anneaux armillaires sont des pièces rigides d’un maillage unique. Chaque sommet porte son pivot \(b\), son axe \(a\), une amplitude et une nature (attributs <code>rigA</code>, <code>rigB</code>), et le vertex shader applique</p>
+        <div class="eq">\[ p' = b + \mathcal{R}(a, \theta)\,(p - b) + t\,\hat b, \]</div>
+        <p>où \(\theta\) et \(t\) ne dépendent que de la profondeur \(x\) et de la phase de la boucle. Le diaphragme est fermé au fond et s’ouvre à l’approche (\(\text{ouverture} = \operatorname{smoothstep}(1{,}3,\ 0{,}45,\ x)\)) ; les éclats s’écartent loin du passage et se réassemblent juste avant ; les écailles respirent ; les anneaux font un nombre entier de tours par boucle. Le matériau d’ombre applique la même déformation : la carte d’ombre suit exactement l’image.</p>
+        <p>L’angle d’ouverture des lames n’est pas réglé à la main. À la génération, la lame est tournée autour de son pivot par pas de 1°, dans un sens puis dans l’autre, jusqu’à ce que tout son contour dégage le trou avec 4 % de marge ; le plus petit angle est gardé et rangé dans l’attribut.</p>
+        <figure id="fig-iris" class="wide"><figcaption><b>Le diaphragme de l’oculus selon la profondeur.</b> À gauche, les lames vues depuis la caméra, sous la coquille (voilée) ; à droite, les courbes d’ouverture du diaphragme et d’écartement des éclats selon \(x\). Géométrie des lames, recherche de l’angle et courbes portées de <code>iris.js</code> et <code>rig.js</code>. Simplification : la rotation est faite dans le plan gnomonique, comme le fait l’approximation retenue dans le code (« ≈ rotation autour de l’axe radial du pivot »).</figcaption></figure>
+        <h3>La profondeur lue dans l’échelle</h3>
+        <p>Le shader doit connaître \(x\). La première version le passait en uniforme par objet ; des exemplaires d’une même couche recevaient parfois la valeur d’un autre, et un diaphragme restait fermé au passage. Le shader le déduit désormais de l’échelle de l’objet, qui vaut \(D\,k^x\) :</p>
+        <pre><code>export const layerX = log(modelScale.x.div(G.D)).div(log(G.ratio));</code></pre>
+        <p>La position à l’image précédente est recalculée avec \(x + \Delta\tau\) et la phase précédente, et écrite dans <code>positionPrevious</code> : le mouvement propre des lames entre dans les vecteurs vitesse, sinon l’anticrénelage temporel garde l’image de lames qui ont déjà bougé.</p>
+        <h3>Naître sans faire sauter la lumière</h3>
+        <p>Les coquilles naissent dans le cœur. Si une nouvelle coquille se mettait d’un coup à projeter son ombre, toute la lumière du cœur sauterait. Dans la carte d’ombre, elle <em>pousse</em> : chaque sommet porte sa proximité au bord du trou, et le matériau d’ombre ne garde que ce qui est sous \(\operatorname{clamp}(x_B - x, 0, 1)\). Les barreaux s’y élargissent depuis leur axe pendant la dernière unité de profondeur, entièrement à l’intérieur du cœur.</p>
+        <div class="note trap"><b>Deux caches de three.js</b><p>three.js compile un objet de rendu d’après les attributs de la géométrie présente à ce moment ; un échange de géométrie ne fait ensuite que remplacer les tampons. Les copies rendues pendant le chargement, compilées sans <code>rigA</code>/<code>rigB</code>, gardaient des diaphragmes figés en pose fermée : les matériaux sont reconstruits à chaque bascule de géométrie. De même, la passe d’ombre met en cache le pipeline sous (maillage, matériau d’ombre) sans voir un changement de nœuds : chaque couche a son propre matériau d’ombre, libéré quand il change, seul moyen d’invalider ce cache.</p></div>
+      </section>
+
+      <section id="biseau">
+        <h2><span class="n">08</span>Un biseau rond avec trois segments</h2>
+        <span class="src">src/scene/materials.js · bevelNormal()</span>
+        <p>Les arêtes des trous reçoivent un biseau arrondi qui accroche la lumière. Avec trois segments au plus fin, un seul au plus loin, et des métaux polis qui reflètent un studio, les normales interpolées des sommets trahissent la géométrie : reflets coudés, diagonale des quadrilatères visible dans le reflet, biseau qui change d’aspect d’un niveau de détail à l’autre.</p>
+        <p>Le mailleur écrit donc, sur la tranche, un attribut <code>bev</code> : la normale horizontale du bord du trou et l’angle \(\alpha\) du profil (0 sur la paroi, \(\pi/2\) sur la face). Le shader reconstruit à chaque pixel la normale d’un quart de cercle exact :</p>
+        <div class="eq">\[ n = \cos\alpha\;\hat w + \sin\alpha\;\hat r, \qquad \hat w = \frac{h - (h\cdot\hat r)\,\hat r}{\lVert h - (h\cdot\hat r)\,\hat r \rVert}, \]</div>
+        <p>avec \(\hat r\) la direction radiale. L’angle s’interpole linéairement, donc la normale tourne à vitesse constante quel que soit le nombre de segments ; les trois niveaux affichés ne diffèrent plus que par la silhouette du biseau, ce qui a permis de relever les seuils de détail (niveau 0 au-delà de 1&#8239;100 px de rayon à l’écran, niveau 1 au-delà de 280). Le vernis suit la même normale.</p>
+        <figure id="fig-bevel" class="wide"><figcaption><b>Un trou rond vu d’en haut, en laiton poli.</b> Le maillage est rastérisé triangle par triangle avec le nombre de points et de segments de chaque niveau (rotation maximale 0,14 / 0,2 / 0,3 rad, 3 / 2 / 1 segments). À droite, le profil du biseau et ses normales de sommets. Comparez les deux modes au niveau 2 : coudes et diagonales disparaissent avec la normale par pixel. Éclairage simplifié : une lumière, un studio à bandes, vue de face.</figcaption></figure>
+        <div class="note trap"><b>Sans branche</b><p>Un <code>select</code> TSL devient un <code>if/else</code> en WGSL, et la normale géométrique, variable partagée, n’était alors assignée que d’un côté. Le choix entre normale de tranche et normale du maillage est donc un <code>mix</code> par un <code>step</code> sur la longueur de l’attribut, avec des divisions bornées : un NaN se propagerait par les dérivées écran.</p></div>
+        <h3>Anticrénelage spéculaire</h3>
+        <p>Les congés serrés et les arêtes fines font varier la normale très vite d’un pixel au voisin : le reflet scintille en dents de scie. Selon Kaplanyan, on élargit le lobe là où la normale varie, à partir de ses dérivées écran :</p>
+        <div class="eq">\[ \rho' = \Big(\rho^4 + \min\!\big(0{,}5\,(\lVert\partial_x N\rVert^2 + \lVert\partial_y N\rVert^2),\ 0{,}18\big)\Big)^{1/4}. \]</div>
+        <p>Le même soin vaut pour les motifs : le relief s’annule à la frontière entre deux finitions (sinon le saut de hauteur dessine un liseré dentelé), et les motifs échantillonnent un volume de bruit périodique précalculé (Perlin et Worley, 128³ en demi-flottants) au lieu de calculer du bruit à chaque pixel.</p>
+      </section>
+
+      <section id="budget">
+        <h2><span class="n">09</span>Budget</h2>
+        <p>Toute la géométrie est générée dans des workers, en parallèle et avec cache ; chaque couche bascule d’un coup quand tous ses niveaux sont arrivés. Le rendu ne fait que placer, orienter et éclairer des exemplaires.</p>
+        <div class="tbl"><table>
+          <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
+          <tbody>
+            <tr><td>Surface minimale, niveau le plus fin (grille 224³ restreinte à la bande)</td><td>worker</td><td class="num">1,2 à 1,8 s</td></tr>
+            <tr><td>Corail : réaction-diffusion sur icosphère</td><td>worker</td><td class="num">5&#8239;000 itérations</td></tr>
+            <tr><td>Sommet de coquille (normale snorm16, tangente snorm8)</td><td>GPU</td><td class="num">28 octets (44 avant)</td></tr>
+            <tr><td>Volume de bruit périodique (Perlin, Worley F1 et F2−F1)</td><td>GPU</td><td class="num">128³</td></tr>
+            <tr><td>Poussière d’or (version mobile : un quart)</td><td>GPU</td><td class="num">6&#8239;000 paillettes</td></tr>
+            <tr><td>Rayons du cœur, pas de raymarching (mobile : quart de résolution)</td><td>GPU</td><td class="num">48 (18)</td></tr>
+            <tr><td>Image toutes options, 1× (≈ 1,1 Mpx)</td><td>GPU</td><td class="num">≈ 11 ms</td></tr>
+            <tr><td>Image toutes options, 2× (verre transmissif le plus coûteux)</td><td>GPU</td><td class="num">≈ 23 ms</td></tr>
+            <tr><td>Version mobile : résolution dynamique (cible ≈ 45 i/s)</td><td>GPU</td><td class="num">50 à 100 % de 1,25× CSS</td></tr>
+          </tbody>
+        </table></div>
+        <p>Les cartes d’ombre ne voient que des maillages simplifiés (un quatrième niveau, à arêtes vives) ; le cœur n’y inclut que les coquilles placées entre lui et la caméra. En version mobile, la lampe frontale ne projette plus d’ombre (presque à l’œil, son ombre se cache derrière ce qui la projette) et la coquille la plus extérieure non plus : environ 19 % de triangles en moins par image.</p>
+      </section>
+    </article>
+
+    <footer class="end">
+      <a href="./">Ouvrir Hollow</a>
+      <a href="https://github.com/drschizzo/Codevember/blob/main/hollow/README.md">README</a>
+      <span class="sp"></span>
+      <a href="../">Tous les jours</a>
+    </footer>
+  </main>
+
+  <script type="module">
+    import { demo, C, TAU, lerp, clamp, smooth, alpha, label, arrow, rng } from '../home/explainer.js';
+
+    const { sqrt, cos, sin, PI, max, min, abs } = Math;
+    const sstep = (e0, e1, x) => { const t = clamp((x - e0) / (e1 - e0)); return t * t * (3 - 2 * t); }; // (comme smoothstep WGSL, bornes inversées admises)
+
+    // ── géométrie plane de gen/shell.js (portée telle quelle) ──────────────
+    const area2 = (P) => { let s = 0; for (let i = 0; i < P.length; i++) { const a = P[i], b = P[(i + 1) % P.length]; s += a[0] * b[1] - b[0] * a[1]; } return s / 2; };
+    const centroid2 = (P) => {
+      if (P.length < 3) return P.reduce((m, p) => [m[0] + p[0] / P.length, m[1] + p[1] / P.length], [0, 0]);
+      let cx = 0, cy = 0, A = 0;
+      for (let i = 0; i < P.length; i++) { const a = P[i], b = P[(i + 1) % P.length], w = a[0] * b[1] - b[0] * a[1]; A += w; cx += (a[0] + b[0]) * w; cy += (a[1] + b[1]) * w; }
+      return abs(A) < 1e-14 ? P[0] : [cx / (3 * A), cy / (3 * A)];
+    };
+    function inset(P, d) {
+      let S = [[-9, -9], [9, -9], [9, 9], [-9, 9]];
+      for (let k = 0; k < P.length && S.length; k++) {
+        const A = P[k], B = P[(k + 1) % P.length];
+        let nx = -(B[1] - A[1]), ny = B[0] - A[0];
+        const l = sqrt(nx * nx + ny * ny);
+        if (l < 1e-12) continue;
+        nx /= l; ny /= l;
+        const f = (p) => (p[0] - A[0]) * nx + (p[1] - A[1]) * ny - (typeof d === 'number' ? d : d[k]);
+        const out = [];
+        for (let i = 0; i < S.length; i++) {
+          const p = S[i], q = S[(i + 1) % S.length], fp = f(p), fq = f(q);
+          if (fp >= 0) out.push(p);
+          if ((fp >= 0) !== (fq >= 0)) { const t = fp / (fp - fq); out.push([p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t]); }
+        }
+        S = out;
+      }
+      return S.length >= 3 && area2(S) > 1e-10 ? S : null;
+    }
+    function roundedExit(P2, rc, o, u) {
+      const circle = (V) => { const wx = o[0] - V[0], wy = o[1] - V[1], bq = wx * u[0] + wy * u[1], cq = wx * wx + wy * wy - rc * rc; return -bq + sqrt(max(0, bq * bq - cq)); };
+      if (P2.length < 3) return circle(P2[0]);
+      let best = Infinity, bk = -1;
+      for (let k = 0; k < P2.length; k++) {
+        const A = P2[k], B = P2[(k + 1) % P2.length];
+        let nx = B[1] - A[1], ny = A[0] - B[0];
+        const l = sqrt(nx * nx + ny * ny);
+        if (l < 1e-12) continue;
+        nx /= l; ny /= l;
+        const den = u[0] * nx + u[1] * ny;
+        if (den <= 1e-12) continue;
+        const t = ((A[0] - o[0]) * nx + (A[1] - o[1]) * ny + rc) / den;
+        if (t < best) { best = t; bk = k; }
+      }
+      if (bk < 0) return 0;
+      const A = P2[bk], B = P2[(bk + 1) % P2.length], ex = B[0] - A[0], ey = B[1] - A[1];
+      const x = o[0] + u[0] * best, y = o[1] + u[1] * best;
+      const s = ((x - A[0]) * ex + (y - A[1]) * ey) / (ex * ex + ey * ey);
+      return s < 0 ? circle(A) : s > 1 ? circle(B) : best;
+    }
+    const smin = (a, b, k) => { const h = max(k - abs(a - b), 0) / k; return min(a, b) - h * h * k * 0.25; };
+    const SHAPES = {
+      poly: () => Infinity,
+      star: (a, s) => 1 - s.depth * (0.5 + 0.5 * cos(s.petals * a)),
+      ellipse: (a, s) => 1 / sqrt(cos(a) ** 2 + (sin(a) / max(0.08, s.aspect)) ** 2),
+      iris: (a, s) => { const k = s.petals, seg = (2 * PI) / k; const r = ((a % seg) + seg) % seg - seg / 2; return cos(PI / k) / cos(r); },
+    };
+    const dist2 = (a, b) => sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2);
+    function holeRim(info, spec, shape, rmaxShape, spacing, maxTurn) {
+      const A = 1024, D = new Array(A);
+      const useShape = !info.portal && spec.shape && spec.shape !== 'poly';
+      for (let j = 0; j < A; j++) {
+        const a = (j / A) * 2 * PI, u = [cos(a), sin(a)];
+        let r = roundedExit(info.P2, info.rc, info.O, u);
+        if (useShape) r = smin(r, rmaxShape * shape(a - info.theta0, spec), 0.2 * info.rho);
+        D[j] = [info.O[0] + u[0] * r, info.O[1] + u[1] * r];
+      }
+      const T = D.map((_, j) => { const a = D[(j + A - 1) % A], b = D[(j + 1) % A], tx = b[0] - a[0], ty = b[1] - a[1], l = sqrt(tx * tx + ty * ty) || 1; return [tx / l, ty / l]; });
+      const cum = new Float64Array(A + 1);
+      for (let j = 0; j < A; j++) {
+        const p = D[j], q = D[(j + 1) % A], t0 = T[j], t1 = T[(j + 1) % A];
+        const turn = Math.acos(max(-1, min(1, t0[0] * t1[0] + t0[1] * t1[1])));
+        const len = dist2(p, q);
+        cum[j + 1] = cum[j] + max(len / spacing, min(turn / maxTurn, (len / spacing) * 8));
+      }
+      const N = max(12, Math.round(cum[A]));
+      const pts = [], nws = [];
+      let j = 0;
+      for (let i = 0; i < N; i++) {
+        const target = (i / N) * cum[A];
+        while (j < A - 1 && cum[j + 1] <= target) j++;
+        const f = (target - cum[j]) / max(1e-12, cum[j + 1] - cum[j]);
+        const p = D[j], q = D[(j + 1) % A], t0 = T[j], t1 = T[(j + 1) % A];
+        pts.push([p[0] + (q[0] - p[0]) * f, p[1] + (q[1] - p[1]) * f]);
+        let tx = t0[0] + (t1[0] - t0[0]) * f, ty = t0[1] + (t1[1] - t0[1]) * f;
+        const l = sqrt(tx * tx + ty * ty) || 1; tx /= l; ty /= l;
+        nws.push([-ty, tx]);
+      }
+      return { pts, nws, outline: D };
+    }
+    const poly = (g, P, X, Y) => { g.beginPath(); P.forEach((p, i) => (i ? g.lineTo(X(p[0]), Y(p[1])) : g.moveTo(X(p[0]), Y(p[1])))); g.closePath(); };
+
+    // ── 01 · le nid ────────────────────────────────────────────────────────
+    {
+      const X_MIN = -2.3, tumbles = [1, -1, 2, 1, -1, 2], gap = 0.32;
+      const cols = () => [C.c1, C.c2, C.c3, C.c4, C.ink, C.dim];
+      demo('#fig-nest', {
+        title: 'Le nid en coupe', aspect: 1.75, animate: true,
+        controls: [
+          { key: 'N', label: 'Modèles de coquille N', min: 4, max: 6, step: 1, value: 5 },
+          { key: 'k', label: 'Rapport entre couches k', min: .58, max: .66, step: .01, value: .62, fmt: (v) => v.toFixed(2) },
+          { key: 'v', label: 'Vitesse de plongée', min: 0, max: 1, step: .01, value: .3, fmt: (v) => `${v.toFixed(2)} couche/s` },
+        ],
+        buttons: [{ key: 'pause', label: 'Pause', toggle: true, value: false }],
+        setup(d) { d.state.tau = .55; },
+        pointer(d, e) {
+          if (e.type === 'down') d.state.drag = [e.x, d.state.tau];
+          else if (e.type === 'up') d.state.drag = null;
+          else if (d.state.drag) d.state.tau = d.state.drag[1] - (e.x - d.state.drag[0]) / d.w * 3;
+        },
+        draw(g, d) {
+          const S = d.state, N = d.s.N, k = d.s.k, coreRel = .05, CL = cols();
+          if (!d.s.pause && !S.drag) S.tau += d.dt * d.s.v;
+          S.tau = ((S.tau % N) + N) % N;
+          const tau = S.tau;
+          const XB = Math.ceil(Math.log(coreRel) / Math.log(k)) + 1, xCore = Math.log(coreRel) / Math.log(k);
+          const copies = Math.ceil((XB - X_MIN + 1) / N) + 1;
+          const { w, h } = d, cx = w * .4, cy = h * .5, D = Math.min(w * .5, h * .46);
+          // cœur
+          const gr = g.createRadialGradient(cx, cy, 0, cx, cy, coreRel * D * 4);
+          gr.addColorStop(0, alpha(C.c1, .95)); gr.addColorStop(.25, alpha(C.c1, .5)); gr.addColorStop(1, alpha(C.c1, 0));
+          g.fillStyle = gr; g.beginPath(); g.arc(cx, cy, coreRel * D * 4, 0, TAU); g.fill();
+          let shown = 0, hidden = 0;
+          for (let dd = Math.ceil(tau + X_MIN); dd <= Math.floor(tau + XB); dd++) {
+            const x = dd - tau, r = D * k ** x, j = ((dd % N) + N) % N;
+            if (!(x < xCore + .8)) { hidden++; continue; }
+            shown++;
+            const s = (((tau - j) / N) % 1 + 1) % 1, wv = Math.min(.45, 1.25 / N), u = clamp((s - wv) / (1 - 2 * wv));
+            const a = TAU * tumbles[j] * u * u * u * (u * (u * 6 - 15) + 10);
+            const fog = clamp(1 - (-x) / 2.6, .15, 1);
+            g.strokeStyle = alpha(CL[j], .9 * fog); g.lineWidth = Math.max(1.2, r * .05);
+            g.beginPath(); g.arc(cx, cy, r, a + gap, a + TAU - gap); g.stroke();
+            if (r > 44 && r < h * .62) label(g, `d=${dd} · modèle ${j}`, cx, cy - r - Math.max(1.2, r * .05) / 2 - 5, { align: 'center', size: 11, color: alpha(CL[j], .95) });
+          }
+          // caméra
+          const camX = cx + D;
+          g.fillStyle = C.ink; g.beginPath(); g.moveTo(camX + 12, cy - 8); g.lineTo(camX + 12, cy + 8); g.lineTo(camX, cy); g.closePath(); g.fill();
+          g.strokeStyle = alpha(C.ink, .25); g.setLineDash([3, 4]); g.beginPath(); g.moveTo(camX, cy); g.lineTo(camX - D * 1.2, cy - D * .45); g.moveTo(camX, cy); g.lineTo(camX - D * 1.2, cy + D * .45); g.stroke(); g.setLineDash([]);
+          label(g, 'caméra', camX + 6, cy + 24, { align: 'center', size: 11 });
+          // frise de τ
+          const fx0 = w - Math.min(220, w * .3), fx1 = w - 16, fy = h - 24;
+          g.strokeStyle = C.grid; g.lineWidth = 1; g.beginPath(); g.moveTo(fx0, fy); g.lineTo(fx1, fy); g.stroke();
+          for (let i = 0; i <= N; i++) { const xx = lerp(fx0, fx1, i / N); g.beginPath(); g.moveTo(xx, fy - 4); g.lineTo(xx, fy + 4); g.stroke(); }
+          g.fillStyle = C.c1; g.beginPath(); g.arc(lerp(fx0, fx1, tau / N), fy, 4.5, 0, TAU); g.fill();
+          label(g, `τ = ${tau.toFixed(2)}  (période ${N})`, fx1, fy - 12, { align: 'right', size: 12, color: C.ink });
+          label(g, 'glisser pour plonger', 12, h - 12, { size: 11.5, color: C.faint });
+          d.status(`${shown} coquilles visibles · ${hidden} dans le cœur · x<sub>B</sub> = ${XB} · ${copies} exemplaires par modèle`);
+        },
+      });
+    }
+
+    // ── 02 · respiration des passages ───────────────────────────────────────
+    {
+      const K7 = (x) => x - 3 * x ** 3 + 3 * x ** 5 - x ** 7;
+      function beatShift(t, N, cam) {
+        const beats = cam.beats?.length ? cam.beats : [{ a: 1, w: 0.5 }];
+        const amp = cam.ramp ?? 0;
+        let tau = t, open = 0;
+        for (let k = Math.round(t) - 1; k <= Math.round(t) + 1; k++) {
+          const b = beats[(((k % N) + N) % N) % beats.length], x = (t - k) / b.w;
+          if (Math.abs(x) >= 1) continue;
+          tau -= amp * b.a * b.w * K7(x);
+          open += Math.max(0, b.a) * (1 - x * x) ** 2;
+        }
+        return { tau, open };
+      }
+      const r2 = (x) => Math.round(x * 1000) / 1000;
+      function beatsFor(seed, n) {
+        const r = rng(seed), range = (a, b) => a + (b - a) * r();
+        const weighted = (L) => { let s = L.reduce((m, [, w]) => m + w, 0) * r(); for (const [v, w] of L) if ((s -= w) < 0) return v; return L[L.length - 1][0]; };
+        return Array.from({ length: n }, () => {
+          const kind = weighted([['slow', 3], ['glide', 1.4], ['rush', 1.2]]);
+          const a = kind === 'slow' ? range(0.45, 1) : kind === 'glide' ? range(-0.1, 0.15) : -range(0.4, 0.85);
+          return { a: r2(a), w: r2(range(0.28, 0.5)), kind };
+        });
+      }
+      let seed = 7;
+      const NAME = { slow: 'ralenti', glide: 'filé', rush: 'accéléré' };
+      demo('#fig-beat', {
+        title: 'Vitesse de la plongée', aspect: 1.75,
+        controls: [
+          { key: 'N', label: 'Couches N', min: 4, max: 6, step: 1, value: 5 },
+          { key: 'ramp', label: 'Amplitude', min: 0, max: 1, step: .01, value: .7, fmt: (v) => v.toFixed(2) },
+        ],
+        buttons: [{ label: 'Autre tirage', onClick: () => { seed++; } }],
+        draw(g, d) {
+          const N = d.s.N, beats = beatsFor(seed, 6), cam = { beats, ramp: d.s.ramp };
+          const M = 900, T = new Float64Array(M + 1), V = new Float64Array(M + 1);
+          for (let i = 0; i <= M; i++) T[i] = beatShift(i / M * N, N, cam).tau;
+          let vmin = Infinity, vmax = -Infinity;
+          for (let i = 0; i <= M; i++) { const a = T[Math.max(0, i - 1)], b = T[Math.min(M, i + 1)]; V[i] = (b - a) / ((Math.min(M, i + 1) - Math.max(0, i - 1)) / M * N); vmin = Math.min(vmin, V[i]); vmax = Math.max(vmax, V[i]); }
+          const { w, h } = d, x0 = 44, x1 = w - 14, X = (t) => lerp(x0, x1, t / N);
+          // vitesse
+          const a0 = 22, a1 = h * .52, Yv = (v) => lerp(a1, a0, v / 2);
+          g.strokeStyle = C.grid; g.lineWidth = 1;
+          for (const v of [0, 1, 2]) { g.beginPath(); g.moveTo(x0, Yv(v)); g.lineTo(x1, Yv(v)); g.stroke(); label(g, v.toFixed(0), x0 - 8, Yv(v) + 4, { align: 'right', size: 11 }); }
+          for (let k = 0; k <= N; k++) {
+            g.strokeStyle = alpha(C.ink, .18); g.beginPath(); g.moveTo(X(k), a0); g.lineTo(X(k), h - 26); g.stroke();
+            const b = beats[(k % N) % beats.length];
+            if (k < N) label(g, `${NAME[b.kind]} ${b.a > 0 ? '+' : ''}${b.a.toFixed(2)}`, X(k) + 4, a0 - 6, { size: 10.5, color: b.kind === 'slow' ? C.c2 : b.kind === 'rush' ? C.c3 : C.dim });
+          }
+          g.strokeStyle = C.c1; g.lineWidth = 2; g.beginPath();
+          for (let i = 0; i <= M; i++) { const y = Yv(V[i]); i ? g.lineTo(X(i / M * N), y) : g.moveTo(X(0), y); } g.stroke();
+          label(g, 'dτ/dt', x1, Yv(2) + 14, { align: 'right', color: C.c1 });
+          // écart τ − t
+          const b0 = h * .62, b1 = h - 26, ym = (b0 + b1) / 2, sc = (b1 - b0) / 2 / .12, Yd = (v) => ym - v * sc;
+          g.strokeStyle = C.grid; g.beginPath(); g.moveTo(x0, ym); g.lineTo(x1, ym); g.stroke();
+          label(g, '0', x0 - 8, ym + 4, { align: 'right', size: 11 }); label(g, '+0,12', x0 - 8, b0 + 4, { align: 'right', size: 11 }); label(g, '−0,12', x0 - 8, b1 + 4, { align: 'right', size: 11 });
+          g.strokeStyle = C.c2; g.lineWidth = 1.8; g.beginPath();
+          for (let i = 0; i <= M; i++) { const y = Yd(T[i] - i / M * N); i ? g.lineTo(X(i / M * N), y) : g.moveTo(X(0), y); } g.stroke();
+          g.fillStyle = C.ink; for (let k = 0; k <= N; k++) { g.beginPath(); g.arc(X(k), ym, 3, 0, TAU); g.fill(); }
+          label(g, 'τ − t', x1, b0 + 4, { align: 'right', color: C.c2 });
+          label(g, 'temps du film t (en passages) →', x1, h - 8, { align: 'right', color: C.faint, size: 11 });
+          d.status(`vitesse entre ${vmin.toFixed(2)} et ${vmax.toFixed(2)}${vmin > 0 ? ' · toujours positive' : ''}`);
+        },
+      });
+    }
+
+    // ── 03 · bord du trou ────────────────────────────────────────────────────
+    {
+      const LODS = [{ spacing: 0.022, turn: 0.14 }, { spacing: 0.034, turn: 0.2 }, { spacing: 0.05, turn: 0.3 }, { spacing: 0.075, turn: 0.45 }];
+      const R0 = rng(11), cell = Array.from({ length: 6 }, (_, k) => { const a = k / 6 * TAU + .25 + (R0() - .5) * .35, r = .115 * (1 + (R0() - .5) * .3); return [cos(a) * r, sin(a) * r]; });
+      let shape = 'star';
+      demo('#fig-rim', {
+        title: 'Bord du trou', aspect: 1.6,
+        controls: [
+          { key: 'bar', label: 'Largeur des barreaux', min: .01, max: .08, step: .001, value: .04, fmt: (v) => v.toFixed(3) },
+          { key: 'round', label: 'Arrondi des trous', min: 0, max: 1, step: .01, value: .35, fmt: (v) => v.toFixed(2) },
+          { key: 'lod', label: 'Niveau de détail', min: 0, max: 3, step: 1, value: 0, fmt: (v) => (v === 3 ? '3 (ombres)' : String(v)) },
+        ],
+        buttons: [
+          { label: 'Polygone', onClick: () => { shape = 'poly'; } }, { label: 'Ellipse', onClick: () => { shape = 'ellipse'; } },
+          { label: 'Étoile', onClick: () => { shape = 'star'; } }, { label: 'Diaphragme', onClick: () => { shape = 'iris'; } },
+          { key: 'uni', label: 'Pas uniforme', toggle: true, value: false },
+        ],
+        draw(g, d) {
+          const spec = { shape, petals: shape === 'star' ? 5 : 6, depth: .32, aspect: .45, holeScale: shape === 'poly' ? 1 : .9 };
+          const P = cell, wHalf = d.s.bar / 2;
+          const P1 = inset(P, wHalf);
+          const { w, h } = d, sc = Math.min(w * .62, h) / .3, ox = w * .36, oy = h * .5, X = (x) => ox + x * sc, Y = (y) => oy - y * sc;
+          g.lineWidth = 1.2; g.strokeStyle = alpha(C.ink, .7); poly(g, P, X, Y); g.stroke();
+          if (!P1) { d.status('barreaux trop larges : cellule pleine'); return; }
+          const O1 = centroid2(P1);
+          let rho = Infinity;
+          for (let k = 0; k < P1.length; k++) { const A = P1[k], B = P1[(k + 1) % P1.length], ex = B[0] - A[0], ey = B[1] - A[1], l = sqrt(ex * ex + ey * ey); if (l > 1e-12) rho = min(rho, abs((O1[0] - A[0]) * ey - (O1[1] - A[1]) * ex) / l); }
+          const rc = d.s.round * rho * .97, P2 = inset(P1, rc) || [O1];
+          const info = { P2, rc, O: centroid2(P2), rho, theta0: .3 };
+          const L = LODS[d.s.lod];
+          const rim = holeRim(info, spec, SHAPES[shape], spec.holeScale * rho, L.spacing, d.s.uni ? Infinity : L.turn);
+          // matière
+          g.fillStyle = alpha(C.c1, .22); poly(g, P, X, Y); g.fill();
+          g.save(); g.globalCompositeOperation = 'destination-out'; g.fillStyle = '#000'; poly(g, rim.outline, X, Y); g.fill(); g.restore();
+          g.strokeStyle = alpha(C.ink, .7); poly(g, P, X, Y); g.stroke();
+          g.setLineDash([6, 4]); g.strokeStyle = alpha(C.c4, .9); poly(g, P1, X, Y); g.stroke();
+          if (P2.length >= 3) { g.setLineDash([2, 3]); g.strokeStyle = alpha(C.c3, .95); poly(g, P2, X, Y); g.stroke(); }
+          g.setLineDash([]);
+          g.strokeStyle = C.c1; g.lineWidth = 1.6; poly(g, rim.pts, X, Y); g.stroke();
+          g.fillStyle = C.c2; rim.pts.forEach((p) => { g.beginPath(); g.arc(X(p[0]), Y(p[1]), 2.4, 0, TAU); g.fill(); });
+          g.strokeStyle = alpha(C.c2, .55); g.lineWidth = 1;
+          rim.pts.forEach((p, i) => { const n = rim.nws[i]; g.beginPath(); g.moveTo(X(p[0]), Y(p[1])); g.lineTo(X(p[0] + n[0] * .008), Y(p[1] + n[1] * .008)); g.stroke(); });
+          // légende
+          const lx = w * .74; let ly = 28;
+          const leg = (col, dash, txt) => { g.strokeStyle = col; g.lineWidth = 1.4; g.setLineDash(dash); g.beginPath(); g.moveTo(lx, ly - 4); g.lineTo(lx + 22, ly - 4); g.stroke(); g.setLineDash([]); label(g, txt, lx + 30, ly, { size: 11.5 }); ly += 20; };
+          leg(alpha(C.ink, .7), [], 'cellule P'); leg(C.c4, [6, 4], 'P₁ : barreaux'); leg(C.c3, [2, 3], 'P₂ : noyau'); leg(C.c1, [], 'bord du trou');
+          label(g, `pas ${L.spacing} · rotation ${d.s.uni ? '∞' : L.turn + ' rad'}`, lx, ly + 8, { size: 11.5, color: C.faint });
+          d.status(`${rim.pts.length} points sur le bord · r<sub>c</sub> = ${rc.toFixed(3)}`);
+        },
+      });
+    }
+
+    // ── 04 · Hankin ──────────────────────────────────────────────────────────
+    {
+      const hash = (x, y, s) => { const v = Math.sin(x * 127.1 + y * 311.7 + s * 74.7) * 43758.5453; return v - Math.floor(v); };
+      function cellsOf(jit) {
+        const out = [], R = 1, key = (p) => `${Math.round(p[0] * 1000)},${Math.round(p[1] * 1000)}`, cache = new Map();
+        const vtx = (p) => { const kk = key(p); if (!cache.has(kk)) { const a = hash(p[0], p[1], 1) * TAU, r = hash(p[0], p[1], 2) * jit; cache.set(kk, [p[0] + cos(a) * r, p[1] + sin(a) * r]); } return cache.get(kk); };
+        for (let q = -4; q <= 4; q++) for (let r = -3; r <= 3; r++) {
+          const cx = sqrt(3) * R * (q + r / 2), cy = 1.5 * R * r;
+          if (abs(cx) > 7 || abs(cy) > 4.2) continue;
+          const V = Array.from({ length: 6 }, (_, k) => vtx([cx + R * cos(PI / 6 + k * PI / 3), cy + R * sin(PI / 6 + k * PI / 3)]));
+          out.push(V);
+        }
+        return out;
+      }
+      // girihCells, dans le plan (V2 : contour en sens trigo)
+      function hankin(V2, theta, wFrame, wStar) {
+        const n = V2.length, M2 = V2.map((v, k) => [(v[0] + V2[(k + 1) % n][0]) / 2, (v[1] + V2[(k + 1) % n][1]) / 2]);
+        const X2 = []; let ok = true;
+        for (let k = 0; k < n; k++) {
+          const a = V2[k], b = V2[(k + 1) % n], c2 = V2[(k + 2) % n];
+          const d0 = [b[0] - a[0], b[1] - a[1]], l0 = Math.hypot(...d0);
+          const d1 = [c2[0] - b[0], c2[1] - b[1]], l1 = Math.hypot(...d1);
+          const u0 = [d0[0] / l0, d0[1] / l0], n0 = [-u0[1], u0[0]];
+          const u1 = [d1[0] / l1, d1[1] / l1], n1 = [-u1[1], u1[0]];
+          const ra = [u0[0] * cos(theta) + n0[0] * sin(theta), u0[1] * cos(theta) + n0[1] * sin(theta)];
+          const rb = [-u1[0] * cos(theta) + n1[0] * sin(theta), -u1[1] * cos(theta) + n1[1] * sin(theta)];
+          const p = M2[k], q = M2[(k + 1) % n];
+          const den = ra[0] * -rb[1] - ra[1] * -rb[0];
+          if (abs(den) < 1e-9) { ok = false; break; }
+          const s = ((q[0] - p[0]) * -rb[1] - (q[1] - p[1]) * -rb[0]) / den;
+          if (!(s > 0)) { ok = false; break; }
+          X2.push([p[0] + ra[0] * s, p[1] + ra[1] * s]);
+        }
+        const convex = (P) => { for (let i = 0; i < P.length; i++) { const a = P[i], b = P[(i + 1) % P.length], c = P[(i + 2) % P.length]; if ((b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]) <= 1e-12) return false; } return true; };
+        const pieces = [];
+        if (ok) {
+          pieces.push({ P: X2, w: X2.map(() => wStar), kind: 0 });
+          for (let k = 0; k < n; k++) {
+            const km = (k + n - 1) % n;
+            pieces.push({ P: [X2[km], M2[k], X2[k]], w: [1, 1, wStar], kind: 1 });
+            pieces.push({ P: [M2[k], V2[(k + 1) % n], M2[(k + 1) % n], X2[k]], w: [wFrame, wFrame, 1, 1], kind: 2 });
+          }
+          ok = pieces.every((pc) => area2(pc.P) > 1e-10 && convex(pc.P));
+        }
+        if (!ok) { const pts = []; for (let k = 0; k < n; k++) pts.push(V2[k], M2[k]); return { ok, pieces: [{ P: pts, w: pts.map(() => wFrame), kind: 3 }], M2, X2 }; }
+        return { ok, pieces, M2, X2 };
+      }
+      demo('#fig-hankin', {
+        title: 'Entrelacs de Hankin', aspect: 2,
+        controls: [
+          { key: 'theta', label: 'Angle de contact θ', min: .3, max: 1.4, step: .01, value: .95, fmt: (v) => `${Math.round(v * 180 / PI)}°` },
+          { key: 'frame', label: 'Barreaux du cadre', min: .3, max: 3, step: .01, value: 1.4, fmt: (v) => `×${v.toFixed(2)}` },
+          { key: 'jit', label: 'Désordre du pavage', min: 0, max: .35, step: .01, value: .06, fmt: (v) => v.toFixed(2) },
+        ],
+        buttons: [{ key: 'lines', label: 'Tracé de construction', toggle: true, value: false }],
+        draw(g, d) {
+          const { w, h } = d, sc = Math.min(w / 10.5, h / 5.6), ox = w / 2, oy = h / 2, X = (x) => ox + x * sc, Y = (y) => oy - y * sc;
+          const bar = .055;
+          g.fillStyle = alpha(C.c1, .55); g.fillRect(0, 0, w, h);
+          let okN = 0, all = 0;
+          for (const V of cellsOf(d.s.jit)) {
+            all++;
+            const H = hankin(V, d.s.theta, d.s.frame, 1);
+            if (H.ok) okN++;
+            for (const pc of H.pieces) {
+              const Q = inset(pc.P, pc.w.map((f) => f * bar));
+              if (!Q) continue;
+              g.fillStyle = C.bg; poly(g, Q, X, Y); g.fill();
+              if (pc.kind === 3) { g.strokeStyle = C.c3; g.lineWidth = 1.5; g.stroke(); }
+            }
+            if (d.s.lines) {
+              g.strokeStyle = alpha(C.ink, .3); g.lineWidth = 1; poly(g, V, X, Y); g.stroke();
+              if (H.ok) {
+                g.strokeStyle = C.c2; g.lineWidth = 1.2; g.beginPath();
+                H.X2.forEach((x, k) => { const m0 = H.M2[k], m1 = H.M2[(k + 1) % H.M2.length]; g.moveTo(X(m0[0]), Y(m0[1])); g.lineTo(X(x[0]), Y(x[1])); g.lineTo(X(m1[0]), Y(m1[1])); });
+                g.stroke();
+              }
+            }
+          }
+          d.status(`${okN} / ${all} cellules redécoupées`);
+        },
+      });
+    }
+
+    // ── 05 · surfaces minimales ─────────────────────────────────────────────
+    {
+      const RES = [224, 132, 76];
+      let kind = 'gyroid';
+      const smax = (a, b, k) => { if (k <= 0) return max(a, b); const h = max(k - abs(a - b), 0) / k; return max(a, b) + h * h * k * 0.25; };
+      function makeField(spec, z0) {
+        const TAUm = PI * 2;
+        const f = (spec.freq * TAUm / 2);
+        const wall = spec.sheet ? Math.min(0.62, Math.max(spec.wall, 0.0325 * f)) : spec.wall;
+        const sheetT = spec.sheet ? (2 * wall) / f : Infinity;
+        const k = Math.min(Math.max(spec.bevel * 6, 0.09), sheetT * 1.6);
+        const Ri = 1 - spec.thickness, Rm = (1 + Ri) / 2, half = spec.thickness / 2;
+        const T = (x, y, z) => {
+          const X = x * f, Y = y * f, Z = z * f; let gg;
+          if (kind === 'schwarz') gg = (cos(X) + cos(Y) + cos(Z)) / 1.9;
+          else if (kind === 'diamond') gg = (sin(X) * sin(Y) * sin(Z) + sin(X) * cos(Y) * cos(Z) + cos(X) * sin(Y) * cos(Z) + cos(X) * cos(Y) * sin(Z)) / 1.25;
+          else gg = (sin(X) * cos(Y) + sin(Y) * cos(Z) + sin(Z) * cos(X)) / 1.5;
+          return (spec.sheet ? abs(gg) - wall : gg - wall) / f;
+        };
+        return { F: (x, y) => { const r = sqrt(x * x + y * y + z0 * z0); return smax(abs(r - Rm) - half, T(x, y, z0), k); }, Rm, k };
+      }
+      const off = document.createElement('canvas'), og = off.getContext('2d');
+      demo('#fig-tpms', {
+        title: 'Surface nets et reprojection', aspect: 2,
+        controls: [
+          { key: 'lod', label: 'Niveau de détail (grille)', min: 0, max: 2, step: 1, value: 2, fmt: (v) => `${v} · ${RES[v]} mailles` },
+          { key: 'freq', label: 'Fréquence', min: 2.4, max: 4.2, step: .05, value: 3.6, fmt: (v) => v.toFixed(2) },
+        ],
+        buttons: [
+          { label: 'Gyroïde', onClick: () => { kind = 'gyroid'; } }, { label: 'Schwarz P', onClick: () => { kind = 'schwarz'; } }, { label: 'Diamant', onClick: () => { kind = 'diamond'; } },
+          { key: 'sheet', label: 'Feuille', toggle: true, value: false },
+          { key: 'proj', label: 'Reprojection et relaxation', toggle: true, value: true },
+        ],
+        draw(g, d) {
+          const spec = { freq: d.s.freq, thickness: .14, wall: d.s.sheet ? .34 : 0, sheet: d.s.sheet, bevel: .01 };
+          const { F, Rm } = makeField(spec, .11);
+          const { w, h } = d, ww = .78, hh = ww * h / w, cxw = 0, cyw = sqrt(Rm * Rm - .11 * .11) - .04;
+          const wx0 = cxw - ww / 2, wy0 = cyw - hh / 2;
+          const X = (x) => (x - wx0) / ww * w, Y = (y) => h - (y - wy0) / hh * h;
+          // fond : champ exact
+          const W2 = Math.max(2, Math.round(w / 2)), H2 = Math.max(2, Math.round(h / 2)); off.width = W2; off.height = H2;
+          const img = og.createImageData(W2, H2), px = img.data;
+          const bgc = [10, 10, 12], mat = [120, 92, 52];
+          for (let j = 0; j < H2; j++) for (let i = 0; i < W2; i++) {
+            const x = wx0 + (i + .5) / W2 * ww, y = wy0 + (1 - (j + .5) / H2) * hh, v = F(x, y), o = (j * W2 + i) * 4;
+            const m = clamp(.5 - v / (ww / W2 * 1.2));
+            const c = [0, 1, 2].map((q) => bgc[q] + (mat[q] - bgc[q]) * m);
+            px[o] = c[0]; px[o + 1] = c[1]; px[o + 2] = c[2]; px[o + 3] = 255;
+          }
+          og.putImageData(img, 0, 0); g.imageSmoothingEnabled = true; g.drawImage(off, 0, 0, w, h);
+          // grille
+          const res = RES[d.s.lod], ext = 1.02, hg = 2 * ext / res;
+          const i0 = Math.floor((wx0 + ext) / hg) - 1, i1 = Math.ceil((wx0 + ww + ext) / hg) + 1, j0 = Math.floor((wy0 + ext) / hg) - 1, j1 = Math.ceil((wy0 + hh + ext) / hg) + 1;
+          const gx = (i) => -ext + i * hg;
+          g.strokeStyle = alpha(C.ink, .07); g.lineWidth = 1; g.beginPath();
+          for (let i = i0; i <= i1; i++) { g.moveTo(X(gx(i)), 0); g.lineTo(X(gx(i)), h); }
+          for (let j = j0; j <= j1; j++) { g.moveTo(0, Y(gx(j))); g.lineTo(w, Y(gx(j))); }
+          g.stroke();
+          const Vv = new Map(), at = (i, j) => { const kk = i * 4096 + j; if (!Vv.has(kk)) Vv.set(kk, F(gx(i), gx(j))); return Vv.get(kk); };
+          const cellV = new Map(), P = [];
+          for (let j = j0; j < j1; j++) for (let i = i0; i < i1; i++) {
+            const c = [at(i, j), at(i + 1, j), at(i, j + 1), at(i + 1, j + 1)];
+            const neg = c.filter((v) => v < 0).length; if (neg === 0 || neg === 4) continue;
+            let sx = 0, sy = 0, n = 0;
+            for (const [a, b] of [[0, 1], [2, 3], [0, 2], [1, 3]]) {
+              const va = c[a], vb = c[b]; if ((va < 0) === (vb < 0)) continue;
+              const t = va / (va - vb); sx += (a & 1) + ((b & 1) - (a & 1)) * t; sy += (a >> 1) + ((b >> 1) - (a >> 1)) * t; n++;
+            }
+            cellV.set(i * 4096 + j, P.length); P.push([gx(i) + sx / n * hg, gx(j) + sy / n * hg]);
+          }
+          const links = [], cv = (i, j) => cellV.get(i * 4096 + j);
+          for (let j = j0 + 1; j < j1; j++) for (let i = i0 + 1; i < i1; i++) {
+            const v0 = at(i, j) < 0;
+            if (v0 !== (at(i + 1, j) < 0)) { const a = cv(i, j - 1), b = cv(i, j); if (a !== undefined && b !== undefined) links.push([a, b]); }
+            if (v0 !== (at(i, j + 1) < 0)) { const a = cv(i - 1, j), b = cv(i, j); if (a !== undefined && b !== undefined) links.push([a, b]); }
+          }
+          // projection (fausse position, Illinois) — gen/tpms.js
+          const project = (x, y, r) => {
+            const e = hg * .2, f0 = F(x, y);
+            let gX = F(x + e, y) - F(x - e, y), gY = F(x, y + e) - F(x, y - e);
+            const l = sqrt(gX * gX + gY * gY) || 1; gX /= l; gY /= l;
+            const atT = (t) => F(x + gX * t, y + gY * t);
+            let a, b, fa, fb;
+            const fhi = atT(r);
+            if ((f0 < 0) !== (fhi < 0)) { a = 0; fa = f0; b = r; fb = fhi; } else { const flo = atT(-r); if ((f0 < 0) !== (flo < 0)) { a = -r; fa = flo; b = 0; fb = f0; } else return null; }
+            let t = 0, side = 0;
+            for (let it = 0; it < 12; it++) {
+              t = (a * fb - b * fa) / (fb - fa);
+              const ft = atT(t);
+              if (ft === 0 || b - a < r * 2e-5) break;
+              if ((ft < 0) === (fb < 0)) { b = t; fb = ft; if (side === -1) fa /= 2; side = -1; } else { a = t; fa = ft; if (side === 1) fb /= 2; side = 1; }
+            }
+            return [x + gX * t, y + gY * t];
+          };
+          if (d.s.proj) {
+            for (let i = 0; i < P.length; i++) { const q = project(P[i][0], P[i][1], hg); if (q) P[i] = q; }
+            const adj = P.map(() => []); for (const [a, b] of links) { adj[a].push(b); adj[b].push(a); }
+            for (let pass = 0; pass < [3, 2, 1][d.s.lod]; pass++) {
+              const Q = P.map((p, i) => { const n = adj[i].length; if (!n) return p; let sx = 0, sy = 0; for (const j of adj[i]) { sx += P[j][0]; sy += P[j][1]; } return [(p[0] + sx / n) / 2, (p[1] + sy / n) / 2]; });
+              for (let i = 0; i < P.length; i++) { const q = project(Q[i][0], Q[i][1], hg * .5); if (q) P[i] = q; }
+            }
+          }
+          let err = 0;
+          g.strokeStyle = C.c2; g.lineWidth = 1.7; g.beginPath();
+          for (const [a, b] of links) { g.moveTo(X(P[a][0]), Y(P[a][1])); g.lineTo(X(P[b][0]), Y(P[b][1])); err += abs(F((P[a][0] + P[b][0]) / 2, (P[a][1] + P[b][1]) / 2)); }
+          g.stroke();
+          g.fillStyle = C.c2; for (const p of P) { g.beginPath(); g.arc(X(p[0]), Y(p[1]), res > 150 ? 1.6 : 2.4, 0, TAU); g.fill(); }
+          d.status(`${P.length} sommets · écart moyen ${(err / max(1, links.length) / hg).toFixed(3)} maille`);
+        },
+      });
+    }
+
+    // ── 06 · corail de Turing ───────────────────────────────────────────────
+    {
+      const PAT = { coral: [0.0545, 0.062], maze: [0.029, 0.057], worms: [0.078, 0.061], spots: [0.03, 0.062], mitosis: [0.0367, 0.0649] };
+      const NAMES = { coral: 'Corail cerveau', maze: 'Labyrinthe', worms: 'Vers', spots: 'Taches', mitosis: 'Mitoses' };
+      const W = 160, H = 96, n = W * H, ITERS = 5000;
+      const nb = new Int32Array(n * 6);
+      for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+        const odd = j & 1, id = j * W + i, w = (a, b) => ((b + H) % H) * W + ((a + W) % W);
+        const L = odd ? [[i - 1, j], [i + 1, j], [i, j - 1], [i + 1, j - 1], [i, j + 1], [i + 1, j + 1]] : [[i - 1, j], [i + 1, j], [i - 1, j - 1], [i, j - 1], [i - 1, j + 1], [i, j + 1]];
+        L.forEach(([a, b], q) => { nb[id * 6 + q] = w(a, b); });
+      }
+      let pat = 'coral', seed = 3;
+      const off = document.createElement('canvas'); off.width = 2 * W + 1; off.height = H; const og = off.getContext('2d');
+      demo('#fig-coral', {
+        title: 'Gray-Scott', aspect: (2 * W + 1) / 2 / (H * .866), animate: true,
+        controls: [{ key: 'thr', label: 'Seuil', min: .05, max: .35, step: .005, value: .2, fmt: (v) => v.toFixed(3) }],
+        buttons: [
+          ...Object.keys(PAT).map((k) => ({ label: NAMES[k], onClick: (d) => { pat = k; d.reset(); } })),
+          { key: 'sheet', label: 'Feuille', toggle: true, value: false },
+          { label: 'Recommencer', onClick: (d) => { seed++; d.reset(); } },
+        ],
+        setup(d) {
+          const r = rng(seed), u = new Float32Array(n).fill(1), v = new Float32Array(n);
+          const pos = (id) => [(id % W) + .5 * (Math.floor(id / W) & 1), Math.floor(id / W) * .866];
+          for (let s = 0; s < 40; s++) {
+            const c = pos(Math.floor(r() * n)), rad = 2 + r() * 2.6;
+            for (let id = 0; id < n; id++) {
+              const p = pos(id); let dx = abs(p[0] - c[0]), dy = abs(p[1] - c[1]);
+              dx = min(dx, W - dx); dy = min(dy, H * .866 - dy);
+              if (dx * dx + dy * dy < rad * rad) { u[id] = .5; v[id] = .25 + r() * .05; }
+            }
+          }
+          d.state = { u, v, u2: new Float32Array(n), v2: new Float32Array(n), it: 0 };
+        },
+        draw(g, d) {
+          const S = d.state, [F, k] = PAT[pat];
+          const steps = S.it < ITERS ? Math.min(30, ITERS - S.it) : 0;
+          for (let it = 0; it < steps; it++) {
+            const { u, v, u2, v2 } = S;
+            for (let i = 0; i < n; i++) {
+              let su = 0, sv = 0; const o = i * 6;
+              for (let q = 0; q < 6; q++) { su += u[nb[o + q]]; sv += v[nb[o + q]]; }
+              const ui = u[i], vi = v[i], uvv = ui * vi * vi;
+              u2[i] = ui + (su / 6 - ui) - uvv + F * (1 - ui);
+              v2[i] = vi + 0.5 * (sv / 6 - vi) + uvv - (F + k) * vi;
+            }
+            S.u = u2; S.u2 = u; S.v = v2; S.v2 = v;
+          }
+          S.it += steps;
+          const img = og.createImageData(2 * W + 1, H), px = img.data, thr = d.s.thr;
+          const bg = [9, 9, 11], mat = [214, 168, 96];
+          for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+            const vv = S.v[j * W + i];
+            const m = d.s.sheet ? sstep(.06, .03, abs(vv - thr)) : sstep(thr - .015, thr + .015, vv);
+            for (let q = 0; q < 2; q++) {
+              const o = (j * (2 * W + 1) + 2 * i + q + (j & 1)) * 4;
+              px[o] = bg[0] + (mat[0] - bg[0]) * m; px[o + 1] = bg[1] + (mat[1] - bg[1]) * m; px[o + 2] = bg[2] + (mat[2] - bg[2]) * m; px[o + 3] = 255;
+            }
+          }
+          og.putImageData(img, 0, 0);
+          g.imageSmoothingEnabled = true; g.drawImage(off, 0, 0, d.w, d.h);
+          d.status(`${NAMES[pat]} · F = ${F} · k = ${k} · itération ${S.it} / ${ITERS}`);
+        },
+      });
+    }
+
+    // ── 07 · diaphragme ──────────────────────────────────────────────────────
+    {
+      const irisOpen = (x) => sstep(1.3, 0.45, x);
+      const burstSpread = (x) => sstep(0.25, 1.7, x) + sstep(-0.5, -1.8, x) * 0.5;
+      function blades(N, curl, overlap, hole) {
+        const rc = hole * 1.06, ro = hole * 1.75, span = (2 * PI) / N, width = span * (1 + overlap);
+        const rhoEnd = (s) => rc + (ro - rc) * (0.55 + 0.45 * sin(PI * s));
+        const at = (i, rho, s) => { const phi = (2 * PI * i) / N + curl * min(rho, rc) / rc + s * width; return [rho * cos(phi), rho * sin(phi)]; };
+        const pivotOf = (i) => at(i, (rc + ro) / 2, 0.5);
+        const outline = (i) => {
+          const P = [];
+          for (let k = 0; k <= 12; k++) { const s = k / 12; P.push(at(i, rhoEnd(s), s)); }
+          for (let k = 1; k <= 12; k++) { const rho = rhoEnd(1) * (1 - k / 12); P.push(at(i, rho, 1)); }
+          for (let k = 1; k < 12; k++) { const rho = rhoEnd(0) * (k / 12); P.push(at(i, rho, 0)); }
+          return P;
+        };
+        const clear = hole * 1.04;
+        const opening = (() => {
+          const P = outline(0), c = pivotOf(0);
+          let best = null;
+          for (const sg of [1, -1]) for (let k = 1; k <= 180; k++) {
+            const a = sg * (k / 180) * PI, ca = cos(a), sa = sin(a);
+            let ok = true;
+            for (const p of P) { const x = p[0] - c[0], y = p[1] - c[1]; const qx = c[0] + x * ca - y * sa, qy = c[1] + x * sa + y * ca; if (qx * qx + qy * qy < clear * clear) { ok = false; break; } }
+            if (ok) { if (!best || Math.abs(a) < Math.abs(best)) best = a; break; }
+          }
+          return best ?? PI / 2;
+        })();
+        return { outline, pivotOf, opening, ro };
+      }
+      demo('#fig-iris', {
+        title: 'Diaphragme', aspect: 2, animate: true,
+        controls: [
+          { key: 'x', label: 'Profondeur relative x', min: -2, max: 3, step: .01, value: .9, fmt: (v) => v.toFixed(2) },
+          { key: 'N', label: 'Lames', min: 6, max: 12, step: 1, value: 9 },
+          { key: 'curl', label: 'Courbure', min: .5, max: 1.3, step: .01, value: .9, fmt: (v) => v.toFixed(2) },
+          { key: 'overlap', label: 'Recouvrement', min: .35, max: .6, step: .01, value: .45, fmt: (v) => v.toFixed(2) },
+        ],
+        buttons: [{ key: 'play', label: 'Plonger', toggle: true, value: false }],
+        draw(g, d) {
+          const hole = .3, B = blades(d.s.N, d.s.curl, d.s.overlap, hole);
+          const x = d.s.play ? 3 - ((d.t * .45) % 5) : d.s.x;
+          const th = B.opening * irisOpen(x);
+          const { w, h } = d, cx = w * .25, cy = h * .5, sc = Math.min(w * .23, h * .46) / (B.ro * 1.08);
+          const X = (p) => cx + p[0] * sc, Y = (p) => cy - p[1] * sc;
+          const shellR = B.ro * 1.08 * sc;
+          g.save(); g.beginPath(); g.arc(cx, cy, shellR, 0, TAU); g.clip();
+          for (let i = 0; i < d.s.N; i++) {
+            const P = B.outline(i), c = B.pivotOf(i), ca = cos(th), sa = sin(th);
+            const Q = P.map((p) => { const xx = p[0] - c[0], yy = p[1] - c[1]; return [c[0] + xx * ca - yy * sa, c[1] + xx * sa + yy * ca]; });
+            g.beginPath(); Q.forEach((p, k) => (k ? g.lineTo(X(p), Y(p)) : g.moveTo(X(p), Y(p)))); g.closePath();
+            g.fillStyle = alpha(C.c2, .5); g.fill(); g.strokeStyle = alpha(C.c2, .95); g.lineWidth = 1; g.stroke();
+          }
+          // coquille voilée, percée de l'oculus
+          g.restore();
+          g.beginPath(); g.arc(cx, cy, shellR, 0, TAU); g.arc(cx, cy, hole * sc, 0, TAU, true);
+          g.fillStyle = alpha(C.c1, .72); g.fill('evenodd');
+          g.strokeStyle = alpha(C.c1, .9); g.lineWidth = 1; g.beginPath(); g.arc(cx, cy, shellR, 0, TAU); g.stroke();
+          g.strokeStyle = C.c1; g.lineWidth = 1.5; g.beginPath(); g.arc(cx, cy, hole * sc, 0, TAU); g.stroke();
+          // courbes
+          const x0 = w * .56, x1 = w - 14, y0 = 26, y1 = h - 34, XX = (v) => lerp(x0, x1, (v + 2) / 5), YY = (v) => lerp(y1, y0, v / 1.6);
+          g.strokeStyle = C.grid; g.lineWidth = 1;
+          for (const v of [-2, -1, 0, 1, 2, 3]) { g.beginPath(); g.moveTo(XX(v), y0); g.lineTo(XX(v), y1); g.stroke(); label(g, String(v), XX(v), y1 + 16, { align: 'center', size: 11 }); }
+          g.beginPath(); g.moveTo(x0, YY(0)); g.lineTo(x1, YY(0)); g.moveTo(x0, YY(1)); g.lineTo(x1, YY(1)); g.stroke();
+          label(g, '1', x0 - 6, YY(1) + 4, { align: 'right', size: 11 }); label(g, '0', x0 - 6, YY(0) + 4, { align: 'right', size: 11 });
+          const curve = (f, col, name, ly) => { g.strokeStyle = col; g.lineWidth = 2; g.beginPath(); for (let i = 0; i <= 200; i++) { const v = -2 + i / 40, y = YY(f(v)); i ? g.lineTo(XX(v), y) : g.moveTo(XX(v), y); } g.stroke(); label(g, name, x0 + 6, ly, { color: col, size: 11.5 }); };
+          curve(irisOpen, C.c2, 'ouverture du diaphragme', y0 + 6);
+          curve(burstSpread, C.c3, 'écartement des éclats', y0 + 22);
+          g.strokeStyle = alpha(C.ink, .6); g.setLineDash([3, 3]); g.beginPath(); g.moveTo(XX(x), y0); g.lineTo(XX(x), y1); g.stroke(); g.setLineDash([]);
+          label(g, '← passage (x = 0) · fond →', XX(.5), h - 6, { align: 'center', size: 11, color: C.faint });
+          d.status(`x = ${x.toFixed(2)} · angle d’ouverture cherché ${Math.round(Math.abs(B.opening) * 180 / PI)}° · ${Math.round(irisOpen(x) * 100)} % ouvert`);
+        },
+      });
+    }
+
+    // ── 08 · biseau ─────────────────────────────────────────────────────────
+    {
+      const LV = [{ segs: 3, turn: .14, spacing: .022 }, { segs: 2, turn: .2, spacing: .034 }, { segs: 1, turn: .3, spacing: .05 }];
+      const off = document.createElement('canvas'), og = off.getContext('2d');
+      const nrm = (v) => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
+      const L = nrm([-.45, .55, .7]), Hh = nrm([L[0], L[1], L[2] + 1]);
+      demo('#fig-bevel', {
+        title: 'Normale de la tranche', aspect: 2,
+        controls: [{ key: 'lod', label: 'Niveau de détail', min: 0, max: 2, step: 1, value: 2 }],
+        buttons: [{ key: 'pix', label: 'Normale par pixel', toggle: true, value: false }],
+        draw(g, d) {
+          const lv = LV[d.s.lod], S = lv.segs, rh = .06, circ = TAU * rh;
+          const M = max(12, Math.round(max(circ / lv.spacing, TAU / lv.turn)));
+          const { w, h } = d, side = Math.min(w * .6, h), W2 = Math.max(2, Math.round(side / 1.5)), H2 = W2;
+          off.width = W2; off.height = H2;
+          const img = og.createImageData(W2, H2), px = img.data;
+          const r0 = 1, b = .5, view = 1.58;
+          const brass = [0.95, 0.72, 0.38];
+          const shade = (n) => {
+            const nh = max(0, n[0] * Hh[0] + n[1] * Hh[1] + n[2] * Hh[2]), spec = nh ** 90 * 1.4;
+            const R = [2 * n[2] * n[0], 2 * n[2] * n[1], 2 * n[2] * n[2] - 1];
+            const az = Math.atan2(R[1], R[0]), band = sstep(.32, .2, abs(((az / TAU * 5) % 1 + 1) % 1 - .5)) * sstep(.05, .25, R[2]) * sstep(.92, .7, R[2]);
+            const env = .22 * clamp(R[2]) + .85 * band;
+            return brass.map((c) => Math.min(255, 255 * (c * (.1 + .8 * env) + spec * (.5 + .5 * c))));
+          };
+          // fond : face plane, et trou
+          for (let j = 0; j < H2; j++) for (let i = 0; i < W2; i++) {
+            const x = ((i + .5) / W2 * 2 - 1) * view, y = -((j + .5) / H2 * 2 - 1) * view, rr = Math.hypot(x, y), o = (j * W2 + i) * 4;
+            const c = rr < r0 ? [6, 6, 8] : shade([0, 0, 1]);
+            px[o] = c[0]; px[o + 1] = c[1]; px[o + 2] = c[2]; px[o + 3] = 255;
+          }
+          // maillage du biseau : M stations × S segments
+          const ang = (i) => (PI / 2) * (i / S);
+          const vert = (i, jj) => {
+            const a = ang(i), phi = jj / M * TAU, rho = r0 + b * (1 - cos(a));
+            const hh = [-cos(phi), -sin(phi), 0];
+            return { p: [rho * cos(phi), rho * sin(phi)], n: [hh[0] * cos(a), hh[1] * cos(a), sin(a)], h: hh, a };
+          };
+          const toPx = (p) => [(p[0] / view + 1) / 2 * W2, (1 - p[1] / view) / 2 * H2];
+          const tri = (A, B, Cc) => {
+            const pa = toPx(A.p), pb = toPx(B.p), pc = toPx(Cc.p);
+            const xmin = Math.max(0, Math.floor(Math.min(pa[0], pb[0], pc[0]))), xmax = Math.min(W2 - 1, Math.ceil(Math.max(pa[0], pb[0], pc[0])));
+            const ymin = Math.max(0, Math.floor(Math.min(pa[1], pb[1], pc[1]))), ymax = Math.min(H2 - 1, Math.ceil(Math.max(pa[1], pb[1], pc[1])));
+            const den = (pb[1] - pc[1]) * (pa[0] - pc[0]) + (pc[0] - pb[0]) * (pa[1] - pc[1]);
+            if (abs(den) < 1e-9) return;
+            for (let y = ymin; y <= ymax; y++) for (let x = xmin; x <= xmax; x++) {
+              const qx = x + .5, qy = y + .5;
+              const l1 = ((pb[1] - pc[1]) * (qx - pc[0]) + (pc[0] - pb[0]) * (qy - pc[1])) / den;
+              const l2 = ((pc[1] - pa[1]) * (qx - pc[0]) + (pa[0] - pc[0]) * (qy - pc[1])) / den;
+              const l3 = 1 - l1 - l2;
+              if (l1 < -1e-6 || l2 < -1e-6 || l3 < -1e-6) continue;
+              let n;
+              if (d.s.pix) {
+                const hv = [0, 1, 2].map((k) => A.h[k] * l1 + B.h[k] * l2 + Cc.h[k] * l3), a = A.a * l1 + B.a * l2 + Cc.a * l3;
+                const wv = nrm([hv[0], hv[1], 0]);
+                n = [wv[0] * cos(a), wv[1] * cos(a), sin(a)];
+              } else n = nrm([0, 1, 2].map((k) => A.n[k] * l1 + B.n[k] * l2 + Cc.n[k] * l3));
+              const c = shade(n), o = (y * W2 + x) * 4;
+              px[o] = c[0]; px[o + 1] = c[1]; px[o + 2] = c[2];
+            }
+          };
+          for (let i = 0; i < S; i++) for (let jj = 0; jj < M; jj++) {
+            const A = vert(i, jj), B = vert(i + 1, jj), Cc = vert(i + 1, jj + 1), Dd = vert(i, jj + 1);
+            tri(A, B, Cc); tri(A, Cc, Dd);
+          }
+          og.putImageData(img, 0, 0);
+          g.imageSmoothingEnabled = true; g.drawImage(off, 0, 0, side, side * (H2 / W2));
+          // profil
+          const px0 = side + (w - side) * .18, px1 = w - 16, pw = px1 - px0, py1 = h * .72, s2 = pw / 1.25;
+          const PX = (rho) => px0 + (rho - r0 + .15) * s2, PY = (z) => py1 - (z + b) * s2;
+          g.fillStyle = alpha(C.c1, .2); g.beginPath(); g.moveTo(PX(r0), PY(-b - .25)); g.lineTo(PX(r0), PY(-b));
+          for (let i = 0; i <= 40; i++) { const a = i / 40 * PI / 2; g.lineTo(PX(r0 + b * (1 - cos(a))), PY(-b + b * sin(a))); }
+          g.lineTo(PX(r0 + b + .4), PY(0)); g.lineTo(PX(r0 + b + .4), PY(-b - .25)); g.closePath(); g.fill();
+          g.strokeStyle = alpha(C.ink, .35); g.setLineDash([3, 3]); g.beginPath();
+          for (let i = 0; i <= 40; i++) { const a = i / 40 * PI / 2, xx = PX(r0 + b * (1 - cos(a))), yy = PY(-b + b * sin(a)); i ? g.lineTo(xx, yy) : g.moveTo(xx, yy); } g.stroke(); g.setLineDash([]);
+          g.strokeStyle = C.c1; g.lineWidth = 1.8; g.beginPath();
+          for (let i = 0; i <= S; i++) { const a = ang(i), xx = PX(r0 + b * (1 - cos(a))), yy = PY(-b + b * sin(a)); i ? g.lineTo(xx, yy) : g.moveTo(xx, yy); } g.stroke();
+          for (let i = 0; i <= S; i++) { const a = ang(i), xx = PX(r0 + b * (1 - cos(a))), yy = PY(-b + b * sin(a)); arrow(g, xx, yy, xx - cos(a) * 28, yy - sin(a) * 28, { color: C.c2, head: 6 }); }
+          label(g, 'profil (coupe)', px0, 22, { size: 11.5 });
+          label(g, 'trou', PX(r0) - 8, PY(-b - .15), { align: 'right', size: 11, color: C.faint });
+          d.status(`${M} stations × ${S} segment${S > 1 ? 's' : ''} · ${d.s.pix ? 'normale par pixel (angle du profil)' : 'normales des sommets interpolées'}`);
+        },
+      });
+    }
+  </script>
+</body>
+</html>

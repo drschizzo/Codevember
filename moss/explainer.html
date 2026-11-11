@@ -1,0 +1,626 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#050506">
+  <title>Moss · défis techniques</title>
+  <meta name="description" content="Comment Moss fait vivre une année de mousse sur sa pierre : équation de Fisher-KPP forcée par les saisons, orbite périodique enregistrée, fissures de la roche comme refuges, coussins en dômes, feuilles posées en forme fermée et bornées à leur cellule de Voronoï, dix mille feuilles dans un seul shader.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+  <link rel="stylesheet" href="../home/explainer.css">
+</head>
+<body>
+  <nav class="top"><div class="in">
+    <a href="../">Codevember</a><span class="day">Day 05</span><span class="crumb">Moss · défis techniques</span>
+    <span class="sp"></span><a class="open" href="./">Ouvrir la scène</a>
+  </div></nav>
+
+  <main>
+    <header class="hero">
+      <div class="kicker">Day 05 · Moss · la reviviscence</div>
+      <h1>Comment une mousse traverse une année sur sa pierre</h1>
+      <p class="lede">À la sécheresse, il ne reste que des îlots bruns dans les fissures. Une averse passe, la roche fonce, les îlots reverdissent ; pendant toute la saison des pluies, les coussins s’étendent sur la roche, puis la sécheresse les fait reculer jusqu’à leurs refuges. Personne n’anime ce mouvement : c’est une équation de réaction-diffusion forcée par les saisons, intégrée jusqu’à ce que l’année se referme sur elle-même.</p>
+    </header>
+
+    <figure class="cover">
+      <img src="docs/capture.jpg" alt="Un coussin de tortule sur une souche, en fin de saison des pluies" width="1483" height="1228">
+      <figcaption>Souche, tortule : le coussin sur sa souche en fin de saison des pluies (graine b88). Chaque rosette est une tige modélisée, plantée dans l’écorce cuite, dont les feuilles sont posées dans le vertex shader.</figcaption>
+    </figure>
+
+    <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
+
+    <article>
+
+      <section id="fisher">
+        <h2><span class="n">01</span>Une année de mousse est une équation de Fisher-KPP</h2>
+        <span class="src">src/field.js</span>
+        <p>La première version de Moss ouvrait des tiges une à une sous la pluie : un geste trop proche de celui d’une autre scène, et surtout illisible, puisque rien ne reliait le mouvement à l’eau ou à la lumière. Le geste retenu est une <strong>propagation</strong> : une mousse qui s’étend et se rétracte sur sa pierre au fil d’une année filmée en accéléré.</p>
+        <p>Deux champs vivent sur une grille de 64 × 64 posée sur le dessus de la pierre : \(W\), l’eau de la roche, et \(B\), la mousse. Une carte d’habitat fixe, la <em>rétention</em> \(R\), dit où l’eau reste : les fissures, les creux, le côté à l’ombre. Le système est :</p>
+        <div class="eq">\[ \begin{aligned} \partial_t W &= p(t,x)\,(1 - W) - e(t)\,(1{,}2 - R)\,W, \\ \partial_t B &= D\,\nabla^2 B + r\,s(t)\,W\,B\,\Big(1 - \frac{B}{K}\Big) - m\,(1 - W)\,(1 - R)^2\,B, \qquad B \ge b_0\,\mathrm{refuge}(R). \end{aligned} \]</div>
+        <p>C’est l’équation de <strong>Fisher-KPP</strong> (croissance logistique plus diffusion), modulée par l’eau. La croissance n’a lieu qu’à la saison des pluies, \(s(t) = \max(0{,}15,\ \text{saison})\) ; la mortalité frappe là où la roche sèche vite, avec un exposant 2 sur \(1 - R\) qui épargne nettement les fissures ; le plancher \(b_0 = 0{,}5\), appliqué seulement où \(R\) dépasse 0,45, garde des fragments vivants dans les refuges. La capacité \(K = 0{,}55 + 0{,}45\,R\) fait les coussins plus épais là où l’eau reste.</p>
+        <p>La pluie est la cause visible de tout le reste. Trois <strong>averses</strong> traversent la pierre en bandes entre les phases 0,105 et 0,19 de la boucle, chacune avec sa direction tirée de la graine ; sous une averse, l’évaporation tombe au dixième et la roche fonce. Puis une pluie de fond (0,55) s’installe pour la saison, et aucune averse ne tombe pendant la sécheresse : le retrait est continu, du bord vers les fissures.</p>
+        <pre><code>const r = 0.034, D = 0.0011, m = 0.022, b0 = 0.5, ev = 0.35;   // jours, cm
+L[k] = D * lap + r * season * W[k] * c * (1 - c / K[k])
+     - m * (1 - W[k]) * (1 - R[k]) ** 2 * c;</code></pre>
+        <figure id="fig-year" class="wide"><figcaption><b>L’année d’une pierre de granit, calculée par <code>field.js</code> dans cette page.</b> Le module est importé tel quel (habitat tiré d’une roche de granit, averses, intégration jusqu’à l’orbite périodique, enregistrement à 30 états par seconde de film pour une boucle de 40 s). À gauche, la pierre vue de dessus : la roche fonce avec l’eau, la mousse brune reverdit avec elle et s’étend ; le bouton « Habitat » montre la rétention \(R\). À droite, la saison des pluies (bleu) et la part de la pierre couverte de mousse épaisse (\(B > 0{,}3\), le seuil des tests). La couleur de la carte est une simplification ; dans la scène, ce sont des tiges.</figcaption></figure>
+      </section>
+
+      <section id="front">
+        <h2><span class="n">02</span>Le front avance à 2√(rD), pas plus vite</h2>
+        <span class="src">src/field.js · simulateField()</span>
+        <p>Ce qui rend la propagation crédible, c’est que sa vitesse n’est pas choisie : elle découle de la croissance et de la diffusion. Pour l’équation de Fisher-KPP, un front qui envahit un milieu vide se stabilise à la vitesse minimale</p>
+        <div class="eq">\[ c^\ast = 2\sqrt{r\,D}. \]</div>
+        <p>Avec \(r = 0{,}034\) par jour et \(D = 0{,}0011\) cm² par jour, \(c^\ast \approx 0{,}012\) cm par jour à pleine eau, soit au plus un centimètre et demi sur une saison des pluies ; moins en pratique, puisque \(W\) reste sous 1 et que le front n’atteint cette vitesse que lentement. C’est l’échelle d’une colonie de mousse : les coussins se rejoignent en une saison, ils ne submergent pas la pierre.</p>
+        <p>Le schéma est explicite, un laplacien à cinq points, avec un sous-pas d’au plus un demi-jour. Pour une boucle de 40 s enregistrée à 30 images par seconde, un pas d’image vaut \(365 / 1\,200 \approx 0{,}3\) jour : un pas par image suffit, et la stabilité n’est pas en jeu (\(D\,\Delta t / \Delta x^2\) vaut environ 0,02 pour une pierre de 8 cm, loin de la limite de 0,25 du schéma explicite).</p>
+        <figure id="fig-front"><figcaption><b>Un front de Fisher-KPP à une dimension, avec les constantes de <code>field.js</code>.</b> La mousse part d’un refuge de 1,5 mm à gauche, à eau et saison pleines ; une seconde de démo vaut quinze jours. En haut, le profil \(B(x)\) ; en bas, la position du front (\(B = 0{,}5\)) au fil des jours et la pente théorique \(2\sqrt{rD}\) en pointillé. Le front mesuré approche cette vitesse par en dessous : c’est un front « tiré », qui ne l’atteint qu’asymptotiquement (environ 80 % au bout de 160 jours avec les valeurs par défaut).</figcaption></figure>
+      </section>
+
+      <section id="orbite">
+        <h2><span class="n">03</span>La boucle est une orbite, pas un fondu</h2>
+        <span class="src">src/field.js · simulateField()</span>
+        <p>Une année simulée à partir d’un état arbitraire ne se termine pas dans l’état où elle a commencé : le premier hiver n’est pas le dernier. Raccorder les deux bouts par un fondu montrerait la mousse sauter. Mais le système est <strong>dissipatif</strong> : la mortalité, la saturation logistique et le plancher des refuges effacent la mémoire de l’état initial. Sous un forçage de période \(P\) (un an), il converge vers une orbite périodique.</p>
+        <p>Moss intègre donc des années entières sans les enregistrer, compare l’état à \(t + P\) à l’état à \(t\), et s’arrête quand l’écart maximal, sur les 2 × 4&#8239;096 valeurs de \(B\) et de \(W\), passe sous \(2 \times 10^{-4}\) (au plus dix années ; en pratique deux à quatre, parfois cinq). Seule l’année suivante est enregistrée, en octets, à 30 états par seconde de film. L’image à \(u = 1\) est l’image à \(u = 0\) par construction ; un test vérifie le résidu (sous \(10^{-3}\)) et le raccord, valeur par valeur.</p>
+        <figure id="fig-orbit"><figcaption><b>Une seule cellule de la grille, année après année.</b> Mêmes équations que <code>field.js</code>, sans la diffusion, avec les vraies averses (graine de démonstration) au centre de la pierre. Chaque courbe est une année de \(B\), de la plus ancienne (rouge) à la dernière (vert) ; à droite, l’écart entre le début et la fin de chaque année, en échelle logarithmique, et le seuil \(2 \times 10^{-4}\). Quel que soit l’état de départ, les années se superposent vite : plus la cellule retient l’eau, plus la convergence est rapide.</figcaption></figure>
+        <div class="note"><b>Le temps du film garde l’heure</b><p>La lumière lit la même horloge que la mousse : le ciel se couvre avec la saison des pluies, chaque averse l’assombrit en passant, le soleil est plus haut et plus dur à la sécheresse. Mais il ne se couche jamais : l’accéléré garde l’heure de la prise de vue, selon la convention du genre, au lieu de faire clignoter des jours et des nuits à quelques images d’intervalle.</p></div>
+      </section>
+
+      <section id="roche">
+        <h2><span class="n">04</span>Les fissures de la roche sont les refuges</h2>
+        <span class="src">src/gen/rock.js · field.js · makeHabitat()</span>
+        <p>Une mousse qui survit « au hasard » sur la pierre ne raconte rien. Il faut que l’œil voie pourquoi elle reste ici et pas là. Moss tire donc l’habitat de la <strong>roche elle-même</strong> : une seule fonction <code>makeRock(type, seed).sample(x, z)</code> rend le relief fin en centimètres et la distance au bord de dalle. Elle sert trois fois.</p>
+        <ul>
+          <li><strong>Au four</strong> : dans un worker, elle est échantillonnée sur 1&#8239;024² texels couvrant 28 cm (0,27 mm par texel), puis lue sur le GPU en déplacement d’un maillage de 720² et en normal map au pixel, avec la couleur minérale, la rugosité et l’occlusion des creux (deux flous de boîte, rayons 3 et 14 texels).</li>
+          <li><strong>Aux tiges</strong> : chaque tige est plantée sur la vraie surface, fissures comprises ; un test vérifie que moins de 0,2 % des points de feuilles passent sous la roche.</li>
+          <li><strong>À l’habitat</strong> : la rétention est surtout un terme de fissure, \(\exp\!\big(-(\text{bord}/0{,}75)^2\big)\), auquel s’ajoutent les creux et le côté à l’ombre : \(R = 0{,}7\,\text{fissure} + 0{,}35\,\text{creux} + 0{,}3\,\text{ombre} - 0{,}1\).</li>
+        </ul>
+        <p>Les fissures du granit sont les bords de cellules de Worley (dalles de 7,5 cm) sur un domaine déformé par du bruit, au profil gaussien plutôt qu’en V : des diaclases arrondies par l’usure. L’usure vient en trois échelles (bosses centimétriques, crêtes millimétriques, grain), puis la couleur ajoute la mosaïque de cristaux de 1 à 2 mm (biotite, feldspath, quartz), les lichens crustacés aréolés à apothécies noires et les algues des creux humides. Le calcaire a ses cupules et ses cannelures, le grès ses lits, l’écorce ses sillons en losanges étirés et ses lambeaux arrachés qui montrent le bois.</p>
+        <figure id="fig-rock" class="wide"><figcaption><b>Le relief de <code>rock.js</code>, importé et échantillonné dans cette page</b> (demi-résolution, ombrage par la pente seule, sans la couleur minérale ni les lichens). En vert, le terme de fissure de la rétention, exactement celui que <code>makeHabitat</code> lit sur la même roche : c’est là que la mousse survit à la sécheresse et d’où la propagation repart. Sur l’écorce et la terre, la largeur du refuge est propre au support (0,12 et 0,3 cm).</figcaption></figure>
+        <div class="note check"><b>Vérifié par un test</b><p>Sur une roche de granit, la rétention moyenne des cellules de grille situées dans une fissure (terme de fissure supérieur à 0,6) doit dépasser de 0,3 au moins celle des cellules hors fissure. Les refuges ne sont pas dessinés à part : ils sont la roche.</p></div>
+      </section>
+
+      <section id="dome">
+        <h2><span class="n">05</span>Un coussin est un dôme, et ses tiges en suivent la normale</h2>
+        <span class="src">src/gen/build.js · src/gen/colony.js · src/scene/stage.js</span>
+        <p>Des tiges dressées sur une roche plate font une plantation, pas une mousse : c’était la première remarque sur la version initiale, « pas de notion d’échelle ». Un vrai coussin est bombé, serré, et seules les rosettes du sommet des tiges affleurent ; le reste est un feutre sombre de tiges et de rhizoïdes.</p>
+        <p>L’épaisseur du coussin pleinement poussé vient de la simulation : on prend le <strong>maximum annuel</strong> de \(B\) en chaque cellule, on l’adoucit par un noyau gaussien de 13 × 13 cellules, puis on lui donne un profil en S qui s’arrondit jusqu’à la roche, sans falaise :</p>
+        <div class="eq">\[ T(x) = h_{\text{dôme}}\,\sqrt{\mathrm{smoothstep}\!\Big(\frac{\bar B_{\max}(x) - 0{,}1}{0{,}75}\Big)}. \]</div>
+        <p>Les tiges ne sont plantées que là où il y aura un coussin (\(T > 0{,}04\) cm), et leur axe suit la <strong>normale du dôme</strong> (85 %, plus 15 % de la normale de la roche) : droites au sommet, couchées vers l’extérieur sur les flancs, où les rosettes débordent. Leur longueur est calculée pour que la rosette arrive à la surface du dôme, quelle que soit l’inclinaison.</p>
+        <p>Reste à faire croître et reculer le coussin sans qu’une rosette ne s’enfouisse ni ne flotte. Chaque tige, feuilles comprises, est mise à l’échelle autour de son pied par un facteur \(g\), et le feutre s’épaissit par la même loi de la mousse locale (moyennée sur neuf points dans un rayon d’un demi-centimètre) :</p>
+        <pre><code>g = max(0, sst(0.04, 0.9, B) * (1 + 0.12 * grow) - 0.12 * grow);  // grow ∈ [0, 0,18]
+const grow = (p, base, g) => base.add(p.sub(base).mul(g));          // TSL</code></pre>
+        <p>La rosette reste à la surface du coussin à chaque instant, et le léger décalage tiré par tige (<code>grow</code>) fait que le bord du coussin s’effrange au lieu d’avancer en bloc.</p>
+        <figure id="fig-dome" class="wide"><figcaption><b>Coupe d’un coussin de tortule autour d’une fissure.</b> Le pointillé est le dôme pleinement poussé \(T(x)\) ; le feutre (brun) et les tiges suivent la mousse locale \(B\), qui part du refuge et s’étend avec le curseur. Les tiges sont tracées avec leur rosette, à l’échelle (0,2 cm d’espacement, rosettes ouvertes de 0,26 cm de rayon). Le bouton « Tiges verticales » montre la version naïve : sur les flancs, les rosettes se plantent dans la pente au lieu d’en épouser la surface. Profil de la mousse simplifié (une bosse et un front), pas issu de la simulation.</figcaption></figure>
+      </section>
+
+      <section id="pose">
+        <h2><span class="n">06</span>La feuille se pose en forme fermée</h2>
+        <span class="src">src/pose.js · src/families.js</span>
+        <p>La reviviscence elle-même tient dans la feuille. Sèche, la feuille de tortule est roulée en gouttière et tordue en vis autour de la tige ; mouillée, elle se détord, s’aplatit et s’étale en étoile recourbée. Ce geste doit être calculé pour chacune des quelque dix mille feuilles, à chaque image, deux fois (pose courante et pose précédente, pour les vecteurs vitesse) : il faut une <strong>forme fermée</strong>, sans itération.</p>
+        <p>La nervure est une suite de trois arcs de cercle : une gaine droite le long de la tige (angle \(a_0\)), une charnière courte qui la porte à l’angle d’insertion \(\theta\), puis le limbe de courbure \(k_l\). Un arc partant à l’angle \(a\) avec la courbure \(k\) sur une longueur \(\ell\) se déplace de</p>
+        <div class="eq">\[ \Delta r = \frac{\cos a - \cos(a + k\ell)}{k}, \qquad \Delta y = \frac{\sin(a + k\ell) - \sin a}{k}. \]</div>
+        <p>La section est roulée (courbure \(k_t\), marges relevées), toute la feuille s’enroule autour de la tige d’un angle \(\tau\,s\) de la base à la pointe, et l’épaisseur est une vraie lame, dessus, dessous et tranche arrondie. Chaque famille donne ses quatre grandeurs au sec et mouillée (pour la tortule : \(\theta\) passe de 0,2 à 0,95 rad, \(k_l\) de −3,5 à 8,5 cm⁻¹, \(k_t\) de 52 à 9 cm⁻¹, l’enroulement de 2,3 rad à 0) ; l’ouverture \(f\) les interpole.</p>
+        <p>Les feuilles d’une même tige ne s’ouvrent pas ensemble. Une feuille de rang \(\rho\) (0 en bas, 1 au bourgeon) suit l’ouverture \(o\) de la tige avec un retard :</p>
+        <div class="eq">\[ f = \mathrm{smoothstep}\big(0{,}45\,\rho,\ 0{,}45\,\rho + 0{,}55,\ o\big). \]</div>
+        <p>Les feuilles extérieures s’ouvrent les premières et se ferment les dernières, comme sur la plante, où une feuille intérieure est tenue par celles qui l’entourent ; c’est aussi ce qui empêche les feuilles d’une même rosette de se traverser. L’ouverture de chaque tige suit l’eau sans retard visible, \(o = \mathrm{smoothstep}(0{,}2,\ 0{,}65,\ W)\) : à l’échelle d’une année en 40 s, les quelques secondes de la reviviscence réelle sont instantanées.</p>
+        <figure id="fig-leaf" class="wide"><figcaption><b>Une tige et ses feuilles posées par <code>pose.js</code>, importé tel quel.</b> Contours des feuilles (bords \(x = \pm 1\), sans l’épaisseur), avec les gabarits, les poses sèche et mouillée et la phyllotaxie de chaque famille (divergence 2/5 pour la tortule et la funaire, 3/8 pour le polytric) ; le poil hyalin de la tortule prolonge la pointe. Glissez pour tourner. En bas à droite, l’ouverture de chaque feuille selon son rang : la cascade des feuilles extérieures vers le bourgeon.</figcaption></figure>
+        <div class="note check"><b>Deux implémentations, une formule</b><p>La pose est écrite deux fois : en JavaScript dans <code>pose.js</code> (pour la génération et les tests) et en TSL dans <code>scene/moss.js</code> (pour le vertex shader). Le module JS est la référence : la génération s’en sert pour régler l’écartement de chaque feuille, et les tests pour prouver qu’aucune feuille ne traverse une feuille voisine ; le shader n’en est que la traduction, ligne pour ligne.</p></div>
+      </section>
+
+      <section id="voronoi">
+        <h2><span class="n">07</span>Chaque feuille reste dans la cellule de sa tige</h2>
+        <span class="src">src/gen/colony.js · buildColony()</span>
+        <p>Les tiges sont réparties par échantillonnage de Poisson (Bridson), à une distance minimale tirée de la rosette ouverte : 0,78 fois son rayon pour la tortule. Plus serrées, elles feraient un coussin dense ; mais des rosettes de 0,26 cm de rayon espacées de 0,2 cm s’interpénètrent forcément. Repousser les tiges ferait un coussin clairsemé ; détecter les collisions entre dix mille feuilles animées, à chaque image, est hors de prix.</p>
+        <p>La solution est géométrique et se règle une fois pour toutes, à la génération. Chaque feuille est bornée à la <strong>cellule de Voronoï de sa tige</strong>, mesurée dans le plan horizontal à la hauteur de chacun de ses points. Pour un point \(p\) d’une feuille de la tige \(i\) et une voisine \(j\), la distance signée au bissecteur se lit sans racine :</p>
+        <div class="eq">\[ \delta = \frac{|p - a_j|^2 - |p - a_i|^2}{2\,|a_i - a_j|}, \qquad \delta \ge \tfrac12\,\text{marge}. \]</div>
+        <p>On cherche par dichotomie (cinq pas) le plus grand écartement \(\text{amp} \in [0, 1]\) tel que, pour six ouvertures de 0 à 1, chacun des douze points témoins de la feuille (et la pointe de son poil) reste dans sa cellule. L’écartement borne l’angle d’insertion et la courbure du limbe ; la feuille se détord et s’aplatit quand même entièrement. Une feuille qu’aucune pose ne loge n’est pas gardée. Comme les cellules sont disjointes, deux feuilles de tiges différentes ne peuvent pas se toucher, à aucun instant de la boucle.</p>
+        <figure id="fig-voronoi" class="wide"><figcaption><b>Sept rosettes de tortule vues de dessus, à 0,2 cm d’écart.</b> Feuilles posées par <code>pose.js</code>, écartement cherché par la même dichotomie que <code>colony.js</code> (tiges verticales ici ; dans la scène, l’axe de chaque voisine est relu à la hauteur du point). Faites glisser une tige. Sans la borne, les feuilles qui sortent de leur cellule sont en rouge ; avec elle, les feuilles serrées s’écartent moins (en clair) et le coussin reste dense sans une seule intersection.</figcaption></figure>
+        <div class="note check"><b>Vérifié par un test</b><p>Pour chaque famille, à trois ouvertures (0, ½, 1), la plus petite distance entre deux points de feuilles de tiges voisines doit dépasser l’épaisseur d’une feuille. Le test parcourt toutes les paires de tiges du graphe de contact.</p></div>
+      </section>
+
+      <section id="shader">
+        <h2><span class="n">08</span>Dix mille feuilles, un seul shader</h2>
+        <span class="src">src/scene/moss.js</span>
+        <p>three.js compile un programme par <code>InstancedMesh</code>. Avec un maillage par tige ou par famille de feuilles, le nombre de shaders exploserait. Les feuilles sont donc un <code>Mesh</code> ordinaire sur une <code>InstancedBufferGeometry</code> : un gabarit de feuille, et par instance vingt flottants dans un seul tampon entrelacé (point d’insertion, quaternion du repère de la tige, longueur, rang, largeur, rayon de la tige, sens de l’enroulement, écartement permis, pied de la tige).</p>
+        <p>Ce qui change d’une image à l’autre tient dans un tableau d’uniformes, un <code>vec4</code> par tige : l’ouverture \(o\), la croissance \(g\), l’eau de surface (les perles), l’eau de la feuille (la translucidité). Le vertex shader recalcule la pose complète de chaque sommet, puis la pose de l’image précédente à partir du même tableau décalé d’une image, pour des vecteurs vitesse exacts dans l’anticrénelage temporel et le flou de mouvement. Un saut dans la boucle recopie l’état courant dans le précédent : pas de traînée parasite.</p>
+        <p>Deux gabarits partagent le même matériau : fin près du lieu du gros plan (2,6 cm autour du bord d’îlot que la caméra va filmer), grossier ailleurs. Les perles d’eau sont une troisième géométrie instanciée sur les mêmes données de feuilles, de rayon nul sur la plupart. Entre les tiges modélisées, la peau du coussin peint trois couches de rosettes en étoile, à 1,6, 1,1 et 0,75 mm, pour la densité d’un vrai coussin.</p>
+        <div class="note trap"><b>Changer l’ordre des lumières recompile tout</b><p>Toutes les lumières de la scène sont créées une fois, dans un ordre fixe, au premier niveau ; les saisons ne font que changer leur intensité, leur couleur et leur position. Ajouter ou réordonner une lumière en cours de route forcerait la recompilation de tous les matériaux, feuilles comprises.</p></div>
+      </section>
+
+      <section id="budget">
+        <h2><span class="n">09</span>Budget</h2>
+        <p>La propagation, le coussin et la roche sont calculés pendant l’écran de chargement, dans deux workers en parallèle ; à l’image, le processeur ne fait que relire l’enregistrement et remplir le tableau d’uniformes.</p>
+        <div class="tbl"><table>
+          <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
+          <tbody>
+            <tr><td>Propagation (orbite + une année) et coussins</td><td>worker</td><td class="num">2 à 5 s</td></tr>
+            <tr><td>Roche cuite, 1&#8239;024² texels (640² en mobile)</td><td>worker</td><td class="num">3 à 4,5 s</td></tr>
+            <tr><td>Enregistrement du champ, 64² × 2 octets par état, 30 états par seconde (boucle de 40 s)</td><td>mémoire</td><td class="num">~10 Mo</td></tr>
+            <tr><td>Tiges (au plus ; 900 en mobile)</td><td>GPU</td><td class="num">3&#8239;200</td></tr>
+            <tr><td>Feuilles instanciées, pose calculée deux fois par sommet</td><td>GPU</td><td class="num">~10&#8239;000</td></tr>
+            <tr><td>Maillage déplacé de la roche (360² en mobile)</td><td>GPU</td><td class="num">720²</td></tr>
+            <tr><td>Image en pleine saison, qualité Haute, 1,8 Mpx, graine b88</td><td>GPU</td><td class="num">14 ms</td></tr>
+            <tr><td>Image, graine s128, pleine saison / sécheresse</td><td>GPU</td><td class="num">15 / 13,7 ms</td></tr>
+          </tbody>
+        </table></div>
+        <p>Les postes les plus lourds sont les feuilles et le maillage de la roche. Treize tests tiennent l’ensemble : l’orbite périodique et son raccord ; le refuge à la sécheresse, l’extension aux pluies (le front ne recule jamais pendant les pluies), le retrait ensuite ; les refuges dans les fissures ; aucune feuille ne touche celle d’une autre tige ; les feuilles au-dessus de la roche ; la caméra périodique et sous 25°/s ; la recette déterministe et les décors distincts.</p>
+      </section>
+    </article>
+
+    <footer class="end">
+      <a href="./">Ouvrir Moss</a>
+      <a href="https://github.com/drschizzo/Codevember/blob/main/moss/README.md">README</a>
+      <a href="https://github.com/drschizzo/Codevember/blob/main/moss/docs/concept.md">La démarche</a>
+      <span class="sp"></span>
+      <a href="../">Tous les jours</a>
+    </footer>
+  </main>
+
+  <script type="module">
+    import { demo, C, TAU, lerp, clamp, smooth, alpha, label, rng } from '../home/explainer.js';
+    import { makeHabitat, showers, simulateField, sampleField, wetSeason, rainAt, FIELD_N } from './src/field.js';
+    import { makeRock, ROCK_PALETTES } from './src/gen/rock.js';
+    import { FAMILIES } from './src/families.js';
+    import { leafPoint, poseParams, leafOpen, tipFrame } from './src/pose.js';
+    import { rosetteReach } from './src/gen/colony.js';
+
+    const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+    const mix3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+    const rgb = (c, k = 1) => `rgb(${Math.round(c[0] * k)},${Math.round(c[1] * k)},${Math.round(c[2] * k)})`;
+
+    // ── 01 · l'année, calculée par field.js ───────────────────────────────
+    {
+      const SEED = 'demo', E = 3.6 * 1.12, T = 40, NN = FIELD_N * FIELD_N;
+      let SIM = null;
+      const off = document.createElement('canvas'); off.width = off.height = FIELD_N;
+      const og = off.getContext('2d'), img = og.createImageData(FIELD_N, FIELD_N);
+      const ROCK = hex('#83857a'), DRY = hex('#7d7046'), WET = hex('#4f9a1a'), BG = [0, 0, 0];
+      const arr = new Float32Array(2 * NN);
+      const dd = demo('#fig-year', {
+        title: 'Une année de mousse', aspect: 2.1, animate: true,
+        controls: [{ key: 'u', label: 'Phase de la boucle', min: 0, max: 1, step: .001, value: .42, fmt: (v) => `${v.toFixed(2)}`, onChange: (d) => { d.state.u = d.s.u; d.state.play = false; } }],
+        buttons: [{ key: 'play', label: 'Lecture', toggle: true, value: false }, { key: 'hab', label: 'Habitat R', toggle: true, value: false }],
+        setup(d) { d.state.u = .42; },
+        draw(g, d) {
+          const { w, h } = d;
+          if (!SIM) { label(g, 'calcul de l’orbite périodique…', w / 2, h / 2, { align: 'center' }); d.status('calcul…'); return; }
+          if (d.s.play) d.state.u = (d.state.u + d.dt / 20) % 1;
+          const u = d.state.u;
+          sampleField(SIM.rec, u, arr);
+          const px = img.data;
+          for (let k = 0; k < NN; k++) {
+            const o = k * 4;
+            if (SIM.H.M[k] < .5) { px[o + 3] = 0; continue; }
+            let c;
+            if (d.s.hab) { const r = clamp(SIM.H.R[k]); c = mix3([40, 38, 34], hex('#7fb2d9'), r); }
+            else {
+              const B = arr[k], W = arr[NN + k];
+              const rock = mix3(ROCK, ROCK.map((x) => x * .45), W);
+              const moss = mix3(DRY, WET, smooth(.2, .65, W));
+              c = mix3(rock, moss, smooth(.04, .9, B));
+              const rr = rainAt(u, -E + 2 * E * ((k % FIELD_N) + .5) / FIELD_N, -E + 2 * E * (Math.floor(k / FIELD_N) + .5) / FIELD_N, SIM.SH, E);
+              c = mix3(c, [150, 180, 210], rr * .18);
+            }
+            px[o] = c[0]; px[o + 1] = c[1]; px[o + 2] = c[2]; px[o + 3] = 255 * Math.min(1, SIM.H.M[k] * 1.5);
+          }
+          og.putImageData(img, 0, 0);
+          const S = Math.min(h - 44, w * .44), mx = 10, my = 12;
+          g.imageSmoothingEnabled = true; g.drawImage(off, mx, my, S, S);
+          label(g, d.s.hab ? 'rétention R (clair : l’eau reste)' : 'vue de dessus', mx, my + S + 16, { size: 11 });
+          // chronologie
+          const x0 = mx + S + 50, x1 = w - 12, y0 = 22, y1 = h - 34;
+          const X = (v) => lerp(x0, x1, v), Y = (v) => lerp(y1, y0, v);
+          g.fillStyle = alpha(C.c2, .13); g.beginPath(); g.moveTo(X(0), Y(0));
+          for (let i = 0; i <= 200; i++) g.lineTo(X(i / 200), Y(wetSeason(i / 200)));
+          g.lineTo(X(1), Y(0)); g.fill();
+          g.strokeStyle = C.grid; g.lineWidth = 1;
+          for (const v of [0, .5, 1]) { g.beginPath(); g.moveTo(x0, Y(v)); g.lineTo(x1, Y(v)); g.stroke(); label(g, `${v * 100} %`, x0 - 6, Y(v) + 4, { align: 'right', size: 11 }); }
+          // averses
+          for (const s of SIM.SH) { g.fillStyle = alpha(C.c2, .35); g.fillRect(X(s.u0), y0, X(s.u0 + s.du) - X(s.u0), y1 - y0); }
+          g.strokeStyle = C.c4; g.lineWidth = 2; g.beginPath();
+          SIM.cover.forEach((c, f) => { const x = X(f / SIM.rec.F), y = Y(c); f ? g.lineTo(x, y) : g.moveTo(x, y); }); g.stroke();
+          const cu = SIM.cover[Math.floor(u * SIM.rec.F) % SIM.rec.F];
+          g.strokeStyle = alpha(C.ink, .5); g.setLineDash([3, 4]); g.beginPath(); g.moveTo(X(u), y0); g.lineTo(X(u), y1); g.stroke(); g.setLineDash([]);
+          g.fillStyle = C.c4; g.beginPath(); g.arc(X(u), Y(cu), 4.5, 0, TAU); g.fill();
+          label(g, 'couverture (B > 0,3)', x1, y0 + 2, { color: C.c4, base: 'top', align: 'right' });
+          label(g, 'saison des pluies', x1, y0 + 18, { color: C.c2, base: 'top', align: 'right' });
+          label(g, 'averses', X(SIM.SH[0].u0) + 2, y1 - 6, { color: C.c2, size: 11 });
+          label(g, 'phase u →', x1, h - 4, { align: 'right', color: C.faint, size: 11 });
+          for (const v of [0, .25, .5, .75]) label(g, v.toFixed(2), X(v), y1 + 14, { align: 'center', size: 11 });
+          const stage = u < .13 ? 'sécheresse : îlots dans les fissures' : u < .25 ? 'les averses passent' : u < .58 ? 'saison des pluies : le front avance' : u < .7 ? 'la sécheresse revient' : 'retrait vers les refuges';
+          d.status(`${stage} · couverture ${(cu * 100).toFixed(0)} % · orbite en ${SIM.rec.periods} ans, résidu ${SIM.rec.residual.toExponential(1)}`);
+        },
+      });
+      setTimeout(() => {
+        const t0 = performance.now();
+        const rock = makeRock('granite', SEED);
+        const H = makeHabitat(SEED, E, [.4, .8, .3], rock), SH = showers(SEED);
+        const rec = simulateField(T, H, SH);
+        const cover = new Float32Array(rec.F); let m = 0;
+        for (let k = 0; k < NN; k++) if (H.M[k] > .5) m++;
+        for (let f = 0; f < rec.F; f++) { let c = 0; for (let k = 0; k < NN; k++) if (H.M[k] > .5 && rec.B[f * NN + k] / 255 > .3) c++; cover[f] = c / m; }
+        SIM = { rec, H, SH, cover, ms: performance.now() - t0 };
+        dd?.redraw();
+      }, 30);
+    }
+
+    // ── 02 · le front de Fisher-KPP ───────────────────────────────────────
+    {
+      const N = 240, Lx = 3, dx = Lx / N, DAYS_PER_S = 15, TMAX = 170;
+      demo('#fig-front', {
+        title: 'Vitesse du front', aspect: 1.8, animate: true,
+        controls: [
+          { key: 'r', label: 'Croissance r', min: .01, max: .1, step: .001, value: .034, fmt: (v) => `${v.toFixed(3)} /jour`, onChange: (d) => d.reset() },
+          { key: 'D', label: 'Diffusion D', min: .0003, max: .004, step: .0001, value: .0011, fmt: (v) => `${v.toFixed(4)} cm²/jour`, onChange: (d) => d.reset() },
+        ],
+        buttons: [{ label: 'Relancer', onClick: (d) => d.reset() }],
+        setup(d) { const B = new Float64Array(N); for (let i = 0; i < N; i++) B[i] = (i + .5) * dx < .15 ? 1 : 0; d.state = { B, L: new Float64Array(N), day: 0, trace: [] }; },
+        draw(g, d) {
+          const S = d.state, r = d.s.r, D = d.s.D;
+          const dt = Math.min(.1, .2 * dx * dx / D);
+          let todo = S.day < TMAX ? d.dt * DAYS_PER_S : 0;
+          while (todo > 1e-9) {
+            const h = Math.min(dt, todo); todo -= h;
+            for (let i = 0; i < N; i++) { const c = S.B[i], lap = (S.B[Math.max(0, i - 1)] + S.B[Math.min(N - 1, i + 1)] - 2 * c) / (dx * dx); S.L[i] = D * lap + r * c * (1 - c); }
+            for (let i = 0; i < N; i++) S.B[i] = clamp(S.B[i] + h * S.L[i]);
+            S.day += h;
+          }
+          let fx = 0; for (let i = 0; i < N - 1; i++) if (S.B[i] >= .5 && S.B[i + 1] < .5) { fx = (i + .5 + (S.B[i] - .5) / (S.B[i] - S.B[i + 1])) * dx; }
+          if (!S.trace.length || S.day - S.trace[S.trace.length - 1][0] > .5) S.trace.push([S.day, fx]);
+          const { w, h } = d, x0 = 48, x1 = w - 14;
+          const X = (x) => lerp(x0, x1, x / Lx);
+          // profil
+          const a0 = 14, a1 = h * .38;
+          g.strokeStyle = C.grid; g.beginPath(); g.moveTo(x0, a1); g.lineTo(x1, a1); g.moveTo(x0, a0); g.lineTo(x1, a0); g.stroke();
+          g.fillStyle = alpha(C.c4, .25); g.strokeStyle = C.c4; g.lineWidth = 2; g.beginPath(); g.moveTo(X(0), a1);
+          for (let i = 0; i < N; i++) g.lineTo(X((i + .5) * dx), lerp(a1, a0, S.B[i])); g.lineTo(X(Lx), a1); g.closePath(); g.fill();
+          g.beginPath(); for (let i = 0; i < N; i++) { const y = lerp(a1, a0, S.B[i]); i ? g.lineTo(X((i + .5) * dx), y) : g.moveTo(X(.5 * dx), y); } g.stroke();
+          label(g, 'B = 1', x0 - 6, a0 + 4, { align: 'right', size: 11 }); label(g, '0', x0 - 6, a1 + 4, { align: 'right', size: 11 });
+          // position du front
+          const b0 = h * .5, b1 = h - 32, Yd = (t) => lerp(b0, b1, t / TMAX);
+          g.strokeStyle = C.grid; for (let t = 0; t <= TMAX; t += 40) { g.beginPath(); g.moveTo(x0, Yd(t)); g.lineTo(x1, Yd(t)); g.stroke(); label(g, `${t} j`, x0 - 6, Yd(t) + 4, { align: 'right', size: 11 }); }
+          for (let x = 0; x <= Lx; x += .5) label(g, `${x} cm`, X(x), h - 14, { align: 'center', size: 11 });
+          const cs = 2 * Math.sqrt(r * D), t0 = S.trace.length > 1 ? S.trace[Math.min(S.trace.length - 1, 30)] : [0, .15];
+          g.strokeStyle = alpha(C.ink, .5); g.setLineDash([4, 4]); g.beginPath();
+          g.moveTo(X(t0[1] - cs * t0[0]), Yd(0)); g.lineTo(X(t0[1] + cs * (TMAX - t0[0])), Yd(TMAX)); g.stroke(); g.setLineDash([]);
+          g.strokeStyle = C.c1; g.lineWidth = 2; g.beginPath();
+          S.trace.forEach(([t, x], i) => { i ? g.lineTo(X(x), Yd(t)) : g.moveTo(X(x), Yd(t)); }); g.stroke();
+          g.fillStyle = C.c1; g.beginPath(); g.arc(X(fx), Yd(S.day), 4, 0, TAU); g.fill();
+          label(g, 'temps ↓', x1, b0 - 6, { align: 'right', color: C.faint, size: 11 });
+          // vitesse mesurée sur les 30 derniers jours
+          let meas = 0; const tr = S.trace; if (tr.length > 10) { const a = tr.find((p) => p[0] >= S.day - 30) ?? tr[0], b = tr[tr.length - 1]; if (b[0] - a[0] > 5) meas = (b[1] - a[1]) / (b[0] - a[0]); }
+          label(g, `2√(rD) = ${(cs * 10).toFixed(3)} mm/jour`, x1, a0 + 16, { align: 'right', color: C.ink });
+          label(g, `mesuré : ${(meas * 10).toFixed(3)} mm/jour`, x1, a0 + 34, { align: 'right', color: C.c1 });
+          d.status(`jour ${Math.round(S.day)} · front à ${(fx * 10).toFixed(1)} mm${meas ? ` · ${(100 * meas / cs).toFixed(0)} % de 2√(rD)` : ''}`);
+        },
+      });
+    }
+
+    // ── 03 · l'orbite d'une cellule ───────────────────────────────────────
+    {
+      const SH = showers('demo'), E = 4, F = 1200, YEARS = 8;
+      const sst = smooth;
+      const run = (R, B0) => {
+        const r = .034, m = .022, b0 = .5, ev = .35, K = .55 + .45 * R, dt = 365 / F;
+        let B = B0, W = 0; const years = [], res = [];
+        for (let y = 0; y < YEARS; y++) {
+          const sB = B, sW = W, curve = new Float32Array(F), wc = new Float32Array(F);
+          for (let f = 0; f < F; f++) {
+            curve[f] = B; wc[f] = W;
+            const u = f / F, rr = rainAt(u, 0, 0, SH, E), e = ev * (.15 + .85 * (1 - wetSeason(u))), season = Math.max(.15, wetSeason(u));
+            W += dt * (rr * 3 * (1 - W) - e * (rr > .05 ? .1 : 1) * (1.2 - R) * W);
+            const L = r * season * W * B * (1 - B / K) - m * (1 - W) * (1 - R) ** 2 * B;
+            B = Math.max(b0 * sst(.45, .9, R), Math.min(1, B + dt * L));
+          }
+          years.push({ curve, wc }); res.push(Math.max(Math.abs(B - sB), Math.abs(W - sW)));
+        }
+        return { years, res };
+      };
+      let cache = null;
+      demo('#fig-orbit', {
+        title: 'Convergence vers l’orbite', aspect: 2.1,
+        controls: [
+          { key: 'R', label: 'Rétention de la cellule R', min: 0, max: 1, step: .01, value: .35 },
+          { key: 'B0', label: 'Mousse au départ', min: 0, max: 1, step: .01, value: .9 },
+        ],
+        draw(g, d) {
+          const key = `${d.s.R}:${d.s.B0}`;
+          if (!cache || cache.key !== key) cache = { key, ...run(d.s.R, Math.max(.001, d.s.B0)) };
+          const { years, res } = cache, { w, h } = d;
+          const x0 = 40, x1 = w * .64, y0 = 46, y1 = h - 32;
+          const X = (u) => lerp(x0, x1, u), Y = (v) => lerp(y1, y0, v);
+          g.fillStyle = alpha(C.c2, .1); g.beginPath(); g.moveTo(X(0), Y(0)); for (let i = 0; i <= 200; i++) g.lineTo(X(i / 200), Y(wetSeason(i / 200))); g.lineTo(X(1), Y(0)); g.fill();
+          g.strokeStyle = C.grid; for (const v of [0, .5, 1]) { g.beginPath(); g.moveTo(x0, Y(v)); g.lineTo(x1, Y(v)); g.stroke(); label(g, v.toFixed(1), x0 - 6, Y(v) + 4, { align: 'right', size: 11 }); }
+          years.forEach(({ curve }, y) => {
+            const t = y / (YEARS - 1), col = y === YEARS - 1 ? C.c4 : alpha(C.c3, .25 + .5 * (1 - t));
+            g.strokeStyle = col; g.lineWidth = y === YEARS - 1 ? 2.4 : 1.2; g.beginPath();
+            for (let f = 0; f < F; f += 4) { const xx = X(f / F), yy = Y(curve[f]); f ? g.lineTo(xx, yy) : g.moveTo(xx, yy); } g.stroke();
+          });
+          g.strokeStyle = alpha(C.c2, .8); g.lineWidth = 1; g.beginPath();
+          years[YEARS - 1].wc.forEach((v, f) => { if (f % 4) return; const xx = X(f / F), yy = Y(v); f ? g.lineTo(xx, yy) : g.moveTo(xx, yy); }); g.stroke();
+          label(g, 'B, année 1 → 8', x0, 10, { color: C.c4, base: 'top', size: 11.5 });
+          label(g, 'W (dernière année)', x0 + 120, 10, { color: C.c2, base: 'top', size: 11.5 });
+          label(g, 'phase u →', x1, h - 12, { align: 'right', color: C.faint, size: 11 });
+          // résidus
+          const r0 = w * .72, r1 = w - 12, lo = -12, hi = 0;
+          const Yr = (v) => lerp(y1, y0, (clamp(Math.log10(Math.max(1e-12, v)), lo, hi) - lo) / (hi - lo));
+          g.strokeStyle = C.grid; for (const e of [0, -4, -8, -12]) { g.beginPath(); g.moveTo(r0, Yr(10 ** e)); g.lineTo(r1, Yr(10 ** e)); g.stroke(); label(g, `1e${e}`, r0 - 4, Yr(10 ** e) + 4, { align: 'right', size: 10.5 }); }
+          const bw = (r1 - r0) / YEARS;
+          let conv = 0;
+          res.forEach((v, y) => { const ok = v < 2e-4; if (ok && !conv) conv = y + 1; g.fillStyle = ok ? C.c4 : C.c3; g.fillRect(r0 + y * bw + 2, Yr(v), bw - 4, y1 - Yr(v)); label(g, String(y + 1), r0 + (y + .5) * bw, y1 + 14, { align: 'center', size: 10.5 }); });
+          g.strokeStyle = C.c1; g.setLineDash([4, 3]); g.beginPath(); g.moveTo(r0, Yr(2e-4)); g.lineTo(r1, Yr(2e-4)); g.stroke(); g.setLineDash([]);
+          label(g, 'écart sur un an', r0, 10, { base: 'top', size: 11.5 });
+          d.status(conv ? `orbite atteinte à l’année ${conv} (écart < 2·10⁻⁴)` : 'pas encore convergé en 8 ans');
+        },
+      });
+    }
+
+    // ── 04 · la roche et ses refuges ──────────────────────────────────────
+    {
+      const TYPES = { granite: 'Granit', limestone: 'Calcaire', sandstone: 'Grès', bark: 'Écorce' };
+      let type = 'granite'; const cacheR = {};
+      const off = document.createElement('canvas'), og = off.getContext('2d');
+      const bake = (t, W, H) => {
+        const key = `${t}:${W}x${H}`; if (cacheR[key]) return cacheR[key];
+        const rock = makeRock(t, 'demo'), span = t === 'bark' ? 9 : 20, px = span / W;
+        const D = new Float32Array(W * H), Cr = new Float32Array(W * H), Rf = new Float32Array(W * H);
+        for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+          const x = (i - W / 2) * px, z = (j - H / 2) * px, o = rock.sample(x, z), k = j * W + i;
+          D[k] = o.d; Cr[k] = o.crack; Rf[k] = Math.exp(-((o.edge / (rock.K.refuge ?? .75)) ** 2)) * (rock.K.refuge ? .75 : 1);
+        }
+        return (cacheR[key] = { D, Cr, Rf, px, span, P: ROCK_PALETTES[t] });
+      };
+      demo('#fig-rock', {
+        title: 'Relief et refuges', aspect: 2.4,
+        buttons: [
+          ...Object.entries(TYPES).map(([k, l]) => ({ label: l, onClick: () => { type = k; } })),
+          { key: 'ref', label: 'Refuges', toggle: true, value: true },
+        ],
+        draw(g, d) {
+          const W = Math.max(2, Math.round(d.w / 2)), H = Math.max(2, Math.round(d.h / 2));
+          const t0 = performance.now(), R = bake(type, W, H), ms = performance.now() - t0;
+          off.width = W; off.height = H;
+          const img = og.createImageData(W, H), px = img.data;
+          const base = hex(R.P.base), dark = hex(R.P.dark), light = hex(R.P.light), green = [120, 190, 90];
+          for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+            const k = j * W + i, gx = (R.D[j * W + Math.min(W - 1, i + 1)] - R.D[j * W + Math.max(0, i - 1)]) / (2 * R.px), gz = (R.D[Math.min(H - 1, j + 1) * W + i] - R.D[Math.max(0, j - 1) * W + i]) / (2 * R.px);
+            const sh = clamp(.62 - .55 * (gx * .7 + gz * .5) / Math.hypot(1, gx, gz));
+            let c = mix3(dark, light, sh); c = mix3(c, base, .25);
+            c = mix3(c, [16, 12, 8], R.Cr[k] * .8);
+            if (d.s.ref) c = mix3(c, green, R.Rf[k] * .65);
+            const o = k * 4; px[o] = c[0]; px[o + 1] = c[1]; px[o + 2] = c[2]; px[o + 3] = 255;
+          }
+          og.putImageData(img, 0, 0);
+          g.imageSmoothingEnabled = true; g.drawImage(off, 0, 0, d.w, d.h);
+          // échelle
+          const cm = d.w / R.span, bar = type === 'bark' ? 1 : 5;
+          g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(8, d.h - 28, bar * cm + 16, 22);
+          g.fillStyle = C.ink; g.fillRect(16, d.h - 14, bar * cm, 2); label(g, `${bar} cm`, 16, d.h - 18, { color: C.ink, size: 11 });
+          d.status(`${TYPES[type]} · ${R.span} cm de large${ms > 5 ? ` · échantillonné en ${Math.round(ms)} ms` : ''}`);
+        },
+      });
+    }
+
+    // ── 05 · coupe d'un coussin ───────────────────────────────────────────
+    {
+      const fam = FAMILIES.tortule, Lf = fam.leaf, Sh = fam.shoot;
+      const ROS = Lf.L[1] * .9, DOME = Sh.dome, REACH = rosetteReach(fam, Lf.L[1]).r, SP = .2;
+      const xs = -3.2, xe = 3.2, XC = -.3;
+      const ys = (x) => .06 * Math.sin(x * 1.7 + .4) + .03 * Math.sin(x * 5.3) - .22 * Math.exp(-(((x - XC) / .14) ** 2));
+      const Bmax = (x) => smooth(2.5, 1.0, Math.abs(x - XC + .1 * Math.sin(x)));
+      const Bbar = (x) => { let s = 0, w = 0; for (let k = -6; k <= 6; k++) { const ww = Math.exp(-(k * k) / 12); s += Bmax(x + k * .13) * ww; w += ww; } return s / w; };
+      const Tm = (x) => { const t = clamp((Bbar(x) - .1) / .75); return DOME * Math.sqrt(t * t * (3 - 2 * t)); };
+      const R0 = rng(5), stems = [];
+      for (let x = xs + .05; x < xe; x += SP * (1 + R0() * .35)) stems.push({ x, grow: R0() * .18, j: R0() - .5, lean: (R0() - .5) * .1 });
+      demo('#fig-dome', {
+        title: 'Coupe d’un coussin', aspect: 2.5,
+        controls: [{ key: 'p', label: 'Avancée de la saison', min: 0, max: 1, step: .005, value: .7 }],
+        buttons: [{ key: 'naive', label: 'Tiges verticales', toggle: true, value: false }],
+        draw(g, d) {
+          const { w, h } = d, sc = (w - 20) / (xe - xs), X = (x) => 10 + (x - xs) * sc, base = h * .78, Y = (y) => base - y * sc;
+          const front = .25 + d.s.p * 2.4;
+          const Bat = (x) => Math.max(Bmax(x) * smooth(front, front - .5, Math.abs(x - XC)), .5 * Math.exp(-(((x - XC) / .3) ** 2)));
+          const Bblur = (x) => (Bat(x) * 2 + Bat(x - .3) + Bat(x + .3) + Bat(x - .45) + Bat(x + .45)) / 6;
+          // dôme plein
+          g.strokeStyle = alpha(C.c4, .6); g.setLineDash([4, 4]); g.lineWidth = 1.2; g.beginPath();
+          for (let i = 0; i <= 300; i++) { const x = lerp(xs, xe, i / 300), y = Y(ys(x) + Tm(x) + ROS * .35); i ? g.lineTo(X(x), y) : g.moveTo(X(x), y); } g.stroke(); g.setLineDash([]);
+          // feutre
+          g.fillStyle = 'rgb(74,54,32)'; g.beginPath(); g.moveTo(X(xs), Y(ys(xs)));
+          for (let i = 0; i <= 300; i++) { const x = lerp(xs, xe, i / 300); const th = Math.max(0, Tm(x) - ROS * .45) + .04 * smooth(.03, .12, Tm(x)); g.lineTo(X(x), Y(ys(x) - .04 + th * smooth(.04, .9, Bblur(x)))); }
+          for (let i = 300; i >= 0; i--) { const x = lerp(xs, xe, i / 300); g.lineTo(X(x), Y(ys(x))); } g.fill();
+          // tiges
+          const B = d.s;
+          for (const s of stems) {
+            const T0 = Tm(s.x); if (T0 <= .04) continue;
+            const e = .08, gx = (Tm(s.x + e) - Tm(s.x - e)) / (2 * e), sx = (ys(s.x + e) - ys(s.x - e)) / (2 * e);
+            const nd = [-gx, 1].map((v) => v / Math.hypot(gx, 1)), ns = [-sx, 1].map((v) => v / Math.hypot(sx, 1));
+            let ax = B.naive ? [0, 1] : [nd[0] * .85 + ns[0] * .15 + s.lean, nd[1] * .85 + ns[1] * .15]; const al = Math.hypot(...ax); ax = [ax[0] / al, ax[1] / al];
+            const yb = ys(s.x) - .06, top = ys(s.x) + T0 + ROS * .35 * (1 + s.j * .4);
+            const H = Math.max(ROS * 1.1, (top - yb) / Math.max(.35, ax[1]));
+            const gg = Math.max(0, smooth(.04, .9, Bblur(s.x)) * (1 + .12 * s.grow) - .12 * s.grow);
+            if (gg <= .001) continue;
+            const tip = [s.x + ax[0] * H * gg, yb + ax[1] * H * gg];
+            const wetk = clamp(d.s.p * 1.5);
+            g.strokeStyle = 'rgb(110,80,46)'; g.lineWidth = 1.2; g.beginPath(); g.moveTo(X(s.x), Y(yb)); g.lineTo(X(tip[0]), Y(tip[1])); g.stroke();
+            // rosette : un disque vu par la tranche, perpendiculaire à l'axe
+            const rr = REACH * gg, px = [ax[1], -ax[0]];
+            g.strokeStyle = rgb(mix3(hex('#7d7046'), hex('#4f9a1a'), wetk)); g.lineWidth = 3.2; g.lineCap = 'round';
+            g.beginPath(); g.moveTo(X(tip[0] - px[0] * rr), Y(tip[1] - px[1] * rr)); g.lineTo(X(tip[0] + px[0] * rr), Y(tip[1] + px[1] * rr)); g.stroke();
+            g.beginPath(); g.moveTo(X(tip[0] - px[0] * rr * .5 - ax[0] * rr * .3), Y(tip[1] - px[1] * rr * .5 - ax[1] * rr * .3)); g.lineTo(X(tip[0] + ax[0] * rr * .25), Y(tip[1] + ax[1] * rr * .25)); g.lineTo(X(tip[0] + px[0] * rr * .5 - ax[0] * rr * .3), Y(tip[1] + px[1] * rr * .5 - ax[1] * rr * .3)); g.stroke();
+          }
+          // roche
+          g.fillStyle = 'rgb(96,98,90)'; g.beginPath(); g.moveTo(X(xs), h);
+          for (let i = 0; i <= 300; i++) { const x = lerp(xs, xe, i / 300); g.lineTo(X(x), Y(ys(x))); } g.lineTo(X(xe), h); g.fill();
+          label(g, 'fissure (refuge)', X(XC), h - 10, { align: 'center', color: C.ink, size: 11 });
+          label(g, 'dôme pleinement poussé T(x)', X(XC + 1.4), Y(DOME + .35), { color: C.c4, size: 11 });
+          g.fillStyle = C.ink; g.fillRect(w - 10 - sc, 14, sc, 2); label(g, '1 cm', w - 10 - sc / 2, 30, { align: 'center', size: 11 });
+          d.status(B.naive ? 'tiges verticales : les rosettes des flancs plongent dans la pente' : 'tiges selon la normale du dôme');
+        },
+      });
+    }
+
+    // ── 06 · la pose d'une feuille ────────────────────────────────────────
+    {
+      let famKey = 'tortule';
+      const leavesOf = (fam) => {
+        const Sh = fam.shoot, Lf = fam.leaf, nl = Math.round((Sh.leaves[0] + Sh.leaves[1]) / 2), H = (Sh.height[0] + Sh.height[1]) / 2 * .55;
+        const lo = 1 - Sh.leafy, L0 = (Lf.L[0] + Lf.L[1]) / 2, out = []; let az = .3;
+        for (let k = 0; k < nl; k++) {
+          const t = lo + (1 - lo) * (1 - (1 - k / nl) ** 1.35) * .97, rho = k / Math.max(1, nl - 1), bud = Math.max(0, (rho - .68) / .32);
+          az += TAU * Sh.div;
+          out.push({ y: t * H, az, rho, L: L0 * (1 - .62 * bud * bud), W: Lf.W * (1 - .3 * bud) });
+        }
+        return { H, leaves: out };
+      };
+      demo('#fig-leaf', {
+        title: 'Pose en forme fermée', aspect: 2.1,
+        controls: [{ key: 'o', label: 'Ouverture de la tige o (l’eau)', min: 0, max: 1, step: .005, value: .55 }],
+        buttons: ['tortule', 'polytric', 'funaire'].map((k) => ({ label: FAMILIES[k].label, onClick: () => { famKey = k; } })),
+        setup(d) { d.state.yaw = .4; d.state.pitch = .5; },
+        pointer(d, e) {
+          if (e.type === 'down') d.state.drag = [e.x, e.y, d.state.yaw, d.state.pitch];
+          else if (e.type === 'up') d.state.drag = null;
+          else if (d.state.drag) { const [x, y, a, b] = d.state.drag; d.state.yaw = a + (e.x - x) * .01; d.state.pitch = clamp(b + (e.y - y) * .006, -.1, 1.3); }
+        },
+        draw(g, d) {
+          const fam = FAMILIES[famKey], Lf = fam.leaf, { H, leaves } = leavesOf(fam), o = d.s.o;
+          const { yaw, pitch } = d.state, cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
+          const span = Math.max(H, (Lf.L[1] * 2.6)) * 1.15, sc = Math.min(d.h * .82, d.w * .55) / span, ox = d.w * .36, oy = d.h * .5 + H * sc * .45;
+          const P3 = (q) => { const x = q[0] * cy - q[2] * sy, z = q[0] * sy + q[2] * cy, y = q[1]; return [ox + x * sc, oy - (y * cp - z * sp) * sc, y * sp + z * cp]; };
+          const dry = hex(fam.color.dry), wet = hex(fam.color.wet), young = hex(fam.color.young);
+          const polys = [];
+          for (const l of leaves) {
+            const f = leafOpen(o, l.rho), P = poseParams(fam, f, l.rho, 1);
+            const G = { L: l.L, W: l.W, h: 0, stemR: fam.shoot.stemR, twist: 1 };
+            const Rr = [Math.cos(l.az), 0, Math.sin(l.az)], Z = [-Math.sin(l.az), 0, Math.cos(l.az)];
+            const world = (p) => [Rr[0] * p[0] + Z[0] * p[2], l.y + p[1], Rr[2] * p[0] + Z[2] * p[2]];
+            const pts = [];
+            for (let i = 0; i <= 16; i++) pts.push(P3(world(leafPoint(i / 16, -1, 0, 0, P, G, Lf))));
+            for (let i = 16; i >= 0; i--) pts.push(P3(world(leafPoint(i / 16, 1, 0, 0, P, G, Lf))));
+            let hair = null;
+            if (Lf.hair) { const T = tipFrame(P, G, Lf); hair = [P3(world(T.p)), P3(world([T.p[0] + T.t[0] * Lf.hair * l.L, T.p[1] + T.t[1] * Lf.hair * l.L, T.p[2] + T.t[2] * Lf.hair * l.L]))]; }
+            const depth = pts.reduce((s, p) => s + p[2], 0) / pts.length;
+            polys.push({ pts, hair, depth, col: mix3(mix3(dry, wet, f), young, .35 * l.rho), f });
+          }
+          // tige
+          const s0 = P3([0, 0, 0]), s1 = P3([0, H, 0]);
+          g.strokeStyle = 'rgb(120,86,50)'; g.lineWidth = Math.max(1.5, fam.shoot.stemR * 2 * sc); g.beginPath(); g.moveTo(s0[0], s0[1]); g.lineTo(s1[0], s1[1]); g.stroke();
+          polys.sort((a, b) => b.depth - a.depth);
+          for (const p of polys) {
+            g.fillStyle = rgb(p.col, .8); g.strokeStyle = rgb(p.col, 1.25); g.lineWidth = .8; g.beginPath();
+            p.pts.forEach((q, i) => (i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]))); g.closePath(); g.fill(); g.stroke();
+            if (p.hair) { g.strokeStyle = 'rgba(233,236,228,.85)'; g.lineWidth = 1; g.beginPath(); g.moveTo(p.hair[0][0], p.hair[0][1]); g.lineTo(p.hair[1][0], p.hair[1][1]); g.stroke(); }
+          }
+          g.fillStyle = C.ink; g.fillRect(16, d.h - 16, sc * .1, 2); label(g, '1 mm', 16, d.h - 22, { size: 11 });
+          label(g, 'glisser pour tourner', 16, 20, { size: 11, color: C.faint });
+          // encart : f(o) par rang
+          const x0 = d.w * .72, x1 = d.w - 14, y0 = d.h * .5, y1 = d.h - 30, X = (v) => lerp(x0, x1, v), Y = (v) => lerp(y1, y0, v);
+          g.strokeStyle = C.grid; g.strokeRect(x0, y0, x1 - x0, y1 - y0);
+          for (const rho of [0, .25, .5, .75, 1]) {
+            g.strokeStyle = rgb(mix3(hex('#e9c48a'), hex('#9cc79a'), rho)); g.lineWidth = 1.4; g.beginPath();
+            for (let i = 0; i <= 60; i++) { const v = i / 60, y = Y(leafOpen(v, rho)); i ? g.lineTo(X(v), y) : g.moveTo(X(v), y); } g.stroke();
+          }
+          g.strokeStyle = alpha(C.ink, .5); g.setLineDash([3, 3]); g.beginPath(); g.moveTo(X(o), y0); g.lineTo(X(o), y1); g.stroke(); g.setLineDash([]);
+          label(g, 'ouverture f selon le rang ρ', x0, y0 - 8, { size: 11 });
+          label(g, 'ρ = 0', X(.32), Y(.8), { size: 10.5, color: C.c1 }); label(g, 'ρ = 1', X(.86), Y(.2), { size: 10.5, color: C.c4, align: 'right' });
+          label(g, 'o →', x1, y1 + 14, { align: 'right', size: 10.5, color: C.faint });
+          const open = polys.filter((p) => p.f > .5).length;
+          d.status(`${fam.label} · ${leaves.length} feuilles · ${open} ouvertes à plus de moitié`);
+        },
+      });
+    }
+
+    // ── 07 · Voronoï ──────────────────────────────────────────────────────
+    {
+      const fam = FAMILIES.tortule, Lf = fam.leaf, Sh = fam.shoot;
+      const reach = rosetteReach(fam, Lf.L[1]), dmin = Math.max(Sh.spacing * .7, reach.r * .78);
+      const MARGIN = Lf.thick * 2 + .008, SS = [.35, .65, .88, 1], XS = [-1, 0, 1], FS = [0, .2, .4, .6, .8, 1];
+      const R = rng(11), NL = 17;
+      const shoots = [[0, 0]];
+      for (let k = 0; k < 6; k++) { const a = k / 6 * TAU + .3; shoots.push([Math.cos(a) * dmin * (1 + .15 * R()), Math.sin(a) * dmin * (1 + .15 * R())]); }
+      const leaves = shoots.map((s, si) => {
+        let az = R() * TAU; const L0 = lerp(Lf.L[0], Lf.L[1], R()), out = [];
+        for (let k = 0; k < NL; k++) { const rho = k / (NL - 1), bud = Math.max(0, (rho - .68) / .32); az += TAU * Sh.div + (R() - .5) * .24; out.push({ si, az, rho, L: L0 * (1 - .62 * bud * bud) * lerp(.9, 1.08, R()), W: Lf.W * lerp(.88, 1.1, R()) * (1 - .3 * bud), amp: 1, cut: false }); }
+        return out;
+      }).flat();
+      const nbOf = (i) => shoots.map((_, j) => j).filter((j) => j !== i && Math.hypot(shoots[i][0] - shoots[j][0], shoots[i][1] - shoots[j][1]) < dmin * 1.75);
+      const ptsOf = (l, f, amp) => {
+        const P = poseParams(fam, f, l.rho, amp), G = { L: l.L, W: l.W, h: 0, stemR: Sh.stemR, twist: 1 };
+        const c = Math.cos(l.az), s = Math.sin(l.az), o = shoots[l.si];
+        const tw = (p) => [o[0] + c * p[0] - s * p[2], o[1] + s * p[0] + c * p[2]];
+        const out = []; for (const ss of SS) for (const x of XS) out.push(tw(leafPoint(ss, x, 0, 0, P, G, Lf)));
+        const T = tipFrame(P, G, Lf); out.push(tw([T.p[0] + T.t[0] * Lf.hair * G.L, 0, T.p[2] + T.t[2] * Lf.hair * G.L]));
+        return out;
+      };
+      const fits = (l, amp, nb) => {
+        const a = shoots[l.si];
+        for (const f of FS) for (const p of ptsOf(l, f, amp)) {
+          const di = (p[0] - a[0]) ** 2 + (p[1] - a[1]) ** 2;
+          for (const j of nb) { const b = shoots[j], dj = (p[0] - b[0]) ** 2 + (p[1] - b[1]) ** 2, dd = Math.hypot(a[0] - b[0], a[1] - b[1]); if ((dj - di) / (2 * dd) < MARGIN * .5) return false; }
+        }
+        return true;
+      };
+      let narrowed = 0, cut = 0, outside = 0;
+      const solve = () => {
+        narrowed = cut = outside = 0;
+        const NB = shoots.map((_, i) => nbOf(i));
+        for (const l of leaves) {
+          const nb = NB[l.si]; l.amp = 1; l.cut = false; l.out = !fits(l, 1, nb);
+          if (!l.out) continue;
+          outside++;
+          if (!fits(l, 0, nb)) { l.cut = true; cut++; continue; }
+          let lo = 0, hi = 1; for (let k = 0; k < 5; k++) { const m = (lo + hi) / 2; if (fits(l, m, nb)) lo = m; else hi = m; }
+          l.amp = lo; narrowed++;
+        }
+      };
+      solve();
+      const off = document.createElement('canvas'), og = off.getContext('2d');
+      demo('#fig-voronoi', {
+        title: 'Feuilles bornées à leur cellule', aspect: 2,
+        controls: [{ key: 'o', label: 'Ouverture o', min: 0, max: 1, step: .01, value: 1 }],
+        buttons: [{ key: 'bound', label: 'Borner à la cellule', toggle: true, value: true }],
+        pointer(d, e) {
+          const sc = d.state.sc, ox = d.w / 2, oy = d.h / 2; if (!sc) return;
+          const wx = (e.x - ox) / sc, wz = (e.y - oy) / sc;
+          if (e.type === 'down') { let best = -1, bd = .08; shoots.forEach((s, i) => { const q = Math.hypot(s[0] - wx, s[1] - wz); if (q < bd) { bd = q; best = i; } }); d.state.drag = best >= 0 ? best : null; }
+          else if (e.type === 'up') { if (d.state.drag != null) solve(); d.state.drag = null; }
+          else if (d.state.drag != null) { shoots[d.state.drag][0] = clamp(wx, -.5, .5); shoots[d.state.drag][1] = clamp(wz, -.3, .3); solve(); }
+        },
+        draw(g, d) {
+          const { w, h } = d, sc = Math.min(w, h * 1.4) / .95, ox = w / 2, oy = h / 2; d.state.sc = sc;
+          // cellules (demi-résolution)
+          const W = Math.round(w / 2), H = Math.round(h / 2); off.width = W; off.height = H;
+          const img = og.createImageData(W, H), px = img.data, ids = new Int8Array(W * H);
+          for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const x = (i * 2 - ox) / sc, z = (j * 2 - oy) / sc; let b = 0, bd = 1e9; shoots.forEach((s, k) => { const q = (s[0] - x) ** 2 + (s[1] - z) ** 2; if (q < bd) { bd = q; b = k; } }); ids[j * W + i] = b; }
+          for (let j = 1; j < H; j++) for (let i = 1; i < W; i++) { const k = j * W + i; if (ids[k] !== ids[k - 1] || ids[k] !== ids[k - W]) { px[k * 4] = 236; px[k * 4 + 1] = 232; px[k * 4 + 2] = 225; px[k * 4 + 3] = 70; } }
+          og.putImageData(img, 0, 0); g.imageSmoothingEnabled = true; g.drawImage(off, 0, 0, w, h);
+          const o = d.s.o, bound = d.s.bound;
+          const wet = hex(fam.color.wet), young = hex(fam.color.young);
+          const S = (p) => [ox + p[0] * sc, oy + p[1] * sc];
+          for (const l of leaves) {
+            if (bound && l.cut) continue;
+            const amp = bound ? l.amp : 1, f = leafOpen(o, l.rho);
+            const P = poseParams(fam, f, l.rho, amp), G = { L: l.L, W: l.W, h: 0, stemR: Sh.stemR, twist: 1 };
+            const c = Math.cos(l.az), s = Math.sin(l.az), oo = shoots[l.si];
+            const tw = (p) => S([oo[0] + c * p[0] - s * p[2], oo[1] + s * p[0] + c * p[2]]);
+            const pts = []; for (let i = 0; i <= 12; i++) pts.push(tw(leafPoint(i / 12, -1, 0, 0, P, G, Lf))); for (let i = 12; i >= 0; i--) pts.push(tw(leafPoint(i / 12, 1, 0, 0, P, G, Lf)));
+            let col = mix3(wet, young, .4 * l.rho);
+            if (!bound && l.out) col = hex('#d9826f'); else if (bound && l.amp < 1) col = mix3(col, [220, 230, 160], .45);
+            g.fillStyle = rgb(col, .85); g.strokeStyle = rgb(col, 1.2); g.lineWidth = .7; g.beginPath();
+            pts.forEach((q, i) => (i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]))); g.closePath(); g.fill(); g.stroke();
+            const T = tipFrame(P, G, Lf), a = tw(T.p), b = tw([T.p[0] + T.t[0] * Lf.hair * l.L, 0, T.p[2] + T.t[2] * Lf.hair * l.L]);
+            g.strokeStyle = 'rgba(233,236,228,.8)'; g.lineWidth = .8; g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke();
+          }
+          shoots.forEach((s) => { const p = S(s); g.fillStyle = 'rgb(120,86,50)'; g.beginPath(); g.arc(p[0], p[1], 3, 0, TAU); g.fill(); });
+          g.fillStyle = C.ink; g.fillRect(14, h - 14, sc * .1, 2); label(g, '1 mm', 14, h - 20, { size: 11 });
+          d.status(bound ? `${narrowed} feuilles resserrées, ${cut} retirées sur ${leaves.length}` : `${outside} feuilles sortent de leur cellule`);
+        },
+      });
+    }
+  </script>
+</body>
+</html>

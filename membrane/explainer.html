@@ -1,0 +1,802 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#050506">
+  <title>Membrane · défis techniques</title>
+  <meta name="description" content="Comment Membrane déchire sans fin des membranes emboîtées : plongée périodique, motif de déchirure lissé, XPBD par particule en shaders de calcul, assauts avant la rupture, images 16 bits relues en Catmull-Rom, triangles PN, photoélasticité de Jones, plis sous-maille en bruit de phaseurs.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+  <link rel="stylesheet" href="../home/explainer.css">
+</head>
+<body>
+  <nav class="top"><div class="in">
+    <a href="../">Codevember</a><span class="day">Day 09</span><span class="crumb">Membrane · défis techniques</span>
+    <span class="sp"></span><a class="open" href="./">Ouvrir la scène</a>
+  </div></nav>
+
+  <main>
+    <header class="hero">
+      <div class="kicker">Day 09 · Membrane · l’éclosion sans fin</div>
+      <h1>Comment une membrane se déchire, encore et encore</h1>
+      <p class="lede">Un solide dort dans une membrane translucide. Son armature se déploie, pousse, recule, repousse ; la membrane bombe, blanchit, puis cède. Les lèvres s’enroulent, des filaments claquent, et la caméra plonge par l’ouverture vers l’œuf suivant. Rien n’est animé à la main : chaque déchirure est une simulation de vingt mille particules, résolue sur le GPU pendant l’écran de chargement, puis relue image par image.</p>
+    </header>
+
+    <figure class="cover">
+      <img src="docs/capture.jpg" alt="Une membrane vascularisée déchirée en quatre lambeaux autour de ses lames, l’œuf suivant au centre" width="1175" height="1007">
+      <figcaption>Un chorion vascularisé, juste après la rupture. Les coupures suivent les intervalles entre les lames, en zigzag irrégulier ; les lèvres sont enroulées en bourrelet, des filaments relient encore les bords. Au centre, l’œuf suivant, enveloppé à son tour.</figcaption>
+    </figure>
+
+    <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
+
+    <article>
+
+      <section id="plongee">
+        <h2><span class="n">01</span>La plongée sans fin tient dans une seule variable</h2>
+        <span class="src">src/scene/nest.js · src/main.js · choreo()</span>
+        <p>La caméra traverse une couche, puis la suivante, puis la suivante, sans jamais revenir en arrière. Pour qu’une telle boucle soit parfaite, il faut que la scène redevienne <em>exactement</em> identique à elle-même, sans fondu. Membrane l’obtient par construction : tout dépend d’une seule grandeur, la <strong>profondeur relative</strong> \(x = d - \tau\) d’une couche, où \(d\) est son indice et \(\tau\) l’avancée de la caméra. Le rayon, l’orientation, l’instant de l’éclosion et la visibilité ne sont que des fonctions de \(x\) :</p>
+        <div class="eq">\[ r(x) = D\,q^{x}, \qquad q \in [0{,}42\,;\,0{,}5], \qquad \text{modèle}(d) = d \bmod N. \]</div>
+        <p>Avec \(N\) modèles différents (deux à quatre), la scène à \(\tau + N\) est celle de \(\tau\). L’éclosion se joue entre \(x = \text{open}\) (2,25 à 2,5) et \(x = -0{,}35\) : la simulation enregistrée et l’armature avancent avec \(x\), rien d’autre ne les pilote.</p>
+        <p>Reste à ne pas reconstruire de géométrie en route. Le nid dispose de \(M\) <strong>emplacements</strong>, un multiple de \(N\) assez grand pour couvrir les profondeurs visibles (huit ou neuf selon \(N\)) ; l’emplacement \(j\) montre toujours le modèle \(j \bmod N\) et vit dans l’intervalle \(x \in [-2{,}2\,;\,3{,}6[\). Il ne change de couche qu’en passant du bord \(x = -2{,}2\) (derrière la caméra, dans la brume) au bord \(x = 3{,}6\) (dans la lueur du cœur), deux endroits où il est invisible.</p>
+        <figure id="fig-nest" class="wide"><figcaption><b>Le nid vu de la caméra, et ses emplacements.</b> À gauche, les couches en coupe, de rayon \(q^x\) ; la couleur est le modèle, les ouvertures dans le cercle représentent l’éclosion en cours (\(x\) entre open et end). À droite, l’axe des profondeurs : chaque point est un emplacement ; il descend avec \(\tau\) et saute du bas vers le haut là où sa visibilité est nulle. La démo ignore l’orientation des couches et dessine l’éclosion comme de simples brèches.</figcaption></figure>
+
+        <h3>Un ralenti qui retombe sur ses pieds</h3>
+        <p>La rupture dure une fraction de seconde ; la chorégraphie la ralentit. Le ralenti est une déformation du temps \(\tau(t)\) appliquée autour de chaque instant de rupture \(k\). Elle soustrait à \(t\) la primitive d’une bosse d’intégrale nulle :</p>
+        <div class="eq">\[ \tau(t) = t - \sum_k a\,w\,K\!\left(\frac{t-k}{w}\right), \qquad K(x) = x - 3x^3 + 3x^5 - x^7, \]</div>
+        <p>avec \(a\) entre 0,35 et 0,75 et \(w\) entre 0,3 et 0,45 couche. Comme \(K(\pm 1) = 0\), on a \(\tau(k \pm w) = k \pm w\) : le ralenti ne décale rien au-delà de sa fenêtre, et \(\tau(t+1) = \tau(t) + 1\). La vitesse vaut \(1 - a\,K'(x)\) : exactement \(1 - a\) à la rupture, un peu plus de 1 de part et d’autre (au plus \(1 + 0{,}65\,a\)), toujours positive tant que \(a < 1\). La caméra ralentit sans jamais s’arrêter ni reculer.</p>
+        <figure id="fig-choreo"><figcaption><b>La vitesse de la plongée sur trois couches.</b> Fonction <code>choreo()</code> portée telle quelle depuis <code>main.js</code>. En haut, \(d\tau/dt\) ; en bas, \(\tau(t)\) et la diagonale (pointillés). Les traits verticaux marquent les ruptures. Le centre du ralenti est réglé à la génération sur la fin moyenne des assauts de l’armature (section 04).</figcaption></figure>
+        <div class="note"><b>Rien ne flotte, rien ne saute</b><p>Chaque œuf repose dans une coupe, au centre de l’armature de la couche précédente, et toutes les couches tournent à la même vitesse : leur orientation relative est fixe. Une armature qui passe derrière la caméra s’efface en fondu par un tramage renouvelé à chaque image (lissé par l’anticrénelage temporel), et son ombre s’efface avec elle. La luminance moyenne de l’image, mesurée sur une boucle entière, varie sans marche.</p></div>
+      </section>
+
+      <section id="dechirure">
+        <h2><span class="n">02</span>La déchirure est tracée avant d’arriver</h2>
+        <span class="src">src/gen/tear.js · src/gen/prep.js · fairSeams()</span>
+        <p>Un solveur de particules ne sait pas fendre un triangle en deux. Laisser la rupture choisir n’importe quelle arête donne des déchirures en escalier, à l’échelle exacte du maillage. Membrane prépare donc le maillage : chaque triangle reçoit l’étiquette du <strong>lambeau</strong> auquel il appartiendra ; les arêtes entre deux étiquettes deviennent des <strong>coutures</strong>, où les sommets sont dédoublés et tenus par des liens. La simulation décide ensuite seule de l’ordre, de la vitesse et de l’étendue de la rupture : certaines coutures ne céderont jamais.</p>
+        <p>Le motif suit l’armature. Pour un calice, les secteurs sont pris entre deux lames ; pour l’iris, l’angle est vrillé avec la colatitude et les secteurs deviennent des spirales ; pour la couronne, une perforation en étoile autour de chaque tête d’épingle, puis une cellule de Voronoï au-delà ; pour la cage, chaque face se fend de son centre vers ses sommets. L’étiquette n’est pas calculée sur la direction du triangle, mais sur cette direction <strong>déformée par un bruit fractal</strong> à quatre octaves : la coupure garde le dessin de l’armature, mais zigzague à toutes les échelles. Un second réseau, plus fin et plus résistant (60 sites au plus), greffe des embranchements près des coupures principales.</p>
+        <pre><code>// ph, th : angles de la direction déformée
+const s = wrap(ph - P.phi0 - PI / P.n - P.twist * th);
+major[t] = floor(s / ((2 * PI) / P.n)) % P.n;</code></pre>
+
+        <h3>Lisser le tracé, pas le hasard</h3>
+        <p>Le bruit fractal est voulu ; le zigzag d’arête en arête ne l’est pas. Une coupure qui suit les arêtes d’une sphère géodésique désordonnée fait des dents de la taille d’un triangle, et les lèvres enroulées les rendent très visibles. Avant le dédoublement, chaque sommet d’un tracé (exactement deux voisins sur le tracé) glisse vers le milieu de ses voisins, \(p \leftarrow 0{,}45\,p + 0{,}55\,m\) ; puis les autres sommets se détendent autour, \(p \leftarrow \tfrac12 p + \tfrac12 \bar p_{\text{voisins}}\). Six passes. Les jonctions restent en place, si bien que la forme d’ensemble, donc l’irrégularité voulue, demeure.</p>
+        <figure id="fig-tear" class="wide"><figcaption><b>Le motif de déchirure d’un calice, vu depuis le pôle.</b> Algorithme porté depuis <code>tear.js</code> (étiquettes, absorption des îlots) et <code>fairSeams()</code> de <code>prep.js</code>, sur un disque plan au lieu de la sphère ; le réseau secondaire est omis. Le maillage est une grille triangulaire désordonnée puis détendue, comme la sphère géodésique. À gauche le tracé brut, à droite après les six passes de lissage.</figcaption></figure>
+        <figure>
+          <img src="docs/avant-apres-lissage.jpg" alt="Comparaison avant et après lissage des coutures sur deux scènes" width="1110" height="926" loading="lazy">
+          <figcaption><b>Dans la scène, avant et après le lissage.</b> En haut, une gélatine : les bords en dents de scie deviennent des courbes. En bas, un chorion : les lèvres enroulées suivent un tracé continu, l’irrégularité à grande échelle est conservée.</figcaption>
+        </figure>
+      </section>
+
+      <section id="jacobi">
+        <h2><span class="n">03</span>Un fil de calcul par particule, sans atomiques</h2>
+        <span class="src">src/scene/gpusim.js · solveOne()</span>
+        <p>La dynamique est de l’<strong>XPBD à petits pas</strong> : 16 sous-pas par image enregistrée, 6 passes de résolution par sous-pas, environ 20&#8239;000 particules. Les contraintes sont l’étirement (avec des longueurs au repos raccourcies : la précontrainte), la flexion entre sommets opposés de deux triangles voisins, les liens des coutures, la pression intérieure, les collisions avec l’armature et l’œuf suivant.</p>
+        <p>La manière classique de paralléliser une dynamique de positions sur GPU est de colorer le graphe des contraintes (aucune particule partagée dans une couleur) ou d’accumuler les corrections par additions atomiques. Membrane fait plus simple : <strong>un fil par particule</strong>, qui parcourt sa propre table de voisinage, calcule chaque correction de son côté et écrit dans une copie (deux tampons alternés). Pas d’atomiques, pas de coloration, et un résultat déterministe d’une machine à l’autre.</p>
+        <p>Le piège de ce schéma de Jacobi est connu : une particule reçoit une dizaine de corrections calculées indépendamment, qui visent toutes le même écart. Les additionner revient à corriger dix fois : la solution oscille, puis diverge. Membrane les <strong>moyenne</strong> et applique un facteur de sur-relaxation \(\omega = 1{,}6\) :</p>
+        <div class="eq">\[ x_i \leftarrow x_i + \frac{\omega}{\max(1, n_c)} \sum_{c} \Delta x_i^{(c)} . \]</div>
+        <pre><code>// Jacobi moyenné : stable quel que soit le nombre de contraintes
+return x + d * (c.omega / max(1.0, nc)) + db / max(1.0, nbd);</code></pre>
+        <p>Les liens des coutures (<code>db</code>) sont moyennés à part, sans sur-relaxation : ils recollent les deux copies d’un sommet dédoublé tant que le lien tient.</p>
+        <figure id="fig-jacobi" class="wide"><figcaption><b>Un carré de membrane ramené à sa forme.</b> Les sommets du bord sont fixes, les autres partent d’une position perturbée ; à chaque itération, toutes les contraintes de distance sont projetées en parallèle. Avec la somme, le facteur \(\omega\) stable dépend du nombre de contraintes par particule : ajoutez la flexion et un réglage qui convergeait diverge. La moyenne converge pour les deux. (Projection pure, sans souplesse XPBD ni inertie.)</figcaption></figure>
+      </section>
+
+      <section id="assauts">
+        <h2><span class="n">04</span>La membrane encaisse avant de céder</h2>
+        <span class="src">src/gen/kin.js · struggle() · src/scene/gpusim.js · bondsK()</span>
+        <p>Une membrane qui se rompt au premier contact est un ballon qui éclate : l’œil ne voit ni la matière, ni l’effort. Avant de s’ouvrir, l’armature mène donc de deux à quatre <strong>assauts</strong> de plus en plus forts : elle pousse, recule, repousse. Sur la fraction \(f\) du déploiement (0,5 à 0,62), l’ouverture effective est</p>
+        <div class="eq">\[ u' = a\left(0{,}45 + 0{,}55\,\frac{k+1}{n}\right)\sin^2(\pi v), \qquad w = \frac{u}{f}\,n,\; k = \lfloor w \rfloor,\; v = w - k, \]</div>
+        <p>puis l’ouverture finale prend le reste. Le sinus carré fait partir et revenir chaque assaut à vitesse nulle. La même fonction existe trois fois, à l’identique : dans la cinématique (JS), dans le vertex shader de l’armature et dans la simulation. La membrane heurte donc exactement l’armature que l’on voit.</p>
+        <p>Pendant ce temps, la rupture est interdite, puis gardée, puis facilitée. Le seuil de chaque lien est mesuré après la mise en place (l’étirement au repos sous pression, plus une résistance propre au lien, à ±30 %). Un fil par lien compare l’étirement maximal des arêtes de ses deux particules à ce seuil, corrigé de deux facteurs :</p>
+        <div class="eq">\[ s_{\text{seuil}} = s_0\,\big(1 - \phi\,e(\tfrac{t - t_s - 0{,}08}{0{,}4})\big)\,\big(1 + g\,(1 - e(\tfrac{t - 0{,}9\,t_s}{0{,}1\,t_s}))\big), \]</div>
+        <p>où \(t_s\) est la fin des assauts, \(\phi = 0{,}85\) la fatigue, \(g = 0{,}7\) la garde et \(e\) le lissage quintique. Avant \(0{,}92\,t_s\), aucun lien ne peut céder. Après la première rupture, la pression fuit en \(e^{-(t - t_f)/\text{fuite}}\) et un dégrafage de l’avant fait passer le front partout, du pôle vers l’arrière.</p>
+        <figure id="fig-rupture" class="wide"><figcaption><b>Une membrane en coupe, trois lames, trois coutures.</b> Anneau de 120 particules sous pression, résolu par le Jacobi moyenné de la section 03 (\(\omega = 1{,}6\), 6 passes, 600 pas par seconde) ; les lames suivent <code>struggle()</code> porté tel quel, la rupture suit <code>bondsK()</code> (garde, fatigue, seuil mesuré après la mise en place). Les arêtes sont teintées par leur étirement ; les coutures sont les points or. En dessous, l’étirement des coutures face à leur seuil. La démo est plane et n’a ni enroulement des lèvres ni retroussement.</figcaption></figure>
+        <div class="note"><b>Les filaments</b><p>Quand une couture s’ouvre, quelques liens laissent un filament, construit dans le vertex shader : il s’étire et s’amincit à volume constant, ploie, puis claque (six sur dix claquent tôt). Il est fait de deux tubes, un par moitié, qui partagent leur anneau du milieu tant que le fil tient. Une première version n’en avait qu’un : après le claquage, un tronçon enjambait l’écart entre les lèvres et traçait de longues lignes à travers l’image. Sur les matières humides, un fil qui s’amincit se résout en gouttelettes au pas d’environ neuf rayons (instabilité de Plateau-Rayleigh).</p></div>
+      </section>
+
+      <section id="enregistrement">
+        <h2><span class="n">05</span>Seize bits par coordonnée, une spline au ralenti</h2>
+        <span class="src">src/scene/gpusim.js · packPos(), at()</span>
+        <p>La simulation n’est pas refaite à chaque image : elle est calculée une fois par couche (160 images, 3,6 s de temps physique) et enregistrée dans un tampon du GPU. À \(N\) couches de 20&#8239;000 particules, en <code>vec4f</code>, cela faisait 152 Mo pour trois couches. Les positions sont maintenant rangées en deux mots de 32 bits par particule, chaque coordonnée quantifiée sur 16 bits dans \([-4, 4]\) :</p>
+        <pre><code>let q = x / 8.0 + 0.5;
+return vec2u(pack2x16unorm(q.xy), pack2x16unorm(vec2f(q.z, 0.0)));</code></pre>
+        <p>Le pas vaut \(8/65\,535 \approx 1{,}2\cdot10^{-4}\) pour une membrane de rayon 1 au repos, un demi-centième d’arête. La mémoire est divisée par deux (76 Mo pour trois couches), sans différence visible.</p>
+        <p>À l’affichage, un shader de calcul pose chaque couche visible à l’image fractionnaire \(f\). Au ralenti de la rupture, une image enregistrée couvre plusieurs images affichées. Une interpolation linéaire y brise la vitesse à chaque image enregistrée : les lambeaux avancent par à-coups. La pose prend une <strong>spline de Catmull-Rom</strong> sur quatre images voisines, dont la dérivée est continue :</p>
+        <div class="eq">\[ p(t) = p_1 + \tfrac12 t\Big[(p_2 - p_0) + t\big((2p_0 - 5p_1 + 4p_2 - p_3) + t\,(3(p_1 - p_2) + p_3 - p_0)\big)\Big]. \]</div>
+        <figure id="fig-spline"><figcaption><b>L’extrémité d’un lambeau qui oscille après la rupture.</b> Les points sont les images enregistrées ; les courbes, ce que voit le spectateur au ralenti choisi. En bas, la vitesse image à image : en marches avec l’interpolation linéaire, continue avec Catmull-Rom (formule de <code>at()</code> portée telle quelle). Le mouvement est un oscillateur amorti, pas une sortie de la simulation.</figcaption></figure>
+        <p>La même passe calcule les normales (soudées à travers les coutures intactes, puis lissées sur le premier anneau : le maillage simulé est volontairement désordonné et le reflet dessinerait ses arêtes), la courbure, la dilatation de surface \(J\), l’endommagement près des coupures et les sommets des lèvres. Une couche close ou finie, dont l’image n’a pas changé, n’est pas reposée.</p>
+      </section>
+
+      <section id="pn">
+        <h2><span class="n">06</span>Des lambeaux qui restent courbes</h2>
+        <span class="src">src/gen/tess.js · src/scene/membrane.js · pnPosition()</span>
+        <p>Vingt mille particules suffisent à la dynamique, pas à la silhouette : un lambeau enroulé sur cinq ou six particules devient un polygone. Le maillage de rendu découpe chaque triangle simulé en \(n^2\) triangles (\(n = 4\) pour les couches proches, soit ×16, \(n = 2\) au loin, soit ×4), que le vertex shader pose sur le <strong>patch cubique des triangles PN</strong> (Vlachos et al., 2001). Le patch ne dépend que des positions et normales des trois coins : sur chaque arête, les points de contrôle sont les tiers de l’arête projetés sur le plan tangent de leur coin,</p>
+        <div class="eq">\[ b_{ij} = \frac{2P_i + P_j - \big((P_j - P_i)\cdot N_i\big)\,N_i}{3}. \]</div>
+        <p>La normale suit une interpolation quadratique, dont les milieux d’arête sont réfléchis par le plan médian de l’arête, si bien qu’un pli en S garde son ombrage. Un sommet de coin ou d’arête est écrit sous une forme canonique, la même depuis les deux triangles qui le partagent : le shader calcule exactement la même position des deux côtés, aucune fissure. Le passage d’un niveau de détail à l’autre ne change que l’échantillonnage du même patch.</p>
+        <figure id="fig-pn"><figcaption><b>Une lèvre enroulée, en coupe.</b> Six particules (points), leurs normales (traits), le maillage plat et la courbe PN de chaque arête, formule de <code>pnPosition()</code> restreinte à une arête. Les normales sont, comme dans la pose, la moyenne de celles des segments voisins.</figcaption></figure>
+      </section>
+
+      <section id="photo">
+        <h2><span class="n">07</span>La contrainte devient couleur</h2>
+        <span class="src">src/scene/photo.js · src/scene/gpusim.js · STRAIN</span>
+        <p>Un film de polymère tendu devient biréfringent : entre deux polariseurs, la contrainte, invisible, se lit en franges colorées. Membrane le fait à partir de sa propre simulation. À chaque pose, un shader de calcul tire de chaque triangle le gradient de la déformation \(F\) (du repos à la pose), le tenseur \(b = FF^\top\), ses étirements principaux \(\lambda_1 \ge \lambda_2\) et leurs directions, et garde le <strong>déviateur logarithmique</strong></p>
+        <div class="eq">\[ E = \tfrac12 \ln\frac{\lambda_1}{\lambda_2}\,\big(d_1 d_1^\top - d_2 d_2^\top\big), \]</div>
+        <p>moyenné par aire autour de chaque particule, soudé, lissé. Une tension égale dans toutes les directions ne donne rien : un œuf gonflé reste noir entre polariseurs croisés. La déformation est mesurée depuis la forme au repos, pas depuis les longueurs relâchées : un lambeau étiré plastiquement garde sa biréfringence, comme un film plastique tiré.</p>
+        <p>Au pixel, \(E\) passe dans le repère de la vue et se projette sur le plan de l’image : écart \(\Delta\), axe \(\theta\). Le retard est \(\Gamma = C\,\Delta\,h\), où \(C\) dépend de la matière (4&#8239;200 nm pour la gélatine, 2&#8239;600 pour le latex, 0 pour la bulle et l’or) et \(h\) est l’épaisseur traversée, amincie en \(1/J\) et allongée en incidence rasante. Puis vient le <strong>calcul de Jones</strong> sur 12 longueurs d’onde de 400 à 700 nm : polariseur, membrane (lame de retard), lame teinte sensible facultative (550 nm à 45°), analyseur. Les intensités sont pondérées par les fonctions colorimétriques CIE 1931 (approximation analytique de Wyman, Sloan et Shirley) et normalisées sur le blanc. On retrouve l’échelle de Michel-Lévy.</p>
+        <figure id="fig-photo" class="wide"><figcaption><b>Un film de gélatine tiré entre deux doigts, entre polariseurs.</b> Le champ de déplacement est analytique (traction entre les doigts, contraction latérale, gonflement isotrope) ; le reste est le vrai calcul : déviateur logarithmique tiré de \(F\), retard \(C\Delta/J\) avec \(C = 4\,200\) nm, calcul de Jones et pondérations CIE portés tels quels depuis <code>photo.js</code> (12 longueurs d’onde). Le gonflement isotrope ne change rien aux franges, seulement à l’épaisseur. Tournez les polariseurs en linéaire : les bandes sombres de l’axe (isoclines) balaient le film ; en circulaire, il ne reste que les isochromes. En bas, l’échelle de Michel-Lévy du mode choisi, de 0 à 2&#8239;500 nm.</figcaption></figure>
+        <figure>
+          <img src="docs/photoelasticite.jpg" alt="Douze vues de membranes en lumière polarisée, quatre modes" width="2472" height="1473" loading="lazy">
+          <figcaption><b>Dans la scène, quatre réglages de la lumière polarisée</b> : polariseurs croisés, lame teinte sensible (fond pourpre), champ clair (analyseur parallèle), linéaire. Les franges serrées des silhouettes viennent de l’épaisseur traversée en incidence rasante.</figcaption>
+        </figure>
+        <div class="note trap"><b>Une approximation assumée</b><p>Chaque couche est traitée comme si elle était seule entre ses deux polariseurs : les retards de couches successives ne se composent pas. Seule la lumière qui traverse passe entre les polariseurs ; la diffusion dépolarise et le reflet reste blanc. Coût : environ 3 ms par image, et seulement si la lumière polarisée est allumée.</p></div>
+      </section>
+
+      <section id="plis">
+        <h2><span class="n">08</span>Des plis plus fins que le maillage</h2>
+        <span class="src">src/scene/membrane.js · wrinkleSlope()</span>
+        <p>Un film mince ne supporte pas la compression : il flambe en plis parallèles à la tension, comme un film étirable tiré entre deux doigts. Ces plis ont une longueur d’onde de l’ordre de 8 % du rayon pour l’épaisseur habituelle, à peine trois arêtes du maillage simulé : bien trop peu pour résoudre une ondulation. La simulation ne voit pas les plis, mais elle sait où la matière est comprimée, dans quel sens et de combien. La pose garde, dans le repère au repos (les plis restent attachés à la matière), le tenseur</p>
+        <div class="eq">\[ W = c\,k\,k^\top, \qquad c = \max\big(0,\,(1 - \text{pre}) - \lambda_2\big), \]</div>
+        <p>où \(k\) est la direction de compression (vecteur propre de \(C = F^\top F\) pour la plus petite valeur propre) et \(c\) la compression au-delà de la longueur relâchée. La longueur d’onde suit la loi de <strong>Cerda et Mahadevan</strong>, \(\lambda \propto \sqrt{t\,L}\) (ici \(\lambda = 1{,}6\sqrt{0{,}2\,t}\)) : la bulle plisse fin, la gélatine large. L’amplitude \(A = (\lambda/\pi)\sqrt{c}\) fait passer dans l’ondulation le surplus de longueur de la matière comprimée.</p>
+        <p>Le motif est un <strong>bruit de phaseurs</strong> (Tricard et al., 2019) : une somme de noyaux de Gabor orientés selon \(k\), un par cellule de 1,5 λ, dont on ne garde que la phase \(\varphi\). Un bruit de Gabor ordinaire a un contraste qui varie d’un endroit à l’autre ; la phase seule donne des bandes de contraste constant, qui suivent l’orientation sans se rompre. Tout est analytique : la pente \(2\sqrt{c}\,\cos\varphi\,k\), exprimée sur l’écran par les dérivées de la position au repos (prises hors de la branche), perturbe la normale. Seuls les pixels où la pente dépasse 2° évaluent le bruit ; les plis de moins de trois pixels s’effacent.</p>
+        <figure id="fig-wrinkle" class="wide"><figcaption><b>Le même film tiré, en lumière rasante.</b> Compression tirée du même champ de déplacement que la démo précédente (\(C = F^\top F\), précontrainte 0,04) ; bruit de phaseurs porté depuis <code>wrinkleSlope()</code> en deux dimensions (9 cellules au lieu de 27). Le bouton compare la phase seule à la partie réelle de la somme de Gabor : même orientation, mais un contraste qui s’éteint par endroits. L’épaisseur fixe la longueur d’onde.</figcaption></figure>
+      </section>
+
+      <section id="travers">
+        <h2><span class="n">09</span>Voir au travers sans tout recopier</h2>
+        <span class="src">src/scene/nest.js · src/scene/membrane.js</span>
+        <p>Une membrane est une couche mince diffusante. Son épaisseur relative vaut irrégularité × vaisseaux × fibres / \(J\) ; la transmission suit la loi de Beer-Lambert, avec l’absorption du sang (forte dans les gros vaisseaux, faible dans les capillaires). Vue de biais, elle est traversée sur une épaisseur \(h/\cos\) : la silhouette d’une peau est plus dense que son centre, et l’on distingue la membrane de ce qu’elle contient.</p>
+        <p>Ce qui est derrière une membrane est une <strong>copie de l’image</strong>, prise juste avant de la dessiner, avec ses niveaux de mipmap pour la part diffusée. Pour que les couches intérieures y figurent déjà, l’ordre de dessin est fixé : armatures et filaments, puis les faces arrière de l’extérieur vers l’intérieur, puis les faces avant de l’intérieur vers l’extérieur. Le flou dépend de la distance, lue dans une copie de la profondeur propre à chaque couche : une lame qui touche la membrane reste nette, le lointain se dissout.</p>
+        <p>Six à huit copies par image coûtaient cher. Quand la caméra est hors d’une couche (\(x > 0{,}35\)), sa face arrière n’est vue qu’au travers de sa face avant, qui réfracte et floute déjà : une copie propre à la face arrière ne servirait qu’à flouter deux fois. Elle se mélange alors directement à l’image, par le matériel : lumière propre + fond × transmission moyenne.</p>
+        <div class="note check"><b>Un passage mesuré</b><p>Entre \(x = 0{,}10\) et \(0{,}35\), la version avec copie perd progressivement réfraction, flou, teinte, plis et reflets en espace écran, jusqu’à donner exactement l’image de la version mélangée, brume comprise. Mesuré de part et d’autre du seuil, l’écart est celui de deux images voisines. Gain : 3,5 ms par image. La version mobile pousse l’idée aux faces avant lointaines (au-delà de \(x = 0{,}8\)), en deux passages pour garder la teinte : sur un GPU à tuiles, chaque copie vide la mémoire de tuile.</p></div>
+        <div class="note"><b>L’anticrénelage du reflet</b><p>Les dérivées écran d’une normale interpolée sont constantes par triangle : un anticrénelage spéculaire classique dessinerait les facettes dans le reflet d’une peau humide. La variance de la normale dans le pixel est tirée de la courbure calculée par sommet à la pose, continue d’un triangle à l’autre, et de la taille du pixel à cette distance, allongée en incidence rasante.</p></div>
+      </section>
+
+      <section id="budget">
+        <h2><span class="n">10</span>Budget</h2>
+        <p>La préparation tourne dans un worker, la simulation sur le GPU pendant l’écran de chargement ; le rendu ne fait que relire et poser.</p>
+        <div class="tbl"><table>
+          <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
+          <tbody>
+            <tr><td>Préparation d’une couche (maillage, motif, coutures, tables, poses de l’armature), 20&#8239;000 particules</td><td>worker</td><td class="num">0,4 s</td></tr>
+            <tr><td>Simulation d’une couche (160 images, 16 sous-pas, 6 passes)</td><td>GPU</td><td class="num">~5 s</td></tr>
+            <tr><td>Scène de trois couches prête (panneau de navigateur masqué, donc ralenti)</td><td>GPU</td><td class="num">15 à 20 s</td></tr>
+            <tr><td>Images enregistrées, 16 bits par coordonnée</td><td>mémoire</td><td class="num">~25 Mo / couche</td></tr>
+            <tr><td>Image complète, qualité haute, 1,9 Mpx, plis compris (32 ms avant les économies)</td><td>GPU</td><td class="num">~26 ms</td></tr>
+            <tr><td>dont reflets en espace écran</td><td>GPU</td><td class="num">3,4 ms</td></tr>
+            <tr><td>dont copies de l’image (6 avant les faces arrière mélangées)</td><td>GPU</td><td class="num">~2,5 ms</td></tr>
+            <tr><td>dont maillage fin des couches proches (×16)</td><td>GPU</td><td class="num">1,1 ms</td></tr>
+            <tr><td>dont bloom · plis · occlusion ambiante (8 échantillons)</td><td>GPU</td><td class="num">0,7 · 0,6 · 0,5 ms</td></tr>
+            <tr><td>Photoélasticité (déformation et intégration spectrale), si allumée</td><td>GPU</td><td class="num">~3 ms</td></tr>
+          </tbody>
+        </table></div>
+        <p>La version mobile simule un maillage plus grossier (36 subdivisions au lieu de 44, deux tiers des particules), 120 images au lieu de 160, 13 sous-pas au lieu de 16 : préparation, calcul et mémoire presque divisés par deux, avec la même dynamique de déchirure. Les plis y évaluent 8 cellules au lieu de 27, la photoélasticité 7 longueurs d’onde au lieu de 12.</p>
+      </section>
+    </article>
+
+    <footer class="end">
+      <a href="./">Ouvrir Membrane</a>
+      <a href="https://github.com/drschizzo/Codevember/blob/main/membrane/README.md">README</a>
+      <span class="sp"></span>
+      <a href="../">Tous les jours</a>
+    </footer>
+  </main>
+
+  <script type="module">
+    import { demo, C, TAU, lerp, clamp, smooth, alpha, label, arrow, rng } from '../home/explainer.js';
+
+
+    const ease = (u) => { u = u < 0 ? 0 : u > 1 ? 1 : u; return u * u * u * (u * (u * 6 - 15) + 10); };
+    const PAL = [C.c1, C.c2, C.c3, C.c4];
+
+    // ── 01 · le nid ─────────────────────────────────────────────────────────
+    {
+      const XMIN = -2.2, XMAX = 3.6, q = 0.46, OPEN = 2.4, END = -0.35;
+      const ss = (a, b, x) => smooth(a, b, x);
+      demo('#fig-nest', {
+        title: 'Plongée périodique', aspect: 2, animate: true,
+        controls: [{ key: 'N', label: 'Modèles différents N', min: 2, max: 4, step: 1, value: 3 }],
+        buttons: [{ key: 'play', label: 'Plonger', toggle: true, value: true }],
+        setup(d) { d.state.tau = 0.3; },
+        draw(g, d) {
+          const S = d.state, N = d.s.N, M = N * Math.ceil((XMAX - XMIN + 0.2) / N);
+          if (d.s.play) S.tau += d.dt / 3.2;
+          const { w, h } = d, cx = h * 0.55, cy = h / 2, R0 = h * 0.3;
+          const slots = [];
+          for (let j = 0; j < M; j++) {
+            const x = XMIN + ((((j - S.tau - XMIN) % M) + M) % M);
+            slots.push({ j, x, model: j % N, vis: ss(XMAX - 0.4, XMAX - 1.1, x) * ss(-0.95, -0.2, x), s: clamp((OPEN - x) / (OPEN - END)) });
+          }
+          // vue de la caméra
+          g.save(); g.beginPath(); g.rect(0, 0, h * 1.1, h); g.clip();
+          slots.slice().sort((a, b) => a.x - b.x).forEach((sl) => {
+            const r = R0 * q ** sl.x; if (r > h * 1.6 || sl.vis < 0.01) return;
+            const col = PAL[sl.model];
+            g.strokeStyle = alpha(col, 0.15 + 0.8 * sl.vis); g.lineWidth = 1 + 2.2 * sl.vis * Math.min(1, r / 60);
+            g.fillStyle = alpha(col, 0.05 * sl.vis);
+            const rot = 0.6 * sl.x;
+            if (sl.s <= 0) { g.beginPath(); g.arc(cx, cy, r, 0, TAU); g.fill(); g.stroke(); }
+            else {
+              const n = 4, gap = (TAU / n) * 0.5 * sl.s;
+              for (let k = 0; k < n; k++) {
+                const a0 = rot + (k / n) * TAU + gap / 2, a1 = rot + ((k + 1) / n) * TAU - gap / 2;
+                g.beginPath(); g.arc(cx, cy, r * (1 + 0.12 * sl.s), a0, a1); g.stroke();
+              }
+            }
+          });
+          g.restore();
+          g.fillStyle = alpha(C.ink, 0.8); g.beginPath(); g.arc(cx, cy, 2.5, 0, TAU); g.fill();
+          // axe des profondeurs
+          const narrow = w < 640, ax = narrow ? h * 1.1 + 34 : h * 1.25 + (w - h * 1.25) * 0.3, y0 = 22, y1 = h - 22;
+          const Y = (x) => lerp(y1, y0, (x - XMIN) / (XMAX - XMIN));
+          g.fillStyle = alpha(C.c1, 0.08); g.fillRect(ax - 14, Y(OPEN), 28, Y(END) - Y(OPEN));
+          g.strokeStyle = C.line; g.lineWidth = 1; g.beginPath(); g.moveTo(ax, y0); g.lineTo(ax, y1); g.stroke();
+          const marks = narrow ? [[XMAX, 'cœur'], [OPEN, 'open'], [0, 'x = 0'], [END, 'end'], [XMIN, 'caméra']] : [[XMAX, 'x = 3,6 · cœur (invisible)'], [OPEN, 'open · début de l’éclosion'], [0, 'x = 0 · couche traversée'], [END, 'end · fin de l’éclosion'], [XMIN, 'x = −2,2 · derrière la caméra']];
+          for (const [x, t] of marks) {
+            g.strokeStyle = alpha(C.ink, 0.35); g.beginPath(); g.moveTo(ax - 6, Y(x)); g.lineTo(ax + 6, Y(x)); g.stroke();
+            label(g, t, ax + (narrow ? 16 : 40), Y(x) + (narrow && x === END ? 12 : x === END ? 10 : 4), { size: 11.5 });
+          }
+          for (const sl of slots) {
+            g.fillStyle = alpha(PAL[sl.model], 0.25 + 0.75 * sl.vis); g.beginPath(); g.arc(ax, Y(sl.x), 6, 0, TAU); g.fill();
+            label(g, `j${sl.j}`, ax - 12, Y(sl.x) + 4, { size: 11, align: 'right', color: alpha(PAL[sl.model], 0.4 + 0.6 * sl.vis) });
+          }
+          d.status(`τ = ${S.tau.toFixed(2)} · τ mod N = ${(S.tau % N).toFixed(2)} · ${M} emplacements`);
+        },
+      });
+    }
+
+    // ── 01b · le ralenti ────────────────────────────────────────────────────
+    {
+      const K7 = (x) => x - 3 * x ** 3 + 3 * x ** 5 - x ** 7;
+      function choreo(t, Cc) {
+        const c = Cc.at - Math.floor(Cc.at), u = t + c;
+        let tau = u;
+        for (let k = Math.round(u) - 1; k <= Math.round(u) + 1; k++) { const x = (u - k) / Cc.width; if (Math.abs(x) < 1) tau -= Cc.slow * Cc.width * K7(x); }
+        return tau - c;
+      }
+      demo('#fig-choreo', {
+        title: 'Temps de la plongée', aspect: 1.8,
+        controls: [
+          { key: 'slow', label: 'Ralenti a', min: 0, max: 0.95, step: 0.01, value: 0.6, fmt: (v) => v.toFixed(2) },
+          { key: 'width', label: 'Largeur w (en couches)', min: 0.1, max: 0.5, step: 0.01, value: 0.4, fmt: (v) => v.toFixed(2) },
+        ],
+        draw(g, d) {
+          const Cc = { slow: d.s.slow, width: d.s.width, at: 1.45 }, T = 3, { w, h } = d, x0 = 44, x1 = w - 14;
+          const X = (t) => lerp(x0, x1, t / T);
+          const c = Cc.at - Math.floor(Cc.at);
+          for (let k = 0; k <= 4; k++) { const t = k - c; if (t < 0 || t > T) continue; g.strokeStyle = alpha(C.c3, 0.45); g.beginPath(); g.moveTo(X(t), 14); g.lineTo(X(t), h - 26); g.stroke(); }
+          // vitesse
+          const a0 = 18, a1 = h * 0.42, Yv = (v) => lerp(a1, a0, v / 2);
+          g.strokeStyle = C.grid; g.lineWidth = 1;
+          for (const v of [0, 0.5, 1, 1.5, 2]) { g.beginPath(); g.moveTo(x0, Yv(v)); g.lineTo(x1, Yv(v)); g.stroke(); label(g, v.toFixed(1).replace('.', ','), x0 - 6, Yv(v) + 4, { align: 'right', size: 11 }); }
+          g.strokeStyle = C.c1; g.lineWidth = 2; g.beginPath();
+          let vmin = 9, vmax = 0;
+          for (let i = 0; i <= 600; i++) { const t = i / 600 * T, e = 1e-4, v = (choreo(t + e, Cc) - choreo(t - e, Cc)) / (2 * e); vmin = Math.min(vmin, v); vmax = Math.max(vmax, v); const y = Yv(v); i ? g.lineTo(X(t), y) : g.moveTo(X(t), y); }
+          g.stroke();
+          label(g, 'dτ/dt', x1, a0 + 12, { align: 'right', color: C.c1 });
+          // τ(t)
+          const b0 = h * 0.52, b1 = h - 26, Yt = (v) => lerp(b1, b0, v / T);
+          g.strokeStyle = alpha(C.ink, 0.3); g.setLineDash([3, 4]); g.beginPath(); g.moveTo(X(0), Yt(0)); g.lineTo(X(T), Yt(T)); g.stroke(); g.setLineDash([]);
+          g.strokeStyle = C.c2; g.lineWidth = 2; g.beginPath();
+          for (let i = 0; i <= 600; i++) { const t = i / 600 * T, y = Yt(choreo(t, Cc)); i ? g.lineTo(X(t), y) : g.moveTo(X(t), y); }
+          g.stroke();
+          label(g, 'τ(t)', x0 + 6, b0 + 4, { color: C.c2 });
+          for (let k = 0; k < T; k++) label(g, String(k), X(k), h - 8, { align: 'center', size: 11 });
+          label(g, 'couches →', x1, h - 8, { align: 'right', color: C.faint, size: 11 });
+          d.status(`vitesse de ${vmin.toFixed(2)} à ${vmax.toFixed(2)}`);
+        },
+      });
+    }
+
+    // ── 02 · motif de déchirure et lissage ─────────────────────────────────
+    {
+      // bruit de valeur 2D et fBm
+      const hsh = (x, y) => { const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453; return s - Math.floor(s); };
+      const vn = (x, y) => { const ix = Math.floor(x), iy = Math.floor(y), fx = x - ix, fy = y - iy, ux = fx * fx * (3 - 2 * fx), uy = fy * fy * (3 - 2 * fy);
+        return lerp(lerp(hsh(ix, iy), hsh(ix + 1, iy), ux), lerp(hsh(ix, iy + 1), hsh(ix + 1, iy + 1), ux), uy) * 2 - 1; };
+      const fbm = (x, y, o = 4) => { let s = 0, a = 0.5, f = 1; for (let i = 0; i < o; i++) { s += a * vn(x * f, y * f); f *= 2; a *= 0.5; } return s; };
+      const wrap = (a) => { a %= TAU; return a < 0 ? a + TAU : a; };
+      // maillage : grille triangulaire désordonnée puis détendue, dans un disque
+      function mesh() {
+        const hs = 0.062, R = 1.0, P = [], idx = new Map(), tri = [];
+        const n = Math.ceil(2.4 / hs);
+        for (let j = -n; j <= n; j++) for (let i = -n; i <= n; i++) {
+          const x = (i + j / 2) * hs, y = j * hs * 0.866;
+          if (Math.hypot(x, y) < R + hs) { idx.set(i + ',' + j, P.length); P.push([x, y]); }
+        }
+        const get = (i, j) => idx.get(i + ',' + j);
+        for (let j = -n; j < n; j++) for (let i = -n; i < n; i++) {
+          for (const t of [[get(i, j), get(i + 1, j), get(i, j + 1)], [get(i + 1, j), get(i + 1, j + 1), get(i, j + 1)]]) {
+            if (t.some((k) => k === undefined)) continue;
+            const cx = (P[t[0]][0] + P[t[1]][0] + P[t[2]][0]) / 3, cy = (P[t[0]][1] + P[t[1]][1] + P[t[2]][1]) / 3;
+            if (Math.hypot(cx, cy) < R) tri.push(t);
+          }
+        }
+        // arêtes, voisins
+        const ek = (a, b) => a < b ? a * 65536 + b : b * 65536 + a;
+        const edgeTris = new Map();
+        tri.forEach((t, k) => { for (let e = 0; e < 3; e++) { const key = ek(t[e], t[(e + 1) % 3]); if (!edgeTris.has(key)) edgeTris.set(key, []); edgeTris.get(key).push(k); } });
+        const border = new Uint8Array(P.length), nb = P.map(() => new Set());
+        for (const [key, ts] of edgeTris) { const a = Math.floor(key / 65536), b = key % 65536; nb[a].add(b); nb[b].add(a); if (ts.length === 1) border[a] = border[b] = 1; }
+        const nbr = tri.map((t) => [0, 1, 2].map((e) => { const ts = edgeTris.get(ek(t[e], t[(e + 1) % 3])); return ts.length > 1 ? (ts[0] === tri.indexOf(t) ? ts[1] : ts[0]) : -1; }));
+        // désordre puis détente
+        const r = rng(11);
+        P.forEach((p, k) => { if (!border[k]) { p[0] += (r() - 0.5) * hs * 0.55; p[1] += (r() - 0.5) * hs * 0.55; } });
+        for (let it = 0; it < 2; it++) { const nx = P.map((p, k) => { if (border[k]) return p; let sx = 0, sy = 0; for (const j of nb[k]) { sx += P[j][0]; sy += P[j][1]; } return [0.6 * p[0] + 0.4 * sx / nb[k].size, 0.6 * p[1] + 0.4 * sy / nb[k].size]; }); nx.forEach((p, k) => { P[k] = p; }); }
+        return { P, tri, nbr, nb, border, edgeTris, ek };
+      }
+      const Mh = mesh();
+      function labels(Pm, prm) {
+        const { tri, nbr } = Mh, nt = tri.length, major = new Int32Array(nt), inside = new Uint8Array(nt);
+        for (let t = 0; t < nt; t++) {
+          const [a, b, c] = tri[t]; const cx = (Pm[a][0] + Pm[b][0] + Pm[c][0]) / 3, cy = (Pm[a][1] + Pm[b][1] + Pm[c][1]) / 3;
+          const sc = 2.5, wx = cx + prm.warp * fbm(cx * sc, cy * sc), wy = cy + prm.warp * fbm(cx * sc + 7.3, cy * sc);
+          const th = Math.hypot(wx, wy) * 1.25, ph = Math.atan2(wy, wx);
+          inside[t] = Math.hypot(cx, cy) < 0.9 + 0.06 * fbm(cx * 3 + 11, cy * 3, 3) ? 1 : 0;
+          const s = wrap(ph - 0.3 - Math.PI / prm.n - prm.twist * th);
+          major[t] = Math.floor(s / (TAU / prm.n)) % prm.n;
+        }
+        for (let pass = 0; pass < 2; pass++) for (let t = 0; t < nt; t++) {
+          const [n0, n1, n2] = nbr[t]; if (n0 < 0 || n1 < 0 || n2 < 0) continue;
+          const k = major[t], k0 = major[n0], k1 = major[n1], k2 = major[n2];
+          if (k !== k0 && k0 === k1) major[t] = k0; else if (k !== k1 && k1 === k2) major[t] = k1; else if (k !== k0 && k0 === k2) major[t] = k0;
+        }
+        const seams = [];
+        for (const [key, ts] of Mh.edgeTris) { if (ts.length < 2) continue; const [u, v] = ts; if (inside[u] && inside[v] && major[u] !== major[v]) seams.push([Math.floor(key / 65536), key % 65536]); }
+        return { major, seams };
+      }
+      function fairSeams(P0, seams, iters = 6) {
+        const P = P0.map((p) => [...p]), sn = P.map(() => []);
+        for (const [a, b] of seams) { sn[a].push(b); sn[b].push(a); }
+        for (let it = 0; it < iters; it++) {
+          const next = new Map();
+          P.forEach((p, v) => { if (sn[v].length === 2) { const m = [(P[sn[v][0]][0] + P[sn[v][1]][0]) / 2, (P[sn[v][0]][1] + P[sn[v][1]][1]) / 2]; next.set(v, [0.45 * p[0] + 0.55 * m[0], 0.45 * p[1] + 0.55 * m[1]]); } });
+          for (const [v, p] of next) P[v] = p;
+          const next2 = new Map();
+          P.forEach((p, v) => { if (sn[v].length || Mh.border[v]) return; let sx = 0, sy = 0; for (const j of Mh.nb[v]) { sx += P[j][0]; sy += P[j][1]; } const k = Mh.nb[v].size; next2.set(v, [0.5 * p[0] + 0.5 * sx / k, 0.5 * p[1] + 0.5 * sy / k]); });
+          for (const [v, p] of next2) P[v] = p;
+        }
+        return P;
+      }
+      let cache = null;
+      demo('#fig-tear', {
+        title: 'Coutures préparées', aspect: 2,
+        controls: [
+          { key: 'n', label: 'Lames n', min: 2, max: 8, step: 1, value: 5, onChange: () => { cache = null; } },
+          { key: 'twist', label: 'Vrille (iris)', min: -2, max: 2, step: 0.05, value: 0, fmt: (v) => v.toFixed(2), onChange: () => { cache = null; } },
+          { key: 'warp', label: 'Irrégularité du tracé', min: 0, max: 0.4, step: 0.01, value: 0.14, fmt: (v) => v.toFixed(2), onChange: () => { cache = null; } },
+        ],
+        draw(g, d) {
+          if (!cache) { const L = labels(Mh.P, d.s); cache = { L, Pf: fairSeams(Mh.P, L.seams) }; }
+          const { L, Pf } = cache, show = [['sans lissage', Mh.P], ['avec lissage', Pf]];
+          const panels = show;
+          const pw = d.w / panels.length;
+          panels.forEach(([name, P], pi) => {
+            const R = Math.min(pw * 0.46, d.h * 0.44), cx = pw * pi + pw / 2, cy = d.h * 0.5;
+            const X = (p) => cx + p[0] * R, Y = (p) => cy - p[1] * R;
+            Mh.tri.forEach((t, k) => {
+              g.fillStyle = alpha(PAL[L.major[k] % 4], L.major[k] >= 4 ? 0.26 : 0.13);
+              g.beginPath(); g.moveTo(X(P[t[0]]), Y(P[t[0]])); g.lineTo(X(P[t[1]]), Y(P[t[1]])); g.lineTo(X(P[t[2]]), Y(P[t[2]])); g.closePath(); g.fill();
+              g.strokeStyle = alpha(C.ink, 0.07); g.lineWidth = 0.6; g.stroke();
+            });
+            g.strokeStyle = C.c1; g.lineWidth = 2; g.lineCap = 'round'; g.beginPath();
+            for (const [a, b] of L.seams) { g.moveTo(X(P[a]), Y(P[a])); g.lineTo(X(P[b]), Y(P[b])); }
+            g.stroke();
+            label(g, name, cx, d.h - 8, { align: 'center', size: 11.5 });
+          });
+          d.status(`${L.seams.length} arêtes de couture · ${Mh.P.length} sommets`);
+        },
+      });
+    }
+
+    // ── 03 · Jacobi : somme contre moyenne ────────────────────────────────
+    {
+      const NX = 13, NY = 11, P = [], pin = [];
+      for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) { P.push([i + (j % 2) * 0.5, j * 0.866]); pin.push(i === 0 || j === 0 || i === NX - 1 || j === NY - 1); }
+      const id = (i, j) => j * NX + i, E = [];
+      for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) {
+        if (i < NX - 1) E.push([id(i, j), id(i + 1, j)]);
+        if (j < NY - 1) { E.push([id(i, j), id(i, j + 1)]); const o = j % 2 ? 1 : -1; if (i + o >= 0 && i + o < NX) E.push([id(i, j), id(i + o, j + 1)]); }
+      }
+      const E1 = E.length, nbs = P.map(() => new Set()); E.forEach(([a, b]) => { nbs[a].add(b); nbs[b].add(a); });
+      const seen = new Set(E.map(([a, b]) => a < b ? a + '_' + b : b + '_' + a));
+      for (let a = 0; a < P.length; a++) for (const b of nbs[a]) for (const c of nbs[b]) {
+        if (c === a || nbs[a].has(c)) continue; const dd = Math.hypot(P[a][0] - P[c][0], P[a][1] - P[c][1]); if (dd < 1.9) continue;
+        const k = a < c ? a + '_' + c : c + '_' + a; if (seen.has(k)) continue; seen.add(k); E.push([a, c]);
+      }
+      const L = E.map(([a, b]) => Math.hypot(P[a][0] - P[b][0], P[a][1] - P[b][1]));
+      demo('#fig-jacobi', {
+        title: 'Jacobi parallèle', aspect: 2.1, animate: true,
+        controls: [{ key: 'om', label: 'Facteur ω', min: 0.2, max: 2.4, step: 0.05, value: 0.5, fmt: (v) => v.toFixed(2), onChange: (d) => d.reset() }],
+        buttons: [
+          { key: 'avg', label: 'Moyenne (Membrane)', toggle: true, value: false, onClick: (d) => d.reset() },
+          { key: 'bend', label: 'Avec la flexion', toggle: true, value: false, onClick: (d) => d.reset() },
+          { label: 'Rejouer', onClick: (d) => d.reset() },
+        ],
+        setup(d) { const r = rng(5); d.state = { X: P.map((p, k) => pin[k] ? [...p] : [p[0] + (r() - 0.5) * 0.8, p[1] + (r() - 0.5) * 0.8]), res: [], clock: 0 }; },
+        draw(g, d) {
+          const S = d.state, ne = d.s.bend ? E.length : E1;
+          const resid = () => { let r = 0; for (let k = 0; k < ne; k++) { const [a, b] = E[k]; r += (Math.hypot(S.X[a][0] - S.X[b][0], S.X[a][1] - S.X[b][1]) - L[k]) ** 2; } return Math.sqrt(r / ne); };
+          if (!S.res.length) S.res.push(resid());
+          S.clock += d.dt;
+          if (S.clock > 0.09 && S.res.length < 61 && S.res[S.res.length - 1] < 1e3) {
+            S.clock = 0;
+            const D = S.X.map(() => [0, 0, 0]);
+            for (let k = 0; k < ne; k++) {
+              const [a, b] = E[k], ex = S.X[a][0] - S.X[b][0], ey = S.X[a][1] - S.X[b][1], l = Math.hypot(ex, ey), wa = pin[a] ? 0 : 1, wb = pin[b] ? 0 : 1;
+              if (!(wa + wb) || l < 1e-9) continue; const s = -(l - L[k]) / (wa + wb) / l;
+              D[a][0] += ex * s * wa; D[a][1] += ey * s * wa; D[a][2]++; D[b][0] -= ex * s * wb; D[b][1] -= ey * s * wb; D[b][2]++;
+            }
+            S.X.forEach((x, k) => { if (pin[k]) return; const f = d.s.avg ? d.s.om / Math.max(1, D[k][2]) : d.s.om; x[0] += D[k][0] * f; x[1] += D[k][1] * f; });
+            S.res.push(resid());
+          }
+          // maillage
+          const { w, h } = d, sz = Math.min(w * 0.42 / (NX - 0.5), (h - 30) / ((NY - 1) * 0.866)), ox = 18, oy = (h - (NY - 1) * 0.866 * sz) / 2;
+          const T = (p) => [ox + clamp(p[0], -3, NX + 3) * sz, oy + clamp(p[1], -3, NY + 3) * sz];
+          g.save(); g.beginPath(); g.rect(0, 0, w * 0.47, h); g.clip();
+          g.lineWidth = 1;
+          for (let k = 0; k < E1; k++) { const [a, b] = E[k], A = T(S.X[a]), B = T(S.X[b]), e = Math.abs(Math.hypot(S.X[a][0] - S.X[b][0], S.X[a][1] - S.X[b][1]) - L[k]) / L[k]; g.strokeStyle = alpha(e > 0.05 ? C.c3 : C.c4, clamp(0.35 + e * 3, 0.35, 1)); g.beginPath(); g.moveTo(...A); g.lineTo(...B); g.stroke(); }
+          S.X.forEach((p, k) => { const A = T(p); g.fillStyle = pin[k] ? C.dim : C.c1; g.fillRect(A[0] - 1.5, A[1] - 1.5, 3, 3); });
+          g.restore();
+          // résidu
+          const x0 = w * 0.55, x1 = w - 14, y0 = 18, y1 = h - 28, lo = -6, hi = 2;
+          const X = (i) => lerp(x0, x1, i / 60), Y = (r) => lerp(y1, y0, (clamp(Math.log10(Math.max(r, 1e-9)), lo, hi) - lo) / (hi - lo));
+          g.strokeStyle = C.grid;
+          for (let e = lo; e <= hi; e += 2) { g.beginPath(); g.moveTo(x0, Y(10 ** e)); g.lineTo(x1, Y(10 ** e)); g.stroke(); label(g, `1e${e}`, x0 - 6, Y(10 ** e) + 4, { align: 'right', size: 10.5 }); }
+          label(g, 'écart RMS des longueurs', x0 + 4, y0 - 4, { size: 11 });
+          label(g, 'itérations →', x1, h - 8, { align: 'right', color: C.faint, size: 11 });
+          const last = S.res[S.res.length - 1], div = last > S.res[0] * 2 || !isFinite(last);
+          g.strokeStyle = div ? C.c3 : C.c1; g.lineWidth = 2; g.beginPath();
+          S.res.forEach((r, i) => { const y = Y(r); i ? g.lineTo(X(i), y) : g.moveTo(X(i), y); }); g.stroke();
+          const nc = (2 * ne / P.length).toFixed(1);
+          d.status(`${d.s.avg ? 'moyenne' : 'somme'} · ~${nc} contraintes par particule · ${div ? 'diverge' : S.res.length > 60 ? 'converge' : 'en cours'}`);
+        },
+      });
+    }
+
+    // ── 04 · assauts et rupture ───────────────────────────────────────────
+    {
+      function struggle(u, S) { if (!S || S.n <= 0 || S.f <= 0) return u; if (u >= S.f) return (u - S.f) / (1 - S.f); const w = (u / S.f) * S.n, k = Math.floor(w), v = w - k; return S.a * (0.45 + (0.55 * (k + 1)) / S.n) * Math.sin(Math.PI * v) ** 2; }
+      const NP = 120, NB = 3, PRE = 0.04, DUR = 1.0, H = 1 / 600;
+      const bladeR = (t, o) => 0.86 + 0.5 * ease(struggle(Math.min(1, Math.max(0, t / DUR)), o.S));
+      function make(seed) {
+        const x = new Float64Array(NP * 2), xp = new Float64Array(NP * 2), v = new Float64Array(NP * 2), xn = new Float64Array(NP * 2);
+        for (let i = 0; i < NP; i++) { const a = i / NP * TAU; x[2 * i] = Math.cos(a); x[2 * i + 1] = Math.sin(a); }
+        const chord = 2 * Math.sin(Math.PI / NP), chord2 = 2 * Math.sin(2 * Math.PI / NP), r = rng(seed);
+        const seamAt = [0, 1, 2].map((k) => Math.round(((k + 0.5) / NB) * NP) % NP);
+        const edges = []; for (let i = 0; i < NP; i++) edges.push({ i, j: (i + 1) % NP, L: chord * (1 - PRE), rest: chord, seam: seamAt.includes(i), broken: -1, noise: 1 + 0.3 * (r() * 2 - 1) });
+        const bend = []; for (let i = 0; i < NP; i++) bend.push({ i, j: (i + 2) % NP, L: chord2 * (1 - PRE), a: edges[i], b: edges[(i + 1) % NP] });
+        const nbrs = Array.from({ length: NP }, () => []);
+        for (const e of edges) { nbrs[e.i].push([e.j, e, 0]); nbrs[e.j].push([e.i, e, 0]); }
+        for (const c of bend) { nbrs[c.i].push([c.j, c, 1]); nbrs[c.j].push([c.i, c, 1]); }
+        return { x, xp, v, xn, edges, nbrs, t: 0, tf: -1, hist: [] };
+      }
+      const strainOf = (R, e) => Math.hypot(R.x[2 * e.i] - R.x[2 * e.j], R.x[2 * e.i + 1] - R.x[2 * e.j + 1]) / e.rest - 1;
+      function step(R, o) {
+        const { x, xp, v, xn, edges, nbrs } = R;
+        const leak = R.tf < 0 ? 1 : Math.exp(-(R.t - R.tf) / 0.15);
+        const p = 12 * leak * (1 + 0.3 * ease(struggle(Math.min(1, R.t / DUR), o.S)));
+        for (let i = 0; i < NP; i++) {
+          const a = (i + NP - 1) % NP, b = (i + 1) % NP;
+          v[2 * i] += p * (x[2 * b + 1] - x[2 * a + 1]) * H; v[2 * i + 1] -= p * (x[2 * b] - x[2 * a]) * H;
+          const dmp = Math.exp(-4 * H); v[2 * i] *= dmp; v[2 * i + 1] *= dmp;
+          const f = 1 / (1 + 1.6 * Math.hypot(v[2 * i], v[2 * i + 1]) * H); v[2 * i] *= f; v[2 * i + 1] *= f;
+          const sp = Math.hypot(v[2 * i], v[2 * i + 1]); if (sp > 2.5) { v[2 * i] *= 2.5 / sp; v[2 * i + 1] *= 2.5 / sp; }
+          xp[2 * i] = x[2 * i]; xp[2 * i + 1] = x[2 * i + 1]; x[2 * i] += v[2 * i] * H; x[2 * i + 1] += v[2 * i + 1] * H;
+        }
+        for (let it = 0; it < 6; it++) {
+          for (let i = 0; i < NP; i++) {
+            let dx = 0, dy = 0, nc = 0;
+            for (const [j, c, kind] of nbrs[i]) {
+              if (kind === 0 && c.broken >= 0) continue; if (kind === 1 && (c.a.broken >= 0 || c.b.broken >= 0)) continue;
+              const ex = x[2 * i] - x[2 * j], ey = x[2 * i + 1] - x[2 * j + 1], l = Math.hypot(ex, ey); if (l < 1e-9) continue;
+              const s = -(l - c.L) / (2 + (kind ? 0.3 : 0.02)) / l; dx += ex * s; dy += ey * s; nc++;
+            }
+            const k = 1.6 / Math.max(1, nc); xn[2 * i] = x[2 * i] + dx * k; xn[2 * i + 1] = x[2 * i + 1] + dy * k;
+          }
+          x.set(xn);
+        }
+        const rb = o.settle ? 0.86 : bladeR(R.t, o);
+        for (let i = 0; i < NP; i++) {
+          const r = Math.hypot(x[2 * i], x[2 * i + 1]), a = Math.atan2(x[2 * i + 1], x[2 * i]);
+          for (let k = 0; k < NB; k++) { let dd = a - k / NB * TAU; dd -= TAU * Math.floor((dd + Math.PI) / TAU); if (Math.abs(dd) < 0.45 && r < rb) { x[2 * i] *= rb / r; x[2 * i + 1] *= rb / r; } }
+        }
+        if (!o.settle) {
+          const ts = DUR * o.S.f;
+          if (!(o.S.n > 0 && R.t < ts * 0.92)) {
+            const fat = ease((R.t - ts - 0.08) / 0.4), guard = 1 + 0.7 * (1 - ease((R.t - ts * 0.9) / Math.max(ts * 0.1, 0.02)));
+            for (const e of edges) if (e.seam && e.broken < 0 && strainOf(R, e) > e.thr0 * (1 - 0.85 * fat) * guard) { e.broken = R.t; if (R.tf < 0) R.tf = R.t; }
+          }
+        }
+        for (let i = 0; i < 2 * NP; i++) v[i] = (x[i] - xp[i]) / H;
+        if (!o.settle) R.t += H;
+      }
+      const thrNow = (R, o, e) => {
+        const ts = DUR * o.S.f; if (o.S.n > 0 && R.t < ts * 0.92) return Infinity;
+        const fat = ease((R.t - ts - 0.08) / 0.4), guard = 1 + 0.7 * (1 - ease((R.t - ts * 0.9) / Math.max(ts * 0.1, 0.02)));
+        return e.thr0 * (1 - 0.85 * fat) * guard;
+      };
+      const TEND = 1.6;
+      demo('#fig-rupture', {
+        title: 'Assauts puis rupture', aspect: 2, animate: true,
+        controls: [
+          { key: 'n', label: 'Assauts', min: 0, max: 4, step: 1, value: 3, onChange: (d) => d.reset() },
+          { key: 'a', label: 'Force des assauts', min: 0.2, max: 0.8, step: 0.01, value: 0.6, fmt: (v) => v.toFixed(2), onChange: (d) => d.reset() },
+          { key: 'sp', label: 'Ralenti', min: 0.1, max: 1, step: 0.05, value: 0.35, fmt: (v) => `×${v.toFixed(2)}` },
+        ],
+        buttons: [{ label: 'Rejouer', onClick: (d) => d.reset() }],
+        setup(d) {
+          const R = make(9), o = { settle: true, S: { n: 0 } };
+          for (let k = 0; k < 400; k++) step(R, o);
+          for (const e of R.edges) if (e.seam) e.thr0 = Math.max(0, strainOf(R, e)) + 0.25 * e.noise;
+          d.state = { R, wait: 0 };
+        },
+        draw(g, d) {
+          const S = d.state, R = S.R, o = { S: { n: d.s.n, a: d.s.a, f: 0.6 } };
+          if (R.t < TEND) {
+            const n = Math.round(d.dt * d.s.sp * 600);
+            for (let k = 0; k < n && R.t < TEND; k++) { step(R, o); if (k % 4 === 0) { const se = R.edges.filter((e) => e.seam); R.hist.push([R.t, bladeR(R.t, o), Math.max(...se.map((e) => e.broken < 0 ? strainOf(R, e) : 0)), Math.min(...se.map((e) => thrNow(R, o, e)))]); } }
+          } else { S.wait += d.dt; if (S.wait > 2.5) { d.reset(); return; } }
+          const { w, h } = d, cx = h * 0.55, cy = h / 2, sc = h * 0.22;
+          // lames
+          const rb = bladeR(R.t, o);
+          for (let k = 0; k < NB; k++) {
+            const a = k / NB * TAU; g.fillStyle = alpha(C.dim, 0.35); g.beginPath();
+            g.arc(cx, cy, rb * sc, -a - 0.45, -a + 0.45); g.lineTo(cx, cy); g.closePath(); g.fill();
+          }
+          // membrane
+          g.lineCap = 'round';
+          for (const e of R.edges) {
+            if (e.broken >= 0) continue;
+            const s = strainOf(R, e);
+            g.strokeStyle = s > 0.02 ? lerpCol(s) : alpha(C.ink, 0.75); g.lineWidth = 3;
+            g.beginPath(); g.moveTo(cx + R.x[2 * e.i] * sc, cy - R.x[2 * e.i + 1] * sc); g.lineTo(cx + R.x[2 * e.j] * sc, cy - R.x[2 * e.j + 1] * sc); g.stroke();
+          }
+          for (const e of R.edges) if (e.seam) {
+            const mx = (R.x[2 * e.i] + R.x[2 * e.j]) / 2, my = (R.x[2 * e.i + 1] + R.x[2 * e.j + 1]) / 2;
+            if (e.broken < 0) { g.fillStyle = C.c1; g.beginPath(); g.arc(cx + mx * sc, cy - my * sc, 4, 0, TAU); g.fill(); }
+          }
+          // frise
+          const x0 = h * 1.2 + 30, x1 = w - 14, ya = 20, yb = h * 0.42, yc = h * 0.55, yd = h - 26;
+          const X = (t) => lerp(x0, x1, t / TEND);
+          const Yb = (r) => lerp(yb, ya, (r - 0.8) / 0.6), Ys = (s) => lerp(yd, yc, clamp(s / 0.45));
+          g.strokeStyle = C.grid; g.lineWidth = 1; g.beginPath(); g.moveTo(x0, yb); g.lineTo(x1, yb); g.moveTo(x0, yd); g.lineTo(x1, yd); g.stroke();
+          const ts = DUR * o.S.f;
+          if (o.S.n > 0) { g.fillStyle = alpha(C.c2, 0.08); g.fillRect(X(0), yc, X(ts * 0.92) - X(0), yd - yc); label(g, 'rupture interdite', X(0) + 4, yc + 12, { size: 10.5, color: C.c2 }); }
+          const H2 = R.hist;
+          const line = (col, f, Yf) => { g.strokeStyle = col; g.lineWidth = 1.8; g.beginPath(); let st = false; for (const r of H2) { const v = f(r); if (!isFinite(v)) { st = false; continue; } const y = Yf(v); st ? g.lineTo(X(r[0]), y) : g.moveTo(X(r[0]), y); st = true; } g.stroke(); };
+          line(C.dim, (r) => r[1], Yb); label(g, 'rayon des lames', x0 + 4, ya + 2, { size: 11, base: 'top' });
+          line(C.c3, (r) => r[2], Ys); line(alpha(C.c1, 0.9), (r) => r[3], Ys);
+          label(g, 'étirement des coutures', x0 + 4, yd + 16, { size: 11, color: C.c3 });
+          label(g, 'seuil', x1, yd + 16, { size: 11, align: 'right', color: C.c1 });
+          if (R.tf >= 0) { g.strokeStyle = alpha(C.c3, 0.6); g.setLineDash([3, 3]); g.beginPath(); g.moveTo(X(R.tf), ya); g.lineTo(X(R.tf), yd); g.stroke(); g.setLineDash([]); }
+          const u = R.t / DUR, k = Math.floor((u / 0.6) * o.S.n);
+          d.status(R.tf >= 0 ? `rupture à t = ${R.tf.toFixed(2)} · ${R.edges.filter((e) => e.broken >= 0).length} coutures ouvertes` : o.S.n > 0 && u < 0.6 ? `assaut ${k + 1}/${o.S.n} · la membrane encaisse` : 'poussée finale');
+        },
+      });
+      function lerpCol(s) { const t = clamp(s / 0.3); return `rgb(${Math.round(lerp(230, 217, t))},${Math.round(lerp(220, 110, t))},${Math.round(lerp(210, 90, t))})`; }
+    }
+
+    // ── 05 · Catmull-Rom ──────────────────────────────────────────────────
+    {
+      const sig = (t) => Math.exp(-1.4 * t) * Math.cos(10 * t) * 0.9;
+      demo('#fig-spline', {
+        title: 'Relecture au ralenti', aspect: 1.7,
+        controls: [
+          { key: 'k', label: 'Images affichées par image enregistrée', min: 1, max: 10, step: 1, value: 6 },
+          { key: 'F', label: 'Images enregistrées sur la fenêtre', min: 8, max: 30, step: 1, value: 12 },
+        ],
+        draw(g, d) {
+          const F = d.s.F, Tw = 1.4, fr = Array.from({ length: F }, (_, i) => sig(i / (F - 1) * Tw));
+          const frame = (k) => fr[Math.min(Math.max(k, 0), F - 1)];
+          const at = (f) => { const ff = clamp(f, 0, F - 1), k = Math.floor(ff), t = ff - k; const p0 = frame(Math.max(k, 1) - 1), p1 = frame(k), p2 = frame(k + 1), p3 = frame(k + 2); return p1 + 0.5 * t * ((p2 - p0) + t * ((2 * p0 - 5 * p1 + 4 * p2 - p3) + t * (3 * (p1 - p2) + p3 - p0))); };
+          const lin = (f) => { const ff = clamp(f, 0, F - 1), k = Math.floor(ff), t = ff - k; return lerp(frame(k), frame(k + 1), t); };
+          const { w, h } = d, x0 = 40, x1 = w - 14, X = (f) => lerp(x0, x1, f / (F - 1));
+          const a0 = 16, a1 = h * 0.5, Yp = (v) => lerp(a1, a0, (v + 0.9) / 1.95);
+          g.strokeStyle = C.grid; g.beginPath(); g.moveTo(x0, Yp(0)); g.lineTo(x1, Yp(0)); g.stroke();
+          const n = (F - 1) * d.s.k, samp = (fn) => Array.from({ length: n + 1 }, (_, i) => fn(i / d.s.k));
+          const L = samp(lin), Cr = samp(at);
+          const poly = (arr, Y, col, lw, dots) => { g.strokeStyle = col; g.lineWidth = lw; g.beginPath(); arr.forEach((v, i) => { const x = X(i / d.s.k), y = Y(v); i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.stroke(); if (dots) { g.fillStyle = col; arr.forEach((v, i) => { g.beginPath(); g.arc(X(i / d.s.k), Y(v), 1.6, 0, TAU); g.fill(); }); } };
+          poly(L, Yp, alpha(C.c3, 0.85), 1.4, true); poly(Cr, Yp, C.c1, 1.8, true);
+          g.fillStyle = C.ink; fr.forEach((v, i) => { g.beginPath(); g.arc(X(i), Yp(v), 3.6, 0, TAU); g.fill(); });
+          label(g, 'position', x1, a0 + 4, { base: 'top', size: 11, align: 'right' });
+          // vitesse
+          const b0 = h * 0.58, b1 = h - 26;
+          const vel = (arr) => arr.slice(1).map((v, i) => (v - arr[i]) * d.s.k);
+          const VL = vel(L), VC = vel(Cr), m = Math.max(...VL.map(Math.abs), ...VC.map(Math.abs), 1e-6);
+          const Yv = (v) => lerp(b1, b0, (v / m + 1) / 2);
+          g.strokeStyle = C.grid; g.beginPath(); g.moveTo(x0, Yv(0)); g.lineTo(x1, Yv(0)); g.stroke();
+          const step = (arr, col, lw) => { g.strokeStyle = col; g.fillStyle = col; g.lineWidth = lw; g.beginPath(); arr.forEach((v, i) => { const x = X((i + 0.5) / d.s.k), y = Yv(v); i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.stroke(); arr.forEach((v, i) => { g.beginPath(); g.arc(X((i + 0.5) / d.s.k), Yv(v), 1.8, 0, TAU); g.fill(); }); };
+          step(VL, alpha(C.c3, 0.85), 1.4); step(VC, C.c1, 1.8);
+          label(g, 'vitesse image à image', x0 + 4, b0 - 4, { size: 11 });
+          label(g, 'linéaire', x1, b1 + 16, { align: 'right', color: C.c3, size: 11.5 });
+          label(g, 'Catmull-Rom', x1 - 70, b1 + 16, { align: 'right', color: C.c1, size: 11.5 });
+          // saut de vitesse maximal aux images enregistrées
+          let jl = 0, jc = 0; for (let i = 1; i < VL.length; i++) { jl = Math.max(jl, Math.abs(VL[i] - VL[i - 1])); jc = Math.max(jc, Math.abs(VC[i] - VC[i - 1])); }
+          d.status(d.s.k === 1 ? 'pas de ralenti : les deux coïncident' : `plus grand saut de vitesse : ${(jl / m * 100).toFixed(0)} % contre ${(jc / m * 100).toFixed(0)} %`);
+        },
+      });
+    }
+
+    // ── 06 · triangles PN (une arête) ────────────────────────────────────
+    {
+      demo('#fig-pn', {
+        title: 'Arête PN', aspect: 1.8,
+        controls: [
+          { key: 'curl', label: 'Enroulement de la lèvre', min: 0, max: 1, step: 0.01, value: 0.55, fmt: (v) => `${Math.round(v * 540)}°` },
+          { key: 'n', label: 'Découpage n', min: 1, max: 8, step: 1, value: 4 },
+        ],
+        buttons: [{ key: 'ctl', label: 'Points de contrôle', toggle: true, value: false }],
+        draw(g, d) {
+          const NPt = 6, tot = d.s.curl * 3 * Math.PI, seg = 1;
+          // la lèvre : courbure croissante le long du lambeau
+          const P = [[0, 0]]; let a = 0;
+          for (let i = 1; i < NPt; i++) { const da = tot * (i - 1) / 10; a += da; const p = P[i - 1]; P.push([p[0] + Math.cos(a) * seg, p[1] + Math.sin(a) * seg]); }
+          const segN = P.slice(1).map((p, i) => { const dx = p[0] - P[i][0], dy = p[1] - P[i][1], l = Math.hypot(dx, dy); return [-dy / l, dx / l]; });
+          const N = P.map((_, i) => { const a1 = segN[Math.max(0, i - 1)], b1 = segN[Math.min(segN.length - 1, i)], x = a1[0] + b1[0], y = a1[1] + b1[1], l = Math.hypot(x, y) || 1; return [x / l, y / l]; });
+          const e = (Pi, Pj, Ni) => { const dd = (Pj[0] - Pi[0]) * Ni[0] + (Pj[1] - Pi[1]) * Ni[1]; return [(2 * Pi[0] + Pj[0] - Ni[0] * dd) / 3, (2 * Pi[1] + Pj[1] - Ni[1] * dd) / 3]; };
+          const bez = (A, B, Cc, D, t) => { const u = 1 - t; return [0, 1].map((k) => u * u * u * A[k] + 3 * u * u * t * B[k] + 3 * u * t * t * Cc[k] + t * t * t * D[k]); };
+          // cadrage
+          const xs = P.map((p) => p[0]), ys = P.map((p) => p[1]);
+          const mnx = Math.min(...xs) - 0.6, mxx = Math.max(...xs) + 0.6, mny = Math.min(...ys) - 0.6, mxy = Math.max(...ys) + 0.6;
+          const sc = Math.min(d.w / (mxx - mnx), (d.h - 20) / (mxy - mny)), ox = (d.w - (mxx - mnx) * sc) / 2 - mnx * sc, oy = (d.h - (mxy - mny) * sc) / 2 + mxy * sc;
+          const T = (p) => [ox + p[0] * sc, oy - p[1] * sc];
+          // maillage plat
+          g.strokeStyle = alpha(C.c3, 0.8); g.lineWidth = 1.4; g.setLineDash([4, 4]); g.beginPath(); P.forEach((p, i) => { const q = T(p); i ? g.lineTo(...q) : g.moveTo(...q); }); g.stroke(); g.setLineDash([]);
+          // PN
+          let maxd = 0;
+          g.strokeStyle = C.c1; g.lineWidth = 2.2; g.beginPath();
+          for (let i = 0; i < NPt - 1; i++) {
+            const A = P[i], D = P[i + 1], B = e(A, D, N[i]), Cc = e(D, A, N[i + 1]);
+            for (let k = 0; k <= d.s.n; k++) { const q = bez(A, B, Cc, D, k / d.s.n), s = T(q); (i || k) ? g.lineTo(...s) : g.moveTo(...s); }
+            for (let k = 0; k <= 20; k++) { const t = k / 20, q = bez(A, B, Cc, D, t), l = [lerp(A[0], D[0], t), lerp(A[1], D[1], t)]; maxd = Math.max(maxd, Math.hypot(q[0] - l[0], q[1] - l[1])); }
+            if (d.s.ctl) { g.save(); g.strokeStyle = alpha(C.c2, 0.6); g.lineWidth = 1; g.beginPath(); g.moveTo(...T(A)); g.lineTo(...T(B)); g.lineTo(...T(Cc)); g.lineTo(...T(D)); g.stroke(); g.fillStyle = C.c2; for (const q of [B, Cc]) { g.beginPath(); g.arc(...T(q), 3, 0, TAU); g.fill(); } g.restore(); }
+          }
+          g.stroke();
+          // particules et normales
+          P.forEach((p, i) => { const q = T(p); arrow(g, q[0], q[1], q[0] + N[i][0] * 0.38 * sc, q[1] - N[i][1] * 0.38 * sc, { color: alpha(C.ink, 0.6), head: 5 }); g.fillStyle = C.ink; g.beginPath(); g.arc(q[0], q[1], 4, 0, TAU); g.fill(); });
+          label(g, 'maillage simulé', 10, d.h - 10, { color: C.c3, size: 11.5 }); label(g, `patch PN, ${d.s.n} tronçon${d.s.n > 1 ? 's' : ''} par arête`, 120, d.h - 10, { color: C.c1, size: 11.5 });
+          d.status(`écart max. à la corde : ${(maxd * 100).toFixed(0)} % d’une arête`);
+        },
+      });
+    }
+
+    // ── champ de déplacement commun (07, 08) : film tiré entre deux doigts ──
+    const FING = 0.55;
+    function dispF(x, y, pull, iso) {
+      // u = traction (x) avec contraction latérale (y), localisée entre les doigts, + gonflement isotrope
+      const u = (X, Y) => { const g = Math.exp(-((Y / 0.28) ** 2)), m = 1 / (1 + Math.exp((Math.abs(X) - FING) / 0.07)); return [pull * X * g * m + iso * X, -0.6 * pull * Y * g * m + iso * Y]; };
+      const e = 1e-3, ux1 = u(x + e, y), ux0 = u(x - e, y), uy1 = u(x, y + e), uy0 = u(x, y - e);
+      return [1 + (ux1[0] - ux0[0]) / (2 * e), (uy1[0] - uy0[0]) / (2 * e), (ux1[1] - ux0[1]) / (2 * e), 1 + (uy1[1] - uy0[1]) / (2 * e)]; // F = [a b; c d]
+    }
+    const sym2 = (a, b, c) => { const tr = (a + c) / 2, df = Math.sqrt(((a - c) / 2) ** 2 + b * b); return [tr + df, tr - df, 0.5 * Math.atan2(2 * b, a - c)]; };
+    const srgb = (v) => { v = Math.max(0, v); return 255 * Math.min(1, v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055); };
+
+    // ── 07 · photoélasticité ─────────────────────────────────────────────
+    {
+      // pondérations portées de photo.js
+      const NL = 12, LAMBDAS = Array.from({ length: NL }, (_, i) => 400 + (300 * (i + 0.5)) / NL);
+      const gg = (l, mu, s1, s2) => { const t = (l - mu) / (l < mu ? s1 : s2); return Math.exp(-0.5 * t * t); };
+      const cie = (l) => [1.056 * gg(l, 599.8, 37.9, 31.0) + 0.362 * gg(l, 442.0, 16.0, 26.7) - 0.065 * gg(l, 501.1, 20.4, 26.2), 0.821 * gg(l, 568.8, 46.9, 40.5) + 0.286 * gg(l, 530.9, 16.3, 31.1), 1.217 * gg(l, 437.0, 11.8, 36.0) + 0.681 * gg(l, 459.0, 26.0, 13.8)];
+      const toRGB = ([X, Y, Z]) => [3.2406 * X - 1.5372 * Y - 0.4986 * Z, -0.9689 * X + 1.8758 * Y + 0.0415 * Z, 0.0557 * X - 0.204 * Y + 1.057 * Z];
+      const W = LAMBDAS.map((l) => toRGB(cie(l))); { const sum = [0, 1, 2].map((c) => W.reduce((s, w) => s + w[c], 0)); for (const w of W) for (let c = 0; c < 3; c++) w[c] /= sum[c]; }
+      const PL = LAMBDAS.map((l) => [Math.sin((Math.PI * 550) / l), Math.cos((Math.PI * 550) / l)]);
+      function jones(gamma, th, phi, plate, circ, cross, out) {
+        const t2 = 2 * (th - phi), C1 = Math.cos(t2), S1 = Math.sin(t2); out[0] = out[1] = out[2] = 0;
+        for (let i = 0; i < NL; i++) {
+          const dd = gamma * Math.PI / LAMBDAS[i], s1 = Math.sin(dd), c1 = Math.cos(dd);
+          const s2 = plate * PL[i][0], c2 = lerp(1, PL[i][1], plate);
+          const re = s1 * s2 * C1, im = s2 * c1 + c2 * s1 * S1, lin = re * re + im * im;
+          const ic = lerp(lin, s1 * s1, circ), I = lerp(1 - ic, ic, cross);
+          out[0] += W[i][0] * I; out[1] += W[i][1] * I; out[2] += W[i][2] * I;
+        }
+        return out;
+      }
+      const off = document.createElement('canvas'), og = off.getContext('2d');
+      let mode = 'circ';
+      demo('#fig-photo', {
+        title: 'Polariscope', aspect: 2.1,
+        controls: [
+          { key: 'pull', label: 'Traction', min: 0, max: 0.3, step: 0.005, value: 0.1, fmt: (v) => v.toFixed(3) },
+          { key: 'iso', label: 'Gonflement isotrope', min: 0, max: 0.2, step: 0.005, value: 0, fmt: (v) => `${(v * 100).toFixed(0)} %` },
+          { key: 'phi', label: 'Angle des polariseurs', min: 0, max: 180, step: 1, value: 20, fmt: (v) => `${v}°` },
+        ],
+        buttons: [
+          { label: 'Circulaire', onClick: () => { mode = 'circ'; } },
+          { label: 'Linéaire', onClick: () => { mode = 'lin'; } },
+          { label: 'Lame teinte sensible', onClick: () => { mode = 'plate'; } },
+          { key: 'par', label: 'Analyseur parallèle', toggle: true, value: false },
+        ],
+        draw(g, d) {
+          const Wd = Math.max(2, Math.round(d.w / 2)), Hd = Math.max(2, Math.round(d.h / 2)); off.width = Wd; off.height = Hd;
+          const img = og.createImageData(Wd, Hd), px = img.data, rgb = [0, 0, 0];
+          const fieldH = Math.round(Hd * 0.8), plate = mode === 'plate' ? 1 : 0, circ = mode === 'circ' ? 1 : 0, cross = d.s.par ? 0 : 1, phi = d.s.phi * Math.PI / 180;
+          const sc = 2.2 / Wd; // largeur du champ : x de −1,1 à 1,1
+          for (let y = 0; y < Hd; y++) for (let x = 0; x < Wd; x++) {
+            const o = (y * Wd + x) * 4;
+            if (y < fieldH) {
+              const X = (x + 0.5 - Wd / 2) * sc, Y = (fieldH / 2 - y - 0.5) * sc;
+              const [a, b, c, dd] = dispF(X, Y, d.s.pull, d.s.iso);
+              // b = F·Fᵀ
+              const bxx = a * a + b * b, bxy = a * c + b * dd, byy = c * c + dd * dd;
+              const [l1, l2, th] = sym2(bxx, bxy, byy);
+              const delta = 0.5 * Math.log(l1 / Math.max(l2, 1e-9)), J = a * dd - b * c;
+              jones(4200 * delta / J, th, phi, plate, circ, cross, rgb);
+              px[o] = srgb(rgb[0]); px[o + 1] = srgb(rgb[1]); px[o + 2] = srgb(rgb[2]); px[o + 3] = 255;
+            } else {
+              const G0 = (x / Wd) * 2500;
+              jones(G0, Math.PI / 4, 0, plate, circ, cross, rgb);
+              px[o] = srgb(rgb[0]); px[o + 1] = srgb(rgb[1]); px[o + 2] = srgb(rgb[2]); px[o + 3] = y < fieldH + 3 ? 0 : 255;
+            }
+          }
+          og.putImageData(img, 0, 0); g.imageSmoothingEnabled = true; g.drawImage(off, 0, 0, d.w, d.h);
+          const fy = (fieldH / Hd) * d.h, s2 = d.w / 2.2;
+          for (const sx of [-1, 1]) { g.fillStyle = 'rgba(20,18,16,.85)'; g.strokeStyle = alpha(C.ink, 0.5); g.beginPath(); g.arc(d.w / 2 + sx * (FING + 0.04) * s2, fy / 2, 0.07 * s2, 0, TAU); g.fill(); g.stroke(); }
+          for (const G0 of [550, 1100, 1650, 2200]) { const x = G0 / 2500 * d.w; g.strokeStyle = 'rgba(0,0,0,.6)'; g.beginPath(); g.moveTo(x, d.h - 6); g.lineTo(x, d.h); g.stroke(); }
+          label(g, '0', 4, fy + 18, { size: 10.5, color: C.ink }); label(g, '2 500 nm', d.w - 4, fy + 18, { size: 10.5, align: 'right', color: C.ink });
+          const names = { circ: 'circulaire', lin: 'linéaire', plate: 'lame teinte sensible' };
+          d.status(`${names[mode]} · analyseur ${d.s.par ? 'parallèle' : 'croisé'}`);
+        },
+      });
+    }
+
+    // ── 08 · plis en bruit de phaseurs ───────────────────────────────────
+    {
+      const fr = (v) => v - Math.floor(v);
+      const h2 = (x, y, s) => [fr(Math.sin(x * 127.1 + y * 311.7 + s) * 43758.5453), fr(Math.sin(x * 269.5 + y * 183.3 + s) * 43758.5453)];
+      const off = document.createElement('canvas'), og = off.getContext('2d');
+      demo('#fig-wrinkle', {
+        title: 'Plis de compression', aspect: 2.1,
+        controls: [
+          { key: 'pull', label: 'Traction', min: 0, max: 0.3, step: 0.005, value: 0.2, fmt: (v) => v.toFixed(3) },
+          { key: 't', label: 'Épaisseur t (en rayon)', min: 0.003, max: 0.04, step: 0.001, value: 0.012, fmt: (v) => v.toFixed(3) },
+        ],
+        buttons: [{ key: 'gabor', label: 'Partie réelle (Gabor)', toggle: true, value: false }],
+        draw(g, d) {
+          const Wd = Math.max(2, Math.round(d.w / 2)), Hd = Math.max(2, Math.round(d.h / 2)); off.width = Wd; off.height = Hd;
+          const img = og.createImageData(Wd, Hd), px = img.data, sc = 2.2 / Wd;
+          const lam = 1.6 * Math.sqrt(d.s.t * 0.2), CS = 1.5, sg = 0.55, PRE = 0.04;
+          let wr = 0;
+          for (let y = 0; y < Hd; y++) for (let x = 0; x < Wd; x++) {
+            const o = (y * Wd + x) * 4, X = (x + 0.5 - Wd / 2) * sc, Y = (Hd / 2 - y - 0.5) * sc;
+            const [a, b, c, dd] = dispF(X, Y, d.s.pull, 0);
+            // C = Fᵀ·F (repère au repos), plus petite valeur propre et sa direction
+            const cxx = a * a + c * c, cxy = a * b + c * dd, cyy = b * b + dd * dd;
+            const [, l2, th] = sym2(cxx, cxy, cyy), k0x = -Math.sin(th), k0y = Math.cos(th);
+            const cmp = Math.max(0, (1 - PRE) - Math.sqrt(Math.max(l2, 0)));
+            // comme dans le shader : k est la colonne de W = c·k·kᵀ de plus grande diagonale (signe stable)
+            const [kx, ky] = k0x * k0x >= k0y * k0y ? [k0x * Math.sign(k0x), k0y * Math.sign(k0x)] : [k0x * Math.sign(k0y), k0y * Math.sign(k0y)];
+            const slope = 2 * Math.sqrt(cmp);
+            let gx = 0, gy = 0;
+            if (slope > 0.035) {
+              wr++;
+              const qx = X / lam, qy = Y / lam, cx0 = Math.floor(qx / CS), cy0 = Math.floor(qy / CS);
+              let zr = 0, zi = 0;
+              for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
+                const cx = cx0 + ox, cy = cy0 + oy, hc = h2(cx, cy, 0), ph = h2(cx, cy, 17.31)[0];
+                const dx = qx - (cx + hc[0]) * CS, dy = qy - (cy + hc[1]) * CS;
+                const w = Math.exp(-(dx * dx + dy * dy) / (2 * sg * sg)), t = (dx * kx + dy * ky + ph) * TAU;
+                zr += w * Math.cos(t); zi += w * Math.sin(t);
+              }
+              const prof = d.s.gabor ? clamp(zr * 0.9, -1, 1) : Math.cos(Math.atan2(zi, zr));
+              const s = Math.min(slope, 1.4) * smooth(0.035, 0.09, slope) * prof;
+              gx = kx * s; gy = ky * s;
+            }
+            // éclairage rasant
+            const nx = -gx, ny = -gy, nz = 1, nl = Math.hypot(nx, ny, nz), L = [-0.55, 0.45, 0.7];
+            const lit = Math.max(0, (nx * L[0] + ny * L[1] + nz * L[2]) / nl / Math.hypot(...L));
+            const base = [0.72, 0.6, 0.52], v = 0.15 + 0.95 * lit;
+            px[o] = srgb(base[0] * v * 0.6); px[o + 1] = srgb(base[1] * v * 0.6); px[o + 2] = srgb(base[2] * v * 0.6); px[o + 3] = 255;
+          }
+          og.putImageData(img, 0, 0); g.imageSmoothingEnabled = true; g.drawImage(off, 0, 0, d.w, d.h);
+          const s2 = d.w / 2.2;
+          for (const sx of [-1, 1]) { g.fillStyle = 'rgba(20,18,16,.85)'; g.strokeStyle = alpha(C.ink, 0.5); g.beginPath(); g.arc(d.w / 2 + sx * (FING + 0.04) * s2, d.h / 2, 0.07 * s2, 0, TAU); g.fill(); g.stroke(); }
+          d.status(`λ = ${lam.toFixed(3)} · ${(100 * wr / (Wd * Hd)).toFixed(0)} % des pixels évaluent le bruit`);
+        },
+      });
+    }
+  </script>
+</body>
+</html>

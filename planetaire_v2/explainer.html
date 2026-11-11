@@ -1,0 +1,703 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#050506">
+  <title>Orrery · défis techniques</title>
+  <meta name="description" content="Comment Orrery trouve des chorégraphies inédites du problème à N corps et la machine qui les trace : action de Newton, force forte, classes de symétrie, certificat par tirs multiples, épicycles et trains d'engrenages, étages par coloration de graphe, verre filé, plongée auto-similaire, compilation sans gel.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+  <link rel="stylesheet" href="../home/explainer.css">
+</head>
+<body>
+  <nav class="top"><div class="in">
+    <a href="../">Codevember</a><span class="day">Day 06</span><span class="crumb">Orrery · défis techniques</span>
+    <span class="sp"></span><a class="open" href="./">Ouvrir la scène</a>
+  </div></nav>
+
+  <main>
+    <header class="hero">
+      <div class="kicker">Day 06 · Orrery · la chorégraphie des astres</div>
+      <h1>Comment une graine devient une orbite, puis la machine qui la trace</h1>
+      <p class="lede">Chaque graine lance la recherche d’une chorégraphie du problème à N corps : des masses égales qui se poursuivent sur une même courbe fermée, solution exacte des équations de Newton. Le programme la certifie, conçoit le planétaire à engrenages qui la dessine pour de bon, puis fait de chaque astre une boule de verre qui contient le monde suivant. Rien n’est téléchargé : tout part de quelques centaines de nombres calculés sur place.</p>
+    </header>
+
+    <figure class="cover">
+      <img src="docs/capture.jpg" alt="Le planétaire de la graine par défaut : quatre astres en lanterne sur une courbe à sept pétales, au-dessus du plateau et de ses satellites" width="1600" height="1000">
+      <figcaption>La graine par défaut : quatre corps sur une courbe à sept pétales bouclés, tracée par trois bras par astre. Autour du bâti, les satellites menés par la couronne dentée ; le fil d’or est la trace de l’orbite.</figcaption>
+    </figure>
+
+    <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
+
+    <article>
+
+      <section id="action">
+        <h2><span class="n">01</span>Une chorégraphie est un point critique de l’action</h2>
+        <span class="src">src/orbit/action.js · lbfgs.js · search.js</span>
+        <p>Intégrer N corps depuis des conditions initiales tirées au hasard ne donne jamais une orbite périodique : on obtient une collision, une éjection, ou un chaos qui ne revient pas. Orrery cherche donc directement <em>la courbe</em>. Dans un repère qui tourne à la vitesse \(\omega\) autour de \(z\), elle est une série de Fourier de période \(2\pi\),</p>
+        <div class="eq">\[ x(t) = \sum_{k} A_k \cos kt + B_k \sin kt, \qquad q_j(t) = R(\omega t)\, x\!\left(t + \tfrac{2\pi j}{N}\right), \]</div>
+        <p>et le corps \(j\) la parcourt avec un décalage d’un N-ième de période. Les harmoniques multiples de N sont retirées une fois pour toutes : ce sont exactement celles qui déplaceraient le centre de masse. Par symétrie, l’action totale vaut N fois celle d’un seul corps :</p>
+        <div class="eq">\[ \mathcal{A} = \int_0^{2\pi} \tfrac12\,\big|\dot x + \omega\, e_z \times x\big|^2 + \tfrac12 \sum_{j=1}^{N-1} \frac{1}{\big|x(t) - x(t + 2\pi j/N)\big|}\; dt. \]</div>
+        <p>Ses points critiques sont les chorégraphies. L’intégrale est évaluée sur Q points équidistants, Q multiple de N : décaler un corps revient alors à décaler un indice, et le gradient exact s’écrit en une passe (vérifié par différences finies à \(10^{-8}\) près).</p>
+
+        <h3>Garder la tresse du départ</h3>
+        <p>Minimiser cette action depuis une courbe aléatoire échoue de deux façons. Soit la courbe traverse un autre corps et se dénoue vers l’orbite la plus simple à sa portée ; soit la descente piétine. Contre la première, l’astuce de Moore (1993) : pendant la descente, une <strong>force forte</strong> \(\varepsilon/r^2\) s’ajoute au potentiel. Une collision coûte alors une action infinie, la courbe ne peut plus traverser un corps et reste dans la classe topologique de son départ. On relâche \(\varepsilon\) par paliers, 0,2 → 0,05 → 0,01 → 0, en reprenant la descente à chaque palier.</p>
+        <p>Contre la seconde, un <strong>préconditionnement en \(1/k^2\)</strong>. La courbure de l’action sur l’harmonique \(k\) est dominée par l’énergie cinétique, qui croît comme \(k^2\) : sans correction, le problème est conditionné à environ \(10^4\). L-BFGS reçoit \(1/k^2\) comme diagonale initiale ; le temps de recherche est divisé par 6. Avant tout, la courbe de départ est mise à la bonne échelle : l’action d’une courbe dilatée de \(\lambda\) vaut \(a\lambda^2 + b/\lambda\), minimale pour \(\lambda^3 = b / 2a\).</p>
+        <figure id="fig-descent" class="wide"><figcaption><b>Les trois premiers essais de la graine par défaut, rejoués avec le vrai code.</b> La page importe <code>createAction</code>, <code>lbfgs</code> et <code>initialGuessSym</code> du projet et rejoue la descente sous force forte, itération par itération (4 corps, classe à 7 pétales). À droite, la norme du gradient ; chaque palier de \(\varepsilon\) repart d’un gradient plus fort, puisque le potentiel a changé. Le verdict final vient de <code>attempt()</code>, la fonction des workers : les essais 1 et 2 retombent sur un polygone de Lagrange, à une autre fréquence permise que \(k_{\min}\) (voir plus bas), et sont écartés ; le 3 est retenu. (À ces 12 harmoniques de départ, le préconditionnement change peu le compte d’itérations de ces trois essais ; le gain mesuré, un temps divisé par 6, porte sur la recherche complète.)</figcaption></figure>
+        <div class="note"><b>Même graine, même orbite</b><p>Les essais d’une graine sont indépendants : chacun tire sa courbe de départ d’un générateur initialisé par <code>orbit:graine:indice</code>. Ils sont répartis entre les workers, et le premier essai réussi <em>par ordre d’indice</em> fait foi, quel que soit celui qui finit en premier. Les graines 17 et 22 donnent la même orbite sous Node et dans Chrome, avec un ou huit workers.</p></div>
+      </section>
+
+      <section id="symetrie">
+        <h2><span class="n">02</span>La classe de symétrie décide de ce qu’on trouve</h2>
+        <span class="src">src/orbit/symmetry.js</span>
+        <p>Les premiers bancs d’essai trouvaient sans cesse les mêmes orbites : le cercle de Lagrange, le huit, et leurs parentes. Changer d’algorithme n’y changeait rien (la continuation retrouvait exactement les mêmes orbites, le mode « selle » de Simó en trouvait 30 familles contre 55). Le levier de la variété était la topologie du départ.</p>
+        <p>En complexe, \(z(t) = \sum_k c_k e^{ikt}\). La graine impose souvent une symétrie de rotation, et parfois un miroir :</p>
+        <div class="eq">\[ z\!\left(t + \tfrac{2\pi}{m}\right) = e^{2i\pi l/m}\, z(t) \;\iff\; c_k = 0 \text{ sauf si } k \equiv l \pmod m, \qquad z(-t) = \overline{z(t)} \iff c_k \in \mathbb{R}. \]</div>
+        <p>La courbe a alors m pétales identiques. L’action étant invariante par ces symétries, un point critique dans la classe est un point critique tout court (principe de criticité symétrique de Palais) : une vraie chorégraphie. Et le minimum dans la classe est en général un <em>point selle</em> de l’action complète, qu’aucune descente libre n’atteindrait. Le projeté sur la classe est orthogonal : il suffit d’annuler des coordonnées complexes, au gradient comme à la courbe.</p>
+        <h3>Toutes les classes ne se valent pas</h3>
+        <p>Le minimum d’une classe est presque toujours le <strong>polygone de Lagrange</strong> qui tourne à la plus basse fréquence permise \(k_{\min}\). Sauf dans un cas : si \(k_{\min}\) et N ont un diviseur commun, ce polygone est une collision (les corps \(j\) et \(j + N/d\) s’y superposent), il est hors d’atteinte et la descente doit trouver autre chose. Mesuré sur 300 graines : ces classes donnent une orbite dans 100 % des cas, les autres dans 0 à 37 %. Elles n’existent que pour N composé (4, 6, 8, 9) ; la graine les tire à 85 %, et pour N premier se contente d’une classe faible ou d’aucune.</p>
+        <figure id="fig-sym" class="wide"><figcaption><b>Les fréquences d’une classe et le polygone qu’elle contient.</b> En haut, les fréquences \(k\) de \(-15\) à \(15\) : barrées, les multiples de N (centre de masse) ; pleines, celles que la classe permet ; cerclée, \(k_{\min}\). En bas, le polygone de Lagrange qui tourne à \(k_{\min}\). Fonctions <code>allowedFrequency</code>, <code>lowestFrequency</code> et <code>symmetryOptions</code> importées telles quelles ; la liste des classes est celle que propose le panneau de la scène (m ≤ 9, \(|k_{\min}| \le 2N\)).</figcaption></figure>
+        <div class="note trap"><b>Une orbite parcourue deux fois n’est pas une orbite nouvelle</b><p>Le huit revenait parfois déguisé : parcouru deux fois, avec une action multipliée par \(2^{2/3}\). Une courbe dont toutes les harmoniques sont multiples de \(g\) est une orbite plus simple, aux corps renumérotés. Le test est un PGCD sur le spectre : si le PGCD des harmoniques non nulles dépasse 1, l’essai est écarté.</p></div>
+      </section>
+
+      <section id="certificat">
+        <h2><span class="n">03</span>Une orbite instable ne se vérifie pas en l’intégrant</h2>
+        <span class="src">src/orbit/newton.js · classify.js · integrate.js</span>
+        <p>Une descente s’arrête près d’un point critique, pas dessus. Le polissage est un <strong>Newton–Krylov</strong> : chaque pas résout \(H\,\delta = -\nabla\mathcal{A}\) par MINRES préconditionné. Le hessien est symétrique, indéfini (les chorégraphies sont souvent des points selles) et singulier (décaler le temps ou tourner la courbe laisse l’action invariante) ; il n’est jamais formé, les produits \(H v\) sont des différences centrées du gradient exact. La convergence est quadratique : le huit en 4 itérations et 6 ms, gradient \(3\cdot10^{-13}\). Newton, contrairement à une descente, ne quitte pas un point selle. On double le nombre d’harmoniques (32, 64, 128) tant que la loi de Newton n’est pas satisfaite.</p>
+        <p>Le <strong>certificat</strong> est cette loi elle-même, évaluée le long de la courbe. Dans le repère tournant, l’accélération inertielle est \(\ddot x + 2\omega\, e_z \times \dot x - \omega^2 x_\perp\) ; elle doit égaler la gravitation des \(N - 1\) autres corps. L’orbite n’est retenue que si le résidu, relatif à l’accélération la plus forte, est sous \(10^{-4}\), si les corps ne se frôlent pas (plus courte approche au-dessus de 3 % de la taille), et si ce n’est ni un polygone ni une orbite parcourue plusieurs fois.</p>
+        <h3>La contre-épreuve par tirs multiples</h3>
+        <p>L’idée naturelle, intégrer les équations de Newton sur une période et comparer, ne prouve rien. Presque toutes ces orbites sont instables : la moindre erreur de troncature y est amplifiée d’un facteur \(10^3\) à \(10^8\) sur une période. La contre-épreuve coupe donc la période en 24 segments, chacun intégré (Dormand–Prince 5(4), tolérance relative \(10^{-11}\)) depuis l’état exact de la courbe : l’écart de raccord mesure la courbe, pas l’instabilité. Au 90<sup>e</sup> centile, il vaut \(5\cdot10^{-6}\). Le produit des jacobiennes des segments donne la matrice de monodromie, dont le rayon spectral dit si l’orbite est stable.</p>
+        <figure id="fig-shoot" class="wide"><figcaption><b>Le même intégrateur, d’un seul tenant et en tirs multiples.</b> Trajectoire du corps 0 dans le repère tournant (gris : la courbe trouvée). En rouge, une seule intégration sur toute la période ; en vert, les segments des tirs multiples, chacun repartant de la courbe. À droite, l’écart à la courbe (toutes les positions, relatif à la taille), en échelle logarithmique. <code>flow</code> et <code>stateAt</code> sont importés du projet ; les orbites sont celles que trouve la recherche pour ces graines. Sur l’orbite stable, les deux méthodes s’accordent ; sur les autres, l’intégration d’un seul tenant s’écarte de la courbe d’un ordre de grandeur de plus à chaque fraction de période.</figcaption></figure>
+        <div class="note check"><b>Des orbites stables, à confirmer</b><p>Sur 300 graines, 61 orbites ont un rayon spectral proche de 1 : 24 sont le huit, redécouvert, et 37 sont des orbites à 4 corps, dont 36 dans des classes de symétrie. La stabilité a été contre-vérifiée sur 13 d’entre elles par une méthode indépendante (état perturbé de \(10^{-9}\), intégré sur 20 périodes : l’écart reste borné). Elles restent des candidates, à comparer aux catalogues avant toute annonce.</p></div>
+      </section>
+
+      <section id="engrenages">
+        <h2><span class="n">04</span>La série de Fourier est déjà une machine</h2>
+        <span class="src">src/scene/epicycles.js · src/mech/design.js · designTrain()</span>
+        <p>Une courbe plane \(z(t) = \sum c_k e^{ikt}\) est une somme de cercles : un bras de longueur \(|c_k|\), tournant à la vitesse entière \(k\), porté par le bras précédent. Ptolémée et Fourier ensemble. Pour chaque astre, la machine garde les bras les plus longs jusqu’à ce que le reste tienne sous 0,3 % de la taille de l’orbite, 14 au plus ; la recherche écarte d’emblée les orbites qu’une telle machine ne tracerait pas à 1 % près. La symétrie choisit déjà les engrenages : dans une classe, la médiane est de 4 harmoniques pour 0,2 % de précision, contre 12 sans.</p>
+        <figure id="fig-epi" class="wide"><figcaption><b>Les bras d’une chaîne et la courbe qu’ils tracent</b>, dans le repère du plateau. En or, la courbe tracée par les bras retenus ; en gris, l’orbite exacte. <code>epicycles</code>, <code>pivots</code> et <code>sampleArms</code> viennent du projet. Retirez des bras : l’écart affiché est la somme des amplitudes oubliées, rapportée à la taille, exactement le critère de la recherche.</figcaption></figure>
+
+        <h3>Un train d’engrenages par bras</h3>
+        <p>Il faut ensuite que chaque bras tourne pour de bon à sa vitesse. Le bras \(i\) pivote au bout du bras \(i-1\), par rapport auquel il doit tourner à \(k_i - k_{i-1}\). La transmission est celle des planétaires : une roue A solidaire du bras \(i-2\) (le plateau pour le premier), montée sur un tenon qui traverse le moyeu du bras \(i-1\) ; des renvois le long de ce bras ; la roue B, solidaire du bras \(i\), à son bout. Chaque engrènement extérieur inverse le sens :</p>
+        <div class="eq">\[ k_i - k_{i-1} = (k_{i-2} - k_{i-1})\,(-1)^{n+1}\,\frac{z_A}{z_B}, \qquad m\,\frac{z_A + z_B + 2\sum z_{\text{renvois}}}{2} = |c_{i-1}|. \]</div>
+        <p>Les \(k\) étant entiers, le rapport est rationnel et exact. Son signe fixe la parité du nombre de renvois \(n\) ; les dents sont des multiples du numérateur et du dénominateur, au moins 10 ; le module \(m\) est choisi pour que la chaîne A, renvois, B tombe exactement sur la longueur du bras, et l’on ajoute des renvois (par deux) tant qu’une roue dépasse la longueur du bras divisée par 2,2. Les dents de chaque paire sont calées dans les creux de l’autre : sur 1&#8239;014 paires vérifiées, l’erreur reste sous \(10^{-12}\) pas.</p>
+        <figure id="fig-train"><figcaption><b>Un train conçu par <code>designTrain()</code>, la fonction du projet.</b> Réglez les vitesses entières des trois bras (valeurs initiales : le deuxième train de la graine par défaut). Les roues tournent dans le repère du bras porteur : A à \(k_{i-2} - k_{i-1}\), puis chaque roue à la vitesse de la précédente multipliée par \(-z_g/z_{g+1}\). Le bandeau compare la vitesse de B obtenue à celle que demande l’orbite. La longueur du bras est fixée à 1 ; seul le module en dépend.</figcaption></figure>
+      </section>
+
+      <section id="etages">
+        <h2><span class="n">05</span>Des étages par coloration de graphe, des portails pour le reste</h2>
+        <span class="src">src/mech/design.js · designOrder(), portals() · tools/collide.mjs</span>
+        <p>N chaînes de bras balaient le même disque. Deux bras de même rang qui se croisent un instant au cours de la période ne peuvent pas être à la même hauteur. La pile monte depuis le plateau : l’étoile des bras 0 (qui tournent ensemble et ne se croisent jamais) juste au-dessus de lui, chaque bras un étage plus haut que celui qui le porte, les astres au sommet. Chaque bras et le train qu’il porte forment une <em>dalle</em> de 34 mm.</p>
+        <p>Le placement est une <strong>coloration du graphe de conflits</strong>, échantillonné en 160 instants par période sur la vraie largeur de chaque dalle (barre, contrepoids, roues). Les éléments verticaux ajoutent des contraintes d’ordre : la goupille d’un astre et l’axe qui monte vers le bras suivant traversent les dalles plus hautes du même rang, qui doivent les éviter ; la colonne d’un galet et l’axe qui monte jusqu’au pivot traversent les plus basses. Ces contraintes forment un graphe orienté, pondéré par la part du temps où chacune compte. Quand il contient un cycle (deux axes qui montent chacun à travers le bras de l’autre), on renonce à l’arête la plus légère. L’ordre de sommation des bras ne change pas le bout de la chaîne : la conception en essaie jusqu’à 24 et garde la machine qui a le moins de collisions, puis le plus de galets, puis la plus basse.</p>
+        <figure id="fig-levels" class="wide"><figcaption><b>La machine vue de dessus, chaque dalle colorée par son étage dans son rang</b> (en gris, l’étoile des bras 0). <code>designMachine()</code> est appelée telle quelle sur l’orbite normalisée, comme dans le worker. À droite, l’élévation : une colonne par chaîne, une barre par dalle à sa hauteur. « Tout au même étage » montre ce que la coloration évite : les croisements de bras de même rang, à cet instant, cerclés de rouge. Les trains sont réduits à leurs roues, sans dents. Pour la graine 12, \(k_0 = 3\) et N = 6 : trois chaînes partagent chaque bras de l’étoile (montage concentrique), d’où deux grappes seulement.</figcaption></figure>
+        <h3>Les croisements qu’aucun étage ne défait</h3>
+        <p>Sur les machines à 11 bras ou plus, les grands bras d’une chaîne balaient les axes verticaux des chaînes voisines, et les conflits forment une boucle à travers toutes les chaînes. Étages entrelacés, têtes compactes autour des astres, trains plus étroits, bras retirés : rien ne la défait. Ces passages sont donc mis en scène. Tout ne dépendant que de \(\tau\), la conception calcule d’avance, pour chaque axe et chaque goupille, les dalles qu’il rencontre et les fenêtres de temps de chaque rencontre, sur 3&#8239;000 à 12&#8239;000 instants (au plus 2 mm de déplacement entre deux), avec 8 mm de jeu. À la hauteur de ce qui arrive, l’axe s’ouvre comme un portail : le tronçon s’efface depuis son milieu, ses bords s’embrasent d’or, le bras passe, l’axe se referme.</p>
+        <div class="note check"><b>Un contrôle qui ne partage rien avec la conception</b><p><code>tools/collide.mjs</code> refait la vérification sur la forme réelle des pièces, à au moins 20&#8239;000 instants par période (moins d’un millimètre entre deux : le croisement bref d’un bras rapide ne passe pas entre deux échantillons), montages concentriques et portails ouverts exceptés. Sur les graines 0 à 29 : aucune pénétration dans les 25 machines ; 14 sans aucun croisement, les 11 autres, à 11 bras ou plus, avec 3 à 25 portails.</p></div>
+      </section>
+
+      <section id="verre">
+        <h2><span class="n">06</span>Le verre filé refroidit d’un N-ième de période</h2>
+        <span class="src">src/scene/orbit3d.js</span>
+        <p>La trace de l’orbite est un fil de verre qui rougeoie derrière chaque astre. Un système de particules ou une texture d’historique coûteraient un tampon et casseraient la boucle parfaite. Or, sur une chorégraphie, la date du dernier passage en tout point est connue d’avance. Au point d’abscisse \(s\) (fraction de période), avec \(\varphi\) la phase courante :</p>
+        <div class="eq">\[ h(s) = 1 - \operatorname{fract}\!\big(N(\varphi - s)\big), \qquad \text{éclat} = e^{-\kappa\,(1 - h)}. \]</div>
+        <p>Le dernier passage date de \((1 - h)/N\) période : le verre refroidit pendant exactement un N-ième de période, et l’astre suivant arrive pour le ranimer. Le tube est un seul maillage fixe sur le plateau, chaque sommet porte son \(s\) ; tout le reste est calculé dans le shader à partir d’un seul uniforme, la phase. La couleur suit une approximation de corps noir en trois mélanges (rouge sombre, orange, jaune pâle, presque blanc), multipliée par \(6\,e^2 + 10\,e^{16}\) : une lueur large et un cœur très vif juste derrière l’astre. Le verre encore mou est un peu plus épais.</p>
+        <figure id="fig-glass" class="wide"><figcaption><b>La chaleur du fil, calculée comme dans le shader</b> (<code>heatColor</code> et l’émission portées ligne à ligne) sur l’orbite de la graine par défaut, vue de dessus. Le taux de refroidissement \(\kappa\) est tiré par la recette entre 4,5 et 7,5. À droite, l’émission en fonction du temps écoulé depuis le dernier passage. La démo remplace l’éclairage et le bloom par un simple tone mapping.</figcaption></figure>
+      </section>
+
+      <section id="plongee">
+        <h2><span class="n">07</span>Plonger dans une boule sans couture</h2>
+        <span class="src">src/main.js · setTime() · src/scene/world.js</span>
+        <p>Chaque astre est une boule de verre qui contient le monde suivant, réduit de \(k = r_g / R_G\) (rayon de la boule sur rayon de la coque du studio, soit au plus 0,075 / 5,2). La caméra ne bouge pas : c’est le monde qui subit une <strong>similitude</strong> de rapport \(k^{-s}\), \(s\) allant de 0 à 1 pendant la plongée. Avec un zoom de point fixe la boule visée \(p\), le raccord est exact, mais la boule ne se centre qu’à la toute fin : elle remplit déjà l’image en se promenant encore au gré de son orbite, et la caméra semble la chercher. Orrery sépare les deux mouvements :</p>
+        <div class="eq">\[ x \mapsto \frac{x - t_r}{k^s}, \qquad t_r = p\,\big(1 - k^s a(s)\big), \qquad a(s) = 1 - \mathrm{ss}_5\!\left(\tfrac{s}{0{,}5}\right). \]</div>
+        <p>La boule est alors dessinée en \(p\,a(s)\) : elle glisse vers le centre tant qu’elle est petite, y est fixée dès la moitié de la plongée, puis grandit sur place. À \(s = 1\), \(t_r = p\) et la couche suivante occupe exactement la place de la précédente : on change de racine sans que rien ne bouge (vérifié : position et échelle identiques à \(10^{-14}\) près aux trois raccords, bouclage compris). Pendant la plongée, le temps du monde qu’on quitte ralentit jusqu’à 8 % de son allure ; le monde qu’on rejoint tourne à la sienne.</p>
+        <figure id="fig-plunge" class="wide"><figcaption><b>Une plongée, vue de dessus.</b> Le monde (coque, plateau, orbite, quatre boules) est dessiné sous la similitude ; la boule visée contient le monde suivant, qui contient le suivant. Le pointillé est le chemin de la boule visée dans l’image pendant toute la plongée. Comparez avec le zoom de point fixe, où \(a(s) = (k^s - k)/(k^s(1 - k))\). Simplifications : vue zénithale au lieu de la caméra oblique, trois fois le même monde au lieu de trois mondes différents, allure de l’orbite arbitraire ; le rapport \(k\) et le ralenti sont ceux de la scène.</figcaption></figure>
+        <div class="note"><b>Une monture qui livre passage</b><p>La trajectoire de la caméra étant connue d’avance, la monture de la boule visée est calculée pour s’écarter : ses anneaux ralentissent et s’arrêtent, et la cage pivote autour de la verticale de l’angle (parmi 144) qui éloigne le plus ses sommets de la trajectoire, en tournant le moins possible. La caméra passe entre deux barreaux ; le verre s’efface quand il remplit l’image.</p></div>
+      </section>
+
+      <section id="compilation">
+        <h2><span class="n">08</span>Trois mondes compilés sans geler l’écran</h2>
+        <span class="src">src/main.js · pipes, warm() · src/scene/world.js</span>
+        <p>Les trois mondes sont emboîtés en permanence, chacun avec ses matières, son studio HDR et ses lumières. Le premier piège était invisible dans le code : three.js calcule la clé de ses shaders à partir de <em>l’ordre</em> des lumières de la scène. Ré-emboîter les mondes à chaque raccord changeait cet ordre et recompilait tous les matériaux, d’où un gel à chaque plongée. Les lumières vivent donc dans des gréements placés directement dans la scène, dans un ordre fixe, qui recopient à chaque image la transformation de leur monde. Chaque monde n’est éclairé que par les siennes, à son échelle (intensité × échelle²), et sa lampe n’ombre que lui, sur un calque propre : rien ne s’allume ni ne s’éteint pendant la plongée.</p>
+        <p>Le second piège tenait au navigateur. L’écran de chargement est dessiné dans un worker, sur un OffscreenCanvas, à environ 110 images par seconde ; il se figeait quand même. three.js crée ses pipelines de façon synchrone au premier dessin, et le processus graphique reste bloqué pendant chaque compilation, avec tout l’affichage de la page. Pendant le chargement, la création de pipeline est donc détournée vers <code>createRenderPipelineAsync</code> ; une pipeline pas encore prête est marquée en erreur, ce qui fait sauter l’objet par three.js, et l’on redessine jusqu’à ce qu’il n’en manque plus :</p>
+        <pre><code>be.createRenderPipeline = (renderObject, promises) => {
+  if (!pipes.on || promises) return create(renderObject, promises);
+  const list = [];
+  create(renderObject, list);              // promesses de compilation
+  const data = be.get(renderObject.pipeline);
+  data.error = true;                       // three.js saute l'objet
+  pipes.made++;
+  pipes.pending.push(Promise.all(list)
+    .then(() => { if (data.pipeline) data.error = false; }));
+};</code></pre>
+        <p>La scène est en outre révélée par petits lots (au plus 4 shaders ou 30 ms par lot, la page rend la main entre deux), puis dessinée aux six moments qui comptent : avant et en fin de plongée, dans chacun des trois mondes. Mesuré sur la graine 17 : 1,4 s de blocages de l’affichage au total (322 ms au pire, plus 0,7 s au premier dessin) avec la compilation synchrone, 0,1 s (moins de 45 ms au pire) ainsi. Ensuite, rien ne se compile : une boucle entière, trois raccords compris, sans une image de plus de 34 ms.</p>
+        <div class="note trap"><b>Instancier sans InstancedMesh</b><p>Les chaînes dont les pièces sont exactement les mêmes sont dessinées par instanciation. Mais pour <code>InstancedMesh</code>, three.js compile un shader par objet. La matrice de chaque instance est donc un attribut de la géométrie, appliqué par la matière : toutes les pièces d’une matière partagent un seul shader. Pour trois machines, 181 shaders au lieu de 477, et un chargement de 10,6 s ramené à 7,7 s.</p></div>
+      </section>
+
+      <section id="budget">
+        <h2><span class="n">09</span>Budget</h2>
+        <p>La recherche tourne dans des workers sous l’écran de chargement ; la conception des machines aussi, une seule fois pour les trois mondes. Les chiffres du solveur viennent d’un banc de 300 graines (<code>tools/bench.mjs</code>).</p>
+        <div class="tbl"><table>
+          <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
+          <tbody>
+            <tr><td>Un essai réussi (descente, Newton, certificat)</td><td>worker</td><td class="num">~20 ms</td></tr>
+            <tr><td>Une graine, un seul cœur (médiane / 90<sup>e</sup> centile)</td><td>Node</td><td class="num">0,6 s / 2,8 s</td></tr>
+            <tr><td>Une orbite dans le navigateur, 8 workers</td><td>workers</td><td class="num">quelques dizaines de ms à ~2 s</td></tr>
+            <tr><td>Graines qui aboutissent (N = 4, 6, 8, 9 / N = 3)</td><td>—</td><td class="num">98 à 100 % / 42 %</td></tr>
+            <tr><td>Orbites distinctes sur 259 trouvées</td><td>—</td><td class="num">229</td></tr>
+            <tr><td>Shaders pour trois machines (instanciation par attribut)</td><td>GPU</td><td class="num">181 (au lieu de 477)</td></tr>
+            <tr><td>Chargement complet, trois mondes</td><td>page</td><td class="num">7,7 s (au lieu de 10,6)</td></tr>
+            <tr><td>Objets dessinés par monde, 7 corps à 11 bras</td><td>GPU</td><td class="num">170 (au lieu de 1&#8239;250)</td></tr>
+            <tr><td>Image, même scène</td><td>GPU</td><td class="num">~14 ms (au lieu de ~60)</td></tr>
+            <tr><td>Atmosphère (poussières, faisceau, fumée, braises)</td><td>GPU</td><td class="num">~2 ms</td></tr>
+            <tr><td>Blocages de l’affichage au chargement, graine 17</td><td>page</td><td class="num">0,1 s (au lieu de 1,4 s)</td></tr>
+            <tr><td>Pire image sur une boucle entière</td><td>page</td><td class="num">34 ms</td></tr>
+            <tr><td>Version mobile : cible de la résolution dynamique</td><td>GPU</td><td class="num">45 i/s</td></tr>
+            <tr><td>Téléchargement hors three.js</td><td>—</td><td class="num">aucun</td></tr>
+          </tbody>
+        </table></div>
+        <p>Deux outils tiennent l’ensemble en dehors de la page : <code>tools/collide.mjs</code> vérifie chaque machine indépendamment de sa conception, et <code>tools/accords.mjs</code> vérifie les 49 accords de matières (le métal chaud ne couvre en moyenne que 18 % de la machine, 37 % au plus).</p>
+      </section>
+    </article>
+
+    <footer class="end">
+      <a href="./">Ouvrir Orrery</a>
+      <a href="https://github.com/drschizzo/Codevember/blob/main/planetaire_v2/README.md">README</a>
+      <span class="sp"></span>
+      <a href="../">Tous les jours</a>
+    </footer>
+  </main>
+
+  <script type="module">
+    import { demo, C, TAU, lerp, clamp, smooth, alpha, label, arrow } from '../home/explainer.js';
+    import { search, orbitParams, attempt } from './src/orbit/search.js';
+    import { createAction, curveAt } from './src/orbit/action.js';
+    import { lbfgs } from './src/orbit/lbfgs.js';
+    import { initialGuessSym, allowedFrequency, lowestFrequency, symmetryOptions } from './src/orbit/symmetry.js';
+    import { stateAt, flow } from './src/orbit/integrate.js';
+    import { epicycles, pivots as chainPivots, sampleArms, sampleCurve } from './src/scene/epicycles.js';
+    import { designTrain, designMachine, SLAB } from './src/mech/design.js';
+    import { createRng } from './src/rng.js';
+
+    const gcd = (a, b) => (b ? gcd(b, a % b) : Math.abs(a));
+    const fmtE = (x) => { if (!(x > 0)) return '0'; const e = Math.floor(Math.log10(x)), m = x / 10 ** e; return `${m.toFixed(1).replace('.', ',')}·10${String(e).replace('-', '⁻').replace(/\d/g, (c) => '⁰¹²³⁴⁵⁶⁷⁸⁹'[c])}`; };
+
+    // orbites trouvées par la vraie recherche (même appel que la scène : au plus 14 bras)
+    const ORB = new Map();
+    function orbitOf(seed) {
+      if (!ORB.has(seed)) {
+        const r = search(seed, { stability: false, over: { maxArms: 14 } });
+        const o = r.orbit, size = o.info.size;
+        const coefN = Float64Array.from(o.coef, (v) => v / size); // normalisée, comme dans le worker
+        ORB.set(seed, { ...o, seed, size, coefN, epiN: epicycles(coefN, o.params, 1, { tol: .003, max: 14 }) });
+      }
+      return ORB.get(seed);
+    }
+    function curvePts(coef, K, n = 360) {
+      const pts = [], pos = [0, 0];
+      for (let i = 0; i <= n; i++) { curveAt(coef, { D: 2, K }, TAU * i / n, pos); pts.push([pos[0], pos[1]]); }
+      return pts;
+    }
+    function poly(g, pts, X, Y, close = false) {
+      g.beginPath(); pts.forEach((p, i) => (i ? g.lineTo(X(p[0]), Y(p[1])) : g.moveTo(X(p[0]), Y(p[1])))); if (close) g.closePath();
+    }
+    function frame(g, x0, y0, x1, y1) { g.strokeStyle = C.grid; g.lineWidth = 1; g.strokeRect(x0, y0, x1 - x0, y1 - y0); }
+
+    // ── 01 · la descente rejouée ──────────────────────────────────────────
+    {
+      const SEED = 'bwkwvk', P = orbitParams(SEED, { maxArms: 14 });
+      const STRONG = [.2, .05, .01, 0];
+      // (search.js : mise à l'échelle optimale, λ³ = P / 2T)
+      const rescale = (act, c) => { act.evaluate(c); const { T, P: V } = act.out; if (!(T > 0) || !Number.isFinite(V)) return; const l = Math.cbrt(V / (2 * T)); for (let i = 0; i < c.length; i++) c[i] *= l; };
+      const cache = new Map();
+      function replay(a, pre) {
+        const key = `${a}:${pre}`;
+        if (cache.has(key)) return cache.get(key);
+        let x = initialGuessSym(P, createRng(`orbit:${SEED}:${a}`), P.Kc);
+        const frames = [], stages = [];
+        let fail = null;
+        for (const [i, strong] of STRONG.entries()) {
+          const act = createAction({ ...P, K: P.Kc, strong });
+          if (i === 0) rescale(act, x);
+          stages.push({ at: frames.length, strong });
+          const r = lbfgs(act.evaluate, x, { maxIter: 1500, gtol: 1e-5, diag: pre ? act.precond : null, iterStride: 1,
+            onIter: (it, f, gn, xx) => frames.push({ x: Float64Array.from(xx), gn, strong }) });
+          if (!Number.isFinite(r.f)) { fail = 'collision'; break; }
+          x = r.x; frames.push({ x: Float64Array.from(x), gn: r.gnorm, strong });
+        }
+        const verdict = pre && !fail ? attempt(P, createRng(`orbit:${SEED}:${a}`), { index: a }) : null;
+        const out = { frames, stages, fail, verdict };
+        cache.set(key, out);
+        return out;
+      }
+      let A = 2;
+      const pick = (a) => (d) => { A = a; d.t = 0; };
+      demo('#fig-descent', {
+        title: 'Descente sous force forte', aspect: 2.1, animate: true,
+        buttons: [
+          { label: 'Essai 1', onClick: pick(0) }, { label: 'Essai 2', onClick: pick(1) }, { label: 'Essai 3', onClick: pick(2) },
+        ],
+        draw(g, d) {
+          const R = replay(A, true), F = R.frames, nf = F.length;
+          const dur = clamp(nf / 140, 3, 9), prog = clamp(d.t / dur), fi = Math.min(nf - 1, Math.floor(prog * (nf - 1)));
+          const done = d.t > dur + .4, ok = done && R.verdict?.ok;
+          const coef = ok ? R.verdict.coef : F[fi].x, K = ok ? R.verdict.params.K : P.Kc;
+          // courbe et corps
+          const { w, h } = d, S = Math.min(h, w * .42), cx = S / 2 + 6, cy = h / 2;
+          const pts = curvePts(coef, K);
+          const rmax = Math.max(1e-6, ...pts.map((p) => Math.hypot(p[0], p[1])));
+          const sc = (S / 2 - 16) / rmax, X = (x) => cx + x * sc, Y = (y) => cy - y * sc;
+          g.strokeStyle = ok ? C.c1 : done && R.verdict ? C.c3 : alpha(C.c1, .75); g.lineWidth = ok ? 1.8 : 1.4;
+          poly(g, pts, X, Y); g.stroke();
+          const pos = [0, 0];
+          for (let j = 0; j < P.N; j++) {
+            curveAt(coef, { D: 2, K }, d.t * .9 + TAU * j / P.N, pos);
+            g.fillStyle = C.ink; g.beginPath(); g.arc(X(pos[0]), Y(pos[1]), 4, 0, TAU); g.fill();
+          }
+          // gradient
+          const x0 = S + 46, x1 = w - 14, y0 = 16, y1 = h - 34, lmin = -6, lmax = 2;
+          const Xi = (i) => lerp(x0, x1, i / Math.max(1, nf - 1)), Yl = (l) => lerp(y1, y0, (clamp(l, lmin, lmax) - lmin) / (lmax - lmin));
+          g.strokeStyle = C.grid; g.lineWidth = 1;
+          for (let l = lmin; l <= lmax; l++) { g.beginPath(); g.moveTo(x0, Yl(l)); g.lineTo(x1, Yl(l)); g.stroke(); label(g, `10${l < 0 ? '⁻' : ''}${'⁰¹²³⁴⁵⁶⁷⁸⁹'[Math.abs(l)]}`, x0 - 6, Yl(l) + 4, { align: 'right', size: 11 }); }
+          g.setLineDash([3, 4]); g.strokeStyle = alpha(C.c4, .6); g.beginPath(); g.moveTo(x0, Yl(-5)); g.lineTo(x1, Yl(-5)); g.stroke(); g.setLineDash([]);
+          label(g, 'seuil 10⁻⁵', x1 - 4, Yl(-5) - 5, { align: 'right', size: 11, color: C.c4 });
+          for (const st of R.stages) {
+            g.strokeStyle = alpha(C.ink, .25); g.beginPath(); g.moveTo(Xi(st.at), y0); g.lineTo(Xi(st.at), y1); g.stroke();
+            label(g, `ε ${String(st.strong).replace('.', ',')}`, Xi(st.at) + 4, y1 + 16, { size: 11 });
+          }
+          g.strokeStyle = C.c2; g.lineWidth = 1.5; g.beginPath();
+          for (let i = 0; i <= fi; i++) { const x = Xi(i), y = Yl(Math.log10(F[i].gn)); i ? g.lineTo(x, y) : g.moveTo(x, y); }
+          g.stroke();
+          g.fillStyle = C.c2; g.beginPath(); g.arc(Xi(fi), Yl(Math.log10(F[fi].gn)), 3.5, 0, TAU); g.fill();
+          label(g, '|∇𝒜| (max)', x0 + 6, y0 + 12, { color: C.c2 });
+          label(g, `${nf} itérations`, x1, y0 + 12, { align: 'right', color: C.dim });
+          let msg;
+          if (!done) msg = `essai ${A + 1} · ε = ${String(F[fi].strong).replace('.', ',')} · itération ${fi}`;
+          else if (!R.verdict) msg = R.fail ? `essai ${A + 1} · collision` : `essai ${A + 1} · ${nf} itérations`;
+          else if (R.verdict.ok) msg = `essai ${A + 1} retenu · résidu de Newton ${fmtE(R.verdict.residual)} · K = ${R.verdict.params.K}`;
+          else msg = `essai ${A + 1} écarté : ${R.verdict.reason}`;
+          d.status(msg);
+        },
+      });
+    }
+
+    // ── 02 · classes de symétrie ──────────────────────────────────────────
+    {
+      let ci = null;
+      const optsFor = (N) => [null, ...symmetryOptions(N)];
+      const dd = demo('#fig-sym', {
+        title: 'Fréquences permises et polygone de Lagrange', aspect: 2.3, animate: true,
+        controls: [
+          { key: 'N', label: 'Nombre de corps N', min: 3, max: 9, step: 1, value: 4, onChange: (d) => { ci = 0; } },
+          { key: 'c', label: 'Classe de symétrie', min: 0, max: 30, step: 1, value: 0, onChange: (d) => { ci = d.s.c; } },
+        ],
+        draw(g, d) {
+          const N = d.s.N, opts = optsFor(N);
+          if (ci === null) ci = Math.max(0, opts.findIndex((o) => o && o.m === 7 && o.l === 5)); // la classe de la graine par défaut
+          ci = clamp(ci, 0, opts.length - 1);
+          const inp = d.fig.querySelectorAll('.ctl input')[1], out = d.fig.querySelectorAll('.ctl output')[1];
+          if (inp) { inp.max = opts.length - 1; inp.value = ci; d.s.c = ci; }
+          const sym = opts[ci], p = { N, sym };
+          if (out) out.textContent = sym ? `m = ${sym.m}, l = ${sym.l}` : 'aucune';
+          const kmin = lowestFrequency(p), dv = gcd(kmin, N), strong = sym && dv > 1;
+          // bande des fréquences
+          const { w, h } = d, KR = 15, x0 = 30, x1 = w - 12, cw = (x1 - x0) / (2 * KR + 1), yb = 30, ch = Math.min(26, cw * 1.2);
+          label(g, 'k', x0 - 10, yb + ch / 2 + 4, { align: 'right' });
+          for (let k = -KR; k <= KR; k++) {
+            const x = x0 + (k + KR) * cw, com = k === 0 || k % N === 0, okk = allowedFrequency(k, p);
+            g.strokeStyle = C.grid; g.strokeRect(x + 1, yb, cw - 2, ch);
+            if (okk) { g.fillStyle = alpha(C.c1, .55); g.fillRect(x + 1, yb, cw - 2, ch); }
+            if (com) { g.strokeStyle = alpha(C.ink, .3); g.beginPath(); g.moveTo(x + 3, yb + 3); g.lineTo(x + cw - 3, yb + ch - 3); g.moveTo(x + cw - 3, yb + 3); g.lineTo(x + 3, yb + ch - 3); g.stroke(); }
+            if (k === kmin) { g.strokeStyle = C.c2; g.lineWidth = 2; g.strokeRect(x - 1, yb - 2, cw + 2, ch + 4); g.lineWidth = 1; }
+            if (k % 5 === 0 || k === kmin) label(g, String(k), x + cw / 2, yb + ch + 14, { align: 'center', size: 11, color: k === kmin ? C.c2 : C.dim });
+          }
+          // polygone de Lagrange à kmin
+          const R = Math.min(h * .26, w * .15), pcx = w * .2, pcy = h * .6;
+          g.strokeStyle = alpha(C.ink, .25); g.beginPath(); g.arc(pcx, pcy, R, 0, TAU); g.stroke();
+          const groups = new Map(), rot = d.t * .5 * Math.sign(kmin);
+          for (let j = 0; j < N; j++) { const key = ((kmin * j) % N + N) % N; groups.set(key, (groups.get(key) || 0) + 1); }
+          for (const [key, cnt] of groups) {
+            const a = TAU * key / N + rot, x = pcx + Math.cos(a) * R, y = pcy - Math.sin(a) * R;
+            g.fillStyle = cnt > 1 ? C.c3 : C.ink; g.beginPath(); g.arc(x, y, cnt > 1 ? 7 : 5, 0, TAU); g.fill();
+            if (cnt > 1) label(g, `×${cnt}`, x + 10, y - 8, { color: C.c3 });
+          }
+          label(g, `polygone à k = ${kmin}`, pcx, pcy + R + 22, { align: 'center' });
+          // verdict
+          const tx = w * .42, ty = h * .46;
+          const lines = !sym
+            ? [['aucune symétrie imposée', C.ink], [`k_min = ${kmin} : le cercle de Lagrange est permis`, C.dim], ['la descente libre y retombe souvent', C.dim]]
+            : strong
+              ? [[`classe sûre · pgcd(${Math.abs(kmin)}, ${N}) = ${dv}`, C.c4], [`le polygone à k = ${kmin} superpose ${dv} corps : collision`, C.dim], ['le minimum de la classe est forcément autre chose', C.dim], ['mesuré : orbite trouvée dans 100 % des cas', C.c4]]
+              : [[`classe faible · pgcd(${Math.abs(kmin)}, ${N}) = 1`, C.c3], [`le polygone à k = ${kmin} est dans la classe`, C.dim], ['la descente y retombe presque toujours', C.dim], ['mesuré : 0 à 37 % ; abandonnée après 4 essais', C.c3]];
+          const fs = w < 640 ? .8 : 1;
+          lines.forEach(([t, col], i) => label(g, t, tx, ty + i * 21 * fs, { color: col, size: (i ? 12.5 : 14) * fs }));
+          const nStrong = opts.filter((o) => o && !o.weak).length;
+          d.status(`N = ${N} · ${opts.length - 1} classes, dont ${nStrong} sûre${nStrong > 1 ? 's' : ''}`);
+        },
+      });
+    }
+
+    // ── 03 · tirs multiples ───────────────────────────────────────────────
+    {
+      const SEEDS = [['12', 'graine 12 · 6 corps'], ['13', 'graine 13 · 8 corps'], ['bwkwvk', 'graine par défaut · stable']];
+      let si = 0;
+      const cache = new Map();
+      function run(seed) {
+        if (cache.has(seed)) return cache.get(seed);
+        const o = orbitOf(seed), p = o.params, { N, D, omega } = p, size = o.size;
+        const S = N * Math.ceil(24 / N), SUB = 8, M = S * SUB, hh = TAU / M;
+        const rot = (y, t) => { const c = Math.cos(-omega * t), s = Math.sin(-omega * t); return [c * y[0] - s * y[1], s * y[0] + c * y[1]]; };
+        const errOf = (y, t) => { const ex = stateAt(o.coef, p, t); let e = 0; for (let i = 0; i < N * D; i++) e = Math.max(e, Math.abs(y[i] - ex[i])); return e / size; };
+        const single = [];
+        let y = stateAt(o.coef, p, 0);
+        single.push({ t: 0, q: rot(y, 0), e: 0 });
+        for (let i = 1; i <= M; i++) { y = flow(y, hh, N, D).y; const t = i * hh; single.push({ t, q: rot(y, t), e: errOf(y, t) }); }
+        const multi = [];
+        for (let s = 0; s < S; s++) {
+          const t0 = s * TAU / S; let ys = stateAt(o.coef, p, t0);
+          const seg = [{ t: t0, q: rot(ys, t0), e: 0 }];
+          for (let i = 1; i <= SUB; i++) { const t = t0 + i * hh; ys = flow(ys, hh, N, D).y; seg.push({ t, q: rot(ys, t), e: errOf(ys, t) }); }
+          multi.push(seg);
+        }
+        const out = { o, S, single, multi, pts: curvePts(o.coef, p.K, 600), size };
+        cache.set(seed, out);
+        return out;
+      }
+      demo('#fig-shoot', {
+        title: 'Intégration d’un seul tenant contre tirs multiples', aspect: 2.1, animate: true,
+        buttons: [
+          ...SEEDS.map(([s, l], i) => ({ label: l, onClick: (d) => { si = i; d.t = 0; } })),
+          { key: 'multi', label: 'Tirs multiples', toggle: true, value: true },
+        ],
+        draw(g, d) {
+          const R = run(SEEDS[si][0]), { w, h } = d;
+          const prog = clamp(d.t / 5), tNow = prog * TAU;
+          const S = Math.min(h, w * .44), cx = S / 2 + 6, cy = h / 2, sc = (S / 2 - 14) / (R.size * 1.05);
+          const X = (x) => cx + x * sc, Y = (y) => cy - y * sc;
+          g.save(); g.beginPath(); g.rect(0, 0, S + 12, h); g.clip();
+          g.strokeStyle = alpha(C.ink, .28); g.lineWidth = 1; poly(g, R.pts, X, Y); g.stroke();
+          if (d.s.multi) {
+            g.strokeStyle = C.c4; g.lineWidth = 2;
+            for (const seg of R.multi) { const part = seg.filter((q) => q.t <= tNow + 1e-9); if (part.length > 1) { poly(g, part.map((q) => q.q), X, Y); g.stroke(); } }
+          }
+          const sp = R.single.filter((q) => q.t <= tNow + 1e-9);
+          g.strokeStyle = C.c3; g.lineWidth = 1.6; poly(g, sp.map((q) => q.q), X, Y); g.stroke();
+          const last = sp[sp.length - 1]; g.fillStyle = C.c3; g.beginPath(); g.arc(X(last.q[0]), Y(last.q[1]), 4, 0, TAU); g.fill();
+          g.restore();
+          // écart
+          const x0 = S + 50, x1 = w - 14, y0 = 16, y1 = h - 32, lmin = -13, lmax = 1;
+          const Xt = (t) => lerp(x0, x1, t / TAU), Ye = (e) => lerp(y1, y0, (clamp(Math.log10(Math.max(e, 1e-13)), lmin, lmax) - lmin) / (lmax - lmin));
+          g.strokeStyle = C.grid; g.lineWidth = 1;
+          for (let l = lmin + 1; l <= lmax; l += 3) { const y = lerp(y1, y0, (l - lmin) / (lmax - lmin)); g.beginPath(); g.moveTo(x0, y); g.lineTo(x1, y); g.stroke(); label(g, `10${l < 0 ? '⁻' : ''}${String(Math.abs(l)).replace(/\d/g, (c) => '⁰¹²³⁴⁵⁶⁷⁸⁹'[c])}`, x0 - 6, y + 4, { align: 'right', size: 11 }); }
+          label(g, '0', x0, y1 + 16, { align: 'center', size: 11 }); label(g, '1 période', x1, y1 + 16, { align: 'right', size: 11 });
+          const plot = (arr, col) => { g.strokeStyle = col; g.lineWidth = 1.6; g.beginPath(); let first = true; for (const q of arr) { if (q.t > tNow + 1e-9 || q.e <= 0) continue; first ? g.moveTo(Xt(q.t), Ye(q.e)) : g.lineTo(Xt(q.t), Ye(q.e)); first = false; } g.stroke(); };
+          if (d.s.multi) for (const seg of R.multi) plot(seg, C.c4);
+          plot(R.single, C.c3);
+          label(g, 'un seul tenant', x0 + 6, y1 - 26, { color: C.c3 });
+          if (d.s.multi) label(g, `tirs multiples (${R.S} segments)`, x0 + 6, y1 - 10, { color: C.c4 });
+          const eS = Math.max(...sp.map((q) => q.e));
+          const eM = Math.max(0, ...R.multi.flat().filter((q) => q.t <= tNow + 1e-9).map((q) => q.e));
+          d.status(`${R.o.params.N} corps · écart d’un seul tenant ${fmtE(eS)}${d.s.multi ? ` · tirs multiples ${fmtE(eM)}` : ''}`);
+        },
+      });
+    }
+
+    // ── 04 · épicycles ────────────────────────────────────────────────────
+    {
+      const SEEDS = [['bwkwvk', 'graine par défaut'], ['13', 'graine 13'], ['3', 'graine 3']];
+      let si = 0;
+      const dd = demo('#fig-epi', {
+        title: 'Bras de Fourier', aspect: 2.1, animate: true,
+        controls: [{ key: 'n', label: 'Bras retenus', min: 1, max: 14, step: 1, value: 3 }],
+        buttons: SEEDS.map(([s, l], i) => ({ label: l, onClick: (d) => { si = i; const o = orbitOf(s); d.s.n = o.epiN.arms.length; const inp = d.fig.querySelector('.ctl input'), out = d.fig.querySelector('.ctl output'); inp.value = d.s.n; out.textContent = d.s.n; } })),
+        draw(g, d) {
+          const o = orbitOf(SEEDS[si][0]), p = o.params, N = p.N;
+          const terms = epicycles(o.coefN, p, 1, { tol: 0, max: 200 });
+          const n = Math.min(d.s.n, terms.arms.length), sel = epicycles(o.coefN, p, 1, { tol: 0, max: n });
+          const { w, h } = d, S = Math.min(h, w * .5), cx = S / 2 + 10, cy = h / 2, sc = (S / 2 - 12) / 1.08;
+          const X = (x) => cx + x * sc, Y = (y) => cy - y * sc;
+          const exact = sampleCurve(o.coefN, p, 600), traced = sampleArms(sel.arms, 600);
+          const toPts = (a) => { const r = []; for (let i = 0; i < a.length / 2; i++) r.push([a[2 * i], a[2 * i + 1]]); r.push(r[0]); return r; };
+          g.strokeStyle = alpha(C.ink, .3); g.lineWidth = 1; poly(g, toPts(exact), X, Y); g.stroke();
+          g.strokeStyle = C.c1; g.lineWidth = 1.6; poly(g, toPts(traced), X, Y); g.stroke();
+          const t = d.t * .35, P = new Float64Array(2 * n + 2);
+          for (let j = N - 1; j >= 0; j--) {
+            chainPivots(sel.arms, t + TAU * j / N, P);
+            const main = j === 0;
+            for (let i = 0; i < n; i++) {
+              const ax = P[2 * i], ay = P[2 * i + 1], bx = P[2 * i + 2], by = P[2 * i + 3];
+              if (main) { g.strokeStyle = alpha(C.c2, .22); g.lineWidth = 1; g.beginPath(); g.arc(X(ax), Y(ay), sel.arms[i].amp * sc, 0, TAU); g.stroke(); }
+              g.strokeStyle = main ? C.c2 : alpha(C.c2, .3); g.lineWidth = main ? 2 : 1.2;
+              g.beginPath(); g.moveTo(X(ax), Y(ay)); g.lineTo(X(bx), Y(by)); g.stroke();
+              if (main) { g.fillStyle = C.c2; g.beginPath(); g.arc(X(ax), Y(ay), 2.5, 0, TAU); g.fill(); }
+            }
+            g.fillStyle = main ? C.ink : alpha(C.ink, .55); g.beginPath(); g.arc(X(P[2 * n]), Y(P[2 * n + 1]), main ? 5 : 3.5, 0, TAU); g.fill();
+          }
+          // liste des bras
+          const tx = S + 40, ty = 26;
+          label(g, `${N} corps · ${terms.arms.length} harmoniques non nulles`, tx, ty, { color: C.ink, size: 13 });
+          label(g, 'bras (vitesse k, longueur |c_k|)', tx, ty + 22, { size: 11.5 });
+          const rows = Math.max(1, Math.min(14, terms.arms.length, Math.floor((h - ty - 90) / 14))), lh = Math.min(18, (h - ty - 90) / rows);
+          for (let i = 0; i < rows; i++) {
+            const a = terms.arms[i], on = i < n, y = ty + 44 + i * lh;
+            label(g, `k = ${a.k}`, tx, y, { size: 11.5, color: on ? C.c2 : C.faint });
+            g.fillStyle = on ? alpha(C.c2, .8) : alpha(C.ink, .15); g.fillRect(tx + 64, y - 8, Math.max(1.5, a.amp * (w - tx - 90)), 7);
+          }
+          const res = sel.residual;
+          const ok = res <= .003, fine = res <= .01;
+          label(g, `écart : ${(res * 100).toFixed(res < .01 ? 2 : 1).replace('.', ',')} % de la taille`, tx, h - 34, { size: 13, color: ok ? C.c4 : fine ? C.c1 : C.c3 });
+          label(g, ok ? 'sous 0,3 % : la machine s’arrête là' : fine ? 'sous 1 % : acceptable pour la recherche' : 'au-delà de 1 % : orbite écartée', tx, h - 14, { size: 11.5 });
+          d.status(`${n} bras par astre · ${n * N} pour la machine`);
+        },
+      });
+    }
+
+    // ── 04b · un train d'engrenages ───────────────────────────────────────
+    {
+      const frac = (num, den) => { const gg = gcd(num, den) || 1; let p = num / gg, q = den / gg; if (q < 0) { p = -p; q = -q; } return [p, q]; };
+      function gearPath(g, cx, cy, r, z, m, ang) {
+        const ra = r + m, rd = Math.max(r * .4, r - 1.25 * m);
+        g.beginPath();
+        for (let i = 0; i < z; i++) {
+          const a0 = ang + TAU * i / z, p = TAU / z;
+          const pts = [[rd, a0 - p * .5], [rd, a0 - p * .25], [ra, a0 - p * .12], [ra, a0 + p * .12], [rd, a0 + p * .25]];
+          pts.forEach(([rr, a], k) => { const x = cx + Math.cos(a) * rr, y = cy + Math.sin(a) * rr; i || k ? g.lineTo(x, y) : g.moveTo(x, y); });
+        }
+        g.closePath();
+      }
+      demo('#fig-train', {
+        title: 'Le train porté par un bras', aspect: 1.9, animate: true,
+        controls: [
+          { key: 'ka', label: 'kᵢ₋₂ : bras qui porte A (0 : le plateau)', min: -9, max: 9, step: 1, value: -2 },
+          { key: 'kb', label: 'kᵢ₋₁ : bras porteur', min: -9, max: 9, step: 1, value: 5 },
+          { key: 'kc', label: 'kᵢ : bras mené, qui porte B', min: -12, max: 12, step: 1, value: -9 },
+        ],
+        draw(g, d) {
+          const { ka, kb, kc } = d.s, { w, h } = d;
+          if (ka === kb || kc === kb) { label(g, ka === kb ? 'A ne tourne pas par rapport au bras porteur : aucun rapport ne mène B.' : 'Le bras mené tournerait avec son porteur : il n’y a rien à transmettre.', w / 2, h / 2, { align: 'center', color: C.c3, size: 13 }); d.status('vitesses identiques : pas de train'); return; }
+          const [p, q] = frac(kc - kb, ka - kb), tr = designTrain(1, p, q);
+          const L = 1, maxR = Math.max(...tr.gears.map((G) => G.r + tr.m));
+          const sc = Math.min((w - 40) / (L + 2 * maxR), (h - 70) / (2 * maxR)), ox = 20 + maxR * sc, oy = h * .46;
+          // le bras
+          g.fillStyle = alpha(C.ink, .08); g.strokeStyle = alpha(C.ink, .25);
+          g.beginPath(); g.roundRect(ox - 12, oy - 9, L * sc + 24, 18, 9); g.fill(); g.stroke();
+          // angles : A tourne à (ka − kb) dans le repère du bras ; chaque roue suivante roule sur la précédente
+          const wA = ka - kb, vmax = Math.max(Math.abs(wA), Math.abs(kc - kb), 1), t = d.t * .5 / vmax;
+          let th = wA * t;
+          const cols = { A: C.c2, I: C.dim, B: C.c1 };
+          tr.gears.forEach((G, i) => {
+            if (i) { const P0 = tr.gears[i - 1]; th = Math.PI + Math.PI / G.z - (P0.z / G.z) * th; }
+            gearPath(g, ox + G.x * sc, oy, G.r * sc, G.z, tr.m * sc, -th);
+            g.fillStyle = alpha(cols[G.role] === C.dim ? C.ink : cols[G.role], G.role === 'I' ? .1 : .18); g.fill();
+            g.strokeStyle = cols[G.role]; g.lineWidth = 1.1; g.stroke();
+            const mx = ox + G.x * sc, mk = -th; g.strokeStyle = cols[G.role]; g.lineWidth = 1.6; g.beginPath(); g.moveTo(mx, oy); g.lineTo(mx + Math.cos(mk) * G.r * sc * .7, oy + Math.sin(mk) * G.r * sc * .7); g.stroke();
+            g.fillStyle = C.ink; g.beginPath(); g.arc(mx, oy, 3, 0, TAU); g.fill();
+            label(g, `${G.role === 'I' ? 'renvoi' : G.role} · ${G.z} dents`, mx, oy + G.r * sc + tr.m * sc + 16, { align: 'center', size: 11.5, color: cols[G.role] });
+          });
+          const got = wA * tr.ratio, want = kc - kb;
+          const nI = tr.n;
+          d.status(`rapport ${p}/${q} · ${nI} renvoi${nI > 1 ? 's' : ''} · module ${tr.m.toFixed(4).replace('.', ',')} × L · B à ${got.toFixed(3).replace('.', ',')} (voulu ${want})`);
+        },
+      });
+    }
+
+    // ── 05 · étages ───────────────────────────────────────────────────────
+    {
+      const SEEDS = [['12', 'graine 12 · 6 corps'], ['bwkwvk', 'graine par défaut']];
+      let si = 0;
+      const cache = new Map();
+      const mach = (seed) => { if (!cache.has(seed)) { const o = orbitOf(seed); cache.set(seed, { o, D: designMachine(o.epiN.arms, o.params.N) }); } return cache.get(seed); };
+      const PAL = () => [C.c2, C.c1, C.c4, C.c3];
+      const segDist = (a, b) => {
+        const ps = (px, py, s) => { const vx = s[2] - s[0], vy = s[3] - s[1], l2 = vx * vx + vy * vy || 1e-12, u = clamp(((px - s[0]) * vx + (py - s[1]) * vy) / l2); return Math.hypot(px - s[0] - u * vx, py - s[1] - u * vy); };
+        const cr = (p, q, r) => (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]);
+        const A0 = [a[0], a[1]], A1 = [a[2], a[3]], B0 = [b[0], b[1]], B1 = [b[2], b[3]];
+        if (cr(A0, A1, B0) * cr(A0, A1, B1) < 0 && cr(B0, B1, A0) * cr(B0, B1, A1) < 0) return 0;
+        return Math.min(ps(a[0], a[1], b), ps(a[2], a[3], b), ps(b[0], b[1], a), ps(b[2], b[3], a));
+      };
+      demo('#fig-levels', {
+        title: 'Dalles et étages', aspect: 2, animate: true,
+        buttons: [...SEEDS.map(([s, l], i) => ({ label: l, onClick: () => { si = i; } })), { key: 'flat', label: 'Tout au même étage', toggle: true, value: false }],
+        draw(g, d) {
+          const { D, o } = mach(SEEDS[si][0]), { n, N, L, barW, halfW, cw, level, base, trains } = D, pal = PAL();
+          const { w, h } = d, S = Math.min(h, w * .56), cx = S / 2 + 6, cy = h / 2;
+          const reach = L.reduce((a, b) => a + b, 0) + .05, sc = (S / 2 - 10) / reach, X = (x) => cx + x * sc, Y = (y) => cy - y * sc;
+          const t = d.t * .12, slabs = [];
+          for (let j = 0; j < N; j++) {
+            const P = Float64Array.from(D.pivots(t + TAU * j / N));
+            for (let i = 0; i < n; i++) {
+              const x0 = P[2 * i], y0 = P[2 * i + 1], x1 = P[2 * i + 2], y1 = P[2 * i + 3], ux = (x1 - x0) / (L[i] || 1), uy = (y1 - y0) / (L[i] || 1);
+              const lv = i ? level[i][j] : 0;
+              slabs.push({ i, j, lv, z: base[i] + lv * SLAB, seg: [x0 - ux * cw[i], y0 - uy * cw[i], x1, y1], x0, y0, ux, uy, end: [x1, y1] });
+            }
+          }
+          slabs.sort((a, b) => a.z - b.z);
+          for (const s of slabs) {
+            const col = s.i === 0 ? alpha(C.ink, .45) : d.s.flat ? C.c2 : pal[s.lv % pal.length];
+            const tr = trains[s.i + 1];
+            if (tr) for (const G of tr.gears) { g.strokeStyle = s.i === 0 ? alpha(C.ink, .2) : alpha(col, .45); g.lineWidth = 1; g.beginPath(); g.arc(X(s.x0 + s.ux * G.x), Y(s.y0 + s.uy * G.x), Math.max(1, G.r * sc), 0, TAU); g.stroke(); }
+            g.strokeStyle = col; g.lineCap = 'round'; g.lineWidth = Math.max(2, barW[s.i] * sc);
+            g.beginPath(); g.moveTo(X(s.seg[0]), Y(s.seg[1])); g.lineTo(X(s.seg[2]), Y(s.seg[3])); g.stroke();
+          }
+          g.lineCap = 'butt';
+          for (const s of slabs) if (s.i === n - 1) { g.fillStyle = C.ink; g.beginPath(); g.arc(X(s.end[0]), Y(s.end[1]), 4, 0, TAU); g.fill(); }
+          // croisements de même rang (tout au même étage)
+          let hits = 0;
+          if (d.s.flat) {
+            for (let i = 1; i < n; i++) for (let j = 0; j < N; j++) for (let j2 = j + 1; j2 < N; j2++) {
+              const a = slabs.find((s) => s.i === i && s.j === j), b = slabs.find((s) => s.i === i && s.j === j2);
+              if (segDist(a.seg, b.seg) < 2 * halfW[i] + .012) {
+                hits++;
+                const mx = (a.seg[0] + a.seg[2] + b.seg[0] + b.seg[2]) / 4, my = (a.seg[1] + a.seg[3] + b.seg[1] + b.seg[3]) / 4;
+                g.strokeStyle = C.c3; g.lineWidth = 2; g.beginPath(); g.arc(X(mx), Y(my), 14, 0, TAU); g.stroke();
+              }
+            }
+          }
+          // élévation
+          const ex0 = S + 40, ex1 = w - 16, ey0 = 30, ey1 = h - 40, H = D.height;
+          const Ez = (z) => lerp(ey1, ey0, z / H), colW = (ex1 - ex0) / N;
+          g.strokeStyle = C.grid; g.lineWidth = 1; g.beginPath(); g.moveTo(ex0, ey1); g.lineTo(ex1, ey1); g.stroke();
+          label(g, 'plateau', ex0, ey1 + 16, { size: 11 });
+          label(g, 'hauteur', ex0, ey0 - 12, { size: 11 });
+          for (const s of slabs) {
+            const z = d.s.flat ? base[s.i] : s.z, col = s.i === 0 ? alpha(C.ink, .45) : d.s.flat ? C.c2 : pal[s.lv % pal.length];
+            g.fillStyle = col; g.fillRect(ex0 + s.j * colW + 4, Ez(z + SLAB * .85), colW - 8, Math.max(2, Ez(z) - Ez(z + SLAB * .85)));
+          }
+          for (let j = 0; j < N; j++) label(g, String(j + 1), ex0 + (j + .5) * colW, ey1 + 30, { align: 'center', size: 10.5, color: C.faint });
+          const ranks = D.S.map((s, i) => `${s}`).join(' · ');
+          d.status(d.s.flat ? `${hits} croisement${hits > 1 ? 's' : ''} de même rang à cet instant` : `${n} rangs · étages par rang ${ranks} · collisions ${D.collisions}`);
+        },
+      });
+    }
+
+    // ── 06 · verre filé ───────────────────────────────────────────────────
+    {
+      const mix3 = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
+      // orbit3d.js · heatColor, ligne à ligne
+      const heatColor = (hh) => {
+        const c1 = mix3([.25, .015, .004], [1, .18, .03], smooth(0, .35, hh));
+        const c2 = mix3(c1, [1, .55, .16], smooth(.3, .7, hh));
+        return mix3(c2, [1, .9, .74], smooth(.72, 1, hh));
+      };
+      const emission = (glow) => { const k = glow * glow * 6 + glow ** 16 * 10; return heatColor(glow).map((c) => c * k); };
+      const tone = (rgb) => rgb.map((c) => Math.round(255 * Math.pow(c / (1 + c), 1 / 2.2)));
+      const BASE = [.012, .014, .018];
+      demo('#fig-glass', {
+        title: 'Chaleur du verre filé', aspect: 2.1, animate: true,
+        controls: [
+          { key: 'cool', label: 'Refroidissement κ', min: 2, max: 12, step: .1, value: 6, fmt: (v) => v.toFixed(1).replace('.', ',') },
+          { key: 'sp', label: 'Allure', min: 0, max: .3, step: .005, value: .06, fmt: (v) => `${(v * 100).toFixed(1).replace('.', ',')} % de période/s` },
+        ],
+        setup(d) { d.state.phi = 0; },
+        draw(g, d) {
+          const o = orbitOf('bwkwvk'), p = o.params, N = p.N;
+          d.state.phi = (d.state.phi + d.dt * d.s.sp) % 1;
+          const phi = d.state.phi, { w, h } = d, S = Math.min(h, w * .5), cx = S / 2 + 6, cy = h / 2, sc = (S / 2 - 12) / 1.05;
+          const X = (x) => cx + x * sc, Y = (y) => cy - y * sc;
+          const n = 900, pos = [0, 0], pts = [];
+          for (let i = 0; i <= n; i++) { curveAt(o.coefN, { D: 2, K: p.K }, TAU * i / n, pos); pts.push([pos[0], pos[1]]); }
+          g.lineCap = 'round';
+          for (let i = 0; i < n; i++) {
+            const s = (i + .5) / n, heat = 1 - (((N * (phi - s)) % 1) + 1) % 1, glow = Math.exp(-(1 - heat) * d.s.cool);
+            const e = emission(glow), rgb = tone(e.map((c, k) => c + BASE[k] * 6));
+            g.strokeStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`; g.lineWidth = 2.2 + 1.6 * glow;
+            g.beginPath(); g.moveTo(X(pts[i][0]), Y(pts[i][1])); g.lineTo(X(pts[i + 1][0]), Y(pts[i + 1][1])); g.stroke();
+          }
+          g.lineCap = 'butt';
+          for (let j = 0; j < N; j++) {
+            curveAt(o.coefN, { D: 2, K: p.K }, TAU * (phi + j / N), pos);
+            g.fillStyle = alpha('#fff4e0', .2); g.beginPath(); g.arc(X(pos[0]), Y(pos[1]), 9, 0, TAU); g.fill();
+            g.fillStyle = '#fff4e0'; g.beginPath(); g.arc(X(pos[0]), Y(pos[1]), 4.5, 0, TAU); g.fill();
+          }
+          // émission selon l'âge
+          const x0 = S + 50, x1 = w - 14, y0 = 20, y1 = h - 38, emax = 16;
+          const Xa = (a) => lerp(x0, x1, a), Ye = (e) => lerp(y1, y0, Math.log1p(e) / Math.log1p(emax));
+          g.strokeStyle = C.grid; g.lineWidth = 1;
+          for (const e of [0, 1, 4, 16]) { g.beginPath(); g.moveTo(x0, Ye(e)); g.lineTo(x1, Ye(e)); g.stroke(); label(g, String(e), x0 - 6, Ye(e) + 4, { align: 'right', size: 11 }); }
+          for (let i = 0; i < 200; i++) {
+            const a = i / 200, glow = Math.exp(-a * d.s.cool), e = emission(glow), lum = .2126 * e[0] + .7152 * e[1] + .0722 * e[2];
+            const a2 = (i + 1) / 200, glow2 = Math.exp(-a2 * d.s.cool), e2 = emission(glow2), lum2 = .2126 * e2[0] + .7152 * e2[1] + .0722 * e2[2];
+            const rgb = tone(e); g.strokeStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`; g.lineWidth = 3;
+            g.beginPath(); g.moveTo(Xa(a), Ye(lum)); g.lineTo(Xa(a2), Ye(lum2)); g.stroke();
+          }
+          label(g, 'luminance émise', x0 + 6, y0 + 4, { base: 'top', size: 11.5 });
+          label(g, 'astre', x0, y1 + 16, { size: 11 }); label(g, 'astre suivant', x1, y1 + 16, { align: 'right', size: 11 });
+          label(g, 'temps depuis le passage (1/N de période) →', (x0 + x1) / 2, y1 + 32, { align: 'center', size: 11, color: C.faint });
+          d.status(`${N} astres · le fil revient à ${(Math.exp(-d.s.cool) * 100).toFixed(1).replace('.', ',')} % de son éclat quand l’astre suivant arrive`);
+        },
+      });
+    }
+
+    // ── 07 · la plongée ───────────────────────────────────────────────────
+    {
+      const RG = 5.2, rg = .075, k = rg / RG, H = .45, SLOW = .08, V = 1.55;
+      const ss5 = (x) => { const t = clamp(x); return t * t * t * (t * (t * 6 - 15) + 10); };
+      // world.js · localTime : le monde qu'on quitte ralentit jusqu'à 8 % de son allure
+      const localTime = (u) => { if (u <= H) return u; const dd = .4 * (1 - H), x = Math.min(1, (u - H) / dd); return H + dd * (x - (1 - SLOW) * (x * x * x - (x * x * x * x) / 2)) + SLOW * Math.max(0, u - H - dd); };
+      const glide = (s) => 1 - ss5(s / .5);
+      const fixedA = (s) => { const ks = k ** s; return (ks - k) / (ks * (1 - k)); };
+      const OM = TAU * .35; // (allure de l'orbite, arbitraire)
+      let pts = null;
+      function bodies(o, T) {
+        const p = o.params, pos = [0, 0], out = [];
+        for (let j = 0; j < p.N; j++) { curveAt(o.coefN, { D: 2, K: p.K }, OM * T + TAU * j / p.N, pos); out.push([pos[0], pos[1]]); }
+        return out;
+      }
+      demo('#fig-plunge', {
+        title: 'Similitude de la plongée', aspect: 1.8, animate: true,
+        controls: [{ key: 'sp', label: 'Durée d’une couche', min: 4, max: 20, step: .5, value: 9, fmt: (v) => `${v} s` }],
+        buttons: [{ key: 'fixed', label: 'Zoom de point fixe', toggle: true, value: false }, { label: 'Rejouer', onClick: (d) => { d.t = 0; } }],
+        draw(g, d) {
+          const o = orbitOf('bwkwvk');
+          if (!pts) { pts = []; const pos = [0, 0]; for (let i = 0; i <= 300; i++) { curveAt(o.coefN, { D: 2, K: o.params.K }, TAU * i / 300, pos); pts.push([pos[0], pos[1]]); } }
+          const { w, h } = d, cx = w / 2, cy = h / 2, px = (h / 2) / V;
+          const u = (d.t / d.s.sp) % 1, s = ss5((u - H) / (1 - H)), ks = k ** s, A = d.s.fixed ? fixedA : glide;
+          const p0 = bodies(o, localTime(u))[0];
+          const tr = [p0[0] * (1 - ks * A(s)), p0[1] * (1 - ks * A(s))];
+          const SX = (x) => cx + (x - tr[0]) / ks * px, SY = (y) => cy - (y - tr[1]) / ks * px;
+          const tones = ['#121216', '#18161a', '#141a1d'];
+          (function draw0() {
+            // racine : temps local(u) ; le monde intérieur vit à u − 1, le suivant à u − 2 (world.js)
+            const T0 = localTime(u);
+            const worldAt = (depth, ox, oy, sc) => {
+              const T = depth === 0 ? T0 : u - depth;
+              const R = sc * px / ks, Xw = (x) => SX(ox + sc * x), Yw = (y) => SY(oy + sc * y);
+              g.fillStyle = tones[depth % 3]; g.beginPath(); g.arc(Xw(0), Yw(0), RG * R, 0, TAU); g.fill();
+              g.fillStyle = alpha(C.ink, .06); g.beginPath(); g.arc(Xw(0), Yw(0), 1.12 * R, 0, TAU); g.fill();
+              g.strokeStyle = alpha(C.c1, .6); g.lineWidth = 1.2; poly(g, pts, Xw, Yw); g.stroke();
+              bodies(o, T).forEach((b, j) => {
+                const bx = Xw(b[0]), by = Yw(b[1]), br = rg * R;
+                if (bx + br < 0 || bx - br > w || by + br < 0 || by - br > h) return;
+                g.save(); g.beginPath(); g.arc(bx, by, Math.max(br, .5), 0, TAU); g.clip();
+                if (j === 0 && br > 2 && depth < 3) worldAt(depth + 1, ox + sc * b[0], oy + sc * b[1], sc * k);
+                else { g.fillStyle = tones[(depth + 1) % 3]; g.fillRect(bx - br, by - br, 2 * br, 2 * br); if (br > 6) { g.strokeStyle = alpha(C.c1, .5); g.lineWidth = .8; poly(g, pts, (x) => bx + x * br / RG, (y) => by - y * br / RG); g.stroke(); } }
+                g.restore();
+                g.strokeStyle = j === 0 ? C.c2 : alpha(C.ink, .7); g.lineWidth = j === 0 ? 1.6 : 1.1; g.beginPath(); g.arc(bx, by, Math.max(br, 2), 0, TAU); g.stroke();
+              });
+            };
+            g.fillStyle = '#0a0a0c'; g.fillRect(0, 0, w, h);
+            worldAt(0, 0, 0, 1);
+          })();
+          // chemin de la boule visée dans l'image pendant la plongée
+          g.setLineDash([2, 4]); g.strokeStyle = alpha(C.c2, .8); g.lineWidth = 1.2; g.beginPath();
+          for (let i = 0; i <= 120; i++) {
+            const uu = H + (1 - H) * i / 120, ss = ss5((uu - H) / (1 - H)), b = bodies(o, localTime(uu))[0], a = A(ss);
+            const x = cx + b[0] * a * px, y = cy - b[1] * a * px; i ? g.lineTo(x, y) : g.moveTo(x, y);
+          }
+          g.stroke(); g.setLineDash([]);
+          // cadre de l'image
+          g.strokeStyle = alpha(C.ink, .15); g.strokeRect(.5, .5, w - 1, h - 1);
+          g.strokeStyle = alpha(C.ink, .35); g.beginPath(); g.moveTo(cx - 6, cy); g.lineTo(cx + 6, cy); g.moveTo(cx, cy - 6); g.lineTo(cx, cy + 6); g.stroke();
+          const off = Math.hypot(p0[0], p0[1]) * A(s) * px;
+          const phase = u < H ? 'on regarde la machine' : s < .5 ? 'la boule glisse vers le centre' : 'la boule grandit sur place';
+          d.status(`${phase} · s = ${s.toFixed(2).replace('.', ',')} · zoom ×${(1 / ks).toFixed(1).replace('.', ',')} · écart au centre ${off.toFixed(0)} px`);
+        },
+      });
+    }
+  </script>
+</body>
+</html>
