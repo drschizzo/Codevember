@@ -1,5 +1,5 @@
 // Banc d'essai de la fracture : temps, nombre d'éclats, étanchéité.
-//   node calcin/tools/bench-fracture.mjs
+//   node shatter/tools/bench-fracture.mjs
 import { fracture } from '../src/gen/fracture.js';
 import { FORMS } from '../src/gen/forms.js';
 

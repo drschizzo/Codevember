@@ -20,7 +20,7 @@ Rendu physique en three.js (WebGPU, TSL). La scène est entièrement procédural
 
 Sur écran tactile : une touche met en pause, deux touches tirent une nouvelle scène, un appui long masque l'interface.
 
-Paramètres d'URL : `?seed=…` (une scène), `#r=…` (une scène retouchée, produite par « Copier le lien »), `?ui=0` (sans panneau), `?mobile=1` / `?mobile=0` (version mobile imposée / interdite), `?debug` (outils dans `window.calcin` : `shot(phase)`, `send(nom)`, `meter()`, `bench()`, `seam()`, `run()`).
+Paramètres d'URL : `?seed=…` (une scène), `#r=…` (une scène retouchée, produite par « Copier le lien »), `?ui=0` (sans panneau), `?mobile=1` / `?mobile=0` (version mobile imposée / interdite), `?debug` (outils dans `window.shatter` : `shot(phase)`, `send(nom)`, `meter()`, `bench()`, `seam()`, `run()`).
 
 Le panneau règle tout :
 - **Scène** : décor, nombre de pièces par boucle, durée d'une étape, caméra rapide (ralenti, durée, retour au temps réel) ;
@@ -97,7 +97,7 @@ Les contre-jours suivent la caméra (derrière la pièce, de part et d'autre) : 
 ## Tests
 
 ```bash
-node --test 'calcin/test/*.test.mjs'
+node --test 'shatter/test/*.test.mjs'
 ```
 
 Dix tests : recette (déterminisme, JSON), humeurs, direction artistique sur 400 graines, décors (au moins deux clairs, deux sombres, aucun couple semblable par la valeur, la lumière, le cadrage, le sol et l'accessoire), pièces (toutes les parties et tous les modelés sortent ; une carafe à anse et bouchon est posée sur la sole, sans NaN), temps (ralenti ×k au choc, temps réel ailleurs, jamais de recul ; plateau arrêté avant le choc), fracture (éclats fermés, nombres par déclencheur ; près de l'impact, plus petits et plus rapides ; pendule horizontal), gravité (parabole d'accélération g, atterrissage, repos à la hauteur de la sole, aucun sommet dessous à aucun instant ; au repos, même sans la sécurité du shader, aucun sommet ne s'y enfoncerait de plus de 1,5 cm ; fonte après la chute), cause et effet (la bille et le marteau touchent le point d'impact exactement au choc et jamais avant ; le choc arrive en temps réel, le ralenti prend le relais).
