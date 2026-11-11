@@ -27,7 +27,9 @@ jobs:
 
       # site statique : la page d'index et chaque expérience — tout dossier de
       # premier niveau qui contient un index.html (une expérience par dossier),
-      # sans les outils ni la documentation ; plus les vignettes de l’accueil (home/)
+      # sans les outils ni les textes Markdown (les images de docs/ et les pages
+      # explainer.html des défis techniques sont publiées) ; plus l’accueil (home/,
+      # vignettes et feuille de style commune des pages de documentation)
       - name: Assembler le site
         run: |
           mkdir -p _site
@@ -37,7 +39,7 @@ jobs:
             d=${d%/}
             if [ "$d" != _site ] && [ -f "$d/index.html" ]; then
               echo "expérience : $d"
-              rsync -a --exclude tools --exclude docs --exclude '*.md' "$d" _site/
+              rsync -a --exclude tools --exclude '*.md' "$d" _site/
             fi
           done
           touch _site/.nojekyll

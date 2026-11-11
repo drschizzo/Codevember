@@ -1,0 +1,781 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#050506">
+  <title>Shatter · défis techniques</title>
+  <meta name="description" content="Comment Shatter souffle, brise et refond une pièce de verre : fracture exacte dans une métrique propre à chaque déclencheur, front de fissure, caméra rapide qui commence au contact, chute analytique dans le vertex shader, position de repos stable, incandescence, porteurs d'ombre.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+  <link rel="stylesheet" href="../home/explainer.css">
+</head>
+<body>
+  <nav class="top"><div class="in">
+    <a href="../">Codevember</a><span class="day">Day 02</span><span class="crumb">Shatter · défis techniques</span>
+    <span class="sp"></span><a class="open" href="./">Ouvrir la scène</a>
+  </div></nav>
+
+  <main>
+    <header class="hero">
+      <div class="kicker">Day 02 · Shatter · le verre brisé, refondu, soufflé, brisé</div>
+      <h1>Comment une pièce de verre se brise et renaît de ses éclats</h1>
+      <p class="lede">Une paraison monte d’un bain en fusion, se gonfle en tournant et devient un verre à pied, une carafe, une amphore. Elle refroidit, une machine descend du portique et la brise, filmée en caméra rapide. Les éclats tombent, rebondissent à peine, se couchent et fondent : c’est le bain de la pièce suivante. Aucune image n’est intégrée de la précédente ; chaque sommet de chaque éclat est une formule du temps.</p>
+    </header>
+
+    <figure class="cover">
+      <img src="docs/capture.jpg" alt="Trois décors de Shatter : une carafe à bouchon dans l’Atelier, un verre à pied dans la Cathédrale, les éclats bleus d’une pièce frappée au marteau dans le Givre" width="1600" height="994">
+      <figcaption>Trois décors, trois temps du cycle. Une carafe encore intacte dans l’Atelier, un verre à pied dans la Cathédrale, et dans le Givre une pièce de cobalt trempée que le marteau de percussion vient de pulvériser : les éclats sont des solides fermés, avec leurs chants plus sombres.</figcaption>
+    </figure>
+
+    <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
+
+    <article>
+
+      <section id="forme">
+        <h2><span class="n">01</span>Une pièce de verrier, d’une seule surface</h2>
+        <span class="src">src/gen/forms.js</span>
+        <p>Quatorze formes de verrier servent de point de départ : verre à pied, flûte, coupe sur pied, bulle, bol, vase à taille, bouteille, flacon, carafe, cruche, amphore, tulipe, cloche et dôme. Chacune est un <strong>profil de souffleur</strong> de six à treize points \((r, y)\), que la graine étire, élargit, gonfle ou pince à la taille. Le profil est densifié en Catmull-Rom (24 points par intervalle), puis rééchantillonné à <em>abscisse curviligne constante</em> en 110 rangées : sans ce second passage, les rangées s’entassent dans les courbes serrées (le bouton d’un verre à pied, le col d’une bouteille) et s’espacent sur les flancs, et la fracture découperait ensuite des triangles très inégaux.</p>
+        <p>Le corps est un solide de révolution de 144 méridiens dont le rayon est <strong>modelé</strong> en \((s, \theta)\) : côtes optiques \(1 + a\cos n\theta\), côtes torses où la phase tourne avec l’abscisse, lobes, godrons (un cosinus élevé au cube, limité au bas de la coupe), bord festonné. Le modelé ne commence qu’à l’abscisse \(s_\text{coupe}\) où commence la coupe : le pied et la jambe d’un verre restent lisses, comme sur une vraie pièce.</p>
+        <div class="eq">\[ r(s,\theta) = r_0(s)\,\big(1 + a\,w(s)\cos(n\theta + 2\pi\,\kappa\,s)\big), \qquad w(s) = \operatorname{clamp}\!\Big(\frac{s - s_\text{coupe} - 0{,}02}{0{,}12}\Big). \]</div>
+        <p>Les normales sont calculées par <strong>différences finies</strong> sur la surface modelée elle-même, pas sur le profil : une côte doit attraper la lumière sur son flanc. Au pôle, où tous les sommets d’une rangée sont confondus, la différence s’annule ; la normale retombe alors sur une direction « vers l’extérieur » tirée du profil.</p>
+        <p>Les parties (anse en tube le long d’une courbe de Bézier, deux anses, bouchon, fil appliqué en spirale) sont soudées au corps dans une <strong>seule surface</strong> : la fracture la découpe d’un seul tenant, et une anse se brise avec la pièce. Chaque sommet porte un paramètre d’accrétion, l’abscisse \(s\) pour le corps et \(2 + t\) pour une partie posée après coup : c’est lui qui dira quand il sort du bain et quand il refroidit.</p>
+        <figure id="fig-form"><figcaption><b>Le profil et son modelé.</b> À gauche, la silhouette de la pièce (profil porté tel quel depuis <code>forms.js</code>, rééchantillonné en 110 rangées) ; le trait pointillé marque le début de la coupe. À droite, la section à l’abscisse choisie, vue de dessus : en trait plein le rayon modelé, en pointillé le rayon du profil. Pour les côtes torses, la section plus basse (en bleu) montre que les côtes tournent avec la hauteur.</figcaption></figure>
+        <div class="note trap"><b>La pièce posée sur une cuvette</b><p>La spline peut passer un peu sous le pied, et la sole n’est pas un plan : c’est une cuvette \(y = 0{,}3\,(1 - e^{-r^2/3{,}2^2})\). Poser la pièce à \(y = 0\) l’enfoncerait dans la sole sur tout son pourtour. Elle est donc relevée de \(\max_i \big(h_\text{sole}(r_i) - y_i\big)\) : elle repose sur son point le plus bas, et un test vérifie qu’aucun sommet n’est dessous et qu’au moins un la touche.</p></div>
+      </section>
+
+      <section id="metrique">
+        <h2><span class="n">02</span>La machine choisit la géométrie des fissures</h2>
+        <span class="src">src/gen/fracture.js · makeMetric()</span>
+        <p>Un diagramme de Voronoï euclidien donne des éclats de taille uniforme : c’est la fracture de démonstration d’un moteur physique, et elle ne ressemble à aucune cassure réelle. Le verre se brise différemment selon la cause : en étoile et en toile d’araignée sous une bille, en lames qui partent du bord quand il entre en résonance, en dés quand il est trempé, en quelques grandes pièces sinueuses sous un choc thermique.</p>
+        <p>Shatter garde le Voronoï mais change l’<strong>espace</strong> où il est calculé. Chaque déclencheur fournit une fonction de coordonnées et une distance :</p>
+        <ul>
+          <li><strong>pendule</strong> : coordonnées log-polaires autour de l’impact, \(\big(A\ln\max(\rho, \rho_\text{min}),\ \varphi\big)\). Des germes répartis régulièrement dans cet espace (9 à 13 rayons, anneaux espacés d’un pas presque constant en \(\ln\rho\), rayons doublés au-delà du troisième, quatrième ou cinquième anneau) donnent sur le verre des éclats dont la taille croît comme la distance : la loi d’échelle de la fragmentation. Les frontières à \(\varphi\) constant sont les fissures radiales, celles à \(\rho\) constant les fissures concentriques ; \(\rho_\text{min} = 0{,}035\,S\) délimite la zone broyée ;</li>
+          <li><strong>haut-parleur</strong> : \((\theta, s)\), l’angle autour de l’axe et l’abscisse le long du profil, avec une distance où \(s\) compte \(0{,}6/0{,}22 \approx 2{,}7\) fois plus que \(\theta\) : des lames méridiennes, 8 à 14 colonnes de deux ou trois germes ;</li>
+          <li><strong>marteau sur verre trempé</strong> : distance euclidienne, 130 à 210 germes tirés selon l’aire ;</li>
+          <li><strong>chalumeau</strong> : 7 à 13 germes dans un espace gauchi par un bruit de grande échelle, d’amplitude quatre fois plus forte : les fissures serpentent.</li>
+        </ul>
+        <figure id="fig-metric" class="wide"><figcaption><b>Quatre fracturations de la même paroi</b>, déroulée à plat (4 × 2 unités ; une pièce mesure 2 unités, environ 25 cm). Les germes, les coordonnées et les distances sont portés de <code>makeMetric()</code> avec les constantes réelles ; le bruit de gauchissement est un bruit de valeur plus simple que celui du projet, et le Voronoï est rendu pixel par pixel au lieu d’être découpé triangle par triangle.</figcaption></figure>
+      </section>
+
+      <section id="decoupage">
+        <h2><span class="n">03</span>Une fissure traverse les triangles</h2>
+        <span class="src">src/gen/fracture.js · clip(), lerpV()</span>
+        <p>La manière la plus simple de fracturer un maillage est d’attribuer chaque triangle au germe le plus proche. Les fissures suivent alors les arêtes du maillage : elles dessinent des escaliers, et un maillage de révolution, aux arêtes alignées sur les méridiens et les parallèles, les rend flagrants.</p>
+        <p>Shatter découpe chaque triangle <strong>exactement</strong>. Pour un germe \(\ell\), la région qu’il possède dans le triangle est l’intersection des demi-plans \(d_\ell - d_m \le 0\) pour chaque concurrent \(m\). Chacun de ces demi-plans est appliqué par l’algorithme de <strong>Sutherland-Hodgman</strong> : on parcourt le polygone, on garde les sommets du bon côté et on insère le point où la différence change de signe, par interpolation linéaire des distances le long de l’arête. Chaque arête du polygone obtenu garde une étiquette : intérieure, bord de la pièce, ou fissure avec le germe \(m\). Ces étiquettes servent ensuite à construire les chants et le graphe des éclats.</p>
+        <h3>Deux triangles, une seule fissure</h3>
+        <p>Le découpage n’est juste que si deux triangles voisins coupent leur arête commune <em>au même point</em>, sinon les éclats ne sont pas étanches. Deux précautions y suffisent. D’abord, chaque triangle considère les cinq (pendule) ou trois plus proches germes de ses sommets <em>et de leurs voisins</em> : un germe qui l’emporte quelque part sur une arête est vu par les deux triangles qui la partagent. Ensuite, le point de coupe est toujours calculé dans un <strong>ordre canonique</strong> des deux extrémités (lexicographique sur les coordonnées), pour que les deux triangles fassent exactement les mêmes opérations flottantes :</p>
+        <pre><code>if (before(B, A)) { [A, B] = [B, A]; t = 1 - t; }   // même calcul des deux côtés
+p = A.p + (B.p - A.p) * t;</code></pre>
+        <p>Chaque région devient ensuite un solide fermé : paroi externe, paroi interne décalée de l’épaisseur le long de la normale, et un chant le long de chaque arête étiquetée fissure ou bord.</p>
+        <figure id="fig-clip"><figcaption><b>Le même maillage, deux étiquetages.</b> Faites glisser les germes. Par triangle entier, la fissure suit les arêtes et dessine des marches ; avec le découpage de Sutherland-Hodgman (fonctions <code>clip()</code> et <code>lerpV()</code> portées telles quelles), elle traverse les triangles. Les légers coudes viennent de l’interpolation linéaire des distances le long des arêtes ; ils disparaissent sur les triangles bien plus fins du projet (110 rangées × 144 méridiens). La démo donne à chaque triangle tous les germes comme concurrents, au lieu des seuls germes voisins.</figcaption></figure>
+        <div class="note check"><b>Étanchéité mesurée</b><p>Le banc <code>tools/bench-fracture.mjs</code> compte les arêtes ouvertes de chaque éclat. Sur seize fractures (quatre déclencheurs, quatre formes), treize sont parfaitement fermées ; les trois autres gardent 32 à 44 arêtes ouvertes sur plus de cent mille. Le test exige moins de 0,2 %.</p></div>
+      </section>
+
+      <section id="front">
+        <h2><span class="n">04</span>Le front de fissure avance de proche en proche</h2>
+        <span class="src">src/gen/fracture.js · src/scene/glass.js</span>
+        <p>Si tous les éclats partaient au même instant, la pièce exploserait d’un bloc. Une vraie cassure part d’un point et se propage. Les éclats forment un graphe (deux éclats sont voisins s’ils partagent une arête de fissure) ; l’instant où le front atteint chacun est le <strong>plus court chemin</strong> depuis l’éclat d’origine, calculé par Dijkstra, avec un poids égal à la distance entre centres divisée par la vitesse du front et multipliée par un aléa de 0,85 à 1,25 :</p>
+        <div class="eq">\[ t_c(v) = \min_{u \sim v}\Big( t_c(u) + \frac{\lVert c_u - c_v\rVert}{V}\,\xi_{uv} \Big), \qquad V = S \times \{6;\ 3{,}5;\ 14;\ 0{,}7\}\ \text{u/s}. \]</div>
+        <p>Les quatre vitesses sont celles du pendule, du haut-parleur, du verre trempé et du chalumeau. Pour le haut-parleur, le front part de tous les éclats qui touchent le bord à la fois ; le verre trempé est parcouru en 0,07 s, le choc thermique en plus d’une seconde. Ces vitesses sont bien en deçà des 1&#8239;500 m/s d’une vraie fissure : elles sont choisies pour qu’on voie la cassure courir.</p>
+        <p>Dans le vertex shader, l’instant \(t_c\) de l’éclat est un attribut. Chaque sommet posé sur une fissure porte une marque ; au passage du front, le trait s’allume, avec une impulsion qui s’éteint en 0,45 s, puis s’estompe en 2,5 s. La fissure se lit ainsi même tant que les éclats se tiennent encore.</p>
+        <figure id="fig-front" class="wide"><figcaption><b>Le front sur la paroi déroulée.</b> Même fracturation que plus haut ; graphe d’adjacence, centres et Dijkstra calculés sur les régions, avec les vitesses réelles. L’éclairage des traits reprend la formule du shader (<code>glass.js</code>). La lecture peut être ralentie : en temps réel, le front du pendule traverse la paroi en un sixième de seconde.</figcaption></figure>
+      </section>
+
+      <section id="ralenti">
+        <h2><span class="n">05</span>Le ralenti commence au contact, pas avant</h2>
+        <span class="src">src/cycle.js · physTime() · src/kinematics.js</span>
+        <p>La rupture est filmée comme en <strong>caméra rapide</strong> : le temps physique \(\tau\) avance 12 à 20 fois moins vite que le film pendant environ deux secondes, puis rattrape le temps réel. Le film lit \(\tau(\ell) = \int v\,d\ell\), avec une vitesse \(v\) qui descend de 1 à \(1/k\), reste en palier, puis remonte, chaque transition étant un smoothstep. L’intégrale d’un smoothstep a une forme fermée, \(\int_0^u (3x^2 - 2x^3)\,dx = u^3 - u^4/2\) ; \(\tau(\ell)\) est donc une formule, évaluable dans le shader sans table ni intégration :</p>
+        <div class="eq">\[ \tau(\ell) = \ell - \Big(1 - \frac1k\Big)\Big[\, r_\text{in}\,G(u_1) + \operatorname{clamp}\big(\ell - (A + r_\text{in}),\ 0,\ B - A - r_\text{in}\big) + r_\text{post}\big(u_2 - G(u_2)\big) \Big], \quad G(u) = u^3 - \tfrac{u^4}{2}. \]</div>
+        <p>Toute la question est de savoir <em>quand</em> commencer. Le premier réflexe est d’anticiper : ralentir un peu avant le choc, pour que le spectateur voie arriver la bille. C’est une erreur : l’outil parcourt alors ses derniers millimètres au ralenti, et l’œil le voit toucher le verre bien avant que celui-ci casse. La cause et l’effet se décollent.</p>
+        <p>Dans Shatter, la vitesse commence à tomber 0,03 s avant le choc (\(A = t_0 - \text{pre} - r_\text{in}\), avec \(\text{pre} = -0{,}09\) s et \(r_\text{in} = 0{,}12\) s) : au contact, le film tourne encore à 85 % du temps réel, et le ralenti prend le relais aussitôt après. La caméra, elle, garde sa vitesse : c’est le temps suspendu d’un plan tourné à haute cadence.</p>
+        <figure id="fig-slow" class="wide"><figcaption><b>Le pendule et le ralenti.</b> En haut, la vitesse du temps physique \(v(\ell)\) ; en bas, la distance entre la bille et le verre (en cm) au fil du film, calculée par <code>pendulum()</code> sur la vraie géométrie (fil de 4,5 u, bille de 0,09 u, lâchée un quart de période avant le choc, \(\omega = \sqrt{g/L}\)) et lue à travers <code>physTime()</code>. À droite, la bille et la paroi à l’instant de la tête de lecture. Avancez le début du ralenti : les derniers centimètres s’étirent à l’écran.</figcaption></figure>
+        <div class="note check"><b>Cause et effet, testés</b><p>La cinématique des déclencheurs est un module pur. Un test vérifie que la surface de la bille et la face de la tête du marteau touchent le point d’impact exactement au choc (écart inférieur à \(10^{-9}\)), et jamais avant (aux instants −0,3, −0,1, −0,03, −0,01 et −0,002 s), puis que le film tourne au temps réel 0,05 s avant le choc, à plus de 80 % au choc, et exactement à \(1/16\) deux dixièmes de seconde après.</p></div>
+      </section>
+
+      <section id="chute">
+        <h2><span class="n">06</span>Une chute sans état : tout est fonction du temps</h2>
+        <span class="src">src/cycle.js · fragmentCenter() · src/scene/glass.js</span>
+        <p>Une pièce brisée au pendule compte une centaine d’éclats, une pièce trempée jusqu’à deux cents, et la boucle doit pouvoir être lue à l’envers, sautée, exportée image par image. Une simulation intégrée d’une image à l’autre ne le permet pas. Chaque éclat suit donc une trajectoire <strong>analytique</strong>, écrite deux fois à l’identique : en JavaScript dans <code>cycle.js</code> (tests, fracture) et en TSL dans le vertex shader.</p>
+        <ul>
+          <li><strong>Vol</strong> : parabole sous gravité vraie, \(c + v\tau - \tfrac12 g\tau^2\), avec \(g = 78\) u/s² (9,81 m/s² à 12,5 cm l’unité). Aucun freinage imaginaire.</li>
+          <li><strong>Choc sur la sole</strong> : l’instant \(\tau_L\) résout \(y(\tau) = h_\text{sole}(x, z) + h_\text{repos}\) ; comme la cuvette dépend du point d’arrivée, deux itérations suffisent.</li>
+          <li><strong>Rebond</strong> : restitution 0,22 de la vitesse verticale d’impact, une seule bosse parabolique.</li>
+          <li><strong>Glissement</strong> : 30 % de la vitesse horizontale conservée, freinée par un frottement de Coulomb \(\mu = 0{,}45\) : arrêt en \(t_s = v_h/(\mu g)\), distance \(d = s - s^2/(2t_s)\).</li>
+          <li><strong>Bascule</strong> dans la position de repos en 0,07 s (section suivante), puis <strong>fonte</strong> : l’éclat s’affaisse, s’étale et coule vers le centre, ceux du milieu de la cuvette d’abord.</li>
+        </ul>
+        <p>La vitesse de départ dépend du déclencheur. Pour le pendule, elle combine la direction de la bille, la direction radiale depuis l’impact et la normale de la paroi, avec une intensité qui décroît avec la distance : \(k = 0{,}22 + 1{,}35/\big(1 + (\rho/0{,}16S)^{1{,}3}\big)\). Les petits éclats tournent plus vite (jusqu’à trois fois). Le choc thermique ne projette presque rien : 0,26 à 0,78 u/s, soit 3 à 10 cm/s, et les pièces s’écartent à peine avant que la gravité les couche.</p>
+        <figure id="fig-fall" class="wide"><figcaption><b>Une coupe de la pièce frappée au pendule</b>, en temps de film. Les éclats d’une paroi (vue de profil) partent quand le front les atteint, suivent leur parabole, frappent la cuvette, rebondissent, glissent et se couchent. Le temps physique est lu à travers <code>physTime()</code> (\(k = 16\)) ; <code>landing()</code> et <code>fragmentCenter()</code> sont portés tels quels. Simplifications : une coupe plane, des éclats réduits à un segment, et l’orientation au sol ramenée à la pente de la cuvette.</figcaption></figure>
+        <h3>La boucle, par construction</h3>
+        <p>La pièce \(k\) vit dans son temps local \(\ell_k = \operatorname{mod}(t - k\,T_s,\ N\,T_s)\), où \(T_s\) (11 à 13 s) est la durée d’une étape et \(N\) (2 à 4) le nombre de pièces. Le bain qui se forme de la fonte des éclats de la pièce \(k\) est celui d’où monte la pièce \(k+1\), et la dernière nourrit la première. Rien n’étant intégré, la boucle n’a pas de raccord à corriger : à \(t = N\,T_s\), chaque formule revient d’elle-même à son état initial.</p>
+        <div class="note check"><b>Aucun sommet sous la sole</b><p>Le test de gravité vérifie, pour quarante éclats de chacune des quatre fractures : l’atterrissage avant 1,5 s, la hauteur exacte au repos, une accélération égale à \(g\) en vol (dérivée seconde numérique), et, pour un sommet sur sept, à sept instants du cycle, qu’aucun ne passe sous la cuvette. Le shader garde une sécurité (\(y \ge h_\text{sole} + 0{,}002\)), mais le test la retire au repos : sans elle, aucun sommet ne s’enfoncerait de plus de 1,5 cm.</p></div>
+      </section>
+
+      <section id="repos">
+        <h2><span class="n">07</span>Un éclat courbe se couche sur son dos</h2>
+        <span class="src">src/gen/fracture.js · position de repos</span>
+        <p>Un éclat de paroi est un morceau de coque, souvent très courbe : une moitié de bol, une lame de flûte. Le coucher selon sa normale moyenne et poser son centre à une demi-épaisseur de la sole, comme une plaque plane, donne un résultat faux : la bosse de l’éclat traverse la sole, ses bords restent dressés. On voit un éclat planté dans le sol.</p>
+        <p>À la fracture, Shatter cherche la <strong>position stable</strong> de chaque éclat : celle où son centre de gravité est le plus bas. Pour une direction \(d\) qu’on tourne vers le bas, la hauteur du centre au-dessus du point d’appui est la <em>fonction de support</em> de l’éclat, \(h(d) = \max_i\,(p_i - c)\cdot d\). Parmi 122 directions (120 réparties sur une spirale de Fibonacci, plus la normale moyenne et son opposé), on garde celle qui minimise \(h\), estimée sur un échantillon d’environ 400 sommets par éclat.</p>
+        <div class="eq">\[ d^\star = \arg\min_{d}\ \max_i\,(p_i - c)\cdot d, \qquad h_\text{repos} = h(d^\star) + 0{,}003. \]</div>
+        <p>La direction \(d^\star\) est stockée en deux flottants (codage octaédrique) dans un attribut du sommet ; au sol, le shader fait tourner l’éclat pour amener \(d^\star\) contre la normale de la cuvette à cet endroit, et pose son centre à \(h_\text{repos}\). L’instant de fonte est recalculé avec cette vraie hauteur, puisqu’elle change l’endroit où l’éclat tombe.</p>
+        <figure id="fig-rest" class="wide"><figcaption><b>Un éclat en coupe.</b> À gauche, l’éclat tel qu’il était dans la pièce et sa fonction de support \(h(d)\) en polaire autour de son centre (le point) ; la flèche est la direction qui la minimise. Au milieu, la pose naïve (normale moyenne vers le bas, centre à une demi-épaisseur) : en rouge, ce qui passe sous la sole. À droite, la position stable. La démo est en deux dimensions, avec 120 directions réparties sur le cercle.</figcaption></figure>
+      </section>
+
+      <section id="chaleur">
+        <h2><span class="n">08</span>Le verre sort jaune orangé et refroidit du pied vers le bord</h2>
+        <span class="src">src/scene/glass.js · blackbody() · src/cycle.js · inflation()</span>
+        <p>Le soufflage occupe les 18 premiers centièmes de l’étape. Chaque sommet du corps part d’une version écrasée de la pièce, posée dans le bain (\(0{,}22\,r\) en largeur, \(0{,}04\,y\) en hauteur), et rejoint sa place selon son paramètre d’accrétion : le pied d’abord, le bord ensuite, avec une légère respiration du rayon (6 %) pendant la montée.</p>
+        <div class="eq">\[ g(a, \ell) = \operatorname{smoothstep}\!\Big(\frac{\ell/(0{,}18\,T_s) - 0{,}55\,a}{0{,}45}\Big), \qquad p = \operatorname{mix}\big(p_\text{bain},\ p_\text{pièce}\cdot(1 + 0{,}06\sin\pi g),\ g\big). \]</div>
+        <p>La chaleur suit le même ordre : un point de la paroi reste à pleine chaleur jusqu’aux six dixièmes de l’instant où il arrive en place, puis refroidit linéairement en \(0{,}22\,T_s\). Le pied s’éteint donc avant le bord, et les parties posées après coup (anse, bouchon, fil) arrivent chaudes sur une pièce déjà tiède.</p>
+        <p>La couleur est un <strong>corps noir approché</strong> en trois puissances de la chaleur \(h\) (0 froid, 1 vers 1&#8239;500 K) : le rouge sature d’abord, le vert suit avec \(h^{1{,}6}\), le bleu n’apparaît qu’en \(h^4\). Le piège est l’intensité. Un corps noir vrai à la température de travail (vers 1&#8239;100 °C) est si lumineux qu’il sature en blanc et efface la forme ; le gain \(7h^{2{,}6} + 0{,}4h\) est réglé pour que le verre sorte jaune orangé, sous le plafond des hautes lumières, et qu’on lise encore ses côtes.</p>
+        <pre><code>blackbody(h) = vec3(1, 0.55·h^1.6 + 0.05, 0.22·h^4) · (7·h^2.6 + 0.4·h)</code></pre>
+        <p>Quand le verre est chaud, la transmission baisse (\(1 - 0{,}6h^2\)) : le verre en fusion est opaque et lumineux, il devient transparent en refroidissant.</p>
+        <figure id="fig-heat"><figcaption><b>Soufflage et refroidissement d’une pièce</b> (\(T_s = 12\) s). La silhouette est déformée par <code>inflation()</code> et colorée par <code>blackbody()</code>, portés tels quels ; seul le rendu change : une exposition fixe, une compression \(x/(1+x)\) et un gamma à la place de la chaîne d’image du projet. La barre de droite montre la couleur selon \(h\) ; ses deux repères sont la chaleur du pied et celle du bord.</figcaption></figure>
+      </section>
+
+      <section id="ombres">
+        <h2><span class="n">09</span>Le verre transmissif ne porte pas d’ombre : un double la porte</h2>
+        <span class="src">src/scene/glass.js · buildGlassShadowCaster() · src/scene/stage.js</span>
+        <p>Le verre est rendu en transmission physique : réfraction, dispersion, absorption selon l’épaisseur traversée (plus forte dans les chants, qui paraissent plus denses et plus verts), lignes de Wallner en relief sur les cassures. Mais dans three.js (WebGPU), un matériau à transmission ne porte <strong>aucune ombre</strong>, quels que soient <code>castShadowNode</code> et <code>shadowMap.transmitted</code>. Une pièce sans ombre flotte, et cent éclats sans ombre sur une sole claire ne semblent jamais posés.</p>
+        <p>Chaque pièce est donc doublée d’un <strong>porteur d’ombre</strong> : même géométrie, même nœud de position (donc la même chorégraphie, éclat par éclat), un matériau opaque rangé dans un calque que seule la caméra de la carte d’ombre voit. Son ombre est teintée par le verre et assez dense dans les parois (la lumière y est surtout déviée), franche sous les chants. L’obsidienne, opaque, porte la sienne.</p>
+        <div class="note trap"><b>Deux pièges de la passe d’ombre</b><p>La passe d’ombre ne reçoit pas les variables du vertex shader principal. Le masque qui fait apparaître une partie posée après coup, ou disparaître un éclat fondu, doit y être <em>recalculé</em> depuis les attributs ; lu dans la variable, il laissait la passe sans valeur et le verre ne portait plus aucune ombre. Ensuite, la carte d’ombre de la lampe (2&#8239;048² en qualité Haute, 4&#8239;096² en Ultra) est resserrée sur \(\pm 3{,}5\) unités autour de la sole, quelle que soit l’ouverture du faisceau : étalée sur toute la scène, elle faisait disparaître les ombres.</p></div>
+        <p>Les contre-jours, qui dessinent les bords du verre sous tous les angles, n’éclairent pas la sole : ils y effaceraient les ombres portées. Sur fond clair, la recette n’autorise jamais un verre presque incolore (cristal, dichroïque), qui y disparaîtrait.</p>
+      </section>
+
+      <section id="budget">
+        <h2><span class="n">10</span>Budget</h2>
+        <p>La fracture tourne dans des Web Workers pendant l’écran de chargement ; le rendu ne fait qu’évaluer des formules du temps dans le vertex shader, un maillage par pièce.</p>
+        <div class="tbl"><table>
+          <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
+          <tbody>
+            <tr><td>Fracture d’une pièce (README)</td><td>worker</td><td class="num">0,5 à 0,9 s</td></tr>
+            <tr><td>Fracture, banc <code>bench-fracture.mjs</code> sous Node : chalumeau → verre trempé</td><td>CPU</td><td class="num">0,22 à 0,73 s</td></tr>
+            <tr><td>Éclats : pendule / haut-parleur / verre trempé / chalumeau</td><td>—</td><td class="num">≈ 100–120 / 23–26 / 130–210 / 7–13</td></tr>
+            <tr><td>Maillage d’une pièce fracturée (banc)</td><td>GPU</td><td class="num">49&#8239;000 à 136&#8239;000 sommets</td></tr>
+            <tr><td>Attributs par sommet : centre, instant de fissure, vitesse, rotation, axe, fonte, repos</td><td>GPU</td><td class="num">4 × vec4 + 4 octets</td></tr>
+            <tr><td>Image, qualité Haute, 1,8 Mpx (GPU d’un Mac)</td><td>GPU</td><td class="num">15 à 17 ms</td></tr>
+            <tr><td>Image, première version (verre plus simple, pièces moins détaillées)</td><td>GPU</td><td class="num">7 à 8 ms</td></tr>
+            <tr><td>Version mobile : verre composité, FXAA, sans SSR, occlusion ni flou de mouvement</td><td>GPU</td><td class="num">≤ 60 i/s</td></tr>
+          </tbody>
+        </table></div>
+        <p>Dix tests tiennent l’ensemble sans navigateur : la recette (déterminisme, JSON), la direction artistique sur 400 graines (deux pièces qui se suivent n’ont jamais la même forme, le même verre ni le même déclencheur), les décors, les pièces assemblées, le temps (ralenti au choc, temps réel ailleurs, jamais de recul), la fracture (éclats fermés, plus petits et plus rapides près de l’impact), la gravité et la cause et l’effet.</p>
+      </section>
+    </article>
+
+    <footer class="end">
+      <a href="./">Ouvrir Shatter</a>
+      <a href="https://github.com/drschizzo/Codevember/blob/main/shatter/README.md">README</a>
+      <a href="https://github.com/drschizzo/Codevember/blob/main/shatter/docs/concept.md">La démarche</a>
+      <span class="sp"></span>
+      <a href="../">Tous les jours</a>
+    </footer>
+  </main>
+
+  <script type="module">
+    import { demo, C, TAU, lerp, clamp, smooth, alpha, label, arrow, rng } from '../home/explainer.js';
+
+    // ── outils communs ─────────────────────────────────────────────────────
+    const RNG = (seed) => {
+      const n = rng(seed);
+      return {
+        next: n, range: (a, b) => a + (b - a) * n(), int: (a, b) => a + Math.floor(n() * (b - a + 1)), sign: () => (n() < .5 ? -1 : 1),
+        gauss: () => Math.sqrt(-2 * Math.log(Math.max(1e-12, n()))) * Math.cos(TAU * n()),
+      };
+    };
+    const wrapPi = (x) => x - TAU * Math.round(x / TAU);
+    const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+    const fmt = (x, n = 2) => x.toFixed(n).replace('.', ',');
+
+    // cycle.js (verbatim)
+    const PH = { acc: .18, cool: .22, spinStop: [.28, .4], rupture: .5, melt: .82, meltSpan: .06, meltDur: .1 };
+    const GRAV = 78, DISH_H = .3, DISH_W = 3.2, MU = .45, BOUNCE = .22;
+    const floorH = (r) => DISH_H * (1 - Math.exp(-(r * r) / (DISH_W * DISH_W)));
+    const clamp01 = (x) => Math.min(1, Math.max(0, x));
+    const Gi = (u) => u * u * u - (u * u * u * u) / 2;
+    function physTime(l, Ts, slow) {
+      const t0 = PH.rupture * Ts, rin = 0.12;
+      const A = t0 - slow.pre - rin, B = t0 + slow.plat;
+      const I = rin * Gi(clamp01((l - A) / rin)) + Math.min(Math.max(l - (A + rin), 0), B - (A + rin)) + slow.post * (clamp01((l - B) / slow.post) - Gi(clamp01((l - B) / slow.post)));
+      return l - (1 - 1 / slow.k) * I;
+    }
+    function landing(F, rest) {
+      const solve = (h) => Math.max(0, (F.v[1] + Math.sqrt(Math.max(0, F.v[1] * F.v[1] + 2 * GRAV * (F.c[1] - h)))) / GRAV);
+      let tau = solve(rest);
+      for (let i = 0; i < 2; i++) { const x = F.c[0] + F.v[0] * tau, z = F.c[2] + F.v[2] * tau; tau = solve(floorH(Math.hypot(x, z)) + rest); }
+      return tau;
+    }
+    function fragmentCenter(F, tau, rest) {
+      const tL = landing(F, rest);
+      if (tau <= tL) return { c: [F.c[0] + F.v[0] * tau, F.c[1] + F.v[1] * tau - 0.5 * GRAV * tau * tau, F.c[2] + F.v[2] * tau], s2: -1, tL };
+      const s2 = tau - tL;
+      const xL = F.c[0] + F.v[0] * tL, zL = F.c[2] + F.v[2] * tL;
+      const vx = F.v[0] * 0.3, vz = F.v[2] * 0.3, vh = Math.hypot(vx, vz), ts = vh / (MU * GRAV) + 1e-6;
+      const s = Math.min(s2, ts), d = s - (s * s) / (2 * ts);
+      const x = xL + vx * d, z = zL + vz * d;
+      const vimp = Math.abs(F.v[1] - GRAV * tL), vb = BOUNCE * vimp;
+      const yb = Math.max(0, vb * s2 - 0.5 * GRAV * s2 * s2);
+      return { c: [x, floorH(Math.hypot(x, z)) + rest + yb, z], s2, tL };
+    }
+
+    // forms.js : profils (extrait) et modelé (verbatim)
+    const FORMS = {
+      verre: { label: 'Verre à pied', bowl: 0.55, pts: [[0, 0], [0.3, 0], [0.31, 0.012], [0.14, 0.03], [0.04, 0.07], [0.032, 0.26], [0.058, 0.31], [0.034, 0.36], [0.05, 0.42], [0.2, 0.52], [0.28, 0.68], [0.27, 0.9], [0.25, 1]] },
+      flute: { label: 'Flûte', bowl: 0.5, pts: [[0, 0], [0.22, 0], [0.23, 0.01], [0.09, 0.025], [0.025, 0.06], [0.022, 0.3], [0.045, 0.34], [0.03, 0.38], [0.11, 0.46], [0.15, 0.62], [0.15, 0.88], [0.14, 1]] },
+      bol: { label: 'Bol', h: 0.62, pts: [[0, 0], [0.22, 0], [0.24, 0.03], [0.44, 0.14], [0.6, 0.4], [0.67, 0.72], [0.7, 1]] },
+      carafe: { label: 'Carafe', pts: [[0, 0], [0.28, 0], [0.34, 0.09], [0.33, 0.33], [0.18, 0.58], [0.11, 0.74], [0.13, 0.9], [0.19, 1]] },
+      amphore: { label: 'Amphore', pts: [[0, 0], [0.13, 0], [0.14, 0.04], [0.09, 0.08], [0.28, 0.22], [0.37, 0.45], [0.29, 0.7], [0.13, 0.8], [0.12, 0.94], [0.18, 1]] },
+      tulipe: { label: 'Tulipe', pts: [[0, 0], [0.12, 0.01], [0.27, 0.16], [0.35, 0.45], [0.31, 0.75], [0.34, 0.92], [0.4, 1]] },
+    };
+    const DECORS = { lisse: 'Lisse', cotes: 'Côtes optiques', torse: 'Côtes torses', lobes: 'Lobé', feston: 'Bord festonné', godrons: 'Godrons' };
+    const cr = (p0, p1, p2, p3, t) => { const t2 = t * t, t3 = t2 * t; return 0.5 * (2 * p1 + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (-p0 + 3 * p1 - 3 * p2 + p3) * t3); };
+    function profile(spec, rows = 110) {
+      const F = FORMS[spec.form];
+      const hk = (F.h ?? 1) * (spec.stretch ?? 1), bowl = F.bowl ?? 0;
+      const pts = F.pts.map(([r, y], i) => {
+        const t = bowl ? Math.max(0, (y - bowl) / (1 - bowl)) : y;
+        const bulge = i > 0 && (!bowl || y > bowl) ? 1 + (spec.bulge ?? 0) * Math.sin(Math.PI * t) + (spec.waist ?? 0) * Math.sin(2 * Math.PI * t) : 1;
+        return [r * bulge * (spec.wide ?? 1), y * hk];
+      });
+      const dense = [], P = [pts[0], ...pts, pts[pts.length - 1]];
+      for (let i = 1; i < P.length - 2; i++) for (let k = 0; k < 24; k++) { const t = k / 24; dense.push([Math.max(0, cr(P[i - 1][0], P[i][0], P[i + 1][0], P[i + 2][0], t)), cr(P[i - 1][1], P[i][1], P[i + 1][1], P[i + 2][1], t)]); }
+      dense.push(pts[pts.length - 1]);
+      const L = [0];
+      for (let i = 1; i < dense.length; i++) L.push(L[i - 1] + Math.hypot(dense[i][0] - dense[i - 1][0], dense[i][1] - dense[i - 1][1]));
+      const total = L[L.length - 1], out = [];
+      let j = 0;
+      for (let k = 0; k <= rows; k++) {
+        const s = (k / rows) * total;
+        while (j < L.length - 2 && L[j + 1] < s) j++;
+        const f = (s - L[j]) / Math.max(1e-9, L[j + 1] - L[j]);
+        out.push({ r: k === 0 ? 0 : dense[j][0] + (dense[j + 1][0] - dense[j][0]) * f, y: dense[j][1] + (dense[j + 1][1] - dense[j][1]) * f, s: k / rows });
+      }
+      const ymin0 = Math.min(...out.map((p) => p.y)); for (const p of out) p.y -= ymin0;
+      const ymax = Math.max(...out.map((p) => p.y)), rmax = Math.max(...out.map((p) => p.r)), H = Math.max(ymax, 2 * rmax);
+      for (const p of out) { p.r /= H; p.y /= H; }
+      const yTop = ymax / H;
+      let sBowl = 0;
+      if (bowl) { const yb = bowl * hk / H; const k = out.findIndex((p) => p.y >= yb); sBowl = k < 0 ? 0 : out[k].s; }
+      return { pts: out, height: yTop, sBowl };
+    }
+    function modulation(spec, s, th, sBowl) {
+      const D = spec.decor ?? 'lisse', a = spec.decorAmp ?? 0.04, n = spec.decorN ?? 12;
+      const w = Math.min(1, Math.max(0, (s - sBowl - 0.02) / 0.12)) * (1 - Math.max(0, (s - 0.97) / 0.03) * (D === 'feston' ? 0 : 0.6));
+      if (D === 'cotes') return 1 + a * w * Math.cos(n * th);
+      if (D === 'torse') return 1 + a * w * Math.cos(n * th + 2 * Math.PI * (spec.twist ?? 0.5) * s);
+      if (D === 'godrons') return 1 + a * 1.6 * w * Math.pow(Math.max(0, Math.cos(n * th * 0.5)), 3) * Math.max(0, 1 - Math.abs(s - sBowl - 0.25) / 0.25);
+      if (D === 'lobes') return 1 + a * 2.5 * w * Math.cos(n * th);
+      if (D === 'feston') return 1 + a * 2.2 * Math.pow(Math.max(0, (s - 0.72) / 0.28), 2) * Math.sin(n * th);
+      return 1;
+    }
+
+    // ── 01 · profil et modelé ──────────────────────────────────────────────
+    {
+      const order = ['verre', 'carafe', 'amphore', 'tulipe', 'bol', 'flute'];
+      const st = { form: 'verre', decor: 'torse' };
+      let cache = null;
+      const prof = () => { if (!cache || cache.form !== st.form) cache = { form: st.form, P: profile({ form: st.form }) }; return cache.P; };
+      demo('#fig-form', {
+        title: 'Profil de souffleur et modelé', aspect: 1.75,
+        controls: [
+          { key: 's', label: 'Abscisse de la section s', min: 0.05, max: 1, step: .005, value: .92, fmt: (v) => fmt(v, 2) },
+          { key: 'n', label: 'Nombre de côtes n', min: 3, max: 24, step: 1, value: 14 },
+          { key: 'a', label: 'Amplitude a', min: .025, max: .055, step: .001, value: .045, fmt: (v) => fmt(v, 3) },
+        ],
+        buttons: [
+          { label: 'Forme suivante', onClick: () => { st.form = order[(order.indexOf(st.form) + 1) % order.length]; } },
+          ...Object.entries(DECORS).map(([k, v]) => ({ label: v, onClick: () => { st.decor = k; } })),
+        ],
+        draw(g, d) {
+          const { pts, height, sBowl } = prof(), spec = { decor: st.decor, decorN: d.s.n, decorAmp: d.s.a, twist: .5 };
+          const { w, h } = d, sc = (h - 44) / Math.max(height, .5), cx = w * .27, by = h - 24;
+          const X = (r) => cx + r * sc, Y = (y) => by - y * sc;
+          // silhouette (θ = 0 à droite, θ = π à gauche)
+          g.beginPath();
+          pts.forEach((p, k) => { const x = X(p.r * modulation(spec, p.s, 0, sBowl)), y = Y(p.y); k ? g.lineTo(x, y) : g.moveTo(x, y); });
+          for (let k = pts.length - 1; k >= 0; k--) { const p = pts[k]; g.lineTo(X(-p.r * modulation(spec, p.s, Math.PI, sBowl)), Y(p.y)); }
+          g.fillStyle = alpha(C.c2, .1); g.fill();
+          for (const sg of [1, -1]) {
+            for (let k = 0; k < pts.length - 1; k++) {
+              const a = pts[k], b = pts[k + 1], th = sg > 0 ? 0 : Math.PI;
+              g.strokeStyle = `hsl(${lerp(38, 205, a.s)}, 55%, ${lerp(70, 68, a.s)}%)`; g.lineWidth = 1.8;
+              g.beginPath(); g.moveTo(X(sg * a.r * modulation(spec, a.s, th, sBowl)), Y(a.y)); g.lineTo(X(sg * b.r * modulation(spec, b.s, th, sBowl)), Y(b.y)); g.stroke();
+            }
+          }
+          g.strokeStyle = C.grid; g.beginPath(); g.moveTo(cx, Y(height) - 6); g.lineTo(cx, by + 4); g.stroke();
+          g.beginPath(); g.moveTo(cx - .5 * sc, by); g.lineTo(cx + .5 * sc, by); g.stroke();
+          // début de la coupe
+          if (sBowl > 0) {
+            const k = Math.round(sBowl * 110), y = Y(pts[k].y);
+            g.setLineDash([3, 4]); g.strokeStyle = alpha(C.ink, .45); g.beginPath(); g.moveTo(cx - .36 * sc, y); g.lineTo(cx + .36 * sc, y); g.stroke(); g.setLineDash([]);
+            label(g, `coupe : s = ${fmt(sBowl)}`, 8, y - 5, { size: 11 });
+          }
+          // section courante
+          const ks = Math.round(d.s.s * 110), ps = pts[ks];
+          g.strokeStyle = C.c1; g.lineWidth = 1.2; g.beginPath(); g.moveTo(cx - .45 * sc, Y(ps.y)); g.lineTo(cx + .45 * sc, Y(ps.y)); g.stroke();
+          label(g, 'pied', cx + 6, by - 6, { size: 11, color: C.faint });
+          // vue de dessus
+          const ox = w * .72, oy = h * .5, R = Math.min(w * .22, h * .42), rr = Math.max(...pts.map((p) => p.r)) * 1.25;
+          const ring = (s, r0, col, lw, dash) => {
+            g.strokeStyle = col; g.lineWidth = lw; if (dash) g.setLineDash(dash); g.beginPath();
+            for (let i = 0; i <= 288; i++) { const th = i / 288 * TAU, r = r0 * (dash ? 1 : modulation(spec, s, th, sBowl)) / rr * R; const x = ox + Math.cos(th) * r, y = oy + Math.sin(th) * r; i ? g.lineTo(x, y) : g.moveTo(x, y); }
+            g.closePath(); g.stroke(); g.setLineDash([]);
+          };
+          if (st.decor === 'torse') { const k2 = Math.max(0, ks - 7); ring(pts[k2].s, pts[k2].r, alpha(C.c2, .7), 1.2); }
+          ring(ps.s, ps.r, alpha(C.ink, .35), 1, [3, 4]);
+          ring(ps.s, ps.r, C.c1, 2);
+          label(g, 'section vue de dessus', ox, h - 12, { align: 'center', size: 11.5, color: C.faint });
+          const m = Math.max(...Array.from({ length: 96 }, (_, i) => Math.abs(modulation(spec, ps.s, i / 96 * TAU, sBowl) - 1)));
+          d.status(`${FORMS[st.form].label} · ${DECORS[st.decor]} · écart au profil ${fmt(m * 100, 1)} %`);
+        },
+      });
+    }
+
+    // ── 02 / 04 · métriques de fissuration et front ───────────────────────
+    const PLW = 4, PLH = 2, S = 2, O = [0.35, 0.95];
+    const LW = 600, LH = 300;
+    function makeNoise(seed) {
+      const r = rng(seed), P = new Float64Array(1024); for (let i = 0; i < 1024; i++) P[i] = r() * 2 - 1;
+      const hh = (i, j) => P[(Math.imul(i, 73856093) ^ Math.imul(j, 19349663)) & 1023];
+      const vn = (x, y) => { const i = Math.floor(x), j = Math.floor(y), fx = x - i, fy = y - j, u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy); return lerp(lerp(hh(i, j), hh(i + 1, j), u), lerp(hh(i, j + 1), hh(i + 1, j + 1), u), v); };
+      return (x, y) => vn(x, y) * .5 + vn(x * 2 + 5.3, y * 2) * .25 + vn(x * 4, y * 4 + 9.1) * .125;
+    }
+    const MECH = { ball: 'Pendule', resonance: 'Haut-parleur', tempered: 'Verre trempé', thermal: 'Chalumeau' };
+    const SPEED = { ball: 6, resonance: 3.5, tempered: 14, thermal: 0.7 };
+    const crackCache = new Map();
+    function crack(mech, seed) {
+      const key = `${mech}:${seed}`; if (crackCache.has(key)) return crackCache.get(key);
+      const r = RNG(seed * 7919 + 13), nz = makeNoise(seed * 31 + 7);
+      const warpAmp = S * 0.02 * (mech === 'thermal' ? 4 : 1), wf = mech === 'thermal' ? 1.6 / S : 4 / S;
+      const warp = (x, y) => [x + warpAmp * nz(x * wf, y * wf), y + warpAmp * nz(x * wf + 17.1, y * wf)];
+      let coords, dist; const seeds = [];
+      if (mech === 'ball') {
+        const rmin = S * 0.035, A = 0.6, rays = 11;
+        coords = (x, y) => { const q = warp(x, y), dx = q[0] - O[0], dy = q[1] - O[1]; return [Math.log(Math.max(rmin, Math.hypot(dx, dy))) * A, Math.atan2(dy, dx)]; };
+        dist = (a, b) => Math.hypot(a[0] - b[0], wrapPi(a[1] - b[1]));
+        const lo = Math.log(rmin * 1.4), hi = Math.log(S * 1.6), step = ((TAU / rays) / A) * 0.5;
+        let ring = 0;
+        for (let L = lo; L < hi; L += step * (0.85 + 0.3 * r.next()), ring++) {
+          const n = rays * (ring >= 3 ? 2 : 1), off = r.next() * TAU;
+          for (let j = 0; j < n; j++) seeds.push([(L + r.range(-0.25, 0.25) * step) * A, wrapPi(off + (TAU * (j + r.range(-0.3, 0.3))) / n)]);
+        }
+        seeds.push([Math.log(rmin) * A, 0]);
+      } else if (mech === 'resonance') {
+        const m = 10, k = 0.22;
+        coords = (x, y) => { const q = warp(x, y); return [wrapPi(q[0] / PLW * TAU), y / PLH]; };
+        dist = (a, b) => Math.hypot(wrapPi(a[0] - b[0]), (a[1] - b[1]) / k * 0.6);
+        for (let j = 0; j < m; j++) { const th = (TAU * (j + r.range(-0.25, 0.25))) / m, rows = r.int(2, 3); for (let q = 0; q < rows; q++) seeds.push([wrapPi(th + r.range(-0.1, 0.1)), 1 - Math.pow(r.next(), 0.7) * 1.05]); }
+      } else {
+        coords = (x, y) => warp(x, y);
+        dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+        const n = mech === 'tempered' ? 180 : 10;
+        for (let i = 0; i < n; i++) seeds.push(coords(-PLW / 2 + r.next() * PLW, r.next() * PLH));
+      }
+      // étiquettes
+      const lab = new Int32Array(LW * LH);
+      for (let j = 0; j < LH; j++) for (let i = 0; i < LW; i++) {
+        const x = -PLW / 2 + (i + .5) / LW * PLW, y = PLH - (j + .5) / LH * PLH, c = coords(x, y);
+        let best = 0, bd = Infinity;
+        for (let s = 0; s < seeds.length; s++) { const dd = dist(c, seeds[s]); if (dd < bd) { bd = dd; best = s; } }
+        lab[j * LW + i] = best;
+      }
+      // régions, centres, voisinage
+      const N = seeds.length, cnt = new Float64Array(N), cx = new Float64Array(N), cy = new Float64Array(N), top = new Uint8Array(N);
+      const adj = Array.from({ length: N }, () => new Set()), edges = [];
+      for (let j = 0; j < LH; j++) for (let i = 0; i < LW; i++) {
+        const l = lab[j * LW + i]; cnt[l]++; cx[l] += -PLW / 2 + (i + .5) / LW * PLW; cy[l] += PLH - (j + .5) / LH * PLH;
+        if (j === 0) top[l] = 1;
+        const rgt = i < LW - 1 ? lab[j * LW + i + 1] : l, dn = j < LH - 1 ? lab[(j + 1) * LW + i] : l;
+        if (rgt !== l || dn !== l) { const o = rgt !== l ? rgt : dn; adj[l].add(o); adj[o].add(l); edges.push(j * LW + i, l, o); }
+      }
+      const alive = []; for (let l = 0; l < N; l++) if (cnt[l]) { cx[l] /= cnt[l]; cy[l] /= cnt[l]; alive.push(l); }
+      // front : plus court chemin (Dijkstra simple)
+      const V = S * SPEED[mech], tc = new Float64Array(N).fill(Infinity), queue = [];
+      const starts = mech === 'resonance' ? alive.filter((l) => top[l]) : [alive.reduce((b, l) => (Math.hypot(cx[l] - O[0], cy[l] - O[1]) < Math.hypot(cx[b] - O[0], cy[b] - O[1]) ? l : b), alive[0])];
+      for (const s of starts) { tc[s] = mech === 'resonance' ? r.range(0, 0.05) : 0; queue.push(s); }
+      while (queue.length) {
+        let bi = 0; for (let i = 1; i < queue.length; i++) if (tc[queue[i]] < tc[queue[bi]]) bi = i;
+        const u = queue.splice(bi, 1)[0];
+        for (const v of adj[u]) { const wgt = Math.hypot(cx[u] - cx[v], cy[u] - cy[v]) / V * r.range(0.85, 1.25); if (tc[u] + wgt < tc[v]) { tc[v] = tc[u] + wgt; queue.push(v); } }
+      }
+      let tmax = 0; for (const l of alive) if (Number.isFinite(tc[l])) tmax = Math.max(tmax, tc[l]);
+      for (const l of alive) if (!Number.isFinite(tc[l])) tc[l] = tmax;
+      const shade = new Float64Array(N); for (let l = 0; l < N; l++) shade[l] = .7 + .5 * ((Math.sin(l * 12.9898) * 43758.5453) % 1 + 1) % 1;
+      const res = { lab, alive, tc, tmax, edges, shade, n: alive.length };
+      crackCache.set(key, res); return res;
+    }
+    const plateMap = (d) => { const m = 8, W = d.w - 2 * m, H = W / 2 > d.h - 2 * m ? d.h - 2 * m : W / 2; const w = H * 2; return { x0: (d.w - w) / 2, y0: (d.h - H) / 2, w, h: H }; };
+    const GLASS = hex('#7fb2d9');
+
+    {
+      const off = document.createElement('canvas'); off.width = LW; off.height = LH; const og = off.getContext('2d');
+      const st = { mech: 'ball', seed: 1 };
+      demo('#fig-metric', {
+        title: 'Voronoï dans l’espace du déclencheur', aspect: 2.05,
+        buttons: [...Object.entries(MECH).map(([k, v]) => ({ label: v, onClick: () => { st.mech = k; } })), { label: 'Autre graine', onClick: () => { st.seed++; } }],
+        draw(g, d) {
+          const R = crack(st.mech, st.seed), img = og.createImageData(LW, LH), px = img.data;
+          const edge = new Uint8Array(LW * LH); for (let e = 0; e < R.edges.length; e += 3) edge[R.edges[e]] = 1;
+          for (let p = 0; p < LW * LH; p++) {
+            const l = R.lab[p], k = R.shade[l] * .42, o = p * 4;
+            if (edge[p]) { px[o] = 236; px[o + 1] = 240; px[o + 2] = 248; }
+            else { px[o] = GLASS[0] * k; px[o + 1] = GLASS[1] * k; px[o + 2] = GLASS[2] * k; }
+            px[o + 3] = 255;
+          }
+          og.putImageData(img, 0, 0);
+          const M = plateMap(d);
+          g.imageSmoothingEnabled = true; g.drawImage(off, M.x0, M.y0, M.w, M.h);
+          const X = (x) => M.x0 + (x + PLW / 2) / PLW * M.w, Y = (y) => M.y0 + (PLH - y) / PLH * M.h;
+          if (st.mech === 'ball') { g.fillStyle = C.c1; g.beginPath(); g.arc(X(O[0]), Y(O[1]), 4, 0, TAU); g.fill(); label(g, 'impact', X(O[0]) + 8, Y(O[1]) - 8, { color: C.c1 }); }
+          if (st.mech === 'resonance') { g.strokeStyle = C.c1; g.lineWidth = 2; g.beginPath(); g.moveTo(M.x0, M.y0 + 1); g.lineTo(M.x0 + M.w, M.y0 + 1); g.stroke(); label(g, 'bord', M.x0 + 8, M.y0 + 16, { color: C.c1 }); }
+          d.status(`${MECH[st.mech]} · ${R.n} éclats sur la paroi`);
+        },
+      });
+    }
+
+    {
+      const off = document.createElement('canvas'); off.width = LW; off.height = LH; const og = off.getContext('2d');
+      const st = { mech: 'ball', t: 0.12 };
+      const crackLight = (dt) => { if (dt < 0) return 0; const a = smooth(0, .03, dt); return a * (smooth(2.5, .8, dt) * .9 + .1) + a * smooth(.45, .05, dt) * 2; };
+      demo('#fig-front', {
+        title: 'Front de fissure (Dijkstra)', aspect: 2.05, animate: true,
+        controls: [{ key: 'sp', label: 'Vitesse de lecture', min: .05, max: 1, step: .05, value: .25, fmt: (v) => `×${fmt(v)}` }],
+        buttons: [...Object.entries(MECH).map(([k, v]) => ({ label: v, onClick: () => { st.mech = k; st.t = -0.15; } }))],
+        draw(g, d) {
+          const R = crack(st.mech, 1);
+          st.t += d.dt * d.s.sp; if (st.t > R.tmax + 2.6) st.t = -0.15;
+          const N = R.tc.length, cl = new Float64Array(N), hit = new Uint8Array(N);
+          let reached = 0;
+          for (const l of R.alive) { const dt = st.t - R.tc[l]; cl[l] = crackLight(dt); if (dt >= 0) { hit[l] = 1; reached++; } }
+          const img = og.createImageData(LW, LH), px = img.data;
+          for (let p = 0; p < LW * LH; p++) {
+            const l = R.lab[p], o = p * 4, k = hit[l] ? R.shade[l] * .42 : .3;
+            px[o] = GLASS[0] * k; px[o + 1] = GLASS[1] * k; px[o + 2] = GLASS[2] * k; px[o + 3] = 255;
+          }
+          for (let e = 0; e < R.edges.length; e += 3) {
+            const p = R.edges[e], v = Math.max(cl[R.edges[e + 1]], cl[R.edges[e + 2]]); if (v <= 0) continue;
+            const o = p * 4, a = Math.min(1, v * .55), hot = Math.min(1, Math.max(0, v - 1));
+            px[o] = lerp(px[o], lerp(225, 255, hot), a); px[o + 1] = lerp(px[o + 1], lerp(232, 236, hot), a); px[o + 2] = lerp(px[o + 2], lerp(245, 200, hot), a);
+          }
+          og.putImageData(img, 0, 0);
+          const M = plateMap(d); g.imageSmoothingEnabled = true; g.drawImage(off, M.x0, M.y0, M.w, M.h);
+          d.status(`${MECH[st.mech]} · t = ${fmt(Math.max(0, st.t), 3)} s après le choc · ${reached} / ${R.n} éclats · front complet en ${fmt(R.tmax, 2)} s`);
+        },
+      });
+    }
+
+    // ── 03 · découpage exact (Sutherland-Hodgman) ─────────────────────────
+    {
+      // fracture.js : before(), lerpV(), clip() — en 2D
+      const before = (A, B) => A.p[0] < B.p[0] || (A.p[0] === B.p[0] && A.p[1] < B.p[1]);
+      function lerpV(A, B, t, labels) {
+        if (before(B, A)) { const T = A; A = B; B = T; t = 1 - t; }
+        const dd = {}; for (const l of labels) dd[l] = A.d[l] + (B.d[l] - A.d[l]) * t;
+        return { p: [A.p[0] + (B.p[0] - A.p[0]) * t, A.p[1] + (B.p[1] - A.p[1]) * t], d: dd };
+      }
+      function clip(poly, tags, l, m, labels) {
+        const out = [], otags = [], n = poly.length, gg = (V) => V.d[l] - V.d[m];
+        for (let i = 0; i < n; i++) {
+          const A = poly[i], B = poly[(i + 1) % n], ga = gg(A), gb = gg(B), ina = ga <= 0, inb = gb <= 0;
+          if (ina) { out.push(A); if (inb) otags.push(tags[i]); else { otags.push(tags[i]); out.push(lerpV(A, B, ga / (ga - gb), labels)); otags.push(m); } }
+          else if (inb) { out.push(lerpV(A, B, ga / (ga - gb), labels)); otags.push(tags[i]); }
+        }
+        return { poly: out, tags: otags };
+      }
+      const NX = 8, NY = 4, r0 = RNG(5);
+      const V = [];
+      for (let j = 0; j <= NY; j++) for (let i = 0; i <= NX; i++) {
+        const inner = i > 0 && i < NX && j > 0 && j < NY;
+        V.push([i / NX + (inner ? r0.range(-.25, .25) / NX : 0), j / NY + (inner ? r0.range(-.25, .25) / NY : 0)]);
+      }
+      const T = [];
+      for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) { const a = j * (NX + 1) + i, b = a + 1, c = a + NX + 1, e = c + 1; T.push([a, b, e], [a, e, c]); }
+      const COL = ['#e9c48a', '#7fb2d9', '#d9826f', '#9cc79a', '#b9a0d9'];
+      demo('#fig-clip', {
+        title: 'Étiquetage d’un maillage', aspect: 2,
+        buttons: [{ key: 'exact', label: 'Découpage exact', toggle: true, value: true }],
+        setup(d) { d.state.seeds = [[.18, .3], [.44, .72], [.62, .25], [.86, .62], [.3, .9]]; },
+        pointer(d, e) {
+          const M = d.state.map; if (!M) return;
+          const q = [(e.x - M.x0) / M.w, (e.y - M.y0) / M.h];
+          if (e.type === 'down') { let bi = -1, bd = .06; d.state.seeds.forEach((s, i) => { const dd = Math.hypot(s[0] - q[0], (s[1] - q[1]) * M.h / M.w); if (dd < bd) { bd = dd; bi = i; } }); d.state.drag = bi; }
+          else if (e.type === 'up') d.state.drag = -1;
+          else if (d.state.drag >= 0 && e.down) d.state.seeds[d.state.drag] = [clamp(q[0], 0, 1), clamp(q[1], 0, 1)];
+        },
+        draw(g, d) {
+          const m = 14, W = d.w - 2 * m, H = d.h - 2 * m, M = { x0: m, y0: m, w: W, h: H }; d.state.map = M;
+          const P = (p) => [M.x0 + p[0] * W, M.y0 + p[1] * H];
+          const seeds = d.state.seeds, labels = seeds.map((_, i) => i);
+          const D = (p) => { const o = {}; seeds.forEach((s, i) => { o[i] = Math.hypot((p[0] - s[0]) * W, (p[1] - s[1]) * H); }); return o; };
+          const cracks = []; let npoly = 0;
+          if (d.s.exact) {
+            for (const t of T) {
+              const verts = t.map((i) => ({ p: V[i], d: D(V[i]) }));
+              for (const l of labels) {
+                let cur = { poly: verts, tags: [-1, -1, -1] };
+                for (const mm of labels) { if (mm === l) continue; cur = clip(cur.poly, cur.tags, l, mm, labels); if (cur.poly.length < 3) break; }
+                if (cur.poly.length < 3) continue;
+                npoly++;
+                g.fillStyle = alpha(COL[l], .28); g.beginPath(); cur.poly.forEach((v, k) => { const [x, y] = P(v.p); k ? g.lineTo(x, y) : g.moveTo(x, y); }); g.closePath(); g.fill();
+                cur.tags.forEach((tg, k) => { if (tg >= 0) cracks.push([cur.poly[k].p, cur.poly[(k + 1) % cur.poly.length].p]); });
+              }
+            }
+          } else {
+            const own = T.map((t) => { const c = [(V[t[0]][0] + V[t[1]][0] + V[t[2]][0]) / 3, (V[t[0]][1] + V[t[1]][1] + V[t[2]][1]) / 3], dd = D(c); return labels.reduce((b, l) => (dd[l] < dd[b] ? l : b), 0); });
+            T.forEach((t, ti) => { g.fillStyle = alpha(COL[own[ti]], .28); g.beginPath(); t.forEach((i, k) => { const [x, y] = P(V[i]); k ? g.lineTo(x, y) : g.moveTo(x, y); }); g.closePath(); g.fill(); });
+            const ek = new Map();
+            T.forEach((t, ti) => { for (let k = 0; k < 3; k++) { const a = t[k], b = t[(k + 1) % 3], key = a < b ? `${a}_${b}` : `${b}_${a}`; if (ek.has(key)) { const o = ek.get(key); if (own[o] !== own[ti]) cracks.push([V[a], V[b]]); } else ek.set(key, ti); } });
+            npoly = T.length;
+          }
+          // maillage
+          g.strokeStyle = alpha(C.ink, .13); g.lineWidth = 1;
+          for (const t of T) { g.beginPath(); t.forEach((i, k) => { const [x, y] = P(V[i]); k ? g.lineTo(x, y) : g.moveTo(x, y); }); g.closePath(); g.stroke(); }
+          g.strokeStyle = C.ink; g.lineWidth = 2;
+          for (const [a, b] of cracks) { const [x0, y0] = P(a), [x1, y1] = P(b); g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke(); }
+          seeds.forEach((s, i) => { const [x, y] = P(s); g.fillStyle = COL[i]; g.beginPath(); g.arc(x, y, 6, 0, TAU); g.fill(); g.strokeStyle = C.bg; g.lineWidth = 1.5; g.stroke(); });
+          d.status(d.s.exact ? `découpage exact · ${npoly} polygones · les fissures traversent les triangles` : 'triangles entiers · fissures en escalier le long des arêtes');
+        },
+      });
+    }
+
+    // ── 05 · caméra rapide et pendule ──────────────────────────────────────
+    {
+      const PEN = { L: 4.5, th0: 0.62, rb: 0.09 }, wP = Math.sqrt(GRAV / PEN.L), Ts = 12, t0 = PH.rupture * Ts, CM = 12.5;
+      const pend = (tp) => {
+        const { L, th0, rb } = PEN;
+        let th; if (tp < -Math.PI / (2 * wP)) th = th0; else if (tp < 0) th = th0 * Math.sin(-wP * tp); else th = -th0 * 0.5 * Math.sin(wP * tp) * Math.exp(-0.45 * tp);
+        const c = [rb + L * Math.sin(th), L - L * Math.cos(th)];
+        return { th, c, gap: Math.hypot(c[0], c[1]) - rb };
+      };
+      demo('#fig-slow', {
+        title: 'physTime() et la bille', aspect: 2.3, animate: true,
+        controls: [
+          { key: 'lead', label: 'Début du ralenti avant le choc', min: .03, max: .6, step: .01, value: .03, fmt: (v) => `${fmt(v)} s` },
+          { key: 'k', label: 'Ralenti k', min: 12, max: 20, step: 1, value: 16, fmt: (v) => `×${v}` },
+        ],
+        draw(g, d) {
+          const slow = { k: d.s.k, pre: d.s.lead - .12, plat: 2, post: 1 };
+          const tp = (l) => physTime(l, Ts, slow) - physTime(t0, Ts, slow);
+          const a = -1, b = 3.2;
+          d.state.p = ((d.state.p ?? 0) + d.dt) % (b - a + .8);
+          const ph = a + Math.min(d.state.p, b - a);
+          const { w, h } = d, x0 = 52, x1 = w * .68, X = (t) => lerp(x0, x1, (t - a) / (b - a));
+          // v(ℓ)
+          const v0 = 14, v1 = h * .38, Yv = (v) => lerp(v1, v0, v);
+          g.strokeStyle = C.grid; g.lineWidth = 1;
+          for (const v of [0, 1 / d.s.k, .5, 1]) { g.beginPath(); g.moveTo(x0, Yv(v)); g.lineTo(x1, Yv(v)); g.stroke(); }
+          label(g, '1', x0 - 6, Yv(1) + 4, { align: 'right', size: 11 }); label(g, `1/${d.s.k}`, x0 - 6, Yv(1 / d.s.k) + 4, { align: 'right', size: 11 });
+          g.strokeStyle = alpha(C.c1, .45); g.beginPath(); g.moveTo(X(0), v0); g.lineTo(X(0), h - 26); g.stroke();
+          label(g, 'choc', X(0) + 4, h - 30, { color: C.c1, size: 11 });
+          g.strokeStyle = C.c2; g.lineWidth = 2; g.beginPath();
+          for (let i = 0; i <= 400; i++) { const t = a + i / 400 * (b - a), l = t0 + t, v = (physTime(l + 1e-4, Ts, slow) - physTime(l, Ts, slow)) / 1e-4, y = Yv(v); i ? g.lineTo(X(t), y) : g.moveTo(X(t), y); }
+          g.stroke(); label(g, 'v(ℓ) : vitesse du temps physique', x0 + 6, v0 + 12, { color: C.c2, size: 11.5 });
+          // écart bille-verre, en cm (0 à 10)
+          const g0 = h * .5, g1 = h - 26, gmax = 10, Yg = (cm) => lerp(g1, g0, Math.min(cm, gmax) / gmax);
+          g.strokeStyle = C.grid; g.lineWidth = 1;
+          for (const cm of [0, 5, 10]) { g.beginPath(); g.moveTo(x0, Yg(cm)); g.lineTo(x1, Yg(cm)); g.stroke(); label(g, `${cm} cm`, x0 - 6, Yg(cm) + 4, { align: 'right', size: 11 }); }
+          g.strokeStyle = C.c1; g.lineWidth = 2; g.beginPath(); let started = false;
+          for (let i = 0; i <= 600; i++) { const t = a + i / 600 * (b - a), q = tp(t0 + t); if (q > 0) break; const y = Yg(pend(q).gap * CM); started ? g.lineTo(X(t), y) : g.moveTo(X(t), y); started = true; }
+          g.stroke(); label(g, 'distance de la bille au verre', x0 + 6, g0 - 4, { color: C.c1, size: 11.5 });
+          label(g, 'temps du film, depuis le choc (s) →', x1, g1 - 8, { align: 'right', color: C.faint, size: 11 });
+          for (const t of [-1, 0, 1, 2, 3]) label(g, String(t), X(t), h - 12, { align: 'center', size: 10.5, color: C.faint });
+          // tête de lecture
+          g.strokeStyle = alpha(C.ink, .5); g.setLineDash([3, 3]); g.beginPath(); g.moveTo(X(ph), v0); g.lineTo(X(ph), g1); g.stroke(); g.setLineDash([]);
+          // durée à l'écran des 5 derniers cm
+          let l5 = t0; for (let l = t0 - 2; l <= t0; l += .0005) { const q = tp(l); if (q <= 0 && pend(q).gap * CM <= 5) { l5 = l; break; } }
+          // encart : la bille et la paroi
+          const bx0 = w * .74, bw = w - bx0 - 12, cyB = h * .48, scB = bw / 0.9; // 0,9 u ≈ 11 cm de champ
+          const wallX = bx0 + bw * .28, q = tp(t0 + ph), P = pend(q);
+          g.save(); g.beginPath(); g.rect(bx0, 10, bw, h - 20); g.clip();
+          g.fillStyle = q > 0 ? alpha(C.c2, .12) : alpha(C.c2, .3); g.fillRect(wallX - .036 * scB, 10, .036 * scB, h - 20);
+          if (q > 0) { g.strokeStyle = C.ink; g.lineWidth = 1.2; for (let k = 0; k < 6; k++) { const yy = cyB + (k - 2.5) * 22; g.beginPath(); g.moveTo(wallX - .036 * scB, yy); g.lineTo(wallX, yy + 9); g.stroke(); } }
+          const bxp = wallX + P.c[0] * scB, byp = cyB - P.c[1] * scB;
+          g.strokeStyle = alpha(C.ink, .3); g.lineWidth = 1; g.beginPath(); g.moveTo(bxp, byp); g.lineTo(bxp - Math.sin(P.th) * PEN.L * scB, byp - PEN.L * Math.cos(P.th) * scB); g.stroke();
+          g.fillStyle = '#c6c7c9'; g.beginPath(); g.arc(bxp, byp, PEN.rb * scB, 0, TAU); g.fill();
+          g.restore();
+          g.strokeStyle = C.line; g.strokeRect(bx0, 10, bw, h - 20);
+          label(g, q <= 0 ? `écart ${fmt(Math.max(0, P.gap) * CM, 1)} cm` : 'brisé', bx0 + 8, h - 18, { size: 11.5, color: C.ink });
+          d.status(`les 5 derniers cm durent ${fmt(t0 - l5, 2)} s à l’écran · v au contact ${Math.round(((physTime(t0 + 1e-4, Ts, slow) - physTime(t0, Ts, slow)) / 1e-4) * 100)} %`);
+        },
+      });
+    }
+
+    // ── 06 · la chute ─────────────────────────────────────────────────────
+    {
+      const Ts = 12, t0 = PH.rupture * Ts, slow = { k: 16, pre: -0.09, plat: 2, post: 1 }, REST = 0.02, OI = [0.62, 1.1, 0];
+      const norm = (v) => { const l = Math.hypot(...v) || 1; return v.map((x) => x / l); };
+      const slope = (x) => Math.sign(x) * DISH_H * 2 * Math.abs(x) / (DISH_W * DISH_W) * Math.exp(-(x * x) / (DISH_W * DISH_W));
+      function frags(seed, force) {
+        const r = RNG(seed), out = [];
+        for (let i = 0; i < 22; i++) {
+          const side = i < 14 ? 1 : -1, y = .2 + r.next() * 1.75, c = [side * .62, y, 0], n = [side, 0, 0];
+          const dv = [c[0] - OI[0], c[1] - OI[1], 0], rho = Math.hypot(...dv);
+          const radial = norm([0, dv[1], 0]), k = 0.22 + 1.35 / (1 + (rho / (0.16 * S)) ** 1.3);
+          const jit = [r.gauss() * .12, r.gauss() * .12, 0], dirIn = [-1, 0, 0];
+          const v = norm([dirIn[0] * (.55 + k * .5) + radial[0] * .55 + n[0] * .35 + jit[0], dirIn[1] * (.55 + k * .5) + radial[1] * .55 + n[1] * .35 + jit[1], 0]).map((x) => x * k * S * 0.95 * 6.5 * force);
+          const len = .07 + .2 * Math.min(1, rho / 1.3) * (.7 + .6 * r.next()), sz = len / S;
+          const w = 6.5 * 2 * r.sign() * r.range(1.2, 3.2) * Math.min(3, Math.sqrt(0.25 / Math.max(0.02, sz)));
+          out.push({ c, v, w, len, tc: t0 + (side > 0 ? rho : rho + 1.2) / (S * 6) * r.range(.85, 1.25) });
+        }
+        return out;
+      }
+      let cacheKey = '', F = [];
+      demo('#fig-fall', {
+        title: 'Vol, choc, rebond, glissement', aspect: 2.4, animate: true,
+        setup(d) { d.state.l = 1.1; },
+        controls: [{ key: 'force', label: 'Force du choc', min: .6, max: 1.4, step: .05, value: 1, fmt: (v) => `×${fmt(v)}` }],
+        buttons: [{ label: 'Autres éclats', onClick: (d) => { d.state.seed = (d.state.seed ?? 1) + 1; d.state.l = 0; } }, { label: 'Rejouer', onClick: (d) => { d.state.l = 0; } }],
+        draw(g, d) {
+          const key = `${d.state.seed ?? 1}:${d.s.force}`; if (key !== cacheKey) { cacheKey = key; F = frags(d.state.seed ?? 1, d.s.force); }
+          d.state.l = ((d.state.l ?? 0) + d.dt) % 6;
+          const l = t0 - .4 + d.state.l;
+          const { w, h } = d, xa = -7.5, xb = 3, sc = Math.min(w / (xb - xa), (h - 30) / 3.4), ox = (w - (xb - xa) * sc) / 2 - xa * sc, oy = h - 22;
+          const X = (x) => ox + x * sc, Y = (y) => oy - y * sc;
+          // sole
+          g.beginPath(); g.moveTo(X(xa), h); for (let i = 0; i <= 200; i++) { const x = xa + i / 200 * (xb - xa); g.lineTo(X(x), Y(floorH(Math.abs(x)))); } g.lineTo(X(xb), h); g.closePath();
+          g.fillStyle = alpha(C.ink, .07); g.fill(); g.strokeStyle = alpha(C.ink, .4); g.lineWidth = 1.2;
+          g.beginPath(); for (let i = 0; i <= 200; i++) { const x = xa + i / 200 * (xb - xa); i ? g.lineTo(X(x), Y(floorH(Math.abs(x)))) : g.moveTo(X(x), Y(floorH(Math.abs(x)))); } g.stroke();
+          // pièce, avant le choc
+          if (l < t0 + .05) { g.strokeStyle = alpha(C.c2, .25); g.lineWidth = 1; g.strokeRect(X(-.62), Y(2), .62 * 2 * sc, 2 * sc); }
+          g.fillStyle = C.c1; g.beginPath(); g.arc(X(OI[0]), Y(OI[1]), 3.5, 0, TAU); g.fill();
+          let landed = 0;
+          const tauNow = physTime(l, Ts, slow) - physTime(t0, Ts, slow);
+          for (const f of F) {
+            const tau = Math.max(0, physTime(l, Ts, slow) - physTime(f.tc, Ts, slow));
+            const P = fragmentCenter(f, tau, REST);
+            // trace
+            g.strokeStyle = alpha(C.c2, .18); g.lineWidth = 1; g.beginPath();
+            for (let i = 0; i <= 24; i++) { const q = fragmentCenter(f, tau * i / 24, REST).c; i ? g.lineTo(X(q[0]), Y(q[1])) : g.moveTo(X(q[0]), Y(q[1])); } g.stroke();
+            let ang;
+            if (P.s2 < 0) ang = Math.PI / 2 + f.w * tau;
+            else { landed++; const a0 = Math.PI / 2 + f.w * P.tL, tgt = Math.atan(slope(P.c[0])); let da = wrapPi(tgt - a0); if (da > Math.PI / 2) da -= Math.PI; if (da < -Math.PI / 2) da += Math.PI; ang = a0 + da * Math.min(1, P.s2 / .07); }
+            const dx = Math.cos(ang) * f.len / 2, dy = Math.sin(ang) * f.len / 2;
+            g.strokeStyle = P.s2 < 0 ? C.c2 : C.c4; g.lineWidth = 3; g.lineCap = 'round';
+            g.beginPath(); g.moveTo(X(P.c[0] - dx), Y(P.c[1] - dy)); g.lineTo(X(P.c[0] + dx), Y(P.c[1] + dy)); g.stroke();
+          }
+          const v = (physTime(l + 1e-4, Ts, slow) - physTime(l, Ts, slow)) / 1e-4;
+          label(g, v < .98 ? `ralenti ×${fmt(1 / v, 1)}` : 'temps réel', w - 12, 20, { align: 'right', color: v < .98 ? C.c1 : C.dim, size: 12.5 });
+          d.status(`film ${l - t0 >= 0 ? '+' : ''}${fmt(l - t0)} s · physique ${fmt(Math.max(0, tauNow), 3)} s · ${landed} / ${F.length} au sol`);
+        },
+      });
+    }
+
+    // ── 07 · position de repos stable ─────────────────────────────────────
+    {
+      const H = .07;
+      function shard(span, asym) {
+        const pts = [], nA = 48;
+        for (const side of [0, 1]) for (let i = 0; i <= nA; i++) {
+          const t = i / nA, ph = (-span / 2 + span * t), R = 1 + asym * (t - .5) - side * H;
+          pts.push([R * Math.sin(ph), R * Math.cos(ph)]);
+        }
+        return pts;
+      }
+      const rot = (p, a) => [p[0] * Math.cos(a) - p[1] * Math.sin(a), p[0] * Math.sin(a) + p[1] * Math.cos(a)];
+      demo('#fig-rest', {
+        title: 'Fonction de support et pose', aspect: 2.7,
+        controls: [
+          { key: 'span', label: 'Ouverture de l’arc', min: 20, max: 200, step: 1, value: 150, fmt: (v) => `${v}°` },
+          { key: 'asym', label: 'Asymétrie', min: 0, max: .8, step: .01, value: .3, fmt: (v) => fmt(v) },
+        ],
+        draw(g, d) {
+          const pts = shard(d.s.span * Math.PI / 180, d.s.asym);
+          const c = pts.reduce((s, p) => [s[0] + p[0] / pts.length, s[1] + p[1] / pts.length], [0, 0]);
+          // normale moyenne (vers l'extérieur de la paroi)
+          const outer = pts.slice(0, 49), nm = outer.reduce((s, p) => { const l = Math.hypot(...p); return [s[0] + p[0] / l, s[1] + p[1] / l]; }, [0, 0]), ln = Math.hypot(...nm), n = [nm[0] / ln, nm[1] / ln];
+          const sup = (dd) => Math.max(...pts.map((p) => (p[0] - c[0]) * dd[0] + (p[1] - c[1]) * dd[1]));
+          const dirs = [n, [-n[0], -n[1]], ...Array.from({ length: 120 }, (_, i) => [Math.cos(i / 120 * TAU), Math.sin(i / 120 * TAU)])];
+          let best = dirs[0], bs = Infinity; for (const dd of dirs) { const s = sup(dd); if (s < bs) { bs = s; best = dd; } }
+          const { w, h } = d, pw = w / 3, sc = Math.min(pw / 2.9, h / 2.5);
+          const panel = (i, title) => { label(g, title, pw * i + pw / 2, 18, { align: 'center', size: 11.5, color: C.dim }); if (i) { g.strokeStyle = C.grid; g.beginPath(); g.moveTo(pw * i, 8); g.lineTo(pw * i, h - 8); g.stroke(); } };
+          const drawShard = (P, ox, oy, col) => {
+            const nA = 49; g.beginPath(); P.slice(0, nA).forEach((p, k) => { const x = ox + p[0] * sc, y = oy - p[1] * sc; k ? g.lineTo(x, y) : g.moveTo(x, y); });
+            for (let k = 2 * nA - 1; k >= nA; k--) g.lineTo(ox + P[k][0] * sc, oy - P[k][1] * sc);
+            g.closePath(); g.fillStyle = alpha(col, .35); g.fill(); g.strokeStyle = col; g.lineWidth = 1.4; g.stroke();
+          };
+          // 1 : l'éclat et h(d)
+          panel(0, 'dans la pièce : h(d) autour du centre');
+          const ox0 = pw / 2 - c[0] * sc, oy0 = h * .58 + c[1] * sc;
+          drawShard(pts, ox0, oy0, C.c2);
+          const cx0 = ox0 + c[0] * sc, cy0 = oy0 - c[1] * sc;
+          g.strokeStyle = alpha(C.c1, .75); g.lineWidth = 1.2; g.beginPath();
+          for (let i = 0; i <= 180; i++) { const a = i / 180 * TAU, dd = [Math.cos(a), Math.sin(a)], s = sup(dd); const x = cx0 + dd[0] * s * sc, y = cy0 - dd[1] * s * sc; i ? g.lineTo(x, y) : g.moveTo(x, y); } g.stroke();
+          g.fillStyle = C.ink; g.beginPath(); g.arc(cx0, cy0, 3, 0, TAU); g.fill();
+          arrow(g, cx0, cy0, cx0 + best[0] * bs * sc, cy0 - best[1] * bs * sc, { color: C.c4, width: 1.8 });
+          // 2 : pose naïve : n vers le bas, centre à H/2
+          panel(1, 'naïf : normale moyenne vers le bas');
+          const fy = h - 26;
+          const pose = (dd, hc, i, col) => {
+            const a = Math.atan2(-1, 0) - Math.atan2(dd[1], dd[0]);
+            const P = pts.map((p) => { const q = rot([p[0] - c[0], p[1] - c[1]], a); return [q[0], q[1] + hc]; });
+            const ox = pw * i + pw / 2, oy = fy;
+            g.strokeStyle = alpha(C.ink, .45); g.lineWidth = 1.2; g.beginPath(); g.moveTo(pw * i + 10, fy); g.lineTo(pw * (i + 1) - 10, fy); g.stroke();
+            g.fillStyle = alpha(C.ink, .05); g.fillRect(pw * i + 10, fy, pw - 20, h - fy);
+            drawShard(P, ox, oy, col);
+            const depth = Math.max(0, -Math.min(...P.map((p) => p[1])));
+            if (depth > 1e-3) { g.save(); g.beginPath(); g.rect(pw * i, fy, pw, h - fy); g.clip(); drawShard(P, ox, oy, C.c3); g.restore(); }
+            return depth;
+          };
+          const dep = pose(n, H / 2, 1, C.c2);
+          panel(2, 'position stable : centre le plus bas');
+          pose(best, bs, 2, C.c4);
+          // éclat de rayon 0,6 u (une paroi de pièce), 1 u = 12,5 cm
+          const cm = (x) => fmt(x * .6 * 12.5, 1);
+          d.status(`naïf : enfoncé de ${cm(dep)} cm · stable : centre à ${cm(bs)} cm de la sole`);
+        },
+      });
+    }
+
+    // ── 08 · soufflage et incandescence ───────────────────────────────────
+    {
+      const Ts = 12;
+      const blackbody = (h) => { const k = Math.pow(h, 2.6) * 7 + h * 0.4; return [k, (Math.pow(h, 1.6) * 0.55 + 0.05) * k, Math.pow(h, 4) * 0.22 * k]; };
+      const EXPO = .3, toRGB = (e, base) => e.map((x, i) => Math.round(255 * Math.pow(Math.min(1, (x * EXPO) / (1 + x * EXPO) + base[i]), 1 / 2.2)));
+      const heatAt = (a, l) => { const tPlace = Ts * PH.acc * (a * 0.55 + 0.45) * 0.6; return clamp(1 - (l - tPlace) / (Ts * PH.cool), 0, 1); };
+      const sm = (u) => u * u * (3 - 2 * u);
+      const st = { form: 'carafe' }, order = ['carafe', 'verre', 'amphore', 'tulipe'];
+      const cache = {}; const P = (f) => (cache[f] ??= profile({ form: f }));
+      const BASE = [.012, .018, .03];
+      demo('#fig-heat', {
+        title: 'inflation() et blackbody()', aspect: 1.45, animate: true,
+        controls: [{ key: 'l', label: 'Temps de l’étape ℓ', min: 0, max: 5, step: .01, value: 2.6, fmt: (v) => `${fmt(v)} s` }],
+        buttons: [{ key: 'play', label: 'Lecture', toggle: true, value: false }, { label: 'Forme suivante', onClick: () => { st.form = order[(order.indexOf(st.form) + 1) % order.length]; } }],
+        draw(g, d) {
+          const l = d.s.play ? (d.t * .8) % 5 : d.s.l;
+          const { pts, height } = P(st.form), { w, h } = d, Sz = 2;
+          const sc = (h - 50) / (Math.max(height, .6) * Sz), cx = w * .4, by = h - 26;
+          const prog = l / (Ts * PH.acc);
+          const pos = (p) => {
+            const a = p.s, gi = sm(clamp((prog - a * 0.55) / 0.45, 0, 1)), breath = Math.sin(gi * Math.PI) * 0.06 + 1;
+            const blowing = l < Ts * PH.acc;
+            const rr = p.r * Sz, yy = p.y * Sz;
+            return blowing ? [lerp(rr * .22, rr * breath, gi), lerp(yy * .04, yy, gi)] : [rr, yy];
+          };
+          // bain
+          const poolR = .6 * (1 - smooth(0, Ts * PH.acc * .85, l));
+          if (poolR > .01) { const e = blackbody(.95); g.fillStyle = `rgb(${toRGB(e, BASE).join(',')})`; g.beginPath(); g.ellipse(cx, by, poolR * sc, Math.max(2, poolR * sc * .12), 0, 0, TAU); g.fill(); }
+          g.strokeStyle = alpha(C.ink, .35); g.beginPath(); g.moveTo(cx - 1.1 * sc, by); g.lineTo(cx + 1.1 * sc, by); g.stroke();
+          for (let k = 0; k < pts.length - 1; k++) {
+            const A = pos(pts[k]), B = pos(pts[k + 1]), e = blackbody(heatAt(pts[k].s, l));
+            g.fillStyle = `rgb(${toRGB(e, BASE).join(',')})`;
+            g.beginPath(); g.moveTo(cx - A[0] * sc, by - A[1] * sc); g.lineTo(cx + A[0] * sc, by - A[1] * sc); g.lineTo(cx + B[0] * sc, by - B[1] * sc); g.lineTo(cx - B[0] * sc, by - B[1] * sc); g.closePath(); g.fill();
+          }
+          g.strokeStyle = alpha(C.c2, .55); g.lineWidth = 1.2;
+          for (const sg of [1, -1]) { g.beginPath(); pts.forEach((p, k) => { const q = pos(p); k ? g.lineTo(cx + sg * q[0] * sc, by - q[1] * sc) : g.moveTo(cx + sg * q[0] * sc, by - q[1] * sc); }); g.stroke(); }
+          // barre de couleur
+          const bx = w - 70, b0 = 26, b1 = h - 40;
+          for (let i = 0; i < 100; i++) { const hh = 1 - i / 100; g.fillStyle = `rgb(${toRGB(blackbody(hh), BASE).join(',')})`; g.fillRect(bx, lerp(b0, b1, i / 100), 16, (b1 - b0) / 100 + 1); }
+          label(g, 'h = 1', bx + 22, b0 + 8, { size: 11 }); label(g, 'h = 0', bx + 22, b1, { size: 11 });
+          const hf = heatAt(0, l), hr = heatAt(1, l);
+          [[hf, 'pied', C.c1], [hr, 'bord', C.c2]].forEach(([hv, nm, col], i) => { const y = lerp(b1, b0, hv); g.strokeStyle = col; g.lineWidth = 2; g.beginPath(); g.moveTo(bx - 8, y); g.lineTo(bx, y); g.stroke(); label(g, nm, bx - 10, y + (i ? 12 : -2), { align: 'right', size: 11, color: col }); });
+          const phase = l < Ts * PH.acc ? 'soufflage' : hr > 0 ? 'refroidissement' : 'verre froid';
+          d.status(`ℓ = ${fmt(l)} s · ${phase} · chaleur du pied ${fmt(hf)}, du bord ${fmt(hr)}`);
+        },
+      });
+    }
+  </script>
+</body>
+</html>

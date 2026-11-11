@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#050506">
+  <title>Fold · défis techniques</title>
+  <meta name="description" content="Comment Fold fait se replier une sensitive, un trèfle ou une dionée : folioles sur charnières qui ne se traversent jamais, limbe plié d'un seul tenant, signal propagé sur le graphe vasculaire, pulvinus, carte du temps à trois régimes, causes au contact exact.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+  <link rel="stylesheet" href="../home/explainer.css">
+</head>
+<body>
+  <nav class="top"><div class="in">
+    <a href="../">Codevember</a><span class="day">Day 01</span><span class="crumb">Fold · défis techniques</span>
+    <span class="sp"></span><a class="open" href="./">Ouvrir la scène</a>
+  </div></nav>
+
+  <main>
+    <header class="hero">
+      <div class="kicker">Day 01 · Fold · la feuille qui se replie</div>
+      <h1>Comment une plante se replie quand on la touche</h1>
+      <p class="lede">Une goutte tombe sur une sensitive : la feuille touchée ferme ses folioles par paires, de proche en proche, puis son pétiole s’affaisse. Un marteau frappe le pot : toute la plante se ferme, de bas en haut. Rien n’est animé à la main. Chaque foliole tourne sur sa charnière d’après l’instant où le signal l’atteint, calculé sur le réseau des nervures, et le film raccorde une chute en temps réel, un choc filmé huit fois ralenti et un retour qui dure six minutes.</p>
+    </header>
+
+    <figure class="cover">
+      <img src="docs/capture.jpg" alt="Trois plantes de Fold : une dionée, un trèfle pourpre et une sensitive" width="1860" height="700">
+      <figcaption>Trois des quatre familles : la dionée, dont les lobes claquent l’un contre l’autre ; le trèfle pourpre, qui plie chaque foliole en deux le long de sa nervure ; la sensitive, qui ferme ses folioles en peigne.</figcaption>
+    </figure>
+
+    <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
+
+    <article>
+
+      <section id="charniere">
+        <h2><span class="n">01</span>Chaque foliole tourne sur une charnière</h2>
+        <span class="src">src/gen/plant.js · leafletFrames()</span>
+        <p>Une pinnule de sensitive porte 12 à 25 paires de folioles d’un centimètre, espacées d’à peine deux millimètres le long du rachis. Ouvertes, elles se recouvrent presque ; fermées, elles s’empilent face à face. Interpoler naïvement chaque foliole entre une pose ouverte et une pose fermée choisies à l’œil (par exemple en tournant d’abord autour d’un axe, puis d’un autre) fait passer, quelque part au milieu du geste, la pointe de l’une à travers sa voisine. Avec deux mille cinq cents paires dans une plante, ce croisement se voit toujours quelque part.</p>
+        <p>Fold impose deux règles. D’abord, le mouvement de chaque foliole est une <strong>rotation d’axe fixe</strong> autour de sa pulvinule : la charnière qui mène le repère ouvert \(F_o\) au repère fermé \(F_c\), extraite de la matrice \(R = F_c F_o^{\top}\) (son angle par la trace, son axe par la partie antisymétrique). Ensuite, toutes les folioles d’un même côté d’une pinnule ont <strong>le même repère</strong> : elles restent parallèles à chaque instant du geste, et deux plans parallèles ne se coupent pas.</p>
+        <p>Reste à les placer pour qu’elles ne se touchent ni ouvertes ni fermées. Ouvertes, elles font un angle \(\alpha = 68^\circ\) avec le rachis et sont côte à côte dans son plan : leur largeur vaut \(0{,}82 \times \text{pas} \times \sin\alpha\), un peu moins que la place disponible. Fermées, elles se relèvent face à leur partenaire et s’écartent de l’axe d’un angle \(\gamma = 15^\circ\) : deux voisines sont alors dans des plans parallèles distants de</p>
+        <div class="eq">\[ e = \text{pas} \times \sin\gamma, \]</div>
+        <p>comme les tuiles d’un toit. Le Biophytum, qui rabat ses folioles vers le bas, suit les mêmes règles avec \(\alpha\) et \(\gamma\) majorés (×1,18 et ×1,4) et une pointe rabattue au lieu d’être relevée.</p>
+        <figure id="fig-hinge" class="wide"><figcaption><b>Une pinnule qui se ferme, calculée par <code>leafletFrames()</code> et <code>leafletPoint()</code> importés tels quels.</b> Faites glisser pour tourner. À \(\gamma = 0\), les folioles fermées d’un même côté sont coplanaires et se recouvrent ; dès que \(\gamma\) s’ouvre, elles s’empilent en tuiles. Simplification : rachis droit et horizontal, folioles sans épaisseur, quatorze paires au lieu de vingt.</figcaption></figure>
+        <div class="note check"><b>Vérifié sur la nappe exacte</b><p>Un test fait fermer les pinnules des six premières feuilles de cinq plantes en onze instants (\(f = 0, 0{,}1, \dots, 1\)) et vérifie qu’aucune foliole ne traverse ses voisines, sur le gabarit exact du limbe, pas sur une boîte englobante. Un second vérifie qu’aucune feuille, à sept instants du pli, ne passe à moins de 0,6 mm d’une autre, ouverte ou fermée.</p></div>
+      </section>
+
+      <section id="pli">
+        <h2><span class="n">02</span>Le trèfle et la dionée plient un limbe d’un seul tenant</h2>
+        <span class="src">src/gen/plant.js · foldPoint(), trapFlip() · src/scene/plant.js · bendLeaf()</span>
+        <p>Le trèfle plie chacune de ses trois folioles en deux le long de la nervure ; la dionée referme ses deux lobes l’un contre l’autre. Il n’y a plus de charnière ponctuelle : c’est le limbe lui-même qui se courbe. Le modéliser comme deux moitiés rigides tournant autour de la nervure échoue dès qu’on donne une épaisseur au limbe : près de l’axe, la face intérieure d’une moitié passe de l’autre côté du plan médian et pénètre sa jumelle. Et deux moitiés séparées laissent une fente visible au pli.</p>
+        <p>Fold garde le limbe d’un seul tenant et le plie dans le vertex shader. De part et d’autre de la nervure, une bande de demi-largeur \(y_0 = 0{,}12\) (en largeurs de feuille) se courbe en <strong>arc de cercle</strong> ; au-delà, le limbe reste plan, tourné de l’angle \(\theta\). Pour un point \((x, y, z)\) du gabarit, avec \(t = \min(1, |y|/y_0)\) et \(a = \theta t\) :</p>
+        <div class="eq">\[ \begin{aligned} Y &= \frac{y_0 \sin a}{\theta} + \max(0, |y| - y_0)\cos\theta - z\sin a, \\ Z &= \frac{y_0 (1 - \cos a)}{\theta} + \max(0, |y| - y_0)\sin\theta + z\cos a. \end{aligned} \]</div>
+        <p>La surface reste continue et sa normale aussi ; la face intérieure ne franchit le plan médian que si la demi-épaisseur dépasse \(y_0/\theta\), loin de ce que porte une feuille. L’angle va de \(9^\circ\) à \(-72^\circ\) pour le trèfle (vers le bas), de \(40^\circ\) à \(74^\circ\) pour la dionée. La même formule est écrite deux fois, en JavaScript pour les tests et le plan, en TSL dans le shader, normales comprises.</p>
+
+        <h3>La dionée claque par flambage</h3>
+        <p>Un piège de dionée ne se contente pas de tourner : ses lobes, concaves quand il est ouvert, deviennent convexes en se fermant. C’est cette inversion de courbure, un flambage, qui rend le claquement si rapide (un cinquième de seconde). Fold l’applique avant le pli : le creusement du lobe, \(0{,}15\,v^2\,(0{,}6 + 0{,}4\sin\pi u)\), est retranché deux fois à la fermeture, ce qui le change exactement en son opposé.</p>
+        <pre><code>export const trapFlip = (u, v, f) =>
+  -2 * Math.min(1, f) * 0.15 * Math.min(1, v * v)
+     * (0.6 + 0.4 * Math.sin(Math.PI * u));</code></pre>
+        <figure id="fig-pli"><figcaption><b>Coupe d’un limbe au milieu de sa longueur</b>, pliée par <code>foldPoint()</code> et <code>trapFlip()</code> importés tels quels. En or, la bande de pliure ; en rouge, les points passés de l’autre côté du plan de la nervure (le critère du test). Le bouton « Deux moitiés rigides » remplace la pliure par une charnière (\(y_0 \to 0\)). L’épaisseur est exagérée pour la lisibilité ; dans la scène, les cils de la dionée, décalés d’un demi-pas entre les deux lobes, s’entrecroisent sans se toucher.</figcaption></figure>
+      </section>
+
+      <section id="signal">
+        <h2><span class="n">03</span>Le signal court sur le graphe des nervures</h2>
+        <span class="src">src/physio.js · propagate() · src/gen/plant.js · buildGraph()</span>
+        <p>Chez la sensitive, un contact déclenche un potentiel d’action qui court le long des faisceaux vasculaires à quelques centimètres par seconde et s’affaiblit avec la distance. Les folioles proches se ferment d’abord, les pinnules ensuite, le pétiole en dernier, à condition que le signal soit encore assez fort. Décider « cette feuille se ferme à tel instant » par une distance à vol d’oiseau ne donne pas cet ordre : deux folioles voisines dans l’espace peuvent appartenir à deux feuilles éloignées par le chemin des tiges.</p>
+        <p>La plante générée porte donc un <strong>graphe vasculaire</strong> : un nœud au collet, un par point de tige, un par pulvinus primaire (base du pétiole) et secondaire (bout du pétiole), un par paire de folioles. Chaque arête a sa longueur réelle et son organe, qui fixent la vitesse \(v\) et la longueur d’atténuation \(\lambda\) :</p>
+        <div class="tbl"><table>
+          <thead><tr><th>Organe</th><th class="num">Vitesse</th><th class="num">Atténuation λ</th></tr></thead>
+          <tbody>
+            <tr><td>tige</td><td class="num">5,5 cm/s</td><td class="num">18 cm</td></tr>
+            <tr><td>pétiole</td><td class="num">3 cm/s</td><td class="num">8,5 cm</td></tr>
+            <tr><td>rachis</td><td class="num">2 cm/s</td><td class="num">6 cm</td></tr>
+            <tr><td>collet</td><td class="num">8 cm/s</td><td class="num">30 cm</td></tr>
+          </tbody>
+        </table></div>
+        <p>Un <strong>Dijkstra</strong> sur un tas binaire donne en chaque nœud l’instant d’arrivée par le chemin le plus rapide et l’amplitude qui y parvient :</p>
+        <div class="eq">\[ A_v = A_u\, e^{-\ell/\lambda}, \qquad t_v = t_u + \frac{\ell}{v\,\big(1 + 1{,}6\,\max(0, A_u - \tfrac12)\big)}. \]</div>
+        <p>Le second facteur fait courir plus vite un signal fort : la vague ralentit en s’éteignant. Sous une amplitude de 0,1 elle s’arrête. Chaque pulvinus a son seuil : 0,2 pour une foliole, 0,36 pour une pinnule, 0,56 pour le pétiole. La goutte part avec une amplitude 3 depuis la paire touchée, le marteau avec 4 depuis le collet.</p>
+        <figure id="fig-signal" class="wide"><figcaption><b>Le graphe d’une vraie sensitive buissonnante</b>, généré par <code>growPlant()</code> dans un worker, et la vague calculée par <code>propagate()</code> : les deux importés tels quels. Touchez une foliole (un point) pour y faire tomber une goutte ; « Marteau » part du collet. Points or : folioles fermées ; anneaux bleus : pinnules ; carrés : pétioles qui tombent. La démo montre la propagation brute ; dans le film, le plan restreint ensuite la réponse d’une goutte à la feuille touchée, entière (voir ci-dessous).</figcaption></figure>
+        <div class="note"><b>Une goutte, une feuille</b><p>Laissé à lui-même, le signal d’une goutte ferme selon l’endroit une pinnule, une feuille ou plusieurs (comme dans la démo) : vrai, mais illisible à l’écran. Le plan garde les instants d’arrivée de Dijkstra, mais ne retient que les nœuds de la feuille touchée et force son pétiole au-dessus du seuil. Une goutte ferme alors toute la feuille touchée, la vague partant du point d’impact, et elle seule ; le marteau ferme tout. Un test le vérifie pour chaque toucher.</p></div>
+      </section>
+
+      <section id="pulvinus">
+        <h2><span class="n">04</span>Trois pulvinus, trois lois</h2>
+        <span class="src">src/physio.js · closeCurve(), KINETICS_BY</span>
+        <p>Une foliole se ferme parce que son pulvinule perd sa turgescence. Le geste est rapide au départ et se pose doucement : \(c(x) = 1 - (1 - x)^3\), avec \(x\) le temps écoulé rapporté à la durée de fermeture (0,55 s pour une foliole de sensitive, 1,3 s pour une pinnule). Le pétiole, lui, n’est pas tiré : privé de l’appui de son pulvinus, il <strong>tombe sous son poids</strong>. Sa loi est la réponse indicielle d’un oscillateur sous-amorti, \(\omega = 2\pi \times 1{,}25\ \mathrm{rad/s}\), \(\zeta = 0{,}45\) :</p>
+        <div class="eq">\[ c(t) = 1 - e^{-\zeta\omega t}\Big(\cos\omega_d t + \tfrac{\zeta}{\sqrt{1-\zeta^2}}\sin\omega_d t\Big), \qquad \omega_d = \omega\sqrt{1-\zeta^2}. \]</div>
+        <p>La feuille dépasse sa position d’environ 20&nbsp;%, remonte et se pose. Après une tenue (95 s pour une foliole, 30 s pour un pétiole), le pulvinus se regonfle en quelques minutes, par une sigmoïde de classe \(C^2\) qui revient <em>exactement</em> à zéro. Le pétiole se relève avant que ses folioles ne se rouvrent, comme sur la vraie plante.</p>
+        <p>Plusieurs touchers se combinent par le maximum, sur le temps physique pris modulo la durée de la boucle \(P\) : un pulvinus déjà fermé le reste, et l’état de la plante est périodique par construction.</p>
+        <div class="eq">\[ f(\tau) = \max_k\, F\big((\tau - a_k) \bmod P\big). \]</div>
+        <p>Chaque famille a son tempo : la dionée claque en 0,2 s et reste fermée 160 s ; le Biophytum ferme en 0,8 s ; le trèfle plie en 1,6 s, puis laisse retomber ses folioles en 2,6 s.</p>
+        <figure id="fig-pulvinus" class="wide"><figcaption><b>Les courbes de fermeture</b>, tracées par <code>closeCurve()</code> importée telle quelle, avec les constantes de chaque famille. À gauche, les six premières secondes : le geste et le rebond du pétiole. À droite, le cycle entier, en minutes. Le curseur ajoute un second toucher sur la même foliole : la courbe pointillée est le maximum des deux réponses.</figcaption></figure>
+        <div class="note"><b>Le pétiole attend ses folioles</b><p>Une feuille qui tombe folioles ouvertes en accroche d’autres. Le plan retarde donc le pulvinus primaire jusqu’à la fermeture de la dernière foliole de la feuille, plus 0,25 s : le signal le franchit, mais il ne lâche qu’une fois la feuille repliée.</p></div>
+      </section>
+
+      <section id="temps">
+        <h2><span class="n">05</span>Trois vitesses de temps dans une seule boucle</h2>
+        <span class="src">src/physio.js · buildTimeMap() · src/camera.js</span>
+        <p>Une goutte tombe en un tiers de seconde ; le choc dure quelques centièmes ; la feuille met une demi-seconde à se fermer et six minutes à se rouvrir. Entre deux touchers s’écoulent 560 s physiques (640 pour la dionée). Le film en fait 38 à 80 s, selon le nombre de touchers (deux à quatre). Il faut donc trois régimes : <strong>temps réel</strong> pour la chute et la vague, <strong>caméra rapide</strong> au choc, <strong>accéléré</strong> pour le retour. Le film lit le temps physique \(\tau(t)\) par l’intermédiaire d’une lenteur \(s = dt/d\tau\), construite en logarithme pour que les passages soient lisses et que \(s\) reste positive :</p>
+        <div class="eq">\[ \ln s(\tau) = -\ln V\,\big(1 - w_r(\tau)\big) + \max\big(\ln 8 \cdot w_c(\tau),\ \ln K \cdot w_p(\tau)\big), \qquad t(\tau) = \int_0^\tau s\,d\tau'. \]</div>
+        <p>\(w_r\) vaut 1 dans les fenêtres de temps réel, raccordées en 4 s physiques ; \(w_c\) monte de 0 à 1 en 12 ms <em>à partir de l’instant du contact</em>, jamais avant (un test le vérifie), et retombe après 0,14 s ; \(w_p\) couvre le pli lui-même, ralenti d’un facteur \(K\) propre à la famille : ×10 pour le claquement de la dionée, ×3 pour la sensitive, ×2,5 pour le Biophytum, ×2 pour le trèfle, ×1,8 pour la plante entière sous le marteau.</p>
+        <p>L’accéléré \(V\) n’est pas choisi : il est cherché par <strong>dichotomie en logarithme</strong> (40 pas entre 1,5 et 5&#8239;000) pour que la boucle physique \(P\) dure exactement \(T\) secondes de film. L’intégrale est faite par trapèzes, à pas adapté au régime (2 à 4 ms physiques près des contacts), puis rééchantillonnée en 8&#8239;192 points de film. Comme tout est fonction de \(\tau \bmod P\) et que \(\tau(t + T) = \tau(t) + P\), l’image à la fin de la boucle est celle du début, sans fondu.</p>
+        <figure id="fig-temps" class="wide"><figcaption><b>La carte du temps d’une boucle de trois touchers (deux gouttes, un coup de marteau)</b>, calculée par <code>buildTimeMap()</code> importée telle quelle. En haut, le temps physique selon le temps du film : de longues pentes raides (l’accéléré) et trois paliers presque plats, les touchers. En bas, autour de la première goutte, la lenteur \(s\) en échelle logarithmique : 1 en temps réel, 8 juste après le contact, \(K\) pendant le pli, \(1/V\) ensuite. La lecture du bas passe par l’échantillonnage de la carte, qui adoucit un peu la montée de 12 ms.</figcaption></figure>
+
+        <h3>Une caméra, un tour</h3>
+        <p>La caméra fait un tour complet par boucle, toujours dans le même sens, lentement pendant les touchers (poids 0,3) et plus vite entre eux. Le départ du tour est choisi parmi 24 azimuts, celui pour lequel chaque contact est vu sans feuille interposée ; le marteau est ensuite placé de profil à l’endroit où sera la caméra au moment du coup. La trajectoire est lissée par un noyau gaussien périodique (\(\sigma = 0{,}8\) s) ; la distance minimale qui la garde hors de la cloche est cherchée par dichotomie pour chaque échantillon, puis appliquée par un maximum adouci, sans coude. Un test vérifie que la vitesse angulaire ne dépasse jamais 25°/s.</p>
+      </section>
+
+      <section id="causes">
+        <h2><span class="n">06</span>Chaque cause touche au bon instant, et pas avant</h2>
+        <span class="src">src/plan.js · planLoop(), tapEvent() · src/physio.js · hammerAngle()</span>
+        <p>Un ralenti ×8 qui démarre trois images avant le contact se voit ; une goutte qui s’arrête un millimètre au-dessus de la foliole aussi. Le plan calcule donc chaque contact sur la vraie géométrie.</p>
+        <p><strong>La goutte</strong> (rayon 1,4 à 2 mm) tombe à la verticale, en chute libre depuis le repos, avec la pesanteur réelle (98,1 u/s², 1 u = 10 cm). La surface de la plante ouverte est échantillonnée en points (folioles, rachis, pétioles, tiges, fleurs) rangés dans une grille ; la hauteur de contact est celle où la sphère de la goutte touche le premier point de la colonne qu’elle balaie. Un second passage, sur une surface plus fine autour du point visé (28 × 12 points par foliole au lieu de 12 × 4), corrige cette hauteur. Le test mesure un écart au contact inférieur à \(6\cdot10^{-4}\) u, et un écart positif 2 ms, 10 ms et 50 ms avant.</p>
+        <p><strong>Le marteau</strong> est un bras pivotant de 5 cm tiré par un électroaimant : accélération angulaire constante depuis la position haute, \(\theta_r = \theta_c + 0{,}62\) rad, pendant 0,2 s. L’angle du coup \(\theta_c\) est la racine de l’écart signé entre la tête (une sphère de 5,5 mm) et le profil du pot <em>à l’azimut frappé</em>, godrons compris, cherchée par 80 pas de dichotomie. Le plan vérifie ensuite que la tête ne touche rien plus tôt dans sa course et que le bras ne frôle jamais la lèvre ; sinon, il essaie une autre hauteur de frappe ou une autre inclinaison.</p>
+        <figure id="fig-marteau" class="wide"><figcaption><b>Le coup de marteau sur un pot de terre de la scène.</b> Le profil vient de <code>containerShape()</code> et <code>outerAt()</code> (les godrons du pot à l’azimut frappé), la course de <code>hammerAngle()</code> : importés tels quels ; la recherche de \(\theta_c\) est la dichotomie du plan, recopiée. Les cercles pâles sont les huit premières itérations. Le bouton « Profil lisse » retire le relief : l’angle du coup change, la tête touche toujours exactement. Ralenti ×4. Simplification : pas de bobine ni de colonne, coupe dans le plan vertical du bras.</figcaption></figure>
+        <div class="note trap"><b>Le bras aussi doit passer</b><p>Résoudre seulement le contact de la tête ne suffit pas : à certaines hauteurs de frappe, c’est la tige du bras qui couperait la lèvre du pot pendant sa course. Le plan échantillonne donc le bras en 21 points sur 25 angles de sa course, la colonne, la potence et l’électroaimant, et rejette toute géométrie qui passe à moins de 1,1 mm + 1 mm du profil ; un test refait la vérification tous les 5 ms de la course.</p></div>
+      </section>
+
+      <section id="ecart">
+        <h2><span class="n">07</span>Rien ne se touche, à aucun instant</h2>
+        <span class="src">src/plan.js · limitDroop() · src/gen/plant.js</span>
+        <p>Un pétiole de sensitive s’affaisse de 55° (32° pour le Biophytum), et le rebond l’emmène 22&nbsp;% plus bas. Dans une touffe de trente feuilles, une feuille qui tombe de toute son amplitude finit dans une autre, dans la terre ou contre la lèvre du pot. Réduire l’amplitude de toutes les feuilles à la fois rendrait la chute timide partout.</p>
+        <p>L’<strong>affaissement permis</strong> est cherché feuille par feuille, de bas en haut, par 7 pas de dichotomie sur la vraie géométrie : la feuille fermée, à la position extrême du rebond et à mi-course, ne doit approcher à moins de 2,2 mm aucune autre feuille (ouverte ou fermée), ni une tige, une fleur, une gousse, ni la terre, le pot, la table ou la vitre de la cloche. Une fois placée, elle devient un obstacle pour les feuilles du dessus.</p>
+        <p>Avant cela, à la croissance, une feuille qui en touche une autre tourne sur sa tige (±15°, ±30°…), puis se raccourcit ; au pire, elle est retirée. Les éclaboussures obéissent à la même règle : 5 à 9 perles balistiques, chacune tirée jusqu’à 400 fois, ne sont gardées que si leur trajectoire ne frôle aucune partie de la plante et se pose sur la terre, la lèvre, la soucoupe ou la table.</p>
+        <div class="note check"><b>Vérifié</b><p>Les tests rejouent la chute de chaque pétiole jusqu’au rebond pour quatre plantes et quatre montures : rien sous la table, dans le pot ou dans sa paroi, aucune autre feuille à moins d’un millimètre. Le plan suit chaque perle tous les 2 ms de son vol, et un test vérifie qu’aucune ne traverse rien.</p></div>
+      </section>
+
+      <section id="rendu">
+        <h2><span class="n">08</span>Cinq mille folioles, un shader par organe</h2>
+        <span class="src">src/pose.js · src/scene/plant.js · src/scene/decor.js</span>
+        <p>Toute la cinématique est sur le CPU, dans un module pur que les tests appellent aussi : à chaque image, <code>pose.js</code> compose pour chaque feuille, pinnule et foliole une hiérarchie de rotations d’axe fixe (affaissement, rapprochement, pli, plus la flexion d’oscillateur amorti de la foliole frappée) et range les matrices affines 3×4 dans des tableaux typés. Pour une sensitive buissonnante, cela fait environ 5&#8239;000 folioles.</p>
+        <p>Le rendu ne passe pas par <code>InstancedMesh</code> : three.js compile un shader par <code>InstancedMesh</code>, ce qui en ferait des dizaines. Chaque organe est un <code>Mesh</code> ordinaire dont la géométrie porte, par instance, 32 nombres dans <strong>un seul tampon entrelacé</strong> : la matrice courante (3 × vec4), celle de l’image précédente pour les vecteurs vitesse du flou de mouvement et de l’anticrénelage temporel, quatre nombres (tirage, âge, mouillure, fermeture) et l’état de pli de l’image précédente. Une géométrie, un shader et un envoi par organe.</p>
+        <p>Pour le trèfle et la dionée, le vertex shader plie le limbe (section 02) deux fois : avec la fermeture courante pour la position, avec la précédente pour le vecteur vitesse. Sans ce second pli, le vecteur vitesse ignorerait le claquement de la dionée, le geste le plus rapide de la scène.</p>
+        <h3>Une goutte est une lentille</h3>
+        <p>Une goutte de 2 mm est rendue comme une lentille : elle lit l’image déjà rendue derrière elle, décalée à l’opposé de la normale (le fond y apparaît renversé et grossi), l’assombrit sur le bord où la réflexion totale domine, et pose par-dessus les reflets nets des lampes et du studio. La version mobile, sans copie de l’image, garde seulement une lentille sombre et brillante.</p>
+      </section>
+
+      <section id="budget">
+        <h2><span class="n">09</span>Budget</h2>
+        <p>La plante, son plan et toute la géométrie sont calculés dans un worker pendant l’écran de chargement ; à chaque image, il ne reste qu’à poser les folioles et à envoyer leurs matrices.</p>
+        <div class="tbl"><table>
+          <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
+          <tbody>
+            <tr><td>Génération de la plante, du plan et de la géométrie</td><td>worker</td><td class="num">0,1 à 3 s</td></tr>
+            <tr><td>Image, qualité Haute, 1,8 Mpx, plante ouverte (graine s0)</td><td>CPU + GPU</td><td class="num">9,8 ms</td></tr>
+            <tr><td>Image au contact d’une goutte</td><td>CPU + GPU</td><td class="num">9,7 ms</td></tr>
+            <tr><td>Image pendant le coup de marteau</td><td>CPU + GPU</td><td class="num">7,1 ms</td></tr>
+            <tr><td>Pose des ~5&#8239;000 folioles et envoi au GPU</td><td>CPU</td><td class="num">compris ci-dessus</td></tr>
+            <tr><td>Données par instance (tampon entrelacé)</td><td>GPU</td><td class="num">32 flottants</td></tr>
+            <tr><td>Image, version mobile, 1,3 Mpx</td><td>GPU</td><td class="num">3,2 ms</td></tr>
+            <tr><td>Compilations de shader après le chargement</td><td>GPU</td><td class="num">0</td></tr>
+          </tbody>
+        </table></div>
+        <p>Les tests tiennent l’ensemble : pas de croisement entre folioles pendant le pli, ni entre les deux moitiés d’un limbe ; un pétiole qui tombe sans rien toucher ; un signal qui arrive plus tard et plus faible loin du point touché ; des pulvinus qui reviennent exactement à zéro ; la pose de toute la plante identique à \(\tau\) et \(\tau + P\) ; la goutte et le marteau au contact exact ; une caméra périodique, au-dessus de la table, sous 25°/s.</p>
+      </section>
+    </article>
+
+    <footer class="end">
+      <a href="./">Ouvrir Fold</a>
+      <a href="https://github.com/drschizzo/Codevember/blob/main/fold/README.md">README</a>
+      <a href="https://github.com/drschizzo/Codevember/blob/main/fold/docs/concept.md">La démarche</a>
+      <span class="sp"></span>
+      <a href="../">Tous les jours</a>
+    </footer>
+  </main>
+
+  <script type="module">
+    import { demo, C, TAU, lerp, clamp, alpha, label, arrow } from '../home/explainer.js';
+    import { leafletFrames, interpFrame, leafletPoint, LEAFLET, HALF, foldPoint, foldAngle, trapFlip, halfPoint, FOLD_Y0 } from './src/gen/plant.js';
+    import { propagate, SIGNAL, closeCurve, kineticsOf, buildTimeMap, hammerAngle } from './src/physio.js';
+    import { containerShape, outerAt, outerRadius, profileDistance } from './src/container.js';
+
+    const DEG = Math.PI / 180;
+    const fr = (x, n = 1) => x.toFixed(n).replace('.', ',');
+    const sup = (n) => String(n).replace(/[-0-9]/g, (c) => '⁻⁰¹²³⁴⁵⁶⁷⁸⁹'['-0123456789'.indexOf(c)]);
+    const sci = (x) => { if (!(x > 0)) return '0'; const e = Math.floor(Math.log10(x)); return `${fr(x / 10 ** e, 1)}·10${sup(e)}`; };
+
+    // ── 01 · la pinnule et ses charnières ─────────────────────────────────
+    {
+      const NP = 14, LEN = 0.44, Lmax = 0.1;
+      const t = [1, 0, 0], n = [0, 1, 0], y = [0, 0, -1];
+      const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+      const mul = (a, s) => [a[0] * s, a[1] * s, a[2] * s];
+      demo('#fig-hinge', {
+        title: 'Folioles sur charnières', aspect: 2.1,
+        controls: [
+          { key: 'f', label: 'Fermeture f', min: 0, max: 1, step: .01, value: .65, fmt: (v) => fr(v, 2) },
+          { key: 'g', label: 'Écart à l’axe fermée γ', min: 0, max: 30, step: .5, value: 15, fmt: (v) => `${fr(v, 1)}°` },
+        ],
+        buttons: [{ key: 'down', label: 'Biophytum (vers le bas)', toggle: true, value: false }],
+        setup(d) { d.state.yaw = -1.35; d.state.pitch = .5; },
+        pointer(d, e) {
+          if (e.type === 'down') d.state.drag = [e.x, e.y, d.state.yaw, d.state.pitch];
+          else if (e.type === 'up') d.state.drag = null;
+          else if (d.state.drag) { const [x0, y0, a, b] = d.state.drag; d.state.yaw = a + (e.x - x0) * .01; d.state.pitch = clamp(b + (e.y - y0) * .01, -1.3, 1.4); }
+        },
+        draw(g, d) {
+          const down = d.s.down, g0 = LEAFLET.gamma;
+          LEAFLET.gamma = d.s.g * DEG;
+          const step = (0.91 * LEN) / (NP - 1), alphaO = LEAFLET.alphaOpen * (down ? 1.18 : 1);
+          const wid0 = LEAFLET.fill * step * Math.sin(alphaO);
+          const polys = [];
+          for (let i = 0; i < NP; i++) {
+            const u = i / (NP - 1), s = 0.06 + 0.91 * u, prof = 0.55 + 0.45 * Math.sin(Math.PI * (0.12 + 0.78 * u));
+            const len = Lmax * prof, wid = Math.min(wid0, len * 0.32);
+            for (const sg of [1, -1]) {
+              const F = leafletFrames(t, n, sg, down);
+              const [X, Y, Z] = interpFrame(F, d.s.f);
+              const base = add(mul(t, s * LEN), mul(y, sg * LEAFLET.rachisR));
+              const pts = [];
+              for (let k = 0; k <= 16; k++) { const p = leafletPoint(k / 16, 1); pts.push(add(add(add(base, mul(X, p[0] * len)), mul(Y, p[1] * wid)), mul(Z, p[2] * wid))); }
+              for (let k = 16; k >= 0; k--) { const p = leafletPoint(k / 16, -1); pts.push(add(add(add(base, mul(X, p[0] * len)), mul(Y, p[1] * wid)), mul(Z, p[2] * wid))); }
+              polys.push({ pts, Z, sg, i });
+            }
+          }
+          LEAFLET.gamma = g0;
+          const { yaw, pitch } = d.state, cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
+          // vue : x écran, y écran (vers le haut), profondeur (vers l'observateur)
+          const V = (q) => { const x = q[0] - LEN / 2, z = q[2]; const X1 = x * cy - z * sy, Z1 = x * sy + z * cy; return [X1, q[1] * cp - Z1 * sp, q[1] * sp + Z1 * cp]; };
+          const view = [0, sp, cp]; // direction vers l'observateur, dans le repère monde (approchée)
+          const sc = Math.min(d.w * .85, d.h * 1.7) / LEN, ox = d.w * (d.w < 560 ? .5 : .38), oy = d.h * .6;
+          const S = (q) => { const v = V(q); return [ox + v[0] * sc, oy - v[1] * sc, v[2]]; };
+          // rachis
+          const items = polys.map((p) => { const s2 = p.pts.map(S); return { s2, depth: s2.reduce((m, q) => m + q[2], 0) / s2.length, p }; });
+          items.sort((a, b) => a.depth - b.depth);
+          const r0 = S([0, 0, 0]), r1 = S([LEN, 0, 0]);
+          g.strokeStyle = alpha(C.ink, .5); g.lineWidth = 2; g.beginPath(); g.moveTo(r0[0], r0[1]); g.lineTo(r1[0], r1[1]); g.stroke();
+          for (const it of items) {
+            // face vue : dessus (or) ou dessous (vert)
+            const a = it.s2[2], b = it.s2[8], c = it.s2[30];
+            const cr = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+            const top = (cr > 0) === (it.p.sg > 0);
+            g.fillStyle = top ? alpha(C.c4, .78) : alpha('#5f7f4f', .85);
+            g.strokeStyle = alpha('#0b0f0a', .7); g.lineWidth = .8;
+            g.beginPath(); it.s2.forEach((q, k) => (k ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]))); g.closePath(); g.fill(); g.stroke();
+          }
+          // légende
+          const narrow = d.w < 560, x = d.w * .8, step_mm = step * 100, e = step_mm * Math.sin(d.s.g * DEG * (down ? 1.4 : 1));
+          if (!narrow) {
+          label(g, 'pas le long du rachis', x, 34, { size: 11.5 });
+          label(g, `${fr(step_mm, 2)} mm`, x, 54, { color: C.ink, size: 16, font: 'Fraunces' });
+          label(g, 'écart entre plans voisins', x, 86, { size: 11.5 });
+          label(g, 'fermées : pas × sin γ', x, 102, { size: 11.5, color: C.faint });
+
+          label(g, d.s.g < .25 ? '0 : recouvrement' : `${fr(e, 2)} mm`, x, 122, { color: d.s.g < .25 ? C.c3 : C.c1, size: 16, font: 'Fraunces' });
+          label(g, 'glisser pour tourner', x, d.h - 16, { size: 11.5, color: C.faint });
+          }
+          d.status(d.s.g < .25 && d.s.f > .9 ? 'γ = 0 : folioles coplanaires, elles se recouvrent' : narrow ? `pas ${fr(step_mm, 2)} mm · écart fermées ${fr(e, 2)} mm` : `f = ${fr(d.s.f, 2)} · toutes parallèles d’un même côté`);
+        },
+      });
+    }
+
+    // ── 02 · le pli d'un limbe d'un seul tenant ───────────────────────────
+    {
+      let fam = 'dionaea';
+      demo('#fig-pli', {
+        title: 'Coupe d’un limbe plié', aspect: 2,
+        controls: [{ key: 'f', label: 'Fermeture f', min: 0, max: 1.2, step: .01, value: 1, fmt: (v) => fr(v, 2) }],
+        buttons: [
+          { label: 'Dionée', onClick: () => { fam = 'dionaea'; } },
+          { label: 'Trèfle', onClick: () => { fam = 'oxalis'; } },
+          { key: 'rigid', label: 'Deux moitiés rigides', toggle: true, value: false },
+        ],
+        draw(g, d) {
+          const F = HALF[fam], th = foldAngle(F, d.s.f), u = 0.5, e = 0.07;
+          const y0 = d.s.rigid ? 1e-6 : FOLD_Y0;
+          const N = 120;
+          const sc = Math.min(d.w * .33, d.h * .62), ox = d.w * .42, oy = fam === 'dionaea' ? d.h * .82 : d.h * .3;
+          const P = (q) => [ox + q[1] * sc, oy - q[2] * sc];
+          let bad = 0;
+          const halfPts = (sg, dz) => {
+            const out = [];
+            for (let i = 0; i <= N; i++) {
+              const v = i / N, p = halfPoint(F.shape, u, v, sg);
+              const flip = F.shape === 'trap' ? trapFlip(u, v, d.s.f) : 0;
+              const q = foldPoint([p[0], p[1], p[2] + flip + dz], th, y0);
+              if (q[1] * sg < -2e-3) bad++;
+              out.push({ q, v, crease: Math.abs(p[1]) < FOLD_Y0 && !d.s.rigid, bad: q[1] * sg < -2e-3 });
+            }
+            return out;
+          };
+          // plan médian (la nervure)
+          g.strokeStyle = C.grid; g.setLineDash([4, 5]); g.beginPath(); g.moveTo(ox, 12); g.lineTo(ox, d.h - 12); g.stroke(); g.setLineDash([]);
+          label(g, 'plan de la nervure', ox + 6, 22, { size: 11, color: C.faint });
+          for (const sg of [1, -1]) {
+            const top = halfPts(sg, e / 2), bot = halfPts(sg, -e / 2);
+            g.fillStyle = alpha(C.c4, .5); g.strokeStyle = C.c4; g.lineWidth = 1.2;
+            g.beginPath(); top.forEach((p, i) => { const s = P(p.q); i ? g.lineTo(...s) : g.moveTo(...s); });
+            for (let i = bot.length - 1; i >= 0; i--) g.lineTo(...P(bot[i].q)); g.closePath(); g.fill(); g.stroke();
+            // bande de pliure
+            for (const L of [top, bot]) {
+              g.strokeStyle = C.c1; g.lineWidth = 2.4; g.beginPath(); let on = false;
+              L.forEach((p) => { const s = P(p.q); if (p.crease) { on ? g.lineTo(...s) : g.moveTo(...s); on = true; } }); g.stroke();
+              g.fillStyle = C.c3; L.forEach((p) => { if (p.bad) { const s = P(p.q); g.beginPath(); g.arc(s[0], s[1], 2.6, 0, TAU); g.fill(); } });
+            }
+          }
+          g.fillStyle = C.ink; g.beginPath(); g.arc(ox, oy, 3, 0, TAU); g.fill();
+          label(g, `θ = ${Math.round(th / DEG)}°`, d.w - 16, 30, { align: 'right', color: C.ink, size: 16, font: 'Fraunces' });
+          label(g, fam === 'dionaea' ? 'dionée : 40° → 74°, courbure inversée' : 'trèfle : 9° → −72°', d.w - 16, 50, { align: 'right', size: 11.5 });
+          label(g, 'or : bande de pliure', d.w - 16, d.h - 34, { align: 'right', size: 11.5, color: C.c1 });
+          label(g, 'rouge : traverse le plan', d.w - 16, d.h - 16, { align: 'right', size: 11.5, color: C.c3 });
+          d.status(bad ? `${bad} points de l’autre côté : les moitiés se pénètrent` : 'chaque moitié reste de son côté');
+        },
+      });
+    }
+
+    // ── 03 · la vague sur le graphe vasculaire ────────────────────────────
+    {
+      let graph = null, busy = false, seedI = 0;
+      const seeds = ['b', 'fold', 'c', 'm2'];
+      const grow = (d) => {
+        busy = true; graph = null; d.status('croissance de la plante…');
+        const url = new URL('./src/gen/plant.js', location.href).href;
+        const src = `import { growPlant } from '${url}';
+onmessage = (e) => { const P = growPlant({ kind: 'bush', seed: e.data }); const G = P.graph;
+  postMessage({ nodes: G.nodes.map((n) => ({ kind: n.kind, pos: n.pos, leaf: n.leaf })), edges: G.edges, root: G.root, leaves: P.leaves.map((L) => ({ P: L.nodeP, S: L.nodeS })) }); };`;
+        const done = (res) => {
+          busy = false; graph = res;
+          // goutte par défaut : la foliole la plus haute
+          let best = -1, by = -1e9; res.nodes.forEach((nd, i) => { if (nd.kind === 'F' && nd.pos[1] > by) { by = nd.pos[1]; best = i; } });
+          stim(d, best, 3);
+        };
+        try {
+          const w = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })), { type: 'module' });
+          w.onmessage = (e) => { done(e.data); w.terminate(); };
+          w.onerror = () => { w.terminate(); import(url).then((m) => { const P = m.growPlant({ kind: 'bush', seed: seeds[seedI] }); done({ nodes: P.graph.nodes, edges: P.graph.edges, root: P.graph.root, leaves: P.leaves.map((L) => ({ P: L.nodeP, S: L.nodeS })) }); }); };
+          w.postMessage(seeds[seedI]);
+        } catch (err) { d.status('worker indisponible'); }
+      };
+      const stim = (d, node, S) => {
+        if (!graph || node < 0) return;
+        const r = propagate(graph, node, S);
+        let maxA = 0; for (const a of r.arr) if (Number.isFinite(a)) maxA = Math.max(maxA, a);
+        d.state.wave = { ...r, src: node, S, t0: d.t, maxA };
+      };
+      demo('#fig-signal', {
+        title: 'Propagation du signal', aspect: 1.9, animate: true,
+        buttons: [
+          { label: 'Marteau (collet)', onClick: (d) => graph && stim(d, graph.root, 4) },
+          { label: 'Rejouer', onClick: (d) => { if (d.state.wave) d.state.wave.t0 = d.t; } },
+          { label: 'Autre plante', onClick: (d) => { if (!busy) { seedI = (seedI + 1) % seeds.length; grow(d); } } },
+        ],
+        setup(d) { if (!graph && !busy) grow(d); },
+        resize(d) { d.state.view = null; },
+        pointer(d, e) {
+          if (e.type !== 'down' || !graph || !d.state.view) return;
+          const { scr } = d.state.view; let best = -1, bd = 22 * 22;
+          graph.nodes.forEach((nd, i) => { if (nd.kind !== 'F') return; const s = scr(nd.pos), dx = s[0] - e.x, dy = s[1] - e.y, q = dx * dx + dy * dy; if (q < bd) { bd = q; best = i; } });
+          if (best >= 0) stim(d, best, 3);
+        },
+        draw(g, d) {
+          if (!graph) { label(g, 'croissance de la plante…', d.w / 2, d.h / 2, { align: 'center' }); return; }
+          if (!d.state.view || d.state.view.graph !== graph || d.state.view.w !== d.w) {
+            const yaw = .6, cy = Math.cos(yaw), sy = Math.sin(yaw);
+            let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+            for (const nd of graph.nodes) { const x = nd.pos[0] * cy + nd.pos[2] * sy; x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, nd.pos[1]); y1 = Math.max(y1, nd.pos[1]); }
+            const pad = 20, sc = Math.min((d.w * (d.w < 560 ? 1 : .72) - 2 * pad) / (x1 - x0), (d.h - 2 * pad) / (y1 - y0));
+            const ox = pad + (d.w * .72 - 2 * pad - (x1 - x0) * sc) / 2 - x0 * sc, oy = d.h - pad + y0 * sc;
+            d.state.view = { graph, w: d.w, scr: (p) => [ox + (p[0] * cy + p[2] * sy) * sc, oy - p[1] * sc] };
+          }
+          const { scr } = d.state.view, W = d.state.wave, T = SIGNAL.threshold, floor = T.leaflet * .5;
+          const el = W ? (d.t - W.t0) : 0;
+          if (W && el > W.maxA + 4) W.t0 = d.t; // (la vague recommence)
+          const lit = (i) => W && Number.isFinite(W.arr[i]) && W.amp[i] >= floor;
+          // arêtes
+          g.lineWidth = 1;
+          for (const [a, b, , organ] of graph.edges) {
+            const sa = scr(graph.nodes[a].pos), sb = scr(graph.nodes[b].pos);
+            g.strokeStyle = organ === 2 ? alpha(C.ink, .13) : alpha(C.ink, .28); g.beginPath(); g.moveTo(...sa); g.lineTo(...sb); g.stroke();
+            if (lit(a) && lit(b)) {
+              const [p, q] = W.arr[a] <= W.arr[b] ? [a, b] : [b, a];
+              const k = clamp((el - W.arr[p]) / Math.max(1e-6, W.arr[q] - W.arr[p]));
+              if (el >= W.arr[p]) {
+                const sp = scr(graph.nodes[p].pos), sq = scr(graph.nodes[q].pos);
+                g.strokeStyle = alpha(C.c2, .35 + .55 * clamp(W.amp[q] / 2)); g.lineWidth = 1.6;
+                g.beginPath(); g.moveTo(...sp); g.lineTo(lerp(sp[0], sq[0], k), lerp(sp[1], sq[1], k)); g.stroke(); g.lineWidth = 1;
+              }
+            }
+          }
+          let nF = 0, nS = 0, nP = 0;
+          graph.nodes.forEach((nd, i) => {
+            const s = scr(nd.pos), on = W && W.arr[i] <= el;
+            if (nd.kind === 'F') {
+              const closed = on && W.amp[i] >= T.leaflet; if (closed) nF++;
+              g.fillStyle = closed ? C.c1 : alpha(C.c4, .55); g.beginPath(); g.arc(s[0], s[1], closed ? 2.1 : 1.5, 0, TAU); g.fill();
+            } else if (nd.kind === 'S' && on && W.amp[i] >= T.pinna) { nS++; g.strokeStyle = C.c2; g.lineWidth = 1.5; g.beginPath(); g.arc(s[0], s[1], 5, 0, TAU); g.stroke(); g.lineWidth = 1; }
+            else if (nd.kind === 'P' && on && W.amp[i] >= T.petiole) { nP++; g.fillStyle = C.c3; g.fillRect(s[0] - 3.5, s[1] - 3.5, 7, 7); }
+          });
+          if (W) { const s = scr(graph.nodes[W.src].pos); g.strokeStyle = C.ink; g.lineWidth = 1.5; g.beginPath(); g.arc(s[0], s[1], 9, 0, TAU); g.stroke(); g.lineWidth = 1; }
+          // compteurs
+          const x = d.w * .76, narrow = d.w < 560;
+          if (!narrow) {
+          const row = (k, name, val, col) => { label(g, name, x, 34 + k * 40, { size: 11.5 }); label(g, val, x, 54 + k * 40, { color: col, size: 17, font: 'Fraunces' }); };
+          row(0, 'temps depuis le toucher', `${fr(Math.min(el, W ? W.maxA : 0), 2)} s`, C.ink);
+          row(1, 'folioles fermées (≥ 0,2)', String(nF), C.c1);
+          row(2, 'pinnules (≥ 0,36)', String(nS), C.c2);
+          row(3, 'pétioles qui tombent (≥ 0,56)', String(nP), C.c3);
+          label(g, 'toucher un point : une goutte', x, d.h - 16, { size: 11.5, color: C.faint });
+          }
+          d.status(!W ? '' : narrow ? `${fr(Math.min(el, W.maxA), 1)} s · ${nF} folioles, ${nS} pinnules, ${nP} pétioles` : `${W.src === graph.root ? 'marteau, amplitude 4' : 'goutte, amplitude 3'} · ${graph.leaves.length} feuilles, ${graph.nodes.length} nœuds`);
+        },
+      });
+    }
+
+    // ── 04 · les courbes des pulvinus ─────────────────────────────────────
+    {
+      let fam = 'sensitive';
+      const names = { sensitive: 'Sensitive', biophytum: 'Biophytum', oxalis: 'Trèfle', dionaea: 'Dionée' };
+      demo('#fig-pulvinus', {
+        title: 'Fermeture des pulvinus', aspect: 2.3,
+        controls: [{ key: 'b', label: 'Second toucher (foliole)', min: 0, max: 400, step: 1, value: 160, fmt: (v) => `${v} s après` }],
+        buttons: Object.entries(names).map(([k, l]) => ({ label: l, onClick: () => { fam = k; } })),
+        draw(g, d) {
+          const K = kineticsOf(fam), { w, h } = d;
+          const curves = fam === 'dionaea' ? [['leaflet', C.c1, 'lobes']] : fam === 'oxalis' ? [['leaflet', C.c1, 'pli'], ['pinna', C.c2, 'retombée']] : [['leaflet', C.c1, 'foliole'], ['pinna', C.c2, 'pinnule'], ['petiole', C.c3, 'pétiole']];
+          const panel = (x0, x1, tmax, fmtT, ticks, second) => {
+            const y0 = 30, y1 = h - 34, Y = (v) => lerp(y1, y0, v / 1.3), X = (t) => lerp(x0, x1, t / tmax);
+            g.strokeStyle = C.grid; g.lineWidth = 1;
+            for (const v of [0, 1]) { g.beginPath(); g.moveTo(x0, Y(v)); g.lineTo(x1, Y(v)); g.stroke(); }
+            label(g, 'ouvert', x0 - 6, Y(0) + 4, { align: 'right', size: 11 }); label(g, 'fermé', x0 - 6, Y(1) + 4, { align: 'right', size: 11 });
+            for (const tk of ticks) label(g, fmtT(tk), X(tk), y1 + 18, { align: 'center', size: 11 });
+            for (const [lv, col] of curves) {
+              g.strokeStyle = col; g.lineWidth = 1.8; g.beginPath();
+              for (let i = 0; i <= 500; i++) { const t = i / 500 * tmax, v = closeCurve(lv, t, K); i ? g.lineTo(X(t), Y(v)) : g.moveTo(X(t), Y(v)); }
+              g.stroke();
+            }
+            if (second) {
+              g.strokeStyle = alpha(C.ink, .8); g.setLineDash([4, 4]); g.lineWidth = 1.4; g.beginPath();
+              for (let i = 0; i <= 600; i++) { const t = i / 600 * tmax, v = Math.max(closeCurve('leaflet', t, K), closeCurve('leaflet', t - d.s.b, K)); i ? g.lineTo(X(t), Y(v)) : g.moveTo(X(t), Y(v)); }
+              g.stroke(); g.setLineDash([]);
+              g.strokeStyle = alpha(C.ink, .4); g.beginPath(); g.moveTo(X(d.s.b), y0); g.lineTo(X(d.s.b), y1); g.stroke();
+            }
+          };
+          const narrow = w < 560, mid = w * (narrow ? .47 : .38);
+          panel(52, mid - 14, 6, (t) => `${t} s`, narrow ? [0, 2, 4, 6] : [0, 1, 2, 3, 4, 5, 6], false);
+          if (!narrow) label(g, 'le geste (6 s)', 52, 18, { size: 11.5 });
+          panel(mid + 44, w - 16, 480, (t) => `${t / 60}${narrow ? '′' : ' min'}`, narrow ? [0, 120, 240, 360, 480] : [0, 60, 120, 180, 240, 300, 360, 420, 480], true);
+          if (!narrow) label(g, 'le cycle entier (8 min)', mid + 44, 18, { size: 11.5 });
+          curves.forEach(([, col, nm], k) => label(g, nm, w - 16 - (curves.length - 1 - k) * (narrow ? 62 : 74), 18, { color: col, align: 'right', size: 12 }));
+          const L = K.leaflet;
+          d.status(`${names[fam]} · foliole : fermée en ${fr(L.close, 2)} s, tenue ${L.hold} s, retour ${Math.round(L.reopen / 60)} min`);
+        },
+      });
+    }
+
+    // ── 05 · la carte du temps ────────────────────────────────────────────
+    {
+      const F = { dionaea: [10, 0.45], sensitive: [3, 2.6], biophytum: [2.5, 2.4], oxalis: [2, 3.2] };
+      const names = { sensitive: 'Sensitive', biophytum: 'Biophytum', oxalis: 'Trèfle', dionaea: 'Dionée' };
+      const cache = {};
+      const mapFor = (fam) => {
+        if (cache[fam]) return cache[fam];
+        const spacing = fam === 'dionaea' ? 640 : 560, K = 3, P = K * spacing, T = Math.round(K * 18 + 4);
+        const fall = Math.sqrt(2 * 0.6 / 98.1);
+        const ev = [0, 1, 2].map((k) => ({ tc: (k + 0.3) * spacing, tap: k === 2 }));
+        const windows = ev.map((E) => {
+          const [foldK, foldDur] = E.tap ? [1.8, 3.5] : F[fam];
+          const pre = E.tap ? 0.2 + 0.9 : fall + 0.9, wave = E.tap ? 6.5 : 3;
+          return { a: E.tc - pre, b: E.tc + Math.min(wave, E.tap ? 6.5 : 4.5), slow: E.tc, foldK, foldDur };
+        });
+        const tm = buildTimeMap({ P, T, windows });
+        // échantillons autour de la première goutte
+        const tc = ev[0].tc, inv = (tau) => { let lo = 0, hi = 1; for (let i = 0; i < 50; i++) { const m = (lo + hi) / 2; if (tm.tauAt(m) < tau) lo = m; else hi = m; } return lo; };
+        const ua = inv(tc - 1.5), ub = inv(tc + 5), zoom = [];
+        for (let i = 0; i <= 1200; i++) { const u = lerp(ua, ub, i / 1200); zoom.push([tm.tauAt(u) - tc, 1 / tm.speedAt(u)]); }
+        return (cache[fam] = { tm, ev, P, T, zoom, foldK: F[fam][0] });
+      };
+      let fam = 'sensitive';
+      demo('#fig-temps', {
+        title: 'Carte du temps', aspect: 1.75,
+        buttons: Object.entries(names).map(([k, l]) => ({ label: l, onClick: () => { fam = k; } })),
+        draw(g, d) {
+          const M = mapFor(fam), { tm, ev, P, T, zoom } = M, { w, h } = d, x0 = 58, x1 = w - 16;
+          // haut : τ(t)
+          const a0 = 26, a1 = h * .44, X = (t) => lerp(x0, x1, t / T), Yt = (tau) => lerp(a1, a0, tau / P);
+          g.strokeStyle = C.grid; g.lineWidth = 1;
+          for (let k = 0; k <= 3; k++) { const v = k * P / 3; g.beginPath(); g.moveTo(x0, Yt(v)); g.lineTo(x1, Yt(v)); g.stroke(); label(g, `${Math.round(v)} s`, x0 - 6, Yt(v) + 4, { align: 'right', size: 11 }); }
+          for (let t = 0; t <= T; t += (w < 560 ? 20 : 10)) label(g, `${t} s`, X(t), a1 + 16, { align: 'center', size: 11 });
+          g.strokeStyle = C.c1; g.lineWidth = 2; g.beginPath();
+          for (let i = 0; i <= 800; i++) { const u = i / 800, y = Yt(tm.tauAt(u)); i ? g.lineTo(X(u * T), y) : g.moveTo(X(0), y); } g.stroke();
+          label(g, 'temps physique τ', x0 + 6, a0 - 8, { size: 11.5 });
+          if (w >= 560) label(g, 'temps du film t →', x1, a1 + 32, { align: 'right', size: 11.5, color: C.faint });
+          // bas : lenteur autour de la première goutte
+          const b0 = h * (w < 560 ? .63 : .58), b1 = h - 30, lmin = Math.log(1 / tm.V) - .3, lmax = Math.log(12);
+          const Xz = (s) => lerp(x0, x1, (s + 1.5) / 6.5), Ys = (s) => lerp(b1, b0, (Math.log(s) - lmin) / (lmax - lmin));
+          for (const s of [1 / 100, 1 / 10, 1, 8]) { if (Math.log(s) < lmin) continue; const y = Ys(s); g.strokeStyle = C.grid; g.beginPath(); g.moveTo(x0, y); g.lineTo(x1, y); g.stroke(); label(g, s < 1 ? `1/${Math.round(1 / s)}` : `×${s}`, x0 - 6, y + 4, { align: 'right', size: 11 }); }
+          for (let s = (w < 560 ? 0 : -1); s <= 5; s += (w < 560 ? 2 : 1)) label(g, `${s > 0 ? '+' : ''}${s} s`, Xz(s), b1 + 16, { align: 'center', size: 11 });
+          g.strokeStyle = alpha(C.c3, .7); g.setLineDash([3, 4]); g.beginPath(); g.moveTo(Xz(0), b0 - 8); g.lineTo(Xz(0), b1); g.stroke(); g.setLineDash([]);
+          label(g, 'contact', Xz(0) + 5, b0 - 2, { color: C.c3, size: 11 });
+          g.strokeStyle = C.c2; g.lineWidth = 2; g.beginPath();
+          zoom.forEach(([s, sl], i) => { const y = Ys(clamp(sl, 1e-6, 1e6)); i ? g.lineTo(Xz(s), y) : g.moveTo(Xz(s), y); }); g.stroke();
+          label(g, w < 560 ? 'lenteur s = dt/dτ (log)' : 'lenteur s = dt/dτ (log) autour de la première goutte', x0 + 6, b0 - 14, { size: 11.5 });
+          label(g, 'temps physique depuis le contact →', x1, h - 2, { align: 'right', size: 11.5, color: C.faint });
+          d.status(`P = ${Math.round(P)} s physiques → T = ${T} s de film · V = ×${Math.round(tm.V)} · pli ×${M.foldK}`);
+        },
+      });
+    }
+
+    // ── 06 · le coup de marteau ───────────────────────────────────────────
+    {
+      const S = containerShape('terracotta', 2, 1.2);
+      const az = 0.3, rh = 0.055, arm = 0.5, strike = 0.2;
+      const solveFor = (prof, frac) => {
+        const yLo = prof[0][1], yHi = prof[prof.length - 1][1];
+        for (const aC0 of [-0.22, -0.12, -0.32, -0.45, -0.6, 0.1]) {
+          const yh = yLo + frac * (yHi - yLo);
+          const rhoW = outerRadius({ outer: prof }, yh);
+          const pivot = [rhoW + rh - arm * Math.sin(aC0), yh + arm * Math.cos(aC0)];
+          const headAt = (a) => [pivot[0] + arm * Math.sin(a), pivot[1] - arm * Math.cos(a)];
+          const inside = (r, y) => y > yLo && y < yHi && r < outerRadius({ outer: prof }, y);
+          const gap = (a) => { const hd = headAt(a); const dd = profileDistance(prof, hd[0], hd[1]); return (inside(hd[0], hd[1]) ? -dd : dd) - rh; };
+          let lo = aC0 - 0.15, hi = aC0 + 0.6;
+          if (!(gap(hi) > 0) || gap(lo) > 0) continue;
+          const iters = [];
+          for (let i = 0; i < 80; i++) { const m = 0.5 * (lo + hi); if (i < 8) iters.push(m); if (gap(m) > 0) hi = m; else lo = m; }
+          const thetaC = hi, rest = thetaC + 0.62;
+          return { pivot, thetaC, rest, iters, headAt, gap, yh, Hm: { tc: 0, pivot, arm, rh, rest, thetaC, strike, acc: (2 * (rest - thetaC)) / (strike * strike) } };
+        }
+        return null;
+      };
+      demo('#fig-marteau', {
+        title: 'Contact du marteau', aspect: 1.9, animate: true,
+        controls: [{ key: 'frac', label: 'Hauteur de frappe sur le pot', min: .32, max: .7, step: .01, value: .55, fmt: (v) => `${Math.round(v * 100)} %` }],
+        buttons: [{ key: 'smooth', label: 'Profil lisse', toggle: true, value: false }],
+        draw(g, d) {
+          const prof = d.s.smooth ? S.outer : outerAt(S, az);
+          const key = `${d.s.smooth}|${d.s.frac}`;
+          if (!d.state.sol || d.state.key !== key) { d.state.sol = solveFor(prof, d.s.frac); d.state.key = key; }
+          const sol = d.state.sol, { w, h } = d;
+          // vue : ρ de −0,75 à 1,45 u ; y de la table à +0,6
+          const sc = Math.min(w / 2.35, (h - 30) / 1.7), ox = w * .36, oy = 14 + 0.62 * sc;
+          const P = (r, y) => [ox + r * sc, oy - y * sc];
+          // table
+          g.strokeStyle = C.line; g.lineWidth = 1; g.beginPath(); g.moveTo(...P(-0.9, S.tableY)); g.lineTo(...P(1.6, S.tableY)); g.stroke();
+          // pot (coupe : deux profils)
+          g.fillStyle = alpha(C.c3, .22); g.strokeStyle = alpha(C.c3, .9); g.lineWidth = 1.4;
+          g.beginPath(); prof.forEach(([r, y], i) => (i ? g.lineTo(...P(r, y)) : g.moveTo(...P(r, y))));
+          for (let i = prof.length - 1; i >= 0; i--) g.lineTo(...P(-prof[i][0], prof[i][1])); g.closePath(); g.fill(); g.stroke();
+          if (!sol) { d.status('aucune géométrie ne dégage le pot à cette hauteur'); return; }
+          // itérations de la dichotomie
+          sol.iters.forEach((a, i) => { const hd = sol.headAt(a); g.strokeStyle = alpha(C.c2, .12 + .05 * i); g.beginPath(); g.arc(...P(hd[0], hd[1]), rh * sc, 0, TAU); g.stroke(); });
+          // course animée (ralenti ×4)
+          const cyc = 1.6, tt = (d.t / 4) % cyc - (strike + 0.25);
+          const a = hammerAngle(tt, sol.Hm), hd = sol.headAt(a);
+          const pv = P(...sol.pivot), hs = P(hd[0], hd[1]);
+          g.strokeStyle = alpha(C.ink, .85); g.lineWidth = Math.max(2, 0.022 * sc); g.beginPath(); g.moveTo(...pv); g.lineTo(...hs); g.stroke();
+          g.fillStyle = C.ink; g.beginPath(); g.arc(...pv, 4, 0, TAU); g.fill();
+          const gp = sol.gap(a), hit = Math.abs(tt) < 0.02;
+          g.fillStyle = hit ? C.c1 : alpha(C.c1, .75); g.beginPath(); g.arc(...hs, rh * sc, 0, TAU); g.fill();
+          // contact
+          const hc = sol.headAt(sol.thetaC);
+          g.strokeStyle = alpha(C.c1, .9); g.setLineDash([3, 3]); g.beginPath(); g.arc(...P(hc[0], hc[1]), rh * sc, 0, TAU); g.stroke(); g.setLineDash([]);
+          label(g, 'pivot', pv[0] + 8, pv[1] - 6, { size: 11.5 });
+          // lecture
+          const x = w * .78, narrow = w < 560;
+          if (!narrow) {
+          label(g, 'angle du coup θc', x, 34, { size: 11.5 });
+          label(g, `${fr(sol.thetaC / DEG, 2)}°`, x, 56, { color: C.c1, size: 17, font: 'Fraunces' });
+          label(g, 'écart au coup', x, 90, { size: 11.5 });
+          label(g, sci(Math.abs(sol.gap(sol.thetaC))) + ' u', x, 112, { color: C.c4, size: 17, font: 'Fraunces' });
+          label(g, 'écart maintenant', x, 146, { size: 11.5 });
+          label(g, `${fr(Math.max(0, gp) * 100, 1)} mm`, x, 168, { color: C.ink, size: 17, font: 'Fraunces' });
+          }
+          d.status(narrow ? `θc = ${fr(sol.thetaC / DEG, 2)}° · écart au coup ${sci(Math.abs(sol.gap(sol.thetaC)))} u` : tt < -strike ? 'au repos' : tt < 0 ? 'l’électroaimant tire le bras' : tt < 0.03 ? 'contact' : 'rebond, rappel amorti');
+        },
+      });
+    }
+  </script>
+</body>
+</html>
