@@ -37,7 +37,7 @@ Un profil Chrome neuf par capture (deux captures sur le même profil échouent s
 
 ## Maintenir
 
-Toute modification d'un projet qui change ce que la page affirme (une constante, un algorithme, un piège corrigé, une mesure du budget) met à jour **dans le même commit** le README et `explainer.html`. Avant de committer, relire les sections touchées et recapturer la page si une démo importe un module modifié. Une page qui contredit le code est un bug.
+Toute modification d'un projet qui change ce que la page affirme (une constante, un algorithme, un piège corrigé, une mesure du budget) met à jour **dans le même commit** le README et `explainer.html`. Avant de committer, relire les sections touchées et recapturer la page si une démo importe un module modifié. Une page qui contredit le code est un bug. Quand un mécanisme est retiré ou remplacé, cherche ses mentions dans le README, `explainer.html` et `docs/concept.md` (noms de fonctions, chiffres, « vérifié ») et réécris-les ; n'écris pas qu'une chose est vérifiée si aucun test ou mesure ne la vérifie, et dis ce qui reste non résolu.
 
 ## La carte de l'accueil et l'écran de chargement
 
