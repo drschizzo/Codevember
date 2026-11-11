@@ -212,6 +212,16 @@
         "feather"
       ],
       "port": 8130
+    },
+    {
+      "name": "labyrinth",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        ".claude/serve.py",
+        "8140",
+        "labyrinth"
+      ],
+      "port": 8140
     }
   ]
 }
