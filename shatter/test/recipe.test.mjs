@@ -1,4 +1,4 @@
-// Invariants de Calcin, vérifiés sans navigateur : node --test 'calcin/test/*.test.mjs'
+// Invariants de Shatter, vérifiés sans navigateur : node --test 'shatter/test/*.test.mjs'
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { generate, upgrade, MOODS, CLEAR, pieceSpec, loopDuration } from '../src/recipe.js';

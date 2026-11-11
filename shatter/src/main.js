@@ -2,7 +2,7 @@
 //
 // Paramètres d'URL : ?seed=… (la scène), #r=… (une scène retouchée, partagée
 // par « Copier le lien »), ?ui=0 (sans panneau), ?mobile=1 / ?mobile=0
-// (version allégée imposée / interdite), ?debug (outils dans window.calcin),
+// (version allégée imposée / interdite), ?debug (outils dans window.shatter),
 // ?syncpipes (compilation synchrone des shaders, pour comparer).
 //
 // Invariant central : renderAt(u) ne dépend que de la recette R et de la
@@ -27,7 +27,7 @@ import { exportLoop, exportPNG } from './app/capture.js';
 import { loader } from './app/loader.js';
 import { asyncPipelines, warmScene, sleep } from './app/warmup.js';
 
-const NAME = 'calcin';
+const NAME = 'shatter'; // (le dossier ; les graines internes gardent « calcin » : mêmes scènes)
 const DEFAULT_SEED = 'n1'; // scène d'ouverture : l'Atelier, devant le four (flacon à bouchon, dôme lobé filigrané, vase à deux anses)
 const params = new URLSearchParams(location.search);
 const $ = (s) => document.querySelector(s);
@@ -98,7 +98,7 @@ async function main() {
 
   // ── Modules ──
   const gen = createGenerator(LITE ? Math.max(2, Math.min(3, (navigator.hardwareConcurrency || 4) - 1)) : undefined);
-  setNoiseVolume(await gen.request({ seed: `${NAME}-noise` }, 'noise')); // (les matériaux en dépendent)
+  setNoiseVolume(await gen.request({ seed: 'calcin-noise' }, 'noise')); // (les matériaux en dépendent)
   const stage = createStage(scene, gen, { lite: LITE });
   const post = createPost(renderer, scene, camera);
   const accum = createAccumulator(renderer);

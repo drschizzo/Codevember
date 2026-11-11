@@ -124,12 +124,12 @@
       "autoPort": false
     },
     {
-      "name": "calcin",
+      "name": "shatter",
       "runtimeExecutable": "python3",
       "runtimeArgs": [
         ".claude/serve.py",
         "8050",
-        "calcin"
+        "shatter"
       ],
       "port": 8050
     },

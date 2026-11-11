@@ -5,7 +5,7 @@ description: Crée de bout en bout, en autonomie, un nouveau projet Codevember �
 
 # Codevember : une scène procédurale en boucle parfaite, à partir d'un thème
 
-Les projets de référence sont dans ce dépôt : `hollow/` (coquilles emboîtées, plongée), `membrane/` (éclosion simulée sur GPU), `tesseract/` (hypercube replié, voyage 4D), `planetaire_v2/` (Orrery : orbites à N corps et machines à engrenages), `calcin/` (verre soufflé, brisé par une machine, caméra rapide), `fold/` (plantes sensibles qui plient leurs feuilles), `tangle/` (corde tordue qui flambe en torsade), `moss/` (mousse qui se propage et se retire sur sa pierre), `melt/` (cristal de neige qui pousse puis fond en perles, en macro). Leurs README sont la meilleure documentation de ce qu'on attend : lis celui du projet le plus proche du thème avant de concevoir.
+Les projets de référence sont dans ce dépôt : `hollow/` (coquilles emboîtées, plongée), `membrane/` (éclosion simulée sur GPU), `tesseract/` (hypercube replié, voyage 4D), `planetaire_v2/` (Orrery : orbites à N corps et machines à engrenages), `shatter/` (Shatter : verre soufflé, brisé par une machine, caméra rapide), `fold/` (plantes sensibles qui plient leurs feuilles), `tangle/` (corde tordue qui flambe en torsade), `moss/` (mousse qui se propage et se retire sur sa pierre), `melt/` (cristal de neige qui pousse puis fond en perles, en macro). Leurs README sont la meilleure documentation de ce qu'on attend : lis celui du projet le plus proche du thème avant de concevoir.
 
 **Les plus réussis, de l'avis de l'utilisateur : Hollow, Orrery, Membrane et Moss.** Étudie-les en premier (README, `docs/concept.md` quand il existe, puis le code), pour ce que chacun fait le mieux :
 - **Hollow** — un seul geste fort, auto-similaire, qui remplit l'image (la plongée de coquille en coquille) ; une géométrie générative usinée qui récompense le gros plan ; une boucle parfaite par construction, sans aucune couture.
@@ -15,7 +15,7 @@ Les projets de référence sont dans ce dépôt : `hollow/` (coquilles emboîté
 
 Ce qu'ils ont en commun : un geste unique qui se lit sans légende, un cœur technique qui *est* le spectacle au lieu de le décorer, un sujet qui occupe l'image sur un fond qui le sert.
 
-`calcin/`, `fold/` et `moss/` ont des `docs/concept.md` qui montrent les révisions demandées par l'utilisateur après les premiers rendus : lis ces sections « Révision » pour savoir ce qu'il refuse.
+`shatter/`, `fold/` et `moss/` ont des `docs/concept.md` qui montrent les révisions demandées par l'utilisateur après les premiers rendus : lis ces sections « Révision » pour savoir ce qu'il refuse.
 
 **Des principes, pas des recettes.** Les exemples de cette skill viennent des projets passés : ils illustrent une exigence, ils ne sont pas des modèles à reproduire. Chaque nouveau projet invente ses propres objets, causes, montures, décors, lumières, grammaire de caméra et structure de boucle, et évite de reprendre ceux des projets précédents (pas de marteau, de cloche, de pendule, de pot de terre, de goutte, de révolution de caméra ou de ralenti « parce que ça a marché ») sauf si le thème l'exige vraiment. Les nombres donnés sont des **bornes** (à ne pas dépasser) ou des ordres de grandeur mesurés sur un projet, jamais des cibles. À reprendre tels quels : seulement les exigences non négociables, les contrats d'architecture et les outils (échafaudage, chaîne d'image, vérification).
 
