@@ -2,6 +2,14 @@
 
 Expériences de creative coding, publiées sur [drschizzo.github.io/Codevember](https://drschizzo.github.io/Codevember/).
 
+## [Tension](tension/)
+
+Ce qui tient ne pousse pas. Des sculptures de tenségrité — des barres d'acier qui ne se touchent pas, tenues en l'air par des câbles — avancent sur un sol nu sans roue ni pied : de petits treuils enroulent leurs propres câbles. Le Culbute, un prisme à six barres, se penche jusqu'à basculer (au ralenti de caméra rapide) ; la Chenille fait courir une onde de contraction sur ses patins à écailles ; le Cerceau, une roue de vélo, laisse tomber son moyeu vers l'avant et roule après lui. Forme d'équilibre trouvée par relaxation (la torsion π/2 − π/n du prisme), dynamique XPBD à câbles unilatéraux, contact et frottement anisotrope, amortissement structural des modes mous, culbutes trouvées par simulation et rejouées par les symétries du prisme, cycle limite refermé par point fixe, câbles mous en arc de longueur exacte, sol invariant par le pas, trois familles, sept décors, écran de chargement qui tend la structure puis dessine la chronophotographie du pas, boucle parfaite exportable en MP4.
+
+[Démo en ligne](https://drschizzo.github.io/Codevember/tension/) · [version légère](https://drschizzo.github.io/Codevember/tension/?mobile=1) · [documentation](tension/README.md) · [concept](tension/docs/concept.md)
+
+[![Tension](tension/docs/capture.jpg)](https://drschizzo.github.io/Codevember/tension/)
+
 ## [Labyrinth](labyrinth/)
 
 Le dédale qu’on retourne. On ne marche pas dans ce labyrinthe : on le tourne. Un automate de noyer, de marbre ou de laque incline un plateau de quelques degrés par deux manivelles et deux bielles, ou fait pivoter un disque dressé par une courroie, et la gravité conduit une bille de 12 mm à travers les couloirs : elle roule, bute au fond d’une impasse, chute d’un couloir à l’autre, saute d’anneau en anneau, trouve la sortie ; une rigole ou une poche de noria la rend à l’entrée. Labyrinthes tirés uniformément parmi les arbres couvrants (algorithme de Wilson) sur des grilles carrées et polaires, bille qui roule sans glisser sur un plan incliné ou tournant (équation de Weltner), film du Plateau piloté le long du chemin, rotations du Cadran et de la Roue trouvées par une recherche en largeur sur des rotations simulées, trois familles, six décors, écran de chargement qui rejoue le calcul, boucle parfaite exportable en MP4.
