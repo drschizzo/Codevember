@@ -172,6 +172,16 @@
         "melt"
       ],
       "port": 8090
+    },
+    {
+      "name": "caustic",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        ".claude/serve.py",
+        "8100",
+        "caustic"
+      ],
+      "port": 8100
     }
   ]
 }

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#050506">
+  <title>Caustic</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.webgpu.js",
+      "three/webgpu": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.webgpu.js",
+      "three/tsl": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.tsl.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/",
+      "lil-gui": "https://cdn.jsdelivr.net/npm/lil-gui@0.20.0/dist/lil-gui.esm.min.js"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="app"></div>
+
+  <header id="title">
+    <h1>Caustic</h1>
+    <p>le foyer des ondes</p>
+  </header>
+  <p id="hint">N : nouvelle scène · espace : pause · ← → : avancer · H : masquer · F : plein écran</p>
+
+  <div id="toast"></div>
+  <div id="progress"><span>Export de la boucle…</span><div><u></u></div></div>
+
+  <div id="loader">
+    <h1>Caustic</h1>
+    <canvas id="otview" width="630" height="210"></canvas>
+    <p>préparation de la scène…</p>
+    <div id="loadbar"><u></u></div>
+  </div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

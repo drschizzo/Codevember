@@ -2,6 +2,14 @@
 
 Expériences de creative coding, publiées sur [drschizzo.github.io/Codevember](https://drschizzo.github.io/Codevember/).
 
+## [Caustic](caustic/)
+
+Le foyer des ondes. Une cuve d’eau vue de côté, à travers sa vitre, éclairée par le soleil ou une lampe à arc : sur le pourtour, des plongeurs poussent des ondes qu’on voit au fond comme des anneaux de lumière qui accourent vers le centre ; à l’instant où elles se rejoignent, la surface prend exactement la forme d’une lentille et la caustique se résout en un dessin — une diatomée, un oursin, une méduse, une rosace, un capitule, un radiolaire — pendant une seconde de caméra rapide, puis se défait en anneaux qui repartent. Lentilles calculées par transport optimal (équation de Monge-Ampère, méthode de Benamou-Froese-Oberman) et loi de Snell, ondes de capillarité-gravité exactes propagées par FFT sur le GPU (la convergence est la dispersion lue à l’envers : un miroir à retournement temporel), caustique par déformation de maillage en trois longueurs d’onde, rideaux de lumière dans l’eau, trois familles (le foyer qui dessine, le cristal de Faraday sous stroboscope, l’allée de tourbillons de Kármán), sept décors, boucle parfaite exportable en MP4.
+
+[Démo en ligne](https://drschizzo.github.io/Codevember/caustic/) · [version légère](https://drschizzo.github.io/Codevember/caustic/?mobile=1) · [documentation](caustic/README.md) · [concept](caustic/docs/concept.md)
+
+[![Caustic](caustic/docs/capture.jpg)](https://drschizzo.github.io/Codevember/caustic/)
+
 ## [Melt](melt/)
 
 Le dégel d’une étoile. En macro, sur un gant de laine, un velours, une vitre ou une feuille de houx : une perle de glace dressée en pointe, d’où sort un hexagone qui pousse en étoile, en accéléré, dans l’air glacé (givre sur les fibres, poussière de diamant) ; le soleil sort, la surface se mouille et brille, les pointes s’arrondissent en perles qui remontent les branches en les avalant, et toute l’étoile se rassemble en une goutte au centre ; la goutte s’évapore, puis regèle de bas en haut et se dresse en pointe. Croissance par le modèle de Gravner et Griffeath (diffusion de la vapeur, attachement selon la courbure), fonte en perles qui conserve l’eau et suit les branches vers le centre, trois familles (l’étoile qui se rétracte, la plaque qui se resserre en collier, la colonne qui se rompt en chapelet de Plateau-Rayleigh), tricot rendu au niveau des fibres (modèle de fil procédural de Zhao et al., fibres de cœur de Wu et Yuksel), éclairage de Rheinberg calculé par la déviation des rayons, six décors, boucle parfaite exportable en MP4.
