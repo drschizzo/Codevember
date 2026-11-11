@@ -26,7 +26,7 @@ import { loader } from './app/loader.js';
 import { asyncPipelines, warmScene } from './app/warmup.js';
 
 const NAME = 'mirage';
-const DEFAULT_SEED = 'm21'; // scène d'ouverture (sans ?seed=) : à choisir parmi les plus belles
+const DEFAULT_SEED = 'h6fawv'; // scène d'ouverture (sans ?seed=)
 const params = new URLSearchParams(location.search);
 const $ = (s) => document.querySelector(s);
 // (pause par MessageChannel : les minuteries sont ralenties quand le panneau est masqué)
@@ -221,8 +221,9 @@ async function main() {
     camState,
     random: () => { R = generate(randomSeed()); applyRecipe(); },
     regenerate: (seed) => { if (seed && seed !== R.seed) { R = generate(seed); applyRecipe(); } },
-    moodChanged: (mood) => { R = generate(R.seed, { mood, family: R.family }); applyRecipe(); },
-    familyChanged: (family) => { R = generate(R.seed, { family }); applyRecipe(); },
+    moodChanged: (mood) => { R = generate(R.seed, { mood, family: R.family, mechanism: R.mechanism.kind }); applyRecipe(); },
+    familyChanged: (family) => { R = generate(R.seed, { family, mood: R.mood, mechanism: R.mechanism.kind }); applyRecipe(); },
+    mechanismChanged: (mechanism) => { R = generate(R.seed, { mechanism, mood: R.mood, family: R.family }); applyRecipe(); },
     airChanged: () => applyRecipe(),
     copyLink: async () => {
       const url = new URL(location.href);
@@ -332,8 +333,8 @@ async function main() {
       // une liste [« graine[:humeur[:famille]] », phases] → images envoyées au collecteur
       async film(list, w = 960, h = 540, prefix = 'f') {
         for (const [spec, phases] of list) {
-          const [sd, mood, family] = String(spec).split(':');
-          R = generate(sd, { ...(mood ? { mood } : {}), ...(family ? { family } : {}) }); applyRecipe();
+          const [sd, mood, family, mechanism] = String(spec).split(':');
+          R = generate(sd, { ...(mood ? { mood } : {}), ...(family ? { family } : {}), ...(mechanism ? { mechanism } : {}) }); applyRecipe();
           await sleep(300);
           for (const ph of phases) await this.still(`${prefix}-${spec.replace(/:/g, '_')}-${String(Math.round(ph * 1000)).padStart(4, '0')}.jpg`, ph, w, h);
         }
@@ -344,8 +345,8 @@ async function main() {
       // famille sont alors imposées — pour comparer toutes les humeurs d'un coup)
       async sheet(seeds, phases = [0, 0.2, 0.4, 0.6, 0.8], prefix = 'sheet') {
         for (const s of seeds) {
-          const [sd, mood, family] = String(s).split(':');
-          R = generate(sd, { ...(mood ? { mood } : {}), ...(family ? { family } : {}) }); applyRecipe();
+          const [sd, mood, family, mechanism] = String(s).split(':');
+          R = generate(sd, { ...(mood ? { mood } : {}), ...(family ? { family } : {}), ...(mechanism ? { mechanism } : {}) }); applyRecipe();
           await sleep(400);
           for (const ph of phases) { await this.shot(ph); await this.send(`${prefix}-${s}-${String(Math.round(ph * 100)).padStart(3, '0')}.jpg`); }
         }
@@ -354,8 +355,8 @@ async function main() {
       async meters(seeds, phases = [0.3, 0.6]) {
         const out = {};
         for (const s of seeds) {
-          const [sd, mood, family] = String(s).split(':');
-          R = generate(sd, { ...(mood ? { mood } : {}), ...(family ? { family } : {}) }); applyRecipe();
+          const [sd, mood, family, mechanism] = String(s).split(':');
+          R = generate(sd, { ...(mood ? { mood } : {}), ...(family ? { family } : {}), ...(mechanism ? { mechanism } : {}) }); applyRecipe();
           await sleep(400);
           out[s] = [];
           for (const ph of phases) { await this.shot(ph); const m = await this.meter(); out[s].push([m.centre.p50, m.image.p50, m.image.brule]); }

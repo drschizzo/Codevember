@@ -27,10 +27,27 @@ export function cameraAt(R, u) {
   return { pos, tgt, fov: C.fov };
 }
 
+// L'aiguille de la boussole : chaque à-coup du couvercle (départ, arrivée en
+// haut, départ, retombée) la fait osciller autour du nord, amortie ; chaque
+// oscillation est bornée dans le temps (fenêtre), si bien que l'aiguille est
+// exactement au repos à u = 0 et à u = 1. La plus forte : la retombée.
+export const JOLTS = [[CHORE.up[0], 0.35], [CHORE.up[1], 0.2], [CHORE.down[0], 0.25], [CHORE.down[1], 0.55]];
+export function swingAt(u) {
+  const v = frac(u);
+  let a = 0;
+  for (const [u0, A] of JOLTS) {
+    const x = v - u0;
+    if (x <= 0 || x >= 0.16) continue;
+    a += A * sstep(0, 0.004, x) * (1 - sstep(0.07, 0.16, x)) * Math.exp(-x / 0.045) * Math.sin(2 * Math.PI * x / 0.034);
+  }
+  return a;
+}
+
 // ce qui bouge dans l'objet
 export function objectAt(R, u) {
   const v = frac(u), O = R.object;
   return {
+    needle: (O.north ?? 0) + swingAt(u),
     spin: 2 * Math.PI * O.spinTurns * v,
     hands: [((O.hour % 12) / 12) * 2 * Math.PI, ((O.hour % 1) * 2 * Math.PI), 2 * Math.PI * O.secondTurns * v],
     time: 2 * Math.PI * 30 * v, // (la flamme vacille à des fréquences entières de la boucle)
