@@ -612,10 +612,18 @@ fn triDev(i: u32) -> Acc {
 `;
 
 // ── Pipelines (par périphérique) ─────────────────────────────────────────────
-const cache = new WeakMap();
-function pipelines(device) {
-  let P = cache.get(device);
-  if (P) return P;
+// Elles sont compilées en asynchrone (pipelinesAsync, au premier calcul) : une
+// compilation synchrone tient le processus graphique, et avec lui l'affichage
+// de toute la page, écran de chargement compris.
+const cache = new WeakMap(), building = new WeakMap();
+function pipelines(device) { return cache.get(device) ?? build(device, false); }
+function pipelinesAsync(device) {
+  if (cache.has(device)) return Promise.resolve(cache.get(device));
+  if (!building.has(device)) building.set(device, build(device, true));
+  return building.get(device);
+}
+function build(device, async) {
+  let P;
   const sto = (b) => ({ binding: b, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } });
   const uni = (b, dyn = false) => ({ binding: b, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform', hasDynamicOffset: dyn } });
   const simL = device.createBindGroupLayout({ entries: [0, 1, 2, 3, 4, 5, 6, 7].map(sto).concat([uni(8), uni(9, true)]) });
@@ -631,7 +639,10 @@ function pipelines(device) {
     return m;
   };
   const sim = mod(SIM, 'sim'), fib = mod(FIB, 'fib'), pose = mod(POSE, 'pose'), strain = mod(STRAIN, 'strain');
-  const mk = (layout, module, entryPoint) => device.createComputePipeline({ layout: device.createPipelineLayout({ bindGroupLayouts: [layout] }), compute: { module, entryPoint } });
+  const mk = (layout, module, entryPoint) => {
+    const d = { layout: device.createPipelineLayout({ bindGroupLayouts: [layout] }), compute: { module, entryPoint } };
+    return async ? device.createComputePipelineAsync(d) : device.createComputePipeline(d);
+  };
   P = {
     simL, fibL, poseL, strL,
     strain: mk(strL, strain, 'strainK'), strainSmooth: mk(strL, strain, 'strainSmooth'), strainLips: mk(strL, strain, 'strainLips'),
@@ -642,8 +653,14 @@ function pipelines(device) {
     interp: mk(poseL, pose, 'interp'), normals: mk(poseL, pose, 'normals'), smoothNormals: mk(poseL, pose, 'smoothNormals'),
     curvature: mk(poseL, pose, 'curvature'), lips: mk(poseL, pose, 'lipsK'),
   };
-  cache.set(device, P);
-  return P;
+  if (!async) { cache.set(device, P); return P; }
+  const keys = Object.keys(P);
+  return Promise.all(keys.map((k) => P[k])).then((v) => {
+    const Q = {};
+    keys.forEach((k, i) => { Q[k] = v[i]; });
+    if (!cache.has(device)) cache.set(device, Q);
+    return cache.get(device);
+  });
 }
 
 const buf = (device, data, usage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC) => {
@@ -668,7 +685,7 @@ const emptyBuf = (device, size) => device.createBuffer({ size: Math.max(16, Math
 // et anneaux à partir de ringOff — un seul tampon, la pose étant à la limite
 // des 8 tampons de stockage par étape).
 export async function simulate(device, prep, S, fibOut, onProgress) {
-  const P = pipelines(device);
+  const P = await pipelinesAsync(device);
   const np = prep.np, nb = prep.nb, F = S.frames, SUB = S.substeps;
   const h = S.duration / (F - 1) / SUB;
   // état : x, x au début du pas, v

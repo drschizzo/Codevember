@@ -11,6 +11,7 @@ import * as THREE from 'three/webgpu';
 import { Fn, atan, attribute, texture, positionPrevious, normalGeometry, modelViewMatrix, positionWorld, positionGeometry, normalWorld, vec2, vec3, vec4, float, mix, smoothstep, uniform, abs, sin, cos, pow, clamp, normalViewGeometry, max as tmax, color, positionLocal, cameraPosition, length, normalize, dot } from 'three/tsl';
 import { noise, worley, fbm, perturb, stableVelocity, isLite } from './materials.js';
 import { makeSubstrate } from '../gen/colony.js';
+import { supportSurface } from '../gen/support.js';
 import { createRng, createNoise3 } from '../rng.js';
 import { DECOR_FINISHES } from '../recipe.js';
 import { Buffers, norm, add as vadd, mul, cross } from '../gen/mesh.js';
@@ -138,6 +139,15 @@ function rockMaterial(T, DU, logR = 0) {
 
 // ── Géométries ───────────────────────────────────────────────────────────────
 // grille (x, z) sur [−X, X] × [−Z, Z], hauteur f(x, z)
+// maillage cuit par un worker (gen/support.js : positions, normales, uv, indices)
+function bakedGeometry(b) {
+  const g = new THREE.BufferGeometry();
+  g.setIndex(new THREE.BufferAttribute(b.index, 1));
+  g.setAttribute('position', new THREE.BufferAttribute(b.pos, 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(b.nrm, 3));
+  g.setAttribute('uv', new THREE.BufferAttribute(b.uv, 2));
+  return g;
+}
 function heightfield(f, X, Z, nx, nz, warp = null) {
   const g = new THREE.PlaneGeometry(2 * X, 2 * Z, nx, nz).rotateX(-Math.PI / 2);
   const P = g.attributes.position;
@@ -231,46 +241,46 @@ function skyMaterial(DU) {
 }
 
 // R : recette ; C : colonie (sortie du worker) ; group : groupe du décor
-export function buildDecor(group, R, C, DU, rockT = null) {
+// baked : le maillage fin du support, cuit par un worker (gen/support.js) ;
+// sans lui, il est calculé ici (même résultat, sur le fil principal)
+export function buildDecor(group, R, C, DU, rockT = null, baked = null) {
   const out = [];
   const add = (geo, mat, { cast = false, receive = true } = {}) => { const o = new THREE.Mesh(geo, mat); o.castShadow = cast; o.receiveShadow = receive; group.add(o); out.push(o); return o; };
   const D = R.decor, acc = D.accord, sub = makeSubstrate(R.colony.support), rng = createRng(`decor:${D.seed}`);
   const fin = (k) => DECOR_FINISHES[k];
-  const Rc = R.colony.radius;
+  const Rc = R.colony.radius, surf = supportSurface(R, sub);
   // support
   switch (D.support) {
     case 'log': {
       if (rockT) {
         // souche : cylindre fin dont le dessus suit la forme du substrat ; l'écorce cuite en relief
-        const Rl = 1 / 0.2, g = new THREE.CylinderGeometry(Rl, Rl, 60, isLite() ? 480 : 900, isLite() ? 260 : 520, true).rotateZ(Math.PI / 2).translate(0, -Rl, 0);
-        const P = g.attributes.position;
-        for (let i = 0; i < P.count; i++) {
-          const x = P.getX(i), y = P.getY(i), z = P.getZ(i), top = Math.max(0, (y + Rl) / Rl) ** 4;
-          P.setY(i, y + top * (sub.base(x, z) - y) * (Math.abs(z) < Rl * 0.95 ? 1 : 0));
+        const Rl = surf.Rl;
+        let g = baked && bakedGeometry(baked);
+        if (!g) {
+          g = new THREE.CylinderGeometry(Rl, Rl, surf.len, isLite() ? 480 : 900, isLite() ? 260 : 520, true).rotateZ(Math.PI / 2).translate(0, -Rl, 0);
+          const P = g.attributes.position;
+          for (let i = 0; i < P.count; i++) {
+            const x = P.getX(i), y = P.getY(i), z = P.getZ(i), top = Math.max(0, (y + Rl) / Rl) ** 4;
+            P.setY(i, y + top * (surf.top(x, z) - y) * (Math.abs(z) < Rl * 0.95 ? 1 : 0));
+          }
+          g.computeVertexNormals();
         }
-        g.computeVertexNormals();
         add(g, rockMaterial(rockT, DU, Rl), { cast: true });
       } else add(logGeometry(sub, 1 / 0.2, 60), decorMaterial(fin(acc.support), DU, { field: true }), { cast: true });
       break;
     }
     case 'granite': case 'boulder': case 'wall': case 'peat': case 'ground': {
-      // le dessus suit le substrat, puis le bloc s'arrondit et plonge vers le sol
-      const Rs = Rc + (D.support === 'wall' ? 3 : ['peat', 'ground'].includes(D.support) ? 3.5 : 4.5);
-      const f = (x, z) => {
-        const a = Math.atan2(z, x), r = (D.support === 'wall' ? Math.abs(z) * 1.6 + Math.abs(x) * 0.2 : Math.hypot(x, z)) * (1 + 0.18 * Math.sin(a * 3 + 1.3) + 0.08 * Math.sin(a * 7 + 0.4));
-        const fall = Math.max(0, r - Rs);
-        return (rockT ? sub.base(x, z) : sub.y(x, z)) - 0.18 * fall * fall - 0.5 * fall;
-      };
+      // le dessus suit le substrat, puis le bloc s'arrondit et plonge vers le sol (gen/support.js)
+      const f = (x, z) => surf.f(x, z, !!rockT);
       const res = rockT ? (isLite() ? 360 : 720) : 220;
-      add(heightfield((x, z) => Math.max(-14, f(x, z)), 22, 22, res, res), rockT ? rockMaterial(rockT, DU) : decorMaterial(fin(acc.support), DU, { field: true }), { cast: true });
+      add((rockT && baked && bakedGeometry(baked)) || heightfield((x, z) => Math.max(-14, f(x, z)), 22, 22, res, res), rockT ? rockMaterial(rockT, DU) : decorMaterial(fin(acc.support), DU, { field: true }), { cast: true });
       break;
     }
     default: { // tourbe, terre : le substrat s'étend, avec une houle douce au loin
-      const sy = rockT ? sub.base : sub.y;
-      const f = (x, z) => { const r = Math.hypot(x, z); return sy(x, z) * Math.exp(-Math.max(0, r - Rc - 4) * 0.05) - Math.max(0, r - 10) * 0.06; };
+      const f = (x, z) => surf.f(x, z, !!rockT);
       if (rockT) {
         // près : grille fine et relief cuit ; loin : grille grossière, sous la fine
-        add(heightfield(f, 14, 14, isLite() ? 360 : 720, isLite() ? 360 : 720), rockMaterial(rockT, DU), { cast: true });
+        add((baked && bakedGeometry(baked)) || heightfield(f, 14, 14, isLite() ? 360 : 720, isLite() ? 360 : 720), rockMaterial(rockT, DU), { cast: true });
         add(heightfield((x, z) => f(x, z) - (Math.max(Math.abs(x), Math.abs(z)) < 13.5 ? 0.3 : 0), 90, 90, 120, 120), decorMaterial(fin(acc.support), DU));
       } else add(heightfield(f, 90, 90, 160, 160, (x, z) => { const r = Math.hypot(x, z), k = r < 1e-6 ? 1 : (r < 12 ? 1 : 1 + (r - 12) * 0.02); return [x * k, z * k]; }), decorMaterial(fin(acc.support), DU, { field: true }), { cast: true });
     }

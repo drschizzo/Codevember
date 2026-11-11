@@ -19,6 +19,8 @@ import { createUI } from './app/ui.js';
 import { loadRender, saveRender, applyQuality, defaultsFor } from './app/settings.js';
 import { wantsMobile, switchMobile, createGovernor, createPacer, bindTouch } from './app/mobile.js';
 import { exportLoop, exportPNG } from './app/capture.js';
+import { loader } from './app/loader.js';
+import { asyncPipelines, warmScene, yieldNow } from './app/warmup.js';
 
 const D = 1; // distance caméra–centre (échelle de la plongée)
 const params = new URLSearchParams(location.search);
@@ -56,9 +58,10 @@ function choreo(t, C) {
   return tau - c;
 }
 
+// un échec : dit à l'écran, avec de quoi repartir (une fois l'interface prête)
+let retry = null;
 function fail(msg) {
-  $('#loader').classList.add('error');
-  $('#loader p').textContent = msg;
+  loader.error(msg, retry ? [{ label: 'Autre graine', run: () => retry.random() }, { label: 'Réessayer', run: () => retry.again() }] : []);
 }
 let toastTimer = 0;
 function toast(msg, ms = 2200) {
@@ -70,6 +73,11 @@ function toast(msg, ms = 2200) {
 }
 
 async function main() {
+  const errors = [];
+  if (params.has('debug')) { // (avant toute compilation : les erreurs du chargement sinon échappent)
+    const orig = console.error;
+    console.error = (...a) => { orig(...a); errors.push(String(a[0]).slice(0, 400)); };
+  }
   // ── Version mobile (fixée au chargement) ──
   const LITE = wantsMobile(params);
   setLite(LITE);
@@ -82,6 +90,10 @@ async function main() {
   renderer.shadowMap.type = THREE.PCFShadowMap;
   const canvas = renderer.domElement;
   $('#app').appendChild(canvas);
+  // Chargement sans gel : pipelines asynchrones pendant la préparation, et
+  // construction des objets découpée en petits lots (app/warmup.js). Rien
+  // n'est dessiné tant que les couches ne sont pas simulées.
+  const pipes = asyncPipelines(renderer);
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color();
@@ -97,7 +109,7 @@ async function main() {
   const gen = createGenerator(LITE ? Math.max(2, Math.min(3, (navigator.hardwareConcurrency || 4) - 1)) : undefined);
   setNoiseVolume(await gen.request({ seed: 'membrane-noise' }, 'noise'));
   const nest = createNest(scene, gen, renderer, { lite: LITE });
-  nest.onError = (e) => toast(`Simulation impossible : ${e.message}`, 6000);
+  nest.onError = (e) => (loading.active ? fail(`Simulation impossible : ${e.message}`) : toast(`Simulation impossible : ${e.message}`, 6000));
   const lights = createLights(scene, { lite: LITE });
   const post = createPost(renderer, scene, camera);
   const RENDER = loadRender(LITE);
@@ -121,11 +133,25 @@ async function main() {
     old?.dispose();
   }
 
-  const loading = { active: true, settle: 0, t0: performance.now() };
+  // ── Écran de chargement ──
+  // La scène n'apparaît que prête : couches simulées sur le GPU, matériaux et
+  // pipelines préparés (warm), puis quelques images (historique de
+  // l'anticrénelage temporel). Le dessin du chargement (app/loaderArt.js)
+  // montre l'œuf de la première couche et son vrai motif de déchirure.
+  const STEPS = [['build', 'les membranes se déchirent'], ['compile', 'la lumière se prépare'], ['settle', 'premières images']];
+  const loading = { active: true, settle: 0, warming: false, t0: performance.now() };
+  const artData = () => ({
+    levels: R.levels.map((lv) => ({
+      arm: lv.arm, color: lv.look?.scatter,
+      mem: { warp: lv.phys.warp, warpScale: lv.phys.warpScale, branch: lv.phys.branch, branchStrength: lv.phys.branchStrength, sectors: lv.phys.sectors, seed: lv.seed },
+    })),
+    ratio: R.nest.ratio, spin: R.nest.spin, core: R.core?.color,
+  });
   let ui = null, resetMotion = true;
   function applyRecipe() {
-    loading.active = true; loading.settle = 0; loading.t0 = performance.now();
-    $('#loader').classList.remove('gone');
+    loading.active = true; loading.settle = 0; loading.warming = false; loading.t0 = performance.now();
+    loader.show({ steps: STEPS });
+    loader.art(artData());
     nest.setRecipe(R);
     syncEnv();
     resetMotion = true;
@@ -185,6 +211,31 @@ async function main() {
   function renderStep(u) {
     renderer._nodes?.nodeFrame?.update();
     renderAt(u);
+  }
+
+  // Préparation du rendu, une fois les couches simulées : matériaux des
+  // emplacements construits un à un, puis chaque moment de la plongée dessiné
+  // par petits lots (pipelines asynchrones). Les emplacements parcourent
+  // toutes les profondeurs en M/N boucles : on les échantillonne toutes
+  // (chaque variante de matériau — avec ou sans copie de l'image, mélangée —
+  // et chaque maillage sont ainsi préparés).
+  async function warm() {
+    loading.warming = true;
+    loader.step('compile');
+    const recipe = R;
+    try {
+      for (const sl of nest.slots) { sl.sync(RENDER.depthBlur); await yieldNow(); if (R !== recipe) return false; }
+      const N = R.levels.length, loops = nest.slots.length / N, phases = [];
+      for (let i = 0, n = Math.round(loops * N * 4); i < n; i++) phases.push((i / n) * loops);
+      return await warmScene({
+        renderer, scene, pipes, render: renderStep, phases,
+        onProgress: (f) => loader.progress(f), alive: () => R === recipe,
+      });
+    } finally {
+      loading.warming = false;
+      resetMotion = true;
+      if (R === recipe) loader.step('settle');
+    }
   }
 
   function resize() {
@@ -273,25 +324,25 @@ async function main() {
     });
   }
 
+  retry = { random: () => on.random(), again: () => applyRecipe() };
   applyRender();
   applyRecipe();
   if (params.has('debug')) {
     window.membrane = {
-      renderer, scene, camera, nest, lights, post, gen, RENDER, renderAt: renderStep, on, G,
+      renderer, scene, camera, nest, lights, post, gen, RENDER, renderAt: renderStep, on, G, pipes, errors, loader,
       get R() { return R; },
       get info() { return info; },
       seek: (p) => { phi = p; paused = true; },
       play: () => { paused = false; frozen = false; },
       async shot(u, n = 10) {
-        while (!nest.ready()) await new Promise((r) => setTimeout(r, 200));
+        await this.run(); // (fin du chargement, même panneau masqué)
         frozen = true;
-        $('#loader').classList.add('gone');
         document.body.classList.add('clean');
         for (let i = 0; i < n; i++) { renderStep(u); await renderer.backend.device?.queue.onSubmittedWorkDone(); }
       },
       // une couche seule, vue de l'extérieur, à la profondeur x (k : recul en rayons)
       async level(j, x, k = 3.2, dir = [0.35, 0.3, 1], all = false) {
-        while (!nest.ready()) await new Promise((r) => setTimeout(r, 200));
+        await this.run();
         frozen = true;
         const d = new THREE.Vector3(...dir).normalize(), q = R.nest.ratio;
         for (let i = 0; i < 6; i++) {
@@ -335,31 +386,57 @@ async function main() {
     else if (e.key === 'ArrowLeft') phi -= 0.004;
   });
 
+  // ── Boucle ──
+  // (fonction nommée : en ?debug, run() la fait tourner à la main quand le
+  // navigateur suspend requestAnimationFrame, panneau masqué)
   let last = performance.now(), fpsAcc = 0, fpsN = 0, fpsT = 0;
-  renderer.setAnimationLoop((now) => {
-    if (busy || frozen) return;
+  function tick(now) {
+    if (busy || frozen || loading.warming) return;
     if (!pace(now)) return; // (écrans 90 / 120 Hz : cadence plafonnée)
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
     if (RENDER.dynRes && !loading.active) governor.frame(dt); // (pas pendant le chargement : simulation et workers faussent la mesure)
     if (!paused && !loading.active) phi += dt / (R.loop.beat * R.levels.length);
-    renderAt(phi);
     if (loading.active) {
-      const k = nest.progress(), el = (performance.now() - loading.t0) / 1000;
-      // (progression : couches prêtes, et une estimation du temps de simulation)
-      $('#loadbar u').style.width = `${Math.min(99, (k * 0.7 + Math.min(1, el / 9) * 0.3) * 100).toFixed(1)}%`;
-      if (nest.ready() && ++loading.settle > 8) {
+      // simulation (avancement réel des couches), préparation, puis quelques images
+      if (!loading.settle) {
+        loader.progress(nest.progress());
+        if (!nest.ready()) return;
+        loading.settle = 1;
+        warm().then((ok) => { if (ok) loading.settle = 2; }, (e) => fail(`Le rendu n'a pas pu être préparé (${e.message}).`));
+        return;
+      }
+      if (loading.settle < 2) return;
+      loader.progress((loading.settle - 2) / 7);
+      if (++loading.settle > 9) {
         loading.active = false;
-        $('#loader').classList.add('gone');
+        loader.hide();
         if (touch && !hinted) { hinted = true; toast('touche : pause · deux touches : nouvelle scène · appui long : masquer', 4500); }
       }
     }
+    renderAt(phi);
     fpsAcc += dt; fpsN++;
     if ((fpsT += dt) > 0.5) {
       ui?.setFps(`${(fpsN / fpsAcc).toFixed(0)}  ·  ${info?.shown ?? 0} couches${RENDER.dynRes ? `  ·  ${Math.round(governor.scale * 100)} %` : ''}`);
       fpsAcc = fpsN = fpsT = 0;
     }
-  });
+  }
+  renderer.setAnimationLoop(tick);
+  if (window.membrane) {
+    // fait tourner la boucle à la main jusqu'à la fin du chargement (ou pendant
+    // `seconds` de film) : à utiliser quand le panneau est masqué
+    window.membrane.run = async (seconds = 0) => {
+      frozen = false; // (une image fixe gèle la boucle : le chargement suivant ne finirait jamais)
+      const t0 = performance.now();
+      while (loading.active || performance.now() - t0 < seconds * 1000) {
+        renderer._nodes?.nodeFrame?.update();
+        tick(performance.now());
+        const t = performance.now();
+        while (performance.now() - t < 16) await yieldNow();
+      }
+    };
+    Object.defineProperty(window.membrane, 'loading', { get: () => ({ ...loading }) });
+  }
 }
 
 main().catch((e) => { console.error(e); fail(e.message); });

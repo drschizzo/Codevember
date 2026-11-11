@@ -31,16 +31,33 @@ body.captions #title, body.clean #title, body.clean #hint, body.clean .lil-gui.r
 #progress div { height: 3px; background: rgba(255,255,255,.1); border-radius: 2px; margin-top: 8px; overflow: hidden; }
 #progress u { display: block; height: 100%; width: 0; background: #e9c48a; }
 
-#loader { position: fixed; inset: 0; display: grid; place-content: center; justify-items: center; text-align: center; background: #050506; transition: opacity .25s; z-index: 5; }
-#loadbar { width: 180px; height: 2px; margin-top: 18px; background: rgba(255, 240, 220, 0.1); border-radius: 1px; overflow: hidden; }
-#loadbar u { display: block; height: 100%; width: 0; background: #e9c48a; transition: width .3s; }
-#loader p { color: var(--dim); margin-top: 10px; font: italic 300 15px Fraunces, Georgia, serif; }
-#loader.gone { opacity: 0; pointer-events: none; transition: opacity 1.2s; }
-#loader.error p { color: #ff9b8a; font-style: normal; max-width: 40em; }
 
 @media (max-width: 640px) {
   #title { left: 16px; bottom: 16px; } #title h1 { font-size: 30px; } #hint { display: none; }
   .lil-gui.root { right: 8px !important; top: 8px !important; width: calc(100% - 16px) !important; max-height: 50%; }
 }
 
-#loadcrystal { width: 180px; height: 180px; margin-bottom: 14px; }
+/* ── écran de chargement (commun aux projets) : le dessin et le fil d'avancement
+   sont tracés dans un worker (app/loaderWorker.js, app/loaderArt.js) ; ici, le
+   nom, l'étape en cours et, en cas d'échec, le message et de quoi repartir.
+   Pendant le chargement, le panneau et les légendes se taisent. ── */
+#loader { --bar: max(46px, 7vh); position: fixed; inset: 0; background: #050506; z-index: 5; transition: opacity .3s; }
+#loader canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+#loader .mark { position: absolute; left: 0; right: 0; bottom: calc(var(--bar) + 16px); text-align: center; pointer-events: none;
+  font: 300 22px/1 Fraunces, Georgia, serif; letter-spacing: .08em; color: rgba(236, 232, 225, .55); }
+#loader .step { position: absolute; left: 0; right: 0; top: calc(100% - var(--bar) + 14px); text-align: center; pointer-events: none;
+  font: italic 300 13px/1.4 Fraunces, Georgia, serif; color: var(--dim); opacity: .8; transition: opacity .4s; padding: 0 16px; }
+#loader .txt { position: absolute; left: 0; right: 0; bottom: var(--bar); text-align: center; padding: 0 16px; display: none; }
+#loader .msg { color: #ff9b8a; font: 300 14px/1.5 Inter, system-ui, sans-serif; max-width: min(560px, calc(100% - 32px)); margin: 0 auto; }
+#loader .actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 14px; }
+#loader .actions:empty { display: none; }
+#loader .actions button { font: 400 12px Inter, system-ui, sans-serif; letter-spacing: .03em; color: var(--fg); background: rgba(255, 245, 230, 0.07);
+  border: 1px solid var(--line); border-radius: 999px; padding: 8px 16px; cursor: pointer; transition: background .2s; }
+#loader .actions button:hover { background: rgba(255, 245, 230, 0.16); }
+#loader .actions button:first-child { border-color: rgba(233, 196, 138, 0.5); color: #e9c48a; }
+#loader.error .txt { display: block; }
+#loader.error .step, #loader.error .mark { display: none; }
+#loader.gone { opacity: 0; pointer-events: none; transition: opacity 1.2s; }
+.lil-gui.root { transition: opacity .6s; }
+body.loading .lil-gui.root, body.loading #title, body.loading #hint { opacity: 0 !important; pointer-events: none; }
+@media (max-width: 640px) { #loader .mark { font-size: 18px; } }

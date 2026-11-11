@@ -71,7 +71,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
   scene.add(group); scene.add(decorGroup);
   const moss = createMoss(group, FIELD);
   const DU = createDecorLook(FIELD);
-  let rockT = null, failed = null, R = null, data = null, cam = null, pending = 0, version = 0, decorMeshes = [];
+  let rockT = null, failed = null, R = null, data = null, cam = null, pending = 0, parts = 0, version = 0, decorMeshes = [];
   const fieldArr = new Float32Array(2 * FIELD_N * FIELD_N);
   let state = new Float32Array(4);
   const RU = { frame: uniform(0), rate: uniform(0), box: uniform(10), height: uniform(14), center: uniform(new THREE.Vector3()), right: uniform(new THREE.Vector3(1, 0, 0)), color: uniform(new THREE.Color(1, 1, 1)) };
@@ -105,9 +105,13 @@ export function createStage(scene, gen, { lite = false } = {}) {
   function setRecipe(recipe) {
     R = recipe;
     const v = ++version;
-    pending = 1;
-    const rockReq = R.decor.rock ? gen.request({ type: R.decor.rock, seed: R.colony.support.seed, X: 14, M: lite ? 640 : 1024 }, 'rock') : Promise.resolve(null);
-    Promise.all([gen.request({ colony: R.colony, loop: R.loop, water: R.hydro }, 'moss'), rockReq]).then(([d, rk]) => {
+    pending = 1; parts = 0;
+    // (avancement : chaque pièce arrivée du worker compte — la roche, le coussin)
+    const part = (p) => p.then((x) => { if (v === version) parts++; return x; });
+    const rockReq = R.decor.rock ? part(gen.request({ type: R.decor.rock, seed: R.colony.support.seed, X: 14, M: lite ? 640 : 1024 }, 'rock')) : Promise.resolve((parts++, null));
+    // (le maillage fin du support, s'il a un relief cuit : dans un worker aussi)
+    const supReq = R.decor.rock ? part(gen.request({ decor: R.decor, colony: R.colony, lite }, 'support')) : Promise.resolve((parts++, null));
+    Promise.all([part(gen.request({ colony: R.colony, loop: R.loop, water: R.hydro }, 'moss')), rockReq, supReq]).then(([d, rk, sup]) => {
       if (v !== version) return;
       if (rockT) { rockT.rel.dispose(); rockT.col.dispose(); }
       rockT = rk ? rockTextures(rk) : null;
@@ -115,7 +119,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
       FIELD.E.value = d.habitat.E;
       moss.set(d, R);
       clearDecor();
-      decorMeshes = buildDecor(decorGroup, R, d.colony, DU, rockT);
+      decorMeshes = buildDecor(decorGroup, R, d.colony, DU, rockT, sup);
       state = new Float32Array((d.colony.n + d.colony.sporCount) * 4);
       cam = camFor(d);
       lastU = null;
@@ -210,6 +214,6 @@ export function createStage(scene, gen, { lite = false } = {}) {
     syncFinishes: () => R && moss.syncLook(R),
     get data() { return data; },
     ready: () => pending === 0 && !!data, get failed() { return failed; },
-    progress: () => (pending ? 0.3 : 1),
+    progress: () => (pending ? 0.08 + 0.3 * parts : 1),
   };
 }

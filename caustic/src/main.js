@@ -10,7 +10,7 @@
 // outils de mise au point passent tous par lui.
 import * as THREE from 'three/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { generate, upgrade, MOODS, FAMILIES } from './recipe.js';
+import { generate, upgrade, kelvinToHex, MOODS, FAMILIES } from './recipe.js';
 import { cameraPose, foyerClock } from './timeline.js';
 import { createGenerator } from './gen/client.js';
 import { createStage } from './scene/stage.js';
@@ -23,6 +23,8 @@ import { createUI } from './app/ui.js';
 import { loadRender, saveRender, applyQuality, defaultsFor } from './app/settings.js';
 import { wantsMobile, switchMobile, createGovernor, createPacer, bindTouch } from './app/mobile.js';
 import { exportLoop, exportPNG } from './app/capture.js';
+import { loader } from './app/loader.js';
+import { asyncPipelines, warmScene } from './app/warmup.js';
 
 const NAME = 'caustic';
 const DEFAULT_SEED = 'c41'; // scène d'ouverture (sans ?seed=) : la diatomée de l'Atelier
@@ -50,10 +52,10 @@ async function unpackRecipe(str) {
 const yieldNow = () => new Promise((r) => { const c = new MessageChannel(); c.port1.onmessage = () => r(); c.port2.postMessage(0); });
 async function sleep(ms) { const t0 = performance.now(); do await yieldNow(); while (performance.now() - t0 < ms); }
 
+// un échec : dit à l'écran, avec de quoi repartir (une fois l'interface prête)
+let retry = null;
 function fail(msg) {
-  $('#loader').classList.remove('gone');
-  $('#loader').classList.add('error');
-  $('#loader p').textContent = msg;
+  loader.error(msg, retry ? [{ label: 'Autre graine', run: () => retry.random() }, { label: 'Réessayer', run: () => retry.again() }] : []);
 }
 let toastTimer = 0;
 function toast(msg, ms = 2200) {
@@ -85,25 +87,9 @@ async function main() {
   const canvas = renderer.domElement;
   $('#app').appendChild(canvas);
 
-  // Chargement sans gel : three.js crée ses pipelines de façon synchrone au
-  // premier dessin, et le processus graphique du navigateur (donc toute la
-  // page) reste bloqué pendant chaque compilation. Pendant le chargement, on
-  // les demande en asynchrone ; tant qu'une pipeline n'est pas prête, l'objet
-  // est sauté, et l'on redessine jusqu'à ce qu'il n'en manque plus.
-  const pipes = { on: false, pending: [], made: 0 };
-  if (renderer.backend.isWebGPUBackend && !params.has('syncpipes')) {
-    const be = renderer.backend, create = be.createRenderPipeline.bind(be);
-    be.createRenderPipeline = (renderObject, promises) => {
-      if (!pipes.on || promises) return create(renderObject, promises);
-      const list = [];
-      create(renderObject, list);
-      const data = be.get(renderObject.pipeline);
-      data.error = true;
-      pipes.made++;
-      pipes.pending.push(Promise.all(list).then(() => { if (data.pipeline) data.error = false; }));
-    };
-  }
-  const flushPipes = async () => { while (pipes.pending.length) await Promise.all(pipes.pending.splice(0)); };
+  // Chargement sans gel : pipelines asynchrones pendant le chargement, et
+  // préparation découpée en petits lots (app/warmup.js).
+  const pipes = asyncPipelines(renderer);
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color();
@@ -139,61 +125,54 @@ async function main() {
     old?.dispose();
   }
 
-  // ── Écran de chargement : le calcul lui-même ──
-  // Pour chaque dessin, la grille du transport optimal (33 × 33 nœuds de
-  // l'application ∇u) se déforme jusqu'à concentrer la lumière sur le dessin ;
-  // quand il est résolu, la cible apparaît sous la grille.
-  const ot = $('#otview'), octx = ot.getContext('2d');
-  const otState = [];
-  function drawOT() {
-    const W = ot.width, H = ot.height, n = 3, pw = W / n;
-    octx.clearRect(0, 0, W, H);
-    for (let e = 0; e < n; e++) {
-      const st = otState[e];
-      const x0 = e * pw + 12, s = pw - 24, y0 = (H - s) / 2;
-      if (st?.target) {
-        const t = st.target, nt = st.nt, img = octx.createImageData(nt, nt);
-        for (let i = 0; i < nt * nt; i++) { const v = Math.min(255, Math.max(0, (t[i] - 0.25) * 70)); img.data[i * 4] = v; img.data[i * 4 + 1] = v * 0.86; img.data[i * 4 + 2] = v * 0.62; img.data[i * 4 + 3] = 255; }
-        const c = new OffscreenCanvas(nt, nt); c.getContext('2d').putImageData(img, 0, 0);
-        octx.imageSmoothingEnabled = true; octx.globalAlpha = 0.9; octx.drawImage(c, x0, y0, s, s); octx.globalAlpha = 1;
-      }
-      if (!st?.grid) { octx.strokeStyle = 'rgba(233,196,138,0.12)'; octx.strokeRect(x0 + 0.5, y0 + 0.5, s, s); continue; }
-      const { grid, n: m } = st;
-      octx.strokeStyle = st.target ? 'rgba(233,196,138,0.25)' : 'rgba(233,196,138,0.6)';
-      octx.lineWidth = 0.7;
-      octx.beginPath();
-      for (let j = 0; j < m; j++) for (let i = 0; i < m; i++) {
-        const k = (j * m + i) * 2, X = x0 + grid[k] * s, Y = y0 + grid[k + 1] * s;
-        if (i) octx.lineTo(X, Y); else octx.moveTo(X, Y);
-      }
-      for (let i = 0; i < m; i++) for (let j = 0; j < m; j++) {
-        const k = (j * m + i) * 2, X = x0 + grid[k] * s, Y = y0 + grid[k + 1] * s;
-        if (j) octx.lineTo(X, Y); else octx.moveTo(X, Y);
-      }
-      octx.stroke();
-    }
-  }
+  // ── Écran de chargement : le calcul lui-même (app/loaderArt.js) ──
+  // Pour un Foyer, chaque grille de l'application ∇u du transport optimal
+  // (129 × 129 nœuds, envoyée par les workers de génération à mesure que le
+  // résidu tombe) est relayée au dessin, qui y pousse un semis de points de
+  // lumière jusqu'à ce qu'ils tracent le dessin. L'étape 'transport' dure tant
+  // que les trois dessins ne sont pas résolus ; son avancement suit le résidu
+  // (échelle logarithmique, du résidu de départ à la tolérance du solveur).
+  const OT_R0 = 0.32, OT_TOL = 2e-3;
+  const ot = { f: [], solved: [] };
+  const otFrac = (res) => Math.min(1, Math.max(0, Math.log(OT_R0 / Math.max(res, 1e-9)) / Math.log(OT_R0 / OT_TOL)));
+  const showArt = () => {
+    const hex = kelvinToHex(R.light.K), c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+    // (la lumière du dessin : la couleur de la lampe, réchauffée vers l'or du projet)
+    const light = c.map((v, i) => Math.round(0.45 * v + 0.55 * [236, 200, 146][i]));
+    let hash = 0; for (const ch of R.seed) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+    loader.art({
+      kind: 'recipe', family: R.family, seed: R.seed, seedHash: hash, light,
+      series: R.foyer?.series, events: R.foyer?.events.map((e) => ({ level: e.level, rotation: e.rotation })) ?? [],
+      lattice: R.faraday?.first, angle: R.faraday?.angle, emissions: R.karman?.emissions,
+    });
+  };
   stage.onProgress((p) => {
-    otState[p.event] = { ...(otState[p.event] || {}), grid: p.grid, n: p.n };
-    if (loading.active) $('#loader p').textContent = `transport optimal : la lumière se rassemble sur le dessin — résidu ${(p.res * 100).toFixed(1)} %`;
-    drawOT();
-  }, (j, o) => { otState[j] = { ...(otState[j] || {}), target: o.target, nt: o.nt }; drawOT(); });
+    if (!loading.active || !loading.applied) return; // (un calcul d'une scène abandonnée)
+    ot.f[p.event] = Math.max(ot.f[p.event] || 0, otFrac(p.res));
+    loader.art({ kind: 'ot', event: p.event, it: p.it, res: p.res, n: p.n, grid: p.grid }, [p.grid.buffer]);
+  }, (j, o) => {
+    ot.f[j] = 1; ot.solved[j] = true;
+    loader.art({ kind: 'solved', event: j, res: o.lens?.residual, it: o.lens?.iterations });
+  });
+  const otDone = () => R.family !== 'foyer' || R.foyer.events.every((_, j) => ot.solved[j]);
 
   // ── Écran de chargement ──
   // Une scène ne s'affiche que lorsque toute sa géométrie est arrivée, que ses
   // shaders sont compilés et que quelques images ont été rendues (historique
   // de l'anticrénelage temporel). On ne voit jamais une forme se transformer.
   const loading = { active: true, applied: false, warming: false, settle: 0 };
+  const STEPS = {
+    foyer: [['transport', 'la lumière cherche le dessin'], ['build', 'la cuve se remplit'], ['compile', 'la lumière se prépare'], ['settle', 'premières images']],
+    faraday: [['build', 'l’excitateur s’accorde'], ['compile', 'la lumière se prépare'], ['settle', 'premières images']],
+    karman: [['build', 'le canal se remplit'], ['compile', 'la lumière se prépare'], ['settle', 'premières images']],
+  };
   let firstRecipe = true;
   function applyRecipe() {
     const recipe = R;
     loading.active = true; loading.applied = false; loading.warming = false; loading.settle = 0;
-    $('#loader').classList.remove('gone', 'error');
-    $('#loader p').textContent = R.family === 'foyer' ? 'transport optimal : la lumière se rassemble sur le dessin…' : R.family === 'faraday' ? 'réglage de l’excitateur et du stroboscope…' : 'mise en eau du canal…';
-    otState.length = 0; drawOT();
-    ot.classList.toggle('off', R.family !== 'foyer');
-    $('#loadbar u').style.width = '0%';
-    document.body.classList.add('loading');
+    loader.show({ steps: STEPS[R.family] || STEPS.foyer });
+    ot.f = []; ot.solved = [];
+    showArt();
     // (le fondu d'entrée de l'écran se termine avant que la scène ne change)
     sleep(firstRecipe ? 0 : 280).then(() => {
       if (R !== recipe) return;
@@ -216,20 +195,16 @@ async function main() {
   // frustum désactivé (un objet hors champ n'est pas compilé).
   async function warm() {
     loading.warming = true;
-    pipes.on = true;
-    const culled = [];
-    scene.traverse((o) => { if (o.isMesh && o.frustumCulled) { culled.push(o); o.frustumCulled = false; } });
+    loader.step('compile');
+    const recipe = R;
     try {
-      for (let pass = 0; pass < 6; pass++) {
-        const before = pipes.made;
-        for (const ph of [0, 0.25, 0.5, 0.75]) { renderStep(ph); await flushPipes(); await yieldNow(); }
-        if (pipes.made === before) break;
-      }
-      if (scene.environment) scene.environment.needsPMREMUpdate = true; // (préfiltré pendant des dessins sautés)
+      return await warmScene({
+        renderer, scene, pipes, render: renderStep, phases: [0, 0.25, 0.5, 0.75],
+        onProgress: (f) => loader.progress(f), alive: () => R === recipe,
+      });
     } finally {
-      for (const o of culled) o.frustumCulled = true;
-      pipes.on = false;
       loading.warming = false;
+      if (R === recipe) loader.step('settle');
     }
   }
 
@@ -373,6 +348,7 @@ async function main() {
     bindTouch(canvas, { onTap: () => on.togglePause(), onDoubleTap: () => on.random(), onLongPress: () => document.body.classList.toggle('clean') });
   }
 
+  retry = { random: () => on.random(), again: () => applyRecipe() };
   applyRender();
   applyRecipe();
 
@@ -512,16 +488,18 @@ async function main() {
     if (RENDER.dynRes && !loading.active) governor.frame(dt); // (pas pendant le chargement : les workers faussent la mesure)
     if (!paused && !loading.active) phi += dt / R.loop.duration;
     if (loading.active) {
-      $('#loadbar u').style.width = `${(stage.progress() * 90).toFixed(1)}%`;
+      if (!loading.settle) {
+        // le transport (Foyer), puis le reste de la génération
+        if (!otDone()) { const n = R.foyer.events.length; let f = 0; for (let j = 0; j < n; j++) f += ot.f[j] || 0; loader.progress(f / n); }
+        else { loader.step('build'); loader.progress(loading.applied ? stage.progress() : 0); }
+      } else if (loading.settle >= 2) loader.progress((loading.settle - 2) / 7);
       if (loading.applied && stage.ready()) {
         if (!loading.settle) {
           loading.settle = 1;
-          warm().then(() => { loading.settle = 2; }, (e) => fail(`Le rendu n'a pas pu être préparé (${e.message}).`));
+          warm().then((ok) => { if (ok) loading.settle = 2; }, (e) => fail(`Le rendu n'a pas pu être préparé (${e.message}).`));
         } else if (loading.settle >= 2 && ++loading.settle > 8) {
           loading.active = false;
-          $('#loadbar u').style.width = '100%';
-          $('#loader').classList.add('gone');
-          document.body.classList.remove('loading');
+          loader.hide();
           if (touch && !hinted) { hinted = true; toast('touche : pause · deux touches : nouvelle scène · appui long : masquer', 4500); }
         }
       }

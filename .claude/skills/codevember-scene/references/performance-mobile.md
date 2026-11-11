@@ -27,11 +27,13 @@ Vise ≤ 16 ms à ~2 Mpx en Haute sur un GPU de portable récent, et ≈ 4 × mo
 
 ## Chargement sans gel
 
-1. **Pipelines asynchrones** pendant le chargement (gabarit `main.js`, `pipes`) : `createRenderPipelineAsync`, objet sauté tant que sa pipeline n'est pas prête, on redessine jusqu'à ce qu'il n'en manque plus. Orrery : blocages de l'affichage 1,4 s → 0,1 s.
-2. **Préchauffage** (`warm()`) : rendre les phases qui montrent des objets ou des états absents du début (plongée, halte, traversée…), `frustumCulled` coupé, états masqués par `visible` couverts ; sans cela, la première image d'un moment nouveau gèle (Tesseract : 0,5 s à la plongée).
-3. **Révéler par lots** quand il y a beaucoup d'objets (la page rend la main entre deux lots).
-4. Refaire le préfiltrage du studio après (`needsPMREMUpdate`).
-5. Écran de chargement dessiné dans un worker (`OffscreenCanvas`) s'il est animé.
+Tout passe par les modules communs `src/app/warmup.js`, `loader.js`, `loaderWorker.js` (copiés tels quels par l'échafaudage depuis melt/ ; identiques dans tous les projets — une correction se reporte partout).
+
+1. **Pipelines asynchrones** pendant le chargement (`asyncPipelines(renderer)`) : `createRenderPipelineAsync`, objet sauté tant que sa pipeline n'est pas prête. Sans cela, chaque compilation bloque le processus graphique, donc tout l'affichage de la page, même un écran dessiné dans un worker. Orrery : blocages de l'affichage 1,4 s → 0,1 s.
+2. **Préchauffage** (`warmScene({ phases, … })`) : rendre les phases qui montrent des objets ou des états absents du début (plongée, halte, traversée…), `frustumCulled` coupé ; sans cela, la première image d'un moment nouveau gèle (Tesseract : 0,5 s à la plongée).
+3. **Construction découpée** : la traduction TSL → WGSL des matériaux se fait sur le fil principal (jusqu'à plusieurs centaines de ms par matériau ; Calcin : 4,6 s d'un bloc). `warmScene` limite chaque image à ~100 ms de construction (les objets nouveaux au-delà sont sautés le temps d'une image, sans toucher à `visible`) et rend la main entre deux images par `MessageChannel` (jamais `setTimeout` : ralenti à 1/s ou 1/min en arrière-plan).
+4. Refaire le préfiltrage du studio après (fait par `warmScene`, `needsPMREMUpdate`).
+5. **L'écran de chargement est dessiné dans un worker** (`OffscreenCanvas`) et démarre avant le téléchargement de three.js (`<script type="module" src="src/app/loader.js">` avant main.js) ; three.js en version `.min` et `modulepreload` dans `index.html`.
 6. Après le chargement, rien ne se compile : une boucle entière sans image de plus de ~34 ms. Les lumières restent au premier niveau de la scène, dans un ordre fixe (un réordonnancement recompile tout).
 
 ## Version mobile (mode allégé)

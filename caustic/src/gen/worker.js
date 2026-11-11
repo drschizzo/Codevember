@@ -15,13 +15,15 @@ function progressOf(spec) {
     const now = performance.now();
     if (now - last < 60 && it > 0) return;
     last = now;
-    // ∇u sur une grille de 33×33 nœuds
-    const n = 33, h = 1 / (M - 1), out = new Float32Array(n * n * 2);
+    // ∇u sur une grille de 129×129 nœuds pris parmi ceux du solveur (257 = 2·128 + 1 :
+    // sans arrondi, l'identité reste l'identité) ; le dessin du chargement y pousse sa lumière
+    const n = 129, h = 1 / (M - 1), out = new Float32Array(n * n * 2);
     for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
       const I = Math.max(1, Math.min(M - 2, Math.round((i / (n - 1)) * (M - 1)))), J = Math.max(1, Math.min(M - 2, Math.round((j / (n - 1)) * (M - 1))));
       const k = J * M + I;
       out[(j * n + i) * 2] = (u[k + 1] - u[k - 1]) / (2 * h);
       out[(j * n + i) * 2 + 1] = (u[k + M] - u[k - M]) / (2 * h);
+      if (!i || !j || i === n - 1 || j === n - 1) { out[(j * n + i) * 2] = i / (n - 1); out[(j * n + i) * 2 + 1] = j / (n - 1); } // (au bord : l'identité)
     }
     self.postMessage({ id: current, progress: { event: spec.index ?? 0, it, res, grid: out, n } }, [out.buffer]);
   };
