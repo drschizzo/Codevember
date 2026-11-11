@@ -24,12 +24,12 @@
     <header class="hero">
       <div class="kicker">Day 15 · Mirage · l'objet qui n'est pas là</div>
       <h1>Comment deux coupes d'argent font flotter un objet qui n'y est pas</h1>
-      <p class="lede">Une toupie, une montre de poche ou une bougie chauffe-plat repose au fond d'une coupe d'argent ; une seconde coupe, percée, la recouvre. On voit l'objet posé dans l'ouverture, net, en relief — mais l'objet est au fond, et ce qu'on voit est une image réelle, faite de rayons qui se croisent dans le vide. Une crémaillère soulève le couvercle : l'image s'enfonce et s'éteint, et l'on découvre l'objet là où il était. Chaque pixel suit son rayon entre les deux miroirs.</p>
+      <p class="lede">Une toupie, une montre de poche, une bougie chauffe-plat, une boussole ou des pièces d'or reposent au fond d'une coupe d'argent ; une seconde coupe, percée, la recouvre. On voit l'objet posé dans l'ouverture, net, en relief — mais l'objet est au fond, et ce qu'on voit est une image réelle, faite de rayons qui se croisent dans le vide. Une machine — crémaillère, trois vis ou poulies — soulève le couvercle : l'image s'enfonce et s'éteint, et l'on découvre l'objet là où il était. Chaque pixel suit son rayon entre les deux miroirs.</p>
     </header>
 
     <figure class="cover">
-      <img src="docs/capture.jpg" alt="Un mirascope d'argent sur son pied de bois : dans l'ouverture du couvercle, l'image d'une montre de poche ouverte flotte, cadran bleu nuit et aiguilles dorées ; à droite, la potence à crémaillère qui tient le couvercle" width="1600" height="900">
-      <figcaption>Le couvercle fermé : la montre semble posée dans l'ouverture. Elle est 5 cm plus bas, au fond de la coupe.</figcaption>
+      <img src="docs/capture.jpg" alt="La nuit, un mirascope d'argent bleui par une fenêtre : dans l'ouverture du couvercle flotte l'image d'une petite pile de pièces d'or ; à droite, la potence de laiton à crémaillère, son pignon moleté et sa manivelle" width="1600" height="900">
+      <figcaption>Le couvercle fermé : les pièces d'or semblent posées dans l'ouverture. Elles sont 5 cm plus bas, au fond de la coupe.</figcaption>
     </figure>
 
     <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
@@ -58,7 +58,8 @@
         <span class="src">src/gen/mirascope.js · imageOf() · test/core.test.mjs</span>
         <p>Pour trouver l'image d'un point \(P\), on émet 400 à 2 000 rayons (répartis en spirale de Fibonacci sur l'hémisphère), on garde ceux qui sortent par l'ouverture après exactement deux réflexions, et l'on cherche le point le plus proche de toutes ces droites (moindres carrés) :</p>
         <div class="eq">\[ \Bigl(\sum_k \mathbf I - \mathbf d_k\mathbf d_k^{\mathsf T}\Bigr)\,\mathbf X = \sum_k \bigl(\mathbf I - \mathbf d_k\mathbf d_k^{\mathsf T}\bigr)\,\mathbf p_k \]</div>
-        <p>Un point à la hauteur \(h\) au-dessus du sommet donne une image en \(y \approx f + h\) — 54,3 mm pour \(h = 4\) mm —, nette à 0,05 mm près sur l'axe. Hors de l'axe, \((x, z) \to (-x, -z)\) : l'image est droite, mais tournée d'un demi-tour autour de l'axe. La montre flotte donc avec son heure tournée de six heures — ce qu'on observe aussi sur un vrai mirascope.</p>
+        <p>Un point à la hauteur \(h\) au-dessus du sommet donne une image en \(y \approx f + h\) — 54,3 mm pour \(h = 4\) mm —, nette à 0,05 mm près sur l'axe. Hors de l'axe, \((x, z) \to (-x, -z)\) : l'image est droite, mais tournée d'un demi-tour autour de l'axe. La montre flotte donc avec son heure tournée de six heures, et l'aiguille de la boussole, dans l'image, montre le sud — ce qu'on observe aussi sur un vrai mirascope.</p>
+        <div class="note trap"><b>Le piège : un objet trop haut</b><p>La première toupie mesurait 2 cm : dans son image, la tige était coupée net. Ce n'était pas un défaut du tracé mais de l'optique : l'image d'un point à 2 cm flotte 2 cm au-dessus de l'ouverture, et vue de 40° au-dessus de l'horizontale, la ligne de visée qui y mène, prolongée vers la cavité, manque l'ouverture — aucun rayon ne vient de là. Un vrai mirascope coupe de même ses objets trop hauts ; ses figurines sont des miniatures. Tous les objets restent sous 11,5 mm, et un test vérifie qu'un point à 11,5 mm se voit dans l'image depuis la caméra, et qu'un point à 20 mm ne se voit pas.</p></div>
         <div class="note check"><b>Vérifié</b><p>Image d'un point de l'axe en \(f + h\) (à 0,8 mm près pour \(h \le 6\) mm), au-dessus du bord de l'ouverture ; demi-tour pour des points hors de l'axe ; un rayon de l'œil visé sur l'image entre par l'ouverture et rencontre l'objet après deux réflexions dans plus de 60 % des cas (<code>test/core.test.mjs</code>).</p></div>
       </section>
 
@@ -73,8 +74,9 @@
       <section id="pixel">
         <h2><span class="n">05</span>Un lancer de rayons au pixel</h2>
         <span class="src">src/scene/raytrace.js</span>
-        <p>Les coupes, l'objet et la table sont dessinés par un seul quad plein écran (TSL). Chaque pixel part de l'œil et teste cinq surfaces analytiques : l'intérieur et l'extérieur de chaque coupe (une coque de 2,5 mm), et la table. Sur l'argent intérieur, il se réfléchit et repart (neuf rebonds au plus) ; sur l'extérieur guilloché, il lit le studio flouté selon la rugosité ; sur la table, il prend sa matière et l'ombre douce de l'appareil. Dans la sphère qui contient l'objet, il avance par <i>sphere tracing</i> dans une SDF de révolution (le profil polygonal de la toupie, du boîtier de montre, du godet de la bougie — <code>src/gen/profiles.js</code>). La flamme est une émission intégrée le long de chaque segment de rayon, au point le plus proche de son cœur.</p>
-        <p>Le mécanisme — pied tourné, potence à crémaillère, pignon et manivelle, bras à fourche qui pince le bord du couvercle — est fait d'objets ordinaires dessinés par-dessus : le quad écrit la profondeur de son premier impact, et ils s'emboîtent exactement.</p>
+        <p>Les coupes, l'objet et la table sont dessinés par un seul quad plein écran (TSL). Chaque pixel part de l'œil et teste cinq surfaces analytiques : l'intérieur et l'extérieur de chaque coupe (une coque de 2,5 mm), et la table. Sur l'argent intérieur, il se réfléchit et repart (neuf rebonds au plus) ; sur l'extérieur guilloché, il lit le studio flouté selon la rugosité ; sur la table, il prend sa matière et l'ombre douce de l'appareil. Dans la sphère qui contient l'objet, il avance par <i>sphere tracing</i> dans une SDF de révolution (profils polygonaux de la toupie, du boîtier de montre, du godet, de la boussole — <code>src/gen/profiles.js</code> —, cylindres arrondis des pièces, losange extrudé de l'aiguille, tores couchés de la bélière et de l'anneau). La flamme est une émission intégrée le long de chaque segment de rayon, au point le plus proche de son cœur.</p>
+        <p>La machinerie est faite d'objets ordinaires dessinés par-dessus : le quad écrit la profondeur de son premier impact, et ils s'emboîtent exactement. Trois mécanismes : une <b>crémaillère</b> (potence de laiton, pignon porté par le coulisseau qui roule de L/r, bras à fourche qui pince le jonc du couvercle, sur un pied de bois tourné) ; <b>trois vis</b> (tiges filetées au pas de 2 mm entraînées par une chaîne au ras d'un socle de marbre, un collier pris dans leurs écrous : quinze tours pour 3 cm) ; des <b>poulies</b> (une araignée au-dessus de l'axe, trois cordes du bord du couvercle réunies en une seule jusqu'à un treuil, sur un trépied). Elle se place derrière la coupe, de côté ; un test vérifie qu'aucune colonne, barre ou corde ne passe entre l'œil et l'image.</p>
+        <div class="note trap"><b>Le piège : des cercles d'ombre</b><p>Les coupes ne sont pas des maillages : seuls leurs joncs portaient une ombre, deux cercles sur la table. Elles portent maintenant la leur par des doublures invisibles, qui n'écrivent que dans la carte d'ombre, et un plan posé sur la table ne garde que les ombres.</p></div>
         <div class="note trap"><b>Le piège : des nœuds évalués trop tard</b><p>Un nœud TSL n'est émis qu'à sa première lecture. Les distances aux surfaces, lues d'abord dans la branche de la sphère englobante, étaient déclarées dans cette branche : hors d'elle, le rayon ne trouvait plus rien, et l'ouverture restait vide (magenta en vue de débogage, « rebonds épuisés »). Chaque distance est désormais une variable posée au début du rebond.</p></div>
         <div class="note trap"><b>Le piège : repartir du bon côté</b><p>Décalé selon la normale, un rayon réfléchi passait de l'autre côté de la coque mince et l'intérieur restait noir. Il repart d'un pas de 20 µm le long de sa nouvelle direction.</p></div>
         <div class="note trap"><b>Le piège : un miroir ne montre que son décor</b><p>Dans un studio sombre, l'argent poli paraissait noir. Chaque décor est une pièce assez claire — plafond, murs, fenêtres, tubes d'atelier — pour que l'argent se lise comme de l'argent ; la nuit garde une fenêtre bleue et une lampe.</p></div>
@@ -84,14 +86,14 @@
       <section id="pose">
         <h2><span class="n">06</span>Posés, pas flottants</h2>
         <span class="src">src/gen/profiles.js · src/scene/stage.js</span>
-        <p>Un objet à fond plat dans une coupe concave ne touche pas le fond au centre : il repose sur l'arête de son pied, à la hauteur \(r^2/4f\) du fond à ce rayon. Le godet de la bougie (r = 9,3 mm) est donc posé 0,43 mm au-dessus du sommet, le boîtier de la montre (r = 11,8 mm) à 0,70 mm ; la pointe de la toupie est au sommet. La coupelle du pied de bois épouse la coque extérieure ; le bras de la potence monte exactement avec le couvercle, et le pignon tourne de \(L/r\).</p>
-        <div class="note check"><b>Vérifié</b><p>Aucun sommet ni aucune arête de profil sous le fond, écart au contact &lt; 10 µm ; la couronne de la montre à plus de 0,2 mm du fond ; tout l'objet dans la sphère englobante du tracé.</p></div>
+        <p>Un objet à fond plat dans une coupe concave ne touche pas le fond au centre : il repose sur l'arête de son pied, à la hauteur \(r^2/4f\) du fond à ce rayon. Le godet de la bougie (r = 9,3 mm) est donc posé 0,43 mm au-dessus du sommet, le boîtier de la montre (r = 11,8 mm) à 0,70 mm, la boussole à 0,55 mm, la première pièce d'or à 0,41 mm et les suivantes à plat sur elle ; la pointe de la toupie est au sommet. Les coupelles des socles épousent la coque extérieure.</p>
+        <div class="note check"><b>Vérifié</b><p>Aucun sommet ni aucune arête de profil sous le fond, écart au contact &lt; 10 µm ; chaque pièce à plat sur la précédente, son centre au-dessus d'elle ; couronne, bélière et anneau à plus de 0,2 mm du fond ; tout l'objet dans la sphère englobante du tracé.</p></div>
       </section>
 
       <section id="boucle">
         <h2><span class="n">07</span>Une horloge, quatre temps</h2>
         <span class="src">src/timeline.js</span>
-        <p>Levée du couvercle et plongée du regard sont des marches douces, raccordées : fermé (0–0,22), levée (0,22–0,38), ouvert (0,38–0,58), retombée (0,58–0,74), fermé. La caméra ne plonge que couvercle déjà levé, et remonte quand il redescend. La toupie fait 24, 30 ou 36 tours par boucle, la trotteuse de la montre deux, la flamme vacille à des fréquences entières : tout se referme.</p>
+        <p>Levée du couvercle et plongée du regard sont des marches douces, raccordées : fermé (0–0,22), levée (0,22–0,38), ouvert (0,38–0,58), retombée (0,58–0,74), fermé. La caméra ne plonge que couvercle déjà levé, et remonte quand il redescend. La toupie fait 24, 30 ou 36 tours par boucle, la trotteuse de la montre deux, la flamme vacille à des fréquences entières ; l'aiguille de la boussole oscille après chaque à-coup du couvercle, dans une fenêtre bornée, et est exactement au repos au raccord : tout se referme.</p>
         <figure id="fig-boucle"><figcaption><b>Levée et plongée</b> sur une boucle. La démo appelle <code>liftAt</code> et <code>diveAt</code> du projet.</figcaption></figure>
       </section>
 
@@ -101,11 +103,10 @@
           <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
           <tbody>
             <tr><td>Studio HDR (équirectangulaire 1 024 × 512, mipmaps)</td><td>au chargement</td><td class="num">&lt; 0,2 s</td></tr>
-            <tr><td>Une image, couvercle fermé (neuf rebonds, objet, mécanisme, chaîne d'image)</td><td>GPU, 1920 × 1080</td><td class="num">≈ 4,6 ms</td></tr>
-            <tr><td>Une image, couvercle levé</td><td>GPU, 1920 × 1080</td><td class="num">≈ 2,2 ms</td></tr>
+            <tr><td>Une image (neuf rebonds, objet, machinerie, ombres, chaîne d'image)</td><td>GPU, 1920 × 1080</td><td class="num">≈ 2,3 à 4,8 ms</td></tr>
           </tbody>
         </table></div>
-        <p>Mesuré sur la graine m21 (montre), panneau de navigateur masqué, 20 rendus d'affilée.</p>
+        <p>Panneau de navigateur masqué, 20 rendus d'affilée : ≈ 2,3 ms (boussole, poulies), ≈ 2,6 ms (montre, crémaillère), ≈ 4,8 ms (pièces d'or, trois vis).</p>
       </section>
     </article>
 

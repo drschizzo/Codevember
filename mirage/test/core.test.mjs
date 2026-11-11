@@ -5,8 +5,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { PARAB, mirrors, hitParab, traceCavity, imageOf } from '../src/gen/mirascope.js';
-import { TOP, CASE, CANDLE, CROWN, WICK, FLAME_Y, BOUND, bowl } from '../src/gen/profiles.js';
-import { CHORE, liftAt, diveAt, cameraAt, objectAt } from '../src/timeline.js';
+import { TOP, CASE, CANDLE, CROWN, BOW, WICK, FLAME_Y, COMPASS, COMP_RING, PIVOT, NEEDLE, CARD_Y, COIN, COINS, MAX_H, BOUND, bowl } from '../src/gen/profiles.js';
+import { CHORE, JOLTS, liftAt, diveAt, cameraAt, objectAt, swingAt } from '../src/timeline.js';
+import { layout, toWorld } from '../src/gen/layout.js';
 import { generate } from '../src/recipe.js';
 
 const f = PARAB.f, R = PARAB.rimK * f, rh = PARAB.holeK * f;
@@ -83,8 +84,19 @@ test('un rayon de l’œil qui entre par l’ouverture vers le fond rencontre l�
   assert.ok(hits > 0.6 * n, `${hits} / ${n}`);
 });
 
+const sphereClear = (c, r, margin, msg) => {
+  for (let k = 0; k < 400; k++) {
+    const th = Math.acos(1 - 2 * (k + 0.5) / 400), ph = k * 2.39996323;
+    const x = c[0] + r * Math.sin(th) * Math.cos(ph), z = (c[2] ?? 0) + r * Math.sin(th) * Math.sin(ph), y = c[1] + r * Math.cos(th);
+    assert.ok(y - bowl(Math.hypot(x, z)) > margin, msg);
+  }
+};
+const torusClear = ([x0, y0, R, r], margin, msg) => {
+  for (let k = 0; k < 64; k++) { const a = (k / 64) * Math.PI * 2; sphereClear([x0 + R * Math.cos(a), y0, R * Math.sin(a)], r, margin, msg); }
+};
+
 test('les objets reposent exactement sur le fond courbe (aucun ne flotte, aucun ne le traverse)', () => {
-  for (const [name, P] of [['toupie', TOP], ['montre', CASE], ['chauffe-plat', CANDLE]]) {
+  for (const [name, P] of [['toupie', TOP], ['montre', CASE], ['chauffe-plat', CANDLE], ['boussole', COMPASS]]) {
     let gap = Infinity;
     for (const [r, y] of P) { const g = y - bowl(r); assert.ok(g > -1e-6, `${name} : sommet (${r}, ${y}) sous le fond`); gap = Math.min(gap, g); }
     // aussi le long des arêtes du profil
@@ -94,16 +106,42 @@ test('les objets reposent exactement sur le fond courbe (aucun ne flotte, aucun 
     }
     assert.ok(gap < 1e-5, `${name} : flotte de ${(gap * 1000).toFixed(2)} mm`);
   }
-  // la couronne de la montre (une sphère) ne touche pas le fond
-  for (let k = 0; k < 400; k++) {
-    const th = Math.acos(1 - 2 * (k + 0.5) / 400), ph = k * 2.39996323;
-    const x = CROWN[0] + CROWN[2] * Math.sin(th) * Math.cos(ph), z = CROWN[2] * Math.sin(th) * Math.sin(ph), y = CROWN[1] + CROWN[2] * Math.cos(th);
-    assert.ok(y - bowl(Math.hypot(x, z)) > 2e-4, 'couronne contre le fond');
+  // les pièces : la première sur l'arête de son fond, chacune à plat sur la précédente, sans toucher le fond ailleurs
+  close(COINS[0].y, bowl(COIN.r), 1e-5);
+  for (let i = 1; i < COINS.length; i++) {
+    close(COINS[i].y, COINS[i - 1].y + COIN.h, 1e-12);
+    const d = Math.hypot(COINS[i].x - COINS[i - 1].x, COINS[i].z - COINS[i - 1].z);
+    assert.ok(d < COIN.r * 0.5, 'le centre de chaque pièce au-dessus de la précédente (elle ne bascule pas)');
+    for (let k = 0; k < 64; k++) { const a = (k / 64) * Math.PI * 2, x = COINS[i].x + COIN.r * Math.cos(a), z = COINS[i].z + COIN.r * Math.sin(a); assert.ok(COINS[i].y - bowl(Math.hypot(x, z)) > 1e-4); }
   }
-  // la flamme au-dessus de la mèche, tout dans la sphère englobante du tracé
+  // couronne, bélière, anneau de la boussole : loin du fond
+  sphereClear(CROWN, CROWN[2], 2e-4, 'couronne contre le fond');
+  torusClear(BOW, 2e-4, 'bélière contre le fond');
+  torusClear(COMP_RING, 2e-4, 'anneau de la boussole contre le fond');
+  // l'aiguille au-dessus de la rose, sous le sommet du pivot ; la flamme au-dessus de la mèche
+  assert.ok(NEEDLE.y - NEEDLE.th > CARD_Y && NEEDLE.y + NEEDLE.th < PIVOT.y1);
   assert.ok(FLAME_Y > WICK.y1);
-  for (const P of [TOP, CASE, CANDLE]) for (const [r, y] of P) assert.ok(Math.hypot(r, y - BOUND.y) < BOUND.r, `(${r}, ${y}) hors de la sphère englobante`);
-  assert.ok(Math.hypot(CROWN[0] + CROWN[2], CROWN[1] - BOUND.y) < BOUND.r);
+});
+
+test('aucun objet ne dépasse 11,5 mm : son image entière passe par l’ouverture', () => {
+  for (const P of [TOP, CASE, CANDLE, COMPASS]) for (const [, y] of P) assert.ok(y <= MAX_H);
+  assert.ok(COINS.at(-1).y + COIN.h <= MAX_H && PIVOT.y1 <= MAX_H && FLAME_Y + 0.003 <= MAX_H);
+  // et tout l'objet dans la sphère englobante du tracé
+  for (const P of [TOP, CASE, CANDLE, COMPASS]) for (const [r, y] of P) assert.ok(Math.hypot(r, y - BOUND.y) < BOUND.r, `(${r}, ${y}) hors de la sphère englobante`);
+  for (const [x, y, R, r] of [BOW, COMP_RING]) assert.ok(Math.hypot(x + R + r, y - BOUND.y) < BOUND.r);
+  for (const c of COINS) assert.ok(Math.hypot(Math.hypot(c.x, c.z) + COIN.r, c.y + COIN.h - BOUND.y) < BOUND.r);
+});
+
+test('les points d’un objet sous 11,5 mm se voient dans l’image depuis la caméra (au-delà de 16 mm, non)', () => {
+  // (la coupure que l'on verrait sur un objet trop haut est celle d'un vrai mirascope)
+  const seen = (el, h) => {
+    const e = (el * Math.PI) / 180, D = 0.38, eye = [0, f + 0.006 + Math.sin(e) * D, Math.cos(e) * D], P = [0, f + h, 0];
+    const d = P.map((v, k) => v - eye[k]);
+    const plane = (o, dd, tMax) => { if (Math.abs(dd[1]) < 1e-9) return null; const t = (h - o[1]) / dd[1]; return t > 1e-7 && t < tMax && Math.hypot(o[0] + dd[0] * t, o[2] + dd[2] * t) < 0.011 ? t : null; };
+    const r = traceCavity(eye, d, f, 0, 6, plane);
+    return r.fate === 'objet' && r.bounces === 2;
+  };
+  for (const el of [40, 47]) { assert.ok(seen(el, MAX_H), `${el}°`); assert.ok(!seen(el, 0.02), `${el}° : 20 mm encore vu`); }
 });
 
 test('la boucle se referme : levée, plongée, caméra et objets identiques à u = 0 et u = 1', () => {
@@ -133,16 +171,46 @@ test('chaque temps est monotone : le couvercle monte, reste levé, redescend ; f
   for (let u = 0; u < 0.5; u += 0.002) if (diveAt(u) > 0.02) assert.ok(liftAt(u) > 0.05, `u = ${u}`);
 });
 
-test('caméra : jamais sous la table ni dans les coupes, et la potence n’est jamais devant la coupe', () => {
-  for (let i = 0; i < 100; i++) {
-    const Rr = generate(`t${i}`);
-    for (let k = 0; k <= 200; k++) {
-      const u = k / 200, c = cameraAt(Rr, u);
+test('l’aiguille de la boussole : au repos au raccord, elle oscille à chaque à-coup du couvercle et s’amortit', () => {
+  assert.equal(swingAt(0), 0); assert.equal(swingAt(0.999999), 0);
+  for (const [u0] of JOLTS) {
+    let m = 0; for (let u = u0; u < u0 + 0.05; u += 0.0005) m = Math.max(m, Math.abs(swingAt(u)));
+    let late = 0; for (let u = u0 + 0.12; u < u0 + 0.16; u += 0.0005) late = Math.max(late, Math.abs(swingAt(u)));
+    assert.ok(m > 0.08 && late < m * 0.1, `à-coup en ${u0} : ${m.toFixed(3)} puis ${late.toFixed(4)}`);
+  }
+  for (const u of [0.05, 0.15, 0.9]) assert.equal(swingAt(u), 0, `au repos en ${u}`);
+});
+
+test('caméra : jamais sous la table ni dans les coupes, et aucune pièce de la machinerie entre l’œil et l’image', () => {
+  // distance de deux segments (échantillonnée)
+  const segDist = (a, b, c, d) => {
+    let m = Infinity;
+    for (let i = 0; i <= 40; i++) for (let j = 0; j <= 40; j++) {
+      const p = a.map((v, k) => v + (b[k] - v) * i / 40), q = c.map((v, k) => v + (d[k] - v) * j / 40);
+      m = Math.min(m, Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]));
+    }
+    return m;
+  };
+  for (const kind of ['cremaillere', 'vis', 'poulies']) for (let i = 0; i < 12; i++) {
+    const Rr = generate(`t${i}`, { mechanism: kind }), Lmax = Rr.mirascope.liftMax, L0 = layout(kind, f);
+    for (let k = 0; k <= 24; k++) {
+      const u = k / 24, c = cameraAt(Rr, u), L = liftAt(u) * Lmax;
       assert.ok(Math.hypot(c.pos[0], c.pos[2]) > R + 0.1 || c.pos[1] > f + 0.1, `${Rr.seed} u = ${u}`);
       assert.ok(c.pos[1] > 0.02);
-      // potence en +x : l'azimut de l'œil (mesuré comme dans cameraAt) reste loin de 90°
-      const az = (Math.atan2(c.pos[0], c.pos[2]) * 180) / Math.PI;
-      assert.ok(Math.abs(az - 90) > 45, `${Rr.seed} : azimut ${az.toFixed(0)}°`);
+      if (L > 0.002) continue; // (couvercle levé : l'image s'est éteinte)
+      const img = [0, f + 0.006, 0];
+      for (const P of L0.posts) {
+        const a = toWorld([P.x, P.y0, P.z], Rr.mechanism.yaw), b = toWorld([P.x, P.y1, P.z], Rr.mechanism.yaw);
+        assert.ok(segDist(c.pos, img, a, b) > P.r + 0.004, `${kind} ${Rr.seed} u = ${u} : une colonne devant l’image`);
+      }
+      for (const B of L0.bars) {
+        const a = toWorld(B.a, Rr.mechanism.yaw), b = toWorld(B.b, Rr.mechanism.yaw);
+        assert.ok(segDist(c.pos, img, a, b) > B.r + 0.003, `${kind} ${Rr.seed} u = ${u} : une barre devant l’image`);
+      }
+      for (const C of L0.cords ?? []) {
+        const a = toWorld([C.x, f / 2, C.z], Rr.mechanism.yaw), b = toWorld([C.x, L0.yS, C.z], Rr.mechanism.yaw);
+        assert.ok(segDist(c.pos, img, a, b) > 0.004, `${kind} ${Rr.seed} u = ${u} : une corde devant l’image`);
+      }
     }
   }
 });

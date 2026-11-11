@@ -16,9 +16,9 @@ import * as THREE from 'three/webgpu';
 import {
   Fn, uniform, texture, vec2, vec3, vec4, float, screenUV, mix, clamp, abs, max, min, exp, sin, cos, sqrt, pow, fract, floor, dot,
   select, mrt, smoothstep, cameraProjectionMatrixInverse, cameraProjectionMatrix, cameraViewMatrix, cameraWorldMatrix, cameraPosition,
-  positionGeometry, normalize, length, reflect, equirectUV, If, Loop, Break, sign, atan, step,
+  positionGeometry, normalize, length, reflect, equirectUV, If, Loop, Break, sign, atan, step, mx_fractal_noise_float,
 } from 'three/tsl';
-import { TOP, CASE, CROWN, DIAL_Y, CANDLE, WICK, WAX_Y, TEA_R, FLAME_Y, BOUND } from '../gen/profiles.js';
+import { TOP, TOP_TIP, CASE, CROWN, BOW, DIAL_Y, CANDLE, WICK, WAX_Y, TEA_R, FLAME_Y, COMPASS, CARD_Y, PIVOT, NEEDLE, COMP_RING, COIN, COINS, BOUND } from '../gen/profiles.js';
 import { G } from './globals.js';
 
 const BIG = 1e6;
@@ -29,10 +29,10 @@ export function createRaytrace({ lite = false, kind = 0 } = {}) {
   const U = {
     f: uniform(0.05), lift: uniform(0), holeR: uniform(0.021), rimR: uniform(0.0707), shell: uniform(0.0025),
     tableY: uniform(-0.03), inner: col('#f2f0ea'), outer: col('#e8e4dc'), outerRough: uniform(0.18), engrave: uniform(1),
-    table: col('#3a2a22'), tableRough: uniform(0.7), envI: uniform(1),
+    table: col('#3a2a22'), tableRough: uniform(0.7), tableKind: uniform(0), envI: uniform(1),
     keyDir: v3(0.4, 0.8, 0.3), keyCol: v3(2, 1.9, 1.8), ambient: v3(0.25, 0.25, 0.27),
     // l'objet
-    kind: uniform(0), spin: uniform(0), tilt: uniform(0), hands: v3(0, 0, 0), flicker: uniform(0), objCol: col('#b33a2a'), objCol2: col('#e8d9b0'),
+    kind: uniform(0), spin: uniform(0), tilt: uniform(0), hands: v3(0, 0, 0), needle: uniform(0), cardRot: uniform(0), flicker: uniform(0), objCol: col('#b33a2a'), objCol2: col('#e8d9b0'),
     time: uniform(0),
     debug: uniform(0), // (1 : couleur = où s'arrête le rayon — studio rouge, objet vert, table bleu, coque jaune, épuisé magenta)
   };
@@ -79,13 +79,42 @@ export function createRaytrace({ lite = false, kind = 0 } = {}) {
   };
   const rotY = (p, a) => vec3(p.x.mul(cos(a)).sub(p.z.mul(sin(a))), p.y, p.x.mul(sin(a)).add(p.z.mul(cos(a))));
   const rotX = (p, a) => vec3(p.x, p.y.mul(cos(a)).sub(p.z.mul(sin(a))), p.y.mul(sin(a)).add(p.z.mul(cos(a))));
-  // toupie : pointe d'acier, corps tourné, tige ; montre : boîtier, cadran, aiguilles ; bougie : cire, mèche
+  const rot2 = (q, a) => vec2(q.x.mul(cos(a)).add(q.y.mul(sin(a))), q.y.mul(cos(a)).sub(q.x.mul(sin(a)))); // (repère tourné de a)
+  // anneau couché à plat (tore d'axe y) ; cylindre d'axe y aux arêtes adoucies
+  const sdRingFlat = (p, c, R, r) => length(vec2(length(p.xz.sub(vec2(c[0], 0))).sub(R), p.y.sub(c[1]))).sub(r);
+  const sdCylR = (q, r, h, e) => {
+    const dx = length(q.xz).sub(r - e), dy = abs(q.y).sub(h / 2 - e);
+    return min(max(dx, dy), 0).add(length(vec2(max(dx, 0), max(dy, 0)))).sub(e);
+  };
+  // losange 2D (iq), demi-diagonales b
+  const sdRhombus = (q, b) => {
+    const a = abs(q), bb = vec2(...b);
+    const h = clamp(bb.x.mul(bb.x.sub(a.x.mul(2))).sub(bb.y.mul(bb.y.sub(a.y.mul(2)))).div(dot(bb, bb)), -1, 1);
+    const d = length(a.sub(bb.mul(vec2(float(1).sub(h), float(1).add(h))).mul(0.5)));
+    return d.mul(sign(a.x.mul(b[1]).add(a.y.mul(b[0])).sub(b[0] * b[1])));
+  };
+  const coinSDF = (p, k) => { const c = COINS[k]; return sdCylR(p.sub(vec3(c.x, c.y + COIN.h / 2, c.z)), COIN.r, COIN.h, 0.00022); };
+
+  // les objets (un shader par famille : seul l'objet de la scène est compilé)
+  //  0 toupie : pointe d'acier, cône, bourrelet, dôme, tige et bouton
+  //  1 montre : boîtier, couronne, bélière couchée
+  //  2 chauffe-plat : godet, cire, mèche
+  //  3 boussole : boîtier, pivot, aiguille, anneau
+  //  4 pièces : pile de quatre pièces décalées
   const objSDF = (p) => {
-    const top = kind === 0 ? sdRev(rotX(p, U.tilt), TOP) : null;
-    const candle = kind === 2 ? min(sdRev(p, CANDLE), max(length(p.xz).sub(WICK.r), abs(p.y.sub((WICK.y0 + WICK.y1) / 2)).sub((WICK.y1 - WICK.y0) / 2))) : null; // (et sa mèche)
-    const watch = kind === 1 ? min(sdRev(p, CASE), length(vec3(p.x.sub(CROWN[0]), p.y.sub(CROWN[1]), p.z)).sub(CROWN[2])) : null; // (boîtier et couronne)
-    // (un shader par famille : seul l'objet de la scène est compilé)
-    return kind === 0 ? top : kind === 1 ? watch : candle;
+    if (kind === 0) return sdRev(rotX(p, U.tilt), TOP);
+    if (kind === 1) return min(min(sdRev(p, CASE), length(vec3(p.x.sub(CROWN[0]), p.y.sub(CROWN[1]), p.z)).sub(CROWN[2])), sdRingFlat(p, BOW, BOW[2], BOW[3]));
+    if (kind === 2) return min(sdRev(p, CANDLE), max(length(p.xz).sub(WICK.r), abs(p.y.sub((WICK.y0 + WICK.y1) / 2)).sub((WICK.y1 - WICK.y0) / 2)));
+    if (kind === 3) {
+      const nq = rot2(p.xz, U.needle);
+      const needle = max(sdRhombus(nq, [NEEDLE.len, NEEDLE.w / 2]), abs(p.y.sub(NEEDLE.y)).sub(NEEDLE.th));
+      const pivot = max(length(p.xz).sub(PIVOT.r), abs(p.y.sub((CARD_Y + PIVOT.y1) / 2)).sub((PIVOT.y1 - CARD_Y) / 2));
+      const knob = length(vec3(p.x.sub(0.0118), p.y.sub(COMP_RING[1]), p.z)).sub(0.0009);
+      return min(min(min(sdRev(p, COMPASS), needle), min(pivot, knob)), sdRingFlat(p, COMP_RING, COMP_RING[2], COMP_RING[3]));
+    }
+    let d = coinSDF(p, 0);
+    for (let k = 1; k < COINS.length; k++) d = min(d, coinSDF(p, k));
+    return d;
   };
 
   // couleur de l'objet au point p (repère objet), de normale n, vu depuis v
@@ -93,45 +122,104 @@ export function createRaytrace({ lite = false, kind = 0 } = {}) {
   // lumière entrée par l'ouverture et renvoyée de tous côtés par l'argent :
   // un éclairage enveloppant, plus fort par-dessus, au lieu de la lampe seule)
   const shadeObj = (p, n, v, cav) => {
-    const lamKey = max(dot(n, normalize(U.keyDir)), 0);
+    const kd = normalize(U.keyDir);
+    const lamKey = max(dot(n, kd), 0);
     const lamCav = n.y.mul(0.35).add(0.65).mul(0.75);
     const lam = mix(lamKey, lamCav, cav);
-    const spec = pow(max(dot(reflect(v, n), normalize(U.keyDir)), 0), 40);
+    const rv = reflect(v, n);
+    const spec = pow(max(dot(rv, kd), 0), 60);
+    const fres = float(0.04).add(float(0.96).mul(pow(float(1).sub(max(dot(n, v.negate()), 0)), 5)));
+    const light = U.ambient.add(U.keyCol.mul(lam));
+    // un métal : la couleur teinte le reflet du décor (flouté selon la rugosité) et de la lampe
+    const metal = (c, rough) => c.mul(env(rv, float(rough)).mul(0.85).add(light.mul(0.25))).add(c.mul(spec).mul(1.4));
+    // un vernis (laque, émail, cire) : diffus + reflet de Fresnel
+    const lacquer = (c, k = 1) => c.mul(light).add(env(rv, float(0.05)).mul(fres).mul(k)).add(spec.mul(0.5 * k));
     const out = vec3(0).toVar();
     if (kind === 0) {
-      // toupie : laque à bandes, pointe d'acier, rayures qui tournent avec elle
+      // toupie : laque à deux tons, filets d'or, spirale peinte sur le dôme qui
+      // tourne avec elle, pointe d'acier, bouton de buis
       const q = rotY(rotX(p, U.tilt), U.spin.negate());
-      const az = atan(q.z, q.x).mul(4 / Math.PI);
-      const band = step(0.5, fract(q.y.mul(380)));
-      const stripe = step(0.5, fract(az));
-      const c = mix(U.objCol, U.objCol2, band.mul(step(0.006, q.y)).mul(step(q.y, 0.0098)).mul(stripe.mul(0.5).add(0.5)));
-      const steel = vec3(0.6, 0.6, 0.62);
-      const base = select(q.y.lessThan(0.0014), steel, c);
-      out.assign(base.mul(U.ambient.add(U.keyCol.mul(lam))).add(spec.mul(0.6)));
+      const r = length(q.xz), a = atan(q.z, q.x);
+      const sw = step(0.5, fract(a.mul(3 / Math.PI).add(r.mul(260)))); // (spirale)
+      const body = mix(U.objCol, U.objCol2, sw.mul(step(0.0061, q.y)).mul(step(r, 0.0094)));
+      const bands = step(0.5, fract(q.y.mul(700))).mul(step(0.0016, q.y)).mul(step(q.y, 0.0036));
+      const c = mix(body, U.objCol2, bands);
+      const gold = step(abs(q.y.sub(0.0049)), 0.00022).add(step(abs(q.y.sub(0.0063)), 0.00018)).add(step(abs(r.sub(0.0035)), 0.0002).mul(step(0.0072, q.y)));
+      const wood = vec3(0.62, 0.45, 0.26);
+      const lac = lacquer(mix(c, select(q.y.greaterThan(0.0094), wood, c), 1));
+      const g = metal(vec3(1.0, 0.78, 0.4), 0.2);
+      const steel = metal(vec3(0.62, 0.63, 0.66), 0.12);
+      out.assign(select(q.y.lessThan(TOP_TIP), steel, mix(lac, g, min(gold, 1))));
     } else if (kind === 1) {
-      // montre ouverte : cadran émaillé, index, aiguilles d'acier bleui
+      // montre : cadran émaillé bleu nuit guilloché en soleil, chemin de fer,
+      // index et aiguilles dorés, petite seconde à 6 h, lunette moletée, bélière
       const r = length(p.xz), a = atan(p.z, p.x);
       const onDial = step(DIAL_Y - 0.0002, p.y).mul(step(r, 0.0115));
-      const tick = step(0.88, fract(a.mul(12 / (2 * Math.PI)).add(0.5))).mul(step(0.0086, r)).mul(step(r, 0.0112));
-      const hand = (ang, L, w) => {
-        const dir = vec2(cos(ang), sin(ang)), q2 = p.xz, along = dot(q2, dir), across = abs(q2.x.mul(dir.y).sub(q2.y.mul(dir.x)));
-        return step(-0.0015, along).mul(step(along, L)).mul(step(across, w));
+      const sun = sin(a.mul(180)).mul(0.5).add(0.5).mul(0.12).add(0.94);
+      const idx = step(0.9, fract(a.mul(12 / (2 * Math.PI)).add(0.45))).mul(step(0.0080, r)).mul(step(r, 0.0104));
+      const track = step(abs(r.sub(0.0108)), 0.00012).add(step(0.8, fract(a.mul(60 / (2 * Math.PI)).add(0.4))).mul(step(abs(r.sub(0.01095)), 0.00045)));
+      const hand = (ang, L, w, c) => {
+        const q2 = rot2(p.xz.sub(vec2(...c)), ang);
+        return step(-0.0012, q2.x).mul(step(q2.x, L)).mul(step(abs(q2.y), mix(float(w), float(w * 0.25), clamp(q2.x.div(L), 0, 1))));
       };
-      const hands = max(max(hand(U.hands.x, 0.0064, 0.0007), hand(U.hands.y, 0.0095, 0.00045)), hand(U.hands.z, 0.0104, 0.0002));
-      const dial = mix(vec3(0.035, 0.05, 0.12), vec3(1.0, 0.82, 0.5), max(tick, hands)); // (émail bleu nuit, index et aiguilles dorés)
-      const gold = vec3(0.95, 0.78, 0.45);
-      const base = mix(gold, dial, onDial);
-      out.assign(base.mul(U.ambient.add(U.keyCol.mul(lam))).add(gold.mul(spec).mul(float(1).sub(onDial.mul(0.7)))));
-    } else {
-      // bougie chauffe-plat : godet d'aluminium embouti, cire, mèche ; la
-      // cire s'éclaire de sa flamme
-      const r = length(p.xz);
-      const alu = vec3(0.62, 0.63, 0.65).mul(U.ambient.add(U.keyCol.mul(lam))).add(spec.mul(0.9));
-      const fl = vec3(1.0, 0.6, 0.25).mul(smoothstep(0.012, 0.0, length(p.sub(vec3(0, FLAME_Y, 0)))).mul(0.8));
-      const wax = U.objCol.mul(U.ambient.mul(0.5).add(U.keyCol.mul(lam).mul(0.35)).add(fl));
+      const sub = vec2(-0.0056, 0), sr = length(p.xz.sub(sub));
+      const subRing = step(abs(sr.sub(0.0024)), 0.0001).add(step(0.85, fract(atan(p.z.sub(sub.y), p.x.sub(sub.x)).mul(12 / (2 * Math.PI)))).mul(step(abs(sr.sub(0.0021)), 0.0003)));
+      const hands = max(max(hand(U.hands.x, 0.0062, 0.0008, [0, 0]), hand(U.hands.y, 0.0094, 0.0006, [0, 0])), hand(U.hands.z, 0.0020, 0.00018, [-0.0056, 0]));
+      const marks = min(idx.add(track).add(subRing).add(hands).add(step(r, 0.0006)), 1);
+      const enamel = vec3(0.03, 0.045, 0.11).mul(sun).mul(select(sr.lessThan(0.0024), float(0.8), float(1)));
+      const dial = mix(lacquer(enamel, 0.7), metal(vec3(1.0, 0.84, 0.52), 0.15), marks);
+      const knurl = step(0.5, fract(a.mul(90 / Math.PI))).mul(step(0.0118, r)).mul(step(DIAL_Y - 0.0008, p.y));
+      const gold = metal(vec3(0.95, 0.76, 0.42).mul(float(1).sub(knurl.mul(0.25))), 0.12);
+      out.assign(mix(gold, dial, onDial));
+    } else if (kind === 2) {
+      // chauffe-plat : godet d'aluminium embouti (cannelures), cire colorée qui
+      // s'éclaire de sa flamme, mèche noircie
+      const r = length(p.xz), a = atan(p.z, p.x);
+      const flute = sin(a.mul(48)).mul(0.5).add(0.5);
+      const alu = metal(vec3(0.78, 0.79, 0.82).mul(flute.mul(0.18).add(0.82)), 0.18);
+      const fl = vec3(1.0, 0.6, 0.25).mul(smoothstep(0.012, 0.0, length(p.sub(vec3(0, FLAME_Y, 0)))).mul(0.9));
+      const wax = U.objCol.mul(U.ambient.mul(0.5).add(U.keyCol.mul(lam).mul(0.35)).add(fl)).add(env(rv, float(0.15)).mul(fres).mul(0.5));
       const isWick = step(p.y, WICK.y1 + 0.0001).mul(step(WICK.y0 + 0.0001, p.y)).mul(step(r, WICK.r * 1.6));
       const isAlu = step(TEA_R - 0.0002, r).max(step(p.y, WAX_Y - 0.0002));
-      out.assign(mix(mix(wax, alu, isAlu), vec3(0.02), isWick));
+      out.assign(mix(mix(wax, alu, isAlu), vec3(0.02).add(fl.mul(0.2)), isWick));
+    } else if (kind === 3) {
+      // boussole : rose des vents à huit pointes sur carton ivoire, couronne de
+      // degrés, aiguille rouge (nord) et acier bleui (sud), boîtier de laiton
+      const r = length(p.xz), a = atan(p.z, p.x).sub(U.cardRot);
+      const onCard = step(p.y, CARD_Y + 0.0002).mul(step(r, 0.0099));
+      const sector = fract(a.mul(4 / Math.PI)), k = abs(sector.sub(0.5)).mul(2); // (0 au milieu d'un secteur, 1 sur une pointe)
+      const main = step(fract(floor(a.mul(4 / Math.PI).add(0.5)).mul(0.5)), 0.25); // (pointes cardinales : la pointe la plus proche est d'indice pair)
+      const rStar = mix(float(0.0022), select(main.greaterThan(0.5), float(0.0086), float(0.0060)), pow(k, 3));
+      const star = step(r, rStar), half = step(0.5, sector);
+      const ring = step(abs(r.sub(0.0093)), 0.0001).add(step(0.75, fract(a.mul(36 / Math.PI))).mul(step(abs(r.sub(0.0096)), 0.0003)));
+      const north = step(abs(a), 0.06).mul(step(0.0086, r)).mul(step(r, 0.0098));
+      const ink = vec3(0.12, 0.1, 0.09), red = vec3(0.62, 0.08, 0.06);
+      const card = mix(mix(U.objCol2, mix(ink, U.objCol2.mul(0.55), half), star), ink, min(ring, 1));
+      const cardC = lacquer(mix(card, red, north), 0.4);
+      const nq = rot2(p.xz, U.needle);
+      const onNeedle = step(abs(p.y.sub(NEEDLE.y)), NEEDLE.th + 0.00008).mul(step(PIVOT.r * 1.05, length(p.xz)));
+      const needle = select(nq.x.greaterThan(0), lacquer(U.objCol, 0.8), metal(vec3(0.22, 0.28, 0.5), 0.1));
+      const brass = metal(vec3(0.95, 0.75, 0.42), 0.16);
+      out.assign(mix(mix(brass, cardC, onCard.mul(step(PIVOT.r * 1.1, r))), needle, onNeedle));
+    } else {
+      // pièces d'or : grènetis au bord, filet, couronne de perles (la légende),
+      // soleil rayonnant au centre ; tranche cannelée
+      const c3 = vec3(0).toVar(), best = float(1).toVar(), rot = float(0).toVar();
+      for (let k = 0; k < COINS.length; k++) {
+        const d = abs(coinSDF(p, k));
+        If(d.lessThan(best), () => { best.assign(d); c3.assign(vec3(COINS[k].x, 0, COINS[k].z)); rot.assign(COINS[k].rot); });
+      }
+      const q = rot2(p.xz.sub(c3.xz), rot), r = length(q), a = atan(q.y, q.x);
+      const face = step(0.7, abs(n.y));
+      const dent = step(0.5, fract(a.mul(70 / Math.PI))).mul(step(0.0080, r));
+      const fil = step(abs(r.sub(0.0077)), 0.00012);
+      const pearls = step(length(vec2(r.sub(0.0068), fract(a.mul(18 / Math.PI)).sub(0.5).mul(r).mul(Math.PI / 9))), 0.00028);
+      const rays = step(0.55, fract(a.mul(8 / Math.PI))).mul(step(0.0018, r)).mul(step(r, mix(float(0.0058), float(0.0040), step(0.5, fract(a.mul(4 / Math.PI))))));
+      const boss = step(r, 0.0018);
+      const relief = face.mul(min(dent.add(fil).add(pearls).add(rays).add(boss), 1));
+      const edge = float(1).sub(face).mul(step(0.5, fract(a.mul(110 / Math.PI))));
+      const base = U.objCol.mul(float(1).sub(edge.mul(0.3)));
+      out.assign(mix(metal(base.mul(0.82), 0.3), metal(base, 0.06), relief));
     }
     return out;
   };
@@ -214,12 +302,45 @@ export function createRaytrace({ lite = false, kind = 0 } = {}) {
       If(tTab.lessThanEqual(tN), () => {
         // table : matière de l'humeur, ombre douce du mirascope, reflet du studio
         const r = length(p.xz);
-        const sh = smoothstep(U.rimR.mul(0.6), U.rimR.mul(1.6), length(p.xz.sub(normalize(U.keyDir).xz.mul(U.rimR.mul(-0.25)))));
+        const sh = float(1); // (l'ombre portée vient de la carte d'ombre, sur le plan posé sur la table)
         const occ = smoothstep(U.rimR.mul(0.3), U.rimR.mul(1.25), r).mul(0.7).add(0.3);
         const lam = max(normalize(U.keyDir).y, 0);
-        const grain = hash(floor(p.xz.mul(4000))).mul(0.06).add(0.97);
-        const c = U.table.mul(grain).mul(U.ambient.mul(occ).add(U.keyCol.mul(lam).mul(sh).mul(0.6)));
-        out.addAssign(thr.mul(c.add(env(reflect(d, vec3(0, 1, 0)), U.tableRough).mul(0.04))));
+        // la matière : 0 noyer en lames, 1 chêne d'établi, 2 marbre veiné, 3 feutre
+        const tk = U.tableKind;
+        // bois : lames de 8,5 cm, aboutées en quinconce ; chaque lame a sa teinte
+        // et son morceau de grume — cernes de croissance coupés en biais (dessin
+        // en flammes qui dérive le long de la lame), bois d'été plus sombre,
+        // fibres et pores fins dans le fil, joints creux
+        const BW = 0.085, BL = 0.62;
+        const row = floor(p.z.div(BW)), v = p.z.sub(row.mul(BW));
+        const xs = p.x.add(hash(vec2(row, 3.7)).mul(BL));
+        const board = floor(xs.div(BL)), uu = xs.sub(board.mul(BL));
+        const sB = hash(vec2(row, board)), sB2 = hash(vec2(board.add(11.3), row));
+        const drift = mx_fractal_noise_float(vec3(uu.mul(2.2), sB.mul(17), 0.3), 3, 2, 0.5).mul(0.03);
+        const wob = mx_fractal_noise_float(vec3(uu.mul(9), v.mul(40), sB2.mul(9)), 2, 2, 0.5).mul(0.0025);
+        const rr = length(vec2(v.sub(BW * 0.5).sub(sB.sub(0.5).mul(BW * 1.4)).add(drift), sB2.mul(0.05).add(0.012))).add(wob);
+        const phase = fract(rr.mul(sB.mul(260).add(480)));
+        const late = smoothstep(0.7, 0.92, phase).mul(float(1).sub(smoothstep(0.96, 1.0, phase)));
+        const fiber = mx_fractal_noise_float(vec3(uu.mul(40), v.mul(1800), sB.mul(31)), 4, 2, 0.6).mul(0.26);
+        const pores = smoothstep(0.55, 0.85, mx_fractal_noise_float(vec3(uu.mul(240), v.mul(5200), sB2.mul(13)), 1, 2, 0.5)).mul(late.mul(0.5).add(0.2)).mul(0.25);
+        const seam = float(1).sub(smoothstep(0.0, 0.0007, min(v, float(BW).sub(v)))).add(float(1).sub(smoothstep(0.0, 0.0006, min(uu, float(BL).sub(uu))))).min(1);
+        const tint = vec3(1, 0.97, 0.93).mul(sB.mul(0.32).add(0.84)).add(vec3(0.05, 0.0, -0.04).mul(sB2.sub(0.5)));
+        const figure = mx_fractal_noise_float(vec3(uu.mul(6), v.mul(90), sB2.mul(5)), 3, 2, 0.5).mul(0.1); // (nuages du fil)
+        const woodC = tint.mul(mix(float(1.08), float(0.8), late).add(fiber).add(figure).sub(pores)).mul(float(1).sub(seam.mul(0.5)));
+        const wood = woodC;
+        const grainW = fiber.mul(6);
+        const scratch = smoothstep(0.985, 1.0, sin(p.x.mul(900).add(p.z.mul(310)).add(grainW.mul(40))).mul(0.5).add(0.5)).mul(0.25);
+        // marbre : veines fines sur un fond nuageux, le long d'un domaine déformé
+        const wq = p.xz.mul(9).add(vec2(mx_fractal_noise_float(vec3(p.xz.mul(5), 1.7), 4, 2, 0.5), mx_fractal_noise_float(vec3(p.xz.mul(5), 4.2), 4, 2, 0.5)).mul(1.1));
+        const mn = mx_fractal_noise_float(vec3(wq, 3.1), 5, 2, 0.5);
+        const cloud = mx_fractal_noise_float(vec3(p.xz.mul(22), 0.7), 4, 2, 0.55);
+        const marble = float(1).sub(smoothstep(0.03, 0.0, abs(mn)).mul(0.28)).sub(smoothstep(0.16, 0.0, abs(mn)).mul(0.08)).add(cloud.mul(0.05));
+        const felt = hash(floor(p.xz.mul(9000))).mul(0.12).add(0.94).mul(mx_fractal_noise_float(vec3(p.xz.mul(160), 1.3), 2, 2, 0.5).mul(0.1).add(1));
+        const tex = select(tk.lessThan(1.5), wood.add(scratch.mul(tk)), vec3(select(tk.lessThan(2.5), marble, felt)));
+        const c = U.table.mul(tex).mul(U.ambient.mul(occ).add(U.keyCol.mul(lam).mul(sh).mul(0.6)));
+        const fresT = float(0.04).add(float(0.96).mul(pow(float(1).sub(max(d.y.negate(), 0)), 5)));
+        const gloss = select(tk.lessThan(2.5), select(tk.greaterThan(1.5), float(0.6), float(0.3).mul(float(1).sub(seam)).mul(late.mul(0.4).add(0.8))), float(0.0));
+        out.addAssign(thr.mul(c.add(env(reflect(d, vec3(0, 1, 0)), U.tableRough).mul(fresT).mul(gloss.mul(occ)))));
         dbg.assign(vec3(0, 0, 1).mul(float(i).add(1).div(4)));
         done.assign(1); Break();
       });

@@ -2,7 +2,7 @@
 // réglages de rendu et des fonctions de rappel : il ne touche pas à la scène.
 import GUI from 'lil-gui';
 import { QUALITY } from './settings.js';
-import { FAMILIES, MOODS, FINISHES } from '../recipe.js';
+import { FAMILIES, MECHANISMS, MOODS, FINISHES } from '../recipe.js';
 
 const opts = (o, label = (v) => v.label) => Object.fromEntries(Object.entries(o).map(([k, v]) => [label(v), k]));
 
@@ -43,6 +43,7 @@ export function createUI({ recipe: getRecipe, render, on }) {
     const ch = () => on.recipeChanged(), re = () => on.airChanged();
     add(fScene, R, 'family', opts(FAMILIES)).name('Objet au fond (nouvelle scène)').onChange((v) => on.familyChanged(v));
     add(fScene, R, 'mood', opts(MOODS)).name('Décor (nouvelle scène)').onChange((m) => on.moodChanged(m));
+    add(fScene, R.mechanism, 'kind', Object.fromEntries(Object.entries(MECHANISMS).map(([k, v]) => [v, k]))).name('Machinerie (nouvelle scène)').onChange((m) => on.mechanismChanged(m));
     add(fScene, R.loop, 'duration', 12, 120, 1).name('Durée de la boucle (s)').onChange(ch);
     add(fMir, R.mirascope, 'finish', opts(FINISHES)).name('Finition des coupes').onChange(re);
     add(fMir, R.mirascope, 'liftMax', 0, 0.06, 0.001).name('Levée du couvercle (m)').onChange(ch);
