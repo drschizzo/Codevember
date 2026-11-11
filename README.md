@@ -2,6 +2,14 @@
 
 Expériences de creative coding, publiées sur [drschizzo.github.io/Codevember](https://drschizzo.github.io/Codevember/).
 
+## [Rust](rust/)
+
+La remise à nu. Une pièce de métal construite comme une vraie — un nœud de treillis riveté, une vanne sur sa tuyauterie, une roue motrice de locomotive, une porte étanche de navire, avec ses centaines de rivets et ses boulons à six pans — rouille sous les averses d’une saison en accéléré : la rouille naît au pied des rivets et dans les angles, là où l’eau reste, s’étend de proche en proche sur les plats, coule en traînées, s’épaissit en croûte qui cloque et s’écaille. Puis une machine se met en place et la décape en temps réel : un portique laser qui balaie la pièce rangée après rangée dans une gerbe d’étincelles, une sableuse dont le cône de grenaille descend en hélice sur la pièce qui tourne, ou un palan qui la plonge dans une fosse d’électrolyse et la ressort ruisselante ; et la rouille revient. Corrosion atmosphérique calculée sur la géométrie (temps d’humectation, concavité, ciel visible, stagnation, front géodésique, ruissellement), loi de dose et stratification de la rouille dans le shader, instant de décapage en forme fermée pour chaque machine, six décors, boucle parfaite exportable en MP4.
+
+[Démo en ligne](https://drschizzo.github.io/Codevember/rust/) · [version légère](https://drschizzo.github.io/Codevember/rust/?mobile=1) · [documentation](rust/README.md) · [concept](rust/docs/concept.md)
+
+[![Rust](rust/docs/capture.jpg)](https://drschizzo.github.io/Codevember/rust/)
+
 ## [Caustic](caustic/)
 
 Le foyer des ondes. Une cuve d’eau vue de côté, à travers sa vitre, éclairée par le soleil ou une lampe à arc : sur le pourtour, des plongeurs poussent des ondes qu’on voit au fond comme des anneaux de lumière qui accourent vers le centre ; à l’instant où elles se rejoignent, la surface prend exactement la forme d’une lentille et la caustique se résout en un dessin — une diatomée, un oursin, une méduse, une rosace, un capitule, un radiolaire — pendant une seconde de caméra rapide, puis se défait en anneaux qui repartent. Lentilles calculées par transport optimal (équation de Monge-Ampère, méthode de Benamou-Froese-Oberman) et loi de Snell, ondes de capillarité-gravité exactes propagées par FFT sur le GPU (la convergence est la dispersion lue à l’envers : un miroir à retournement temporel), caustique par déformation de maillage en trois longueurs d’onde, rideaux de lumière dans l’eau, trois familles (le foyer qui dessine, le cristal de Faraday sous stroboscope, l’allée de tourbillons de Kármán), sept décors, boucle parfaite exportable en MP4.
