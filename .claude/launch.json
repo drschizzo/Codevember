@@ -222,6 +222,16 @@
         "labyrinth"
       ],
       "port": 8140
+    },
+    {
+      "name": "tension",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        ".claude/serve.py",
+        "8150",
+        "tension"
+      ],
+      "port": 8150
     }
   ]
 }
