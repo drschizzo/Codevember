@@ -1,0 +1,89 @@
+<!doctype html>
+<!-- Page « défis techniques » de {{TITLE}} : à réécrire entièrement d'après le
+     projet (voir references/documentation.md et le modèle tangle/explainer.html).
+     Ce gabarit ne garde que la structure : en-tête, sommaire, une section avec
+     une démo d'exemple, budget, pied. -->
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#050506">
+  <title>{{TITLE}} · défis techniques</title>
+  <meta name="description" content="Comment {{TITLE}} est calculé : (une phrase qui nomme les défis).">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+  <link rel="stylesheet" href="../home/explainer.css">
+</head>
+<body>
+  <nav class="top"><div class="in">
+    <a href="../">Codevember</a><span class="day">Day NN</span><span class="crumb">{{TITLE}} · défis techniques</span>
+    <span class="sp"></span><a class="open" href="./">Ouvrir la scène</a>
+  </div></nav>
+
+  <main>
+    <header class="hero">
+      <div class="kicker">Day NN · {{TITLE}} · {{SUBTITLE}}</div>
+      <h1>Comment … (le geste du projet, en une phrase)</h1>
+      <p class="lede">Trois ou quatre phrases : ce qu'on voit, ce qui est calculé, ce qui rend le problème difficile.</p>
+    </header>
+
+    <figure class="cover">
+      <img src="docs/capture.jpg" alt="…" width="1600" height="900">
+      <figcaption>Ce que montre la capture, et ce qu'il faut y regarder.</figcaption>
+    </figure>
+
+    <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
+
+    <article>
+      <section id="defi-1">
+        <h2><span class="n">01</span>Un titre qui affirme la solution</h2>
+        <span class="src">src/gen/….js · fonction()</span>
+        <p>Le problème concret. Pourquoi l'approche naïve échoue. La solution retenue, avec ses constantes réelles et, si elle éclaire, sa formule :</p>
+        <div class="eq">\[ x(t) = \ldots \]</div>
+        <div class="note trap"><b>Le piège</b><p>Ce qui a cassé pendant la mise au point, et comment on l'a vu.</p></div>
+        <figure id="fig-exemple"><figcaption><b>Ce que montre la démo.</b> Ce qu'elle simplifie par rapport au projet.</figcaption></figure>
+      </section>
+
+      <section id="budget">
+        <h2><span class="n">0N</span>Budget</h2>
+        <div class="tbl"><table>
+          <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
+          <tbody>
+            <tr><td>(mesures du README : calcul au chargement, ms par image, shaders, mémoire)</td><td>worker</td><td class="num">…</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+    </article>
+
+    <footer class="end">
+      <a href="./">Ouvrir {{TITLE}}</a>
+      <a href="https://github.com/drschizzo/Codevember/blob/main/{{NAME}}/README.md">README</a>
+      <a href="https://github.com/drschizzo/Codevember/blob/main/{{NAME}}/docs/concept.md">La démarche</a>
+      <span class="sp"></span>
+      <a href="../">Tous les jours</a>
+    </footer>
+  </main>
+
+  <script type="module">
+    import { demo, C, TAU, lerp, label } from '../home/explainer.js';
+    // Importer les modules purs du projet plutôt que les recopier :
+    // import { … } from './src/gen/….js';
+
+    demo('#fig-exemple', {
+      title: 'Exemple', aspect: 2.2,
+      controls: [{ key: 'a', label: 'Amplitude', min: 0, max: 1, step: .01, value: .5 }],
+      draw(g, d) {
+        g.strokeStyle = C.c1; g.lineWidth = 2; g.beginPath();
+        for (let i = 0; i <= 200; i++) { const x = lerp(16, d.w - 16, i / 200), y = d.h / 2 - Math.sin(i / 200 * TAU * 2) * d.s.a * d.h * .4; i ? g.lineTo(x, y) : g.moveTo(x, y); }
+        g.stroke();
+        label(g, 'à remplacer', 16, 20);
+        d.status(`a = ${d.s.a.toFixed(2)}`);
+      },
+    });
+  </script>
+</body>
+</html>

@@ -8,7 +8,7 @@
 //    studio HDR, volume de bruit, pool de workers, maillage, finitions et
 //    matériaux), avec les quelques retouches qui les découplent de leur projet.
 // 2. Ajoute le gabarit de la skill (main.js, panneau, recette, plateau,
-//    worker, tests, README), où {{NAME}}, {{TITLE}}, {{SUBTITLE}} sont remplacés.
+//    worker, tests, README, page « défis techniques » explainer.html), où {{NAME}}, {{TITLE}}, {{SUBTITLE}} sont remplacés.
 // 3. Inscrit le serveur de développement dans .claude/launch.json.
 //
 // Le résultat tourne tout de suite : une pièce de démonstration sur un plateau,
