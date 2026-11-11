@@ -13,7 +13,9 @@ import { cameraPath } from '../camera.js';
 const SHADOW = { mobile: 1024, low: 1024, medium: 2048, high: 2048, ultra: 4096 };
 const TARGET = [0, 2.0, 0]; // (le milieu de la corde, à peu près)
 
-export function createStage(scene, gen, { lite = false } = {}) {
+// opts.onSimPart(part) : états de la corde en cours de calcul ; opts.onSim(sim, warp) : la simulation est prête
+export function createStage(scene, gen, opts = {}) {
+  const lite = !!opts.lite;
   // ── Lumières (ordre fixe) ──
   const spot = new THREE.SpotLight(0xffffff, 0, 0, 0.5, 0.7, 2);
   const sun = new THREE.DirectionalLight(0xffffff, 0);
@@ -41,7 +43,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
   scene.add(cordRoot);
   const cord = createCord(cordRoot);
 
-  let R = null, sim = null, plan = null, warp = null, cam = null, pending = 0, total = 2, version = 0;
+  let R = null, sim = null, plan = null, warp = null, cam = null, pending = 0, total = 2, version = 0, simFrac = 0, benchDone = false;
 
   function setRecipe(recipe) {
     R = recipe;
@@ -50,9 +52,13 @@ export function createStage(scene, gen, { lite = false } = {}) {
     const sunKey = R.light.key.kind === 'sun';
     spot.visible = !sunKey; sun.visible = sunKey;
     decor.setRecipe(R, null, [sunKey ? sun : spot, place]);
-    bench.setRecipe(R, gen).then(() => { if (v === version) pending--; }, (e) => { console.error(e); });
-    gen.request({ family: R.family, cycles: R.cycles, sim: R.sim }, 'sim').then((s) => {
+    simFrac = 0; benchDone = false;
+    bench.setRecipe(R, gen).then(() => { if (v === version) { pending--; benchDone = true; } }, (e) => { console.error(e); });
+    // (en route : l'avancement réel du calcul et quelques états de la corde, pour l'écran de chargement)
+    const onPart = (part) => { if (v !== version) return; simFrac = Math.min(1, part.taus[part.taus.length - 1] / part.P); opts.onSimPart?.(part); };
+    gen.request({ family: R.family, cycles: R.cycles, sim: R.sim }, 'sim', onPart).then((s) => {
       if (v !== version) return;
+      simFrac = 1;
       sim = s;
       plan = makePlan(R);
       warp = makeWarp(sim.P, sim.bumps);
@@ -60,6 +66,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
       cord.setSim(sim, R, CORDS);
       cam = cameraPath(sim, R, { S: SCALE, Y0 });
       pending--;
+      opts.onSim?.(sim, warp);
     }, (e) => { console.error(e); });
   }
   function relook() { if (sim) cord.setLook(R, CORDS); }
@@ -103,7 +110,8 @@ export function createStage(scene, gen, { lite = false } = {}) {
     group: bench.root, bench, cord, decor, spot, sun, place, rims,
     get sim() { return sim; }, get plan() { return plan; }, get warp() { return warp; }, get cam() { return cam; },
     ready: () => pending === 0,
-    progress: () => (total ? 1 - pending / total : 1),
+    // (la simulation est l'essentiel de l'attente : son avancement réel, puis le banc)
+    progress: () => (pending ? 0.92 * simFrac + (benchDone ? 0.08 : 0) : 1),
     resetHistory: () => cord.resetHistory(),
   };
 }

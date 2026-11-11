@@ -6,10 +6,33 @@ import { buildNoiseVolume } from './noisevol.js';
 import { simulate } from './sim.js';
 import { buildBench } from './bench.js';
 
-function build({ spec, what }) {
+// live : la simulation envoie en route, par lots, quelques états de la corde
+// ({ id, part: { taus, rows, stride, P } }) ; l'écran de chargement les dessine
+function simLive(spec, id) {
+  let taus = [], rows = [], stride = 0, P = 0, last = performance.now();
+  const flush = () => {
+    if (!taus.length) return;
+    const t = Float32Array.from(taus), r = new Float32Array(rows.length * stride);
+    rows.forEach((x, i) => r.set(x, i * stride));
+    self.postMessage({ id, part: { taus: t, rows: r, stride, P } }, [t.buffer, r.buffer]);
+    taus = []; rows = []; last = performance.now();
+  };
+  const out = simulate(spec, {
+    hz: spec.hz ?? 3000,
+    onSnap: (row, tau, p) => {
+      stride = row.length; P = p;
+      taus.push(tau); rows.push(row.slice());
+      if (performance.now() - last > 50) flush();
+    },
+  });
+  flush();
+  return out;
+}
+
+function build({ spec, what, live, id }) {
   switch (what) {
     case 'noise': return buildNoiseVolume(spec.seed);
-    case 'sim': return simulate(spec, { hz: spec.hz ?? 3000 });
+    case 'sim': return live ? simLive(spec, id) : simulate(spec, { hz: spec.hz ?? 3000 });
     case 'bench': return buildBench(spec);
     default: throw new Error(`inconnu : ${what}`);
   }

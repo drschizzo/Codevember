@@ -85,6 +85,7 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
   const group = new THREE.Group();
   scene.add(group);
   let R = null, cache = null, refRadius = 0, generation = 0, pendingCount = 0, totalCount = 1, readyFlag = false;
+  let arrived = []; // (géométries arrivées : l'ossature, puis panneaux et objet de chaque cellule)
 
   // pièce : un maillage, ses uniformes 4D, son matériau
   const pieces = [];
@@ -206,7 +207,8 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
     const jobs = [gen.request(frameSpec(), 'frame')];
     for (let c = 0; c < 8; c++) { jobs.push(gen.request({ cell: cellSpec(c), frame: frameSpec() }, 'panels')); jobs.push(gen.request(contentSpec(c), 'content')); }
     totalCount = jobs.length; pendingCount = jobs.length;
-    jobs.forEach((j) => j.then(() => { if (gen0 === generation) pendingCount--; }, () => {}));
+    arrived = new Array(jobs.length).fill(false);
+    jobs.forEach((j, i) => j.then(() => { if (gen0 === generation) { pendingCount--; arrived[i] = true; } }, () => {}));
     Promise.all(jobs).then(([frame, ...rest]) => {
       if (gen0 !== generation) return;
       const frameGeo = toGeometry(frame);
@@ -514,6 +516,8 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
     group, guides, practicals, reveals, setRecipe, refresh, syncGeometry, syncMaterial, update, setViewer, pieces,
     ready: () => readyFlag,
     progress: () => (totalCount ? 1 - pendingCount / totalCount : 1),
+    // avancement de chaque cellule (0, ½, 1 : panneaux, objet) et de l'ossature (écran de chargement)
+    cellsProgress: () => ({ frame: arrived[0] ? 1 : 0, cells: [...Array(8).keys()].map((c) => ((arrived[1 + 2 * c] ? 1 : 0) + (arrived[2 + 2 * c] ? 1 : 0)) / 2) }),
     // (après un saut dans la boucle : pas de vecteurs vitesse)
     resetMotion: () => { for (const P of pieces) P.prev = null; },
     invalidateFraming: () => { refRadius = 0; },

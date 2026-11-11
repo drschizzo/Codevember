@@ -2,7 +2,8 @@
 //
 // Paramètres d'URL : ?seed=… (la scène), #r=… (une scène retouchée, partagée
 // par « Copier le lien »), ?ui=0 (sans panneau), ?export (panneau d'export ouvert),
-// ?mobile=1 / ?mobile=0 (version allégée imposée / interdite ; voir app/mobile.js).
+// ?mobile=1 / ?mobile=0 (version allégée imposée / interdite ; voir app/mobile.js),
+// ?debug (outils dans window.hollow, dont run() : la boucle à la main).
 import * as THREE from 'three/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { generate, geometryFor, finishesFor, makeLayer, randomType, upgrade, beatsFor } from './recipe.js';
@@ -21,6 +22,8 @@ import { loadRender, saveRender, applyQuality, defaultsFor } from './app/setting
 import { wantsMobile, switchMobile, createGovernor, createPacer, bindTouch } from './app/mobile.js';
 import { exportLoop, exportPNG } from './app/capture.js';
 import { createSound } from './app/sound.js';
+import { loader } from './app/loader.js';
+import { asyncPipelines, warmScene } from './app/warmup.js';
 
 const DEFAULT_SEED = 'ce0gkq'; // scène d'ouverture (sans ?seed=)
 const D = 4; // distance caméra–centre (toutes les longueurs de la scène en dépendent)
@@ -62,9 +65,10 @@ function beatShift(t, N, cam) {
   return { tau, open };
 }
 
+// un échec : dit à l'écran, avec de quoi repartir (une fois l'interface prête)
+let retry = null;
 function fail(msg) {
-  $('#loader').classList.add('error');
-  $('#loader p').textContent = msg;
+  loader.error(msg, retry ? [{ label: 'Autre graine', run: () => retry.random() }, { label: 'Réessayer', run: () => retry.again() }] : []);
 }
 
 let toastTimer = 0;
@@ -77,10 +81,11 @@ function toast(msg, ms = 2200) {
 }
 
 async function main() {
+  const errors = [];
   if (params.has('debug')) {
     const orig = console.error;
-    window.hollowErrors = [];
-    console.error = (...a) => { orig(...a); if (window.hollowErrors.push(String(a[0]).slice(0, 300)) <= 3) console.log('[pile]', new Error().stack); };
+    window.hollowErrors = errors;
+    console.error = (...a) => { orig(...a); if (errors.push(String(a[0]).slice(0, 300)) <= 3) console.log('[pile]', new Error().stack); };
   }
   // ── Version mobile (fixée au chargement) ──
   const LITE = wantsMobile(params);
@@ -96,6 +101,9 @@ async function main() {
   renderer.toneMappingExposure = 1;
   const canvas = renderer.domElement;
   $('#app').appendChild(canvas);
+  // Chargement sans gel : pipelines asynchrones pendant le chargement, et
+  // préparation découpée en petits lots (app/warmup.js).
+  const pipes = asyncPipelines(renderer);
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color();
@@ -108,6 +116,19 @@ async function main() {
   controls.minDistance = 0.3;
   controls.maxDistance = 20;
   const camState = { free: false };
+
+  // ── Recette ── (connue avant les modules : l'écran de chargement en dessine les couches)
+  let R;
+  if (location.hash.startsWith('#r=')) {
+    try { R = upgrade(await unpackRecipe(location.hash.slice(3))); } catch { R = null; }
+  }
+  R ??= generate(params.get('seed') || DEFAULT_SEED);
+  // l'écran de chargement : les coquilles de la recette, tracées à mesure qu'elles sont générées (app/loaderArt.js)
+  const showNest = () => loader.art({
+    seed: R.seed, ratio: R.nest.ratio, core: R.nest.core, coreColor: R.core.color, beats: R.camera.beats, ramp: R.camera.ramp,
+    layers: R.layers.map((L) => ({ type: L.type, geo: L.geo, color: L.finish.outer.color, spin: L.motion.spin, phase: L.motion.phase })),
+  });
+  showNest();
 
   // ── Modules ──
   // (mobile : moins de workers, la génération ne doit pas étouffer le rendu)
@@ -122,12 +143,6 @@ async function main() {
   const governor = createGovernor({ target: 1 / 45, min: 0.5, max: 1, onChange: () => !busy && resize() });
   const pace = createPacer(() => RENDER.maxFps);
 
-  // ── Recette ──
-  let R;
-  if (location.hash.startsWith('#r=')) {
-    try { R = upgrade(await unpackRecipe(location.hash.slice(3))); } catch { R = null; }
-  }
-  R ??= generate(params.get('seed') || DEFAULT_SEED);
   let envKey = '';
 
   function syncEnv() {
@@ -140,21 +155,21 @@ async function main() {
   }
 
   // Écran de chargement : une nouvelle scène ne s'affiche que lorsque toutes ses
-  // coquilles ont leur forme définitive (tous niveaux de détail, cristaux) et
-  // que quelques images ont été rendues (pipelines compilés, historique TRAA).
-  const loading = { active: true, applied: false, settle: 0 };
-  function showLoader() {
-    loading.active = true;
-    loading.applied = false;
-    loading.settle = 0;
-    $('#loader').classList.remove('gone');
-    $('#loader p').textContent = 'génération des coquilles…';
-    $('#loadbar u').style.width = '0%';
-  }
+  // coquilles ont leur forme définitive (tous niveaux de détail, cristaux), que
+  // ses matériaux sont préparés (warm : avec la géométrie définitive — nest.js
+  // reconstruit les matériaux quand elle arrive) et que quelques images ont été
+  // rendues (historique TRAA). Rien n'est dessiné avant : pas de compilation
+  // synchrone pendant le chargement.
+  const loading = { active: true, applied: false, warming: false, settle: 0 };
+  const STEPS = [['build', 'les coquilles se forment'], ['compile', 'la lumière se prépare'], ['settle', 'premières images']];
+  let lastProg = '';
   let firstRecipe = true;
   function applyRecipe() {
     const recipe = R;
-    showLoader();
+    loading.active = true; loading.applied = false; loading.warming = false; loading.settle = 0;
+    loader.show({ steps: STEPS });
+    showNest();
+    lastProg = '';
     // (le fondu d'entrée de l'écran se termine avant que la scène ne change)
     setTimeout(() => {
       if (R !== recipe) return; // (une autre scène a été demandée entre-temps)
@@ -241,6 +256,25 @@ async function main() {
   function renderStep(u) {
     renderer._nodes?.nodeFrame?.update();
     renderAt(u);
+  }
+
+  // Préparation de tout ce que la boucle dessinera, sans gel : deux boucles de la
+  // plongée (chaque couche passe à toutes les profondeurs et tous les niveaux de
+  // détail, et les instances des deux boucles sont construites).
+  const PHASES = Array.from({ length: 16 }, (_, i) => i / 8);
+  async function warm() {
+    loading.warming = true;
+    loader.step('compile');
+    const recipe = R;
+    try {
+      return await warmScene({
+        renderer, scene, pipes, render: renderStep, phases: PHASES,
+        onProgress: (f) => loader.progress(f), alive: () => R === recipe,
+      });
+    } finally {
+      loading.warming = false;
+      if (R === recipe) loader.step('settle');
+    }
   }
 
   function applyRender() {
@@ -365,20 +399,20 @@ async function main() {
     });
   }
 
+  retry = { random: () => on.random(), again: () => applyRecipe() };
   applyRender();
   applyRecipe();
   if (params.has('debug')) {
     window.hollow = {
-      renderer, scene, camera, controls, nest, lights, dust, post, gen, RENDER, renderAt: renderStep, on,
+      renderer, scene, camera, controls, nest, lights, dust, post, gen, RENDER, pipes, errors, renderAt: renderStep, on,
       get R() { return R; },
       seek: (p) => { phi = p; paused = true; },
-      play: () => { paused = false; },
+      play: () => { paused = false; frozen = false; },
       freeze: (v) => { frozen = v; },
       // image fixe rendue à la demande (n images : historique de l'anticrénelage)
       async shot(ph, n = 12) {
-        while (!nest.ready()) await new Promise((r) => setTimeout(r, 200));
+        await this.run(); // (fin du chargement, même panneau masqué)
         frozen = true;
-        $('#loader').classList.add('gone');
         document.body.classList.add('clean');
         for (let i = 0; i < n; i++) { renderStep(ph); await renderer.backend.device?.queue.onSubmittedWorkDone(); }
       },
@@ -405,26 +439,57 @@ async function main() {
 
   // ── Boucle ──
   let last = performance.now(), fpsAcc = 0, fpsN = 0, fpsT = 0;
-  renderer.setAnimationLoop((now) => {
-    if (busy || frozen) return;
+  // (la boucle est une fonction nommée : en ?debug, run() la fait tourner à la
+  // main quand le navigateur suspend requestAnimationFrame, panneau masqué)
+  function tick(now) {
+    if (busy || frozen || loading.warming) return;
     if (!pace(now)) return; // (écrans 90 / 120 Hz : cadence plafonnée)
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
     if (RENDER.dynRes && !loading.active) governor.frame(dt); // (pas pendant le chargement : les workers faussent la mesure)
     if (!paused && !loading.active) phi += dt / R.loop.duration;
+    if (loading.active) {
+      const ready = loading.applied && nest.ready();
+      if (!loading.settle) {
+        // l'avancement de chaque couche, pour son tracé à l'écran de chargement
+        if (loading.applied) {
+          const prog = nest.designs.map((d) => +d.progress.toFixed(3)), key = prog.join();
+          if (key !== lastProg) { lastProg = key; loader.art({ seed: R.seed, prog }); }
+        }
+        loader.progress(loading.applied ? nest.progress() : 0);
+      } else if (loading.settle >= 2) loader.progress((loading.settle - 2) / 7);
+      if (ready) {
+        if (!loading.settle) {
+          loading.settle = 1;
+          warm().then((ok) => { if (ok) loading.settle = 2; }, (e) => fail(`Le rendu n'a pas pu être préparé (${e.message}).`));
+        } else if (loading.settle >= 2 && ++loading.settle > 8) {
+          loading.active = false;
+          loader.hide();
+          if (touch && !hinted) { hinted = true; toast('touche : pause · deux touches : nouvelle scène · appui long : masquer', 4500); }
+        }
+      }
+      if (!ready || loading.settle < 2) return;
+    }
     renderAt(phi);
     if (!loading.active) sound.update({ tau: curTau, phase: phi - Math.floor(phi), N: R.layers.length, layers: R.layers, mood: R.mood });
-    if (loading.active) {
-      $('#loadbar u').style.width = `${(nest.progress() * 100).toFixed(1)}%`;
-      if (loading.applied && nest.ready() && ++loading.settle > 8) {
-        loading.active = false;
-        $('#loader').classList.add('gone');
-        if (touch && !hinted) { hinted = true; toast('touche : pause · deux touches : nouvelle scène · appui long : masquer', 4500); }
-      }
-    }
     fpsAcc += dt; fpsN++;
     if ((fpsT += dt) > 0.5) { ui?.setFps(`${(fpsN / fpsAcc).toFixed(0)}  ·  ${shells} coquilles  ·  ${RENDER.dynRes ? `${Math.round(governor.scale * 100)} %  ·  ` : ''}${gen.busy() ? 'génération…' : 'prêt'}`); fpsAcc = fpsN = fpsT = 0; }
-  });
+  }
+  renderer.setAnimationLoop(tick);
+  if (window.hollow) {
+    // fait tourner la boucle à la main jusqu'à la fin du chargement (ou pendant
+    // `seconds` de film) : à utiliser quand le panneau est masqué
+    window.hollow.run = async (seconds = 0) => {
+      frozen = false; // (une image fixe gèle la boucle : le chargement suivant ne finirait jamais)
+      const t0 = performance.now();
+      while (loading.active || performance.now() - t0 < seconds * 1000) {
+        renderer._nodes?.nodeFrame?.update();
+        tick(performance.now());
+        await new Promise((r) => setTimeout(r, 16));
+      }
+    };
+    Object.defineProperty(window.hollow, 'loading', { get: () => ({ ...loading }) });
+  }
 }
 
 main().catch((e) => { console.error(e); fail(e.message); });

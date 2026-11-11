@@ -5,11 +5,15 @@
 // pures, importables depuis Node (tests, bancs d'essai).
 import { buildNoiseVolume } from './noisevol.js';
 import { buildMoss, bakeRock } from './build.js';
+import { envPixels } from './envmap.js';
+import { bakeSupport } from './support.js';
 
 function build({ spec, what }) {
   switch (what) {
     case 'noise': return buildNoiseVolume(spec.seed);
     case 'moss': return buildMoss(spec);
+    case 'env': return { data: envPixels(spec.key, spec.warmth ?? 0, spec.W) };
+    case 'support': return bakeSupport(spec);
     case 'rock': return bakeRock(spec.type, spec.seed, spec.X, spec.M);
     default: throw new Error(`inconnu : ${what}`);
   }

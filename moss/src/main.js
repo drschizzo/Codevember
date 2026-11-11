@@ -22,6 +22,8 @@ import { createUI } from './app/ui.js';
 import { loadRender, saveRender, applyQuality, defaultsFor } from './app/settings.js';
 import { wantsMobile, switchMobile, createGovernor, createPacer, bindTouch } from './app/mobile.js';
 import { exportLoop, exportPNG } from './app/capture.js';
+import { loader } from './app/loader.js';
+import { asyncPipelines, warmScene } from './app/warmup.js';
 
 const NAME = 'moss';
 const DEFAULT_SEED = 'b88'; // Sous-bois, tortule : un tapis sur une souche, soies dressées
@@ -44,10 +46,10 @@ async function unpackRecipe(str) {
   return JSON.parse(await new Response(s).text());
 }
 
+// un échec : dit à l'écran, avec de quoi repartir (une fois l'interface prête)
+let retry = null;
 function fail(msg) {
-  $('#loader').classList.remove('gone');
-  $('#loader').classList.add('error');
-  $('#loader p').textContent = msg;
+  loader.error(msg, retry ? [{ label: 'Autre graine', run: () => retry.random() }, { label: 'Réessayer', run: () => retry.again() }] : []);
 }
 let toastTimer = 0;
 function toast(msg, ms = 2200) {
@@ -79,25 +81,9 @@ async function main() {
   const canvas = renderer.domElement;
   $('#app').appendChild(canvas);
 
-  // Chargement sans gel : three.js crée ses pipelines de façon synchrone au
-  // premier dessin, et le processus graphique du navigateur (donc toute la
-  // page) reste bloqué pendant chaque compilation. Pendant le chargement, on
-  // les demande en asynchrone ; tant qu'une pipeline n'est pas prête, l'objet
-  // est sauté, et l'on redessine jusqu'à ce qu'il n'en manque plus.
-  const pipes = { on: false, pending: [], made: 0 };
-  if (renderer.backend.isWebGPUBackend && !params.has('syncpipes')) {
-    const be = renderer.backend, create = be.createRenderPipeline.bind(be);
-    be.createRenderPipeline = (renderObject, promises) => {
-      if (!pipes.on || promises) return create(renderObject, promises);
-      const list = [];
-      create(renderObject, list);
-      const data = be.get(renderObject.pipeline);
-      data.error = true;
-      pipes.made++;
-      pipes.pending.push(Promise.all(list).then(() => { if (data.pipeline) data.error = false; }));
-    };
-  }
-  const flushPipes = async () => { while (pipes.pending.length) await Promise.all(pipes.pending.splice(0)); };
+  // Chargement sans gel : pipelines asynchrones pendant le chargement, et
+  // préparation découpée en petits lots (app/warmup.js).
+  const pipes = asyncPipelines(renderer);
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color();
@@ -125,14 +111,20 @@ async function main() {
   }
   const forced = Object.fromEntries(['mood', 'family', 'water'].filter((k) => params.get(k)).map((k) => [k, params.get(k)]));
   R ??= generate(params.get('seed') || DEFAULT_SEED, forced);
-  let envKey = '';
+  // (le ciel HDR est calculé par un worker de génération : le fil principal
+  // ne fait que poser la texture)
+  let envKey = '', envReq = null;
   function syncEnv() {
     const k = R.env.preset;
-    if (k === envKey) return;
+    if (k === envKey) return envReq ?? Promise.resolve();
     envKey = k;
-    const old = scene.environment;
-    scene.environment = makeEnvironment(k, 0, LITE ? 512 : 1024);
-    old?.dispose();
+    const W = LITE ? 512 : 1024;
+    return (envReq = gen.request({ key: k, W }, 'env').then(({ data }) => {
+      if (envKey !== k) return;
+      const old = scene.environment;
+      scene.environment = makeEnvironment(k, 0, W, data);
+      old?.dispose();
+    }));
   }
 
   // ── Écran de chargement ──
@@ -140,20 +132,28 @@ async function main() {
   // shaders sont compilés et que quelques images ont été rendues (historique
   // de l'anticrénelage temporel). On ne voit jamais une forme se transformer.
   const loading = { active: true, applied: false, warming: false, settle: 0 };
+  const STEPS = [['build', 'les tiges poussent'], ['compile', 'l\'eau passe'], ['settle', 'premières images']];
+  // le dessin du chargement : la propagation de la scène, calculée dans le
+  // worker de l'écran (app/loaderArt.js) à partir de la même recette
+  const showField = () => {
+    const C = R.colony;
+    loader.art({
+      seed: C.seed, radius: C.radius, rock: C.support.rock, rockSeed: C.support.seed, sunDir: C.sunDir,
+      support: C.support.kind, family: R.family, water: R.hydro.kind,
+      look: { dry: R.look.dry, wet: R.look.wet, young: R.look.young, old: R.look.old, hair: R.look.hair, seta: R.look.seta, capsule: R.look.capsule },
+    });
+  };
   let firstRecipe = true;
   function applyRecipe() {
     const recipe = R;
     loading.active = true; loading.applied = false; loading.warming = false; loading.settle = 0;
-    $('#loader').classList.remove('gone', 'error');
-    $('#loader p').textContent = 'les tiges poussent, l\'eau passe…';
-    $('#loadbar u').style.width = '0%';
-    document.body.classList.add('loading');
+    loader.show({ steps: STEPS });
+    showField();
     // (le fondu d'entrée de l'écran se termine avant que la scène ne change)
     setTimeout(() => {
       if (R !== recipe) return;
       stage.setRecipe(R);
-      syncEnv();
-      loading.applied = true;
+      syncEnv().then(() => { if (R === recipe) loading.applied = true; }, (e) => fail(`Le ciel n'a pas pu être calculé (${e.message}).`));
     }, firstRecipe ? 0 : 280);
     firstRecipe = false;
     ui?.rebuild();
@@ -169,20 +169,16 @@ async function main() {
   // frustum désactivé (un objet hors champ n'est pas compilé).
   async function warm() {
     loading.warming = true;
-    pipes.on = true;
-    const culled = [];
-    scene.traverse((o) => { if (o.isMesh && o.frustumCulled) { culled.push(o); o.frustumCulled = false; } });
+    loader.step('compile');
+    const recipe = R;
     try {
-      for (let pass = 0; pass < 6; pass++) {
-        const before = pipes.made;
-        for (const ph of [0, 0.16, 0.3, 0.5, 0.7, 0.9]) { renderStep(ph); await flushPipes(); await new Promise((r) => setTimeout(r, 0)); }
-        if (pipes.made === before) break;
-      }
-      if (scene.environment) scene.environment.needsPMREMUpdate = true; // (préfiltré pendant des dessins sautés)
+      return await warmScene({
+        renderer, scene, pipes, render: renderStep, phases: [0, 0.16, 0.3, 0.5, 0.7, 0.9],
+        onProgress: (f) => loader.progress(f), alive: () => R === recipe,
+      });
     } finally {
-      for (const o of culled) o.frustumCulled = true;
-      pipes.on = false;
       loading.warming = false;
+      if (R === recipe) loader.step('settle');
     }
   }
 
@@ -331,6 +327,7 @@ async function main() {
     bindTouch(canvas, { onTap: () => on.togglePause(), onDoubleTap: () => on.random(), onLongPress: () => document.body.classList.toggle('clean') });
   }
 
+  retry = { random: () => on.random(), again: () => applyRecipe() };
   applyRender();
   applyRecipe();
 
@@ -434,16 +431,15 @@ async function main() {
     if (RENDER.dynRes && !loading.active) governor.frame(dt); // (pas pendant le chargement : les workers faussent la mesure)
     if (!paused && !loading.active) phi += dt / R.loop.duration;
     if (loading.active) {
-      $('#loadbar u').style.width = `${(stage.progress() * 90).toFixed(1)}%`;
+      if (!loading.settle) loader.progress(stage.progress());
+      else if (loading.settle >= 2) loader.progress((loading.settle - 2) / 7);
       if (loading.applied && stage.ready()) {
         if (!loading.settle) {
           loading.settle = 1;
-          warm().then(() => { loading.settle = 2; }, (e) => fail(`Le rendu n'a pas pu être préparé (${e.message}).`));
+          warm().then((ok) => { if (ok) loading.settle = 2; }, (e) => fail(`Le rendu n'a pas pu être préparé (${e.message}).`));
         } else if (loading.settle >= 2 && ++loading.settle > 8) {
           loading.active = false;
-          $('#loadbar u').style.width = '100%';
-          $('#loader').classList.add('gone');
-          document.body.classList.remove('loading');
+          loader.hide();
           if (touch && !hinted) { hinted = true; toast('touche : pause · deux touches : nouvelle scène · appui long : masquer', 4500); }
         }
       }

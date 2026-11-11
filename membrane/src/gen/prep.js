@@ -29,7 +29,7 @@ const ek = (a, b) => (a < b ? a * 1048576 + b : b * 1048576 + a);
 // milieu de ses deux voisins sur le tracé (sur la sphère) ; puis les autres
 // sommets se détendent autour. Le zigzag à l'échelle du maillage disparaît,
 // l'irrégularité voulue (bruit fractal du motif) demeure.
-function fairSeams(G, seams, iters = 6) {
+export function fairSeams(G, seams, iters = 6) {
   const nv = G.nv, pos = G.pos;
   const sn = Array.from({ length: nv }, () => []);
   for (const s of seams) { sn[s.a].push(s.b); sn[s.b].push(s.a); }

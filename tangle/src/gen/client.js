@@ -13,6 +13,7 @@ export function createGenerator(size = Math.max(2, Math.min(6, (navigator.hardwa
 
   workers.forEach((w) => {
     w.onmessage = ({ data }) => {
+      if (data.part) { pending.get(data.id)?.onPart?.(data.part); return; } // (nouvelles en route)
       const job = pending.get(data.id);
       pending.delete(data.id);
       idle.push(w);
@@ -27,14 +28,16 @@ export function createGenerator(size = Math.max(2, Math.min(6, (navigator.hardwa
       const job = queue.shift();
       const w = idle.pop();
       pending.set(job.id, job);
-      w.postMessage({ id: job.id, spec: job.spec, what: job.what });
+      w.postMessage({ id: job.id, spec: job.spec, what: job.what, live: !!job.onPart });
     }
   }
 
-  function request(spec, what) {
+  // onPart(part) : nouvelles en route du calcul (seulement pour le premier
+  // demandeur : une pièce déjà en cache arrive sans elles)
+  function request(spec, what, onPart) {
     const key = `${what}|${JSON.stringify(spec)}`;
     if (cache.has(key)) { const p = cache.get(key); cache.delete(key); cache.set(key, p); return p; }
-    const p = new Promise((resolve, reject) => { queue.push({ id: nextId++, spec, what, resolve, reject }); pump(); });
+    const p = new Promise((resolve, reject) => { queue.push({ id: nextId++, spec, what, onPart, resolve, reject }); pump(); });
     p.catch(() => cache.delete(key));
     cache.set(key, p);
     while (cache.size > MAX_CACHE) cache.delete(cache.keys().next().value);

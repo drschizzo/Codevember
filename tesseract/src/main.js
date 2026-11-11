@@ -23,7 +23,9 @@ import { wantsMobile, switchMobile, createGovernor, createPacer, bindTouch } fro
 import { exportLoop, exportPNG } from './app/capture.js';
 import { createOverlay, drawOverlay } from './app/overlay.js';
 import { smoothInsidePose, entryAxis } from './scene/voyage.js';
-import { voyageSeconds } from './math4.js';
+import { voyageSeconds, timelineFor } from './math4.js';
+import { loader } from './app/loader.js';
+import { asyncPipelines, warmScene } from './app/warmup.js';
 
 const TARGET = 1.9; // rayon de l'objet à l'écran (unités du monde)
 const params = new URLSearchParams(location.search);
@@ -45,9 +47,10 @@ async function unpackRecipe(str) {
   return JSON.parse(await new Response(s).text());
 }
 
+// un échec : dit à l'écran, avec de quoi repartir (une fois l'interface prête)
+let retry = null;
 function fail(msg) {
-  $('#loader').classList.add('error');
-  $('#loader p').textContent = msg;
+  loader.error(msg, retry ? [{ label: 'Autre graine', run: () => retry.random() }, { label: 'Réessayer', run: () => retry.again() }] : []);
 }
 let toastTimer = 0;
 function toast(msg, ms = 2200) {
@@ -59,6 +62,11 @@ function toast(msg, ms = 2200) {
 }
 
 async function main() {
+  const errors = [];
+  if (params.has('debug')) { // (avant toute compilation : les erreurs du chargement sinon échappent)
+    const orig = console.error;
+    console.error = (...a) => { orig(...a); errors.push(String(a[0]).slice(0, 400)); };
+  }
   // ── Version mobile (fixée au chargement) ──
   const LITE = wantsMobile(params);
   setLite(LITE);
@@ -71,6 +79,9 @@ async function main() {
   renderer.shadowMap.transmitted = true; // (verre et pierres : ombres colorées)
   const canvas = renderer.domElement;
   $('#app').appendChild(canvas);
+  // Chargement sans gel : pipelines asynchrones pendant le chargement, et
+  // préparation découpée en petits lots (app/warmup.js).
+  const pipes = asyncPipelines(renderer);
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color();
@@ -98,29 +109,42 @@ async function main() {
   if (location.hash.startsWith('#r=')) { try { R = upgrade(await unpackRecipe(location.hash.slice(3))); } catch { R = null; } }
   R ??= generate(params.get('seed') || DEFAULT_SEED);
 
-  let envKey = '';
+  // (les pixels de l'environnement sont calculés dans un worker de génération :
+  // sur le fil principal, ils tenaient la page plusieurs secondes)
+  let envKey = '', envJob = Promise.resolve();
   function syncEnv() {
-    if (R.env.preset === envKey) return;
-    envKey = R.env.preset;
-    const old = scene.environment;
-    scene.environment = makeEnvironment(envKey, 0, LITE ? 512 : 1024);
-    old?.dispose();
+    if (R.env.preset === envKey) return envJob; // (déjà là, ou en cours)
+    const key = envKey = R.env.preset, W = LITE ? 512 : 1024;
+    return (envJob = gen.request({ key, warmth: 0, W }, 'env').then(({ data }) => {
+      if (envKey !== key) return;
+      const old = scene.environment;
+      scene.environment = makeEnvironment(data, 0, W);
+      old?.dispose();
+    }));
   }
 
-  const loading = { active: true, applied: false, settle: 0, warm: false };
+  // ── Écran de chargement : le patron de la scène, en fil de fer (app/loaderArt.js) ──
+  // La scène n'apparaît que prête : géométries arrivées, shaders compilés
+  // (sans dessin synchrone : app/warmup.js), quelques images rendues
+  // (historique de l'anticrénelage temporel).
+  const loading = { active: true, applied: false, settle: 0, warming: false, cells: '' };
+  const STEPS = [['build', 'les cellules se construisent'], ['compile', 'la lumière se prépare'], ['settle', 'premières images']];
+  const showNet = () => loader.art({ recipe: {
+    parent: R.net.parent, moves: R.moves, az: R.camera.az, elev: R.camera.elev, antic: R.chor.antic, stagger: R.chor.stagger, lamp: R.view?.practicalColor,
+    proj: { d: R.proj.d, inflate: R.proj.inflate, inset: R.proj.inset, tiltX: R.proj.tiltX, tiltZ: R.proj.tiltZ },
+  } });
   let ui = null, firstRecipe = true, resetMotion = true;
   function applyRecipe() {
     const recipe = R;
-    loading.active = true; loading.applied = false; loading.settle = 0; loading.warm = false;
-    $('#loader').classList.remove('gone');
-    $('#loadbar u').style.width = '0%';
+    loading.active = true; loading.applied = false; loading.settle = 0; loading.warming = false; loading.cells = '';
+    loader.show({ steps: STEPS });
+    showNet();
     setTimeout(() => {
       if (R !== recipe) return;
       tess.setRecipe(R);
       phi = 0; // (chaque scène commence par le patron déplié)
-      syncEnv();
-      loading.applied = true;
       resetMotion = true;
+      syncEnv().then(() => { if (R === recipe) loading.applied = true; }, (e) => fail(`L’éclairage n’a pas pu être calculé (${e.message}).`));
     }, firstRecipe ? 0 : 280);
     firstRecipe = false;
     ui?.rebuild();
@@ -276,18 +300,35 @@ async function main() {
     renderer._nodes?.nodeFrame?.update();
     renderAt(u);
   }
-  // Amorçage, sous l'écran de chargement : quelques images du voyage, pour
-  // que les shaders qui n'y servent que là (sonde de pièce et ses doublures,
-  // gorges lumineuses, portes) soient compilés avant le film. Sans cela la
+  // Amorçage, sous l'écran de chargement : chaque temps de la boucle, y
+  // compris les moments du voyage dont les shaders ne servent que là (sonde de
+  // pièce et ses doublures, gorges lumineuses, portes), est dessiné par petits
+  // lots, pipelines compilées en asynchrone (app/warmup.js). Sans cela la
   // première image de la plongée gelait la page une demi-seconde, et
-  // l'animation repartait par un à-coup.
-  function warmUp() {
-    const tl = info?.timeline;
-    if (!tl || !R.voyage?.on) return;
-    const at = (k, f) => { const s = tl.find((p) => p.k === k); return s ? s.a + (s.b - s.a) * f : null; };
-    for (const ph of [at('plunge', 0.5), at('plunge', 0.97), at('dwell', 0.5), at('dwell', 0.97), at('travel', 0.5), at('surface', 0.5)]) if (ph !== null) renderStep(ph);
-    probe?.invalidate();
-    resetMotion = true;
+  // l'animation repartait par un à-coup. Rend false si un autre chargement a
+  // été demandé entre-temps.
+  function warmPhases() {
+    const tl = timelineFor(R), out = [0];
+    for (const p of tl) out.push(p.a + (p.b - p.a) * 0.5);
+    for (const k of ['plunge', 'dwell']) { const p = tl.find((x) => x.k === k); if (p) out.push(p.a + (p.b - p.a) * 0.97); }
+    return out;
+  }
+  async function warmUp() {
+    loading.warming = true;
+    loader.step('compile');
+    const recipe = R;
+    try {
+      const ok = await warmScene({
+        renderer, scene, pipes, render: renderAt, phases: warmPhases(),
+        onProgress: (f) => loader.progress(f), alive: () => R === recipe,
+      });
+      probe?.invalidate();
+      resetMotion = true;
+      return ok;
+    } finally {
+      loading.warming = false;
+      if (R === recipe) loader.step('settle');
+    }
   }
   // Image accumulée (voir render/accum.js) : n passes autour de la phase u,
   // moyennées sur le canevas. frame : numéro de l'image (décorrèle les
@@ -404,11 +445,12 @@ async function main() {
     });
   }
 
+  retry = { random: () => on.random(), again: () => applyRecipe() };
   applyRender();
   applyRecipe();
   if (params.has('debug')) {
     window.tess = {
-      renderer, scene, camera, tess, stage, post, probe, gen, RENDER, renderAt: renderStep, on, G, warmUp,
+      renderer, scene, camera, tess, stage, post, probe, gen, RENDER, renderAt: renderStep, on, G, warmUp, pipes, errors,
       get R() { return R; },
       get info() { return info; },
       seek: (p) => { phi = p; paused = true; },
@@ -469,9 +511,9 @@ async function main() {
         await fetch(url + name, { method: 'POST', body: await sc.convertToBlob({ type: 'image/jpeg', quality: 0.9 }) });
       },
       async shot(ph, n = 12) {
-        while (!tess.ready()) await new Promise((r) => setTimeout(r, 200));
+        await this.run(); // (fin du chargement, même panneau masqué)
         frozen = true;
-        $('#loader').classList.add('gone');
+        loader.hide();
         document.body.classList.add('clean');
         for (let i = 0; i < n; i++) { renderStep(ph); await renderer.backend.device?.queue.onSubmittedWorkDone(); }
       },
@@ -490,31 +532,60 @@ async function main() {
     else if (e.key === 'ArrowLeft') phi -= 0.005;
   });
 
+  // ── Boucle ──
   let last = performance.now(), fpsAcc = 0, fpsN = 0, fpsT = 0;
-  renderer.setAnimationLoop((now) => {
-    if (busy || frozen) return;
+  // (la boucle est une fonction nommée : en ?debug, run() la fait tourner à la
+  // main quand le navigateur suspend requestAnimationFrame, panneau masqué)
+  function tick(now) {
+    if (busy || frozen || loading.warming) return;
     if (!pace(now)) return; // (écrans 90 / 120 Hz : cadence plafonnée)
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
     if (RENDER.dynRes && !loading.active) governor.frame(dt); // (pas pendant le chargement : les workers faussent la mesure)
     if (!paused && !loading.active) phi += dt / R.loop.duration;
-    renderAt(phi);
     if (loading.active) {
-      $('#loadbar u').style.width = `${(tess.progress() * 100).toFixed(1)}%`;
-      if (loading.applied && tess.ready() && !loading.warm && info) { loading.warm = true; warmUp(); }
-      if (loading.applied && tess.ready() && ++loading.settle > 8) {
-        loading.active = false;
-        $('#loader').classList.add('gone');
-        if (touch && !hinted) { hinted = true; toast('touche : pause · deux touches : nouvelle scène · appui long : masquer', 4500); }
+      if (!loading.settle) {
+        loader.progress(tess.progress());
+        // (chaque cellule s'allume à l'écran quand ses pièces sont construites)
+        const cp = tess.cellsProgress(), key = `${cp.frame}:${cp.cells}`;
+        if (key !== loading.cells) { loading.cells = key; loader.art(cp); }
+      } else if (loading.settle >= 2) loader.progress((loading.settle - 2) / 7);
+      if (loading.applied && tess.ready()) {
+        if (!loading.settle) {
+          loading.settle = 1;
+          warmUp().then((ok) => { if (ok) loading.settle = 2; }, (e) => fail(`Le rendu n'a pas pu être préparé (${e.message}).`));
+        } else if (loading.settle >= 2 && ++loading.settle > 8) {
+          loading.active = false;
+          loader.hide();
+          if (touch && !hinted) { hinted = true; toast('touche : pause · deux touches : nouvelle scène · appui long : masquer', 4500); }
+        }
       }
+      // (rien n'est dessiné avant que tout soit compilé : pas de pipeline synchrone)
+      if (!loading.applied || !tess.ready() || loading.settle < 2) return;
     }
+    renderAt(phi);
     fpsAcc += dt; fpsN++;
     if ((fpsT += dt) > 0.5) {
       const st = info?.state;
       ui?.setFps(`${(fpsN / fpsAcc).toFixed(0)}${RENDER.dynRes ? `  ·  ${Math.round(governor.scale * 100)} %` : ''}  ·  étape ${st ? st.step + 1 : '–'}/${R.moves.length}  ·  ${st?.phase ?? ''}`);
       fpsAcc = fpsN = fpsT = 0;
     }
-  });
+  }
+  renderer.setAnimationLoop(tick);
+  if (window.tess) {
+    // fait tourner la boucle à la main jusqu'à la fin du chargement (ou pendant
+    // `seconds` de film) : à utiliser quand le panneau est masqué
+    window.tess.run = async (seconds = 0) => {
+      frozen = false; // (une image fixe gèle la boucle : le chargement suivant ne finirait jamais)
+      const t0 = performance.now();
+      while (loading.active || performance.now() - t0 < seconds * 1000) {
+        renderer._nodes?.nodeFrame?.update();
+        tick(performance.now());
+        await new Promise((r) => setTimeout(r, 16));
+      }
+    };
+    Object.defineProperty(window.tess, 'loading', { get: () => ({ ...loading }) });
+  }
 }
 
 main().catch((e) => { console.error(e); fail(e.message); });

@@ -500,7 +500,7 @@ export function createStage(scene, gen, { lite = false, renderer } = {}) {
       R.foyer.events.forEach((e, j) => {
         jobs.push(gen.request({ index: j, series: R.foyer.series, level: e.level, seed: R.seed, N, L: T.L, H: T.H, light, side, imageCenter, rotation: e.rotation }, 'event', {
           noCache: true,
-          onProgress: (p) => progressCb.fn?.(p),
+          onProgress: (p) => { if (v === version) progressCb.fn?.(p); },
         }).then((o) => { if (v === version) { waves.setEvent(j, o.inter); progressCb.done?.(j, o); } return o; }));
       });
     } else waves.setEventCount(0);

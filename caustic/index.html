@@ -11,16 +11,20 @@
   <script type="importmap">
   {
     "imports": {
-      "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.webgpu.js",
-      "three/webgpu": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.webgpu.js",
-      "three/tsl": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.tsl.js",
+      "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.webgpu.min.js",
+      "three/webgpu": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.webgpu.min.js",
+      "three/tsl": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.tsl.min.js",
       "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/",
       "lil-gui": "https://cdn.jsdelivr.net/npm/lil-gui@0.20.0/dist/lil-gui.esm.min.js"
     }
   }
   </script>
+  <!-- (le moteur est demandé dès la lecture de la page, en parallèle des modules du projet) -->
+  <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.webgpu.min.js" crossorigin>
+  <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.core.js" crossorigin>
+  <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.tsl.min.js" crossorigin>
 </head>
-<body>
+<body class="loading">
   <div id="app"></div>
 
   <header id="title">
@@ -33,12 +37,13 @@
   <div id="progress"><span>Export de la boucle…</span><div><u></u></div></div>
 
   <div id="loader">
-    <h1>Caustic</h1>
-    <canvas id="otview" width="630" height="210"></canvas>
-    <p>préparation de la scène…</p>
-    <div id="loadbar"><u></u></div>
+    <canvas></canvas>
+    <h1 class="mark">Caustic</h1>
+    <p class="step"></p>
+    <div class="txt"><p class="msg"></p><div class="actions"></div></div>
   </div>
 
+  <script type="module" src="src/app/loader.js"></script>
   <script type="module" src="src/main.js"></script>
 </body>
 </html>

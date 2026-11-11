@@ -15,7 +15,9 @@ import { makePlan, makeWarp, rodSpec, sstep } from '../plan.js';
 const REC = 120;      // Hz physiques
 const FILM = 30;      // images par seconde de film enregistrées
 
-export function simulate(R, { hz = 3000, onProgress } = {}) {
+// onSnap(row, τ, P) : un état enregistré sur `snapEvery` (l'écran de
+// chargement montre la corde pendant qu'elle est calculée) ; row est réutilisé.
+export function simulate(R, { hz = 3000, onProgress, onSnap, snapEvery = 6 } = {}) {
   const plan = makePlan(R);
   const spec = rodSpec(R.family, R.sim);
   spec.topY = 0;
@@ -35,6 +37,7 @@ export function simulate(R, { hz = 3000, onProgress } = {}) {
     rec[o + stride - 3] = st.fly.phi;
     rec[o + stride - 2] = st.theta;
     rec[o + stride - 1] = 0;
+    if (onSnap && r % snapEvery === 0) onSnap(rec.subarray(o, o + stride), r / REC, plan.P);
     r++;
   };
   record();

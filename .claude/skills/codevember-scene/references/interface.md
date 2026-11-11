@@ -7,7 +7,7 @@
 - **Panneau** lil-gui à droite, en verre dépoli (`backdrop-filter: blur(16px)`, fond `rgba(12,11,10,.62)`, liseré `rgba(255,240,220,.12)`, rayon 12 px, nombres en `#e9c48a`), 320 px, replié sauf l'essentiel ; sur téléphone, pleine largeur, 50 % de hauteur, replié au démarrage.
 - **Toast** centré en haut (pilule de verre), messages brefs (« Pause », « Lien copié… »).
 - **Progression d'export** en bas au centre.
-- **Écran de chargement** : nom en Fraunces, une ligne en italique (« assemblage des cellules… », « génération des coquilles… », propre au thème), barre fine dorée de 180 px ; fondu de 1,2 s à la fin ; en cas d'échec, le message (et des issues) à la place de la ligne.
+- **Écran de chargement** (commun, `src/app/loader.js`) : plein écran sombre ; au centre, un dessin propre au thème qui *montre le calcul ou le sujet* (`src/app/loaderArt.js`, dans le worker, nourri par `loader.art()` avec ce que dit la recette : Melt, le cristal de la graine qui pousse ; Orrery, la recherche d'orbite) et ne s'arrête jamais ; en bas, le nom en Fraunces, un fil d'avancement découpé en étapes (`loader.show({ steps })`, `step()`, `progress()` : avancement réel, qui dérive lentement entre deux nouvelles pour ne jamais paraître figé) et le libellé de l'étape en italique (« le cristal pousse », « la lumière se prépare », « premières images »). Panneau, titre et légende masqués pendant le chargement (`body.loading`). Fondu de 1,2 s pendant lequel le dessin achève son geste ; en cas d'échec, le message et des boutons (« Autre graine », « Réessayer »), panneau revenu.
 
 Aucun autre texte à l'écran. Les aides (légendes, encart explicatif) sont masquées par défaut, s'affichent à la demande (touche, case du panneau), sont mémorisées, et sont composées dans l'export quand elles sont affichées.
 
@@ -32,7 +32,7 @@ N, Espace, ← →, H, F partout ; touches propres au projet annoncées dans l'i
 
 ## Chargement
 
-Voir performance-mobile.md (sans gel). La scène ne s'affiche que complète : toute la géométrie arrivée, les shaders de tous les moments compilés, quelques images rendues. Si le calcul est le sujet (Orrery), l'écran de chargement le montre en direct, dans un worker sur `OffscreenCanvas` (il reste fluide pendant que le fil principal compile), et se fond dans la première image.
+Voir performance-mobile.md (sans gel). La scène ne s'affiche que complète : toute la géométrie arrivée, les shaders de tous les moments compilés, quelques images rendues. L'écran de chargement montre toujours le calcul ou le sujet en direct, dans un worker sur `OffscreenCanvas` (il reste fluide pendant que le fil principal compile), et se fond dans la première image.
 
 ## Son (facultatif)
 

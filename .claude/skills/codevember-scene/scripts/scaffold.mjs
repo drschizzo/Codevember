@@ -52,6 +52,11 @@ const COPY = [
   ['membrane/src/finishes.js', 'src/finishes.js'],
   ['membrane/src/scene/materials.js', 'src/scene/materials.js'],
   ['.claude/skills/codevember-scene/scripts/sink.py', 'tools/sink.py'],
+  // écran de chargement et préparation sans gel : modules communs, à copier tels quels
+  // (le dessin propre au thème, src/app/loaderArt.js, vient du gabarit et se réécrit)
+  ['melt/src/app/loader.js', 'src/app/loader.js'],
+  ['melt/src/app/loaderWorker.js', 'src/app/loaderWorker.js'],
+  ['melt/src/app/warmup.js', 'src/app/warmup.js'],
 ];
 
 const write = (rel, text) => {
