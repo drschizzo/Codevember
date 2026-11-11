@@ -34,7 +34,8 @@ Tout passe par les modules communs `src/app/warmup.js`, `loader.js`, `loaderWork
 3. **Construction découpée** : la traduction TSL → WGSL des matériaux se fait sur le fil principal (jusqu'à plusieurs centaines de ms par matériau ; Calcin : 4,6 s d'un bloc). `warmScene` limite chaque image à ~100 ms de construction (les objets nouveaux au-delà sont sautés le temps d'une image, sans toucher à `visible`) et rend la main entre deux images par `MessageChannel` (jamais `setTimeout` : ralenti à 1/s ou 1/min en arrière-plan).
 4. Refaire le préfiltrage du studio après (fait par `warmScene`, `needsPMREMUpdate`).
 5. **L'écran de chargement est dessiné dans un worker** (`OffscreenCanvas`) et démarre avant le téléchargement de three.js (`<script type="module" src="src/app/loader.js">` avant main.js) ; three.js en version `.min` et `modulepreload` dans `index.html`.
-6. Après le chargement, rien ne se compile : une boucle entière sans image de plus de ~34 ms. Les lumières restent au premier niveau de la scène, dans un ordre fixe (un réordonnancement recompile tout).
+6. **Les calculs lourds avant la lecture** (résolution de contacts, simulations relues) se font dans le worker de génération, qui poste son avancement (`postMessage({ id, progress })`) relayé à `loader.progress()`. L'utilisateur accepte un chargement plus long (5 à 15 s) s'il voit que le calcul avance ; il n'accepte pas un défaut visible pour gagner quelques secondes.
+7. Après le chargement, rien ne se compile : une boucle entière sans image de plus de ~34 ms. Les lumières restent au premier niveau de la scène, dans un ordre fixe (un réordonnancement recompile tout).
 
 ## Version mobile (mode allégé)
 

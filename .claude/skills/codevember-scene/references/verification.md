@@ -34,6 +34,18 @@ Un modèle animé (simulation, champ, plan de mouvements) s'inspecte d'abord en 
 
 Garde dans l'outil de planche la possibilité d'**imposer** l'humeur ou la famille d'une graine (par exemple `graine:humeur:famille`), pour comparer toutes les humeurs ou toutes les familles d'un coup après une correction. Quand le panneau est masqué et qu'une planche prend plusieurs minutes, lance-la en tâche détachée et avance sur autre chose (README, tests) pendant qu'elle tourne.
 
+## Un banc qui voit ce que l'on voit
+
+Des tests verts pendant que l'écran montre un défaut flagrant : c'est le banc qui est faux, pas l'œil de l'utilisateur. Le cas typique : chaque mécanisme vérifié isolément (l'objet contre une surface approchée de ses voisins au repos, une pièce contre la seule pièce qu'on pensait concernée), alors qu'à l'écran tout bouge en même temps.
+
+- **Même source que le rendu** : le banc pose la scène par la fonction qui alimente le GPU (uniformes, tables d'instances) et reproduit en JS la formule du vertex shader ; un banc qui recalcule la scène à sa façon teste autre chose que ce qu'on voit.
+- **Tout contre tout**, sans hypothèse d'ordre (qui est dessus, qui bouge, qui est concerné) ; on n'élimine des paires que par un critère sûr (sphères englobantes, éléments immobiles l'un par rapport à l'autre).
+- **La bonne mesure de la traversée** : pour des éléments minces (lames, fibres, rubans, plaques), un point « dans » un volume ne veut rien dire ; mesure les **segments** de lignes brisées dont les deux extrémités sont de part et d'autre d'une surface (carte de hauteur dans le repère de l'élément, ou distance signée), au-delà d'un seuil de l'ordre du dixième de millimètre de la scène, et en ignorant les parties qui n'ont pas de surface (fibres libres, franges).
+- **Toute la boucle** : 100 à 200 instants, pas seulement les temps forts ; imprime la part de la boucle touchée et la profondeur maximale, par graine et par famille.
+- **Un témoin négatif** : le même banc sur la scène sans la correction doit trouver le défaut. C'est la preuve qu'il voit, et un test le garde.
+- **Ordre de travail** : quand l'utilisateur décrit un défaut, le banc doit d'abord le reproduire et le chiffrer, ensuite seulement on corrige ; une correction validée par un test qui ne voyait pas le défaut ne prouve rien.
+- **Continuité image par image** : un déplacement maximal par image (à 60 i/s) de tous les points, ombres comprises, attrape les sauts, « flashs » et changements de géométrie d'une image à l'autre qu'aucune image fixe ne montre.
+
 ## Ce que les planches ne montrent pas d'elles-mêmes
 
 - **Les événements** : filme une fenêtre de ± 0,5 s autour de chaque cause, à quelques images d'écart. Un décalage de quelques dixièmes entre la cause et l'effet casse tout, et ne se voit qu'ainsi (ou en direct).

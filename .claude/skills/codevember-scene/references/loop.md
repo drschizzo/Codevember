@@ -51,6 +51,17 @@ La vitesse et son intégrale s'écrivent en forme fermée (montée en smoothstep
 - **Lisibilité** : montre l'action de la cause (son mouvement, sa montée en puissance, sa chaleur), oriente la scène pour qu'elle se lise de profil, et fais partir l'effet visiblement du point d'action (un front, une onde, une marque qui s'étend). Filme image par image une fenêtre de ± 0,5 s autour de chaque événement, et regarde-la.
 - Une cause sans trace visible (un son, un champ, une chaleur) a besoin d'un relais crédible : la vibration de l'objet, la membrane qui bat, le point qui rougit, la poussière qui s'agite.
 
+## Contacts entre éléments qui bougent
+
+Quand des éléments voisins se frôlent (écailles, plumes, pétales, cartes, tuiles qui se recouvrent), les forces de contact locales — un point repoussé, une pièce qui se plie là où elle touche — donnent des mouvements par à-coups, des voisins qui bougent « sans raison » et de nouvelles traversées ailleurs. L'utilisateur les prend pour des bugs. Ce qui marche :
+
+- **Bouger en bloc** : chaque élément garde sa forme et se déplace rigidement autour de son ancrage (pivot, soulèvement), du plus petit mouvement qui supprime la traversée, mesuré par le banc (verification.md). Une dichotomie sur l'amplitude suffit si le critère est monotone.
+- **Une pose imposée d'avance ne peut pas éviter un recouvrement en écailles** (le bord qui doit finir dessous arrive par-dessus) : la pose se **résout** (l'objet descend jusqu'à toucher), puis on la rend **monotone** — f(u) = min(f_imposée(u), min sur u' ≥ u de f_permise(u')) : elle se pose et y reste, sans remonter.
+- **Une seule solution par élément** : choisis une fois la direction d'écart (celle qui demande le moins à l'instant le plus contraint), puis cherche seulement l'amplitude ; mélanger d'un instant à l'autre deux solutions valides (tourner à gauche, basculer) donne en lissant une pose qui ne l'est pas.
+- **Les dépendances par étages** : l'élément écarté soulève ceux qui sont posés sur lui (ordre mesuré au repos) et ne doit pas entrer dans ceux du dessous ; résous niveau par niveau, chacun sur les poses déjà lissées du précédent.
+- **Le temps** : dilate (maximum glissant) avant de lisser (gaussienne), sinon le lissage repasse sous la contrainte ; lissage périodique pour que u = 1 soit u = 0. Les voisins s'écartent ainsi un peu avant le contact et se reposent en douceur.
+- **Tout est calculé une fois**, dans un worker, sous l'écran de chargement (tables de poses sur 100–200 instants, interpolées à l'image) : quelques secondes de chargement de plus valent mieux qu'une seule traversée visible, tant que l'écran de chargement montre la progression réelle.
+
 ## Caméra
 
 - Périodique en u, lisse, lente : pointes < 25°/s (Tesseract mesurait 80°/s avec des pointes à 220°/s avant lissage ; Fold tourne à ~10°/s). La grammaire (caméra immobile, travelling, plongée, révolution, suivi d'un objet…) se choisit pour chaque film. Lisser la pose par un noyau gaussien (σ de l'ordre d'une demi-seconde à une seconde) calculé sur la trajectoire échantillonnée elle-même (la boucle se referme, l'export rend la même chose), interpoler en Catmull-Rom, et tester l'accélération image par image à 120 i/s.
