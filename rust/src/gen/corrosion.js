@@ -209,7 +209,10 @@ export function corrosionField(body, { seed = 'rust', spacing = 0.0045, maxDim =
   // gagne de proche en proche, sous la calamine) — distance géodésique dans
   // les voxels occupés (Dijkstra, 26 voisins), à la vitesse `spread` (m par
   // unité de temps d'humectation)
-  const onset = new Float32Array(NV).fill(9);
+  // (double précision : le tas compare les valeurs poussées à onset[k] ; en
+  // float32, l’arrondi de onset[kk] = no tombait parfois sous no, l’entrée
+  // était rejetée au dépilage et le front s’interrompait)
+  const onset = new Float64Array(NV).fill(9);
   for (let k = 0; k < NV; k++) if (has[k]) { const t = Math.max(0, Math.min(1, (val[k * 4] - 0.28) / 0.72)); onset[k] = (1 - t) ** 1.25; }
   {
     const heap = new MinHeap(), done = new Uint8Array(NV);
