@@ -159,9 +159,9 @@ export function createStage(scene, gen, { lite = false } = {}) {
       RU.turns.value = plan.N; RU.nTop.value = plan.yTop; RU.nBot.value = plan.yBot; RU.foot.value = plan.foot; RU.tilt.value = plan.tilt; RU.dir.value = plan.dir; RU.az.value = plan.az;
       spec = { kind, lo, hi, rMax: plan.rMax, platen: plan.platen, tilt: plan.tilt };
     } else {
-      plan = bathPlan(R, lo, hi, info.lifts);
+      plan = bathPlan(R, lo, hi, info.lifts, info.hook);
       RU.level.value = plan.L; RU.up0.value = plan.u.up0;
-      spec = { kind, lo, hi, tank: plan.tank, hook: plan.hook, lifts: info.lifts, rest: plan.rest };
+      spec = { kind, lo, hi, tank: plan.tank, hook: plan.hook, lifts: info.lifts, loops: info.loops, spreader: info.spreader, rest: plan.rest };
     }
     gen.request(spec, 'machine').then((o) => {
       if (v !== version) return;

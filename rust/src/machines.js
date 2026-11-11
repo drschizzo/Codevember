@@ -170,7 +170,7 @@ export function turnCleanS(plan, dirs, p, n) {
 }
 
 // ── Bain d'électrolyse ───────────────────────────────────────────────────────
-export function bathPlan(R, lo, hi, lifts) {
+export function bathPlan(R, lo, hi, lifts, hookPt = null) {
   const M = R.machine, T = R.timing;
   // fosse d'électrolyse : le rebord affleure le sol, le liquide est juste dessous
   const tank = { hx: (hi[0] - lo[0]) / 2 + M.margin, hz: (hi[2] - lo[2]) / 2 + M.margin, cx: (lo[0] + hi[0]) / 2, cz: (lo[2] + hi[2]) / 2 };
@@ -180,7 +180,7 @@ export function bathPlan(R, lo, hi, lifts) {
   const down = L - 0.07 - hi[1];
   const w = T.clean1 - T.clean0;
   const u = { down0: T.clean0, down1: T.clean0 + w * 0.2, up0: T.clean0 + w * (0.2 + M.hold), up1: T.clean1 };
-  const hook = [(lifts[0][0] + lifts[1][0]) / 2, Math.max(lifts[0][1], lifts[1][1]) + 0.32, (lifts[0][2] + lifts[1][2]) / 2];
+  const hook = hookPt ?? [(lifts[0][0] + lifts[1][0]) / 2, Math.max(lifts[0][1], lifts[1][1]) + 0.32, (lifts[0][2] + lifts[1][2]) / 2];
   return { kind: 'bain', tank, L, rest, down, u, hook, lid: [T.setup0, T.setup0 + (T.clean0 - T.setup0) * 0.8, T.clean1 + 0.004, T.retract1] };
 }
 // décalage vertical de la pièce (descente douce, remontée lente et régulière)
