@@ -232,6 +232,16 @@
         "tension"
       ],
       "port": 8150
+    },
+    {
+      "name": "mirage",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        ".claude/serve.py",
+        "8160",
+        "mirage"
+      ],
+      "port": 8160
     }
   ]
 }
