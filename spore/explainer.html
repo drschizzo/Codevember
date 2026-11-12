@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#050506">
+  <title>Spore · défis techniques</title>
+  <meta name="description" content="Comment Spore est calculé : une boucle qui est une translation, un front de Dijkstra, le réseau adaptatif de Tero, des perles de Plateau-Rayleigh, des sporanges en poutres encastrées, des spores de Stokes qui ensemencent le site suivant, un bois périodique, un péridium en couche mince.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+  <link rel="stylesheet" href="../home/explainer.css">
+</head>
+<body>
+  <nav class="top"><div class="in">
+    <a href="../">Codevember</a><span class="day">Day 16</span><span class="crumb">Spore · défis techniques</span>
+    <span class="sp"></span><a class="open" href="./">Ouvrir la scène</a>
+  </div></nav>
+
+  <main>
+    <header class="hero">
+      <div class="kicker">Day 16 · Spore · le relais</div>
+      <h1>Comment une poussière de spores devient une forêt, puis le nuage qui ensemence la suivante</h1>
+      <p class="lede">Sur du bois mort, une génération de myxomycètes en une boucle : les spores germent en un plasmodium qui s'étend en réseau, se condense en perles, se dresse en sporanges qui mûrissent et s'ouvrent au souffle. Le nuage dérive jusqu'au site suivant, et la caméra le suit. Le réseau est calculé par la loi d'adaptation de Tero, les perles reçoivent exactement le volume des veines, les spores tombent selon Stokes — et les points où germe la génération suivante sont des points de chute de vraies spores. La boucle ne revient pas en arrière : c'est une translation.</p>
+    </header>
+
+    <figure class="cover">
+      <img src="docs/capture.jpg" alt="Une forêt de sporanges sur du bois, et le nuage de spores qui part sous le vent" width="1600" height="900">
+      <figcaption>La forêt mûre au moment où le souffle arrive : les têtes s'inclinent dans le sens du vent, et le nuage part de leurs sommets. Au loin, le bois nu du site suivant.</figcaption>
+    </figure>
+
+    <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
+
+    <article>
+      <section id="translation">
+        <h2><span class="n">01</span>La boucle est une translation, pas un retour</h2>
+        <span class="src">src/timeline.js · sites() — src/camera.js · makeTravel()</span>
+        <p>Une génération de myxomycète ne revient pas à son état initial : les sporanges vides restent sur le bois pendant des semaines. Rejouer le film à l'envers, ou fondre la fin dans le début, se verrait. Mais la génération suivante, elle, recommence ailleurs : un peu plus loin, sous le vent, là où les spores sont tombées.</p>
+        <p>Le bois est donc périodique de période \(L = 4{,}4\) cm le long du vent, et le site \(j\) vit son cycle avec un retard d'une boucle sur son voisin d'amont :</p>
+        <div class="eq">\[ \text{état}(j, u) = S\big(\operatorname{clamp}(u - j,\, 0,\, 2)\big), \qquad X_\text{caméra}(u + 1) = X_\text{caméra}(u) + L. \]</div>
+        <p>\(S(0)\) est le bois nu, \(S(0 \to 1)\) le cycle, \(S(1 \to 2)\) l'usure des sporanges vides. Le monde à \(u + 1\) est le monde à \(u\) translaté de \(L\) ; la caméra aussi : l'image est la même, par construction. À l'écran, on ne montre que deux sites : le présent (phase \(u\)) et le passé (phase \(u + 1\), une période en amont). La caméra avance à une vitesse faite d'un socle (la dérive lente au-dessus du site) et d'une bosse en \(\cos^2\) (le voyage avec le nuage), normalisée pour que son intégrale vaille \(L\).</p>
+        <figure id="fig-frise"><figcaption><b>La frise.</b> Trois sites du bois et le cadre de la caméra. Faites glisser la phase : chaque site vit le même cycle, décalé d'une boucle ; à \(u = 1\), tout s'est décalé d'un site. (Le cycle est résumé en quatre états.)</figcaption></figure>
+      </section>
+
+      <section id="front">
+        <h2><span class="n">02</span>Le front est une distance de Dijkstra à seize voisins</h2>
+        <span class="src">src/gen/plasmodium.js · arrivalField()</span>
+        <p>Chaque spore germe à son instant ; la gouttelette s'étend, rejoint ses voisines, et la nappe avance en éventail. Plutôt que de simuler le fluide, on calcule l'<em>instant d'arrivée</em> \(T(x, z)\) du plasmodium en chaque point : une distance de Dijkstra multi-sources sur une grille de 0,11 mm, où chaque graine part avec son retard. Le pas est anisotrope (le front court \(1{,}1\) à \(1{,}5\) fois plus vite le long du fil du bois) et la vitesse est modulée par un bruit : ce sont les festons du front. La nappe de la scène est la courbe de niveau \(T = s\) : son bord reste net à toute distance, quelle que soit la résolution de la grille.</p>
+        <div class="note trap"><b>Le piège</b><p>Avec huit voisins, une distance de grille n'est pas euclidienne : un front parti d'un point devient un octogone, et les gouttelettes avaient des pans coupés. Avec les seize voisins (pas de cavalier), l'erreur maximale sur la distance tombe de 8 % à moins de 3 %, sans recourir à un fast marching.</p></div>
+        <p>La distance est enfin remappée en phase par \(f(x) = \tfrac12 x^{0{,}55} + \tfrac12 x^{1{,}6}\) : les gouttelettes grossissent lentement (on les voit séparées), le front file au milieu, puis ralentit au bord du territoire.</p>
+        <figure id="fig-front"><figcaption><b>Le front de cette graine.</b> Le vrai calcul (<code>arrivalField</code>), dessiné en courbes de niveau de \(T\). L'anisotropie se règle ; les points sont les spores qui germent.</figcaption></figure>
+      </section>
+
+      <section id="tero">
+        <h2><span class="n">03</span>Le réseau s'adapte à son propre flux (Tero)</h2>
+        <span class="src">src/gen/plasmodium.js · networkSteps()</span>
+        <p>Derrière son front, un plasmodium se creuse en veines : les tubes qui transportent beaucoup s'élargissent, les autres disparaissent. Tero et al. (2007) en ont tiré un modèle qui retrouve le réseau ferré de Tokyo. Sur un treillis triangulaire de 0,45 mm, chaque arête a une conductivité \(D_{ij}\) ; à chaque pas, le protoplasme part du corps (les nœuds âgés) vers quelques nœuds tirés au front, et les pressions sont celles de Kirchhoff :</p>
+        <div class="eq">\[ \sum_j \frac{D_{ij}}{l_{ij}}\,(p_i - p_j) = b_i, \qquad Q_{ij} = \frac{D_{ij}}{l_{ij}}(p_i - p_j), \qquad \frac{dD_{ij}}{dt} = \frac{|Q_{ij}|^\mu}{1 + |Q_{ij}|^\mu} - D_{ij}. \]</div>
+        <p>Le système est résolu par gradient conjugué préconditionné (Jacobi), en repartant des pressions du pas précédent, avec un bilan nul dans chaque composante connexe — avant leur fusion, les gouttelettes sont des réseaux séparés. Le rayon d'une veine suit Poiseuille : \(D \propto r^4\), donc \(r \propto D^{1/4}\). 140 pas, 32 instantanés enregistrés et relus dans le vertex shader.</p>
+        <div class="note check"><b>Vérifié</b><p>Le résidu de Kirchhoff reste sous 6 % du flux injecté à chaque pas, sur les graines testées (<code>test/spore.test.mjs</code>) ; le volume des perles est celui du réseau à 10⁻⁹ près.</p></div>
+        <figure id="fig-tero"><figcaption><b>Le réseau pousse.</b> Le même générateur que la scène (un pas par image), en plus grossier. Avec \(\mu \approx 1\), des mailles ; avec \(\mu \approx 2\), un arbre.</figcaption></figure>
+      </section>
+
+      <section id="perles">
+        <h2><span class="n">04</span>Les veines se vident dans des perles</h2>
+        <span class="src">src/gen/plasmodium.js · placeBeads()</span>
+        <p>À la lumière, un plasmodium se rassemble en perles, puis chaque perle se dresse en sporange. Le long d'une veine, l'espacement est celui que choisit un filament liquide qui se fragmente : l'instabilité de Plateau-Rayleigh amplifie le plus vite la longueur d'onde \(\lambda \approx 9{,}02\, r\). Pour un filament non visqueux de rayon \(a\), le taux de croissance d'une ondulation \(k\) est</p>
+        <div class="eq">\[ \omega^2 = \frac{\gamma}{\rho a^3}\; x\,(1 - x^2)\,\frac{I_1(x)}{I_0(x)}, \qquad x = ka, \]</div>
+        <p>maximal en \(x \approx 0{,}697\). Les espèces en grappes (<em>Arcyria</em>) ou en touffes (<em>Stemonitis</em>) se rassemblent autour des nœuds les plus chargés du réseau. Dans tous les cas, <b>chaque veine verse son volume à la perle la plus proche</b> : la somme des perles est le volume du réseau, à l'arrondi près, et la taille de chaque sporange en découle (racine cubique du volume). Les veines loin d'une perle se vident les premières : on voit le protoplasme refluer.</p>
+        <figure id="fig-plateau"><figcaption><b>Plateau-Rayleigh.</b> Le taux de croissance selon la longueur d'onde, et le filament qui se fragmente à la longueur d'onde choisie. Placez-la loin du maximum : la fragmentation est lente.</figcaption></figure>
+      </section>
+
+      <section id="poutre">
+        <h2><span class="n">05</span>Un sporange est une perle repliée et une poutre encastrée</h2>
+        <span class="src">src/fruit.js · fruitState() — src/scene/sporangia.js</span>
+        <p>Chaque espèce a un gabarit usiné, dans sa forme mûre (hypothallus, pied évasé, calice à lèvre roulée, péridium, capillitium, columelle). Le vertex shader le replie en sphère de même volume (la perle), puis le déplie : le pied s'allonge, la tête monte et prend forme. Le vent le fléchit comme une poutre encastrée chargée en bout — déplacement \(\delta(t) = b\, t^2 (3 - t)/2\) le long de la hauteur relative \(t\), avec une amplitude \(b \propto U^2 H\) (la traînée) ; les normales tournent de la pente \(\delta'\). La même formule sert au calcul des spores (leur point de départ suit la tête fléchie).</p>
+        <p>Puis chaque famille fait son geste : le filet d'<em>Arcyria</em> se détend de 2 à 3,6 fois sa hauteur avec un rebond, ses mailles s'ajourent ; la masse de <em>Stemonitis</em> s'amincit du sommet vers le pied et laisse la cage ; le péridium de <em>Lamproderma</em> s'écaille ; les tubes d'<em>Hemitrichia</em> se fendent et moussent.</p>
+        <figure id="fig-poutre"><figcaption><b>De la perle au sporange.</b> Le profil d'un sporange (ici <em>Arcyria</em>) replié en perle, dressé, fléchi par le vent, et son filet qui se détend. Mêmes cotes que le gabarit de la scène.</figcaption></figure>
+      </section>
+
+      <section id="stokes">
+        <h2><span class="n">06</span>Les spores tombent selon Stokes et ensemencent le site suivant</h2>
+        <span class="src">src/gen/spores.js · flight(), buildSpores()</span>
+        <p>Une spore de 10 µm tombe dans l'air immobile à \(v = \tfrac{2}{9}\,\Delta\rho\, g\, r^2/\mu \approx 0{,}3\) cm/s ; à 8 µm, 0,19 cm/s. Le souffle l'emporte. Sa trajectoire est analytique (la même en JS et en TSL) : le vent moyen intégré \(W(s)\) lu dans une table, une montée dans le tourbillon de l'ouverture, la chute, et une dispersion qui croît depuis zéro :</p>
+        <div class="eq">\[ x(\tau) = x_0 + W(s) - W(s_r) + \sigma\,a(\tau)\sin(1{,}3\tau + \varphi_1), \quad y(\tau) = y_0 + h\,(1 - e^{-\tau/0{,}8}) - v\,\tau + \ldots \]</div>
+        <p>L'instant où elle touche le bois est cherché par pas, puis par dichotomie, sur la même surface de bois que le rendu. Trente mille spores par site ; à l'écran, chacune est une bouffée qui s'étale en vol (rayon \(\propto \sqrt\tau\), densité \(\propto 1/r^2\)) et s'allume à contre-jour (Henyey-Greenstein, \(g = 0{,}6\)).</p>
+        <p><b>Les germinations du site suivant sont des chutes réelles.</b> Pour chaque graine du plasmodium, translatée de \(L\), la spore dont la chute naturelle tombe le plus près reçoit une correction \(c\), appliquée progressivement pendant le vol et pleine à son instant de chute : elle se pose exactement sur la graine.</p>
+        <div class="note trap"><b>Le piège</b><p>Corriger la trajectoire change l'endroit où elle touche le bois, donc l'instant de chute, donc la correction : sur un bois fendu, la boucle ne convergeait pas (jusqu'à 1,3 mm d'écart pour <em>Hemitrichia</em>, dont les spores partent au ras du bois). En gardant l'instant de chute naturel et en posant la spore à la hauteur du bois à cet instant, la chute est exacte par construction.</p></div>
+        <figure id="fig-stokes"><figcaption><b>Le nuage de profil.</b> Des trajectoires calculées par <code>flight()</code> sous un souffle en rafales ; en bas, où elles tombent. Plus les spores sont petites, plus elles vont loin.</figcaption></figure>
+      </section>
+
+      <section id="bois">
+        <h2><span class="n">07</span>Le bois se répète exactement, sans couture</h2>
+        <span class="src">src/gen/wood.js · makeNoise(), bakeWood()</span>
+        <p>Pour que la caméra retombe sur la même image après avoir avancé de \(L\), le bois doit se répéter exactement : tout le bruit du four est périodique en \(x\). Un bruit de gradient à période entière \(p_x\) (le hachage lit \(i \bmod p_x\)), et pour chaque octave une fréquence arrondie à un nombre entier de cellules sur \(L\) ; les cellules de Voronoï des fentes et de la croûte de charbon sont tirées de même. Le relief (1 024² texels, 43 µm), ses pentes, son occlusion et une hauteur lissée (le niveau du gel qui remplit les creux) sont cuits dans un worker, puis lus deux fois : en déplacement vertical d'un maillage dense et en normal map.</p>
+        <figure id="fig-bois"><figcaption><b>La couture.</b> Deux périodes du même bruit côte à côte. Périodique, rien ne marque la jonction ; sinon, une arête traverse le bois.</figcaption></figure>
+      </section>
+
+      <section id="irisation">
+        <h2><span class="n">08</span>Le péridium irise par une couche mince</h2>
+        <span class="src">src/scene/sporangia.js · iridescence</span>
+        <p>Les sphères de <em>Lamproderma</em> et de <em>Diachea</em> sont bleu-violet métallique, avec des reflets or et vert : ce n'est pas un pigment, c'est une interférence dans une couche mince du péridium (Inchaussandague et al., 2010). Le matériau de three.js la calcule dans le reflet (épaisseur 300 à 640 nm selon l'espèce, indice 2,0 sur un fond d'indice 1,45) ; la couleur glisse quand la tête s'incline au vent.</p>
+        <figure id="fig-film"><figcaption><b>Couche mince.</b> Réflectance d'Airy à trois longueurs d'onde (650, 550, 450 nm), convertie en couleur, selon l'angle d'incidence. L'épaisseur se règle.</figcaption></figure>
+      </section>
+
+      <section id="budget">
+        <h2><span class="n">09</span>Budget</h2>
+        <div class="tbl"><table>
+          <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
+          <tbody>
+            <tr><td>Front, réseau de Tero (140 pas), perles, spores et chutes (30 000)</td><td>worker</td><td class="num">2 à 4,5 s</td></tr>
+            <tr><td>Bois cuit (1 024², relief, pentes, occlusion, hauteur lissée)</td><td>worker, en parallèle</td><td class="num">0,4 à 1 s</td></tr>
+            <tr><td>Veines (tubes posés)</td><td>GPU</td><td class="num">60 k à 220 k sommets</td></tr>
+            <tr><td>Maillage du bois</td><td>GPU</td><td class="num">≈ 390 k sommets</td></tr>
+            <tr><td>Image complète, qualité Haute, 1,8 Mpx (réseau · dissémination)</td><td>GPU</td><td class="num">11,7 · 8,7 ms</td></tr>
+            <tr><td>Version mobile, 1,2 Mpx</td><td>GPU</td><td class="num">3,9 ms</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+    </article>
+
+    <footer class="end">
+      <a href="./">Ouvrir Spore</a>
+      <a href="https://github.com/drschizzo/Codevember/blob/main/spore/README.md">README</a>
+      <a href="https://github.com/drschizzo/Codevember/blob/main/spore/docs/concept.md">La démarche</a>
+      <span class="sp"></span>
+      <a href="../">Tous les jours</a>
+    </footer>
+  </main>
+
+  <script type="module">
+    import { demo, C, TAU, lerp, clamp, smooth, label, alpha, arrow, rng } from '../home/explainer.js';
+    import { generate } from './src/recipe.js';
+    import { seedsOf, arrivalField, sampleT, buildGraph, networkSteps, territoryOf } from './src/gen/plasmodium.js';
+    import { beamShape } from './src/fruit.js';
+    import { flight, windTable } from './src/gen/spores.js';
+    import { makeNoise } from './src/gen/wood.js';
+    import { FAMILIES } from './src/families.js';
+
+    const R0 = generate('c3', { family: 'arcyria' });
+
+    // ── 01 · la frise ───────────────────────────────────────────────────────
+    demo('#fig-frise', {
+      title: 'Trois sites, une caméra', aspect: 2.4, animate: true,
+      controls: [{ key: 'u', label: 'Phase u (boucle)', min: 0, max: 2, step: .001, value: .2, fmt: (v) => v.toFixed(2) }],
+      buttons: [{ key: 'play', label: 'Lecture', toggle: true, value: true }],
+      draw(g, d) {
+        if (d.s.play) { d.s.u = (d.s.u + d.dt / 8) % 2; const inp = d.fig.querySelector('input'); if (inp) { inp.value = d.s.u; inp.previousSibling.textContent = d.s.u.toFixed(2); } }
+        const u = d.s.u, { w, h } = d, L = w / 3.4, y0 = h * .7;
+        const travel = (q) => { const f = q - Math.floor(q); const c = .94, ww = .1; let acc = 0; for (let i = 0; i < 200; i++) { const t = i / 200; let dd = t - c; dd -= Math.round(dd); acc += (t < f ? 1 : 0) * (.12 + .88 * (Math.abs(dd) < ww ? Math.cos(Math.PI * dd / (2 * ww)) ** 2 / ww : 0)); } let tot = 0; for (let i = 0; i < 200; i++) { const t = i / 200; let dd = t - c; dd -= Math.round(dd); tot += .12 + .88 * (Math.abs(dd) < ww ? Math.cos(Math.PI * dd / (2 * ww)) ** 2 / ww : 0); } return Math.floor(q) + acc / tot; };
+        const camX = (travel(u) - travel(.44)) * L + w * .3;
+        g.strokeStyle = C.grid; g.beginPath(); g.moveTo(0, y0); g.lineTo(w, y0); g.stroke();
+        for (let j = -1; j <= 3; j++) {
+          const cx = w * .3 + j * L, s = u - j;
+          label(g, `site ${j}`, cx, y0 + 22, { align: 'center', color: C.faint });
+          if (s <= 0) { label(g, 'bois nu', cx, y0 - 8, { align: 'center', color: C.faint, size: 11 }); continue; }
+          const st = Math.min(s, 2);
+          if (st < .2) { g.fillStyle = alpha(C.c3, .6); for (let k = 0; k < 9; k++) { g.beginPath(); g.arc(cx - 30 + k * 7, y0 - 2, 2 + st * 20 * (k % 3 + 1) / 3, 0, TAU); g.fill(); } }
+          else if (st < .45) { g.strokeStyle = C.c3; g.lineWidth = 2; for (let k = 0; k < 5; k++) { g.beginPath(); g.moveTo(cx - 40, y0 - 3); g.quadraticCurveTo(cx, y0 - 3 - k * 2, cx + 40 * (st - .2) / .25, y0 - 3 + (k - 2) * 3); g.stroke(); } }
+          else if (st < 1.05) { const hgt = 50 * smooth(.45, .62, st), op = smooth(.74, .9, st); for (let k = 0; k < 7; k++) { const x = cx - 30 + k * 10, b = 10 * smooth(.72, .85, st) * (st < .95 ? 1 : 0); g.strokeStyle = C.ink; g.lineWidth = 1.2; g.beginPath(); g.moveTo(x, y0); g.quadraticCurveTo(x, y0 - hgt * .6, x + b, y0 - hgt); g.stroke(); g.fillStyle = st > .6 ? C.c1 : '#eee'; g.beginPath(); g.arc(x + b, y0 - hgt, 4 + 2 * op, 0, TAU); g.fill(); }
+            if (st > .76) { g.fillStyle = alpha(C.c1, .25); for (let k = 0; k < 30; k++) { const t = (st - .76) / .3; g.beginPath(); g.arc(cx + t * L * (k / 30 + .4), y0 - 50 + t * 40 * (k % 5) / 5, 3, 0, TAU); g.fill(); } } }
+          else { const k2 = 1 - smooth(1.05, 1.9, st); for (let k = 0; k < 7; k++) { const x = cx - 30 + k * 10; g.strokeStyle = alpha(C.ink, .5 * k2 + .05); g.beginPath(); g.moveTo(x, y0); g.lineTo(x + 8 * (1 - k2), y0 - 50 * k2); g.stroke(); } }
+        }
+        g.strokeStyle = C.c2; g.lineWidth = 2; g.strokeRect(camX - L * .55, h * .12, L * 1.1, y0 - h * .12 + 30);
+        label(g, 'cadre', camX - L * .55 + 6, h * .12 + 16, { color: C.c2 });
+        d.status(`site 0 à la phase ${Math.min(2, Math.max(0, u)).toFixed(2)}`);
+      },
+    });
+
+    // ── 02 · le front ───────────────────────────────────────────────────────
+    {
+      let cache = null;
+      demo('#fig-front', {
+        title: 'Instant d’arrivée T(x, z)', aspect: 2,
+        controls: [{ key: 'an', label: 'Anisotropie (fil du bois)', min: .7, max: 2, step: .05, value: R0.plasmodium.aniso }, { key: 'fe', label: 'Festons', min: 0, max: 1.5, step: .05, value: R0.plasmodium.festoon }],
+        draw(g, d) {
+          const key = `${d.s.an}|${d.s.fe}`;
+          if (!cache || cache.key !== key) {
+            const P = { ...R0.plasmodium, aniso: d.s.an, festoon: d.s.fe };
+            const seeds = seedsOf(P, P.seed), F = arrivalField(P, R0.site.L, seeds);
+            cache = { key, P, F, seeds: seeds.filter((q) => sampleT(F, q.x, q.z) < .3), img: null };
+          }
+          const { F, P } = cache, Tr = territoryOf(P), { w, h } = d;
+          const sc = Math.min(w / (Tr.x1 - Tr.x0), h / (Tr.z1 - Tr.z0)) * .95, ox = w / 2 - (Tr.x0 + Tr.x1) / 2 * sc, oz = h / 2 - (Tr.z0 + Tr.z1) / 2 * sc;
+          const step = 3;
+          for (let py = 0; py < h; py += step) for (let px = 0; px < w; px += step) {
+            const T = sampleT(F, (px - ox) / sc, (py - oz) / sc);
+            if (T > 1) continue;
+            const band = (T * 40) % 1 < .12;
+            g.fillStyle = band ? alpha(C.c1, .9) : alpha(C.c1, .08 + .25 * (1 - T / .37));
+            g.fillRect(px, py, step, step);
+          }
+          g.fillStyle = C.c3; for (const q of cache.seeds) { g.beginPath(); g.arc(ox + q.x * sc, oz + q.z * sc, 3.5, 0, TAU); g.fill(); }
+          arrow(g, w - 120, h - 20, w - 30, h - 20, { color: C.faint }); label(g, 'fil du bois, vent', w - 125, h - 15, { align: 'right', color: C.faint });
+          d.status(`${cache.seeds.length} germinations · courbes tous les 0,025 de boucle`);
+        },
+      });
+    }
+
+    // ── 03 · Tero ───────────────────────────────────────────────────────────
+    demo('#fig-tero', {
+      title: 'Adaptation du réseau', aspect: 2, animate: true,
+      controls: [{ key: 'mu', label: 'μ', min: .8, max: 2.2, step: .05, value: 1.4, onChange: (d) => d.reset() }],
+      buttons: [{ label: 'Rejouer', onClick: (d) => d.reset() }],
+      setup(d) {
+        const P = { ...R0.plasmodium, mu: d.s.mu ?? 1.4 };
+        const seeds = seedsOf(P, P.seed), F = arrivalField(P, R0.site.L, seeds);
+        const live = seeds.filter((q) => sampleT(F, q.x, q.z) < .3);
+        const Gr = buildGraph(P, F, .08, 'demo');
+        d.state = { P, F, Gr, it: networkSteps(P, Gr, live, { steps: 90, seed: 'demo', snaps: false }), D: null, s: 0, done: false };
+      },
+      draw(g, d) {
+        const S = d.state; if (!S.Gr) return;
+        if (!S.done) { const r = S.it.next(); if (r.done) S.done = true; else { S.D = r.value.D; S.s = r.value.s; } }
+        const { Gr, F, P } = S, Tr = territoryOf(P), { w, h } = d;
+        const sc = Math.min(w / (Tr.x1 - Tr.x0), h / (Tr.z1 - Tr.z0)) * .95, ox = w / 2 - (Tr.x0 + Tr.x1) / 2 * sc, oz = h / 2 - (Tr.z0 + Tr.z1) / 2 * sc;
+        for (let py = 0; py < h; py += 4) for (let px = 0; px < w; px += 4) { const T = sampleT(F, (px - ox) / sc, (py - oz) / sc); if (T <= S.s) { g.fillStyle = alpha(C.c1, S.s - T < .03 ? .3 : .07); g.fillRect(px, py, 4, 4); } }
+        if (S.D) {
+          let m = 1e-9; for (let k = 0; k < Gr.m; k++) m = Math.max(m, S.D[k]);
+          g.lineCap = 'round';
+          for (let k = 0; k < Gr.m; k++) { const q = S.D[k] / m; if (q < .02) continue; g.strokeStyle = alpha(C.c1, Math.min(1, .2 + q ** .25)); g.lineWidth = .5 + 4 * q ** .25; g.beginPath(); g.moveTo(ox + Gr.x[Gr.ea[k]] * sc, oz + Gr.z[Gr.ea[k]] * sc); g.lineTo(ox + Gr.x[Gr.eb[k]] * sc, oz + Gr.z[Gr.eb[k]] * sc); g.stroke(); }
+        }
+        d.status(`phase ${S.s.toFixed(3)} · ${Gr.n} nœuds, ${Gr.m} arêtes${S.done ? ' · fini' : ''}`);
+      },
+    });
+
+    // ── 04 · Plateau-Rayleigh ───────────────────────────────────────────────
+    {
+      const I = (n, x) => { let s = 0, t = (x / 2) ** n; for (let k = 1; k <= n; k++) t /= k; for (let k = 0; k < 30; k++) { s += t; t *= (x * x / 4) / ((k + 1) * (k + 1 + n)); } return s; };
+      const w2 = (x) => x * (1 - x * x) * I(1, x) / I(0, x);
+      demo('#fig-plateau', {
+        title: 'Le filament choisit sa longueur d’onde', aspect: 2.2, animate: true,
+        controls: [{ key: 'lam', label: 'λ / a', min: 6.5, max: 30, step: .1, value: 9.02, fmt: (v) => v.toFixed(2), onChange: (d) => { d.state.t = 0; } }],
+        setup(d) { d.state = { t: 0 }; },
+        draw(g, d) {
+          const { w, h } = d, x0 = 40, x1 = w * .45, y1 = h * .85, y0 = h * .12;
+          const X = (x) => lerp(x0, x1, x), Y = (v) => lerp(y1, y0, v / .35);
+          g.strokeStyle = C.grid; g.beginPath(); g.moveTo(x0, y1); g.lineTo(x1, y1); g.moveTo(x0, y0); g.lineTo(x0, y1); g.stroke();
+          g.strokeStyle = C.c2; g.lineWidth = 2; g.beginPath();
+          for (let i = 1; i <= 200; i++) { const x = i / 200 * .999; const v = Math.sqrt(Math.max(0, w2(x))); i > 1 ? g.lineTo(X(x), Y(v)) : g.moveTo(X(x), Y(v)); } g.stroke();
+          const xk = TAU / d.s.lam, gr = Math.sqrt(Math.max(0, w2(xk)));
+          g.fillStyle = C.c1; g.beginPath(); g.arc(X(xk), Y(gr), 5, 0, TAU); g.fill();
+          label(g, 'x = ka', x1, y1 + 18, { align: 'right' }); label(g, 'taux ω', x0 + 6, y0 - 2);
+          label(g, 'max : x = 0,697 (λ = 9,02 a)', X(.697), Y(.343) - 8, { align: 'center', color: C.faint, size: 11 });
+          // filament
+          const S = d.state; S.t += d.dt; const amp = Math.min(.95, .02 * Math.exp(gr * S.t * 3));
+          if (amp >= .95 && S.t > 4) S.t = 0;
+          const fx0 = w * .52, fx1 = w - 20, fy = h * .5, a = h * .09, scx = (fx1 - fx0) / (3.2 * 9.02);
+          g.fillStyle = alpha(C.c1, .75); g.beginPath();
+          for (let i = 0; i <= 300; i++) { const xx = i / 300 * (fx1 - fx0), r = a * Math.max(0, 1 + amp * Math.cos(xx / scx / d.s.lam * TAU)); g.lineTo(fx0 + xx, fy - r); }
+          for (let i = 300; i >= 0; i--) { const xx = i / 300 * (fx1 - fx0), r = a * Math.max(0, 1 + amp * Math.cos(xx / scx / d.s.lam * TAU)); g.lineTo(fx0 + xx, fy + r); }
+          g.fill();
+          d.status(`λ = ${d.s.lam.toFixed(2)} a · croissance ${(gr / .343 * 100).toFixed(0)} % du maximum`);
+        },
+      });
+    }
+
+    // ── 05 · la poutre ──────────────────────────────────────────────────────
+    {
+      const sp = FAMILIES.arcyria.species.denudata;
+      demo('#fig-poutre', {
+        title: 'Arcyria denudata', aspect: 2.2,
+        controls: [
+          { key: 'g', label: 'Levée (perle → sporange)', min: 0, max: 1, step: .01, value: 1 },
+          { key: 'U', label: 'Vent (cm/s)', min: 0, max: 2, step: .01, value: .9 },
+          { key: 'o', label: 'Ouverture', min: 0, max: 1, step: .01, value: .6 },
+        ],
+        draw(g, d) {
+          const { w, h } = d, H = sp.stalk.h + sp.head.h, sc = h * .75 / (H * sp.expand * .75), base = h * .92;
+          const cupTop = sp.stalk.h + sp.head.h * sp.cup, beadR = Math.cbrt(.75 * sp.head.r ** 2 * sp.head.h) * 1.15;
+          const lift = smooth(0, .85, d.s.g), m = smooth(.3, 1, d.s.g), yc = sp.stalk.h + sp.head.h / 2, cNow = lerp(beadR * .78, yc, lift);
+          const e = d.s.o + Math.sin(d.s.o * Math.PI) * .18 * (1 - d.s.o), E = 1 + (sp.expand - 1) * e;
+          const Hn = Math.max(.002, lerp(beadR * 2, H, lift)), b = .06 * d.s.U ** 2 * .6 * Hn * d.s.g;
+          const P = (x, y) => { const t = clamp(y / Hn); return [w / 2 + (x + b * beamShape(t)) * sc, base - y * sc]; };
+          g.strokeStyle = C.grid; g.beginPath(); g.moveTo(20, base); g.lineTo(w - 20, base); g.stroke();
+          // pied
+          g.strokeStyle = alpha(C.ink, .9); g.lineWidth = Math.max(1.5, sp.stalk.r * 2 * sc * smooth(.05, .5, d.s.g)); g.beginPath();
+          for (let i = 0; i <= 20; i++) { const y = (i / 20) * sp.stalk.h * cNow / yc; const [px, py] = P(0, y); i ? g.lineTo(px, py) : g.moveTo(px, py); } g.stroke();
+          // tête : sphère → capsule ; filet détendu
+          const top = cNow + (sp.head.h / 2) * m + beadR * (1 - m);
+          const pts = [];
+          for (let i = 0; i <= 40; i++) {
+            const a = -Math.PI / 2 + i / 40 * Math.PI, sx = Math.cos(a) * beadR, sy = Math.sin(a) * beadR;
+            const hx = sp.head.r * Math.cos(a) ** .35, hy = sp.head.h / 2 * Math.sin(a);
+            let x = lerp(sx, hx, m), y = cNow + lerp(sy, hy, m);
+            if (d.s.g > .99 && y > cupTop) { y = cupTop + (y - cupTop) * E; x *= 1 + .28 * e; } // (le filet se détend au-dessus du calice)
+            pts.push([x, y]);
+          }
+          g.fillStyle = alpha(C.c1, .5 + .3 * (1 - d.s.o)); g.strokeStyle = C.c1; g.lineWidth = 1.2; g.beginPath();
+          pts.forEach(([x, y], i) => { const [px, py] = P(x, y); i ? g.lineTo(px, py) : g.moveTo(px, py); });
+          for (let i = pts.length - 1; i >= 0; i--) { const [px, py] = P(-pts[i][0], pts[i][1]); g.lineTo(px, py); }
+          g.closePath(); g.fill(); g.stroke();
+          if (d.s.g > .99) { const [ax, ay] = P(sp.head.r * 1.06, cupTop), [bx] = P(-sp.head.r * 1.06, cupTop); g.strokeStyle = C.c2; g.lineWidth = 2.5; g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, ay); g.stroke(); label(g, 'calice', ax + 8, ay + 4, { color: C.c2 }); }
+          arrow(g, 30, h * .3, 90, h * .3, { color: C.c3 }); label(g, `vent ${d.s.U.toFixed(2)} cm/s`, 30, h * .3 - 8, { color: C.c3 });
+          d.status(`hauteur ${(top * 10).toFixed(1)} mm · flexion au sommet ${(b * 10).toFixed(2)} mm (∝ U²)`);
+        },
+      });
+    }
+
+    // ── 06 · Stokes ─────────────────────────────────────────────────────────
+    {
+      demo('#fig-stokes', {
+        title: 'Trajectoires et chutes', aspect: 2.2,
+        controls: [{ key: 'd', label: 'Diamètre des spores (µm)', min: 5, max: 14, step: .5, value: 8 }, { key: 'gu', label: 'Rafales', min: 0, max: 1, step: .05, value: .6 }],
+        draw(g, d) {
+          const R = { ...R0, wind: { ...R0.wind, gust: d.s.gu } }, tab = windTable(R), L = R.site.L;
+          const { w, h } = d, X = (x) => 20 + (x + .3) / 7 * (w - 40), Y = (y) => h * .78 - y / 1.6 * h * .65;
+          g.strokeStyle = C.grid; g.beginPath(); g.moveTo(10, Y(0)); g.lineTo(w - 10, Y(0)); g.stroke();
+          g.strokeStyle = alpha(C.c2, .5); g.setLineDash([3, 4]); g.beginPath(); g.moveTo(X(L), Y(0) + 10); g.lineTo(X(L), Y(1.5)); g.stroke(); g.setLineDash([]);
+          label(g, 'site suivant', X(L) + 6, Y(1.45), { color: C.c2 });
+          const r = rng(7), hist = new Float32Array(60), vs = .3 * (d.s.d / 10) ** 2;
+          for (let k = 0; k < 140; k++) {
+            const q = { x0: r() * .4, y0: .2 + r() * .4, z0: 0, sr: .75 + r() * .12, lift: .1 + 1.7 * r() ** 2.2, vs: vs * (.75 + .5 * r()), sig: .06 + .14 * r(), p1: r() * 6, p2: r() * 6, p3: r() * 6, cx: 0, cz: 0, tl: 0 };
+            g.strokeStyle = alpha(C.c1, .22); g.lineWidth = 1; g.beginPath();
+            let landX = null;
+            for (let s = q.sr, i = 0; s < q.sr + .5; s += .002, i++) { const p = flight(q, s, tab); if (p[1] < 0) { landX = p[0]; break; } i ? g.lineTo(X(p[0]), Y(p[1])) : g.moveTo(X(p[0]), Y(p[1])); }
+            g.stroke();
+            if (landX !== null) { const b = Math.floor((landX + .3) / 7 * 60); if (b >= 0 && b < 60) hist[b]++; }
+          }
+          const hm = Math.max(1, ...hist);
+          for (let b = 0; b < 60; b++) { const x = 20 + b / 60 * (w - 40); g.fillStyle = alpha(C.c3, .8); const hh = hist[b] / hm * h * .14; g.fillRect(x, h - 6 - hh, (w - 40) / 60 - 1, hh); }
+          d.status(`chute de Stokes ${(vs * 10).toFixed(2)} mm/s`);
+        },
+      });
+    }
+
+    // ── 07 · le bois périodique ─────────────────────────────────────────────
+    {
+      const L = 4.4, N = makeNoise(L, 41);
+      const raw = (x, z) => { let s = 0, a = .5, f = 2.4; for (let o = 0; o < 4; o++) { s += a * Math.sin(x * f * 1.7 + z * f * 2.3 + o) * Math.cos(z * f * 1.3 - x * f * .9 + 2 * o); f *= 2.03; a *= .5; } return s; };
+      demo('#fig-bois', {
+        title: 'Deux périodes côte à côte', aspect: 2.6,
+        buttons: [{ key: 'per', label: 'Bruit périodique', toggle: true, value: true }],
+        draw(g, d) {
+          const { w, h } = d, step = 3;
+          for (let py = 0; py < h; py += step) for (let px = 0; px < w; px += step) {
+            let x = px / w * 2 * L; const z = py / h * 2.2;
+            if (!d.s.per) x %= L;
+            const v = d.s.per ? N(x, z, 2.4, 4) : raw(x, z);
+            const c = Math.round(110 + 110 * v);
+            g.fillStyle = `rgb(${c},${Math.round(c * .86)},${Math.round(c * .7)})`; g.fillRect(px, py, step, step);
+          }
+          g.strokeStyle = alpha(C.c2, .8); g.setLineDash([4, 4]); g.beginPath(); g.moveTo(w / 2, 0); g.lineTo(w / 2, h); g.stroke(); g.setLineDash([]);
+          label(g, 'x = L', w / 2 + 6, 16, { color: C.c2 });
+          d.status(d.s.per ? 'période entière : aucune jonction' : 'bruit ordinaire répété : la couture se voit');
+        },
+      });
+    }
+
+    // ── 08 · couche mince ───────────────────────────────────────────────────
+    {
+      const refl = (lam, d, th, n1 = 2.0, n2 = 1.45) => {
+        const s0 = Math.sin(th), c0 = Math.cos(th), s1 = s0 / n1, c1 = Math.sqrt(1 - s1 * s1), s2 = s0 / n2, c2 = Math.sqrt(1 - s2 * s2);
+        const rs = (a, b, ca, cb) => (a * ca - b * cb) / (a * ca + b * cb);
+        const r01 = rs(1, n1, c0, c1), r12 = rs(n1, n2, c1, c2), delta = 4 * Math.PI * n1 * d * c1 / lam;
+        const re = r01 + r12 * Math.cos(delta), im = r12 * Math.sin(delta), dre = 1 + r01 * r12 * Math.cos(delta), dim = r01 * r12 * Math.sin(delta);
+        return (re * re + im * im) / (dre * dre + dim * dim);
+      };
+      demo('#fig-film', {
+        title: 'Réflectance d’une couche mince', aspect: 2.4,
+        controls: [{ key: 'd', label: 'Épaisseur (nm)', min: 250, max: 700, step: 5, value: 450 }],
+        draw(g, d) {
+          const { w, h } = d, n = 120;
+          for (let i = 0; i < n; i++) {
+            const th = i / n * 1.4, rgb = [650, 550, 450].map((l) => refl(l, d.s.d, th));
+            const m = Math.max(...rgb, 1e-6);
+            g.fillStyle = `rgb(${rgb.map((v) => Math.round(255 * Math.min(1, (v / m) ** .8 * Math.min(1, m * 6)))).join(',')})`;
+            g.fillRect(20 + i / n * (w - 40), h * .1, (w - 40) / n + 1, h * .5);
+          }
+          label(g, '0°', 20, h * .7, { color: C.faint }); label(g, '80°  (incidence)', w - 20, h * .7, { align: 'right', color: C.faint });
+          const R550 = refl(550, d.s.d, 0);
+          d.status(`réflectance à 550 nm, incidence normale : ${(R550 * 100).toFixed(1)} %`);
+        },
+      });
+    }
+  </script>
+</body>
+</html>
