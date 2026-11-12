@@ -21,11 +21,12 @@
 // La caméra du début (P) et celle qui regarde l'image du petit (C1) voient la
 // même chose (ajusté pixel à pixel par tools/seamfit.mjs, salle allumée :
 // l'image n'est pas une copie exacte du petit — elle se montre sous un angle
-// plus plongeant et un peu étirée). Autour de u = 1, un fondu bref entre les
-// deux vues efface ce qui reste d'écart.
+// plus plongeant et un peu étirée). Juste après le raccord, un morphing (chaque
+// pixel vise d'abord le point que montrait l'autre vue) efface ce qui reste
+// d'écart, sans double image.
 import { CUT_HALF } from './gen/abyme.js';
 
-export const CHORE = { seam: [0.985, 1.015] }; // fondu des deux vues (autour de u = 1)
+export const CHORE = { morph: 0.045 }; // morphing du raccord, juste après u = 0 (≈ 1 s)
 
 // Les deux poses du raccord (NOCUT=1 FIX_AX=1 MODE=jour tools/seamfit.mjs 50
 // 0.011 18 1.7778 0.03, K = 0,05, couvercle fermé : 6,9 % de pixels en
@@ -43,11 +44,20 @@ const frac = (u) => u - Math.floor(u);
 const lerp = (a, b, t) => a + (b - a) * t;
 
 // le niveau de la spirale : 0 au gros plan sur le grand, 1 sur l'image du petit
-// (lentement au début — la coupe s'ouvre pendant que la caméra voit encore le
-// grand presque entier —, plus vite ensuite : λ = u + a·sin(2πu)/2π, vitesse
-// 1 + a·cos 2πu, la même des deux côtés du raccord)
-export const DIVE_EASE = -0.8;
-export const levelAt = (R, u) => { const v = frac(u); return v + (DIVE_EASE * Math.sin(2 * Math.PI * v)) / (2 * Math.PI); };
+// Le niveau : vite au raccord (le passage d'un niveau à l'autre se fait en
+// mouvement), puis la caméra ralentit et s'attarde pendant que la coupe
+// s'ouvre et qu'on compare l'objet et son image, puis plonge. Une courbe de
+// Hermite monotone par des clés (u, λ, vitesse) ; la vitesse au raccord est la
+// même des deux côtés.
+export const DIVE = [[0, 0, 1.6], [0.12, 0.1, 0.3], [0.42, 0.19, 0.3], [0.8, 0.68, 1.6], [1, 1, 1.6]];
+export const levelAt = (R, u) => {
+  const v = frac(u);
+  let k = 0;
+  while (k < DIVE.length - 2 && v > DIVE[k + 1][0]) k++;
+  const [u0, l0, m0] = DIVE[k], [u1, l1, m1] = DIVE[k + 1], h = u1 - u0, t = (v - u0) / h;
+  const t2 = t * t, t3 = t2 * t;
+  return (2 * t3 - 3 * t2 + 1) * l0 + (t3 - 2 * t2 + t) * h * m0 + (-2 * t3 + 3 * t2) * l1 + (t3 - t2) * h * m1;
+};
 
 // pose sur la spirale au niveau λ : la distance est géométrique (C1/P par
 // niveau), la visée converge au même rythme vers le point limite de la
@@ -71,17 +81,13 @@ export function cameraAt(R, u, λ = levelAt(R, u)) {
   return { pos, tgt, fov: S.fov, level: λ };
 }
 
-// Le fondu du raccord : autour de u = 1, on mêle la vue courante et la vue du
-// même instant comptée depuis l'autre niveau (avant le raccord : le grand vu
-// de près, λ − 1 ; après : l'image du petit, λ + 1). Poids de l'autre vue :
-// ½ au raccord, 0 aux bords de la fenêtre.
+// Le morphing du raccord : juste après u = 0, la vue courante (le grand, λ)
+// emprunte d'abord ses directions à la vue du même instant comptée depuis le
+// niveau d'avant (l'image du petit, λ + 1), puis les rend (poids w de 1 à 0).
 export function seamAt(R, u) {
-  const v = frac(u), [a, b] = CHORE.seam;
-  const before = v >= a, after = v < b - 1;
-  if (!before && !after) return null;
-  const w = before ? 0.5 * s5(a, 1, v) : 0.5 * (1 - s5(0, b - 1, v));
-  const λ = levelAt(R, u);
-  return { w, alt: before ? λ - 1 : λ + 1 };
+  const v = frac(u);
+  if (v >= CHORE.morph) return null;
+  return { w: 1 - s5(0, CHORE.morph, v), alt: levelAt(R, u) + 1 };
 }
 
 // La compensation de l'argent : l'image du petit a perdu deux réflexions
@@ -93,7 +99,7 @@ export const compExp = (λ) => λ;
 // La coupe du couvercle : son demi-angle, de 0 (entier) à CUT_HALF (un quart
 // ôté). Elle s'ouvre tôt (la caméra voit encore le grand presque entier),
 // reste ouverte, et se referme bien avant le raccord.
-export const CUT = { open: [0.03, 0.15], close: [0.5, 0.68] };
+export const CUT = { open: [0.06, 0.16], close: [0.44, 0.6] };
 export function cutAt(R, u) {
   const v = frac(u);
   return CUT_HALF * s5(...CUT.open, v) * (1 - s5(...CUT.close, v));

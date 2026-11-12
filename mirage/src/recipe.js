@@ -2,8 +2,9 @@
 // (partageable par « Copier le lien ») ; le panneau le modifie en place. Le
 // rendu ne lit QUE la recette et la phase.
 //
-// La mise en abyme : une graine tire la gravure du dôme (la famille : vagues,
-// soleil, spirale — le motif qui se répète d'un niveau à l'autre), la finition
+// La mise en abyme : une graine tire le décor du dôme (la famille : argent
+// guilloché, cloisonné, laque et or, cuivre martelé, nacre — ce qui se répète
+// d'un niveau à l'autre — et sa couronne), la finition
 // des coupes, le décor, le projecteur, et le sens et l'ampleur de la spirale
 // que décrit la caméra. Au fond, toujours le même petit mirascope, vingt fois
 // plus petit, et ainsi de suite.
@@ -21,12 +22,18 @@ export const kelvin = (K) => {
   return `#${c(r)}${c(g)}${c(b)}`;
 };
 
-// ── Familles : la gravure du dôme, le motif qui se répète d'un niveau à l'autre
+// ── Familles : le décor du dôme — ce qui emplit le cadre, et se répète d'un
+// niveau à l'autre — et la couronne qui va avec (jewel : 0 perles, 1 cabochons,
+// 2 clous d'or, 3 rivets, 4 perles noires)
 export const FAMILIES = {
-  vagues: { label: 'Vagues — cercles ondulés', kind: 0 },
-  soleil: { label: 'Soleil — rayons guillochés', kind: 1 },
-  spirale: { label: 'Spirale — grain d’orge tournant', kind: 2 },
+  guilloche: { label: 'Argent guilloché, couronne de perles', style: 0, jewel: 0, stones: [['#efe9de', '#efe9de']] },
+  cloisonne: { label: 'Cloisonné, cabochons', style: 1, jewel: 1, trim: '#f0c46c', stones: [['#2aa7a0', '#d0573e'], ['#1f5fa8', '#e2b23c'], ['#2f8a4a', '#b8324a']] },
+  laque: { label: 'Laque noire et or, clous d’or', style: 2, jewel: 2, trim: '#f0c46c', stones: [['#ffc66b', '#ffc66b']] },
+  martele: { label: 'Cuivre martelé, rivets', style: 3, jewel: 3, trim: '#eaa287', stones: [['#f0a070', '#f0a070']] },
+  nacre: { label: 'Nacre, perles noires', style: 4, jewel: 4, trim: '#f2f0ea', stones: [['#3a3843', '#4a3f52']] },
 };
+// (les gravures de l'argent guilloché)
+export const PATTERNS = ['vagues', 'soleil', 'spirale'];
 
 // ── Finitions des coupes (dehors ; dedans, toujours l'argent poli) ─────────
 export const FINISHES = {
@@ -55,7 +62,7 @@ export function generate(seed, overrides = {}) {
   const M = MOODS[mood];
   const rc = rng.fork('camera'), rf = rng.fork('finish'), rl = rng.fork('light');
   return {
-    v: 8, seed, mood, family,
+    v: 9, seed, mood, family, pattern: rng.fork('pattern').pick(PATTERNS), stones: rng.fork('stones').pick(FAMILIES[family].stones),
     loop: { duration: 24 },
     // l'émail de la bande gravée : bleu nuit, vert anglais, grenat, noir
     mirascope: { f: 0.05, finish: rf.pick(M.finishes), enamel: rf.fork('enamel').pick(['#1c2b5e', '#163d31', '#5a1622', '#1a1817']) },
@@ -68,7 +75,7 @@ export function generate(seed, overrides = {}) {
 }
 
 export function upgrade(R) {
-  if (R.v !== 8) return generate(R.seed);
+  if (R.v !== 9) return generate(R.seed);
   const D = generate(R.seed, { mood: R.mood, family: R.family });
   for (const k of Object.keys(D)) if (R[k] === undefined) R[k] = D[k];
   return R;

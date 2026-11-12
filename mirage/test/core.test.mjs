@@ -161,12 +161,14 @@ test('la boucle se referme un niveau plus bas : λ(1⁻) − 1 = λ(0⁺), et pa
   }
 });
 
-test('une seule plongée, sans retour : λ croît de 0 à 1, lentement au début, à la même vitesse des deux côtés du raccord', () => {
-  const Rr = generate('mono'), e = 1e-6;
+test('une seule plongée, sans retour : λ croît de 0 à 1 ; vite au raccord (même vitesse des deux côtés), lente quand la coupe est ouverte', () => {
+  const Rr = generate('mono'), e = 1e-6, sp = (u) => (levelAt(Rr, u + e) - levelAt(Rr, u - e)) / (2 * e);
   let prev = levelAt(Rr, 0);
   for (let k = 1; k < 2000; k++) { const l = levelAt(Rr, k / 2000); assert.ok(l > prev, `u = ${k / 2000}`); prev = l; }
-  const v0 = (levelAt(Rr, e) - levelAt(Rr, 0)) / e, v1 = (1 + levelAt(Rr, 1 - 2 * e) - (1 + levelAt(Rr, 1 - e))) / -e;
-  assert.ok(Math.abs(v0 - v1) < 1e-3 && v0 < 0.5, `${v0} ${v1}`);
+  const v0 = (levelAt(Rr, e) - levelAt(Rr, 0)) / e, v1 = (1 - levelAt(Rr, 1 - e)) / e;
+  assert.ok(Math.abs(v0 - v1) < 1e-3 && v0 > 1.2, `${v0} ${v1}`);
+  const mid = (CUT.open[1] + CUT.close[0]) / 2;
+  assert.ok(sp(mid) < 0.5, `coupe ouverte : ${sp(mid)}`);
 });
 
 test('la coupe ouverte : la caméra voit dans le même cadre le vrai petit au fond (sans miroir) et son image au-dessus de l’ouverture', () => {
@@ -201,18 +203,16 @@ test('la caméra ne tourne pas autour de l’axe (au balancement près) : l’en
   }
 });
 
-test('le fondu du raccord : moitié-moitié à u = 1, nul aux bords ; l’éclat de l’argent se raccorde', () => {
+test('le morphing du raccord : plein juste après u = 0, nul ensuite et avant ; il regarde le niveau d’avant ; l’éclat de l’argent se raccorde', () => {
   const Rr = generate('fondu'), e = 1e-7;
-  const a = seamAt(Rr, 1 - e), b = seamAt(Rr, e);
-  assert.ok(Math.abs(a.w - 0.5) < 1e-3 && Math.abs(b.w - 0.5) < 1e-3);
-  assert.ok(seamAt(Rr, CHORE.seam[0] - 0.001) === null && seamAt(Rr, CHORE.seam[1] - 1 + 0.001) === null);
-  assert.ok(seamAt(Rr, CHORE.seam[0] + 1e-5).w < 1e-3);
-  // les deux vues mêlées sont les mêmes de part et d'autre (vue courante ↔ vue de l'autre niveau)
-  assert.ok(Math.abs(levelAt(Rr, 1 - e) - b.alt) < 1e-4 && Math.abs(levelAt(Rr, e) - a.alt) < 1e-4);
+  const s0 = seamAt(Rr, e);
+  assert.ok(Math.abs(s0.w - 1) < 1e-3);
+  assert.equal(seamAt(Rr, 1 - e), null);
+  assert.equal(seamAt(Rr, CHORE.morph + 1e-4), null);
+  assert.ok(Math.abs(s0.alt - (levelAt(Rr, e) + 1)) < 1e-9);
   // éclat affiché d'une vue au niveau λ, qui regarde le niveau n : ρ^(−2λ) × ρ^(2n) — le même des deux côtés
   const shown = (λ, n) => -2 * compExp(λ) + 2 * n;
   assert.ok(Math.abs(shown(levelAt(Rr, 1 - e), 1) - shown(levelAt(Rr, e), 0)) < 1e-3);
-  assert.ok(Math.abs(shown(a.alt, 0) - shown(levelAt(Rr, 1 - e), 1)) < 1e-3);
 });
 
 test('caméra calme : le regard tourne à moins de 25°/s', () => {

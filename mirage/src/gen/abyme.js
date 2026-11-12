@@ -160,7 +160,8 @@ export function surfaces(L = 0, level = 0, cut = null) {
   const jewels = [];
   for (let k = 0; k < JEWELS.n; k++) {
     const t = (k / JEWELS.n) * Math.PI * 2, c = [Math.cos(t) * JEWELS.R, JEWELS.y + L, Math.sin(t) * JEWELS.R];
-    if (!inCut(cut, c[0], c[2])) jewels.push({ id: 'jewel', hit: (o, d) => ball(o, d, c, JEWELS.r) });
+    // (coupées avec le couvercle : un point d'entrée dans la coupe ne compte pas — on néglige la tranche)
+    jewels.push({ id: 'jewel', hit: (o, d) => { const h = ball(o, d, c, JEWELS.r); return h && !inCut(cut, h.p[0], h.p[2]) ? h : null; } });
   }
   const S = [
     { id: 'inLo', mirror: true, hit: (o, d) => parabCut(o, d, a, 0, 0, R, null) },
