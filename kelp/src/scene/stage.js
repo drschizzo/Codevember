@@ -43,7 +43,16 @@ export function createStage(scene, gen, { lite = false } = {}) {
   const skyNode = tTexture(skyHolder.tex);
   const skyMat = new THREE.MeshBasicNodeMaterial({ side: THREE.BackSide, depthWrite: false });
   skyMat.fog = false;
-  skyMat.colorNode = skyNode.sample(equirectUV(normalize(positionWorld.sub(cameraPosition)))).level(0).rgb;
+  // les étoiles, au pixel (dans la carte du ciel, une étoile faisait un texel :
+  // une tache de 5 px) — une grille fine en azimut et hauteur, une étoile
+  // sur ~1 500 cellules, d'éclat varié
+  const starAmt = uniform(0);
+  const sdir = normalize(positionWorld.sub(cameraPosition));
+  const sel = sdir.y.asin(), saz = atan(sdir.z, sdir.x);
+  const scell = floor(vec2(saz.mul(1400), sel.mul(1400)));
+  const sh = mx_cell_noise_float(scell), sh2 = mx_cell_noise_float(scell.add(31.7));
+  const stars = step(0.99935, sh).mul(sh2.mul(sh2).mul(1.6).add(0.15)).mul(smoothstep(0.03, 0.12, sel)).mul(starAmt);
+  skyMat.colorNode = skyNode.sample(equirectUV(sdir)).level(0).rgb.add(vec3(stars.mul(0.9), stars.mul(0.92), stars));
   const skyMesh = new THREE.Mesh(new THREE.SphereGeometry(500, 64, 32), skyMat);
   skyMesh.frustumCulled = false; skyMesh.renderOrder = -1;
   const group = new THREE.Group();
@@ -133,6 +142,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
     const tgt = new THREE.Vector3(c.target.x + (c.target.x - c.pos.x) * 2.6, c.pos.y - 0.3, c.target.z + (c.target.z - c.pos.z) * 2.6); // (centrée 3,6 m devant l'objectif, dans l'axe)
     sun.target.position.copy(tgt);
     sun.position.set(tgt.x + sd[0] * 15, tgt.y + Math.max(0.2, sd[1]) * 15, tgt.z + sd[2] * 15);
+    starAmt.value = R.sun.moon ? 1 : 0;
     scene.environmentIntensity = R.env.intensity;
     scene.backgroundIntensity = 1;
   }
@@ -165,7 +175,9 @@ export function createStage(scene, gen, { lite = false } = {}) {
     const dt = 1 / fps;
     // exposition : filtre du premier ordre, deux tours pour qu'il soit périodique
     const exp = new Float32Array(nf); let e = 1;
-    for (let L = 0; L < 2; L++) for (let f = 0; f < nf; f++) { const tgt = 2 ** (1.1 * under(f)); e += (tgt - e) * (1 - Math.exp(-dt / 0.7)); exp[f] = e; }
+    // (la nuit, l'œil ne rattrape presque rien : l'eau lumineuse suffit)
+    const stops = R.sun.moon ? 0.25 : 1.1;
+    for (let L = 0; L < 2; L++) for (let f = 0; f < nf; f++) { const tgt = 2 ** (stops * under(f)); e += (tgt - e) * (1 - Math.exp(-dt / 0.7)); exp[f] = e; }
     // choc : force = montée de l'eau au dôme + pression du courant sur le caisson
     const force = new Float32Array(nf);
     for (let f = 0; f < nf; f++) {

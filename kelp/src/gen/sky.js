@@ -55,24 +55,26 @@ export function skyPixels(R, W = 1024) {
         const sx = sd[0] / Math.max(0.05, Math.hypot(sd[0], sd[2])), sz = sd[2] / Math.max(0.05, Math.hypot(sd[0], sd[2]));
         const n2 = N.fbm(u + sx * 0.08, 3.3, v + sz * 0.08, 4) * 0.5 + 0.5;
         const cov = sst(1 - cloud, 1.05 - cloud * 0.6, n) * sst(0, 0.06, e);
-        const shade = Math.max(0.45, Math.min(1.25, 1 - (n2 - n) * 5));
+        // (un ciel couvert est doux : l'ombrage et le liseré s'effacent quand le voile se ferme)
+        const open = 1 - sst(0.55, 0.95, cloud);
+        const shade = Math.max(0.45, Math.min(1.25, 1 - (n2 - n) * 5 * open));
         const lit = (0.55 + 0.55 * Math.exp(-th / 0.5) * sunUp) * shade;
-        const rim = sunUp * Math.exp(-th / 0.3) * cov * (1 - cov) * 4;
+        const rim = sunUp * Math.exp(-th / 0.3) * cov * (1 - cov) * 4 * open;
         const cl = (night ? 0.02 : 0.95) * lit;
         const warm = (1 - sst(0, 0.25, e)) * 0.35;
         const cr = cl * (0.85 + 0.15 * sc[0]) * (1 - warm) + hor[0] * warm + sc[0] * rim * 1.5;
         const cg = cl * (0.85 + 0.15 * sc[1]) * (1 - warm) + hor[1] * warm + sc[1] * rim * 1.5;
         const cb = cl * (0.88 + 0.12 * sc[2]) * (1 - warm) + hor[2] * warm + sc[2] * rim * 1.5;
         r += (cr - r) * cov; gg += (cg - gg) * cov; b += (cb - b) * cov;
-        if (!night && e > 0.03) {
+        if (!night && e > 0.03 && open > 0.05) {
           const ci = N.fbm(dx * p * 0.5 + 9.1, 7.7, dz * p * 4.0, 4) * 0.5 + 0.5;
-          const cc = sst(0.62, 0.82, ci) * 0.3 * Math.min(1, cloud * 3) * sst(0.03, 0.2, e);
+          const cc = sst(0.62, 0.82, ci) * 0.3 * Math.min(1, cloud * 3) * sst(0.03, 0.2, e) * open;
           const cl2 = 0.9 + 0.8 * Math.exp(-th / 0.4) * sunUp;
           r += (cl2 * sc[0] - r) * cc; gg += (cl2 * sc[1] - gg) * cc; b += (cl2 * (0.9 + 0.1 * sc[2]) - b) * cc;
         }
       }
       // étoiles (la nuit)
-      if (night && el > 0.05) {
+      if (false && night && el > 0.05) { // (les étoiles sont dessinées au pixel par le ciel de la scène : stage.js)
         const fx = Math.floor((az + 4) * 260), fy = Math.floor((el + 2) * 260);
         const hsh = Math.sin(fx * 12.9898 + fy * 78.233) * 43758.5453, f = hsh - Math.floor(hsh);
         if (f > 0.9975) { const k = (f - 0.9975) * 400 * 0.6; r += k; gg += k; b += k * 1.1; }
