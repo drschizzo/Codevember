@@ -2,7 +2,7 @@
 // au contact de la surface de départ, caméra lente et continue.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { filmState, U, PARK, BLADE_UP, EDGE } from '../src/timeline.js';
+import { filmState, U, PARK, BLADE_UP, EDGE, reliefK } from '../src/timeline.js';
 import { buildCamera, SHOTS } from '../src/camera.js';
 import { generate, specOf } from '../src/recipe.js';
 import { TABLE, longProfile, crossProfile, FAMILIES } from '../src/gen/table.js';
@@ -53,6 +53,27 @@ test('phases monotones : le séchage ne revient jamais en arrière, l’eau ne r
     const F = filmState(u, S);
     if (u < U.cut0) { assert.ok(F.dry >= d - 1e-12, `séchage qui recule à ${u}`); d = F.dry; }
     if (u > U.sim1 + 0.03) assert.equal(F.water, 0);
+  }
+});
+
+test('fin de l’expérience : le relief s’arrête en douceur, l’eau s’infiltre avant de disparaître', () => {
+  // relief : monotone, part et arrive juste, vitesse continue, nulle à la fin
+  let prev = 0, prevV = 1;
+  for (let k = 0.001; k <= 1; k += 0.001) {
+    const v = reliefK(k), sp = (v - reliefK(k - 0.001)) / 0.001;
+    assert.ok(v >= prev - 1e-12, `recul à ${k}`);
+    assert.ok(Math.abs(sp - prevV) < 0.05, `saut de vitesse à ${k.toFixed(3)} : ${prevV.toFixed(3)} → ${sp.toFixed(3)}`);
+    prev = v; prevV = sp;
+  }
+  assert.ok(Math.abs(reliefK(1) - 1) < 1e-12 && (reliefK(1) - reliefK(0.9999)) / 0.0001 < 0.01);
+  // eau : l'infiltration est complète quand l'eau cesse d'être dessinée
+  const S = specOf(seeds[0]);
+  let last = null;
+  for (let u = U.sim1 - 0.1; u < U.sim1 + 0.05; u += 0.0005) {
+    const F = filmState(u, S);
+    if (last && last.water === 1 && F.water === 0) assert.ok(last.drain > 0.99, `l'eau disparaît à ${(last.drain * 100).toFixed(0)} % d'infiltration`);
+    if (last) assert.ok(F.drain >= last.drain - 1e-12);
+    last = F;
   }
 });
 

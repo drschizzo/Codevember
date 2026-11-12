@@ -29,7 +29,7 @@ export const kelvinToHex = (K) => {
 // l'eau chargée de ce sable.
 export const SANDS = {
   silice: { label: 'Silice et kaolin', tones: ['#d8cdb9', '#b3a690', '#ece3d2', '#8d8478'], deposit: '#d6cab4', grain: '#3b342c', mud: '#a2937a' },
-  gres: { label: 'Grès rouge', tones: ['#b95d3a', '#d79c66', '#e9d4b4', '#8f4430'], deposit: '#c98a5e', grain: '#3a1d14', mud: '#8a5236' },
+  gres: { label: 'Grès rouge', tones: ['#b95d3a', '#d79c66', '#d8b48c', '#8f4430'], deposit: '#c98a5e', grain: '#3a1d14', mud: '#8a5236' },
   basalte: { label: 'Basalte', tones: ['#3d3a37', '#6e6963', '#a49b8e', '#28292a'], deposit: '#5b5650', grain: '#141414', mud: '#4c4842' },
   ocres: { label: 'Ocres', tones: ['#d7a243', '#c46d2f', '#a3442d', '#7a4b58'], deposit: '#c98d48', grain: '#3a2516', mud: '#94602e' },
   limon: { label: 'Limon', tones: ['#a99a83', '#7d6c56', '#c9b796', '#5c5045'], deposit: '#a19279', grain: '#2b241d', mud: '#6f604c' },

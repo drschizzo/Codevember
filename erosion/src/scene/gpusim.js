@@ -50,6 +50,7 @@ const WS: f32 = ${f(P.ws)};
 const EMAX: f32 = ${f(P.eMax)};
 const DVEL: f32 = ${f(P.dVel)};
 const TWET: f32 = ${f(P.talusWet)};
+const DSUB: f32 = ${f(P.dSub)};
 const TDAMP: f32 = ${f(P.talusDamp)};
 const TRATE: f32 = ${f(P.talusRate)};
 const DIFF: f32 = ${f(P.diffuse)};
@@ -177,7 +178,7 @@ fn conc(n: u32) -> f32 { let dd = cell[n].y; return select(0.0, sA[n] / dd, dd >
       let tau = MAN * MAN * vm * vm / pow(max(v.y, 0.001), 1.0 / 3.0);
       let C = KC * pow(max(0.0, tau - TAUC), 1.5);
       // (des rides ne se forment que sous une vraie lame d'eau, pas sous le ruissellement de la pluie)
-      rip = min(1.0, rip + KRIP * max(0.0, tau - TAUC) * smoothstep(0.002, 0.005, v.y) * P.dt);
+      rip = min(1.0, rip + KRIP * max(0.0, tau - TAUC) * smoothstep(0.004, 0.008, v.y) * P.dt);
       if (s < C) {
         let st = stat[c];
         let hard = select(hardAt(st.x - v.x), 0.0, v.x > v.z + 0.0002);
@@ -202,7 +203,7 @@ fn inside(p: vec2i) -> bool { return p.x >= 1 && p.x < i32(OUT) && p.y >= 1 && p
   let p = vec2i(i32(c % NX), i32(c / NX));
   var o = array<f32, 8>(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
   if (inside(p)) {
-    let tn = select(TDAMP, TWET, cell[c].y > 0.0005);
+    let tn = select(TDAMP, TWET, cell[c].y > DSUB);
     let bc = aux[c].w;
     var tot = 0.0; var mx = 0.0;
     for (var k = 0u; k < 8u; k++) {
@@ -312,7 +313,7 @@ const L: f32 = ${TABLE.Lx / NX};
 struct Res {
   t0: u32, t1: u32, w0: u32, w1: u32,
   tt: f32, tw: f32, water: f32, screed: f32,   // mélange des états, eau visible (0–1), position de la lame (m, −1 : pas de passage)
-  bermTan: f32, bead: f32, wake: f32, tm: f32, // pente du bourrelet, bourrelet minimal (m), sillage frais derrière la lame (m), mélange de la mémoire
+  bermTan: f32, bead: f32, drain: f32, tm: f32, // pente du bourrelet, bourrelet minimal (m), infiltration de l'eau restante (0–1), mélange de la mémoire
   tA: u32, tD: u32, m0: u32, m1: u32,          // états voisins (Catmull-Rom dans le temps), états de la mémoire
 };
 @group(0) @binding(0) var<storage, read> recT: array<u32>;
@@ -328,13 +329,16 @@ struct Res {
 @group(1) @binding(0) var<uniform> R: Res;
 
 // relief enregistré à la cellule c, au temps (réel) entre les états t0 et t1 :
-// Catmull-Rom sur tA, t0, t1, tD, borné par les valeurs en t0 et t1
+// B-spline cubique uniforme sur tA, t0, t1, tD. Elle n'interpole pas les états,
+// elle les lisse sur trois intervalles : un effondrement enregistré dans un seul
+// intervalle s'étale, sans dépassement (combinaison convexe), et la vitesse est
+// C². (Un Catmull-Rom borné ralentissait chaque cellule à chaque état : la vitesse
+// du relief battait au rythme des états, 5 fois par seconde.)
 fn relAt(c: u32) -> vec2f {
   let pa = unpack2x16float(recT[R.tA * N + c]); let p0 = unpack2x16float(recT[R.t0 * N + c]);
   let p1 = unpack2x16float(recT[R.t1 * N + c]); let pd = unpack2x16float(recT[R.tD * N + c]);
-  let t = R.tt; let t2 = t * t; let t3 = t2 * t;
-  let v = 0.5 * (2.0 * p0 + (p1 - pa) * t + (2.0 * pa - 5.0 * p0 + 4.0 * p1 - pd) * t2 + (3.0 * p0 - pa - 3.0 * p1 + pd) * t3);
-  return clamp(v, min(p0, p1), max(p0, p1));
+  let t = R.tt; let s = 1.0 - t;
+  return (pa * (s * s * s) + p0 * (3.0 * t * t * t - 6.0 * t * t + 4.0) + p1 * (-3.0 * t * t * t + 3.0 * t * t + 3.0 * t + 1.0) + pd * (t * t * t)) / 6.0;
 }
 
 @compute @workgroup_size(8, 8) fn resolve(@builtin(global_invocation_id) gid: vec3u) {
@@ -386,12 +390,16 @@ fn relAt(c: u32) -> vec2f {
     let r0 = select(m0.x, dry, m0.x < -0.5); let r1 = select(m1.x, dry, m1.x < -0.5);
     let wt = mix(w0, w1, R.tw);
     var eta = bb + mix(r0, r1, R.tw);
+    // à la fin de l'expérience, l'eau qui reste (le lac derrière une digue, les
+    // flaques) s'infiltre : la surface libre descend jusqu'au lit (sans cela, elle
+    // disparaissait d'un coup)
+    eta = mix(eta, bn - 0.0008, R.drain);
     var turb = 0.0; var vel = vec2f(0.0);
     if (wt > 0.0) {
       turb = (m0.y * w0 * (1.0 - R.tw) + m1.y * w1 * R.tw) / max(1e-4, w0 * (1.0 - R.tw) + w1 * R.tw);
       vel = (v0 * w0 * (1.0 - R.tw) + v1 * w1 * R.tw) / max(1e-4, w0 * (1.0 - R.tw) + w1 * R.tw);
     }
-    if (R.water <= 0.0 || wt <= 0.0) { eta = -1.0; }
+    if (R.water <= 0.0 || wt <= 0.0 || R.drain >= 1.0) { eta = -1.0; }
     textureStore(wat, vec2u(i, j), vec4f(eta, turb * 0.01, vel));
   }
 }
@@ -674,6 +682,30 @@ export function createGpuSim(renderer, { lite = false } = {}) {
     for (let c = 0; c < N; c++) { b[c] = b0[c] + h(u[c * 2]); bmin[c] = b0[c] + h(u[c * 2 + 1]); wet[c] = h(u[M + c * 2]); rip[c] = h(u[M + c * 2 + 1]); }
     return { b, bmin, wet, rip };
   }
+  // le relief courant, tel que la dernière relecture l'a écrit (mise au point : fluidité)
+  async function readCur() {
+    const rb = device.createBuffer({ size: N * 16, usage: GPUBufferUsage.MAP_READ | CD });
+    const enc = device.createCommandEncoder();
+    enc.copyBufferToBuffer(B.cur, 0, rb, 0, N * 16);
+    device.queue.submit([enc.finish()]);
+    await rb.mapAsync(GPUMapMode.READ);
+    const a = new Float32Array(rb.getMappedRange().slice(0));
+    rb.unmap(); rb.destroy();
+    return a;
+  }
+  // lecture d'un état enregistré de l'eau (mise au point) : surface libre − b₀ (−1 : sec), turbidité, vitesse
+  async function readWater(k) {
+    const rb = device.createBuffer({ size: HN * 8, usage: GPUBufferUsage.MAP_READ | CD });
+    const enc = device.createCommandEncoder();
+    enc.copyBufferToBuffer(B.recW, k * HN * 8, rb, 0, HN * 8);
+    device.queue.submit([enc.finish()]);
+    await rb.mapAsync(GPUMapMode.READ);
+    const u = new Uint16Array(rb.getMappedRange().slice(0));
+    rb.unmap(); rb.destroy();
+    const h = THREE.DataUtils.fromHalfFloat, out = new Float32Array(HN * 4);
+    for (let i = 0; i < HN * 4; i++) out[i] = h(u[i]);
+    return out;
+  }
   // l'état courant de la simulation (cell : b, d, bmin, humidité)
   async function readCell() {
     const rb = device.createBuffer({ size: N * 16, usage: GPUBufferUsage.MAP_READ | CD });
@@ -694,7 +726,7 @@ export function createGpuSim(renderer, { lite = false } = {}) {
     const tM = (tT / (FT - 1)) * (FM - 1), m = Math.min(FM - 2, Math.floor(tM));
     ru[0] = a; ru[1] = a + 1; ru[2] = w; ru[3] = w + 1;
     rf[4] = tT - a; rf[5] = tW - w; rf[6] = s.water ?? 1; rf[7] = s.screed ?? -2;
-    rf[8] = s.bermTan ?? 0.67; rf[9] = s.bead ?? 0.003; rf[10] = 0; rf[11] = tM - m;
+    rf[8] = s.bermTan ?? 0.67; rf[9] = s.bead ?? 0.003; rf[10] = s.drain ?? 0; rf[11] = tM - m;
     ru[12] = Math.max(0, a - 1); ru[13] = Math.min(FT - 1, a + 2); ru[14] = m; ru[15] = m + 1;
     device.queue.writeBuffer(resBuf, 0, resData);
     const enc = device.createCommandEncoder();
@@ -709,7 +741,7 @@ export function createGpuSim(renderer, { lite = false } = {}) {
 
   return {
     NX, NY, HX, HY, FT, FW, FM, dt, l, terrainTex, waterTex, normalTex, occTex,
-    setup, run, finish, resolve, readTerrain, readCell,
+    setup, run, finish, resolve, readTerrain, readWater, readCur, readCell,
     get ran() { return ran; },
     get final() { return final; },
     bytes: () => Object.values(B).reduce((a, b) => a + b.size, 0),

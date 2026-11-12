@@ -27,6 +27,18 @@ export const BLADE_UP = 0.1;         // levée de la lame (m) : elle passe au-de
 // temps hydraulique à la phase u (0 avant l'expérience, S.T après)
 export function simTime(u, S) { return clamp01((u - U.sim0) / (U.sim1 - U.sim0)) * S.T; }
 
+// Avancement du relief (0–1) pour un avancement k de l'expérience : le même,
+// sauf sur la fin, où le relief accélère un peu puis s'arrête en douceur
+// (f(1) = 1, f'(1) = 0) — sans cela l'érosion se figeait d'un coup, en pleine
+// course, à la fin de la simulation.
+export const RELIEF_EASE = 0.12;
+export function reliefK(k) {
+  const a = 1 - RELIEF_EASE, d = RELIEF_EASE;
+  if (k <= a) return Math.max(0, k);
+  const x = Math.min(d, k - a);
+  return a + x + (x * x) / d - (x * x * x) / (d * d);
+}
+
 // État complet du film à la phase u (fraction de la boucle, [0, 1))
 export function filmState(u, S) {
   u -= Math.floor(u);
@@ -50,6 +62,8 @@ export function filmState(u, S) {
     terrainFrame: k,              // (0–1 ; multiplier par FT − 1)
     water: u >= U.sim0 && u < U.sim1 + 0.02 ? 1 : 0,
     dry,
+    // l'eau restante s'infiltre dans le sable, de la fin de l'expérience à la disparition de l'eau
+    drain: sstep(U.sim1 - 0.055, U.sim1 + 0.018, u),
     gantryX: x, bladeLift: lift * BLADE_UP,
     screed,                       // −2 : pas de gabarit ; −1 : bac entier régalé ; sinon position de la lame (m)
     inflow: inflowAt(S, T) * (u < U.sim1 ? 1 : 0),
