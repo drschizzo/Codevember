@@ -254,7 +254,8 @@ export function faunaGeometry(R, cam, rock, plants, lite = false) {
   const rr = createRng(`fauna:${R.seed}`);
   const H = sampler(rock, rock.H), crack = sampler(rock, rock.crack), fill = sampler(rock, rock.fill);
   const yaw = R.camera.yaw, half = (R.camera.fov * Math.PI / 180) * 0.75;
-  const ok = (x, z, rMin = 0.35) => {
+  // (pas à moins de 60 cm : dans le flou de l'avant-plan, une colonie faisait du pop-corn)
+  const ok = (x, z, rMin = 0.6) => {
     const dx = x - cam.x, dz = z - cam.z, d = Math.hypot(dx, dz);
     if (d < rMin || d > 4.5) return false;
     let a = Math.atan2(-dx, -dz) - yaw; a -= 2 * Math.PI * Math.round(a / (2 * Math.PI));
@@ -301,7 +302,7 @@ export function faunaGeometry(R, cam, rock, plants, lite = false) {
     const n = 6 + Math.floor(rr.next() * 22);
     for (let q = 0; q < n; q++) {
       const x = x0 + (rr.next() - 0.5) * 0.14, z = z0 + (rr.next() - 0.5) * 0.14;
-      if (!ok(x, z, 0.25)) continue;
+      if (!ok(x, z, 0.55)) continue;
       const F = frameAt(x, z), r = 0.003 + 0.0055 * rr.next() ** 2, h = r * (0.55 + 0.3 * rr.next()), lob = rr.next() * 6;
       shell(F, [[r, 0], [r * 0.82, h * 0.55], [r * 0.5, h], [r * 0.34, h * 0.92], [r * 0.12, h * 0.55]], 12, BAR, (a, j) => (j < 2 ? 1 + 0.09 * Math.sin(6 * a + lob) : 1));
     }
@@ -320,7 +321,7 @@ export function faunaGeometry(R, cam, rock, plants, lite = false) {
     const n = 3 + Math.floor(rr.next() * 9);
     for (let q = 0; q < n; q++) {
       const x = x0 + (rr.next() - 0.5) * 0.09, z = z0 + (rr.next() - 0.5) * 0.09;
-      if (!ok(x, z, 0.25)) continue;
+      if (!ok(x, z, 0.55)) continue;
       const F = frameAt(x, z), L = 0.022 + 0.026 * rr.next(), W = L * 0.42, Hh = L * 0.36;
       // (une coque allongée, en pointe à un bout, à moitié enfoncée et dressée de biais)
       const prof = [[1, -0.25], [0.95, 0.1], [0.78, 0.45], [0.5, 0.75], [0.12, 0.9]].map(([r, h]) => [r * W, h * Hh]);

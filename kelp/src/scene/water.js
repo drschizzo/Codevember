@@ -10,7 +10,7 @@
 import * as THREE from 'three/webgpu';
 import {
   Fn, uniform, texture, vec2, vec3, vec4, float, positionWorld, cameraPosition, normalize, length, max, min, exp, mix, select,
-  clamp, output, smoothstep, sqrt, dot, reflect, abs, pow, positionLocal, normalLocal, attribute, If, fract, sin, cos, equirectUV,
+  clamp, output, smoothstep, step, sqrt, dot, reflect, abs, pow, positionLocal, normalLocal, attribute, If, fract, sin, cos, equirectUV,
   normalWorld, mrt, velocity, positionPrevious, textureLoad, ivec2, int, floor,
 } from 'three/tsl';
 import { NZ, noise, fbm } from './materials.js';
@@ -276,9 +276,17 @@ export function createSurface(W, skyTex, lite) {
   // laissait passer des coins (des dents vues de dessous, la ligne d'eau en
   // escalier, des pans verticaux sur les gradins). Le mouillé et le sec sont
   // décidés au pixel, dans maskNode.
+  // (au-delà de la zone fine, les mailles grandissent — ~4 cm + 10 % de la
+  // distance — et un front oblique, marche nette du niveau, s'y dessinait en
+  // dents de scie vues de dessous : le niveau y est moyenné sur la maille)
   const pose = (p, t) => {
     const x = p.x, z = p.z;
-    return vec3(x, max(W.sea(x, z, t).x, W.pool(x, z)), z);
+    const dF = max(max(x.abs().sub(4.5), z.negate().sub(10)), z.sub(3.2)).max(0);
+    const w = dF.mul(0.1).add(0.04).mul(step(0.001, dF));
+    const e0 = W.sea(x, z, t).x;
+    const eA = W.sea(x.add(w), z, t).x.add(W.sea(x.sub(w), z, t).x).add(W.sea(x, z.add(w), t).x).add(W.sea(x, z.sub(w), t).x);
+    const eta = mix(e0, e0.add(eA).div(5), step(0.001, dF));
+    return vec3(x, max(eta, W.pool(x, z)), z);
   };
   mat.positionNode = Fn(() => {
     const p = positionLocal;
