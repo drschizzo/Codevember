@@ -1,13 +1,15 @@
 // Invariants du cœur : l'optique du mirascope (où se forme l'image, comment
-// elle s'efface quand on lève le couvercle), la pose des objets sur le fond
-// courbe, la chorégraphie (boucle refermée, temps monotones).
+// elle s'efface quand on lève le couvercle), la mise en abyme (le petit posé au
+// fond, son image au-dessus de l'ouverture, le raccord d'un niveau au suivant),
+// l'écorché (le vrai petit au fond, et son image, dans le même cadre), la
+// chorégraphie (une plongée à vitesse constante, refermée un niveau plus bas,
+// caméra calme).
 //   node --test 'mirage/test/*.test.mjs'
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { PARAB, mirrors, hitParab, traceCavity, imageOf } from '../src/gen/mirascope.js';
-import { TOP, CASE, CANDLE, CROWN, BOW, WICK, FLAME_Y, COMPASS, COMP_RING, PIVOT, NEEDLE, CARD_Y, COIN, COINS, MAX_H, BOUND, bowl } from '../src/gen/profiles.js';
-import { CHORE, JOLTS, liftAt, diveAt, cameraAt, objectAt, swingAt } from '../src/timeline.js';
-import { layout, toWorld } from '../src/gen/layout.js';
+import { K, MINI, BOUND, FOOT, BEADS, HEIGHT, SHELL, TABLE_Y, cutOf, traceNested } from '../src/gen/abyme.js';
+import { CHORE, SEAM, CUT, cameraAt, levelAt, seamAt, compExp, cutAt } from '../src/timeline.js';
 import { generate } from '../src/recipe.js';
 
 const f = PARAB.f, R = PARAB.rimK * f, rh = PARAB.holeK * f;
@@ -60,157 +62,180 @@ test('couvercle levé : l’image descend dans la cavité et perd ses rayons (el
     assert.ok(I.X[1] < prevY, `L = ${L} : l'image descend`);
     prevY = I.X[1];
   }
+  for (const L of [0.028, 0.032, 0.036]) {
+    const I = imageOf(P, f, L, 2000);
+    assert.ok(!I || I.n < 0.15 * n0, `L = ${L} : ${I?.n} rayons sur ${n0}`);
+  }
+});
+
+
+const bowl = (r) => (r * r) / (4 * f);
+
+test('le petit repose au fond du grand par l’arête de son pied (ni flottant, ni enfoncé)', () => {
+  // la base (r = FOOT.base.r, à y = TABLE_Y dans son repère) touche la coupe du bas du parent
+  const rb = FOOT.base.r * K, yBase = MINI.y + K * TABLE_Y;
+  assert.ok(Math.abs(yBase - bowl(rb)) < 1e-5, `écart ${(yBase - bowl(rb)) * 1e6} µm`);
+  // la base, partout, au-dessus du fond
+  for (let k = 0; k <= 20; k++) { const r = (rb * k) / 20; assert.ok(yBase >= bowl(r) - 1e-9, `r = ${r}`); }
+});
+
+test('le petit tient dans sa sphère englobante, et elle dans la cavité du grand, sous l’ouverture', () => {
+  const c = [0, BOUND.y], pts = [
+    [R + SHELL + 2 * BEADS.hi.r, BEADS.hi.y + BEADS.hi.r], [R + SHELL + 2 * BEADS.lo.r, BEADS.lo.y - BEADS.lo.r],
+    [rh, f + SHELL + BEADS.lip.r], [0, f + SHELL], [FOOT.base.r, TABLE_Y], [0, TABLE_Y],
+  ];
+  for (const [r, y] of pts) assert.ok(Math.hypot(r - c[0], y - c[1]) < BOUND.r, `(${r}, ${y})`);
+  // la sphère, dans le repère du grand : sous le plan de l'ouverture, dans la coupe
+  const cy = MINI.y + BOUND.y * K, rr = BOUND.r * K;
+  assert.ok(cy + rr < f - bowl(rh), 'sous l’ouverture');
+  assert.ok(rr < rh, 'plus étroite que l’ouverture');
+});
+
+test('le petit est assez bas pour que son image passe entière par l’ouverture (≤ 11,5 mm)', () => {
+  assert.ok(HEIGHT * K <= 0.0115, `${HEIGHT * K}`);
+});
+
+// une caméra de la spirale (repère du grand)
+const ray = (P, x = 0, y = 0, aspect = 16 / 9) => {
+  const F = P.tgt.map((v, i) => v - P.pos[i]), Lf = Math.hypot(...F), Fw = F.map((v) => v / Lf);
+  let Rt = [-Fw[2], 0, Fw[0]]; const lr = Math.hypot(...Rt); Rt = Rt.map((v) => v / lr);
+  const Up = [Rt[1] * Fw[2] - Rt[2] * Fw[1], Rt[2] * Fw[0] - Rt[0] * Fw[2], Rt[0] * Fw[1] - Rt[1] * Fw[0]];
+  const th = Math.tan((P.fov * Math.PI) / 360), tw = th * aspect * (P.ax ?? 1);
+  const d = Fw.map((v, k) => v + Rt[k] * x * tw + Up[k] * y * th), l = Math.hypot(...d);
+  return [P.pos, d.map((v) => v / l)];
+};
+
+test('l’image du petit se forme au-dessus de l’ouverture : la caméra du raccord la voit, deux réflexions plus bas', () => {
+  const Rr = generate('abyme');
+  const C = cameraAt(Rr, 0, 1), cut = null; // (λ = 1 : la caméra qui regarde l'image du petit, couvercles fermés)
+  // sur tout le cadre : le dôme du petit, vu par deux réflexions dans le grand (son image) ;
+  // et, plus bas dans la chaîne, le niveau suivant
+  let image = 0, deeper = 0, n = 0;
+  for (let j = 0; j < 18; j++) for (let i = 0; i < 32; i++) {
+    const h = traceNested(...ray(C, ((i + 0.5) / 32) * 2 - 1, 1 - ((j + 0.5) / 18) * 2), { cut });
+    n++;
+    if (h.level === 1 && h.id === 'outHi' && h.bounces >= 2) image++;
+    if (h.level >= 2) deeper++;
+  }
+  assert.ok(image > 0.1 * n, `image du petit : ${image} / ${n}`);
+  assert.ok(deeper > 0.01 * n, `niveaux plus bas : ${deeper} / ${n}`);
+});
+
+test('le raccord : la caméra C1 (image du petit) et la caméra P (le grand) voient la même chose, salle allumée', () => {
+  // chaque pixel : même surface un niveau plus bas, au même point (repère de chaque niveau),
+  // ou la salle dans la même direction
+  const Rr = generate('raccord'), A = cameraAt(Rr, 0, 1), B = cameraAt(Rr, 0, 0), cut = cutOf(Rr.camera.az, cutAt(Rr, 0)); // (couvercle fermé au raccord)
+  assert.equal(cut, null);
+  let bad = 0, n = 0, err = 0, ok = 0, ang = 0, nr = 0;
+  for (let j = 0; j < 27; j++) for (let i = 0; i < 48; i++) {
+    const x = ((i + 0.5) / 48) * 2 - 1, y = 1 - ((j + 0.5) / 27) * 2;
+    const a = traceNested(...ray(A, x, y), { cut }), b = traceNested(...ray(B, x, y), { cut });
+    n++;
+    if (a.id === 'room' && b.id === 'room') { const t = Math.acos(Math.min(1, a.d[0] * b.d[0] + a.d[1] * b.d[1] + a.d[2] * b.d[2])); ang += t; nr++; if (t > 0.15) bad++; continue; }
+    if (a.id !== b.id || a.level !== b.level + 1 || !a.p) { bad++; continue; }
+    ok++; err += Math.hypot(a.p[0] - b.p[0], a.p[1] - b.p[1], a.p[2] - b.p[2]);
+  }
+  assert.ok(bad / n < 0.09, `${((bad / n) * 100).toFixed(1)} % de pixels en désaccord`);
+  assert.ok(err / ok < 0.0013, `écart moyen ${((err / ok) * 1000).toFixed(2)} mm`);
+  assert.ok(ang / nr < 0.02, `reflets de la salle : ${((ang / nr) * 180 / Math.PI).toFixed(2)}°`);
+});
+
+test('la spirale : C1 et P sont les deux bouts d’un niveau, la distance y est géométrique', () => {
+  const Rr = generate('spirale'), r = SEAM.C1.dist / SEAM.P.dist;
+  const d = (P) => Math.hypot(...P.pos.map((v, i) => v - P.tgt[i]));
+  assert.ok(Math.abs(d(cameraAt(Rr, 0, 1)) - SEAM.C1.dist) < 1e-9);
+  assert.ok(Math.abs(d(cameraAt(Rr, 0, 0)) - SEAM.P.dist) < 1e-9);
+  assert.ok(Math.abs(d(cameraAt(Rr, 0, 0.5)) - SEAM.P.dist * Math.sqrt(r)) < 1e-9);
+});
+
+test('la boucle se referme un niveau plus bas : λ(1⁻) − 1 = λ(0⁺), et partout ailleurs λ est continu', () => {
   for (let i = 0; i < 20; i++) {
-    const Rr = generate(`t${i}`), I = imageOf(P, f, Rr.mirascope.liftMax, 2000);
-    assert.ok(!I || I.n < 0.15 * n0, `${Rr.seed} : ${I?.n} rayons sur ${n0} au plus haut`);
-  }
-});
-
-test('un rayon de l’œil qui entre par l’ouverture vers le fond rencontre l’objet après deux réflexions', () => {
-  // (le chemin que suit le lancer de rayons pour former l'image)
-  const sphere = (o, d, tMax) => { // l'objet : une bille au fond
-    const c = [0, 0.004, 0], r = 0.004, oc = [o[0] - c[0], o[1] - c[1], o[2] - c[2]];
-    const b = oc[0] * d[0] + oc[1] * d[1] + oc[2] * d[2], cc = oc[0] ** 2 + oc[1] ** 2 + oc[2] ** 2 - r * r, D = b * b - cc;
-    if (D < 0) return null; const t = -b - Math.sqrt(D); return t > 1e-7 && t < tMax ? t : null;
-  };
-  // l'œil au-dessus, qui vise l'image (en y = f + 0,004)
-  let hits = 0, n = 0;
-  for (let i = -4; i <= 4; i++) for (let j = -4; j <= 4; j++) {
-    const eye = [0.1, 0.2, 0.05], tgt = [i * 0.0008, f + 0.004 + j * 0.0008, 0];
-    const d = tgt.map((v, k) => v - eye[k]);
-    const res = traceCavity(eye, d, f, 0, 8, sphere);
-    n++; if (res.fate === 'objet' && res.bounces === 2) hits++;
-  }
-  assert.ok(hits > 0.6 * n, `${hits} / ${n}`);
-});
-
-const sphereClear = (c, r, margin, msg) => {
-  for (let k = 0; k < 400; k++) {
-    const th = Math.acos(1 - 2 * (k + 0.5) / 400), ph = k * 2.39996323;
-    const x = c[0] + r * Math.sin(th) * Math.cos(ph), z = (c[2] ?? 0) + r * Math.sin(th) * Math.sin(ph), y = c[1] + r * Math.cos(th);
-    assert.ok(y - bowl(Math.hypot(x, z)) > margin, msg);
-  }
-};
-const torusClear = ([x0, y0, R, r], margin, msg) => {
-  for (let k = 0; k < 64; k++) { const a = (k / 64) * Math.PI * 2; sphereClear([x0 + R * Math.cos(a), y0, R * Math.sin(a)], r, margin, msg); }
-};
-
-test('les objets reposent exactement sur le fond courbe (aucun ne flotte, aucun ne le traverse)', () => {
-  for (const [name, P] of [['toupie', TOP], ['montre', CASE], ['chauffe-plat', CANDLE], ['boussole', COMPASS]]) {
-    let gap = Infinity;
-    for (const [r, y] of P) { const g = y - bowl(r); assert.ok(g > -1e-6, `${name} : sommet (${r}, ${y}) sous le fond`); gap = Math.min(gap, g); }
-    // aussi le long des arêtes du profil
-    for (let i = 1; i < P.length; i++) for (let s = 0; s <= 20; s++) {
-      const r = P[i - 1][0] + (P[i][0] - P[i - 1][0]) * s / 20, y = P[i - 1][1] + (P[i][1] - P[i - 1][1]) * s / 20;
-      assert.ok(y - bowl(r) > -1e-6, `${name} : arête sous le fond en r = ${r}`);
+    const Rr = generate(`t${i}`), e = 1e-7;
+    assert.ok(Math.abs(levelAt(Rr, 1 - e) - 1 - levelAt(Rr, e)) < 1e-4, Rr.seed);
+    let prev = levelAt(Rr, 0);
+    for (let k = 1; k <= 3000; k++) {
+      const u = k / 3000, l = k === 3000 ? levelAt(Rr, 1 - e) : levelAt(Rr, u);
+      assert.ok(Math.abs(l - prev) < 0.01, `${Rr.seed} u = ${u} : saut de λ`);
+      prev = l;
     }
-    assert.ok(gap < 1e-5, `${name} : flotte de ${(gap * 1000).toFixed(2)} mm`);
   }
-  // les pièces : la première sur l'arête de son fond, chacune à plat sur la précédente, sans toucher le fond ailleurs
-  close(COINS[0].y, bowl(COIN.r), 1e-5);
-  for (let i = 1; i < COINS.length; i++) {
-    close(COINS[i].y, COINS[i - 1].y + COIN.h, 1e-12);
-    const d = Math.hypot(COINS[i].x - COINS[i - 1].x, COINS[i].z - COINS[i - 1].z);
-    assert.ok(d < COIN.r * 0.5, 'le centre de chaque pièce au-dessus de la précédente (elle ne bascule pas)');
-    for (let k = 0; k < 64; k++) { const a = (k / 64) * Math.PI * 2, x = COINS[i].x + COIN.r * Math.cos(a), z = COINS[i].z + COIN.r * Math.sin(a); assert.ok(COINS[i].y - bowl(Math.hypot(x, z)) > 1e-4); }
+});
+
+test('une seule plongée, sans retour : λ croît de 0 à 1, lentement au début, à la même vitesse des deux côtés du raccord', () => {
+  const Rr = generate('mono'), e = 1e-6;
+  let prev = levelAt(Rr, 0);
+  for (let k = 1; k < 2000; k++) { const l = levelAt(Rr, k / 2000); assert.ok(l > prev, `u = ${k / 2000}`); prev = l; }
+  const v0 = (levelAt(Rr, e) - levelAt(Rr, 0)) / e, v1 = (1 + levelAt(Rr, 1 - 2 * e) - (1 + levelAt(Rr, 1 - e))) / -e;
+  assert.ok(Math.abs(v0 - v1) < 1e-3 && v0 < 0.5, `${v0} ${v1}`);
+});
+
+test('la coupe ouverte : la caméra voit dans le même cadre le vrai petit au fond (sans miroir) et son image au-dessus de l’ouverture', () => {
+  for (let i = 0; i < 6; i++) {
+    const u = (CUT.open[1] + CUT.close[0]) / 2 - 0.1, Rr = generate(`t${i}`), P = cameraAt(Rr, u), cut = cutOf(Rr.camera.az, cutAt(Rr, u));
+    assert.ok(cut, 'la coupe est ouverte');
+    let real = 0, image = 0;
+    for (let j = 0; j < 27; j++) for (let k = 0; k < 48; k++) {
+      const h = traceNested(...ray(P, ((k + 0.5) / 48) * 2 - 1, 1 - ((j + 0.5) / 27) * 2), { cut });
+      if (h.level === 1 && h.bounces === 0) real++;
+      if (h.level === 1 && h.bounces >= 2) image++;
+    }
+    assert.ok(real > 2, `${Rr.seed} : le vrai petit (${real} pixels)`);
+    assert.ok(image > 2, `${Rr.seed} : son image (${image} pixels)`);
+    // sans l'entaille, le vrai petit ne se voit pas directement
+    let hidden = 0;
+    for (let j = 0; j < 27; j++) for (let k = 0; k < 48; k++) { const h = traceNested(...ray(P, ((k + 0.5) / 48) * 2 - 1, 1 - ((j + 0.5) / 27) * 2)); if (h.level === 1 && h.bounces === 0) hidden++; }
+    assert.equal(hidden, 0, `${Rr.seed} : couvercle entier`);
+    // et la coupe est fermée au raccord, ouverte au milieu, d'un seul mouvement
+    assert.equal(cutAt(Rr, 0), 0); assert.equal(cutAt(Rr, 1 - 1e-9), 0);
   }
-  // couronne, bélière, anneau de la boussole : loin du fond
-  sphereClear(CROWN, CROWN[2], 2e-4, 'couronne contre le fond');
-  torusClear(BOW, 2e-4, 'bélière contre le fond');
-  torusClear(COMP_RING, 2e-4, 'anneau de la boussole contre le fond');
-  // l'aiguille au-dessus de la rose, sous le sommet du pivot ; la flamme au-dessus de la mèche
-  assert.ok(NEEDLE.y - NEEDLE.th > CARD_Y && NEEDLE.y + NEEDLE.th < PIVOT.y1);
-  assert.ok(FLAME_Y > WICK.y1);
 });
 
-test('aucun objet ne dépasse 11,5 mm : son image entière passe par l’ouverture', () => {
-  for (const P of [TOP, CASE, CANDLE, COMPASS]) for (const [, y] of P) assert.ok(y <= MAX_H);
-  assert.ok(COINS.at(-1).y + COIN.h <= MAX_H && PIVOT.y1 <= MAX_H && FLAME_Y + 0.003 <= MAX_H);
-  // et tout l'objet dans la sphère englobante du tracé
-  for (const P of [TOP, CASE, CANDLE, COMPASS]) for (const [r, y] of P) assert.ok(Math.hypot(r, y - BOUND.y) < BOUND.r, `(${r}, ${y}) hors de la sphère englobante`);
-  for (const [x, y, R, r] of [BOW, COMP_RING]) assert.ok(Math.hypot(x + R + r, y - BOUND.y) < BOUND.r);
-  for (const c of COINS) assert.ok(Math.hypot(Math.hypot(c.x, c.z) + COIN.r, c.y + COIN.h - BOUND.y) < BOUND.r);
-});
-
-test('les points d’un objet sous 11,5 mm se voient dans l’image depuis la caméra (au-delà de 16 mm, non)', () => {
-  // (la coupure que l'on verrait sur un objet trop haut est celle d'un vrai mirascope)
-  const seen = (el, h) => {
-    const e = (el * Math.PI) / 180, D = 0.38, eye = [0, f + 0.006 + Math.sin(e) * D, Math.cos(e) * D], P = [0, f + h, 0];
-    const d = P.map((v, k) => v - eye[k]);
-    const plane = (o, dd, tMax) => { if (Math.abs(dd[1]) < 1e-9) return null; const t = (h - o[1]) / dd[1]; return t > 1e-7 && t < tMax && Math.hypot(o[0] + dd[0] * t, o[2] + dd[2] * t) < 0.011 ? t : null; };
-    const r = traceCavity(eye, d, f, 0, 6, plane);
-    return r.fate === 'objet' && r.bounces === 2;
-  };
-  for (const el of [40, 47]) { assert.ok(seen(el, MAX_H), `${el}°`); assert.ok(!seen(el, 0.02), `${el}° : 20 mm encore vu`); }
-});
-
-test('la boucle se referme : levée, plongée, caméra et objets identiques à u = 0 et u = 1', () => {
+test('la caméra ne tourne pas autour de l’axe (au balancement près) : l’entaille de chaque niveau lui fait face', () => {
   for (let i = 0; i < 20; i++) {
     const Rr = generate(`t${i}`);
-    assert.equal(liftAt(0), liftAt(1)); assert.equal(diveAt(0), diveAt(1));
-    const c0 = cameraAt(Rr, 0), c1 = cameraAt(Rr, 1);
-    for (let k = 0; k < 3; k++) { close(c0.pos[k], c1.pos[k], 1e-12); close(c0.tgt[k], c1.tgt[k], 1e-12); }
-    const o0 = objectAt(Rr, 0), o1 = objectAt(Rr, 1 - 1e-12);
-    const wrap = (a) => Math.abs(Math.atan2(Math.sin(a), Math.cos(a)));
-    assert.ok(wrap(o1.spin - o0.spin) < 1e-6 && wrap(o1.hands[2] - o0.hands[2]) < 1e-6 && wrap(o1.time - o0.time) < 1e-6);
-    assert.ok(Number.isInteger(Rr.object.spinTurns) && Number.isInteger(Rr.object.secondTurns));
-  }
-});
-
-test('chaque temps est monotone : le couvercle monte, reste levé, redescend ; fermé, l’image est là', () => {
-  const N = 2000;
-  for (let i = 1; i <= N; i++) {
-    const u = i / N, a = liftAt((i - 1) / N), b = liftAt(u);
-    if (u <= 0.5) assert.ok(b >= a - 1e-15, `levée en u = ${u}`); else assert.ok(b <= a + 1e-15, `retombée en u = ${u}`);
-    const c = diveAt((i - 1) / N), d = diveAt(u);
-    if (u <= 0.5) assert.ok(d >= c - 1e-15); else assert.ok(d <= c + 1e-15);
-  }
-  for (const u of [0, 0.1, CHORE.up[0], CHORE.down[1], 0.9]) assert.equal(liftAt(u), 0);
-  for (let u = CHORE.up[1]; u <= CHORE.down[0]; u += 0.01) close(liftAt(u), 1, 1e-12);
-  // la caméra ne plonge que couvercle déjà levé
-  for (let u = 0; u < 0.5; u += 0.002) if (diveAt(u) > 0.02) assert.ok(liftAt(u) > 0.05, `u = ${u}`);
-});
-
-test('l’aiguille de la boussole : au repos au raccord, elle oscille à chaque à-coup du couvercle et s’amortit', () => {
-  assert.equal(swingAt(0), 0); assert.equal(swingAt(0.999999), 0);
-  for (const [u0] of JOLTS) {
-    let m = 0; for (let u = u0; u < u0 + 0.05; u += 0.0005) m = Math.max(m, Math.abs(swingAt(u)));
-    let late = 0; for (let u = u0 + 0.12; u < u0 + 0.16; u += 0.0005) late = Math.max(late, Math.abs(swingAt(u)));
-    assert.ok(m > 0.08 && late < m * 0.1, `à-coup en ${u0} : ${m.toFixed(3)} puis ${late.toFixed(4)}`);
-  }
-  for (const u of [0.05, 0.15, 0.9]) assert.equal(swingAt(u), 0, `au repos en ${u}`);
-});
-
-test('caméra : jamais sous la table ni dans les coupes, et aucune pièce de la machinerie entre l’œil et l’image', () => {
-  // distance de deux segments (échantillonnée)
-  const segDist = (a, b, c, d) => {
-    let m = Infinity;
-    for (let i = 0; i <= 40; i++) for (let j = 0; j <= 40; j++) {
-      const p = a.map((v, k) => v + (b[k] - v) * i / 40), q = c.map((v, k) => v + (d[k] - v) * j / 40);
-      m = Math.min(m, Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]));
+    for (let k = 0; k <= 40; k++) {
+      const c = cameraAt(Rr, k / 40), az = (Math.atan2(c.pos[0], c.pos[2]) * 180) / Math.PI;
+      const dz = ((az - Rr.camera.az + 540) % 360) - 180;
+      assert.ok(Math.abs(dz) <= Math.abs(Rr.camera.sway) + 1e-6, `${Rr.seed} u = ${k / 40} : ${dz}°`);
     }
-    return m;
-  };
-  for (const kind of ['cremaillere', 'vis', 'poulies']) for (let i = 0; i < 12; i++) {
-    const Rr = generate(`t${i}`, { mechanism: kind }), Lmax = Rr.mirascope.liftMax, L0 = layout(kind, f);
-    for (let k = 0; k <= 24; k++) {
-      const u = k / 24, c = cameraAt(Rr, u), L = liftAt(u) * Lmax;
-      assert.ok(Math.hypot(c.pos[0], c.pos[2]) > R + 0.1 || c.pos[1] > f + 0.1, `${Rr.seed} u = ${u}`);
-      assert.ok(c.pos[1] > 0.02);
-      if (L > 0.002) continue; // (couvercle levé : l'image s'est éteinte)
-      const img = [0, f + 0.006, 0];
-      for (const P of L0.posts) {
-        const a = toWorld([P.x, P.y0, P.z], Rr.mechanism.yaw), b = toWorld([P.x, P.y1, P.z], Rr.mechanism.yaw);
-        assert.ok(segDist(c.pos, img, a, b) > P.r + 0.004, `${kind} ${Rr.seed} u = ${u} : une colonne devant l’image`);
-      }
-      for (const B of L0.bars) {
-        const a = toWorld(B.a, Rr.mechanism.yaw), b = toWorld(B.b, Rr.mechanism.yaw);
-        assert.ok(segDist(c.pos, img, a, b) > B.r + 0.003, `${kind} ${Rr.seed} u = ${u} : une barre devant l’image`);
-      }
-      for (const C of L0.cords ?? []) {
-        const a = toWorld([C.x, f / 2, C.z], Rr.mechanism.yaw), b = toWorld([C.x, L0.yS, C.z], Rr.mechanism.yaw);
-        assert.ok(segDist(c.pos, img, a, b) > 0.004, `${kind} ${Rr.seed} u = ${u} : une corde devant l’image`);
-      }
+  }
+});
+
+test('le fondu du raccord : moitié-moitié à u = 1, nul aux bords ; l’éclat de l’argent se raccorde', () => {
+  const Rr = generate('fondu'), e = 1e-7;
+  const a = seamAt(Rr, 1 - e), b = seamAt(Rr, e);
+  assert.ok(Math.abs(a.w - 0.5) < 1e-3 && Math.abs(b.w - 0.5) < 1e-3);
+  assert.ok(seamAt(Rr, CHORE.seam[0] - 0.001) === null && seamAt(Rr, CHORE.seam[1] - 1 + 0.001) === null);
+  assert.ok(seamAt(Rr, CHORE.seam[0] + 1e-5).w < 1e-3);
+  // les deux vues mêlées sont les mêmes de part et d'autre (vue courante ↔ vue de l'autre niveau)
+  assert.ok(Math.abs(levelAt(Rr, 1 - e) - b.alt) < 1e-4 && Math.abs(levelAt(Rr, e) - a.alt) < 1e-4);
+  // éclat affiché d'une vue au niveau λ, qui regarde le niveau n : ρ^(−2λ) × ρ^(2n) — le même des deux côtés
+  const shown = (λ, n) => -2 * compExp(λ) + 2 * n;
+  assert.ok(Math.abs(shown(levelAt(Rr, 1 - e), 1) - shown(levelAt(Rr, e), 0)) < 1e-3);
+  assert.ok(Math.abs(shown(a.alt, 0) - shown(levelAt(Rr, 1 - e), 1)) < 1e-3);
+});
+
+test('caméra calme : le regard tourne à moins de 25°/s', () => {
+  for (let i = 0; i < 10; i++) {
+    const Rr = generate(`t${i}`), T = Rr.loop.duration, N = 3000;
+    const dir = (u) => { const P = cameraAt(Rr, u), d = P.tgt.map((v, k) => v - P.pos[k]), l = Math.hypot(...d); return d.map((v) => v / l); };
+    let peak = 0;
+    for (let k = 0; k < N; k++) {
+      const u = k / N, a = dir(u), b = dir(u + 1 / N);
+      if (u > 0.999) continue;
+      const ang = Math.acos(Math.min(1, a[0] * b[0] + a[1] * b[1] + a[2] * b[2])) * 180 / Math.PI;
+      peak = Math.max(peak, ang / (T / N));
+    }
+    assert.ok(peak < 25, `${Rr.seed} : ${peak.toFixed(1)}°/s`);
+  }
+});
+
+test('caméra : jamais dans les coupes', () => {
+  for (let i = 0; i < 8; i++) {
+    const Rr = generate(`t${i}`);
+    for (let k = 0; k <= 48; k++) {
+      const u = k / 48, c = cameraAt(Rr, u), r = Math.hypot(c.pos[0], c.pos[2]);
+      assert.ok(r > R + 0.01 || c.pos[1] > f + SHELL + 0.004 - bowl(Math.max(r, rh)), `${Rr.seed} u = ${u}`);
     }
   }
 });
