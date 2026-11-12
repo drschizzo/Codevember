@@ -24,9 +24,9 @@ Rendu physique en three.js (WebGPU, TSL), entièrement procédural : une graine 
 
 Sur écran tactile : une touche met en pause, deux touches tirent une nouvelle scène, un appui long masque l'interface.
 
-Paramètres d'URL : `?seed=…`, `#r=…` (scène retouchée, « Copier le lien »), `?ui=0`, `?mobile=1` / `?mobile=0`, `?debug` (outils dans `window.mirage` : `still(nom, phase, l, h)`, `film([[graine, phases]])` — une graine peut s'écrire `graine:décor:gravure` —, `noSeam(true)` (chaque vue sans le fondu du raccord), `shot`, `send`, `meter()`, `bench()`, `seam()`, `run()` ; `stage.raytrace.U.debug.value = 1` colore chaque pixel selon ce que son rayon a touché, plus sombre à chaque niveau).
+Paramètres d'URL : `?seed=…`, `#r=…` (scène retouchée, « Copier le lien »), `?ui=0`, `?mobile=1` / `?mobile=0`, `?debug` (outils dans `window.mirage` : `still(nom, phase, l, h)`, `film([[graine, phases]])` — une graine peut s’écrire `graine:pièce:décor du dôme` —, `noSeam(true)` (chaque vue sans le morphing du raccord), `shot`, `send`, `meter()`, `bench()`, `seam()`, `run()` ; `stage.raytrace.U.debug.value = 1` colore chaque pixel selon ce que son rayon a touché, plus sombre à chaque niveau).
 
-Le panneau règle le décor, la gravure du dôme, la durée d'un niveau ; la finition des coupes et le projecteur ; le balancement de la caméra ; le rendu. Export MP4 image par image (éventuellement accumulé) et PNG.
+Le panneau règle le décor de la pièce, le décor du dôme, la durée d'un niveau ; la finition des coupes et le projecteur ; le balancement de la caméra ; le rendu. Export MP4 image par image (éventuellement accumulé) et PNG.
 
 ## Principe : deux paraboloïdes, chaque sommet au foyer de l'autre
 
@@ -41,7 +41,7 @@ Fermées, elles se rejoignent à leur bord (y = f/2) et chaque sommet est au foy
 
 Le demi-angle de la coupe va de 0 à 45° (u de 0,03 à 0,15), reste ouvert, puis revient à 0 (u de 0,50 à 0,68) ; fermée au raccord. Par la coupe, on voit le petit au fond directement, sans miroir. **L'image n'en souffre pas** : pour un observateur, les rayons qui forment l'image se réfléchissent sur les coupes du côté opposé au sien. La coupe du bas reste entière — par l'entaille on ne voit que l'intérieur, jamais la table, que le petit n'a pas.
 
-Dans le tracé, une surface du couvercle (dedans, dehors, joncs, perles) n'est retenue que hors de l'entaille (pour un paraboloïde, la plus proche des deux racines qui convient ; pour un jonc, le *sphere tracing* marche dans le tore privé du coin) ; les deux tranches sont des demi-plans verticaux par l'axe, gardés dans l'épaisseur du couvercle (2,5 mm) ; elles et les tranches des joncs sont peintes en rouge, comme sur les écorchés des musées. (Un signe inversé dans la coupe des joncs gardait la partie ôtée et ôtait le reste : des trous sombres bordaient l'ouverture. Le tore coupé est max(d_tore, c), c positif dans la coupe, −1 couvercle entier.)
+Dans le tracé, une surface du couvercle (dedans, dehors, joncs, perles) n'est retenue que hors de l'entaille (pour un paraboloïde, la plus proche des deux racines qui convient ; pour un jonc et pour la couronne, le *sphere tracing* marche dans la forme privée du coin : les perles sont tranchées une à une à mesure que la coupe s'élargit) ; les deux tranches sont des demi-plans verticaux par l'axe, gardés dans l'épaisseur du couvercle (2,5 mm) ; elles et les tranches des joncs sont peintes en rouge, comme sur les écorchés des musées. (Un signe inversé dans la coupe des joncs gardait la partie ôtée et ôtait le reste : des trous sombres bordaient l'ouverture. Le tore coupé est max(d_tore, c), c positif dans la coupe, −1 couvercle entier.)
 
 ## La mise en abyme
 
@@ -49,21 +49,32 @@ Dans le tracé, une surface du couvercle (dedans, dehors, joncs, perles) n'est r
 
 - **Le petit** est le grand réduit de K = 0,05 : 7,6 mm de large, 4,2 mm de haut pied compris, posé au fond sur l'arête de sa base (à moins de 10 µm), **tourné d'un demi-tour**.
 - **Un repère par niveau** : x_n = y_mini·ŷ + K·R_π·x_(n+1), et la direction tourne d'un demi-tour avec lui. Son image, tournée d'un demi-tour à son tour, a donc l'orientation du grand : la coupe de chaque niveau fait face à la même caméra, qui n'a pas à tourner (si elle tournait, à mi-chemin l'image se formerait par la coupe et s'éteindrait). Quand un rayon entre dans la sphère qui enveloppe le petit, il passe dans son repère et le même code recommence ; quand il en ressort sans s'y être réfléchi, il revient au parent. Le fond du parent, qui traverse cette sphère, est encore un paraboloïde dans le repère de l'enfant.
-- **Par pixel**, à chaque pas : quatre paraboloïdes (dedans et dehors de chaque coupe), la table et le pied, deux tores en *sphere tracing* borné (les joncs du bord, la lèvre de l'ouverture), les deux tranches de la coupe, les trois perles les plus proches, deux sphères (entrer, sortir) ; dix-huit pas en tout.
+- **Par pixel**, à chaque pas : quatre paraboloïdes (dedans et dehors de chaque coupe), la table et le pied, deux tores en *sphere tracing* borné (les joncs du bord, la lèvre de l'ouverture), les deux tranches de la coupe, la couronne (tracée avec la lèvre, par répétition autour de l'axe), deux sphères (entrer, sortir) ; dix-huit pas en tout.
 - **Deux libertés** rendent la chaîne semblable à elle-même : la salle, la lampe et le projecteur sont les mêmes dans le repère de chaque niveau ; et un rayon qui ressort de la cavité d'un petit après s'y être réfléchi voit la salle, comme s'il sortait du grand.
-- Chaque niveau porte une **bande d'émail** semée de points d'or (bleu nuit, vert anglais, grenat ou noir) et une **couronne de vingt-quatre perles** autour de l'ouverture.
 
 ### Le raccord : l'image n'est pas une copie
 
-La caméra C1, qui regarde l'image du petit, doit voir ce que voit au début la caméra P, qui regarde le grand. Mais l'image d'un mirascope paraît plus profonde que large, et ce qu'on voit d'elle sous un angle, ce sont des rayons partis sous un autre : vue à 50°, elle ressemble au petit vu à 46,5°. `tools/seamfit.mjs` trace les deux vues pixel à pixel (`traceNested`, couvercle écorché, salle allumée) et cherche P par Nelder–Mead. Avec le cadre qu'exige la coupe (le grand presque entier, l'image en haut, le petit au fond en bas) et couvercles fermés au raccord, il reste **6,9 % de pixels en désaccord — des contours et les coins du cadre — et 1,0 mm d'écart moyen** (0,7° sur les reflets) ; un **fondu de 0,7 s** autour de u = 1 les efface (le lancer de rayons trace alors une seconde caméra). L'image du petit a subi deux réflexions de plus ; on la relève de ρ^(−2λ) à mesure qu'elle emplit l'écran.
+La caméra C1, qui regarde l'image du petit, doit voir ce que voit au début la caméra P, qui regarde le grand. Mais l'image d'un mirascope paraît plus profonde que large, et ce qu'on voit d'elle sous un angle, ce sont des rayons partis sous un autre : vue à 50°, elle ressemble au petit vu à 46,5°. `tools/seamfit.mjs` trace les deux vues pixel à pixel (`traceNested`, couvercle écorché, salle allumée) et cherche P par Nelder–Mead. Avec le cadre qu'exige la coupe (le grand presque entier, l'image en haut, le petit au fond en bas) et couvercles fermés au raccord, il reste **6,9 % de pixels en désaccord — des contours et les coins du cadre — et 1,0 mm d'écart moyen** (0,7° sur les reflets) ; un **morphing** d'une seconde, juste après le raccord, les efface sans double image : chaque pixel de la vue du grand vise d'abord le point que montrait la vue d'avant (le point touché relu un niveau plus haut, ou, pour une image plus profonde, l'endroit où son rayon la traversait au-dessus de l'ouverture), puis retrouve sa direction. Le raccord se fait en mouvement (plongée rapide). L'image du petit a subi deux réflexions de plus ; on la relève de ρ^(−2λ) à mesure qu'elle emplit l'écran.
 
 ### La plongée
 
-Le niveau avance lentement au début (la coupe s'ouvre pendant que la caméra voit le grand presque entier), plus vite ensuite : λ = u + a·sin(2πu)/2π, a = −0,8, à la même vitesse des deux côtés du raccord. La distance est géométrique en λ (×0,062 par niveau), la visée converge au même rythme vers le point limite de la chaîne, élévation et champ passent de P à C1 avec une dérivée nulle aux deux bouts, et l'azimut se balance de 6 à 12°, une fois par niveau, nul au raccord.
+Le niveau suit une courbe de Hermite monotone : vite au raccord (vitesse 1,6), lent pendant que la coupe est ouverte (0,3), vite de nouveau pour plonger — la même vitesse des deux côtés du raccord. La distance est géométrique en λ (×0,062 par niveau), la visée converge au même rythme vers le point limite de la chaîne, élévation et champ passent de P à C1 avec une dérivée nulle aux deux bouts, et l'azimut se balance de 6 à 12°, une fois par niveau, nul au raccord.
 
 ## Familles et décors
 
-La famille est la **gravure du dôme**, le motif qui se répète d'un niveau à l'autre : **vagues** (cercles ondulés), **soleil** (rayons guillochés), **spirale** (grain d'orge tournant). La gravure s'efface quand un pixel couvre un sillon — la taille d'un pixel prise à la distance de la visée, ramenée à l'échelle du niveau (l'image est réelle : les miroirs refocalisent).
+La famille est le **décor du dôme** — ce qui emplit le cadre, et se répète d'un niveau à l'autre — avec sa bande et sa couronne :
+
+| Famille | Dôme | Bande | Couronne |
+| --- | --- | --- | --- |
+| **Argent guilloché** | sillons de 50 µm qui font tourner les reflets (vagues, soleil ou grain d'orge) | émail translucide coulé sur la gravure, points d'or | perles à orient |
+| **Cloisonné** | émaux vitreux (turquoise, cobalt, corail, ivoire), teinte inégale, fines bulles, creusés au milieu ; fils d'or en saillie | or | cabochons de deux pierres |
+| **Laque et or** | urushi noir sous un vernis profond (un miroir sombre), paillettes d'or inclinées qui scintillent, filets, constellation | or | clous d'or |
+| **Cuivre martelé** | cuvettes polies (Voronoï, hauteur au carré de la distance au coup), arêtes mates et oxydées | filet poli | rivets de cuivre |
+| **Nacre** | tesselles inclinées, « flamme », irisation de couche mince, poli ; joints de résine | émail bordé d'or | perles noires |
+
+**Les matières** suivent un même modèle (`shadePBR`) : base métal ou diélectrique, rugosité, normale perturbée par le relief, vernis facultatif ; reflet de la salle floutée selon la rugosité, pondéré par Fresnel–Schlick ; diffus de la salle entière, floue, de la lampe et du projecteur ; sous un vernis, la base diélectrique ne garde que son diffus. La rugosité varie en nuages (traces de doigts, usure). Joncs, lèvre et pied sont dans le métal de la famille.
+
+Les gravures s'effacent quand un pixel couvre un sillon — la taille d'un pixel prise à la distance de la visée, ramenée à l'échelle du niveau (l'image est réelle : les miroirs refocalisent).
 
 | Décor | Pièce | Lampe | Finitions |
 | --- | --- | --- | --- |
@@ -80,11 +91,11 @@ Un projecteur au-dessus de l'axe (3 000 à 3 600 K) tombe droit dans l'ouverture
 node --test 'mirage/test/*.test.mjs'
 ```
 
-Optique : coupes jointes à leur bord, chaque sommet au foyer de l'autre ; image en f + h, au-dessus de l'ouverture, nette, tournée d'un demi-tour ; couvercle levé, l'image descend et perd ses rayons. Abyme : le petit repose au fond par l'arête de son pied ; il tient dans sa sphère, et elle dans la cavité sous l'ouverture ; il mesure moins de 11,5 mm ; vu par C1, son image couvre plus de 10 % du cadre et le niveau suivant s'y voit. **Coupe** : ouverte, pour chaque graine, le même cadre contient le vrai petit (sans miroir) et son image ; couvercle entier, le petit ne se voit pas directement ; fermée au raccord ; la caméra reste face à la coupe, à son balancement près. **Raccord** : moins de 9 % de pixels en désaccord, moins de 1,3 mm d'écart, moins de 1,2° sur les reflets entre C1 et P. Chorégraphie : distance géométrique ; λ croît sans retour, à la même vitesse des deux côtés du raccord ; fondu moitié-moitié au raccord, éclat raccordé ; regard sous 25°/s ; caméra jamais dans les coupes. Recette : déterministe, JSON pur, catalogue entier tiré, décors distincts, balancement d'un côté ou de l'autre.
+Optique : coupes jointes à leur bord, chaque sommet au foyer de l'autre ; image en f + h, au-dessus de l'ouverture, nette, tournée d'un demi-tour ; couvercle levé, l'image descend et perd ses rayons. Abyme : le petit repose au fond par l'arête de son pied ; il tient dans sa sphère, et elle dans la cavité sous l'ouverture ; il mesure moins de 11,5 mm ; vu par C1, son image couvre plus de 10 % du cadre et le niveau suivant s'y voit. **Coupe** : ouverte, pour chaque graine, le même cadre contient le vrai petit (sans miroir) et son image ; couvercle entier, le petit ne se voit pas directement ; fermée au raccord ; la caméra reste face à la coupe, à son balancement près. **Raccord** : moins de 9 % de pixels en désaccord, moins de 1,3 mm d'écart, moins de 1,2° sur les reflets entre C1 et P. Chorégraphie : distance géométrique ; λ croît sans retour, vite au raccord (même vitesse des deux côtés), lent coupe ouverte ; morphing plein juste après le raccord ; éclat raccordé ; regard sous 25°/s ; caméra jamais dans les coupes. Recette : déterministe, JSON pur, catalogue entier tiré, décors distincts, balancement d'un côté ou de l'autre.
 
 ## Performances mesurées
 
-1920 × 1080, panneau de navigateur masqué (20 rendus d'affilée puis `onSubmittedWorkDone`) : **≈ 5 à 9 ms par image**, **≈ 9 ms** pendant les 0,7 s du fondu (deux caméras, couvercles fermés). Non vérifié : la fluidité en direct, un téléphone réel, l'export MP4.
+1920 × 1080, panneau de navigateur masqué (20 rendus d'affilée puis `onSubmittedWorkDone`) : **≈ 5,5 à 8 ms par image**, **≈ 10 ms** pendant la seconde du morphing (deux tracés ; cuivre martelé, le plus cher). Non vérifié : la fluidité en direct, un téléphone réel, l'export MP4.
 
 ## Version mobile
 

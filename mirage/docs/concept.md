@@ -2,7 +2,29 @@
 
 Thème donné : « mirage ». Le projet s'appelle **Mirage**, sous-titre *l'objet qui n'est pas là*.
 
-## Huitième version : la coupe animée
+## Dixième version : les matières
+
+Retour sur la neuvième : « bien mieux, mais il faut bien plus travailler les matériaux du mirascope : intéressants, pas assez réalistes ».
+
+Un même modèle physique pour tout (métal ou diélectrique, Fresnel–Schlick, diffus de la salle floue, vernis), et un relief qui fait dévier la lumière : sillons de guilloché sous émail translucide, fils d'or en saillie et émail creusé, paillettes d'or inclinées sous la laque, cuvettes de marteau aux arêtes oxydées, tesselles de nacre inclinées à irisation de couche mince. Joncs, lèvre et pied dans le métal de la famille. Un piège TSL a coûté deux rendus : la normale, émise dans la première branche qui la lisait, restait nulle dans les autres.
+
+---
+
+# Neuvième version : morphing, perles tranchées, décors
+
+
+Retour sur la huitième : « le raccord n'est toujours pas parfait (la transition floue reste assez visible) ; sur le collier de perles, les pierres apparaissent et disparaissent d'un coup au lieu d'être coupées progressivement ; les scènes manquent beaucoup de variété ».
+
+**Un morphing, pas un fondu.** Un fondu mêle deux images décalées : on voit une double image. Juste après le raccord, chaque pixel de la vue du grand vise d'abord le point que montrait la vue d'avant, puis retrouve sa direction : la première image après le raccord est la dernière d'avant. Pour les pixels qui montraient une image plus profonde, viser le point touché ramenait au vrai petit, au fond : ils visent l'endroit où le rayon traversait l'image, au-dessus de l'ouverture. Et le raccord se fait en mouvement : la plongée est rapide au raccord, lente quand la coupe est ouverte.
+
+**Des perles tranchées.** La couronne est tracée avec la lèvre, en *sphere tracing*, privée du coin de la coupe : chaque perle est tranchée à mesure que la coupe passe, avec sa tranche rouge.
+
+**Cinq décors.** Le dôme emplit le cadre : c'est lui qui doit changer. Argent guilloché et perles, cloisonné et cabochons, laque noire et or, cuivre martelé et rivets, nacre et perles noires. (La nacre sortait grise et le martelé lisse : des valeurs partagées, émises paresseusement dans la première branche qui les lisait, manquaient aux autres ; elles sont figées avant le choix du décor.)
+
+---
+
+# Huitième version : la coupe animée
+
 
 Retour sur la septième (l'écorché permanent) : « l'idée est bonne, mais le mirascope ne devrait pas être tout le temps coupé : la coupe devrait être animée pour qu'on comprenne ce qui se passe ; et la géométrie de la découpe doit être réaliste — des éléments sans épaisseur, d'autres qui semblent des bugs ».
 

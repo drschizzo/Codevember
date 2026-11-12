@@ -42,7 +42,7 @@ export function createUI({ recipe: getRecipe, render, on }) {
     const add = (f, o, k, ...a) => { const c = f.add(o, k, ...a); ctls.push(c); return c; };
     const ch = () => on.recipeChanged(), re = () => on.airChanged();
     add(fScene, R, 'mood', opts(MOODS)).name('Décor (nouvelle scène)').onChange((m) => on.moodChanged(m));
-    add(fScene, R, 'family', opts(FAMILIES)).name('Gravure du dôme (nouvelle scène)').onChange((v) => on.familyChanged(v));
+    add(fScene, R, 'family', opts(FAMILIES)).name('Décor du dôme (nouvelle scène)').onChange((v) => on.familyChanged(v));
     add(fScene, R.loop, 'duration', 8, 120, 1).name('Durée d’un niveau (s)').onChange(ch);
     add(fMir, R.mirascope, 'finish', opts(FINISHES)).name('Finition des coupes').onChange(re);
     add(fMir, R.light, 'spot', 0, 80, 0.5).name('Projecteur').onChange(re);

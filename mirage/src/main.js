@@ -26,7 +26,7 @@ import { loader } from './app/loader.js';
 import { asyncPipelines, warmScene } from './app/warmup.js';
 
 const NAME = 'mirage';
-const DEFAULT_SEED = 'h6fawv'; // scène d'ouverture (sans ?seed=)
+const DEFAULT_SEED = 'j2wm45'; // scène d'ouverture (sans ?seed=)
 const params = new URLSearchParams(location.search);
 const $ = (s) => document.querySelector(s);
 // (pause par MessageChannel : les minuteries sont ralenties quand le panneau est masqué)

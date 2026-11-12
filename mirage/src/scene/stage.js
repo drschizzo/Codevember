@@ -43,7 +43,11 @@ export function createStage(scene, gen, { lite = false } = {}) {
     const U = RT.U, Fi = FINISHES[R.mirascope.finish];
     U.f.value = f; U.shell.value = SHELL; U.rimR.value = PARAB.rimK * f; U.holeR.value = PARAB.holeK * f; U.tableY.value = TABLE_Y;
     U.outer.value.set(Fi.color); U.outerRough.value = Fi.rough; U.engrave.value = Fi.engrave;
-    U.pattern.value = FAMILIES[R.family].kind;
+    const Fa = FAMILIES[R.family];
+    U.style.value = Fa.style; U.jewel.value = Fa.jewel; U.pattern.value = ['vagues', 'soleil', 'spirale'].indexOf(R.pattern);
+    U.jewelCol.value.set(R.stones[0]); U.jewelCol2.value.set(R.stones[1]);
+    // la garniture (joncs, lèvre, pied) : le métal de la famille
+    U.trim.value.set(Fa.trim ?? Fi.color);
     U.table.value.set(M.table); U.tableRough.value = M.tableRough; U.tableKind.value = M.tableKind; U.envI.value = M.envI;
     const lc = new THREE.Color(kelvin(M.lamp));
     U.keyCol.value.set(lc.r * M.key, lc.g * M.key, lc.b * M.key);
