@@ -14,12 +14,31 @@ L'échafaudage la pose depuis `template/explainer.html` (structure, en-tête, so
 
 **Ce qu'elle raconte.** Les défis *propres au projet*, du cœur du sujet vers le rendu : 6 à 9 sections, puis « Budget ». Pas les généralités communes à tous les projets (panneau, export MP4, chaîne d'image standard), sauf si elles ont ici une solution particulière.
 
-**Comment.** Le ton d'un article technique sérieux, pour un développeur graphique curieux :
+**Comment.** Le ton d'un article de vulgarisation technique sérieux. Deux lecteurs : un curieux qui n'a jamais écrit de shader doit suivre le fil de chaque section (le problème, l'idée, le résultat) ; un développeur graphique doit y trouver les vraies constantes et de quoi refaire le calcul :
 - chaque section est un défi, avec un **titre qui affirme** (« La came est usinée d'après le plan », pas « Came ») et le fichier source en étiquette (`<span class="src">src/gen/rod.js · inextensible()</span>`) ;
 - le problème concret, **pourquoi l'approche naïve échoue**, puis la solution retenue et ses constantes réelles ;
 - précis et dense : vrais nombres (pas, tailles, seuils, temps mesurés), formules en LaTeX (KaTeX, `\( \)` et `\[ \]`) quand elles éclairent, un court extrait de code quand une ligne dit tout ;
 - voix impersonnelle, sûre, sans superlatifs ; encadrés `.note` (idée), `.note.trap` (piège rencontré), `.note.check` (ce qu'un test ou une mesure vérifie) ;
 - **rien d'inventé** : chaque nombre vient du code, du README, d'un test ou d'une mesure faite pour l'occasion (et dite comme telle). Les pièges racontés dans les commits et dans `docs/concept.md` sont la meilleure matière.
+
+**Rendre lisible sans appauvrir.**
+- Le chapeau dit ce qu'on voit à l'écran, puis la difficulté en une phrase qu'un non-spécialiste comprend. Le jargon vient après.
+- Chaque section ouvre sur le problème concret, en mots simples, avant le premier terme technique ou la première formule.
+- Un terme technique est glosé à sa première apparition, une fois, en quelques mots (apposition ou parenthèse) : « le tir multiple, qui coupe la trajectoire en tronçons partis chacun de leur propre état ». Ensuite on l'emploie sans répéter la glose.
+- Une formule est annoncée en mots (ce qu'elle calcule) et suivie de ce qu'elle implique. Elle n'est jamais la seule explication d'une idée.
+- Un ordre de grandeur abstrait gagne une image concrète, calculée à partir des vrais nombres et juste (« multipliée par 10⁸ : un millimètre d'écart devient cent kilomètres »).
+- Une idée par phrase. Les chaînes de propositions reliées par des points-virgules se coupent en phrases. Varier la longueur.
+- Les légendes de démo disent quoi manipuler et quoi regarder, puis ce que la démo simplifie.
+
+**Ce qui sonne « écrit par une IA », à éviter** (d'après la skill *humanizer*, adaptée au français) :
+- **Les contrastes de théâtre** : « non pas X, mais Y », « ce n'est pas X, c'est Y », « pas seulement X : Y », la queue négative (« …, pas un nouveau modèle », « sans fondu ni triche »). Dire la chose directement. Garder un contraste quand la moitié négative corrige une idée que le lecteur a vraiment (l'approche naïve, chiffrée).
+- **Les chutes en une ligne** qui répètent le paragraphe (« Le reste suit. », « Tout est là. »), les fragments en rafale, les aphorismes (« la physique ne triche pas », « X est le langage de Y »). Finir sur le dernier fait concret.
+- **Les annonces** : « voici comment », « regardons », « c'est là qu'intervient », « place à ». Et les objections que personne n'a faites (« on pourrait croire que… ») quand elles ne servent pas l'approche naïve réellement essayée.
+- **Le tiret cadratin comme connecteur universel** (« — ») : le remplacer par une virgule, deux-points, des parenthèses ou un point. Zéro dans la prose (le tiret reste permis dans le code et les formules).
+- **Les triades forcées** (trois exemples ou trois adjectifs parce que trois sonne complet) et les phrases qui commencent toutes pareil.
+- **Les mots enflés** : véritable, crucial, essentiel, clé (adjectif), subtil, élégant, magique, fascinant, riche, robuste (au figuré), dompter, orchestrer, sublimer, au cœur de, joue un rôle, s'articule autour de, se révèle, littéralement, tout simplement. Et les verbes qui évitent « est » et « a » : « constitue », « représente », « se présente comme », « fait office de ».
+- **La page qui parle d'elle-même** : « cette section montre », « comme on va le voir », « ci-dessous ». Le lecteur voit la mise en page.
+- **Le gras décoratif** : un `<strong>` seulement pour le terme défini à cet endroit, pas pour scander.
 
 **Des démos interactives**, au moins cinq, sous les idées clés : canvas 2D (jamais WebGPU), curseurs, boutons, glisser, avec l'API de `home/explainer.js` (`demo('#fig-id', { title, aspect, controls, buttons, animate, setup, draw, pointer })`, aides `C`, `label`, `arrow`, `alpha`, `lerp`, `clamp`, `smooth`, `rng`, `TAU`). **Importer les modules purs du projet** (`import { … } from './src/gen/….js'`) plutôt que les recopier : la démo reste juste quand le code change. Chaque légende dit ce que la démo simplifie. Une démo lourde se calcule à demi-résolution dans un canvas hors écran ; un calcul de plus d'une seconde va dans un worker.
 
