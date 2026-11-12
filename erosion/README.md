@@ -105,7 +105,18 @@ Chaque humeur garde une lampe principale à moins de ~55° au-dessus du sable (C
 
 Six sables (accords de quatre tons de strates, d'un ton de dépôt, de grains sombres et d'eau chargée) : silice et kaolin, grès rouge, basalte, ocres, limon, glauconie et craie ; quatre stratigraphies : lits fins réguliers, bancs durs et tendres, chapeau dur, sable uniforme. Les azimuts des lumières sont donnés pour une caméra d'un côté du bac et réfléchis quand elle vole de l'autre.
 
-**La caméra** (`src/camera.js`) : une suite d'images clés propre à la famille — plan d'ensemble, descente vers l'endroit où l'eau travaille, vol au-dessus du geste, remontée pour le paysage sec, la lame de profil — interpolées en Catmull-Rom périodique, écartées des montants du simulateur de pluie, puis lissées (gaussienne périodique, σ = 0,9 s). Pointe sous 25 °/s, accélération sous 1,5 m/s² (testées à 120 i/s).
+**Le découpage** (`src/camera.js`) : la boucle est filmée en six plans, montés cut et calés sur ce qui se passe dans le bac, chacun cadré sur l'endroit où l'eau travaille dans la famille.
+
+| u | Plan | Ce qu'il montre |
+| --- | --- | --- |
+| 0,955 – 0,11 | ensemble (à cheval sur la boucle) | l'appareil dans son lieu, lent travelling avant ; l'eau arrive |
+| 0,11 – 0,30 | au ras du sable | l'objectif dans le bac, à 3 cm du sable (et du lac), en aval, regard vers l'amont : la miniature devient un paysage (courte focale, grande profondeur de champ) |
+| 0,30 – 0,47 | macro | une berge active de près, longue focale, faible profondeur de champ : l'échelle vraie |
+| 0,47 – 0,64 | carte | plongée presque verticale, lente rotation : le réseau se dessine pendant l'accéléré |
+| 0,64 – 0,812 | séchage | large, en lumière rasante, panoramique lent ; le portique traverse le cadre |
+| 0,812 – 0,955 | la lame | de profil, la caméra suit la lame à sa vitesse, un peu en avant : le bourrelet vient vers nous, le sable neuf reste derrière (en dedans des montants quand il y a le simulateur de pluie) |
+
+Dans un plan, la caméra va d'une pose à l'autre à vitesse constante ; à chaque raccord, la chaîne d'image remet à zéro le flou de mouvement et l'historique de l'anticrénelage temporel, et le rendu accumulé n'ouvre jamais l'obturateur à cheval sur deux plans. La caméra qui suit la lame reste à niveau (le profil du gabarit a des ruptures de pente). Dans chaque plan : pointe sous 25 °/s, accélération sous 1,5 m/s² (testées à 120 i/s).
 
 ## Tests
 
@@ -113,7 +124,7 @@ Six sables (accords de quatre tons de strates, d'un ton de dépôt, de grains so
 node --test 'erosion/test/*.test.mjs'
 ```
 
-Vingt-trois tests : le sable se conserve (ce qui manque est sorti par le déversoir) ; l'eau se conserve et reste positive, sans NaN ; la simulation est déterministe ; le delta creuse l'amont et comble le lac ; l'escarpement se creuse plus vite que le plateau ; la brèche entaille la digue ; strates et duretés ; la surface de départ est celle que dessine la lame ; raccord exact (l'état à u → 1 est celui de u = 0) ; la lame balaie tout le bac sans revenir en arrière, son bord bas est b₀ ; le séchage ne recule jamais ; la caméra est périodique, lente, au-dessus du sable et des parois, jamais à moins de 12 cm d'un montant, d'un rail ou de la poutre ; la recette est déterministe et en JSON ; humeurs, familles, sables et stratigraphies tirés ; lampes presque blanches (le soleil couchant excepté) ; humeurs différentes par le lieu, la lumière et la valeur ; familles aux gestes distincts.
+Vingt-quatre tests : le sable se conserve (ce qui manque est sorti par le déversoir) ; l'eau se conserve et reste positive, sans NaN ; la simulation est déterministe ; le delta creuse l'amont et comble le lac ; l'escarpement se creuse plus vite que le plateau ; la brèche entaille la digue ; strates et duretés ; la surface de départ est celle que dessine la lame ; raccord exact (l'état à u → 1 est celui de u = 0) ; la lame balaie tout le bac sans revenir en arrière, son bord bas est b₀ ; le séchage ne recule jamais ; six plans de plus de 4 s, un raccord par plan ; dans chaque plan la caméra est lente ; elle passe au-dessus des parois, ou, au ras du sable, dans le bac loin des parois, au-dessus du sable de départ et du lac, portique garé ; jamais à moins de 12 cm d'un montant, d'un rail ou de la poutre ; la recette est déterministe et en JSON ; humeurs, familles, sables et stratigraphies tirés ; lampes presque blanches (le soleil couchant excepté) ; humeurs différentes par le lieu, la lumière et la valeur ; familles aux gestes distincts.
 
 ## Performances
 

@@ -3,9 +3,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { filmState, U, PARK, BLADE_UP, EDGE } from '../src/timeline.js';
-import { buildCamera } from '../src/camera.js';
+import { buildCamera, SHOTS } from '../src/camera.js';
 import { generate, specOf } from '../src/recipe.js';
-import { TABLE, longProfile, FAMILIES } from '../src/gen/table.js';
+import { TABLE, longProfile, crossProfile, FAMILIES } from '../src/gen/table.js';
 
 const seeds = ['a1', 'b2', 'c3', 'd4', 'e5', 'f6'].flatMap((s) => Object.keys(FAMILIES).map((f) => generate(s, { family: f })));
 
@@ -56,7 +56,20 @@ test('phases monotones : le séchage ne revient jamais en arrière, l’eau ne r
   }
 });
 
-test('caméra : périodique, pointe < 25 °/s, accélération bornée (120 i/s)', () => {
+test('découpage : six plans de plus de 4 s, un raccord par plan', () => {
+  for (const R of seeds) {
+    const S = specOf(R), pose = buildCamera(R, S), dur = R.loop.duration;
+    for (let k = 0; k < SHOTS.length; k++) {
+      const len = ((SHOTS[(k + 1) % SHOTS.length].u0 - SHOTS[k].u0 + 1) % 1) * dur;
+      assert.ok(len > 4, `plan ${SHOTS[k].kind} de ${len.toFixed(1)} s`);
+    }
+    let cuts = 0, prev = pose(0).shot;
+    for (let i = 1; i <= 2000; i++) { const s2 = pose(i / 2000).shot; if (s2 !== prev) cuts++; prev = s2; }
+    assert.equal(cuts, SHOTS.length);
+  }
+});
+
+test('caméra : périodique, pointe < 25 °/s, accélération bornée dans chaque plan (120 i/s)', () => {
   for (const R of seeds) {
     const S = specOf(R), pose = buildCamera(R, S), dur = R.loop.duration;
     const a = pose(0), b = pose(1 - 1e-12);
@@ -66,6 +79,8 @@ test('caméra : périodique, pointe < 25 °/s, accélération bornée (120 i/s)'
     let peak = 0, prevV = null, peakAcc = 0;
     for (let i = 0; i < n; i++) {
       const u0 = i / n, u1 = (i + 1) / n;
+      // (un raccord est un saut voulu : on ne mesure qu'à l'intérieur d'un plan)
+      if (pose(u0).shot !== pose(u1).shot || (i > 0 && pose((i - 1) / n).shot !== pose(u0).shot)) { prevV = null; continue; }
       const d0 = dirAt(u0), d1 = dirAt(u1);
       const ang = Math.acos(Math.min(1, d0[0] * d1[0] + d0[1] * d1[1] + d0[2] * d1[2])) * 180 / Math.PI / dt;
       peak = Math.max(peak, ang);
@@ -78,13 +93,21 @@ test('caméra : périodique, pointe < 25 °/s, accélération bornée (120 i/s)'
   }
 });
 
-test('caméra : toujours au-dessus du sable et des parois quand elle survole le bac', () => {
+test('caméra : au-dessus des parois quand elle survole le bac, ou dans le bac à distance du sable et des parois', () => {
   for (const R of seeds) {
     const S = specOf(R), pose = buildCamera(R, S);
     for (let u = 0; u < 1; u += 0.002) {
-      const p = pose(u).position;
+      const P = pose(u), p = P.position;
       const inside = Math.abs(p[0]) < TABLE.Lx / 2 + 0.1 && Math.abs(p[2]) < TABLE.Ly / 2 + 0.1;
-      if (inside) assert.ok(p[1] > 0.26, `${R.seed}/${R.family} u=${u.toFixed(3)} : caméra à ${p[1].toFixed(3)} m au-dessus du bac`);
+      if (inside && P.kind === 'ras') {
+        // le plan au ras du sable : dans le bac, loin des parois, au-dessus du sable de départ et du lac
+        const x = p[0] + TABLE.Lx / 2, y = p[2] + TABLE.Ly / 2;
+        assert.ok(x > 0.05 && x < TABLE.Lx - 0.04 && y > 0.04 && y < TABLE.Ly - 0.04, `${R.seed}/${R.family} u=${u.toFixed(3)} : trop près d'une paroi`);
+        const lake = Math.max(...S.base.map((b) => b[1]));
+        assert.ok(p[1] > longProfile(S.form, x) + crossProfile(S.form, y) + 0.025 && p[1] > lake + 0.02, `${R.seed}/${R.family} u=${u.toFixed(3)} : caméra dans le sable`);
+        // (et la poutre du portique, garée, est loin)
+        assert.ok(filmState(u, S).gantryX < 0, 'le portique roule pendant le plan au ras du sable');
+      } else if (inside) assert.ok(p[1] > 0.26, `${R.seed}/${R.family} u=${u.toFixed(3)} : caméra à ${p[1].toFixed(3)} m au-dessus du bac`);
       else assert.ok(p[1] > 0.12, `${R.seed}/${R.family} u=${u.toFixed(3)} : caméra trop basse hors du bac`);
     }
   }

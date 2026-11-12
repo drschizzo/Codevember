@@ -251,15 +251,18 @@ export function createSand(gs) {
     const ny = sqrt(tmax(0.0001, float(1).sub(A.x.mul(A.x)).sub(A.y.mul(A.y))));
     const nBed = normalize(vec3(A.x, ny, A.y));
     // rides de courant : crêtes perpendiculaires à la descente, longueur d'onde ~13 mm
-    const down = normalize(vec2(A.x, A.y).add(vec2(0.0001, 0)));
-    const across = vec2(down.y.negate(), down.x);
-    const rp = dot(p.xz, down).div(0.013).add(noise(vec3(p.x.mul(30), 0.5, p.z.mul(30))).mul(1.6)).add(dot(p.xz, across).div(0.04).mul(noise(vec3(p.z.mul(9), 1.7, p.x.mul(9))).mul(0.6)));
+    // (tirée vers l'aval : sur un fond presque plat, la normale bruitée faisait tourner les crêtes en volutes)
+    const down = normalize(vec2(A.x, A.y).add(vec2(0.05, 0)));
+    // (phase sur un axe fixe du bac — le courant y va vers l'aval — et non sur la
+    // pente locale : le produit scalaire de la position avec une direction qui varie
+    // faisait tourner les crêtes en volutes, un degré décalant la phase d'un cycle)
+    const rp = p.x.div(0.013).add(noise(vec3(p.x.mul(22), 0.5, p.z.mul(22))).mul(0.8)).add(noise(vec3(p.z.mul(9), 1.7, p.x.mul(9))).mul(0.5));
     // profil asymétrique lisse (flanc amont long, flanc aval plus raide), sans
     // marche ni cassure : une marche dans le profil dessinait un trait noir le
     // long de chaque crête. Les rides ne naissent que là où un courant a longtemps
     // coulé (chenaux, delta) : une lame de pluie n'en fait pas.
     const th = rp.mul(2 * Math.PI);
-    const rprof = sin(th.add(sin(th).mul(0.55)));
+    const rprof = sin(th.add(sin(th).mul(0.4)));
     const ripple = rprof.mul(0.5).mul(U.rippleAmp).mul(smoothstep(0.75, 0.98, A.w)).mul(smoothstep(0.0008, 0.003, depth.add(dep)));
     const rFade = smoothstep(0.3, 0.08, fwidth(rp)); // (effacées bien avant la fréquence du pixel : pas de moiré)
     // stries du gabarit sur le sable neuf
@@ -270,8 +273,11 @@ export function createSand(gs) {
     const grainH = noise(vec3(p.x.div(0.0005), 0.71, p.z.div(0.0005))).mul(0.00005).mul(smoothstep(1.0, 0.3, fwidth(p.x.div(0.0005))));
     // parois : stries d'éboulement le long de la plus grande pente, et lamines
     // de la stratification soulignées en relief (les bancs se lisent à la lumière)
-    const gq = vec3(dot(p.xz, across).mul(420), dot(p.xz, down).mul(45), 2.3);
-    const grooves = noise(gq).mul(0.00009).mul(smoothstep(0.5, 0.15, fwidth(gq.x)));
+    // (deux jeux de stries sur les axes fixes du bac, mêlés selon l'orientation de la
+    // paroi : une phase prise sur la pente locale tournait en volutes)
+    const gx = vec3(p.z.mul(420), p.x.mul(45), 2.3), gz = vec3(p.x.mul(420), p.z.mul(45), 6.1);
+    const wz = down.y.mul(down.y);
+    const grooves = mix(noise(gx).mul(smoothstep(0.5, 0.15, fwidth(gx.x))), noise(gz).mul(smoothstep(0.5, 0.15, fwidth(gz.x))), wz).mul(0.00009);
     const lamR = sin(depthV.mul(2 * Math.PI / 0.0016)).mul(0.00003).mul(smoothstep(0.5, 0.15, fwidth(depthV.mul(1 / 0.0016))));
     const wall = grooves.add(lamR).mul(steep).mul(float(1).sub(isDep));
     // cratères des gouttes : le sable criblé par la pluie (effacés par le courant et par la lame)

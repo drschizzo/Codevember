@@ -530,6 +530,9 @@ export function createGpuSim(renderer, { lite = false } = {}) {
 
   const groups = (n) => Math.ceil(n / WG);
   let spec = null, ran = false, b0 = null, final = null;
+  // (partagé entre les simulations : une scène relancée ne doit pas copier dans le
+  // tampon d'aperçu pendant que la précédente le lit encore)
+  let previewBusy = false;
 
   // Prépare une scène : b₀, érodabilité, sources ; strates ; remise à zéro
   function setup({ b0: B0, strata, S, seed }) {
@@ -573,7 +576,6 @@ export function createGpuSim(renderer, { lite = false } = {}) {
     const mRec = Array.from({ length: FM }, (_, k) => Math.round((k / (FM - 1)) * total));
     let nT = 0, nW = 0, nM = 0, n = 0;
     const data = new ArrayBuffer(BATCH * ALIGN), f32 = new Float32Array(data);
-    let previewBusy = false;
     const t0 = performance.now();
     while (n <= total) {
       if (!alive()) return false;
