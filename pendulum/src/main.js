@@ -106,7 +106,7 @@ async function main() {
   // ── Modules ──
   const gen = createGenerator(LITE ? Math.max(2, Math.min(3, (navigator.hardwareConcurrency || 4) - 1)) : undefined);
   setNoiseVolume(await gen.request({ seed: `${NAME}-noise` }, 'noise')); // (les matériaux en dépendent)
-  const stage = createStage(scene, gen, { lite: LITE });
+  const stage = createStage(scene, gen, { lite: LITE, renderer }); // (renderer : la lampe à gobo, voir stage.js)
   // l'écran de chargement dessine le solveur pendant qu'il cherche
   stage.hooks.art = (a) => loader.art({ type: 'iter', ...a });
   stage.hooks.error = (e) => fail(`Aucune trajectoire trouvée pour cette machine (${e.message.split('\n')[0]}).`);
@@ -187,6 +187,7 @@ async function main() {
   // ── Rendu d'une phase ──
   const _f = new THREE.Vector3(), _u = new THREE.Vector3();
   const camPose = { position: new THREE.Vector3(), target: new THREE.Vector3(), fov: 30 };
+  let lastShot = null;
   const loopDuration = () => stage.film?.duration ?? 20;
   // u : phase « déroulée » (partie entière = nombre de boucles accomplies) ;
   // sub : décalages d'un rendu accumulé (lentille, pixel), facultatif
@@ -197,15 +198,23 @@ async function main() {
     G.frame.value = (G.frame.value + 1) % 65536;
     const C = R.camera;
     stage.update(ph);
+    let fov = C.fov;
     if (camState.free) controls.update();
     else {
-      // caméra périodique en ph (même pose à 0 et à 1), cadrée sur la machine
+      // caméra périodique en ph (même pose à 0 et à 1) : le plan du découpage
+      // (camera.js) qui contient cette phase
       stage.cameraAt(ph, camera.aspect, camPose);
       camera.position.copy(camPose.position);
       camera.up.set(0, 1, 0);
       camera.lookAt(camPose.target);
+      fov = camPose.fov;
+      // un raccord (changement de plan) : l'historique de l'anticrénelage et
+      // les vitesses de la caméra appartiennent au plan précédent
+      const shot = stage.shotIndex(ph);
+      if (shot !== lastShot && lastShot !== null) post.cut();
+      lastShot = shot;
     }
-    if (camera.fov !== C.fov) { camera.fov = C.fov; camera.updateProjectionMatrix(); }
+    if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); }
     camera.clearViewOffset();
     if (sub) {
       camera.updateMatrixWorld();
@@ -221,7 +230,9 @@ async function main() {
     scene.fog.color.set(R.stage.bg);
     // (brume : seulement quand l'humeur en a une ; sinon repoussée très loin)
     const camDist = camera.position.distanceTo(camPose.target);
-    scene.fog.near = R.stage.fog > 0 ? camDist * (1.1 - R.stage.fog) : 200; scene.fog.far = R.stage.fog > 0 ? camDist * (1.1 - R.stage.fog) + 8 / R.stage.fog * 0.4 : 400;
+    // (brume en distances fixes, celles du plan large : elle ne change pas d'un plan à l'autre)
+    const fogRef = camState.free ? camDist : camPose.ref ?? camDist;
+    scene.fog.near = R.stage.fog > 0 ? fogRef * (1.1 - R.stage.fog) : 200; scene.fog.far = R.stage.fog > 0 ? fogRef * (1.1 - R.stage.fog) + 8 / R.stage.fog * 0.4 : 400;
     scene.environmentIntensity = R.env.intensity;
     scene.environmentRotation.set(0, R.env.rotation, 0);
     post.update({ ...RENDER, lite: LITE, focus: camDist, focusRange: RENDER.focusRange * camDist }, R);
@@ -240,7 +251,9 @@ async function main() {
     accum.begin(canvas.width, canvas.height);
     for (let i = 0; i < n; i++) {
       const s = jitter(i, frame);
-      renderStep(u + s.time * shutter, s);
+      // (l'obturateur ne s'ouvre pas à cheval sur un raccord : une image mêlerait deux plans)
+      const ut = u + s.time * shutter;
+      renderStep(stage.shotIndex(ut) === stage.shotIndex(u) ? ut : u, s);
       accum.add(1 / n);
     }
     camera.clearViewOffset();

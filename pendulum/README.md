@@ -20,7 +20,7 @@ Sur écran tactile : une touche met en pause, deux touches tirent une nouvelle s
 
 Paramètres d'URL : `?seed=…`, `#r=…` (scène retouchée, « Copier le lien »), `?mood=…` (cabinet, laboratoire, chrono, soleil, atelier, bleue, laque), `?family=…` (cart, rotary, acrobat, wheel), `?ui=0`, `?mobile=1` / `?mobile=0`, `?debug` (outils dans `window.pendulum` : `shot(phase)`, `send(nom)`, `sheet(graines, phases)` — une graine peut s'écrire `graine:humeur:famille` —, `meter()`, `meters()`, `bench()`, `seam()`, `run()`, `artShot()` ; `sink` : adresse du collecteur d'images).
 
-Le panneau règle l'humeur et la machine (nouvelle scène de la même graine) ; la chorégraphie (durée de chaque tenue et du ralenti : le film seul change ; durée de chaque manœuvre : les trajectoires sont recalculées) ; la caméra (champ, distance, azimut, hauteur, balancement, avancée au sommet, caméra libre) ; chaque maillon (longueur, forme : nouveau calcul) et les matières par rôle (socle, bâti, guidage, maillons, chapes, accent, courroie) ; la lampe, les contre-jours, le studio HDR, le fond et la brume ; le rendu. Export MP4 image par image (éventuellement accumulé) et PNG.
+Le panneau règle l'humeur et la machine (nouvelle scène de la même graine) ; la chorégraphie (durée de chaque tenue et du ralenti : le film seul change ; durée de chaque manœuvre : les trajectoires sont recalculées) ; la caméra (champ, distance, azimut, hauteur, balancement, avancée au sommet, montage en plans ou plan unique, caméra libre) ; chaque maillon (longueur, forme : nouveau calcul) et les matières par rôle (socle, bâti, guidage, maillons, chapes, accent, courroie) ; la lampe, les contre-jours, le studio HDR, le fond et la brume ; le rendu. Export MP4 image par image (éventuellement accumulé) et PNG.
 
 ## Principe : le redressement
 
@@ -78,11 +78,11 @@ Sept humeurs, chacune un décor (fond, sol, lumière, valeur, cadrage), pas une 
 
 | Humeur | Décor | Lumière | Valeur | Cadrage |
 | --- | --- | --- | --- | --- |
-| **Cabinet** | parquet à l'anglaise, mur vert sombre ; acajou, noyer ou poirier noirci, laiton, acier bleui | grande fenêtre haute de côté, douce | moyenne-sombre | profil un peu bas |
-| **Laboratoire** | cyclorama blanc continu, sol de résine ; peinture poudre, aluminium anodisé, une couleur d'accent | boîte à lumière au-dessus, bandes latérales | très claire | trois-quarts face |
-| **Chronophotographie** | velours noir sans horizon ; machine noire, maillons émaillés blancs, poses passées | lumière dure rasante de côté | très sombre, sujet clair | profil strict, longue focale |
+| **Cabinet** | parquet à l'anglaise, mur vert sombre ; acajou, noyer ou poirier noirci, laiton, acier bleui | grande fenêtre à meneaux, de côté : son dessin projeté sur le mur, le sol et la machine | moyenne-sombre | profil un peu bas |
+| **Laboratoire** | cyclorama blanc continu, sol compris (une seule peinture : pas de raccord à la gorge) ; peinture poudre, aluminium anodisé, une couleur d'accent | boîte à lumière au-dessus, bandes latérales | très claire | trois-quarts face |
+| **Chronophotographie** | velours noir sans horizon (le velours piège aussi le reflet rasant : intensité spéculaire 0,08) ; machine noire, maillons émaillés blancs, poses passées | lumière dure rasante de côté | très sombre, sujet clair | profil strict, longue focale |
 | **Plein soleil** | mur chaulé, terre battue ; chêne, vert machine, ocre | soleil dur et bas (ombres portées sur le mur), ciel en remplissage | claire | profil avec le mur |
-| **Atelier** | halle sombre, béton taché ; fonte brute, chêne fumé, laiton | rai de lumière zénithal | sombre | légère plongée |
+| **Atelier** | halle sombre, béton taché ; fonte brute, chêne fumé, laiton | rai zénithal par une verrière : sa grille projetée au sol | sombre | légère plongée |
 | **Heure bleue** | cyclorama gris froid, béton lissé, brume ; acier, chrome, cuivre | ciel froid diffus, contre-jour blanc | moyenne froide | trois-quarts arrière |
 | **Laque** | feutre gris, fond gris moyen ; laques noire, rouge, ivoire, laiton | boîte à lumière, contre-jour | moyenne | plan serré |
 
@@ -90,7 +90,13 @@ Un décor « pièce » (Cabinet, Plein soleil, Atelier : sol et mur de matières
 
 Les matières sont tirées par **accord** (socle, bâti, guidage, maillons, chapes, accent, courroie), composé à la main : trois familles de matières au moins, l'or en accent, des maillons qui tranchent sur leur bâti (tests). Nouveaux motifs de matière (`scene/materials.js`) : bois (cernes en onde triangulaire autour d'un axe décalé, pores le long du fil, que les pièces tournées suivent), fonte moulée au sable, peinture (peau d'orange), enduit, béton, parquet (lames décalées, joints, une nuance par lame), cuir, terre battue. Les lampes sont presque blanches (sauf le soleil) ; l'exposition de chaque humeur est réglée au posemètre (médiane du sujet de 0,08 au Cabinet à 0,75 au Laboratoire, sans brûlé ; la Chronophotographie garde un fond noir, le sujet clair).
 
-La caméra cadre la machine entière, se balance lentement en azimut (une période par boucle) et, pendant la tenue au sommet, glisse vers un second cadrage : la chaîne debout, entière.
+**La lumière a une cause visible.** Au Cabinet et à l'Atelier, la lampe principale porte un gobo (`stage.js`) : une fenêtre à meneaux, une verrière. Le motif est lu dans les coordonnées de la carte d'ombre de la lampe (elle couvre alors tout le faisceau) ; ses barres d'ombre tombent sur la machine, le sol et le mur, et la chaîne qui balance les traverse. Hors de la fenêtre, presque rien. Tout est uniforme : changer de scène ne recompile rien.
+
+**Le découpage** (`camera.js`). La boucle est filmée en plans, montés cut, un par manœuvre : chacun commence un quart de seconde après que la machine s'est mise en route (raccord dans le mouvement) et couvre la manœuvre puis la tenue qui suit. Le **plan large** (la machine entière, sur l'axe de la recette) est celui du retour à la chaîne pendante : il enjambe le raccord de la boucle. Avant le temps fort, un **plan moyen** de l'autre côté ; le temps fort, au ralenti, en **contre-plongée** à focale un peu plus longue, la caméra s'avançant sur la chaîne debout pendant la tenue au sommet ; après, le **contrechamp**. Au moins 30° d'axe entre deux plans qui se suivent. Chaque plan cadre ce que la chaîne balaie vraiment pendant sa durée (poses du film échantillonnées) et glisse lentement. À chaque raccord, l'historique de l'anticrénelage temporel repart de l'image neuve et le flou de mouvement est coupé (sans quoi l'ancien plan traînerait en fantôme) ; le rendu accumulé n'ouvre jamais l'obturateur à cheval sur un raccord ; la brume garde les distances du plan large. Sans montage (case du panneau) : un seul plan large qui se balance.
+
+**Deux corrections d'ombrage.** Le brossage étire le reflet *en travers* de ses stries : la direction d'anisotropie est la bitangente du brossage (elle était la tangente, et une barre d'acier brossé en long, sous la verrière de l'Atelier, brûlait en néon sur toute sa longueur). Le gobo n'utilise pas `light.colorNode` de three : `SpotLightNode` l'applique par un `select()`, compilé en if/else, où des variables partagées de l'éclairage ne sont calculées que dans une branche — des quadrilatères à bords droits (le carré de projection de la lampe) apparaissaient sur les murs de toutes les humeurs, même sans motif. Une sous-classe (`GoboSpotLightNode`) multiplie l'atténuation du cône par le motif, sans branche.
+
+Les paliers ont une face de roulement (bague extérieure, flasque en retrait, bague intérieure, bout d'axe) : un disque plein et sombre se lisait comme un trou noir au bout des maillons.
 
 ## L'écran de chargement
 
@@ -98,11 +104,11 @@ On regarde le solveur chercher : une plaque de chronophotographie par manœuvre,
 
 ## Tests
 
-`node --test 'pendulum/test/*.test.mjs'` (15 tests) :
+`node --test 'pendulum/test/*.test.mjs'` (16 tests) :
 - recette : déterminisme, JSON pur, chaque humeur et chaque famille tirées, toutes les finitions citées existent ; la suite part de la chaîne pendante, passe par le tout-debout, n'y revient que par un grand tour, le ralenti est sur la manœuvre qui arrive au dernier tout-debout et seulement elle ; accords (trois familles, l'or en accent, maillons distincts du bâti) ; lampes presque blanches, une humeur claire et deux sombres au moins ;
 - dynamique : énergie conservée sans commande (quatre familles), chaque équilibre est un équilibre ;
 - transitions (une graine par famille et une chaîne triple) : départ et arrivée au repos sur l'équilibre visé, la machine revenue, commande nulle aux deux bouts ; course dans le rail ;
-- film : la boucle se referme (u = 0 et u → 1), continuité à chaque raccord tenue / transition ; ralenti continu, croissant, de vitesse ≤ 1, couvrant exactement la transition ; corrections d'équilibre seulement pendant une tenue debout, nulles aux raccords, de l'ordre du millimètre ;
+- film : la boucle se referme (u = 0 et u → 1), continuité à chaque raccord tenue / transition ; ralenti continu, croissant, de vitesse ≤ 1, couvrant exactement la transition ; corrections d'équilibre seulement pendant une tenue debout, nulles aux raccords, de l'ordre du millimètre ; découpage : boucle exacte, aucun saut dans un plan, un raccord par plan, caméra calme (moins d'un quart de sa distance par seconde) et jamais sous 28 cm ;
 - **contacts** (`gen/clearance.js`) : sur 240 instants de la boucle, aucun maillon (axe échantillonné tous les 4 mm, demi-largeur et demi-épaisseur, lentille, volant, moteur porté) ne touche le sol, le bâti, le chariot ou le bras, ni un autre maillon ; les obstacles sont les **vraies pièces** construites, ramenées à la boîte de chacune de leurs composantes connexes, et la scène est posée par la fonction du rendu. **Témoin négatif** : la même chaîne reculée de 6 cm dans son support est vue. `node tools/contacts.mjs 0 40` : 40 graines, aucun contact.
 
 Bancs : `node tools/seeds.mjs [début] [nombre] [famille]` (taux de réussite et temps du solveur), `node tools/try.mjs [famille] [n]`, `node tools/library.mjs` (refait la bibliothèque de départs).
