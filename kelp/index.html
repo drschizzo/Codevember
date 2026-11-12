@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#050506">
+  <title>Kelp</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.webgpu.min.js",
+      "three/webgpu": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.webgpu.min.js",
+      "three/tsl": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.tsl.min.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/",
+      "lil-gui": "https://cdn.jsdelivr.net/npm/lil-gui@0.20.0/dist/lil-gui.esm.min.js"
+    }
+  }
+  </script>
+  <!-- (le moteur est demandé dès la lecture de la page, en parallèle des modules du projet) -->
+  <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.webgpu.min.js" crossorigin>
+  <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.core.js" crossorigin>
+  <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.tsl.min.js" crossorigin>
+</head>
+<body class="loading">
+  <div id="app"></div>
+
+  <header id="title">
+    <h1>Kelp</h1>
+    <p>le ressac</p>
+  </header>
+  <p id="hint">N : nouvelle scène · espace : pause · ← → : avancer · H : masquer · F : plein écran</p>
+
+  <div id="toast"></div>
+  <div id="progress"><span>Export de la boucle…</span><div><u></u></div></div>
+
+  <div id="loader">
+    <canvas></canvas>
+    <h1 class="mark">Kelp</h1>
+    <p class="step"></p>
+    <div class="txt"><p class="msg"></p><div class="actions"></div></div>
+  </div>
+
+  <script type="module" src="src/app/loader.js"></script>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

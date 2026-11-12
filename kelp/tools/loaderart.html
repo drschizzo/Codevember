@@ -1,0 +1,23 @@
+<!doctype html>
+<!-- Vignette de l'accueil : le dessin de l'écran de chargement, avancé image
+     par image (sans worker), pour une capture en Chrome sans tête.
+     ?seed=…&t=secondes -->
+<html><head><meta charset="utf-8"><style>html,body{margin:0;background:#050506}canvas{display:block}</style></head>
+<body><canvas id="c" width="1280" height="800" style="width:640px;height:400px"></canvas>
+<script type="module">
+  import createArt from '../src/app/loaderArt.js';
+  import { generate } from '../src/recipe.js';
+  const q = new URLSearchParams(location.search);
+  const R = generate(q.get('seed') || 'a1');
+  const art = createArt();
+  art.data({ seed: R.seed, family: R.family, mood: R.mood, waves: R.sea.waves, profile: R.sea.profile, T: R.loop.duration });
+  const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+  const S = { w: cv.width, h: cv.height, dpr: 2, t: 0, dt: 1 / 60, p: 0.5, done: 0 };
+  const n = Math.round((Number(q.get('t')) || 12) * 60);
+  for (let i = 0; i < n; i++) {
+    S.t = i / 60;
+    ctx.fillStyle = '#050506'; ctx.fillRect(0, 0, cv.width, cv.height);
+    art.draw(ctx, S);
+  }
+  document.title = 'ok';
+</script></body></html>
