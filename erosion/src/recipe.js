@@ -30,7 +30,7 @@ export const kelvinToHex = (K) => {
 export const SANDS = {
   silice: { label: 'Silice et kaolin', tones: ['#d8cdb9', '#b3a690', '#ece3d2', '#8d8478'], deposit: '#d6cab4', grain: '#3b342c', mud: '#a2937a' },
   gres: { label: 'Grès rouge', tones: ['#b95d3a', '#d79c66', '#e9d4b4', '#8f4430'], deposit: '#c98a5e', grain: '#3a1d14', mud: '#8a5236' },
-  basalte: { label: 'Basalte', tones: ['#3d3a37', '#6e6963', '#d6cdbd', '#28292a'], deposit: '#5b5650', grain: '#141414', mud: '#4c4842' },
+  basalte: { label: 'Basalte', tones: ['#3d3a37', '#6e6963', '#a49b8e', '#28292a'], deposit: '#5b5650', grain: '#141414', mud: '#4c4842' },
   ocres: { label: 'Ocres', tones: ['#d7a243', '#c46d2f', '#a3442d', '#7a4b58'], deposit: '#c98d48', grain: '#3a2516', mud: '#94602e' },
   limon: { label: 'Limon', tones: ['#a99a83', '#7d6c56', '#c9b796', '#5c5045'], deposit: '#a19279', grain: '#2b241d', mud: '#6f604c' },
   glauconie: { label: 'Glauconie et craie', tones: ['#6e7a5b', '#dad6c6', '#505b45', '#a9ad92'], deposit: '#8f9479', grain: '#1f2419', mud: '#626850' },
@@ -74,7 +74,9 @@ function makeStrata(kind, rs) {
 // contre-jour ; floor : sol du lieu ; grade : étalonnage. Les azimuts sont
 // donnés pour une caméra du côté +Z du bac (cos az < 0 : la lumière vient de
 // l'autre côté, contre-jour ou de biais) ; ils sont réfléchis quand la
-// caméra vole de l'autre côté.
+// caméra vole de l'autre côté. Le sujet est un relief de quelques mm : chaque
+// humeur garde une lampe principale assez basse pour l'ombrer (au plus ~55°
+// au-dessus du sable ; sous une lumière zénithale, le paysage disparaissait).
 export const MOODS = {
   laboratoire: {
     label: 'Laboratoire', env: 'lab', bg: '#6d6f71', floor: '#5a5b5c',
@@ -96,13 +98,13 @@ export const MOODS = {
   },
   cyclorama: {
     label: 'Cyclorama', env: 'cyclo', bg: '#e9e7e2', floor: '#dcdad5',
-    key: { kind: 'lamp', az: -1.9, el: 1.2, dist: 2.6, K: 5600, lux: 2.0, angle: 0.7, pen: 1 },
+    key: { kind: 'lamp', az: -1.9, el: 0.6, dist: 2.6, K: 5600, lux: 3.3, angle: 0.7, pen: 0.65 },
     fill: { az: 1.2, el: 1.0, K: 6000, lux: 0.9 }, rim: { az: 3.0, el: 0.5, K: 6000, lux: 0.4 },
     envI: [0.32, 0.42], grade: { contrast: 0.98, saturation: 0.9, shadows: [0.98, 1.0, 1.03], highlights: [1, 1, 1], exposure: 1 },
   },
   verriere: {
     label: 'Verrière', env: 'overcast', bg: '#9aa3a8', floor: '#6e7275',
-    key: { kind: 'lamp', az: 0.4, el: 1.35, dist: 3, K: 6800, lux: 1.6, angle: 0.8, pen: 1 },
+    key: { kind: 'lamp', az: 0.4, el: 0.7, dist: 3, K: 6800, lux: 2.4, angle: 0.8, pen: 0.8 },
     fill: { az: 2.8, el: 1.0, K: 7000, lux: 0.6 }, rim: { az: -2, el: 0.6, K: 6500, lux: 0.3 },
     envI: [0.7, 0.9], grade: { contrast: 1.0, saturation: 0.92, shadows: [0.95, 1.0, 1.06], highlights: [1.0, 1.0, 1.02], exposure: 1 },
   },
@@ -114,7 +116,7 @@ export const MOODS = {
   },
   midi: {
     label: 'Midi', env: 'clearsky', bg: '#c9d3dc', floor: '#9b9286',
-    key: { kind: 'sun', az: -2.6, el: 1.1, dist: 6, K: 5800, lux: 9, angle: 0.15, pen: 0.2 },
+    key: { kind: 'sun', az: -2.6, el: 0.95, dist: 6, K: 5800, lux: 9.9, angle: 0.15, pen: 0.2 },
     fill: { az: 0.6, el: 1.0, K: 9000, lux: 0.8 }, rim: { az: 1.5, el: 0.4, K: 6000, lux: 0.2 },
     envI: [0.28, 0.36], grade: { contrast: 1.04, saturation: 1.0, shadows: [0.95, 0.99, 1.06], highlights: [1.02, 1.0, 0.97], exposure: 1 },
   },

@@ -10,7 +10,7 @@
 import * as THREE from 'three/webgpu';
 import {
   Fn, vec3, vec2, float, int, ivec2, uniform, attribute, positionGeometry, textureLoad, floor, fract, clamp, min as tmin, max as tmax,
-  hash, sin, mix, smoothstep, positionPrevious,
+  hash, sin, mix, smoothstep, positionPrevious, step,
 } from 'three/tsl';
 import { TABLE } from '../gen/table.js';
 import { stableVelocity } from './materials.js';
@@ -36,7 +36,9 @@ export function createRain(gs, { lite = false } = {}) {
   const ld = (x, y) => textureLoad(gs.terrainTex, ivec2(clamp(x, int(0), int(NX - 1)), clamp(y, int(0), int(NY - 1))));
 
   const mat = new THREE.MeshPhysicalNodeMaterial({ color: 0xffffff, roughness: 0.05, metalness: 0, transparent: true, depthWrite: false });
-  // position d'un sommet de la goutte au temps t (s)
+  // position d'un sommet de la goutte au temps t (s) : un fuseau qui tombe,
+  // puis, à l'impact, une couronne qui s'ouvre et retombe en 60 ms
+  const SPLASH = 0.06;
   const at = (t) => {
     const i = attribute('drop', 'float');
     const ph = t.div(U.period).add(hash(i.add(0.5)));
@@ -48,16 +50,27 @@ export function createRain(gs, { lite = false } = {}) {
     const fall = f.mul(U.period).mul(U.speed);
     const y = float(RAIN_TOP).sub(fall);
     const len = tmin(0.028, tmax(0, y.sub(g)));
-    const live = float(1).sub(smoothstep(0.0, 0.004, g.sub(y))).mul(hash(i.mul(0.731).add(9)).lessThan(U.on).select(float(1), float(0)));
+    const on = hash(i.mul(0.731).add(9)).lessThan(U.on).select(float(1), float(0));
+    const live = float(1).sub(smoothstep(0.0, 0.004, g.sub(y))).mul(on);
+    // temps écoulé depuis l'impact
+    const since = f.mul(U.period).sub(float(RAIN_TOP).sub(g).div(U.speed));
+    const sp = step(0, since).mul(step(since, SPLASH)).mul(on).mul(float(1).sub(live));
+    const k = clamp(since.div(SPLASH), 0, 1);
+    const rs = float(0.0007).add(k.mul(0.0035)).div(0.00035); // (rayon de la couronne, en rayons du fuseau)
+    const hs = float(0.0022).mul(k.mul(float(1).sub(k)).mul(4)).add(0.0002);
     const p = positionGeometry;
-    return vec3(p.x.mul(live).add(x.sub(TABLE.Lx / 2)), p.y.mul(len).mul(live).add(tmax(y, g)), p.z.mul(live).add(z.sub(TABLE.Ly / 2)));
+    const drop = vec3(p.x.mul(live).add(x.sub(TABLE.Lx / 2)), p.y.mul(len).mul(live).add(tmax(y, g)), p.z.mul(live).add(z.sub(TABLE.Ly / 2)));
+    const crown = vec3(p.x.mul(rs).add(x.sub(TABLE.Lx / 2)), p.y.mul(hs).add(g), p.z.mul(rs).add(z.sub(TABLE.Ly / 2)));
+    return mix(drop, crown, sp);
   };
   // la pose à l'image précédente : la goutte a une vraie vitesse (traînée de
   // l'obturateur dans le flou de mouvement, reprojection juste du TRAA)
   mat.positionNode = Fn(() => { positionPrevious.assign(at(U.tPrev)); return at(U.t); })();
   if (!lite) mat.mrtNode = stableVelocity(); // (une goutte qui renaît en haut ne doit pas tirer un trait)
-  mat.opacityNode = float(0.55);
-  mat.emissiveNode = vec3(0.12);
+  // (gouttes éclairées par les lampes, pas lumineuses par elles-mêmes : elles
+  // brillent à contre-jour et s'effacent de face)
+  mat.opacityNode = float(0.4);
+  mat.emissiveNode = vec3(0.025);
   const mesh = new THREE.Mesh(geo, mat);
   mesh.frustumCulled = false;
   mesh.renderOrder = 3;
