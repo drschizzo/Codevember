@@ -273,6 +273,16 @@
         "kelp"
       ],
       "port": 8180
+    },
+    {
+      "name": "pendulum",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        ".claude/serve.py",
+        "8190",
+        "pendulum"
+      ],
+      "port": 8190
     }
   ]
 }

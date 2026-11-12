@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#050506">
+  <title>Pendulum · défis techniques</title>
+  <meta name="description" content="Comment Pendulum est calculé : une chaîne de pendules sous-actionnée, des redressements trouvés par tir multiple et SQP, une bibliothèque de départs pour la chaîne triple, une boucle d'équilibres, un ralenti en forme fermée et un banc des contacts qui voit les vraies pièces.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+  <link rel="stylesheet" href="../home/explainer.css">
+</head>
+<body>
+  <nav class="top"><div class="in">
+    <a href="../">Codevember</a><span class="day">Day 18</span><span class="crumb">Pendulum · défis techniques</span>
+    <span class="sp"></span><a class="open" href="./">Ouvrir la scène</a>
+  </div></nav>
+
+  <main>
+    <header class="hero">
+      <div class="kicker">Day 18 · Pendulum · l'équilibre renversé</div>
+      <h1>Comment une machine à un seul moteur fait tenir une chaîne debout</h1>
+      <p class="lede">Un chariot sur un rail, un bras qui tourne, un coude motorisé, un volant : chaque machine n'impose qu'une coordonnée, et la chaîne qu'elle porte suit les lois de la mécanique. Pour qu'elle se dresse et s'arrête, immobile, à l'envers, il faut trouver le mouvement exact de cette coordonnée — un problème aux deux bouts, instable, résolu dans le navigateur sous l'écran de chargement. Le reste suit : une boucle faite d'équilibres, un ralenti qui ne triche pas sur la physique, et un banc qui vérifie que rien ne se traverse.</p>
+    </header>
+
+    <figure class="cover">
+      <img src="docs/capture.jpg" alt="Trois maillons de laiton debout, alignés, sur le chariot d'un banc d'acajou, devant un mur vert sombre" width="1600" height="900">
+      <figcaption>Graine p114 (Cabinet) : la chaîne triple pendant la tenue au sommet. Elle vient d'être redressée par trois secondes d'à-coups du chariot ; rien dans ses articulations n'est motorisé.</figcaption>
+    </figure>
+
+    <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
+
+    <article>
+      <section id="sous-actionne">
+        <h2><span class="n">01</span>Le moteur n'impose qu'une coordonnée, ses forces sortent des équations</h2>
+        <span class="src">src/gen/dynamics.js · makeSystem()</span>
+        <p>Quatre machines très différentes — un chariot, un bras de Furuta, un coude d'Acrobot, un volant d'inertie — partagent la même chaîne plane de \(n\) maillons, chacun un pendule composé (masse \(m_k\), centre de gravité à \(c_k\) du pivot, inertie \(J_k\)), avec des angles absolus \(\theta\) comptés depuis la verticale descendante. Avec \(\mu_k = m_k c_k + l_k\sum_{i>k} m_i\) et \(h_{jk} = l_j\mu_k\), la ligne \(j\) des équations de Lagrange :</p>
+        <div class="eq">\[ \sum_k h_{jk}\cos(\theta_j-\theta_k)\,\ddot\theta_k + \sum_k h_{jk}\sin(\theta_j-\theta_k)\,\dot\theta_k^2 + (g+\ddot y)\,\mu_j\sin\theta_j + \mu_j\cos\theta_j\,\ddot x = Q_j \]</div>
+        <p>Écrire une dynamique par machine aurait fait quatre codes et quatre façons de se tromper. Toutes s'écrivent \(\theta = A\,q + b\,s\) : \(q\) les coordonnées libres, \(s\) la coordonnée imposée. Le moteur ne travaille que le long de \(b\) ; projetées par \(A^\top\), ses forces disparaissent, et il ne reste que ce que la machine impose :</p>
+        <div class="eq">\[ (A^\top M A)\,\ddot q = -A^\top\big(M\,b\,\ddot s + C(\theta,\dot\theta) + G(\theta) + B(\theta)\,\ddot x\big) \]</div>
+        <p>Le chariot impose \(\ddot x = \ddot s\) ; le bras du tourniquet impose \(\ddot x = r\ddot\varphi\) et ajoute le terme centrifuge \(-\tfrac12\dot\varphi^2\,\partial W/\partial\theta_j\), \(W=\int w^2\,dm\) ; l'acrobate change \(A\) (le coude est un angle relatif) ; la roue ajoute \(I_w(\ddot\theta_n+\ddot\psi)\) sur le dernier maillon. Une ligne de plus dans la boucle, pas un nouveau modèle.</p>
+        <div class="note check"><b>Vérifié</b><p>Sans commande, l'énergie de chaque famille se conserve à \(10^{-6}\) près sur 2 s (RK4 au pas de 1 ms), et chacun des \(2^n\) équilibres a une accélération nulle au repos.</p></div>
+        <figure id="fig-pump"><figcaption><b>Le chariot ne suffit pas à lui seul.</b> Un double pendule réel (le modèle du projet) sur un chariot qui oscille en sinus : on pompe de l'énergie, la chaîne s'agite, parfois passe par-dessus — mais elle ne s'arrête jamais debout. Il faut un mouvement calculé.</figcaption></figure>
+      </section>
+
+      <section id="tir-multiple">
+        <h2><span class="n">02</span>Le tir multiple dompte l'instabilité de l'équilibre debout</h2>
+        <span class="src">src/gen/shoot.js · solveTransition()</span>
+        <p>Une transition est un problème aux deux bouts : trouver \(u=\ddot s(t)\) sur \([0,T]\) qui part au repos d'un équilibre et arrive au repos sur un autre, la machine revenue à son point zéro. L'approche naïve — choisir \(u\), intégrer d'un bout à l'autre, corriger — échoue : un pendule debout diverge en \(e^{\lambda t}\) (\(\lambda=\sqrt{3g/2l}\approx 6{,}5\ \mathrm{s^{-1}}\) pour une barre de 35 cm, davantage pour une chaîne). Sur 3 s, l'erreur est multipliée par \(10^{8}\) au moins : la moindre retouche de la commande au début fait exploser l'arrivée, et la méthode de Newton n'y trouve plus de pente utilisable.</p>
+        <p>Le tir multiple coupe la trajectoire en \(S\) segments (12, ou 16 pour la chaîne triple), chacun parti d'un état inconnu ; les raccords deviennent des contraintes. Un segment de 0,25 s n'amplifie une erreur que d'un facteur 5 environ : le problème devient bien posé.</p>
+        <figure id="fig-diverge"><figcaption><b>Un pendule debout, légèrement dérangé.</b> L'erreur (échelle log) croît d'un facteur \(e^{\lambda t}\) ; intégrée d'un seul tenant, elle sature avant la fin. Coupée en segments, chacun reparti de son état, elle reste petite. La démo intègre le vrai modèle (un maillon de 35 cm sur chariot fixe).</figcaption></figure>
+      </section>
+
+      <section id="sqp">
+        <h2><span class="n">03</span>Un pas de Newton referme les raccords, un pas quadratique cherche l'effort minimal</h2>
+        <span class="src">src/gen/shoot.js · solveTransition() · record()</span>
+        <p>Inconnues : la commande, affine par morceaux sur \(N=60\) intervalles avec \(u_0=u_N=0\) (le moteur part et s'arrête sans saut d'accélération), et les états de tir. Coût : \(\tfrac12\!\int u^2 + \tfrac12\beta\!\int (s-s_{\text{réf}})^2\), qui garde le chariot près du milieu du rail. À chaque itération, la jacobienne des raccords par différences finies — une commande ne touche qu'un ou deux segments, un état un seul —, un système KKT dense de 150 à 330 inconnues, une recherche linéaire sur un mérite \(\ell_1\). Au-delà de 70 itérations, un <em>polissage</em> : des pas de Newton de norme minimale sur les seules contraintes, sans recherche linéaire, convergent quadratiquement jusqu'à un résidu sous \(10^{-10}\).</p>
+        <div class="note trap"><b>Le piège</b><p>Sans polissage, l'Acrobot calait à \(10^{-6}\) : le mérite \(\ell_1\) refusait les pas pleins (effet Maratos) et la recherche linéaire n'avançait plus. Les 36 essais du banc sont passés de 0 à 30 réussites en ajoutant dix pas de polissage.</p></div>
+        <figure id="fig-solve"><figcaption><b>Le solveur, itération par itération</b> (comme sur l'écran de chargement) : un pendule sur chariot, de pendant à debout. Chaque segment repart de son propre état : tant que les raccords sont ouverts, la chronophotographie se brise ; à la convergence, elle devient un seul geste. Dessous, la commande \(u(t)\) et le résidu. Le calcul tourne dans la page, avec le code du projet.</figcaption></figure>
+      </section>
+
+      <section id="boucle">
+        <h2><span class="n">04</span>La boucle est une suite d'équilibres, le ralenti une intégrale en forme fermée</h2>
+        <span class="src">src/film.js · buildFilm() · physTime()</span>
+        <p>Le film enchaîne des tenues (la chaîne immobile sur un équilibre) et des transitions (une table relue en Hermite). Chaque transition part au repos et arrive au repos, la machine revenue : l'état à \(u=1\) est celui de \(u=0\), sans fondu ni retour en arrière. Les angles ne comptent qu'à \(2\pi\) près — une transition finit à \(-\pi\) ou à \(3\pi\), la tenue suivante est à \(\pi\), la rotation est la même.</p>
+        <p>Le temps fort — la transition qui arrive au tout-debout — passe au ralenti de caméra rapide. La physique reste exacte en temps physique \(\tau\) ; seul le film le lit plus lentement. La vitesse \(d\tau/dt\) descend de 1 à \(\kappa\) en smoothstep, reste à \(\kappa\) le temps de la pose, remonte ; son intégrale est en forme fermée (\(\int_0^x 3s^2-2s^3\,ds = x^3 - x^4/2\)), ce qui donne \(\tau(t)\) exactement, et la durée du film \(F = T + (p_1-p_0)(1/\kappa-1) + r(1-\kappa)\).</p>
+        <div class="note check"><b>Vérifié</b><p>La boucle se referme à \(10^{-5}\) rad près en Node (test), et la pose de toutes les pièces à \(2\cdot10^{-7}\) dans la page (<code>seam()</code>) ; \(\tau\) est continu, croissant, de vitesse \(\le 1\), et couvre exactement \([0,T]\).</p></div>
+        <figure id="fig-slow"><figcaption><b>Temps du film et temps physique.</b> La fenêtre du ralenti est centrée sur l'instant où la chaîne se pose (la dernière entrée de son énergie potentielle dans la bande des 25 % autour de celle d'arrivée). En bas, la vitesse du film.</figcaption></figure>
+      </section>
+
+      <section id="bibliotheque">
+        <h2><span class="n">05</span>La chaîne triple part d'une bibliothèque et glisse jusqu'à la graine</h2>
+        <span class="src">src/gen/plan.js · fromLibrary() · tools/library.mjs</span>
+        <p>Pour deux maillons, une suite fixe d'essais (durée ×1 à ×1,9, sens de bascule, poids de la course), chacun parti à chaud du précédent, suffit : toutes les transitions de quatorze graines de chariot passent. Pour trois maillons, partir d'une interpolation linéaire des angles ne suffit plus : 17 réussites sur 128 essais à 3,2 s. Une recherche large hors ligne (8 sens de bascule × 3 durées × 6 tirages initiaux) sur une machine de référence — trois barres d'aluminium de 30, 28 et 26 cm — garde 7 redressements et 6 descentes, rangés dans <code>library.js</code>.</p>
+        <p>À l'exécution, on part de l'entrée de même sens (puis des autres, de la moins coûteuse à la plus coûteuse), et l'on suit une <em>continuation</em> : masses, centres, inerties et longueurs glissent de la référence vers ceux de la graine en quatre pas, chaque résolution partant de la précédente. Les solutions varient continûment avec les paramètres : 24 transitions triples sur 24, 3 à 5 s chacune, en parallèle dans le pool de workers.</p>
+        <figure id="fig-lib"><figcaption><b>Les redressements de la bibliothèque</b>, relus sur la machine de référence : chaque vignette est la chronophotographie d'une solution (le sens de bascule des trois maillons et le coût \(\tfrac12\!\int u^2\) au-dessous). Le choix du sens change toute la manœuvre.</figcaption></figure>
+      </section>
+
+      <section id="contacts">
+        <h2><span class="n">06</span>Le banc des contacts voit les vraies pièces</h2>
+        <span class="src">src/gen/clearance.js · clearance() · src/gen/pose.js · layoutOf()</span>
+        <p>Chaque maillon est dans un plan devant le précédent (montage en chapes alternées : demi-épaisseurs, lentilles comprises, plus 6 mm) ; le premier est à 2 cm devant la face de son support. Ce qui reste à vérifier, c'est ce que la chaîne balaie : le sol, le bâti, le chariot, le bras, et ce que portent les maillons (volant, moteur). Le banc pose la scène par la fonction du rendu (<code>poseOf</code>), échantillonne chaque maillon tous les 4 mm avec sa demi-largeur et sa demi-épaisseur, et le confronte aux <em>vraies pièces</em> construites par les workers, ramenées à la boîte de chacune de leurs composantes connexes (union-find sur les triangles), sur 240 instants de la boucle.</p>
+        <div class="note trap"><b>Le piège</b><p>Le premier portique de l'Acrobate avait un montant devant la chaîne et une barre qui la traversait : quand le second maillon se repliait le long du premier (figure UD), il passait à travers la barre. Le portique est désormais derrière la chaîne, l'axe de l'épaule en porte-à-faux. Le banc a aussi trouvé un jeu de 1,5 mm entre le palier de tête du tourniquet et son pendule : le pivot est passé de \(r+26\) à \(r+38\) mm.</p></div>
+        <div class="note check"><b>Témoin négatif</b><p>La même chaîne reculée de 6 cm dans son support est vue par le banc (test). Sur 40 graines, aucun contact (<code>tools/contacts.mjs</code>).</p></div>
+        <figure id="fig-boxes"><figcaption><b>Vue de dessus d'un banc de chariot</b> : les boîtes des composantes connexes des vraies pièces (gris), les plans des maillons (or) et la trace du chariot. Le curseur recule la chaîne : le banc signale le contact dès qu'un plan entre dans une boîte.</figcaption></figure>
+      </section>
+
+      <section id="budget">
+        <h2><span class="n">07</span>Budget</h2>
+        <div class="tbl"><table>
+          <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
+          <tbody>
+            <tr><td>Transition, chaîne double, roue, tourniquet, acrobate (une par worker, en parallèle)</td><td>worker</td><td class="num">0,2–1,5 s</td></tr>
+            <tr><td>Transition, chaîne triple (continuation depuis la bibliothèque, 4 pas)</td><td>worker</td><td class="num">3–5 s</td></tr>
+            <tr><td>Pipelines compilées sous l'écran de chargement (aucune ensuite)</td><td>GPU</td><td class="num">51–204</td></tr>
+            <tr><td>Image, Chariot double, Plein soleil, 1,95 Mpx, qualité Haute</td><td>GPU</td><td class="num">7,1–8,3 ms</td></tr>
+            <tr><td>Image, Chariot triple et ses fantômes, Chronophotographie, 1,95 Mpx</td><td>GPU</td><td class="num">6,4–6,8 ms</td></tr>
+            <tr><td>Image, version mobile, Roue, 1,36 Mpx</td><td>GPU</td><td class="num">2,3 ms</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+    </article>
+
+    <footer class="end">
+      <a href="./">Ouvrir Pendulum</a>
+      <a href="https://github.com/drschizzo/Codevember/blob/main/pendulum/README.md">README</a>
+      <a href="https://github.com/drschizzo/Codevember/blob/main/pendulum/docs/concept.md">La démarche</a>
+      <span class="sp"></span>
+      <a href="../">Tous les jours</a>
+    </footer>
+  </main>
+
+  <script type="module">
+    import { demo, C, TAU, lerp, label, alpha } from '../home/explainer.js';
+    import { makeSystem, rk4Step, rkWork } from './src/gen/dynamics.js';
+    import { solveTransition, record, sampleTable } from './src/gen/shoot.js';
+    import { slowWindow, physTime, physRate } from './src/film.js';
+    import { LIBRARY } from './src/gen/library.js';
+    import { REF3 } from './src/gen/reference.js';
+    import { systemOf, linkMass } from './src/gen/machines.js';
+    import { obstaclesOf } from './src/gen/clearance.js';
+    import { layoutOf } from './src/gen/pose.js';
+
+    const rod = (l, m) => ({ l, c: l / 2, m, J: (m * l * l) / 12 });
+    // dessin d'une chaîne (angles absolus) depuis un pivot écran
+    const drawChain = (g, x, y, th, L, sc, col, w = 2) => {
+      g.strokeStyle = col; g.lineWidth = w; g.lineCap = 'round'; g.beginPath(); g.moveTo(x, y);
+      for (let i = 0; i < th.length; i++) { x += Math.sin(th[i]) * L[i] * sc; y += Math.cos(th[i]) * L[i] * sc; g.lineTo(x, y); }
+      g.stroke();
+    };
+
+    // ── 01 · pompage en sinus ─────────────────────────────────────────────
+    {
+      const sys = makeSystem({ kind: 'cart', links: [rod(0.32, 0.25), rod(0.32, 0.18)] });
+      demo('#fig-pump', {
+        title: 'Double pendule sur chariot, commande en sinus', aspect: 2.2, animate: true,
+        controls: [
+          { key: 'A', label: 'Amplitude du chariot (cm)', min: 0, max: 20, step: 0.5, value: 6, fmt: (v) => `${v} cm` },
+          { key: 'f', label: 'Fréquence (Hz)', min: 0.3, max: 2.5, step: 0.01, value: 1.1, fmt: (v) => `${v.toFixed(2)} Hz` },
+        ],
+        buttons: [{ label: 'Repartir', onClick: (d) => d.reset() }],
+        setup(d) { d.state = { x: new Float64Array(sys.nx), t: 0, w: rkWork(sys.nx), trail: [] }; },
+        draw(g, d) {
+          const S = d.state, A = d.s.A / 100, om = TAU * d.s.f;
+          for (let k = 0; k < Math.round(d.dt / 0.001); k++) {
+            const t = S.t, u = -A * om * om * Math.sin(om * t), u2 = -A * om * om * Math.sin(om * (t + 0.001));
+            rk4Step(sys, S.x, u, u2, 0.001, S.w); S.t += 0.001;
+            // (le chariot suit exactement le sinus : position imposée)
+            S.x[4] = A * Math.sin(om * S.t); S.x[5] = A * om * Math.cos(om * S.t);
+            if (!Number.isFinite(S.x[0])) d.reset();
+          }
+          const sc = Math.min(d.h * 0.42, d.w * 0.22) / 0.64, cx = d.w / 2, cy = d.h * 0.48;
+          g.strokeStyle = C.grid; g.lineWidth = 1; g.beginPath(); g.moveTo(cx - 0.6 * sc, cy); g.lineTo(cx + 0.6 * sc, cy); g.stroke();
+          const px = cx + S.x[4] * sc;
+          g.fillStyle = C.dim; g.fillRect(px - 14, cy - 7, 28, 14);
+          const th = [S.x[0], S.x[1]];
+          const tip = [px + (Math.sin(th[0]) * 0.32 + Math.sin(th[1]) * 0.32) * sc, cy + (Math.cos(th[0]) * 0.32 + Math.cos(th[1]) * 0.32) * sc];
+          S.trail.push(tip); if (S.trail.length > 240) S.trail.shift();
+          g.strokeStyle = alpha(C.c2, 0.35); g.lineWidth = 1; g.beginPath(); S.trail.forEach((p, i) => (i ? g.lineTo(...p) : g.moveTo(...p))); g.stroke();
+          drawChain(g, px, cy, th, [0.32, 0.32], sc, C.c1, 3);
+          const up = Math.cos(th[0]) < -0.95 && Math.cos(th[1]) < -0.95;
+          d.status(up ? 'debout… pour un instant' : `énergie : ${sys.energy(S.x).toFixed(2)} J`);
+        },
+      });
+    }
+
+    // ── 02 · divergence et segments ───────────────────────────────────────
+    {
+      const sys = makeSystem({ kind: 'cart', links: [rod(0.35, 0.3)] });
+      demo('#fig-diverge', {
+        title: 'Erreur sur un pendule debout', aspect: 2.2,
+        controls: [
+          { key: 'e', label: 'Perturbation initiale (log₁₀ rad)', min: -14, max: -3, step: 1, value: -12, fmt: (v) => `10^${v}` },
+          { key: 'S', label: 'Segments de tir', min: 1, max: 16, step: 1, value: 12 },
+        ],
+        draw(g, d) {
+          const T = 3, n = 600, dt = T / n, w = rkWork(sys.nx);
+          const x0 = 18, x1 = d.w - 16, y0 = 16, y1 = d.h - 28;
+          const X = (t) => lerp(x0, x1, t / T), Y = (lg) => lerp(y1, y0, (lg + 15) / 16);
+          g.strokeStyle = C.grid; g.lineWidth = 1;
+          for (const lg of [-15, -10, -5, 0]) { g.beginPath(); g.moveTo(x0, Y(lg)); g.lineTo(x1, Y(lg)); g.stroke(); label(g, `10^${lg}`, x0 + 2, Y(lg) - 3); }
+          for (const t of [0, 1, 2, 3]) label(g, `${t} s`, X(t), y1 + 16, { align: 'center' });
+          const run = (segs, col) => {
+            const x = new Float64Array(sys.nx); x[0] = Math.PI + 10 ** d.s.e;
+            g.strokeStyle = col; g.lineWidth = 2; g.beginPath();
+            const per = n / segs;
+            let maxLg = -99;
+            for (let i = 0; i <= n; i++) {
+              if (i && i % Math.round(per) === 0 && segs > 1) { x[0] = Math.PI + 10 ** d.s.e; x[1] = 0; } // (le segment repart de son état de tir)
+              const lg = Math.log10(Math.max(1e-16, Math.min(Math.PI, Math.abs(x[0] - Math.PI))));
+              maxLg = Math.max(maxLg, lg);
+              i ? g.lineTo(X(i * dt), Y(lg)) : g.moveTo(X(0), Y(lg));
+              rk4Step(sys, x, 0, 0, dt, w);
+            }
+            g.stroke();
+            return maxLg;
+          };
+          const a = run(1, alpha(C.c3, 0.9)), b = run(d.s.S, C.c1);
+          label(g, 'un seul tir', x1 - 4, y0 + 12, { align: 'right', color: C.c3 });
+          label(g, `${d.s.S} segments`, x1 - 4, y0 + 28, { align: 'right', color: C.c1 });
+          d.status(`erreur max : 10^${a.toFixed(0)} d'un tenant, 10^${b.toFixed(0)} par segments`);
+        },
+      });
+    }
+
+    // ── 03 · le solveur, itération par itération ──────────────────────────
+    {
+      const sys = makeSystem({ kind: 'cart', links: [rod(0.4, 0.3)] });
+      const L = [0.4];
+      let snaps = null, sol = null;
+      const solve = (T) => {
+        snaps = [];
+        const X0 = sys.restState([0]), X1 = sys.restState([Math.PI]);
+        sol = solveTransition(sys, { T, X0, X1, alpha: 1, beta: 60, onIter: (it) => {
+          const poses = [], y = new Float64Array(sys.nx);
+          for (let i = 0; i < it.S; i++) it.seg(i, y, (x) => poses.push([x[0], x[2]]));
+          snaps.push({ cn: it.cn, poses });
+        } });
+      };
+      demo('#fig-solve', {
+        title: 'Tir multiple : de pendant à debout', aspect: 2, animate: true,
+        controls: [{ key: 'T', label: 'Durée de la manœuvre (s)', min: 1.3, max: 2.4, step: 0.05, value: 1.6, fmt: (v) => `${v.toFixed(2)} s`, onChange: (d) => { snaps = null; d.t = 0; } }],
+        buttons: [{ label: 'Résoudre', onClick: (d) => { solve(d.s.T); d.t = 0; } }],
+        draw(g, d) {
+          if (!snaps) { solve(d.s.T); d.t = 0; }
+          const k = Math.min(snaps.length - 1, Math.floor(d.t * 3)), S = snaps[k];
+          const sc = Math.min(d.h * 0.32, d.w * 0.2) / 0.4, cx = d.w * 0.5, cy = d.h * 0.42;
+          g.strokeStyle = C.grid; g.lineWidth = 1; g.beginPath(); g.moveTo(cx - 0.7 * sc, cy); g.lineTo(cx + 0.7 * sc, cy); g.stroke();
+          S.poses.forEach(([th, s], j) => drawChain(g, cx + s * sc, cy, [th], L, sc, alpha(C.ink, 0.12 + 0.5 * (j / S.poses.length)), 1.2));
+          // commande et résidu
+          const gy = d.h * 0.78, gh = d.h * 0.18;
+          g.strokeStyle = C.c2; g.lineWidth = 1.5; g.beginPath();
+          const u = sol.u, um = Math.max(1, ...u.map(Math.abs));
+          u.forEach((v, i) => { const x = lerp(16, d.w * 0.6, i / (u.length - 1)), y = gy + gh / 2 - (v / um) * gh / 2; i ? g.lineTo(x, y) : g.moveTo(x, y); });
+          if (k === snaps.length - 1) g.stroke();
+          label(g, 'u(t)', 16, gy - 4, { color: C.c2 });
+          g.strokeStyle = C.c1; g.beginPath();
+          snaps.slice(0, k + 1).forEach((q, i) => { const x = lerp(d.w * 0.66, d.w - 16, i / Math.max(1, snaps.length - 1)), y = gy + gh * (1 - (Math.log10(Math.max(1e-12, q.cn)) + 12) / 13); i ? g.lineTo(x, y) : g.moveTo(x, y); });
+          g.stroke();
+          label(g, 'résidu (log)', d.w * 0.66, gy - 4, { color: C.c1 });
+          d.status(`itération ${k + 1}/${snaps.length} · résidu ${S.cn.toExponential(1)}${k === snaps.length - 1 ? (sol.ok ? ' · convergé' : ' · non convergé : autre durée') : ''}`);
+        },
+      });
+    }
+
+    // ── 04 · ralenti ──────────────────────────────────────────────────────
+    demo('#fig-slow', {
+      title: 'τ(t) : le ralenti de caméra rapide', aspect: 2.2,
+      controls: [
+        { key: 'k', label: 'Vitesse du film au ralenti κ', min: 0.2, max: 1, step: 0.01, value: 0.5 },
+        { key: 'c', label: 'Instant de la pose (s)', min: 0.8, max: 2.4, step: 0.01, value: 1.9 },
+      ],
+      draw(g, d) {
+        const T = 2.6, W = slowWindow(T, d.s.c, { k: d.s.k, span: 0.35 }), F = W ? W.F : T;
+        const x0 = 30, x1 = d.w - 16, y0 = 14, y1 = d.h * 0.62, z0 = d.h * 0.72, z1 = d.h - 22;
+        const X = (t) => lerp(x0, x1, t / F), Y = (v) => lerp(y1, y0, v / T), Z = (v) => lerp(z1, z0, v);
+        g.strokeStyle = C.grid; g.lineWidth = 1; g.strokeRect(x0, y0, x1 - x0, y1 - y0);
+        g.setLineDash([3, 4]); g.beginPath(); g.moveTo(X(0), Y(0)); g.lineTo(X(T), Y(T)); g.stroke(); g.setLineDash([]);
+        if (W) { g.fillStyle = alpha(C.c1, 0.08); g.fillRect(X(W.a), y0, X(W.b + W.r) - X(W.a), y1 - y0); }
+        g.strokeStyle = C.c1; g.lineWidth = 2; g.beginPath();
+        for (let i = 0; i <= 300; i++) { const t = (i / 300) * F, v = physTime(t, W, T); i ? g.lineTo(X(t), Y(v)) : g.moveTo(X(t), Y(v)); }
+        g.stroke();
+        g.strokeStyle = C.c2; g.beginPath();
+        for (let i = 0; i <= 300; i++) { const t = (i / 300) * F, v = physRate(t, W); i ? g.lineTo(X(t), Z(v)) : g.moveTo(X(t), Z(v)); }
+        g.stroke();
+        label(g, 'temps physique τ', x0 + 6, y0 + 14, { color: C.c1 });
+        label(g, 'vitesse dτ/dt', x0 + 6, z0 - 4, { color: C.c2 });
+        label(g, 'temps du film t →', x1, y1 + 14, { align: 'right' });
+        d.status(W ? `transition de ${T} s filmée en ${F.toFixed(2)} s` : 'pas de fenêtre possible ici');
+      },
+    });
+
+    // ── 05 · bibliothèque ─────────────────────────────────────────────────
+    {
+      const sys = systemOf(REF3), L = REF3.links.map((l) => l.l);
+      const tabs = LIBRARY['DDD-UUU'].map((E) => ({ E, tab: record(sys, { X0: sys.restState([0, 0, 0]), z: Float64Array.from(E.z), nu: 79, N: 80, S: 16, K: 6, T: E.T }) }));
+      demo('#fig-lib', {
+        title: 'Sept redressements de la chaîne triple', aspect: 1.7,
+        controls: [{ key: 'n', label: 'Poses par vignette', min: 8, max: 40, step: 1, value: 22 }],
+        draw(g, d) {
+          const m = tabs.length, cw = d.w / m, sc = Math.min(cw * 0.55, d.h * 0.4) / 0.84;
+          const x = new Float64Array(sys.nx), th = new Float64Array(3), td = new Float64Array(3);
+          tabs.forEach(({ E, tab }, i) => {
+            const cx = cw * (i + 0.5), cy = d.h * 0.48;
+            g.strokeStyle = C.grid; g.lineWidth = 1; g.beginPath(); g.moveTo(cx - cw * 0.45, cy); g.lineTo(cx + cw * 0.45, cy); g.stroke();
+            for (let j = 0; j <= d.s.n; j++) {
+              sampleTable(tab, (j / d.s.n) * E.T, x); sys.angles(x, th, td);
+              const s = x[2 * sys.np];
+              drawChain(g, cx + s * sc, cy, Array.from(th), L, sc, j === d.s.n ? C.c1 : alpha(C.ink, 0.1 + 0.45 * (j / d.s.n)), j === d.s.n ? 2 : 1);
+            }
+            label(g, E.signs.map((v) => (v > 0 ? '+' : '−')).join(' '), cx, d.h - 24, { align: 'center', color: C.ink });
+            label(g, `${E.T} s · ${E.cost.toFixed(0)}`, cx, d.h - 8, { align: 'center' });
+          });
+          d.status('sens de bascule de chaque maillon · durée · coût');
+        },
+      });
+    }
+
+    // ── 06 · boîtes des vraies pièces ─────────────────────────────────────
+    {
+      const bar = (l) => ({ l, w: 0.03, t: 0.008, metal: 'alu', fill: 0.65, style: 'bar', bob: null });
+      const M = { family: 'cart', links: [bar(0.36), bar(0.32)], rail: { half: 0.62 }, height: 0.84, motorSide: 1 };
+      const Lay = layoutOf(M), O = obstaclesOf(M, Lay, false);
+      demo('#fig-boxes', {
+        title: 'Vue de dessus : pièces et plans des maillons', aspect: 2.2,
+        controls: [{ key: 'z', label: 'Recul de la chaîne (mm)', min: 0, max: 70, step: 1, value: 0, fmt: (v) => `${v} mm` }],
+        draw(g, d) {
+          const sx = (d.w - 40) / 2.0, sz = (d.h - 40) / 0.38, cx = d.w / 2, cz = 20 + 0.17 * sz; // (z de −0,21 à +0,17 m)
+          const X = (x) => cx + x * sx, Z = (z) => cz - z * sz;
+          const zs = -d.s.z / 1000;
+          let hit = false;
+          // (boîtes à hauteur du balayage de la chaîne : sous le pivot)
+          for (const B of O.fixed) {
+            if (B.hi[1] < M.height - 0.7 || B.lo[1] > M.height + 0.05) continue;
+            g.fillStyle = alpha(C.ink, 0.08); g.strokeStyle = alpha(C.ink, 0.35); g.lineWidth = 1;
+            g.fillRect(X(B.lo[0]), Z(B.hi[2]), (B.hi[0] - B.lo[0]) * sx, (B.hi[2] - B.lo[2]) * sz);
+            g.strokeRect(X(B.lo[0]), Z(B.hi[2]), (B.hi[0] - B.lo[0]) * sx, (B.hi[2] - B.lo[2]) * sz);
+          }
+          M.links.forEach((Lk, i) => {
+            const z = Lay.z[i] + zs, h = Lk.t / 2 + 0.0025, reach = M.rail.half + Lay.z.length * 0.0;
+            // la chaîne balaie, dans son plan, de −(course + longueur) à +(course + longueur)
+            const ext = M.rail.half - 0.06 + M.links.slice(0, i + 1).reduce((s, l) => s + l.l, 0);
+            const inBox = O.fixed.some((B) => B.hi[1] > M.height - 0.7 && B.lo[1] < M.height + 0.05 && z - h < B.hi[2] && z + h > B.lo[2] && B.lo[0] < ext && B.hi[0] > -ext);
+            hit ||= inBox;
+            g.fillStyle = alpha(inBox ? C.c3 : C.c1, 0.55);
+            g.fillRect(X(-ext), Z(z + h), 2 * ext * sx, Math.max(2, 2 * h * sz));
+            void reach;
+          });
+          label(g, 'x (le long du rail)', d.w - 16, d.h - 8, { align: 'right' });
+          label(g, 'z (vers la caméra) ↑', 16, 16);
+          d.status(hit ? 'contact : un plan de maillon entre dans une pièce' : 'aucun plan de maillon ne coupe une pièce');
+        },
+      });
+    }
+  </script>
+</body>
+</html>

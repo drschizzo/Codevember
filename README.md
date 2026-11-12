@@ -2,6 +2,14 @@
 
 Expériences de creative coding, publiées sur [drschizzo.github.io/Codevember](https://drschizzo.github.io/Codevember/).
 
+## [Pendulum](pendulum/)
+
+L'équilibre renversé. Une chaîne de pendules pend, immobile ; la machine qui la porte se met en mouvement — un chariot qui donne des à-coups sur son rail, un bras de Furuta qui pivote autour de sa colonne, un acrobate motorisé au seul coude, un volant d'inertie qui s'emballe — et la chaîne, sans aucun moteur dans ses articulations, balance de plus en plus haut, se dresse d'un coup de fouet et reste debout, à l'envers, immobile ; puis elle se replie dans une autre figure et revient pendre. Dynamique exacte d'une chaîne plane sous-actionnée (une coordonnée imposée, les forces du moteur éliminées par projection), redressements trouvés comme des problèmes aux deux bouts par tir multiple et SQP (Graichen et al., Glück et al.), départs à chaud et continuation depuis une bibliothèque pour la chaîne triple, grand tour pour un maillon seul, boucle faite d'équilibres et ralenti de caméra rapide en forme fermée, banc des contacts sur les vraies pièces, quatre familles, sept décors (dont une chronophotographie à la Marey), écran de chargement qui dessine le solveur en train de refermer ses raccords, boucle parfaite exportable en MP4.
+
+[Démo en ligne](https://drschizzo.github.io/Codevember/pendulum/) · [version légère](https://drschizzo.github.io/Codevember/pendulum/?mobile=1) · [documentation](pendulum/README.md) · [concept](pendulum/docs/concept.md)
+
+[![Pendulum](pendulum/docs/capture.jpg)](https://drschizzo.github.io/Codevember/pendulum/)
+
 ## [Kelp](kelp/)
 
 Le ressac. Au ras d'un platier rocheux — granit rose, basalte, craie, ardoise, grès —, une caméra à hublot-dôme filmée moitié au-dessus, moitié au-dessous de l'eau. Une série de trois vagues arrive du large : la mer se retire et couche les laminaires sur la roche ; chaque vague les soulève et les peigne vers la côte à l'instant où son front les atteint, puis le retrait les recouche dans l'autre sens ; la troisième recouvre la caméra, et dans l'eau laiteuse de bulles la forêt est debout. La mer est simulée (Saint-Venant 1D, reconstruction hydrostatique d'Audusse et flux HLL : ressauts, front mouillé-sec, bord générant-absorbant, écume et bulles transportées, enveloppe de séchage de la roche) ; les laminaires sont des chaînes XPBD (poussée d'Archimède, traînée de Morison implicite, masse ajoutée, contacts entre rubans épais, inextensibilité exacte) ; la boucle est une orbite périodique refermée par deux passages sous le même forçage ; le brouillard d'eau est compté pour chaque pixel sur la partie immergée de son rayon, depuis le dôme. Quatre familles (digitée, cochayuyo, palmier de mer, boa), six humeurs, écran de chargement qui simule la mer de la graine en coupe, boucle parfaite exportable en MP4.
