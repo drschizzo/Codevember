@@ -242,6 +242,37 @@
         "mirage"
       ],
       "port": 8160
+    },
+    {
+      "name": "mirage-8161",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        ".claude/serve.py",
+        "8161",
+        "mirage"
+      ],
+      "port": 8161,
+      "autoPort": false
+    },
+    {
+      "name": "spore",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        ".claude/serve.py",
+        "8170",
+        "spore"
+      ],
+      "port": 8170
+    },
+    {
+      "name": "kelp",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        ".claude/serve.py",
+        "8180",
+        "kelp"
+      ],
+      "port": 8180
     }
   ]
 }
