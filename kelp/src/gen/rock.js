@@ -88,10 +88,13 @@ export function makeRock(type, seed, opts = {}) {
       const period = 0.3;
       const k = u / period, f = k - Math.floor(k), lid = h2(Math.floor(k), 3, s);
       // profil en dents : face raide (f → 1) et dos en pente douce, crête arrondie
-      const tooth = sst(0, 0.8, f) * (1 - sst(0.86, 0.98, f));
-      d = (0.06 + 0.05 * lid) * tooth - 0.04 + 0.01 * wear;
+      // (la face raide descend sur ~8 cm : un front plus abrupt ne tient pas dans
+      // le relief cuit ni dans le maillage, et se lisait en facettes)
+      const tooth = sst(0, 0.72, f) * (1 - sst(0.74, 1.0, f));
+      d = (0.045 + 0.035 * lid) * tooth - 0.03 + 0.01 * wear;
       crack = 1 - sst(0.0, 0.12, f) * (1 - sst(0.9, 1.0, f));
-      d += 0.003 * Math.sin(u * 180 + N.noise(x, 2, z) * 3); // (feuilletage fin)
+      // (pas de feuilletage fin dans le relief : sa période, 3,5 cm, est à peine
+      // deux texels de la carte cuite, et il se repliait en stries)
       id = lid; motif = f;
     } else { // sandstone
       // lits en gradins le long de x (marches arrondies), alvéoles

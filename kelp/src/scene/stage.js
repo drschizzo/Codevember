@@ -197,19 +197,27 @@ export function createStage(scene, gen, { lite = false } = {}) {
       const big = h3.mul(h3);
       const lifeT = h4.mul(11).add(3).mul(float(1).sub(big.mul(0.4)));
       const life = float(1).sub(tau.div(lifeT)).clamp(0, 1);
-      const r = big.mul(0.26).add(0.07).mul(life.sqrt());
+      // (une goutte ne sort jamais de sa cellule : son rayon est borné par la
+      // place qu'elle a, et elle s'arrête — puis sèche — avant le bord du bas ;
+      // sinon le bord de la cellule la coupait net en glissant)
+      const cx = h1.mul(0.4).add(0.3), cy0 = h2.mul(0.2).add(0.18);
+      // bornes exactes (contour irrégulier jusqu'à +30 %, affaissement 1/0,75 en
+      // bas, 1/1,12 en haut, étirement (1 + s/2) en glissant, balancement 0,02)
+      const r0 = big.mul(0.22).add(0.06).min(cx.min(cx.oneMinus()).sub(0.025).div(1.53)).min(cy0.div(1.2));
+      const r = r0.mul(life.sqrt());
       // glissement : départ après un temps propre à la goutte, puis accéléré
       const t0 = h1.mul(2.5).add(0.4), run = tau.sub(t0).max(0);
-      const slide = step(0.55, h3).mul(big.mul(0.08).add(0.02)).mul(run).mul(run).min(0.75);
-      const sway = sin(slide.mul(11).add(h2.mul(6.3))).mul(0.03).mul(step(0.001, slide));
-      const c = vec2(h1.mul(0.5).add(0.25).add(sway), h2.mul(0.3).add(0.15).add(slide));
+      const room = float(0.98).sub(cy0).sub(r0.mul(1.733)).div(r0.mul(0.867).add(1)).max(0);
+      const slide = step(0.55, h3).mul(big.mul(0.08).add(0.02)).mul(run).mul(run).min(room).min(0.75);
+      const sway = sin(slide.mul(11).add(h2.mul(6.3))).mul(0.02).mul(step(0.001, slide));
+      const c = vec2(cx.add(sway), cy0.add(slide));
       const d0 = q.sub(cell).sub(c);
       // forme : affaissée vers le bas (la gravité), allongée en glissant, contour irrégulier
       const e = vec2(d0.x.mul(h2.mul(0.35).add(0.85)).mul(float(1).add(slide.mul(0.6))), d0.y.mul(select(d0.y.greaterThan(0), float(0.75), float(1.12))).div(float(1).add(slide.mul(0.5))));
       const ang = atan(e.y, e.x);
       const rr = r.mul(float(1).add(sin(ang.mul(2).add(h4.mul(6.3))).mul(big.mul(0.18))).add(sin(ang.mul(3).add(h1.mul(6.3))).mul(0.08)).add(sin(ang.mul(5).add(h2.mul(6.3))).mul(0.04)));
       const k = length(e).div(rr.max(1e-4));
-      const exist = step(float(1).sub(dens.mul(patch)), h1.mul(0.6).add(h2.mul(0.4))).mul(step(0.01, life)).mul(smoothstep(0.75, 0.6, slide));
+      const exist = step(float(1).sub(dens.mul(patch)), h1.mul(0.6).add(h2.mul(0.4))).mul(step(0.01, life));
       // traînée humide au-dessus d'une goutte qui glisse
       const trail = step(d0.x.abs(), r.mul(0.3)).mul(step(d0.y, 0)).mul(step(slide.negate(), d0.y)).mul(step(0.01, slide)).mul(exist).mul(life);
       return { k, inside: smoothstep(1.0, 0.9, k).mul(exist), d: e.div(rr.max(1e-4)), r: rr.div(scale), trail };
@@ -225,7 +233,9 @@ export function createStage(scene, gen, { lite = false } = {}) {
     // nappe sous la ligne d'eau : juste au-dessus du ménisque, l'eau ruisselle
     // (et, l'instant où l'eau quitte le dôme, la pellicule qui s'en retire)
     const sheet = smoothstep(fw.mul(60), fw.mul(4), a).mul(air).max(smoothstep(0.5, 0.0, tau).mul(wet));
-    const wob = vec2(sin(uv0.y.mul(140).add(uv0.x.mul(23)).add(W.U.t.mul(7))), sin(uv0.x.mul(90).add(W.U.t.mul(5)))).mul(0.0025).mul(sheet);
+    // (une ondulation lente le long de la ligne : la nappe qui descend ; une
+    // fréquence haute en hauteur dessinait des aiguilles sur la ligne d'eau)
+    const wob = vec2(sin(uv0.x.mul(31).add(W.U.t.mul(2.7))).mul(0.0008), sin(uv0.x.mul(17).add(W.U.t.mul(3.3))).mul(0.0022)).mul(sheet);
     const trailOff = vec2(select(useA, A.trail, B.trail).mul(0.0035).mul(wet), 0);
     const uvS = uv0.add(vec2(off.x.div(asp), off.y).mul(ins)).add(wob).add(trailOff);
     let col = sample(uvS).rgb;
@@ -237,7 +247,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
     // le ménisque : une ligne sombre, un liseré clair qui accroche le ciel
     const line = smoothstep(fw.mul(2.2), float(0), a.abs());
     const rim = smoothstep(fw.mul(5), fw.mul(1.5), a.sub(fw.mul(3.5)).abs()).mul(step(0, a));
-    col = col.mul(float(1).sub(line.mul(0.85))).add(vec3(rim.mul(0.18)));
+    col = col.mul(float(1).sub(line.mul(0.7))).add(vec3(rim.mul(0.05)));
     return vec4(tmax(col, vec3(0)), 1);
   }
   function setDomeCamera(cam) { DU.pos.value.copy(cam.position); DU.projInv.value.copy(cam.projectionMatrixInverse); DU.world.value.copy(cam.matrixWorld); }

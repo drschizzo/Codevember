@@ -7,6 +7,7 @@ import { bakeRock, sampler, makePools } from './rock.js';
 import { layoutPlants, buildKelp, simulateKelp, FAMILIES } from './kelp.js';
 import { createRng, createNoise3 } from '../rng.js';
 import { Buffers, OUT } from './mesh.js';
+import { cameraPose } from '../camera.js';
 
 export const BOX = { x0: -7, x1: 9, z0: -12, z1: 4 };
 export const SEA_X = [-9, 10];
@@ -267,7 +268,7 @@ export function buildScene(R, { lite = false, onProgress = () => {} } = {}) {
     avoid: (x, z) => fill(x, z) - Hr(x, z) > 0.01 || ((x - cam.x) ** 2 + (z - cam.z) ** 2 < 0.06),
   });
   const K = buildKelp(R.family, plants, Hc);
-  const sim = simulateKelp(K, { sea, rockH: Hc, T, fps: 30, sub: lite ? 90 : 100, loops: 2, obliq: R.sea.obliq, zRef: cam.z }, (p) => onProgress(0.14 + 0.8 * p));
+  const sim = simulateKelp(K, { sea, rockH: Hc, T, fps: 30, sub: lite ? 90 : 100, loops: 2, obliq: R.sea.obliq, zRef: cam.z, camera: (ph) => cameraPose(R.camera, cam, ph).pos }, (p) => onProgress(0.14 + 0.8 * p));
   times.kelp = Date.now() - t0;
   // 5. tampons du GPU
   const N = sim.n, nf = sim.nf;

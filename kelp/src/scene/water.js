@@ -207,12 +207,22 @@ export function createSurface(W, skyTex, lite) {
   mat.blendSrc = THREE.OneFactor; mat.blendDst = THREE.OneMinusSrcAlphaFactor;
   mat.blendSrcAlpha = THREE.OneFactor; mat.blendDstAlpha = THREE.OneMinusSrcAlphaFactor;
 
-  // pose : sur l'eau, ou sous la roche (sec)
+  // pose : sur l'eau, ou posée sur la roche là où elle est sèche (et
+  // transparente : voir « thin ») — le bord de l'eau suit ainsi le contour
+  // mouillé ; un sommet sec envoyé sous la roche dessinait un front en dents
+  // de scie, hérissé d'écume
+  // La surface est un plan d'eau à son niveau partout où la mer (ou une
+  // flaque) est là, et c'est le test de profondeur contre la roche qui
+  // dessine le bord de l'eau : il suit alors la roche au pixel près. Posée sur
+  // la roche ou envoyée dessous là où elle était sèche, la surface faisait
+  // des triangles inclinés qui sortaient en dents de scie sur les pentes
+  // raides (les feuillets d'ardoise). Là où la mer n'est pas (le front du jet
+  // de rive), elle plonge sous la roche ; ce rideau est retiré par maskNode.
   const pose = (p, t) => {
     const x = p.x, z = p.z;
-    const lv = W.level(x, z, t), rk = W.rockAt(x, z);
-    const wet = lv.sub(rk).greaterThan(0.0015);
-    return vec3(x, select(wet, lv, rk.sub(0.06)), z);
+    const eta = W.sea(x, z, t).x, pl = W.pool(x, z), lv = max(eta, pl);
+    const wet = eta.sub(W.profAt(x)).greaterThan(0.001).or(pl.sub(W.rockAt(x, z)).greaterThan(0.0015));
+    return vec3(x, select(wet, lv, W.rockAt(x, z).sub(0.3)), z);
   };
   mat.positionNode = Fn(() => {
     const p = positionLocal;
@@ -239,8 +249,10 @@ export function createSurface(W, skyTex, lite) {
     // de période T/8, donc périodiques sur la boucle)
     const tau = U.T.div(8), ph1 = U.t.div(tau).fract(), ph2 = U.t.div(tau).add(0.5).fract();
     const wFlow = ph1.mul(2).sub(1).abs();
-    const fl1 = vec3(P.x.sub(sm.y.mul(ph1).mul(tau).mul(0.7)), P.z, G.phase.mul(8));
-    const fl2 = vec3(P.x.sub(sm.y.mul(ph2).mul(tau).mul(0.7)).add(0.37), P.z.add(0.21), G.phase.mul(8));
+    // (la hauteur entre dans les coordonnées : sur la face raide d'un ressaut,
+    // x et z ne varient presque plus et le motif s'étirait en aiguilles)
+    const fl1 = vec3(P.x.sub(sm.y.mul(ph1).mul(tau).mul(0.7)).add(P.y.mul(0.8)), P.z.add(P.y.mul(0.6)), G.phase.mul(8));
+    const fl2 = vec3(P.x.sub(sm.y.mul(ph2).mul(tau).mul(0.7)).add(0.37).add(P.y.mul(0.8)), P.z.add(0.21).add(P.y.mul(0.6)), G.phase.mul(8));
     // rides à trois échelles (vagues de vent, clapot, capillaires) ; les plus
     // fines s'effacent au loin avant la fréquence du pixel
     const dCam = length(C.sub(P));
@@ -287,7 +299,7 @@ export function createSurface(W, skyTex, lite) {
     const foam = vec3(0.86, 0.88, 0.88).mul(lit).mul(select(above, float(1), float(0.6)));
     // (au bord de l'eau, la nappe s'amincit : transparente)
     const depth = W.level(P.x, P.z, U.t).sub(W.rockAt(P.x, P.z));
-    const thin = smoothstep(0.0, 0.012, depth);
+    const thin = smoothstep(0.006, 0.02, depth);
     const glowN = vec3(0.12, 0.5, 1.0).mul(U.glow).mul(sm.z.mul(1.5).add(sm.w));
     // composition prémultipliée : src + dst·(1 − α)
     const reflA = select(above, sky.mul(F).add(spec), mix(window, deep, F));
@@ -301,7 +313,9 @@ export function createSurface(W, skyTex, lite) {
   mat.outputNode = out();
   // (ce qui est entre le centre optique et le dôme n'est pas dessiné : sans
   // cela, la surface passée juste au-dessus de l'objectif se voyait en aplat)
-  mat.maskNode = length(positionWorld.sub(cameraPosition)).greaterThan(U.dome);
+  // (ni les parties sèches, posées sur la roche : rien à dessiner, et pas de profondeur à écrire)
+  const lvF = W.level(positionWorld.x, positionWorld.z, U.t);
+  mat.maskNode = length(positionWorld.sub(cameraPosition)).greaterThan(U.dome).and(lvF.sub(W.rockAt(positionWorld.x, positionWorld.z)).greaterThan(0.004)).and(positionWorld.y.greaterThan(lvF.sub(0.01))); // (6 mm : l'écart entre le maillage de la roche et son relief cuit, sur les pentes raides)
   // vitesses : la surface n'en écrit pas (alpha nul : la cible garde celle
   // de ce qui est dessous). Ses sommets passent d'un coup de la roche à
   // l'eau au bord mouillé-sec : leurs vitesses démesurées étiraient le flou

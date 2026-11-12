@@ -357,8 +357,25 @@ export function simulateKelp(K, opts, onProgress = null) {
     X[c] += W[c] * gc * lx; Y[c] += W[c] * gc * ly; Z[c] += W[c] * gc * lz;
   }
   let tSim = 0, water = 0;
+  let obst = null;
+  // le caisson : une sphère autour de l'objectif (le dôme et son boîtier) et
+  // un pied vertical jusqu'à la roche ; un nœud est repoussé hors des deux
+  const pushOutP = (p, o, clear) => {
+    let dx = p[0] - o.x, dy = p[1] - o.y, dz = p[2] - o.z, dd = Math.hypot(dx, dy, dz), rr = o.r + clear;
+    if (dd < rr && dd > 1e-6) { const q = (rr - dd) / dd; p[0] += dx * q; p[1] += dy * q; p[2] += dz * q; }
+    if (p[1] < o.y) {
+      dx = p[0] - o.x; dz = p[2] - o.z; dd = Math.hypot(dx, dz); rr = o.rs + clear;
+      if (dd < rr && dd > 1e-6) { const q = (rr - dd) / dd; p[0] += dx * q; p[2] += dz * q; }
+    }
+    return p;
+  };
+  const _p3 = [0, 0, 0];
+  const pushOut = (i, o, clear) => { _p3[0] = X[i]; _p3[1] = Y[i]; _p3[2] = Z[i]; pushOutP(_p3, o, clear); X[i] = _p3[0]; Y[i] = _p3[1]; Z[i] = _p3[2]; };
+
   function substep() {
     const t = tSim;
+    // (le caisson suit le léger travelling de la caméra)
+    if (opts.camera) { const c = opts.camera(t / T); obst = { x: c[0], y: c[1], z: c[2], r: opts.cameraR ?? 0.13, rs: 0.035, h: c[1] - rockH(c[0], c[2]) }; }
     // 1. forces et prédiction
     for (let i = 0; i < N; i++) {
       if (W[i] === 0) continue;
@@ -371,6 +388,12 @@ export function simulateKelp(K, opts, onProgress = null) {
         const depth = eta - GH[i];
         s = (eta - Y[i]) / (2 * Rr[i] + SW) + 0.5;
         s = (s < 0 ? 0 : s > 1 ? 1 : s) * water;
+        // (une lame d'eau de quelques millimètres sur la roche — la nappe qui
+        // se retire — n'emporte pas une lanière couchée : sa prise croît avec
+        // la profondeur, nulle sous 5 mm, entière au-delà de 6 cm. Sans cela,
+        // les lames glissaient dans une eau que l'image montre à peine)
+        const dep = depth < 0.005 ? 0 : depth > 0.06 ? 1 : ((depth - 0.005) / 0.055) ** 2 * (3 - 2 * (depth - 0.005) / 0.055);
+        s *= dep;
         if (s > 0 && depth > 0.003) {
           // profil de vitesse en puissance 1/7 : plus lent près de la roche
           const zr = Math.max(0, Y[i] - GH[i]) / Math.max(0.02, depth);
@@ -421,6 +444,8 @@ export function simulateKelp(K, opts, onProgress = null) {
       // (correction bornée par sous-pas : sur le tombant, la hauteur sous le
       // nœud peut dépasser d'un mètre sa position ; corrigée d'un coup, elle
       // lançait le nœud à 30 m/s — un « saut » à l'écran)
+      // le caisson de la caméra (dôme et pied) : un obstacle comme la roche
+      if (obst) pushOut(i, obst, clear);
       const pen = Math.min(0.006, (h0 + clear + 0.001 - Y[i]) * ny);
       if (pen > 0) {
         if (pen > pushMax) { pushMax = pen; worst = { i, t: tSim, pen, y: Y[i], h0, prevY: PY[i], hPrev: GH[i], x: X[i], z: Z[i], px: PX[i], pz: PZ[i], kind: KIND[i], ny, clear, a, ya: Y[a] }; }
@@ -552,10 +577,21 @@ export function simulateKelp(K, opts, onProgress = null) {
     for (let i = 0; i < N; i++) cnt[plantOf[i]]++;
     for (let f = 0; f < nf; f++) { const o = f * N * 3; for (let i = 0; i < N; i++) gp[plantOf[i]][f] += Math.hypot(pos[o + 3 * i] - A.pos[o + 3 * i], pos[o + 3 * i + 1] - A.pos[o + 3 * i + 1], pos[o + 3 * i + 2] - A.pos[o + 3 * i + 2]) / cnt[plantOf[i]]; }
     const half = Math.round(0.05 * nf), lo = Math.round(0.55 * nf) + half, hi = Math.round(0.95 * nf) - half;
+    // part immergée de chaque plante, image par image : le fondu se fait de
+    // préférence quand la plante est dans l'eau qui bouge (son glissement d'une
+    // version à l'autre s'y perd dans le mouvement de l'eau) ; à l'air, une
+    // lame qui glisse sur la roche sèche se voit
+    const sub = Array.from({ length: NP }, () => new Float64Array(nf));
+    if (S) for (let f = 0; f < nf; f++) { const o = f * N * 3, t = f / fps; for (let i = 0; i < N; i++) { const x = pos[o + 3 * i], y = pos[o + 3 * i + 1], z = pos[o + 3 * i + 2]; if (fieldAt(S.eta, x, t - obliq * (z - zRef)) > y + 0.02) sub[plantOf[i]][f] += 1 / cnt[plantOf[i]]; } }
     const center = new Int32Array(NP);
     for (let p = 0; p < NP; p++) {
       let best = Infinity;
-      for (let f = lo; f <= hi; f++) { let m = 0; for (let d = -half; d <= half; d++) m = Math.max(m, gp[p][f + d]); if (m < best) { best = m; center[p] = f; } }
+      for (let f = lo; f <= hi; f++) {
+        let m = 0, wsub = 0;
+        for (let d = -half; d <= half; d++) { m = Math.max(m, gp[p][f + d]); wsub += sub[p][f + d]; }
+        const score = m + 0.25 * (1 - wsub / (2 * half + 1));
+        if (score < best) { best = score; center[p] = f; }
+      }
     }
     const wOf = (p, f) => { const t = (f - (center[p] - half)) / (2 * half); return t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t); };
     stats.blendCenters = [Math.min(...center) / nf, Math.max(...center) / nf].map((v) => +v.toFixed(2));
@@ -577,6 +613,12 @@ export function simulateKelp(K, opts, onProgress = null) {
         pos[ii] = pos[ia] + (dx * l0) / l; pos[ii + 1] = pos[ia + 1] + (dy * l0) / l; pos[ii + 2] = pos[ia + 2] + (dz * l0) / l;
         const g = rockH(pos[ii], pos[ii + 2]) + Rr[i] + 0.001;
         if (pos[ii + 1] < g) pos[ii + 1] = g;
+        if (opts.camera) {
+          const c = opts.camera(f / nf), o = { x: c[0], y: c[1], z: c[2], r: opts.cameraR ?? 0.13, rs: 0.035 };
+          _p3[0] = pos[ii]; _p3[1] = pos[ii + 1]; _p3[2] = pos[ii + 2];
+          pushOutP(_p3, o, Rr[i]);
+          pos[ii] = _p3[0]; pos[ii + 1] = _p3[1]; pos[ii + 2] = _p3[2];
+        }
       }
       for (let i = 0; i < N; i++) { const w = wOf(plantOf[i], f); for (let c = 0; c < 3; c++) dir[o + 3 * i + c] += (A.dir[o + 3 * i + c] - dir[o + 3 * i + c]) * w; }
       for (let i = 0; i < N; i++) { const q = o + 3 * i, l = Math.hypot(dir[q], dir[q + 1], dir[q + 2]) || 1; dir[q] /= l; dir[q + 1] /= l; dir[q + 2] /= l; }
