@@ -118,6 +118,8 @@ Six sables (accords de quatre tons de strates, d'un ton de dépôt, de grains so
 | 0,64 – 0,812 | séchage | large, en lumière rasante, panoramique lent ; le portique traverse le cadre |
 | 0,812 – 0,955 | la lame | de profil, la caméra suit la lame à sa vitesse, un peu en avant : le bourrelet vient vers nous, le sable neuf reste derrière (en dedans des montants quand il y a le simulateur de pluie) |
 
+Pour la brèche, qui se fait tard (le lac doit d'abord se remplir), l'ordre change entre les mêmes raccords : la carte pendant le remplissage, le plan au ras du sable quand l'eau franchit l'échancrure, la macro quand la brèche s'élargit en crue.
+
 Dans un plan, la caméra va d'une pose à l'autre à vitesse constante ; à chaque raccord, la chaîne d'image remet à zéro le flou de mouvement et l'historique de l'anticrénelage temporel, et le rendu accumulé n'ouvre jamais l'obturateur à cheval sur deux plans. La caméra qui suit la lame reste à niveau (le profil du gabarit a des ruptures de pente). Dans chaque plan : pointe sous 25 °/s, accélération sous 1,5 m/s² (testées à 120 i/s).
 
 ## Tests
