@@ -43,7 +43,7 @@ La suite est un **crescendo** : de l'exploit le plus petit (un maillon debout au
 | --- | --- | --- | --- |
 | tenue (pendant) | la gravité | équilibre stable | temps réel |
 | transition | le chariot, le bras, le coude ou le volant, mené par son moteur | équations de Lagrange de la chaîne, une coordonnée imposée | temps réel ; ralenti ×0,4–0,6 au temps fort |
-| tenue (debout) | la machine immobile sous la chaîne en équilibre exact | équilibre instable (en vrai, une boucle de rétroaction ferait des corrections de quelques dixièmes de millimètre) | temps réel |
+| tenue (debout) | la machine sous la chaîne en équilibre, qui la rattrape sans cesse | équilibre instable : le rendu ajoute les corrections d'une boucle de rétroaction (quelques millièmes de radian, quelques millimètres de chariot, nulles aux raccords ; `film.js · tremor`) — sans elles, la chaîne debout se lit comme une image arrêtée | temps réel |
 | la roue | le moteur sur le pendule ; le volant prend la réaction | conservation du moment cinétique | temps réel |
 
 ## Génération (`src/gen/`, dans des Web Workers)
@@ -86,6 +86,8 @@ Sept humeurs, chacune un décor (fond, sol, lumière, valeur, cadrage), pas une 
 | **Heure bleue** | cyclorama gris froid, béton lissé, brume ; acier, chrome, cuivre | ciel froid diffus, contre-jour blanc | moyenne froide | trois-quarts arrière |
 | **Laque** | feutre gris, fond gris moyen ; laques noire, rouge, ivoire, laiton | boîte à lumière, contre-jour | moyenne | plan serré |
 
+Un décor « pièce » (Cabinet, Plein soleil, Atelier : sol et mur de matières différentes) a un angle franc au pied du mur ; les studios gardent une gorge de cyclorama. Au Plein soleil, le mur est à 1,1 m de la machine : l'ombre portée du soleil bas monte dessus. Les enduits, bétons et terres n'ont que des nuances larges et faibles (un mélange franc à 30 cm dessinait des taches de camouflage) ; le bois garde, de loin, un fil lisible (bandes larges étirées le long de la pièce) quand ses cernes s'effacent sous le pixel.
+
 Les matières sont tirées par **accord** (socle, bâti, guidage, maillons, chapes, accent, courroie), composé à la main : trois familles de matières au moins, l'or en accent, des maillons qui tranchent sur leur bâti (tests). Nouveaux motifs de matière (`scene/materials.js`) : bois (cernes en onde triangulaire autour d'un axe décalé, pores le long du fil, que les pièces tournées suivent), fonte moulée au sable, peinture (peau d'orange), enduit, béton, parquet (lames décalées, joints, une nuance par lame), cuir, terre battue. Les lampes sont presque blanches (sauf le soleil) ; l'exposition de chaque humeur est réglée au posemètre (médiane du sujet de 0,08 au Cabinet à 0,75 au Laboratoire, sans brûlé ; la Chronophotographie garde un fond noir, le sujet clair).
 
 La caméra cadre la machine entière, se balance lentement en azimut (une période par boucle) et, pendant la tenue au sommet, glisse vers un second cadrage : la chaîne debout, entière.
@@ -96,11 +98,11 @@ On regarde le solveur chercher : une plaque de chronophotographie par manœuvre,
 
 ## Tests
 
-`node --test 'pendulum/test/*.test.mjs'` (14 tests) :
+`node --test 'pendulum/test/*.test.mjs'` (15 tests) :
 - recette : déterminisme, JSON pur, chaque humeur et chaque famille tirées, toutes les finitions citées existent ; la suite part de la chaîne pendante, passe par le tout-debout, n'y revient que par un grand tour, le ralenti est sur la manœuvre qui arrive au dernier tout-debout et seulement elle ; accords (trois familles, l'or en accent, maillons distincts du bâti) ; lampes presque blanches, une humeur claire et deux sombres au moins ;
 - dynamique : énergie conservée sans commande (quatre familles), chaque équilibre est un équilibre ;
 - transitions (une graine par famille et une chaîne triple) : départ et arrivée au repos sur l'équilibre visé, la machine revenue, commande nulle aux deux bouts ; course dans le rail ;
-- film : la boucle se referme (u = 0 et u → 1), continuité à chaque raccord tenue / transition ; ralenti continu, croissant, de vitesse ≤ 1, couvrant exactement la transition ;
+- film : la boucle se referme (u = 0 et u → 1), continuité à chaque raccord tenue / transition ; ralenti continu, croissant, de vitesse ≤ 1, couvrant exactement la transition ; corrections d'équilibre seulement pendant une tenue debout, nulles aux raccords, de l'ordre du millimètre ;
 - **contacts** (`gen/clearance.js`) : sur 240 instants de la boucle, aucun maillon (axe échantillonné tous les 4 mm, demi-largeur et demi-épaisseur, lentille, volant, moteur porté) ne touche le sol, le bâti, le chariot ou le bras, ni un autre maillon ; les obstacles sont les **vraies pièces** construites, ramenées à la boîte de chacune de leurs composantes connexes, et la scène est posée par la fonction du rendu. **Témoin négatif** : la même chaîne reculée de 6 cm dans son support est vue. `node tools/contacts.mjs 0 40` : 40 graines, aucun contact.
 
 Bancs : `node tools/seeds.mjs [début] [nombre] [famille]` (taux de réussite et temps du solveur), `node tools/try.mjs [famille] [n]`, `node tools/library.mjs` (refait la bibliothèque de départs).

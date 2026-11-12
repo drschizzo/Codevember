@@ -123,3 +123,36 @@ export function buildFilm(R, sys, tables) {
   }
   return { steps, duration, at, moves };
 }
+
+// Un équilibre tenu n'est jamais immobile au micron : un pendule inversé ne
+// tient debout que par les corrections continues de son moteur (le chariot,
+// le bras, le coude ou le volant suivent la chaîne qui penche). Le rendu les
+// ajoute pendant les tenues où un maillon est debout — quelques millièmes de
+// radian, un ou deux millimètres de chariot —, nulles aux deux bouts de la
+// tenue (les raccords et la boucle restent exacts, le film pur ne change pas).
+// Sans elles, la chaîne debout se lit comme une image arrêtée.
+const TREMOR = { cart: 1.5, rotary: 4, acrobat: 6, wheel: 60 }; // (coordonnée imposée par mètre de penchant)
+export function tremor(R, out, amp = 1) {
+  const st = out.step;
+  if (!st || st.kind !== 'hold' || !(amp > 0)) return out;
+  const code = R.film.seq[st.i];
+  if (!code.includes('U')) return out;
+  const t = out.tf - st.t0, D = st.dur;
+  const sm = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
+  const w = sm(t / 0.6) * sm((D - t) / 0.6) * amp;
+  if (w <= 0) return out;
+  // (trois fréquences incommensurables, phases propres à la tenue : jamais un battement régulier)
+  const p = st.i * 1.731 + 0.37;
+  const sig = (a) => 0.55 * Math.sin(2 * Math.PI * 1.3 * t + a) + 0.3 * Math.sin(2 * Math.PI * 2.3 * t + 2.1 * a + 1) + 0.15 * Math.sin(2 * Math.PI * 3.7 * t + 3.3 * a + 2);
+  const e1 = sig(p), e2 = sig(p + 2.4);
+  let lean = 0;
+  const L = R.machine.links;
+  out.theta = out.theta.map((th, j) => {
+    // (premier mode : toute la chaîne penche ; le second, plus faible, la plie)
+    const d = 0.004 * w * (code[j] === 'U' ? 1 : 0.35) * (e1 + (j % 2 ? -0.5 : 0.25) * e2);
+    lean += L[j].l * d;
+    return th + d;
+  });
+  out.s += -(TREMOR[R.family] ?? 0) * lean;
+  return out;
+}

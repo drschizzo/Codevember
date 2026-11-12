@@ -9,7 +9,8 @@ import { buildPieceMaterial, finishUniforms } from './materials.js';
 import { pieceFinish } from '../finishes.js';
 import { createMachine, GHOSTS, GHOST_DT } from './machine.js';
 import { systemOf } from '../gen/machines.js';
-import { buildFilm, movesOf } from '../film.js';
+import { buildFilm, movesOf, tremor } from '../film.js';
+import { MOODS } from '../recipe.js';
 
 const SHADOW = { mobile: 1024, low: 1024, medium: 2048, high: 2048, ultra: 4096 };
 const { sin, cos, PI } = Math;
@@ -84,13 +85,21 @@ export function createStage(scene, gen, { lite = false } = {}) {
     sys = systemOf(R.machine);
     machine.setRecipe(R);
     const D = R.stage.sun ? 1.15 : 1.8;
-    const ck = `${R.stage.floor}|${R.stage.wall}|${D}`;
+    // Une pièce (sol et mur de matières différentes : parquet et mur peint,
+    // terre et chaux, béton) a un angle franc au pied du mur ; seul un studio
+    // a une gorge de cyclorama. (Une gorge d'un mètre dans la matière du mur,
+    // posée sur un parquet, se lit comme une rampe molle au raccord net.)
+    // Le plan du mur reste au même endroit dans les deux cas.
+    // (Plein soleil : le mur est tout près, à 1,1 m de l'axe de la machine —
+    // l'ombre portée du soleil bas monte dessus, comme promis par le décor)
+    const rc = MOODS[R.mood]?.room ? 0.012 : 1.1, Dw = (R.stage.sun ? 1.1 : D + 1.1) - rc;
+    const ck = `${R.stage.floor}|${R.stage.wall}|${Dw}|${rc}`;
     if (ck !== cycloKey) {
       cycloKey = ck;
       floor.geometry.dispose(); wall.geometry.dispose();
       floor.material?.dispose?.(); wall.material?.dispose?.();
-      floor.geometry = cycloGeometry('floor', D, 1.1);
-      wall.geometry = cycloGeometry('wall', D, 1.1);
+      floor.geometry = cycloGeometry('floor', Dw, rc);
+      wall.geometry = cycloGeometry('wall', Dw, rc);
       floor.material = surfaceMat(R.stage.floor, 3.3);
       wall.material = surfaceMat(R.stage.wall, 7.1);
     }
@@ -134,6 +143,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
     key.shadow.camera.near = Math.max(0.5, L.key.dist - 4); key.shadow.camera.far = L.key.dist + 5;
     rims.forEach((l, i) => { const r = L.rim[i]; place(l, target, r.az, r.el, 6.5); l.color.set(r.color); l.intensity = unit(6.5) * r.power * (lite && i === 0 ? 1.4 : 1); });
     film.at(ph, state);
+    tremor(R, state); // (les corrections d'un équilibre tenu : voir film.js)
     machine.update(state);
     if (R.stage.ghosts) {
       for (let k = 0; k < GHOSTS; k++) ghostStates[k] = film.at(ph - ((k + 1) * GHOST_DT) / film.duration, ghostStates[k] ?? {});

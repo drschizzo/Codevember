@@ -84,7 +84,7 @@ export const FINISHES = {
   crystalFrost: F({ label: 'Cristal satiné', pattern: 'plain', color: '#ffffff', color2: '#dfe7ee', rough: 0.2, glass: 1, ior: 1.55, dispersion: 0.3, attDist: 2 }),
   // ── Pendulum : bois, fonte, peintures, laques, sols et murs (unités : mètres ;
   // scale règle la taille du motif) ──
-  mahogany: F({ label: 'Acajou verni', pattern: 'wood', color: '#5a2414', color2: '#2e0f08', rough: 0.36, clearcoat: 0.8, ccRough: 0.04, bump: 0.5, scale: 1 }),
+  mahogany: F({ label: 'Acajou verni', pattern: 'wood', color: '#4a2416', color2: '#1f0d07', rough: 0.36, clearcoat: 0.8, ccRough: 0.04, bump: 0.5, scale: 1 }),
   walnut: F({ label: 'Noyer huilé', pattern: 'wood', color: '#5b4030', color2: '#2a1a10', rough: 0.5, clearcoat: 0.35, ccRough: 0.12, bump: 0.6, scale: 1.1 }),
   ebonized: F({ label: 'Poirier noirci', pattern: 'wood', color: '#1d1714', color2: '#0b0807', rough: 0.3, clearcoat: 0.9, ccRough: 0.03, bump: 0.35, scale: 1.2 }),
   oak: F({ label: 'Chêne clair', pattern: 'wood', color: '#b98d5c', color2: '#7a5432', rough: 0.62, bump: 0.8, scale: 0.8 }),
@@ -110,14 +110,14 @@ export const FINISHES = {
   slate: F({ label: 'Ardoise', pattern: 'concrete', color: '#3a3e44', color2: '#2c2f34', rough: 0.7, bump: 0.6, scale: 2 }),
   // murs et sols
   wallGreen: F({ label: 'Mur vert sombre', pattern: 'plaster', color: '#1f2a24', color2: '#17201b', rough: 0.92, bump: 0.6, scale: 1 }),
-  parquet: F({ label: 'Parquet', pattern: 'parquet', color: '#4a2c1a', color2: '#26150b', rough: 0.45, clearcoat: 0.4, ccRough: 0.12, bump: 0.6, scale: 1 }),
+  parquet: F({ label: 'Parquet', pattern: 'parquet', color: '#3e2c1d', color2: '#1d140c', rough: 0.45, clearcoat: 0.4, ccRough: 0.12, bump: 0.6, scale: 1 }),
   cycloWhite: F({ label: 'Cyclorama blanc', pattern: 'plaster', color: '#e4e3df', color2: '#d8d6d1', rough: 0.95, bump: 0.15, scale: 1 }),
   epoxyWhite: F({ label: 'Sol de résine', pattern: 'paint', color: '#d7d6d2', color2: '#c9c8c3', rough: 0.6, bump: 0.2, scale: 0.4 }),
-  velvetBlack: F({ label: 'Velours noir', pattern: 'velvet', color: '#050505', color2: '#020202', rough: 1, sheen: 0.4, sheenColor: '#2a2a2a', sheenRough: 0.6, scale: 0.3 }),
+  velvetBlack: F({ label: 'Velours noir', pattern: 'velvet', color: '#030303', color2: '#020202', rough: 1, sheen: 0.4, sheenColor: '#121212', sheenRough: 0.6, scale: 0.3 }),
   limewash: F({ label: 'Mur chaulé', pattern: 'plaster', color: '#e2d8c4', color2: '#cbbd9f', rough: 0.95, bump: 1.2, scale: 1 }),
   earth: F({ label: 'Terre battue', pattern: 'earth', color: '#a5866a', color2: '#7b604a', rough: 0.95, bump: 1.4, scale: 1 }),
   concreteDark: F({ label: 'Béton sombre', pattern: 'concrete', color: '#2a2928', color2: '#1d1c1b', rough: 0.9, bump: 0.8, scale: 1 }),
-  concrete: F({ label: 'Béton taché', pattern: 'concrete', color: '#6a6660', color2: '#45423e', rough: 0.85, bump: 1, scale: 1 }),
+  concrete: F({ label: 'Béton taché', pattern: 'concrete', color: '#4f4c48', color2: '#37342f', rough: 0.85, bump: 1, scale: 1 }),
   cycloGrey: F({ label: 'Cyclorama gris', pattern: 'plaster', color: '#5c656f', color2: '#535b64', rough: 0.95, bump: 0.15, scale: 1 }),
   concreteCold: F({ label: 'Béton lissé', pattern: 'concrete', color: '#6b7076', color2: '#55595e', rough: 0.7, bump: 0.5, scale: 1 }),
   cycloMid: F({ label: 'Cyclorama gris moyen', pattern: 'plaster', color: '#4a4643', color2: '#423e3b', rough: 0.95, bump: 0.15, scale: 1 }),
