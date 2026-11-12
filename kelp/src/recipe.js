@@ -78,12 +78,14 @@ export const MOODS = {
   },
 };
 
-// teintes des familles (lanière, stipe), linéaires : brun mouillé, olive, or
+// teintes des familles (lanière, stipe, lumière transmise), en sRGB : une
+// laminaire mouillée est brun olive presque noir (albédo linéaire 0,02 à 0,05)
+// et se lit par ses reflets ; claires, elles faisaient des rubans caramel
 export const KELP_COLORS = {
-  digitata: { blade: '#5a3c18', stipe: '#4a3418', light: '#b07a2a' },
-  durvillaea: { blade: '#6a5220', stipe: '#4e3a14', light: '#a87c26' },
-  postelsia: { blade: '#6a5020', stipe: '#5a4020', light: '#c08a30' },
-  egregia: { blade: '#4e3a16', stipe: '#3e2e12', light: '#a07a2a' },
+  digitata: { blade: '#3a2a13', stipe: '#30230f', light: '#a8742a' },
+  durvillaea: { blade: '#3c3414', stipe: '#2f2810', light: '#9c7a26' },
+  postelsia: { blade: '#463a17', stipe: '#3a2e14', light: '#b4882e' },
+  egregia: { blade: '#36290f', stipe: '#2c210c', light: '#9a7428' },
 };
 
 const FAMILY_KEYS = Object.keys(FAMILIES);

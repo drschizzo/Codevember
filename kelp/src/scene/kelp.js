@@ -11,8 +11,8 @@
 // dans l'eau ; sores sombres, pointes usées et plus claires.
 import * as THREE from 'three/webgpu';
 import {
-  Fn, attribute, textureLoad, texture, ivec2, int, vec3, vec4, float, mix, normalize, cross, dot, sin, cos, floor, fract, positionLocal, normalLocal,
-  positionPrevious, positionWorld, uniform, smoothstep, max, select, abs, varying, color, normalView,
+  Fn, attribute, textureLoad, texture, ivec2, int, vec2, vec3, vec4, float, mix, normalize, cross, dot, sin, cos, floor, fract, positionLocal, normalLocal,
+  positionPrevious, positionWorld, uniform, smoothstep, max, select, abs, varying, color, normalView, mx_cell_noise_float,
 } from 'three/tsl';
 import { fbm, noise, NZ, perturb } from './materials.js';
 import { G } from './globals.js';
@@ -53,7 +53,11 @@ export function createKelp(W, lite) {
     const hw = sect.x, ht = sect.y, th = seg.y;
     const c = cos(th), sn = sin(th);
     // bord ondulé (la marge d'une lame pousse plus vite que son milieu)
-    const ruffle = sin(seg.z.mul(46).add(sect.w.mul(30))).mul(c.mul(c)).mul(hw).mul(0.22).mul(sect.z).mul(smoothstep(0.1, 0.3, seg.z));
+    // (dans l'eau, le bord ondule : des ondes courent vers la pointe — 21
+    // périodes par boucle, ~1,5 s ; à l'air, il retombe figé)
+    const wet = smoothstep(-0.01, 0.03, W.level(P.x.add(anch.x), P.z.add(anch.z), t).sub(P.y.add(anch.y)));
+    const flutter = sin(seg.z.mul(46).add(sect.w.mul(30)).sub(t.div(U.T).mul(2 * Math.PI * 21))).mul(wet.mul(0.6).add(0.4));
+    const ruffle = flutter.mul(c.mul(c)).mul(hw).mul(mix(float(0.22), float(0.32), wet)).mul(sect.z).mul(smoothstep(0.1, 0.3, seg.z));
     const p = P.add(anch.xyz).add(B.mul(hw.mul(c))).add(F.mul(ht.mul(sn).add(ruffle)));
     const n = normalize(B.mul(ht.mul(c)).add(F.mul(hw.mul(sn))));
     return { p, n, B, F, T };
@@ -80,28 +84,42 @@ export function createKelp(W, lite) {
   col = mix(col, vec3(KU.light), tips.mul(0.35).add(n1.mul(0.12).add(0.06)).clamp(0, 1));
   col = col.mul(float(1).sub(sori.mul(0.35)));
   mat.colorNode = col;
-  mat.roughnessNode = mix(float(0.42), float(0.55), under).add(n1.mul(0.08));
+  mat.roughnessNode = mix(float(0.3), float(0.5), under).add(n1.mul(0.1));
   mat.metalnessNode = float(0);
   // mucilage : un vernis à l'air, rien dans l'eau
-  mat.clearcoatNode = mix(float(0.45), float(0.0), under).mul(kind.mul(0.5).add(0.5));
-  mat.clearcoatRoughnessNode = float(0.12).add(n1.abs().mul(0.15));
+  mat.clearcoatNode = mix(float(0.7), float(0.0), under).mul(kind.mul(0.4).add(0.6));
+  mat.clearcoatRoughnessNode = float(0.07).add(n1.abs().mul(0.12));
   // translucidité (Barré-Brisebois) : la lame s'allume à contre-jour, ambrée
-  mat.thicknessColorNode = vec3(KU.light).mul(mix(float(0.3), float(0.7), kind)).mul(float(1).add(tips.mul(0.6)));
+  // (sous l'eau, le soleil réfracté vient d'en haut, à moins de 49° de la
+  // verticale : une lame vue de côté n'est plus à contre-jour — sans cela, les
+  // lames immergées s'allumaient comme des néons)
+  // (la lumière ne passe que là où la lame est mince : marges et pointes)
+  const margin = smoothstep(0.55, 1.0, seg.y.cos().abs());
+  mat.thicknessColorNode = vec3(KU.light).mul(mix(float(0.3), float(0.8), kind)).mul(max(tips, margin).mul(0.7).add(0.3)).mul(mix(float(1), float(0.12), under));
   mat.thicknessDistortionNode = float(0.15);
   mat.thicknessAmbientNode = float(0.0);
   mat.thicknessAttenuationNode = float(0.9);
   mat.thicknessPowerNode = float(3.0);
   mat.thicknessScaleNode = mix(float(0.3), float(1.4), kind);
   // stries le long de la lame, grain de la surface
+  // (le relief court dans la LONGUEUR de la lame : les reflets s'y étirent en
+  // filets, comme sur une lame vernie de mucilage ; des stries en travers
+  // donnaient un velours côtelé)
   const across = seg.y.cos();
-  const hStri = sin(seg.z.mul(260).add(across.mul(2.5))).mul(0.00012).add(noise(vec3(seg.z.mul(90), across.mul(6), rk.mul(9))).mul(0.00025)).mul(kind);
+  const hStri = noise(vec3(seg.z.mul(5), across.mul(22), rk.mul(9))).mul(0.0004).add(noise(vec3(seg.z.mul(14), across.mul(55), rk.mul(5))).mul(0.00015)).mul(kind);
   mat.normalNode = perturb(hStri, normalView);
   mat.receivedShadowNode = W.receivedShadow;
   if (fringe) {
     // boa : la lanière est frangée de lamelles (un peigne découpé dans ses marges)
+    // (lamelles de longueur, de largeur et d'espacement irréguliers : un peigne
+    // régulier se lisait comme une fermeture éclair)
     const ax = seg.y.cos().abs();
-    const comb = sin(seg.z.mul(520).add(sect.w.mul(50))).mul(0.5).add(0.5);
-    const keep = ax.lessThan(0.42).or(comb.greaterThan(ax.sub(0.42).mul(1.2))).or(kind.lessThan(0.5));
+    const q = seg.z.mul(150).add(noise(vec3(seg.z.mul(31), rk.mul(13), 0.5)).mul(2.5)), cell = floor(q), f = fract(q);
+    const hL = mx_cell_noise_float(vec2(cell, rk.mul(97))), hW = mx_cell_noise_float(vec2(cell, rk.mul(97).add(7)));
+    const len = hL.mul(hL).mul(0.75).add(0.25), wid = hW.mul(0.35).add(0.55); // (lamelles larges et serrées : des feuilles, pas des épines)
+    const out = ax.sub(0.42).div(float(0.58).mul(len)); // (0 à la base de la lamelle, 1 à sa pointe)
+    const lam = f.sub(0.5).abs().lessThan(wid.mul(0.5).mul(float(1).sub(out.mul(0.7)))).and(out.lessThan(1)).and(hL.greaterThan(0.12));
+    const keep = ax.lessThan(0.42).or(lam).or(kind.lessThan(0.5));
     mat.maskNode = keep;
     mat.maskShadowNode = keep;
   }

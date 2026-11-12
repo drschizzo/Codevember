@@ -101,7 +101,7 @@ export function makeRock(type, seed, opts = {}) {
       const k = (x + 0.4 * N.fbm(x * 0.3, 6.6, z * 0.3, 3)) / 0.55, f = k - Math.floor(k);
       d = 0.06 * (sst(0.75, 0.95, f) - f) + 0.02 * wear;
       const [t1, , tid] = worley(x, z, 0.09, s + 3, 1);
-      const taf = tid > 0.45 ? sst(0.045, 0.015, t1) : 0;
+      const taf = tid > 0.82 ? sst(0.03 + 0.04 * (tid - 0.82) / 0.18, 0.01, t1) : 0; // (alvéoles rares et de tailles variées : nombreuses et égales, pleines d'eau, elles faisaient des pois)
       d -= 0.012 * taf * (0.6 + 0.4 * N.noise(x * 0.8, 1, z * 0.8));
       crack = sst(0.9, 0.97, f);
       id = h2(Math.floor(k), 1, s); motif = taf;

@@ -4,7 +4,7 @@
 // creux, un micro-relief procédural pour le gros plan — et l'eau : la roche
 // fonce et brille là où la mer vient de passer, puis sèche par le haut.
 import * as THREE from 'three/webgpu';
-import { Fn, vec2, vec3, vec4, float, positionLocal, normalLocal, positionWorld, cameraPosition, cameraViewMatrix, texture, normalize, mix, smoothstep, max, select, uniform, normalView, transformNormalToView, pow } from 'three/tsl';
+import { Fn, vec2, vec3, vec4, float, positionLocal, normalLocal, positionPrevious, positionWorld, cameraPosition, cameraViewMatrix, texture, normalize, mix, smoothstep, max, select, uniform, normalView, transformNormalToView, pow } from 'three/tsl';
 import { gridGeometry, spacing } from './water.js';
 import { fbm, noise, perturb, NZ } from './materials.js';
 import { G } from './globals.js';
@@ -28,6 +28,11 @@ export function createTerrain(W, lite) {
     const e = 0.05, gp = W.profAt(x.add(e)).sub(W.profAt(x.sub(e))).div(2 * e);
     const gx = mix(gp, g.y, inb), gz = mix(float(0), g.z, inb);
     normalLocal.assign(normalize(vec3(gx.negate(), 1, gz.negate())));
+    // (la roche ne bouge pas : sa position précédente est la même — sans cette
+    // ligne, three.js prenait la grille plate pour la pose précédente, et les
+    // vecteurs vitesse valaient tout le relief : l'anticrénelage temporel et le
+    // flou de mouvement étalaient la roche à la verticale)
+    positionPrevious.assign(vec3(x, h, z));
     return vec3(x, h, z);
   })();
   // couleur, eau, micro-relief
@@ -47,7 +52,7 @@ export function createTerrain(W, lite) {
   // mouillé : sous l'enveloppe de séchage (la mer vient d'y passer), ou dans l'eau
   const lv = W.levelNear(P.x, P.z, U.t);
   const under = smoothstep(0.0, 0.004, lv.sub(H));
-  const wet = max(smoothstep(-0.004, 0.006, W.wetLevel(P.x, P.z, U.t).sub(H)), under).max(smoothstep(-0.3, -0.6, H));
+  const wet = max(smoothstep(-0.004, 0.006, W.wetLevel(P.x, P.z, U.t, H).sub(H)), under).max(smoothstep(-0.3, -0.6, H));
   // grain minéral (cristaux de 1 à 3 mm) : taches sombres et claires
   const gr = NZ(P.mul(vec3(260, 260, 260))).w, gr2 = NZ(P.mul(vec3(110, 110, 110)).add(3.3)).w;
   const camD = positionWorld.sub(cameraPosition).length();
@@ -71,6 +76,8 @@ export function createTerrain(W, lite) {
   const mesh = new THREE.Mesh(geo, mat);
   mesh.frustumCulled = false;
   mesh.receiveShadow = true;
-  mesh.castShadow = false;
+  // (la roche s'ombre elle-même : au soleil rasant, les boules, les dalles et
+  // les fissures ne se lisent que par leurs ombres portées)
+  mesh.castShadow = true;
   return { mesh, colT, RU };
 }

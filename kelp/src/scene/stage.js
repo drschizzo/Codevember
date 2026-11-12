@@ -12,10 +12,10 @@ import { createKelp } from './kelp.js';
 import { sunDir } from '../gen/sky.js';
 import { cameraPose } from '../camera.js';
 import { G } from './globals.js';
-import { texture as tTexture, equirectUV, normalize, positionWorld, cameraPosition, vec4, vec2, vec3, float, uniform, screenUV, screenSize, getViewPosition, fwidth, smoothstep, step, floor, fract, length, mx_cell_noise_float, max as tmax, select, sin, atan } from 'three/tsl';
+import { texture as tTexture, equirectUV, normalize, positionWorld, cameraPosition, vec4, vec2, vec3, float, uniform, screenUV, screenSize, getViewPosition, fwidth, smoothstep, step, floor, fract, length, mx_cell_noise_float, max as tmax, select, sin, atan, dFdx, dFdy, If, mix } from 'three/tsl';
 import { NZ } from './materials.js';
 
-const SHADOW = { mobile: 1024, low: 1024, medium: 2048, high: 2048, ultra: 4096 };
+const SHADOW = { mobile: 1024, low: 1024, medium: 2048, high: 3072, ultra: 4096 };
 const lin = (h) => new THREE.Color(h);
 
 export function createStage(scene, gen, { lite = false } = {}) {
@@ -27,7 +27,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
   sun.shadow.normalBias = 0.01;
   sun.shadow.radius = 3;
   const sc = sun.shadow.camera;
-  sc.left = -3.5; sc.right = 3.5; sc.top = 3.5; sc.bottom = -3.5; sc.near = 0.5; sc.far = 40;
+  sc.left = -5; sc.right = 5; sc.top = 5; sc.bottom = -5; sc.near = 0.5; sc.far = 40; // (10 m : toute la frange dans le champ)
   scene.add(sun); scene.add(sun.target);
 
   const W = createWater();
@@ -48,7 +48,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
   group.add(skyMesh, terrain.mesh, kelp.mesh, kelp.hold, surface.mesh);
   scene.add(group);
 
-  let R = null, D = null, sky = null, pending = 0, version = 0, prog = 0;
+  let R = null, D = null, sky = null, pending = 0, version = 0, prog = 0, track = null;
   const onSky = { fn: null };
 
   function setRecipe(recipe, onProgress = null) {
@@ -96,9 +96,10 @@ export function createStage(scene, gen, { lite = false } = {}) {
       const old = node.value; node.value = t; if (old && old !== t) old.dispose();
     }
     const U = W.U;
-    U.seaX0.value = S.x0; U.seaW.value = S.nx * S.dx; U.fps.value = S.fps; U.nf.value = S.nf; U.T.value = out.T;
+    U.seaX0.value = S.x0; U.seaW.value = S.nx * S.dx; U.nx.value = S.nx; U.fps.value = S.fps; U.nf.value = S.nf; U.T.value = out.T;
     U.box.value.set(Rk.box.x0, Rk.box.z0, Rk.box.x1 - Rk.box.x0, Rk.box.z1 - Rk.box.z0);
     kelp.setData(out.kelp, R);
+    track = buildTrack(S, out);
     const E = out.emerge, et = W.dataTex(E.tex, E.nf, E.levels, THREE.HalfFloatType, THREE.RGFormat, THREE.RepeatWrapping);
     et.minFilter = et.magFilter = THREE.NearestFilter;
     { const old = emT.value; emT.value = et; old?.dispose?.(); }
@@ -126,7 +127,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
     sun.color.copy(sunCol);
     sun.intensity = R.sun.lux * Math.max(0, Math.min(1, (sd[1] + 0.02) / 0.08));
     const c = camPose(0);
-    const tgt = new THREE.Vector3(c.pos.x - 0.6, c.pos.y - 0.3, c.pos.z - 2.4);
+    const tgt = new THREE.Vector3(c.target.x + (c.target.x - c.pos.x) * 2.6, c.pos.y - 0.3, c.target.z + (c.target.z - c.pos.z) * 2.6); // (centrée 3,6 m devant l'objectif, dans l'axe)
     sun.target.position.copy(tgt);
     sun.position.set(tgt.x + sd[0] * 15, tgt.y + Math.max(0.2, sd[1]) * 15, tgt.z + sd[2] * 15);
     scene.environmentIntensity = R.env.intensity;
@@ -134,11 +135,67 @@ export function createStage(scene, gen, { lite = false } = {}) {
   }
 
   // ── la caméra : un trépied au ras de l'eau, un lent travelling périodique ──
+  // (plus ce que la mer fait au caisson : le choc de la vague, la respiration)
   const _p = new THREE.Vector3(), _t = new THREE.Vector3();
   function camPose(ph) {
     const P = cameraPose(R.camera, D?.cam ?? { x: -0.6, y: 0.3, z: R.camera.z }, ph);
-    _p.set(...P.pos); _t.set(...P.target);
-    return { pos: _p, target: _t, fov: P.fov };
+    const k = trackAt(ph);
+    _p.set(P.pos[0] + k.dx, P.pos[1] + k.dy, P.pos[2]); _t.set(P.target[0] + k.dx, P.target[1] + k.dy + k.tilt, P.target[2]);
+    return { pos: _p, target: _t, fov: P.fov, roll: k.roll };
+  }
+  // La vie de la caméra, tirée de la mer enregistrée au point du caisson (une
+  // fois par scène, périodique sur la boucle) :
+  //  - exposition : sous l'eau l'image perd ~2 diaphs ; l'opérateur (ou la
+  //    cellule) rattrape un diaph, avec ~0,7 s de retard — la plongée se sent ;
+  //  - choc : quand le front frappe le caisson (l'eau monte vite au dôme, le
+  //    courant le pousse), un ressort amorti (1,6 Hz) le fait tressaillir et
+  //    rouler ; hors des chocs, une respiration de trépied d'un millimètre ;
+  //  - point : il est sur la frange (~1,4 m) ; trois secondes avant que la
+  //    grande vague ne recouvre le dôme, il glisse vers le front qui arrive
+  //    (5 m), puis revient.
+  function buildTrack(S, out) {
+    const nf = S.nf, fps = S.fps, nx = S.nx, cam = out.cam, dome = R.camera.dome;
+    const i = Math.max(0, Math.min(nx - 1, Math.round((cam.x - S.x0) / S.dx - 0.5)));
+    const eta = new Float32Array(nf), u = new Float32Array(nf);
+    for (let f = 0; f < nf; f++) { eta[f] = fromHalf(S.tex[(f * nx + i) * 4]); u[f] = fromHalf(S.tex[(f * nx + i) * 4 + 1]); }
+    const under = (f) => Math.min(1, Math.max(0, (eta[(f + nf) % nf] - cam.y) / dome * 0.5 + 0.5));
+    const dt = 1 / fps;
+    // exposition : filtre du premier ordre, deux tours pour qu'il soit périodique
+    const exp = new Float32Array(nf); let e = 1;
+    for (let L = 0; L < 2; L++) for (let f = 0; f < nf; f++) { const tgt = 2 ** (1.1 * under(f)); e += (tgt - e) * (1 - Math.exp(-dt / 0.7)); exp[f] = e; }
+    // choc : force = montée de l'eau au dôme + pression du courant sur le caisson
+    const force = new Float32Array(nf);
+    for (let f = 0; f < nf; f++) {
+      const rise = (eta[(f + 1) % nf] - eta[(f - 1 + nf) % nf]) / (2 * dt);
+      const near = Math.exp(-(((eta[f] - cam.y) / (2.5 * dome)) ** 2));
+      force[f] = Math.max(0, rise) * near * 1.5 + Math.max(0, u[f]) * Math.abs(u[f]) * under(f) * 0.6;
+    }
+    const w = 2 * Math.PI * 1.6, z = 0.22;
+    const xs = new Float32Array(nf); let x = 0, v = 0;
+    for (let L = 0; L < 3; L++) for (let f = 0; f < nf; f++) { v += (force[f] - w * w * x - 2 * z * w * v) * dt; x += v * dt; xs[f] = x; }
+    let mx = 1e-6; for (const q of xs) mx = Math.max(mx, Math.abs(q));
+    const amp = 0.018 / mx;
+    // point : le début de la plus longue immersion du dôme (la grande vague)
+    let best = 0, bestLen = 0;
+    for (let f = 0; f < nf; f++) if (under(f) > 0.5 && under(f - 1) <= 0.5) { let n = 0; while (n < nf && under(f + n) > 0.5) n++; if (n > bestLen) { bestLen = n; best = f; } }
+    const T = nf / fps, tHit = best / fps;
+    return { nf, exp, xs, amp, tHit, T };
+  }
+  function trackAt(ph) {
+    const out = { dx: 0, dy: 0, tilt: 0, roll: 0, exp: 1, focus: 1.4 };
+    if (!track) return out;
+    const fr = ph * track.nf, f0 = Math.floor(fr) % track.nf, f1 = (f0 + 1) % track.nf, w = fr - Math.floor(fr);
+    const lerp = (a) => a[f0] * (1 - w) + a[f1] * w;
+    const s = lerp(track.xs) * track.amp, a = 2 * Math.PI * ph;
+    // (respiration : harmoniques entières de la boucle, ~1 mm)
+    const br = 0.0007 * Math.sin(3 * a + 1.3) + 0.0004 * Math.sin(7 * a + 0.2), bt = 0.0006 * Math.sin(5 * a + 2.1) + 0.0003 * Math.sin(11 * a);
+    out.dx = s + br; out.dy = s * 0.35 + bt; out.tilt = -s * 0.6; out.roll = s * 1.2;
+    out.exp = lerp(track.exp);
+    // (temps signé jusqu'au choc de la grande vague, replié sur la boucle)
+    let d = ph * track.T - track.tHit; d -= track.T * Math.round(d / track.T);
+    const pull = d < 0 ? Math.exp(-(((d + 0.6) / 1.4) ** 2)) : Math.exp(-(((d + 0.6) / 0.9) ** 2));
+    out.focus = 1.4 + (5 - 1.4) * pull;
+    return out;
   }
 
   function update(ph, phPrev = ph) {
@@ -176,7 +233,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
     const vp = getViewPosition(uv0, float(0.5), DU.projInv);
     const dW = normalize(DU.world.mul(vec4(vp, 0)).xyz);
     const O = DU.pos.add(dW.mul(W.U.dome));
-    const a = O.y.sub(W.level(O.x, O.z, W.U.t)).toVar();
+    const a = O.y.sub(W.levelDome(O.x, O.z, W.U.t)).toVar();
     const fw = fwidth(a).max(1e-5);
     const air = smoothstep(fw.mul(1.5), fw.mul(4), a);
     // depuis quand l'eau a quitté ce point du dôme (−1 : dans l'eau), et le
@@ -220,7 +277,8 @@ export function createStage(scene, gen, { lite = false } = {}) {
       const exist = step(float(1).sub(dens.mul(patch)), h1.mul(0.6).add(h2.mul(0.4))).mul(step(0.01, life));
       // traînée humide au-dessus d'une goutte qui glisse
       const trail = step(d0.x.abs(), r.mul(0.3)).mul(step(d0.y, 0)).mul(step(slide.negate(), d0.y)).mul(step(0.01, slide)).mul(exist).mul(life);
-      return { k, inside: smoothstep(1.0, 0.9, k).mul(exist), d: e.div(rr.max(1e-4)), r: rr.div(scale), trail };
+      // (bord doux : le dôme est à 9 cm, hors du plan de netteté — une goutte y est une tache défocalisée, pas un autocollant)
+      return { k, inside: smoothstep(1.05, 0.6, k).mul(exist), d: e.div(rr.max(1e-4)), r: rr.div(scale), trail };
     };
     const A = layer(float(6), 0, float(0.38)), B = layer(float(15), 41, float(0.45));
     const useA = A.inside.greaterThanEqual(B.inside);
@@ -237,24 +295,50 @@ export function createStage(scene, gen, { lite = false } = {}) {
     // fréquence haute en hauteur dessinait des aiguilles sur la ligne d'eau)
     const wob = vec2(sin(uv0.x.mul(31).add(W.U.t.mul(2.7))).mul(0.0008), sin(uv0.x.mul(17).add(W.U.t.mul(3.3))).mul(0.0022)).mul(sheet);
     const trailOff = vec2(select(useA, A.trail, B.trail).mul(0.0035).mul(wet), 0);
-    const uvS = uv0.add(vec2(off.x.div(asp), off.y).mul(ins)).add(wob).add(trailOff);
-    let col = sample(uvS).rgb;
+    // la lame d'eau juste au-dessus du ménisque est une lentille cylindrique :
+    // elle grossit l'image vers la ligne d'eau
+    const ga = vec2(dFdx(a), dFdy(a)), gn = ga.div(length(ga).max(1e-7));
+    const lensBand = smoothstep(fw.mul(14), fw.mul(2), a).mul(air);
+    const mag = gn.mul(lensBand).mul(0.006);
+    const uvS = uv0.add(vec2(off.x.div(asp), off.y).mul(ins)).add(wob).add(trailOff).add(mag);
+    const col = sample(uvS).rgb.toVar();
+    // dans une goutte, l'image réfractée est elle-même floue (défocalisée)
+    If(ins.greaterThan(0.02), () => {
+      const br = rad.mul(0.22);
+      const acc = col.add(sample(uvS.add(vec2(br.div(asp), 0))).rgb).add(sample(uvS.sub(vec2(br.div(asp), 0))).rgb).add(sample(uvS.add(vec2(0, br))).rgb).add(sample(uvS.sub(vec2(0, br))).rgb);
+      col.assign(mix(col, acc.div(5), ins));
+    });
     // bord sombre, reflet du ciel en haut, caustique en bas
-    const ring = smoothstep(0.78, 0.98, k).mul(ins);
-    const glint = smoothstep(0.16, 0.0, length(dd.sub(vec2(-0.3, -0.45)).mul(vec2(0.8, 1.6)))).mul(ins);
-    const caus = smoothstep(0.35, 0.0, length(dd.sub(vec2(0.1, 0.55)))).mul(ins).mul(0.35);
-    col = col.mul(float(1).sub(ring.mul(0.55))).add(vec3(glint.mul(0.7))).add(col.mul(caus));
+    const ring = smoothstep(0.55, 1.0, k).mul(ins);
+    const glint = smoothstep(0.3, 0.0, length(dd.sub(vec2(-0.3, -0.45)).mul(vec2(0.8, 1.6)))).mul(ins);
+    const caus = smoothstep(0.45, 0.0, length(dd.sub(vec2(0.1, 0.55)))).mul(ins).mul(0.3);
+    let colD = col.mul(float(1).sub(ring.mul(0.35))).add(vec3(glint.mul(0.3))).add(col.mul(caus));
     // le ménisque : une ligne sombre, un liseré clair qui accroche le ciel
-    const line = smoothstep(fw.mul(2.2), float(0), a.abs());
-    const rim = smoothstep(fw.mul(5), fw.mul(1.5), a.sub(fw.mul(3.5)).abs()).mul(step(0, a));
-    col = col.mul(float(1).sub(line.mul(0.7))).add(vec3(rim.mul(0.05)));
-    return vec4(tmax(col, vec3(0)), 1);
+    // le ménisque, flou lui aussi : une bande sombre de quelques pixels, un
+    // liseré clair qui accroche le ciel juste au-dessus
+    const line = smoothstep(fw.mul(7), float(0), a.abs());
+    const rim = smoothstep(fw.mul(9), fw.mul(3), a.sub(fw.mul(7)).abs()).mul(step(0, a));
+    colD = colD.mul(float(1).sub(line.mul(0.5))).add(colD.mul(rim.mul(0.25)));
+    // sous l'eau : des particules en suspension tout près du dôme, floues, qui
+    // accrochent la lumière de l'eau et dérivent (périodiques sur la boucle)
+    const uw = smoothstep(fw.mul(2), fw.mul(-2), a);
+    const speck = (scale, salt, m) => {
+      const q = P.mul(scale), cell = floor(q);
+      const h1 = mx_cell_noise_float(cell.add(salt)), h2 = mx_cell_noise_float(cell.add(salt + 5.1)), h3 = mx_cell_noise_float(cell.add(salt + 9.7));
+      const ang = G.phase.mul(6.2832 * m).add(h1.mul(6.28));
+      const c = vec2(h1.mul(0.5).add(0.25), h2.mul(0.5).add(0.25)).add(vec2(sin(ang), sin(ang.add(1.7))).mul(0.18));
+      const rS = h3.mul(0.12).add(0.05);
+      return smoothstep(rS, rS.mul(0.25), length(q.sub(cell).sub(c))).mul(step(0.55, h3));
+    };
+    const motes = speck(float(7), 3.3, 1).mul(0.5).add(speck(float(16), 11.9, 2).mul(0.35));
+    colD = colD.add(colD.mul(0.9).add(vec3(0.004, 0.006, 0.006)).mul(motes).mul(uw));
+    return vec4(tmax(colD, vec3(0)), 1);
   }
   function setDomeCamera(cam) { DU.pos.value.copy(cam.position); DU.projInv.value.copy(cam.projectionMatrixInverse); DU.world.value.copy(cam.matrixWorld); }
 
   return {
     domeLens, setDomeCamera,
-    setRecipe, update, setShadowQuality, camPose, group, sun, W, kelp, terrain, surface,
+    setRecipe, update, setShadowQuality, camPose, trackAt, group, sun, W, kelp, terrain, surface,
     get data() { return D; },
     ready: () => pending === 0 && !!D && !!sky,
     failed: () => pending < 0,
@@ -275,6 +359,7 @@ function makeSkyTex(pixels, w, h) {
   return t;
 }
 
+const fromHalf = (h) => { const sg = h & 0x8000 ? -1 : 1, e = (h >> 10) & 31, m = h & 1023; return e === 0 ? sg * (m / 1024) * 2 ** -14 : sg * 2 ** (e - 15) * (1 + m / 1024); };
 const _f = new Float32Array(1), _u = new Uint32Array(_f.buffer);
 function toHalf(v) {
   _f[0] = v; const x = _u[0];

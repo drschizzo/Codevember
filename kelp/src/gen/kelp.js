@@ -38,7 +38,7 @@ export const FAMILIES = {
   durvillaea: {
     label: 'Cochayuyo', latin: 'Durvillaea antarctica',
     stipe: { L: [0.1, 0.18], r: 0.018, EI: 0.6, rho: 1.02, ds: 0.06 },
-    blade: { n: [3, 5], L: [1.4, 2.1], w: [0.035, 0.055], e: 0.008, EI: 0.007, rho: 0.78, ds: 0.09, fan: 0.35 },
+    blade: { n: [3, 5], L: [1.4, 2.1], w: [0.035, 0.055], e: 0.008, EI: 0.004, rho: 0.78, ds: 0.07, fan: 0.35 },
     holdfast: 0.13, spacing: 0.55, drag: 0.7, palm: 6,
   },
   postelsia: {
