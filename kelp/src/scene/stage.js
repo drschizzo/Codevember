@@ -9,10 +9,11 @@ import * as THREE from 'three/webgpu';
 import { createWater, createSurface } from './water.js';
 import { createTerrain } from './terrain.js';
 import { createKelp } from './kelp.js';
+import { createFauna } from './fauna.js';
 import { sunDir } from '../gen/sky.js';
 import { cameraPose } from '../camera.js';
 import { G } from './globals.js';
-import { texture as tTexture, equirectUV, normalize, positionWorld, cameraPosition, vec4, vec2, vec3, float, uniform, screenUV, screenSize, getViewPosition, fwidth, smoothstep, step, floor, fract, length, mx_cell_noise_float, max as tmax, select, sin, atan, dFdx, dFdy, If, mix } from 'three/tsl';
+import { texture as tTexture, equirectUV, normalize, positionWorld, cameraPosition, vec4, vec2, vec3, float, uniform, screenUV, screenSize, getViewPosition, fwidth, smoothstep, step, floor, fract, length, mx_cell_noise_float, max as tmax, select, sin, atan, dFdx, dFdy, If, mix, Fn } from 'three/tsl';
 import { NZ } from './materials.js';
 
 const SHADOW = { mobile: 1024, low: 1024, medium: 2048, high: 3072, ultra: 4096 };
@@ -36,6 +37,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
   const terrain = createTerrain(W, lite);
   const surface = createSurface(W, skyHolder.tex, lite);
   const kelp = createKelp(W, lite);
+  const fauna = createFauna(W);
   // le ciel : une grande sphère de la scène (le fond de three.js, dessiné à
   // part, restait noir après le préchauffage asynchrone des pipelines)
   const skyNode = tTexture(skyHolder.tex);
@@ -45,7 +47,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
   const skyMesh = new THREE.Mesh(new THREE.SphereGeometry(500, 64, 32), skyMat);
   skyMesh.frustumCulled = false; skyMesh.renderOrder = -1;
   const group = new THREE.Group();
-  group.add(skyMesh, terrain.mesh, kelp.mesh, kelp.hold, surface.mesh);
+  group.add(skyMesh, terrain.mesh, kelp.mesh, kelp.hold, fauna.mesh, surface.mesh);
   scene.add(group);
 
   let R = null, D = null, sky = null, pending = 0, version = 0, prog = 0, track = null;
@@ -99,6 +101,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
     U.seaX0.value = S.x0; U.seaW.value = S.nx * S.dx; U.nx.value = S.nx; U.fps.value = S.fps; U.nf.value = S.nf; U.T.value = out.T;
     U.box.value.set(Rk.box.x0, Rk.box.z0, Rk.box.x1 - Rk.box.x0, Rk.box.z1 - Rk.box.z0);
     kelp.setData(out.kelp, R);
+    if (out.fauna) fauna.setData(out.fauna);
     track = buildTrack(S, out);
     const E = out.emerge, et = W.dataTex(E.tex, E.nf, E.levels, THREE.HalfFloatType, THREE.RGFormat, THREE.RepeatWrapping);
     et.minFilter = et.magFilter = THREE.NearestFilter;
@@ -301,18 +304,21 @@ export function createStage(scene, gen, { lite = false } = {}) {
     const lensBand = smoothstep(fw.mul(14), fw.mul(2), a).mul(air);
     const mag = gn.mul(lensBand).mul(0.006);
     const uvS = uv0.add(vec2(off.x.div(asp), off.y).mul(ins)).add(wob).add(trailOff).add(mag);
-    const col = sample(uvS).rgb.toVar();
     // dans une goutte, l'image réfractée est elle-même floue (défocalisée)
-    If(ins.greaterThan(0.02), () => {
-      const br = rad.mul(0.22);
-      const acc = col.add(sample(uvS.add(vec2(br.div(asp), 0))).rgb).add(sample(uvS.sub(vec2(br.div(asp), 0))).rgb).add(sample(uvS.add(vec2(0, br))).rgb).add(sample(uvS.sub(vec2(0, br))).rgb);
-      col.assign(mix(col, acc.div(5), ins));
-    });
+    const col = Fn(() => {
+      const c0 = sample(uvS).rgb.toVar();
+      If(ins.greaterThan(0.02), () => {
+        const br = rad.mul(0.22);
+        const acc = c0.add(sample(uvS.add(vec2(br.div(asp), 0))).rgb).add(sample(uvS.sub(vec2(br.div(asp), 0))).rgb).add(sample(uvS.add(vec2(0, br))).rgb).add(sample(uvS.sub(vec2(0, br))).rgb);
+        c0.assign(mix(c0, acc.div(5), ins));
+      });
+      return c0;
+    })();
     // bord sombre, reflet du ciel en haut, caustique en bas
     const ring = smoothstep(0.55, 1.0, k).mul(ins);
     const glint = smoothstep(0.3, 0.0, length(dd.sub(vec2(-0.3, -0.45)).mul(vec2(0.8, 1.6)))).mul(ins);
     const caus = smoothstep(0.45, 0.0, length(dd.sub(vec2(0.1, 0.55)))).mul(ins).mul(0.3);
-    let colD = col.mul(float(1).sub(ring.mul(0.35))).add(vec3(glint.mul(0.3))).add(col.mul(caus));
+    let colD = col.mul(float(1).sub(ring.mul(0.3))).add(col.mul(glint.mul(0.25))).add(col.mul(caus.mul(0.5))); // (défocalisée, une goutte déforme et assombrit son bord ; elle n'ajoute presque pas de blanc — sinon, des flocons)
     // le ménisque : une ligne sombre, un liseré clair qui accroche le ciel
     // le ménisque, flou lui aussi : une bande sombre de quelques pixels, un
     // liseré clair qui accroche le ciel juste au-dessus
@@ -328,10 +334,10 @@ export function createStage(scene, gen, { lite = false } = {}) {
       const ang = G.phase.mul(6.2832 * m).add(h1.mul(6.28));
       const c = vec2(h1.mul(0.5).add(0.25), h2.mul(0.5).add(0.25)).add(vec2(sin(ang), sin(ang.add(1.7))).mul(0.18));
       const rS = h3.mul(0.12).add(0.05);
-      return smoothstep(rS, rS.mul(0.25), length(q.sub(cell).sub(c))).mul(step(0.55, h3));
+      return smoothstep(rS, rS.mul(0.25), length(q.sub(cell).sub(c))).mul(step(0.8, h3));
     };
     const motes = speck(float(7), 3.3, 1).mul(0.5).add(speck(float(16), 11.9, 2).mul(0.35));
-    colD = colD.add(colD.mul(0.9).add(vec3(0.004, 0.006, 0.006)).mul(motes).mul(uw));
+    colD = colD.add(colD.mul(0.45).add(vec3(0.002, 0.003, 0.003)).mul(motes).mul(uw));
     return vec4(tmax(colD, vec3(0)), 1);
   }
   function setDomeCamera(cam) { DU.pos.value.copy(cam.position); DU.projInv.value.copy(cam.projectionMatrixInverse); DU.world.value.copy(cam.matrixWorld); }
