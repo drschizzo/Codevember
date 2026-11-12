@@ -283,6 +283,16 @@
         "pendulum"
       ],
       "port": 8190
+    },
+    {
+      "name": "erosion",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        ".claude/serve.py",
+        "8171",
+        "erosion"
+      ],
+      "port": 8171
     }
   ]
 }
