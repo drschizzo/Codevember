@@ -2,7 +2,7 @@
 // réglages de rendu et des fonctions de rappel : il ne touche pas à la scène.
 import GUI from 'lil-gui';
 import { QUALITY } from './settings.js';
-import { FAMILIES, MECHANISMS, MOODS, FINISHES } from '../recipe.js';
+import { FAMILIES, MOODS, FINISHES } from '../recipe.js';
 
 const opts = (o, label = (v) => v.label) => Object.fromEntries(Object.entries(o).map(([k, v]) => [label(v), k]));
 
@@ -41,19 +41,12 @@ export function createUI({ recipe: getRecipe, render, on }) {
     ctls = [];
     const add = (f, o, k, ...a) => { const c = f.add(o, k, ...a); ctls.push(c); return c; };
     const ch = () => on.recipeChanged(), re = () => on.airChanged();
-    add(fScene, R, 'family', opts(FAMILIES)).name('Objet au fond (nouvelle scène)').onChange((v) => on.familyChanged(v));
     add(fScene, R, 'mood', opts(MOODS)).name('Décor (nouvelle scène)').onChange((m) => on.moodChanged(m));
-    add(fScene, R.mechanism, 'kind', Object.fromEntries(Object.entries(MECHANISMS).map(([k, v]) => [v, k]))).name('Machinerie (nouvelle scène)').onChange((m) => on.mechanismChanged(m));
-    add(fScene, R.loop, 'duration', 12, 120, 1).name('Durée de la boucle (s)').onChange(ch);
+    add(fScene, R, 'family', opts(FAMILIES)).name('Gravure du dôme (nouvelle scène)').onChange((v) => on.familyChanged(v));
+    add(fScene, R.loop, 'duration', 8, 120, 1).name('Durée d’un niveau (s)').onChange(ch);
     add(fMir, R.mirascope, 'finish', opts(FINISHES)).name('Finition des coupes').onChange(re);
-    add(fMir, R.mirascope, 'liftMax', 0, 0.06, 0.001).name('Levée du couvercle (m)').onChange(ch);
-    if (R.family === 'toupie') add(fMir, R.object, 'spinTurns', 0, 60, 1).name('Tours de la toupie / boucle').onChange(ch);
-    if (R.family === 'montre') add(fMir, R.object, 'hour', 0, 12, 0.01).name('Heure').onChange(ch);
-    add(fCam, R.camera, 'dist', 0.2, 0.6, 0.005).name('Distance (m)').onChange(ch);
-    add(fCam, R.camera, 'elevHigh', 10, 80, 0.5).name('Élévation, couvercle fermé (°)').onChange(ch);
-    add(fCam, R.camera, 'elevLow', 0, 40, 0.5).name('Élévation, couvercle levé (°)').onChange(ch);
-    add(fCam, R.camera, 'sway', 0, 60, 0.5).name('Balancement (°)').onChange(ch);
-    add(fCam, R.camera, 'fov', 10, 50, 0.1).name('Champ (°)').onChange(ch);
+    add(fMir, R.light, 'spot', 0, 80, 0.5).name('Projecteur').onChange(re);
+    add(fCam, R.camera, 'sway', -30, 30, 0.5).name('Balancement (°)').onChange(ch);
   }
 
   const r = render, rch = () => on.renderChanged();

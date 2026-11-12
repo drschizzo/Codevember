@@ -1,7 +1,7 @@
 // Invariants de la recette : déterminisme, partage, catalogue, décors.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { generate, upgrade, MOODS, FAMILIES, FINISHES, MECHANISMS } from '../src/recipe.js';
+import { generate, upgrade, MOODS, FAMILIES, FINISHES } from '../src/recipe.js';
 import { ENV_PRESETS } from '../src/gen/envmap.js';
 
 const SEEDS = Array.from({ length: 400 }, (_, i) => `t${i}`);
@@ -20,14 +20,12 @@ test('chaque famille, chaque décor et chaque finition sont tirés ; la finition
   const seen = { f: new Set(), m: new Set(), x: new Set(), k: new Set() };
   for (const s of SEEDS) {
     const R = generate(s);
-    seen.f.add(R.family); seen.m.add(R.mood); seen.x.add(R.mirascope.finish); seen.k.add(R.mechanism.kind);
+    seen.f.add(R.family); seen.m.add(R.mood); seen.x.add(R.mirascope.finish);
     assert.ok(MOODS[R.mood].finishes.includes(R.mirascope.finish));
-    assert.ok(FAMILIES[R.family].colors.some(([a, b]) => a === R.object.c1 && b === R.object.c2));
   }
   for (const k of Object.keys(FAMILIES)) assert.ok(seen.f.has(k), k);
   for (const k of Object.keys(MOODS)) assert.ok(seen.m.has(k), k);
   for (const k of Object.keys(FINISHES)) assert.ok(seen.x.has(k), k);
-  for (const k of Object.keys(MECHANISMS)) assert.ok(seen.k.has(k), k);
 });
 
 test('des décors, pas des teintes : studio, table, lampe et valeur diffèrent d’un décor à l’autre', () => {
@@ -39,9 +37,15 @@ test('des décors, pas des teintes : studio, table, lampe et valeur diffèrent d
   assert.ok(Math.max(...amb) > 0.3 && Math.min(...amb) < 0.02);
 });
 
-test('les surcharges imposent la famille, le décor et la machinerie', () => {
-  for (const family of Object.keys(FAMILIES)) for (const mood of Object.keys(MOODS)) for (const mechanism of Object.keys(MECHANISMS)) {
-    const R = generate('x', { family, mood, mechanism });
-    assert.equal(R.family, family); assert.equal(R.mood, mood); assert.equal(R.mechanism.kind, mechanism);
+test('les surcharges imposent le décor et la gravure', () => {
+  for (const mood of Object.keys(MOODS)) for (const family of Object.keys(FAMILIES)) {
+    const R = generate('x', { mood, family });
+    assert.equal(R.mood, mood); assert.equal(R.family, family);
   }
+});
+
+test('la caméra se balance d’un côté ou de l’autre, de 6 à 12°', () => {
+  const sw = SEEDS.map((s) => generate(s).camera.sway);
+  assert.ok(sw.some((t) => t > 0) && sw.some((t) => t < 0));
+  assert.ok(sw.every((t) => Math.abs(t) >= 6 && Math.abs(t) <= 12));
 });

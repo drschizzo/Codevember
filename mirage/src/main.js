@@ -11,7 +11,7 @@
 import * as THREE from 'three/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { generate, upgrade } from './recipe.js';
-import { cameraAt } from './timeline.js';
+import { cameraAt, seamAt, compExp, levelAt } from './timeline.js';
 import { createGenerator } from './gen/client.js';
 import { createStage } from './scene/stage.js';
 import { G } from './scene/globals.js';
@@ -124,7 +124,7 @@ async function main() {
     const recipe = R;
     loading.active = true; loading.applied = false; loading.warming = false; loading.settle = 0;
     loader.show({ steps: STEPS });
-    loader.art({ seed: R.seed, family: R.family, f: R.mirascope.f, liftMax: R.mirascope.liftMax });
+    loader.art({ seed: R.seed, family: R.family, f: R.mirascope.f });
     // (le fondu d'entrée de l'écran se termine avant que la scène ne change)
     sleep(firstRecipe ? 0 : 280).then(() => {
       if (R !== recipe) return;
@@ -160,7 +160,22 @@ async function main() {
 
   // ── Rendu d'une phase ──
   const TAU = Math.PI * 2;
-  const _f = new THREE.Vector3(), _u = new THREE.Vector3(), _r = new THREE.Vector3();
+  const _r = new THREE.Vector3();
+  const altCam = new THREE.PerspectiveCamera(25, 1, 0.01, 10);
+  let dbgNoSeam = false; // (?debug : window.mirage.noSeam(true) montre chaque vue sans le fondu)
+  // pose d'une caméra : position, visée, champ (élargi en portrait), étirement
+  // horizontal du raccord (le format du dessin, multiplié par ax)
+  function pose(cam, P, sub) {
+    cam.position.set(...P.pos);
+    cam.up.set(0, 1, 0);
+    cam.lookAt(_r.set(...P.tgt));
+    const base = canvas.width / Math.max(1, canvas.height);
+    const fovDeg = P.fov * (base >= 1 ? 1 : Math.min(1.7, 1.1 / base)), asp = base * (P.ax ?? 1);
+    if (cam.fov !== fovDeg || cam.aspect !== asp) { cam.fov = fovDeg; cam.aspect = asp; cam.updateProjectionMatrix(); }
+    cam.clearViewOffset();
+    if (sub) cam.setViewOffset(canvas.width, canvas.height, sub.pixel[0], sub.pixel[1], canvas.width, canvas.height);
+    cam.updateMatrixWorld();
+  }
   // u : phase « déroulée » (partie entière = nombre de boucles accomplies) ;
   // sub : décalages d'un rendu accumulé (lentille, pixel), facultatif
   function renderAt(u, sub = null) {
@@ -168,16 +183,26 @@ async function main() {
     G.phasePrev.value = G.phase.value;
     G.phase.value = ph;
     G.frame.value = (G.frame.value + 1) % 65536;
-    // la caméra de la chorégraphie : balancement lent, plongée vers le jour du couvercle levé
+    // la caméra de la chorégraphie : la spirale de l'abyme
     const P = cameraAt(R, ph);
-    camera.position.set(...P.pos);
-    camera.up.set(0, 1, 0);
-    camera.lookAt(_r.set(...P.tgt));
-    const fovDeg = P.fov * (camera.aspect >= 1 ? 1 : Math.min(1.7, 1.1 / camera.aspect));
-    if (camera.fov !== fovDeg) { camera.fov = fovDeg; camera.updateProjectionMatrix(); }
-    camera.clearViewOffset();
-    if (sub) camera.setViewOffset(canvas.width, canvas.height, sub.pixel[0], sub.pixel[1], canvas.width, canvas.height);
-    camera.updateMatrixWorld();
+    pose(camera, P, sub);
+    // le raccord : la même image vue depuis l'autre niveau, mêlée en fondu ;
+    // l'argent perdu par l'image du petit, compensé à mesure qu'elle grandit
+    const U = stage.raytrace.U, rho = U.inner.value;
+    const pixA = (2 * Math.tan((camera.fov * Math.PI) / 360)) / Math.max(1, canvas.height);
+    const dist = (Q) => Math.hypot(Q.pos[0] - Q.tgt[0], Q.pos[1] - Q.tgt[1], Q.pos[2] - Q.tgt[2]);
+    U.pixFoot.value = pixA * dist(P); // (un pixel, à la distance de la visée ; le tracé le convertit au niveau touché)
+    const comp = (e) => [rho.r, rho.g, rho.b].map((c) => c ** (-2 * e));
+    U.comp.value.set(...comp(compExp(P.level)));
+    const S = dbgNoSeam ? null : seamAt(R, ph);
+    if (S) {
+      pose(altCam, cameraAt(R, ph, S.alt), sub);
+      U.altPos.value.copy(altCam.position); U.altWorld.value.copy(altCam.matrixWorld); U.altProjInv.value.copy(altCam.projectionMatrixInverse);
+      U.altComp.value.set(...comp(compExp(S.alt)));
+      const A2 = cameraAt(R, ph, S.alt);
+      U.altPixFoot.value = pixA * dist(A2);
+      U.altW.value = S.w;
+    } else U.altW.value = 0;
     stage.update(ph, camera);
     post.update({ ...RENDER, lite: LITE, exposure: RENDER.exposure * stage.exposure() }, R);
     post.render();
@@ -221,9 +246,8 @@ async function main() {
     camState,
     random: () => { R = generate(randomSeed()); applyRecipe(); },
     regenerate: (seed) => { if (seed && seed !== R.seed) { R = generate(seed); applyRecipe(); } },
-    moodChanged: (mood) => { R = generate(R.seed, { mood, family: R.family, mechanism: R.mechanism.kind }); applyRecipe(); },
-    familyChanged: (family) => { R = generate(R.seed, { family, mood: R.mood, mechanism: R.mechanism.kind }); applyRecipe(); },
-    mechanismChanged: (mechanism) => { R = generate(R.seed, { mechanism, mood: R.mood, family: R.family }); applyRecipe(); },
+    moodChanged: (mood) => { R = generate(R.seed, { mood, family: R.family }); applyRecipe(); },
+    familyChanged: (family) => { R = generate(R.seed, { family, mood: R.mood }); applyRecipe(); },
     airChanged: () => applyRecipe(),
     copyLink: async () => {
       const url = new URL(location.href);
@@ -292,6 +316,7 @@ async function main() {
       renderer, scene, camera, controls, stage, post, gen, RENDER, G, pipes, errors, on, renderAt: renderStep, renderAccum,
       get R() { return R; },
       seek: (p) => { phi = p; paused = true; },
+      noSeam: (v = true) => { dbgNoSeam = v; },
       play: () => { paused = false; frozen = false; },
       freeze: (v = true) => { frozen = v; },
       // image fixe à la phase ph (n images : historique de l'anticrénelage)
@@ -330,11 +355,11 @@ async function main() {
         busy = false; canvas.style.width = ''; canvas.style.height = ''; resize();
         return n;
       },
-      // une liste [« graine[:humeur[:famille]] », phases] → images envoyées au collecteur
+      // une liste [« graine[:humeur[:gravure]] », phases] → images envoyées au collecteur
       async film(list, w = 960, h = 540, prefix = 'f') {
         for (const [spec, phases] of list) {
-          const [sd, mood, family, mechanism] = String(spec).split(':');
-          R = generate(sd, { ...(mood ? { mood } : {}), ...(family ? { family } : {}), ...(mechanism ? { mechanism } : {}) }); applyRecipe();
+          const [sd, mood, family] = String(spec).split(':');
+          R = generate(sd, { ...(mood ? { mood } : {}), ...(family ? { family } : {}) }); applyRecipe();
           await sleep(300);
           for (const ph of phases) await this.still(`${prefix}-${spec.replace(/:/g, '_')}-${String(Math.round(ph * 1000)).padStart(4, '0')}.jpg`, ph, w, h);
         }
@@ -345,8 +370,8 @@ async function main() {
       // famille sont alors imposées — pour comparer toutes les humeurs d'un coup)
       async sheet(seeds, phases = [0, 0.2, 0.4, 0.6, 0.8], prefix = 'sheet') {
         for (const s of seeds) {
-          const [sd, mood, family, mechanism] = String(s).split(':');
-          R = generate(sd, { ...(mood ? { mood } : {}), ...(family ? { family } : {}), ...(mechanism ? { mechanism } : {}) }); applyRecipe();
+          const [sd, mood, family] = String(s).split(':');
+          R = generate(sd, { ...(mood ? { mood } : {}), ...(family ? { family } : {}) }); applyRecipe();
           await sleep(400);
           for (const ph of phases) { await this.shot(ph); await this.send(`${prefix}-${s}-${String(Math.round(ph * 100)).padStart(3, '0')}.jpg`); }
         }
@@ -355,8 +380,8 @@ async function main() {
       async meters(seeds, phases = [0.3, 0.6]) {
         const out = {};
         for (const s of seeds) {
-          const [sd, mood, family, mechanism] = String(s).split(':');
-          R = generate(sd, { ...(mood ? { mood } : {}), ...(family ? { family } : {}), ...(mechanism ? { mechanism } : {}) }); applyRecipe();
+          const [sd, mood, family] = String(s).split(':');
+          R = generate(sd, { ...(mood ? { mood } : {}), ...(family ? { family } : {}) }); applyRecipe();
           await sleep(400);
           out[s] = [];
           for (const ph of phases) { await this.shot(ph); const m = await this.meter(); out[s].push([m.centre.p50, m.image.p50, m.image.brule]); }
@@ -389,13 +414,14 @@ async function main() {
         await renderer.backend.device?.queue.onSubmittedWorkDone();
         return +((performance.now() - t0) / n).toFixed(2);
       },
-      // signature de la boucle : la pose de la caméra et des pièces à u et à u + 1
-      // doit être identique (raccord parfait)
+      // signature de la boucle : les pièces de la machinerie à u et à u + 1
+      // doivent être identiques ; la caméra, elle, se raccorde un niveau plus bas
+      // (λ(1⁻) − 1 = λ(0⁺) : voir timeline.js et le test du raccord)
       seam(u = 0) {
-        const sig = () => { const v = [...camera.matrixWorld.elements]; stage.group.traverse((o) => o.isMesh && v.push(...o.matrixWorld.elements)); return v; };
+        const sig = () => { const v = []; stage.group.traverse((o) => o.isMesh && v.push(...o.matrixWorld.elements)); return v; };
         renderStep(u); const a = sig();
         renderStep(u + 1 - 1e-9); const b = sig();
-        return Math.max(...a.map((x, i) => Math.abs(x - b[i])));
+        return { pieces: Math.max(0, ...a.map((x, i) => Math.abs(x - b[i]))), niveau: Math.abs(levelAt(R, 1 - 1e-9) - 1 - levelAt(R, 0)) };
       },
     };
   }

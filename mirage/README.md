@@ -1,12 +1,16 @@
 # Mirage
 
-*l'objet qui n'est pas là.* Deux coupes d'argent poli posées l'une sur l'autre ; celle du haut est percée. Au fond, une toupie, une montre de poche, une bougie chauffe-plat, une boussole ou une pile de pièces d'or. On la voit posée dans l'ouverture, en relief, nette : la toupie y tourne, la montre y donne l'heure, la flamme y brûle, l'aiguille y montre le sud. Mais l'objet est au fond, 5 cm plus bas, et ce qu'on voit est une **image réelle**, faite de rayons qui se croisent dans le vide. Une machine soulève le couvercle — crémaillère, trois vis ou poulies : l'image s'enfonce dans la cavité et s'éteint, la caméra descend regarder par le jour entre les coupes et découvre l'objet là où il était. Le couvercle redescend, l'image revient.
+*l'objet qui n'est pas là.* Deux coupes d'argent poli posées l'une sur l'autre ; celle du haut est percée. Ce qu'on met au fond flotte, net et en relief, dans l'ouverture : c'est une **image réelle**, faite de rayons qui se croisent dans le vide. Ici, ce qu'on met au fond est **un autre mirascope**, vingt fois plus petit — et au fond de celui-ci, un plus petit encore.
+
+**Une coupe s'ouvre dans le couvercle**, face à la caméra, comme sur une maquette de musée — une fente, puis un éventail jusqu'au quart, tranches peintes en rouge — et se referme : pendant qu'elle est ouverte, on voit dans le même cadre **le vrai petit mirascope posé au fond**, et **son image qui flotte au-dessus de l'ouverture**. Le même objet, deux fois : l'un est là, l'autre pas.
+
+La boucle est un seul mouvement : couvercle entier, un petit mirascope flotte ; la coupe s'ouvre pendant que la caméra s'approche lentement ; puis la caméra plonge dans l'image — coupée elle aussi, avec au fond le suivant — ; les coupes se referment, et l'image emplit l'écran comme le grand au début : c'est le début, un niveau plus bas. La lumière ne change pas.
 
 ![Mirage](docs/capture.jpg)
 
-Rendu physique en three.js (WebGPU, TSL), entièrement procédural : une graine produit une scène. Page technique : [explainer.html](explainer.html). La démarche est dans [docs/concept.md](docs/concept.md), avec ses deux concepts abandonnés : un horizon au très long foyer (une Fata Morgana au soleil de minuit), juste mais illisible, puis un cabinet de physique (une cuve de sirop, une plaque chauffée) où un milieu stratifié complétait une demi-figure — plus lisible, mais la seconde apparence n'était qu'une déformation. Le mirascope tient le thème au pied de la lettre : **on voit un objet, il n'est pas là** ; la cause est un appareil qu'on voit, et le geste qui la révèle est simple — lever le couvercle.
+Rendu physique en three.js (WebGPU, TSL), entièrement procédural : une graine produit une scène. Page technique : [explainer.html](explainer.html). La démarche est dans [docs/concept.md](docs/concept.md), avec ses versions abandonnées : un horizon au très long foyer (une Fata Morgana), juste mais illisible ; un cabinet de physique où la seconde apparence n'était qu'une déformation ; un mirascope à objets dont la boucle était trop simple ; une plongée en sept actes, trop compliquée ; une plongée seule, où l'on ne voyait plus que c'était un mirage ; une aiguille qui traversait l'image, juste mais muette ; un quart du couvercle ôté en permanence, qu'on ne comprenait pas.
 
-**Rien n'est dessiné qui ressemble à une image.** Chaque pixel suit son rayon entre les deux miroirs ; l'objet flottant sort de la géométrie des rayons, et disparaît de lui-même quand ils s'échappent.
+**Rien n'est dessiné qui ressemble à une image.** Chaque pixel suit son rayon entre les miroirs, d'un niveau de la chaîne à l'autre ; les mirascopes flottants sortent de la géométrie des rayons.
 
 ## Utilisation
 
@@ -20,70 +24,55 @@ Rendu physique en three.js (WebGPU, TSL), entièrement procédural : une graine 
 
 Sur écran tactile : une touche met en pause, deux touches tirent une nouvelle scène, un appui long masque l'interface.
 
-Paramètres d'URL : `?seed=…`, `#r=…` (scène retouchée, « Copier le lien »), `?ui=0`, `?mobile=1` / `?mobile=0`, `?debug` (outils dans `window.mirage` : `still(nom, phase, l, h)`, `film([[graine, phases]])` — une graine peut s'écrire `graine:décor:objet` —, `shot`, `send`, `meter()`, `bench()`, `seam()`, `run()` ; `stage.raytrace.U.debug.value = 1` colore chaque pixel selon ce que son rayon a touché).
+Paramètres d'URL : `?seed=…`, `#r=…` (scène retouchée, « Copier le lien »), `?ui=0`, `?mobile=1` / `?mobile=0`, `?debug` (outils dans `window.mirage` : `still(nom, phase, l, h)`, `film([[graine, phases]])` — une graine peut s'écrire `graine:décor:gravure` —, `noSeam(true)` (chaque vue sans le fondu du raccord), `shot`, `send`, `meter()`, `bench()`, `seam()`, `run()` ; `stage.raytrace.U.debug.value = 1` colore chaque pixel selon ce que son rayon a touché, plus sombre à chaque niveau).
 
-Le panneau règle l'objet, le décor et la machinerie, la durée ; **le mirascope** (finition des coupes, levée du couvercle, tours de la toupie ou heure de la montre) ; le cadrage ; le rendu. Export MP4 image par image (éventuellement accumulé) et PNG.
+Le panneau règle le décor, la gravure du dôme, la durée d'un niveau ; la finition des coupes et le projecteur ; le balancement de la caméra ; le rendu. Export MP4 image par image (éventuellement accumulé) et PNG.
 
 ## Principe : deux paraboloïdes, chaque sommet au foyer de l'autre
 
-Origine au sommet de la coupe du bas, y vertical, f = 5 cm, L la levée du couvercle :
+Origine au sommet de la coupe du bas, y vertical, f = 5 cm :
 
 - coupe du bas : y = r²/4f, pour r ≤ R = √2·f ;
-- coupe du haut : y = f + L − r²/4f, pour 0,42·f ≤ r ≤ R (l'ouverture).
+- coupe du haut : y = f − r²/4f, pour 0,42·f ≤ r ≤ R (l'ouverture).
 
-Fermées, elles se rejoignent à leur bord (y = f/2) et chaque sommet est au foyer de l'autre. Un point de l'objet, près du sommet du bas, est près du foyer du haut : ses rayons, réfléchis par la coupe du haut, redescendent presque parallèles à l'axe ; la coupe du bas les renvoie vers son foyer — dans l'ouverture. **L'image d'un point à la hauteur h se forme en y ≈ f + h, tournée d'un demi-tour autour de l'axe** ((x, z) → (−x, −z)) : la montre flotte avec son heure décalée de six heures, comme sur un vrai mirascope.
+Fermées, elles se rejoignent à leur bord (y = f/2) et chaque sommet est au foyer de l'autre. **L'image d'un point à la hauteur h se forme en y ≈ f + h, tournée d'un demi-tour autour de l'axe.**
 
-Couvercle levé, le sommet du haut quitte le foyer du bas : l'image descend (54 → 31 mm pour L de 0 à 3 cm) et surtout perd ses rayons (1 299 sur 2 000 fermé, 140 à 2 cm), qui s'échappent par le jour entre les coupes. On n'efface rien : l'image s'éteint parce qu'il n'y a plus de lumière pour la former.
+## La coupe
 
-| Objet | Ce qui flotte | Construction |
-| --- | --- | --- |
-| **Toupie** | une toupie laquée qui tourne en l'air, un peu penchée, sa spirale peinte qui file | pointe d'acier au sommet de la coupe, cône, bourrelet à filets d'or, dôme, tige et bouton de buis |
-| **Montre** | le cadran bleu nuit guilloché en soleil, index et aiguilles dorés, chemin de fer ; la petite seconde fait deux tours par boucle | boîtier bombé, lunette moletée, couronne, bélière couchée ; posé sur l'arête de son fond |
-| **Chauffe-plat** | une flamme qui brûle dans le vide, au-dessus de l'ouverture | godet d'aluminium cannelé, cire colorée, mèche ; la flamme vacille à des fréquences entières de la boucle |
-| **Boussole** | l'aiguille, qui dans l'image montre le **sud** (le demi-tour) ; elle oscille à chaque à-coup du couvercle, et s'amortit | boîtier de laiton, rose des vents à huit pointes, couronne de degrés, pivot, aiguille rouge et acier bleui, anneau |
-| **Pièces d'or** | un petit trésor qu'on ne peut pas prendre | quatre pièces décalées, posées à plat l'une sur l'autre : grènetis, filet, perles, soleil rayonnant, tranche cannelée |
+Le demi-angle de la coupe va de 0 à 45° (u de 0,03 à 0,15), reste ouvert, puis revient à 0 (u de 0,50 à 0,68) ; fermée au raccord. Par la coupe, on voit le petit au fond directement, sans miroir. **L'image n'en souffre pas** : pour un observateur, les rayons qui forment l'image se réfléchissent sur les coupes du côté opposé au sien. La coupe du bas reste entière — par l'entaille on ne voit que l'intérieur, jamais la table, que le petit n'a pas.
 
-**Aucun objet ne dépasse 11,5 mm.** L'image d'un point à la hauteur h flotte en f + h ; vu de 40 à 47° au-dessus de l'horizontale, un point au-delà de ~14 mm ne se voit plus dans l'image — les rayons qui y mèneraient manquent l'ouverture. Une première toupie de 2 cm avait ainsi la tige coupée dans son image : c'est ce que fait un vrai mirascope (ses objets sont des miniatures), mais à l'écran cela se lit comme un défaut. Les objets ont été redessinés plus bas, et un test vérifie qu'ils se voient en entier.
+Dans le tracé, une surface du couvercle (dedans, dehors, joncs, perles) n'est retenue que hors de l'entaille (pour un paraboloïde, la plus proche des deux racines qui convient ; pour un jonc, le *sphere tracing* marche dans le tore privé du coin) ; les deux tranches sont des demi-plans verticaux par l'axe, gardés dans l'épaisseur du couvercle (2,5 mm) ; elles et les tranches des joncs sont peintes en rouge, comme sur les écorchés des musées. (Un signe inversé dans la coupe des joncs gardait la partie ôtée et ôtait le reste : des trous sombres bordaient l'ouverture. Le tore coupé est max(d_tore, c), c positif dans la coupe, −1 couvercle entier.)
 
-### La machinerie
+## La mise en abyme
 
-| Mécanisme | Socle | Ce qui lève le couvercle | Ce qui tourne |
+`src/gen/abyme.js` (pur : tests, outils, chargement) et `src/scene/raytrace.js` (le même calcul en TSL).
+
+- **Le petit** est le grand réduit de K = 0,05 : 7,6 mm de large, 4,2 mm de haut pied compris, posé au fond sur l'arête de sa base (à moins de 10 µm), **tourné d'un demi-tour**.
+- **Un repère par niveau** : x_n = y_mini·ŷ + K·R_π·x_(n+1), et la direction tourne d'un demi-tour avec lui. Son image, tournée d'un demi-tour à son tour, a donc l'orientation du grand : la coupe de chaque niveau fait face à la même caméra, qui n'a pas à tourner (si elle tournait, à mi-chemin l'image se formerait par la coupe et s'éteindrait). Quand un rayon entre dans la sphère qui enveloppe le petit, il passe dans son repère et le même code recommence ; quand il en ressort sans s'y être réfléchi, il revient au parent. Le fond du parent, qui traverse cette sphère, est encore un paraboloïde dans le repère de l'enfant.
+- **Par pixel**, à chaque pas : quatre paraboloïdes (dedans et dehors de chaque coupe), la table et le pied, deux tores en *sphere tracing* borné (les joncs du bord, la lèvre de l'ouverture), les deux tranches de la coupe, les trois perles les plus proches, deux sphères (entrer, sortir) ; dix-huit pas en tout.
+- **Deux libertés** rendent la chaîne semblable à elle-même : la salle, la lampe et le projecteur sont les mêmes dans le repère de chaque niveau ; et un rayon qui ressort de la cavité d'un petit après s'y être réfléchi voit la salle, comme s'il sortait du grand.
+- Chaque niveau porte une **bande d'émail** semée de points d'or (bleu nuit, vert anglais, grenat ou noir) et une **couronne de vingt-quatre perles** autour de l'ouverture.
+
+### Le raccord : l'image n'est pas une copie
+
+La caméra C1, qui regarde l'image du petit, doit voir ce que voit au début la caméra P, qui regarde le grand. Mais l'image d'un mirascope paraît plus profonde que large, et ce qu'on voit d'elle sous un angle, ce sont des rayons partis sous un autre : vue à 50°, elle ressemble au petit vu à 46,5°. `tools/seamfit.mjs` trace les deux vues pixel à pixel (`traceNested`, couvercle écorché, salle allumée) et cherche P par Nelder–Mead. Avec le cadre qu'exige la coupe (le grand presque entier, l'image en haut, le petit au fond en bas) et couvercles fermés au raccord, il reste **6,9 % de pixels en désaccord — des contours et les coins du cadre — et 1,0 mm d'écart moyen** (0,7° sur les reflets) ; un **fondu de 0,7 s** autour de u = 1 les efface (le lancer de rayons trace alors une seconde caméra). L'image du petit a subi deux réflexions de plus ; on la relève de ρ^(−2λ) à mesure qu'elle emplit l'écran.
+
+### La plongée
+
+Le niveau avance lentement au début (la coupe s'ouvre pendant que la caméra voit le grand presque entier), plus vite ensuite : λ = u + a·sin(2πu)/2π, a = −0,8, à la même vitesse des deux côtés du raccord. La distance est géométrique en λ (×0,062 par niveau), la visée converge au même rythme vers le point limite de la chaîne, élévation et champ passent de P à C1 avec une dérivée nulle aux deux bouts, et l'azimut se balance de 6 à 12°, une fois par niveau, nul au raccord.
+
+## Familles et décors
+
+La famille est la **gravure du dôme**, le motif qui se répète d'un niveau à l'autre : **vagues** (cercles ondulés), **soleil** (rayons guillochés), **spirale** (grain d'orge tournant). La gravure s'efface quand un pixel couvre un sillon — la taille d'un pixel prise à la distance de la visée, ramenée à l'échelle du niveau (l'image est réelle : les miroirs refocalisent).
+
+| Décor | Pièce | Lampe | Finitions |
 | --- | --- | --- | --- |
-| **Crémaillère** | pied de bois tourné, planche de noyer vissée | une potence de laiton porte une crémaillère ; le pignon, monté sur le coulisseau, roule dessus ; le bras à fourche pince le jonc du couvercle | le pignon et sa manivelle, de L/r |
-| **Trois vis** | socle de marbre mouluré, colonnette de laiton | trois tiges filetées autour des coupes, entraînées ensemble par une chaîne sur trois pignons au ras du marbre ; un collier pris dans trois écrous embrasse le couvercle | les tiges, de 2π·L/pas (pas de 2 mm : quinze tours), la manivelle au sommet de la première |
-| **Poulies** | trépied de laiton à pieds galbés | un mât porte une flèche et une araignée de trois poulies au-dessus de l'axe ; trois cordes montent du bord du couvercle, se réunissent au moyeu et descendent le long du mât jusqu'à un treuil | le tambour, de L/r ; les cordes raccourcissent de L |
+| **Cabinet** | boiseries chaudes, une fenêtre froide | 3 400 K | argent, vermeil |
+| **Atelier d'horloger** | murs gris clair, deux tubes au plafond | 5 200 K | argent, étain, cuivre |
+| **Salon de marbre** | pièce claire, deux hautes fenêtres | 5 600 K | argent, vermeil, cuivre |
+| **Nuit** | presque noire, une fenêtre bleue, une lampe chaude | 4 200 K | argent, étain |
 
-La machinerie se place derrière la coupe, de côté, selon le regard de la caméra ; un test vérifie qu'aucune colonne, barre ou corde ne passe entre l'œil et l'image, pour toutes les graines et toute la boucle. Les coupes portent leur ombre par des doublures invisibles (elles ne sont pas des maillages : le quad les trace) ; un plan posé sur la table ne garde que les ombres.
-
-### Le tracé
-
-`src/gen/mirascope.js` (pur, pour les tests, les outils et le chargement) et `src/scene/raytrace.js` (le même calcul en TSL) :
-
-- **Intersection rayon–paraboloïde** : un second degré en t, A = a(d_x² + d_z²), B = 2a(o_x d_x + o_z d_z) − d_y, C = a(o_x² + o_z²) + b − o_y ; forme stable q = −½(B + sgn B·√Δ), t₁ = q/A, t₂ = C/q (sinon, pour un rayon presque vertical, la racine utile se perd dans l'arrondi). Normale par le gradient (2ax, −1, 2az).
-- **L'image d'un point** (`imageOf`) : 400 à 2 000 rayons en spirale de Fibonacci sur l'hémisphère ; on garde ceux qui sortent par l'ouverture après exactement deux réflexions, et l'on cherche le point le plus proche de toutes ces droites, (Σ I − d dᵀ) X = Σ (I − d dᵀ) p.
-- **Le rendu** : un quad plein écran. Chaque pixel part de l'œil et teste cinq surfaces analytiques — intérieur et extérieur de chaque coupe (une coque de 2,5 mm), la table. Sur l'argent intérieur, il se réfléchit et repart (neuf rebonds au plus) ; sur l'extérieur guilloché, il lit le studio flouté selon la rugosité ; sur la table, sa matière et l'ombre douce de l'appareil. Dans la sphère qui contient l'objet, il avance par *sphere tracing* dans une SDF de révolution (les profils de `src/gen/profiles.js`). La flamme est une émission intégrée le long de chaque segment de rayon, au point le plus proche de son cœur.
-- **La machinerie** (`src/scene/machine.js`, cotes dans `src/gen/layout.js`) est faite d'objets ordinaires dessinés par-dessus, avec les joncs polis des coupes et la lèvre de l'ouverture ; boîtes aux arêtes arrondies et cylindres chanfreinés (une arête vive n'accroche pas la lumière), laiton brossé, bois verni. Le quad écrit la profondeur de son premier impact : tout s'emboîte.
-
-### Posés, pas flottants
-
-Un objet à fond plat dans une coupe concave ne touche pas le fond au centre : il repose sur l'arête de son pied, à la hauteur r²/4f du fond à ce rayon. Le godet (r = 9,3 mm) est donc 0,43 mm au-dessus du sommet, le boîtier de la montre (r = 11,8 mm) 0,70 mm, la boussole (r = 10,5 mm) 0,55 mm, la première pièce (r = 9 mm) 0,41 mm, les autres à plat sur elle ; la pointe de la toupie est au sommet.
-
-### L'horloge et la boucle
-
-Une seule horloge (`src/timeline.js`), une boucle de 20 s : fermé (0–0,22), levée (0,22–0,38), ouvert (0,38–0,58), retombée (0,58–0,74), fermé. La caméra tourne lentement autour de la coupe, plonge pendant que le couvercle est levé (de 38–46° à 14–19° d'élévation) et remonte quand il redescend ; chaque temps est une marche douce, monotone. La toupie fait 24, 30 ou 36 tours par boucle, la trotteuse deux, la flamme vacille à des fréquences entières ; l'aiguille de la boussole oscille après chaque à-coup du couvercle (départ, arrivée, départ, retombée), dans une fenêtre bornée, et est exactement au repos au raccord : **la boucle est parfaite par construction** (raccord mesuré : 10⁻⁹).
-
-## Les décors
-
-Un miroir ne montre que ce qui l'entoure : chaque décor est une pièce, pas un fond noir.
-
-| Décor | Pièce | Table | Lampe | Valeur | Finitions |
-| --- | --- | --- | --- | --- | --- |
-| **Cabinet** | boiseries chaudes, une fenêtre froide | noyer en lames | 3 400 K, de côté | sombre et chaude | argent, vermeil |
-| **Atelier d'horloger** | murs gris clair, deux tubes au plafond | chêne en lames aboutées, cernes en flammes, rayé | 5 200 K | moyenne | argent, étain, cuivre |
-| **Salon de marbre** | pièce claire, deux hautes fenêtres | marbre veiné, poli | 5 600 K | claire | argent, vermeil, cuivre |
-| **Nuit** | presque noire, une fenêtre bleue, une lampe chaude | feutre vert | 4 200 K, faible | très sombre | argent, étain |
-
-Cinq objets × trois machineries × quatre décors × quatre finitions.
+Un projecteur au-dessus de l'axe (3 000 à 3 600 K) tombe droit dans l'ouverture.
 
 ## Tests
 
@@ -91,12 +80,12 @@ Cinq objets × trois machineries × quatre décors × quatre finitions.
 node --test 'mirage/test/*.test.mjs'
 ```
 
-Les coupes se rejoignent à leur bord, chaque sommet au foyer de l'autre ; un rayon parallèle à l'axe repasse par le foyer ; l'image d'un point en f + h, au-dessus de l'ouverture, nette ; demi-tour autour de l'axe ; couvercle levé, l'image descend à chaque cran et garde moins de 15 % de ses rayons pour chaque graine ; un rayon de l'œil visé sur l'image rencontre l'objet après deux réflexions ; les objets reposent exactement sur le fond (aucun sommet ni arête dessous, contact à moins de 10 µm ; pièces à plat l'une sur l'autre ; couronne, bélière et anneau loin du fond) ; aucun ne dépasse 11,5 mm, tout est dans la sphère englobante, et l'image d'un point à 11,5 mm se voit (à 20 mm, non) ; l'aiguille de la boussole au repos au raccord, amortie après chaque à-coup ; boucle refermée (levée, plongée, caméra, objets) ; temps monotones, la caméra ne plonge que couvercle levé ; caméra jamais sous la table ni dans les coupes ; aucune colonne, barre ni corde de la machinerie entre l'œil et l'image ; recette déterministe, JSON pur, catalogue entier tiré (objets, décors, finitions, machineries), décors distincts.
+Optique : coupes jointes à leur bord, chaque sommet au foyer de l'autre ; image en f + h, au-dessus de l'ouverture, nette, tournée d'un demi-tour ; couvercle levé, l'image descend et perd ses rayons. Abyme : le petit repose au fond par l'arête de son pied ; il tient dans sa sphère, et elle dans la cavité sous l'ouverture ; il mesure moins de 11,5 mm ; vu par C1, son image couvre plus de 10 % du cadre et le niveau suivant s'y voit. **Coupe** : ouverte, pour chaque graine, le même cadre contient le vrai petit (sans miroir) et son image ; couvercle entier, le petit ne se voit pas directement ; fermée au raccord ; la caméra reste face à la coupe, à son balancement près. **Raccord** : moins de 9 % de pixels en désaccord, moins de 1,3 mm d'écart, moins de 1,2° sur les reflets entre C1 et P. Chorégraphie : distance géométrique ; λ croît sans retour, à la même vitesse des deux côtés du raccord ; fondu moitié-moitié au raccord, éclat raccordé ; regard sous 25°/s ; caméra jamais dans les coupes. Recette : déterministe, JSON pur, catalogue entier tiré, décors distincts, balancement d'un côté ou de l'autre.
 
 ## Performances mesurées
 
-1920 × 1080, panneau de navigateur masqué (20 rendus d'affilée puis `onSubmittedWorkDone`) : **≈ 2,3 à 4,8 ms par image** selon la scène — montre et crémaillère ≈ 2,6 ms, boussole et poulies ≈ 2,3 ms, pièces d'or et trois vis ≈ 4,8 ms (les quatre pièces font une SDF plus chère, et les tiges filetées beaucoup de triangles). Au chargement : le studio HDR (≈ 0,17 s, calculé une fois par décor). Raccord de la boucle (`seam`) : 10⁻⁹. Non vérifié : la fluidité en direct, un téléphone réel, l'export MP4.
+1920 × 1080, panneau de navigateur masqué (20 rendus d'affilée puis `onSubmittedWorkDone`) : **≈ 5 à 9 ms par image**, **≈ 9 ms** pendant les 0,7 s du fondu (deux caméras, couvercles fermés). Non vérifié : la fluidité en direct, un téléphone réel, l'export MP4.
 
 ## Version mobile
 
-`?mobile=1` : six rebonds au lieu de neuf, 40 pas de sphere tracing au lieu de 64, studio de 512 × 256, chaîne d'image allégée (FXAA), résolution dynamique, cadence plafonnée à 60 i/s.
+`?mobile=1` : douze pas au lieu de dix-huit, quatorze pas de *sphere tracing* pour les joncs au lieu de vingt-deux, studio de 512 × 256, chaîne d'image allégée (FXAA), résolution dynamique, cadence plafonnée à 60 i/s.

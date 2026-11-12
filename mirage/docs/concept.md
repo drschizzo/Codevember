@@ -2,6 +2,77 @@
 
 Thème donné : « mirage ». Le projet s'appelle **Mirage**, sous-titre *l'objet qui n'est pas là*.
 
+## Huitième version : la coupe animée
+
+Retour sur la septième (l'écorché permanent) : « l'idée est bonne, mais le mirascope ne devrait pas être tout le temps coupé : la coupe devrait être animée pour qu'on comprenne ce qui se passe ; et la géométrie de la découpe doit être réaliste — des éléments sans épaisseur, d'autres qui semblent des bugs ».
+
+**La coupe s'ouvre et se referme.** Couvercle entier au début : un objet flotte. Une fente s'ouvre face à la caméra et s'élargit en éventail jusqu'au quart ; on voit alors le vrai petit au fond et son image au-dessus de l'ouverture ; la coupe reste ouverte pendant que la caméra plonge, puis se referme bien avant le raccord, qui se fait couvercles fermés (6,9 % de pixels en désaccord, 1,0 mm). La plongée commence lentement (λ = u − 0,8·sin 2πu / 2π) pour que la comparaison dure plusieurs secondes avant que la caméra n'entre dans l'image.
+
+**Une coupe qui se lit comme une coupe.** Les tranches du couvercle et des joncs sont peintes en rouge, comme sur les écorchés des musées. Et le « bug » de la capture en était un : un signe inversé gardait la partie ôtée des joncs et ôtait le reste — la lèvre de l'ouverture n'existait plus que dans la coupe, des trous sombres la bordaient.
+
+---
+
+# Septième version : l'écorché
+
+
+Retour sur la sixième (l'aiguille) : « l'aiguille n'apporte rien et n'aide pas à comprendre le côté mirage ; il faudrait plutôt trouver un moyen de vraiment montrer l'objet au fond, pour bien comprendre la différence avec le mirage pendant la boucle ».
+
+**Voir l'objet et son image ensemble.** Un quart du couvercle est ôté, face à la caméra, comme sur une maquette de musée. Par l'entaille, le vrai petit mirascope, posé au fond ; au-dessus de l'ouverture, son image. Le même objet, deux fois, dans le même cadre, pendant toute la boucle. L'image n'en souffre pas : pour un observateur, elle se forme sur les coupes du côté opposé au sien. La coupe du bas reste entière (sinon on verrait la table par l'entaille, et le petit, posé au fond du grand, n'en a pas : la chaîne ne serait plus semblable à elle-même).
+
+**Plus de spirale.** La caméra tournait d'un demi-tour par niveau pour suivre l'image (tournée d'un demi-tour). Avec l'entaille, à mi-chemin, elle aurait regardé du côté entier et l'image se serait formée par l'entaille — éteinte. Chaque petit est donc posé tourné d'un demi-tour : son image a l'orientation du grand, l'entaille de chaque niveau fait face à la même caméra, qui plonge droit en se balançant à peine.
+
+**Un cadre plus large.** Il faut voir l'image en haut et l'objet au fond en bas : le cadre du raccord montre maintenant le grand presque entier. À K = 0,05, l'ajustement le permet (6,7 % de pixels en désaccord, 0,9 mm) ; l'aiguille a été retirée.
+
+---
+
+# Sixième version : l'aiguille
+
+
+Retour sur la cinquième (la plongée seule) : « c'est mieux, mais on ne se rend pas suffisamment compte que c'est un mirage, et les scènes sont peut-être un peu trop simples ». La plongée montrait des dômes dans des dômes : rien ne disait que ce qui flotte n'est pas là.
+
+**Une preuve, sans légende.** Une aiguille de laiton, pincée au bord de chaque coupe, fait un tour par boucle et traverse l'image flottante ; sa perle s'arrête au cœur du petit mirascope et s'y voit à travers le dôme d'argent qui devrait la cacher. Rien ne bouge. C'est le geste qu'on fait devant un vrai mirascope — tendre le doigt et ne rien toucher. Le moment est placé tôt dans le niveau (u = 0,2), quand l'image occupe un quart du cadre ; plus tard, le grand bras passait en barre floue devant la caméra. Chaque niveau a son aiguille au même angle : deux aiguilles à deux échelles traversent chacune son image, et le raccord reste exact.
+
+**Plus à regarder.** Chaque niveau porte une bande d'émail semée de points d'or et une couronne de vingt-quatre perles autour de l'ouverture : ce qui grandit pendant la plongée est un objet de vitrine, pas une coupe nue.
+
+---
+
+# Cinquième version : une seule plongée
+
+
+Retour sur la quatrième (la plongée en sept actes) : « c'est mieux, mais le scénario est trop compliqué avec tous ces actes (particulièrement les changements de lumière), et le raccord reste assez visible ».
+
+**Un seul mouvement.** La caméra plonge en spirale, à vitesse constante (λ = u : même rapport de distance à chaque instant), dans l'image qui flotte au-dessus de l'ouverture ; un niveau par boucle de 24 s. Plus d'actes, plus de lumière qui change, plus de couvercle qui se lève — donc plus de machinerie (elle ne serait jamais dans le cadre). La famille devient la gravure du dôme (vagues, soleil, spirale), le motif qui se répète d'un niveau à l'autre.
+
+**Un raccord exact, sauf la géométrie.** Le noir du raccord n'était plus là pour cacher l'écart ; il fallait le supprimer :
+- un rayon qui ressort de la cavité d'un petit après s'y être réfléchi voit la salle, comme s'il sortait du grand (sinon, les reflets au fond de l'ouverture différaient d'un niveau à l'autre) ;
+- la spirale fait exactement un demi-tour par niveau, puisque l'image est tournée d'un demi-tour (sinon les reflets de la salle tournaient au raccord) ;
+- la gravure s'efface selon la taille d'un pixel à la distance de la visée, pas selon le chemin du rayon (l'image est réelle : les miroirs refocalisent ; mesurée par le chemin, la gravure disparaissait de l'image du petit) ;
+- le petit est deux fois plus petit (K = 0,05) : l'écart géométrique, proportionnel à K, tombe à 0,6 mm, et le bord de l'ouverture ne masque presque plus l'image. Il reste des contours décalés d'un pixel, qu'un fondu de 0,7 s efface.
+
+---
+
+# Quatrième version : la mise en abyme en actes
+
+
+Retour sur la troisième (le mirascope à objets) : « le projet fonctionne correctement, mais on pourrait aller plus loin, vers quelque chose de vraiment cinématographique ; la boucle est trop simple — la machine s'ouvre et se ferme ; peut-être un zoom infini ? ». Deux pistes ont été proposées : un **plan-séquence en actes** qui garde les objets (noir, un bras qui traverse l'image sans rien toucher, la lumière, la plongée), ou un **zoom infini** où l'objet du fond est lui-même un mirascope. Choisi : le zoom infini, avec une boucle de 30 s.
+
+**L'idée.** Au fond du mirascope, un mirascope dix fois plus petit, fermé, sur son pied ; au fond de celui-ci, un plus petit encore. Au-dessus de l'ouverture flotte l'image du petit, qui fait flotter le suivant. La caméra plonge dans l'image jusqu'à ce que le petit remplisse l'écran comme le grand au début : la boucle reprend un niveau plus bas. Le geste qui révèle reste là : on lève le couvercle, l'image s'éteint, et l'on découvre au fond le vrai petit — fermé, avec sa propre image au-dessus de sa propre ouverture.
+
+**Les actes.** Noir (un projecteur seul, gros plan sur l'ouverture) → lumière (la salle s'allume, la caméra recule en spirale et découvre la machine) → levée → plongée par le jour entre les coupes → retombée → nuit → abyme (la caméra plonge en spirale dans l'image). Le noir encadre le raccord : seul le projecteur, au-dessus de l'axe, éclaire — le même dans le repère de chaque niveau.
+
+**Ce que le calcul a appris.**
+- Le tracé passe d'un repère à l'autre (une similitude : la direction ne change pas) ; chaque niveau se calcule dans ses unités. Le fond du parent, vu du repère de l'enfant, est encore un paraboloïde.
+- **L'image n'est pas une copie** : grandissement ≈ 1,07 en largeur, ≈ 1,16 en profondeur ; vue à 56°, elle ressemble au petit vu à 48°, d'un peu plus près, avec un champ plus large. Le raccord ne s'obtient donc pas en réduisant la pose : `tools/seamfit.mjs` compare les deux vues pixel à pixel et ajuste la caméra du grand (Nelder–Mead). Il faut aussi un cadrage assez serré pour ne jamais voir le dôme éclairé du grand autour de l'ouverture — et pas trop, car le bord de l'ouverture masque la face proche de l'image. Reste 5 % de pixels en désaccord : un fondu d'une seconde et demie, dans le noir, à deux caméras, les efface.
+- Premier ajustement : un champ de 39° pour le grand contre 26° pour l'image — la caméra aurait élargi puis resserré son champ en plongeant. Avec 18° pour l'image, le grand tombe à 25° : le champ ne fait que se resserrer.
+- Les reflets de la salle éteinte (tubes, fenêtres) restaient visibles à 3 % ; le reste de jour est sous 1 %.
+
+Les objets (toupie, montre, chauffe-plat, boussole, pièces d'or) ont laissé la place à la chaîne ; la famille d'une scène est sa machinerie.
+
+---
+
+# Troisième version : le mirascope à objets
+
+
 Ce document est le troisième concept. Les deux premiers — un horizon au très long foyer (Fata Morgana au soleil de minuit), puis un cabinet de physique (cuve de sirop, plaque chaude) — sont gardés en annexe, avec les retours qui les ont fait abandonner : le premier était juste mais illisible (la cause invisible, la seconde apparence une simple déformation) ; le second lisible mais resté une démonstration de laboratoire. Ce que le mot doit donner à voir : **une chose qu'on voit nettement, et qui n'est pas là**.
 
 ## Le mirascope
