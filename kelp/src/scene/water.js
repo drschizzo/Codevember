@@ -132,17 +132,17 @@ export function createWater() {
   // réfracté, surtout vers l'avant (Henyey-Greenstein, g = 0,55 : l'eau
   // s'éclaire du côté du soleil), découpé en rayons par les rides de la
   // surface (les caustiques projetées le long du rayon de soleil, moyennées en
-  // quatre points du segment immergé). Sans cela, l'eau était un aplat.
+  // deux points du segment immergé). Sans cela, l'eau était un aplat.
   const inscatter = (O, P, sA, sB, dir, M, depthM, aer) => {
     const { Lw } = sunIn();
     let shafts = float(0);
-    for (const f of [0.15, 0.4, 0.65, 0.9]) {
+    for (const f of [0.25, 0.75]) {
       const Q = O.add(P.sub(O).mul(mix(sA, sB, f)));
-      const dq = level(Q.x, Q.z, U.t).sub(Q.y).max(0);
+      const dq = levelNear(Q.x, Q.z, U.t).sub(Q.y).max(0);
       const S = Q.add(Lw.mul(dq.div(Lw.y))); // (où ce rayon de soleil a traversé la surface)
       shafts = shafts.add(caustic(vec3(S.x, 0, S.z), float(0.5)).sub(1).mul(1.6).add(1).max(0.15));
     }
-    shafts = shafts.mul(0.25);
+    shafts = shafts.mul(0.5); // (deux points : l'anticrénelage temporel lisse le reste)
     return waterGlow(dir, depthM, aer, shafts);
   };
   // la couleur de l'eau vue dans la direction dir, à la profondeur depthM

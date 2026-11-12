@@ -112,7 +112,7 @@ Le platier est trop propre. Il manque de quoi donner l'échelle et la vie :
 | 9 | corrigé | Cause principale : la simulation enregistrait une image tous les `round(100/30)` = 3 sous-pas, soit 0,030 s au lieu de 1/30 s. Les laminaires prenaient jusqu'à 3 s de retard sur la mer et flottaient là où l'eau avait été (à 0,9 de la boucle, points de lanière à plus de 20 cm en l'air : 917 → 49). Les sous-pas sont désormais un multiple de la cadence. De plus, le caisson ne repousse plus qu'à l'horizontale (des lanières restaient posées sur son sommet invisible) et les lames du cochayuyo sont plus souples. Sauts d'image : pire 0,34 → 0,22 m. |
 | 3 | corrigé | Le champ des flaques valait −9 hors flaque, d'où des bords en marches de texels ; il est désormais continu. Les alvéoles du grès sont rares et de tailles variées. |
 | 10 | corrigé | Écume en plaques déchirées trouées de bulles. |
-| 11, 12 | corrigé | La roche porte ses ombres ; l'ombre du soleil couvre 10 m dans l'axe de visée (3 072² en qualité haute). |
+| 11, 12 | corrigé | La roche porte ses ombres ; l'ombre du soleil couvre 10 m dans l'axe de visée. |
 | P1 laminaires | fait | Albédo sombre, reflets étirés dans la longueur, translucidité aux marges et aux pointes. |
 | P1 eau | fait | Diffusion de Henyey-Greenstein vers le soleil réfracté, rayons de lumière ; l'eau a un corps vue d'en dessus ; ciel avec nuages ombrés, liseré à contre-jour, cirrus. |
 | P2 | fait | Ménisque et gouttes flous ; la lame d'eau grossit l'image ; particules en suspension ; profondeur de champ avec bascule de point vers la grande vague ; exposition qui rattrape la plongée ; choc amorti du caisson ; respiration du trépied ; images fantômes du dôme. |

@@ -310,8 +310,8 @@ export function faunaGeometry(R, cam, rock, plants, lite = false) {
   for (let c = 0; c < 140 * k; c++) {
     const x = cam.x + (rr.next() - 0.5) * 7, z = cam.z - 0.3 - rr.next() * 4.4;
     if (!ok(x, z)) continue;
-    const F = frameAt(x, z), r = 0.009 + 0.012 * rr.next(), h = r * (0.45 + 0.25 * rr.next()), ph = rr.next() * 6;
-    shell(F, [[r, 0], [r * 0.92, h * 0.3], [r * 0.62, h * 0.72], [r * 0.25, h * 0.95], [0.0005, h]], 18, LIM, (a, j) => (j < 3 ? 1 + 0.05 * Math.sin(17 * a + ph) : 1), 1.15, r * 0.25 * (rr.next() - 0.5));
+    const F = frameAt(x, z), r = 0.009 + 0.012 * rr.next(), h = r * (0.38 + 0.2 * rr.next()), ph = rr.next() * 6;
+    shell(F, [[r, 0], [r * 0.92, h * 0.3], [r * 0.62, h * 0.72], [r * 0.25, h * 0.95], [0.0005, h]], 18, LIM, (a, j) => (j < 3 ? 1 + 0.07 * Math.sin(17 * a + ph) + 0.04 * Math.sin(5 * a + ph * 2) : 1), 1.15, r * 0.25 * (rr.next() - 0.5));
   }
   // moules : serrées dans les fissures et les creux
   for (let c = 0; c < 900 * k; c++) {

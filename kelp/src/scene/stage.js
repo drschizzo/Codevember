@@ -16,7 +16,7 @@ import { G } from './globals.js';
 import { texture as tTexture, equirectUV, normalize, positionWorld, cameraPosition, vec4, vec2, vec3, float, uniform, screenUV, screenSize, getViewPosition, fwidth, smoothstep, step, floor, fract, length, mx_cell_noise_float, max as tmax, select, sin, atan, dFdx, dFdy, If, mix, Fn } from 'three/tsl';
 import { NZ } from './materials.js';
 
-const SHADOW = { mobile: 1024, low: 1024, medium: 2048, high: 3072, ultra: 4096 };
+const SHADOW = { mobile: 1024, low: 1024, medium: 2048, high: 2048, ultra: 4096 };
 const lin = (h) => new THREE.Color(h);
 
 export function createStage(scene, gen, { lite = false } = {}) {
