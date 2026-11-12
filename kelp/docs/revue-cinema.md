@@ -1,6 +1,6 @@
 # Kelp — revue cinéma (direction artistique et technical art)
 
-Passe du 12 novembre 2026, à partir de la graine d'ouverture k39 (Couchant, cochayuyo), rendue en 1280 × 720 à dix instants de la boucle, et de trois humeurs de plus (Ploumanac'h / digitée, Étretat / palmier de mer, Midi / boa). Planche annotée : [revue-defauts.jpg](revue-defauts.jpg) ; le pire cas, Midi : [revue-midi.jpg](revue-midi.jpg). (Les erreurs WebGPU « texture size 0 » relevées pendant la passe viennent du panneau de navigateur masqué, un canevas de 0 × 0 : elles ne viennent pas du projet.)
+Passe du 12 novembre 2026, à partir de la graine d'ouverture k39 (Couchant, cochayuyo), rendue en 1280 × 720 à dix instants de la boucle, et de trois humeurs de plus (Ploumanac'h / digitée, Étretat / palmier de mer, Midi / boa). Planche annotée : [revue-defauts.jpg](revue-defauts.jpg) ; le pire cas, Midi : [revue-midi.jpg](revue-midi.jpg) ; après les corrections : [revue-avant-apres.jpg](revue-avant-apres.jpg). (Les erreurs WebGPU « texture size 0 » relevées pendant la passe viennent du panneau de navigateur masqué, un canevas de 0 × 0 : elles ne viennent pas du projet.)
 
 ## Verdict
 
