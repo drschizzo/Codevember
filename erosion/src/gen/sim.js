@@ -136,7 +136,9 @@ export function createSim({ NX, NY, b0, strata, S }) {
       const vm = Math.hypot(vx[c], vy[c]);
       const tau = (P.manning * P.manning * vm * vm) / Math.cbrt(Math.max(d[c], 0.001));
       const C = P.Kc * Math.max(0, tau - P.tauC) ** 1.5;
-      rip[c] = Math.min(1, rip[c] + P.kRip * Math.max(0, tau - P.tauC) * dt);
+      // (des rides ne se forment que sous une vraie lame d'eau, pas sous le ruissellement de la pluie)
+      const dr = Math.min(1, Math.max(0, (d[c] - 0.002) / 0.003));
+      rip[c] = Math.min(1, rip[c] + P.kRip * Math.max(0, tau - P.tauC) * dr * dr * (3 - 2 * dr) * dt);
       if (s[c] < C) {
         const hard = b[c] > bmin[c] + 0.0002 ? 0 : hardnessAt(strata, b0[c] - b[c]);
         // (sous plus de 2 cm d'eau, la vitesse moyenne surestime le cisaillement au fond : un lac n'arrache plus son fond)

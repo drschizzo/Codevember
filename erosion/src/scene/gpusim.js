@@ -15,10 +15,14 @@
 // pas et lues par un décalage dynamique dans un tampon d'uniformes.
 //
 // Enregistrement (passe record) : FT états du relief à pleine résolution
-// (b − b₀, bmin − b₀, humidité, rides en demi-flottants) et FW états de l'eau
-// à demi-résolution (surface libre − b₀, turbidité, vitesse). Puis, à chaque
-// image, la passe resolve interpole deux états et applique le gabarit ; elle
-// écrit deux StorageTexture que les matériaux lisent.
+// (b − b₀, bmin − b₀ en demi-flottants), FM états de sa mémoire (humidité,
+// rides : elles changent lentement) et FW états de l'eau à demi-résolution
+// (surface libre − b₀, turbidité, vitesse). Puis, à chaque image, la passe
+// resolve interpole les états — le relief en Catmull-Rom dans le temps sur
+// quatre états, borné par les deux états encadrants : sa vitesse est continue
+// (une interpolation linéaire entre états espacés de 0,45 s faisait avancer
+// l'érosion par saccades) — et applique le gabarit ; elle écrit les
+// StorageTexture que les matériaux lisent.
 import * as THREE from 'three/webgpu';
 import { TABLE, inflowAt, rainAt, baseAt, fbm, MAX_LAYERS } from '../gen/table.js';
 import { PHYS } from '../gen/sim.js';
@@ -172,7 +176,8 @@ fn conc(n: u32) -> f32 { let dd = cell[n].y; return select(0.0, sA[n] / dd, dd >
       let vm = length(aux[c].xy);
       let tau = MAN * MAN * vm * vm / pow(max(v.y, 0.001), 1.0 / 3.0);
       let C = KC * pow(max(0.0, tau - TAUC), 1.5);
-      rip = min(1.0, rip + KRIP * max(0.0, tau - TAUC) * P.dt);
+      // (des rides ne se forment que sous une vraie lame d'eau, pas sous le ruissellement de la pluie)
+      rip = min(1.0, rip + KRIP * max(0.0, tau - TAUC) * smoothstep(0.002, 0.005, v.y) * P.dt);
       if (s < C) {
         let st = stat[c];
         let hard = select(hardAt(st.x - v.x), 0.0, v.x > v.z + 0.0002);
@@ -234,7 +239,7 @@ fn outOf(n: u32, k: u32) -> f32 { let v = tout[2u * n + k / 4u]; let m = k % 4u;
 }
 
 // ── Enregistrement, aperçu, relecture ────────────────────────────────────────
-function wgslIO(NX, NY, FT, FW) {
+function wgslIO(NX, NY) {
   const HX = NX / 2, HY = NY / 2;
   return /* wgsl */`
 const NX: u32 = ${NX}u;
@@ -250,15 +255,20 @@ struct Rec { frame: u32, kind: u32, p0: u32, p1: u32 };
 @group(0) @binding(1) var<storage, read> sA: array<f32>;
 @group(0) @binding(2) var<storage, read> aux: array<vec4f>;
 @group(0) @binding(3) var<storage, read> stat: array<vec4f>;
-@group(0) @binding(4) var<storage, read_write> recT: array<vec2u>;
+@group(0) @binding(4) var<storage, read_write> recT: array<u32>;    // b − b₀, bmin − b₀
 @group(0) @binding(5) var<storage, read_write> recW: array<vec2u>;
 @group(0) @binding(6) var<storage, read_write> prev: array<vec2f>;   // aperçu 128 × 64 (écran de chargement)
+@group(0) @binding(7) var<storage, read_write> recM: array<u32>;    // humidité, rides
 @group(1) @binding(0) var<uniform> R: Rec;
 
 @compute @workgroup_size(64) fn recTerrain(@builtin(global_invocation_id) gid: vec3u) {
   let c = gid.x; if (c >= N) { return; }
   let v = cell[c]; let b0 = stat[c].x;
-  recT[R.frame * N + c] = vec2u(pack2x16float(vec2f(v.x - b0, v.z - b0)), pack2x16float(vec2f(v.w, aux[c].z)));
+  recT[R.frame * N + c] = pack2x16float(vec2f(v.x - b0, v.z - b0));
+}
+@compute @workgroup_size(64) fn recMemory(@builtin(global_invocation_id) gid: vec3u) {
+  let c = gid.x; if (c >= N) { return; }
+  recM[R.frame * N + c] = pack2x16float(vec2f(cell[c].w, aux[c].z));
 }
 @compute @workgroup_size(64) fn recWater(@builtin(global_invocation_id) gid: vec3u) {
   let h = gid.x; if (h >= HN) { return; }
@@ -289,7 +299,7 @@ struct Rec { frame: u32, kind: u32, p0: u32, p1: u32 };
 `;
 }
 
-function wgslResolve(NX, NY, FT, FW) {
+function wgslResolve(NX, NY) {
   const HX = NX / 2, HY = NY / 2;
   return /* wgsl */`
 const NX: u32 = ${NX}u;
@@ -302,9 +312,10 @@ const L: f32 = ${TABLE.Lx / NX};
 struct Res {
   t0: u32, t1: u32, w0: u32, w1: u32,
   tt: f32, tw: f32, water: f32, screed: f32,   // mélange des états, eau visible (0–1), position de la lame (m, −1 : pas de passage)
-  bermTan: f32, bead: f32, wake: f32, p3: f32, // pente du bourrelet, bourrelet minimal (m), sillage frais derrière la lame (m)
+  bermTan: f32, bead: f32, wake: f32, tm: f32, // pente du bourrelet, bourrelet minimal (m), sillage frais derrière la lame (m), mélange de la mémoire
+  tA: u32, tD: u32, m0: u32, m1: u32,          // états voisins (Catmull-Rom dans le temps), états de la mémoire
 };
-@group(0) @binding(0) var<storage, read> recT: array<vec2u>;
+@group(0) @binding(0) var<storage, read> recT: array<u32>;
 @group(0) @binding(1) var<storage, read> recW: array<vec2u>;
 @group(0) @binding(2) var<storage, read> stat: array<vec4f>;
 @group(0) @binding(3) var<storage, read> surplus: array<f32>;  // matière poussée par la lame, cumulée depuis l'aval (m²)
@@ -313,18 +324,26 @@ struct Res {
 @group(0) @binding(6) var<storage, read_write> cur: array<vec4f>;   // relief courant : b, humidité, rides, sable frais
 @group(0) @binding(7) var nrm: texture_storage_2d<rgba16float, write>; // nx, nz, humidité, rides (filtrable)
 @group(0) @binding(8) var occ: texture_storage_2d<rgba16float, write>; // occlusion du relief, creux (filtrable)
+@group(0) @binding(9) var<storage, read> recM: array<u32>;
 @group(1) @binding(0) var<uniform> R: Res;
+
+// relief enregistré à la cellule c, au temps (réel) entre les états t0 et t1 :
+// Catmull-Rom sur tA, t0, t1, tD, borné par les valeurs en t0 et t1
+fn relAt(c: u32) -> vec2f {
+  let pa = unpack2x16float(recT[R.tA * N + c]); let p0 = unpack2x16float(recT[R.t0 * N + c]);
+  let p1 = unpack2x16float(recT[R.t1 * N + c]); let pd = unpack2x16float(recT[R.tD * N + c]);
+  let t = R.tt; let t2 = t * t; let t3 = t2 * t;
+  let v = 0.5 * (2.0 * p0 + (p1 - pa) * t + (2.0 * pa - 5.0 * p0 + 4.0 * p1 - pd) * t2 + (3.0 * p0 - pa - 3.0 * p1 + pd) * t3);
+  return clamp(v, min(p0, p1), max(p0, p1));
+}
 
 @compute @workgroup_size(8, 8) fn resolve(@builtin(global_invocation_id) gid: vec3u) {
   let i = gid.x; let j = gid.y;
   if (i >= NX || j >= NY) { return; }
   let c = j * NX + i;
   let b0 = stat[c].x;
-  let a0 = recT[R.t0 * N + c]; let a1 = recT[R.t1 * N + c];
-  let p0 = unpack2x16float(a0.x); let p1 = unpack2x16float(a1.x);
-  let q0 = unpack2x16float(a0.y); let q1 = unpack2x16float(a1.y);
-  let rel = mix(p0, p1, R.tt);        // b − b₀, bmin − b₀
-  let mem = mix(q0, q1, R.tt);        // humidité, rides
+  let rel = relAt(c);                 // b − b₀, bmin − b₀
+  let mem = mix(unpack2x16float(recM[R.m0 * N + c]), unpack2x16float(recM[R.m1 * N + c]), R.tm); // humidité, rides
   var b = b0 + rel.x;
   var dep = max(0.0, rel.x - rel.y);  // épaisseur de dépôt frais
   var depth = max(0.0, -rel.y);       // profondeur atteinte sous b₀ (strates)
@@ -358,7 +377,7 @@ struct Res {
     for (var k = 0u; k < 4u; k++) {
       let cc = (2u * j + k / 2u) * NX + 2u * i + k % 2u;
       bb += stat[cc].x;
-      bn += mix(unpack2x16float(recT[R.t0 * N + cc].x).x, unpack2x16float(recT[R.t1 * N + cc].x).x, R.tt);
+      bn += relAt(cc).x;
     }
     bb *= 0.25; bn *= 0.25;
     // (un bloc sec vaut « sous le lit » : une rive qui avance monte du fond)
@@ -424,25 +443,26 @@ export function createGpuSim(renderer, { lite = false } = {}) {
   const device = renderer.backend.device;
   const NX = lite ? TABLE.NX / 2 : TABLE.NX, NY = lite ? TABLE.NY / 2 : TABLE.NY, N = NX * NY;
   const HX = NX / 2, HY = NY / 2, HN = HX * HY;
-  const FT = lite ? 40 : 64, FW = lite ? 80 : 128;
+  // (états du relief : 160 sur l'expérience, un toutes les ~0,2 s de film ; mémoire : 48)
+  const FT = lite ? 100 : 160, FW = lite ? 80 : 128, FM = lite ? 24 : 48;
   const l = TABLE.Lx / NX, dt = PHYS.courant * l;
   const S_ = GPUBufferUsage.STORAGE, CD = GPUBufferUsage.COPY_DST, CS = GPUBufferUsage.COPY_SRC;
   const buf = (size, usage = S_ | CD | CS) => device.createBuffer({ size, usage });
   const B = {
     cell: buf(N * 16), sA: buf(N * 4), sB: buf(N * 4), flux: buf(N * 16), aux: buf(N * 16), tout: buf(N * 32), stat: buf(N * 16),
     strata: buf(16 + MAX_LAYERS * 16, GPUBufferUsage.UNIFORM | CD),
-    recT: buf(FT * N * 8), recW: buf(FW * HN * 8), prev: buf(8192 * 8), surplus: buf(N * 4), cur: buf(N * 16),
+    recT: buf(FT * N * 4), recM: buf(FM * N * 4), recW: buf(FW * HN * 8), prev: buf(8192 * 8), surplus: buf(N * 4), cur: buf(N * 16),
   };
   const BATCH = 256;
   const stepBuf = buf(BATCH * ALIGN, GPUBufferUsage.UNIFORM | CD);
-  const recBuf = buf((FT + FW + 2) * ALIGN, GPUBufferUsage.UNIFORM | CD);
+  const recBuf = buf((FT + FW + FM + 2) * ALIGN, GPUBufferUsage.UNIFORM | CD);
   const resBuf = buf(64, GPUBufferUsage.UNIFORM | CD);
   const prevRead = device.createBuffer({ size: 8192 * 8, usage: GPUBufferUsage.MAP_READ | CD });
 
   const report = (name, module) => module.getCompilationInfo?.().then((info) => { for (const m of info.messages) if (m.type === 'error') console.error(`${name}.wgsl ${m.lineNum}:${m.linePos} ${m.message}`); });
   const modSim = device.createShaderModule({ code: wgsl(NX, NY) }); report('sim', modSim);
-  const modIO = device.createShaderModule({ code: wgslIO(NX, NY, FT, FW) }); report('io', modIO);
-  const modRes = device.createShaderModule({ code: wgslResolve(NX, NY, FT, FW) }); report('resolve', modRes);
+  const modIO = device.createShaderModule({ code: wgslIO(NX, NY) }); report('io', modIO);
+  const modRes = device.createShaderModule({ code: wgslResolve(NX, NY) }); report('resolve', modRes);
 
   const C = GPUShaderStage.COMPUTE;
   const st = (type) => ({ visibility: C, buffer: { type } });
@@ -454,15 +474,16 @@ export function createGpuSim(renderer, { lite = false } = {}) {
   const g0 = device.createBindGroup({ layout: L0, entries: [B.cell, B.sA, B.sB, B.flux, B.aux, B.tout, B.stat, B.strata].map((buffer, binding) => ({ binding, resource: { buffer } })) });
   const gStep = device.createBindGroup({ layout: Ldyn, entries: [{ binding: 0, resource: { buffer: stepBuf, size: 32 } }] });
 
-  const LIO = device.createBindGroupLayout({ entries: [st('read-only-storage'), st('read-only-storage'), st('read-only-storage'), st('read-only-storage'), st('storage'), st('storage'), st('storage')].map((e, binding) => ({ binding, ...e })) });
+  const LIO = device.createBindGroupLayout({ entries: [st('read-only-storage'), st('read-only-storage'), st('read-only-storage'), st('read-only-storage'), st('storage'), st('storage'), st('storage'), st('storage')].map((e, binding) => ({ binding, ...e })) });
   const plIO = device.createPipelineLayout({ bindGroupLayouts: [LIO, Ldyn] });
-  const KIO = { recTerrain: mk(modIO, plIO, 'recTerrain'), recWater: mk(modIO, plIO, 'recWater'), preview: mk(modIO, plIO, 'preview') };
-  const gIO = device.createBindGroup({ layout: LIO, entries: [B.cell, B.sA, B.aux, B.stat, B.recT, B.recW, B.prev].map((buffer, binding) => ({ binding, resource: { buffer } })) });
+  const KIO = { recTerrain: mk(modIO, plIO, 'recTerrain'), recMemory: mk(modIO, plIO, 'recMemory'), recWater: mk(modIO, plIO, 'recWater'), preview: mk(modIO, plIO, 'preview') };
+  const gIO = device.createBindGroup({ layout: LIO, entries: [B.cell, B.sA, B.aux, B.stat, B.recT, B.recW, B.prev, B.recM].map((buffer, binding) => ({ binding, resource: { buffer } })) });
   const gRec = device.createBindGroup({ layout: Ldyn, entries: [{ binding: 0, resource: { buffer: recBuf, size: 16 } }] });
   {
-    const a = new Uint32Array(((FT + FW + 2) * ALIGN) / 4);
+    const a = new Uint32Array(((FT + FW + FM + 2) * ALIGN) / 4);
     for (let k = 0; k < FT; k++) a[(k * ALIGN) / 4] = k;
     for (let k = 0; k < FW; k++) a[((FT + k) * ALIGN) / 4] = k;
+    for (let k = 0; k < FM; k++) a[((FT + FW + k) * ALIGN) / 4] = k;
     device.queue.writeBuffer(recBuf, 0, a);
   }
 
@@ -486,7 +507,8 @@ export function createGpuSim(renderer, { lite = false } = {}) {
       { visibility: C, storageTexture: { access: 'write-only', format: 'rgba32float' } },
       st('storage'),
       { visibility: C, storageTexture: { access: 'write-only', format: 'rgba16float' } },
-      { visibility: C, storageTexture: { access: 'write-only', format: 'rgba16float' } }].map((e, binding) => ({ binding, ...e })),
+      { visibility: C, storageTexture: { access: 'write-only', format: 'rgba16float' } },
+      st('read-only-storage')].map((e, binding) => ({ binding, ...e })),
   });
   const LRu = device.createBindGroupLayout({ entries: [{ binding: 0, visibility: C, buffer: { type: 'uniform' } }] });
   const plR = device.createPipelineLayout({ bindGroupLayouts: [LR, LRu] });
@@ -501,6 +523,7 @@ export function createGpuSim(renderer, { lite = false } = {}) {
       { binding: 6, resource: { buffer: B.cur } },
       { binding: 7, resource: renderer.backend.get(normalTex).texture.createView() },
       { binding: 8, resource: renderer.backend.get(occTex).texture.createView() },
+      { binding: 9, resource: { buffer: B.recM } },
     ],
   });
   const gRu = device.createBindGroup({ layout: LRu, entries: [{ binding: 0, resource: { buffer: resBuf } }] });
@@ -547,7 +570,8 @@ export function createGpuSim(renderer, { lite = false } = {}) {
     const total = Math.ceil(Math.min(S.T, until) / dt);
     const tRec = Array.from({ length: FT }, (_, k) => Math.round((k / (FT - 1)) * total));
     const wRec = Array.from({ length: FW }, (_, k) => Math.round((k / (FW - 1)) * total));
-    let nT = 0, nW = 0, n = 0;
+    const mRec = Array.from({ length: FM }, (_, k) => Math.round((k / (FM - 1)) * total));
+    let nT = 0, nW = 0, nM = 0, n = 0;
     const data = new ArrayBuffer(BATCH * ALIGN), f32 = new Float32Array(data);
     let previewBusy = false;
     const t0 = performance.now();
@@ -569,6 +593,10 @@ export function createGpuSim(renderer, { lite = false } = {}) {
         while (nT < FT && tRec[nT] === step) {
           pass.setPipeline(KIO.recTerrain); pass.setBindGroup(0, gIO); pass.setBindGroup(1, gRec, [nT * ALIGN]);
           pass.dispatchWorkgroups(groups(N)); nT++; wantPreview = true;
+        }
+        while (nM < FM && mRec[nM] === step) {
+          pass.setPipeline(KIO.recMemory); pass.setBindGroup(0, gIO); pass.setBindGroup(1, gRec, [(FT + FW + nM) * ALIGN]);
+          pass.dispatchWorkgroups(groups(N)); nM++;
         }
         while (nW < FW && wRec[nW] === step) {
           pass.setPipeline(KIO.recWater); pass.setBindGroup(0, gIO); pass.setBindGroup(1, gRec, [(FT + nW) * ALIGN]);
@@ -629,16 +657,19 @@ export function createGpuSim(renderer, { lite = false } = {}) {
 
   // lecture d'un état enregistré (tests, surplus, mise au point)
   async function readTerrain(k) {
+    // (la mémoire : l'état enregistré le plus proche dans le temps)
+    const km = Math.round((k / (FT - 1)) * (FM - 1));
     const rb = device.createBuffer({ size: N * 8, usage: GPUBufferUsage.MAP_READ | CD });
     const enc = device.createCommandEncoder();
-    enc.copyBufferToBuffer(B.recT, k * N * 8, rb, 0, N * 8);
+    enc.copyBufferToBuffer(B.recT, k * N * 4, rb, 0, N * 4);
+    enc.copyBufferToBuffer(B.recM, km * N * 4, rb, N * 4, N * 4);
     device.queue.submit([enc.finish()]);
     await rb.mapAsync(GPUMapMode.READ);
     const u = new Uint16Array(rb.getMappedRange().slice(0));
     rb.unmap(); rb.destroy();
     const b = new Float32Array(N), bmin = new Float32Array(N), wet = new Float32Array(N), rip = new Float32Array(N);
-    const h = THREE.DataUtils.fromHalfFloat;
-    for (let c = 0; c < N; c++) { b[c] = b0[c] + h(u[c * 4]); bmin[c] = b0[c] + h(u[c * 4 + 1]); wet[c] = h(u[c * 4 + 2]); rip[c] = h(u[c * 4 + 3]); }
+    const h = THREE.DataUtils.fromHalfFloat, M = 2 * N;
+    for (let c = 0; c < N; c++) { b[c] = b0[c] + h(u[c * 2]); bmin[c] = b0[c] + h(u[c * 2 + 1]); wet[c] = h(u[M + c * 2]); rip[c] = h(u[M + c * 2 + 1]); }
     return { b, bmin, wet, rip };
   }
   // l'état courant de la simulation (cell : b, d, bmin, humidité)
@@ -658,9 +689,11 @@ export function createGpuSim(renderer, { lite = false } = {}) {
   function resolve(s) {
     const tT = Math.min(FT - 1, Math.max(0, s.tT)), tW = Math.min(FW - 1, Math.max(0, s.tW));
     const a = Math.min(FT - 2, Math.floor(tT)), w = Math.min(FW - 2, Math.floor(tW));
+    const tM = (tT / (FT - 1)) * (FM - 1), m = Math.min(FM - 2, Math.floor(tM));
     ru[0] = a; ru[1] = a + 1; ru[2] = w; ru[3] = w + 1;
     rf[4] = tT - a; rf[5] = tW - w; rf[6] = s.water ?? 1; rf[7] = s.screed ?? -2;
-    rf[8] = s.bermTan ?? 0.67; rf[9] = s.bead ?? 0.003; rf[10] = 0; rf[11] = 0;
+    rf[8] = s.bermTan ?? 0.67; rf[9] = s.bead ?? 0.003; rf[10] = 0; rf[11] = tM - m;
+    ru[12] = Math.max(0, a - 1); ru[13] = Math.min(FT - 1, a + 2); ru[14] = m; ru[15] = m + 1;
     device.queue.writeBuffer(resBuf, 0, resData);
     const enc = device.createCommandEncoder();
     const pass = enc.beginComputePass();
@@ -673,7 +706,7 @@ export function createGpuSim(renderer, { lite = false } = {}) {
   }
 
   return {
-    NX, NY, HX, HY, FT, FW, dt, l, terrainTex, waterTex, normalTex, occTex,
+    NX, NY, HX, HY, FT, FW, FM, dt, l, terrainTex, waterTex, normalTex, occTex,
     setup, run, finish, resolve, readTerrain, readCell,
     get ran() { return ran; },
     get final() { return final; },
