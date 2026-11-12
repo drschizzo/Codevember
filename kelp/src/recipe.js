@@ -31,7 +31,7 @@ export const MOODS = {
   ploumanach: {
     label: "Ploumanac'h", rock: 'granite',
     rockColor: { base: '#b98f80', dark: '#7d5d55', light: '#d9b8a6', crust: '#c77b86', lichen: '#d7b14a' },
-    sun: { el: [0.32, 0.45], az: [-2.0, -1.4], K: 5400, lux: 3.2 }, sky: { zenith: [0.16, 0.32, 0.72], horizon: [0.72, 0.8, 0.9], haze: 0.35, cloud: 0.15, intensity: 1.0 },
+    sun: { el: [0.32, 0.45], az: [-2.0, -1.4], K: 5400, lux: 3.2 }, sky: { zenith: [0.16, 0.32, 0.72], horizon: [0.72, 0.8, 0.9], haze: 0.35, cloud: 0.3, intensity: 1.0 },
     water: { ext: [0.62, 0.2, 0.28], scat: 0.35, tint: [0.12, 0.32, 0.26] },
     cam: { lens: [0.22, 0.3], yaw: [0.2, 0.35], pitch: [-0.12, -0.07], fov: [64, 70] },
     grade: { contrast: 1.04, saturation: 1.02, shadows: [0.96, 1.0, 1.04], highlights: [1.03, 1.0, 0.96] },
@@ -39,7 +39,7 @@ export const MOODS = {
   couchant: {
     label: 'Couchant', rock: 'basalt',
     rockColor: { base: '#2d2b2a', dark: '#161515', light: '#47423d', crust: '#9a5568', lichen: '#b8a24a' },
-    sun: { el: [0.07, 0.12], az: [2.65, 2.95], K: 3400, lux: 2.6 }, sky: { zenith: [0.1, 0.16, 0.36], horizon: [1.1, 0.55, 0.26], haze: 0.6, cloud: 0.25, intensity: 0.85 },
+    sun: { el: [0.07, 0.12], az: [2.65, 2.95], K: 3400, lux: 2.6 }, sky: { zenith: [0.1, 0.16, 0.36], horizon: [1.1, 0.55, 0.26], haze: 0.6, cloud: 0.38, intensity: 0.85 },
     water: { ext: [0.6, 0.24, 0.2], scat: 0.25, tint: [0.1, 0.22, 0.25] },
     cam: { lens: [0.18, 0.24], yaw: [0.42, 0.6], pitch: [-0.07, -0.03], fov: [66, 72] },
     grade: { contrast: 1.08, saturation: 1.05, shadows: [0.92, 0.97, 1.08], highlights: [1.06, 1.0, 0.92] },

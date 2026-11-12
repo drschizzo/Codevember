@@ -97,3 +97,25 @@ Le platier est trop propre. Il manque de quoi donner l'échelle et la vie :
 3. **P2 ménisque et gouttes flous, profondeur de champ, exposition** : le « look » *over-under*.
 4. **P1 eau** (épaisseur de la vague, rayons, particules), **P2 choc du caisson et cadrage**.
 5. **P3, P4**.
+
+---
+
+## Suivi des corrections (12 novembre 2026)
+
+| # | État | Correction |
+|---|---|---|
+| 8, 5, 13 | corrigé | Tous les sommets de la surface restent au niveau de l'eau ; le mouillé et le sec sont décidés au pixel. Le niveau lu au dôme est interpolé à la main en pleine précision : la ligne d'eau en escalier venait des poids 8 bits du filtrage, pas du maillage. |
+| — | corrigé (trouvé en cours de route) | La roche était déplacée dans le vertex shader sans `positionPrevious` : ses vecteurs vitesse valaient tout son relief, et l'anticrénelage temporel et le flou l'étalaient à la verticale. C'était la principale cause du flou général des images. |
+| 6 | corrigé | Contre-jour éteint sous l'eau ; soleil réduit par Fresnel à l'entrée dans l'eau. |
+| 7 | corrigé | 12 prises décalées par un bruit entrelacé, traînée plafonnée à 3 % de l'écran. |
+| 1, 2, 14 | corrigé | Stipe fermé et aplati en paume ; haptères irréguliers et ramifiés (disque bosselé pour le cochayuyo) ; lamelles du boa irrégulières, larges et serrées. |
+| 9 | corrigé | Cause principale : la simulation enregistrait une image tous les `round(100/30)` = 3 sous-pas, soit 0,030 s au lieu de 1/30 s. Les laminaires prenaient jusqu'à 3 s de retard sur la mer et flottaient là où l'eau avait été (à 0,9 de la boucle, points de lanière à plus de 20 cm en l'air : 917 → 49). Les sous-pas sont désormais un multiple de la cadence. De plus, le caisson ne repousse plus qu'à l'horizontale (des lanières restaient posées sur son sommet invisible) et les lames du cochayuyo sont plus souples. Sauts d'image : pire 0,34 → 0,22 m. |
+| 3 | corrigé | Le champ des flaques valait −9 hors flaque, d'où des bords en marches de texels ; il est désormais continu. Les alvéoles du grès sont rares et de tailles variées. |
+| 10 | corrigé | Écume en plaques déchirées trouées de bulles. |
+| 11, 12 | corrigé | La roche porte ses ombres ; l'ombre du soleil couvre 10 m dans l'axe de visée (3 072² en qualité haute). |
+| P1 laminaires | fait | Albédo sombre, reflets étirés dans la longueur, translucidité aux marges et aux pointes. |
+| P1 eau | fait | Diffusion de Henyey-Greenstein vers le soleil réfracté, rayons de lumière ; l'eau a un corps vue d'en dessus ; ciel avec nuages ombrés, liseré à contre-jour, cirrus. |
+| P2 | fait | Ménisque et gouttes flous ; la lame d'eau grossit l'image ; particules en suspension ; profondeur de champ avec bascule de point vers la grande vague ; exposition qui rattrape la plongée ; choc amorti du caisson ; respiration du trépied ; images fantômes du dôme. |
+| P3 | fait | Bord des lames qui ondule dans l'eau (ondes qui courent vers la pointe). |
+| P4 | fait | Balanes, patelles, moules. |
+| cadrage | non modifié | L'horizon est déjà au-dessus du centre pour la plupart des humeurs ; le cap n'a pas été touché (règle du projet : ne pas toucher la caméra sans raison). |

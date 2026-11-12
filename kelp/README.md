@@ -20,7 +20,7 @@ Rendu physique en three.js (WebGPU, TSL). Tout est calculé : une graine produit
 
 Sur écran tactile : une touche met en pause, deux touches tirent une nouvelle scène, un appui long masque l'interface.
 
-Paramètres d'URL : `?seed=…`, `?mood=…` (ploumanach, couchant, etretat, ardoise, midi, noctiluque), `?family=…` (digitata, durvillaea, postelsia, egregia), `#r=…` (scène retouchée, « Copier le lien »), `?ui=0`, `?mobile=1` / `?mobile=0`, `?debug` (outils dans `window.kelp` : `shot(phase)`, `still(nom, phase, l, h)`, `film(préfixe, phases)`, `send(nom)`, `sheet(graines, phases)` — une graine peut s'écrire `graine:humeur:famille` —, `meter()`, `meters()`, `bench()`, `seam()`, `run()`).
+Paramètres d'URL : `?seed=…`, `?mood=…` (ploumanach, couchant, etretat, ardoise, midi, noctiluque), `?family=…` (digitata, durvillaea, postelsia, egregia), `#r=…` (scène retouchée, « Copier le lien »), `?ui=0`, `?mobile=1` / `?mobile=0`, `?debug` (outils dans `window.kelp` ; `&sink=port` choisit le collecteur de `tools/sink.py` : `shot(phase)`, `still(nom, phase, l, h)`, `film(préfixe, phases)`, `send(nom)`, `sheet(graines, phases)` — une graine peut s'écrire `graine:humeur:famille` —, `meter()`, `meters()`, `bench()`, `seam()`, `run()`).
 
 Le panneau règle l'humeur et la laminaire (nouvelle scène de la même graine) ; la série de vagues (instant, hauteur au large et creux de chacune, obliquité, frottement, pente du platier — la mer et les laminaires sont alors recalculées) ; la densité et les couleurs de la frange ; la caméra (champ, cap, inclinaison, hauteur et rayon du dôme, travellings) ; le soleil, le ciel, l'eau (extinction par canal, noctiluques) ; le rendu. Export MP4 image par image (éventuellement accumulé) et PNG.
 
@@ -59,7 +59,7 @@ Le tout est enregistré 60 fois par seconde (une texture x × t) et relu sur le 
 
 ## Les laminaires (`src/gen/kelp.js`)
 
-Des chaînes de nœuds (stipe, lanières) ancrées au crampon, intégrées par XPBD à petits pas (100 sous-pas par seconde, deux itérations) :
+Des chaînes de nœuds (stipe, lanières) ancrées au crampon, intégrées par XPBD à petits pas (120 sous-pas par seconde — un multiple des 30 images enregistrées par seconde —, deux itérations) :
 
 - **Forces** : poids, poussée d'Archimède de la partie immergée (rapport de densité propre à la famille), traînée de Morison sur la vitesse relative à l'eau — intégrée implicitement, v_r ← v_r / (1 + k|v_r|h), stable quel que soit le pas —, et l'accélération de l'eau elle-même, qui emporte une lame presque neutre ; la masse ajoutée ralentit la montée d'une lame à plat ; profil de vitesse en puissance 1/7 (plus lent près de la roche).
 - **Stabilité** : la correction de contact sur la roche est bornée à 6 mm par sous-pas (sur le tombant, la roche sous un nœud peut dépasser d'un mètre sa position : corrigée d'un coup, elle le lançait à 30 m/s), la vitesse à 5 m/s, et un amortissement structurel tire la vitesse de chaque nœud vers celle de ses voisins de chaîne (les vibrations nœud contre nœud s'éteignent, le mouvement d'ensemble reste).
@@ -89,6 +89,43 @@ Des chaînes de nœuds (stipe, lanières) ancrées au crampon, intégrées par X
 - **Le soleil sous l'eau** : atténué sur le chemin réfracté jusqu'au point, modulé par des caustiques, par `receivedShadowNode` (même atténuation pour la roche, les lanières, les crampons).
 - **La roche** (`src/gen/rock.js`, `src/scene/terrain.js`) : relief cuit dans un worker (1 024² sur 16 × 16 m), déplacement des sommets et normal map ; granit en boules et diaclases, basalte en dalles polygonales, craie à silex, ardoise en feuillets (front adouci sur ~8 cm : plus abrupt, il ne tenait ni dans le relief cuit ni dans le maillage et se lisait en facettes), grès en gradins ; algue calcaire rose dans les creux bas et les flaques ; grain minéral et micro-relief au gros plan ; normale lue au pixel dans le relief cuit (interpolée entre les sommets, elle dessinait les triangles sur les pentes raides), et sur les faces raides une couleur tirée du volume de bruit en 3D (la carte vue de dessus s'y étirait en stries) ; **mouillée** sous l'enveloppe de séchage (plus sombre, brillante), mate dans l'eau.
 - **Le ciel** (`src/gen/sky.js`) : carte HDR calculée (dégradé, brume, auréole de Mie, nuages, lune et étoiles), dessinée comme une sphère de la scène.
+
+## La passe cinéma
+
+Une revue de direction artistique ([docs/revue-cinema.md](docs/revue-cinema.md)) a relevé ce qui trahissait l'image de synthèse ; voici ce qui a changé.
+
+- **Ce qui cassait l'illusion.**
+  - La surface de l'eau garde tous ses sommets au niveau de l'eau, et le mouillé et le sec sont décidés au pixel. Les sommets plongés sous la roche faisaient des triangles vus de dessous et des pans verticaux sur les gradins.
+  - Le niveau d'eau lu au dôme est interpolé à la main en pleine précision : les poids 8 bits du filtrage matériel dessinaient la ligne d'eau en escalier.
+  - La roche donne sa position précédente : ses vecteurs vitesse valaient tout le relief, et l'anticrénelage temporel l'étalait à la verticale.
+  - La texture des flaques est continue hors flaque (bords en marches de texels).
+  - Le flou de mouvement prend 12 prises décalées par un bruit, avec une traînée plafonnée (on voyait des copies distinctes).
+  - Sous l'eau, le contre-jour des lames est éteint : le soleil réfracté vient d'en haut, et les lames ne s'allument plus comme des néons.
+- **Les laminaires.**
+  - Elles sont brun olive presque noir, avec des reflets étirés dans la longueur et une translucidité limitée aux marges et aux pointes.
+  - Leur bord ondule dans l'eau.
+  - Le stipe est fermé et s'aplatit en paume.
+  - Les crampons ont des haptères irréguliers et ramifiés ; ceux du cochayuyo forment un disque bosselé. Leur taille suit l'âge de la plante.
+  - Les lamelles du boa sont irrégulières.
+  - Les lames du cochayuyo sont plus souples (`tools/sag.mjs` mesure les lames tenues en l'air).
+  - Les laminaires ne prennent plus de retard sur la mer. On enregistrait une image tous les `round(sous-pas / 30)` sous-pas : à 100 sous-pas par seconde, une image valait 0,030 s au lieu de 1/30 s. En fin de boucle, les lames suivaient l'eau de 3 s en retard et flottaient en l'air, tendues comme des poutres. Les sous-pas sont désormais un multiple de la cadence.
+  - Le caisson de la caméra repousse les lanières à l'horizontale seulement : elles ne restent plus posées sur son sommet invisible.
+- **La roche** porte ses ombres : au soleil rasant, les boules, les dalles et les fissures se lisent enfin. L'ombre du soleil couvre 10 m dans l'axe de visée.
+- **Le platier** porte des balanes en colonies, des patelles et des moules dans les fissures (`faunaGeometry`, `scene/fauna.js`). Elles donnent l'échelle.
+- **L'eau.**
+  - Elle diffuse le soleil réfracté vers l'avant (Henyey-Greenstein, g = 0,55), découpé en rayons par les rides (caustiques projetées le long du rayon de soleil, en quatre points du segment immergé).
+  - Vue d'en dessus, elle a un corps : une crête n'est plus transparente au ciel, elle s'opacifie avec la profondeur et s'allume à contre-jour.
+  - L'écume forme des plaques déchirées trouées de bulles, au lieu d'un filet de Worley.
+- **La caméra vit**, d'après la mer enregistrée au point du caisson (`stage.trackAt`, périodique) :
+  - l'exposition rattrape la plongée d'un diaph, avec 0,7 s de retard ;
+  - quand le front frappe le dôme, un ressort amorti (1,6 Hz) fait tressaillir et rouler le caisson ;
+  - le trépied respire, d'un millimètre ;
+  - la profondeur de champ est active, avec une bascule de point vers la grande vague trois secondes avant qu'elle ne recouvre le dôme.
+- **Le dôme.**
+  - Le ménisque et les gouttes sont flous : ils sont à 9 cm, hors du plan de netteté.
+  - La lame d'eau au-dessus de la ligne grossit l'image.
+  - Sous l'eau, des particules en suspension, floues, dérivent devant l'objectif.
+  - Le soleil laisse des images fantômes colorées, de l'autre côté du centre.
 
 ## L'écran de chargement (`src/app/loaderArt.js`)
 
