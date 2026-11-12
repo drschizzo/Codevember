@@ -137,6 +137,12 @@ function surface(fin, U, p, pf, pn) {
       const n = n1.mul(0.65).add(n2.mul(0.35));
       out.h = n.mul(0.5).add(0.5).mul(aa(260 / PI));
       out.rough = U.rough.add(n.mul(0.05)).clamp(0.02, 1);
+      // (anisotropie de three : le reflet s'étire le long de la direction
+      // donnée. Les stries d'un brossage dispersent la lumière EN TRAVERS
+      // d'elles-mêmes — le reflet d'une barre brossée en long est une bande
+      // courte en travers, pas un néon sur toute sa longueur : direction de la
+      // bitangente, pas de la tangente de brossage.)
+      out.aniso = vec2(0, U.aniso);
       break;
     }
     case 'hammered': { // coups de marteau : coupelles autour des germes de Worley
@@ -397,7 +403,7 @@ export const ditherThreshold = (salt = 0) => {
 
 // Ce qui, dans un matériau, impose une recompilation quand cela change
 export function signature(f) {
-  const s = (fin) => [fin.pattern, fin.sheen > 0, fin.clearcoat > 0, fin.irid > 0, fin.aniso > 0, fin.glass > 0, fin.dispersion > 0, fin.smudge > 0, fin.emit > 0].join('');
+  const s = (fin) => [fin.pattern, fin.sheen > 0, fin.clearcoat > 0, fin.irid > 0, fin.aniso > 0, fin.glass > 0, fin.dispersion > 0, fin.smudge > 0, fin.emit > 0, fin.spec < 1].join('');
   return [s(f.outer), s(f.inner), s(f.edge), (f.wear || 0) > 0].join('|');
 }
 
@@ -416,7 +422,7 @@ export function buildPieceMaterial(finish, U, M, { shadowTint = null, content = 
     cc: any((f) => f.clearcoat > 0), ccN: fins.some((f) => f.pattern === 'glaze'), sheen: any((f) => f.sheen > 0),
     irid: any((f) => f.irid > 0), aniso: any((f) => f.aniso > 0), glass: any((f) => f.glass > 0),
     disp: any((f) => f.glass > 0 && f.dispersion > 0), glit: fins.some((f) => f.pattern === 'glitter' || f.pattern === 'urushi'),
-    smudge: any((f) => f.smudge > 0), emit: any((f) => f.emit > 0), wear: (finish.wear || 0) > 0,
+    smudge: any((f) => f.smudge > 0), emit: any((f) => f.emit > 0), wear: (finish.wear || 0) > 0, spec: any((f) => f.spec < 1),
   };
   const members = { color: 'vec3', rough: 'float', metal: 'float', h: 'float' };
   if (F.cc) Object.assign(members, { cc: 'float', ccRough: 'float' });
@@ -429,6 +435,7 @@ export function buildPieceMaterial(finish, U, M, { shadowTint = null, content = 
   if (F.glit) members.glitter = 'vec3';
   if (F.smudge) members.smudge = 'float';
   if (F.emit) members.emit = 'vec3';
+  if (F.spec) members.spec = 'float';
   const Surf = struct(members);
 
   // (motif : dans le repère de la pièce au repos — position d'origine)
@@ -452,6 +459,7 @@ export function buildPieceMaterial(finish, U, M, { shadowTint = null, content = 
     if (F.glit) o.glitter = s.glitter;
     if (F.smudge) o.smudge = float(Uf.smudge);
     if (F.emit) o.emit = Uf.emitColor.mul(Uf.emit);
+    if (F.spec) o.spec = float(Uf.spec);
     return o;
   };
   const evaluate = Fn(() => {
@@ -515,6 +523,7 @@ export function buildPieceMaterial(finish, U, M, { shadowTint = null, content = 
     m.iridescenceThicknessNode = get('iridT');
   }
   if (F.aniso) m.anisotropyNode = get('aniso');
+  if (F.spec) m.specularIntensityNode = get('spec'); // (velours : les fibres piègent aussi le reflet rasant)
   if (F.glass && LITE) {
     // verre allégé : une baguette de verre sombre, teintée par son absorption,
     // brillante sous son vernis (pas de copie de l'image ni de double passe)

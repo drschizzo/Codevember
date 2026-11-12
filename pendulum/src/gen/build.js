@@ -149,9 +149,14 @@ export function linkParts(L, dzNext) {
     cylinder(body, w / 2, 0, l - bossR * 1.4, 0.0008, 24);
   }
   // chapes : roulement au pivot (bague extérieure, cage, bague intérieure)
+  // (face avant détaillée : un disque plein et sombre se lisait comme un trou
+  // noir au bout du maillon ; ici la bague extérieure, le flasque en retrait,
+  // la bague intérieure et le bout de l'axe, qui accrochent la lumière en anneaux)
   const bear = (y, zc, rOut) => {
     hub.frame([0, y, zc], X, Y, Z);
-    turned(hub, [[0, -th / 2 - 0.0025], [rOut, -th / 2 - 0.0025], [rOut, th / 2 + 0.0025], [0, th / 2 + 0.0025]], { fil: 0.0012, M: 40 });
+    const h = th / 2 + 0.0025, r1 = rOut * 0.8, r2 = rOut * 0.52, r3 = rOut * 0.28;
+    const prof = [[0, -h], [rOut, -h], [rOut, h], [r1, h], [r1, h - 0.0006], [r2, h - 0.0006], [r2, h + 0.0003], [r3, h + 0.0003], [r3, h + 0.0012], [0, h + 0.0012]];
+    turned(hub, prof, { fil: 0.0005, M: 40, surf: (i) => (i === 4 || i === 5 ? IN : i >= 6 ? EDGE : OUT) });
   };
   bear(0, 0, bossR * 0.78);
   // axe vers le maillon suivant, avec un écrou

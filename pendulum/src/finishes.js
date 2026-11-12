@@ -23,6 +23,9 @@ export const FINISH_DEFAULTS = {
   irid: 0, iridIOR: 1.8, iridMin: 250, iridMax: 650, aniso: 0, bump: 0, scale: 1, smudge: 0,
   glass: 0, ior: 1.5, dispersion: 0, attDist: 0.6,
   emit: 0, emitColor: '#36e0ff', // (phosphorescence : une lueur qui pulse depuis le cœur)
+  // intensité du reflet spéculaire d'un diélectrique : < 1 pour un piège à
+  // lumière (le velours noir, dont le reflet rasant grisait le sol)
+  spec: 1,
 };
 
 // F0 des métaux (sRGB)
@@ -113,7 +116,7 @@ export const FINISHES = {
   parquet: F({ label: 'Parquet', pattern: 'parquet', color: '#3e2c1d', color2: '#1d140c', rough: 0.45, clearcoat: 0.4, ccRough: 0.12, bump: 0.6, scale: 1 }),
   cycloWhite: F({ label: 'Cyclorama blanc', pattern: 'plaster', color: '#e4e3df', color2: '#d8d6d1', rough: 0.95, bump: 0.15, scale: 1 }),
   epoxyWhite: F({ label: 'Sol de résine', pattern: 'paint', color: '#d7d6d2', color2: '#c9c8c3', rough: 0.6, bump: 0.2, scale: 0.4 }),
-  velvetBlack: F({ label: 'Velours noir', pattern: 'velvet', color: '#030303', color2: '#020202', rough: 1, sheen: 0.4, sheenColor: '#121212', sheenRough: 0.6, scale: 0.3 }),
+  velvetBlack: F({ label: 'Velours noir', pattern: 'velvet', color: '#030303', color2: '#020202', rough: 1, spec: 0.08, sheen: 0.4, sheenColor: '#121212', sheenRough: 0.6, scale: 0.3 }),
   limewash: F({ label: 'Mur chaulé', pattern: 'plaster', color: '#e2d8c4', color2: '#cbbd9f', rough: 0.95, bump: 1.2, scale: 1 }),
   earth: F({ label: 'Terre battue', pattern: 'earth', color: '#a5866a', color2: '#7b604a', rough: 0.95, bump: 1.4, scale: 1 }),
   concreteDark: F({ label: 'Béton sombre', pattern: 'concrete', color: '#2a2928', color2: '#1d1c1b', rough: 0.9, bump: 0.8, scale: 1 }),
