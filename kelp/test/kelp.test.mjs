@@ -63,6 +63,17 @@ test('les laminaires : étirement borné (à la mise en place < 5 %, pointe tran
   assert.ok(st.settleStretch < 0.05, `étirement après la mise en place ${st.settleStretch}`);
 });
 
+test('les lanières ne traversent jamais le caisson de la caméra (sinon le plan proche les coupe)', () => {
+  const K = S.kelp, sg = K.straps, anch = new Float32Array(K.n * 3);
+  for (let v = 0; v < sg.count; v++) for (let c = 0; c < 4; c++) { const i = sg.nidx[v * 4 + c]; anch[3 * i] = sg.anch[v * 4]; anch[3 * i + 1] = sg.anch[v * 4 + 1]; anch[3 * i + 2] = sg.anch[v * 4 + 2]; }
+  let m = 9;
+  for (let f = 0; f < K.nf; f += 2) {
+    const c = cameraPose(R.camera, S.cam, f / K.nf).pos;
+    for (let i = 0; i < K.n; i++) { const q = P(f, i); m = Math.min(m, Math.hypot(q[0] + anch[3 * i] - c[0], q[1] + anch[3 * i + 1] - c[1], q[2] + anch[3 * i + 2] - c[2])); }
+  }
+  assert.ok(m > 0.1, `une lanière passe à ${(m * 100).toFixed(1)} cm de l'objectif`);
+});
+
 test('raccord : la dernière image rejoint la première sans saut', () => {
   const K = S.kelp;
   let m = 0;
