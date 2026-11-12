@@ -38,6 +38,15 @@ export const SHOTS = [
   { u0: 0.812, kind: 'lame' }, // (après le roulement rapide du portique : il attend en aval, lame qui descend)
 ];
 
+// l'ordre des plans entre les mêmes raccords, propre à la famille : la brèche
+// se fait tard (le lac doit d'abord se remplir) — on la voit de haut pendant
+// le remplissage, au ras du sable quand l'eau déborde, de près quand elle
+// s'élargit en crue
+const ORDER = {
+  breche: ['ensemble', 'carte', 'ras', 'macro', 'sechage', 'lame'],
+};
+export const kindsFor = (family) => ORDER[family] ?? SHOTS.map((s) => s.kind);
+
 // indice du plan qui contient la phase u, et l'avancement t ∈ [0, 1) dans ce plan
 export function shotAt(u) {
   u -= Math.floor(u);
@@ -112,10 +121,11 @@ export function buildCamera(R, S) {
   for (let k = 0; k <= 40; k++) bladeZ += longProfile(S.form, (k / 40) * TABLE.Lx) / 41;
   const at = (xy, dz = 0) => toWorld(xy[0], xy[1], b0(S, xy[0], xy[1]) + dz);
 
+  const kinds = kindsFor(R.family);
   function pose(u) {
-    const sh = shotAt(u), t = sh.t;
+    const sh = shotAt(u), t = sh.t, kind = kinds[sh.index];
     let position, target, f = fov, dof = 1, near = 0.05;
-    switch (sh.kind) {
+    switch (kind) {
       case 'ensemble': {
         target = mid;
         position = sph(mid, lerp(0.8, 0.68, t), 0.55 * hk, lerp(1.95, 1.62, t));
@@ -160,7 +170,7 @@ export function buildCamera(R, S) {
         break;
       }
     }
-    return { position, target, fov: f, shot: sh.index, kind: sh.kind, dof, near };
+    return { position, target, fov: f, shot: sh.index, kind, dof, near };
   }
   return pose;
 }
