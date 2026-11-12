@@ -32,8 +32,9 @@ export function createFauna(W) {
     const lv = W.levelNear(P.x, P.z, U.t), H = W.rockAt(P.x, P.z);
     const wet = max(smoothstep(-0.004, 0.006, W.wetLevel(P.x, P.z, U.t, H).sub(H)), smoothstep(-0.002, 0.004, lv.sub(P.y)));
     mat.colorNode = mix(base, base.pow(1.35).mul(0.7), wet);
-    const rough = bar.mul(0.85).add(lim.mul(0.6)).add(mus.mul(0.32));
-    mat.roughnessNode = mix(rough, rough.mul(0.45), wet.mul(select(mus.greaterThan(0.5), float(1), float(0.7))));
+    // (une patelle est calcaire, mate même mouillée : brillante, elle se lisait comme une bille de métal)
+    const rough = bar.mul(0.85).add(lim.mul(0.8)).add(mus.mul(0.32));
+    mat.roughnessNode = mix(rough, rough.mul(0.45), wet.mul(select(mus.greaterThan(0.5), float(1), select(lim.greaterThan(0.5), float(0.25), float(0.7)))));
     mat.metalnessNode = float(0);
     mat.receivedShadowNode = W.receivedShadow;
     return mat;

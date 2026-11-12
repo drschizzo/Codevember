@@ -113,7 +113,7 @@ Une revue de direction artistique ([docs/revue-cinema.md](docs/revue-cinema.md))
 - **La roche** porte ses ombres : au soleil rasant, les boules, les dalles et les fissures se lisent enfin. L'ombre du soleil couvre 10 m dans l'axe de visée.
 - **Le platier** porte des balanes en colonies, des patelles et des moules dans les fissures (`faunaGeometry`, `scene/fauna.js`). Elles donnent l'échelle.
 - **L'eau.**
-  - Elle diffuse le soleil réfracté vers l'avant (Henyey-Greenstein, g = 0,55), découpé en rayons par les rides (caustiques projetées le long du rayon de soleil, en quatre points du segment immergé).
+  - Elle diffuse le soleil réfracté vers l'avant (Henyey-Greenstein, g = 0,55), découpé en rayons par les rides (caustiques projetées le long du rayon de soleil, en deux points du segment immergé).
   - Vue d'en dessus, elle a un corps : une crête n'est plus transparente au ciel, elle s'opacifie avec la profondeur et s'allume à contre-jour.
   - L'écume forme des plaques déchirées trouées de bulles, au lieu d'un filet de Worley.
 - **La caméra vit**, d'après la mer enregistrée au point du caisson (`stage.trackAt`, périodique) :
@@ -155,6 +155,8 @@ Quatorze tests : la mer est une orbite périodique, sa hauteur n'est jamais nég
 Génération d'une scène (dans Node, un seul cœur) : ~1 s pour la mer, ~2 s pour la roche, 7 à 18 s pour les laminaires selon la famille (jusqu'à 64 plantes et ~3 400 nœuds, deux boucles entières). Nettement plus lent quand l'onglet est en arrière-plan.
 
 Temps d'image (GPU d'un Mac, onglet au premier plan, 960 × 540, graine ft2xdf) : 6,6 à 6,9 ms, contre 10,6 ms avant la passe d'optimisation — roche 6 → 3,9 ms (hauteur relue dans la position au lieu de l'échantillonner, pente hors de la boîte lue sur le profil seul, micro-relief à deux octaves, niveau de l'eau sans champ lointain), brouillard d'eau calculé seulement pour les rayons qui traversent l'eau, une seule copie des vagues lointaines, grilles de l'eau (4 cm) et de la roche (2,8 cm) plus lâches, sections des lanières à 8 sommets, occlusion ambiante à 8 échantillons ; résolution par défaut 1,25 × l'écran. Postes restants : occlusion ambiante ~2,8 ms, roche ~3,9 ms.
+
+Après la passe cinéma (graine k39, 960 × 540, même machine, panneau masqué) : 8,1 à 9,3 ms, contre 6,6 à 7,6 ms avant. Le surcoût vient surtout des plans sous l'eau (diffusion vers le soleil et rayons : +2,6 ms) ; il y a aussi la roche dans l'ombre portée, la faune, la profondeur de champ et le flou à 12 prises.
 
 ## Version mobile
 
