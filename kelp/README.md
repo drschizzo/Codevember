@@ -126,6 +126,11 @@ Une revue de direction artistique ([docs/revue-cinema.md](docs/revue-cinema.md))
   - La lame d'eau au-dessus de la ligne grossit l'image.
   - Sous l'eau, des particules en suspension, floues, dérivent devant l'objectif.
   - Le soleil laisse des images fantômes colorées, de l'autre côté du centre.
+- **La nuit** (Noctiluque) :
+  - les étoiles sont dessinées au pixel par le ciel de la scène (dans la carte du ciel, une étoile faisait une tache de 5 px) ;
+  - la luminescence s'allume en étincelles, pas en voile ;
+  - l'exposition ne rattrape presque rien sous l'eau.
+- **La profondeur de champ** suit 1/distance et sature à l'infini : le nœud de three.js reçoit une profondeur remappée.
 
 ## L'écran de chargement (`src/app/loaderArt.js`)
 

@@ -170,7 +170,13 @@ export function createPost(renderer, scene, camera, opts = {}) { // opts.lens(sa
       color = finish(t.getTextureNode());
     }
     if (cfg.dof) {
-      const d = dof(color, scenePass.getViewZNode(), U.focus, U.focusRange, U.bokeh);
+      // (cercle de confusion physique : il suit 1/distance et sature à
+      // l'infini — le nœud de three.js floute sans limite au-delà de la
+      // plage, et les étoiles devenaient de gros disques ; on lui donne une
+      // profondeur remappée : focus + (1 − focus/z)·focus·0,14)
+      const zv = scenePass.getViewZNode().negate().max(0.01);
+      const zPhys = U.focus.add(float(1).sub(U.focus.div(zv)).mul(U.focus).mul(0.14)).negate();
+      const d = dof(color, zPhys, U.focus, U.focusRange, U.bokeh);
       nodes.dof = d;
       color = d;
     }

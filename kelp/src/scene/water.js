@@ -186,7 +186,9 @@ export function createWater() {
       const Tr = exp(sig.mul(lw).negate());
       const ins = inscatter(O, P, sA, sB, dir, M, depthM, aer);
       // la nuit : l'eau agitée s'allume (noctiluques)
-      const lum = vec3(0.15, 0.55, 1.0).mul(U.glow).mul(aer.mul(2.2).add(sm.z.mul(0.6)));
+      // (en étincelles : chaque noctiluque est un point, pas un voile)
+      const spark = smoothstep(0.16, 0.0, NZ(M.mul(34).add(vec3(0, 0, G.phase.mul(16)))).z).mul(2.6).add(0.15);
+      const lum = vec3(0.15, 0.55, 1.0).mul(U.glow).mul(aer.mul(2.2).add(sm.z.mul(0.6))).mul(spark);
       rgbW.assign(rgbW.mul(Tr).add(ins.add(lum).mul(Tr.oneMinus())));
       lwV.assign(lw);
     });
@@ -368,7 +370,9 @@ export function createSurface(W, skyTex, lite) {
     // s'allume)
     const cosTi = sqrt(float(1).sub(float(1).sub(cosi.mul(cosi)).div(1.77)));
     const tdirA = normalize(dir.div(1.33).add(n.mul(cosi.div(1.33).sub(cosTi)))); // (rayon réfracté, de l'air vers l'eau)
-    const body = float(1).sub(exp(depth.max(0).mul(-2.6).div(cosTi.max(0.25)))).mul(F.oneMinus()).mul(smoothstep(0.03, 0.2, depth)); // (une nappe mince laisse voir la roche)
+    // (opacité selon la limpidité de l'eau : une eau claire, Étretat, laisse voir plus loin)
+    const kBody = dot(vec3(U.ext), vec3(1 / 3)).mul(2.5).add(0.8);
+    const body = float(1).sub(exp(depth.max(0).mul(kBody).negate().div(cosTi.max(0.25)))).mul(F.oneMinus()).mul(smoothstep(0.03, 0.2, depth)); // (une nappe mince laisse voir la roche)
     const bodyCol = W.waterGlow(tdirA, depth.max(0).mul(0.5), sm.w.clamp(0, 1.2)).mul(body);
     // composition prémultipliée : src + dst·(1 − α)
     const reflA = select(above, sky.mul(F).add(spec).add(bodyCol), mix(window, deep, F));
