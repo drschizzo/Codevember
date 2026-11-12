@@ -83,16 +83,28 @@ export function makeRock(type, seed, opts = {}) {
       d -= 0.02 * crack;
       motif = nod; id = pid;
     } else if (type === 'slate') {
-      // feuillets dressés : une coordonnée transverse aux couches, gauchie
+      // feuillets dressés : une coordonnée transverse aux couches, gauchie ;
+      // des couches d'épaisseurs inégales (bords gauchis par un bruit), coupées
+      // le long de leur direction en blocs de hauteurs différentes, au dessus
+      // rugueux — un pas et un profil constants faisaient une tôle ondulée
       const u = (x * cd + z * sd) + 0.18 * N.fbm(x * 0.25, 5.5, z * 0.25, 3);
+      const v = -x * sd + z * cd;
       const period = 0.3;
-      const k = u / period, f = k - Math.floor(k), lid = h2(Math.floor(k), 3, s);
-      // profil en dents : face raide (f → 1) et dos en pente douce, crête arrondie
-      // (la face raide descend sur ~8 cm : un front plus abrupt ne tient pas dans
-      // le relief cuit ni dans le maillage, et se lisait en facettes)
-      const tooth = sst(0, 0.72, f) * (1 - sst(0.74, 1.0, f));
-      d = (0.045 + 0.035 * lid) * tooth - 0.03 + 0.01 * wear;
-      crack = 1 - sst(0.0, 0.12, f) * (1 - sst(0.9, 1.0, f));
+      const k = u / period + 0.35 * N.noise(u * 1.5, 2.2, v * 0.3), f = k - Math.floor(k), lay = Math.floor(k), lid = h2(lay, 3, s);
+      // (blocs longs, joints obliques et décalés d'une couche à l'autre)
+      const blen = 0.8 + 1.4 * h2(lay, 9, s), vj = v + (u - lay * period) * (h2(lay, 6, s) - 0.5) * 1.6 + 0.2 * N.noise(u * 2, 8.8, v * 2);
+      const kb = vj / blen + h2(lay, 4, s), fb = kb - Math.floor(kb), blk = h2(lay * 31 + Math.floor(kb), 5, s);
+      // profil : face raide (f → 1) et dos en pente, crête nette mais pas vive
+      // (la face raide descend sur ~8 cm : plus abrupte, elle ne tient pas
+      // dans le relief cuit ni dans le maillage, et se lit en facettes)
+      // (dos plan, à peine arrondi à l'arête : un profil en cloche faisait des tuiles)
+      const tooth = Math.min(1, f / 0.8) ** 1.15 * (1 - sst(0.8, 1.0, f));
+      const rough = 0.006 * N.fbm(x * 7, 3.1, z * 7, 3) + 0.01 * N.fbm(x * 1.8, 4.4, z * 1.8, 2);
+      d = (0.03 + 0.03 * lid + 0.03 * blk) * tooth - 0.035 + 0.01 * wear + rough;
+      // (joint transverse entre deux blocs : une entaille)
+      const joint = sst(0.06, 0.0, Math.min(fb, 1 - fb) * blen);
+      d -= 0.025 * joint * tooth;
+      crack = Math.max(1 - sst(0.0, 0.12, f) * (1 - sst(0.9, 1.0, f)), joint);
       // (pas de feuilletage fin dans le relief : sa période, 3,5 cm, est à peine
       // deux texels de la carte cuite, et il se repliait en stries)
       id = lid; motif = f;

@@ -22,7 +22,7 @@ export function createFauna(W) {
     const n1 = fbm(P.mul(140), 2), n2 = NZ(P.mul(600)).x;
     // balane : plâtre, l'orifice sombre au sommet (le haut de la coque)
     const top = smoothstep(0.004, 0.0075, P.y.sub(W.rockAt(P.x, P.z)));
-    const cBar = mix(vec3(0.62, 0.6, 0.55), vec3(0.42, 0.4, 0.36), n1.mul(0.5).add(0.5)).mul(float(1).sub(top.mul(0.75)));
+    const cBar = mix(vec3(0.44, 0.42, 0.38), vec3(0.28, 0.27, 0.24), n1.mul(0.5).add(0.5)).mul(float(1).sub(top.mul(0.75)));
     // patelle : côtes claires sur fond gris brun
     const cLim = mix(vec3(0.2, 0.18, 0.15), vec3(0.42, 0.39, 0.33), smoothstep(0.1, 0.6, n2).mul(0.6).add(n1.mul(0.3)));
     // moule : bleu-noir, un reflet violacé

@@ -119,3 +119,7 @@ Le platier est trop propre. Il manque de quoi donner l'échelle et la vie :
 | P3 | fait | Bord des lames qui ondule dans l'eau (ondes qui courent vers la pointe). |
 | P4 | fait | Balanes, patelles, moules. |
 | cadrage | non modifié | L'horizon est déjà au-dessus du centre pour la plupart des humeurs ; le cap n'a pas été touché (règle du projet : ne pas toucher la caméra sans raison). |
+| Ardoise | corrigé | Les feuillets formaient une tôle ondulée (pas et profil constants) : ils ont désormais des couches d'épaisseurs inégales, un dos plan, et sont rompus par des joints obliques. Au loin, le niveau d'eau est moyenné sur la maille, ce qui adoucit les dents du front vues de dessous (il en reste de légères ondulations de la crête). |
+| Noctiluque | corrigé | Les étoiles sont dessinées au pixel (un texel de la carte du ciel faisait une tache de 5 px). La luminescence forme des étincelles et non un voile, l'exposition reste presque fixe la nuit, et le flou de profondeur sature à l'infini. |
+| Étretat | corrigé | Ciel couvert doux (l'ombrage des nuages faisait un crépi) ; la lame d'eau devant le dôme suit la limpidité de l'eau. |
+| faune | ajusté | Pas de coquillage à moins de 60 cm (dans le flou de l'avant-plan, les balanes faisaient du pop-corn) ; balanes moins blanches, patelles mates. |

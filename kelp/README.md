@@ -130,6 +130,8 @@ Une revue de direction artistique ([docs/revue-cinema.md](docs/revue-cinema.md))
   - les étoiles sont dessinées au pixel par le ciel de la scène (dans la carte du ciel, une étoile faisait une tache de 5 px) ;
   - la luminescence s'allume en étincelles, pas en voile ;
   - l'exposition ne rattrape presque rien sous l'eau.
+- **L'ardoise** a des feuillets d'épaisseurs inégales, au dos plan et à l'arête nette, rompus en blocs par des joints obliques et décalés : un pas et un profil constants faisaient une tôle ondulée, puis des tuiles.
+- **Au loin**, le niveau d'eau est moyenné sur la taille de la maille : un front oblique y dessinait des dents de scie vues de dessous.
 - **La profondeur de champ** suit 1/distance et sature à l'infini : le nœud de three.js reçoit une profondeur remappée.
 
 ## L'écran de chargement (`src/app/loaderArt.js`)
@@ -153,7 +155,7 @@ Pendant que le worker calcule, la coupe du platier de la graine et sa mer, simul
 node --test 'kelp/test/*.test.mjs'
 ```
 
-Quatorze tests : la mer est une orbite périodique, sa hauteur n'est jamais négative, le grand retrait découvre le platier et la grande vague le recouvre ; aucun nœud de laminaire ne passe sous la roche, à aucun instant, ni à moins de 10 cm de l'objectif ; étirement borné (moins de 5 % après la mise en place ; des pointes transitoires, jusqu'à ~45 %, quand un nœud est repoussé par une marche de la roche dans un sous-pas) ; la dernière image rejoint la première sans saut ; à l'air, les lanières reposent sur la roche ; la caméra est périodique, lente, au-dessus de la roche ; les familles diffèrent par leur flottabilité et leur raideur ; la recette est déterministe et JSON, chaque humeur et chaque famille sont tirées, la série est un crescendo qui finit au calme, les humeurs sont des décors.
+Quinze tests : la mer est une orbite périodique, sa hauteur n'est jamais négative, le grand retrait découvre le platier et la grande vague le recouvre ; aucun nœud de laminaire ne passe sous la roche, à aucun instant, ni à moins de 10 cm de l'objectif ; étirement borné (moins de 5 % après la mise en place ; des pointes transitoires, jusqu'à ~45 %, quand un nœud est repoussé par une marche de la roche dans un sous-pas) ; la dernière image rejoint la première sans saut ; à l'air, les lanières reposent sur la roche ; la caméra est périodique, lente, au-dessus de la roche ; les familles diffèrent par leur flottabilité et leur raideur ; la recette est déterministe et JSON, chaque humeur et chaque famille sont tirées, la série est un crescendo qui finit au calme, les humeurs sont des décors ; les laminaires sont à l'heure de la mer (un nombre entier de sous-pas par image enregistrée).
 
 ## Performances
 
