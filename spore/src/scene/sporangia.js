@@ -7,7 +7,7 @@
 import * as THREE from 'three/webgpu';
 import {
   Fn, attribute, uniformArray, uniform, float, vec2, vec3, vec4, instanceIndex, positionLocal, positionPrevious, normalLocal, positionGeometry,
-  normalize, mix, smoothstep, clamp, sin, cos, abs, max as tmax, min as tmin, varying, color, hash, fract, length, pow, sqrt, select, dot, normalGeometry,
+  normalize, mix, smoothstep, clamp, sin, cos, abs, max as tmax, min as tmin, varying, color, hash, fract, length, pow, sqrt, select, dot, normalGeometry, normalWorld,
 } from 'three/tsl';
 import { stableVelocity, isLite, worley, noise, ditherThreshold } from './materials.js';
 import { fruitState } from '../fruit.js';
@@ -45,8 +45,10 @@ export function createSporangia(ctx) {
 
   const tp = attribute('tp', 'vec4'), a0 = attribute('ib0', 'vec4'), a1 = attribute('ib1', 'vec4');
   const part = tp.x, hy = tp.y;
+  const uDew = uniform(0), uSunD = uniform(new THREE.Vector3(0, 1, 0)), uSunE = uniform(new THREE.Color());
   const vSt = varying(vec4(0), 'vSt'), vTp = varying(vec4(0), 'vTp'), vRnd = varying(float(0), 'vRnd');
-  const yc = float(fam === 'lamproderma' ? D.headC : D.stalkH + D.headH / 2);
+  const round = fam === 'lamproderma' || fam === 'trichia' || fam === 'lycogala';
+  const yc = float(round ? D.headC : D.stalkH + D.headH / 2);
   const top = float(D.top);
   const isPart = (k) => abs(part.sub(k)).lessThan(0.5);
   const hsh = (x) => fract(sin(x.mul(12.9898).add(4.1)).mul(43758.5453));
@@ -78,23 +80,41 @@ export function createSporangia(ctx) {
       // la cage n'apparaît qu'à maturité (avant, elle est dans la masse)
       const k3 = mix(float(0.8), float(1), sst(0.55, 0.95, mature));
       p.assign(isPart(3).select(vec3(p.x.mul(k3), p.y, p.z.mul(k3)), p));
-    } else if (fam === 'lamproderma') {
+    } else if (fam === 'lamproderma' || fam === 'trichia') {
       // écailles : chacune se détache à son instant, s'écarte et tombe
       const tf = hsh(tp.z.mul(97).add(a1.y.mul(31))).mul(0.55).add(0.08);
       const f = clamp(open.sub(tf).div(0.3), 0, 1);
       const dir = normalize(vec3(p.x, p.y.sub(D.headC), p.z));
       const fall = vec3(dir.x.mul(f.mul(D.headR * 0.9)), f.mul(f).mul(-D.headC * 1.1), dir.z.mul(f.mul(D.headR * 0.9)));
       p.assign(isPart(2).select(p.add(fall), p));
-      // la masse sombre s'effrite au vent
-      const k3 = float(1).sub(sst(0.35, 1, open).mul(0.55));
-      p.assign(isPart(3).select(vec3(p.x.mul(k3), float(D.headC).add(p.y.sub(D.headC).mul(k3)), p.z.mul(k3)), p));
+      if (fam === 'lamproderma') {
+        // la masse sombre s'effrite au vent
+        const k3 = float(1).sub(sst(0.35, 1, open).mul(0.55));
+        p.assign(isPart(3).select(vec3(p.x.mul(k3), float(D.headC).add(p.y.sub(D.headC).mul(k3)), p.z.mul(k3)), p));
+      } else {
+        // Trichia : les élatères comprimés jaillissent en houppe ronde (rebond)
+        const e = open.add(sin(open.mul(Math.PI)).mul(0.22).mul(float(1).sub(open)));
+        const E = float(1).add(float(sp.expand - 1).mul(e));
+        const q3 = p.sub(vec3(0, D.headC, 0));
+        const lifted = vec3(0, float(D.headC).add(q3.y.max(0).mul(E.sub(1)).mul(0.25)), 0);
+        p.assign(isPart(3).select(lifted.add(vec3(q3.x.mul(E), q3.y.mul(E), q3.z.mul(E))), p));
+      }
+    } else if (fam === 'lycogala') {
+      // le coussin se dégonfle à mesure que les rafales l'aspirent
+      const k3 = float(1).sub(sst(0.1, 1, open).mul(0.42));
+      p.assign(isPart(3).select(vec3(p.x.mul(k3.mul(0.5).add(0.5)), p.y.mul(k3), p.z.mul(k3.mul(0.5).add(0.5))), p));
+      const k2 = float(1).sub(sst(0.2, 1, open).mul(0.16));
+      p.assign(isPart(2).select(vec3(p.x, p.y.mul(k2), p.z), p));
     }
+    // rosée : chaque gouttelette grossit puis sèche autour de son centre
+    const dc = p.sub(nn.mul(tp.z));
+    p.assign(isPart(6).select(dc.add(nn.mul(tp.z.mul(uDew).mul(hsh(tp.w.mul(17).add(a1.y)).mul(0.6).add(0.6)))), p));
     // 2. la levée : perle (sphère de rayon rb posée) → sporange dressé
     const rb = float(D.beadR).mul(tmax(bead, 0.001).pow(1 / 3));
     const lift = sst(0, 0.85, grow);
     const cNow = mix(rb.mul(0.78), yc, lift);                    // centre de la tête
     const m = sst(0.3, 1, grow);                                  // forme de la tête
-    const isHead = isPart(2).or(isPart(3)).or(isPart(4));
+    const isHead = isPart(2).or(isPart(3)).or(isPart(4)).or(isPart(6));
     const q = p.sub(vec3(0, yc, 0));
     const qs = normalize(q.add(vec3(0, 1e-5, 0))).mul(rb);
     const headP = vec3(0, cNow, 0).add(mix(qs, q, m));
@@ -143,7 +163,7 @@ export function createSporangia(ctx) {
   const K = sp.colors;
   const grow = vSt.x, mature = vSt.y, open = vSt.z, wear = vSt.w, P = vTp.x, hy2 = vTp.y;
   const is = (k) => abs(P.sub(k)).lessThan(0.5);
-  const ripe = (k) => mix(mix(C(K.young), C(K.mid), sst(0, 0.5, mature)), C(k), sst(0.45, 1, mature));
+  const ripe = (k) => mix(mix(C(K.young), C(K.mid), sst(0, 0.4, mature)), C(k), sst(0.35, 0.85, mature));
   // couleurs par partie
   const stalkC = mix(C(K.young), C(K.stalk), sst(0.1, 0.8, mature));
   let headC = ripe(K.ripe);
@@ -152,6 +172,10 @@ export function createSporangia(ctx) {
   // l'usure pâlit tout (les spores parties, le soleil)
   const pale = (c) => mix(c, c.mul(0.6).add(vec3(0.22, 0.2, 0.18)), wear.mul(0.7));
   let col = is(0).select(hypoC, is(1).or(is(5)).select(stalkC, is(3).select(netC, is(4).select(ripe(K.ripe).mul(0.8), headC))));
+  // marbrure : les têtes ne sont jamais d'une teinte unie (masse de spores
+  // granuleuse, verrues du péridium)
+  const mott = noise(positionGeometry.mul(160).add(vec3(vRnd.mul(13), 0, 0))).mul(0.16).add(noise(positionGeometry.mul(45)).mul(0.1)).add(1);
+  col = is(2).or(is(4)).select(col.mul(mott), col);
   // Stemonitis : la masse qui fume s'éclaircit ; Arcyria : le filet détendu est un coton lumineux
   mat.colorNode = pale(col);
   const wet = float(1).sub(sst(0.1, 0.6, mature));
@@ -177,20 +201,45 @@ export function createSporangia(ctx) {
     mat.iridescenceThicknessNode = mix(float(film[0]), float(film[1]), hsh(vTp.z.mul(13).add(vRnd.mul(7))));
   }
   // filet : des mailles (Worley sur la surface déroulée) ; plus ouvertes quand il se détend
-  if (fam === 'arcyria' || fam === 'stemonitis') {
+  let keep = null;
+  const andKeep = (k) => { keep = keep ? keep.and(k) : k; };
+  if (fam === 'arcyria' || fam === 'stemonitis' || fam === 'trichia') {
     const ang = vTp.w.mul(Math.PI * 2 * D.netR), yy = positionGeometry.y;
-    const cell = worley(vec3(ang.mul(fam === 'arcyria' ? 60 : 85), yy.mul(fam === 'arcyria' ? 60 : 85), vRnd.mul(9)));
+    const sc = fam === 'arcyria' ? 60 : fam === 'trichia' ? 70 : 85;
+    const cell = worley(vec3(ang.mul(sc), yy.mul(sc), vRnd.mul(9)));
     const thread = cell.y.sub(cell.x);
     // (fils le long des bords de cellules : gardés si près d'un bord ; le
     // filet serré est plein, détendu il s'ajoure)
-    const w = fam === 'arcyria' ? mix(float(1.2), float(0.2), sst(0.05, 0.7, open)) : mix(float(1.2), float(0.08), sst(0.1, 0.8, open));
-    mat.maskNode = is(3).not().or(thread.lessThan(w));
+    const w = fam === 'stemonitis' ? mix(float(1.2), float(0.08), sst(0.1, 0.8, open)) : mix(float(1.2), float(0.2), sst(0.05, 0.7, open));
+    andKeep(is(3).not().or(thread.lessThan(w)));
   }
-  if (fam === 'lamproderma') {
+  if (fam === 'lamproderma' || fam === 'trichia') {
     // écailles tombées : elles s'effacent en touchant le bois
     const tf = hsh(vTp.z.mul(97).add(vRnd.mul(31))).mul(0.55).add(0.08);
     const f = clamp(open.sub(tf).div(0.3), 0, 1);
-    mat.maskNode = is(2).not().or(f.lessThan(ditherThreshold(3).mul(0.25).add(0.75)));
+    andKeep(is(2).not().or(f.lessThan(ditherThreshold(3).mul(0.25).add(0.75))));
+  }
+  if (fam === 'lycogala') {
+    // le sommet se perce : un trou irrégulier qui s'agrandit
+    const nn = worley(vec3(vTp.w.mul(9), hy2.mul(4), vRnd.mul(5))).x;
+    andKeep(is(2).not().or(hy2.lessThan(float(1).sub(open.mul(0.1).mul(nn.mul(0.8).add(0.6))))));
+  }
+  if (keep) mat.maskNode = keep;
+  // gouttes d'eau : noires et brillantes (elles ne montrent que ce qu'elles
+  // reflètent), avec la tache de lumière réfractée du côté opposé au soleil
+  {
+    const water = is(6);
+    const base = mat.colorNode;
+    mat.colorNode = water.select(vec3(0.07, 0.08, 0.09), base);
+    mat.roughnessNode = water.select(float(0.03), mat.roughnessNode);
+    mat.clearcoatNode = water.select(float(1), mat.clearcoatNode);
+    mat.sheenNode = water.select(float(0), mat.sheenNode);
+    const em = mat.emissiveNode;
+    // (sans branche : une normale lue pour la première fois dans un select —
+    // compilé en if/else — n'est calculée que dans une branche, et toutes les
+    // autres faces s'éclairent avec une normale fausse)
+    const wE = uSunE.mul(smoothstep(0.45, 0.95, dot(normalize(normalWorld), uSunD.negate()))).mul(1.8).add(uSunE.mul(0.05));
+    mat.emissiveNode = mix(em, wE, water.select(float(1), float(0)));
   }
   mat.mrtNode = stableVelocity();
   const mesh = new THREE.Mesh(g, mat);
@@ -200,13 +249,20 @@ export function createSporangia(ctx) {
   return {
     meshes: [mesh],
     update(s) {
+      // la rosée : déposée à l'aube sur les perles qui montent, séchée par le jour
+      const dewy = { brume: 1, sousbois: 0.85, humus: 1, greve: 0.35, cedre: 0.3, brulis: 0 }[R.mood] ?? 0;
+      const sm = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+      uDew.value = dewy * sm(0.45, 0.53, s) * (1 - sm(0.63, 0.72, s));
+      if (ctx.stage) { uSunD.value.copy(ctx.stage.sunDir).normalize(); uSunE.value.copy(ctx.stage.sunCol).multiplyScalar(0.6); }
       for (let i = 0; i < n; i++) {
         const b = beads[i], f = fruitState(b, s, R, sp);
         stP.array[i].copy(st.array[i]); bdP.array[i].copy(bd.array[i]);
         // (une petite inclinaison propre, tirée une fois, s'ajoute à la flexion)
         const H = (D.top) * b.size * f.grow;
         st.array[i].set(f.grow, f.mature, f.open, f.wear);
-        bd.array[i].set(f.bx + b.tilt * H * Math.cos(b.az) * 0.5, f.bz + b.tilt * H * Math.sin(b.az) * 0.5, f.bead, 0);
+        // (sur un support courbe, le sporange pousse à peu près selon la normale du bois)
+        const nl = (b.z / R.site.logR) * H * 0.8;
+        bd.array[i].set(f.bx + b.tilt * H * Math.cos(b.az) * 0.5, f.bz + b.tilt * H * Math.sin(b.az) * 0.5 + nl, f.bead, 0);
       }
     },
     beads, dims: D,

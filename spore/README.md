@@ -4,7 +4,7 @@
 
 Au début, la caméra arrive en glissant le long du bois, ralentit ; une fumée brune descend en biais et poudre le bois nu. Dans la poudre, des gouttelettes jaunes naissent, gonflent et se rejoignent en une nappe ; la nappe s'étend vers l'aval en éventail, et derrière son bord elle se creuse en veines qui battent. La lumière monte : les veines se vident dans des perles alignées, et les perles se dressent sur leurs pieds, blanches, toutes ensemble. Elles foncent, se dessèchent ; un souffle passe, elles s'inclinent et s'ouvrent, et leurs spores partent avec lui. La caméra suit la fumée ; à gauche restent les sporanges vides, et la fumée se pose : c'est la première image.
 
-![Spore](docs/capture.jpg)
+![Spore : des Trichia dorés dans leur nuage de spores (graine s9)](docs/capture.jpg)
 
 Rendu physique en three.js (WebGPU, TSL). Tout est calculé : une graine produit une scène. La démarche (le thème exploré sous six angles, cinq clichés écartés, neuf pistes notées, les épreuves) est dans [docs/concept.md](docs/concept.md) ; les défis techniques, avec des démonstrations interactives, dans [explainer.html](explainer.html).
 
@@ -57,15 +57,27 @@ S(0) est le bois nu, S(0 → 1) le cycle (germination, réseau, condensation, fo
 
 Un gabarit usiné par espèce (solides fermés : hypothallus, pied évasé, calice à lèvre roulée, péridium, capillitium, columelle), dans sa forme mûre ; le vertex shader le replie en perle (sphère de même volume), le dresse (le pied s'allonge, la tête prend forme), l'ouvre selon la famille, le fléchit sous le vent (poutre encastrée chargée en bout, ∝ U²) et le pose sur la même surface de bois que tout le reste. L'état de chaque sporange (perle, levée, maturité, ouverture, usure, flexion) est calculé par une seule fonction (`fruitState`) sur le CPU et envoyé au GPU dans des tableaux d'uniformes (courant et précédent : vecteurs vitesse).
 
-**Quatre familles, quatre gestes :**
+**Six familles, six gestes :**
 - ***Arcyria*** : des coupes serrées ; à l'ouverture, le haut du péridium tombe et le filet comprimé **se détend** vers le haut (2 à 3,6 fois sa hauteur, avec un rebond), ses mailles s'ajourent ; *A. obvelata* retombe.
 - ***Stemonitis*** : de hautes colonnes en touffes qui **plient** sous le souffle et **fument** : la masse de spores s'amincit du sommet vers le pied et laisse la cage claire autour de la columelle ; *Comatricha* en semis le long des veines.
 - ***Hemitrichia*** : pas de pieds, **le réseau devient le fruit** : les veines maîtresses gonflent en tubes dorés, les petites se vident en elles ; mûrs, les tubes se fendent et **moussent** d'élatères.
 - ***Lamproderma*** : des sphères sur pieds fins, **iridescentes** (interférences dans une couche mince, Inchaussandague et al., 2010) ; le péridium **s'écaille** en plaquettes qui tombent, la masse sombre s'effrite.
+- ***Trichia*** : des toupies dorées et luisantes ; le péridium se fend en plaques et les élatères **jaillissent en houppe** ronde, deux fois plus large, que le vent peigne.
+- ***Lycogala*** : des coussins sans pied, corail puis gris rosé ; le sommet **se perce** et chaque rafale **aspire une bouffée** par l'ouverture ; le coussin se dégonfle.
 
-## Les spores (`src/gen/spores.js`, `scene/spores.js`)
+**La rosée** : dans les décors humides, des gouttelettes se posent à l'aube sur les perles qui montent (elles font partie du gabarit et suivent la tête quand elle se replie) et sèchent pendant la maturation ; noires et brillantes, avec la tache de lumière réfractée du côté opposé au soleil.
 
-Trente mille particules (douze mille en mobile) par site, chacune une bouffée de spores qui s'étale en vol (rayon ∝ √τ, densité ∝ 1/r²) et s'allume à contre-jour (diffusion de Henyey-Greenstein, g = 0,6). Trajectoire analytique (même formule en JS et en TSL) : vent moyen intégré (table), montée dans le tourbillon de l'ouverture, chute de Stokes, dispersion qui croît depuis zéro. Chaque spore se pose sur le bois (instant calculé par pas puis dichotomie) et y reste ; le plasmodium suivant l'absorbe. **Les points de germination du site suivant sont des points de chute de spores réelles** : pour chacun, la spore dont la chute naturelle tombe le plus près reçoit une petite correction, pleine à son instant de chute (testé : chaque graine est à moins de 0,1 mm de sa spore).
+## Le nuage (`src/gen/smoke.js`, `scene/smoke.js`)
+
+**Une simulation de fluide.** Une grille 3D de cellules de 1 mm (71 × 25 × 29) couvre le site et l'aval jusqu'au site suivant. L'air y suit les équations d'Euler incompressibles, résolues par la méthode de Stam (« Stable Fluids », 1999) : forces, advection semi-lagrangienne, projection (pression par Jacobi, repartie de la précédente) ; le bois est un obstacle.
+- **Le vent du lieu** : profil logarithmique de couche limite au-dessus du bois, rappelé vers la vitesse du souffle de l'horloge ; des tourbillons qui passent avec lui (forçage à divergence nulle, tables séparables) ; le confinement de vorticité (Fedkiw et al., 2001) garde les volutes.
+- **L'émission** : chaque tête verse dans l'air exactement ce qu'elle perd en s'ouvrant, avec une impulsion propre à la famille ; chez *Lycogala*, chaque rafale aspire une bouffée par l'ouverture (débit ∝ U², effet Venturi).
+- **La chute et le dépôt** : la concentration est transportée par l'air et par la chute de Stokes (v_s = 0,3 (d / 10 µm)² cm/s, d selon l'espèce, de 6 à 13 µm) ; le flux ρ·v_s qui traverse la surface du bois quitte l'air et s'ajoute à une carte de dépôt — la poussière que le plasmodium suivant traverse et absorbe.
+- **Le bilan** : émis = en l'air + déposé + sorti, exact (l'advection, non conservative, est renormalisée à chaque pas d'après ce bilan) ; typiquement 45 à 95 % du nuage se dépose, le reste quitte le domaine par l'aval ou par le haut.
+- **Les grains** : 6 000 spores suivies une à une dans le même champ (Runge-Kutta 2), qui se posent là où la poussière se dépose. **Les germinations du site suivant sont des chutes de grains** : le grain qui tombe le plus près de chaque point de germination (translaté de L) y est mené exactement, par une correction appliquée pendant son vol.
+- Calculé une fois dans le worker (126 pas, ≈ 2,5 à 3 s), enregistré en 64 images (densité, transmission vers le soleil, vitesse, dépôt cumulé, positions des grains), et le centre de masse du nuage, que la caméra suit pendant le voyage.
+
+**Le rendu.** Une boîte resserrée à chaque image autour de la fumée visible (calculée par le worker) où chaque pixel marche le long de son rayon (22 pas, départ tramé lissé par l'anticrénelage temporel), jusqu'à la surface opaque la plus proche (profondeur de la scène). Entre deux images, la densité est interpolée **avec compensation de mouvement** (chaque image est lue là où la vitesse enregistrée amène la fumée) : elle glisse au lieu de se fondre. Un bruit de détail (deux canaux du volume de bruit), entraîné par le vent, érode les bords. Lumière : diffusion simple (Henyey-Greenstein, g = 0,55, le nuage s'allume à contre-jour), ombre propre précalculée par image le long de la direction du soleil, ambiance qui imite la diffusion multiple, albédo clair teinté par le pigment des spores. Les grains, relus en Catmull-Rom, sont des points d'un demi-pixel au moins, d'opacité égale à leur couverture réelle.
 
 ## Le bois (`src/gen/wood.js`, `scene/wood.js`)
 
@@ -79,7 +91,7 @@ Un relief de 1 024² texels sur une période (43 µm × 51 µm par texel), **cui
 
 ## Les décors
 
-Le fond est neutre (une brume de la teinte du lieu) ; chaque décor se distingue par son support, sa lumière, sa valeur et son cadrage.
+Le fond est neutre mais pas un aplat : un dégradé (plus clair à l'horizon) et le halo du soleil dans sa direction, qu'on voit à contre-jour ; la brume prend la teinte du lieu. Chaque décor se distingue par son bois, sa lumière, sa valeur et son cadrage ; **le support** change toute la composition : une bûche presque plate (rayon 6,5 cm) qui file vers l'horizon, une branche (2,1 cm) dont le dos se détache sur le fond, un rameau (1,05 cm) vu de profil, la forêt en crête sur sa ligne.
 
 | Décor | Support | Lumière | Valeur | Cadrage |
 | --- | --- | --- | --- | --- |
@@ -90,7 +102,7 @@ Le fond est neutre (une brume de la teinte du lieu) ; chaque décor se distingue
 | Sous-bois | bûche échauffée | ciel couvert, de côté | moyenne | trois-quarts |
 | Cèdre | planche de cèdre | soleil bas de trois-quarts arrière | contrastée, fond sombre et chaud | contre-plongée légère |
 
-**La caméra** voyage avec le vent : elle s'attarde au-dessus du site (dérive lente) en plongée sur le réseau, descend au ras du bois quand la forêt se lève (sa distance passe à l'échelle des sporanges), puis suit le nuage jusqu'au site suivant. Trajectoire échantillonnée, partie périodique lissée par un noyau gaussien périodique (σ = 0,8 s), relue en Catmull-Rom ; la translation est ajoutée ensuite, exacte.
+**La caméra** voyage avec le vent : elle s'attarde au-dessus du site (dérive lente) en plongée sur le réseau, descend au ras du bois quand la forêt se lève (sa distance passe à l'échelle des sporanges), puis suit le centre de masse du nuage (calculé par la simulation) jusqu'au site suivant. Trajectoire échantillonnée, partie périodique lissée par un noyau gaussien périodique (σ = 0,8 s), relue en Catmull-Rom ; la translation est ajoutée ensuite, exacte.
 
 ## L'écran de chargement
 
@@ -102,12 +114,12 @@ Le plasmodium de la scène pousse en direct, calculé dans le worker du chargeme
 node --test spore/test/*.test.mjs
 ```
 
-La boucle (la caméra à u + 1 est la caméra à u translatée de L) ; la caméra lente et lisse (pointe < 25°/s, accélération bornée à 120 i/s) ; Kirchhoff et conservation des volumes du réseau aux perles ; le front qui couvre le territoire avant l'aube ; chaque germination part d'une spore posée ; les spores tombent, se posent et restent sur le bois ; l'horloge monotone (le jour boucle, l'aube monte, le soir baisse, le souffle précède l'ouverture) ; les têtes ne se traversent pas ; la recette déterministe et JSON ; les décors différents par le support, la lumière et la valeur ; les lampes presque blanches ; quatre familles aux gestes distincts ; la variété sur 400 graines.
+La boucle (la caméra à u + 1 est la caméra à u translatée de L) ; la caméra lente et lisse (pointe < 25°/s, accélération bornée à 120 i/s), y compris quand elle suit le nuage ; Kirchhoff et conservation des volumes du réseau aux perles ; le front qui couvre le territoire avant l'aube ; chaque germination part d'un grain posé par le nuage du site précédent ; le nuage : bilan de masse exact, dépôt qui ne décroît jamais, grains jamais sous le bois ; la projection rend le champ (presque) sans divergence ; l'horloge monotone (le jour boucle, l'aube monte, le soir baisse, le souffle précède l'ouverture) ; les têtes ne se traversent pas ; les gabarits sont orientés (chaque triangle tourne sa face avant du côté de ses normales) ; la recette déterministe et JSON ; les décors différents par le support, la lumière et la valeur ; les lampes presque blanches ; six familles aux gestes distincts ; la variété sur 400 graines (décors, familles, supports, réseaux, ordres).
 
 ## Performances
 
-Génération d'une scène : 2 à 4,5 s pour le site (front, réseau de Tero, perles, gabarit, trente mille spores et leurs chutes), 0,4 à 1 s pour le bois, en parallèle dans deux workers (mesuré dans Node ; nettement plus lent quand l'onglet est en arrière-plan). Temps d'image mesuré dans le panneau de navigateur de l'application (GPU d'un Mac, panneau masqué), qualité Haute, 1,8 Mpx, graine e5 : **11,7 ms** pendant le réseau (u = 0,3), **8,7 ms** pendant la dissémination (u = 0,82). Version mobile, graine p6, 1,2 Mpx : 3,9 ms. Les postes les plus lourds : le maillage déplacé du bois (≈ 390 k sommets) et les veines (60 k à 220 k sommets, deux lectures de la table des instantanés par sommet).
+Génération d'une scène : ≈ 5 à 8 s dans le worker du site (front et réseau de Tero ≈ 1,5 à 2,5 s, nuage ≈ 2,5 à 3 s : 126 pas de Stable Fluids sur 51 k cellules, 6 000 grains, 64 images, ombre propre), le bois (0,4 à 1 s) en parallèle — mesuré dans Node ; nettement plus lent quand l'onglet est en arrière-plan. Temps d'image mesuré dans le panneau de navigateur de l'application (GPU d'un Mac, panneau masqué), qualité Haute, ≈ 1,8 Mpx, graine s9 : **11,3 ms** pendant le réseau, **15,8 ms** quand le nuage occupe l'écran (marche de rayons de 22 pas dans la boîte resserrée ; elle coûtait 64 ms avec 48 pas dans toute la boîte). Les autres postes lourds : le maillage déplacé du bois (≈ 390 k sommets) et les veines (60 k à 220 k sommets).
 
 ## Version mobile
 
-Imposée par `?mobile=1`, ou choisie d'office sur téléphone : bois cuit en 640², maillage plus lâche, douze mille spores par site, chaîne d'image allégée (sans profondeur de champ), résolution dynamique. Vérifiée dans le navigateur de l'application (console propre, 3,9 ms par image), pas sur un appareil réel.
+Imposée par `?mobile=1`, ou choisie d'office sur téléphone : bois cuit en 640², maillage plus lâche, 2 500 grains, nuage en 14 pas à trame fixe, chaîne d'image allégée (sans profondeur de champ), résolution dynamique. Mesurée dans le navigateur de l'application : 6,5 ms par image à 1,2 Mpx avec le nuage à l'écran, console propre ; pas vérifiée sur un appareil réel.

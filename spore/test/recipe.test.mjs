@@ -21,10 +21,10 @@ test('lampes presque blanches (≥ 4700 K) ; la chaleur vient du bois et du fond
   for (const k of MOOD_KEYS) assert.ok(MOODS[k].key.K >= 4700, `${k} : ${MOODS[k].key.K} K`);
 });
 
-test('quatre familles aux gestes distincts, espèces complètes', () => {
-  assert.equal(FAMILY_KEYS.length, 4);
+test('six familles aux gestes distincts, espèces complètes', () => {
+  assert.equal(FAMILY_KEYS.length, 6);
   const gestures = new Set(FAMILY_KEYS.map((f) => FAMILIES[f].gesture));
-  assert.equal(gestures.size, 4);
+  assert.equal(gestures.size, 6);
   const modes = new Set();
   for (const f of FAMILY_KEYS) for (const [k, sp] of Object.entries(FAMILIES[f].species)) {
     modes.add(sp.mode);
@@ -35,12 +35,12 @@ test('quatre familles aux gestes distincts, espèces complètes', () => {
   assert.ok(modes.size >= 4, 'grappes, touffes, perles le long des veines, réseau');
 });
 
-test('la variété : 400 graines tirent tous les décors, familles, réseaux et ordres', () => {
-  const seen = { mood: new Set(), family: new Set(), net: new Set(), order: new Set(), species: new Set() };
+test('la variété : 400 graines tirent tous les décors, familles, supports, réseaux et ordres', () => {
+  const seen = { mood: new Set(), family: new Set(), net: new Set(), order: new Set(), species: new Set(), support: new Set() };
   for (let i = 0; i < 400; i++) {
     const R = generate(`v${i}`);
-    seen.mood.add(R.mood); seen.family.add(R.family); seen.net.add(R.plasmodium.net); seen.order.add(R.fruit.order); seen.species.add(`${R.family}.${R.species}`);
+    seen.mood.add(R.mood); seen.family.add(R.family); seen.net.add(R.plasmodium.net); seen.order.add(R.fruit.order); seen.species.add(`${R.family}.${R.species}`); seen.support.add(R.support);
   }
-  assert.equal(seen.mood.size, 6); assert.equal(seen.family.size, 4); assert.equal(seen.net.size, 4); assert.equal(seen.order.size, 4);
-  assert.ok(seen.species.size >= 10);
+  assert.equal(seen.mood.size, 6); assert.equal(seen.family.size, 6); assert.equal(seen.support.size, 3); assert.equal(seen.net.size, 4); assert.equal(seen.order.size, 4);
+  assert.ok(seen.species.size >= 14);
 });

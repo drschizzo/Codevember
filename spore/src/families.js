@@ -89,7 +89,7 @@ export const FAMILIES = {
     species: {
       columbinum: {
         spore: 13, label: 'Lamproderma columbinum', mode: 'vein', count: [60, 110], spacing: 0.15,
-        head: { r: 0.048, h: 0.096 }, stalk: { h: 0.12, r: 0.006 }, film: [380, 520],
+        head: { r: 0.048, h: 0.096 }, stalk: { h: 0.12, r: 0.0045 }, film: [380, 520],
         colors: { young: '#f1f1ee', mid: '#7a7fa0', ripe: '#26232e', net: '#2a2630', stalk: '#0f0d0f', hypo: '#1a181c' },
         plasmodium: '#efd585', vein: 0.02,
       },
@@ -101,9 +101,45 @@ export const FAMILIES = {
       },
       arcyrioides: {
         spore: 12, label: 'Lamproderma arcyrioides', mode: 'cluster', count: [70, 120], spacing: 0.12,
-        head: { r: 0.04, h: 0.08 }, stalk: { h: 0.1, r: 0.006 }, film: [480, 640],
+        head: { r: 0.04, h: 0.08 }, stalk: { h: 0.1, r: 0.0045 }, film: [480, 640],
         colors: { young: '#f0f0ee', mid: '#8a8f90', ripe: '#2c3030', net: '#2a2c2c', stalk: '#121212', hypo: '#1c1c1c' },
         plasmodium: '#f0d683', vein: 0.02,
+      },
+    },
+  },
+  trichia: {
+    label: 'Trichia', gesture: 'la tête éclate en houppe dorée',
+    motion: 'des toupies dorées et luisantes ; mûres, le péridium se fend en plaques qui tombent et les élatères comprimés jaillissent en une houppe ronde, deux fois plus large, que le vent peigne',
+    species: {
+      decipiens: {
+        spore: 9, label: 'Trichia decipiens', mode: 'cluster', count: [60, 110], spacing: 0.11,
+        head: { r: 0.042, h: 0.1 }, stalk: { h: 0.07, r: 0.01 }, expand: 1.9,
+        colors: { young: '#f6efe0', mid: '#cf9d3e', ripe: '#8d7428', net: '#e7b43a', stalk: '#5e4220', hypo: '#4a3420' },
+        plasmodium: '#f2cf62', vein: 0.022,
+      },
+      varia: {
+        spore: 10, label: 'Trichia varia', mode: 'vein', count: [60, 110], spacing: 0.13,
+        head: { r: 0.038, h: 0.076 }, stalk: { h: 0.014, r: 0.012 }, expand: 1.7,
+        colors: { young: '#fbf3dc', mid: '#efc246', ripe: '#c99a24', net: '#f2c13c', stalk: '#8a6a22', hypo: '#6a5020' },
+        plasmodium: '#f4d873', vein: 0.02,
+      },
+    },
+  },
+  lycogala: {
+    label: 'Lycogala', gesture: 'le coussin se perce et souffle',
+    motion: 'des coussins sans pied, corail puis gris rosé, verruqueux ; mûrs, leur sommet se perce et chaque rafale aspire par l’ouverture une bouffée de spores (effet Venturi) ; le coussin se dégonfle',
+    species: {
+      epidendrum: {
+        spore: 6, label: 'Lycogala epidendrum', mode: 'cluster', count: [12, 26], spacing: 0.42,
+        head: { r: 0.17, h: 0.24 }, stalk: { h: 0, r: 0 },
+        colors: { young: '#f6b3a6', mid: '#e07b6a', ripe: '#a6857a', net: '#d6a898', stalk: '#a6857a', hypo: '#6a5048' },
+        plasmodium: '#f08a7c', vein: 0.024,
+      },
+      flavofuscum: {
+        spore: 6, label: 'Lycogala flavofuscum', mode: 'cluster', count: [6, 12], spacing: 0.62,
+        head: { r: 0.27, h: 0.36 }, stalk: { h: 0, r: 0 },
+        colors: { young: '#f3e2c4', mid: '#dab27a', ripe: '#9a7650', net: '#c9a070', stalk: '#9a7650', hypo: '#5c4430' },
+        plasmodium: '#f2dca4', vein: 0.024,
       },
     },
   },

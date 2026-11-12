@@ -28,8 +28,8 @@
     </header>
 
     <figure class="cover">
-      <img src="docs/capture.jpg" alt="Une forêt de sporanges sur du bois, et le nuage de spores qui part sous le vent" width="1600" height="900">
-      <figcaption>La forêt mûre au moment où le souffle arrive : les têtes s'inclinent dans le sens du vent, et le nuage part de leurs sommets. Au loin, le bois nu du site suivant.</figcaption>
+      <img src="docs/capture.jpg" alt="Des Trichia dorés dont les élatères ont jailli en houppes, dans le nuage de spores qui monte" width="1600" height="900">
+      <figcaption>Des <em>Trichia</em> sur une planche de cèdre, au moment où leurs élatères ont jailli en houppes : le nuage de spores — une fumée simulée, rendue en volume — monte entre elles et part sous le vent.</figcaption>
     </figure>
 
     <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
@@ -77,46 +77,61 @@
         <h2><span class="n">05</span>Un sporange est une perle repliée et une poutre encastrée</h2>
         <span class="src">src/fruit.js · fruitState() — src/scene/sporangia.js</span>
         <p>Chaque espèce a un gabarit usiné, dans sa forme mûre (hypothallus, pied évasé, calice à lèvre roulée, péridium, capillitium, columelle). Le vertex shader le replie en sphère de même volume (la perle), puis le déplie : le pied s'allonge, la tête monte et prend forme. Le vent le fléchit comme une poutre encastrée chargée en bout — déplacement \(\delta(t) = b\, t^2 (3 - t)/2\) le long de la hauteur relative \(t\), avec une amplitude \(b \propto U^2 H\) (la traînée) ; les normales tournent de la pente \(\delta'\). La même formule sert au calcul des spores (leur point de départ suit la tête fléchie).</p>
-        <p>Puis chaque famille fait son geste : le filet d'<em>Arcyria</em> se détend de 2 à 3,6 fois sa hauteur avec un rebond, ses mailles s'ajourent ; la masse de <em>Stemonitis</em> s'amincit du sommet vers le pied et laisse la cage ; le péridium de <em>Lamproderma</em> s'écaille ; les tubes d'<em>Hemitrichia</em> se fendent et moussent.</p>
+        <p>Puis chaque famille fait son geste : le filet d'<em>Arcyria</em> se détend de 2 à 3 fois sa hauteur avec un rebond, ses mailles s'ajourent ; la masse de <em>Stemonitis</em> s'amincit du sommet vers le pied et laisse la cage ; le péridium de <em>Lamproderma</em> s'écaille ; les tubes d'<em>Hemitrichia</em> se fendent et moussent ; les élatères de <em>Trichia</em> jaillissent en houppe ronde ; le coussin de <em>Lycogala</em> se perce et souffle à chaque rafale.</p>
+        <div class="note trap"><b>Le piège</b><p>Les surfaces de révolution des gabarits étaient tournées à l'envers : le GPU éliminait la face extérieure et montrait l'intérieur de la coque, que l'émission de translucidité éclairait assez pour qu'on croie à un défaut de lumière — des têtes plates, sans modelé. Un test vérifie maintenant que chaque triangle tourne sa face avant du côté de ses normales.</p></div>
         <figure id="fig-poutre"><figcaption><b>De la perle au sporange.</b> Le profil d'un sporange (ici <em>Arcyria</em>) replié en perle, dressé, fléchi par le vent, et son filet qui se détend. Mêmes cotes que le gabarit de la scène.</figcaption></figure>
       </section>
 
-      <section id="stokes">
-        <h2><span class="n">06</span>Les spores tombent selon Stokes et ensemencent le site suivant</h2>
-        <span class="src">src/gen/spores.js · flight(), buildSpores()</span>
-        <p>Une spore de 10 µm tombe dans l'air immobile à \(v = \tfrac{2}{9}\,\Delta\rho\, g\, r^2/\mu \approx 0{,}3\) cm/s ; à 8 µm, 0,19 cm/s. Le souffle l'emporte. Sa trajectoire est analytique (la même en JS et en TSL) : le vent moyen intégré \(W(s)\) lu dans une table, une montée dans le tourbillon de l'ouverture, la chute, et une dispersion qui croît depuis zéro :</p>
-        <div class="eq">\[ x(\tau) = x_0 + W(s) - W(s_r) + \sigma\,a(\tau)\sin(1{,}3\tau + \varphi_1), \quad y(\tau) = y_0 + h\,(1 - e^{-\tau/0{,}8}) - v\,\tau + \ldots \]</div>
-        <p>L'instant où elle touche le bois est cherché par pas, puis par dichotomie, sur la même surface de bois que le rendu. Trente mille spores par site ; à l'écran, chacune est une bouffée qui s'étale en vol (rayon \(\propto \sqrt\tau\), densité \(\propto 1/r^2\)) et s'allume à contre-jour (Henyey-Greenstein, \(g = 0{,}6\)).</p>
-        <p><b>Les germinations du site suivant sont des chutes réelles.</b> Pour chaque graine du plasmodium, translatée de \(L\), la spore dont la chute naturelle tombe le plus près reçoit une correction \(c\), appliquée progressivement pendant le vol et pleine à son instant de chute : elle se pose exactement sur la graine.</p>
-        <div class="note trap"><b>Le piège</b><p>Corriger la trajectoire change l'endroit où elle touche le bois, donc l'instant de chute, donc la correction : sur un bois fendu, la boucle ne convergeait pas (jusqu'à 1,3 mm d'écart pour <em>Hemitrichia</em>, dont les spores partent au ras du bois). En gardant l'instant de chute naturel et en posant la spore à la hauteur du bois à cet instant, la chute est exacte par construction.</p></div>
-        <figure id="fig-stokes"><figcaption><b>Le nuage de profil.</b> Des trajectoires calculées par <code>flight()</code> sous un souffle en rafales ; en bas, où elles tombent. Plus les spores sont petites, plus elles vont loin.</figcaption></figure>
+      <section id="fumee">
+        <h2><span class="n">06</span>Le nuage est une simulation de fluide, qui dépose ce qu'il porte</h2>
+        <span class="src">src/gen/smoke.js · simulateSmoke()</span>
+        <p>Un nuage de spores n'est pas une poignée de points : c'est une fumée que le vent soulève, déroule en volutes, emporte et laisse retomber. Une grille 3D de cellules de 1 mm couvre le site et l'aval jusqu'au site suivant (71 × 25 × 29 cellules) ; l'air y suit les équations d'Euler incompressibles, résolues par la méthode de Stam (« Stable Fluids ») : forces, advection semi-lagrangienne, projection (pression par Jacobi, \(\mathbf u \leftarrow \mathbf u - \nabla p\)). Le bois est un obstacle.</p>
+        <ul>
+          <li><b>Le vent du lieu</b> : un profil logarithmique de couche limite au-dessus du bois, \(U(y) \propto \ln(1 + y/y_0)\), rappelé vers la vitesse du souffle de l'horloge ; des tourbillons qui passent avec lui (forçage à divergence nulle) ; le confinement de vorticité garde les volutes que la grille effacerait.</li>
+          <li><b>L'émission</b> : chaque tête verse dans l'air exactement ce qu'elle perd en s'ouvrant (\(V \cdot d\,\text{ouverture}/dt\)), avec une impulsion propre à la famille — et chez <em>Lycogala</em>, chaque rafale aspire une bouffée par l'ouverture (effet Venturi : débit \(\propto U^2\)).</li>
+          <li><b>La chute et le dépôt</b> : la concentration est transportée par l'air et par la chute de Stokes \(v_s = 0{,}3\,(d/10\,\mu\text{m})^2\) cm/s ; le flux \(\rho\, v_s\) qui traverse la surface du bois quitte l'air et s'ajoute à une carte de dépôt : la poussière que le plasmodium suivant traversera.</li>
+        </ul>
+        <div class="note check"><b>Vérifié</b><p>Le bilan est exact : émis = en l'air + déposé + sorti du domaine, à 10⁻⁴ près (l'advection semi-lagrangienne, qui ne conserve pas la masse, est renormalisée à chaque pas d'après ce bilan) ; le dépôt ne décroît jamais ; aucun grain ne passe sous le bois.</p></div>
+        <p>Des grains (6 000 spores suivies une à une, Runge-Kutta 2) sont portés par le même champ de vitesse et se posent là où la poussière se dépose ; ceux qui tombent le plus près des points de germination du site suivant y sont menés exactement, par une correction appliquée pendant leur vol. Tout est calculé une fois, dans un worker (≈ 2 à 3 s), et enregistré en 64 images. Pendant le voyage, la caméra suit le centre de masse du nuage.</p>
+        <figure id="fig-fumee"><figcaption><b>Une coupe du nuage.</b> Une version 2D du même schéma (Stam, profil de vent, tourbillons, chute, dépôt) sur une grille plus grossière, dans le navigateur. Le bilan s'affiche ; les spores plus petites vont plus loin.</figcaption></figure>
+      </section>
+
+      <section id="interpolation">
+        <h2><span class="n">07</span>Entre deux images, la fumée glisse au lieu de se fondre</h2>
+        <span class="src">src/scene/smoke.js · march()</span>
+        <p>Le nuage enregistré est relu à n'importe quelle phase : entre deux images (0,3 s), un simple fondu montrerait deux nuages fantômes qui se croisent. Chaque image enregistre aussi la vitesse ; le shader lit l'image \(k\) au point d'où la fumée vient, et l'image \(k + 1\) au point où elle va :</p>
+        <div class="eq">\[ \rho(\mathbf x, t) = (1 - a)\, \rho_k\big(\mathbf x - a\,\Delta t\, \mathbf v\big) + a\, \rho_{k+1}\big(\mathbf x + (1 - a)\,\Delta t\, \mathbf v\big). \]</div>
+        <p>Le rendu est une marche de rayons (22 pas, départ tramé lissé par l'anticrénelage temporel) dans une boîte resserrée à chaque image autour de la fumée visible, qui s'arrête à la surface opaque la plus proche ; un bruit de détail entraîné par le vent érode les bords (des filaments plus fins que la grille) ; la lumière est une diffusion simple (Henyey-Greenstein, \(g = 0{,}55\) : le nuage s'allume à contre-jour), avec la transmission vers le soleil précalculée par image (l'ombre propre du nuage), plus une ambiance qui imite la diffusion multiple.</p>
+        <figure id="fig-interp"><figcaption><b>Fondu ou compensation.</b> Deux images d'une bouffée qui avance ; la phase intermédiaire, interpolée par un fondu (deux fantômes) ou avec la vitesse (la bouffée glisse).</figcaption></figure>
       </section>
 
       <section id="bois">
-        <h2><span class="n">07</span>Le bois se répète exactement, sans couture</h2>
+        <h2><span class="n">08</span>Le bois se répète exactement, sans couture</h2>
         <span class="src">src/gen/wood.js · makeNoise(), bakeWood()</span>
         <p>Pour que la caméra retombe sur la même image après avoir avancé de \(L\), le bois doit se répéter exactement : tout le bruit du four est périodique en \(x\). Un bruit de gradient à période entière \(p_x\) (le hachage lit \(i \bmod p_x\)), et pour chaque octave une fréquence arrondie à un nombre entier de cellules sur \(L\) ; les cellules de Voronoï des fentes et de la croûte de charbon sont tirées de même. Le relief (1 024² texels, 43 µm), ses pentes, son occlusion et une hauteur lissée (le niveau du gel qui remplit les creux) sont cuits dans un worker, puis lus deux fois : en déplacement vertical d'un maillage dense et en normal map.</p>
         <figure id="fig-bois"><figcaption><b>La couture.</b> Deux périodes du même bruit côte à côte. Périodique, rien ne marque la jonction ; sinon, une arête traverse le bois.</figcaption></figure>
       </section>
 
       <section id="irisation">
-        <h2><span class="n">08</span>Le péridium irise par une couche mince</h2>
+        <h2><span class="n">09</span>Le péridium irise par une couche mince</h2>
         <span class="src">src/scene/sporangia.js · iridescence</span>
         <p>Les sphères de <em>Lamproderma</em> et de <em>Diachea</em> sont bleu-violet métallique, avec des reflets or et vert : ce n'est pas un pigment, c'est une interférence dans une couche mince du péridium (Inchaussandague et al., 2010). Le matériau de three.js la calcule dans le reflet (épaisseur 300 à 640 nm selon l'espèce, indice 2,0 sur un fond d'indice 1,45) ; la couleur glisse quand la tête s'incline au vent.</p>
         <figure id="fig-film"><figcaption><b>Couche mince.</b> Réflectance d'Airy à trois longueurs d'onde (650, 550, 450 nm), convertie en couleur, selon l'angle d'incidence. L'épaisseur se règle.</figcaption></figure>
       </section>
 
       <section id="budget">
-        <h2><span class="n">09</span>Budget</h2>
+        <h2><span class="n">10</span>Budget</h2>
         <div class="tbl"><table>
           <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
           <tbody>
-            <tr><td>Front, réseau de Tero (140 pas), perles, spores et chutes (30 000)</td><td>worker</td><td class="num">2 à 4,5 s</td></tr>
+            <tr><td>Front, réseau de Tero (140 pas), perles</td><td>worker</td><td class="num">≈ 1,5 à 2,5 s</td></tr>
+            <tr><td>Nuage : 126 pas de Stable Fluids sur 51 k cellules, 6 000 grains, 64 images, ombre propre</td><td>worker</td><td class="num">≈ 2,5 à 3 s</td></tr>
             <tr><td>Bois cuit (1 024², relief, pentes, occlusion, hauteur lissée)</td><td>worker, en parallèle</td><td class="num">0,4 à 1 s</td></tr>
             <tr><td>Veines (tubes posés)</td><td>GPU</td><td class="num">60 k à 220 k sommets</td></tr>
             <tr><td>Maillage du bois</td><td>GPU</td><td class="num">≈ 390 k sommets</td></tr>
-            <tr><td>Image complète, qualité Haute, 1,8 Mpx (réseau · dissémination)</td><td>GPU</td><td class="num">11,7 · 8,7 ms</td></tr>
-            <tr><td>Version mobile, 1,2 Mpx</td><td>GPU</td><td class="num">3,9 ms</td></tr>
+            <tr><td>Image complète, qualité Haute, 1,8 Mpx (réseau · nuage à l'écran)</td><td>GPU</td><td class="num">11,3 · 15,8 ms</td></tr>
+            <tr><td>Marche de rayons du nuage avant optimisation (48 pas, boîte entière)</td><td>GPU</td><td class="num">64 ms</td></tr>
+            
           </tbody>
         </table></div>
       </section>
@@ -136,7 +151,6 @@
     import { generate } from './src/recipe.js';
     import { seedsOf, arrivalField, sampleT, buildGraph, networkSteps, territoryOf } from './src/gen/plasmodium.js';
     import { beamShape } from './src/fruit.js';
-    import { flight, windTable } from './src/gen/spores.js';
     import { makeNoise } from './src/gen/wood.js';
     import { FAMILIES } from './src/families.js';
 
@@ -300,34 +314,82 @@
       });
     }
 
-    // ── 06 · Stokes ─────────────────────────────────────────────────────────
+    // ── 06 · la fumée (2D) ──────────────────────────────────────────────────
     {
-      demo('#fig-stokes', {
-        title: 'Trajectoires et chutes', aspect: 2.2,
-        controls: [{ key: 'd', label: 'Diamètre des spores (µm)', min: 5, max: 14, step: .5, value: 8 }, { key: 'gu', label: 'Rafales', min: 0, max: 1, step: .05, value: .6 }],
+      const nx = 120, ny = 44, h = 1;
+      demo('#fig-fumee', {
+        title: 'Stable Fluids, en coupe', aspect: 2.4, animate: true,
+        controls: [{ key: 'd', label: 'Diamètre des spores (µm)', min: 5, max: 14, step: .5, value: 8 }, { key: 'U', label: 'Souffle', min: .2, max: 2, step: .05, value: 1 }],
+        buttons: [{ label: 'Rejouer', onClick: (d) => d.reset() }],
+        setup(d) {
+          const N = nx * ny, z = () => new Float32Array(N);
+          d.state = { u: z(), v: z(), r: z(), u2: z(), v2: z(), r2: z(), p: z(), dv: z(), t: 0, emit: 0, dep: 0, out: 0, depMap: new Float32Array(nx) };
+        },
         draw(g, d) {
-          const R = { ...R0, wind: { ...R0.wind, gust: d.s.gu } }, tab = windTable(R), L = R.site.L;
-          const { w, h } = d, X = (x) => 20 + (x + .3) / 7 * (w - 40), Y = (y) => h * .78 - y / 1.6 * h * .65;
-          g.strokeStyle = C.grid; g.beginPath(); g.moveTo(10, Y(0)); g.lineTo(w - 10, Y(0)); g.stroke();
-          g.strokeStyle = alpha(C.c2, .5); g.setLineDash([3, 4]); g.beginPath(); g.moveTo(X(L), Y(0) + 10); g.lineTo(X(L), Y(1.5)); g.stroke(); g.setLineDash([]);
-          label(g, 'site suivant', X(L) + 6, Y(1.45), { color: C.c2 });
-          const r = rng(7), hist = new Float32Array(60), vs = .3 * (d.s.d / 10) ** 2;
-          for (let k = 0; k < 140; k++) {
-            const q = { x0: r() * .4, y0: .2 + r() * .4, z0: 0, sr: .75 + r() * .12, lift: .1 + 1.7 * r() ** 2.2, vs: vs * (.75 + .5 * r()), sig: .06 + .14 * r(), p1: r() * 6, p2: r() * 6, p3: r() * 6, cx: 0, cz: 0, tl: 0 };
-            g.strokeStyle = alpha(C.c1, .22); g.lineWidth = 1; g.beginPath();
-            let landX = null;
-            for (let s = q.sr, i = 0; s < q.sr + .5; s += .002, i++) { const p = flight(q, s, tab); if (p[1] < 0) { landX = p[0]; break; } i ? g.lineTo(X(p[0]), Y(p[1])) : g.moveTo(X(p[0]), Y(p[1])); }
-            g.stroke();
-            if (landX !== null) { const b = Math.floor((landX + .3) / 7 * 60); if (b >= 0 && b < 60) hist[b]++; }
+          const S = d.state, { u, v, r } = S, id = (i, j) => j * nx + i, dt = .5, vs = .06 * (d.s.d / 10) ** 2;
+          const samp = (f, x, y) => { x = Math.min(nx - 1.001, Math.max(0, x)); y = Math.min(ny - 1.001, Math.max(0, y)); const i = x | 0, j = y | 0, fx = x - i, fy = y - j; return (f[id(i, j)] * (1 - fx) + f[id(i + 1, j)] * fx) * (1 - fy) + (f[id(i, j + 1)] * (1 - fx) + f[id(i + 1, j + 1)] * fx) * fy; };
+          for (let it = 0; it < 2; it++) {
+            S.t += dt;
+            for (let j = 1; j < ny; j++) for (let i = 0; i < nx; i++) {
+              const o = id(i, j), prof = Math.min(1.2, Math.log(1 + j / 1.5) / Math.log(1 + 30 / 1.5));
+              u[o] += (d.s.U * .5 * prof - u[o]) * .05;
+              u[o] += .02 * d.s.U * Math.sin(i * .11 - S.t * .05 * d.s.U) * Math.cos(j * .15);
+              v[o] -= .02 * d.s.U * Math.cos(i * .11 - S.t * .05 * d.s.U) * Math.sin(j * .15) * 1.3;
+            }
+            if (S.t < 60) for (let k = 0; k < 3; k++) { const o = id(14 + k, 8 + (S.t | 0) % 4); r[o] += .5; S.emit += .5; v[o] += .08; }
+            for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) { const o = id(i, j); S.u2[o] = samp(u, i - u[o] * dt, j - v[o] * dt); S.v2[o] = samp(v, i - u[o] * dt, j - v[o] * dt); S.r2[o] = i - u[o] * dt < 0 ? 0 : samp(r, i - u[o] * dt, j - (v[o] - vs) * dt); }
+            u.set(S.u2); v.set(S.v2);
+            const Mb = r.reduce((a, b) => a + b, 0);
+            r.set(S.r2);
+            let dm = 0, om = 0;
+            for (let i = 0; i < nx; i++) { const o = id(i, 1), q = Math.min(r[o], r[o] * (vs + Math.max(0, -v[o])) * dt); r[o] -= q; dm += q; S.depMap[i] += q; }
+            for (let j = 0; j < ny; j++) { const o = id(nx - 1, j), q = r[o] * Math.max(0, u[o]) * dt; r[o] -= q; om += q; }
+            S.dep += dm; S.out += om;
+            const Mt = Math.max(0, S.emit - S.dep - S.out), Mn = r.reduce((a, b) => a + b, 0);
+            if (Mn > 0) for (let o = 0; o < r.length; o++) r[o] *= Mt / Mn;
+            void Mb;
+            // projection (Jacobi)
+            const { p, dv } = S;
+            for (let j = 1; j < ny - 1; j++) for (let i = 1; i < nx - 1; i++) { const o = id(i, j); dv[o] = (u[o + 1] - u[o - 1] + v[o + nx] - v[o - nx]) / 2; }
+            for (let k = 0; k < 20; k++) for (let j = 1; j < ny - 1; j++) for (let i = 1; i < nx - 1; i++) { const o = id(i, j); p[o] = (p[o + 1] + p[o - 1] + p[o + nx] + p[o - nx] - dv[o]) / 4; }
+            for (let j = 1; j < ny - 1; j++) for (let i = 1; i < nx - 1; i++) { const o = id(i, j); u[o] -= (p[o + 1] - p[o - 1]) / 2; v[o] -= (p[o + nx] - p[o - nx]) / 2; }
+            for (let i = 0; i < nx; i++) v[id(i, 0)] = Math.max(0, v[id(i, 0)]);
           }
-          const hm = Math.max(1, ...hist);
-          for (let b = 0; b < 60; b++) { const x = 20 + b / 60 * (w - 40); g.fillStyle = alpha(C.c3, .8); const hh = hist[b] / hm * h * .14; g.fillRect(x, h - 6 - hh, (w - 40) / 60 - 1, hh); }
-          d.status(`chute de Stokes ${(vs * 10).toFixed(2)} mm/s`);
+          const { w, h: H } = d, cw = w / nx, ch = (H - 26) / ny;
+          for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+            const a = Math.min(1, r[id(i, j)] * 1.4); if (a < .01) continue;
+            g.fillStyle = alpha(C.c1, a * .9); g.fillRect(i * cw, H - 26 - (j + 1) * ch, cw + .5, ch + .5);
+          }
+          g.fillStyle = alpha(C.ink, .25); g.fillRect(0, H - 26, w, 2);
+          const dm = Math.max(1e-6, ...S.depMap);
+          for (let i = 0; i < nx; i++) { g.fillStyle = alpha(C.c3, Math.sqrt(S.depMap[i] / dm)); g.fillRect(i * cw, H - 22, cw + .5, 10); }
+          g.fillStyle = C.c2; g.beginPath(); g.arc(15.5 * cw, H - 26 - 9 * ch, 4, 0, TAU); g.fill();
+          const E = Math.max(S.emit, 1e-9), air = Math.max(0, S.emit - S.dep - S.out);
+          d.status(`émis 100 % · en l'air ${(air / E * 100).toFixed(0)} % · déposé ${(S.dep / E * 100).toFixed(0)} % · sorti ${(S.out / E * 100).toFixed(0)} %`);
+          if (S.t > 260) d.reset();
         },
       });
     }
 
-    // ── 07 · le bois périodique ─────────────────────────────────────────────
+    // ── 07 · interpolation compensée ────────────────────────────────────────
+    demo('#fig-interp', {
+      title: 'Entre deux images', aspect: 2.6,
+      controls: [{ key: 'a', label: 'Phase entre les images', min: 0, max: 1, step: .01, value: .5 }],
+      buttons: [{ key: 'mc', label: 'Compensation de mouvement', toggle: true, value: true }],
+      draw(g, d) {
+        const { w, h } = d, puff = (x, y, cx) => { let v = 0; for (const [ox, oy, rr] of [[0, 0, 1], [.7, .3, .7], [-.5, .4, .6], [.3, -.5, .55]]) v += Math.exp(-(((x - cx - ox * 18) ** 2 + (y - h / 2 - oy * 18) ** 2) / (2 * (rr * 16) ** 2))); return Math.min(1, v); };
+        const c0 = w * .3, c1 = w * .62, vel = c1 - c0, a = d.s.a, step = 3;
+        for (let y = 0; y < h; y += step) for (let x = 0; x < w; x += step) {
+          const v = d.s.mc ? (1 - a) * puff(x - a * vel, y, c0) + a * puff(x + (1 - a) * vel, y, c1) : (1 - a) * puff(x, y, c0) + a * puff(x, y, c1);
+          if (v < .02) continue;
+          g.fillStyle = alpha(C.c1, v * .85); g.fillRect(x, y, step, step);
+        }
+        label(g, 'image k', c0, h - 12, { align: 'center', color: C.faint }); label(g, 'image k + 1', c1, h - 12, { align: 'center', color: C.faint });
+        d.status(d.s.mc ? 'la bouffée glisse' : 'fondu : deux fantômes');
+      },
+    });
+
+    // ── 08 · le bois périodique ─────────────────────────────────────────────
     {
       const L = 4.4, N = makeNoise(L, 41);
       const raw = (x, z) => { let s = 0, a = .5, f = 2.4; for (let o = 0; o < 4; o++) { s += a * Math.sin(x * f * 1.7 + z * f * 2.3 + o) * Math.cos(z * f * 1.3 - x * f * .9 + 2 * o); f *= 2.03; a *= .5; } return s; };
@@ -350,7 +412,7 @@
       });
     }
 
-    // ── 08 · couche mince ───────────────────────────────────────────────────
+    // ── 09 · couche mince ───────────────────────────────────────────────────
     {
       const refl = (lam, d, th, n1 = 2.0, n2 = 1.45) => {
         const s0 = Math.sin(th), c0 = Math.cos(th), s1 = s0 / n1, c1 = Math.sqrt(1 - s1 * s1), s2 = s0 / n2, c2 = Math.sqrt(1 - s2 * s2);

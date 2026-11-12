@@ -4,9 +4,10 @@
 // tableaux ; seule la phase change à l'image.
 import { buildPlasmodium, K_SNAP, S0, S1 } from './plasmodium.js';
 import { buildTemplate } from './sporangia.js';
-import { buildSpores } from './spores.js';
+import { simulateSmoke, SMOKE } from './smoke.js';
 import { heightGrid } from './wood.js';
 import { fruitState, beamShape } from '../fruit.js';
+import { windSpeed } from '../timeline.js';
 import { FAMILIES } from '../families.js';
 
 const MAX_ROWS = 8192;
@@ -126,6 +127,7 @@ function veinGeometry(strands, P, rowOf, NR = 10, SUB = 2) {
 
 export function buildSite(spec) {
   const { R, M: lite } = spec;
+  const sstepJS = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
   const fam = FAMILIES[R.family], sp = fam.species[R.species];
   const L = R.site.L;
   const ground = heightGrid({ ...R.wood, L, W: R.site.W, logR: R.site.logR }, 256);
@@ -198,7 +200,7 @@ export function buildSite(spec) {
       const e = 1 + (sp.expand - 1) * st.open;
       const hn = (dims.top - dims.cupTop) * e;
       yc = dims.cupTop + hn / 2; r = dims.netR * (1 + 0.25 * st.open); h = hn / 2; top = dims.cupTop + hn;
-    } else if (R.family === 'lamproderma') { yc = dims.headC; r = dims.headR; h = dims.headR; top = dims.top; }
+    } else if (R.family === 'lamproderma' || R.family === 'trichia' || R.family === 'lycogala') { yc = dims.headC; r = dims.netR; h = (dims.headH ?? dims.headR * 2) / 2; top = dims.top; }
     else { yc = dims.stalkH + dims.headH * 0.6; r = dims.netR; h = dims.headH * 0.4; top = dims.top; }
     const t = beamShape(yc / top);
     return { c: [b.x + st.bx * t * sz, y0 + yc * sz, b.z + st.bz * t * sz], r: r * sz, h: h * sz };
@@ -211,15 +213,18 @@ export function buildSite(spec) {
     sporeBeads = fk.slice(0, 400).map((k, i) => ({ x: (P.x[Gr.ea[k]] + P.x[Gr.eb[k]]) / 2, z: (P.z[Gr.ea[k]] + P.z[Gr.eb[k]]) / 2, size: 1, delay: rng(i) * 0.6 + 0.2 * Pm.drain[k], az: 0, rnd: rng(i + 9) }));
     sporeHeads = (i, s) => { const b = sporeBeads[i], r = sp.tube * 1.4; return { c: [b.x, ground(b.x, b.z) + r, b.z], r, h: r * 0.5 }; };
   }
-  const S = buildSpores({ R, sp, beads: sporeBeads, heads: sporeHeads, ground, seeds: Pm.seeds, L, count: lite ? 12000 : 30000, seed: `${R.seed}:spores` });
-  const ns = S.list.length;
-  const a0 = new Float32Array(ns * 4), a1 = new Float32Array(ns * 4), a2 = new Float32Array(ns * 4), a3 = new Float32Array(ns * 4);
-  S.list.forEach((q, i) => {
-    a0.set([q.x0, q.y0, q.z0, q.sr], i * 4);
-    a1.set([q.lift, q.vs, q.sig, q.tl], i * 4);
-    a2.set([q.p1, q.p2, q.p3, q.sl], i * 4);
-    a3.set([q.cx, q.cz, (i * 0.618034) % 1, S.designated.includes(i) ? 1 : 0], i * 4);
+  // ── le nuage : simulation de fluide, émise par les têtes qui s'ouvrent ──
+  const kick = { arcyria: 0.5, stemonitis: 0.25, lamproderma: 0.4, hemitrichia: 0.6, trichia: 1.2, lycogala: 2.2 }[R.family] ?? 0.4;
+  const emitters = sporeBeads.map((b, i) => {
+    const V = (sp.head ? (sp.head.r ** 2) * sp.head.h * 3.1 : sp.tube ** 2 * 0.2) * (b.size ?? 1) ** 3;
+    const op = (s) => (sp.mode === 'net' ? sstepJS(0.74 + b.delay * 0.06, 0.86 + b.delay * 0.06, s) : fruitState(b, s, R, sp).open);
+    // (Lycogala : chaque rafale aspire une bouffée par l'ouverture — Venturi)
+    const puff = R.family === 'lycogala' ? (s) => (windSpeed(s, R.wind.gust, R.wind.strength) / 0.7) ** 2 : () => 1;
+    return { at: (s) => sporeHeads(i, s), rate: (s) => Math.max(0, op(s + 0.002) - op(s - 0.002)) / 0.004 / SMOKE.sec * V * puff(s), kick };
   });
+  const K = R.light.key;
+  const sunDir = K.kind === 'lamp' ? [Math.sin(R.camera.az) * 0.6, 0.7, Math.cos(R.camera.az) * 0.6] : [Math.cos(K.az) * Math.cos(K.el), Math.sin(K.el), Math.sin(K.az) * Math.cos(K.el)];
+  const Sm = simulateSmoke({ R, L, ground, emitters, sunDir, settle: 0.3 * ((sp.spore ?? 10) / 10) ** 2, grains: lite ? 2500 : 6000, seeds: Pm.seeds, seed: `${R.seed}:smoke` });
   const F = Pm.F;
   return {
     sheet: { T: F.T, Gx: F.Gx, Gz: F.Gz, x0: F.x0, z0: F.z0, h: F.h },
@@ -227,8 +232,8 @@ export function buildSite(spec) {
     veins,
     beads: beadArr, nBeads: beads.length,
     template, dims,
-    spores: { a0, a1, a2, a3, count: ns, wind: S.tab },
+    smoke: Sm,
     seeds: Pm.seeds.map((g) => [g.x, g.z, g.t]).flat(),
-    stats: { nodes: Gr.n, edges: m, kept: rows, strands: strands.length, residual: net.residual, Vnet: Pm.Vnet, Vbeads: Pm.Vbeads, designated: S.designated.length },
+    stats: { nodes: Gr.n, edges: m, kept: rows, strands: strands.length, residual: net.residual, Vnet: Pm.Vnet, Vbeads: Pm.Vbeads, designated: Sm.grains.designated.length, budget: Sm.budget },
   };
 }

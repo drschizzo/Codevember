@@ -42,7 +42,9 @@ function lathe(M, prof, part, seg = 28, { y0 = 0, y1 = 1, closeTop = false, clos
   }
   for (let k = 0; k + 1 < n; k++) for (let i = 0; i < seg; i++) {
     const a = rows[k][i], b = rows[k][i + 1], c = rows[k + 1][i + 1], d = rows[k + 1][i];
-    if (inward) { M.tri(a, c, b); M.tri(a, d, c); } else { M.tri(a, b, c); M.tri(a, c, d); }
+    // (sens direct vu du côté de la normale : sinon le GPU élimine la face
+    // extérieure et montre l'intérieur de la coque)
+    if (inward) { M.tri(a, b, c); M.tri(a, c, d); } else { M.tri(a, c, b); M.tri(a, d, c); }
   }
   return rows;
 }
@@ -60,7 +62,7 @@ function capsuleProfile(r, y0, y1, kb, kt, n = 18) {
 
 // pied : tube effilé, évasé à la base, fermé
 function stalk(M, h, r0, r1, part = 1, seg = 12) {
-  const P = [[1e-4, 0], [r0 * 1.9, 0.0004], [r0 * 1.3, h * 0.04], [r0, h * 0.12]];
+  const P = [[1e-4, 0], [r0 * 1.45, 0.0004], [r0 * 1.15, h * 0.04], [r0, h * 0.12]];
   for (let i = 1; i <= 10; i++) P.push([r0 + (r1 - r0) * (i / 10) ** 0.8, h * (0.12 + 0.88 * (i / 10))]);
   P.push([1e-4, h + r1 * 0.3]);
   lathe(M, P, part, seg, { y0: 0, y1: h });
@@ -116,7 +118,8 @@ export function buildTemplate(familyKey, sp, seed = 't') {
     lathe(M, capsuleProfile(r, H, H + hh, kb, kt, 26), 2, 26, { y0: H, y1: H + hh });
     lathe(M, capsuleProfile(r * 1.05, H - r * 0.05, H + hh + r * 0.05, kb, kt, 26), 3, 26, { y0: H, y1: H + hh });
     dims.netR = r * 1.05;
-  } else if (familyKey === 'lamproderma') {
+  }
+  if (familyKey === 'lamproderma') {
     stalk(M, H, sp.stalk.r, sp.stalk.r * 0.6);
     const c = [0, H + r * 0.92, 0];
     dims.top = H + r * 1.92; dims.headH = r * 2; dims.headC = c[1];
@@ -125,6 +128,54 @@ export function buildTemplate(familyKey, sp, seed = 't') {
     // masse de spores sombre, un peu plus petite, et son filet de capillitium
     lathe(M, Array.from({ length: 13 }, (_, i) => { const a = -Math.PI / 2 + (i / 12) * Math.PI; return [Math.max(1e-4, Math.cos(a) * r * 0.9), c[1] + Math.sin(a) * r * 0.9]; }), 3, 24, { y0: c[1] - r * 0.9, y1: c[1] + r * 0.9 });
     dims.netR = r * 0.9;
+  }
+  else if (familyKey === 'trichia') {
+    // toupie dorée : pied court, tête en sphère un peu étirée, péridium en
+    // plaques, élatères comprimés dedans
+    if (H > 0.02) stalk(M, H, sp.stalk.r, sp.stalk.r * 0.8);
+    const c = [0, H + r * 0.95, 0];
+    dims.headC = c[1]; dims.top = c[1] + r; dims.headH = r * 2;
+    flakySphere(M, c, r, 2, 14, rng);
+    lathe(M, Array.from({ length: 13 }, (_, i) => { const a = -Math.PI / 2 + (i / 12) * Math.PI; return [Math.max(1e-4, Math.cos(a) * r * 0.93), c[1] + Math.sin(a) * r * 0.93]; }), 3, 26, { y0: c[1] - r, y1: c[1] + r });
+    dims.netR = r * 0.93;
+  } else if (familyKey === 'lycogala') {
+    // coussin sans pied (æthalium) : un dôme aplati posé, verruqueux ; la
+    // masse de spores dedans
+    // (dôme tronqué à sa base : une semelle plate posée sur le bois)
+    const a0 = -0.55, yb = hh / 2 + Math.sin(a0) * hh / 2;
+    const P = [[1e-4, 0.001], [Math.cos(a0) * r * 0.97, 0.001]];
+    for (let i = 0; i <= 18; i++) { const a = a0 + (i / 18) * (Math.PI / 2 - a0); P.push([Math.max(1e-4, Math.cos(a) * r), 0.001 + (hh / 2 + Math.sin(a) * hh / 2 - yb) * hh / (hh - yb)]); }
+    lathe(M, P, 2, 40, { y0: 0, y1: hh });
+    lathe(M, P.map(([x, y]) => [x * 0.9, y * 0.9 + 0.002]), 3, 32, { y0: 0, y1: hh });
+    dims.headC = hh / 2; dims.top = hh; dims.headH = hh; dims.netR = r * 0.9; dims.stalkH = 0;
+  }
+  // rosée : des gouttelettes posées sur la tête (partie 6 ; tp.z = leur rayon),
+  // qui suivent la tête quand elle se replie, et sèchent avec elle
+  if (familyKey !== 'hemitrichia') {
+    const nd = familyKey === 'lycogala' ? 22 : familyKey === 'stemonitis' ? 10 : 7;
+    const round = familyKey === 'lamproderma' || familyKey === 'trichia' || familyKey === 'lycogala';
+    for (let q = 0; q < nd; q++) {
+      const a = rng.next() * TAU, rd = r * (familyKey === 'lycogala' ? 0.05 + 0.08 * rng.next() : 0.14 + 0.12 * rng.next());
+      let c, n;
+      if (round) {
+        const el = 0.15 + rng.next() * 1.25, cy = dims.headC, ry = familyKey === 'lycogala' ? hh / 2 : r;
+        n = [Math.cos(el) * Math.cos(a), Math.sin(el) * (ry / r), Math.cos(el) * Math.sin(a)];
+        const l = Math.hypot(...n); n = n.map((x) => x / l);
+        c = [Math.cos(el) * Math.cos(a) * r, cy + Math.sin(el) * ry, Math.cos(el) * Math.sin(a) * r];
+      } else {
+        const y0 = familyKey === 'arcyria' ? dims.cupTop + hh * 0.1 : H + hh * 0.1, y = y0 + rng.next() * (H + hh - y0 - r * 0.6);
+        n = [Math.cos(a), 0, Math.sin(a)]; c = [Math.cos(a) * r, y, Math.sin(a) * r];
+      }
+      const cc = c.map((x, i) => x + n[i] * rd * 0.55);
+      const hyD = (cc[1] - H) / Math.max(1e-4, dims.top - H);
+      for (let j = 0; j < 6; j++) for (let i = 0; i < 8; i++) {
+        const quad = [[i, j], [i + 1, j], [i + 1, j + 1], [i, j + 1]].map(([ii, jj]) => {
+          const th = (jj / 6) * Math.PI, ph = (ii / 8) * TAU, d = [Math.sin(th) * Math.cos(ph), Math.cos(th), Math.sin(th) * Math.sin(ph)];
+          return M.v([cc[0] + d[0] * rd, cc[1] + d[1] * rd, cc[2] + d[2] * rd], d, [6, hyD, rd, q / nd]);
+        });
+        M.tri(quad[0], quad[1], quad[2]); M.tri(quad[0], quad[2], quad[3]);
+      }
+    }
   }
   return { ...M.out(), dims };
 }

@@ -11,7 +11,7 @@
 import * as THREE from 'three/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { generate, upgrade, MOODS } from './recipe.js';
-import { createCameraPath } from './camera.js';
+import { createCameraPath, cloudTrack } from './camera.js';
 import { FAMILIES } from './families.js';
 import { heightOf } from './fruit.js';
 import { logBase } from './gen/wood.js';
@@ -30,7 +30,7 @@ import { loader } from './app/loader.js';
 import { asyncPipelines, warmScene } from './app/warmup.js';
 
 const NAME = 'spore';
-const DEFAULT_SEED = 'p2'; // scène d'ouverture (sans ?seed=) : Lamproderma iridescents sur une bûche échauffée
+const DEFAULT_SEED = 's9'; // scène d'ouverture (sans ?seed=) : Trichia dorés sur une planche de cèdre
 const params = new URLSearchParams(location.search);
 const $ = (s) => document.querySelector(s);
 const randomSeed = () => Math.random().toString(36).slice(2, 8);
@@ -141,6 +141,7 @@ async function main() {
       // (la forêt remplit le cadre : distance à l'échelle des sporanges)
       distForest: Math.min(R.camera.dist, Math.max(1.6, H * (H > 0.5 ? 4.4 : 6.5) + 0.6)),
       groundAt: (x, z) => logBase(z, R.site.logR) + 0.05,
+      cloud: cloudTrack(S?.smoke, R.site.L), // (la caméra suit le nuage pendant le voyage)
     }, 40);
   }
 
@@ -274,8 +275,9 @@ async function main() {
     camState,
     random: () => { R = generate(randomSeed()); applyRecipe(); },
     regenerate: (seed) => { if (seed && seed !== R.seed) { R = generate(seed); applyRecipe(); } },
-    moodChanged: (mood) => { R = generate(R.seed, { mood, family: R.family }); applyRecipe(); },
-    familyChanged: (family) => { R = generate(R.seed, { mood: R.mood, family }); applyRecipe(); },
+    moodChanged: (mood) => { R = generate(R.seed, { mood, family: R.family, support: R.support }); applyRecipe(); },
+    familyChanged: (family) => { R = generate(R.seed, { mood: R.mood, family, support: R.support }); applyRecipe(); },
+    supportChanged: (support) => { R = generate(R.seed, { mood: R.mood, family: R.family, support }); applyRecipe(); },
     siteChanged: () => { applyRecipe(); },
     cameraChanged: () => { path = null; },
     copyLink: async () => {
@@ -377,8 +379,8 @@ async function main() {
       // famille sont alors imposées — pour comparer toutes les humeurs d'un coup)
       async sheet(seeds, phases = [0, 0.2, 0.4, 0.6, 0.8], prefix = 'sheet') {
         for (const s of seeds) {
-          const [sd, mood, family] = String(s).split(':');
-          R = generate(sd, { ...(mood ? { mood } : {}), ...(family ? { family } : {}) }); applyRecipe();
+          const [sd, mood, family, support] = String(s).split(':');
+          R = generate(sd, { ...(mood ? { mood } : {}), ...(family ? { family } : {}), ...(support ? { support } : {}) }); applyRecipe();
           await new Promise((r) => setTimeout(r, 400));
           for (const ph of phases) { await this.shot(ph); await this.send(`${prefix}-${s}-${String(Math.round(ph * 100)).padStart(3, '0')}.jpg`); }
         }
