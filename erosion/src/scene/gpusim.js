@@ -321,9 +321,9 @@ struct Res {
 @group(0) @binding(3) var<storage, read> surplus: array<f32>;  // matière poussée par la lame, cumulée depuis l'aval (m²)
 @group(0) @binding(4) var terr: texture_storage_2d<rgba32float, write>;
 @group(0) @binding(5) var wat: texture_storage_2d<rgba32float, write>;
-@group(0) @binding(6) var<storage, read_write> cur: array<vec4f>;   // relief courant : b, humidité, rides, sable frais
+@group(0) @binding(6) var<storage, read_write> cur: array<vec4f>;   // relief courant : b, humidité, rides, profondeur atteinte
 @group(0) @binding(7) var nrm: texture_storage_2d<rgba16float, write>; // nx, nz, humidité, rides (filtrable)
-@group(0) @binding(8) var occ: texture_storage_2d<rgba16float, write>; // occlusion du relief, creux (filtrable)
+@group(0) @binding(8) var occ: texture_storage_2d<rgba16float, write>; // occlusion du relief, creux, profondeur atteinte (filtrable)
 @group(0) @binding(9) var<storage, read> recM: array<u32>;
 @group(1) @binding(0) var<uniform> R: Res;
 
@@ -366,7 +366,7 @@ fn relAt(c: u32) -> vec2f {
   }
   if (fresh > 0.5) { wet = 0.0; }
   textureStore(terr, vec2u(i, j), vec4f(b, depth, dep, fresh));
-  cur[c] = vec4f(b, wet, rip, fresh);
+  cur[c] = vec4f(b, wet, rip, depth); // (la profondeur atteinte repart dans la texture filtrable)
   // eau (demi-résolution)
   if (i < HX && j < HY) {
     let h = j * HX + i;
@@ -434,7 +434,7 @@ fn relAt(c: u32) -> vec2f {
     m += cur[u32(q.y) * NX + u32(q.x)].x;
   }
   let cav = clamp((m / 8.0 - h0) * 400.0, -1.0, 1.0);
-  textureStore(occ, vec2u(i, j), vec4f(vis, cav, 0.0, 1.0));
+  textureStore(occ, vec2u(i, j), vec4f(vis, cav, v.w, 1.0));
 }
 `;
 }

@@ -22,10 +22,12 @@ export function createApparatus(scene, { lite = false, lights = [] } = {}) {
   const L = tLights(lights);
   const M = (o) => { const m = new THREE.MeshPhysicalNodeMaterial(o); m.lightsNode = L; return m; };
   const mats = {
-    alu: M({ color: 0xd9dadb, metalness: 1, roughness: 0.34 }),
+    // (aluminium microbillé, acier et inox satinés : les reflets de la lampe le
+    // long des profilés étaient les points les plus vifs de l'image et tiraient l'œil hors du sable)
+    alu: M({ color: 0xb9bbbe, metalness: 1, roughness: 0.52 }),
     acr: M({ color: 0xffffff, metalness: 0, roughness: 0.03, transparent: true, opacity: 0.1, clearcoat: 1, clearcoatRoughness: 0.02, depthWrite: false }),
-    steel: M({ color: 0xc4c5c5, metalness: 1, roughness: 0.16 }),
-    inox: M({ color: 0xc8c6c2, metalness: 1, roughness: 0.28 }),
+    steel: M({ color: 0xb4b5b6, metalness: 1, roughness: 0.3 }),
+    inox: M({ color: 0xbab8b4, metalness: 1, roughness: 0.42 }),
     black: M({ color: 0x141416, metalness: 0, roughness: 0.55, clearcoat: 0.3, clearcoatRoughness: 0.4 }),
     base: M({ color: 0x2b2c2e, metalness: 0, roughness: 0.6 }),
     blade: M({ color: 0x9aa0a6, metalness: 1, roughness: 0.3 }),

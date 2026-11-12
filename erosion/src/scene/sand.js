@@ -27,7 +27,7 @@ import {
 } from 'three/tsl';
 import { TABLE, MAX_LAYERS } from '../gen/table.js';
 import { G } from './globals.js';
-import { noise, perturb, isLite, stableVelocity } from './materials.js';
+import { noise, NZ, perturb, isLite, stableVelocity } from './materials.js';
 
 const srgb = (hex) => new THREE.Color(hex); // (THREE.Color convertit en linéaire)
 
@@ -64,6 +64,8 @@ export function createSand(gs) {
     layerColor: uniformArray(Array.from({ length: MAX_LAYERS }, () => new THREE.Color(0.6, 0.5, 0.4)), 'color'),
     nLayers: uniform(1, 'int'),
     deposit: uniform(new THREE.Color(0.6, 0.55, 0.45)),
+    meanTone: uniform(new THREE.Color(0.6, 0.5, 0.4)), // (ton moyen des strates : le voile de grains roulés)
+    pits: uniform(0),           // cratères des gouttes (0–1 : la pluie a commencé à cribler le sable)
     grainDark: uniform(new THREE.Color(0.08, 0.07, 0.06)),
     grainAmt: uniform(0.18),
     dry: uniform(0),            // séchage (0 humide → 1 sec)
@@ -71,7 +73,7 @@ export function createSand(gs) {
     wetDark: uniform(0.55),     // assombrissement du sable mouillé
     mud: uniform(new THREE.Color(0.42, 0.33, 0.22)),
     mudScale: uniform(1),
-    turbK: uniform(1800),       // opacité de la turbidité (par m d'eau, par fraction volumique)
+    turbK: uniform(3600),       // opacité de la turbidité (par m d'eau, par fraction volumique)
     absorb: uniform(new THREE.Vector3(3.2, 1.6, 1.1)), // absorption de l'eau (1/m) — une eau claire de quelques cm
     rippleAmp: uniform(0.0003),
     flowPhase: uniform(0),      // phase des rides d'eau (tours entiers par boucle)
@@ -197,7 +199,20 @@ export function createSand(gs) {
     // ce que montre la surface
     const depth = T.y, dep = T.z;
     const isDep = smoothstep(0.0002, 0.0006, dep);
-    const strat = layerColorAt(depth.add(tmax(0, bed.sub(T.x)).mul(0)));
+    // pente : 0 à plat, 1 sur une paroi (normale du lit, B-spline)
+    const steep = smoothstep(0.88, 0.6, sqrt(tmax(0.0001, float(1).sub(A.x.mul(A.x)).sub(A.y.mul(A.y)))));
+    // la strate se lit à la hauteur vraie du pixel sous la surface de départ
+    // (b₀ − y) : sur une paroi, la profondeur interpolée en plan mêlait toutes
+    // les couches en un seul ton ; le contact est ondulé de quelques dixièmes de mm
+    const b0p = T.x.sub(T.z).add(T.y);
+    const contact = noise(vec3(p.x.mul(180), 3.1, p.z.mul(180))).mul(0.0006).add(noise(vec3(p.x.mul(40), 8.3, p.z.mul(40))).mul(0.0008));
+    // (à plat, la profondeur atteinte lue en B-spline dans une texture filtrable : seuillée
+    // en bilinéaire, elle dessinait les marches de la grille aux contacts des strates)
+    const depthS = bspline(gs.occTex, c).z;
+    const depthV = mix(depthS, tmax(0, b0p.sub(bed)), steep).add(contact);
+    const strat0 = layerColorAt(tmax(0, depthV));
+    // à plat, un voile de grains roulés mêle un peu les couches (contraste des affleurements adouci)
+    const strat = mix(strat0, vec3(U.meanTone), float(0.32).mul(float(1).sub(steep.mul(0.7))).mul(smoothstep(0.0005, 0.002, depth)));
     // dépôt : lamines obliques (litage entrecroisé) dans l'épaisseur
     const lamD = sin(dep.mul(2 * Math.PI / 0.0009).add(p.x.mul(160)).add(noise(p.mul(22)).mul(3))).mul(0.06);
     let alb = mix(strat, vec3(U.deposit).mul(lamD.add(1)), isDep);
@@ -229,7 +244,7 @@ export function createSand(gs) {
 
     // sous l'eau : atténuation et turbidité
     const att = exp(U.absorb.mul(wd).negate().mul(2));
-    const tOp = float(1).sub(exp(U.turbK.mul(Wt.y).mul(wd).negate())).mul(film).mul(0.85);
+    const tOp = float(1).sub(exp(U.turbK.mul(Wt.y).mul(wd).negate())).mul(film).mul(0.92);
     alb = mix(alb.mul(att), vec3(U.mud), tOp);
 
     // ── relief fin (hauteur en m, perturbation de Mikkelsen) ──
@@ -253,7 +268,20 @@ export function createSand(gs) {
     // grain en relief : bruit continu (un hachage par cellule faisait des marches,
     // dessinées en pointillés noirs par la perturbation de normale)
     const grainH = noise(vec3(p.x.div(0.0005), 0.71, p.z.div(0.0005))).mul(0.00005).mul(smoothstep(1.0, 0.3, fwidth(p.x.div(0.0005))));
-    const H = ripple.mul(rFade).add(streak).add(grainH).mul(float(1).sub(tOp));
+    // parois : stries d'éboulement le long de la plus grande pente, et lamines
+    // de la stratification soulignées en relief (les bancs se lisent à la lumière)
+    const gq = vec3(dot(p.xz, across).mul(420), dot(p.xz, down).mul(45), 2.3);
+    const grooves = noise(gq).mul(0.00009).mul(smoothstep(0.5, 0.15, fwidth(gq.x)));
+    const lamR = sin(depthV.mul(2 * Math.PI / 0.0016)).mul(0.00003).mul(smoothstep(0.5, 0.15, fwidth(depthV.mul(1 / 0.0016))));
+    const wall = grooves.add(lamR).mul(steep).mul(float(1).sub(isDep));
+    // cratères des gouttes : le sable criblé par la pluie (effacés par le courant et par la lame)
+    const pq = vec3(p.x.div(0.0042), 9.1, p.z.div(0.0042));
+    // (tailles et profondeurs variées, cratères clairsemés par endroits : une grille régulière se lisait en tôle perforée)
+    const pv = NZ(pq.mul(0.23).add(4.4));
+    const pq2 = pq.add(pv.xyz.mul(0.7)); // (germes déplacés : plus d'alignements)
+    const pit = smoothstep(pv.x.mul(0.12).add(0.32), 0.0, NZ(pq2).z).mul(smoothstep(-0.25, 0.35, pv.y)).mul(-0.00009).mul(U.pits).mul(float(1).sub(T.w))
+      .mul(float(1).sub(smoothstep(0.3, 0.7, A.w))).mul(float(1).sub(steep)).mul(smoothstep(0.6, 0.2, fwidth(pq.x)));
+    const H = ripple.mul(rFade).add(streak).add(grainH).add(wall).add(pit).mul(float(1).sub(tOp));
     const nBedV = normalize(cameraViewMatrix.mul(vec4(nBed, 0)).xyz);
     const nV = perturb(H, nBedV);
 
@@ -261,7 +289,18 @@ export function createSand(gs) {
     //    calculées seulement là où il y a de l'eau (branche : la plupart des pixels sont secs)
     const nWV = normalize(cameraViewMatrix.mul(vec4(waterNormal(p, h, Wt, film), 0)).xyz);
     const occ = texture(gs.occTex, vec2(p.x.add(Lx / 2).div(Lx), p.z.add(Ly / 2).div(Ly)));
-    return { alb: alb.mul(mix(float(1), float(0.82), clamp(occ.y, 0, 1))), nV, nWV, film, tOp, wetL, moist, ao: occ.x };
+    // une lame mince (ruissellement, moins de ~1 mm) n'est pas un miroir : du sable
+    // mouillé qui scintille ; au-delà, la surface libre devient un plan d'eau
+    const deep = smoothstep(0.0004, 0.0025, wd).mul(film);
+    // écume : flocons entraînés par le courant, là où l'eau va vite et peu profonde
+    const vel = Wt.zw;
+    const fq = vec3(p.x.sub(vel.x.mul(fract(U.flowPhase)).mul(0.8)), 1.3, p.z.sub(vel.y.mul(fract(U.flowPhase)).mul(0.8))).mul(420);
+    const fq2 = vec3(p.x.sub(vel.x.mul(fract(U.flowPhase.add(0.5))).mul(0.8)), 4.9, p.z.sub(vel.y.mul(fract(U.flowPhase.add(0.5))).mul(0.8))).mul(420);
+    const fw = abs(fract(U.flowPhase).sub(0.5)).mul(2);
+    const foamN = mix(noise(fq), noise(fq2), fw);
+    const foam = smoothstep(0.35, 0.7, foamN).mul(smoothstep(0.18, 0.45, length(vel))).mul(film).mul(float(1).sub(smoothstep(0.004, 0.012, wd))).mul(0.55);
+    const albF = mix(alb, vec3(0.78, 0.76, 0.72), foam);
+    return { alb: albF.mul(mix(float(1), float(0.82), clamp(occ.y, 0, 1))), nV, nWV, film, deep, foam, tOp, wetL, moist, ao: occ.x };
   };
 
   // (un seul appel : la structure renvoyée est partagée par tous les canaux)
@@ -270,12 +309,14 @@ export function createSand(gs) {
   const s = get();
   material.colorNode = s.alb;
   material.normalNode = normalize(mix(s.nV, s.nWV, s.tOp));
-  material.roughnessNode = mix(mix(0.9, 0.97, float(1).sub(s.moist)), 0.5, s.wetL);
+  // sable mouillé : sombre et satiné, jamais verni (un vernis faisait des
+  // falaises en chocolat) ; l'eau seule porte le vernis, miroir quand elle est profonde
+  material.roughnessNode = mix(mix(mix(0.9, 0.97, float(1).sub(s.moist)), 0.66, s.wetL), 0.9, s.foam);
   material.metalnessNode = float(0);
   material.aoNode = s.ao;
-  material.specularIntensityNode = mix(float(0.5), float(0.08), s.film);
-  material.clearcoatNode = tmax(s.film, s.wetL.mul(0.25));
-  material.clearcoatRoughnessNode = mix(0.3, 0.035, s.film);
+  material.specularIntensityNode = mix(float(0.5), float(0.08), s.deep);
+  material.clearcoatNode = tmax(s.film.mul(0.45), s.deep).mul(float(1).sub(s.foam));
+  material.clearcoatRoughnessNode = mix(0.22, 0.05, s.deep);
   material.clearcoatNormalNode = normalize(mix(s.nV, s.nWV, s.film));
 
   const mesh = new THREE.Mesh(geo, material);
@@ -342,6 +383,8 @@ export function createSand(gs) {
       U.layerColor.array[k].copy(srgb(R.sand.tones[Lk.tone % R.sand.tones.length]));
     }
     U.deposit.value.copy(srgb(R.sand.deposit));
+    U.meanTone.value.setRGB(0, 0, 0);
+    for (const t of R.sand.tones) U.meanTone.value.add(srgb(t).multiplyScalar(1 / R.sand.tones.length));
     U.grainDark.value.copy(srgb(R.sand.grain ?? '#2a2622'));
     U.mud.value.copy(srgb(R.sand.mud ?? '#6b5a44')).lerp(srgb(R.sand.deposit), 0.35); // (l'eau chargée prend la teinte du sable fin, éclaircie)
   }

@@ -61,7 +61,7 @@ test('direction artistique : les humeurs diffèrent par le décor, la lumière e
   const sig = (m) => `${m.env}|${Math.round(m.key.el * 4)}|${Math.round(m.key.az * 2)}|${Math.round(lum(m.bg) * 4)}`;
   assert.equal(new Set(M.map(sig)).size, M.length);
   // au moins trois directions de lumière : rasante, haute, contre-jour
-  assert.ok(M.some((m) => m.key.el < 0.3) && M.some((m) => m.key.el > 1.0) && M.some((m) => Math.cos(m.key.az) < -0.9 && m.key.el < 0.5));
+  assert.ok(M.some((m) => m.key.el < 0.3) && M.some((m) => m.key.el > 0.9) && M.every((m) => m.key.el < 1.0) && M.some((m) => Math.cos(m.key.az) < -0.9 && m.key.el < 0.5));
 });
 
 test('les familles ont des gestes distincts (source, pluie, niveau de base, forme)', () => {

@@ -96,6 +96,7 @@ export function createStage(scene, renderer, { lite = false } = {}) {
     const F = filmState(ph, S);
     gs.resolve({ tT: F.k * (gs.FT - 1), tW: F.k * (gs.FW - 1), water: F.water, screed: F.screed, bead: 0.003, bermTan: Math.tan((33 * Math.PI) / 180) });
     sand.U.dry.value = F.dry;
+    sand.U.pits.value = S.rain ? Math.min(1, F.k * 6) : 0; // (le sable se crible dès les premières averses)
     sand.U.waterOn.value = F.water;
     sand.U.flowPhase.value = ph * Math.round(duration * 0.8); // (un nombre entier de cycles par boucle)
     app.update(F, ph);
