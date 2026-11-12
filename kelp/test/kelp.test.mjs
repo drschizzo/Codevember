@@ -7,7 +7,7 @@ import { generate } from '../src/recipe.js';
 import { buildScene, BOX } from '../src/gen/scene.js';
 import { simulateSea, makeProfile, sampleField } from '../src/gen/sea.js';
 import { bakeRock, sampler, makePools } from '../src/gen/rock.js';
-import { FAMILIES } from '../src/gen/kelp.js';
+import { FAMILIES, layoutPlants, buildKelp, simulateKelp } from '../src/gen/kelp.js';
 import { cameraPose } from '../src/camera.js';
 
 const fromHalf = (h) => { const s = h & 0x8000 ? -1 : 1, e = (h >> 10) & 31, m = h & 1023; return e === 0 ? s * (m / 1024) * 2 ** -14 : s * 2 ** (e - 15) * (1 + m / 1024); };
@@ -116,4 +116,15 @@ test('les familles bougent chacune à sa façon (flottabilité, raideur)', () =>
   assert.ok(F.durvillaea.blade.rho < F.digitata.blade.rho, 'le cochayuyo flotte plus');
   assert.ok(F.postelsia.stipe.stand && F.postelsia.stipe.EI > 10 * F.digitata.stipe.EI, 'le palmier de mer reste debout');
   assert.ok(F.egregia.blade.fringe, 'le boa est frangé');
+});
+
+test('les laminaires sont à l\'heure de la mer : un nombre entier de sous-pas par image enregistrée', () => {
+  // (à 100 sous-pas par seconde, une image tous les round(100/30) = 3 sous-pas
+  // durait 0,030 s : en fin de boucle, les lames avaient 3 s de retard sur l'eau)
+  const plants = layoutPlants('digitata', 'sub', { x0: -1.5, x1: -1.2, z0: -0.2, z1: 0.2 }, Hc, { near: { x: -1.3, z: 0 }, nearR: 1, max: 1 });
+  const K = buildKelp('digitata', plants, Hc);
+  const out = simulateKelp(K, { sea, rockH: Hc, T: 1, fps: 30, sub: 100, loops: 1, settle: 0.1 });
+  assert.equal(out.stats.sub % 30, 0, `sous-pas ${out.stats.sub}`);
+  assert.equal(out.nf, 30);
+  assert.equal(S.stats.kelp.sub % 30, 0);
 });

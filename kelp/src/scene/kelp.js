@@ -84,18 +84,18 @@ export function createKelp(W, lite) {
   col = mix(col, vec3(KU.light), tips.mul(0.35).add(n1.mul(0.12).add(0.06)).clamp(0, 1));
   col = col.mul(float(1).sub(sori.mul(0.35)));
   mat.colorNode = col;
-  mat.roughnessNode = mix(float(0.3), float(0.5), under).add(n1.mul(0.1));
+  mat.roughnessNode = mix(float(0.38), float(0.5), under).add(n1.mul(0.1));
   mat.metalnessNode = float(0);
   // mucilage : un vernis à l'air, rien dans l'eau
-  mat.clearcoatNode = mix(float(0.7), float(0.0), under).mul(kind.mul(0.4).add(0.6));
-  mat.clearcoatRoughnessNode = float(0.07).add(n1.abs().mul(0.12));
+  mat.clearcoatNode = mix(float(0.45), float(0.0), under).mul(kind.mul(0.4).add(0.6));
+  mat.clearcoatRoughnessNode = float(0.12).add(n1.abs().mul(0.15));
   // translucidité (Barré-Brisebois) : la lame s'allume à contre-jour, ambrée
   // (sous l'eau, le soleil réfracté vient d'en haut, à moins de 49° de la
   // verticale : une lame vue de côté n'est plus à contre-jour — sans cela, les
   // lames immergées s'allumaient comme des néons)
   // (la lumière ne passe que là où la lame est mince : marges et pointes)
   const margin = smoothstep(0.55, 1.0, seg.y.cos().abs());
-  mat.thicknessColorNode = vec3(KU.light).mul(mix(float(0.3), float(0.8), kind)).mul(max(tips, margin).mul(0.7).add(0.3)).mul(mix(float(1), float(0.12), under));
+  mat.thicknessColorNode = vec3(KU.light).mul(mix(float(0.3), float(0.8), kind)).mul(max(tips, margin).mul(0.85).add(0.15)).mul(mix(float(1), float(0.12), under));
   mat.thicknessDistortionNode = float(0.15);
   mat.thicknessAmbientNode = float(0.0);
   mat.thicknessAttenuationNode = float(0.9);
@@ -106,7 +106,7 @@ export function createKelp(W, lite) {
   // filets, comme sur une lame vernie de mucilage ; des stries en travers
   // donnaient un velours côtelé)
   const across = seg.y.cos();
-  const hStri = noise(vec3(seg.z.mul(5), across.mul(22), rk.mul(9))).mul(0.0004).add(noise(vec3(seg.z.mul(14), across.mul(55), rk.mul(5))).mul(0.00015)).mul(kind);
+  const hStri = noise(vec3(seg.z.mul(3), across.mul(7), rk.mul(9))).mul(0.0005).mul(kind); // (rides douces : plus fin, le relief faisait une peau de serpent)
   mat.normalNode = perturb(hStri, normalView);
   mat.receivedShadowNode = W.receivedShadow;
   if (fringe) {

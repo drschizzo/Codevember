@@ -44,14 +44,32 @@ export function skyPixels(R, W = 1024) {
       const aur = (night ? 0.5 : 1) * sunUp * (2.2 * Math.exp(-th / 0.06) + 0.7 * Math.exp(-th / 0.35) * (0.5 + haze)) * (1 - 0.6 * cloud);
       r += sc[0] * aur; gg += sc[1] * aur; b += sc[2] * aur;
       if (th < 0.0055 && sd[1] > -0.01) { const d = (night ? 12 : 40) * (1 - cloud * 0.95); r += sc[0] * d; gg += sc[1] * d; b += sc[2] * d; }
-      // nuages : un voile en fBm, plus dense vers l'horizon, éclairé par le soleil
+      // nuages : un voile en fBm, plus dense vers l'horizon, ombré selon le
+      // soleil (plus épais du côté du soleil : plus sombre), un liseré
+      // lumineux à contre-jour (diffusion vers l'avant), le dessous réchauffé
+      // par l'horizon ; et des cirrus étirés, plus hauts
       if (cloud > 0 && el > 0) {
         const p = 1 / Math.max(0.08, se);
-        const n = N.fbm(dx * p * 1.2, 3.3, dz * p * 1.2, 5) * 0.5 + 0.5;
+        const u = dx * p * 1.2, v = dz * p * 1.2;
+        const n = N.fbm(u, 3.3, v, 5) * 0.5 + 0.5;
+        const sx = sd[0] / Math.max(0.05, Math.hypot(sd[0], sd[2])), sz = sd[2] / Math.max(0.05, Math.hypot(sd[0], sd[2]));
+        const n2 = N.fbm(u + sx * 0.08, 3.3, v + sz * 0.08, 4) * 0.5 + 0.5;
         const cov = sst(1 - cloud, 1.05 - cloud * 0.6, n) * sst(0, 0.06, e);
-        const lit = 0.6 + 0.6 * Math.exp(-th / 0.5) * sunUp;
+        const shade = Math.max(0.45, Math.min(1.25, 1 - (n2 - n) * 5));
+        const lit = (0.55 + 0.55 * Math.exp(-th / 0.5) * sunUp) * shade;
+        const rim = sunUp * Math.exp(-th / 0.3) * cov * (1 - cov) * 4;
         const cl = (night ? 0.02 : 0.95) * lit;
-        r += (cl * (0.85 + 0.15 * sc[0]) - r) * cov; gg += (cl * (0.85 + 0.15 * sc[1]) - gg) * cov; b += (cl * (0.88 + 0.12 * sc[2]) - b) * cov;
+        const warm = (1 - sst(0, 0.25, e)) * 0.35;
+        const cr = cl * (0.85 + 0.15 * sc[0]) * (1 - warm) + hor[0] * warm + sc[0] * rim * 1.5;
+        const cg = cl * (0.85 + 0.15 * sc[1]) * (1 - warm) + hor[1] * warm + sc[1] * rim * 1.5;
+        const cb = cl * (0.88 + 0.12 * sc[2]) * (1 - warm) + hor[2] * warm + sc[2] * rim * 1.5;
+        r += (cr - r) * cov; gg += (cg - gg) * cov; b += (cb - b) * cov;
+        if (!night && e > 0.03) {
+          const ci = N.fbm(dx * p * 0.5 + 9.1, 7.7, dz * p * 4.0, 4) * 0.5 + 0.5;
+          const cc = sst(0.62, 0.82, ci) * 0.3 * Math.min(1, cloud * 3) * sst(0.03, 0.2, e);
+          const cl2 = 0.9 + 0.8 * Math.exp(-th / 0.4) * sunUp;
+          r += (cl2 * sc[0] - r) * cc; gg += (cl2 * sc[1] - gg) * cc; b += (cl2 * (0.9 + 0.1 * sc[2]) - b) * cc;
+        }
       }
       // étoiles (la nuit)
       if (night && el > 0.05) {

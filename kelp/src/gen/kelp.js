@@ -166,7 +166,13 @@ export function buildKelp(family, plants, rockH) {
 //   long de la côte) }
 // retour : { n, nf, fps, pos (Float32 nf × n × 3), dir (idem), stats }
 export function simulateKelp(K, opts, onProgress = null) {
-  const { sea: S, rockH, T, fps = 30, sub = 480, loops = 2, obliq = 0.06, zRef = 0, settle = 2.5, mu = 0.45, side = 0.12, iters = 2 } = opts;
+  const { sea: S, rockH, T, fps = 30, loops = 2, obliq = 0.06, zRef = 0, settle = 2.5, mu = 0.45, side = 0.12, iters = 2 } = opts;
+  // (un nombre entier de sous-pas par image : on enregistre une image tous les
+  // sub/fps sous-pas — à 100 sous-pas par seconde, round(100/30) = 3 faisait
+  // des images de 0,030 s au lieu de 1/30 s, et les laminaires prenaient
+  // jusqu'à 3 s de retard sur la mer en fin de boucle : elles flottaient en
+  // l'air, là où l'eau avait été)
+  const sub = Math.ceil((opts.sub ?? 480) / fps) * fps;
   const F = FAMILIES[K.family];
   const N = K.nodes.length;
   const X = new Float64Array(N), Y = new Float64Array(N), Z = new Float64Array(N);
@@ -360,13 +366,14 @@ export function simulateKelp(K, opts, onProgress = null) {
   let obst = null;
   // le caisson : une sphère autour de l'objectif (le dôme et son boîtier) et
   // un pied vertical jusqu'à la roche ; un nœud est repoussé hors des deux
+  // (repoussé à l'horizontale seulement, sur toute la hauteur autour de
+  // l'objectif : une sphère offrait son sommet, et des lanières restaient
+  // posées sur le caisson invisible, tendues en poutres dans le haut de l'image)
   const pushOutP = (p, o, clear) => {
-    let dx = p[0] - o.x, dy = p[1] - o.y, dz = p[2] - o.z, dd = Math.hypot(dx, dy, dz), rr = o.r + clear;
-    if (dd < rr && dd > 1e-6) { const q = (rr - dd) / dd; p[0] += dx * q; p[1] += dy * q; p[2] += dz * q; }
-    if (p[1] < o.y) {
-      dx = p[0] - o.x; dz = p[2] - o.z; dd = Math.hypot(dx, dz); rr = o.rs + clear;
-      if (dd < rr && dd > 1e-6) { const q = (rr - dd) / dd; p[0] += dx * q; p[2] += dz * q; }
-    }
+    let dx = p[0] - o.x, dz = p[2] - o.z, dd = Math.hypot(dx, dz);
+    const dy = p[1] - o.y;
+    const rr = (dy < 0 && dy > -o.r ? Math.max(o.rs, Math.sqrt(o.r * o.r - dy * dy)) : dy <= -o.r ? o.rs : o.r) + clear;
+    if (dd < rr && dd > 1e-6) { const q = (rr - dd) / dd; p[0] += dx * q; p[2] += dz * q; }
     return p;
   };
   const _p3 = [0, 0, 0];
@@ -635,5 +642,6 @@ export function simulateKelp(K, opts, onProgress = null) {
   stats.maxOverlap = +ovMax.toFixed(4);
   stats.maxPush = +pushMax.toFixed(4); stats.worst = worst;
   stats.pairs = np / 2;
+  stats.sub = sub; // (sous-pas par seconde effectifs : un multiple de fps)
   return { n: N, nf, fps, pos, dir, stats, end: snaps[snaps.length - 1], start: snaps[snaps.length - 2] };
 }

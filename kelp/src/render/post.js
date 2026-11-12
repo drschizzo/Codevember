@@ -64,7 +64,7 @@ export function createPost(renderer, scene, camera, opts = {}) { // opts.lens(sa
     // virage de l'humeur : teinte des ombres et des hautes lumières (voir recipe.js, grade)
     shadowTint: uniform(new THREE.Color(1, 1, 1)), highTint: uniform(new THREE.Color(1, 1, 1)),
     ca: uniform(0.2), grain: uniform(0.04), hiCap: uniform(3),
-    streaks: uniform(0.3), streakLen: uniform(6), halation: uniform(0.3), dirt: uniform(0.4),
+    streaks: uniform(0.3), streakLen: uniform(6), halation: uniform(0.3), dirt: uniform(0.4), ghosts: uniform(0.6),
   };
   let nodes = {};
   let key = '';
@@ -192,6 +192,14 @@ export function createPost(renderer, scene, camera, opts = {}) { // opts.lens(sa
       // et poussière sur la lentille (révélée par la lumière diffusée)
       const glow = vec3(1, 0.32, 0.12).mul(U.halation);
       c = c.add(b.rgb.mul((cfg.dirt > 0 ? glow.add(lensDirt().mul(U.dirt)) : glow).add(1)));
+      // images fantômes du hublot : les reflets entre le dôme et l'objectif
+      // renvoient le soleil en petits disques colorés, sur la droite qui joint
+      // le soleil au centre de l'image, de l'autre côté
+      if (!cfg.lite) {
+        const bt = b.getTextureNode();
+        const ghost = (k, tint) => bt.sample(vec2(0.5).add(vec2(0.5).sub(uv()).mul(k))).rgb.mul(tint);
+        c = c.add(ghost(0.55, vec3(0.25, 0.32, 0.4)).add(ghost(1.25, vec3(0.38, 0.26, 0.12))).add(ghost(0.25, vec3(0.12, 0.3, 0.22))).mul(U.ghosts));
+      }
     }
     if (cfg.streaks > 0) {
       // traînées anamorphiques : seules les lumières les plus vives (le cœur, un
@@ -250,6 +258,7 @@ export function createPost(renderer, scene, camera, opts = {}) { // opts.lens(sa
     U.streakLen.value = cfg.streakLen ?? 6;
     U.halation.value = cfg.halation ?? 0;
     U.dirt.value = cfg.dirt ?? 0;
+    U.ghosts.value = cfg.ghosts ?? 0.6;
     U.focus.value = cfg.focus;
     U.focusRange.value = cfg.focusRange;
     U.bokeh.value = cfg.bokeh;
