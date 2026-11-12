@@ -53,7 +53,7 @@ export function windSpeed(s, gust = 0.5, strength = 1) {
   const t = (s - T.wind[0]) / (T.wind[1] - T.wind[0]);
   // rafales : bosses lisses dont le nombre et la hauteur dépendent de gust
   const g = 1 + gust * 0.9 * Math.sin(Math.PI * t * 5) ** 2 * Math.sin(Math.PI * t);
-  return strength * 1.1 * on * g;
+  return strength * 0.7 * on * g;
 }
 
 // avancement d'une étape propre à un sporange (retard d ∈ [0, 1] tiré à la

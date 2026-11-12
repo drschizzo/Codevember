@@ -67,7 +67,7 @@ export function territoryOf(P) {
 // champ T(x, z) sur une grille Gx × Gz couvrant la boîte du territoire
 export function arrivalField(P, L, seeds) {
   const Tr = territoryOf(P), N = makeNoise(L, 41);
-  const h = 0.011; // (cm par cellule)
+  const h = 0.015; // (cm par cellule)
   const Gx = Math.ceil((Tr.x1 - Tr.x0) / h) + 1, Gz = Math.ceil((Tr.z1 - Tr.z0) / h) + 1;
   const inside = new Uint8Array(Gx * Gz), speed = new Float32Array(Gx * Gz);
   for (let j = 0; j < Gz; j++) for (let i = 0; i < Gx; i++) {

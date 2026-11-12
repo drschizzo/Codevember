@@ -257,3 +257,13 @@ Les planches successives (familles × instants, puis 8 graines × 5 instants) on
 - **les colonnes de *Stemonitis* se cassaient** sous le vent (la flexion était calculée sur la hauteur de la tête, pas du sporange) ; les filets d'*Arcyria* détendus fléchissent sur toute leur longueur ;
 - **le filet d'*Arcyria* était plein quand il aurait dû s'ajourer** (masque inversé) ;
 - **l'iridescence de *Lamproderma* ne se voyait pas** : péridium lisse, couche mince d'indice 2,0 sur un fond de 1,45.
+
+## h. Deuxième révision (retours de l'utilisateur)
+
+Trois remarques : le **niveau graphique** général, la **variété** des scènes, et surtout **le nuage de spores**, pas assez visible ni compréhensible — avec une piste : une vraie simulation de « fumée », rendue avec soin, pour voir le nuage s'envoler et se poser.
+
+**Le nuage devient une simulation de fluide** (`src/gen/smoke.js`). Les spores n'étaient que des particules à trajectoire analytique : on ne lisait ni l'envol, ni le voyage, ni la retombée. Désormais une grille 3D couvre le site et l'aval ; l'air suit les équations d'Euler (Stable Fluids de Stam : forces, advection, projection), poussé par le vent du lieu (couche limite au-dessus du bois), roulé par des tourbillons qui passent avec lui, ses volutes gardées par le confinement de vorticité. Chaque tête verse dans l'air ce qu'elle perd en s'ouvrant ; la fumée chute selon Stokes et se dépose sur le bois — la poussière où germera la génération suivante. Bilan de masse exact. Des grains suivis un à un dans le même champ donnent le détail ; les germinations du site suivant sont leurs points de chute. Rendu en volume : marche de rayons, interpolation entre images avec compensation de mouvement, érosion par un bruit de détail, diffusion vers l'avant, ombre propre. **La caméra suit le centre de masse du nuage** pendant le voyage : on voit la fumée partir, dériver et s'étaler sur le bois du site suivant.
+
+**La variété** : deux familles nouvelles dont le geste ne ressemble à aucun des quatre premiers — *Trichia* (des toupies dorées dont les élatères jaillissent en houppe ronde) et *Lycogala* (des coussins corail sans pied, percés au sommet, que chaque rafale fait souffler par effet Venturi : le nuage part par bouffées) ; un axe **support** (bûche, branche, rameau) qui change toute la composition — la courbure du bois, la ligne d'horizon, la forêt en crête sur un rameau.
+
+**Le niveau graphique** : le fond n'est plus un aplat (dégradé, halo du soleil à contre-jour) ; la rosée se pose à l'aube sur les perles qui montent et sèche pendant la maturation (dans les décors humides) ; les têtes sont marbrées ; le nuage, plus clair (albédo d'une poussière qui diffuse), s'allume à contre-jour.

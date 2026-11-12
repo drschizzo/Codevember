@@ -16,6 +16,11 @@ function build({ spec, what }) {
       const S = buildSite(spec);
       S.sheet.TH = toHalf(S.sheet.T); S.sheet.T = null;
       S.edges.texH = toHalf(S.edges.tex); S.edges.tex = null;
+      // grains : positions en demi-flottants RGBA (une colonne par grain, une ligne par image)
+      const G = S.smoke.grains, F = S.smoke.frames, gp = new Float32Array(F * G.n * 4);
+      for (let i = 0; i < F * G.n; i++) { gp[i * 4] = G.pos[i * 3] || 0; gp[i * 4 + 1] = G.pos[i * 3 + 1] || 0; gp[i * 4 + 2] = G.pos[i * 3 + 2] || 0; gp[i * 4 + 3] = 1; }
+      G.posH = toHalf(gp); G.pos = null;
+      S.smoke.depH = toHalf(S.smoke.dep.map((v) => v / S.smoke.depMax)); S.smoke.dep = null;
       return S;
     }
     case 'env': return { data: envPixels(spec.preset, 0, spec.W) };

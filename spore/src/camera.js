@@ -66,11 +66,25 @@ export function createCameraPath(C, S, dur = 40) {
     const f = Math.min(1, Math.max(0, e));
     const dist = Math.exp(lerp(Math.log(C.dist), Math.log(S.distForest ?? C.dist), f)) * dk;
     const tx = lerp(S.target[0], S.forest[0], f), tz = lerp(S.target[1], S.forest[1], f);
-    const ty = S.y0 + S.H * hk * 0.55;
+    let ty = S.y0 + S.H * hk * 0.55;
+    // le voyage : la cible suit le centre de masse du nuage (calculé par la
+    // simulation), poids en cloche sur la fenêtre du voyage
+    let follow = 0;
+    if (S.cloud) {
+      let dd = u - 0.92; dd -= Math.round(dd);
+      const wgt = Math.abs(dd) < 0.13 ? Math.cos((Math.PI * dd) / 0.26) ** 2 : 0;
+      const c = S.cloud(u);
+      if (wgt > 0 && c) {
+        const Xt = S.L * (travel(u) - Fc); // (translation qu’aura la caméra à u)
+        follow = wgt * Math.max(-1.2, Math.min(1.2, c[0] - (Xt + tx)));
+        ty = ty * (1 - wgt * 0.6) + c[1] * wgt * 0.6;
+      }
+    }
+    const txf = tx + follow;
     const az = C.az + C.sway * Math.sin(2 * Math.PI * u);
     // (la caméra regarde vers −z, inclinée de az autour de la verticale)
-    const p = [tx + Math.sin(az) * Math.cos(el) * dist, ty + Math.sin(el) * dist, tz + Math.cos(az) * Math.cos(el) * dist];
-    return [...p, tx, ty, tz];
+    const p = [txf + Math.sin(az) * Math.cos(el) * dist, ty + Math.sin(el) * dist, tz + Math.cos(az) * Math.cos(el) * dist];
+    return [...p, txf, ty, tz];
   };
   const N = Math.round(dur * 30), sigma = 0.8 * 30;
   const raw = Array.from({ length: N }, (_, i) => rawPose(i / N));
@@ -97,4 +111,20 @@ export function createCameraPath(C, S, dur = 40) {
     return { pos: o.slice(0, 3), target: o.slice(3, 6), fov: C.fov, focus: Math.hypot(o[0] - o[3], o[1] - o[4], o[2] - o[5]), X };
   };
   return { pose, travel };
+}
+
+// centre du nuage vu depuis le site présent : le sien (u ≥ s0) ou celui du
+// site précédent (u petit : sa phase est u + 1, translaté de −L)
+export function cloudTrack(Sm, L, s0 = 0.73, s1 = 1.22) {
+  if (!Sm?.centroid) return null;
+  const C = Sm.centroid, F = Sm.frames;
+  return (u) => {
+    const s = u < 0.2 ? u + 1 : u, f = ((s - s0) / (s1 - s0)) * (F - 1);
+    if (f < 0 || f > F - 1) return null;
+    const k = Math.min(F - 2, Math.floor(f)), t = f - k, a = C.slice(k * 4, k * 4 + 4), b = C.slice(k * 4 + 4, k * 4 + 8);
+    if (!(a[3] > 0) || !(b[3] > 0)) return null;
+    const p = [0, 1, 2].map((j) => a[j] + (b[j] - a[j]) * t);
+    if (u < 0.2) p[0] -= L;
+    return p;
+  };
 }

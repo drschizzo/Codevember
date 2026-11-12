@@ -5,7 +5,7 @@
 // caméra (qui ne dépend elle-même que de la phase). Toutes les lumières sont
 // créées une fois, dans un ordre fixe, au premier niveau de la scène.
 import * as THREE from 'three/webgpu';
-import { uniform } from 'three/tsl';
+import { uniform, Fn, vec3, float, mix, smoothstep, exp, dot, normalize, positionWorldDirection, clamp, max as tmax } from 'three/tsl';
 import { woodTextures, createWood } from './wood.js';
 import { createSiteView } from './site.js';
 import { daylight } from '../timeline.js';
@@ -30,6 +30,18 @@ export function createStage(scene, gen, { lite = false } = {}) {
 
   const group = new THREE.Group();
   scene.add(group);
+  // ── Le fond : pas un aplat — un dégradé (plus clair à l'horizon, plus sombre
+  // en haut) et le halo du soleil dans sa direction (on le voit à contre-jour) ;
+  // la brume du lieu prend la couleur de l'horizon ──
+  const bgU = { col: uniform(new THREE.Color()), sun: uniform(new THREE.Vector3(0, 1, 0)), sunCol: uniform(new THREE.Color()), glow: uniform(0) };
+  scene.backgroundNode = Fn(() => {
+    const d = normalize(positionWorldDirection);
+    const up = clamp(d.y, -1, 1);
+    const grad = mix(float(1.12), float(0.62), smoothstep(-0.05, 0.6, up)).mul(mix(float(0.85), float(1), smoothstep(-0.4, 0, up)));
+    const c = tmax(dot(d, bgU.sun), 0);
+    const halo = exp(float(1).sub(c).mul(-7)).mul(0.6).add(exp(float(1).sub(c).mul(-60)).mul(0.9));
+    return bgU.col.mul(grad).add(bgU.sunCol.mul(halo).mul(bgU.glow));
+  })();
   let R = null, version = 0, pending = 0, total = 1;
   let wood = null, woodTex = null, views = [], siteData = null;
   const look = { wet: uniform(0) };
@@ -101,6 +113,11 @@ export function createStage(scene, gen, { lite = false } = {}) {
     else light.sunDir.set(camera.position.x - tgt[0], camera.position.y - tgt[1], camera.position.z - tgt[2]).normalize();
     light.sunCol.set(L.key.color).multiplyScalar(L.key.intensity * dim * 0.35);
     light.amb.set(R.fog.color).multiplyScalar(0.25 * R.env.intensity).add(new THREE.Color(0.03, 0.03, 0.03));
+    // fond : couleur du lieu, halo du soleil (dosé par le jour)
+    bgU.col.value.set(R.fog.color);
+    if (L.key.kind === 'sun') { dir(L.key.az, L.key.el); bgU.sun.value.copy(_d); bgU.glow.value = 0.35 * dim * (R.mood === 'brume' ? 2.2 : 1); }
+    else bgU.glow.value = 0;
+    bgU.sunCol.value.set(L.key.color).multiplyScalar(0.12);
     for (const v of views) v.update(ph, camera);
   }
 

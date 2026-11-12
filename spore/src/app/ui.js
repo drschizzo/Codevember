@@ -10,7 +10,7 @@ import GUI from 'lil-gui';
 import { ENV_PRESETS } from '../scene/env.js';
 import { QUALITY } from './settings.js';
 import { FAMILIES } from '../families.js';
-import { NETWORKS, ORDERS } from '../recipe.js';
+import { NETWORKS, ORDERS, SUPPORTS } from '../recipe.js';
 
 const opts = (o, label = (v) => v.label) => Object.fromEntries(Object.entries(o).map(([k, v]) => [label(v), k]));
 
@@ -61,6 +61,7 @@ export function createUI({ recipe: getRecipe, render, on, moods }) {
     add(fScene, R, 'mood', opts(moods)).name('Décor (nouvelle scène)').onChange((m) => on.moodChanged(m));
     add(fScene, R, 'family', opts(FAMILIES)).name('Famille (nouvelle scène)').onChange((f) => on.familyChanged(f));
     add(fScene, R, 'species', opts(FAMILIES[R.family].species)).name('Espèce').onChange(regen);
+    add(fScene, R, 'support', opts(SUPPORTS)).name('Support (nouvelle scène)').onChange((v) => on.supportChanged(v));
     add(fScene, R.loop, 'duration', 16, 120, 1).name('Durée de la boucle (s)').onChange(ch);
 
     add(fCam, R.camera, 'fov', 14, 50, 0.5).name('Champ (°)').onChange(() => on.cameraChanged());

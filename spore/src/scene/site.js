@@ -5,7 +5,7 @@ import * as THREE from 'three/webgpu';
 import { uniform, float, vec2, texture, smoothstep, clamp } from 'three/tsl';
 import { createPlasmodium } from './plasmodium.js';
 import { createSporangia } from './sporangia.js';
-import { createSpores } from './spores.js';
+import { createSmoke, smokeTextures } from './smoke.js';
 import { woodNodes } from './wood.js';
 
 export function sheetTexture(S) {
@@ -21,7 +21,7 @@ export function edgeTexture(S) {
 const shared = new WeakMap(); // (textures partagées par les deux vues d'un même site)
 
 export function createSiteView({ R, sp, S, wood, off, lite, light }) {
-  if (!shared.has(S)) shared.set(S, { sheet: sheetTexture(S), edges: edgeTexture(S), n: 0 });
+  if (!shared.has(S)) shared.set(S, { sheet: sheetTexture(S), edges: edgeTexture(S), smoke: smokeTextures(S.smoke), n: 0 });
   const TX = shared.get(S); TX.n++;
   const L = R.site.L;
   const U = { s: uniform(0), sPrev: uniform(0), xoff: uniform(off * L) };
@@ -34,7 +34,7 @@ export function createSiteView({ R, sp, S, wood, off, lite, light }) {
   const ctx = { R, sp, S, U, Wn, wood, Tat, inBox, TX, lite, off, L, stage: light };
   const plas = createPlasmodium(ctx);
   const spor = sp.head ? createSporangia(ctx) : null;
-  const spores = createSpores(ctx);
+  const spores = createSmoke(ctx);
   const meshes = [...plas.meshes, ...(spor ? spor.meshes : []), ...spores.meshes];
   return {
     U, meshes,
@@ -42,7 +42,7 @@ export function createSiteView({ R, sp, S, wood, off, lite, light }) {
     dispose(g) {
       for (const m of meshes) { g.remove(m); m.material.dispose(); }
       plas.dispose?.(); spor?.dispose?.(); spores.dispose?.();
-      if (--TX.n === 0) { TX.sheet.dispose(); TX.edges.dispose(); shared.delete(S); }
+      if (--TX.n === 0) { TX.sheet.dispose(); TX.edges.dispose(); TX.smoke.dep.dispose(); TX.smoke.pos.dispose(); shared.delete(S); }
     },
     update(ph, camera) {
       U.sPrev.value = U.s.value;
