@@ -15,7 +15,7 @@ import { createApparatus } from './apparatus.js';
 import { createRain } from './rain.js';
 import { initialTerrain, TABLE } from '../gen/table.js';
 import { specOf, kelvinToHex } from '../recipe.js';
-import { filmState } from '../timeline.js';
+import { filmState, reliefK } from '../timeline.js';
 import { G } from './globals.js';
 
 const SHADOW = { mobile: 2048, low: 2048, medium: 4096, high: 4096, ultra: 4096 };
@@ -94,11 +94,12 @@ export function createStage(scene, renderer, { lite = false } = {}) {
   function update(ph, duration) {
     if (!R) return;
     const F = filmState(ph, S);
-    gs.resolve({ tT: F.k * (gs.FT - 1), tW: F.k * (gs.FW - 1), water: F.water, screed: F.screed, bead: 0.003, bermTan: Math.tan((33 * Math.PI) / 180) });
+    gs.resolve({ tT: reliefK(F.k) * (gs.FT - 1), tW: F.k * (gs.FW - 1), water: F.water, drain: F.drain, screed: F.screed, bead: 0.003, bermTan: Math.tan((33 * Math.PI) / 180) });
     sand.U.dry.value = F.dry;
     sand.U.pits.value = S.rain ? Math.min(1, F.k * 6) : 0; // (le sable se crible dès les premières averses)
     sand.U.waterOn.value = F.water;
     sand.U.flowPhase.value = ph * Math.round(duration * 0.8); // (un nombre entier de cycles par boucle)
+    app.duration = duration;
     app.update(F, ph);
     rain.update(F, ph, duration, S);
     const L = R.light;

@@ -27,7 +27,7 @@ import {
 } from 'three/tsl';
 import { TABLE, MAX_LAYERS } from '../gen/table.js';
 import { G } from './globals.js';
-import { noise, NZ, perturb, isLite, stableVelocity } from './materials.js';
+import { noise, NZ, perturb, isLite, stableVelocity, hash33 } from './materials.js';
 
 const srgb = (hex) => new THREE.Color(hex); // (THREE.Color convertit en linéaire)
 
@@ -106,41 +106,60 @@ export function createSand(gs) {
     const s01 = texture(tex, vec2(h0.x, h1.y).mul(inv)), s11 = texture(tex, vec2(h1.x, h1.y).mul(inv));
     return mix(mix(s11, s10, g0.y), mix(s01, s00, g0.y), g0.x);
   };
+  // B-spline cubique « à la main » sur la composante x d'une texture en flottants 32
+  // bits : valeur et gradient (en cellules), 16 lectures. (La surface libre en
+  // bilinéaire montrait ses cellules de 5 mm en facettes dans les reflets.)
+  const bsp = (tex, nx, ny, cx, cy) => {
+    const ix = int(floor(cx)), iy = int(floor(cy)), fx = fract(cx), fy = fract(cy);
+    const W = (t) => { const s1 = float(1).sub(t); return [s1.mul(s1).mul(s1).div(6), t.mul(t).mul(t.mul(3).sub(6)).add(4).div(6), t.mul(t).mul(t.mul(-3).add(3)).add(t.mul(3)).add(1).div(6), t.mul(t).mul(t).div(6)]; };
+    const D = (t) => { const s1 = float(1).sub(t); return [s1.mul(s1).mul(-0.5), t.mul(t).mul(1.5).sub(t.mul(2)), t.mul(t).mul(-1.5).add(t).add(0.5), t.mul(t).mul(0.5)]; };
+    const wx = W(fx), wy = W(fy), dx = D(fx), dy = D(fy);
+    let v = float(0), gx = float(0), gy = float(0);
+    for (let j = 0; j < 4; j++) for (let i = 0; i < 4; i++) {
+      const q = ld(tex, ix.add(i - 1), iy.add(j - 1), nx, ny).x;
+      v = v.add(q.mul(wx[i].mul(wy[j]))); gx = gx.add(q.mul(dx[i].mul(wy[j]))); gy = gy.add(q.mul(wx[i].mul(dy[j])));
+    }
+    return { v, gx, gy };
+  };
   const cellOf = (X, Z) => vec2(X.add(Lx / 2).div(l).sub(0.5), Z.add(Ly / 2).div(l).sub(0.5));
   const hcellOf = (X, Z) => vec2(X.add(Lx / 2).div(2 * l).sub(0.5), Z.add(Ly / 2).div(2 * l).sub(0.5));
 
   // ── Vertex : lit bicubique, surface libre ──
   const vB = varyingProperty('float', 'vBed');
+  const vE = varyingProperty('float', 'vEta'); // (surface libre au sommet : la même que le maillage)
+  const vN = varyingProperty('vec3', 'vBedN'); // (normale du lit au sommet, dérivée de l'interpolation)
   const positionNode = Fn(() => {
     const p = positionGeometry;
     const c = cellOf(p.x, p.z);
     const ix = int(floor(c.x)), iy = int(floor(c.y));
     const fx = fract(c.x), fy = fract(c.y);
-    const wts = (t) => [
-      t.mul(t.mul(float(2).sub(t)).sub(1)).mul(0.5),
-      t.mul(t).mul(t.mul(3).sub(5)).add(2).mul(0.5),
-      t.mul(t.mul(float(4).sub(t.mul(3))).add(1)).mul(0.5),
-      t.sub(1).mul(t).mul(t).mul(0.5),
-    ];
-    const wx = wts(fx), wy = wts(fy);
-    let b = float(0);
-    const inner = [];
+    // Hermite cubique monotone, séparable (pentes de Fritsch–Carlson) : passe par
+    // les valeurs simulées, ne dépasse jamais (pas de bourrelet au bord d'une
+    // berge), continue en pente d'une cellule à l'autre (pas de palier ni de
+    // facette). Une B-spline arrondissait chaque crête sur ~7 mm : les ravines
+    // avaient l'air de cire fondue. La normale vient de la dérivée exacte.
+    const lim = (m, a, b2) => select(a.mul(b2).lessThanEqual(0), float(0), m.sign().mul(tmin(m.abs(), tmin(a.abs().mul(3), b2.abs().mul(3)))));
+    const herm = (q, t) => {
+      const D0 = q[1].sub(q[0]), D1 = q[2].sub(q[1]), D2 = q[3].sub(q[2]);
+      const m1 = lim(q[2].sub(q[0]).mul(0.5), D0, D1), m2 = lim(q[3].sub(q[1]).mul(0.5), D1, D2);
+      const t2 = t.mul(t), t3 = t2.mul(t);
+      const v = q[1].mul(t3.mul(2).sub(t2.mul(3)).add(1)).add(m1.mul(t3.sub(t2.mul(2)).add(t))).add(q[2].mul(t3.mul(-2).add(t2.mul(3)))).add(m2.mul(t3.sub(t2)));
+      const d = q[1].mul(t2.mul(6).sub(t.mul(6))).add(m1.mul(t2.mul(3).sub(t.mul(4)).add(1))).add(q[2].mul(t2.mul(-6).add(t.mul(6)))).add(m2.mul(t2.mul(3).sub(t.mul(2))));
+      return [v, d];
+    };
+    const rows = [], drows = [];
     for (let j = 0; j < 4; j++) {
-      let row = float(0);
-      for (let i = 0; i < 4; i++) {
-        const v = ld(tTerr, ix.add(i - 1), iy.add(j - 1), NX, NY).x;
-        if ((i === 1 || i === 2) && (j === 1 || j === 2)) inner.push(v);
-        row = row.add(v.mul(wx[i]));
-      }
-      b = b.add(row.mul(wy[j]));
+      const q = [0, 1, 2, 3].map((i) => ld(tTerr, ix.add(i - 1), iy.add(j - 1), NX, NY).x);
+      const [v, d] = herm(q, fx);
+      rows.push(v); drows.push(d);
     }
-    // Catmull-Rom borné par les quatre cellules qui entourent le sommet : pas de
-    // dépassement au bord d'une berge (le dépassement arrondissait les crêtes en
-    // bourrelets et creusait un sillon au pied des parois)
-    b = clamp(b, tmin(tmin(inner[0], inner[1]), tmin(inner[2], inner[3])), tmax(tmax(inner[0], inner[1]), tmax(inner[2], inner[3])));
+    const [b, dby] = herm(rows, fy);
+    const [dbx] = herm(drows, fy);
+    vN.assign(normalize(vec3(dbx.div(l).negate(), 1, dby.div(l).negate())));
     vB.assign(b);
     const h = hcellOf(p.x, p.z);
-    const eta = bilin(tWat, HX, HY, h.x, h.y).x;
+    const eta = bsp(tWat, HX, HY, h.x, h.y).v;
+    vE.assign(eta);
     const P = vec3(p.x, tmax(b, eta.mul(U.waterOn).sub(float(1).sub(U.waterOn))), p.z);
     // pose précédente = pose courante (le relief bouge de quelques µm par image) :
     // sans elle, three prend la grille plate pour la pose précédente, et la vitesse
@@ -153,7 +172,7 @@ export function createSand(gs) {
   const layerColorAt = Fn(([depth]) => {
     const col = vec3(U.layerColor.element(0)).toVar();
     const top = float(0).toVar();
-    const w = tmax(fwidth(depth), 0.00025); // (frontières adoucies au pixel)
+    const w = tmax(fwidth(depth), 0.0005); // (frontières adoucies : un fond posé sur un banc ne se découpe pas en taches)
     Loop({ start: int(0), end: U.nLayers.sub(1), type: 'int', condition: '<' }, ({ i }) => {
       const bot = U.layerBottom.element(i);
       col.assign(mix(col, vec3(U.layerColor.element(i.add(1))), smoothstep(bot.sub(w), bot.add(w), depth)));
@@ -170,9 +189,8 @@ export function createSand(gs) {
   const waterNormal = Fn(([p, h, Wt, film]) => {
     const n = vec3(0, 1, 0).toVar();
     If(film.greaterThan(0.001), () => {
-      const e = 0.5;
-      const ex = bilin(tWat, HX, HY, h.x.add(e), h.y).x, ez = bilin(tWat, HX, HY, h.x, h.y.add(e)).x;
-      const gwx = ex.sub(Wt.x).div(e * 2 * l), gwz = ez.sub(Wt.x).div(e * 2 * l);
+      const E = bsp(tWat, HX, HY, h.x, h.y);
+      const gwx = E.gx.div(2 * l), gwz = E.gy.div(2 * l);
       const vel = Wt.zw;
       // rides : deux lectures du bruit advectées par le courant, décalées d'une demi-période (en boucle)
       const ph0 = fract(U.flowPhase), ph1 = fract(U.flowPhase.add(0.5));
@@ -193,19 +211,20 @@ export function createSand(gs) {
     const h = hcellOf(p.x, p.z);
     const Wt = bilin(tWat, HX, HY, h.x, h.y);          // η, turbidité, vx, vy
     const bed = vB;
-    const wd = Wt.x.sub(bed).mul(U.waterOn).max(0);    // hauteur d'eau au pixel
+    const wd = vE.sub(bed).mul(U.waterOn).max(0);      // hauteur d'eau au pixel (surface du maillage)
     const film = smoothstep(0.00008, 0.0006, wd);
 
     // ce que montre la surface
     const depth = T.y, dep = T.z;
     const isDep = smoothstep(0.0002, 0.0006, dep);
     // pente : 0 à plat, 1 sur une paroi (normale du lit, B-spline)
-    const steep = smoothstep(0.88, 0.6, sqrt(tmax(0.0001, float(1).sub(A.x.mul(A.x)).sub(A.y.mul(A.y)))));
+    const nG = normalize(vN); // (normale du lit : dérivée exacte de l'interpolation, au sommet)
+    const steep = smoothstep(0.88, 0.6, nG.y);
     // la strate se lit à la hauteur vraie du pixel sous la surface de départ
     // (b₀ − y) : sur une paroi, la profondeur interpolée en plan mêlait toutes
     // les couches en un seul ton ; le contact est ondulé de quelques dixièmes de mm
     const b0p = T.x.sub(T.z).add(T.y);
-    const contact = noise(vec3(p.x.mul(180), 3.1, p.z.mul(180))).mul(0.0006).add(noise(vec3(p.x.mul(40), 8.3, p.z.mul(40))).mul(0.0008));
+    const contact = noise(vec3(p.x.mul(120), 3.1, p.z.mul(120))).mul(0.0003).add(noise(vec3(p.x.mul(30), 8.3, p.z.mul(30))).mul(0.0004));
     // (à plat, la profondeur atteinte lue en B-spline dans une texture filtrable : seuillée
     // en bilinéaire, elle dessinait les marches de la grille aux contacts des strates)
     const depthS = bspline(gs.occTex, c).z;
@@ -217,20 +236,36 @@ export function createSand(gs) {
     const lamD = sin(dep.mul(2 * Math.PI / 0.0009).add(p.x.mul(160)).add(noise(p.mul(22)).mul(3))).mul(0.06);
     let alb = mix(strat, vec3(U.deposit).mul(lamD.add(1)), isDep);
     // marbrure : le tri des grains fait des taches à quelques mm et quelques cm
-    const fine = noise(vec3(p.x.mul(720), 7.7, p.z.mul(720))).mul(0.07).mul(smoothstep(0.9, 0.3, fwidth(p.x.mul(720))));
-    const mott = noise(vec3(p.x.mul(90), 0.37, p.z.mul(90))).mul(0.05).add(noise(vec3(p.x.mul(260), 2.1, p.z.mul(260))).mul(0.04)).add(noise(vec3(p.x.mul(22), 5.3, p.z.mul(22))).mul(0.04)).add(fine);
+    const mott = noise(vec3(p.x.mul(90), 0.37, p.z.mul(90))).mul(0.05).add(noise(vec3(p.x.mul(260), 2.1, p.z.mul(260))).mul(0.04)).add(noise(vec3(p.x.mul(22), 5.3, p.z.mul(22))).mul(0.04));
     alb = alb.mul(mott.add(1));
-    // grains : couleurs du sable (minéraux sombres, quartz clairs), effacés avant le pixel
-    const gp = p.xz.div(0.00032);
-    const gcell = floor(gp);
-    const gh = fract(sin(dot(gcell, vec2(127.1, 311.7))).mul(43758.5453));
-    const gh2 = fract(sin(dot(gcell, vec2(269.5, 183.3))).mul(43758.5453));
-    const fade = smoothstep(1.2, 0.35, fwidth(gp.x));
-    const dark = step(0.86, gh).mul(U.grainAmt.mul(2.2));
-    const light = step(gh, 0.1).mul(U.grainAmt);
-    alb = alb.mul(float(1).add(gh2.sub(0.5).mul(U.grainAmt).mul(fade)));
+    // mottes de sable humide (1 à 3 mm) : Worley du volume, germes déplacés
+    const cq = vec3(p.x.div(0.0019), 2.7, p.z.div(0.0019));
+    const cw = NZ(cq.add(NZ(cq.mul(0.31)).xyz.mul(0.8)));
+    const clumpF = smoothstep(0.6, 0.15, fwidth(cq.x));
+    // grains (~0,28 mm) : cellules de Voronoï à germes déplacés (hachage sans sinus),
+    // chacun sa teinte, son relief en dôme, des pores entre eux ; minéraux lourds
+    // sombres, quartz clairs. (Des carrés de grille et un bruit très agrandi
+    // dessinaient une trame de tissu.) Effacés avant la fréquence du pixel.
+    const gp = p.xz.div(0.00028);
+    const fade = smoothstep(1.1, 0.35, fwidth(gp.x));
+    const gi = floor(gp), gf = fract(gp);
+    let gd = float(9), gid = vec3(0.5);
+    for (let y = -1; y <= 1; y++) for (let x = -1; x <= 1; x++) {
+      const o = vec2(x, y);
+      const hh = hash33(vec3(gi.add(o), 17.3));
+      const r = o.add(hh.xy.mul(0.8).add(0.1)).sub(gf);
+      const d2 = dot(r, r);
+      gid = select(d2.lessThan(gd), hh, gid);
+      gd = tmin(gd, d2);
+    }
+    const gF1 = sqrt(gd);
+    const dark = step(0.9, gid.z).mul(U.grainAmt.mul(2.4));
+    const light = step(gid.z, 0.08).mul(U.grainAmt);
+    const pore = smoothstep(0.42, 0.7, gF1);
+    alb = alb.mul(float(1).add(gid.x.sub(0.5).mul(U.grainAmt).mul(1.4).mul(fade)));
     alb = mix(alb, vec3(U.grainDark), dark.mul(fade));
-    alb = alb.add(light.mul(fade).mul(0.25));
+    alb = alb.add(light.mul(fade).mul(0.22));
+    alb = alb.mul(float(1).sub(pore.mul(0.22).mul(fade)));
 
     // humidité : sable humide (de base), mouillé (là où l'eau est passée), sec (séchage)
     const wetMem = tmax(A.z, film);
@@ -246,17 +281,31 @@ export function createSand(gs) {
     const att = exp(U.absorb.mul(wd).negate().mul(2));
     const tOp = float(1).sub(exp(U.turbK.mul(Wt.y).mul(wd).negate())).mul(film).mul(0.92);
     alb = mix(alb.mul(att), vec3(U.mud), tOp);
+    // caustiques : sous une eau claire et peu profonde, les rides de la surface
+    // concentrent la lumière en un réseau de filets qui suit le courant
+    const cv = Wt.zw;
+    const cph0 = fract(U.flowPhase), cph1 = fract(U.flowPhase.add(0.5)), cwv = abs(cph0.sub(0.5)).mul(2);
+    const cqa = vec3(p.x.sub(cv.x.mul(cph0).mul(0.6)), 0.4, p.z.sub(cv.y.mul(cph0).mul(0.6))).div(0.0045);
+    const cqb = vec3(p.x.sub(cv.x.mul(cph1).mul(0.6)), 1.9, p.z.sub(cv.y.mul(cph1).mul(0.6))).div(0.0045);
+    // (domaine déformé : des filets ondulés, pas un réseau de cellules qui se lirait en boue craquelée)
+    const cwa = NZ(cqa.mul(0.27)).xyz.mul(0.9), cwb = NZ(cqb.mul(0.27)).xyz.mul(0.9);
+    const caust = mix(smoothstep(0.2, 0.0, NZ(cqa.add(cwa)).w), smoothstep(0.2, 0.0, NZ(cqb.add(cwb)).w), cwv).pow(2);
+    // (une eau calme n'a pas de rides, donc pas de caustiques : seulement là où elle coule)
+    const cAmt = smoothstep(0.04, 0.18, length(cv)).mul(smoothstep(0.0004, 0.003, wd)).mul(float(1).sub(smoothstep(0.015, 0.04, wd))).mul(float(1).sub(tOp)).mul(smoothstep(0.6, 0.2, fwidth(cqa.x)));
+    alb = alb.mul(float(1).add(caust.mul(cAmt).mul(0.3)));
+    // ménisque : à la ligne d'eau, une frange plus sombre (le sable boit)
+    const edge = film.mul(float(1).sub(smoothstep(0.0002, 0.0012, wd)));
+    alb = alb.mul(float(1).sub(edge.mul(0.18)));
 
     // ── relief fin (hauteur en m, perturbation de Mikkelsen) ──
-    const ny = sqrt(tmax(0.0001, float(1).sub(A.x.mul(A.x)).sub(A.y.mul(A.y))));
-    const nBed = normalize(vec3(A.x, ny, A.y));
+    const nBed = nG;
     // rides de courant : crêtes perpendiculaires à la descente, longueur d'onde ~13 mm
     // (tirée vers l'aval : sur un fond presque plat, la normale bruitée faisait tourner les crêtes en volutes)
-    const down = normalize(vec2(A.x, A.y).add(vec2(0.05, 0)));
+    const down = normalize(nG.xz.add(vec2(0.05, 0)));
     // (phase sur un axe fixe du bac — le courant y va vers l'aval — et non sur la
     // pente locale : le produit scalaire de la position avec une direction qui varie
     // faisait tourner les crêtes en volutes, un degré décalant la phase d'un cycle)
-    const rp = p.x.div(0.013).add(noise(vec3(p.x.mul(22), 0.5, p.z.mul(22))).mul(0.8)).add(noise(vec3(p.z.mul(9), 1.7, p.x.mul(9))).mul(0.5));
+    const rp = p.x.div(0.013).add(noise(vec3(p.x.mul(22), 0.5, p.z.mul(22))).mul(0.8)).add(noise(vec3(p.z.mul(6), 1.7, p.x.mul(6))).mul(2.2)).add(noise(vec3(p.z.mul(2.5), 3.3, p.x.mul(2.5))).mul(3.0)); // (crêtes sinueuses, raccords en Y)
     // profil asymétrique lisse (flanc amont long, flanc aval plus raide), sans
     // marche ni cassure : une marche dans le profil dessinait un trait noir le
     // long de chaque crête. Les rides ne naissent que là où un courant a longtemps
@@ -267,10 +316,13 @@ export function createSand(gs) {
     const rFade = smoothstep(0.3, 0.08, fwidth(rp)); // (effacées bien avant la fréquence du pixel : pas de moiré)
     // stries du gabarit sur le sable neuf
     const neuf = float(1).sub(smoothstep(0.0001, 0.0005, depth.add(dep)));
-    const streak = noise(vec3(p.z.mul(900), 0.3, p.x.mul(12))).mul(0.000025).mul(neuf).mul(smoothstep(0.6, 0.2, fwidth(p.z.mul(900))));
+    // (stries de la lame : quelques sillons irréguliers, pas une trame)
+    const sq = vec3(p.z.mul(260), 0.3, p.x.mul(6));
+    const streak = noise(sq.add(vec3(noise(vec3(p.x.mul(40), 1.1, p.z.mul(40))).mul(0.6), 0, 0))).mul(0.00003).mul(neuf).mul(smoothstep(0.5, 0.15, fwidth(sq.x)));
     // grain en relief : bruit continu (un hachage par cellule faisait des marches,
     // dessinées en pointillés noirs par la perturbation de normale)
-    const grainH = noise(vec3(p.x.div(0.0005), 0.71, p.z.div(0.0005))).mul(0.00005).mul(smoothstep(1.0, 0.3, fwidth(p.x.div(0.0005))));
+    const grainH = float(1).sub(gd.mul(1.6)).max(0).mul(0.00006).mul(fade)
+      .add(smoothstep(0.55, 0.0, cw.z).mul(0.00005).mul(clumpF).mul(moist.mul(0.7).add(0.3)).mul(float(1).sub(film))); // (sous l'eau, pas de mottes)
     // parois : stries d'éboulement le long de la plus grande pente, et lamines
     // de la stratification soulignées en relief (les bancs se lisent à la lumière)
     // (deux jeux de stries sur les axes fixes du bac, mêlés selon l'orientation de la

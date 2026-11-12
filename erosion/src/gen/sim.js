@@ -27,6 +27,7 @@ export const PHYS = {
   dVel: 0.0008,        // profondeur plancher pour estimer la vitesse (lames minces)
   talusWet: Math.tan((30 * Math.PI) / 180),  // sable immergé
   talusDamp: Math.tan((62 * Math.PI) / 180), // sable humide (cohésion capillaire)
+  dSub: 0.0005,        // au-delà de cette lame d'eau, le sable est immergé (talus de 30°)
   talusRate: 0.25,     // part de l'excès redistribuée par pas
   diffuse: 1e-6,       // diffusion du lit mouillé (m²/s, temps morphologique)
   tDry: 6,             // mémoire de l'humidité (s) : le sable reste sombre après le passage de l'eau
@@ -137,7 +138,7 @@ export function createSim({ NX, NY, b0, strata, S }) {
       const tau = (P.manning * P.manning * vm * vm) / Math.cbrt(Math.max(d[c], 0.001));
       const C = P.Kc * Math.max(0, tau - P.tauC) ** 1.5;
       // (des rides ne se forment que sous une vraie lame d'eau, pas sous le ruissellement de la pluie)
-      const dr = Math.min(1, Math.max(0, (d[c] - 0.002) / 0.003));
+      const dr = Math.min(1, Math.max(0, (d[c] - 0.004) / 0.004));
       rip[c] = Math.min(1, rip[c] + P.kRip * Math.max(0, tau - P.tauC) * dr * dr * (3 - 2 * dr) * dt);
       if (s[c] < C) {
         const hard = b[c] > bmin[c] + 0.0002 ? 0 : hardnessAt(strata, b0[c] - b[c]);
@@ -153,7 +154,7 @@ export function createSim({ NX, NY, b0, strata, S }) {
     // 5. talus : la part au-delà de l'angle de repos glisse vers les voisins plus bas
     const D8 = [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [1, 1], [1, -1], [-1, 1]];
     for (let j = 1; j < NY - 1; j++) for (let i = 1; i < OUT; i++) {
-      const c = j * NX + i, tan = d[c] > 0.0005 ? P.talusWet : P.talusDamp;
+      const c = j * NX + i, tan = d[c] > P.dSub ? P.talusWet : P.talusDamp;
       let tot = 0, mx = 0;
       for (let k = 0; k < 8; k++) {
         const ni = i + D8[k][0], nj = j + D8[k][1], n = nj * NX + ni, dist = k < 4 ? l : l * Math.SQRT2;
