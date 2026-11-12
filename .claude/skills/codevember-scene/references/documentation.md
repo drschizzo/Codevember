@@ -8,6 +8,13 @@ Chaque projet publie trois choses en plus de la scène, et les **tient à jour**
 | Page « défis techniques » | `<projet>/explainer.html` | le site : un article illustré, lien « documentation » de l'accueil |
 | Carte de l'accueil | `index.html`, `home/<nom>-art.jpg`, `home/<nom>-scene.jpg`, `README.md` racine | la page d'accueil et le dépôt |
 
+## Le README
+
+Un document de référence pour qui ouvre le dépôt : on y cherche une touche, un paramètre d'URL, une constante, une mesure. Il garde ses sections (Utilisation, Principe, Génération, Matériaux, Scène, Tests, Performances mesurées, Version mobile), ses tableaux et ses listes, et reste dense et neutre. Ce qui sonne « écrit par une IA » (liste plus bas, section de la page « défis techniques ») y est évité de la même façon : zéro tiret cadratin en connecteur, pas de contraste de théâtre ni de chute. Deux règles propres au README :
+- **Le gras sert à repérer**, pas à scander : le nom d'une famille, d'une humeur, d'un mécanisme là où il est défini, au plus un ou deux par paragraphe. Une phrase entière en gras ne fait que crier.
+- **Les points-virgules ne remplacent pas les phrases.** Une liste d'éléments courts peut s'écrire avec ; une suite d'idées se coupe en phrases.
+Le premier paragraphe et la section Principe doivent se lire sans bagage technique (le reste peut supposer un développeur graphique).
+
 ## La page « défis techniques » (`explainer.html`)
 
 L'échafaudage la pose depuis `template/explainer.html` (structure, en-tête, sommaire, une section et une démo d'exemple, budget, pied). Modèle complet à lire avant d'écrire : **`tangle/explainer.html`** ; d'autres exemples : `orrery` (`planetaire_v2/explainer.html`), `moss/`, `melt/`, `tesseract/`.

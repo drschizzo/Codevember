@@ -111,7 +111,7 @@ export function simulateField(T, H, SH, P = {}) {
     for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) rainGrid[j * N + i] = rainAt(u, -E + dx * (i + 0.5), -E + dx * (j + 0.5), SH, E);
     // évaporation : forte au soleil de la sécheresse, faible sous la pluie
     const e = ev * (0.15 + 0.85 * (1 - wetSeason(u)));
-    // (la mousse ne pousse qu'à la saison des pluies : une rosée n'y suffit pas)
+    // (la mousse pousse surtout à la saison des pluies, et jamais sous 15 % de son maximum)
     const season = Math.max(0.15, wetSeason(u));
     for (let s = 0; s < sub; s++) {
       for (let k = 0; k < N * N; k++) {
