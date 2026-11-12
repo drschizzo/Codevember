@@ -23,7 +23,7 @@ import * as THREE from 'three/webgpu';
 import {
   Fn, vec2, vec3, vec4, float, ivec2, int, uniform, uniformArray, positionGeometry, textureLoad, texture, floor, fract, clamp,
   mix, smoothstep, max as tmax, min as tmin, sqrt, exp, sin, cos, dot, normalize, length, abs, varyingProperty, cameraViewMatrix,
-  fwidth, Loop, If, select, positionView, step, pow,
+  fwidth, Loop, If, select, positionView, step, pow, positionPrevious,
 } from 'three/tsl';
 import { TABLE, MAX_LAYERS } from '../gen/table.js';
 import { G } from './globals.js';
@@ -73,7 +73,7 @@ export function createSand(gs) {
     mudScale: uniform(1),
     turbK: uniform(1800),       // opacité de la turbidité (par m d'eau, par fraction volumique)
     absorb: uniform(new THREE.Vector3(3.2, 1.6, 1.1)), // absorption de l'eau (1/m) — une eau claire de quelques cm
-    rippleAmp: uniform(0.00035),
+    rippleAmp: uniform(0.0003),
     flowPhase: uniform(0),      // phase des rides d'eau (tours entiers par boucle)
     waterOn: uniform(1),
   };
@@ -122,15 +122,29 @@ export function createSand(gs) {
     ];
     const wx = wts(fx), wy = wts(fy);
     let b = float(0);
+    const inner = [];
     for (let j = 0; j < 4; j++) {
       let row = float(0);
-      for (let i = 0; i < 4; i++) row = row.add(ld(tTerr, ix.add(i - 1), iy.add(j - 1), NX, NY).x.mul(wx[i]));
+      for (let i = 0; i < 4; i++) {
+        const v = ld(tTerr, ix.add(i - 1), iy.add(j - 1), NX, NY).x;
+        if ((i === 1 || i === 2) && (j === 1 || j === 2)) inner.push(v);
+        row = row.add(v.mul(wx[i]));
+      }
       b = b.add(row.mul(wy[j]));
     }
+    // Catmull-Rom borné par les quatre cellules qui entourent le sommet : pas de
+    // dépassement au bord d'une berge (le dépassement arrondissait les crêtes en
+    // bourrelets et creusait un sillon au pied des parois)
+    b = clamp(b, tmin(tmin(inner[0], inner[1]), tmin(inner[2], inner[3])), tmax(tmax(inner[0], inner[1]), tmax(inner[2], inner[3])));
     vB.assign(b);
     const h = hcellOf(p.x, p.z);
     const eta = bilin(tWat, HX, HY, h.x, h.y).x;
-    return vec3(p.x, tmax(b, eta.mul(U.waterOn).sub(float(1).sub(U.waterOn))), p.z);
+    const P = vec3(p.x, tmax(b, eta.mul(U.waterOn).sub(float(1).sub(U.waterOn))), p.z);
+    // pose précédente = pose courante (le relief bouge de quelques µm par image) :
+    // sans elle, three prend la grille plate pour la pose précédente, et la vitesse
+    // vaut tout le relief (flou de mouvement et anticrénelage temporel faussés)
+    positionPrevious.assign(P);
+    return P;
   })();
 
   // ── Couleur du sable ──
@@ -225,13 +239,20 @@ export function createSand(gs) {
     const down = normalize(vec2(A.x, A.y).add(vec2(0.0001, 0)));
     const across = vec2(down.y.negate(), down.x);
     const rp = dot(p.xz, down).div(0.013).add(noise(vec3(p.x.mul(30), 0.5, p.z.mul(30))).mul(1.6)).add(dot(p.xz, across).div(0.04).mul(noise(vec3(p.z.mul(9), 1.7, p.x.mul(9))).mul(0.6)));
-    const rw = fract(rp);
-    const ripple = rw.mul(rw).mul(float(3).sub(rw.mul(2))).sub(rw.mul(0.4)).mul(U.rippleAmp).mul(smoothstep(0.5, 0.95, A.w)).mul(smoothstep(0.0008, 0.003, depth.add(dep)));
-    const rFade = smoothstep(0.6, 0.15, fwidth(rp));
+    // profil asymétrique lisse (flanc amont long, flanc aval plus raide), sans
+    // marche ni cassure : une marche dans le profil dessinait un trait noir le
+    // long de chaque crête. Les rides ne naissent que là où un courant a longtemps
+    // coulé (chenaux, delta) : une lame de pluie n'en fait pas.
+    const th = rp.mul(2 * Math.PI);
+    const rprof = sin(th.add(sin(th).mul(0.55)));
+    const ripple = rprof.mul(0.5).mul(U.rippleAmp).mul(smoothstep(0.75, 0.98, A.w)).mul(smoothstep(0.0008, 0.003, depth.add(dep)));
+    const rFade = smoothstep(0.3, 0.08, fwidth(rp)); // (effacées bien avant la fréquence du pixel : pas de moiré)
     // stries du gabarit sur le sable neuf
     const neuf = float(1).sub(smoothstep(0.0001, 0.0005, depth.add(dep)));
     const streak = noise(vec3(p.z.mul(900), 0.3, p.x.mul(12))).mul(0.000025).mul(neuf).mul(smoothstep(0.6, 0.2, fwidth(p.z.mul(900))));
-    const grainH = gh2.sub(0.5).mul(0.00007).mul(fade);
+    // grain en relief : bruit continu (un hachage par cellule faisait des marches,
+    // dessinées en pointillés noirs par la perturbation de normale)
+    const grainH = noise(vec3(p.x.div(0.0005), 0.71, p.z.div(0.0005))).mul(0.00005).mul(smoothstep(1.0, 0.3, fwidth(p.x.div(0.0005))));
     const H = ripple.mul(rFade).add(streak).add(grainH).mul(float(1).sub(tOp));
     const nBedV = normalize(cameraViewMatrix.mul(vec4(nBed, 0)).xyz);
     const nV = perturb(H, nBedV);
@@ -290,7 +311,9 @@ export function createSand(gs) {
     const b = bilin(tTerr, NX, NY, c.x, c.y).x;
     const y = p.y.mul(b);
     vY.assign(y);
-    return vec3(p.x, y, p.z);
+    const P = vec3(p.x, y, p.z);
+    positionPrevious.assign(P);
+    return P;
   })();
   skirtMat.colorNode = Fn(() => {
     const p = positionGeometry, c = edgeCell(p);
