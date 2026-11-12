@@ -11,7 +11,7 @@
 import * as THREE from 'three/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { generate, upgrade, MOODS } from './recipe.js';
-import { buildCamera } from './camera.js';
+import { buildCamera, shotAt } from './camera.js';
 import { createGenerator } from './gen/client.js';
 import { createStage } from './scene/stage.js';
 import { makeEnvironment } from './scene/env.js';
@@ -176,6 +176,7 @@ async function main() {
   // ── Rendu d'une phase ──
   const TAU = Math.PI * 2;
   const _f = new THREE.Vector3(), _u = new THREE.Vector3(), _r = new THREE.Vector3();
+  let lastShot = null;
   // u : phase « déroulée » (partie entière = nombre de boucles accomplies) ;
   // sub : décalages d'un rendu accumulé (lentille, pixel), facultatif
   function renderAt(u, sub = null) {
@@ -184,14 +185,18 @@ async function main() {
     G.phase.value = ph;
     G.frame.value = (G.frame.value + 1) % 65536;
     const Pc = pose(ph);
+    const near = camState.free ? 0.05 : Pc.near;
     if (camState.free) controls.update();
     else {
-      // caméra du film : périodique en ph (camera.js)
+      // caméra du film : le plan du découpage qui contient ph (camera.js)
       camera.position.set(...Pc.position);
       camera.up.set(0, 1, 0);
       camera.lookAt(...Pc.target);
+      // un raccord : l'historique de l'anticrénelage et les vitesses appartiennent au plan précédent
+      if (lastShot !== null && Pc.shot !== lastShot) post.cut();
+      lastShot = Pc.shot;
     }
-    if (Math.abs(camera.fov - Pc.fov) > 1e-6) { camera.fov = Pc.fov; camera.updateProjectionMatrix(); }
+    if (Math.abs(camera.fov - Pc.fov) > 1e-6 || camera.near !== near) { camera.fov = Pc.fov; camera.near = near; camera.updateProjectionMatrix(); }
     const dist = camState.free ? camera.position.distanceTo(controls.target) : Math.hypot(Pc.position[0] - Pc.target[0], Pc.position[1] - Pc.target[1], Pc.position[2] - Pc.target[2]);
     camera.clearViewOffset();
     if (sub) {
@@ -210,7 +215,9 @@ async function main() {
     scene.environmentIntensity = R.env.intensity;
     scene.environmentRotation.set(0, R.env.rotation, 0);
     stage.update(ph, R.loop.duration);
-    post.update({ ...RENDER, lite: LITE, focus: RENDER.focus * dist, focusRange: RENDER.focusRange * dist }, R);
+    // (profondeur de champ du plan : faible en macro, grande au ras du sable)
+    const dk = camState.free ? 1 : Pc.dof;
+    post.update({ ...RENDER, lite: LITE, focus: RENDER.focus * dist, focusRange: RENDER.focusRange * dist * dk, bokeh: RENDER.bokeh * Math.min(1.4, 1 / Math.sqrt(dk)) }, R);
     post.render();
   }
   // Rendu hors de la boucle d'animation (export, image fixe, débogage) : three.js
@@ -226,7 +233,9 @@ async function main() {
     accum.begin(canvas.width, canvas.height);
     for (let i = 0; i < n; i++) {
       const s = jitter(i, frame);
-      renderStep(u + s.time * shutter, s);
+      // (l'obturateur ne s'ouvre pas à cheval sur un raccord : une image mêlerait deux plans)
+      const ut = u + s.time * shutter;
+      renderStep(shotAt(ut).index === shotAt(u).index ? ut : u, s);
       accum.add(1 / n);
     }
     camera.clearViewOffset();
