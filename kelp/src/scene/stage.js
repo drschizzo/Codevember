@@ -12,7 +12,8 @@ import { createKelp } from './kelp.js';
 import { sunDir } from '../gen/sky.js';
 import { cameraPose } from '../camera.js';
 import { G } from './globals.js';
-import { texture as tTexture, equirectUV, normalize, positionWorld, cameraPosition, vec4 } from 'three/tsl';
+import { texture as tTexture, equirectUV, normalize, positionWorld, cameraPosition, vec4, vec2, vec3, float, uniform, screenUV, screenSize, getViewPosition, fwidth, smoothstep, step, floor, fract, length, mx_cell_noise_float, max as tmax, select, sin, atan } from 'three/tsl';
+import { NZ } from './materials.js';
 
 const SHADOW = { mobile: 1024, low: 1024, medium: 2048, high: 2048, ultra: 4096 };
 const lin = (h) => new THREE.Color(h);
@@ -98,6 +99,10 @@ export function createStage(scene, gen, { lite = false } = {}) {
     U.seaX0.value = S.x0; U.seaW.value = S.nx * S.dx; U.fps.value = S.fps; U.nf.value = S.nf; U.T.value = out.T;
     U.box.value.set(Rk.box.x0, Rk.box.z0, Rk.box.x1 - Rk.box.x0, Rk.box.z1 - Rk.box.z0);
     kelp.setData(out.kelp, R);
+    const E = out.emerge, et = W.dataTex(E.tex, E.nf, E.levels, THREE.HalfFloatType, THREE.RGFormat, THREE.RepeatWrapping);
+    et.minFilter = et.magFilter = THREE.NearestFilter;
+    { const old = emT.value; emT.value = et; old?.dispose?.(); }
+    DU.y0.value = E.y0; DU.dy.value = E.dy; DU.levels.value = E.levels; DU.nf.value = E.nf; DU.fps.value = S.fps;
   }
 
   function syncLook() {
@@ -149,7 +154,96 @@ export function createStage(scene, gen, { lite = false } = {}) {
     if (sun.shadow.mapSize.x !== s) { sun.shadow.mapSize.set(s, s); sun.shadow.map?.dispose(); sun.shadow.map = null; }
   }
 
+  // ── Le hublot-dôme, en post-traitement : ce que l'eau laisse sur la
+  // lentille. Pour chaque pixel, le point du dôme où part son rayon (le même
+  // que pour le brouillard d'eau) dit s'il est dans l'eau, à l'air, ou juste
+  // au-dessus de la ligne d'eau, et depuis combien de temps il a émergé
+  // (l'enveloppe de séchage de la mer, lue au point du dôme).
+  //  - Ménisque : une ligne sombre où l'eau coupe le dôme, et au-dessus une
+  //    nappe qui ruisselle et ondule l'image en descendant.
+  //  - Gouttes : des lentilles plano-convexes. Chacune montre la scène
+  //    renversée et réduite (l'image vue par une calotte d'eau de courte
+  //    focale), cerclée d'un bord sombre (réfraction rasante) avec un reflet
+  //    du ciel en haut et une caustique claire en bas ; les grosses glissent
+  //    en laissant une traînée humide, toutes rétrécissent en séchant, à des
+  //    instants différents. Deux couches de cellules (une goutte au plus par
+  //    cellule, pas de voisins à parcourir) : deux tirages, une lecture de
+  //    l'image déformée.
+  const DU = { pos: uniform(new THREE.Vector3()), projInv: uniform(new THREE.Matrix4()), world: uniform(new THREE.Matrix4()), y0: uniform(0), dy: uniform(0.24), levels: uniform(32), nf: uniform(1920), fps: uniform(60) };
+  const emT = tTexture(W.dataTex(new Uint16Array(8), 2, 2, THREE.HalfFloatType, THREE.RGFormat, THREE.RepeatWrapping));
+  function domeLens(sample) {
+    const uv0 = screenUV;
+    const vp = getViewPosition(uv0, float(0.5), DU.projInv);
+    const dW = normalize(DU.world.mul(vec4(vp, 0)).xyz);
+    const O = DU.pos.add(dW.mul(W.U.dome));
+    const a = O.y.sub(W.level(O.x, O.z, W.U.t)).toVar();
+    const fw = fwidth(a).max(1e-5);
+    const air = smoothstep(fw.mul(1.5), fw.mul(4), a);
+    // depuis quand l'eau a quitté ce point du dôme (−1 : dans l'eau), et le
+    // numéro de cette émergence (chaque vague dépose de nouvelles gouttes)
+    const em = emT.sample(vec2(W.U.t.mul(DU.fps).add(0.5).div(DU.nf), O.y.sub(DU.y0).div(DU.dy).mul(DU.levels.sub(1)).add(0.5).div(DU.levels))).level(0);
+    const tau = em.x.toVar(), wave = em.y;
+    const wet = step(0, tau).mul(air).toVar();
+    const asp = screenSize.x.div(screenSize.y);
+    const P = vec2(uv0.x.mul(asp), uv0.y);
+    // (les gouttes se groupent : une densité qui varie lentement sur le dôme)
+    const patch = smoothstep(-0.25, 0.45, NZ(vec3(P.mul(2.3), wave.mul(0.37).add(3.1))).x).mul(1.3);
+    // une couche de gouttes : cellules de taille 1/scale, une goutte tirée par
+    // cellule et par émergence ; elle naît quand l'eau se retire, sèche en
+    // rétrécissant à son heure, et les grosses glissent en accélérant
+    const layer = (scale, salt, dens) => {
+      const q = P.mul(scale), cell = floor(q), sd = cell.add(wave.mul(17.3)).add(salt);
+      const h1 = mx_cell_noise_float(sd), h2 = mx_cell_noise_float(sd.add(7.3)), h3 = mx_cell_noise_float(sd.add(19.1)), h4 = mx_cell_noise_float(sd.add(31.7));
+      const big = h3.mul(h3);
+      const lifeT = h4.mul(11).add(3).mul(float(1).sub(big.mul(0.4)));
+      const life = float(1).sub(tau.div(lifeT)).clamp(0, 1);
+      const r = big.mul(0.26).add(0.07).mul(life.sqrt());
+      // glissement : départ après un temps propre à la goutte, puis accéléré
+      const t0 = h1.mul(2.5).add(0.4), run = tau.sub(t0).max(0);
+      const slide = step(0.55, h3).mul(big.mul(0.08).add(0.02)).mul(run).mul(run).min(0.75);
+      const sway = sin(slide.mul(11).add(h2.mul(6.3))).mul(0.03).mul(step(0.001, slide));
+      const c = vec2(h1.mul(0.5).add(0.25).add(sway), h2.mul(0.3).add(0.15).add(slide));
+      const d0 = q.sub(cell).sub(c);
+      // forme : affaissée vers le bas (la gravité), allongée en glissant, contour irrégulier
+      const e = vec2(d0.x.mul(h2.mul(0.35).add(0.85)).mul(float(1).add(slide.mul(0.6))), d0.y.mul(select(d0.y.greaterThan(0), float(0.75), float(1.12))).div(float(1).add(slide.mul(0.5))));
+      const ang = atan(e.y, e.x);
+      const rr = r.mul(float(1).add(sin(ang.mul(2).add(h4.mul(6.3))).mul(big.mul(0.18))).add(sin(ang.mul(3).add(h1.mul(6.3))).mul(0.08)).add(sin(ang.mul(5).add(h2.mul(6.3))).mul(0.04)));
+      const k = length(e).div(rr.max(1e-4));
+      const exist = step(float(1).sub(dens.mul(patch)), h1.mul(0.6).add(h2.mul(0.4))).mul(step(0.01, life)).mul(smoothstep(0.75, 0.6, slide));
+      // traînée humide au-dessus d'une goutte qui glisse
+      const trail = step(d0.x.abs(), r.mul(0.3)).mul(step(d0.y, 0)).mul(step(slide.negate(), d0.y)).mul(step(0.01, slide)).mul(exist).mul(life);
+      return { k, inside: smoothstep(1.0, 0.9, k).mul(exist), d: e.div(rr.max(1e-4)), r: rr.div(scale), trail };
+    };
+    const A = layer(float(6), 0, float(0.38)), B = layer(float(15), 41, float(0.45));
+    const useA = A.inside.greaterThanEqual(B.inside);
+    const ins = select(useA, A.inside, B.inside).mul(wet);
+    const k = select(useA, A.k, B.k), dd = select(useA, A.d, B.d), rad = select(useA, A.r, B.r);
+    // réfraction : l'image renversée et réduite au centre de la goutte, qui se
+    // déforme vers le bord (la calotte devient prisme)
+    const prof = k.mul(k).mul(0.6).add(0.4);
+    const off = dd.mul(rad).mul(-3.2).mul(prof);
+    // nappe sous la ligne d'eau : juste au-dessus du ménisque, l'eau ruisselle
+    // (et, l'instant où l'eau quitte le dôme, la pellicule qui s'en retire)
+    const sheet = smoothstep(fw.mul(60), fw.mul(4), a).mul(air).max(smoothstep(0.5, 0.0, tau).mul(wet));
+    const wob = vec2(sin(uv0.y.mul(140).add(uv0.x.mul(23)).add(W.U.t.mul(7))), sin(uv0.x.mul(90).add(W.U.t.mul(5)))).mul(0.0025).mul(sheet);
+    const trailOff = vec2(select(useA, A.trail, B.trail).mul(0.0035).mul(wet), 0);
+    const uvS = uv0.add(vec2(off.x.div(asp), off.y).mul(ins)).add(wob).add(trailOff);
+    let col = sample(uvS).rgb;
+    // bord sombre, reflet du ciel en haut, caustique en bas
+    const ring = smoothstep(0.78, 0.98, k).mul(ins);
+    const glint = smoothstep(0.16, 0.0, length(dd.sub(vec2(-0.3, -0.45)).mul(vec2(0.8, 1.6)))).mul(ins);
+    const caus = smoothstep(0.35, 0.0, length(dd.sub(vec2(0.1, 0.55)))).mul(ins).mul(0.35);
+    col = col.mul(float(1).sub(ring.mul(0.55))).add(vec3(glint.mul(0.7))).add(col.mul(caus));
+    // le ménisque : une ligne sombre, un liseré clair qui accroche le ciel
+    const line = smoothstep(fw.mul(2.2), float(0), a.abs());
+    const rim = smoothstep(fw.mul(5), fw.mul(1.5), a.sub(fw.mul(3.5)).abs()).mul(step(0, a));
+    col = col.mul(float(1).sub(line.mul(0.85))).add(vec3(rim.mul(0.18)));
+    return vec4(tmax(col, vec3(0)), 1);
+  }
+  function setDomeCamera(cam) { DU.pos.value.copy(cam.position); DU.projInv.value.copy(cam.projectionMatrixInverse); DU.world.value.copy(cam.matrixWorld); }
+
   return {
+    domeLens, setDomeCamera,
     setRecipe, update, setShadowQuality, camPose, group, sun, W, kelp, terrain, surface,
     get data() { return D; },
     ready: () => pending === 0 && !!D && !!sky,

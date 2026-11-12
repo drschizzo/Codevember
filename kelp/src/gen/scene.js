@@ -115,7 +115,7 @@ export function rockRelief(B) {
 // travée, son angle autour de la section (ellipse aplatie : la lame s'amincit
 // vers ses bords) et les dimensions de la section ; le vertex shader
 // (scene/kelp.js) lit les positions enregistrées et construit le ruban.
-export function strapGeometry(K, plants, { ring = 10, sub = 4 } = {}) {
+export function strapGeometry(K, plants, { ring = 8, sub = 3 } = {}) {
   const F = FAMILIES[K.family];
   const pos = [], nidx = [], seg = [], sect = [], anch = [], index = [];
   let v = 0;
@@ -144,7 +144,7 @@ export function strapGeometry(K, plants, { ring = 10, sub = 4 } = {}) {
       } else {
         // stipe : s'effile vers le haut (la palme), s'élargit au pied
         const r0 = K.nodes[seq[1]]?.r ?? 0.01;
-        hw = ht = r0 * (1.25 - 0.4 * u);
+        hw = ht = r0 * (F.stipe.stand ? 1.5 - 0.85 * u : 1.25 - 0.4 * u); // (le palmier de mer s'évase au pied)
       }
       for (let k = 0; k < R; k++) {
         const th = (k / R) * Math.PI * 2;
@@ -190,24 +190,21 @@ export function holdfastGeometry(K, plants, rockH, seed) {
       }
       return;
     }
+    // un cône de tissu (le pied du stipe qui s'évase), et autour, des
+    // haptères courts et serrés, en étages, qui plongent vers la roche
+    const g0 = rockH(P.x, P.z), top = P.y + F.holdfast * 0.6;
+    tube(B, [[P.x, g0 - 0.004, P.z], [P.x, (g0 + top) / 2, P.z], [P.x, top + 0.004, P.z]], R0 * 0.42, R0 * 0.16, 10);
     for (let tI = 0; tI < tiers; tI++) {
-      const n = per - tI, h0 = F.holdfast * 0.6 * (1 - tI / tiers) + 0.004;
+      const n = per + 3 - tI, h0 = F.holdfast * 0.55 * (1 - tI / tiers) + 0.004;
       for (let k = 0; k < n; k++) {
-        const a = (k / n) * Math.PI * 2 + tI * 0.7 + rr.next() * 0.5;
-        const reach = R0 * (0.3 + 0.12 * tI + 0.15 * rr.next()); // (un cône serré d'haptères, pas des pattes)
+        const a = (k / n) * Math.PI * 2 + tI * 0.7 + rr.next() * 0.4;
+        const reach = R0 * (0.5 + 0.18 * tI + 0.15 * rr.next());
         const pts = [];
-        for (let s = 0; s <= 7; s++) {
-          const t = s / 7, rad = reach * t, x = P.x + Math.cos(a) * rad, z = P.z + Math.sin(a) * rad;
-          const g = rockH(x, z);
-          // arc : part du pied, descend et s'appuie sur la roche
-          pts.push([x, Math.max(g + 0.003, P.y + h0 * (1 - t) ** 1.6 - 0.002 * t), z]);
+        for (let s2 = 0; s2 <= 6; s2++) {
+          const t = s2 / 6, rad = R0 * 0.3 + (reach - R0 * 0.3) * t, x = P.x + Math.cos(a) * rad, z = P.z + Math.sin(a) * rad;
+          pts.push([x, Math.max(rockH(x, z) + 0.002, P.y + h0 * (1 - t) ** 1.4 - 0.004 * t), z]);
         }
-        tube(B, pts, 0.006 * (1.2 - 0.2 * tI), 0.003);
-        // une fourche au bout (haptère ramifié)
-        const e = pts[pts.length - 1], a2 = a + (rr.next() - 0.5) * 1.2;
-        const f2 = [e, [e[0] + Math.cos(a2) * 0.02, 0, e[2] + Math.sin(a2) * 0.02]];
-        f2[1][1] = rockH(f2[1][0], f2[1][2]) + 0.002;
-        tube(B, f2, 0.0025, 0.0012);
+        tube(B, pts, 0.0055 * (1.1 - 0.15 * tI), 0.0035);
       }
     }
   });
@@ -215,7 +212,7 @@ export function holdfastGeometry(K, plants, rockH, seed) {
 }
 
 // tube effilé le long d'une polyligne (rayon r0 → r1), fermé aux bouts
-function tube(B, pts, r0, r1, nr = 7) {
+function tube(B, pts, r0, r1, nr = 8) {
   const n = pts.length;
   const base = B.n;
   for (let i = 0; i < n; i++) {
@@ -305,6 +302,23 @@ export function buildScene(R, { lite = false, onProgress = () => {} } = {}) {
     seaTex[4 * k] = toHalf(sea.eta[k]); seaTex[4 * k + 1] = toHalf(sea.u[k]); seaTex[4 * k + 2] = toHalf(sea.foam[k]); seaTex[4 * k + 3] = toHalf(sea.aer[k]);
     wetTex[k] = toHalf(sea.wet[k]);
   }
+  // le dôme : pour chaque hauteur autour de l'objectif (32 niveaux sur ±12 cm)
+  // et chaque image, le temps écoulé depuis que l'eau l'a quitté (−1 s'il est
+  // dans l'eau) et le numéro de cette émergence — les gouttes naissent quand
+  // l'eau se retire, glissent et sèchent ; chaque vague en dépose de nouvelles
+  const EL = 32, emerge = new Uint16Array(sea.nf * EL * 2);
+  {
+    const ic = Math.round((cam.x - sea.x0) / sea.dx - 0.5);
+    for (let l = 0; l < EL; l++) {
+      const hgt = cam.y - 0.12 + (0.24 * l) / (EL - 1);
+      let tau = 99, count = 0;
+      for (let pass = 0; pass < 2; pass++) for (let f = 0; f < sea.nf; f++) {
+        if (sea.eta[f * sea.nx + ic] >= hgt) tau = -1;
+        else { if (tau < 0) { tau = 0; count++; } else tau += 1 / sea.fps; }
+        if (pass) { const o = (l * sea.nf + f) * 2; emerge[o] = toHalf(Math.min(tau, 60)); emerge[o + 1] = toHalf(count % 64); }
+      }
+    }
+  }
   const fillTex = new Uint16Array(rock.M * rock.M);
   for (let k = 0; k < fillTex.length; k++) fillTex[k] = toHalf(rock.fill[k] - rock.H[k] > 0.002 ? rock.fill[k] : -9);
   const straps = strapGeometry(K, plants);
@@ -312,7 +326,7 @@ export function buildScene(R, { lite = false, onProgress = () => {} } = {}) {
   onProgress(1);
   times.total = Date.now() - t0;
   return {
-    T, cam, times, stats: { sea: sea.stats, kelp: { ...sim.stats, worst: undefined }, plants: plants.length, nodes: N },
+    T, cam, times, emerge: { tex: emerge, nf: sea.nf, levels: EL, y0: cam.y - 0.12, dy: 0.24 }, stats: { sea: sea.stats, kelp: { ...sim.stats, worst: undefined }, plants: plants.length, nodes: N },
     sea: { nx: sea.nx, nf: sea.nf, x0: sea.x0, dx: sea.dx, fps: sea.fps, tex: seaTex, wet: wetTex, b: sea.b },
     rock: { M: rock.M, box: BOX, relief: rockRelief(rock), color: rockColors(rock, R), fill: fillTex },
     kelp: { n: N, nf, fps: sim.fps, pos: kpos, dir: kdir, straps, holdfasts, fringe: !!FAMILIES[R.family].blade.fringe, plants: plants.map((p) => [p.x, p.y, p.z]) },

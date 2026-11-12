@@ -54,7 +54,7 @@ function lensDirt() {
 }
 const step05 = (x) => smoothstep(0.45, 0.55, x);
 
-export function createPost(renderer, scene, camera) {
+export function createPost(renderer, scene, camera, opts = {}) { // opts.lens(sample) : déformation de l'image par l'objectif (voir finish)
   const pipeline = new THREE.RenderPipeline(renderer);
   pipeline.outputColorTransform = false; // (tone mapping dans la chaîne, avant l'anticrénelage)
   const U = {
@@ -97,6 +97,7 @@ export function createPost(renderer, scene, camera) {
       aoPass.radius.value = 0.35;
       aoPass.thickness.value = 0.6;
       aoPass.useTemporalFiltering = useTraa;
+      if (useTraa && aoPass.samples) aoPass.samples.value = 8; // (sous l'anticrénelage temporel, 8 échantillons suffisent : −1 ms)
       nodes.ao = aoPass;
       scenePass.contextNode = builtinAOContext(mix(float(1), aoPass.getTextureNode().sample(screenUV).r, U.aoStrength));
     }
@@ -131,8 +132,18 @@ export function createPost(renderer, scene, camera) {
       return acc.div(n);
     };
 
+    // (même flou, lu à des coordonnées données : l'objectif propre à la scène
+    // — Kelp : les gouttes et la nappe d'eau sur le dôme — y déforme l'image)
+    const blurAt = (tex, uvn) => {
+      if (!(cfg.motionBlur > 0)) return tex.sample(uvn);
+      const v = vel.mul(U.blur), n = 10;
+      let acc = tex.sample(uvn);
+      for (let i = 1; i < n; i++) acc = acc.add(tex.sample(uvn.add(v.mul(i / (n - 1) - 0.5))));
+      return acc.div(n);
+    };
+    const finish = (tex) => (opts.lens ? opts.lens((uvn) => blurAt(tex, uvn)) : blur(tex));
     // (sans anticrénelage temporel, le flou porte sur la passe de scène)
-    let color = useTraa ? base : blur(base);
+    let color = useTraa ? base : finish(base);
     if (cfg.ssr) {
       // Réflexions en espace écran : les objets exposés et les doublures
       // reflètent ce qui est réellement autour d'eux (parois de la cellule,
@@ -156,7 +167,7 @@ export function createPost(renderer, scene, camera) {
       color = select(dot(color.rgb, color.rgb).lessThan(1e8), color, vec4(0, 0, 0, 1));
       const t = traa(color, depth, scenePass.getTextureNode('velocity'), camera);
       nodes.traa = t;
-      color = blur(t.getTextureNode());
+      color = finish(t.getTextureNode());
     }
     if (cfg.dof) {
       const d = dof(color, scenePass.getViewZNode(), U.focus, U.focusRange, U.bokeh);

@@ -4,15 +4,15 @@
 // équations de Saint-Venant sur le profil de la graine (le même profil, la
 // même série de vagues que gen/sea.js, sur une grille plus grossière), en
 // direct, deux fois plus vite que le temps réel. Une frange de laminaires en
-// coupe se couche à l'air et se dresse dans l'eau. Dessous, le diagramme
-// espace-temps du jet de rive se remplit colonne par colonne : chaque vague
-// y dessine sa langue d'eau qui monte sur le platier et se retire.
+// coupe se couche à l'air et se dresse dans l'eau. Dessous, la série telle
+// qu'elle entre au large (trois vagues, chacune précédée du creux où la mer
+// se retire), et un point qui avance avec la coupe.
 import { makeProfile, makeForcing } from '../gen/sea.js';
 
 const g = 9.81;
 
 export default function createArt() {
-  let sim = null, hov = null, hctx = null, col = 0, tSim = 0, plants = [], fam = 'digitata';
+  let sim = null, tSim = 0, plants = [], fam = 'digitata';
   const X0 = -5, X1 = 4, NX = 180, dx = (X1 - X0) / NX;
 
   function init(d) {
@@ -21,7 +21,7 @@ export default function createArt() {
     const b = new Float64Array(NX), h = new Float64Array(NX), q = new Float64Array(NX), foam = new Float64Array(NX);
     for (let i = 0; i < NX; i++) { b[i] = prof(X0 + (i + 0.5) * dx); h[i] = Math.max(0, -b[i]); }
     sim = { b, h, q, foam, forcing, T: d.T ?? 32, h0: h[0] };
-    tSim = 0; col = 0; hov = null;
+    tSim = 0;
     fam = d.family ?? 'digitata';
     // laminaires en coupe : des chaînes ancrées sur le bord du platier
     let s = 0; for (const c of String(d.seed ?? '')) s = (s * 31 + c.charCodeAt(0)) >>> 0;
@@ -126,7 +126,7 @@ export default function createArt() {
       ctx.fillStyle = 'rgba(240, 248, 248, 0.8)';
       for (let i = 0; i < NX; i++) if (sim.foam[i] > 0.15 && sim.h[i] > 0.004) {
         const x = sx(X0 + (i + 0.5) * dx), y = sy(sim.h[i] + sim.b[i]);
-        ctx.beginPath(); ctx.arc(x, y - 1.5 * S.dpr, (1 + 2.5 * sim.foam[i]) * S.dpr, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = a * Math.min(1, sim.foam[i]); ctx.beginPath(); ctx.arc(x, y - 1 * S.dpr, (0.6 + 1.2 * sim.foam[i]) * S.dpr, 0, Math.PI * 2); ctx.fill();
       }
       ctx.restore();
       // laminaires
@@ -136,24 +136,23 @@ export default function createArt() {
         P.pts.forEach((p, i) => (i ? ctx.lineTo(sx(p[0]), sy(p[1])) : ctx.moveTo(sx(p[0]), sy(p[1]))));
         ctx.strokeStyle = 'rgba(196, 140, 58, 0.9)'; ctx.lineWidth = 2 * S.dpr; ctx.stroke();
       }
-      // diagramme espace-temps (x vers la droite, le temps vers le bas… ici, de gauche à droite)
-      const hw = Math.round(W * 0.84), hh = Math.round(H * 0.16);
-      if (!hov || hov.width !== hw) { hov = new OffscreenCanvas(hw, hh); hctx = hov.getContext('2d'); hctx.fillStyle = 'rgba(0,0,0,0)'; col = 0; }
-      const target = Math.floor((tSim / sim.T) * hw) % hw;
-      while (col !== target) {
-        hctx.clearRect(col, 0, 1, hh);
-        for (let j = 0; j < hh; j++) {
-          const x = -3.2 + (j / hh) * 5.6, i = Math.min(NX - 1, Math.floor((x - X0) / dx));
-          const d = sim.h[i];
-          if (d > 0.004) { const v = Math.min(1, d * 2.2), fo = Math.min(1, sim.foam[i] * 1.5); const m = (a, b) => Math.round(a + (b - a) * fo); hctx.fillStyle = `rgba(${m(40, 232)}, ${m(118 + 50 * v, 240)}, ${m(128 + 60 * v, 238)}, ${0.3 + 0.6 * Math.max(v, fo)})`; hctx.fillRect(col, hh - 1 - j, 1, 1); }
-        }
-        col = (col + 1) % hw;
-      }
-      ctx.globalAlpha = a * 0.9;
-      ctx.drawImage(hov, W * 0.08, H * 0.71);
-      // le curseur du temps
-      ctx.fillStyle = 'rgba(255, 236, 200, 0.7)';
-      ctx.fillRect(W * 0.08 + target, H * 0.71, 1 * S.dpr, hh);
+      // la série au large : la hauteur de la mer qui entre (les trois vagues de
+      // la graine, chacune précédée de son creux) le long de la boucle ; le
+      // point est l'instant de la coupe au-dessus
+      const gx0 = W * 0.08, gw = W * 0.84, gy = H * 0.78, gh = H * 0.07;
+      const gX = (t) => gx0 + (t / sim.T) * gw, gY = (e) => gy - e * gh / 0.8;
+      ctx.globalAlpha = a * 0.5;
+      ctx.strokeStyle = 'rgba(236, 226, 210, 0.5)'; ctx.lineWidth = 1 * S.dpr;
+      ctx.beginPath(); ctx.moveTo(gx0, gy); ctx.lineTo(gx0 + gw, gy); ctx.stroke();
+      ctx.globalAlpha = a;
+      ctx.beginPath();
+      for (let k = 0; k <= 240; k++) { const t = (k / 240) * sim.T, x = gX(t), y = gY(sim.forcing(t)); k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+      ctx.strokeStyle = 'rgba(160, 214, 214, 0.85)'; ctx.lineWidth = 1.5 * S.dpr; ctx.stroke();
+      const tc = tSim % sim.T, xc = gX(tc), yc = gY(sim.forcing(tc));
+      ctx.strokeStyle = 'rgba(255, 236, 200, 0.35)'; ctx.lineWidth = 1 * S.dpr;
+      ctx.beginPath(); ctx.moveTo(xc, gy - gh * 1.4); ctx.lineTo(xc, gy + gh * 0.9); ctx.stroke();
+      ctx.fillStyle = 'rgba(255, 236, 200, 0.95)';
+      ctx.beginPath(); ctx.arc(xc, yc, 3 * S.dpr, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     },
   };

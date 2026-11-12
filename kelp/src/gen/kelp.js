@@ -238,7 +238,8 @@ export function simulateKelp(K, opts, onProgress = null) {
     return (arr[o0] * (1 - wx) + arr[o0 + 1] * wx) * (1 - wt) + (arr[o1] * (1 - wx) + arr[o1 + 1] * wx) * wt;
   };
 
-  const h = 1 / sub;
+  const h = 1 / sub, VMAX = 5, BP = 6, SW = 0.012, SD = Number(globalThis.process?.env?.SD ?? 0.3);
+  const DVX = new Float64Array(N), DVY = new Float64Array(N), DVZ = new Float64Array(N);
   // ── voisinage des segments : grille hachée (tableaux, sans allocation) ──
   const cell = 0.16, HS = 1 << 15, head = new Int32Array(HS), nxt = new Int32Array(NS);
   const MX = new Float64Array(NS), MY = new Float64Array(NS), MZ = new Float64Array(NS);
@@ -368,7 +369,7 @@ export function simulateKelp(K, opts, onProgress = null) {
         const tl = t - obliq * (Z[i] - zRef);
         const eta = fieldAt(S.eta, X[i], tl);
         const depth = eta - GH[i];
-        s = (eta - Y[i]) / (2 * Rr[i] + 0.012) + 0.5;
+        s = (eta - Y[i]) / (2 * Rr[i] + SW) + 0.5;
         s = (s < 0 ? 0 : s > 1 ? 1 : s) * water;
         if (s > 0 && depth > 0.003) {
           // profil de vitesse en puissance 1/7 : plus lent près de la roche
@@ -417,7 +418,10 @@ export function simulateKelp(K, opts, onProgress = null) {
         const fx = TY[i] * BZ[i] - TZ[i] * BY[i], fy = TZ[i] * BX[i] - TX[i] * BZ[i], fz = TX[i] * BY[i] - TY[i] * BX[i];
         clear = 0.5 * Wd[i] * Math.abs(BX[i] * nx + BY[i] * ny + BZ[i] * nz) + Rr[i] * Math.abs(fx * nx + fy * ny + fz * nz);
       }
-      const pen = (h0 + clear + 0.001 - Y[i]) * ny;
+      // (correction bornée par sous-pas : sur le tombant, la hauteur sous le
+      // nœud peut dépasser d'un mètre sa position ; corrigée d'un coup, elle
+      // lançait le nœud à 30 m/s — un « saut » à l'écran)
+      const pen = Math.min(0.006, (h0 + clear + 0.001 - Y[i]) * ny);
       if (pen > 0) {
         if (pen > pushMax) { pushMax = pen; worst = { i, t: tSim, pen, y: Y[i], h0, prevY: PY[i], hPrev: GH[i], x: X[i], z: Z[i], px: PX[i], pz: PZ[i], kind: KIND[i], ny, clear, a, ya: Y[a] }; }
         X[i] += nx * pen; Y[i] += ny * pen; Z[i] += nz * pen;
@@ -433,7 +437,26 @@ export function simulateKelp(K, opts, onProgress = null) {
     for (let i = 0; i < N; i++) {
       if (W[i] === 0) continue;
       VX[i] = (X[i] - PX[i]) / h; VY[i] = (Y[i] - PY[i]) / h; VZ[i] = (Z[i] - PZ[i]) / h;
+      // (vitesse bornée : une lame dans le ressac ne dépasse pas ~5 m/s ; au-delà,
+      // c'est une correction de contrainte, pas un mouvement)
+      const sp = Math.sqrt(VX[i] * VX[i] + VY[i] * VY[i] + VZ[i] * VZ[i]);
+      if (sp > VMAX) { const q = VMAX / sp; VX[i] *= q; VY[i] *= q; VZ[i] *= q; }
     }
+    // 6 bis. amortissement structurel : la vitesse de chaque nœud est tirée vers
+    // la moyenne de ses voisins de chaîne. Le mouvement d'ensemble (la lame
+    // emportée par l'eau) est intact ; les vibrations nœud contre nœud — que
+    // les contacts et la projection d'inextensibilité excitent, et qui se
+    // voyaient comme des sauts d'une image à l'autre — s'éteignent.
+    for (let i = 0; i < N; i++) {
+      if (W[i] === 0) continue;
+      const p = prevN[i], n = nextN[i];
+      let mx = 0, my = 0, mz = 0, c = 0;
+      if (p >= 0) { mx += VX[p]; my += VY[p]; mz += VZ[p]; c++; }
+      if (n >= 0) { mx += VX[n]; my += VY[n]; mz += VZ[n]; c++; }
+      if (!c) continue;
+      DVX[i] = (mx / c - VX[i]) * SD; DVY[i] = (my / c - VY[i]) * SD; DVZ[i] = (mz / c - VZ[i]) * SD;
+    }
+    for (let i = 0; i < N; i++) if (W[i] !== 0) { VX[i] += DVX[i]; VY[i] += DVY[i]; VZ[i] += DVZ[i]; }
     // 7. directeurs : transportés, couchés sur ce qui porte, tournés dans le courant
     for (let i = 0; i < N; i++) tangent(i);
     for (let i = 0; i < N; i++) {
@@ -465,12 +488,12 @@ export function simulateKelp(K, opts, onProgress = null) {
   }
 
   let done = 0;
-  const total = settle + T * (loops > 1 ? 2 - (opts.aStart ?? 0.6) : 1);
+  const total = settle + T * (loops > 1 ? 2 - (opts.aStart ?? 0) : 1);
   function run(seconds, rec = null) {
     const n = Math.round(seconds * sub), per = Math.round(sub / fps);
     for (let k = 0; k < n; k++) {
       if (onProgress && k % 200 === 0) onProgress(Math.min(0.99, (done + k / sub) / total));
-      if (k % 6 === 0) broadphase();
+      if (k % BP === 0) broadphase();
       if (rec && k % per === 0) rec(k / per);
       substep();
     }
@@ -488,7 +511,7 @@ export function simulateKelp(K, opts, onProgress = null) {
   // et va jusqu'à T ; B part de A(T) et fait la boucle entière.
   water = S ? 1 : 0;
   const nf = Math.round(T * fps);
-  const aStart = opts.aStart ?? 0.6, fA = Math.round(aStart * nf);
+  const aStart = opts.aStart ?? 0, fA = Math.round(aStart * nf);
   const A = { pos: new Float32Array(nf * N * 3), dir: new Float32Array(nf * N * 3) };
   const Bq = loops > 1 ? { pos: new Float32Array(nf * N * 3), dir: new Float32Array(nf * N * 3) } : A;
   const snaps = [snap()];
@@ -515,21 +538,47 @@ export function simulateKelp(K, opts, onProgress = null) {
   // A(T) = R(T). Les images mélangées sont ramenées à des chaînes
   // inextensibles posées sur la roche.
   const pos = Bq.pos, dir = Bq.dir;
+  // écart moyen entre A et B, image par image (pour placer le fondu)
+  const gap = new Float64Array(nf);
+  if (loops > 1) for (let f = fA; f < nf; f++) { let m = 0; const o = f * N * 3; for (let i = 0; i < N; i++) m += Math.hypot(pos[o + 3 * i] - A.pos[o + 3 * i], pos[o + 3 * i + 1] - A.pos[o + 3 * i + 1], pos[o + 3 * i + 2] - A.pos[o + 3 * i + 2]); gap[f] = m / N; }
+  stats.gap = Array.from({ length: 20 }, (_, k) => +gap[Math.floor(((k + 0.5) / 20) * nf)].toFixed(3));
   if (loops > 1) {
-    const [w0, w1] = opts.blend ?? [Math.max(0.7, aStart + 0.08), 0.88];
-    for (let f = 0; f < nf; f++) {
-      const u = f / nf, w = u <= w0 ? 0 : u >= w1 ? 1 : ((u - w0) / (w1 - w0)) ** 2 * (3 - 2 * (u - w0) / (w1 - w0));
-      if (w === 0) continue;
+    // Chaque plante a son propre fondu, centré là où ses deux versions se
+    // ressemblent le plus (l'écart moyen de ses nœuds, entre 0,55 et 0,95 de
+    // la boucle) : on ne mélange jamais deux poses opposées.
+    const NP = K.nodes.reduce((m, o) => Math.max(m, o.plant + 1), 0);
+    const plantOf = Int32Array.from(K.nodes.map((o) => o.plant));
+    const gp = Array.from({ length: NP }, () => new Float64Array(nf)), cnt = new Float64Array(NP);
+    for (let i = 0; i < N; i++) cnt[plantOf[i]]++;
+    for (let f = 0; f < nf; f++) { const o = f * N * 3; for (let i = 0; i < N; i++) gp[plantOf[i]][f] += Math.hypot(pos[o + 3 * i] - A.pos[o + 3 * i], pos[o + 3 * i + 1] - A.pos[o + 3 * i + 1], pos[o + 3 * i + 2] - A.pos[o + 3 * i + 2]) / cnt[plantOf[i]]; }
+    const half = Math.round(0.05 * nf), lo = Math.round(0.55 * nf) + half, hi = Math.round(0.95 * nf) - half;
+    const center = new Int32Array(NP);
+    for (let p = 0; p < NP; p++) {
+      let best = Infinity;
+      for (let f = lo; f <= hi; f++) { let m = 0; for (let d = -half; d <= half; d++) m = Math.max(m, gp[p][f + d]); if (m < best) { best = m; center[p] = f; } }
+    }
+    const wOf = (p, f) => { const t = (f - (center[p] - half)) / (2 * half); return t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t); };
+    stats.blendCenters = [Math.min(...center) / nf, Math.max(...center) / nf].map((v) => +v.toFixed(2));
+    for (let f = Math.round(0.55 * nf); f < nf; f++) {
       const o = f * N * 3;
-      for (let k = 0; k < N * 3; k++) { pos[o + k] += (A.pos[o + k] - pos[o + k]) * w; dir[o + k] += (A.dir[o + k] - dir[o + k]) * w; }
+      // (on mélange les directions des segments, pas les positions : deux poses
+      // très différentes mélangées point à point font des chaînes dont les
+      // nœuds se superposent, et dont le sens bascule d'une image à l'autre)
       for (let k = 0; k < FTL.length; k += 2) {
-        const a = FTL[k], i = FTL[k + 1], l0 = FL[k >> 1];
-        const ia = o + 3 * a, ii = o + 3 * i;
-        const dx = pos[ii] - pos[ia], dy = pos[ii + 1] - pos[ia + 1], dz = pos[ii + 2] - pos[ia + 2], l = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1e-9;
+        const pa = FTL[k], i = FTL[k + 1], l0 = FL[k >> 1], w = wOf(plantOf[i], f);
+        const ia = o + 3 * pa, ii = o + 3 * i;
+        let bx = pos[ii] - pos[ia], by = pos[ii + 1] - pos[ia + 1], bz = pos[ii + 2] - pos[ia + 2];
+        let ax = A.pos[ii] - A.pos[ia], ay = A.pos[ii + 1] - A.pos[ia + 1], az = A.pos[ii + 2] - A.pos[ia + 2];
+        const lb = Math.hypot(bx, by, bz) || 1, la = Math.hypot(ax, ay, az) || 1;
+        bx /= lb; by /= lb; bz /= lb; ax /= la; ay /= la; az /= la;
+        let dx = bx + (ax - bx) * w, dy = by + (ay - by) * w, dz = bz + (az - bz) * w;
+        const l = Math.hypot(dx, dy, dz) || 1;
+        // (le parent, déjà reconstruit dans cette image, porte le segment)
         pos[ii] = pos[ia] + (dx * l0) / l; pos[ii + 1] = pos[ia + 1] + (dy * l0) / l; pos[ii + 2] = pos[ia + 2] + (dz * l0) / l;
         const g = rockH(pos[ii], pos[ii + 2]) + Rr[i] + 0.001;
         if (pos[ii + 1] < g) pos[ii + 1] = g;
       }
+      for (let i = 0; i < N; i++) { const w = wOf(plantOf[i], f); for (let c = 0; c < 3; c++) dir[o + 3 * i + c] += (A.dir[o + 3 * i + c] - dir[o + 3 * i + c]) * w; }
       for (let i = 0; i < N; i++) { const q = o + 3 * i, l = Math.hypot(dir[q], dir[q + 1], dir[q + 2]) || 1; dir[q] /= l; dir[q + 1] /= l; dir[q + 2] /= l; }
     }
   }

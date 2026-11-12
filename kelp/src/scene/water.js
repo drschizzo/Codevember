@@ -58,7 +58,7 @@ export function createWater() {
   // vague incidente au large (forme analytique, la même qu'au bord de la simulation)
   const oneWave = (w, v, t) => {
     let s = float(0);
-    for (const k of [-1, 0, 1]) {
+    for (const k of [0]) { // (les vagues sont loin des bords de la boucle : une seule copie suffit)
       const dt = t.sub(w.x).sub(U.T.mul(k));
       s = s.add(w.y.mul(exp(dt.div(v.x).pow(2).negate()))).sub(w.y.mul(w.z).mul(exp(dt.add(w.w).div(v.y).pow(2).negate())));
     }
@@ -89,8 +89,11 @@ export function createWater() {
     const r = reliefT.sample(boxUV(x, z)).level(0).x;
     return mix(prof, r, inBox(x, z));
   };
+  const profAt = (x) => profT.sample(vec2(x.sub(U.seaX0).div(U.seaW), 0.5)).level(0).x;
   const pool = (x, z) => mix(float(-9), fillT.sample(boxUV(x, z)).level(0).x, inBox(x, z).step(0.999));
   const level = (x, z, t) => max(sea(x, z, t).x, pool(x, z));
+  // (sans le champ lointain : pour ce qui est dans le domaine de la simulation)
+  const levelNear = (x, z, t) => max(seaT.sample(fieldUV(x, localT(z, t))).level(0).x, pool(x, z));
   // enveloppe de séchage : la roche sous ce niveau est encore mouillée
   const wetLevel = (x, z, t) => max(wetT.sample(fieldUV(x, localT(z, t))).level(0).x, pool(x, z).add(0.02));
 
@@ -101,28 +104,39 @@ export function createWater() {
     const d = P.sub(C), L = length(d).max(1e-4), dir = d.div(L);
     const O = C.add(dir.mul(U.dome));
     const segL = L.sub(U.dome).max(0);
-    const a = O.y.sub(level(O.x, O.z, U.t)).toVar(), b = P.y.sub(level(P.x, P.z, U.t)).toVar();
-    const s0 = a.div(a.sub(b).add(select(a.sub(b).greaterThanEqual(0), 1e-6, -1e-6))).clamp(0, 1);
-    const aIn = a.lessThan(0), bIn = b.lessThan(0);
-    const frac = select(aIn, select(bIn, float(1), s0), select(bIn, s0.oneMinus(), float(0)));
-    const lw = segL.mul(frac);
-    const sA = select(aIn, float(0), s0), sB = select(bIn, float(1), s0);
-    const M = O.add(P.sub(O).mul(sA.add(sB).mul(0.5)));
-    const sm = sea(M.x, M.z, U.t);
-    const aer = sm.w.clamp(0, 1.2);
-    const depthM = level(M.x, M.z, U.t).sub(M.y).max(0);
-    // l'eau aérée diffuse fort et blanc
-    const sig = vec3(U.ext).add(aer.mul(2.5));
-    const Tr = exp(sig.mul(lw).negate());
-    // lumière diffusée : soleil et ciel qui descendent jusqu'à cette profondeur
-    const down = exp(vec3(U.ext).mul(depthM).negate());
-    const E = vec3(U.sunE).mul(U.sunDir.y.max(0)).add(vec3(U.skyE));
-    const ins = mix(vec3(U.tint).mul(0.5), vec3(0.5, 0.56, 0.55), aer.div(aer.add(0.6)).mul(0.8)).mul(E).mul(down);
-    // la nuit : l'eau agitée s'allume (noctiluques)
-    const lum = vec3(0.15, 0.55, 1.0).mul(U.glow).mul(aer.mul(2.2).add(sm.z.mul(0.6)));
-    let rgb = rgbIn.mul(Tr).add(ins.add(lum).mul(Tr.oneMinus()));
+    // (le dôme est près de la caméra, dans le domaine simulé : pas de champ lointain)
+    const a = O.y.sub(levelNear(O.x, O.z, U.t)).toVar(), b = P.y.sub(level(P.x, P.z, U.t)).toVar();
+    const lwV = float(0).toVar();
+    const rgbW = vec3(rgbIn).toVar();
+    // (le calcul de l'eau n'est fait que si le rayon en traverse : à l'air, la
+    // plupart des pixels s'en passent)
+    If(a.lessThan(0).or(b.lessThan(0)), () => {
+      const s0 = a.div(a.sub(b).add(select(a.sub(b).greaterThanEqual(0), 1e-6, -1e-6))).clamp(0, 1);
+      const aIn = a.lessThan(0), bIn = b.lessThan(0);
+      const frac = select(aIn, select(bIn, float(1), s0), select(bIn, s0.oneMinus(), float(0)));
+      const lw = segL.mul(frac);
+      const sA = select(aIn, float(0), s0), sB = select(bIn, float(1), s0);
+      const M = O.add(P.sub(O).mul(sA.add(sB).mul(0.5)));
+      const sm = sea(M.x, M.z, U.t);
+      // (les bulles forment des nuages, pas un voile uniforme)
+      const cloud = NZ(M.mul(1.6).add(vec3(0, 0, G.phase.mul(8)))).x.mul(0.8).add(0.6).clamp(0.15, 1.4);
+      const aer = sm.w.mul(cloud).clamp(0, 1.2);
+      const depthM = sm.x.max(pool(M.x, M.z)).sub(M.y).max(0);
+      // l'eau aérée diffuse fort et blanc
+      const sig = vec3(U.ext).add(aer.mul(2.5));
+      const Tr = exp(sig.mul(lw).negate());
+      // lumière diffusée : soleil et ciel qui descendent jusqu'à cette profondeur
+      const down = exp(vec3(U.ext).mul(depthM).negate());
+      const E = vec3(U.sunE).mul(U.sunDir.y.max(0)).add(vec3(U.skyE));
+      const ins = mix(vec3(U.tint).mul(0.5), vec3(0.5, 0.56, 0.55), aer.div(aer.add(0.6)).mul(0.8)).mul(E).mul(down);
+      // la nuit : l'eau agitée s'allume (noctiluques)
+      const lum = vec3(0.15, 0.55, 1.0).mul(U.glow).mul(aer.mul(2.2).add(sm.z.mul(0.6)));
+      rgbW.assign(rgbW.mul(Tr).add(ins.add(lum).mul(Tr.oneMinus())));
+      lwV.assign(lw);
+    });
+    let rgb = rgbW;
     // brume de l'air au loin
-    const la = L.sub(lw);
+    const la = L.sub(lwV);
     rgb = mix(rgb, vec3(U.haze), float(1).sub(exp(la.div(U.hazeDist).negate())).mul(0.85));
     // (le fond — le ciel — est à l'infini : sa position n'est pas finie, on n'y touche pas)
     return select(L.lessThan(5000), rgb, rgbIn);
@@ -146,7 +160,7 @@ export function createWater() {
   };
   const receivedShadow = (shadow) => shadow.mul(sunAtten(positionWorld));
 
-  return { U, seaT, wetT, fillT, reliefT, profT, sea, level, wetLevel, rockAt, pool, medium, fogNode, sunAtten, receivedShadow, inBox, boxUV, dataTex };
+  return { U, seaT, wetT, fillT, reliefT, profT, profAt, sea, level, levelNear, wetLevel, rockAt, pool, medium, fogNode, sunAtten, receivedShadow, inBox, boxUV, dataTex };
 }
 
 // ── La surface ───────────────────────────────────────────────────────────────
@@ -183,7 +197,7 @@ export function spacing(lo, a, b, hi, step, grow = 1.08) {
 
 export function createSurface(W, skyTex, lite) {
   const { U } = W;
-  const geo = gridGeometry(spacing(-160, -4.5, 4.5, 40, lite ? 0.05 : 0.03), spacing(-260, -10, 3.2, 60, lite ? 0.05 : 0.03));
+  const geo = gridGeometry(spacing(-160, -4.5, 4.5, 40, lite ? 0.06 : 0.04, 1.1), spacing(-260, -10, 3.2, 60, lite ? 0.06 : 0.04, 1.1));
   const mat = new THREE.MeshBasicNodeMaterial();
   mat.transparent = true;
   mat.depthWrite = true;
@@ -205,7 +219,6 @@ export function createSurface(W, skyTex, lite) {
     const e = 0.025;
     const c = pose(p, U.t), px = pose(p.add(vec3(e, 0, 0)), U.t), pz = pose(p.add(vec3(0, 0, e)), U.t);
     normalLocal.assign(normalize(vec3(c.y.sub(px.y).div(e), 1, c.y.sub(pz.y).div(e))));
-    positionPrevious.assign(pose(p, U.tPrev)); // (vecteurs vitesse : la surface bouge par ses sommets)
     return c;
   })();
 
@@ -228,10 +241,14 @@ export function createSurface(W, skyTex, lite) {
     const wFlow = ph1.mul(2).sub(1).abs();
     const fl1 = vec3(P.x.sub(sm.y.mul(ph1).mul(tau).mul(0.7)), P.z, G.phase.mul(8));
     const fl2 = vec3(P.x.sub(sm.y.mul(ph2).mul(tau).mul(0.7)).add(0.37), P.z.add(0.21), G.phase.mul(8));
-    const rip = (f) => NZ(f.mul(vec3(3.2, 3.2, 1))).xy.mul(0.6).add(NZ(f.mul(vec3(9, 9, 1)).add(vec3(0.3, 0.7, 0))).xy.mul(0.4));
+    // rides à trois échelles (vagues de vent, clapot, capillaires) ; les plus
+    // fines s'effacent au loin avant la fréquence du pixel
+    const dCam = length(C.sub(P));
+    const fine = smoothstep(6, 1, dCam), mid = smoothstep(30, 4, dCam);
+    const rip = (f) => NZ(f.mul(vec3(1.3, 2.2, 1))).xy.mul(0.5).add(NZ(f.mul(vec3(4.5, 6, 1)).add(vec3(0.3, 0.7, 0))).xy.mul(mid.mul(0.45))).add(NZ(f.mul(vec3(16, 19, 1)).add(vec3(2.1, 0.4, 0))).xy.mul(fine.mul(0.35)));
     const rr = mix(rip(fl1), rip(fl2), wFlow);
     const r1 = rr, r2 = vec2(0);
-    const chop = float(0.05).add(speed.mul(0.05)).add(sm.z.mul(0.12));
+    const chop = float(0.14).add(speed.mul(0.09)).add(sm.z.mul(0.25));
     let n = normalize(normalWorld.add(vec3(r1.x, 0, r1.y).mul(chop)));
     n = select(above, n, n.negate()).toVar();
     // (au loin, les facettes des vagues regardent plus haut que la normale
@@ -256,10 +273,15 @@ export function createSurface(W, skyTex, lite) {
     const window = skyT.sample(equirectUV(tdir)).level(0).rgb.mul(F.oneMinus());
     const deep = vec3(U.tint).mul(vec3(U.sunE).mul(U.sunDir.y.max(0)).add(vec3(U.skyE))).mul(0.55);
     // écume : un tapis de cellules qui suit le courant, plus dense dans le ressaut
-    const fcell = (f) => NZ(f.mul(vec3(7, 7, 0.5))).w.add(NZ(f.mul(vec3(16, 16, 0.5)).add(5.1)).w.mul(0.5));
-    const cellMix = mix(fcell(fl1), fcell(fl2), wFlow);
-    const cell = cellMix, cell2 = float(0);
-    const cov = smoothstep(0.12, 0.9, sm.z.mul(U.foamK)).mul(smoothstep(0.02, 0.25, cell.add(cell2.mul(0.5)).add(sm.z.mul(0.25)).sub(0.05)));
+    // (écume en dentelle : les bords des cellules de Worley, étirés dans le
+    // sens du courant ; pleine dans le ressaut, ajourée quand elle vieillit)
+    const lace = (f) => {
+      const w1 = NZ(f.mul(vec3(4, 9, 0.5))).w, w2 = NZ(f.mul(vec3(10, 22, 0.5)).add(5.1)).w;
+      return smoothstep(0.22, 0.02, w1).max(smoothstep(0.16, 0.0, w2).mul(0.8));
+    };
+    const laceM = mix(lace(fl1), lace(fl2), wFlow);
+    const fo = sm.z.mul(U.foamK);
+    const cov = smoothstep(0.1, 0.5, fo).mul(laceM).max(smoothstep(0.75, 1.2, fo).mul(0.95));
     const foamCov = cov.clamp(0, 0.97);
     const lit = vec3(U.sunE).mul(U.sunDir.y.max(0)).mul(0.7).add(vec3(U.skyE).mul(1.1));
     const foam = vec3(0.86, 0.88, 0.88).mul(lit).mul(select(above, float(1), float(0.6)));
@@ -277,9 +299,14 @@ export function createSurface(W, skyTex, lite) {
     return vec4(rgb, alpha);
   });
   mat.outputNode = out();
-  // vitesse prémultipliée, mélangée comme la couleur (le mélange matériel
-  // s'applique à toutes les cibles, chacune avec son propre alpha)
-  if (!lite) mat.mrtNode = mrt({ velocity: vec4(velocity.xy.mul(output.a), 0, output.a) });
+  // (ce qui est entre le centre optique et le dôme n'est pas dessiné : sans
+  // cela, la surface passée juste au-dessus de l'objectif se voyait en aplat)
+  mat.maskNode = length(positionWorld.sub(cameraPosition)).greaterThan(U.dome);
+  // vitesses : la surface n'en écrit pas (alpha nul : la cible garde celle
+  // de ce qui est dessous). Ses sommets passent d'un coup de la roche à
+  // l'eau au bord mouillé-sec : leurs vitesses démesurées étiraient le flou
+  // de mouvement en copies répétées des reflets.
+  if (!lite) mat.mrtNode = mrt({ velocity: vec4(0) });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.frustumCulled = false;
   mesh.renderOrder = 10;
