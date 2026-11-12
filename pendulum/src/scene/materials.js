@@ -297,7 +297,13 @@ function surface(fin, U, p, pf, pn) {
       const late = smoothstep(0.55, 0.95, tri).mul(aa(320));
       const pores = noise2(across.mul(S.mul(2200)).add(t.mul(along.mul(S.mul(40))))).mul(aa(2200));
       const fig = noise(across.mul(S.mul(50)).add(t.mul(along.mul(S.mul(2))))).mul(0.5).add(0.5);
-      out.color = mix(U.color, U.color2, late.mul(0.5).add(fig.mul(0.22))).mul(pores.mul(0.1).add(1));
+      // (de loin, les cernes s'effacent sous l'empreinte du pixel : la planche
+      // garderait une teinte unie de plastique. Le fil reste lisible par des
+      // bandes larges, étirées le long de la pièce — le « ruban » de l'acajou,
+      // les flammes du noyer — et la teinte moyenne des cernes effacés.)
+      const ribbon = smoothstep(-0.45, 0.55, noise2(across.mul(S.mul(14)).add(t.mul(along.mul(S.mul(0.7)))).add(warp.mul(60))));
+      const lateMean = aa(320).oneMinus().mul(0.16);
+      out.color = mix(U.color, U.color2, late.mul(0.5).add(lateMean).add(fig.mul(0.22)).add(ribbon.mul(0.28))).mul(pores.mul(0.1).add(1));
       out.rough = U.rough.add(late.mul(0.06)).add(pores.mul(0.05));
       out.h = late.mul(0.5).add(pores.mul(0.35)).add(0.2);
       break;
@@ -320,7 +326,10 @@ function surface(fin, U, p, pf, pn) {
     case 'plaster': { // enduit : grosses ondes, coups de taloche, grain
       const big = fbm(p.mul(S.mul(3)), 3), trowel = noise(p.mul(S.mul(25))), fine = noise2(p.mul(S.mul(300))).mul(aa(300));
       out.h = big.mul(0.6).add(trowel.mul(0.3)).add(fine.mul(0.25));
-      out.color = mix(U.color, U.color2, smoothstep(-0.35, 0.45, big.add(trowel.mul(0.3)))).mul(fine.mul(0.04).add(1));
+      // (nuances douces : un enduit photographié a des variations larges et
+      // faibles ; un mélange franc à 30 cm dessine des taches de camouflage)
+      const broad = fbm(p.mul(S.mul(0.7)).add(5.7), 2);
+      out.color = mix(U.color, U.color2, smoothstep(-0.6, 0.6, broad).mul(0.55).add(smoothstep(-0.4, 0.5, big.add(trowel.mul(0.3))).mul(0.3))).mul(fine.mul(0.04).add(1));
       out.rough = U.rough;
       break;
     }
@@ -328,7 +337,8 @@ function surface(fin, U, p, pf, pn) {
       const n = fbm(p.mul(S.mul(6)), 3), stain = noise(p.mul(S.mul(1.2)));
       const pit = worley(p.mul(S.mul(180))).x;
       out.h = n.mul(0.35).add(smoothstep(0.0, 0.25, pit).mul(0.5).mul(aa(180)));
-      out.color = mix(U.color, U.color2, smoothstep(-0.3, 0.5, n.add(stain.mul(0.6)))).mul(smoothstep(0.0, 0.18, pit).mul(0.25).mul(aa(180)).add(0.78));
+      // (taches larges et faibles, bulles discrètes : voir l'enduit)
+      out.color = mix(U.color, U.color2, smoothstep(-0.6, 0.7, stain).mul(0.55).add(smoothstep(-0.3, 0.5, n).mul(0.25))).mul(smoothstep(0.0, 0.18, pit).mul(0.12).mul(aa(180)).add(0.9));
       out.rough = U.rough.add(stain.mul(0.08));
       break;
     }
@@ -360,7 +370,8 @@ function surface(fin, U, p, pf, pn) {
       const big = fbm(p.mul(S.mul(4)), 3), peb = worley(p.mul(S.mul(70))), fine = noise2(p.mul(S.mul(500))).mul(aa(500));
       const stone = smoothstep(0.35, 0.15, peb.x).mul(aa(70));
       out.h = big.mul(0.5).add(stone.mul(0.6)).add(fine.mul(0.2));
-      out.color = mix(mix(U.color, U.color2, smoothstep(-0.3, 0.4, big)), U.color.mul(1.15), stone.mul(0.5)).mul(fine.mul(0.06).add(1));
+      const broad = fbm(p.mul(S.mul(0.8)).add(2.3), 2);
+      out.color = mix(mix(U.color, U.color2, smoothstep(-0.6, 0.6, broad).mul(0.5).add(smoothstep(-0.3, 0.4, big).mul(0.3))), U.color.mul(1.15), stone.mul(0.5)).mul(fine.mul(0.06).add(1));
       out.rough = U.rough.sub(stone.mul(0.1));
       break;
     }

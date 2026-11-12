@@ -36,7 +36,7 @@ export const kelvinToHex = (K) => {
 // exact, vu de face) ; grade : étalonnage ; accords : rôles → finitions.
 export const MOODS = {
   cabinet: {
-    label: 'Cabinet', env: 'atelier', bg: '#0f0d0a', wall: 'wallGreen', floor: 'parquet', fog: 0.0,
+    label: 'Cabinet', room: true, env: 'atelier', bg: '#0f0d0a', wall: 'wallGreen', floor: 'parquet', fog: 0.0,
     light: { K: 5200, az: -0.95, el: 0.62, dist: 6.5, angle: 0.62, penumbra: 0.95, power: 3.2, rims: [{ az: 2.45, el: 0.5, power: 0.55, K: 6500 }, { az: -2.6, el: 0.25, power: 0.25, K: 4800 }] },
     cam: { az: [-0.18, 0.12], el: [0.05, 0.14], fov: [26, 32], dist: 1.0 },
     grade: { contrast: 1.05, saturation: 0.98, shadows: [0.95, 1.0, 1.04], highlights: [1.05, 1.0, 0.93], exposure: 1 },
@@ -69,7 +69,7 @@ export const MOODS = {
     ],
   },
   soleil: {
-    label: 'Plein soleil', env: 'clearsky', bg: '#d9cfbd', wall: 'limewash', floor: 'earth', fog: 0.0, sun: true, envIntensity: [0.12, 0.18], keyScale: 1,
+    label: 'Plein soleil', room: true, env: 'clearsky', bg: '#d9cfbd', wall: 'limewash', floor: 'earth', fog: 0.0, sun: true, envIntensity: [0.12, 0.18], keyScale: 1,
     light: { K: 5000, az: -0.65, el: 0.52, dist: 14, angle: 0.55, penumbra: 0.1, power: 1.3, rims: [{ az: 2.8, el: 0.6, power: 0.12, K: 9000 }, { az: 0.8, el: 1.3, power: 0.1, K: 11000 }] },
     cam: { az: [-0.32, -0.12], el: [0.06, 0.16], fov: [28, 34], dist: 1.1 },
     grade: { contrast: 1.06, saturation: 1.02, shadows: [0.96, 1.0, 1.06], highlights: [1.04, 1.0, 0.95], exposure: 1 },
@@ -80,8 +80,8 @@ export const MOODS = {
     ],
   },
   atelier: {
-    label: 'Atelier', env: 'studio', bg: '#0a0908', wall: 'concreteDark', floor: 'concrete', fog: 0.05, beam: true, envIntensity: [0.35, 0.5],
-    light: { K: 5400, az: -0.35, el: 1.18, dist: 7, angle: 0.42, penumbra: 0.6, power: 5, rims: [{ az: 2.3, el: 0.35, power: 0.35, K: 4700 }, { az: -2.5, el: 0.3, power: 0.18, K: 6000 }] },
+    label: 'Atelier', room: true, env: 'studio', bg: '#0a0908', wall: 'concreteDark', floor: 'concrete', fog: 0.05, beam: true, envIntensity: [0.35, 0.5],
+    light: { K: 5400, az: -0.35, el: 1.18, dist: 7, angle: 0.3, penumbra: 0.55, power: 5, rims: [{ az: 2.3, el: 0.35, power: 0.35, K: 4700 }, { az: -2.5, el: 0.3, power: 0.18, K: 6000 }] },
     cam: { az: [0.15, 0.4], el: [0.2, 0.32], fov: [30, 36], dist: 1.0 },
     grade: { contrast: 1.08, saturation: 0.92, shadows: [0.93, 0.98, 1.08], highlights: [1.06, 1.0, 0.92], exposure: 1 },
     accords: [

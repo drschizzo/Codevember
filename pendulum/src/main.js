@@ -451,7 +451,10 @@ async function main() {
     if (!paused && !loading.active) phi += dt / loopDuration();
     if (loading.active) {
       if (!loading.settle) loader.progress(stage.progress());
-      if (stage.film && !loading.filmSent) {
+      // (loading.applied : jusqu'à stage.setRecipe, stage.film est encore celui
+      // de la scène précédente — ses poses, lues avec la nouvelle machine,
+      // donneraient une fausse plaque, ou une erreur si elle a moins de maillons)
+      if (loading.applied && stage.film && !loading.filmSent) {
         loading.filmSent = true;
         // (les trajectoires retenues, en 60 poses chacune : la plaque finale est la vraie solution)
         const F = stage.film, sys = stage.sys, x = new Float64Array(sys.nx);

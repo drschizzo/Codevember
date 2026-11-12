@@ -6,7 +6,7 @@ import { generate } from '../src/recipe.js';
 import { systemOf } from '../src/gen/machines.js';
 import { rk4Step, rkWork } from '../src/gen/dynamics.js';
 import { solveMove } from '../src/gen/plan.js';
-import { buildFilm, movesOf, slowWindow, physTime, physRate, codeAngles } from '../src/film.js';
+import { buildFilm, movesOf, slowWindow, physTime, physRate, codeAngles, tremor } from '../src/film.js';
 import { clearance } from '../src/gen/clearance.js';
 
 const FAMS = ['cart', 'rotary', 'acrobat', 'wheel'];
@@ -85,6 +85,30 @@ test('la boucle se referme exactement (u = 0 et u → 1), les tenues sont immobi
         p.theta.forEach((t, i) => assert.ok(wrap(t - q.theta[i]) < 1e-4, `${R.family} raccord ${st.kind} θ${i}`));
         // (l'angle du coude ne compte qu'à 2π près, comme ceux des maillons)
         assert.ok(R.family === 'acrobat' ? wrap(p.s - q.s) < 1e-4 : Math.abs(p.s - q.s) < 1e-4, `${R.family} raccord s ${p.s} ${q.s}`);
+      }
+    }
+  }
+});
+
+test('corrections d’équilibre : seulement pendant une tenue debout, nulles aux raccords, de l’ordre du millimètre', () => {
+  for (const { R, res } of solved) {
+    const sys = systemOf(R.machine);
+    const F = buildFilm(R, sys, res.map((r) => r.tab));
+    const wrap = (d) => Math.abs(Math.atan2(Math.sin(d), Math.cos(d)));
+    let seen = 0;
+    for (let k = 0; k <= 4000; k++) {
+      const u = k / 4000, a = F.at(u), b = tremor(R, { ...F.at(u) });
+      const dth = Math.max(...a.theta.map((t, i) => wrap(t - b.theta[i]))), ds = Math.abs(a.s - b.s);
+      if (a.step.kind !== 'hold' || !R.film.seq[a.step.i].includes('U')) assert.ok(dth === 0 && ds === 0, `${R.family} hors tenue debout`);
+      assert.ok(dth < 0.01 && ds < (R.family === 'cart' ? 0.005 : 0.2), `${R.family} amplitude ${dth} ${ds}`);
+      if (dth > 1e-3) seen++;
+    }
+    assert.ok(seen > 0 || !R.film.seq.some((c) => c.includes('U')), `${R.family} : aucune correction visible`);
+    for (const st of F.steps) {
+      for (const u of [st.t0 / F.duration, (st.t0 + st.dur) / F.duration]) {
+        const a = F.at(u), b = tremor(R, { ...F.at(u) });
+        a.theta.forEach((t, i) => assert.ok(wrap(t - b.theta[i]) < 1e-9, `${R.family} raccord θ${i}`));
+        assert.ok(Math.abs(a.s - b.s) < 1e-9, `${R.family} raccord s`);
       }
     }
   }
