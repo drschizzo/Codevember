@@ -101,7 +101,7 @@ async function main() {
   const gen = createGenerator(LITE ? Math.max(2, Math.min(3, (navigator.hardwareConcurrency || 4) - 1)) : undefined);
   setNoiseVolume(await gen.request({ seed: `${NAME}-noise` }, 'noise')); // (les matériaux en dépendent)
   const stage = createStage(scene, gen, { lite: LITE });
-  const post = createPost(renderer, scene, camera);
+  const post = createPost(renderer, scene, camera, { lens: (sample) => stage.domeLens(sample) });
   const accum = createAccumulator(renderer);
   const RENDER = loadRender(LITE);
   const governor = createGovernor({ target: 1 / 45, min: 0.5, max: 1, onChange: () => !busy && resize() });
@@ -193,6 +193,8 @@ async function main() {
     }
     G.microDetail.value = RENDER.microDetail;
     G.roughFloor.value = RENDER.roughFloor;
+    camera.updateMatrixWorld();
+    stage.setDomeCamera(camera);
     stage.update(ph, G.phasePrev.value);
     post.update({ ...RENDER, lite: LITE, focus: RENDER.focus * 1.5, focusRange: RENDER.focusRange * 1.5 }, R);
     post.render();

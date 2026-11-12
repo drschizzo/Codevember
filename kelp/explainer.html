@@ -77,9 +77,9 @@
       <section id="boucle">
         <h2><span class="n">05</span>La boucle est une orbite, pas un fondu</h2>
         <span class="src">src/gen/kelp.js · simulateKelp() · fermeture</span>
-        <p>Le forçage a la période \(T\) de la boucle et le système est dissipatif : la mer oublie son état initial en une période. Les laminaires, elles, gardent un peu de mémoire — une lanière tombée à gauche de sa voisine plutôt qu'à droite. Deux passages sont simulés sous le même forçage : A commence au grand retrait (le platier est à sec, les plantes couchées), B part de A(T) et fait la boucle entière. La boucle rendue mélange les deux pendant le retrait de la grande vague, quand tout bouge vite et dans le même sens :</p>
+        <p>Le forçage a la période \(T\) de la boucle et le système est dissipatif : la mer oublie son état initial en une période. Les laminaires, elles, gardent un peu de mémoire — une lanière tombée à gauche de sa voisine plutôt qu'à droite. Deux boucles sont simulées sous le même forçage, A puis B, avec B(0) = A(T). La boucle rendue passe de B à A, plante par plante, chacune au moment où ses deux versions se ressemblent le plus :</p>
         <div class="eq">\[ R(t) = (1-w(t))\,B(t) + w(t)\,A(t), \qquad R(0) = B(0) = A(T) = R(T) \]</div>
-        <p>Les images mélangées sont ramenées à des chaînes inextensibles posées sur la roche. A ne coûte que 40 % d'une boucle : la simulation entière (mise en place, A, B) fait 47 s de temps simulé.</p>
+        <p>Ce sont les directions des segments qui sont mélangées, la chaîne étant reconstruite depuis le crampon : mélanger les positions de deux poses très différentes superposait des nœuds, et la chaîne basculait d'une image à l'autre — des sauts d'un mètre. Mesurés par <code>tools/jumps.mjs</code> : pire saut 0,99 → 0,15 m.</p>
         <div class="note check"><b>Vérifié</b><p>La dernière image rejoint la première à moins d'un déplacement d'image ; aucun nœud ne passe sous la roche à aucun instant (<code>test/kelp.test.mjs</code>).</p></div>
       </section>
 
@@ -97,7 +97,7 @@
         <span class="src">src/scene/water.js · medium()</span>
         <p>Avec une caméra à sténopé, la surface de l'eau qui passe par le centre optique se projette sur l'horizon : l'image bascule d'un coup de l'air à l'eau. Les photographies « over-under » se font avec un hublot en dôme, et la ligne d'eau traverse l'image. Chaque rayon part donc du dôme, à \(r_d = 9\) cm devant le centre optique : il commence dans l'eau si ce point est sous la surface. La ligne d'eau est à l'élévation</p>
         <div class="eq">\[ \theta_w = \arcsin\frac{y_w - y_e}{r_d} \]</div>
-        <p>et balaie tout le champ quand l'eau monte de 18 cm sur le dôme. Le plan proche de la caméra joue le même rôle pour la surface : ce qui est entre le centre optique et le dôme n'est pas dessiné. Le brouillard d'eau de chaque pixel n'est compté que sur la partie immergée du rayon (le niveau de l'eau étant pris linéaire entre ses deux bouts) : une même lanière est nette au-dessus de la ligne, voilée de vert au-dessous.</p>
+        <p>et balaie tout le champ quand l'eau monte de 18 cm sur le dôme. Le plan proche de la caméra joue le même rôle pour la surface : ce qui est entre le centre optique et le dôme n'est pas dessiné. En post-traitement, le même calcul par pixel donne le ménisque (une ligne sombre de deux pixels là où l'eau coupe le dôme), la nappe qui ruisselle au-dessus, et sur le haut du dôme qui vient de ressortir des gouttes : des lentilles qui montrent la scène renversée et réduite, cerclées de sombre, qui glissent et sèchent chacune à son heure (deux couches de cellules, une seule lecture de l'image déformée, ~0,35 ms à 0,5 Mpx). Le brouillard d'eau de chaque pixel n'est compté que sur la partie immergée du rayon (le niveau de l'eau étant pris linéaire entre ses deux bouts) : une même lanière est nette au-dessus de la ligne, voilée de vert au-dessous.</p>
         <figure id="fig-dome"><figcaption><b>Le dôme en coupe.</b> Le curseur règle la hauteur de l'eau par rapport au centre optique ; les rayons qui partent du dôme sous l'eau sont verts. À droite, l'image : la ligne d'eau monte avec l'eau.</figcaption></figure>
       </section>
 
@@ -105,7 +105,7 @@
         <h2><span class="n">08</span>Le soleil passe par la surface</h2>
         <span class="src">src/scene/water.js · sunAtten(), receivedShadow</span>
         <p>Sous l'eau, le soleil est atténué sur son chemin réfracté jusqu'au point, \(T = e^{-\sigma\, d / \cos\theta_t}\) avec \(\sin\theta_t = \sin\theta_i / 1{,}33\), par canal (le rouge d'abord), et modulé par des caustiques. three.js permet de modifier l'ombre reçue par un matériau (<code>receivedShadowNode</code>) : l'atténuation y est multipliée, et la roche, les lanières et les crampons reçoivent la même lumière sans un mot de plus dans leurs matériaux. La surface vue d'en dessous montre la fenêtre de Snell (48,6°) et, au-delà, la réflexion totale ; vue d'en dessus, un reflet de Fresnel qui ne devient jamais un miroir au loin (les facettes des vagues regardent plus haut que la normale moyenne).</p>
-        <div class="note trap"><b>Le piège</b><p>Le ciel est resté noir longtemps : la même texture servait d'environnement et de fond, et le fond lisait sa version préfiltrée ; puis le fond, dessiné à part, restait marqué en erreur après le préchauffage asynchrone des pipelines. Le ciel est maintenant une grande sphère de la scène, préchauffée comme le reste.</p></div>
+        <div class="note trap"><b>Le piège</b><p>Le ciel est resté noir longtemps : la même texture servait d'environnement et de fond, et le fond lisait sa version préfiltrée ; puis le fond, dessiné à part, restait marqué en erreur après le préchauffage asynchrone des pipelines. Le ciel est maintenant une grande sphère de la scène, préchauffée comme le reste. Autre piège : les sommets de la surface sautent de sous la roche à la surface de l'eau au bord mouillé-sec ; leurs vecteurs vitesse étiraient le flou de mouvement en copies répétées des reflets. La surface n'écrit plus de vitesse.</p></div>
       </section>
 
       <section id="budget">
@@ -115,11 +115,11 @@
           <tbody>
             <tr><td>La mer : Saint-Venant, 760 cellules, deux périodes de 32 s (~31 000 pas)</td><td>worker</td><td class="num">~1 s</td></tr>
             <tr><td>La roche : relief 1 024², surface de contact, flaques (inondation prioritaire), couleur</td><td>worker</td><td class="num">~2 s</td></tr>
-            <tr><td>Les laminaires : 64 plantes, ~3 400 nœuds, 47 s simulées à 100 sous-pas/s</td><td>worker</td><td class="num">10–14 s</td></tr>
+            <tr><td>Les laminaires : 64 plantes, ~3 400 nœuds, 66 s simulées à 100 sous-pas/s</td><td>worker</td><td class="num">7–18 s</td></tr>
             <tr><td>Données transmises au GPU (mer 60 i/s, laminaires 30 i/s, roche)</td><td>GPU</td><td class="num">~85 Mo</td></tr>
           </tbody>
         </table></div>
-        <p>Mesures dans Node (un cœur), graine de test ; nettement plus lent quand l'onglet est en arrière-plan. Le temps d'image n'a pas pu être mesuré dans des conditions représentatives (panneau de navigateur masqué).</p>
+        <p>Mesures dans Node (un cœur), graine de test ; nettement plus lent quand l'onglet est en arrière-plan. Temps d'image mesuré à 960 × 540 (GPU d'un Mac) : 6,6 à 6,9 ms, dont ~3,9 ms pour la roche et ~2,8 ms pour l'occlusion ambiante.</p>
       </section>
     </article>
 

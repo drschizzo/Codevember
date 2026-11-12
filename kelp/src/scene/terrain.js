@@ -11,7 +11,7 @@ import { G } from './globals.js';
 
 export function createTerrain(W, lite) {
   const { U } = W;
-  const geo = gridGeometry(spacing(-150, -3.6, 3.2, 60, lite ? 0.035 : 0.02, 1.07), spacing(-250, -7, 2.8, 60, lite ? 0.035 : 0.02, 1.07));
+  const geo = gridGeometry(spacing(-150, -3.6, 3.2, 60, lite ? 0.04 : 0.028, 1.09), spacing(-250, -7, 2.8, 60, lite ? 0.04 : 0.028, 1.09));
   const colT = texture(W.dataTex(new Uint8Array(16), 2, 2, THREE.UnsignedByteType));
   colT.value.colorSpace = THREE.SRGBColorSpace;
   const RU = { base: uniform(new THREE.Color(0.4, 0.35, 0.3)), wetDark: uniform(0.55), micro: uniform(1), grain: uniform(1) };
@@ -20,11 +20,12 @@ export function createTerrain(W, lite) {
   mat.positionNode = Fn(() => {
     const p = positionLocal;
     const x = p.x, z = p.z;
-    const h = W.rockAt(x, z);
     const inb = W.inBox(x, z);
     const g = W.reliefT.sample(W.boxUV(x, z)).level(0);
-    // (hors de la boîte : pente du profil)
-    const e = 0.05, gp = W.rockAt(x.add(e), z.add(0)).sub(W.rockAt(x.sub(e), z)).div(2 * e);
+    const pr = W.profAt(x);
+    const h = mix(pr, g.x, inb);
+    // (hors de la boîte : pente du profil, lue seule)
+    const e = 0.05, gp = W.profAt(x.add(e)).sub(W.profAt(x.sub(e))).div(2 * e);
     const gx = mix(gp, g.y, inb), gz = mix(float(0), g.z, inb);
     normalLocal.assign(normalize(vec3(gx.negate(), 1, gz.negate())));
     return vec3(x, h, z);
@@ -34,11 +35,11 @@ export function createTerrain(W, lite) {
   const inb = W.inBox(P.x, P.z);
   const tex = colT.sample(W.boxUV(P.x, P.z));
   const relief = W.reliefT.sample(W.boxUV(P.x, P.z));
-  const H = W.rockAt(P.x, P.z);
-  const far = vec3(RU.base).mul(fbm(P.mul(0.8), 3).mul(0.25).add(0.9));
+  const H = P.y; // (la position est déjà la roche : rien à relire)
+  const far = vec3(RU.base).mul(NZ(P.mul(0.8)).x.mul(0.22).add(0.9));
   const albedo0 = mix(far, tex.rgb, inb);
   // mouillé : sous l'enveloppe de séchage (la mer vient d'y passer), ou dans l'eau
-  const lv = W.level(P.x, P.z, U.t);
+  const lv = W.levelNear(P.x, P.z, U.t);
   const under = smoothstep(0.0, 0.004, lv.sub(H));
   const wet = max(smoothstep(-0.004, 0.006, W.wetLevel(P.x, P.z, U.t).sub(H)), under).max(smoothstep(-0.3, -0.6, H));
   // grain minéral (cristaux de 1 à 3 mm) : taches sombres et claires
@@ -53,7 +54,7 @@ export function createTerrain(W, lite) {
   mat.roughnessNode = mix(mix(float(0.85), tex.a, inb), float(0.16), wet.mul(under.oneMinus())).max(G.roughFloor);
   mat.metalnessNode = float(0);
   // micro-relief : grain et cristaux (le gros plan), estompé à l'approche du pixel
-  const hMicro = fbm(P.mul(28), 4).mul(0.0035).add(NZ(P.mul(140)).x.mul(0.0006)).add(NZ(P.mul(420)).y.mul(0.00025).mul(near)).mul(RU.micro).mul(G.microDetail).mul(wet.mul(0.5).oneMinus());
+  const hMicro = fbm(P.mul(28), 2).mul(0.0035).add(NZ(P.mul(140)).x.mul(0.0006)).add(NZ(P.mul(420)).y.mul(0.00025).mul(near)).mul(RU.micro).mul(G.microDetail).mul(wet.mul(0.5).oneMinus());
   mat.normalNode = perturb(hMicro, normalView);
   mat.aoNode = mix(float(1), relief.a, inb);
   mat.receivedShadowNode = W.receivedShadow;
