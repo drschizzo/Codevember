@@ -79,6 +79,8 @@ export function createUI({ recipe: getRecipe, render, on, moods }) {
     add(fCam, R.camera, 'el', -0.1, 0.8, 0.01).name('Hauteur (rad)').onChange(ch);
     add(fCam, R.camera, 'sway', 0, 0.2, 0.005).name('Balancement').onChange(ch);
     add(fCam, R.camera, 'push', 0, 0.4, 0.005).name('Avancée au sommet').onChange(ch);
+    R.camera.cuts ??= true; // (recette ancienne : montage par défaut)
+    add(fCam, R.camera, 'cuts').name('Montage (plans)').onChange(ch);
     add(fCam, on.camState, 'free').name('Caméra libre (souris)').onChange((v) => on.freeCam(v));
 
     // la machine : maillons (nouveau calcul des trajectoires) et matières

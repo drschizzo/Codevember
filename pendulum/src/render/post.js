@@ -65,6 +65,7 @@ export function createPost(renderer, scene, camera) {
     shadowTint: uniform(new THREE.Color(1, 1, 1)), highTint: uniform(new THREE.Color(1, 1, 1)),
     ca: uniform(0.2), grain: uniform(0.04), hiCap: uniform(3),
     streaks: uniform(0.3), streakLen: uniform(6), halation: uniform(0.3), dirt: uniform(0.4),
+    cut: uniform(0), // (1 pendant l'image d'un raccord : vitesses nulles)
   };
   let nodes = {};
   let key = '';
@@ -122,7 +123,7 @@ export function createPost(renderer, scene, camera) {
     // temporel : celui-ci reprojette alors une image nette, sans traînées
     // fantômes sur les barres fines.
     // (vitesse lue sous garde : NaN ou démesurée → nulle ; NDC → UV)
-    const vel = needVel ? (() => { const v = scenePass.getTextureNode('velocity').xy.mul(vec2(0.5, -0.5)); return select(length(v).lessThan(0.25), v, vec2(0)); })() : null;
+    const vel = needVel ? (() => { const v = scenePass.getTextureNode('velocity').xy.mul(vec2(0.5, -0.5)); return select(length(v).lessThan(0.25).and(U.cut.lessThan(0.5)), v, vec2(0)); })() : null;
     const blur = (tex) => {
       if (!(cfg.motionBlur > 0)) return tex;
       const v = vel.mul(U.blur), n = 10;
@@ -260,5 +261,20 @@ export function createPost(renderer, scene, camera) {
     renderer.toneMapping = TONE_MAPPINGS[cfg.toneMapping] ?? THREE.AgXToneMapping;
   }
 
-  return { pipeline, update, render: () => pipeline.render(), U, get nodes() { return nodes; } };
+  // Raccord : l'image d'un nouveau plan ne doit rien hériter du précédent —
+  // ni flou de mouvement (la caméra a « sauté »), ni historique de
+  // l'anticrénelage temporel (il traînerait l'ancien plan en fantôme). TRAANode
+  // repart d'une image propre quand la taille de son historique change.
+  let cutPending = false;
+  function render() {
+    if (cutPending) {
+      U.cut.value = 1;
+      const h = nodes.traa?._historyRenderTarget;
+      if (h) h.width = -1;
+    }
+    pipeline.render();
+    U.cut.value = 0;
+    cutPending = false;
+  }
+  return { pipeline, update, render, cut: () => { cutPending = true; }, U, get nodes() { return nodes; } };
 }

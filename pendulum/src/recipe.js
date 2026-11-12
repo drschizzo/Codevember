@@ -37,7 +37,7 @@ export const kelvinToHex = (K) => {
 export const MOODS = {
   cabinet: {
     label: 'Cabinet', room: true, env: 'atelier', bg: '#0f0d0a', wall: 'wallGreen', floor: 'parquet', fog: 0.0,
-    light: { K: 5200, az: -0.95, el: 0.62, dist: 6.5, angle: 0.62, penumbra: 0.95, power: 3.2, rims: [{ az: 2.45, el: 0.5, power: 0.55, K: 6500 }, { az: -2.6, el: 0.25, power: 0.25, K: 4800 }] },
+    light: { K: 5200, az: -0.95, el: 0.62, dist: 6.5, angle: 0.62, penumbra: 0.35, power: 3.2, gobo: { grid: [3, 4], half: [0.27, 0.34], bar: 0.007, soft: 0.009, leak: 0.05 }, rims: [{ az: 2.45, el: 0.5, power: 0.55, K: 6500 }, { az: -2.6, el: 0.25, power: 0.25, K: 4800 }] },
     cam: { az: [-0.18, 0.12], el: [0.05, 0.14], fov: [26, 32], dist: 1.0 },
     grade: { contrast: 1.05, saturation: 0.98, shadows: [0.95, 1.0, 1.04], highlights: [1.05, 1.0, 0.93], exposure: 1 },
     accords: [
@@ -48,7 +48,8 @@ export const MOODS = {
     ],
   },
   laboratoire: {
-    label: 'Laboratoire', env: 'cyclo', bg: '#d8d7d3', wall: 'cycloWhite', floor: 'epoxyWhite', fog: 0.0, keyScale: 0.6, envIntensity: [0.32, 0.42],
+    label: 'Laboratoire', env: 'cyclo', bg: '#d8d7d3', wall: 'cycloWhite', floor: 'cycloWhite', // (une seule peinture, sol compris : sinon le raccord de la gorge se voit)
+    fog: 0.0, keyScale: 0.6, envIntensity: [0.32, 0.42],
     light: { K: 6200, az: -0.4, el: 1.15, dist: 6, angle: 0.75, penumbra: 1, power: 0.8, rims: [{ az: 2.2, el: 0.45, power: 0.45, K: 6500 }, { az: -2.4, el: 0.4, power: 0.3, K: 6500 }] },
     cam: { az: [0.35, 0.6], el: [0.12, 0.24], fov: [30, 36], dist: 1.05 },
     grade: { contrast: 1.0, saturation: 0.9, shadows: [0.98, 1.0, 1.03], highlights: [1, 1, 1], exposure: 1 },
@@ -81,7 +82,7 @@ export const MOODS = {
   },
   atelier: {
     label: 'Atelier', room: true, env: 'studio', bg: '#0a0908', wall: 'concreteDark', floor: 'concrete', fog: 0.05, beam: true, envIntensity: [0.35, 0.5],
-    light: { K: 5400, az: -0.35, el: 1.18, dist: 7, angle: 0.3, penumbra: 0.55, power: 5, rims: [{ az: 2.3, el: 0.35, power: 0.35, K: 4700 }, { az: -2.5, el: 0.3, power: 0.18, K: 6000 }] },
+    light: { K: 5400, az: -0.35, el: 1.18, dist: 7, angle: 0.34, penumbra: 0.3, power: 5, gobo: { grid: [5, 5], half: [0.3, 0.3], bar: 0.005, soft: 0.006, leak: 0.03 }, rims: [{ az: 2.3, el: 0.35, power: 0.35, K: 4700 }, { az: -2.5, el: 0.3, power: 0.18, K: 6000 }] },
     cam: { az: [0.15, 0.4], el: [0.2, 0.32], fov: [30, 36], dist: 1.0 },
     grade: { contrast: 1.08, saturation: 0.92, shadows: [0.93, 0.98, 1.08], highlights: [1.06, 1.0, 0.92], exposure: 1 },
     accords: [
@@ -206,10 +207,10 @@ export function generate(seed, overrides = {}) {
     camera: {
       // (le tourniquet se lit de trois quarts : de profil, son bras pointe vers l'objectif)
       az: r2(rc.range(...MO.cam.az) * (rc.chance(0.5) ? 1 : -1) + (family === 'rotary' ? rc.pick([-1, 1]) * rc.range(0.5, 0.7) : 0)), el: r2(rc.range(...MO.cam.el)), fov: r2(rc.range(...MO.cam.fov)),
-      dist: r2(MO.cam.dist * rc.range(0.9, 1.0)), sway: r2(rc.range(0.04, 0.08)), push: r2(rc.range(0.18, 0.3)),
+      dist: r2(MO.cam.dist * rc.range(0.9, 1.0)), sway: r2(rc.range(0.04, 0.08)), push: r2(rc.range(0.18, 0.3)), cuts: true,
     },
     light: {
-      key: { color: kelvinToHex(L.K + rl.range(-150, 150)), power: r2(L.power * ks * rl.range(0.92, 1.08)), az: r2(L.az + rl.range(-0.1, 0.1)), el: r2(L.el + rl.range(-0.05, 0.05)), dist: L.dist, angle: L.angle, penumbra: L.penumbra },
+      key: { color: kelvinToHex(L.K + rl.range(-150, 150)), power: r2(L.power * ks * rl.range(0.92, 1.08)), az: r2(L.az + rl.range(-0.1, 0.1)), el: r2(L.el + rl.range(-0.05, 0.05)), dist: L.dist, angle: L.angle, penumbra: L.penumbra, gobo: L.gobo ?? null },
       rim: L.rims.map((r) => ({ color: kelvinToHex(r.K), power: r2(r.power * ks * rl.range(0.85, 1.1)), az: r2(r.az), el: r2(r.el) })),
     },
     env: { preset: MO.env, intensity: r2(rl.range(...(MO.envIntensity ?? [0.45, 0.65]))), rotation: r2(rl.range(-0.3, 0.3)) },

@@ -8,6 +8,7 @@ import { rk4Step, rkWork } from '../src/gen/dynamics.js';
 import { solveMove } from '../src/gen/plan.js';
 import { buildFilm, movesOf, slowWindow, physTime, physRate, codeAngles, tremor } from '../src/film.js';
 import { clearance } from '../src/gen/clearance.js';
+import { planShots } from '../src/camera.js';
 
 const FAMS = ['cart', 'rotary', 'acrobat', 'wheel'];
 
@@ -111,6 +112,35 @@ test('corrections d’équilibre : seulement pendant une tenue debout, nulles au
         assert.ok(Math.abs(a.s - b.s) < 1e-9, `${R.family} raccord s`);
       }
     }
+  }
+});
+
+test('découpage : boucle exacte, plans sans saut, raccords francs, caméra calme et au-dessus du sol', () => {
+  const V = () => ({ set(x, y, z) { this.x = x; this.y = y; this.z = z; return this; } });
+  for (const { R, res } of solved) {
+    const F = buildFilm(R, systemOf(R.machine), res.map((r) => r.tab));
+    const sumL = R.machine.links.reduce((a, L) => a + L.l, 0);
+    const P = planShots(R, F, { w: 2, h: R.machine.height + sumL, H: R.machine.height, sumL });
+    assert.ok(P.shots.length >= 2 && P.shots.length <= 5, `${R.family} : ${P.shots.length} plans`);
+    for (const s of P.shots) assert.ok(s.t1 - s.t0 > 2, `${R.family} : plan de ${(s.t1 - s.t0).toFixed(2)} s`);
+    const at = (u) => P.at(u, 1.6, { position: V(), target: V() });
+    const a = at(0), b = at(1 - 1e-9);
+    assert.ok(Math.hypot(a.position.x - b.position.x, a.position.y - b.position.y, a.position.z - b.position.z) < 1e-6, `${R.family} : raccord de boucle`);
+    const N = 6000, dt = F.duration / N;
+    let prev = at(0), cuts = 0;
+    for (let i = 1; i <= N; i++) {
+      const c = at(i / N);
+      assert.ok(c.position.y >= 0.27, `${R.family} : objectif à ${c.position.y.toFixed(2)} m`);
+      if (c.shot !== prev.shot) { cuts++; prev = c; continue; }
+      // dans un plan : l'objectif et la visée se déplacent de moins d'un
+      // quart de la distance de prise de vue par seconde
+      const d = Math.hypot(c.position.x - c.target.x, c.position.y - c.target.y, c.position.z - c.target.z);
+      const v = Math.hypot(c.position.x - prev.position.x, c.position.y - prev.position.y, c.position.z - prev.position.z) / dt / d;
+      const w = Math.hypot(c.target.x - prev.target.x, c.target.y - prev.target.y, c.target.z - prev.target.z) / dt / d;
+      assert.ok(v < 0.25 && w < 0.25, `${R.family} : caméra trop vive (${v.toFixed(2)}, ${w.toFixed(2)} /s) à u = ${(i / N).toFixed(3)}`);
+      prev = c;
+    }
+    assert.equal(cuts, P.shots.length === 1 ? 0 : P.shots.length, `${R.family} : un raccord par plan`);
   }
 });
 

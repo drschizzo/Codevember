@@ -4,13 +4,14 @@
 //
 // update(ph) ne dépend que de la recette, des tables et de la phase.
 import * as THREE from 'three/webgpu';
-import { uniform } from 'three/tsl';
+import { uniform, float, abs, fract, smoothstep, mix, step } from 'three/tsl';
 import { buildPieceMaterial, finishUniforms } from './materials.js';
 import { pieceFinish } from '../finishes.js';
 import { createMachine, GHOSTS, GHOST_DT } from './machine.js';
 import { systemOf } from '../gen/machines.js';
 import { buildFilm, movesOf, tremor } from '../film.js';
 import { MOODS } from '../recipe.js';
+import { planShots } from '../camera.js';
 
 const SHADOW = { mobile: 1024, low: 1024, medium: 2048, high: 2048, ultra: 4096 };
 const { sin, cos, PI } = Math;
@@ -50,9 +51,31 @@ function cycloGeometry(part, D, rc, W = 14, Hm = 9, front = 14) {
   return g;
 }
 
-export function createStage(scene, gen, { lite = false } = {}) {
+// ── Gobo de la lampe principale : la lumière a une cause visible ──
+// Cabinet : une grande fenêtre à meneaux ; Atelier : la verrière du toit. Le
+// motif est projeté par la lampe (coordonnées de sa carte d'ombre, [0, 1]², la
+// fenêtre centrée sur la machine) : ses barres d'ombre tombent sur la machine,
+// le sol et le mur, et la chaîne qui balance les traverse. Hors de la fenêtre,
+// presque rien (un peu de lumière diffusée).
+//
+// (Pas de light.colorNode / light.map : SpotLightNode les applique par un
+// select(), compilé en if/else, et des variables partagées de l'éclairage n'y
+// sont calculées que dans une branche — des quadrilatères à bords droits, le
+// carré de projection de la lampe, mal éclairés partout, même sans motif. Ici
+// le motif multiplie l'atténuation du cône, sans branche.)
+class GoboSpotLight extends THREE.SpotLight {}
+class GoboSpotLightNode extends THREE.SpotLightNode {
+  static get type() { return 'GoboSpotLightNode'; }
+  getSpotAttenuation(builder, angleCosine) {
+    const a = super.getSpotAttenuation(builder, angleCosine);
+    return this.light.gobo ? a.mul(this.light.gobo(this.getLightCoord(builder))) : a;
+  }
+}
+
+export function createStage(scene, gen, { lite = false, renderer = null } = {}) {
+  renderer?.library.addLight(GoboSpotLightNode, GoboSpotLight);
   // ── Lumières (ordre fixe) ──
-  const key = new THREE.SpotLight(0xffffff, 400, 0, 0.5, 0.8, 2);
+  const key = new (renderer ? GoboSpotLight : THREE.SpotLight)(0xffffff, 400, 0, 0.5, 0.8, 2);
   key.castShadow = true;
   key.shadow.bias = -0.0002;
   key.shadow.normalBias = 0.01;
@@ -61,6 +84,24 @@ export function createStage(scene, gen, { lite = false } = {}) {
   const rims = [new THREE.SpotLight(0xffffff, 200, 0, 0.6, 0.9, 2), new THREE.SpotLight(0xffffff, 80, 0, 0.7, 0.9, 2)];
   if (lite) rims[1].visible = false;
   for (const l of [key, ...rims]) { scene.add(l); scene.add(l.target); }
+
+  // (tout est uniforme : changer de scène ne recompile rien ; kind = 0 : pas de gobo)
+  const GOBO = {
+    kind: uniform(0), grid: uniform(new THREE.Vector2(3, 3)), half: uniform(new THREE.Vector2(0.3, 0.3)),
+    bar: uniform(0.01), soft: uniform(0.01), leak: uniform(0.04),
+  };
+  key.gobo = (lc) => {
+    const q = lc.xy.sub(0.5);
+    const edge = (d, h, s) => smoothstep(h.add(s), h.sub(s), d);
+    const inside = edge(abs(q.x), GOBO.half.x, GOBO.soft).mul(edge(abs(q.y), GOBO.half.y, GOBO.soft));
+    // distance aux meneaux (lignes de la grille), en unités de la carte
+    const pane = GOBO.half.mul(2).div(GOBO.grid);
+    const g = q.add(GOBO.half).div(pane);
+    const d = abs(fract(g.add(0.5)).sub(0.5)).mul(pane);
+    const bars = smoothstep(GOBO.bar.sub(GOBO.soft), GOBO.bar.add(GOBO.soft), d.x).mul(smoothstep(GOBO.bar.sub(GOBO.soft), GOBO.bar.add(GOBO.soft), d.y));
+    const v = mix(GOBO.leak, float(1), inside.mul(bars));
+    return mix(float(1), v, step(0.5, GOBO.kind));
+  };
 
   // ── Cyclorama ──
   const floor = new THREE.Mesh(), wall = new THREE.Mesh();
@@ -75,13 +116,13 @@ export function createStage(scene, gen, { lite = false } = {}) {
   // ── Machine et film ──
   const machine = createMachine(gen);
   scene.add(machine.group);
-  let R = null, film = null, sys = null, version = 0, solved = 0, nMoves = 0, failed = null;
+  let R = null, film = null, shots = null, sys = null, version = 0, solved = 0, nMoves = 0, failed = null;
   const hooks = { art: null, error: null };
 
   function setRecipe(recipe) {
     R = recipe;
     const v = ++version;
-    film = null; failed = null;
+    film = null; shots = null; failed = null;
     sys = systemOf(R.machine);
     machine.setRecipe(R);
     const D = R.stage.sun ? 1.15 : 1.8;
@@ -112,6 +153,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
         if (v !== version) return;
         film = buildFilm(R, sys, res.map((r) => r.tab));
         film.solutions = res.map(({ tab, ...rest }) => rest);
+        shots = null;
       })
       .catch((e) => { if (v !== version) return; failed = e; hooks.error?.(e); });
   }
@@ -122,6 +164,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
     const sol = film.solutions, tabs = film.steps.filter((x) => x.kind === 'move').map((x) => x.tab);
     film = buildFilm(R, sys, tabs);
     film.solutions = sol;
+    shots = null;
   }
 
   const place = (l, target, az, el, d) => {
@@ -139,7 +182,11 @@ export function createStage(scene, gen, { lite = false } = {}) {
     place(key, target, L.key.az, L.key.el, L.key.dist);
     key.color.set(L.key.color); key.intensity = unit(L.key.dist) * L.key.power; key.angle = L.key.angle; key.penumbra = L.key.penumbra;
     // (carte d'ombre resserrée sur la machine, quelle que soit l'ouverture du faisceau)
-    key.shadow.focus = Math.min(1, Math.atan((Math.max(E.w, E.h) * 0.75) / L.key.dist) / L.key.angle);
+    // (avec un gobo, la carte couvre tout le faisceau : le motif est lu dans ses coordonnées)
+    const gb = L.key.gobo;
+    key.shadow.focus = gb ? 1 : Math.min(1, Math.atan((Math.max(E.w, E.h) * 0.75) / L.key.dist) / L.key.angle);
+    GOBO.kind.value = gb ? 1 : 0;
+    if (gb) { GOBO.grid.value.set(...gb.grid); GOBO.half.value.set(...gb.half); GOBO.bar.value = gb.bar; GOBO.soft.value = gb.soft; GOBO.leak.value = gb.leak; }
     key.shadow.camera.near = Math.max(0.5, L.key.dist - 4); key.shadow.camera.far = L.key.dist + 5;
     rims.forEach((l, i) => { const r = L.rim[i]; place(l, target, r.az, r.el, 6.5); l.color.set(r.color); l.intensity = unit(6.5) * r.power * (lite && i === 0 ? 1.4 : 1); });
     film.at(ph, state);
@@ -152,39 +199,19 @@ export function createStage(scene, gen, { lite = false } = {}) {
     return state;
   }
 
-  // caméra : profil (az 0 : vue de face, le plan du balancement), cadrée sur
-  // la machine entière ; balancement lent en azimut (une période par boucle)
-  // et avancée douce pendant la tenue au sommet
+  // caméra : le découpage en plans (voir camera.js), recalculé quand le film
+  // ou la recette de la caméra changent (cadrages échantillonnés sur le film)
+  let shotKey = '';
+  function plan() {
+    const k = JSON.stringify(R.camera);
+    if (!shots || k !== shotKey) { shots = planShots(R, film, machine.extent()); shotKey = k; }
+    return shots;
+  }
   function cameraAt(ph, aspect, out) {
-    const E = machine.extent(), C = R.camera;
-    const fov = (C.fov * PI) / 180, t = Math.tan(fov / 2);
-    // deux cadrages, fondus l'un dans l'autre : la machine entière, et la
-    // chaîne debout (tenue au sommet), d'autant plus que l'avancée est forte
-    const k = topBump(ph) * Math.min(1, C.push / 0.25);
-    const extra = R.machine.family === 'wheel' ? R.machine.wheel.r : 0;
-    const A = { cy: E.h * 0.5, h: E.h * 0.6, w: E.w * 0.56 };
-    const B = { cy: E.H + (E.sumL + extra) * 0.42, h: (E.sumL + extra + 0.3) * 0.62, w: Math.max(E.sumL * 0.6, 0.4) };
-    const cy = A.cy + (B.cy - A.cy) * k, hh = A.h + (B.h - A.h) * k, ww = A.w + (B.w - A.w) * k;
-    // (le facteur de distance de la recette ne resserre que le plan large : au sommet, la chaîne entière)
-    const d = Math.max(hh / t, ww / (t * aspect)) * (C.dist + (1 - C.dist) * k);
-    const az = C.az + C.sway * sin(2 * PI * ph);
-    const el = C.el;
-    out.position.set(sin(az) * cos(el) * d, cy + sin(el) * d, 0.1 + cos(az) * cos(el) * d);
-    out.target.set(0, cy, 0.1);
-    out.fov = C.fov;
-    return out;
+    if (!film) return out;
+    return plan().at(ph, aspect, out);
   }
-  // 0 → 1 → 0 autour de la tenue au sommet (périodique : fonction du film seul)
-  function topBump(ph) {
-    if (!film) return 0;
-    const seq = R.film.seq, top = seq.findLastIndex((c) => !c.includes('D'));
-    const st = film.steps.find((s) => s.kind === 'hold' && s.i === top);
-    if (!st) return 0;
-    const tf = (ph - Math.floor(ph)) * film.duration;
-    const a = st.t0 - 2.2, b = st.t0 + st.dur + 1.2;
-    const sm = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
-    return sm((tf - a) / 2.2) * (1 - sm((tf - (b - 1.4)) / 1.4));
-  }
+  const shotIndex = (ph) => (film ? plan().index(ph) : 0);
 
   function setShadowQuality(q) {
     const s = SHADOW[q] ?? 2048;
@@ -192,7 +219,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
   }
 
   return {
-    setRecipe, retime, update, cameraAt, setShadowQuality, syncFinishes: () => machine.syncFinishes(),
+    setRecipe, retime, update, cameraAt, shotIndex, setShadowQuality, syncFinishes: () => machine.syncFinishes(),
     group: machine.group, floor, wall, key, rims, machine, hooks,
     get film() { return film; }, get sys() { return sys; },
     ready: () => machine.ready() && !!film,
