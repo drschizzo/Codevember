@@ -6,7 +6,7 @@ import { simulateSea, makeProfile } from './sea.js';
 import { bakeRock, sampler, makePools } from './rock.js';
 import { layoutPlants, buildKelp, simulateKelp, FAMILIES } from './kelp.js';
 import { createRng, createNoise3 } from '../rng.js';
-import { Buffers, OUT } from './mesh.js';
+import { Buffers, OUT, norm, cross } from './mesh.js';
 import { cameraPose } from '../camera.js';
 
 export const BOX = { x0: -7, x1: 9, z0: -12, z1: 4 };
@@ -243,6 +243,93 @@ export function holdfastGeometry(K, plants, rockH, seed) {
   return B.out();
 }
 
+// ── La vie du platier : balanes, patelles, moules ──────────────────────────
+// Autour de la caméra, dans le champ, sur la roche découverte : des balanes
+// en colonies sur les bosses, des patelles éparses, des moules serrées dans
+// les fissures. Elles donnent l'échelle (un centimètre se lit) et la vie.
+// Chaque coquillage est construit dans le repère de la roche (normale du
+// relief) ; surf porte l'espèce (balane, patelle, moule) et piece un tirage.
+export function faunaGeometry(R, cam, rock, plants, lite = false) {
+  const B = new Buffers(1 << 15);
+  const rr = createRng(`fauna:${R.seed}`);
+  const H = sampler(rock, rock.H), crack = sampler(rock, rock.crack), fill = sampler(rock, rock.fill);
+  const yaw = R.camera.yaw, half = (R.camera.fov * Math.PI / 180) * 0.75;
+  const ok = (x, z, rMin = 0.35) => {
+    const dx = x - cam.x, dz = z - cam.z, d = Math.hypot(dx, dz);
+    if (d < rMin || d > 4.5) return false;
+    let a = Math.atan2(-dx, -dz) - yaw; a -= 2 * Math.PI * Math.round(a / (2 * Math.PI));
+    if (Math.abs(a) > half) return false;
+    if (fill(x, z) - H(x, z) > 0.004) return false; // (pas au fond d'une flaque)
+    if (H(x, z) < -0.25) return false; // (pas sur le tombant)
+    for (const P of plants) if ((P.x - x) ** 2 + (P.z - z) ** 2 < 0.012) return false;
+    return true;
+  };
+  const frameAt = (x, z) => {
+    const e = 0.01, n = norm([-(H(x + e, z) - H(x - e, z)) / (2 * e), 1, -(H(x, z + e) - H(x, z - e)) / (2 * e)]);
+    const a = rr.next() * Math.PI * 2;
+    const t0 = norm(cross(n, Math.abs(n[1]) < 0.9 ? [0, 1, 0] : [Math.cos(a), 0, Math.sin(a)]));
+    const b0 = cross(n, t0);
+    return { o: [x, H(x, z), z], n, t: t0, b: b0 };
+  };
+  const put = (F, u, v, w) => [F.o[0] + F.t[0] * u + F.b[0] * v + F.n[0] * w, F.o[1] + F.t[1] * u + F.b[1] * v + F.n[1] * w, F.o[2] + F.t[2] * u + F.b[2] * v + F.n[2] * w];
+  const dir = (F, u, v, w) => norm([F.t[0] * u + F.b[0] * v + F.n[0] * w, F.t[1] * u + F.b[1] * v + F.n[1] * w, F.t[2] * u + F.b[2] * v + F.n[2] * w]);
+  // une coque de révolution : profil [[rayon, hauteur], ...] du bord au sommet,
+  // rayon modulé par l'angle (lobes, côtes), aplatie en x par sx
+  const shell = (F, prof, nSeg, kind, mod = () => 1, sx = 1, sk = 0) => {
+    B.piece = Math.floor(rr.next() * 255);
+    const rows = [];
+    prof.forEach(([r, h], j) => {
+      const row = [];
+      for (let k = 0; k < nSeg; k++) {
+        const a = (k / nSeg) * Math.PI * 2, m = r * mod(a, j);
+        const u = Math.cos(a) * m * sx + sk * h, v = Math.sin(a) * m;
+        // normale approchée : radiale inclinée par la pente du profil
+        const nb = prof[Math.min(prof.length - 1, j + 1)], pb = prof[Math.max(0, j - 1)];
+        const dr = nb[0] - pb[0], dh = nb[1] - pb[1];
+        row.push(B.vert(put(F, u, v, h - 0.0015), dir(F, Math.cos(a) * dh * sx, Math.sin(a) * dh, -dr || 1e-4), kind));
+      }
+      rows.push(row);
+    });
+    B.grid(rows, true);
+  };
+  const BAR = [255, 0, 0], LIM = [0, 255, 0], MUS = [0, 0, 255];
+  const k = lite ? 0.5 : 1;
+  // balanes : colonies serrées sur les bosses découvertes
+  for (let c = 0; c < 110 * k; c++) {
+    const x0 = cam.x + (rr.next() - 0.5) * 7, z0 = cam.z - 0.3 - rr.next() * 4.4;
+    if (!ok(x0, z0)) continue;
+    const n = 6 + Math.floor(rr.next() * 22);
+    for (let q = 0; q < n; q++) {
+      const x = x0 + (rr.next() - 0.5) * 0.14, z = z0 + (rr.next() - 0.5) * 0.14;
+      if (!ok(x, z, 0.25)) continue;
+      const F = frameAt(x, z), r = 0.003 + 0.0055 * rr.next() ** 2, h = r * (0.55 + 0.3 * rr.next()), lob = rr.next() * 6;
+      shell(F, [[r, 0], [r * 0.82, h * 0.55], [r * 0.5, h], [r * 0.34, h * 0.92], [r * 0.12, h * 0.55]], 12, BAR, (a, j) => (j < 2 ? 1 + 0.09 * Math.sin(6 * a + lob) : 1));
+    }
+  }
+  // patelles : éparses
+  for (let c = 0; c < 140 * k; c++) {
+    const x = cam.x + (rr.next() - 0.5) * 7, z = cam.z - 0.3 - rr.next() * 4.4;
+    if (!ok(x, z)) continue;
+    const F = frameAt(x, z), r = 0.009 + 0.012 * rr.next(), h = r * (0.45 + 0.25 * rr.next()), ph = rr.next() * 6;
+    shell(F, [[r, 0], [r * 0.92, h * 0.3], [r * 0.62, h * 0.72], [r * 0.25, h * 0.95], [0.0005, h]], 18, LIM, (a, j) => (j < 3 ? 1 + 0.05 * Math.sin(17 * a + ph) : 1), 1.15, r * 0.25 * (rr.next() - 0.5));
+  }
+  // moules : serrées dans les fissures et les creux
+  for (let c = 0; c < 900 * k; c++) {
+    const x0 = cam.x + (rr.next() - 0.5) * 7, z0 = cam.z - 0.3 - rr.next() * 4.4;
+    if (crack(x0, z0) < 0.15 || !ok(x0, z0)) continue;
+    const n = 3 + Math.floor(rr.next() * 9);
+    for (let q = 0; q < n; q++) {
+      const x = x0 + (rr.next() - 0.5) * 0.09, z = z0 + (rr.next() - 0.5) * 0.09;
+      if (!ok(x, z, 0.25)) continue;
+      const F = frameAt(x, z), L = 0.022 + 0.026 * rr.next(), W = L * 0.42, Hh = L * 0.36;
+      // (une coque allongée, en pointe à un bout, à moitié enfoncée et dressée de biais)
+      const prof = [[1, -0.25], [0.95, 0.1], [0.78, 0.45], [0.5, 0.75], [0.12, 0.9]].map(([r, h]) => [r * W, h * Hh]);
+      shell(F, prof, 14, MUS, (a) => 1 + 0.9 * Math.max(0, Math.cos(a)) ** 1.5 * (L / W - 1) * 0.5, 1.6, 0.4 * Hh);
+    }
+  }
+  return B.out();
+}
+
 // tube effilé le long d'une polyligne (rayon r0 → r1), fermé aux bouts
 function tube(B, pts, r0, r1, nr = 8) {
   const n = pts.length;
@@ -358,12 +445,14 @@ export function buildScene(R, { lite = false, onProgress = () => {} } = {}) {
   for (let k = 0; k < fillTex.length; k++) fillTex[k] = toHalf(rock.fill[k] - rock.H[k] > 0.002 ? rock.fill[k] : rock.H[k] - 0.002);
   const straps = strapGeometry(K, plants);
   const holdfasts = holdfastGeometry(K, plants, Hr, R.seed);
+  const fauna = faunaGeometry(R, cam, rock, plants, lite);
   onProgress(1);
   times.total = Date.now() - t0;
   return {
     T, cam, times, emerge: { tex: emerge, nf: sea.nf, levels: EL, y0: cam.y - 0.12, dy: 0.24 }, stats: { sea: sea.stats, kelp: { ...sim.stats, worst: undefined }, plants: plants.length, nodes: N },
     sea: { nx: sea.nx, nf: sea.nf, x0: sea.x0, dx: sea.dx, fps: sea.fps, tex: seaTex, wet: wetTex, b: sea.b },
     rock: { M: rock.M, box: BOX, relief: rockRelief(rock), color: rockColors(rock, R), fill: fillTex },
+    fauna,
     kelp: { n: N, nf, fps: sim.fps, pos: kpos, dir: kdir, straps, holdfasts, fringe: !!FAMILIES[R.family].blade.fringe, plants: plants.map((p) => [p.x, p.y, p.z]) },
   };
 }
