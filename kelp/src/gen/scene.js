@@ -132,8 +132,11 @@ export function strapGeometry(K, plants, { ring = 8, sub = 3 } = {}) {
     const rings = [];
     for (let sI = 0; sI < nseg; sI++) for (let q = 0; q < sub; q++) rings.push([sI, q / sub]);
     rings.push([nseg - 1, 1]);
+    // (le bout d'un stipe est fermé : deux anneaux qui se resserrent sur place —
+    // ouvert, il se lisait comme un tuyau d'où sortaient les lames)
+    if (!blade) rings.push([nseg - 1, 1, 0.55], [nseg - 1, 1, 0.02]);
     const base = v;
-    rings.forEach(([sI, s], ri) => {
+    rings.forEach(([sI, s, capK = 1], ri) => {
       const ia = sI === 0 ? pre : seq[sI - 1], ib = seq[sI], ic = seq[sI + 1], id = sI + 2 < nn ? seq[sI + 2] : seq[sI + 1];
       const u = (sI + s) / nseg; // (place le long de la chaîne)
       let hw, ht;
@@ -146,6 +149,9 @@ export function strapGeometry(K, plants, { ring = 8, sub = 3 } = {}) {
         // stipe : s'effile vers le haut (la palme), s'élargit au pied
         const r0 = K.nodes[seq[1]]?.r ?? 0.01;
         hw = ht = r0 * (F.stipe.stand ? 1.5 - 0.85 * u : 1.25 - 0.4 * u); // (le palmier de mer s'évase au pied)
+        // le haut du stipe s'aplatit et s'élargit en paume, d'où partent les lames
+        const flat = F.stipe.stand ? 0 : sst(0.55, 1, u);
+        hw *= (1 + 0.9 * flat) * capK; ht *= (1 - 0.55 * flat) * capK;
       }
       for (let k = 0; k < R; k++) {
         const th = (k / R) * Math.PI * 2;
@@ -175,38 +181,63 @@ export function holdfastGeometry(K, plants, rockH, seed) {
   const F = FAMILIES[K.family];
   const B = new Buffers();
   const rr = createRng(`holdfast:${seed}`);
-  plants.forEach((P) => {
-    const R0 = F.holdfast * (0.8 + 0.4 * rr.next());
-    const tiers = K.family === 'durvillaea' ? 2 : 4, per = K.family === 'durvillaea' ? 0 : 9;
+  const N = createNoise3(`holdfast-n:${seed}`);
+  plants.forEach((P, pi) => {
+    // (chaque crampon a son âge : taille de 0,6 à 1,5)
+    const age = 0.6 + 0.9 * rr.next() ** 1.5;
+    const R0 = F.holdfast * age;
     if (K.family === 'durvillaea') {
-      // disque massif : un dôme de tissu épais (anneaux de tubes serrés)
-      for (let k = 0; k < 14; k++) {
-        const a = (k / 14) * Math.PI * 2 + rr.next() * 0.3, r1 = R0 * (0.85 + 0.2 * rr.next());
-        const pts = [];
-        for (let s = 0; s <= 6; s++) {
-          const t = s / 6, rad = r1 * t, x = P.x + Math.cos(a) * rad, z = P.z + Math.sin(a) * rad;
-          pts.push([x, rockH(x, z) + R0 * 0.55 * (1 - t * t) + 0.004, z]);
-        }
-        tube(B, pts, R0 * 0.22, R0 * 0.08);
+      // disque massif : un coussin de tissu bosselé, au contour irrégulier,
+      // qui épouse la roche (un seul maillage, pas des tubes rayonnants)
+      const NR = 7, NT = 28, ph = rr.next() * 10;
+      const at = (t, a) => {
+        const edge = R0 * (0.9 + 0.22 * N.fbm(Math.cos(a) * 1.3 + ph, Math.sin(a) * 1.3, pi * 0.37, 3));
+        const rad = edge * t, x = P.x + Math.cos(a) * rad, z = P.z + Math.sin(a) * rad;
+        const lump = 1 + 0.35 * N.fbm(x * 40 + ph, z * 40, pi, 2);
+        return [x, rockH(x, z) + R0 * 0.5 * (1 - t * t) * lump - 0.003 * t, z];
+      };
+      const base = B.n;
+      for (let i = 0; i <= NR; i++) for (let k = 0; k < NT; k++) {
+        const t = i / NR, a = (k / NT) * Math.PI * 2;
+        const p = at(t, a), e = 0.01;
+        const px = at(Math.min(1, t + e), a), pa = at(Math.max(0.02, t), a + e);
+        const d1 = [px[0] - p[0], px[1] - p[1], px[2] - p[2]], d2 = [pa[0] - p[0], pa[1] - p[1], pa[2] - p[2]];
+        let n = [d1[1] * d2[2] - d1[2] * d2[1], d1[2] * d2[0] - d1[0] * d2[2], d1[0] * d2[1] - d1[1] * d2[0]];
+        if (n[1] < 0) n = n.map((c) => -c);
+        const l = Math.hypot(...n) || 1; n = i === 0 ? [0, 1, 0] : n.map((c) => c / l);
+        B.vert(p, n, OUT, d1);
+      }
+      for (let i = 0; i < NR; i++) for (let k = 0; k < NT; k++) {
+        const a = base + i * NT + k, b = base + i * NT + ((k + 1) % NT), c = a + NT, d = b + NT;
+        B.tri(a, c, b); B.tri(b, c, d);
       }
       return;
     }
-    // un cône de tissu (le pied du stipe qui s'évase), et autour, des
-    // haptères courts et serrés, en étages, qui plongent vers la roche
-    const g0 = rockH(P.x, P.z), top = P.y + F.holdfast * 0.6;
-    tube(B, [[P.x, g0 - 0.004, P.z], [P.x, (g0 + top) / 2, P.z], [P.x, top + 0.004, P.z]], R0 * 0.42, R0 * 0.16, 10);
-    for (let tI = 0; tI < tiers; tI++) {
-      const n = per + 3 - tI, h0 = F.holdfast * 0.55 * (1 - tI / tiers) + 0.004;
-      for (let k = 0; k < n; k++) {
-        const a = (k / n) * Math.PI * 2 + tI * 0.7 + rr.next() * 0.4;
-        const reach = R0 * (0.5 + 0.18 * tI + 0.15 * rr.next());
-        const pts = [];
-        for (let s2 = 0; s2 <= 6; s2++) {
-          const t = s2 / 6, rad = R0 * 0.3 + (reach - R0 * 0.3) * t, x = P.x + Math.cos(a) * rad, z = P.z + Math.sin(a) * rad;
-          pts.push([x, Math.max(rockH(x, z) + 0.002, P.y + h0 * (1 - t) ** 1.4 - 0.004 * t), z]);
-        }
-        tube(B, pts, 0.0055 * (1.1 - 0.15 * tI), 0.0035);
+    // le pied du stipe qui s'évase, puis des haptères en nombre, en longueur et
+    // en direction irréguliers, qui plongent en arc vers la roche et s'y
+    // ramifient une ou deux fois (pointes enfoncées dans la roche)
+    const g0 = rockH(P.x, P.z), top = P.y + F.holdfast * 0.6 * age;
+    tube(B, [[P.x, g0 - 0.004, P.z], [P.x + (rr.next() - 0.5) * 0.004, (g0 + top) / 2, P.z + (rr.next() - 0.5) * 0.004], [P.x, top + 0.004, P.z]], R0 * 0.42, R0 * 0.16, 10);
+    const n = 6 + Math.floor(rr.next() * 8);
+    const arm = (o, a, reach, r, depth) => {
+      const pts = [];
+      const bend = (rr.next() - 0.5) * 0.6;
+      for (let s2 = 0; s2 <= 6; s2++) {
+        const t = s2 / 6, aa = a + bend * t, rad = reach * t, x = o[0] + Math.cos(aa) * rad, z = o[2] + Math.sin(aa) * rad;
+        const g = rockH(x, z);
+        pts.push([x, t < 1 ? Math.max(g + r * 0.6, o[1] + (g - o[1]) * t ** 0.7) : g - 0.002, z]);
       }
+      tube(B, pts, r, r * 0.55, 6);
+      if (depth > 0) {
+        const m = pts[3], nb = 1 + (rr.next() < 0.5 ? 1 : 0);
+        for (let b = 0; b < nb; b++) arm(m, a + bend * 0.5 + (b === 0 ? 0.45 : -0.45) * (0.6 + 0.6 * rr.next()), reach * (0.4 + 0.25 * rr.next()), r * 0.7, depth - 1);
+      }
+    };
+    for (let k = 0; k < n; k++) {
+      const a = rr.next() * Math.PI * 2;
+      const h = g0 + (top - g0) * (0.15 + 0.75 * rr.next());
+      const o = [P.x + Math.cos(a) * R0 * 0.25, h, P.z + Math.sin(a) * R0 * 0.25];
+      arm(o, a, R0 * (0.45 + 0.6 * rr.next()), 0.0045 * (0.8 + 0.5 * rr.next()) * Math.sqrt(age), rr.next() < 0.7 ? 1 : 0);
     }
   });
   return B.out();
@@ -321,7 +352,10 @@ export function buildScene(R, { lite = false, onProgress = () => {} } = {}) {
     }
   }
   const fillTex = new Uint16Array(rock.M * rock.M);
-  for (let k = 0; k < fillTex.length; k++) fillTex[k] = toHalf(rock.fill[k] - rock.H[k] > 0.002 ? rock.fill[k] : -9);
+  // (hors flaque : juste sous la roche, pas −9 — le champ reste continu et le
+  // bord d'une flaque, seuillé sur l'interpolation, suit une courbe au lieu
+  // de marches de texels)
+  for (let k = 0; k < fillTex.length; k++) fillTex[k] = toHalf(rock.fill[k] - rock.H[k] > 0.002 ? rock.fill[k] : rock.H[k] - 0.002);
   const straps = strapGeometry(K, plants);
   const holdfasts = holdfastGeometry(K, plants, Hr, R.seed);
   onProgress(1);

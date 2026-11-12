@@ -124,23 +124,23 @@ export function createPost(renderer, scene, camera, opts = {}) { // opts.lens(sa
     // fantômes sur les barres fines.
     // (vitesse lue sous garde : NaN ou démesurée → nulle ; NDC → UV)
     const vel = needVel ? (() => { const v = scenePass.getTextureNode('velocity').xy.mul(vec2(0.5, -0.5)); return select(length(v).lessThan(0.25), v, vec2(0)); })() : null;
-    const blur = (tex) => {
-      if (!(cfg.motionBlur > 0)) return tex;
-      const v = vel.mul(U.blur), n = 10;
-      let acc = tex.sample(uv());
-      for (let i = 1; i < n; i++) acc = acc.add(tex.sample(uv().add(v.mul(i / (n - 1) - 0.5))));
-      return acc.div(n);
+    // (traînée plafonnée à 3 % de l'écran, et prises décalées au pixel par un
+    // bruit entrelacé : régulières et espacées de plus d'un pixel, elles
+    // dessinaient des copies distinctes des lames proches de l'objectif)
+    const N_BLUR = 12;
+    const ign = fract(float(52.9829189).mul(fract(dot(screenCoordinate.xy, vec2(0.06711056, 0.00583715)))));
+    const blurVec = () => { const v = vel.mul(U.blur), l = length(v); return v.mul(float(0.03).div(l.max(0.03))); };
+    const blurAt = (tex, uvn) => {
+      if (!(cfg.motionBlur > 0)) return tex.sample(uvn);
+      const v = blurVec();
+      let acc = vec4(0);
+      for (let i = 0; i < N_BLUR; i++) acc = acc.add(tex.sample(uvn.add(v.mul(ign.add(i).div(N_BLUR).sub(0.5)))));
+      return acc.div(N_BLUR);
     };
+    const blur = (tex) => (cfg.motionBlur > 0 ? blurAt(tex, uv()) : tex);
 
     // (même flou, lu à des coordonnées données : l'objectif propre à la scène
     // — Kelp : les gouttes et la nappe d'eau sur le dôme — y déforme l'image)
-    const blurAt = (tex, uvn) => {
-      if (!(cfg.motionBlur > 0)) return tex.sample(uvn);
-      const v = vel.mul(U.blur), n = 10;
-      let acc = tex.sample(uvn);
-      for (let i = 1; i < n; i++) acc = acc.add(tex.sample(uvn.add(v.mul(i / (n - 1) - 0.5))));
-      return acc.div(n);
-    };
     const finish = (tex) => (opts.lens ? opts.lens((uvn) => blurAt(tex, uvn)) : blur(tex));
     // (sans anticrénelage temporel, le flou porte sur la passe de scène)
     let color = useTraa ? base : finish(base);

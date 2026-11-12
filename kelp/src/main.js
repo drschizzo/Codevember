@@ -180,6 +180,7 @@ async function main() {
       camera.position.copy(pose.pos);
       camera.up.set(0, 1, 0);
       camera.lookAt(pose.target);
+      camera.rotateZ(pose.roll ?? 0); // (le caisson roule sous le choc de la vague)
     }
     if (camera.fov !== C.fov) { camera.fov = C.fov; camera.updateProjectionMatrix(); }
     camera.clearViewOffset();
@@ -196,7 +197,9 @@ async function main() {
     camera.updateMatrixWorld();
     stage.setDomeCamera(camera);
     stage.update(ph, G.phasePrev.value);
-    post.update({ ...RENDER, lite: LITE, focus: RENDER.focus * 1.5, focusRange: RENDER.focusRange * 1.5 }, R);
+    // exposition qui suit la plongée, mise au point qui glisse vers la grande vague (stage.trackAt)
+    const tk = stage.trackAt(ph);
+    post.update({ ...RENDER, lite: LITE, exposure: RENDER.exposure * tk.exp, focus: tk.focus * RENDER.focus, focusRange: RENDER.focusRange * tk.focus }, R);
     post.render();
   }
   // Rendu hors de la boucle d'animation (export, image fixe, débogage) : three.js
@@ -319,7 +322,7 @@ async function main() {
       },
       // image rendue, envoyée au collecteur local (tools/sink.py) : la capture
       // d'écran du panneau de navigateur est périmée quand il est masqué
-      async send(name, scale = 0.5, url = 'http://127.0.0.1:8231/') {
+      async send(name, scale = 0.5, url = `http://127.0.0.1:${params.get('sink') || 8231}/`) { // (?sink=port : un autre collecteur)
         const w = canvas.width, h = canvas.height;
         const rt = new THREE.RenderTarget(w, h, { type: THREE.UnsignedByteType });
         renderer.setRenderTarget(rt); post.render(); renderer.setRenderTarget(null);
@@ -337,7 +340,7 @@ async function main() {
       // image fixe de taille imposée (panneau masqué : le canevas fait 0 × 0)
       async still(name, ph, w = 960, h = 540) {
         renderer.setPixelRatio(1); renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
-        await this.shot(ph);
+        await this.shot(ph, 40); // (40 images : l'historique de l'anticrénelage oublie la phase précédente — à 12, elle restait en fantôme)
         return this.send(name, 1);
       },
       // film : une graine à plusieurs phases

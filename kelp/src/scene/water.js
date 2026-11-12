@@ -11,7 +11,7 @@ import * as THREE from 'three/webgpu';
 import {
   Fn, uniform, texture, vec2, vec3, vec4, float, positionWorld, cameraPosition, normalize, length, max, min, exp, mix, select,
   clamp, output, smoothstep, sqrt, dot, reflect, abs, pow, positionLocal, normalLocal, attribute, If, fract, sin, cos, equirectUV,
-  normalWorld, mrt, velocity, positionPrevious,
+  normalWorld, mrt, velocity, positionPrevious, textureLoad, ivec2, int, floor,
 } from 'three/tsl';
 import { NZ, noise, fbm } from './materials.js';
 import { G } from './globals.js';
@@ -32,7 +32,7 @@ export function createWater() {
   const U = {
     t: uniform(0), tPrev: uniform(0),
     obliq: uniform(0.06), zRef: uniform(0.8),
-    seaX0: uniform(-9), seaW: uniform(19), fps: uniform(60), nf: uniform(1920),
+    seaX0: uniform(-9), seaW: uniform(19), nx: uniform(760), fps: uniform(60), nf: uniform(1920),
     box: uniform(new THREE.Vector4(-7, -12, 16, 16)), // (x0, z0, largeur, profondeur) de la roche cuite
     ext: uniform(new THREE.Vector3(0.6, 0.2, 0.28)), tint: uniform(new THREE.Color(0.1, 0.3, 0.25)), scat: uniform(0.3),
     dome: uniform(0.09),
@@ -94,8 +94,67 @@ export function createWater() {
   const level = (x, z, t) => max(sea(x, z, t).x, pool(x, z));
   // (sans le champ lointain : pour ce qui est dans le domaine de la simulation)
   const levelNear = (x, z, t) => max(seaT.sample(fieldUV(x, localT(z, t))).level(0).x, pool(x, z));
+  // Le niveau au dôme, interpolé à la main en pleine précision : le dôme fait
+  // 9 cm, et 0,1 mm de niveau y déplace la ligne d'eau de plusieurs pixels —
+  // les poids du filtrage matériel (8 bits) la dessinaient en escalier.
+  const seaExact = (x, tl) => {
+    const fx = x.sub(U.seaX0).div(U.seaW).mul(U.nx).sub(0.5).clamp(0, U.nx.sub(1.001)), fy = tl.mul(U.fps);
+    const i0 = floor(fx), j0 = floor(fy), wx = fx.sub(i0), wy = fy.sub(j0);
+    const jm = (j) => j.sub(floor(j.div(U.nf)).mul(U.nf));
+    const ja = int(jm(j0)), jb = int(jm(j0.add(1))), ia = int(i0), ib = int(i0.add(1));
+    const L = (i, j) => textureLoad(seaT, ivec2(i, j)).x;
+    return mix(mix(L(ia, ja), L(ib, ja), wx), mix(L(ia, jb), L(ib, jb), wx), wy);
+  };
+  const levelDome = (x, z, t) => max(seaExact(x, localT(z, t)), pool(x, z));
   // enveloppe de séchage : la roche sous ce niveau est encore mouillée
-  const wetLevel = (x, z, t) => max(wetT.sample(fieldUV(x, localT(z, t))).level(0).x, pool(x, z).add(0.02));
+  // (rock : la hauteur de la roche au point ; une flaque mouille son bord sur 2 cm)
+  const wetLevel = (x, z, t, rock) => { const pl = pool(x, z); return max(wetT.sample(fieldUV(x, localT(z, t))).level(0).x, select(pl.sub(rock).greaterThan(0.0015), pl.add(0.02), float(-9))); };
+
+  // ── le soleil sous l'eau (pour receivedShadowNode) ──
+  // atténuation sur le chemin réfracté jusqu'au point, et caustiques
+  const caustic = (P, depth) => {
+    const ph = G.phase.mul(4); // (le volume de bruit est périodique : 4 cellules = une boucle)
+    const q = vec3(P.x.mul(5.5), P.z.mul(5.5), ph);
+    const w1 = NZ(q).w, w2 = NZ(q.mul(1.37).add(vec3(1.7, 3.1, 2.0))).w;
+    const lines = smoothstep(0.16, 0.0, w1).add(smoothstep(0.12, 0.0, w2).mul(0.7));
+    return float(1).add(lines.mul(1.0).sub(0.25).mul(smoothstep(0.02, 0.25, depth)).mul(smoothstep(3, 0.6, depth)).mul(U.caustic));
+  };
+  // la direction d'où vient le soleil sous l'eau (réfractée : plus haute), et
+  // la part qui entre (Fresnel à l'incidence du soleil)
+  const sunIn = () => {
+    const sd = vec3(U.sunDir), sy = sd.y.max(0.05);
+    const h = vec2(sd.x, sd.z).div(1.33);
+    const Lw = normalize(vec3(h.x, sqrt(float(1).sub(dot(h, h)).max(0.01)), h.y));
+    const Tf = float(1).sub(float(0.02).add(float(0.98).mul(float(1).sub(sy).pow(5))));
+    return { Lw, Tf };
+  };
+  // Lumière diffusée vers l'œil dans l'eau : le ciel, isotrope, et le soleil
+  // réfracté, surtout vers l'avant (Henyey-Greenstein, g = 0,55 : l'eau
+  // s'éclaire du côté du soleil), découpé en rayons par les rides de la
+  // surface (les caustiques projetées le long du rayon de soleil, moyennées en
+  // quatre points du segment immergé). Sans cela, l'eau était un aplat.
+  const inscatter = (O, P, sA, sB, dir, M, depthM, aer) => {
+    const { Lw } = sunIn();
+    let shafts = float(0);
+    for (const f of [0.15, 0.4, 0.65, 0.9]) {
+      const Q = O.add(P.sub(O).mul(mix(sA, sB, f)));
+      const dq = level(Q.x, Q.z, U.t).sub(Q.y).max(0);
+      const S = Q.add(Lw.mul(dq.div(Lw.y))); // (où ce rayon de soleil a traversé la surface)
+      shafts = shafts.add(caustic(vec3(S.x, 0, S.z), float(0.5)).sub(1).mul(1.6).add(1).max(0.15));
+    }
+    shafts = shafts.mul(0.25);
+    return waterGlow(dir, depthM, aer, shafts);
+  };
+  // la couleur de l'eau vue dans la direction dir, à la profondeur depthM
+  function waterGlow(dir, depthM, aer, shafts = float(1)) {
+    const { Lw, Tf } = sunIn();
+    const g = 0.55, ct = dot(dir, Lw);
+    const hg = float(1 - g * g).div(float(1 + g * g).sub(ct.mul(2 * g)).max(1e-3).pow(1.5));
+    const down = exp(vec3(U.ext).mul(depthM).negate());
+    const tintW = mix(vec3(U.tint).mul(0.5), vec3(0.5, 0.56, 0.55), aer.div(aer.add(0.6)).mul(0.8));
+    const sunL = vec3(U.sunE).mul(Tf).mul(hg.mul(0.22)).mul(shafts).mul(exp(vec3(U.ext).mul(depthM.div(Lw.y)).negate()));
+    return tintW.mul(vec3(U.skyE).mul(down).add(vec3(U.sunE).mul(U.sunDir.y.max(0)).mul(down).mul(0.5)).add(sunL));
+  }
 
   // ── le milieu : brouillard d'eau sur la partie immergée du rayon ──
   // (le rayon part du hublot-dôme, à `dome` devant le centre optique ; le
@@ -105,7 +164,7 @@ export function createWater() {
     const O = C.add(dir.mul(U.dome));
     const segL = L.sub(U.dome).max(0);
     // (le dôme est près de la caméra, dans le domaine simulé : pas de champ lointain)
-    const a = O.y.sub(levelNear(O.x, O.z, U.t)).toVar(), b = P.y.sub(level(P.x, P.z, U.t)).toVar();
+    const a = O.y.sub(levelDome(O.x, O.z, U.t)).toVar(), b = P.y.sub(level(P.x, P.z, U.t)).toVar();
     const lwV = float(0).toVar();
     const rgbW = vec3(rgbIn).toVar();
     // (le calcul de l'eau n'est fait que si le rayon en traverse : à l'air, la
@@ -125,10 +184,7 @@ export function createWater() {
       // l'eau aérée diffuse fort et blanc
       const sig = vec3(U.ext).add(aer.mul(2.5));
       const Tr = exp(sig.mul(lw).negate());
-      // lumière diffusée : soleil et ciel qui descendent jusqu'à cette profondeur
-      const down = exp(vec3(U.ext).mul(depthM).negate());
-      const E = vec3(U.sunE).mul(U.sunDir.y.max(0)).add(vec3(U.skyE));
-      const ins = mix(vec3(U.tint).mul(0.5), vec3(0.5, 0.56, 0.55), aer.div(aer.add(0.6)).mul(0.8)).mul(E).mul(down);
+      const ins = inscatter(O, P, sA, sB, dir, M, depthM, aer);
       // la nuit : l'eau agitée s'allume (noctiluques)
       const lum = vec3(0.15, 0.55, 1.0).mul(U.glow).mul(aer.mul(2.2).add(sm.z.mul(0.6)));
       rgbW.assign(rgbW.mul(Tr).add(ins.add(lum).mul(Tr.oneMinus())));
@@ -143,24 +199,18 @@ export function createWater() {
   });
   const fogNode = Fn(() => vec4(medium(positionWorld, cameraPosition, output.rgb), output.a))();
 
-  // ── le soleil sous l'eau (pour receivedShadowNode) ──
-  // atténuation sur le chemin réfracté jusqu'au point, et caustiques
-  const caustic = (P, depth) => {
-    const ph = G.phase.mul(4); // (le volume de bruit est périodique : 4 cellules = une boucle)
-    const q = vec3(P.x.mul(5.5), P.z.mul(5.5), ph);
-    const w1 = NZ(q).w, w2 = NZ(q.mul(1.37).add(vec3(1.7, 3.1, 2.0))).w;
-    const lines = smoothstep(0.16, 0.0, w1).add(smoothstep(0.12, 0.0, w2).mul(0.7));
-    return float(1).add(lines.mul(1.0).sub(0.25).mul(smoothstep(0.02, 0.25, depth)).mul(smoothstep(3, 0.6, depth)).mul(U.caustic));
-  };
   const sunAtten = (P) => {
     const w = level(P.x, P.z, U.t), depth = w.sub(P.y).max(0);
     const sy = U.sunDir.y.max(0.05), cr = sqrt(float(1).sub(float(1).sub(sy.mul(sy)).div(1.77))); // (cos de l'angle réfracté)
     const Tr = exp(vec3(U.ext).mul(depth.div(cr)).negate());
-    return mix(vec3(1), Tr.mul(caustic(P, depth)), smoothstep(0.0, 0.01, depth));
+    // (la part du soleil qui entre dans l'eau : Fresnel à l'incidence du soleil
+    // — au couchant, plus de la moitié est réfléchie par la surface)
+    const Tf = float(1).sub(float(0.02).add(float(0.98).mul(float(1).sub(sy).pow(5))));
+    return mix(vec3(1), Tr.mul(Tf).mul(caustic(P, depth)), smoothstep(0.0, 0.01, depth));
   };
   const receivedShadow = (shadow) => shadow.mul(sunAtten(positionWorld));
 
-  return { U, seaT, wetT, fillT, reliefT, profT, profAt, sea, level, levelNear, wetLevel, rockAt, pool, medium, fogNode, sunAtten, receivedShadow, inBox, boxUV, dataTex };
+  return { U, seaT, wetT, fillT, reliefT, profT, profAt, sea, level, levelNear, levelDome, wetLevel, rockAt, pool, medium, fogNode, sunAtten, receivedShadow, waterGlow, inBox, boxUV, dataTex };
 }
 
 // ── La surface ───────────────────────────────────────────────────────────────
@@ -218,11 +268,15 @@ export function createSurface(W, skyTex, lite) {
   // des triangles inclinés qui sortaient en dents de scie sur les pentes
   // raides (les feuillets d'ardoise). Là où la mer n'est pas (le front du jet
   // de rive), elle plonge sous la roche ; ce rideau est retiré par maskNode.
+  // Les sommets restent TOUS au niveau de l'eau (sur le sec, le niveau est le
+  // fond du profil) : plonger les sommets secs sous la roche faisait, dans la
+  // grille lâche du loin, des triangles mi-eau mi-rideau dont le masque
+  // laissait passer des coins (des dents vues de dessous, la ligne d'eau en
+  // escalier, des pans verticaux sur les gradins). Le mouillé et le sec sont
+  // décidés au pixel, dans maskNode.
   const pose = (p, t) => {
     const x = p.x, z = p.z;
-    const eta = W.sea(x, z, t).x, pl = W.pool(x, z), lv = max(eta, pl);
-    const wet = eta.sub(W.profAt(x)).greaterThan(0.001).or(pl.sub(W.rockAt(x, z)).greaterThan(0.0015));
-    return vec3(x, select(wet, lv, W.rockAt(x, z).sub(0.3)), z);
+    return vec3(x, max(W.sea(x, z, t).x, W.pool(x, z)), z);
   };
   mat.positionNode = Fn(() => {
     const p = positionLocal;
@@ -241,7 +295,7 @@ export function createSurface(W, skyTex, lite) {
     const v = normalize(C.sub(P));
     const dir = v.negate();
     const O = C.add(dir.mul(U.dome));
-    const above = O.y.greaterThan(W.level(O.x, O.z, U.t));
+    const above = O.y.greaterThan(W.levelDome(O.x, O.z, U.t));
     const sm = W.sea(P.x, P.z, U.t);
     const speed = sm.y.abs();
     // rides : fines ondulations du vent, plus hachées dans le ressaut
@@ -284,16 +338,22 @@ export function createSurface(W, skyTex, lite) {
     const tdir = normalize(dir.mul(1.33).add(n.mul(float(1.33).mul(cosi).sub(cosT))));
     const window = skyT.sample(equirectUV(tdir)).level(0).rgb.mul(F.oneMinus());
     const deep = vec3(U.tint).mul(vec3(U.sunE).mul(U.sunDir.y.max(0)).add(vec3(U.skyE))).mul(0.55);
-    // écume : un tapis de cellules qui suit le courant, plus dense dans le ressaut
-    // (écume en dentelle : les bords des cellules de Worley, étirés dans le
-    // sens du courant ; pleine dans le ressaut, ajourée quand elle vieillit)
+    // écume : des plaques déchirées qui suivent le courant, trouées de bulles —
+    // un bruit déformé seuillé selon la quantité d'écume (les bords des
+    // cellules de Worley, d'épaisseur constante, se lisaient comme un filet)
     const lace = (f) => {
-      const w1 = NZ(f.mul(vec3(4, 9, 0.5))).w, w2 = NZ(f.mul(vec3(10, 22, 0.5)).add(5.1)).w;
-      return smoothstep(0.22, 0.02, w1).max(smoothstep(0.16, 0.0, w2).mul(0.8));
+      const wp = f.mul(vec3(1.6, 3.2, 0.5));
+      const warp = vec3(NZ(wp).x, NZ(wp.add(4.7)).y, 0).mul(0.35);
+      const q = f.add(warp);
+      const d = NZ(q.mul(vec3(2.4, 4.8, 0.5))).x.mul(0.55).add(NZ(q.mul(vec3(7, 12, 0.5)).add(3.3)).y.mul(0.28)).add(NZ(q.mul(vec3(19, 26, 0.5)).add(7.7)).x.mul(0.12)).add(0.5);
+      // (bulles : petits trous ronds dans la mousse)
+      const holes = smoothstep(0.16, 0.06, NZ(q.mul(vec3(38, 44, 0.5)).add(1.9)).z).mul(0.35);
+      return d.sub(holes);
     };
     const laceM = mix(lace(fl1), lace(fl2), wFlow);
     const fo = sm.z.mul(U.foamK);
-    const cov = smoothstep(0.1, 0.5, fo).mul(laceM).max(smoothstep(0.75, 1.2, fo).mul(0.95));
+    const thr = float(0.95).sub(fo.clamp(0, 1.5).mul(0.42));
+    const cov = smoothstep(thr, thr.add(0.08), laceM).mul(smoothstep(0.03, 0.12, fo)).max(smoothstep(0.9, 1.4, fo).mul(0.9));
     const foamCov = cov.clamp(0, 0.97);
     const lit = vec3(U.sunE).mul(U.sunDir.y.max(0)).mul(0.7).add(vec3(U.skyE).mul(1.1));
     const foam = vec3(0.86, 0.88, 0.88).mul(lit).mul(select(above, float(1), float(0.6)));
@@ -301,9 +361,18 @@ export function createSurface(W, skyTex, lite) {
     const depth = W.level(P.x, P.z, U.t).sub(W.rockAt(P.x, P.z));
     const thin = smoothstep(0.006, 0.02, depth);
     const glowN = vec3(0.12, 0.5, 1.0).mul(U.glow).mul(sm.z.mul(1.5).add(sm.w));
+    // Le corps de l'eau, vu d'en dessus : le rayon réfracté descend dans l'eau
+    // et n'en ressort pas — ce qu'on voit à travers une crête n'est jamais le
+    // ciel de derrière, mais l'eau, de plus en plus opaque avec la profondeur
+    // (la lumière du soleil la traverse vers l'avant : une crête à contre-jour
+    // s'allume)
+    const cosTi = sqrt(float(1).sub(float(1).sub(cosi.mul(cosi)).div(1.77)));
+    const tdirA = normalize(dir.div(1.33).add(n.mul(cosi.div(1.33).sub(cosTi)))); // (rayon réfracté, de l'air vers l'eau)
+    const body = float(1).sub(exp(depth.max(0).mul(-2.6).div(cosTi.max(0.25)))).mul(F.oneMinus()).mul(smoothstep(0.03, 0.2, depth)); // (une nappe mince laisse voir la roche)
+    const bodyCol = W.waterGlow(tdirA, depth.max(0).mul(0.5), sm.w.clamp(0, 1.2)).mul(body);
     // composition prémultipliée : src + dst·(1 − α)
-    const reflA = select(above, sky.mul(F).add(spec), mix(window, deep, F));
-    const alphaW = select(above, F, float(1)).mul(thin);
+    const reflA = select(above, sky.mul(F).add(spec).add(bodyCol), mix(window, deep, F));
+    const alphaW = select(above, F.add(body), float(1)).mul(thin);
     let rgb = mix(reflA.mul(thin), foam, foamCov.mul(thin)).add(glowN.mul(thin));
     let alpha = mix(alphaW, float(1), foamCov.mul(thin));
     // milieu : d'en dessous, le rayon traverse l'eau jusqu'à la surface
@@ -314,8 +383,12 @@ export function createSurface(W, skyTex, lite) {
   // (ce qui est entre le centre optique et le dôme n'est pas dessiné : sans
   // cela, la surface passée juste au-dessus de l'objectif se voyait en aplat)
   // (ni les parties sèches, posées sur la roche : rien à dessiner, et pas de profondeur à écrire)
-  const lvF = W.level(positionWorld.x, positionWorld.z, U.t);
-  mat.maskNode = length(positionWorld.sub(cameraPosition)).greaterThan(U.dome).and(lvF.sub(W.rockAt(positionWorld.x, positionWorld.z)).greaterThan(0.004)).and(positionWorld.y.greaterThan(lvF.sub(0.01))); // (6 mm : l'écart entre le maillage de la roche et son relief cuit, sur les pentes raides)
+  // mouillé au pixel : la mer couvre le profil (ou une flaque est pleine), et
+  // l'eau est au-dessus de la roche dessinée
+  const Pm = positionWorld, rkF = W.rockAt(Pm.x, Pm.z), plF = W.pool(Pm.x, Pm.z);
+  const etaF = W.sea(Pm.x, Pm.z, U.t).x, lvF = max(etaF, plF);
+  const wetF = etaF.sub(W.profAt(Pm.x)).greaterThan(0.001).or(plF.sub(rkF).greaterThan(0.0015));
+  mat.maskNode = length(Pm.sub(cameraPosition)).greaterThan(U.dome).and(wetF).and(lvF.sub(rkF).greaterThan(0.004));
   // vitesses : la surface n'en écrit pas (alpha nul : la cible garde celle
   // de ce qui est dessous). Ses sommets passent d'un coup de la roche à
   // l'eau au bord mouillé-sec : leurs vitesses démesurées étiraient le flou
