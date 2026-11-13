@@ -60,15 +60,39 @@ export function setNoiseVolume({ data, size }) {
 }
 // p en « cellules » : une période du bruit de gradient par unité
 const NZ = (p) => texture3D(noiseTexture, p.mul(1 / NOISE_PERIOD));
-const noise = (p) => NZ(p).x;                    // gradient, ≈ [-1, 1]
-const noise2 = (p) => NZ(p).y;
 // rotation entre octaves (cache la périodicité, évite les alignements sur les axes)
 const ROT = mat3(0.0, 0.8, 0.6, -0.8, 0.36, -0.48, -0.6, -0.48, 0.64);
-const fbm = (p, oct = 4) => {
+const ROT2 = mat3(0.36, 0.48, -0.8, -0.8, 0.6, 0.0, 0.48, 0.64, 0.6);
+// Le volume est périodique (NOISE_PERIOD cellules) : lu tel quel, un motif se
+// répète toutes les 4 cellules — visible de près sur les grands motifs
+// (bosses, plaques, cloques). Version sans répétition (noiseNT, fbmNT) : deux
+// lectures sur deux réseaux incommensurables (tourné, échelle × 1,37, décalé),
+// mêlées par un poids lu dans la seconde (canal .y, indépendant), contraste
+// renormalisé : aucune période commune. Deux lectures au lieu d'une : on la
+// réserve aux motifs larges ; les détails fins et les octaves suivantes (tournées,
+// × 2,03, sans période commune avec la première) restent en lecture simple.
+const detile = (p, ch) => {
+  const a = NZ(p), b = NZ(ROT2.mul(p).mul(1.37).add(vec3(17.31, 5.77, 41.13)));
+  const w = smoothstep(-0.3, 0.3, b.y);
+  const k = float(1).div(w.mul(w).add(float(1).sub(w).mul(float(1).sub(w))).sqrt());
+  return a[ch].mul(float(1).sub(w)).add(b[ch].mul(w)).mul(k);
+};
+const noise = (p) => NZ(p).x;                    // gradient, ≈ [-1, 1]
+const noise2 = (p) => NZ(p).y;
+const noiseNT = (p) => detile(p, 'x');
+const fbmWith = (first) => (p, oct = 4) => {
   if (LITE) oct = Math.min(oct, 2);
-  let s = float(0), a = 0.5, q = p;
-  for (let i = 0; i < oct; i++) { s = s.add(noise(q).mul(a)); q = ROT.mul(q).mul(2.03); a *= 0.5; }
+  let s = first(p).mul(0.5), a = 0.25, q = ROT.mul(p).mul(2.03);
+  for (let i = 1; i < oct; i++) { s = s.add(NZ(q).x.mul(a)); q = ROT.mul(q).mul(2.03); a *= 0.5; }
   return s;
+};
+const fbm = fbmWith(noise), fbmNT = fbmWith(noiseNT);
+// Worley du volume (F1 en .z) sans répétition : le plus proche des germes des
+// deux réseaux, chacun dominant là où son poids l'emporte
+const worleyNT = (p) => {
+  const A = NZ(p), B = NZ(ROT2.mul(p).mul(1.37).add(vec3(17.31, 5.77, 41.13)));
+  const w = smoothstep(-0.3, 0.3, B.y);
+  return A.z.add(w.mul(0.7)).min(B.z.add(float(1).sub(w).mul(0.7)));
 };
 
 // ── Worley analytique ────────────────────────────────────────────────────────
@@ -294,7 +318,7 @@ function surface(fin, U, p, pf, pn) {
   return out;
 }
 
-export { noise, noise2, fbm, worley, perturb, NZ, hash33 };
+export { noise, noise2, noiseNT, fbm, fbmNT, worley, worleyNT, perturb, NZ, hash33 };
 
 // Seuil de tramage d'un fondu (pixel gardé si seuil < couverture) : aléatoire
 // et renouvelé à chaque image (lissé par l'anticrénelage temporel) ; en mode

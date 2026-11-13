@@ -6,8 +6,10 @@
 //              verticale de hauteur w (miroir galvanométrique) et parcourt la
 //              pièce en rangées, de haut en bas, en boustrophédon. Les rangées
 //              ne couvrent que la largeur de la pièce à leur hauteur.
-//  - sablage : la pièce tourne sur un plateau (N tours entiers) pendant que la
-//              buse descend : le front est une hélice.
+//  - sablage : la pièce tourne sur un plateau (N tours entiers) pendant qu'une
+//              rampe de buses parallèles, aussi large que la pièce, descend :
+//              le front est une hélice ; le jet, incliné, frappe plus bas que
+//              la rampe (d'autant plus que la face est loin d'elle).
 //  - bain    : un palan descend la pièce dans une cuve d'électrolyse, la
 //              garde, la remonte : le front est le niveau du liquide.
 //
@@ -128,12 +130,16 @@ export function turnPlan(R, radial, lo, hi) {
   const M = R.machine;
   let rMax = 0;
   for (const v of radial.data) if (v > rMax) rMax = v;
-  const yTop = hi[1] + M.foot * 0.5, yBot = lo[1] - M.foot * 0.25;
+  // rampe : à Rn de l'axe (bout du bras, voir gen/machinery.js) ; le jet
+  // incliné tombe de tan(tilt) par mètre parcouru : la rampe part assez haut
+  // pour que son jet frappe le sommet de la pièce
+  const Rn = rMax + 0.16, tanT = Math.tan(M.tilt);
+  const yTop = hi[1] + M.foot * 0.5 + tanT * Rn, yBot = lo[1] - M.foot * 0.25;
   let N = M.turns;
   while ((yTop - yBot) / N > M.foot * 0.75) N++;
   // la colonne se place de côté par rapport à la caméra : on voit le jet de profil
   const az = Math.PI / 2 - R.camera.az + (M.side ?? 1.75);
-  return { kind: 'sablage', N, yTop, yBot, rMax, foot: M.foot, tilt: M.tilt, dir: M.dir, az };
+  return { kind: 'sablage', N, yTop, yBot, rMax, Rn, tanT, foot: M.foot, tilt: M.tilt, dir: M.dir, az };
 }
 // angle de la pièce (radians, sens trigonométrique vu de dessus) et hauteur de la buse
 export const turnAngle = (plan, s) => plan.dir * TAU * plan.N * s;
@@ -149,27 +155,86 @@ export function faceAzimuth(p, n) {
   const vx = (n[0] / (nh || 1)) * w + (p[0] / r) * (1 - w), vz = (n[2] / (nh || 1)) * w + (p[2] / r) * (1 - w);
   return atan2(vz, vx);
 }
+// profondeur de la surface la plus avancée vers la direction (azimut a, dans
+// le repère de la pièce), à l'abscisse latérale lat et à la hauteur y
+// (−1e3 : rien)
+export function dirDepth(dirs, a, lat, y) {
+  const k = ((Math.round((a / TAU) * dirs.K) % dirs.K) + dirs.K) % dirs.K;
+  const ci = floor((lat + dirs.r) / dirs.cell) + 1, cj = floor((y - dirs.y0) / dirs.cell) + 1;
+  if (ci < 0 || ci >= dirs.tw || cj < 0 || cj >= dirs.th) return -1e3;
+  return dirs.data[(floor(k / 8) * dirs.th + cj) * dirs.w + (k % 8) * dirs.tw + ci];
+}
+// distance horizontale parcourue par le jet d'une buse de la rampe (abscisse
+// latérale lat, hauteur ny, repère de la pièce) jusqu'à la pièce ; null s'il
+// la manque (il finit sur le plateau, à yFloor)
+export function jetHit(plan, dirs, s, lat, yFloor = 0) {
+  const a = plan.az - turnAngle(plan, s), ny = nozzleY(plan, s);
+  const dEnd = (ny - yFloor) / plan.tanT;
+  for (let d = 0; d < dEnd; d += 0.008) {
+    const dm = dirDepth(dirs, a, lat, ny - plan.tanT * d);
+    if (dm > -999 && plan.Rn - d <= dm) return { d, y: ny - plan.tanT * d, piece: true };
+  }
+  return { d: dEnd, y: yFloor, piece: false };
+}
 // accès : la face regarde dehors (ou vers le haut, jet incliné) et n'est pas
 // masquée dans la direction d'où elle voit la buse (32 cartes de profondeur)
-export function turnReach(plan, dirs, p, n) {
-  const ph = faceAzimuth(p, n);
-  const face = Math.cos(plan.tilt) * hypot(n[0], n[2]) + Math.sin(plan.tilt) * n[1];
-  if (face < 0.05) return false;
-  const k = ((Math.round((ph / TAU) * dirs.K) % dirs.K) + dirs.K) % dirs.K, a = (k / dirs.K) * TAU;
-  const dx = cos(a), dz = sin(a), dep = p[0] * dx + p[2] * dz, lat = -p[0] * dz + p[2] * dx;
+// Incidence utile du jet (cosinus entre la normale et le jet) : en deçà, il
+// glisse sur la face sans la décaper.
+export const JET_COS = 0.45;
+// azimut (repère de la pièce) de la direction d'où la face, en tournant, entre
+// dans le champ des jets avec une incidence utile : c'est là qu'elle commence
+// à être décapée — pas quand elle est exactement face à la rampe. (Faces
+// presque horizontales : l'azimut de leur position, comme faceAzimuth.)
+export function entryAzimuth(plan, p, n) {
+  const phi = faceAzimuth(p, n), nh = hypot(n[0], n[2]), w = sstep(0.12, 0.45, nh);
+  const cw = (JET_COS - n[1] * sin(plan.tilt)) / max(1e-4, nh * cos(plan.tilt));
+  const W = min(1.2, Math.acos(max(0, min(1, cw)))) * w;
+  return phi + plan.dir * W;
+}
+// la surface est-elle la plus avancée vers la direction a (pas masquée) ?
+function frontmost(dirs, p, a) {
+  const k = ((Math.round((a / TAU) * dirs.K) % dirs.K) + dirs.K) % dirs.K, b = (k / dirs.K) * TAU;
+  const dx = cos(b), dz = sin(b), dep = p[0] * dx + p[2] * dz, lat = -p[0] * dz + p[2] * dx;
   const ci = min(dirs.tw - 1, max(0, floor((lat + dirs.r) / dirs.cell) + 1)), cj = min(dirs.th - 1, max(0, floor((p[1] - dirs.y0) / dirs.cell) + 1));
   return dep >= dirs.data[(floor(k / 8) * dirs.th + cj) * dirs.w + (k % 8) * dirs.tw + ci] - 0.02;
 }
-// progression s* à laquelle la buse atteint le point (Infinity : jamais) :
-// quand la buse est à sa hauteur et que la face se tourne vers elle
+// accès : la face regarde dehors (ou vers le haut, jet incliné) ; pendant
+// qu'elle traverse le champ des jets (de son entrée à sa sortie, symétriques
+// autour de « face à la rampe »), le premier azimut où rien ne la masque
+// (cartes de profondeur) ; null si elle reste masquée
+export const ACCESS_STEPS = 7;
+export function turnAccess(plan, dirs, p, n) {
+  const face = Math.cos(plan.tilt) * hypot(n[0], n[2]) + Math.sin(plan.tilt) * n[1];
+  if (face < 0.05) return null;
+  const pe = entryAzimuth(plan, p, n), ph = faceAzimuth(p, n);
+  for (let i = 0; i < ACCESS_STEPS; i++) {
+    const a = pe + (ph - pe) * (2 * i) / (ACCESS_STEPS - 1);
+    if (frontmost(dirs, p, a)) return a;
+  }
+  return null;
+}
+export const turnReach = (plan, dirs, p, n) => turnAccess(plan, dirs, p, n) !== null;
+// hauteur de la rampe dont le jet frappe le point p quand sa face (azimut phi)
+// se tourne vers elle : le jet parcourt Rn − p·d à l'horizontale et tombe
+export const impactY = (plan, p, phi) => p[1] + plan.tanT * (plan.Rn - (p[0] * cos(phi) + p[2] * sin(phi)));
+// progression s* à laquelle le jet atteint le point (Infinity : jamais) :
+// quand la face se tourne vers la rampe et que le jet frappe à sa hauteur
 export function turnCleanS(plan, dirs, p, n) {
-  if (!turnReach(plan, dirs, p, n)) return Infinity;
-  const phi = faceAzimuth(p, n);
-  const s1 = max(0, (plan.yTop - p[1] - plan.foot / 2) / (plan.yTop - plan.yBot));
+  const phi = turnAccess(plan, dirs, p, n);
+  if (phi === null) return Infinity;
+  const s1 = max(0, (plan.yTop - impactY(plan, p, phi) - plan.foot / 2) / (plan.yTop - plan.yBot));
   return s1 + mod(plan.dir * (plan.az - phi) - TAU * plan.N * s1, TAU) / (TAU * plan.N);
 }
 
 // ── Bain d'électrolyse ───────────────────────────────────────────────────────
+// La pièce descend dans la cuve (cathode) et y reste : la croûte se réduit en
+// boue noire (magnétite) et se décolle sous les bulles d'hydrogène. Elle
+// remonte noire et ruisselante, puis une rampe de rinçage (un cadre de tubes à
+// buses qui entoure la pièce, pendu à la poutre par deux câbles) descend de
+// haut en bas et chasse la boue : le front visible est la ligne de la rampe.
+//
+//   down0 ─ descente ─ down1 ─ immersion ─ up0 ─ remontée ─ up1 ─ rampe en
+//   haut ─ rinse0 ─ rinçage (la rampe descend) ─ rinse1 ─ la rampe remonte
 export function bathPlan(R, lo, hi, lifts, hookPt = null) {
   const M = R.machine, T = R.timing;
   // fosse d'électrolyse : le rebord affleure le sol, le liquide est juste dessous
@@ -179,9 +244,14 @@ export function bathPlan(R, lo, hi, lifts, hookPt = null) {
   const rest = 0.13 - lo[1]; // décalage vertical de la pièce au repos (au-dessus du sol)
   const down = L - 0.07 - hi[1];
   const w = T.clean1 - T.clean0;
-  const u = { down0: T.clean0, down1: T.clean0 + w * 0.2, up0: T.clean0 + w * (0.2 + M.hold), up1: T.clean1 };
+  const down1 = T.clean0 + w * 0.13, up0 = down1 + w * M.hold * 0.55, up1 = up0 + w * 0.15;
+  const u = { down0: T.clean0, down1, up0, up1, rinse0: up1 + w * 0.05, rinse1: T.clean1 - w * 0.04, park: T.retract1 };
   const hook = hookPt ?? [(lifts[0][0] + lifts[1][0]) / 2, Math.max(lifts[0][1], lifts[1][1]) + 0.32, (lifts[0][2] + lifts[1][2]) / 2];
-  return { kind: 'bain', tank, L, rest, down, u, hook, lid: [T.setup0, T.setup0 + (T.clean0 - T.setup0) * 0.8, T.clean1 + 0.004, T.retract1] };
+  // rampe : cadre de tubes autour de la pièce (dans la fosse en plan), garée
+  // au-dessus de la pièce ; elle rince de son sommet jusqu'à son pied
+  const ring = { hx: (hi[0] - lo[0]) / 2 + M.margin * 0.55, hz: (hi[2] - lo[2]) / 2 + M.margin * 0.55, r: 0.016, top: hi[1] + rest + 0.09, bot: lo[1] + rest - 0.025 };
+  ring.parkY = ring.top;
+  return { kind: 'bain', tank, L, rest, down, u, hook, ring, lid: [T.setup0, T.setup0 + (T.clean0 - T.setup0) * 0.8, T.clean1 + 0.004, T.retract1] };
 }
 // décalage vertical de la pièce (descente douce, remontée lente et régulière)
 export function bathOffset(plan, u) {
@@ -194,8 +264,26 @@ export function bathOffset(plan, u) {
   const I = (t) => (t < a ? (a * ((t / a) ** 3 - (t / a) ** 4 / 2)) : t > 1 - a ? (1 - a) - a * (((1 - t) / a) ** 3 - ((1 - t) / a) ** 4 / 2) : a / 2 + (t - a));
   return plan.down + (plan.rest - plan.down) * (I(x) / (1 - a));
 }
-// décapé : remonté au-dessus du niveau pendant la remontée (ou après)
+// hauteur (monde) de la ligne des buses : garée en haut, descend pendant le
+// rinçage (vitesse constante adoucie aux bouts), remonte se garer
+export function rinseY(plan, u) {
+  const U = plan.u, g = plan.ring;
+  if (u < U.rinse0 || u >= U.park) return g.top;
+  if (u < U.rinse1) return g.top + (g.bot - g.top) * rampS(U.rinse0, U.rinse1, u);
+  return g.bot + (g.top - g.bot) * sstep(U.rinse1 + (U.park - U.rinse1) * 0.15, U.park - (U.park - U.rinse1) * 0.1, u);
+}
+// part parcourue d'un trajet à vitesse constante, adouci aux bouts (C¹)
+function rampS(a, b, u) {
+  const x = Math.max(0, Math.min(1, (u - a) / (b - a))), e = 0.1;
+  if (x < e) return (x * x) / (2 * e * (1 - e));
+  if (x > 1 - e) return 1 - ((1 - x) * (1 - x)) / (2 * e * (1 - e));
+  return (x - e / 2) / (1 - e);
+}
+// remontée de la cuve (la rouille est partie, la boue reste) : un point est
+// sorti du bain pendant la remontée (ou après)
 export const bathClean = (plan, p, u) => u >= plan.u.up0 && p[1] + bathOffset(plan, u) > plan.L;
+// rincé : la ligne des buses est passée sous lui
+export const bathRinsed = (plan, p, u) => u >= plan.u.rinse0 && (u >= plan.u.rinse1 || p[1] + bathOffset(plan, u) > rinseY(plan, u));
 
 // ── Accès commun ─────────────────────────────────────────────────────────────
 // rouille visible à l'instant u, relative à son épaisseur « h(τ(u)) » :

@@ -13,7 +13,7 @@ import { cycloGeometry, floorUniforms, floorMaterial, standMaterial, machineMate
 import { createParticles, hash } from './particles.js';
 import { perturb, fbm, noise, stableVelocity } from './materials.js';
 import { tauAt, rainAt, wetAt, overcastAt, sstep } from '../timeline.js';
-import { laserPlan, laserHead, laserRig, frontAt, turnPlan, turnS, turnAngle, nozzleY, radialAt, bathPlan, bathOffset, TAU } from '../machines.js';
+import { laserPlan, laserHead, laserRig, frontAt, turnPlan, turnS, turnAngle, nozzleY, jetHit, radialAt, bathPlan, bathOffset, rinseY, TAU } from '../machines.js';
 import { cameraPath } from '../camera.js';
 
 const SHADOW = { mobile: 1024, low: 1024, medium: 2048, high: 2048, ultra: 4096 };
@@ -65,14 +65,16 @@ export function createStage(scene, gen, { lite = false } = {}) {
     rainN: createParticles(scene, { max: 2600, kind: 'streak', blend: 'normal', tint: '#eef2f6' }),
     splash: createParticles(scene, { max: 600, kind: 'puff', blend: 'normal', tint: '#f2f6fa' }),
     sparks: createParticles(scene, { max: 700, kind: 'streak', blend: 'add', tint: '#ffb35c' }),
-    grit: createParticles(scene, { max: 900, kind: 'streak', blend: 'add', tint: '#d8d2c6' }),
+    grit: createParticles(scene, { max: 1400, kind: 'streak', blend: 'add', tint: '#d8d2c6' }),
     dust: createParticles(scene, { max: 260, kind: 'puff', blend: 'normal', tint: '#b9b2a6' }),
     bubbles: createParticles(scene, { max: 400, kind: 'puff', blend: 'normal', tint: '#c9c6b8' }),
     drips: createParticles(scene, { max: 300, kind: 'streak', blend: 'normal', tint: '#d7dde2' }),
+    spray: createParticles(scene, { max: 900, kind: 'streak', blend: 'normal', tint: '#eef3f6' }),
+    mud: createParticles(scene, { max: 500, kind: 'streak', blend: 'normal', tint: '#3a332b' }),
   };
 
   // ── Liquide du bain ──
-  const LU = { t: uniform(0), stir: uniform(0), ring: uniform(0), center: uniform(new THREE.Vector2()) };
+  const LU = { t: uniform(0), stir: uniform(0), ring: uniform(0), center: uniform(new THREE.Vector2()), dirt: uniform(0) };
   let liquid = null;
   function liquidMaterial() {
     const m = new THREE.MeshPhysicalNodeMaterial();
@@ -80,8 +82,12 @@ export function createStage(scene, gen, { lite = false } = {}) {
     const r = length(p.xz.sub(LU.center));
     const ring = sin(r.mul(60).sub(LU.t.mul(9))).mul(smoothstep(0.9, 0.0, r)).mul(LU.ring).mul(0.0008);
     const boil = fbm(vec3(p.x.mul(14), LU.t.mul(1.4), p.z.mul(14)), 3).mul(LU.stir).mul(0.0012);
-    m.colorNode = vec3(0.045, 0.05, 0.038).mul(noise(p.mul(3)).mul(0.1).add(1));
-    m.roughnessNode = float(0.05);
+    // le bain se trouble de la rouille réduite : brun-rouge, et une écume
+    // grise de bulles crevées qui s'étend par plaques
+    const murk = mix(vec3(0.045, 0.05, 0.038), vec3(0.07, 0.03, 0.014), LU.dirt);
+    const foam = smoothstep(0.1, 0.45, fbm(vec3(p.x.mul(16), LU.t.mul(0.04), p.z.mul(16)), 3).add(fbm(p.mul(70), 2).mul(0.25)).add(LU.dirt.mul(0.2)).sub(0.2)).mul(LU.dirt);
+    m.colorNode = mix(murk.mul(noise(p.mul(3)).mul(0.1).add(1)), vec3(0.16, 0.13, 0.1).mul(noise(p.mul(160)).mul(0.3).add(0.9)), foam.mul(0.6));
+    m.roughnessNode = mix(float(0.05), float(0.7), foam);
     m.metalnessNode = float(0);
     m.normalNode = perturb(ring.add(boil), normalViewGeometry);
     m.mrtNode = stableVelocity();
@@ -117,7 +123,9 @@ export function createStage(scene, gen, { lite = false } = {}) {
     FU.tone.value.copy(tone);
     FU.wall.value.copy(new THREE.Color(R.fog.color)).lerp(tone, 0.3);
     applyLive();
-    const fin = { laser: [0.36, 0.97, 1], sablage: [0.58, 0.92, 0], bain: [0.42, 0.78, 0] }[R.machine.kind];
+    // (acier décapé : jamais un miroir — le laser laisse une surface satinée,
+    // micro-fondue ; le sablage, un mat grenu ; le bain, un gris terne)
+    const fin = { laser: [0.46, 0.9, 1], sablage: [0.64, 0.76, 0], bain: [0.5, 0.74, 0] }[R.machine.kind];
     RU.cleanRough.value = fin[0]; RU.cleanTone.value = fin[1]; RU.stripes.value = fin[2];
     gen.request({ family: R.piece.family, params: R.piece.params, seed: R.seed, lite }, 'piece').then((o) => {
       if (v !== version) return;
@@ -156,12 +164,12 @@ export function createStage(scene, gen, { lite = false } = {}) {
     } else if (kind === 'sablage') {
       plan = turnPlan(R, C.radial, lo, hi);
       plan.platen = 0.3;
-      RU.turns.value = plan.N; RU.nTop.value = plan.yTop; RU.nBot.value = plan.yBot; RU.foot.value = plan.foot; RU.tilt.value = plan.tilt; RU.dir.value = plan.dir; RU.az.value = plan.az;
-      spec = { kind, lo, hi, rMax: plan.rMax, platen: plan.platen, tilt: plan.tilt };
+      RU.Rn.value = plan.Rn; RU.tanT.value = plan.tanT; RU.turns.value = plan.N; RU.nTop.value = plan.yTop; RU.nBot.value = plan.yBot; RU.foot.value = plan.foot; RU.tilt.value = plan.tilt; RU.dir.value = plan.dir; RU.az.value = plan.az;
+      spec = { kind, lo, hi, rMax: plan.rMax, platen: plan.platen, tilt: plan.tilt, foot: plan.foot };
     } else {
       plan = bathPlan(R, lo, hi, info.lifts, info.hook);
       RU.level.value = plan.L; RU.up0.value = plan.u.up0;
-      spec = { kind, lo, hi, tank: plan.tank, hook: plan.hook, lifts: info.lifts, loops: info.loops, spreader: info.spreader, rest: plan.rest };
+      spec = { kind, lo, hi, tank: plan.tank, hook: plan.hook, lifts: info.lifts, loops: info.loops, spreader: info.spreader, rest: plan.rest, ring: { ...plan.ring, cx: plan.tank.cx, cz: plan.tank.cz } };
     }
     gen.request(spec, 'machine').then((o) => {
       if (v !== version) return;
@@ -189,6 +197,8 @@ export function createStage(scene, gen, { lite = false } = {}) {
     } else {
       M.tank = mk(o.parts.tank); M.crane = mk(o.parts.crane);
       M.lid = mk(o.parts.lid);
+      M.ring = mk(o.parts.ring); M.cables = mk(o.parts.cables); M.winches = mk(o.parts.winches);
+      M.ring.position.set(plan.tank.cx, plan.ring.top, plan.tank.cz);
       M.hook = mk(o.parts.hook, pieceG);
       // (la chaîne qui dépasse au-dessus du palan entre dans son corps : masquée)
       M.hook.material = machineMaterial(R.machinePaint ?? PAINTS[R.mood] ?? '#c9a227', { clipY: o.info.beamY - 0.3 });
@@ -216,11 +226,17 @@ export function createStage(scene, gen, { lite = false } = {}) {
     } else if (k === 'sablage') {
       const r = plan.rMax + 0.1;
       frameBox = { lo: [-r, 0, -r], hi: [r, hi[1] + yOff, r] };
-      focus = (u) => { const s = turnS(R, u); return [plan.rMax * 0.6 * Math.cos(plan.az), nozzleY(plan, s) + yOff, plan.rMax * 0.6 * Math.sin(plan.az)]; };
+      focus = (u) => { const s = turnS(R, u); return [plan.rMax * 0.6 * Math.cos(plan.az), nozzleY(plan, s) - plan.tanT * (plan.Rn - plan.rMax * 0.6) + yOff, plan.rMax * 0.6 * Math.sin(plan.az)]; };
     } else {
       const T = plan.tank;
       frameBox = { lo: [T.cx - T.hx, -0.2, T.cz - T.hz], hi: [T.cx + T.hx, hi[1] + plan.rest, T.cz + T.hz] };
-      focus = (u) => [T.cx, Math.max(plan.L + 0.15, Math.min(hi[1] + plan.rest - 0.3, plan.L + 0.35)), T.cz];
+      // la surface du bain pendant l'immersion, puis la ligne de la rampe
+      const yBath = Math.max(plan.L + 0.15, Math.min(hi[1] + plan.rest - 0.3, plan.L + 0.35));
+      focus = (u) => {
+        const U = plan.u, k = sstep(U.up0, U.rinse0, u) * (1 - sstep(U.rinse1, U.park, u));
+        const yr = Math.min(plan.ring.top - 0.12, Math.max(plan.ring.bot + 0.1, rinseY(plan, Math.min(Math.max(u, U.rinse0), U.rinse1))));
+        return [T.cx, yBath + (yr - yBath) * k, T.cz];
+      };
     }
     // le décor s'oriente : sa paroi à l'opposé de la caméra
     cyclo.rotation.y = R.camera.az;
@@ -301,75 +317,105 @@ export function createStage(scene, gen, { lite = false } = {}) {
   function blastFX(u, s, yOff) {
     P.grit.begin(); P.dust.begin();
     if (plan?.kind === 'sablage' && machine) {
-      const t = u * D(), on = s > 0 && s < 1 ? 1 : 0;
-      const Rn = machine.Rc - (machine.info.reach ?? 0.3);
-      const ny = nozzleY(plan, s) + yOff, az = plan.az;
-      const dir = [-Math.cos(plan.tilt) * Math.cos(az), -Math.sin(plan.tilt), -Math.cos(plan.tilt) * Math.sin(az)];
-      const tip = [Rn * Math.cos(az), ny, Rn * Math.sin(az)];
-      // point d'impact : la surface de la pièce face à la buse, à sa hauteur
-      const rHit = (sv) => { const ny0 = nozzleY(plan, sv); let r = 0; for (let k = -2; k <= 2; k++) r = Math.max(r, radialAt(C.radial, az - turnAngle(plan, sv) + k * 0.04, ny0 - Math.tan(plan.tilt) * 0.2)); return Math.max(0.05, r); };
-      const hitD = Math.max(0.08, (Rn - rHit(s)) / Math.cos(plan.tilt));
+      const t = u * D(), on = s > 0 && s < 1 ? 1 : 0, az = plan.az, L = machine.info.barL ?? plan.rMax;
+      const ca = Math.cos(az), sa = Math.sin(az), ct = Math.cos(plan.tilt), st = Math.sin(plan.tilt);
+      const dir = [-ct * ca, -st, -ct * sa];
+      // une buse tous les 5 cm ; chaque jet file jusqu'à la surface qu'il
+      // frappe vraiment (cartes de profondeur de la pièce, dans son repère
+      // tournant) ou jusqu'au plateau : le décapage est là où tombe le jet
+      const nN = Math.max(3, Math.round((2 * L) / 0.05)), hits = [];
+      const at = (lat, ny, d) => [plan.Rn * ca - lat * sa + dir[0] * d / ct, ny + yOff - plan.tanT * d, plan.Rn * sa + lat * ca + dir[2] * d / ct];
       if (on) {
-        for (let i = 0; i < 700; i++) {
-          const per = 0.09, ph = hash(i, 21) * per, a = ((t + ph) % per) / per;
-          const sp = 0.08 * hash(i, 22), th = hash(i, 23) * TAU;
-          const d = a * hitD * 1.05;
-          const off = [Math.cos(th) * sp * a, Math.sin(th) * sp * a];
-          const x = tip[0] + dir[0] * d + off[0] * Math.sin(az), y = tip[1] + dir[1] * d + off[1], z = tip[2] + dir[2] * d - off[0] * Math.cos(az);
-          P.grit.push(x, y, z, dir[0] * 0.07, dir[1] * 0.07, dir[2] * 0.07, 0.0016, 0.75, 1.1);
+        const ny = nozzleY(plan, s);
+        for (let i = 0; i <= nN; i++) {
+          const lat = -L + (2 * L * i) / nN, h = jetHit(plan, C.dirs, s, lat, 0.0);
+          hits.push({ lat, d: h.d, piece: h.piece });
+          for (let j = 0; j < 22; j++) {
+            const id = i * 31 + j, per = 0.07 + 0.03 * hash(id, 21), a = ((t + hash(id, 24) * per) % per) / per;
+            // cône du jet : s'évase jusqu'à ~15 cm à l'impact
+            const th = hash(id, 23 + Math.floor((t + hash(id, 24) * per) / per)) * TAU, sp = plan.foot * 0.5 * Math.sqrt(hash(id, 22)) * a;
+            const P0 = at(lat + Math.cos(th) * sp, ny, a * h.d);
+            P.grit.push(P0[0], P0[1] + Math.sin(th) * sp * 0.6, P0[2], dir[0] * 0.07, dir[1] * 0.07, dir[2] * 0.07, 0.0014, 0.7, 1.1);
+          }
         }
       }
-      // poussière : bouffées nées au point d'impact (pendant le sablage), qui
+      // poussière : bouffées nées aux points d'impact (pendant le sablage), qui
       // roulent, montent, s'étalent et retombent
-      const hit = [tip[0] + dir[0] * hitD, tip[1] + dir[1] * hitD, tip[2] + dir[2] * hitD];
       for (let i = 0; i < 220; i++) {
         const per = 2.6, ph = hash(i, 31) * per, k = Math.floor((t - ph) / per), tb = k * per + ph, age = t - tb;
         const sb = turnS(R, tb / D());
         if (!(sb > 0 && sb < 1)) continue;
-        const hd = Math.max(0.08, (Rn - rHit(sb)) / Math.cos(plan.tilt));
-        const hb = [Rn * Math.cos(az) + dir[0] * hd, nozzleY(plan, sb) + yOff + dir[1] * hd, Rn * Math.sin(az) + dir[2] * hd];
+        const lat = (hash(i, 34 + k) * 2 - 1) * L, h = jetHit(plan, C.dirs, sb, lat, 0.0);
+        if (!h.piece && hash(i, 35 + k) < 0.7) continue; // (surtout là où le jet frappe la pièce)
+        const hb = at(lat, nozzleY(plan, sb), h.d);
         const a = age / per, th = hash(i, 32 + k) * TAU, sp = 0.25 + 0.5 * hash(i, 33 + k);
-        const x = hb[0] + Math.cos(th) * sp * Math.sqrt(age) * 0.6 + Math.cos(az) * 0.25 * age;
-        const z = hb[2] + Math.sin(th) * sp * Math.sqrt(age) * 0.6 + Math.sin(az) * 0.25 * age;
+        const x = hb[0] + Math.cos(th) * sp * Math.sqrt(age) * 0.6 + ca * 0.25 * age;
+        const z = hb[2] + Math.sin(th) * sp * Math.sqrt(age) * 0.6 + sa * 0.25 * age;
         const y = Math.max(0.05, hb[1] + 0.12 * Math.sqrt(age) - 0.06 * age * age);
-        P.dust.push(x, y, z, 0, 0, 0, 0.08 + 0.32 * Math.sqrt(a), 0.16 * (1 - a) * Math.min(1, a * 8), 1);
+        P.dust.push(x, y, z, 0, 0, 0, 0.06 + 0.26 * Math.sqrt(a), 0.14 * (1 - a) * Math.min(1, a * 8), 1);
       }
-      void hit;
+      void hits;
     }
     P.grit.end(); P.dust.end();
   }
 
   function bathFX(u, off) {
-    P.bubbles.begin(); P.drips.begin();
+    P.bubbles.begin(); P.drips.begin(); P.spray.begin(); P.mud.begin();
     if (plan?.kind === 'bain' && info) {
-      const t = u * D(), U = plan.u, T = plan.tank;
+      const t = u * D(), U = plan.u, T = plan.tank, g = plan.ring;
       const under = u > U.down0 + 0.02 && u < U.up1 - 0.01;
       if (under) {
-        // bulles d'hydrogène qui crèvent à la surface autour de la pièce
-        for (let i = 0; i < 380; i++) {
+        // bulles d'hydrogène qui crèvent à la surface autour de la pièce (de
+        // plus en plus nombreuses : la réduction s'emballe)
+        const fizz = 0.45 + 0.55 * sstep(U.down1, U.up0, u);
+        for (let i = 0; i < 380 * fizz; i++) {
           const per = 0.5 + hash(i, 41) * 0.6, ph = hash(i, 42) * per, k = Math.floor((t - ph) / per), a = ((t - ph) % per) / per;
           const x = info.lo[0] + (info.hi[0] - info.lo[0]) * hash(i, 43 + k), z = info.lo[2] + (info.hi[2] - info.lo[2]) * hash(i, 44 + k);
           P.bubbles.push(x, plan.L + 0.002, z, 0, 0, 0, 0.006 + 0.012 * a, 0.5 * Math.sin(Math.PI * a), 0.9, 1);
         }
       }
-      // gouttes qui tombent de la pièce remontée (de moins en moins)
-      if (u > U.up0) {
-        const since = (u - U.up0) * D();
-        for (let i = 0; i < 260; i++) {
-          const per = 0.35 + hash(i, 51) * 0.5, ph = hash(i, 52) * per, k = Math.floor((t - ph) / per), age = ((t - ph) % per);
-          if (hash(i, 53 + k) > Math.exp(-since / 6)) continue;
-          const x = info.lo[0] + (info.hi[0] - info.lo[0]) * hash(i, 54 + k), z = info.lo[2] + (info.hi[2] - info.lo[2]) * hash(i, 55 + k);
-          const y0 = info.lo[1] + off + 0.01, y = y0 - 0.5 * 9.81 * age * age;
+      // boue : gouttes noires qui tombent de la pièce remontée, puis l'eau
+      // sale chassée par la rampe (plus dense pendant le rinçage)
+      const yLo = info.lo[1] + off;
+      if (u > U.up0 && u < U.park) {
+        const since = (u - U.up0) * D(), rinsing = u > U.rinse0 && u < U.rinse1 + 0.01 ? 1 : 0;
+        const rate = rinsing ? 1 : Math.exp(-since / 5);
+        for (let i = 0; i < 300; i++) {
+          if (hash(i, 50) > rate) continue;
+          const per = 0.3 + hash(i, 51) * 0.45, ph = hash(i, 52) * per, k = Math.floor((t - ph) / per), age = ((t - ph) % per);
+          const x = info.lo[0] + (info.hi[0] - info.lo[0]) * hash(i, 54 + k), z = info.lo[2] + (info.hi[2] - info.lo[2]) * (0.2 + 0.6 * hash(i, 55 + k));
+          const y = yLo + 0.005 - 0.5 * 9.81 * age * age;
           if (y < plan.L) continue;
-          P.drips.push(x, y, z, 0, -Math.max(0.02, 9.81 * age / 60), 0, 0.0035, 0.55, 1);
+          const v = 9.81 * age;
+          (hash(i, 56 + k) < 0.6 ? P.mud : P.drips).push(x, y, z, 0, -Math.max(0.015, v / 50), 0, 0.004, 0.75, 1);
+        }
+      }
+      // jets de la rampe : un éventail court par buse, vers la pièce et vers
+      // le bas, qui éclate en brume au contact
+      if (u > U.rinse0 - 0.002 && u < U.rinse1 + 0.004) {
+        const yr = rinseY(plan, u), on = sstep(U.rinse0 - 0.002, U.rinse0 + 0.004, u) * (1 - sstep(U.rinse1, U.rinse1 + 0.004, u));
+        const rr = Math.min(0.06, g.hz * 0.5), nN = Math.max(2, Math.floor((2 * (g.hx - rr)) / 0.09)), reach = g.hz - (info.hi[2] - info.lo[2]) / 2 + 0.01;
+        for (const sz of [-1, 1]) for (let i = 0; i <= nN; i++) {
+          const x0 = T.cx - (g.hx - rr) + (2 * (g.hx - rr) * i) / nN, z0 = T.cz + sz * (g.hz - 0.02);
+          for (let j = 0; j < 9; j++) {
+            const per = 0.09 + 0.05 * hash(i * 7 + j, 61 + (sz > 0 ? 1 : 0)), a = ((t + hash(i * 7 + j, 62) * per) % per) / per;
+            const spread = (hash(i * 7 + j, 63 + Math.floor((t + hash(i * 7 + j, 62) * per) / per)) - 0.5) * 0.09;
+            const d = [spread, -0.42, -sz], L = Math.hypot(...d), dn = d.map((v) => v / L);
+            const s = a * reach / Math.abs(dn[2]);
+            P.spray.push(x0 + dn[0] * s, yr - 0.012 + dn[1] * s, z0 + dn[2] * s, dn[0] * 0.05, dn[1] * 0.05, dn[2] * 0.05, 0.0035, 0.85 * on, 1.3);
+          }
+          // brume à l'impact
+          const per = 0.25, a = ((t + hash(i, 64) * per) % per) / per;
+          for (let j = 0; j < 2; j++) P.bubbles.push(x0 + (hash(i * 3 + j, 65 + Math.floor(t / per)) - 0.5) * 0.08, yr - 0.04 - 0.08 * a, z0 - sz * reach, 0, 0, 0, 0.04 + 0.07 * a, 0.2 * on * (1 - a), 1.2, 0);
         }
       }
       LU.t.value = t;
       LU.stir.value = under ? 1 : Math.max(0, 1 - (u - U.up1) * 20);
       LU.ring.value = sstep(U.down0, U.down0 + 0.01, u) * (1 - sstep(U.down1, U.down1 + 0.05, u)) + sstep(U.up0, U.up0 + 0.01, u) * (1 - sstep(U.up1, U.up1 + 0.04, u)) * 0.6;
-      void T;
+      // le bain se trouble pendant l'immersion ; il se repose sous le couvercle
+      LU.dirt.value = sstep(U.down1 - 0.01, U.up0, u) * (1 - sstep(plan.lid[3] - 0.01, plan.lid[3] + 0.03, u));
     }
-    P.bubbles.end(); P.drips.end();
+    P.bubbles.end(); P.drips.end(); P.spray.end(); P.mud.end();
   }
 
   // ── Mise à jour : la recette et la phase ──
@@ -402,8 +448,11 @@ export function createStage(scene, gen, { lite = false } = {}) {
       pieceG.rotation.y = -th; M.platen.rotation.y = -th;
       pieceG.position.y = plan.platen;
       // bras : pivote vers la pièce pendant la mise en place, repart au retrait
-      const swing = 1.25 * (1 - ease((u - T.setup0) / (T.clean0 - T.setup0 - 0.01))) + 1.25 * ease((u - T.clean1 - 0.005) / (T.retract1 - T.clean1 - 0.005));
-      const back = ease((u - T.clean1 - 0.005) / (T.retract1 - T.clean1 - 0.005));
+      // (la rampe, aussi large que la pièce, ne pivote qu'au-dessus d'elle : au
+      // retrait, elle remonte d'abord, puis pivote)
+      const r0 = T.clean1 + 0.005, rw = T.retract1 - r0;
+      const swing = 1.25 * (1 - ease((u - T.setup0) / (T.clean0 - T.setup0 - 0.01))) + 1.25 * ease((u - r0 - rw * 0.5) / (rw * 0.5));
+      const back = ease((u - r0) / (rw * 0.5));
       const ny = nozzleY(plan, s) * (1 - back) + plan.yTop * back + plan.platen;
       M.armG.position.set(M.Rc, ny, 0);
       M.armG.rotation.y = swing;
@@ -417,7 +466,12 @@ export function createStage(scene, gen, { lite = false } = {}) {
       const open = ease((u - plan.lid[0]) / (plan.lid[1] - plan.lid[0])) * (1 - ease((u - plan.lid[2]) / (plan.lid[3] - plan.lid[2])));
       M.lid.position.x = plan.tank.cx + open * (2 * plan.tank.hx + 0.3) * (R.camera.az >= 0 ? -1 : 1); // (roule vers le côté opposé à la caméra)
       RU.off.value = off;
-      RU.emergeWet.value = sstep(plan.u.up0, plan.u.up0 + 0.005, u) * Math.exp(-Math.max(0, u - plan.u.up1) / 0.035);
+      RU.emergeWet.value = sstep(plan.u.up0, plan.u.up0 + 0.005, u) * Math.exp(-Math.max(0, u - plan.u.rinse1) / 0.035);
+      // rampe de rinçage et ses câbles (des treuils sous la poutre)
+      const yr = rinseY(plan, u);
+      M.ring.position.y = yr;
+      M.cables.position.y = yr; M.cables.scale.y = Math.max(0.01, M.info.beamY - 0.175 - yr);
+      RU.rinseY.value = u < plan.u.up0 ? 10 : u < plan.u.rinse0 ? 10 : u < plan.u.rinse1 ? yr : -10;
       bathFX(u, off);
     }
     if (plan.kind !== 'sablage') blastFX(u, 0, 0);
