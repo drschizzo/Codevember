@@ -96,6 +96,7 @@ export const FINISHES = {
   celadon: F({ label: 'Céladon craquelé', pattern: 'glaze', color: '#a9c2ae', color2: '#57685c', rough: 0.35, clearcoat: 1, ccRough: 0.03, bump: 0.12, scale: 1.4 }),
   bone: F({ label: 'Os', pattern: 'rock', color: '#e6dccb', color2: '#d6c9b2', rough: 0.45, clearcoat: 0.3, ccRough: 0.1, bump: 0.05, scale: 6 }),
   plaster: F({ label: 'Plâtre', pattern: 'rock', color: '#e9e6e0', color2: '#dedad2', rough: 0.95, bump: 0.08, scale: 3 }),
+  vermilionBall: F({ label: 'Acier émaillé vermillon', pattern: 'plain', color: '#d8401f', rough: 0.18, clearcoat: 1, ccRough: 0.01 }),
   steelBall: F({ label: 'Acier poli', pattern: 'plain', color: METAL.steel, metal: 1, rough: 0.035 }),
   nickel: F({ label: 'Nickel', pattern: 'brushed', color: METAL.nickel, metal: 1, rough: 0.22, aniso: 0.5, bump: 0.15, smudge: 0.2 }),
   rawSteel: F({ label: 'Acier brut', pattern: 'brushed', color: '#9fa1a3', metal: 1, rough: 0.45, aniso: 0.4, bump: 0.3 }),

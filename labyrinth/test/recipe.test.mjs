@@ -51,6 +51,16 @@ test('la bille tranche sur son fond (valeur)', () => {
   for (const [m, M] of Object.entries(MOODS)) for (const a of M.accords) {
     const b = FINISHES[a.ball], f = FINISHES[a.board[0]];
     // un métal poli reflète le studio : il tranche sur un fond sombre ; sinon, contraste de luminance
+    // la bille vermillon (le fil rouge de la collection) tranche par sa teinte :
+    // le fond ne doit être ni rouge ni orangé, ou alors d'une autre valeur
+    if (a.ball === 'vermilionBall') {
+      const hsv = (hex) => { const [r, g, bb] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255); const mx = Math.max(r, g, bb), mn = Math.min(r, g, bb); const s = mx ? (mx - mn) / mx : 0; if (mx - mn < 0.04) return [null, s]; const h = mx === r ? ((g - bb) / (mx - mn)) % 6 : mx === g ? (bb - r) / (mx - mn) + 2 : (r - g) / (mx - mn) + 4; return [(h * 60 + 360) % 360, s]; };
+      const [hb, sf] = hsv(f.color), [, sb] = hsv(b.color);
+      const dh = hb === null ? 180 : Math.min(Math.abs(hb - 10), 360 - Math.abs(hb - 10));
+      // (teinte, saturation ou valeur : un de ces écarts suffit à la lire)
+      assert.ok(dh > 25 || sb - sf > 0.25 || Math.abs(Math.log((lum(b.color) + 0.01) / (lum(f.color) + 0.01))) > 1.2, `${m} : la bille vermillon se perd sur ${a.board[0]}`);
+      continue;
+    }
     if (b.metal > 0.5) assert.ok(lum(f.color) < 0.2 || /Copper|Brass/.test(a.ball), `${m} : bille de métal sur fond clair`);
     else assert.ok(Math.abs(Math.log((lum(b.color) + 0.01) / (lum(f.color) + 0.01))) > 1.2, `${m} : la bille ne tranche pas (${a.ball} sur ${a.board[0]})`);
   }
