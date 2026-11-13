@@ -29,7 +29,9 @@ function plunger(B, x, z, nx, nz, H) {
   B.noFrame();
   tube(B, [[x, -0.15 + h, z], [x, 1.25, z]], 0.03, 12, EDGE);
   B.frame([x, 0.55, z], X, Y, Z);
-  roundedBox(B, [0, 0, 0], [0.07, 0.05, 0.07], 0.02, 20, EDGE, OUT);
+  // (le collier, seul, porte la surface « intérieure » : il prend la laque
+  // vermillon, la tige et le coin gardent le métal de la cuve)
+  roundedBox(B, [0, 0, 0], [0.07, 0.05, 0.07], 0.02, 20, IN, IN);
   B.noFrame();
 }
 
