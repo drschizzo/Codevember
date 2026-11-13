@@ -38,7 +38,7 @@
     .bars { display: grid; gap: 5px; font-size: 12.5px; }
     .bars .r { display: grid; grid-template-columns: 6.5em 1fr 2.2em; gap: 10px; align-items: center; }
     .bars .r span:first-child { color: var(--dim); text-align: right; }
-    .bars .r i { display: block; height: 10px; border-radius: 3px; background: var(--c2); width: calc(var(--n) / 42 * 100%); min-width: 3px; }
+    .bars .r i { display: block; height: 10px; border-radius: 3px; background: var(--c2); width: calc(var(--n) / 43 * 100%); min-width: 3px; }
     .bars .r.sk i { background: var(--gold); }
     .bars .r span:last-child { font-variant-numeric: tabular-nums; color: var(--fg); }
     .bars .sep { margin: 8px 0 2px; color: var(--dim); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; }
@@ -84,7 +84,7 @@
         <p>Une <strong>skill</strong> Claude Code est un dossier que l’agent charge quand la demande s’y prête. Le fichier d’entrée, <code>SKILL.md</code>, dit quand l’utiliser, ce qu’on attend du résultat et dans quel ordre travailler. Les documents plus longs restent à côté et ne sont lus qu’au moment où l’étape les demande. Celle-ci contient quatre choses :</p>
         <div class="split" style="margin-top:20px">
           <div><h4>SKILL.md</h4><ul>
-            <li>vingt exigences qui définissent la famille de projets</li>
+            <li>vingt-cinq exigences qui définissent la famille de projets : vingt pour qu’une scène soit juste, cinq pour qu’elle ait un regard</li>
             <li>le déroulé en neuf étapes</li>
             <li>les exigences non négociables</li>
           </ul></div>
@@ -98,6 +98,7 @@
           </ul></div>
           <div><h4>scripts/ et template/</h4><ul>
             <li><code>scaffold.mjs</code> : pose un projet qui tourne</li>
+            <li><code>planche.py</code> : la collection côte à côte, et ses mesures</li>
             <li><code>sink.py</code> : collecteur d’images et de mesures</li>
             <li>gabarit : <code>main.js</code>, recette, panneau, worker, tests, README, <code>explainer.html</code></li>
           </ul></div>
@@ -160,9 +161,9 @@
       </section>
 
       <section id="exigences">
-        <h2><span class="n">04</span>Vingt exigences définissent la famille</h2>
-        <span class="src">SKILL.md · « Ce qui fait un projet de cette famille »</span>
-        <p>La skill ne décrit pas une scène type. Elle décrit ce que toutes doivent tenir, et laisse à chaque projet le soin d’inventer ses objets, ses causes, ses décors et sa caméra. Les nombres qu’elle donne sont des bornes, jamais des cibles. Regroupées, les vingt exigences tiennent en cinq idées :</p>
+        <h2><span class="n">04</span>Vingt-cinq exigences définissent la famille</h2>
+        <span class="src">SKILL.md · « Ce qui fait un projet de cette famille » · « Le regard »</span>
+        <p>La skill ne décrit pas une scène type. Elle décrit ce que toutes doivent tenir, et laisse à chaque projet le soin d’inventer ses objets, ses causes, ses décors et sa caméra. Les nombres qu’elle donne sont des bornes, jamais des cibles. Regroupées, elles tiennent en six idées. Les cinq premières rendent une scène juste ; la sixième, ajoutée après une revue de toute la collection, lui demande d’être belle :</p>
         <div class="tbl"><table>
           <thead><tr><th>Idée</th><th>Ce que la skill exige</th></tr></thead>
           <tbody>
@@ -171,6 +172,7 @@
             <tr><td>Une boucle parfaite</td><td>L’état à u = 1 est exactement l’état à u = 0, par construction, jamais par fondu. Une seule horloge pour la cause, la lumière, l’effet et la caméra.</td></tr>
             <tr><td>Le réel comme cible</td><td>Chaque événement a une cause visible ; rien ne flotte, rien ne se traverse ; échelle et densité calées sur des photographies.</td></tr>
             <tr><td>Des scènes variées</td><td>Une graine, une scène : deux graines donnent deux films qu’on ne confond pas (décor, lumière, valeur, cadrage), et le geste se décline en familles.</td></tr>
+            <tr><td>Un regard</td><td>Une liberté poétique, une seule, traitée avec la même rigueur que le reste ; le regard d’un photographe ou d’un peintre pris pour cible ; une image qui tient en affiche (sujet sur au moins 40 % du cadre) ; l’appareil de laboratoire à l’image seulement s’il est le sujet ; la variété jugée sur la planche de toute la collection.</td></tr>
           </tbody>
         </table></div>
         <p>S’y ajoutent des règles non négociables : aucune texture téléchargée ni modèle importé, tous les tirages dérivés de la graine, aucun gel après le chargement, et une documentation qui suit le code dans le même commit.</p>
@@ -180,34 +182,36 @@
         <h2><span class="n">05</span>L’échafaudage pose un projet qui tourne déjà</h2>
         <span class="src">scripts/scaffold.mjs</span>
         <pre><code>node .claude/skills/codevember-scene/scripts/scaffold.mjs maree "Marée" "le souffle de la côte"</code></pre>
-        <p>Tout ce qui ne dépend pas du thème a déjà été écrit, éprouvé et corrigé sur les projets précédents. L’échafaudage le copie, avec les quelques retouches qui le détachent de son projet d’origine, puis pose le gabarit propre au thème et inscrit le serveur de développement. Le résultat s’ouvre tout de suite : une pièce de démonstration qui fait un nombre entier de tours par boucle. L’agent vérifie qu’elle tourne dans le navigateur avant de toucher au thème.</p>
+        <p>Tout ce qui ne dépend pas du thème a déjà été écrit, éprouvé et corrigé sur les projets précédents, et vit une seule fois dans le dossier <code>shared/</code> du dépôt. L’échafaudage ne copie rien : il pose le gabarit propre au thème, qui importe ces modules, et inscrit le serveur de développement. Le résultat s’ouvre tout de suite : une pièce de démonstration qui fait un nombre entier de tours par boucle. L’agent vérifie qu’elle tourne dans le navigateur avant de toucher au thème.</p>
         <figure>
           <div class="split">
-            <div><h4>Copié tel quel, commun</h4><ul>
+            <div><h4>Importé de <code>shared/</code>, commun</h4><ul>
               <li>hasard à graine <code>sfc32</code></li>
-              <li>réglages, qualités, version mobile</li>
+              <li>version mobile, feuille de style</li>
               <li>écran de chargement sans gel</li>
               <li>export MP4 image par image, rendu accumulé</li>
               <li>chaîne d’image (GTAO, SSR, TRAA, bloom, grain)</li>
               <li>studio HDR, volume de bruit, pool de workers</li>
               <li>quarante finitions au F0 mesuré</li>
+              <li>outils de mise au point (planches, posemètre, raccord)</li>
             </ul></div>
             <div class="mine"><h4>À réécrire pour le thème</h4><ul>
               <li><code>recipe.js</code> : ce que tire la graine</li>
               <li><code>gen/</code> : le cœur, en fonctions pures</li>
               <li><code>scene/</code> : objets, matières, lumières</li>
               <li><code>app/loaderArt.js</code> : le dessin du calcul</li>
-              <li><code>app/ui.js</code> : le panneau</li>
+              <li><code>app/ui.js</code>, <code>app/settings.js</code> : le panneau, les réglages</li>
               <li><code>test/</code>, README, <code>explainer.html</code></li>
             </ul></div>
           </div>
           <figcaption><b>Ce que l’échafaudage apporte et ce qu’il laisse.</b> À gauche, ce que l’agent n’a pas à réinventer. À droite, ce qui fait que deux projets ne se ressemblent pas.</figcaption>
         </figure>
+        <div class="note"><b>Un module commun ne se modifie pas pour un seul projet</b><p>Jusqu’au 13 novembre, l’échafaudage copiait ces modules d’un projet à l’autre. Ils dérivaient : dix variantes de la chaîne d’image, et un nouveau projet repartait d’une version sans les corrections faites depuis. Ils sont maintenant partagés. Une nouveauté y entre comme une option dont la valeur par défaut redonne l’ancien rendu, et chaque scène est rendue avant et après (<code>tools/regress.html</code>) pour vérifier qu’aucune image n’a changé. Ce qu’un seul projet demande reste une variante dans son dossier.</p></div>
       </section>
 
       <section id="verifier">
         <h2><span class="n">06</span>Voir ce qu’on fait, sans regarder l’écran</h2>
-        <span class="src">references/verification.md · scripts/sink.py</span>
+        <span class="src">references/verification.md · tools/sink.py · shared/app/debug.js</span>
         <p>Un agent ne regarde pas l’écran comme un humain. Le panneau du navigateur est souvent masqué, ses captures peuvent être périmées et ses minuteries ralenties. La skill remplace donc le coup d’œil par des mesures et par des images qu’il demande lui-même à la scène : la page rend des images dans une cible hors écran et les envoie à un petit collecteur local, qui les range en planches.</p>
         <figure class="wide">
           <svg class="dia" viewBox="0 0 640 380" role="img" aria-label="Boucle de vérification : le modèle, les courbes, les images, les mesures et les tests, et le retour au modèle quand un défaut est vu">
@@ -258,6 +262,8 @@
           <li><span class="w">Melt</span>« Tout semble un peu flotter », un fond infini, un problème d’échelle. <b>Ombres de contact calculées, le support donne l’échelle, vrai flou de macro, pas de fausse couleur.</b></li>
           <li><span class="w">Chargement</span>Un texte « préparation de la scène… ». <b>Écran de chargement commun qui dessine le calcul de la graine, page « défis techniques » obligatoire.</b></li>
           <li><span class="w">Feather</span>Des tests verts pendant que l’écran montrait des pièces qui se traversaient. <b>Un banc qui pose la scène par la fonction même du rendu, tout contre tout, avec un témoin qui doit échouer.</b></li>
+          <li><span class="w">La collection (revue du 13 novembre)</span>Douze scènes sur vingt et une montraient un banc ou une machine de laboratoire, onze étaient dans la même gamme sépia, et plusieurs captures prenaient un instant quelconque d’une scène qui avait bien mieux à montrer. <b>Cinq règles sur le regard, une planche de toute la collection avant de choisir une humeur, et la capture prise au temps fort.</b></li>
+          <li><span class="w">Les modules copiés</span>Chaque projet emportait sa copie des modules communs ; les corrections de l’un n’atteignaient pas les autres. <b>Un dossier <code>shared/</code>, des options plutôt que des variantes, et chaque scène rendue avant et après un changement.</b></li>
         </ol>
         <p>Les pièges techniques suivent le même chemin. <code>three-tsl-pitfalls.md</code> recense ceux de three.js WebGPU et TSL qui ont coûté des heures : un objet qui disparaît parce que la limite de varyings est dépassée, une géométrie remplacée qui garde son ancien shader, un cache d’ombres qui ignore un changement de matériau. Le projet suivant ne les paie plus.</p>
       </section>
@@ -269,27 +275,27 @@
         <figure>
           <div class="bars">
             <div class="sep">Avant la skill</div>
-            <div class="r"><span>Hollow</span><i style="--n:42"></i><span>42</span></div>
-            <div class="r"><span>Tesseract</span><i style="--n:35"></i><span>35</span></div>
-            <div class="r"><span>Orrery</span><i style="--n:27"></i><span>27</span></div>
-            <div class="r"><span>Membrane</span><i style="--n:23"></i><span>23</span></div>
+            <div class="r"><span>Hollow</span><i style="--n:43"></i><span>43</span></div>
+            <div class="r"><span>Tesseract</span><i style="--n:37"></i><span>37</span></div>
+            <div class="r"><span>Orrery</span><i style="--n:29"></i><span>29</span></div>
+            <div class="r"><span>Membrane</span><i style="--n:24"></i><span>24</span></div>
             <div class="sep">Avec la skill</div>
-            <div class="r sk"><span>Kelp</span><i style="--n:13"></i><span>13</span></div>
-            <div class="r sk"><span>Erosion</span><i style="--n:12"></i><span>12</span></div>
-            <div class="r sk"><span>Fold</span><i style="--n:7"></i><span>7</span></div>
-            <div class="r sk"><span>Shatter</span><i style="--n:6"></i><span>6</span></div>
-            <div class="r sk"><span>Melt</span><i style="--n:6"></i><span>6</span></div>
-            <div class="r sk"><span>Rust</span><i style="--n:6"></i><span>6</span></div>
-            <div class="r sk"><span>Mirage</span><i style="--n:6"></i><span>6</span></div>
-            <div class="r sk"><span>Pendulum</span><i style="--n:6"></i><span>6</span></div>
-            <div class="r sk"><span>Tangle</span><i style="--n:5"></i><span>5</span></div>
-            <div class="r sk"><span>Moss</span><i style="--n:5"></i><span>5</span></div>
-            <div class="r sk"><span>Caustic</span><i style="--n:5"></i><span>5</span></div>
-            <div class="r sk"><span>Feather</span><i style="--n:5"></i><span>5</span></div>
-            <div class="r sk"><span>Spore</span><i style="--n:4"></i><span>4</span></div>
-            <div class="r sk"><span>Labyrinth</span><i style="--n:3"></i><span>3</span></div>
-            <div class="r sk"><span>Tension</span><i style="--n:3"></i><span>3</span></div>
-            <div class="r sk"><span>Cocoon</span><i style="--n:1"></i><span>1</span></div>
+            <div class="r sk"><span>Kelp</span><i style="--n:15"></i><span>15</span></div>
+            <div class="r sk"><span>Erosion</span><i style="--n:13"></i><span>13</span></div>
+            <div class="r sk"><span>Fold</span><i style="--n:10"></i><span>10</span></div>
+            <div class="r sk"><span>Rust</span><i style="--n:9"></i><span>9</span></div>
+            <div class="r sk"><span>Pendulum</span><i style="--n:9"></i><span>9</span></div>
+            <div class="r sk"><span>Caustic</span><i style="--n:9"></i><span>9</span></div>
+            <div class="r sk"><span>Melt</span><i style="--n:8"></i><span>8</span></div>
+            <div class="r sk"><span>Shatter</span><i style="--n:7"></i><span>7</span></div>
+            <div class="r sk"><span>Mirage</span><i style="--n:7"></i><span>7</span></div>
+            <div class="r sk"><span>Tangle</span><i style="--n:7"></i><span>7</span></div>
+            <div class="r sk"><span>Feather</span><i style="--n:7"></i><span>7</span></div>
+            <div class="r sk"><span>Spore</span><i style="--n:7"></i><span>7</span></div>
+            <div class="r sk"><span>Labyrinth</span><i style="--n:7"></i><span>7</span></div>
+            <div class="r sk"><span>Moss</span><i style="--n:6"></i><span>6</span></div>
+            <div class="r sk"><span>Tension</span><i style="--n:5"></i><span>5</span></div>
+            <div class="r sk"><span>Cocoon</span><i style="--n:2"></i><span>2</span></div>
           </div>
           <figcaption><b>Commits par projet, au 13 novembre.</b> En bleu, les quatre scènes faites avant la skill ; en or, les seize faites avec elle. La plupart de ces dernières tiennent en un commit de création, suivi de corrections ponctuelles et des passes de documentation communes à tout le dépôt.</figcaption>
         </figure>

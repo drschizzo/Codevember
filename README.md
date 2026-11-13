@@ -22,11 +22,12 @@ Ce que contient la skill :
 
 | Fichier | Rôle |
 | --- | --- |
-| `SKILL.md` | Vingt exigences qui définissent la famille (un geste lisible sans légende, un vrai cœur de calcul, une boucle parfaite par construction, des causes visibles, rien qui flotte ni se traverse, des scènes vraiment variées), le déroulé en neuf étapes et les règles non négociables. |
+| `SKILL.md` | Vingt-cinq exigences qui définissent la famille : vingt pour qu'une scène soit juste (un geste lisible sans légende, un vrai cœur de calcul, une boucle parfaite par construction, des causes visibles, rien qui flotte ni se traverse, des scènes vraiment variées) et cinq pour qu'elle ait un regard (une liberté poétique, un auteur pris pour cible, l'épreuve de l'affiche) ; le déroulé en neuf étapes et les règles non négociables. |
 | `references/concept.md` | Le **protocole d'idéation**, écrit avant tout code dans `<projet>/docs/concept.md` : cinq angles d'exploration, clichés nommés et écartés, au moins huit pistes notées sur six critères, puis six épreuves (crédibilité, variété, ambition, déclinaison, scénario, références). |
 | `references/*.md` | Boucle et caméra, direction artistique, rendu, architecture, interface, performance et mobile, vérification, documentation, et les pièges three.js WebGPU / TSL déjà rencontrés. |
 | `scripts/scaffold.mjs` | Pose un projet qui tourne tout de suite : le gabarit propre au thème, qui importe les modules communs de [`shared/`](shared/README.md) (hasard à graine, mobile, écran de chargement, export MP4, chaîne d'image, studio HDR, quarante finitions). |
-| `scripts/sink.py` | Collecteur local des images et des mesures que la scène lui envoie : planches, films image par image, posemètre. |
+| `scripts/planche.py` | Toutes les captures de la collection côte à côte, avec leurs mesures (valeur, amplitude, part d'ambre) : un nouveau projet ne refait pas une image déjà vue. Avec `--dossier`, la même mesure sur les humeurs d'un seul projet. |
+| `scripts/sink.py` | Collecteur local des images et des mesures que la scène lui envoie : planches, films image par image, posemètre, aussi à la racine (`tools/sink.py`). |
 
 La skill garde la mémoire des critiques. Chaque remarque de l'utilisateur qui porte sur une catégorie de défauts (une pièce qui flotte, des humeurs qui ne sont que des teintes, des familles qui bougent toutes pareil, des tests verts pendant que l'écran montre une interpénétration) y devient une règle, une épreuve ou un test, avec l'exemple qui l'a fait naître. Le projet suivant ne refait pas l'erreur.
 
