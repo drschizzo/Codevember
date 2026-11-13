@@ -2,7 +2,7 @@
 
 *l'équilibre renversé.* Une chaîne de pendules pend, immobile. La machine qui la porte se met en mouvement : un chariot qui donne des à-coups sur son rail, un bras qui pivote autour d'une colonne, un coude qui se plie comme un gymnaste, ou un volant qui s'emballe. La chaîne n'a aucun moteur dans ses articulations. Elle se met pourtant à balancer, de plus en plus haut, se dresse d'un coup de fouet et reste debout, à l'envers, immobile. Puis elle se replie dans une autre figure et revient pendre. Chaque manœuvre est une trajectoire calculée sous l'écran de chargement, à partir de l'état de départ et de l'état d'arrivée imposés (un problème « aux deux bouts »).
 
-![Scène : trois maillons de laiton debout sur le chariot d'un banc d'acajou (Cabinet)](docs/capture.jpg)
+![Scène : la chaîne triple balance sur son chariot, et la lampe du bout trace sa trajectoire en rouge (Pose longue)](docs/capture.jpg)
 
 Rendu physique en three.js (WebGPU, TSL). La scène est entièrement procédurale : une graine produit une machine, une suite d'équilibres, des trajectoires, un décor et un film. La démarche est dans [docs/concept.md](docs/concept.md) : le thème exploré sous six angles, les clichés écartés, neuf pistes notées, les épreuves (crédibilité, variété, ambition, déclinaison, scénario, références).
 
@@ -18,7 +18,7 @@ Rendu physique en three.js (WebGPU, TSL). La scène est entièrement procédural
 
 Sur écran tactile : une touche met en pause, deux touches tirent une nouvelle scène, un appui long masque l'interface.
 
-Paramètres d'URL : `?seed=…`, `#r=…` (scène retouchée, « Copier le lien »), `?mood=…` (cabinet, laboratoire, chrono, soleil, atelier, bleue, laque), `?family=…` (cart, rotary, acrobat, wheel), `?ui=0`, `?mobile=1` / `?mobile=0`, `?debug` (outils dans `window.pendulum` : `shot(phase)`, `send(nom)`, `sheet(graines, phases)` (une graine peut s'écrire `graine:humeur:famille`), `meter()`, `meters()`, `bench()`, `seam()`, `run()`, `artShot()` ; `sink` : adresse du collecteur d'images).
+Paramètres d'URL : `?seed=…`, `#r=…` (scène retouchée, « Copier le lien »), `?mood=…` (abbott, cabinet, laboratoire, chrono, soleil, atelier, bleue, laque), `?family=…` (cart, rotary, acrobat, wheel), `?ui=0`, `?mobile=1` / `?mobile=0`, `?debug` (outils dans `window.pendulum` : `shot(phase)`, `send(nom)`, `sheet(graines, phases)` (une graine peut s'écrire `graine:humeur:famille`), `meter()`, `meters()`, `bench()`, `seam()`, `run()`, `artShot()` ; `sink` : adresse du collecteur d'images).
 
 Le panneau règle l'humeur et la machine (nouvelle scène de la même graine). Il règle aussi la chorégraphie (durée de chaque tenue et du ralenti : le film seul change ; durée de chaque manœuvre : les trajectoires sont recalculées) ; la caméra (champ, distance, azimut, hauteur, balancement, avancée au sommet, montage en plans ou plan unique, caméra libre) ; chaque maillon (longueur, forme : nouveau calcul) et les matières par rôle (socle, bâti, guidage, maillons, chapes, accent, courroie) ; la lampe, les contre-jours, le studio HDR, le fond et la brume ; le rendu. Export MP4 image par image (éventuellement accumulé) et PNG.
 
@@ -72,12 +72,15 @@ Toutes les pièces sont usinées : plaques au contour convexe extrudées, au bor
 
 **Chronophotographie** : dans cette humeur, dix poses passées de chaque maillon (toutes les 75 ms du film), en fantômes additifs qui s'effacent avec l'âge et disparaissent quand la chaîne ne bouge plus, comme sur une plaque de Marey.
 
+**La pose longue** (la liberté de la scène, `src/scene/trace.js`) : une petite lampe est vissée au bout de la chaîne, et l'appareil garde ce que l'œil ne garde pas — la trajectoire des 3,6 dernières secondes du film, en traînée vermillon (le fil rouge de la collection) qui pâlit avec l'âge et blanchit à la tête, comme une lampe surexposée. Ce n'est pas un effet dessiné : c'est la vraie position du bout de la chaîne, relue dans le film à 240 instants passés (`film.at(φ − âge)`), donc périodique comme lui — la boucle se referme sans couture. Un tube de six côtés recalculé chaque image (1 440 sommets), additif, sans profondeur écrite ; une lumière ponctuelle faible au bout. Dans les humeurs sombres seulement (au Laboratoire et en Plein soleil, une lampe ne se verrait pas). Ce que voulait dire « l'équilibre renversé » se lit alors d'un coup d'œil : la spirale qui s'élargit, le coup de fouet, puis un point immobile, en haut.
+
 ## Les décors
 
-Sept humeurs, chacune un décor complet (fond, sol, lumière, valeur, cadrage) :
+Huit humeurs, chacune un décor complet (fond, sol, lumière, valeur, cadrage) :
 
 | Humeur | Décor | Lumière | Valeur | Cadrage |
 | --- | --- | --- | --- | --- |
+| **Pose longue** (d'après Berenice Abbott, *Documenting Science*) | noir sans bord ; machine noire, maillons blancs ou chromés : la trace est le seul rouge de l'image | une lumière dure, basse, de côté ; la lampe du bout de la chaîne et sa trace ; fantômes stroboscopiques | très sombre, sujet clair | profil strict, longue focale, la chaîne remplit la hauteur |
 | **Cabinet** | parquet à l'anglaise, mur vert sombre ; acajou, noyer ou poirier noirci, laiton, acier bleui | grande fenêtre à meneaux, de côté : son dessin projeté sur le mur, le sol et la machine | moyenne-sombre | profil un peu bas |
 | **Laboratoire** | cyclorama blanc continu, sol compris (une seule peinture : pas de raccord à la gorge) ; peinture poudre, aluminium anodisé, une couleur d'accent | boîte à lumière au-dessus, bandes latérales | très claire | trois-quarts face |
 | **Chronophotographie** | velours noir sans horizon (le velours piège aussi le reflet rasant : intensité spéculaire 0,08) ; machine noire, maillons émaillés blancs, poses passées | lumière dure rasante de côté | très sombre, sujet clair | profil strict, longue focale |

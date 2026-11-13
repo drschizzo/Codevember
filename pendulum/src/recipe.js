@@ -35,8 +35,24 @@ export const kelvinToHex = (K) => {
 // douceur ; K : température) et contre-jours ; cam : cadrage (az 0 = profil
 // exact, vu de face) ; grade : étalonnage ; accords : rôles → finitions.
 export const MOODS = {
+  // Berenice Abbott (« Documenting Science », 1958-1961) : un fond noir sans
+  // bord, une machine noire et blanche, une seule lumière dure, de côté et
+  // basse, et la pose longue — la lampe du bout de la chaîne écrit sa
+  // trajectoire, des fantômes à intervalle fixe comme sous un stroboscope.
+  // (le seul rouge de l'image est la trace : le fil rouge de la collection)
+  abbott: {
+    label: 'Pose longue', env: 'night', bg: '#010101', wall: 'velvetBlack', floor: 'velvetBlack', fog: 0.0, envIntensity: [0.16, 0.22], ghosts: true, trace: 1.0,
+    light: { K: 6000, az: 1.35, el: 0.28, dist: 6.5, angle: 0.42, penumbra: 0.25, power: 2.2, rims: [{ az: -2.1, el: 0.4, power: 0.35, K: 6500 }, { az: -1.0, el: 1.2, power: 0.06, K: 6500 }] },
+    cam: { az: [-0.05, 0.05], el: [0.0, 0.05], fov: [19, 22], dist: 0.92 },
+    grade: { contrast: 1.16, saturation: 1.0, shadows: [1, 1, 1], highlights: [1, 1, 1], exposure: 1 },
+    accords: [
+      { base: 'blackPaint', frame: 'blackPaint', guide: 'chrome', link: 'whiteEnamel', hub: 'chrome', accent: 'chrome', belt: 'rubber' },
+      { base: 'blackPaint', frame: 'blackenedSteel', guide: 'chrome', link: 'chrome', hub: 'whiteEnamel', accent: 'whiteEnamel', belt: 'rubber' },
+      { base: 'blackPaint', frame: 'blackPaint', guide: 'brushedSteel', link: 'brushedSteel', hub: 'whiteEnamel', accent: 'chrome', belt: 'rubber' },
+    ],
+  },
   cabinet: {
-    label: 'Cabinet', room: true, env: 'atelier', bg: '#0f0d0a', wall: 'wallGreen', floor: 'parquet', fog: 0.0,
+    label: 'Cabinet', room: true, trace: 0.55, env: 'atelier', bg: '#0f0d0a', wall: 'wallGreen', floor: 'parquet', fog: 0.0,
     light: { K: 5200, az: -0.95, el: 0.62, dist: 6.5, angle: 0.62, penumbra: 0.35, power: 3.2, gobo: { grid: [3, 4], half: [0.27, 0.34], bar: 0.007, soft: 0.009, leak: 0.05 }, rims: [{ az: 2.45, el: 0.5, power: 0.55, K: 6500 }, { az: -2.6, el: 0.25, power: 0.25, K: 4800 }] },
     cam: { az: [-0.18, 0.12], el: [0.05, 0.14], fov: [26, 32], dist: 1.0 },
     grade: { contrast: 1.05, saturation: 0.98, shadows: [0.95, 1.0, 1.04], highlights: [1.05, 1.0, 0.93], exposure: 1 },
@@ -60,7 +76,7 @@ export const MOODS = {
     ],
   },
   chrono: {
-    label: 'Chronophotographie', env: 'night', bg: '#030303', wall: 'velvetBlack', floor: 'velvetBlack', fog: 0.0, envIntensity: [0.25, 0.35], ghosts: true,
+    label: 'Chronophotographie', trace: 0.8, env: 'night', bg: '#030303', wall: 'velvetBlack', floor: 'velvetBlack', fog: 0.0, envIntensity: [0.25, 0.35], ghosts: true,
     light: { K: 5600, az: -1.45, el: 0.32, dist: 6.5, angle: 0.5, penumbra: 0.45, power: 2, rims: [{ az: 2.0, el: 0.35, power: 0.25, K: 6500 }, { az: 1.2, el: 1.2, power: 0.1, K: 6500 }] },
     cam: { az: [-0.04, 0.04], el: [0.02, 0.06], fov: [20, 24], dist: 1.15 },
     grade: { contrast: 1.12, saturation: 0.6, shadows: [1, 1, 1.02], highlights: [1.02, 1.0, 0.97], exposure: 1 },
@@ -81,7 +97,7 @@ export const MOODS = {
     ],
   },
   atelier: {
-    label: 'Atelier', room: true, env: 'studio', bg: '#0a0908', wall: 'concreteDark', floor: 'concrete', fog: 0.05, beam: true, envIntensity: [0.35, 0.5],
+    label: 'Atelier', room: true, trace: 0.5, env: 'studio', bg: '#0a0908', wall: 'concreteDark', floor: 'concrete', fog: 0.05, beam: true, envIntensity: [0.35, 0.5],
     light: { K: 5400, az: -0.35, el: 1.18, dist: 7, angle: 0.34, penumbra: 0.3, power: 5, gobo: { grid: [5, 5], half: [0.3, 0.3], bar: 0.005, soft: 0.006, leak: 0.03 }, rims: [{ az: 2.3, el: 0.35, power: 0.35, K: 4700 }, { az: -2.5, el: 0.3, power: 0.18, K: 6000 }] },
     cam: { az: [0.15, 0.4], el: [0.2, 0.32], fov: [30, 36], dist: 1.0 },
     grade: { contrast: 1.08, saturation: 0.92, shadows: [0.93, 0.98, 1.08], highlights: [1.06, 1.0, 0.92], exposure: 1 },
@@ -92,7 +108,7 @@ export const MOODS = {
     ],
   },
   bleue: {
-    label: 'Heure bleue', env: 'fogwhite', bg: '#56606b', wall: 'cycloGrey', floor: 'concreteCold', fog: 0.12, envIntensity: [0.28, 0.4],
+    label: 'Heure bleue', trace: 0.6, env: 'fogwhite', bg: '#56606b', wall: 'cycloGrey', floor: 'concreteCold', fog: 0.12, envIntensity: [0.28, 0.4],
     light: { K: 7200, az: 2.6, el: 0.45, dist: 6.5, angle: 0.55, penumbra: 0.9, power: 2.4, rims: [{ az: -2.2, el: 0.5, power: 0.55, K: 9000 }, { az: -0.5, el: 1.0, power: 0.2, K: 8000 }] },
     cam: { az: [-0.55, -0.35], el: [0.08, 0.16], fov: [28, 34], dist: 1.05 },
     grade: { contrast: 1.04, saturation: 0.82, shadows: [0.92, 0.98, 1.1], highlights: [0.98, 1.0, 1.04], exposure: 1 },
@@ -102,7 +118,7 @@ export const MOODS = {
     ],
   },
   laque: {
-    label: 'Laque', env: 'softbox', bg: '#46423e', wall: 'cycloMid', floor: 'felt', fog: 0.0, envIntensity: [0.4, 0.55],
+    label: 'Laque', trace: 0.45, env: 'softbox', bg: '#46423e', wall: 'cycloMid', floor: 'felt', fog: 0.0, envIntensity: [0.4, 0.55],
     light: { K: 5600, az: -1.2, el: 1.0, dist: 6, angle: 0.7, penumbra: 1, power: 1.2, rims: [{ az: 2.5, el: 0.4, power: 0.5, K: 6000 }, { az: -2.6, el: 0.35, power: 0.25, K: 5600 }] },
     cam: { az: [0.0, 0.25], el: [0.1, 0.2], fov: [24, 30], dist: 0.95 },
     grade: { contrast: 1.05, saturation: 1.0, shadows: [0.97, 0.99, 1.03], highlights: [1.02, 1.0, 0.97], exposure: 1 },
@@ -214,7 +230,7 @@ export function generate(seed, overrides = {}) {
       rim: L.rims.map((r) => ({ color: kelvinToHex(r.K), power: r2(r.power * ks * rl.range(0.85, 1.1)), az: r2(r.az), el: r2(r.el) })),
     },
     env: { preset: MO.env, intensity: r2(rl.range(...(MO.envIntensity ?? [0.45, 0.65]))), rotation: r2(rl.range(-0.3, 0.3)) },
-    stage: { bg: MO.bg, wall: MO.wall, floor: MO.floor, fog: MO.fog, ghosts: !!MO.ghosts, beam: !!MO.beam, sun: !!MO.sun },
+    stage: { bg: MO.bg, wall: MO.wall, floor: MO.floor, fog: MO.fog, ghosts: !!MO.ghosts, beam: !!MO.beam, sun: !!MO.sun, trace: MO.trace ?? 0 },
     grade: { ...MO.grade },
   };
 }

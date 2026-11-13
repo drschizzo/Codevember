@@ -8,6 +8,7 @@ import { uniform, float, abs, fract, smoothstep, mix, step } from 'three/tsl';
 import { buildPieceMaterial, finishUniforms } from './materials.js';
 import { pieceFinish } from '../finishes.js';
 import { createMachine, GHOSTS, GHOST_DT } from './machine.js';
+import { createTrace } from './trace.js';
 import { systemOf } from '../gen/machines.js';
 import { buildFilm, movesOf, tremor } from '../film.js';
 import { MOODS } from '../recipe.js';
@@ -116,6 +117,8 @@ export function createStage(scene, gen, { lite = false, renderer = null } = {}) 
   // ── Machine et film ──
   const machine = createMachine(gen);
   scene.add(machine.group);
+  const trace = createTrace();
+  scene.add(trace.group);
   let R = null, film = null, shots = null, sys = null, version = 0, solved = 0, nMoves = 0, failed = null;
   const hooks = { art: null, error: null };
 
@@ -125,6 +128,7 @@ export function createStage(scene, gen, { lite = false, renderer = null } = {}) 
     film = null; shots = null; failed = null;
     sys = systemOf(R.machine);
     machine.setRecipe(R);
+    trace.setRecipe(R);
     const D = R.stage.sun ? 1.15 : 1.8;
     // Une pièce (sol et mur de matières différentes : parquet et mur peint,
     // terre et chaux, béton) a un angle franc au pied du mur ; seul un studio
@@ -196,6 +200,7 @@ export function createStage(scene, gen, { lite = false, renderer = null } = {}) 
       for (let k = 0; k < GHOSTS; k++) ghostStates[k] = film.at(ph - ((k + 1) * GHOST_DT) / film.duration, ghostStates[k] ?? {});
       machine.updateGhosts(state, ghostStates);
     }
+    trace.update(ph, film, state);
     return state;
   }
 
@@ -220,7 +225,7 @@ export function createStage(scene, gen, { lite = false, renderer = null } = {}) 
 
   return {
     setRecipe, retime, update, cameraAt, shotIndex, setShadowQuality, syncFinishes: () => machine.syncFinishes(),
-    group: machine.group, floor, wall, key, rims, machine, hooks,
+    group: machine.group, floor, wall, key, rims, machine, trace, hooks,
     get film() { return film; }, get sys() { return sys; },
     ready: () => machine.ready() && !!film,
     failed: () => failed,

@@ -28,7 +28,7 @@ import { chainPoints } from './gen/pose.js';
 import { sampleTable } from './gen/shoot.js';
 
 const NAME = 'pendulum';
-const DEFAULT_SEED = 'p114'; // scène d'ouverture : chaîne triple de laiton sur banc d'acajou (Cabinet)
+const DEFAULT_SEED = 'p114'; // scène d'ouverture : chaîne triple sur son chariot, en pose longue (d'après Berenice Abbott)
 const params = new URLSearchParams(location.search);
 const $ = (s) => document.querySelector(s);
 const randomSeed = () => Math.random().toString(36).slice(2, 8);
