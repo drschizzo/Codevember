@@ -47,6 +47,15 @@ Garde la piste qui a le meilleur total sans note inférieure à 3 ; une piste pe
 
 **e quater. L'épreuve des références** : décris trois à cinq photographies réelles du sujet (ou demande-les) et ce qu'elles imposent d'échelle, de densité, de forme d'ensemble et de lumière ; vérifie que la piste retenue peut l'atteindre dans le budget, et comment (voir rendering.md, « Formes faites de milliers d'éléments »).
 
+**e quinquies. L'épreuve du regard** (SKILL.md, « Le regard », après la revue du 13 novembre) :
+- *La liberté* : une phrase, « la liberté : … » — la seule chose de la scène qui n'existe pas dans un laboratoire. Pas de liberté : la piste est une démonstration, revois-la. Deux libertés : garde la plus forte.
+- *Le regard* : l'auteur choisi (photographe, peintre, cinéaste), et trois phrases sur ce qu'il impose (valeur, cadrage, lumière, hors-champ).
+- *L'appareil* : si une machine, un banc ou une cuve est à l'image, dis pourquoi elle est le sujet ; sinon remplace-la par une cause naturelle, domestique ou hors champ.
+- *Le fil rouge et ce qui se conserve* : quel élément est vermillon, et quelle grandeur la boucle conserve.
+- *La collection* : la planche (`scripts/planche.py`) et l'humeur d'ouverture qui n'y est pas déjà.
+
+Ajoute aussi un septième critère à la notation des pistes (d) : *regard* — la piste contient-elle une idée qu'on n'attend pas d'un laboratoire, et une image qu'on accrocherait ?
+
 **f. Annoncer** le concept retenu à l'utilisateur en quelques lignes (titre, image, boucle, variations) et continuer sans attendre, sauf thème vraiment ambigu.
 
 ## 1. Chercher le geste

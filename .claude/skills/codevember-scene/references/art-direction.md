@@ -28,7 +28,7 @@ Ces règles viennent de retours précis de l'utilisateur sur Orrery et Tesseract
 
 14. **Des décors, pas des teintes.** Une humeur se définit d'abord par son décor (fond clair ou noir, sol, accessoires, atmosphère), sa lumière (soleil dur, boîte à lumière, stroboscope de côté, lueur de four, rayons colorés, lumière noire) et sa valeur, avant sa couleur. Calcin, premier essai : six humeurs, un seul décor (fond sombre et lueur colorée) : « les scènes se ressemblent beaucoup ». Chaque humeur a aussi son cadrage (gros plan bas, plongée, plan large).
 16. **La couleur d'une lumière reste celle d'une lumière** : fond sombre et lumière chaude ou claire, ou dégradé doux ; jamais deux couleurs saturées complémentaires en aplats (Melt, Rheinberg vert et rose : « fausse couleur »). **Un objet transparent sur un fond clair est invisible** : fond sombre ou moyen (Melt, « Verre » : table lumineuse blanche abandonnée pour une vitre devant le ciel de l'heure bleue). Une humeur peut avoir une exposition fixe propre (`grade.exposure`, appliquée par la chaîne d'image) : réglée au posemètre, elle ne casse pas la boucle.
-15. **Crédible avant d'être beau** : le support de chaque objet est visible (sol, socle, plateau, fil, pince), chaque événement a sa cause à l'écran, la gravité s'applique à tout ce qui n'est pas tenu. Une image belle mais impossible (un objet qui flotte, une poussière qui monte seule) est refusée.
+15. **Crédible avant d'être beau**, sauf la liberté poétique de la scène (SKILL.md, règle 21), qui est déclarée, unique et traitée avec la même rigueur : le support de chaque objet est visible (sol, socle, plateau, fil, pince), chaque événement a sa cause à l'écran, la gravité s'applique à tout ce qui n'est pas tenu. Une image belle mais impossible (un objet qui flotte, une poussière qui monte seule) est refusée.
 
 ## Les tests
 
@@ -43,3 +43,7 @@ Mets les premiers rendus à côté des photographies de référence du sujet (SK
 ## Le jugement sur image
 
 Les tests empêchent les dérives ; ils ne disent pas si c'est beau. Fais une planche (8 graines × 5 phases, `sheet()`), regarde chaque image et note ce qui est : vide, chargé, plat (pas de modelé), brûlé, bouché, illisible (forme qu'on ne comprend pas), répétitif d'une graine à l'autre. Corrige la règle ou le catalogue, pas l'image d'une graine. Mesure au posemètre avant de juger une exposition (voir rendering.md).
+
+## La collection
+
+Une scène se juge aussi à côté des autres (SKILL.md, règles 21 à 25) : `scripts/planche.py` mesure chaque capture (médiane, amplitude, part d'ambre, teinte, saturation) et signale les images « sépia », « plates » et « bouchées ». Le 13 novembre, onze captures sur vingt et un étaient sépia : les humeurs d'ouverture des projets suivants vont chercher ailleurs (jour blanc, bleu de l'heure bleue, vert d'eau, noir et blanc, couleur franche d'un émail), et le vermillon du fil rouge reste la seule couleur saturée commune à toute la collection.
