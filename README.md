@@ -2,9 +2,9 @@
 
 Expériences de creative coding, publiées sur [drschizzo.github.io/Codevember](https://drschizzo.github.io/Codevember/).
 
-## Le propos : rien ne se perd, tout se transforme
+## Ce qui relie les scènes
 
-Chaque scène fait, défait et refait : la rouille et le décapage, le verre brisé et refondu, le paysage creusé puis regarni, la glace fondue et regelée, le fil dévidé et renroulé. Et chaque cœur de calcul **garde** quelque chose : le sable, l'eau, le volume des veines, l'enlacement d'une corde, la longueur d'un câble, la lumière. La boucle parfaite n'est pas qu'une contrainte technique : c'est le propos de la collection. La page d'accueil dit, pour chaque scène, ce qui se conserve, et place les scènes sur un **atlas** — la taille du sujet et la durée réelle de ce que montre une boucle —, reliées dans l'ordre des jours par un fil rouge. Le même vermillon est, dans chaque scène, la couleur de l'élément qui porte le geste.
+Chaque scène raconte une transformation qui revient à son point de départ : la glace fond puis regèle, le verre se brise puis se refond, le paysage se creuse puis la lame le regarnit, la soie se dévide d'une lanterne et s'enroule sur l'autre. La boucle parfaite n'est pas seulement une contrainte technique : c'est ce que les scènes ont en commun.
 
 ## Comment ces scènes sont faites : la skill `codevember-scene`
 
