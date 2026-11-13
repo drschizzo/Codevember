@@ -209,9 +209,11 @@ export function createStage(scene, gen, { lite = false } = {}) {
     U.leaf.value.setHSL(L.hue / 360, L.sat, L.light * 0.82, C);
     // revers nettement plus pâle, bleuté (la cire du dessous) : quand la feuille
     // se ferme, on voit soudain le revers — le pli se lit à la couleur
-    U.leafBack.value.setHSL((L.hue + 26) / 360, L.sat * 0.32, Math.min(0.78, L.light * 1.85), C);
-    U.leafYoung.value.setHSL((L.hue - 14) / 360, Math.min(1, L.sat * 1.15), L.light * 1.25, C);
-    U.trans.value.setHSL((L.hue - 22) / 360, Math.min(1, L.sat * 1.6), 0.5, C);
+    // (revers : plus pâle et plus froid, mais toujours une feuille — un revers
+    // presque blanc donnait des folioles de papier crayeux)
+    U.leafBack.value.setHSL((L.hue + 12) / 360, L.sat * 0.62, Math.min(0.52, L.light * 1.38), C);
+    U.leafYoung.value.setHSL((L.hue - 12) / 360, Math.min(1, L.sat * 1.1), L.light * 1.15, C);
+    U.trans.value.setHSL((L.hue - 16) / 360, Math.min(1, L.sat * 1.3), Math.min(0.36, L.light * 1.35), C); // (contre-jour : un vert lumineux, pas un jaune fluo)
     U.translucency.value = L.translucency;
     U.stemHigh.value.setHSL((L.hue - 8) / 360, L.sat * 0.75, L.light * 0.95, C);
     U.flower.value.set(L.flower);
@@ -222,11 +224,13 @@ export function createStage(scene, gen, { lite = false } = {}) {
     U.relief.value = { sensitive: 0.00018, biophytum: 0.00025, oxalis: 0.0009, dionaea: 0.0007 }[fam] ?? 0.0002;
     U.veinFreq.value = fam === 'oxalis' ? 26 : fam === 'dionaea' ? 30 : 46;
     U.rough.value = fam === 'oxalis' ? 0.5 : fam === 'dionaea' ? 0.3 : 0.38;
-    U.sheenTop.value.set(fam === 'oxalis' ? '#4a3a52' : '#0c0f0a');
-    U.sheenBack.value.set(fam === 'oxalis' ? '#5a4a60' : fam === 'dionaea' ? '#1c2216' : '#4a5a3c');
+    // (duvet : un voile à peine visible ; fort, il blanchit les feuilles comme
+    // un plastique poudré)
+    U.sheenTop.value.set(fam === 'oxalis' ? '#24162a' : '#070906');
+    U.sheenBack.value.set(fam === 'oxalis' ? '#2e2034' : fam === 'dionaea' ? '#10140c' : '#1f2819');
     U.inner.value.set(L.inner ?? '#9c1f1a');
     U.eyeAmt.value = L.eye ?? 0;
-    U.eye.value.setHSL((L.hue + 20) / 360, 0.45, 0.62, C);
+    U.eye.value.setHSL((L.hue + 14) / 360, 0.45, Math.min(0.5, L.light * 2.1), C); // (la tache du trèfle pourpre : un mauve, pas un rose bonbon)
     if (fam === 'oxalis') { U.stemLow.value.setHSL(L.hue / 360, L.sat * 0.7, L.light * 1.2, C); U.stemHigh.value.setHSL(L.hue / 360, L.sat * 0.6, L.light * 1.4, C); }
     if (fam === 'dionaea') U.leafBack.value.setHSL((L.hue + 4) / 360, L.sat * 0.85, L.light * 1.05, C); // (dehors du piège : vert)
     if (fam === 'dionaea') { U.stemLow.value.setHSL(L.hue / 360, L.sat, L.light * 0.9, C); U.stemHigh.value.setHSL(L.hue / 360, L.sat, L.light, C); }

@@ -121,13 +121,16 @@ export function backdropMaterial(kind, U) {
     const da = abs(fract(az.sub(U.winAz).div(TAU).add(0.5)).sub(0.5)).mul(TAU).mul(U.Rw);
     const inWin = smoothstep(5.2, 5.1, da).mul(smoothstep(3.0, 3.1, y)).mul(smoothstep(16, 15.9, y));
     const mull = smoothstep(0.16, 0.1, abs(da)).max(smoothstep(0.16, 0.1, abs(y.sub(10.5))));
-    const sky = mix(vec3(0.05, 0.08, 0.16), vec3(0.16, 0.22, 0.36), smoothstep(3, 16, y));
-    const moon = smoothstep(0.75, 0.7, length(vec2(da.sub(2.2), y.sub(13.2))));
-    color = mix(vec3(0.05, 0.06, 0.09).mul(noise(vec3(x.mul(0.1), y.mul(0.1), 4)).mul(0.2).add(0.9)), vec3(0.02), inWin);
+    const sky = mix(vec3(0.1, 0.13, 0.24), vec3(0.3, 0.36, 0.52), smoothstep(3, 16, y)); // (heure bleue)
+    const moon = float(0); // (pas de lune en pastille : un disque blanc collé au fond faisait décor de théâtre)
+    color = mix(vec3(0.09, 0.1, 0.14).mul(noise(vec3(x.mul(0.1), y.mul(0.1), 4)).mul(0.2).add(0.9)), vec3(0.02), inWin);
     emit = sky.add(vec3(0.9, 0.92, 1.0).mul(moon).mul(4)).mul(inWin.mul(mull.oneMinus())).mul(U.wall.mul(8).add(0.5));
     rough = float(0.85);
   } else if (kind === 'velvet') {
+    // velours tendu en fond de studio : noir au sol, une nappe de lumière
+    // grise qui monte dans la paroi (le fond n'est jamais un vide)
     color = vec3(0.012, 0.011, 0.012);
+    emit = vec3(0.05, 0.048, 0.046).mul(smoothstep(0.5, 4.5, y)).mul(smoothstep(15, 6, y)).mul(noise(vec3(x.mul(0.08), y.mul(0.08), 7)).mul(0.25).add(1));
     m.sheenNode = vec3(0.08);
     m.sheenRoughnessNode = float(0.35);
     rough = float(0.98);
@@ -190,7 +193,7 @@ export function mulchMaterial(U, kind) {
     col = mix(vec3(0.42, 0.2, 0.08), vec3(0.62, 0.36, 0.17), tone).mul(pits.mul(-0.35).add(1)).mul(noise(p.mul(90)).mul(0.12).add(1));
     rough = float(0.92);
   } else if (kind === 'gravel') {
-    const base = mix(mix(vec3(0.36, 0.35, 0.33), vec3(0.6, 0.55, 0.47), tone), mix(vec3(0.82, 0.8, 0.76), vec3(0.18, 0.18, 0.19), step(0.5, tone)), step(0.78, pick));
+    const base = mix(mix(vec3(0.36, 0.35, 0.33), vec3(0.6, 0.55, 0.47), tone), mix(vec3(0.6, 0.57, 0.52), vec3(0.2, 0.19, 0.19), step(0.5, tone)), step(0.78, pick));
     const speck = smoothstep(0.62, 0.8, noise2(p.mul(320)));
     col = base.mul(noise(p.mul(40)).mul(0.14).add(1)).mul(speck.mul(-0.4).add(1));
     rough = float(0.5);
@@ -203,10 +206,10 @@ export function mulchMaterial(U, kind) {
   } else {
     // sphaigne : têtes de mousse, vert pâle à blond, quelques pointes rougies
     const fib = smoothstep(0.3, 0.9, sin(atan(p.z.sub(gr.z), p.x).mul(23).add(noise(p.mul(120)).mul(4))).mul(0.5).add(0.5));
-    col = mix(vec3(0.16, 0.3, 0.07), vec3(0.42, 0.5, 0.18), tone).mul(fib.mul(0.3).add(0.8)).mul(smoothstep(-0.005, 0.04, p.y).mul(0.6).add(0.4));
+    col = mix(vec3(0.1, 0.2, 0.04), vec3(0.32, 0.4, 0.1), tone).mul(fib.mul(0.3).add(0.8)).mul(smoothstep(-0.005, 0.04, p.y).mul(0.6).add(0.4));
     col = mix(col, vec3(0.6, 0.25, 0.18), smoothstep(0.88, 1, pick).mul(0.6));
     rough = float(0.8);
-    m.sheenNode = vec3(0.35, 0.4, 0.25); m.sheenRoughnessNode = float(0.4);
+    m.sheenNode = vec3(0.08, 0.1, 0.05); m.sheenRoughnessNode = float(0.4); // (un voile : plus fort, la mousse devenait des perles grises)
   }
   const wet = Fn(() => {
     const acc = float(0).toVar();

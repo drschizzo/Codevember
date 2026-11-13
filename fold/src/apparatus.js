@@ -12,7 +12,9 @@
 //
 // Tout est exprimé dans le plan méridien (ρ, y) du coup (direction d depuis
 // l'axe du pot) ; s (perpendiculaire) pour l'épaisseur.
-export const HAMMER = { la: 0.26, armR: 0.011, coilL: 0.1, coilR: 0.042, coreR: 0.016, gap: 0.006, plate: [0.15, 0.03, 0.1], colR: 0.02 };
+// (proportions d'un vrai appareil d'atelier : une colonne de 6 mm, un socle
+// lourd ; plus mince, il se lisait comme un jouet en fil de laiton)
+export const HAMMER = { la: 0.26, armR: 0.014, coilL: 0.1, coilR: 0.042, coreR: 0.016, gap: 0.006, plate: [0.17, 0.04, 0.12], colR: 0.03 };
 
 export function hammerLayout(H) {
   const { pivot, arm, rest } = H, K = HAMMER;

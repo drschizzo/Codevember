@@ -49,7 +49,7 @@ export const MOODS = {
     sky: ['#ffe8cc', '#3a2a1c', 0.05],
     label: 'Cabinet', backdrop: 'cabinet', table: ['walnut'], containers: [['ward', 3], ['cloche', 3]],
     key: { K: 4800, az: [1.2, 1.9], el: [0.32, 0.5], angle: 0.36, pen: 0.35, I: [700, 950] }, rim: [['#ffe2c0', 180], ['#9fb6ff', 40]],
-    env: 'atelier', envI: [0.08, 0.16], bg: '#0d0906', wall: 0.06,
+    env: 'atelier', envI: [0.12, 0.2], bg: '#2a1a10', wall: 0.22,
     grade: { contrast: 1.08, saturation: 0.95, shadows: [0.94, 0.98, 1.08], highlights: [1.06, 1.0, 0.92] },
     plants: [['bush', 3], ['fruiting', 2], ['flowering', 2], ['bijuga', 2]], view: { el: [0.22, 0.4], close: [1.21, 1.54], wide: [5.0, 6.0], fov: [30, 35] },
     leafLight: 0.9,
@@ -160,16 +160,21 @@ export function generate(seed, overrides = {}) {
       backdrop: M.backdrop, wall: M.wall,
       table: finishOf(rd.pick(M.table)),
       // paillage : sphaigne pour la dionée (sa tourbière), akadama ou gravier
-      mulch: family === 'dionaea' ? 'perlite' : rd.pick(['akadama', 'gravel']),
+      mulch: family === 'dionaea' ? 'sphagnum' : rd.pick(['akadama', 'akadama', 'gravel']), // (sphaigne vivante : la perlite blanche volait la vedette au piège)
       pot: scaled(finishOf(POT[container]), container === 'terracotta' || container === 'cloche' || container === 'ward' ? 3 : 7),
-      base: BASE[container] ? finishOf(rd.pick(BASE[container])) : null,
+      // (dans un décor sombre, un socle de fonte blanche devenait la plus grande
+      // tache claire de l'image : il vole la vedette à la plante)
+      base: BASE[container] ? finishOf(rd.pick(M.wall < 0.3 ? BASE[container].filter((b) => b !== 'whiteIron') : BASE[container])) : null,
       stand: finishOf('castIron'), brass: finishOf('hammerArm'), coil: finishOf('coil'),
     },
     leaf: {
       family,
       // trèfle : pourpre (Oxalis triangularis) une fois sur deux
-      hue: r2(family === 'oxalis' && purple ? rp.range(282, 296) : rp.range(92, 108)), sat: r2(family === 'oxalis' && purple ? rp.range(0.35, 0.5) : rp.range(0.42, 0.58)),
-      light: r2((family === 'oxalis' && purple ? rp.range(0.22, 0.27) : rp.range(0.3, 0.36)) * M.leafLight), translucency: r2(rp.range(0.8, 1.2)),
+      // (pourpre d'Oxalis triangularis : un aubergine profond, pas un lilas ;
+      // vert : un vert franc et soutenu, jamais menthe)
+      hue: r2(family === 'oxalis' && purple ? rp.range(300, 318) : family === 'dionaea' ? rp.range(78, 92) : rp.range(88, 104)),
+      sat: r2(family === 'oxalis' && purple ? rp.range(0.38, 0.5) : rp.range(0.5, 0.66)),
+      light: r2((family === 'oxalis' && purple ? rp.range(0.13, 0.17) : rp.range(0.26, 0.31)) * M.leafLight), translucency: r2(rp.range(0.9, 1.25)),
       flower: kind === 'biophytum' ? '#f2d24a' : rp.pick(['#f4a6cf', '#ef8fc0', '#f7b9d8', '#e98ab9']),
       inner: family === 'dionaea' ? rp.pick(['#a3201c', '#8c1a2a', '#b8401c']) : '#9c1f1a', eye: family === 'oxalis' && purple ? 0.8 : 0,
     },

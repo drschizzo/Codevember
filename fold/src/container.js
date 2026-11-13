@@ -139,8 +139,8 @@ export function caseBars(S) {
 
 // ── Décor en relief du pot de terre ─────────────────────────────────────────
 // déplacement radial (u) au point (azimut φ, hauteur y) de la paroi externe :
-// godrons (côtes verticales arrondies) sur le bas du corps, guirlande de
-// festons sous le bandeau, irrégularité du tournage (le pot n'est pas un tour
+// godrons (côtes verticales arrondies) sur le bas du corps, un filet sous le
+// bandeau, irrégularité du tournage (le pot n'est pas un tour
 // parfait), cartouche du potier. Le contact du marteau est calculé sur ce
 // relief, à son azimut (voir outerAt).
 const sst = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
@@ -159,11 +159,9 @@ export function potRelief(S) {
     // godrons : 22 côtes, entre la bague et le pied
     const g = sst(-0.86, -0.8, y) * (1 - sst(-0.6, -0.54, y));
     d += 0.011 * g * Math.pow(Math.abs(Math.cos(11 * phi)), 0.6);
-    // guirlande : festons pendants sous le bandeau, une perle à chaque attache
-    const yb = -0.13, sw = (Math.cos(9 * phi) + 1) / 2; // (0 au creux du feston, 1 à l'attache)
-    const yl = yb - 0.07 * (1 - sw); // (le feston pend entre deux attaches)
-    d += 0.0065 * Math.exp(-(((y - yl) / 0.012) ** 2)) * sst(-0.3, -0.2, y);
-    d += 0.009 * Math.exp(-(((y - yb) / 0.014) ** 2)) * Math.pow(sw, 40);
+    // (pas de guirlande de festons : à cette taille, elle se lisait comme un
+    // glaçage de pâtissier ; un simple filet en relief sous le bandeau)
+    d += 0.004 * Math.exp(-(((y + 0.15) / 0.007) ** 2));
     // tournage à la main : ovalisation et ondes lentes (quelques dixièmes de mm)
     d += 0.0035 * Math.sin(2 * phi + 0.7) + 0.0018 * Math.sin(5 * phi + 3 * y);
     return d;
