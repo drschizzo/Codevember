@@ -8,7 +8,8 @@ La variété se juge sur la collection, pas seulement d'une graine à l'autre
 (ou l'image candidate), le script mesure :
 
 - `méd`    : luminance médiane (0–1) ;
-- `ampl`   : amplitude des valeurs, p97 − p3 (une image « plate » < 0,45) ;
+- `ampl`   : amplitude des valeurs, p99,5 − p1 (une image « plate » < 0,45 ; une image
+             en clé basse, un trait clair sur du noir, passe) ;
 - `ambre`  : part des pixels colorés dont la teinte tombe dans 15–55° (sépia,
              ambre, brun, orangé) ;
 - `teinte` : teinte dominante des pixels saturés (en degrés) ;
@@ -55,8 +56,8 @@ def measure(im):
     hist, _, _ = np.histogram2d(h.ravel(), v.ravel(), bins=(12, 6), range=((0, 360), (0, 1)),
                                 weights=(0.15 + s).ravel())
     hist = hist.ravel() / hist.sum()
-    p3, p50, p97 = np.percentile(lum, [3, 50, 97])
-    return dict(med=float(p50), ampl=float(p97 - p3), ambre=amber, teinte=hue,
+    p1, p50, p99 = np.percentile(lum, [1, 50, 99.5])
+    return dict(med=float(p50), ampl=float(p99 - p1), ambre=amber, teinte=hue,
                 sat=float(s[v > 0.08].mean() if (v > 0.08).any() else 0), hist=hist)
 
 
@@ -91,7 +92,8 @@ def main():
 
     if args.candidat:
         c = measure(load(args.candidat))
-        d = sorted((0.5 * np.abs(c['hist'] - m['hist']).sum(), n) for n, m in zip(names, ms))
+        own = os.path.abspath(args.candidat).split(os.sep)[-3] if args.candidat.endswith(os.path.join('docs', 'capture.jpg')) else None
+        d = sorted((0.5 * np.abs(c['hist'] - m['hist']).sum(), n) for n, m in zip(names, ms) if n != own)
         print(f"\ncandidate : méd {c['med']:.2f} ampl {c['ampl']:.2f} ambre {c['ambre']:.2f}"
               f" teinte {c['teinte']:.0f} sat {c['sat']:.2f}{'  SÉPIA' if sepia(c) else ''}")
         for dist, n in d[:3]:
