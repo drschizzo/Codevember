@@ -93,6 +93,9 @@ Le graphe vasculaire relie le collet, les points des tiges, les pulvinus primair
 | Shōji | papier rétroéclairé sur kumiko ; planche de hinoki | grande source douce de côté | moyenne, douce | rapproché, horizontal |
 | Nuit | mur bleu nuit, fenêtre de lune ; bois noirci | lune dure et froide, veilleuse | sombre | contre-plongée |
 | Velours | velours noir | projecteur étroit, deux contre-jours | low key extrême | macro |
+| Blossfeldt (d'après Karl Blossfeldt, *Urformen der Kunst*) | carton gris moyen, sol et fond de même valeur, sans plateau qui se détache | une seule lampe dure et rasante de côté, presque pas de remplissage | moyenne, couleurs retenues (saturation 0,45) | plan rapproché très serré : l'organe, pas la plante |
+
+Blossfeldt est tirée à part (une graine sur cinq, sur son propre flux `regard`) : le tirage des sept autres décors n'a pas changé, et les graines déjà partagées gardent le leur, sauf celles-là. Le bras du marteau est laqué vermillon, le fil rouge de la collection : c'est lui qui donne le temps fort.
 
 La lampe est presque blanche (4 800 à 7 600 K) ; sa carte d'ombre est resserrée sur la plante quelle que soit l'ouverture du faisceau (les folioles font 1,6 mm). Une « lumière du lieu » (hémisphère, sans ombre) éclaire le sol loin de la lampe dans les décors clairs. Le sol et le fond ne reçoivent que la lampe et le lieu : les contre-jours n'effacent pas les ombres.
 

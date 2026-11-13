@@ -73,6 +73,8 @@ export const FINISHES = {
   marble: F({ label: 'Marbre de Carrare', pattern: 'marble', color: '#eeeae4', color2: '#7a7670', rough: 0.14, clearcoat: 0.8, ccRough: 0.02, scale: 1 }),
   marbleNoir: F({ label: 'Marbre Nero Marquina', pattern: 'marble', color: '#121214', color2: '#d8cfc0', rough: 0.12, clearcoat: 0.9, ccRough: 0.015, scale: 1.2 }),
   urushi: F({ label: 'Laque urushi et or', pattern: 'urushi', color: '#090807', color2: METAL.gold, rough: 0.32, clearcoat: 1, ccRough: 0.012, bump: 1, scale: 1 }),
+  // le fil rouge de la collection : le bras du marteau (la cause du temps fort)
+  vermilion: F({ label: 'Laque vermillon', pattern: 'plain', color: '#d8401f', rough: 0.3, clearcoat: 1, ccRough: 0.02 }),
   urushiRed: F({ label: 'Laque vermillon', pattern: 'urushi', color: '#6a0c0a', color2: METAL.gold, rough: 0.34, clearcoat: 1, ccRough: 0.015, bump: 1, scale: 0.7 }),
   blackCeramic: F({ label: 'Céramique noire', pattern: 'plain', color: '#0d0d0f', rough: 0.1, clearcoat: 1, ccRough: 0.01, smudge: 0.25 }),
   whiteCeramic: F({ label: 'Céramique blanche', pattern: 'plain', color: '#f1f0ec', rough: 0.2, clearcoat: 1, ccRough: 0.015 }),
@@ -94,6 +96,8 @@ export const FINISHES = {
   whiteIron: F({ label: 'Fonte laquée blanche', pattern: 'plain', color: '#e9e6df', rough: 0.4, clearcoat: 0.4, ccRough: 0.1 }),
   epoxy: F({ label: 'Paillasse noire', pattern: 'plain', color: '#101112', rough: 0.35, clearcoat: 0.5, ccRough: 0.18, smudge: 0.4 }),
   paperWhite: F({ label: 'Fond blanc', pattern: 'plain', color: '#eceae5', rough: 0.95 }),
+  // (Blossfeldt : le carton gris du fond, prolongé sous le pot — pas de plateau qui se détache)
+  cardGrey: F({ label: 'Carton gris', pattern: 'plain', color: '#7d7e7a', rough: 0.95 }),
   velvetBlack: F({ label: 'Velours noir', pattern: 'velvet', color: '#070707', color2: '#030303', rough: 0.98, sheen: 0.4, sheenColor: '#3a3a3a', sheenRough: 0.4 }),
   celadonGlaze: F({ label: 'Céladon', pattern: 'glaze', color: '#9cbfa8', color2: '#55665a', rough: 0.35, clearcoat: 1, ccRough: 0.03, bump: 0.15, scale: 1.4 }),
   copperWire: F({ label: 'Fil de cuivre', pattern: 'brushed', color: METAL.copper, metal: 1, rough: 0.22, aniso: 0.6, bump: 0.6, scale: 3 }),
@@ -145,12 +149,13 @@ export const SETS = {
   castIron: { label: 'Fonte', only: true, outer: 'castIron', inner: 'castIron', edge: 'brushedSteel', wear: 0.1, chamfer: false, moods: [] },
   whiteIron: { label: 'Fonte blanche', only: true, outer: 'whiteIron', inner: 'whiteIron', edge: 'whiteIron', wear: 0, chamfer: false, moods: [] },
   epoxy: { label: 'Paillasse', only: true, outer: 'epoxy', inner: 'epoxy', edge: 'epoxy', wear: 0, chamfer: false, moods: [] },
+  cardGrey: { label: 'Carton gris', only: true, outer: 'cardGrey', inner: 'cardGrey', edge: 'cardGrey', wear: 0, chamfer: false, moods: [] },
   paperWhite: { label: 'Fond blanc', only: true, outer: 'paperWhite', inner: 'paperWhite', edge: 'paperWhite', wear: 0, chamfer: false, moods: [] },
   velvetBlack: { label: 'Velours noir', only: true, outer: 'velvetBlack', inner: 'velvetBlack', edge: 'velvetBlack', wear: 0, chamfer: false, moods: [] },
   brassLab: { label: 'Laiton', only: true, outer: 'brushedBrass', inner: 'polishedBrass', edge: 'polishedBrass', wear: 0, chamfer: false, moods: [] },
   steelLab: { label: 'Acier', only: true, outer: 'brushedSteel', inner: 'chrome', edge: 'chrome', wear: 0, chamfer: false, moods: [] },
   coil: { label: 'Marteau : socle, bobine, potence', only: true, outer: 'castIron', inner: 'copperWire', edge: 'brushedSteel', wear: 0, chamfer: false, moods: [] },
-  hammerArm: { label: 'Marteau : bras', only: true, outer: 'castIron', inner: 'polishedBrass', edge: 'brushedBrass', wear: 0, chamfer: false, moods: [] },
+  hammerArm: { label: 'Marteau : bras', only: true, outer: 'vermilion', inner: 'polishedBrass', edge: 'brushedBrass', wear: 0, chamfer: false, moods: [] },
   bronze: { label: 'Bronze & cuivre', outer: 'bronzeDark', inner: 'polishedCopper', edge: 'polishedBrass', wear: 0.3, chamfer: false, moods: ['sacré', 'atelier'] },
 };
 

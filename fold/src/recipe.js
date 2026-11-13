@@ -36,6 +36,24 @@ export const kelvinToHex = (K) => {
 // préférences d'archétypes ; view : cadrage (élévation de la caméra,
 // distances des plans rapproché et large, focale).
 export const MOODS = {
+  // d'après Karl Blossfeldt (« Urformen der Kunst », 1928) : l'organe, pas la
+  // plante. Carton gris moyen sans horizon, une seule lumière dure et rasante
+  // de côté qui sculpte les nervures, presque pas de remplissage, couleurs
+  // retenues (la plante reste verte, à peine), plan rapproché serré. Tirée à
+  // part (une scène sur cinq, voir generate) pour ne rien changer aux autres
+  // graines.
+  blossfeldt: {
+    sky: ['#f4f4f2', '#6e6f6b', 0.12],
+    label: 'Blossfeldt', backdrop: 'card', table: ['cardGrey'], containers: [['cachepot', 3], ['terracotta', 2]],
+    key: { K: 5600, az: [1.45, 1.75], el: [0.28, 0.42], angle: 0.7, pen: 0.25, I: [900, 1100] }, rim: [['#ffffff', 50], ['#eef2ff', 20]],
+    // (un carton éclairé de lui-même, mur et sol de même valeur : sans quoi
+    // la flaque de la lampe sur le sol et le mur sombre font une scène de
+    // théâtre, avec un horizon)
+    env: 'cyclo', envI: [0.12, 0.16], bg: '#8c8d89', wall: 0.95,
+    grade: { contrast: 1.18, saturation: 0.45, shadows: [0.98, 1.0, 1.03], highlights: [1, 1, 0.99] },
+    plants: [['flowering', 2], ['bush', 3], ['seedling', 2], ['biophytum', 1]], view: { el: [0.05, 0.18], close: [0.78, 0.95], wide: [3.8, 4.4], fov: [26, 30] },
+    leafLight: 1.0, extra: true,
+  },
   serre: {
     sky: ['#eef3ff', '#b7ad98', 1.0],
     label: 'Serre', backdrop: 'serre', table: ['weathered', 'oak'], containers: [['ward', 2], ['cloche', 2], ['terracotta', 2]],
@@ -118,7 +136,10 @@ export const CAUSES = { drop: 'Goutte', tap: 'Marteau' };
 
 export function generate(seed, overrides = {}) {
   const rng = createRng(seed);
-  const mood = overrides.mood ?? rng.fork('mood').pick(Object.keys(MOODS));
+  // (le tirage des humeurs d'origine est inchangé ; Blossfeldt est tirée à
+  // part, une fois sur cinq, sur son propre flux : les graines déjà choisies
+  // gardent leur décor sauf celles-là)
+  const mood = overrides.mood ?? (rng.fork('regard').chance(0.2) ? 'blossfeldt' : rng.fork('mood').pick(Object.keys(MOODS).filter((k) => !MOODS[k].extra)));
   const M = MOODS[mood];
   const rp = rng.fork('plant'), rc = rng.fork('camera'), rl = rng.fork('light'), re = rng.fork('events'), rd = rng.fork('decor');
   // la famille d'abord (quatre manières de plier), puis le port de la sensitive
