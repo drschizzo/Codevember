@@ -14,9 +14,11 @@
 // (débit, pluie, niveau de base) sont calculées sur le processeur pour chaque
 // pas et lues par un décalage dynamique dans un tampon d'uniformes.
 //
-// Enregistrement (passe record) : FT états du relief à pleine résolution
-// (b − b₀, bmin − b₀ en demi-flottants), FM états de sa mémoire (humidité,
-// rides : elles changent lentement) et FW états de l'eau à demi-résolution
+// Enregistrement (passe record) : FT états du lit à pleine résolution (b − b₀
+// en demi-flottant, 2 octets : assez d'états pour qu'une marche qui remonte une
+// vallée avance d'environ une cellule par état — à 2 ou 3 cellules, elle
+// s'effaçait d'un côté et apparaissait de l'autre, en « stop motion »), FM
+// états de sa mémoire (le plus bas atteint, l'humidité, les rides, 4 octets) et FW états de l'eau à demi-résolution
 // (surface libre − b₀, turbidité, vitesse). Puis, à chaque image, la passe
 // resolve interpole les états — le relief en Catmull-Rom dans le temps sur
 // quatre états, borné par les deux états encadrants : sa vitesse est continue
@@ -256,20 +258,22 @@ struct Rec { frame: u32, kind: u32, p0: u32, p1: u32 };
 @group(0) @binding(1) var<storage, read> sA: array<f32>;
 @group(0) @binding(2) var<storage, read> aux: array<vec4f>;
 @group(0) @binding(3) var<storage, read> stat: array<vec4f>;
-@group(0) @binding(4) var<storage, read_write> recT: array<u32>;    // b − b₀, bmin − b₀
+@group(0) @binding(4) var<storage, read_write> recT: array<u32>;    // b − b₀ de deux cellules voisines
 @group(0) @binding(5) var<storage, read_write> recW: array<vec2u>;
 @group(0) @binding(6) var<storage, read_write> prev: array<vec2f>;   // aperçu 128 × 64 (écran de chargement)
-@group(0) @binding(7) var<storage, read_write> recM: array<u32>;    // humidité, rides
+@group(0) @binding(7) var<storage, read_write> recM: array<u32>;    // bmin − b₀ (demi-flottant), humidité, rides (8 bits)
 @group(1) @binding(0) var<uniform> R: Rec;
 
 @compute @workgroup_size(64) fn recTerrain(@builtin(global_invocation_id) gid: vec3u) {
-  let c = gid.x; if (c >= N) { return; }
-  let v = cell[c]; let b0 = stat[c].x;
-  recT[R.frame * N + c] = pack2x16float(vec2f(v.x - b0, v.z - b0));
+  let p = gid.x; if (p >= N / 2u) { return; }
+  let c = 2u * p;
+  recT[R.frame * (N / 2u) + p] = pack2x16float(vec2f(cell[c].x - stat[c].x, cell[c + 1u].x - stat[c + 1u].x));
 }
 @compute @workgroup_size(64) fn recMemory(@builtin(global_invocation_id) gid: vec3u) {
   let c = gid.x; if (c >= N) { return; }
-  recM[R.frame * N + c] = pack2x16float(vec2f(cell[c].w, aux[c].z));
+  let bm = pack2x16float(vec2f(cell[c].z - stat[c].x, 0.0)) & 0xFFFFu;
+  let w = u32(round(clamp(cell[c].w, 0.0, 1.0) * 255.0)); let r = u32(round(clamp(aux[c].z, 0.0, 1.0) * 255.0));
+  recM[R.frame * N + c] = bm | (w << 16u) | (r << 24u);
 }
 @compute @workgroup_size(64) fn recWater(@builtin(global_invocation_id) gid: vec3u) {
   let h = gid.x; if (h >= HN) { return; }
@@ -334,9 +338,12 @@ struct Res {
 // intervalle s'étale, sans dépassement (combinaison convexe), et la vitesse est
 // C². (Un Catmull-Rom borné ralentissait chaque cellule à chaque état : la vitesse
 // du relief battait au rythme des états, 5 fois par seconde.)
-fn relAt(c: u32) -> vec2f {
-  let pa = unpack2x16float(recT[R.tA * N + c]); let p0 = unpack2x16float(recT[R.t0 * N + c]);
-  let p1 = unpack2x16float(recT[R.t1 * N + c]); let pd = unpack2x16float(recT[R.tD * N + c]);
+fn bAt(k: u32, c: u32) -> f32 {
+  let v = unpack2x16float(recT[k * (N / 2u) + c / 2u]);
+  return select(v.x, v.y, (c & 1u) == 1u);
+}
+fn relAt(c: u32) -> f32 {
+  let pa = bAt(R.tA, c); let p0 = bAt(R.t0, c); let p1 = bAt(R.t1, c); let pd = bAt(R.tD, c);
   let t = R.tt; let s = 1.0 - t;
   return (pa * (s * s * s) + p0 * (3.0 * t * t * t - 6.0 * t * t + 4.0) + p1 * (-3.0 * t * t * t + 3.0 * t * t + 3.0 * t + 1.0) + pd * (t * t * t)) / 6.0;
 }
@@ -346,11 +353,15 @@ fn relAt(c: u32) -> vec2f {
   if (i >= NX || j >= NY) { return; }
   let c = j * NX + i;
   let b0 = stat[c].x;
-  let rel = relAt(c);                 // b − b₀, bmin − b₀
-  let mem = mix(unpack2x16float(recM[R.m0 * N + c]), unpack2x16float(recM[R.m1 * N + c]), R.tm); // humidité, rides
-  var b = b0 + rel.x;
-  var dep = max(0.0, rel.x - rel.y);  // épaisseur de dépôt frais
-  var depth = max(0.0, -rel.y);       // profondeur atteinte sous b₀ (strates)
+  let rb = relAt(c);                  // b − b₀
+  let M0 = recM[R.m0 * N + c]; let M1 = recM[R.m1 * N + c];
+  // le plus bas atteint : celui de l'état de mémoire antérieur (il ne peut qu'être
+  // plus haut que le vrai), borné par le lit courant — c'est un minimum courant
+  let bmr = min(unpack2x16float(M0 & 0xFFFFu).x, rb);
+  let mem = mix(vec2f(f32((M0 >> 16u) & 0xFFu), f32(M0 >> 24u)), vec2f(f32((M1 >> 16u) & 0xFFu), f32(M1 >> 24u)), R.tm) / 255.0; // humidité, rides
+  var b = b0 + rb;
+  var dep = max(0.0, rb - bmr);       // épaisseur de dépôt frais
+  var depth = max(0.0, -bmr);         // profondeur atteinte sous b₀ (strates)
   var fresh = 0.0;                    // sable retourné par la lame
   var rip = mem.y;
   var wet = mem.x;
@@ -381,7 +392,7 @@ fn relAt(c: u32) -> vec2f {
     for (var k = 0u; k < 4u; k++) {
       let cc = (2u * j + k / 2u) * NX + 2u * i + k % 2u;
       bb += stat[cc].x;
-      bn += relAt(cc).x;
+      bn += relAt(cc);
     }
     bb *= 0.25; bn *= 0.25;
     // (un bloc sec vaut « sous le lit » : une rive qui avance monte du fond)
@@ -452,14 +463,15 @@ export function createGpuSim(renderer, { lite = false } = {}) {
   const NX = lite ? TABLE.NX / 2 : TABLE.NX, NY = lite ? TABLE.NY / 2 : TABLE.NY, N = NX * NY;
   const HX = NX / 2, HY = NY / 2, HN = HX * HY;
   // (états du relief : 160 sur l'expérience, un toutes les ~0,2 s de film ; mémoire : 48)
-  const FT = lite ? 100 : 160, FW = lite ? 80 : 128, FM = lite ? 24 : 48;
+  // (lit : 480 états, un toutes les ~0,065 s de film ; mémoire : 96 ; eau : 192)
+  const FT = lite ? 240 : 480, FW = lite ? 96 : 192, FM = lite ? 48 : 96;
   const l = TABLE.Lx / NX, dt = PHYS.courant * l;
   const S_ = GPUBufferUsage.STORAGE, CD = GPUBufferUsage.COPY_DST, CS = GPUBufferUsage.COPY_SRC;
   const buf = (size, usage = S_ | CD | CS) => device.createBuffer({ size, usage });
   const B = {
     cell: buf(N * 16), sA: buf(N * 4), sB: buf(N * 4), flux: buf(N * 16), aux: buf(N * 16), tout: buf(N * 32), stat: buf(N * 16),
     strata: buf(16 + MAX_LAYERS * 16, GPUBufferUsage.UNIFORM | CD),
-    recT: buf(FT * N * 4), recM: buf(FM * N * 4), recW: buf(FW * HN * 8), prev: buf(8192 * 8), surplus: buf(N * 4), cur: buf(N * 16),
+    recT: buf(FT * N * 2), recM: buf(FM * N * 4), recW: buf(FW * HN * 8), prev: buf(8192 * 8), surplus: buf(N * 4), cur: buf(N * 16),
   };
   const BATCH = 256;
   const stepBuf = buf(BATCH * ALIGN, GPUBufferUsage.UNIFORM | CD);
@@ -602,7 +614,7 @@ export function createGpuSim(renderer, { lite = false } = {}) {
         // enregistrements AVANT le pas `step` (l'état au temps step·dt)
         while (nT < FT && tRec[nT] === step) {
           pass.setPipeline(KIO.recTerrain); pass.setBindGroup(0, gIO); pass.setBindGroup(1, gRec, [nT * ALIGN]);
-          pass.dispatchWorkgroups(groups(N)); nT++; wantPreview = true;
+          pass.dispatchWorkgroups(groups(N / 2)); nT++; wantPreview = true;
         }
         while (nM < FM && mRec[nM] === step) {
           pass.setPipeline(KIO.recMemory); pass.setBindGroup(0, gIO); pass.setBindGroup(1, gRec, [(FT + FW + nM) * ALIGN]);
@@ -669,17 +681,21 @@ export function createGpuSim(renderer, { lite = false } = {}) {
   async function readTerrain(k) {
     // (la mémoire : l'état enregistré le plus proche dans le temps)
     const km = Math.round((k / (FT - 1)) * (FM - 1));
-    const rb = device.createBuffer({ size: N * 8, usage: GPUBufferUsage.MAP_READ | CD });
+    const rb = device.createBuffer({ size: N * 6, usage: GPUBufferUsage.MAP_READ | CD });
     const enc = device.createCommandEncoder();
-    enc.copyBufferToBuffer(B.recT, k * N * 4, rb, 0, N * 4);
-    enc.copyBufferToBuffer(B.recM, km * N * 4, rb, N * 4, N * 4);
+    enc.copyBufferToBuffer(B.recT, k * N * 2, rb, 0, N * 2);
+    enc.copyBufferToBuffer(B.recM, km * N * 4, rb, N * 2, N * 4);
     device.queue.submit([enc.finish()]);
     await rb.mapAsync(GPUMapMode.READ);
     const u = new Uint16Array(rb.getMappedRange().slice(0));
     rb.unmap(); rb.destroy();
     const b = new Float32Array(N), bmin = new Float32Array(N), wet = new Float32Array(N), rip = new Float32Array(N);
-    const h = THREE.DataUtils.fromHalfFloat, M = 2 * N;
-    for (let c = 0; c < N; c++) { b[c] = b0[c] + h(u[c * 2]); bmin[c] = b0[c] + h(u[c * 2 + 1]); wet[c] = h(u[M + c * 2]); rip[c] = h(u[M + c * 2 + 1]); }
+    const h = THREE.DataUtils.fromHalfFloat, M = N;
+    for (let c = 0; c < N; c++) {
+      b[c] = b0[c] + h(u[c]);
+      bmin[c] = Math.min(b[c], b0[c] + h(u[M + c * 2]));
+      const hi = u[M + c * 2 + 1]; wet[c] = (hi & 255) / 255; rip[c] = (hi >> 8) / 255;
+    }
     return { b, bmin, wet, rip };
   }
   // le relief courant, tel que la dernière relecture l'a écrit (mise au point : fluidité)
