@@ -1,4 +1,4 @@
-# Publie les expériences sur GitHub Pages à chaque push sur main.
+# Teste puis publie les expériences sur GitHub Pages à chaque push sur main.
 # (Réglage du dépôt requis une fois : Settings → Pages → Source : « GitHub Actions ».)
 name: GitHub Pages
 
@@ -17,7 +17,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # invariants des projets (sans navigateur) et cohérence du dépôt : rien
+  # n'est publié si un test échoue
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm run check
+      - run: npm test
+
   deploy:
+    needs: test
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -35,6 +48,8 @@ jobs:
           mkdir -p _site
           cp index.html _site/
           cp -r home _site/   # (vignettes de la page d'accueil)
+          cp -r shared _site/ # (modules communs aux projets : sans eux, aucune scène ne se charge)
+          rm -rf _site/shared/test
           for d in */; do
             d=${d%/}
             if [ "$d" != _site ] && [ -f "$d/index.html" ]; then

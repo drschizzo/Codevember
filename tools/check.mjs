@@ -72,6 +72,9 @@ for (const p of projects) {
   }
 }
 
+// la publication doit emporter shared/ (sans lui, aucune scène ne se charge en ligne)
+if (!/cp -r shared _site/.test(read('.github/workflows/pages.yml'))) errors.push('.github/workflows/pages.yml : shared/ n\'est pas copié dans le site publié');
+
 for (const w of warnings) console.log(`à voir   ${w}`);
 for (const e of errors) console.log(`ERREUR   ${e}`);
 console.log(`${projects.length} projets, ${errors.length} erreur(s), ${warnings.length} remarque(s)`);
