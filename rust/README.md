@@ -4,7 +4,7 @@
 
 Au début, la pièce est nue : un nœud de treillis riveté, une vanne sur sa tuyauterie, une roue de locomotive sur son coupon de rail ou une porte étanche de navire, en acier gris clair qui accroche la lumière. Le ciel se voile, une averse passe : on voit tomber la pluie, la pièce fonce et luit, l'eau reste dans les angles. En séchant, un voile orange paraît là où l'eau est restée : au pied de chaque rivet, dans les angles des cornières, sous les têtes de boulon, sur les rebords tournés vers le ciel. À chaque averse, les taches s'étendent sur les plats, se rejoignent et coulent en traînées sous chaque source. La croûte s'épaissit, fonce, cloque et se fend en écailles. Puis la machine se met en place : un portique laser qui roule de derrière la pièce, une sableuse dont le bras à rampe de buses pivote au-dessus de la pièce posée sur un plateau tournant, ou un palan qui descend la pièce dans une fosse d'électrolyse. Elle la remet à nu, par une ligne d'éclair blanc qui balaie la pièce rangée après rangée en jetant ses étincelles, un rideau de grenaille qui descend en hélice dans un nuage de poussière, ou le bain dont la pièce ressort noire de boue avant qu'une rampe de rinçage, en descendant, découvre l'acier ruisselant. La machine repart, et la pièce est nue comme au début.
 
-![capture](docs/capture.jpg)
+![La porte étanche à moitié décapée par le portique laser, dans la cale sèche (graine x14)](docs/capture.jpg)
 
 Rendu physique en three.js (WebGPU, TSL). La scène est entièrement procédurale : une graine produit une scène. La démarche est dans [docs/concept.md](docs/concept.md) : le thème exploré sous six angles, les clichés écartés, neuf pistes notées, les épreuves (crédibilité, variété, ambition, déclinaison, scénario, références).
 

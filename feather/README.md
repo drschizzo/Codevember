@@ -4,7 +4,7 @@
 
 Au début, un gros plan sur un plumage : des plumes imbriquées comme des tuiles, et au centre une plume usée, aux pointes effrangées. Une pointe bleutée pousse sous elle, la soulève et la chasse du follicule. L'ancienne glisse sur la pente du dos et tombe. La nouvelle plume monte, roulée dans un tube de kératine cireux. Puis la gaine sèche et s'effrite de la pointe vers la base. Les barbes libérées s'écartent en pinceau, et les deux moitiés du cylindre s'ouvrent, sans s'étirer, pour devenir les deux vexilles (les deux moitiés plates de la plume, de part et d'autre de l'axe). Les barbes, d'abord séparées par des jours, s'agrafent de proche en proche, et le motif (barres, chevrons, taches, ocelle) se lit en entier. La plume se couche dans sa rangée, pâlit, s'effrange, et devient la plume usée du début.
 
-![Martin-pêcheur au contre-jour : la plume nouvelle, déroulée, au-dessus de son plumage](docs/capture.jpg)
+![La plume ocellée du paon, déroulée au-dessus de son plumage, à la fenêtre nord (graine 7)](docs/capture.jpg)
 
 Rendu physique en three.js (WebGPU, TSL). La scène est entièrement procédurale : une graine (un code court) produit toujours la même scène. La démarche est dans [docs/concept.md](docs/concept.md) : le thème exploré sous six angles, les clichés écartés, neuf pistes notées, les épreuves (crédibilité, variété, ambition, déclinaison, échelle) et les révisions après les premiers rendus.
 
