@@ -6,7 +6,7 @@ Une plante dans son pot, sous une cloche, dans une caisse de Ward, sur une paill
 
 Le film suit un scénario simple. Une goutte grossit au toit de verre (condensation) ou au bec d'une burette, tombe et frappe une feuille. La feuille touchée se ferme en entier, et elle seule, par une vague partie du point d'impact, puis se rouvre en accéléré. Une deuxième, une troisième goutte frappent d'autres feuilles. Pour finir, temps fort du film, un marteau de laboratoire frappe le pot et toute la plante se ferme, de bas en haut. Tout se rouvre et la boucle recommence, sans raccord visible. La dionée, qui ne réagit qu'aux contacts, reçoit trois gouttes sur trois pièges.
 
-![Trois familles : dionée, trèfle pourpre, sensitive](docs/capture.jpg)
+![Une sensitive en pot sous la lampe](docs/capture.jpg)
 
 Rendu physique en three.js (WebGPU, TSL). La scène est entièrement procédurale : une graine (un code court) produit toujours la même scène. La démarche qui a conduit à ce concept est dans [docs/concept.md](docs/concept.md) : le thème « fold » exploré sous six angles, les clichés écartés (la grue en origami, la feuille froissée, le drapé, l'éventail), dix pistes notées, puis les trois épreuves (crédibilité, variété, ambition).
 
