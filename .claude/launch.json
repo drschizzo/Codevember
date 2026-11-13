@@ -303,6 +303,16 @@
         "cocoon"
       ],
       "port": 8200
+    },
+    {
+      "name": "bolt",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        ".claude/serve.py",
+        "8210",
+        "bolt"
+      ],
+      "port": 8210
     }
   ]
 }
