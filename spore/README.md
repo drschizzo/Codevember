@@ -4,7 +4,7 @@
 
 Au début, la caméra arrive en glissant le long du bois et ralentit. Une fumée brune descend en biais et poudre le bois nu. Dans la poudre, des gouttelettes jaunes naissent, gonflent et se rejoignent en une nappe. La nappe s'étend vers l'aval en éventail, et derrière son bord elle se creuse en veines qui battent. La lumière monte, les veines se vident dans des perles alignées, et les perles se dressent sur leurs pieds, blanches, toutes ensemble. Elles foncent et se dessèchent. Un souffle passe, elles s'inclinent et s'ouvrent, et leurs spores partent avec lui. La caméra suit la fumée, laissant à gauche les sporanges vides, et la fumée se pose sur la première image.
 
-![Spore : des Trichia dorés dans leur nuage de spores (graine s9)](docs/capture.jpg)
+![Une forêt de Stemonitis sur bois flotté, dans la brume (graine x18, Brume)](docs/capture.jpg)
 
 Rendu physique en three.js (WebGPU, TSL). Tout est calculé : une graine (un code court) produit toujours la même scène. La démarche (le thème exploré sous six angles, cinq clichés écartés, neuf pistes notées, les épreuves) est dans [docs/concept.md](docs/concept.md). Les défis techniques, avec des démonstrations interactives, sont dans [explainer.html](explainer.html).
 

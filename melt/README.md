@@ -4,7 +4,7 @@
 
 Au début, une perle de glace laiteuse, dressée en pointe, est posée sur un gant de laine (ou un velours, une vitre, une feuille de houx, une ardoise, une lame de microscope). L'air est glacé : le givre hérisse les fibres, de la poussière de diamant tombe en scintillant. Un petit hexagone transparent sort de la perle et s'élargit, puis six bras partent de ses coins et se ramifient, en accéléré. La caméra recule pour garder l'étoile dans le cadre. Le soleil sort ensuite de côté. Le givre des fibres s'éteint, le cristal se mouille et brille comme verni. Des perles naissent au bout des branches et remontent les bras en les avalant, les branches latérales d'abord, jusqu'à ce que toute l'étoile se rassemble en une goutte au centre. Cette fonte se déroule en temps réel, avec un ralenti au rassemblement. La goutte s'évapore, le soleil passe, et elle gèle de bas en haut, devient laiteuse et se dresse en pointe : c'est la perle du début.
 
-![La fougère sur la laine, au moment où le soleil entre (graine k2)](docs/capture.jpg)
+![La plaque qui se ramifie, sur la vitre de l'heure bleue, dans la poussière de diamant (graine x21, Verre)](docs/capture.jpg)
 
 Rendu physique en three.js (WebGPU, TSL). La scène est entièrement procédurale : une graine produit une scène. La démarche est dans [docs/concept.md](docs/concept.md) : le thème exploré sous six angles, les clichés écartés (le glaçon, la bougie, les montres molles), dix pistes notées, les épreuves de crédibilité, de variété et d'ambition, les photographies de référence.
 
