@@ -27,7 +27,7 @@ Vise ≤ 16 ms à ~2 Mpx en Haute sur un GPU de portable récent, et ≈ 4 × mo
 
 ## Chargement sans gel
 
-Tout passe par les modules communs `src/app/warmup.js`, `loader.js`, `loaderWorker.js` (copiés tels quels par l'échafaudage depuis melt/ ; identiques dans tous les projets — une correction se reporte partout).
+Tout passe par les modules communs `shared/app/warmup.js`, `loader.js`, `loaderWorker.js` (identiques dans tous les projets — une correction se reporte partout).
 
 1. **Pipelines asynchrones** pendant le chargement (`asyncPipelines(renderer)`) : `createRenderPipelineAsync`, objet sauté tant que sa pipeline n'est pas prête. Sans cela, chaque compilation bloque le processus graphique, donc tout l'affichage de la page, même un écran dessiné dans un worker. Orrery : blocages de l'affichage 1,4 s → 0,1 s.
 2. **Préchauffage** (`warmScene({ phases, … })`) : rendre les phases qui montrent des objets ou des états absents du début (plongée, halte, traversée…), `frustumCulled` coupé ; sans cela, la première image d'un moment nouveau gèle (Tesseract : 0,5 s à la plongée).

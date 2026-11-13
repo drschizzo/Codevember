@@ -25,12 +25,32 @@ Ce que contient la skill :
 | `SKILL.md` | Vingt exigences qui définissent la famille (un geste lisible sans légende, un vrai cœur de calcul, une boucle parfaite par construction, des causes visibles, rien qui flotte ni se traverse, des scènes vraiment variées), le déroulé en neuf étapes et les règles non négociables. |
 | `references/concept.md` | Le **protocole d'idéation**, écrit avant tout code dans `<projet>/docs/concept.md` : cinq angles d'exploration, clichés nommés et écartés, au moins huit pistes notées sur six critères, puis six épreuves (crédibilité, variété, ambition, déclinaison, scénario, références). |
 | `references/*.md` | Boucle et caméra, direction artistique, rendu, architecture, interface, performance et mobile, vérification, documentation, et les pièges three.js WebGPU / TSL déjà rencontrés. |
-| `scripts/scaffold.mjs` | Pose un projet qui tourne tout de suite, en copiant les modules communs éprouvés (hasard à graine, réglages, mobile, écran de chargement, export MP4, chaîne d'image, studio HDR, quarante finitions) et le gabarit propre au thème. |
+| `scripts/scaffold.mjs` | Pose un projet qui tourne tout de suite : le gabarit propre au thème, qui importe les modules communs de [`shared/`](shared/README.md) (hasard à graine, mobile, écran de chargement, export MP4, chaîne d'image, studio HDR, quarante finitions). |
 | `scripts/sink.py` | Collecteur local des images et des mesures que la scène lui envoie : planches, films image par image, posemètre. |
 
 La skill garde la mémoire des critiques. Chaque remarque de l'utilisateur qui porte sur une catégorie de défauts (une pièce qui flotte, des humeurs qui ne sont que des teintes, des familles qui bougent toutes pareil, des tests verts pendant que l'écran montre une interpénétration) y devient une règle, une épreuve ou un test, avec l'exemple qui l'a fait naître. Le projet suivant ne refait pas l'erreur.
 
 Explication détaillée, avec schémas : [la page de l'atelier](https://drschizzo.github.io/Codevember/skill/) ([source](skill/index.html)).
+
+## Organisation du dépôt
+
+Un dossier par scène, sans étape de construction : des modules ES servis tels quels, three.js par `importmap`.
+
+| Dossier | Contenu |
+| --- | --- |
+| `<scène>/` | ce qui est propre au thème : recette, simulation, scène, panneau, tests, documentation |
+| [`shared/`](shared/README.md) | ce que les scènes ont en commun, une seule fois : chaîne d'image, matériaux, studio HDR, écran de chargement, export, hasard à graine, feuille de style |
+| `tools/` | collecteur d'images, contrôle de cohérence, non-régression du rendu |
+| `home/` | vignettes de l'accueil, style et outils des pages « défis techniques » |
+
+```bash
+npm test          # les invariants de toutes les scènes (node --test, sans navigateur)
+npm run check     # cohérence : versions, livrables de chaque scène, imports
+npm run serve     # le site entier sur http://localhost:8120/
+npm run new -- marees "Marées" "le sous-titre"   # échafaude une scène
+```
+
+Un changement dans `shared/` touche toutes les scènes : [`tools/regress.html`](tools/regress.html) rend chaque scène à taille et phases fixes avant et après, et `tools/regress.py` compare les deux séries au bruit propre de chaque rendu. Les tests et le contrôle de cohérence tournent avant chaque publication.
 
 ## [Cocoon](cocoon/)
 
