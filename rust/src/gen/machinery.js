@@ -163,7 +163,7 @@ function buildBlast(s) {
     parts.platen = B.out();
   }
   // colonne (fixe), à l'azimut de la buse, hors du plateau
-  const Rc = Rp + 0.35, H = top + hi[1] + 0.45;
+  const Rc = Rp + 0.35, H = top + hi[1] + 0.5 + s.foot * 0.5 + Math.tan(s.tilt) * (rMax + 0.16); // (la rampe part au-dessus de la pièce)
   {
     const B = new Buffers();
     box(B, [Rc, 0.02, 0], [0.22, 0.02, 0.22], 0.006);
@@ -178,22 +178,32 @@ function buildBlast(s) {
     parts.column = B.out();
   }
   // bras (pivote autour de la colonne, coulisse en hauteur) ; origine : axe de
-  // la colonne à la hauteur de la buse ; la buse vise −x (vers l'axe), inclinée
+  // la colonne à la hauteur des buses. Au bout, une rampe : un tube
+  // horizontal aussi large que la pièce, perpendiculaire au bras, qui porte une
+  // rangée de buses parallèles visant −x (vers l'axe), inclinées vers le bas
   {
     const B = new Buffers();
-    const reach = Rc - (rMax + 0.16);
-    box(B, [0, 0, 0], [0.13, 0.09, 0.13], 0.014); // coulisseau autour de la colonne
-    box(B, [-reach / 2, 0.02, 0], [reach / 2, 0.035, 0.035], 0.01); // bras
-    // porte-buse incliné vers le bas (tilt), buse en carbure, flexible
+    const reach = Rc - (rMax + 0.16), L = rMax + 0.03;
     const t = s.tilt, dir = [-cos(t), -sin(t), 0];
-    const tip = [-reach, 0, 0];
-    revolve(B, frame(add(tip, mul(dir, -0.17)), dir), [[0, 0], [0.032, 0], [0.034, 0.01], [0.034, 0.07], [0.026, 0.09], [0.022, 0.15], [0.016, 0.17], [0.011, 0.171], [0, 0.171]], STEEL, { M: 24, smooth: 0.5 });
-    revolve(B, frame(add(tip, mul(dir, -0.17)), mul(dir, -1)), [[0, 0], [0.03, 0], [0.03, 0.05], [0.025, 0.06], [0, 0.06]], RUBBER, { M: 20 });
-    hose(B, [add(tip, mul(dir, -0.23)), [-reach + 0.05, 0.12, 0.05], [-reach / 2, 0.11, 0.07], [-0.1, 0.07, 0.11], [0.0, 0.1, 0.13]], 0.022, RUBBER);
+    box(B, [0, 0, 0], [0.13, 0.09, 0.13], 0.014); // coulisseau autour de la colonne
+    box(B, [-(reach - 0.06) / 2, 0.02, 0], [(reach - 0.06) / 2, 0.035, 0.035], 0.01); // bras
+    // nourrice : tube, bouchons, raccord en T au bout du bras
+    const nl = 0.05; // longueur d'une buse
+    const base = (z) => [-reach - dir[0] * nl, -dir[1] * nl, z];
+    const cx = -reach - dir[0] * nl + 0.022, cy = -dir[1] * nl + 0.012;
+    loft(B, [[cx, cy, -L - 0.02], [cx, cy, L + 0.02]], () => [0.024, 0.024], STEEL, { nr: 16, up: [0, 1, 0], caps: true });
+    box(B, [cx + 0.03, cy + 0.008, 0], [0.04, 0.03, 0.04], 0.01, STEEL);
+    // buses en carbure, tous les 5 cm (leur jet s'évase à ~15 cm : il se recouvre)
+    const nN = Math.max(3, Math.round((2 * L) / 0.05));
+    for (let i = 0; i <= nN; i++) {
+      const z = -L + (2 * L * i) / nN;
+      revolve(B, frame(base(z), dir), [[0, 0], [0.012, 0], [0.012, 0.022], [0.0085, 0.03], [0.008, 0.045], [0.0055, nl], [0, nl]], i % 2 ? STEEL : RUBBER, { M: 14, smooth: 0.5 });
+    }
+    hose(B, [[cx + 0.06, cy + 0.03, 0], [cx + 0.12, 0.12, 0.04], [-reach / 2, 0.11, 0.07], [-0.1, 0.07, 0.11], [0.0, 0.1, 0.13]], 0.022, RUBBER);
     parts.arm = B.out();
-    s.reach = reach;
+    s.reach = reach; s.barL = L;
   }
-  return { parts, info: { Rp, Rc, H, top, reach: s.reach } };
+  return { parts, info: { Rp, Rc, H, top, reach: s.reach, barL: s.barL } };
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -311,6 +321,46 @@ function buildBath(s) {
     // chaîne de levage (vers le palan, longue : la part au-dessus du palan est masquée)
     chainRun(B, [hxp, hy + 0.225, hzp], [hxp, hy + 3.3, hzp], 0.044, 0.009, 0.004);
     parts.hook = B.out();
+  }
+  // rampe de rinçage : cadre de tubes autour de la pièce (coudes arrondis),
+  // buses tournées vers la pièce, en biais vers le bas ; raccord du tuyau
+  // d'eau et deux oreilles où s'accrochent les câbles. Repère : centré sur la
+  // fosse, à la hauteur de la ligne des buses (y = 0).
+  if (s.ring) {
+    const B = new Buffers();
+    const g = s.ring, hx = g.hx, hz = g.hz, rr = Math.min(0.06, hz * 0.5), r = g.r;
+    // contour (rectangle à coins arrondis), parcouru une fois
+    const pts = [];
+    const corners = [[hx - rr, hz - rr, 0], [-hx + rr, hz - rr, PI / 2], [-hx + rr, -hz + rr, PI], [hx - rr, -hz + rr, 1.5 * PI]];
+    for (const [cx, cz, a0] of corners) for (let k = 0; k <= 6; k++) { const a = a0 + (k / 6) * (PI / 2); pts.push([cx + rr * cos(a), 0, cz + rr * sin(a)]); }
+    pts.push(pts[0]);
+    // (rangées denses le long des grands côtés : le tube reste rond)
+    const dense = [];
+    for (let i = 0; i < pts.length - 1; i++) { const a = pts[i], b = pts[i + 1], n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[2] - a[2]) / 0.1)); for (let k = 0; k < n; k++) dense.push([a[0] + (b[0] - a[0]) * k / n, 0, a[2] + (b[2] - a[2]) * k / n]); }
+    dense.push(dense[0]);
+    loft(B, dense, () => [r, r], STEEL, { nr: 12, up: [0, 1, 0] });
+    // buses : sur les deux grands côtés, tous les 9 cm
+    const nN = Math.max(2, Math.floor((2 * (hx - rr)) / 0.09));
+    for (const sz of [-1, 1]) for (let i = 0; i <= nN; i++) {
+      const x = -(hx - rr) + (2 * (hx - rr) * i) / nN, d = norm([0, -0.45, -sz]);
+      const o = [x, 0, sz * hz];
+      revolve(B, frame(add(o, mul(d, r * 0.6)), d), [[0, 0], [0.007, 0], [0.007, 0.012], [0.0045, 0.02], [0, 0.02]], STEEL, { M: 10 });
+    }
+    // oreilles d'accrochage des câbles (l'eau arrive par les câbles-tuyaux)
+    for (const sx of [-1, 1]) {
+      revolve(B, frame([sx * hx, r * 0.6, 0], [0, 1, 0], [1, 0, 0]), [[0, 0], [0.014, 0], [0.014, 0.03], [0.006, 0.034], [0, 0.034]], STEEL, { M: 12 });
+    }
+    parts.ring = B.out();
+    // câbles (hauteur unité, mis à l'échelle à chaque image) et treuils sous la poutre
+    const C = new Buffers();
+    for (const sx of [-1, 1]) loft(C, [[s.ring.cx + sx * hx, 0, s.ring.cz], [s.ring.cx + sx * hx, 1, s.ring.cz]], () => [0.0035, 0.0035], STEEL, { nr: 8 });
+    parts.cables = C.out();
+    const W = new Buffers();
+    for (const sx of [-1, 1]) {
+      box(W, [s.ring.cx + sx * hx, s.beamY - 0.13, s.ring.cz], [0.06, 0.045, 0.05], 0.01, PAINT);
+      revolve(W, frame([s.ring.cx + sx * hx, s.beamY - 0.13, s.ring.cz - 0.05], [0, 0, -1]), [[0, 0], [0.04, 0], [0.04, 0.012], [0, 0.012]], PAINT, { M: 20 });
+    }
+    parts.winches = W.out();
   }
   return { parts, info: { beamY: s.beamY } };
 }

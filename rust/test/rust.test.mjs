@@ -6,7 +6,7 @@ import { generate, MOODS, CLIMATES } from '../src/recipe.js';
 import { tauAt, rainAt, wetAt, overcastAt } from '../src/timeline.js';
 import { buildPiece } from '../src/gen/pieces.js';
 import { corrosionField } from '../src/gen/corrosion.js';
-import { laserPlan, laserHead, laserCleanTime, frontAt, turnPlan, turnS, turnAngle, turnCleanS, faceAzimuth, nozzleY, bathPlan, bathOffset, bathClean, TAU } from '../src/machines.js';
+import { laserPlan, laserHead, laserCleanTime, frontAt, turnPlan, turnS, turnAngle, turnCleanS, turnAccess, impactY, nozzleY, JET_COS, bathPlan, bathOffset, bathClean, bathRinsed, rinseY, TAU } from '../src/machines.js';
 import { cameraPath, cameraStats } from '../src/camera.js';
 import { FAMILIES } from '../src/gen/pieces.js';
 
@@ -110,11 +110,20 @@ test('sablage : le plateau fait un nombre entier de tours ; la buse atteint chaq
       if (s === Infinity) continue;
       reached++;
       assert.ok(s >= 0 && s <= 1 + 1e-9, `${fam} : s* = ${s}`);
-      // à s*, la face est tournée vers la buse (azimut) et dans son empreinte (hauteur)
-      const az = faceAzimuth(p, n) + turnAngle(plan, s);
+      // à s*, la face entre dans le champ des jets (azimut d'accès tourné jusqu'à
+      // la rampe), avec une incidence utile, et le jet frappe à sa hauteur
+      const ph = turnAccess(plan, C.dirs, p, n), az = ph + turnAngle(plan, s);
       const d = Math.atan2(Math.sin(az - plan.az), Math.cos(az - plan.az));
       assert.ok(Math.abs(d) < 1e-6, `${fam} : écart d'azimut ${d}`);
-      assert.ok(Math.abs(nozzleY(plan, s) - p[1]) <= plan.foot / 2 + 1e-6, `${fam} : hors de l'empreinte`);
+      const a = plan.az - turnAngle(plan, s), jet = [-Math.cos(plan.tilt) * Math.cos(a), -Math.sin(plan.tilt), -Math.cos(plan.tilt) * Math.sin(a)];
+      const inc = -(n[0] * jet[0] + n[1] * jet[1] + n[2] * jet[2]);
+      // (au moins l'incidence utile, ou la meilleure possible pour une face rasante)
+      const best = Math.cos(plan.tilt) * Math.hypot(n[0], n[2]) + Math.sin(plan.tilt) * n[1];
+      if (Math.hypot(n[0], n[2]) > 0.45) assert.ok(inc > Math.min(JET_COS, best) - 0.02, `${fam} : incidence ${inc.toFixed(2)}`);
+      // (le jet incliné frappe plus bas que la rampe ; un point plus haut que le
+      // premier passage est pris au premier tour)
+      const yi = impactY(plan, p, ph);
+      if (yi < plan.yTop - plan.foot / 2) assert.ok(Math.abs(nozzleY(plan, s) - yi) <= plan.foot / 2 + 1e-6, `${fam} : hors de l'empreinte`);
     }
     assert.ok(reached / (pr.length / 8) > 0.15, `${fam} : trop peu de points atteints (${(reached / (pr.length / 8)).toFixed(2)})`);
   }
@@ -136,7 +145,20 @@ test('bain : la pièce descend toute entière sous le niveau, remonte, et ressor
     for (const y of [P.info.lo[1], (P.info.lo[1] + P.info.hi[1]) / 2, P.info.hi[1]]) {
       assert.ok(bathClean(plan, [0, y, 0], U.up1 + 0.001));
       assert.ok(!bathClean(plan, [0, y, 0], U.up0 - 0.001));
+      // la boue : rincée quand la rampe passe sous le point, toute rincée à la fin
+      assert.ok(!bathRinsed(plan, [0, y, 0], U.rinse0 - 0.001));
+      assert.ok(bathRinsed(plan, [0, y, 0], U.rinse1 + 0.001));
     }
+    // la rampe : entoure la pièce (en plan, dans la fosse), balaie de son
+    // sommet à son pied en descendant, revient se garer ; jamais sur le couvercle
+    const g = plan.ring, T = plan.tank;
+    assert.ok(g.hx - g.r > (P.info.hi[0] - P.info.lo[0]) / 2 + 0.02 && g.hz - g.r > (P.info.hi[2] - P.info.lo[2]) / 2 + 0.02, `${fam} : la rampe touche la pièce`);
+    assert.ok(g.hx + g.r < T.hx && g.hz + g.r < T.hz, `${fam} : la rampe déborde de la fosse`);
+    assert.ok(g.top > P.info.hi[1] + plan.rest + 0.05 && g.bot < P.info.lo[1] + plan.rest);
+    let py = rinseY(plan, U.rinse0);
+    for (let u = U.rinse0; u <= U.rinse1; u += 1e-4) { const y = rinseY(plan, u); assert.ok(y <= py + 1e-12); py = y; }
+    for (let u = 0; u < 1; u += 1e-3) assert.ok(rinseY(plan, u) - g.r > 0.075, `${fam} : la rampe descend sur le couvercle en ${u}`);
+    assert.ok(Math.abs(rinseY(plan, 0) - rinseY(plan, 0.999999)) < 1e-9);
   }
 });
 
@@ -201,10 +223,15 @@ test('rien ne se traverse : machines et pièce à tous les instants', async () =
     {
       const { R, P, C } = scene('k3', 'sablage', fam);
       const plan = turnPlan(R, C.radial, P.info.lo, P.info.hi);
-      const M = buildMachine({ kind: 'sablage', lo: P.info.lo, hi: P.info.hi, rMax: plan.rMax, platen: 0.3, tilt: plan.tilt });
+      const M = buildMachine({ kind: 'sablage', lo: P.info.lo, hi: P.info.hi, rMax: plan.rMax, platen: 0.3, tilt: plan.tilt, foot: plan.foot });
       const tip = M.info.Rc - M.info.reach;
       assert.ok(tip - Math.sin(plan.tilt) * 0.0 > plan.rMax + 0.1, `${fam} : buse à ${tip.toFixed(2)} pour une pièce de rayon ${plan.rMax.toFixed(2)}`);
       assert.ok(M.info.Rp > plan.rMax && M.info.Rc - 0.12 > M.info.Rp, `${fam} : colonne sur le plateau`);
+      // la rampe (aussi large que la pièce) ne pivote qu'au-dessus d'elle, et
+      // la colonne est assez haute pour la porter
+      assert.ok(plan.yTop - 0.03 > P.info.hi[1] + 0.03, `${fam} : la rampe pivote dans la pièce`);
+      assert.ok(M.info.H > plan.yTop + 0.3 + 0.1, `${fam} : colonne trop courte`);
+      assert.ok(Math.abs(M.info.Rc - M.info.reach - plan.Rn) < 1e-9, `${fam} : buses hors de leur place`);
     }
     // bain : la pièce reste dans la fosse (marges) et au-dessus de son fond
     {

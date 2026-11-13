@@ -10,7 +10,8 @@
 //  - bouffée (puff) : quad face à la caméra, disque doux — poussière,
 //    éclaboussures, bulles.
 import * as THREE from 'three/webgpu';
-import { attribute, cameraPosition, vec3, vec4, float, uv, normalize, cross, length, smoothstep, mix, uniform, color, max, clamp } from 'three/tsl';
+import { attribute, cameraPosition, vec3, vec4, float, uv, normalize, cross, length, smoothstep, mix, uniform, color, max, clamp, mrt } from 'three/tsl';
+import { isLite } from './materials.js';
 
 export function createParticles(scene, { max: N, kind = 'streak', blend = 'add', tint = '#ffffff' }) {
   const g = new THREE.InstancedBufferGeometry();
@@ -52,6 +53,11 @@ export function createParticles(scene, { max: N, kind = 'streak', blend = 'add',
     m.colorNode = vec3(U.color).mul(par.z).mul(U.gain);
     m.opacityNode = a;
   }
+  // (les particules ne touchent ni aux vitesses ni à la réflectance : sorties
+  // à alpha nul, donc laissées telles quelles par le mélange. Sans cela, leurs
+  // quads écrivaient des vitesses que le flou de bougé et l'anticrénelage
+  // temporel étiraient en rectangles fantômes)
+  if (!isLite()) m.mrtNode = mrt({ velocity: vec4(0), refl: vec4(0) });
   const mesh = new THREE.Mesh(g, m);
   mesh.frustumCulled = false;
   mesh.renderOrder = 5;

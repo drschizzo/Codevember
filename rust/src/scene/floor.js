@@ -115,7 +115,7 @@ export function floorMaterial(kind, U) {
   const puddle = ss(0.05, 0.2, big.add(mid.mul(0.3)).negate().add(U.puddle.mul(0.3))).mul(onFloor);
   const wet = clamp(U.wet.mul(onFloor), 0, 1);
   col = col.mul(mix(float(1), float(0.62), wet));
-  rough = mix(rough, mix(float(0.3), float(0.04), puddle), wet);
+  rough = mix(rough, mix(float(0.3), float(0.09), puddle), wet); // (flaque : un reflet adouci, pas une tache blanche de miroir)
   H = H.mul(float(1).sub(puddle.mul(wet)));
   m.colorNode = col;
   m.roughnessNode = rough;
@@ -136,8 +136,11 @@ export function standMaterial(paint = '#3b4148') {
   const wood = s.x;
   // chêne : cernes le long de l'axe principal de la cale, rayons médullaires
   const g = vec3(p.x.mul(9), p.y.mul(70), p.z.mul(70)).add(vec3(fbm(p.mul(3), 2).mul(4), 0, 0));
-  const ring = fract(length(g.yz).mul(0.25).add(fbm(p.mul(6), 2).mul(1.5)));
-  const oak = mix(vec3(0.3, 0.19, 0.1), vec3(0.42, 0.29, 0.16), ss(0.2, 0.8, ring)).mul(noise(p.mul(200)).mul(0.08).add(0.95)).mul(s.w.mul(0.2).add(0.85));
+  // (cernes de 4 à 7 mm, comme un vrai chêne : à 6 cm, ils se lisaient comme
+  // un dessin animé ; bois de calage grisé, taché)
+  const ring = fract(length(g.yz).mul(2.4).add(fbm(p.mul(6), 2).mul(2.5)));
+  const stain = ss(-0.2, 0.4, fbm(p.mul(7).add(2.7), 3));
+  const oak = mix(vec3(0.2, 0.13, 0.075), vec3(0.3, 0.21, 0.13), ss(0.15, 0.85, ring)).mul(mix(float(1), float(0.62), stain)).mul(noise(p.mul(200)).mul(0.08).add(0.95)).mul(s.w.mul(0.2).add(0.85));
   const steel = color(new THREE.Color(paint)).mul(fbm(p.mul(8), 2).mul(0.08).add(1));
   m.colorNode = mix(steel, oak, wood);
   m.roughnessNode = mix(float(0.55), float(0.82), wood);
@@ -152,15 +155,18 @@ export function machineMaterial(paint = '#d9a21b', { clipY = null } = {}) {
   const m = new THREE.MeshPhysicalNodeMaterial();
   const p = positionGeometry, s = attribute('surf', 'vec4');
   const P = color(new THREE.Color(paint));
-  // peinture : légèrement marbrée, salie dans le bas
-  const dirt = ss(0.6, 0.0, positionWorld.y).mul(0.25);
-  const paintC = P.mul(fbm(p.mul(5), 2).mul(0.06).add(1)).mul(float(1).sub(dirt));
+  // peinture industrielle usée : marbrée, éclats qui montrent l'apprêt sombre,
+  // coulures de crasse verticales, salie dans le bas ; jamais un jouet neuf
+  const dirt = ss(0.9, 0.0, positionWorld.y).mul(0.35);
+  const grime = ss(0.0, 0.5, fbm(vec3(p.x.mul(26), p.y.mul(1.8), p.z.mul(26)), 3)).mul(0.28);
+  const chip = ss(0.5, 0.56, fbm(p.mul(19).add(3.3), 3).add(noise(p.mul(90)).mul(0.12))).mul(s.x);
+  const paintC = mix(P.mul(0.82).mul(fbm(p.mul(5), 2).mul(0.08).add(1)).mul(float(1).sub(dirt)).mul(float(1).sub(grime)), vec3(0.07, 0.065, 0.06), chip);
   const steel = vec3(0.6, 0.6, 0.61).mul(fbm(p.mul(30), 2).mul(0.05).add(1));
   const rubber = vec3(0.025, 0.025, 0.027);
   m.colorNode = paintC.mul(s.x).add(steel.mul(s.y)).add(rubber.mul(s.z));
   m.metalnessNode = s.y;
-  m.roughnessNode = s.x.mul(float(0.42).add(dirt)).add(s.y.mul(0.4)).add(s.z.mul(0.72));
-  m.clearcoatNode = s.x.mul(0.3);
+  m.roughnessNode = s.x.mul(float(0.48).add(dirt).add(grime.mul(0.5)).add(chip.mul(0.2))).add(s.y.mul(0.4)).add(s.z.mul(0.72));
+  m.clearcoatNode = s.x.mul(0.12).mul(float(1).sub(chip));
   m.clearcoatRoughnessNode = float(0.25);
   if (clipY !== null) m.maskNode = positionWorld.y.lessThan(clipY);
   m.mrtNode = stableVelocity();

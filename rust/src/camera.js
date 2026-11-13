@@ -29,7 +29,10 @@ export function cameraPath(R, { box, focus, frameBox = box }) {
     const f = focus(u) ?? c;
     const tgt = [0, 1, 2].map((k) => c[k] + (f[k] - c[k]) * close * 0.5);
     const d = dWide * (1 - (1 - C.close) * close);
-    const az = C.az + C.sway * sin(2 * PI * u) + (C.side ?? 0.38) * close * (C.az >= 0 ? 1 : -1);
+    // (laser : le gros plan reste dans l'ouverture du portique — décalé de
+    // côté, il passait derrière un pied, qui barrait l'image)
+    const side = (C.side ?? 0.38) * (R.machine?.kind === 'laser' ? 0.35 : 1);
+    const az = C.az + C.sway * sin(2 * PI * u) + side * close * (C.az >= 0 ? 1 : -1);
     const e = el * (1 - 0.25 * close);
     raw.push([...tgt, d, az, e]);
   }
