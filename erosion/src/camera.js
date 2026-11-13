@@ -1,20 +1,22 @@
 // Le découpage (module pur) : la boucle est filmée en six plans, montés cut,
 // chacun calé sur ce qui se passe dans le bac.
 //
-//   ensemble  (0,955 → 0,11, à cheval sur la boucle) : l'appareil entier dans
-//             son lieu, lent travelling avant ; l'eau arrive.
+//   ensemble  (0,905 → 0,11, à cheval sur la boucle) : le bac en plongée,
+//             lent travelling avant ; la lame finit son passage, se lève et
+//             rentre au garage, puis l'eau arrive.
 //   au ras    (0,11 → 0,30) : l'objectif dans le bac, à 3 cm du sable, en aval
 //             de l'endroit où l'eau travaille, regard vers l'amont — la
 //             miniature devient un paysage (courte focale, grande profondeur).
-//   macro     (0,30 → 0,47) : une berge active de près, longue focale, faible
-//             profondeur de champ — l'échelle vraie du laboratoire.
+//   gros plan (0,30 → 0,47) : une berge active de près (cadre de ~35 cm, la
+//             finesse de la simulation), longue focale, profondeur réduite.
 //   carte     (0,47 → 0,64) : plongée presque verticale, lente rotation — le
 //             réseau entier se dessine pendant l'accéléré.
-//   séchage   (0,64 → 0,812) : plan large en lumière rasante, panoramique lent ;
-//             le portique traverse le cadre vers l'aval.
-//   la lame   (0,812 → 0,955) : de profil, la caméra accompagne la lame à sa
-//             vitesse, un peu en avant d'elle : le bourrelet vient vers nous,
-//             le sable neuf reste derrière.
+//   séchage   (0,64 → 0,806) : le paysage entier en plongée, lumière rasante,
+//             panoramique lent.
+//   la lame   (0,806 → 0,905) : panoramique depuis le haut du bout amont : le
+//             portique arrive en aval, descend sa lame et remonte le bac vers
+//             nous ; le paysage s'efface d'un bout à l'autre. Raccord dans le
+//             mouvement avant que la poutre ne passe sous l'objectif.
 //
 // Dans un plan, la caméra va d'une pose à l'autre à vitesse constante (pas
 // d'à-coup) ; entre deux plans, un raccord (le rendu remet à zéro le flou de
@@ -30,12 +32,12 @@ export const toWorld = (x, y, z = 0.07) => [x - TABLE.Lx / 2, z, y - TABLE.Ly / 
 
 // les plans : début (phase), type
 export const SHOTS = [
-  { u0: 0.955, kind: 'ensemble' },
+  { u0: 0.905, kind: 'ensemble' }, // (raccord dans le mouvement : la lame finit son passage, se lève et rentre, vue de haut)
   { u0: 0.11, kind: 'ras' },
   { u0: 0.30, kind: 'macro' },
   { u0: 0.47, kind: 'carte' },
   { u0: 0.64, kind: 'sechage' },
-  { u0: 0.812, kind: 'lame' }, // (après le roulement rapide du portique : il attend en aval, lame qui descend)
+  { u0: 0.806, kind: 'lame' }, // (le portique part vers l'aval, descend sa lame et revient vers nous)
 ];
 
 // l'ordre des plans entre les mêmes raccords, propre à la famille : la brèche
@@ -127,8 +129,10 @@ export function buildCamera(R, S) {
     let position, target, f = fov, dof = 1, near = 0.05;
     switch (kind) {
       case 'ensemble': {
-        target = mid;
-        position = sph(mid, lerp(0.8, 0.68, t), 0.55 * hk, lerp(1.95, 1.62, t));
+        // (plongée franche et plus près : le bac remplit le cadre, le piétement et le
+        // sol sortent du champ, le rail proche longe le bas de l'image au lieu de le barrer)
+        target = toWorld(TABLE.Lx / 2, TABLE.Ly * 0.56, 0.07);
+        position = sph(target, lerp(0.78, 0.66, t), 0.8 + 0.12 * (hk - 1), lerp(1.62, 1.38, t));
         break;
       }
       case 'ras': {
@@ -138,8 +142,11 @@ export function buildCamera(R, S) {
       }
       case 'macro': {
         target = at(Fc.macro, -0.004);
-        position = sph(target, lerp(0.95, 1.2, t), 0.72, 0.42);
-        f = 24; dof = 0.55;
+        // (gros plan plutôt que macro : à 42 cm et 24°, le cadre ne couvrait que 70
+        // cellules de la simulation et montrait l'interpolation du relief, pas le sable ;
+        // à ~35 cm de large, 140 cellules, le relief tient)
+        position = sph(target, lerp(0.95, 1.2, t), 0.72, 0.66);
+        f = 28; dof = 0.8;
         break;
       }
       case 'carte': {
@@ -148,25 +155,24 @@ export function buildCamera(R, S) {
         break;
       }
       case 'sechage': {
-        target = toWorld(TABLE.Lx * 0.55, TABLE.Ly / 2, 0.07);
-        position = sph(target, lerp(0.42, 0.72, t), 0.5 * hk, 1.35); // (assez haut pour que le rail passe sous le regard)
+        // (haut et serré : le paysage remplit le cadre, le rail proche reste sous le bord bas)
+        target = toWorld(TABLE.Lx * 0.55, TABLE.Ly * 0.56, 0.07);
+        position = sph(target, lerp(0.42, 0.7, t), 0.82 + 0.1 * (hk - 1), 1.22);
         break;
       }
-      default: { // la lame : la cible suit le portique
-        const F = filmState(u, S);
-        // (pas de borne sur x : une borne casserait la vitesse quand la lame quitte le
-        // sable ; hauteur constante : le profil a des ruptures de pente, la grue reste à niveau)
-        const gx = F.gantryX, hz = bladeZ;
-        target = toWorld(gx - 0.03, TABLE.Ly / 2, hz + 0.02);
-        // (au-dessus de la ligne du rail : il passe au bas du cadre, pas en travers)
-        // (avec le simulateur de pluie, la caméra passe en dedans de ses montants : de
-        // l'extérieur, un montant traversait le cadre en gros plan ; elle se tient en
-        // avant de la lame, en plongée, et regarde venir le bourrelet)
-        if (S.rain) {
-          target = toWorld(gx - 0.08, TABLE.Ly / 2, hz + 0.01);
-          position = sph(target, -0.6, 0.95, 0.5);
-        } else position = sph(target, -0.5, 0.5, 0.85);
-        f = fov - 2;
+      default: { // la lame : un panoramique qui la regarde venir
+        // La caméra se tient haut au-dessus du bout amont du bac (au-dessus de la
+        // boîte d'alimentation), presque immobile, et tourne pour suivre la lame qui
+        // remonte tout le bac vers elle : le paysage s'efface d'un bout à l'autre, le
+        // bourrelet vient vers nous, la poutre reste derrière la lame. (Une caméra qui
+        // accompagnait la lame à distance fixe finissait derrière la boîte
+        // d'alimentation, face au dos de la machine.) Hauteur de visée constante : le
+        // profil a des ruptures de pente.
+        const F = filmState(u, S), gx = F.gantryX, hz = bladeZ;
+        target = toWorld(gx - 0.04, TABLE.Ly / 2, hz + 0.01);
+        const c = toWorld(lerp(-0.1, -0.15, t), TABLE.Ly / 2 + side * lerp(0.16, 0.2, t), lerp(0.92, 0.86, t));
+        position = c;
+        f = fov - 3;
         break;
       }
     }

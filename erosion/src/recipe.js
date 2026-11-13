@@ -98,15 +98,19 @@ export const MOODS = {
   },
   cyclorama: {
     label: 'Cyclorama', env: 'cyclo', bg: '#e9e7e2', floor: '#dcdad5',
-    key: { kind: 'lamp', az: -1.9, el: 0.6, dist: 2.6, K: 5600, lux: 3.3, angle: 0.7, pen: 0.65 },
-    fill: { az: 1.2, el: 1.0, K: 6000, lux: 0.9 }, rim: { az: 3.0, el: 0.5, K: 6000, lux: 0.4 },
-    envI: [0.32, 0.42], grade: { contrast: 0.98, saturation: 0.9, shadows: [0.98, 1.0, 1.03], highlights: [1, 1, 1], exposure: 1 },
+    // (lampe plus basse, appoint et studio réduits : sous une lumière haute et
+    // enveloppante, le relief de quelques mm disparaissait sur le fond blanc)
+    key: { kind: 'lamp', az: -1.9, el: 0.42, dist: 2.6, K: 5600, lux: 4.6, angle: 0.7, pen: 0.65 },
+    fill: { az: 1.2, el: 1.0, K: 6000, lux: 0.45 }, rim: { az: 3.0, el: 0.5, K: 6000, lux: 0.4 },
+    envI: [0.22, 0.3], grade: { contrast: 0.98, saturation: 0.9, shadows: [0.98, 1.0, 1.03], highlights: [1, 1, 1], exposure: 1 },
   },
   verriere: {
     label: 'Verrière', env: 'overcast', bg: '#9aa3a8', floor: '#6e7275',
-    key: { kind: 'lamp', az: 0.4, el: 0.7, dist: 3, K: 6800, lux: 2.4, angle: 0.8, pen: 0.8 },
-    fill: { az: 2.8, el: 1.0, K: 7000, lux: 0.6 }, rim: { az: -2, el: 0.6, K: 6500, lux: 0.3 },
-    envI: [0.7, 0.9], grade: { contrast: 1.0, saturation: 0.92, shadows: [0.95, 1.0, 1.06], highlights: [1.0, 1.0, 1.02], exposure: 1 },
+    // (ciel couvert, mais orienté : une verrière éclaire d'un côté ; tout enveloppée,
+    // la lumière aplatissait les dépôts en taches de couleur sans relief)
+    key: { kind: 'lamp', az: 0.4, el: 0.5, dist: 3, K: 6800, lux: 3.2, angle: 0.8, pen: 0.8 },
+    fill: { az: 2.8, el: 1.0, K: 7000, lux: 0.4 }, rim: { az: -2, el: 0.6, K: 6500, lux: 0.3 },
+    envI: [0.5, 0.65], grade: { contrast: 1.0, saturation: 0.92, shadows: [0.95, 1.0, 1.06], highlights: [1.0, 1.0, 1.02], exposure: 1 },
   },
   contreJour: {
     label: 'Contre-jour', env: 'dark', bg: '#08090b', floor: '#101112',

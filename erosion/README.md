@@ -33,7 +33,7 @@ Le panneau règle l'humeur et l'expérience (nouvelle scène de la même graine,
 | 0 – 0,05 | le sable neuf | — | — | — |
 | 0,05 – 0,68 | l'expérience | la pluie, le débordement de la boîte (flotteur du débitmètre), la guillotine du déversoir | Saint-Venant, Meyer-Peter–Müller, talus | eau en temps réel, relief accéléré (MORFAC 30–50) |
 | 0,66 – 0,80 | le séchage, le portique roule vers l'aval | (le sable pâlit) | frange capillaire | accéléré |
-| 0,815 – 0,95 | la lame descend et remonte le bac | moteur, courroie, vérins | conservation de la masse (le bourrelet) | temps réel |
+| 0,81 – 0,95 | la lame descend et remonte le bac | moteur, courroie, vérins | conservation de la masse (le bourrelet) | temps réel |
 | 0,95 – 1 | la lame se lève, le portique rentre | — | — | — |
 
 Le temps hydraulique T = S.T · (u − 0,05) / 0,63 : l'eau coule à sa vitesse (un peu ralentie : 25 s d'hydraulique sur 30 s de film), le relief change ×30 à ×50 plus vite (facteur d'accélération morphologique de Lesser et al. 2004, celui des modèles de Delft3D) — l'eau a l'air de couler normalement pendant que le paysage se fait en une demi-minute. À u = 0 la simulation n'a pas commencé : le relief est b₀. À u → 1, la lame est passée partout : le relief est b₀. Rien d'autre ne garde d'état.
@@ -91,7 +91,9 @@ Un seul maillage (1 024 × 512 sommets), un seul matériau :
 
 ## L'appareil (`src/gen/apparatus.js`, `src/scene/apparatus.js`)
 
-Bac (fond, parois d'acrylique clair, profilés d'aluminium de 30 × 30, montants), piétement (quatre pieds de 40 × 40, traverses, pieds réglables, vérins de basculement à volant), boîte d'alimentation en inox avec sa goulotte en biseau, son robinet à volant et son débitmètre à flotteur, déversoir aval (caisson, glissières, guillotine à crémaillère et volant, tuyau de sortie), portique (deux rails ronds sur supports, chariots à galets, poutre de 60 × 30, moteur pas à pas, vérins de descente), lame-gabarit en aluminium anodisé dont le bord bas est le profil en travers, simulateur de pluie (quatre montants, caisson à aiguilles). Le portique et le châssis ne portent pas d'ombre sur le paysage (une barre d'ombre en travers du sable se lisait comme un défaut) ; seule la lame en porte, quand elle est au contact.
+Bac (fond, parois d'acrylique clair, profilés d'aluminium de 30 × 30, montants), piétement (quatre pieds de 40 × 40, traverses, pieds réglables, vérins de basculement à volant), boîte d'alimentation en inox avec sa goulotte en biseau, son robinet à volant et son débitmètre à flotteur, déversoir aval (caisson, glissières, guillotine à crémaillère et volant, tuyau de sortie), portique (deux rails ronds sur supports, chariots à galets, poutre de 60 × 30, moteur pas à pas, vérins de descente), lame-gabarit dont le bord bas est le profil en travers, simulateur de pluie (quatre montants, caisson à aiguilles).
+
+**Le bâti s'efface devant le sable.** Le sujet est le relief ; l'appareil n'en est que la cause et le cadre. Châssis, rails, portique, caissons et lame sont laqués mats dans la valeur du lieu : l'albédo a est choisi pour que, sous la lampe et l'appoint de l'humeur (E lux), a · E / π rende à peu près la luminance du fond (un peu en dessous). Sur fond noir, l'appareil est un cadre sombre ; sur le cyclorama, un bâti blanc mat ; on le lit par sa forme, plus par des lignes vives. (En aluminium brut et inox satiné, les rails et les profilés étaient les tracés les plus contrastés de l'image, et la lame polie, garée, renvoyait la lampe en une barre blanche au fond du plan au ras du sable.) La paroi amont, face à ce plan, est un panneau peint plutôt qu'une vitre. **La lame reste dans le bac** : elle ne descend et ne pousse qu'entre les deux bouts du sable (1,5 mm de jeu contre la paroi amont et devant la guillotine) ; la goulotte de la boîte d'alimentation traverse la paroi par une fente et s'arrête à son nu ; levée, la lame est portée à niveau au-dessus de la boîte d'alimentation, des profilés et de la digue de la brèche ; les tiges des vérins vont du haut de la lame à l'intérieur de leur corps, pendu sous la poutre, quelle que soit la hauteur de la lame (elle suit la pente du gabarit, de 12 cm en amont à 5 cm en aval). Un test pose la lame à chaque instant de la boucle contre les pièces fixes. (Elle allait autrefois 3 cm au-delà de chaque bout, dans la paroi amont et la boîte d'alimentation, dans le caisson du déversoir : l'acrylique transparent le cachait.) Le portique, ses tiges et le châssis ne portent pas d'ombre sur le paysage (une barre d'ombre en travers du sable se lisait comme un défaut) ; seule la lame en porte, quand elle est au contact.
 
 **Les ombres du sable** : le relief ne se projette pas dans la carte d'ombre. Étirée en lumière rasante sur tout le bac, elle dessinait des escaliers de plusieurs millimètres au bord des ombres, visibles en gros plan. L'ombre portée du relief est tracée sur la carte de hauteur, une fois par image dans la passe de calcul : depuis chaque cellule, vers la lampe principale, par pas d'une cellule puis de plus en plus longs, jusqu'à ~1 m. La pénombre suit la taille apparente de la lampe (soleil net, lampe plus douce). Le matériau du sable multiplie l'ombre de la carte (la lame) par cette ombre-là, lue en B-spline bicubique (en bilinéaire, le bord d'ombre dessinait la grille des cellules en gros plan), et le sable n'est plus dessiné dans la passe d'ombre (un million de sommets en moins).
 
@@ -104,12 +106,12 @@ Le fond est neutre ; chaque humeur se distingue par son lieu, sa lumière, sa va
 | Laboratoire | hall d'essais, murs gris moyen | grandes boîtes zénithales, lampe de biais | moyenne | limon, grès, ocres, glauconie |
 | Fin de jour | atelier sombre, une grande fenêtre | soleil bas et dur, de biais arrière, 4 300 K | contrastée | grès, ocres, silice |
 | Lampe rasante | pièce noire | une lampe au ras du sable, de côté | très sombre | grès, silice, glauconie, ocres |
-| Cyclorama | cyclorama blanc | lumière enveloppante d'en haut | très claire | basalte, glauconie, grès |
-| Verrière | sous une verrière, ciel couvert | ciel diffus, un peu bleuté | moyenne | limon, glauconie, ocres |
+| Cyclorama | cyclorama blanc | une lampe assez basse sur fond blanc, appoint léger | très claire | basalte, glauconie, grès |
+| Verrière | sous une verrière, ciel couvert | ciel diffus mais orienté, un peu bleuté | moyenne | limon, glauconie, ocres |
 | Contre-jour | fond noir | une lampe derrière le bac, face à la caméra : l'eau scintille | sombre | silice, limon, grès |
 | Midi | dehors | soleil haut et dur | très claire | ocres, grès, silice |
 
-Chaque humeur garde une lampe principale à moins de ~55° au-dessus du sable (Cyclorama, Verrière et Midi ont été abaissées) : le sujet est un relief de quelques millimètres, et sous une lumière zénithale il disparaissait. L'aluminium est microbillé, l'acier et l'inox satinés : leurs reflets étaient les points les plus vifs de l'image.
+Chaque humeur garde une lampe principale à moins de ~55° au-dessus du sable (Cyclorama, Verrière et Midi ont été abaissées) : le sujet est un relief de quelques millimètres, et sous une lumière zénithale il disparaissait.
 
 Six sables (accords de quatre tons de strates, d'un ton de dépôt, de grains sombres et d'eau chargée) : silice et kaolin, grès rouge, basalte, ocres, limon, glauconie et craie ; quatre stratigraphies : lits fins réguliers, bancs durs et tendres, chapeau dur, sable uniforme. Les azimuts des lumières sont donnés pour une caméra d'un côté du bac et réfléchis quand elle vole de l'autre.
 
@@ -117,16 +119,16 @@ Six sables (accords de quatre tons de strates, d'un ton de dépôt, de grains so
 
 | u | Plan | Ce qu'il montre |
 | --- | --- | --- |
-| 0,955 – 0,11 | ensemble (à cheval sur la boucle) | l'appareil dans son lieu, lent travelling avant ; l'eau arrive |
+| 0,905 – 0,11 | ensemble (à cheval sur la boucle) | le bac en plongée (~45°), qui remplit le cadre, lent travelling avant ; la lame finit son passage, se lève et rentre ; l'eau arrive |
 | 0,11 – 0,30 | au ras du sable | l'objectif dans le bac, à 3 cm du sable (et du lac), en aval, regard vers l'amont : la miniature devient un paysage (courte focale, grande profondeur de champ) |
-| 0,30 – 0,47 | macro | une berge active de près, longue focale, faible profondeur de champ : l'échelle vraie |
+| 0,30 – 0,47 | gros plan | une berge active de près (cadre de ~35 cm, soit ~140 cellules : plus près, on voyait l'interpolation du relief, pas le sable), longue focale, profondeur de champ réduite |
 | 0,47 – 0,64 | carte | plongée presque verticale, lente rotation : le réseau se dessine pendant l'accéléré |
-| 0,64 – 0,812 | séchage | large, en lumière rasante, panoramique lent ; le portique traverse le cadre |
-| 0,812 – 0,955 | la lame | de profil, la caméra suit la lame à sa vitesse, un peu en avant : le bourrelet vient vers nous, le sable neuf reste derrière (en dedans des montants quand il y a le simulateur de pluie) |
+| 0,64 – 0,806 | séchage | le paysage entier en plongée haute et serrée, lumière rasante, panoramique lent ; le portique part vers l'aval |
+| 0,806 – 0,905 | la lame | panoramique depuis le haut du bout amont : le portique arrive en aval, descend sa lame et remonte le bac vers nous ; le paysage s'efface d'un bout à l'autre, le bourrelet vient vers nous, la poutre reste derrière la lame. Raccord dans le mouvement avant que la poutre ne passe sous l'objectif (le plan d'ensemble montre la fin du passage) |
 
 Pour la brèche, qui se fait tard (le lac doit d'abord se remplir), l'ordre change entre les mêmes raccords : la carte pendant le remplissage, le plan au ras du sable quand l'eau franchit l'échancrure, la macro quand la brèche s'élargit en crue.
 
-Dans un plan, la caméra va d'une pose à l'autre à vitesse constante ; à chaque raccord, la chaîne d'image remet à zéro le flou de mouvement et l'historique de l'anticrénelage temporel, et le rendu accumulé n'ouvre jamais l'obturateur à cheval sur deux plans. La caméra qui suit la lame reste à niveau (le profil du gabarit a des ruptures de pente). Dans chaque plan : pointe sous 25 °/s, accélération sous 1,5 m/s² (testées à 120 i/s).
+Dans un plan, la caméra va d'une pose à l'autre à vitesse constante ; à chaque raccord, la chaîne d'image remet à zéro le flou de mouvement et l'historique de l'anticrénelage temporel, et le rendu accumulé n'ouvre jamais l'obturateur à cheval sur deux plans. Le panoramique sur la lame vise à hauteur constante (le profil du gabarit a des ruptures de pente). Dans chaque plan : pointe sous 25 °/s, accélération sous 1,5 m/s² (testées à 120 i/s).
 
 ## Tests
 
@@ -134,7 +136,7 @@ Dans un plan, la caméra va d'une pose à l'autre à vitesse constante ; à chaq
 node --test 'erosion/test/*.test.mjs'
 ```
 
-Vingt-cinq tests : le sable se conserve (ce qui manque est sorti par le déversoir) ; l'eau se conserve et reste positive, sans NaN ; la simulation est déterministe ; le delta creuse l'amont et comble le lac ; l'escarpement se creuse plus vite que le plateau ; la brèche entaille la digue ; strates et duretés ; la surface de départ est celle que dessine la lame ; raccord exact (l'état à u → 1 est celui de u = 0) ; la lame balaie tout le bac sans revenir en arrière, son bord bas est b₀ ; le séchage ne recule jamais ; à la fin de l'expérience, le relief s'arrête sans saut de vitesse et l'eau est infiltrée quand elle cesse d'être dessinée ; six plans de plus de 4 s, un raccord par plan ; dans chaque plan la caméra est lente ; elle passe au-dessus des parois, ou, au ras du sable, dans le bac loin des parois, au-dessus du sable de départ et du lac, portique garé ; jamais à moins de 12 cm d'un montant, d'un rail ou de la poutre ; la recette est déterministe et en JSON ; humeurs, familles, sables et stratigraphies tirés ; lampes presque blanches (le soleil couchant excepté) ; humeurs différentes par le lieu, la lumière et la valeur ; familles aux gestes distincts.
+Vingt-six tests : le sable se conserve (ce qui manque est sorti par le déversoir) ; l'eau se conserve et reste positive, sans NaN ; la simulation est déterministe ; le delta creuse l'amont et comble le lac ; l'escarpement se creuse plus vite que le plateau ; la brèche entaille la digue ; strates et duretés ; la surface de départ est celle que dessine la lame ; raccord exact (l'état à u → 1 est celui de u = 0) ; la lame balaie tout le bac sans revenir en arrière, son bord bas est b₀ ; le séchage ne recule jamais ; à la fin de l'expérience, le relief s'arrête sans saut de vitesse et l'eau est infiltrée quand elle cesse d'être dessinée ; six plans de plus de 4 s, un raccord par plan ; dans chaque plan la caméra est lente ; elle passe au-dessus des parois, ou, au ras du sable, dans le bac loin des parois, au-dessus du sable de départ et du lac, portique garé ; jamais à moins de 12 cm d'un montant, d'un rail ou de la poutre ; la lame et ses tiges ne traversent jamais une paroi, la boîte d'alimentation, le déversoir ni les vérins ; la recette est déterministe et en JSON ; humeurs, familles, sables et stratigraphies tirés ; lampes presque blanches (le soleil couchant excepté) ; humeurs différentes par le lieu, la lumière et la valeur ; familles aux gestes distincts.
 
 ## Performances
 

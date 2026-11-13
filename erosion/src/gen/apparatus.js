@@ -18,7 +18,8 @@ export const DIM = {
   wallT: 0.008,              // épaisseur de l'acrylique
   wallTop: 0.175,            // haut des parois
   railY: 0.225, railZ: HZ + 0.055, railR: 0.008,
-  beamY: 0.30,               // poutre du portique
+  beamY: 0.36,               // poutre du portique (dessous ; les vérins pendent sous elle)
+  rodTop: 0.345,             // haut des tiges des vérins (dans leur corps)
   bladeH: 0.05, bladeT: 0.006,
   floorY: -0.82,             // sol du lieu
   benchY: -0.03,             // dessous du bac (châssis)
@@ -32,7 +33,9 @@ export function buildStatic(spec) {
   // ── bac : fond, parois d'acrylique, profilés du haut ──
   box(base, [0, -0.008, 0], [HX + 0.06, 0.008, HZ + 0.02], 0.002);
   for (const s of [-1, 1]) box(acr, [0, D.wallTop / 2 - 0.016, s * (HZ + D.wallT / 2)], [HX + 0.004, D.wallTop / 2 + 0.016, D.wallT / 2], 0.0015, 3);
-  box(acr, [-HX - D.wallT / 2, D.wallTop / 2 - 0.016, 0], [D.wallT / 2, D.wallTop / 2 + 0.016, HZ + D.wallT], 0.0015, 3);
+  // (paroi amont : un panneau peint, pas d'acrylique — face à la caméra du plan au ras
+  // du sable, une vitre renvoyait la lampe en une barre blanche au fond du paysage)
+  box(base, [-HX - D.wallT / 2, D.wallTop / 2 - 0.016, 0], [D.wallT / 2, D.wallTop / 2 + 0.016, HZ + D.wallT], 0.0015, 3);
   // profilés de 30 × 30 le long des bords hauts, et en bout
   for (const s of [-1, 1]) {
     box(alu, [0, D.wallTop + 0.015, s * (HZ + D.wallT + 0.015)], [HX + 0.07, 0.015, 0.015], 0.003);
@@ -94,7 +97,9 @@ export function buildStatic(spec) {
     const x0 = -HX - 0.004;
     box(inox, [x0 - 0.05, 0.155, zc], [0.045, 0.05, w], 0.003);
     // lèvre : une goulotte inclinée qui descend jusqu'au sable
-    inox.frame([x0 + 0.004, 0.118, zc], [0.94, -0.34, 0], [0.34, 0.94, 0], [0, 0, 1]);
+    // (la goulotte traverse la paroi amont par une fente et s'arrête à son nu
+    // intérieur : la lame, en fin de course, vient contre la paroi sans la toucher)
+    inox.frame([x0 + 0.004 - 0.0248, 0.118, zc], [0.94, -0.34, 0], [0.34, 0.94, 0], [0, 0, 1]);
     box(inox, [0.0, 0, 0], [0.02, 0.0015, w - 0.006], 0.001, 3);
     for (const s of [-1, 1]) box(inox, [0.0, 0.008, s * (w - 0.006)], [0.02, 0.008, 0.0015], 0.001, 3);
     inox.noFrame();
@@ -177,9 +182,7 @@ export function buildBlade(form) {
     const a = B.vert([-t, y0, z], [0, 0, s], EDGE), b = B.vert([t, y0, z], [0, 0, s], EDGE), c = B.vert([t, D.bladeH, z], [0, 0, s], EDGE), d = B.vert([-t, D.bladeH, z], [0, 0, s], EDGE);
     B.quad(a, b, c, d);
   }
-  // tiges des vérins
-  tube(B, [[0, D.bladeH, -(HZ - 0.08)], [0, D.bladeH + 0.13, -(HZ - 0.08)]], 0.004, 12, EDGE);
-  tube(B, [[0, D.bladeH, HZ - 0.08], [0, D.bladeH + 0.13, HZ - 0.08]], 0.004, 12, EDGE);
+  // (les tiges des vérins sont à part : leur longueur suit la hauteur de la lame)
   return B.out();
 }
 

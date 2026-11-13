@@ -44,6 +44,15 @@ export function createApparatus(scene, { lite = false, lights = [] } = {}) {
     const m = new THREE.Mesh(toGeometry(o), mats[k]); m.castShadow = false; m.receiveShadow = true; gantry.add(m);
   }
   let blade = null, gate = null, flt = null, specKey = '';
+  // tiges des vérins : du haut de la lame à l'intérieur de leur corps, sous la
+  // poutre — la lame suit la pente du gabarit (12 cm en amont, 5 en aval) et se
+  // lève jusqu'à 16 cm : une tige de longueur fixe sortait du corps ou traversait la poutre
+  const rods = [-1, 1].map((s) => {
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 1, 14, 1, true).translate(0, 0.5, 0), mats.steel);
+    m.position.z = s * (HZ - 0.08); m.castShadow = false; // (comme le portique : pas de trait d'ombre en travers du paysage)
+    gantry.add(m);
+    return m;
+  });
 
   // La nappe : l'eau qui déborde de la lèvre de la boîte et tombe sur le sable
   // (sans elle, l'eau naissait de rien sous la lèvre). Un ruban en parabole, plus
@@ -66,7 +75,7 @@ export function createApparatus(scene, { lite = false, lights = [] } = {}) {
     if (!S.src) return;
     const zc = S.src.y - HZ, w = Math.max(0.06, S.src.w) / 2 + 0.02 - 0.008;
     // bout de la lèvre (voir gen/apparatus.js : goulotte inclinée de 0,02 m, pente −0,34/0,94)
-    const x0 = -HX + 0.0188, y0 = 0.1112, v0 = 0.22, g = 9.81;
+    const x0 = -HX + 0.0188 - 0.0248, y0 = 0.1112, v0 = 0.22, g = 9.81;
     const ground = longProfile(S.form, 0.03) + crossProfile(S.form, S.src.y) - 0.002;
     // durée de chute jusqu'au sable
     const vy = -0.34 * v0, tf = (vy + Math.sqrt(vy * vy + 2 * g * Math.max(0.002, y0 - ground))) / g;
@@ -84,7 +93,32 @@ export function createApparatus(scene, { lite = false, lights = [] } = {}) {
     nappe.geometry = geo;
   }
 
+  // Le bâti peint au ton du lieu. La vedette est le sable : le châssis, les
+  // rails, le portique et les caissons sont laqués mats (laque de studio, comme
+  // on peint un banc de tournage) dans la valeur du fond, de sorte qu'éclairés
+  // par la lampe de l'humeur ils rendent à peu près la luminance du fond — ils se
+  // lisent par leur forme, pas comme des lignes vives qui traversent l'image.
+  // (Alu brut et inox satiné étaient, avec leurs reflets, les tracés les plus
+  // contrastés du cadre : sur fond noir, des barres claires ; sur fond clair,
+  // des arêtes brillantes.) Albédo a tel que a · E / π ≈ fond, E = lampe +
+  // appoint (lux de la recette) ; un peu plus sombre que le fond, borné.
+  function setTone(R) {
+    const bg = new THREE.Color(R.fog.color); // (linéaire)
+    const E = (R.light.key.lux ?? 4) * Math.max(0.35, Math.sin(R.light.key.el)) + (R.light.fill.lux ?? 0.5) + 0.6 * (R.env?.intensity ?? 0.3);
+    const a = (v) => Math.min(0.72, Math.max(0.025, (0.8 * v * Math.PI) / E));
+    const paint = new THREE.Color(a(bg.r), a(bg.g), a(bg.b));
+    mats.alu.color.copy(paint); mats.alu.metalness = 0; mats.alu.roughness = 0.68;
+    mats.inox.color.copy(paint).multiplyScalar(1.06); mats.inox.metalness = 0; mats.inox.roughness = 0.6;
+    // (rails et tiges : acier bruni, un métal sombre très peu réfléchissant)
+    mats.steel.color.copy(paint).multiplyScalar(0.8); mats.steel.metalness = 0.5; mats.steel.roughness = 0.55;
+    mats.base.color.copy(paint).multiplyScalar(0.7);
+    // (la lame : acier laqué du même ton, un peu plus clair ; polie, elle renvoyait
+    // la lampe en une barre blanche au fond du plan au ras du sable, garée)
+    mats.blade.color.copy(paint).multiplyScalar(1.15); mats.blade.metalness = 0.35; mats.blade.roughness = 0.5;
+  }
+
   function setRecipe(R, S) {
+    setTone(R);
     const key = JSON.stringify([S.form, S.src]);
     if (key === specKey) return;
     specKey = key;
@@ -121,6 +155,8 @@ export function createApparatus(scene, { lite = false, lights = [] } = {}) {
       // la lame suit le programme de hauteur du gabarit : son bord bas est la surface b₀
       const xs = Math.min(TABLE.Lx, Math.max(0, x));
       bladeG.position.set(0, longProfile(S.form, xs) + F.bladeLift, 0);
+      const yTop = bladeG.position.y + DIM.bladeH;
+      for (const r of rods) { r.position.y = yTop; r.scale.y = Math.max(0.001, DIM.rodTop - yTop); }
       // (la lame ne porte d'ombre que près du sable : garée, son ombre rasante traverserait le paysage)
       if (blade) blade.castShadow = F.bladeLift < 0.05 && x > -0.01;
       gate.position.set(HX + 0.006, Math.max(0.006, F.base), 0);

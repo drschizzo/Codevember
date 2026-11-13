@@ -221,7 +221,11 @@ export function createSand(gs) {
 
     // ce que montre la surface
     const depth = T.y, dep = T.z;
-    const isDep = smoothstep(0.0002, 0.0006, dep);
+    // (un placage de sable transporté se mêle à son lit : quelques grains épars sur
+    // le fond, puis une couverture pleine à quelques mm ; seuillé à 0,6 mm, le
+    // moindre voile basculait toute sa couleur et dessinait des aplats de camouflage)
+    const veneer = noise(vec3(p.x.mul(140), 6.7, p.z.mul(140))).mul(0.0004);
+    const isDep = smoothstep(0.0002, 0.0025, dep.add(veneer)).pow(0.8);
     // pente : 0 à plat, 1 sur une paroi (normale du lit, B-spline)
     const nG = normalize(vN); // (normale du lit : dérivée exacte de l'interpolation, au sommet)
     const steep = smoothstep(0.88, 0.6, nG.y);
