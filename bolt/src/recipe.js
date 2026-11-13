@@ -65,6 +65,11 @@ export const TABLES = {
   marbreNoir: { label: 'Marbre noir', ...fin('marbleNoir', { color: '#131316', color2: '#d9d2c4', rough: 0.16 }), kind: 'marble', family: 'pierre' },
   ardoise: { label: 'Ardoise', ...fin('basalt', { color: '#3a3f47', color2: '#565c66', rough: 0.8, bump: 0.5, scale: 1.6 }), kind: 'slate', family: 'pierre' },
 };
+// ce qui rougit sans être du métal : les pierres du bol, les braises et la cendre du brasero
+export const ELEMENTS = {
+  pierres: { outer: fin('basalt', { label: 'Galet', color: '#4b4c50', color2: '#6a6b70', rough: 0.72, bump: 0.35, scale: 2.2 }), inner: fin('basalt', { color: '#4b4c50', color2: '#6a6b70', rough: 0.72 }), edge: fin('basalt', { color: '#4b4c50', color2: '#6a6b70', rough: 0.72 }) },
+  braise: { outer: fin('basalt', { label: 'Charbon', color: '#0d0c0c', color2: '#1c1a19', rough: 0.9, bump: 0.6, scale: 3 }), inner: fin('basalt', { label: 'Cendre', color: '#6c6862', color2: '#8a857c', rough: 1, bump: 0.5, scale: 3 }), edge: fin('basalt', { color: '#0d0c0c', color2: '#1c1a19', rough: 0.9 }) },
+};
 export const TEAS = { noir: '#3d1508', vert: '#5f6a1c', menthe: '#7a6a1e', rooibos: '#5a1408', lait: '#b08a62', matcha: '#6f8a2e' };
 
 // ── Humeurs ──────────────────────────────────────────────────────────────────
@@ -77,7 +82,7 @@ export const MOODS = {
     accords: [['porcelaineOr', 'argent', 'lin', 'noir'], ['porcelainePlatine', 'argent', 'linBleu', 'noir'], ['biscuit', 'vermeil', 'lin', 'rooibos'], ['verreOr', 'argent', 'lin', 'menthe']],
     families: [['tasse', 5], ['theiere', 2], ['verre', 2], ['bol', 1]],
     cloud: { tint: '#f4f6fa', shade: '#59626e', ambient: 0.55 },
-    cam: { az: 0.5, el: 0.14, dist: 5.5, fov: 30 },
+    cam: { az: 0.5, el: 0.36, dist: 5.5, fov: 30 },
     grade: { contrast: 1.04, saturation: 0.92, shadows: [0.94, 0.98, 1.06], highlights: [1.0, 1.0, 0.98] },
   },
   plaque: {
@@ -85,7 +90,7 @@ export const MOODS = {
     accords: [['porcelainePlatine', 'argent', 'velours', 'noir'], ['noirOr', 'argent', 'velours', 'noir'], ['verreBleu', 'argent', 'velours', 'noir']],
     families: [['tasse', 3], ['verre', 3], ['bol', 2], ['theiere', 1]],
     cloud: { tint: '#e9e9ec', shade: '#1b1b1f', ambient: 0.12 },
-    cam: { az: 0.0, el: 0.06, dist: 5.3, fov: 30 },
+    cam: { az: 0.0, el: 0.3, dist: 5.3, fov: 30 },
     grade: { contrast: 1.14, saturation: 0.0, shadows: [1, 1, 1], highlights: [1, 1, 1], exposure: 1.1 },
     bw: true,
   },
@@ -102,7 +107,7 @@ export const MOODS = {
     accords: [['celadon', 'vermeil', 'natte', 'vert'], ['celadon', 'argent', 'lin', 'matcha'], ['biscuit', 'vermeil', 'natte', 'matcha'], ['tenmoku', 'vermeil', 'natte', 'vert']],
     families: [['bol', 5], ['tasse', 2], ['theiere', 2], ['verre', 1]],
     cloud: { tint: '#f6f8f1', shade: '#69725f', ambient: 0.6 },
-    cam: { az: 0.9, el: 0.36, dist: 6.0, fov: 28 },
+    cam: { az: 0.9, el: 0.42, dist: 6.0, fov: 28 },
     grade: { contrast: 1.0, saturation: 0.9, shadows: [0.96, 1.02, 0.98], highlights: [1.0, 1.0, 0.97] },
   },
   laque: {
@@ -110,7 +115,7 @@ export const MOODS = {
     accords: [['fonte', 'fonte', 'laque', 'vert'], ['noirOr', 'vermeil', 'laque', 'noir'], ['vermillon', 'vermeil', 'laqueNoire', 'noir'], ['tenmoku', 'vermeil', 'laque', 'vert']],
     families: [['theiere', 5], ['bol', 3], ['tasse', 2], ['verre', 1]],
     cloud: { tint: '#f0e6e2', shade: '#2a1c1c', ambient: 0.16 },
-    cam: { az: -0.35, el: 0.1, dist: 5.8, fov: 30 },
+    cam: { az: -0.35, el: 0.32, dist: 5.8, fov: 30 },
     grade: { contrast: 1.1, saturation: 1.08, shadows: [1.04, 0.96, 0.96], highlights: [1.02, 1.0, 0.96] },
   },
   heureBleue: {
@@ -118,7 +123,7 @@ export const MOODS = {
     accords: [['verreOr', 'vermeil', 'marbre', 'menthe'], ['porcelaineOr', 'argent', 'marbreNoir', 'noir'], ['bleuCeleste', 'vermeil', 'marbre', 'noir'], ['verreBleu', 'argent', 'ardoise', 'menthe']],
     families: [['verre', 5], ['tasse', 3], ['theiere', 1], ['bol', 2]],
     cloud: { tint: '#c9d8f4', shade: '#141d33', ambient: 0.3 },
-    cam: { az: 0.25, el: 0.08, dist: 5.9, fov: 30 },
+    cam: { az: 0.25, el: 0.34, dist: 5.9, fov: 30 },
     grade: { contrast: 1.08, saturation: 1.05, shadows: [0.9, 0.97, 1.14], highlights: [1.0, 1.0, 1.02] },
   },
   sevres: {
@@ -126,7 +131,7 @@ export const MOODS = {
     accords: [['bleuCeleste', 'vermeil', 'marbre', 'noir'], ['porcelaineOr', 'vermeil', 'marbre', 'rooibos'], ['bleuCeleste', 'vermeil', 'marbre', 'lait']],
     families: [['tasse', 5], ['theiere', 3], ['bol', 1], ['verre', 1]],
     cloud: { tint: '#fbf3f5', shade: '#6d5f6c', ambient: 0.5 },
-    cam: { az: -0.9, el: 0.3, dist: 5.5, fov: 30 },
+    cam: { az: -0.9, el: 0.4, dist: 5.5, fov: 30 },
     grade: { contrast: 1.0, saturation: 1.0, shadows: [0.98, 0.97, 1.03], highlights: [1.01, 1.0, 0.99] },
   },
 };
@@ -164,9 +169,10 @@ export function generate(seed, overrides = {}) {
   const vessel = {
     family, variant, flare: r2(rv.range(0, 1)),
     flutes: !V.glass && !V.cast && family !== 'bol' && rv.chance(0.4) ? rv.pick([16, 20, 24, 32]) : 0,
-    spoonAz: r2(rv.range(2.0, 2.9) * rv.sign()), // (la cuillère, vue de trois quarts)
+    mastAz: r2(rv.range(2.0, 2.9) * rv.sign()), // (la machine : son mât, ses pierres — vus de trois quarts)
     turn: r2(rv.range(-0.5, 0.5)),               // (l'anse ou le bec, tournés par rapport à la caméra)
     body: bodyKey, metal: metalKey, tea: TEAS[teaKey],
+    heater: V.heater, mast: rng.fork('heater').int(0, 1),
   };
 
   // ── nuage ──
@@ -203,12 +209,14 @@ export function generate(seed, overrides = {}) {
     u: r3(TIMES.flicker[0] + ((TIMES.flicker[1] - TIMES.flicker[0]) * (i + rf.range(0.1, 0.6))) / nFl),
     amp: r2(rf.range(0.5, 1) * (0.5 + (0.5 * i) / nFl)), p: [r2(rf.range(-0.5, 0.5)), r2(rf.range(0.25, 0.6)), r2(rf.range(-0.4, 0.4))],
   }));
+  vessel.stones = 1 + bolt.forks; // (bol : une pierre par arc)
   const film = { duration: overrides.duration ?? 24, strokes, flickers, drop: 0.022 };
 
   // ── caméra : le plan de base de l'humeur, retouché ──
   const camera = {
     az: r2(M.cam.az + rc.range(-0.25, 0.25)), el: r2(M.cam.el + rc.range(-0.03, 0.05)), dist: r2(M.cam.dist * rc.range(0.96, 1.06)), fov: M.cam.fov,
     push: r2(rc.range(0.05, 0.09)), arc: r2(rc.range(0.06, 0.14) * rc.sign()), tilt: r2(rc.range(-0.02, 0.03)), rise: r2(rc.range(0.02, 0.08)), sway: r2(rc.range(0.015, 0.035)),
+    dip: r2(rc.range(0.2, 0.28)), dipEl: r2(rc.range(0.05, 0.09)), dipIn: r2(rc.range(0.1, 0.14)), // (après la jonction : la caméra descend vers la machine)
     target: [0, 1, 0], // (réglée sur le récipient et son nuage au chargement : voir layout())
   };
 
@@ -243,7 +251,8 @@ export function layout(R, meta) {
   const c = [R.cloud.off[0], base, R.cloud.off[1]];
   const steam = { p: rot(meta.steam.p), r: meta.steam.r };
   const up = R.bolt.family === 'upward';
-  const h = (base - (strike ? strike[1] : meta.liquid.y)) / 17;
+  const pins = meta.heater?.pins?.map(rot) ?? null; // (bol : les pierres, une par arc)
+  const h = (base - (strike ? strike[1] : pins ? pins[0][1] : meta.liquid.y)) / 17;
   const root = up ? strike : [c[0] + R.bolt.root[0] * R.cloud.radius * 0.6, base + 0.06, c[2] + R.bolt.root[1] * R.cloud.radius * 0.6];
   const obstacles = meta.obstacles.map((o) => (o.type === 'ellipsoid' ? { ...o, c: rot(o.c) } : o));
   const spec = {
@@ -251,14 +260,14 @@ export function layout(R, meta) {
     root, obstacles,
     ...(R.bolt.family === 'strike' ? { targets: [strike], field: 'down', box: { r: 1.3, y0: strike[1] - h * 1.2, y1: base + 0.1 } } : {}),
     ...(R.bolt.family === 'spider' ? { targets: [strike], field: 'down', slab: { y0: base - 0.01, y1: base + 0.1, count: 130, r: R.cloud.radius * 0.8 }, box: { r: Math.max(R.cloud.radius * 0.8, Math.hypot(strike[0], strike[2]) + 0.25), y0: strike[1] - h * 1.2, y1: base + 0.12 } } : {}),
-    ...(R.bolt.family === 'fork' ? { targets: [[0, meta.liquid.y, 0]], surface: { y: meta.liquid.y, r: meta.liquid.r * 0.82 }, forks: R.bolt.forks, field: 'down', beta: 0.45, box: { r: 1.3, y0: meta.liquid.y - 0.02, y1: base + 0.1 } } : {}),
-    ...(R.bolt.family === 'upward' ? { targets: [[c[0], base + 0.3, c[2]]], stopAt: 300, field: 'up', beta: 0.42, box: { r: R.cloud.radius * 0.75, y0: strike[1], y1: base + 0.32 } } : {}),
+    ...(R.bolt.family === 'fork' ? { targets: [pins[0]], pins, bowl: meta.liquid.r * 0.9, forks: pins.length - 1, field: 'down', beta: 0.5, box: { r: 1.3, y0: pins[0][1] - h * 1.2, y1: base + 0.1 } } : {}),
+    ...(R.bolt.family === 'upward' ? { targets: [[c[0], base + 0.3, c[2]]], stopAt: 300, field: 'up', beta: 0.42, box: { r: Math.max(R.cloud.radius * 0.75, Math.hypot(strike[0], strike[2]) + 0.3), y0: strike[1], y1: base + 0.32 } } : {}),
   };
   const mid = (base + R.cloud.height) * 0.5;
   // la simulation du panache : unité = hauteur de la source au niveau de condensation
   const span = Math.max(0.3, base - steam.p[1]);
   const plume = { r0: r2(Math.min(0.24, Math.max(0.13, (steam.r / span) * 0.7))), top: r2(Math.min(2.15, Math.max(1.4, 1 + R.cloud.height / span))), puffs: R.cloud.puffs ?? 8, gamma: 22, heat: 5, mix: 0.2 };
-  return { base, center: c, strike, steam, spec, plume, span, h, topMost, target: [0, mid, 0], frame: base + R.cloud.height };
+  return { base, center: c, strike, pins, steam, spec, plume, span, h, topMost, target: [0, mid, 0], frame: base + R.cloud.height };
 }
 
 // Recette ancienne (lien partagé) → recette courante : compléter les champs
@@ -266,6 +275,9 @@ export function layout(R, meta) {
 export function upgrade(R) {
   const D = generate(R.seed, { mood: R.mood, family: R.vessel?.family, variant: R.vessel?.variant });
   for (const k of Object.keys(D)) if (R[k] === undefined) R[k] = D[k];
+  // (liens d'avant les machines : la cuillère est devenue un mât)
+  for (const k of ['heater', 'mast', 'stones', 'mastAz']) if (R.vessel[k] === undefined) R.vessel[k] = k === 'mastAz' ? (R.vessel.spoonAz ?? D.vessel.mastAz) : D.vessel[k];
+  for (const k of ['dip', 'dipEl', 'dipIn']) if (R.camera[k] === undefined) R.camera[k] = D.camera[k];
   if (R.table && !R.table.finish.kind) R.table.finish.kind = TABLES[R.table.key]?.kind ?? 'cloth';
   return R;
 }

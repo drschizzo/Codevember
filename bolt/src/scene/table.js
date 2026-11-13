@@ -23,7 +23,11 @@ const PI = Math.PI;
 export const TABLE_KINDS = ['cloth', 'velvet', 'marble', 'metal', 'lacquer', 'mat', 'slate'];
 
 export function tableUniforms(fin) {
-  return { color: uniform(new THREE.Color(fin.color)), color2: uniform(new THREE.Color(fin.color2)), rough: uniform(fin.rough) };
+  return {
+    color: uniform(new THREE.Color(fin.color)), color2: uniform(new THREE.Color(fin.color2)), rough: uniform(fin.rough),
+    // la lueur d'une résistance rougie, au ras de la table : (x, z, hauteur, intensité) et sa couleur
+    glow: uniform(new THREE.Vector4(0, 0, 0.2, 0)), glowCol: uniform(new THREE.Color('#ff6a1c')),
+  };
 }
 export function applyTable(U, fin) { U.color.value.set(fin.color); U.color2.value.set(fin.color2); U.rough.value = fin.rough; }
 
@@ -92,13 +96,14 @@ export function buildTableMaterial(kind, U, lightsOf = null) {
       const wq = vec3(fbm(p3.mul(0.55).add(3.3), 3), fbm(p3.mul(0.55).add(8.7), 3), 0).mul(0.9);
       const q = p3.mul(0.42).add(wq);
       const ridge = (n) => abs(n).oneMinus();
-      const big = ridge(noise(q)).pow(11), mid = ridge(noise2(q.mul(2.1).add(1.7))).pow(18).mul(0.7), fine = ridge(noise(q.mul(5.3).add(4.2))).pow(30).mul(0.3).mul(aa(6));
+      // (puissances élevées : des traits nets ; à 11, les grandes veines étaient des rubans flous qu'on prenait pour de la fumée sous un nuage)
+      const big = ridge(noise(q)).pow(34), mid = ridge(noise2(q.mul(2.1).add(1.7))).pow(44).mul(0.6), fine = ridge(noise(q.mul(5.3).add(4.2))).pow(60).mul(0.3).mul(aa(6));
       // (les veines s'interrompent : elles ne courent pas d'un bord à l'autre)
-      const gate = smoothstep(-0.15, 0.3, fbm(p3.mul(0.3).add(11), 2));
+      const gate = smoothstep(0.0, 0.4, fbm(p3.mul(0.3).add(11), 2));
       const vein = big.add(mid).add(fine).mul(gate).clamp(0, 1);
       const cloud = fbm(p3.mul(0.9).add(wq), 3).mul(0.5).add(0.5);
       const xtal = noise2(p3.mul(140)).mul(0.5).add(0.5).mul(aa(140));
-      color = mix(U.color.mul(cloud.mul(0.22).add(0.82)), U.color2, vein.pow(0.7).mul(0.95)).mul(xtal.mul(0.05).add(0.975));
+      color = mix(U.color.mul(cloud.mul(0.22).add(0.82)), U.color2, vein.mul(0.8)).mul(xtal.mul(0.05).add(0.975));
       rough = U.rough.add(vein.mul(0.12)).add(cloud.mul(0.05));
       H = vein.mul(-0.0012);
       // (pas de vernis : un second lobe spéculaire sur une surface plein écran coûtait 1 ms ; le poli est dans la rugosité)
@@ -117,8 +122,8 @@ export function buildTableMaterial(kind, U, lightsOf = null) {
       const rc = p.mul(1 / 1.9), ci = floor(rc), rf = fract(rc).sub(vec2(h21(ci, 11), h21(ci, 13)).mul(0.5).add(0.25));
       const rr = h21(ci, 17).mul(0.05).add(0.16);
       const ring = exp(length(rf).sub(rr).div(0.007).pow2().negate()).mul(step(0.5, h21(ci, 19))).mul(noise(p3.mul(9)).mul(0.5).add(0.6).clamp(0, 1));
-      color = U.color.mul(ox.mul(0.38).add(ox2.mul(0.16)).add(0.9)).mul(ring.mul(0.4).oneMinus()).mul(sc.mul(0.25).add(1));
-      rough = U.rough.add(ox.mul(0.22)).add(ox2.mul(0.1)).add(ring.mul(0.25)).sub(sc.mul(0.2)).add(brush.mul(0.05)).clamp(0.12, 1);
+      color = U.color.mul(ox.mul(0.16).add(ox2.mul(0.1)).add(0.94)).mul(ring.mul(0.4).oneMinus()).mul(sc.mul(0.25).add(1));
+      rough = U.rough.add(ox.mul(0.08)).add(ox2.mul(0.06)).add(ring.mul(0.25)).sub(sc.mul(0.2)).add(brush.mul(0.05)).clamp(0.12, 1);
       metal = float(1);
       H = brush.mul(0.0006).sub(sc.mul(0.0012));
       break;
@@ -171,6 +176,12 @@ export function buildTableMaterial(kind, U, lightsOf = null) {
   m.roughnessNode = rough.clamp(0.04, 1);
   m.metalnessNode = metal;
   m.normalNode = perturb(H.mul(G.microDetail), N0);
+  // (une lampe de plus coûtait 2 ms sur la table plein écran : la lueur de la
+  // machine est une source ponctuelle évaluée ici, à la main — Lambert, sans ombre)
+  {
+    const d = p.sub(U.glow.xy), q = dot(d, d).div(U.glow.z.mul(U.glow.z)).add(1);
+    m.emissiveNode = color.mul(U.glowCol).mul(U.glow.w).div(q.mul(q.sqrt()));
+  }
   m.mrtNode = stableVelocity();
   if (lightsOf) m.lightsNode = lights(lightsOf);
   return m;

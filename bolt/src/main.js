@@ -17,7 +17,7 @@ import { makeEnvironment } from '../../shared/scene/env.js';
 import { G } from '../../shared/scene/globals.js';
 import { setNoiseVolume, setLite } from '../../shared/scene/materials.js';
 import { createPost } from './render/post.js'; // (variante locale : le nuage absorbe)
-import { cameraAt } from './film.js';
+import { cameraAt, stateAt } from './film.js';
 import { createAccumulator, jitter } from '../../shared/render/accum.js';
 import { createUI } from './app/ui.js';
 import { loadRender, saveRender, applyQuality, defaultsFor } from './app/settings.js';
@@ -147,7 +147,7 @@ async function main() {
     const recipe = R;
     try {
       return await warmScene({
-        renderer, scene, pipes, render: renderStep, phases: [0.12, 0.3, 0.5, 0.602, 0.64, 0.82],
+        renderer, scene, pipes, render: renderStep, phases: [0.12, 0.3, 0.45, 0.502, 0.53, 0.6, 0.76],
         onProgress: (f) => loader.progress(f), alive: () => R === recipe,
       });
     } finally {
@@ -158,7 +158,7 @@ async function main() {
 
   // ── Rendu d'une phase ──
   const TAU = Math.PI * 2;
-  const _f = new THREE.Vector3(), _u = new THREE.Vector3(), _r = new THREE.Vector3();
+  const _f = new THREE.Vector3(), _u = new THREE.Vector3(), _r = new THREE.Vector3(), _flash = new THREE.Color();
   // u : phase « déroulée » (partie entière = nombre de boucles accomplies) ;
   // sub : décalages d'un rendu accumulé (lentille, pixel), facultatif
   function renderAt(u, sub = null) {
@@ -176,6 +176,13 @@ async function main() {
       camera.lookAt(...pose.target);
     }
     if (camera.fov !== C.fov) { camera.fov = C.fov; camera.updateProjectionMatrix(); }
+    // la secousse du coup de foudre : un à-coup du pied de la caméra à chaque arc, amorti en un quart de seconde
+    const F0 = stateAt(R.film, ph);
+    if (!camState.free && F0.tau > 0) {
+      let k = 0;
+      for (const s of R.film.strokes) { const x = F0.tau - s.t; if (x > 0) k += s.amp * Math.exp(-x / 0.16) * Math.sin(x * 2 * Math.PI * 11); }
+      camera.position.y += k * 0.0035 * C.dist;
+    }
     camera.clearViewOffset();
     if (sub) {
       camera.updateMatrixWorld();
@@ -188,14 +195,15 @@ async function main() {
     G.microDetail.value = RENDER.microDetail;
     G.roughFloor.value = RENDER.roughFloor;
     const camDist = camera.position.distanceTo(_r.set(...pose.target));
-    scene.background.set(R.fog.color);
-    scene.fog.color.set(R.fog.color);
+    // (le mur aussi reçoit l'éclair : c'est la couleur de fond, que les lampes n'atteignent pas)
+    scene.background.set(R.fog.color).lerp(_flash.set(R.bolt.color), Math.min(0.6, F0.light * (0.08 + 0.4 * R.fog.wall)));
+    scene.fog.color.copy(scene.background);
     scene.fog.near = camDist + 0.8; scene.fog.far = camDist + 6.2; // (la table se fond dans le mur : pas d'horizon)
     scene.environmentIntensity = R.env.intensity;
     scene.environmentRotation.set(0, R.env.rotation, 0);
     R.film.duration = R.loop.duration;
     stage.update(ph, camera, canvas.height);
-    post.update({ ...RENDER, lite: LITE, focus: RENDER.focus * camDist, focusRange: RENDER.focusRange * camDist }, R);
+    post.update({ ...RENDER, exposure: RENDER.exposure * F0.expo, lite: LITE, focus: RENDER.focus * camDist, focusRange: RENDER.focusRange * camDist }, R);
     post.render();
   }
   // Rendu hors de la boucle d'animation (export, image fixe, débogage) : three.js
@@ -338,6 +346,12 @@ async function main() {
           window.__job = `done ${errors.slice(0, 3).join(' | ')}`;
         } catch (e) { window.__job = `err ${e.message} ${e.stack}`; } finally { T.shot = shot; }
       })();
+    };
+    // gros plans de mise au point : load(graine, { mood, family, variant }, retouche) puis look(position, cible) ; look() rend la caméra au film
+    window[NAME].load = (seed, o = {}, patch = null) => { R = generate(seed, o); patch?.(R); applyRecipe(); };
+    window[NAME].look = (pos, target) => {
+      camState.free = !!pos;
+      if (pos) { controls.enableDamping = false; camera.position.set(...pos); controls.target.set(...target); controls.update(); }
     };
     Object.defineProperty(window[NAME], 'loading', { get: () => ({ ...loading }) });
   }

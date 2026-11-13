@@ -77,7 +77,7 @@ export function createUI({ recipe: getRecipe, render, on, moods }) {
     add(fVessel, R.vessel, 'flare', 0, 1, 0.01).name('Évasement').onFinishChange(re);
     add(fVessel, R.vessel, 'flutes', 0, 40, 4).name('Côtes').onFinishChange(re);
     add(fVessel, R.vessel, 'turn', -3.14, 3.14, 0.01).name('Orientation').onFinishChange(re);
-    add(fVessel, R.vessel, 'spoonAz', -3.14, 3.14, 0.01).name('Cuillère : azimut').onFinishChange(re);
+    add(fVessel, R.vessel, 'mastAz', -3.14, 3.14, 0.01).name('Machine : azimut').onFinishChange(re);
     addC(fVessel, R.vessel, 'tea').name('Thé').onChange(ch);
     add(fVessel, pick, 'body', opts(BODIES)).name('Matière').onChange((k) => { R.vessel.body = k; R.finish.body = structuredClone(BODIES[k]); on.finishChanged(); build(); });
     add(fVessel, pick, 'metal', opts(METALS)).name('Métal').onChange((k) => { R.vessel.metal = k; R.finish.metal = { ...METALS[k] }; on.finishChanged(); build(); });

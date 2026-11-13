@@ -42,14 +42,18 @@ test('cause et effet : l’écart traceur–aigrette est nul à la jonction, pos
   }
 });
 
-test('l’arc touche la vraie géométrie : la pointe de la cuillère, le bouton, ou la surface du thé', () => {
+test('l’arc touche la vraie géométrie : la pointe du mât, l’arceau, ou une pierre du bol', () => {
   for (const { s, R, V, L, B } of made) {
     const t = B.strokes[0].target;
     if (R.bolt.family === 'fork') {
+      // (bol : chaque arc tombe sur une pierre, jamais deux sur la même)
+      const used = new Set();
       for (const S of B.strokes) {
-        assert.ok(Math.abs(S.target[1] - V.meta.liquid.y) < 1e-6, `${s} : impact hors de la surface`);
-        assert.ok(Math.hypot(S.target[0], S.target[2]) < V.meta.liquid.r, `${s} : impact hors du bol`);
+        const k = L.pins.findIndex((p) => Math.hypot(S.target[0] - p[0], S.target[1] - p[1], S.target[2] - p[2]) < 1e-6);
+        assert.ok(k >= 0 && !used.has(k), `${s} : un arc ne tombe pas sur une pierre`);
+        used.add(k);
       }
+      assert.ok(Math.hypot(t[0] - L.pins[0][0], t[2] - L.pins[0][2]) < 1e-6, `${s} : le premier arc`);
     } else if (R.bolt.family !== 'upward') {
       assert.ok(Math.hypot(t[0] - L.strike[0], t[1] - L.strike[1], t[2] - L.strike[2]) < 1e-6, `${s} : la cible n'est pas la pointe`);
     } else {

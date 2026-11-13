@@ -226,7 +226,28 @@ export function buildBolt(spec) {
   // dont la pointe est la plus basse et assez loin des impacts déjà choisis ;
   // leur traceur de réamorçage les prolongera jusqu'au liquide
   const extra = [];
-  if (spec.forks && spec.surface) {
+  if (spec.forks && spec.pins) {
+    // (bol : une pierre par arc ; chaque pierre restante prend la pointe de
+    // branche la plus proche d'elle, parmi les plus basses et à l'aplomb du bol)
+    const kids = new Uint16Array(n);
+    for (let i = 1; i < firstHit; i++) kids[parent[i]]++;
+    const tips = [], used = new Set([hit[0]]);
+    for (let i = 1; i < firstHit; i++) if (!kids[i] && i !== hit[0]) tips.push(i);
+    const yMax = spec.pins[0][1] + (spec.root[1] - spec.pins[0][1]) * 0.62;
+    for (const t of spec.pins.slice(1, 1 + spec.forks)) {
+      let best = -1, bd = Infinity;
+      for (const i of tips) {
+        const p = [G.pos[i * 3], G.pos[i * 3 + 1], G.pos[i * 3 + 2]];
+        if (used.has(i) || p[1] > yMax || p[1] < t[1] + spec.h || Math.hypot(p[0], p[2]) > (spec.bowl ?? 1e9)) continue;
+        const d = Math.hypot(p[0] - t[0], (p[1] - t[1]) * 0.6, p[2] - t[2]);
+        if (d < bd) { bd = d; best = i; }
+      }
+      if (best < 0) continue;
+      used.add(best);
+      extra.push({ i: best, t: [...t] });
+    }
+    for (const e of extra) { hit.push(e.i); targets.push(e.t); }
+  } else if (spec.forks && spec.surface) {
     const kids = new Uint16Array(n);
     for (let i = 1; i < firstHit; i++) kids[parent[i]]++;
     const tips = [];

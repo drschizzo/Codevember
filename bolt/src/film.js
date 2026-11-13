@@ -1,14 +1,15 @@
 // Le film : une seule horloge. Tout ce que montre la boucle — vapeur, nuage,
-// charge, traceur, arcs, lumière, pluie, niveau du thé, caméra — se lit ici,
-// en fonction de la seule phase u ∈ [0, 1). Module pur (tests, écran de
-// chargement, scène).
+// charge, traceur, arcs, lumière, chaleur, pluie, niveau du thé, caméra — se
+// lit ici, en fonction de la seule phase u ∈ [0, 1). Module pur (tests, écran
+// de chargement, scène).
 //
-//   0,96 – 0,335 la vapeur monte et remplit le nuage (accéléré ; simulation relue)
-//   0,24 – 0,34  la charge : le nuage fonce, lueurs (accéléré)
-//   0,34 – 0,60  le traceur descend par bonds       (caméra rapide)
-//   0,60         la jonction : l'arc en retour
-//   0,60 – 0,70  réamorçages, rémanence en perles   (ralenti léger)
-//   0,72 – 0,95  l'averse rend l'eau à la tasse     (temps réel)
+//   0,93 – 0,36  la vapeur monte et remplit le nuage (accéléré ; simulation relue)
+//   0,22 – 0,385 la charge : le nuage fonce, lueurs (accéléré)
+//   0,385 – 0,50 le traceur descend par bonds, hésite, puis saute (caméra rapide)
+//   0,50         la jonction : l'arc en retour
+//   0,50 – 0,62  la chaleur descend le métal, la machine rougit, le thé bout ;
+//                réamorçages, rémanence en perles    (ralenti léger)
+//   0,62 – 0,90  l'averse rend l'eau à la tasse et grésille sur le métal chaud (temps réel)
 //
 // L'eau se conserve : nuage + pluie en vol + thé = constante, à chaque instant.
 // C'est ce qui referme la boucle (le niveau revient exactement à sa marque).
@@ -16,9 +17,11 @@
 // cycle : l'instant où la vapeur repart de la tasse (le film d'une graine
 // commence à u = 0, mais le cycle de l'eau commence ici, juste après l'averse) ;
 // fill : durée du remplissage du nuage, en part de boucle
-export const TIMES = { cycle: 0.96, fill: 0.375, dark: [0.2, 0.34], leader: [0.34, 0.6], strike: 0.6, rain: [0.715, 0.94], flicker: [0.25, 0.335] };
+export const TIMES = { cycle: 0.93, fill: 0.43, dark: [0.22, 0.385], leader: [0.385, 0.5], strike: 0.5, rain: [0.62, 0.9], flicker: [0.27, 0.38] };
 // vitesses (unités de scène par seconde de film) et durées (secondes de film)
-export const PHYS = { wave: 11, dart: 0.07, fall: 0.42, tauFast: 0.075, tauSlow: 0.4, tauBranch: 0.09, ripple: 0.55 };
+// cond : durée de la descente de la chaleur le long du métal, de la pointe à la
+// résistance ; rod : refroidissement de la tige (mince), en secondes
+export const PHYS = { wave: 11, dart: 0.07, fall: 0.42, tauFast: 0.075, tauSlow: 0.4, tauBranch: 0.09, ripple: 0.55, cond: 0.85, rod: 0.6 };
 
 const clamp = (x, a = 0, b = 1) => (x < a ? a : x > b ? b : x);
 export const sstep = (a, b, x) => { const t = clamp((x - a) / (b - a)); return t * t * (3 - 2 * t); };
@@ -44,6 +47,25 @@ export function pulse(x) {
   return Math.min(1, x / 0.012) * (0.72 * Math.exp(-x / PHYS.tauFast) + 0.28 * Math.exp(-x / PHYS.tauSlow));
 }
 
+// La chaleur que la foudre laisse dans la machine (x : part de boucle écoulée
+// depuis la jonction). Elle retombe lentement, tient pendant toute l'averse et
+// la reprise de la vapeur, et s'annule exactement avant la foudre suivante.
+export const heatAt = (x) => Math.exp(-x / 0.34) * (1 - sstep5(0.7, 0.98, x));
+// Le traceur avance par bonds : un saut bref, une pause, de plus en plus vite ;
+// à 0,86 il hésite (l'aigrette monte à sa rencontre), puis saute. t, a ∈ [0, 1].
+const BOUNDS = 9, HOLD = [0.8, 0.94];
+export function leaderAt(t) {
+  if (t >= 1) return 1;
+  if (t >= HOLD[1]) return 0.86 + 0.14 * sstep(HOLD[1], 1, t);
+  const q = Math.min(1, t / HOLD[0]), e = q * (0.6 + 0.4 * q) * BOUNDS; // (il part lentement et accélère)
+  const k = Math.min(BOUNDS - 1, Math.floor(e)), f = e - k;
+  return (0.86 * (k + sstep(0, 0.4, f))) / BOUNDS;
+}
+// La bouffée de vapeur du choc : le thé saisi par la résistance (secondes après la jonction)
+export const burstAt = (tau) => (tau <= 0 ? 0 : sstep(0.12, 0.7, tau) * (1 - sstep(1.3, 3.2, tau)));
+
+const S_rainRate = (v, r0, r1) => (sstep5(r0, r1, v + 0.004) - sstep5(r0, r1, v - 0.004)) / 0.008 / 1.875 / (1 / (r1 - r0)); // débit de la pluie, 0 → 1
+
 // État du film à la phase u. F = R.film : { duration, strokes: [{ t, amp, path }], flickers: [{ u, amp, p }] }
 export function stateAt(F, u) {
   u -= Math.floor(u);
@@ -57,14 +79,19 @@ export function stateAt(F, u) {
   const cloud = up - out, air = out - landed;
   // la chaleur que la foudre a laissée (la cuillère rougie, le thé qui frémit) :
   // c'est elle qui fait repartir la vapeur après l'averse
-  const heat = Math.exp(-((u - T.strike + 1) % 1) / 0.22);
+  const heat = heatAt((u - T.strike + 1) % 1);
   // avancement du traceur : il part lentement et accélère
   const tl = clamp((u - T.leader[0]) / (T.leader[1] - T.leader[0]));
-  const a = u < T.leader[0] ? -1 : u >= T.strike ? 1 : tl * (0.55 + 0.45 * tl);
+  const a = u < T.leader[0] ? -1 : u >= T.strike ? 1 : leaderAt(tl);
   const tau = (u - T.strike) * D; // secondes après la jonction (négatif avant)
   // lumière des arcs (somme des impulsions) et arc dominant
   let light = 0, lead = 0, best = 0;
   if (tau > 0) F.strokes.forEach((s, j) => { const l = s.amp * pulse(tau - s.t); light += l; if (l > best) { best = l; lead = j; } });
+  // l'exposition : l'arc brûle l'image le temps d'une impulsion, puis l'iris
+  // se referme (l'œil ébloui) et se rouvre en une seconde
+  let burn = 0;
+  if (tau > 0) for (const s of F.strokes) { const x = tau - s.t; if (x > 0) burn += s.amp * Math.min(1, x / 0.012) * Math.exp(-x / 0.06); }
+  const iris = tau > 0 ? sstep(0.03, 0.16, tau) * Math.exp(-tau / 0.75) : 0;
   // lueurs intra-nuage pendant la charge
   const glow = F.flickers.map((f) => { const x = (u - f.u) * D; return x <= 0 ? 0 : f.amp * Math.min(1, x / 0.03) * Math.exp(-x / 0.16); });
   return {
@@ -74,20 +101,29 @@ export function stateAt(F, u) {
     dark: sstep(T.dark[0], T.dark[1], u) * (1 - sstep(T.rain[0], T.rain[0] + 0.14, u)),
     sim: clamp(v / T.fill),                                   // instant de la simulation du panache (0 → 1), puis elle reste sur sa dernière image
     heat,
+    since: ((u - T.strike + 1) % 1) * D,                      // secondes de film depuis la jonction (toujours ≥ 0 : la chaleur dure toute la boucle)
+    burst: burstAt(tau),                                      // la bouffée de vapeur du choc (0 → 1 → 0)
+    sizzle: (out > 0 && out < 1 ? 1 : 0) * sstep(0.08, 0.3, heat), // la pluie grésille sur le métal encore chaud
+    expo: (1 + 0.85 * Math.min(1.3, burn)) * (1 - 0.3 * iris), burn,
+    // les bouffées : le choc, le grésillement de la pluie, puis le relais avant que la colonne ne reparte
+    puffs: Math.max(burstAt(tau), (out > 0 && out < 1 ? sstep(0.05, 0.3, S_rainRate(v, r0, r1)) : 0) * sstep(0.08, 0.3, heat) * 0.85, sstep5(T.rain[1] - 0.05, T.rain[1], u) * (1 - sstep5(T.cycle + 0.015, T.cycle + 0.07, (u < 0.5 ? u + 1 : u))) * 0.8),
     a, tau, light, lead, glow,
     rain: out > 0 && out < 1 ? (sstep5(r0, r1, v + 0.004) - sstep5(r0, r1, v - 0.004)) / 0.008 / 1.875 / (1 / (r1 - r0)) : 0, // débit, 0 → 1
   };
 }
 
-// Caméra : sur pied. Elle s'approche pendant la charge et le traceur, recule
-// pendant l'averse ; un balancement d'une période par boucle. C : R.camera.
+// Caméra : sur pied. Elle s'approche pendant la charge et le traceur ; après la
+// jonction elle descend vers le récipient (c'est là que la suite se passe : le
+// métal qui rougit, le thé qui bout), puis recule pendant l'averse ; un
+// balancement d'une période par boucle. C : R.camera.
 export function cameraAt(C, u) {
   u -= Math.floor(u);
-  const push = sstep5(0.22, 0.52, u) * (1 - sstep5(0.68, 0.94, u));
+  const push = sstep5(0.2, 0.47, u) * (1 - sstep5(0.66, 0.92, u));
+  const dip = sstep5(0.47, 0.6, u) * (1 - sstep5(0.7, 0.93, u));
   const az = C.az + C.sway * Math.sin(2 * Math.PI * u) + C.arc * push;
-  const el = C.el + C.tilt * push;
-  const d = C.dist * (1 - C.push * push);
-  const ty = C.target[1] + C.rise * push;
+  const el = C.el + C.tilt * push + (C.dipEl ?? 0) * dip;
+  const d = C.dist * (1 - C.push * push - (C.dipIn ?? 0) * dip);
+  const ty = C.target[1] + C.rise * push - (C.dip ?? 0) * dip;
   const p = [C.target[0] + Math.sin(az) * Math.cos(el) * d, ty + Math.sin(el) * d, C.target[2] + Math.cos(az) * Math.cos(el) * d];
   return { pos: p, target: [C.target[0], ty, C.target[2]], fov: C.fov };
 }
