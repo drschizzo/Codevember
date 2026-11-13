@@ -5,6 +5,7 @@
 import { buildNoiseVolume } from '../../../shared/gen/noisevol.js';
 import { bakeWood } from './wood.js';
 import { buildSite } from './site.js';
+import { displayField } from './plasmodium.js';
 import { envPixels } from './envmap.js';
 import { toHalf } from './half.js';
 
@@ -14,7 +15,8 @@ function build({ spec, what }) {
     case 'wood': { const w = bakeWood(spec); return { ...w, relH: toHalf(w.rel), rel: null, smoothH: toHalf(w.smooth), smooth: null }; }
     case 'site': {
       const S = buildSite(spec);
-      S.sheet.TH = toHalf(S.sheet.T); S.sheet.T = null;
+      S.sheet.TH = toHalf(displayField(S.sheet)); // (lissé, prolongé hors du territoire)
+      S.sheet.T = null;
       S.edges.texH = toHalf(S.edges.tex); S.edges.tex = null;
       // grains : positions en demi-flottants RGBA (une colonne par grain, une ligne par image)
       const G = S.smoke.grains, F = S.smoke.frames, gp = new Float32Array(F * G.n * 4);

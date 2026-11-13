@@ -101,10 +101,15 @@ export function createSmoke(ctx) {
         const tl = mix(da.y, db.y, uFrac);
         // détail : érosion par le volume de bruit, entraîné par le vent
         // (deux octaves : des volutes de ~1 mm et des filaments de ~0,3 mm)
-        const nz = NZ(p.mul(9).sub(vec3(U.s.mul(32), 0, 0)));
-        const n = nz.x.mul(0.65).add(nz.y.mul(0.35));
-        const d = tmax(rho.mul(float(0.9).add(n.mul(2.2))).sub(rho.mul(0.25).add(0.012)), 0);
-        const sigma = d.mul(30);
+        // (étiré dans le sens du vent, en crêtes : des voiles et des
+        // filaments ; un bruit isotrope sculptait des boules de coton, et
+        // à cette échelle la fumée se lisait comme des cumulus)
+        // (une seule lecture par pas : deux canaux indépendants du volume)
+        const na = NZ(p.mul(vec3(4.5, 16, 16)).sub(vec3(U.s.mul(18), 0, 0)));
+        const ridge = float(1).sub(abs(na.x)).pow(2);
+        const n = ridge.mul(0.75).add(na.y.mul(0.25));
+        const d = tmax(rho.mul(n.mul(2.6).sub(0.45)).sub(0.01), 0);
+        const sigma = d.mul(28);
         const a = exp(sigma.mul(dt).negate());
         // simple diffusion (soleil, ombre propre) + diffusion multiple approchée (ambiance, renforcée dans le nuage)
         const Li = uSunCol.mul(hg.mul(tl).add(tl.mul(0.25).add(0.08))).add(uAmb.mul(2.2));
@@ -154,24 +159,33 @@ export function createSmoke(ctx) {
     const xn = q.x.sub(L), eaten = landed.and(inBox(xn, q.z)).and(Tat(xn, q.z, true).lessThan(s.sub(1)));
     const alive = born.and(eaten.not()).select(float(1).sub(sst(1.45, 1.75, s)), float(0));
     const toCam = cameraPosition.sub(p), dd = length(toCam);
-    const sizeReal = float(0.0011), sizePx = pxSize.mul(dd).mul(0.7);
+    // (demi-taille réelle d'une spore, d'après l'espèce : plus gros, les grains
+    // posés se lisaient comme des perles à pois)
+    const sizeReal = float((sp.spore ?? 9) * 0.5e-4), sizePx = pxSize.mul(dd).mul(0.7);
     const size = tmax(sizeReal, sizePx).mul(alive.greaterThan(0.001).select(1, 0));
     if (write) { vA.assign(alive.mul(sizeReal.div(tmax(sizeReal, sizePx)).pow(2)).mul(landed.select(0.5, 1))); vLand.assign(landed.select(1, 0)); }
     const fw = normalize(toCam), right = normalize(cross(vec3(0, 1, 0), fw)), up = cross(fw, right);
     return p.add(right.mul(positionLocal.x.mul(size))).add(up.mul(positionLocal.y.mul(size)));
   };
+  const dustColorG = mix(color(new THREE.Color(sp.colors.ripe)), vec3(0.5, 0.46, 0.4), 0.25).mul(0.75);
   const gm = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false });
   gm.positionNode = Fn(() => { const q = quad(U.s, true); vUv.assign(positionLocal.xy); if (!isLite()) positionPrevious.assign(quad(U.sPrev, false)); return q; })();
   const cosG = dot(uSun, normalize(positionWorld.sub(cameraPosition)));
   const hgG = float(0.0716).div(float(1.3025).sub(cosG.mul(1.1)).pow(1.5)).mul(4 * Math.PI);
-  gm.colorNode = albedo.mul(uAmb.add(uSunCol.mul(vLand.greaterThan(0.5).select(float(0.3), hgG.mul(0.8).add(0.2)))));
+  // (posé, un grain prend la couleur de la poudre : clair, il se lisait comme
+  // une perle blanche, à pois)
+  const landed = vLand.greaterThan(0.5).select(float(1), float(0));
+  gm.colorNode = mix(albedo.mul(uAmb.add(uSunCol.mul(hgG.mul(1.5).add(0.2)))), dustColorG.mul(uAmb.add(uSunCol.mul(0.3))), landed);
   gm.opacityNode = vA.mul(smoothstep(1, 0.3, length(vUv)));
   gm.mrtNode = stableVelocity();
   const grains = new THREE.Mesh(gg, gm);
   grains.frustumCulled = false; grains.renderOrder = 9;
 
   let kCur = -1;
-  const dustColor = albedo.mul(0.85);
+  // (une sporée est une poudre fine de la couleur des spores en masse — leur
+  // pigment, assombri — et non un voile clair : posée à 80 % d'un albédo
+  // pâle, elle plâtrait tout le bois en fin de boucle)
+  const dustColor = mix(color(new THREE.Color(sp.colors.ripe)), vec3(0.5, 0.46, 0.4), 0.25).mul(0.75);
   return {
     meshes: [vol, grains],
     dustColor,
@@ -184,11 +198,14 @@ export function createSmoke(ctx) {
       const dep = texture3D(TX.dep, uv).x;
       // le plasmodium suivant l'absorbe en passant (il germe là) ; le temps l'efface
       const xn = x.sub(L), eaten = inBox(xn, z).and(Tat(xn, z).lessThan(s.sub(1)));
+      // (couverture plafonnée, en amas : la poudre s'accroche aux creux et au
+      // fil, elle ne nappe pas)
+      // (les amas : appliqués une fois par le bois, scene/wood.js)
       const cover = float(1).sub(exp(dep.max(0).sqrt().mul(-3.2)));
       // le dépôt ne s'annule pas aux bords du domaine de simulation (le nuage en
       // sort) : sans fondu, la poudre dessine au sol le rectangle du domaine
       const edge = sst(0, 0.3, x.sub(D.x0)).mul(sst(0, 0.9, float(D.x1).sub(x))).mul(sst(0, 0.55, z.sub(D.z0))).mul(sst(0, 0.55, float(D.z1).sub(z)));
-      return inside.and(eaten.not()).select(cover.mul(edge).mul(float(1).sub(sst(1.45, 1.8, s))).mul(0.8), float(0));
+      return inside.and(eaten.not()).select(cover.mul(edge).mul(float(1).sub(sst(1.45, 1.8, s))).mul(0.42), float(0));
     },
     update(s, camera) {
       const h = 2 * Math.tan((camera.fov * Math.PI) / 360);

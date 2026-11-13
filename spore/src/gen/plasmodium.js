@@ -111,6 +111,49 @@ export function arrivalField(P, L, seeds) {
   return { T, Gx, Gz, x0: Tr.x0, z0: Tr.z0, h, dmax };
 }
 
+// Le champ T tel que l'écran le lit (texture filtrée) : lissé et continu.
+// Le front est une courbe de niveau de T lue en bilinéaire ; deux défauts du
+// champ de Dijkstra s'y voient en très gros plan : les crêtes de la grille
+// (des bandes en escalier dans le film et la trace mouillée) et le saut à 9
+// hors du territoire (un bord en marches de la taille d'une cellule). On le
+// lisse donc par un noyau gaussien restreint au territoire, puis on le
+// prolonge au-dehors par une pente raide (T du bord + 0,25 par cellule) : la
+// courbe de niveau reste lisse et ne sort pas du territoire de plus d'une
+// fraction de cellule.
+export function displayField(F, sigma = 1.6) {
+  const { Gx, Gz } = F, T = F.T, N = Gx * Gz;
+  const ok = new Uint8Array(N);
+  for (let o = 0; o < N; o++) ok[o] = T[o] < 8 ? 1 : 0;
+  const R = Math.ceil(sigma * 2.5), w = Array.from({ length: 2 * R + 1 }, (_, k) => Math.exp(-((k - R) ** 2) / (2 * sigma * sigma)));
+  // flou séparable pondéré par l'appartenance au territoire
+  const a = new Float32Array(N), b = new Float32Array(N), a2 = new Float32Array(N), b2 = new Float32Array(N);
+  for (let j = 0; j < Gz; j++) for (let i = 0; i < Gx; i++) {
+    let s = 0, m = 0;
+    for (let k = -R; k <= R; k++) { const ii = i + k; if (ii < 0 || ii >= Gx) continue; const q = j * Gx + ii; if (ok[q]) { s += w[k + R] * T[q]; m += w[k + R]; } }
+    a[j * Gx + i] = s; b[j * Gx + i] = m;
+  }
+  for (let j = 0; j < Gz; j++) for (let i = 0; i < Gx; i++) {
+    let s = 0, m = 0;
+    for (let k = -R; k <= R; k++) { const jj = j + k; if (jj < 0 || jj >= Gz) continue; const q = jj * Gx + i; s += w[k + R] * a[q]; m += w[k + R] * b[q]; }
+    a2[j * Gx + i] = s; b2[j * Gx + i] = m;
+  }
+  const out = new Float32Array(N).fill(9);
+  for (let o = 0; o < N; o++) if (ok[o]) out[o] = a2[o] / Math.max(1e-9, b2[o]);
+  // prolongement : distance (chanfrein 8 voisins) au territoire, deux passes
+  const D = new Float32Array(N).fill(1e9), E = new Float32Array(N);
+  for (let o = 0; o < N; o++) if (ok[o]) { D[o] = 0; E[o] = out[o]; }
+  const relax = (i, j, di, dj, c) => {
+    const ii = i + di, jj = j + dj;
+    if (ii < 0 || jj < 0 || ii >= Gx || jj >= Gz) return;
+    const o = j * Gx + i, q = jj * Gx + ii;
+    if (D[q] + c < D[o]) { D[o] = D[q] + c; E[o] = E[q]; }
+  };
+  for (let j = 0; j < Gz; j++) for (let i = 0; i < Gx; i++) { relax(i, j, -1, 0, 1); relax(i, j, 0, -1, 1); relax(i, j, -1, -1, 1.414); relax(i, j, 1, -1, 1.414); }
+  for (let j = Gz - 1; j >= 0; j--) for (let i = Gx - 1; i >= 0; i--) { relax(i, j, 1, 0, 1); relax(i, j, 0, 1, 1); relax(i, j, 1, 1, 1.414); relax(i, j, -1, 1, 1.414); }
+  for (let o = 0; o < N; o++) if (!ok[o]) out[o] = Math.min(9, E[o] + 0.25 * D[o]);
+  return out;
+}
+
 // T bilinéaire en (x, z) (9 hors du territoire)
 export function sampleT(F, x, z) {
   const u = (x - F.x0) / F.h, v = (z - F.z0) / F.h;
@@ -245,7 +288,14 @@ export function* networkSteps(P, Gr, seeds, { steps = 140, seed = 'tero', snaps 
       if (!src.length) src = [C.all[0]];
       let sinks = [];
       if (C.front.length > 6) for (let q = 0; q < 6; q++) sinks.push(C.front[Math.floor(rng.next() * C.front.length)]);
-      else {
+      else if (P.pairs) {
+        // (front arrêté, Hemitrichia : sources et puits tirés au hasard deux à
+        // deux dans tout le plasmodium, comme les sources de nourriture de Tero
+        // et al. — le flux tourne dans toutes les directions et le réseau se
+        // referme en mailles au lieu de filer vers l'ancien front)
+        src = []; for (let q = 0; q < 3; q++) src.push(C.all[Math.floor(rng.next() * C.all.length)]);
+        for (let q = 0; q < 3; q++) sinks.push(C.all[Math.floor(rng.next() * C.all.length)]);
+      } else {
         const pool = C.late.length ? C.late : C.all;
         for (let q = 0; q < 4; q++) sinks.push(rng.next() < P.explore ? C.all[Math.floor(rng.next() * C.all.length)] : pool[Math.floor(rng.next() * pool.length)]);
       }
@@ -343,7 +393,8 @@ export function placeBeads(P, Gr, net, sp, fruit, rad, seed = 'beads') {
   // les têtes ne se traversent pas : une perle trop proche d'une autre est
   // fondue dans sa voisine (son volume la suit), sinon les deux rétrécissent
   // juste assez (rayon de tête à son plus large : filet détendu d'Arcyria)
-  const rHead = sp.head ? sp.head.r * (sp.cup ? 1.28 : sp.head.h > 3 * sp.head.r ? 1.05 : 1) : 0;
+  // (marge de 12 % : les têtes sont bosselées, et le vent ou la lumière les penchent)
+  const rHead = sp.head ? sp.head.r * (sp.cup ? 1.28 : sp.head.h > 3 * sp.head.r ? 1.05 : 1) * 1.12 : 0;
   const merged = beads.map(() => -1);
   // volume : chaque veine (et la nappe) verse le sien à la perle la plus proche
   const Vtot = (snapIdx) => { let v = 0; for (let k = 0; k < m; k++) v += veinVolume(rad(net.snapD[snapIdx * m + k]), len[k]); return v; };
@@ -416,7 +467,12 @@ export function seedsOf(P, rngSeed) {
   return out;
 }
 
-export function buildPlasmodium({ P, sp, fruit, L }) {
+export function buildPlasmodium({ P: P0, sp, fruit, L }) {
+  // Hemitrichia : le réseau EST le fruit, et le fruit d'H. serpula est un
+  // filet à mailles (« le bretzel »). Un réseau en arbre, couché dans le fil,
+  // donnait de longs rubans parallèles : on impose donc des mailles (μ bas,
+  // exploration forte) et un front presque isotrope.
+  const P = sp.mode === 'net' ? { ...P0, mu: Math.min(P0.mu, 1.08), explore: Math.max(P0.explore, 0.55), aniso: 1 + (P0.aniso - 1) * 0.25, pairs: true } : P0;
   const tried = seedsOf(P, P.seed);
   const F = arrivalField(P, L, tried);
   // (une graine tirée hors du territoire au bord bruité ne germe pas : on l'oublie)

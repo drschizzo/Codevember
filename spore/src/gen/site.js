@@ -11,6 +11,10 @@ import { windSpeed } from '../timeline.js';
 import { FAMILIES } from '../families.js';
 
 const MAX_ROWS = 8192;
+// (Hemitrichia : seuil des tubes-fruits. Plus bas, presque tout le réseau
+// devenait fruit, un feutre de rubans ; à 66 % il reste un filet à mailles
+// ouvertes, celui d'H. serpula)
+const FRUIT_R = 0.66;
 
 // ── Veines : brins (chaînes entre nœuds de degré ≠ 2), lissés, en tubes ─────
 function strandsOf(Gr, keep) {
@@ -43,15 +47,15 @@ function strandsOf(Gr, keep) {
 
 // lissage d'affichage : les nœuds de degré 2 glissent vers le milieu de leurs
 // voisins (le treillis dessinerait des escaliers) ; les jonctions bougent peu
-function smoothNodes(Gr, keep, deg, iters = 8) {
-  const x = Float64Array.from(Gr.x), z = Float64Array.from(Gr.z);
+function smoothNodes(Gr, keep, deg, iters = 8, wJ = 0.12, init = Gr) {
+  const x = Float64Array.from(init.x), z = Float64Array.from(init.z);
   for (let it = 0; it < iters; it++) {
     const nx = Float64Array.from(x), nz = Float64Array.from(z);
     for (let i = 0; i < Gr.n; i++) {
       if (!deg[i]) continue;
       let sx = 0, sz = 0, c = 0;
       for (let q = Gr.off[i]; q < Gr.off[i + 1]; q++) { const k = Gr.adj[q]; if (!keep[k]) continue; const j = Gr.ea[k] === i ? Gr.eb[k] : Gr.ea[k]; sx += x[j]; sz += z[j]; c++; }
-      const w = deg[i] === 2 ? 0.5 : 0.12;
+      const w = deg[i] === 2 ? 0.5 : wJ;
       nx[i] = x[i] * (1 - w) + (sx / c) * w; nz[i] = z[i] * (1 - w) + (sz / c) * w;
     }
     x.set(nx); z.set(nz);
@@ -69,7 +73,7 @@ const catmull = (p0, p1, p2, p3, t) => {
 //   o  (cosθ, sinθ, axial, w)   décalage dans la section (θ = 0 de côté,
 //                               π/2 en haut), part axiale (calottes), poids
 //   e  (ligne A, ligne B)       arêtes dont le rayon est lu (mélangées par w)
-function veinGeometry(strands, P, rowOf, NR = 10, SUB = 2) {
+function veinGeometry(strands, P, rowOf, NR = 10, SUB = 3) {
   const C = [], O = [], E = [], I = [];
   let nv = 0;
   const ring = (cx, cz, tx, tz, ra, rb, w, axial = 0, scale = 1) => {
@@ -144,18 +148,25 @@ export function buildSite(spec) {
   // Hemitrichia : les veines-fruits forment leurs propres brins (de longs
   // tubes continus, sans calotte à chaque petite branche qui s'en détache)
   const lastR0 = (k) => rad(net.snapD[(K_SNAP - 1) * m + k]);
-  let strands, deg;
+  let strands, deg, netFruit = null;
   if (sp.mode === 'net') {
     const kf = new Uint8Array(m), kr = new Uint8Array(m);
-    for (let k = 0; k < m; k++) if (keep[k]) { if (lastR0(k) >= sp.vein * 0.55) kf[k] = 1; else kr[k] = 1; }
+    for (let k = 0; k < m; k++) if (keep[k]) { if (lastR0(k) >= sp.vein * FRUIT_R) kf[k] = 1; else kr[k] = 1; }
     const a = strandsOf(Gr, kf), b = strandsOf(Gr, kr);
     strands = [...a.strands, ...b.strands];
+    netFruit = { keep: kf, deg: a.deg };
     deg = new Int32Array(Gr.n); for (let i = 0; i < Gr.n; i++) deg[i] = a.deg[i] + b.deg[i];
   } else ({ strands, deg } = strandsOf(Gr, keep));
-  const P = smoothNodes(Gr, keep, deg);
-  // Hemitrichia : les veines maîtresses (au rayon final ≥ 55 % du maximum) deviennent le fruit
+  // (le filet d'Hemitrichia, vu de près en tubes épais, demande un lissage plus poussé)
+  let P = smoothNodes(Gr, keep, deg, sp.mode === 'net' ? 16 : 8, sp.mode === 'net' ? 0.25 : 0.12);
+  // (Hemitrichia : les tubes-fruits se lissent encore entre eux seuls. Dans le
+  // réseau entier, leurs nœuds sont des jonctions — de petites branches s'en
+  // détachent, qui se videront — et restaient épinglés : le filet mûr se
+  // dessinait en marches à angle droit)
+  if (netFruit) P = smoothNodes(Gr, netFruit.keep, netFruit.deg, 20, 0.2, P);
+  // Hemitrichia : les veines maîtresses (au rayon final ≥ 66 % du maximum) deviennent le fruit
   const lastR = (k) => rad(net.snapD[(K_SNAP - 1) * m + k]);
-  const fruitEdge = (k) => sp.mode === 'net' && lastR(k) >= sp.vein * 0.55;
+  const fruitEdge = (k) => sp.mode === 'net' && lastR(k) >= sp.vein * FRUIT_R;
   // table des arêtes (K × lignes, RGBA) : rayon, flux signé, vidange, arrivée
   const rows = kept.length;
   const tex = new Float32Array(K_SNAP * rows * 4);
