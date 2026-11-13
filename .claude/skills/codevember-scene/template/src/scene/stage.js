@@ -11,7 +11,7 @@
 //    niveau de la scène : changer leur ordre recompile tous les matériaux.)
 import * as THREE from 'three/webgpu';
 import { uniform } from 'three/tsl';
-import { buildPieceMaterial, finishUniforms, applyFinish, signature } from './materials.js';
+import { buildPieceMaterial, finishUniforms, applyFinish, signature } from '../../../shared/scene/materials.js';
 
 const TAU = Math.PI * 2;
 const SHADOW = { mobile: 1024, low: 1024, medium: 2048, high: 2048, ultra: 4096 };

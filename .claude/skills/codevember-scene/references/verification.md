@@ -7,7 +7,7 @@ On ne livre rien jugé sur la liste des matières ou sur le code : on regarde de
 Quand `tabs_context` dit que le panneau est masqué : `requestAnimationFrame` est suspendu ou réduit à 1–4 i/s, les captures d'écran du canevas WebGPU (et même du DOM) sont périmées, et le JS tourne ~10 × plus lentement. Donc :
 
 - fais tourner la boucle à la main : `await <nom>.run()` (jusqu'à la fin du chargement), `<nom>.shot(ph)` (image fixe, 12 rendus) ;
-- récupère les images par le **collecteur** : `python3 <projet>/tools/sink.py <dossier du scratchpad> <port>` en arrière-plan (8099 par défaut ; si le port est pris par une autre session, prends-en un autre et passe l'URL à `send(nom, 0.5, 'http://127.0.0.1:<port>/')`), puis `Read` les JPEG ; assemble des planches avec PIL ;
+- récupère les images par le **collecteur** : `python3 tools/sink.py <dossier du scratchpad> <port>` en arrière-plan (8099 par défaut ; si le port est pris par une autre session, prends-en un autre et passe l'URL à `send(nom, 0.5, 'http://127.0.0.1:<port>/')`), puis `Read` les JPEG ; assemble des planches avec PIL ;
 - les appels `javascript_tool` expirent à 45 s alors que le script continue : lance les longs travaux en IIFE détachée qui écrit dans `window.__job`, rends la main, puis interroge par de courts appels ;
 - tu ne peux pas juger la **fluidité** en direct dans ces conditions : dis-le à l'utilisateur au lieu de conclure sur des images fixes, ou demande-lui d'afficher le panneau.
 

@@ -12,8 +12,8 @@
 // - les lampes sont presque blanches, la chaleur vient des matières, du fond,
 //   des contre-jours et de l'étalonnage ;
 // - tout mouvement fait un nombre ENTIER de tours (ou de périodes) par boucle.
-import { createRng } from './rng.js';
-import { FINISHES, SETS, TINTS } from './finishes.js';
+import { createRng } from '../../shared/rng.js';
+import { FINISHES, SETS, TINTS } from '../../shared/finishes.js';
 
 const r2 = (x) => Math.round(x * 100) / 100 || 0; // (|| 0 : jamais de −0, que JSON ne garde pas)
 

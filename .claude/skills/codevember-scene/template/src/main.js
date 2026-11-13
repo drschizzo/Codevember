@@ -11,40 +11,26 @@
 import * as THREE from 'three/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { generate, upgrade, MOODS } from './recipe.js';
-import { createGenerator } from './gen/client.js';
+import { createGenerator } from '../../shared/gen/client.js';
 import { createStage } from './scene/stage.js';
-import { makeEnvironment } from './scene/env.js';
-import { G } from './scene/globals.js';
-import { setNoiseVolume, setLite } from './scene/materials.js';
-import { createPost } from './render/post.js';
-import { createAccumulator, jitter } from './render/accum.js';
+import { makeEnvironment } from '../../shared/scene/env.js';
+import { G } from '../../shared/scene/globals.js';
+import { setNoiseVolume, setLite } from '../../shared/scene/materials.js';
+import { createPost } from '../../shared/render/post.js';
+import { createAccumulator, jitter } from '../../shared/render/accum.js';
 import { createUI } from './app/ui.js';
 import { loadRender, saveRender, applyQuality, defaultsFor } from './app/settings.js';
-import { wantsMobile, switchMobile, createGovernor, createPacer, bindTouch } from './app/mobile.js';
-import { exportLoop, exportPNG } from './app/capture.js';
-import { loader } from './app/loader.js';
-import { asyncPipelines, warmScene } from './app/warmup.js';
+import { wantsMobile, switchMobile, createGovernor, createPacer, bindTouch } from '../../shared/app/mobile.js';
+import { exportLoop, exportPNG } from '../../shared/app/capture.js';
+import { loader } from '../../shared/app/loader.js';
+import { asyncPipelines, warmScene } from '../../shared/app/warmup.js';
+import { createDebugTools, packRecipe, unpackRecipe, sleep } from '../../shared/app/debug.js';
 
 const NAME = '{{NAME}}';
 const DEFAULT_SEED = 'a1'; // scène d'ouverture (sans ?seed=) : à choisir parmi les plus belles
 const params = new URLSearchParams(location.search);
 const $ = (s) => document.querySelector(s);
 const randomSeed = () => Math.random().toString(36).slice(2, 8);
-
-// ── Partage d'une scène retouchée : JSON compressé dans l'ancre ──────────────
-async function packRecipe(R) {
-  const s = new Blob([JSON.stringify(R)]).stream().pipeThrough(new CompressionStream('deflate-raw'));
-  const b = new Uint8Array(await new Response(s).arrayBuffer());
-  let bin = '';
-  for (const x of b) bin += String.fromCharCode(x);
-  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-async function unpackRecipe(str) {
-  const bin = atob(str.replace(/-/g, '+').replace(/_/g, '/'));
-  const b = Uint8Array.from(bin, (c) => c.charCodeAt(0));
-  const s = new Blob([b]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
-  return JSON.parse(await new Response(s).text());
-}
 
 // un échec : dit à l'écran, avec de quoi repartir (une fois l'interface prête)
 let retry = null;
@@ -135,12 +121,13 @@ async function main() {
     loader.show({ steps: STEPS });
     loader.art({ seed: R.seed });
     // (le fondu d'entrée de l'écran se termine avant que la scène ne change)
-    setTimeout(() => {
+    // (sleep et non setTimeout : une page masquée ralentit les minuteries)
+    sleep(firstRecipe ? 0 : 280).then(() => {
       if (R !== recipe) return;
       stage.setRecipe(R);
       syncEnv();
       loading.applied = true;
-    }, firstRecipe ? 0 : 280);
+    });
     firstRecipe = false;
     ui?.rebuild();
     const url = new URL(location.href);
@@ -319,88 +306,22 @@ async function main() {
       seek: (p) => { phi = p; paused = true; },
       play: () => { paused = false; frozen = false; },
       freeze: (v = true) => { frozen = v; },
-      // image fixe à la phase ph (n images : historique de l'anticrénelage)
-      async shot(ph, n = 12) {
-        await this.run(); // (fin du chargement, même panneau masqué)
-        frozen = true;
-        document.body.classList.add('clean');
-        for (let i = 0; i < n; i++) { renderStep(ph); await renderer.backend.device?.queue.onSubmittedWorkDone(); }
-      },
-      // image rendue, envoyée au collecteur local (tools/sink.py) : la capture
-      // d'écran du panneau de navigateur est périmée quand il est masqué
-      async send(name, scale = 0.5, url = 'http://127.0.0.1:8099/') {
-        const w = canvas.width, h = canvas.height;
-        const rt = new THREE.RenderTarget(w, h, { type: THREE.UnsignedByteType });
-        renderer.setRenderTarget(rt); post.render(); renderer.setRenderTarget(null);
-        const px = await renderer.readRenderTargetPixelsAsync(rt, 0, 0, w, h);
-        rt.dispose();
-        const c = new OffscreenCanvas(w, h), img = c.getContext('2d').createImageData(w, h), stride = Math.ceil((w * 4) / 256) * 256;
-        for (let y = 0; y < h; y++) img.data.set(px.subarray(y * stride, y * stride + w * 4), y * w * 4);
-        c.getContext('2d').putImageData(img, 0, 0);
-        const sc = new OffscreenCanvas(Math.round(w * scale), Math.round(h * scale));
-        sc.getContext('2d').drawImage(c, 0, 0, sc.width, sc.height);
-        const b = await sc.convertToBlob({ type: 'image/jpeg', quality: 0.88 });
-        await fetch(url + name, { method: 'POST', body: b });
-        return b.size;
-      },
-      // planche : les graines × les phases, chaque image envoyée au collecteur
-      // (une graine peut s'écrire « graine:humeur:famille » : l'humeur et la
-      // famille sont alors imposées — pour comparer toutes les humeurs d'un coup)
-      async sheet(seeds, phases = [0, 0.2, 0.4, 0.6, 0.8], prefix = 'sheet') {
-        for (const s of seeds) {
-          const [sd, mood, family] = String(s).split(':');
-          R = generate(sd, { ...(mood ? { mood } : {}), ...(family ? { family } : {}) }); applyRecipe();
-          await new Promise((r) => setTimeout(r, 400));
-          for (const ph of phases) { await this.shot(ph); await this.send(`${prefix}-${s}-${String(Math.round(ph * 100)).padStart(3, '0')}.jpg`); }
-        }
-      },
-      // posemètre de plusieurs scènes : { graine: [[médiane du centre, médiane de l'image, brûlé] par phase] }
-      async meters(seeds, phases = [0.3, 0.6]) {
-        const out = {};
-        for (const s of seeds) {
-          const [sd, mood, family] = String(s).split(':');
-          R = generate(sd, { ...(mood ? { mood } : {}), ...(family ? { family } : {}) }); applyRecipe();
-          await new Promise((r) => setTimeout(r, 400));
-          out[s] = [];
-          for (const ph of phases) { await this.shot(ph); const m = await this.meter(); out[s].push([m.centre.p50, m.image.p50, m.image.brule]); }
-        }
-        return out;
-      },
-      // posemètre : luminance de la passe de scène (HDR, avant étalonnage) sur
-      // l'image et sur son centre — médiane, centiles, part de noir et de brûlé
-      async meter(box = 0.18) {
-        const rt = post.nodes.scenePass.renderTarget, w = rt.width, h = rt.height;
-        const px = await renderer.readRenderTargetPixelsAsync(rt, 0, 0, w, h, 0);
-        const half = px instanceof Uint16Array, val = (i) => (half ? THREE.DataUtils.fromHalfFloat(px[i]) : px[i]);
-        const stride = Math.ceil((w * (half ? 8 : 16)) / 256) * 256 / (half ? 2 : 4);
-        const all = [], mid = [], b = box * h;
-        for (let y = 0; y < h; y += 3) for (let x = 0; x < w; x += 3) {
-          const i = y * stride + x * 4, L = 0.2126 * val(i) + 0.7152 * val(i + 1) + 0.0722 * val(i + 2);
-          if (!(L >= 0)) continue;
-          all.push(L);
-          if (Math.abs(x - w / 2) < b && Math.abs(y - h / 2) < b) mid.push(L);
-        }
-        const stat = (a) => { a.sort((p, q) => p - q); const q = (t) => +a[Math.min(a.length - 1, Math.floor(t * a.length))].toFixed(3); return { p50: q(0.5), p90: q(0.9), p99: q(0.99), noir: +(a.filter((v) => v < 0.01).length / a.length).toFixed(2), brule: +(a.filter((v) => v > RENDER.hiCap * 0.5).length / a.length).toFixed(3) }; };
-        return { image: stat(all), centre: stat(mid) };
-      },
-      // temps GPU moyen d'une image (boucle arrêtée, n rendus d'affilée)
-      async bench(ph = 0.3, n = 30) {
-        frozen = true;
-        renderStep(ph); await renderer.backend.device?.queue.onSubmittedWorkDone();
-        const t0 = performance.now();
-        for (let i = 0; i < n; i++) renderStep(ph);
-        await renderer.backend.device?.queue.onSubmittedWorkDone();
-        return +((performance.now() - t0) / n).toFixed(2);
-      },
-      // signature de la boucle : la pose de la caméra et des pièces à u et à u + 1
-      // doit être identique (raccord parfait)
-      seam(u = 0) {
-        const sig = () => { const v = [...camera.matrixWorld.elements]; stage.group.traverse((o) => o.isMesh && v.push(...o.matrixWorld.elements)); return v; };
-        renderStep(u); const a = sig();
-        renderStep(u + 1 - 1e-9); const b = sig();
-        return Math.max(...a.map((x, i) => Math.abs(x - b[i])));
-      },
+      // image fixe, envoi au collecteur, planches, posemètre, temps d'image,
+      // raccord, boucle à la main quand le panneau est masqué : shot(ph),
+      // send(nom), sheet(graines, phases), film(u0, u1, n), meter(), meters(),
+      // poster(), bench(ph), seam(u), size(w, h), run(s) — shared/app/debug.js
+      ...createDebugTools({
+        renderer, canvas, camera, post, renderStep,
+        tick: (now) => tick(now),
+        isLoading: () => loading.active,
+        freeze: (v) => { frozen = v; },
+        resize: () => resize(),
+        load: (seed, forced) => { R = generate(seed, forced); applyRecipe(); },
+        poses: () => [stage.group],
+        hiCap: () => RENDER.hiCap,
+      }),
     };
+    Object.defineProperty(window[NAME], 'loading', { get: () => ({ ...loading }) });
   }
 
   addEventListener('resize', () => !busy && resize());
@@ -445,20 +366,6 @@ async function main() {
     if ((fpsT += dt) > 0.5) { ui?.setFps(`${(fpsN / fpsAcc).toFixed(0)}${RENDER.dynRes ? `  ·  ${Math.round(governor.scale * 100)} %` : ''}  ·  ${gen.busy() ? 'génération…' : 'prêt'}`); fpsAcc = fpsN = fpsT = 0; }
   }
   renderer.setAnimationLoop(tick);
-  if (window[NAME]) {
-    // fait tourner la boucle à la main jusqu'à la fin du chargement (ou pendant
-    // `seconds` de film) : à utiliser quand le panneau est masqué
-    window[NAME].run = async (seconds = 0) => {
-      frozen = false; // (une image fixe gèle la boucle : le chargement suivant ne finirait jamais)
-      const t0 = performance.now();
-      while (loading.active || performance.now() - t0 < seconds * 1000) {
-        renderer._nodes?.nodeFrame?.update();
-        tick(performance.now());
-        await new Promise((r) => setTimeout(r, 16));
-      }
-    };
-    Object.defineProperty(window[NAME], 'loading', { get: () => ({ ...loading }) });
-  }
 }
 
 main().catch((e) => { console.error(e); fail(e.message); });

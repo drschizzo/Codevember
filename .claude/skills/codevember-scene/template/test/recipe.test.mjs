@@ -7,7 +7,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { generate, upgrade, MOODS } from '../src/recipe.js';
-import { SETS, FINISHES } from '../src/finishes.js';
+import { SETS, FINISHES } from '../../shared/finishes.js';
 
 const SEEDS = Array.from({ length: 400 }, (_, i) => `t${i}`);
 
