@@ -25,12 +25,13 @@
 // front d'eau fait basculer chaque cellule à son instant et glisse à sa vraie
 // vitesse, au lieu de s'effacer d'un côté pendant qu'il apparaît de l'autre (le
 // « stop motion » de toute interpolation qui mélange deux états) et FW états de l'eau à demi-résolution
-// (surface libre − b₀, turbidité, vitesse). Puis, à chaque image, la passe
-// resolve interpole les états — le relief en Catmull-Rom dans le temps sur
-// quatre états, borné par les deux états encadrants : sa vitesse est continue
-// (une interpolation linéaire entre états espacés de 0,45 s faisait avancer
-// l'érosion par saccades) — et applique le gabarit ; elle écrit les
-// StorageTexture que les matériaux lisent.
+// (surface libre − b₀, turbidité, vitesse). Chaque état du lit est la MOYENNE des
+// pas de son intervalle (préfiltre : un instantané repliait le tremblement de la
+// simulation, pas à pas, en agitation à la cadence des états). Après la
+// simulation, une passe tire de la courbe du lit le plus bas atteint. Puis, à
+// chaque image, la passe resolve relit le lit en B-spline dans le temps,
+// complète le plus bas atteint sur la même courbe, applique le gabarit, et
+// écrit les StorageTexture que les matériaux lisent.
 import * as THREE from 'three/webgpu';
 import { TABLE, inflowAt, rainAt, baseAt, fbm, MAX_LAYERS } from '../gen/table.js';
 import { PHYS } from '../gen/sim.js';
@@ -324,6 +325,10 @@ struct Step { q: f32, r: f32, lvl: f32, mf: f32, dt: f32, fT: f32, fW: f32, p2: 
 @compute @workgroup_size(64) fn accum(@builtin(global_invocation_id) gid: vec3u) {
   let c = gid.x; if (c >= N) { return; }
   let v = cell[c];
+  // lit : somme de b − b₀ (acc.w = b₀) et nombre de pas depuis le dernier état
+  // enregistré — l'état sera la MOYENNE de l'intervalle, pas un instantané
+  let ab = acc[c];
+  acc[c] = vec4f(ab.x + (v.x - ab.w), ab.y + 1.0, ab.z, ab.w);
   let e = v.x + v.y;
   let w = accW[c]; let de = abs(e - w.w);
   accW[c] = vec4f(w.x + de, w.y + de * P.fW, w.z + de * P.fW * P.fW, e);
@@ -344,7 +349,16 @@ fn timing(a: vec3f, thr: f32) -> u32 {
 @compute @workgroup_size(64) fn recBed(@builtin(global_invocation_id) gid: vec3u) {
   let p = gid.x; if (p >= N / 2u) { return; }
   let c = 2u * p;
-  recT[R.frame * (N / 2u) + p] = pack2x16float(vec2f(cell[c].x - stat[c].x, cell[c + 1u].x - stat[c + 1u].x));
+  // Préfiltre : la moyenne de tous les pas de l'intervalle (filtre-boîte). Le lit
+  // simulé tremble d'un pas à l'autre (talus, diffusion, grains qui se reposent,
+  // ~700 Hz) ; un instantané tous les ~37 pas repliait ce bruit en une agitation à
+  // la cadence des états (17 Hz) — le « stop motion » : les cellules faisaient 8
+  // fois plus de chemin que leur déplacement net. (État 0 : aucun pas, b₀.)
+  let a0 = acc[c]; let a1 = acc[c + 1u];
+  let m0 = select(cell[c].x - stat[c].x, a0.x / a0.y, a0.y > 0.5);
+  let m1 = select(cell[c + 1u].x - stat[c + 1u].x, a1.x / a1.y, a1.y > 0.5);
+  acc[c] = vec4f(0.0, 0.0, a0.z, a0.w); acc[c + 1u] = vec4f(0.0, 0.0, a1.z, a1.w);
+  recT[R.frame * (N / 2u) + p] = pack2x16float(vec2f(m0, m1));
 }
 @compute @workgroup_size(64) fn recWaterTime(@builtin(global_invocation_id) gid: vec3u) {
   let h = gid.x; if (h >= HN) { return; }
@@ -362,7 +376,95 @@ fn timing(a: vec3f, thr: f32) -> u32 {
   return { acc, rec };
 }
 
-function wgslResolve(NX, NY) {
+// La courbe du lit dans le temps, partagée par la relecture et par la passe qui
+// en tire le plus bas atteint : B-spline cubique uniforme sur les états (C², sans
+// dépassement ; les états sont des moyennes d'intervalle, la B-spline est le
+// reconstructeur assorti). Aux deux bouts, un état fantôme réfléchi (2·s₀ − s₁) :
+// la courbe passe EXACTEMENT par le premier et le dernier état (b₀ au début de
+// la boucle, le relief final sous la lame).
+function wgslCurve(FT, FM) {
+  return /* wgsl */`
+const FT: u32 = ${FT}u;
+const FM: u32 = ${FM}u;
+const MS: u32 = ${Math.floor((FT - 1) / (FM - 1))}u; // (états du lit par état de la mémoire du plus bas atteint)
+fn bAt(k: u32, c: u32) -> f32 { let v = unpack2x16float(recT[k * (N / 2u) + c / 2u]); return select(v.x, v.y, (c & 1u) == 1u); }
+// états k−1, k, k+1, k+2 (fantômes réfléchis aux bouts)
+fn knots(k: u32, c: u32) -> vec4f {
+  let p1 = bAt(k, c); let p2 = bAt(min(k + 1u, FT - 1u), c);
+  var p0 = 2.0 * p1 - p2; if (k > 0u) { p0 = bAt(k - 1u, c); }
+  var p3 = 2.0 * p2 - p1; if (k + 2u < FT) { p3 = bAt(k + 2u, c); }
+  return vec4f(p0, p1, p2, p3);
+}
+// segment suivant : la fenêtre glisse d'un état
+fn slide(q: vec4f, k: u32, c: u32) -> vec4f {
+  var n = 2.0 * q.w - q.z; if (k + 3u < FT) { n = bAt(k + 3u, c); }
+  return vec4f(q.y, q.z, q.w, n);
+}
+fn cub(q: vec4f, t: f32) -> f32 {
+  let s = 1.0 - t;
+  return (q.x * (s * s * s) + q.y * (3.0 * t * t * t - 6.0 * t * t + 4.0) + q.z * (-3.0 * t * t * t + 3.0 * t * t + 3.0 * t + 1.0) + q.w * (t * t * t)) / 6.0;
+}
+`;
+}
+
+// Le plus bas atteint, tiré de la courbe même qui est affichée (une passe après la
+// simulation) : minimum courant échantillonné quatre fois par segment, écrit tous
+// les MS états dans la mémoire (demi-flottant bas). La relecture le complète par
+// les segments parcourus depuis : le dépôt et la strate visibles ne sautent plus
+// (la mémoire enregistrée 96 fois prenait des minima que la courbe lissée
+// n'atteignait jamais : la couleur basculait 3,4 fois par seconde).
+// Le lit dans le temps, filtré passe-bas sans déphasage (une passe après la
+// simulation, en place) : deux allers-retours d'un filtre exponentiel, constante
+// TAU états. Le MORFAC multiplie par 30 à 50 les échanges de l'eau avec le lit :
+// les vagues et les bouffées de sédiment, à la cadence de l'eau (période ~4 états,
+// 0,2 s), faisaient osciller chaque cellule de ~0,17 mm — le relief bouillonnait,
+// le paysage avançait par à-coups. Le lit, lui, n'a de sens qu'en moyenne sur
+// quelques périodes de l'eau : restent ~17 µm d'agitation, 98,6 % du creusement net.
+// L'état 0 reste exactement b₀ (le début de la boucle).
+function wgslSmooth(NX, NY, FT, TAU) {
+  return /* wgsl */`
+const NP: u32 = ${(NX * NY) / 2}u;
+const FT: u32 = ${FT}u;
+const A: f32 = ${1 - Math.exp(-1 / TAU)};
+@group(0) @binding(0) var<storage, read_write> recT: array<u32>;
+fn rd(k: u32, p: u32) -> vec2f { return unpack2x16float(recT[k * NP + p]); }
+fn wr(k: u32, p: u32, v: vec2f) { recT[k * NP + p] = pack2x16float(v); }
+@compute @workgroup_size(64) fn smoothBed(@builtin(global_invocation_id) gid: vec3u) {
+  let p = gid.x; if (p >= NP) { return; }
+  for (var it = 0u; it < 2u; it++) {
+    var y = rd(0u, p);
+    for (var k = 1u; k < FT; k++) { y += A * (rd(k, p) - y); wr(k, p, y); }
+    for (var k = FT - 1u; k > 0u; k--) { y += A * (rd(k - 1u, p) - y); wr(k - 1u, p, y); }
+  }
+  wr(0u, p, vec2f(0.0));
+}
+`;
+}
+
+function wgslMem(NX, NY, FT, FM) {
+  return /* wgsl */`
+const N: u32 = ${NX * NY}u;
+@group(0) @binding(0) var<storage, read> recT: array<u32>;
+@group(0) @binding(1) var<storage, read_write> recM: array<u32>;
+${wgslCurve(FT, FM)}
+fn putLo(m: u32, c: u32, v: f32) { let i = m * N + c; recM[i] = (recM[i] & 0xFFFF0000u) | (pack2x16float(vec2f(v, 0.0)) & 0xFFFFu); }
+@compute @workgroup_size(64) fn memMin(@builtin(global_invocation_id) gid: vec3u) {
+  let c = gid.x; if (c >= N) { return; }
+  var q = knots(0u, c);
+  var mn = cub(q, 0.0);
+  putLo(0u, c, mn);
+  var m = 1u;
+  for (var k = 0u; k + 1u < FT; k++) {
+    for (var j = 1u; j <= 4u; j++) { mn = min(mn, cub(q, f32(j) * 0.25)); }
+    if (k + 1u == m * MS && m < FM) { putLo(m, c, mn); m++; }
+    q = slide(q, k, c);
+  }
+  for (; m < FM; m++) { putLo(m, c, mn); }
+}
+`;
+}
+
+function wgslResolve(NX, NY, FT, FM) {
   const HX = NX / 2, HY = NY / 2;
   return /* wgsl */`
 const NX: u32 = ${NX}u;
@@ -385,7 +487,7 @@ struct Res {
 @group(0) @binding(3) var<storage, read> surplus: array<f32>;  // matière poussée par la lame, cumulée depuis l'aval (m²)
 @group(0) @binding(4) var terr: texture_storage_2d<rgba32float, write>;
 @group(0) @binding(5) var wat: texture_storage_2d<rgba32float, write>;
-@group(0) @binding(6) var<storage, read_write> cur: array<vec4f>;   // relief courant : b, humidité, rides, profondeur atteinte
+@group(0) @binding(6) var<storage, read_write> cur: array<vec4f>;   // relief courant, deux vec4 par cellule : (b brut, humidité, rides, profondeur atteinte), (dépôt, sable frais, —, —) puis, après aniso, (orientation des crêtes ×2, b lissé, —)
 @group(0) @binding(7) var nrm: texture_storage_2d<rgba16float, write>; // nx, nz, humidité, rides (filtrable)
 @group(0) @binding(8) var occ: texture_storage_2d<rgba16float, write>; // occlusion du relief, creux, profondeur atteinte, ombre portée de la lampe (filtrable)
 @group(0) @binding(9) var<storage, read> recM: array<u32>;
@@ -407,17 +509,37 @@ fn advance(t: f32, code: u32, sgMin: f32) -> f32 {
   return mix((smoothstep(lo, hi, t) - g0) / (g1 - g0), t, smoothstep(0.12, 0.24, sg));
 }
 const DEF: u32 = 128u | (148u << 8u); // (code « rien n'a changé »)
-fn bAt(k: u32, c: u32) -> f32 { let v = unpack2x16float(recT[k * (N / 2u) + c / 2u]); return select(v.x, v.y, (c & 1u) == 1u); }
-// lit enregistré (b − b₀) à la cellule c, entre les états t0 et t1 : B-spline
-// cubique dans le temps sur quatre états (C², sans dépassement). L'érosion du sable
-// est un changement régulier (les instants enregistrés le montrent : presque
-// toutes les cellules changent sur tout l'intervalle) ; une bascule par cellule,
-// essayée ici, faisait ressortir des cellules isolées en petits carrés.
-fn relAt(c: u32) -> f32 {
-  let b0v = bAt(R.t0, c); let b1v = bAt(R.t1, c);
-  let ba = bAt(R.tA, c); let bd = bAt(R.tD, c);
-  let t = R.tt; let s = 1.0 - t;
-  return (ba * (s * s * s) + b0v * (3.0 * t * t * t - 6.0 * t * t + 4.0) + b1v * (-3.0 * t * t * t + 3.0 * t * t + 3.0 * t + 1.0) + bd * (t * t * t)) / 6.0;
+${wgslCurve(FT, FM)}
+// lit enregistré (b − b₀) à la cellule c, au temps R.t0 + R.tt (en états)
+fn relAt(c: u32) -> f32 { return cub(knots(R.t0, c), R.tt); }
+// le plus bas atteint par la courbe affichée jusqu'à l'instant courant : la mémoire
+// écrite par memMin (tous les MS états), puis les segments parcourus depuis,
+// échantillonnés aux mêmes instants (quatre par segment), et la valeur courante
+fn bminAt(c: u32, rb: f32) -> f32 {
+  let a = R.t0;
+  let mi = min(a / MS, FM - 1u);
+  var mn = min(unpack2x16float(recM[mi * N + c] & 0xFFFFu).x, rb);
+  var k = mi * MS;
+  var q = knots(k, c);
+  loop {
+    let lim = select(4u, u32(floor(R.tt * 4.0)), k == a);
+    for (var j = 1u; j <= lim; j++) { mn = min(mn, cub(q, f32(j) * 0.25)); }
+    if (k >= a) { break; }
+    q = slide(q, k, c);
+    k++;
+  }
+  return mn;
+}
+// mémoire (humidité, rides) : B-spline dans le temps sur quatre états (fantômes
+// réfléchis aux bouts) — en linéaire, sa vitesse cassait à chaque état
+fn memAt(m: u32, c: u32) -> vec2f { let M = recM[m * N + c]; return vec2f(f32((M >> 16u) & 0xFFu), f32(M >> 24u)) / 255.0; }
+fn memCurve(c: u32) -> vec2f {
+  let w1 = memAt(R.m0, c); let w2 = memAt(R.m1, c);
+  var w0 = 2.0 * w1 - w2; if (R.m0 > 0u) { w0 = memAt(R.m0 - 1u, c); }
+  var w3 = 2.0 * w2 - w1; if (R.m1 + 1u < FM) { w3 = memAt(R.m1 + 1u, c); }
+  let t = R.tm; let s = 1.0 - t;
+  let a = s * s * s / 6.0; let b = (3.0 * t * t * t - 6.0 * t * t + 4.0) / 6.0; let d = t * t * t / 6.0; let e = 1.0 - a - b - d;
+  return clamp(w0 * a + w1 * b + w2 * e + w3 * d, vec2f(0.0), vec2f(1.0));
 }
 
 @compute @workgroup_size(8, 8) fn resolve(@builtin(global_invocation_id) gid: vec3u) {
@@ -426,11 +548,8 @@ fn relAt(c: u32) -> f32 {
   let c = j * NX + i;
   let b0 = stat[c].x;
   let rb = relAt(c);                  // b − b₀
-  let M0 = recM[R.m0 * N + c]; let M1 = recM[R.m1 * N + c];
-  // le plus bas atteint : celui de l'état de mémoire antérieur (il ne peut qu'être
-  // plus haut que le vrai), borné par le lit courant — c'est un minimum courant
-  let bmr = min(unpack2x16float(M0 & 0xFFFFu).x, rb);
-  let mem = mix(vec2f(f32((M0 >> 16u) & 0xFFu), f32(M0 >> 24u)), vec2f(f32((M1 >> 16u) & 0xFFu), f32(M1 >> 24u)), R.tm) / 255.0; // humidité, rides
+  let bmr = bminAt(c, rb);             // le plus bas atteint par la courbe affichée
+  let mem = memCurve(c);              // humidité, rides
   var b = b0 + rb;
   var dep = max(0.0, rb - bmr);       // épaisseur de dépôt frais
   var depth = max(0.0, -bmr);         // profondeur atteinte sous b₀ (strates)
@@ -452,8 +571,9 @@ fn relAt(c: u32) -> f32 {
     }
   }
   if (fresh > 0.5) { wet = 0.0; }
-  textureStore(terr, vec2u(i, j), vec4f(b, depth, dep, fresh));
-  cur[c] = vec4f(b, wet, rip, depth); // (la profondeur atteinte repart dans la texture filtrable)
+  // (la texture du relief est écrite par la passe aniso, après le lissage le long des crêtes)
+  cur[2u * c] = vec4f(b, wet, rip, depth); // (la profondeur atteinte repart dans la texture filtrable)
+  cur[2u * c + 1u] = vec4f(dep, fresh, b, 0.0);
   // eau (demi-résolution)
   if (i < HX && j < HY) {
     let h = j * HX + i;
@@ -499,6 +619,52 @@ fn relAt(c: u32) -> f32 {
   }
 }
 
+// Lissage le long des crêtes (tenseur de structure). Une crête en diagonale, à
+// l'angle de talus, est faite de coins de cellules : la relecture nette (Hermite
+// monotone) les rendait fidèlement, et chaque arête oblique se dentelait en dents
+// de scie au pas de la grille (2,5 mm), l'ombre portée du relief avec elle. Un
+// lissage isotrope arrondit les crêtes en cire fondue ; ici, on ne lisse que le
+// long des lignes de niveau : la direction de plus faible variation, tirée du
+// tenseur de structure (gradients pondérés sur 5 × 5 cellules, insensible au
+// signe : une crête, dont la pente s'inverse, reste une seule direction). Le profil
+// en travers de la crête reste intact ; la dent de scie (période ~1,4 cellule le
+// long de l'arête) est effacée, les formes de plus de ~8 cellules gardées à ~90 %.
+// Seulement là où l'orientation est nette (cohérence) et la pente marquée.
+fn hr(i: i32, j: i32) -> f32 { let q = clamp(vec2i(i, j), vec2i(0), vec2i(i32(NX) - 1, i32(NY) - 1)); return cur[2u * (u32(q.y) * NX + u32(q.x))].x; }
+fn hb(p: vec2f) -> f32 {
+  let f = floor(p); let t = p - f; let i = i32(f.x); let j = i32(f.y);
+  return mix(mix(hr(i, j), hr(i + 1, j), t.x), mix(hr(i, j + 1), hr(i + 1, j + 1), t.x), t.y);
+}
+@compute @workgroup_size(8, 8) fn aniso(@builtin(global_invocation_id) gid: vec3u) {
+  let i = gid.x; let j = gid.y;
+  if (i >= NX || j >= NY) { return; }
+  let c = j * NX + i;
+  let ii = i32(i); let jj = i32(j);
+  var J = vec3f(0.0); var ws = 0.0;
+  for (var dy = -2; dy <= 2; dy++) { for (var dx = -2; dx <= 2; dx++) {
+    let w = exp(-f32(dx * dx + dy * dy) / 4.5);
+    let gx = (hr(ii + dx + 1, jj + dy) - hr(ii + dx - 1, jj + dy)) * 0.5;
+    let gy = (hr(ii + dx, jj + dy + 1) - hr(ii + dx, jj + dy - 1)) * 0.5;
+    J += w * vec3f(gx * gx, gx * gy, gy * gy); ws += w;
+  } }
+  let tr = J.x + J.z; let df = J.x - J.z;
+  let coh = select(0.0, sqrt(df * df + 4.0 * J.y * J.y) / tr, tr > 1e-16);
+  let th = 0.5 * atan2(2.0 * J.y, df);
+  let t = vec2f(-sin(th), cos(th));   // le long des lignes de niveau
+  let p = vec2f(f32(i), f32(j));
+  let h0 = cur[2u * c].x;
+  let hs = (h0 + 0.458 * (hb(p + t) + hb(p - t)) + 0.044 * (hb(p + 2.0 * t) + hb(p - 2.0 * t))) / 2.004;
+  let slope = sqrt(tr / ws) / L;
+  let k = smoothstep(0.3, 0.7, coh) * smoothstep(0.08, 0.3, slope);
+  let b = mix(h0, hs, k);
+  let e = cur[2u * c + 1u];
+  let v = cur[2u * c];
+  textureStore(terr, vec2u(i, j), vec4f(b, v.w, max(0.0, e.x + b - h0), e.y));
+  // (pour la passe des sommets : l'orientation en angle double — moyennable —, pondérée)
+  let o = k * vec2f(df, 2.0 * J.y) / max(sqrt(df * df + 4.0 * J.y * J.y), 1e-20);
+  cur[2u * c + 1u] = vec4f(o, b, 0.0);
+}
+
 // normales du relief courant (différences centrées, en cellules), humidité, rides
 @compute @workgroup_size(8, 8) fn normals(@builtin(global_invocation_id) gid: vec3u) {
   let i = gid.x; let j = gid.y;
@@ -506,10 +672,10 @@ fn relAt(c: u32) -> f32 {
   let c = j * NX + i;
   let iL = select(i - 1u, 0u, i == 0u); let iR = min(NX - 1u, i + 1u);
   let jT = select(j - 1u, 0u, j == 0u); let jB = min(NY - 1u, j + 1u);
-  let gx = (cur[j * NX + iR].x - cur[j * NX + iL].x) / (f32(iR - iL) * L);
-  let gy = (cur[jB * NX + i].x - cur[jT * NX + i].x) / (f32(jB - jT) * L);
+  let gx = (cur[2u * (j * NX + iR) + 1u].z - cur[2u * (j * NX + iL) + 1u].z) / (f32(iR - iL) * L);
+  let gy = (cur[2u * (jB * NX + i) + 1u].z - cur[2u * (jT * NX + i) + 1u].z) / (f32(jB - jT) * L);
   let n = normalize(vec3f(-gx, 1.0, -gy));
-  let v = cur[c];
+  let v = vec4f(cur[2u * c + 1u].z, cur[2u * c].yzw);
   textureStore(nrm, vec2u(i, j), vec4f(n.x, n.z, v.y, v.z));
   // occlusion par l'horizon du relief : 8 directions, 5 pas (2,5 mm à 4 cm)
   let h0 = v.x;
@@ -522,7 +688,7 @@ fn relAt(c: u32) -> f32 {
     for (var s = 0u; s < 5u; s++) {
       let q = vec2i(vec2f(f32(i), f32(j)) + dir * r);
       let qc = clamp(q, vec2i(0), vec2i(i32(NX) - 1, i32(NY) - 1));
-      let dh = cur[u32(qc.y) * NX + u32(qc.x)].x - h0;
+      let dh = cur[2u * (u32(qc.y) * NX + u32(qc.x)) + 1u].z - h0;
       hmax = max(hmax, dh / (r * L));
       r *= 2.0;
     }
@@ -534,7 +700,7 @@ fn relAt(c: u32) -> f32 {
   for (var k = 0u; k < 8u; k++) {
     let a = f32(k) * 0.7853982;
     let q = clamp(vec2i(vec2f(f32(i), f32(j)) + vec2f(cos(a), sin(a)) * 3.0), vec2i(0), vec2i(i32(NX) - 1, i32(NY) - 1));
-    m += cur[u32(q.y) * NX + u32(q.x)].x;
+    m += cur[2u * (u32(q.y) * NX + u32(q.x)) + 1u].z;
   }
   let cav = clamp((m / 8.0 - h0) * 400.0, -1.0, 1.0);
   // Ombre portée du relief par la lampe principale : un tracé vers la lampe sur la
@@ -554,12 +720,74 @@ fn relAt(c: u32) -> f32 {
     if (q.x < 0.0 || q.y < 0.0 || q.x > f32(NX - 1u) || q.y > f32(NY - 1u)) { break; }
     let q0 = vec2u(floor(q)); let fq = fract(q);
     let q1 = min(q0 + vec2u(1u, 1u), vec2u(NX - 1u, NY - 1u));
-    let hq = mix(mix(cur[q0.y * NX + q0.x].x, cur[q0.y * NX + q1.x].x, fq.x), mix(cur[q1.y * NX + q0.x].x, cur[q1.y * NX + q1.x].x, fq.x), fq.y);
+    let hq = mix(mix(cur[2u * (q0.y * NX + q0.x) + 1u].z, cur[2u * (q0.y * NX + q1.x) + 1u].z, fq.x), mix(cur[2u * (q1.y * NX + q0.x) + 1u].z, cur[2u * (q1.y * NX + q1.x) + 1u].z, fq.x), fq.y);
     mt = max(mt, (hq - h0) / (sd * L));
     sd += max(1.0, sd * 0.05);
   }
   let sh = smoothstep(-R.lpen, R.lpen, atan(tanL) - atan(mt));
   textureStore(occ, vec2u(i, j), vec4f(vis, cav, v.w, sh));
+}
+`;
+}
+
+// Le relief AUX SOMMETS du maillage (MX × MY, deux par cellule), une fois par
+// image : l'Hermite monotone du lit, moyenné le long des crêtes. Une interpolation
+// séparable (en x, puis en y) est haute à chaque nœud d'une crête en diagonale et
+// creuse un col entre deux : l'arête se festonnait au pas de la cellule, les
+// silhouettes et les terminateurs en dents de scie. Cinq évaluations le long de la
+// ligne de niveau (orientation de la passe aniso), gaussienne de 0,7 cellule : le
+// feston disparaît, le profil en travers reste vif. Hauteur (lue par les sommets)
+// et normale (lue au pixel, filtrable), au même endroit, de la même surface.
+function wgslHires(NX, NY, MX, MY) {
+  return /* wgsl */`
+const NX: u32 = ${NX}u;
+const NY: u32 = ${NY}u;
+const MX: u32 = ${MX}u;
+const MY: u32 = ${MY}u;
+@group(0) @binding(0) var<storage, read> cur: array<vec4f>;
+@group(0) @binding(1) var hiH: texture_storage_2d<r32float, write>;
+@group(0) @binding(2) var hiN: texture_storage_2d<rgba16float, write>;
+fn hc(i: i32, j: i32) -> f32 { let q = clamp(vec2i(i, j), vec2i(0), vec2i(i32(NX) - 1, i32(NY) - 1)); return cur[2u * (u32(q.y) * NX + u32(q.x)) + 1u].z; }
+fn ori(i: i32, j: i32) -> vec2f { let q = clamp(vec2i(i, j), vec2i(0), vec2i(i32(NX) - 1, i32(NY) - 1)); return cur[2u * (u32(q.y) * NX + u32(q.x)) + 1u].xy; }
+fn limf(m: f32, a: f32, b: f32) -> f32 { if (a * b <= 0.0) { return 0.0; } return sign(m) * min(abs(m), 3.0 * min(abs(a), abs(b))); }
+// Hermite monotone (Fritsch–Carlson) : valeur, dérivée
+fn herm(q: vec4f, t: f32) -> vec2f {
+  let D0 = q.y - q.x; let D1 = q.z - q.y; let D2 = q.w - q.z;
+  let m1 = limf((q.z - q.x) * 0.5, D0, D1); let m2 = limf((q.w - q.y) * 0.5, D1, D2);
+  let t2 = t * t; let t3 = t2 * t;
+  let v = q.y * (2.0 * t3 - 3.0 * t2 + 1.0) + m1 * (t3 - 2.0 * t2 + t) + q.z * (-2.0 * t3 + 3.0 * t2) + m2 * (t3 - t2);
+  let d = q.y * (6.0 * t2 - 6.0 * t) + m1 * (3.0 * t2 - 4.0 * t + 1.0) + q.z * (-6.0 * t2 + 6.0 * t) + m2 * (3.0 * t2 - 2.0 * t);
+  return vec2f(v, d);
+}
+// le lit au point p (en cellules : centre de la cellule i en i) : hauteur, ∂x, ∂y (par cellule)
+fn bedH(p: vec2f) -> vec3f {
+  let f = floor(p); let t = p - f; let ix = i32(f.x); let iy = i32(f.y);
+  var rows = vec4f(0.0); var drows = vec4f(0.0);
+  for (var j = 0; j < 4; j++) {
+    let r = herm(vec4f(hc(ix - 1, iy + j - 1), hc(ix, iy + j - 1), hc(ix + 1, iy + j - 1), hc(ix + 2, iy + j - 1)), t.x);
+    rows[j] = r.x; drows[j] = r.y;
+  }
+  let a = herm(rows, t.y);
+  return vec3f(a.x, herm(drows, t.y).x, a.y);
+}
+@compute @workgroup_size(8, 8) fn hires(@builtin(global_invocation_id) gid: vec3u) {
+  let i = gid.x; let j = gid.y;
+  if (i >= MX || j >= MY) { return; }
+  // (le sommet i est à x = i/(MX−1)·Lx : en cellules, x/L − 1/2)
+  let p = vec2f(f32(i) * f32(NX) / f32(MX - 1u), f32(j) * f32(NY) / f32(MY - 1u)) - 0.5;
+  let f = floor(p); let w = p - f; let ix = i32(f.x); let iy = i32(f.y);
+  let o = mix(mix(ori(ix, iy), ori(ix + 1, iy), w.x), mix(ori(ix, iy + 1), ori(ix + 1, iy + 1), w.x), w.y);
+  let k = clamp(length(o), 0.0, 1.0);
+  var r = bedH(p);
+  if (k > 0.01) {
+    let th = 0.5 * atan2(o.y, o.x);
+    let t = vec2f(-sin(th), cos(th));
+    let a = r + 0.69 * (bedH(p + 0.6 * t) + bedH(p - 0.6 * t)) + 0.23 * (bedH(p + 1.2 * t) + bedH(p - 1.2 * t));
+    r = mix(r, a / 2.84, k);
+  }
+  textureStore(hiH, vec2u(i, j), vec4f(r.x, 0.0, 0.0, 0.0));
+  let n = normalize(vec3f(-r.y, ${TABLE.Lx / NX}, -r.z));
+  textureStore(hiN, vec2u(i, j), vec4f(n.x, n.z, 0.0, 0.0));
 }
 `;
 }
@@ -577,7 +805,7 @@ export function createGpuSim(renderer, { lite = false } = {}) {
   const B = {
     cell: buf(N * 16), sA: buf(N * 4), sB: buf(N * 4), flux: buf(N * 16), aux: buf(N * 16), tout: buf(N * 32), stat: buf(N * 16),
     strata: buf(16 + MAX_LAYERS * 16, GPUBufferUsage.UNIFORM | CD),
-    recT: buf(FT * N * 2), recM: buf(FM * N * 4), recWT: buf(FW * HN * 4), acc: buf(N * 16), accW: buf(N * 16), recW: buf(FW * HN * 8), prev: buf(8192 * 8), surplus: buf(N * 4), cur: buf(N * 16),
+    recT: buf(FT * N * 2), recM: buf(FM * N * 4), recWT: buf(FW * HN * 4), acc: buf(N * 16), accW: buf(N * 16), recW: buf(FW * HN * 8), prev: buf(8192 * 8), surplus: buf(N * 4), cur: buf(N * 32),
   };
   const BATCH = 256;
   const stepBuf = buf(BATCH * ALIGN, GPUBufferUsage.UNIFORM | CD);
@@ -588,7 +816,7 @@ export function createGpuSim(renderer, { lite = false } = {}) {
   const report = (name, module) => module.getCompilationInfo?.().then((info) => { for (const m of info.messages) if (m.type === 'error') console.error(`${name}.wgsl ${m.lineNum}:${m.linePos} ${m.message}`); });
   const modSim = device.createShaderModule({ code: wgsl(NX, NY) }); report('sim', modSim);
   const modIO = device.createShaderModule({ code: wgslIO(NX, NY) }); report('io', modIO);
-  const modRes = device.createShaderModule({ code: wgslResolve(NX, NY) }); report('resolve', modRes);
+  const modRes = device.createShaderModule({ code: wgslResolve(NX, NY, FT, FM) }); report('resolve', modRes);
   const TIM = wgslTiming(NX, NY);
   const modAcc = device.createShaderModule({ code: TIM.acc }); report('accum', modAcc);
   const modTim = device.createShaderModule({ code: TIM.rec }); report('timing', modTim);
@@ -634,7 +862,16 @@ export function createGpuSim(renderer, { lite = false } = {}) {
   const occTex = new THREE.StorageTexture(NX, NY);
   occTex.type = THREE.HalfFloatType; occTex.format = THREE.RGBAFormat;
   occTex.minFilter = occTex.magFilter = THREE.LinearFilter; occTex.generateMipmaps = false;
+  // le relief aux sommets du maillage (deux par cellule ; un en version légère)
+  const MX = (lite ? 1 : 2) * NX, MY = (lite ? 1 : 2) * NY;
+  const hiTex = new THREE.StorageTexture(MX, MY);
+  hiTex.type = THREE.FloatType; hiTex.format = THREE.RedFormat;
+  hiTex.minFilter = hiTex.magFilter = THREE.NearestFilter; hiTex.generateMipmaps = false;
+  const hiNTex = new THREE.StorageTexture(MX, MY);
+  hiNTex.type = THREE.HalfFloatType; hiNTex.format = THREE.RGBAFormat;
+  hiNTex.minFilter = hiNTex.magFilter = THREE.LinearFilter; hiNTex.generateMipmaps = false;
   renderer.initTexture(terrainTex); renderer.initTexture(waterTex); renderer.initTexture(normalTex); renderer.initTexture(occTex);
+  renderer.initTexture(hiTex); renderer.initTexture(hiNTex);
   const LR = device.createBindGroupLayout({
     entries: [st('read-only-storage'), st('read-only-storage'), st('read-only-storage'), st('read-only-storage'),
       { visibility: C, storageTexture: { access: 'write-only', format: 'rgba32float' } },
@@ -646,7 +883,26 @@ export function createGpuSim(renderer, { lite = false } = {}) {
   });
   const LRu = device.createBindGroupLayout({ entries: [{ binding: 0, visibility: C, buffer: { type: 'uniform' } }] });
   const plR = device.createPipelineLayout({ bindGroupLayouts: [LR, LRu] });
-  const KR = mk(modRes, plR, 'resolve'), KN = mk(modRes, plR, 'normals');
+  const KR = mk(modRes, plR, 'resolve'), KA = mk(modRes, plR, 'aniso'), KN = mk(modRes, plR, 'normals');
+  const modHi = device.createShaderModule({ code: wgslHires(NX, NY, MX, MY) }); report('hires', modHi);
+  const LHi = device.createBindGroupLayout({ entries: [
+    { binding: 0, visibility: C, buffer: { type: 'read-only-storage' } },
+    { binding: 1, visibility: C, storageTexture: { access: 'write-only', format: 'r32float' } },
+    { binding: 2, visibility: C, storageTexture: { access: 'write-only', format: 'rgba16float' } }] });
+  const KHi = mk(modHi, device.createPipelineLayout({ bindGroupLayouts: [LHi] }), 'hires');
+  const gHi = device.createBindGroup({ layout: LHi, entries: [
+    { binding: 0, resource: { buffer: B.cur } },
+    { binding: 1, resource: renderer.backend.get(hiTex).texture.createView() },
+    { binding: 2, resource: renderer.backend.get(hiNTex).texture.createView() }] });
+  // le plus bas atteint, tiré de la courbe affichée (une passe après la simulation)
+  const modMem = device.createShaderModule({ code: wgslMem(NX, NY, FT, FM) }); report('mem', modMem);
+  const modSm = device.createShaderModule({ code: wgslSmooth(NX, NY, FT, (3 * FT) / 480) }); report('smooth', modSm);
+  const LSm = device.createBindGroupLayout({ entries: [{ binding: 0, ...st('storage') }] });
+  const KSm = mk(modSm, device.createPipelineLayout({ bindGroupLayouts: [LSm] }), 'smoothBed');
+  const gSm = device.createBindGroup({ layout: LSm, entries: [{ binding: 0, resource: { buffer: B.recT } }] });
+  const LMem = device.createBindGroupLayout({ entries: [st('read-only-storage'), st('storage')].map((e, binding) => ({ binding, ...e })) });
+  const KMem = mk(modMem, device.createPipelineLayout({ bindGroupLayouts: [LMem] }), 'memMin');
+  const gMem = device.createBindGroup({ layout: LMem, entries: [B.recT, B.recM].map((buffer, binding) => ({ binding, resource: { buffer } })) });
   const gR = device.createBindGroup({
     layout: LR,
     entries: [
@@ -778,6 +1034,13 @@ export function createGpuSim(renderer, { lite = false } = {}) {
       await device.queue.onSubmittedWorkDone(); // (rend la main : l'écran de chargement reste fluide)
     }
     while (previewBusy) await device.queue.onSubmittedWorkDone();
+    {
+      const enc = device.createCommandEncoder(), pass = enc.beginComputePass();
+      pass.setPipeline(KSm); pass.setBindGroup(0, gSm); pass.dispatchWorkgroups(groups(N / 2));
+      pass.setPipeline(KMem); pass.setBindGroup(0, gMem); pass.dispatchWorkgroups(groups(N));
+      pass.end(); device.queue.submit([enc.finish()]);
+      await device.queue.onSubmittedWorkDone();
+    }
     ran = true;
     return { steps: total, ms: performance.now() - t0 };
   }
@@ -826,16 +1089,20 @@ export function createGpuSim(renderer, { lite = false } = {}) {
     }
     return { b, bmin, wet, rip };
   }
-  // le relief courant, tel que la dernière relecture l'a écrit (mise au point : fluidité)
-  async function readCur() {
-    const rb = device.createBuffer({ size: N * 16, usage: GPUBufferUsage.MAP_READ | CD });
+  // le relief courant, tel que la dernière relecture l'a écrit (mise au point : fluidité) :
+  // quatre flottants par cellule — b lissé le long des crêtes, humidité, rides, profondeur atteinte
+  // (raw : b avant ce lissage, à la place du premier)
+  async function readCur({ raw = false } = {}) {
+    const rb = device.createBuffer({ size: N * 32, usage: GPUBufferUsage.MAP_READ | CD });
     const enc = device.createCommandEncoder();
-    enc.copyBufferToBuffer(B.cur, 0, rb, 0, N * 16);
+    enc.copyBufferToBuffer(B.cur, 0, rb, 0, N * 32);
     device.queue.submit([enc.finish()]);
     await rb.mapAsync(GPUMapMode.READ);
     const a = new Float32Array(rb.getMappedRange().slice(0));
     rb.unmap(); rb.destroy();
-    return a;
+    const o = new Float32Array(N * 4);
+    for (let c = 0; c < N; c++) { o[c * 4] = raw ? a[c * 8] : a[c * 8 + 6]; o[c * 4 + 1] = a[c * 8 + 1]; o[c * 4 + 2] = a[c * 8 + 2]; o[c * 4 + 3] = a[c * 8 + 3]; }
+    return o;
   }
   // lecture d'un état enregistré de l'eau (mise au point) : surface libre − b₀ (−1 : sec), turbidité, vitesse
   async function readWater(k) {
@@ -879,14 +1146,18 @@ export function createGpuSim(renderer, { lite = false } = {}) {
     const pass = enc.beginComputePass();
     pass.setPipeline(KR); pass.setBindGroup(0, gR); pass.setBindGroup(1, gRu);
     pass.dispatchWorkgroups(Math.ceil(NX / 8), Math.ceil(NY / 8));
+    pass.setPipeline(KA);
+    pass.dispatchWorkgroups(Math.ceil(NX / 8), Math.ceil(NY / 8));
     pass.setPipeline(KN);
     pass.dispatchWorkgroups(Math.ceil(NX / 8), Math.ceil(NY / 8));
+    pass.setPipeline(KHi); pass.setBindGroup(0, gHi);
+    pass.dispatchWorkgroups(Math.ceil(MX / 8), Math.ceil(MY / 8));
     pass.end();
     device.queue.submit([enc.finish()]);
   }
 
   return {
-    NX, NY, HX, HY, FT, FW, FM, dt, l, terrainTex, waterTex, normalTex, occTex,
+    NX, NY, HX, HY, MX, MY, FT, FW, FM, dt, l, terrainTex, waterTex, normalTex, occTex, hiTex, hiNTex,
     setup, run, finish, resolve, readTerrain, readWater, readCur, readCell,
     get ran() { return ran; },
     get final() { return final; },
