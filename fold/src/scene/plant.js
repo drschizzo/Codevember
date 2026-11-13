@@ -137,7 +137,7 @@ function leafletMaterial(U, bend = null, { wing = false } = {}) {
   col = col.mul(mix(float(1.12), float(0.92), smoothstep(0.0, 0.9, u)));
   // marbrures de la cuticule (lentes, à peine visibles)
   col = col.mul(rnd.mul(0.12).add(1)).mul(noise(g.mul(vec3(6, 14, 14)).add(ix.x.mul(17))).mul(0.08).add(1));
-  col = mix(col, col.mul(vec3(1.25, 1.28, 0.85)), rib.mul(0.8).add(veins.mul(0.35)).clamp(0, 1));
+  col = mix(col, col.mul(vec3(1.18, 1.2, 0.88)), rib.mul(0.6).add(veins.mul(0.2)).clamp(0, 1)); // (nervures : un ton, pas un trait de dessin)
   col = mix(col, col.mul(1.1), edge.mul(0.4));
   col = mix(col, U.leafYoung.mul(1.1), smoothstep(0.05, 0.0, u).mul(U.trap.oneMinus()));
   // trèfle pourpre : tache plus claire au centre ; dionée : intérieur rouge
@@ -156,7 +156,7 @@ function leafletMaterial(U, bend = null, { wing = false } = {}) {
   const rays = smoothstep(0.75, 1.0, sin(atan(abs(y).add(0.02), u.sub(0.5)).mul(34)).mul(0.5).add(0.5)).mul(0.35);
   col = mix(col, mix(U.inner.mul(mix(float(0.62), float(1.12), smoothstep(0.0, 0.42, abs(y)))).mul(rays.oneMinus().mul(0.25).add(0.75)), U.inner.mul(1.6).add(vec3(0.05, 0.02, 0.0)), glands.mul(0.8)), trapIn);
   col = mix(col, vec3(0.55, 0.62, 0.32), trap.mul(hair));
-  col = mix(col, vec3(0.62, 0.66, 0.2), trap.mul(front).mul(smoothstep(0.38, 0.47, abs(y))).mul(cil.oneMinus()).mul(0.6));
+  col = mix(col, vec3(0.34, 0.42, 0.1), trap.mul(front).mul(smoothstep(0.43, 0.48, abs(y))).mul(cil.oneMinus()).mul(0.6)); // (lèvre : un filet vert-jaune, pas une bordure crème)
   col = mix(col, mix(U.leaf.mul(1.1), U.inner, 0.3), trap.mul(cil).mul(hair.oneMinus()));
   const wet = ix.z;
   col = col.mul(wet.mul(-0.22).add(1));
@@ -176,7 +176,7 @@ function leafletMaterial(U, bend = null, { wing = false } = {}) {
   m.normalNode = perturb(H, normalViewGeometry);
   // lumière transmise : une feuille transmet ~10 % (vert-jaune), moins à travers
   // les nervures ; la tranche n'en transmet pas
-  m.thicknessColorNode = U.trans.mul(U.translucency).mul(0.22).mul(rib.mul(-0.6).add(1)).mul(veins.mul(-0.3).add(1)).mul(age.oneMinus().mul(0.35).add(0.85)).mul(rim.oneMinus());
+  m.thicknessColorNode = U.trans.mul(U.translucency).mul(0.16).mul(rib.mul(-0.6).add(1)).mul(veins.mul(-0.3).add(1)).mul(age.oneMinus().mul(0.35).add(0.85)).mul(rim.oneMinus());
   m.thicknessDistortionNode = float(0.18);
   m.thicknessAmbientNode = float(0.02);
   m.thicknessAttenuationNode = float(1.0);

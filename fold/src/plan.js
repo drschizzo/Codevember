@@ -155,7 +155,7 @@ export function planLoop(plant, S, spec) {
       // contact recalculé sur une surface fine, autour du point visé (folioles,
       // rachis, pétioles proches) : l'écart à l'instant du choc est nul
       if (!best.fine) {
-        const fineAll = surfacePoints(plant, poser, { du: 28, dv: 12 });
+        const fineAll = surfacePoints(plant, poser, { du: 56, dv: 24 }); // (plus fin que le test : aucun point de la surface n'échappe au contact)
         const fg = makeGrid(0.05);
         for (const [p, tag] of fineAll) if (Math.hypot(p[0] - best.x, p[2] - best.z) < r + 0.05) fg.add(p, tag);
         const hit = fg.columnMax(best.x, best.z, r);
@@ -232,7 +232,7 @@ export function planLoop(plant, S, spec) {
     // course — la tête (rayon rh) ne touche qu'au coup, le bras (une tige) et
     // la bobine ne frôlent jamais la lèvre ni le relief
     const yLo = prof[0][1], yHi = prof[prof.length - 1][1];
-    const rh = 0.055, arm = 0.5, armR = 0.011, strike = 0.2;
+    const rh = 0.055, arm = 0.5, armR = HAMMER.armR, strike = 0.2;
     const solve = (frac, aC0) => {
       const yh = yLo + frac * (yHi - yLo);
       const rhoW = S.case ? S.case.D : outerRadius({ outer: profAz }, yh);
@@ -399,7 +399,7 @@ function chooseView(E, V, grid, plant, S) {
     // (au-dessus du plan de la foliole : on voit la goutte arriver sur sa face
     // supérieure ; dans une caisse de Ward, par une vitre de côté)
     // (une rosette basse — la dionée — se regarde d'en haut, vers son cœur)
-    const low = plant.family === 'dionaea' ? 0.45 : 0;
+    const low = plant.family === 'dionaea' ? 0.22 : 0; // (d'en haut, mais pas à la verticale : un plan, pas un schéma)
     const els = (S.case ? [V.el + 0.12, V.el + 0.04, V.el + 0.2, V.el - 0.04] : [V.el + 0.28, V.el + 0.2, V.el + 0.38, V.el + 0.12, V.el + 0.5]).map((e) => e + low);
     for (const el of els) {
       const dir = [cos(az) * cos(el), sin(el), sin(az) * cos(el)];
@@ -427,7 +427,10 @@ function chooseView(E, V, grid, plant, S) {
   const dist = Math.min(max(V.wide, need), 6.5);
   const target = [0, (plant.H + S.tableY) * 0.47, 0];
   const cam = v3.add(head, v3.mul([cos(az) * cos(el + 0.12), sin(el + 0.12), sin(az) * cos(el + 0.12)], 2.4));
-  return { clear: sightClear(grid, cam, head, 0.03), az, el, dist, target, start: { target: [head[0], head[1] + 0.05, head[2]], dist: Math.max(2.4, dist / 2.5), el: el + 0.12 } };
+  // (le coup se lit à deux : la tête et le pot qu'elle frappe, la plante au-dessus —
+  // jamais l'appareil seul dans le vide)
+  const t0 = [head[0] * 0.55, head[1] + 0.25, head[2] * 0.55];
+  return { clear: sightClear(grid, cam, head, 0.03), az, el, dist, target, start: { target: t0, dist: Math.max(2.8, dist / 1.8), el: el + 0.1 } };
 }
 
 const extent = (pts) => pts.reduce((m, [p]) => max(m, hypot(p[0], p[2])), 0);

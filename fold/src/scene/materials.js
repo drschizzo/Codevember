@@ -314,7 +314,7 @@ function surface(fin, U, p, pf, pn) {
       let c = U.color.mul(tone.mul(0.16).add(0.9)).mul(grit.mul(0.08).add(1)).mul(flash.oneMinus().mul(0.25).add(0.75).add(flash.mul(0)));
       c = mix(c, U.color.mul(vec3(0.62, 0.5, 0.42)), flash);
       c = mix(c, vec3(0.3, 0.36, 0.22), algae.mul(0.55));
-      c = mix(c, mix(U.color, U.color2, 0.55), salt.mul(0.35));
+      c = mix(c, mix(U.color, U.color2, 0.6), salt.mul(0.55)); // (le sel se voit : c'est ce qui dit « pot qui a vécu »)
       // cartouche du potier : un ovale en relief, trois lignes de lettres
       const az = atan(p.z, p.x), ex = az.sub(0.6).mul(0.6), ey = yy.add(0.4);
       const ell = length(vec2(ex.div(0.11), ey.div(0.065)));

@@ -530,7 +530,7 @@ export function buildHammer(E, S) {
   tube(B, [W(L.colRho, y0 + 0.05), W(L.colRho, L.top)], K.colR, 16, EDGE, true);
   // potence jusqu'à la chape ; chape (deux joues) et axe
   const py = Hm.pivot[1];
-  tube(B, [W(L.colRho, py + 0.035), W(Hm.pivot[0] + 0.02, py + 0.035)], 0.016, 14, EDGE, true);
+  tube(B, [W(L.colRho, py + 0.035), W(Hm.pivot[0] + 0.02, py + 0.035)], 0.021, 14, EDGE, true);
   for (const z of [-0.028, 0.028]) {
     B.frame(W(Hm.pivot[0], py + 0.008, z), d, [0, 1, 0], side);
     roundedBox(B, [0, 0, 0], [0.026, 0.034, 0.005], 0.004, 2, EDGE, EDGE);

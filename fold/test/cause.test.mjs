@@ -24,7 +24,7 @@ test('la goutte touche la surface de la plante au contact, et pas avant', () => 
     const D = plan.events.find((e) => e.cause === 'drop');
     if (!D) continue;
     // surface plus fine que celle du plan
-    const pts = surfacePoints(plant, createPoser(plant), { du: 20, dv: 8 });
+    const pts = surfacePoints(plant, createPoser(plant), { du: 48, dv: 20 }); // (le plan en prend 28 × 12)
     const gap = (tau) => {
       const y = dropCenterY(tau, D);
       let g = Infinity;

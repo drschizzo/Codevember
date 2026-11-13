@@ -83,8 +83,8 @@ export const FINISHES = {
   crystalSmoke: F({ label: 'Quartz fumé', pattern: 'plain', color: '#ffffff', color2: '#7a6250', rough: 0.01, glass: 1, ior: 1.55, dispersion: 0.5, attDist: 0.45 }),
   crystalFrost: F({ label: 'Cristal satiné', pattern: 'plain', color: '#ffffff', color2: '#dfe7ee', rough: 0.2, glass: 1, ior: 1.55, dispersion: 0.3, attDist: 2 }),
   // atelier du botaniste
-  terracotta: F({ label: 'Terre cuite', pattern: 'clay', color: '#b4613f', color2: '#e6dccb', rough: 0.86, bump: 0.5, scale: 1 }),
-  terracottaPale: F({ label: 'Terre cuite pâle', pattern: 'clay', color: '#c98a64', color2: '#ece4d6', rough: 0.88, bump: 0.5, scale: 1 }),
+  terracotta: F({ label: 'Terre cuite', pattern: 'clay', color: '#86583c', color2: '#ddd3c2', rough: 0.86, bump: 0.5, scale: 1 }),
+  terracottaPale: F({ label: 'Terre cuite pâle', pattern: 'clay', color: '#957056', color2: '#ece4d6', rough: 0.88, bump: 0.5, scale: 1 }),
   walnut: F({ label: 'Noyer ciré', pattern: 'wood', color: '#5a3a24', color2: '#2e1c10', rough: 0.42, clearcoat: 0.35, ccRough: 0.12, bump: 0.3, scale: 1.8 }),
   oak: F({ label: 'Chêne', pattern: 'wood', color: '#9c7a50', color2: '#6a4c2c', rough: 0.6, bump: 0.4, scale: 1.8 }),
   hinoki: F({ label: 'Hinoki', pattern: 'wood', color: '#e2c9a0', color2: '#c8a676', rough: 0.55, bump: 0.25, scale: 2.2 }),
@@ -149,7 +149,7 @@ export const SETS = {
   velvetBlack: { label: 'Velours noir', only: true, outer: 'velvetBlack', inner: 'velvetBlack', edge: 'velvetBlack', wear: 0, chamfer: false, moods: [] },
   brassLab: { label: 'Laiton', only: true, outer: 'brushedBrass', inner: 'polishedBrass', edge: 'polishedBrass', wear: 0, chamfer: false, moods: [] },
   steelLab: { label: 'Acier', only: true, outer: 'brushedSteel', inner: 'chrome', edge: 'chrome', wear: 0, chamfer: false, moods: [] },
-  coil: { label: 'Marteau : socle, bobine, potence', only: true, outer: 'castIron', inner: 'copperWire', edge: 'polishedBrass', wear: 0, chamfer: false, moods: [] },
+  coil: { label: 'Marteau : socle, bobine, potence', only: true, outer: 'castIron', inner: 'copperWire', edge: 'brushedSteel', wear: 0, chamfer: false, moods: [] },
   hammerArm: { label: 'Marteau : bras', only: true, outer: 'castIron', inner: 'polishedBrass', edge: 'brushedBrass', wear: 0, chamfer: false, moods: [] },
   bronze: { label: 'Bronze & cuivre', outer: 'bronzeDark', inner: 'polishedCopper', edge: 'polishedBrass', wear: 0.3, chamfer: false, moods: ['sacré', 'atelier'] },
 };

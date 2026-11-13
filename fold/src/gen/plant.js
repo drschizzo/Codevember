@@ -91,7 +91,7 @@ export const PLANTS = {
   bijuga: { family: 'sensitive', label: 'Deux pinnules', stems: [3, 4], nodes: [9, 12], branch: 0.45, pinnae: 2, pairs: [18, 26], flowers: [1, 3], pods: 0, lean: 0.45, height: [1.9, 2.4], bigLeaf: 1.1 },
   biophytum: { family: 'biophytum', label: 'Biophytum (palmier nain)', stems: [1, 1], nodes: [14, 20], branch: 0, pinnae: 1, pairs: [9, 13], flowers: [3, 6], pods: 0, lean: 0.05, height: [1.0, 1.4], crown: true },
   // rosettes : les feuilles partent du collet, pas de tige
-  oxalis: { family: 'oxalis', label: 'Trèfle (Oxalis)', rosette: true, nodes: [30, 36], pinnae: 3, flowers: [0, 0], pods: 0, height: [1.1, 1.6] },
+  oxalis: { family: 'oxalis', label: 'Trèfle (Oxalis)', rosette: true, nodes: [44, 52], pinnae: 3, flowers: [0, 0], pods: 0, height: [1.1, 1.6] },
   dionaea: { family: 'dionaea', label: 'Dionée', rosette: true, nodes: [6, 9], pinnae: 1, flowers: [0, 0], pods: 0, height: [0.5, 0.8] },
 };
 // pli des demi-limbes (trèfle, dionée) : rotation autour de la nervure, de
@@ -255,10 +255,10 @@ export function growPlant(spec) {
       phase += golden + rl.range(-0.12, 0.12);
       const az = phase, horiz = [cos(az), 0, sin(az)];
       const young = 1 - k / Math.max(1, n - 1); // (les premières : extérieures, âgées)
-      const elev = (A.family === 'oxalis' ? rl.range(52, 66) + 18 * young : rl.range(8, 18) + 26 * young) * D;
+      const elev = (A.family === 'oxalis' ? rl.range(30, 50) + 40 * young : rl.range(8, 18) + 26 * young) * D; // (trèfle : un dôme, des feuilles couchées dehors aux dressées dedans)
       const dir = norm(add(mul(horiz, cos(elev)), mul(UP, sin(elev))));
       const scale = size * (1 - 0.3 * young) * rl.range(0.9, 1.08);
-      const pet = (A.family === 'oxalis' ? rl.range(0.7, 1.7) : rl.range(0.3, 0.44)) * scale;
+      const pet = (A.family === 'oxalis' ? rl.range(0.45, 1.85) : rl.range(0.3, 0.44)) * scale;
       const base = add(mul(horiz, 0.03 + 0.05 * (1 - young)), [0, 0.01, 0]);
       leaves.push(makeLeaf(rl, A, { base, dir, az, pet, scale, young: young * 0.6, stem: -1, t: 0 }));
     }
@@ -406,14 +406,16 @@ function separate(plant) {
   for (const L of plant.leaves) {
     let ok = false;
     const az0 = L.az;
-    for (let tries = 0; tries < 16 && !ok; tries++) {
+    const nT = plant.family === 'oxalis' ? 34 : 16; // (le trèfle : une touffe dense, on cherche plus finement sa place)
+    for (let tries = 0; tries < nT && !ok; tries++) {
       // pendant tout le pli (cinq instants), à distance des autres feuilles —
       // ouvertes, à mi-course, fermées — et de leurs pétioles
       ok = [0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1].every((f) => !clash(pts3(leafPoints(L, f, f, 0, true)), f === 0 ? 0.026 : 0.02));
       if (!ok) {
         // tourne de ±15°, ±30°… autour de son azimut, puis raccourcit
         const k = Math.floor(tries / 2) + 1;
-        retarget(L, az0 + (tries % 2 ? 1 : -1) * 0.26 * k, tries > 7 ? 0.94 : 1);
+        const st = nT > 16 ? 0.15 : 0.26;
+        retarget(L, az0 + (tries % 2 ? 1 : -1) * st * (((k - 1) % 8) + 1), nT > 16 ? (tries > 7 && tries % 8 === 7 ? 0.9 : tries > 7 ? 0.97 : 1) : tries > 7 ? 0.94 : 1);
       }
     }
     if (ok) {
