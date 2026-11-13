@@ -185,7 +185,10 @@ export function createSmoke(ctx) {
       // le plasmodium suivant l'absorbe en passant (il germe là) ; le temps l'efface
       const xn = x.sub(L), eaten = inBox(xn, z).and(Tat(xn, z).lessThan(s.sub(1)));
       const cover = float(1).sub(exp(dep.max(0).sqrt().mul(-3.2)));
-      return inside.and(eaten.not()).select(cover.mul(float(1).sub(sst(1.45, 1.8, s))).mul(0.8), float(0));
+      // le dépôt ne s'annule pas aux bords du domaine de simulation (le nuage en
+      // sort) : sans fondu, la poudre dessine au sol le rectangle du domaine
+      const edge = sst(0, 0.3, x.sub(D.x0)).mul(sst(0, 0.9, float(D.x1).sub(x))).mul(sst(0, 0.55, z.sub(D.z0))).mul(sst(0, 0.55, float(D.z1).sub(z)));
+      return inside.and(eaten.not()).select(cover.mul(edge).mul(float(1).sub(sst(1.45, 1.8, s))).mul(0.8), float(0));
     },
     update(s, camera) {
       const h = 2 * Math.tan((camera.fov * Math.PI) / 360);
