@@ -26,6 +26,12 @@
     .month a { background: var(--gold); border-color: var(--gold); opacity: .85; transition: transform .2s, opacity .2s; }
     .month a:hover, .month a:focus-visible { transform: scale(1.5); opacity: 1; }
     .month small { margin-left: 10px; color: var(--dim); font-size: 12px; letter-spacing: .06em; }
+    .atelier { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-top: 26px; padding: 9px 16px; border: 1px solid var(--line); border-radius: 999px; color: var(--dim); font-size: 13.5px; transition: color .2s, border-color .2s; }
+    .atelier span { color: var(--gold); font-size: 11px; letter-spacing: .16em; text-transform: uppercase; }
+    .atelier i { font-style: normal; color: var(--gold); transition: transform .2s; }
+    .atelier:hover, .atelier:focus-visible { color: var(--fg); border-color: rgba(233, 196, 138, .4); }
+    .atelier:hover i { transform: translateX(3px); }
+    @media (max-width: 560px) { .atelier { border-radius: 10px; } }
 
     /* ── les jours ── */
     .days { list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: clamp(28px, 4vw, 44px) clamp(20px, 3vw, 32px); padding-bottom: 72px; }
@@ -57,6 +63,7 @@
       <h1>Codevember</h1>
       <p class="lede">Un thème par jour, une scène par thème. Chaque scène est entièrement calculée — simulation, mathématiques, géométrie générative — rendue en lumière physique, et tourne en boucle parfaite. Une graine, une scène : chaque visite peut en tirer une nouvelle.</p>
       <nav class="month" aria-label="Les jours de novembre"></nav>
+      <a class="atelier" href="skill/"><span>Atelier</span>Comment ces scènes sont faites : un thème, une skill Claude Code, une scène presque d’un seul jet <i>→</i></a>
     </header>
 
     <ol class="days">
@@ -196,6 +203,7 @@
 
     <footer>
       <span>WebGPU requis : Chrome, Edge, Safari 26 ou Firefox récents. Sur téléphone, la version légère s’impose d’elle-même.</span>
+      <span><a href="skill/" style="color:var(--gold)">La skill qui les fabrique</a></span>
       <span>Dans chaque scène : <kbd>N</kbd> nouvelle graine · <kbd>espace</kbd> pause · <kbd>H</kbd> masquer · <kbd>F</kbd> plein écran</span>
     </footer>
   </div>

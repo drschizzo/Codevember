@@ -2,6 +2,32 @@
 
 Expériences de creative coding, publiées sur [drschizzo.github.io/Codevember](https://drschizzo.github.io/Codevember/).
 
+## Comment ces scènes sont faites : la skill `codevember-scene`
+
+Depuis Fold, chaque projet part d'un simple thème donné à [Claude Code](https://claude.com/claude-code) (« fais-moi un projet sur l'érosion »). Le dépôt contient une *skill*, [`.claude/skills/codevember-scene`](.claude/skills/codevember-scene/SKILL.md), que l'agent charge de lui-même sur ce genre de demande et qui le conduit seul du thème à la livraison : concept, simulation, rendu, boucle, interface, tests, documentation et carte de l'accueil. Le résultat est le plus souvent bon du premier coup, à quelques retouches près.
+
+Utilisation, dans un clone du dépôt ouvert dans Claude Code :
+
+```
+/codevember-scene les marées
+```
+
+ou simplement « un nouveau projet Codevember sur les marées ». L'agent annonce son concept en quelques lignes et avance sans interrompre, sauf thème vraiment ambigu.
+
+Ce que contient la skill :
+
+| Fichier | Rôle |
+| --- | --- |
+| `SKILL.md` | Vingt exigences qui définissent la famille (un geste lisible sans légende, un vrai cœur de calcul, une boucle parfaite par construction, des causes visibles, rien qui flotte ni se traverse, des scènes vraiment variées), le déroulé en neuf étapes et les règles non négociables. |
+| `references/concept.md` | Le **protocole d'idéation**, écrit avant tout code dans `<projet>/docs/concept.md` : cinq angles d'exploration, clichés nommés et écartés, au moins huit pistes notées sur six critères, puis six épreuves (crédibilité, variété, ambition, déclinaison, scénario, références). |
+| `references/*.md` | Boucle et caméra, direction artistique, rendu, architecture, interface, performance et mobile, vérification, documentation, et les pièges three.js WebGPU / TSL déjà rencontrés. |
+| `scripts/scaffold.mjs` | Pose un projet qui tourne tout de suite, en copiant les modules communs éprouvés (hasard à graine, réglages, mobile, écran de chargement, export MP4, chaîne d'image, studio HDR, quarante finitions) et le gabarit propre au thème. |
+| `scripts/sink.py` | Collecteur local des images et des mesures que la scène lui envoie : planches, films image par image, posemètre. |
+
+La skill garde la mémoire des critiques. Chaque remarque de l'utilisateur qui porte sur une catégorie de défauts (une pièce qui flotte, des humeurs qui ne sont que des teintes, des familles qui bougent toutes pareil, des tests verts pendant que l'écran montre une interpénétration) y devient une règle, une épreuve ou un test, avec l'exemple qui l'a fait naître. Le projet suivant ne refait pas l'erreur.
+
+Explication détaillée, avec schémas : [la page de l'atelier](https://drschizzo.github.io/Codevember/skill/) ([source](skill/index.html)).
+
 ## [Cocoon](cocoon/)
 
 La lumière filée. Deux lanternes-cocons pendent aux bras d'un fléau. Un seul ruban de soie quitte l'une, qui se dévide et libère sa lampe, passe sur le fléau et s'enroule sur la cage nue de l'autre, qui se referme sur sa lumière jusqu'à n'être plus qu'une lueur ; puis le fléau fait un demi-tour et les échange, et le fil coule toujours dans le même sens. Le thème appelle une créature, et la chair est ce que le temps réel rend le plus mal : on ne montre que la soie et la lumière. Côté technique : chemins d'enroulement exacts sur la cage (géodésiques de Clairaut, motifs qui se referment après N circuits, cerclage, boucles en huit du ver à soie), ruban de fils ronds déposé sur une carte de hauteur sans aucune traversée (vérifié par un banc et son témoin négatif), paroi qui garde l'instant de passage des quatre premiers fils de chaque direction et filtre la lumière des lampes sur les murs, l'autre lanterne et la brume ; fils rendus en rubans à normale et profondeur de cylindre, reflets de Marschner et lueur à travers les couches ; ailette de rouet dont la cinématique est déduite du fil ; quatre familles, sept formes de cage, huit fils, sept décors ; boucle parfaite exportable en MP4.
