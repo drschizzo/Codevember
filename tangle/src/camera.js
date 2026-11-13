@@ -48,10 +48,16 @@ export function cameraPath(S, R, { S: scale, Y0 }) {
   const C = R.camera;
   const frames = new Float64Array(nf * 7);
   const tanH = Math.tan((C.fov * Math.PI) / 360);
+  // close (0..1) : le plan serré — la corde remplit l'image, le haut du
+  // moteur et le bas du balancier sortent du cadre (on garde le mandrin qui
+  // tourne, la cause) ; le centre suit davantage le désordre (règle 23 de la
+  // skill : le sujet, pas l'appareil). 0 : le banc entier (recettes anciennes).
+  const k = C.close ?? 0;
   for (let f = 0; f < nf; f++) {
     const u = f / nf;
-    const span = Math.max(2.4, top - fs[f]);
-    const centre = (top + fs[f]) / 2 * 0.75 + (Y0 + ys[f] * scale) * 0.25;
+    const topK = top - k * 0.2 * scale, botK = fs[f] + k * 0.1 * scale;
+    const span = Math.max(2.4 - k * 0.75, topK - botK);
+    const centre = (topK + botK) / 2 * (0.75 - 0.3 * k) + (Y0 + ys[f] * scale) * (0.25 + 0.3 * k);
     const dist = (span / 2 / tanH) * 1.12 * C.dist;
     const az = C.side + C.sway * Math.sin(TAU * u) * 0.5; // (un balancement par boucle)
     const el = 0.05 + C.height * 0.35 + 0.03 * Math.sin(TAU * u + 1.3);
