@@ -46,4 +46,4 @@ Les tests empêchent les dérives ; ils ne disent pas si c'est beau. Fais une pl
 
 ## La collection
 
-Une scène se juge aussi à côté des autres (SKILL.md, règles 21 à 25) : `scripts/planche.py` mesure chaque capture (médiane, amplitude, part d'ambre, teinte, saturation) et signale les images « sépia », « plates » et « bouchées ». Le 13 novembre, onze captures sur vingt et un étaient sépia : les humeurs d'ouverture des projets suivants vont chercher ailleurs (jour blanc, bleu de l'heure bleue, vert d'eau, noir et blanc, couleur franche d'un émail), et le vermillon du fil rouge reste la seule couleur saturée commune à toute la collection.
+Une scène se juge aussi à côté des autres (SKILL.md, règles 21 à 25) : `scripts/planche.py` mesure chaque capture (médiane, amplitude, part d'ambre, teinte, saturation) et signale les images « sépia », « plates » et « bouchées ». Le 13 novembre, onze captures sur vingt et un étaient sépia : les humeurs d'ouverture des projets suivants vont chercher ailleurs (jour blanc, bleu de l'heure bleue, vert d'eau, noir et blanc, couleur franche d'un émail).

@@ -51,7 +51,7 @@ Garde la piste qui a le meilleur total sans note inférieure à 3 ; une piste pe
 - *La liberté* : une phrase, « la liberté : … » — la seule chose de la scène qui n'existe pas dans un laboratoire. Pas de liberté : la piste est une démonstration, revois-la. Deux libertés : garde la plus forte.
 - *Le regard* : l'auteur choisi (photographe, peintre, cinéaste), et trois phrases sur ce qu'il impose (valeur, cadrage, lumière, hors-champ).
 - *L'appareil* : si une machine, un banc ou une cuve est à l'image, dis pourquoi elle est le sujet ; sinon remplace-la par une cause naturelle, domestique ou hors champ.
-- *Le fil rouge et ce qui se conserve* : quel élément est vermillon, et quelle grandeur la boucle conserve.
+- *Le lien avec la collection* : quelle transformation la boucle raconte, et comment elle revient à son point de départ.
 - *La collection* : la planche (`scripts/planche.py`) et l'humeur d'ouverture qui n'y est pas déjà.
 
 Ajoute aussi un septième critère à la notation des pistes (d) : *regard* — la piste contient-elle une idée qu'on n'attend pas d'un laboratoire, et une image qu'on accrocherait ?
