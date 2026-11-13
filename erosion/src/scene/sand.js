@@ -401,7 +401,8 @@ export function createSand(gs) {
   // les objets) multipliée par l'ombre portée du relief, tracée sur la carte de
   // hauteur (scene/gpusim.js) ; le sable ne se projette pas lui-même dans la carte
   // d'ombre (escaliers en lumière rasante, et une passe de 1 M de sommets en moins).
-  material.receivedShadowNode = Fn(([sh]) => sh.mul(texture(gs.occTex, vec2(positionGeometry.x.add(Lx / 2).div(Lx), positionGeometry.z.add(Ly / 2).div(Ly))).w));
+  // (lue en B-spline bicubique : en bilinéaire, le bord d'ombre dessinait la grille des cellules de 2,5 mm en gros plan)
+  material.receivedShadowNode = Fn(([sh]) => sh.mul(bspline(gs.occTex, cellOf(positionGeometry.x, positionGeometry.z)).w));
   const mesh = new THREE.Mesh(geo, material);
   mesh.frustumCulled = false;
   mesh.castShadow = false;
