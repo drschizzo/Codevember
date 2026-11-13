@@ -89,7 +89,7 @@ Les appareils sont des pièces à trois finitions (face, intérieur, tranche) au
 
 ## Scène et caméra
 
-Les plongeurs sont laqués vermillon, le fil rouge de la collection : c'est d'eux que part le geste ; le cylindre de Kármán aussi. (Une humeur « Planche », vue d'en haut à longue focale, a été essayée puis retirée : le dessin remplissait l'image, mais on ne voyait plus que c'est de l'eau qui se déforme, et la scène refaisait l'écran de chargement.)
+Les plongeurs gardent le métal de la cuve ; seul leur collier est laqué vermillon, un accent discret là d'où part le geste (entièrement vermillon, ils attiraient l'œil plus que l'eau). (Une humeur « Planche », vue d'en haut à longue focale, a été essayée puis retirée : le dessin remplissait l'image, mais on ne voyait plus que c'est de l'eau qui se déforme, et la scène refaisait l'écran de chargement.)
 
 La caméra est hors de la cuve, devant la vitre, à hauteur de l'eau ou un peu au-dessus. Les rayons qui passent sous la ligne d'eau voient le fond à travers la vitre, ceux qui passent au-dessus voient la surface d'en haut : c'est la coupe d'un aquarium. Ses mouvements suivent l'histoire. Entre deux dessins, elle regarde la surface et les plongeurs (la cause) ; quand les ondes convergent, elle descend vers le fond et s'avance un peu (l'effet) ; puis elle remonte. Pointes < 25°/s, accélération bornée image par image (test à 120 i/s).
 
