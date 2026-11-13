@@ -5,8 +5,9 @@ import { generate, upgrade, MOODS, CLEAR, pieceSpec, loopDuration } from '../src
 import { SETS } from '../src/finishes.js';
 import { GLASSES } from '../src/glasses.js';
 import { FORMS, shellSurface } from '../src/gen/forms.js';
-import { PH, GRAV, DISH, physTime, fragmentPoint, fragmentCenter, landing, spinAngle, inflation, floorH } from '../src/cycle.js';
+import { PH, GRAV, physTime, spinAngle, floorH } from '../src/cycle.js';
 import { fracture } from '../src/gen/fracture.js';
+import { simulate, sampleTrack, qrot } from '../src/gen/sim.js';
 import { openEdges } from '../tools/bench-fracture.mjs';
 
 const SEEDS = Array.from({ length: 400 }, (_, i) => `t${i}`);
@@ -96,7 +97,9 @@ test('fracture : des éclats fermés, nombreux pour la bille et la trempe, peu p
   assert.ok(ball.frags.length >= 60, `bille : ${ball.frags.length}`);
   assert.ok(res.frags.length >= 12, `résonance : ${res.frags.length}`);
   assert.ok(temp.frags.length >= 100, `trempe : ${temp.frags.length}`);
-  assert.ok(therm.frags.length >= 5 && therm.frags.length <= 20, `choc : ${therm.frags.length}`);
+  assert.ok(therm.bodies.length >= 5 && therm.bodies.length <= 20, `choc : ${therm.bodies.length}`);
+  // (éclats secondaires : les grands éclats sont pré-découpés, la trempe jamais)
+  assert.ok(therm.frags.length > therm.bodies.length && temp.frags.length === temp.bodies.length);
   for (const r of fr) {
     const edges = r.mesh.index.length / 2;
     assert.ok(openEdges(r) / edges < 0.002, `arêtes ouvertes : ${openEdges(r)} / ${edges}`);
@@ -114,34 +117,36 @@ test('fracture : près de l’impact, éclats plus petits et plus rapides ; le p
   assert.ok(Math.abs(ball.dir[1]) < 1e-9);
 });
 
-test('gravité : chaque éclat tombe, touche la sole, s’y arrête, se couche et ne la traverse pas', () => {
-  const Ts = 12, slow = { k: 16, pre: -0.09, plat: 2, post: 1 };
-  for (const r of fr) {
-    const rest = r.thickness / 2;
-    for (const F of r.frags.slice(0, 40)) {
-      const tL = landing(F, rest);
-      assert.ok(tL >= 0 && tL < 1.5, `atterrissage ${tL}`);
-      // au sol : à la hauteur de la cuvette
-      const c = fragmentCenter(F, tL + 2, rest).c;
-      assert.ok(Math.abs(c[1] - (floorH(Math.hypot(c[0], c[2])) + rest)) < 1e-9);
-      // en vol : parabole (accélération g)
-      const y = (t) => fragmentCenter(F, t, rest).c[1], h = 1e-3, tm = tL / 2;
-      if (tL > 0.01) assert.ok(Math.abs((y(tm + h) - 2 * y(tm) + y(tm - h)) / (h * h) + GRAV) < 1e-2);
-      // aucun sommet de l'éclat sous la sole, à aucun instant (pas seulement son centre)
-      const P = r.mesh.position, [a, b] = F.range;
-      for (const l of [0.45, 0.52, 0.55, 0.62, 0.75, 0.86, 0.95].map((f) => f * Ts)) for (let i = a; i < b; i += 7) {
-        const p = fragmentPoint(F, [P[3 * i], P[3 * i + 1], P[3 * i + 2]], l, { Ts, slow, rest });
-        assert.ok(p[1] >= floorH(Math.hypot(p[0], p[2])) - 1e-6, `sommet sous la sole à ${l.toFixed(2)} s`);
-      }
-      assert.ok(F.tm >= PH.melt * Ts && F.tm < Ts);
-      // au repos, l'éclat est posé, pas écrasé : sans la sécurité du shader (qui
-      // remonte les sommets sous la sole), aucun ne passerait dessous de plus de 1,5 cm
-      let worst = 0;
-      for (let i = a; i < b; i += 3) { const p = fragmentPoint(F, [P[3 * i], P[3 * i + 1], P[3 * i + 2]], 0.79 * Ts, { Ts, slow, rest, clampFloor: false }); worst = Math.min(worst, p[1] - floorH(Math.hypot(p[0], p[2]))); }
-      assert.ok(worst > -0.12, `éclat enfoncé dans la sole de ${(-worst).toFixed(3)} u`);
+test('simulation : les éclats tombent sous g, se heurtent, se brisent parfois, se posent sans traverser la sole ni les autres', () => {
+  for (const [i, r] of fr.entries()) {
+    const spec = specs[i], Ts = spec.Ts, slow = spec.slow, p0 = physTime(PH.rupture * Ts, Ts, slow);
+    const sim = simulate(r, spec);
+    const P = r.mesh.position, pose = (s, tau, p) => { const { x, q } = sampleTrack(sim, s, tau); const c = r.frags[s].c; return qrot(q, [p[0] - c[0], p[1] - c[1], p[2] - c[2]]).map((u, j) => u + x[j]); };
+    // avant le choc : la pose de repos, exactement
+    for (const s of [0, 3, 7]) { const { x, q } = sampleTrack(sim, s, 0); assert.ok(Math.hypot(...x.map((u, j) => u - r.frags[s].c[j])) < 1e-5 && Math.abs(q[3] - 1) < 1e-6); }
+    // en vol : accélération g (éclats hauts, juste après leur libération)
+    // (éclats seuls dans leur corps : le centre d'un sous-éclat tourne avec le
+    // corps ; médiane : quelques-uns heurtent un voisin)
+    const high = r.frags.map((F, s) => ({ F, s })).filter(({ F }) => F.c[1] > 1.1 && r.bodies[F.parent].children.length === 1).slice(0, 12);
+    const accs = high.map(({ F, s }) => {
+      const t = physTime(F.tc, Ts, slow) - p0 + 0.03, d = 2 / sim.rate;
+      const y = (u) => sampleTrack(sim, s, u).x[1];
+      return (y(t + d) - 2 * y(t) + y(t - d)) / (d * d);
+    }).sort((a, b) => a - b);
+    if (accs.length) { const med = accs[accs.length >> 1]; assert.ok(Math.abs(med + GRAV) < GRAV * 0.05, `${spec.mech} : accélération ${med.toFixed(1)} en vol`); }
+    // aucun sommet nettement sous la sole, à aucun instant (sans la sécurité du shader)
+    let worst = 0;
+    for (const tau of [0.05, 0.15, 0.3, 0.6, 1, (sim.samples - 1) / sim.rate]) for (const [s, F] of r.frags.entries()) for (let k = F.range[0]; k < F.range[1]; k += 5) {
+      const p = pose(s, tau, [P[3 * k], P[3 * k + 1], P[3 * k + 2]]);
+      worst = Math.min(worst, p[1] - floorH(Math.hypot(p[0], p[2])));
     }
+    assert.ok(worst > -0.012, `${spec.mech} : sommet sous la sole de ${(-worst).toFixed(3)} u`);
+    // à la fin : presque tous au repos, pas d'interpénétration profonde entre éclats
+    assert.ok(sim.stats.awakeAtEnd <= Math.max(2, 0.08 * sim.stats.bodies), `${spec.mech} : ${sim.stats.awakeAtEnd} éclats encore en mouvement`);
+    assert.ok(sim.stats.endDepth < sim.radius, `${spec.mech} : interpénétration ${sim.stats.endDepth.toFixed(3)} u`);
+    for (const t of sim.tm) assert.ok(t >= PH.melt * Ts && t < Ts);
+    if (spec.mech === 'thermal') assert.ok(sim.stats.breaks > 0, 'aucun éclat secondaire');
   }
-  assert.ok(DISH > 0 && floorH(20) < 0.31 && inflation(0, 0, 12) === 0 && inflation(1, PH.acc * 12, 12) === 1);
 });
 
 test('cause et effet : l’outil touche le point d’impact exactement au choc, jamais avant', async () => {

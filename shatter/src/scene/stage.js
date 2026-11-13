@@ -10,10 +10,12 @@
 // la scène ; les maillages reçoivent leur matériau quand leur géométrie est
 // arrivée, et un matériau neuf à chaque nouvelle géométrie.
 import * as THREE from 'three/webgpu';
-import { uniform, lights, vec2, vec3, smoothstep, length, normalize, positionWorld, cameraPosition, acos, clamp, dot, exp, float, uv, mix, abs, floor as tFloor, fract, min, select, mx_cell_noise_float } from 'three/tsl';
+import { uniform, lights, vec2, vec3, smoothstep, length, normalize, positionWorld, cameraPosition, acos, clamp, dot, exp, float, uv, mix, abs, floor as tFloor, fract, min, select, mx_cell_noise_float, sin, cos } from 'three/tsl';
 import { buildPieceMaterial, finishUniforms, signature, noise } from './materials.js';
 import { glassUniforms, applyGlass, buildGlassMaterial, buildGlassShadowCaster, SHADOW_LAYER, blackbody, GLASSES } from './glass.js';
 import { createApparatus } from './apparatus.js';
+import { G } from './globals.js';
+const TAU6 = Math.PI * 12;
 import { pieceSpec, finishOf, floorFinish } from '../recipe.js';
 import { PH, floorH, spinAngle } from '../cycle.js';
 import { Buffers, OUT, EDGE } from '../gen/mesh.js';
@@ -63,9 +65,13 @@ export function createStage(scene, gen, { lite = false } = {}) {
   const rims = [new THREE.SpotLight(0xffffff, 400, 0, 0.55, 0.9, 2), new THREE.SpotLight(0xffffff, 150, 0, 0.6, 0.9, 2)];
   if (lite) rims[1].visible = false;
   const glow = new THREE.PointLight(0xff8a3a, 0, 0, 2);       // le verre en fusion, la sole qui chauffe
-  const furnaceLight = new THREE.PointLight(0xff7a2a, 0, 0, 2); // la gueule du four
+  // la gueule du four (ou la fenêtre) : un projecteur placé dans l'ouverture et
+  // tourné vers la pièce. Une lumière ponctuelle collée au mur éclairait d'abord
+  // le mur et la sole autour d'elle : tout l'Atelier virait au saumon laiteux.
+  const furnaceLight = new THREE.SpotLight(0xff7a2a, 0, 0, 0.55, 1, 2);
+  furnaceLight.castShadow = false;
   for (const l of [key, ...rims]) { scene.add(l); scene.add(l.target); }
-  scene.add(glow, furnaceLight);
+  scene.add(glow, furnaceLight, furnaceLight.target);
 
   // ── Cyclorama et sole ──
   // La sole est une cuvette (cycle.js, floorH : la même dans la physique) : les éclats y
@@ -148,9 +154,16 @@ export function createStage(scene, gen, { lite = false } = {}) {
   // plombs, sous un arc brisé. Chacune éclaire la scène (lumière ponctuelle).
   const FU = { on: uniform(0), seed: uniform(0) };
   const furnace = (() => {
+    // ouvreau : un anneau de fonte sombre, une lèvre rouge, et au fond le bain
+    // jaune orangé, plus chaud au centre, qui palpite à peine
     const m = new THREE.MeshBasicNodeMaterial({ fog: false });
     const d = length(uv().sub(0.5)).mul(2);
-    m.colorNode = mix(vec3(1.0, 0.62, 0.25), vec3(0.9, 0.22, 0.04), smoothstep(0.1, 1, d)).mul(FU.on).mul(smoothstep(1, 0.92, d)).mul(2.4);
+    const hot = mix(vec3(1.0, 0.55, 0.18), vec3(0.75, 0.16, 0.03), smoothstep(0.05, 0.74, d))
+      // (palpitation périodique dans la boucle : six tours de bruit par boucle)
+      .mul(noise(vec3(uv().mul(5).add(vec2(cos(G.phase.mul(TAU6)), sin(G.phase.mul(TAU6))).mul(0.7)), 0.5)).mul(0.12).add(0.94)).mul(1.6);
+    const lip = vec3(0.5, 0.07, 0.01).mul(smoothstep(0.86, 0.76, d)).mul(0.6);
+    const iron = vec3(0.018, 0.015, 0.013);
+    m.colorNode = mix(hot, lip, smoothstep(0.7, 0.76, d)).mul(FU.on).max(iron.mul(smoothstep(0.76, 0.8, d)));
     const mesh = new THREE.Mesh(new THREE.CircleGeometry(1, 64), m);
     mesh.visible = false;
     scene.add(mesh);
@@ -180,7 +193,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
   let R = null, version = 0, pending = 0, total = 0;
   let pieces = [];
   const clear = () => {
-    for (const p of pieces) { scene.remove(p.mesh); p.mesh.geometry.dispose(); p.mesh.material?.dispose?.(); }
+    for (const p of pieces) { scene.remove(p.mesh); p.mesh.geometry.dispose(); p.mesh.material?.dispose?.(); p.track?.dispose(); }
     pieces = [];
   };
 
@@ -191,7 +204,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
     total = R.pieces.length; pending = total;
     R.pieces.forEach((P, k) => {
       const U = glassUniforms();
-      const slot = { k, P, U, mesh: new THREE.Mesh(new THREE.BufferGeometry()), info: null, glassKey: P.glass };
+      const slot = { k, P, U, mesh: new THREE.Mesh(new THREE.BufferGeometry()), info: null, glassKey: P.glass, track: null };
       slot.mesh.castShadow = true; slot.mesh.receiveShadow = true; slot.mesh.visible = false;
       slot.mesh.frustumCulled = false;
       pieces.push(slot);
@@ -200,8 +213,14 @@ export function createStage(scene, gen, { lite = false } = {}) {
         slot.mesh.geometry.dispose();
         slot.mesh.geometry = pieceGeometry(o.mesh);
         slot.info = o.info;
+        // trajectoires simulées des éclats (gen/sim.js) : une ligne par éclat,
+        // deux texels (centre ; quaternion) par échantillon
+        slot.track?.dispose();
+        slot.track = new THREE.DataTexture(o.track, 2 * o.info.samples, o.info.frags, THREE.RGBAFormat, THREE.FloatType);
+        slot.track.needsUpdate = true;
+        U.samples.value = o.info.samples; U.rate.value = o.info.rate;
         slot.mesh.material?.dispose?.();
-        slot.mesh.material = buildGlassMaterial(U, { glassKey: P.glass }); // (après la géométrie)
+        slot.mesh.material = buildGlassMaterial(U, { glassKey: P.glass, track: slot.track }); // (après la géométrie)
         // le verre transmissif ne porte pas d'ombre : un double invisible la porte
         if (slot.caster) { slot.mesh.remove(slot.caster); slot.caster.material.dispose(); }
         slot.caster = new THREE.Mesh(slot.mesh.geometry, buildGlassShadowCaster(U, slot.mesh.material));
@@ -221,6 +240,9 @@ export function createStage(scene, gen, { lite = false } = {}) {
       floor.material?.dispose?.();
       floor.material = buildPieceMaterial(recipe.floor.finish, finishU(recipe.floor.finish), { seedOff: uniform(new THREE.Vector3(9, 9, 9)) });
       floor.material.emissiveNode = floorEmissive();
+      // (sole mate, poussiéreuse : un reflet rasant atténué — la lumière doit
+      // tomber sur la pièce, pas sur le sol entre elle et la caméra)
+      floor.material.specularIntensityNode = float(0.22);
       // (les contre-jours n'éclairent que le verre et les appareils : sur le sol,
       // ils effaceraient les ombres portées, et la pièce semblerait flotter)
       floor.material.lightsNode = lights([key, glow, furnaceLight]);
@@ -233,7 +255,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
       if (!p.info) continue;
       if (!!GLASSES[p.P.glass]?.opaque !== !!GLASSES[p.glassKey]?.opaque) {
         p.mesh.material.dispose();
-        p.mesh.material = buildGlassMaterial(p.U, { glassKey: p.P.glass });
+        p.mesh.material = buildGlassMaterial(p.U, { glassKey: p.P.glass, track: p.track });
       }
       p.glassKey = p.P.glass;
     }
@@ -275,16 +297,19 @@ export function createStage(scene, gen, { lite = false } = {}) {
     const pr = L.prop;
     furnace.visible = pr?.kind === 'four'; windowM.visible = pr?.kind === 'vitrail';
     if (pr) {
-      const a = pr.az, rw = R0 + 4 - 0.03, fy = Y0 + 5.2;
+      // (décollés de la paroi courbe : un disque posé à 3 cm la coupait sur ses
+      // côtés, et la gueule du four prenait la forme d'une applique)
+      const a = pr.az, rw = R0 + 4 - 0.25, fy = Y0 + 5.2;
       FU.on.value = pr.intensity; FU.seed.value = pr.seed ?? 0;
       if (pr.kind === 'four') {
         furnace.position.set(Math.cos(a) * rw, fy, Math.sin(a) * rw); furnace.lookAt(0, fy, 0); furnace.scale.setScalar(1.6);
-        furnaceLight.color.set('#ff6a1a'); furnaceLight.intensity = 450 * pr.intensity;
+        furnaceLight.color.set('#ff6a1a'); furnaceLight.intensity = 650 * pr.intensity; furnaceLight.angle = 0.42;
       } else {
         windowM.position.set(Math.cos(a) * rw, Y0 + 4.2, Math.sin(a) * rw); windowM.lookAt(0, Y0 + 4.2, 0); windowM.scale.set(2.6, 7, 1);
-        furnaceLight.color.set('#c890ff'); furnaceLight.intensity = 900 * pr.intensity;
+        furnaceLight.color.set('#c890ff'); furnaceLight.intensity = 1100 * pr.intensity; furnaceLight.angle = 0.3;
       }
-      furnaceLight.position.set(Math.cos(a) * (rw - 1.5), fy, Math.sin(a) * (rw - 1.5));
+      furnaceLight.position.set(Math.cos(a) * (rw - 0.3), pr.kind === 'four' ? fy : Y0 + 6, Math.sin(a) * (rw - 0.3));
+      furnaceLight.target.position.set(0, 0.7, 0);
     } else furnaceLight.intensity = 0;
 
     let glowI = 0, poolR = 0, floorHeat = 0, active = null, plateAngle = 0;

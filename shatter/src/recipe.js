@@ -88,9 +88,9 @@ export const MOODS = {
     grade: { contrast: 1.1, saturation: 1.1, shadows: [0.92, 0.94, 1.12], highlights: [1.0, 1.0, 1.04] },
   },
   cathedrale: {
-    label: 'Cathédrale', bg: '#0a080d', floor: { set: 'obsidian', color: '#4a443d' }, backdrop: { color: '#7a5a90', gain: 0.18 }, prop: 'vitrail',
+    label: 'Cathédrale', bg: '#17121c', floor: { set: 'obsidian', color: '#4a443d' }, backdrop: { color: '#6e5c80', gain: 0.42 }, prop: 'vitrail',
     key: { color: 'vitrail', i: [1700, 2300], el: [1.3, 1.42], az: [-2.4, -1.4], pen: 0.35, angle: 0.2 }, rim: [['#ff9a4a', 350, 520], ['#4a7aff', 220, 340]],
-    cam: { dist: [7.4, 8.4], height: [0.5, 0.75], fov: [36, 42], orbit: [0], sway: [0.2, 0.35] }, fog: [5, 18], env: 'atelier', envI: [0.4, 0.6], heat: 1.1,
+    cam: { dist: [7.4, 8.4], height: [0.5, 0.75], fov: [36, 42], orbit: [0], sway: [0.2, 0.35] }, fog: [7, 34], env: 'atelier', envI: [0.4, 0.6], heat: 1.1,
     glasses: ['rubis', 'cobalt', 'ambre', 'emeraude', 'dichroique'], mechs: { ball: 1.5, resonance: 3, tempered: 1, thermal: 1.5 },
     forms: ['cloche', 'amphore', 'tazza', 'verre', 'vase'],
     grade: { contrast: 1.08, saturation: 1.08, shadows: [0.98, 0.93, 1.06], highlights: [1.05, 1.0, 0.95] },
@@ -117,7 +117,10 @@ export function finishOf(setKey) {
 export function floorFinish(setKey, color = null) {
   const f = finishOf(setKey);
   for (const k of ['outer', 'inner', 'edge']) {
-    f[k].rough = Math.max(f[k].rough, 0.62); f[k].clearcoat = 0; f[k].smudge = 0; f[k].metal = 0;
+    // (ni irisation ni anisotropie : vu en incidence rasante sous la lampe et la
+    // gueule du four, un acier brossé irisé devenait une nappe claire, plus
+    // lumineuse que la pièce)
+    f[k].rough = Math.max(f[k].rough, 0.82); f[k].clearcoat = 0; f[k].smudge = 0; f[k].metal = 0; f[k].irid = 0; f[k].aniso = 0;
     if (color) { f[k].color = color; if (!(k === 'outer' && ['blackSteel', 'biscuit'].includes(setKey))) f[k].pattern = 'plain'; f[k].bump = Math.min(f[k].bump, 0.15); }
   }
   return f;
@@ -172,7 +175,8 @@ export function makePiece(r, mood, prev, k, next = null, used = []) {
 // spécification envoyée au worker (tout ce qui change la géométrie)
 export function pieceSpec(R, k) {
   const P = R.pieces[k];
-  const spec = { seed: `${R.seed}/${P.seed}`, size: R.size, Ts: R.loop.stage };
+  // (le ralenti fixe l'instant où chaque éclat est libéré : la simulation en dépend)
+  const spec = { seed: `${R.seed}/${P.seed}`, size: R.size, Ts: R.loop.stage, slow: R.loop.slow };
   for (const key of ['form', 'mech', 'stretch', 'wide', 'bulge', 'waist', 'thickness', 'warp', 'force', 'decor', 'decorN', 'decorAmp', 'twist', 'parts', 'handleAngle', 'threadTurns', 'threadFrom', 'threadTo', ...MECH_KEYS]) if (P[key] !== undefined) spec[key] = P[key];
   return spec;
 }
@@ -185,6 +189,10 @@ export function generate(seed, overrides = {}) {
   const M = MOODS[mood];
   const rr = rng.fork('rythme'), rp = rng.fork('pieces'), rc = rng.fork('camera'), rl = rng.fork('light');
   const N = overrides.count ?? rr.weighted([[2, 1], [3, 3], [4, 1.5]]);
+  const sway = pickRange(rc, M.cam.sway);
+  // (le four ou la fenêtre de côté, au tiers de l'image, jamais derrière la
+  // pièce : décalé d'au moins le balancement de la caméra, plus une marge)
+  const propOff = rc.sign() * (sway + rc.range(0.12, 0.22));
   const pieces = [];
   for (let k = 0; k < N; k++) pieces.push(makePiece(rp, mood, pieces[k - 1], k, k === N - 1 && N > 2 ? pieces[0] : null, pieces));
   const K = M.key;
@@ -196,9 +204,9 @@ export function generate(seed, overrides = {}) {
     loop: { stage: r2(rr.range(11, 13)), slow: { k: rr.int(12, 20), pre: -0.09, plat: r2(rr.range(1.8, 2.4)), post: r2(rr.range(0.8, 1.2)) } },
     pieces,
     camera: {
-      fov: pickRange(rc, M.cam.fov), dist: pickRange(rc, M.cam.dist), height: pickRange(rc, M.cam.height), orbit: rc.pick(M.cam.orbit), sway: pickRange(rc, M.cam.sway),
+      fov: pickRange(rc, M.cam.fov), dist: pickRange(rc, M.cam.dist), height: pickRange(rc, M.cam.height), orbit: rc.pick(M.cam.orbit), sway,
       // (face au four ou à la fenêtre)
-      az: M.prop ? r2(-propAz - Math.PI / 2 + rc.range(-0.35, 0.35)) : r2(rc.range(0, Math.PI * 2)), push: r2(rc.range(0.06, 0.12)), // (la caméra est en (sin az, cos az), le décor en (cos a, sin a))
+      az: M.prop ? r2(-propAz - Math.PI / 2 + propOff) : r2(rc.range(0, Math.PI * 2)), push: r2(rc.range(0.06, 0.12)), // (la caméra est en (sin az, cos az), le décor en (cos a, sin a))
     },
     light: {
       key: { color: keyColor, intensity: r2(rl.range(...K.i)), az: r2(rl.range(...K.az)), el: r2(rl.range(...K.el)), angle: K.angle, penumbra: K.pen },

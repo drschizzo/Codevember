@@ -54,11 +54,12 @@
         <p>La méthode courante pour casser un objet en images de synthèse est le diagramme de Voronoï : on sème des points, les germes, et chaque point de la paroi appartient au germe le plus proche. Avec la distance ordinaire, il donne des éclats de taille uniforme. C’est la fracture de démonstration d’un moteur physique, et elle ne ressemble à aucune cassure réelle. Le verre se brise différemment selon la cause : en étoile et en toile d’araignée sous une bille, en lames qui partent du bord quand il entre en résonance, en dés quand il est trempé, en quelques grandes pièces sinueuses sous un choc thermique.</p>
         <p>Shatter garde le Voronoï et change l’espace où il est calculé. Chaque déclencheur fournit une fonction de coordonnées et une distance :</p>
         <ul>
-          <li><strong>pendule</strong> : coordonnées log-polaires autour de l’impact, \(\big(A\ln\max(\rho, \rho_\text{min}),\ \varphi\big)\). Des germes répartis régulièrement dans cet espace (9 à 13 rayons, anneaux espacés d’un pas presque constant en \(\ln\rho\), rayons doublés au-delà du troisième, quatrième ou cinquième anneau) donnent sur le verre des éclats dont la taille croît comme la distance à l’impact, ce qui est la loi d’échelle de la fragmentation. Les frontières à \(\varphi\) constant sont les fissures radiales, celles à \(\rho\) constant les fissures concentriques ; \(\rho_\text{min} = 0{,}035\,S\) délimite la zone broyée ;</li>
+          <li><strong>pendule</strong> : coordonnées log-polaires autour de l’impact, \(\big(A\ln\max(\rho, \rho_\text{min}),\ \varphi\big)\). Des germes répartis régulièrement dans cet espace (9 à 13 rayons, anneaux espacés d’un pas presque constant en \(\ln\rho\), rayons doublés au-delà du troisième, quatrième ou cinquième anneau) donnent sur le verre des éclats dont la taille croît comme la distance à l’impact, ce qui est la loi d’échelle de la fragmentation. Les frontières à \(\varphi\) constant sont les fissures radiales, celles à \(\rho\) constant les fissures concentriques ; \(\rho_\text{min} = 0{,}035\,S\) délimite la zone broyée. Loin de l’impact, la loi d’échelle seule donnerait des lamelles de la hauteur de la pièce : au-delà de \(\rho \approx 0{,}5\,S\), le pas des anneaux passe à \(\ln(1 + c/\rho)\) et le nombre de rayons à \(2\pi\rho/c\), avec \(c = 0{,}26\,S\) (environ 3 cm) : les fissures radiales se ramifient et aucun éclat ne dépasse quelques centimètres ;</li>
           <li><strong>haut-parleur</strong> : \((\theta, s)\), l’angle autour de l’axe et l’abscisse le long du profil, avec une distance où \(s\) compte \(0{,}6/0{,}22 \approx 2{,}7\) fois plus que \(\theta\). Le résultat : des lames méridiennes, 8 à 14 colonnes de deux ou trois germes ;</li>
           <li><strong>marteau sur verre trempé</strong> : distance euclidienne, 130 à 210 germes tirés selon l’aire ;</li>
           <li><strong>chalumeau</strong> : 7 à 13 germes dans un espace gauchi par un bruit de grande échelle, d’amplitude quatre fois plus forte, ce qui fait serpenter les fissures.</li>
         </ul>
+        <div class="note trap"><b>Un germe, plusieurs morceaux</b><p>Les coordonnées log-polaires (et l’angle × abscisse du haut-parleur) projettent une coque fermée sur un plan : le devant et le derrière du col, les deux côtés de la panse, tombent au même endroit et reviennent au même germe. Gardée telle quelle, une région faisait un « éclat » en morceaux disjoints qui bougeaient d’un bloc : l’un reposait sur la sole, l’autre flottait à côté. Chaque région est donc découpée en ses composantes connexes (polygones qui partagent un sommet) avant de devenir des éclats.</p></div>
         <figure id="fig-metric" class="wide"><figcaption><b>Quatre fracturations de la même paroi</b>, déroulée à plat (4 × 2 unités ; une pièce mesure 2 unités, environ 25 cm). Les germes, les coordonnées et les distances sont portés de <code>makeMetric()</code> avec les constantes réelles ; le bruit de gauchissement est un bruit de valeur plus simple que celui du projet, et le Voronoï est rendu pixel par pixel au lieu d’être découpé triangle par triangle.</figcaption></figure>
       </section>
 
@@ -98,31 +99,30 @@ p = A.p + (B.p - A.p) * t;</code></pre>
       </section>
 
       <section id="chute">
-        <h2><span class="n">06</span>Une chute sans état : tout est fonction du temps</h2>
-        <span class="src">src/cycle.js · fragmentCenter() · src/scene/glass.js</span>
-        <p>Une pièce brisée au pendule compte une centaine d’éclats, une pièce trempée jusqu’à deux cents, et la boucle doit pouvoir être lue à l’envers, sautée ou exportée image par image. Une simulation qui avance d’une image à l’autre ne le permet pas : pour connaître l’image 500, il faudrait calculer les 499 précédentes. Chaque éclat suit donc une trajectoire <strong>analytique</strong>, une formule qui donne sa position à n’importe quel instant, écrite deux fois à l’identique : en JavaScript dans <code>cycle.js</code> (tests, fracture) et en TSL dans le vertex shader.</p>
+        <h2><span class="n">06</span>Une chute simulée d’avance, lue comme une formule</h2>
+        <span class="src">src/gen/sim.js · simulate() · src/scene/glass.js</span>
+        <p>Une pièce brisée au pendule compte une centaine d’éclats, une pièce trempée jusqu’à deux cents, et la boucle doit pouvoir être lue à l’envers, sautée ou exportée image par image. Une simulation qui avance d’une image à l’autre pendant la lecture ne le permet pas : pour connaître l’image 500, il faudrait calculer les 499 précédentes. Shatter simule donc <strong>une fois, pendant le chargement</strong>, dans le worker qui vient de fracturer la pièce, et enregistre la pose de chaque éclat (centre et quaternion) 240 fois par seconde de temps physique depuis le choc. Le vertex shader lit cette trajectoire dans une texture (une ligne par éclat) au temps physique \(\tau = \text{physTime}(\ell) - \text{physTime}(t_0)\) : la lecture reste une fonction du seul temps, et le ralenti de la caméra rapide ne fait que lire la même trajectoire plus lentement.</p>
+        <p>Une première version donnait à chaque éclat une trajectoire analytique (parabole, choc, rebond, glissement, pose stable) qui ignorait les autres. Les éclats se traversaient, et le col d’une bouteille coupée au chalumeau descendait à travers la panse. La simulation, elle, fait des éclats des corps rigides qui se heurtent :</p>
         <ul>
-          <li><strong>Vol</strong> : parabole sous gravité vraie, \(c + v\tau - \tfrac12 g\tau^2\), avec \(g = 78\) u/s² (9,81 m/s² à 12,5 cm l’unité), sans freinage ajouté.</li>
-          <li><strong>Choc sur la sole</strong> : l’instant \(\tau_L\) résout \(y(\tau) = h_\text{sole}(x, z) + h_\text{repos}\) ; comme la cuvette dépend du point d’arrivée, deux itérations suffisent.</li>
-          <li><strong>Rebond</strong> : restitution 0,22 de la vitesse verticale d’impact, une seule bosse parabolique.</li>
-          <li><strong>Glissement</strong> : 30 % de la vitesse horizontale conservée, freinée par un frottement de Coulomb \(\mu = 0{,}45\) : arrêt en \(t_s = v_h/(\mu g)\), distance \(d = s - s^2/(2t_s)\).</li>
-          <li><strong>Bascule</strong> dans la position de repos en 0,07 s (section suivante), puis <strong>fonte</strong> : l’éclat s’affaisse, s’étale et coule vers le centre, ceux du milieu de la cuvette d’abord.</li>
+          <li><strong>Forme de collision</strong> : un nuage de sphères posé au milieu de la paroi de chaque éclat (rayon 0,029 u, environ 3,6 mm, espacement de Poisson). Un éclat fin et courbe se pose sur les autres par sa vraie forme, sans enveloppe convexe gonflée. Les sommets extrêmes de chaque éclat (74 directions) servent en plus de palpeurs contre la sole.</li>
+          <li><strong>Sole</strong> : la cuvette exacte \(y = 0{,}3\,(1 - e^{-r^2/3{,}2^2})\) et sa normale ; restitution 0,22, frottement \(\mu = 0{,}45\).</li>
+          <li><strong>Libération</strong> : un éclat que le front de fissure n’a pas encore atteint est un obstacle fixe. Deux éclats qui se touchent le long d’une fissure s’ignorent tant qu’ils ne se sont pas séparés une fois, sinon ils s’éjecteraient l’un l’autre au départ.</li>
+          <li><strong>La bille</strong> du pendule est un obstacle mobile qui suit sa vraie trajectoire (<code>kinematics.js</code>) et bouscule les éclats qu’elle traverse.</li>
+          <li><strong>Solveur</strong> : impulsions séquentielles (huit itérations, frottement de Coulomb, restitution au-delà de 0,8 u/s), pas de 1/480 s, correction de position contre la sole. Un éclat immobile depuis 0,15 s s’endort : au repos, il ne tremble ni ne dérive. Un choc sur un éclat endormi le réveille.</li>
         </ul>
-        <p>La vitesse de départ dépend du déclencheur. Pour le pendule, elle combine la direction de la bille, la direction radiale depuis l’impact et la normale de la paroi, avec une intensité qui décroît avec la distance : \(k = 0{,}22 + 1{,}35/\big(1 + (\rho/0{,}16S)^{1{,}3}\big)\). Les petits éclats tournent plus vite (jusqu’à trois fois). Le choc thermique ne projette presque rien, 0,26 à 0,78 u/s, soit 3 à 10 cm/s : les pièces s’écartent à peine avant que la gravité les couche.</p>
-        <figure id="fig-fall" class="wide"><figcaption><b>Une coupe de la pièce frappée au pendule</b>, en temps de film. Les éclats d’une paroi (vue de profil) partent quand le front les atteint, suivent leur parabole, frappent la cuvette, rebondissent, glissent et se couchent. Le temps physique est lu à travers <code>physTime()</code> (\(k = 16\)) ; <code>landing()</code> et <code>fragmentCenter()</code> sont portés tels quels. Simplifications : une coupe plane, des éclats réduits à un segment, et l’orientation au sol ramenée à la pente de la cuvette.</figcaption></figure>
+        <p>La vitesse de départ dépend du déclencheur. Pour le pendule, elle combine la direction de la bille, la direction radiale depuis l’impact et la normale de la paroi, avec une intensité qui décroît avec la distance : \(k = 0{,}22 + 1{,}35/\big(1 + (\rho/0{,}16S)^{1{,}3}\big)\). Les petits éclats tournent plus vite. Le verre trempé se détend à l’horizontale, depuis l’axe de la pièce. Le choc thermique ne projette presque rien, mais la pièce s’ouvre vers l’extérieur d’autant plus que l’éclat est haut. L’instant de fonte de chaque éclat dépend de l’endroit où la simulation l’a arrêté : ceux du milieu de la cuvette fondent d’abord.</p>
+        <figure id="fig-fall" class="wide"><figcaption><b>Le temps du film et le temps physique</b>, sur une coupe de la pièce frappée au pendule. Les éclats d’une paroi (vue de profil) partent quand le front les atteint et tombent sous \(g = 78\) u/s² (9,81 m/s² à 12,5 cm l’unité). Le temps physique est lu à travers <code>physTime()</code> (\(k = 16\)). Cette démo garde l’ancien modèle analytique (sans collisions entre éclats) pour montrer seulement le vol et le ralenti.</figcaption></figure>
         <h3>La boucle, par construction</h3>
-        <p>La pièce \(k\) vit dans son temps local \(\ell_k = \operatorname{mod}(t - k\,T_s,\ N\,T_s)\), où \(T_s\) (11 à 13 s) est la durée d’une étape et \(N\) (2 à 4) le nombre de pièces. Le bain qui se forme de la fonte des éclats de la pièce \(k\) est celui d’où monte la pièce \(k+1\), et la dernière nourrit la première. Comme rien n’est intégré pas à pas, la boucle n’a pas de raccord à corriger : à \(t = N\,T_s\), chaque formule revient d’elle-même à son état initial.</p>
-        <div class="note check"><b>Aucun sommet sous la sole</b><p>Le test de gravité vérifie, pour quarante éclats de chacune des quatre fractures : l’atterrissage avant 1,5 s, la hauteur exacte au repos, une accélération égale à \(g\) en vol (dérivée seconde numérique), et, pour un sommet sur sept, à sept instants du cycle, qu’aucun ne passe sous la cuvette. Le shader garde une sécurité (\(y \ge h_\text{sole} + 0{,}002\)). Le test la retire au repos et constate que, même sans elle, aucun sommet ne s’enfoncerait de plus de 1,5 cm.</p></div>
+        <p>La pièce \(k\) vit dans son temps local \(\ell_k = \operatorname{mod}(t - k\,T_s,\ N\,T_s)\), où \(T_s\) (11 à 13 s) est la durée d’une étape et \(N\) (2 à 4) le nombre de pièces. Le bain qui se forme de la fonte des éclats de la pièce \(k\) est celui d’où monte la pièce \(k+1\), et la dernière nourrit la première. La simulation dépend de la seule recette (graine, ralenti, durée d’étape), et la trajectoire est lue en fonction du temps : à \(t = N\,T_s\), tout revient à son état initial.</p>
+        <div class="note check"><b>Ce que vérifie le test de simulation</b><p>Pour chacune des quatre fractures : la pose de repos exacte avant le choc ; une accélération médiane égale à \(g\) en vol (dérivée seconde numérique de la trajectoire) ; pour un sommet sur cinq, à six instants, aucun ne passe plus de 1,2 cm sous la cuvette ; à la fin, presque tous les éclats sont au repos, aucune interpénétration entre éclats ne dépasse le rayon d’une sphère, et au moins un éclat secondaire se forme au chalumeau. Le shader garde une sécurité (\(y \ge h_\text{sole} + 0{,}002\)).</p></div>
       </section>
 
       <section id="repos">
-        <h2><span class="n">07</span>Un éclat courbe se couche sur son dos</h2>
-        <span class="src">src/gen/fracture.js · position de repos</span>
-        <p>Un éclat de paroi est un morceau de coque, souvent très courbe : une moitié de bol, une lame de flûte. Si on le couche selon sa normale moyenne et qu’on pose son centre à une demi-épaisseur de la sole, comme une plaque plane, la bosse de l’éclat traverse la sole et ses bords restent dressés : l’éclat paraît planté dans le sol.</p>
-        <p>À la fracture, Shatter cherche la <strong>position stable</strong> de chaque éclat : celle où son centre de gravité est le plus bas. Si l’on tourne une direction \(d\) vers le bas, l’éclat repose sur son sommet le plus avancé dans cette direction, et son centre se trouve à la hauteur \(h(d) = \max_i\,(p_i - c)\cdot d\) au-dessus de ce point d’appui. C’est la <em>fonction de support</em> de l’éclat. Parmi 122 directions (120 réparties sur une spirale de Fibonacci, plus la normale moyenne et son opposé), on garde celle qui minimise \(h\), estimée sur un échantillon d’environ 400 sommets par éclat.</p>
-        <div class="eq">\[ d^\star = \arg\min_{d}\ \max_i\,(p_i - c)\cdot d, \qquad h_\text{repos} = h(d^\star) + 0{,}003. \]</div>
-        <p>La direction \(d^\star\) est stockée en deux flottants (codage octaédrique) dans un attribut du sommet. Au sol, le shader fait tourner l’éclat pour amener \(d^\star\) contre la normale de la cuvette à cet endroit, et pose son centre à \(h_\text{repos}\). L’instant de fonte est recalculé avec cette vraie hauteur, puisqu’elle change l’endroit où l’éclat tombe.</p>
-        <figure id="fig-rest" class="wide"><figcaption><b>Un éclat en coupe.</b> À gauche, l’éclat tel qu’il était dans la pièce et sa fonction de support \(h(d)\) en polaire autour de son centre (le point) ; la flèche est la direction qui la minimise. Au milieu, la pose naïve (normale moyenne vers le bas, centre à une demi-épaisseur) : en rouge, ce qui passe sous la sole. À droite, la position stable. La démo est en deux dimensions, avec 120 directions réparties sur le cercle.</figcaption></figure>
+        <h2><span class="n">07</span>Un grand éclat se brise à son tour en touchant le sol</h2>
+        <span class="src">src/gen/fracture.js · splitSecondary() · src/gen/sim.js</span>
+        <p>Un grand éclat de verre qui tombe de 20 cm sur de l’acier se casse souvent encore. À la fracture, chaque éclat primaire de plus de \(0{,}0225\,S^2 = 0{,}09\) u² (environ 14 cm², un carré de plus de 3,7 cm de côté) est pré-découpé en deux à six morceaux : un Voronoï euclidien dont les germes sont espacés par l’échantillonnage de Mitchell (le plus éloigné de douze candidats). Les distances y sont prises au carré : leurs différences varient linéairement le long d’une arête, et les fissures secondaires sont des segments exacts. Ces morceaux restent collés. Ils forment un seul corps dans la simulation et ne s’allument pas au passage du front primaire.</p>
+        <p>Quand ce corps heurte la sole ou un autre éclat avec une vitesse d’approche supérieure à son seuil, environ 7,5 u/s (0,9 m/s), plus bas pour un grand éclat qui fléchit davantage, il se brise. Chaque morceau devient un corps : il hérite de la vitesse du parent à l’endroit où il se trouve (\(v + \omega \times r\)), plus une petite détente vers l’extérieur et un peu de rotation. La trempe n’en a pas : ses dés sont déjà à leur taille finale.</p>
+        <div class="note trap"><b>Un germe, plusieurs morceaux, à nouveau</b><p>Une cellule de Voronoï euclidien sur une coque courbe peut, elle aussi, se retrouver en deux morceaux. Chaque morceau secondaire passe donc par la même découpe en composantes connexes que les éclats primaires.</p></div>
       </section>
 
       <section id="chaleur">
@@ -148,7 +148,7 @@ p = A.p + (B.p - A.p) * t;</code></pre>
 
       <section id="budget">
         <h2><span class="n">10</span>Budget</h2>
-        <p>La fracture tourne dans des Web Workers (des fils de calcul parallèles du navigateur) pendant l’écran de chargement. Le rendu ne fait ensuite qu’évaluer des formules du temps dans le vertex shader, avec un maillage par pièce.</p>
+        <p>La fracture et la simulation tournent dans des Web Workers (des fils de calcul parallèles du navigateur) pendant l’écran de chargement. Le rendu ne fait ensuite que lire des trajectoires dans une texture, dans le vertex shader, avec un maillage par pièce.</p>
         <div class="tbl"><table>
           <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
           <tbody>
@@ -156,7 +156,9 @@ p = A.p + (B.p - A.p) * t;</code></pre>
             <tr><td>Fracture, banc <code>bench-fracture.mjs</code> sous Node : chalumeau → verre trempé</td><td>CPU</td><td class="num">0,22 à 0,73 s</td></tr>
             <tr><td>Éclats : pendule / haut-parleur / verre trempé / chalumeau</td><td>—</td><td class="num">≈ 100–120 / 23–26 / 130–210 / 7–13</td></tr>
             <tr><td>Maillage d’une pièce fracturée (banc)</td><td>GPU</td><td class="num">49&#8239;000 à 136&#8239;000 sommets</td></tr>
-            <tr><td>Attributs par sommet : centre, instant de fissure, vitesse, rotation, axe, fonte, repos</td><td>GPU</td><td class="num">4 × vec4 + 4 octets</td></tr>
+            <tr><td>Simulation des éclats d’une pièce (Node, graine n1) : 3 500 à 4 600 sphères, 1 630 pas</td><td>worker</td><td class="num">1,1 à 2,3 s</td></tr>
+            <tr><td>Trajectoires : 816 échantillons × 8 flottants par éclat (70 à 190 éclats)</td><td>GPU</td><td class="num">1,8 à 5 Mo</td></tr>
+            <tr><td>Attributs par sommet : centre, instant de fissure, indice de l’éclat, fonte, soufflage</td><td>GPU</td><td class="num">4 × vec4 + 4 octets</td></tr>
             <tr><td>Image, qualité Haute, 1,8 Mpx (GPU d’un Mac)</td><td>GPU</td><td class="num">15 à 17 ms</td></tr>
             <tr><td>Image, première version (verre plus simple, pièces moins détaillées)</td><td>GPU</td><td class="num">7 à 8 ms</td></tr>
             <tr><td>Version mobile : verre composité, FXAA, sans SSR, occlusion ni flou de mouvement</td><td>GPU</td><td class="num">≤ 60 i/s</td></tr>
@@ -659,72 +661,6 @@ p = A.p + (B.p - A.p) * t;</code></pre>
           const v = (physTime(l + 1e-4, Ts, slow) - physTime(l, Ts, slow)) / 1e-4;
           label(g, v < .98 ? `ralenti ×${fmt(1 / v, 1)}` : 'temps réel', w - 12, 20, { align: 'right', color: v < .98 ? C.c1 : C.dim, size: 12.5 });
           d.status(`film ${l - t0 >= 0 ? '+' : ''}${fmt(l - t0)} s · physique ${fmt(Math.max(0, tauNow), 3)} s · ${landed} / ${F.length} au sol`);
-        },
-      });
-    }
-
-    // ── 07 · position de repos stable ─────────────────────────────────────
-    {
-      const H = .07;
-      function shard(span, asym) {
-        const pts = [], nA = 48;
-        for (const side of [0, 1]) for (let i = 0; i <= nA; i++) {
-          const t = i / nA, ph = (-span / 2 + span * t), R = 1 + asym * (t - .5) - side * H;
-          pts.push([R * Math.sin(ph), R * Math.cos(ph)]);
-        }
-        return pts;
-      }
-      const rot = (p, a) => [p[0] * Math.cos(a) - p[1] * Math.sin(a), p[0] * Math.sin(a) + p[1] * Math.cos(a)];
-      demo('#fig-rest', {
-        title: 'Fonction de support et pose', aspect: 2.7,
-        controls: [
-          { key: 'span', label: 'Ouverture de l’arc', min: 20, max: 200, step: 1, value: 150, fmt: (v) => `${v}°` },
-          { key: 'asym', label: 'Asymétrie', min: 0, max: .8, step: .01, value: .3, fmt: (v) => fmt(v) },
-        ],
-        draw(g, d) {
-          const pts = shard(d.s.span * Math.PI / 180, d.s.asym);
-          const c = pts.reduce((s, p) => [s[0] + p[0] / pts.length, s[1] + p[1] / pts.length], [0, 0]);
-          // normale moyenne (vers l'extérieur de la paroi)
-          const outer = pts.slice(0, 49), nm = outer.reduce((s, p) => { const l = Math.hypot(...p); return [s[0] + p[0] / l, s[1] + p[1] / l]; }, [0, 0]), ln = Math.hypot(...nm), n = [nm[0] / ln, nm[1] / ln];
-          const sup = (dd) => Math.max(...pts.map((p) => (p[0] - c[0]) * dd[0] + (p[1] - c[1]) * dd[1]));
-          const dirs = [n, [-n[0], -n[1]], ...Array.from({ length: 120 }, (_, i) => [Math.cos(i / 120 * TAU), Math.sin(i / 120 * TAU)])];
-          let best = dirs[0], bs = Infinity; for (const dd of dirs) { const s = sup(dd); if (s < bs) { bs = s; best = dd; } }
-          const { w, h } = d, pw = w / 3, sc = Math.min(pw / 2.9, h / 2.5);
-          const panel = (i, title) => { label(g, title, pw * i + pw / 2, 18, { align: 'center', size: 11.5, color: C.dim }); if (i) { g.strokeStyle = C.grid; g.beginPath(); g.moveTo(pw * i, 8); g.lineTo(pw * i, h - 8); g.stroke(); } };
-          const drawShard = (P, ox, oy, col) => {
-            const nA = 49; g.beginPath(); P.slice(0, nA).forEach((p, k) => { const x = ox + p[0] * sc, y = oy - p[1] * sc; k ? g.lineTo(x, y) : g.moveTo(x, y); });
-            for (let k = 2 * nA - 1; k >= nA; k--) g.lineTo(ox + P[k][0] * sc, oy - P[k][1] * sc);
-            g.closePath(); g.fillStyle = alpha(col, .35); g.fill(); g.strokeStyle = col; g.lineWidth = 1.4; g.stroke();
-          };
-          // 1 : l'éclat et h(d)
-          panel(0, 'dans la pièce : h(d) autour du centre');
-          const ox0 = pw / 2 - c[0] * sc, oy0 = h * .58 + c[1] * sc;
-          drawShard(pts, ox0, oy0, C.c2);
-          const cx0 = ox0 + c[0] * sc, cy0 = oy0 - c[1] * sc;
-          g.strokeStyle = alpha(C.c1, .75); g.lineWidth = 1.2; g.beginPath();
-          for (let i = 0; i <= 180; i++) { const a = i / 180 * TAU, dd = [Math.cos(a), Math.sin(a)], s = sup(dd); const x = cx0 + dd[0] * s * sc, y = cy0 - dd[1] * s * sc; i ? g.lineTo(x, y) : g.moveTo(x, y); } g.stroke();
-          g.fillStyle = C.ink; g.beginPath(); g.arc(cx0, cy0, 3, 0, TAU); g.fill();
-          arrow(g, cx0, cy0, cx0 + best[0] * bs * sc, cy0 - best[1] * bs * sc, { color: C.c4, width: 1.8 });
-          // 2 : pose naïve : n vers le bas, centre à H/2
-          panel(1, 'naïf : normale moyenne vers le bas');
-          const fy = h - 26;
-          const pose = (dd, hc, i, col) => {
-            const a = Math.atan2(-1, 0) - Math.atan2(dd[1], dd[0]);
-            const P = pts.map((p) => { const q = rot([p[0] - c[0], p[1] - c[1]], a); return [q[0], q[1] + hc]; });
-            const ox = pw * i + pw / 2, oy = fy;
-            g.strokeStyle = alpha(C.ink, .45); g.lineWidth = 1.2; g.beginPath(); g.moveTo(pw * i + 10, fy); g.lineTo(pw * (i + 1) - 10, fy); g.stroke();
-            g.fillStyle = alpha(C.ink, .05); g.fillRect(pw * i + 10, fy, pw - 20, h - fy);
-            drawShard(P, ox, oy, col);
-            const depth = Math.max(0, -Math.min(...P.map((p) => p[1])));
-            if (depth > 1e-3) { g.save(); g.beginPath(); g.rect(pw * i, fy, pw, h - fy); g.clip(); drawShard(P, ox, oy, C.c3); g.restore(); }
-            return depth;
-          };
-          const dep = pose(n, H / 2, 1, C.c2);
-          panel(2, 'position stable : centre le plus bas');
-          pose(best, bs, 2, C.c4);
-          // éclat de rayon 0,6 u (une paroi de pièce), 1 u = 12,5 cm
-          const cm = (x) => fmt(x * .6 * 12.5, 1);
-          d.status(`naïf : enfoncé de ${cm(dep)} cm · stable : centre à ${cm(bs)} cm de la sole`);
         },
       });
     }
