@@ -34,7 +34,9 @@ export const FAMILIES = {
 
 // ── Humeurs ──────────────────────────────────────────────────────────────────
 // Un décor chacune : support, fond, lumière, valeur, cadrage. Accords :
-// board [fond, rigole, chant], walls [paroi, —, poteau], ball, metal [corps,
+// board [fond, rigole, chant], walls [paroi, —, poteau], ball (toujours
+// vermillon : le fil rouge de la collection, et la bille qu'on suit doit se
+// détacher du bois, du marbre et du laiton), metal [corps,
 // —, pièces polies], base [socle, —, chant], support.
 const A = (board, walls, ball, metal, base, support) => ({ board, walls, ball, metal, base, support });
 export const MOODS = {
@@ -43,8 +45,8 @@ export const MOODS = {
     key: { az: [-2.6, -2.1], el: [0.45, 0.62], angle: 0.42, penumbra: 0.55 }, style: 'strip',
     cam: { el: [0.42, 0.62], az: [-0.5, 0.35], fill: 0.86 },
     accords: [
-      A(['walnut', 'feltGreen', 'walnutEnd'], ['polishedBrass', 'polishedBrass', 'polishedBrass'], 'steelBall', ['blackenedSteel', 'blackenedSteel', 'nickel'], ['walnut', 'walnut', 'walnutEnd'], 'leather'),
-      A(['walnut', 'feltBlack', 'walnutEnd'], ['nickel', 'nickel', 'polishedBrass'], 'steelBall', ['polishedBrass', 'polishedBrass', 'nickel'], ['ebony', 'ebony', 'ebony'], 'leather'),
+      A(['walnut', 'feltGreen', 'walnutEnd'], ['polishedBrass', 'polishedBrass', 'polishedBrass'], 'vermilionBall', ['blackenedSteel', 'blackenedSteel', 'nickel'], ['walnut', 'walnut', 'walnutEnd'], 'leather'),
+      A(['walnut', 'feltBlack', 'walnutEnd'], ['nickel', 'nickel', 'polishedBrass'], 'vermilionBall', ['polishedBrass', 'polishedBrass', 'nickel'], ['ebony', 'ebony', 'ebony'], 'leather'),
     ],
     grade: { contrast: 1.06, saturation: 1.0, shadows: [0.95, 0.98, 1.06], highlights: [1.05, 1.0, 0.93], exposure: 1.35 },
   },
@@ -53,8 +55,8 @@ export const MOODS = {
     key: { az: [-1.9, -1.2], el: [0.62, 0.8], angle: 0.6, penumbra: 0.8 }, style: 'carved',
     cam: { el: [0.62, 0.86], az: [-0.35, 0.35], fill: 0.84 },
     accords: [
-      A(['marble', 'marble', 'marble'], ['marble', 'marble', 'marble'], 'obsidian', ['nickel', 'nickel', 'chrome'], ['marble', 'marble', 'marble'], 'plaster'),
-      A(['marble', 'bone', 'marble'], ['marble', 'marble', 'marble'], 'blackCeramic', ['rawTitanium', 'rawTitanium', 'chrome'], ['bone', 'bone', 'bone'], 'plaster'),
+      A(['marble', 'marble', 'marble'], ['marble', 'marble', 'marble'], 'vermilionBall', ['nickel', 'nickel', 'chrome'], ['marble', 'marble', 'marble'], 'plaster'),
+      A(['marble', 'bone', 'marble'], ['marble', 'marble', 'marble'], 'vermilionBall', ['rawTitanium', 'rawTitanium', 'chrome'], ['bone', 'bone', 'bone'], 'plaster'),
     ],
     grade: { contrast: 0.98, saturation: 0.88, shadows: [0.98, 1.0, 1.03], highlights: [1, 1, 1], exposure: 1 },
   },
@@ -63,8 +65,8 @@ export const MOODS = {
     key: { az: [-3.0, -2.75], el: [0.22, 0.34], angle: 0.36, penumbra: 0.35 }, style: 'strip',
     cam: { el: [0.24, 0.4], az: [-0.25, 0.4], fill: 0.9 },
     accords: [
-      A(['lacquerBlack', 'lacquerRed', 'lacquerBlack'], ['lacquerRed', 'lacquerRed', 'polishedGold'], 'porcelain', ['blackenedSteel', 'blackenedSteel', 'polishedGold'], ['lacquerBlack', 'lacquerBlack', 'lacquerBlack'], 'ebony'),
-      A(['lacquerRed', 'lacquerBlack', 'lacquerRed'], ['lacquerBlack', 'lacquerBlack', 'polishedGold'], 'porcelain', ['blackenedSteel', 'blackenedSteel', 'polishedGold'], ['ebony', 'ebony', 'ebony'], 'ebony'),
+      A(['lacquerBlack', 'lacquerRed', 'lacquerBlack'], ['lacquerRed', 'lacquerRed', 'polishedGold'], 'vermilionBall', ['blackenedSteel', 'blackenedSteel', 'polishedGold'], ['lacquerBlack', 'lacquerBlack', 'lacquerBlack'], 'ebony'),
+      A(['bone', 'lacquerBlack', 'bone'], ['lacquerBlack', 'lacquerBlack', 'polishedGold'], 'vermilionBall', ['blackenedSteel', 'blackenedSteel', 'polishedGold'], ['ebony', 'ebony', 'ebony'], 'ebony'),
     ],
     grade: { contrast: 1.1, saturation: 1.02, shadows: [0.97, 0.95, 1.04], highlights: [1.03, 1.0, 0.97], exposure: 1.7 },
   },
@@ -73,8 +75,8 @@ export const MOODS = {
     key: { az: [-1.2, -0.6], el: [0.8, 1.0], angle: 0.6, penumbra: 0.9 }, style: 'strip',
     cam: { el: [0.7, 0.95], az: [-0.3, 0.3], fill: 0.82 },
     accords: [
-      A(['slateHoned', 'slate', 'slate'], ['bone', 'bone', 'bone'], 'polishedBrass', ['brushedSteel', 'brushedSteel', 'chrome'], ['oak', 'oak', 'oak'], 'oakTable'),
-      A(['slate', 'feltBlack', 'slate'], ['bone', 'bone', 'nickel'], 'steelBall', ['brushedSteel', 'brushedSteel', 'chrome'], ['ash', 'ash', 'ash'], 'oakTable'),
+      A(['slateHoned', 'slate', 'slate'], ['bone', 'bone', 'bone'], 'vermilionBall', ['brushedSteel', 'brushedSteel', 'chrome'], ['oak', 'oak', 'oak'], 'oakTable'),
+      A(['slate', 'feltBlack', 'slate'], ['bone', 'bone', 'nickel'], 'vermilionBall', ['brushedSteel', 'brushedSteel', 'chrome'], ['ash', 'ash', 'ash'], 'oakTable'),
     ],
     grade: { contrast: 1.02, saturation: 0.9, shadows: [0.94, 0.99, 1.08], highlights: [1.0, 1.0, 1.02], exposure: 1 },
   },
@@ -83,8 +85,8 @@ export const MOODS = {
     key: { az: [0.6, 1.3], el: [0.9, 1.2], angle: 0.7, penumbra: 0.95 }, style: 'carved',
     cam: { el: [0.48, 0.7], az: [-0.6, 0.6], fill: 0.72 },
     accords: [
-      A(['concrete', 'concrete', 'concrete'], ['concrete', 'concrete', 'concrete'], 'polishedCopper', ['rawSteel', 'rawSteel', 'brushedSteel'], ['oak', 'oak', 'oak'], 'concrete'),
-      A(['concrete', 'slate', 'concrete'], ['concrete', 'concrete', 'concrete'], 'obsidian', ['blackenedSteel', 'blackenedSteel', 'brushedSteel'], ['concrete', 'concrete', 'concrete'], 'concrete'),
+      A(['concrete', 'concrete', 'concrete'], ['concrete', 'concrete', 'concrete'], 'vermilionBall', ['rawSteel', 'rawSteel', 'brushedSteel'], ['oak', 'oak', 'oak'], 'concrete'),
+      A(['concrete', 'slate', 'concrete'], ['concrete', 'concrete', 'concrete'], 'vermilionBall', ['blackenedSteel', 'blackenedSteel', 'brushedSteel'], ['concrete', 'concrete', 'concrete'], 'concrete'),
     ],
     grade: { contrast: 1.0, saturation: 0.8, shadows: [0.97, 1.0, 1.04], highlights: [1, 1, 1], exposure: 1 },
   },
@@ -93,8 +95,8 @@ export const MOODS = {
     key: { az: [1.9, 2.5], el: [0.55, 0.75], angle: 0.32, penumbra: 0.15 }, style: 'carved',
     cam: { el: [0.4, 0.62], az: [-0.45, 0.45], fill: 0.86 },
     accords: [
-      A(['celadon', 'bone', 'celadon'], ['celadon', 'celadon', 'celadon'], 'polishedCopper', ['bronzeDark', 'bronzeDark', 'polishedBrass'], ['ash', 'ash', 'ash'], 'linen'),
-      A(['celadon', 'celadon', 'bone'], ['celadon', 'celadon', 'celadon'], 'obsidian', ['nickel', 'nickel', 'chrome'], ['oak', 'oak', 'oak'], 'linen'),
+      A(['celadon', 'bone', 'celadon'], ['celadon', 'celadon', 'celadon'], 'vermilionBall', ['bronzeDark', 'bronzeDark', 'polishedBrass'], ['ash', 'ash', 'ash'], 'linen'),
+      A(['celadon', 'celadon', 'bone'], ['celadon', 'celadon', 'celadon'], 'vermilionBall', ['nickel', 'nickel', 'chrome'], ['oak', 'oak', 'oak'], 'linen'),
     ],
     grade: { contrast: 1.04, saturation: 0.95, shadows: [0.96, 0.98, 1.04], highlights: [1.04, 1.01, 0.95], exposure: 1 },
   },

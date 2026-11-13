@@ -75,13 +75,15 @@ Le fond est neutre, une nappe mate qui se fond dans la brume. Chaque humeur se d
 | Humeur | Plateau / parois | Support | Lumière | Valeur |
 | --- | --- | --- | --- | --- |
 | Cabinet | noyer verni, filets de laiton ou de nickel, feutre dans la rigole | sous-main de cuir | lampe de bureau de côté, ombres longues | basse |
-| Carrare | marbre taillé dans la masse, bille d'obsidienne | plâtre, cyclorama clair | haute et douce | très haute |
-| Laque | laque noire et vermillon, poteaux dorés, bille de porcelaine | ébène | rasante et dure, d'un seul côté | très basse |
+| Carrare | marbre taillé dans la masse | plâtre, cyclorama clair | haute et douce | très haute |
+| Laque | laque noire et vermillon, ou os et laque noire, poteaux dorés | ébène | rasante et dure, d'un seul côté | très basse |
 | Ardoise | ardoise adoucie, parois d'os | plateau de chêne | fenêtre au nord, douce et froide | moyenne |
-| Béton | béton banché taillé, bille de cuivre ou d'obsidienne | bloc de béton | ciel couvert | moyenne, froide |
+| Béton | béton banché taillé | bloc de béton | ciel couvert | moyenne, froide |
 | Céladon | céramique céladon craquelée, taillée | lin | soleil dur par une fenêtre | haute |
 
 Les disques dressés sont toujours éclairés en lumière rasante de côté (la lampe à 55–75° de leur normale), pour que les parois portent leurs ombres sur la face. La bille tranche en valeur sur son fond, et un test le vérifie : obsidienne ou céramique noire sur les fonds clairs, porcelaine sur la laque, métal poli sur les fonds sombres. Une bille d'acier poli sur le céladon le reflétait et disparaissait.
+
+**La bille est vermillon dans toutes les humeurs** (acier émaillé, vernis brillant) : c'est le fil rouge de la collection, et c'est elle que l'œil suit. Elle tranchait autrefois en valeur (obsidienne, porcelaine, acier poli selon le fond) ; elle tranche maintenant par la teinte, la saturation ou la valeur, et le test le vérifie sur chaque accord : un fond de laque rouge, où elle se perdait, est devenu de l'os.
 
 **Matières** : finitions au F0 mesuré du dépôt, plus un motif bois (cernes ondulés autour d'un axe parallèle au fil, bois final plus sombre et plus mat, pores en traits fins) pour le noyer, le chêne, le frêne, l'ébène. S'y ajoutent feutre, cuir, lin, béton, ardoise (veinage discret : un relief de piqûres la faisait passer pour du métal martelé), laques, céladon, os.
 
