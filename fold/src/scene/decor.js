@@ -135,7 +135,7 @@ export function backdropMaterial(kind, U) {
     m.sheenRoughnessNode = float(0.35);
     rough = float(0.98);
   } else {
-    // cyclorama blanc
+    // cyclorama blanc (Planche), ou carton gris moyen (Blossfeldt, « card ») : la teinte est celle du fond de l’humeur
     color = vec3(U.base);
     emit = vec3(U.base).mul(U.wall).mul(0.3);
     rough = float(0.95);
