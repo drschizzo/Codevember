@@ -8,8 +8,10 @@ import * as THREE from 'three/webgpu';
 import {
   Fn, attribute, uniformArray, uniform, float, vec2, vec3, vec4, instanceIndex, positionLocal, positionPrevious, normalLocal, positionGeometry,
   normalize, mix, smoothstep, clamp, sin, cos, abs, max as tmax, min as tmin, varying, color, hash, fract, length, pow, sqrt, select, dot, normalGeometry, normalWorld,
+  normalView, positionViewDirection, normalViewGeometry,
 } from 'three/tsl';
-import { stableVelocity, isLite, worley, noise, ditherThreshold } from '../../../shared/scene/materials.js';
+import { stableVelocity, isLite, worley, noise, NZ, ditherThreshold, perturb } from '../../../shared/scene/materials.js';
+
 import { fruitState } from '../fruit.js';
 
 const sst = (a, b, x) => smoothstep(float(a), float(b), x);
@@ -51,18 +53,51 @@ export function createSporangia(ctx) {
   const yc = float(round ? D.headC : D.stalkH + D.headH / 2);
   const top = float(D.top);
   const isPart = (k) => abs(part.sub(k)).lessThan(0.5);
+  // (le filet : la coque, partie 3, et ses fibres, partie 7)
+  const isNetP = isPart(3).or(isPart(7));
   const hsh = (x) => fract(sin(x.mul(12.9898).add(4.1)).mul(43758.5453));
+
+  // 0. l'individu : aucun sporange n'est la copie d'un autre. Tête bosselée
+  // (bruit basse fréquence de la direction, tiré par sporange), Trichia en
+  // toupie (la tête s'effile vers le pied), pied cannelé et vrillé,
+  // hypothallus en membrane lobée, plus large que le pied et qui rejoint
+  // celle des voisins. Ne dépend pas de l'instant : calculé une fois pour les
+  // deux poses (courante et précédente), avec une seule lecture de bruit.
+  const shaped = (() => {
+    const p0 = positionGeometry;
+    const headPart = isPart(2).or(isNetP).or(isPart(4)).or(isPart(6));
+    const q = p0.sub(vec3(0, yc, 0));
+    const dq = normalize(q.add(vec3(0, 1e-5, 0)));
+    const ang = tp.w.mul(Math.PI * 2);
+    const seed = vec3(a1.y.mul(17.3), a1.w.mul(3.1), a1.x.mul(1.7));
+    // (une lecture : la direction pour la tête, l'angle pour l'hypothallus)
+    const at = isPart(0).select(vec3(cos(ang).mul(1.6), sin(ang).mul(1.6), a1.y.mul(9)), dq.mul(1.7).add(seed));
+    const nz4 = NZ(at).level(0);
+    const lump = nz4.x.mul(0.75).add(nz4.y.mul(0.25));
+    const amp = fam === 'stemonitis' ? 0.05 : fam === 'lycogala' ? 0.09 : 0.075;
+    let qk = q.mul(lump.mul(amp).add(1));
+    if (fam === 'trichia') {
+      const t = clamp(q.y.negate().div(D.headR), 0, 1).pow(1.4);
+      qk = vec3(qk.x.mul(float(1).sub(t.mul(0.38))), qk.y.mul(t.mul(0.32).add(1)), qk.z.mul(float(1).sub(t.mul(0.38))));
+    }
+    // pied : cannelures vrillées
+    const flute = cos(ang.mul(7).add(hy.mul(4)).add(a1.y.mul(20))).mul(0.1).add(1);
+    const lobes = nz4.x.mul(0.5).add(1.5);
+    return headPart.select(vec3(0, yc, 0).add(qk),
+      isPart(1).select(vec3(p0.x.mul(flute), p0.y, p0.z.mul(flute)),
+        isPart(0).select(vec3(p0.x.mul(lobes), p0.y.mul(0.7), p0.z.mul(lobes)), p0)));
+  })();
 
   // le gabarit à la pose (s, b) d'un sporange : renvoie [position, normale] locales
   const pose = (S4, B4, write) => {
     const grow = S4.x, mature = S4.y, open = S4.z, wear = S4.w, bead = B4.z;
-    let p = positionGeometry.toVar(), nn = normalGeometry.toVar();
+    let p = shaped.toVar(), nn = normalGeometry.toVar();
     // 1. le geste d'ouverture propre à la famille (sur la forme mûre)
     if (fam === 'arcyria') {
       const e = open.add(sin(open.mul(Math.PI)).mul(0.18).mul(float(1).sub(open)));
       const E = float(1).add(float(sp.expand - 1).mul(e));
       const above = tmax(p.y.sub(D.cupTop), 0);
-      const isNet = isPart(3);
+      const isNet = isNetP;
       const ny = float(D.cupTop).add(above.mul(E));
       const rr = float(1).add(e.mul(0.28).mul(sst(D.cupTop - 0.005, D.cupTop + 0.02, p.y)));
       p.assign(isNet.select(vec3(p.x.mul(rr), ny, p.z.mul(rr)), p));
@@ -77,9 +112,9 @@ export function createSporangia(ctx) {
       const ol = clamp(open.mul(1.7).sub(float(1).sub(hy).mul(0.7)), 0, 1);
       const k2 = float(1).sub(ol.mul(0.78));
       p.assign(isPart(2).select(vec3(p.x.mul(k2), p.y, p.z.mul(k2)), p));
-      // la cage n'apparaît qu'à maturité (avant, elle est dans la masse)
-      const k3 = mix(float(0.8), float(1), sst(0.55, 0.95, mature));
-      p.assign(isPart(3).select(vec3(p.x.mul(k3), p.y, p.z.mul(k3)), p));
+      // la cage reste dehors : un filet fin sur la masse, qui s'ajoure quand
+      // la masse part (rentrée dans la masse puis ressortie, elle la
+      // traversait et dessinait des bandes sombres sur les têtes)
     } else if (fam === 'lamproderma' || fam === 'trichia') {
       // écailles : chacune se détache à son instant, s'écarte et tombe
       const tf = hsh(tp.z.mul(97).add(a1.y.mul(31))).mul(0.55).add(0.08);
@@ -90,19 +125,19 @@ export function createSporangia(ctx) {
       if (fam === 'lamproderma') {
         // la masse sombre s'effrite au vent
         const k3 = float(1).sub(sst(0.35, 1, open).mul(0.55));
-        p.assign(isPart(3).select(vec3(p.x.mul(k3), float(D.headC).add(p.y.sub(D.headC).mul(k3)), p.z.mul(k3)), p));
+        p.assign(isNetP.select(vec3(p.x.mul(k3), float(D.headC).add(p.y.sub(D.headC).mul(k3)), p.z.mul(k3)), p));
       } else {
         // Trichia : les élatères comprimés jaillissent en houppe ronde (rebond)
         const e = open.add(sin(open.mul(Math.PI)).mul(0.22).mul(float(1).sub(open)));
         const E = float(1).add(float(sp.expand - 1).mul(e));
         const q3 = p.sub(vec3(0, D.headC, 0));
         const lifted = vec3(0, float(D.headC).add(q3.y.max(0).mul(E.sub(1)).mul(0.25)), 0);
-        p.assign(isPart(3).select(lifted.add(vec3(q3.x.mul(E), q3.y.mul(E), q3.z.mul(E))), p));
+        p.assign(isNetP.select(lifted.add(vec3(q3.x.mul(E), q3.y.mul(E), q3.z.mul(E))), p));
       }
     } else if (fam === 'lycogala') {
       // le coussin se dégonfle à mesure que les rafales l'aspirent
       const k3 = float(1).sub(sst(0.1, 1, open).mul(0.42));
-      p.assign(isPart(3).select(vec3(p.x.mul(k3.mul(0.5).add(0.5)), p.y.mul(k3), p.z.mul(k3.mul(0.5).add(0.5))), p));
+      p.assign(isNetP.select(vec3(p.x.mul(k3.mul(0.5).add(0.5)), p.y.mul(k3), p.z.mul(k3.mul(0.5).add(0.5))), p));
       const k2 = float(1).sub(sst(0.2, 1, open).mul(0.16));
       p.assign(isPart(2).select(vec3(p.x, p.y.mul(k2), p.z), p));
     }
@@ -110,13 +145,22 @@ export function createSporangia(ctx) {
     const dc = p.sub(nn.mul(tp.z));
     p.assign(isPart(6).select(dc.add(nn.mul(tp.z.mul(uDew).mul(hsh(tp.w.mul(17).add(a1.y)).mul(0.6).add(0.6)))), p));
     // 2. la levée : perle (sphère de rayon rb posée) → sporange dressé
-    const rb = float(D.beadR).mul(tmax(bead, 0.001).pow(1 / 3));
+    // (avant la condensation, la perle n'existe pas : bornée à 0,001 de son
+    // volume, elle restait une bille de 10 % de son rayon — des points blancs
+    // semés sur le bois nu)
+    const rb = float(D.beadR).mul(tmax(bead, 1e-6).pow(1 / 3)).mul(sst(0, 0.04, bead));
     const lift = sst(0, 0.85, grow);
     const cNow = mix(rb.mul(0.78), yc, lift);                    // centre de la tête
     const m = sst(0.3, 1, grow);                                  // forme de la tête
-    const isHead = isPart(2).or(isPart(3)).or(isPart(4)).or(isPart(6));
+    const isHead = isPart(2).or(isNetP).or(isPart(4)).or(isPart(6));
     const q = p.sub(vec3(0, yc, 0));
-    const qs = normalize(q.add(vec3(0, 1e-5, 0))).mul(rb);
+    // (perle : la tête repliée en sphère. Les pièces internes — filet, fibres,
+    // columelle — restent un peu en dedans, sinon elles affleurent la même
+    // sphère que le péridium et s'y battent ; chaque goutte de rosée garde sa
+    // forme, posée sur la perle au-dessus de son centre)
+    const inner = isNetP.or(isPart(5)).select(float(0.92), float(1));
+    const qsDew = normalize(dc.sub(vec3(0, yc, 0)).add(vec3(0, 1e-5, 0))).mul(rb).add(p.sub(dc));
+    const qs = isPart(6).select(qsDew, normalize(q.add(vec3(0, 1e-5, 0))).mul(rb).mul(inner));
     const headP = vec3(0, cNow, 0).add(mix(qs, q, m));
     const stemK = cNow.div(yc);
     const stemW = sst(0.05, 0.5, grow);
@@ -124,7 +168,11 @@ export function createSporangia(ctx) {
     const hypK = sst(0, 1, bead);
     const hypP = vec3(p.x.mul(hypK), p.y, p.z.mul(hypK));
     p.assign(isHead.select(headP, isPart(0).select(hypP, stemP)));
-    nn.assign(isHead.select(normalize(mix(normalize(q.add(vec3(0, 1e-5, 0))), nn, m)), nn));
+    nn.assign(isHead.and(isPart(6).not()).select(normalize(mix(normalize(q.add(vec3(0, 1e-5, 0))), nn, m)), nn));
+    // (le pied n'est jamais une baguette : il s'arque un peu, d'un côté tiré
+    // par sporange ; ses deux bouts restent en place)
+    const bow = sin(hy.clamp(0, 1).mul(Math.PI)).mul(float(D.stalkH).mul(a1.y.mul(0.05).add(0.025))).mul(lift);
+    p.assign(isPart(1).select(p.add(vec3(cos(a1.x.add(1.3)).mul(bow), 0, sin(a1.x.add(1.3)).mul(bow))), p));
     // 3. l'usure : le sporange vide s'effrite (rétrécit vers son pied)
     const crumble = float(1).sub(sst(0.7, 1, wear));
     p.assign(p.mul(crumble));
@@ -151,7 +199,9 @@ export function createSporangia(ctx) {
     return p.add(base);
   };
 
-  const mat = new THREE.MeshPhysicalNodeMaterial();
+  // (matériau à diffusion sous la surface : une perle jeune est une goutte de
+  // protoplasme laiteux que la lumière traverse)
+  const mat = new THREE.MeshSSSNodeMaterial();
   mat.positionNode = Fn(() => {
     const q = pose(st.element(instanceIndex), bd.element(instanceIndex), true);
     if (!isLite()) positionPrevious.assign(pose(stP.element(instanceIndex), bdP.element(instanceIndex), false));
@@ -163,15 +213,17 @@ export function createSporangia(ctx) {
   const K = sp.colors;
   const grow = vSt.x, mature = vSt.y, open = vSt.z, wear = vSt.w, P = vTp.x, hy2 = vTp.y;
   const is = (k) => abs(P.sub(k)).lessThan(0.5);
+  const isNetF = is(3).or(is(7));
   const ripe = (k) => mix(mix(C(K.young), C(K.mid), sst(0, 0.4, mature)), C(k), sst(0.35, 0.85, mature));
   // couleurs par partie
-  const stalkC = mix(C(K.young), C(K.stalk), sst(0.1, 0.8, mature));
+  // (le pied se teinte avant la tête : sécrété d'abord, il sèche le premier)
+  const stalkC = mix(C(K.young), C(K.stalk), sst(0.0, 0.5, mature));
   let headC = ripe(K.ripe);
   const netC = mix(ripe(K.net), C(K.net).mul(1.15), open);
   const hypoC = mix(C(ctx.sp.plasmodium), C(K.hypo), sst(0, 0.8, mature));
   // l'usure pâlit tout (les spores parties, le soleil)
   const pale = (c) => mix(c, c.mul(0.6).add(vec3(0.22, 0.2, 0.18)), wear.mul(0.7));
-  let col = is(0).select(hypoC, is(1).or(is(5)).select(stalkC, is(3).select(netC, is(4).select(ripe(K.ripe).mul(0.8), headC))));
+  let col = is(0).select(hypoC, is(1).or(is(5)).select(stalkC, isNetF.select(netC, is(4).select(ripe(K.ripe).mul(0.8), headC))));
   // marbrure : les têtes ne sont jamais d'une teinte unie (masse de spores
   // granuleuse, verrues du péridium)
   const mott = noise(positionGeometry.mul(160).add(vec3(vRnd.mul(13), 0, 0))).mul(0.16).add(noise(positionGeometry.mul(45)).mul(0.1)).add(1);
@@ -179,16 +231,38 @@ export function createSporangia(ctx) {
   // Stemonitis : la masse qui fume s'éclaircit ; Arcyria : le filet détendu est un coton lumineux
   mat.colorNode = pale(col);
   const wet = float(1).sub(sst(0.1, 0.6, mature));
-  mat.roughnessNode = mix(float(0.62), float(0.28), wet).add(is(1).select(float(-0.3), float(0)).mul(sp.whiteStalk ? 0 : 1)).clamp(0.12, 0.95);
-  mat.clearcoatNode = wet.mul(wet).mul(0.9);
-  mat.clearcoatRoughnessNode = float(0.08);
+  // (vernis humide léger et pas tout à fait lisse : un vernis miroir reflétait
+  // le studio — haut clair, horizon noir — et les perles devenaient des billes
+  // de chrome ou de verre)
+  mat.roughnessNode = mix(float(0.62), float(0.34), wet).add(is(1).select(float(-0.15), float(0)).mul(sp.whiteStalk ? 0 : 1)).clamp(0.25, 0.95);
+  mat.clearcoatNode = wet.mul(wet).mul(0.4);
+  mat.clearcoatRoughnessNode = float(0.2);
   mat.metalnessNode = float(0);
-  mat.sheenNode = is(3).select(float(1), float(0)).mul(mature);
+  mat.sheenNode = isNetF.select(float(1), float(0)).mul(mature);
   mat.sheenColorNode = netC;
   mat.sheenRoughnessNode = float(0.5);
   // translucidité des perles jeunes (lumière qui ressort teintée)
   // translucidité des perles jeunes ; coton du filet détendu (lumière diffusée dans les fibres)
-  mat.emissiveNode = col.mul(col).mul(0.12).mul(wet).add(is(3).select(netC.mul(netC).mul(0.08).mul(open), vec3(0)));
+  mat.emissiveNode = col.mul(col).mul(0.04).mul(wet).add(isNetF.select(netC.mul(netC).mul(0.08).mul(open), vec3(0)));
+  // translucidité (Barré-Brisebois) : forte sur les perles et les têtes
+  // jeunes, éteinte à maturité ; le pied jeune et l'hypothallus en gardent un peu
+  const headF = is(2).or(is(4)).select(float(1), float(0)), thinF = is(0).or(is(1)).select(float(0.5), float(0));
+  // (le coton du filet et les élatères ouverts s'allument à contre-jour)
+  mat.thicknessColorNode = col.mul(wet.mul(headF.add(thinF))).mul(0.9).add(netC.mul(isNetF.select(float(0.25), float(0)).mul(open)));
+  mat.thicknessDistortionNode = float(0.18);
+  mat.thicknessAmbientNode = float(0.02);
+  mat.thicknessAttenuationNode = float(0.9);
+  mat.thicknessPowerNode = float(3);
+  mat.thicknessScaleNode = float(5);
+  // micro-relief : verrues du péridium (plus fortes chez Lycogala), stries du
+  // pied ; rien sur les gouttes
+  {
+    const g = positionGeometry, rk = vec3(vRnd.mul(31), 0, 0);
+    const wart = fam === 'lycogala' ? float(1).sub(NZ(g.mul(55).add(rk)).z.clamp(0, 1)).pow(3).mul(0.0035) : noise(g.mul(230).add(rk)).mul(0.0004).add(noise(g.mul(700).add(rk)).mul(0.00012));
+    const stri = noise(vec3(g.x.mul(900), g.y.mul(60), g.z.mul(900)).add(rk)).mul(0.00008);
+    const hM = mix(float(0), wart, headF).add(mix(float(0), stri, is(1).select(float(1), float(0))));
+    mat.normalNode = perturb(hM.mul(float(1).sub(wet.mul(0.6))), normalViewGeometry);
+  }
   if (fam === 'lamproderma') {
     // péridium lisse et brillant (la couche mince ne se voit que dans le reflet)
     mat.roughnessNode = is(2).select(mix(float(0.3), float(0.14), mature), mat.roughnessNode);
@@ -210,7 +284,7 @@ export function createSporangia(ctx) {
     const thread = cell.y.sub(cell.x);
     // (fils le long des bords de cellules : gardés si près d'un bord ; le
     // filet serré est plein, détendu il s'ajoure)
-    const w = fam === 'stemonitis' ? mix(float(1.2), float(0.08), sst(0.1, 0.8, open)) : mix(float(1.2), float(0.2), sst(0.05, 0.7, open));
+    const w = fam === 'stemonitis' ? mix(mix(float(1.2), float(0.3), sst(0.3, 0.8, mature)), float(0.08), sst(0.1, 0.8, open)) : mix(float(1.2), float(0.2), sst(0.05, 0.7, open));
     andKeep(is(3).not().or(thread.lessThan(w)));
   }
   if (fam === 'lamproderma' || fam === 'trichia') {
@@ -218,6 +292,24 @@ export function createSporangia(ctx) {
     const tf = hsh(vTp.z.mul(97).add(vRnd.mul(31))).mul(0.55).add(0.08);
     const f = clamp(open.sub(tf).div(0.3), 0, 1);
     andKeep(is(2).not().or(f.lessThan(ditherThreshold(3).mul(0.25).add(0.75))));
+    // l'écaille du pixel (Voronoï des germes du gabarit) : chaque copie d'un
+    // quadrilatère de bord ne garde que les pixels de son écaille ; près
+    // d'une frontière, la ligne de déhiscence fonce à maturité
+    if (D.flakes) {
+      const dq = normalize(positionGeometry.sub(vec3(0, D.headC, 0)));
+      let bd = float(-2), sd = float(-2), bi = float(0);
+      D.flakes.forEach((c, k) => {
+        const v = dot(dq, vec3(...c));
+        const win = v.greaterThan(bd);
+        sd = win.select(bd, tmax(sd, v));
+        bi = win.select(float(k), bi);
+        bd = tmax(bd, v);
+      });
+      const own = vTp.z.mul(D.flakes.length).floor();
+      andKeep(is(2).not().or(abs(bi.sub(own)).lessThan(0.5)));
+      const seam = float(1).sub(sst(0.004, 0.03, bd.sub(sd))).mul(sst(0.4, 0.9, mature)).mul(is(2).select(float(1), float(0)));
+      mat.colorNode = mat.colorNode.mul(float(1).sub(seam.mul(0.45)));
+    }
   }
   if (fam === 'lycogala') {
     // le sommet se perce : un trou irrégulier qui s'agrandit
@@ -225,21 +317,27 @@ export function createSporangia(ctx) {
     andKeep(is(2).not().or(hy2.lessThan(float(1).sub(open.mul(0.1).mul(nn.mul(0.8).add(0.6))))));
   }
   if (keep) mat.maskNode = keep;
-  // gouttes d'eau : noires et brillantes (elles ne montrent que ce qu'elles
-  // reflètent), avec la tache de lumière réfractée du côté opposé au soleil
+  // gouttes d'eau : claires. On voit au travers la tête qu'elles couvrent
+  // (un peu assombrie et grossie), cerclée d'un bord sombre où la goutte
+  // réfléchit le fond (Fresnel), avec un reflet net et, du côté opposé au
+  // soleil, la tache de lumière réfractée. (Noires, elles se lisaient comme
+  // des taches de moisissure.)
   {
-    const water = is(6);
+    const water = is(6), wF = water.select(float(1), float(0));
     const base = mat.colorNode;
-    mat.colorNode = water.select(vec3(0.07, 0.08, 0.09), base);
-    mat.roughnessNode = water.select(float(0.03), mat.roughnessNode);
-    mat.clearcoatNode = water.select(float(1), mat.clearcoatNode);
-    mat.sheenNode = water.select(float(0), mat.sheenNode);
-    const em = mat.emissiveNode;
     // (sans branche : une normale lue pour la première fois dans un select —
     // compilé en if/else — n'est calculée que dans une branche, et toutes les
     // autres faces s'éclairent avec une normale fausse)
-    const wE = uSunE.mul(smoothstep(0.45, 0.95, dot(normalize(normalWorld), uSunD.negate()))).mul(1.8).add(uSunE.mul(0.05));
-    mat.emissiveNode = mix(em, wE, water.select(float(1), float(0)));
+    const nv = clamp(dot(normalize(normalView), positionViewDirection), 0, 1);
+    const rimW = pow(float(1).sub(nv), 2.2);
+    const seen = base.mul(0.8).mul(float(1).sub(rimW.mul(0.85))).add(vec3(0.015));
+    mat.colorNode = mix(base, seen, wF);
+    mat.roughnessNode = mix(mat.roughnessNode, float(0.02), wF);
+    mat.clearcoatNode = mix(mat.clearcoatNode, float(1), wF);
+    mat.sheenNode = mix(mat.sheenNode, float(0), wF);
+    const em = mat.emissiveNode;
+    const wE = uSunE.mul(smoothstep(0.55, 0.97, dot(normalize(normalWorld), uSunD.negate()))).mul(2.6).add(base.mul(uSunE).mul(0.25).mul(nv));
+    mat.emissiveNode = mix(em, wE, wF);
   }
   mat.mrtNode = stableVelocity();
   const mesh = new THREE.Mesh(g, mat);

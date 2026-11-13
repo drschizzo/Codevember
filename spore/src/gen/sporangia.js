@@ -74,20 +74,114 @@ function hypothallus(M, R, th = 0.0012) {
   lathe(M, P, 0, 24, { y0: -0.0004, y1: th });
 }
 
-// sphère découpée en écailles (Voronoï de la sphère) : chaque triangle va à
-// l'écaille de son centre, sommets dupliqués par écaille
-function flakySphere(M, c, r, part, nFlakes, rng, res = 22) {
+// sphère découpée en écailles (Voronoï de la sphère). La frontière entre deux
+// écailles est tracée au pixel (le fragment retrouve son écaille d'après les
+// germes, scene/sporangia.js) : chaque quadrilatère est émis une fois par
+// écaille qui le touche (sommets dupliqués, étiquetés), et chaque copie ne
+// garde que ses propres pixels. (Une écaille par triangle donnait des bords
+// en escalier de la taille de la grille.)
+function flakySphere(M, c, r, part, nFlakes, rng, res = 26) {
   const centers = Array.from({ length: nFlakes }, () => { const z = rng.next() * 2 - 1, a = rng.next() * TAU, s = Math.sqrt(1 - z * z); return [s * Math.cos(a), z, s * Math.sin(a)]; });
   const flake = (d) => { let b = 0, bd = -2; centers.forEach((q, i) => { const v = q[0] * d[0] + q[1] * d[1] + q[2] * d[2]; if (v > bd) { bd = v; b = i; } }); return b; };
   const dir = (i, j) => { const th = (j / res) * Math.PI, ph = (i / (2 * res)) * TAU; return [Math.sin(th) * Math.cos(ph), -Math.cos(th), Math.sin(th) * Math.sin(ph)]; };
   for (let j = 0; j < res; j++) for (let i = 0; i < 2 * res; i++) {
     const q = [dir(i, j), dir(i + 1, j), dir(i + 1, j + 1), dir(i, j + 1)];
     const m = [(q[0][0] + q[2][0]) / 2, (q[0][1] + q[2][1]) / 2, (q[0][2] + q[2][2]) / 2];
-    const f = flake(m), tag = (f + 0.5) / nFlakes;
-    const vs = q.map((d) => M.v([c[0] + d[0] * r, c[1] + d[1] * r, c[2] + d[2] * r], d, [part, (d[1] + 1) / 2, tag, (i / (2 * res))]));
-    M.tri(vs[0], vs[2], vs[1]); M.tri(vs[0], vs[3], vs[2]);
+    // (les écailles qui touchent le quadrilatère : ses coins, son centre, ses milieux d'arêtes)
+    const probe = [...q, m, ...q.map((a, k) => { const b = q[(k + 1) % 4]; return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2]; })];
+    const fs = [...new Set(probe.map(flake))];
+    for (const f of fs) {
+      const tag = (f + 0.5) / nFlakes;
+      const vs = q.map((d) => M.v([c[0] + d[0] * r, c[1] + d[1] * r, c[2] + d[2] * r], d, [part, (d[1] + 1) / 2, tag, (i / (2 * res))]));
+      M.tri(vs[0], vs[2], vs[1]); M.tri(vs[0], vs[3], vs[2]);
+    }
   }
   return centers;
+}
+
+// fibre : tube fin (3 faces) le long d'une polyligne, normales du tube ;
+// tp = [part, hauteur relative (y0..y1), tirage, angle autour de l'axe]
+function tube(M, pts0, rad, part, tag, y0, y1) {
+  // (brin adouci par une passe de Chaikin : un coude vif replie le tube sur lui-même)
+  let pts = pts0;
+  for (let it = 0; it < 1; it++) {
+    const q = [pts[0]];
+    for (let k = 0; k + 1 < pts.length; k++) {
+      const a = pts[k], b = pts[k + 1];
+      q.push(a.map((x, i) => x * 0.75 + b[i] * 0.25), a.map((x, i) => x * 0.25 + b[i] * 0.75));
+    }
+    q.push(pts[pts.length - 1]); pts = q;
+  }
+  const n = pts.length, rows = [];
+  let u = null; // (repère transporté le long du brin : pas de torsion entre deux anneaux)
+  for (let k = 0; k < n; k++) {
+    const a = pts[Math.max(0, k - 1)], b = pts[Math.min(n - 1, k + 1)];
+    let t = [b[0] - a[0], b[1] - a[1], b[2] - a[2]]; const lt = Math.hypot(...t) || 1; t = t.map((x) => x / lt);
+    if (!u) { const ref = Math.abs(t[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0]; u = [t[1] * ref[2] - t[2] * ref[1], t[2] * ref[0] - t[0] * ref[2], t[0] * ref[1] - t[1] * ref[0]]; }
+    const dt = u[0] * t[0] + u[1] * t[1] + u[2] * t[2];
+    u = [u[0] - dt * t[0], u[1] - dt * t[1], u[2] - dt * t[2]]; const lu = Math.hypot(...u) || 1; u = u.map((x) => x / lu);
+    const v = [t[1] * u[2] - t[2] * u[1], t[2] * u[0] - t[0] * u[2], t[0] * u[1] - t[1] * u[0]];
+    const q = pts[k], rr = rad * (k === 0 || k === n - 1 ? 0.4 : 1), row = [];
+    const hy = (q[1] - y0) / Math.max(1e-6, y1 - y0), ang = (Math.atan2(q[2], q[0]) / TAU + 1) % 1;
+    for (let i = 0; i < 3; i++) {
+      const c = Math.cos((i / 3) * TAU), sn = Math.sin((i / 3) * TAU), d = [u[0] * c + v[0] * sn, u[1] * c + v[1] * sn, u[2] * c + v[2] * sn];
+      row.push(M.v([q[0] + d[0] * rr, q[1] + d[1] * rr, q[2] + d[2] * rr], d, [part, hy, tag, ang]));
+    }
+    rows.push(row);
+  }
+  for (let k = 0; k + 1 < n; k++) for (let i = 0; i < 3; i++) {
+    const a = rows[k][i], b = rows[k][(i + 1) % 3], c = rows[k + 1][(i + 1) % 3], d = rows[k + 1][i];
+    M.tri(a, b, c); M.tri(a, c, d);
+  }
+}
+
+// capillitium et élatères en fibres (partie 7 : elles suivent le filet, partie
+// 3, dans tous ses gestes). Le filet plein (une coque) donnait des têtes de
+// coton lisses ; les fibres dessinent le contour duveteux et, ouvertes, la
+// houppe ou le filet ajouré qu'on voit sur les photographies.
+//   net    : brins errants dans une capsule (Arcyria), surtout près de la paroi
+//   burst  : élatères courts, courbes, rayonnant du centre (Trichia)
+//   spokes : branches de la columelle à la surface (Stemonitis)
+function fibers(M, kind, rng, o) {
+  const P = (k) => rng.next() * k;
+  if (kind === 'net') {
+    const { r, y0, y1, n = 34, rad = 0.0006 } = o;
+    for (let f = 0; f < n; f++) {
+      let a = P(TAU), y = y0 + P(y1 - y0), rho = r * (0.6 + 0.4 * Math.sqrt(rng.next()));
+      const pts = [], da = (rng.next() - 0.5) * 0.5, dy = (rng.next() - 0.5) * (y1 - y0) * 0.09;
+      for (let k = 0; k < 14; k++) {
+        a += da + (rng.next() - 0.5) * 0.35; y = Math.min(y1, Math.max(y0, y + dy + (rng.next() - 0.5) * (y1 - y0) * 0.05));
+        rho = Math.min(r * 1.04, Math.max(r * 0.35, rho + (rng.next() - 0.5) * r * 0.18));
+        pts.push([Math.cos(a) * rho, y, Math.sin(a) * rho]);
+      }
+      tube(M, pts, rad, 7, rng.next(), y0, y1);
+    }
+  } else if (kind === 'burst') {
+    const { c, r, n = 64, rad = 0.0005, y0, y1 } = o;
+    for (let f = 0; f < n; f++) {
+      const z = rng.next() * 2 - 1, a = P(TAU), s = Math.sqrt(1 - z * z), d = [s * Math.cos(a), z, s * Math.sin(a)];
+      const r0 = r * (0.1 + 0.3 * rng.next()), r1 = r * (0.62 + 0.42 * rng.next());
+      // (élatères courbes et de longueurs inégales : droits et égaux, la houppe
+      // se lisait comme un oursin)
+      const curl = (rng.next() - 0.5) * 2.2, side = [d[2], 0, -d[0]];
+      const pts = [];
+      for (let k = 0; k < 6; k++) {
+        const t = k / 5, rr = r0 + (r1 - r0) * t, w = Math.sin(t * Math.PI) * curl * r * 0.25;
+        pts.push([c[0] + d[0] * rr + side[0] * w, c[1] + d[1] * rr + 0.15 * w, c[2] + d[2] * rr + side[2] * w]);
+      }
+      tube(M, pts, rad, 7, rng.next(), y0, y1);
+    }
+  } else if (kind === 'spokes') {
+    const { r, y0, y1, n = 40, rad = 0.0005 } = o;
+    for (let f = 0; f < n; f++) {
+      const y = y0 + (y1 - y0) * (0.08 + 0.84 * rng.next()), a = P(TAU), pts = [];
+      for (let k = 0; k < 6; k++) {
+        const t = k / 5, rr = r * 0.12 + (r * 1.02 - r * 0.12) * t, aa = a + 0.6 * t * t * (rng.next() - 0.5);
+        pts.push([Math.cos(aa) * rr, y + (rng.next() - 0.5) * r * 0.3 * t, Math.sin(aa) * rr]);
+      }
+      tube(M, pts, rad, 7, rng.next(), y0, y1);
+    }
+  }
 }
 
 // Gabarit d'une espèce ; renvoie aussi les cotes utiles au shader
@@ -108,6 +202,7 @@ export function buildTemplate(familyKey, sp, seed = 't') {
     // péridium (le haut, fugace) et capillitium serré dedans, du calice au sommet
     lathe(M, capsuleProfile(r, H + ct * 0.6, H + hh, 0.15, 0.85), 2, 30, { y0: H + ct * 0.6, y1: H + hh });
     lathe(M, capsuleProfile(r * 0.93, H + ct * 0.5, H + hh * 0.98, 0.1, 0.8, 22), 3, 30, { y0: H + ct * 0.5, y1: H + hh });
+    fibers(M, 'net', rng, { r: r * 0.93, y0: H + ct * 0.55, y1: H + hh * 0.97 });
     dims.netR = r * 0.93;
   } else if (familyKey === 'stemonitis') {
     stalk(M, H, sp.stalk.r, sp.stalk.r * 0.7);
@@ -117,6 +212,7 @@ export function buildTemplate(familyKey, sp, seed = 't') {
     const kb = sp.label.startsWith('Comatricha') ? 0.9 : 0.6, kt = sp.label.startsWith('Comatricha') ? 1 : 0.9;
     lathe(M, capsuleProfile(r, H, H + hh, kb, kt, 26), 2, 26, { y0: H, y1: H + hh });
     lathe(M, capsuleProfile(r * 1.05, H - r * 0.05, H + hh + r * 0.05, kb, kt, 26), 3, 26, { y0: H, y1: H + hh });
+    fibers(M, 'spokes', rng, { r: r * 1.0, y0: H, y1: H + hh });
     dims.netR = r * 1.05;
   }
   if (familyKey === 'lamproderma') {
@@ -124,7 +220,7 @@ export function buildTemplate(familyKey, sp, seed = 't') {
     const c = [0, H + r * 0.92, 0];
     dims.top = H + r * 1.92; dims.headH = r * 2; dims.headC = c[1];
     lathe(M, [[sp.stalk.r * 0.5, H - 0.001], [sp.stalk.r * 0.4, c[1]], [1e-4, c[1] + r * 0.45]], 5, 8, { y0: H, y1: c[1] + r * 0.45 });
-    flakySphere(M, c, r, 2, 26, rng);
+    dims.flakes = flakySphere(M, c, r, 2, 26, rng);
     // masse de spores sombre, un peu plus petite, et son filet de capillitium
     lathe(M, Array.from({ length: 13 }, (_, i) => { const a = -Math.PI / 2 + (i / 12) * Math.PI; return [Math.max(1e-4, Math.cos(a) * r * 0.9), c[1] + Math.sin(a) * r * 0.9]; }), 3, 24, { y0: c[1] - r * 0.9, y1: c[1] + r * 0.9 });
     dims.netR = r * 0.9;
@@ -135,8 +231,11 @@ export function buildTemplate(familyKey, sp, seed = 't') {
     if (H > 0.02) stalk(M, H, sp.stalk.r, sp.stalk.r * 0.8);
     const c = [0, H + r * 0.95, 0];
     dims.headC = c[1]; dims.top = c[1] + r; dims.headH = r * 2;
-    flakySphere(M, c, r, 2, 14, rng);
-    lathe(M, Array.from({ length: 13 }, (_, i) => { const a = -Math.PI / 2 + (i / 12) * Math.PI; return [Math.max(1e-4, Math.cos(a) * r * 0.93), c[1] + Math.sin(a) * r * 0.93]; }), 3, 26, { y0: c[1] - r, y1: c[1] + r });
+    dims.flakes = flakySphere(M, c, r, 2, 14, rng);
+    // (masse d'élatères : un cœur un peu plus petit, d'où les fibres dépassent)
+    // (un cœur petit : la houppe est faite des fibres, pas d'une coque lisse)
+    lathe(M, Array.from({ length: 13 }, (_, i) => { const a = -Math.PI / 2 + (i / 12) * Math.PI; return [Math.max(1e-4, Math.cos(a) * r * 0.6), c[1] + Math.sin(a) * r * 0.6]; }), 3, 26, { y0: c[1] - r, y1: c[1] + r });
+    fibers(M, 'burst', rng, { c, r: r * 0.97, n: 100, rad: 0.00045, y0: c[1] - r, y1: c[1] + r });
     dims.netR = r * 0.93;
   } else if (familyKey === 'lycogala') {
     // coussin sans pied (æthalium) : un dôme aplati posé, verruqueux ; la
@@ -155,7 +254,7 @@ export function buildTemplate(familyKey, sp, seed = 't') {
     const nd = familyKey === 'lycogala' ? 22 : familyKey === 'stemonitis' ? 10 : 7;
     const round = familyKey === 'lamproderma' || familyKey === 'trichia' || familyKey === 'lycogala';
     for (let q = 0; q < nd; q++) {
-      const a = rng.next() * TAU, rd = r * (familyKey === 'lycogala' ? 0.05 + 0.08 * rng.next() : 0.14 + 0.12 * rng.next());
+      const a = rng.next() * TAU, rd = r * (familyKey === 'lycogala' ? 0.05 + 0.08 * rng.next() : 0.07 + 0.08 * rng.next()); // (fines : grosses, elles faisaient des oreilles aux têtes)
       let c, n;
       if (round) {
         const el = 0.15 + rng.next() * 1.25, cy = dims.headC, ry = familyKey === 'lycogala' ? hh / 2 : r;

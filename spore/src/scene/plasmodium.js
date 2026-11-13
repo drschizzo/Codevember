@@ -18,13 +18,16 @@ export const H_FRONT = 0.028, H_FILM = 0.005; // (cm : 0,28 mm au front, 50 µm 
 
 // épaisseur de la nappe selon l'âge (phase depuis l'arrivée du front) et la phase
 export function sheetThickness(age, s) {
-  const rise = sst(0, 0.004, age);
+  // (bord en ménisque : la nappe s'épaissit sur une courte distance derrière le front)
+  const rise = sst(0, 0.009, age);
   const thin = mix(float(H_FRONT), float(H_FILM), sst(0.02, 0.075, age));
   const condense = float(1).sub(sst(TL.condense[0], TL.condense[1], s).mul(0.85));
   return rise.mul(thin).mul(condense).mul(age.greaterThan(0).select(1, 0));
 }
 // battement : onde qui part de l'arrière (T petit) vers le front, période ~1,6 s
-const pulse = (s, Tm, amp) => sin(s.mul(25).sub(Tm.mul(160))).mul(amp).mul(sst(0.1, 0.16, s)).mul(float(1).sub(sst(0.4, 0.47, s)));
+// (longueur d'onde de plusieurs millimètres le long des veines : plus courte, elles
+// se lisaient comme des chapelets de saucisses)
+const pulse = (s, Tm, amp) => sin(s.mul(25).sub(Tm.mul(70))).mul(amp).mul(sst(0.1, 0.16, s)).mul(float(1).sub(sst(0.4, 0.47, s)));
 
 function gelMaterial(ctx, { colorNode, normalNode, thick, saturate = 1 }) {
   const m = new THREE.MeshPhysicalNodeMaterial();
@@ -78,7 +81,12 @@ export function createPlasmodium(ctx) {
     const gx = Tat(g.x.add(e), g.z).sub(Tat(g.x.sub(e), g.z)), gz = Tat(g.x, g.z.add(e)).sub(Tat(g.x, g.z.sub(e)));
     const gd = normalize(vec2(gx, gz).add(vec2(1e-6, 0)));
     const along = g.x.mul(gd.x).add(g.z.mul(gd.y)), across = g.x.mul(gd.y).sub(g.z.mul(gd.x));
-    const streak = noise(vec3(across.mul(140), along.mul(14), 0.3)).mul(0.5).add(0.5);
+    // (filtrées : plus fines qu'un pixel, les stries se replient en moiré —
+    // un « acier damassé » ; leur contraste s'éteint quand leur période à
+    // l'écran approche du pixel)
+    const ph = across.mul(110);
+    const fade = float(1).sub(sst(0.18, 0.55, fwidth(ph)));
+    const streak = mix(float(0.5), noise(vec3(ph, along.mul(12), 0.3)).mul(0.5).add(0.5), fade);
     const hh = h.mul(streak.mul(0.45).add(0.75));
     const xw = g.x.add(U.xoff);
     const surf = tmax(Wn.height(xw, g.z).add(0.0004), Wn.smooth(xw, g.z).add(hh));
@@ -116,8 +124,8 @@ export function createPlasmodium(ctx) {
     const r = ed.x, drain = ed.z, Tm = ed.w;
     const isFruit = drain.lessThan(-0.5);
     const c = sst(0, 0.03, s.sub(float(TL.condense[0]).add(clamp(drain, 0, 1).mul(0.055))));
-    const shrink = isFruit.select(float(1).add(sst(TL.condense[0], TL.rise[1], s).mul(0.45)), float(1).sub(c));
-    return r.mul(pulse(s, Tm, 0.14).add(1)).mul(shrink);
+    const shrink = isFruit.select(float(1).add(sst(TL.condense[0], TL.rise[1], s).mul(0.25)), float(1).sub(c));
+    return r.mul(pulse(s, Tm, 0.09).add(1)).mul(shrink);
   };
   const vc = attribute('vc', 'vec4'), vo = attribute('vo', 'vec4'), ve = attribute('ve', 'vec2');
   const vRad = varying(float(0), 'vRad'), vFlux = varying(float(0), 'vFlux'), vTop = varying(float(0), 'vTop'), vOpen = varying(float(0), 'vOpen');
@@ -129,7 +137,9 @@ export function createPlasmodium(ctx) {
     const side = vec3(tz.negate(), 0, tx), up = vec3(0, 1, 0), tan = vec3(tx, 0, tz);
     const xw = vc.x.add(U.xoff);
     const yc = Wn.height(xw, vc.y);
-    let off = side.mul(vo.x.mul(r)).add(up.mul(vo.y.mul(0.62).add(0.4).mul(r))).add(tan.mul(vo.z.mul(r)));
+    // (section en demi-ellipse ; les tubes-fruits d'Hemitrichia, gonflés, sont ronds)
+    const flat = fruitNet ? mix(float(0.62), float(0.95), sst(TL.condense[0], TL.rise[1], s)) : float(0.62);
+    let off = side.mul(vo.x.mul(r)).add(up.mul(vo.y.mul(flat).add(0.4).mul(r))).add(tan.mul(vo.z.mul(r)));
     // Hemitrichia : mûrs, les tubes se fendent sur le dessus et moussent
     // d'élatères (un bourrelet doré, floconneux, qui gonfle hors de la fente)
     let op = float(0);
@@ -143,7 +153,7 @@ export function createPlasmodium(ctx) {
     }
     if (write) {
       vRad.assign(r); vFlux.assign(q); vTop.assign(vo.y); vOpen.assign(op);
-      normalLocal.assign(normalize(side.mul(vo.x).add(up.mul(vo.y.div(0.62))).add(tan.mul(vo.z))));
+      normalLocal.assign(normalize(side.mul(vo.x).add(up.mul(vo.y.div(flat))).add(tan.mul(vo.z))));
     }
     return vec3(xw, yc, vc.y).add(off);
   };
@@ -184,7 +194,9 @@ export function createPlasmodium(ctx) {
     trailAt: (x, z) => {
       const T = Tat(x, z);
       const age = U.s.sub(T);
-      return inBox(x, z).select(sst(0, 0.01, age).mul(float(1).sub(sst(0.55, 0.85, U.s))).mul(0.9), float(0));
+      // (la trace sèche du bord vers le centre : le bord du territoire, le dernier
+      // atteint, sèche le premier — sinon une ellipse sombre à bord net, une décalcomanie)
+      return inBox(x, z).select(sst(0, 0.01, age).mul(float(1).sub(sst(0.5, 0.8, U.s.add(float(0.42).sub(T).mul(-0.6))))).mul(0.9), float(0));
     },
   };
 }

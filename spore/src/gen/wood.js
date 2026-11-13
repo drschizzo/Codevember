@@ -93,7 +93,10 @@ function makePattern(spec, L) {
   const rings = (g, w = 0.11) => {
     const q = g / w + 0.6 * N(g * 3, 0.3, 0.4, 2, 0.0001);
     const f = q - Math.floor(q);
-    return ss(0.0, 0.08, f) * ss(0.42, 0.22, f); // (bande de latewood)
+    // (chaque cerne a son propre relief : tous égaux, le fil se lisait comme
+    // une tôle ondulée)
+    const amp = 0.35 + 0.9 * hash2(Math.floor(q), 1, s);
+    return ss(0.0, 0.08, f) * ss(0.42, 0.22, f) * amp; // (bande de latewood)
   };
   // gerces : fentes le long du fil, par bandes en travers ; chaque bande tire
   // (ou non) une fente, sa position, sa longueur, sa largeur ; bouts effilés
@@ -138,8 +141,9 @@ function makePattern(spec, L) {
       const wf = spec.pattern === 'weathered';
       return (x, z) => {
         const g = grain(x, z, 0.16) + 0.05 * N(x, z, 2.2, 2);
-        const ring = rings(g, wf ? 0.085 : 0.12);
-        const ring2 = rings(g + 0.37, wf ? 0.21 : 0.27) * 0.6;
+        const along = 0.55 + 0.45 * Math.max(-1, Math.min(1, 1.6 * N(x, g, 1.4, 2))); // (érosion inégale le long du fil)
+        const ring = rings(g, wf ? 0.085 : 0.12) * along;
+        const ring2 = rings(g + 0.37, wf ? 0.21 : 0.27) * 0.6 * (1.4 - along * 0.6);
         const fib = N(x * 0.05, g, 38, 2, 0.02) * 0.5 + N(x * 0.1, g, 90, 1, 0.02) * 0.3;
         const ck = checks(x, z, wf ? 1.7 : 1);
         const mound = N(x, z, 0.9, 3);
@@ -167,9 +171,12 @@ function makePattern(spec, L) {
         const fib = N(x * 0.05, g, 30, 2, 0.02);
         const h = (dome - crack * 0.07 + fib * 0.004 + (id - 0.5) * 0.012) * k;
         const shine = ss(0.03, 0.1, d) * (0.5 + 0.5 * id);
-        let col = mixc(c1, c2, 0.35 + 0.5 * crack + 0.15 * N(x, z, 6, 2));
+        let col = mixc(c1, c2, 0.35 + 0.5 * crack + 0.15 * N(x, z, 6, 2)).map((c) => c * 0.75);
         col = mixc(col, [0.08, 0.075, 0.07], shine * 0.25 * (0.5 + 0.5 * fib)); // (reflets argentés du charbon)
-        return [h, col, (spec.rough ?? 0.45) + crack * 0.4 - shine * 0.12];
+        // (mat, sauf quelques écailles lustrées : une croûte uniformément
+        // satinée reflétait le studio et le charbon devenait une céramique grise)
+        const lustre = shine * ss(0.55, 0.8, id);
+        return [h, col, Math.min(1, (spec.rough ?? 0.45) + 0.18 + crack * 0.3 - lustre * 0.4)];
       };
     }
     case 'rot': {
@@ -194,12 +201,17 @@ function makePattern(spec, L) {
         const fib = N(x * 0.05, g, 34, 2, 0.02);
         const zn = N(x, z, 1.1, 3);
         const zl = Math.abs(zn + 0.12); // (lignes de zone : une courbe de niveau)
-        const line = ss(0.007, 0.002, zl);
+        // (lignes de zone d'épaisseur variable, avec un halo brun diffus : un
+        // trait d'égale largeur se lisait comme un dessin à l'encre)
+        const lw = 0.004 + 0.007 * (0.5 + 0.5 * N(x + 3, z, 2.5, 2));
+        const line = ss(lw, lw * 0.3, zl) * (0.75 + 0.25 * N(x, z + 4, 6, 2));
+        const halo = ss(lw * 5, lw, zl) * 0.3;
         const pale = ss(0.1, 0.3, N(x + 7, z, 0.8, 2));
         const h = (ring * 0.006 + fib * 0.003 + N(x, z, 0.7, 3) * 0.015) * k;
         let col = mixc(c1, [c1[0] * 1.25, c1[1] * 1.22, c1[2] * 1.15], pale * 0.6);
         col = mixc(col, [c1[0] * 0.8, c1[1] * 0.72, c1[2] * 0.6], zn > -0.12 ? 0.35 : 0); // (une zone, une teinte)
         col = mixc(col, c2, ring * 0.35 + fib * 0.15);
+        col = mixc(col, [c1[0] * 0.45, c1[1] * 0.38, c1[2] * 0.3], halo);
         col = mixc(col, [0.012, 0.01, 0.008], Math.min(1, line));
         return [h, col, spec.rough ?? 0.7];
       };
@@ -215,7 +227,8 @@ function makePattern(spec, L) {
         const f = q - Math.floor(q);
         const late = ss(0.6, 0.78, f) * ss(1.0, 0.9, f);
         const ray = ss(0.6, 0.95, N(x * 0.04, z, 60, 1, 0.01)) * 0.4;
-        const saw = Math.sin((x / L) * TAU * 44 + 0.3 * N(x, z, 2, 2)) * 0.5 + 0.5;
+        // (traits de scie irréguliers : pas variable, profondeur par passes)
+        const saw = (Math.sin((x / L) * TAU * 44 + 2.2 * N(x, z, 0.7, 2)) * 0.5 + 0.5) * (0.25 + 0.75 * Math.max(0, N(x, z * 0.3, 1.1, 2) + 0.4)) * 0.6;
         const fib = N(x * 0.05, z, 40, 2, 0.02);
         const h = (late * 0.004 + saw * 0.0025 + fib * 0.002) * k;
         let col = mixc(c1, c2, late * 0.7 + fib * 0.15);

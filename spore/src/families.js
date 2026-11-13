@@ -73,13 +73,13 @@ export const FAMILIES = {
         spore: 11, label: 'Hemitrichia serpula', mode: 'net', count: [0, 0], spacing: 0,
         tube: 0.022, expand: 2.2,
         colors: { young: '#fff3c4', mid: '#f3c437', ripe: '#c98d1c', net: '#f0b83a', stalk: '#7a5a1a', hypo: '#6a5020' },
-        plasmodium: '#f7d43a', vein: 0.034,
+        plasmodium: '#f7d43a', vein: 0.024, // (tubes de 0,5 mm ; plus épais, le filet se fermait en sangles)
       },
       vesparia: {
         spore: 11, label: 'Hemitrichia serpula (rouille)', mode: 'net', count: [0, 0], spacing: 0,
         tube: 0.019, expand: 1.9,
         colors: { young: '#ffe9c9', mid: '#e09a3a', ripe: '#a8551c', net: '#d4782e', stalk: '#6a3a1a', hypo: '#5a3a20' },
-        plasmodium: '#f4c13a', vein: 0.031,
+        plasmodium: '#f4c13a', vein: 0.022,
       },
     },
   },
