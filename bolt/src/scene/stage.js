@@ -15,6 +15,7 @@ import { stateAt, PHYS } from '../film.js';
 import { layout } from '../recipe.js';
 import { createCloud, N_LIGHTS } from './cloud.js';
 import { createLightning, MAX_STROKES } from './lightning.js';
+import { buildTableMaterial, tableUniforms, applyTable } from './table.js';
 
 const SHADOW = { mobile: 1024, low: 1024, medium: 2048, high: 2048, ultra: 4096 };
 
@@ -126,13 +127,17 @@ export function createStage(scene, gen, { lite = false } = {}) {
         pending--;
       });
     }).catch((e) => { console.error(e); pending = -1; });
-    // support
-    const tf = tri(R.table.finish), tk = signature(tf);
-    if (!tableFin || tableFin.key !== tk) {
+    // support : une matière écrite pour lui (scene/table.js) ; sa nature choisit le shader
+    setTable();
+  }
+
+  function setTable() {
+    const tf = R.table.finish, kind = tf.kind ?? 'cloth';
+    if (!tableFin || tableFin.key !== kind) {
       table.material?.dispose?.();
-      tableFin = { key: tk, U: finishU(tf), M: { seedOff: uniform(new THREE.Vector3(9, 9, 9)) } };
-      table.material = buildPieceMaterial(tf, tableFin.U, tableFin.M);
-    } else for (const k of ['outer', 'inner', 'edge']) applyFinish(tableFin.U[k], tf[k]);
+      tableFin = { key: kind, U: tableUniforms(tf) };
+      table.material = buildTableMaterial(kind, tableFin.U, [key, flash]);
+    } else applyTable(tableFin.U, tf);
   }
 
   // la pluie : des traits qui tombent de la base du nuage dans le récipient
@@ -175,9 +180,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
       if (signature(f) !== s.key) { const old = s.mesh.material; s.f = f; s.U = finishU(f); s.key = signature(f); s.mesh.material = buildPieceMaterial(f, s.U, { seedOff: uniform(new THREE.Vector3(1.3, 2.1, 0.5)) }); old.dispose(); }
       else for (const k of ['outer', 'inner', 'edge']) applyFinish(s.U[k], f[k]);
     }
-    const tf = tri(R.table.finish);
-    if (signature(tf) !== tableFin.key) { table.material.dispose(); tableFin = { key: signature(tf), U: finishU(tf), M: { seedOff: uniform(new THREE.Vector3(9, 9, 9)) } }; table.material = buildPieceMaterial(tf, tableFin.U, tableFin.M); }
-    else for (const k of ['outer', 'inner', 'edge']) applyFinish(tableFin.U[k], tf[k]);
+    setTable();
   }
 
   const place = (l, az, el, r, target) => {

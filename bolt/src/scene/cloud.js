@@ -90,7 +90,11 @@ export function createCloud() {
     const d = smoothstep(0, 0.22, env.sub(0.2).mul(1.25).add(n.sub(0.72).mul(er)).sub(col.mul(0.1)).sub(rim.mul(0.3)));
     // condensation : sous le niveau z = 1, la vapeur ne se voit qu'en partie
     const cond = smoothstep(0.8, 1.03, z).mul(0.7).add(0.3);
-    return d.mul(cond).mul(U.dens).mul(U.shred.oneMinus().pow(0.6));
+    // (la colonne est plus légère que le nuage : c'est dans la densité, continue
+    // en hauteur — et non dans le coefficient d'extinction de chaque marche, qui
+    // faisait une ligne à leur couture)
+    const light = smoothstep(0.5, 1.0, z).mul(0.45).add(0.55);
+    return d.mul(cond).mul(light).mul(U.dens).mul(U.shred.oneMinus().pow(0.6));
   };
 
   // intersection rayon / boîte alignée (bmin, bmax) → vec2(t0, t1)
@@ -158,10 +162,10 @@ export function createCloud() {
     // deux domaines de marche pour un même champ : la colonne (étroite, sous le
     // nuage), puis le nuage (large). La couture est à 0,72 de la montée, dans
     // la colonne : les deux côtés lisent la même densité.
-    const top = U.steamP.y.add(U.simSize.y.mul(U.span)).add(0.03), cut = U.steamP.y.add(U.span.mul(0.78));
+    const top = U.steamP.y.add(U.simSize.y.mul(U.span)).add(0.03), cut = U.steamP.y.add(U.span.mul(0.62));
     const rc = U.span.mul(U.kr).mul(0.62).add(0.12);
     const lo = tMin(U.steamP.xz, U.c.xz).sub(rc), hi = tMax(U.steamP.xz, U.c.xz).add(rc);
-    march(vec3(lo.x, U.steamP.y, lo.y), vec3(hi.x, cut, hi.y), NS, 7);
+    march(vec3(lo.x, U.steamP.y, lo.y), vec3(hi.x, cut, hi.y), NS, 13);
     const ext = U.R.mul(1.12);
     march(vec3(U.c.x.sub(ext), cut, U.c.z.sub(ext)), vec3(U.c.x.add(ext), top, U.c.z.add(ext)), N, 13);
     return clamp(col, 0, 1e4);

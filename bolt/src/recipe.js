@@ -54,16 +54,16 @@ export const BODIES = {
 };
 export const METALS = { argent: SILVER, vermeil: VERMEIL, inox: STEEL, fonte: IRON };
 export const TABLES = {
-  lin: { label: 'Nappe de lin', ...fin('carbonMatte', { color: '#bfbcb3', color2: '#a39e93', rough: 0.96, aniso: 0, bump: 0.5, scale: 2.2, sheen: 0.25, sheenColor: '#ffffff', sheenRough: 0.8 }), family: 'textile' },
-  linBleu: { label: 'Lin bleu', ...fin('carbonMatte', { color: '#8fa3b5', color2: '#74889b', rough: 0.96, aniso: 0, bump: 0.5, scale: 2.2, sheen: 0.25, sheenColor: '#e8f0ff', sheenRough: 0.8 }), family: 'textile' },
-  velours: { label: 'Velours noir', ...fin('velvetNight', { color: '#0d0d0f', color2: '#060607', sheenColor: '#9aa0b0', sheen: 0.7, scale: 3 }), family: 'textile' },
-  zinc: { label: 'Zinc', ...fin('brushedSteel', { color: '#8f949a', rough: 0.5, aniso: 0.3, bump: 0.3, scale: 0.6, smudge: 0.15 }), family: 'métal' },
-  natte: { label: 'Natte tressée', ...fin('carbonMatte', { color: '#c9c092', color2: '#a89c6a', rough: 0.9, aniso: 0, bump: 0.9, scale: 0.55 }), family: 'textile' },
-  laque: { label: 'Plateau de laque', ...fin('whiteCeramic', { color: '#8e1a13', rough: 0.5, clearcoat: 0.25, ccRough: 0.4, smudge: 0.2 }), family: 'laque' },
-  laqueNoire: { label: 'Laque noire', ...fin('blackCeramic', { color: '#0e0c0d', rough: 0.5, clearcoat: 0.25, ccRough: 0.4, smudge: 0.2 }), family: 'laque' },
-  marbre: { label: 'Marbre de Carrare', ...fin('marble', { rough: 0.3, scale: 1.1, clearcoat: 0.4, ccRough: 0.15 }), family: 'pierre' },
-  marbreNoir: { label: 'Marbre noir', ...fin('marbleNoir', { rough: 0.3, scale: 1.2, clearcoat: 0.4, ccRough: 0.15 }), family: 'pierre' },
-  ardoise: { label: 'Ardoise', ...fin('basalt', { color: '#3a3f47', color2: '#565c66', rough: 0.8, bump: 0.5, scale: 1.6 }), family: 'pierre' },
+  lin: { label: 'Nappe de lin', ...fin('carbonMatte', { color: '#bfbcb3', color2: '#a39e93', rough: 0.96, aniso: 0, bump: 0.5, scale: 2.2, sheen: 0.25, sheenColor: '#ffffff', sheenRough: 0.8 }), kind: 'cloth', family: 'textile' },
+  linBleu: { label: 'Lin bleu', ...fin('carbonMatte', { color: '#8fa3b5', color2: '#74889b', rough: 0.96, aniso: 0, bump: 0.5, scale: 2.2, sheen: 0.25, sheenColor: '#e8f0ff', sheenRough: 0.8 }), kind: 'cloth', family: 'textile' },
+  velours: { label: 'Velours noir', ...fin('velvetNight', { color: '#0d0d0f', color2: '#060607', sheenColor: '#9aa0b0', sheen: 0.7, scale: 3 }), kind: 'velvet', family: 'textile' },
+  zinc: { label: 'Zinc', ...fin('brushedSteel', { color: '#70757b', rough: 0.5, aniso: 0.3, bump: 0.3, scale: 0.6, smudge: 0.15 }), kind: 'metal', family: 'métal' },
+  natte: { label: 'Natte tressée', ...fin('carbonMatte', { color: '#c9c092', color2: '#a89c6a', rough: 0.9, aniso: 0, bump: 0.9, scale: 0.55 }), kind: 'mat', family: 'textile' },
+  laque: { label: 'Plateau de laque', ...fin('whiteCeramic', { color: '#8e1a13', color2: '#ffe29d', rough: 0.3, clearcoat: 0.25, ccRough: 0.4, smudge: 0.2 }), kind: 'lacquer', family: 'laque' },
+  laqueNoire: { label: 'Laque noire', ...fin('blackCeramic', { color: '#0e0c0d', color2: '#ffe29d', rough: 0.3, clearcoat: 0.25, ccRough: 0.4, smudge: 0.2 }), kind: 'lacquer', family: 'laque' },
+  marbre: { label: 'Marbre de Carrare', ...fin('marble', { color: '#e4e1db', color2: '#53565e', rough: 0.18 }), kind: 'marble', family: 'pierre' },
+  marbreNoir: { label: 'Marbre noir', ...fin('marbleNoir', { color: '#131316', color2: '#d9d2c4', rough: 0.16 }), kind: 'marble', family: 'pierre' },
+  ardoise: { label: 'Ardoise', ...fin('basalt', { color: '#3a3f47', color2: '#565c66', rough: 0.8, bump: 0.5, scale: 1.6 }), kind: 'slate', family: 'pierre' },
 };
 export const TEAS = { noir: '#3d1508', vert: '#5f6a1c', menthe: '#7a6a1e', rooibos: '#5a1408', lait: '#b08a62', matcha: '#6f8a2e' };
 
@@ -266,5 +266,6 @@ export function layout(R, meta) {
 export function upgrade(R) {
   const D = generate(R.seed, { mood: R.mood, family: R.vessel?.family, variant: R.vessel?.variant });
   for (const k of Object.keys(D)) if (R[k] === undefined) R[k] = D[k];
+  if (R.table && !R.table.finish.kind) R.table.finish.kind = TABLES[R.table.key]?.kind ?? 'cloth';
   return R;
 }
