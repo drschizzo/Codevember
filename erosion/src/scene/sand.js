@@ -1,8 +1,8 @@
 // Le sable et l'eau : un seul maillage, un seul matériau.
 //
 // Le maillage (2 sommets par cellule de simulation) est déplacé dans le
-// vertex shader : le lit b, lu dans la texture du relief courant (scene/
-// gpusim.js) en interpolation bicubique (Catmull-Rom), et la surface libre
+// vertex shader : le lit b, lu dans le relief aux sommets (scene/gpusim.js ·
+// hires : Hermite monotone moyenné le long des crêtes), et la surface libre
 // de l'eau η là où elle le recouvre — la ligne d'eau est l'intersection
 // d'une surface lisse (η, demi-résolution) et du lit fin : elle est nette.
 //
@@ -35,7 +35,7 @@ export function createSand(gs) {
   const lite = isLite();
   const { NX, NY, HX, HY, l } = gs;
   const Lx = TABLE.Lx, Ly = TABLE.Ly;
-  const MX = (lite ? 1 : 2) * NX, MY = (lite ? 1 : 2) * NY;
+  const { MX, MY } = gs; // (un sommet par texel du relief aux sommets, scene/gpusim.js · hires)
 
   // ── Maillage : grille au repos (X, 0, Z) ──
   const geo = new THREE.BufferGeometry();
@@ -93,7 +93,7 @@ export function createSand(gs) {
   };
   // B-spline bicubique par quatre lectures bilinéaires (Sigg et Hadwiger) : C² continu,
   // les normales ne dessinent plus la grille sous une lumière rasante
-  const bspline = (tex, c) => {
+  const bspline = (tex, c, W = NX, H = NY) => {
     const f = fract(c), i = floor(c);
     const w0 = float(1).sub(f).pow(3).div(6);
     const w1 = f.mul(f).mul(f.mul(3).sub(6)).add(4).div(6);
@@ -101,7 +101,7 @@ export function createSand(gs) {
     const w3 = f.pow(3).div(6);
     const g0 = w0.add(w1), g1 = w2.add(w3);
     const h0 = w1.div(g0).sub(1).add(i).add(0.5), h1 = w3.div(g1).add(1).add(i).add(0.5);
-    const inv = vec2(1 / NX, 1 / NY);
+    const inv = vec2(1 / W, 1 / H);
     const s00 = texture(tex, vec2(h0.x, h0.y).mul(inv)), s10 = texture(tex, vec2(h1.x, h0.y).mul(inv));
     const s01 = texture(tex, vec2(h0.x, h1.y).mul(inv)), s11 = texture(tex, vec2(h1.x, h1.y).mul(inv));
     return mix(mix(s11, s10, g0.y), mix(s01, s00, g0.y), g0.x);
@@ -124,42 +124,20 @@ export function createSand(gs) {
   const cellOf = (X, Z) => vec2(X.add(Lx / 2).div(l).sub(0.5), Z.add(Ly / 2).div(l).sub(0.5));
   const hcellOf = (X, Z) => vec2(X.add(Lx / 2).div(2 * l).sub(0.5), Z.add(Ly / 2).div(2 * l).sub(0.5));
 
-  // ── Vertex : lit bicubique, surface libre ──
+  // Le lit : Hermite cubique monotone (pentes de Fritsch–Carlson) — passe par les
+  // valeurs simulées, sans dépassement ni facette ; une B-spline arrondissait chaque
+  // crête en cire fondue — moyenné le long des crêtes, évalué une fois par image aux
+  // sommets du maillage sur le GPU (scene/gpusim.js · hires) : hauteur et normale.
+
+  // ── Vertex : lit, surface libre ──
   const vB = varyingProperty('float', 'vBed');
   const vE = varyingProperty('float', 'vEta'); // (surface libre au sommet : la même que le maillage)
-  const vN = varyingProperty('vec3', 'vBedN');
-  const vW = varyingProperty('vec2', 'vEtaGrad'); // (pente de la surface libre, au sommet : 16 lectures de moins par pixel mouillé) // (normale du lit au sommet, dérivée de l'interpolation)
+  const vW = varyingProperty('vec2', 'vEtaGrad'); // (pente de la surface libre, au sommet : 16 lectures de moins par pixel mouillé)
   const positionNode = Fn(() => {
     const p = positionGeometry;
-    const c = cellOf(p.x, p.z);
-    const ix = int(floor(c.x)).toVar(), iy = int(floor(c.y)).toVar();
-    const fx = fract(c.x).toVar(), fy = fract(c.y).toVar();
-    // Hermite cubique monotone, séparable (pentes de Fritsch–Carlson) : passe par
-    // les valeurs simulées, ne dépasse jamais (pas de bourrelet au bord d'une
-    // berge), continue en pente d'une cellule à l'autre (pas de palier ni de
-    // facette). Une B-spline arrondissait chaque crête sur ~7 mm : les ravines
-    // avaient l'air de cire fondue. La normale vient de la dérivée exacte.
-    const lim = (m, a, b2) => select(a.mul(b2).lessThanEqual(0), float(0), m.sign().mul(tmin(m.abs(), tmin(a.abs().mul(3), b2.abs().mul(3)))));
-    // (chaque valeur en variable : réutilisée telle quelle, TSL recopierait toute
-    // l'expression — lectures de texture comprises — à chaque usage, et le shader
-    // de sommet explosait : le sable coûtait 30 ms)
-    const herm = (q, t) => {
-      const D0 = q[1].sub(q[0]).toVar(), D1 = q[2].sub(q[1]).toVar(), D2 = q[3].sub(q[2]).toVar();
-      const m1 = lim(q[2].sub(q[0]).mul(0.5), D0, D1).toVar(), m2 = lim(q[3].sub(q[1]).mul(0.5), D1, D2).toVar();
-      const t2 = t.mul(t).toVar(), t3 = t2.mul(t).toVar();
-      const v = q[1].mul(t3.mul(2).sub(t2.mul(3)).add(1)).add(m1.mul(t3.sub(t2.mul(2)).add(t))).add(q[2].mul(t3.mul(-2).add(t2.mul(3)))).add(m2.mul(t3.sub(t2)));
-      const d = q[1].mul(t2.mul(6).sub(t.mul(6))).add(m1.mul(t2.mul(3).sub(t.mul(4)).add(1))).add(q[2].mul(t2.mul(-6).add(t.mul(6)))).add(m2.mul(t2.mul(3).sub(t.mul(2))));
-      return [v.toVar(), d.toVar()];
-    };
-    const rows = [], drows = [];
-    for (let j = 0; j < 4; j++) {
-      const q = [0, 1, 2, 3].map((i) => ld(tTerr, ix.add(i - 1), iy.add(j - 1), NX, NY).x.toVar());
-      const [v, d] = herm(q, fx);
-      rows.push(v); drows.push(d);
-    }
-    const [b, dby] = herm(rows, fy);
-    const [dbx] = herm(drows, fy);
-    vN.assign(normalize(vec3(dbx.div(l).negate(), 1, dby.div(l).negate())));
+    // (le relief aux sommets : l'Hermite moyenné le long des crêtes, calculé une fois par image)
+    const vi = int(p.x.add(Lx / 2).div(Lx).mul(MX - 1).round()), vj = int(p.z.add(Ly / 2).div(Ly).mul(MY - 1).round());
+    const b = textureLoad(gs.hiTex, ivec2(vi, vj)).x;
     vB.assign(b);
     const h = hcellOf(p.x, p.z);
     const EB = bsp(tWat, HX, HY, h.x, h.y);
@@ -173,6 +151,16 @@ export function createSand(gs) {
     positionPrevious.assign(P);
     return P;
   })();
+  // Normale du lit au pixel : celle de la même surface que les sommets (dérivée de
+  // l'Hermite moyenné le long des crêtes), lue en B-spline bicubique dans la texture
+  // filtrable des sommets — interpolée par triangle, le terminateur d'une crête
+  // vive suivait les arêtes des triangles, toutes de même diagonale.
+  const bedNormal = Fn(() => {
+    const p = positionGeometry;
+    const ch = vec2(p.x.add(Lx / 2).div(Lx).mul(MX - 1), p.z.add(Ly / 2).div(Ly).mul(MY - 1));
+    const n = bspline(gs.hiNTex, ch, MX, MY).xy;
+    return normalize(vec3(n.x, sqrt(tmax(0.0001, float(1).sub(dot(n, n)))), n.y));
+  });
 
   // ── Couleur du sable ──
   const layerColorAt = Fn(([depth]) => {
@@ -227,7 +215,7 @@ export function createSand(gs) {
     const veneer = noise(vec3(p.x.mul(140), 6.7, p.z.mul(140))).mul(0.0004);
     const isDep = smoothstep(0.0002, 0.0025, dep.add(veneer)).pow(0.8);
     // pente : 0 à plat, 1 sur une paroi (normale du lit, B-spline)
-    const nG = normalize(vN); // (normale du lit : dérivée exacte de l'interpolation, au sommet)
+    const nG = bedNormal().toVar(); // (normale du lit : dérivée exacte de l'interpolation, au pixel)
     const steep = smoothstep(0.88, 0.6, nG.y);
     // la strate se lit à la hauteur vraie du pixel sous la surface de départ
     // (b₀ − y) : sur une paroi, la profondeur interpolée en plan mêlait toutes
