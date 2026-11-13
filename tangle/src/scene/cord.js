@@ -127,7 +127,9 @@ export function createCord(root) {
     m.colorNode = vec4(col, 1);
     m.roughnessNode = float(0.72).sub(H.mul(0.1));
     m.metalnessNode = float(0);
-    m.sheenNode = mix(base, vec3(1), 0.5).mul(U.sheen);
+    // (lustre teinté par la fibre : à 50 % de blanc, une corde vermillon
+    // virait au rose corail)
+    m.sheenNode = mix(base, vec3(1), 0.18).mul(U.sheen);
     m.sheenRoughnessNode = float(0.45);
     // relief de la tresse (hauteur en unités du monde : ~0,5 mm de bosse)
     const N0 = normalViewGeometry.mul(faceDirection);

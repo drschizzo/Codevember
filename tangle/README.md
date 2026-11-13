@@ -6,7 +6,7 @@ Un banc d'essai de torsion, pièce d'instrument de cabinet de physique : socle s
 
 Le moteur tourne, et la rayure tissée dans la gaine de la corde s'enroule en hélice. La corde reste droite. Au seuil, elle cède d'un coup sur le côté en une boucle qui s'enroule sur elle-même en torsade, et remonte le balancier. Quand le mandrin a fait son compte, une came de la roue-programme abaisse le poussoir, qui écarte la glissière. Libéré, le balancier tourne, la torsade se défait, il redescend, oscille et se pose. La glissière revient quand le moteur repart. Trois cycles en crescendo : la rayure seule, une boucle, la torsade.
 
-![Le cordon en torsade, Muybridge](docs/capture.jpg)
+![Le cordon vermillon en torsade sous le mandrin, plan serré (Midi, graine b5)](docs/capture.jpg)
 
 Rendu physique en three.js (WebGPU, TSL). La scène est entièrement procédurale : une graine produit une scène. La démarche est dans [docs/concept.md](docs/concept.md) : le thème « tangle » exploré sous six angles, les clichés écartés (la pelote et le chat, les écouteurs emmêlés, le nœud qui se fait seul, les spaghettis), dix pistes notées, puis les épreuves (crédibilité, variété, ambition, déclinaison, scénario).
 
@@ -27,7 +27,7 @@ Paramètres d'URL : `?seed=…` (une scène), `#r=…` (une scène retouchée, p
 Le panneau règle :
 - **Scène** : humeur, famille, durée (fixée par la simulation) ; pour chaque cycle, les tours du mandrin, la vitesse du moteur et le temps de retour au repos ; l'amortisseur du balancier ; le pli naturel de la corde (qui choisit où naît la boucle) ;
 - **Caméra** : champ, distance, hauteur du regard, côté, balancement, caméra libre ;
-- **Corde et matières** : gaine et rayure (huit palettes), second brin de la paire, lustre, une ou deux rayures ; bâti, métal, balancier, accent, cadran, courroie (jeu de matériaux, couleur et curseurs du modèle physique) ;
+- **Corde et matières** : gaine et rayure (dix palettes ; la corde qui se tord est toujours vermillon, le fil rouge de la collection), second brin de la paire, lustre, une ou deux rayures ; bâti, métal, balancier, accent, cadran, courroie (jeu de matériaux, couleur et curseurs du modèle physique) ;
 - **Lumière et fond** : lampe ou soleil, lumière du lieu, contre-jours, studio HDR, brume ;
 - **Rendu**.
 
@@ -98,6 +98,8 @@ Un ruban et un fil d'acier ont été essayés et écartés : le ruban se travers
 Lampes presque blanches (≥ 4 700 K), sauf la lampe de bureau du Cabinet (4 300 K). Le décor ne reçoit que la lampe et la lumière du lieu, pour que les contre-jours n'effacent pas les ombres.
 
 **La caméra** est une grue lente qui encadre la partie active de la machine, du moteur au balancier. Elle est centrée en partie sur le désordre de la corde (les sommets pondérés par leur écart à l'axe), se rapproche quand le balancier remonte et se balance d'un seul mouvement par boucle. Sa trajectoire est échantillonnée à 30 images par seconde de film et lissée par un noyau gaussien périodique (σ = 1,2 s). Elle pointe sous 25°/s (testé à 120 i/s).
+
+**Le plan serré** (`camera.close`, 0,75 à 1) : la corde est le sujet, pas le banc. Le cadre descend sous la traverse du moteur (on garde le mandrin qui tourne, la cause) et remonte au-dessus du bas du balancier ; son centre suit davantage le désordre de la corde (0,25 + 0,3 × close au lieu de 0,25). Une recette ancienne, sans `close`, garde le plan du banc entier. La corde principale est vermillon (deux tons, rayure noire ou ivoire, albédo #c4370c, plus orangé, que le lustre de la gaine éclaircit et désature vers le vermillon de la collection) ; le second brin de la paire prend une couleur du décor.
 
 ## Tests
 

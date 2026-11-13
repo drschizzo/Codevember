@@ -39,7 +39,13 @@ export const CORDS = {
   vertCuivre: ['#2d5a45', '#1d3c2e', '#d9874a', 'Coton vert, rayure cuivre'],
   orangeNoir: ['#d0581c', '#a8420f', '#141212', 'Orange de sécurité, rayure noire'],
   blancNoir: ['#ece9e2', '#d4d0c6', '#121212', 'Coton blanc, rayure noire'],
+  // le fil rouge de la collection : la corde principale est toujours vermillon
+  // (albédo plus sombre et plus orangé que le #d8401f de la collection : le lustre de la
+  // gaine tressée l'éclaircit et le désature vers le rose)
+  vermillonNoir: ['#c4370c', '#962808', '#141212', 'Vermillon, rayure noire'],
+  vermillonIvoire: ['#c4370c', '#9a2a09', '#efe8da', 'Vermillon, rayure ivoire'],
 };
+export const FIL_ROUGE = ['vermillonNoir', 'vermillonIvoire'];
 
 // ── Humeurs : chacune un décor (fond, sol, accessoires), une lumière, une
 // valeur, un cadrage ─────────────────────────────────────────────────────────
@@ -162,8 +168,10 @@ export function generate(seed, overrides = {}) {
   const A = ra.pick(M.accords);
   const family = overrides.family ?? rf.pick(Object.keys(CATALOGUE));
   const fam = CATALOGUE[family];
-  const cordKey = ra.pick(M.cords);
-  const cord2Key = ra.pick(M.cords.filter((k) => k !== cordKey));
+  // (la corde qui se tord est vermillon ; le second brin de la paire prend
+  // une couleur du décor, qui fait lire le commettage)
+  const cordKey = ra.pick(FIL_ROUGE);
+  const cord2Key = ra.pick(M.cords.filter((k) => !/rouge|Rouge|orange|cramoisi/i.test(k)).concat(M.cords.length ? [] : ['blancNoir']));
   const rate = r2(rm.range(0.85, 1.15));
   const cycles = fam.cycles.map((K, i) => ({ K, rate: r2(rate * (i === 0 ? 1.1 : 1)), settle: fam.settle[i] }));
 
@@ -183,7 +191,7 @@ export function generate(seed, overrides = {}) {
     },
     camera: {
       fov: r2(rc.range(...M.cam.fov)), dist: r2(rc.range(...M.cam.dist)), height: r2(rc.range(...M.cam.h)),
-      side: r2(rc.range(0.35, 0.75) * rc.pick([1, -1])), sway: r2(rc.range(0.15, 0.3)),
+      side: r2(rc.range(0.35, 0.75) * rc.pick([1, -1])), sway: r2(rc.range(0.15, 0.3)), close: r2(rc.range(0.75, 1)),
     },
     light: {
       key,
