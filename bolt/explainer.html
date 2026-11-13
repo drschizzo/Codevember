@@ -1,0 +1,310 @@
+<!doctype html>
+<!-- Page « défis techniques » de Bolt. Les démos importent les modules purs du
+     projet (src/gen/dbm.js, src/gen/vessels.js, src/film.js). -->
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#050506">
+  <title>Bolt · défis techniques</title>
+  <meta name="description" content="Comment Bolt est calculé : un éclair qui pousse par claquage diélectrique, un arc en retour daté segment par segment, un nuage volumique éclairé de l’intérieur, et une boucle refermée par la conservation de l’eau.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+  <link rel="stylesheet" href="../home/explainer.css">
+</head>
+<body>
+  <nav class="top"><div class="in">
+    <a href="../">Codevember</a><span class="day">Day 21</span><span class="crumb">Bolt · défis techniques</span>
+    <span class="sp"></span><a class="open" href="./">Ouvrir la scène</a>
+  </div></nav>
+
+  <main>
+    <header class="hero">
+      <div class="kicker">Day 21 · Bolt · une tempête dans une tasse de thé</div>
+      <h1>Comment la foudre choisit la cuillère</h1>
+      <p class="lede">Une tasse de thé fume. Sa vapeur monte et s’accumule en nuage, le nuage se charge, un éclair en descend et tombe sur la cuillère, puis il pleut dans la tasse, et le thé réchauffé par la foudre se remet à fumer. L’orage est à l’échelle d’une table, c’est la seule liberté de la scène. La difficulté est de faire pousser un éclair qui ressemble à ceux que filment les caméras rapides, de dater chaque morceau de son canal pour que la lumière le parcoure dans le bon ordre, de faire de la vapeur et du nuage un seul fluide, et de ramener le film à son point de départ sans fondu.</p>
+    </header>
+
+    <figure class="cover">
+      <img src="docs/capture.jpg" alt="Une tasse de porcelaine blanche sur un marbre noir, sous un petit cumulonimbus à base plate éclairé de l’intérieur ; un éclair relie le nuage au bouton de la cuillère" width="1920" height="1080">
+      <figcaption>La jonction, 0,1 s après que le traceur a touché l’aigrette montée de la cuillère. Le canal principal porte le courant, les branches s’éteignent déjà. Le nuage est éclairé par le haut du canal, la tasse par un projecteur placé sur le canal.</figcaption>
+    </figure>
+
+    <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
+
+    <article>
+      <section id="claquage">
+        <h2><span class="n">01</span>Le traceur avance par tirages</h2>
+        <span class="src">src/gen/dbm.js · grow()</span>
+        <p>Un éclair ne suit pas une ligne tracée d’avance. Avant l’éclat, un canal peu lumineux, le traceur, descend du nuage par sauts de quelques dizaines de mètres, hésite, se divise. Dessiner un zigzag au hasard donne un pictogramme : les coudes n’ont pas la bonne statistique, et les branches partent n’importe où.</p>
+        <p>Le modèle de claquage diélectrique de Niemeyer, Pietronero et Wiesmann (1984) fait pousser la décharge site par site sur un réseau. À chaque pas, un des sites voisins de la décharge est tiré au sort, avec une probabilité d’autant plus forte que le champ électrique y est grand. La forme rapide de Kim, Sweeney, Shelley et Lin (2007) évite de résoudre l’équation de Laplace sur une grille : le potentiel d’un candidat est une somme sur les sites déjà posés, mise à jour à chaque ajout.</p>
+        <div class="eq">\[ p_i \propto \Phi_i^{\,\eta}, \qquad \Phi_i = (1-\beta)\,n(\varphi_i) + \beta\,n(g_i), \qquad \varphi_i = \sum_j \Bigl(1 - \frac{R}{r_{ij}}\Bigr) \]</div>
+        <p>\(\varphi_i\) est ce que la décharge impose au candidat \(i\) (\(R\) vaut une demi-maille) : nul au contact, il grandit loin de ce qui existe déjà et pousse les branches à s’écarter. \(g_i\) est l’attrait de la cible. \(n(\cdot)\) ramène chaque terme entre 0 et 1 parmi les candidats. L’exposant \(\eta\) règle l’allure : à 2,4 le traceur est touffu, à 4,2 il est presque un fil. La scène tire \(\eta\) dans cet intervalle et \(\beta\) vaut 0,42 à 0,5. La maille est le dix-septième de la distance du nuage à la cible, soit une vingtaine de bonds par canal.</p>
+        <figure id="fig-dbm"><figcaption><b>Une décharge, vue de face.</b> Le curseur η passe du buisson au fil. « Autre tirage » change la graine. Les pointes blanches sont les derniers sites posés, le cercle est la cible. La démo appelle <code>buildBolt()</code>, le calcul de la scène, sur une cible fixe sans récipient.</figcaption></figure>
+      </section>
+
+      <section id="pointes">
+        <h2><span class="n">02</span>Trois règles font un traceur d’un agrégat</h2>
+        <span class="src">src/gen/dbm.js · grow(), attract()</span>
+        <p>Le modèle seul remplit l’espace. Les premiers arbres calculés avaient 600 sites et l’allure d’une pelote : des branches repartaient vers le haut, d’autres naissaient sur de vieux tronçons, et quand la pointe manquait sa cible elle rampait sur le sol jusqu’à la trouver. Les films à 7 000 images par seconde montrent autre chose : dix à trente branches, toutes dirigées vers le bas, qui ne poussent que par leur extrémité.</p>
+        <p>Trois règles suffisent. Seuls les candidats proposés par l’un des 26 à 40 derniers sites peuvent être tirés : ce sont les pointes actives. Un traceur qui descend n’a pas de candidat plus haut que lui. Il ne fait pas plus de deux pas horizontaux d’affilée. L’attrait de la cible prend la forme d’un entonnoir : l’écart horizontal y pèse \(0{,}25 + 1{,}9 f^2\), où \(f\) est la part de la descente déjà faite. En haut, le traceur erre presque librement, et près de la pointe il n’a plus le choix.</p>
+        <div class="note check"><b>Mesuré sur 300 graines</b><p>Aucun échec. Un coup au but compte 119 sites en moyenne (331 au plus) et se calcule en 4 ms, un éclair araignée 238 sites en 9 ms. Une croissance qui dépasse 520 sites est rejetée et relancée avec un attracteur plus ferme.</p></div>
+        <p>Les quatre familles d’éclair sont quatre réglages du même calcul. Le <strong>coup au but</strong> vise le bouton de la cuillère. L’<strong>ascendant</strong> part du couvercle de la théière avec le champ retourné et s’arrête à 300 sites, épanoui sous le nuage. L’<strong>araignée</strong> pousse d’abord 130 sites dans une tranche horizontale de la base du nuage, puis un fil tombe. Le <strong>fourchu</strong> vise la surface du thé, et une à trois autres branches, choisies parmi les plus basses et les plus écartées, sont prolongées jusqu’au liquide pour les arcs suivants.</p>
+        <figure id="fig-familles"><figcaption><b>Les quatre familles.</b> Chaque bouton relance le calcul avec le réglage de la famille. En blanc, les canaux qui porteront un arc. En orange, les tronçons que seul un réamorçage révélera.</figcaption></figure>
+      </section>
+
+      <section id="date">
+        <h2><span class="n">03</span>Chaque segment connaît son heure</h2>
+        <span class="src">src/scene/lightning.js · src/film.js · pulse()</span>
+        <p>Ce qu’on appelle l’éclair est la seconde moitié du phénomène. Quand le traceur touche le sol, une onde de courant remonte le canal : l’arc en retour. Les branches qui n’ont pas abouti s’allument à son passage puis meurent. Le canal principal, encore chaud, est repris plusieurs fois par un traceur rapide suivi d’un nouvel arc, d’où le scintillement.</p>
+        <p>Animer cela image par image sur le processeur demanderait de tenir un état par segment. Ici l’arbre est figé au chargement et chaque nœud porte quatre nombres : son instant de naissance \(t_b\) (0 à la racine, 1 à la jonction), sa distance au sol \(s\) le long du canal, le masque des arcs dont il fait partie et sa grosseur. Le film ne fournit que deux nombres, l’avancement du traceur \(a\) et le temps \(\tau\) écoulé depuis la jonction. Le vertex shader en tire la luminosité de chacun des 300 à 1 300 segments :</p>
+        <div class="eq">\[ I = \underbrace{[t_b \le a]\,\bigl(0{,}085 + 1{,}5\,e^{-(a - t_b)/0{,}022}\bigr)}_{\text{traceur et sa pointe}} \;+\; \sum_j A_j\,P\!\Bigl(\tau - t_j - \frac{s}{v}\Bigr) \]</div>
+        <p>\(P\) est l’impulsion d’un arc : montée en 12 ms, chute en 75 ms, traîne de 0,4 s. L’onde court à \(v = 11\) unités par seconde de film, elle met donc un dixième de seconde à remonter le canal, soit six images. Les branches reçoivent la première onde seulement et s’éteignent en 90 ms. Après le dernier arc, la luminosité du canal est multipliée par un motif périodique en \(s\) : le canal se défait en perles.</p>
+        <figure id="fig-arc"><figcaption><b>Le film d’un éclair.</b> Le curseur parcourt le traceur puis les arcs. À la jonction, l’onde part du bas. La démo calcule la luminosité de chaque nœud avec <code>pulse()</code> et les constantes de <code>film.js</code> ; elle omet le traceur de réamorçage et les perles.</figcaption></figure>
+        <div class="note check"><b>La cause et l’effet à la même image</b><p>Une aigrette de un à trois nœuds monte de la cible à la rencontre du traceur. Le dernier site du traceur naît à \(a = 1\) exactement. Un test mesure l’écart entre les deux pointes : positif à \(a = 0{,}999\), nul à \(a = 1\), sur 80 graines. Un autre vérifie que la cible est bien le sommet du bouton de la cuillère, le sommet du couvercle ou un point de la surface du thé.</p></div>
+      </section>
+
+      <section id="eau">
+        <h2><span class="n">04</span>L’eau se conserve, donc la boucle se referme</h2>
+        <span class="src">src/film.js · stateAt()</span>
+        <p>Un orage ne revient pas à son point de départ par un fondu. Le film le ramène par le chemin que prend l’eau. Trois courbes cumulées décrivent tout : \(U\), l’eau montée de la tasse (vapeur et nuage), \(O\), l’eau partie en pluie, et \(L\), l’eau arrivée dans la tasse, qui est \(O\) retardée du temps de chute (0,42 s).</p>
+        <div class="eq">\[ \text{nuage} = U - O, \qquad \text{pluie en vol} = O - L, \qquad \text{niveau du thé} = -(U - L) \]</div>
+        <p>La somme des trois est nulle par construction. Le cycle de l’eau commence à u = 0,96, quand l’averse est finie et que la vapeur repart ; à cet instant les trois grandeurs sont nulles. Le thé baisse de 2,2 mm quand le nuage est plein, assez pour se voir sur la paroi.</p>
+        <p>Il reste à dire pourquoi la vapeur repart. Sans cause, un thé qui vient de recevoir une averse et se remet à fumer est un raccord de montage. La cause est la foudre : elle laisse dans la cuillère et dans le thé une chaleur qui retombe en exponentielle sur toute la boucle. La cuillère passe du blanc-jaune au rouge sombre, le thé frémit, et quand l’averse cesse il est encore chaud. La foudre réchauffe le thé, le thé fait la vapeur, la vapeur fait le nuage, le nuage fait la foudre.</p>
+        <p>Le traceur est filmé à la caméra rapide, et le nuage doit le montrer. Ses volutes lisent une horloge lente, de vitesse \(1 - 0{,}94\,B(u)\), où \(B\) vaut 1 pendant le traceur. Son intégrale, en forme fermée, est ramenée à 1 sur la boucle. Pendant le traceur elle ne parcourt que 2 % d’un tour.</p>
+        <figure id="fig-eau"><figcaption><b>Les courbes du film.</b> Le curseur déplace l’instant. En bleu l’eau en l’air (vapeur et nuage), en vert le niveau du thé (inversé), en rouge la pluie en vol (amplifiée dix fois), en or la lumière des arcs, en rose la chaleur laissée par la foudre. Les valeurs viennent de <code>stateAt()</code>.</figcaption></figure>
+      </section>
+
+      <section id="nuage">
+        <h2><span class="n">05</span>La vapeur et le nuage sont un seul fluide simulé</h2>
+        <span class="src">src/gen/plume.js · simulatePlume() · src/scene/cloud.js</span>
+        <p>Les deux premières versions dessinaient deux objets : un filet de vapeur, et au-dessus une enveloppe de nuage qui grossissait. Évaser le filet, le faire entrer dans l’enveloppe, lier sa densité au débit : rien n’y faisait, on voyait toujours deux choses posées l’une sur l’autre. La seule façon de montrer que la vapeur remplit le nuage est de calculer ce remplissage.</p>
+        <p>Un panache chaud monte donc de la surface du thé dans une simulation de fluide, axisymétrique pour tenir en une seconde de calcul : deux coordonnées, le rayon et la hauteur. L’air chaud est plus léger et monte (c’est le terme de flottabilité \(b\)), et il emporte un traceur \(s\), la vapeur condensée, qui est tout ce qu’on verra.</p>
+        <div class="eq">\[ \partial_t \mathbf{u} + (\mathbf{u}\cdot\nabla)\mathbf{u} = -\nabla p + b\,\hat{z}, \qquad \nabla\cdot\mathbf{u} = 0, \qquad \partial_t b + \mathbf{u}\cdot\nabla b = -\Gamma(z)\,w \]</div>
+        <p>\(\Gamma\) est la stratification de l’air ambiant. Elle est nulle jusqu’au niveau de condensation (\(z = 1\)) et vaut 22 au-dessus : dans cette couche, l’air qui monte se retrouve vite plus lourd que ce qui l’entoure. Une bouffée chauffée à \(b\) s’arrête vers \(z \approx 1 + b/\Gamma\) et s’étale à l’horizontale. La source chauffe de plus en plus fort, de 0,3 à 2,15 fois sa valeur de base, et bat par bouffées (6 à 10 selon la graine). Les premières s’étalent à la base, les suivantes plus haut, les dernières sous le plafond fermé du domaine. Le nuage est ce qui s’est accumulé. À la fin la source faiblit et la colonne se réduit à un filet.</p>
+        <div class="note trap"><b>Un jet laminaire perce tout</b><p>Sans mélange, le panache simulé restait un jet étroit et chaud : il traversait la couche stable et tapait le plafond dès la première bouffée. Un vrai panache est turbulent, il entraîne l’air ambiant, s’élargit en cône et se dilue. Une diffusion ajoutée aux vitesses et à la flottabilité (viscosité de tourbillon, coefficient 0,2 par pas) joue ce rôle. Une inversion très raide en guise de plafond avait l’effet contraire : l’air qui la touchait devenait si lourd qu’il retombait jusqu’à la tasse. Le plafond est maintenant le haut du domaine, fermé.</p></div>
+        <p>Le schéma est celui de Stam : advection semi-lagrangienne, puis projection de la vitesse sur un champ sans divergence par 36 passes de Gauss-Seidel sur le laplacien cylindrique. La grille fait 64 cellules de large et 56 à 88 de haut. Les 576 pas sont enregistrés en 72 images de 8 bits, dans une texture à trois dimensions (rayon, hauteur, temps) : le filtrage trilinéaire du processeur graphique interpole dans le temps.</p>
+        <figure id="fig-nuage"><figcaption><b>La simulation, telle qu’elle est enregistrée.</b> Le curseur parcourt les 72 images du traceur, le demi-plan (r, z) complété par symétrie. Le trait pointillé est le niveau de condensation. La démo lance <code>simulatePlume()</code> dans le worker du projet (une à deux secondes) ; la scène y ajoute les volutes et les bourgeons.</figcaption></figure>
+        <p>Une simulation axisymétrique est trop lisse : rendue telle quelle, elle donnait un abat-jour. Le rendu lui rend son désordre sans toucher à sa dynamique. Les coordonnées de lecture sont déformées par un bruit qui dérive lentement, ce qui tord la colonne en volutes. Puis le champ sert d’enveloppe à une érosion par deux échelles de bruit de Worley inversé, d’après la méthode de Schneider pour <em>Horizon Zero Dawn</em> : ce sont les bourgeons. La colonne et le nuage passent par la même fonction de densité, il n’y a pas de couture entre eux. Sous \(z = 1\) le traceur n’est visible qu’à 30 % : la base du nuage est plate.</p>
+        <p>Le rendu est une marche de rayon dans la chaîne d’image, 12 pas dans la colonne et 36 dans le nuage, avec un départ décalé par pixel et par image que l’anticrénelage temporel lisse. Chaque pas dense prend deux prélèvements allégés vers la lampe pour l’ombre propre. Les éclairs sont six sources ponctuelles placées dans le volume, d’intensité \(I / (1 + 14\,d^2)\).</p>
+        <div class="note check"><b>Ce que les tests affirment</b><p>La tête du panache ne redescend pas pendant la montée et atteint la base du nuage en moins d’un tiers du film. La masse au-dessus du niveau de condensation ne fait que croître, et pèse à la fin plus de six fois celle de la colonne. La relecture ne change d’image brusquement qu’à l’instant où l’averse a tout effacé.</p></div>
+      </section>
+
+      <section id="camera">
+        <h2><span class="n">06</span>La caméra d’une passe plein écran n’est pas celle de la scène</h2>
+        <span class="src">src/scene/cloud.js · haze() · src/render/post.js</span>
+        <p>Le nuage est calculé après la passe de scène, pour pouvoir absorber ce qui est derrière lui et s’arrêter à ce qui est devant. Il lui faut, pour chaque pixel, le rayon de la caméra et la distance du premier objet. Pendant plusieurs essais, rien ne s’est affiché.</p>
+        <div class="note trap"><b>Deux erreurs superposées</b><p>La fonction <code>getViewPosition</code> de three.js reconstruit la position d’un pixel à partir de sa profondeur en supposant la convention d’OpenGL (profondeur de −1 à 1). En WebGPU elle va de 0 à 1 : un objet à 7 unités était vu à 3,7, devant le nuage, et la marche s’arrêtait avant de commencer. Ensuite, dans une passe plein écran, les nœuds <code>cameraPosition</code> et <code>cameraWorldMatrix</code> désignent la caméra orthographique du quad. La boîte du nuage était testée depuis l’origine. Une image de contrôle qui affichait la longueur du rayon dans la boîte a montré une bande horizontale au milieu de l’écran.</p></div>
+        <p>La position, la matrice monde et l’inverse de la projection de la caméra de la scène passent donc par des uniformes, mis à jour à chaque image. La distance du premier objet vient de la profondeur par <code>perspectiveDepthToViewZ</code>, divisée par la composante en z du rayon.</p>
+        <p>La chaîne d’image commune ajoute la brume d’un projet à l’image. Un nuage d’orage doit aussi l’assombrir. Bolt garde une variante locale de cette chaîne, différente d’une ligne : la fonction reçoit la couleur de la scène et rend \(C\,T + L\), la couleur transmise plus la lumière diffusée.</p>
+      </section>
+
+      <section id="recipients">
+        <h2><span class="n">07</span>Dix récipients tournés, une cuillère posée</h2>
+        <span class="src">src/gen/vessels.js · shellProfile(), spoonFrame()</span>
+        <p>La cible de la foudre doit tenir le gros plan : une tasse en une seule surface a l’air d’un jouet. Chaque récipient part d’un profil externe de cinq à sept points, lissé en Catmull-Rom. La paroi interne est ce profil décalé de l’épaisseur le long de sa normale (2,2 mm pour une tasse, 3 mm pour la fonte). La lèvre est un demi-cercle qui les raccorde, le fond a un congé de 5 mm, le pied est un anneau en retrait. La lèvre reçoit sa propre matière, d’où le filet d’or.</p>
+        <p>Les pièces rapportées sont balayées le long de courbes de Bézier : l’anse, qui quitte la paroi le long de sa normale et s’épaissit à ses attaches, noyées dans l’épaisseur, le bec en col de cygne et son embouchure, le bouton du couvercle, l’arceau du tetsubin sur ses deux oreilles, 140 picots de fonte, 16 à 32 côtes.</p>
+        <p>La cuillère est le paratonnerre de la scène, et elle doit être posée. Son cuilleron repose sur le fond, sa tige s’appuie sur la lèvre : la tige est la tangente, menée du centre du cuilleron, au cercle de la lèvre grossi de la demi-épaisseur de la tige. Quatre itérations suffisent, la hauteur du cuilleron dépendant de l’angle. Un test passe tous les sommets de la cuillère contre le profil de la paroi.</p>
+        <figure id="fig-profil"><figcaption><b>Le profil d’une tasse et sa cuillère.</b> Les boutons changent de variante, le curseur évase la lèvre. En or la paroi (<code>shellProfile()</code>), en bleu le niveau du thé, en blanc l’axe de la cuillère et le point que vise la foudre. La démo montre la coupe ; l’anse et la soucoupe n’y sont pas.</figcaption></figure>
+      </section>
+
+      <section id="lumiere">
+        <h2><span class="n">08</span>L’éclair éclaire la table</h2>
+        <span class="src">src/scene/stage.js · update()</span>
+        <p>Un éclair qui ne change rien à la lumière de la pièce est un autocollant. À la jonction, un projecteur à ombres s’allume sur le canal, au tiers bas, toujours à plus de 4 cm au-dessus du récipient : la tasse jette une ombre dure sur la nappe, et cette ombre tourne quand un arc suivant emprunte un autre canal. La position du projecteur est la moyenne des canaux, pondérée par leurs impulsions. Elle glisse d’un arc à l’autre sans sauter.</p>
+        <p>Son intensité suit la somme des impulsions, multipliée par 150 candelas et par un facteur qui baisse dans les scènes claires. Le thé reçoit de chaque impact un anneau qui s’éloigne à 0,55 unité par seconde et s’amortit en 1,4 s. La pluie y ajoute ses ronds, tirés sur une grille de cellules.</p>
+      </section>
+
+      <section id="budget">
+        <h2><span class="n">09</span>Budget</h2>
+        <div class="tbl"><table>
+          <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
+          <tbody>
+            <tr><td>Récipient (10 000 à 27 000 sommets)</td><td>worker</td><td class="num">4 à 43 ms</td></tr>
+            <tr><td>Éclair : croissance et segments (80 à 440 sites)</td><td>worker</td><td class="num">2 à 30 ms</td></tr>
+            <tr><td>Panache : 576 pas sur 64 × 68 cellules, 72 images</td><td>worker</td><td class="num">1,3 à 1,6 s</td></tr>
+            <tr><td>Pipelines compilées sous l’écran de chargement</td><td>GPU</td><td class="num">42</td></tr>
+            <tr><td>Image, qualité Haute, 1920 × 1080</td><td>GPU</td><td class="num">14,4 ms</td></tr>
+            <tr><td>Image, version légère, 1280 × 720</td><td>GPU</td><td class="num">5,2 ms</td></tr>
+            <tr><td>Marche du nuage</td><td>fragment</td><td class="num">36 + 12 pas (14 + 6 en version légère)</td></tr>
+            <tr><td>Tests</td><td>Node</td><td class="num">32</td></tr>
+          </tbody>
+        </table></div>
+        <p>Mesures prises sur un portable Apple Silicon, dans le panneau de navigateur intégré. Le temps d’image va de 13,8 à 14,4 ms selon l’instant. La version légère n’a pas été essayée sur un téléphone.</p>
+      </section>
+    </article>
+
+    <footer class="end">
+      <a href="./">Ouvrir Bolt</a>
+      <a href="https://github.com/drschizzo/Codevember/blob/main/bolt/README.md">README</a>
+      <a href="https://github.com/drschizzo/Codevember/blob/main/bolt/docs/concept.md">La démarche</a>
+      <span class="sp"></span>
+      <a href="../">Tous les jours</a>
+    </footer>
+  </main>
+
+  <script type="module">
+    import { demo, C, TAU, lerp, clamp, smooth, label, alpha, rng } from '../home/explainer.js';
+    import { buildBolt } from './src/gen/dbm.js';
+    import { shellProfile, VARIANTS } from './src/gen/vessels.js';
+    import { stateAt, pulse, PHYS, TIMES } from './src/film.js';
+
+    // ── réglages des familles, sur une scène type (unités de la scène) ──
+    const SPEC = {
+      strike: (seed, eta, active) => ({ family: 'strike', seed, h: 0.06, eta, active, beta: 0.5, root: [0, 1.6, 0], targets: [[0.35, 0.55, 0]], field: 'down', box: { r: 1.3, y0: 0.48, y1: 1.7 }, obstacles: [] }),
+      upward: (seed) => ({ family: 'upward', seed, h: 0.06, eta: 3, active: 30, beta: 0.42, root: [0, 0.55, 0], targets: [[0, 1.75, 0]], stopAt: 300, field: 'up', box: { r: 0.85, y0: 0.55, y1: 1.78 }, obstacles: [] }),
+      spider: (seed) => ({ family: 'spider', seed, h: 0.06, eta: 3.6, active: 30, beta: 0.5, root: [-0.3, 1.6, 0], targets: [[0.3, 0.55, 0]], field: 'down', slab: { y0: 1.52, y1: 1.66, count: 130, r: 0.8 }, box: { r: 0.9, y0: 0.48, y1: 1.7 }, obstacles: [] }),
+      fork: (seed) => ({ family: 'fork', seed, h: 0.06, eta: 2.8, active: 36, beta: 0.45, root: [0, 1.6, 0], targets: [[0, 0.45, 0]], surface: { y: 0.45, r: 0.55 }, forks: 2, field: 'down', box: { r: 1.3, y0: 0.43, y1: 1.7 }, obstacles: [] }),
+    };
+    const view = (d, x, y) => [d.w / 2 + x * d.h * 0.62, d.h * 0.96 - (y - 0.35) * d.h * 0.68];
+    function drawTree(g, d, B, bright) {
+      g.lineCap = 'round';
+      for (let i = 1; i < B.n; i++) {
+        const p = B.parent[i], st = bright(i, p);
+        if (!st) continue;
+        const [x0, y0] = view(d, B.pos[p * 3], B.pos[p * 3 + 1]), [x1, y1] = view(d, B.pos[i * 3], B.pos[i * 3 + 1]);
+        g.strokeStyle = st.color; g.lineWidth = st.width; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
+      }
+    }
+    const cloudLine = (g, d, y) => { const [x0, yy] = view(d, -0.9, y), [x1] = view(d, 0.9, y); g.strokeStyle = alpha(C.c2, 0.5); g.lineWidth = 1; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(x0, yy); g.lineTo(x1, yy); g.stroke(); g.setLineDash([]); label(g, 'base du nuage', x1 + 6, yy + 4); };
+
+    // 01 : une décharge, η réglable
+    demo('#fig-dbm', {
+      title: 'Claquage diélectrique', aspect: 1.9, animate: true,
+      controls: [{ key: 'eta', label: 'η', min: 1.6, max: 5.5, step: 0.1, value: 3.2, fmt: (v) => v.toFixed(1) }],
+      buttons: [{ label: 'Autre tirage', onClick: (d) => { d.state.seed = (d.state.seed ?? 1) + 1; d.state.key = ''; d.t = 0; } }],
+      draw(g, d) {
+        const S = d.state, key = `${S.seed ?? 1}/${d.s.eta}`;
+        if (S.key !== key) { S.key = key; S.B = buildBolt(SPEC.strike(`demo${S.seed ?? 1}`, d.s.eta, 32)); d.t = Math.min(d.t, 0.01); }
+        const B = S.B, a = Math.min(1, d.t / 3.2);
+        cloudLine(g, d, 1.6);
+        drawTree(g, d, B, (i) => (B.tb[i] <= a ? { color: B.mask[i] && a >= 1 ? C.ink : alpha(C.c2, 0.5 + 0.5 * Math.exp(-(a - B.tb[i]) / 0.05)), width: B.mask[i] && a >= 1 ? 2.2 : 1.1 } : null));
+        for (let i = 0; i < B.n; i++) if (B.tb[i] <= a && a - B.tb[i] < 0.03 && a < 1) { const [x, y] = view(d, B.pos[i * 3], B.pos[i * 3 + 1]); g.fillStyle = C.ink; g.beginPath(); g.arc(x, y, 2.2, 0, TAU); g.fill(); }
+        const [tx, ty] = view(d, 0.35, 0.55); g.strokeStyle = C.c1; g.lineWidth = 1.2; g.beginPath(); g.arc(tx, ty, 6, 0, TAU); g.stroke();
+        d.status(`${B.n} nœuds · canal de ${B.strokes[0].length.toFixed(2)} u`);
+        if (d.t > 5) d.t = 0;
+      },
+    });
+
+    // 02 : les quatre familles
+    demo('#fig-familles', {
+      title: 'Quatre réglages du même calcul', aspect: 1.9,
+      buttons: ['strike', 'upward', 'spider', 'fork'].map((f, i) => ({ label: ['Coup au but', 'Ascendant', 'Araignée', 'Fourchu'][i], onClick: (d) => { d.state.f = f; d.state.n = (d.state.n ?? 0) + 1; d.state.B = null; } })),
+      draw(g, d) {
+        const S = d.state; S.f ??= 'fork';
+        S.B ??= buildBolt(SPEC[S.f](`fam${S.n ?? 0}`, 3.2, 32));
+        const B = S.B;
+        cloudLine(g, d, S.f === 'upward' ? 1.5 : 1.6);
+        drawTree(g, d, B, (i, p) => ({ color: B.tb[i] > 1.2 ? C.c3 : (B.mask[i] & B.mask[p]) && S.f !== 'upward' ? C.ink : S.f === 'upward' && (B.mask[i] & 2) ? C.ink : alpha(C.c2, 0.75), width: B.tb[i] > 1.2 || ((B.mask[i] & B.mask[p]) && S.f !== 'upward') || (S.f === 'upward' && (B.mask[i] & 2)) ? 2 : 1 }));
+        for (const K of B.strokes) { const [x, y] = view(d, K.target[0], K.target[1]); if (S.f !== 'upward') { g.strokeStyle = C.c1; g.lineWidth = 1.2; g.beginPath(); g.arc(x, y, 5, 0, TAU); g.stroke(); } }
+        d.status(`${B.n} nœuds · ${B.strokes.length} ${B.strokes.length > 1 ? 'canaux' : 'canal'}`);
+      },
+    });
+
+    // 03 : le film d'un éclair
+    const ARC = buildBolt(SPEC.strike('arc7', 3.0, 34)), STROKES = [{ t: 0, amp: 1 }, { t: 0.32, amp: 0.7 }, { t: 0.66, amp: 0.5 }];
+    demo('#fig-arc', {
+      title: 'Traceur, jonction, arcs', aspect: 1.9,
+      controls: [{ key: 'x', label: 'Instant', min: 0, max: 1, step: 0.002, value: 0.44, fmt: (v) => (v < 0.5 ? `traceur a = ${(v * 2).toFixed(2)}` : `τ = ${((v - 0.5) * 2.4).toFixed(2)} s`) }],
+      draw(g, d) {
+        const B = ARC, a = Math.min(1, d.s.x * 2), tau = d.s.x < 0.5 ? -1 : (d.s.x - 0.5) * 2.4;
+        cloudLine(g, d, 1.6);
+        drawTree(g, d, B, (i) => {
+          if (B.tb[i] > a) return null;
+          let I = 0.085 + 1.5 * Math.exp(-(a - B.tb[i]) / 0.022) * (tau < 0 ? 1 : 0);
+          const xb = tau - B.s[i] / PHYS.wave;
+          if (tau >= 0) {
+            if (B.mask[i]) for (const s of STROKES) I += 2.6 * s.amp * pulse(tau - s.t - B.s[i] / PHYS.wave);
+            else if (xb > 0) I = I * Math.exp(-xb / 0.05) + 0.55 * B.w[i] * Math.min(1, xb / 0.012) * Math.exp(-xb / PHYS.tauBranch);
+          }
+          const k = clamp(I / 1.2);
+          return { color: k > 0.5 ? alpha('#ffffff', clamp(0.5 + k)) : alpha(C.c2, clamp(0.5 + 1.5 * k)), width: 1.1 + 2.6 * clamp(I / 2.6) };
+        });
+        const [tx, ty] = view(d, 0.35, 0.55); g.strokeStyle = C.c1; g.lineWidth = 1.2; g.beginPath(); g.arc(tx, ty, 6, 0, TAU); g.stroke();
+        let L = 0; if (tau > 0) for (const s of STROKES) L += s.amp * pulse(tau - s.t);
+        d.status(tau < 0 ? 'le traceur descend' : `lumière des arcs : ${L.toFixed(2)}`);
+      },
+    });
+
+    // 04 : les courbes du film
+    const F = { duration: 24, strokes: [{ t: 0, amp: 1, path: 0 }, { t: 0.3, amp: 0.7, path: 0 }, { t: 0.62, amp: 0.55, path: 0 }, { t: 0.95, amp: 0.4, path: 0 }], flickers: [{ u: 0.27, amp: 0.6, p: [0, 0, 0] }, { u: 0.31, amp: 0.9, p: [0, 0, 0] }], drop: 0.022 };
+    demo('#fig-eau', {
+      title: 'Une seule horloge', aspect: 2.3,
+      controls: [{ key: 'u', label: 'Phase u', min: 0, max: 1, step: 0.001, value: 0.61, fmt: (v) => v.toFixed(3) }],
+      draw(g, d) {
+        const X = (u) => lerp(40, d.w - 16, u), Y = (v) => lerp(d.h - 26, 18, v);
+        g.strokeStyle = C.grid; g.lineWidth = 1;
+        for (const [u, name] of [[TIMES.dark[0], 'charge'], [TIMES.leader[0], 'traceur'], [TIMES.strike, 'jonction'], [TIMES.rain[0], 'averse'], [TIMES.cycle, 'vapeur']]) { g.beginPath(); g.moveTo(X(u), Y(0)); g.lineTo(X(u), Y(1)); g.stroke(); label(g, name, X(u) + 4, 14, { size: 11 }); }
+        const curve = (f, color, w = 1.8) => { g.strokeStyle = color; g.lineWidth = w; g.beginPath(); for (let i = 0; i <= 600; i++) { const u = i / 600, y = Y(clamp(f(stateAt(F, u)))); i ? g.lineTo(X(u), y) : g.moveTo(X(u), y); } g.stroke(); };
+        curve((S) => S.cloud, C.c2); curve((S) => -S.level, C.c4, 1.2); curve((S) => S.air * 10, C.c3); curve((S) => S.light, C.c1, 1.4); curve((S) => S.heat, '#d98fb0', 1); curve((S) => (S.a < 0 ? 0 : S.a < 1 ? S.a * 0.5 : 0), alpha(C.ink, 0.5), 1);
+        const S = stateAt(F, d.s.u);
+        g.strokeStyle = C.ink; g.lineWidth = 1; g.beginPath(); g.moveTo(X(d.s.u), Y(0)); g.lineTo(X(d.s.u), Y(1)); g.stroke();
+        label(g, '0', 28, Y(0) + 4); label(g, '1', 28, Y(1) + 4);
+        d.status(`nuage ${S.cloud.toFixed(3)} + en vol ${S.air.toFixed(3)} + thé ${S.level.toFixed(3)} = ${(S.cloud + S.air + S.level).toFixed(3)}`);
+      },
+    });
+
+    // 05 : la simulation du panache, calculée dans le worker du projet
+    demo('#fig-nuage', {
+      title: 'Le panache qui devient nuage', aspect: 1.9,
+      controls: [{ key: 't', label: 'Temps de la simulation', min: 0, max: 1, step: 0.005, value: 0.55 }],
+      setup(d) {
+        if (d.state.asked) return;
+        d.state.asked = true;
+        const w = new Worker(new URL('./src/gen/worker.js', import.meta.url), { type: 'module' });
+        w.onmessage = ({ data }) => { d.state.P = data.out; d.state.err = data.error; w.terminate(); d.redraw(); };
+        w.postMessage({ id: 1, what: 'plume', spec: { r0: 0.2, top: 1.7, puffs: 8, gamma: 22, heat: 5, mix: 0.2 } });
+      },
+      draw(g, d) {
+        const P = d.state.P;
+        if (!P) { label(g, d.state.err ? 'la simulation a échoué' : 'simulation en cours…', d.w / 2, d.h / 2, { align: 'center' }); return; }
+        const f = d.s.t * (P.NF - 1), f0 = Math.floor(f), f1 = Math.min(P.NF - 1, f0 + 1), k = f - f0;
+        const W = P.NR * 2, H = P.NZ, c = d.state.c ??= new OffscreenCanvas(W, H), img = c.getContext('2d').createImageData(W, H);
+        for (let j = 0; j < H; j++) for (let i = 0; i < P.NR; i++) {
+          const o = i + P.NR * (H - 1 - j), v = (P.frames[o + P.NR * P.NZ * f0] * (1 - k) + P.frames[o + P.NR * P.NZ * f1] * k) / 255, a = v * v;
+          for (const x of [P.NR + i, P.NR - 1 - i]) { const q = (j * W + x) * 4; img.data[q] = 205; img.data[q + 1] = 218; img.data[q + 2] = 240; img.data[q + 3] = 255 * Math.min(1, a * 1.6); }
+        }
+        c.getContext('2d').putImageData(img, 0, 0);
+        const sc = d.h / (H * P.DX) * 0.96, w = W * P.DX * sc, x0 = (d.w - w) / 2, y0 = d.h * 0.02;
+        g.imageSmoothingEnabled = true; g.drawImage(c, x0, y0, w, H * P.DX * sc);
+        const yb = y0 + (H * P.DX - 1) * sc; g.strokeStyle = alpha(C.c1, 0.6); g.setLineDash([4, 4]); g.beginPath(); g.moveTo(x0, yb); g.lineTo(x0 + w, yb); g.stroke(); g.setLineDash([]);
+        label(g, 'niveau de condensation (z = 1)', x0 + 4, yb + 15);
+        d.status(`image ${f0 + 1} / ${P.NF}`);
+      },
+    });
+
+    // 07 : profil d'un récipient et cuillère
+    const names = ['tulipe', 'litron', 'pied', 'droit', 'chawan'];
+    demo('#fig-profil', {
+      title: 'Profil tourné', aspect: 1.9,
+      controls: [{ key: 'flare', label: 'Évasement', min: 0, max: 1, step: 0.01, value: 0.5 }],
+      buttons: names.map((v) => ({ label: VARIANTS[v].label, onClick: (d) => { d.state.v = v; } })),
+      draw(g, d) {
+        const v = d.state.v ?? 'tulipe', V = VARIANTS[v], S = shellProfile(V.outer({ flare: d.s.flare }), { t: V.t, floor: V.floor, foot: V.foot });
+        const k = d.h * 0.78 / Math.max(S.top, 0.9), P = (r, y) => [d.w / 2 + r * k, d.h * 0.9 - y * k];
+        for (const sg of [-1, 1]) {
+          g.beginPath(); S.prof.forEach((q, i) => { const [x, y] = P(sg * q.r, q.y); i ? g.lineTo(x, y) : g.moveTo(x, y); });
+          g.closePath(); g.fillStyle = alpha(C.c1, 0.25); g.fill(); g.strokeStyle = C.c1; g.lineWidth = 1.5; g.stroke();
+        }
+        const lv = S.floor + (S.top - S.floor) * V.fill, [l0, ly] = P(-S.rIn(lv), lv), [l1] = P(S.rIn(lv), lv);
+        g.strokeStyle = C.c2; g.lineWidth = 1.5; g.beginPath(); g.moveTo(l0, ly); g.lineTo(l1, ly); g.stroke();
+        if (V.family !== 'bol') {
+          // la tige : tangente au cercle de la lèvre, menée du centre du cuilleron (comme spoonFrame)
+          const th = 0.022, bowlL = V.glass ? 0.24 : 0.3, depth = 0.05, L = Math.max(V.glass ? 1.5 : 1.22, (S.top - S.floor) * 1.75), rho = S.lip.rad + th / 2 + 0.002;
+          let ang = 0.9, p0 = [0, 0];
+          for (let it = 0; it < 4; it++) { p0 = [-S.rIn(S.floor + 0.08) * 0.42, S.floor + bowlL * 0.5 * Math.sin(ang) + depth * Math.cos(ang) + th + 0.012]; const dx = S.lip.r - p0[0], dy = S.lip.y - p0[1]; ang = Math.atan2(dy, dx) + Math.asin(Math.min(0.99, rho / Math.hypot(dx, dy))); }
+          const o = [p0[0] - Math.cos(ang) * bowlL / 2, p0[1] - Math.sin(ang) * bowlL / 2], e = [o[0] + Math.cos(ang) * L, o[1] + Math.sin(ang) * L];
+          g.strokeStyle = C.ink; g.lineWidth = 2; g.beginPath(); g.moveTo(...P(...o)); g.lineTo(...P(...e)); g.stroke();
+          const [ex, ey] = P(...e); g.fillStyle = C.ink; g.beginPath(); g.arc(ex, ey, 4, 0, TAU); g.fill(); label(g, 'la pointe', ex + 8, ey + 4);
+          const [cx, cy] = P(S.lip.r, S.lip.y); g.strokeStyle = C.c3; g.lineWidth = 1; g.beginPath(); g.arc(cx, cy, rho * k, 0, TAU); g.stroke();
+          d.status(`tige à ${(ang * 180 / Math.PI).toFixed(0)}° · épaisseur ${(V.t * 100).toFixed(1)} mm`);
+        } else d.status(`la foudre vise la surface du thé · épaisseur ${(V.t * 100).toFixed(1)} mm`);
+      },
+    });
+  </script>
+</body>
+</html>
