@@ -75,6 +75,8 @@ export const FINISHES = {
   urushi: F({ label: 'Laque urushi et or', pattern: 'urushi', color: '#090807', color2: METAL.gold, rough: 0.32, clearcoat: 1, ccRough: 0.012, bump: 1, scale: 1 }),
   urushiRed: F({ label: 'Laque vermillon', pattern: 'urushi', color: '#6a0c0a', color2: METAL.gold, rough: 0.34, clearcoat: 1, ccRough: 0.015, bump: 1, scale: 0.7 }),
   blackCeramic: F({ label: 'Céramique noire', pattern: 'plain', color: '#0d0d0f', rough: 0.1, clearcoat: 1, ccRough: 0.01, smudge: 0.25 }),
+  // le fil rouge de la collection : la pièce qui porte le geste (plongeurs, cylindre de Kármán)
+  vermilion: F({ label: 'Laque vermillon', pattern: 'plain', color: '#d8401f', rough: 0.32, clearcoat: 1, ccRough: 0.02 }),
   whiteCeramic: F({ label: 'Céramique blanche', pattern: 'plain', color: '#f1f0ec', rough: 0.2, clearcoat: 1, ccRough: 0.015 }),
   soapFilm: F({ label: 'Film de savon', pattern: 'soap', color: '#09090b', rough: 0.04, clearcoat: 0.6, ccRough: 0.01, irid: 1, iridIOR: 1.33, iridMin: 120, iridMax: 900, scale: 1 }),
   // cristaux massifs (objets exposés) : ils réfractent l'intérieur de la cellule

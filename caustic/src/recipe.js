@@ -56,6 +56,24 @@ export const TANKS = {
 // { pos } (m, au-dessus de l'eau) ; angular : taille angulaire de la source
 // (rad) ; lux : éclairement horizontal de la surface ; K : température.
 export const MOODS = {
+  // d'après Ernst Haeckel (« Kunstformen der Natur ») : la planche, pas
+  // l'aquarium. La caméra regarde le fond presque à la verticale, à travers
+  // la surface, et le fond de papier remplit l'image : sans lumière ambiante
+  // (studio presque éteint), le papier n'est clair que là où la lentille
+  // concentre la lumière, et le dessin s'y imprime comme une planche
+  // gravée ; un fond sombre éteindrait aussi le dessin (essayé). Seuls les
+  // plongeurs vermillon, au bord, disent d'où vient le geste.
+  haeckel: {
+    label: 'Planche', families: ['foyer'],
+    floor: 'paper', tank: 'steel', camera: 'zenith',
+    // (lampe haute, loin sur le côté : vu à longue focale, son reflet sur
+    // l'eau tombe hors du cadre ; assez haute — 66° — pour que l'ombre du
+    // bord de la cuve ne morde pas sur le fond)
+    light: { kind: 'lamp', pos: [-1.7, 3.3, 0.1], angular: 0.003, K: 6000, lux: 6 },
+    water: { turbid: 0.025, ambient: 0.000006, tint: [1, 1, 1] },
+    env: 'studio', envIntensity: 0.04, bg: ['#050506', '#020203'],
+    grade: { exposure: 0.24, contrast: 1.35, saturation: 0.9, shadows: [0.97, 0.99, 1.03], highlights: [1, 1, 1] },
+  },
   lagon: {
     label: 'Lagon', families: ['foyer', 'karman'],
     floor: 'sand', tank: 'enamel', camera: 'plongee',
@@ -116,6 +134,10 @@ export const MOODS = {
 
 // Les cadrages (caméra hors de la cuve, devant la vitre ; unités : m)
 const CAMERAS = {
+  // presque à la verticale, de haut, à longue focale : le fond remplit
+  // l'image (Planche). (Plus près et plus ouvert, les rayons du haut du cadre,
+  // réfractés, atteignaient la paroi du fond : une bande claire en travers.)
+  zenith: { el: [1.36, 1.42], az: [-0.08, 0.08], dist: [1.25, 1.32], fov: [15, 16.5], ty: -0.43, hi: -0.4, tx: 0.045 }, // (tx : le cadre s'écarte de l'ombre de la paroi côté lampe)
   plongee: { el: [0.6, 0.68], az: [-0.1, 0.1], dist: [0.88, 0.95], fov: [40, 43], ty: -0.3, hi: -0.1 },
   rasant: { el: [0.3, 0.36], az: [-0.16, 0.16], dist: [0.9, 0.98], fov: [38, 41], ty: -0.32, hi: -0.12 },
   troisquarts: { el: [0.46, 0.54], az: [0.36, 0.46], dist: [0.9, 0.98], fov: [39, 42], ty: -0.3, hi: -0.1 },
@@ -153,7 +175,7 @@ export function generate(seed, overrides = {}) {
   const Cs = CAMERAS[M.camera];
   const camera = {
     style: M.camera, el: r3(rc.range(...Cs.el)), az: r3(rc.range(...Cs.az) * rc.sign()), dist: r3(rc.range(...Cs.dist)), fov: r2(rc.range(...Cs.fov)),
-    target: [0, r3(Cs.ty * geo.H / 0.45), r3(-geo.D * 0.08)],
+    target: [Cs.tx ?? 0, r3(Cs.ty * geo.H / 0.45), r3(-geo.D * 0.08)],
     // la cible remonte vers la surface et les plongeurs entre deux dessins
     // (la cause), et redescend sur le fond quand les ondes convergent (l'effet)
     rise: family === 'foyer' ? r3((Cs.hi - Cs.ty) * geo.H / 0.45) : 0,

@@ -2,7 +2,7 @@
 
 *le foyer des ondes.* Une cuve d'eau vue de côté, à travers sa vitre. Sur le pourtour, des plongeurs poussent des ondes. On les voit au fond comme des anneaux de lumière qui accourent vers le centre en se resserrant. À l'instant où ils se rejoignent, la surface prend exactement la forme d'une lentille calculée, et la lumière au fond se résout en un **dessin** (une diatomée, un oursin, une méduse, une rosace, un capitule de tournesol, un radiolaire), net et lumineux pendant une seconde de caméra rapide. Puis il se défait en anneaux qui repartent vers les bords, où les plongeurs les absorbent.
 
-![Une diatomée dessinée par la lumière au fond de la cuve émaillée de l’Atelier (graine c41)](docs/capture.jpg)
+![Une diatomée dessinée par la lumière sur le fond de papier, vue d’en haut comme une planche de Haeckel (graine h3, Planche)](docs/capture.jpg)
 
 Rendu physique en three.js (WebGPU, TSL). La scène est entièrement procédurale : une graine produit une scène. La démarche est dans [docs/concept.md](docs/concept.md) : le thème exploré sous six angles (la physique des catastrophes optiques, les cuves à ondes et les bassins à houle, Hockney et les rideaux de lumière, le vocabulaire, les cycles, la lumière), les clichés écartés (le fond de piscine qui ondule au hasard, la cardioïde dans la tasse, le cristal qui jette des arcs-en-ciel), dix pistes notées, les épreuves de crédibilité, de variété et d'ambition, les photographies de référence.
 
@@ -79,6 +79,7 @@ Les appareils sont des pièces à trois finitions (face, intérieur, tranche) au
 
 | Humeur | Décor | Lumière | Valeur | Cadrage |
 | --- | --- | --- | --- | --- |
+| **Planche** (Foyer ; d'après Ernst Haeckel, *Kunstformen der Natur*) | le fond de papier seul, sans cuve ni vitre à l'image | lampe ponctuelle haute, loin sur le côté (son reflet sort du cadre), studio presque éteint : le papier n'est clair que là où la lentille concentre la lumière | claire, gravée | presque à la verticale, à longue focale (15–16,5°), décalé de 4,5 cm pour sortir l'ombre de la paroi |
 | **Lagon** | cuve émaillée, sable blanc | soleil haut, filets nets et frangés | très claire | plongée |
 | **Chambre noire** | cuve à bâti d'acier noirci, fond de chaux, pièce noire | lampe à arc ponctuelle au-dessus | très sombre, contrastée | rasant |
 | **Thermes** | bassin de moellons de travertin, fond de faïence | soleil d'une verrière, un peu diffusé | moyenne, douce | trois-quarts |
@@ -88,6 +89,8 @@ Les appareils sont des pièces à trois finitions (face, intérieur, tranche) au
 | **Stroboscope** (Faraday) | cuve d'acier sur l'excitateur, fond de papier | stroboscope blanc | sombre, image figée | plongée |
 
 ## Scène et caméra
+
+**La Planche** est le contre-pied des autres humeurs : on ne voit plus l'aquarium, seulement ce qu'il dessine. Vue d'en haut, de 1,3 m, à longue focale, à travers la surface : le dessin remplit l'image comme une planche de Haeckel. (Plus près et plus ouvert, les rayons du haut du cadre, réfractés, atteignaient la paroi du fond : une bande claire en travers ; un fond d'ardoise éteignait aussi le dessin.) Les plongeurs, dans toutes les humeurs, sont laqués vermillon, le fil rouge de la collection : c'est d'eux que part le geste ; le cylindre de Kármán aussi.
 
 La caméra est hors de la cuve, devant la vitre, à hauteur de l'eau ou un peu au-dessus. Les rayons qui passent sous la ligne d'eau voient le fond à travers la vitre, ceux qui passent au-dessus voient la surface d'en haut : c'est la coupe d'un aquarium. Ses mouvements suivent l'histoire. Entre deux dessins, elle regarde la surface et les plongeurs (la cause) ; quand les ondes convergent, elle descend vers le fond et s'avance un peu (l'effet) ; puis elle remonte. Pointes < 25°/s, accélération bornée image par image (test à 120 i/s).
 
