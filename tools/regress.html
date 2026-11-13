@@ -1,0 +1,100 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Codevember · non-régression</title>
+<!--
+  Filet de non-régression du rendu. Cette page charge chaque projet dans un
+  cadre (même origine : le site est servi depuis la racine du dépôt), le rend
+  à taille fixe et à phases fixes par ses outils de mise au point (?debug),
+  relit l'image et l'envoie au collecteur (tools/sink.py).
+
+    python3 tools/sink.py <dossier> 8199
+    ouvrir tools/regress.html?out=avant      (deux fois, ?out=bruit, pour le bruit propre)
+    … modifier shared/ …
+    ouvrir tools/regress.html?out=apres
+    python3 tools/regress.py <dossier>/avant <dossier>/apres --bruit <dossier>/bruit
+
+  Paramètres : ?only=cocoon,kelp   projets à rendre (défaut : tous)
+               ?phases=0.1,0.45,0.8
+               ?out=avant        sous-dossier du collecteur
+               ?sink=http://127.0.0.1:8199/
+               ?w=960&h=540
+  L'avancement est dans window.__job (la page peut tourner panneau masqué).
+-->
+<style>
+  body { margin: 0; background: #111; color: #ccc; font: 13px/1.5 ui-monospace, monospace; }
+  pre { margin: 12px; white-space: pre-wrap; }
+  iframe { position: fixed; left: 0; top: 0; border: 0; opacity: 0.999; }
+</style>
+<pre id="log"></pre>
+<script type="module">
+// projet → nom de l'objet d'outils dans window (par défaut : le nom du dossier)
+const PROJECTS = {
+  hollow: 'hollow', membrane: 'membrane', tesseract: 'tess', shatter: 0, fold: 0, tangle: 0, moss: 0, melt: 0,
+  caustic: 0, rust: 0, feather: 0, labyrinth: 0, tension: 0, mirage: 0, spore: 0, kelp: 0, pendulum: 0, erosion: 0, cocoon: 0,
+};
+const SEEDS = { membrane: 'regress' };
+const q = new URLSearchParams(location.search);
+const only = q.get('only')?.split(',');
+const phases = (q.get('phases') || '0.1,0.45,0.8').split(',').map(Number);
+const sink = `${q.get('sink') || 'http://127.0.0.1:8199/'}${q.get('out') || 'avant'}/`;
+const W = +(q.get('w') || 960), H = +(q.get('h') || 540);
+const log = (s) => { document.querySelector('#log').textContent += `${s}\n`; };
+// (les minuteries d'une page masquée sont ralenties : attente par messages)
+const tickCh = new MessageChannel(); const waiters = [];
+tickCh.port1.onmessage = () => waiters.shift()?.();
+const yieldNow = () => new Promise((r) => { waiters.push(r); tickCh.port2.postMessage(0); });
+const sleep = async (ms) => { const t = performance.now(); while (performance.now() - t < ms) await yieldNow(); };
+
+const job = window.__job = { done: false, current: '', ok: [], failed: {}, t0: performance.now() };
+
+async function shoot(name, key) {
+  const frame = document.createElement('iframe');
+  frame.width = W; frame.height = H;
+  // (graine fixe : un projet sans scène d'ouverture en tirerait une au hasard)
+  frame.src = `../${name}/?debug&ui=0${SEEDS[name] ? `&seed=${SEEDS[name]}` : ''}`;
+  document.body.appendChild(frame);
+  try {
+    const win = frame.contentWindow;
+    const t = performance.now();
+    while (!win[key]?.shot) {
+      if (performance.now() - t > 240e3) throw new Error('outils de mise au point absents après 240 s');
+      await sleep(250);
+    }
+    const api = win[key], { renderer, camera, post } = api;
+    for (const ph of phases) {
+      // taille imposée (rapport de pixels 1), puis image fixe à la phase
+      renderer.setPixelRatio(1); renderer.setSize(W, H, false);
+      camera.aspect = W / H; camera.updateProjectionMatrix();
+      await api.shot(ph);
+      renderer.setPixelRatio(1); renderer.setSize(W, H, false);
+      camera.aspect = W / H; camera.updateProjectionMatrix();
+      await api.shot(ph);
+      const RT = post.nodes.scenePass.renderTarget.constructor;
+      const rt = new RT(W, H);
+      renderer.setRenderTarget(rt); post.render(); renderer.setRenderTarget(null);
+      const px = await renderer.readRenderTargetPixelsAsync(rt, 0, 0, W, H);
+      rt.dispose();
+      const c = new OffscreenCanvas(W, H), img = c.getContext('2d').createImageData(W, H), stride = Math.ceil((W * 4) / 256) * 256;
+      for (let y = 0; y < H; y++) img.data.set(px.subarray(y * stride, y * stride + W * 4), y * W * 4);
+      c.getContext('2d').putImageData(img, 0, 0);
+      const blob = await c.convertToBlob({ type: 'image/png' });
+      await fetch(`${sink}${name}-${String(Math.round(ph * 100)).padStart(3, '0')}.png`, { method: 'POST', body: blob });
+    }
+    if (api.errors?.length) throw new Error(`console.error : ${api.errors.slice(0, 3).join(' | ')}`);
+    job.ok.push(name); log(`${name} : ${phases.length} images`);
+  } catch (e) {
+    job.failed[name] = String(e?.message || e); log(`${name} : ÉCHEC ${job.failed[name]}`);
+  } finally {
+    frame.remove();
+    await sleep(300);
+  }
+}
+
+for (const [name, key] of Object.entries(PROJECTS)) {
+  if (only && !only.includes(name)) continue;
+  job.current = name;
+  await shoot(name, key || name);
+}
+job.done = true; job.seconds = Math.round((performance.now() - job.t0) / 1000);
+log(`terminé en ${job.seconds} s — ${job.ok.length} projets, ${Object.keys(job.failed).length} échecs`);
+</script>
