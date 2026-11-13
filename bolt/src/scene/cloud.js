@@ -19,7 +19,7 @@
 import * as THREE from 'three/webgpu';
 import {
   Fn, If, Loop, uniform, uniformArray, vec2, vec3, vec4, float, screenUV, screenCoordinate, perspectiveDepthToViewZ, texture3D,
-  normalize, length, dot, exp, sqrt, smoothstep, mix, min as tMin, max as tMax, fract, clamp, step,
+  normalize, length, dot, exp, sqrt, smoothstep, mix, min as tMin, max as tMax, fract, clamp, step, sin, cos,
 } from 'three/tsl';
 import { NZ } from '../../../shared/scene/materials.js';
 
@@ -63,22 +63,37 @@ export function createCloud() {
   const density = (p, fine = true) => {
     const z0 = p.y.sub(U.steamP.y).div(U.span);
     // l'axe du panache : de la source (la tasse, le bec) à l'aplomb du nuage
-    const ctr = mix(U.steamP.xz, U.c.xz, smoothstep(0, 0.85, z0));
     const o = vec3(U.seed, U.drift, U.seed.mul(1.7));
+    // (la colonne serpente : elle ne monte jamais droit, et pas deux fois pareil)
+    const snake = vec2(sin(z0.mul(5.3).add(U.seed.mul(3.1)).add(U.drift.mul(1.5708))), sin(z0.mul(4.1).add(U.seed.mul(5.3)))).mul(U.span.mul(0.05)).mul(smoothstep(0.04, 0.4, z0)).mul(smoothstep(1.05, 0.75, z0));
+    const ctr = mix(U.steamP.xz, U.c.xz, smoothstep(0, 0.85, z0)).add(snake);
     // volutes : la lecture est déformée par un bruit lent, davantage dans le nuage
     const wn = fine ? NZ(p.mul(1.15).add(o)).level(0) : vec4(0);
     const amt = smoothstep(0.02, 0.6, z0).mul(0.7).add(0.3);
-    const r = length(p.xz.sub(ctr).add(wn.xy.mul(0.16).mul(amt).mul(U.span))).div(U.span.mul(U.kr));
-    const z = z0.add(wn.x.mul(0.07).mul(amt));
+    // La simulation est axisymétrique : lue telle quelle, le nuage est un palet.
+    // Son plan est donc lobé (trois harmoniques de l'azimut, phases tirées de la
+    // graine : un côté s'étale en enclume, l'autre se creuse), et son sommet
+    // bourgeonne (les dômes d'un Worley de basse fréquence soulèvent la lecture).
+    const q = p.xz.sub(ctr).add(wn.xy.mul(0.16).mul(amt).mul(U.span)), ql = length(q).max(1e-4);
+    const cs = q.div(ql), c1 = cs.x, s1 = cs.y, s2 = s1.mul(c1).mul(2), c2 = c1.mul(c1).sub(s1.mul(s1)), s3 = s1.mul(3).sub(s1.mul(s1).mul(s1).mul(4));
+    const f1 = U.seed.mul(2.4), f2 = U.seed.mul(4.1).add(1), f3 = U.seed.mul(1.3).add(2);
+    const lobes = s1.mul(cos(f1)).add(c1.mul(sin(f1))).mul(0.2).add(s2.mul(cos(f2)).add(c2.mul(sin(f2))).mul(0.15)).add(s3.mul(cos(f3)).mul(0.08));
+    const inCloud = smoothstep(0.8, 1.15, z0);
+    const r = ql.div(U.span.mul(U.kr)).div(lobes.mul(inCloud).add(1));
+    const dome = fine ? wn.z.min(1).oneMinus().sub(0.45).mul(0.34).mul(smoothstep(1.0, 1.35, z0)) : float(0);
+    const z = z0.add(wn.x.mul(0.07).mul(amt)).sub(dome);
     const inside = step(r, U.simSize.x.mul(0.985)).mul(step(0.004, z)).mul(step(z, U.simSize.y.mul(0.995)));
     const tw = U.simT.mul(U.simSize.z.sub(1)).add(0.5).div(U.simSize.z);
-    const sv = sim.sample(vec3(r.div(U.simSize.x), z.div(U.simSize.y), tw)).level(0).r;
+    const sv0 = sim.sample(vec3(r.div(U.simSize.x), z.div(U.simSize.y), tw)).level(0).r;
+    // (le panache simulé s'étale en couronne, plus haute que son cœur : au-dessus de la base, le cœur prend aussi
+    // ce que la couronne a à sa hauteur — un sommet bombé, pas un cratère)
+    const sv = fine ? sv0.max(sim.sample(vec3(r.max(0.8).div(U.simSize.x), z.div(U.simSize.y), tw)).level(0).r.mul(smoothstep(1.05, 1.3, z0))) : sv0;
     // (enregistré en racine carrée : 8 bits suffisent pour les voiles minces ;
     // le plafond du domaine est adouci, sinon le sommet serait une table)
     const env = sv.mul(inside).mul(smoothstep(U.simSize.y, U.simSize.y.sub(0.14), z));
     // bourgeons (Worley inversé, deux échelles) et lambeaux (Perlin)
     const w1 = NZ(p.mul(2.6).add(o)).level(0);
-    const fineN = fine ? NZ(p.mul(6.1).add(o.mul(2))).level(0).z.min(1).oneMinus().mul(0.26) : float(0.13);
+    const fineN = fine ? NZ(p.mul(6.1).add(o.mul(2))).level(0).z.min(1).oneMinus().mul(0.3) : float(0.15);
     const n = w1.z.min(1).oneMinus().mul(0.56).add(fineN).add(w1.x.mul(0.5).add(0.5).mul(0.18));
     // érosion : le champ simulé sert d'enveloppe, le bruit en mange les bords.
     // Plus forte dans la colonne (des volutes, pas un tuyau), sur le pourtour
@@ -87,7 +102,7 @@ export function createCloud() {
     const rim = smoothstep(U.R.mul(0.6), U.R.mul(1.08), length(p.xz.sub(U.c.xz)));
     const er = U.shred.mul(0.9).add(0.78).add(col.mul(0.5)).add(rim.mul(0.5));
     // (hors du panache, l'enveloppe est négative : le bruit seul ne crée rien)
-    const d = smoothstep(0, 0.22, env.sub(0.2).mul(1.25).add(n.sub(0.72).mul(er)).sub(col.mul(0.1)).sub(rim.mul(0.3)));
+    const d = smoothstep(0, 0.15, env.sub(0.2).mul(1.25).add(n.sub(0.72).mul(er)).sub(col.mul(0.1)).sub(rim.mul(0.3)));
     // condensation : sous le niveau z = 1, la vapeur ne se voit qu'en partie
     const cond = smoothstep(0.8, 1.03, z).mul(0.7).add(0.3);
     // (la colonne est plus légère que le nuage : c'est dans la densité, continue
@@ -107,7 +122,7 @@ export function createCloud() {
 
   // haze(depth, lite, rgb) → rgb vu à travers le nuage et la vapeur
   const haze = (depthTex, lite, rgb) => Fn(() => {
-    const N = lite ? 14 : 36, NS = lite ? 6 : 12;
+    const N = lite ? 14 : 32, NS = lite ? 6 : 12;
     // rayon de la caméra et distance du premier obstacle. Deux pièges : dans
     // une passe plein écran, les nœuds « caméra » de three.js (cameraPosition,
     // cameraWorldMatrix…) désignent la caméra du quad, pas celle de la scène —

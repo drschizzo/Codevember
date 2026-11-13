@@ -219,3 +219,17 @@ Trois retours de l'utilisateur, dans l'ordre, et ce qu'ils ont changé.
 4. **« Les géométries des objets ne sont pas parfaites, par exemple la partie basse de l'anse. »** L'anse arrivait de biais sur la paroi et sortait de la matière au creux des côtes. Elle quitte maintenant la paroi le long de sa normale, les bouts noyés dans l'épaisseur. La soucoupe a perdu ses côtes, qui la rendaient polygonale.
 5. **« Une ligne de démarcation au milieu de la fumée, juste sous le nuage. »** La couture des deux domaines de marche (extinction différente de part et d'autre). Même coefficient des deux côtés, la légèreté de la colonne passée dans la densité.
 6. **« Les matières, particulièrement les sols, pourraient être plus travaillées. »** Les supports utilisaient les finitions communes (un sergé de carbone recoloré pour le lin, un motif de marbre en cellules). Sept shaders propres au projet (`scene/table.js`), chacun avec ce qui fait reconnaître la matière.
+
+## Passe de direction artistique (13 novembre, soir)
+
+Diagnostic : l'histoire se jouait là où la caméra ne regardait pas. Le thé était une ellipse de quelques pixels, la foudre tombait sur un bouton de cuillère suspendu à côté de la tasse, et rien ne disait ce qu'elle y faisait. Les trois remarques de l'utilisateur (ralenti trop long, éclair sans impact ni sens, géométries mal proportionnées et mal assemblées) en découlaient. Ce qui précède dans ce document décrit la version d'avant : la cuillère, les temps (0,34 – 0,60 pour le traceur, 0,96 pour la reprise) et la mention « L'appareil : aucun » ne valent plus.
+
+1. **Ce que la foudre touche a un rôle.** Quatre machines à chauffer le thé, une par famille de récipient, pour varier les scènes : thermoplongeur à paratonnerre (tasse, verre), réchaud à spirale et son mât (théière boule), brasero (tetsubin, la foudre tombe sur l'arceau), pierres chaudes (bol, un arc par pierre). Elles restent domestiques : l'interdit du cliché n° 2 (l'appareil de laboratoire) tient toujours. La chaleur descend le métal depuis la pointe, la résistance rougit, le thé bout, la pluie grésille sur le métal chaud, et ces bouffées deviennent la colonne suivante.
+2. **Le temps.** Traceur de 6,2 s à 2,8 s, en neuf bonds de plus en plus rapides, avec une retenue avant le dernier saut. Le temps gagné va à l'après-coup.
+3. **L'impact.** Image brûlée puis iris qui se referme, mur qui prend l'éclair, étincelles, gouttes, bouffée, à-coup de la caméra ; canal à cœur fin, gaine violette et lueur d'air au lieu d'un boudin blanc.
+4. **La caméra** plonge de 17 à 24° selon l'humeur et descend vers la machine après la jonction.
+5. **Les géométries.** Anses en ruban à collerette, bec raccordé, godrons à arête vive sous un jonc, soucoupe à bassin et aile, piédouche de 12 %.
+6. **Le nuage** n'est plus un palet (plan lobé, sommet bourgeonnant, colonne qui serpente) ; **la pluie** se voit (420 gouttes, éclat à l'impact).
+7. **Les supports.** Veines du marbre affinées (on les prenait pour de la fumée), oxydation du zinc calmée.
+
+Écartés : le samovar (une cinquième famille entière, à faire pour elle-même) ; la cuillère posée sur la soucoupe (elle n'a plus de rôle).

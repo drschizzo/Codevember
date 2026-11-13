@@ -21,7 +21,7 @@ export function createLightning(scene, { lite = false } = {}) {
     a: uniform(-1), tau: uniform(-1), last: uniform(0),
     strokes: uniformArray(Array.from({ length: MAX_STROKES }, () => new THREE.Vector4(0, 0, 0, 1)), 'vec4'), // t, amplitude, bit du canal, longueur du canal
     width: uniform(0.012), pixel: uniform(0.001), gain: uniform(1),
-    core: uniform(new THREE.Color('#ffffff')), halo: uniform(new THREE.Color('#9db8ff')), leader: uniform(new THREE.Color('#b8a4ff')),
+    core: uniform(new THREE.Color('#ffffff')), halo: uniform(new THREE.Color('#9db8ff')), sheath: uniform(new THREE.Color('#8d6bff')), leader: uniform(new THREE.Color('#b8a4ff')),
     cloudY: uniform(9), // (au-dessus de la base du nuage, le canal est dans le nuage : c'est le nuage qui le montre)
   };
   const iA = attribute('iA', 'vec4'), iB = attribute('iB', 'vec4'), iC = attribute('iC', 'vec4');
@@ -65,8 +65,8 @@ export function createLightning(scene, { lite = false } = {}) {
   const toCam = cameraPosition.sub(mid), dist = length(toCam);
   const side = normalize(cross(ax, toCam.div(dist)));
   // demi-largeur : celle du canal, jamais sous le pixel ; elle gonfle avec le courant
-  const hw = tMax(U.width.mul(w.mul(0.6).add(0.4)).mul(I.clamp(0, 2.6).mul(0.55).add(0.6)), U.pixel.mul(dist));
-  const K = 3.2; // (le quad déborde du cœur : place du halo)
+  const hw = tMax(U.width.mul(w.mul(0.6).add(0.4)).mul(I.clamp(0, 2.6).mul(0.42).add(0.7)), U.pixel.mul(dist));
+  const K = 7; // (le quad déborde largement du cœur : place de la gaine et de la lueur de l'air)
   const along = t.y.mul(len.add(hw.mul(2 * K))).sub(hw.mul(K));
   const pos = A.add(ax.mul(along)).add(side.mul(t.x.sub(0.5).mul(2 * K).mul(hw)));
   const vL = varying(vec3(along.div(hw), len.div(hw), 0), 'vBoltL');
@@ -76,9 +76,13 @@ export function createLightning(scene, { lite = false } = {}) {
   const lx = t.x.sub(0.5).mul(2 * K);
   const dy = tMax(tMax(vL.x.negate(), vL.x.sub(vL.y)), 0);
   const d = sqrt(lx.mul(lx).add(dy.mul(dy)));
-  const coreP = exp(d.div(0.42).pow2().negate()), haloP = exp(d.div(1.45).pow2().negate());
+  // Trois couches, comme sur une photographie : un cœur très fin (il sature :
+  // c'est le halo de la chaîne d'image qui dit son éclat, pas sa largeur), une
+  // gaine violette (l'azote) qui tombe en exponentielle, et la lueur de l'air,
+  // large et faible. Un profil gaussien large saturait en un boudin blanc.
+  const coreP = exp(d.div(0.3).pow2().negate()), sheathP = exp(d.div(-0.62)), airP = float(1).div(d.div(1.7).pow2().add(1).pow(1.5)).mul(smoothstep(K, K * 0.6, d));
   const white = vI.y.clamp(0, 1);
-  const c = mix(U.leader, U.core, white).mul(coreP).add(mix(U.leader, U.halo, white).mul(haloP).mul(0.16));
+  const c = mix(U.leader, U.core, white).mul(coreP).add(mix(U.leader, U.sheath, white).mul(sheathP).mul(0.11)).add(U.halo.mul(airP).mul(0.012));
   m.colorNode = c.mul(vI.x).mul(U.gain);
   if (!lite) m.mrtNode = mrt({ velocity: vec4(0), refl: vec4(0) });
 
