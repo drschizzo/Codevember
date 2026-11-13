@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#050506">
+  <title>Codevember · la skill</title>
+  <meta name="description" content="Comment les scènes de Codevember sont faites : une skill Claude Code, codevember-scene, qui part d'un thème et livre une scène procédurale WebGPU en boucle parfaite, documentée et vérifiée.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../home/explainer.css">
+  <style>
+    /* ── schémas de cette page (HTML et SVG, lisibles à 360 px) ── */
+    .flow { list-style: none; padding: 0 !important; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 168px), 1fr)); gap: 12px; counter-reset: f; }
+    @media (min-width: 640px) { .flow { grid-template-columns: repeat(3, 1fr); } }
+    .flow li { counter-increment: f; position: relative; margin: 0; padding: 12px 14px 13px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; font-size: 13px; line-height: 1.45; color: var(--dim); }
+    .flow li::before { content: counter(f, decimal-leading-zero); display: block; color: var(--gold); font-size: 11px; letter-spacing: .14em; margin-bottom: 4px; }
+    .flow li b { display: block; color: var(--fg); font: 400 16px/1.25 Fraunces, Georgia, serif; margin-bottom: 4px; }
+    .flow li.key { border-color: var(--gold-dim); background: linear-gradient(180deg, rgba(233, 196, 138, .07), var(--panel) 70%); }
+    .flow li.out { border-color: rgba(156, 199, 154, .45); }
+    .flow li.out::before { color: var(--c4); }
+
+    .funnel { display: grid; gap: 7px; margin-top: 6px; }
+    .funnel div { margin: 0 auto; width: var(--w); min-width: min(100%, 230px); max-width: 100%; padding: 9px 14px; border-radius: 6px; border: 1px solid var(--line-2); background: rgba(233, 196, 138, var(--a)); text-align: center; font-size: 13.5px; line-height: 1.4; }
+    .funnel div b { color: var(--gold); font-weight: 400; }
+    .funnel div small { display: block; color: var(--dim); font-size: 12px; }
+
+    .split { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); gap: 12px; }
+    .split > div { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; font-size: 13.5px; }
+    .split h4 { font: 400 11px/1.4 Inter, sans-serif; letter-spacing: .16em; text-transform: uppercase; color: var(--gold); margin-bottom: 8px; }
+    .split > div.mine h4 { color: var(--c2); }
+    .split ul { list-style: none; padding: 0 !important; margin: 0 !important; }
+    .split li { margin: 0; padding: 4px 0; border-top: 1px solid var(--line); color: var(--dim); }
+    .split li:first-child { border-top: 0; }
+    .split li code { white-space: normal; }
+
+    .bars { display: grid; gap: 5px; font-size: 12.5px; }
+    .bars .r { display: grid; grid-template-columns: 6.5em 1fr 2.2em; gap: 10px; align-items: center; }
+    .bars .r span:first-child { color: var(--dim); text-align: right; }
+    .bars .r i { display: block; height: 10px; border-radius: 3px; background: var(--c2); width: calc(var(--n) / 42 * 100%); min-width: 3px; }
+    .bars .r.sk i { background: var(--gold); }
+    .bars .r span:last-child { font-variant-numeric: tabular-nums; color: var(--fg); }
+    .bars .sep { margin: 8px 0 2px; color: var(--dim); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; }
+
+    .lessons { list-style: none; padding: 0 !important; border-left: 1px solid var(--line-2); margin-left: 6px !important; }
+    .lessons li { position: relative; margin: 0; padding: 0 0 18px 22px; }
+    .lessons li::before { content: ''; position: absolute; left: -5px; top: 7px; width: 9px; height: 9px; border-radius: 50%; background: var(--gold); }
+    .lessons li b { color: var(--fg); font-weight: 400; }
+    .lessons li .w { display: block; color: var(--gold); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; }
+
+    svg.dia { display: block; width: 100%; height: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+    svg.dia text { font-family: Inter, system-ui, sans-serif; fill: var(--fg); }
+    svg.dia .dim { fill: var(--dim); }
+    svg.dia .gold { fill: var(--gold); }
+    svg.dia .box { fill: var(--panel-2); stroke: var(--line-2); }
+    svg.dia .box.k { stroke: var(--gold-dim); }
+    svg.dia .box.r { stroke: rgba(217, 130, 111, .6); }
+    svg.dia .box.g { stroke: rgba(156, 199, 154, .55); }
+    svg.dia .ln { stroke: var(--gold-dim); fill: none; stroke-width: 1.5; }
+    svg.dia .ln.r { stroke: rgba(217, 130, 111, .7); stroke-dasharray: 5 4; }
+  </style>
+</head>
+<body>
+  <nav class="top"><div class="in">
+    <a href="../">Codevember</a><span class="day">Atelier</span><span class="crumb">La skill codevember-scene</span>
+    <span class="sp"></span><a class="open" href="https://github.com/drschizzo/Codevember/tree/main/.claude/skills/codevember-scene">Voir la skill</a>
+  </div></nav>
+
+  <main>
+    <header class="hero">
+      <div class="kicker">Atelier · comment les scènes sont faites</div>
+      <h1>Un thème en entrée, une scène en sortie</h1>
+      <p class="lede">Seize des vingt scènes de Codevember sont parties d’une phrase : « fais-moi un projet sur l’érosion ». Le reste (concept, simulation, rendu, boucle, interface, tests, documentation, carte de l’accueil) est conduit par Claude Code en suivant une <em>skill</em> rangée dans le dépôt. Cette page explique ce qu’elle contient, comment elle déroule un projet, et pourquoi le premier jet est presque toujours le bon.</p>
+    </header>
+
+    <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
+
+    <article>
+
+      <section id="quoi">
+        <h2><span class="n">01</span>Une skill, c’est un savoir-faire écrit</h2>
+        <span class="src">.claude/skills/codevember-scene/</span>
+        <p>Une <strong>skill</strong> Claude Code est un dossier que l’agent charge quand la demande s’y prête. Le fichier d’entrée, <code>SKILL.md</code>, dit quand l’utiliser, ce qu’on attend du résultat et dans quel ordre travailler. Les documents plus longs restent à côté et ne sont lus qu’au moment où l’étape les demande. Celle-ci contient quatre choses :</p>
+        <div class="split" style="margin-top:20px">
+          <div><h4>SKILL.md</h4><ul>
+            <li>vingt exigences qui définissent la famille de projets</li>
+            <li>le déroulé en neuf étapes</li>
+            <li>les exigences non négociables</li>
+          </ul></div>
+          <div><h4>references/</h4><ul>
+            <li><code>concept.md</code> : protocole d’idéation, épreuves</li>
+            <li><code>loop.md</code> : schémas de boucle parfaite, caméra</li>
+            <li><code>art-direction.md</code>, <code>rendering.md</code></li>
+            <li><code>architecture.md</code>, <code>interface.md</code>, <code>performance-mobile.md</code></li>
+            <li><code>verification.md</code>, <code>documentation.md</code></li>
+            <li><code>three-tsl-pitfalls.md</code> : les pièges déjà payés</li>
+          </ul></div>
+          <div><h4>scripts/ et template/</h4><ul>
+            <li><code>scaffold.mjs</code> : pose un projet qui tourne</li>
+            <li><code>sink.py</code> : collecteur d’images et de mesures</li>
+            <li>gabarit : <code>main.js</code>, recette, panneau, worker, tests, README, <code>explainer.html</code></li>
+          </ul></div>
+        </div>
+        <p>Il n’y a rien de magique dans ce dossier. C’est du texte et un peu de code, écrits au fil des projets. Ce qu’il apporte, c’est que chaque leçon apprise sur une scène est déjà là quand la suivante commence.</p>
+        <h3>S’en servir</h3>
+        <p>Dans un clone du dépôt, ouvrir Claude Code et donner un thème. La skill se déclenche d’elle-même sur une demande de « nouveau projet », de « nouvelle scène » ou de « Codevember » ; on peut aussi l’appeler par son nom :</p>
+        <pre><code>/codevember-scene les marées</code></pre>
+        <p>L’agent annonce son concept en quelques lignes, puis avance seul jusqu’à la livraison. Il n’interrompt que si le thème est vraiment ambigu. Il ne committe pas sans qu’on le lui demande.</p>
+      </section>
+
+      <section id="deroule">
+        <h2><span class="n">02</span>Neuf étapes, du thème à la carte de l’accueil</h2>
+        <span class="src">SKILL.md · Déroulé</span>
+        <p>Le déroulé est toujours le même. Ce qui varie, c’est ce qu’on y met. Les étapes 1 et 9 sont les plus longues : la première décide de tout, la dernière vérifie que l’écran montre bien ce que le concept promettait.</p>
+        <figure class="wide">
+          <ol class="flow">
+            <li class="key"><b>Concept</b>Idéation écrite dans <code>docs/concept.md</code>, avant toute ligne de code.</li>
+            <li><b>Échafaudage</b><code>scaffold.mjs</code> pose un projet qui tourne déjà, vérifié dans le navigateur.</li>
+            <li class="key"><b>Le cœur</b>Génération et simulation, itérées dans Node, avec leurs tests d’invariants.</li>
+            <li><b>Boucle et caméra</b><code>renderAt(u)</code> ne dépend que de la recette et de la phase.</li>
+            <li><b>Matières, humeurs</b>Accords composés à la main, jugés sur image et au posemètre.</li>
+            <li><b>Lumière et image</b>Ombres douces, studio HDR, chaîne d’image complète, exposition fixe.</li>
+            <li><b>Interface</b>Panneau, écran de chargement qui dessine le calcul, export MP4 et PNG.</li>
+            <li><b>Performance, mobile</b>≤ 16 ms à 2 Mpx ; mobile environ 4 fois moins cher.</li>
+            <li class="out"><b>Revue, livraison</b>Planches, films, tests, README, page « défis techniques », carte de l’accueil.</li>
+          </ol>
+          <figcaption><b>Le déroulé de la skill.</b> En or, les deux étapes qui portent le projet ; en vert, ce qui est livré. Chaque étape renvoie à un document de <code>references/</code>, lu seulement à ce moment-là.</figcaption>
+        </figure>
+      </section>
+
+      <section id="concept">
+        <h2><span class="n">03</span>Le concept s’écrit avant le code</h2>
+        <span class="src">references/concept.md · protocole d’idéation</span>
+        <p>Laissé à lui-même, un agent prend la première idée venue, et la première idée d’un thème est presque toujours un cliché. La skill impose donc un entonnoir écrit, qui reste dans le dossier du projet (<code>docs/concept.md</code>) avec les pistes écartées et leurs raisons.</p>
+        <figure>
+          <div class="funnel">
+            <div style="--w:100%;--a:.03"><b>Explorer</b> le thème sous au moins cinq angles<small>physique, métiers et objets, art et cinéma, vocabulaire, cycles, lumière</small></div>
+            <div style="--w:90%;--a:.05"><b>Nommer</b> trois à cinq clichés<small>interdits comme idée principale</small></div>
+            <div style="--w:80%;--a:.07"><b>Proposer</b> au moins huit pistes<small>de gestes et de schémas de boucle différents</small></div>
+            <div style="--w:68%;--a:.10"><b>Noter</b> sur six critères<small>originalité, esthétique, boucle, cœur technique, variations, faisabilité</small></div>
+            <div style="--w:56%;--a:.14"><b>Éprouver</b> la piste retenue<small>crédibilité, variété, ambition, déclinaison, scénario, références</small></div>
+            <div style="--w:44%;--a:.20"><b>Annoncer</b> et continuer</div>
+          </div>
+          <figcaption><b>L’entonnoir d’idéation.</b> Une piste n’est retenue qu’avec le meilleur total et aucune note sous 3. Elle doit encore passer six épreuves écrites avant le premier fichier de code.</figcaption>
+        </figure>
+        <p>Les épreuves sont la partie la plus utile. Chacune est née d’un défaut relevé sur un projet précédent :</p>
+        <div class="tbl"><table>
+          <thead><tr><th>Épreuve</th><th>La question</th></tr></thead>
+          <tbody>
+            <tr><td>Crédibilité</td><td>Pour chaque temps du film : quelle cause visible, quelle loi, quelle convention de temps (ralenti, accéléré) ?</td></tr>
+            <tr><td>Variété</td><td>Une phrase par humeur sans parler de couleur. Si deux phrases se ressemblent, revoir les humeurs.</td></tr>
+            <tr><td>Ambition</td><td>Au moins cinq éléments de construction pour l’objet principal, dignes d’une vitrine de musée.</td></tr>
+            <tr><td>Déclinaison</td><td>Au moins trois familles qui accomplissent le geste chacune autrement (silhouette, mécanisme, tempo).</td></tr>
+            <tr><td>Scénario</td><td>La boucle racontée comme un film muet, plan par plan, chaque effet entier et cadré.</td></tr>
+            <tr><td>Références</td><td>Trois à cinq photographies du sujet réel : échelle, densité, forme d’ensemble, lumière.</td></tr>
+          </tbody>
+        </table></div>
+        <div class="note"><b>Le nom du projet</b><p>Quand l’utilisateur donne un thème, le projet porte le nom du thème (thème « fold », dossier <code>fold/</code>, titre Fold). Le titre évocateur trouvé pendant l’idéation devient le sous-titre. Fold s’est d’abord appelé Sensitive et a dû être renommé.</p></div>
+      </section>
+
+      <section id="exigences">
+        <h2><span class="n">04</span>Vingt exigences définissent la famille</h2>
+        <span class="src">SKILL.md · « Ce qui fait un projet de cette famille »</span>
+        <p>La skill ne décrit pas une scène type. Elle décrit ce que toutes doivent tenir, et laisse à chaque projet le soin d’inventer ses objets, ses causes, ses décors et sa caméra. Les nombres qu’elle donne sont des bornes, jamais des cibles. Regroupées, les vingt exigences tiennent en cinq idées :</p>
+        <div class="tbl"><table>
+          <thead><tr><th>Idée</th><th>Ce que la skill exige</th></tr></thead>
+          <tbody>
+            <tr><td>Un geste</td><td>Une image forte et un mouvement qui se lit sans légende, montré à l’échelle, dans l’axe et au tempo où il se comprend.</td></tr>
+            <tr><td>Un vrai calcul</td><td>Une simulation, une construction exacte ou une géométrie générative qui <em>est</em> le spectacle, vérifiée par des tests, de préférence tirée d’un modèle publié.</td></tr>
+            <tr><td>Une boucle parfaite</td><td>L’état à u = 1 est exactement l’état à u = 0, par construction, jamais par fondu. Une seule horloge pour la cause, la lumière, l’effet et la caméra.</td></tr>
+            <tr><td>Le réel comme cible</td><td>Chaque événement a une cause visible ; rien ne flotte, rien ne se traverse ; échelle et densité calées sur des photographies.</td></tr>
+            <tr><td>Des scènes variées</td><td>Une graine, une scène : deux graines donnent deux films qu’on ne confond pas (décor, lumière, valeur, cadrage), et le geste se décline en familles.</td></tr>
+          </tbody>
+        </table></div>
+        <p>S’y ajoutent des règles non négociables : aucune texture téléchargée ni modèle importé, tous les tirages dérivés de la graine, aucun gel après le chargement, et une documentation qui suit le code dans le même commit.</p>
+      </section>
+
+      <section id="echafaudage">
+        <h2><span class="n">05</span>L’échafaudage pose un projet qui tourne déjà</h2>
+        <span class="src">scripts/scaffold.mjs</span>
+        <pre><code>node .claude/skills/codevember-scene/scripts/scaffold.mjs maree "Marée" "le souffle de la côte"</code></pre>
+        <p>Tout ce qui ne dépend pas du thème a déjà été écrit, éprouvé et corrigé sur les projets précédents. L’échafaudage le copie, avec les quelques retouches qui le détachent de son projet d’origine, puis pose le gabarit propre au thème et inscrit le serveur de développement. Le résultat s’ouvre tout de suite : une pièce de démonstration qui fait un nombre entier de tours par boucle. L’agent vérifie qu’elle tourne dans le navigateur avant de toucher au thème.</p>
+        <figure>
+          <div class="split">
+            <div><h4>Copié tel quel, commun</h4><ul>
+              <li>hasard à graine <code>sfc32</code></li>
+              <li>réglages, qualités, version mobile</li>
+              <li>écran de chargement sans gel</li>
+              <li>export MP4 image par image, rendu accumulé</li>
+              <li>chaîne d’image (GTAO, SSR, TRAA, bloom, grain)</li>
+              <li>studio HDR, volume de bruit, pool de workers</li>
+              <li>quarante finitions au F0 mesuré</li>
+            </ul></div>
+            <div class="mine"><h4>À réécrire pour le thème</h4><ul>
+              <li><code>recipe.js</code> : ce que tire la graine</li>
+              <li><code>gen/</code> : le cœur, en fonctions pures</li>
+              <li><code>scene/</code> : objets, matières, lumières</li>
+              <li><code>app/loaderArt.js</code> : le dessin du calcul</li>
+              <li><code>app/ui.js</code> : le panneau</li>
+              <li><code>test/</code>, README, <code>explainer.html</code></li>
+            </ul></div>
+          </div>
+          <figcaption><b>Ce que l’échafaudage apporte et ce qu’il laisse.</b> À gauche, ce que l’agent n’a pas à réinventer. À droite, ce qui fait que deux projets ne se ressemblent pas.</figcaption>
+        </figure>
+      </section>
+
+      <section id="verifier">
+        <h2><span class="n">06</span>Voir ce qu’on fait, sans regarder l’écran</h2>
+        <span class="src">references/verification.md · scripts/sink.py</span>
+        <p>Un agent ne regarde pas l’écran comme un humain. Le panneau du navigateur est souvent masqué, ses captures peuvent être périmées et ses minuteries ralenties. La skill remplace donc le coup d’œil par des mesures et par des images qu’il demande lui-même à la scène : la page rend des images dans une cible hors écran et les envoie à un petit collecteur local, qui les range en planches.</p>
+        <figure class="wide">
+          <svg class="dia" viewBox="0 0 640 380" role="img" aria-label="Boucle de vérification : le modèle, les courbes, les images, les mesures et les tests, et le retour au modèle quand un défaut est vu">
+            <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10z" fill="#e9c48a" fill-opacity=".7"/></marker>
+            <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10z" fill="#d9826f"/></marker></defs>
+            <rect class="box k" x="20" y="130" width="140" height="70" rx="8"/>
+            <text x="90" y="160" text-anchor="middle" font-size="17">Le modèle</text>
+            <text class="dim" x="90" y="182" text-anchor="middle" font-size="12.5">gen/ · scene/</text>
+
+            <rect class="box" x="250" y="20" width="160" height="70" rx="8"/>
+            <text x="330" y="50" text-anchor="middle" font-size="17">Les courbes</text>
+            <text class="dim" x="330" y="72" text-anchor="middle" font-size="12.5">dans Node, avant l’image</text>
+
+            <rect class="box" x="250" y="130" width="160" height="70" rx="8"/>
+            <text x="330" y="160" text-anchor="middle" font-size="17">Les planches</text>
+            <text class="dim" x="330" y="182" text-anchor="middle" font-size="12.5">graines × phases, films</text>
+
+            <rect class="box" x="250" y="240" width="160" height="70" rx="8"/>
+            <text x="330" y="270" text-anchor="middle" font-size="17">Les mesures</text>
+            <text class="dim" x="330" y="292" text-anchor="middle" font-size="12.5">posemètre, raccord, bench</text>
+
+            <rect class="box g" x="490" y="130" width="130" height="70" rx="8"/>
+            <text x="555" y="160" text-anchor="middle" font-size="17">Les tests</text>
+            <text class="dim" x="555" y="182" text-anchor="middle" font-size="12.5">node --test</text>
+
+            <path class="ln" d="M160 150 C 205 150, 205 55, 250 55" marker-end="url(#ah)"/>
+            <path class="ln" d="M160 165 L 250 165" marker-end="url(#ah)"/>
+            <path class="ln" d="M160 180 C 205 180, 205 275, 250 275" marker-end="url(#ah)"/>
+            <path class="ln" d="M410 55 C 455 55, 455 150, 490 150" marker-end="url(#ah)"/>
+            <path class="ln" d="M410 165 L 490 165" marker-end="url(#ah)"/>
+            <path class="ln" d="M410 275 C 455 275, 455 180, 490 180" marker-end="url(#ah)"/>
+            <path class="ln r" d="M555 200 L555 345 Q555 360 540 360 L105 360 Q90 360 90 345 L90 202" marker-end="url(#ar)"/>
+            <text x="330" y="350" text-anchor="middle" font-size="13" fill="#d9826f">défaut vu à l’écran : le banc doit d’abord échouer</text>
+          </svg>
+          <figcaption><b>La boucle de vérification.</b> Les courbes du film (couverture, ouverture, position de la caméra en fonction de u) montrent un aller-retour d’un coup d’œil, avant toute image. Les planches montrent ce qui est vide, brûlé, illisible. Les mesures et les tests le fixent. Quand l’utilisateur voit un défaut que les tests n’ont pas vu, on corrige d’abord le banc pour qu’il le voie.</figcaption>
+        </figure>
+        <div class="note check"><b>Avant de dire « fini »</b><p>Console vide en qualité Haute et en <code>?mobile=1</code>, aucun shader compilé après le chargement, raccord de boucle sous 1e-6, posemètre passé sur chaque humeur, tests verts (dont aucune interpénétration à aucun instant), un export MP4 court essayé. Et la liste de ce qui n’a pas été vérifié, dite comme telle.</p></div>
+      </section>
+
+      <section id="lecons">
+        <h2><span class="n">07</span>Une skill qui garde la mémoire des critiques</h2>
+        <span class="src">git log -- .claude/skills</span>
+        <p>La skill a été écrite le 10 novembre, après Hollow, Membrane, Tesseract et Orrery, faits sans elle. Elle n’était pas complète. À chaque projet, les remarques de l’utilisateur sur les premiers rendus ont été versées dans la skill, sous forme de règle, d’épreuve ou de test, avec l’exemple qui l’a fait naître.</p>
+        <ol class="lessons">
+          <li><span class="w">Shatter (premier essai, « Calcin »)</span>La pièce flottait, les éclats restaient suspendus, les six humeurs étaient un même décor teinté autrement. <b>Épreuves de crédibilité, de variété et d’ambition.</b></li>
+          <li><span class="w">Fold (premier essai, « Sensitive »)</span>Sept archétypes qui restaient la même plante, des plis « pas forcément compréhensibles », des folioles qui traversaient un pétiole à mi-pli. <b>Familles qui bougent différemment, scénario de film muet, contacts testés à tous les instants.</b></li>
+          <li><span class="w">Moss</span>Des plantes posées une à une donnaient une plantation. <b>Le réel comme cible : références, échelle, densité, enveloppe d’abord ; fond neutre ; une seule horloge.</b></li>
+          <li><span class="w">Melt</span>« Tout semble un peu flotter », un fond infini, un problème d’échelle. <b>Ombres de contact calculées, le support donne l’échelle, vrai flou de macro, pas de fausse couleur.</b></li>
+          <li><span class="w">Chargement</span>Un texte « préparation de la scène… ». <b>Écran de chargement commun qui dessine le calcul de la graine, page « défis techniques » obligatoire.</b></li>
+          <li><span class="w">Feather</span>Des tests verts pendant que l’écran montrait des pièces qui se traversaient. <b>Un banc qui pose la scène par la fonction même du rendu, tout contre tout, avec un témoin qui doit échouer.</b></li>
+        </ol>
+        <p>Les pièges techniques suivent le même chemin. <code>three-tsl-pitfalls.md</code> recense ceux de three.js WebGPU et TSL qui ont coûté des heures : un objet qui disparaît parce que la limite de varyings est dépassée, une géométrie remplacée qui garde son ancien shader, un cache d’ombres qui ignore un changement de matériau. Le projet suivant ne les paie plus.</p>
+      </section>
+
+      <section id="mesure">
+        <h2><span class="n">08</span>Presque d’un seul jet</h2>
+        <span class="src">git log --oneline -- &lt;projet&gt;</span>
+        <p>Le nombre de commits qui touchent le dossier d’un projet donne une idée de la quantité d’allers-retours. Ce n’est qu’un indice : les relectures de documentation et les passes de direction artistique faites après coup y sont comptées.</p>
+        <figure>
+          <div class="bars">
+            <div class="sep">Avant la skill</div>
+            <div class="r"><span>Hollow</span><i style="--n:42"></i><span>42</span></div>
+            <div class="r"><span>Tesseract</span><i style="--n:35"></i><span>35</span></div>
+            <div class="r"><span>Orrery</span><i style="--n:27"></i><span>27</span></div>
+            <div class="r"><span>Membrane</span><i style="--n:23"></i><span>23</span></div>
+            <div class="sep">Avec la skill</div>
+            <div class="r sk"><span>Kelp</span><i style="--n:13"></i><span>13</span></div>
+            <div class="r sk"><span>Erosion</span><i style="--n:12"></i><span>12</span></div>
+            <div class="r sk"><span>Fold</span><i style="--n:7"></i><span>7</span></div>
+            <div class="r sk"><span>Shatter</span><i style="--n:6"></i><span>6</span></div>
+            <div class="r sk"><span>Melt</span><i style="--n:6"></i><span>6</span></div>
+            <div class="r sk"><span>Rust</span><i style="--n:6"></i><span>6</span></div>
+            <div class="r sk"><span>Mirage</span><i style="--n:6"></i><span>6</span></div>
+            <div class="r sk"><span>Pendulum</span><i style="--n:6"></i><span>6</span></div>
+            <div class="r sk"><span>Tangle</span><i style="--n:5"></i><span>5</span></div>
+            <div class="r sk"><span>Moss</span><i style="--n:5"></i><span>5</span></div>
+            <div class="r sk"><span>Caustic</span><i style="--n:5"></i><span>5</span></div>
+            <div class="r sk"><span>Feather</span><i style="--n:5"></i><span>5</span></div>
+            <div class="r sk"><span>Spore</span><i style="--n:4"></i><span>4</span></div>
+            <div class="r sk"><span>Labyrinth</span><i style="--n:3"></i><span>3</span></div>
+            <div class="r sk"><span>Tension</span><i style="--n:3"></i><span>3</span></div>
+            <div class="r sk"><span>Cocoon</span><i style="--n:1"></i><span>1</span></div>
+          </div>
+          <figcaption><b>Commits par projet, au 13 novembre.</b> En bleu, les quatre scènes faites avant la skill ; en or, les seize faites avec elle. La plupart de ces dernières tiennent en un commit de création, suivi de corrections ponctuelles et des passes de documentation communes à tout le dépôt.</figcaption>
+        </figure>
+        <p>« D’un seul jet » ne veut pas dire sans regard. L’utilisateur regarde chaque scène, et quand une remarque porte sur une catégorie de défauts plutôt que sur un cas, elle finit dans la skill. C’est ce qui fait que la remarque suivante porte sur autre chose.</p>
+      </section>
+
+    </article>
+
+    <footer class="end">
+      <a href="https://github.com/drschizzo/Codevember/blob/main/.claude/skills/codevember-scene/SKILL.md">SKILL.md</a>
+      <a href="https://github.com/drschizzo/Codevember/tree/main/.claude/skills/codevember-scene/references">Les références</a>
+      <a href="https://github.com/drschizzo/Codevember/blob/main/fold/docs/concept.md">Un concept complet (Fold)</a>
+      <span class="sp"></span>
+      <a href="../">Tous les jours</a>
+    </footer>
+  </main>
+
+  <script type="module" src="../home/explainer.js"></script>
+</body>
+</html>
