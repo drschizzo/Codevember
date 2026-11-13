@@ -526,8 +526,8 @@ export function createStage(scene, gen, { lite = false, renderer } = {}) {
     piece(o.shell, shellFin);
     piece(o.frame, fin3(ts.frame, T.style === 'brass' ? 0.1 : 0));
     if (o.rig.position.length) piece(o.rig, T.style === 'stone' ? fin3('bronzeDark') : fin3('blackenedSteel'));
-    if (o.extra.position.length) piece(o.extra, R.family === 'karman' ? fin3('chrome') : fin3('brushedSteel'));
-    if (o.movers) piece(o.movers, fin3(T.style === 'brass' ? 'polishedBrass' : 'brushedSteel'), plungerRig(), { foot: [o.movers.foot, 1] });
+    if (o.extra.position.length) piece(o.extra, R.family === 'karman' ? fin3('vermilion') : fin3('brushedSteel'));
+    if (o.movers) piece(o.movers, fin3('vermilion'), plungerRig(), { foot: [o.movers.foot, 1] });
     // parois intérieures
     const inner = new THREE.Mesh(toGeometry(o.inner), wallMaterial(S));
     inner.scale.setScalar(0.1);
