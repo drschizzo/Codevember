@@ -2,6 +2,10 @@
 
 Expériences de creative coding, publiées sur [drschizzo.github.io/Codevember](https://drschizzo.github.io/Codevember/).
 
+## Le propos : rien ne se perd, tout se transforme
+
+Chaque scène fait, défait et refait : la rouille et le décapage, le verre brisé et refondu, le paysage creusé puis regarni, la glace fondue et regelée, le fil dévidé et renroulé. Et chaque cœur de calcul **garde** quelque chose : le sable, l'eau, le volume des veines, l'enlacement d'une corde, la longueur d'un câble, la lumière. La boucle parfaite n'est pas qu'une contrainte technique : c'est le propos de la collection. La page d'accueil dit, pour chaque scène, ce qui se conserve, et place les scènes sur un **atlas** — la taille du sujet et la durée réelle de ce que montre une boucle —, reliées dans l'ordre des jours par un fil rouge. Le même vermillon est, dans chaque scène, la couleur de l'élément qui porte le geste.
+
 ## Comment ces scènes sont faites : la skill `codevember-scene`
 
 Depuis Fold, chaque projet part d'un simple thème donné à [Claude Code](https://claude.com/claude-code) (« fais-moi un projet sur l'érosion »). Le dépôt contient une *skill*, [`.claude/skills/codevember-scene`](.claude/skills/codevember-scene/SKILL.md), que l'agent charge de lui-même sur ce genre de demande et qui le conduit seul du thème à la livraison : concept, simulation, rendu, boucle, interface, tests, documentation et carte de l'accueil. Le résultat est le plus souvent bon du premier coup, à quelques retouches près.

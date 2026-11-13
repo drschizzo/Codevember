@@ -52,6 +52,23 @@
     .lite + .lite { margin-left: 18px; }
     .lite:hover, .lite:focus-visible { color: var(--gold); border-color: rgba(233, 196, 138, .4); }
 
+    /* ── le propos et l'atlas : chaque scène sur la carte des tailles et des durées, reliées par le fil rouge ── */
+    :root { --rouge: #d8401f; }
+    .motto { margin-top: 14px; color: var(--fg); font: italic 300 clamp(15px, 1.8vw, 17px)/1.5 Fraunces, Georgia, serif; }
+    .motto b { font-weight: 300; color: var(--rouge); }
+    .atlas { margin: 0 0 clamp(40px, 7vh, 72px); }
+    .atlas h3 { font: 300 22px/1.2 Fraunces, Georgia, serif; }
+    .atlas p { margin-top: 6px; max-width: 46em; color: var(--dim); font-size: 13.5px; }
+    .atlas svg { display: block; width: 100%; height: auto; margin-top: 18px; overflow: visible; }
+    .atlas .ax { stroke: var(--line); }
+    .atlas .tick { fill: var(--dim); font: 400 10.5px Inter, system-ui, sans-serif; letter-spacing: .04em; }
+    .atlas .thread { fill: none; stroke: var(--rouge); stroke-width: 1.2; opacity: .75; }
+    .atlas a circle { fill: var(--bg); stroke: var(--rouge); stroke-width: 1.4; transition: r .2s; }
+    .atlas a text { fill: var(--fg); font: italic 300 15px Fraunces, Georgia, serif; }
+    .atlas a:hover circle, .atlas a:focus-visible circle { fill: var(--rouge); }
+    .atlas a:hover text { fill: var(--rouge); }
+    .keep { margin-top: 6px; color: var(--fg); opacity: .8; font-size: 12.5px; padding-left: 10px; border-left: 1.5px solid var(--rouge); }
+    .keep span { display: block; color: var(--rouge); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; opacity: .95; }
     footer { border-top: 1px solid var(--line); padding: 26px 0 40px; color: var(--dim); font-size: 12.5px; display: flex; flex-wrap: wrap; gap: 8px 28px; justify-content: space-between; }
     footer kbd { font: 400 11px Inter, system-ui, sans-serif; border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; color: var(--fg); }
     @media (prefers-reduced-motion: reduce) { .frame img { transition: opacity .4s; transform: none !important; } }
@@ -62,142 +79,168 @@
     <header>
       <h1>Codevember</h1>
       <p class="lede">Un thème par jour, une scène par thème. Chaque scène est entièrement calculée — simulation, mathématiques, géométrie générative — rendue en lumière physique, et tourne en boucle parfaite. Une graine, une scène : chaque visite peut en tirer une nouvelle.</p>
+      <p class="motto">« Rien ne se perd, rien ne se crée, tout se transforme. » Chaque scène fait, défait et refait — et garde quelque chose : <b>le fil rouge</b> de la collection.</p>
       <nav class="month" aria-label="Les jours de novembre"></nav>
       <a class="atelier" href="skill/"><span>Atelier</span>Comment ces scènes sont faites : un thème, une skill Claude Code, une scène presque d’un seul jet <i>→</i></a>
     </header>
 
+    <section class="atlas" aria-labelledby="atlas-t">
+      <h3 id="atlas-t">L’atlas</h3>
+      <p>Chaque scène regarde son sujet à sa taille et à son tempo : une étoile de neige de quatre millimètres qui pousse en une demi-heure, une mousse qui vit une année en quelques secondes, des astres qu’on ne verrait tourner qu’en une vie. Horizontalement, la durée réelle de ce que montre une boucle ; verticalement, la taille du sujet. Le fil rouge les relie dans l’ordre des jours.</p>
+      <svg id="atlas" viewBox="0 0 1200 520" role="img" aria-label="Les scènes placées selon la taille de leur sujet et la durée réelle de leur boucle"></svg>
+    </section>
     <ol class="days">
-      <li class="day" id="d01" data-dir="fold"><a href="fold/">
+      <li class="day" id="d01" data-dir="fold" data-size="0.12" data-time="1200"><a href="fold/">
         <div class="frame"><img class="art" decoding="async" fetchpriority="high" src="home/fold-art.jpg" alt="Dessin du chargement de Fold : la plante pousse puis se replie" width="640" height="400"><img class="scene" decoding="async" data-src="home/fold-scene.jpg" alt="" width="640" height="400"></div>
         <div class="meta"><span class="num">Day 01</span><h2>Fold</h2></div>
         <p class="tag">La feuille qui se replie</p>
         <p class="how">Un choc, et toute la plante se ferme : signal propagé sur le graphe de la plante, pli sans interpénétration.</p>
+        <p class="keep"><span>ce qui se conserve</span> l’eau des pulvinus, qui passe d’un côté de l’articulation à l’autre</p>
       </a><a class="lite" href="fold/?mobile=1">version légère</a><a class="lite" href="fold/explainer.html">documentation</a></li>
 
-      <li class="day" id="d02" data-dir="shatter"><a href="shatter/">
+      <li class="day" id="d02" data-dir="shatter" data-size="0.25" data-time="900"><a href="shatter/">
         <div class="frame"><img class="art" decoding="async" fetchpriority="high" src="home/shatter-art.jpg" alt="Dessin du chargement de Shatter : le sable fond en verre" width="640" height="400"><img class="scene" decoding="async" data-src="home/shatter-scene.jpg" alt="" width="640" height="400"></div>
         <div class="meta"><span class="num">Day 02</span><h2>Shatter</h2></div>
         <p class="tag">Le verre brisé, refondu, soufflé, brisé</p>
         <p class="how">Une pièce de verrier monte du bain, se brise en caméra rapide, et ses éclats refondent : fracture exacte.</p>
+        <p class="keep"><span>ce qui se conserve</span> le verre : chaque éclat retourne au bain et fait la pièce suivante</p>
       </a><a class="lite" href="shatter/?mobile=1">version légère</a><a class="lite" href="shatter/explainer.html">documentation</a></li>
 
-      <li class="day" id="d03" data-dir="melt"><a href="melt/">
+      <li class="day" id="d03" data-dir="melt" data-size="0.004" data-time="1800"><a href="melt/">
         <div class="frame"><img class="art" decoding="async" fetchpriority="high" src="home/melt-art.jpg" alt="Dessin du chargement de Melt : un cristal de neige pousse" width="640" height="400"><img class="scene" decoding="async" data-src="home/melt-scene.jpg" alt="" width="640" height="400"></div>
         <div class="meta"><span class="num">Day 03</span><h2>Melt</h2></div>
         <p class="tag">Le dégel d’une étoile</p>
         <p class="how">Un cristal de neige pousse, puis fond en perles qui remontent vers son cœur : croissance de Gravner-Griffeath.</p>
+        <p class="keep"><span>ce qui se conserve</span> l’eau : la glace fond en perles, les perles regèlent en étoile</p>
       </a><a class="lite" href="melt/?mobile=1">version légère</a><a class="lite" href="melt/explainer.html">documentation</a></li>
 
-      <li class="day" id="d04" data-dir="tangle"><a href="tangle/">
+      <li class="day" id="d04" data-dir="tangle" data-size="0.5" data-time="60"><a href="tangle/">
         <div class="frame"><img class="art" decoding="async" src="home/tangle-art.jpg" alt="Dessin du chargement de Tangle : la corde se tord en boucle" width="640" height="400"><img class="scene" decoding="async" data-src="home/tangle-scene.jpg" alt="" width="640" height="400"></div>
         <div class="meta"><span class="num">Day 04</span><h2>Tangle</h2></div>
         <p class="tag">Le tour de trop</p>
         <p class="how">Une corde tordue tour après tour fait soudain une boucle, puis tout se démêle : tiges de Cosserat, Lk = Tw + Wr.</p>
+        <p class="keep"><span>ce qui se conserve</span> l’enlacement, Lk = Tw + Wr : la torsion devient boucle, la boucle redevient torsion</p>
       </a><a class="lite" href="tangle/?mobile=1">version légère</a><a class="lite" href="tangle/explainer.html">documentation</a></li>
 
-      <li class="day" id="d05" data-dir="moss"><a href="moss/">
+      <li class="day" id="d05" data-dir="moss" data-size="0.2" data-time="3.15e+07"><a href="moss/">
         <div class="frame"><img class="art" decoding="async" src="home/moss-art.jpg" alt="Dessin du chargement de Moss : la mousse s'étend sous les averses" width="640" height="400"><img class="scene" decoding="async" data-src="home/moss-scene.jpg" alt="" width="640" height="400"></div>
         <div class="meta"><span class="num">Day 05</span><h2>Moss</h2></div>
         <p class="tag">La reviviscence</p>
         <p class="how">Une année de mousse sur sa pierre : réfugiée dans les fissures, elle reverdit à l’averse — Fisher-KPP au fil des saisons.</p>
+        <p class="keep"><span>ce qui se conserve</span> la mousse : elle sèche sans mourir et reverdit à l’averse</p>
       </a><a class="lite" href="moss/?mobile=1">version légère</a><a class="lite" href="moss/explainer.html">documentation</a></li>
 
-      <li class="day" id="d06" data-dir="planetaire_v2"><a href="planetaire_v2/">
+      <li class="day" id="d06" data-dir="planetaire_v2" data-size="0.5" data-time="3e+08"><a href="planetaire_v2/">
         <div class="frame"><img class="art" decoding="async" src="home/orrery-art.jpg" alt="Dessin du chargement d'Orrery : la recherche d'une orbite" width="640" height="400"><img class="scene" decoding="async" data-src="home/orrery-scene.jpg" alt="" width="640" height="400"></div>
         <div class="meta"><span class="num">Day 06</span><h2>Orrery</h2></div>
         <p class="tag">La chorégraphie des astres</p>
         <p class="how">Chaque graine trouve une orbite inédite du problème à N corps, et la machine à engrenages qui la trace.</p>
+        <p class="keep"><span>ce qui se conserve</span> l’énergie et le moment cinétique des N corps</p>
       </a><a class="lite" href="planetaire_v2/?mobile=1">version légère</a><a class="lite" href="planetaire_v2/explainer.html">documentation</a></li>
 
-      <li class="day" id="d07" data-dir="hollow"><a href="hollow/">
+      <li class="day" id="d07" data-dir="hollow" data-size="0.15" data-time="20"><a href="hollow/">
         <div class="frame"><img class="art" decoding="async" loading="lazy" src="home/hollow-art.jpg" alt="Dessin du chargement de Hollow : des coquilles emboîtées" width="640" height="400"><img class="scene" decoding="async" data-src="home/hollow-scene.jpg" alt="" width="640" height="400"></div>
         <div class="meta"><span class="num">Day 07</span><h2>Hollow</h2></div>
         <p class="tag">La plongée sans fond</p>
         <p class="how">Des coquilles creuses emboîtées à l’infini, chacune vue par l’oculus de la précédente.</p>
+        <p class="keep"><span>ce qui se conserve</span> la forme : chaque coquille est la précédente, à une autre échelle</p>
       </a><a class="lite" href="hollow/?mobile=1">version légère</a><a class="lite" href="hollow/explainer.html">documentation</a></li>
 
-      <li class="day" id="d08" data-dir="tesseract"><a href="tesseract/">
+      <li class="day" id="d08" data-dir="tesseract" data-size="1" data-time="20"><a href="tesseract/">
         <div class="frame"><img class="art" decoding="async" loading="lazy" src="home/tesseract-art.jpg" alt="Dessin du chargement de Tesseract : le patron 4D se replie" width="640" height="400"><img class="scene" decoding="async" data-src="home/tesseract-scene.jpg" alt="" width="640" height="400"></div>
         <div class="meta"><span class="num">Day 08</span><h2>Tesseract</h2></div>
         <p class="tag">L’écrin qui se replie en hypercube</p>
         <p class="how">Huit cubes se replient en hypercube, puis la caméra y voyage de pièce en pièce au fil des rotations 4D.</p>
+        <p class="keep"><span>ce qui se conserve</span> les volumes : une rotation en quatre dimensions ne déforme rien</p>
       </a><a class="lite" href="tesseract/?mobile=1">version légère</a><a class="lite" href="tesseract/explainer.html">documentation</a></li>
 
-      <li class="day" id="d09" data-dir="membrane"><a href="membrane/">
+      <li class="day" id="d09" data-dir="membrane" data-size="0.1" data-time="15"><a href="membrane/">
         <div class="frame"><img class="art" decoding="async" loading="lazy" src="home/membrane-art.jpg" alt="Dessin du chargement de Membrane : la membrane se déchire" width="640" height="400"><img class="scene" decoding="async" data-src="home/membrane-scene.jpg" alt="" width="640" height="400"></div>
         <div class="meta"><span class="num">Day 09</span><h2>Membrane</h2></div>
         <p class="tag">L’éclosion sans fin</p>
         <p class="how">Des membranes vascularisées se tendent et se déchirent sur leur armature, simulées sur le GPU.</p>
+        <p class="keep"><span>ce qui se conserve</span> la forme : chaque œuf rejoue l’éclosion du précédent</p>
       </a><a class="lite" href="membrane/?mobile=1">version légère</a><a class="lite" href="membrane/explainer.html">documentation</a></li>
 
-      <li class="day" id="d10" data-dir="caustic"><a href="caustic/">
+      <li class="day" id="d10" data-dir="caustic" data-size="0.3" data-time="4"><a href="caustic/">
         <div class="frame"><img class="art" decoding="async" loading="lazy" src="home/caustic-art.jpg" alt="Dessin du chargement de Caustic : la lumière se rassemble sur le motif" width="640" height="400"><img class="scene" decoding="async" data-src="home/caustic-scene.jpg" alt="" width="640" height="400"></div>
         <div class="meta"><span class="num">Day 10</span><h2>Caustic</h2></div>
         <p class="tag">Le foyer des ondes</p>
         <p class="how">Des ondes convergent et la surface devient une lentille : la caustique dessine une diatomée — transport optimal.</p>
+        <p class="keep"><span>ce qui se conserve</span> la lumière : la lentille ne fait que la déplacer, sans en perdre</p>
       </a><a class="lite" href="caustic/?mobile=1">version légère</a><a class="lite" href="caustic/explainer.html">documentation</a></li>
 
-      <li class="day" id="d11" data-dir="rust"><a href="rust/">
+      <li class="day" id="d11" data-dir="rust" data-size="1" data-time="1.6e+07"><a href="rust/">
         <div class="frame"><img class="art" decoding="async" loading="lazy" src="home/rust-art.jpg" alt="Dessin du chargement de Rust : le front de rouille" width="640" height="400"><img class="scene" decoding="async" data-src="home/rust-scene.jpg" alt="" width="640" height="400"></div>
         <div class="meta"><span class="num">Day 11</span><h2>Rust</h2></div>
         <p class="tag">La remise à nu</p>
         <p class="how">Une pièce rivetée rouille sous les averses d’une saison, puis une machine la décape — corrosion calculée sur la géométrie.</p>
+        <p class="keep"><span>ce qui se conserve</span> le fer, sous la rouille, que la machine remet à nu</p>
       </a><a class="lite" href="rust/?mobile=1">version légère</a><a class="lite" href="rust/explainer.html">documentation</a></li>
 
-      <li class="day" id="d12" data-dir="feather"><a href="feather/">
+      <li class="day" id="d12" data-dir="feather" data-size="0.12" data-time="3e+06"><a href="feather/">
         <div class="frame"><img class="art" decoding="async" loading="lazy" src="home/feather-art.jpg" alt="Dessin du chargement de Feather : le motif de la plume se dépose dans le collier" width="640" height="400"><img class="scene" decoding="async" data-src="home/feather-scene.jpg" alt="" width="640" height="400"></div>
         <div class="meta"><span class="num">Day 12</span><h2>Feather</h2></div>
         <p class="tag">La plume en tuyau</p>
         <p class="how">Une plume sort roulée dans sa gaine et se déroule sans s’étirer : croissance dans le collier, motif par réaction-diffusion.</p>
+        <p class="keep"><span>ce qui se conserve</span> la longueur des barbes : la plume se déroule sans s’étirer</p>
       </a><a class="lite" href="feather/?mobile=1">version légère</a><a class="lite" href="feather/explainer.html">documentation</a></li>
 
-      <li class="day" id="d13" data-dir="labyrinth"><a href="labyrinth/">
+      <li class="day" id="d13" data-dir="labyrinth" data-size="0.3" data-time="60"><a href="labyrinth/">
         <div class="frame"><img class="art" decoding="async" loading="lazy" src="home/labyrinth-art.jpg" alt="Dessin du chargement de Labyrinth : l’algorithme de Wilson creuse le labyrinthe, puis le chemin s’allume" width="640" height="400"><img class="scene" decoding="async" data-src="home/labyrinth-scene.jpg" alt="" width="640" height="400"></div>
         <div class="meta"><span class="num">Day 13</span><h2>Labyrinth</h2></div>
         <p class="tag">Le dédale qu’on retourne</p>
         <p class="how">Un automate incline ou fait tourner le labyrinthe et la gravité conduit la bille : arbres couvrants de Wilson, roulement simulé, rotations trouvées par recherche en largeur.</p>
+        <p class="keep"><span>ce qui se conserve</span> la bille : une seule, qui revient toujours à l’entrée</p>
       </a><a class="lite" href="labyrinth/?mobile=1">version légère</a><a class="lite" href="labyrinth/explainer.html">documentation</a></li>
-      <li class="day" id="d14" data-dir="tension"><a href="tension/">
+      <li class="day" id="d14" data-dir="tension" data-size="0.5" data-time="40"><a href="tension/">
         <div class="frame"><img class="art" decoding="async" loading="lazy" src="home/tension-art.jpg" alt="Dessin du chargement de Tension : la tenségrité se tend, puis la chronophotographie de ses culbutes" width="640" height="400"><img class="scene" decoding="async" data-src="home/tension-scene.jpg" alt="" width="640" height="400"></div>
         <div class="meta"><span class="num">Day 14</span><h2>Tension</h2></div>
         <p class="tag">Ce qui tient ne pousse pas</p>
         <p class="how">Des tenségrités avancent en enroulant leurs propres câbles : barres rigides et câbles unilatéraux simulés, culbutes trouvées par symétrie, cycle limite refermé par point fixe.</p>
+        <p class="keep"><span>ce qui se conserve</span> la longueur des câbles : enroulés d’un côté, déroulés de l’autre</p>
       </a><a class="lite" href="tension/?mobile=1">version légère</a><a class="lite" href="tension/explainer.html">documentation</a></li>
-      <li class="day" id="d15" data-dir="mirage"><a href="mirage/">
+      <li class="day" id="d15" data-dir="mirage" data-size="0.2" data-time="20"><a href="mirage/">
         <div class="frame"><img class="art" decoding="async" loading="lazy" src="home/mirage-art.jpg" alt="Dessin du chargement de Mirage : le mirascope en coupe, un petit mirascope au fond, et les rayons partis de son dôme qui, deux fois réfléchis, se croisent au-dessus de l’ouverture, là où flotte son image" width="640" height="400"><img class="scene" decoding="async" data-src="home/mirage-scene.jpg" alt="" width="640" height="400"></div>
         <div class="meta"><span class="num">Day 15</span><h2>Mirage</h2></div>
         <p class="tag">L’objet qui n’est pas là</p>
         <p class="how">Un mirascope au fond d’un mirascope — argent, cloisonné, laque, cuivre ou nacre. Une coupe s’ouvre dans le couvercle : on voit le vrai petit posé au fond et son image qui flotte au-dessus de l’ouverture ; puis la caméra plonge dans l’image, sans fin.</p>
+        <p class="keep"><span>ce qui se conserve</span> la lumière : deux fois réfléchie, elle refait l’objet là où il n’est pas</p>
       </a><a class="lite" href="mirage/?mobile=1">version légère</a><a class="lite" href="mirage/explainer.html">documentation</a></li>
-      <li class="day" id="d16" data-dir="spore"><a href="spore/">
+      <li class="day" id="d16" data-dir="spore" data-size="0.05" data-time="600000"><a href="spore/">
         <div class="frame"><img class="art" decoding="async" loading="lazy" src="home/spore-art.jpg" alt="Dessin du chargement de Spore : le plasmodium jaune de la scène qui s’étend depuis ses spores, et son réseau de veines qui s’organise derrière le front" width="640" height="400"><img class="scene" decoding="async" data-src="home/spore-scene.jpg" alt="" width="640" height="400"></div>
         <div class="meta"><span class="num">Day 16</span><h2>Spore</h2></div>
         <p class="tag">Le relais</p>
         <p class="how">Sur du bois mort, une poussière de spores germe en un plasmodium qui s’étend en réseau, se condense en perles et se dresse en une forêt de sporanges ; au souffle, ils s’ouvrent, et la caméra suit le nuage jusqu’au site suivant : réseau adaptatif de Tero, perles de Plateau, fumée simulée en 3D qui se dépose, boucle qui est une translation.</p>
+        <p class="keep"><span>ce qui se conserve</span> le volume du plasmodium : les veines se vident exactement dans les perles</p>
       </a><a class="lite" href="spore/?mobile=1">version légère</a><a class="lite" href="spore/explainer.html">documentation</a></li>
-      <li class="day" id="d17" data-dir="kelp"><a href="kelp/">
+      <li class="day" id="d17" data-dir="kelp" data-size="2" data-time="30"><a href="kelp/">
         <div class="frame"><img class="art" decoding="async" loading="lazy" src="home/kelp-art.jpg" alt="Dessin du chargement de Kelp : la coupe du platier de la scène, la mer qui monte en ressaut et se retire, les laminaires en coupe, et dessous la série de vagues qui entre au large" width="640" height="400"><img class="scene" decoding="async" data-src="home/kelp-scene.jpg" alt="" width="640" height="400"></div>
         <div class="meta"><span class="num">Day 17</span><h2>Kelp</h2></div>
         <p class="tag">Le ressac</p>
         <p class="how">Au ras d’un platier, une caméra à hublot-dôme, moitié au-dessus, moitié au-dessous de l’eau : à chaque vague de la série, les laminaires couchées sur la roche se dressent quand le front les atteint, puis le retrait les recouche : mer de Saint-Venant avec son front mouillé-sec, laminaires XPBD qui flottent et traînent dans le courant, boucle refermée sur une orbite périodique.</p>
+        <p class="keep"><span>ce qui se conserve</span> la masse d’eau de chaque vague, du large à la roche et retour</p>
       </a><a class="lite" href="kelp/?mobile=1">version légère</a><a class="lite" href="kelp/explainer.html">documentation</a></li>
-      <li class="day" id="d18" data-dir="pendulum"><a href="pendulum/">
+      <li class="day" id="d18" data-dir="pendulum" data-size="0.6" data-time="20"><a href="pendulum/">
         <div class="frame"><img class="art" decoding="async" loading="lazy" src="home/pendulum-art.jpg" alt="Dessin du chargement de Pendulum : une plaque de chronophotographie par manœuvre, les poses de la chaîne qui se brisent d’un segment de tir à l’autre puis s’alignent quand le solveur converge, et la courbe du résidu sous chaque plaque" width="640" height="400"><img class="scene" decoding="async" data-src="home/pendulum-scene.jpg" alt="" width="640" height="400"></div>
         <div class="meta"><span class="num">Day 18</span><h2>Pendulum</h2></div>
         <p class="tag">L’équilibre renversé</p>
         <p class="how">Un chariot sur son rail, un bras qui tourne, un coude motorisé ou un volant font se dresser une chaîne de pendules, qui reste debout, immobile, à l’envers, puis se replie : redressements trouvés par tir multiple et SQP sur la dynamique exacte d’une chaîne sous-actionnée, bibliothèque et continuation pour la chaîne triple, boucle faite d’équilibres.</p>
+        <p class="keep"><span>ce qui se conserve</span> aucun moteur dans la chaîne : toute l’énergie vient de la base</p>
       </a><a class="lite" href="pendulum/?mobile=1">version légère</a><a class="lite" href="pendulum/explainer.html">documentation</a></li>
-      <li class="day" id="d19" data-dir="erosion"><a href="erosion/">
+      <li class="day" id="d19" data-dir="erosion" data-size="1.5" data-time="3600"><a href="erosion/">
         <div class="frame"><img class="art" decoding="async" loading="lazy" src="home/erosion-art.jpg" alt="Dessin du chargement d’Erosion : la table vue d’en haut, ombrée en lumière rasante, qui se creuse en direct pendant la simulation — le chenal, le delta dans le lac, aux couleurs des strates de la graine" width="640" height="400"><img class="scene" decoding="async" data-src="home/erosion-scene.jpg" alt="" width="640" height="400"></div>
         <div class="meta"><span class="num">Day 19</span><h2>Erosion</h2></div>
         <p class="tag">Un paysage d’une heure</p>
         <p class="how">Une table à érosion de laboratoire : la pluie, un courant, un lac qui déborde ou un déversoir qui s’abaisse creusent dans un sable stratifié des ravines, un canyon, un delta, une brèche, puis une lame-gabarit repasse le sable : eau peu profonde par tuyaux virtuels et transport de Meyer-Peter–Müller simulés sur le GPU, enregistrés puis relus, boucle refermée par la lame qui réécrit la surface de départ.</p>
+        <p class="keep"><span>ce qui se conserve</span> le sable : ce que le canyon perd, le delta le gagne</p>
       </a><a class="lite" href="erosion/?mobile=1">version légère</a><a class="lite" href="erosion/explainer.html">documentation</a></li>
-      <li class="day" id="d20" data-dir="cocoon"><a href="cocoon/">
+      <li class="day" id="d20" data-dir="cocoon" data-size="0.3" data-time="260000"><a href="cocoon/">
         <div class="frame"><img class="art" decoding="async" loading="lazy" src="home/cocoon-art.jpg" alt="Dessin du chargement de Cocoon : le vrai chemin du ruban de la graine qui s’enroule sur la cage, circuit après circuit, autour d’une lueur de lampe qui baisse à mesure que le cocon se ferme" width="640" height="400"><img class="scene" decoding="async" data-src="home/cocoon-scene.jpg" alt="" width="640" height="400"></div>
         <div class="meta"><span class="num">Day 20</span><h2>Cocoon</h2></div>
         <p class="tag">La lumière filée</p>
         <p class="how">Deux lanternes-cocons aux bras d’un fléau : un seul ruban de soie quitte l’une, qui se dévide et libère sa lampe, et s’enroule sur la cage de l’autre, qui se referme sur sa lumière ; puis le fléau fait un demi-tour et les échange : géodésiques de Clairaut, fil déposé sans traversée sur une carte de hauteur, paroi qui filtre la lumière fil par fil jusque dans la brume.</p>
+        <p class="keep"><span>ce qui se conserve</span> le fil : un seul ruban, qui passe d’une cage à l’autre</p>
       </a><a class="lite" href="cocoon/?mobile=1">version légère</a><a class="lite" href="cocoon/explainer.html">documentation</a></li>
     </ol>
 
@@ -217,6 +260,44 @@
         const el = document.createElement(card ? 'a' : 'span');
         if (card) { el.href = `#${card.id}`; el.title = `Day ${String(d).padStart(2, '0')} · ${card.querySelector('h2').textContent}`; }
         nav.append(el);
+      }
+      // L'atlas : taille du sujet (m) et durée réelle d'une boucle (s), en logarithmes ;
+      // le fil rouge passe par les jours dans l'ordre, en courbe douce.
+      const svg = document.getElementById('atlas'), NS = 'http://www.w3.org/2000/svg';
+      if (svg) {
+        const W = 1200, H = 520, L = 70, R = 30, T = 24, B = 46;
+        const t0 = Math.log10(2), t1 = Math.log10(1e9), s0 = Math.log10(0.002), s1 = Math.log10(3);
+        const X = (t) => L + (Math.log10(t) - t0) / (t1 - t0) * (W - L - R);
+        const Y = (m) => H - B - (Math.log10(m) - s0) / (s1 - s0) * (H - T - B);
+        const el = (n, a, p = svg) => { const e = document.createElementNS(NS, n); for (const k in a) e.setAttribute(k, a[k]); p.append(e); return e; };
+        const ticksT = [[1, '1 s'], [60, '1 min'], [3600, '1 h'], [86400, '1 jour'], [2.6e6, '1 mois'], [3.15e7, '1 an'], [3.15e8, '10 ans']];
+        for (const [t, l] of ticksT) { const x = X(t); el('line', { class: 'ax', x1: x, x2: x, y1: T, y2: H - B }); el('text', { class: 'tick', x, y: H - B + 20, 'text-anchor': 'middle' }).textContent = l; }
+        for (const [m, l] of [[0.001 * 3, '3 mm'], [0.01, '1 cm'], [0.1, '10 cm'], [1, '1 m']]) { const y = Y(m); el('line', { class: 'ax', x1: L, x2: W - R, y1: y, y2: y }); el('text', { class: 'tick', x: L - 10, y: y + 4, 'text-anchor': 'end' }).textContent = l; }
+        const pts = days.map((li) => ({ li, x: X(+li.dataset.time), y: Y(+li.dataset.size), name: li.querySelector('h2').textContent })).filter((p) => Number.isFinite(p.x));
+        // Le fil pend d'une scène à la suivante, comme un vrai fil : chaque travée
+        // est une parabole dont la flèche croît avec la portée.
+        let d = `M${pts[0].x},${pts[0].y}`;
+        for (let i = 0; i < pts.length - 1; i++) {
+          const p1 = pts[i], p2 = pts[i + 1], span = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+          d += ` Q${(p1.x + p2.x) / 2},${Math.min(H - B + 6, (p1.y + p2.y) / 2 + 0.22 * span)} ${p2.x},${p2.y}`;
+        }
+        el('path', { class: 'thread', d });
+        const placed = [];
+        for (const p of pts) {
+          const a = el('a', { href: `#${p.li.id}` });
+          el('title', {}, a).textContent = `${p.li.querySelector('.num').textContent} · ${p.name}`;
+          el('circle', { cx: p.x, cy: p.y, r: 5 }, a);
+          // étiquette à droite, ou à gauche, ou décalée, pour ne pas en chevaucher une autre
+          const w = 8.6 * p.name.length + 6;
+          const cands = [[10, 4, 'start'], [-10, 4, 'end'], [10, -12, 'start'], [10, 19, 'start'], [-10, -12, 'end'], [-10, 19, 'end'], [0, -14, 'middle'], [0, 24, 'middle']];
+          let pick = cands[0];
+          for (const c of cands) {
+            const x0 = c[2] === 'start' ? p.x + c[0] : c[2] === 'end' ? p.x + c[0] - w : p.x - w / 2, y0 = p.y + c[1] - 11;
+            const box = [x0, y0, x0 + w, y0 + 14];
+            if (box[2] < W && box[0] > 0 && !placed.some((b) => b[0] < box[2] && box[0] < b[2] && b[1] < box[3] && box[1] < b[3])) { pick = c; placed.push(box); break; }
+          }
+          el('text', { x: p.x + pick[0], y: p.y + pick[1], 'text-anchor': pick[2] }, a).textContent = p.name;
+        }
       }
       const n = document.createElement('small'); n.textContent = `${days.length} / 30`; nav.append(n);
       // Les images des scènes ne sont demandées qu'au premier survol (ou, sur un
