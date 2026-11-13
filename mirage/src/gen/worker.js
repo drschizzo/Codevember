@@ -1,6 +1,6 @@
 // Worker de génération : le volume de bruit (le reste du mirascope se calcule
 // au pixel). Fonctions pures, importables depuis Node.
-import { buildNoiseVolume } from './noisevol.js';
+import { buildNoiseVolume } from '../../../shared/gen/noisevol.js';
 
 function build({ spec, what }) {
   switch (what) {

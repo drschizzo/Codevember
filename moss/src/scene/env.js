@@ -3,7 +3,7 @@
 // formées — boîtes à lumière, bandes, fenêtre, rebond du plateau — dont les
 // bords adoucis donnent des reflets nets mais pas crénelés.
 import * as THREE from 'three/webgpu';
-import { ENV_PRESETS, envPixels } from '../gen/envmap.js';
+import { ENV_PRESETS, envPixels } from '../../../shared/gen/envmap.js';
 
 export { ENV_PRESETS };
 

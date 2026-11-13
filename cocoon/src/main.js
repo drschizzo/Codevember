@@ -11,20 +11,20 @@
 import * as THREE from 'three/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { generate, upgrade, MOODS, FAMILIES } from './recipe.js';
-import { createGenerator } from './gen/client.js';
+import { createGenerator } from '../../shared/gen/client.js';
 import { createStage } from './scene/stage.js';
 import { cameraPose } from './timeline.js';
-import { makeEnvironment } from './scene/env.js';
-import { G } from './scene/globals.js';
-import { setNoiseVolume, setLite } from './scene/materials.js';
-import { createPost } from './render/post.js';
-import { createAccumulator, jitter } from './render/accum.js';
+import { makeEnvironment } from '../../shared/scene/env.js';
+import { G } from '../../shared/scene/globals.js';
+import { setNoiseVolume, setLite } from '../../shared/scene/materials.js';
+import { createPost } from '../../shared/render/post.js';
+import { createAccumulator, jitter } from '../../shared/render/accum.js';
 import { createUI } from './app/ui.js';
 import { loadRender, saveRender, applyQuality, defaultsFor } from './app/settings.js';
-import { wantsMobile, switchMobile, createGovernor, createPacer, bindTouch } from './app/mobile.js';
-import { exportLoop, exportPNG } from './app/capture.js';
-import { loader } from './app/loader.js';
-import { asyncPipelines, warmScene } from './app/warmup.js';
+import { wantsMobile, switchMobile, createGovernor, createPacer, bindTouch } from '../../shared/app/mobile.js';
+import { exportLoop, exportPNG } from '../../shared/app/capture.js';
+import { loader } from '../../shared/app/loader.js';
+import { asyncPipelines, warmScene } from '../../shared/app/warmup.js';
 
 const NAME = 'cocoon';
 const DEFAULT_SEED = 'p6'; // scène d'ouverture (sans ?seed=) : à choisir parmi les plus belles
@@ -100,11 +100,11 @@ async function main() {
   const camState = { free: false };
 
   // ── Modules ──
-  const gen = createGenerator(LITE ? Math.max(2, Math.min(3, (navigator.hardwareConcurrency || 4) - 1)) : undefined);
+  const gen = createGenerator(LITE ? Math.max(2, Math.min(3, (navigator.hardwareConcurrency || 4) - 1)) : undefined, { maxCache: 6 }); // (une scène pèse des dizaines de Mo)
   setNoiseVolume(await gen.request({ seed: `${NAME}-noise` }, 'noise')); // (les matériaux en dépendent)
   const stage = createStage(scene, gen, { lite: LITE, renderer });
   camera.layers.enable(1); // (les fils)
-  const post = createPost(renderer, scene, camera, { haze: stage.haze });
+  const post = createPost(renderer, scene, camera, { haze: stage.haze, aoSamples: 8 }); // (sous le TRAA, 8 échantillons d'occlusion suffisent)
   const accum = createAccumulator(renderer);
   const RENDER = loadRender(LITE);
   const governor = createGovernor({ target: 1 / 45, min: 0.5, max: 1, onChange: () => !busy && resize() });

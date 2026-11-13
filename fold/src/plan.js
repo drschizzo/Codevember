@@ -16,7 +16,7 @@
 //   (tache humide), la lèvre du pot, la soucoupe ou la table ;
 // - le marteau : bras pivotant ; l'angle du contact est celui où la surface de
 //   la tête touche le profil du pot (ou du socle), par dichotomie.
-import { createRng } from './rng.js';
+import { createRng } from '../../shared/rng.js';
 import { makeGrid } from './grid.js';
 import { createPoser, applyM } from './pose.js';
 import { leafletPoint, leafPoints, v3, ORGANS, foldPoint, foldAngle, fullPoint, petiolePoint } from './gen/plant.js';

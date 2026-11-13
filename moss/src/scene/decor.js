@@ -9,12 +9,12 @@
 // du coussin.
 import * as THREE from 'three/webgpu';
 import { Fn, atan, attribute, texture, positionPrevious, normalGeometry, modelViewMatrix, positionWorld, positionGeometry, normalWorld, vec2, vec3, vec4, float, mix, smoothstep, uniform, abs, sin, cos, pow, clamp, normalViewGeometry, max as tmax, color, positionLocal, cameraPosition, length, normalize, dot } from 'three/tsl';
-import { noise, worley, fbm, perturb, stableVelocity, isLite } from './materials.js';
+import { noise, worley, fbm, perturb, stableVelocity, isLite } from '../../../shared/scene/materials.js';
 import { makeSubstrate } from '../gen/colony.js';
 import { supportSurface } from '../gen/support.js';
-import { createRng, createNoise3 } from '../rng.js';
+import { createRng, createNoise3 } from '../../../shared/rng.js';
 import { DECOR_FINISHES } from '../recipe.js';
-import { Buffers, norm, add as vadd, mul, cross } from '../gen/mesh.js';
+import { Buffers, norm, add as vadd, mul, cross } from '../../../shared/gen/mesh.js';
 
 const sst = (a, b, x) => smoothstep(float(a), float(b), x);
 

@@ -13,7 +13,7 @@
 // comme une vraie déchirure. Un second réseau, plus fin et plus résistant,
 // greffe des embranchements le long des coupures principales.
 
-import { createNoise3, createRng } from '../rng.js';
+import { createNoise3, createRng } from '../../../shared/rng.js';
 import { V3 } from './geo.js';
 
 const { PI, atan2, acos, floor, min, max, sqrt } = Math;

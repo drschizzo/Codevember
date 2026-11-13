@@ -1,6 +1,6 @@
 // Recette d'une scène : tout ce qui découle de la graine. Une recette est un
 // objet JSON (partageable par lien) ; le panneau la modifie en place.
-import { createRng } from './rng.js';
+import { createRng } from '../../shared/rng.js';
 import { FINISHES, SETS, TINTS } from './finishes.js';
 import { randomNet, randomMoves, ROOT, voyageSeconds, twinFace, stepOrientations, innerCell } from './math4.js';
 

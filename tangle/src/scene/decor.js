@@ -11,7 +11,7 @@ import {
   positionWorld, length, color, vec2, vec3, vec4, float, uniform, mix, smoothstep, fract, floor, abs, step, max as tmax, min as tmin, lights, sin, normalWorld, clamp,
 } from 'three/tsl';
 import { noise, noise2, fbm } from './materials.js';
-import { createRng } from '../rng.js';
+import { createRng } from '../../../shared/rng.js';
 
 const H = 2.8; // hauteur de la table (u)
 

@@ -10,7 +10,7 @@ import {
   Fn, attribute, uniform, float, vec2, vec3, vec4, texture, smoothstep, mix, clamp, sin, abs, normalize, max as tmax, min as tmin,
   positionLocal, positionPrevious, normalLocal, positionGeometry, modelViewMatrix, normalViewGeometry, varying, fwidth, color, exp, dot, positionWorld,
 } from 'three/tsl';
-import { noise, perturb, stableVelocity, isLite, ditherThreshold } from './materials.js';
+import { noise, perturb, stableVelocity, isLite, ditherThreshold } from '../../../shared/scene/materials.js';
 import { T as TL } from '../timeline.js';
 
 const sst = (a, b, x) => smoothstep(float(a), float(b), x);

@@ -6,7 +6,7 @@
 // L'orbite elle-même n'est pas dans la recette : elle se recalcule, à
 // l'identique, à partir de la graine et des contraintes demandées (nombre de
 // corps, symétrie, rotation du plateau).
-import { createRng } from './rng.js';
+import { createRng } from '../../shared/rng.js';
 
 const r2 = (x) => Math.round(x * 100) / 100;
 

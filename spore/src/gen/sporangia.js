@@ -10,7 +10,7 @@
 // Unités : cm. Toutes les pièces sont des solides fermés (pas de nappe nue) :
 // le calice a une paroi épaisse et une lèvre roulée, le pied s'évase à la
 // base, la tête est arrondie au sommet.
-import { createRng } from '../rng.js';
+import { createRng } from '../../../shared/rng.js';
 
 const TAU = Math.PI * 2;
 

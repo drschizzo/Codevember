@@ -6,8 +6,8 @@
 import * as THREE from 'three/webgpu';
 import { Fn, vec2, vec3, vec4, float, positionLocal, normalLocal, positionPrevious, positionWorld, cameraPosition, cameraViewMatrix, texture, normalize, mix, smoothstep, max, select, uniform, normalView, transformNormalToView, pow } from 'three/tsl';
 import { gridGeometry, spacing } from './water.js';
-import { fbm, noise, perturb, NZ } from './materials.js';
-import { G } from './globals.js';
+import { fbm, noise, perturb, NZ } from '../../../shared/scene/materials.js';
+import { G } from '../../../shared/scene/globals.js';
 
 export function createTerrain(W, lite) {
   const { U } = W;

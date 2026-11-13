@@ -9,7 +9,7 @@
 // - les lampes sont presque blanches ; la chaleur vient du bois, du fond, des
 //   contre-jours et de l'étalonnage.
 // Unités : centimètres.
-import { createRng } from './rng.js';
+import { createRng } from '../../shared/rng.js';
 import { FAMILIES, FAMILY_KEYS } from './families.js';
 
 const r2 = (x) => Math.round(x * 100) / 100 || 0; // (|| 0 : jamais de −0, que JSON ne garde pas)

@@ -1,7 +1,7 @@
 // Contours des familles à plusieurs instants (lignes de barbes en projection),
 // pour juger la forme dans Node : JSON vers stdout, dessiné par tools/draw.py.
 import { FAMILIES } from '../src/families.js';
-import { createRng } from '../src/rng.js';
+import { createRng } from '../../shared/rng.js';
 import { shapeOf, barbTable, barbPose, BARB_STRIDE } from '../src/gen/feather.js';
 const us = (process.argv[2] || '0.3,0.42,0.5,0.56,0.66,1').split(',').map(Number);
 const out = [];

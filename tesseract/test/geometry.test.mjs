@@ -8,7 +8,7 @@ import {
   stepOrientations, innerCell, MOVES, stateAt, cellTransforms, cellMatrix, timelineFor, depthOf, foldOrder, project,
 } from '../src/math4.js';
 import { generate } from '../src/recipe.js';
-import { createRng } from '../src/rng.js';
+import { createRng } from '../../shared/rng.js';
 import { buildPanels, buildContent } from '../src/gen/cell.js';
 import { faceLayout } from '../src/scene/reveal.js';
 

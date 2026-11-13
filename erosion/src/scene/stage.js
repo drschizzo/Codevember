@@ -16,7 +16,7 @@ import { createRain } from './rain.js';
 import { initialTerrain, TABLE } from '../gen/table.js';
 import { specOf, kelvinToHex } from '../recipe.js';
 import { filmState, reliefK } from '../timeline.js';
-import { G } from './globals.js';
+import { G } from '../../../shared/scene/globals.js';
 
 const SHADOW = { mobile: 2048, low: 2048, medium: 4096, high: 4096, ultra: 4096 };
 

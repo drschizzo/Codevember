@@ -9,7 +9,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { generate, geometryFor, finishesFor, makeLayer, randomType, upgrade, beatsFor } from './recipe.js';
 import { SETS } from './finishes.js';
 import { TYPES } from './types.js';
-import { createRng } from './rng.js';
+import { createRng } from '../../shared/rng.js';
 import { createGenerator } from './gen/client.js';
 import { createNest } from './scene/nest.js';
 import { createLights } from './scene/lights.js';
@@ -19,11 +19,11 @@ import { G, setNoiseVolume, setLite } from './scene/materials.js';
 import { createPost } from './render/post.js';
 import { createUI } from './app/ui.js';
 import { loadRender, saveRender, applyQuality, defaultsFor } from './app/settings.js';
-import { wantsMobile, switchMobile, createGovernor, createPacer, bindTouch } from './app/mobile.js';
+import { wantsMobile, switchMobile, createGovernor, createPacer, bindTouch } from '../../shared/app/mobile.js';
 import { exportLoop, exportPNG } from './app/capture.js';
 import { createSound } from './app/sound.js';
-import { loader } from './app/loader.js';
-import { asyncPipelines, warmScene } from './app/warmup.js';
+import { loader } from '../../shared/app/loader.js';
+import { asyncPipelines, warmScene } from '../../shared/app/warmup.js';
 
 const DEFAULT_SEED = 'ce0gkq'; // scène d'ouverture (sans ?seed=)
 const D = 4; // distance caméra–centre (toutes les longueurs de la scène en dépendent)

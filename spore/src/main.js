@@ -15,19 +15,19 @@ import { createCameraPath, cloudTrack } from './camera.js';
 import { FAMILIES } from './families.js';
 import { heightOf } from './fruit.js';
 import { logBase } from './gen/wood.js';
-import { createGenerator } from './gen/client.js';
+import { createGenerator } from '../../shared/gen/client.js';
 import { createStage } from './scene/stage.js';
 import { makeEnvironment } from './scene/env.js';
-import { G } from './scene/globals.js';
-import { setNoiseVolume, setLite } from './scene/materials.js';
-import { createPost } from './render/post.js';
-import { createAccumulator, jitter } from './render/accum.js';
+import { G } from '../../shared/scene/globals.js';
+import { setNoiseVolume, setLite } from '../../shared/scene/materials.js';
+import { createPost } from '../../shared/render/post.js';
+import { createAccumulator, jitter } from '../../shared/render/accum.js';
 import { createUI } from './app/ui.js';
 import { loadRender, saveRender, applyQuality, defaultsFor } from './app/settings.js';
-import { wantsMobile, switchMobile, createGovernor, createPacer, bindTouch } from './app/mobile.js';
-import { exportLoop, exportPNG } from './app/capture.js';
-import { loader } from './app/loader.js';
-import { asyncPipelines, warmScene } from './app/warmup.js';
+import { wantsMobile, switchMobile, createGovernor, createPacer, bindTouch } from '../../shared/app/mobile.js';
+import { exportLoop, exportPNG } from '../../shared/app/capture.js';
+import { loader } from '../../shared/app/loader.js';
+import { asyncPipelines, warmScene } from '../../shared/app/warmup.js';
 
 const NAME = 'spore';
 const DEFAULT_SEED = 's9'; // scène d'ouverture (sans ?seed=) : Trichia dorés sur une planche de cèdre

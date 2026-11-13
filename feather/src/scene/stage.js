@@ -10,7 +10,7 @@ import {
   attribute, sin, hash, positionGeometry,
 } from 'three/tsl';
 import { barbGeometry, barbMaterial, rachisGeometry, rachisMaterial, sheathMaterial, createLook, FSTRIDE, tubeTemplate } from './feather.js';
-import { isLite, stableVelocity, noise } from './materials.js';
+import { isLite, stableVelocity, noise } from '../../../shared/scene/materials.js';
 import { BIRDS } from '../families.js';
 import { growth, bendOf, layoutPlumage, featherFrame, betaAt, betaSolved, LIE_BETA, settleAt, wearAt, ejection, LIE, SCHED, qrot } from '../gen/feather.js';
 import { cameraPath } from '../camera.js';

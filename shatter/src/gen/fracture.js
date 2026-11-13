@@ -20,7 +20,7 @@
 //    (décalée de l'épaisseur), chants le long des fissures et du bord.
 // 4. Chorégraphie : front de fissure (plus court chemin dans le graphe des
 //    éclats, à vitesse finie), vitesse, rotation, effritement.
-import { createRng, createNoise3 } from '../rng.js';
+import { createRng, createNoise3 } from '../../../shared/rng.js';
 import { shellSurface } from './forms.js';
 import { PH } from '../cycle.js';
 

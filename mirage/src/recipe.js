@@ -8,7 +8,7 @@
 // des coupes, le décor, le projecteur, et le sens et l'ampleur de la spirale
 // que décrit la caméra. Au fond, toujours le même petit mirascope, vingt fois
 // plus petit, et ainsi de suite.
-import { createRng } from './rng.js';
+import { createRng } from '../../shared/rng.js';
 
 const r2 = (x) => Math.round(x * 100) / 100 || 0;
 const r4 = (x) => Math.round(x * 10000) / 10000 || 0;

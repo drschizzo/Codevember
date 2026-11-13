@@ -2,7 +2,7 @@
 // géométrie) est fait hors du fil principal, à partir d'une spécification
 // JSON ; les tampons sont transférés sans copie. Les constructeurs sont des
 // fonctions pures, importables depuis Node (tests, bancs d'essai).
-import { buildNoiseVolume } from './noisevol.js';
+import { buildNoiseVolume } from '../../../shared/gen/noisevol.js';
 import { buildEvent } from './lens.js';
 import { ambientSpectrum } from './ambient.js';
 import { buildApparatus } from './apparatus.js';

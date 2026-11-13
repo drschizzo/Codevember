@@ -4,7 +4,7 @@
 // débitmètre monte avec le débit). La géométrie vient de gen/apparatus.js.
 import * as THREE from 'three/webgpu';
 import { lights as tLights, uv, uniform, float, vec3, mix, abs, fract, smoothstep } from 'three/tsl';
-import { noise } from './materials.js';
+import { noise } from '../../../shared/scene/materials.js';
 import { buildStatic, buildGantry, buildBlade, buildGate, buildFloat, DIM } from '../gen/apparatus.js';
 import { TABLE, longProfile, crossProfile } from '../gen/table.js';
 

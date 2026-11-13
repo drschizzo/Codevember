@@ -37,7 +37,7 @@ Le panneau règle tout :
 - **Lumière et plateau**.
 - **Rendu**.
 
-L'export produit une boucle MP4 (H.264) rendue image par image, et une image PNG. Le **rendu accumulé** (`src/render/accum.js`, réglage « Rendu accumulé » du dossier Export, de 8 à 64 passes) fait de chaque image la moyenne de N rendus complets, décalés d'un rien dans le temps (vrai flou de mouvement, obturateur à 180°), sur la lentille (vraie profondeur de champ, discrète), dans le pixel (anticrénelage) et sur le projecteur (vraie pénombre). L'anticrénelage temporel et le flou de mouvement calculé sont alors coupés. L'export prend N fois plus de temps, le rendu en temps réel ne change pas.
+L'export produit une boucle MP4 (H.264) rendue image par image, et une image PNG. Le **rendu accumulé** (`shared/render/accum.js`, réglage « Rendu accumulé » du dossier Export, de 8 à 64 passes) fait de chaque image la moyenne de N rendus complets, décalés d'un rien dans le temps (vrai flou de mouvement, obturateur à 180°), sur la lentille (vraie profondeur de champ, discrète), dans le pixel (anticrénelage) et sur le projecteur (vraie pénombre). L'anticrénelage temporel et le flou de mouvement calculé sont alors coupés. L'export prend N fois plus de temps, le rendu en temps réel ne change pas.
 
 ## Principe
 

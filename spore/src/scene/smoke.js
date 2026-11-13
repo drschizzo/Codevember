@@ -21,8 +21,8 @@ import {
   cameraPosition, cameraNear, cameraFar, normalize, mix, smoothstep, clamp, exp, max as tmax, min as tmin, abs, dot, length, varying, color,
   screenUV, viewportDepthTexture, perspectiveDepthToViewZ, cameraViewMatrix, instanceIndex, cross, fract, sin, screenCoordinate, uint, hash, select,
 } from 'three/tsl';
-import { NZ, isLite, stableVelocity } from './materials.js';
-import { G } from './globals.js';
+import { NZ, isLite, stableVelocity } from '../../../shared/scene/materials.js';
+import { G } from '../../../shared/scene/globals.js';
 import { SMOKE } from '../gen/smoke.js';
 
 const sst = (a, b, x) => smoothstep(float(a), float(b), x);

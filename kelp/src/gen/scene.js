@@ -5,8 +5,8 @@
 import { simulateSea, makeProfile } from './sea.js';
 import { bakeRock, sampler, makePools } from './rock.js';
 import { layoutPlants, buildKelp, simulateKelp, FAMILIES } from './kelp.js';
-import { createRng, createNoise3 } from '../rng.js';
-import { Buffers, OUT, norm, cross } from './mesh.js';
+import { createRng, createNoise3 } from '../../../shared/rng.js';
+import { Buffers, OUT, norm, cross } from '../../../shared/gen/mesh.js';
 import { cameraPose } from '../camera.js';
 
 export const BOX = { x0: -7, x1: 9, z0: -12, z1: 4 };

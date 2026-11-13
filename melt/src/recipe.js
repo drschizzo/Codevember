@@ -8,7 +8,7 @@
 // cadrage) avant d'être une couleur ; les lampes sont presque blanches, sauf
 // le soleil d'hiver (un peu chaud) et l'éclairage de Rheinberg (coloré : c'est
 // le principe de cette microscopie).
-import { createRng } from './rng.js';
+import { createRng } from '../../shared/rng.js';
 import { FAMILIES } from './families.js';
 
 const r2 = (x) => Math.round(x * 100) / 100 || 0; // (|| 0 : jamais de −0, que JSON ne garde pas)

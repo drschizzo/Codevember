@@ -5,7 +5,7 @@
 //
 // Repères : monde (sol y = 0) ; fléau (pivot de la colonne, tourne autour de
 // y) ; station (centre de la cage à l'origine, axe y). Module pur.
-import { Buffers, lathe, tube, roundedBox, sphere, torus, OUT, EDGE, norm, sub, add, mul, cross } from './mesh.js';
+import { Buffers, lathe, tube, roundedBox, sphere, torus, OUT, EDGE, norm, sub, add, mul, cross } from '../../../shared/gen/mesh.js';
 import { wallPoint } from './profile.js';
 
 const TAU = Math.PI * 2;

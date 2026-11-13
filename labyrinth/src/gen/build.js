@@ -6,7 +6,7 @@
 // dalle et cadre balayés le long du contour, fond et rigole triangulés entre
 // contours appariés. Les mécanismes sont construits dans leur propre repère et
 // posés par la scène (matrices de kin.js).
-import { Buffers, OUT, IN, EDGE, lathe, tube, sphere, roundedBox, norm, cross } from './mesh.js';
+import { Buffers, OUT, IN, EDGE, lathe, tube, sphere, roundedBox, norm, cross } from '../../../shared/gen/mesh.js';
 import { DIM } from './maze.js';
 import { S, layout, beltPath, discFrame } from '../kin.js';
 

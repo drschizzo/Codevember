@@ -7,9 +7,9 @@
 //   tige    OUT écorce, IN aiguillon, EDGE stipule ;
 //   fleur   OUT filet rose, IN anthère, EDGE pédoncule et réceptacle ;
 //   gousse  OUT valve, EDGE soies.
-import { Buffers, OUT, IN, EDGE, tube, lathe, sphere, roundedBox, torus, add, sub, mul, norm, cross, dot } from './mesh.js';
+import { Buffers, OUT, IN, EDGE, tube, lathe, sphere, roundedBox, torus, add, sub, mul, norm, cross, dot } from '../../../shared/gen/mesh.js';
 import { leafletPoint, LEAFLET, sampleCurve, v3, halfPoint, fullPoint } from './plant.js';
-import { createRng } from '../rng.js';
+import { createRng } from '../../../shared/rng.js';
 import { caseBars, potRelief, chaikin } from '../container.js';
 import { hammerLayout, HAMMER } from '../apparatus.js';
 

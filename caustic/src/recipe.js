@@ -7,7 +7,7 @@
 // (un décor : la cuve, son fond, la lumière, l'eau, le cadrage, l'étalonnage).
 // Chaque tirage a son propre flux (rng.fork) ; les humeurs sont composées à la
 // main, jamais tirées pièce par pièce. Longueurs en mètres.
-import { createRng } from './rng.js';
+import { createRng } from '../../shared/rng.js';
 import { SERIES } from './gen/motifs.js';
 
 const r2 = (x) => Math.round(x * 100) / 100 || 0; // (|| 0 : jamais de −0, que JSON ne garde pas)

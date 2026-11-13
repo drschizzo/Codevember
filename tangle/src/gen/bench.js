@@ -12,7 +12,7 @@
 // haut), multiplié par S ; le dessus de la table est à y = −TABLE (sim).
 // Chaque corps mobile est construit autour de son pivot (son origine) ; la
 // scène le place et l'anime.
-import { Buffers, lathe, roundedBox, torus, tube, sphere, OUT, IN, EDGE, norm } from './mesh.js';
+import { Buffers, lathe, roundedBox, torus, tube, sphere, OUT, IN, EDGE, norm } from '../../../shared/gen/mesh.js';
 import { makePlan } from '../plan.js';
 
 export const S = 4;          // unités de la scène par mètre

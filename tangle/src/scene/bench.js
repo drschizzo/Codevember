@@ -6,7 +6,7 @@ import * as THREE from 'three/webgpu';
 import { uniform } from 'three/tsl';
 import { buildPieceMaterial, finishUniforms, applyFinish, signature } from './materials.js';
 import { S, TABLE, GEO } from '../gen/bench.js';
-import { Buffers, tube, roundedBox, EDGE, OUT } from '../gen/mesh.js';
+import { Buffers, tube, roundedBox, EDGE, OUT } from '../../../shared/gen/mesh.js';
 
 const TAU = Math.PI * 2;
 export const Y0 = TABLE * S; // (hauteur, dans la scène, du mandrin : l'origine de la simulation)

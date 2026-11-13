@@ -10,7 +10,7 @@
 // - les lampes sont presque blanches (≥ 4700 K) ;
 // - la boucle : des événements à intervalles fixes de temps physique, une
 //   durée de film fixe (voir physio.js, plan.js).
-import { createRng } from './rng.js';
+import { createRng } from '../../shared/rng.js';
 import { FINISHES, SETS } from './finishes.js';
 import { PLANTS } from './gen/plant.js';
 import { CONTAINERS } from './container.js';

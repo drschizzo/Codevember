@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { generate, upgrade, MOODS, kelvinToHex } from '../src/recipe.js';
 import { FAMILIES, BIRDS } from '../src/families.js';
-import { ENV_PRESETS } from '../src/gen/envmap.js';
+import { ENV_PRESETS } from '../../shared/gen/envmap.js';
 
 const SEEDS = Array.from({ length: 400 }, (_, i) => `t${i}`);
 const lum = (hex) => { const n = parseInt(hex.slice(1), 16); const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };

@@ -11,7 +11,7 @@
 // - les matières des décors sont des accords composés à la main ;
 // - les lampes sont presque blanches (≥ 4700 K), sauf la lune (bleutée) ;
 //   la chaleur vient des matières, du ciel, des contre-jours et de l'étalonnage.
-import { createRng } from './rng.js';
+import { createRng } from '../../shared/rng.js';
 import { FAMILIES, FAMILY_KEYS } from './families.js';
 
 const r2 = (x) => Math.round(x * 100) / 100 || 0; // (|| 0 : jamais de −0, que JSON ne garde pas)

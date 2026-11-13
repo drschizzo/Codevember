@@ -16,7 +16,7 @@
 import * as THREE from 'three/webgpu';
 import { uniform, vec3, vec4, float, positionGeometry, sin, smoothstep, mix, time } from 'three/tsl';
 import { buildPieceMaterial, finishUniforms } from './materials.js';
-import { Buffers, sphere, roundedBox, OUT, EDGE } from '../gen/mesh.js';
+import { Buffers, sphere, roundedBox, OUT, EDGE } from '../../../shared/gen/mesh.js';
 import { PH, physTime } from '../cycle.js';
 import { pendulum, hammer, resonanceAmp, torchOn, PENDULUM, HAMMER, TORCH, RES_FREQ } from '../kinematics.js';
 

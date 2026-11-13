@@ -7,7 +7,7 @@
 // sombre à côté : elles se dessinent en traits. Une bande étroite, ailleurs,
 // fait scintiller les arêtes quand la caméra se balance.
 import * as THREE from 'three/webgpu';
-import { smoothstep as ss } from '../rng.js';
+import { smoothstep as ss } from '../../../shared/rng.js';
 
 const hex = (c) => c; // (couleurs HDR linéaires [r, g, b])
 

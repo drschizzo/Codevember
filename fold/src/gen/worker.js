@@ -2,7 +2,7 @@
 // toute la géométrie sont construits hors du fil principal, à partir d'une
 // spécification JSON ; les tampons sont transférés sans copie. Les
 // constructeurs sont des fonctions pures, importables depuis Node.
-import { buildNoiseVolume } from './noisevol.js';
+import { buildNoiseVolume } from '../../../shared/gen/noisevol.js';
 import { growPlant } from './plant.js';
 import { containerShape } from '../container.js';
 import { planLoop } from '../plan.js';

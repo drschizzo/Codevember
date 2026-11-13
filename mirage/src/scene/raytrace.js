@@ -29,7 +29,7 @@ import {
   positionGeometry, normalize, length, reflect, equirectUV, If, Loop, atan, mx_fractal_noise_float, cos, step, cross,
 } from 'three/tsl';
 import { BEADS, FOOT, MINI, BOUND, K, JEWELS } from '../gen/abyme.js';
-import { G } from './globals.js';
+import { G } from '../../../shared/scene/globals.js';
 
 const BIG = 1e6;
 const IMG_Y = 0.052; // (hauteur des images flottantes, repère d'un niveau : ≈ f + h)

@@ -7,7 +7,7 @@
 // humeur (le décor, la lumière, la valeur, le cadrage), une forme tirée.
 // Les lampes sont presque blanches ; la chaleur vient du fond, des contre-jours
 // et de l'étalonnage (sauf la lanterne, une flamme : justifiée).
-import { createRng } from './rng.js';
+import { createRng } from '../../shared/rng.js';
 import { FAMILIES, BIRDS, birdsOf } from './families.js';
 import { shapeOf } from './gen/feather.js';
 

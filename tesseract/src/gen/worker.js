@@ -1,7 +1,7 @@
 // Worker de génération : construit l'ossature, les panneaux ou l'objet d'une
 // cellule hors du fil principal ; les tampons sont transférés sans copie.
 import { buildFrame, buildPanels, buildContent } from './cell.js';
-import { buildNoiseVolume } from './noisevol.js';
+import { buildNoiseVolume } from '../../../shared/gen/noisevol.js';
 import { envPixels } from './envmap.js';
 
 // Format compact des sommets : normale en snorm16, tangente en snorm8,

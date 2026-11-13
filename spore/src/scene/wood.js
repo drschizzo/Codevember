@@ -9,7 +9,7 @@
 // poussière de spores le poudre.
 import * as THREE from 'three/webgpu';
 import { Fn, texture, uniform, vec2, vec3, vec4, float, positionLocal, positionGeometry, positionPrevious, normalLocal, modelViewMatrix, normalize, mix, smoothstep, sqrt, max as tmax, abs, clamp } from 'three/tsl';
-import { noise, perturb, stableVelocity, isLite } from './materials.js';
+import { noise, perturb, stableVelocity, isLite } from '../../../shared/scene/materials.js';
 
 export function woodTextures(maps) {
   const rel = new THREE.DataTexture(maps.relH, maps.M, maps.M, THREE.RGBAFormat, THREE.HalfFloatType);

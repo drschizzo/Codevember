@@ -28,7 +28,7 @@
 //    long des veines à l'espacement de Plateau-Rayleigh (λ ≈ 9 r), ou nulle
 //    part (Hemitrichia : les veines maîtresses deviennent le fruit). Chaque
 //    veine verse son volume à la perle la plus proche : Σ perles = réseau.
-import { createRng } from '../rng.js';
+import { createRng } from '../../../shared/rng.js';
 import { makeNoise } from './wood.js';
 
 export const K_SNAP = 32;                // instantanés du réseau

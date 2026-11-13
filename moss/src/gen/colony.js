@@ -13,12 +13,12 @@
 //   plus basses sont vieilles (brunes, raides).
 // - Le graphe de contact (tiges voisines) et l'exposition de chaque tige (au
 //   ciel, au soleil, au vent) servent à l'hydraulique (hydro.js).
-import { createRng, createNoise3, smoothstep as sst } from '../rng.js';
+import { createRng, createNoise3, smoothstep as sst } from '../../../shared/rng.js';
 import { bilerp } from '../field.js';
 import { makeRock } from './rock.js';
 import { FAMILIES } from '../families.js';
 import { leafPoint, poseParams, tipFrame } from '../pose.js';
-import { Buffers, tube, norm, cross, sub, add, mul, dot } from './mesh.js';
+import { Buffers, tube, norm, cross, sub, add, mul, dot } from '../../../shared/gen/mesh.js';
 
 // ── Substrat ─────────────────────────────────────────────────────────────────
 // support : { cx, cz (courbures, 1/cm), tilt, bumps, seed }

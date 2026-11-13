@@ -14,7 +14,7 @@ import { norm } from './cells.js';
 import { Buffers, OUT, RIG, revolve } from './mesh.js';
 import { sweep, circle, meridian } from './sweep.js';
 import { appendIris } from './iris.js';
-import { createRng } from '../rng.js';
+import { createRng } from '../../../shared/rng.js';
 
 const { cos, sin, PI, min } = Math;
 const Z = [0, 0, 1];

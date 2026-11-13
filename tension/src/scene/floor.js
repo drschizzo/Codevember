@@ -11,8 +11,8 @@ import {
   Fn, uniform, positionWorld, vec2, vec3, vec4, float, floor as tFloor, fract, mod, abs, mix, smoothstep, length, atan, select,
   normalViewGeometry, faceDirection, sin, clamp, max as tmax, min as tmin, fwidth, dot,
 } from 'three/tsl';
-import { NZ, perturb, stableVelocity } from './materials.js';
-import { G } from './globals.js';
+import { NZ, perturb, stableVelocity } from '../../../shared/scene/materials.js';
+import { G } from '../../../shared/scene/globals.js';
 import { FLOORS, floorFreqs, jointSpacing } from '../floors.js';
 export { floorFreqs, jointSpacing };
 

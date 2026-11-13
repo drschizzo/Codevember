@@ -15,7 +15,7 @@
 //   movers  : plongeurs (tige + coin), animés par le champ des ondes (attribut
 //             foot : indice du point de la grille sous le plongeur, mobile 0/1)
 //   extra   : famille — excitateur de Faraday, ou poteau et grille de Kármán
-import { Buffers, roundedBox, tube, lathe, sphere, torus, OUT, IN, EDGE } from './mesh.js';
+import { Buffers, roundedBox, tube, lathe, sphere, torus, OUT, IN, EDGE } from '../../../shared/gen/mesh.js';
 
 const D2 = (a) => a * 10; // m → dm
 

@@ -8,7 +8,7 @@ import {
   Fn, vec2, vec3, vec4, float, ivec2, textureLoad, uniform, positionWorld, acos, atan, clamp, floor, fract, mix, step,
   dot, length, exp, log, max, min, select, int, sin, cos, screenCoordinate, smoothstep,
 } from 'three/tsl';
-import { G } from './globals.js';
+import { G } from '../../../shared/scene/globals.js';
 
 export class LanternLight extends THREE.PointLight {
   constructor(...a) { super(...a); this.cookie = null; }

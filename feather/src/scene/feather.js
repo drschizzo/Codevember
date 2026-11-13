@@ -14,8 +14,8 @@ import {
   abs, uniform, uniformArray, texture, clamp, pow, sin, cos, exp, max as tmax, min as tmin, select, cross, normalViewGeometry,
   varyingProperty, hash, fract, length, positionGeometry, frameId, step, fwidth, normalView, positionViewDirection,
 } from 'three/tsl';
-import { isLite, stableVelocity, perturb } from './materials.js';
-import { G } from './globals.js';
+import { isLite, stableVelocity, perturb } from '../../../shared/scene/materials.js';
+import { G } from '../../../shared/scene/globals.js';
 import { SCHED, BARB_STRIDE } from '../gen/feather.js';
 
 const sst = (a, b, x) => { const t = clamp(x.sub(a).div(float(b).sub(a)), 0, 1); return t.mul(t).mul(t.mul(-2).add(3)); };

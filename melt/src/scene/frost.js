@@ -14,8 +14,8 @@ import {
   Fn, attribute, uniform, vec3, vec4, float, normalize, cross, mix, smoothstep, fract, sin, cos, positionLocal, normalLocal,
   positionPrevious, max as tmax, clamp, length, abs, dot, normalView, positionViewDirection,
 } from 'three/tsl';
-import { createRng } from '../rng.js';
-import { stableVelocity, isLite } from './materials.js';
+import { createRng } from '../../../shared/rng.js';
+import { stableVelocity, isLite } from '../../../shared/scene/materials.js';
 
 // prisme hexagonal effilé, axe +y de 0 à 1, rayon 1 à la base
 function needleGeometry() {

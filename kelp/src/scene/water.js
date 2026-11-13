@@ -13,8 +13,8 @@ import {
   clamp, output, smoothstep, step, sqrt, dot, reflect, abs, pow, positionLocal, normalLocal, attribute, If, fract, sin, cos, equirectUV,
   normalWorld, mrt, velocity, positionPrevious, textureLoad, ivec2, int, floor,
 } from 'three/tsl';
-import { NZ, noise, fbm } from './materials.js';
-import { G } from './globals.js';
+import { NZ, noise, fbm } from '../../../shared/scene/materials.js';
+import { G } from '../../../shared/scene/globals.js';
 
 const g = 9.81;
 

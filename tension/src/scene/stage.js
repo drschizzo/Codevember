@@ -4,7 +4,7 @@
 // update(u) ne dépend que de la recette, du film et de la phase.
 import * as THREE from 'three/webgpu';
 import { uniform } from 'three/tsl';
-import { buildPieceMaterial, finishUniforms, applyFinish, signature } from './materials.js';
+import { buildPieceMaterial, finishUniforms, applyFinish, signature } from '../../../shared/scene/materials.js';
 import { createCableUniforms, buildCableMaterial, cableGeometry, MAX_CABLES } from './cables.js';
 import { createFloorUniforms, buildFloorMaterial, floorGeometry, FLOORS, floorFreqs, jointSpacing } from './floor.js';
 import { sagOf } from '../gen/cable.js';

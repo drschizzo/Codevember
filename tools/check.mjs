@@ -52,14 +52,23 @@ for (const p of projects) {
     if (!/\.(js|mjs|html)$/.test(f)) continue;
     const text = read(f);
     // (les exemples de code des pages de documentation ne sont pas des imports)
-    const code = f.endsWith('.html') ? [...text.matchAll(/<script[^>]*type="module"[^>]*>([^]*?)<\/script>/g)].map((m) => m[1]).join('\n') : text;
+    const raw = f.endsWith('.html') ? [...text.matchAll(/<script[^>]*type="module"[^>]*>([^]*?)<\/script>/g)].map((m) => m[1]).join('\n') : text;
+    const code = raw.replace(/^\s*\/\/.*$/gm, ''); // (pas les exemples en commentaire)
     for (const m of code.matchAll(SPEC)) {
       const target = path.normalize(path.join(path.dirname(f), m[2]));
       if (target.startsWith('..')) { err(p, `${f} : import hors du dépôt (${m[2]})`); continue; }
       if (!has(target)) err(p, `${f} : import introuvable (${m[2]})`);
     }
+    // scripts et feuilles de style des pages
+    if (f.endsWith('.html')) for (const m of text.matchAll(/<(?:script|link)[^>]*?(?:src|href)="([^"#?]+)"/g)) {
+      if (/^(https?:)?\/\//.test(m[1]) || m[1].startsWith('data:')) continue;
+      if (!has(path.normalize(path.join(path.dirname(f), m[1])))) err(p, `${f} : fichier introuvable (${m[1]})`);
+    }
     const rel = path.relative(`${p}/src`, f);
-    if (!rel.startsWith('..') && has(`shared/${rel}`) && read(`shared/${rel}`) === text) warn(p, `src/${rel} est une copie de shared/${rel}`);
+    // (une copie qui importe une variante locale est légitime : le module de
+    // shared/ importerait l'original)
+    const localDeps = [...code.matchAll(SPEC)].some((m) => !path.normalize(path.join(path.dirname(f), m[2])).startsWith('shared'));
+    if (!rel.startsWith('..') && has(`shared/${rel}`) && read(`shared/${rel}`) === text && !localDeps) warn(p, `src/${rel} est une copie de shared/${rel}`);
   }
 }
 

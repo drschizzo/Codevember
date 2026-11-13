@@ -18,7 +18,7 @@ import { G } from './globals.js';
 const TAU6 = Math.PI * 12;
 import { pieceSpec, finishOf, floorFinish } from '../recipe.js';
 import { PH, floorH, spinAngle } from '../cycle.js';
-import { Buffers, OUT, EDGE } from '../gen/mesh.js';
+import { Buffers, OUT, EDGE } from '../../../shared/gen/mesh.js';
 
 const SHADOW = { mobile: 1024, low: 1024, medium: 2048, high: 2048, ultra: 4096 };
 const finishU = (f) => ({ outer: finishUniforms(f.outer), inner: finishUniforms(f.inner), edge: finishUniforms(f.edge), wear: uniform(f.wear) });

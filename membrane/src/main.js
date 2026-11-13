@@ -7,7 +7,7 @@
 import * as THREE from 'three/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { generate, makeLevel, makeArmature, makeMembrane, finishesFor, upgrade, MOODS } from './recipe.js';
-import { createRng } from './rng.js';
+import { createRng } from '../../shared/rng.js';
 import { createGenerator } from './gen/client.js';
 import { createNest, XMAX, MAIN } from './scene/nest.js';
 import { createLights } from './scene/lights.js';
@@ -17,10 +17,10 @@ import { G } from './scene/globals.js';
 import { createPost } from './render/post.js';
 import { createUI } from './app/ui.js';
 import { loadRender, saveRender, applyQuality, defaultsFor } from './app/settings.js';
-import { wantsMobile, switchMobile, createGovernor, createPacer, bindTouch } from './app/mobile.js';
+import { wantsMobile, switchMobile, createGovernor, createPacer, bindTouch } from '../../shared/app/mobile.js';
 import { exportLoop, exportPNG } from './app/capture.js';
-import { loader } from './app/loader.js';
-import { asyncPipelines, warmScene, yieldNow } from './app/warmup.js';
+import { loader } from '../../shared/app/loader.js';
+import { asyncPipelines, warmScene, yieldNow } from '../../shared/app/warmup.js';
 
 const D = 1; // distance caméra–centre (échelle de la plongée)
 const params = new URLSearchParams(location.search);

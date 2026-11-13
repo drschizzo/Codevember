@@ -181,7 +181,7 @@
     import { stateAt, flow } from './src/orbit/integrate.js';
     import { epicycles, pivots as chainPivots, sampleArms, sampleCurve } from './src/scene/epicycles.js';
     import { designTrain, designMachine, SLAB } from './src/mech/design.js';
-    import { createRng } from './src/rng.js';
+    import { createRng } from '../shared/rng.js';
 
     const gcd = (a, b) => (b ? gcd(b, a % b) : Math.abs(a));
     const fmtE = (x) => { if (!(x > 0)) return '0'; const e = Math.floor(Math.log10(x)), m = x / 10 ** e; return `${m.toFixed(1).replace('.', ',')}·10${String(e).replace('-', '⁻').replace(/\d/g, (c) => '⁰¹²³⁴⁵⁶⁷⁸⁹'[c])}`; };

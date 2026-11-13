@@ -22,7 +22,7 @@ import {
   varyingProperty, positionPrevious, normalLocal, positionGeometry, normalView, positionViewDirection, dot, abs, pow, refract,
   cameraViewMatrix, modelWorldMatrix, select, length, transformNormalToView,
 } from 'three/tsl';
-import { G, stableVelocity, isLite } from './materials.js';
+import { G, stableVelocity, isLite } from '../../../shared/scene/materials.js';
 import { backlight } from './backlight.js';
 
 const S = (x) => smoothstep(0, 1, x);

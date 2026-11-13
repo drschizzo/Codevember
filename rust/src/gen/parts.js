@@ -10,7 +10,7 @@
 // arrondis (rayon r aux normales calculées), les profilés ont leurs congés de
 // laminage, les têtes de rivet leur petit bourrelet. Seules les coupes à la
 // scie (bouts de barre) restent vives, comme en vrai.
-import { add, sub, mul, norm, cross, dot } from './mesh.js';
+import { add, sub, mul, norm, cross, dot } from '../../../shared/gen/mesh.js';
 
 const { PI, cos, sin, abs, sqrt, atan2, max, min } = Math;
 

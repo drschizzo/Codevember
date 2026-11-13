@@ -15,7 +15,7 @@ import { createMoss, BLUR_TAPS } from './moss.js';
 import { buildDecor, createDecorLook, rockTextures } from './decor.js';
 import { sampleField, bilerp, wetSeason, rainAt, rainNow, FIELD_N } from '../field.js';
 import { createCameraPath } from '../camera.js';
-import { isLite, stableVelocity, noise } from './materials.js';
+import { isLite, stableVelocity, noise } from '../../../shared/scene/materials.js';
 
 const SHADOW = { mobile: 1024, low: 1024, medium: 2048, high: 2048, ultra: 4096 };
 const sst = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };

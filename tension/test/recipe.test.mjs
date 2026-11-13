@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generate, upgrade, MOODS, FAMILIES, CABLES } from '../src/recipe.js';
-import { FINISHES } from '../src/finishes.js';
+import { FINISHES } from '../../shared/finishes.js';
 import { FLOORS } from '../src/floors.js';
 
 const SEEDS = Array.from({ length: 400 }, (_, i) => `t${i}`);

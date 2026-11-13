@@ -11,7 +11,7 @@
 //   ardoise  — feuillets dressés en peigne (une face raide, un dos en pente) ;
 //   grès     — gradins en lits, alvéoles (taffonis).
 // Plus des cuvettes (les flaques). Axe x vers la côte, z le long de la côte.
-import { createNoise3, hashSeed, createRng } from '../rng.js';
+import { createNoise3, hashSeed, createRng } from '../../../shared/rng.js';
 import { makeProfile } from './sea.js';
 
 const sst = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };

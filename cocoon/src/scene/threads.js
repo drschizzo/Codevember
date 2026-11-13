@@ -13,7 +13,7 @@ import {
   modelWorldMatrixInverse, normalize, cross, dot, length, max, min, mix, sqrt, pow, exp, log, smoothstep, clamp, abs, varyingProperty,
   positionPrevious, fract, sin, select, positionView, vec2, step, viewZToPerspectiveDepth, cameraNear, cameraFar,
 } from 'three/tsl';
-import { stableVelocity, noise } from './materials.js';
+import { stableVelocity, noise } from '../../../shared/scene/materials.js';
 
 // Géométrie : un quadrilatère de base (t ∈ {0, 1} le long, v ∈ {−1, 1} en
 // travers) et trois attributs par instance (a = p0, s0 ; b = p1, s1 ;

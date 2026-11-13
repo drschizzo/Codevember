@@ -15,7 +15,7 @@ import {
   Fn, attribute, positionLocal, normalLocal, positionPrevious, positionGeometry, normalGeometry, vec2, vec3, vec4, float, int, dot, normalize, mix, smoothstep,
   abs, uniform, uniformArray, texture, clamp, atan, floor, hash, pow, sin, cos, max as tmax, min as tmin, select, sign, cross, normalViewGeometry, length, exp, fract,
 } from 'three/tsl';
-import { isLite, stableVelocity, noise, worley, perturb } from './materials.js';
+import { isLite, stableVelocity, noise, worley, perturb } from '../../../shared/scene/materials.js';
 import { FAMILIES } from '../families.js';
 import { STAGGER } from '../pose.js';
 import { LEAF_STRIDE, SPOR_STRIDE } from '../gen/colony.js';

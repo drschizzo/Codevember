@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generate } from '../src/recipe.js';
 import { FAMILIES } from '../src/families.js';
-import { createRng } from '../src/rng.js';
+import { createRng } from '../../shared/rng.js';
 import {
   shapeOf, barbTable, barbPose, barbArc, BARB_STRIDE, SCHED, growth, unroll, zipAt, releaseAt, bendAt, settleAt, wearAt,
   layoutPlumage, featherFrame, pinTip, bendOf, tubeRadius, rachisPoint, betaAt, bodyFrame, qrot, LIE, ejection, sinkAt,

@@ -14,7 +14,7 @@
 //   fond clair (il y disparaîtrait) ;
 // - les lampes sont presque blanches, sauf quand le décor justifie une couleur
 //   (vitraux, lumière noire) ; la chaleur vient de l'incandescence.
-import { createRng } from './rng.js';
+import { createRng } from '../../shared/rng.js';
 import { FINISHES, SETS } from './finishes.js';
 import { FORMS, DECORS } from './gen/forms.js';
 import { MECHS } from './gen/fracture.js';

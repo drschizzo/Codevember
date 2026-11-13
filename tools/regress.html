@@ -19,6 +19,17 @@
                ?sink=http://127.0.0.1:8199/
                ?w=960&h=540
   L'avancement est dans window.__job (la page peut tourner panneau masqué).
+
+  Pour que « avant » et « après » soient comparables :
+  - servir par .claude/serve.py (jamais python -m http.server : sans no-store,
+    le navigateur mélange d'anciens modules aux nouveaux) ;
+  - garder l'onglet au premier plan et la machine au repos (pas de npm test
+    en même temps) : les scènes ont des poussières, des étincelles, un
+    anticrénelage temporel qui dépendent du temps réel ;
+  - « avant » se rend depuis un autre arbre git (git worktree add <dossier>
+    <commit>), servi sur son propre port.
+  Les réglages de rendu mémorisés par le navigateur sont mis de côté pendant
+  les rendus, puis rendus.
 -->
 <style>
   body { margin: 0; background: #111; color: #ccc; font: 13px/1.5 ui-monospace, monospace; }
@@ -46,6 +57,10 @@ const yieldNow = () => new Promise((r) => { waiters.push(r); tickCh.port2.postMe
 const sleep = async (ms) => { const t = performance.now(); while (performance.now() - t < ms) await yieldNow(); };
 
 const job = window.__job = { done: false, current: '', ok: [], failed: {}, t0: performance.now() };
+// réglages de rendu mémorisés mis de côté le temps des rendus (chaque projet
+// retrouve ses valeurs par défaut), puis rendus à la fin
+const stored = Object.entries(localStorage);
+localStorage.clear();
 
 async function shoot(name, key) {
   const frame = document.createElement('iframe');
@@ -95,6 +110,8 @@ for (const [name, key] of Object.entries(PROJECTS)) {
   job.current = name;
   await shoot(name, key || name);
 }
+localStorage.clear();
+for (const [k, v] of stored) localStorage.setItem(k, v);
 job.done = true; job.seconds = Math.round((performance.now() - job.t0) / 1000);
 log(`terminé en ${job.seconds} s — ${job.ok.length} projets, ${Object.keys(job.failed).length} échecs`);
 </script>

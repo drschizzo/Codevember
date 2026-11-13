@@ -13,7 +13,7 @@ import {
   hash, sin, mix, smoothstep, positionPrevious, step,
 } from 'three/tsl';
 import { TABLE } from '../gen/table.js';
-import { stableVelocity } from './materials.js';
+import { stableVelocity } from '../../../shared/scene/materials.js';
 
 export const RAIN_TOP = 1.4;    // hauteur des aiguilles (m) : au-dessus de toutes les caméras du film
 

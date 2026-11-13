@@ -15,7 +15,7 @@
 // La même fonction donne le relief à la mousse (gen/colony.js : chaque tige
 // est plantée sur la vraie surface) et à l'habitat (field.js : les fissures
 // gardent l'eau, la mousse y survit à la sécheresse).
-import { createNoise3, smoothstep as sst, hashSeed } from '../rng.js';
+import { createNoise3, smoothstep as sst, hashSeed } from '../../../shared/rng.js';
 
 const fract = (x) => x - Math.floor(x);
 const h2 = (i, j, s) => { const v = Math.sin(i * 127.1 + j * 311.7 + s * 74.7) * 43758.5453; return v - Math.floor(v); };

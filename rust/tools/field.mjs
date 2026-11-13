@@ -4,7 +4,7 @@
 import fs from 'node:fs';
 import { buildPiece, pieceParams } from '../src/gen/pieces.js';
 import { corrosionField } from '../src/gen/corrosion.js';
-import { createRng } from '../src/rng.js';
+import { createRng } from '../../shared/rng.js';
 const [family = 'noeud', seed = 'a1', out = '/tmp/f.bin', ch = 'tow'] = process.argv.slice(2);
 const params = pieceParams(family, createRng(seed).fork('piece'));
 const P = buildPiece({ family, params, seed });

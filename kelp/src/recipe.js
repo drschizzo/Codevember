@@ -5,7 +5,7 @@
 // Une humeur est un décor complet : une roche, une lumière (soleil, ciel), une
 // eau, une valeur, un cadrage — pas une teinte. Une famille est une plante qui
 // fait le geste à sa façon (gen/kelp.js).
-import { createRng } from './rng.js';
+import { createRng } from '../../shared/rng.js';
 import { FAMILIES } from './gen/kelp.js';
 
 const r2 = (x) => Math.round(x * 100) / 100 || 0; // (|| 0 : jamais de −0)

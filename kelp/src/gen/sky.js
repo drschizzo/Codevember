@@ -4,7 +4,7 @@
 // nuit ; sous l'horizon, la mer lointaine qui reflète le ciel (Fresnel
 // rasant). Les métaux humides, l'eau et la peau mouillée des laminaires le
 // reflètent ; scene/sky.js en fait la texture et le fond.
-import { createNoise3 } from '../rng.js';
+import { createNoise3 } from '../../../shared/rng.js';
 
 const sst = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const hex = (h) => [parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255].map((c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));

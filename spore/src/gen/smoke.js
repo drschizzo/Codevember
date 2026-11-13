@@ -26,7 +26,7 @@
 // Enregistré en F images sur [S0, S1] (phase du site) : densité, transmission
 // de la lumière vers le soleil, vitesse (pour l'interpolation entre images
 // avec compensation de mouvement), dépôt cumulé ; relu à l'image.
-import { createRng } from '../rng.js';
+import { createRng } from '../../../shared/rng.js';
 import { windSpeed } from '../timeline.js';
 
 export const SMOKE = { s0: 0.73, s1: 1.22, frames: 64, h: 0.1, sec: 40 };

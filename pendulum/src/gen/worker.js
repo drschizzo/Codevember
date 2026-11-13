@@ -3,8 +3,8 @@
 // L'avancement d'un long calcul est posté au fil de l'eau
 // ({ id, progress, label, art }) : l'écran de chargement dessine le solveur
 // pendant qu'il cherche.
-import { buildNoiseVolume } from './noisevol.js';
-import { envPixels } from './envmap.js';
+import { buildNoiseVolume } from '../../../shared/gen/noisevol.js';
+import { envPixels } from '../../../shared/gen/envmap.js';
 import { solveMove } from './plan.js';
 import { systemOf } from './machines.js';
 import { linkParts, cartBench, cartCarriage, pulley, beltLoop, rotaryBase, rotaryArm, portal, acroDrive, elbowPulley, gallows, flywheel, wheelMotor } from './build.js';
