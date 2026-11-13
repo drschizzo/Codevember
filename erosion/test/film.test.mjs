@@ -2,7 +2,8 @@
 // au contact de la surface de départ, caméra lente et continue.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { filmState, U, PARK, BLADE_UP, EDGE, reliefK } from '../src/timeline.js';
+import { filmState, U, PARK, BLADE_UP, EDGE, BLADE_IN, reliefK } from '../src/timeline.js';
+import { DIM } from '../src/gen/apparatus.js';
 import { buildCamera, SHOTS } from '../src/camera.js';
 import { generate, specOf } from '../src/recipe.js';
 import { TABLE, longProfile, crossProfile, FAMILIES } from '../src/gen/table.js';
@@ -29,8 +30,8 @@ test('la lame balaie tout le bac en remontant, sans jamais revenir en arrière',
     assert.equal(F.bladeLift, 0);
     prev = F.screed;
   }
-  assert.ok(filmState(U.cut0, S).screed >= TABLE.Lx);
-  assert.ok(filmState(U.cut1 - 1e-6, S).screed <= 0.001 && EDGE < 0);
+  assert.ok(filmState(U.cut0, S).screed >= TABLE.Lx - 2 * BLADE_IN - 1e-9); // (le plan de la lame posée au bout du sable)
+  assert.ok(filmState(U.cut1 - 1e-6, S).screed <= 0.001 && EDGE > 0);
 });
 
 test('la lame touche la surface de départ : son bord bas est b₀ (écart nul), levée avant et après', () => {
@@ -149,9 +150,46 @@ test('caméra : jamais à moins de 12 cm d’un montant, d’un rail ou de la po
       for (const s of [-1, 1]) {
         if (Math.abs(p[0]) < HX + 0.1) assert.ok(Math.hypot(p[1] - 0.225, p[2] - s * (HZ + 0.055)) > 0.12, `${R.seed}/${R.family} u=${u.toFixed(3)} : rail`);
       }
-      // poutre du portique (Y 0,315, X = position du portique)
+      // poutre du portique (X = position du portique)
       const gx = F.gantryX - HX;
-      if (Math.abs(p[2]) < HZ + 0.1) assert.ok(Math.hypot(p[0] - gx, p[1] - 0.315) > 0.12, `${R.seed}/${R.family} u=${u.toFixed(3)} : poutre du portique`);
+      if (Math.abs(p[2]) < HZ + 0.1) assert.ok(Math.hypot(p[0] - gx, p[1] - (DIM.beamY + 0.015)) > 0.12, `${R.seed}/${R.family} u=${u.toFixed(3)} : poutre du portique`);
+    }
+  }
+});
+
+// La lame et ses tiges, à chaque instant de la boucle, contre les pièces fixes
+// du bac (repère du bac : X de 0 à Lx le long du sable). Témoin : l'ancienne
+// course (3 cm au-delà de chaque bout) traversait la paroi amont et le caisson
+// du déversoir.
+test('la lame ne traverse jamais une paroi, la boîte d’alimentation, le déversoir ni la poutre', () => {
+  const Lx = TABLE.Lx, Ly = TABLE.Ly, t = DIM.bladeT / 2;
+  for (const R of seeds) {
+    const S = specOf(R);
+    // pièces fixes : [x0, x1, y0, y1, z0, z1] (z en coordonnées du bac, 0 … Ly)
+    const W = DIM.wallT, hb = S.src ? [S.src.y - Math.max(0.06, S.src.w) / 2 - 0.02, S.src.y + Math.max(0.06, S.src.w) / 2 + 0.02] : null;
+    const solids = [
+      ['paroi amont', -W, 0, -0.03, DIM.wallTop, 0, Ly],
+      ['profilé amont', -0.1, -0.07, -0.05, 0.19, 0, Ly],
+      ['caisson du déversoir', Lx + 0.009, Lx + 0.061, -0.03, 0.11, 0, Ly],
+      ['glissières de la guillotine', Lx, Lx + 0.012, 0.01, 0.19, Ly / 2 - 0.068, Ly / 2 + 0.068],
+      ['profilé aval', Lx + 0.07, Lx + 0.1, -0.05, 0.19, 0, Ly],
+      ...(hb ? [['boîte d’alimentation', -0.099, -0.009, 0.105, 0.205, hb[0], hb[1]]] : []),
+    ];
+    for (let u = 0; u < 1; u += 0.0005) {
+      const F = filmState(u, S), x = F.gantryX;
+      const base = longProfile(S.form, Math.min(Lx, Math.max(0, x))) + F.bladeLift;
+      // la lame reste sous les corps des vérins, pendus sous la poutre
+      assert.ok(base + DIM.bladeH < DIM.beamY - 0.05 - 0.005, `${R.seed}/${R.family} u=${u.toFixed(4)} : lame dans les vérins`);
+      assert.ok(base + DIM.bladeH < DIM.rodTop, 'tige des vérins');
+      for (let k = 0; k <= 48; k++) {
+        const z = 0.002 + ((Ly - 0.004) * k) / 48, y0 = base + crossProfile(S.form, z), y1 = base + DIM.bladeH;
+        for (const [name, a0, a1, b0, b1, c0, c1] of solids) {
+          const hit = x + t > a0 && x - t < a1 && y1 > b0 && y0 < b1 && z > c0 && z < c1;
+          assert.ok(!hit, `${R.seed}/${R.family} u=${u.toFixed(4)} : la lame traverse ${name} (x = ${x.toFixed(3)})`);
+        }
+      }
+      // en descente et pendant le passage, la lame est dans le bac
+      if (F.bladeLift < 0.05) assert.ok(x - t > 0 && x + t < Lx, `${R.seed}/${R.family} u=${u.toFixed(4)} : lame basse hors du bac`);
     }
   }
 });

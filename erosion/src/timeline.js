@@ -11,7 +11,7 @@
 //                     poussant le sable ; derrière elle, la surface de départ
 //   U.cut1 – 1        le sable neuf, la machine garée
 // À u = 0 et u → 1 : la surface b₀, sans eau, la lame levée au garage amont.
-import { TABLE, inflowAt, rainAt, baseAt } from './gen/table.js';
+import { TABLE, inflowAt, rainAt, baseAt, longProfile, crossProfile } from './gen/table.js';
 
 export const U = { sim0: 0.05, sim1: 0.68, dry0: 0.66, dry1: 0.78, roll0: 0.775, roll1: 0.81, drop: 0.822, cut0: 0.83, cut1: 0.95, lift: 0.962, home: 0.99 };
 
@@ -21,8 +21,32 @@ export const sstep = (a, b, x) => { const t = clamp01((x - a) / (b - a)); return
 export const ease5 = (t) => { t = clamp01(t); return t * t * t * (t * (6 * t - 15) + 10); };
 
 export const PARK = -0.13;           // le portique au garage (m) : au-dessus de la boîte d'alimentation, hors du sable
-export const EDGE = -0.03;           // fin du passage : la lame a quitté le sable
-export const BLADE_UP = 0.1;         // levée de la lame (m) : elle passe au-dessus de la boîte d'alimentation
+// La lame (6 mm d'épaisseur) ne descend et ne pousse qu'en dedans du bac : son
+// plan va de BLADE_IN (contre la paroi amont, 1,5 mm de jeu) à Lx − BLADE_IN
+// (devant la guillotine du déversoir). Elle passait autrefois 3 cm au-delà de
+// chaque bout : dans la paroi amont et la boîte d'alimentation, dans le caisson
+// du déversoir — l'acrylique transparent le cachait.
+export const BLADE_IN = 0.003 + 0.0015;
+export const EDGE = BLADE_IN;        // fin du passage : la lame contre la paroi amont
+export const BLADE_UP = 0.09;        // levée minimale de la lame au-dessus du sable (m)
+// Hauteur de transport de la lame levée (repère du monde, m) : le portique la
+// porte à niveau, son bord bas au-dessus du haut de la boîte d'alimentation
+// (0,205 m) et du profilé amont (0,19 m) au point le plus bas de son profil en
+// travers, et à BLADE_UP au moins au-dessus du sable de départ (la digue de la
+// brèche) ; elle reste sous les corps des vérins, pendus sous la poutre.
+export const CLEAR_Y = 0.222;
+const travelCache = new WeakMap();
+export function bladeTravelY(S) {
+  let y = travelCache.get(S.form);
+  if (y === undefined) {
+    let c = Infinity, m = 0;
+    for (let k = 0; k <= 128; k++) c = Math.min(c, crossProfile(S.form, (k / 128) * TABLE.Ly));
+    for (let k = 0; k <= 256; k++) m = Math.max(m, longProfile(S.form, (k / 256) * TABLE.Lx));
+    y = Math.max(CLEAR_Y - c, m + BLADE_UP);
+    travelCache.set(S.form, y);
+  }
+  return y;
+}
 
 // temps hydraulique à la phase u (0 avant l'expérience, S.T après)
 export function simTime(u, S) { return clamp01((u - U.sim0) / (U.sim1 - U.sim0)) * S.T; }
@@ -48,7 +72,7 @@ export function filmState(u, S) {
   const dry = sstep(U.dry0, U.dry1, u);
   // portique : garé en amont (au-dessus de la boîte), roule vers l'aval lame levée, la descend,
   // pousse vers l'amont, la lève au bout du sable, rentre au garage
-  const XD = TABLE.Lx + 0.02;
+  const XD = TABLE.Lx - BLADE_IN;
   let x = PARK, lift = 1;
   if (u >= U.roll0 && u < U.roll1) x = PARK + (XD - PARK) * ease5((u - U.roll0) / (U.roll1 - U.roll0));
   else if (u >= U.roll1 && u < U.cut0) { x = XD; lift = 1 - ease5((u - U.roll1 - 0.004) / (U.drop - U.roll1 - 0.004)); }
@@ -56,7 +80,8 @@ export function filmState(u, S) {
   else if (u >= U.cut1 && u < U.lift) { x = EDGE; lift = ease5((u - U.cut1) / (U.lift - U.cut1)); }
   else if (u >= U.lift && u < U.home) x = EDGE + (PARK - EDGE) * ease5((u - U.lift) / (U.home - U.lift));
   // la lame n'efface que pendant son passage ; après, tout le bac est b₀
-  const screed = u >= U.cut0 && u < U.cut1 ? x : u >= U.cut1 ? -1 : -2;
+  // (le gabarit est écrit derrière la face amont de la lame : à la fin du passage, 0)
+  const screed = u >= U.cut0 && u < U.cut1 ? Math.max(0, x - BLADE_IN) : u >= U.cut1 ? -1 : -2;
   return {
     u, T, k,
     terrainFrame: k,              // (0–1 ; multiplier par FT − 1)
@@ -64,7 +89,8 @@ export function filmState(u, S) {
     dry,
     // l'eau restante s'infiltre dans le sable, de la fin de l'expérience à la disparition de l'eau
     drain: sstep(U.sim1 - 0.055, U.sim1 + 0.018, u),
-    gantryX: x, bladeLift: lift * BLADE_UP,
+    // (levée relative au sable sous la lame : 0 au contact, à niveau à la hauteur de transport)
+    gantryX: x, bladeLift: lift * (bladeTravelY(S) - longProfile(S.form, Math.min(TABLE.Lx, Math.max(0, x)))),
     screed,                       // −2 : pas de gabarit ; −1 : bac entier régalé ; sinon position de la lame (m)
     inflow: inflowAt(S, T) * (u < U.sim1 ? 1 : 0),
     rain: rainAt(S, T) * (u < U.sim1 ? 1 : 0),

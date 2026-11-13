@@ -323,7 +323,7 @@
           ['débit', C.c2, (F) => F.inflow / qmax], ['pluie', C.c2, (F) => F.rain / rmax],
           ['niveau de base', C.c4, (F) => (F.base - 0.03) / 0.06],
           ['séchage', C.c3, (F) => F.dry],
-          ['portique', C.ink, (F) => (F.gantryX + 0.13) / (TABLE.Lx + 0.15)], ['levée de la lame', C.dim, (F) => F.bladeLift / 0.1],
+          ['portique', C.ink, (F) => (F.gantryX + 0.13) / (TABLE.Lx + 0.15)], ['levée de la lame', C.dim, (F) => F.bladeLift / 0.17],
         ];
         g.strokeStyle = C.grid; g.strokeRect(m, m, W, H);
         curves.forEach(([name, col, f], k) => {
