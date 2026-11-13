@@ -26,7 +26,7 @@
 // masqué par une autre partie de la pièce reste rouillé) : profondeur vue de
 // face (laser, qui tire selon −z) et rayon maximal vu de l'axe (buse de
 // sablage, la pièce tourne sur le plateau).
-import { createRng } from '../rng.js';
+import { createRng } from '../../../shared/rng.js';
 
 const { sqrt, max, min, abs, floor, ceil, PI, cos, sin, atan2 } = Math;
 const sstep = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };

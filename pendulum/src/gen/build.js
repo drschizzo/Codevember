@@ -8,7 +8,7 @@
 //
 // Rôles de surface : OUT (face, finition externe), EDGE (congés et chants,
 // polis), IN (finition interne : fond de gorge, alésage).
-import { Buffers, OUT, IN, EDGE, roundedBox, lathe, norm, cross, add, mul, sub } from './mesh.js';
+import { Buffers, OUT, IN, EDGE, roundedBox, lathe, norm, cross, add, mul, sub } from '../../../shared/gen/mesh.js';
 
 const { PI, cos, sin, max, min, hypot, ceil } = Math;
 const TAU = 2 * PI;

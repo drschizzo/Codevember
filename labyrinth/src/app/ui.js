@@ -8,7 +8,7 @@
 // touche du clavier entre parenthèses.
 import GUI from 'lil-gui';
 import { FINISHES, FINISH_DEFAULTS, PATTERNS, SETS } from '../finishes.js';
-import { ENV_PRESETS } from '../scene/env.js';
+import { ENV_PRESETS } from '../../../shared/scene/env.js';
 import { QUALITY } from './settings.js';
 
 const opts = (o, label = (v) => v.label) => Object.fromEntries(Object.entries(o).map(([k, v]) => [label(v), k]));

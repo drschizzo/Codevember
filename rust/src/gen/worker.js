@@ -1,7 +1,7 @@
 // Worker de génération : la pièce (géométrie), son champ de corrosion et ses
 // cartes d'accès, construits hors du fil principal ; tampons transférés sans
 // copie. Les constructeurs sont des fonctions pures (importables depuis Node).
-import { buildNoiseVolume } from './noisevol.js';
+import { buildNoiseVolume } from '../../../shared/gen/noisevol.js';
 import { buildPiece } from './pieces.js';
 import { corrosionField } from './corrosion.js';
 import { buildMachine } from './machinery.js';

@@ -14,7 +14,7 @@ import {
   Fn, uniform, float, vec3, vec4, mod, pow, sin, cos, cross, dot, normalize, smoothstep, fract,
   positionGeometry, positionWorld, normalLocal, positionPrevious, instancedBufferAttribute,
 } from 'three/tsl';
-import { createRng } from '../rng.js';
+import { createRng } from '../../../shared/rng.js';
 import { G, stableVelocity } from './materials.js';
 import { MAIN, X_MIN } from './nest.js';
 

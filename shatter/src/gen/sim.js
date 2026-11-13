@@ -26,7 +26,7 @@
 // texture (scene/glass.js) ; les mêmes formules sont en JS ci-dessous
 // (sampleTrack) pour les tests. Tout dépend de la seule recette : la boucle
 // reste parfaite.
-import { createRng } from '../rng.js';
+import { createRng } from '../../../shared/rng.js';
 import { PH, GRAV, MU, BOUNCE, floorH, floorN, physTime } from '../cycle.js';
 import { pendulum, PENDULUM } from '../kinematics.js';
 

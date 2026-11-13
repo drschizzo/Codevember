@@ -6,7 +6,7 @@
 // Mouillées : plus sombres et brillantes, comme la roche (enveloppe de séchage).
 import * as THREE from 'three/webgpu';
 import { attribute, vec3, float, mix, smoothstep, positionWorld, max, select } from 'three/tsl';
-import { fbm, NZ } from './materials.js';
+import { fbm, NZ } from '../../../shared/scene/materials.js';
 
 export function createFauna(W) {
   const { U } = W;

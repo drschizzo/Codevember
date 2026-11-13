@@ -1,7 +1,7 @@
 // Worker de recherche : un essai (graine, indice) à la fois. Pendant la
 // descente, envoie de temps en temps la courbe courante (pour l'écran de
 // génération) ; à la fin, le résultat. Calcule aussi la stabilité sur demande.
-import { createRng } from '../rng.js';
+import { createRng } from '../../../shared/rng.js';
 import { attempt } from './search.js';
 import { sampleCurve } from './classify.js';
 import { monodromyRadius, closure } from './integrate.js';

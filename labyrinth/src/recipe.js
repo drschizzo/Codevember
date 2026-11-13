@@ -8,7 +8,7 @@
 // - les matières viennent d'accords composés à la main, par humeur ;
 // - les lampes sont presque blanches ; la chaleur vient des matières, du fond,
 //   des contre-jours et de l'étalonnage.
-import { createRng } from './rng.js';
+import { createRng } from '../../shared/rng.js';
 import { FINISHES } from './finishes.js';
 
 const r2 = (x) => Math.round(x * 100) / 100 || 0; // (|| 0 : jamais de −0, que JSON ne garde pas)

@@ -15,10 +15,10 @@
 // Sortie : `body` (ce qui rouille : finitions OUT acier laminé, IN fonte,
 // EDGE laiton / bronze), `stand` (le support : OUT chêne, IN acier peint),
 // `info` (boîte englobante, points de levage, hauteur du crochet).
-import { Buffers, OUT, IN, EDGE, add, sub, mul, norm, cross, dot } from './mesh.js';
+import { Buffers, OUT, IN, EDGE, add, sub, mul, norm, cross, dot } from '../../../shared/gen/mesh.js';
 import { frame, P, slab, slabRing, prism, angleProfile, revolve, rivet, bolt, stud, hexPrism, washer, threadEnd, loft, roundPoly, ringSweep, eyeBolt, padeye, earClip } from './parts.js';
-import { roundedBox } from './mesh.js';
-import { createRng } from '../rng.js';
+import { roundedBox } from '../../../shared/gen/mesh.js';
+import { createRng } from '../../../shared/rng.js';
 
 const { PI, cos, sin, abs, sqrt, max, min, atan2 } = Math;
 const STEEL = OUT, CAST = IN, BRONZE = EDGE;

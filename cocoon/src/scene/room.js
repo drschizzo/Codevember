@@ -3,7 +3,7 @@
 // projetées des lanternes, rien d'autre.
 import * as THREE from 'three/webgpu';
 import { uniform, vec3, vec4, float, positionWorld, positionGeometry, mix, smoothstep, abs, fract, floor, max, min, step, length, color } from 'three/tsl';
-import { noise, fbm, stableVelocity } from './materials.js';
+import { noise, fbm, stableVelocity } from '../../../shared/scene/materials.js';
 
 const TAU = Math.PI * 2;
 export const ROOM = { Rw: 3.0, rc: 0.8, Hw: 4.5, off: 0.8 };

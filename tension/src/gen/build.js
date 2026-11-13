@@ -3,7 +3,7 @@
 // gorges, chanfreins arrondis) aux normales calculées sur le profil ; trois
 // rôles de surface : OUT (le tube), IN (viroles, manchons), EDGE (laiton des
 // embouts et des pièces mécaniques).
-import { Buffers, lathe, sphere, OUT, IN, EDGE } from './mesh.js';
+import { Buffers, lathe, sphere, OUT, IN, EDGE } from '../../../shared/gen/mesh.js';
 
 const PI = Math.PI;
 

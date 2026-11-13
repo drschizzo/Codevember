@@ -27,7 +27,7 @@ import {
   dFdx, dFdy, fwidth, faceDirection, mrt, normalViewGeometry, positionGeometry, atan, modelWorldMatrix, select, velocity, transformNormalToView, cos, max as tmax, texture3D, mx_cell_noise_vec3, modelViewMatrix, modelScale, cameraPosition,
 } from 'three/tsl';
 import { FINISH_KEYS } from '../finishes.js';
-import { NOISE_PERIOD } from '../gen/noisevol.js';
+import { NOISE_PERIOD } from '../../../shared/gen/noisevol.js';
 import { tpmsParams } from '../gen/tpms.js';
 import { rigPosition, rigBev, rigRadial, layerX } from './rig.js';
 import { G } from './globals.js';

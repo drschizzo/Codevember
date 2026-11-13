@@ -15,7 +15,7 @@
 //     (résidu relatif < 10⁻⁴).
 // Les essais d'une graine sont indépendants (on peut les lancer en parallèle) ;
 // le premier essai réussi, par ordre d'indice, fait foi : même graine, même orbite.
-import { createRng } from '../rng.js';
+import { createRng } from '../../../shared/rng.js';
 import { createAction } from './action.js';
 import { lbfgs } from './lbfgs.js';
 import { newton } from './newton.js';

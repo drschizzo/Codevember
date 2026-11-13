@@ -19,7 +19,7 @@
 // sa couleur, les bords d'oculus s'éclairent. À la fin : on file à travers
 // l'oculus suivant en s'effaçant. La plongée ne s'arrête jamais (avec la
 // respiration des passages de la scène).
-import { createRng, createNoise3 } from '../rng.js';
+import { createRng, createNoise3 } from '../../../shared/rng.js';
 import { goldbergCells, slotCells, voronoiCells, norm, dot, tangentFrame } from '../gen/cells.js';
 import { girihCells } from '../gen/girih.js';
 import { tpmsField } from '../gen/tpms.js';

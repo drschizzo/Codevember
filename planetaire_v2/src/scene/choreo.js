@@ -16,7 +16,7 @@
 // court chemin, élévation, distance, cible) : la caméra tourne autour de la
 // machine sans jamais la traverser. Elle vit en temps réel : pendant un
 // ralenti, le monde ralentit, pas elle.
-import { createRng } from '../rng.js';
+import { createRng } from '../../../shared/rng.js';
 import { curveAt } from '../orbit/action.js';
 
 const TAU = Math.PI * 2;

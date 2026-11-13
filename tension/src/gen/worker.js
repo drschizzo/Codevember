@@ -2,7 +2,7 @@
 // enregistrement) et toute la géométrie sont construites hors du fil
 // principal ; les tampons sont transférés sans copie. L'avancement d'un long
 // calcul est posté au fil de l'eau ({ id, progress, label }).
-import { buildNoiseVolume } from './noisevol.js';
+import { buildNoiseVolume } from '../../../shared/gen/noisevol.js';
 import { prepare } from './gait.js';
 import { strut, nodeBall, winch, hub, cableTube } from './build.js';
 

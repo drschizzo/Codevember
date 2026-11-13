@@ -20,7 +20,7 @@
 // (largeur < pas × sin α), fermées elles s'écartent de l'axe d'un angle γ, et
 // deux folioles voisines sont alors dans des plans parallèles distants de
 // pas × sin γ (les tuiles d'un toit). Voir test/plant.test.mjs.
-import { createRng } from '../rng.js';
+import { createRng } from '../../../shared/rng.js';
 import { makeGrid } from '../grid.js';
 
 const { sin, cos, sqrt, PI, max, min, abs, atan2, hypot } = Math;

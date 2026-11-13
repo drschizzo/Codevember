@@ -1,6 +1,6 @@
 // Worker de génération : fracture des pièces et poussière des transitions,
 // hors du fil principal ; les tampons sont transférés sans copie.
-import { buildNoiseVolume } from './noisevol.js';
+import { buildNoiseVolume } from '../../../shared/gen/noisevol.js';
 import { fracture } from './fracture.js';
 import { simulate } from './sim.js';
 

@@ -8,7 +8,7 @@
 // tout point par interpolation exacte sur le réseau triangulaire de la face
 // d'icosaèdre qui contient la direction (projection gnomonique).
 
-import { createRng } from '../rng.js';
+import { createRng } from '../../../shared/rng.js';
 import { buildImplicit } from './tpms.js';
 
 const { sqrt, abs, max, min } = Math;

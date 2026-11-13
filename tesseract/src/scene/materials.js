@@ -27,7 +27,7 @@ import {
   dFdx, dFdy, fwidth, faceDirection, mrt, normalViewGeometry, atan, select, velocity, cos, max as tmax, min as tmin, positionGeometry, texture3D, mx_cell_noise_vec3, modelViewMatrix, modelScale,
 } from 'three/tsl';
 import { FINISH_KEYS } from '../finishes.js';
-import { NOISE_PERIOD } from '../gen/noisevol.js';
+import { NOISE_PERIOD } from '../../../shared/gen/noisevol.js';
 import { projectPosition, localScale, revealMask, depthW, depthColor, frameMerge, doorGlow } from './project.js';
 import { G, MODE } from './globals.js';
 import { probeLight } from './probe.js';

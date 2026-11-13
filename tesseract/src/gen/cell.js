@@ -9,7 +9,7 @@ import {
   Buffers, OUT, IN, EDGE, sweep, polyProfile, arcProfile, roundedBox, sphere, torus, tube, gem, lathe, sharpProfile,
   polyhedron, icosahedron, dodecahedron, add, sub, mul, norm, cross, dot, PI, cos, sin, abs,
 } from './mesh.js';
-import { createRng } from '../rng.js';
+import { createRng } from '../../../shared/rng.js';
 
 const AX = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
 const sgnv = (v, s) => v.map((x) => x * s);

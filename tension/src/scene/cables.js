@@ -12,8 +12,8 @@ import {
   Fn, attribute, uniform, uniformArray, instanceIndex, vec3, vec4, float, sin, cos, normalize, cross, dot, mix, abs, length,
   normalLocal, positionPrevious, varyingProperty, smoothstep, fract, select, max as tmax, cameraPosition, modelWorldMatrix,
 } from 'three/tsl';
-import { stableVelocity, isLite } from './materials.js';
-import { G } from './globals.js';
+import { stableVelocity, isLite } from '../../../shared/scene/materials.js';
+import { G } from '../../../shared/scene/globals.js';
 
 export const MAX_CABLES = 64;
 

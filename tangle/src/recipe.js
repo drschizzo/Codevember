@@ -11,7 +11,7 @@
 //   du fond et de l'étalonnage ;
 // - les cycles font un nombre ENTIER de tours (le compte-tours fait un tour
 //   par boucle).
-import { createRng } from './rng.js';
+import { createRng } from '../../shared/rng.js';
 import { FINISHES, SETS } from './finishes.js';
 import { CATALOGUE } from './plan.js';
 

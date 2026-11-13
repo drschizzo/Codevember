@@ -3,7 +3,7 @@
 // formées — boîtes à lumière, bandes, fenêtre, rebond du plateau — dont les
 // bords adoucis donnent des reflets nets mais pas crénelés.
 import * as THREE from 'three/webgpu';
-import { smoothstep as ss } from '../rng.js';
+import { smoothstep as ss } from '../../../shared/rng.js';
 
 // [azimut, élévation, ½ largeur, ½ hauteur, flou, r, g, b] (azimut / élévation en radians)
 export const ENV_PRESETS = {

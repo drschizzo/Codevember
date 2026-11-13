@@ -11,7 +11,7 @@
 //   du fond et de l'étalonnage ;
 // - une humeur est d'abord un décor (fond, sol, lumière, valeur, cadrage).
 // Module pur (sans three) : tests Node.
-import { createRng } from './rng.js';
+import { createRng } from '../../shared/rng.js';
 import { SHAPES } from './gen/profile.js';
 import { FAMILIES } from './gen/winding.js';
 import { fitDistance } from './timeline.js';

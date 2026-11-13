@@ -16,7 +16,7 @@
 // reste (≪ 0,1 mm, bille à l'arrêt) est fondu dans la dernière pause.
 import { DIM, gateFrame } from './maze.js';
 import { PHYS, createWorld, newBall, step, qmul } from './physics.js';
-import { createRng } from '../rng.js';
+import { createRng } from '../../../shared/rng.js';
 
 const TAU = Math.PI * 2;
 export const TILT_MAX = (5.5 * Math.PI) / 180;   // inclinaison maximale du plateau

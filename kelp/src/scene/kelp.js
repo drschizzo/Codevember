@@ -14,8 +14,8 @@ import {
   Fn, attribute, textureLoad, texture, ivec2, int, vec2, vec3, vec4, float, mix, normalize, cross, dot, sin, cos, floor, fract, positionLocal, normalLocal,
   positionPrevious, positionWorld, uniform, smoothstep, max, select, abs, varying, color, normalView, mx_cell_noise_float,
 } from 'three/tsl';
-import { fbm, noise, NZ, perturb } from './materials.js';
-import { G } from './globals.js';
+import { fbm, noise, NZ, perturb } from '../../../shared/scene/materials.js';
+import { G } from '../../../shared/scene/globals.js';
 
 export function createKelp(W, lite) {
   let fringe = false;

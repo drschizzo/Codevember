@@ -11,18 +11,18 @@
 import * as THREE from 'three/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { generate, upgrade, MOODS } from './recipe.js';
-import { createGenerator } from './gen/client.js';
+import { createGenerator } from '../../shared/gen/client.js';
 import { createStage } from './scene/stage.js';
-import { G } from './scene/globals.js';
-import { setNoiseVolume, setLite } from './scene/materials.js';
+import { G } from '../../shared/scene/globals.js';
+import { setNoiseVolume, setLite } from '../../shared/scene/materials.js';
 import { createPost } from './render/post.js';
-import { createAccumulator, jitter } from './render/accum.js';
+import { createAccumulator, jitter } from '../../shared/render/accum.js';
 import { createUI } from './app/ui.js';
 import { loadRender, saveRender, applyQuality, defaultsFor } from './app/settings.js';
-import { wantsMobile, switchMobile, createGovernor, createPacer, bindTouch } from './app/mobile.js';
-import { exportLoop, exportPNG } from './app/capture.js';
-import { loader } from './app/loader.js';
-import { asyncPipelines, warmScene } from './app/warmup.js';
+import { wantsMobile, switchMobile, createGovernor, createPacer, bindTouch } from '../../shared/app/mobile.js';
+import { exportLoop, exportPNG } from '../../shared/app/capture.js';
+import { loader } from '../../shared/app/loader.js';
+import { asyncPipelines, warmScene } from '../../shared/app/warmup.js';
 
 const NAME = 'kelp';
 const DEFAULT_SEED = 'k39'; // scène d'ouverture : Couchant, cochayuyo (choisie sur planche)
@@ -98,7 +98,7 @@ async function main() {
   const camState = { free: false };
 
   // ── Modules ──
-  const gen = createGenerator(LITE ? Math.max(2, Math.min(3, (navigator.hardwareConcurrency || 4) - 1)) : undefined);
+  const gen = createGenerator(LITE ? Math.max(2, Math.min(3, (navigator.hardwareConcurrency || 4) - 1)) : undefined, { maxCache: 4 }); // (une scène pèse des dizaines de Mo)
   setNoiseVolume(await gen.request({ seed: `${NAME}-noise` }, 'noise')); // (les matériaux en dépendent)
   const stage = createStage(scene, gen, { lite: LITE });
   const post = createPost(renderer, scene, camera, { lens: (sample) => stage.domeLens(sample) });

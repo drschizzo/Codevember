@@ -9,7 +9,7 @@ import {
   Fn, attribute, uniformArray, uniform, float, vec2, vec3, vec4, instanceIndex, positionLocal, positionPrevious, normalLocal, positionGeometry,
   normalize, mix, smoothstep, clamp, sin, cos, abs, max as tmax, min as tmin, varying, color, hash, fract, length, pow, sqrt, select, dot, normalGeometry, normalWorld,
 } from 'three/tsl';
-import { stableVelocity, isLite, worley, noise, ditherThreshold } from './materials.js';
+import { stableVelocity, isLite, worley, noise, ditherThreshold } from '../../../shared/scene/materials.js';
 import { fruitState } from '../fruit.js';
 
 const sst = (a, b, x) => smoothstep(float(a), float(b), x);

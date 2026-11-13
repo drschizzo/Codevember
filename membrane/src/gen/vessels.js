@@ -10,7 +10,7 @@
 //   B : profondeur (les gros vaisseaux sont un peu plus enfoncés),
 //   A : distance au vaisseau le plus proche (halo, sang diffusé)
 
-import { createRng } from '../rng.js';
+import { createRng } from '../../../shared/rng.js';
 import { V3 } from './geo.js';
 
 const { sqrt, min, max, abs, acos } = Math;

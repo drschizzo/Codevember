@@ -15,7 +15,7 @@ import { createWaterUniforms, buildWaterMaterial, buildWaterShadow, capGeometry,
 import { createSubstrate } from './substrate.js';
 import { createFrost } from './frost.js';
 import { createBacklight, setBacklight } from './backlight.js';
-import { G } from './globals.js';
+import { G } from '../../../shared/scene/globals.js';
 
 const SHADOW = { mobile: 1024, low: 1024, medium: 2048, high: 2048, ultra: 4096 };
 const ramp = (x, a, b) => sstep((x - a) / (b - a));

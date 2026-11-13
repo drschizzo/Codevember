@@ -13,7 +13,7 @@ import { tearPattern } from '../gen/level.js';
 import { geodesic, triNeighbors, V3 } from '../gen/geo.js';
 import { labelTriangles, findSeams } from '../gen/tear.js';
 import { fairSeams } from '../gen/prep.js';
-import { createRng } from '../rng.js';
+import { createRng } from '../../../shared/rng.js';
 
 const { PI, sin, cos, min, max, abs, acos } = Math;
 const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);

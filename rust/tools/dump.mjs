@@ -2,7 +2,7 @@
 //   node tools/dump.mjs <famille> <graine> <sortie.bin>
 import fs from 'node:fs';
 import { buildPiece, pieceParams } from '../src/gen/pieces.js';
-import { createRng } from '../src/rng.js';
+import { createRng } from '../../shared/rng.js';
 const [family = 'noeud', seed = 'a1', out = '/tmp/piece.bin'] = process.argv.slice(2);
 const params = pieceParams(family, createRng(seed).fork('piece'));
 const t0 = performance.now();

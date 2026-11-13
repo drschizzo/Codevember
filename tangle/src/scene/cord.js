@@ -18,7 +18,7 @@ import {
 } from 'three/tsl';
 import { SUB, sampleSim, denseStrand } from '../track.js';
 import { perturb, stableVelocity, isLite, noise2 } from './materials.js';
-import { G } from './globals.js';
+import { G } from '../../../shared/scene/globals.js';
 
 const SIDES = 18;
 

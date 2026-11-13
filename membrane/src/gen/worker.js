@@ -1,6 +1,6 @@
 // Worker de génération : volume de bruit, carte des vaisseaux, et couches
 // (armature + simulation de la membrane). Les tampons sont transférés sans copie.
-import { buildNoiseVolume } from './noisevol.js';
+import { buildNoiseVolume } from '../../../shared/gen/noisevol.js';
 import { buildLevel } from './level.js';
 import { buildVessels } from './vessels.js';
 

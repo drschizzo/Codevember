@@ -12,7 +12,7 @@ import {
   Fn, attribute, uniform, vec2, vec3, vec4, float, mix, smoothstep, abs, sin, cos, clamp, normalView, positionWorld, pow, max as tmax,
   fract, floor, length, exp, positionViewDirection, dot, fwidth, atan,
 } from 'three/tsl';
-import { noise, noise2, fbm, perturb, worley, isLite, stableVelocity } from './materials.js';
+import { noise, noise2, fbm, perturb, worley, isLite, stableVelocity } from '../../../shared/scene/materials.js';
 
 export function createSubstrate(scene, gen, { lite = false, contact = null } = {}) {
   const group = new THREE.Group();

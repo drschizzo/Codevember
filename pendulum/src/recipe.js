@@ -11,7 +11,7 @@
 // - les lampes sont presque blanches (sauf le soleil, qui est le soleil) ;
 // - la boucle est une suite d'équilibres qui revient au premier : le
 //   tout-debout est toujours au sommet du crescendo.
-import { createRng } from './rng.js';
+import { createRng } from '../../shared/rng.js';
 import { FINISHES } from './finishes.js';
 import { FAMILIES } from './gen/machines.js';
 

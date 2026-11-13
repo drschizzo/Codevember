@@ -2,7 +2,7 @@
 // calculés hors du fil principal, à partir de la recette ; les tampons sont
 // transférés sans copie. Les constructeurs sont des fonctions pures,
 // importables depuis Node (tests, bancs d'essai).
-import { buildNoiseVolume } from './noisevol.js';
+import { buildNoiseVolume } from '../../../shared/gen/noisevol.js';
 import { buildScene } from './scene.js';
 import { skyPixels } from './sky.js';
 

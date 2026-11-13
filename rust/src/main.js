@@ -11,17 +11,17 @@
 import * as THREE from 'three/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { generate, upgrade, MOODS, CLIMATES, FAMILIES, MACHINES } from './recipe.js';
-import { createGenerator } from './gen/client.js';
+import { createGenerator } from '../../shared/gen/client.js';
 import { createStage } from './scene/stage.js';
 import { makeEnvironment } from './scene/env.js';
-import { G } from './scene/globals.js';
+import { G } from '../../shared/scene/globals.js';
 import { setNoiseVolume, setLite } from './scene/materials.js';
-import { createPost } from './render/post.js';
-import { createAccumulator, jitter } from './render/accum.js';
+import { createPost } from '../../shared/render/post.js';
+import { createAccumulator, jitter } from '../../shared/render/accum.js';
 import { createUI } from './app/ui.js';
 import { loadRender, saveRender, applyQuality, defaultsFor } from './app/settings.js';
-import { wantsMobile, switchMobile, createGovernor, createPacer, bindTouch } from './app/mobile.js';
-import { exportLoop, exportPNG } from './app/capture.js';
+import { wantsMobile, switchMobile, createGovernor, createPacer, bindTouch } from '../../shared/app/mobile.js';
+import { exportLoop, exportPNG } from '../../shared/app/capture.js';
 import { createLoadMap } from './app/loadmap.js';
 
 const NAME = 'rust';

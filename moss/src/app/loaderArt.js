@@ -13,7 +13,7 @@
 import { makeHabitat, showers, rainAt, rainNow, wetSeason, FIELD_N, YEAR } from '../field.js';
 import { makeRock, ROCK_PALETTES } from '../gen/rock.js';
 import { FAMILIES } from '../families.js';
-import { createRng, createNoise3, smoothstep as sst } from '../rng.js';
+import { createRng, createNoise3, smoothstep as sst } from '../../../shared/rng.js';
 
 const TILT = 0.56, RISE = 0.84;   // vue oblique : profondeur écrasée, hauteur un peu raccourcie
 const U0 = 0.035, UMAX = 0.55;     // de la sécheresse au cœur de la saison des pluies

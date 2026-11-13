@@ -7,8 +7,8 @@
 // Tout est replié sauf l'essentiel ; les libellés sont en français, avec la
 // touche du clavier entre parenthèses.
 import GUI from 'lil-gui';
-import { FINISHES, FINISH_DEFAULTS, PATTERNS } from '../finishes.js';
-import { ENV_PRESETS } from '../scene/env.js';
+import { FINISHES, FINISH_DEFAULTS, PATTERNS } from '../../../shared/finishes.js';
+import { ENV_PRESETS } from '../../../shared/scene/env.js';
 import { QUALITY } from './settings.js';
 import { CABLES } from '../recipe.js';
 import { FLOORS } from '../floors.js';

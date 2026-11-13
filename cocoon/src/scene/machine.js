@@ -3,7 +3,7 @@
 // le bois porte un fil (veinage) dans le repère de la pièce au repos.
 import * as THREE from 'three/webgpu';
 import { uniform, vec3, vec4, float, positionGeometry, mix, smoothstep, abs, sin, color, dFdx, dFdy, normalViewGeometry } from 'three/tsl';
-import { noise, fbm, stableVelocity } from './materials.js';
+import { noise, fbm, stableVelocity } from '../../../shared/scene/materials.js';
 export { MAT as MATERIALS };
 
 import { MATERIALS as MAT } from './materials-list.js';

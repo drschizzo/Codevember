@@ -10,7 +10,7 @@
 // Pièces mobiles, chacune dans son repère : le portique (chariots, poutre,
 // moteur, tiges des vérins), la lame (profil en travers du gabarit), la
 // guillotine du déversoir, le flotteur du débitmètre.
-import { Buffers, roundedBox, tube, sphere, torus, lathe, OUT, EDGE } from './mesh.js';
+import { Buffers, roundedBox, tube, sphere, torus, lathe, OUT, EDGE } from '../../../shared/gen/mesh.js';
 import { TABLE, crossProfile } from './table.js';
 
 const HX = TABLE.Lx / 2, HZ = TABLE.Ly / 2;

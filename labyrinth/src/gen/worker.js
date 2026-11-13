@@ -3,11 +3,11 @@
 // hors du fil principal, à partir d'une spécification JSON ; les tampons sont
 // transférés sans copie. Les constructeurs sont des fonctions pures,
 // importables depuis Node (tests, bancs d'essai).
-import { buildNoiseVolume } from './noisevol.js';
+import { buildNoiseVolume } from '../../../shared/gen/noisevol.js';
 import { buildMaze } from './maze.js';
 import { planScene } from './plan.js';
 import { buildApparatus } from './build.js';
-import { envPixels } from './envmap.js';
+import { envPixels } from '../../../shared/gen/envmap.js';
 
 function buildScene(spec, progress) {
   progress(0.02);

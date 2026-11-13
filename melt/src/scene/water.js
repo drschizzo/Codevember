@@ -22,7 +22,7 @@ import {
   clamp, int, varyingProperty, positionLocal,
 } from 'three/tsl';
 import { MAX_BLOBS } from '../gen/crystal.js';
-import { stableVelocity, isLite } from './materials.js';
+import { stableVelocity, isLite } from '../../../shared/scene/materials.js';
 import { backlight } from './backlight.js';
 
 export function createWaterUniforms() {

@@ -7,7 +7,7 @@
 // tirés couche par couche : un sable est un accord composé à la main (quatre
 // tons de strates, le ton des dépôts, celui des grains sombres, celui de
 // l'eau chargée) ; la stratigraphie choisit l'ordre et les épaisseurs.
-import { createRng } from './rng.js';
+import { createRng } from '../../shared/rng.js';
 import { FAMILIES, familySpec, MAX_LAYERS } from './gen/table.js';
 
 const r2 = (x) => Math.round(x * 100) / 100 || 0;

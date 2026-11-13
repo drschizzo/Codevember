@@ -2,7 +2,7 @@
 // de transmission, cinématique de l'œil) et la géométrie de l'appareil, hors
 // du fil principal ; les tampons sont transférés sans copie. Fonctions pures,
 // importables depuis Node (tests, bancs d'essai).
-import { buildNoiseVolume } from './noisevol.js';
+import { buildNoiseVolume } from '../../../shared/gen/noisevol.js';
 import { buildScene } from './build.js';
 
 function build({ spec, what, id }) {

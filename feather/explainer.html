@@ -174,7 +174,7 @@
     import { shapeOf, barbTable, barbPose, BARB_STRIDE, SCHED, growth, zipAt, bendAt, settleAt, wearAt, sinkAt } from './src/gen/feather.js';
     import { heightField, crossings } from './src/gen/collide.js';
     import { simulateCollar, normalizePattern, PROGRAMS } from './src/gen/pattern.js';
-    import { createRng } from './src/rng.js';
+    import { createRng } from '../shared/rng.js';
 
     const P0 = shapeOf('vexille', createRng('explainer'));
     const barbsOf = (P, seed = 'x', dens) => { const T = barbTable(P, seed, dens); const out = []; for (let i = 0; i < T.length / BARB_STRIDE; i++) out.push([...T.slice(i * BARB_STRIDE, (i + 1) * BARB_STRIDE)]); return out; };

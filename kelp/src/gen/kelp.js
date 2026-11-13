@@ -20,7 +20,7 @@
 // courant (moindre traînée) quand l'eau la tire, lissé le long de la lanière.
 //
 // Axe x vers la côte, y vers le haut, z le long de la côte. Unités SI.
-import { createRng } from '../rng.js';
+import { createRng } from '../../../shared/rng.js';
 
 export const RHO_W = 1025;
 const G = 9.81;

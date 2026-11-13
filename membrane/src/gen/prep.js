@@ -20,7 +20,7 @@ import { geodesic, triNeighbors, V3 } from './geo.js';
 import { labelTriangles, findSeams } from './tear.js';
 import { partPose } from './kin.js';
 import { renderMesh, LIP_RING } from './tess.js';
-import { createRng } from '../rng.js';
+import { createRng } from '../../../shared/rng.js';
 
 const { min, max, acos, cos, PI, exp } = Math;
 const ek = (a, b) => (a < b ? a * 1048576 + b : b * 1048576 + a);

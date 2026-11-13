@@ -6,7 +6,7 @@
 // plan du plateau, z normal au plateau). La même liste de parois sert au rendu
 // (maillage extrudé), à la physique (capsules et arcs épaissis) et aux tests :
 // ce que la bille touche est exactement ce que l'on voit.
-import { createRng } from '../rng.js';
+import { createRng } from '../../../shared/rng.js';
 
 const TAU = Math.PI * 2;
 

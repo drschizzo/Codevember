@@ -6,7 +6,7 @@
 // réelles, aux fréquences arrondies à des multiples de 2π/T (boucle exacte).
 // On normalise a pour que la hauteur ait un écart type de 1 (m) à t = 0 :
 // l'amplitude de la recette est alors l'écart type en mètres.
-import { createRng } from '../rng.js';
+import { createRng } from '../../../shared/rng.js';
 import { fft2 } from './fft.js';
 
 export function ambientSpectrum({ seed, N, L, k0 = 200, spread = 1, dir = 0 }) {

@@ -16,7 +16,7 @@ import {
 import { isLite, stableVelocity, noise, worley, perturb } from './materials.js';
 import { atan } from 'three/tsl';
 import { FOLD_Y0 } from '../gen/plant.js';
-import { G } from './globals.js';
+import { G } from '../../../shared/scene/globals.js';
 
 const STRIDE = 32; // (im0…2, ip0…2, ix, iy : état précédent du pli)
 

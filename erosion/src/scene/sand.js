@@ -26,8 +26,8 @@ import {
   fwidth, Loop, If, select, positionView, step, pow, positionPrevious,
 } from 'three/tsl';
 import { TABLE, MAX_LAYERS } from '../gen/table.js';
-import { G } from './globals.js';
-import { noise, NZ, perturb, isLite, stableVelocity, hash33 } from './materials.js';
+import { G } from '../../../shared/scene/globals.js';
+import { noise, NZ, perturb, isLite, stableVelocity, hash33 } from '../../../shared/scene/materials.js';
 
 const srgb = (hex) => new THREE.Color(hex); // (THREE.Color convertit en linéaire)
 

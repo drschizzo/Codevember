@@ -8,7 +8,7 @@
 // touche du clavier entre parenthèses.
 import GUI from 'lil-gui';
 import { FINISHES } from '../finishes.js';
-import { ENV_PRESETS } from '../scene/env.js';
+import { ENV_PRESETS } from '../../../shared/scene/env.js';
 import { QUALITY } from './settings.js';
 import { FAMILIES } from '../gen/machines.js';
 

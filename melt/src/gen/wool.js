@@ -26,7 +26,7 @@
 //
 // Repère du monde (mm, y vers le haut). Le cristal repose sur les fibres les
 // plus hautes de son emprise (rayon `clear`) : rien n'y dépasse y = 0.
-import { createRng } from '../rng.js';
+import { createRng } from '../../../shared/rng.js';
 
 const TAU = Math.PI * 2;
 

@@ -10,7 +10,7 @@
 // blanches (≥ 4700 K) ; la chaleur vient de la rouille elle-même, du fond, des
 // contre-jours et de l'étalonnage ; les humeurs se distinguent par le décor,
 // la lumière, la valeur et le cadrage, pas par une teinte.
-import { createRng } from './rng.js';
+import { createRng } from '../../shared/rng.js';
 import { FAMILIES, pieceParams } from './gen/pieces.js';
 import { MACHINES, machineParams } from './machines.js';
 import { makeTiming } from './timeline.js';

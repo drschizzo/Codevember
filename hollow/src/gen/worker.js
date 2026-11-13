@@ -1,7 +1,7 @@
 // Worker de génération : construit la géométrie d'une couche (un niveau de
 // détail) ou ses cristaux, hors du fil principal ; les tampons sont
 // transférés sans copie.
-import { createRng, createNoise3 } from '../rng.js';
+import { createRng, createNoise3 } from '../../../shared/rng.js';
 import { goldbergCells, slotCells, voronoiCells } from './cells.js';
 import { girihCells } from './girih.js';
 import { prepareCells, buildShell, buildPanes, crest } from './shell.js';
@@ -12,7 +12,7 @@ import { buildWeave } from './weave.js';
 import { buildCoral } from './coral.js';
 import { placeCrystals } from './crystals.js';
 import { junctions, placeGems, placeSpines } from './jewels.js';
-import { buildNoiseVolume } from './noisevol.js';
+import { buildNoiseVolume } from '../../../shared/gen/noisevol.js';
 
 // Pavages percés (gen/shell.js) : la forme des cellules
 const TILINGS = {

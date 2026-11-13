@@ -1,7 +1,7 @@
 // Recette d'une scène : tout ce qui découle de la graine. Une recette est un
 // objet JSON (partageable par lien) ; le panneau la modifie en place.
-import { createRng } from './rng.js';
-import { FINISHES, SETS, TINTS } from './finishes.js';
+import { createRng } from '../../shared/rng.js';
+import { FINISHES, SETS, TINTS } from '../../shared/finishes.js';
 import { MEMBRANES, MEMBRANE_DEFAULTS, LOOK_KEYS, PHYS_KEYS } from './membranes.js';
 
 const r2 = (x) => Math.round(x * 100) / 100;

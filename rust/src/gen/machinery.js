@@ -14,7 +14,7 @@
 //  - bain    : cuve d'électrolyse à rebord roulé (anodes, barres, câbles,
 //              coffret), couvercle en deux battants, portique de levage à
 //              pieds en A, palan à chaîne, moufle et crochet, élingues.
-import { Buffers, OUT, IN, EDGE, roundedBox, add, sub, mul, norm, cross, dot } from './mesh.js';
+import { Buffers, OUT, IN, EDGE, roundedBox, add, sub, mul, norm, cross, dot } from '../../../shared/gen/mesh.js';
 import { frame, slab, prism, revolve, loft, roundPoly, chainLink, hexPrism, bolt, washer, rivet } from './parts.js';
 
 const { PI, cos, sin, abs, max, min, sqrt, atan2 } = Math;

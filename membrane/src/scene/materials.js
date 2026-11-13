@@ -26,8 +26,8 @@ import {
   float, mat3, mix, smoothstep, clamp, abs, length, normalize, dot, cross, sin, floor, fract, mod, step, acos, sign,
   dFdx, dFdy, fwidth, faceDirection, mrt, normalViewGeometry, atan, select, velocity, cos, max as tmax, texture3D, mx_cell_noise_vec3, modelViewMatrix, modelScale,
 } from 'three/tsl';
-import { FINISH_KEYS } from '../finishes.js';
-import { NOISE_PERIOD } from '../gen/noisevol.js';
+import { FINISH_KEYS } from '../../../shared/finishes.js';
+import { NOISE_PERIOD } from '../../../shared/gen/noisevol.js';
 import { rigPosition } from './rig.js';
 import { G } from './globals.js';
 

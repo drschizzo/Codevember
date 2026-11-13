@@ -11,7 +11,7 @@
 // sont des formes de Haeckel dessinées à la règle : symétries rayonnantes,
 // points et filets, ce que la lumière d'une caustique sait le mieux tracer.
 
-import { createRng } from '../rng.js';
+import { createRng } from '../../../shared/rng.js';
 
 // ── Toile : primitives accumulées dans une grille ──────────────────────────
 function canvas(m) {

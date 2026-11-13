@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { generate, MOODS } from '../src/recipe.js';
 import { FINISHES } from '../src/finishes.js';
 import { roomGain, heroGain } from '../src/scene/dose.js';
-import { jitter } from '../src/rng.js';
+import { jitter } from '../../shared/rng.js';
 import { voyageDoors } from '../src/scene/reveal.js';
 import { stepOrientations, innerCell, cellTransforms } from '../src/math4.js';
 

@@ -1,0 +1,14 @@
+{
+  "name": "codevember",
+  "private": true,
+  "type": "module",
+  "description": "Scènes procédurales three.js WebGPU/TSL en boucle parfaite. Sans étape de construction : ces scripts ne servent qu'au développement.",
+  "scripts": {
+    "test": "node --test --test-reporter=dot */test/*.test.mjs shared/test/*.test.mjs",
+    "check": "node tools/check.mjs",
+    "new": "node .claude/skills/codevember-scene/scripts/scaffold.mjs",
+    "serve": "python3 .claude/serve.py 8120 .",
+    "planche": "python3 .claude/skills/codevember-scene/scripts/planche.py",
+    "sink": "python3 tools/sink.py"
+  }
+}

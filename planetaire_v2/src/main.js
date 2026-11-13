@@ -31,7 +31,7 @@ import { createUI } from './app/ui.js';
 import { loadRender, saveRender, applyQuality, defaultsFor, SHADOWS } from './app/settings.js';
 import { wantsMobile, switchMobile, createGovernor, createPacer, bindTouch } from './app/mobile.js';
 import { generate, generateLayer, upgrade, orbitOverrides, packRecipe, unpackRecipe, MOODS } from './recipe.js';
-import { createRng } from './rng.js';
+import { createRng } from '../../shared/rng.js';
 import { withPivots } from './mech/design.js';
 
 const TAU = Math.PI * 2;

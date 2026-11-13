@@ -2,7 +2,7 @@
 // spores), le volume de bruit, le studio — hors du fil principal, à partir
 // d'une spécification JSON ; tampons transférés sans copie. Les constructeurs
 // sont des fonctions pures, importables depuis Node (tests, outils).
-import { buildNoiseVolume } from './noisevol.js';
+import { buildNoiseVolume } from '../../../shared/gen/noisevol.js';
 import { bakeWood } from './wood.js';
 import { buildSite } from './site.js';
 import { envPixels } from './envmap.js';

@@ -3,7 +3,7 @@
 // entièrement modifiable depuis l'interface ; les réglages de rendu (post-
 // traitement, qualité) n'en font pas partie et survivent aux changements de
 // graine.
-import { createRng } from './rng.js';
+import { createRng } from '../../shared/rng.js';
 import { FINISHES, SETS, TINTS, FINISH_DEFAULTS } from './finishes.js';
 import { TYPES, geometryFor, randomType } from './types.js';
 

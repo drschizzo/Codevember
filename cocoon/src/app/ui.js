@@ -7,7 +7,7 @@
 // Tout est replié sauf l'essentiel ; les libellés sont en français, avec la
 // touche du clavier entre parenthèses.
 import GUI from 'lil-gui';
-import { ENV_PRESETS } from '../scene/env.js';
+import { ENV_PRESETS } from '../../../shared/scene/env.js';
 import { QUALITY } from './settings.js';
 import { THREADS, ACCORDS, SHAPES, FAMILIES } from '../recipe.js';
 

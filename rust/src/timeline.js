@@ -8,7 +8,7 @@
 // séchage qui les suit (la rouille éclair paraît en séchant) : 0 avant la
 // première, 1 après la dernière, constant ensuite. La rouille ne recule
 // jamais pendant les averses ; elle ne part que sous l'outil.
-import { createRng } from './rng.js';
+import { createRng } from '../../shared/rng.js';
 
 export const sstep = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const s5 = (t) => { t = Math.max(0, Math.min(1, t)); return t * t * t * (t * (6 * t - 15) + 10); };

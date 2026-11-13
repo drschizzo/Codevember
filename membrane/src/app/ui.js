@@ -1,7 +1,7 @@
 // Panneau de réglages (lil-gui). Ce module ne connaît que la recette, les
 // réglages de rendu et des fonctions de rappel : il ne touche pas à la scène.
 import GUI from 'lil-gui';
-import { FINISHES, SETS, FINISH_DEFAULTS, PATTERNS } from '../finishes.js';
+import { FINISHES, SETS, FINISH_DEFAULTS, PATTERNS } from '../../../shared/finishes.js';
 import { MOODS, ARMATURES, ORDERS, POLYS, STYLES, CUPS, RINGS, HEADS, POLAR_MODES } from '../recipe.js';
 import { MEMBRANES } from '../membranes.js';
 import { ENV_PRESETS } from '../scene/env.js';

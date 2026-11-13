@@ -19,8 +19,8 @@
 // collision (pour la simulation), et le maillage (attributs rigA–rigD : la
 // même cinématique dans le vertex shader).
 
-import { Buffers, OUT, IN, EDGE, norm, cross, dot, add, sub, mul } from './mesh.js';
-import { createRng } from '../rng.js';
+import { Buffers, OUT, IN, EDGE, norm, cross, dot, add, sub, mul } from '../../../shared/gen/mesh.js';
+import { createRng } from '../../../shared/rng.js';
 
 const { PI, sin, cos, atan2, acos, max, min, abs, sqrt } = Math;
 const sph = (th, ph, r = 1) => [r * sin(th) * cos(ph), r * sin(th) * sin(ph), r * cos(th)];

@@ -22,7 +22,7 @@
 // converge vers une orbite périodique, qu'on intègre jusqu'à ce que l'état
 // à t + P égale l'état à t, puis qu'on enregistre — la boucle se referme
 // par construction.
-import { createRng, createNoise3, smoothstep as sst } from './rng.js';
+import { createRng, createNoise3, smoothstep as sst } from '../../shared/rng.js';
 
 export const FIELD_N = 64;      // grille FIELD_N × FIELD_N
 export const YEAR = 365;        // période physique (jours)
