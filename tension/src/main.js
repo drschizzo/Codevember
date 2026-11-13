@@ -28,7 +28,7 @@ import { loader } from '../../shared/app/loader.js';
 import { asyncPipelines, warmScene } from '../../shared/app/warmup.js';
 
 const NAME = 'tension';
-const DEFAULT_SEED = 's16'; // scène d'ouverture : Scène, Culbute, acier poli et tresse rouge
+const DEFAULT_SEED = 't5'; // scène d'ouverture : Midi, la Chenille aux barres vermillon sur le sol clair (choisie sur une planche des sept humeurs : la structure remplit le cadre, là où le Culbute de la Scène se perdait dans le noir)
 const params = new URLSearchParams(location.search);
 const $ = (s) => document.querySelector(s);
 const randomSeed = () => Math.random().toString(36).slice(2, 8);

@@ -2,7 +2,7 @@
 
 *ce qui tient ne pousse pas.* Des sculptures de tenségrité avancent sur un sol nu, sans roue ni pied. Une tenségrité est un assemblage de barres d'acier qui ne se touchent pas, tenues en l'air par des câbles tendus. Ici, de petits treuils enroulent ces câbles pour faire marcher la structure. Un prisme se penche jusqu'à basculer, une chenille fait courir une onde de contraction de la queue à la tête, une roue de vélo laisse tomber son moyeu vers l'avant et roule après lui. Puis la structure se repose, intacte, un pas plus loin.
 
-![Scène : le Culbute en acier poli sur un plancher de théâtre, dans la poursuite](docs/capture.jpg)
+![Scène : la Chenille aux barres vermillon avance sur un sol clair, sous le soleil de midi](docs/capture.jpg)
 
 Rendu physique en three.js (WebGPU, TSL). La scène est entièrement procédurale : une graine produit une sculpture, une allure, un décor et un film. La démarche est dans [docs/concept.md](docs/concept.md) : le thème exploré sous six angles, les clichés écartés, huit pistes notées, les épreuves (crédibilité, variété, ambition, déclinaison, scénario, références).
 
