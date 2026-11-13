@@ -15,6 +15,8 @@
 
   Paramètres : ?only=cocoon,kelp   projets à rendre (défaut : tous)
                ?phases=0.1,0.45,0.8
+               ?seeds=p5,p22     avec ?only=<projet> : une planche de graines (direction
+                                 artistique : choisir une scène d'ouverture, comparer les humeurs)
                ?out=avant        sous-dossier du collecteur
                ?sink=http://127.0.0.1:8199/
                ?w=960&h=540
@@ -46,6 +48,7 @@ const PROJECTS = {
 const SEEDS = { membrane: 'regress' };
 const q = new URLSearchParams(location.search);
 const only = q.get('only')?.split(',');
+const seeds = q.get('seeds')?.split(','); // (planche d'un projet : une image par graine et par phase)
 const phases = (q.get('phases') || '0.1,0.45,0.8').split(',').map(Number);
 const sink = `${q.get('sink') || 'http://127.0.0.1:8199/'}${q.get('out') || 'avant'}/`;
 const W = +(q.get('w') || 960), H = +(q.get('h') || 540);
@@ -62,11 +65,12 @@ const job = window.__job = { done: false, current: '', ok: [], failed: {}, t0: p
 const stored = Object.entries(localStorage);
 localStorage.clear();
 
-async function shoot(name, key) {
+async function shoot(name, key, seed = SEEDS[name]) {
   const frame = document.createElement('iframe');
   frame.width = W; frame.height = H;
   // (graine fixe : un projet sans scène d'ouverture en tirerait une au hasard)
-  frame.src = `../${name}/?debug&ui=0${SEEDS[name] ? `&seed=${SEEDS[name]}` : ''}`;
+  frame.src = `../${name}/?debug&ui=0${seed ? `&seed=${seed}` : ''}`;
+  const tag = seeds ? `${name}-${seed}` : name;
   document.body.appendChild(frame);
   try {
     const win = frame.contentWindow;
@@ -93,10 +97,10 @@ async function shoot(name, key) {
       for (let y = 0; y < H; y++) img.data.set(px.subarray(y * stride, y * stride + W * 4), y * W * 4);
       c.getContext('2d').putImageData(img, 0, 0);
       const blob = await c.convertToBlob({ type: 'image/png' });
-      await fetch(`${sink}${name}-${String(Math.round(ph * 100)).padStart(3, '0')}.png`, { method: 'POST', body: blob });
+      await fetch(`${sink}${tag}-${String(Math.round(ph * 100)).padStart(3, '0')}.png`, { method: 'POST', body: blob });
     }
     if (api.errors?.length) throw new Error(`console.error : ${api.errors.slice(0, 3).join(' | ')}`);
-    job.ok.push(name); log(`${name} : ${phases.length} images`);
+    job.ok.push(tag); log(`${tag} : ${phases.length} images`);
   } catch (e) {
     job.failed[name] = String(e?.message || e); log(`${name} : ÉCHEC ${job.failed[name]}`);
   } finally {
@@ -108,7 +112,8 @@ async function shoot(name, key) {
 for (const [name, key] of Object.entries(PROJECTS)) {
   if (only && !only.includes(name)) continue;
   job.current = name;
-  await shoot(name, key || name);
+  if (seeds) for (const seed of seeds) await shoot(name, key || name, seed);
+  else await shoot(name, key || name);
 }
 localStorage.clear();
 for (const [k, v] of stored) localStorage.setItem(k, v);
