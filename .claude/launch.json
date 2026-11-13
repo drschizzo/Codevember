@@ -293,6 +293,16 @@
         "erosion"
       ],
       "port": 8171
+    },
+    {
+      "name": "cocoon",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        ".claude/serve.py",
+        "8200",
+        "cocoon"
+      ],
+      "port": 8200
     }
   ]
 }

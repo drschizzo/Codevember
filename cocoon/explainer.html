@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#050506">
+  <title>Cocoon · défis techniques</title>
+  <meta name="description" content="Comment Cocoon enroule un cocon de lumière : géodésiques de Clairaut, motifs qui se referment, fil déposé sans traversée, paroi qui filtre la lumière fil par fil, ailette déduite du fil, boucle par échange.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+  <link rel="stylesheet" href="../home/explainer.css">
+</head>
+<body>
+  <nav class="top"><div class="in">
+    <a href="../">Codevember</a><span class="day">Day 20</span><span class="crumb">Cocoon · défis techniques</span>
+    <span class="sp"></span><a class="open" href="./">Ouvrir la scène</a>
+  </div></nav>
+
+  <main>
+    <header class="hero">
+      <div class="kicker">Day 20 · Cocoon · la lumière filée</div>
+      <h1>Comment un fil enferme une lumière</h1>
+      <p class="lede">Deux lanternes pendent aux bras d’un fléau. Un ruban de soie quitte l’une et s’enroule sur l’autre : à droite, la lampe disparaît peu à peu derrière le fil ; à gauche, elle reparaît. Puis le fléau fait un demi-tour et tout recommence. Rien n’est animé à la main : le chemin du ruban est calculé sur la cage, chaque fil se pose sur ceux qui sont déjà là, et la lumière qui atteint les murs traverse exactement les fils posés à cet instant.</p>
+    </header>
+
+    <figure class="cover">
+      <img src="docs/capture.jpg" alt="Deux lanternes de soie dorée aux bras d’un fléau, devant un mur de laque rouge sombre" width="1920" height="1080">
+      <figcaption>Au début de la boucle. À gauche, le cocon plein ne fait que luire ; à droite, l’armature se pose sur la cage nue, autour de l’ampoule. Le mur porte l’ombre agrandie de la lanterne de gauche.</figcaption>
+    </figure>
+
+    <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
+
+    <article>
+
+      <section id="chair">
+        <h2><span class="n">01</span>Montrer la soie, jamais la chair</h2>
+        <span class="src">docs/concept.md · src/scene/threads.js</span>
+        <p>Le thème appelle une créature : un ver qui file, une chrysalide, un papillon. C’est ce que le temps réel rend le plus mal. La peau d’une larve diffuse la lumière sur plusieurs couches, se plisse, brille d’humidité ; le duvet d’un papillon demande des millions de brins ; une reptation se juge à l’œil en un instant. Le projet a donc été conçu autour de ce qui se rend bien. Le cocon est un objet de fil, ce qu’il enferme est une lampe, et ce qui le file est un appareil de laiton et de bois.</p>
+        <p>Un fil est une courbe connue, et son reflet une loi connue. La fibre de soie, de section presque triangulaire, renvoie la lumière en deux reflets décalés le long de la fibre (Marschner et al., 2003, pour les cheveux) : un reflet R blanc et étroit, renvoyé par la surface, et un reflet TRT teinté et plus large, qui a traversé la fibre. C’est ce double lobe qui fait le satin. Chaque segment de fil est un ruban de deux triangles tourné vers la caméra, dont la normale tourne d’un bord à l’autre comme celle d’un cylindre, et dont chaque pixel est écrit à la profondeur de la surface du fil.</p>
+        <figure id="fig-fiber"><figcaption><b>Le reflet d’un ruban de fils parallèles.</b> Une bande de fils vue de face, éclairée par une lampe dont on règle la hauteur. À gauche, un éclairage de surface ordinaire (Lambert et Blinn) ; à droite, les deux lobes décalés de la fibre. Montez la lampe : le reflet satiné glisse le long du ruban et change de teinte. La démo reprend les formules du shader, sur des fils droits.</figcaption></figure>
+        <div class="note trap"><b>Des fils plus fins qu’un pixel</b><p>De loin, un fil fait moins d’un pixel, et chacun scintillait d’une image à l’autre : les jours de 0,1 mm entre fils voisins laissaient passer la lampe en points brillants, et les reflets étroits sautaient d’un fil à l’autre. Les fils d’un ruban sont élargis de 12 % pour se recouvrir, et sous ~2 px la normale cylindrique s’aplatit, les nuances fil à fil s’effacent et le reflet s’élargit.</p></div>
+        <div class="note trap"><b>Un fil tous les 3 mm, c’était trop</b><p>Avec un point tous les 3 mm, deux cocons de 13 fils par ruban faisaient 450 000 rubans, soit 1,8 million de sommets éclairés trois fois par image (pré-passe, scène, ombre) : 42 ms sur 52. Le rendu garde un point sur trois. Une corde de 9 mm sur une cage de 13 cm de rayon s’écarte de l’arc de moins de 0,1 mm, et chaque point gardé prend la hauteur maximale des points qu’il remplace : le fil enjambe les croisements, il ne s’y enfonce jamais. Un segment recouvert par un fil posé après lui n’est plus dessiné.</p></div>
+        <div class="note trap"><b>Un camouflage dans la lueur</b><p>La lueur d’un fil dépend du nombre \(n_b\) de fils posés sous lui, un entier compté au centre de chaque segment de 3 mm. D’un segment à l’autre, \(\tau^{n_b}\) sautait de moitié : la paroi prenait l’aspect d’un camouflage en tirets, qui scintillait en mouvement. Ce compte est lissé le long du fil (± 9 points) et interpolé entre les deux bouts du segment, et chaque segment reçoit les tangentes de ses voisins : le fil se lit comme un ruban d’un seul tenant.</p></div>
+        <div class="note"><b>La profondeur d’un cylindre</b><p>Deux fils voisins vus en biais se chevauchent à l’écran. Avec des rubans plats, l’ordre des deux change d’un pixel à l’autre et les bords scintillent en escalier, ce qu’ont montré les premiers rendus. Chaque pixel du ruban écrit donc la profondeur de la surface du cylindre, \(z - r\sqrt{1 - v^2}\), où \(v\) va de −1 à 1 en travers du ruban : le fil le plus proche gagne, pixel par pixel.</p></div>
+      </section>
+
+      <section id="clairaut">
+        <h2><span class="n">02</span>Un fil tendu suit une géodésique</h2>
+        <span class="src">src/gen/winding.js · geodesicHalf()</span>
+        <p>Un fil sous tension, posé sur une surface lisse, ne glisse pas si le chemin qu’il suit est le plus court possible sur cette surface : une <strong>géodésique</strong>. Sur une surface de révolution comme la cage, les géodésiques obéissent à la relation de Clairaut. En notant \(r\) la distance à l’axe et \(\alpha\) l’angle du fil avec le méridien, le produit reste constant :</p>
+        <div class="eq">\[ r \sin \alpha = c. \]</div>
+        <p>Le fil s’enroule donc d’autant plus à plat que la cage est étroite, et rebrousse chemin là où \(r = c\), tangent au parallèle : c’est l’ouverture polaire des réservoirs bobinés. Avec \(\sigma\) l’abscisse le long du méridien, l’angle parcouru autour de l’axe s’intègre :</p>
+        <div class="eq">\[ \varphi(\sigma) = \int \frac{c}{r\sqrt{r^2 - c^2}}\,d\sigma. \]</div>
+        <p>L’intégrande devient infini au point de rebroussement. La substitution \(\sigma = a + \tfrac{b - a}{2}(1 - \cos \pi x)\) concentre les pas aux deux bouts et fait tendre le produit vers une valeur finie : 1 200 pas suffisent pour une demi-géodésique exacte à \(2 \times 10^{-3}\) près sur \(r \sin \alpha\) (c’est un test).</p>
+        <figure id="fig-geo" class="wide"><figcaption><b>Une demi-géodésique sur la cage.</b> À gauche, le profil de la cage (son méridien) et les deux parallèles où \(r = c\) ; à droite, le chemin déroulé dans la carte \((\varphi, \sigma)\) de la paroi. Changez \(c\) et la forme : une petite ouverture donne un fil presque méridien, une grande un fil presque horizontal qui ne couvre que le ventre. Calcul fait par <code>geodesicHalf</code> et <code>makeProfile</code> du projet.</figcaption></figure>
+      </section>
+
+      <section id="motif">
+        <h2><span class="n">03</span>Un motif qui se referme</h2>
+        <span class="src">src/gen/winding.js · choosePattern(), geodesicLayer()</span>
+        <p>Un circuit monte d’un pôle à l’autre et redescend. Pour que N circuits couvrent la paroi sans trou ni recouvrement, chaque circuit doit commencer un peu plus loin que le précédent, d’une avance \(\Delta = 2\pi p / N\), avec \(p\) premier avec \(N\) : après \(N\) circuits, chaque départ a été visité une fois et le motif se referme. L’avance naturelle d’un circuit, \(2\,\Delta\varphi_{1/2}\), ne tombe pas juste ; le fil fait donc, à chaque pôle, un petit séjour le long du parallèle \(r = c\) qui rattrape l’écart.</p>
+        <p>Le choix de \(p\) décide de la façon dont la lanterne se ferme. Avec \(p = 1\), les rubans se posent côte à côte et un front avance. Avec \(p/N\) proche de \(0{,}382\), l’inverse du nombre d’or au carré, chaque nouveau ruban tombe au milieu du plus grand vide restant : les losanges se subdivisent régulièrement, les jours rétrécissent tous ensemble.</p>
+        <figure id="fig-pattern"><figcaption><b>Les départs des circuits sur le cercle polaire.</b> Chaque trait est le départ d’un circuit, dans l’ordre de pose ; les arcs restés libres sont en clair. Faites varier \(p\) et le nombre de circuits posés. À \(p/N \approx 0{,}382\), le plus grand vide reste à peine plus grand que le plus petit : la paroi se ferme partout à la fois.</figcaption></figure>
+      </section>
+
+      <section id="familles">
+        <h2><span class="n">04</span>Quatre façons de fermer un cocon</h2>
+        <span class="src">src/gen/winding.js · buildPath()</span>
+        <p>Une graine tire une famille. Chacune enchaîne trois régimes, une armature, une fermeture, une finition, et chacune ferme la lanterne autrement :</p>
+        <ul>
+          <li><b>Losange</b> : quelques circuits géodésiques larges, puis une couche plus serrée à motif \(p/N \approx 0{,}382\), une couche presque polaire et un cerclage de taille. Des losanges de lumière qui se subdivisent.</li>
+          <li><b>Cerclage</b> : des côtes polaires, puis une hélice qui monte de bas en haut, dans la zone où la pente du méridien reste sous le frottement des côtes crantées. Une fente de lumière qui remonte la lanterne.</li>
+          <li><b>Huit</b> : la bave du ver à soie. Un balayage lent en hélice d’un pôle à l’autre, et en travers une lemniscate de Gerono. Pour \(k\) couches par passage, le pas d’une boucle à l’autre vaut \(2{,}6\,w/k\), \(w\) étant la largeur du ruban. Une paroi non tissée qui se couvre par plages.</li>
+          <li><b>Méridien</b> : des circuits presque polaires, ruban après ruban. Deux quartiers de lumière qui se rétrécissent en tournant.</li>
+        </ul>
+        <figure id="fig-families" class="wide"><figcaption><b>La paroi déroulée, pendant qu’elle se ferme.</b> Le chemin réel de chaque famille, calculé par <code>buildPath</code> sur une cage ovoïde, dessiné jusqu’à la part \(S\) du ruban. Faites avancer \(S\) : les losanges se subdivisent, la fente du cerclage remonte, les boucles du huit couvrent par plages, les quartiers du méridien se ferment. (La démo trace l’axe du ruban, pas ses fils.)</figcaption></figure>
+      </section>
+
+      <section id="depot">
+        <h2><span class="n">05</span>Chaque fil se pose sur ce qui est déjà là</h2>
+        <span class="src">src/gen/winding.js · windCocoon()</span>
+        <p>Un ruban de 6 à 16 fils ronds de 1,1 à 1,9 mm croise des milliers de fois les rubans posés avant lui. Calculer la forme du chemin sur la cage ne dit pas à quelle hauteur passe chaque fil : posé au rayon de la cage, il traverserait tous ceux du dessous. La paroi est donc une <strong>carte de hauteur</strong> de 1 024 × 2 048 cellules, et le ruban s’y dépose par tronçons de 16 points :</p>
+        <ol>
+          <li>chaque fil lit le maximum de la carte sous son empreinte, en ignorant son propre dépôt récent, et s’y pose à un rayon au-dessus ;</li>
+          <li>sa hauteur est dilatée sur ± 2 points puis lissée le long du fil, sans jamais descendre sous la valeur lue : le fil enjambe un croisement un peu avant de l’atteindre ;</li>
+          <li>il élève la carte de sa section ronde, si bien que le fil suivant se loge dans le creux entre deux fils.</li>
+        </ol>
+        <p>Au départ, la carte n’est pas plate : entre deux côtes de la cage, le fil tendu fait une corde, d’une profondeur \(r\,(1 - \cos(\pi/n))\) au milieu, pour \(n\) côtes. Les premiers rubans dessinent les facettes de la cage. Et les pôles, où tous les rubans se croisent, s’épaississent d’eux-mêmes, comme les calottes d’un réservoir bobiné.</p>
+        <figure id="fig-depot"><figcaption><b>Un tronçon de paroi vu en coupe.</b> Des fils ronds tombent sur une côte et sur les fils déjà posés, chacun au maximum lu sous son empreinte plus un rayon. Le bouton « sans dépôt » les pose tous au rayon de la cage : ils se traversent. La démo est une coupe à une dimension de la même règle.</figcaption></figure>
+        <div class="note trap"><b>Un demi-diamètre de trop</b><p>Le premier dépôt écrivait dans la carte le dessus du fil à la hauteur de son axe : chaque fil suivant s’enfonçait d’un rayon dans le précédent. À l’écran, on ne voyait qu’une paroi un peu plate. Le banc l’a vu tout de suite : 25 000 contacts douteux sur 390 000.</p></div>
+        <div class="note check"><b>Le banc de traversée</b><p>Deux fils ronds de diamètre \(d\) dont les axes sont à \(\delta < d\) ne se traversent pas si leurs hauteurs diffèrent d’au moins \(\sqrt{d^2 - \delta^2}\). Le test le vérifie, pour chaque point de fil, contre tous les points des fils posés avant lui, sur les quatre familles et à la grille de l’application : moins de 2 contacts douteux pour 10 000 voisinages contrôlés (de 95 000 à 390 000 par cocon). Le même banc, sur des fils tous posés à la même hauteur, doit échouer : c’est la preuve qu’il voit une traversée.</p></div>
+      </section>
+
+      <section id="paroi">
+        <h2><span class="n">06</span>La paroi filtre la lumière, fil par fil</h2>
+        <span class="src">src/gen/winding.js · src/scene/lantern.js · makeCookie()</span>
+        <p>Une lampe dans une cage de fils projette sur les murs l’ombre agrandie de chaque ruban, et dans une brume, chaque jour entre les rubans devient un faisceau. Il faudrait pour cela une carte d’ombre de 200 000 segments de fil par lampe, six fois par image. Le dépôt garde à la place, pour chaque cellule de la paroi, <strong>les instants des quatre premiers fils qui la couvrent</strong>, l’instant étant la part \(s\) du ruban déjà posée. À l’instant \(S\), une direction issue de la lampe traverse \(n\) fils, ceux dont \(s_k &lt; S\), et la paroi laisse passer</p>
+        <div class="eq">\[ T(\omega, S) = \tau^{\,n}, \qquad n = \#\{k : s_k(\omega) &lt; S\}, \]</div>
+        <p>avec \(\tau\) la transmission d’une épaisseur de fil : 0 pour le cuivre, 0,12 pour la soie noire, 0,42 pour la grège, 0,72 pour la fibre de verre. Au-delà de quatre fils, la lumière est éteinte. Une table de 512 entrées relie l’angle d’une direction à l’abscisse \(\sigma\) où elle sort de la paroi. Cette seule texture (RGBA32F, 2 048 × 1 024) sert aux murs, à l’appareil, à l’autre lanterne, à la brume, et au double qui porte l’ombre du cocon sous la lumière de la pièce. Les lampes n’ont pas de carte d’ombre : les côtes de la cage, les rosaces et l’autre cocon sont des ombres analytiques dans la même lecture (deux cartes cubiques coûtaient ~7 ms par image). La lanterne de gauche lit la même texture que celle de droite, avec \(1 - S\).</p>
+        <div class="note trap"><b>Une grille de points sur les murs</b><p>Lue au plus proche, la table dessinait sur les murs chaque cellule de la paroi : une grille de points carrés, agrandie vingt fois. Elle est lue en bilinéaire, sur deux prélèvements opposés dans un disque de 3,5 mm sur la paroi, la pénombre d’un filament de quelques millimètres, qui grandit avec la distance du point éclairé et tourne à chaque pixel et à chaque image ; l’anticrénelage temporel en fait un flou continu.</p></div>
+        <figure id="fig-cookie" class="wide"><figcaption><b>Ce que voit la lampe.</b> Un vrai cocon de la famille Losange, déposé par <code>windCocoon</code> sur une grille réduite, puis la carte de transmission \(T\) à l’instant \(S\), déroulée de pôle à pôle, et la bande de lumière qu’elle projette sur un mur. Le calcul prend quelques dixièmes de seconde à l’ouverture de la démo.</figcaption></figure>
+        <div class="note"><b>La lueur</b><p>La paroi luit aussi vue du dehors. Chaque segment de fil garde le nombre \(n_b\) de fils posés sous lui, qui ne change jamais : un fil n’existe que si ceux du dessous existent. La lumière qui l’atteint de l’intérieur vaut \(I\,\tau^{n_b}/r^2\), et il en diffuse une part \(\tau\) vers l’avant, un peu plus au bord du ruban, là où le fil est vu en épaisseur.</p></div>
+      </section>
+
+      <section id="ailette">
+        <h2><span class="n">07</span>L’ailette est déduite du fil</h2>
+        <span class="src">src/gen/apparatus.js · eyeTable()</span>
+        <p>L’appareil est une ailette de rouet : un rail courbe qui tourne autour de la cage et épouse le cocon plein à 5 cm, un chariot qui y coulisse, un œil de porcelaine sur le chariot. Le chemin du ruban est connu ; l’appareil doit le produire. Un brin tendu va droit de l’œil au point de pose et quitte la paroi tangentiellement, sans pli. L’œil est donc là où la tangente au ruban rencontre la surface du rail. L’azimut de l’ailette est celui de l’œil, le chariot est à sa hauteur.</p>
+        <p>Pris tel quel, ce point fouette : aux rebroussements polaires, la tangente tourne d’un demi-tour en quelques centimètres de fil. L’azimut et la position du chariot sont donc lissés le long du chemin, sur une gaussienne de 22 points de 3 mm, et ramenés sur le rail. L’ailette tourne alors d’un mouvement continu, d’au plus 0,07 rad par point. Le brin reste droit ; on vérifie qu’il ne traverse pas la paroi telle qu’elle est au moment du passage, ce qui arrive moins de 1 % du temps.</p>
+        <figure id="fig-eye"><figcaption><b>L’œil sur la tangente.</b> Le méridien de la cage, l’enveloppe du cocon plein et le rail à 5 cm. Faites glisser le point de pose le long du profil et changez l’angle du ruban au méridien : l’œil est à l’intersection de la tangente avec le rail, et le brin libre reste dehors. (Coupe plane : le vrai brin quitte le plan méridien.)</figcaption></figure>
+        <div class="note"><b>La filière du huit</b><p>Le huit pose des boucles de 6 à 9 cm : une tangente qui tourne deux fois par boucle ferait vibrer toute l’ailette. Pour cette famille, l’ailette suit seulement le balayage lent, et une filière fine, au bout du chariot, frôle la paroi à 1,6 cm et bat en huit. C’est le mouvement de la tête du ver à soie, porté par une pièce de laiton.</p></div>
+      </section>
+
+      <section id="boucle">
+        <h2><span class="n">08</span>Un échange, pas un aller-retour</h2>
+        <span class="src">src/timeline.js · makeProgram(), beamAngle(), filmState()</span>
+        <p>Un cocon se dévide à l’envers de sa construction : la dernière couche posée part la première. Enrouler puis dérouler la même lanterne donnerait un film lu à l’envers. Ici, les deux stations portent le même chemin \(P\). La lanterne de droite en montre la portion \(s \le S\), celle de gauche la portion \(s \le 1 - S\) : le fil est uniforme et ne garde pas la mémoire de son sens, la longueur se conserve. La station de droite est tournée de \(\pi\) dans le fléau. Quand \(S\) atteint 1, le fléau fait un demi-tour, et la station pleine arrive exactement à la place et dans l’orientation de celle de gauche, son ailette au même angle :</p>
+        <div class="eq">\[ \mathcal{R}_\pi \cdot \text{station}_B(S = 1) \;=\; \text{station}_A(S_A = 1). \]</div>
+        <p>Le tempo suit les régimes du chemin. La vitesse du ruban vaut 1 pendant l’armature, où l’on suit chaque passage de l’œil, 1,9 à 2,5 pendant la fermeture (un accéléré d’atelier, assumé), 1,1 pendant la finition, sur une boucle de 56 à 64 s. Pendant tout le transfert, la caméra s’approche de face de la lanterne qui s’enroule, et recule pour la relève. Les raccords sont lissés, et le départ comme l’arrêt se font sans à-coup. Le fléau tourne en \(\pi\,s_5(x)\) plus un dépassement amorti qui retombe exactement sur \(\pi\), vitesse nulle aux deux bouts.</p>
+        <figure id="fig-loop" class="wide"><figcaption><b>La boucle d’une graine.</b> La part posée à droite \(S\) et à gauche \(1 - S\), la vitesse du ruban, l’angle du fléau, sur une boucle. Le curseur parcourt la boucle ; les marques sont les débuts de la fermeture et de la finition, tirés du vrai chemin. Programme calculé par <code>makeProgram</code>, angle par <code>beamAngle</code>.</figcaption></figure>
+        <div class="note check"><b>Le raccord</b><p>Le contrôle compare la scène à \(u\) et à \(u + 1\) sans supposer quelle station est laquelle : pour chaque position de station, triée, sa part posée et les matrices de la station, de l’ailette et du chariot. L’écart mesuré à \(u = 0\) est de \(4 \times 10^{-10}\).</p></div>
+      </section>
+
+      <section id="budget">
+        <h2><span class="n">09</span>Budget</h2>
+        <p>Tout le bobinage est calculé pendant l’écran de chargement, dans un worker (un fil de calcul parallèle du navigateur) ; l’écran de chargement dessine pendant ce temps le vrai chemin du ruban de la graine.</p>
+        <div class="tbl"><table>
+          <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
+          <tbody>
+            <tr><td>Chemin, dépôt, table de transmission, cinématique (mesuré dans Node)</td><td>worker</td><td class="num">1,4 à 2,2 s</td></tr>
+            <tr><td>Segments de fil rendus par cocon (un point sur trois, 9 mm)</td><td>GPU</td><td class="num">35 000 à 100 000</td></tr>
+            <tr><td>Table de transmission (RGBA32F)</td><td>GPU</td><td class="num">2 048 × 1 024</td></tr>
+            <tr><td>Image, qualité Haute, MSAA 4×, 1,5 Mpx (graine ebc1m2)</td><td>GPU</td><td class="num">12 à 13,5 ms</td></tr>
+            <tr><td>La même avant optimisation</td><td>GPU</td><td class="num">52 ms</td></tr>
+            <tr><td>Version mobile, 1 Mpx</td><td>GPU</td><td class="num">5 à 6 ms</td></tr>
+            <tr><td>Brume : 14 pas, deux lampes</td><td>GPU</td><td class="num">dans la passe d’image</td></tr>
+          </tbody>
+        </table></div>
+        <p>Quatorze tests tiennent l’ensemble : la relation de Clairaut, la continuité du ruban, le dépôt sans traversée et son témoin négatif, l’ordre et la fermeture de la table de transmission, le rail et la rotation de l’ailette, le brin libre, l’horloge (transfert monotone, relève, raccord par échange, conservation du fil), la caméra (moins de 25 °/s), la recette et la direction artistique.</p>
+      </section>
+    </article>
+
+    <footer class="end">
+      <a href="./">Ouvrir Cocoon</a>
+      <a href="https://github.com/drschizzo/Codevember/blob/main/cocoon/README.md">README</a>
+      <a href="https://github.com/drschizzo/Codevember/blob/main/cocoon/docs/concept.md">La démarche</a>
+      <span class="sp"></span>
+      <a href="../">Tous les jours</a>
+    </footer>
+  </main>
+
+  <script type="module">
+    import { demo, C, TAU, lerp, clamp, smooth, alpha, label } from '../home/explainer.js';
+    import { makeProfile, SHAPES } from './src/gen/profile.js';
+    import { geodesicHalf, buildPath, windCocoon } from './src/gen/winding.js';
+    import { makeProgram, beamAngle } from './src/timeline.js';
+    import { generate } from './src/recipe.js';
+
+    // ── 01 · reflet d'un ruban de fils ───────────────────────────────────────
+    demo('#fig-fiber', {
+      title: 'Lambert et Blinn, puis la fibre', aspect: 2.2,
+      controls: [{ key: 'el', label: 'Hauteur de la lampe', min: -60, max: 60, step: 1, value: 18, fmt: (v) => `${v}°` }],
+      draw(g, d) {
+        const { w, h } = d, half = w / 2, el = d.s.el * Math.PI / 180;
+        const L = [0, Math.sin(el), Math.cos(el)], V = [0, 0, 1];
+        const H = [L[0] + V[0], L[1] + V[1], L[2] + V[2]], hl = Math.hypot(...H); H.forEach((x, i) => { H[i] = x / hl; });
+        const col = [0.93, 0.89, 0.8], n = 22, top = 24, bot = h - 18;
+        for (const side of [0, 1]) {
+          const x0 = side ? half + 12 : 12, x1 = side ? w - 12 : half - 12, fw = (x1 - x0) / n;
+          for (let k = 0; k < n; k++) for (let py = top; py < bot; py += 2) {
+            // fil vertical (tangente T = y), vu de face ; normale cylindrique selon x dans le fil
+            const t = (py - top) / (bot - top) - 0.5;
+            for (let px = 0; px < fw - 1; px += 2) {
+              const v = (px / (fw - 1)) * 2 - 1, N = [v, 0.12 * t, Math.sqrt(Math.max(0, 1 - v * v))];
+              const T = [0, 1, 0];
+              let c;
+              if (!side) {
+                const nl = Math.max(0, N[0] * L[0] + N[1] * L[1] + N[2] * L[2]), nh = Math.max(0, N[0] * H[0] + N[1] * H[1] + N[2] * H[2]);
+                c = col.map((a) => a * nl * 0.55 + 0.35 * nh ** 40);
+              } else {
+                const shift = 0.08, T1 = [T[0] + N[0] * shift, T[1] + N[1] * shift, T[2] + N[2] * shift], T2 = [T[0] - N[0] * shift * 2, T[1] - N[1] * shift * 2, T[2] - N[2] * shift * 2];
+                const nrm = (a) => { const l = Math.hypot(...a); return a.map((x) => x / l); };
+                const a1 = nrm(T1), a2 = nrm(T2);
+                const s1 = Math.sqrt(Math.max(0, 1 - (a1[0] * H[0] + a1[1] * H[1] + a1[2] * H[2]) ** 2)), s2 = Math.sqrt(Math.max(0, 1 - (a2[0] * H[0] + a2[1] * H[1] + a2[2] * H[2]) ** 2));
+                const nl = N[0] * L[0] + N[1] * L[1] + N[2] * L[2];
+                const e1 = 2 / 0.25 ** 2, e2 = e1 / 4;
+                c = col.map((a) => a * Math.max(0, nl * 0.75 + 0.25) * 0.5 + (s1 ** e1) * 0.35 + a * (s2 ** e2) * 0.22);
+              }
+              const tone = c.map((x) => Math.round(255 * Math.min(1, x) ** (1 / 2.2)));
+              g.fillStyle = `rgb(${tone[0]},${tone[1]},${tone[2]})`;
+              g.fillRect(x0 + k * fw + px, py, 2, 2);
+            }
+          }
+          label(g, side ? 'deux lobes le long de la fibre' : 'surface ordinaire', side ? half + 12 : 12, 16);
+        }
+        d.status(Math.abs(d.s.el) < 8 ? 'lumière de face : le reflet est au milieu du ruban' : 'le reflet glisse le long des fils');
+      },
+    });
+
+    // ── 02 · une demi-géodésique ─────────────────────────────────────────────
+    demo('#fig-geo', {
+      title: 'r · sin α = c', aspect: 2.4,
+      controls: [
+        { key: 'c', label: 'Ouverture c (× rayon maximal)', min: 0.2, max: 0.9, step: 0.01, value: 0.45, fmt: (v) => v.toFixed(2) },
+        { key: 'shape', label: 'Forme (ovoïde, arachide, fuseau, sphère, poire, capsule, double cône)', min: 0, max: 6, step: 1, value: 0, fmt: (v) => SHAPES[Object.keys(SHAPES)[v]].label },
+      ],
+      draw(g, d) {
+        const { w, h } = d, P = makeProfile({ shape: Object.keys(SHAPES)[d.s.shape], R: 0.13, hub: 0.02 });
+        const c = d.s.c * P.rMax, G = geodesicHalf(P, c);
+        // profil
+        const sc = Math.min((h - 30) / P.H, (w * 0.32) / (2 * P.rMax)), cx = P.rMax * sc + 14, cy = h / 2;
+        g.strokeStyle = C.c1; g.lineWidth = 1.8; g.beginPath();
+        for (let i = 0; i < P.n; i++) { const x = cx + P.r[i] * sc, y = cy - P.y[i] * sc; i ? g.lineTo(x, y) : g.moveTo(x, y); }
+        g.stroke();
+        g.strokeStyle = alpha(C.c1, 0.35); g.beginPath(); for (let i = 0; i < P.n; i++) { const x = cx - P.r[i] * sc, y = cy - P.y[i] * sc; i ? g.lineTo(x, y) : g.moveTo(x, y); } g.stroke();
+        g.strokeStyle = C.c2; g.setLineDash([4, 4]);
+        for (const s of [G.a, G.b]) { const y = cy - P.yAt(s) * sc; g.beginPath(); g.moveTo(cx - P.rMax * sc - 8, y); g.lineTo(cx + P.rMax * sc + 8, y); g.stroke(); }
+        g.setLineDash([]);
+        label(g, 'r = c', cx + P.rMax * sc + 10, cy - P.yAt(G.b) * sc + 4, { color: C.c2 });
+        // carte déroulée
+        const x0 = 2 * P.rMax * sc + 60, x1 = w - 16, y0 = 14, y1 = h - 18;
+        g.strokeStyle = C.grid; g.strokeRect(x0, y0, x1 - x0, y1 - y0);
+        const X = (ph) => x0 + (ph / TAU) * (x1 - x0), Y = (s) => y1 - (s / P.len) * (y1 - y0);
+        g.strokeStyle = C.c3; g.lineWidth = 2; g.beginPath();
+        let wrap = 0;
+        for (let i = 0; i < G.sig.length; i += 4) { const ph = G.phi[i] % TAU, x = X(ph), y = Y(G.sig[i]); if (i && ph < wrap) g.moveTo(x, y); else if (i) g.lineTo(x, y); else g.moveTo(x, y); wrap = ph; }
+        g.stroke();
+        label(g, 'φ →', x1 - 26, y1 + 14); label(g, 'σ', x0 - 12, y0 + 10);
+        d.status(`Δφ½ = ${(G.dphi * 180 / Math.PI).toFixed(0)}° · angle au ventre ${(Math.asin(Math.min(1, c / P.rMax)) * 180 / Math.PI).toFixed(0)}°`);
+      },
+    });
+
+    // ── 03 · départs des circuits ────────────────────────────────────────────
+    demo('#fig-pattern', {
+      title: 'Avance 2πp/N', aspect: 1.9,
+      controls: [
+        { key: 'N', label: 'Circuits par couche N', min: 8, max: 60, step: 1, value: 34 },
+        { key: 'q', label: 'p / N', min: 0.02, max: 0.5, step: 0.005, value: 0.382, fmt: (v) => v.toFixed(3) },
+        { key: 'k', label: 'Circuits posés', min: 1, max: 60, step: 1, value: 12 },
+      ],
+      draw(g, d) {
+        const { w, h } = d, N = d.s.N, gcd = (a, b) => (b ? gcd(b, a % b) : a);
+        let p = Math.max(1, Math.round(d.s.q * N)); while (gcd(p, N) !== 1) p++;
+        const k = Math.min(d.s.k, N), cx = h / 2 + 10, cy = h / 2, R = h * 0.38;
+        const starts = Array.from({ length: k }, (_, i) => ((i * p) % N) / N * TAU);
+        const sorted = [...starts].sort((a, b) => a - b);
+        const gaps = sorted.map((a, i) => ((sorted[(i + 1) % k] - a + TAU) % TAU) || TAU);
+        g.lineWidth = 10;
+        sorted.forEach((a, i) => { g.strokeStyle = alpha(C.c1, 0.08 + 0.5 * gaps[i] / Math.max(...gaps)); g.beginPath(); g.arc(cx, cy, R, a, a + gaps[i]); g.stroke(); });
+        g.lineWidth = 2;
+        starts.forEach((a, i) => { g.strokeStyle = i === k - 1 ? C.c2 : C.ink; g.beginPath(); g.moveTo(cx + Math.cos(a) * (R - 12), cy + Math.sin(a) * (R - 12)); g.lineTo(cx + Math.cos(a) * (R + 12), cy + Math.sin(a) * (R + 12)); g.stroke(); });
+        const gx = h + 40;
+        label(g, `p = ${p}, N = ${N}`, gx, 30, { color: C.ink, size: 14 });
+        label(g, `plus grand vide / plus petit : ${(Math.max(...gaps) / Math.min(...gaps)).toFixed(2)}`, gx, 56);
+        label(g, `vides : ${new Set(gaps.map((x) => x.toFixed(4))).size} longueurs différentes`, gx, 80);
+        d.status(k >= N ? 'le motif est refermé' : `${N - k} circuits avant la fermeture`);
+      },
+    });
+
+    // ── 04 · familles : la paroi déroulée ───────────────────────────────────
+    {
+      const FAM = ['losange', 'cerclage', 'huit', 'meridien'];
+      const spec = (f) => ({ family: f, cage: { shape: 'ovoid', R: 0.13, hub: f === 'meridien' ? 0.016 : 0.024, ribs: 16, wire: 0.0016 },
+        band: { threads: f === 'huit' ? 5 : 11, thread: 0.0016, gap: 1.05, width: (f === 'huit' ? 5 : 11) * 0.0016 * 1.05 },
+        wind: { c1: 0.55, n1: 8, c2: 0.3, ribs: 5, mu: 0.85, amp: 0.04, k: 1.15, passes: 2 }, step: 0.006 });
+      let paths = null;
+      demo('#fig-families', {
+        title: 'La part S du ruban, posée', aspect: 2.6,
+        controls: [{ key: 'S', label: 'Part posée S', min: 0, max: 1, step: 0.005, value: 0.3, fmt: (v) => v.toFixed(3) }],
+        setup() { paths ??= FAM.map((f) => buildPath(spec(f))); },
+        draw(g, d) {
+          const { w, h } = d, cw = (w - 10) / 4;
+          paths.forEach(({ P, path }, i) => {
+            const x0 = 5 + i * cw + 6, x1 = 5 + (i + 1) * cw - 6, y0 = 22, y1 = h - 8;
+            g.fillStyle = alpha(C.c2, 0.06); g.fillRect(x0, y0, x1 - x0, y1 - y0);
+            label(g, FAM[i], x0, 16, { color: C.ink });
+            const n = Math.floor(path.sig.length * d.s.S), wb = P.rMax * 0.3;
+            const X = (ph) => x0 + (((ph % TAU) + TAU) % TAU) / TAU * (x1 - x0), Y = (s) => y1 - (s / P.len) * (y1 - y0);
+            g.strokeStyle = alpha(C.c1, 0.6); g.lineWidth = Math.max(1, (x1 - x0) * (P.rMax * 0.0 + (FAM[i] === 'huit' ? 0.0084 : 0.0185)) / (TAU * P.rMax));
+            g.beginPath();
+            let px = null;
+            for (let j = 0; j < n; j++) { const x = X(path.phi[j]), y = Y(path.sig[j]); if (px === null || Math.abs(x - px) > (x1 - x0) / 2) g.moveTo(x, y); else g.lineTo(x, y); px = x; }
+            g.stroke();
+            for (const mk of path.marks.slice(1)) if (d.s.S > mk.s) { const j = Math.floor(mk.s * path.sig.length); g.fillStyle = C.c2; g.beginPath(); g.arc(X(path.phi[j]), Y(path.sig[j]), 3, 0, TAU); g.fill(); }
+          });
+        },
+      });
+    }
+
+    // ── 05 · le dépôt en coupe ───────────────────────────────────────────────
+    demo('#fig-depot', {
+      title: 'Fils posés sur la carte de hauteur', aspect: 2.1, animate: true,
+      buttons: [{ key: 'flat', label: 'Sans dépôt', toggle: true, value: false }, { label: 'Reposer', onClick: (d) => d.reset() }],
+      setup(d) { d.state = { H: new Float32Array(400), fils: [], t: 0, pre: 45 }; },
+      draw(g, d) {
+        const { w, h } = d, S = d.state, N = S.H.length, r = 6 / 400 * 1, sc = w / N;
+        // une côte au milieu : la carte de départ
+        if (!S.init) { for (let i = 0; i < N; i++) S.H[i] = Math.max(0, 9 - Math.abs(i - 200) * 0.9) * 0 + (Math.abs(i - 200) < 6 ? 6 : 0); S.init = true; S.rand = 1; }
+        S.t += d.dt;
+        while (S.pre > 0 || (S.t > 0.12 && S.fils.length < 70)) {
+          if (S.pre > 0) S.pre--; else S.t = 0; S.rand = (S.rand * 16807) % 2147483647;
+          const c = 40 + (S.rand % 320), rad = 6;
+          let top = 0;
+          for (let i = c - rad; i <= c + rad; i++) top = Math.max(top, S.H[i] ?? 0);
+          const y = d.s.flat ? rad : top + rad;
+          S.fils.push({ c, y, rad });
+          for (let i = c - rad; i <= c + rad; i++) { const q = i - c; if (S.H[i] !== undefined) S.H[i] = Math.max(S.H[i], y + Math.sqrt(Math.max(0, rad * rad - q * q))); }
+          if (S.pre === 0 && S.t > 0) break;
+        }
+        const base = h - 20, k = 2.2;
+        g.fillStyle = alpha(C.c2, 0.4); g.beginPath(); g.arc(200 * sc, base - 6 * k, 6 * k * 0.9, 0, TAU); g.fill();
+        label(g, 'côte', 200 * sc - 12, base + 14);
+        for (const f of S.fils) { g.fillStyle = alpha(C.c1, 0.55); g.strokeStyle = C.c1; g.beginPath(); g.arc(f.c * sc, base - f.y * k, f.rad * k * 0.98, 0, TAU); g.fill(); g.stroke(); }
+        g.strokeStyle = alpha(C.ink, 0.4); g.beginPath(); g.moveTo(0, base); g.lineTo(w, base); g.stroke();
+        d.status(d.s.flat ? 'tous au rayon de la cage : ils se traversent' : `${S.fils.length} fils, aucun ne traverse son voisin`);
+      },
+    });
+
+    // ── 06 · la carte de transmission ────────────────────────────────────────
+    {
+      let W = null;
+      demo('#fig-cookie', {
+        title: 'Transmission T = τⁿ', aspect: 2.4,
+        controls: [
+          { key: 'S', label: 'Part posée S', min: 0, max: 1, step: 0.002, value: 0.35, fmt: (v) => v.toFixed(3) },
+          { key: 'tau', label: 'Transmission d’un fil τ', min: 0, max: 0.8, step: 0.01, value: 0.42, fmt: (v) => v.toFixed(2) },
+        ],
+        setup() {
+          W ??= windCocoon({ family: 'losange', cage: { shape: 'ovoid', R: 0.13, hub: 0.024, ribs: 16, wire: 0.0016 }, band: { threads: 8, thread: 0.0022, gap: 1.05, width: 8 * 0.0022 * 1.05 }, wind: { c1: 0.55, n1: 8, c2: 0.3 }, grid: { ns: 128, np: 256 }, step: 0.006 });
+        },
+        draw(g, d) {
+          const { w, h } = d, { Ns, Np } = W.grid, S = d.s.S, tau = d.s.tau;
+          const mw = Math.min(w * 0.62, (h - 40) * 2), mh = mw / 2, x0 = 10, y0 = 10;
+          const img = g.createImageData(Np, Ns), col = new Float32Array(Np);
+          for (let i = 0; i < Ns; i++) for (let k = 0; k < Np; k++) {
+            const c = (i * Np + k) * 4; let n = 0;
+            for (let q = 0; q < 4; q++) if (W.cook[c + q] < S) n++;
+            const T = tau ** n, o = ((Ns - 1 - i) * Np + k) * 4, v = Math.round(255 * T ** (1 / 2.2));
+            img.data[o] = v; img.data[o + 1] = Math.round(v * 0.92); img.data[o + 2] = Math.round(v * 0.78); img.data[o + 3] = 255;
+            if (Math.abs(i - Ns / 2) < 2) col[k] += T / 4;
+          }
+          const tmp = new OffscreenCanvas(Np, Ns); tmp.getContext('2d').putImageData(img, 0, 0);
+          g.imageSmoothingEnabled = false; g.drawImage(tmp, x0, y0, mw, mh);
+          label(g, 'paroi déroulée (pôle haut en haut)', x0, y0 + mh + 16);
+          // le mur : la rangée de l'équateur, agrandie et adoucie (la pénombre)
+          const mx0 = x0 + mw + 24, mx1 = w - 10, my = y0 + 10, mh2 = mh - 10;
+          for (let x = mx0; x < mx1; x++) {
+            const k = Math.floor((x - mx0) / (mx1 - mx0) * Np * 0.35);
+            let a = 0; for (let q = -2; q <= 2; q++) a += col[(k + q + Np) % Np] / 5;
+            const v = Math.round(255 * a ** (1 / 2.2));
+            g.fillStyle = `rgb(${v},${Math.round(v * 0.92)},${Math.round(v * 0.78)})`; g.fillRect(x, my, 1, mh2);
+          }
+          label(g, 'sur un mur (un tiers du tour)', mx0, y0 + mh + 16);
+          let open = 0; for (let i = 0; i < Ns; i++) for (let k = 0; k < Np; k++) if (W.cook[(i * Np + k) * 4] >= S) open++;
+          d.status(`${(100 * open / (Ns * Np)).toFixed(0)} % de jours`);
+        },
+      });
+    }
+
+    // ── 07 · l'œil sur la tangente ───────────────────────────────────────────
+    {
+      const P = makeProfile({ shape: 'ovoid', R: 0.13, hub: 0.024 }), env = 0.006, gap = 0.05;
+      demo('#fig-eye', {
+        title: 'Brin libre tangent', aspect: 1.5,
+        controls: [
+          { key: 's', label: 'Point de pose (le long du méridien)', min: 0.08, max: 0.92, step: 0.005, value: 0.42, fmt: (v) => `${Math.round(v * 100)} %` },
+          { key: 'a', label: 'Angle du ruban au méridien', min: 0, max: 80, step: 1, value: 35, fmt: (v) => `${v}°` },
+        ],
+        draw(g, d) {
+          const { w, h } = d, sc = (h - 30) / (P.H + 2 * gap + 0.05), cx = w * 0.35, cy = h / 2;
+          const pt = (r, y) => [cx + r * sc, cy - y * sc];
+          const curve = (off, color, wd, dash = []) => {
+            g.strokeStyle = color; g.lineWidth = wd; g.setLineDash(dash); g.beginPath();
+            for (let i = 0; i < P.n; i++) { const r = P.r[i] + P.dy[i] * off, y = P.y[i] - P.dr[i] * off; const [x, yy] = pt(r, y); i ? g.lineTo(x, yy) : g.moveTo(x, yy); }
+            g.stroke(); g.setLineDash([]);
+          };
+          curve(0, alpha(C.c1, 0.5), 1.4); curve(env, C.c1, 2.2); curve(env + gap, C.c2, 2.4, [6, 4]);
+          label(g, 'cage', ...pt(P.rMax * 0.55, -0.02)); label(g, 'cocon plein', ...pt(P.rMax * 0.35, -P.H * 0.42), { color: C.c1 }); label(g, 'rail', ...pt(P.rMax + gap + 0.012, 0.02), { color: C.c2 });
+          // point de pose et tangente (projetée dans le plan méridien : cos α)
+          const s = d.s.s * P.len, r0 = P.rAt(s) + P.dyAt(s) * env * 0.5, y0 = P.yAt(s) - P.drAt(s) * env * 0.5;
+          const ca = Math.cos(d.s.a * Math.PI / 180), tr = P.drAt(s) * ca, ty = P.dyAt(s) * ca;
+          // marche le long de la tangente jusqu'au rail (dans le plan : ρ grandit aussi par la composante hors plan)
+          let E = null;
+          for (let t = 0.005; t < 0.4; t += 0.002) {
+            const sa = Math.sin(d.s.a * Math.PI / 180);
+            const rho = Math.hypot(r0 + tr * t, sa * t), y = y0 + ty * t;
+            let i = 0; while (i < P.n - 1 && P.y[i + 1] < y) i++;
+            const railR = (y > P.y[0] && y < P.y[P.n - 1]) ? P.r[i] + env + gap : -1;
+            if (rho > railR) { E = [rho, y, t]; break; }
+          }
+          const [px, py] = pt(r0, y0);
+          g.fillStyle = C.ink; g.beginPath(); g.arc(px, py, 4, 0, TAU); g.fill();
+          if (E) {
+            const [ex, ey] = pt(E[0], E[1]);
+            g.strokeStyle = C.c3; g.lineWidth = 2; g.beginPath(); g.moveTo(px, py); g.lineTo(ex, ey); g.stroke();
+            g.fillStyle = C.c3; g.beginPath(); g.arc(ex, ey, 5, 0, TAU); g.fill();
+            label(g, 'œil', ex + 8, ey - 6, { color: C.c3 });
+            d.status(`brin libre : ${(E[2] * 100).toFixed(1)} cm`);
+          }
+        },
+      });
+    }
+
+    // ── 08 · la boucle ───────────────────────────────────────────────────────
+    {
+      const R = generate('p6');
+      const marks = [{ s: 0 }, { s: 0.1 }, { s: 0.62 }];
+      const prog = makeProgram(marks, R.tempo.speeds);
+      const T = R.tempo;
+      demo('#fig-loop', {
+        title: 'S, 1 − S, vitesse, angle du fléau', aspect: 2.6,
+        controls: [{ key: 'u', label: 'Phase de la boucle u', min: 0, max: 1, step: 0.001, value: 0.4, fmt: (v) => v.toFixed(3) }],
+        draw(g, d) {
+          const { w, h } = d, x0 = 40, x1 = w - 12, y0 = 14, y1 = h - 26;
+          const X = (u) => lerp(x0, x1, u), Y = (v) => lerp(y1, y0, v);
+          const S = (u) => (u < T.t0 ? 0 : u > T.t1 ? 1 : prog.S((u - T.t0) / (T.t1 - T.t0)));
+          const th = (u) => (u < T.s0 ? 0 : beamAngle((u - T.s0) / (T.s1 - T.s0), T.overshoot)) / Math.PI;
+          g.strokeStyle = C.grid; g.strokeRect(x0, y0, x1 - x0, y1 - y0);
+          const curve = (f, col, wd = 2) => { g.strokeStyle = col; g.lineWidth = wd; g.beginPath(); for (let i = 0; i <= 600; i++) { const u = i / 600; i ? g.lineTo(X(u), Y(f(u))) : g.moveTo(X(u), Y(f(u))); } g.stroke(); };
+          let vmax = 0; const vel = (u) => (S(Math.min(1, u + 0.001)) - S(Math.max(0, u - 0.001))) / 0.002;
+          for (let i = 0; i <= 200; i++) vmax = Math.max(vmax, vel(i / 200));
+          curve((u) => vel(u) / vmax * 0.9, alpha(C.c4, 0.8), 1.4);
+          curve(S, C.c1); curve((u) => 1 - S(u), alpha(C.c1, 0.45)); curve((u) => th(u) / 1.06, C.c2);
+          for (const mk of marks.slice(1)) { let lo = 0, hi = 1; for (let k = 0; k < 40; k++) { const m = (lo + hi) / 2; if (S(m) < mk.s) lo = m; else hi = m; } g.strokeStyle = alpha(C.ink, 0.3); g.setLineDash([3, 4]); g.beginPath(); g.moveTo(X(lo), y0); g.lineTo(X(lo), y1); g.stroke(); g.setLineDash([]); }
+          const u = d.s.u; g.strokeStyle = C.ink; g.beginPath(); g.moveTo(X(u), y0); g.lineTo(X(u), y1); g.stroke();
+          label(g, 'S (droite)', x0 + 6, y0 + 14, { color: C.c1 }); label(g, '1 − S (gauche)', x0 + 80, y0 + 14, { color: C.c1 });
+          label(g, 'vitesse du ruban', x0 + 186, y0 + 14, { color: C.c4 }); label(g, 'fléau / π', x0 + 310, y0 + 14, { color: C.c2 });
+          label(g, '0', X(0), y1 + 16, { align: 'center' }); label(g, '1', X(1), y1 + 16, { align: 'center' });
+          d.status(u > T.s0 && u < T.s1 ? 'la relève : le fléau tourne' : u > T.t1 ? 'les ailettes sont à l’arrêt' : `S = ${S(u).toFixed(3)}`);
+        },
+      });
+    }
+  </script>
+</body>
+</html>
