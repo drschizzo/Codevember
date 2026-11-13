@@ -82,7 +82,7 @@ export function createUI({ recipe: getRecipe, render, on, moods }) {
     add(fVessel, pick, 'body', opts(BODIES)).name('Matière').onChange((k) => { R.vessel.body = k; R.finish.body = structuredClone(BODIES[k]); on.finishChanged(); build(); });
     add(fVessel, pick, 'metal', opts(METALS)).name('Métal').onChange((k) => { R.vessel.metal = k; R.finish.metal = { ...METALS[k] }; on.finishChanged(); build(); });
     add(fVessel, pick, 'table', opts(TABLES)).name('Support').onChange((k) => { R.table.key = k; R.table.finish = { ...TABLES[k] }; on.finishChanged(); build(); });
-    for (const [F, label] of [[R.finish.body.outer, 'Face externe'], [R.finish.body.inner, 'Face interne'], [R.finish.body.edge, 'Lèvre'], [R.finish.metal, 'Métal'], [R.table.finish, 'Support']]) {
+    for (const [F, label] of [[R.finish.body.outer, 'Face externe'], [R.finish.body.inner, 'Face interne'], [R.finish.body.edge, 'Lèvre'], [R.finish.metal, 'Métal']]) {
       const fs = fVessel.addFolder(`${label} · ${F.label}`).close();
       folders.push(fs);
       const pk = { preset: F.preset };
@@ -92,10 +92,15 @@ export function createUI({ recipe: getRecipe, render, on, moods }) {
       for (const [k, l, a, b, st] of FIN) fs.add(F, k, a, b, st).name(l).onChange(() => on.finishChanged());
     }
 
+    // (le support a son propre shader : couleur, seconde couleur, rugosité)
+    addC(fVessel, R.table.finish, 'color').name('Support : couleur').onChange(() => on.finishChanged());
+    addC(fVessel, R.table.finish, 'color2').name('Support : veines, fils').onChange(() => on.finishChanged());
+    add(fVessel, R.table.finish, 'rough', 0.04, 1, 0.01).name('Support : rugosité').onChange(() => on.finishChanged());
+
     const K = R.cloud;
     add(fCloud, K, 'radius', 0.5, 1.6, 0.01).name('Rayon').onChange(ch);
-    add(fCloud, K, 'height', 0.4, 1.4, 0.01).name('Hauteur').onChange(ch);
-    add(fCloud, K, 'anvil', 0, 1.3, 0.01).name('Enclume').onChange(ch);
+    add(fCloud, K, 'height', 0.4, 1.4, 0.01).name('Hauteur (plafond)').onFinishChange(re);
+    add(fCloud, K, 'puffs', 4, 12, 1).name('Bouffées').onFinishChange(re);
     add(fCloud, K, 'density', 0.4, 1.6, 0.01).name('Densité').onChange(ch);
     add(fCloud, K, 'gap', 0.5, 1.4, 0.01).name('Hauteur de la base').onFinishChange(re);
     add(fCloud, K, 'seed', 0, 4, 0.01).name('Tirage du bruit').onChange(ch);
