@@ -4,7 +4,7 @@
 
 Au centre d'une sole en cuvette, un bain de verre en fusion. Une paraison en monte, se gonfle en tournant sur le plateau et prend forme. C'est une pièce de verrier : verre à pied, flûte, coupe sur pied, carafe à anse et bouchon, amphore à deux anses, flacon, cloche… Elle est côtelée, torse, lobée, festonnée ou godronnée, parfois filigranée de fils blancs. Elle refroidit en passant du jaune orangé au rouge sombre, puis au verre clair et teinté. Le plateau s'arrête et une machine descend du portique : un pendule à bille d'acier, un haut-parleur qui fait chanter le verre, un marteau de percussion, ou un chalumeau. La pièce se brise, filmée en caméra rapide. Les éclats tombent sous une gravité vraie, frappent la sole, rebondissent à peine, glissent et se couchent. La sole chauffe, les éclats rougeoient, s'affaissent et coulent au fond de la cuvette : c'est le bain de la pièce suivante. Après deux à quatre pièces, la première renaît du dernier bain : la boucle se referme sans raccord.
 
-![Trois décors : Atelier, Cathédrale, Givre](docs/capture.jpg)
+![Une carafe rouge qui éclate sous le choc du pendule, dans l’Atelier](docs/capture.jpg)
 
 Rendu physique en three.js (WebGPU, TSL). La scène est entièrement procédurale : une graine produit une scène. La démarche qui a conduit à ce concept est dans [docs/concept.md](docs/concept.md) : dix pistes notées, les clichés écartés, puis la révision après les premiers rendus (les trois épreuves : crédibilité, variété, ambition).
 
