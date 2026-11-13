@@ -148,6 +148,16 @@ function tube(curve, radius, segs = 48, sides = 14, acc0 = 2) {
   return grid(P, segs + 1, sides, (k) => acc0 + k / segs, (k, i, p) => p.map((x, c) => x - C[k][c]));
 }
 
+// spline de Catmull-Rom passant par les points de contrôle, n sous-pas par segment
+function catmull(P, n) {
+  const out = [], at = (i) => P[Math.max(0, Math.min(P.length - 1, i))];
+  for (let i = 0; i < P.length - 1; i++) for (let j = 0; j < n; j++) {
+    const t = j / n, a = at(i - 1), b = at(i), c = at(i + 1), d = at(i + 2), t2 = t * t, t3 = t2 * t;
+    out.push([0, 1].map((k) => 0.5 * (2 * b[k] + (c[k] - a[k]) * t + (2 * a[k] - 5 * b[k] + 4 * c[k] - d[k]) * t2 + (3 * b[k] - a[k] - 3 * c[k] + d[k]) * t3)));
+  }
+  out.push(P[P.length - 1].slice());
+  return out;
+}
 // petit corps de révolution fermé aux deux bouts (bouchon)
 function closedLathe(prof, cx, cy, cz, cols = 40, acc0 = 2) {
   const P = prof.map(([r, y]) => Array.from({ length: cols }, (_, i) => { const a = (i / cols) * Math.PI * 2; return [cx + r * Math.cos(a), cy + y, cz + r * Math.sin(a)]; }));
@@ -199,8 +209,15 @@ export function shellSurface(spec, { rows = 110, cols = 144 } = {}) {
   if (wanted.has('anses2')) { parts.push(handle(th0, 0.8, 0.55, 0.12)); parts.push(handle(th0 + Math.PI, 0.8, 0.55, 0.12)); }
   if (wanted.has('bouchon') && !flip) {
     const top = pts[rows], rn = Math.max(0.02, top.r) * S;
-    const prof = [[0, -0.5 * rn], [rn * 0.85, -0.45 * rn], [rn * 0.9, 0.15 * rn], [rn * 0.6, 0.4 * rn], [rn * 0.55, 0.7 * rn], [rn * 1.7, 1.4 * rn], [rn * 2.1, 2.6 * rn], [rn * 1.5, 3.6 * rn], [rn * 0.5, 4.1 * rn], [0, 4.2 * rn]];
-    parts.push(closedLathe(prof, 0, top.y * S, 0, 40, 2));
+    // (profil de contrôle lissé par une spline de Catmull-Rom : dix points
+    // reliés en ligne brisée donnaient une boule octogonale, facettée de profil)
+    const ctrl = [[0, -0.5], [0.85, -0.45], [0.9, 0.15], [0.62, 0.42], [0.55, 0.72], [1.15, 1.2], [1.55, 1.9], [1.55, 2.55], [1.15, 3.15], [0.5, 3.52], [0, 3.6]];
+    // (la tige rodée épouse l'embouchure, mais la tête est proportionnée au col,
+    // pas à l'embouchure : une carafe évasée recevait une boule de 15 cm)
+    const rf = Math.min(rn, 0.085 * S), yk = 0.72;
+    const prof = catmull(ctrl, 6).map(([r, y]) => (y <= yk ? [Math.max(0, r) * rn, y * rn] : [Math.max(0, r) * (rn + (rf - rn) * Math.min(1, (y - yk) / 0.5)), yk * rn + (y - yk) * rf]));
+    prof[0][0] = 0; prof[prof.length - 1][0] = 0;
+    parts.push(closedLathe(prof, 0, top.y * S, 0, 72, 2));
   }
   if (wanted.has('fil') && !flip) {
     // fil appliqué : un filet de verre enroulé en spirale autour du col ou de la panse

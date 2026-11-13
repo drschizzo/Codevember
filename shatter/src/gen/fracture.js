@@ -22,7 +22,7 @@
 //    éclats, à vitesse finie), vitesse, rotation, effritement.
 import { createRng, createNoise3 } from '../rng.js';
 import { shellSurface } from './forms.js';
-import { PH, landing } from '../cycle.js';
+import { PH } from '../cycle.js';
 
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
@@ -82,10 +82,18 @@ function makeMetric(spec, surf, rng) {
     dist = (a, b) => Math.hypot(a[0] - b[0], wrapPi(a[1] - b[1]));
     const rays = spec.rays ?? 11, lo = Math.log(rmin * 1.4), hi = Math.log(S * 1.6);
     const step = ((2 * Math.PI) / rays) / A * (spec.ringStep ?? 0.5);
+    // Loin de l'impact, la loi de puissance seule donnerait des lamelles de la
+    // hauteur de la pièce (15 à 30 cm), qui, couchées sur leur dos courbe, se
+    // dressent en arceaux au-dessus du tas. Les fissures radiales se
+    // ramifient et les anneaux se resserrent pour qu'aucun éclat ne dépasse
+    // ~cap (≈ 6 cm), comme sur un vrai verre creux percé par une bille.
+    const cap = S * 0.26;
     let ring = 0;
-    for (let L = lo; L < hi; L += step * (0.85 + 0.3 * rng.next()), ring++) {
-      const n = rays * (ring >= (spec.branchAt ?? 3) ? 2 : 1), off = rng.next() * 2 * Math.PI;
-      for (let j = 0; j < n; j++) seeds.push([(L + rng.range(-0.25, 0.25) * step) * A, wrapPi(off + (2 * Math.PI * (j + rng.range(-0.3, 0.3))) / n)]);
+    for (let L = lo; L < hi; ring++) {
+      const rho = Math.exp(L), dL = Math.min(step, Math.log(1 + cap / rho));
+      const n = Math.max(rays * (ring >= (spec.branchAt ?? 3) ? 2 : 1), Math.round((2 * Math.PI * rho) / cap)), off = rng.next() * 2 * Math.PI;
+      for (let j = 0; j < n; j++) seeds.push([(L + rng.range(-0.25, 0.25) * dL) * A, wrapPi(off + (2 * Math.PI * (j + rng.range(-0.3, 0.3))) / n)]);
+      L += dL * (0.85 + 0.3 * rng.next());
     }
     seeds.push([Math.log(rmin) * A, 0]); // (zone broyée)
   } else if (mech === 'resonance') {
@@ -151,6 +159,78 @@ function clip(poly, tags, l, m, labels) {
   return { poly: out, tags: otags };
 }
 
+// ── Composantes connexes d'un ensemble de polygones ──────────────────────────
+// (polygones qui partagent un sommet ; positions arrondies au 1/100 000)
+const qk = (p) => `${Math.round(p[0] * 1e5)},${Math.round(p[1] * 1e5)},${Math.round(p[2] * 1e5)}`;
+function components(polys) {
+  const par = polys.map((_, i) => i);
+  const find = (i) => { while (par[i] !== i) i = par[i] = par[par[i]]; return i; };
+  const owner = new Map();
+  polys.forEach(({ poly }, i) => {
+    for (const V of poly) { const k = qk(V.p); if (owner.has(k)) par[find(i)] = find(owner.get(k)); else owner.set(k, i); }
+  });
+  const groups = new Map();
+  polys.forEach((pp, i) => { const r = find(i); if (!groups.has(r)) groups.set(r, []); groups.get(r).push(pp); });
+  return [...groups.values()];
+}
+
+// ── Éclats secondaires ───────────────────────────────────────────────────────
+// Un grand éclat est pré-découpé en n morceaux (Voronoï euclidien, germes
+// espacés par l'échantillonnage de Mitchell), qui restent collés : la
+// simulation (sim.js) ne les sépare que si l'éclat heurte assez fort la sole
+// ou un autre éclat. Distances au carré : leurs différences varient
+// linéairement le long d'une arête, les fissures secondaires sont donc des
+// segments exacts. Les chants créés portent l'étiquette -3 (chant, mais pas de
+// ligne de fissure allumée par le front primaire).
+function splitSecondary(polys, n, r) {
+  const tris = [];
+  let tot = 0;
+  for (const { poly } of polys) for (let k = 1; k < poly.length - 1; k++) {
+    const a = poly[0].p, b = poly[k].p, c = poly[k + 1].p;
+    tot += len(cross(sub(b, a), sub(c, a))) / 2;
+    tris.push([tot, a, b, c]);
+  }
+  const pick = () => {
+    const x = r.next() * tot;
+    let lo = 0, hi = tris.length - 1;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (tris[m][0] < x) lo = m + 1; else hi = m; }
+    let u = r.next(), v = r.next();
+    if (u + v > 1) { u = 1 - u; v = 1 - v; }
+    const [, a, b, c] = tris[lo];
+    return add(a, add(mul(sub(b, a), u), mul(sub(c, a), v)));
+  };
+  const seeds = [pick()];
+  while (seeds.length < n) {
+    let best = null, bd = -1;
+    for (let i = 0; i < 12; i++) { const p = pick(), d = Math.min(...seeds.map((q) => len(sub(p, q)))); if (d > bd) { bd = d; best = p; } }
+    seeds.push(best);
+  }
+  const L = seeds.map((_, j) => 1e6 + j);
+  const outs = new Map(L.map((l) => [l, []]));
+  for (const { poly, tags } of polys) {
+    const verts = poly.map((V) => {
+      const d = {};
+      L.forEach((l, j) => { const q = seeds[j]; d[l] = (V.p[0] - q[0]) ** 2 + (V.p[1] - q[1]) ** 2 + (V.p[2] - q[2]) ** 2; });
+      return { p: V.p, n: V.n, a: V.a, d };
+    });
+    const nearest = verts.map((V) => L.reduce((b, l) => (V.d[l] < V.d[b] ? l : b), L[0]));
+    // (tous les sommets du même côté de chaque bissectrice : le polygone entier)
+    if (nearest.every((x) => x === nearest[0])) { outs.get(nearest[0]).push({ poly: verts, tags: tags.slice() }); continue; }
+    for (const l of L) {
+      let cur = { poly: verts, tags };
+      for (const m of L) {
+        if (m === l) continue;
+        cur = clip(cur.poly, cur.tags, l, m, L);
+        if (cur.poly.length < 3) break;
+      }
+      if (cur.poly.length >= 3) outs.get(l).push({ poly: cur.poly, tags: cur.tags.map((t) => (t >= 1e6 ? -3 : t)) });
+    }
+  }
+  const groups = [];
+  for (const g of outs.values()) if (g.length) groups.push(...components(g));
+  return groups;
+}
+
 // ── Fracture complète ────────────────────────────────────────────────────────
 // spec : { seed, form, size, thickness, mech, … , Ts } ; renvoie les tampons du
 // maillage (tous les éclats dans un seul maillage) et la table des éclats
@@ -192,7 +272,7 @@ export function fracture(spec, opts = {}) {
   }
 
   // régions de chaque triangle
-  const regions = new Map(); // label → [{ poly, tags }]
+  let regions = new Map(); // label → [{ poly, tags }]
   const T = surf.tri;
   const edgeKey = (a, b) => (a < b ? `${a}_${b}` : `${b}_${a}`);
   for (let t = 0; t < T.length; t += 3) {
@@ -228,6 +308,28 @@ export function fracture(spec, opts = {}) {
     }
   }
 
+  // ── Composantes connexes ──
+  // Une métrique projetée (log-polaire de la bille, angle × abscisse de la
+  // résonance) envoie plusieurs zones disjointes de la coque — devant et
+  // derrière du col, deux côtés de la panse — vers le même germe. Gardées
+  // ensemble, elles formeraient un « éclat » en morceaux séparés qui bougent
+  // d'un bloc : l'un repose sur la sole, l'autre flotte à côté. Chaque région
+  // est donc découpée en ses composantes (polygones qui partagent un sommet).
+  const keyComp = new Map(); // germe | sommet → composante
+  {
+    const split = new Map();
+    let next = 0;
+    for (const [l, polys] of regions) {
+      for (const g of components(polys)) {
+        const id = next++;
+        split.set(id, g);
+        for (const { poly } of g) for (const V of poly) keyComp.set(`${l}|${qk(V.p)}`, id);
+      }
+    }
+    regions = split;
+  }
+  const compOf = (m, a, b) => keyComp.get(`${m}|${qk(a)}`) ?? keyComp.get(`${m}|${qk(b)}`);
+
   // ── Éclats : statistiques, graphe ──
   const labels = [...regions.keys()];
   const index = new Map(labels.map((l, i) => [l, i]));
@@ -241,7 +343,11 @@ export function fracture(spec, opts = {}) {
         F.area += ar; F.c = add(F.c, mul(ctr, ar)); F.n = add(F.n, mul(poly[0].n, ar));
       }
       for (const V of poly) F.amax = Math.max(F.amax, V.a);
-      tags.forEach((m) => { if (m >= 0 && index.has(m)) F.nb.add(index.get(m)); });
+      tags.forEach((m, k) => {
+        if (m < 0) return;
+        const c = compOf(m, poly[k].p, poly[(k + 1) % poly.length].p);
+        if (c !== undefined && index.has(c)) F.nb.add(index.get(c));
+      });
     }
   }
   for (const F of frags) {
@@ -276,6 +382,7 @@ export function fracture(spec, opts = {}) {
 
   // ── Vitesses, rotations, effritement ──
   const center = [0, 0, 0];
+  const topY = frags.reduce((m, F) => Math.max(m, F.c[1]), 0);
   // (la bille du pendule arrive à l'horizontale, au bas de sa course)
   const dirIn = norm([-M.n0[0] + rng.range(-0.12, 0.12), 0, -M.n0[2] + rng.range(-0.12, 0.12)]);
   const force = spec.force ?? 1;
@@ -292,10 +399,18 @@ export function fracture(spec, opts = {}) {
       const out = norm([F.n[0], 0, F.n[2]]);
       v = mul(norm(add(add(out, [0, 0.12, 0]), jit)), S * (0.25 + 0.9 * Math.min(1, F.amax) ** 2) * PHYS);
     } else if (spec.mech === 'tempered') {
-      v = mul(norm(add(norm(sub(F.c, center)), mul(jit, 2.5))), S * r.range(0.45, 0.8) * PHYS);
+      // (la paroi se détend : les dés partent à l'horizontale, depuis l'axe de la
+      // pièce à leur hauteur, un peu vers le haut ; dirigés depuis le pied, ceux
+      // du col jaillissaient à la verticale, en geyser hors du cadre)
+      const outw = norm([F.c[0] - center[0], 0, F.c[2] - center[2]]);
+      v = mul(norm(add(add(outw, [0, 0.3, 0]), add(mul(F.n, 0.4), mul(jit, 2.2)))), S * r.range(0.35, 0.65) * PHYS);
     } else {
-      // (choc thermique : les pièces se séparent à peine, puis la gravité les couche)
-      v = mul(norm(add(F.n, mul(jit, 1.5))), S * r.range(0.02, 0.06) * PHYS);
+      // (choc thermique : les pièces se séparent à peine, puis la gravité les
+      // couche. Lâchées à la verticale, celles du haut descendaient à travers
+      // celles du bas : la pièce s'ouvre donc vers l'extérieur, d'autant plus
+      // que l'éclat est haut, et le col retombe à côté de la panse)
+      const outw = norm([F.c[0] + 1e-4, 0, F.c[2]]), hn = Math.min(1, Math.max(0, F.c[1] / (topY || 1)));
+      v = add(mul(norm(add(F.n, mul(jit, 1.5))), S * r.range(0.02, 0.05) * PHYS), mul(outw, S * PHYS * (0.03 + 0.11 * hn * hn)));
     }
     v = mul(v, force);
     F.v = v;
@@ -304,10 +419,28 @@ export function fracture(spec, opts = {}) {
     const sz = Math.sqrt(F.area) / S;
     F.w = PHYS * 2 * r.sign() * r.range(1.2, 3.2) * Math.min(3, Math.sqrt(0.25 / Math.max(0.02, sz))) * (spec.mech === 'thermal' ? 0.4 : 1);
     F.tc = tc[i];
-    // fonte : la sole chauffe ; les éclats tombés près du centre fondent d'abord
-    const rest = h * 0.5, tL = landing(F, rest), xL = F.c[0] + v[0] * tL, zL = F.c[2] + v[2] * tL;
-    F.tm = Ts * (PH.melt + PH.meltSpan * Math.min(1, Math.hypot(xL, zL) / 3) + 0.01 * r.next());
-    F.rnd = r.next();
+    F.tm = Ts * PH.melt; // (l'instant de fonte dépend de l'endroit où l'éclat s'arrête : sim.js)
+  });
+
+  // ── Éclats secondaires (collés dans leur parent) ──
+  // (pas pour la trempe : ses dés sont déjà à la taille finale)
+  const sec = spec.mech === 'tempered' ? 0 : (spec.secondary ?? 1);
+  const shards = [];
+  labels.forEach((l, fi) => {
+    const F = frags[fi], polys = regions.get(l);
+    const n = sec ? Math.max(1, Math.min(6, Math.floor(F.area / (0.0225 * S * S)))) : 1;
+    const groups = n > 1 ? splitSecondary(polys, n, rng.fork(`sec${fi}`)) : [polys];
+    F.children = [];
+    for (const g of groups) {
+      const Sh = { parent: fi, polys: g, area: 0, c: [0, 0, 0], n: [0, 0, 0], v: F.v, w: F.w, axis: F.axis, tc: F.tc, tm: F.tm, rad: 0 };
+      for (const { poly } of g) for (let k = 1; k < poly.length - 1; k++) {
+        const ar = len(cross(sub(poly[k].p, poly[0].p), sub(poly[k + 1].p, poly[0].p))) / 2;
+        Sh.area += ar; Sh.c = add(Sh.c, mul(mul(add(poly[0].p, add(poly[k].p, poly[k + 1].p)), 1 / 3), ar)); Sh.n = add(Sh.n, mul(poly[0].n, ar));
+      }
+      Sh.n = norm(Sh.n); Sh.c = sub(mul(Sh.c, 1 / Math.max(1e-12, Sh.area)), mul(Sh.n, h / 2));
+      F.children.push(shards.length);
+      shards.push(Sh);
+    }
   });
 
   // ── Maillage ──
@@ -319,8 +452,11 @@ export function fracture(spec, opts = {}) {
     if (key && fragVerts.has(key)) return fragVerts.get(key);
     const i = out.position.length / 3;
     out.position.push(...p); out.normal.push(...norm(n)); out.surf.push(s[0], s[1], s[2], 0); // (w : 255 sur les lignes de fissure, voir plus bas)
-    out.rigA.push(...F.c, F.tc); out.rigB.push(...F.v, F.w); out.rigC.push(...F.axis, F.tm);
-    out.rigD.push(a > 1.5 ? a : Math.min(1, Math.max(0, a + accNoise(p))), 0, 0, 0); // (hauteur de repos et direction « vers le bas », complétées plus bas)
+    // rigA : centre de l'éclat au repos, instant de fissure ; rigB.x : indice de
+    // l'éclat (sa ligne dans la texture de trajectoire) ; rigC.w : début de la
+    // fonte (sim.js) ; rigD.x : paramètre de soufflage
+    out.rigA.push(...F.c, F.tc); out.rigB.push(F.index, 0, 0, 0); out.rigC.push(0, 0, 0, F.tm);
+    out.rigD.push(a > 1.5 ? a : Math.min(1, Math.max(0, a + accNoise(p))), 0, 0, 0);
     F.rad = Math.max(F.rad, len(sub(p, F.c)));
     if (key) fragVerts.set(key, i);
     return i;
@@ -332,11 +468,11 @@ export function fracture(spec, opts = {}) {
   const q = (x) => Math.round(x * 1e6);
   const kp = (p, tag) => `${tag}${q(p[0])},${q(p[1])},${q(p[2])}`;
   const fragRanges = [];
-  labels.forEach((l, fi) => {
-    const F = frags[fi];
+  shards.forEach((F, si) => {
+    F.index = si;
     fragVerts = new Map();
     const first = out.position.length / 3;
-    for (const { poly, tags } of regions.get(l)) {
+    for (const { poly, tags } of F.polys) {
       const o = poly.map((V) => vert(F, V.p, V.n, OUT, V.a, kp(V.p, 'o')));
       const inn = poly.map((V) => { const nn = norm(V.n); return vert(F, sub(V.p, mul(nn, h)), mul(nn, -1), IN, V.a, kp(V.p, 'i')); });
       const nAvg = poly.reduce((s, V) => add(s, V.n), [0, 0, 0]);
@@ -366,35 +502,6 @@ export function fracture(spec, opts = {}) {
     }
     fragRanges.push([first, out.position.length / 3]);
   });
-  // rayon de chaque éclat (effritement du bord vers le cœur)
-  // ── Position de repos de chaque éclat ──
-  // Un éclat courbe ne se pose pas sur sa normale moyenne (une moitié de vase
-  // resterait dressée, ses bords écrasés dans la sole) : il se pose dans sa
-  // position stable, celle où son centre de gravité est le plus bas. Parmi
-  // ~120 directions, on garde la direction « vers le bas » d qui minimise la
-  // hauteur du centre au-dessus du point le plus bas (le support). Le shader
-  // couche l'éclat sur d et pose son centre à cette hauteur : aucun sommet sous la sole.
-  const fib = Array.from({ length: 120 }, (_, i) => { const y = 1 - (2 * (i + 0.5)) / 120, rr = Math.sqrt(1 - y * y), t = i * 2.399963; return [rr * Math.cos(t), y, rr * Math.sin(t)]; });
-  const P3 = out.position;
-  labels.forEach((l, fi) => {
-    const Fr = frags[fi], [a, b] = fragRanges[fi];
-    const step = Math.max(1, Math.floor((b - a) / 400));
-    let best = null, bs = Infinity;
-    for (const d of [Fr.n, mul(Fr.n, -1), ...fib]) {
-      let sup = -Infinity;
-      for (let i = a; i < b; i += step) sup = Math.max(sup, (P3[3 * i] - Fr.c[0]) * d[0] + (P3[3 * i + 1] - Fr.c[1]) * d[1] + (P3[3 * i + 2] - Fr.c[2]) * d[2]);
-      if (sup < bs) { bs = sup; best = d; }
-    }
-    Fr.d = best; Fr.sup = bs + 0.003;
-    const l1 = Math.abs(best[0]) + Math.abs(best[1]) + Math.abs(best[2]);
-    let ox = best[0] / l1, oz = best[2] / l1;
-    if (best[1] < 0) { const tx = (1 - Math.abs(oz)) * Math.sign(ox || 1), tz = (1 - Math.abs(ox)) * Math.sign(oz || 1); ox = tx; oz = tz; }
-    // (la fonte dépend de l'endroit où il tombe : recalculée avec la vraie hauteur de repos)
-    const tL = landing(Fr, Fr.sup), xL = Fr.c[0] + Fr.v[0] * tL, zL = Fr.c[2] + Fr.v[2] * tL;
-    Fr.tm = Ts * (PH.melt + PH.meltSpan * Math.min(1, Math.hypot(xL, zL) / 3) + 0.01 * ((fi * 0.618) % 1));
-    for (let i = a; i < b; i++) { out.rigD[4 * i + 1] = Fr.sup; out.rigD[4 * i + 2] = ox; out.rigD[4 * i + 3] = oz; out.rigC[4 * i + 3] = Fr.tm; }
-  });
-
   const nVert = out.position.length / 3;
   return {
     mesh: {
@@ -402,7 +509,11 @@ export function fracture(spec, opts = {}) {
       rigA: Float32Array.from(out.rigA), rigB: Float32Array.from(out.rigB), rigC: Float32Array.from(out.rigC), rigD: Float32Array.from(out.rigD),
       index: nVert < 65536 ? Uint16Array.from(out.index) : Uint32Array.from(out.index),
     },
-    frags: frags.map((F, i) => ({ c: F.c, v: F.v, axis: F.axis, w: F.w, tc: F.tc, tm: F.tm, n: F.n, d: F.d, sup: F.sup, rad: F.rad, area: F.area, range: fragRanges[i] })),
+    // frags : les éclats dessinés (sous-éclats compris), chacun avec son parent ;
+    // bodies : les éclats primaires, corps de la simulation tant qu'ils ne se
+    // brisent pas
+    frags: shards.map((F, i) => ({ c: F.c, v: F.v, axis: F.axis, w: F.w, tc: F.tc, tm: F.tm, n: F.n, rad: F.rad, area: F.area, range: fragRanges[i], parent: F.parent })),
+    bodies: frags.map((F) => ({ c: F.c, v: F.v, axis: F.axis, w: F.w, tc: F.tc, area: F.area, children: F.children })),
     origin: M.O, normal: M.n0, dir: dirIn, size: S, thickness: h,
     tFront: [t0, Math.max(...frags.map((F, i) => tc[i]))],
   };

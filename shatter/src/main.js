@@ -181,7 +181,26 @@ async function main() {
   // sub : décalages d'un rendu accumulé (lentille, pixel), facultatif
   // azimut de la caméra du film (position : sin az, cos az)
   const camAzAt = (ph) => { const C = R.camera; return C.az + TAU * C.orbit * ph + C.sway * Math.sin(TAU * ph); };
-  let lastT = null;
+  let lastT = null, focusDist = 6;
+  // Recul minimal pour qu'en plongée le sommet de la plus haute pièce reste dans
+  // l'image (le recul calculé pour une caméra horizontale coupait le bouchon).
+  // Calculé une fois par scène et par format, par bissection, sur la caméra la
+  // plus haute de la boucle : continu, il ne fait jamais sauter le cadre.
+  let fitKey = '', fitD = 0;
+  const _cam = new THREE.PerspectiveCamera();
+  function plungeFit(H) {
+    const C = R.camera, k = `${R.seed}|${H}|${camera.aspect}|${C.height}|${C.fov}`;
+    if (k === fitKey) return fitD;
+    _cam.fov = C.fov; _cam.aspect = camera.aspect; _cam.updateProjectionMatrix();
+    const top = (d) => {
+      _cam.position.set(0, Math.max(C.height + 0.15, floorH(d) + 0.3), d); _cam.lookAt(0, H * 0.48, 0); _cam.updateMatrixWorld();
+      return _f.set(0, H * 1.04 + 0.08, 0).project(_cam).y;
+    };
+    let lo = 1, hi = 40;
+    for (let i = 0; i < 40; i++) { const m = (lo + hi) / 2; if (top(m) > 0.84) lo = m; else hi = m; }
+    fitKey = k; fitD = hi;
+    return hi;
+  }
   function renderAt(u, sub = null) {
     const ph = u - Math.floor(u);
     const N = R.pieces.length, Ts = R.loop.stage, T = loopDuration(R);
@@ -205,12 +224,14 @@ async function main() {
       const az = camAzAt(ph);
       // (recul minimal pour que la plus haute pièce tienne dans l'image, bord compris)
       const fit = (stage.maxHeight() * 0.55 + 0.45) / Math.tan(((C.fov / 2) * Math.PI) / 180);
-      const d = Math.max(C.dist, fit) * (1 - C.push * push);
+      const H = stage.maxHeight();
+      const d = Math.max(C.dist, fit, plungeFit(H)) * (1 - C.push * push);
       const y = C.height + 0.15 * Math.sin(TAU * ph * 2 + 1) - 0.3 * push;
       // (jamais sous le bord relevé de la sole)
       camera.position.set(Math.sin(az) * d, Math.max(y, floorH(d) + 0.3), Math.cos(az) * d);
       camera.up.set(0, 1, 0);
-      camera.lookAt(0, stage.maxHeight() * 0.48 - 0.3 * push, 0);
+      camera.lookAt(0, H * 0.48 - 0.3 * push, 0);
+      focusDist = camera.position.distanceTo(_r.set(0, stage.maxHeight() * 0.45, 0));
     }
     if (camera.fov !== C.fov) { camera.fov = C.fov; camera.updateProjectionMatrix(); }
     camera.clearViewOffset();
@@ -230,7 +251,8 @@ async function main() {
     scene.environmentIntensity = R.env.intensity;
     scene.environmentRotation.set(0, R.env.rotation, 0);
     stage.update(t, camera, (tt) => camAzAt(tt / loopDuration(R)));
-    post.update({ ...RENDER, lite: LITE, focus: RENDER.focus * C.dist, focusRange: RENDER.focusRange * C.dist }, R);
+    // (mise au point sur la pièce : la vraie distance, qui suit le recul et l'approche)
+    post.update({ ...RENDER, lite: LITE, focus: RENDER.focus * focusDist, focusRange: RENDER.focusRange * focusDist }, R);
     post.render();
   }
   // Rendu hors de la boucle d'animation (export, image fixe, débogage) : three.js
