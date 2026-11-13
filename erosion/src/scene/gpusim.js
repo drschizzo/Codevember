@@ -15,10 +15,16 @@
 // pas et lues par un décalage dynamique dans un tampon d'uniformes.
 //
 // Enregistrement (passe record) : FT états du lit à pleine résolution (b − b₀
-// en demi-flottant, 2 octets : assez d'états pour qu'une marche qui remonte une
-// vallée avance d'environ une cellule par état — à 2 ou 3 cellules, elle
-// s'effaçait d'un côté et apparaissait de l'autre, en « stop motion »), FM
-// états de sa mémoire (le plus bas atteint, l'humidité, les rides, 4 octets) et FW états de l'eau à demi-résolution
+// en demi-flottant), FM états de sa mémoire (le plus bas atteint, l'humidité,
+// les rides, 4 octets), et, avec chaque état du lit et de l'eau, l'INSTANT où
+// chaque cellule a changé dans l'intervalle qui le précède : pendant la
+// simulation, une passe accumule pour chaque cellule Σ|Δ|, Σ t·|Δ|, Σ t²·|Δ|
+// (t : position du pas dans l'intervalle) ; on en tire l'instant moyen du
+// changement et son étalement (8 bits chacun). À la relecture, chaque cellule
+// bascule de sa valeur à la suivante à cet instant-là : un front d'eau, une
+// marche qui remonte une vallée se déplacent à leur vraie vitesse, au lieu de
+// s'effacer d'un côté pendant qu'ils apparaissent de l'autre (le « stop
+// motion » de toute interpolation qui mélange deux états, si lisse soit-elle) et FW états de l'eau à demi-résolution
 // (surface libre − b₀, turbidité, vitesse). Puis, à chaque image, la passe
 // resolve interpole les états — le relief en Catmull-Rom dans le temps sur
 // quatre états, borné par les deux états encadrants : sa vitesse est continue
@@ -258,17 +264,12 @@ struct Rec { frame: u32, kind: u32, p0: u32, p1: u32 };
 @group(0) @binding(1) var<storage, read> sA: array<f32>;
 @group(0) @binding(2) var<storage, read> aux: array<vec4f>;
 @group(0) @binding(3) var<storage, read> stat: array<vec4f>;
-@group(0) @binding(4) var<storage, read_write> recT: array<u32>;    // b − b₀ de deux cellules voisines
+@group(0) @binding(4) var<storage, read_write> recT: array<u32>;    // (écrit par le module des instants)
 @group(0) @binding(5) var<storage, read_write> recW: array<vec2u>;
 @group(0) @binding(6) var<storage, read_write> prev: array<vec2f>;   // aperçu 128 × 64 (écran de chargement)
 @group(0) @binding(7) var<storage, read_write> recM: array<u32>;    // bmin − b₀ (demi-flottant), humidité, rides (8 bits)
 @group(1) @binding(0) var<uniform> R: Rec;
 
-@compute @workgroup_size(64) fn recTerrain(@builtin(global_invocation_id) gid: vec3u) {
-  let p = gid.x; if (p >= N / 2u) { return; }
-  let c = 2u * p;
-  recT[R.frame * (N / 2u) + p] = pack2x16float(vec2f(cell[c].x - stat[c].x, cell[c + 1u].x - stat[c + 1u].x));
-}
 @compute @workgroup_size(64) fn recMemory(@builtin(global_invocation_id) gid: vec3u) {
   let c = gid.x; if (c >= N) { return; }
   let bm = pack2x16float(vec2f(cell[c].z - stat[c].x, 0.0)) & 0xFFFFu;
@@ -304,6 +305,67 @@ struct Rec { frame: u32, kind: u32, p0: u32, p1: u32 };
 `;
 }
 
+// ── Instants des changements : accumulation à chaque pas, enregistrement ──
+function wgslTiming(NX, NY) {
+  const HX = NX / 2, HY = NY / 2;
+  const head = /* wgsl */`
+const NX: u32 = ${NX}u;
+const NY: u32 = ${NY}u;
+const N: u32 = ${NX * NY}u;
+const HX: u32 = ${HX}u;
+const HN: u32 = ${HX * HY}u;
+@group(0) @binding(0) var<storage, read> cell: array<vec4f>;
+@group(0) @binding(2) var<storage, read_write> acc: array<vec4f>;   // lit : Σ|Δ|, Σt|Δ|, Σt²|Δ|, valeur au pas précédent
+@group(0) @binding(3) var<storage, read_write> accW: array<vec4f>;  // surface libre : idem
+`;
+  const acc = head + /* wgsl */`
+struct Step { q: f32, r: f32, lvl: f32, mf: f32, dt: f32, fT: f32, fW: f32, p2: f32 };
+@group(1) @binding(0) var<uniform> P: Step;
+@compute @workgroup_size(64) fn accum(@builtin(global_invocation_id) gid: vec3u) {
+  let c = gid.x; if (c >= N) { return; }
+  let v = cell[c];
+  let a = acc[c]; let db = abs(v.x - a.w);
+  acc[c] = vec4f(a.x + db, a.y + db * P.fT, a.z + db * P.fT * P.fT, v.x);
+  let e = v.x + v.y;
+  let w = accW[c]; let de = abs(e - w.w);
+  accW[c] = vec4f(w.x + de, w.y + de * P.fW, w.z + de * P.fW * P.fW, e);
+}
+`;
+  const rec = head + /* wgsl */`
+@group(0) @binding(1) var<storage, read> stat: array<vec4f>;
+@group(0) @binding(4) var<storage, read_write> recT: array<u32>;    // b − b₀ (demi-flottant) | instant (8 bits) | étalement (8 bits)
+@group(0) @binding(5) var<storage, read_write> recWT: array<u32>;   // instant | étalement de la surface libre (demi-résolution)
+struct Rec { frame: u32, kind: u32, p0: u32, p1: u32 };
+@group(1) @binding(0) var<uniform> R: Rec;
+fn timing(a: vec3f, thr: f32) -> u32 {
+  if (a.x < thr) { return 128u | (148u << 8u); } // (presque rien n'a bougé : interpolation linéaire, code réservé)
+  let tau = a.y / a.x;
+  let sg = sqrt(max(0.0, a.z / a.x - tau * tau));
+  return u32(round(clamp(tau, 0.0, 1.0) * 255.0)) | (u32(round(clamp(sg, 0.0, 0.5) * 510.0)) << 8u);
+}
+@compute @workgroup_size(64) fn recBed(@builtin(global_invocation_id) gid: vec3u) {
+  let c = gid.x; if (c >= N) { return; }
+  let a = acc[c];
+  let h = pack2x16float(vec2f(cell[c].x - stat[c].x, 0.0)) & 0xFFFFu;
+  recT[R.frame * N + c] = h | (timing(a.xyz, 0.0002) << 16u);
+  acc[c] = vec4f(0.0, 0.0, 0.0, a.w);
+}
+@compute @workgroup_size(64) fn recWaterTime(@builtin(global_invocation_id) gid: vec3u) {
+  let h = gid.x; if (h >= HN) { return; }
+  let hi = h % HX; let hj = h / HX;
+  var sum = vec3f(0.0);
+  for (var k = 0u; k < 4u; k++) {
+    let c = (2u * hj + k / 2u) * NX + 2u * hi + k % 2u;
+    let w = accW[c];
+    sum += w.xyz;
+    accW[c] = vec4f(0.0, 0.0, 0.0, w.w);
+  }
+  recWT[R.frame * HN + h] = timing(sum, 0.002);
+}
+`;
+  return { acc, rec };
+}
+
 function wgslResolve(NX, NY) {
   const HX = NX / 2, HY = NY / 2;
   return /* wgsl */`
@@ -321,7 +383,7 @@ struct Res {
   tA: u32, tD: u32, m0: u32, m1: u32,          // états voisins (B-spline dans le temps), états de la mémoire
   lp: vec3f, lpen: f32,                        // position de la lampe principale (monde), demi-pénombre (rad)
 };
-@group(0) @binding(0) var<storage, read> recT: array<u32>;
+@group(0) @binding(0) var<storage, read> recT: array<u32>;   // b − b₀ | instant | étalement
 @group(0) @binding(1) var<storage, read> recW: array<vec2u>;
 @group(0) @binding(2) var<storage, read> stat: array<vec4f>;
 @group(0) @binding(3) var<storage, read> surplus: array<f32>;  // matière poussée par la lame, cumulée depuis l'aval (m²)
@@ -331,22 +393,65 @@ struct Res {
 @group(0) @binding(7) var nrm: texture_storage_2d<rgba16float, write>; // nx, nz, humidité, rides (filtrable)
 @group(0) @binding(8) var occ: texture_storage_2d<rgba16float, write>; // occlusion du relief, creux, profondeur atteinte, ombre portée de la lampe (filtrable)
 @group(0) @binding(9) var<storage, read> recM: array<u32>;
+@group(0) @binding(10) var<storage, read> recWT: array<u32>;
 @group(1) @binding(0) var<uniform> R: Res;
 
-// relief enregistré à la cellule c, au temps (réel) entre les états t0 et t1 :
-// B-spline cubique uniforme sur tA, t0, t1, tD. Elle n'interpole pas les états,
-// elle les lisse sur trois intervalles : un effondrement enregistré dans un seul
-// intervalle s'étale, sans dépassement (combinaison convexe), et la vitesse est
-// C². (Un Catmull-Rom borné ralentissait chaque cellule à chaque état : la vitesse
-// du relief battait au rythme des états, 5 fois par seconde.)
-fn bAt(k: u32, c: u32) -> f32 {
-  let v = unpack2x16float(recT[k * (N / 2u) + c / 2u]);
-  return select(v.x, v.y, (c & 1u) == 1u);
+// Avancement (0–1) d'une cellule dans l'intervalle, au temps t (0–1) : elle
+// bascule à l'instant enregistré, sur la durée de son étalement (le front passe).
+// F(0) = 0 et F(1) = 1 exactement : pas de saut aux états. Sans changement
+// mesurable, ou très étalé, c'est l'interpolation linéaire.
+fn advance(t: f32, code: u32, sgMin: f32) -> f32 {
+  let tau = f32(code & 255u) / 255.0;
+  let sg = max(max(f32((code >> 8u) & 255u) / 510.0, 0.03), sgMin);
+  let lo = tau - 1.7 * sg; let hi = tau + 1.7 * sg;
+  let g0 = smoothstep(lo, hi, 0.0); let g1 = smoothstep(lo, hi, 1.0);
+  if (g1 - g0 < 0.05) { return t; }
+  // (un changement étalé sur tout l'intervalle — régulier — reste linéaire : une
+  // courbe en S dans chaque intervalle ferait battre la vitesse au rythme des états)
+  return mix((smoothstep(lo, hi, t) - g0) / (g1 - g0), t, smoothstep(0.12, 0.24, sg));
 }
+const DEF: u32 = 128u | (148u << 8u); // (code « rien n'a changé »)
+fn bAt(k: u32, c: u32) -> f32 { return unpack2x16float(recT[k * N + c] & 0xFFFFu).x; }
+// Une cellule bascule d'un coup, mais un front franchit une cellule en un temps
+// fini : la bascule s'étale au moins sur l'écart d'instant avec les voisines qui
+// changent aussi (le temps que met le front à traverser une cellule), si bien que
+// les bascules voisines se chevauchent et que le front glisse au lieu de sauter
+// de cellule en cellule.
+fn tauOf(k: u32, c: u32) -> vec2f { // (instant, ampleur du changement)
+  let p = recT[k * N + c];
+  return vec2f(f32((p >> 16u) & 255u) / 255.0, abs(unpack2x16float(p & 0xFFFFu).x - bAt(k - 1u, c)));
+}
+fn spreadAt(c: u32) -> f32 {
+  let i = c % NX; let j = c / NX;
+  let me = tauOf(R.t1, c);
+  var g = 0.0;
+  let nb = array<u32, 4>(select(c - 1u, c, i == 0u), select(c + 1u, c, i == NX - 1u), select(c - NX, c, j == 0u), select(c + NX, c, j == NY - 1u));
+  for (var k = 0u; k < 4u; k++) {
+    let o = tauOf(R.t1, nb[k]);
+    // (seulement entre cellules qui ont vraiment changé)
+    if (o.y > 0.0002 && me.y > 0.0002) { g = max(g, abs(o.x - me.x)); }
+  }
+  return min(0.25, 0.6 * g);
+}
+// lit enregistré (b − b₀) à la cellule c, entre les états t0 et t1. Deux régimes :
+// – un changement régulier (presque tout le lit : l'érosion est continue) : B-spline
+//   cubique dans le temps sur quatre états, vitesse lisse (C²), sans dépassement ;
+// – un événement bref (une berge qui s'effondre, un front qui passe) : la cellule
+//   bascule à son instant, étalé sur le temps que met le front à franchir une cellule.
+// On passe de l'un à l'autre selon l'étalement enregistré.
 fn relAt(c: u32) -> f32 {
-  let pa = bAt(R.tA, c); let p0 = bAt(R.t0, c); let p1 = bAt(R.t1, c); let pd = bAt(R.tD, c);
+  let p1 = recT[R.t1 * N + c];
+  let code = p1 >> 16u;
+  let b0v = bAt(R.t0, c); let b1v = unpack2x16float(p1 & 0xFFFFu).x;
+  let ba = bAt(R.tA, c); let bd = bAt(R.tD, c);
   let t = R.tt; let s = 1.0 - t;
-  return (pa * (s * s * s) + p0 * (3.0 * t * t * t - 6.0 * t * t + 4.0) + p1 * (-3.0 * t * t * t + 3.0 * t * t + 3.0 * t + 1.0) + pd * (t * t * t)) / 6.0;
+  let bs = (ba * (s * s * s) + b0v * (3.0 * t * t * t - 6.0 * t * t + 4.0) + b1v * (-3.0 * t * t * t + 3.0 * t * t + 3.0 * t + 1.0) + bd * (t * t * t)) / 6.0;
+  let sg = f32((code >> 8u) & 255u) / 510.0;
+  let ev = 1.0 - smoothstep(0.1, 0.2, select(sg, 1.0, code == DEF));
+  if (ev <= 0.0) { return bs; }
+  // (l'événement part de la courbe lisse en t0 et la rejoint en t1 : pas de saut aux états)
+  let e0 = (ba + 4.0 * b0v + b1v) / 6.0; let e1 = (b0v + 4.0 * b1v + bd) / 6.0;
+  return mix(bs, mix(e0, e1, advance(t, code, spreadAt(c))), ev);
 }
 
 @compute @workgroup_size(8, 8) fn resolve(@builtin(global_invocation_id) gid: vec3u) {
@@ -387,6 +492,18 @@ fn relAt(c: u32) -> f32 {
   if (i < HX && j < HY) {
     let h = j * HX + i;
     let e0 = recW[R.w0 * HN + h]; let e1 = recW[R.w1 * HN + h];
+    // (le front d'eau arrive à son instant, étalé sur l'écart avec les voisines)
+    let hi2 = h % HX; let hj2 = h / HX; let me = f32(recWT[R.w1 * HN + h] & 255u) / 255.0;
+    var gw = 0.0;
+    let nbw = array<u32, 4>(select(h - 1u, h, hi2 == 0u), select(h + 1u, h, hi2 == HX - 1u), select(h - HX, h, hj2 == 0u), select(h + HX, h, hj2 == HY - 1u));
+    let mine = recWT[R.w1 * HN + h];
+    for (var k = 0u; k < 4u; k++) {
+      let o = recWT[R.w1 * HN + nbw[k]];
+      // (seulement entre cellules qui ont vraiment changé : le code réservé dit « rien »)
+      if (o != DEF && mine != DEF) { gw = max(gw, abs(f32(o & 255u) / 255.0 - me)); }
+    }
+    // (vagues, débit qui varie : régulier, linéaire ; front qui arrive : à son instant)
+    let tw = advance(R.tw, mine, min(0.25, 0.6 * gw));
     let m0 = unpack2x16float(e0.x); let m1 = unpack2x16float(e1.x);
     let v0 = unpack2x16float(e0.y); let v1 = unpack2x16float(e1.y);
     var bb = 0.0; var bn = 0.0;
@@ -400,16 +517,16 @@ fn relAt(c: u32) -> f32 {
     let dry = bn - 0.004;
     let w0 = select(1.0, 0.0, m0.x < -0.5); let w1 = select(1.0, 0.0, m1.x < -0.5);
     let r0 = select(m0.x, dry, m0.x < -0.5); let r1 = select(m1.x, dry, m1.x < -0.5);
-    let wt = mix(w0, w1, R.tw);
-    var eta = bb + mix(r0, r1, R.tw);
+    let wt = mix(w0, w1, tw);
+    var eta = bb + mix(r0, r1, tw);
     // à la fin de l'expérience, l'eau qui reste (le lac derrière une digue, les
     // flaques) s'infiltre : la surface libre descend jusqu'au lit (sans cela, elle
     // disparaissait d'un coup)
     eta = mix(eta, bn - 0.0008, R.drain);
     var turb = 0.0; var vel = vec2f(0.0);
     if (wt > 0.0) {
-      turb = (m0.y * w0 * (1.0 - R.tw) + m1.y * w1 * R.tw) / max(1e-4, w0 * (1.0 - R.tw) + w1 * R.tw);
-      vel = (v0 * w0 * (1.0 - R.tw) + v1 * w1 * R.tw) / max(1e-4, w0 * (1.0 - R.tw) + w1 * R.tw);
+      turb = (m0.y * w0 * (1.0 - tw) + m1.y * w1 * tw) / max(1e-4, w0 * (1.0 - tw) + w1 * tw);
+      vel = (v0 * w0 * (1.0 - tw) + v1 * w1 * tw) / max(1e-4, w0 * (1.0 - tw) + w1 * tw);
     }
     if (R.water <= 0.0 || wt <= 0.0 || R.drain >= 1.0) { eta = -1.0; }
     textureStore(wat, vec2u(i, j), vec4f(eta, turb * 0.01, vel));
@@ -485,16 +602,16 @@ export function createGpuSim(renderer, { lite = false } = {}) {
   const device = renderer.backend.device;
   const NX = lite ? TABLE.NX / 2 : TABLE.NX, NY = lite ? TABLE.NY / 2 : TABLE.NY, N = NX * NY;
   const HX = NX / 2, HY = NY / 2, HN = HX * HY;
-  // (états du relief : 160 sur l'expérience, un toutes les ~0,2 s de film ; mémoire : 48)
-  // (lit : 480 états, un toutes les ~0,065 s de film ; mémoire : 96 ; eau : 192)
-  const FT = lite ? 240 : 480, FW = lite ? 96 : 192, FM = lite ? 48 : 96;
+  // (lit : 240 états, un toutes les ~0,13 s de film, avec l'instant de chaque
+  // changement ; mémoire : 96 ; eau : 192, avec l'instant de chaque changement)
+  const FT = lite ? 120 : 240, FW = lite ? 96 : 192, FM = lite ? 48 : 96;
   const l = TABLE.Lx / NX, dt = PHYS.courant * l;
   const S_ = GPUBufferUsage.STORAGE, CD = GPUBufferUsage.COPY_DST, CS = GPUBufferUsage.COPY_SRC;
   const buf = (size, usage = S_ | CD | CS) => device.createBuffer({ size, usage });
   const B = {
     cell: buf(N * 16), sA: buf(N * 4), sB: buf(N * 4), flux: buf(N * 16), aux: buf(N * 16), tout: buf(N * 32), stat: buf(N * 16),
     strata: buf(16 + MAX_LAYERS * 16, GPUBufferUsage.UNIFORM | CD),
-    recT: buf(FT * N * 2), recM: buf(FM * N * 4), recW: buf(FW * HN * 8), prev: buf(8192 * 8), surplus: buf(N * 4), cur: buf(N * 16),
+    recT: buf(FT * N * 4), recM: buf(FM * N * 4), recWT: buf(FW * HN * 4), acc: buf(N * 16), accW: buf(N * 16), recW: buf(FW * HN * 8), prev: buf(8192 * 8), surplus: buf(N * 4), cur: buf(N * 16),
   };
   const BATCH = 256;
   const stepBuf = buf(BATCH * ALIGN, GPUBufferUsage.UNIFORM | CD);
@@ -506,6 +623,9 @@ export function createGpuSim(renderer, { lite = false } = {}) {
   const modSim = device.createShaderModule({ code: wgsl(NX, NY) }); report('sim', modSim);
   const modIO = device.createShaderModule({ code: wgslIO(NX, NY) }); report('io', modIO);
   const modRes = device.createShaderModule({ code: wgslResolve(NX, NY) }); report('resolve', modRes);
+  const TIM = wgslTiming(NX, NY);
+  const modAcc = device.createShaderModule({ code: TIM.acc }); report('accum', modAcc);
+  const modTim = device.createShaderModule({ code: TIM.rec }); report('timing', modTim);
 
   const C = GPUShaderStage.COMPUTE;
   const st = (type) => ({ visibility: C, buffer: { type } });
@@ -519,7 +639,12 @@ export function createGpuSim(renderer, { lite = false } = {}) {
 
   const LIO = device.createBindGroupLayout({ entries: [st('read-only-storage'), st('read-only-storage'), st('read-only-storage'), st('read-only-storage'), st('storage'), st('storage'), st('storage'), st('storage')].map((e, binding) => ({ binding, ...e })) });
   const plIO = device.createPipelineLayout({ bindGroupLayouts: [LIO, Ldyn] });
-  const KIO = { recTerrain: mk(modIO, plIO, 'recTerrain'), recMemory: mk(modIO, plIO, 'recMemory'), recWater: mk(modIO, plIO, 'recWater'), preview: mk(modIO, plIO, 'preview') };
+  // instants des changements : cell, stat, acc, accW, recT, recWT
+  const LT = device.createBindGroupLayout({ entries: [st('read-only-storage'), st('read-only-storage'), st('storage'), st('storage'), st('storage'), st('storage')].map((e, binding) => ({ binding, ...e })) });
+  const plT = device.createPipelineLayout({ bindGroupLayouts: [LT, Ldyn] });
+  const KT = { accum: mk(modAcc, plT, 'accum'), recBed: mk(modTim, plT, 'recBed'), recWaterTime: mk(modTim, plT, 'recWaterTime') };
+  const gT = device.createBindGroup({ layout: LT, entries: [B.cell, B.stat, B.acc, B.accW, B.recT, B.recWT].map((buffer, binding) => ({ binding, resource: { buffer } })) });
+  const KIO = { recMemory: mk(modIO, plIO, 'recMemory'), recWater: mk(modIO, plIO, 'recWater'), preview: mk(modIO, plIO, 'preview') };
   const gIO = device.createBindGroup({ layout: LIO, entries: [B.cell, B.sA, B.aux, B.stat, B.recT, B.recW, B.prev, B.recM].map((buffer, binding) => ({ binding, resource: { buffer } })) });
   const gRec = device.createBindGroup({ layout: Ldyn, entries: [{ binding: 0, resource: { buffer: recBuf, size: 16 } }] });
   {
@@ -551,7 +676,7 @@ export function createGpuSim(renderer, { lite = false } = {}) {
       st('storage'),
       { visibility: C, storageTexture: { access: 'write-only', format: 'rgba16float' } },
       { visibility: C, storageTexture: { access: 'write-only', format: 'rgba16float' } },
-      st('read-only-storage')].map((e, binding) => ({ binding, ...e })),
+      st('read-only-storage'), st('read-only-storage')].map((e, binding) => ({ binding, ...e })),
   });
   const LRu = device.createBindGroupLayout({ entries: [{ binding: 0, visibility: C, buffer: { type: 'uniform' } }] });
   const plR = device.createPipelineLayout({ bindGroupLayouts: [LR, LRu] });
@@ -567,6 +692,7 @@ export function createGpuSim(renderer, { lite = false } = {}) {
       { binding: 7, resource: renderer.backend.get(normalTex).texture.createView() },
       { binding: 8, resource: renderer.backend.get(occTex).texture.createView() },
       { binding: 9, resource: { buffer: B.recM } },
+      { binding: 10, resource: { buffer: B.recWT } },
     ],
   });
   const gRu = device.createBindGroup({ layout: LRu, entries: [{ binding: 0, resource: { buffer: resBuf } }] });
@@ -602,6 +728,10 @@ export function createGpuSim(renderer, { lite = false } = {}) {
     const cell = new Float32Array(N * 4);
     for (let c = 0; c < N; c++) { cell[c * 4] = B0[c]; cell[c * 4 + 2] = B0[c]; }
     device.queue.writeBuffer(B.cell, 0, cell);
+    // (accumulateurs des instants : la valeur précédente est la surface de départ)
+    const ac = new Float32Array(N * 4);
+    for (let c = 0; c < N; c++) ac[c * 4 + 3] = B0[c];
+    device.queue.writeBuffer(B.acc, 0, ac); device.queue.writeBuffer(B.accW, 0, ac);
     for (const k of ['sA', 'sB', 'flux', 'aux', 'tout']) device.queue.writeBuffer(B[k], 0, new Float32Array(B[k].size / 4));
     const sg = new ArrayBuffer(16 + MAX_LAYERS * 16), su = new Uint32Array(sg), sf = new Float32Array(sg);
     su[0] = Math.min(MAX_LAYERS, strata.length);
@@ -619,6 +749,9 @@ export function createGpuSim(renderer, { lite = false } = {}) {
     const mRec = Array.from({ length: FM }, (_, k) => Math.round((k / (FM - 1)) * total));
     let nT = 0, nW = 0, nM = 0, n = 0;
     const data = new ArrayBuffer(BATCH * ALIGN), f32 = new Float32Array(data);
+    // position d'un pas dans l'intervalle d'enregistrement qui le contient (0–1)
+    const frac = (rec) => { let k = 0; return (step) => { while (k < rec.length - 2 && rec[k + 1] <= step) k++; return Math.min(1, Math.max(0, (step + 0.5 - rec[k]) / Math.max(1, rec[k + 1] - rec[k]))); }; };
+    const fT = frac(tRec), fW = frac(wRec);
     const t0 = performance.now();
     while (n <= total) {
       if (!alive()) return false;
@@ -626,6 +759,7 @@ export function createGpuSim(renderer, { lite = false } = {}) {
       for (let k = 0; k < m; k++) {
         const T = (n + k) * dt, o = (k * ALIGN) / 4;
         f32[o] = inflowAt(S, T); f32[o + 1] = rainAt(S, T); f32[o + 2] = baseAt(S, T); f32[o + 3] = S.morfac; f32[o + 4] = dt;
+        f32[o + 5] = fT(n + k); f32[o + 6] = fW(n + k);
       }
       device.queue.writeBuffer(stepBuf, 0, data, 0, m * ALIGN);
       const enc = device.createCommandEncoder();
@@ -636,8 +770,8 @@ export function createGpuSim(renderer, { lite = false } = {}) {
         const step = n + k;
         // enregistrements AVANT le pas `step` (l'état au temps step·dt)
         while (nT < FT && tRec[nT] === step) {
-          pass.setPipeline(KIO.recTerrain); pass.setBindGroup(0, gIO); pass.setBindGroup(1, gRec, [nT * ALIGN]);
-          pass.dispatchWorkgroups(groups(N / 2)); nT++; wantPreview = true;
+          pass.setPipeline(KT.recBed); pass.setBindGroup(0, gT); pass.setBindGroup(1, gRec, [nT * ALIGN]);
+          pass.dispatchWorkgroups(groups(N)); nT++; wantPreview = true;
         }
         while (nM < FM && mRec[nM] === step) {
           pass.setPipeline(KIO.recMemory); pass.setBindGroup(0, gIO); pass.setBindGroup(1, gRec, [(FT + FW + nM) * ALIGN]);
@@ -645,12 +779,17 @@ export function createGpuSim(renderer, { lite = false } = {}) {
         }
         while (nW < FW && wRec[nW] === step) {
           pass.setPipeline(KIO.recWater); pass.setBindGroup(0, gIO); pass.setBindGroup(1, gRec, [(FT + nW) * ALIGN]);
+          pass.dispatchWorkgroups(groups(HN));
+          pass.setPipeline(KT.recWaterTime); pass.setBindGroup(0, gT); pass.setBindGroup(1, gRec, [(FT + nW) * ALIGN]);
           pass.dispatchWorkgroups(groups(HN)); nW++;
         }
         if (step === total) break;
         pass.setBindGroup(0, g0);
         pass.setBindGroup(1, gStep, [k * ALIGN]);
         for (const e of ['sources', 'fluxes', 'carry', 'depth', 'erode', 'talusOut', 'talusIn']) { pass.setPipeline(K[e]); pass.dispatchWorkgroups(groups(N)); }
+        // (instant des changements de ce pas)
+        pass.setPipeline(KT.accum); pass.setBindGroup(0, gT); pass.setBindGroup(1, gStep, [k * ALIGN]);
+        pass.dispatchWorkgroups(groups(N));
       }
       if (wantPreview && onPreview && !previewBusy) {
         pass.setPipeline(KIO.preview); pass.setBindGroup(0, gIO); pass.setBindGroup(1, gRec, [0]);
@@ -704,22 +843,33 @@ export function createGpuSim(renderer, { lite = false } = {}) {
   async function readTerrain(k) {
     // (la mémoire : l'état enregistré le plus proche dans le temps)
     const km = Math.round((k / (FT - 1)) * (FM - 1));
-    const rb = device.createBuffer({ size: N * 6, usage: GPUBufferUsage.MAP_READ | CD });
+    const rb = device.createBuffer({ size: N * 8, usage: GPUBufferUsage.MAP_READ | CD });
     const enc = device.createCommandEncoder();
-    enc.copyBufferToBuffer(B.recT, k * N * 2, rb, 0, N * 2);
-    enc.copyBufferToBuffer(B.recM, km * N * 4, rb, N * 2, N * 4);
+    enc.copyBufferToBuffer(B.recT, k * N * 4, rb, 0, N * 4);
+    enc.copyBufferToBuffer(B.recM, km * N * 4, rb, N * 4, N * 4);
     device.queue.submit([enc.finish()]);
     await rb.mapAsync(GPUMapMode.READ);
     const u = new Uint16Array(rb.getMappedRange().slice(0));
     rb.unmap(); rb.destroy();
     const b = new Float32Array(N), bmin = new Float32Array(N), wet = new Float32Array(N), rip = new Float32Array(N);
-    const h = THREE.DataUtils.fromHalfFloat, M = N;
+    const h = THREE.DataUtils.fromHalfFloat, M = 2 * N;
     for (let c = 0; c < N; c++) {
-      b[c] = b0[c] + h(u[c]);
+      b[c] = b0[c] + h(u[c * 2]);
       bmin[c] = Math.min(b[c], b0[c] + h(u[M + c * 2]));
       const hi = u[M + c * 2 + 1]; wet[c] = (hi & 255) / 255; rip[c] = (hi >> 8) / 255;
     }
     return { b, bmin, wet, rip };
+  }
+  // codes bruts d'un état du lit (mise au point : instants des changements)
+  async function readRaw(k) {
+    const rb = device.createBuffer({ size: N * 4, usage: GPUBufferUsage.MAP_READ | CD });
+    const enc = device.createCommandEncoder();
+    enc.copyBufferToBuffer(B.recT, k * N * 4, rb, 0, N * 4);
+    device.queue.submit([enc.finish()]);
+    await rb.mapAsync(GPUMapMode.READ);
+    const a = new Uint32Array(rb.getMappedRange().slice(0));
+    rb.unmap(); rb.destroy();
+    return a;
   }
   // le relief courant, tel que la dernière relecture l'a écrit (mise au point : fluidité)
   async function readCur() {
@@ -782,7 +932,7 @@ export function createGpuSim(renderer, { lite = false } = {}) {
 
   return {
     NX, NY, HX, HY, FT, FW, FM, dt, l, terrainTex, waterTex, normalTex, occTex,
-    setup, run, finish, resolve, readTerrain, readWater, readCur, readCell,
+    setup, run, finish, resolve, readTerrain, readWater, readCur, readRaw, readCell,
     get ran() { return ran; },
     get final() { return final; },
     bytes: () => Object.values(B).reduce((a, b) => a + b.size, 0),
