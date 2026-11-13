@@ -28,6 +28,20 @@ export const kelvinToHex = (K) => {
 // linéaires relatives) ; water : extinction (1/m, par canal), diffusion, teinte
 // de l'eau diffusée ; cam : cadrage préféré ; grade : étalonnage.
 export const MOODS = {
+  // d'après Hiroshi Sugimoto (« Seascapes ») : une mer et un ciel gris de
+  // même valeur, l'horizon au milieu exact de l'image, aucun soleil, presque
+  // pas de couleur. Le hublot-dôme coupe le cadre en deux à la même hauteur :
+  // au-dessus, la marine immobile ; au-dessous, la forêt qui bouge. Tirée à
+  // part (une graine sur cinq, sur son propre flux), les autres graines
+  // gardent leur décor.
+  sugimoto: {
+    label: 'Marine', rock: 'slate', extra: true,
+    rockColor: { base: '#55595b', dark: '#2e3133', light: '#73787a', crust: '#6f6266', lichen: '#8a8a78' },
+    sun: { el: [1.1, 1.25], az: [-0.4, 0.4], K: 6800, lux: 0.35 }, sky: { zenith: [0.5, 0.52, 0.54], horizon: [0.62, 0.63, 0.64], haze: 1.0, cloud: 1.0, intensity: 1.05 },
+    water: { ext: [0.55, 0.2, 0.2], scat: 0.55, tint: [0.18, 0.24, 0.24] },
+    cam: { lens: [0.24, 0.3], yaw: [0.02, 0.08], pitch: [-0.02, 0.0], fov: [60, 64] },
+    grade: { contrast: 1.04, saturation: 0.3, shadows: [0.99, 1.0, 1.02], highlights: [1, 1, 1], exposure: 1.1 },
+  },
   ploumanach: {
     label: "Ploumanac'h", rock: 'granite',
     rockColor: { base: '#b98f80', dark: '#7d5d55', light: '#d9b8a6', crust: '#c77b86', lichen: '#d7b14a' },
@@ -82,17 +96,19 @@ export const MOODS = {
 // laminaire mouillée est brun olive presque noir (albédo linéaire 0,02 à 0,05)
 // et se lit par ses reflets ; claires, elles faisaient des rubans caramel
 export const KELP_COLORS = {
-  digitata: { blade: '#3a2a13', stipe: '#30230f', light: '#a8742a' },
-  durvillaea: { blade: '#3c3414', stipe: '#2f2810', light: '#9c7a26' },
-  postelsia: { blade: '#463a17', stipe: '#3a2e14', light: '#b4882e' },
-  egregia: { blade: '#36290f', stipe: '#2c210c', light: '#9a7428' },
+  // (olive, pas caramel : au soleil rasant, des bruns orangés se lisaient en
+  // rubans de cuir ; la lumière transmise reste ambrée, plus verte)
+  digitata: { blade: '#2f2c14', stipe: '#2a2510', light: '#97862a' },
+  durvillaea: { blade: '#34331a', stipe: '#2b2a12', light: '#8f8628' },
+  postelsia: { blade: '#3b3818', stipe: '#332e14', light: '#a59330' },
+  egregia: { blade: '#2f2a12', stipe: '#28220e', light: '#8e7c26' },
 };
 
 const FAMILY_KEYS = Object.keys(FAMILIES);
 
 export function generate(seed, overrides = {}) {
   const rng = createRng(seed);
-  const mood = overrides.mood ?? rng.fork('mood').pick(Object.keys(MOODS));
+  const mood = overrides.mood ?? (rng.fork('regard').chance(0.2) ? 'sugimoto' : rng.fork('mood').pick(Object.keys(MOODS).filter((k) => !MOODS[k].extra)));
   const family = overrides.family ?? rng.fork('family').weighted([['digitata', 4], ['durvillaea', 3], ['postelsia', 2.5], ['egregia', 2.5]]);
   const M = MOODS[mood];
   const rs = rng.fork('sea'), rc = rng.fork('camera'), rl = rng.fork('light'), rr = rng.fork('rock');

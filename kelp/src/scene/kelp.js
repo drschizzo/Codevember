@@ -87,7 +87,7 @@ export function createKelp(W, lite) {
   mat.roughnessNode = mix(float(0.38), float(0.5), under).add(n1.mul(0.1));
   mat.metalnessNode = float(0);
   // mucilage : un vernis à l'air, rien dans l'eau
-  mat.clearcoatNode = mix(float(0.45), float(0.0), under).mul(kind.mul(0.4).add(0.6));
+  mat.clearcoatNode = mix(float(0.35), float(0.0), under).mul(kind.mul(0.4).add(0.6));
   mat.clearcoatRoughnessNode = float(0.12).add(n1.abs().mul(0.15));
   // translucidité (Barré-Brisebois) : la lame s'allume à contre-jour, ambrée
   // (sous l'eau, le soleil réfracté vient d'en haut, à moins de 49° de la

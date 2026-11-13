@@ -124,7 +124,7 @@ Une revue de direction artistique ([docs/revue-cinema.md](docs/revue-cinema.md))
   - Le flou de mouvement prend 12 prises décalées par un bruit, avec une traînée plafonnée (on voyait des copies distinctes).
   - Sous l'eau, le contre-jour des lames est éteint : le soleil réfracté vient d'en haut, et les lames ne s'allument plus comme des néons.
 - **Les laminaires.**
-  - Elles sont brun olive presque noir, avec des reflets étirés dans la longueur et une translucidité limitée aux marges et aux pointes.
+  - Elles sont olive presque noir (le brun caramel d'avant se lisait, au soleil rasant, en rubans de cuir ; le vernis de mucilage est aussi plus discret, 0,35 au lieu de 0,45), avec des reflets étirés dans la longueur et une translucidité limitée aux marges et aux pointes.
   - Leur bord ondule dans l'eau.
   - Le stipe est fermé et s'aplatit en paume.
   - Les crampons ont des haptères irréguliers et ramifiés ; ceux du cochayuyo forment un disque bosselé. Leur taille suit l'âge de la plante.
@@ -170,6 +170,9 @@ Pendant que le worker calcule, l'écran montre la coupe du platier de la graine 
 | Ardoise | feuillets d'ardoise | heure bleue, sans soleil | basse, froide | dôme bas |
 | Midi | grès rouge en gradins | soleil haut, caustiques | claire, contrastée | plan plus large |
 | Noctiluque | granit sombre | lune, eau qui s'allume | très sombre | au ras de l'eau |
+| Marine (d'après Hiroshi Sugimoto, *Seascapes*) | ardoise grise | ciel couvert, aucun soleil ; mer et ciel de même valeur | moyenne, presque sans couleur (saturation 0,3) | horizon au milieu exact, regard droit vers le large |
+
+La Marine est tirée à part (une graine sur cinq, sur son propre flux `regard`) : les autres graines gardent leur décor, dont la scène d'ouverture.
 
 ## Tests
 
