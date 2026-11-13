@@ -318,7 +318,8 @@ struct Res {
   t0: u32, t1: u32, w0: u32, w1: u32,
   tt: f32, tw: f32, water: f32, screed: f32,   // mélange des états, eau visible (0–1), position de la lame (m, −1 : pas de passage)
   bermTan: f32, bead: f32, drain: f32, tm: f32, // pente du bourrelet, bourrelet minimal (m), infiltration de l'eau restante (0–1), mélange de la mémoire
-  tA: u32, tD: u32, m0: u32, m1: u32,          // états voisins (Catmull-Rom dans le temps), états de la mémoire
+  tA: u32, tD: u32, m0: u32, m1: u32,          // états voisins (B-spline dans le temps), états de la mémoire
+  lp: vec3f, lpen: f32,                        // position de la lampe principale (monde), demi-pénombre (rad)
 };
 @group(0) @binding(0) var<storage, read> recT: array<u32>;
 @group(0) @binding(1) var<storage, read> recW: array<vec2u>;
@@ -328,7 +329,7 @@ struct Res {
 @group(0) @binding(5) var wat: texture_storage_2d<rgba32float, write>;
 @group(0) @binding(6) var<storage, read_write> cur: array<vec4f>;   // relief courant : b, humidité, rides, profondeur atteinte
 @group(0) @binding(7) var nrm: texture_storage_2d<rgba16float, write>; // nx, nz, humidité, rides (filtrable)
-@group(0) @binding(8) var occ: texture_storage_2d<rgba16float, write>; // occlusion du relief, creux, profondeur atteinte (filtrable)
+@group(0) @binding(8) var occ: texture_storage_2d<rgba16float, write>; // occlusion du relief, creux, profondeur atteinte, ombre portée de la lampe (filtrable)
 @group(0) @binding(9) var<storage, read> recM: array<u32>;
 @group(1) @binding(0) var<uniform> R: Res;
 
@@ -453,7 +454,29 @@ fn relAt(c: u32) -> f32 {
     m += cur[u32(q.y) * NX + u32(q.x)].x;
   }
   let cav = clamp((m / 8.0 - h0) * 400.0, -1.0, 1.0);
-  textureStore(occ, vec2u(i, j), vec4f(vis, cav, v.w, 1.0));
+  // Ombre portée du relief par la lampe principale : un tracé vers la lampe sur la
+  // carte de hauteur (pas d'une cellule, puis de plus en plus longs, jusqu'à ~1 m),
+  // pénombre selon la taille apparente de la lampe. Exacte à la cellule et lisse
+  // une fois filtrée — la carte d'ombre, étirée en lumière rasante sur tout le
+  // bac, dessinait des escaliers de plusieurs millimètres sur les bords d'ombre.
+  let P = vec3f((f32(i) + 0.5) * L - f32(NX) * L * 0.5, h0, (f32(j) + 0.5) * L - f32(NY) * L * 0.5);
+  let dl = R.lp - P;
+  let hd = max(length(dl.xz), 1e-5);
+  let dir = dl.xz / hd;
+  let tanL = dl.y / hd;
+  var mt = -1.0e6;
+  var sd = 1.0;
+  for (var k = 0u; k < 80u; k++) {
+    let q = vec2f(f32(i), f32(j)) + dir * sd;
+    if (q.x < 0.0 || q.y < 0.0 || q.x > f32(NX - 1u) || q.y > f32(NY - 1u)) { break; }
+    let q0 = vec2u(floor(q)); let fq = fract(q);
+    let q1 = min(q0 + vec2u(1u, 1u), vec2u(NX - 1u, NY - 1u));
+    let hq = mix(mix(cur[q0.y * NX + q0.x].x, cur[q0.y * NX + q1.x].x, fq.x), mix(cur[q1.y * NX + q0.x].x, cur[q1.y * NX + q1.x].x, fq.x), fq.y);
+    mt = max(mt, (hq - h0) / (sd * L));
+    sd += max(1.0, sd * 0.05);
+  }
+  let sh = smoothstep(-R.lpen, R.lpen, atan(tanL) - atan(mt));
+  textureStore(occ, vec2u(i, j), vec4f(vis, cav, v.w, sh));
 }
 `;
 }
@@ -476,7 +499,7 @@ export function createGpuSim(renderer, { lite = false } = {}) {
   const BATCH = 256;
   const stepBuf = buf(BATCH * ALIGN, GPUBufferUsage.UNIFORM | CD);
   const recBuf = buf((FT + FW + FM + 2) * ALIGN, GPUBufferUsage.UNIFORM | CD);
-  const resBuf = buf(64, GPUBufferUsage.UNIFORM | CD);
+  const resBuf = buf(80, GPUBufferUsage.UNIFORM | CD);
   const prevRead = device.createBuffer({ size: 8192 * 8, usage: GPUBufferUsage.MAP_READ | CD });
 
   const report = (name, module) => module.getCompilationInfo?.().then((info) => { for (const m of info.messages) if (m.type === 'error') console.error(`${name}.wgsl ${m.lineNum}:${m.linePos} ${m.message}`); });
@@ -735,7 +758,7 @@ export function createGpuSim(renderer, { lite = false } = {}) {
   }
 
   // Relecture à l'image : st = { tT (0–FT−1, réel), tW (0–FW−1), water (0/1), screed (m ; −1 : bac entier régalé ; −2 : pas de gabarit), bead, bermTan }
-  const resData = new ArrayBuffer(64), ru = new Uint32Array(resData), rf = new Float32Array(resData);
+  const resData = new ArrayBuffer(80), ru = new Uint32Array(resData), rf = new Float32Array(resData);
   function resolve(s) {
     const tT = Math.min(FT - 1, Math.max(0, s.tT)), tW = Math.min(FW - 1, Math.max(0, s.tW));
     const a = Math.min(FT - 2, Math.floor(tT)), w = Math.min(FW - 2, Math.floor(tW));
@@ -744,6 +767,8 @@ export function createGpuSim(renderer, { lite = false } = {}) {
     rf[4] = tT - a; rf[5] = tW - w; rf[6] = s.water ?? 1; rf[7] = s.screed ?? -2;
     rf[8] = s.bermTan ?? 0.67; rf[9] = s.bead ?? 0.003; rf[10] = s.drain ?? 0; rf[11] = tM - m;
     ru[12] = Math.max(0, a - 1); ru[13] = Math.min(FT - 1, a + 2); ru[14] = m; ru[15] = m + 1;
+    const lp = s.light ?? [0, 10, 0];
+    rf[16] = lp[0]; rf[17] = lp[1]; rf[18] = lp[2]; rf[19] = s.lightPen ?? 0.015;
     device.queue.writeBuffer(resBuf, 0, resData);
     const enc = device.createCommandEncoder();
     const pass = enc.beginComputePass();

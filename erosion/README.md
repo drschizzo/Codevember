@@ -89,6 +89,8 @@ Un seul maillage (1 024 × 512 sommets), un seul matériau :
 
 Bac (fond, parois d'acrylique clair, profilés d'aluminium de 30 × 30, montants), piétement (quatre pieds de 40 × 40, traverses, pieds réglables, vérins de basculement à volant), boîte d'alimentation en inox avec sa goulotte en biseau, son robinet à volant et son débitmètre à flotteur, déversoir aval (caisson, glissières, guillotine à crémaillère et volant, tuyau de sortie), portique (deux rails ronds sur supports, chariots à galets, poutre de 60 × 30, moteur pas à pas, vérins de descente), lame-gabarit en aluminium anodisé dont le bord bas est le profil en travers, simulateur de pluie (quatre montants, caisson à aiguilles). Le portique et le châssis ne portent pas d'ombre sur le paysage (une barre d'ombre en travers du sable se lisait comme un défaut) ; seule la lame en porte, quand elle est au contact.
 
+**Les ombres du sable** : le relief ne se projette pas dans la carte d'ombre. Étirée en lumière rasante sur tout le bac, elle dessinait des escaliers de plusieurs millimètres au bord des ombres, visibles en gros plan. L'ombre portée du relief est tracée sur la carte de hauteur, une fois par image dans la passe de calcul : depuis chaque cellule, vers la lampe principale, par pas d'une cellule puis de plus en plus longs, jusqu'à ~1 m. La pénombre suit la taille apparente de la lampe (soleil net, lampe plus douce). Le matériau du sable multiplie l'ombre de la carte (la lame) par cette ombre-là, et le sable n'est plus dessiné dans la passe d'ombre (un million de sommets en moins).
+
 ## Les décors
 
 Le fond est neutre ; chaque humeur se distingue par son lieu, sa lumière, sa valeur et son cadrage, et préfère certains sables.
@@ -133,6 +135,8 @@ Vingt-cinq tests : le sable se conserve (ce qui manque est sorti par le déverso
 ## Performances
 
 Simulation d'une scène : 4 à 5,5 s sur le GPU (Mac, panneau de navigateur visible). Temps d'image mesuré dans le panneau de navigateur de l'application, qualité Haute, 1 920 × 1 080, graine k7 (delta, Fin de jour) : **14,8 ms** au début de l'expérience, **16,9 ms** au milieu (l'eau partout), **12,5 ms** pendant le passage de la lame. Le poste principal est le matériau du sable (bicubique au sommet, strates, eau) ; la GTAO de la chaîne d'image, qui refaisait une pré-passe de tout ce matériau, coûtait à elle seule 10 ms : elle est remplacée par une occlusion calculée sur la carte de hauteur (l'horizon dans 8 directions, une fois par image dans la passe de calcul), et la normale de l'eau n'est calculée qu'aux pixels mouillés (29 → 15 ms). Mémoire GPU de la simulation et de ses états : ~245 Mo.
+
+Depuis le relief net, les grains et l'eau plus détaillée, le sable coûte davantage : mesuré à 2 400 × 1 350 (fenêtre de 1 600 × 900 en qualité Haute, densité 1,5), graine myr9bo, **19 ms** au ras du sable, **26 ms** en gros plan sur l'eau, **39 ms** quand le sable remplit tout le cadre (plongée) — dont ~31 ms pour le seul maillage du sable, la passe de calcul (relecture, normales, occlusion, ombre portée du relief) ne prenant que 0,4 ms. La résolution dynamique est donc active par défaut aussi sur ordinateur : elle vise 55 i/s et descend jusqu'à la moitié de la densité de base, l'anticrénelage temporel lissant la différence (réglage « Rendu », clé de stockage v6). Les grains de près et les caustiques ne sont évalués que là où ils se voient.
 
 ## Version mobile
 

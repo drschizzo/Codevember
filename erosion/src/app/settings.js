@@ -19,7 +19,7 @@ export const RENDER_DEFAULTS = {
   dof: true, focus: 1, focusRange: 0.8, bokeh: 1.6,
   motionBlur: 0.6, ca: 0.06, grain: 0.03,
   streaks: 0.02, streakLen: 4, halation: 0.2, dirt: 0.12,
-  dynRes: false, maxFps: 0, // (résolution dynamique, cadence plafonnée : voir app/mobile.js)
+  dynRes: true, maxFps: 0, // (résolution dynamique — la fluidité d'abord —, cadence plafonnée : voir app/mobile.js)
 };
 
 // Réglages du mode mobile : mêmes réglages artistiques, chaîne d'image allégée.
@@ -35,7 +35,7 @@ export const MOBILE_DEFAULTS = {
   dynRes: true, maxFps: 60,
 };
 
-const STORE = 'erosion.render.v5';
+const STORE = 'erosion.render.v6'; // (v6 : résolution dynamique par défaut)
 
 // (le mode mobile a ses propres réglages mémorisés)
 export const defaultsFor = (lite) => (lite ? MOBILE_DEFAULTS : RENDER_DEFAULTS);

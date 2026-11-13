@@ -105,7 +105,9 @@ async function main() {
   const post = createPost(renderer, scene, camera);
   const accum = createAccumulator(renderer);
   const RENDER = loadRender(LITE);
-  const governor = createGovernor({ target: 1 / 45, min: 0.5, max: 1, onChange: () => !busy && resize() });
+  // (résolution dynamique, aussi sur ordinateur : le sable remplit souvent tout le cadre
+  // et coûte 25 à 40 ms en Retina plein écran ; on vise 55 i/s, l'anticrénelage temporel lisse)
+  const governor = createGovernor({ target: LITE ? 1 / 45 : 1 / 55, min: 0.5, max: 1, onChange: () => !busy && resize() });
   const pace = createPacer(() => RENDER.maxFps);
 
   // ── Recette ──

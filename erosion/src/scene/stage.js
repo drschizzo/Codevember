@@ -94,7 +94,12 @@ export function createStage(scene, renderer, { lite = false } = {}) {
   function update(ph, duration) {
     if (!R) return;
     const F = filmState(ph, S);
-    gs.resolve({ tT: reliefK(F.k) * (gs.FT - 1), tW: F.k * (gs.FW - 1), water: F.water, drain: F.drain, screed: F.screed, bead: 0.003, bermTan: Math.tan((33 * Math.PI) / 180) });
+    const L = R.light;
+    const kd = L.key.kind === 'sun' ? 6 : L.key.dist;
+    place(key, L.key.az, L.key.el, kd);
+    // (demi-pénombre de l'ombre du relief : soleil net, lampe plus douce)
+    const lightPen = L.key.kind === 'sun' ? 0.012 : 0.012 + 0.03 * (L.key.pen ?? 0.5);
+    gs.resolve({ light: key.position.toArray(), lightPen, tT: reliefK(F.k) * (gs.FT - 1), tW: F.k * (gs.FW - 1), water: F.water, drain: F.drain, screed: F.screed, bead: 0.003, bermTan: Math.tan((33 * Math.PI) / 180) });
     sand.U.dry.value = F.dry;
     sand.U.pits.value = S.rain ? Math.min(1, F.k * 6) : 0; // (le sable se crible dès les premières averses)
     sand.U.waterOn.value = F.water;
@@ -102,9 +107,6 @@ export function createStage(scene, renderer, { lite = false } = {}) {
     app.duration = duration;
     app.update(F, ph);
     rain.update(F, ph, duration, S);
-    const L = R.light;
-    const kd = L.key.kind === 'sun' ? 6 : L.key.dist;
-    place(key, L.key.az, L.key.el, kd);
     key.color.set(kelvinToHex(L.key.K));
     key.intensity = cd(L.key.lux, kd);
     key.angle = L.key.kind === 'sun' ? 0.16 : L.key.angle;
