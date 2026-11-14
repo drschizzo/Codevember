@@ -33,25 +33,25 @@ export const FAMILIES = {
     label: 'Digitée', latin: 'Laminaria digitata',
     stipe: { L: [0.18, 0.3], r: 0.007, EI: 0.002, rho: 1.04, ds: 0.06 },
     blade: { n: [5, 7], L: [0.6, 1.0], w: [0.05, 0.08], e: 0.0022, EI: 3e-4, rho: 0.93, ds: 0.07, fan: 0.5 },
-    holdfast: 0.07, spacing: 0.3, drag: 1, palm: 3,
+    holdfast: 0.07, spacing: 0.3, drag: 1, palm: 3, twist: 2.2,
   },
   durvillaea: {
     label: 'Cochayuyo', latin: 'Durvillaea antarctica',
     stipe: { L: [0.1, 0.18], r: 0.018, EI: 0.6, rho: 1.02, ds: 0.06 },
     blade: { n: [3, 5], L: [1.4, 2.1], w: [0.035, 0.055], e: 0.008, EI: 0.004, rho: 0.78, ds: 0.07, fan: 0.35 },
-    holdfast: 0.13, spacing: 0.55, drag: 0.7, palm: 6,
+    holdfast: 0.13, spacing: 0.55, drag: 0.7, palm: 6, twist: 0.8, // (les lanières épaisses roulent sur elles-mêmes)
   },
   postelsia: {
     label: 'Palmier de mer', latin: 'Postelsia palmaeformis',
     stipe: { L: [0.3, 0.45], r: 0.011, EI: 0.9, rho: 1.0, ds: 0.05, stand: true },
     blade: { n: [14, 20], L: [0.14, 0.22], w: [0.008, 0.012], e: 0.0015, EI: 1.5e-4, rho: 1.0, ds: 0.045, fan: 1.2, tassel: true },
-    holdfast: 0.05, spacing: 0.6, drag: 1, colony: [3, 6], colonyR: 0.15, // (en colonies serrées : isolé, il se lisait comme un cocotier miniature)
+    holdfast: 0.05, spacing: 0.6, drag: 1, twist: 0.6, colony: [3, 6], colonyR: 0.15, // (en colonies serrées : isolé, il se lisait comme un cocotier miniature)
   },
   egregia: {
     label: 'Boa', latin: 'Egregia menziesii',
     stipe: { L: [0.06, 0.1], r: 0.009, EI: 0.05, rho: 1.03, ds: 0.05 },
     blade: { n: [3, 5], L: [1.1, 1.7], w: [0.03, 0.04], e: 0.003, fringe: true, EI: 1.2e-3, rho: 0.86, ds: 0.08, fan: 0.6 },
-    holdfast: 0.08, spacing: 0.4, drag: 1.4, // (les franges de lamelles freinent)
+    holdfast: 0.08, spacing: 0.4, drag: 1.4, twist: 1.6, // (les franges de lamelles freinent)
   },
 };
 
@@ -264,6 +264,17 @@ export function simulateKelp(K, opts, onProgress = null) {
   const FLD = opts.field ?? null;
   const h = 1 / sub, VMAX = 5, BP = 6, SW = 0.012, SD = Number(globalThis.process?.env?.SD ?? 0.3);
   const ULast = new Float64Array(N).fill(NaN), EU = new Float64Array(2);
+  // torsion (voir 8.) : angle, vitesse angulaire, couple du courant, vitesse relative
+  const PHI = new Float64Array(N), OM = new Float64Array(N), UREL = new Float64Array(N);
+  const CHN = Int32Array.from(K.nodes.map((o) => Math.max(0, o.chain ?? 0))), ETAc = new Float64Array(K.chains.length);
+  const TWS = F.twist ?? 1, twistSamples = [];
+  let twistJump = 0;
+  let stepK = 0;
+  // (onde de torsion à ~2 m/s le long d'une lame au pas l : K = c² / l² ;
+  // amortissement 4 /s ; couple corrélé sur 0,3 s)
+  const segL = F.blade.ds, TW_K = (2.0 * 2.0) / (segL * segL), TW_C = 4, TW_TAU = 0.3, TW_R = 20;
+  const TW_NS = Math.sqrt(12 * 2 / (TW_TAU * (opts.sub ?? 480))) * 40; // (bruit blanc discret de variance 1, intensité réglée par la mesure)
+  const trng = (() => { let a = 0x9e3779b9 ^ N; return () => { a ^= a << 13; a ^= a >>> 17; a ^= a << 5; return (a >>> 0) / 4294967296; }; })();
   const DVX = new Float64Array(N), DVY = new Float64Array(N), DVZ = new Float64Array(N);
   // ── voisinage des segments : grille hachée (tableaux, sans allocation) ──
   // (cellule de la grille : la plus grande distance de contact, pas plus — dans
@@ -444,9 +455,11 @@ export function simulateKelp(K, opts, onProgress = null) {
       if (s > 0) {
         vx += s * dux; vz += s * dux * side; // (l'eau qui accélère emporte la lame)
         let rx = vx - ux, ry = vy, rz = vz - uz;
-        const f = 1 / (1 + Kd[i] * Math.sqrt(rx * rx + ry * ry + rz * rz) * h * s);
+        const vr = Math.sqrt(rx * rx + ry * ry + rz * rz);
+        UREL[i] = vr * s;
+        const f = 1 / (1 + Kd[i] * vr * h * s);
         vx = ux + rx * f; vy = ry * f; vz = uz + rz * f;
-      } else { const f = 1 / (1 + 0.5 * h); vx *= f; vy *= f; vz *= f; }
+      } else { const f = 1 / (1 + 0.5 * h); vx *= f; vy *= f; vz *= f; UREL[i] = 0; }
       PX[i] = X[i]; PY[i] = Y[i]; PZ[i] = Z[i];
       X[i] += vx * h; Y[i] += vy * h; Z[i] += vz * h;
       CN[i * 3] = 0; CN[i * 3 + 1] = 0; CN[i * 3 + 2] = 0;
@@ -546,6 +559,35 @@ export function simulateKelp(K, opts, onProgress = null) {
       const bl = Math.sqrt(bx * bx + by * by + bz * bz) || 1;
       BX[i] = bx / bl; BY[i] = by / bl; BZ[i] = bz / bl;
     }
+    // 8. la torsion : un angle φ autour de la lame, par nœud. Le courant
+    // tourbillonnaire la tord (un couple aléatoire corrélé dans le temps, à
+    // la mesure de la vitesse de l'eau par rapport à la lame), la raideur de
+    // torsion la propage le long de la lame (ondes qui courent vers la
+    // pointe), le pied est tenu ; couchée sur la roche, la lame se remet à
+    // plat. Sans elle, toutes les lames d'un même courant restaient à plat,
+    // parallèles, comme des planches. (Un degré de liberté par nœud, sans
+    // contrainte : rien à ajouter au solveur ; le contact ne la voit pas.)
+    // (un couple par lame : un tourbillon est plus grand que l'écart entre deux
+    // nœuds — tiré nœud par nœud, il désaccordait les voisins de plusieurs tours)
+    for (let c = 0; c < ETAc.length; c++) ETAc[c] += -ETAc[c] * h / TW_TAU + TW_NS * (trng() - 0.5);
+    for (let i = 0; i < N; i++) {
+      if (!KIND[i]) continue;
+      const p = prevN[i], n = nextN[i];
+      if (p < 0 || !KIND[p]) { PHI[i] = 0; OM[i] = 0; continue; }
+      const lap = PHI[p] + (n >= 0 ? PHI[n] : PHI[i]) - 2 * PHI[i];
+      // (couchée sur ce qui la porte, la lame est rappelée à plat — un couple,
+      // pas une remise à zéro : remis à zéro nœud par nœud, l'angle sautait
+      // d'un nœud au suivant)
+      const lie = CN[i * 3] !== 0 || CN[i * 3 + 1] !== 0 || CN[i * 3 + 2] !== 0 ? 1 : 0;
+      OM[i] += h * (TW_K * lap - (TW_R + 300 * lie) * PHI[i] - (TW_C + 20 * lie) * OM[i] + ETAc[CHN[i]] * TWS * Math.min(UREL[i], 2.5)); // (la lame garde la mémoire de sa forme à plat)
+      // (bornée, et pas plus de 0,8 rad d'un nœud au suivant, de la racine
+      // vers la pointe — comme l'inextensibilité : une lame de 7 cm ne vrille
+      // pas d'un demi-tour)
+      PHI[i] = Math.max(-2.5, Math.min(2.5, Math.max(PHI[p] - 0.8, Math.min(PHI[p] + 0.8, PHI[i] + h * OM[i]))));
+      if (UREL[i] > 0.4 && ((i * 7 + stepK) & 1023) === 0 && (n < 0)) twistSamples.push(Math.abs(PHI[i]));
+      const dd = Math.abs(PHI[i] - PHI[p]); if (dd > twistJump) twistJump = dd;
+    }
+    stepK++;
     tSim += h;
   }
 
@@ -581,7 +623,13 @@ export function simulateKelp(K, opts, onProgress = null) {
   const recInto = (rec, f0 = 0) => (f) => {
     maxS = Math.max(maxS, stretch());
     const o = (f + f0) * N * 3;
-    for (let i = 0; i < N; i++) { rec.pos[o + 3 * i] = X[i]; rec.pos[o + 3 * i + 1] = Y[i]; rec.pos[o + 3 * i + 2] = Z[i]; rec.dir[o + 3 * i] = BX[i]; rec.dir[o + 3 * i + 1] = BY[i]; rec.dir[o + 3 * i + 2] = BZ[i]; }
+    for (let i = 0; i < N; i++) {
+      rec.pos[o + 3 * i] = X[i]; rec.pos[o + 3 * i + 1] = Y[i]; rec.pos[o + 3 * i + 2] = Z[i];
+      // le directeur tourné de φ autour de la lame : b cos φ + (t × b) sin φ
+      const c = Math.cos(PHI[i]), sn = Math.sin(PHI[i]);
+      const kx = TY[i] * BZ[i] - TZ[i] * BY[i], ky = TZ[i] * BX[i] - TX[i] * BZ[i], kz = TX[i] * BY[i] - TY[i] * BX[i];
+      rec.dir[o + 3 * i] = BX[i] * c + kx * sn; rec.dir[o + 3 * i + 1] = BY[i] * c + ky * sn; rec.dir[o + 3 * i + 2] = BZ[i] * c + kz * sn;
+    }
   };
   if (loops > 1) {
     tSim = fA / fps;
@@ -672,6 +720,7 @@ export function simulateKelp(K, opts, onProgress = null) {
   stats.maxOverlap = +ovMax.toFixed(4);
   stats.maxPush = +pushMax.toFixed(4); stats.worst = worst;
   stats.pairs = np / 2;
+  { const q = twistSamples.sort((a, b) => a - b); stats.twist = q.length ? { med: +(q[q.length >> 1] * 57.3).toFixed(0), p90: +(q[Math.floor(q.length * 0.9)] * 57.3).toFixed(0), jump: +(twistJump * 57.3).toFixed(0), n: q.length } : null; }
   stats.sub = sub; // (sous-pas par seconde effectifs : un multiple de fps)
   return { n: N, nf, fps, pos, dir, stats, end: snaps[snaps.length - 1], start: snaps[snaps.length - 2] };
 }
