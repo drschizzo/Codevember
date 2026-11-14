@@ -26,7 +26,7 @@ import { asyncPipelines, warmScene } from '../../shared/app/warmup.js';
 import { createDebugTools, packRecipe, unpackRecipe, sleep } from '../../shared/app/debug.js';
 
 const NAME = 'melt';
-const DEFAULT_SEED = 'b92'; // scène d'ouverture (sans ?seed=) : forge, gros plan, oxyde or et magenta
+const DEFAULT_SEED = 'j4s5i6'; // scène d'ouverture (sans ?seed=) : tente claire, grappe en gros plan, oxyde bleus et verts
 const params = new URLSearchParams(location.search);
 const $ = (s) => document.querySelector(s);
 const randomSeed = () => Math.random().toString(36).slice(2, 8);

@@ -60,6 +60,24 @@ Une planche de seize graines montrait trois défauts. Seule la planche les rév�
 - **Une caméra sous le métal.** Au ras du bain, elle était à 1,3 cm sous une marée de 2,9 cm. Elle reste maintenant au-dessus de la marée haute (vérifié par un test), et le cadre suit la taille de la grappe.
 - **Des peaux en confettis.** Chaque plaque avait une couleur tirée au hasard. La peau est maintenant une seule pellicule en dégradé, fendue en grandes plaques.
 
+## Prototype s0 : la vraie fonte (14 novembre)
+
+La fonte de la scène est une imitation : un arrondi et un comblement des gradins réglés à la main au-dessus de la ligne, un affaissement tiré au hasard, un coin qui tombe. L'utilisateur : « calculer une vraie simulation… je rappelle que c'est LE thème », avec une meilleure interaction avec le sol. `proto/s0` essaie de calculer la fonte au lieu de la dessiner.
+
+**Le modèle (problème de Stefan, méthode de l'enthalpie)**, sur une grille 3D de 160 × 110 × 160 (pas 0,02 cm) autour d'une trémie :
+- le solide, à peine sorti du bain, est juste sous le point de fusion ;
+- sous la ligne, le bain chaud (brassé) échange fortement avec lui. Une cellule en partie noyée échange au prorata, faute de quoi la fonte se strie par couches ;
+- au-dessus, l'air reçoit un panache chaud né du bain, qui retombe vers l'air de l'atelier (sous la fusion) ;
+- la croûte du fond, plus froide, tient le pied du cristal (le creuset gèle par le bas) ;
+- le solide conduit la chaleur. Une cellule qui a reçu la moitié de sa chaleur latente fond : au-dessus du bain le liquide s'égoutte, dessous il rejoint le bain ;
+- l'appui : quand la section du solide au ras du bain tombe sous 15 % de celle du cristal (la taille a fondu, comme l'encoche à la ligne de flottaison d'un iceberg), le bloc au-dessus n'est plus porté et s'enfonce jusqu'à reposer sur une section plus large. La chaleur est calculée dans le repère du cristal.
+
+**Ce qu'on garde** : pour chaque cellule, l'instant τ où elle fond. Le cristal à l'instant u est la trémie d'origine (faces nettes) ∩ { τ > u }, rendu par la distance φ = (u − τ)·v, avec v = 1/|∇τ|, la vitesse du front. Le champ est lissé (trois passes) : la méthode de l'enthalpie fond une cellule à la fois, et la tension superficielle lisse les faces fondues. Une face fondue est du métal liquide, sans oxyde. Il suffit d'une texture 3D par cristal, relue à chaque image. Le calcul prend 0,7 s sur le GPU (5 878 pas) ; `sim.mjs` est la même chose en Node, pour régler le modèle (`lead.mjs` mesure l'avance de la fonte sur la ligne de métal).
+
+**Ce qui en sort sans réglage à la main** : les parois minces et les arêtes fondent d'abord, les gradins s'amollissent et pendent en franges de métal fondu le long de la ligne. Une encoche se creuse à la ligne, puis le bloc s'assoit dans son bain. La chaleur du métal fait défiler les couleurs de l'oxyde devant la fonte. Le film est dans `proto/s0/fonte.gif`.
+
+**Pas encore fait** : la peau d'oxyde et la surface du bain (une simulation 2D en hauteur, qui porterait la peau et les rides) ; plusieurs cristaux ; l'intégration dans la scène (une grille par cristal, plus grossière pour les satellites) ; le crènelage des reflets.
+
 ## Ce qui reste perfectible
 
 - **L'affaissement est un mouvement d'ensemble du cristal**, plus un coin qui tombe. Les gradins ne s'effondrent pas un à un.
