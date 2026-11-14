@@ -318,16 +318,23 @@ export function rachisMaterial({ FS, FSP, FU, LK, moving, offset = 0 }) {
   return m;
 }
 
-// ── La gaine (seulement la plume nouvelle) ───────────────────────────────────
+// ── La gaine (les plumes qui poussent) ───────────────────────────────────────
 // Un tube autour du vexille roulé ; il existe sous le front de déroulement et
-// au-dessus de la peau ; au front, il s'effrite (bord tramé).
-export function sheathMaterial({ FS, FSP, FU, LK, idx = 0 }) {
+// au-dessus de la peau ; au front, il s'effrite (bord tramé). Instancié : une
+// gaine par follicule, l'attribut fid dit à quelle plume elle appartient.
+export function sheathGeometry(fids, nr = 64, ns = 20) {
+  const g = rachisGeometry(fids.length, nr, ns);
+  g.setAttribute('fid', new THREE.InstancedBufferAttribute(Float32Array.from(fids), 1));
+  return g;
+}
+export function sheathMaterial({ FS, FSP, FU, LK }) {
   const lite = isLite();
   const m = new THREE.MeshSSSNodeMaterial();
   const vS = varyingProperty('vec2', 'vSh');
+  const vU = varyingProperty('float', 'vShU'); // (l'âge de la plume)
   const rhoAt = (s) => FU.rhoTex ? texture(FU.rhoTex, vec2(s, 0.5)).level(0).r : float(0.1);
   const pose = (A, full) => Fn(() => {
-    const st = stOf(A, float(idx));
+    const st = stOf(A, attribute('fid', 'float'));
     const s = positionGeometry.x, c = positionGeometry.y, sn = positionGeometry.z;
     const R = rachisPoint(s, st, FU, false);
     const rho = tmax(rhoAt(s), FU.r0.mul(1.1));
@@ -345,15 +352,15 @@ export function sheathMaterial({ FS, FSP, FU, LK, idx = 0 }) {
     if (full) {
       normalLocal.assign(qrot(st.Q, normalize(X.mul(c).add(R.N.mul(sn)))));
       vS.assign(vec2(s, atanLike(c, sn)));
+      vU.assign(st.T.x);
     }
     return st.P.xyz.add(qrot(st.Q, p.mul(st.P.w)));
   })();
   m.positionNode = lite ? pose(FS, true) : Fn(() => { positionPrevious.assign(pose(FSP, false)); return pose(FS, true); })();
   m.castShadowPositionNode = pose(FS, false);
-  const st = stOf(FS, float(idx));
   const s = vS.x, ang = vS.y;
   // l'effritement : au-dessus du front, la gaine n'est plus là ; bord en écailles
-  const u = st.T.x;
+  const u = vU;
   const front = releaseAtT(s); // (instant où le front passe à cette hauteur)
   const flake = fract(sin(s.mul(173.1).add(ang.mul(7.3))).mul(4375.5));
   const gone = u.sub(front).add(flake.mul(0.012));

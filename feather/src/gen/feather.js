@@ -1,4 +1,4 @@
-// La plume : forme, barbes, déroulement, calendrier de la boucle, plumage.
+// La plume : forme, barbes, déroulement, calendrier de sa vie, repères.
 // Module pur (sans three.js) : la même formule sert au vertex shader
 // (scene/feather.js la recopie en TSL), aux tests et au placement.
 //
@@ -30,15 +30,15 @@ export const mix = (a, b, t) => a + (b - a) * t;
 // Une seule horloge : la croissance, le déroulement, l'agrafage, la pose et
 // l'usure lisent tous ces bornes ; la caméra et la lumière aussi.
 export const SCHED = {
-  push: [0.0, 0.075],   // le tuyau sort sous l'ancienne plume et la soulève (accéléré)
-  fall: [0.075, 0.15],  // libérée, elle glisse sur le dos (caméra rapide, ×8)
-  grow: [0.15, 0.4],    // le tuyau finit de monter (accéléré)
-  front: [0.34, 0.6],   // le front de déroulement descend de la pointe à la base
+  push: [0.0, 0.05],    // le tuyau sort sous l'ancienne plume et la chasse du follicule (accéléré)
+  fall: [0.05, 0.1],    // libérée, elle tombe hors du bouquet (caméra rapide, ×8)
+  grow: [0.1, 0.22],    // le tuyau finit de monter (accéléré)
+  front: [0.18, 0.42],  // le front de déroulement descend de la pointe à la base
   open: 0.045,          // durée locale d'ouverture (rebond élastique)
   zipLag: 0.025, zipW: 0.035, zipDur: 0.035, // agrafage : retard, avancée vers le bord, durée
-  bend: [0.46, 0.72],   // le rachis prend sa courbure
-  settle: [0.72, 0.85], // la plume se couche
-  wear: [0.86, 0.99],   // l'usure
+  bend: [0.3, 0.58],    // le rachis prend sa courbure (le poids du vexille ouvert)
+  settle: [0.5, 0.66],  // la plume se penche à sa place dans la gerbe
+  wear: [0.84, 0.99],   // l'usure
   pushFrac: 0.42,       // part de la croissance faite sous l'ancienne plume (il la soulève)
 };
 
@@ -52,7 +52,7 @@ export function growth(u, L) {
 // (au départ, tout est caché : la pointe des barbes dépasse un peu le rachis,
 // et le duvet est fait de barbes plus longues que son calamus)
 export const sinkAt = (u, L, cal, over = 1.08) => mix(L * over, 0.85 * cal * L, growth(u, L));
-// courbure du rachis (1/cm) : la sienne, bornée pour épouser le corps sans y entrer
+// courbure du rachis (1/cm) sur un corps de rayon Rd (la gerbe donne la sienne : lay.kb)
 export const bendOf = (P, Rd) => Math.min(P.bend + 0.5 / Rd, 0.9 / Rd);
 // instant où le front de déroulement atteint la hauteur s (part du rachis)
 export const releaseAt = (s) => SCHED.front[0] + (1 - clamp(s, 0, 1)) * (SCHED.front[1] - SCHED.front[0]);
@@ -88,8 +88,9 @@ export function halfWidth(P, s, side) {
   return W * w;
 }
 // rayon du tube (gaine) à la hauteur s : la circonférence est la largeur totale
-// (plafonné : un vexille très large — l'autruche — s'enroule sur plus d'un tour)
-export const tubeRadius = (P, s) => P.radial ? P.bundle : Math.min(0.06 * P.L, Math.max(0.012, (halfWidth(P, s, 1) + halfWidth(P, s, -1)) / TAU));
+// (plafonné : un tuyau fin, comme sur un oisillon — un vexille large s'y
+// enroule sur plus d'un tour, caché par la gaine)
+export const tubeRadius = (P, s) => P.radial ? P.bundle : Math.min(0.032 * P.L, Math.max(0.012, (halfWidth(P, s, 1) + halfWidth(P, s, -1)) / TAU));
 
 // point d'une barbe dans le plan déroulé, à l'abscisse curviligne l :
 // σ (distance au rachis), h (hauteur au-dessus de sa racine) ; angle φ = α − c·l
@@ -263,11 +264,10 @@ export function rachisPoint(s, S) {
   return { p: [0, Ny / kk + Ny * off, -(1 - Nz) / kk + Nz * off], hidden: yy < 0 };
 }
 
-// ── Le corps et le plumage ───────────────────────────────────────────────────
-// Le corps : une sphère de rayon Rd, son sommet à l'origine (centre en
-// (0, −Rd, 0)). Le follicule de la plume héroïne est sur le méridien φ = 0,
-// à l'angle polaire θh (vers +z). Les plumes pointent « vers la queue » :
-// vers les θ croissants.
+// ── Les repères sur le socle ─────────────────────────────────────────────────
+// Le socle : une sphère de rayon Rd, son sommet à l'origine (centre en
+// (0, −Rd, 0)) ; un point en (θ angle polaire, φ azimut). La gerbe (bouquet.js)
+// y plante ses follicules ; le duvet (down.js) y sème ses rosettes.
 export const quatFromBasis = (x, y, z) => { // (colonnes x, y, z orthonormées)
   const m00 = x[0], m11 = y[1], m22 = z[2], tr = m00 + m11 + m22;
   let qx, qy, qz, qw;
@@ -285,7 +285,7 @@ export const qrot = (q, v) => {
 const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 const norm = (a) => { const l = Math.hypot(...a) || 1; return a.map((x) => x / l); };
 
-// repère du corps au point (θ, φ) : position, normale n, pente d (vers la queue), côté e
+// repère du socle au point (θ, φ) : position, normale n, pente d (vers l'extérieur et le bas), côté e
 export function bodyFrame(Rd, th, ph) {
   const n = [Math.sin(th) * Math.sin(ph), Math.cos(th), Math.sin(th) * Math.cos(ph)];
   const p = [n[0] * Rd, n[1] * Rd - Rd, n[2] * Rd];
@@ -308,94 +308,4 @@ export function featherFrame(Rd, th, ph, beta, omega = 0, yaw = 0) {
   X = X2; Z = Z2;
   void e;
   return { p, q: quatFromBasis(X, Y, Z), X, Y, Z, n };
-}
-
-// La plume couchée : soulevée de ε au-dessus de la pente (les rangées se
-// recouvrent comme des tuiles), roulée de ω (recouvrement latéral)
-export const LIE = { eps: 0.16, omega: 0.07, erect: 0.62 };
-export const LIE_BETA = (radial) => (radial ? 0.85 : Math.PI / 2 - LIE.eps);
-// (le duvet ne se couche pas : une houppe reste dressée, penchée vers la queue)
-export const betaAt = (u, radial = false) => mix(LIE.erect, LIE_BETA(radial), settleAt(u));
-
-// Plan du plumage : les plumes voisines en rangées décalées. La plume
-// héroïne est la tuile (0, 0) ; les deux tuiles de la rangée du dessus qui
-// couvriraient son follicule s'écartent (le tuyau sort entre elles).
-export function layoutPlumage(P0, seed, { rows = [-8, 14], cols = 7, lite = false, tile = null } = {}) {
-  const P = tile ?? P0; // (le plumage : les plumes voisines, pas forcément de la famille héroïne)
-  let h = 2166136261;
-  for (const ch of `plumage:${seed}`) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
-  const rnd = () => { h = Math.imul(h ^ (h >>> 15), 2246822507); h = Math.imul(h ^ (h >>> 13), 3266489909); return ((h ^= h >>> 16) >>> 0) / 4294967296; };
-  const Rd = P.L * FAMILIES[P.family].dome, thH = 0.72;
-  const len = P.L;
-  // (on ne voit que le bout de chaque plume : la rangée suivante recouvre plus des deux tiers)
-  const rowStep = P.radial ? P.L * 0.38 : len * (P.eye ? 0.26 : 0.3);
-  const colStep = P.radial ? P.L * 0.42 : Math.max(P.W, P.L * 0.22) * (P.eye ? 0.72 : 0.56);
-  const tiles = [];
-  for (let k = rows[0]; k <= rows[1]; k++) {
-    const th = thH + (k * rowStep) / Rd;
-    if (th < 0.06 || th > 1.62) continue;
-    const ring = Rd * Math.sin(th);
-    for (let j = -cols; j <= cols; j++) {
-      if (k === 0 && j === 0) continue; // (la plume héroïne)
-      let b = (j + (k & 1 ? 0.5 : 0)) * colStep;
-      const ph = b / ring;
-      if (Math.abs(ph) > 1.25) continue;
-      tiles.push({ th, ph, k, j, scale: 0.9 + 0.14 * rnd(), wear: 0.1 + 0.3 * rnd(), rnd: rnd(), yaw: (rnd() - 0.5) * 0.05 });
-    }
-  }
-  if (lite) for (let i = tiles.length - 1; i >= 0; i--) if (Math.abs(tiles[i].ph) > 0.8 || tiles[i].k > 5) tiles.splice(i, 1);
-  return { Rd, thH, rowStep, colStep, tiles };
-}
-
-// La plume ancienne, chassée : poussée (le tuyau la soulève), puis libre,
-// elle glisse sur le dos de l'oiseau — le long du méridien, au-dessus des
-// rangées — et disparaît derrière la courbe du corps (ralenti ×8 : une caméra
-// rapide ; la croissance s'arrête pendant ce temps).
-// Rend { th (angle polaire de sa base), lift (cm, selon la normale), tilt
-// (rad, autour de l'axe latéral), roll, gone, base (hauteur du contact) }
-export const FALL_SLOWMO = 8;
-// pointe du tuyau nouveau dans le monde (pendant la poussée, il est droit)
-export function pinTip(u, P, lay) {
-  const fr = featherFrame(lay.Rd, lay.thH, 0, betaAt(u, P.radial), 0);
-  const h = Math.max(0, P.L - sinkAt(u, P.L, P.calamus, P.over));
-  return qrot(fr.q, [0, h, 0]).map((v, i) => v + fr.p[i]);
-}
-export function ejection(u, P, lay) {
-  const { thH, Rd } = lay;
-  const { p: root, n } = bodyFrame(Rd, thH, 0);
-  // le contact : la base de l'ancienne plume repose sur la pointe du tuyau ;
-  // elle bascule pour que sa pointe à elle reste sur le plumage
-  const pose = (uu) => {
-    const tw = pinTip(Math.min(uu, SCHED.push[1]), P, lay);
-    const D = tw.map((v, i) => v - root[i]);
-    const dn = D[0] * n[0] + D[1] * n[1] + D[2] * n[2];
-    return { D, tilt: Math.asin(clamp(dn / (P.L * 0.9), 0, 0.9)) };
-  };
-  if (u <= SCHED.fall[0]) {
-    const { D, tilt } = pose(u);
-    return { th: thH, off: D, tilt, roll: 0, gone: false, base: D };
-  }
-  // temps réel (s) depuis qu'elle est libre ; durée de la boucle de référence : 36 s
-  const T = ((u - SCHED.fall[0]) * 36) / FALL_SLOWMO;
-  // glissement d'une plume sur des plumes : a = g (sin θ − μ cos θ), μ = 0,45
-  const mu = 0.45, acc = 981 * Math.max(0.05, Math.sin(thH) - mu * Math.cos(thH));
-  const sl = 0.5 * acc * T * T; // cm, le long du corps
-  const th = thH + sl / Rd;
-  // (au départ, exactement la pose de la fin de la poussée : pas de saut ;
-  // elle retombe à plat sur le plumage en glissant, et oscille un peu)
-  const { D: D1, tilt: a1 } = pose(SCHED.fall[0]);
-  const k = sstep(0, 0.12, T);
-  const nt = bodyFrame(Rd, th, 0).n;
-  const off = D1.map((v, i) => v * (1 - k) + nt[i] * 0.25 * k);
-  const roll = 0.18 * sstep(0.05, 0.2, T) * Math.sin(T * 22) * sstep(0, 0.05, T);
-  // (elle n'est retirée qu'une fois passée derrière la courbe du dos, à
-  // 1,3 rad du follicule : la caméra, du côté de la tête, ne la voit plus)
-  return { th, off, tilt: a1 * (1 - k), roll, gone: sl / Rd > 1.3, base: null };
-}
-
-// ── La pose résolue (gen/collide.js, solveSettle) ──────────────────────────
-// lecture de la pose résolue (interpolation linéaire, continue)
-export function betaSolved(path, u) {
-  const N = path.length - 1, x = clamp(u, 0, 1) * N, i = Math.min(N - 1, Math.floor(x)), f = x - i;
-  return path[i] * (1 - f) + path[i + 1] * f;
 }

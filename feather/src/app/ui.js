@@ -65,7 +65,7 @@ export function createUI({ recipe: getRecipe, render, on, moods }) {
     add(fCam, R.camera, 'd', 0.6, 2.5, 0.01).name('Distance (× longueur de plume)').onChange(() => on.cameraChanged());
     add(fCam, R.camera, 'el', 0.05, 1.3, 0.01).name('Plongée (rad)').onChange(() => on.cameraChanged());
     add(fCam, R.camera, 'az', -1.6, 1.6, 0.01).name('Trois quarts (rad)').onChange(() => on.cameraChanged());
-    add(fCam, R.camera, 'drift', 0, 0.6, 0.01).name('Glissement pendant le déroulement').onChange(() => on.cameraChanged());
+    add(fCam, R.camera, 'drift', 0, 0.6, 0.01).name('Balancement (rad)').onChange(() => on.cameraChanged());
     add(fCam, on.camState, 'free').name('Caméra libre (souris)').onChange((v) => on.freeCam(v));
 
     const S = R.shape, sh = () => on.shapeChanged();

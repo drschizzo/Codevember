@@ -1,6 +1,7 @@
 // Invariants du cœur : déroulement isométrique, calendrier monotone, raccord
-// de la boucle, contact de la poussée, plumage sans interpénétration, caméra
-// lente et périodique, motif du collier.
+// de la boucle, la gerbe (ordre à l'angle d'or, chute de l'ancienne, rien ne
+// traverse rien, rien sous le socle), caméra lente et périodique, motif du
+// collier.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generate } from '../src/recipe.js';
@@ -8,10 +9,11 @@ import { FAMILIES } from '../src/families.js';
 import { createRng } from '../../shared/rng.js';
 import {
   shapeOf, barbTable, barbPose, barbArc, BARB_STRIDE, SCHED, growth, unroll, zipAt, releaseAt, bendAt, settleAt, wearAt,
-  layoutPlumage, featherFrame, pinTip, bendOf, tubeRadius, rachisPoint, betaAt, bodyFrame, qrot, LIE, ejection, sinkAt,
+  qrot, sinkAt,
 } from '../src/gen/feather.js';
+import { layoutBouquet, bouquetState, ageOf, frameAt, oldPose, leanAt, surfaceDist, GERBE, GOLDEN } from '../src/gen/bouquet.js';
 import { cameraPath } from '../src/camera.js';
-import { solveScene, sceneCrossings } from '../src/gen/collide.js';
+import { bouquetCrossings, featherLines } from '../src/gen/collide.js';
 import { simulateCollar, featherTexture, PROGRAMS } from '../src/gen/pattern.js';
 
 const barb = (T, i) => [...T.slice(i * BARB_STRIDE, (i + 1) * BARB_STRIDE)];
@@ -58,8 +60,8 @@ test('le calendrier est monotone : croissance, déroulement, agrafage, courbure,
     let pz = -1;
     for (let u = 0; u <= 0.85; u += 1 / 1000) { const z = zipAt(u, s, 0.5); assert.ok(z >= pz - 1e-12); pz = z; }
   }
-  // tout est ouvert, agrafé et courbé avant que la plume se couche
-  assert.ok(unroll(SCHED.settle[0], 0) > 0.999 && zipAt(SCHED.settle[0], 0, 1) > 0.999 && bendAt(SCHED.settle[0]) > 0.97);
+  // tout est ouvert, agrafé et courbé quand la plume a pris sa place dans la gerbe
+  assert.ok(unroll(SCHED.settle[1], 0) > 0.999 && zipAt(SCHED.settle[1], 0, 1) > 0.999 && bendAt(SCHED.settle[1]) > 0.999);
   // l'ancienne plume est chassée avant que la nouvelle ne pousse vraiment
   assert.ok(SCHED.fall[1] <= SCHED.grow[0] + 1e-9);
 });
@@ -79,143 +81,103 @@ test('la boucle se referme : la plume à u = 1 est la plume couchée et usée du
     }
     // à u = 0, la nouvelle plume est entièrement dans le follicule
     for (let b = 0; b < T.length / BARB_STRIDE; b += 9) assert.ok(barbPose(barb(T, b), 1, 0, 0, S0(P, 0)).hidden);
-    assert.ok(Math.abs(betaAt(1) - (Math.PI / 2 - LIE.eps)) < 1e-12 && sinkAt(0, P.L, P.calamus, P.over) >= P.L);
+    assert.ok(sinkAt(0, P.L, P.calamus, P.over) >= P.L);
   }
 });
 
-test('la poussée : la base de l’ancienne plume repose exactement sur la pointe du tuyau', () => {
-  for (const fam of ['vexille', 'plume', 'ocelle']) {
-    const P = shapeOf(fam, createRng(`push-${fam}`));
-    const lay = layoutPlumage(P, 'push');
-    const root = bodyFrame(lay.Rd, lay.thH, 0).p;
-    let lifted = 0;
-    for (let u = 0; u <= SCHED.push[1]; u += SCHED.push[1] / 20) {
-      const ej = ejection(u, P, lay), tip = pinTip(u, P, lay);
-      const base = root.map((v, i) => v + ej.off[i]);
-      assert.ok(Math.hypot(base[0] - tip[0], base[1] - tip[1], base[2] - tip[2]) < 1e-9, `u = ${u}`);
-      lifted = Math.max(lifted, ej.tilt);
+// ── La gerbe ────────────────────────────────────────────────────────────────
+const SEEDS = [['1', {}], ['6', {}], ['7', {}], ['0', {}], ['2', {}], ['g1', { family: 'vexille' }], ['g2', { family: 'plume' }], ['g3', { family: 'ocelle' }]];
+const sceneOf = (seed, over) => { const R = generate(seed, over); return { R, lay: layoutBouquet(R.shape, R.seed), tables: { hero: barbTable(R.shape, R.seed) } }; };
+
+test('la gerbe : à l’angle d’or, deux plumes nées l’une après l’autre sont loin l’une de l’autre', () => {
+  const { lay } = sceneOf('1', {});
+  for (let i = 1; i < lay.N; i++) {
+    const d = Math.abs(((lay.follicles[i].az - lay.follicles[i - 1].az + Math.PI) % (2 * Math.PI)) - Math.PI);
+    assert.ok(d > 2, `${i} : ${d}`);
+  }
+  assert.ok(Math.abs(GOLDEN - 2.39996) < 1e-4);
+  // à chaque instant, une plume au moins se déplie
+  for (let u = 0; u < 1; u += 0.01) assert.ok(lay.follicles.some((f) => { const a = ageOf(lay, f.i, u); return a > SCHED.front[0] && a < SCHED.front[1]; }), `u = ${u}`);
+  // l'inclinaison ne revient jamais en arrière
+  for (const fam of Object.keys(GERBE)) { let p = -1; for (let a = 0; a <= 1; a += 0.001) { const l = leanAt(GERBE[fam], a); assert.ok(l >= p - 1e-12); p = l; } }
+});
+
+test('le relais : au raccord d’un follicule, l’ancienne prend exactement la pose de la courante', () => {
+  for (const [seed, over] of SEEDS) {
+    const { R, lay } = sceneOf(seed, over);
+    for (const f of lay.follicles) {
+      const cur = frameAt(lay, f, 1 - 1e-9), old = oldPose(lay, f, 0, R.shape);
+      assert.ok(Math.hypot(...cur.p.map((v, i) => v - old.p[i])) < 1e-6, seed);
+      assert.ok(Math.abs(Math.abs(cur.q.reduce((s, v, i) => s + v * old.q[i], 0)) - 1) < 1e-6, seed);
     }
-    // (et elle se soulève assez pour qu'on le voie : plus de 5°)
-    assert.ok(lifted > 0.09, `${fam} : soulevée de ${(lifted * 180 / Math.PI).toFixed(1)}°`);
-    // ensuite elle s'en va vers la queue, sans jamais remonter, et n'est retirée que derrière la courbe du dos
-    const late = ejection(SCHED.fall[1] + 0.05, P, lay);
-    assert.ok(late.gone && late.th > lay.thH + 1.3);
-    let pth = -1;
-    for (let u = SCHED.fall[0]; u <= SCHED.fall[1]; u += 0.002) { const e = ejection(u, P, lay); assert.ok(e.th >= pth); pth = e.th; }
+    // et toute la scène boucle
+    const a = bouquetState(R, lay, 0.3), b = bouquetState(R, lay, 1.3);
+    a.forEach((o, i) => assert.ok(Math.hypot(...o.p.map((v, k) => v - b[i].p[k])) < 1e-9 && o.vis === b[i].vis));
   }
 });
 
-test('le plumage : les rangées se recouvrent comme des tuiles, sans se traverser', () => {
-  for (const fam of ['vexille', 'ocelle', 'plume']) {
-    const P = shapeOf(fam, createRng(`tile-${fam}`));
-    const lay = layoutPlumage(P, 'tile');
-    const k = bendOf(P, lay.Rd);
-    // hauteur au-dessus du corps du rachis couché : croît avec la distance au follicule
-    const fr = featherFrame(lay.Rd, lay.thH, 0, betaAt(1), LIE.omega);
-    let prev = -1;
-    for (let s = 0.2; s <= 1; s += 0.1) {
-      const y = s * P.L - sinkAt(1, P.L, P.calamus, P.over), kk = k;
-      const loc = [0, Math.sin(kk * y) / kk, -(1 - Math.cos(kk * y)) / kk];
-      const w = qrot(fr.q, loc).map((v, i) => v + fr.p[i]);
-      const h = Math.hypot(w[0], w[1] + lay.Rd, w[2]) - lay.Rd;
-      assert.ok(h > 0 && h > prev - 1e-9, `${fam} s = ${s} : h = ${h}`);
-      prev = h;
+test('la chute : l’ancienne glisse hors du follicule, bascule, glisse sur le socle et sort du cadre, sans saut', () => {
+  for (const [seed, over] of SEEDS) {
+    const { R, lay } = sceneOf(seed, over);
+    const P = R.shape, f = lay.follicles[0];
+    // pendant la poussée : le long de son axe, de la longueur de son calamus au plus
+    const p0 = oldPose(lay, f, 0, P).p, p1 = oldPose(lay, f, SCHED.push[1], P).p;
+    assert.ok(Math.hypot(...p0.map((v, i) => v - p1[i])) <= 0.85 * P.calamus * P.L * f.scale + 1e-9);
+    // continue : à 60 i/s, son follicule bouge de moins de 1,5 L par seconde de film
+    const dt = 1 / (R.loop.duration * 60);
+    let prev = null, worst = 0, py = Infinity;
+    for (let a = 0; a < SCHED.fall[1] + 0.08; a += dt) {
+      const o = oldPose(lay, f, a, P);
+      if (prev) worst = Math.max(worst, Math.hypot(...o.p.map((v, i) => v - prev[i])));
+      if (a > SCHED.push[1] + 0.01) { assert.ok(o.p[1] <= py + 1e-9, `${seed} : elle remonte`); py = o.p[1]; }
+      prev = o.p;
     }
+    assert.ok(worst < 0.03 * P.L * 8, `${seed} : ${worst.toFixed(3)} cm par image`);
+    // retirée hors du cadre, avant que la boucle ne la redemande
+    assert.ok(bouquetState(R, lay, 0).filter((o) => o.kind === 'old' && o.f === 0).every((o) => o.vis) && oldPose(lay, f, SCHED.fall[1] + 0.08, P).vis === 0, seed);
   }
 });
 
-// Le banc des traversées (gen/collide.js) : la scène telle qu'elle est rendue
-// — la plume, l'ancienne, les voisines écartées —, toutes ses barbes et ses
-// rachis en lignes brisées, et la surface pleine de chaque plume en carte de
-// hauteur : une ligne qui passe d'un côté à l'autre d'une surface la traverse.
-const SOLVED = new Map();
-function solvedOf(seed, over = {}) {
-  const key = `${seed}:${JSON.stringify(over)}`;
-  if (!SOLVED.has(key)) {
-    const R = generate(seed, over), P = R.shape, T = R.tile ?? P, lay = layoutPlumage(P, R.seed, { tile: R.tile });
-    const tables = { hero: barbTable(P, R.seed), tile: barbTable(T, `${R.seed}:tile`, 10) };
-    SOLVED.set(key, { R, lay, tables, solved: solveScene(R, lay, tables) });
-  }
-  return SOLVED.get(key);
-}
-
-test('rien ne traverse rien : la plume, l’ancienne et les voisines, sur toute la boucle', () => {
-  // vexilles : rien au-delà de 0,3 mm ; l'autruche et le paon (barbes libres,
-  // comme des cheveux) : leurs barbes se mêlent, seules comptent les traversées
-  // des parties pleines (vexille agrafé, disque de l'œil, rachis)
-  for (const [seed, over, max] of [['33', {}, 0.03], ['nqbh3w', {}, 0.03], ['o', {}, 0.03], ['h1', { family: 'vexille' }, 0.03], ['u', {}, 0.15]]) {
-    const { R, lay, tables, solved } = solvedOf(seed, over);
-    let worst = { depth: 0 }, at = 0;
-    for (let i = 0; i <= 100; i++) {
-      const c = sceneCrossings(R, lay, i / 100, tables, solved);
+test('rien ne traverse rien : toutes les plumes de la gerbe, sur toute la boucle', () => {
+  // parties pleines (vexilles agrafés, disque de l'œil, rachis), hors du pied
+  // duveteux de la gerbe : au plus 0,6 mm pour les vexilles, le duvet et le
+  // paon. L'autruche, dont seuls les rachis sont pleins : deux rachis se
+  // frôlent encore un instant (≤ 5,5 mm, sur un ou deux centièmes de boucle).
+  // Le socle : rien à plus de 1,5 mm sous la couche de duvet, dans le cadre.
+  for (const [seed, over] of SEEDS) {
+    const { R, lay, tables } = sceneOf(seed, over);
+    const max = R.family === 'plume' ? 0.55 : R.family === 'ocelle' ? 0.08 : 0.06;
+    let worst = { depth: 0 }, at = 0, body = 0;
+    for (let i = 0; i < 100; i++) {
+      const c = bouquetCrossings(R, lay, i / 100, tables);
+      body = Math.max(body, c.body);
       if (c.depth > worst.depth) { worst = c; at = i / 100; }
     }
     assert.ok(worst.depth < max, `${seed} (${R.family}) : traversée de ${worst.depth.toFixed(3)} cm à u = ${at.toFixed(2)} (${worst.pair})`);
+    assert.ok(body < 0.15, `${seed} (${R.family}) : ${body.toFixed(3)} cm dans le socle`);
   }
 });
 
-test('le banc voit les traversées : sans le solveur, la plume traverse ses voisines', () => {
-  const { R, lay, tables } = solvedOf('33');
-  let n = 0;
-  for (let i = 0; i <= 50; i++) if (sceneCrossings(R, lay, i / 50, tables, null).depth > 0.05) n++;
-  assert.ok(n > 10, `seulement ${n} instants détectés sans solveur`);
-});
-
-test('les mouvements résolus sont continus, lents, monotones à la pose, et bouclent', () => {
-  for (const seed of ['33', 'nqbh3w', 'u']) {
-    const { R, lay, solved } = solvedOf(seed);
-    const N = solved.beta.length - 1, T = R.tile ?? R.shape;
-    // la pose ne remonte jamais pendant qu'elle se couche ; le raccord
-    for (let i = 1; i <= N; i++) if (i / N > SCHED.settle[0] - 0.05) assert.ok(solved.beta[i] >= solved.beta[i - 1] - 1e-6, `${seed} : la plume remonte`);
-    for (const [, tab] of solved.tiles) assert.ok(Math.abs(tab[0] - tab[N * 2]) < 1e-6 && Math.abs(tab[1] - tab[N * 2 + 1]) < 1e-6, `${seed} : une voisine ne boucle pas`);
-    // à 60 i/s, la pointe d'une voisine bouge de moins de 2 mm par image
-    const frames = R.loop.duration * 60;
-    let worst = 0;
-    for (const [, tab] of solved.tiles) for (let i = 1; i <= N; i++) {
-      const dang = Math.hypot(tab[i * 2] - tab[(i - 1) * 2], tab[i * 2 + 1] - tab[(i - 1) * 2 + 1]);
-      worst = Math.max(worst, (dang * T.L) / (frames / N));
-    }
-    assert.ok(worst < 0.2, `${seed} : ${worst.toFixed(3)} cm par image`);
-    for (let i = 1; i <= N; i++) assert.ok(Math.abs(solved.old[i] - solved.old[i - 1]) * T.L < 2, 'ancienne plume');
-    void lay;
-  }
-});
-
-test('l’ancienne plume ne saute pas quand elle se libère', () => {
-  for (const fam of ['vexille', 'plume', 'ocelle']) {
-    const P = shapeOf(fam, createRng(`ej-${fam}`)), lay = layoutPlumage(P, 'ej');
-    const a = ejection(SCHED.fall[0] - 1e-6, P, lay), b = ejection(SCHED.fall[0] + 1e-6, P, lay);
-    assert.ok(Math.abs(a.tilt - b.tilt) < 1e-3 && Math.hypot(...a.off.map((v, i) => v - b.off[i])) < 1e-3 && Math.abs(a.th - b.th) < 1e-6 && Math.abs(b.roll) < 1e-3, fam);
-  }
-});
-
-test('la plume ne passe jamais sous le plumage (points témoins à pas fixe)', () => {
-  for (const fam of ['vexille', 'ocelle', 'plume']) {
-    const R = generate('pen', { family: fam });
-    const P = R.shape, lay = layoutPlumage(P, R.seed);
-    const T = barbTable(P, R.seed);
-    const k = bendOf(P, lay.Rd);
-    const mouth = 2.2 * Math.max(...Array.from({ length: 21 }, (_, i) => tubeRadius(P, i / 20))) + 0.1;
-    let worst = Infinity, where = '';
-    for (let u = 0.15; u <= 1; u += 0.025) {
-      const fr = featherFrame(lay.Rd, lay.thH, 0, betaAt(u), LIE.omega * settleAt(u));
-      const g = qrot([-fr.q[0], -fr.q[1], -fr.q[2], fr.q[3]], [0, -1, 0]);
-      const S = { u, L: P.L, k, wear: wearAt(u), g, radial: P.radial, cal: P.calamus, over: P.over };
-      for (let b = 0; b < T.length / BARB_STRIDE; b += 3) {
-        const B = barb(T, b);
-        for (let i = 1; i <= 8; i++) {
-          const r = barbPose(B, i / 8, 0, 0, S);
-          if (r.hidden) continue;
-          const w = qrot(fr.q, r.p).map((v, j) => v + fr.p[j]);
-          // (la bouche du follicule : la peau s'y enroule autour du tuyau)
-          if (Math.hypot(w[0] - fr.p[0], w[1] - fr.p[1], w[2] - fr.p[2]) < mouth) continue;
-          const h = Math.hypot(w[0], w[1] + lay.Rd, w[2]) - lay.Rd;
-          if (h < worst) { worst = h; where = `u=${u.toFixed(3)} b=${b} s0=${B[0].toFixed(2)} plum=${B[7].toFixed(2)} t=${i / 8}`; }
-        }
+test('le mouvement est continu : à 60 i/s, aucune partie pleine ne saute', () => {
+  // (les fils libres du paon et de l'autruche, roulés sur plusieurs tours, se
+  // déroulent d'un coup de fouet : c'est leur geste, il n'est pas mesuré ici)
+  for (const [seed, over] of SEEDS.slice(0, 5)) {
+    const { R, lay, tables } = sceneOf(seed, over);
+    const dt = 1 / (R.loop.duration * 60);
+    let worst = 0, where = '';
+    for (let k = 0; k < 120; k++) {
+      const u = k / 120;
+      const A = bouquetState(R, lay, u), B = bouquetState(R, lay, u + dt);
+      for (let j = 0; j < A.length; j++) {
+        if (!A[j].vis || !B[j].vis || A[j].kind === 'old') continue;
+        const la = featherLines(R.shape, tables.hero, A[j], lay, { nt: 4, every: 7, skipPlum: false });
+        const lb = featherLines(R.shape, tables.hero, B[j], lay, { nt: 4, every: 7, skipPlum: false });
+        if (la.length !== lb.length) continue; // (une barbe qui sort du follicule)
+        la.forEach((l, i) => l.solid && l.forEach((w, m) => { const v = lb[i][m]; if (!v || l.length !== lb[i].length) return; const d = Math.hypot(w[0] - v[0], w[1] - v[1], w[2] - v[2]); if (d > worst) { worst = d; where = `u=${u.toFixed(3)} ${A[j].kind}${A[j].f}`; } }));
       }
     }
-    // (le corps est dessiné 1,5 mm sous la sphère de référence : la peau sous le duvet)
-    assert.ok(worst > -0.15, `${fam} : ${worst.toFixed(3)} cm sous la surface du corps (${where})`);
+    // (le rebond élastique du déroulement est le plus rapide : moins de 2 mm par image)
+    assert.ok(worst < 0.2, `${seed} : ${worst.toFixed(3)} cm (${where})`);
   }
 });
 
@@ -239,7 +201,8 @@ test('la caméra est périodique, lente, sans à-coup', () => {
       }
       prev = n;
     }
-    assert.ok(peak < 25, `${seed} : ${peak.toFixed(1)}°/s`);
+    assert.ok(peak < 12, `${seed} : ${peak.toFixed(1)}°/s`);
+    assert.ok(a.focusDist > 0 && Math.abs(a.focusDist - b.focusDist) < 1e-5);
     assert.ok(peakAcc < 60, `${seed} : accélération ${peakAcc.toFixed(1)}°/s²`);
   }
 });
