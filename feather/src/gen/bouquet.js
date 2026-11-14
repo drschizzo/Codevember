@@ -39,10 +39,10 @@ export const GOLDEN = Math.PI * (3 - Math.sqrt(5)); // (137,5°)
 //   inclinaison des follicules ; lean : inclinaison de la plume en plus [tuyau,
 //   ouverte, usée] (rad) ; kb : courbure du rachis (1/cm, × 1/L)
 export const GERBE = {
-  vexille: { N: 11, cap: 0.9, rho: 0.12, thF: 0.3, lean: [0.02, 0.34, 0.6], kb: 0.42 },
-  ocelle: { N: 8, cap: 0.55, rho: 0.06, thF: 0.26, lean: [0.02, 0.3, 0.56], kb: 0.22 },
-  duvet: { N: 6, cap: 1.8, rho: 0.75, thF: 0.3, lean: [0.06, 0.4, 0.62], kb: 0 },
-  plume: { N: 7, cap: 0.6, rho: 0.09, thF: 0.2, lean: [0.02, 0.22, 0.42], kb: 0.36 },
+  vexille: { N: 21, cap: 0.9, rho: 0.16, thF: 0.3, lean: [0.02, 0.34, 0.6], kb: 0.42 },
+  ocelle: { N: 13, cap: 0.55, rho: 0.06, thF: 0.26, lean: [0.02, 0.5, 0.95], kb: 0.22 },
+  duvet: { N: 9, cap: 1.8, rho: 0.75, thF: 0.3, lean: [0.06, 0.4, 0.62], kb: 0 },
+  plume: { N: 11, cap: 0.6, rho: 0.12, thF: 0.2, lean: [0.02, 0.25, 0.5], kb: 0.36 },
 };
 
 // inclinaison d'une plume à l'âge a (monotone : elle ne se redresse jamais)
@@ -149,7 +149,7 @@ export function oldPose(lay, f, a, P) {
   const beta = beta0 + (FALL.lie - beta0) * k;
   const s = f.th * lay.Rd + L * (1.0 * T * T + 6 * Math.max(0, T - 0.1) ** 2);
   const S = surfaceAt(lay.Rd, s, f.az);
-  const lift = 0.025 * L * k; // (couchée sur le duvet)
+  const lift = 0.025 * L * k * k; // (couchée sur le duvet ; k² : le soulèvement ne devance pas la descente le long de l’axe, elle ne remonte jamais)
   // (l'axe sorti du follicule s'efface à mesure qu'elle se couche)
   const p = S.p.map((v, i) => v + S.n[i] * lift + Y0[i] * slide * (1 - k));
   const wob = 0.12 * Math.sin(T * 9) * sstep(0.15, 0.4, T);

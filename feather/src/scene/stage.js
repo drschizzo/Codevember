@@ -16,7 +16,7 @@ import { layoutBouquet, bouquetState } from '../gen/bouquet.js';
 import { cameraPath } from '../camera.js';
 
 const SHADOW = { mobile: 1024, low: 1024, medium: 2048, high: 2048, ultra: 4096 };
-const MAXF = 32; // (3 vec4 par plume ; deux instances par follicule)
+const MAXF = 48; // (3 vec4 par plume ; deux instances par follicule)
 
 export function createStage(scene, gen, { lite = false } = {}) {
   // ── Lumières (ordre fixe) ──
@@ -145,8 +145,10 @@ export function createStage(scene, gen, { lite = false } = {}) {
       }
       add(new THREE.Mesh(barbGeometry(T, lite ? 12 : 22), barbMaterial({ FS, FSP, FU, LK, PAT: t, moving: true })));
       add(new THREE.Mesh(P.radial ? rachisGeometry(nF, 8, 8) : rachisGeometry(nF), rachisMaterial({ FS, FSP, FU, LK, moving: true, offset: 0 })));
-      // les gaines : une par follicule (la plume courante, id pair)
-      add(new THREE.Mesh(sheathGeometry(Array.from({ length: lay.N }, (_, i) => 2 * i), lite ? 40 : 64, lite ? 12 : 20), sheathMaterial({ FS, FSP, FU, LK })));
+      // les gaines : une par follicule (la plume courante, id pair) — une
+      // pellicule claire, sans ombre portée (elle assombrissait la plume roulée
+      // dedans : un bâton sombre au milieu de la gerbe)
+      add(new THREE.Mesh(sheathGeometry(Array.from({ length: lay.N }, (_, i) => 2 * i), lite ? 40 : 64, lite ? 12 : 20), sheathMaterial({ FS, FSP, FU, LK })), false);
       pending--;
       lastPh = -1;
     }).catch((e) => { console.error(e); pending = Math.max(0, pending - 1); });

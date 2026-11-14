@@ -12,7 +12,7 @@ import * as THREE from 'three/webgpu';
 import {
   Fn, attribute, positionLocal, normalLocal, positionPrevious, vec2, vec3, vec4, float, int, dot, normalize, mix,
   abs, uniform, uniformArray, texture, clamp, pow, sin, cos, exp, max as tmax, min as tmin, select, cross, normalViewGeometry,
-  varyingProperty, hash, fract, length, positionGeometry, frameId, step, fwidth, normalView, positionViewDirection,
+  varyingProperty, hash, fract, length, positionGeometry, frameId, step, fwidth, normalView, positionViewDirection, screenCoordinate,
 } from 'three/tsl';
 import { isLite, stableVelocity, perturb } from '../../../shared/scene/materials.js';
 import { G } from '../../../shared/scene/globals.js';
@@ -51,7 +51,7 @@ const stOf = (A, f) => {
 
 // La pose (gen/feather.js, barbPose). b0..b3 : la barbe ; tv : (t, v, arête) ;
 // st : l'état de sa plume ; FU : uniformes de la famille.
-function barbPoseT(b0, b1, b2, b3, tv, st, FU, ridgeK = 0.7) {
+function barbPoseT(b0, b1, b2, b3, tv, st, FU, ridgeK = 0.7, shadow = false) {
   const s0 = b0.x, side = b0.y, ell = b0.z, alpha0 = b0.w;
   const curl0 = b1.x, rho0 = b1.y, rho1 = b1.z, plum = b1.w;
   const rnd = b2.y, width = b2.z, zipF = b2.w;
@@ -102,7 +102,11 @@ function barbPoseT(b0, b1, b2, b3, tv, st, FU, ridgeK = 0.7) {
   const cx = nx.add(tilt.mul(tx)), cz = nz.add(tilt.mul(tz));
   const n = normalize(vec3(cx, Ny.mul(cz), Nz.mul(cz)));
   // caché (dans le follicule, ou plume masquée) : replié au follicule
-  const hide = yy.lessThan(0).or(st.T.w.lessThan(0.5));
+  // (passe d'ombre : une barbe encore roulée n'en porte pas — le tuyau se
+  // faisait de l'ombre à lui-même et restait un bâton sombre à contre-jour,
+  // quand les plumes ouvertes s'allument par translucidité)
+  let hide = yy.lessThan(0).or(st.T.w.lessThan(0.5));
+  if (shadow) hide = hide.or(rel.lessThan(0.5));
   p = select(hide, vec3(0, -0.05, 0), p);
   const world = st.P.xyz.add(qrot(st.Q, p.mul(st.P.w)));
   const nw = qrot(st.Q, n);
@@ -162,7 +166,7 @@ export function barbMaterial({ FS, FSP, FU, LK, PAT, moving, tile = false }) {
     const b0 = attribute('b0', 'vec4'), b1 = attribute('b1', 'vec4'), b2 = attribute('b2', 'vec4'), b3 = attribute('b3', 'vec4');
     const tv = positionGeometry;
     const st = stOf(FS, b2.x);
-    const P = barbPoseT(b0, b1, b2, b3, tv, st, FU, tile ? 0.2 : 0.45); // (voisines : un ruban vaut plusieurs barbes, arête adoucie)
+    const P = barbPoseT(b0, b1, b2, b3, tv, st, FU, tile ? 0.2 : 0.45, !full); // (voisines : un ruban vaut plusieurs barbes, arête adoucie)
     if (full) {
       normalLocal.assign(P.nw);
       vA.assign(vec4(P.pat, tv.x, tv.y));
@@ -364,23 +368,33 @@ export function sheathMaterial({ FS, FSP, FU, LK }) {
   const front = releaseAtT(s); // (instant où le front passe à cette hauteur)
   const flake = fract(sin(s.mul(173.1).add(ang.mul(7.3))).mul(4375.5));
   const gone = u.sub(front).add(flake.mul(0.012));
-  m.maskNode = gone.lessThan(0.0);
-  m.maskShadowNode = float(1).greaterThan(0); // (l'ombre suit la géométrie, voir goneV)
-  // kératine cireuse, bleu-gris, translucide ; crêtes hélicoïdales des barbes
-  // vues au travers ; plus sombre vers la base (la pulpe)
+  // Une pellicule, pas un tube : une gaine de kératine de quelques µm, claire
+  // comme du papier de soie, à travers laquelle on voit la plume roulée dans
+  // ses couleurs. Elle ne se lit qu'à ses bords (incidence rasante : Fresnel),
+  // par ses crêtes hélicoïdales et là où elle sèche et se fend, au front.
+  // (couverture tramée, lissée par l'anticrénelage temporel ; en version
+  // légère, sans TRAA : seuil fixe, il ne reste que le liseré)
   const helix = sin(ang.mul(28).add(s.mul(180))).mul(0.5).add(0.5);
-  const pulp = sst(0.45, 0.05, s);
-  const col = LK.sheath.mul(helix.mul(0.12).add(0.9)).mul(mix(float(1), float(0.55), pulp));
+  const fres = float(1).sub(abs(dot(normalView, positionViewDirection)).clamp(0, 1));
+  const dry = sst(-0.035, 0, gone); // (le bord qui sèche, juste sous le front : blanchi, plus opaque)
+  const cover = float(0.03).add(fres.mul(fres).mul(fres).mul(0.7)).add(helix.mul(0.05)).add(dry.mul(0.5)).clamp(0, 0.9);
+  // (bruit à gradient entrelacé, à l'écran, décalé à chaque image)
+  const ign = fract(fract(dot(screenCoordinate.xy, vec2(0.06711056, 0.00583715))).mul(52.9829189));
+  const thr = lite ? float(0.5) : fract(ign.add(float(frameId).mul(0.618034)));
+  m.maskNode = gone.lessThan(0.0).and(cover.greaterThan(thr));
+  m.maskShadowNode = float(1).greaterThan(0); // (sans ombre portée : voir stage.js)
+  const pale = mix(vec3(0.93, 0.92, 0.89), LK.sheath, 0.12);
+  const col = pale.mul(helix.mul(0.06).add(0.96)).mul(mix(float(1), float(1.04), dry));
   m.colorNode = col;
-  m.roughnessNode = float(0.3).add(helix.mul(0.1));
+  m.roughnessNode = mix(float(0.16), float(0.5), dry);
   m.metalnessNode = float(0);
-  m.clearcoatNode = float(0.5);
-  m.clearcoatRoughnessNode = float(0.25);
-  m.thicknessColorNode = col.mul(vec3(1.1, 1.0, 0.9)).mul(0.35);
-  m.thicknessDistortionNode = float(0.2);
+  m.clearcoatNode = float(1);
+  m.clearcoatRoughnessNode = float(0.12);
+  m.thicknessColorNode = col.mul(0.5);
+  m.thicknessDistortionNode = float(0.1);
   m.thicknessAmbientNode = float(0.0);
   m.thicknessAttenuationNode = float(1.0);
-  m.thicknessPowerNode = float(3.0);
+  m.thicknessPowerNode = float(2.0);
   m.thicknessScaleNode = float(1.5);
   m.mrtNode = stableVelocity();
   void FSP; void length; void step; void G;
