@@ -1,0 +1,36 @@
+# p8_c_1mm  T∞ 1.5→9→1.5 °C, P=400 s, v=0.500 mm/s, F=20, grille 40x160, dx=1 mm, dt=0.0941 s
+# dt → 0.0753
+# dt → 0.0602
+# dt → 0.0482
+t=260 s (période 0.65)  T∞=7.47  V=1.08 cm³  bout à z=157 mm  0.51 ms/pas
+# dt → 0.0386
+# dt → 0.0308
+t=393 s (période 0.98)  T∞=1.52  V=15.04 cm³  bout à z=124 mm  0.50 ms/pas
+t=517 s (période 1.29)  T∞=6.22  V=34.56 cm³  bout à z=74 mm  0.50 ms/pas
+# dt → 0.0247
+t=636 s (période 1.59)  T∞=8.42  V=4.43 cm³  bout à z=73 mm  0.50 ms/pas
+t=734 s (période 1.84)  T∞=3.32  V=8.54 cm³  bout à z=140 mm  0.49 ms/pas
+t=833 s (période 2.08)  T∞=2.00  V=22.10 cm³  bout à z=107 mm  0.49 ms/pas
+t=932 s (période 2.33)  T∞=7.05  V=35.38 cm³  bout à z=69 mm  0.50 ms/pas
+t=1031 s (période 2.58)  T∞=8.58  V=5.70 cm³  bout à z=72 mm  0.50 ms/pas
+t=1129 s (période 2.82)  T∞=3.59  V=7.72 cm³  bout à z=142 mm  0.50 ms/pas
+t=1228 s (période 3.07)  T∞=1.85  V=20.91 cm³  bout à z=109 mm  0.50 ms/pas
+t=1327 s (période 3.32)  T∞=6.77  V=35.47 cm³  bout à z=70 mm  0.50 ms/pas
+t=1425 s (période 3.56)  T∞=8.71  V=6.93 cm³  bout à z=71 mm  0.49 ms/pas
+t=1524 s (période 3.81)  T∞=3.87  V=6.96 cm³  bout à z=144 mm  0.49 ms/pas
+# fin : 55082 pas, 27 s, 0.49 ms/pas, 583 décalages
+# écart période 0 → 1 : RMS 4.942 mm, max 13.99 mm
+# écart période 1 → 2 : RMS 0.304 mm, max 8.97 mm
+# écart période 2 → 3 : RMS 0.257 mm, max 9.37 mm
+# longueur immergée (mm) aux 16 phases : 40 50 61 72 82 89 95 94 92 89 1 8 13 18 23 32
+# part de la boucle avec moins de 15 mm de glace sous l'eau : 17 %
+# détachement t=245 s (phase 0.613, période 0) : 7.88 cm³, z 44–160 mm
+# détachement t=646 s (phase 0.614, période 1) : 2.77 cm³, z 75–160 mm
+# détachement t=653 s (phase 0.633, période 1) : 0.14 cm³, z 159–160 mm
+# détachement t=656 s (phase 0.639, période 1) : 0.04 cm³, z 159–160 mm
+# détachement t=1045 s (phase 0.613, période 2) : 2.89 cm³, z 75–160 mm
+# détachement t=1053 s (phase 0.632, période 2) : 0.16 cm³, z 159–160 mm
+# détachement t=1445 s (phase 0.613, période 3) : 2.98 cm³, z 75–160 mm
+# détachement t=1452 s (phase 0.631, période 3) : 0.19 cm³, z 159–160 mm
+# écrit p8_c_1mm.png, p8_c_1mm.json
+node p1.js --name=p8_c_1mm --P=400 --periods=4 --T0=1.5 --T1=9 --v=5e-4    27.27s user 0.22s system 99% cpu 27.511 total

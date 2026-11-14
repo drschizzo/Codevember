@@ -1,16 +1,22 @@
-// Worker de génération : la croissance du cristal, son maillage et sa fonte
-// enregistrée sont calculés hors du fil principal, à partir d'une
-// spécification JSON ; les tampons sont transférés sans copie. Les
-// constructeurs sont des fonctions pures, importables depuis Node.
-import { buildNoiseVolume } from '../../../shared/gen/noisevol.js';
-import { buildCrystal } from './crystal.js';
-import { buildWool } from './wool.js';
+// Worker de génération : la simulation du lac (gen/lake.js), puis la bascule
+// du fuseau libéré (gen/body.js), hors du fil principal. L'avancement porte un
+// instantané du profil, que l'écran de chargement dessine (app/loaderArt.js).
+import { runLake } from './lake.js';
+import { simulateBody } from './body.js';
 
-function build({ spec, what }) {
+function build({ id, spec, what }) {
   switch (what) {
-    case 'noise': return buildNoiseVolume(spec.seed);
-    case 'crystal': return buildCrystal(spec);
-    case 'wool': return buildWool(spec);
+    case 'lake': {
+      let last = 0;
+      const S = runLake(spec.sim, (f, snap) => {
+        const now = Date.now();
+        if (now - last < 120) return;
+        last = now;
+        self.postMessage({ id, progress: f * 0.97, label: JSON.stringify(snap) });
+      });
+      const B = S.detach ? simulateBody({ prof: S.detach.prof, dz: S.dx, tilt0: spec.body.tilt0 }) : null;
+      return { S, B };
+    }
     default: throw new Error(`inconnu : ${what}`);
   }
 }
@@ -21,7 +27,7 @@ self.onmessage = ({ data }) => {
     const transfer = [];
     const walk = (o) => { if (!o) return; for (const v of Object.values(o)) { if (ArrayBuffer.isView(v)) transfer.push(v.buffer); else if (v && typeof v === 'object') walk(v); } };
     walk(out);
-    self.postMessage({ id: data.id, out }, [...new Set(transfer)]);
+    self.postMessage({ id: data.id, out }, transfer);
   } catch (e) {
     self.postMessage({ id: data.id, error: `${e.message}\n${e.stack}` });
   }

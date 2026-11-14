@@ -1,41 +1,39 @@
 // Réglages de rendu : indépendants de la graine, mémorisés dans le navigateur.
+// Propres au projet (valeurs par défaut, clé de stockage) : la chaîne d'image
+// qui les lit est commune (shared/render/post.js).
 
+// La scène est un lancer de rayons (scene/tracer.js) : ni ombres portées, ni
+// occlusion ambiante, ni réflexions en espace écran, ni anticrénelage temporel
+// (pas de vitesses) ; la qualité est la résolution (pixelRatio).
 export const QUALITY = {
-  // (mode allégé : matériaux, lumières, ombres, chaîne d'image ; voir app/mobile.js)
-  mobile: { label: 'Mobile', pixelRatio: 1.25, aa: 'fxaa', shadows: 'mobile', ao: false, ssr: false, motionBlur: 0 },
-  draft: { label: 'Brouillon', pixelRatio: 1, aa: 'fxaa', shadows: 'low', ao: false, ssr: false, motionBlur: 0 },
-  standard: { label: 'Standard', pixelRatio: 1.25, aa: 'smaa', shadows: 'medium', ao: true, ssr: true, ssrRes: 0.5, ssrQuality: 0.35, motionBlur: 0.5 },
-  high: { label: 'Haute', pixelRatio: 1.5, aa: 'traa', shadows: 'high', ao: true, ssr: true, ssrRes: 0.5, ssrQuality: 0.5, motionBlur: 0.6 },
-  cinema: { label: 'Cinéma', pixelRatio: 2, aa: 'traa', shadows: 'ultra', ao: true, ssr: true, ssrRes: 1, ssrQuality: 0.8, motionBlur: 0.8 },
+  mobile: { label: 'Mobile', pixelRatio: 0.75, aa: 'fxaa' },
+  draft: { label: 'Brouillon', pixelRatio: 0.75, aa: 'fxaa' },
+  standard: { label: 'Standard', pixelRatio: 1, aa: 'fxaa' },
+  high: { label: 'Haute', pixelRatio: 1.25, aa: 'smaa' },
+  cinema: { label: 'Cinéma', pixelRatio: 2, aa: 'smaa' },
 };
 
 export const RENDER_DEFAULTS = {
   quality: 'high',
-  pixelRatio: 1.5, aa: 'traa', shadows: 'high', microDetail: 1, patina: 1,
-  toneMapping: 'agx', exposure: 1.1, contrast: 1.08, saturation: 1.05, warmth: 0, vignette: 0.45,
-  bloom: true, bloomStrength: 0.06, bloomRadius: 0.4, bloomThreshold: 1.6, hiCap: 4, roughFloor: 0.08,
-  ao: true, aoStrength: 0.9, aoRadius: 0.4,
-  ssr: true, ssrIntensity: 0.7, ssrQuality: 0.5, ssrDistance: 2.5, ssrThickness: 0.05, ssrRes: 0.5, ssrBlur: 2, nestEnv: 0.45, crystalThick: 1,
-  dof: true, focus: 1, focusRange: 0.3, bokeh: 11,
-  motionBlur: 0.6, ca: 0.1, grain: 0.03,
-  streaks: 0.08, streakLen: 4, halation: 0.25, dirt: 0.3,
-  dynRes: false, maxFps: 0, // (résolution dynamique, cadence plafonnée : voir app/mobile.js)
+  pixelRatio: 1.25, aa: 'smaa', shadows: 'high', microDetail: 1, patina: 1, msaa: 0,
+  toneMapping: 'aces', exposure: 1, contrast: 1.04, saturation: 1, warmth: 0, vignette: 0.35,
+  bloom: true, bloomStrength: 0.08, bloomRadius: 0.5, bloomThreshold: 1.2, hiCap: 6, roughFloor: 0,
+  ao: false, aoStrength: 0, aoRadius: 0.4,
+  ssr: false, ssrIntensity: 0, ssrQuality: 0.5, ssrDistance: 2.5, ssrThickness: 0.05, ssrRes: 0.5, ssrBlur: 2,
+  dof: false, focus: 1, focusRange: 0.35, bokeh: 2,
+  motionBlur: 0, ca: 0.06, grain: 0.03,
+  streaks: 0, streakLen: 4, halation: 0.2, dirt: 0,
+  dynRes: false, maxFps: 0,
 };
 
-// Réglages du mode mobile : mêmes réglages artistiques, chaîne d'image allégée.
-// Résolution de base 1,25 × CSS (et non le ×3 d'un téléphone), ajustée ensuite
-// par la résolution dynamique (dynRes : de 50 à 100 % de cette base) ; cadence
-// plafonnée à maxFps. Sans réflexions en espace écran, l'objet exposé voit un
-// peu plus du studio (nestEnv) : ses reflets ne s'éteignent pas dans une
-// cellule fermée.
+// Mobile : demi-résolution, résolution dynamique, cadence plafonnée.
 export const MOBILE_DEFAULTS = {
   ...RENDER_DEFAULTS,
-  quality: 'mobile', lite: true, pixelRatio: 1.25, aa: 'fxaa', shadows: 'mobile', ao: false, ssr: false, motionBlur: 0,
-  nestEnv: 0.6, ca: 0, streaks: 0, dirt: 0, grain: 0.025, dof: false,
+  quality: 'mobile', lite: true, pixelRatio: 0.75, aa: 'fxaa', ca: 0, grain: 0.025,
   dynRes: true, maxFps: 60,
 };
 
-const STORE = 'melt.render.v2'; // (v2 : profondeur de champ de macro)
+const STORE = 'melt.render.v2'; // (changer de version quand un défaut change : les réglages mémorisés sont alors oubliés)
 
 // (le mode mobile a ses propres réglages mémorisés)
 export const defaultsFor = (lite) => (lite ? MOBILE_DEFAULTS : RENDER_DEFAULTS);

@@ -1,0 +1,14 @@
+# f_S56_F4  Tinf=5.6 °C  F(St)=4  St_eff/Tinf=0.0549 /°C  hold=top
+# grid 160x576  dx=0.250 mm  dt=0.00588 s  R=0.04 Z=0.144  ice a=0.014 H=0.09  MG levels=6 (5x18) nV=2
+# Ra(H, max dT^2) ~ 3.85e+6  Ra/Tinf^2 (L=2a) = 7.24e+3
+t=117.6s step=20000 V/V0=0.7984 umax=1.46mm/s uIce=0.004mm/s div*dx/U=1.4e-8 ms/step=10.44
+t=235.3s step=40000 V/V0=0.6859 umax=1.40mm/s uIce=0.005mm/s div*dx/U=1.6e-8 ms/step=9.14
+t=352.9s step=60000 V/V0=0.5827 umax=1.42mm/s uIce=0.008mm/s div*dx/U=2.7e-8 ms/step=9.18
+t=470.6s step=80000 V/V0=0.4858 umax=1.44mm/s uIce=0.009mm/s div*dx/U=3.9e-8 ms/step=10.53
+t=588.2s step=100000 V/V0=0.3957 umax=1.48mm/s uIce=0.010mm/s div*dx/U=1.5e-8 ms/step=9.01
+t=705.9s step=120000 V/V0=0.3123 umax=1.54mm/s uIce=0.009mm/s div*dx/U=1.8e-8 ms/step=8.85
+t=823.5s step=140000 V/V0=0.2366 umax=1.61mm/s uIce=0.008mm/s div*dx/U=1.6e-8 ms/step=9.02
+t=941.2s step=160000 V/V0=0.1689 umax=1.72mm/s uIce=0.006mm/s div*dx/U=6.9e-9 ms/step=9.07
+# done: t=1037.6 s physical, 176400 steps, wall 1661.5 s, 9.42 ms/step, cells=92160
+# snapshots at t = 0, 116, 333, 583, 802, 1038 s ; V/V0 = 1.00, 0.80, 0.60, 0.40, 0.25, 0.12
+# wrote f_S56_F4.png (1950x576), f_S56_F4.json, f_S56_F4_profile.csv
