@@ -28,6 +28,8 @@
 // Unités : cm ; u, le temps de la fonte (0 : début de la descente, 1 : fin) ;
 // températures rapportées à l'écart bain – fusion (Tm = 0, Tb = 1).
 
+import { HOPPER } from '../scene/hopper.js';
+
 export const PHYS = {
   alpha: 0.3, T0: -0.1, Tb: 1, Lh: 1,      // diffusivité, solide, bain, chaleur latente
   hb: 2, ha: 0.4, a: 0.45, lam: 0.3,      // échanges bain / air, panache (part de la chaleur du bain à la ligne, longueur)
@@ -38,7 +40,7 @@ export const PHYS = {
 };
 
 // demi-largeur horizontale du cristal (repère monde), selon son port
-export const reachOf = (s, habit) => (habit === 2 ? 2.1 : 1.65) * s; // (coin d’un cube tourné et incliné de 0,3 rad)
+export const reachOf = (s, habit) => (habit === 2 ? 2.15 : 1.65) * s; // (coin d’un cube tourné et incliné de 0,3 rad)
 
 // la grille d'un cristal : pas, demi-largeur, hauteur, dimensions
 export function gridFor(c, habit, quality = 1) {
@@ -70,25 +72,31 @@ export function stepsFor(h, P = PHYS) {
 // ── la trémie (même fonction que hopperK en WGSL, scene/hopper.js) ──
 function rotY(p, a) { const c = Math.cos(a), s = Math.sin(a); return [c * p[0] + s * p[2], p[1], -s * p[0] + c * p[2]]; }
 function rotX(p, a) { const c = Math.cos(a), s = Math.sin(a); return [p[0], c * p[1] - s * p[2], s * p[1] + c * p[2]]; }
-export function hopper(q0, s, habit) {
-  const lng = habit === 2, f = lng ? 0.62 : 1;
-  const q = lng ? [q0[0] * 0.62, q0[1], q0[2]] : q0;
-  const b = q.map((v) => Math.abs(v) - s);
-  const dbox = (Math.hypot(Math.max(b[0], 0), Math.max(b[1], 0), Math.max(b[2], 0)) + Math.min(Math.max(b[0], b[1], b[2]), 0)) * f;
-  const a = q.map(Math.abs);
-  if (q[1] < -Math.max(a[0], a[2])) return dbox; // (la base a poussé sur la croûte : pleine)
-  let n, t;
-  if (a[0] >= a[1] && a[0] >= a[2]) { n = a[0]; t = [q[1], q[2]]; } else if (a[1] >= a[2]) { n = a[1]; t = [q[0], q[2]]; } else { n = a[2]; t = [q[0], q[1]]; }
-  const w = s * 0.11;
-  if (habit === 1) {
-    const k0 = Math.floor((s - Math.max(Math.abs(t[0]), Math.abs(t[1]))) / w), an = k0 * 0.07, c = Math.cos(an), sn = Math.sin(an);
+function faceCav(n, t0, ext, ea, w, sd, spiral) {
+  let t = t0;
+  if (spiral) {
+    const k0 = Math.floor(Math.max(Math.min(ext[0] - Math.abs(t[0]), ext[1] - Math.abs(t[1])), 0) / w), an = k0 * 0.07, c = Math.cos(an), sn = Math.sin(an);
     t = [c * t[0] - sn * t[1], sn * t[0] + c * t[1]];
   }
-  const rim = s - Math.max(Math.abs(t[0]), Math.abs(t[1]));
-  const k = Math.min(Math.floor(rim / w), 7);
-  let dcav = n - (s - k * w * 0.75);
-  if (k > 0.5) dcav = Math.min(dcav, Math.hypot(rim - k * w, Math.max(n - (s - (k - 1) * w * 0.75), 0)));
-  return Math.max(dbox, dcav * f);
+  const H = HOPPER, r = Math.max(Math.min(ext[0] - Math.abs(t[0]), ext[1] - Math.abs(t[1])), 0) / w;
+  const x = r + H.a1 * Math.sin(H.f1 * r + sd) + H.a2 * Math.sin(H.f2 * r + 1.7 * sd);
+  const k = Math.min(Math.max(Math.floor(x), 0), H.kmax), fr = x - k, dep = w * H.dstep;
+  let d = n - (ea - k * dep);
+  if (k > 0.5) d = Math.min(d, Math.hypot(fr * w / H.slope, Math.max(n - (ea - (k - 1) * dep), 0)));
+  return d;
+}
+export function hopper(q, s, habit) {
+  const H = HOPPER, e = habit === 2 ? [s * H.lng, s, s] : [s, s, s];
+  const b = q.map((v, i) => Math.abs(v) - e[i]);
+  let d = Math.hypot(Math.max(b[0], 0), Math.max(b[1], 0), Math.max(b[2], 0)) + Math.min(Math.max(b[0], b[1], b[2]), 0);
+  const w = s * H.w, maxD = H.kmax * w * H.dstep, sp = habit === 1, sd = s * 37;
+  const faces = [
+    [Math.abs(q[0]), [q[1], q[2]], [e[1], e[2]], e[0], sd + (q[0] < 0 ? 1.3 : 0)],
+    [q[1], [q[0], q[2]], [e[0], e[2]], e[1], sd + 2.6],
+    [Math.abs(q[2]), [q[0], q[1]], [e[0], e[1]], e[2], sd + (q[2] < 0 ? 5.2 : 3.9)],
+  ];
+  for (const [n, t, ext, ea, fs] of faces) if (n - ea + maxD > d) d = Math.max(d, faceCav(n, t, ext, ea, w, fs, sp));
+  return d;
 }
 // distance au cristal c, point p dans le repère de sa grille (x, z centrés ; y = 0 : la croûte)
 export const crystalSDF = (p, c, habit) => hopper(rotX(rotY([p[0], p[1] - c.y, p[2]], c.ang), c.tilt), c.s, habit);

@@ -256,7 +256,7 @@ export function createMelt(renderer) {
           const d3 = [Math.ceil(g.nx / 4), Math.ceil(g.ny / 4), Math.ceil(g.nz / 4)];
           p.setBindGroup(0, g01);
           p.setPipeline(pipes.fill); p.dispatchWorkgroups(...d3);
-          for (const e of ['blurAB', 'blurBA', 'blurAB']) { p.setPipeline(pipes[e]); p.dispatchWorkgroups(...d3); }
+          for (const e of ['blurAB', 'blurBA', 'blurAB', 'blurBA', 'blurAB']) { p.setPipeline(pipes[e]); p.dispatchWorkgroups(...d3); }
           p.setPipeline(pipes.bake); p.dispatchWorkgroups(...d3);
           p.end();
           enc.copyBufferToTexture({ buffer: outB, bytesPerRow: stride * 4, rowsPerImage: g.ny }, { texture: tex, origin: [pk.pos[ci][0], 0, pk.pos[ci][1]] }, [g.nx, g.ny, g.nz]);

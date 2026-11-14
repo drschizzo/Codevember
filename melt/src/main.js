@@ -158,7 +158,7 @@ async function main() {
       camera.lookAt(...C.tgt);
     }
     if (camera.fov !== C.fov) { camera.fov = C.fov; camera.updateProjectionMatrix(); }
-    stage.update(ph, camera, [canvas.width, canvas.height], sub ? sub.pixel : [0, 0]);
+    stage.update(ph, camera, [canvas.width, canvas.height], sub);
     post.update({ ...RENDER, lite: LITE }, R);
     post.render();
   }

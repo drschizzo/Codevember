@@ -3,25 +3,42 @@
 // dessus (scene/stage.js). Essais d'origine : proto/b0 (l'image), proto/s0 (la
 // fonte calculée).
 //
-// - Trémie : un cube dont chaque face est creusée en gradins vers le centre
-//   (scene/hopper.js) ; variantes : en spirale, allongée.
+// - Trémie : un cube dont chaque face est creusée en gradins irréguliers vers
+//   le centre (scene/hopper.js) ; variantes : en spirale, allongée.
 // - La fonte : calculée au chargement (scene/melt.js) ; pour chaque cristal,
 //   l'atlas 3D donne l'instant τ où chaque point fond et la vitesse du front
-//   v. Le cristal à l'instant u de la fonte est { trémie } ∩ { τ > u }, de
-//   distance max(trémie, (u − τ)·v) ; une face fondue est du métal liquide.
+//   v. Le cristal à l'instant u de la fonte est { trémie } ∩ { τ > u }. La
+//   distance (u − τ)·v n'est juste que près du front : on la borne à deux
+//   cellules de la grille, sinon la marche traverse la surface (dents de scie,
+//   lambeaux, déchirures noires).
+// - Un cristal dont la taille a fondu bascule : sa partie haute pivote sur le
+//   bord de l'encoche, tombe dans le bain et y fond.
 // - Couleur : couche mince d'oxyde (Bi₂O₃, n ≈ 2,2) sur le métal
-//   (n ≈ 1,9 + 3,4 i), réflectance d'Airy à six longueurs d'onde ; l'épaisseur
-//   vient du temps passé à l'air et de la chaleur du bain.
+//   (n ≈ 1,9 + 3,4 i), réflectance d'Airy à six longueurs d'onde, plus forte
+//   en incidence rasante (Fresnel) ; l'épaisseur vient du temps passé à l'air,
+//   de la chaleur du bain, et de la place sur la terrasse (l'arête, plus
+//   exposée, s'oxyde plus que le pied du gradin).
+// - Le creuset : une marmite de fonte, posée sur un brûleur, sur un établi ;
+//   une quenouille (la tige qui bouche le trou de coulée au fond) et, au
+//   remplissage, le filet de métal versé d'une louche. Matières rugueuses :
+//   éclairement analytique des boîtes de lumière et du dôme, reflet adouci.
 // - Le bain : un miroir de métal liquide ; la peau d'oxyde des cristaux
-//   engloutis s'y étale et s'y défait ; un cristal qui se tasse le ride.
+//   engloutis s'y étale et s'y défait ; un cristal qui bascule le ride ; le
+//   vidage y creuse un tourbillon autour de la quenouille.
+// - Flou de mise au point (lentille mince), à l'export seulement : chaque
+//   sous-image du rendu accumulé tire son point de la lentille. En lecture, un
+//   tirage par image fait trembler le flou (on le lit comme une caméra qui
+//   bouge) : l'objectif y est fermé. Le satiné du métal, lui, est tiré à
+//   chaque image et moyenné par l'anticrénelage temporel.
 // - Chaque rayon ne visite que les cristaux dont la sphère englobante le croise ;
-//   un rayon qui n'en croise aucun touche le bain analytiquement.
+//   le reste (bain, creuset, quenouille, filet, établi) est analytique.
 //
 // Unités : cm ; y = 0 : la croûte du fond (repère de la grappe, avant sa descente).
 import * as THREE from 'three/webgpu';
 import { HOPPER_WGSL } from './hopper.js';
 
 export const MAXC = 12;
+const NH = 18, NB = 18, CS = 6; // en-tête, boîtes, vec4 par cristal
 
 const WGSL = HOPPER_WGSL + /* wgsl */ `
 struct P {
@@ -32,10 +49,17 @@ struct P {
   envLo: vec4f, envHi: vec4f, // fond du studio (bas, haut)
   forge: vec4f,  // lueur de forge (couleur, force)
   atlas: vec4f,  // dimensions de l'atlas de la fonte, temps u de la fonte
-  boxes: array<vec4f, 18>,    // 6 boîtes : (direction, intensité), (couleur, demi-largeur), (haut, demi-hauteur)
-  cr: array<vec4f, 48>,       // cristaux : (centre, demi-côté), (angle, inclinaison, oxyde, graine),
-                              // (origine x, z dans l'atlas, pas, demi-largeur de la grille), (descente, nx, ny, nz)
-  sk: array<vec4f, 12>,       // peau (âge ou −1), ride (x, z, âge ou −1)
+  pot: vec4f,    // rayon intérieur, épaisseur, haut du bord, fond extérieur
+  rod: vec4f,    // quenouille : x, z, rayon, levée
+  flow: vec4f,   // vidage (0–1), bas du filet, haut du filet, rayon du filet
+  flow2: vec4f,  // filet : x, z ; flamme (0–1) ; —
+  lens: vec4f,   // échantillon de la lentille (disque unité), rayon d'ouverture, distance de mise au point
+  misc: vec4f,   // image, T4, T5, établi
+  boxes: array<vec4f, ${NB}>, // 6 boîtes : (direction, intensité), (couleur, demi-largeur), (haut, demi-hauteur)
+  cr: array<vec4f, ${MAXC * CS}>, // cristaux : (centre, demi-côté), (angle, inclinaison, oxyde, graine),
+                              // (origine x, z dans l'atlas, pas, demi-largeur de la grille), (descente, nx, ny, nz),
+                              // bascule (direction x, z, angle, hauteur de l'encoche), (pivot, fonte de la partie tombée, enfoncement, —)
+  sk: array<vec4f, ${MAXC}>,  // peau (âge ou −1), ride (x, z, âge ou −1)
 };
 @group(0) @binding(0) var<uniform> u: P;
 @group(0) @binding(1) var outTex: texture_storage_2d<rgba16float, write>;
@@ -43,6 +67,7 @@ struct P {
 @group(0) @binding(3) var meltS: sampler;
 
 const PI = 3.14159265;
+const TAU = 6.2831853;
 fn hash31(p: vec3f) -> f32 { var q = fract(p * 0.1031); q += dot(q, q.zyx + 31.32); return fract((q.x + q.y) * q.z); }
 fn noise3(p: vec3f) -> f32 {
   let i = floor(p); let f = fract(p); let w = f * f * (3.0 - 2.0 * f);
@@ -60,66 +85,102 @@ fn voro(x: vec2f, seed: f32) -> vec2f {
   } }
   return vec2f(f2 - f1, id);
 }
+// rotation d'angle a autour de l'axe horizontal perpendiculaire à dir (le haut penche vers dir)
+fn tip(v: vec3f, dir: vec2f, a: f32) -> vec3f {
+  let d = vec3f(dir.x, 0.0, dir.y);
+  let al = dot(v, d); let h = v.y; let side = v - d * al - vec3f(0.0, h, 0.0);
+  let c = cos(a); let s = sin(a);
+  return d * (al * c + h * s) + vec3f(0.0, -al * s + h * c, 0.0) + side;
+}
+// un temps périodique sur la boucle : deux coordonnées d'un cercle (pour le bruit)
+fn loopc(k: f32) -> vec2f { let a = TAU * u.st.x * k; return vec2f(cos(a), sin(a)); }
 
-// un cristal : (distance, gradin, part fondue de la surface)
-fn crystalAt(p: vec3f, i: i32) -> vec3f {
-  let A = u.cr[4 * i]; let B = u.cr[4 * i + 1]; let G = u.cr[4 * i + 2]; let D = u.cr[4 * i + 3];
-  // (repère de la grille : la grappe est descendue de D.x)
-  let pc = vec3f(p.x - A.x, p.y + D.x, p.z - A.z);
+// le cristal dans le repère de sa grille : (distance, gradin + terrasse, part fondue)
+fn crystalGrid(pc: vec3f, i: i32) -> vec3f {
+  let A = u.cr[${CS} * i]; let B = u.cr[${CS} * i + 1]; let G = u.cr[${CS} * i + 2]; let D = u.cr[${CS} * i + 3];
   let hk = hopperK(rotX(rotY(pc - vec3f(0.0, A.y, 0.0), B.x), B.y), A.w, u.st.z);
-  if (hk.x > 0.05 * A.w + 0.02) { return vec3f(hk.x, hk.y, 0.0); }
+  if (hk.x > 0.05 * A.w + 0.03) { return vec3f(hk.x, hk.y, 0.0); }
   // la fonte calculée : τ (instant où le point fond) et v (vitesse du front)
   let g = clamp(vec3f((pc.x + G.w) / G.z, pc.y / G.z, (pc.z + G.w) / G.z), vec3f(0.5), D.yzw - vec3f(0.5));
   let F = textureSampleLevel(meltT, meltS, (vec3f(G.x, 0.0, G.y) + g) / u.atlas.xyz, 0.0).xy;
-  let phi = (u.atlas.w - F.x) * F.y;
-  return vec3f(max(hk.x, phi), hk.y, smoothstep(-0.006, 0.006, phi - hk.x));
+  // (la distance au front n'est juste que près de lui : bornée à deux cellules)
+  let phi = min((u.atlas.w - F.x) * F.y, 4.0 * G.z);
+  return vec3f(max(hk.x, phi), hk.y, smoothstep(-0.3 * G.z, 0.3 * G.z, phi - hk.x));
+}
+fn crystalAt(p: vec3f, i: i32) -> vec3f {
+  let A = u.cr[${CS} * i]; let D = u.cr[${CS} * i + 3]; let K = u.cr[${CS} * i + 4]; let E = u.cr[${CS} * i + 5];
+  // (repère de la grille : la grappe est descendue de D.x)
+  let pc = vec3f(p.x - A.x, p.y + D.x, p.z - A.z);
+  if (K.z <= 0.0) { return crystalGrid(pc, i); }
+  // la bascule : la partie au-dessus de l'encoche pivote sur son bord, tombe
+  // dans le bain, s'y enfonce et y fond ; le pied reste sur la croûte
+  let lo = crystalGrid(pc, i);
+  var c = vec3f(max(lo.x, pc.y - K.w), lo.y, lo.z);
+  if (E.y >= 1.8 * A.w) { return c; } // (la partie tombée a fini de fondre)
+  let piv = vec3f(K.x * E.x, K.w - E.z, K.y * E.x);
+  let q = tip(pc - piv, K.xy, -K.z) + piv + vec3f(0.0, E.z, 0.0);
+  let hi = crystalGrid(q, i);
+  let dh = max(hi.x + E.y, K.w - q.y);
+  if (dh < c.x) { c = vec3f(dh, hi.y, max(hi.z, smoothstep(0.0, 0.05, E.y))); }
+  return c;
 }
 
 var<private> MASK: u32;
-// la scène : (distance, matière) ; matière ≥ 0 : cristal i·10 + gradin ; −1 : bain
+// la scène : (distance, matière) ; matière ≥ 0 : cristal i·16 + gradin ; −1 : bain
 fn scene(p: vec3f) -> vec2f {
-  let pool = p.y - u.tide.x;
+  let pool = max(p.y - u.tide.x, length(p.xz) - u.pot.x); // (le bain est dans le creuset, pas au-delà)
   var best = vec2f(1e9, -1.0);
   let n = i32(u.st.w);
   for (var i = 0; i < n; i++) {
     if ((MASK & (1u << u32(i))) == 0u) { continue; }
     let c = crystalAt(p, i);
-    if (c.x < best.x) { best = vec2f(c.x, f32(i) * 10.0 + c.y); }
+    if (c.x < best.x) { best = vec2f(c.x, f32(i) * 16.0 + c.y); }
   }
   let k = 0.03; // le ménisque : le bain mouille le cristal
   let d = smin(best.x, pool, k);
   if (pool < best.x - 0.5 * k) { return vec2f(d, -1.0); }
   return vec2f(d, best.y);
 }
-fn nrm(p: vec3f) -> vec3f {
-  let e = 0.0015; let k = vec2f(1.0, -1.0);
+fn nrm(p: vec3f, e: f32) -> vec3f {
+  let k = vec2f(1.0, -1.0);
   return normalize(k.xyy * scene(p + k.xyy * e).x + k.yyx * scene(p + k.yyx * e).x + k.yxy * scene(p + k.yxy * e).x + k.xxx * scene(p + k.xxx * e).x);
 }
 
 // ── l'atelier : ce que le métal reflète ──
-fn rect(d: vec3f, c: vec3f, up: vec3f, hw: f32, hh: f32) -> f32 {
+// (boîtes à bords doux : un bord dur se lit, sur une face plane, comme une coupure)
+fn rect(d: vec3f, c: vec3f, up: vec3f, hw: f32, hh: f32, soft: f32) -> f32 {
   let cc = dot(d, c); if (cc <= 0.0) { return 0.0; }
   let r = normalize(cross(c, up)); let v = cross(r, c);
   let q = d / cc;
-  return (1.0 - smoothstep(hw * 0.85, hw, abs(dot(q, r)))) * (1.0 - smoothstep(hh * 0.85, hh, abs(dot(q, v))));
+  let ex = abs(dot(q, r)) / hw; let ey = abs(dot(q, v)) / hh;
+  return (1.0 - smoothstep(1.0 - soft, 1.0 + soft * 0.5, ex)) * (1.0 - smoothstep(1.0 - soft, 1.0 + soft * 0.5, ey)) * (0.75 + 0.25 * (1.0 - ex * ex));
 }
-fn env(d: vec3f) -> vec3f {
-  // un dôme : sombre près de l'horizon (le bain, vu en rasant, reste un miroir noir), clair en hauteur
-  var c = mix(u.envLo.xyz, u.envHi.xyz, smoothstep(0.12, 0.75, d.y));
+fn env(d: vec3f, soft: f32) -> vec3f {
+  // un dôme : sombre près de l'horizon, clair en hauteur
+  var c = mix(u.envLo.xyz, u.envHi.xyz, smoothstep(0.05 - soft, 0.75 + soft, d.y));
   for (var b = 0; b < 6; b++) {
     let A = u.boxes[3 * b]; let B = u.boxes[3 * b + 1]; let Cb = u.boxes[3 * b + 2];
     if (A.w <= 0.0) { continue; }
-    c += B.xyz * A.w * rect(d, A.xyz, Cb.xyz, B.w, Cb.w);
+    c += B.xyz * A.w * rect(d, A.xyz, Cb.xyz, B.w + soft * 0.4, Cb.w + soft * 0.4, 0.35 + soft) * mix(1.0, 0.6, soft);
   }
   if (u.forge.w > 0.0) { c += u.forge.xyz * u.forge.w * smoothstep(0.25, -0.15, d.y) * (0.7 + 0.3 * noise3(d * 4.0)); }
+  return c;
+}
+// l'éclairement d'une surface mate (dôme et boîtes, sans ombres), divisé par π
+fn irr(n: vec3f) -> vec3f {
+  var c = mix(u.envLo.xyz, u.envHi.xyz, 0.5 + 0.5 * n.y) * 0.9;
+  for (var b = 0; b < 6; b++) {
+    let A = u.boxes[3 * b]; let B = u.boxes[3 * b + 1]; let Cb = u.boxes[3 * b + 2];
+    if (A.w <= 0.0) { continue; }
+    c += B.xyz * A.w * (4.0 * B.w * Cb.w) / PI * max(dot(n, A.xyz), 0.0);
+  }
   return c;
 }
 
 // ── couche mince d'oxyde sur le bismuth (Airy) ──
 fn cmul(a: vec2f, b: vec2f) -> vec2f { return vec2f(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x); }
 fn cdiv(a: vec2f, b: vec2f) -> vec2f { let d = dot(b, b); return vec2f(a.x * b.x + a.y * b.y, a.y * b.x - a.x * b.y) / d; }
-fn filmR(th: f32, lam: f32, cosi: f32) -> f32 {
-  let n1 = 2.2; let n2 = vec2f(1.9, 3.4);
+fn filmR(th: f32, lam: f32, cosi: f32, n1: f32, n2: vec2f) -> f32 {
   let r01 = vec2f((1.0 - n1) / (1.0 + n1), 0.0);
   let r12 = cdiv(vec2f(n1, 0.0) - n2, vec2f(n1, 0.0) + n2);
   let sint = sqrt(max(0.0, 1.0 - cosi * cosi)) / n1;
@@ -128,27 +189,55 @@ fn filmR(th: f32, lam: f32, cosi: f32) -> f32 {
   let r = cdiv(r01 + cmul(r12, e), vec2f(1.0, 0.0) + cmul(r01, cmul(r12, e)));
   return dot(r, r);
 }
-fn filmRGB(th: f32, cosi: f32) -> vec3f {
-  return vec3f(0.5 * filmR(th, 610.0, cosi) + 0.5 * filmR(th, 650.0, cosi),
-               0.5 * filmR(th, 530.0, cosi) + 0.5 * filmR(th, 560.0, cosi),
-               0.5 * filmR(th, 450.0, cosi) + 0.5 * filmR(th, 480.0, cosi));
+fn filmRGBn(th: f32, cosi: f32, n1: f32, n2: vec2f) -> vec3f {
+  let R = vec3f(0.5 * filmR(th, 610.0, cosi, n1, n2) + 0.5 * filmR(th, 650.0, cosi, n1, n2),
+                0.5 * filmR(th, 530.0, cosi, n1, n2) + 0.5 * filmR(th, 560.0, cosi, n1, n2),
+                0.5 * filmR(th, 450.0, cosi, n1, n2) + 0.5 * filmR(th, 480.0, cosi, n1, n2));
+  // (en incidence rasante, tout métal devient miroir : Fresnel de Schlick)
+  let f = pow(1.0 - cosi, 5.0);
+  return R + (vec3f(1.0) - R) * f;
 }
+fn filmRGB(th: f32, cosi: f32) -> vec3f { return filmRGBn(th, cosi, 2.2, vec2f(1.9, 3.4)); }
 fn emerge(y: f32) -> f32 { let T = u.times; return T.x + clamp((u.tide.z - y) / (u.tide.z - u.tide.w), 0.0, 1.0) * (T.y - T.x); }
 
-// le bain : peau d'oxyde des cristaux engloutis (épaisseur), rides des tassements (normale)
+// le bain : peau d'oxyde des cristaux engloutis (épaisseur), rides et tourbillon (normale)
 var<private> NOUT: vec3f;
 fn poolFilm(p: vec3f) -> f32 {
-  var th = 10.0 + 14.0 * noise3(p * 0.8 + 0.5 * vec3f(cos(6.2831853 * u.st.x), 0.0, sin(6.2831853 * u.st.x)));
+  // le voile du bain, entraîné par le brassage : il tourne autour de la
+  // quenouille quand on vide, il s'écoule du centre vers les bords quand on chauffe
+  var q = p.xz;
+  let rv = q - u.rod.xy; let dr = length(rv) + 1e-3;
+  let sw = u.flow.x * 2.2 / (1.0 + dr * dr * 0.6);
+  let ca = cos(sw * u.st.x * 40.0); let sa = sin(sw * u.st.x * 40.0);
+  q = u.rod.xy + vec2f(ca * rv.x - sa * rv.y, sa * rv.x + ca * rv.y);
+  let lc = loopc(1.0);
+  var th = 10.0 + 14.0 * noise3(vec3f(q.x * 0.8, 0.0, q.y * 0.8) + 0.5 * vec3f(lc.x, 0.0, lc.y));
   var nn = vec3f(0.0, 1.0, 0.0);
+  // le tourbillon : un creux autour de la quenouille (la pente du creux)
+  let dip = u.flow.x * 0.12 * 2.0 * dr / pow(1.0 + dr * dr * 1.5, 2.0) * 1.5;
+  nn += vec3f(-rv.x / dr * dip, 0.0, -rv.y / dr * dip);
+  // les cellules de convection quand le creuset chauffe (le bain frémit)
+  if (u.tide.y > 0.0) {
+    let lc8 = loopc(8.0);
+    let cv = vec3f(p.x * 0.9 + 0.6 * lc8.x, p.z * 0.9 + 0.6 * lc8.y, 3.0);
+    let e = 0.05; let c0 = noise3(cv);
+    nn += u.tide.y * 0.006 * vec3f(-(noise3(cv + vec3f(e, 0.0, 0.0)) - c0) / e, 0.0, -(noise3(cv + vec3f(0.0, e, 0.0)) - c0) / e);
+  }
+  // le filet versé : des rides concentriques autour de son point de chute
+  if (u.flow.w > 0.0 && u.flow.y < u.tide.x + 0.2) {
+    let sv = p.xz - u.flow2.xy; let rs = length(sv) + 1e-3;
+    let lr = loopc(160.0);
+    let g = 0.08 * exp(-rs * 0.9) * sin(rs * 9.0 - atan2(lr.y, lr.x));
+    nn += vec3f(sv.x / rs * g, 0.0, sv.y / rs * g);
+  }
   let n = i32(u.st.w);
   for (var i = 0; i < n; i++) {
-    let A = u.cr[4 * i]; let B = u.cr[4 * i + 1]; let S = u.sk[i];
+    let A = u.cr[${CS} * i]; let B = u.cr[${CS} * i + 1]; let S = u.sk[i];
     if (S.x > 0.0) {
       // la peau du cristal englouti : elle s'étale depuis l'endroit où il a
       // disparu (sans surgir d'un bloc), une seule pellicule en dégradé ; le
       // bain, chauffé par le bas, s'écoule en surface du centre vers les bords
       // et l'emporte ; elle se fend, et ses plaques rapetissent jusqu'à rien
-      // avant la fin de sa vie (aucune ne disparaît d'un coup)
       let age = S.x;
       var dir = A.xz; if (dot(dir, dir) < 0.01) { dir = vec2f(cos(B.w), sin(B.w)); }
       dir = normalize(dir);
@@ -159,12 +248,9 @@ fn poolFilm(p: vec3f) -> f32 {
       if (r < R0) {
         let warp = vec2f(noise3(vec3f(rel * 2.3, B.w)), noise3(vec3f(rel * 2.3, B.w + 7.0))) - 0.5;
         let vo = voro((rel + warp * A.w * 0.5) / (A.w * 0.8), B.w);
-        // (la fente grandit au-delà du plus grand écart possible entre deux
-        // germes : à 0,12, il ne reste rien ; la vie de la peau s'arrête à 0,14)
         let crack = 0.02 + 1.25 * smoothstep(0.015, 0.12, age);
         let edge = smoothstep(0.0, 0.05, vo.x - crack) * (1.0 - smoothstep(0.75, 1.0, r / R0));
         if (edge > 0.0) {
-          // (les plis sont ceux de la peau : ils partent avec elle)
           let wr = noise3(vec3f(rel * 9.0, B.w));
           let grad = noise3(vec3f(rel / A.w * 0.9, B.w + 4.0));
           th = mix(th, 110.0 + 150.0 * grad + 18.0 * (hash31(vec3f(vo.y, 1.0, B.w)) - 0.5) + 25.0 * (wr - 0.5), edge);
@@ -191,72 +277,297 @@ fn rayMask(ro: vec3f, rd: vec3f, tEnd: ptr<function, f32>) -> u32 {
   var m = 0u; var te = 0.0;
   let n = i32(u.st.w);
   for (var i = 0; i < n; i++) {
-    let A = u.cr[4 * i]; let D = u.cr[4 * i + 3];
+    let A = u.cr[${CS} * i]; let D = u.cr[${CS} * i + 3]; let K = u.cr[${CS} * i + 4]; let E = u.cr[${CS} * i + 5];
     let c = vec3f(A.x, A.y - D.x, A.z);
     let R = A.w * select(1.9, 2.5, u.st.z > 1.5);
-    if (c.y + R < u.tide.x - 0.05) { continue; } // (tout entier sous le bain)
-    let oc = ro - c; let b = dot(oc, rd); let cc = dot(oc, oc) - R * R;
-    let disc = b * b - cc;
-    if (disc > 0.0) { let t1 = -b + sqrt(disc); if (t1 > 0.0) { m |= (1u << u32(i)); te = max(te, t1); } }
+    var hitAny = false;
+    // (le cristal, ou son pied s'il a basculé)
+    if (c.y + R >= u.tide.x - 0.05) {
+      let oc = ro - c; let b = dot(oc, rd); let cc = dot(oc, oc) - R * R;
+      let disc = b * b - cc;
+      if (disc > 0.0) { let t1 = -b + sqrt(disc); if (t1 > 0.0) { hitAny = true; te = max(te, t1); } }
+    }
+    // (la partie basculée : sa propre sphère, tant qu'elle n'a pas fini de fondre)
+    if (K.z > 0.0 && E.y < 1.8 * A.w) {
+      let piv = vec3f(A.x + K.x * E.x, K.w - D.x, A.z + K.y * E.x);
+      let cu = tip(c - piv, K.xy, K.z) + piv - vec3f(0.0, E.z, 0.0);
+      let Ru = R - 0.9 * E.y;
+      if (cu.y + Ru >= u.tide.x - 0.05) {
+        let oc = ro - cu; let b = dot(oc, rd); let cc = dot(oc, oc) - Ru * Ru;
+        let disc = b * b - cc;
+        if (disc > 0.0) { let t1 = -b + sqrt(disc); if (t1 > 0.0) { hitAny = true; te = max(te, t1); } }
+      }
+    }
+    if (hitAny) { m |= (1u << u32(i)); }
   }
   *tEnd = te;
   return m;
+}
+
+// ── le creuset et l'atelier, analytiques : (t, matière), normale dans HN ──
+// matières : −1 bain, −2 paroi intérieure, −3 bord, −4 paroi extérieure, −5 quenouille,
+// −6 filet versé, −7 établi, −8 brûleur, −9 dessous du creuset, −10 levier de la quenouille
+var<private> HN: vec3f;
+fn cylV(ro: vec2f, rd: vec2f, r: f32) -> vec2f { // (racines t1 ≤ t2 d'un cylindre vertical d'axe passant par l'origine)
+  let a = dot(rd, rd); let b = dot(ro, rd); let c = dot(ro, ro) - r * r;
+  let disc = b * b - a * c;
+  if (disc < 0.0 || a < 1e-9) { return vec2f(1e9, -1e9); }
+  let s = sqrt(disc); return vec2f((-b - s) / a, (-b + s) / a);
+}
+// une capsule (segment a–b, rayon r) : distance du rayon, ou −1 (Quílez)
+fn capHit(ro: vec3f, rd: vec3f, pa: vec3f, pb: vec3f, r: f32) -> f32 {
+  let ba = pb - pa; let oa = ro - pa;
+  let baba = dot(ba, ba); let bard = dot(ba, rd); let baoa = dot(ba, oa); let rdoa = dot(rd, oa); let oaoa = dot(oa, oa);
+  let a = baba - bard * bard; let b = baba * rdoa - baoa * bard; let c = baba * oaoa - baoa * baoa - r * r * baba;
+  let h = b * b - a * c;
+  if (h >= 0.0) {
+    let t = (-b - sqrt(h)) / a; let y = baoa + t * bard;
+    if (y > 0.0 && y < baba) { return t; }
+    let oc = select(ro - pb, oa, y <= 0.0); let b2 = dot(rd, oc); let c2 = dot(oc, oc) - r * r; let h2 = b2 * b2 - c2;
+    if (h2 > 0.0) { return -b2 - sqrt(h2); }
+  }
+  return -1.0;
+}
+fn capN(p: vec3f, a: vec3f, b: vec3f) -> vec3f { let ba = b - a; let pa = p - a; let h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0); return normalize(pa - h * ba); }
+fn capTest(ro: vec3f, rd: vec3f, a: vec3f, b: vec3f, r: f32, m: f32, tMin: f32, best: ptr<function, vec2f>) {
+  let t = capHit(ro, rd, a, b, r);
+  if (t > tMin && t < (*best).x) { *best = vec2f(t, m); HN = capN(ro + rd * t, a, b); }
+}
+fn world(ro: vec3f, rd: vec3f, tMin: f32) -> vec2f {
+  var best = vec2f(1e9, 0.0);
+  let Ri = u.pot.x; let Ro = u.pot.x + u.pot.y; let rim = u.pot.z; let bot = u.pot.w; let L = u.tide.x;
+  let fl = -0.4; // le fond intérieur (sous la croûte)
+  // le bain (dans le creuset seulement)
+  if (rd.y < -1e-5 && ro.y > L) {
+    let t = (L - ro.y) / rd.y; let q = ro + rd * t;
+    if (t > tMin && length(q.xz) < Ri) { best = vec2f(t, -1.0); HN = vec3f(0.0, 1.0, 0.0); }
+  }
+  // la paroi intérieure (vue de dedans : la racine de sortie), au-dessus du bain
+  let ci = cylV(ro.xz, rd.xz, Ri);
+  if (ci.y > tMin && ci.y < best.x) { let y = ro.y + rd.y * ci.y; if (y > L - 0.01 && y < rim) { best = vec2f(ci.y, -2.0); let q = ro + rd * ci.y; HN = -vec3f(q.x, 0.0, q.z) / Ri; } }
+  // la paroi extérieure (vue de dehors : la racine d'entrée)
+  let co = cylV(ro.xz, rd.xz, Ro);
+  if (co.x > tMin && co.x < best.x) { let y = ro.y + rd.y * co.x; if (y > bot && y < rim) { best = vec2f(co.x, -4.0); let q = ro + rd * co.x; HN = vec3f(q.x, 0.0, q.z) / Ro; } }
+  // le bord : un anneau au sommet, à lèvre arrondie (la normale se courbe vers l'extérieur et l'intérieur)
+  if (abs(rd.y) > 1e-5) {
+    let t = (rim - ro.y) / rd.y; let q = ro + rd * t; let r = length(q.xz);
+    if (t > tMin && t < best.x && r > Ri && r < Ro) {
+      let m = (r - (Ri + Ro) * 0.5) / (0.5 * (Ro - Ri));
+      best = vec2f(t, -3.0); HN = normalize(vec3f(0.0, 1.0, 0.0) + vec3f(q.x, 0.0, q.z) / r * m * 1.1);
+    }
+    // le dessous du creuset (entre le brûleur et l'établi, vu d'en bas)
+    let tb = (bot - ro.y) / rd.y; let qb = ro + rd * tb;
+    if (rd.y > 0.0 && tb > tMin && tb < best.x && length(qb.xz) < Ro) { best = vec2f(tb, -9.0); HN = vec3f(0.0, -1.0, 0.0); }
+  }
+  // la quenouille : une tige de graphite plantée dans le trou de coulée, tenue
+  // par un levier d'acier qui s'appuie sur un montant fixé au bord ; lever le
+  // levier lève la tige et débouche le trou
+  {
+    let rp = u.rod.xy; let rl = length(rp); let dir = rp / rl;
+    let top = rim + 1.6 + u.rod.w;
+    capTest(ro, rd, vec3f(rp.x, L - 0.5, rp.y), vec3f(rp.x, top, rp.y), u.rod.z, -5.0, tMin, &best);
+    let post = dir * (Ri + 0.5 * u.pot.y);
+    capTest(ro, rd, vec3f(post.x, rim, post.y), vec3f(post.x, rim + 1.6, post.y), 0.09, -10.0, tMin, &best);
+    let end = dir * (Ro + 1.4);
+    capTest(ro, rd, vec3f(rp.x, top, rp.y), vec3f(end.x, rim + 1.6 - 1.4 * u.rod.w, end.y), 0.075, -10.0, tMin, &best);
+  }
+  // le filet versé d'une louche (hors champ, en haut)
+  if (u.flow.w > 0.0) {
+    let cs = cylV(ro.xz - u.flow2.xy, rd.xz, u.flow.w);
+    if (cs.x > tMin && cs.x < best.x) { let y = ro.y + rd.y * cs.x; if (y > max(L, u.flow.y) && y < u.flow.z) { best = vec2f(cs.x, -6.0); let q = ro + rd * cs.x; HN = vec3f(q.x - u.flow2.x, 0.0, q.z - u.flow2.y) / u.flow.w; } }
+  }
+  // le brûleur, sous le creuset
+  let rb = Ro * 0.42;
+  let cb = cylV(ro.xz, rd.xz, rb);
+  if (cb.x > tMin && cb.x < best.x) { let y = ro.y + rd.y * cb.x; if (y > u.misc.w && y < bot) { best = vec2f(cb.x, -8.0); let q = ro + rd * cb.x; HN = vec3f(q.x, 0.0, q.z) / rb; } }
+  // l'établi
+  if (rd.y < -1e-5) {
+    let t = (u.misc.w - ro.y) / rd.y;
+    if (t > tMin && t < best.x) { best = vec2f(t, -7.0); HN = vec3f(0.0, 1.0, 0.0); }
+  }
+  return best;
+}
+
+// les flammes du brûleur : une nappe bleue sous le creuset, des langues qui
+// lèchent sa paroi (émission intégrée le long du rayon, de 0 à tEnd)
+fn flameAt(p: vec3f) -> vec3f {
+  let Ro = u.pot.x + u.pot.y; let bot = u.pot.w;
+  let r = length(p.xz); let a = atan2(p.z, p.x);
+  let lc = loopc(240.0);
+  // (la nappe, sous le fond)
+  let sheet = exp(-pow((p.y - (bot - 0.12)) / 0.09, 2.0)) * smoothstep(Ro * 0.42, Ro * 0.42 + 0.3, r) * (1.0 - smoothstep(Ro - 0.05, Ro + 0.25, r));
+  // (les langues, contre la paroi)
+  let cell = a * 34.0 / TAU;
+  let fk = noise3(vec3f(cell * 1.7, lc.x * 0.8, lc.y * 0.8));
+  let H = 0.45 + 0.75 * fk;
+  let hgt = p.y - (bot - 0.15);
+  let tongue = pow(0.5 + 0.5 * cos(TAU * cell + 2.0 * fk), 3.0) * exp(-pow((r - Ro - 0.1 - 0.15 * hgt) / 0.1, 2.0)) * smoothstep(H, H - 0.45, hgt) * step(0.0, hgt);
+  let blue = vec3f(0.12, 0.3, 1.5);
+  let tipc = vec3f(0.9, 0.55, 0.35);
+  return (sheet * blue * 1.4 + tongue * mix(blue, tipc, smoothstep(0.2, 0.9, hgt / H) * 0.35)) * u.flow2.z;
+}
+fn flames(ro: vec3f, rd: vec3f, tEnd: f32) -> vec3f {
+  if (u.flow2.z <= 0.0) { return vec3f(0.0); }
+  let Ro = u.pot.x + u.pot.y; let bot = u.pot.w;
+  let cb = cylV(ro.xz, rd.xz, Ro + 0.6);
+  var t0 = max(cb.x, 0.0); var t1 = min(cb.y, tEnd);
+  // (la tranche de hauteur des flammes)
+  if (abs(rd.y) > 1e-5) {
+    let ta = (bot - 0.35 - ro.y) / rd.y; let tb = (bot + 1.3 - ro.y) / rd.y;
+    t0 = max(t0, min(ta, tb)); t1 = min(t1, max(ta, tb));
+  }
+  if (t1 <= t0) { return vec3f(0.0); }
+  // (un segment tout entier dans le creuset ne croise pas de flamme)
+  let ci = cylV(ro.xz, rd.xz, u.pot.x);
+  if (ci.x <= t0 && ci.y >= t1) { return vec3f(0.0); }
+  var c = vec3f(0.0);
+  let ds = (t1 - t0) / 16.0;
+  let j = hash31(vec3f(rd * 917.0 + u.misc.x));
+  for (var k = 0; k < 16; k++) { c += flameAt(ro + rd * (t0 + (f32(k) + j) * ds)); }
+  return c * ds * 2.2;
+}
+
+// un vecteur aléatoire par pixel et par image (satiné, lentille)
+var<private> SEED: vec3f;
+fn rnd3() -> vec3f {
+  SEED = SEED + vec3f(0.618, 0.414, 0.732);
+  return vec3f(hash31(SEED * 113.7), hash31(SEED.yzx * 71.3 + 4.1), hash31(SEED.zxy * 53.1 + 9.7)) * 2.0 - 1.0;
+}
+fn glossy(n: vec3f, r: f32) -> vec3f { return normalize(n + rnd3() * r); }
+
+// une matière rugueuse (fonte, graphite, établi) : diffus + reflet adouci
+fn rough(n: vec3f, rd: vec3f, alb: vec3f, spec: f32, soft: f32) -> vec3f {
+  let cosi = clamp(-dot(rd, n), 0.0, 1.0);
+  let F = spec + (1.0 - spec) * pow(1.0 - cosi, 5.0) * 0.5;
+  return alb * irr(n) + F * env(reflect(rd, n), soft);
 }
 
 fn trace(ro0: vec3f, rd0: vec3f) -> vec3f {
   var ro = ro0; var rd = rd0;
   var T = vec3f(1.0); var L = vec3f(0.0);
   let Lv = u.tide.x;
+  let Ro = u.pot.x + u.pot.y;
   for (var b = 0; b < 3; b++) {
     var tEnd = 0.0;
     MASK = rayMask(ro, rd, &tEnd);
-    var hit = false; var mat = -3.0; var t = 0.002;
-    // (le bain d'abord : la marche s'arrête à sa surface)
-    var tp = 1e9; if (rd.y < -1e-4 && ro.y > Lv) { tp = (Lv - ro.y) / rd.y; }
+    var hit = false; var mat = 0.0; var t = 0.002;
+    // (le monde analytique d'abord : la marche s'arrête à sa surface)
+    HN = vec3f(0.0, 1.0, 0.0);
+    let W = world(ro, rd, 0.002);
+    let wN = HN;
     if (MASK != 0u) {
-      let tMax = min(tEnd, tp + 0.05);
+      let tMax = min(tEnd, W.x + 0.05);
       var hb = vec2f(1e9, 0.0); var tb = t;
-      for (var i = 0; i < 180; i++) {
+      for (var i = 0; i < 200; i++) {
         let h = scene(ro + rd * t);
         if (h.x < 0.0006 * t + 0.0005) { hit = true; mat = h.y; break; }
         if (h.x < hb.x) { hb = h; tb = t; }
-        t += max(h.x * 0.7, 0.0008);
+        t += max(h.x * 0.8, 0.0008);
         if (t > tMax) { break; }
       }
       // (marche épuisée le long d'une paroi : le point le plus proche est la surface)
-      if (!hit && t <= tMax && hb.x < 0.02) { hit = true; mat = hb.y; t = tb; }
+      if (!hit && t <= tMax && hb.x < 0.004) { hit = true; mat = hb.y; t = tb; }
     }
+    // (les flammes, devant ce que le rayon touche)
+    let tHit = select(W.x, t, hit);
+    L += T * flames(ro, rd, min(tHit, 400.0));
     if (!hit) {
-      if (tp < 1e8) { t = tp; hit = true; mat = -1.0; }
-      else { L += T * env(rd); break; }
+      if (W.x < 1e8) { t = W.x; hit = true; mat = W.y; }
+      else { L += T * env(rd, 0.0); break; }
     }
     let p = ro + rd * t;
-    var n = vec3f(0.0, 1.0, 0.0);
-    if (MASK != 0u && abs(p.y - Lv) > 0.004) { n = nrm(p); }
+    var n = wN;
+    if (mat == -1.0) { n = vec3f(0.0, 1.0, 0.0); if (MASK != 0u && abs(p.y - Lv) > 0.004) { n = nrm(p, 0.0015); } }
+    // (une face fondue : le champ τ est fait de couches d'une cellule ; sa
+    // normale se prend à l'échelle de la cellule, sinon elle se lit en zébrures)
+    var meltF = 0.0;
+    if (mat >= 0.0) {
+      let ci = i32(floor(mat / 16.0));
+      meltF = crystalAt(p, ci).z;
+      n = nrm(p, mix(0.0015, 1.3 * u.cr[${CS} * ci + 2].z, meltF));
+    }
     var cosi = clamp(-dot(rd, n), 0.0, 1.0);
     var R = vec3f(0.62);
+    var gl = 0.0;
     if (mat >= 0.0) {
-      let i = i32(floor(mat / 10.0)); let k = mat - f32(i) * 10.0;
-      let B = u.cr[4 * i + 1]; let D = u.cr[4 * i + 3];
+      let i = i32(floor(mat / 16.0)); let kf = mat - f32(i) * 16.0;
+      let k = floor(kf); let fr = kf - k;
+      let A = u.cr[${CS} * i]; let B = u.cr[${CS} * i + 1]; let D = u.cr[${CS} * i + 3];
       // oxyde : il pousse dès que le métal sort du bain qu'on vide (hauteur dans
-      // le repère du cristal) ; la chaleur du bain l'épaissit juste au-dessus de
-      // la ligne ; une face fondue, elle, est du métal liquide, sans oxyde
+      // le repère du cristal) ; plus épais sur l'arête de chaque terrasse (plus
+      // exposée, plus chaude), un peu plus vers le fond de la trémie ; la
+      // chaleur du bain l'épaissit juste au-dessus de la ligne ; une face
+      // fondue est du métal liquide, sans oxyde
       let age = max(u.st.x - emerge(p.y + D.x), 0.0);
-      var th = u.st.y * 300.0 * sqrt(age) * (0.85 + 0.3 * B.z) + 24.0 * k * sqrt(age) + 18.0 * (noise3(p * 2.5 + B.w) - 0.5) * min(age * 8.0, 1.0);
+      let sa = sqrt(age);
+      let lip = (1.0 - fr) * (1.0 - fr);
+      var th = u.st.y * 300.0 * sa * (0.8 + 0.4 * B.z) + (9.0 * k + 55.0 * lip) * sa
+        + 40.0 * (noise3(p * 0.7 + B.w) - 0.5) * min(age * 6.0, 1.0) + 10.0 * (noise3(p * 6.0 + B.w) - 0.5) * min(age * 6.0, 1.0);
       th += u.tide.y * 140.0 * exp(-max(p.y - Lv, 0.0) / 0.9);
-      let melted = crystalAt(p, i).z;
+      let melted = meltF;
       R = mix(filmRGB(max(th, 0.0), cosi), filmRGB(8.0, cosi), melted);
-    } else {
+      gl = mix(0.012, 0.003, melted); // (satiné : les terrasses ne sont pas des miroirs parfaits)
+    } else if (mat == -1.0) {
       let th = poolFilm(p);
       n = normalize(n + (NOUT - vec3f(0.0, 1.0, 0.0)));
       cosi = clamp(-dot(rd, n), 0.0, 1.0);
       R = filmRGB(th, cosi);
+      gl = 0.0; // (en rasant, le moindre dépoli du bain se lit en grain)
+    } else if (mat == -6.0) {
+      // le filet : du métal liquide qui ondule en tombant
+      let lc = loopc(300.0);
+      let wob = noise3(vec3f(p.y * 3.0 + lc.x, lc.y, p.x)) - 0.5;
+      n = normalize(n + vec3f(0.0, wob * 0.6, 0.0) + vec3f(-n.z, 0.0, n.x) * wob * 0.5);
+      cosi = clamp(-dot(rd, n), 0.0, 1.0);
+      R = filmRGB(8.0, cosi);
+    } else {
+      // matières rugueuses : la fonte du creuset, la quenouille, l'établi, le brûleur
+      // (la fonte : un gris sombre marbré, plus mat par plaques)
+      let mott = noise3(p * 2.3) * 0.5 + noise3(p * 13.0) * 0.5;
+      var alb = vec3f(0.07, 0.066, 0.063) * (0.85 + 0.3 * mott); var spec = 0.06 * (0.8 + 0.4 * mott); var soft = 0.45 + 0.15 * (1.0 - mott);
+      var wet = 0.0;
+      if (mat == -2.0 || mat == -5.0) {
+        // (la marque de la marée haute : un liseré de bismuth figé sur la fonte
+        // et la tige, là où le bain plein a mouillé, oxydé comme les cristaux)
+        wet = smoothstep(0.1, 0.0, abs(p.y - u.tide.z + 0.04)) * step(Lv + 0.02, p.y);
+        let ang = atan2(p.z, p.x);
+        wet *= 0.6 + 0.4 * noise3(vec3f(ang * 14.0, p.y * 8.0, 1.0));
+      }
+      if (mat == -5.0) { alb = vec3f(0.06, 0.06, 0.062); spec = 0.05; soft = 0.6; } // (le graphite, dans la valeur de la paroi : l'appareil s'efface)
+      if (mat == -7.0) {
+        // l'établi : une plaque d'acier huilé, rayée
+        let g = noise3(vec3f(p.x * 1.2, p.z * 26.0, 2.0)) * 0.5 + noise3(p * 0.6) * 0.5;
+        alb = vec3f(0.05, 0.05, 0.052) * (0.85 + 0.3 * g); spec = 0.05; soft = 0.35;
+      }
+      if (mat == -8.0 || mat == -9.0) { alb = vec3f(0.03); spec = 0.04; soft = 0.6; }
+      if (mat == -10.0) { alb = vec3f(0.05, 0.05, 0.055); spec = 0.35; soft = 0.12; } // (le levier : acier poli par les mains)
+      var c = rough(n, rd, alb, spec, soft);
+      // (l'ombre de la marmite et du brûleur sur l'établi : ils y sont posés)
+      if (mat == -7.0) { let r = length(p.xz); c *= mix(0.12, 1.0, smoothstep(Ro * 0.75, Ro * 1.9, r)); }
+      // (le pied de la paroi extérieure, près du brûleur, reçoit moins de jour)
+      if (mat == -4.0) { c *= mix(0.45, 1.0, smoothstep(u.pot.w, u.pot.w + 1.5, p.y)); }
+      // (la lueur des flammes sur ce qui les entoure)
+      if (u.flow2.z > 0.0 && p.y < u.pot.w + 2.0) {
+        let dr = abs(length(p.xz) - Ro * 0.8); let dy = max(p.y - u.pot.w, 0.0) + max(u.pot.w - 0.3 - p.y, 0.0) * 0.4;
+        c += u.flow2.z * vec3f(0.08, 0.16, 0.6) * exp(-(dr * 0.6 + dy * 1.5));
+      }
+      // (le fond de la marmite, sous le bord : un peu d'ombre)
+      if (mat == -2.0) { c *= 0.55 + 0.45 * smoothstep(Lv, u.pot.z, p.y); }
+      if (wet > 0.0) {
+        let age = max(u.st.x - emerge(p.y), 0.0);
+        let thw = u.st.y * 300.0 * sqrt(age) * 0.8 + 25.0 * noise3(p * 2.0);
+        let Rw = filmRGB(thw, cosi);
+        c = mix(c, Rw * env(reflect(rd, n), 0.3), wet);
+      }
+      L += T * c;
+      break;
     }
-    // (miroir net : l'anticrénelage temporel moyenne les arêtes, un dépoli aléatoire n'y ajouterait que du bruit)
     T *= R;
-    ro = p + n * 0.003; rd = reflect(rd, n);
+    let ng = select(n, glossy(n, gl), gl > 0.0);
+    ro = p + n * 0.003; rd = reflect(rd, ng);
+    if (dot(rd, n) < 0.0) { rd = reflect(rd, n); }
     // (un rayon encore pris dans les gradins au dernier rebond voit le studio, pas le noir)
-    if (b == 2) { L += T * env(rd); }
+    if (b == 2) { L += T * env(rd, 0.15); }
   }
   return L;
 }
@@ -265,38 +576,47 @@ fn trace(ro0: vec3f, rd0: vec3f) -> vec3f {
 fn main(@builtin(global_invocation_id) gid: vec3u) {
   let res = u.res.xy;
   if (f32(gid.x) >= res.x || f32(gid.y) >= res.y) { return; }
+  SEED = vec3f(vec2f(gid.xy), u.misc.x * 0.37);
   let uv = (vec2f(gid.xy) + 0.5 + u.res.zw) / res;
-  let ndc = vec2f(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0);
+  var ndc = vec2f(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0);
   let th = u.cam.w;
-  let rd = normalize(u.camF.xyz + ndc.x * th * (res.x / res.y) * u.camR.xyz + ndc.y * th * u.camU.xyz);
-  let c = min(trace(u.cam.xyz, rd), vec3f(24.0));
+  let dir = normalize(u.camF.xyz + ndc.x * th * (res.x / res.y) * u.camR.xyz + ndc.y * th * u.camU.xyz);
+  // la lentille mince : le point net est à la distance de mise au point
+  let lo = (u.camR.xyz * u.lens.x + u.camU.xyz * u.lens.y) * u.lens.z;
+  let fp = u.cam.xyz + dir * (u.lens.w / dot(dir, u.camF.xyz));
+  let ro = u.cam.xyz + lo;
+  let c = min(trace(ro, normalize(fp - ro)), vec3f(24.0));
   textureStore(outTex, vec2i(gid.xy), vec4f(c, 1.0));
 }
 `;
 
 // L'anticrénelage : chaque image est décalée d'une fraction de pixel (suite de
-// Halton) et fondue dans un historique, borné par le voisinage de l'image
-// courante (ce qui a bougé ne traîne pas). Ni la caméra ni la grappe ne vont
-// vite : sans reprojection, l'historique converge vers une image
-// suréchantillonnée. Il repart de zéro après un saut (graine, temps, taille).
+// Halton) et d'un tirage du satiné, et fondue dans un historique, borné par
+// le voisinage 3 × 3 de l'image courante (ce qui a bougé ne traîne pas ; un
+// bornage plus lâche, par l'écart type, laissait passer le décalage d'une
+// image à l'autre : les arêtes scintillaient, la caméra semblait bouger). Ni la caméra ni la grappe ne vont vite : sans reprojection,
+// l'historique converge vers une image suréchantillonnée. Il repart de zéro
+// après un saut (graine, temps, taille).
 const RESOLVE = /* wgsl */ `
 @group(0) @binding(0) var<uniform> R: vec4f; // part de l'image courante, largeur, hauteur
 @group(0) @binding(1) var cur: texture_2d<f32>;
 @group(0) @binding(2) var prev: texture_2d<f32>;
 @group(0) @binding(3) var next: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(4) var outTex: texture_storage_2d<rgba16float, write>;
+fn tm(c: vec3f) -> vec3f { return c / (1.0 + max(c.x, max(c.y, c.z))); }
+fn itm(c: vec3f) -> vec3f { return c / max(1.0 - max(c.x, max(c.y, c.z)), 1e-4); }
 @compute @workgroup_size(8, 8)
 fn main(@builtin(global_invocation_id) g: vec3u) {
   let q = vec2i(g.xy);
   if (f32(q.x) >= R.y || f32(q.y) >= R.z) { return; }
-  let c = textureLoad(cur, q, 0).rgb;
+  let c = tm(textureLoad(cur, q, 0).rgb);
   var lo = c; var hi = c;
   for (var a = -1; a <= 1; a++) { for (var b = -1; b <= 1; b++) {
-    let n = textureLoad(cur, clamp(q + vec2i(a, b), vec2i(0), vec2i(i32(R.y) - 1, i32(R.z) - 1)), 0).rgb;
+    let n = tm(textureLoad(cur, clamp(q + vec2i(a, b), vec2i(0), vec2i(i32(R.y) - 1, i32(R.z) - 1)), 0).rgb);
     lo = min(lo, n); hi = max(hi, n);
   } }
-  let h = clamp(textureLoad(prev, q, 0).rgb, lo, hi);
-  let o = mix(h, c, R.x);
+  let h = clamp(tm(textureLoad(prev, q, 0).rgb), lo, hi);
+  let o = itm(mix(h, c, R.x));
   textureStore(next, q, vec4f(o, 1.0));
   textureStore(outTex, q, vec4f(o, 1.0));
 }
@@ -313,8 +633,7 @@ export function createTracer(renderer) {
   const rpipe = device.createComputePipeline({ layout: 'auto', compute: { module: device.createShaderModule({ code: RESOLVE, label: 'anticrénelage' }), entryPoint: 'main' } });
   const rbuf = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
   let cur = null, hist = [null, null], frame = 0, last = null;
-  // (agencement : 12 vec4 d'en-tête, 18 boîtes, 48 cristaux, 12 peaux)
-  const NV = 12 + 18 + 48 + 12;
+  const NV = NH + NB + MAXC * CS + MAXC;
   const U = new Float32Array(NV * 4);
   const ubuf = device.createBuffer({ size: U.byteLength, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
   const sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
@@ -334,14 +653,18 @@ export function createTracer(renderer) {
     return tex;
   }
   const set = (i, a, b = 0, c = 0, d = 0) => U.set([a, b, c, d], i * 4);
-  // p.melt : { texture (GPUTexture rg16float 3D), dims, crystals } de melt.js
+  // p.melt : { texture (GPUTexture rg16float 3D), dims, crystals } de melt.js ;
+  // p.world : creuset, quenouille, filet, flamme (cycle.js apparatusAt) ;
+  // p.lens : échantillon de la lentille imposé (rendu accumulé), sinon tiré ici
   function run(p) {
     target(p.w, p.h);
     U.fill(0);
     // (rendu accumulé ou export : le décalage vient de l'accumulateur, sans historique)
     const external = p.jitter[0] !== 0 || p.jitter[1] !== 0;
     frame++;
-    const jit = external ? p.jitter : [halton(frame % 64 + 1, 2) - 0.5, halton(frame % 64 + 1, 3) - 0.5];
+    const fi = frame % 64 + 1;
+    const jit = external ? p.jitter : [halton(fi, 2) - 0.5, halton(fi, 3) - 0.5];
+    const lens = p.lens ?? (() => { const r = Math.sqrt(halton(fi, 5)), a = 2 * Math.PI * halton(fi, 7); return [r * Math.cos(a), r * Math.sin(a)]; })();
     set(0, p.w, p.h, jit[0], jit[1]);
     const key = [p.t, ...p.cam.pos];
     const jump = external || !last || Math.abs(key[0] - last[0]) > 0.01 || Math.hypot(key[1] - last[1], key[2] - last[2], key[3] - last[3]) > 0.05 || p.reset;
@@ -354,17 +677,26 @@ export function createTracer(renderer) {
     set(8, ...p.env.lo, 0); set(9, ...p.env.hi, 0);
     set(10, ...p.env.forge.color, p.env.forge.strength);
     set(11, ...(p.melt ? p.melt.dims : [1, 1, 1]), p.u);
+    const w = p.world;
+    set(12, w.pot.Ri, w.pot.th, w.pot.rim, w.pot.bottom);
+    set(13, w.rod.x, w.rod.z, w.rod.r, w.rod.lift);
+    set(14, w.drain, w.stream.head, w.stream.tail, w.stream.r);
+    set(15, w.stream.x, w.stream.z, w.flame, 0);
+    set(16, lens[0], lens[1], p.aperture, p.focus);
+    set(17, frame % 4096, p.tide.T4, p.tide.T5, w.pot.bench);
     p.env.boxes.slice(0, 6).forEach((b, k) => {
-      set(12 + 3 * k, ...norm(b.dir), b.I); set(13 + 3 * k, ...b.color, b.hw); set(14 + 3 * k, ...(b.up ?? [0, 1, 0]), b.hh);
+      set(NH + 3 * k, ...norm(b.dir), b.I); set(NH + 1 + 3 * k, ...b.color, b.hw); set(NH + 2 + 3 * k, ...(b.up ?? [0, 1, 0]), b.hh);
     });
-    const cr0 = 30, sk0 = cr0 + 48;
+    const cr0 = NH + NB, sk0 = cr0 + MAXC * CS;
     p.crystals.slice(0, MAXC).forEach((c, i) => {
-      const m = mc?.[i];
-      set(cr0 + 4 * i, c.x, c.y, c.z, c.s);
-      set(cr0 + 4 * i + 1, c.ang, c.tilt, c.ox, c.seed);
+      const m = mc?.[i], o = cr0 + CS * i;
+      set(o, c.x, c.y, c.z, c.s);
+      set(o + 1, c.ang, c.tilt, c.ox, c.seed);
       // (sans simulation : une grille d'une cellule où rien ne fond)
-      if (m) { set(cr0 + 4 * i + 2, m.ox, m.oz, m.h, m.X); set(cr0 + 4 * i + 3, c.desc, m.nx, m.ny, m.nz); }
-      else { set(cr0 + 4 * i + 2, 0, 0, 1e3, 0); set(cr0 + 4 * i + 3, c.desc, 1, 1, 1); }
+      if (m) { set(o + 2, m.ox, m.oz, m.h, m.X); set(o + 3, c.desc, m.nx, m.ny, m.nz); }
+      else { set(o + 2, 0, 0, 1e3, 0); set(o + 3, c.desc, 1, 1, 1); }
+      const k = c.topple;
+      if (k) { set(o + 4, k.dir[0], k.dir[1], k.angle, k.neck); set(o + 5, k.pivot, k.shrink, k.sink, 0); }
       set(sk0 + i, c.skin, c.ripple ? c.ripple.x : 0, c.ripple ? c.ripple.z : 0, c.ripple ? c.ripple.dt : -1);
     });
     device.queue.writeBuffer(ubuf, 0, U);
@@ -379,7 +711,7 @@ export function createTracer(renderer) {
           { binding: 2, resource: hist[k].createView() }, { binding: 3, resource: hist[1 - k].createView() },
           { binding: 4, resource: gpuTex.createView() }] })) };
     }
-    device.queue.writeBuffer(rbuf, 0, new Float32Array([jump ? 1 : 0.12, p.w, p.h, 0]));
+    device.queue.writeBuffer(rbuf, 0, new Float32Array([jump ? 1 : 0.1, p.w, p.h, 0]));
     const enc = device.createCommandEncoder();
     const pass = enc.beginComputePass();
     pass.setPipeline(pipeline); pass.setBindGroup(0, bind.group);

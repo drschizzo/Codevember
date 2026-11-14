@@ -16,9 +16,14 @@
 // - T4 – T5 : le bain se remplit (le miroir monte, rien ne dépasse) ; à t = 1,
 //   la grappe a repoussé sous lui : l'état est celui de t = 0.
 import { createRng } from '../../shared/rng.js';
-import { PHYS } from './melt/model.js';
+import { PHYS, bathAt } from './melt/model.js';
 
-export const CYCLE = { LH: 2.9, LL: 0.22, T0: 0.06, T1: 0.30, T2: 0.52, T3: 0.86, T4: 0.90, T5: 0.97 };
+export const CYCLE = { LH: 2.9, LL: 0.22, T0: 0.03, T1: 0.27, T2: 0.47, T3: 0.83, T4: 0.88, T5: 0.96 };
+// La boucle affichée commence au milieu du cycle (les cristaux sortis, leurs
+// couleurs qui mûrissent) : la première image, la vignette, montre le sujet
+// et non un miroir vide. Le cycle garde son origine (le bain plein).
+export const SHIFT = 0.4;
+export const cycleT = (ph) => { const t = ph + SHIFT; return t - Math.floor(t); };
 
 const clamp01 = (x) => Math.min(1, Math.max(0, x));
 const sm = (a, b, x) => { const k = clamp01((x - a) / (b - a)); return k * k * (3 - 2 * k); };
@@ -78,6 +83,55 @@ function dropOf(m, u) {
   return i >= m.steps ? m.drop[m.steps] : m.drop[i] * (1 - f) + m.drop[i + 1] * f;
 }
 
+// La bascule : quand la section au ras du bain a fondu (l'encoche de la
+// ligne de flottaison), la partie haute n'est plus portée que d'un côté, celui
+// qui regarde le centre de la grappe. Elle pivote sur ce bord : son côté
+// extérieur tombe dans le bain, en accélérant (son centre de gravité descend :
+// pivoter sur le bord extérieur le ferait monter, comme un levier), rebondit à
+// peine, s'enfonce presque à fleur (le bismuth solide flotte à
+// peine sur le liquide : 9,8 contre 10,05 g/cm³), et y fond tout entière avant
+// la fin de la fonte. Le pied reste sur la croûte et fond avec le bain.
+export function toppleOf(c, m, u, C = CYCLE) {
+  if (!m || !(m.uSettle > 0) || u <= m.uSettle) return null;
+  const uS = m.uSettle, x = (u - uS) / 0.06;
+  const r = (k) => { const v = Math.sin(c.seed * 12.9898 + k * 78.233) * 43758.5453; return v - Math.floor(v); };
+  const amax = 0.5 + 0.35 * r(1);
+  const fall = x < 1 ? x * x : 1 + 0.08 * Math.exp(-2.5 * (x - 1)) * Math.sin(5 * (x - 1));
+  let dx = c.x, dz = c.z; const l = Math.hypot(dx, dz);
+  if (l < 0.2) { dx = Math.cos(c.seed); dz = Math.sin(c.seed); } else { dx /= l; dz /= l; }
+  const dur = Math.max(0.15, Math.min(0.45, 1.08 - uS - 0.05));
+  return {
+    dir: [dx, dz], angle: amax * fall,
+    neck: bathAt(uS, C.LL, C.LH - C.LL) + dropOf(m, uS),
+    pivot: -0.85 * c.s, sink: 0.6 * c.s * sm(0.8, 2.5, x),
+    shrink: 1.9 * c.s * Math.pow(Math.min(Math.max((u - uS - 0.05) / dur, 0), 1), 1.3),
+  };
+}
+
+// L'appareillage, ce qui cause chaque temps du cycle (cm, repère du creuset) :
+// - on vide le bain par le fond : la quenouille, la tige qui bouche le trou
+//   de coulée, se lève ; un tourbillon se creuse autour d'elle ;
+// - le brûleur s'allume sous le creuset avant la fonte, s'éteint après ;
+// - on remplit : un filet de métal tombe d'une louche, hors champ, en haut.
+// stream : head, le bas du filet (son front qui tombe) ; tail, son haut.
+export function apparatusAt(t, C = CYCLE, duration = 40) {
+  const drain = sm(C.T0 - 0.005, C.T0 + 0.015, t) * (1 - sm(C.T1 - 0.015, C.T1 + 0.005, t));
+  const top = 60, g = 981 / 2; // (cm, cm/s² : la chute libre du filet)
+  const tS = C.T4 - 0.012, tE = C.T5;
+  let head = 1e4, tail = -1e4, r = 0;
+  if (t > tS && t < tE + 0.02) {
+    const a = (t - tS) * duration, b = (t - tE) * duration;
+    head = Math.max(top - g * a * a, -5); // (le front du filet ; une fois au bain, le filet le rejoint)
+    tail = b > 0 ? top - g * b * b : top; // (le haut du filet : la louche, puis sa queue qui tombe)
+    r = tail < C.LL - 0.5 ? 0 : 0.13;
+  }
+  return {
+    drain, lift: 0.3 * drain,
+    stream: { head, tail, r },
+    flame: sm(C.T2 - 0.035, C.T2 - 0.012, t) * (1 - sm(C.T3, C.T3 + 0.03, t)),
+  };
+}
+
 // État de chaque cristal à l'instant t : sa descente (la croûte + son
 // tassement), l'âge de sa peau d'oxyde sur le bain, la ride de son tassement.
 // melt : les résultats de la simulation (un par cristal), ou rien (tests).
@@ -95,6 +149,7 @@ export function crystalsAt(cluster, t, C = CYCLE, melt = null) {
     const rip = tSet > 0 ? t - tSet : -1;
     return {
       x: c.x, y: c.y, z: c.z, s: c.s, ang: c.ang, tilt: c.tilt, ox: c.ox, seed: c.seed, desc,
+      topple: toppleOf(c, m, u, C),
       skin: skinAge > 0 && skinAge < 0.14 ? skinAge : -1,
       ripple: rip > 0 && rip < 0.07 ? { x: c.x, z: c.z, dt: rip } : null,
     };
