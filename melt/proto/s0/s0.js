@@ -1,8 +1,11 @@
 // Prototype s0 : une trémie de bismuth qui fond pour de vrai.
 //
 // 1. Simulation (WGSL, au chargement) : problème de Stefan par la méthode de
-//    l'enthalpie sur une grille 3D (voir sim.mjs, même modèle). Le bain chaud
-//    remonte ; le panache d'air chaud qu'il crée chauffe le cristal ; les parois
+//    l'enthalpie sur une grille 3D (voir sim.mjs, même modèle). La croûte du
+//    fond fond sous la grappe, chauffée par le creuset : le cristal descend
+//    dans le bain (dans son repère, le bain monte : c'est ce que calcule la
+//    simulation ; le rendu remet le bain fixe). Le panache d'air chaud du bain
+//    chauffe le cristal ; les parois
 //    minces et les arêtes fondent d'abord ; le liquide s'égoutte dans le bain.
 //    On note l'instant τ où chaque cellule fond.
 // 2. Rendu : le cristal à l'instant u est { trémie } ∩ { τ > u }. La distance
@@ -12,7 +15,7 @@
 //    gardent leur oxyde.
 //
 // URL : ?u=0.5 (instant de la remontée) &h=0.025 (pas de la grille) &sink=8097
-import { P0 } from './sim.mjs';
+import { P0, level } from './sim.mjs';
 import { MOODS } from '../../src/recipe.js';
 
 const params = new URLSearchParams(location.search);
@@ -177,7 +180,7 @@ fn bake(@builtin(global_invocation_id) g: vec3u) {
 const RENDER = COMMON + /* wgsl */ `
 struct R {
   res: vec4f, cam: vec4f, camF: vec4f, camR: vec4f, camU: vec4f,
-  st: vec4f,      // u (remontée), vitesse d'oxydation, image, enfoncement du cristal
+  st: vec4f,      // u (fonte), vitesse d'oxydation, image, descente du cristal
   envLo: vec4f, envHi: vec4f, forge: vec4f,
   boxes: array<vec4f, 18>,
 };
@@ -202,7 +205,7 @@ fn fieldAt(p: vec3f) -> vec2f {
 // (distance, part fondue de la surface : 0 face d'origine, 1 face fondue)
 var<private> MELTED: f32;
 fn crystal(pw: vec3f) -> f32 {
-  let p = pw + vec3f(0.0, u.st.w, 0.0); // (repère du cristal : il s'est enfoncé)
+  let p = pw + vec3f(0.0, u.st.w, 0.0); // (repère du cristal : il est descendu de u.st.w)
   let dh = hopper(p, S0.crys.x, S0.crys.y, S0.crys.z, S0.crys.w);
   if (dh > 0.08) { MELTED = 0.0; return dh; }
   let F = fieldAt(p);
@@ -211,7 +214,7 @@ fn crystal(pw: vec3f) -> f32 {
   return max(dh, phi);
 }
 fn scene(p: vec3f) -> f32 {
-  let L = level(u.st.x, S0);
+  let L = S0.tide.x; // (le bain reste à sa hauteur : c'est le cristal qui descend)
   return smin(crystal(p), p.y - L, 0.03); // le ménisque : le bain mouille le cristal
 }
 fn nrm(p: vec3f) -> vec3f {
@@ -254,7 +257,7 @@ fn filmRGB(th: f32, cosi: f32) -> vec3f {
 
 fn trace(ro0: vec3f, rd0: vec3f) -> vec3f {
   var ro = ro0; var rd = rd0; var T = vec3f(1.0); var Lc = vec3f(0.0);
-  let L = level(u.st.x, S0);
+  let L = S0.tide.x; // (le bain reste à sa hauteur : c'est le cristal qui descend)
   for (var b = 0; b < 4; b++) {
     var t = 0.003; var hit = false; var water = false;
     // (boîte de la grille : au-delà, seulement le bain ou le studio)
@@ -444,7 +447,8 @@ async function main() {
     U.fill(0);
     U.set([W, H, 0, 0], 0); U.set([...cam, Math.tan((fov * Math.PI) / 360)], 4);
     U.set([...f, 0], 8); U.set([...r, 0], 12); U.set([...up, 0], 16);
-    U.set([u, ox, 0, dropAt(u)], 20); U.set([...M.lo, 0], 24); U.set([...M.hi, 0], 28); U.set([...M.forge.color, M.forge.strength], 32);
+    // (la croûte fond sous la grappe : le cristal descend dans le bain)
+    U.set([u, ox, 0, level(u, P) - P.LL + dropAt(u)], 20); U.set([...M.lo, 0], 24); U.set([...M.hi, 0], 28); U.set([...M.forge.color, M.forge.strength], 32);
     M.boxes.slice(0, 6).forEach((b, k) => { U.set([...norm(b.dir), b.I], 36 + 12 * k); U.set([...b.color, b.hw], 40 + 12 * k); U.set([...(b.up ?? [0, 1, 0]), b.hh], 44 + 12 * k); });
     device.queue.writeBuffer(ibuf, 0, new Float32Array([W, H, exposure * M.grade.exposure, 0]));
     for (let k = 0; k < spp; k++) {
