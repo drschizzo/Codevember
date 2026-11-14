@@ -35,13 +35,13 @@ export const MOODS = {
     cam: { pos: [1, -16, 16], tgt: [-1.5, -2, 0], fov: 42 },
     grade: { exposure: 0.55, contrast: 1.02, saturation: 0.95 },
   },
-  ombre: {
-    label: 'Ombre', absorb: [0.004, 0.0012, 0.001], sigS: 0.004,
-    deep: [0.03, 0.08, 0.1], shallow: [0.2, 0.38, 0.45],
-    sky: [0.8, 0.9, 1.1], horizon: [1, 1, 1], skyI: 1, sun: [0.3, 0.6, 0.75], sunI: 90,
-    lb: [0, 0, 1], lbI: 0, amb: [0.12, 0.15, 0.17], sunW: [0.25, 0.7, 0.65], glow: 0.4, floorY: -17,
-    cam: { pos: [3, -1.5, 15], tgt: [-1.5, -13, -6], fov: 50 },
-    grade: { exposure: 0.7, contrast: 1.04, saturation: 0.9 },
+  contrejour: {
+    label: 'Contre-jour', absorb: [0.006, 0.002, 0.0015], sigS: 0.006,
+    deep: [0.002, 0.006, 0.012], shallow: [0.01, 0.03, 0.05],
+    sky: [0.2, 0.3, 0.5], horizon: [0.3, 0.4, 0.55], skyI: 1, sun: [0, 1, 0], sunI: 0,
+    lb: [0.05, -0.05, -1], lbI: 3.2, amb: [0.03, 0.05, 0.07], sunW: [0, 1, 0], glow: 0,
+    cam: { pos: [0, -4, 24], tgt: [0, -4.4, 0], fov: 32 },
+    grade: { exposure: 1.1, contrast: 1.06, saturation: 0.9 },
   },
   lait: {
     label: 'Lait glaciaire', absorb: [0.012, 0.004, 0.006], sigS: 0.018,
@@ -104,7 +104,7 @@ export function generate(seed, overrides = {}) {
     body: {
       tilt0: r3(rb.range(0.06, 0.16)), azimuth: rb.pick([0, Math.PI]), driftDir: 1, breeze: r2(rb.range(0.6, 1.2)),
     },
-    camera: { sway: r3(rc.range(0.05, 0.12)), dolly: r2(rc.range(0.94, 1.06)), lift: r2(rc.range(-0.6, 0.6)) },
+    camera: { sway: r3(rc.range(0.015, 0.04)), dolly: r2(rc.range(0.96, 1.06)), lift: r2(rc.range(-0.3, 0.3)) },
     loop: { duration: 48 },
     grade: { ...M.grade },
   };

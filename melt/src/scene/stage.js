@@ -8,19 +8,7 @@ import { texture, screenUV, vec4, positionGeometry } from 'three/tsl';
 import { createTracer } from './tracer.js';
 import { MOODS, ICES, SECTIONS } from '../recipe.js';
 import { stateAt, columnRows } from '../timeline.js';
-
-const TAU = Math.PI * 2;
-
-// la caméra du film : le cadrage de l'humeur, un balancement lent et périodique
-export function cameraAt(R, u) {
-  const C = MOODS[R.mood].cam, K = R.camera;
-  const tgt = [...C.tgt];
-  const off = [C.pos[0] - tgt[0], C.pos[1] - tgt[1], C.pos[2] - tgt[2]];
-  const az = K.sway * Math.sin(TAU * u), lift = K.lift * Math.sin(TAU * u + 1.3);
-  const c = Math.cos(az), s = Math.sin(az);
-  const pos = [tgt[0] + (off[0] * c + off[2] * s) * K.dolly, tgt[1] + off[1] * K.dolly + lift, tgt[2] + (-off[0] * s + off[2] * c) * K.dolly];
-  return { pos, tgt, fov: C.fov };
-}
+export { cameraAt } from '../camera.js';
 
 export function createStage(scene, gen, { lite = false, renderer, onArt = null } = {}) {
   const tracer = createTracer(renderer);

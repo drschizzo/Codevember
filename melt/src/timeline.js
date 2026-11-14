@@ -14,7 +14,7 @@ export const COMPRESSION = 11.5; // temps physique / temps simulé à F = 20 (pr
 // La vitesse du film v(u) = 1 − A·plateau(u) (plateau lisse de demi-largeur
 // h, raccords de largeur r), normalisée pour que s(1) = 1 ; le centre c du
 // plateau est cherché pour que s(c) = s_d (le détachement tombe au milieu du
-// ralenti). Au plateau, une seconde de film ≈ 1,7 s physique.
+// ralenti). Au plateau, une seconde de film ≈ 1,9 s physique.
 export const WARP = { A: 0.982, h: 0.036, r: 0.03, n: 4096 };
 const warps = new Map();
 function makeWarp(sd) {
@@ -85,7 +85,7 @@ export function stateAt(R, S, B, u) {
       }
       // rides : l'onde de la bascule, puis la brise de l'automne
       const breeze = sm(ud, ud + 0.05, s) * (1 - sm(0.86, 0.95, s));
-      ripple = { amp: 0.012 * Math.exp(-tau / 2.5) + 0.004 * breeze * R.body.breeze, x: pos[0], z: pos[2], t: Math.min(tau, 600), lambda: 1.2 };
+      ripple = { amp: 0.006 * Math.exp(-tau / 2.5) + 0.0025 * breeze * R.body.breeze, x: pos[0], z: pos[2], t: Math.min(tau, 600), lambda: 1.2 };
     }
   }
   return { u, s, summer, Tlake: 0.5 * (R.lake.T0 + R.lake.T1) - 0.5 * (R.lake.T1 - R.lake.T0) * Math.cos(2 * Math.PI * s), frag, ripple, feed: feedAt(S, s) };
