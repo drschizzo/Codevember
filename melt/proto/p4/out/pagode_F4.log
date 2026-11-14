@@ -1,0 +1,11 @@
+# pagode_F4  T∞=10 °C, S 12→4 (fond→surface), α=0.0001, Le=10, F=4, grille 80x288
+# Huppert-Turner : Δρ_T=1.00 kg/m³, dρ/dz=43.3 kg/m⁴ → épaisseur prévue 15.0 mm
+t=36 s  V/V0=0.819
+t=72 s  V/V0=0.734
+t=108 s  V/V0=0.670
+t=144 s  V/V0=0.617
+t=192 s  V/V0=0.556
+t=240 s  V/V0=0.501
+# 12475 pas, 28 s
+# creux du profil (z, mm) :  ; espacements :  (prévu ≈ 15 mm)
+# nappes (minima de sel à r = a + 6 mm, z en mm) : 70, 77, 87, 97.5, 107.5, 117, 129.5 ; espacements : 7, 10, 10.5, 10, 9.5, 12.5
