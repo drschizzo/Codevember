@@ -2,8 +2,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generate, MOODS, HABITS, OXIDES, CLUSTERS, FRAMINGS } from '../src/recipe.js';
-import { level, emerge, reach, descent, buildCluster, crystalsAt, tideFor, topOf } from '../src/cycle.js';
-import { cameraAt } from '../src/camera.js';
+import { level, emerge, reach, descent, buildCluster, crystalsAt, tideFor, topOf, cycleT, apparatusAt } from '../src/cycle.js';
+import { cameraAt, potFor } from '../src/camera.js';
 import { simulate, gridsFor, stepsFor, bathAt, PHYS } from '../src/melt/model.js';
 
 test('recette déterministe, JSON, tous les choix tirés', () => {
@@ -95,16 +95,19 @@ test('modèle de fonte (Node, grille grossière) : les parties minces d’abord,
   assert.ok(bathAt(1, LL, D) === LL + D && X > c.s);
 });
 
-test('caméra : périodique, lente, toujours au-dessus du métal', () => {
+test('caméra : périodique, lente, au-dessus du métal, dans le creuset ou dehors selon le cadrage', () => {
   for (let i = 0; i < 200; i++) {
     const R = generate(`k${i}`);
-    const LH = tideFor(buildCluster(R.seed, CLUSTERS[R.cluster])).LH;
+    const C = tideFor(buildCluster(R.seed, CLUSTERS[R.cluster])), pot = potFor(R);
     for (let k = 0; k < 100; k++) {
-      const y = cameraAt(R, k / 100).pos[1];
-      assert.ok(y > LH + 0.15, `graine k${i} (${R.framing}) : caméra à ${y.toFixed(2)} sous la marée haute ${LH.toFixed(2)}`);
+      const ph = k / 100, t = cycleT(ph), p = cameraAt(R, ph).pos, r = Math.hypot(p[0], p[2]);
+      assert.ok(p[1] > level(t, C) + 0.15, `graine k${i} (${R.framing}) : caméra à ${p[1].toFixed(2)} sous le bain ${level(t, C).toFixed(2)}`);
+      // (au-dessus du bain : la paroi proche reste sous l'objectif ; l'atelier : dehors, au-dessus du bord)
+      if (R.framing === 'atelier') assert.ok(r > pot.Ri + pot.th + 1 && p[1] > pot.rim + 2, `graine k${i} : l'atelier est vu du dedans`);
+      else assert.ok(r < pot.Ri - 0.5, `graine k${i} (${R.framing}) : caméra dans la paroi (${r.toFixed(2)} / ${pot.Ri.toFixed(2)})`);
     }
   }
-  for (const s of ['c1', 'c2', 'c3']) {
+  for (const s of ['c1', 'c2', 'c3', 's7']) {
     const R = generate(s);
     const a = cameraAt(R, 0).pos, b = cameraAt(R, 1).pos;
     for (let i = 0; i < 3; i++) assert.ok(Math.abs(a[i] - b[i]) < 1e-9);
@@ -115,6 +118,17 @@ test('caméra : périodique, lente, toujours au-dessus du métal', () => {
     }
     assert.ok(vmax < 1.5, `caméra trop rapide : ${vmax} cm/s`);
   }
+});
+
+test('appareillage : la quenouille pendant le vidage, la flamme pendant la fonte, le filet pendant le remplissage', () => {
+  const C = tideFor(buildCluster('a0', CLUSTERS.grappe));
+  const A = (t) => apparatusAt(t, C);
+  assert.ok(A((C.T0 + C.T1) / 2).drain > 0.99 && A(C.T2).drain === 0 && A(0.01).drain < 0.01);
+  assert.ok(A((C.T2 + C.T3) / 2).flame > 0.99 && A(C.T1).flame === 0 && A(C.T4).flame === 0);
+  // (la flamme s'allume avant que la grappe ne descende : la cause avant l'effet)
+  assert.ok(A(C.T2 - 0.005).flame > 0.5);
+  const s = A((C.T4 + C.T5) / 2).stream;
+  assert.ok(s.r > 0 && s.head < C.LL && A(C.T3).stream.r === 0 && A(0.99).stream.r === 0);
 });
 
 test('grilles de fonte : elles contiennent le cristal et tiennent dans le budget', () => {

@@ -23,7 +23,7 @@ export const RENDER_DEFAULTS = {
   dof: false, focus: 1, focusRange: 0.35, bokeh: 2,
   motionBlur: 0, ca: 0.06, grain: 0.03,
   streaks: 0, streakLen: 4, halation: 0.2, dirt: 0,
-  dynRes: false, maxFps: 0,
+  dynRes: true, maxFps: 0, // (le creuset et les gradins fins coûtent : la résolution suit la cadence)
 };
 
 // Mobile : demi-résolution, résolution dynamique, cadence plafonnée.
@@ -33,7 +33,7 @@ export const MOBILE_DEFAULTS = {
   dynRes: true, maxFps: 60,
 };
 
-const STORE = 'melt.render.v3';
+const STORE = 'melt.render.v4';
 const RAYTRACE_OFF = { dof: false, ao: false, ssr: false, motionBlur: 0, streaks: 0, dirt: 0 }; // (changer de version quand un défaut change : les réglages mémorisés sont alors oubliés)
 
 // (le mode mobile a ses propres réglages mémorisés)
