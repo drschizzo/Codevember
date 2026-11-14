@@ -466,6 +466,7 @@ export function mergeBundles(list) {
   const out = { ...f, nz, residual: list.flatMap((B) => B.residual) };
   for (const key of ['eta', 'u', 'foam', 'aer', 'wet']) { const A = new Float32Array(nz * n); let o = 0; for (const B of list) { A.set(B[key], o); o += B.nz * n; } out[key] = A; }
   const bb = new Float32Array(nz * f.nx); let o = 0; for (const B of list) { bb.set(B.b, o); o += B.nz * f.nx; } out.b = bb;
+  const br = new Float32Array(nz * f.nf * 4); o = 0; for (const B of list) { br.set(B.brk, o); o += B.nz * f.nf * 4; } out.brk = br;
   const zs = list.flatMap((B) => B.zs);
   out.zs = zs; out.z0 = zs[0]; out.dz = nz > 1 ? (zs[nz - 1] - zs[0]) / (nz - 1) : 1;
   return out;
@@ -555,7 +556,14 @@ export function assembleScene(R, parts, { lite = false, onProgress = () => {} } 
     }
     const bb = new Uint16Array(bundle.nz * bundle.nx * 4);
     for (let k = 0; k < bundle.nz * bundle.nx; k++) bb[4 * k] = toHalf(bundle.b[k]);
-    bundleOut = { nz: bundle.nz, z0: bundle.z0, dz: bundle.dz, nx: bundle.nx, x0: bundle.x0, dx: bundle.dx, nf: bundle.nf, fps: bundle.fps, tex, wet, b: bb };
+    // le déferlement par profil et par image (x, intensité, u, hauteur), lissé
+    // d'une image à l'autre sur l'intensité (les embruns s'allument et s'éteignent sans sauts)
+    const brk = new Uint16Array(bundle.nz * bundle.nf * 4);
+    for (let k = 0; k < bundle.nz; k++) for (let f = 0; f < bundle.nf; f++) {
+      const o = (k * bundle.nf + f) * 4, at = (df) => bundle.brk[(k * bundle.nf + (f + df + bundle.nf) % bundle.nf) * 4 + 1];
+      brk[o] = toHalf(bundle.brk[o]); brk[o + 1] = toHalf((at(-1) + 2 * at(0) + at(1)) / 4); brk[o + 2] = toHalf(bundle.brk[o + 2]); brk[o + 3] = toHalf(bundle.brk[o + 3]);
+    }
+    bundleOut = { nz: bundle.nz, z0: bundle.z0, dz: bundle.dz, nx: bundle.nx, x0: bundle.x0, dx: bundle.dx, nf: bundle.nf, fps: bundle.fps, tex, wet, b: bb, brk };
   }
   // le profil moyen (sans le bord qui varie) : la roche au-delà de la boîte le
   // déplace elle-même de s(z) (scene/water.js, profAt)

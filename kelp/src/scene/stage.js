@@ -10,6 +10,7 @@ import { createWater, createSurface } from './water.js';
 import { createTerrain } from './terrain.js';
 import { createKelp } from './kelp.js';
 import { createFauna } from './fauna.js';
+import { createSpray } from './spray.js';
 import { sunDir } from '../gen/sky.js';
 import { cameraPose } from '../camera.js';
 import { sceneJobs } from '../gen/scene.js';
@@ -39,6 +40,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
   const surface = createSurface(W, skyHolder.tex, lite);
   const kelp = createKelp(W, lite);
   const fauna = createFauna(W);
+  const spray = createSpray(W, lite);
   // le ciel : une grande sphère de la scène (le fond de three.js, dessiné à
   // part, restait noir après le préchauffage asynchrone des pipelines)
   const skyNode = tTexture(skyHolder.tex);
@@ -57,7 +59,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
   const skyMesh = new THREE.Mesh(new THREE.SphereGeometry(500, 64, 32), skyMat);
   skyMesh.frustumCulled = false; skyMesh.renderOrder = -1;
   const group = new THREE.Group();
-  group.add(skyMesh, terrain.mesh, kelp.mesh, kelp.hold, fauna.mesh, surface.mesh);
+  group.add(skyMesh, terrain.mesh, kelp.mesh, kelp.hold, fauna.mesh, surface.mesh, spray.mesh);
   scene.add(group);
 
   let R = null, D = null, sky = null, pending = 0, version = 0, prog = 0, track = null;
@@ -122,6 +124,8 @@ export function createStage(scene, gen, { lite = false } = {}) {
     const bTex = Bd ? W.dataTex3(Bd.tex, Bd.nx, Bd.nf, Bd.nz) : W.dataTex3(new Uint16Array(32), 2, 2, 2);
     const bWetTex = Bd ? W.dataTex3(Bd.wet, Bd.nx, Bd.nf, Bd.nz, THREE.RedFormat) : W.dataTex3(new Uint16Array(8), 2, 2, 2, THREE.RedFormat);
     const bBTex = Bd ? W.dataTex(Bd.b, Bd.nx, Bd.nz) : W.dataTex(new Uint16Array(16), 2, 2);
+    const brkTex = Bd?.brk ? W.dataTex(Bd.brk, Bd.nf, Bd.nz) : W.dataTex(new Uint16Array(16), 2, 2);
+    brkTex.wrapS = THREE.RepeatWrapping; // (le temps, en x, boucle)
     // roche
     const Rk = out.rock;
     const relTex = W.dataTex(Rk.relief, Rk.M, Rk.M);
@@ -129,7 +133,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
     const colTex = W.dataTex(Rk.color, Rk.M, Rk.M, THREE.UnsignedByteType);
     colTex.colorSpace = THREE.SRGBColorSpace;
     colTex.generateMipmaps = true; colTex.minFilter = THREE.LinearMipmapLinearFilter; colTex.anisotropy = 8;
-    for (const [node, t] of [[W.seaT, seaTex], [W.wetT, wetTex], [W.profT, profTex], [W.heroBT, heroBTex], [W.bundleT, bTex], [W.bundleWetT, bWetTex], [W.bundleBT, bBTex], [W.reliefT, relTex], [W.fillT, fillTex], [terrain.colT, colTex]]) {
+    for (const [node, t] of [[W.seaT, seaTex], [W.wetT, wetTex], [W.profT, profTex], [W.heroBT, heroBTex], [W.bundleT, bTex], [W.bundleWetT, bWetTex], [W.bundleBT, bBTex], [W.brkT, brkTex], [W.reliefT, relTex], [W.fillT, fillTex], [terrain.colT, colTex]]) {
       const old = node.value; node.value = t; if (old && old !== t) old.dispose();
     }
     const U = W.U;
@@ -139,6 +143,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
     if (Bd) { U.bx0.value = Bd.x0; U.bW.value = Bd.nx * Bd.dx; U.bnf.value = Bd.nf; U.bfps.value = Bd.fps; U.bz0.value = Bd.z0; U.bdz.value = Bd.dz; U.bnz.value = Bd.nz; }
     kelp.setData(out.kelp, R);
     if (out.fauna) fauna.setData(out.fauna);
+    spray.setData(out.T);
     track = buildTrack(S, out);
     const E = out.emerge, et = W.dataTex(E.tex, E.nf, E.levels, THREE.HalfFloatType, THREE.RGFormat, THREE.RepeatWrapping);
     et.minFilter = et.magFilter = THREE.NearestFilter;
@@ -389,7 +394,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
 
   return {
     domeLens, setDomeCamera,
-    setRecipe, update, setShadowQuality, camPose, trackAt, group, sun, W, kelp, terrain, surface,
+    setRecipe, update, setShadowQuality, camPose, trackAt, group, sun, W, kelp, terrain, surface, spray,
     get data() { return D; },
     ready: () => pending === 0 && !!D && !!sky,
     failed: () => pending < 0,

@@ -71,6 +71,8 @@ export function createWater() {
   // le sec et le mouillé se décident contre le fond que la mer a vu
   const heroBT = texture(dataTex(new Uint16Array(8), 2, 1));
   const bundleBT = texture(dataTex(new Uint16Array(16), 2, 2));
+  // le déferlement par profil et par image : (x de la crête, intensité, u, hauteur)
+  const brkT = texture(dataTex(new Uint16Array(16), 2, 2, THREE.HalfFloatType, THREE.RGBAFormat, THREE.RepeatWrapping));
   const bundleWetT = texture3D(dataTex3(new Uint16Array(8), 2, 2, 2, THREE.RedFormat));
 
   // ── lectures ──
@@ -96,6 +98,8 @@ export function createWater() {
   // caméra (fondu sur |z − zRef| entre 1 m et 0,3 m, comme dans gen/sea.js)
   const bundleUVW = (x, z, tl) => vec3(x.sub(U.bx0).div(U.bW), tl.mul(U.bfps).add(0.5).div(U.bnf), z.sub(U.bz0).div(U.bdz).add(0.5).div(U.bnz));
   const heroW = (z) => max(smoothstep(1.0, 0.3, z.sub(U.zRef).abs()), U.bOn.oneMinus());
+  // le déferlement au voisinage de z, au temps local tl (texture : t en x, z en y)
+  const breaking = (z, tl) => brkT.sample(vec2(tl.mul(U.bfps).add(0.5).div(U.bnf), z.sub(U.bz0).div(U.bdz).add(0.5).div(U.bnz))).level(0).mul(U.bOn);
   // le fond vu par la mer en (x, z)
   const simBed = (x, z) => mix(
     bundleBT.sample(vec2(x.sub(U.bx0).div(U.bW), z.sub(U.bz0).div(U.bdz).add(0.5).div(U.bnz))).level(0).x,
@@ -260,7 +264,7 @@ export function createWater() {
   };
   const receivedShadow = (shadow) => shadow.mul(sunAtten(positionWorld));
 
-  return { U, seaT, wetT, fillT, reliefT, profT, bundleT, bundleWetT, dataTex3, edgeShift, profAt, simBed, heroBT, bundleBT, sea, level, levelNear, levelDome, wetLevel, rockAt, pool, medium, fogNode, sunAtten, receivedShadow, waterGlow, inBox, boxUV, dataTex };
+  return { U, seaT, wetT, fillT, reliefT, profT, bundleT, bundleWetT, dataTex3, edgeShift, profAt, simBed, heroBT, bundleBT, brkT, breaking, localT, sea, level, levelNear, levelDome, wetLevel, rockAt, pool, medium, fogNode, sunAtten, receivedShadow, waterGlow, inBox, boxUV, dataTex };
 }
 
 // ── La surface ───────────────────────────────────────────────────────────────
@@ -334,7 +338,18 @@ export function createSurface(W, skyTex, lite) {
     const e0 = W.sea(x, z, t).x;
     const eA = W.sea(x.add(w), z, t).x.add(W.sea(x.sub(w), z, t).x).add(W.sea(x, z.add(w), t).x).add(W.sea(x, z.sub(w), t).x);
     const eta = mix(e0, e0.add(eA).div(5), step(0.001, dF));
-    return vec3(x, max(eta, W.pool(x, z)), z);
+    // la lèvre : là où la vague casse, la crête est poussée vers l'avant (dans
+    // le sens où va l'eau) — la face se creuse et se cambre au lieu d'être une
+    // pente lisse ; pas près du dôme (la ligne d'eau y est celle du profil fin)
+    const bk = W.breaking(z, W.localT(z, t));
+    const crest = bk.w.sub(W.simBed(x, z)).max(0);
+    const s = x.sub(bk.x); // (devant la crête : s > 0 dans le sens de la vague)
+    const fwd = select(bk.z.lessThan(0), float(-1), float(1));
+    const bump = exp(s.mul(fwd).add(0.12).div(0.16).pow(2).negate());
+    const lift = eta.sub(bk.w.sub(crest.mul(0.6))).max(0).div(crest.mul(0.6).max(0.02)).clamp(0, 1); // (le haut de la crête seulement)
+    const camD = vec2(x.sub(cameraPosition.x), z.sub(cameraPosition.z)).length();
+    const curl = smoothstep(2, 12, bk.y).mul(crest.mul(0.55).min(0.22)).mul(bump).mul(lift).mul(smoothstep(1.2, 2.5, camD)).mul(fwd);
+    return vec3(x.add(curl), max(eta, W.pool(x, z)), z);
   };
   mat.positionNode = Fn(() => {
     const p = positionLocal;
@@ -399,7 +414,10 @@ export function createSurface(W, skyTex, lite) {
     // écume : des plaques déchirées qui suivent le courant, trouées de bulles —
     // un bruit déformé seuillé selon la quantité d'écume (les bords des
     // cellules de Worley, d'épaisseur constante, se lisaient comme un filet)
-    const lace = (f) => {
+    // (l'écume s'étire dans le sens du courant : en traînées dans le retrait)
+    const stretch = float(1).div(speed.mul(0.9).add(1));
+    const lace = (f0) => {
+      const f = f0.mul(vec3(stretch, 1, 1));
       const wp = f.mul(vec3(1.6, 3.2, 0.5));
       const warp = vec3(NZ(wp).x, NZ(wp.add(4.7)).y, 0).mul(0.35);
       const q = f.add(warp);
@@ -413,6 +431,8 @@ export function createSurface(W, skyTex, lite) {
     const thr = float(0.95).sub(fo.clamp(0, 1.5).mul(0.42));
     const cov = smoothstep(thr, thr.add(0.08), laceM).mul(smoothstep(0.03, 0.12, fo)).max(smoothstep(0.9, 1.4, fo).mul(0.9));
     const foamCov = cov.clamp(0, 0.97);
+    // (la mousse a une épaisseur : elle porte une ombre sur l'eau autour d'elle)
+    const foamShade = float(1).sub(smoothstep(thr.sub(0.18), thr, laceM).mul(smoothstep(0.03, 0.2, fo)).mul(foamCov.oneMinus()).mul(0.35));
     const lit = vec3(U.sunE).mul(U.sunDir.y.max(0)).mul(0.7).add(vec3(U.skyE).mul(1.1));
     const foam = vec3(0.86, 0.88, 0.88).mul(lit).mul(select(above, float(1), float(0.6)));
     // (au bord de l'eau, la nappe s'amincit : transparente)
@@ -430,8 +450,17 @@ export function createSurface(W, skyTex, lite) {
     const kBody = dot(vec3(U.ext), vec3(1 / 3)).mul(2.5).add(0.8);
     const body = float(1).sub(exp(depth.max(0).mul(kBody).negate().div(cosTi.max(0.25)))).mul(F.oneMinus()).mul(smoothstep(0.03, 0.2, depth)); // (une nappe mince laisse voir la roche)
     const bodyCol = W.waterGlow(tdirA, depth.max(0).mul(0.5), sm.w.clamp(0, 1.2)).mul(body);
+    // La crête à contre-jour : le soleil traverse la lame d'eau et ressort
+    // vers l'œil (Beer-Lambert sur l'épaisseur traversée, ~ la hauteur de
+    // l'eau, plus longue sur une face raide) — vert-turquoise quand la crête
+    // est mince, rien au pied. C'est ce qui fait lire une vague comme de l'eau.
+    const steep = float(1).sub(normalWorld.y.abs()).clamp(0, 1);
+    const thick = depth.max(0).mul(float(1).add(steep.mul(2)));
+    const back = dot(dir, vec3(U.sunDir)).max(0).pow(3); // (le soleil en face de la caméra, derrière la crête)
+    const crestT = exp(vec3(U.ext).mul(thick).mul(1.6).negate());
+    const crestCol = vec3(U.sunE).mul(crestT).mul(back.mul(0.9).add(0.08)).mul(steep.mul(1.5).add(0.25)).mul(smoothstep(0.04, 0.15, depth)).mul(F.oneMinus()).mul(0.22);
     // composition prémultipliée : src + dst·(1 − α)
-    const reflA = select(above, sky.mul(F).add(spec).add(bodyCol), mix(window, deep, F));
+    const reflA = select(above, sky.mul(F).add(spec).add(bodyCol).add(crestCol).mul(foamShade), mix(window, deep, F));
     const alphaW = select(above, F.add(body), float(1)).mul(thin);
     let rgb = mix(reflA.mul(thin), foam, foamCov.mul(thin)).add(glowN.mul(thin));
     let alpha = mix(alphaW, float(1), foamCov.mul(thin));
