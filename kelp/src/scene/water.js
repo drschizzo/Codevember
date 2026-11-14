@@ -129,7 +129,12 @@ export function createWater() {
   };
   // le bord du platier le long de la côte : s(z), la même formule que
   // gen/sea.js (edgeShift), et le masque qui le raccorde au platier
-  const edgeShift = (z) => {
+  const edgeShift = (z0) => {
+    // (au-delà du faisceau, le bord ne varie plus : la mer y garde le profil
+    // du bout, et une roche qui continuait d'onduler se couvrait d'une nappe
+    // d'eau qui reflétait le ciel, en triangle blanc au loin)
+    const zEnd = U.bz0.add(U.bnz.sub(1).mul(U.bdz));
+    const z = select(U.bOn.greaterThan(0.5), z0.clamp(U.bz0, zEnd), z0);
     let v = float(0);
     for (const e of [U.es0, U.es1, U.es2]) v = v.add(e.x.mul(sin(e.y.mul(z).add(e.z))));
     for (const e of [U.eg0, U.eg1]) v = v.add(e.x.mul(exp(z.sub(e.y).div(e.z).pow(2).negate())));
