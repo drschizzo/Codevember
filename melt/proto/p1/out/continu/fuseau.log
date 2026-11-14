@@ -1,0 +1,41 @@
+# fuseau  T∞ 7→9→7 °C, P=400 s, v=0.400 mm/s, F=20, grille 80x320, dx=0.5 mm, dt=0.0235 s
+t=94 s (période 0.24)  T∞=7.91  V=28.39 cm³  bout à z=47 mm  1.97 ms/pas
+# dt → 0.0188
+t=188 s (période 0.47)  T∞=8.98  V=6.45 cm³  bout à z=108 mm  1.96 ms/pas
+# dt → 0.0151
+# dt → 0.0120
+t=238 s (période 0.59)  T∞=8.83  V=6.07 cm³  bout à z=123 mm  1.94 ms/pas
+t=286 s (période 0.71)  T∞=8.22  V=6.09 cm³  bout à z=124 mm  1.97 ms/pas
+t=334 s (période 0.84)  T∞=7.49  V=6.34 cm³  bout à z=122 mm  1.98 ms/pas
+t=382 s (période 0.96)  T∞=7.04  V=6.63 cm³  bout à z=119 mm  2.00 ms/pas
+t=430 s (période 1.08)  T∞=7.11  V=7.90 cm³  bout à z=120 mm  2.01 ms/pas
+t=479 s (période 1.20)  T∞=7.67  V=8.74 cm³  bout à z=116 mm  2.02 ms/pas
+t=527 s (période 1.32)  T∞=8.41  V=8.27 cm³  bout à z=111 mm  2.03 ms/pas
+t=575 s (période 1.44)  T∞=8.92  V=7.06 cm³  bout à z=112 mm  2.04 ms/pas
+t=623 s (période 1.56)  T∞=8.93  V=6.04 cm³  bout à z=120 mm  2.05 ms/pas
+t=671 s (période 1.68)  T∞=8.43  V=6.22 cm³  bout à z=124 mm  2.06 ms/pas
+t=720 s (période 1.80)  T∞=7.70  V=6.25 cm³  bout à z=123 mm  2.07 ms/pas
+t=768 s (période 1.92)  T∞=7.13  V=6.59 cm³  bout à z=120 mm  2.07 ms/pas
+t=816 s (période 2.04)  T∞=7.03  V=7.43 cm³  bout à z=120 mm  2.07 ms/pas
+t=864 s (période 2.16)  T∞=7.47  V=8.71 cm³  bout à z=118 mm  2.08 ms/pas
+t=912 s (période 2.28)  T∞=8.19  V=8.50 cm³  bout à z=111 mm  2.08 ms/pas
+t=961 s (période 2.40)  T∞=8.81  V=7.34 cm³  bout à z=111 mm  2.07 ms/pas
+t=1009 s (période 2.52)  T∞=8.99  V=6.09 cm³  bout à z=117 mm  2.06 ms/pas
+t=1057 s (période 2.64)  T∞=8.63  V=6.03 cm³  bout à z=124 mm  2.05 ms/pas
+t=1105 s (période 2.76)  T∞=7.92  V=6.41 cm³  bout à z=124 mm  2.04 ms/pas
+t=1153 s (période 2.88)  T∞=7.26  V=6.28 cm³  bout à z=120 mm  2.04 ms/pas
+t=1201 s (période 3.00)  T∞=7.00  V=7.28 cm³  bout à z=120 mm  2.03 ms/pas
+t=1250 s (période 3.12)  T∞=7.29  V=8.27 cm³  bout à z=120 mm  2.02 ms/pas
+t=1298 s (période 3.24)  T∞=7.97  V=8.90 cm³  bout à z=114 mm  2.02 ms/pas
+t=1346 s (période 3.37)  T∞=8.66  V=7.64 cm³  bout à z=111 mm  2.01 ms/pas
+t=1394 s (période 3.49)  T∞=9.00  V=6.48 cm³  bout à z=114 mm  2.01 ms/pas
+t=1442 s (période 3.61)  T∞=8.79  V=5.90 cm³  bout à z=123 mm  2.00 ms/pas
+t=1491 s (période 3.73)  T∞=8.15  V=6.22 cm³  bout à z=124 mm  2.00 ms/pas
+t=1539 s (période 3.85)  T∞=7.43  V=6.44 cm³  bout à z=122 mm  1.99 ms/pas
+t=1587 s (période 3.97)  T∞=7.02  V=6.81 cm³  bout à z=120 mm  1.99 ms/pas
+# fin : 125082 pas, 249 s, 1.99 ms/pas, 1280 décalages
+# écart période 0 → 1 : RMS 4.089 mm, max 13.99 mm
+# écart période 1 → 2 : RMS 0.009 mm, max 0.35 mm
+# écart période 2 → 3 : RMS 0.003 mm, max 0.21 mm
+# détachement t=186 s (phase 0.465, période 0) : 2.26 cm³, z 18–107 mm
+# écrit fuseau.png, fuseau.json
