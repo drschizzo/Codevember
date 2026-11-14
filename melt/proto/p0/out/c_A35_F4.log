@@ -1,0 +1,16 @@
+# c_A35_F4  Tinf=3.5 °C  F(St)=4  St_eff/Tinf=0.0549 /°C  hold=top
+# grid 80x288  dx=0.500 mm  dt=0.02353 s  R=0.04 Z=0.144  ice a=0.014 H=0.09  MG levels=5 (5x18) nV=2
+# Ra(H, max dT^2) ~ 3.85e+6  Ra/Tinf^2 (L=2a) = 7.24e+3
+t=117.6s step=5000 V/V0=0.8464 umax=1.49mm/s uIce=0.031mm/s div*dx/U=8.8e-7 ms/step=2.77
+t=235.3s step=10000 V/V0=0.7340 umax=1.46mm/s uIce=0.053mm/s div*dx/U=2.6e-7 ms/step=2.51
+t=352.9s step=15000 V/V0=0.6310 umax=1.50mm/s uIce=0.086mm/s div*dx/U=4.7e-7 ms/step=2.41
+t=470.6s step=20000 V/V0=0.5367 umax=1.46mm/s uIce=0.099mm/s div*dx/U=3.8e-7 ms/step=2.40
+t=588.2s step=25000 V/V0=0.4498 umax=1.38mm/s uIce=0.104mm/s div*dx/U=2.9e-7 ms/step=2.41
+t=705.9s step=30000 V/V0=0.3709 umax=1.34mm/s uIce=0.107mm/s div*dx/U=4.0e-8 ms/step=2.48
+t=823.5s step=35000 V/V0=0.2994 umax=1.29mm/s uIce=0.105mm/s div*dx/U=4.4e-7 ms/step=2.85
+t=941.2s step=40000 V/V0=0.2355 umax=1.26mm/s uIce=0.100mm/s div*dx/U=2.5e-7 ms/step=2.80
+t=1058.8s step=45000 V/V0=0.1793 umax=1.20mm/s uIce=0.094mm/s div*dx/U=3.5e-7 ms/step=2.94
+t=1176.5s step=50000 V/V0=0.1308 umax=1.15mm/s uIce=0.084mm/s div*dx/U=1.9e-7 ms/step=2.86
+# done: t=1207.1 s physical, 51300 steps, wall 136.1 s, 2.65 ms/step, cells=23040
+# snapshots at t = 0, 167, 393, 661, 915, 1207 s ; V/V0 = 1.00, 0.80, 0.60, 0.40, 0.25, 0.12
+# wrote c_A35_F4.png (1950x576), c_A35_F4.json, c_A35_F4_profile.csv

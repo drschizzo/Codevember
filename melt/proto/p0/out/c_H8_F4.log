@@ -1,0 +1,9 @@
+# c_H8_F4  Tinf=8 °C  F(St)=4  St_eff/Tinf=0.0549 /°C  hold=hang
+# grid 80x288  dx=0.500 mm  dt=0.02353 s  R=0.04 Z=0.144  ice a=0.014 H=0.09  MG levels=5 (5x18) nV=2
+# Ra(H, max dT^2) ~ 3.85e+6  Ra/Tinf^2 (L=2a) = 7.24e+3
+t=117.6s step=5000 V/V0=0.6402 umax=7.83mm/s uIce=0.050mm/s div*dx/U=9.9e-8 ms/step=2.78
+t=235.3s step=10000 V/V0=0.3898 umax=8.60mm/s uIce=0.059mm/s div*dx/U=3.2e-7 ms/step=2.53
+t=352.9s step=15000 V/V0=0.1994 umax=8.67mm/s uIce=0.033mm/s div*dx/U=6.9e-8 ms/step=2.41
+# done: t=418.8 s physical, 17800 steps, wall 45.5 s, 2.56 ms/step, cells=23040
+# snapshots at t = 0, 56, 136, 231, 320, 419 s ; V/V0 = 1.00, 0.80, 0.60, 0.40, 0.25, 0.12
+# wrote c_H8_F4.png (1950x576), c_H8_F4.json, c_H8_F4_profile.csv
