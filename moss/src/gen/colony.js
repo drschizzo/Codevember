@@ -3,9 +3,10 @@
 //
 // - Le substrat est une surface y = sub(x, z) (dessus d'une pierre, d'une
 //   souche, d'un tapis de tourbe), légèrement bosselée.
-// - Les tiges sont réparties par échantillonnage de Poisson (Bridson) à une
-//   distance minimale égale au diamètre d'une rosette ouverte : deux tiges
-//   voisines se touchent du bout des feuilles, sans se traverser.
+// - Les tiges sont réparties par échantillonnage de Poisson (Bridson) à la
+//   densité d'un vrai coussin : un peu moins d'un rayon de rosette entre deux
+//   tiges, les rosettes voisines s'imbriquent (une feuille passe au-dessus ou
+//   au-dessous de celles de la voisine). Une tige serrée s'ouvre moins.
 // - Le coussin est plus haut au centre (croissance radiale) ; les tiges
 //   penchent vers l'extérieur, et leur axe zigzague irrégulièrement (deux
 //   fréquences, deux plans).
@@ -111,16 +112,18 @@ export function buildColony(spec, habitat = null) {
   const Sh = fam.shoot, Lf = fam.leaf;
   const Lmax = Lf.L[1];
   const reach = rosetteReach(fam, Lmax * (Sh.capitulum ? 0.85 : 1));
-  // distance minimale : les rosettes ouvertes s'interpénètreraient ; chaque
-  // feuille sera bornée à la cellule de Voronoï de sa tige (plus bas)
-  const d = Math.max(Sh.spacing * 0.7, reach.r * (Sh.capitulum ? 0.95 : 0.78));
+  // distance minimale : celle d'un coussin réel, où les rosettes ouvertes
+  // s'imbriquent (environ 0,45 rayon de rosette ; les capitules de la
+  // sphaigne, plus massifs, se touchent à peine)
+  // (version allégée : un peu plus espacées, environ deux fois moins de tiges)
+  const d = (Sh.capitulum ? reach.r * 0.8 : Math.max(Sh.spacing * 0.4, reach.r * 0.45)) * (spec.lite ? 1.4 : 1);
   const Rc = spec.radius;
   const blob = (p) => { const a = Math.atan2(p[1], p[0]); return Rc * (1 + 0.16 * N.noise(Math.cos(a) * 1.3, Math.sin(a) * 1.3, 0.5) + 0.08 * N.noise(Math.cos(a) * 3, Math.sin(a) * 3, 2.5)); };
   // coussins : épaisseur du dôme pleinement poussé (gen/build.js, d'après le
   // champ de la mousse) ; les tiges ne poussent que là où il y aura un coussin
   const dome = spec.dome ? (x, z) => bilerp(spec.dome.T, spec.dome.N, spec.dome.E, x, z) : null;
   const inside = (p) => Math.hypot(p[0], p[1]) < blob(p) && (!dome || dome(p[0], p[1]) > 0.04);
-  const maxN = spec.lite ? 900 : 3200;
+  const maxN = spec.lite ? 3500 : 16000;
   const pts = poisson(rng.fork('poisson'), Rc * 1.3, d, inside, maxN);
 
   const shoots = [];
@@ -145,7 +148,14 @@ export function buildColony(spec, habitat = null) {
       axis = norm(add(add(mul([0, 1, 0], 0.6), mul(nrm, 0.4)), add(mul(out, Sh.lean * r), [rng.range(-0.06, 0.06), 0, rng.range(-0.06, 0.06)])));
       H = rng.range(...Sh.height) * (0.9 + 0.1 * N.noise(x * 0.9, 1.7, z * 0.9) * 2);
     }
-    shoots.push({ x, z, yb, H, axis, r, rnd: rng.next(), twist: rng.chance(0.85) ? 1 : -1, grow: rng.range(0.0, 0.18) });
+    // naissance : chaque tige sort quand la mousse locale passe son seuil b
+    // (le front avance tige par tige) ; dans les refuges (fissures), les
+    // tiges survivent à la sécheresse — leur seuil est au plancher
+    const refuge = habitat ? sst(0.45, 0.9, bilerp(habitat.R, habitat.N, habitat.E, x, z)) : 0;
+    const bmax = spec.dome?.Bmax ? bilerp(spec.dome.Bmax, spec.dome.N, spec.dome.E, x, z) : 1;
+    const birth = rng.next() * (1 - refuge);
+    const b = Math.max(0.03, Math.min(0.03 + (bmax - 0.25) * birth, 0.6 * bmax));
+    shoots.push({ x, z, yb, H, axis, r, rnd: rng.next(), twist: rng.chance(0.85) ? 1 : -1, b, refuge });
   }
   const n = shoots.length;
 
@@ -164,6 +174,10 @@ export function buildColony(spec, habitat = null) {
     }
     s.top = s.pts[NS];
   }
+  // niveau de détail d'un objet de taille l au point p (gen/build.js : d'après
+  // la trajectoire de la caméra) : 0 gros plan, 1 moyen, 2 lointain
+  const lodOf = spec.lod ? spec.lod(shoots) : () => 0;
+  for (const s of shoots) s.lod = lodOf(s.top, Lmax);
   const stemAt = (s, t) => {
     const f = Math.min(NS - 1e-6, Math.max(0, t * NS)), k = Math.floor(f), u = f - k;
     const p = add(mul(s.pts[k], 1 - u), mul(s.pts[k + 1], u));
@@ -172,10 +186,24 @@ export function buildColony(spec, habitat = null) {
   };
 
   // graphe de contact et exposition
-  const nb = shoots.map(() => []);
-  for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
-    const D = Math.hypot(shoots[i].x - shoots[j].x, shoots[i].z - shoots[j].z);
-    if (D < d * 1.75) { nb[i].push(j); nb[j].push(i); }
+  const nb = shoots.map(() => []), nbC = d * 1.75, nbG = new Map();
+  shoots.forEach((S, i) => { const k = `${Math.floor(S.x / nbC)},${Math.floor(S.z / nbC)}`; if (!nbG.has(k)) nbG.set(k, []); nbG.get(k).push(i); });
+  for (let i = 0; i < n; i++) {
+    const S = shoots[i], gx = Math.floor(S.x / nbC), gz = Math.floor(S.z / nbC);
+    for (let a = gx - 1; a <= gx + 1; a++) for (let c = gz - 1; c <= gz + 1; c++) for (const j of nbG.get(`${a},${c}`) ?? []) {
+      if (j <= i) continue;
+      if (Math.hypot(S.x - shoots[j].x, S.z - shoots[j].z) < nbC) { nb[i].push(j); nb[j].push(i); }
+    }
+  }
+  // écartement permis : une tige dont la voisine la plus proche est à dn
+  // s'ouvre jusqu'à ce que sa rosette dépasse à peine l'axe de la voisine ;
+  // serrement (crowd) : la part du ciel que lui cachent ses voisines
+  for (let i = 0; i < n; i++) {
+    const S = shoots[i];
+    let dn = Infinity;
+    for (const j of nb[i]) dn = Math.min(dn, Math.hypot(S.x - shoots[j].x, S.z - shoots[j].z));
+    S.amp = Math.min(1, Math.max(0.55, (dn * 1.4) / reach.r));
+    S.crowd = Math.min(1, nb[i].length / 9);
   }
   const sunDir = norm(spec.sunDir ?? [0.4, 0.8, 0.3]);
   for (let i = 0; i < n; i++) {
@@ -213,16 +241,19 @@ export function buildColony(spec, habitat = null) {
   const leaves = [];
   shoots.forEach((s, si) => {
     const nl = Math.round(rng.range(...Sh.leaves) * (dome ? 1 : 0.75 + 0.25 * Math.min(1, s.H / Sh.height[1])));
-    const nOld = dome ? 0 : 2;
+    // (feuilles mortes, brunes et raides, le long du bas de la tige : sous un
+    // dôme elles garnissent toute la partie enfouie, de 15 % de la hauteur
+    // jusqu'à la rosette)
+    const nOld = dome ? 3 : 2;
     const total = nl + nOld;
     let az = rng.range(0, Math.PI * 2);
     const L0 = rng.range(...Lf.L);
-    for (let k = 0; k < total; k++) {
+    for (let k = 0; k < total; k++) (() => {
       const old = k < nOld;
       // vieilles feuilles en bas, feuilles vertes de 1 − leafy au sommet ;
       // entre-nœuds qui raccourcissent vers le bourgeon
-      const lo = s.tTurf, hiOld = dome ? lo : lo + 0.06;
-      const g = old ? lo + (k / nOld) * (hiOld - lo) * 0.95 : hiOld + (1 - hiOld) * (1 - (1 - (k - nOld) / nl) ** 1.35) * 0.97;
+      const lo = s.tTurf, hiOld = dome ? lo : lo + 0.06, loOld = dome ? Math.min(lo, 0.15) : lo;
+      const g = old ? loOld + (k / nOld) * (hiOld - loOld) * 0.95 : hiOld + (1 - hiOld) * (1 - (1 - (k - nOld) / nl) ** 1.35) * 0.97;
       const t = Math.min(0.985, g);
       const rho = old ? 0 : (k - nOld) / Math.max(1, nl - 1);
       az += Math.PI * 2 * Sh.div + rng.range(-0.12, 0.12);
@@ -232,63 +263,30 @@ export function buildColony(spec, habitat = null) {
       const q = quatFromBasis(Rr, T, Z);
       const bud = Math.max(0, (rho - 0.68) / 0.32);
       const L = L0 * (old ? 0.85 : 1) * (1 - (Sh.capitulum ? 0.8 : 0.62) * bud * (Sh.capitulum ? 1 : bud)) * rng.range(0.9, 1.08);
-      leaves.push([p[0], p[1], p[2], L, q[0], q[1], q[2], q[3], si, rho, Lf.W * rng.range(0.88, 1.1) * (1 - 0.3 * bud), rng.next(), Sh.stemR * (1 - 0.35 * t), s.twist, old ? 0.3 : 1, old ? 1 : 0, s.yb]);
-    }
+      // (instance : i0 insertion + L ; i1 repère ; i2 seuil de naissance de la
+      // tige, rang, largeur, tirage ; i3 rayon de tige, sens, écartement,
+      // vieille ; i4 pied (y), tige (x, z), serrement)
+      const lv = Math.max(s.lod, lodOf(p, L));
+      // (au loin, les feuilles du bas d'une tige serrée sont cachées dans le coussin)
+      if ((lv === 2 || (spec.lite && lv === 1)) && rho < 0.35 && s.crowd > 0.5) return;
+      leaves.push([p[0], p[1], p[2], L, q[0], q[1], q[2], q[3], s.b, rho, Lf.W * rng.range(0.88, 1.1) * (1 - 0.3 * bud), rng.next(), Sh.stemR * (1 - 0.35 * t), s.twist, old ? 0.3 : s.amp, old ? 1 : 0, s.yb, s.x, s.z, s.crowd, si, lv]);
+    })();
   });
-  // ── Chaque feuille reste dans la cellule de Voronoï de sa tige ──
-  // (dans le plan horizontal, à la hauteur de chaque point : les axes des
-  // tiges voisines à cette hauteur). Une feuille serrée par une voisine
-  // s'écarte moins : on cherche par dichotomie le plus grand écartement amp
-  // tel qu'à toute ouverture f, chacun de ses points reste à une demi-marge
-  // du bissecteur. Deux feuilles de tiges différentes ne peuvent alors pas
-  // se toucher (les cellules sont disjointes).
-  const axisAt = (j, y) => {
-    const S = shoots[j], t = Math.min(1, Math.max(0, (y - S.yb) / (S.H * Math.max(0.3, S.axis[1]))));
-    return stemAt(S, t).p;
-  };
-  const MARGIN = Lf.thick * 2 + 0.008;
-  const nbFar = shoots.map((_, i) => nb[i]);
-  const SS = [0.35, 0.65, 0.88, 1.0], XS = [-1, 0, 1], FS = [0, 0.2, 0.4, 0.6, 0.8, 1];
-  const fits = (l, amp) => {
-    const si = l[8], G = { L: l[3], W: l[10], h: 0, stemR: l[12], twist: l[13] }, q = [l[4], l[5], l[6], l[7]];
-    for (const f of FS) {
-      const P = poseParams(fam, f, l[9], amp);
-      const pts = [];
-      for (const s of SS) for (const x of XS) pts.push(leafPoint(s, x, 0, 0, P, G, Lf));
-      if (Lf.hair) { const T = tipFrame(P, G, Lf); pts.push([T.p[0] + T.t[0] * Lf.hair * G.L, T.p[1] + T.t[1] * Lf.hair * G.L, T.p[2] + T.t[2] * Lf.hair * G.L]); }
-      for (const pl of pts) {
-        const r = qrot(q, pl), p = [r[0] + l[0], r[1] + l[1], r[2] + l[2]];
-        const ai = axisAt(si, p[1]), di = (p[0] - ai[0]) ** 2 + (p[2] - ai[2]) ** 2;
-        for (const j of nbFar[si]) {
-          const aj = axisAt(j, p[1]), dj = (p[0] - aj[0]) ** 2 + (p[2] - aj[2]) ** 2;
-          const dd = Math.hypot(ai[0] - aj[0], ai[2] - aj[2]);
-          if ((dj - di) / (2 * dd) < MARGIN * 0.5) return false;
-        }
-      }
-    }
-    return true;
-  };
-  let crowded = 0;
-  for (const l of leaves) {
-    const top = l[14];
-    if (fits(l, top)) continue;
-    let lo = 0, hi = top;
-    // (une feuille qu'aucune pose ne loge dans sa cellule n'est pas gardée)
-    if (!fits(l, 0)) { l[15] = -1; crowded++; continue; }
-    for (let k = 0; k < 5; k++) { const m = (lo + hi) / 2; if (fits(l, m)) lo = m; else hi = m; }
-    l[14] = lo;
-  }
-  const kept = leaves.filter((l) => l[15] >= 0);
-  leaves.length = 0; leaves.push(...kept);
-  const leafInst = new Float32Array(leaves.length * LEAF_STRIDE);
-  leaves.forEach((l, i) => leafInst.set(l, i * LEAF_STRIDE));
-  // niveaux de détail : les feuilles proches du lieu du gros plan ont le
-  // gabarit fin, les autres (vues de loin, ou floues) le gabarit grossier
-  const hero = spec.hero ?? [0, 0], heroR = spec.heroR ?? 2.4;
-  const nearL = [], farL = [];
-  leaves.forEach((l) => (Math.hypot(l[0] - hero[0], l[2] - hero[1]) < heroR ? nearL : farL).push(l));
-  const pack = (L) => { const a = new Float32Array(Math.max(1, L.length) * LEAF_STRIDE); L.forEach((l, i) => a.set(l, i * LEAF_STRIDE)); return a; };
-  const leafNear = pack(nearL), leafFar = pack(farL);
+  // instances des feuilles par niveau de détail (LEAF_STRIDE flottants
+  // chacune) ; leafInst : toutes, leafStem : la tige de chacune
+  const leafInst = new Float32Array(Math.max(1, leaves.length) * LEAF_STRIDE), leafStem = new Int32Array(leaves.length);
+  leaves.forEach((l, i) => { leafInst.set(l.slice(0, LEAF_STRIDE), i * LEAF_STRIDE); leafStem[i] = l[LEAF_STRIDE]; });
+  const lods = [0, 1, 2].map((lv) => {
+    const L = leaves.filter((l) => l[LEAF_STRIDE + 1] === lv), a = new Float32Array(Math.max(1, L.length) * LEAF_STRIDE);
+    L.forEach((l, i) => a.set(l.slice(0, LEAF_STRIDE), i * LEAF_STRIDE));
+    return { inst: a, count: L.length };
+  });
+  // perles d'eau : seulement les feuilles qui peuvent en porter une (scene/moss.js,
+  // beadPosition : une feuille sur trois du haut, pas les vieilles), hors du lointain
+  const fract = (v) => v - Math.floor(v);
+  const BL = leaves.filter((l) => l[LEAF_STRIDE + 1] < 2 && l[15] < 0.5 && l[9] > 0.3 && fract(l[11] * 7.31) > 0.35);
+  const beads = { inst: new Float32Array(Math.max(1, BL.length) * LEAF_STRIDE), count: BL.length };
+  BL.forEach((l, i) => beads.inst.set(l.slice(0, LEAF_STRIDE), i * LEAF_STRIDE));
 
   // ── Sporophytes ──
   const SP = fam.spor, spors = [];
@@ -312,7 +310,7 @@ export function buildColony(spec, habitat = null) {
     spors.push({ x: s.x, z: s.z, i, base, q, len, rnd: rs.next(), turns: SP.turns ? rs.range(...SP.turns) * (rs.chance(0.5) ? 1 : -1) : 0, open: rs.chance(SP.lid > 0 ? 1 - SP.lid : 1) ? 1 : 0 });
   }
   const sporInst = new Float32Array(spors.length * SPOR_STRIDE);
-  spors.forEach((o, k) => sporInst.set([o.base[0], o.base[1], o.base[2], o.len, ...o.q, n + k, o.rnd, o.turns, o.open, o.i, shoots[o.i].yb, 0, 0], k * SPOR_STRIDE));
+  spors.forEach((o, k) => sporInst.set([o.base[0], o.base[1], o.base[2], o.len, ...o.q, shoots[o.i].b, o.rnd, o.turns, o.open, o.i, shoots[o.i].yb, shoots[o.i].x, shoots[o.i].z], k * SPOR_STRIDE));
 
   // ── Tiges (géométrie fixe, fusionnée) ──
   const B = new Buffers(1 << 15);
@@ -320,10 +318,11 @@ export function buildColony(spec, habitat = null) {
   shoots.forEach((s, si) => {
     const v0 = B.n;
     B.piece = Math.floor(s.rnd * 255);
-    const pts = s.pts.slice(0, NS + 1);
+    // (au loin : moins d'anneaux et de côtés)
+    const pts = s.lod === 2 ? s.pts.filter((_, k) => k % 2 === 0) : s.pts.slice(0, NS + 1);
     // (tube effilé : on construit anneau par anneau ; surf.x : hauteur relative)
     const R0 = Sh.stemR;
-    const M = pts.length, nr = spec.lite ? 5 : 7;
+    const M = pts.length, nr = spec.lite || s.lod === 2 ? 4 : s.lod === 1 ? 5 : 7;
     const Ts = pts.map((_, i) => norm(sub(pts[Math.min(M - 1, i + 1)], pts[Math.max(0, i - 1)])));
     let Nn = norm(cross(Ts[0], [1, 0, 0]));
     const rows = [];
@@ -341,10 +340,11 @@ export function buildColony(spec, habitat = null) {
     sidRanges.push([v0, B.n, si]);
   });
   const stems = B.out();
-  stems.sid = new Float32Array(stems.position.length / 3);
-  for (const [a, b, si] of sidRanges) stems.sid.fill(si, a, b);
+  // (seuil de naissance et serrement de la tige, par sommet)
+  stems.sb = new Float32Array((stems.position.length / 3) * 2);
+  for (const [a, b, si] of sidRanges) for (let v = a; v < b; v++) stems.sb.set([shoots[si].b, shoots[si].crowd], v * 2);
   // (pied de chaque tige : la tige pousse et se rétracte autour de lui)
-  stems.sbase = new Float32Array(stems.sid.length * 3);
+  stems.sbase = new Float32Array(stems.position.length);
   for (const [a, b, si] of sidRanges) for (let v = a; v < b; v++) stems.sbase.set([shoots[si].x, shoots[si].yb, shoots[si].z], v * 3);
 
   // maillage du feutre : posé sous la roche (caché), il s'épaissit avec la
@@ -356,7 +356,16 @@ export function buildColony(spec, habitat = null) {
     for (let i = 0; i <= NG; i++) {
       const x = -ext + i * step, z = -ext + j * step, y0 = sub0.y(x, z);
       row.push(TB.vert([x, y0 - 0.04, z], sub0.normal(x, z), [255, 0, 0]));
-      thA.push(Math.max(0, turfY(x, z) - y0) + 0.04 * (dome ? sst(0.03, 0.12, dome(x, z)) : 1));
+      // (le fond n'existe que sous des tiges : à moins d'une distance de tige
+      // de la plus proche, sinon il reste sous la roche)
+      let dn = Infinity;
+      const gx = Math.floor(x / cs), gz = Math.floor(z / cs);
+      for (let a = gx - 1; a <= gx + 1; a++) for (let c = gz - 1; c <= gz + 1; c++) for (const k of cellG.get(`${a},${c}`) ?? []) dn = Math.min(dn, Math.hypot(shoots[k].x - x, shoots[k].z - z));
+      const under = 1 - sst(d * 0.8, d * 1.5, dn);
+      // (sous un coussin en dôme : une natte de rhizoïdes à peine levée — le
+      // fond du coussin, ce sont les tiges dans leur pénombre ; un fond levé
+      // ferait falaise là où les tiges sont encore rares)
+      thA.push((dome ? 0.07 : Math.max(0, turfY(x, z) - y0) + 0.04) * under);
     }
     rowsT.push(row);
   }
@@ -365,9 +374,9 @@ export function buildColony(spec, habitat = null) {
   turf.th = new Float32Array(thA);
 
   return {
-    family: spec.family, n, d, reach, crowded, turf, tTurf: shoots.map((S) => S.tTurf),
-    shoots: shoots.map((s) => ({ x: s.x, z: s.z, yb: s.yb, H: s.H, top: s.top, sky: s.sky, sun: s.sun, r: s.r, axis: s.axis, grow: s.grow })),
-    nb, leafInst, leafCount: leaves.length, leafNear, nearCount: nearL.length, leafFar, farCount: farL.length, sporInst, sporCount: spors.length,
+    family: spec.family, n, d, reach, turf, tTurf: shoots.map((S) => S.tTurf),
+    shoots: shoots.map((s) => ({ x: s.x, z: s.z, yb: s.yb, H: s.H, top: s.top, sky: s.sky, sun: s.sun, r: s.r, axis: s.axis, b: s.b, amp: s.amp, crowd: s.crowd, lod: s.lod, refuge: s.refuge })),
+    nb, leafInst, leafStem, leafCount: leaves.length, lods, beads, sporInst, sporCount: spors.length,
     spors: spors.map((o) => ({ shoot: o.i, base: o.base, len: o.len, q: o.q, turns: o.turns, open: o.open })),
     stems,
   };
