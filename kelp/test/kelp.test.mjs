@@ -142,3 +142,15 @@ test('le faisceau : le bord du platier et le front varient le long de la côte',
   const etas = Array.from({ length: B.nz }, (_, k) => fromHalf(B.tex[((k * B.nf + f) * B.nx + i) * 4]));
   assert.ok(Math.max(...etas) - Math.min(...etas) > 0.05, 'front identique sur tous les profils');
 });
+
+test('la forêt : des clones au-delà des plantes simulées, jamais contre le dôme', () => {
+  const C = S.kelp.clones, cam = S.cam;
+  assert.ok(S.kelp.nClones > 20, `trop peu de clones (${S.kelp.nClones})`);
+  for (let v = 0; v < C.count; v += 97) {
+    const x = C.anch[4 * v], z = C.anch[4 * v + 2];
+    assert.ok(Math.hypot(x - cam.x, z - cam.z) > 2.0, 'clone contre le dôme');
+    assert.ok(C.clone[2 * v + 1] === 1, 'attribut de clone');
+  }
+  // les sommets des plantes simulées sont deux fois moins nombreux que ceux de la forêt entière, au moins
+  assert.ok(C.count > S.kelp.straps.count * 0.5, 'la forêt ne s\'étend pas');
+});

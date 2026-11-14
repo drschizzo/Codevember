@@ -256,7 +256,7 @@ export function simulateBundle(spec, onProgress = null) {
     const S = simulateSea({ ...spec, profileFn: (x) => profileZ(x, z) }, onProgress ? (p) => onProgress((k + p) / nzz) : null);
     if (!out) {
       const n = S.nf * S.nx * nzz;
-      out = { nz: nzz, z0: zs[0], dz: nzz > 1 ? zs[1] - zs[0] : 1, nx: S.nx, x0: S.x0, dx: S.dx, nf: S.nf, fps: S.fps, T: S.T,
+      out = { nz: nzz, zs: [...zs], z0: zs[0], dz: nzz > 1 ? zs[1] - zs[0] : 1, nx: S.nx, x0: S.x0, dx: S.dx, nf: S.nf, fps: S.fps, T: S.T,
         eta: new Float32Array(n), u: new Float32Array(n), foam: new Float32Array(n), aer: new Float32Array(n), wet: new Float32Array(n), b: new Float32Array(nzz * S.nx), residual: [] };
     }
     const o = k * S.nf * S.nx;
@@ -300,5 +300,26 @@ export function seaField(hero, bundle, obliq, zRef) {
     if (w >= 1) return h;
     return at3v(key, x, z, tl) * (1 - w) + h * w;
   };
-  return { get, eta: (x, z, t) => get('eta', x, z, t), u: (x, z, t) => get('u', x, z, t), heroW };
+  // (η et u d'un coup : les poids de l'interpolation sont calculés une fois —
+  // c'est la lecture la plus fréquente de la simulation des laminaires)
+  const two = (S, A, Bv, x, t, o, w, acc) => {
+    const fx = (x - S.x0) / S.dx - 0.5, i0 = fx < 0 ? 0 : fx > S.nx - 2 ? S.nx - 2 : Math.floor(fx), wx = Math.min(1, Math.max(0, fx - i0));
+    let ft = (t / S.T) * S.nf; ft -= Math.floor(ft / S.nf) * S.nf;
+    const f0 = Math.floor(ft) % S.nf, f1 = f0 + 1 === S.nf ? 0 : f0 + 1, wt = ft - Math.floor(ft);
+    const o0 = f0 * S.nx + i0, o1 = f1 * S.nx + i0, a = (1 - wx) * (1 - wt), b = wx * (1 - wt), c = (1 - wx) * wt, d = wx * wt;
+    const e = A[o0] * a + A[o0 + 1] * b + A[o1] * c + A[o1 + 1] * d, u = Bv[o0] * a + Bv[o0 + 1] * b + Bv[o1] * c + Bv[o1 + 1] * d;
+    if (acc) { o[0] += e * w; o[1] += u * w; } else { o[0] = e * w; o[1] = u * w; }
+  };
+  const eu = (x, z, t, o) => {
+    const tl = t - obliq * (z - zRef);
+    if (!B) { two(hero, hero.eta, hero.u, x, tl, o, 1, false); return o; }
+    const w = heroW(z);
+    if (w >= 1) { two(hero, hero.eta, hero.u, x, tl, o, 1, false); return o; }
+    const fz = (z - B.z0) / B.dz;
+    if (fz <= 0 || fz >= B.nz - 1) { const k = fz <= 0 ? 0 : B.nz - 1; two(B, views.eta[k], views.u[k], x, tl, o, 1 - w, false); }
+    else { const k0 = Math.floor(fz), wz = fz - k0; two(B, views.eta[k0], views.u[k0], x, tl, o, (1 - wz) * (1 - w), false); two(B, views.eta[k0 + 1], views.u[k0 + 1], x, tl, o, wz * (1 - w), true); }
+    if (w > 0) two(hero, hero.eta, hero.u, x, tl, o, w, true);
+    return o;
+  };
+  return { get, eu, eta: (x, z, t) => get('eta', x, z, t), u: (x, z, t) => get('u', x, z, t), heroW };
 }

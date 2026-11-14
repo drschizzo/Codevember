@@ -12,6 +12,7 @@ import { createKelp } from './kelp.js';
 import { createFauna } from './fauna.js';
 import { sunDir } from '../gen/sky.js';
 import { cameraPose } from '../camera.js';
+import { sceneJobs } from '../gen/scene.js';
 import { G } from '../../../shared/scene/globals.js';
 import { texture as tTexture, equirectUV, normalize, positionWorld, cameraPosition, vec4, vec2, vec3, float, uniform, screenUV, screenSize, getViewPosition, fwidth, smoothstep, step, floor, fract, length, mx_cell_noise_float, max as tmax, select, sin, atan, dFdx, dFdy, If, mix, Fn } from 'three/tsl';
 import { NZ } from '../../../shared/scene/materials.js';
@@ -62,12 +63,32 @@ export function createStage(scene, gen, { lite = false } = {}) {
   let R = null, D = null, sky = null, pending = 0, version = 0, prog = 0, track = null;
   const onSky = { fn: null };
 
+  // La scène en deux temps : ses pièces indépendantes (la mer — le profil fin
+  // de la caméra, les tranches du faisceau — et la roche) en même temps sur les
+  // workers du pool, puis l'assemblage (caméra, laminaires) sur l'un d'eux,
+  // qui reçoit les pièces sans copie. Tout à la suite, la mer et la roche
+  // coûtaient ~7 s de plus que leur plus longue pièce.
+  async function requestScene(spec, report) {
+    const key = `scene|${JSON.stringify(spec)}`;
+    if (gen.has(key)) return gen.request(spec, 'scene', report, { key });
+    const t0 = performance.now();
+    const jobs = sceneJobs(spec.R, spec.lite, Math.max(1, (gen.size ?? 4) - 2));
+    const pp = jobs.map(() => 0), mix = () => report(0.14 * pp.reduce((a, b) => a + b, 0) / jobs.length);
+    const res = await Promise.all(jobs.map((j, k) => gen.request(j, 'part', (p) => { pp[k] = p; mix(); }, { cache: false })));
+    const parts = { sea: res[0], rock: res[1], bundles: res.slice(2), ms: Math.round(performance.now() - t0) };
+    const transfer = [];
+    const walk = (o) => { for (const x of Object.values(o)) { if (ArrayBuffer.isView(x)) { if (!transfer.includes(x.buffer)) transfer.push(x.buffer); } else if (x && typeof x === 'object') walk(x); } };
+    walk(parts);
+    return gen.request({ ...spec, parts }, 'scene', (p) => report(Math.max(0.14, p)), { key, transfer });
+  }
+
   function setRecipe(recipe, onProgress = null) {
     R = recipe;
     const v = ++version;
     pending = 2; prog = 0;
     const spec = { R, lite };
-    gen.request(spec, 'scene', (p) => { if (v === version) { prog = p; onProgress?.(p); } }).then((out) => {
+    const report = (p) => { if (v === version) { prog = p; onProgress?.(p); } };
+    requestScene(spec, report).then((out) => {
       if (v !== version) return;
       apply(out);
       pending--;

@@ -45,7 +45,7 @@ export const FAMILIES = {
     label: 'Palmier de mer', latin: 'Postelsia palmaeformis',
     stipe: { L: [0.3, 0.45], r: 0.011, EI: 0.9, rho: 1.0, ds: 0.05, stand: true },
     blade: { n: [14, 20], L: [0.14, 0.22], w: [0.008, 0.012], e: 0.0015, EI: 1.5e-4, rho: 1.0, ds: 0.045, fan: 1.2, tassel: true },
-    holdfast: 0.05, spacing: 0.22, drag: 1,
+    holdfast: 0.05, spacing: 0.6, drag: 1, colony: [3, 6], colonyR: 0.15, // (en colonies serrées : isolé, il se lisait comme un cocotier miniature)
   },
   egregia: {
     label: 'Boa', latin: 'Egregia menziesii',
@@ -75,6 +75,16 @@ export function layoutPlants(family, seed, area, rockH, opts = {}) {
     const d = sp * (0.85 + 0.3 * r.next());
     if (pts.some((p) => (p.x - x) ** 2 + (p.z - z) ** 2 < d * d)) continue;
     pts.push({ x, z });
+    // colonie : des plantes serrées autour de la première (palmier de mer)
+    if (F.colony) {
+      const nc = r.int(...F.colony);
+      for (let c = 0, tr = 0; c < nc && tr < nc * 8 && pts.length < (opts.max ?? 80); tr++) {
+        const a = r.next() * Math.PI * 2, rad = F.colonyR * Math.sqrt(r.next()), cx = x + Math.cos(a) * rad, cz = z + Math.sin(a) * rad;
+        if (opts.avoid && opts.avoid(cx, cz)) continue;
+        if (pts.some((p) => (p.x - cx) ** 2 + (p.z - cz) ** 2 < 0.055 ** 2)) continue;
+        pts.push({ x: cx, z: cz }); c++;
+      }
+    }
   }
   const near = opts.near ?? { x: 0, z: 0 };
   return pts.map((p, i) => {
@@ -235,7 +245,11 @@ export function simulateKelp(K, opts, onProgress = null) {
   const segChain = Int32Array.from(segB.map((b) => K.nodes[b].chain));
   const segIdx = Int32Array.from(segB.map((b) => K.chains[K.nodes[b].chain].nodes.indexOf(b)));
   const segPlant = Int32Array.from(segB.map((b) => K.nodes[b].plant));
-  const PALM = F.palm ?? 3;
+  const PALM = F.palm ?? 3, TASSEL = !!F.blade.tassel;
+  // (marge de la recherche des paires : à l'échelle du pas des lames — 10 cm
+  // autour des lames de 4,5 cm d'une houppe de palmier de mer faisaient
+  // 40 000 paires)
+  const MARGIN = Math.min(0.1, Math.max(0.05, 1.4 * F.blade.ds));
 
   // ── l'eau au nœud (champ enregistré, bilinéaire en x et t) ──
   const fieldAt = (arr, x, t) => {
@@ -249,9 +263,13 @@ export function simulateKelp(K, opts, onProgress = null) {
   // (le champ de la mer en (x, z, t), faisceau de profils compris : gen/sea.js, seaField)
   const FLD = opts.field ?? null;
   const h = 1 / sub, VMAX = 5, BP = 6, SW = 0.012, SD = Number(globalThis.process?.env?.SD ?? 0.3);
+  const ULast = new Float64Array(N).fill(NaN), EU = new Float64Array(2);
   const DVX = new Float64Array(N), DVY = new Float64Array(N), DVZ = new Float64Array(N);
   // ── voisinage des segments : grille hachée (tableaux, sans allocation) ──
-  const cell = 0.16, HS = 1 << 15, head = new Int32Array(HS), nxt = new Int32Array(NS);
+  // (cellule de la grille : la plus grande distance de contact, pas plus — dans
+  // une houppe serrée, des cellules de 16 cm contenaient des centaines de segments)
+  let maxW = 0; for (let i = 0; i < N; i++) if (KIND[i]) maxW = Math.max(maxW, Wd[i]);
+  const cell = Math.min(0.16, Math.max(0.06, maxW + MARGIN)), HS = 1 << 15, head = new Int32Array(HS), nxt = new Int32Array(NS);
   const MX = new Float64Array(NS), MY = new Float64Array(NS), MZ = new Float64Array(NS);
   let pairs = new Int32Array(1 << 16), np = 0;
   const hkey = (i, j, k) => (((i * 73856093) ^ (j * 19349663) ^ (k * 83492791)) >>> 0) & (HS - 1);
@@ -271,8 +289,12 @@ export function simulateKelp(K, opts, onProgress = null) {
           if (segChain[s] === segChain[t] && Math.abs(segIdx[s] - segIdx[t]) < 3) continue;
           // (la paume : les doigts d'une même plante sont soudés près de la racine)
           if (segPlant[s] === segPlant[t] && segIdx[s] < PALM && segIdx[t] < PALM) continue;
+          // (la houppe du palmier de mer : ses lames courtes, toutes nées au même
+          // point, pendent ensemble — leurs contacts mutuels ne se voient pas,
+          // et en colonie ils coûtaient le triple de la simulation)
+          if (TASSEL && segPlant[s] === segPlant[t]) continue;
           if (SA[s] === SA[t] || SA[s] === SB[t] || SB[s] === SA[t] || SB[s] === SB[t]) continue;
-          const r = 0.5 * (Wd[SB[s]] + Wd[SB[t]]) + 0.1;
+          const r = 0.5 * (Wd[SB[s]] + Wd[SB[t]]) + MARGIN;
           const dx = MX[s] - MX[t], dy = MY[s] - MY[t], dz = MZ[s] - MZ[t];
           if (dx * dx + dy * dy + dz * dz < r * r) {
             if (np + 2 > pairs.length) { const q = new Int32Array(pairs.length * 2); q.set(pairs); pairs = q; }
@@ -395,7 +417,8 @@ export function simulateKelp(K, opts, onProgress = null) {
       let s = 0, ux = 0, uz = 0, dux = 0;
       if (water > 0) {
         const tl = t - obliq * (Z[i] - zRef);
-        const eta = FLD ? FLD.eta(X[i], Z[i], t) : fieldAt(S.eta, X[i], tl);
+        if (FLD) FLD.eu(X[i], Z[i], t, EU);
+        const eta = FLD ? EU[0] : fieldAt(S.eta, X[i], tl);
         const depth = eta - GH[i];
         s = (eta - Y[i]) / (2 * Rr[i] + SW) + 0.5;
         s = (s < 0 ? 0 : s > 1 ? 1 : s) * water;
@@ -409,9 +432,12 @@ export function simulateKelp(K, opts, onProgress = null) {
           // profil de vitesse en puissance 1/7 : plus lent près de la roche
           const zr = Math.max(0, Y[i] - GH[i]) / Math.max(0.02, depth);
           const pr = Math.max(0.35, Math.min(1, zr ** (1 / 7)));
-          const u0 = (FLD ? FLD.u(X[i], Z[i], t) : fieldAt(S.u, X[i], tl)) * pr, u1 = (FLD ? FLD.u(X[i], Z[i], t + h) : fieldAt(S.u, X[i], tl + h)) * pr;
-          ux = u0; uz = u0 * side; dux = u1 - u0;
-        }
+          // (l'accélération de l'eau : différence avec la vitesse lue au sous-pas
+          // précédent — une lecture du champ de moins par nœud et par sous-pas)
+          const ur = FLD ? EU[1] : fieldAt(S.u, X[i], tl), u0 = ur * pr;
+          ux = u0; uz = u0 * side; dux = ULast[i] === ULast[i] ? (ur - ULast[i]) * pr : 0;
+          ULast[i] = ur;
+        } else ULast[i] = NaN;
       }
       // poids et poussée (la masse ajoutée ralentit une lame à plat dans l'eau)
       vy += (G * (s / Rho[i] - 1) / (1 + s * Am[i] * 0.5)) * h;

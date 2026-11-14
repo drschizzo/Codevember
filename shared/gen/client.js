@@ -32,21 +32,29 @@ export function createGenerator(size = Math.max(2, Math.min(6, (navigator.hardwa
       const job = queue.shift();
       const w = idle.pop();
       pending.set(job.id, job);
-      w.postMessage({ id: job.id, spec: job.spec, what: job.what });
+      w.postMessage({ id: job.id, spec: job.spec, what: job.what }, job.transfer ?? []);
     }
   }
 
   // onProgress(f, label) : avancement posté par le worker pendant un long
   // calcul (0 → 1) ; une pièce déjà en cache arrive avec (1, 'cache')
-  function request(spec, what, onProgress = null) {
-    const key = `${what}|${JSON.stringify(spec)}`;
-    if (cache.has(key)) { const p = cache.get(key); cache.delete(key); cache.set(key, p); onProgress?.(1, 'cache'); return p; }
-    const p = new Promise((resolve, reject) => { queue.push({ id: nextId++, spec, what, resolve, reject, onProgress }); pump(); });
-    p.catch(() => cache.delete(key));
-    cache.set(key, p);
-    while (cache.size > maxCache) cache.delete(cache.keys().next().value);
+  // opts (facultatif) : key — clé du cache à la place de la recette entière
+  // (quand le spec porte de gros tampons) ; cache: false — ne pas garder le
+  // résultat (une pièce intermédiaire) ; transfer — tampons cédés au worker
+  function request(spec, what, onProgress = null, opts = {}) {
+    const key = opts.key ?? `${what}|${JSON.stringify(spec)}`;
+    const keep = opts.cache !== false;
+    if (keep && cache.has(key)) { const p = cache.get(key); cache.delete(key); cache.set(key, p); onProgress?.(1, 'cache'); return p; }
+    const p = new Promise((resolve, reject) => { queue.push({ id: nextId++, spec, what, resolve, reject, onProgress, transfer: opts.transfer }); pump(); });
+    if (keep) {
+      p.catch(() => cache.delete(key));
+      cache.set(key, p);
+      while (cache.size > maxCache) cache.delete(cache.keys().next().value);
+    }
     return p;
   }
+  // un résultat est-il déjà en cache (ou en cours) sous cette clé ?
+  const has = (key) => cache.has(key);
 
-  return { request, busy: () => pending.size + queue.length };
+  return { request, has, size, busy: () => pending.size + queue.length };
 }
