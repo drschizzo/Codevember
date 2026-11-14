@@ -2,7 +2,7 @@
 // recette, un balancement lent autour de la grappe (périodique : même pose à
 // u = 0 et u = 1), qui suit la grappe quand elle descend dans le bain.
 import { FRAMINGS, CLUSTERS, HABITS } from './recipe.js';
-import { buildCluster, tideFor, descent, level, cycleT } from './cycle.js';
+import { buildCluster, tideFor, lift, level, cycleT, meltEnd } from './cycle.js';
 import { reachOf } from './melt/model.js';
 
 const TAU = Math.PI * 2;
@@ -12,8 +12,9 @@ const sm = (a, b, x) => { const k = Math.min(1, Math.max(0, (x - a) / (b - a)));
 let cache = { key: '', cl: null, C: null };
 function clusterOf(R) {
   const key = `${R.seed}|${R.cluster}`;
-  if (cache.key !== key) { const cl = buildCluster(R.seed, CLUSTERS[R.cluster] ?? CLUSTERS.grappe); cache = { key, cl, C: tideFor(cl) }; }
-  return cache;
+  if (cache.key !== key) { const cl = buildCluster(R.seed, CLUSTERS[R.cluster] ?? CLUSTERS.grappe); cache = { key, cl, C0: tideFor(cl) }; }
+  // (le temps de la fonte, calé sur la simulation une fois qu'elle a tourné)
+  return { cl: cache.cl, C: { ...cache.C0, UM: meltEnd(key) } };
 }
 
 // le cadre suit la grappe : le gros plan se règle sur le grand cristal, les
@@ -39,25 +40,25 @@ export function potFor(R) {
     const camH = Math.hypot(F.pos[0] - F.tgt[0], F.pos[2] - F.tgt[2]) * f * (R.camera.dolly ?? 1);
     Ri = Math.max(Ri, camH + 1.4);
   }
-  const th = 0.45, rim = C.LH + 0.45, bottom = -0.9;
-  // (la quenouille au fond à gauche, le filet au fond à droite : vus derrière la grappe)
-  const rr = Ri - 0.75, rs = Math.max(ext + 0.4, Ri - 1.6);
+  // la grille (un treillis d'acier dans un cerceau, sur lequel la grappe a
+  // poussé), à peine plus large que les pieds ; deux câbles fins la tiennent par
+  // son cerceau et montent vers un crochet, hors champ, loin derrière la grappe
+  // (le coin d'un cube tourné va à √2 demi-côté du centre, 1,9 pour la trémie allongée :
+  // aucun pied ne doit passer sur le cerceau)
+  const Rg = Math.max(...cl.map((c) => Math.hypot(c.x, c.z) + c.s * (habit === 2 ? 1.95 : 1.45))) + 0.12;
+  Ri = Math.max(Ri, Rg + 1.2);
+  // (le bain est fixe, à LB ; la grille au repos est à LB − LH, le fond juste dessous ;
+  // la paroi monte bien au-dessus du bain : elle fait le fond de l'image)
+  const th = 0.45, rim = C.LB + 0.8 * C.LH + 0.4, bottom = C.LB - C.LH - 1.2;
   return {
     Ri, th, rim, bottom, bench: bottom - 1.6,
-    rod: { x: Math.sin(-0.85) * rr, z: -Math.cos(-0.85) * rr, r: 0.14 },
-    stream: { x: Math.sin(0.45) * rs, z: -Math.cos(0.45) * rs },
+    galette: { r: Rg, crust: 0, bar: 0 },
   };
 }
 
-// la part de la descente que la caméra suit (0 hors de la fonte, 1 au fond),
-// qui revient en douceur pendant le remplissage : périodique
-function follow(t, C) {
-  const D = C.LH - C.LL;
-  if (t < C.T2) return 0;
-  if (t < C.T3) return descent(t, C) / D;
-  if (t < C.T4) return 1;
-  return 1 - sm(C.T4, C.T5, t);
-}
+// la part de la descente que la caméra suit : 0 grappe suspendue, 1 au fond
+// (périodique : elle suit la levée comme la fonte)
+const follow = (t, C) => (C.LB - C.LOW - lift(t, C)) / (C.LH - C.LOW);
 
 // u : la phase affichée (0–1)
 export function cameraAt(R, u) {
@@ -67,14 +68,14 @@ export function cameraAt(R, u) {
   const az = K.sway * Math.sin(TAU * u), lift = K.lift * Math.sin(TAU * u + 1.3);
   const c = Math.cos(az), s = Math.sin(az);
   if (R.framing === 'atelier') {
-    const pot = potFor(R), Ro = pot.Ri + pot.th, d = Ro * 3.4;
+    const pot = potFor(R), Ro = pot.Ri + pot.th, d = Ro * 2.9;
     const tgt = [0, F.tgt[1], 0];
     const off = [F.pos[0] * d, F.pos[1] * d, F.pos[2] * d];
     const pos = [tgt[0] + (off[0] * c + off[2] * s) * K.dolly, tgt[1] + off[1] * K.dolly + lift * 2, tgt[2] + (-off[0] * s + off[2] * c) * K.dolly];
     return { pos, tgt, fov: F.fov, aperture: F.aperture, focus: Math.hypot(pos[0] - tgt[0], pos[1] - tgt[1], pos[2] - tgt[2]) };
   }
   const f = frameScale(R);
-  const D = C.LH - C.LL, fw = follow(t, C);
+  const D = C.LH - C.LOW, fw = follow(t, C);
   const tgt = [F.tgt[0] * f, F.tgt[1] * f - 0.45 * D * fw, F.tgt[2] * f];
   const off = [(F.pos[0] - F.tgt[0]) * f, (F.pos[1] - F.tgt[1]) * f, (F.pos[2] - F.tgt[2]) * f];
   // la hauteur de base reste au-dessus de la marée haute de la grappe (au ras
@@ -82,7 +83,8 @@ export function cameraAt(R, u) {
   // jamais passer sous le bain ; le balancement vertical s'y ajoute
   const m = Math.abs(K.lift);
   let y0 = F.tgt[1] * f + off[1] * K.dolly;
-  y0 = R.framing === 'rasant' ? C.LH + 0.3 + m : Math.max(y0, C.LH + 0.5 + m);
+  // (au ras du bain : un peu au-dessus de lui, la grappe suspendue vue de biais)
+  y0 = R.framing === 'rasant' ? C.LB + 0.55 * C.LH + 0.6 + m : Math.max(y0, C.LH + 0.5 + m);
   y0 = Math.max(y0 - 0.45 * D * fw, level(t, C) + 0.3 + m);
   const pos = [tgt[0] + (off[0] * c + off[2] * s) * K.dolly, y0 + lift, tgt[2] + (-off[0] * s + off[2] * c) * K.dolly];
   const ap = F.aperture * Math.max(0.7, f);

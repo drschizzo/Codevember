@@ -3,7 +3,7 @@
 //
 // Un cube dont les faces sont creusées en gradins vers le centre (les arêtes
 // poussent plus vite que le milieu des faces) ; la base, qui a poussé sur la
-// croûte, est pleine. Ports : 0 trémie, 1 spirale (chaque gradin tourne d'un
+// grille, est pleine. Ports : 0 trémie, 1 spirale (chaque gradin tourne d'un
 // cran), 2 allongée (le long de x).
 //
 // Le solide est l'intersection de la boîte et, pour chaque face creusée, de

@@ -14,11 +14,11 @@ struct S {
   dims: vec4f,   // nx, ny, nz, h
   box: vec4f,    // X, Y, dt, pas
   crys: vec4f,   // demi-côté, hauteur du centre, angle, inclinaison
-  tide: vec4f,   // LL, D (descente totale), exposant, air ambiant
+  tide: vec4f,   // ligne au départ, course de la ligne, nombre de crans, air ambiant
   heat: vec4f,   // alpha, T0, Tb, Lh
   xch: vec4f,    // hb, ha, a, lambda
-  fall: vec4f,   // vitesse de tassement, croûte, port, part de la section d'origine qui porte encore
-  pack: vec4f,   // pas d'une ligne de l'atlas (en u32), seuil des restes, vitesse de leur effondrement, —
+  fall: vec4f,   // vitesse de tassement, grille, port, part de la section d'origine qui porte encore
+  pack: vec4f,   // pas d'une ligne de l'atlas (en u32), seuil des restes, vitesse de leur effondrement, durée d'un cran
 };
 @group(0) @binding(0) var<uniform> S0: S;
 @group(0) @binding(1) var<storage, read_write> Hin: array<f32>;
@@ -38,7 +38,12 @@ fn NN() -> i32 { return nx() * ny() * nz(); }
 fn id3(i: i32, j: i32, k: i32) -> i32 { return i + nx() * (j + ny() * k); }
 fn cl3(q: vec3i) -> i32 { let r = clamp(q, vec3i(0), vec3i(nx() - 1, ny() - 1, nz() - 1)); return id3(r.x, r.y, r.z); }
 fn Tof(e: f32) -> f32 { if (e < 0.0) { return e; } if (e > S0.heat.w) { return e - S0.heat.w; } return 0.0; }
-fn bath(u: f32) -> f32 { return S0.tide.x + S0.tide.y * pow(clamp(u, 0.0, 1.0), S0.tide.z); }
+fn bath(u: f32) -> f32 {
+  // (la grappe descend par crans : S0.tide.z crans, chacun de durée S0.pack.w)
+  let x = clamp(u, 0.0, 1.0); let n = S0.tide.z; var s = 0.0;
+  for (var k = 0.0; k < n; k += 1.0) { s += smoothstep(k / n, k / n + S0.pack.w, x); }
+  return S0.tide.x + S0.tide.y * s / n;
+}
 fn lin(g: vec3u) -> i32 { return i32(g.x + g.y * 65535u * 64u); }
 
 @compute @workgroup_size(64)
@@ -96,7 +101,7 @@ fn step(@builtin(global_invocation_id) g: vec3u) {
   let off = array<vec3i, 6>(vec3i(-1, 0, 0), vec3i(1, 0, 0), vec3i(0, -1, 0), vec3i(0, 1, 0), vec3i(0, 0, -1), vec3i(0, 0, 1));
   for (var m = 0; m < 6; m++) {
     let q = vec3i(i, j, k) + off[m];
-    if (q.y < 0) { f += K * (S0.fall.y - T); continue; } // la croûte, plus froide : elle tient le pied
+    if (q.y < 0) { f += K * (S0.fall.y - T); continue; } // la grille, plus froide : elle tient le pied
     if (q.x >= 0 && q.x < nx() && q.y < ny() && q.z >= 0 && q.z < nz()) {
       let o = id3(q.x, q.y, q.z);
       if (tau[o] > u) { f += K * (Tof(Hin[o]) - T); continue; }
@@ -221,8 +226,8 @@ export function createMelt(renderer) {
         const c = cluster[ci], g = grids[ci], { dt, steps } = stepsFor(g.h);
         const N = g.nx * g.ny * g.nz, stride = Math.ceil((g.nx * 4) / 256) * 64;
         device.queue.writeBuffer(ubuf, 0, new Float32Array([
-          g.nx, g.ny, g.nz, g.h, g.X, g.Y, dt, steps, c.s, c.y, c.ang, c.tilt, LL, D, P.rise, P.amb,
-          P.alpha, P.T0, P.Tb, P.Lh, P.hb, P.ha, P.a, P.lam, P.fall, P.crust, habit, P.neck, stride, P.rest, P.plunge, 0]));
+          g.nx, g.ny, g.nz, g.h, g.X, g.Y, dt, steps, c.s, c.y, c.ang, c.tilt, LL, D, P.steps, P.amb,
+          P.alpha, P.T0, P.Tb, P.Lh, P.hb, P.ha, P.a, P.lam, P.fall, P.crust, habit, P.neck, stride, P.rest, P.plunge, P.ramp]));
         const hist = mk(2 * (steps + 2), GPUBufferUsage.COPY_SRC);
         const bg = (a, b) => device.createBindGroup({ layout, entries: [
           { binding: 0, resource: { buffer: ubuf } }, { binding: 1, resource: { buffer: a } }, { binding: 2, resource: { buffer: b } },

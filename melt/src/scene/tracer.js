@@ -19,21 +19,21 @@
 //   de la chaleur du bain, et de la place sur la terrasse (l'arête, plus
 //   exposée, s'oxyde plus que le pied du gradin).
 // - Le creuset : une marmite de fonte, posée sur un brûleur, sur un établi ;
-//   une quenouille (la tige qui bouche le trou de coulée au fond) et, au
-//   remplissage, le filet de métal versé d'une louche. Matières rugueuses :
+//   la grille d'acier qui porte la grappe, et ses deux câbles. Matières rugueuses :
 //   éclairement analytique des boîtes de lumière et du dôme, reflet adouci.
 // - Le bain : un miroir de métal liquide ; la peau d'oxyde des cristaux
 //   engloutis s'y étale et s'y défait ; un cristal qui bascule le ride ; le
-//   vidage y creuse un tourbillon autour de la quenouille.
+//   bain refroidi se couvre d'une peau dorée, que la grille déchire en sortant.
 // - Flou de mise au point (lentille mince), à l'export seulement : chaque
 //   sous-image du rendu accumulé tire son point de la lentille. En lecture, un
 //   tirage par image fait trembler le flou (on le lit comme une caméra qui
 //   bouge) : l'objectif y est fermé. Le satiné du métal, lui, est tiré à
 //   chaque image et moyenné par l'anticrénelage temporel.
 // - Chaque rayon ne visite que les cristaux dont la sphère englobante le croise ;
-//   le reste (bain, creuset, quenouille, filet, établi) est analytique.
+//   le reste (bain, creuset, câbles, établi) est analytique, la grille se borne
+//   simplement loin de son plan.
 //
-// Unités : cm ; y = 0 : la croûte du fond (repère de la grappe, avant sa descente).
+// Unités : cm ; y = 0 : la grille (repère de la grappe) ; le bain est fixe dans le monde.
 import * as THREE from 'three/webgpu';
 import { HOPPER_WGSL } from './hopper.js';
 
@@ -44,17 +44,17 @@ const WGSL = HOPPER_WGSL + /* wgsl */ `
 struct P {
   res: vec4f, cam: vec4f, camF: vec4f, camR: vec4f, camU: vec4f,
   st: vec4f,     // t, vitesse d'oxydation, port (0 trémie, 1 spirale, 2 allongée), nombre de cristaux
-  tide: vec4f,   // niveau du bain, chaleur de la fonte (0–1), LH, LL
+  tide: vec4f,   // niveau du bain (monde), chaleur de la fonte (0–1), ligne au repos LH et suspendue LOW (repère de la grappe)
   times: vec4f,  // T0, T1, T2, T3
   envLo: vec4f, envHi: vec4f, // fond du studio (bas, haut)
   forge: vec4f,  // lueur de forge (couleur, force)
   atlas: vec4f,  // dimensions de l'atlas de la fonte, temps u de la fonte
   pot: vec4f,    // rayon intérieur, épaisseur, haut du bord, fond extérieur
-  rod: vec4f,    // quenouille : x, z, rayon, levée
-  flow: vec4f,   // vidage (0–1), bas du filet, haut du filet, rayon du filet
-  flow2: vec4f,  // filet : x, z ; flamme (0–1) ; —
+  gal: vec4f,    // la grille : rayon, —, —, hauteur de la grappe dans le monde
+  flow: vec4f,   // peau du bain qui refroidit : couverture (0–1), rayon de la déchirure (part du bain), —, —
+  flow2: vec4f,  // — ; — ; flamme (0–1) ; —
   lens: vec4f,   // échantillon de la lentille (disque unité), rayon d'ouverture, distance de mise au point
-  misc: vec4f,   // image, T4, T5, établi
+  misc: vec4f,   // image, —, —, établi
   boxes: array<vec4f, ${NB}>, // 6 boîtes : (direction, intensité), (couleur, demi-largeur), (haut, demi-hauteur)
   cr: array<vec4f, ${MAXC * CS}>, // cristaux : (centre, demi-côté), (angle, inclinaison, oxyde, graine),
                               // (origine x, z dans l'atlas, pas, demi-largeur de la grille), (descente, nx, ny, nz),
@@ -113,7 +113,7 @@ fn crystalAt(p: vec3f, i: i32) -> vec3f {
   let pc = vec3f(p.x - A.x, p.y + D.x, p.z - A.z);
   if (K.z <= 0.0) { return crystalGrid(pc, i); }
   // la bascule : la partie au-dessus de l'encoche pivote sur son bord, tombe
-  // dans le bain, s'y enfonce et y fond ; le pied reste sur la croûte
+  // dans le bain, s'y enfonce et y fond ; le pied reste sur la grille
   let lo = crystalGrid(pc, i);
   var c = vec3f(max(lo.x, pc.y - K.w), lo.y, lo.z);
   if (E.y >= 1.8 * A.w) { return c; } // (la partie tombée a fini de fondre)
@@ -123,6 +123,23 @@ fn crystalAt(p: vec3f, i: i32) -> vec3f {
   let dh = max(hi.x + E.y, K.w - q.y);
   if (dh < c.x) { c = vec3f(dh, hi.y, max(hi.z, smoothstep(0.0, 0.05, E.y))); }
   return c;
+}
+
+// la grille : un treillis d'acier tendu dans un cerceau, sur lequel la grappe
+// a poussé (les cristaux reposent sur ses fils, cycle.js GRID_WIRE) ; on voit le bain au travers.
+// Une plaque pleine, quoi qu'on en fasse, se lisait en socle ou en neige.
+const GBIT = 32768u;
+const MESH = 0.42; // (pas du treillis, cm)
+fn galette(p: vec3f) -> f32 {
+  let q = p - vec3f(0.0, u.gal.w, 0.0);
+  let rr = length(q.xz);
+  // (loin du plan de la grille, une borne simple)
+  let far = max(abs(q.y) - 0.08, rr - u.gal.x - 0.08);
+  if (far > 0.03) { return far; }
+  let ring = length(vec2f(rr - u.gal.x, q.y)) - 0.05;
+  let fx = abs(fract(q.x / MESH + 0.5) - 0.5) * MESH; let fz = abs(fract(q.z / MESH + 0.5) - 0.5) * MESH;
+  let wire = max(length(vec2f(min(fx, fz), q.y)) - 0.02, rr - u.gal.x);
+  return min(ring, wire);
 }
 
 var<private> MASK: u32;
@@ -136,6 +153,7 @@ fn scene(p: vec3f) -> vec2f {
     let c = crystalAt(p, i);
     if (c.x < best.x) { best = vec2f(c.x, f32(i) * 16.0 + c.y); }
   }
+  if ((MASK & GBIT) != 0u) { let g = galette(p); if (g < best.x) { best = vec2f(g, -11.0); } }
   let k = 0.03; // le ménisque : le bain mouille le cristal
   let d = smin(best.x, pool, k);
   if (pool < best.x - 0.5 * k) { return vec2f(d, -1.0); }
@@ -200,35 +218,30 @@ fn filmRGBn(th: f32, cosi: f32, n1: f32, n2: vec2f) -> vec3f {
 fn filmRGB(th: f32, cosi: f32) -> vec3f { return filmRGBn(th, cosi, 2.2, vec2f(1.9, 3.4)); }
 fn emerge(y: f32) -> f32 { let T = u.times; return T.x + clamp((u.tide.z - y) / (u.tide.z - u.tide.w), 0.0, 1.0) * (T.y - T.x); }
 
-// le bain : peau d'oxyde des cristaux engloutis (épaisseur), rides et tourbillon (normale)
+// le bain : peau d'oxyde des cristaux engloutis (épaisseur), rides et frémissement (normale)
 var<private> NOUT: vec3f;
 fn poolFilm(p: vec3f) -> f32 {
-  // le voile du bain, entraîné par le brassage : il tourne autour de la
-  // quenouille quand on vide, il s'écoule du centre vers les bords quand on chauffe
-  var q = p.xz;
-  let rv = q - u.rod.xy; let dr = length(rv) + 1e-3;
-  let sw = u.flow.x * 2.2 / (1.0 + dr * dr * 0.6);
-  let ca = cos(sw * u.st.x * 40.0); let sa = sin(sw * u.st.x * 40.0);
-  q = u.rod.xy + vec2f(ca * rv.x - sa * rv.y, sa * rv.x + ca * rv.y);
+  let q = p.xz;
   let lc = loopc(1.0);
   var th = 10.0 + 14.0 * noise3(vec3f(q.x * 0.8, 0.0, q.y * 0.8) + 0.5 * vec3f(lc.x, 0.0, lc.y));
+  // la peau du bain qui refroidit : elle s’épaissit en couleurs (paille, puis or),
+  // plus vite au bord, contre la fonte froide ; la grille
+  // qui sort la déchire du centre vers les bords, en lambeaux qui s'écartent
+  if (u.flow.x > 0.0) {
+    let r = length(q) / u.pot.x;
+    let wv = noise3(vec3f(q * 0.9, 7.0));
+    var cov = u.flow.x * smoothstep(0.0, 1.0, u.flow.x * 1.4 + 0.35 * r + 0.2 * (wv - 0.5) - 0.2);
+    if (u.flow.y > 0.0) { cov *= smoothstep(-0.04, 0.04, r - u.flow.y + 0.12 * (noise3(vec3f(q * 1.7, 3.0)) - 0.5)); }
+    // (les premières couleurs seulement, paille et or pâle : plus épaisse, la peau virait au brun sale)
+    if (cov > 0.0) { th = mix(th, 14.0 + 17.0 * cov + 6.0 * (wv - 0.5), smoothstep(0.0, 0.3, cov)); }
+  }
   var nn = vec3f(0.0, 1.0, 0.0);
-  // le tourbillon : un creux autour de la quenouille (la pente du creux)
-  let dip = u.flow.x * 0.12 * 2.0 * dr / pow(1.0 + dr * dr * 1.5, 2.0) * 1.5;
-  nn += vec3f(-rv.x / dr * dip, 0.0, -rv.y / dr * dip);
   // les cellules de convection quand le creuset chauffe (le bain frémit)
   if (u.tide.y > 0.0) {
     let lc8 = loopc(8.0);
     let cv = vec3f(p.x * 0.9 + 0.6 * lc8.x, p.z * 0.9 + 0.6 * lc8.y, 3.0);
     let e = 0.05; let c0 = noise3(cv);
     nn += u.tide.y * 0.006 * vec3f(-(noise3(cv + vec3f(e, 0.0, 0.0)) - c0) / e, 0.0, -(noise3(cv + vec3f(0.0, e, 0.0)) - c0) / e);
-  }
-  // le filet versé : des rides concentriques autour de son point de chute
-  if (u.flow.w > 0.0 && u.flow.y < u.tide.x + 0.2) {
-    let sv = p.xz - u.flow2.xy; let rs = length(sv) + 1e-3;
-    let lr = loopc(160.0);
-    let g = 0.08 * exp(-rs * 0.9) * sin(rs * 9.0 - atan2(lr.y, lr.x));
-    nn += vec3f(sv.x / rs * g, 0.0, sv.y / rs * g);
   }
   let n = i32(u.st.w);
   for (var i = 0; i < n; i++) {
@@ -248,7 +261,7 @@ fn poolFilm(p: vec3f) -> f32 {
       if (r < R0) {
         let warp = vec2f(noise3(vec3f(rel * 2.3, B.w)), noise3(vec3f(rel * 2.3, B.w + 7.0))) - 0.5;
         let vo = voro((rel + warp * A.w * 0.5) / (A.w * 0.8), B.w);
-        let crack = 0.02 + 1.25 * smoothstep(0.015, 0.12, age);
+        let crack = 0.02 + 1.25 * smoothstep(0.012, 0.095, age);
         let edge = smoothstep(0.0, 0.05, vo.x - crack) * (1.0 - smoothstep(0.75, 1.0, r / R0));
         if (edge > 0.0) {
           let wr = noise3(vec3f(rel * 9.0, B.w));
@@ -300,13 +313,19 @@ fn rayMask(ro: vec3f, rd: vec3f, tEnd: ptr<function, f32>) -> u32 {
     }
     if (hitAny) { m |= (1u << u32(i)); }
   }
+  // (la grille, tant qu'elle est hors du bain)
+  if (u.gal.w > u.tide.x - 0.1) {
+    let c = vec3f(0.0, u.gal.w, 0.0); let R = u.gal.x + 0.15;
+    let oc = ro - c; let b = dot(oc, rd); let cc = dot(oc, oc) - R * R; let disc = b * b - cc;
+    if (disc > 0.0) { let t1 = -b + sqrt(disc); if (t1 > 0.0) { m |= GBIT; te = max(te, t1); } }
+  }
   *tEnd = te;
   return m;
 }
 
 // ── le creuset et l'atelier, analytiques : (t, matière), normale dans HN ──
-// matières : −1 bain, −2 paroi intérieure, −3 bord, −4 paroi extérieure, −5 quenouille,
-// −6 filet versé, −7 établi, −8 brûleur, −9 dessous du creuset, −10 levier de la quenouille
+// matières : −1 bain, −2 paroi intérieure, −3 bord, −4 paroi extérieure, 
+// −7 établi, −8 brûleur, −9 dessous du creuset, −10 câbles, −11 grille
 var<private> HN: vec3f;
 fn cylV(ro: vec2f, rd: vec2f, r: f32) -> vec2f { // (racines t1 ≤ t2 d'un cylindre vertical d'axe passant par l'origine)
   let a = dot(rd, rd); let b = dot(ro, rd); let c = dot(ro, ro) - r * r;
@@ -336,7 +355,6 @@ fn capTest(ro: vec3f, rd: vec3f, a: vec3f, b: vec3f, r: f32, m: f32, tMin: f32, 
 fn world(ro: vec3f, rd: vec3f, tMin: f32) -> vec2f {
   var best = vec2f(1e9, 0.0);
   let Ri = u.pot.x; let Ro = u.pot.x + u.pot.y; let rim = u.pot.z; let bot = u.pot.w; let L = u.tide.x;
-  let fl = -0.4; // le fond intérieur (sous la croûte)
   // le bain (dans le creuset seulement)
   if (rd.y < -1e-5 && ro.y > L) {
     let t = (L - ro.y) / rd.y; let q = ro + rd * t;
@@ -359,22 +377,20 @@ fn world(ro: vec3f, rd: vec3f, tMin: f32) -> vec2f {
     let tb = (bot - ro.y) / rd.y; let qb = ro + rd * tb;
     if (rd.y > 0.0 && tb > tMin && tb < best.x && length(qb.xz) < Ro) { best = vec2f(tb, -9.0); HN = vec3f(0.0, -1.0, 0.0); }
   }
-  // la quenouille : une tige de graphite plantée dans le trou de coulée, tenue
-  // par un levier d'acier qui s'appuie sur un montant fixé au bord ; lever le
-  // levier lève la tige et débouche le trou
+  // la grille elle-même est dans la marche des rayons (galette()) ; ici, ce qui la tient
   {
-    let rp = u.rod.xy; let rl = length(rp); let dir = rp / rl;
-    let top = rim + 1.6 + u.rod.w;
-    capTest(ro, rd, vec3f(rp.x, L - 0.5, rp.y), vec3f(rp.x, top, rp.y), u.rod.z, -5.0, tMin, &best);
-    let post = dir * (Ri + 0.5 * u.pot.y);
-    capTest(ro, rd, vec3f(post.x, rim, post.y), vec3f(post.x, rim + 1.6, post.y), 0.09, -10.0, tMin, &best);
-    let end = dir * (Ro + 1.4);
-    capTest(ro, rd, vec3f(rp.x, top, rp.y), vec3f(end.x, rim + 1.6 - 1.4 * u.rod.w, end.y), 0.075, -10.0, tMin, &best);
-  }
-  // le filet versé d'une louche (hors champ, en haut)
-  if (u.flow.w > 0.0) {
-    let cs = cylV(ro.xz - u.flow2.xy, rd.xz, u.flow.w);
-    if (cs.x > tMin && cs.x < best.x) { let y = ro.y + rd.y * cs.x; if (y > max(L, u.flow.y) && y < u.flow.z) { best = vec2f(cs.x, -6.0); let q = ro + rd * cs.x; HN = vec3f(q.x - u.flow2.x, 0.0, q.z - u.flow2.y) / u.flow.w; } }
+    let o = u.gal.w; let Rg = u.gal.x;
+    // (deux câbles fins, attachés au cerceau de la grille, au fond à gauche et à
+    // droite, qui montent en se rapprochant vers un crochet, hors champ, derrière
+    // la grappe : ils tiennent la grille sans barrer l'image)
+    // (le crochet est loin derrière la grappe : les câbles partent vers le fond, ils ne passent pas devant elle)
+    let hook = vec3f(0.0, o + u.tide.z + 5.0, -Rg - 5.5);
+    for (var k = 0; k < 2; k++) {
+      let a = select(-0.8, 0.8, k == 1);
+      let e = vec3f(sin(a) * Rg, o, -cos(a) * Rg);
+      capTest(ro, rd, e, hook, 0.022, -10.0, tMin, &best);
+    }
+    capTest(ro, rd, hook, hook + vec3f(0.0, 60.0, 0.0), 0.03, -10.0, tMin, &best);
   }
   // le brûleur, sous le creuset
   let rb = Ro * 0.42;
@@ -481,6 +497,7 @@ fn trace(ro0: vec3f, rd0: vec3f) -> vec3f {
     // (une face fondue : le champ τ est fait de couches d'une cellule ; sa
     // normale se prend à l'échelle de la cellule, sinon elle se lit en zébrures)
     var meltF = 0.0;
+    if (mat == -11.0) { n = nrm(p, 0.003); }
     if (mat >= 0.0) {
       let ci = i32(floor(mat / 16.0));
       meltF = crystalAt(p, ci).z;
@@ -506,41 +523,31 @@ fn trace(ro0: vec3f, rd0: vec3f) -> vec3f {
       th += u.tide.y * 140.0 * exp(-max(p.y - Lv, 0.0) / 0.9);
       let melted = meltF;
       R = mix(filmRGB(max(th, 0.0), cosi), filmRGB(8.0, cosi), melted);
-      gl = mix(0.012, 0.003, melted); // (satiné : les terrasses ne sont pas des miroirs parfaits)
+      gl = mix(0.005, 0.002, melted); // (satiné : les terrasses ne sont pas des miroirs parfaits)
     } else if (mat == -1.0) {
       let th = poolFilm(p);
       n = normalize(n + (NOUT - vec3f(0.0, 1.0, 0.0)));
       cosi = clamp(-dot(rd, n), 0.0, 1.0);
       R = filmRGB(th, cosi);
       gl = 0.0; // (en rasant, le moindre dépoli du bain se lit en grain)
-    } else if (mat == -6.0) {
-      // le filet : du métal liquide qui ondule en tombant
-      let lc = loopc(300.0);
-      let wob = noise3(vec3f(p.y * 3.0 + lc.x, lc.y, p.x)) - 0.5;
-      n = normalize(n + vec3f(0.0, wob * 0.6, 0.0) + vec3f(-n.z, 0.0, n.x) * wob * 0.5);
-      cosi = clamp(-dot(rd, n), 0.0, 1.0);
-      R = filmRGB(8.0, cosi);
     } else {
-      // matières rugueuses : la fonte du creuset, la quenouille, l'établi, le brûleur
+      // matières rugueuses : la fonte du creuset, les câbles, l'établi, le brûleur, la grille
       // (la fonte : un gris sombre marbré, plus mat par plaques)
       let mott = noise3(p * 2.3) * 0.5 + noise3(p * 13.0) * 0.5;
       var alb = vec3f(0.07, 0.066, 0.063) * (0.85 + 0.3 * mott); var spec = 0.06 * (0.8 + 0.4 * mott); var soft = 0.45 + 0.15 * (1.0 - mott);
-      var wet = 0.0;
-      if (mat == -2.0 || mat == -5.0) {
-        // (la marque de la marée haute : un liseré de bismuth figé sur la fonte
-        // et la tige, là où le bain plein a mouillé, oxydé comme les cristaux)
-        wet = smoothstep(0.1, 0.0, abs(p.y - u.tide.z + 0.04)) * step(Lv + 0.02, p.y);
-        let ang = atan2(p.z, p.x);
-        wet *= 0.6 + 0.4 * noise3(vec3f(ang * 14.0, p.y * 8.0, 1.0));
-      }
-      if (mat == -5.0) { alb = vec3f(0.06, 0.06, 0.062); spec = 0.05; soft = 0.6; } // (le graphite, dans la valeur de la paroi : l'appareil s'efface)
       if (mat == -7.0) {
         // l'établi : une plaque d'acier huilé, rayée
         let g = noise3(vec3f(p.x * 1.2, p.z * 26.0, 2.0)) * 0.5 + noise3(p * 0.6) * 0.5;
         alb = vec3f(0.05, 0.05, 0.052) * (0.85 + 0.3 * g); spec = 0.05; soft = 0.35;
       }
       if (mat == -8.0 || mat == -9.0) { alb = vec3f(0.03); spec = 0.04; soft = 0.6; }
-      if (mat == -10.0) { alb = vec3f(0.05, 0.05, 0.055); spec = 0.35; soft = 0.12; } // (le levier : acier poli par les mains)
+      if (mat == -11.0) {
+        // la grille : de l'acier inoxydable, terni par le bain, un peu de bismuth
+        // figé sur les fils, irisé depuis qu'il a quitté le bain
+        let age = max(u.st.x - emerge(p.y - u.gal.w), 0.0);
+        let tint = filmRGB(u.st.y * 120.0 * sqrt(age), 0.8);
+        alb = mix(vec3f(0.05), tint * 0.12, 0.5); spec = 0.6; soft = 0.2;
+      }
       var c = rough(n, rd, alb, spec, soft);
       // (l'ombre de la marmite et du brûleur sur l'établi : ils y sont posés)
       if (mat == -7.0) { let r = length(p.xz); c *= mix(0.12, 1.0, smoothstep(Ro * 0.75, Ro * 1.9, r)); }
@@ -553,12 +560,6 @@ fn trace(ro0: vec3f, rd0: vec3f) -> vec3f {
       }
       // (le fond de la marmite, sous le bord : un peu d'ombre)
       if (mat == -2.0) { c *= 0.55 + 0.45 * smoothstep(Lv, u.pot.z, p.y); }
-      if (wet > 0.0) {
-        let age = max(u.st.x - emerge(p.y), 0.0);
-        let thw = u.st.y * 300.0 * sqrt(age) * 0.8 + 25.0 * noise3(p * 2.0);
-        let Rw = filmRGB(thw, cosi);
-        c = mix(c, Rw * env(reflect(rd, n), 0.3), wet);
-      }
       L += T * c;
       break;
     }
@@ -654,7 +655,7 @@ export function createTracer(renderer) {
   }
   const set = (i, a, b = 0, c = 0, d = 0) => U.set([a, b, c, d], i * 4);
   // p.melt : { texture (GPUTexture rg16float 3D), dims, crystals } de melt.js ;
-  // p.world : creuset, quenouille, filet, flamme (cycle.js apparatusAt) ;
+  // p.world : creuset, grille, flamme, peau du bain (camera.js potFor, cycle.js apparatusAt, cool) ;
   // p.lens : échantillon de la lentille imposé (rendu accumulé), sinon tiré ici
   function run(p) {
     target(p.w, p.h);
@@ -672,18 +673,18 @@ export function createTracer(renderer) {
     set(1, ...p.cam.pos, p.cam.tanHalf); set(2, ...p.cam.f, 0); set(3, ...p.cam.r, 0); set(4, ...p.cam.u, 0);
     const mc = p.melt?.crystals;
     set(5, p.t, p.oxRate, p.habit, Math.min(MAXC, p.crystals.length));
-    set(6, p.tide.L, p.tide.rising, p.tide.LH, p.tide.LL);
+    set(6, p.tide.L, p.tide.rising, p.tide.LH, p.tide.LOW);
     set(7, p.tide.T0, p.tide.T1, p.tide.T2, p.tide.T3);
     set(8, ...p.env.lo, 0); set(9, ...p.env.hi, 0);
     set(10, ...p.env.forge.color, p.env.forge.strength);
     set(11, ...(p.melt ? p.melt.dims : [1, 1, 1]), p.u);
     const w = p.world;
     set(12, w.pot.Ri, w.pot.th, w.pot.rim, w.pot.bottom);
-    set(13, w.rod.x, w.rod.z, w.rod.r, w.rod.lift);
-    set(14, w.drain, w.stream.head, w.stream.tail, w.stream.r);
-    set(15, w.stream.x, w.stream.z, w.flame, 0);
+    set(13, w.galette.r, w.galette.crust, w.galette.bar, w.galette.lift);
+    set(14, w.cool.cover, w.cool.tear, 0, 0);
+    set(15, 0, 0, w.flame, 0);
     set(16, lens[0], lens[1], p.aperture, p.focus);
-    set(17, frame % 4096, p.tide.T4, p.tide.T5, w.pot.bench);
+    set(17, frame % 4096, 0, 0, w.pot.bench);
     p.env.boxes.slice(0, 6).forEach((b, k) => {
       set(NH + 3 * k, ...norm(b.dir), b.I); set(NH + 1 + 3 * k, ...b.color, b.hw); set(NH + 2 + 3 * k, ...(b.up ?? [0, 1, 0]), b.hh);
     });
