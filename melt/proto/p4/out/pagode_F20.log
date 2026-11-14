@@ -1,0 +1,10 @@
+# pagode_F20  T∞=10 °C, S 12→4 (fond→surface), α=0.0001, Le=10, F=20, grille 80x288
+# Huppert-Turner : Δρ_T=1.00 kg/m³, dρ/dz=43.3 kg/m⁴ → épaisseur prévue 15.0 mm
+t=9 s  V/V0=0.759
+t=18 s  V/V0=0.578
+t=27 s  V/V0=0.419
+t=36 s  V/V0=0.308
+t=48 s  V/V0=0.216
+t=60 s  V/V0=0.163
+# 3810 pas, 9 s
+# creux du profil (z, mm) :  ; espacements :  (prévu ≈ 15 mm)
