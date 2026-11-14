@@ -15,7 +15,7 @@
 
 const params = new URLSearchParams(location.search);
 const MOODS = ['nuit', 'ombro', 'lait', 'snell', 'tourbe', 'pierre'];
-const SHAPES = ['aiguille', 'festons', 'col'];
+const SHAPES = ['aiguille', 'festons', 'col', 'table'];
 const W = 1280, H = 800;
 
 // ── Humeurs : une eau et une lumière ────────────────────────────────────────
@@ -72,7 +72,7 @@ const MOOD = {
 };
 
 const SHADER = /* wgsl */ `
-struct U { v: array<vec4f, 18> };
+struct U { v: array<vec4f, 18>, prof: array<vec4f, 72> };
 @group(0) @binding(0) var<uniform> u: U;
 
 const NW = 1.333;
@@ -103,6 +103,15 @@ fn scallopPhase(hb: f32) -> f32 {
 fn profile(y: f32) -> f32 {
   let r0 = R0();
   if (y >= 0.0) { return r0; }
+  if (shapeId() > 2.5) {
+    // profil simulé (P5) : rayon en mm par rangée de la grille, z depuis le fond
+    let zm = u.v[16].x + y * 0.01;
+    let fj = clamp(zm / u.v[16].y - 0.5, 0.0, u.v[16].z - 1.001);
+    let j = u32(floor(fj)); let t = fj - floor(fj);
+    let a0 = u.prof[j / 4u][j % 4u]; let a1 = u.prof[(j + 1u) / 4u][(j + 1u) % 4u];
+    let wl = r0 * (1.0 - smoothstep(0.0, 1.0, -y));
+    return smax(mix(a0, a1, t) * 0.1, wl, 0.25);
+  }
   let h = -y; let L = LEN(); let hb = L - h;
   if (hb <= 0.0) { return 0.0; }
   let s = shapeId();
@@ -401,6 +410,63 @@ fn iceInterior(r0: Ray) -> Ray {
   return r;
 }
 
+// ── Eau trouble et eau de fonte (P5) : la fraction d'eau de fonte vaut
+// c = (T∞ − T)/T∞ (mélange d'eau à 0 °C et d'eau du lac) ; l'eau de fonte est
+// limpide, la diffusion y vaut σs(1 − c).
+@group(0) @binding(3) var<storage, read> tf: array<f32>;
+fn tAt(p: vec3f) -> f32 {
+  let dxm = u.v[16].y; let nr = u.v[16].w; let nz = u.v[16].z;
+  let fi = length(p.xz) * 0.01 / dxm - 0.5; let fj = (u.v[16].x + p.y * 0.01) / dxm - 0.5;
+  if (fi > nr - 1.5 || fj < 0.0 || fj > nz - 1.5) { return u.v[10].w; }
+  let i = u32(max(fi, 0.0)); let j = u32(fj); let a = clamp(fi - f32(i), 0.0, 1.0); let b = fj - f32(j);
+  let n = u32(nr); let q = j * n + i;
+  return mix(mix(tf[q], tf[q + 1u], a), mix(tf[q + n], tf[q + n + 1u], a), b);
+}
+fn fogSeg(r: ptr<function, Ray>, t: f32) {
+  let absorb = u.v[3].xyz; let sigS = u.v[3].w;
+  let p = (*r).p; let d = (*r).d;
+  var t0 = t; var t1 = t;
+  if (u.v[16].w > 0.5 && sigS > 0.0) {
+    // portion du segment dans le cylindre du domaine simulé (r < 3,8 cm, −14 < y < 0)
+    let Rd = 3.8; let A = dot(d.xz, d.xz); let B = dot(p.xz, d.xz); let C = dot(p.xz, p.xz) - Rd * Rd;
+    let disc = B * B - A * C;
+    if (A > 1e-8 && disc > 0.0) {
+      var a0 = (-B - sqrt(disc)) / A; var a1 = (-B + sqrt(disc)) / A;
+      if (abs(d.y) > 1e-6) { let y0 = (-14.0 - p.y) / d.y; let y1 = (0.0 - p.y) / d.y; a0 = max(a0, min(y0, y1)); a1 = min(a1, max(y0, y1)); }
+      t0 = clamp(a0, 0.0, t); t1 = clamp(a1, 0.0, t);
+    }
+  }
+  // dehors : analytique ; dedans : marche
+  let segs = array<vec2f, 3>(vec2f(0.0, t0), vec2f(t0, t1), vec2f(t1, t));
+  for (var k = 0; k < 3; k++) {
+    let s0 = segs[k].x; let s1 = segs[k].y; let len = s1 - s0;
+    if (len <= 0.0) { continue; }
+    if (k != 1) {
+      // sous-pas de longueur croissante : la couleur de la brume suit la hauteur
+      var a = s0;
+      for (var m = 0; m < 24; m++) {
+        let bnd = min(s1, s0 + len * pow(f32(m + 1) / 24.0, 2.0));
+        let hh = bnd - a;
+        if (hh <= 0.0) { continue; }
+        let fogC = mix(u.v[4].xyz, u.v[5].xyz, smoothstep(-30.0, 0.0, p.y + d.y * (a + 0.5 * hh)));
+        (*r).L += (*r).T * (vec3f(1.0) - exp(-vec3f(sigS) * hh)) * fogC;
+        (*r).T *= exp(-(absorb + vec3f(sigS)) * hh);
+        a = bnd;
+      }
+    } else {
+      let M = 96; let h = len / f32(M);
+      for (var m = 0; m < M; m++) {
+        let q = p + d * (s0 + (f32(m) + 0.5) * h);
+        let c = clamp((u.v[10].w - tAt(q)) / max(u.v[10].w, 0.1), 0.0, 1.0);
+        let sl = sigS * (1.0 - c);
+        let fogC = mix(u.v[4].xyz, u.v[5].xyz, smoothstep(-30.0, 0.0, q.y));
+        (*r).L += (*r).T * (vec3f(1.0) - exp(-vec3f(sl) * h)) * fogC;
+        (*r).T *= exp(-(absorb + vec3f(sl)) * h);
+      }
+    }
+  }
+}
+
 fn trace(ro: vec3f, rd: vec3f) -> vec3f {
   var r = Ray(ro, rd, vec3f(1.0), vec3f(0.0), false);
   let absorb = u.v[3].xyz; let sigS = u.v[3].w;
@@ -417,10 +483,7 @@ fn trace(ro: vec3f, rd: vec3f) -> vec3f {
     }
     t = min(t, tmax);
     // l'eau traversée : absorption et diffusion vers la couleur de l'eau
-    let tr = exp(-(absorb + vec3f(sigS)) * t);
-    let fogC = mix(u.v[4].xyz, u.v[5].xyz, smoothstep(-30.0, 0.0, r.p.y + r.d.y * t * 0.5));
-    r.L += r.T * (vec3f(1.0) - exp(-vec3f(sigS) * t)) * fogC;
-    r.T *= tr;
+    fogSeg(&r, t);
     r.p = r.p + r.d * t;
     if (hit) {
       let n = nrm(r.p);
@@ -482,9 +545,10 @@ fn trace(ro: vec3f, rd: vec3f) -> vec3f {
 }
 
 @group(0) @binding(1) var acc: texture_2d<f32>;
+@group(0) @binding(2) var bub: texture_2d<f32>;
 fn aces(x: vec3f) -> vec3f { return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), vec3f(0.0), vec3f(1.0)); }
 @fragment fn fsShow(@builtin(position) fc: vec4f) -> @location(0) vec4f {
-  let c = textureLoad(acc, vec2i(fc.xy), 0).rgb / u.v[15].z * u.v[2].w;
+  let c = (textureLoad(acc, vec2i(fc.xy), 0).rgb / u.v[15].z + textureLoad(bub, vec2i(fc.xy), 0).rgb) * u.v[2].w;
   let res = u.v[0].xy;
   let q = fc.xy / res - 0.5;
   let vig = 1.0 - 0.35 * dot(q, q);
@@ -512,7 +576,7 @@ async function main() {
   for (const m of info2.messages) console[m.type === 'error' ? 'error' : 'log'](`${m.lineNum}:${m.linePos} ${m.message}`);
   if (info2.messages.some((m) => m.type === 'error')) { window.__err = info2.messages.map((m) => `${m.lineNum}: ${m.message}`).join('\n'); return; }
 
-  const ubuf = device.createBuffer({ size: 18 * 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+  const ubuf = device.createBuffer({ size: 90 * 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
   const accTex = device.createTexture({ size: [W, H], format: 'rgba32float', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING });
   const outTex = device.createTexture({ size: [W, H], format: 'rgba8unorm', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC });
 
@@ -520,12 +584,13 @@ async function main() {
   const bglS = device.createBindGroupLayout({ entries: [
     { binding: 0, visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.VERTEX, buffer: {} },
     { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'unfilterable-float' } },
+    { binding: 2, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'unfilterable-float' } },
+    { binding: 3, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
   ] });
-  const pTrace = device.createRenderPipeline({
-    layout: device.createPipelineLayout({ bindGroupLayouts: [bglT] }),
-    vertex: { module, entryPoint: 'vs' },
-    fragment: { module, entryPoint: 'fsTrace', targets: [{ format: 'rgba32float' }] },
-  });
+  const tBuf = device.createBuffer({ size: 80 * 288 * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+  // bulles (P5) : traits additifs dans une texture à part
+  const bubTex = device.createTexture({ size: [W, H], format: 'rgba16float', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING });
+  const bubView = bubTex.createView();
   const mkShow = (format) => device.createRenderPipeline({
     layout: device.createPipelineLayout({ bindGroupLayouts: [bglS] }),
     vertex: { module, entryPoint: 'vs' },
@@ -533,7 +598,7 @@ async function main() {
   });
   const pShowCanvas = mkShow(fmt), pShowOut = mkShow('rgba8unorm');
   const bgT = device.createBindGroup({ layout: bglT, entries: [{ binding: 0, resource: { buffer: ubuf } }] });
-  const bgS = device.createBindGroup({ layout: bglS, entries: [{ binding: 0, resource: { buffer: ubuf } }, { binding: 1, resource: accTex.createView() }] });
+  const bgS = device.createBindGroup({ layout: bglS, entries: [{ binding: 0, resource: { buffer: ubuf } }, { binding: 1, resource: accTex.createView() }, { binding: 2, resource: bubView }, { binding: 3, resource: { buffer: tBuf } }] });
 
   // le pas de 32 bits flottants ne se mélange pas : on accumule à la main dans
   // un second tampon (ping-pong) — plus simple : une passe = une image, et on
@@ -567,12 +632,78 @@ async function main() {
     vertex: { module: sumModule, entryPoint: 'vs' },
     fragment: { module: sumModule, entryPoint: 'fsSum', targets: [{ format: 'rgba32float' }] },
   });
-  const bgSumFromA = device.createBindGroup({ layout: bglS, entries: [{ binding: 0, resource: { buffer: ubuf } }, { binding: 1, resource: accTex.createView() }] });
-  const bgSumFromB = device.createBindGroup({ layout: bglS, entries: [{ binding: 0, resource: { buffer: ubuf } }, { binding: 1, resource: accB.createView() }] });
-  const bgShowB = device.createBindGroup({ layout: bglS, entries: [{ binding: 0, resource: { buffer: ubuf } }, { binding: 1, resource: accB.createView() }] });
-  void pTrace; void bgT;
+  const bgSumFromA = device.createBindGroup({ layout: bglS, entries: [{ binding: 0, resource: { buffer: ubuf } }, { binding: 1, resource: accTex.createView() }, { binding: 2, resource: bubView }, { binding: 3, resource: { buffer: tBuf } }] });
+  const bgSumFromB = device.createBindGroup({ layout: bglS, entries: [{ binding: 0, resource: { buffer: ubuf } }, { binding: 1, resource: accB.createView() }, { binding: 2, resource: bubView }, { binding: 3, resource: { buffer: tBuf } }] });
+  const bgShowB = device.createBindGroup({ layout: bglS, entries: [{ binding: 0, resource: { buffer: ubuf } }, { binding: 1, resource: accB.createView() }, { binding: 2, resource: bubView }, { binding: 3, resource: { buffer: tBuf } }] });
+  void bgT;
 
-  const U = new Float32Array(18 * 4);
+  const SEG = /* wgsl */ `
+struct U { v: array<vec4f, 18>, prof: array<vec4f, 72> };
+@group(0) @binding(0) var<uniform> u: U;
+@group(0) @binding(1) var<storage, read> segs: array<f32>;
+struct VO { @builtin(position) pos: vec4f, @location(0) w: vec3f };
+fn proj(p: vec3f) -> vec4f {
+  let cp = u.v[1].xyz; let f = normalize(u.v[2].xyz - cp);
+  let rgt = normalize(cross(f, vec3f(0.0, 1.0, 0.0))); let up = cross(rgt, f);
+  let th = tan(u.v[1].w * 0.5); let asp = u.v[0].x / u.v[0].y;
+  let d = p - cp;
+  return vec4f(dot(d, rgt) / (th * asp), dot(d, up) / th, 0.5, dot(d, f));
+}
+@vertex fn vsSeg(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> VO {
+  var o: VO;
+  let b = ii * 7u;
+  let p0 = vec3f(segs[b], segs[b + 1u], segs[b + 2u]);
+  let p1 = vec3f(segs[b + 3u], segs[b + 4u], segs[b + 5u]);
+  let rb = segs[b + 6u] * 1e-4; // µm → cm
+  let c0 = proj(p0); let c1 = proj(p1);
+  let res = u.v[0].xy;
+  let s0 = c0.xy / c0.w * res * 0.5; let s1 = c1.xy / c1.w * res * 0.5;
+  var dir = s1 - s0; let L = length(dir);
+  if (L < 1e-3) { dir = vec2f(1.0, 0.0); } else { dir = dir / L; }
+  let nrm = vec2f(-dir.y, dir.x);
+  let pxPerCm = res.y * 0.5 / (tan(u.v[1].w * 0.5) * c1.w);
+  let rpx = rb * pxPerCm;
+  let hw = max(0.7, rpx);
+  var C = array<vec2f, 6>(vec2f(0.0, -1.0), vec2f(1.0, -1.0), vec2f(1.0, 1.0), vec2f(0.0, -1.0), vec2f(1.0, 1.0), vec2f(0.0, 1.0));
+  let k = C[vi];
+  let len = L + 2.0 * hw;
+  let sp = s0 - dir * hw + dir * len * k.x + nrm * hw * k.y;
+  // l'énergie du disque de la bulle, étalée sur le trait
+  let I = 3.14159 * rpx * rpx / (len * 2.0 * hw);
+  o.pos = vec4f(sp / (res * 0.5), 0.5, 1.0);
+  if (c0.w < 0.1 || c1.w < 0.1) { o.pos = vec4f(2.0, 2.0, 2.0, 1.0); }
+  o.w = vec3f(k.x, k.y, I);
+  return o;
+}
+@fragment fn fsSeg(i: VO) -> @location(0) vec4f {
+  let across = 1.0 - abs(i.w.y);
+  let head = 0.3 + 0.7 * i.w.x; // plus clair à la position actuelle
+  return vec4f(u.v[17].xyz * i.w.z * across * head * 2.0 * u.v[17].w, 1.0);
+}`;
+  const segModule = device.createShaderModule({ code: SEG });
+  const ci3 = await segModule.getCompilationInfo();
+  if (ci3.messages.some((m) => m.type === 'error')) { window.__err = ci3.messages.map((m) => `${m.lineNum}: ${m.message}`).join('\n'); console.error(window.__err); return; }
+  const bglG = device.createBindGroupLayout({ entries: [
+    { binding: 0, visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.VERTEX, buffer: {} },
+    { binding: 1, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
+  ] });
+  const pSeg = device.createRenderPipeline({
+    layout: device.createPipelineLayout({ bindGroupLayouts: [bglG] }),
+    vertex: { module: segModule, entryPoint: 'vsSeg' },
+    fragment: { module: segModule, entryPoint: 'fsSeg', targets: [{ format: 'rgba16float', blend: { color: { srcFactor: 'one', dstFactor: 'one' }, alpha: { srcFactor: 'one', dstFactor: 'one' } } }] },
+    primitive: { topology: 'triangle-list' },
+  });
+  let segBuf = null, segBG = null, nSeg = 0;
+  function setBubbles(segs) {
+    nSeg = segs ? segs.length : 0;
+    if (!nSeg) return;
+    const arr = new Float32Array(nSeg * 7); segs.forEach((q, n) => arr.set(q, n * 7));
+    segBuf = device.createBuffer({ size: arr.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+    device.queue.writeBuffer(segBuf, 0, arr);
+    segBG = device.createBindGroup({ layout: bglG, entries: [{ binding: 0, resource: { buffer: ubuf } }, { binding: 1, resource: { buffer: segBuf } }] });
+  }
+
+  const U = new Float32Array(90 * 4);
   const setU = (mood, shape, jit, spp, ice) => {
     const M = { ...MOOD[mood], ...(window.__cam ?? {}) };
     const s = (i, a, b = 0, c = 0, d = 0) => U.set([a, b, c, d], i * 4);
@@ -586,12 +717,24 @@ async function main() {
     s(7, ...M.lb, M.lbI);
     s(8, ...M.sky, M.screenZ ?? 0);
     s(9, ...M.horizon, M.wallZ ?? 0);
-    s(10, 1.4, 10, 0.38, shape === 'aiguille' ? 3 : shape === 'festons' ? 5.6 : 8.5);
+    let Lcol = 10;
+    if (shape === 'table' && window.__p5) { const P5 = window.__p5; let j = 0; while (j < P5.prof.length && P5.prof[j] < 0.3) j++; Lcol = (P5.Z - (j + 0.5) * P5.dx) * 100; }
+    s(10, 1.4, Lcol, 0.38, shape === 'aiguille' ? 3 : shape === 'festons' ? 5.6 : 8.5);
     s(11, ...M.amb, 0);
     s(12, ...norm(M.sunW), M.glow);
     s(13, window.__dbg ? 1 : 0, typeof ice === 'number' ? ice : ice === 'bulleuse' ? 1.6 : 0, window.__noIce ? 1 : 0, 0);
     s(14, 0.38, 5.0, 0.12, M.Ds ?? 30);
     s(15, jit[0], jit[1], spp, 0);
+    const P5 = window.__p5;
+    if (P5) {
+      s(16, P5.Z, P5.dx, P5.prof.length, P5.T ? P5.nr : 0);
+      if (P5.T && !P5.sent) { device.queue.writeBuffer(tBuf, 0, new Float32Array(P5.T)); P5.sent = true; }
+      U[10 * 4 + 3] = P5.Tinf;
+      for (let n = 0; n < 288; n++) U[90 * 0 + 18 * 4 + n] = n < P5.prof.length ? P5.prof[n] : 0;
+      // rayonnement réfléchi par une bulle (réflexion totale sur 44 % de sa section)
+      const g = M.amb.map((a) => 0.44 * (2 * a + 0.03 * M.lbI + 0.004 * (M.sunI ?? 0)));
+      s(17, ...g, window.__bubGain ?? 1);
+    }
     device.queue.writeBuffer(ubuf, 0, U);
   };
 
@@ -612,6 +755,11 @@ async function main() {
       device.queue.submit([enc.finish()]);
       await device.queue.onSubmittedWorkDone();
     }
+    enc = device.createCommandEncoder();
+    { const bp = enc.beginRenderPass({ colorAttachments: [{ view: bubView, loadOp: 'clear', storeOp: 'store', clearValue: [0, 0, 0, 0] }] });
+      if (nSeg && window.__p5) { bp.setPipeline(pSeg); bp.setBindGroup(0, segBG); bp.draw(6, nSeg); }
+      bp.end(); }
+    device.queue.submit([enc.finish()]);
     const last = spp % 2 === 1 ? accB : accTex;
     const bgLast = last === accB ? bgShowB : bgS;
     enc = device.createCommandEncoder();
@@ -643,7 +791,7 @@ async function main() {
     await fetch(`http://127.0.0.1:${params.get('sink') ?? 8097}/${name}`, { method: 'POST', body: blob });
   }
 
-  window.p3 = { render, send, MOOD, MOODS, SHAPES };
+  window.p3 = { render, send, setBubbles, MOOD, MOODS, SHAPES };
   const spp = +(params.get('spp') ?? 8);
   if (params.has('all')) {
     window.__job = 'running';
