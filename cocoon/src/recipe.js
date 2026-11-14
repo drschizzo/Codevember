@@ -97,12 +97,12 @@ export const MOODS = {
   filature: {
     label: 'Filature', value: 'moyenne',
     room: { wall: '#8d8a85', floor: '#76736e', wallRough: 0.85, floorRough: 0.7, tiles: 0, haze: 0.006, window: 0, concrete: 1 },
-    key: { kind: 'skylight', K: 6000, power: 1.3, az: -1.2, el: 1.25, soft: 0.25 },
+    key: { kind: 'skylight', K: 6000, power: 0.55, az: -1.2, el: 1.25, soft: 0.25 }, // (le haut du cocon fait face à la verrière : à 1,3, il brûlait)
     fill: 0.25, env: 'atelier', envIntensity: 0.3,
     lamp: { K: 4100, power: 0.4, glow: 0.55 },
     threads: ['grege', 'lin', 'tussah', 'cuivre', 'noire'], accords: ['fonteVerte', 'acierBuis', 'noirLaiton'],
     camera: { el: [0.32, 0.45], dist: [1.7, 1.95], az: [0.65, 0.9] },
-    grade: { exposure: 1, contrast: 1.06, saturation: 0.88, shadows: [0.97, 0.99, 1.03], highlights: [1.02, 1.0, 0.97] },
+    grade: { exposure: 0.95, contrast: 1.06, saturation: 0.88, shadows: [0.97, 0.99, 1.03], highlights: [1.02, 1.0, 0.97] },
   },
   shoji: {
     label: 'Shōji', value: 'claire derrière',
@@ -117,7 +117,7 @@ export const MOODS = {
   laque: {
     label: 'Laque', value: 'sombre, chaude',
     room: { wall: '#4a1210', floor: '#0f0c0b', wallRough: 0.45, floorRough: 0.5, tiles: 0, haze: 0.012, window: 0 },
-    key: { kind: 'top', K: 4800, power: 1.0, az: 0.6, el: 1.38, soft: 0.2 },
+    key: { kind: 'top', K: 4800, power: 0.5, az: 0.6, el: 1.38, soft: 0.2 }, // (la douche tombe sur le cocon : à 1, il brûlait)
     fill: 0.06, env: 'night', envIntensity: 0.1,
     lamp: { K: 3400, power: 0.75, glow: 0.45 },
     threads: ['doree', 'grege', 'cuivre', 'noire'], accords: ['noirLaiton', 'nickelEbene'],
@@ -127,9 +127,9 @@ export const MOODS = {
   brouillard: {
     label: 'Brouillard', value: 'moyenne, sans ombres',
     room: { wall: '#a9acab', floor: '#9a9c9a', wallRough: 0.95, floorRough: 0.9, tiles: 0, haze: 0.06, window: 0 },
-    key: { kind: 'diffuse', K: 6500, power: 0.35, az: -0.8, el: 0.9, soft: 1.0 },
+    key: { kind: 'diffuse', K: 6500, power: 0.25, az: -0.8, el: 0.9, soft: 1.0 },
     fill: 0.3, env: 'cyclo', envIntensity: 0.3,
-    lamp: { K: 3900, power: 0.5, glow: 0.6 },
+    lamp: { K: 3900, power: 0.5, glow: 0.45 },
     threads: ['grege', 'yamamai', 'verre', 'lin'], accords: ['acierBuis', 'laitonNoyer', 'nickelEbene'],
     camera: { el: [0.06, 0.16], dist: [2.0, 2.3], az: [0.7, 0.9] },
     grade: { exposure: 1, contrast: 0.96, saturation: 0.85, shadows: [0.98, 1.0, 1.02], highlights: [1.0, 1.0, 1.0] },
@@ -188,7 +188,11 @@ export function generate(seed, overrides = {}) {
     },
     light: {
       key: { ...M.key, color: kelvinToHex(M.key.K), power: r2(M.key.power * rl.range(0.9, 1.1)), az: r2(M.key.az + rl.range(-0.25, 0.25)) },
-      fill: r2(M.fill), lamp: { K: M.lamp.K, color: kelvinToHex(M.lamp.K), power: r2(M.lamp.power * rl.range(0.9, 1.1)), size: 0.004, glow: r3(0.026 * (M.lamp.glow ?? 1) / Math.max(0.15, THREADS[thread].tau / 0.4)) },
+      // thread : part de la lampe reçue en direct par les fils (threads.js,
+      // lampThread) ; glow : la lueur à travers la paroi. Dosés au posemètre
+      // (cocoon.meter) : la soie, sous ses deux lampes, à une médiane de 1 à
+      // 1,5 en scène linéaire (le dessin du ruban se lit sous l'épaule d'AgX)
+      fill: r2(M.fill), lamp: { K: M.lamp.K, color: kelvinToHex(M.lamp.K), power: r2(M.lamp.power * rl.range(0.9, 1.1)), size: 0.004, thread: 0.15, glow: r3(0.019 * (M.lamp.glow ?? 1) / Math.max(0.15, THREADS[thread].tau / 0.4)) },
     },
     room: { ...M.room },
     env: { preset: M.env, intensity: r2(M.envIntensity), rotation: r2(rl.range(0, Math.PI * 2)) },

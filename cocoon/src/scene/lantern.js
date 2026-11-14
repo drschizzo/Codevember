@@ -18,6 +18,11 @@ export class LanternLightNode extends THREE.PointLightNode {
   setupDirect(builder) {
     const d = super.setupDirect(builder);
     if (this.light.cookie) d.lightColor = d.lightColor.mul(this.light.cookie(positionWorld));
+    // part de la lampe reçue par une matière (drapeau de plateau) : le métal
+    // à quelques centimètres de l'ampoule (côtes, ailette, chariot) recevait
+    // jusqu'à 600 fois la lumière d'un mur et dessinait des arcs blancs
+    const g = builder.material?.userData?.lampGain;
+    if (g !== undefined && g !== 1) d.lightColor = d.lightColor.mul(g);
     return d;
   }
 }

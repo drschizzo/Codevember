@@ -45,6 +45,13 @@ export function threadUniforms() {
     fillDir: uniform(new THREE.Vector3(0, 1, 0)), fillRad: uniform(new THREE.Color(0, 0, 0)),
     ambSky: uniform(new THREE.Color(0.05, 0.05, 0.05)), ambGround: uniform(new THREE.Color(0.03, 0.03, 0.03)),
     lampRad: uniform(new THREE.Color(1, 0.8, 0.6)), // (intensité de chaque lampe, cd)
+    // part des lampes reçue en direct par les fils (« liaison de lumière » :
+    // un drapeau de plateau). L'ampoule nue d'une lanterne, à 60 cm, éclairait
+    // l'autre cocon six fois plus fort que la pièce : la soie blanche y
+    // montait à 6–8 (scène linéaire), au-delà de l'épaule du tone mapping, et
+    // le dessin du ruban disparaissait dans le blanc. Les murs gardent la
+    // pleine lampe (les ombres des côtes) ; la lueur a son propre dosage.
+    lampThread: uniform(0.15),
     glowGain: uniform(0.15),
     total: uniform(30), // (longueur du ruban, m : pour la soie fraîche) // (part de la lampe qui traverse la paroi : dosée au posemètre, par humeur)
   };
@@ -140,17 +147,20 @@ export function threadMaterial(U, own, other, cookieOwn, cookieOther, { free = f
     col = col.add(fiber(U.fillDir, U.fillRad.mul(smoothstep(-0.4, 0.3, dot(ns, U.fillDir)))));
     // l'autre lampe, à travers sa propre paroi
     const lampO = other.lampW, dO = lampO.sub(Pw), rO = length(dO), LO = dO.div(rO);
-    const EO = U.lampRad.mul(vX.x).div(rO.mul(rO)).mul(free ? float(1) : smoothstep(-0.3, 0.3, dot(ns, LO)));
+    const EO = U.lampRad.mul(U.lampThread).mul(vX.x).div(rO.mul(rO)).mul(free ? float(1) : smoothstep(-0.3, 0.3, dot(ns, LO)));
     col = col.add(fiber(LO, EO));
     // sa propre lampe : directe (vue par les jours, ou ruban libre), et la lueur
     // à travers les couches posées dessous
     const lampW = own.lampW, dW = lampW.sub(Pw), rW = length(dW), LW = dW.div(rW);
     const inv2 = float(1).div(rW.mul(rW));
     if (free) {
-      col = col.add(fiber(LW, U.lampRad.mul(vX.w).mul(inv2)));
+      // (le cordon longe le rail à 18 cm de l'ampoule nue, sans paroi entre
+      // eux : même à la part des fils, il montait à ~20 et dessinait autour
+      // de la cage un arc de néon ; il en reçoit le sixième)
+      col = col.add(fiber(LW, U.lampRad.mul(U.lampThread.mul(0.16)).mul(vX.w).mul(inv2)));
     } else {
       const under = exp(nb.mul(log(U.tau.max(1e-4))));
-      col = col.add(fiber(LW, U.lampRad.mul(under).mul(inv2).mul(U.glowGain.mul(2).min(1)), 0));
+      col = col.add(fiber(LW, U.lampRad.mul(U.lampThread).mul(under).mul(inv2).mul(U.glowGain.mul(2).min(1)), 0));
       // diffusion vers l'avant dans la fibre : plus forte au bord du ruban (le
       // fil y est vu en épaisseur rasante)
       const rim = float(0.75).add(abs(v).mul(0.5).mul(fade));

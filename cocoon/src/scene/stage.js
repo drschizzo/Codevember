@@ -24,6 +24,9 @@ import { windSpec, ACCORDS, kelvinToHex } from '../recipe.js';
 
 const TAU = Math.PI * 2;
 const SHADOW = { mobile: 1024, low: 1024, medium: 2048, high: 2048, ultra: 4096 };
+// part des lampes reçue par le métal de la station (côtes, ailette, chariot) :
+// à 15–20 cm d'une ampoule nue, il brûlait en arcs blancs autour du cocon
+const NEAR_LAMP = 0.3;
 
 function toGeometry(o) {
   const g = new THREE.BufferGeometry();
@@ -116,7 +119,13 @@ export function createStage(scene, gen, { lite = false, renderer = null } = {}) 
   const mats = new Map(); // (une matière par rôle et par clé : construite une fois)
   // (fils de la cage et rails : plus fins qu'un pixel de loin, ils reçoivent un
   // reflet plus large, sinon ils scintillent)
-  const matFor = (k, wire = false) => { const key = wire ? `${k}:fil` : k; if (!mats.has(key)) mats.set(key, solidMaterial(k, { minRough: wire ? 0.45 : 0 })); return mats.get(key); };
+  // (près des lampes : côtes, ailette, chariot, buse — ils ne reçoivent
+  // qu'une part de la lampe, comme les fils : NEAR_LAMP)
+  const matFor = (k, wire = false, near = false) => {
+    const key = `${k}${wire ? ':fil' : ''}${near ? ':près' : ''}`;
+    if (!mats.has(key)) mats.set(key, solidMaterial(k, { minRough: wire ? 0.45 : 0, lampGain: near ? NEAR_LAMP : 1 }));
+    return mats.get(key);
+  };
   const glassMat = bulbMaterial(), filMat = filamentMaterial({ filament });
   const meshes = [];
   const addMesh = (parent, buf, matKey, { cast = true, receive = true } = {}) => {
@@ -203,11 +212,10 @@ export function createStage(scene, gen, { lite = false, renderer = null } = {}) 
     push(beamParts, addMesh(beam, G.beam.wood, A.wood));
     for (const s of ST) {
       push(s.parts, addMesh(s.g, G.station.fittings, A.fittings));
-      { const m = addMesh(s.g, G.station.cage, A.cage); if (m) m.userData.wire = true; push(s.parts, m); }
+      { const m = addMesh(s.g, G.station.cage, A.cage); if (m) m.userData.wire = m.userData.near = true; push(s.parts, m); }
       push(s.parts, addMesh(s.g, G.station.glass, 'glass', { cast: false, receive: false }));
       push(s.parts, addMesh(s.g, G.station.filament, 'filament', { cast: false, receive: false }));
-      push(s.parts, addMesh(s.yoke, G.yoke.fittings, A.fittings));
-      push(s.parts, addMesh(s.carriage, G.carriage.fittings, A.fittings));
+      for (const m of [addMesh(s.yoke, G.yoke.fittings, A.fittings), addMesh(s.carriage, G.carriage.fittings, A.fittings)]) { if (m) m.userData.near = true; push(s.parts, m); }
       push(s.parts, addMesh(s.eye, G.eyeRing.eye, A.eye));
       // fils : même géométrie pour les deux stations (même cocon)
       s.threads.geometry.dispose();
@@ -218,12 +226,12 @@ export function createStage(scene, gen, { lite = false, renderer = null } = {}) 
     // buse : un cylindre unitaire le long de −x, mis à l'échelle
     for (const s of ST) {
       const nz = new THREE.Mesh(new THREE.CylinderGeometry(0.0016, 0.0024, 1, 10, 1).rotateX(Math.PI / 2).translate(0, 0, 0.5));
-      nz.castShadow = true; nz.receiveShadow = true; nz.userData.role = A.fittings;
+      nz.castShadow = true; nz.receiveShadow = true; nz.userData.role = A.fittings; nz.userData.near = true;
       s.nozzle.add(nz); s.parts.push(nz); meshes.push(nz);
     }
     for (const m of meshes) {
       const r = m.userData.role;
-      m.material = r === 'glass' ? glassMat : r === 'filament' ? filMat : matFor(r, !!m.userData.wire);
+      m.material = r === 'glass' ? glassMat : r === 'filament' ? filMat : matFor(r, !!m.userData.wire, !!m.userData.near);
     }
     buildThreadMaterials();
     // le ruban libre entre les poulies (dans le fléau, fixe)
@@ -368,6 +376,7 @@ export function createStage(scene, gen, { lite = false, renderer = null } = {}) 
     lamps.forEach((l) => { l.color.set(L.lamp.color); l.intensity = lampI; });
     TU.lampRad.value.set(L.lamp.color).multiplyScalar(lampI);
     TU.glowGain.value = L.lamp.glow ?? 0.15;
+    TU.lampThread.value = L.lamp.thread ?? 0.15;
     TU.total.value = D.total;
     hazeU.density.value = R.room.haze ?? 0; hazeU.frame.value = (hazeU.frame.value + 1) % 4096;
     filament.value.set(L.lamp.color).multiplyScalar(40 * L.lamp.power);
