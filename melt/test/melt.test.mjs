@@ -2,8 +2,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generate, MOODS, HABITS, OXIDES, CLUSTERS, FRAMINGS } from '../src/recipe.js';
-import { CYCLE, level, emerge, reach, rising, buildCluster, crystalsAt, tideFor } from '../src/cycle.js';
+import { level, emerge, reach, descent, buildCluster, crystalsAt, tideFor, topOf } from '../src/cycle.js';
 import { cameraAt } from '../src/camera.js';
+import { simulate, gridsFor, stepsFor, bathAt, PHYS } from '../src/melt/model.js';
 
 test('recette déterministe, JSON, tous les choix tirés', () => {
   assert.deepEqual(generate('x1'), generate('x1'));
@@ -18,45 +19,34 @@ test('recette déterministe, JSON, tous les choix tirés', () => {
   assert.equal(seen.framing.size, Object.keys(FRAMINGS).length);
 });
 
-test('marée : continue, périodique, monotone par temps', () => {
-  assert.equal(level(0), level(1 - 1e-12));
-  let prev = level(0);
-  for (let k = 1; k <= 4000; k++) {
-    const t = k / 4000, L = level(t);
-    assert.ok(Math.abs(L - prev) < 0.01, `saut de niveau à t = ${t}`);
-    if (t > CYCLE.T0 && t < CYCLE.T1) assert.ok(L <= prev + 1e-12);
-    if (t > CYCLE.T2 && t < CYCLE.T3) assert.ok(L >= prev - 1e-12);
-    prev = L;
+test('bain et descente : continus, périodiques, monotones par temps ; le bain ne bouge pas pendant la fonte', () => {
+  const C = tideFor(buildCluster('m0', CLUSTERS.grappe));
+  assert.ok(Math.abs(level(0, C) - level(1 - 1e-9, C)) < 1e-6);
+  let prevL = level(0, C), prevD = descent(0, C);
+  for (let k = 1; k < 4000; k++) {
+    const t = k / 4000, L = level(t, C), D = descent(t, C);
+    assert.ok(Math.abs(L - prevL) < 0.01, `saut de niveau à t = ${t}`);
+    assert.ok(Math.abs(D - prevD) < 0.01, `saut de descente à t = ${t}`);
+    if (t > C.T0 && t < C.T1) assert.ok(L <= prevL + 1e-12);
+    if (t >= C.T1 && t < C.T4) assert.equal(L, C.LL); // (la fonte : c'est la grappe qui descend, pas le bain qui monte)
+    if (t > C.T4) assert.ok(L >= prevL - 1e-12);
+    assert.ok(D >= prevD - 1e-12, 'la grappe remonte pendant la boucle');
+    prevL = L; prevD = D;
   }
-  // le métal sort du bain dans l'ordre de la hauteur, la ligne remonte dans l'ordre aussi
-  for (let y = 0; y < 3; y += 0.1) { assert.ok(emerge(y + 0.1) <= emerge(y)); assert.ok(reach(y + 0.1) >= reach(y)); }
-  assert.equal(rising(0.5), 0);
+  // le métal sort du bain dans l'ordre de la hauteur ; la ligne atteint le cristal de bas en haut
+  for (let y = 0; y < 3; y += 0.1) { assert.ok(emerge(y + 0.1, C) <= emerge(y, C)); assert.ok(reach(y + 0.1, C) >= reach(y, C)); }
 });
 
-// plus haut point d'un cristal (cube tourné, éventuellement allongé)
-function topOf(c, stretch = 1) {
-  let top = -1e9;
-  for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
-    // repère du cristal → monde : inverse de rotX(rotY(p − c, ang), tilt)
-    let x = sx * c.s * stretch, y = sy * c.s, z = sz * c.s;
-    const ct = Math.cos(-c.tilt), st = Math.sin(-c.tilt);
-    [y, z] = [ct * y - st * z, st * y + ct * z];
-    top = Math.max(top, c.y + y);
-  }
-  return top;
-}
+// plus haut point d'un cristal dans le monde (cube tourné, incliné), à sa descente près
+const topWorld = (c) => topOf(c) - c.desc;
 
 test('raccord : au début et à la fin de la boucle, le bain couvre tout', () => {
   for (let i = 0; i < 200; i++) {
     const R = generate(`r${i}`);
     const cl = buildCluster(R.seed, CLUSTERS[R.cluster]), C = tideFor(cl);
-    for (const t of [0, 0.02, CYCLE.T0 - 1e-3, CYCLE.T3 + 0.03, 0.95, 0.999]) {
+    for (const t of [0, 0.02, C.T0 - 1e-3, C.T3 + 0.02, C.T4 + 0.01, 0.95, 0.999]) {
       const L = level(t, C);
-      for (const c of crystalsAt(cl, t, C)) {
-        const top = topOf(c, R.habit === 'allongee' ? 1 / 0.62 : 1);
-        assert.ok(top < L - 0.02, `graine r${i}, t = ${t} : un cristal dépasse (${top.toFixed(2)} ≥ ${L})`);
-        assert.equal(c.piece, null); assert.equal(c.drips.length, 0);
-      }
+      for (const c of crystalsAt(cl, t, C)) assert.ok(topWorld(c) < L - 0.02, `graine r${i}, t = ${t} : un cristal dépasse (${topWorld(c).toFixed(2)} ≥ ${L.toFixed(2)})`);
     }
   }
 });
@@ -72,18 +62,48 @@ test('grappe : cristaux posés, sans interpénétration franche', () => {
   }
 });
 
-test('fonte : affaissement, coin et gouttes dans l’ordre, peau après engloutissement', () => {
-  const cl = buildCluster('f1', CLUSTERS.grappe);
-  const c0 = cl[0];
-  const at = (t) => crystalsAt(cl, t)[0];
-  assert.ok(Math.abs(at(0.5).y - c0.y) < 1e-9); // rien ne bouge avant la remontée
-  assert.ok(at(0.84).y < c0.y); // il s'est affaissé
+test('fonte : la grappe descend pendant la fonte seulement ; la peau vient après', () => {
+  const cl = buildCluster('f1', CLUSTERS.grappe), C = tideFor(cl);
+  const at = (t) => crystalsAt(cl, t, C)[0];
+  assert.equal(at(0.45).desc, 0); // rien ne bouge avant la fonte
+  assert.ok(at((C.T2 + C.T3) / 2).desc > 0);
+  assert.ok(Math.abs(at(C.T3).desc - (C.LH - C.LL)) < 1e-9); // à la fin, la grappe est descendue de toute la marée
   // la peau n'apparaît qu'une fois le haut englouti
-  const tSub = reach(c0.y + c0.s * 1.1);
+  const tSub = reach(topOf(cl[0]) + 0.05, C);
   assert.ok(at(tSub - 0.01).skin < 0 && at(tSub + 0.02).skin > 0);
 });
 
-test('caméra : périodique et lente', () => {
+test('modèle de fonte (Node, grille grossière) : les parties minces d’abord, puis le front suit la ligne', () => {
+  const c = { s: 1, y: 0.8, ang: 0.5, tilt: 0.08 }, LL = 0.22, D = 1.85;
+  const { tau, grid } = simulate(c, 0, { LL, D, quality: 2.2 });
+  const { h, X, nx, ny } = grid;
+  const lead = [];
+  for (let id = 0; id < tau.length; id++) {
+    if (tau[id] < 0 || tau[id] > 50) continue;
+    const j = Math.floor(id / nx) % ny, y = (j + 0.5) * h;
+    if (y <= LL + h) continue;
+    // instant où le bain (repère du cristal) atteint y, sans tassement
+    const uLine = Math.pow(Math.min(Math.max((y - LL) / D, 0), 1), 1 / PHYS.rise);
+    lead.push(tau[id] - uLine);
+  }
+  lead.sort((a, b) => a - b);
+  const q = (f) => lead[Math.floor(f * (lead.length - 1))];
+  assert.ok(lead.length > 1000);
+  assert.ok(q(0.5) < 0 && q(0.5) > -0.12, `médiane de l’avance de la fonte sur la ligne : ${q(0.5)}`);
+  // (avance modeste : le panache est tiède à la ligne, pour que les petits cristaux fondent en s'enfonçant)
+  assert.ok(q(0.05) < q(0.5) - 0.02, `les parties minces ne fondent pas avant le reste (${q(0.05)} / ${q(0.5)})`);
+  assert.ok(bathAt(1, LL, D) === LL + D && X > c.s);
+});
+
+test('caméra : périodique, lente, toujours au-dessus du métal', () => {
+  for (let i = 0; i < 200; i++) {
+    const R = generate(`k${i}`);
+    const LH = tideFor(buildCluster(R.seed, CLUSTERS[R.cluster])).LH;
+    for (let k = 0; k < 100; k++) {
+      const y = cameraAt(R, k / 100).pos[1];
+      assert.ok(y > LH + 0.15, `graine k${i} (${R.framing}) : caméra à ${y.toFixed(2)} sous la marée haute ${LH.toFixed(2)}`);
+    }
+  }
   for (const s of ['c1', 'c2', 'c3']) {
     const R = generate(s);
     const a = cameraAt(R, 0).pos, b = cameraAt(R, 1).pos;
@@ -97,23 +117,18 @@ test('caméra : périodique et lente', () => {
   }
 });
 
-test('caméra : toujours au-dessus du métal, même à marée haute', () => {
-  for (let i = 0; i < 200; i++) {
-    const R = generate(`k${i}`);
-    const LH = tideFor(buildCluster(R.seed, CLUSTERS[R.cluster])).LH;
-    for (let k = 0; k < 100; k++) {
-      const y = cameraAt(R, k / 100).pos[1];
-      assert.ok(y > LH + 0.15, `graine k${i} (${R.framing}) : caméra à ${y.toFixed(2)} sous la marée haute ${LH.toFixed(2)}`);
-    }
+test('grilles de fonte : elles contiennent le cristal et tiennent dans le budget', () => {
+  let worst = 0;
+  for (let i = 0; i < 120; i++) {
+    const R = generate(`a${i}`), habit = HABITS[R.habit].id;
+    const cl = buildCluster(R.seed, CLUSTERS[R.cluster]);
+    const grids = gridsFor(cl, habit);
+    let work = 0;
+    grids.forEach((g, k) => {
+      assert.ok(g.Y > topOf(cl[k]) && g.nx < 400 && g.ny < 300, `grille ${g.nx}×${g.ny}`);
+      work += g.nx * g.ny * g.nz * stepsFor(g.h).steps;
+    });
+    worst = Math.max(worst, work);
   }
-});
-
-test('marée de la grappe : juste au-dessus du plus haut cristal', () => {
-  for (let i = 0; i < 100; i++) {
-    const R = generate(`m${i}`), cl = buildCluster(R.seed, CLUSTERS[R.cluster]), C = tideFor(cl);
-    assert.ok(C.LH < 3.2 && C.LH > C.LL + 0.5);
-    // le bain ne reste pas haut et vide : à mi-remontée, au moins un cristal dépasse encore
-    const L = level((C.T2 + C.T3) / 2, C);
-    assert.ok(crystalsAt(cl, (C.T2 + C.T3) / 2, C).some((c) => c.y + c.s > L), `graine m${i} : tout est englouti à mi-fonte`);
-  }
+  assert.ok(worst <= 2.5e10, `travail ${worst.toExponential(2)}`);
 });

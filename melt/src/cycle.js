@@ -1,35 +1,45 @@
-// Le cycle du bain de bismuth (fonctions pures, Node et navigateur). Tout ce
-// qui bouge est calculé ici une fois par image, puis passé au rendu
-// (scene/tracer.js) en uniformes :
+// Le cycle du bain de bismuth (fonctions pures, Node et navigateur). Une seule
+// horloge, t ∈ [0, 1) :
 //
-// - la marée de métal (la liberté) : le bain couvre tout, se retire et découvre
-//   les cristaux, reste bas, puis le métal chaud remonte et les refond ;
-// - l'oxyde : il pousse dès que le métal sort du bain (en racine du temps) ;
-//   quand le métal chaud remonte, il s'épaissit au-dessus de la ligne ;
-// - la fonte : arrondi et gradins comblés au-dessus de la ligne (dans le
-//   rendu), affaissement du cristal quand son pied fond, un coin de gradin qui
-//   cède et tombe, des gouttes qui perlent et glissent, la peau d'oxyde qui
-//   survit au métal et se fend sur le miroir, les rides des chutes ;
-// - pendant que le bain couvre tout (le métal refroidit), les cristaux
-//   repoussent sous le miroir : à u = 1, l'état est celui de u = 0.
+// - 0 – T0 : le miroir ; sous lui, les cristaux ont poussé pendant que le métal
+//   refroidissait ;
+// - T0 – T1 : on vide le bain (c'est ainsi qu'on récolte le bismuth) : les
+//   cristaux sortent, le haut d'abord, et s'oxydent dès qu'ils touchent l'air ;
+// - T1 – T2 : le bain bas, les couleurs mûrissent ;
+// - T2 – T3 : la fonte. Le creuset chauffe par le bas, la croûte du fond fond
+//   sous la grappe, et la grappe descend dans son bain, qui ne bouge pas. Le
+//   métal chaud fond les cristaux par leur ligne de flottaison ; un cristal
+//   dont la taille a fondu se tasse. La forme des cristaux vient de la
+//   simulation (melt/model.js, scene/melt.js), relue ici par le tassement et
+//   par l'instant où il ne reste plus rien au-dessus du bain ;
+// - T3 – T4 : les peaux d'oxyde des cristaux engloutis flottent et se défont ;
+// - T4 – T5 : le bain se remplit (le miroir monte, rien ne dépasse) ; à t = 1,
+//   la grappe a repoussé sous lui : l'état est celui de t = 0.
 import { createRng } from '../../shared/rng.js';
+import { PHYS } from './melt/model.js';
 
-export const CYCLE = { LH: 2.9, LL: 0.22, T0: 0.06, T1: 0.30, T2: 0.60, T3: 0.86 };
-const RISE = 1.5; // la remontée : niveau en x^RISE
+export const CYCLE = { LH: 2.9, LL: 0.22, T0: 0.06, T1: 0.30, T2: 0.52, T3: 0.86, T4: 0.90, T5: 0.97 };
 
+const clamp01 = (x) => Math.min(1, Math.max(0, x));
+const sm = (a, b, x) => { const k = clamp01((x - a) / (b - a)); return k * k * (3 - 2 * k); };
+
+// le niveau du bain (repère du monde)
 export function level(t, C = CYCLE) {
   if (t < C.T0) return C.LH;
   if (t < C.T1) return C.LH + (C.LL - C.LH) * (t - C.T0) / (C.T1 - C.T0);
-  if (t < C.T2) return C.LL;
-  if (t < C.T3) return C.LL + (C.LH - C.LL) * Math.pow((t - C.T2) / (C.T3 - C.T2), RISE); // (lente au pied des cristaux, plus vive au-dessus d'eux)
-  return C.LH;
+  if (t < C.T4) return C.LL;
+  return C.LL + (C.LH - C.LL) * sm(C.T4, C.T5, t);
 }
-// instant où le métal à la hauteur y sort du bain
-export const emerge = (y, C = CYCLE) => C.T0 + Math.min(1, Math.max(0, (C.LH - y) / (C.LH - C.LL))) * (C.T1 - C.T0);
-// instant où la ligne de métal chaud atteint la hauteur y en remontant
-export const reach = (y, C = CYCLE) => C.T2 + Math.pow(Math.min(1, Math.max(0, (y - C.LL) / (C.LH - C.LL))), 1 / RISE) * (C.T3 - C.T2);
-export const rising = (t, C = CYCLE) => (t > C.T2 && t < C.T3 + 0.02 ? Math.min(1, (t - C.T2) / (C.T3 - C.T2)) : 0);
-const sm = (a, b, x) => { const k = Math.max(0, Math.min(1, (x - a) / (b - a))); return k * k * (3 - 2 * k); };
+// le temps de la fonte : 0 au début de la descente, 1 à la fin
+export const meltU = (t, C = CYCLE) => (t - C.T2) / (C.T3 - C.T2);
+// la descente commune de la grappe (la croûte qui fond), sans le tassement propre à chaque cristal
+export const descent = (t, C = CYCLE) => (C.LH - C.LL) * Math.pow(clamp01(meltU(t, C)), PHYS.rise);
+// instant où le métal à la hauteur y (repère du cristal) sort du bain qu'on vide
+export const emerge = (y, C = CYCLE) => C.T0 + clamp01((C.LH - y) / (C.LH - C.LL)) * (C.T1 - C.T0);
+// instant où la ligne du bain atteint la hauteur y du cristal pendant la descente (sans tassement)
+export const reach = (y, C = CYCLE) => C.T2 + Math.pow(clamp01((y - C.LL) / (C.LH - C.LL)), 1 / PHYS.rise) * (C.T3 - C.T2);
+// la chaleur de la fonte (0 hors de la fonte, 1 pendant)
+export const rising = (t, C = CYCLE) => sm(C.T2, C.T2 + 0.03, t) * (1 - sm(C.T3, C.T3 + 0.04, t));
 
 // ── La grappe : des trémies posées sur la croûte du fond, sans s'interpénétrer
 // trop (une trémie peut en pénétrer une autre : ce sont des cristaux maclés) ──
@@ -43,7 +53,6 @@ export function buildCluster(seed, { count = 9, scale = 1, spread = 1 } = {}) {
     const r = big ? 0 : rng.range(0.9, 2.9) * spread * scale;
     const a = rng.range(0, Math.PI * 2);
     const x = Math.cos(a) * r, z = Math.sin(a) * r;
-    // (au plus une interpénétration légère avec les voisins)
     if (out.some((c) => Math.hypot(c.x - x, c.z - z) < (c.s + s) * 0.95)) continue;
     out.push({
       x, z, s, y: s * rng.range(0.55, 0.98), // centre : posé, plus ou moins enfoncé dans la croûte (jamais au-dessus)
@@ -54,64 +63,39 @@ export function buildCluster(seed, { count = 9, scale = 1, spread = 1 } = {}) {
   return out;
 }
 
-// La marée de la grappe : le bain monte juste au-dessus du plus haut cristal
-// (pas plus : une marée taillée pour le grand cristal laissait les petites
-// grappes englouties dès le milieu de la fonte, puis le bain vide)
+// La marée de la grappe : on vide le bain depuis juste au-dessus du plus haut
+// cristal, et la fonte fait descendre la grappe d'autant (D = LH − LL)
 export function topOf(c) { const a = Math.abs(c.tilt); return c.y + c.s * (Math.cos(a) + Math.sin(a)); }
 export function tideFor(cluster, C = CYCLE) {
   const top = Math.max(...cluster.map(topOf));
   return { ...C, LH: Math.max(top + 0.14, C.LL + 0.8) };
 }
 
-const rotY = (v, a) => [Math.cos(a) * v[0] + Math.sin(a) * v[2], v[1], -Math.sin(a) * v[0] + Math.cos(a) * v[2]];
+// le tassement d'un cristal à l'instant u de la fonte (données de la simulation)
+function dropOf(m, u) {
+  if (!m || u <= 0) return 0;
+  const x = Math.min(u / m.dt, m.steps), i = Math.floor(x), f = x - i;
+  return i >= m.steps ? m.drop[m.steps] : m.drop[i] * (1 - f) + m.drop[i + 1] * f;
+}
 
-// État de chaque cristal à l'instant t : pose (affaissement), coin, gouttes,
-// peau, rides
-export function crystalsAt(cluster, t, C = CYCLE) {
-  const L = level(t, C), rs = rising(t, C);
+// État de chaque cristal à l'instant t : sa descente (la croûte + son
+// tassement), l'âge de sa peau d'oxyde sur le bain, la ride de son tassement.
+// melt : les résultats de la simulation (un par cristal), ou rien (tests).
+export function crystalsAt(cluster, t, C = CYCLE, melt = null) {
+  const u = meltU(t, C), base = descent(t, C);
   return cluster.map((c, i) => {
-    // l'affaissement : quand la ligne atteint le pied, il fond ; le cristal
-    // s'enfonce et penche du côté qui a cédé
-    const tBase = reach(c.y - c.s * 0.6, C);
-    const col = sm(tBase, tBase + 0.14, t);
-    const pose = { x: c.x, y: c.y - c.s * 0.3 * col, z: c.z, s: c.s, ang: c.ang, tilt: c.tilt + 0.45 * col * c.lean };
-    // le coin de gradin qui cède quand la fonte atteint le milieu du cristal
-    const tb = reach(c.y, C) + 0.015;
-    const cl = [c.corner[0] * c.s * 0.72, c.s * 0.9, c.corner[1] * c.s * 0.72];
-    const w0 = [c.x + rotY(cl, -c.ang)[0], c.y + cl[1], c.z + rotY(cl, -c.ang)[2]];
-    const outd = rotY([cl[0], 0, cl[2]], -c.ang), on = Math.hypot(outd[0], outd[2]) || 1;
-    const tau = t - tb;
-    let piece = null, ripple = null;
-    if (tau > 0) {
-      const pos = [w0[0] + (outd[0] / on) * 9 * tau, w0[1] - 1400 * tau * tau, w0[2] + (outd[2] / on) * 9 * tau];
-      if (pos[1] > L - 0.4) piece = { pos, ang: c.ang, rot: 18 * tau * Math.sign(cl[2]), s: c.s };
-      const ti = tb + Math.sqrt(Math.max(w0[1] - L, 0) / 1400);
-      const dt = t - ti;
-      if (dt > 0 && dt < 0.07) ripple = { x: w0[0] + (outd[0] / on) * 9 * (ti - tb), z: w0[2] + (outd[2] / on) * 9 * (ti - tb), dt };
-    }
-    // les gouttes : elles naissent quand la fonte atteint leur hauteur, glissent,
-    // et le bain les absorbe ; elles suivent l'affaissement du cristal
-    const drips = [];
-    if (rs > 0 && col < 0.35) {
-      const rng = createRng(`${c.seed.toFixed(3)}:${i}`);
-      for (let j = 0; j < 4; j++) {
-        const face = Math.floor(rng.range(0, 4)), off = rng.range(-0.6, 0.6), hk = rng.next();
-        const a = c.ang + face * Math.PI / 2;
-        const nf = [Math.sin(a), 0, Math.cos(a)], tf = [Math.cos(a), 0, -Math.sin(a)];
-        const y0 = c.y + c.s * (0.2 + 0.6 * hk);
-        const age = t - reach(y0 - 0.5, C);
-        if (age <= 0 || y0 < L) continue;
-        const y = y0 - age * 6 * c.s - c.s * 0.3 * col;
-        if (y < L - 0.03) continue;
-        const r = c.s * (0.1 + 0.06 * hk) * Math.min(age * 14, 1);
-        drips.push([c.x + nf[0] * c.s * 1.02 + tf[0] * off * c.s, y, c.z + nf[2] * c.s * 1.02 + tf[2] * off * c.s, r]);
-      }
-    }
-    // la peau d'oxyde : quand le haut passe sous la ligne
-    const tSub = reach(c.y + c.s * 1.1, C);
-    const skinAge = t - tSub;
-    const skin = skinAge > 0 && skinAge < 0.16 ? skinAge : -1;
-    const breakNow = tau > 0;
-    return { ...pose, ox: c.ox, seed: c.seed, cornerLocal: cl, broken: breakNow, piece, drips, skin, ripple };
+    const m = melt?.[i];
+    const desc = base + dropOf(m, u);
+    // la peau : quand il ne reste plus rien du cristal au-dessus du bain
+    const tGone = m ? C.T2 + m.uGone * (C.T3 - C.T2) : reach(topOf(c) + 0.05, C);
+    const skinAge = t - tGone;
+    // la ride : quand le bloc commence à se tasser
+    const tSet = m && m.uSettle > 0 ? C.T2 + m.uSettle * (C.T3 - C.T2) : -1;
+    const rip = tSet > 0 ? t - tSet : -1;
+    return {
+      x: c.x, y: c.y, z: c.z, s: c.s, ang: c.ang, tilt: c.tilt, ox: c.ox, seed: c.seed, desc,
+      skin: skinAge > 0 && skinAge < 0.14 ? skinAge : -1,
+      ripple: rip > 0 && rip < 0.07 ? { x: c.x, z: c.z, dt: rip } : null,
+    };
   });
 }

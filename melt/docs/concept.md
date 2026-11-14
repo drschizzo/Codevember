@@ -23,19 +23,20 @@ C'est la cinquième version du concept. Les précédentes sont gardées pour la 
 
 **L'image.** Un bain de bismuth fondu, noir et lisse comme un miroir, sous un studio de photographe. Des trémies irisées s'y dressent et s'y reflètent, chaque cristal et son double formant une figure.
 
-**La liberté (une seule) : la marée de métal.** Le bain se retire et découvre les cristaux, puis remonte et les refond. Tout le reste suit la physique.
+**La liberté (une seule) : le creuset qu'on vide puis qu'on chauffe.** On vide le bain pour découvrir les cristaux, puis le creuset chauffe par le bas et la croûte fond sous la grappe, qui descend dans son bain. Tout le reste suit la physique, et la fonte est calculée.
 
 **Le cycle** (`src/cycle.js`, une seule horloge, durée 40 s) :
 
 | t | Ce qu'on voit | Cause | Loi |
 | --- | --- | --- | --- |
 | 0 – 0,06 | le miroir seul ; sous lui, les cristaux ont repoussé pendant que le métal refroidissait | le froid | croissance en trémie |
-| 0,06 – 0,30 | le bain se retire ; les cristaux sortent, le haut en premier ; le métal neuf s'oxyde aussitôt : les couleurs descendent avec la marée | l'air chaud | oxyde en racine du temps passé à l'air |
-| 0,30 – 0,60 | le bain bas ; les couleurs mûrissent (or, magenta, bleu) | l'air | couche mince d'Airy |
-| 0,60 – 0,86 | **la fonte** : le métal chaud remonte ; une bande de couleurs court devant lui ; les arêtes s'arrondissent, les gradins se comblent en argent liquide ; les cristaux s'affaissent et penchent quand leur pied fond ; un coin de gradin cède, tombe et ride le bain ; des gouttes perlent et glissent ; la peau d'oxyde de chaque cristal englouti flotte un instant, se fend en écailles irisées et se dissout | la chaleur du métal | chaleur, tension superficielle, gravité |
-| 0,86 – 1 | le miroir (= t 0) | | |
+| 0,06 – 0,30 | on vide le bain ; les cristaux sortent, le haut en premier ; le métal neuf s'oxyde aussitôt : les couleurs descendent avec le niveau | l'air chaud | oxyde en racine du temps passé à l'air |
+| 0,30 – 0,52 | le bain bas ; les couleurs mûrissent (or, magenta, bleu) | l'air | couche mince d'Airy |
+| 0,52 – 0,86 | **la fonte** : la grappe descend dans le bain, qui ne bouge pas ; la chaleur fait défiler les couleurs devant la ligne ; les parois minces et les arêtes fondent d'abord ; les gradins pendent en franges d'argent liquide ; une encoche se creuse à la ligne et le cristal se tasse quand sa taille cède, ce qui ride le bain | le creuset chauffe par le bas | problème de Stefan (simulé) |
+| 0,86 – 0,90 | la peau d'oxyde de chaque cristal englouti s'étale sur le miroir, se fend, et ses plaques rapetissent jusqu'à rien | | |
+| 0,90 – 0,97 | le bain se remplit, rien ne dépasse | | |
 
-**La boucle se referme par construction.** À t = 0 et à t = 1, le bain couvre tout. Un test vérifie, pour 200 graines, qu'aucun coin de cristal ne dépasse. Les cristaux repoussent sous le miroir.
+**La boucle se referme par construction.** À t = 0 et à t = 1, le bain couvre tout, et la grappe, descendue de toute la marée, a repoussé sous le miroir. Un test vérifie, pour 200 graines, qu'aucun coin de cristal ne dépasse.
 
 **Le regard** : la photographie de minéraux de musée. Un studio sombre, des boîtes de lumière, l'objet qui tranche sur le fond, et le reflet comme second sujet.
 
@@ -80,8 +81,18 @@ La fonte de la scène est une imitation : un arrondi et un comblement des gradin
 
 **Pas encore fait** : la peau d'oxyde et la surface du bain (une simulation 2D en hauteur, qui porterait la peau et les rides) ; plusieurs cristaux ; l'intégration dans la scène (une grille par cristal, plus grossière pour les satellites) ; le crènelage des reflets.
 
+## Intégration de la fonte calculée (14 novembre)
+
+La scène calcule maintenant la fonte au chargement, une grille par cristal (`src/melt/model.js` pour le modèle et sa version de référence en Node, `src/scene/melt.js` pour le GPU). Le traceur lit chaque cristal dans un atlas 3D. Trois choses ont changé en route :
+- **Le critère d'appui.** Il compare la section au ras du bain à la section **d'origine à la même hauteur**, et non à celle d'un cube plein. Une trémie creuse a une petite section à bien des hauteurs sans que rien n'ait fondu : avec l'ancien critère, les petits cristaux se tassaient sans fin dès le début.
+- **Le panache d'air chaud** est moins chaud à la ligne (0,45 de la chaleur du bain au lieu de 0,85) et plus court. Les petits cristaux, aux parois de deux cellules, fondaient entiers dans l'air avant d'avoir commencé à descendre. Ils fondent maintenant pendant qu'ils s'enfoncent.
+- **Le budget de calcul.** Au plus 2,5 · 10¹⁰ cellules × pas : le pas de la grille grandit pour les grosses grappes (une à trois secondes de calcul).
+
+Les anciennes fontes dessinées (arrondi au-dessus de la ligne, coin qui tombe, gouttes, affaissement tiré au hasard) sont retirées. L'anticrénelage est temporel, sans reprojection : décalage de Halton et historique borné par le voisinage.
+
 ## Ce qui reste perfectible
 
-- **L'affaissement est un mouvement d'ensemble du cristal**, plus un coin qui tombe. Les gradins ne s'effondrent pas un à un.
-- **Les reflets de gradins fins crènellent** (des escaliers de pixels), faute d'anticrénelage temporel ou de suréchantillonnage.
-- **Les restes de cristaux allongés**, très arrondis en fin de fonte, deviennent des gélules lisses.
+- **Les cristaux allongés** laissent parfois, en fin de fonte, des arêtes minces qui tiennent en l'air un instant. Le tassement ne regarde que le bloc entier, pas ses morceaux détachés.
+- **Les franges** des gradins latéraux, très régulières sur les grands cristaux, font parfois des peignes.
+- **Les peaux d'oxyde** restent dessinées : la surface du bain n'est pas simulée.
+- **Non vérifié :** mobile, et autres GPU que celui de cette machine.
