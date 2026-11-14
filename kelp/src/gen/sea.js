@@ -69,7 +69,7 @@ export function makeProfileZ(P, edge) {
 // ── La série de vagues incidente au large : η_in(t), période T ───────────────
 // chaque vague : une crête de hauteur A (largeur temporelle tc) précédée d'un
 // creux (la mer qui se retire) de profondeur β·A, d secondes avant
-export function makeForcing(waves, T) {
+export function makeForcing(waves, T, swell = null) {
   const one = (w, t) => {
     let s = 0;
     for (let k = -2; k <= 2; k++) { // (copies périodiques)
@@ -78,7 +78,10 @@ export function makeForcing(waves, T) {
     }
     return s;
   };
-  return (t) => { let s = 0; for (const w of waves) s += one(w, t); return s; };
+  // (la houle de fond, entre les vagues de la série : sinon la mer est un
+  // miroir ; des périodes T/n, donc périodique sur la boucle)
+  const sw = swell ?? [];
+  return (t) => { let s = 0; for (const w of waves) s += one(w, t); for (const [A, n, ph] of sw) s += A * Math.sin((2 * Math.PI * n * t) / T + ph); return s; };
 }
 
 // ── Simulation ───────────────────────────────────────────────────────────────
@@ -89,7 +92,7 @@ export function makeForcing(waves, T) {
 export function simulateSea(spec, onProgress = null) {
   const { T, x0 = -9, x1 = 7, dx = 0.025, fps = 60, manning = 0.035, loops = 3, cfl = 0.42 } = spec;
   const prof = spec.profileFn ?? makeProfile(spec.profile);
-  const forcing = makeForcing(spec.waves, T);
+  const forcing = makeForcing(spec.waves, T, spec.swell);
   const film = spec.film ?? 0.04, drain = spec.drain ?? 1.6, drainBelow = spec.drainBelow ?? -0.35;
   const fk = spec.foam?.k ?? 0.25, ftau = spec.foam?.tau ?? 3.2, atau = spec.foam?.aerTau ?? 1.0, lam = spec.dry ?? 0.012;
   const nx = Math.round((x1 - x0) / dx);

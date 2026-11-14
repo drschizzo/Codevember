@@ -54,6 +54,7 @@ export function createWater() {
     v0: uniform(new THREE.Vector4()), v1: uniform(new THREE.Vector4()), v2: uniform(new THREE.Vector4()),
     T: uniform(32), c0: uniform(Math.sqrt(g * 1.4)),
     foamK: uniform(1), caustic: uniform(1),
+    sw0: uniform(new THREE.Vector3()), sw1: uniform(new THREE.Vector3()), sw2: uniform(new THREE.Vector3()), // (houle : amplitude, n, phase)
     // le faisceau de profils (gen/sea.js, simulateBundle) : x, t, z
     bOn: uniform(0), bx0: uniform(-9), bW: uniform(19), bnf: uniform(960), bfps: uniform(30), bz0: uniform(0), bdz: uniform(1), bnz: uniform(1),
     // le bord du platier le long de la côte, s(z) (gen/sea.js, edgeShift)
@@ -92,7 +93,10 @@ export function createWater() {
     const tt = tl.sub(U.seaX0.sub(x).max(0).div(U.c0));
     // (le temps est replié sur la boucle)
     const tw = tt.sub(U.T.mul(tt.div(U.T).floor()));
-    return oneWave(U.w0, U.v0, tw).add(oneWave(U.w1, U.v1, tw)).add(oneWave(U.w2, U.v2, tw)).mul(smoothstep(-90, -30, x));
+    // (la houle de fond : la même qu'au bord de la simulation)
+    let sw = float(0);
+    for (const q of [U.sw0, U.sw1, U.sw2]) sw = sw.add(q.x.mul(sin(tw.mul(q.y).mul(2 * Math.PI).div(U.T).add(q.z))));
+    return oneWave(U.w0, U.v0, tw).add(oneWave(U.w1, U.v1, tw)).add(oneWave(U.w2, U.v2, tw)).add(sw).mul(smoothstep(-90, -30, x));
   };
   // le faisceau, au temps local tl ; et son poids face au profil fin de la
   // caméra (fondu sur |z − zRef| entre 1 m et 0,3 m, comme dans gen/sea.js)
@@ -229,14 +233,22 @@ export function createWater() {
       const sA = select(aIn, float(0), s0), sB = select(bIn, float(1), s0);
       const M = O.add(P.sub(O).mul(sA.add(sB).mul(0.5)));
       const sm = sea(M.x, M.z, U.t);
-      // (les bulles forment des nuages, pas un voile uniforme)
-      const cloud = NZ(M.mul(1.6).add(vec3(0, 0, G.phase.mul(8)))).x.mul(0.8).add(0.6).clamp(0.15, 1.4);
-      const aer = sm.w.mul(cloud).clamp(0, 1.2);
+      // (les bulles forment des nuages, pas un voile uniforme : des panaches
+      // qui plongent sous le ressaut — denses sous la surface, en colonnes,
+      // d'autant plus profonds que le déferlement est fort)
       const depthM = sm.x.max(pool(M.x, M.z)).sub(M.y).max(0);
-      // l'eau aérée diffuse fort et blanc
-      const sig = vec3(U.ext).add(aer.mul(2.5));
+      const cloud = NZ(M.mul(vec3(2.0, 0.7, 2.0)).add(vec3(0, 0, G.phase.mul(8)))).x.mul(0.9).add(0.55).clamp(0.1, 1.5);
+      const plume = exp(depthM.div(sm.w.mul(0.9).add(0.25)).negate()).mul(1.6).add(0.15);
+      const aer = sm.w.mul(cloud).mul(plume).clamp(0, 1.4);
+      // le sable soulevé près du fond là où le courant est fort (le retrait,
+      // le ressaut) : un nuage brun, par bouffées
+      const bed = rockAt(M.x, M.z);
+      const sed = smoothstep(0.6, 1.8, sm.y.abs()).mul(exp(M.y.sub(bed).max(0).div(0.3).negate())).mul(NZ(M.mul(vec3(1.4, 2.5, 1.4)).add(vec3(3.1, 0, G.phase.mul(8)))).y.mul(0.8).add(0.5).clamp(0, 1.2));
+      // l'eau aérée diffuse fort et blanc ; le sable, brun, absorbe
+      const sig = vec3(U.ext).add(aer.mul(2.5)).add(vec3(1.4, 1.7, 2.1).mul(sed));
       const Tr = exp(sig.mul(lw).negate());
-      const ins = inscatter(O, P, sA, sB, dir, M, depthM, aer);
+      const ins0 = inscatter(O, P, sA, sB, dir, M, depthM, aer);
+      const ins = mix(ins0, vec3(0.55, 0.46, 0.33).mul(dot(ins0, vec3(0.33)).mul(1.1)), sed.mul(0.6).clamp(0, 0.7));
       // la nuit : l'eau agitée s'allume (noctiluques)
       // (en étincelles : chaque noctiluque est un point, pas un voile)
       const spark = smoothstep(0.16, 0.0, NZ(M.mul(34).add(vec3(0, 0, G.phase.mul(16)))).z).mul(2.6).add(0.15);

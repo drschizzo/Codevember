@@ -172,6 +172,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
     // vagues au large (mêmes paramètres que le bord de la simulation)
     const wv = R.sea.waves;
     [[U.w0, U.v0], [U.w1, U.v1], [U.w2, U.v2]].forEach(([w, vv], k) => { const q = wv[k]; w.value.set(q.t, q.A, q.beta, q.d); vv.value.set(q.tc, q.tt, 0, 0); });
+    [U.sw0, U.sw1, U.sw2].forEach((u, k) => u.value.set(...(R.sea.swell?.[k] ?? [0, 1, 0])));
     terrain.RU.base.value.copy(lin(R.rock.color.base));
     // le soleil
     sun.color.copy(sunCol);
