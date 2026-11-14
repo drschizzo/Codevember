@@ -51,8 +51,17 @@ C'est la cinquième version du concept. Les précédentes sont gardées pour la 
 
 4 × 3 × 4 × 3 × 4 = 576 combinaisons, plus la graine de chaque grappe.
 
-## Ce qui reste perfectible (au 14 novembre)
+## Passe de DA (14 novembre)
 
-- **La qualité est inégale selon les graines.** Certains cadrages en gros plan sont trop serrés pour le grand cristal du port « solitaire ». Beaucoup de facettes restent noires (des parois de gradins qui reflètent l'horizon sombre).
+Une planche de seize graines montrait trois défauts. Seule la planche les révélait, aucune image isolée.
+
+- **Des faces noires, piquées de points.** La distance au cristal ignorait la paroi du gradin voisin : la marche la traversait et les normales devenaient du bruit. De plus, un rayon pris dans les gradins après trois rebonds rendait du noir, et le dépoli aléatoire des miroirs, sans anticrénelage temporel pour le moyenner, faisait du grain. Corrigés tous les trois, les gradins montrent enfin leurs couleurs.
+- **Un bain vide pendant la fonte.** La marée montait à 2,9 cm pour toutes les grappes, et l'affaissement enfonçait chaque cristal de 0,55 demi-côté. À t = 0,72, tout était englouti pour la plupart des graines. Désormais, la marée haute se règle sur la grappe, l'affaissement est plus doux (0,3 demi-côté, sur 5,6 s) et la remontée est lente au pied des cristaux. La fonte dure jusqu'à t ≈ 0,79.
+- **Une caméra sous le métal.** Au ras du bain, elle était à 1,3 cm sous une marée de 2,9 cm. Elle reste maintenant au-dessus de la marée haute (vérifié par un test), et le cadre suit la taille de la grappe.
+- **Des peaux en confettis.** Chaque plaque avait une couleur tirée au hasard. La peau est maintenant une seule pellicule en dégradé, fendue en grandes plaques.
+
+## Ce qui reste perfectible
+
 - **L'affaissement est un mouvement d'ensemble du cristal**, plus un coin qui tombe. Les gradins ne s'effondrent pas un à un.
-- **La peau d'oxyde garde une mosaïque régulière** dans les plans larges.
+- **Les reflets de gradins fins crènellent** (des escaliers de pixels), faute d'anticrénelage temporel ou de suréchantillonnage.
+- **Les restes de cristaux allongés**, très arrondis en fin de fonte, deviennent des gélules lisses.

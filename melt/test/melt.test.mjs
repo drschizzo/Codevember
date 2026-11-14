@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generate, MOODS, HABITS, OXIDES, CLUSTERS, FRAMINGS } from '../src/recipe.js';
-import { CYCLE, level, emerge, reach, rising, buildCluster, crystalsAt } from '../src/cycle.js';
+import { CYCLE, level, emerge, reach, rising, buildCluster, crystalsAt, tideFor } from '../src/cycle.js';
 import { cameraAt } from '../src/camera.js';
 
 test('recette déterministe, JSON, tous les choix tirés', () => {
@@ -49,10 +49,10 @@ function topOf(c, stretch = 1) {
 test('raccord : au début et à la fin de la boucle, le bain couvre tout', () => {
   for (let i = 0; i < 200; i++) {
     const R = generate(`r${i}`);
-    const cl = buildCluster(R.seed, CLUSTERS[R.cluster]);
+    const cl = buildCluster(R.seed, CLUSTERS[R.cluster]), C = tideFor(cl);
     for (const t of [0, 0.02, CYCLE.T0 - 1e-3, CYCLE.T3 + 0.03, 0.95, 0.999]) {
-      const L = level(t);
-      for (const c of crystalsAt(cl, t)) {
+      const L = level(t, C);
+      for (const c of crystalsAt(cl, t, C)) {
         const top = topOf(c, R.habit === 'allongee' ? 1 / 0.62 : 1);
         assert.ok(top < L - 0.02, `graine r${i}, t = ${t} : un cristal dépasse (${top.toFixed(2)} ≥ ${L})`);
         assert.equal(c.piece, null); assert.equal(c.drips.length, 0);
@@ -94,5 +94,26 @@ test('caméra : périodique et lente', () => {
       vmax = Math.max(vmax, Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]) * 2000 / R.loop.duration);
     }
     assert.ok(vmax < 1.5, `caméra trop rapide : ${vmax} cm/s`);
+  }
+});
+
+test('caméra : toujours au-dessus du métal, même à marée haute', () => {
+  for (let i = 0; i < 200; i++) {
+    const R = generate(`k${i}`);
+    const LH = tideFor(buildCluster(R.seed, CLUSTERS[R.cluster])).LH;
+    for (let k = 0; k < 100; k++) {
+      const y = cameraAt(R, k / 100).pos[1];
+      assert.ok(y > LH + 0.15, `graine k${i} (${R.framing}) : caméra à ${y.toFixed(2)} sous la marée haute ${LH.toFixed(2)}`);
+    }
+  }
+});
+
+test('marée de la grappe : juste au-dessus du plus haut cristal', () => {
+  for (let i = 0; i < 100; i++) {
+    const R = generate(`m${i}`), cl = buildCluster(R.seed, CLUSTERS[R.cluster]), C = tideFor(cl);
+    assert.ok(C.LH < 3.2 && C.LH > C.LL + 0.5);
+    // le bain ne reste pas haut et vide : à mi-remontée, au moins un cristal dépasse encore
+    const L = level((C.T2 + C.T3) / 2, C);
+    assert.ok(crystalsAt(cl, (C.T2 + C.T3) / 2, C).some((c) => c.y + c.s > L), `graine m${i} : tout est englouti à mi-fonte`);
   }
 });

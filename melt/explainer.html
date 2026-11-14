@@ -40,9 +40,9 @@
         <h2><span class="n">01</span>Une marée de métal découvre les cristaux, puis les reprend</h2>
         <span class="src">src/cycle.js · CYCLE, level(), emerge(), reach()</span>
         <p>Les cristaux de bismuth du commerce poussent dans un creuset qui refroidit. Pour les voir, on verse le métal encore liquide : les cristaux restent, à l’air, encore chauds, et s’oxydent en prenant leurs couleurs. Melt garde ce geste et en fait une boucle. La seule liberté prise avec la physique est le niveau du bain, qui descend et remonte comme une marée.</p>
-        <p>Le niveau \(L(t)\) est affine par morceaux sur la phase \(t \in [0, 1)\) de la boucle. Il reste haut à \(L_H = 2{,}9\) cm jusqu’à \(T_0 = 0{,}06\), descend jusqu’à \(L_L = 0{,}22\) cm à \(T_1 = 0{,}30\), reste bas jusqu’à \(T_2 = 0{,}60\), puis remonte jusqu’à \(L_H\) à \(T_3 = 0{,}86\). Les hauteurs sont mesurées depuis la croûte du fond. Sur la boucle de 40 s de la recette, la descente dure 9,6 s (0,28 cm/s), le bain reste bas 12 s et remonte en 10,4 s.</p>
-        <p>Parce que la marée est affine, chaque hauteur \(y\) a deux instants qui se calculent en une ligne : celui où elle sort du bain et celui où le métal la reprend,</p>
-        <div class="eq">\[ t_e(y) = T_0 + \frac{L_H - y}{L_H - L_L}\,(T_1 - T_0), \qquad t_r(y) = T_2 + \frac{y - L_L}{L_H - L_L}\,(T_3 - T_2), \]</div>
+        <p>Le niveau \(L(t)\) est défini par morceaux sur la phase \(t \in [0, 1)\) de la boucle. Il reste haut à \(L_H\) jusqu’à \(T_0 = 0{,}06\), descend en ligne droite jusqu’à \(L_L = 0{,}22\) cm à \(T_1 = 0{,}30\), reste bas jusqu’à \(T_2 = 0{,}60\), puis remonte jusqu’à \(L_H\) à \(T_3 = 0{,}86\). La remontée suit \(L_L + (L_H - L_L)\,x^{1{,}5}\), avec \(x = (t - T_2)/(T_3 - T_2)\) : lente au pied des cristaux, où la fonte a le plus à montrer, plus vive au-dessus d’eux, où il ne reste que les peaux. Les hauteurs sont mesurées depuis la croûte du fond. La marée haute \(L_H\) dépend de la grappe : 0,14 cm au-dessus de son plus haut cristal (<code>tideFor</code>). Avec la même marée pour toutes, taillée pour le plus grand cristal, une druse de petits cristaux était engloutie à mi-remontée et le bain restait vide jusqu’à la fin. Sur la boucle de 40 s de la recette, la descente dure 9,6 s, le bain reste bas 12 s et remonte en 10,4 s.</p>
+        <p>Chaque morceau de la marée s’inverse en une ligne, si bien que chaque hauteur \(y\) a deux instants qui se calculent en une ligne : celui où elle sort du bain et celui où le métal la reprend,</p>
+        <div class="eq">\[ t_e(y) = T_0 + \frac{L_H - y}{L_H - L_L}\,(T_1 - T_0), \qquad t_r(y) = T_2 + \Big(\frac{y - L_L}{L_H - L_L}\Big)^{2/3}(T_3 - T_2), \]</div>
         <p>bornés aux extrémités. Le haut des cristaux sort le premier et rentre le dernier. Il reste donc le plus longtemps à l’air, et c’est lui qui porte l’oxyde le plus épais : le dégradé de couleurs du pied vers le sommet découle de la marée. Le shader recalcule \(t_e(y)\) en chaque point touché avec les mêmes constantes, passées en uniformes.</p>
         <figure id="fig-tide" class="wide"><figcaption><b>La marée de <code>cycle.js</code>, importée telle quelle, et la grappe de la graine b1 tirée par <code>buildCluster</code>.</b> Le premier curseur fait avancer la boucle, le second choisit une hauteur. À gauche, le niveau \(L(t)\), la descente (bleu) et la remontée (rouge) ; le trait doré marque le temps que la hauteur choisie passe à l’air, de \(t_e\) à \(t_r\). À droite, la grappe vue de côté : le bain cache tout ce qui est sous sa ligne, et les cristaux s’affaissent pendant la remontée. Simplification : les cristaux sont dessinés en carrés de profil, sans leurs gradins, avec la couleur de l’oxyde à leur sommet.</figcaption></figure>
         <div class="note check"><b>Vérifié par un test</b><p>Le niveau est continu (aucun saut de plus de 0,01 cm entre deux des 4 000 instants testés), décroît pendant la descente et croît pendant la remontée. \(t_e\) décroît avec la hauteur et \(t_r\) croît : le métal sort et rentre dans l’ordre des hauteurs.</p></div>
@@ -94,7 +94,7 @@
         <span class="src">src/cycle.js · buildCluster(), crystalsAt()</span>
         <p>La fonte change aussi la pose des cristaux, et chaque événement a besoin d’une cause visible. Ils sont tous déclenchés par l’instant \(t_r\) où la ligne atteint une hauteur précise du cristal, de centre \(y_c\) et de demi-côté \(s\).</p>
         <ul>
-          <li><strong>L’affaissement.</strong> Quand la ligne atteint le pied, à \(y_c - 0{,}6\,s\), le cristal s’enfonce de \(0{,}55\,s\) et penche de 0,45 rad du côté qui cède, sur 0,09 boucle (3,6 s), avec un départ et une arrivée adoucis.</li>
+          <li><strong>L’affaissement.</strong> Quand la ligne atteint le pied, à \(y_c - 0{,}6\,s\), le cristal s’enfonce de \(0{,}3\,s\) et penche de 0,45 rad du côté qui cède, sur 0,14 boucle (5,6 s), avec un départ et une arrivée adoucis.</li>
           <li><strong>Le coin.</strong> À \(t_r(y_c) + 0{,}015\), un coin du gradin supérieur se détache. Le cristal garde une entaille, et la plaque tombe : elle part vers l’extérieur à 9 cm par boucle, descend de \(1400\,\tau^2\) cm (\(\tau\) en boucles) et tourne de 18 rad par boucle. Sur 40 s, cela fait 0,88 cm/s², environ 1 100 fois moins que la pesanteur : la chute est filmée environ 33 fois au ralenti. À l’impact, une ride part du point de chute pendant 0,07 boucle (2,8 s).</li>
           <li><strong>Les gouttes.</strong> Quatre par cristal, sur une face et à une hauteur tirées d’un flux de hasard propre au cristal. Chacune naît quand la ligne passe 0,5 cm sous elle, grossit en 1/14 de boucle, glisse de \(6\,s\) par boucle et se fond dans le bain en l’atteignant. Elles disparaissent avec le cristal quand il s’affaisse.</li>
           <li><strong>La peau.</strong> L’oxyde fond à 817 °C, le bismuth à 271 °C : quand le métal engloutit un cristal, sa pellicule d’oxyde reste et flotte. Quand la ligne dépasse \(y_c + 1{,}1\,s\), une peau carrée de rayon \(s\,(1{,}05 + 3{,}5\,a)\) s’étale sur le bain et s’arrondit, se fend en cellules de Voronoï de plus en plus grandes, d’épaisseur 90 à 320 nm (des plaques irisées), et s’efface en 0,16 boucle (6,4 s).</li>
@@ -110,7 +110,7 @@
         <p>Dans le prototype d’image, le shader calculait lui-même les instants de rupture, l’affaissement et les gouttes. La fonction de distance de la scène, appelée jusqu’à 200 fois par rebond et quatre fois de plus pour chaque normale, recalculait à chaque appel l’état de huit cristaux et de sept gouttes par cristal, avec leurs tirages au hasard. Ces valeurs sont pourtant les mêmes pour tous les pixels d’une image.</p>
         <p>La scène les calcule donc une fois par image, en JavaScript. <code>crystalsAt(grappe, t)</code> rend pour chaque cristal sa pose, l’entaille, la plaque qui tombe, ses gouttes, l’âge de sa peau et sa ride. Pour douze cristaux, l’appel prend environ 1,5 µs (mesuré en Node pour cette page). Le tout est rangé dans un tampon d’uniformes de 149 vec4, soit 2 384 octets : 11 pour l’en-tête (définition, caméra, temps, marée, fond et lueur du studio), 18 pour les six boîtes de lumière du studio, 36 pour douze cristaux, 24 pour les plaques, 48 pour les gouttes, 12 pour les peaux et les rides. Le shader ne fait plus que lire.</p>
         <p>Comme l’état ne dépend que de la recette et de \(t\), la même phase donne la même image : on peut reculer dans la boucle, exporter image par image ou accumuler plusieurs rendus d’un même instant. Les gouttes tirent leurs faces d’un générateur recréé à chaque image à partir de la graine du cristal, et restent donc les mêmes d’une image à l’autre. Rien n’est précalculé : la scène est prête dès qu’elle a sa recette.</p>
-        <p>La boucle se referme sous le bain. À \(t = 0\) et à la fin de la boucle, le niveau est \(L_H = 2{,}9\) cm et couvre tous les cristaux. Le bismuth liquide est opaque : ce qu’il couvre ne se voit pas. Les cristaux affaissés de la fin de boucle peuvent donc retrouver leur pose du début sous le miroir, pendant que le métal refroidit : ils repoussent, et à \(t = 1\) l’état est celui de \(t = 0\).</p>
+        <p>La boucle se referme sous le bain. À \(t = 0\) et à la fin de la boucle, le niveau est \(L_H\), juste au-dessus du plus haut cristal, et couvre tout. Le bismuth liquide est opaque : ce qu’il couvre ne se voit pas. Les cristaux affaissés de la fin de boucle peuvent donc retrouver leur pose du début sous le miroir, pendant que le métal refroidit : ils repoussent, et à \(t = 1\) l’état est celui de \(t = 0\).</p>
         <div class="note check"><b>Vérifié par un test</b><p>Pour 200 recettes, aux instants 0 ; 0,02 ; \(T_0 - 0{,}001\) ; \(T_3 + 0{,}03\) ; 0,95 et 0,999, chacun des huit coins de chaque cristal (étiré de \(1/0{,}62\) pour la trémie allongée, incliné selon sa pose) est au moins 0,02 cm sous le bain, et il n’y a ni plaque en chute ni goutte.</p></div>
       </section>
 
@@ -118,7 +118,7 @@
         <h2><span class="n">08</span>Un rayon ne visite que les cristaux qu’il croise</h2>
         <span class="src">src/scene/tracer.js · rayMask(), trace()</span>
         <p>L’image est un lancer de rayons dans un shader de calcul WebGPU. Chaque rayon avance par bonds de la taille de la distance à la surface la plus proche (la marche de sphère), se réfléchit sur le métal et repart vers le studio. Le prototype <code>proto/b0</code> évaluait à chaque pas les huit cristaux, leurs 56 gouttes et le bain, sur 200 pas et quatre rebonds, jusqu’à 60 cm. Il prenait environ 215 ms par passe en 1 280 × 800. La plupart des pixels voient pourtant le bain ou le fond du studio, loin de tout cristal.</p>
-        <p>La scène teste d’abord, pour chaque rayon, la sphère englobante de chaque cristal : rayon \(2s\) (\(3s\) pour la trémie allongée), agrandi pour contenir la plaque qui tombe et, de \(0{,}4\,s\), les gouttes. Les cristaux touchés forment un masque de bits (douze au plus), et la marche ne visite qu’eux, jusqu’à la sortie de la sphère la plus lointaine. Un rayon qui ne croise aucune sphère ne marche pas du tout : s’il descend, il touche le plan du bain en \(t = (L - y_0)/d_y\), sinon il lit le studio. Au bain, la normale est celle du plan, perturbée par la peau et les rides, sans les quatre évaluations de la scène d’une normale ordinaire. La marche fait au plus 160 pas de 0,7 fois la distance, sur trois rebonds. L’image prend environ 9 ms en 1 280 × 800, et chaque image est neuve : il n’y a pas d’accumulation.</p>
+        <p>La scène teste d’abord, pour chaque rayon, la sphère englobante de chaque cristal : rayon \(2s\) (\(3s\) pour la trémie allongée), agrandi pour contenir la plaque qui tombe et, de \(0{,}4\,s\), les gouttes. Les cristaux touchés forment un masque de bits (douze au plus), et la marche ne visite qu’eux, jusqu’à la sortie de la sphère la plus lointaine. Un rayon qui ne croise aucune sphère ne marche pas du tout : s’il descend, il touche le plan du bain en \(t = (L - y_0)/d_y\), sinon il lit le studio. Au bain, la normale est celle du plan, perturbée par la peau et les rides, sans les quatre évaluations de la scène d’une normale ordinaire. La marche fait au plus 160 pas de 0,7 fois la distance, sur trois rebonds. L’image prend environ 11 ms en 1 280 × 800, et chaque image est neuve : il n’y a pas d’accumulation.</p>
         <div class="note trap"><b>Une distance qui n’en est pas une</b><p>Le creux de la trémie, le maximum de deux distances, l’étirement de la variante allongée et l’entaille du coin donnent une fonction qui surestime parfois la vraie distance. Un rayon qui avance de toute la valeur peut alors traverser une marche. La scène n’avance que de 70 % de la valeur, avec un pas minimal de 0,008 mm pour ne pas stagner près des surfaces.</p></div>
       </section>
 
@@ -130,7 +130,7 @@
           <tbody>
             <tr><td>État de la grappe, <code>crystalsAt</code>, 12 cristaux (Node, mesuré pour cette page)</td><td>CPU</td><td class="num">≈ 1,5 µs</td></tr>
             <tr><td>Uniformes : 149 vec4 (caméra, marée, studio, cristaux, plaques, gouttes, peaux)</td><td>CPU → GPU</td><td class="num">2&#8239;384 octets</td></tr>
-            <tr><td>Lancer de rayons, 1&#8239;280 × 800, trois rebonds, 160 pas au plus, sphères englobantes</td><td>GPU</td><td class="num">≈ 9 ms</td></tr>
+            <tr><td>Lancer de rayons, 1&#8239;280 × 800, trois rebonds, 160 pas au plus, sphères englobantes</td><td>GPU</td><td class="num">≈ 11 ms</td></tr>
             <tr><td>Prototype <code>proto/b0</code>, même définition, sans sphères englobantes ni bain analytique, une passe</td><td>GPU</td><td class="num">≈ 215 ms</td></tr>
           </tbody>
         </table></div>
@@ -150,7 +150,7 @@
 
   <script type="module">
     import { demo, C, lerp, clamp, alpha, label, smooth } from '../home/explainer.js';
-    import { CYCLE, level, emerge, reach, rising, buildCluster, crystalsAt } from './src/cycle.js';
+    import { CYCLE, level, emerge, reach, rising, buildCluster, crystalsAt, tideFor } from './src/cycle.js';
     import { generate, OXIDES, CLUSTERS } from './src/recipe.js';
 
     const fr = (x, n = 2) => x.toFixed(n).replace('.', ',').replace('-', '−');
@@ -232,7 +232,7 @@
 
     // ── 01 · la marée ────────────────────────────────────────────────────
     {
-      const cl = buildCluster('b1', CLUSTERS.grappe);
+      const cl = buildCluster('b1', CLUSTERS.grappe), TC = tideFor(cl);
       demo('#fig-tide', {
         title: 'Le niveau du bain et le temps à l’air', aspect: 2.2,
         controls: [
@@ -247,14 +247,14 @@
           box(g, x1, top, W1, H);
           g.fillStyle = alpha(C.c2, .1); g.fillRect(X(CYCLE.T0), top + 1, X(CYCLE.T1) - X(CYCLE.T0), H - 1);
           g.fillStyle = alpha(C.c3, .1); g.fillRect(X(CYCLE.T2), top + 1, X(CYCLE.T3) - X(CYCLE.T2), H - 1);
-          const pts = []; for (let k = 0; k <= 400; k++) { const s = k / 400 * .9999; pts.push([X(s), Y(level(s))]); }
+          const pts = []; for (let k = 0; k <= 400; k++) { const s = k / 400 * .9999; pts.push([X(s), Y(level(s, TC))]); }
           line(g, pts, C.ink, 1.6);
-          const te = emerge(y), tr = reach(y);
+          const te = emerge(y, TC), tr = reach(y, TC);
           line(g, [[x1, Y(y)], [x1 + W1, Y(y)]], C.faint, 1, [3, 4]);
           line(g, [[X(te), Y(y)], [X(tr), Y(y)]], C.c1, 3);
           dot(g, X(te), Y(y), 4, C.c2); dot(g, X(tr), Y(y), 4, C.c3);
           line(g, [[X(t), top], [X(t), top + H]], alpha(C.ink, .45), 1);
-          dot(g, X(t), Y(level(t)), 4.5, C.ink);
+          dot(g, X(t), Y(level(t, TC)), 4.5, C.ink);
           for (const v of [0, .25, .5, .75, 1]) label(g, fr(v, 2), X(v), top + H + 16, { align: 'center', size: 10 });
           for (const v of [0, 1, 2, 3]) label(g, String(v), x1 - 6, Y(v) + 4, { align: 'right', size: 10 });
           label(g, 'L(t) (cm)', x1 + 6, top + 14, { size: 11 });
@@ -262,7 +262,7 @@
           label(g, 'remontée', X((CYCLE.T2 + CYCLE.T3) / 2), top + H - 8, { size: 10, color: C.c3, align: 'center' });
           label(g, 'à l’air', X((te + tr) / 2), Y(y) - 7, { size: 10, color: C.c1, align: 'center' });
           // droite : la grappe de profil
-          const L = level(t), st = crystalsAt(cl, t);
+          const L = level(t, TC), st = crystalsAt(cl, t, TC);
           const sc = H / YM, Xs = (x) => x2 + W2 / 2 + x * sc;
           box(g, x2, top, W2, H);
           g.save(); g.beginPath(); g.rect(x2 + 1, top + 1, W2 - 1, H - 1); g.clip();
@@ -479,7 +479,7 @@
           }
           const ck = CLK[d.s.type], id = `${ck}:${seed}`;
           if (id !== key) { key = id; cl = buildCluster(`b${seed}`, CLUSTERS[ck]); }
-          const t = d.s.t, L = level(t), st = crystalsAt(cl, t);
+          const TC = tideFor(cl), t = d.s.t, L = level(t, TC), st = crystalsAt(cl, t, TC);
           const gw = 40, pw = w - gw - 30, ph = h - 20, sc = Math.min(pw, ph) / 9.5, cx = 10 + pw / 2, cz = 10 + ph / 2;
           const P = (x, z) => [cx + x * sc, cz + z * sc];
           const gr = g.createLinearGradient(0, 10, 0, 10 + ph);

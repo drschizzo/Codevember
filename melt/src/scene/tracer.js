@@ -80,7 +80,16 @@ fn hopper(q0: vec3f, s: f32, round: f32, fill: f32, cav: f32) -> vec2f {
   let rim = s - max(abs(tt.x), abs(tt.y));
   let k = min(floor(rim / w), 7.0);
   let depth = k * w * 0.75 * (1.0 - fill); // (au plus ~0,55 du demi-côté ; la fonte comble les gradins)
-  let dcav = (n - (s - depth)) * select(1.0, 0.62, lng);
+  // (vraie distance : le fond du gradin, ou la paroi du gradin extérieur, plus
+  // haut, à côté — sans elle, la marche traverse les parois et les normales
+  // deviennent du bruit)
+  var dcav = n - (s - depth);
+  if (k > 0.5) {
+    let up = (k - 1.0) * w * 0.75 * (1.0 - fill);
+    let lat = rim - k * w;
+    dcav = min(dcav, length(vec2f(lat, max(n - (s - up), 0.0))));
+  }
+  dcav *= select(1.0, 0.62, lng);
   return vec2f(max(dbox, dcav), k);
 }
 
@@ -198,15 +207,19 @@ fn poolFilm(p: vec3f) -> f32 {
       let r = mix(max(abs(rl.x), abs(rl.y)), length(rel), smoothstep(0.0, 0.16, age));
       if (r < R0) {
         let warp = vec2f(noise3(vec3f(rel * 2.3, B.w)), noise3(vec3f(rel * 2.3, B.w + 7.0))) - 0.5;
-        let vo = voro((rel + warp * A.w * 0.5) / (A.w * (0.38 + 1.6 * age)), B.w);
-        if (vo.x >= 0.04 + 0.5 * smoothstep(0.02, 0.16, age)) {
+        let vo = voro((rel + warp * A.w * 0.5) / (A.w * (0.75 + 1.4 * age)), B.w);
+        if (vo.x >= 0.03 + 0.28 * smoothstep(0.02, 0.16, age)) {
           let fade = (1.0 - smoothstep(0.08, 0.16, age)) * (1.0 - smoothstep(0.8, 1.0, r / R0));
           let wr = noise3(vec3f(p.xz * 9.0, B.w));
-          th = mix(th, 90.0 + 160.0 * hash31(vec3f(vo.y, 1.0, B.w)) + 70.0 * wr, fade);
+          // (une seule peau, dont la couleur varie en dégradé — celle du cristal
+          // englouti —, fendue en grandes plaques : une teinte au hasard par
+          // plaque faisait des confettis)
+          let grad = noise3(vec3f(rel / A.w * 0.9, B.w + 4.0));
+          th = mix(th, 110.0 + 150.0 * grad + 18.0 * (hash31(vec3f(vo.y, 1.0, B.w)) - 0.5) + 25.0 * (wr - 0.5), fade);
           let e = 0.02;
           let gx = noise3(vec3f((p.xz + vec2f(e, 0.0)) * 9.0, B.w)) - wr;
           let gz = noise3(vec3f((p.xz + vec2f(0.0, e)) * 9.0, B.w)) - wr;
-          nn += fade * vec3f(-gx, 0.0, -gz) * 6.0;
+          nn += fade * vec3f(-gx, 0.0, -gz) * 3.5;
         }
       }
     }
@@ -247,12 +260,17 @@ fn trace(ro0: vec3f, rd0: vec3f) -> vec3f {
     MASK = rayMask(ro, rd, &tEnd);
     var hit = false; var mat = -3.0; var t = 0.002;
     if (MASK != 0u) {
+      var hb = vec2f(1e9, 0.0); var tb = t;
       for (var i = 0; i < 160; i++) {
         let h = scene(ro + rd * t);
         if (h.x < 0.0006 * t + 0.0005) { hit = true; mat = h.y; break; }
+        if (h.x < hb.x) { hb = h; tb = t; }
         t += max(h.x * 0.7, 0.0008);
         if (t > tEnd) { break; }
       }
+      // (marche épuisée le long d'une paroi de gradin : le point le plus proche
+      // est la surface ; le compter comme « rien touché » faisait des points de lumière)
+      if (!hit && t <= tEnd && hb.x < 0.02) { hit = true; mat = hb.y; t = tb; }
     }
     if (!hit) {
       // au-delà des cristaux : le bain (un plan) ou le studio
@@ -263,7 +281,7 @@ fn trace(ro0: vec3f, rd0: vec3f) -> vec3f {
     var n = vec3f(0.0, 1.0, 0.0);
     if (MASK != 0u && abs(p.y - Lv) > 0.004) { n = nrm(p); }
     var cosi = clamp(-dot(rd, n), 0.0, 1.0);
-    var R = vec3f(0.62); var rough = 0.01;
+    var R = vec3f(0.62);
     if (mat >= 0.0) {
       let i = i32(floor(mat / 10.0)); let k = mat - f32(i) * 10.0;
       let B = u.cr[3 * i + 1];
@@ -275,23 +293,21 @@ fn trace(ro0: vec3f, rd0: vec3f) -> vec3f {
       th += u.tide.y * 220.0 * exp(-max(p.y - Lv, 0.0) / 0.9);
       let mp = u.tide.y * exp(-max(p.y - Lv, 0.0) / 0.55);
       R = mix(filmRGB(max(th, 0.0), cosi), filmRGB(8.0, cosi), smoothstep(0.45, 0.8, mp));
-      rough = mix(0.025, 0.004, smoothstep(0.45, 0.8, mp));
     } else if (mat < -1.5) {
-      R = filmRGB(6.0, cosi); rough = 0.002;
+      R = filmRGB(6.0, cosi);
     } else {
       let th = poolFilm(p);
       n = normalize(n + (NOUT - vec3f(0.0, 1.0, 0.0)));
       cosi = clamp(-dot(rd, n), 0.0, 1.0);
       R = filmRGB(th, cosi);
-      rough = select(0.004, 0.02, th > 40.0);
     }
     // réflexion légèrement dépolie (décalage par pixel et par image, moyenné par l'anticrénelage)
+    // (miroir net : sans anticrénelage temporel, un dépoli aléatoire n'est que du bruit)
     var r = reflect(rd, n);
-    let jit = vec3f(hash31(p * 91.7 + u.res.z), hash31(p * 53.1 + u.res.w), hash31(p * 17.3 + u.res.z + u.res.w)) - 0.5;
-    r = normalize(r + rough * jit);
-    if (dot(r, n) < 0.0) { r = reflect(r, n); }
     T *= R;
     ro = p + n * 0.003; rd = r;
+    // (un rayon encore pris dans les gradins au dernier rebond voit le studio, pas le noir)
+    if (b == 2) { L += T * env(rd); }
   }
   return L;
 }
