@@ -184,7 +184,7 @@ fn emerge(y: f32) -> f32 { let T = u.times; return T.x + clamp((u.tide.z - y) / 
 // le bain : peau d'oxyde des cristaux engloutis (épaisseur), rides des chutes (normale)
 var<private> NOUT: vec3f;
 fn poolFilm(p: vec3f) -> f32 {
-  var th = 10.0 + 14.0 * noise3(p * 0.8 + vec3f(0.0, 0.0, u.st.x * 3.0));
+  var th = 10.0 + 14.0 * noise3(p * 0.8 + 0.5 * vec3f(cos(6.2831853 * u.st.x), 0.0, sin(6.2831853 * u.st.x)));
   var nn = vec3f(0.0, 1.0, 0.0);
   let n = i32(u.st.w);
   for (var i = 0; i < n; i++) {
