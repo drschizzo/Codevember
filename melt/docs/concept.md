@@ -94,6 +94,10 @@ Les anciennes fontes dessinées (arrondi au-dessus de la ligne, coin qui tombe, 
 
 L'utilisateur : « les derniers résidus disparaissent de manière trop abrupte ». Les derniers restes d'un cristal (des arêtes, le cadre d'une trémie creuse) n'ont qu'une ou deux cellules d'épaisseur : tout leur métal fond au même pas, en l'air, d'une image à l'autre. Un tel squelette ne tient pas : quand il reste moins de 20 % du solide qui a été hors du bain, la simulation le fait s'effondrer dans le bain (4 cm par unité de u, soit environ une seconde et demie). Il disparaît en s'enfonçant, comme englouti, et le bain se ride à cet instant ; la peau d'oxyde s'étale ensuite depuis là.
 
+## Les peaux qui s'éteignaient d'un coup (14 novembre)
+
+L'utilisateur : des motifs « qui réduisent progressivement et puis en une frame ne sont plus là ». Les plaques de la peau d'oxyde rapetissaient, mais pas jusqu'à zéro : la vie de la peau (0,14 boucle) finissait alors que de grandes plaques restaient visibles. Désormais, la fente entre les plaques dépasse le plus grand écart possible entre deux germes de Voronoï avant 0,12 : tout a disparu avant la fin de la vie. Pour que le mouvement ait une cause, le bain, chauffé par le bas, s'écoule en surface du centre vers les bords et emporte la peau. Ses plis partent avec elle.
+
 ## Ce qui reste perfectible
 
 - **Le tassement et l'effondrement** regardent le cristal entier, pas ses morceaux détachés un à un.
