@@ -16,7 +16,7 @@ export const RENDER_DEFAULTS = {
   bloom: true, bloomStrength: 0.06, bloomRadius: 0.4, bloomThreshold: 1.6, hiCap: 4, roughFloor: 0.08,
   ao: true, aoStrength: 0.9, aoRadius: 0.4,
   ssr: false, ssrIntensity: 0.7, ssrQuality: 0.5, ssrDistance: 2.5, ssrThickness: 0.05, ssrRes: 0.5, ssrBlur: 2, nestEnv: 0.45, crystalThick: 1,
-  dof: true, focus: 1, focusRange: 0.45, bokeh: 1.4, // (point sur la frange, qui glisse vers la grande vague : voir stage.trackAt)
+  dof: true, focus: 1, focusRange: 0.7, bokeh: 1.0, // (point sur la frange, qui glisse vers la grande vague : voir stage.trackAt ; flou modéré — à 1,4, la scène se lisait en maquette)
   motionBlur: 0.3, ca: 0.1, grain: 0.03,
   streaks: 0.08, streakLen: 4, halation: 0.25, dirt: 0.3,
   dynRes: false, maxFps: 0, // (résolution dynamique, cadence plafonnée : voir app/mobile.js)

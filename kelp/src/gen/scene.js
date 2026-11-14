@@ -446,11 +446,11 @@ export function runJob(job, onProgress = null) {
   if (job.what === 'sea-hero') {
     // le profil fin de la caméra (60 images / s : un ressaut avance de 6 cm
     // par image ; la ligne d'eau sur le dôme)
-    return simulateSea({ T, x0: SEA_X[0], x1: SEA_X[1], dx: 0.025, profileFn: (x) => profZ(x, R.camera.z), waves: R.sea.waves, manning: R.sea.manning, fps: 60, loops: 2 }, onProgress);
+    return simulateSea({ T, x0: SEA_X[0], x1: SEA_X[1], dx: 0.025, profileFn: (x) => profZ(x, R.camera.z), waves: R.sea.waves, swell: R.sea.swell, manning: R.sea.manning, fps: 60, loops: 2 }, onProgress);
   }
   if (job.what === 'sea-bundle') {
     // une tranche du faisceau de profils le long de la côte (5 cm, 30 images / s)
-    return simulateBundle({ T, x0: SEA_X[0], x1: SEA_X[1], dx: 0.05, cfl: 0.8, profileZ: profZ, zs: job.zs, waves: R.sea.waves, manning: R.sea.manning, fps: 30, loops: 2 }, onProgress);
+    return simulateBundle({ T, x0: SEA_X[0], x1: SEA_X[1], dx: 0.05, cfl: 0.8, profileZ: profZ, zs: job.zs, waves: R.sea.waves, swell: R.sea.swell, manning: R.sea.manning, fps: 30, loops: 2 }, onProgress);
   }
   if (job.what === 'rock') {
     const pools = makePools(R.seed, { x0: -1.6, x1: 3, z0: -8, z1: 2 }, R.rock.pools);
