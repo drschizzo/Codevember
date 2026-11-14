@@ -3,17 +3,22 @@
 //
 // Pas d'InstancedMesh (three.js compile un shader par InstancedMesh) : un
 // Mesh ordinaire dont la géométrie porte, par instance, des attributs fixes
-// (point d'insertion, repère de la tige, rang, tirages) dans un seul tampon
-// entrelacé. Ce qui bouge — l'ouverture o de chaque tige, son eau w, son eau
-// de surface s, l'eau de chaque sporophyte — tient dans un tableau
-// d'uniformes (un vec4 par tige ou par sporophyte) mis à jour à chaque image ;
-// la pose de chaque feuille est calculée dans le vertex shader par la même
-// formule que pose.js (leafPoint), ainsi que celle de l'image précédente (les
-// vecteurs vitesse de l'anticrénelage temporel).
+// (point d'insertion, repère de la tige, rang, tirages, pied de la tige et
+// son seuil de naissance) dans un seul tampon entrelacé. Ce qui bouge —
+// l'ouverture o de chaque tige, sa croissance g, son eau w, son eau de
+// surface s — ne dépend que du champ au pied de la tige : chaque sommet le
+// lit dans la texture du champ (B flouté, W, eau de surface), sans tableau
+// d'uniformes, donc sans limite au nombre de tiges. La pose de chaque
+// feuille est calculée dans le vertex shader par la même formule que pose.js
+// (leafPoint), ainsi que celle de l'image précédente (texture du champ
+// précédent : les vecteurs vitesse de l'anticrénelage temporel).
+//
+// Trois niveaux de détail (gen/build.js, d'après la trajectoire de la
+// caméra) partagent le même matériau : seul le gabarit change.
 import * as THREE from 'three/webgpu';
 import {
   Fn, attribute, positionLocal, normalLocal, positionPrevious, positionGeometry, normalGeometry, vec2, vec3, vec4, float, int, dot, normalize, mix, smoothstep,
-  abs, uniform, uniformArray, texture, clamp, atan, floor, hash, pow, sin, cos, max as tmax, min as tmin, select, sign, cross, normalViewGeometry, length, exp, fract,
+  abs, uniform, texture, clamp, atan, floor, hash, pow, sin, cos, max as tmax, min as tmin, select, sign, cross, normalViewGeometry, length, exp, fract,
 } from 'three/tsl';
 import { isLite, stableVelocity, noise, worley, perturb } from '../../../shared/scene/materials.js';
 import { FAMILIES } from '../families.js';
@@ -111,27 +116,37 @@ export function createMossLook() {
   };
 }
 
-// lecture de l'état : ST = (o ouverture, g croissance, s eau de surface, w eau)
-// par tige, (ws eau de la soie, g de sa tige, 0, 0) par sporophyte ; STP : les
-// mêmes à l'image précédente
-const stateOf = (ST, i) => ST.element(int(i.add(0.5)));
+// état d'une tige dont le pied est en (x, z), de seuil de naissance b :
+// (o ouverture, g croissance, s eau de surface, w eau), lu dans la texture du
+// champ (x B, y W, z B flouté, w eau de surface ; stage.js) — tex : FIELD.tex
+// pour l'image courante, FIELD.prev pour la précédente. La tige sort quand
+// la mousse locale passe son seuil (le front avance tige par tige).
+const stateAt = (FIELD, tex, x, z, b) => {
+  const f = texture(tex, vec2(x, z).div(FIELD.E.mul(2)).add(0.5)).level(0);
+  // (B brut ou moyenné : une fissure étroite garde ses tiges entières au sec)
+  return vec4(sst(0.2, 0.65, f.y), smoothstep(b, b.add(0.22), tmax(f.z, f.x)), f.w, f.y);
+};
+// pénombre de la canopée : au fond d'un coussin serré, une feuille du bas
+// d'une tige (rang ρ faible), surtout près de sa base, ne voit plus le ciel
+const canopy = (rho, s, crowd) => mix(float(1), mix(float(0.14), float(1), pow(rho.clamp(0, 1), 0.85)).mul(mix(float(0.55), float(1), s)), crowd);
 // une tige pousse et se rétracte autour de son pied
 const grow = (p, base, g) => base.add(p.sub(base).mul(g));
 // points de la moyenne de la mousse (cm) : centre et deux couronnes
 export const BLUR_TAPS = [[0, 0], [0.3, 0], [-0.3, 0], [0, 0.3], [0, -0.3], [0.45, 0.45], [-0.45, 0.45], [0.45, -0.45], [-0.45, -0.45]];
 
 // ── Feuilles ─────────────────────────────────────────────────────────────────
-function leafPosition(full, F, ST, STP) {
+function leafPosition(full, F, FIELD) {
   return Fn(() => {
     const i0 = attribute('i0', 'vec4'), i1 = attribute('i1', 'vec4'), i2 = attribute('i2', 'vec4'), i3 = attribute('i3', 'vec4'), i4 = attribute('i4', 'vec4');
     const lp = attribute('lp', 'vec4');
-    const st = stateOf(ST, i2.x), sp = stateOf(STP, i2.x);
+    const st = stateAt(FIELD, FIELD.tex, i4.y, i4.z, i2.x);
     const G = { L: i0.w, W: i2.z, h: F.thick, stemR: i3.x, twist: i3.y };
     const P = leafPose(lp, leafOpen(st.x, i2.y), i3.z, i2.y, G, F);
     const base = vec3(i0.x, i4.x, i0.z);
     const world = (p, g) => grow(qrot(i1, p).add(i0.xyz), base, g);
     if (full) {
       if (!isLite()) {
+        const sp = stateAt(FIELD, FIELD.prev, i4.y, i4.z, i2.x);
         positionPrevious.assign(world(leafPose(lp, leafOpen(sp.x, i2.y), i3.z, i2.y, G, F).pos, sp.y));
       }
       normalLocal.assign(normalize(qrot(i1, P.nrm)));
@@ -140,12 +155,12 @@ function leafPosition(full, F, ST, STP) {
   })();
 }
 
-function leafMaterial(U, F, ST, STP) {
+function leafMaterial(U, F, FIELD) {
   const m = new THREE.MeshSSSNodeMaterial({ side: THREE.FrontSide });
-  m.positionNode = leafPosition(true, F, ST, STP);
-  m.castShadowPositionNode = leafPosition(false, F, ST, STP);
-  const lp = attribute('lp', 'vec4'), i2 = attribute('i2', 'vec4'), i3 = attribute('i3', 'vec4');
-  const st = stateOf(ST, i2.x);
+  m.positionNode = leafPosition(true, F, FIELD);
+  m.castShadowPositionNode = leafPosition(false, F, FIELD);
+  const lp = attribute('lp', 'vec4'), i2 = attribute('i2', 'vec4'), i3 = attribute('i3', 'vec4'), i4 = attribute('i4', 'vec4');
+  const st = stateAt(FIELD, FIELD.tex, i4.y, i4.z, i2.x);
   const isHair = lp.w.lessThan(-0.5).select(float(1), float(0));
   const s = lp.x.clamp(0, 1), y = lp.y; // (y : en demi-largeurs, la nervure en 0)
   const front = lp.z.mul(0.5).add(0.5);
@@ -160,8 +175,9 @@ function leafMaterial(U, F, ST, STP) {
   let col = mix(U.dry, U.wet, wet);
   col = mix(col, mix(U.young, U.wet, 0.3), sst(0.55, 1.0, rho).mul(0.55).mul(wet.mul(0.6).add(0.4)));
   col = mix(col, U.old, old.mul(0.85));
-  // la jeune pousse, au front, est d'un vert plus clair et plus tendre
-  col = mix(col, U.young.mul(1.15), young.mul(wet).mul(0.7));
+  // la jeune pousse, au front, est d'un vert plus clair et plus tendre (une
+  // tige qui se retire à la sécheresse, moins mouillée, ne l'est pas)
+  col = mix(col, U.young.mul(1.15), young.mul(sst(0.45, 0.85, st.w)).mul(0.7));
   // (vers la base, la feuille pâlit ; la nervure est plus jaune)
   col = col.mul(mix(float(1.18), float(0.95), sst(0, 0.5, s)));
   col = mix(col, col.mul(vec3(1.25, 1.2, 0.75)), costa.mul(0.6));
@@ -170,20 +186,24 @@ function leafMaterial(U, F, ST, STP) {
   col = mix(col, mix(U.hair, U.hair.mul(0.55), wet), isHair);
   // mouillé : plus sombre (le film d'eau)
   col = col.mul(film.mul(-0.18).add(1));
-  m.colorNode = col;
+  // (le fond du coussin : pénombre ; le poil, au sommet, y échappe)
+  const deep = mix(canopy(rho, s, i4.w), float(1), isHair);
+  m.colorNode = col.mul(deep);
+  m.aoNode = deep;
   m.roughnessNode = mix(mix(float(0.62), float(0.42), front), float(0.12), film.mul(U.gloss)).mul(isHair.mul(-0.5).add(1));
   m.metalnessNode = float(0);
-  m.specularIntensityNode = mix(float(0.3), float(0.55), film);
-  m.clearcoatNode = film.mul(0.35).mul(U.gloss);
-  m.clearcoatRoughnessNode = float(0.12);
+  m.specularIntensityNode = mix(float(0.3), float(0.55), film).mul(deep);
+  // (le reflet du ciel sur le film d'eau : seulement pour les feuilles qui le voient)
+  m.clearcoatNode = film.mul(0.22).mul(U.gloss).mul(deep.mul(deep));
+  m.clearcoatRoughnessNode = float(0.2);
   // sec : la surface papilleuse a un lustre de velours
-  m.sheenNode = mix(vec3(0.16, 0.15, 0.1), vec3(0.02), wet).mul(isHair.oneMinus());
+  m.sheenNode = mix(vec3(0.16, 0.15, 0.1), vec3(0.02), wet).mul(isHair.oneMinus()).mul(deep);
   m.sheenRoughnessNode = float(0.5);
   const H = costa.mul(front.mul(2).sub(1)).mul(0.8).add(rows.mul(0.15)).mul(U.relief).mul(rim.oneMinus());
   m.normalNode = perturb(H, normalViewGeometry);
   // lumière transmise : la feuille mouillée est translucide (une assise de
   // cellules gorgées d'eau), la feuille sèche presque opaque
-  m.thicknessColorNode = U.trans.mul(U.translucency).mul(mix(float(0.05), float(0.32), wet)).mul(costa.mul(-0.5).add(1)).mul(rim.oneMinus()).mul(old.mul(-0.7).add(1)).add(U.hair.mul(isHair).mul(0.15));
+  m.thicknessColorNode = U.trans.mul(U.translucency).mul(mix(float(0.05), float(0.32), wet)).mul(deep).mul(costa.mul(-0.5).add(1)).mul(rim.oneMinus()).mul(old.mul(-0.7).add(1)).add(U.hair.mul(isHair).mul(0.15));
   m.thicknessDistortionNode = float(0.2);
   m.thicknessAmbientNode = float(0.02);
   m.thicknessAttenuationNode = float(1.0);
@@ -194,10 +214,10 @@ function leafMaterial(U, F, ST, STP) {
 }
 
 // ── Perles d'eau (au bout des feuilles du haut) ──────────────────────────────
-function beadPosition(full, F, ST, STP) {
+function beadPosition(full, F, FIELD) {
   return Fn(() => {
     const i0 = attribute('i0', 'vec4'), i1 = attribute('i1', 'vec4'), i2 = attribute('i2', 'vec4'), i3 = attribute('i3', 'vec4'), i4 = attribute('i4', 'vec4');
-    const st = stateOf(ST, i2.x), stp = stateOf(STP, i2.x);
+    const st = stateAt(FIELD, FIELD.tex, i4.y, i4.z, i2.x), stp = stateAt(FIELD, FIELD.prev, i4.y, i4.z, i2.x);
     const base = vec3(i0.x, i4.x, i0.z);
     const G = { L: i0.w, W: i2.z, h: F.thick, stemR: i3.x, twist: i3.y };
     // une perle sur une feuille sur trois du haut ; au bout du poil s'il y en a
@@ -221,10 +241,10 @@ function beadPosition(full, F, ST, STP) {
     return p;
   })();
 }
-function beadMaterial(F, ST, STP) {
+function beadMaterial(F, FIELD) {
   const m = new THREE.MeshPhysicalNodeMaterial();
-  m.positionNode = beadPosition(true, F, ST, STP);
-  m.castShadowPositionNode = beadPosition(false, F, ST, STP);
+  m.positionNode = beadPosition(true, F, FIELD);
+  m.castShadowPositionNode = beadPosition(false, F, FIELD);
   m.color = new THREE.Color(1, 1, 1);
   m.roughness = 0.03;
   m.metalness = 0;
@@ -296,23 +316,25 @@ function sporPose(S, ws, full) {
   p = rY(p); n = rY(n);
   return { pos: qrot(s1, p).add(s0.xyz), nrm: qrot(s1, n) };
 }
-function sporPosition(full, S, ST, STP) {
+// (sporophyte : s2.x le seuil de naissance de sa tige, s3 = (tige, pied y, x, z) ;
+// la soie suit l'eau w de la tige)
+function sporPosition(full, S, FIELD) {
   return Fn(() => {
     const s0 = attribute('s0', 'vec4'), s2 = attribute('s2', 'vec4'), s3 = attribute('s3', 'vec4');
-    const st = stateOf(ST, s2.x), sp = stateOf(STP, s2.x);
+    const st = stateAt(FIELD, FIELD.tex, s3.z, s3.w, s2.x);
     const base = vec3(s0.x, s3.y, s0.z);
-    const P = sporPose(S, st.x, full);
+    const P = sporPose(S, st.w, full);
     if (full) {
-      if (!isLite()) positionPrevious.assign(grow(sporPose(S, sp.x, false).pos, base, sp.y));
+      if (!isLite()) { const sp = stateAt(FIELD, FIELD.prev, s3.z, s3.w, s2.x); positionPrevious.assign(grow(sporPose(S, sp.w, false).pos, base, sp.y)); }
       normalLocal.assign(normalize(P.nrm));
     }
     return grow(P.pos, base, st.y);
   })();
 }
-function sporMaterial(U, S, ST, STP) {
+function sporMaterial(U, S, FIELD) {
   const m = new THREE.MeshPhysicalNodeMaterial();
-  m.positionNode = sporPosition(true, S, ST, STP);
-  m.castShadowPositionNode = sporPosition(false, S, ST, STP);
+  m.positionNode = sporPosition(true, S, FIELD);
+  m.castShadowPositionNode = sporPosition(false, S, FIELD);
   const sp = attribute('sp', 'vec4'), s2 = attribute('s2', 'vec4');
   const part = sp.x;
   const isSeta = part.lessThan(0.5).select(float(1), float(0));
@@ -339,17 +361,20 @@ function sporMaterial(U, S, ST, STP) {
 }
 
 // ── Tiges ────────────────────────────────────────────────────────────────────
-function stemMaterial(U, ST, STP) {
+function stemMaterial(U, FIELD) {
   const m = new THREE.MeshPhysicalNodeMaterial();
-  const t = attribute('surf', 'vec4').x, sid = attribute('sid', 'float'), sb = attribute('sbase', 'vec3');
-  const st = stateOf(ST, sid);
+  const t = attribute('surf', 'vec4').x, sbc = attribute('sb', 'vec2'), sb = attribute('sbase', 'vec3');
+  const st = stateAt(FIELD, FIELD.tex, sb.x, sb.z, sbc.x);
   const pos = (g) => grow(positionLocal, sb, g);
-  m.positionNode = Fn(() => { if (!isLite()) positionPrevious.assign(grow(positionLocal, sb, stateOf(STP, sid).y)); return pos(st.y); })();
+  m.positionNode = Fn(() => { if (!isLite()) positionPrevious.assign(grow(positionLocal, sb, stateAt(FIELD, FIELD.prev, sb.x, sb.z, sbc.x).y)); return pos(st.y); })();
   m.castShadowPositionNode = pos(st.y);
   const wet = sst(0.08, 0.6, st.w);
   // tomentum de rhizoïdes roux à la base, tige brune, verte sous le bourgeon
   const base = mix(vec3(0.24, 0.1, 0.05), U.old.mul(1.1), sst(0.05, 0.3, t));
-  m.colorNode = mix(base, mix(U.dry, U.wet, wet).mul(0.8), sst(0.6, 1, t).mul(0.6)).mul(noise(positionGeometry.mul(vec3(40, 6, 40))).mul(0.1).add(1)).mul(wet.mul(-0.15).add(1));
+  // (une tige est surtout au fond du coussin : dans la pénombre des rosettes)
+  const deep = mix(float(1), mix(float(0.12), float(0.85), t.mul(t)), sbc.y);
+  m.colorNode = mix(base, mix(U.dry, U.wet, wet).mul(0.8), sst(0.6, 1, t).mul(0.6)).mul(noise(positionGeometry.mul(vec3(40, 6, 40))).mul(0.1).add(1)).mul(wet.mul(-0.15).add(1)).mul(deep);
+  m.aoNode = deep;
   m.roughnessNode = mix(float(0.75), float(0.4), wet);
   m.sheenNode = vec3(0.3, 0.2, 0.12).mul(sst(0.3, 0.0, t));
   m.sheenRoughnessNode = float(0.6);
@@ -357,59 +382,35 @@ function stemMaterial(U, ST, STP) {
   return m;
 }
 
-// rosettes peintes sur la peau du coussin (deux grilles décalées) : chaque
-// cellule porte une étoile de n feuilles effilées, orientée au hasard —
-// la densité d'un vrai coussin entre les tiges modélisées
-function starLayer(p, cell, n, seed) {
-  const q = p.xz.div(cell).add(seed);
-  const id = floor(q), f = q.sub(id).sub(0.5);
-  const h1 = fract(sin(id.x.mul(127.1).add(id.y.mul(311.7)).add(seed)).mul(43758.55)), h2 = fract(sin(id.x.mul(269.5).add(id.y.mul(183.3)).add(seed)).mul(23421.63));
-  const c = f.sub(vec2(h1, h2).sub(0.5).mul(0.35));
-  const r = length(c).mul(2.2), a = atan(c.y, c.x).add(h1.mul(6.283));
-  const spoke = pow(abs(cos(a.mul(n * 0.5))), float(14).mul(r.add(0.25)));
-  const leaf = spoke.mul(sst(1.0, 0.25, r)).mul(sst(0.0, 0.08, r));
-  return { leaf, r, h: h1 };
-}
-
-// ── Le feutre : rhizoïdes roux, débris de feuilles mortes, grains de terre ──
+// ── La natte du coussin : rhizoïdes, feuilles mortes, terre ──
+// Une fine natte sombre posée sur la roche, sous les tiges (gen/colony.js,
+// th) : elle ne se voit qu'entre les rosettes, au fond, dans leur ombre. Le
+// volume du coussin est porté par les tiges seules.
 function turfMaterial(U, FIELD) {
   const m = new THREE.MeshPhysicalNodeMaterial();
   const p = positionGeometry;
-  const fieldAt = (q) => texture(FIELD.tex, q.xz.div(FIELD.E.mul(2)).add(0.5)).level(0);
-  // (le bord du coussin s'arrondit à l'échelle du coussin : la mousse moyennée
-  // sur un demi-centimètre, comme pour les tiges — stage.js, blurB)
-  const blurB = (tex, q) => {
-    let acc = float(0);
-    for (const [a, b] of BLUR_TAPS) acc = acc.add(texture(tex, q.xz.add(vec2(a, b)).div(FIELD.E.mul(2)).add(0.5)).level(0).x);
-    return acc.div(BLUR_TAPS.length);
-  };
+  const fieldAt = (q, tex) => texture(tex, q.xz.div(FIELD.E.mul(2)).add(0.5)).level(0);
+  // (le fond monte avec la mousse — B brut ou moyenné, comme les tiges ; il
+  // reste sous la roche tant qu'il n'y a pas de quoi le couvrir)
   const th = attribute('th', 'float');
-  const lift = (q, tex) => q.add(vec3(0, th.mul(sst(0.04, 0.9, blurB(tex, q))), 0));
+  // (même loi que la naissance des tiges ; il reste sous la roche tant que
+  // presque aucune n'est sortie, et n'existe que sous des tiges — th)
+  const lift = (q, tex) => { const f = fieldAt(q, tex); return q.add(vec3(0, th.mul(sst(0.1, 0.8, tmax(f.z, f.x))), 0)); };
   m.positionNode = Fn(() => { if (!isLite()) positionPrevious.assign(lift(positionLocal, FIELD.prev)); return lift(positionLocal, FIELD.tex); })();
   m.castShadowPositionNode = lift(positionLocal, FIELD.tex);
-  const fw = fieldAt(p);
-  const fib = worley(p.mul(vec3(38, 60, 38)));
+  const fw = fieldAt(p, FIELD.tex);
+  const grain = worley(p.mul(vec3(30, 30, 30)));
+  const bits = sst(0.3, 0.05, grain.x);
   const flakes = sst(0.18, 0.05, worley(p.mul(14).add(vec3(1.7, 0, 3.1))).x);
-  const strands = sst(0.04, 0.0, fib.y);
-  // l'intérieur d'un coussin : des feuilles serrées dans l'ombre (étoiles
-  // sombres), quelques débris bruns ; le bas (rhizoïdes) roux
-  // (même mourante, c'est de la mousse : des tiges serrées, brunies, pas un carton)
-  const stars = sst(0.35, 0.05, worley(p.mul(vec3(26, 26, 26))).x);
-  const stars2 = sst(0.3, 0.05, worley(p.mul(vec3(55, 55, 55)).add(vec3(3.3, 1, 7))).x);
-  const dead = mix(U.old.mul(0.7), U.dry.mul(0.5), sst(0.2, 0.7, fw.x));
   const live = sst(0.1, 0.6, fw.y).mul(sst(0.06, 0.4, fw.x));
-  const S1 = starLayer(p, float(0.16), 8, 0.0), S2 = starLayer(p, float(0.11), 7, 17.3), S3 = starLayer(p, float(0.075), 6, 41.1);
-  const leaves = tmax(tmax(S1.leaf, S2.leaf.mul(0.8)), S3.leaf.mul(0.6));
-  const base = mix(dead, U.wet.mul(0.4), live).mul(stars.mul(0.3).add(stars2.mul(0.2)).add(0.3));
-  const leafCol = mix(mix(U.dry.mul(0.85), U.old, 0.3), mix(U.wet, U.young, S1.h.mul(0.5)), live);
-  let col = mix(base, leafCol, leaves.mul(0.9));
-  col = mix(col, U.old.mul(0.5), flakes.mul(0.25));
+  // brun roux des rhizoïdes et des feuilles mortes ; un vert éteint là où la
+  // mousse est vivante — trois fois plus sombre que les rosettes
+  const dead = mix(vec3(0.045, 0.03, 0.018), U.old.mul(0.22), bits);
+  let col = mix(dead, mix(U.wet, U.old, 0.5).mul(0.16), live.mul(0.6));
+  col = mix(col, U.old.mul(0.25), flakes.mul(0.4));
   m.colorNode = col.mul(fw.y.mul(-0.3).add(1));
-  m.roughnessNode = mix(float(0.85), float(0.4), fw.y);
-  m.sheenRoughnessNode = float(0.5);
-  m.normalNode = perturb(leaves.mul(0.006).add(stars.mul(0.002)), normalViewGeometry);
-  // feuilles translucides à contre-jour
-  m.sheenNode = U.trans.mul(leaves).mul(live).mul(0.25);
+  m.roughnessNode = mix(float(0.9), float(0.55), fw.y);
+  m.normalNode = perturb(bits.mul(0.002).add(flakes.mul(0.0015)), normalViewGeometry);
   m.mrtNode = stableVelocity();
   return m;
 }
@@ -428,10 +429,10 @@ function instGeometry(tpl, attrs, inst, stride, count, keys) {
   return g;
 }
 
-// FIELD : { tex, prev (textures du champ B, W), E (demi-largeur) }
+// FIELD : { tex, prev (textures du champ : B, W, B flouté, eau de surface), E (demi-largeur) }
 export function createMoss(group, FIELD) {
   const U = createMossLook();
-  let meshes = [], mats = [], ST = null, STP = null, arr = null, arrP = null, n = 0, m = 0;
+  let meshes = [], mats = [];
   function clear() {
     for (const o of meshes) { group.remove(o); o.geometry.dispose(); }
     for (const x of mats) x.dispose();
@@ -440,11 +441,7 @@ export function createMoss(group, FIELD) {
   // data : sortie du worker (gen/build.js) ; R : recette
   function set(data, R) {
     clear();
-    const C = data.colony, fam = FAMILIES[R.family];
-    n = C.n; m = C.sporCount;
-    arr = Array.from({ length: Math.max(1, n + m) }, () => new THREE.Vector4());
-    arrP = Array.from({ length: Math.max(1, n + m) }, () => new THREE.Vector4());
-    ST = uniformArray(arr, 'vec4'); STP = uniformArray(arrP, 'vec4');
+    const C = data.colony, fam = FAMILIES[R.family], m = C.sporCount;
     const F = familyUniforms(fam);
     const add = (geo, mat, { cast = true, receive = true, own = true } = {}) => {
       const o = new THREE.Mesh(geo, mat);
@@ -453,30 +450,31 @@ export function createMoss(group, FIELD) {
       return o;
     };
     const LK = ['i0', 'i1', 'i2', 'i3', 'i4'];
-    // feuilles : gabarit fin près du gros plan, grossier ailleurs (même shader)
-    const lmat = leafMaterial(U, F, ST, STP);
-    add(instGeometry(data.leaf, { lp: data.leaf.lp }, C.leafNear, LEAF_STRIDE, C.nearCount, LK), lmat);
-    if (C.farCount) add(instGeometry(data.leafFar, { lp: data.leafFar.lp }, C.leafFar, LEAF_STRIDE, C.farCount, LK), lmat, { own: false });
-    // perles : une sphère par feuille proche (de rayon nul sur la plupart)
-    {
-      const sg = new THREE.IcosahedronGeometry(1, 2);
+    // feuilles : trois gabarits (gros plan, moyen, lointain), un seul shader
+    const lmat = leafMaterial(U, F, FIELD);
+    // (les feuilles lointaines ne portent pas d'ombre : trop petites pour la carte)
+    C.lods.forEach((L, lv) => { if (L.count) add(instGeometry(data.leaf[lv], { lp: data.leaf[lv].lp }, L.inst, LEAF_STRIDE, L.count, LK), lmat, { own: lv === 0, cast: lv < 2 }); });
+    if (!C.lods[0].count) mats.push(lmat);
+    // perles : une sphère par feuille qui peut en porter une (de rayon nul hors de la pluie)
+    if (C.beads.count) {
+      const sg = new THREE.IcosahedronGeometry(1, 1);
       const tpl = { position: sg.attributes.position.array, normal: sg.attributes.normal.array, index: sg.index ? sg.index.array : Uint16Array.from({ length: sg.attributes.position.count }, (_, i) => i) };
-      add(instGeometry(tpl, {}, C.leafNear, LEAF_STRIDE, C.nearCount, LK), beadMaterial(F, ST, STP), { cast: false });
+      add(instGeometry(tpl, {}, C.beads.inst, LEAF_STRIDE, C.beads.count, LK), beadMaterial(F, FIELD), { cast: false });
     }
     if (m) {
       const S = sporUniforms(fam.spor.kind);
-      add(instGeometry(data.spor, { sp: data.spor.sp }, C.sporInst, SPOR_STRIDE, m, ['s0', 's1', 's2', 's3']), sporMaterial(U, S, ST, STP));
+      add(instGeometry(data.spor, { sp: data.spor.sp }, C.sporInst, SPOR_STRIDE, m, ['s0', 's1', 's2', 's3']), sporMaterial(U, S, FIELD));
     }
     // tiges
     const sg = new THREE.BufferGeometry();
     sg.setAttribute('position', new THREE.BufferAttribute(C.stems.position, 3));
     sg.setAttribute('normal', new THREE.BufferAttribute(C.stems.normal, 3));
     sg.setAttribute('surf', new THREE.BufferAttribute(C.stems.surf, 4, true));
-    sg.setAttribute('sid', new THREE.BufferAttribute(C.stems.sid, 1));
+    sg.setAttribute('sb', new THREE.BufferAttribute(C.stems.sb, 2));
     sg.setAttribute('sbase', new THREE.BufferAttribute(C.stems.sbase, 3));
     sg.setIndex(new THREE.BufferAttribute(C.stems.index, 1));
     sg.computeBoundingSphere();
-    add(sg, stemMaterial(U, ST, STP));
+    add(sg, stemMaterial(U, FIELD));
     // feutre
     const tg = new THREE.BufferGeometry();
     tg.setAttribute('position', new THREE.BufferAttribute(C.turf.position, 3));
@@ -492,14 +490,5 @@ export function createMoss(group, FIELD) {
     for (const k of ['dry', 'wet', 'young', 'old', 'hair', 'trans', 'seta', 'capsule', 'calyptra']) U[k].value.set(L[k]);
     U.translucency.value = L.translucency; U.gloss.value = L.gloss;
   }
-  // state : Float32Array ((n + m) × 4) ; jump : un saut dans la boucle (pas de mouvement)
-  function update(state, jump) {
-    if (!arr) return;
-    for (let i = 0; i < n + m; i++) {
-      if (jump) arrP[i].set(state[i * 4], state[i * 4 + 1], state[i * 4 + 2], state[i * 4 + 3]);
-      else arrP[i].copy(arr[i]);
-      arr[i].set(state[i * 4], state[i * 4 + 1], state[i * 4 + 2], state[i * 4 + 3]);
-    }
-  }
-  return { set, update, syncLook, U, get meshes() { return meshes; } };
+  return { set, syncLook, U, get meshes() { return meshes; } };
 }

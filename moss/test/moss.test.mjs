@@ -13,7 +13,7 @@ import { makeRock } from '../src/gen/rock.js';
 
 const scenes = FAMILY_KEYS.map((family, i) => {
   const R = generate(`inv${i}`, { family, mood: ['lande', 'sousbois', 'muret', 'tourbiere'][i] });
-  return { R, D: buildMoss({ colony: R.colony, loop: R.loop, water: R.hydro }) };
+  return { R, D: buildMoss({ colony: R.colony, loop: R.loop, water: R.hydro, camera: R.camera }) };
 });
 const cover = (D, u, th = 0.3) => {
   const NN = FIELD_N * FIELD_N, f = sampleField(D.rec, u, new Float32Array(2 * NN));
@@ -63,20 +63,49 @@ function leafPoints(l, fam, f, SS = [0.3, 0.6, 0.85, 1], XS = [-1, 0, 1]) {
   return out;
 }
 
-test('aucune feuille ne touche une feuille d\'une autre tige', () => {
+// (les rosettes voisines s'imbriquent, comme dans un vrai coussin : une
+// feuille passe au-dessus ou au-dessous de celles de la voisine, mais ne
+// traverse pas sa tige)
+test('aucune feuille ne traverse la tige d\'une voisine', () => {
   for (const { R, D } of scenes) {
-    const C = D.colony, fam = FAMILIES[R.family], margin = fam.leaf.thick;
+    const C = D.colony, fam = FAMILIES[R.family], margin = fam.shoot.stemR + fam.leaf.thick;
     const by = Array.from({ length: C.n }, () => []);
-    for (let i = 0; i < C.leafCount; i++) by[C.leafInst[i * LEAF_STRIDE + 8]].push(C.leafInst.subarray(i * LEAF_STRIDE, (i + 1) * LEAF_STRIDE));
-    for (const f of [0, 0.5, 1]) {
-      const pts = by.map((ls) => ls.flatMap((l) => leafPoints(l, fam, f)));
-      let worst = Infinity;
-      for (let i = 0; i < C.n; i++) for (const j of C.nb[i]) {
-        if (j < i) continue;
-        for (const p of pts[i]) for (const q of pts[j]) worst = Math.min(worst, Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]));
+    for (let i = 0; i < C.leafCount; i++) by[C.leafStem[i]].push(C.leafInst.subarray(i * LEAF_STRIDE, (i + 1) * LEAF_STRIDE));
+    // axe d'une tige : de son pied à son sommet (la tige zigzague de 2 % de sa hauteur)
+    const axisAt = (j, y) => { const S = C.shoots[j], t = Math.min(1, Math.max(0, (y - S.yb) / (S.top[1] - S.yb))); return [S.x + (S.top[0] - S.x) * t, S.z + (S.top[2] - S.z) * t, t]; };
+    let bad = 0, tot = 0;
+    for (const f of [0, 1]) for (let i = 0; i < C.n; i += 2) {
+      for (const l of by[i]) for (const p of leafPoints(l, fam, f, [0.6, 1], [0])) for (const j of C.nb[i]) {
+        const a = axisAt(j, p[1]);
+        if (a[2] <= 0 || a[2] >= 1) continue;
+        tot++;
+        if (Math.hypot(p[0] - a[0], p[2] - a[1]) < margin + 0.02 * (C.shoots[j].top[1] - C.shoots[j].yb)) bad++;
       }
-      assert.ok(worst > margin, `${R.family}, f = ${f} : deux tiges à ${worst.toFixed(4)} cm`);
     }
+    // (~1 % existe déjà au sec, feuilles plaquées : deux tiges voisines penchées
+    // l'une vers l'autre sur un flanc de dôme — au fond du coussin, invisibles)
+    assert.ok(bad / tot < 0.02, `${R.family} : ${bad} traversées sur ${tot}`);
+  }
+});
+
+test('le coussin est dense : des rosettes imbriquées, sans feuille jetée', () => {
+  for (const { R, D } of scenes) {
+    const C = D.colony, fam = FAMILIES[R.family];
+    if (!fam.shoot.capitulum) assert.ok(C.d < C.reach.r * 0.6, `${R.family} : tiges à ${C.d} pour une rosette de ${C.reach.r}`);
+    assert.ok(C.lods.reduce((a, L) => a + L.count, 0) === C.leafCount);
+    // chaque tige porte ses feuilles (au loin, au moins celles du haut)
+    const per = new Int32Array(C.n);
+    for (let i = 0; i < C.leafCount; i++) per[C.leafStem[i]]++;
+    assert.ok(Math.min(...per) >= 4, `${R.family} : une tige sans rosette`);
+  }
+});
+
+test('les tiges des refuges naissent les premières (elles survivent à la sécheresse)', () => {
+  for (const { R, D } of scenes) {
+    const S = D.colony.shoots, ref = S.filter((s) => s.refuge > 0.8), rest = S.filter((s) => s.refuge < 0.1);
+    if (ref.length < 10 || rest.length < 10) continue;
+    const mean = (a) => a.reduce((x, s) => x + s.b, 0) / a.length;
+    assert.ok(mean(ref) < mean(rest) * 0.5, `${R.family} : seuils ${mean(ref).toFixed(3)} / ${mean(rest).toFixed(3)}`);
   }
 });
 

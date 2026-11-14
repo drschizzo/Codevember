@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#050506">
   <title>Moss · défis techniques</title>
-  <meta name="description" content="Comment Moss fait vivre une année de mousse sur sa pierre : équation de Fisher-KPP forcée par les saisons, orbite périodique enregistrée, fissures de la roche comme refuges, coussins en dômes, feuilles posées en forme fermée et bornées à leur cellule de Voronoï, dix mille feuilles dans un seul shader.">
+  <meta name="description" content="Comment Moss fait vivre une année de mousse sur sa pierre : équation de Fisher-KPP forcée par les saisons, orbite périodique enregistrée, fissures de la roche comme refuges, coussins en dômes, feuilles posées en forme fermée, rosettes imbriquées à la densité d’un vrai coussin, quarante mille feuilles dans un seul shader, état lu dans la texture du champ et niveaux de détail tirés de la trajectoire de la caméra.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
@@ -90,17 +90,18 @@ L[k] = D * lap + r * season * W[k] * c * (1 - c / K[k])
         <p>L’épaisseur du coussin pleinement poussé vient de la simulation. On prend le maximum annuel de \(B\) en chaque cellule et on l’adoucit par un noyau gaussien de 13 × 13 cellules, une moyenne pondérée en cloche. On lui donne enfin un profil en S qui s’arrondit jusqu’à la roche, sans falaise :</p>
         <div class="eq">\[ T(x) = h_{\text{dôme}}\,\sqrt{\mathrm{smoothstep}\!\Big(\frac{\bar B_{\max}(x) - 0{,}1}{0{,}75}\Big)}. \]</div>
         <p>Les tiges ne sont plantées que là où il y aura un coussin (\(T > 0{,}04\) cm). Leur axe suit la <strong>normale du dôme</strong>, la direction perpendiculaire à sa surface, à 85 %, plus 15 % de la normale de la roche. Elles sont droites au sommet et couchées vers l’extérieur sur les flancs, où les rosettes débordent. Leur longueur est calculée pour que la rosette arrive à la surface du dôme, quelle que soit l’inclinaison.</p>
-        <p>Reste à faire croître et reculer le coussin sans qu’une rosette ne s’enfouisse ni ne flotte. Chaque tige, feuilles comprises, est mise à l’échelle autour de son pied par un facteur \(g\). Le feutre s’épaissit selon la même loi, à partir de la mousse locale moyennée sur neuf points dans un rayon d’un demi-centimètre :</p>
-        <pre><code>g = max(0, sst(0.04, 0.9, B) * (1 + 0.12 * grow) - 0.12 * grow);  // grow ∈ [0, 0,18]
-const grow = (p, base, g) => base.add(p.sub(base).mul(g));          // TSL</code></pre>
-        <p>La rosette reste à la surface du coussin à chaque instant. Le léger décalage tiré par tige (<code>grow</code>) effrange le bord du coussin au lieu de le faire avancer en bloc.</p>
-        <figure id="fig-dome" class="wide"><figcaption><b>Coupe d’un coussin de tortule autour d’une fissure.</b> Le curseur fait avancer la saison. Le pointillé est le dôme pleinement poussé \(T(x)\). Le feutre (brun) et les tiges suivent la mousse locale \(B\), qui part du refuge et s’étend. Les tiges sont tracées avec leur rosette, à l’échelle (0,2 cm d’espacement, rosettes ouvertes de 0,26 cm de rayon). Le bouton « Tiges verticales » montre la version naïve : sur les flancs, les rosettes se plantent dans la pente au lieu d’en épouser la surface. Simplification : le profil de la mousse (une bosse et un front) est posé à la main, sans passer par la simulation.</figcaption></figure>
+        <p>Reste à faire croître et reculer le coussin sans qu’une rosette ne s’enfouisse ni ne flotte. Chaque tige, feuilles comprises, est mise à l’échelle autour de son pied par un facteur \(g\). Chacune a son propre <strong>seuil de naissance</strong> \(b\) : elle sort quand la mousse locale le dépasse, si bien que le front avance tige par tige au lieu de gonfler en bloc. La mousse locale est le plus grand de \(B\) et de sa moyenne sur neuf points dans un rayon d’un demi-centimètre, pour qu’une fissure étroite garde ses tiges :</p>
+        <pre><code>b = max(0.03, 0.03 + (Bmax - 0.25) * u * (1 - refuge));  // u ∈ [0, 1] tiré par tige
+g = sst(b, b + 0.22, max(B̄, B));
+const grow = (p, base, g) => base.add(p.sub(base).mul(g));  // TSL</code></pre>
+        <p>Dans les refuges, le seuil est ramené au plancher : ces tiges naissent les premières et passent la sécheresse entières, brunes et refermées. Sous les tiges, une natte sombre de rhizoïdes est posée sur la roche à peine levée. Le corps du coussin, ce sont les tiges elles-mêmes, avec leurs feuilles mortes le long du bas, dans la pénombre des rosettes.</p>
+        <figure id="fig-dome" class="wide"><figcaption><b>Coupe d’un coussin de tortule autour d’une fissure.</b> Le curseur fait avancer la saison. Le pointillé est le dôme pleinement poussé \(T(x)\). Les tiges suivent la mousse locale \(B\), qui part du refuge et s’étend, chacune quand \(B\) passe son seuil. Elles sont tracées avec leur rosette, à l’échelle (0,12 cm d’espacement, rosettes ouvertes de 0,26 cm de rayon). Le bouton « Tiges verticales » montre la version naïve : sur les flancs, les rosettes se plantent dans la pente au lieu d’en épouser la surface. Simplification : le profil de la mousse (une bosse et un front) est posé à la main, sans passer par la simulation.</figcaption></figure>
       </section>
 
       <section id="pose">
         <h2><span class="n">06</span>La feuille se pose en forme fermée</h2>
         <span class="src">src/pose.js · src/families.js</span>
-        <p>La reviviscence, le retour à la vie d’une mousse sèche qu’on mouille, se joue dans la feuille. Sèche, la feuille de tortule est roulée en gouttière et tordue en vis autour de la tige. Mouillée, elle se détord, s’aplatit et s’étale en étoile recourbée. Ce geste doit être calculé pour chacune des quelque dix mille feuilles, à chaque image, et deux fois (pose courante et pose précédente, pour les vecteurs vitesse). Il faut donc une <strong>forme fermée</strong>, une formule qui donne la pose directement, sans itération.</p>
+        <p>La reviviscence, le retour à la vie d’une mousse sèche qu’on mouille, se joue dans la feuille. Sèche, la feuille de tortule est roulée en gouttière et tordue en vis autour de la tige. Mouillée, elle se détord, s’aplatit et s’étale en étoile recourbée. Ce geste doit être calculé pour chacune des trente à quarante mille feuilles, à chaque image, et deux fois (pose courante et pose précédente, pour les vecteurs vitesse). Il faut donc une <strong>forme fermée</strong>, une formule qui donne la pose directement, sans itération.</p>
         <p>La nervure est une suite de trois arcs de cercle : une gaine droite le long de la tige (angle \(a_0\)), une charnière courte qui la porte à l’angle d’insertion \(\theta\), puis le limbe (la lame de la feuille) de courbure \(k_l\). Un arc partant à l’angle \(a\) avec la courbure \(k\) sur une longueur \(\ell\) se déplace de</p>
         <div class="eq">\[ \Delta r = \frac{\cos a - \cos(a + k\ell)}{k}, \qquad \Delta y = \frac{\sin(a + k\ell) - \sin a}{k}. \]</div>
         <p>La section est roulée (courbure \(k_t\), marges relevées). Toute la feuille s’enroule autour de la tige d’un angle \(\tau\,s\) de la base à la pointe. L’épaisseur forme une vraie lame, avec un dessus, un dessous et une tranche arrondie. Chaque famille donne ses quatre grandeurs au sec et mouillée. Pour la tortule, \(\theta\) passe de 0,2 à 0,95 rad, \(k_l\) de −3,5 à 8,5 cm⁻¹, \(k_t\) de 52 à 9 cm⁻¹, et l’enroulement de 2,3 rad à 0. L’ouverture \(f\) les interpole.</p>
@@ -108,46 +109,48 @@ const grow = (p, base, g) => base.add(p.sub(base).mul(g));          // TSL</code
         <div class="eq">\[ f = \mathrm{smoothstep}\big(0{,}45\,\rho,\ 0{,}45\,\rho + 0{,}55,\ o\big). \]</div>
         <p>Les feuilles extérieures s’ouvrent les premières et se ferment les dernières, comme sur la plante, où une feuille intérieure est tenue par celles qui l’entourent. Ce retard empêche aussi les feuilles d’une même rosette de se traverser. L’ouverture de chaque tige suit l’eau sans retard visible, \(o = \mathrm{smoothstep}(0{,}2,\ 0{,}65,\ W)\). Une année tient en 40 s, si bien qu’une seconde de film couvre plus de neuf jours, et les quelques secondes de la reviviscence réelle y deviennent instantanées.</p>
         <figure id="fig-leaf" class="wide"><figcaption><b>Une tige et ses feuilles posées par <code>pose.js</code>, importé tel quel.</b> Le curseur règle l’ouverture de la tige, les boutons changent de famille, et un glissé fait tourner la vue. Contours des feuilles (bords \(x = \pm 1\), sans l’épaisseur), avec les gabarits, les poses sèche et mouillée et la phyllotaxie de chaque famille, c’est-à-dire l’étagement des feuilles autour de la tige (divergence 2/5 pour la tortule et la funaire, 3/8 pour le polytric). Le poil hyalin (transparent) de la tortule prolonge la pointe. En bas à droite, l’ouverture de chaque feuille selon son rang montre la cascade des feuilles extérieures vers le bourgeon.</figcaption></figure>
-        <div class="note check"><b>Deux implémentations, une formule</b><p>La pose est écrite deux fois : en JavaScript dans <code>pose.js</code> (pour la génération et les tests) et en TSL, le langage de shaders de three.js, dans <code>scene/moss.js</code> (pour le vertex shader). Le module JS sert de référence. La génération s’en sert pour régler l’écartement de chaque feuille, et les tests pour prouver qu’aucune feuille ne traverse une feuille voisine. Le shader en est la traduction, ligne pour ligne.</p></div>
+        <div class="note check"><b>Deux implémentations, une formule</b><p>La pose est écrite deux fois : en JavaScript dans <code>pose.js</code> (pour la génération et les tests) et en TSL, le langage de shaders de three.js, dans <code>scene/moss.js</code> (pour le vertex shader). Le module JS sert de référence. La génération s’en sert pour mesurer la rosette ouverte et régler l’écartement des tiges, et les tests pour vérifier qu’aucune feuille ne transperce la tige d’une voisine. Le shader en est la traduction, ligne pour ligne.</p></div>
       </section>
 
       <section id="voronoi">
-        <h2><span class="n">07</span>Chaque feuille reste dans la cellule de sa tige</h2>
+        <h2><span class="n">07</span>Les rosettes s’imbriquent</h2>
         <span class="src">src/gen/colony.js · buildColony()</span>
-        <p>Les tiges sont réparties par échantillonnage de Poisson (Bridson), un tirage au hasard qui garde une distance minimale entre deux tiges. Cette distance est tirée de la rosette ouverte : 0,78 fois son rayon pour la tortule. Cet écart serré donne un coussin dense, mais des rosettes de 0,26 cm de rayon plantées à 0,2 cm l’une de l’autre s’interpénètrent forcément. Repousser les tiges rendrait le coussin clairsemé. Détecter les collisions entre dix mille feuilles animées, à chaque image, coûterait beaucoup trop cher.</p>
-        <p>Le problème se règle une fois pour toutes, à la génération, par la géométrie. Chaque feuille est bornée à la <strong>cellule de Voronoï de sa tige</strong>, la région plus proche de cette tige que de toute autre, mesurée dans le plan horizontal à la hauteur de chacun de ses points. Pour un point \(p\) d’une feuille de la tige \(i\) et une voisine \(j\), la distance signée au bissecteur (la médiatrice entre les deux pieds) se calcule sans racine carrée :</p>
-        <div class="eq">\[ \delta = \frac{|p - a_j|^2 - |p - a_i|^2}{2\,|a_i - a_j|}, \qquad \delta \ge \tfrac12\,\text{marge}. \]</div>
-        <p>Une dichotomie de cinq pas, qui coupe l’intervalle en deux à chaque pas, cherche le plus grand écartement \(\text{amp} \in [0, 1]\) qui garde dans sa cellule chacun des douze points témoins de la feuille (et la pointe de son poil), pour six ouvertures de 0 à 1. L’écartement borne l’angle d’insertion et la courbure du limbe. La feuille se détord et s’aplatit quand même entièrement. Une feuille qu’aucune pose ne loge est retirée. Les cellules étant disjointes, deux feuilles de tiges différentes ne peuvent se toucher à aucun instant de la boucle.</p>
-        <figure id="fig-voronoi" class="wide"><figcaption><b>Sept rosettes de tortule vues de dessus, à 0,2 cm d’écart.</b> Feuilles posées par <code>pose.js</code>, écartement cherché par la même dichotomie que <code>colony.js</code> (tiges verticales ici ; dans la scène, l’axe de chaque voisine est relu à la hauteur du point). Faites glisser une tige. Le curseur règle l’ouverture, le bouton « Borner à la cellule » active ou retire la borne. Sans elle, les feuilles qui sortent de leur cellule sont en rouge. Avec elle, les feuilles serrées s’écartent moins (en clair), et le coussin reste dense sans une seule intersection.</figcaption></figure>
-        <div class="note check"><b>Vérifié par un test</b><p>Pour chaque famille, à trois ouvertures (0, ½, 1), la plus petite distance entre deux points de feuilles de tiges voisines doit dépasser l’épaisseur d’une feuille. Le test parcourt toutes les paires de tiges du graphe de contact.</p></div>
+        <p>Les tiges sont réparties par échantillonnage de Poisson (Bridson), un tirage au hasard qui garde une distance minimale entre deux tiges. La première version de Moss tirait cette distance de la rosette ouverte (0,78 fois son rayon pour la tortule) et bornait chaque feuille à la <strong>cellule de Voronoï de sa tige</strong>, la région plus proche de cette tige que de toute autre. Deux feuilles de tiges différentes ne pouvaient alors jamais se toucher. Le prix était lourd : pour la tortule, 17 tiges par cm² au plus, et selon la famille 6 à 37 % des feuilles retirées faute de place. Entre les tiges, une peau peinte d’étoiles comblait les trous, et de près on voyait que c’était une texture plate.</p>
+        <p>Dans un vrai coussin, les rosettes voisines s’imbriquent : une feuille passe au-dessus ou au-dessous de celles de la voisine. On plante donc les tiges à <strong>0,45 rayon de rosette</strong>, à peu près trois fois plus serrées, sans retirer aucune feuille. Seule règle gardée : une tige serrée s’ouvre moins. Son écartement dépend de la distance \(d_n\) à sa plus proche voisine, rapportée au rayon \(r\) de la rosette ouverte :</p>
+        <div class="eq">\[ \text{amp} = \mathrm{clamp}\Big(\frac{1{,}4\,d_n}{r},\ 0{,}55,\ 1\Big). \]</div>
+        <p>L’écartement borne l’angle d’insertion et la courbure du limbe. La feuille se détord et s’aplatit quand même entièrement, si bien que le geste de la reviviscence reste entier. Les feuilles s’interpénètrent parfois, mais dans l’épaisseur de la canopée, où on ne les voit pas. Ce qui compte, c’est qu’une feuille ne transperce pas la tige d’une voisine.</p>
+        <figure id="fig-voronoi" class="wide"><figcaption><b>Sept rosettes de tortule vues de dessus.</b> Feuilles posées par <code>pose.js</code>, tiges verticales. Le curseur règle l’ouverture, et un glissé déplace une tige. Par défaut, les tiges sont plantées à la densité actuelle (0,45 rayon de rosette) et s’imbriquent ; les feuilles du bas sont dessinées d’abord, celles du bourgeon par-dessus. Le bouton « Ancienne règle » replace les tiges à 0,78 rayon et borne chaque feuille à sa cellule (lignes claires) : les feuilles serrées s’écartent moins (en clair), celles qu’aucune pose ne loge sont retirées (dans la scène, 6 à 37 % selon la famille), et le coussin est trois fois moins dense.</figcaption></figure>
+        <div class="note check"><b>Vérifié par des tests</b><p>Pour chaque famille, au sec et mouillée, moins de 2 % des points de nervure passent à moins d’un rayon de tige de l’axe d’une voisine. Ce petit reste existe déjà au sec, feuilles plaquées : ce sont deux tiges voisines penchées l’une vers l’autre sur un flanc de dôme. Un deuxième test vérifie la densité (tiges à moins de 0,6 rayon de rosette, aucune feuille retirée, chaque tige garde sa rosette).</p></div>
       </section>
 
       <section id="shader">
-        <h2><span class="n">08</span>Dix mille feuilles, un seul shader</h2>
-        <span class="src">src/scene/moss.js</span>
-        <p>three.js compile un programme par <code>InstancedMesh</code>. Avec un maillage par tige ou par famille de feuilles, le nombre de shaders exploserait. Les feuilles sont donc un <code>Mesh</code> ordinaire sur une <code>InstancedBufferGeometry</code> : un gabarit de feuille, et pour chaque copie de ce gabarit vingt flottants dans un seul tampon entrelacé (point d’insertion, quaternion du repère de la tige, longueur, rang, largeur, rayon de la tige, sens de l’enroulement, écartement permis, pied de la tige).</p>
-        <p>Ce qui change d’une image à l’autre tient dans un tableau d’uniformes, des valeurs transmises au shader à chaque image, à raison d’un <code>vec4</code> par tige : l’ouverture \(o\), la croissance \(g\), l’eau de surface (les perles) et l’eau de la feuille (la translucidité). Le vertex shader recalcule la pose complète de chaque sommet. Il recalcule ensuite la pose de l’image précédente à partir du même tableau décalé d’une image, ce qui donne des vecteurs vitesse exacts au flou de mouvement et à l’anticrénelage temporel (le lissage des bords par mélange des images successives). Un saut dans la boucle recopie l’état courant dans le précédent, ce qui évite une traînée parasite.</p>
-        <p>Deux gabarits partagent le même matériau : un fin près du lieu du gros plan (2,6 cm autour du bord d’îlot que la caméra va filmer), un grossier ailleurs. Les perles d’eau sont une troisième géométrie instanciée sur les mêmes données de feuilles, de rayon nul sur la plupart. Entre les tiges modélisées, la peau du coussin peint trois couches de rosettes en étoile, à 1,6, 1,1 et 0,75 mm, pour retrouver la densité d’un vrai coussin.</p>
+        <h2><span class="n">08</span>Quarante mille feuilles, un seul shader</h2>
+        <span class="src">src/scene/moss.js · src/scene/stage.js · src/gen/build.js</span>
+        <p>three.js compile un programme par <code>InstancedMesh</code>. Avec un maillage par tige ou par famille de feuilles, le nombre de shaders exploserait. Les feuilles sont donc un <code>Mesh</code> ordinaire sur une <code>InstancedBufferGeometry</code> : un gabarit de feuille, et pour chaque copie de ce gabarit vingt flottants dans un seul tampon entrelacé (point d’insertion, quaternion du repère de la tige, longueur, seuil de naissance de la tige, rang, largeur, rayon de la tige, sens de l’enroulement, écartement permis, pied de la tige et son serrement).</p>
+        <p><strong>L’état d’une tige se lit dans la texture du champ.</strong> L’ouverture \(o\), la croissance \(g\), l’eau de surface (les perles) et l’eau de la feuille (la translucidité) ne dépendent que du champ au pied de la tige. À chaque image, le processeur écrit dans la texture du champ (64², quatre canaux) la mousse \(B\), l’eau \(W\), la mousse moyennée et l’eau de surface. Chaque sommet la lit au pied de sa tige. La première version passait l’état par un tableau d’uniformes, un <code>vec4</code> par tige, que la taille maximale d’un tampon d’uniformes WebGPU (64 Ko) plafonnait à environ 4 000 tiges. Avec la texture, il n’y a plus de plafond. Le vertex shader recalcule la pose de l’image précédente à partir de la texture du champ précédent, ce qui donne des vecteurs vitesse exacts à l’anticrénelage temporel (le lissage des bords par mélange des images successives).</p>
+        <p><strong>Trois niveaux de détail, tirés de la trajectoire de la caméra.</strong> La caméra ne dépend que de la recette, si bien que la génération la connaît d’avance. Pour chaque feuille, elle cherche sur toute la boucle sa plus grande taille à l’écran (dans le champ, pour une image de 1 080 lignes). Au-delà de 150 pixels, la feuille prend le gabarit fin (8 sections, tranche arrondie, 336 à 384 triangles). Entre 35 et 150 pixels, elle prend le gabarit moyen (6 sections, 60 à 78 triangles), et en dessous une lame à quatre faces (24 à 30 triangles), sans ombre portée. Au loin, les feuilles du bas d’une tige serrée, cachées dans le coussin, ne sont pas créées. Les trois gabarits partagent le même matériau. Les perles d’eau sont une autre géométrie instanciée, seulement sur les feuilles qui peuvent en porter une.</p>
+        <p><strong>La pénombre de la canopée.</strong> Dans un coussin serré, une feuille du bas d’une tige ne voit presque plus le ciel. Sa couleur, son occlusion, son reflet spéculaire, son vernis d’eau et sa lumière transmise sont assombris selon son rang \(\rho\), sa position \(s\) le long du limbe et le serrement de sa tige (le nombre de voisines). C’est cette pénombre qui donne au coussin sa profondeur : pointes claires, cœur presque noir.</p>
         <div class="note trap"><b>Changer l’ordre des lumières recompile tout</b><p>Toutes les lumières de la scène sont créées une fois, dans un ordre fixe, au premier niveau. Les saisons ne changent que leur intensité, leur couleur et leur position. Ajouter ou réordonner une lumière en cours de route forcerait la recompilation de tous les matériaux, feuilles comprises.</p></div>
       </section>
 
       <section id="budget">
         <h2><span class="n">09</span>Budget</h2>
-        <p>La propagation, le coussin et la roche sont calculés pendant l’écran de chargement, dans deux workers en parallèle. À chaque image, le processeur ne fait que relire l’enregistrement et remplir le tableau d’uniformes.</p>
+        <p>La propagation, le coussin et la roche sont calculés pendant l’écran de chargement, dans deux workers en parallèle. À chaque image, le processeur ne fait que relire l’enregistrement et remplir la texture du champ (64², quatre canaux).</p>
         <div class="tbl"><table>
           <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
           <tbody>
             <tr><td>Propagation (orbite + une année) et coussins</td><td>worker</td><td class="num">2 à 5 s</td></tr>
             <tr><td>Roche cuite, 1&#8239;024² texels (640² en mobile)</td><td>worker</td><td class="num">3 à 4,5 s</td></tr>
             <tr><td>Enregistrement du champ, 64² × 2 octets par état, 30 états par seconde (boucle de 40 s)</td><td>mémoire</td><td class="num">~10 Mo</td></tr>
-            <tr><td>Tiges (au plus ; 900 en mobile)</td><td>GPU</td><td class="num">3&#8239;200</td></tr>
-            <tr><td>Feuilles instanciées, pose calculée deux fois par sommet</td><td>GPU</td><td class="num">~10&#8239;000</td></tr>
+            <tr><td>Tiges, selon la famille (340 à 1&#8239;300 en mobile)</td><td>GPU</td><td class="num">620 à 2&#8239;650</td></tr>
+            <tr><td>Feuilles instanciées, trois niveaux de détail, pose calculée deux fois par sommet</td><td>GPU</td><td class="num">30 à 43&#8239;000</td></tr>
+            <tr><td>Triangles de feuilles (~1 M en mobile)</td><td>GPU</td><td class="num">2,9 à 5,7 M</td></tr>
             <tr><td>Maillage déplacé de la roche (360² en mobile)</td><td>GPU</td><td class="num">720²</td></tr>
-            <tr><td>Image en pleine saison, qualité Haute, 1,8 Mpx, graine b88</td><td>GPU</td><td class="num">14 ms</td></tr>
-            <tr><td>Image, graine s128, pleine saison / sécheresse</td><td>GPU</td><td class="num">15 / 13,7 ms</td></tr>
+            <tr><td>Image en pleine saison, qualité Haute, 1,8 Mpx, graine b88 (première version, 10 000 feuilles)</td><td>GPU</td><td class="num">14 ms</td></tr>
+            <tr><td>Graine b88, plan large / front / plein coussin, panneau masqué en 3,1 Mpx : première version → coussin dense</td><td>GPU</td><td class="num">17 → 31 / 21 → 39 / 22 → 30 ms</td></tr>
           </tbody>
         </table></div>
-        <p>Les postes les plus lourds sont les feuilles et le maillage de la roche. Treize tests couvrent l’ensemble. Ils vérifient l’orbite périodique et son raccord, le refuge à la sécheresse, l’extension aux pluies (le front ne recule jamais pendant les pluies) et le retrait qui suit. D’autres contrôlent que les refuges sont dans les fissures, qu’aucune feuille ne touche celle d’une autre tige et que les feuilles restent au-dessus de la roche. Les derniers portent sur la caméra (périodique et sous 25°/s), sur le déterminisme de la recette et sur la variété des décors.</p>
+        <p>Les postes les plus lourds sont les feuilles et le maillage de la roche ; aucun poste ne domine dans le coussin dense (ombres portées ~3 ms, feuilles du niveau moyen ~4 ms, perles ~1,5 ms). Quinze tests couvrent l’ensemble. Ils vérifient l’orbite périodique et son raccord, le refuge à la sécheresse, l’extension aux pluies (le front ne recule jamais pendant les pluies) et le retrait qui suit. D’autres contrôlent que les refuges sont dans les fissures, qu’aucune feuille ne transperce la tige d’une voisine, que le coussin est dense sans feuille retirée, que les tiges des refuges naissent les premières et que les feuilles restent au-dessus de la roche. Les derniers portent sur la caméra (périodique et sous 25°/s), sur le déterminisme de la recette et sur la variété des décors.</p>
       </section>
     </article>
 
@@ -408,14 +411,15 @@ const grow = (p, base, g) => base.add(p.sub(base).mul(g));          // TSL</code
     // ── 05 · coupe d'un coussin ───────────────────────────────────────────
     {
       const fam = FAMILIES.tortule, Lf = fam.leaf, Sh = fam.shoot;
-      const ROS = Lf.L[1] * .9, DOME = Sh.dome, REACH = rosetteReach(fam, Lf.L[1]).r, SP = .2;
+      const ROS = Lf.L[1] * .9, DOME = Sh.dome, REACH = rosetteReach(fam, Lf.L[1]).r, SP = Math.max(Sh.spacing * .4, REACH * .45);
       const xs = -3.2, xe = 3.2, XC = -.3;
       const ys = (x) => .06 * Math.sin(x * 1.7 + .4) + .03 * Math.sin(x * 5.3) - .22 * Math.exp(-(((x - XC) / .14) ** 2));
       const Bmax = (x) => smooth(2.5, 1.0, Math.abs(x - XC + .1 * Math.sin(x)));
       const Bbar = (x) => { let s = 0, w = 0; for (let k = -6; k <= 6; k++) { const ww = Math.exp(-(k * k) / 12); s += Bmax(x + k * .13) * ww; w += ww; } return s / w; };
       const Tm = (x) => { const t = clamp((Bbar(x) - .1) / .75); return DOME * Math.sqrt(t * t * (3 - 2 * t)); };
       const R0 = rng(5), stems = [];
-      for (let x = xs + .05; x < xe; x += SP * (1 + R0() * .35)) stems.push({ x, grow: R0() * .18, j: R0() - .5, lean: (R0() - .5) * .1 });
+      // seuil de naissance (colony.js) : tiré entre 0,03 et Bmax − 0,25, ramené au plancher dans le refuge
+      for (let x = xs + .05; x < xe; x += SP * (1 + R0() * .35)) { const ref = smooth(.45, .9, Math.exp(-(((x - XC) / .3) ** 2))); stems.push({ x, b: Math.max(.03, Math.min(.03 + (Bmax(x) - .25) * R0() * (1 - ref), .6 * Bmax(x))), j: R0() - .5, lean: (R0() - .5) * .1 }); }
       demo('#fig-dome', {
         title: 'Coupe d’un coussin', aspect: 2.5,
         controls: [{ key: 'p', label: 'Avancée de la saison', min: 0, max: 1, step: .005, value: .7 }],
@@ -428,9 +432,9 @@ const grow = (p, base, g) => base.add(p.sub(base).mul(g));          // TSL</code
           // dôme plein
           g.strokeStyle = alpha(C.c4, .6); g.setLineDash([4, 4]); g.lineWidth = 1.2; g.beginPath();
           for (let i = 0; i <= 300; i++) { const x = lerp(xs, xe, i / 300), y = Y(ys(x) + Tm(x) + ROS * .35); i ? g.lineTo(X(x), y) : g.moveTo(X(x), y); } g.stroke(); g.setLineDash([]);
-          // feutre
-          g.fillStyle = 'rgb(74,54,32)'; g.beginPath(); g.moveTo(X(xs), Y(ys(xs)));
-          for (let i = 0; i <= 300; i++) { const x = lerp(xs, xe, i / 300); const th = Math.max(0, Tm(x) - ROS * .45) + .04 * smooth(.03, .12, Tm(x)); g.lineTo(X(x), Y(ys(x) - .04 + th * smooth(.04, .9, Bblur(x)))); }
+          // natte de rhizoïdes (à peine levée, sous les tiges)
+          g.fillStyle = 'rgb(54,38,22)'; g.beginPath(); g.moveTo(X(xs), Y(ys(xs)));
+          for (let i = 0; i <= 300; i++) { const x = lerp(xs, xe, i / 300); g.lineTo(X(x), Y(ys(x) - .04 + .07 * smooth(.03, .12, Tm(x)) * smooth(.1, .8, Math.max(Bblur(x), Bat(x))))); }
           for (let i = 300; i >= 0; i--) { const x = lerp(xs, xe, i / 300); g.lineTo(X(x), Y(ys(x))); } g.fill();
           // tiges
           const B = d.s;
@@ -441,7 +445,7 @@ const grow = (p, base, g) => base.add(p.sub(base).mul(g));          // TSL</code
             let ax = B.naive ? [0, 1] : [nd[0] * .85 + ns[0] * .15 + s.lean, nd[1] * .85 + ns[1] * .15]; const al = Math.hypot(...ax); ax = [ax[0] / al, ax[1] / al];
             const yb = ys(s.x) - .06, top = ys(s.x) + T0 + ROS * .35 * (1 + s.j * .4);
             const H = Math.max(ROS * 1.1, (top - yb) / Math.max(.35, ax[1]));
-            const gg = Math.max(0, smooth(.04, .9, Bblur(s.x)) * (1 + .12 * s.grow) - .12 * s.grow);
+            const gg = smooth(s.b, s.b + .22, Math.max(Bblur(s.x), Bat(s.x)));
             if (gg <= .001) continue;
             const tip = [s.x + ax[0] * H * gg, yb + ax[1] * H * gg];
             const wetk = clamp(d.s.p * 1.5);
@@ -534,20 +538,23 @@ const grow = (p, base, g) => base.add(p.sub(base).mul(g));          // TSL</code
       });
     }
 
-    // ── 07 · Voronoï ──────────────────────────────────────────────────────
+    // ── 07 · Imbrication (et l'ancienne borne de Voronoï, pour comparer) ──
     {
       const fam = FAMILIES.tortule, Lf = fam.leaf, Sh = fam.shoot;
-      const reach = rosetteReach(fam, Lf.L[1]), dmin = Math.max(Sh.spacing * .7, reach.r * .78);
+      const reach = rosetteReach(fam, Lf.L[1]);
+      const D = { now: Math.max(Sh.spacing * .4, reach.r * .45), old: Math.max(Sh.spacing * .7, reach.r * .78) };
       const MARGIN = Lf.thick * 2 + .008, SS = [.35, .65, .88, 1], XS = [-1, 0, 1], FS = [0, .2, .4, .6, .8, 1];
       const R = rng(11), NL = 17;
-      const shoots = [[0, 0]];
-      for (let k = 0; k < 6; k++) { const a = k / 6 * TAU + .3; shoots.push([Math.cos(a) * dmin * (1 + .15 * R()), Math.sin(a) * dmin * (1 + .15 * R())]); }
-      const leaves = shoots.map((s, si) => {
+      // (positions en unités de distance minimale : la même disposition aux deux densités)
+      const unit = [[0, 0]];
+      for (let k = 0; k < 6; k++) { const a = k / 6 * TAU + .3; unit.push([Math.cos(a) * (1 + .15 * R()), Math.sin(a) * (1 + .15 * R())]); }
+      let mode = 'now', shoots = unit.map((u) => [u[0] * D.now, u[1] * D.now]);
+      const leaves = unit.map((s, si) => {
         let az = R() * TAU; const L0 = lerp(Lf.L[0], Lf.L[1], R()), out = [];
         for (let k = 0; k < NL; k++) { const rho = k / (NL - 1), bud = Math.max(0, (rho - .68) / .32); az += TAU * Sh.div + (R() - .5) * .24; out.push({ si, az, rho, L: L0 * (1 - .62 * bud * bud) * lerp(.9, 1.08, R()), W: Lf.W * lerp(.88, 1.1, R()) * (1 - .3 * bud), amp: 1, cut: false }); }
         return out;
-      }).flat();
-      const nbOf = (i) => shoots.map((_, j) => j).filter((j) => j !== i && Math.hypot(shoots[i][0] - shoots[j][0], shoots[i][1] - shoots[j][1]) < dmin * 1.75);
+      }).flat().sort((a, b) => a.rho - b.rho);
+      const nbOf = (i) => shoots.map((_, j) => j).filter((j) => j !== i && Math.hypot(shoots[i][0] - shoots[j][0], shoots[i][1] - shoots[j][1]) < D[mode] * 1.75);
       const ptsOf = (l, f, amp) => {
         const P = poseParams(fam, f, l.rho, amp), G = { L: l.L, W: l.W, h: 0, stemR: Sh.stemR, twist: 1 };
         const c = Math.cos(l.az), s = Math.sin(l.az), o = shoots[l.si];
@@ -564,14 +571,19 @@ const grow = (p, base, g) => base.add(p.sub(base).mul(g));          // TSL</code
         }
         return true;
       };
-      let narrowed = 0, cut = 0, outside = 0;
+      let narrowed = 0, cut = 0, ampMin = 1;
       const solve = () => {
-        narrowed = cut = outside = 0;
+        narrowed = cut = 0; ampMin = 1;
         const NB = shoots.map((_, i) => nbOf(i));
+        if (mode === 'now') {
+          // écartement de la tige d'après sa plus proche voisine (colony.js)
+          const amp = shoots.map((s, i) => { let dn = Infinity; for (const j of NB[i]) dn = Math.min(dn, Math.hypot(s[0] - shoots[j][0], s[1] - shoots[j][1])); return clamp(1.4 * dn / reach.r, .55, 1); });
+          for (const l of leaves) { l.cut = false; l.amp = amp[l.si]; ampMin = Math.min(ampMin, l.amp); }
+          return;
+        }
         for (const l of leaves) {
-          const nb = NB[l.si]; l.amp = 1; l.cut = false; l.out = !fits(l, 1, nb);
-          if (!l.out) continue;
-          outside++;
+          const nb = NB[l.si]; l.amp = 1; l.cut = false;
+          if (fits(l, 1, nb)) continue;
           if (!fits(l, 0, nb)) { l.cut = true; cut++; continue; }
           let lo = 0, hi = 1; for (let k = 0; k < 5; k++) { const m = (lo + hi) / 2; if (fits(l, m, nb)) lo = m; else hi = m; }
           l.amp = lo; narrowed++;
@@ -580,9 +592,9 @@ const grow = (p, base, g) => base.add(p.sub(base).mul(g));          // TSL</code
       solve();
       const off = document.createElement('canvas'), og = off.getContext('2d');
       demo('#fig-voronoi', {
-        title: 'Feuilles bornées à leur cellule', aspect: 2,
+        title: 'Rosettes imbriquées', aspect: 2,
         controls: [{ key: 'o', label: 'Ouverture o', min: 0, max: 1, step: .01, value: 1 }],
-        buttons: [{ key: 'bound', label: 'Borner à la cellule', toggle: true, value: true }],
+        buttons: [{ key: 'old', label: 'Ancienne règle', toggle: true, value: false }],
         pointer(d, e) {
           const sc = d.state.sc, ox = d.w / 2, oy = d.h / 2; if (!sc) return;
           const wx = (e.x - ox) / sc, wz = (e.y - oy) / sc;
@@ -591,33 +603,39 @@ const grow = (p, base, g) => base.add(p.sub(base).mul(g));          // TSL</code
           else if (d.state.drag != null) { shoots[d.state.drag][0] = clamp(wx, -.5, .5); shoots[d.state.drag][1] = clamp(wz, -.3, .3); solve(); }
         },
         draw(g, d) {
+          const want = d.s.old ? 'old' : 'now';
+          if (want !== mode) { mode = want; shoots = unit.map((u) => [u[0] * D[mode], u[1] * D[mode]]); solve(); }
           const { w, h } = d, sc = Math.min(w, h * 1.4) / .95, ox = w / 2, oy = h / 2; d.state.sc = sc;
-          // cellules (demi-résolution)
-          const W = Math.round(w / 2), H = Math.round(h / 2); off.width = W; off.height = H;
-          const img = og.createImageData(W, H), px = img.data, ids = new Int8Array(W * H);
-          for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const x = (i * 2 - ox) / sc, z = (j * 2 - oy) / sc; let b = 0, bd = 1e9; shoots.forEach((s, k) => { const q = (s[0] - x) ** 2 + (s[1] - z) ** 2; if (q < bd) { bd = q; b = k; } }); ids[j * W + i] = b; }
-          for (let j = 1; j < H; j++) for (let i = 1; i < W; i++) { const k = j * W + i; if (ids[k] !== ids[k - 1] || ids[k] !== ids[k - W]) { px[k * 4] = 236; px[k * 4 + 1] = 232; px[k * 4 + 2] = 225; px[k * 4 + 3] = 70; } }
-          og.putImageData(img, 0, 0); g.imageSmoothingEnabled = true; g.drawImage(off, 0, 0, w, h);
-          const o = d.s.o, bound = d.s.bound;
+          if (mode === 'old') {
+            // cellules (demi-résolution)
+            const W = Math.round(w / 2), H = Math.round(h / 2); off.width = W; off.height = H;
+            const img = og.createImageData(W, H), px = img.data, ids = new Int8Array(W * H);
+            for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const x = (i * 2 - ox) / sc, z = (j * 2 - oy) / sc; let b = 0, bd = 1e9; shoots.forEach((s, k) => { const q = (s[0] - x) ** 2 + (s[1] - z) ** 2; if (q < bd) { bd = q; b = k; } }); ids[j * W + i] = b; }
+            for (let j = 1; j < H; j++) for (let i = 1; i < W; i++) { const k = j * W + i; if (ids[k] !== ids[k - 1] || ids[k] !== ids[k - W]) { px[k * 4] = 236; px[k * 4 + 1] = 232; px[k * 4 + 2] = 225; px[k * 4 + 3] = 70; } }
+            og.putImageData(img, 0, 0); g.imageSmoothingEnabled = true; g.drawImage(off, 0, 0, w, h);
+          }
+          const o = d.s.o;
           const wet = hex(fam.color.wet), young = hex(fam.color.young);
           const S = (p) => [ox + p[0] * sc, oy + p[1] * sc];
           for (const l of leaves) {
-            if (bound && l.cut) continue;
-            const amp = bound ? l.amp : 1, f = leafOpen(o, l.rho);
-            const P = poseParams(fam, f, l.rho, amp), G = { L: l.L, W: l.W, h: 0, stemR: Sh.stemR, twist: 1 };
+            if (l.cut) continue;
+            const f = leafOpen(o, l.rho);
+            const P = poseParams(fam, f, l.rho, l.amp), G = { L: l.L, W: l.W, h: 0, stemR: Sh.stemR, twist: 1 };
             const c = Math.cos(l.az), s = Math.sin(l.az), oo = shoots[l.si];
             const tw = (p) => S([oo[0] + c * p[0] - s * p[2], oo[1] + s * p[0] + c * p[2]]);
             const pts = []; for (let i = 0; i <= 12; i++) pts.push(tw(leafPoint(i / 12, -1, 0, 0, P, G, Lf))); for (let i = 12; i >= 0; i--) pts.push(tw(leafPoint(i / 12, 1, 0, 0, P, G, Lf)));
-            let col = mix3(wet, young, .4 * l.rho);
-            if (!bound && l.out) col = hex('#d9826f'); else if (bound && l.amp < 1) col = mix3(col, [220, 230, 160], .45);
-            g.fillStyle = rgb(col, .85); g.strokeStyle = rgb(col, 1.2); g.lineWidth = .7; g.beginPath();
+            // (en dessous, dans l'ombre des rosettes : plus sombre — la pénombre de la canopée)
+            let col = mix3(mix3(wet, young, .4 * l.rho), [20, 28, 12], mode === 'now' ? .55 * (1 - l.rho) : 0);
+            if (mode === 'old' && l.amp < 1) col = mix3(col, [220, 230, 160], .45);
+            g.fillStyle = rgb(col, .92); g.strokeStyle = rgb(col, 1.2); g.lineWidth = .7; g.beginPath();
             pts.forEach((q, i) => (i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]))); g.closePath(); g.fill(); g.stroke();
             const T = tipFrame(P, G, Lf), a = tw(T.p), b = tw([T.p[0] + T.t[0] * Lf.hair * l.L, 0, T.p[2] + T.t[2] * Lf.hair * l.L]);
             g.strokeStyle = 'rgba(233,236,228,.8)'; g.lineWidth = .8; g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke();
           }
           shoots.forEach((s) => { const p = S(s); g.fillStyle = 'rgb(120,86,50)'; g.beginPath(); g.arc(p[0], p[1], 3, 0, TAU); g.fill(); });
           g.fillStyle = C.ink; g.fillRect(14, h - 14, sc * .1, 2); label(g, '1 mm', 14, h - 20, { size: 11 });
-          d.status(bound ? `${narrowed} feuilles resserrées, ${cut} retirées sur ${leaves.length}` : `${outside} feuilles sortent de leur cellule`);
+          const dens = Math.round(.7 / (D[mode] * D[mode]));
+          d.status(mode === 'now' ? `tiges à ${(D.now * 10).toFixed(1)} mm (~${dens} par cm²) · écartement ${ampMin.toFixed(2)} à 1 · aucune feuille retirée` : `tiges à ${(D.old * 10).toFixed(1)} mm (~${dens} par cm²) · ${narrowed} feuilles resserrées, ${cut} retirées sur ${leaves.length}`);
         },
       });
     }

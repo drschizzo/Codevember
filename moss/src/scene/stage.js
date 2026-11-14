@@ -63,7 +63,9 @@ export function createStage(scene, gen, { lite = false } = {}) {
     return vec3(mix(float(1), smoothstep(0.05, 0.4, n).mul(1.15).add(0.08), fleck.on));
   });
 
-  // ── Champ (mousse B, eau W) en textures, lu par le feutre et la roche ──
+  // ── Champ en textures : x mousse B, y eau W, z B moyenné sur un
+  // demi-centimètre (BLUR_TAPS : la croissance des tiges), w eau de surface
+  // (pluie qui tombe, film) ; lu par les tiges, le feutre et la roche ──
   const mkTex = () => { const t = new THREE.DataTexture(new Float32Array(FIELD_N * FIELD_N * 4), FIELD_N, FIELD_N, THREE.RGBAFormat, THREE.FloatType); t.magFilter = t.minFilter = THREE.LinearFilter; t.needsUpdate = true; return t; };
   const FIELD = { tex: mkTex(), prev: mkTex(), E: uniform(5) };
 
@@ -72,8 +74,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
   const moss = createMoss(group, FIELD);
   const DU = createDecorLook(FIELD);
   let rockT = null, failed = null, R = null, data = null, cam = null, pending = 0, parts = 0, version = 0, decorMeshes = [];
-  const fieldArr = new Float32Array(2 * FIELD_N * FIELD_N);
-  let state = new Float32Array(4);
+  const fieldArr = new Float32Array(2 * FIELD_N * FIELD_N), blurArr = new Float32Array(FIELD_N * FIELD_N), surfArr = new Float32Array(FIELD_N * FIELD_N);
   const RU = { frame: uniform(0), rate: uniform(0), box: uniform(10), height: uniform(14), center: uniform(new THREE.Vector3()), right: uniform(new THREE.Vector3(1, 0, 0)), color: uniform(new THREE.Color(1, 1, 1)) };
   let lastU = null;
 
@@ -111,7 +112,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
     const rockReq = R.decor.rock ? part(gen.request({ type: R.decor.rock, seed: R.colony.support.seed, X: 14, M: lite ? 640 : 1024 }, 'rock')) : Promise.resolve((parts++, null));
     // (le maillage fin du support, s'il a un relief cuit : dans un worker aussi)
     const supReq = R.decor.rock ? part(gen.request({ decor: R.decor, colony: R.colony, lite }, 'support')) : Promise.resolve((parts++, null));
-    Promise.all([part(gen.request({ colony: R.colony, loop: R.loop, water: R.hydro }, 'moss')), rockReq, supReq]).then(([d, rk, sup]) => {
+    Promise.all([part(gen.request({ colony: { ...R.colony, lite: R.colony.lite || lite }, loop: R.loop, water: R.hydro, camera: R.camera }, 'moss')), rockReq, supReq]).then(([d, rk, sup]) => {
       if (v !== version) return;
       if (rockT) { rockT.rel.dispose(); rockT.col.dispose(); }
       rockT = rk ? rockTextures(rk) : null;
@@ -120,7 +121,6 @@ export function createStage(scene, gen, { lite = false } = {}) {
       moss.set(d, R);
       clearDecor();
       decorMeshes = buildDecor(decorGroup, R, d.colony, DU, rockT, sup);
-      state = new Float32Array((d.colony.n + d.colony.sporCount) * 4);
       cam = camFor(d);
       lastU = null;
       pending = 0;
@@ -142,29 +142,19 @@ export function createStage(scene, gen, { lite = false } = {}) {
     sampleField(data.rec, ph, fieldArr);
     const NN = FIELD_N * FIELD_N, E = data.habitat.E;
     const a = FIELD.tex.image.data, b = FIELD.prev.image.data;
-    const write = (t) => { for (let k = 0; k < NN; k++) { t[k * 4] = fieldArr[k]; t[k * 4 + 1] = fieldArr[NN + k]; t[k * 4 + 3] = 1; } };
+    // (z et w au centre de chaque maille : la moyenne de B, la pluie de cet instant)
+    const dx = (2 * E) / FIELD_N, SH = data.showers;
+    for (let j = 0; j < FIELD_N; j++) for (let i = 0; i < FIELD_N; i++) {
+      const x = -E + dx * (i + 0.5), z = -E + dx * (j + 0.5), k = j * FIELD_N + i;
+      let Bv = 0;
+      for (const [a2, b2] of BLUR_TAPS) Bv += bilerp(fieldArr, FIELD_N, E, x + a2, z + b2);
+      blurArr[k] = Bv / BLUR_TAPS.length;
+      surfArr[k] = Math.min(1, rainAt(ph, x, z, SH, E) * 1.4 + fieldArr[NN + k] * 0.25);
+    }
+    const write = (t) => { for (let k = 0; k < NN; k++) { t[k * 4] = fieldArr[k]; t[k * 4 + 1] = fieldArr[NN + k]; t[k * 4 + 2] = blurArr[k]; t[k * 4 + 3] = surfArr[k]; } };
     if (jump) write(b); else b.set(a);
     write(a);
     FIELD.tex.needsUpdate = true; FIELD.prev.needsUpdate = true;
-    // tiges : ouverture (l'eau), croissance (la mousse), eau de surface (la pluie), eau
-    const C = data.colony, SH = data.showers;
-    for (let i = 0; i < C.n; i++) {
-      const S = C.shoots[i];
-      let Bv = 0;
-      for (const [a, b2] of BLUR_TAPS) Bv += bilerp(fieldArr, FIELD_N, E, S.x + a, S.z + b2);
-      Bv /= BLUR_TAPS.length;
-      const Wv = bilerp(fieldArr, FIELD_N, E, S.x, S.z, NN);
-      const rr = rainAt(ph, S.x, S.z, SH, E);
-      state[i * 4] = sst(0.2, 0.65, Wv);
-      state[i * 4 + 1] = Math.max(0, sst(0.04, 0.9, Bv) * (1 + 0.12 * S.grow) - 0.12 * S.grow); // (même loi que le dôme du feutre : le bord recule, le dôme garde sa forme)
-      state[i * 4 + 2] = Math.min(1, rr * 1.4 + Wv * 0.25);
-      state[i * 4 + 3] = Wv;
-    }
-    for (let k = 0; k < C.sporCount; k++) {
-      const si = C.spors[k].shoot, j = (C.n + k) * 4;
-      state[j] = state[si * 4 + 3]; state[j + 1] = state[si * 4 + 1]; state[j + 2] = 0; state[j + 3] = 0;
-    }
-    moss.update(state, jump);
     // ciel : les pluies voilent le soleil, les averses l'éteignent en passant
     const L = R.light, season = wetSeason(ph), shower = rainNow(ph, SH, E);
     const cloud = Math.min(1, season * 0.75 + shower * 0.9);

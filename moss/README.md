@@ -51,9 +51,11 @@ La première ligne remplit la roche sous la pluie et la vide par évaporation. L
 ## Les coussins (`src/gen/colony.js`, `src/gen/build.js`)
 
 - **Le dôme.** Un coussin est un dôme. Son épaisseur pleine est le maximum annuel de la mousse, adouci ; les tiges ne poussent que là où il y aura un coussin.
-- **Les tiges** sont plantées dans la roche (sur son relief fin, fissures comprises) et suivent la **normale du dôme** : droites au sommet, couchées vers l'extérieur sur les flancs, où les rosettes débordent. Seule la rosette du sommet porte des feuilles ; le corps du dôme est un feutre de tiges serrées dans l'ombre.
-- **Croissance et retrait** : chaque tige s'allonge et raccourcit autour de son pied, et le feutre s'épaissit, selon la même loi de la mousse locale. La rosette reste toujours à la surface du coussin, et le bord du coussin avance et recule.
-- **Les collisions** : chaque feuille est bornée à la cellule de Voronoï de sa tige ; une feuille serrée par une voisine s'écarte moins.
+- **Les tiges** sont plantées dans la roche (sur son relief fin, fissures comprises) et suivent la **normale du dôme** : droites au sommet, couchées vers l'extérieur sur les flancs, où les rosettes débordent. La rosette du sommet porte les feuilles vertes, et des feuilles mortes brunes garnissent le bas de la tige.
+- **La densité d'un vrai coussin** : les tiges sont plantées à 0,45 rayon de rosette (jusqu'à 2 650 tiges et 43 000 feuilles), et les rosettes voisines s'imbriquent. Une tige serrée s'ouvre moins (écartement réglé par sa plus proche voisine). Rien n'est peint : le volume est fait de tiges, et la **pénombre de la canopée** (feuilles du bas assombries selon leur rang et le serrement de la tige) donne la profondeur. Une natte sombre de rhizoïdes bouche le fond.
+- **Croissance et retrait, tige par tige** : chaque tige s'allonge et raccourcit autour de son pied quand la mousse locale passe son propre **seuil de naissance**, si bien que le front avance tige par tige. Dans les refuges, le seuil est au plancher : ces tiges passent la sécheresse entières.
+- **L'état dans la texture du champ** : l'ouverture, la croissance et l'eau de chaque tige ne dépendent que du champ à son pied, que chaque sommet lit dans une texture 64² (B, W, B moyenné, eau de surface). Sans tableau d'uniformes, le nombre de tiges n'a plus de plafond.
+- **Trois niveaux de détail** tirés de la trajectoire de la caméra, connue d'avance : chaque feuille prend le gabarit fin, moyen ou lointain selon sa plus grande taille à l'écran sur toute la boucle. Un seul matériau.
 - **La feuille** : une lame épaisse à tranche arrondie dont la pose est calculée en forme fermée dans le vertex shader (même formule qu'en JS, `src/pose.js`) ; poil hyalin, nervure, translucidité qui croît avec l'eau, film d'eau brillant.
 
 ## La roche et l'écorce (`src/gen/rock.js`)
@@ -93,8 +95,8 @@ Treize tests. La propagation est une orbite périodique et le raccord est exact.
 
 ## Performances
 
-Génération d'une scène : 2 à 5 s pour les coussins et la propagation, 3 à 4,5 s pour la roche (dans Node, deux workers en parallèle pendant l'écran de chargement ; nettement plus lent quand l'onglet est en arrière-plan). Temps d'image mesuré dans le panneau de navigateur de l'application (GPU d'un Mac, panneau masqué), qualité Haute, 1,8 Mpx, graine b88 : 14 ms en pleine saison (coussins étendus). Graine s128 : 15 ms en pleine saison, 13,7 ms à la sécheresse. Les postes les plus lourds : les feuilles (~10 000 instances, pose calculée deux fois par sommet pour les vecteurs vitesse) et le maillage déplacé de la roche (720²).
+Génération d'une scène : 2 à 5 s pour les coussins et la propagation, 3 à 4,5 s pour la roche (dans Node, deux workers en parallèle pendant l'écran de chargement ; nettement plus lent quand l'onglet est en arrière-plan). Temps d'image mesuré dans le panneau de navigateur de l'application (GPU d'un Mac, panneau masqué), qualité Haute, 1,8 Mpx, graine b88 : 14 ms en pleine saison (coussins étendus). Graine s128 : 15 ms en pleine saison, 13,7 ms à la sécheresse. Les postes les plus lourds : les feuilles (~10 000 instances, pose calculée deux fois par sommet pour les vecteurs vitesse) et le maillage déplacé de la roche (720²). Le coussin dense (30 000 à 43 000 feuilles) coûte environ 1,4 à 1,9 fois plus : graine b88 dans le panneau masqué en 3,1 Mpx, 17 → 31 ms en plan large, 21 → 39 ms au front, 22 → 30 ms en plein coussin.
 
 ## Version mobile
 
-Imposée par `?mobile=1`, ou choisie d'office sur téléphone : moins de tiges, gabarit de feuille grossier, roche cuite en 640² sur un maillage de 360², une lumière de moins, chaîne d'image allégée, résolution dynamique. Non vérifiée sur un appareil réel.
+Imposée par `?mobile=1`, ou choisie d'office sur téléphone : tiges 1,4 fois plus espacées (environ deux fois moins), sans gabarit fin, environ 1 M de triangles de feuilles, roche cuite en 640² sur un maillage de 360², une lumière de moins, chaîne d'image allégée, résolution dynamique. Non vérifiée sur un appareil réel.

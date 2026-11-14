@@ -15,16 +15,24 @@ export function leafTemplate(family, lod = 0) {
   // abscisses : serrées à la gaine, à la charnière et vers la pointe
   const sh = Lf.sheath, hg = Lf.hinge;
   const S = new Set([0, sh * 0.5, sh, sh + hg * 0.5, sh + hg]);
-  const nb = lod ? 4 : 8;
+  // (lod 2 : la feuille lointaine — 3 sections, une lame à quatre faces)
+  // (lod 1 : la feuille moyenne — 6 sections, sans bourrelet de tranche)
+  if (lod === 2) { S.clear(); for (const v of [0, sh + hg, 0.6, 1]) S.add(v); }
+  if (lod === 1) { S.clear(); for (const v of [0, sh, sh + hg]) S.add(v); }
+  const nb = lod === 2 ? 0 : lod ? 3 : 8;
   for (let k = 1; k <= nb; k++) { const t = k / nb; S.add(sh + hg + (1 - sh - hg) * (1 - (1 - t) ** 1.4)); }
   const ss = [...S].filter((s) => s <= 1).sort((a, b) => a - b);
   const nx = lod ? 2 : 4;
   // anneau : dessus (x de −1 à 1), tranche droite, dessous (de 1 à −1), tranche gauche
   const ring = [];
-  for (let i = 0; i <= nx; i++) ring.push([-1 + (2 * i) / nx, 1, 0]);
-  for (const b of [Math.PI / 4, -Math.PI / 4]) ring.push([1, Math.sin(b), Math.cos(b)]);
-  for (let i = 0; i <= nx; i++) ring.push([1 - (2 * i) / nx, -1, 0]);
-  for (const b of [-Math.PI / 4, Math.PI / 4]) ring.push([-1, Math.sin(b), Math.cos(b)]);
+  if (lod === 2) ring.push([-1, 1, 0], [1, 1, 0], [1, -1, 0], [-1, -1, 0]);
+  else for (let i = 0; i <= nx; i++) ring.push([-1 + (2 * i) / nx, 1, 0]);
+  if (lod === 1) for (let i = 0; i <= nx; i++) ring.push([1 - (2 * i) / nx, -1, 0]);
+  else if (lod !== 2) {
+    for (const b of [Math.PI / 4, -Math.PI / 4]) ring.push([1, Math.sin(b), Math.cos(b)]);
+    for (let i = 0; i <= nx; i++) ring.push([1 - (2 * i) / nx, -1, 0]);
+    for (const b of [-Math.PI / 4, Math.PI / 4]) ring.push([-1, Math.sin(b), Math.cos(b)]);
+  }
   const R = ring.length;
   const lp = [], idx = [];
   for (const s of ss) for (const [x, nu, lat] of ring) lp.push(s, x, nu, lat);
@@ -34,7 +42,7 @@ export function leafTemplate(family, lod = 0) {
   }
   // poil hyalin (tube effilé)
   if (Lf.hair > 0) {
-    const base = lp.length / 4, nu = lod ? 3 : 6, nr = lod ? 3 : 4;
+    const base = lp.length / 4, nu = lod === 2 ? 1 : lod ? 3 : 6, nr = lod ? 3 : 4;
     for (let k = 0; k <= nu; k++) for (let i = 0; i < nr; i++) {
       const ph = (2 * Math.PI * i) / nr;
       lp.push(1.0005 + k / nu, Math.cos(ph), Math.sin(ph), -1);

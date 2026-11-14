@@ -5,6 +5,28 @@ export { bakeRock };
 import { leafTemplate, sporTemplate } from './templates.js';
 import { FAMILIES } from '../families.js';
 import { makeHabitat, showers, simulateField, bilerp } from '../field.js';
+import { createCameraPath } from '../camera.js';
+
+// niveaux de détail d'après la trajectoire de la caméra (connue d'avance :
+// elle ne dépend que de la recette) : la plus grande taille à l'écran, sur
+// toute la boucle, d'un objet de taille l au point p — en pixels d'une image
+// de 1080 lignes. Gros plan au-delà de PX[0], moyen au-delà de PX[1].
+export const LOD_PX = [150, 35];
+function makeLod(camera, T, S) {
+  const cam = createCameraPath(camera, S, T);
+  const P = Array.from({ length: 240 }, (_, i) => cam.pose(i / 240));
+  const t = Math.tan((camera.fov * Math.PI) / 360), f = 540 / t, cosCone = Math.cos(Math.atan(t * 1.9) + 0.1);
+  const V = P.map((q) => { const d = q.target.map((v, k) => v - q.pos[k]), l = Math.hypot(...d); return d.map((v) => v / l); });
+  return (p, l) => {
+    let px = 0;
+    for (let i = 0; i < P.length; i++) {
+      const q = P[i].pos, dx = p[0] - q[0], dy = p[1] - q[1], dz = p[2] - q[2], D = Math.hypot(dx, dy, dz);
+      if ((dx * V[i][0] + dy * V[i][1] + dz * V[i][2]) / D < cosCone) continue; // (hors champ)
+      px = Math.max(px, (l * f) / D);
+    }
+    return px > LOD_PX[0] ? 0 : px > LOD_PX[1] ? 1 : 2;
+  };
+}
 
 // spec : { colony: {…}, loop: { duration }, water: { kind, dir, intensity, evap } }
 // spec : { colony: {…}, loop: { duration }, water: { kind, … } }
@@ -41,11 +63,15 @@ export function buildMoss(spec) {
     const t = Math.max(0, Math.min(1, (v - 0.1) / 0.75));
     Tm[j * H.N + i] = fam.shoot.dome * Math.sqrt(t * t * (3 - 2 * t));
   }
-  const C = buildColony({ ...spec.colony, hero, heroR: 2.6, dome: { T: Tm, N: H.N, E } }, H);
+  // (niveaux de détail : la caméra vise le 60e centile du dessus des tiges, comme stage.js)
+  const lod = spec.camera ? (shoots) => {
+    const tops = shoots.map((s) => s.top[1]).sort((a, b) => a - b);
+    return makeLod(spec.camera, spec.loop.duration, { top: tops[Math.floor(tops.length * 0.6)], E, hero, heroDir: hd });
+  } : null;
+  const C = buildColony({ ...spec.colony, lod, dome: { T: Tm, N: H.N, E, Bmax } }, H);
   return {
     colony: C, rec, habitat: { R: H.R, M: H.M, E, N: H.N }, showers: SH, hero, heroDir: hd,
-    leaf: leafTemplate(spec.colony.family, spec.colony.lite ? 1 : 0),
-    leafFar: leafTemplate(spec.colony.family, 1),
+    leaf: [0, 1, 2].map((lv) => leafTemplate(spec.colony.family, spec.colony.lite ? Math.max(1, lv) : lv)),
     spor: sporTemplate(fam.spor.kind),
   };
 }
