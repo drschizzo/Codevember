@@ -100,6 +100,7 @@ export function simulateSea(spec, onProgress = null) {
   const Fh = new Float64Array(nx + 1), Fq = new Float64Array(nx + 1);
   const SL = new Float64Array(nx + 1), SR = new Float64Array(nx + 1); // (corrections hydrostatiques des deux côtés)
   const P = new Float64Array(nx); // production d'écume
+  const Pk = new Float64Array(nx); // (son maximum depuis la dernière image enregistrée : le déferlement)
   const n2 = manning * manning;
   const vel = (hh, qq) => (hh > 1e-4 ? Math.max(-9, Math.min(9, qq / hh)) : 0);
 
@@ -149,6 +150,7 @@ export function simulateSea(spec, onProgress = null) {
       const conv = Math.max(0, ul - ur) / (2 * dx);
       const slope = Math.abs(h[i + 1] + b[i + 1] - h[i - 1] - b[i - 1]) / (2 * dx);
       P[i] = fk * conv * Math.max(0, slope - 0.06);
+      if (P[i] > Pk[i]) Pk[i] = P[i];
     }
     const r = dt / dx;
     for (let i = 0; i < nx; i++) {
@@ -186,6 +188,9 @@ export function simulateSea(spec, onProgress = null) {
   // intègre de t0 à t0 + T en s'arrêtant exactement à chaque image (si rec)
   const nf = Math.round(T * fps);
   const eta = new Float32Array(nf * nx), U = new Float32Array(nf * nx), FO = new Float32Array(nf * nx), AE = new Float32Array(nf * nx);
+  // le déferlement, image par image : (x de la crête qui casse, intensité,
+  // vitesse de l'eau, hauteur de la crête) — les embruns et la lèvre en partent
+  const BRK = new Float32Array(nf * 4);
   let steps = 0;
   function runLoop(k, rec) {
     let t = k * T;
@@ -196,10 +201,19 @@ export function simulateSea(spec, onProgress = null) {
         step(t, dt);
         t += dt; steps++;
       }
-      if (rec) for (let i = 0; i < nx; i++) {
-        const o = fr * nx + i;
-        eta[o] = h[i] > 1e-4 ? h[i] + b[i] : b[i] - 0.002; U[o] = vel(h[i], q[i]); FO[o] = f[i]; AE[o] = a[i];
+      if (rec) {
+        let im = 0, pm = 0;
+        for (let i = 0; i < nx; i++) {
+          const o = fr * nx + i;
+          eta[o] = h[i] > 1e-4 ? h[i] + b[i] : b[i] - 0.002; U[o] = vel(h[i], q[i]); FO[o] = f[i]; AE[o] = a[i];
+          if (Pk[i] > pm) { pm = Pk[i]; im = i; }
+        }
+        // (la crête : le point le plus haut de l'eau juste devant le maximum de production)
+        let ic = im;
+        for (let i = im; i < Math.min(nx, im + Math.round(0.4 / dx)); i++) if (h[i] + b[i] > h[ic] + b[ic]) ic = i;
+        BRK[fr * 4] = x0 + (ic + 0.5) * dx; BRK[fr * 4 + 1] = pm; BRK[fr * 4 + 2] = vel(h[ic], q[ic]); BRK[fr * 4 + 3] = h[ic] + b[ic];
       }
+      Pk.fill(0);
       if (onProgress && fr % 60 === 0) onProgress((k + fr / nf) / loops);
     }
     // dernière image : l'état à k·T + T (pour mesurer le raccord)
@@ -225,7 +239,7 @@ export function simulateSea(spec, onProgress = null) {
     M[i] = Math.max(e, M[i] - lam / fps);
     if (pass) wet[o] = M[i];
   }
-  return { nx, x0, dx, nf, fps, T, eta, u: U, foam: FO, aer: AE, wet, b: bf, stats: { steps, residual, h0 } };
+  return { nx, x0, dx, nf, fps, T, eta, u: U, foam: FO, aer: AE, wet, b: bf, brk: BRK, stats: { steps, residual, h0 } };
 }
 
 // lecture d'un champ enregistré en (x, t) : interpolation bilinéaire, t périodique
@@ -257,10 +271,10 @@ export function simulateBundle(spec, onProgress = null) {
     if (!out) {
       const n = S.nf * S.nx * nzz;
       out = { nz: nzz, zs: [...zs], z0: zs[0], dz: nzz > 1 ? zs[1] - zs[0] : 1, nx: S.nx, x0: S.x0, dx: S.dx, nf: S.nf, fps: S.fps, T: S.T,
-        eta: new Float32Array(n), u: new Float32Array(n), foam: new Float32Array(n), aer: new Float32Array(n), wet: new Float32Array(n), b: new Float32Array(nzz * S.nx), residual: [] };
+        eta: new Float32Array(n), u: new Float32Array(n), foam: new Float32Array(n), aer: new Float32Array(n), wet: new Float32Array(n), b: new Float32Array(nzz * S.nx), brk: new Float32Array(nzz * S.nf * 4), residual: [] };
     }
     const o = k * S.nf * S.nx;
-    out.b.set(S.b, k * S.nx);
+    out.b.set(S.b, k * S.nx); out.brk.set(S.brk, k * S.nf * 4);
     out.eta.set(S.eta, o); out.u.set(S.u, o); out.foam.set(S.foam, o); out.aer.set(S.aer, o); out.wet.set(S.wet, o);
     out.residual.push(S.stats.residual.at(-1));
   });
