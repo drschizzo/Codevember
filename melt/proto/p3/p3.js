@@ -14,7 +14,7 @@
 //       &spp=8 (passes accumulées)
 
 const params = new URLSearchParams(location.search);
-const MOODS = ['nuit', 'ombro', 'lait', 'snell', 'tourbe', 'pierre'];
+const MOODS = ['nuit', 'ombro', 'lait', 'snell', 'tourbe', 'pierre', 'soleil'];
 const SHAPES = ['aiguille', 'festons', 'col', 'table'];
 const W = 1280, H = 800;
 
@@ -61,6 +61,14 @@ const MOOD = {
     lb: [0, 0, 1], lbI: 0, amb: [0.16, 0.09, 0.035],
     sunW: [-0.55, 0.62, -0.55], glow: 3.0,
   },
+  soleil: {
+    cam: [4, -4, 26], tgt: [-1.5, -11.5, 0], fov: 40, exposure: 0.8,
+    absorb: [0.004, 0.0012, 0.001], sigS: 0.004,
+    deep: [0.03, 0.08, 0.1], shallow: [0.2, 0.38, 0.45],
+    sky: [0.8, 0.9, 1.1], horizon: [1.0, 1.0, 1.0], sun: [0.35, 0.85, 0.3], sunI: 160,
+    lb: [0, 0, 1], lbI: 0, amb: [0.3, 0.38, 0.42],
+    sunW: [0.27, 0.92, 0.23], glow: 0.4, floorY: -17,
+  },
   pierre: {
     cam: [5, -5.5, 30], tgt: [0, -5.0, 0], fov: 28, exposure: 0.9,
     absorb: [0.004, 0.0012, 0.001], sigS: 0.008,
@@ -72,7 +80,7 @@ const MOOD = {
 };
 
 const SHADER = /* wgsl */ `
-struct U { v: array<vec4f, 18>, prof: array<vec4f, 72> };
+struct U { v: array<vec4f, 20>, prof: array<vec4f, 80> };
 @group(0) @binding(0) var<uniform> u: U;
 
 const NW = 1.333;
@@ -279,6 +287,7 @@ fn backdropT(p: vec3f, d: vec3f) -> f32 {
   var zb = 0.0;
   if (abs(m - 1.0) < 0.5) { zb = u.v[8].w; }
   else if (abs(m - 5.0) < 0.5) { zb = u.v[9].w; }
+  else if (abs(m - 6.0) < 0.5) { if (d.y >= -1e-4) { return 1e9; } return (u.v[18].w - p.y) / d.y; }
   else { return 1e9; }
   if (d.z >= -1e-4) { return 1e9; }
   return (zb - p.z) / d.z;
@@ -290,6 +299,14 @@ fn backdrop(p: vec3f) -> vec3f {
     let b = normalize(vec3f(-0.574, 0.0, -0.819));
     let xp = p.x * b.z - p.z * b.x;
     return vec3f(1.0, 0.97, 0.92) * (screenLight(xp, p.y) * abs(b.z) * 1.2 + 0.08);
+  }
+  if (abs(m - 6.0) < 0.5) {
+    // fond de sable pâle au soleil : l'ombre de la glace et des nappes
+    let sw = normalize(u.v[12].xyz);
+    let sand = vec3f(0.82, 0.78, 0.68) * (0.85 + 0.25 * noise3(vec3f(p.xz * 2.0, 1.0)) + 0.1 * noise3(vec3f(p.xz * 9.0, 4.0)));
+    var I = 1.0;
+    if (u.v[16].w > 0.5) { I = floorLight(p); }
+    return sand * (u.v[5].w * 0.006 * sw.y * I + u.v[11].xyz);
   }
   // mur de pierre sous le soleil filtré par la surface ridée
   let depthF = exp(p.y * 0.04);
@@ -420,19 +437,108 @@ fn tAt(p: vec3f) -> f32 {
   if (fi > nr - 1.5 || fj < 0.0 || fj > nz - 1.5) { return u.v[10].w; }
   let i = u32(max(fi, 0.0)); let j = u32(fj); let a = clamp(fi - f32(i), 0.0, 1.0); let b = fj - f32(j);
   let n = u32(nr); let q = j * n + i;
-  return mix(mix(tf[q], tf[q + 1u], a), mix(tf[q + n], tf[q + n + 1u], a), b);
+  return mix(mix(tf[2u * q], tf[2u * (q + 1u)], a), mix(tf[2u * (q + n)], tf[2u * (q + n + 1u)], a), b);
+}
+// second champ (P7) : fraction de glace fs
+fn iceAt(p: vec3f) -> f32 {
+  let dxm = u.v[16].y; let nr = u.v[16].w; let nz = u.v[16].z;
+  let fi = length(p.xz) * 0.01 / dxm - 0.5; let fj = (u.v[16].x + p.y * 0.01) / dxm - 0.5;
+  if (fi > nr - 1.5 || fj < 0.0 || fj > nz - 1.5) { return 0.0; }
+  let i = u32(max(fi, 0.0)); let j = u32(fj); let a = clamp(fi - f32(i), 0.0, 1.0); let b = fj - f32(j);
+  let n = u32(nr); let q = j * n + i;
+  return mix(mix(tf[2u * q + 1u], tf[2u * (q + 1u) + 1u], a), mix(tf[2u * (q + n) + 1u], tf[2u * (q + n + 1u) + 1u], a), b);
+}
+// fraction d'eau de fonte : par la température (P5, eau douce) ou par le sel (P7)
+fn meltFrac(q: vec3f) -> f32 {
+  if (u.v[18].z > 0.5) {
+    let z = u.v[16].x + q.y * 0.01;
+    let sInf = u.v[18].x + (u.v[18].y - u.v[18].x) * z / u.v[16].x;
+    return clamp(-tAt(q) / max(sInf, 0.1), 0.0, 1.0);
+  }
+  return clamp((u.v[10].w - tAt(q)) / max(u.v[10].w, 0.1), 0.0, 1.0);
+}
+// gradient de l'indice dû au sel (par cm) : n = n0 + dn/dS · (S − S∞) (+ le fond, négligeable)
+fn gradN(q: vec3f) -> vec3f {
+  let e = 0.04;
+  let g = vec3f(tAt(q + vec3f(e, 0.0, 0.0)) - tAt(q - vec3f(e, 0.0, 0.0)), tAt(q + vec3f(0.0, e, 0.0)) - tAt(q - vec3f(0.0, e, 0.0)), tAt(q + vec3f(0.0, 0.0, e)) - tAt(q - vec3f(0.0, 0.0, e))) / (2.0 * e);
+  return u.v[19].x * g;
+}
+fn gradIce(q: vec3f) -> vec3f {
+  let e = 0.04;
+  let g = vec3f(iceAt(q + vec3f(e, 0.0, 0.0)) - iceAt(q - vec3f(e, 0.0, 0.0)), iceAt(q + vec3f(0.0, e, 0.0)) - iceAt(q - vec3f(0.0, e, 0.0)), iceAt(q + vec3f(0.0, 0.0, e)) - iceAt(q - vec3f(0.0, 0.0, e))) / (2.0 * e);
+  return (NI - NW) * g;
+}
+// ombre au soleil sur le fond (P7) : déplacement du faisceau parallèle à
+// l'arrivée sur le fond (plan horizontal), et profondeur optique de la glace
+fn floorDelta(P: vec3f) -> vec3f {
+  let sw = normalize(u.v[12].xyz);
+  let yb = -u.v[16].x * 100.0;
+  // portion de la droite P + sw·s dans le cylindre du domaine
+  let Rd = 3.8; let A = dot(sw.xz, sw.xz); let B = dot(P.xz, sw.xz); let C = dot(P.xz, P.xz) - Rd * Rd;
+  let disc = B * B - A * C;
+  if (disc <= 0.0) { return vec3f(0.0); }
+  var a0 = (-B - sqrt(disc)) / A; var a1 = (-B + sqrt(disc)) / A;
+  a0 = max(a0, (yb - P.y) / sw.y); a1 = min(a1, (0.0 - P.y) / sw.y);
+  if (a1 <= a0) { return vec3f(0.0); }
+  let N = 72; let h = (a1 - a0) / f32(N);
+  var dlt = vec3f(0.0); var tau = 0.0;
+  for (var m = 0; m < N; m++) {
+    let s = a0 + (f32(m) + 0.5) * h;
+    let q = P + sw * s;
+    var g = gradIce(q);
+    if (u.v[19].z > 0.5) { g += gradN(q); }
+    let gp = g - dot(g, sw) * sw;
+    dlt += s * gp * h / NW;
+    tau += u.v[19].y * iceAt(q) * h;
+  }
+  return vec3f(dlt.x - dlt.y * sw.x / sw.y, dlt.z - dlt.y * sw.z / sw.y, tau);
+}
+// ombroscopie de laboratoire (P7) : faisceau horizontal le long de z, à
+// travers le champ simulé ; écran à Ds (u.v[14].w) cm
+fn phiField(x: f32, y: f32) -> f32 {
+  let N = 128; let zmax = 3.8; let h = zmax / f32(N);
+  var acc = 0.0;
+  for (var m = 0; m < N; m++) {
+    let q = vec3f(x, y, (f32(m) + 0.5) * h);
+    acc += u.v[19].x * tAt(q) + (NI - NW) * iceAt(q);
+  }
+  return 2.0 * acc * h;
+}
+fn screenField(x: f32, y: f32) -> f32 {
+  let h = u.v[19].w; // pas des différences finies : ≥ 2 mailles, sinon on lit la grille bilinéaire
+  let c = phiField(x, y);
+  let hxx = (phiField(x + h, y) - 2.0 * c + phiField(x - h, y)) / (h * h);
+  let hyy = (phiField(x, y + h) - 2.0 * c + phiField(x, y - h)) / (h * h);
+  let hxy = (phiField(x + h, y + h) - phiField(x + h, y - h) - phiField(x - h, y + h) + phiField(x - h, y - h)) / (4.0 * h * h);
+  let a = u.v[14].w / NW;
+  let det = (1.0 + a * hxx) * (1.0 + a * hyy) - a * a * hxy * hxy;
+  var I = clamp(1.0 / max(abs(det), 0.04), 0.0, 3.0);
+  // la glace bulleuse diffuse : l'ombre se voile
+  var tau = 0.0; let N = 64; let hz = 3.8 / f32(N);
+  for (var m = 0; m < N; m++) { tau += u.v[19].y * iceAt(vec3f(x, y, (f32(m) + 0.5) * hz)) * hz; }
+  return I * exp(-2.0 * tau);
+}
+fn floorLight(P: vec3f) -> f32 {
+  let e = 0.04;
+  let c = floorDelta(P);
+  let dxp = floorDelta(P + vec3f(e, 0.0, 0.0)); let dxm = floorDelta(P - vec3f(e, 0.0, 0.0));
+  let dzp = floorDelta(P + vec3f(0.0, 0.0, e)); let dzm = floorDelta(P - vec3f(0.0, 0.0, e));
+  let j00 = 1.0 + (dxp.x - dxm.x) / (2.0 * e); let j01 = (dzp.x - dzm.x) / (2.0 * e);
+  let j10 = (dxp.y - dxm.y) / (2.0 * e); let j11 = 1.0 + (dzp.y - dzm.y) / (2.0 * e);
+  let det = j00 * j11 - j01 * j10;
+  return exp(-c.z) * clamp(1.0 / max(abs(det), 0.05), 0.0, 4.0);
 }
 fn fogSeg(r: ptr<function, Ray>, t: f32) {
   let absorb = u.v[3].xyz; let sigS = u.v[3].w;
   let p = (*r).p; let d = (*r).d;
   var t0 = t; var t1 = t;
-  if (u.v[16].w > 0.5 && sigS > 0.0) {
+  if (u.v[16].w > 0.5 && (sigS > 0.0 || u.v[19].z > 0.5)) {
     // portion du segment dans le cylindre du domaine simulé (r < 3,8 cm, −14 < y < 0)
     let Rd = 3.8; let A = dot(d.xz, d.xz); let B = dot(p.xz, d.xz); let C = dot(p.xz, p.xz) - Rd * Rd;
     let disc = B * B - A * C;
     if (A > 1e-8 && disc > 0.0) {
       var a0 = (-B - sqrt(disc)) / A; var a1 = (-B + sqrt(disc)) / A;
-      if (abs(d.y) > 1e-6) { let y0 = (-14.0 - p.y) / d.y; let y1 = (0.0 - p.y) / d.y; a0 = max(a0, min(y0, y1)); a1 = min(a1, max(y0, y1)); }
+      if (abs(d.y) > 1e-6) { let y0 = (-u.v[16].x * 100.0 - p.y) / d.y; let y1 = (0.0 - p.y) / d.y; a0 = max(a0, min(y0, y1)); a1 = min(a1, max(y0, y1)); }
       t0 = clamp(a0, 0.0, t); t1 = clamp(a1, 0.0, t);
     }
   }
@@ -455,14 +561,17 @@ fn fogSeg(r: ptr<function, Ray>, t: f32) {
       }
     } else {
       let M = 96; let h = len / f32(M);
+      var dacc = vec3f(0.0);
       for (var m = 0; m < M; m++) {
         let q = p + d * (s0 + (f32(m) + 0.5) * h);
-        let c = clamp((u.v[10].w - tAt(q)) / max(u.v[10].w, 0.1), 0.0, 1.0);
+        if (u.v[19].z > 0.5) { let gn = gradN(q); dacc += h * (gn - dot(gn, d) * d) / NW; }
+        let c = meltFrac(q);
         let sl = sigS * (1.0 - c);
         let fogC = mix(u.v[4].xyz, u.v[5].xyz, smoothstep(-30.0, 0.0, q.y));
         (*r).L += (*r).T * (vec3f(1.0) - exp(-vec3f(sl) * h)) * fogC;
         (*r).T *= exp(-(absorb + vec3f(sl)) * h);
       }
+      if (u.v[19].z > 0.5) { (*r).d = normalize(d + dacc); }
     }
   }
 }
@@ -576,7 +685,7 @@ async function main() {
   for (const m of info2.messages) console[m.type === 'error' ? 'error' : 'log'](`${m.lineNum}:${m.linePos} ${m.message}`);
   if (info2.messages.some((m) => m.type === 'error')) { window.__err = info2.messages.map((m) => `${m.lineNum}: ${m.message}`).join('\n'); return; }
 
-  const ubuf = device.createBuffer({ size: 90 * 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+  const ubuf = device.createBuffer({ size: 100 * 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
   const accTex = device.createTexture({ size: [W, H], format: 'rgba32float', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING });
   const outTex = device.createTexture({ size: [W, H], format: 'rgba8unorm', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC });
 
@@ -587,7 +696,7 @@ async function main() {
     { binding: 2, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'unfilterable-float' } },
     { binding: 3, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
   ] });
-  const tBuf = device.createBuffer({ size: 80 * 288 * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+  const tBuf = device.createBuffer({ size: 80 * 320 * 2 * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
   // bulles (P5) : traits additifs dans une texture à part
   const bubTex = device.createTexture({ size: [W, H], format: 'rgba16float', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING });
   const bubView = bubTex.createView();
@@ -619,7 +728,8 @@ async function main() {
   let th = tan(u.v[1].w * 0.5);
   let rd = normalize(f + ndc.x * th * (res.x / res.y) * rgt + ndc.y * th * up);
   var c = vec3f(0.0);
-  if (u.v[13].x > 0.5) { c = vec3f(screenLight((uv.x - 0.5) * 12.8, 1.0 - uv.y * 12.0)); }
+  if (u.v[13].x > 1.5) { c = vec3f(screenField((uv.x - 0.5) * 16.0 * res.x / res.y, -uv.y * 16.0)); }
+  else if (u.v[13].x > 0.5) { c = vec3f(screenLight((uv.x - 0.5) * 12.8, 1.0 - uv.y * 12.0)); }
   else { c = trace(cp, rd); }
   return vec4f(textureLoad(prev, vec2i(fc.xy), 0).rgb + c, 1.0);
 }`.replace('@group(0) @binding(1) var acc: texture_2d<f32>;', '');
@@ -638,7 +748,7 @@ async function main() {
   void bgT;
 
   const SEG = /* wgsl */ `
-struct U { v: array<vec4f, 18>, prof: array<vec4f, 72> };
+struct U { v: array<vec4f, 20>, prof: array<vec4f, 80> };
 @group(0) @binding(0) var<uniform> u: U;
 @group(0) @binding(1) var<storage, read> segs: array<f32>;
 struct VO { @builtin(position) pos: vec4f, @location(0) w: vec3f };
@@ -703,7 +813,7 @@ fn proj(p: vec3f) -> vec4f {
     segBG = device.createBindGroup({ layout: bglG, entries: [{ binding: 0, resource: { buffer: ubuf } }, { binding: 1, resource: { buffer: segBuf } }] });
   }
 
-  const U = new Float32Array(90 * 4);
+  const U = new Float32Array(100 * 4);
   const setU = (mood, shape, jit, spp, ice) => {
     const M = { ...MOOD[mood], ...(window.__cam ?? {}) };
     const s = (i, a, b = 0, c = 0, d = 0) => U.set([a, b, c, d], i * 4);
@@ -722,15 +832,21 @@ fn proj(p: vec3f) -> vec4f {
     s(10, 1.4, Lcol, 0.38, shape === 'aiguille' ? 3 : shape === 'festons' ? 5.6 : 8.5);
     s(11, ...M.amb, 0);
     s(12, ...norm(M.sunW), M.glow);
-    s(13, window.__dbg ? 1 : 0, typeof ice === 'number' ? ice : ice === 'bulleuse' ? 1.6 : 0, window.__noIce ? 1 : 0, 0);
+    s(13, window.__dbg ?? 0, typeof ice === 'number' ? ice : ice === 'bulleuse' ? 1.6 : 0, window.__noIce ? 1 : 0, 0);
     s(14, 0.38, 5.0, 0.12, M.Ds ?? 30);
     s(15, jit[0], jit[1], spp, 0);
     const P5 = window.__p5;
     if (P5) {
-      s(16, P5.Z, P5.dx, P5.prof.length, P5.T ? P5.nr : 0);
-      if (P5.T && !P5.sent) { device.queue.writeBuffer(tBuf, 0, new Float32Array(P5.T)); P5.sent = true; }
+      s(16, P5.Z, P5.dx, P5.prof.length, P5.T || P5.dS ? P5.nr : 0);
+      if ((P5.T || P5.dS) && !P5.sent) {
+        const f0 = P5.dS ?? P5.T, n = f0.length, arr = new Float32Array(2 * n);
+        for (let q = 0; q < n; q++) { arr[2 * q] = f0[q]; arr[2 * q + 1] = P5.fs ? P5.fs[q] : 0; }
+        device.queue.writeBuffer(tBuf, 0, arr); P5.sent = true;
+      }
       U[10 * 4 + 3] = P5.Tinf;
-      for (let n = 0; n < 288; n++) U[90 * 0 + 18 * 4 + n] = n < P5.prof.length ? P5.prof[n] : 0;
+      s(18, P5.Sbot ?? 0, P5.Stop ?? 0, P5.dS ? 1 : 0, M.floorY ?? -17);
+      s(19, 1.9e-4, 0.5, P5.refract ? 1 : 0, window.__sgH ?? 0.12);
+      for (let n = 0; n < 320; n++) U[20 * 4 + n] = n < P5.prof.length ? P5.prof[n] : 0;
       // rayonnement réfléchi par une bulle (réflexion totale sur 44 % de sa section)
       const g = M.amb.map((a) => 0.44 * (2 * a + 0.03 * M.lbI + 0.004 * (M.sunI ?? 0)));
       s(17, ...g, window.__bubGain ?? 1);
