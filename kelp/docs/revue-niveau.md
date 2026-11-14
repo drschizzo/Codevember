@@ -136,3 +136,23 @@ Contraintes du projet à garder en tête :
 - la boucle reste parfaite : tout ce qui est ajouté est soit enregistré sur l'orbite périodique, soit périodique en T par construction (âge mod T, fréquences multiples de 1/T) ;
 - la caméra et l'animation ne bougent pas sans raison ;
 - le coût se mesure à chaque étape (budget actuel : ~9 ms à 960 × 540).
+
+---
+
+## Suivi (15 novembre 2026)
+
+| Étape | État | Ce qui a été fait |
+|---|---|---|
+| B, A1 | fait | Le bord du platier avance et recule le long de la côte (trois ondulations, un chenal, un éperon : la même formule dans la mer, la roche et le shader), l'arête est rompue au mètre, des blocs éboulés cassent le pied du tombant. Faisceau de profils (un tous les 0,9 m) en texture 3D, fondu avec le profil fin de la caméra. Le front se courbe : écart du jet de rive à sa droite, 0 → 0,2 à 0,4 m (`tools/front.mjs`). |
+| C2, C3 | fait | Forêt de touffes clonées et décalées dans le temps (100 à 240 touffes, 0,4 ms par image). Palmier de mer en colonies. Crampons mats ; disque du cochayuyo aplati. |
+| A3, A4 | fait, en partie | Le déferlement est relevé par profil et par image ; embruns (8 000 grappes périodiques), lèvre (crête poussée vers l'avant), crête à contre-jour traversée par le soleil, écume étirée dans le courant et ombrée. **Non fait** : un vrai ruban de lèvre en volute, et l'écume advectée en lagrangien (elle aurait doublé la mémoire du faisceau). |
+| C1 | fait, autrement | Pas de tiges de Cosserat (un quaternion par segment dans le solveur aurait allongé la génération), mais un angle de torsion par nœud, tordu par le courant et propagé le long de la lame : les lames vrillent (médiane en pointe 96° pour le cochayuyo, 39° pour la digitée). **Non fait** : la lame large en étoffe (paume de la digitée). |
+| A5, A6 | fait | Houle de fond périodique ; panaches de bulles en colonnes, sable soulevé près du fond ; profondeur de champ plus douce. |
+| A2 | **écarté** | Serre-Green-Naghdi demande une résolution tridiagonale à chaque pas : le profil fin de la caméra deviendrait la plus longue pièce du démarrage. Contrainte retenue : le démarrage ne doit pas s'allonger. |
+| C4 | non fait | Ombres de la canopée sous l'eau. |
+| Démarrage | amélioré | La mer et la roche sont calculées en parallèle sur le pool de workers ; moins de plantes simulées ; paires de contact à l'échelle des lames. k39 17,3 → ~12 s, e5 20,7 → ~15 s, p7 22,5 → ~18,5 s. |
+
+Points à surveiller :
+- les embruns ne se voient bien que lorsque la caméra est à l'air et que la vague casse dans le champ ; sur k39, la grande vague casse quand la caméra est déjà sous l'eau ;
+- le palmier de mer reste lisible comme un palmier dans les colonies proches ; des colonies plus denses coûteraient en contacts ;
+- les clones n'épousent pas exactement la roche de leur nouvelle place (6 cm de tolérance) : au loin, cela ne se voit pas.

@@ -58,12 +58,16 @@ La boucle est parfaite par construction. Le forçage, c'est-à-dire la série de
 
 - **Reconstruction hydrostatique** (Audusse et al., 2004) et flux HLL. La mer au repos reste au repos sur un fond quelconque, la hauteur reste positive, et le front mouillé-sec avance et recule sans oscillation. Les vagues déferlées qui courent sur le platier sont des chocs que le schéma capture.
 - **Bord du large générant-absorbant** : la vague incidente entre par l'invariant de Riemann montant u + 2c, la vague réfléchie sort par le descendant.
-- **La série** : chaque vague est une crête précédée d'un creux (la mer qui se retire avant la vague), η_in(t) = A·[e^{−(t−t_k)²/τ_c²} − β e^{−(t−t_k+d)²/τ_t²}], périodique de période T. Les trois vagues vont en crescendo.
+- **La série** : chaque vague est une crête précédée d'un creux (la mer qui se retire avant la vague), η_in(t) = A·[e^{−(t−t_k)²/τ_c²} − β e^{−(t−t_k+d)²/τ_t²}], périodique de période T. Les trois vagues vont en crescendo. S'y ajoute une **houle de fond** (trois trains de 2,5 à 4,5 cm, de périodes T/4, T/5, T/7) : entre les vagues, la mer n'est jamais un miroir.
 - **Frottement de Manning** implicite (n = 0,035). Une lame de moins de 4 cm est drainée par le relief que le profil moyen ne voit pas (fissures, rigoles), ce qui découvre le platier entre les vagues.
 - **L'écume** naît là où la surface est raide et où l'écoulement converge (le ressaut). Le courant la transporte, et elle se défait en 4,5 s ; les bulles dans l'eau, en 1 s. L'enveloppe de séchage M(x, t) = max(η, M − λ dt) dit jusqu'où la roche est encore mouillée.
-- **Le champ 2D** est le champ 1D décalé par l'obliquité de la houle (un retard proportionnel à la distance le long de la côte). Dans les cuvettes, il est relevé jusqu'à leur seuil : ce sont les flaques, calculées par inondation prioritaire sur la roche cuite. Au large, au-delà de la simulation, les mêmes vagues arrivent sous forme analytique.
+- **Le bord du platier n'est pas droit.** Il avance et recule le long de la côte : trois ondulations (8 à 11 m, 3,5 à 4,8 m, 1,6 à 2,2 m), un chenal et un éperon, la même formule s(z) dans la mer, la roche cuite et le shader (`edgeShift`). La roche y ajoute une arête rompue à l'échelle du mètre et des blocs éboulés au pied du tombant. Le profil en (x, z) est le profil moyen déplacé de s(z) au tombant et raccordé au platier, sans toucher à la côte.
+- **Le faisceau de profils** : la mer n'est plus un seul profil extrudé le long de la côte. Un profil de Saint-Venant tous les 0,9 m (5 cm, 30 images/s, CFL 0,8), chacun sur sa coupe du platier, tous sous la même série, dans le même temps local t − obliq·(z − z_ref). Entre deux profils, le champ est interpolé (texture 3D x × t × z). Le front se courbe avec le bord : il arrive plus tôt dans le chenal et casse sur l'éperon. `tools/front.mjs` mesure l'écart du jet de rive à sa droite le long de la côte (0 pour une mer extrudée, jusqu'à 0,4 m ici).
+- **Le profil fin de la caméra** (2,5 cm, 60 images/s) reste calculé à part et fondu avec le faisceau à moins d'un mètre de la caméra : c'est lui qui fait la ligne d'eau sur le dôme. Le sec et le mouillé se décident contre le fond que chaque profil a vu (`simBed`).
+- **Le déferlement** : pour chaque profil et chaque image, la mer relève où la vague casse et avec quelle force (le maximum de la production d'écume entre deux images, et la crête juste devant), la vitesse de l'eau et la hauteur de la crête. Les embruns et la lèvre en partent.
+- Dans les cuvettes, le niveau est relevé jusqu'à leur seuil : ce sont les flaques, calculées par inondation prioritaire sur la roche cuite. Au large, au-delà de la simulation, les mêmes vagues et la même houle arrivent sous forme analytique.
 
-Le tout est enregistré 60 fois par seconde dans une texture x × t, relue sur le GPU par la surface, le brouillard d'eau, la roche (mouillée) et le soleil (atténué sous l'eau).
+Le tout est relu sur le GPU par la surface, le brouillard d'eau, la roche (mouillée), le soleil (atténué sous l'eau), les embruns et les laminaires.
 
 ## Les laminaires (`src/gen/kelp.js`)
 
@@ -74,9 +78,15 @@ Des chaînes de nœuds (stipe, lanières) ancrées au crampon, intégrées par X
 - **Contraintes** : flexion (seconde différence pondérée, raideur EI/l d'une charnière) et longueur, puis inextensibilité exacte de la racine vers la pointe (« follow the leader »). Celle-ci traite nœud par nœud le contact et le frottement sur la roche, et la tranche du ruban compte s'il penche. Les contraintes raides (stipe du palmier de mer, du cochayuyo) ont dix itérations de plus.
 - **Contacts entre lanières** : les rubans sont épais. La séparation est prise sur l'axe de moindre recouvrement parmi la droite des points les plus proches et les normales des deux faces. Couchée sur une autre, une lanière se pose dessus ; côte à côte, deux lanières s'écartent par la tranche. La correction est bornée par sous-pas, si bien qu'un recouvrement se résout sans lancer les nœuds.
 - **Orientation du ruban** : un directeur le long de la largeur, transporté avec la lanière, couché à plat sur ce qui la porte, tourné dans le plan du courant quand l'eau la tire, lissé le long de la lanière.
+- **La torsion** : sans elle, toutes les lames d'un même courant restaient à plat et parallèles, comme des planches. Chaque nœud porte un angle φ autour de la lame. Le courant le tord (un couple aléatoire corrélé sur 0,3 s, un par lame, à la mesure de la vitesse relative de l'eau), la raideur de torsion le propage vers la pointe (onde à ~2 m/s), le pied est tenu, un rappel faible garde la mémoire de la forme à plat et, couchée sur la roche, la lame est rappelée à plat. φ est borné à 0,8 rad d'un nœud au suivant, de la racine vers la pointe. Il tourne le directeur enregistré (b cos φ + (t × b) sin φ) sans toucher au solveur ni aux contacts : un degré de liberté par nœud, rien au temps de génération. Médiane en pointe dans le courant : 96° pour le cochayuyo (ses lanières épaisses roulent sur elles-mêmes), 39° pour la digitée.
 - **Le caisson de la caméra** est un obstacle : une sphère de 13 cm autour de l'objectif (dôme et boîtier) et un pied jusqu'à la roche, qui suivent le travelling. Sans lui, des lanières passaient à 4 cm de l'objectif, et le plan proche en coupait des morceaux qui disparaissaient puis revenaient.
 - **Prise de l'eau** : une lame d'eau de quelques millimètres n'emporte pas une lanière couchée (prise nulle sous 5 mm, entière au-delà de 6 cm). Le fondu de raccord de chaque plante se place de préférence quand elle est dans l'eau qui bouge.
 - **Surface de contact** : l'enveloppe supérieure lissée du relief (dilatation puis flou, 3 cm). Une lanière passe par-dessus une fissure au lieu d'y tomber, et ne descend jamais sous la roche dessinée.
+- **Recherche des paires de contact** : une grille hachée, dont la cellule et la marge sont à l'échelle du pas des lames (des cellules de 16 cm et une marge de 10 cm faisaient 40 000 paires dans les houppes serrées du palmier de mer, 10 000 aujourd'hui). Les lames d'une même houppe ne se testent pas entre elles.
+
+**La forêt** (`placeClones`, `src/gen/scene.js`). La mer a une symétrie : à un pas Δ le long de la côte, c'est la même mer, retardée de obliq·Δ (le faisceau n'en change que le détail du bord). Une plante simulée en z est donc une pose valide en z + Δ, rejouée avec ce retard. On ne simule que les plantes proches de la caméra (40 au plus, à moins de ~4,6 m), là où comptent les contacts entre plantes et avec le caisson. Au-delà de 2,2 m et jusqu'à ~20 m, des touffes entières (une plante et ses voisines, une colonie de palmiers de mer) sont posées à la même distance du bord, sur une roche de même hauteur à 6 cm près, avec un maillage plus léger. La frange devient une forêt de 100 à 240 touffes pour 0,4 ms par image et rien au démarrage.
+
+Le palmier de mer pousse en **colonies serrées** (3 à 6 plantes sur 15 cm) : isolé, il se lisait comme un cocotier miniature. Les crampons sont mats et sombres, et le disque du cochayuyo est un coussin plat : brillants et bombés, ils se lisaient comme des ventouses.
 
 Quatre familles, quatre mouvements :
 
@@ -96,12 +106,16 @@ Quatre familles, quatre mouvements :
   - Sur le haut du dôme qui vient de ressortir se posent des gouttes. Ce sont des lentilles plano-convexes qui montrent la scène renversée et réduite, avec un bord sombre (réfraction rasante), le reflet du ciel en haut et une caustique claire en bas. Elles sont affaissées par la gravité, au contour irrégulier, groupées par plaques. Les grosses glissent en laissant une traînée humide, et toutes rétrécissent en séchant, chacune à son heure.
   - La mer elle-même anime les gouttes. Pour chaque hauteur du dôme (32 niveaux sur ±12 cm) et chaque image, la simulation donne le temps écoulé depuis que l'eau l'a quitté et le numéro de cette émergence (`emerge`, `src/gen/scene.js`). Les gouttes naissent quand l'eau se retire, d'abord en haut de l'image, en dernier en bas, et chaque vague en dépose de nouvelles. Les grosses glissent en accélérant et s'étirent, toutes sèchent en 3 à 14 s.
   - Une goutte reste dans sa cellule : son rayon et sa course sont bornés exactement par son contour le plus large (irrégularité, affaissement, étirement, balancement). Sans cette borne, le bord de la cellule la coupait net. Deux couches de cellules (une goutte au plus par cellule) et une seule lecture de l'image déformée coûtent ~0,35 ms à 0,5 Mpx.
-- **Le milieu** (`src/scene/water.js`) : un brouillard d'eau calculé pour chaque pixel sur la partie immergée de son rayon, le niveau de l'eau le long du rayon étant pris linéaire entre ses deux bouts. Il comprend l'extinction par canal (le rouge d'abord), une lumière diffusée qui décroît avec la profondeur, et une eau aérée qui blanchit sous le ressaut en nuages de bulles plutôt qu'en voile uniforme. La nuit (Noctiluque), l'eau agitée s'allume.
+- **Le milieu** (`src/scene/water.js`) : un brouillard d'eau calculé pour chaque pixel sur la partie immergée de son rayon, le niveau de l'eau le long du rayon étant pris linéaire entre ses deux bouts. Il comprend l'extinction par canal (le rouge d'abord) et une lumière diffusée qui décroît avec la profondeur. L'eau aérée blanchit sous le ressaut en panaches : denses sous la surface, en colonnes, d'autant plus profonds que le déferlement est fort. Là où le courant est fort, un nuage de sable brun se soulève près du fond. La nuit (Noctiluque), l'eau agitée s'allume.
+- **La vague qui casse** :
+  - la crête à contre-jour est traversée par le soleil (Beer-Lambert sur l'épaisseur d'eau, plus longue sur une face raide) : vert-turquoise quand elle est mince, rien au pied ;
+  - la lèvre : là où la vague casse, le haut de la crête est poussé vers l'avant, dans le sens où va l'eau (jamais près du dôme, où la ligne d'eau est celle du profil fin) ;
+  - les embruns (`src/scene/spray.js`) : 8 000 grappes de gouttes, des quadrilatères face à la caméra, sans rien de simulé au démarrage. Chaque grappe vit par cycles (T/25) : elle tire une place le long de la côte, lit le déferlement à cet instant, part de la crête avec la vitesse de l'eau et un jet vers le haut à la mesure du déferlement, et suit une chute freinée par l'air, en forme exacte. Éclairées comme l'écume, avec la diffusion vers l'avant à contre-jour ; invisibles sous l'eau.
 - **La surface vue d'en dessus** :
   - des rides à trois échelles (vent, clapot, capillaires, les plus fines s'effaçant au loin) ;
   - un reflet de Fresnel du ciel, jamais un miroir parfait au loin, car les facettes regardent plus haut ;
   - le reflet du soleil (GGX) ;
-  - une écume en dentelle (bords de cellules de Worley étirés dans le sens du courant, pleine dans le ressaut), entraînée par le courant en deux phases fondues et périodiques.
+  - une écume en plaques déchirées, trouées de bulles, entraînée par le courant en deux phases fondues et périodiques, étirée en traînées là où le courant est rapide (le retrait), et qui porte une ombre sur l'eau autour d'elle.
 
   Rien n'est dessiné entre le centre optique et le dôme, ni sous la roche. La surface est un plan d'eau à son niveau partout où la mer ou une flaque est là, et le test de profondeur contre la roche dessine le bord de l'eau au pixel près. Posée ou drapée sur la roche sèche, elle faisait des triangles inclinés qui sortaient en dents de scie sur les pentes raides. Les motifs de la surface tiennent compte de la hauteur : sur la face raide d'un ressaut, ils s'étiraient en aiguilles. La surface n'écrit pas de vecteurs vitesse, car ses sommets passent d'un coup de la roche à l'eau au bord mouillé-sec, et leurs vitesses démesurées étiraient le flou de mouvement en copies répétées des reflets. Vue d'en dessous, la fenêtre de Snell montre le ciel, et la réflexion totale montre l'eau elle-même.
 - **Le soleil sous l'eau** est atténué sur le chemin réfracté jusqu'au point et modulé par des caustiques, par `receivedShadowNode` (même atténuation pour la roche, les lanières, les crampons).
@@ -180,7 +194,7 @@ La Marine est tirée à part (une graine sur cinq, sur son propre flux `regard`)
 node --test 'kelp/test/*.test.mjs'
 ```
 
-Quinze tests :
+Dix-sept tests :
 - la mer est une orbite périodique, sa hauteur n'est jamais négative, le grand retrait découvre le platier et la grande vague le recouvre ;
 - aucun nœud de laminaire ne passe sous la roche, à aucun instant, ni à moins de 10 cm de l'objectif ;
 - l'étirement est borné : moins de 5 % après la mise en place, avec des pointes transitoires jusqu'à ~45 % quand une marche de la roche repousse un nœud dans un sous-pas ;
@@ -189,11 +203,21 @@ Quinze tests :
 - la caméra est périodique, lente, au-dessus de la roche ;
 - les familles diffèrent par leur flottabilité et leur raideur ;
 - la recette est déterministe et JSON, chaque humeur et chaque famille sont tirées, la série est un crescendo qui finit au calme, les humeurs sont des décors ;
-- les laminaires sont à l'heure de la mer (un nombre entier de sous-pas par image enregistrée).
+- les laminaires sont à l'heure de la mer (un nombre entier de sous-pas par image enregistrée) ;
+- le bord du platier et le front varient le long de la côte (faisceau de profils) ;
+- la forêt s'étend en clones, jamais contre le dôme.
 
 ## Performances
 
-Génération d'une scène (dans Node, un seul cœur) : ~1 s pour la mer, ~2 s pour la roche, 7 à 18 s pour les laminaires selon la famille (jusqu'à 64 plantes et ~3 400 nœuds, deux boucles entières). Nettement plus lent quand l'onglet est en arrière-plan.
+**Génération d'une scène.** La mer (le profil fin de la caméra et les tranches du faisceau) et la roche ne dépendent que de la recette. `scene/stage.js` les demande en même temps aux workers du pool (`sceneJobs`, pièces « part »), puis cède leurs tampons, sans copie, au worker qui assemble la scène (caméra, laminaires, géométrie : `assembleScene`). Sans pool (Node, tests), `buildScene` les enchaîne. Les workers imbriqués n'ont pas été retenus : tous les navigateurs ne les ont pas, et le panneau de navigateur de développement non plus.
+
+| Graine | Avant cette passe | Après (plus longue pièce + assemblage, Node) |
+| --- | --- | --- |
+| k39 (cochayuyo) | 17,3 s | ~12 s (10,1 s mesurés dans le navigateur) |
+| e5 (palmier de mer) | 20,7 s | ~15 s |
+| p7 (digitée) | 22,5 s | ~18,5 s |
+
+Le gain vient du parallélisme (mer et roche : ~2 s au lieu de ~3 s à la suite, et le faisceau, sept fois plus de mer, ne coûte rien de plus), de moins de plantes simulées (les clones font la densité), de la recherche des paires de contact à l'échelle des lames et d'une seule lecture du champ par nœud et par sous-pas. Le reste est la simulation des laminaires, surtout leurs contacts. La génération est nettement plus lente quand l'onglet est en arrière-plan.
 
 Temps d'image (GPU d'un Mac, onglet au premier plan, 960 × 540, graine ft2xdf) : 6,6 à 6,9 ms, contre 10,6 ms avant la passe d'optimisation. La roche est passée de 6 à 3,9 ms (hauteur relue dans la position au lieu de l'échantillonner, pente hors de la boîte lue sur le profil seul, micro-relief à deux octaves, niveau de l'eau sans champ lointain). Les autres gains :
 - brouillard d'eau calculé seulement pour les rayons qui traversent l'eau ;
@@ -208,4 +232,4 @@ Après la passe cinéma (graine k39, 960 × 540, même machine, panneau masqué)
 
 ## Version mobile
 
-Imposée par `?mobile=1`, ou choisie d'office sur téléphone : 36 plantes, 90 sous-pas par seconde, roche cuite en 640², grilles de la roche et de l'eau plus lâches, chaîne d'image allégée, résolution dynamique. Non vérifiée sur un appareil réel.
+Imposée par `?mobile=1`, ou choisie d'office sur téléphone : 28 plantes simulées et 90 touffes clonées, un profil du faisceau tous les 1,5 m, 2 500 grappes d'embruns, 90 sous-pas par seconde, roche cuite en 640², grilles de la roche et de l'eau plus lâches, chaîne d'image allégée, résolution dynamique. Non vérifiée sur un appareil réel.

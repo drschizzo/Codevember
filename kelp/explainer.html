@@ -108,18 +108,26 @@
         <div class="note trap"><b>Le piège</b><p>Le ciel est longtemps resté noir. D'abord, la même texture servait d'environnement et de fond, et le fond lisait sa version préfiltrée pour les reflets. Ensuite, le fond, dessiné à part, restait marqué en erreur après le préchauffage asynchrone des pipelines. Le ciel est maintenant une grande sphère de la scène, préchauffée comme le reste. Autre piège : au bord mouillé-sec, les sommets de la surface sautent de sous la roche à la surface de l'eau, et leurs vecteurs vitesse étiraient le flou de mouvement en copies répétées des reflets. La surface n'écrit plus de vitesse.</p></div>
       </section>
 
+      <section id="faisceau">
+        <h2><span class="n">09</span>Le bord n'est pas droit, le front non plus</h2>
+        <span class="src">src/gen/sea.js · edgeShift(), simulateBundle(), seaField() · src/gen/scene.js · placeClones()</span>
+        <p>Une seule coupe de la mer, extrudée le long de la côte, dessinait un front tiré à la règle et un platier bordé comme un trottoir. Le bord avance et recule maintenant le long de la côte, d'une quantité \(s(z)\) (trois ondulations, un chenal, un éperon), la même dans la roche et dans le shader. La mer est un faisceau de profils de Saint-Venant, un tous les 0,9 m, chacun sur sa propre coupe et tous sous la même série. Entre deux profils, le champ est interpolé dans le même temps local \(t - \text{obliq}\,(z - z_\text{ref})\) : le front arrive plus tôt dans le chenal, casse sur l'éperon, et se courbe au lieu de se dédoubler.</p>
+        <p>La même symétrie fait la forêt. À un pas \(\Delta\) le long de la côte, la mer est presque la même, retardée de \(\text{obliq}\,\Delta\). Une laminaire simulée en \(z\) est donc une pose valide en \(z + \Delta\), rejouée avec ce retard. Seules les plantes proches de la caméra sont simulées ; au loin, des touffes entières sont clonées à la même distance du bord. La frange devient une forêt sans une seconde de calcul de plus.</p>
+        <div class="note trap"><b>Le piège</b><p>Le temps de démarrage. Sept fois plus de mer, à la suite, ajoutait 4 s. Les profils, le profil fin de la caméra et la roche ne dépendent que de la recette : ils sont calculés en même temps sur les workers du pool, puis cédés sans copie au worker qui assemble la scène. Le démarrage est plus court qu'avant (17 → 10 s sur la graine k39). Un worker qui lance ses propres workers aurait été plus simple, mais tous les navigateurs ne le permettent pas.</p></div>
+      </section>
+
       <section id="budget">
-        <h2><span class="n">09</span>Budget</h2>
+        <h2><span class="n">10</span>Budget</h2>
         <div class="tbl"><table>
           <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
           <tbody>
-            <tr><td>La mer : Saint-Venant, 760 cellules, deux périodes de 32 s (~31 000 pas)</td><td>worker</td><td class="num">~1 s</td></tr>
-            <tr><td>La roche : relief 1 024², surface de contact, flaques (inondation prioritaire), couleur</td><td>worker</td><td class="num">~2 s</td></tr>
-            <tr><td>Les laminaires : 64 plantes, ~3 400 nœuds, 66 s simulées à 120 sous-pas/s</td><td>worker</td><td class="num">7–18 s</td></tr>
-            <tr><td>Données transmises au GPU (mer 60 i/s, laminaires 30 i/s, roche)</td><td>GPU</td><td class="num">~85 Mo</td></tr>
+            <tr><td>La mer : le profil fin de la caméra (760 cellules, 60 i/s) et ~22 profils du faisceau (380 cellules, 30 i/s), deux périodes de 32 s chacun, en parallèle</td><td>workers</td><td class="num">~1,5 s</td></tr>
+            <tr><td>La roche : relief 1 024², arête rompue, éboulis, surface de contact, flaques, couleur (en même temps que la mer)</td><td>worker</td><td class="num">~2 s</td></tr>
+            <tr><td>Les laminaires : 23 à 40 plantes simulées, 66 s à 120 sous-pas/s, puis 100 à 240 touffes clonées</td><td>worker</td><td class="num">8–17 s</td></tr>
+            <tr><td>Données transmises au GPU (faisceau en texture 3D, profil fin 60 i/s, laminaires 30 i/s, roche)</td><td>GPU</td><td class="num">~170 Mo</td></tr>
           </tbody>
         </table></div>
-        <p>Mesures faites dans Node, sur un cœur, avec une graine de test ; la génération est nettement plus lente quand l'onglet est en arrière-plan. Le temps d'image, mesuré à 960 × 540 sur le GPU d'un Mac, était de 6,6 à 6,9 ms, dont ~3,9 ms pour la roche et ~2,8 ms pour l'occlusion ambiante. La passe cinéma l'a porté à 8,1–9,3 ms (graine k39), surtout pour la lumière diffusée sous l'eau.</p>
+        <p>Mesures faites dans Node, sur un cœur, avec une graine de test ; la génération est nettement plus lente quand l'onglet est en arrière-plan. Le temps d'image, mesuré à 960 × 540 sur le GPU d'un Mac, était de 6,6 à 6,9 ms, dont ~3,9 ms pour la roche et ~2,8 ms pour l'occlusion ambiante. La passe cinéma l'a porté à 8,1–9,3 ms (graine k39), surtout pour la lumière diffusée sous l'eau. Le faisceau, la forêt clonée (0,4 ms) et les embruns (0,2 ms) coûtent peu ; le démarrage, lui, a raccourci : 17 → ~12 s sur k39, 22,5 → ~18,5 s sur la graine p7.</p>
       </section>
     </article>
 
