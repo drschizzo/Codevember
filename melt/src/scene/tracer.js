@@ -1,418 +1,313 @@
-// Le rendu : un lancer de rayons, en shader de calcul WebGPU, qui écrit l'image
-// HDR dans une texture three.js ; la chaîne d'image commune (bloom,
-// étalonnage, grain, anticrénelage) s'applique ensuite (scene/stage.js).
-// Prototypes : proto/p3 (indices vrais, glace bulleuse, miroir de la surface),
-// proto/p5 (profil simulé), proto/p8 (le fuseau libéré).
+// Le rendu : un lancer de rayons en shader de calcul WebGPU, qui écrit l'image
+// HDR dans une texture three.js ; la chaîne d'image commune passe ensuite
+// dessus (scene/stage.js). Essai d'origine : proto/b0.
 //
-// Pourquoi un lancer de rayons : la glace dans l'eau ne se lit que par ce qui
-// la fait voir pour de vrai (réfraction d'indice relatif 0,982, réflexion
-// totale aux incidences rasantes, diffusion dans la glace bulleuse), et la
-// surface vue de dessous est un miroir hors de la fenêtre de Snell (48,6°) :
-// chaque forme a son double. Une matière à transmission de three.js ne sait
-// faire ni l'un ni l'autre.
+// - Trémie : un cube dont chaque face est creusée en gradins vers le centre
+//   (les arêtes poussent plus vite que le milieu des faces) ; variantes : en
+//   spirale (chaque gradin tourne d'un cran), allongée.
+// - Couleur : couche mince d'oxyde (Bi₂O₃, n ≈ 2,2) sur le métal
+//   (n ≈ 1,9 + 3,4 i), réflectance d'Airy à six longueurs d'onde ; l'épaisseur
+//   (0 à ~300 nm) vient du temps passé à l'air et de la chaleur du métal.
+// - Le bain : un miroir de métal liquide ; la peau d'oxyde des cristaux engloutis
+//   y flotte et se fend ; les chutes y font des rides.
+// - Ce qui bouge est calculé côté JavaScript une fois par image (cycle.js) ;
+//   chaque rayon ne visite que les cristaux dont la sphère englobante le croise,
+//   et un rayon qui ne croise aucun cristal touche le bain analytiquement.
 //
-// Unités : cm ; y = 0 à la surface ; l'axe de la colonne est l'axe y.
+// Unités : cm ; y = 0 : la croûte du fond.
 import * as THREE from 'three/webgpu';
 
-export const MAX_ROWS = 256;
+export const MAXC = 12;
 
 const WGSL = /* wgsl */ `
 struct P {
-  res: vec4f,      // largeur, hauteur, décalage x, décalage y (pixels)
-  cam: vec4f,      // position, tan(fov/2)
-  camF: vec4f, camR: vec4f, camU: vec4f,
-  absorb: vec4f,   // absorption de l'eau (cm⁻¹), w : diffusion
-  deep: vec4f,     // eau profonde, w : humeur
-  shallow: vec4f,  // eau claire (vers la surface), w : soleil (intensité)
-  sun: vec4f,      // direction du soleil dans l'air, w : intensité du ciel
-  sunW: vec4f,     // direction du soleil dans l'eau, w : lueur vers lui
-  lb: vec4f,       // boîte à lumière (direction), w : intensité
-  sky: vec4f,      // zénith, w : z du mur (Bassin de pierre)
-  horizon: vec4f,  // horizon, w : y du fond (Ombre)
-  amb: vec4f,      // lumière ambiante dans l'eau, w : diffusion de la glace (cm⁻¹)
-  col: vec4f,      // rayon de la colonne émergée, hauteur du domaine, pas des rangées (cm), nombre de rangées
-  mat: vec4f,      // avance cumulée (cm, coordonnées de la matière), densité des bulles, hauteur des cellules de bulles, section (0 ronde, 1 carrée, 2 hexagonale)
-  frag: vec4f,     // centre du fuseau (cm), w : θ (inclinaison de l'axe, horaire)
-  frag2: vec4f,    // longueur (cm), rangées, présent, azimut du plan de bascule
-  frag3: vec4f,    // centre de masse depuis le bas (cm), cellules de bulles par période d'avance, —, rides (amplitude)
-  ripple: vec4f,   // x, z de l'origine des rides, temps (s), longueur d'onde (cm)
-  glint: vec4f,    // couleur de l'éclat des bulles, w : bleu de la glace (absorption)
+  res: vec4f, cam: vec4f, camF: vec4f, camR: vec4f, camU: vec4f,
+  st: vec4f,     // t, vitesse d'oxydation, port (0 trémie, 1 spirale, 2 allongée), nombre de cristaux
+  tide: vec4f,   // niveau L, remontée (0–1), LH, LL
+  times: vec4f,  // T0, T1, T2, T3
+  envLo: vec4f, envHi: vec4f, // fond du studio (bas, haut)
+  forge: vec4f,  // lueur de forge (couleur, force)
+  boxes: array<vec4f, 18>,    // 6 boîtes : (direction, intensité), (couleur, demi-largeur), (haut, demi-hauteur)
+  cr: array<vec4f, 36>,       // cristaux : (centre, demi-côté), (angle, inclinaison, oxyde, graine), (coin, cédé)
+  pc: array<vec4f, 24>,       // coins tombés : (position, actif), (angle, rotation, demi-côté, —)
+  dr: array<vec4f, 48>,       // gouttes : 4 par cristal, (position, rayon)
+  sk: array<vec4f, 12>,       // peau (âge ou −1), ride (x, z, âge ou −1)
 };
 @group(0) @binding(0) var<uniform> u: P;
-@group(0) @binding(1) var<storage, read> rows: array<f32>; // [colonne MAX_ROWS][fuseau MAX_ROWS], mm
-@group(0) @binding(2) var outTex: texture_storage_2d<rgba16float, write>;
+@group(0) @binding(1) var outTex: texture_storage_2d<rgba16float, write>;
 
-const NW = 1.333;
-const NI = 1.309;
 const PI = 3.14159265;
-const MAXR = ${MAX_ROWS}u;
-
 fn hash31(p: vec3f) -> f32 { var q = fract(p * 0.1031); q += dot(q, q.zyx + 31.32); return fract((q.x + q.y) * q.z); }
-fn hash33(p: vec3f) -> vec3f { var q = fract(p * vec3f(0.1031, 0.1030, 0.0973)); q += dot(q, q.yxz + 33.33); return fract((q.xxy + q.yxx) * q.zyx); }
 fn noise3(p: vec3f) -> f32 {
   let i = floor(p); let f = fract(p); let w = f * f * (3.0 - 2.0 * f);
   return mix(mix(mix(hash31(i), hash31(i + vec3f(1,0,0)), w.x), mix(hash31(i + vec3f(0,1,0)), hash31(i + vec3f(1,1,0)), w.x), w.y),
              mix(mix(hash31(i + vec3f(0,0,1)), hash31(i + vec3f(1,0,1)), w.x), mix(hash31(i + vec3f(0,1,1)), hash31(i + vec3f(1,1,1)), w.x), w.y), w.z);
 }
+fn smin(a: f32, b: f32, k: f32) -> f32 { let h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0); return mix(b, a, h) - k * h * (1.0 - h); }
+fn rotY(p: vec3f, a: f32) -> vec3f { let c = cos(a); let s = sin(a); return vec3f(c * p.x + s * p.z, p.y, -s * p.x + c * p.z); }
+fn rotX(p: vec3f, a: f32) -> vec3f { let c = cos(a); let s = sin(a); return vec3f(p.x, c * p.y - s * p.z, s * p.y + c * p.z); }
+fn sdBox(p: vec3f, b: vec3f) -> f32 { let q = abs(p) - b; return length(max(q, vec3f(0.0))) + min(max(q.x, max(q.y, q.z)), 0.0); }
+fn sdCapsule(p: vec3f, a: vec3f, b: vec3f, r: f32) -> f32 { let pa = p - a; let ba = b - a; let h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0); return length(pa - ba * h) - r; }
+fn voro(x: vec2f, seed: f32) -> vec2f {
+  let i = floor(x); var f1 = 9.0; var f2 = 9.0; var id = 0.0;
+  for (var a = -1; a <= 1; a++) { for (var b = -1; b <= 1; b++) {
+    let c = i + vec2f(f32(a), f32(b));
+    let h = vec2f(hash31(vec3f(c, seed)), hash31(vec3f(c, seed + 3.7)));
+    let d = length(x - c - h);
+    if (d < f1) { f2 = f1; f1 = d; id = hash31(vec3f(c, seed + 9.1)); } else if (d < f2) { f2 = d; }
+  } }
+  return vec2f(f2 - f1, id);
+}
 
-// ── La colonne : rayon simulé par rangée (mm), interpolé ──
-fn colRow(fj: f32) -> f32 {
-  let n = u.col.w;
-  let f = clamp(fj, 0.0, n - 1.001);
-  let j = u32(floor(f)); let t = f - floor(f);
-  return mix(rows[j], rows[j + 1u], t) * 0.1;
+// ── la trémie ──
+fn hopper(q0: vec3f, s: f32, round: f32, fill: f32, cav: f32) -> vec2f {
+  var q = q0;
+  let lng = u.st.z > 1.5;
+  if (lng) { q = vec3f(q0.x * 0.62, q0.y, q0.z); } // allongée (le long de x)
+  let b = abs(q) - vec3f(s);
+  let dbox = (length(max(b, vec3f(0.0))) + min(max(b.x, max(b.y, b.z)), 0.0) - round) * select(1.0, 0.62, lng);
+  if (cav < 0.5) { return vec2f(dbox, 0.0); } // (au ras du métal, les gradins sont noyés : le ménisque enveloppe le bloc)
+  let a = abs(q);
+  var n = 0.0; var t = vec2f(0.0);
+  if (a.x >= a.y && a.x >= a.z) { n = a.x; t = q.yz; } else if (a.y >= a.z) { n = a.y; t = q.xz; } else { n = a.z; t = q.xy; }
+  let w = s * 0.11;
+  var tt = t;
+  if (u.st.z > 0.5 && u.st.z < 1.5) { // spirale : chaque gradin tourne d'un cran
+    let k0 = floor((s - max(abs(t.x), abs(t.y))) / w);
+    let an = k0 * 0.07; let c = cos(an); let sn = sin(an);
+    tt = vec2f(c * t.x - sn * t.y, sn * t.x + c * t.y);
+  }
+  let rim = s - max(abs(tt.x), abs(tt.y));
+  let k = min(floor(rim / w), 7.0);
+  let depth = k * w * 0.75 * (1.0 - fill); // (au plus ~0,55 du demi-côté ; la fonte comble les gradins)
+  let dcav = (n - (s - depth)) * select(1.0, 0.62, lng);
+  return vec2f(max(dbox, dcav), k);
 }
-fn colRadius(y: f32) -> f32 {
-  if (y >= 0.0) { return u.col.x; } // la partie émergée (dans l'air, elle ne fond pas)
-  return colRow((u.col.y + y) / u.col.z - 0.5);
+
+var<private> MASK: u32;
+fn crystal(p: vec3f, i: i32, L: f32) -> vec2f {
+  let A = u.cr[3 * i]; let B = u.cr[3 * i + 1]; let Cc = u.cr[3 * i + 2];
+  let s = A.w;
+  let q = rotX(rotY(p - A.xyz, B.x), B.y);
+  // la fonte : au-dessus de la ligne de métal chaud, la part fondue (mp) arrondit
+  // les arêtes, comble les gradins et fond le cristal sur lui-même, de bas en haut
+  let mp = u.tide.y * exp(-max(p.y - L, 0.0) / 0.55);
+  let soft = 0.42 * s * mp;
+  let h = hopper(q, s - soft, soft * 0.8, clamp(mp * 1.6, 0.0, 1.0), select(0.0, 1.0, p.y > L + 0.1));
+  var d = h.x;
+  if (Cc.w > 0.5) { d = max(d, -sdBox(q - Cc.xyz, vec3f(s * 0.29, s * 0.12, s * 0.29))); } // l'entaille du coin tombé
+  return vec2f(d, h.y);
 }
-// section : ronde, carrée ou hexagonale, arrondie avec la profondeur (la glace
-// neuve est sciée, l'eau en arrondit les arêtes)
-fn sectionScale(p: vec3f) -> f32 {
-  let s = u.mat.w;
-  if (s < 0.5) { return 1.0; }
-  let a = atan2(p.z, p.x);
-  let nSides = select(4.0, 6.0, s > 1.5);
-  let k = PI / nSides;
-  let polyR = cos(k) / cos(((a + PI) % (2.0 * k)) - k); // rayon du polygone inscrit (apothème 1)
-  let age = clamp(-p.y / 6.0, 0.0, 1.0); // arrondi par la fonte
-  return mix(polyR / cos(k) * 0.93, 1.0, age);
+fn piece(p: vec3f, i: i32) -> f32 {
+  let A = u.pc[2 * i]; let B = u.pc[2 * i + 1];
+  if (A.w < 0.5) { return 1e9; }
+  let q = rotX(rotY(p - A.xyz, B.x), B.y);
+  let he = vec3f(B.z * 0.26, B.z * 0.09, B.z * 0.26);
+  return max(sdBox(q, he), -sdBox(q - vec3f(0.5, 0.5, 0.5) * he, he * vec3f(0.55, 0.6, 0.55))); // un gradin : une plaque creusée d'une marche
 }
-fn sdColumn(p: vec3f) -> f32 {
-  let yb = -u.col.y;
-  let r = length(p.xz);
-  let R = colRadius(p.y) * sectionScale(p);
-  let e = 0.05;
-  let dR = (colRadius(p.y + e) - colRadius(p.y - e)) / (2.0 * e);
-  return (r - R) / sqrt(1.0 + dR * dR) * 0.9;
+fn drips(p: vec3f, i: i32) -> f32 {
+  var d = 1e9;
+  for (var j = 0; j < 4; j++) {
+    let D = u.dr[4 * i + j];
+    if (D.w <= 0.0) { continue; }
+    d = min(d, min(sdCapsule(p, D.xyz, D.xyz + vec3f(0.0, D.w * 1.6, 0.0), D.w), sdCapsule(p, D.xyz + vec3f(0.0, D.w, 0.0), D.xyz + vec3f(0.0, D.w * 2.6, 0.0), D.w * 0.6)));
+  }
+  return d;
 }
-// ── Le fuseau libéré ──
-fn fragLocal(p: vec3f) -> vec3f { // (s depuis le centre de masse, rayon, coordonnée hors plan)
-  let az = u.frag2.w; let th = u.frag.w;
-  let q0 = p - u.frag.xyz;
-  // plan de bascule tourné de az autour de y
-  let c = cos(az); let s = sin(az);
-  let q = vec3f(c * q0.x + s * q0.z, q0.y, -s * q0.x + c * q0.z);
-  let ax = vec3f(sin(th), cos(th), 0.0);
-  let along = dot(q, ax);
-  let perp = q - ax * along;
-  return vec3f(along, length(perp), q.z);
+// la scène : (distance, matière) ; matière ≥ 0 : cristal i·10 + gradin ; −1 : bain ; −2 : goutte
+fn scene(p: vec3f) -> vec2f {
+  let L = u.tide.x;
+  let pool = p.y - L;
+  var best = vec2f(1e9, -1.0);
+  var dc = 1e9; var dd = 1e9;
+  let n = i32(u.st.w);
+  for (var i = 0; i < n; i++) {
+    if ((MASK & (1u << u32(i))) == 0u) { continue; }
+    let c = crystal(p, i, L);
+    if (c.x < best.x) { best = vec2f(c.x, f32(i) * 10.0 + c.y); }
+    let pd = piece(p, i);
+    if (pd < best.x) { best = vec2f(pd, f32(i) * 10.0); }
+    dc = min(dc, min(c.x, pd));
+    dd = min(dd, drips(p, i));
+  }
+  let k = 0.035 + 0.1 * u.tide.y;
+  let d = smin(smin(dc, pool, k), dd, 0.04);
+  if (dd < min(dc, pool) && dd < 0.02) { return vec2f(d, -2.0); }
+  if (pool < dc - 0.5 * k) { return vec2f(d, -1.0); }
+  return vec2f(d, best.y);
 }
-fn fragRow(sFromBottom: f32) -> f32 {
-  let n = u.frag2.y;
-  let f = clamp(sFromBottom / u.col.z - 0.5, 0.0, n - 1.001);
-  let j = u32(floor(f)); let t = f - floor(f);
-  return mix(rows[MAXR + j], rows[MAXR + j + 1u], t) * 0.1;
-}
-fn sdFrag(p: vec3f) -> f32 {
-  if (u.frag2.z < 0.5) { return 1e9; }
-  let L = u.frag2.x; let sg = u.frag3.x;
-  let l = fragLocal(p);
-  let s = l.x + sg;
-  if (s < 0.0) { return length(vec2f(s, l.y)); }
-  if (s > L) { return length(vec2f(s - L, l.y)); }
-  let e = 0.05;
-  let dR = (fragRow(s + e) - fragRow(s - e)) / (2.0 * e);
-  return (l.y - fragRow(s)) / sqrt(1.0 + dR * dR) * 0.9;
-}
-fn sdBody(p: vec3f) -> f32 { return min(sdColumn(p), sdFrag(p)); }
 fn nrm(p: vec3f) -> vec3f {
-  let e = 0.004; let k = vec2f(1.0, -1.0);
-  return normalize(k.xyy * sdBody(p + k.xyy * e) + k.yyx * sdBody(p + k.yyx * e) + k.yxy * sdBody(p + k.yxy * e) + k.xxx * sdBody(p + k.xxx * e));
+  let e = 0.0015; let k = vec2f(1.0, -1.0);
+  return normalize(k.xyy * scene(p + k.xyy * e).x + k.yyx * scene(p + k.yyx * e).x + k.yxy * scene(p + k.yxy * e).x + k.xxx * scene(p + k.xxx * e).x);
 }
-// coordonnées de la matière (les bulles descendent avec la glace qui avance)
-fn matCoord(p: vec3f) -> vec3f {
-  if (sdFrag(p) < sdColumn(p)) {
-    // le fuseau garde la matière qu'il avait dans la colonne au détachement :
-    // repère du fuseau ramené à sa pose de départ (axe vertical, centre à y_G0)
-    let az = u.frag2.w; let th = u.frag.w; let c = cos(az); let s = sin(az);
-    let q0 = p - u.frag.xyz;
-    let q = vec3f(c * q0.x + s * q0.z, q0.y, -s * q0.x + c * q0.z);
-    let X = dot(q, vec3f(cos(th), -sin(th), 0.0)); let Y = dot(q, vec3f(sin(th), cos(th), 0.0));
-    return vec3f(c * X - s * q.z, Y + u.frag3.z, s * X + c * q.z);
+
+// ── l'atelier : ce que le métal reflète ──
+fn rect(d: vec3f, c: vec3f, up: vec3f, hw: f32, hh: f32) -> f32 {
+  let cc = dot(d, c); if (cc <= 0.0) { return 0.0; }
+  let r = normalize(cross(c, up)); let v = cross(r, c);
+  let q = d / cc;
+  return (1.0 - smoothstep(hw * 0.85, hw, abs(dot(q, r)))) * (1.0 - smoothstep(hh * 0.85, hh, abs(dot(q, v))));
+}
+fn env(d: vec3f) -> vec3f {
+  // un dôme : sombre près de l'horizon (le bain, vu en rasant, reste un miroir noir), clair en hauteur
+  // (les faces des cristaux, qui regardent le ciel, attrapent la lumière et montrent leur oxyde)
+  var c = mix(u.envLo.xyz, u.envHi.xyz, smoothstep(0.12, 0.75, d.y));
+  for (var b = 0; b < 6; b++) {
+    let A = u.boxes[3 * b]; let B = u.boxes[3 * b + 1]; let Cb = u.boxes[3 * b + 2];
+    if (A.w <= 0.0) { continue; }
+    c += B.xyz * A.w * rect(d, A.xyz, Cb.xyz, B.w, Cb.w);
   }
-  return vec3f(p.x, p.y + u.mat.x, p.z);
-}
-
-fn fresnel(ci: f32, n1: f32, n2: f32) -> f32 {
-  let eta = n1 / n2; let st2 = eta * eta * (1.0 - ci * ci);
-  if (st2 >= 1.0) { return 1.0; }
-  let ct = sqrt(1.0 - st2);
-  let rs = (n1 * ci - n2 * ct) / (n1 * ci + n2 * ct);
-  let rp = (n1 * ct - n2 * ci) / (n1 * ct + n2 * ci);
-  return 0.5 * (rs * rs + rp * rp);
-}
-
-// ── Lumières ──
-fn sky(d: vec3f) -> vec3f {
-  var c = mix(u.horizon.xyz, u.sky.xyz, pow(clamp(d.y, 0.0, 1.0), 0.6)) * u.sun.w;
-  let cs = dot(d, normalize(u.sun.xyz));
-  c += u.shallow.w * (smoothstep(0.99996, 0.99999, cs) + 0.002 * pow(max(cs, 0.0), 60.0));
+  if (u.forge.w > 0.0) { c += u.forge.xyz * u.forge.w * smoothstep(0.25, -0.15, d.y) * (0.7 + 0.3 * noise3(d * 4.0)); }
   return c;
 }
-fn softbox(d: vec3f) -> vec3f {
-  let I = u.lb.w;
-  if (I <= 0.0) { return vec3f(0.0); }
-  let lb = normalize(u.lb.xyz);
-  let c = dot(d, lb);
-  if (c <= 0.0) { return vec3f(0.0); }
-  let t1 = normalize(cross(lb, vec3f(0.0, 1.0, 0.0))); let t2 = cross(t1, lb);
-  let q = d / c;
-  let m = (1.0 - smoothstep(0.22, 0.3, abs(dot(q, t1)))) * (1.0 - smoothstep(0.42, 0.5, abs(dot(q, t2))));
-  return vec3f(1.0, 0.97, 0.93) * I * m;
-}
-fn waterInf(d: vec3f) -> vec3f {
-  var c = mix(u.deep.xyz, u.shallow.xyz, smoothstep(-0.7, 0.95, d.y));
-  if (u.sunW.w > 0.0) { c += u.shallow.xyz * u.sunW.w * pow(max(dot(d, normalize(u.sunW.xyz)), 0.0), 6.0); }
-  return c + softbox(d);
-}
-fn envWater(d: vec3f) -> vec3f {
-  if (d.y > 0.6614) { return sky(refract(d, vec3f(0.0, -1.0, 0.0), NW)) * 0.95; }
-  if (d.y > 0.0) { return waterInf(vec3f(d.x, -d.y, d.z)); }
-  return waterInf(d);
-}
-// la surface : plane, ridée par la brise après le détachement (rides qui
-// partent du fuseau couché)
-fn surfNormal(p: vec3f) -> vec3f {
-  let A = u.frag3.w;
-  if (A <= 0.0) { return vec3f(0.0, -1.0, 0.0); }
-  let q = p.xz - u.ripple.xy;
-  let r = length(q) + 1e-4;
-  let k = 2.0 * PI / u.ripple.w;
-  let ph = k * r - 6.0 * u.ripple.z;
-  let a = A * exp(-0.08 * r) * cos(ph);
-  let g = q / r * a * k;
-  // vent : de petites rides régulières
-  let gw = vec2f(0.6 * A * cos(p.x * 3.1 + p.z * 1.3 + 4.0 * u.ripple.z), 0.4 * A * cos(p.z * 2.7 - p.x * 0.9 + 3.0 * u.ripple.z));
-  return normalize(vec3f(g.x + gw.x, -1.0, g.y + gw.y));
-}
 
-// ── Fonds ──
-fn caustic(p: vec2f) -> f32 {
-  var c = 0.0; var q = p;
-  for (var i = 0; i < 4; i++) {
-    let w = vec2f(sin(q.y * 1.7 + f32(i) * 1.3), cos(q.x * 1.5 - f32(i) * 0.7));
-    q = q * 1.21 + w * 0.6;
-    c += pow(1.0 - abs(sin(q.x + 0.5 * sin(q.y))), 10.0) * pow(1.0 - abs(sin(q.y * 0.9 + 0.5 * cos(q.x))), 4.0);
-  }
-  return c;
+// ── couche mince d'oxyde sur le bismuth (Airy) ──
+fn cmul(a: vec2f, b: vec2f) -> vec2f { return vec2f(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x); }
+fn cdiv(a: vec2f, b: vec2f) -> vec2f { let d = dot(b, b); return vec2f(a.x * b.x + a.y * b.y, a.y * b.x - a.x * b.y) / d; }
+fn filmR(th: f32, lam: f32, cosi: f32) -> f32 {
+  let n1 = 2.2; let n2 = vec2f(1.9, 3.4);
+  let r01 = vec2f((1.0 - n1) / (1.0 + n1), 0.0);
+  let r12 = cdiv(vec2f(n1, 0.0) - n2, vec2f(n1, 0.0) + n2);
+  let sint = sqrt(max(0.0, 1.0 - cosi * cosi)) / n1;
+  let dl = 4.0 * PI * n1 * th * sqrt(1.0 - sint * sint) / lam;
+  let e = vec2f(cos(dl), sin(dl));
+  let r = cdiv(r01 + cmul(r12, e), vec2f(1.0, 0.0) + cmul(r01, cmul(r12, e)));
+  return dot(r, r);
 }
-fn backdropT(p: vec3f, d: vec3f) -> f32 {
-  let m = u.deep.w;
-  if (abs(m - 5.0) < 0.5) { if (d.z >= -1e-4) { return 1e9; } return (u.sky.w - p.z) / d.z; }
-  if (abs(m - 2.0) < 0.5) { if (d.y >= -1e-4) { return 1e9; } return (u.horizon.w - p.y) / d.y; }
-  return 1e9;
+fn filmRGB(th: f32, cosi: f32) -> vec3f {
+  return vec3f(0.5 * filmR(th, 610.0, cosi) + 0.5 * filmR(th, 650.0, cosi),
+               0.5 * filmR(th, 530.0, cosi) + 0.5 * filmR(th, 560.0, cosi),
+               0.5 * filmR(th, 450.0, cosi) + 0.5 * filmR(th, 480.0, cosi));
 }
-// ombre portée de la glace sur le fond (humeur Ombre) : la corde traversée le
-// long du soleil assombrit (glace bulleuse), le bord dévie la lumière
-fn chordSun(P0: vec3f) -> f32 {
-  let sw = normalize(u.sunW.xyz);
-  let top = (0.0 - P0.y) / sw.y;
-  let N = 40; let h = top / f32(N);
-  var c = 0.0;
-  for (var m = 0; m < N; m++) {
-    let q = P0 + sw * ((f32(m) + 0.5) * h);
-    c += (1.0 - smoothstep(-0.02, 0.02, sdBody(q))) * h;
-  }
-  return c;
-}
-fn backdrop(p: vec3f) -> vec3f {
-  let m = u.deep.w;
-  if (abs(m - 2.0) < 0.5) {
-    let sw = normalize(u.sunW.xyz);
-    let sand = vec3f(0.82, 0.78, 0.68) * (0.85 + 0.25 * noise3(vec3f(p.xz * 2.0, 1.0)) + 0.1 * noise3(vec3f(p.xz * 9.0, 4.0)));
-    let e = 0.05;
-    let c0 = chordSun(p);
-    // lentille divergente : le bord de l'ombre se resserre en un liseré clair
-    let lap = (chordSun(p + vec3f(e, 0.0, 0.0)) + chordSun(p - vec3f(e, 0.0, 0.0)) + chordSun(p + vec3f(0.0, 0.0, e)) + chordSun(p - vec3f(0.0, 0.0, e)) - 4.0 * c0) / (e * e);
-    let I = exp(-u.amb.w * c0 * 0.8) * clamp(1.0 + 0.02 * lap, 0.15, 3.0);
-    let caus = 1.0 + 0.5 * caustic(p.xz * 0.6 + vec2f(u.ripple.z * 0.15, 0.0));
-    return sand * (u.shallow.w * 0.006 * sw.y * I * caus + u.amb.xyz);
-  }
-  let depthF = exp(p.y * 0.04);
-  let E = u.shallow.w * 0.012 * caustic(p.xy * 0.55 + vec2f(u.ripple.z * 0.1, 0.0)) * depthF + 0.7;
-  let n = noise3(vec3f(p.xy * 0.9, 0.0)) * 0.5 + noise3(vec3f(p.xy * 3.1, 2.0)) * 0.3 + noise3(vec3f(p.xy * 11.0, 5.0)) * 0.2;
-  return vec3f(0.74, 0.71, 0.64) * (0.82 + 0.3 * n) * u.amb.xyz * E;
-}
+fn emerge(y: f32) -> f32 { let T = u.times; return T.x + clamp((u.tide.z - y) / (u.tide.z - u.tide.w), 0.0, 1.0) * (T.y - T.x); }
 
-// ── La glace émergée, dans l'air ──
-fn airScene(p: vec3f, d: vec3f) -> vec3f {
-  let r0 = u.col.x;
-  let a = d.x * d.x + d.z * d.z; let b = p.x * d.x + p.z * d.z; let c = p.x * p.x + p.z * p.z - r0 * r0;
-  let disc = b * b - a * c;
-  if (a > 1e-6 && disc > 0.0) {
-    let t = (-b - sqrt(disc)) / a;
-    if (t > 0.0) {
-      let q = p + d * t;
-      let n = normalize(vec3f(q.x, 0.0, q.z));
-      let frost = 0.55 + 0.25 * noise3(q * 40.0);
-      return frost * (u.horizon.xyz * u.sun.w * 0.6 + u.shallow.w * 0.004 * max(dot(n, normalize(u.sun.xyz)), 0.0)) + sky(reflect(d, n)) * 0.05;
-    }
-  }
-  return sky(d);
-}
-
-struct Ray { p: vec3f, d: vec3f, T: vec3f, L: vec3f, done: bool };
-
-// corde jusqu'à la surface de la colonne dans la direction l (profil local)
-fn chordToSurf(q: vec3f, l: vec3f) -> f32 {
-  let lx = vec2f(l.x, l.z); let ln = length(lx);
-  if (ln < 1e-3) { return 6.0; }
-  let dir = lx / ln;
-  let R = colRadius(q.y);
-  let b = dot(q.xz, dir); let c = dot(q.xz, q.xz) - R * R;
-  let disc = b * b - c;
-  if (disc < 0.0) { return 0.3; }
-  return max(-b + sqrt(disc), 0.0) / ln;
-}
-fn inscatter(q: vec3f, dens: f32) -> vec3f {
-  var s = u.amb.xyz * 1.3;
-  if (u.lb.w > 0.0) { s += vec3f(1.0, 0.97, 0.93) * u.lb.w * 0.08 * exp(-dens * chordToSurf(q, normalize(u.lb.xyz))); }
-  if (u.shallow.w > 0.0) { s += mix(vec3f(1.0), u.shallow.xyz * 2.0, 0.5) * u.shallow.w * 0.006 * exp(-dens * chordToSurf(q, normalize(u.sunW.xyz))); }
-  return s * 0.92;
-}
-
-fn iceInterior(r0: Ray) -> Ray {
-  var r = r0;
-  let step = 0.03;
-  let sig = u.amb.w;
-  let cellH = u.mat.z;
-  var lastCell = vec3f(-999.0);
-  var t = 0.0;
-  for (var i = 0; i < 200; i++) {
-    let q0 = r.p + r.d * t;
-    let q = q0 + r.d * step;
-    if (q.y > 0.0) { r.L += r.T * u.horizon.xyz * u.sun.w * 0.35; r.done = true; return r; }
-    let mq = matCoord(q);
-    // glace bulleuse : un fond diffus, plus dense au cœur (bulles chassées par le gel)
-    let rr = length(mq.xz);
-    let dens = sig * (0.7 + 0.3 * noise3(mq * 3.0)) * (1.0 + 1.5 * (1.0 - smoothstep(0.25, 0.6, rr)));
-    let tr = exp(-dens * step);
-    r.L += r.T * (1.0 - tr) * inscatter(q, dens);
-    r.T *= tr * exp(-u.glint.w * step * vec3f(1.0, 0.35, 0.12)); // la glace épaisse est bleue
-    // chapelets de bulles, fixes dans la matière
-    let mq0 = matCoord(q0);
-    let ang = atan2(mq0.z, mq0.x);
-    let na = 34.0;
-    // (indice vertical modulo le nombre de cellules par période d'avance : à u = 1, la
-    // glace a avancé d'un nombre entier de cellules, le motif retombe sur lui-même)
-    let nPer = max(u.frag3.y, 1.0);
-    let cz = floor(mq0.y / cellH);
-    let cell = vec3f(floor((ang + PI) / (2.0 * PI) * na), floor(length(mq0.xz) / 0.16), cz - nPer * floor(cz / nPer));
-    if (any(cell != lastCell)) {
-      let hs = hash33(vec3f(cell.x, cell.y, 7.0));
-      let hb = hash33(cell);
-      let rcen = (cell.y + 0.25 + 0.5 * hs.y) * 0.16;
-      if (hs.z < 0.55 && hb.x < u.mat.y && rcen < 1.3) {
-        let ac = (cell.x + 0.3 + 0.4 * hs.x) / na * 2.0 * PI - PI;
-        let cenM = vec3f(cos(ac) * rcen, (cz + 0.3 + 0.4 * hb.y) * cellH, sin(ac) * rcen);
-        let rb = 0.012 + 0.04 * hb.z * hb.z;
-        let v = cenM - mq0;
-        // (le trajet du rayon en coordonnées de la matière : même pas, même direction à une rotation près)
-        let dM = normalize(matCoord(q0 + r.d * 0.01) - mq0);
-        let tp = clamp(dot(v, dM), 0.0, step);
-        let bd = length(v - dM * tp);
-        if (bd < rb) {
-          lastCell = cell;
-          if (bd / rb > 0.76) { r.L += r.T * u.glint.xyz; r.T *= 0.1; } // réflexion totale au bord de la bulle
-          else { r.T *= 0.85; }
+// le bain : peau d'oxyde des cristaux engloutis (épaisseur), rides des chutes (normale)
+var<private> NOUT: vec3f;
+fn poolFilm(p: vec3f) -> f32 {
+  var th = 10.0 + 14.0 * noise3(p * 0.8 + vec3f(0.0, 0.0, u.st.x * 3.0));
+  var nn = vec3f(0.0, 1.0, 0.0);
+  let n = i32(u.st.w);
+  for (var i = 0; i < n; i++) {
+    let A = u.cr[3 * i]; let B = u.cr[3 * i + 1]; let S = u.sk[i];
+    if (S.x > 0.0) {
+      let age = S.x;
+      let rel = p.xz - A.xz;
+      let ca = cos(B.x); let sa = sin(B.x);
+      let rl = vec2f(ca * rel.x - sa * rel.y, sa * rel.x + ca * rel.y);
+      let R0 = A.w * (1.05 + 3.5 * age) * (0.8 + 0.4 * noise3(vec3f(rel * 3.0, B.w + 2.0)));
+      let r = mix(max(abs(rl.x), abs(rl.y)), length(rel), smoothstep(0.0, 0.16, age));
+      if (r < R0) {
+        let warp = vec2f(noise3(vec3f(rel * 2.3, B.w)), noise3(vec3f(rel * 2.3, B.w + 7.0))) - 0.5;
+        let vo = voro((rel + warp * A.w * 0.5) / (A.w * (0.38 + 1.6 * age)), B.w);
+        if (vo.x >= 0.04 + 0.5 * smoothstep(0.02, 0.16, age)) {
+          let fade = (1.0 - smoothstep(0.08, 0.16, age)) * (1.0 - smoothstep(0.8, 1.0, r / R0));
+          let wr = noise3(vec3f(p.xz * 9.0, B.w));
+          th = mix(th, 90.0 + 160.0 * hash31(vec3f(vo.y, 1.0, B.w)) + 70.0 * wr, fade);
+          let e = 0.02;
+          let gx = noise3(vec3f((p.xz + vec2f(e, 0.0)) * 9.0, B.w)) - wr;
+          let gz = noise3(vec3f((p.xz + vec2f(0.0, e)) * 9.0, B.w)) - wr;
+          nn += fade * vec3f(-gx, 0.0, -gz) * 6.0;
         }
       }
     }
-    if (max(r.T.x, max(r.T.y, r.T.z)) < 0.003) { r.done = true; return r; }
-    if (sdBody(q) > 0.0) {
-      var a = t; var b = t + step;
-      for (var k = 0; k < 6; k++) { let m = 0.5 * (a + b); if (sdBody(r.p + r.d * m) > 0.0) { b = m; } else { a = m; } }
-      let pe = r.p + r.d * b;
-      let n = nrm(pe);
-      r.p = pe + n * 0.004;
-      r.d = normalize(refract(r.d, -n, NI / NW));
-      return r;
+    if (S.w > 0.0) {
+      let rr = length(p.xz - S.yz) + 1e-4;
+      let amp = 0.06 * (1.0 - S.w / 0.07) * exp(-rr * 2.8) * smoothstep(9.0 * S.w * 30.0 + 0.2, 9.0 * S.w * 30.0 - 0.6, rr);
+      let g = cos(30.0 * rr - 900.0 * S.w) * amp;
+      nn += vec3f((p.x - S.y) / rr * g, 0.0, (p.z - S.z) / rr * g);
     }
-    t += step;
   }
-  r.done = true;
-  return r;
+  NOUT = normalize(nn);
+  return th;
 }
 
-fn fog(r: ptr<function, Ray>, t: f32) {
-  let sigS = u.absorb.w;
-  var a = 0.0;
-  for (var m = 0; m < 12; m++) {
-    let bnd = t * pow(f32(m + 1) / 12.0, 2.0);
-    let hh = bnd - a;
-    if (hh <= 0.0) { continue; }
-    let fogC = mix(u.deep.xyz, u.shallow.xyz, smoothstep(-30.0, 0.0, (*r).p.y + (*r).d.y * (a + 0.5 * hh)));
-    (*r).L += (*r).T * (vec3f(1.0) - exp(-vec3f(sigS) * hh)) * fogC;
-    (*r).T *= exp(-(u.absorb.xyz + vec3f(sigS)) * hh);
-    a = bnd;
+// sphères englobantes : les cristaux que le rayon croise, et jusqu'où marcher
+fn rayMask(ro: vec3f, rd: vec3f, tEnd: ptr<function, f32>) -> u32 {
+  var m = 0u; var te = 0.0;
+  let n = i32(u.st.w);
+  for (var i = 0; i < n; i++) {
+    let A = u.cr[3 * i]; let P0 = u.pc[2 * i];
+    var c = A.xyz; var R = A.w * select(2.0, 3.0, u.st.z > 1.5);
+    if (P0.w > 0.5) { c = 0.5 * (A.xyz + P0.xyz); R += 0.5 * length(P0.xyz - A.xyz) + A.w * 0.5; }
+    if (u.dr[4 * i].w > 0.0 || u.dr[4 * i + 1].w > 0.0) { R += A.w * 0.4; }
+    let oc = ro - c; let b = dot(oc, rd); let cc = dot(oc, oc) - R * R;
+    let disc = b * b - cc;
+    if (disc > 0.0) { let t1 = -b + sqrt(disc); if (t1 > 0.0) { m |= (1u << u32(i)); te = max(te, t1); } }
   }
+  *tEnd = te;
+  return m;
 }
 
-fn trace(ro: vec3f, rd: vec3f) -> vec3f {
-  var r = Ray(ro, rd, vec3f(1.0), vec3f(0.0), false);
-  for (var bounce = 0; bounce < 6; bounce++) {
-    let tS = select(1e9, -r.p.y / r.d.y, r.d.y > 1e-5);
-    let tB = backdropT(r.p, r.d);
-    let tmax = min(min(tS, tB), 140.0);
-    var t = 0.0; var hit = false;
-    for (var i = 0; i < 220; i++) {
-      let s = sdBody(r.p + r.d * t);
-      if (s < 0.0015) { hit = true; break; }
-      t += max(s, 0.0015);
-      if (t > tmax) { break; }
+fn trace(ro0: vec3f, rd0: vec3f) -> vec3f {
+  var ro = ro0; var rd = rd0;
+  var T = vec3f(1.0); var L = vec3f(0.0);
+  let Lv = u.tide.x;
+  for (var b = 0; b < 3; b++) {
+    var tEnd = 0.0;
+    MASK = rayMask(ro, rd, &tEnd);
+    var hit = false; var mat = -3.0; var t = 0.002;
+    if (MASK != 0u) {
+      for (var i = 0; i < 160; i++) {
+        let h = scene(ro + rd * t);
+        if (h.x < 0.0006 * t + 0.0005) { hit = true; mat = h.y; break; }
+        t += max(h.x * 0.7, 0.0008);
+        if (t > tEnd) { break; }
+      }
     }
-    t = min(t, tmax);
-    fog(&r, t);
-    r.p = r.p + r.d * t;
-    if (hit) {
-      let n = nrm(r.p);
-      let ci = -dot(r.d, n);
-      let eta = NW / NI;
-      let k = 1.0 - eta * eta * (1.0 - ci * ci);
-      if (k < 0.0 || ci <= 0.0) { r.d = reflect(r.d, n); r.p += n * 0.004; continue; } // le liseré
-      let F = fresnel(ci, NW, NI);
-      r.L += r.T * F * envWater(reflect(r.d, n));
-      r.T *= (1.0 - F);
-      r.d = normalize(refract(r.d, n, eta));
-      r.p -= n * 0.004;
-      r = iceInterior(r);
-      if (r.done) { break; }
-      continue;
+    if (!hit) {
+      // au-delà des cristaux : le bain (un plan) ou le studio
+      if (rd.y < -1e-4 && ro.y > Lv) { t = (Lv - ro.y) / rd.y; hit = true; mat = -1.0; }
+      else { L += T * env(rd); break; }
     }
-    if (tS <= tB && t >= tS - 1e-3 && tS < 140.0) {
-      // la surface vue de dessous : fenêtre de Snell, miroir au-delà
-      let sn = surfNormal(r.p);
-      let ci = max(dot(r.d, -sn), 0.0);
-      let F = fresnel(ci, NW, 1.0);
-      if (F < 1.0) { r.L += r.T * (1.0 - F) * airScene(vec3f(r.p.x, 0.0, r.p.z), normalize(refract(r.d, sn, NW))); }
-      r.T *= F;
-      r.d = normalize(reflect(r.d, sn));
-      if (r.d.y > -0.001) { r.d = normalize(vec3f(r.d.x, -0.001, r.d.z)); }
-      r.p.y = -0.002;
-      continue;
+    let p = ro + rd * t;
+    var n = vec3f(0.0, 1.0, 0.0);
+    if (MASK != 0u && abs(p.y - Lv) > 0.004) { n = nrm(p); }
+    var cosi = clamp(-dot(rd, n), 0.0, 1.0);
+    var R = vec3f(0.62); var rough = 0.01;
+    if (mat >= 0.0) {
+      let i = i32(floor(mat / 10.0)); let k = mat - f32(i) * 10.0;
+      let B = u.cr[3 * i + 1];
+      // oxyde : il pousse dès que le métal sort du bain ; quand le métal chaud
+      // remonte, il s'épaissit juste au-dessus de la ligne ; le métal fondu, lui,
+      // n'en a plus (argent liquide)
+      let age = max(u.st.x - emerge(p.y), 0.0);
+      var th = u.st.y * 300.0 * sqrt(age) * (0.85 + 0.3 * B.z) + 24.0 * k * sqrt(age) + 18.0 * (noise3(p * 2.5 + B.w) - 0.5) * min(age * 8.0, 1.0);
+      th += u.tide.y * 220.0 * exp(-max(p.y - Lv, 0.0) / 0.9);
+      let mp = u.tide.y * exp(-max(p.y - Lv, 0.0) / 0.55);
+      R = mix(filmRGB(max(th, 0.0), cosi), filmRGB(8.0, cosi), smoothstep(0.45, 0.8, mp));
+      rough = mix(0.025, 0.004, smoothstep(0.45, 0.8, mp));
+    } else if (mat < -1.5) {
+      R = filmRGB(6.0, cosi); rough = 0.002;
+    } else {
+      let th = poolFilm(p);
+      n = normalize(n + (NOUT - vec3f(0.0, 1.0, 0.0)));
+      cosi = clamp(-dot(rd, n), 0.0, 1.0);
+      R = filmRGB(th, cosi);
+      rough = select(0.004, 0.02, th > 40.0);
     }
-    if (tB < tS && t >= tB - 1e-3) { r.L += r.T * backdrop(r.p); break; }
-    r.L += r.T * waterInf(r.d);
-    break;
+    // réflexion légèrement dépolie (décalage par pixel et par image, moyenné par l'anticrénelage)
+    var r = reflect(rd, n);
+    let jit = vec3f(hash31(p * 91.7 + u.res.z), hash31(p * 53.1 + u.res.w), hash31(p * 17.3 + u.res.z + u.res.w)) - 0.5;
+    r = normalize(r + rough * jit);
+    if (dot(r, n) < 0.0) { r = reflect(r, n); }
+    T *= R;
+    ro = p + n * 0.003; rd = r;
   }
-  return r.L;
+  return L;
 }
 
 @compute @workgroup_size(8, 8)
 fn main(@builtin(global_invocation_id) gid: vec3u) {
   let res = u.res.xy;
   if (f32(gid.x) >= res.x || f32(gid.y) >= res.y) { return; }
-  let uv = (vec2f(gid.xy) + vec2f(0.5) + u.res.zw) / res;
+  let uv = (vec2f(gid.xy) + 0.5 + u.res.zw) / res;
   let ndc = vec2f(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0);
   let th = u.cam.w;
   let rd = normalize(u.camF.xyz + ndc.x * th * (res.x / res.y) * u.camR.xyz + ndc.y * th * u.camU.xyz);
-  let c = trace(u.cam.xyz, rd);
+  let c = min(trace(u.cam.xyz, rd), vec3f(24.0));
   textureStore(outTex, vec2i(gid.xy), vec4f(c, 1.0));
 }
 `;
-
-export const MOOD_INDEX = { nuit: 0, snell: 1, ombre: 2, lait: 3, tourbe: 4, pierre: 5, contrejour: 6 };
 
 export function createTracer(renderer) {
   const device = renderer.backend.device;
@@ -421,13 +316,11 @@ export function createTracer(renderer) {
     for (const m of info.messages) if (m.type === 'error') console.error(`tracer ${m.lineNum}:${m.linePos} ${m.message}`);
   });
   const pipeline = device.createComputePipeline({ layout: 'auto', compute: { module, entryPoint: 'main' } });
-  const NU = 21 * 4;
-  const U = new Float32Array(NU);
-  const ubuf = device.createBuffer({ size: NU * 4, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
-  const rowsArr = new Float32Array(MAX_ROWS * 2);
-  const rbuf = device.createBuffer({ size: rowsArr.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+  // (agencement : 11 vec4 d'en-tête, 18 boîtes, 36 cristaux, 24 coins, 48 gouttes, 12 peaux)
+  const NV = 11 + 18 + 36 + 24 + 48 + 12;
+  const U = new Float32Array(NV * 4);
+  const ubuf = device.createBuffer({ size: U.byteLength, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
   let tex = null, bind = null, W = 0, H = 0;
-
   function target(w, h) {
     if (tex && w === W && h === H) return tex;
     tex?.dispose();
@@ -440,38 +333,33 @@ export function createTracer(renderer) {
     return tex;
   }
   const set = (i, a, b = 0, c = 0, d = 0) => U.set([a, b, c, d], i * 4);
-  // p : tout ce que le shader lit, déjà mis en forme par stage.js
   function run(p) {
     target(p.w, p.h);
+    U.fill(0);
     set(0, p.w, p.h, p.jitter[0], p.jitter[1]);
-    set(1, ...p.cam.pos, p.cam.tanHalf);
-    set(2, ...p.cam.f, 0); set(3, ...p.cam.r, 0); set(4, ...p.cam.u, 0);
-    const M = p.mood;
-    set(5, ...M.absorb, M.sigS);
-    set(6, ...M.deep, MOOD_INDEX[M.key]);
-    set(7, ...M.shallow, p.sunI);
-    set(8, ...M.sun, p.skyI);
-    set(9, ...M.sunW, M.glow);
-    set(10, ...M.lb, M.lbI);
-    set(11, ...M.sky, M.wallZ ?? 0);
-    set(12, ...M.horizon, M.floorY ?? -17);
-    set(13, ...p.amb, p.ice.sigma);
-    set(14, p.col.a, p.col.Z, p.col.dz, p.col.n);
-    set(15, p.ice.feedOffset, p.ice.bubbles, p.ice.cellH, p.ice.section);
-    set(16, ...(p.frag ? p.frag.pos : [0, 0, 0]), p.frag ? p.frag.th : 0);
-    set(17, p.frag ? p.frag.L : 0, p.frag ? p.frag.n : 0, p.frag ? 1 : 0, p.frag ? p.frag.az : 0);
-    set(18, p.frag ? p.frag.sG : 0, p.ice.nPer, p.frag ? p.frag.matY : 0, p.ripple.amp);
-    set(19, p.ripple.x, p.ripple.z, p.ripple.t, p.ripple.lambda);
-    set(20, ...p.glint, p.ice.blue); // l'éclat des bulles, le bleu de la glace épaisse
+    set(1, ...p.cam.pos, p.cam.tanHalf); set(2, ...p.cam.f, 0); set(3, ...p.cam.r, 0); set(4, ...p.cam.u, 0);
+    set(5, p.t, p.oxRate, p.habit, Math.min(MAXC, p.crystals.length));
+    set(6, p.tide.L, p.tide.rising, p.tide.LH, p.tide.LL);
+    set(7, p.tide.T0, p.tide.T1, p.tide.T2, p.tide.T3);
+    set(8, ...p.env.lo, 0); set(9, ...p.env.hi, 0);
+    set(10, ...p.env.forge.color, p.env.forge.strength);
+    p.env.boxes.slice(0, 6).forEach((b, k) => {
+      set(11 + 3 * k, ...norm(b.dir), b.I); set(12 + 3 * k, ...b.color, b.hw); set(13 + 3 * k, ...(b.up ?? [0, 1, 0]), b.hh);
+    });
+    const cr0 = 29, pc0 = cr0 + 36, dr0 = pc0 + 24, sk0 = dr0 + 48;
+    p.crystals.slice(0, MAXC).forEach((c, i) => {
+      set(cr0 + 3 * i, c.x, c.y, c.z, c.s);
+      set(cr0 + 3 * i + 1, c.ang, c.tilt, c.ox, c.seed);
+      set(cr0 + 3 * i + 2, ...c.cornerLocal, c.broken ? 1 : 0);
+      if (c.piece) { set(pc0 + 2 * i, ...c.piece.pos, 1); set(pc0 + 2 * i + 1, c.piece.ang, c.piece.rot, c.piece.s, 0); }
+      c.drips.slice(0, 4).forEach((d, j) => set(dr0 + 4 * i + j, ...d));
+      set(sk0 + i, c.skin, c.ripple ? c.ripple.x : 0, c.ripple ? c.ripple.z : 0, c.ripple ? c.ripple.dt : -1);
+    });
     device.queue.writeBuffer(ubuf, 0, U);
-    rowsArr.fill(0);
-    rowsArr.set(p.col.rows.subarray(0, Math.min(MAX_ROWS, p.col.rows.length)), 0);
-    if (p.frag) rowsArr.set(p.frag.rows.subarray(0, Math.min(MAX_ROWS, p.frag.rows.length)), MAX_ROWS);
-    device.queue.writeBuffer(rbuf, 0, rowsArr);
     const gpuTex = renderer.backend.get(tex).texture;
     if (!bind || bind.tex !== gpuTex) {
       bind = { tex: gpuTex, group: device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [
-        { binding: 0, resource: { buffer: ubuf } }, { binding: 1, resource: { buffer: rbuf } }, { binding: 2, resource: gpuTex.createView() }] }) };
+        { binding: 0, resource: { buffer: ubuf } }, { binding: 1, resource: gpuTex.createView() }] }) };
     }
     const enc = device.createCommandEncoder();
     const pass = enc.beginComputePass();
@@ -483,3 +371,4 @@ export function createTracer(renderer) {
   }
   return { run, target, texture: () => tex };
 }
+function norm(v) { const l = Math.hypot(...v) || 1; return v.map((x) => x / l); }

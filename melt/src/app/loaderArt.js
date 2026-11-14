@@ -1,51 +1,48 @@
 // Melt — dessin de l'écran de chargement (dans le worker de loaderWorker.js) :
-// la simulation du lac, en direct. Le profil de la glace que le worker calcule
-// (gen/lake.js), dessiné en silhouette avec son reflet dans la surface, et la
-// saison qui tourne (un arc qui suit la phase, chaud l'été, froid l'hiver).
+// une trémie de bismuth vue de face, dont les gradins apparaissent un à un, du
+// bord vers le centre ; chacun prend la couleur de son oxyde, calculée par la
+// même optique des couches minces que la scène (Airy, Bi₂O₃ sur bismuth).
 //
 // Contrat : createArt(S) → { data(d, S), draw(ctx, S) } ; pas de texte, rien
 // sous ~88 % de la hauteur, < 3 ms par image.
+function filmR(th, lam) {
+  const n1 = 2.2, n2r = 1.9, n2i = 3.4;
+  const r01 = (1 - n1) / (1 + n1);
+  // r12 = (n1 − n2) / (n1 + n2), complexe
+  const ar = n1 - n2r, ai = -n2i, br = n1 + n2r, bi = n2i, bd = br * br + bi * bi;
+  const r12r = (ar * br + ai * bi) / bd, r12i = (ai * br - ar * bi) / bd;
+  const dl = (4 * Math.PI * n1 * th) / lam, er = Math.cos(dl), ei = Math.sin(dl);
+  const xr = r12r * er - r12i * ei, xi = r12r * ei + r12i * er; // r12·e
+  const nr = r01 + xr, ni = xi, dr = 1 + r01 * xr, di = r01 * xi;
+  const dd = dr * dr + di * di;
+  const rr = (nr * dr + ni * di) / dd, ri = (ni * dr - nr * di) / dd;
+  return rr * rr + ri * ri;
+}
+const film = (th) => [610, 530, 460].map((l) => Math.min(255, Math.round(255 * Math.pow(filmR(th, l), 0.8) * 1.15)));
+
 export default function createArt() {
-  let prof = null, target = null, u = 0, T = 4, T0 = 1.5, T1 = 9, a = 0.014;
+  let rate = 1, spiral = false;
   return {
-    data(d) {
-      if (d.T0 != null) { T0 = d.T0; T1 = d.T1; a = d.a ?? a; }
-      if (d.prof) { target = d.prof; if (!prof || prof.length !== target.length) prof = target.slice(); u = d.u ?? u; T = d.T ?? T; }
-      if (d.seed != null && !d.prof) { prof = null; target = null; }
-    },
+    data(d) { if (d.oxRate != null) rate = d.oxRate; if (d.habit != null) spiral = d.habit === 'spirale'; },
     draw(ctx, S) {
-      const W = S.w, H = S.h, cx = W / 2, y0 = H * 0.36; // la surface
-      const scale = (H * 0.46) / 0.16; // 16 cm de domaine sur 46 % de la hauteur
+      const W = S.w, H = S.h, cx = W / 2, cy = H * 0.44, half = Math.min(W, H) * 0.22;
+      const steps = 8, shown = Math.min(steps, 1 + Math.floor((S.t * 2.2) % (steps + 3)));
       ctx.globalAlpha = 1 - S.done;
-      // la surface
-      ctx.strokeStyle = 'rgba(200, 214, 230, 0.35)'; ctx.lineWidth = 1 * S.dpr;
-      ctx.beginPath(); ctx.moveTo(cx - W * 0.22, y0); ctx.lineTo(cx + W * 0.22, y0); ctx.stroke();
-      // la saison
-      const w = (T - T0) / Math.max(0.1, T1 - T0);
-      ctx.strokeStyle = `rgba(${Math.round(150 + 105 * w)}, ${Math.round(190 + 30 * w)}, ${Math.round(255 - 120 * w)}, 0.7)`;
-      ctx.lineWidth = 2 * S.dpr;
-      ctx.beginPath(); ctx.arc(cx, y0, H * 0.3, Math.PI * 1.08, Math.PI * (1.08 + 0.84 * u)); ctx.stroke();
-      if (!target) {
-        // avant le premier relevé : la colonne neuve, qui respire
-        const r = a * scale * (0.95 + 0.05 * Math.sin(S.t * 2));
-        ctx.fillStyle = 'rgba(236, 242, 250, 0.85)';
-        ctx.fillRect(cx - r, y0, 2 * r, H * 0.08);
-        ctx.globalAlpha *= 0.35; ctx.fillRect(cx - r, y0 - H * 0.08, 2 * r, H * 0.08);
-        return;
+      ctx.save(); ctx.translate(cx, cy); ctx.rotate(0.12);
+      for (let k = 0; k < shown; k++) {
+        const r = half * (1 - k / steps), age = Math.max(0, S.t * 0.6 - k * 0.12);
+        const th = rate * (60 + 110 * Math.sqrt(age)) + 22 * k;
+        const [R, G, B] = film(th);
+        ctx.strokeStyle = `rgb(${R}, ${G}, ${B})`;
+        ctx.lineWidth = Math.max(1.5, half * 0.07) * (1 - k / (steps + 2));
+        if (spiral) ctx.rotate(0.07);
+        ctx.strokeRect(-r, -r, 2 * r, 2 * r);
       }
-      for (let j = 0; j < prof.length; j++) prof[j] += (target[j] - prof[j]) * 0.25;
-      const n = prof.length, dz = (0.16 / n) * scale;
-      for (const [dir, alpha] of [[1, 0.9], [-1, 0.3]]) { // la glace, puis son reflet
-        ctx.fillStyle = `rgba(236, 242, 250, ${alpha})`;
-        ctx.beginPath();
-        let started = false;
-        for (let j = n - 1; j >= 0; j--) {
-          const r = prof[j] * 1e-3 * scale, y = y0 + dir * (n - 1 - j) * dz;
-          if (!started) { ctx.moveTo(cx - r, y); started = true; } else ctx.lineTo(cx - r, y);
-        }
-        for (let j = 0; j < n; j++) { const r = prof[j] * 1e-3 * scale, y = y0 + dir * (n - 1 - j) * dz; ctx.lineTo(cx + r, y); }
-        ctx.closePath(); ctx.fill();
-      }
+      ctx.restore();
+      // le reflet dans le bain
+      ctx.globalAlpha = (1 - S.done) * 0.2;
+      ctx.fillStyle = 'rgba(200, 205, 215, 1)';
+      ctx.fillRect(cx - half * 1.4, cy + half * 1.25, half * 2.8, 1.2 * S.dpr);
     },
   };
 }

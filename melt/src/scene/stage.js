@@ -1,16 +1,15 @@
-// La scène : la simulation demandée au worker, l'horloge (timeline.js), et le
-// lancer de rayons (tracer.js) dont l'image HDR remplit un quad plein écran ;
-// la chaîne d'image commune (shared/render/post.js) passe ensuite dessus.
-//
-// update(ph, …) ne dépend que de la recette, de la simulation et de la phase.
+// La scène : l'état du cycle (cycle.js) et le lancer de rayons (tracer.js),
+// dont l'image HDR remplit un quad plein écran ; la chaîne d'image commune
+// (shared/render/post.js) passe ensuite dessus. Rien n'est précalculé : la
+// scène est prête dès qu'elle a sa recette.
 import * as THREE from 'three/webgpu';
 import { texture, screenUV, vec4, positionGeometry } from 'three/tsl';
 import { createTracer } from './tracer.js';
-import { MOODS, ICES, SECTIONS } from '../recipe.js';
-import { stateAt, columnRows } from '../timeline.js';
+import { MOODS, HABITS, CLUSTERS } from '../recipe.js';
+import { CYCLE, level, rising, buildCluster, crystalsAt } from '../cycle.js';
 export { cameraAt } from '../camera.js';
 
-export function createStage(scene, gen, { lite = false, renderer, onArt = null } = {}) {
+export function createStage(scene, gen, { renderer } = {}) {
   const tracer = createTracer(renderer);
   const blank = new THREE.DataTexture(new Uint8Array(4), 1, 1); blank.needsUpdate = true;
   const texNode = texture(blank, screenUV);
@@ -22,60 +21,30 @@ export function createStage(scene, gen, { lite = false, renderer, onArt = null }
   quad.frustumCulled = false;
   scene.add(quad);
   const group = new THREE.Group();
+  let R = null, cluster = null;
 
-  let R = null, data = null, prog = 0, recipeKey = '';
-  const rowsBuf = new Float32Array(256);
-  let state = null;
+  function setRecipe(r) { R = r; cluster = buildCluster(R.seed, CLUSTERS[R.cluster]); }
 
-  function setRecipe(r) {
-    R = r;
-    const key = JSON.stringify([R.sim, R.body.tilt0]);
-    if (key === recipeKey && data) return;
-    recipeKey = key; data = null; prog = 0;
-    const want = key;
-    gen.request({ sim: R.sim, body: { tilt0: R.body.tilt0 } }, 'lake', (f, label) => {
-      if (want !== recipeKey) return;
-      prog = f;
-      if (label && label !== 'cache') { try { onArt?.(JSON.parse(label)); } catch { /* */ } }
-    }).then((out) => { if (want === recipeKey) { data = out; prog = 1; } }, (e) => console.error(e));
-  }
-
-  // jitter : décalage du pixel (rendu accumulé) ; size : [w, h] en pixels
   function update(ph, camera, size, jitter = [0, 0]) {
-    if (!R || !data) return;
-    const { S, B } = data;
-    state = stateAt(R, S, B, ph);
-    columnRows(S, state.s, rowsBuf);
-    const M = { ...MOODS[R.mood], key: R.mood };
-    const I = ICES[R.ice];
-    const feedP = S.feedPeriod / 10; // cm par période
-    const nPer = Math.max(1, Math.round(feedP / 0.17));
-    // la saison : le soleil et le ciel s'ouvrent l'été
-    const sunI = M.sunI * (0.35 + 0.65 * state.summer);
-    const skyI = 0.55 + 0.45 * state.summer;
-    const amb = M.amb.map((a) => a * (0.7 + 0.3 * state.summer));
+    if (!R) return;
+    const t = ph - Math.floor(ph);
+    const M = MOODS[R.mood];
     camera.updateMatrixWorld();
     const e = camera.matrixWorld.elements;
-    const tanHalf = Math.tan((camera.fov * Math.PI) / 360);
-    const frag = state.frag ? { ...state.frag, rows: data.S.detach.prof } : null;
     const tex = tracer.run({
-      w: size[0], h: size[1], jitter,
-      cam: { pos: [camera.position.x, camera.position.y, camera.position.z], tanHalf, r: [e[0], e[1], e[2]], u: [e[4], e[5], e[6]], f: [-e[8], -e[9], -e[10]] },
-      mood: M, sunI, skyI, amb,
-      col: { a: R.sim.a * 100, Z: S.Z * 100, dz: S.dx * 100, n: S.nz, rows: rowsBuf },
-      ice: { sigma: I.sigma, bubbles: I.bubbles, blue: I.blue, feedOffset: state.feed, cellH: feedP / nPer, nPer, section: SECTIONS[R.section] },
-      frag, ripple: state.ripple,
-      glint: amb.map((a) => 0.44 * (2 * a + 0.03 * M.lbI + 0.004 * sunI)),
+      w: size[0], h: size[1], jitter, t, oxRate: R.oxRate, habit: HABITS[R.habit].id,
+      cam: { pos: [camera.position.x, camera.position.y, camera.position.z], tanHalf: Math.tan((camera.fov * Math.PI) / 360), r: [e[0], e[1], e[2]], u: [e[4], e[5], e[6]], f: [-e[8], -e[9], -e[10]] },
+      tide: { L: level(t), rising: rising(t), ...CYCLE },
+      env: { lo: M.lo, hi: M.hi, forge: M.forge, boxes: M.boxes },
+      crystals: crystalsAt(cluster, t),
     });
     if (texNode.value !== tex) texNode.value = tex;
   }
 
   return {
     group, setRecipe, update,
-    ready: () => !!data,
-    progress: () => prog,
-    state: () => state,
-    data: () => data,
+    ready: () => !!R, progress: () => 1,
+    cluster: () => cluster,
     setShadowQuality() {}, syncFinishes() {},
   };
 }
