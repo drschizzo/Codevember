@@ -6,7 +6,7 @@
 // la glace, la bascule, la caméra), puis Rendu.
 import GUI from 'lil-gui';
 import { QUALITY } from './settings.js';
-import { COLUMNS, ICES, SECTIONS } from '../recipe.js';
+import { HABITS, OXIDES, CLUSTERS, FRAMINGS } from '../recipe.js';
 
 const opts = (o, label = (v) => v.label) => Object.fromEntries(Object.entries(o).map(([k, v]) => [label(v), k]));
 
@@ -32,7 +32,6 @@ export function createUI({ recipe: getRecipe, render, on, moods }) {
   fExp.add(exp, 'png').name('Image (PNG)');
 
   const fScene = gui.addFolder('Scène');
-  const fBody = gui.addFolder('La bascule').close();
   const fCam = gui.addFolder('Caméra').close();
   const fRender = gui.addFolder('Rendu').close();
   let ctls = [];
@@ -46,19 +45,16 @@ export function createUI({ recipe: getRecipe, render, on, moods }) {
     const add = (f, o, k, ...a) => { const c = f.add(o, k, ...a); ctls.push(c); return c; };
     const ch = () => on.recipeChanged();
 
-    add(fScene, R, 'mood', opts(moods)).name('Humeur (eau et lumière)').onChange((v) => on.overrideChanged('mood', v));
-    add(fScene, R, 'column', opts(COLUMNS)).name('Colonne et lac (recalcul)').onChange((v) => on.overrideChanged('column', v));
-    add(fScene, R, 'ice', opts(ICES)).name('Glace').onChange((v) => on.overrideChanged('ice', v));
-    add(fScene, R, 'section', Object.fromEntries(Object.keys(SECTIONS).map((k) => [{ ronde: 'Ronde', carree: 'Carrée', hexagonale: 'Hexagonale' }[k], k]))).name('Section du fût').onChange((v) => on.overrideChanged('section', v));
+    add(fScene, R, 'mood', opts(moods)).name('Humeur (studio)').onChange((v) => on.overrideChanged('mood', v));
+    add(fScene, R, 'habit', opts(HABITS)).name('Port des cristaux').onChange((v) => on.overrideChanged('habit', v));
+    add(fScene, R, 'cluster', opts(CLUSTERS)).name('Grappe').onChange((v) => on.overrideChanged('cluster', v));
+    add(fScene, R, 'oxide', opts(OXIDES)).name('Gamme d’oxyde').onChange((v) => on.overrideChanged('oxide', v));
+    add(fScene, R, 'oxRate', 0.1, 2, 0.01).name('Vitesse d’oxydation').onChange(ch);
     add(fScene, R.loop, 'duration', 16, 120, 1).name('Durée de la boucle (s)').onChange(ch);
-
-    add(fBody, R.body, 'tilt0', 0.02, 0.3, 0.005).name('Inclinaison au détachement (rad, recalcul)').onFinishChange(() => on.resimulate());
-    add(fBody, R.body, 'azimuth', { 'Vers la gauche': 0, 'Vers la droite': Math.PI }).name('Sens de la bascule').onChange(ch);
-    add(fBody, R.body, 'breeze', 0, 2, 0.01).name('Brise (rides)').onChange(ch);
-
-    add(fCam, R.camera, 'sway', 0, 0.2, 0.001).name('Balancement').onChange(ch);
-    add(fCam, R.camera, 'dolly', 0.7, 1.4, 0.01).name('Distance (×)').onChange(ch);
-    add(fCam, R.camera, 'lift', -2, 2, 0.01).name('Hauteur (cm)').onChange(ch);
+    add(fCam, R, 'framing', opts(FRAMINGS)).name('Cadrage').onChange((v) => on.overrideChanged('framing', v));
+    add(fCam, R.camera, 'sway', 0, 0.3, 0.001).name('Balancement').onChange(ch);
+    add(fCam, R.camera, 'dolly', 0.6, 1.5, 0.01).name('Distance (×)').onChange(ch);
+    add(fCam, R.camera, 'lift', -1, 1, 0.01).name('Hauteur (cm)').onChange(ch);
     add(fCam, on.camState, 'free').name('Caméra libre (souris)').onChange((v) => on.freeCam(v));
   }
 

@@ -33,7 +33,8 @@ export const MOBILE_DEFAULTS = {
   dynRes: true, maxFps: 60,
 };
 
-const STORE = 'melt.render.v2'; // (changer de version quand un défaut change : les réglages mémorisés sont alors oubliés)
+const STORE = 'melt.render.v3';
+const RAYTRACE_OFF = { dof: false, ao: false, ssr: false, motionBlur: 0, streaks: 0, dirt: 0 }; // (changer de version quand un défaut change : les réglages mémorisés sont alors oubliés)
 
 // (le mode mobile a ses propres réglages mémorisés)
 export const defaultsFor = (lite) => (lite ? MOBILE_DEFAULTS : RENDER_DEFAULTS);
@@ -41,7 +42,8 @@ export function loadRender(lite = false) {
   const D = defaultsFor(lite);
   try {
     const s = JSON.parse(localStorage.getItem(lite ? `${STORE}.mobile` : STORE) || 'null');
-    if (s && typeof s === 'object') return { ...D, ...s, lite };
+    // (le lancer de rayons n'a ni profondeur, ni vitesses, ni normales : ces effets restent coupés)
+    if (s && typeof s === 'object') return { ...D, ...s, lite, ...RAYTRACE_OFF, aa: s.aa === 'traa' ? D.aa : s.aa };
   } catch { /* stockage indisponible */ }
   return { ...D, lite };
 }

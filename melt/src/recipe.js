@@ -1,113 +1,98 @@
-// Recette d'une scène : tout ce qui découle de la graine. Une recette est un
-// objet JSON (partageable par lien, « Copier le lien ») ; le panneau la modifie
-// en place. Le rendu ne lit QUE la recette, la simulation qu'elle demande et la
-// phase : même recette, même phase → même image.
+// Recette d'une scène : tout ce qui découle de la graine (JSON partageable).
+// Le rendu ne lit que la recette et la phase : même recette, même phase →
+// même image.
 //
 // - chaque tirage a son propre flux (rng.fork('…')) ;
-// - une humeur est une eau et une lumière (décor, valeur, cadrage), pas une
-//   teinte ;
-// - la colonne et le lac sont des réglages éprouvés (docs/concept.md, proto/p8,
-//   et le balayage de la reconstruction) : chacun donne un détachement par
-//   période et moins de 20 % de boucle sans sujet.
+// - une humeur est un studio (boîtes de lumière, fond, lueur), pas une teinte ;
+// - les couleurs du bismuth ne sont jamais peintes : elles viennent de
+//   l'épaisseur de l'oxyde (vitesse d'oxydation) et de l'optique des couches minces.
 import { createRng } from '../../shared/rng.js';
 
 const r2 = (x) => Math.round(x * 100) / 100 || 0;
-const r3 = (x) => Math.round(x * 1000) / 1000 || 0;
 
-// ── Humeurs : une eau et une lumière ─────────────────────────────────────────
-// absorb, sigS en cm⁻¹ ; couleurs en luminance linéaire ; sun : soleil dans
-// l'air ; sunW : sa direction dans l'eau (réfractée) ; lb : boîte à lumière ;
-// cam : cadrage (position, cible, champ) ; grade : étalonnage de la chaîne d'image
+// ── Humeurs : le studio que le métal reflète ─────────────────────────────────
+// boîtes : direction (vers la boîte), intensité, couleur, demi-largeur et
+// demi-hauteur angulaires ; lo / hi : fond bas et haut ; forge : lueur sous l'horizon
+const WHITE = [1, 0.98, 0.95], COOL = [0.92, 0.95, 1], WARM = [1, 0.86, 0.7];
 export const MOODS = {
-  nuit: {
-    label: 'Nuit', absorb: [0.004, 0.0015, 0.001], sigS: 0.004,
-    deep: [0, 0, 0], shallow: [0.006, 0.008, 0.011],
-    sky: [0.01, 0.012, 0.02], horizon: [0.02, 0.022, 0.03], skyI: 1, sun: [0, 1, 0], sunI: 0,
-    lb: [-0.85, 0.12, 0.5], lbI: 9, amb: [0.03, 0.033, 0.038], sunW: [0, 1, 0], glow: 0,
-    cam: { pos: [0, -3.4, 23], tgt: [-0.4, -3.4, 0], fov: 32 },
-    grade: { exposure: 1.5, contrast: 1.05, saturation: 0.9 },
+  studio: {
+    label: 'Studio', lo: [0.012, 0.012, 0.014], hi: [0.42, 0.42, 0.44], forge: { color: [0, 0, 0], strength: 0 },
+    boxes: [
+      { dir: [-0.7, 0.6, 0.4], I: 4, color: WHITE, hw: 0.35, hh: 0.5 },
+      { dir: [0.75, 0.55, 0.25], I: 3, color: COOL, hw: 0.25, hh: 0.45 },
+      { dir: [0.05, 0.98, 0.15], I: 3.5, color: WHITE, hw: 0.6, hh: 0.3, up: [0, 0, 1] },
+      { dir: [0.2, 0.3, -1], I: 2.2, color: WARM, hw: 0.9, hh: 0.025 },
+      { dir: [-0.3, 0.25, 1], I: 2.5, color: COOL, hw: 0.5, hh: 0.2 },
+      { dir: [0.1, 0.12, 1], I: 0.9, color: [0.8, 0.82, 0.86], hw: 0.8, hh: 0.12 },
+    ],
+    grade: { exposure: 1, contrast: 1.04, saturation: 1 },
   },
-  snell: {
-    label: 'Fenêtre de Snell', absorb: [0.006, 0.0018, 0.0012], sigS: 0.01,
-    deep: [0, 0.012, 0.03], shallow: [0.04, 0.2, 0.3],
-    sky: [0.35, 0.6, 1.2], horizon: [1.4, 1.5, 1.6], skyI: 1, sun: [0.35, 0.8, -0.45], sunI: 300,
-    lb: [0, 0, 1], lbI: 0, amb: [0.18, 0.32, 0.42], sunW: [0.26, 0.9, -0.34], glow: 2,
-    cam: { pos: [1, -16, 16], tgt: [-1.5, -2, 0], fov: 42 },
-    grade: { exposure: 0.55, contrast: 1.02, saturation: 0.95 },
+  forge: {
+    label: 'Forge', lo: [0.02, 0.008, 0.004], hi: [0.32, 0.22, 0.16], forge: { color: [1.6, 0.45, 0.08], strength: 0.45 },
+    boxes: [
+      { dir: [-0.8, 0.45, 0.3], I: 3.2, color: WARM, hw: 0.3, hh: 0.5 },
+      { dir: [0.05, 0.98, 0.15], I: 2.5, color: [1, 0.9, 0.8], hw: 0.5, hh: 0.3, up: [0, 0, 1] },
+      { dir: [0.7, 0.3, -0.6], I: 1.8, color: [1, 0.7, 0.45], hw: 0.4, hh: 0.06 },
+      { dir: [0.2, 0.15, 1], I: 0.8, color: [1, 0.6, 0.3], hw: 0.9, hh: 0.1 },
+    ],
+    grade: { exposure: 1.05, contrast: 1.06, saturation: 1 },
   },
-  contrejour: {
-    label: 'Contre-jour', absorb: [0.006, 0.002, 0.0015], sigS: 0.006,
-    deep: [0.002, 0.006, 0.012], shallow: [0.01, 0.03, 0.05],
-    sky: [0.2, 0.3, 0.5], horizon: [0.3, 0.4, 0.55], skyI: 1, sun: [0, 1, 0], sunI: 0,
-    lb: [0.05, -0.05, -1], lbI: 3.2, amb: [0.03, 0.05, 0.07], sunW: [0, 1, 0], glow: 0,
-    cam: { pos: [0, -4, 24], tgt: [0, -4.4, 0], fov: 32 },
-    grade: { exposure: 1.1, contrast: 1.06, saturation: 0.9 },
+  tente: {
+    label: 'Tente claire', lo: [0.08, 0.08, 0.09], hi: [1.1, 1.1, 1.12], forge: { color: [0, 0, 0], strength: 0 },
+    boxes: [
+      { dir: [-0.75, 0.55, 0.35], I: 2.5, color: WHITE, hw: 0.45, hh: 0.6 },
+      { dir: [0.8, 0.5, 0.2], I: 2, color: COOL, hw: 0.3, hh: 0.55 },
+      { dir: [0.1, 0.3, -1], I: 1, color: WARM, hw: 0.5, hh: 0.18 },
+    ],
+    grade: { exposure: 0.75, contrast: 1.02, saturation: 0.95 },
   },
-  lait: {
-    label: 'Lait glaciaire', absorb: [0.012, 0.004, 0.006], sigS: 0.018,
-    deep: [0.005, 0.035, 0.04], shallow: [0.28, 0.62, 0.58],
-    sky: [1, 1.05, 1.1], horizon: [0.9, 0.95, 1], skyI: 1, sun: [0.2, 0.9, 0.3], sunI: 0,
-    lb: [0, 0, 1], lbI: 0, amb: [0.3, 0.55, 0.52], sunW: [0, 1, 0], glow: 1,
-    cam: { pos: [0, -4, 16], tgt: [0, -5.2, 0], fov: 38 },
-    grade: { exposure: 1, contrast: 1.06, saturation: 0.95 },
-  },
-  tourbe: {
-    label: 'Tourbe', absorb: [0.008, 0.024, 0.07], sigS: 0.011,
-    deep: [0.004, 0.002, 0], shallow: [0.4, 0.2, 0.06],
-    sky: [1.2, 0.9, 0.6], horizon: [1.4, 1, 0.6], skyI: 1, sun: [-0.7, 0.35, -0.6], sunI: 120,
-    lb: [0, 0, 1], lbI: 0, amb: [0.16, 0.09, 0.035], sunW: [-0.55, 0.62, -0.55], glow: 3,
-    cam: { pos: [6, -6.5, 32], tgt: [0, -5, 0], fov: 30 },
-    grade: { exposure: 1.4, contrast: 1.04, saturation: 0.9 },
-  },
-  pierre: {
-    label: 'Bassin de pierre', absorb: [0.004, 0.0012, 0.001], sigS: 0.008,
-    deep: [0.03, 0.07, 0.08], shallow: [0.25, 0.4, 0.45],
-    sky: [0.8, 0.9, 1.1], horizon: [1, 1, 1], skyI: 1, sun: [0.3, 0.9, 0.3], sunI: 80,
-    lb: [0, 0, 1], lbI: 0, amb: [0.32, 0.38, 0.4], sunW: [0.22, 0.95, 0.22], glow: 0.5, wallZ: -9,
-    cam: { pos: [5, -5.5, 30], tgt: [0, -5, 0], fov: 30 },
-    grade: { exposure: 0.9, contrast: 1.03, saturation: 0.92 },
+  aube: {
+    label: 'Heure bleue', lo: [0.006, 0.008, 0.016], hi: [0.22, 0.3, 0.46], forge: { color: [0, 0, 0], strength: 0 },
+    boxes: [
+      { dir: [0.0, 0.25, -1], I: 3.5, color: [0.6, 0.75, 1.1], hw: 1.2, hh: 0.16 },
+      { dir: [-0.85, 0.35, 0.3], I: 2.2, color: [0.75, 0.85, 1.1], hw: 0.2, hh: 0.6 },
+      { dir: [0.05, 0.98, 0.15], I: 1.2, color: [0.8, 0.85, 1], hw: 0.5, hh: 0.3, up: [0, 0, 1] },
+      { dir: [0.9, 0.2, 0.3], I: 1.4, color: WARM, hw: 0.12, hh: 0.3 },
+    ],
+    grade: { exposure: 1.1, contrast: 1.05, saturation: 1 },
   },
 };
 
-// ── Colonnes et lacs : réglages éprouvés (un détachement par période) ─────────
-// a : rayon de la colonne (m) ; v : avance (m/s simulés) ; feedOff : phases
-// d'arrêt de l'avance (l'été) ; T0 → T1 : température du lac (°C)
-export const COLUMNS = {
-  moyenne: { label: 'Moyenne, lac tempéré', a: 0.014, v: 5e-4, feedOff: [0.38, 0.6], T0: 1.5, T1: 9 },
-  fine: { label: 'Fine, lac tempéré', a: 0.010, v: 5e-4, feedOff: [0.38, 0.55], T0: 1.5, T1: 9 },
-  large: { label: 'Large, lac tempéré', a: 0.020, v: 4e-4, feedOff: [0.36, 0.58], T0: 2, T1: 10 },
-  chaude: { label: 'Moyenne, lac chaud', a: 0.014, v: 5e-4, feedOff: [0.34, 0.5], T0: 3, T1: 11 },
+// ── Ports du cristal ──
+export const HABITS = { tremie: { label: 'Trémie', id: 0 }, spirale: { label: 'Trémie en spirale', id: 1 }, allongee: { label: 'Allongée', id: 2 } };
+// ── Gammes d'oxyde : la vitesse d'oxydation (l'air plus ou moins chaud) ──
+export const OXIDES = {
+  or: { label: 'Or et magenta (oxyde mince)', rate: 0.65 },
+  arcenciel: { label: 'Arc-en-ciel', rate: 1 },
+  bleus: { label: 'Bleus et verts (oxyde épais)', rate: 1.45 },
+  argent: { label: 'Presque argent', rate: 0.25 },
 };
-
-// ── Glaces ──
-export const ICES = {
-  fine: { label: 'Bulleuse fine', sigma: 0.5, bubbles: 0.55, blue: 0.01 },
-  chapelets: { label: 'À chapelets', sigma: 0.32, bubbles: 0.95, blue: 0.015 },
-  glacier: { label: 'Bleue de glacier', sigma: 0.22, bubbles: 0.3, blue: 0.07 },
-  neve: { label: 'Blanche de névé', sigma: 0.9, bubbles: 0.4, blue: 0.005 },
+// ── Grappes ──
+export const CLUSTERS = {
+  grappe: { label: 'Grappe', count: 9, scale: 1, spread: 1 },
+  dense: { label: 'Druse dense', count: 12, scale: 0.6, spread: 0.85 },
+  solitaire: { label: 'Un grand cristal et ses satellites', count: 5, scale: 1.25, spread: 1.4 },
 };
-export const SECTIONS = { ronde: 0, carree: 1, hexagonale: 2 };
+// ── Cadrages ──
+export const FRAMINGS = {
+  large: { label: 'Plan large', pos: [0.5, 3.2, 8.2], tgt: [0, 0.8, 0], fov: 32 },
+  rasant: { label: 'Au ras du bain', pos: [0.8, 1.3, 8.6], tgt: [0, 0.9, 0], fov: 28 },
+  macro: { label: 'Gros plan', pos: [0.3, 2.4, 4.6], tgt: [0, 0.9, 0], fov: 32 },
+  plongee: { label: 'Plongée', pos: [0.2, 7.5, 5.5], tgt: [0, 0.4, 0], fov: 34 },
+};
 
 export function generate(seed, overrides = {}) {
   const rng = createRng(seed);
-  const mood = overrides.mood ?? rng.fork('mood').pick(Object.keys(MOODS));
-  const column = overrides.column ?? rng.fork('column').pick(Object.keys(COLUMNS));
-  const ice = overrides.ice ?? rng.fork('ice').pick(Object.keys(ICES));
-  const section = overrides.section ?? rng.fork('section').pick(['ronde', 'ronde', 'carree', 'hexagonale']);
-  const rb = rng.fork('body');
+  const pick = (k, o) => overrides[k] ?? rng.fork(k).pick(Object.keys(o));
+  const mood = pick('mood', MOODS), habit = pick('habit', HABITS), oxide = pick('oxide', OXIDES);
+  const cluster = pick('cluster', CLUSTERS), framing = overrides.framing ?? rng.fork('framing').pick(['large', 'large', 'large', 'rasant', 'macro', 'macro', 'plongee']);
   const rc = rng.fork('camera');
-  const C = COLUMNS[column], M = MOODS[mood];
   return {
-    v: 1, seed: String(seed), mood, column, ice, section,
-    lake: { T0: C.T0, T1: C.T1 },
-    sim: { T0: C.T0, T1: C.T1, P: 400, v: C.v, feedOff: [...C.feedOff], a: C.a, periods: 2, dx: 1e-3, samples: 200 },
-    body: {
-      tilt0: r3(rb.range(0.06, 0.16)), azimuth: rb.pick([0, Math.PI]), driftDir: 1, breeze: r2(rb.range(0.6, 1.2)),
-    },
-    camera: { sway: r3(rc.range(0.015, 0.04)), dolly: r2(rc.range(0.96, 1.06)), lift: r2(rc.range(-0.3, 0.3)) },
-    loop: { duration: 48 },
-    grade: { ...M.grade },
+    v: 2, seed: String(seed), mood, habit, oxide, cluster, framing,
+    oxRate: OXIDES[oxide].rate,
+    camera: { sway: r2(rc.range(0.05, 0.12)), lift: r2(rc.range(-0.2, 0.2)), dolly: r2(rc.range(0.95, 1.05)) },
+    loop: { duration: 40 },
+    grade: { ...MOODS[mood].grade },
   };
 }
-
-export function upgrade(R) { return R?.v === 1 ? R : generate(R?.seed ?? 'a1'); }
+export function upgrade(R) { return R?.v === 2 ? R : generate(R?.seed ?? 'b1'); }

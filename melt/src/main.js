@@ -26,7 +26,7 @@ import { asyncPipelines, warmScene } from '../../shared/app/warmup.js';
 import { createDebugTools, packRecipe, unpackRecipe, sleep } from '../../shared/app/debug.js';
 
 const NAME = 'melt';
-const DEFAULT_SEED = 'm91'; // scène d'ouverture (sans ?seed=) : Nuit, colonne moyenne, glace bulleuse fine
+const DEFAULT_SEED = 'b1'; // scène d'ouverture (sans ?seed=) : à choisir parmi les plus belles
 const params = new URLSearchParams(location.search);
 const $ = (s) => document.querySelector(s);
 const randomSeed = () => Math.random().toString(36).slice(2, 8);
@@ -77,7 +77,7 @@ async function main() {
 
   // ── Modules ──
   const gen = createGenerator(LITE ? Math.max(2, Math.min(3, (navigator.hardwareConcurrency || 4) - 1)) : undefined);
-  const stage = createStage(scene, gen, { lite: LITE, renderer, onArt: (snap) => loader.art({ seed: R.seed, ...snap }) });
+  const stage = createStage(scene, gen, { lite: LITE, renderer });
   const post = createPost(renderer, scene, camera);
   const accum = createAccumulator(renderer);
   const RENDER = loadRender(LITE);
@@ -99,13 +99,13 @@ async function main() {
   const loading = { active: true, applied: false, warming: false, settle: 0 };
   // étapes de l'écran de chargement (libellés propres au thème) ; le dessin
   // (app/loaderArt.js) reçoit ce que la recette en dit, par loader.art()
-  const STEPS = [['build', 'le lac se calcule'], ['compile', 'la lumière se prépare'], ['settle', 'premières images']];
+  const STEPS = [['build', 'le bain se prépare'], ['compile', 'la lumière se prépare'], ['settle', 'premières images']];
   let firstRecipe = true;
   function applyRecipe() {
     const recipe = R;
     loading.active = true; loading.applied = false; loading.warming = false; loading.settle = 0;
     loader.show({ steps: STEPS });
-    loader.art({ seed: R.seed, a: R.sim.a, T0: R.sim.T0, T1: R.sim.T1 });
+    loader.art({ seed: R.seed, oxRate: R.oxRate, habit: R.habit });
     // (le fondu d'entrée de l'écran se termine avant que la scène ne change)
     // (sleep et non setTimeout : une page masquée ralentit les minuteries)
     sleep(firstRecipe ? 0 : 280).then(() => {
@@ -203,7 +203,7 @@ async function main() {
     regenerate: (seed) => { if (seed && seed !== R.seed) { R = generate(seed); applyRecipe(); } },
     moodChanged: (mood) => { R = generate(R.seed, { mood }); applyRecipe(); },
     // (humeur, colonne, glace, section : nouvelle recette de la même graine, les autres choix gardés)
-    overrideChanged: (k, v) => { R = generate(R.seed, { mood: R.mood, column: R.column, ice: R.ice, section: R.section, [k]: v }); applyRecipe(); },
+    overrideChanged: (k, v) => { R = generate(R.seed, { mood: R.mood, habit: R.habit, oxide: R.oxide, cluster: R.cluster, framing: R.framing, [k]: v }); applyRecipe(); },
     resimulate: () => applyRecipe(),
     copyLink: async () => {
       const url = new URL(location.href);
