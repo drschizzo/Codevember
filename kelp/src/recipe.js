@@ -129,10 +129,18 @@ export function generate(seed, overrides = {}) {
     riseX: 1.0, rise: 0.09, cap: 1.3, steps: M.rock === 'sandstone' ? 0.03 : 0, stepW: 0.6,
   };
 
+  // le bord du platier le long de la côte (son propre flux : les autres tirages
+  // ne bougent pas) : trois ondulations, un chenal et un éperon dans le champ
+  const re = rng.fork('edge'), TAU = 2 * Math.PI;
+  const edge = {
+    s: [[r2(re.range(0.55, 0.85)), r3(TAU / re.range(8, 11)), r2(re.range(0, TAU))], [r2(re.range(0.28, 0.42)), r3(TAU / re.range(3.5, 4.8)), r2(re.range(0, TAU))], [r2(re.range(0.08, 0.14)), r3(TAU / re.range(1.6, 2.2)), r2(re.range(0, TAU))]],
+    g: [[r2(re.range(0.6, 0.9)), r2(re.range(-6.5, -2.5)), r2(re.range(0.3, 0.5))], [r2(-re.range(0.5, 0.8)), r2(re.range(-11, -5)), r2(re.range(0.5, 0.8))]],
+  };
+
   return {
     v: 1, seed, mood, family,
     loop: { duration: T },
-    sea: { profile, waves, obliq: r3(rs.range(0.04, 0.08) * rs.sign()), manning: 0.035 },
+    sea: { profile, edge, waves, obliq: r3(rs.range(0.04, 0.08) * rs.sign()), manning: 0.035 },
     rock: { type: M.rock, seed: `${seed}`, amp: r2(rr.range(0.85, 1.15)), dip: r2(rr.range(0.3, 1.2)), pools: rr.int(3, 6), color: { ...M.rockColor } },
     kelp: { density: r2(rng.fork('kelp').range(0.95, 1.1)), color: { ...KELP_COLORS[family] } },
     camera: {
@@ -152,6 +160,7 @@ export function generate(seed, overrides = {}) {
 export function upgrade(R) {
   const D = generate(R.seed, { mood: R.mood, family: R.family });
   for (const k of Object.keys(D)) if (R[k] === undefined) R[k] = D[k];
+  if (R.sea && !R.sea.edge) R.sea.edge = D.sea.edge;
   return R;
 }
 

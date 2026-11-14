@@ -11,12 +11,23 @@ import * as THREE from 'three/webgpu';
 import {
   Fn, uniform, texture, vec2, vec3, vec4, float, positionWorld, cameraPosition, normalize, length, max, min, exp, mix, select,
   clamp, output, smoothstep, step, sqrt, dot, reflect, abs, pow, positionLocal, normalLocal, attribute, If, fract, sin, cos, equirectUV,
-  normalWorld, mrt, velocity, positionPrevious, textureLoad, ivec2, int, floor,
+  normalWorld, mrt, velocity, positionPrevious, textureLoad, ivec2, int, floor, texture3D,
 } from 'three/tsl';
 import { NZ, noise, fbm } from '../../../shared/scene/materials.js';
 import { G } from '../../../shared/scene/globals.js';
 
 const g = 9.81;
+
+function dataTex3(data, w, h, d, format = THREE.RGBAFormat) {
+  const t = new THREE.Data3DTexture(data, w, h, d);
+  t.format = format; t.type = THREE.HalfFloatType;
+  t.minFilter = t.magFilter = THREE.LinearFilter;
+  t.wrapS = t.wrapR = THREE.ClampToEdgeWrapping; t.wrapT = THREE.RepeatWrapping;
+  t.unpackAlignment = 1;
+  t.colorSpace = THREE.NoColorSpace;
+  t.needsUpdate = true;
+  return t;
+}
 
 function dataTex(data, w, h, type = THREE.HalfFloatType, format = THREE.RGBAFormat, wrapT = THREE.ClampToEdgeWrapping) {
   const t = new THREE.DataTexture(data, w, h, format, type);
@@ -43,6 +54,11 @@ export function createWater() {
     v0: uniform(new THREE.Vector4()), v1: uniform(new THREE.Vector4()), v2: uniform(new THREE.Vector4()),
     T: uniform(32), c0: uniform(Math.sqrt(g * 1.4)),
     foamK: uniform(1), caustic: uniform(1),
+    // le faisceau de profils (gen/sea.js, simulateBundle) : x, t, z
+    bOn: uniform(0), bx0: uniform(-9), bW: uniform(19), bnf: uniform(960), bfps: uniform(30), bz0: uniform(0), bdz: uniform(1), bnz: uniform(1),
+    // le bord du platier le long de la côte, s(z) (gen/sea.js, edgeShift)
+    es0: uniform(new THREE.Vector3()), es1: uniform(new THREE.Vector3()), es2: uniform(new THREE.Vector3()),
+    eg0: uniform(new THREE.Vector3(0, 0, 1)), eg1: uniform(new THREE.Vector3(0, 0, 1)), edgeX: uniform(-2.8),
   };
   // textures provisoires (remplacées à l'arrivée d'une scène)
   const seaT = texture(dataTex(new Uint16Array(4 * 4), 2, 2, THREE.HalfFloatType, THREE.RGBAFormat, THREE.RepeatWrapping));
@@ -50,6 +66,12 @@ export function createWater() {
   const fillT = texture(dataTex(new Uint16Array(4), 2, 2, THREE.HalfFloatType, THREE.RedFormat));
   const reliefT = texture(dataTex(new Uint16Array(16), 2, 2));
   const profT = texture(dataTex(new Uint16Array(8), 2, 1));
+  const bundleT = texture3D(dataTex3(new Uint16Array(4 * 8), 2, 2, 2));
+  // le fond de chaque profil simulé (le profil fin de la caméra, le faisceau) :
+  // le sec et le mouillé se décident contre le fond que la mer a vu
+  const heroBT = texture(dataTex(new Uint16Array(8), 2, 1));
+  const bundleBT = texture(dataTex(new Uint16Array(16), 2, 2));
+  const bundleWetT = texture3D(dataTex3(new Uint16Array(8), 2, 2, 2, THREE.RedFormat));
 
   // ── lectures ──
   // le temps local : la houle arrive en biais (retard le long de la côte)
@@ -70,10 +92,24 @@ export function createWater() {
     const tw = tt.sub(U.T.mul(tt.div(U.T).floor()));
     return oneWave(U.w0, U.v0, tw).add(oneWave(U.w1, U.v1, tw)).add(oneWave(U.w2, U.v2, tw)).mul(smoothstep(-90, -30, x));
   };
+  // le faisceau, au temps local tl ; et son poids face au profil fin de la
+  // caméra (fondu sur |z − zRef| entre 1 m et 0,3 m, comme dans gen/sea.js)
+  const bundleUVW = (x, z, tl) => vec3(x.sub(U.bx0).div(U.bW), tl.mul(U.bfps).add(0.5).div(U.bnf), z.sub(U.bz0).div(U.bdz).add(0.5).div(U.bnz));
+  const heroW = (z) => max(smoothstep(1.0, 0.3, z.sub(U.zRef).abs()), U.bOn.oneMinus());
+  // le fond vu par la mer en (x, z)
+  const simBed = (x, z) => mix(
+    bundleBT.sample(vec2(x.sub(U.bx0).div(U.bW), z.sub(U.bz0).div(U.bdz).add(0.5).div(U.bnz))).level(0).x,
+    heroBT.sample(vec2(x.sub(U.seaX0).div(U.seaW), 0.5)).level(0).x, heroW(z));
+  // (η, u, écume, bulles) dans le domaine simulé, au temps local tl
+  const seaSim = (x, z, tl) => {
+    const h = seaT.sample(fieldUV(x, tl)).level(0);
+    const b = bundleT.sample(bundleUVW(x, z, tl)).level(0);
+    return mix(b, h, heroW(z));
+  };
   // (η, u, écume, bulles) au point (x, z) à l'instant t
   const sea = (x, z, t) => {
     const tl = localT(z, t);
-    const s = seaT.sample(fieldUV(x, tl)).level(0);
+    const s = seaSim(x, z, tl);
     const far = farEta(x, tl);
     const wf = smoothstep(U.seaX0.add(0.6), U.seaX0.add(0.15), x);
     return vec4(mix(s.x, far, wf), s.y.mul(wf.oneMinus()), s.z.mul(wf.oneMinus()), s.w.mul(wf.oneMinus()));
@@ -83,17 +119,29 @@ export function createWater() {
     const q = boxUV(x, z);
     return smoothstep(0, 0.02, q.x).mul(smoothstep(1, 0.98, q.x)).mul(smoothstep(0, 0.02, q.y)).mul(smoothstep(1, 0.98, q.y));
   };
-  // la roche : cuite dans la boîte, le profil moyen au-delà
+  // le bord du platier le long de la côte : s(z), la même formule que
+  // gen/sea.js (edgeShift), et le masque qui le raccorde au platier
+  const edgeShift = (z) => {
+    let v = float(0);
+    for (const e of [U.es0, U.es1, U.es2]) v = v.add(e.x.mul(sin(e.y.mul(z).add(e.z))));
+    for (const e of [U.eg0, U.eg1]) v = v.add(e.x.mul(exp(z.sub(e.y).div(e.z).pow(2).negate())));
+    // 1,2 · tanh(v / 1,2)
+    const q = exp(v.div(1.2).mul(2));
+    return q.sub(1).div(q.add(1)).mul(1.2);
+  };
+  const edgeMask = (x) => smoothstep(U.edgeX.add(0.8), U.edgeX.add(2.8), x).oneMinus();
+  // le profil en (x, z) : le profil moyen, déplacé de s(z) au tombant
+  const profAt = (x, z) => profT.sample(vec2(x.sub(edgeShift(z).mul(edgeMask(x))).sub(U.seaX0).div(U.seaW), 0.5)).level(0).x;
+  // la roche : cuite dans la boîte, le profil au-delà
   const rockAt = (x, z) => {
-    const prof = profT.sample(vec2(x.sub(U.seaX0).div(U.seaW), 0.5)).level(0).x;
+    const prof = profAt(x, z);
     const r = reliefT.sample(boxUV(x, z)).level(0).x;
     return mix(prof, r, inBox(x, z));
   };
-  const profAt = (x) => profT.sample(vec2(x.sub(U.seaX0).div(U.seaW), 0.5)).level(0).x;
   const pool = (x, z) => mix(float(-9), fillT.sample(boxUV(x, z)).level(0).x, inBox(x, z).step(0.999));
   const level = (x, z, t) => max(sea(x, z, t).x, pool(x, z));
   // (sans le champ lointain : pour ce qui est dans le domaine de la simulation)
-  const levelNear = (x, z, t) => max(seaT.sample(fieldUV(x, localT(z, t))).level(0).x, pool(x, z));
+  const levelNear = (x, z, t) => max(seaSim(x, z, localT(z, t)).x, pool(x, z));
   // Le niveau au dôme, interpolé à la main en pleine précision : le dôme fait
   // 9 cm, et 0,1 mm de niveau y déplace la ligne d'eau de plusieurs pixels —
   // les poids du filtrage matériel (8 bits) la dessinaient en escalier.
@@ -108,7 +156,7 @@ export function createWater() {
   const levelDome = (x, z, t) => max(seaExact(x, localT(z, t)), pool(x, z));
   // enveloppe de séchage : la roche sous ce niveau est encore mouillée
   // (rock : la hauteur de la roche au point ; une flaque mouille son bord sur 2 cm)
-  const wetLevel = (x, z, t, rock) => { const pl = pool(x, z); return max(wetT.sample(fieldUV(x, localT(z, t))).level(0).x, select(pl.sub(rock).greaterThan(0.0015), pl.add(0.02), float(-9))); };
+  const wetLevel = (x, z, t, rock) => { const pl = pool(x, z), tl = localT(z, t); return max(mix(bundleWetT.sample(bundleUVW(x, z, tl)).level(0).x, wetT.sample(fieldUV(x, tl)).level(0).x, heroW(z)), select(pl.sub(rock).greaterThan(0.0015), pl.add(0.02), float(-9))); };
 
   // ── le soleil sous l'eau (pour receivedShadowNode) ──
   // atténuation sur le chemin réfracté jusqu'au point, et caustiques
@@ -212,7 +260,7 @@ export function createWater() {
   };
   const receivedShadow = (shadow) => shadow.mul(sunAtten(positionWorld));
 
-  return { U, seaT, wetT, fillT, reliefT, profT, profAt, sea, level, levelNear, levelDome, wetLevel, rockAt, pool, medium, fogNode, sunAtten, receivedShadow, waterGlow, inBox, boxUV, dataTex };
+  return { U, seaT, wetT, fillT, reliefT, profT, bundleT, bundleWetT, dataTex3, edgeShift, profAt, simBed, heroBT, bundleBT, sea, level, levelNear, levelDome, wetLevel, rockAt, pool, medium, fogNode, sunAtten, receivedShadow, waterGlow, inBox, boxUV, dataTex };
 }
 
 // ── La surface ───────────────────────────────────────────────────────────────
@@ -399,7 +447,7 @@ export function createSurface(W, skyTex, lite) {
   // l'eau est au-dessus de la roche dessinée
   const Pm = positionWorld, rkF = W.rockAt(Pm.x, Pm.z), plF = W.pool(Pm.x, Pm.z);
   const etaF = W.sea(Pm.x, Pm.z, U.t).x, lvF = max(etaF, plF);
-  const wetF = etaF.sub(W.profAt(Pm.x)).greaterThan(0.001).or(plF.sub(rkF).greaterThan(0.0015));
+  const wetF = etaF.sub(W.simBed(Pm.x, Pm.z)).greaterThan(0.001).or(plF.sub(rkF).greaterThan(0.0015));
   mat.maskNode = length(Pm.sub(cameraPosition)).greaterThan(U.dome).and(wetF).and(lvF.sub(rkF).greaterThan(0.004));
   // vitesses : la surface n'en écrit pas (alpha nul : la cible garde celle
   // de ce qui est dessous). Ses sommets passent d'un coup de la roche à

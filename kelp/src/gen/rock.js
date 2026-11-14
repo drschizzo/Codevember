@@ -12,7 +12,7 @@
 //   grès     — gradins en lits, alvéoles (taffonis).
 // Plus des cuvettes (les flaques). Axe x vers la côte, z le long de la côte.
 import { createNoise3, hashSeed, createRng } from '../../../shared/rng.js';
-import { makeProfile } from './sea.js';
+import { makeProfile, edgeShift, edgeMask } from './sea.js';
 
 const sst = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const h2 = (i, j, s) => { const v = Math.sin(i * 127.1 + j * 311.7 + s * 74.7) * 43758.5453; return v - Math.floor(v); };
@@ -147,17 +147,38 @@ function poolDepth(pools, x, z) {
 //   flaques, −∞ hors flaque), crack, id, motif (Float32) }
 export function bakeRock(spec) {
   const { type, seed, box, M = 1024 } = spec;
-  const prof = makeProfile(spec.profile);
+  // (le profil en (x, z) : le bord du platier avance et recule le long de la
+  // côte, comme dans le faisceau de profils de la mer)
+  const shift = edgeShift(spec.edge);
   const rock = makeRock(type, seed, spec.rock ?? {});
   const pools = spec.pools ?? [];
+  const blocks = scree(spec, shift);
+  const prof0 = makeProfile(spec.profile), EN = createNoise3(`edge:${seed}`);
   const H = new Float32Array(M * M), crack = new Float32Array(M * M), id = new Float32Array(M * M), motif = new Float32Array(M * M);
   const sx = (box.x1 - box.x0) / (M - 1), sz = (box.z1 - box.z0) / (M - 1);
   // le détail s'éteint au large (sous l'eau profonde) et loin de la scène
   for (let j = 0; j < M; j++) for (let i = 0; i < M; i++) {
     const x = box.x0 + i * sx, z = box.z0 + j * sz, k = j * M + i;
     const o = rock.sample(x, z);
-    const fade = sst(-4.2, -3.2, x);
-    H[k] = prof(x) + o.d * fade - poolDepth(pools, x, z);
+    // l'arête, rompue à l'échelle du mètre (la mer ne voit que la grande
+    // échelle) : éperons, encoches, et une lèvre qui ne suit pas une règle
+    const em = edgeMask(spec.profile, x);
+    const jit = spec.edge ? (0.32 * EN.fbm(z * 0.7, 3.1, x * 0.25, 3) + 0.12 * EN.fbm(z * 2.6, 8.7, x * 0.9, 2)) * em : 0;
+    const xw = x - (shift(z) + jit) * em; // (l'abscisse ramenée au profil moyen)
+    const fade = 0.35 + 0.65 * sst(-4.2, -3.2, xw); // (le tombant garde un peu de relief)
+    let hh = prof0(xw) + o.d * fade - poolDepth(pools, x, z);
+    // éboulis au pied du tombant : des blocs arrondis, à moitié enfouis
+    for (const b of blocks) {
+      const dx = x - b.x, dz = z - b.z;
+      if (Math.abs(dx) > b.r * 1.3 || Math.abs(dz) > b.r * 1.3) continue;
+      const ca = Math.cos(b.a), sa = Math.sin(b.a);
+      const u = (dx * ca + dz * sa) / b.r, v = (-dx * sa + dz * ca) / (b.r * b.e);
+      const q = 1 - (Math.abs(u) ** 2.6 + Math.abs(v) ** 2.6);
+      if (q <= 0) continue;
+      const top = b.y + b.h * q ** 0.42 + 0.6 * o.d;
+      if (top > hh) hh = top;
+    }
+    H[k] = hh;
     crack[k] = o.crack; id[k] = o.id; motif[k] = o.motif;
   }
   const fill = priorityFill(H, M, spec.seaLevel ?? 0);
@@ -166,6 +187,22 @@ export function bakeRock(spec) {
   // au lieu d'y tomber, et ne descend jamais sous la roche dessinée
   const Hc = boxBlur(dilate(H, M, 2), M, 2);
   return { M, box, H, Hc, fill, crack, id, motif };
+}
+
+// Les blocs éboulés au pied du tombant, le long de la côte : rompent la
+// ligne du pied (sans eux, le bas du tombant était une règle)
+function scree(spec, shift) {
+  const P = spec.profile, box = spec.box, out = [];
+  if (!spec.edge) return out;
+  const r = createRng(`scree:${spec.seed}`);
+  const prof0 = makeProfile(P);
+  for (let z = box.z0 - 0.5; z < box.z1 + 0.5; ) {
+    const rad = 0.22 + 0.45 * r.next() ** 1.5;
+    const x = (P.edgeX ?? -2.6) - (P.edgeW ?? 0.9) * (0.35 + 0.9 * r.next()) + shift(z);
+    out.push({ x, z, r: rad, e: 0.6 + 0.5 * r.next(), a: r.next() * Math.PI, h: rad * (0.45 + 0.4 * r.next()), y: prof0(x - shift(z)) - rad * 0.25 });
+    z += rad * (1.1 + 2.2 * r.next());
+  }
+  return out;
 }
 
 function dilate(A, M, r) {

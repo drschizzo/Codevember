@@ -2,7 +2,7 @@
 // le worker, importable depuis Node) : la mer, la roche, la place de la
 // caméra, la disposition des laminaires, leur simulation, et la géométrie des
 // lanières et des crampons.
-import { simulateSea, makeProfile } from './sea.js';
+import { simulateSea, simulateBundle, seaField, makeProfile, makeProfileZ, edgeShift, edgeMask } from './sea.js';
 import { bakeRock, sampler, makePools } from './rock.js';
 import { layoutPlants, buildKelp, simulateKelp, FAMILIES } from './kelp.js';
 import { createRng, createNoise3 } from '../../../shared/rng.js';
@@ -358,12 +358,24 @@ function tube(B, pts, r0, r1, nr = 8) {
 export function buildScene(R, { lite = false, onProgress = () => {} } = {}) {
   const t0 = Date.now(), times = {};
   const T = R.loop.duration;
-  // 1. la mer (60 images / s : un ressaut avance de 6 cm par image)
-  const sea = simulateSea({ T, x0: SEA_X[0], x1: SEA_X[1], dx: 0.025, profile: R.sea.profile, waves: R.sea.waves, manning: R.sea.manning, fps: 60, loops: 2 }, (p) => onProgress(0.08 * p));
+  // 1. la mer : le profil fin de la caméra (60 images / s : un ressaut avance
+  // de 6 cm par image ; la ligne d'eau sur le dôme), puis le faisceau de
+  // profils le long de la côte (5 cm, 30 images / s), chacun sur sa coupe du
+  // platier : le front se courbe avec le bord
+  const zRef = R.camera.z;
+  const profZ = makeProfileZ(R.sea.profile, R.sea.edge);
+  const sea = simulateSea({ T, x0: SEA_X[0], x1: SEA_X[1], dx: 0.025, profileFn: (x) => profZ(x, zRef), waves: R.sea.waves, manning: R.sea.manning, fps: 60, loops: 2 }, (p) => onProgress(0.03 * p));
+  let bundle = null;
+  if (R.sea.edge) {
+    const dz = lite ? 1.5 : 0.9, zs = [];
+    for (let k = Math.ceil((BOX.z0 - 1.5 - zRef) / dz); zRef + k * dz <= BOX.z1 + 1.5; k++) zs.push(+(zRef + k * dz).toFixed(4));
+    bundle = simulateBundle({ T, x0: SEA_X[0], x1: SEA_X[1], dx: 0.05, cfl: 0.8, profileZ: profZ, zs, waves: R.sea.waves, manning: R.sea.manning, fps: 30, loops: 2 }, (p) => onProgress(0.03 + 0.07 * p));
+  }
+  const field = seaField(sea, bundle, R.sea.obliq, zRef);
   times.sea = Date.now() - t0;
   // 2. la roche
   const pools = makePools(R.seed, { x0: -1.6, x1: 3, z0: -8, z1: 2 }, R.rock.pools);
-  const rock = bakeRock({ type: R.rock.type, seed: R.rock.seed, profile: R.sea.profile, box: BOX, M: lite ? 640 : 1024, pools, rock: { amp: R.rock.amp, dip: R.rock.dip } });
+  const rock = bakeRock({ type: R.rock.type, seed: R.rock.seed, profile: R.sea.profile, edge: R.sea.edge, box: BOX, M: lite ? 640 : 1024, pools, rock: { amp: R.rock.amp, dip: R.rock.dip } });
   const Hc = sampler(rock, rock.Hc), Hr = sampler(rock, rock.H);
   onProgress(0.14);
   times.rock = Date.now() - t0;
@@ -381,13 +393,15 @@ export function buildScene(R, { lite = false, onProgress = () => {} } = {}) {
     return Math.abs(a) < half || d < 0.9;
   };
   const fill = sampler(rock, rock.fill);
+  // (une abscisse du profil moyen → la même place par rapport au bord, qui avance et recule)
+  const shiftZ = edgeShift(R.sea.edge), warp = (x, z) => { let y = x; for (let k = 0; k < 4; k++) y = x + shiftZ(z) * edgeMask(R.sea.profile, y); return y; };
   const plants = layoutPlants(R.family, R.seed, area, Hr, {
-    near: { x: cam.x, z: cam.z }, nearR: 2.4, max: lite ? 36 : 64, density: R.kelp.density, inside,
+    near: { x: cam.x, z: cam.z }, nearR: 2.4, max: lite ? 36 : 64, density: R.kelp.density, inside, warp,
     // (pas dans une flaque, pas sur le dôme de la caméra)
     avoid: (x, z) => fill(x, z) - Hr(x, z) > 0.01 || ((x - cam.x) ** 2 + (z - cam.z) ** 2 < 0.06),
   });
   const K = buildKelp(R.family, plants, Hc);
-  const sim = simulateKelp(K, { sea, rockH: Hc, T, fps: 30, sub: lite ? 90 : 100, loops: 2, obliq: R.sea.obliq, zRef: cam.z, camera: (ph) => cameraPose(R.camera, cam, ph).pos }, (p) => onProgress(0.14 + 0.8 * p));
+  const sim = simulateKelp(K, { sea, rockH: Hc, T, fps: 30, sub: lite ? 90 : 100, loops: 2, obliq: R.sea.obliq, zRef: cam.z, field, camera: (ph) => cameraPose(R.camera, cam, ph).pos }, (p) => onProgress(0.14 + 0.8 * p));
   times.kelp = Date.now() - t0;
   // 5. tampons du GPU
   const N = sim.n, nf = sim.nf;
@@ -422,6 +436,23 @@ export function buildScene(R, { lite = false, onProgress = () => {} } = {}) {
     seaTex[4 * k] = toHalf(sea.eta[k]); seaTex[4 * k + 1] = toHalf(sea.u[k]); seaTex[4 * k + 2] = toHalf(sea.foam[k]); seaTex[4 * k + 3] = toHalf(sea.aer[k]);
     wetTex[k] = toHalf(sea.wet[k]);
   }
+  // le faisceau : (η, u, écume, bulles) et l'enveloppe de séchage, une couche
+  // par profil (texture 3D : x, t, z — le GPU interpole entre deux profils)
+  let bundleOut = null;
+  if (bundle) {
+    const n = bundle.nz * bundle.nf * bundle.nx, tex = new Uint16Array(n * 4), wet = new Uint16Array(n);
+    for (let k = 0; k < n; k++) {
+      tex[4 * k] = toHalf(bundle.eta[k]); tex[4 * k + 1] = toHalf(bundle.u[k]); tex[4 * k + 2] = toHalf(bundle.foam[k]); tex[4 * k + 3] = toHalf(bundle.aer[k]);
+      wet[k] = toHalf(bundle.wet[k]);
+    }
+    const bb = new Uint16Array(bundle.nz * bundle.nx * 4);
+    for (let k = 0; k < bundle.nz * bundle.nx; k++) bb[4 * k] = toHalf(bundle.b[k]);
+    bundleOut = { nz: bundle.nz, z0: bundle.z0, dz: bundle.dz, nx: bundle.nx, x0: bundle.x0, dx: bundle.dx, nf: bundle.nf, fps: bundle.fps, tex, wet, b: bb };
+  }
+  // le profil moyen (sans le bord qui varie) : la roche au-delà de la boîte le
+  // déplace elle-même de s(z) (scene/water.js, profAt)
+  const prof0 = makeProfile(R.sea.profile), b0 = new Float32Array(sea.nx);
+  for (let i = 0; i < sea.nx; i++) b0[i] = prof0(sea.x0 + (i + 0.5) * sea.dx);
   // le dôme : pour chaque hauteur autour de l'objectif (32 niveaux sur ±12 cm)
   // et chaque image, le temps écoulé depuis que l'eau l'a quitté (−1 s'il est
   // dans l'eau) et le numéro de cette émergence — les gouttes naissent quand
@@ -451,7 +482,7 @@ export function buildScene(R, { lite = false, onProgress = () => {} } = {}) {
   times.total = Date.now() - t0;
   return {
     T, cam, times, emerge: { tex: emerge, nf: sea.nf, levels: EL, y0: cam.y - 0.12, dy: 0.24 }, stats: { sea: sea.stats, kelp: { ...sim.stats, worst: undefined }, plants: plants.length, nodes: N },
-    sea: { nx: sea.nx, nf: sea.nf, x0: sea.x0, dx: sea.dx, fps: sea.fps, tex: seaTex, wet: wetTex, b: sea.b },
+    sea: { nx: sea.nx, nf: sea.nf, x0: sea.x0, dx: sea.dx, fps: sea.fps, tex: seaTex, wet: wetTex, b: sea.b, b0, bundle: bundleOut },
     rock: { M: rock.M, box: BOX, relief: rockRelief(rock), color: rockColors(rock, R), fill: fillTex },
     fauna,
     kelp: { n: N, nf, fps: sim.fps, pos: kpos, dir: kdir, straps, holdfasts, fringe: !!FAMILIES[R.family].blade.fringe, plants: plants.map((p) => [p.x, p.y, p.z]) },

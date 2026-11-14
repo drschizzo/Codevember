@@ -22,11 +22,12 @@ export function createTerrain(W, lite) {
     const x = p.x, z = p.z;
     const inb = W.inBox(x, z);
     const g = W.reliefT.sample(W.boxUV(x, z)).level(0);
-    const pr = W.profAt(x);
+    const pr = W.profAt(x, z);
     const h = mix(pr, g.x, inb);
     // (hors de la boîte : pente du profil, lue seule)
-    const e = 0.05, gp = W.profAt(x.add(e)).sub(W.profAt(x.sub(e))).div(2 * e);
-    const gx = mix(gp, g.y, inb), gz = mix(float(0), g.z, inb);
+    const e = 0.05, gp = W.profAt(x.add(e), z).sub(W.profAt(x.sub(e), z)).div(2 * e);
+    const gq = W.profAt(x, z.add(e)).sub(W.profAt(x, z.sub(e))).div(2 * e); // (le bord avance et recule le long de la côte)
+    const gx = mix(gp, g.y, inb), gz = mix(gq, g.z, inb);
     normalLocal.assign(normalize(vec3(gx.negate(), 1, gz.negate())));
     // (la roche ne bouge pas : sa position précédente est la même — sans cette
     // ligne, three.js prenait la grille plate pour la pose précédente, et les
