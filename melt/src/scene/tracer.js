@@ -145,24 +145,32 @@ fn poolFilm(p: vec3f) -> f32 {
     let A = u.cr[4 * i]; let B = u.cr[4 * i + 1]; let S = u.sk[i];
     if (S.x > 0.0) {
       // la peau du cristal englouti : elle s'étale depuis l'endroit où il a
-      // disparu (sans surgir d'un bloc), une seule pellicule en dégradé, puis
-      // se fend et ses plaques rapetissent jusqu'à rien (sans fondu)
+      // disparu (sans surgir d'un bloc), une seule pellicule en dégradé ; le
+      // bain, chauffé par le bas, s'écoule en surface du centre vers les bords
+      // et l'emporte ; elle se fend, et ses plaques rapetissent jusqu'à rien
+      // avant la fin de sa vie (aucune ne disparaît d'un coup)
       let age = S.x;
-      let rel = p.xz - A.xz;
+      var dir = A.xz; if (dot(dir, dir) < 0.01) { dir = vec2f(cos(B.w), sin(B.w)); }
+      dir = normalize(dir);
+      let c0 = A.xz + dir * (3.0 * age + 12.0 * age * age);
+      let rel = p.xz - c0;
       let R0 = A.w * 3.4 * sqrt(age) * (0.82 + 0.36 * noise3(vec3f(rel * 2.2, B.w + 2.0)));
       let r = length(rel);
       if (r < R0) {
         let warp = vec2f(noise3(vec3f(rel * 2.3, B.w)), noise3(vec3f(rel * 2.3, B.w + 7.0))) - 0.5;
         let vo = voro((rel + warp * A.w * 0.5) / (A.w * 0.8), B.w);
-        let crack = 0.02 + 0.62 * smoothstep(0.02, 0.14, age);
-        let edge = smoothstep(0.0, 0.04, vo.x - crack) * (1.0 - smoothstep(0.85, 1.0, r / R0));
+        // (la fente grandit au-delà du plus grand écart possible entre deux
+        // germes : à 0,12, il ne reste rien ; la vie de la peau s'arrête à 0,14)
+        let crack = 0.02 + 1.25 * smoothstep(0.015, 0.12, age);
+        let edge = smoothstep(0.0, 0.05, vo.x - crack) * (1.0 - smoothstep(0.75, 1.0, r / R0));
         if (edge > 0.0) {
-          let wr = noise3(vec3f(p.xz * 9.0, B.w));
+          // (les plis sont ceux de la peau : ils partent avec elle)
+          let wr = noise3(vec3f(rel * 9.0, B.w));
           let grad = noise3(vec3f(rel / A.w * 0.9, B.w + 4.0));
           th = mix(th, 110.0 + 150.0 * grad + 18.0 * (hash31(vec3f(vo.y, 1.0, B.w)) - 0.5) + 25.0 * (wr - 0.5), edge);
           let e = 0.02;
-          let gx = noise3(vec3f((p.xz + vec2f(e, 0.0)) * 9.0, B.w)) - wr;
-          let gz = noise3(vec3f((p.xz + vec2f(0.0, e)) * 9.0, B.w)) - wr;
+          let gx = noise3(vec3f((rel + vec2f(e, 0.0)) * 9.0, B.w)) - wr;
+          let gz = noise3(vec3f((rel + vec2f(0.0, e)) * 9.0, B.w)) - wr;
           nn += edge * vec3f(-gx, 0.0, -gz) * 3.5;
         }
       }
