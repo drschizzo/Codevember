@@ -194,6 +194,8 @@ export function simulateSea(spec, onProgress = null) {
   // le déferlement, image par image : (x de la crête qui casse, intensité,
   // vitesse de l'eau, hauteur de la crête) — les embruns et la lèvre en partent
   const BRK = new Float32Array(nf * 4);
+  // (la production d'écume par image : d'où naissent les flocons, voir foamFlakes)
+  const PR = spec.flakes ? new Float32Array(nf * nx) : null;
   let steps = 0;
   function runLoop(k, rec) {
     let t = k * T;
@@ -210,6 +212,7 @@ export function simulateSea(spec, onProgress = null) {
           const o = fr * nx + i;
           eta[o] = h[i] > 1e-4 ? h[i] + b[i] : b[i] - 0.002; U[o] = vel(h[i], q[i]); FO[o] = f[i]; AE[o] = a[i];
           if (Pk[i] > pm) { pm = Pk[i]; im = i; }
+          if (PR) PR[o] = Pk[i];
         }
         // (la crête : le point le plus haut de l'eau juste devant le maximum de production)
         let ic = im;
@@ -242,7 +245,77 @@ export function simulateSea(spec, onProgress = null) {
     M[i] = Math.max(e, M[i] - lam / fps);
     if (pass) wet[o] = M[i];
   }
-  return { nx, x0, dx, nf, fps, T, eta, u: U, foam: FO, aer: AE, wet, b: bf, brk: BRK, stats: { steps, residual, h0 } };
+  const out = { nx, x0, dx, nf, fps, T, eta, u: U, foam: FO, aer: AE, wet, b: bf, brk: BRK, stats: { steps, residual, h0 } };
+  if (PR) out.flakes = foamFlakes(out, PR, spec.flakes, spec.flakeSeed ?? 1);
+  return out;
+}
+
+// ── L'écume, flocon par flocon ───────────────────────────────────────────────
+// Des flocons naissent là où la mer produit de l'écume (tirés selon la
+// production, image par image : surtout dans le ressaut et au déferlement),
+// puis le courant de surface les emporte ; ils s'arrêtent, échoués, là où
+// l'eau quitte la roche. Leur trajectoire est enregistrée à 10 Hz sur toute
+// leur vie (jusqu'à 8 s) : le GPU la relit. Le temps est replié sur la boucle.
+// retour : { n, K (échantillons), rate (Hz), birth: Float32 n × 4 (naissance,
+//   x0, vie, graine de l'îlot), traj: demi-flottants n × K × 2 (abscisse, sur l'eau) }
+export const FLAKE_RATE = 10, FLAKE_K = 80;
+export function foamFlakes(S, PR, n, seed) {
+  const { nf, nx, fps, T, x0, dx } = S;
+  // tirage stratifié selon la production
+  const cum = new Float64Array(nf * nx);
+  let tot = 0;
+  for (let k = 0; k < nf * nx; k++) { tot += PR[k]; cum[k] = tot; }
+  let a = (seed * 2654435761) >>> 0 || 1;
+  const rnd = () => { a ^= a << 13; a ^= a >>> 17; a ^= a << 5; return (a >>> 0) / 4294967296; };
+  const K = FLAKE_K, birth = new Float32Array(n * 4), TR = new Uint16Array(n * K * 2); // (x, sur l'eau), en demi-flottants : prêts pour le GPU
+  if (tot <= 0) return { n: 0, K, rate: FLAKE_RATE, birth: new Float32Array(0), traj: new Uint16Array(0) };
+  const field = (arr, x, t) => {
+    const fx = (x - x0) / dx - 0.5, i0 = fx < 0 ? 0 : fx > nx - 2 ? nx - 2 : Math.floor(fx), wx = Math.min(1, Math.max(0, fx - i0));
+    let ft = t * fps; ft -= Math.floor(ft / nf) * nf;
+    const f0 = Math.floor(ft) % nf, f1 = (f0 + 1) % nf, wt = ft - Math.floor(ft);
+    return (arr[f0 * nx + i0] * (1 - wx) + arr[f0 * nx + i0 + 1] * wx) * (1 - wt) + (arr[f1 * nx + i0] * (1 - wx) + arr[f1 * nx + i0 + 1] * wx) * wt;
+  };
+  const depth = (x, t) => field(S.eta, x, t) - (() => { const fx = Math.max(0, Math.min(nx - 1, Math.floor((x - x0) / dx))); return S.b[fx]; })();
+  const h = 1 / (FLAKE_RATE * 3);
+  // (en îlots : six flocons naissent ensemble, à quelques centimètres les uns
+  // des autres ; là où le courant diverge, il les sépare et l'îlot s'étire en
+  // traînée — des flocons tirés un à un faisaient des taches isolées)
+  const G = 6, ng = Math.ceil(n / G);
+  let f = 0, i = 0, tb0 = 0, xc = 0, cs = 0, life0 = 0;
+  for (let j = 0; j < n; j++) {
+    if (j % G === 0) {
+      const q = ((Math.floor(j / G) + rnd()) / ng) * tot;
+      let lo = 0, hi = nf * nx - 1;
+      while (lo < hi) { const m = (lo + hi) >> 1; if (cum[m] < q) lo = m + 1; else hi = m; }
+      f = Math.floor(lo / nx); i = lo - f * nx;
+      tb0 = (f + rnd()) / fps; xc = x0 + (i + rnd()) * dx; cs = rnd(); life0 = 3 + 5 * rnd() ** 0.7;
+    }
+    const tb = tb0 + rnd() * 0.12, xb = xc + (rnd() - 0.5) * 0.3, life = life0 * (0.7 + 0.5 * rnd());
+    birth[j * 4] = tb; birth[j * 4 + 1] = xb; birth[j * 4 + 2] = life; birth[j * 4 + 3] = cs; // (graine de l'îlot)
+    // le courant de surface emporte le flocon (RK2), jusqu'à ce qu'il échoue
+    let x = xb, t = tb, stuck = false;
+    for (let k = 0; k < K; k++) {
+      const d = depth(x, t);
+      if (d < 0.004) stuck = true; // (échoué : l'eau s'est retirée sous lui ; il reste là)
+      TR[(j * K + k) * 2] = half(x); TR[(j * K + k) * 2 + 1] = stuck ? 0 : 0x3c00; // (1 en demi-flottant)
+      for (let r = 0; r < 3; r++) {
+        if (stuck) break;
+        const u1 = field(S.u, x, t), u2 = field(S.u, x + u1 * h * 0.5, t + h * 0.5);
+        x += u2 * h * 1.05; t += h; // (l'écume, en surface, va un peu plus vite que la moyenne de la colonne)
+      }
+      if (stuck) t += 3 * h;
+    }
+  }
+  return { n, K, rate: FLAKE_RATE, birth, traj: TR };
+}
+// float → demi-flottant
+const _hf = new Float32Array(1), _hu = new Uint32Array(_hf.buffer);
+function half(v) {
+  _hf[0] = v; const x = _hu[0];
+  const sgn = (x >> 16) & 0x8000, e = ((x >> 23) & 0xff) - 112, m = x & 0x7fffff;
+  if (e <= 0) return sgn;
+  if (e >= 31) return sgn | 0x7c00;
+  return sgn | (e << 10) | (m >> 13);
 }
 
 // lecture d'un champ enregistré en (x, t) : interpolation bilinéaire, t périodique
@@ -270,7 +343,7 @@ export function simulateBundle(spec, onProgress = null) {
   const nzz = zs.length;
   let out = null;
   zs.forEach((z, k) => {
-    const S = simulateSea({ ...spec, profileFn: (x) => profileZ(x, z) }, onProgress ? (p) => onProgress((k + p) / nzz) : null);
+    const S = simulateSea({ ...spec, flakeSeed: k + 1 + Math.round(z * 100), profileFn: (x) => profileZ(x, z) }, onProgress ? (p) => onProgress((k + p) / nzz) : null);
     if (!out) {
       const n = S.nf * S.nx * nzz;
       out = { nz: nzz, zs: [...zs], z0: zs[0], dz: nzz > 1 ? zs[1] - zs[0] : 1, nx: S.nx, x0: S.x0, dx: S.dx, nf: S.nf, fps: S.fps, T: S.T,
@@ -278,6 +351,7 @@ export function simulateBundle(spec, onProgress = null) {
     }
     const o = k * S.nf * S.nx;
     out.b.set(S.b, k * S.nx); out.brk.set(S.brk, k * S.nf * 4);
+    if (S.flakes) (out.flakes ??= []).push({ z, ...S.flakes });
     out.eta.set(S.eta, o); out.u.set(S.u, o); out.foam.set(S.foam, o); out.aer.set(S.aer, o); out.wet.set(S.wet, o);
     out.residual.push(S.stats.residual.at(-1));
   });

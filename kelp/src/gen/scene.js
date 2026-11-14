@@ -437,7 +437,7 @@ export function sceneJobs(R, lite = false, slices = 1) {
     const dz = lite ? 1.5 : 0.9, zs = [];
     for (let k = Math.ceil((BOX.z0 - 1.5 - zRef) / dz); zRef + k * dz <= BOX.z1 + 1.5; k++) zs.push(+(zRef + k * dz).toFixed(4));
     const n = Math.max(1, Math.min(slices, zs.length)), per = Math.ceil(zs.length / n);
-    for (let i = 0; i < zs.length; i += per) jobs.push({ what: 'sea-bundle', R, zs: zs.slice(i, i + per) });
+    for (let i = 0; i < zs.length; i += per) jobs.push({ what: 'sea-bundle', R, lite, zs: zs.slice(i, i + per) });
   }
   return jobs;
 }
@@ -450,7 +450,7 @@ export function runJob(job, onProgress = null) {
   }
   if (job.what === 'sea-bundle') {
     // une tranche du faisceau de profils le long de la côte (5 cm, 30 images / s)
-    return simulateBundle({ T, x0: SEA_X[0], x1: SEA_X[1], dx: 0.05, cfl: 0.8, profileZ: profZ, zs: job.zs, waves: R.sea.waves, swell: R.sea.swell, manning: R.sea.manning, fps: 30, loops: 2 }, onProgress);
+    return simulateBundle({ T, x0: SEA_X[0], x1: SEA_X[1], dx: 0.05, cfl: 0.8, profileZ: profZ, zs: job.zs, waves: R.sea.waves, swell: R.sea.swell, manning: R.sea.manning, fps: 30, loops: 2, flakes: job.lite ? 1800 : 4800 }, onProgress);
   }
   if (job.what === 'rock') {
     const pools = makePools(R.seed, { x0: -1.6, x1: 3, z0: -8, z1: 2 }, R.rock.pools);
@@ -467,10 +467,39 @@ export function mergeBundles(list) {
   for (const key of ['eta', 'u', 'foam', 'aer', 'wet']) { const A = new Float32Array(nz * n); let o = 0; for (const B of list) { A.set(B[key], o); o += B.nz * n; } out[key] = A; }
   const bb = new Float32Array(nz * f.nx); let o = 0; for (const B of list) { bb.set(B.b, o); o += B.nz * f.nx; } out.b = bb;
   const br = new Float32Array(nz * f.nf * 4); o = 0; for (const B of list) { br.set(B.brk, o); o += B.nz * f.nf * 4; } out.brk = br;
+  out.flakes = list.flatMap((B) => B.flakes ?? []);
   const zs = list.flatMap((B) => B.zs);
   out.zs = zs; out.z0 = zs[0]; out.dz = nz > 1 ? (zs[nz - 1] - zs[0]) / (nz - 1) : 1;
   return out;
 }
+// Les flocons d'écume pour le GPU : leurs trajectoires (x, sur l'eau) dans une
+// texture, plusieurs flocons par ligne ; un quadrilatère par flocon, qui porte sa
+// naissance, sa vie, sa graine, son numéro, sa place le long de la côte
+export function flakeBuffers(bundle) {
+  const L = bundle.flakes ?? [];
+  const n = L.reduce((a, F) => a + F.n, 0);
+  if (!n) return null;
+  const K = L[0].K, rate = L[0].rate, perRow = Math.ceil(n / 8000), rows = Math.ceil(n / perRow); // (une texture fait au plus 8 192 lignes)
+  const traj = new Uint16Array(rows * perRow * K * 2);
+  const fl = new Float32Array(n * 16), fc = new Float32Array(n * 12), index = new Uint32Array(n * 6);
+  const cs = [[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]];
+  let j = 0;
+  for (const F of L) for (let q = 0; q < F.n; q++, j++) {
+    const row = Math.floor(j / perRow), col = (j % perRow) * K;
+    traj.set(F.traj.subarray(q * K * 2, (q + 1) * K * 2), (row * perRow * K + col) * 2);
+    // (l'îlot se place entre deux profils ; ses flocons, à ±12 cm les uns des autres)
+    const isl = F.birth[q * 4 + 3], own = (Math.sin(j * 12.9898) * 43758.5453) % 1, seed = Math.abs(own);
+    const z = F.z + (((isl * 7919) % 1) - 0.5) * bundle.dz + (((seed * 3571) % 1) - 0.5) * 0.24;
+    for (let c = 0; c < 4; c++) {
+      const v = j * 4 + c;
+      fl[v * 4] = F.birth[q * 4]; fl[v * 4 + 1] = F.birth[q * 4 + 2]; fl[v * 4 + 2] = seed; fl[v * 4 + 3] = j;
+      fc[v * 3] = cs[c][0]; fc[v * 3 + 1] = cs[c][1]; fc[v * 3 + 2] = z;
+    }
+    const b = j * 4; index.set([b, b + 1, b + 2, b, b + 2, b + 3], j * 6);
+  }
+  return { n, K, rate, perRow, rows, traj, fl, fc, index };
+}
+
 // tout, d'un trait (Node, tests ; le worker passe par sceneJobs + assembleScene)
 export function buildScene(R, { lite = false, onProgress = () => {} } = {}) {
   const t0 = Date.now();
@@ -503,7 +532,9 @@ export function assembleScene(R, parts, { lite = false, onProgress = () => {} } 
   };
   const fill = sampler(rock, rock.fill);
   // (une abscisse du profil moyen → la même place par rapport au bord, qui avance et recule)
-  const shiftZ = edgeShift(R.sea.edge), warp = (x, z) => { let y = x; for (let k = 0; k < 4; k++) y = x + shiftZ(z) * edgeMask(R.sea.profile, y); return y; };
+  // (au-delà du faisceau, le bord ne varie plus : comme dans le shader)
+  const sh0 = edgeShift(R.sea.edge), zLo = bundle ? bundle.z0 : -1e9, zHi = bundle ? bundle.z0 + (bundle.nz - 1) * bundle.dz : 1e9;
+  const shiftZ = (z) => sh0(Math.min(zHi, Math.max(zLo, z))), warp = (x, z) => { let y = x; for (let k = 0; k < 4; k++) y = x + shiftZ(z) * edgeMask(R.sea.profile, y); return y; };
   const plants = layoutPlants(R.family, R.seed, area, Hr, {
     near: { x: cam.x, z: cam.z }, nearR: 2.4, max: Math.round((lite ? 28 : 40) * (FAMILIES[R.family].colony ? 0.85 : 1)), density: R.kelp.density, inside, warp,
     // (pas dans une flaque, pas sur le dôme de la caméra)
@@ -563,7 +594,7 @@ export function assembleScene(R, parts, { lite = false, onProgress = () => {} } 
       const o = (k * bundle.nf + f) * 4, at = (df) => bundle.brk[(k * bundle.nf + (f + df + bundle.nf) % bundle.nf) * 4 + 1];
       brk[o] = toHalf(bundle.brk[o]); brk[o + 1] = toHalf((at(-1) + 2 * at(0) + at(1)) / 4); brk[o + 2] = toHalf(bundle.brk[o + 2]); brk[o + 3] = toHalf(bundle.brk[o + 3]);
     }
-    bundleOut = { nz: bundle.nz, z0: bundle.z0, dz: bundle.dz, nx: bundle.nx, x0: bundle.x0, dx: bundle.dx, nf: bundle.nf, fps: bundle.fps, tex, wet, b: bb, brk };
+    bundleOut = { nz: bundle.nz, z0: bundle.z0, dz: bundle.dz, nx: bundle.nx, x0: bundle.x0, dx: bundle.dx, nf: bundle.nf, fps: bundle.fps, tex, wet, b: bb, brk, flakes: flakeBuffers(bundle) };
   }
   // le profil moyen (sans le bord qui varie) : la roche au-delà de la boîte le
   // déplace elle-même de s(z) (scene/water.js, profAt)
@@ -593,7 +624,8 @@ export function assembleScene(R, parts, { lite = false, onProgress = () => {} } 
   for (let k = 0; k < fillTex.length; k++) fillTex[k] = toHalf(rock.fill[k] - rock.H[k] > 0.002 ? rock.fill[k] : rock.H[k] - 0.002);
   const straps = strapGeometry(K, plants);
   // la forêt : clones de touffes au-delà des plantes simulées
-  const rockAt = (x, z) => (x > BOX.x0 + 0.05 && x < BOX.x1 - 0.05 && z > BOX.z0 + 0.05 && z < BOX.z1 - 0.05 ? Hr(x, z) : profZ(x, z));
+  const prof0f = makeProfile(R.sea.profile);
+  const rockAt = (x, z) => (x > BOX.x0 + 0.05 && x < BOX.x1 - 0.05 && z > BOX.z0 + 0.05 && z < BOX.z1 - 0.05 ? Hr(x, z) : prof0f(unwarp(x, z)));
   const unwarp = (x, z) => x - shiftZ(z) * edgeMask(R.sea.profile, x);
   const halfW = half * 1.15, insideWide = (x, z) => { const dx = x - cam.x, dz = z - cam.z; return Math.abs(Math.atan2(-dx, -dz) - yaw) < halfW && Math.hypot(dx, dz) < 24; };
   const clones = placeClones({

@@ -46,7 +46,10 @@ export function createTerrain(W, lite) {
   // (sur les faces raides — le tombant, les fronts des feuillets —, la carte
   // vue de dessus s'étire en stries : une couleur tirée du volume de bruit en
   // 3D, de la même teinte, la remplace)
-  const gN0 = normalize(mix(vec3(0, 1, 0), vec3(relief.y.negate(), 1, relief.z.negate()), inb));
+  // (au-delà de la boîte, le profil seul est lisse : mouillé, c'était un
+  // miroir qui se lisait au loin en triangle blanc ; des bosses de bruit)
+  const farN = vec3(NZ(P.mul(vec3(1.1, 0, 1.1))).y.mul(0.35).add(NZ(P.mul(vec3(3.7, 0, 3.7)).add(5.1)).y.mul(0.15)), 1, NZ(P.mul(vec3(1.1, 0, 1.1)).add(2.3)).z.mul(0.35).add(NZ(P.mul(vec3(3.7, 0, 3.7)).add(8.3)).z.mul(0.15)));
+  const gN0 = normalize(mix(farN, vec3(relief.y.negate(), 1, relief.z.negate()), inb));
   const steep = smoothstep(0.8, 0.5, gN0.y);
   const side = vec3(RU.base).mul(NZ(P.mul(7)).x.mul(0.3).add(NZ(P.mul(23)).y.mul(0.15)).add(0.85)).mul(0.9);
   const albedo0 = mix(mix(far, tex.rgb, inb), side, steep);
@@ -63,7 +66,7 @@ export function createTerrain(W, lite) {
   const albedo = mix(albedoS, pow(albedoS, vec3(1.45)).mul(RU.wetDark), wet);
   mat.colorNode = albedo;
   // la pellicule d'eau sur la roche découverte brille ; sous l'eau, non
-  mat.roughnessNode = mix(mix(float(0.85), tex.a, inb), float(0.16), wet.mul(under.oneMinus())).max(G.roughFloor);
+  mat.roughnessNode = mix(mix(float(0.85), tex.a, inb), mix(float(0.4), float(0.16), inb), wet.mul(under.oneMinus())).max(G.roughFloor);
   mat.metalnessNode = float(0);
   // micro-relief : grain et cristaux (le gros plan), estompé à l'approche du pixel
   const hMicro = fbm(P.mul(28), 2).mul(0.0035).add(NZ(P.mul(140)).x.mul(0.0006)).add(NZ(P.mul(420)).y.mul(0.00025).mul(near)).mul(RU.micro).mul(G.microDetail).mul(wet.mul(0.5).oneMinus());
