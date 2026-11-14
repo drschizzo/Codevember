@@ -1,5 +1,7 @@
 # Melt, troisième version : le fjord
 
+> **Abandonné le 14 novembre** au profit de `concept-eau-douce.md` : P7 a montré que les nappes ne se voient pas.
+
 Thème : **« melt »**. Sous-titre : *la colonne sans fin*.
 
 Ce document prend la suite de `concept-pinacles.md`, qui garde la trace des essais en eau douce et des prototypes P0 à P5. Le choix du fjord a été fait le 14 novembre, après le bilan de ces prototypes. P6 (`proto/p6/RESULTS.md`) en est la première épreuve.
