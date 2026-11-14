@@ -90,7 +90,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
   const rainMat = rainMaterial(rainU, lite);
   let rain = null;
   // étincelles (au point que touche chaque arc), gouttes (le thé saisi par la
-  // résistance) et bouffées de vapeur : attributs fixes, tout est dans le shader
+  // résistance) : attributs fixes, tout est dans le shader
   const sparkU = {
     tau: uniform(-1), light: uniform(new THREE.Color(1, 1, 1)),
     src: uniformArray(Array.from({ length: 5 }, () => new THREE.Vector4(0, 0, 0, 99)), 'vec4'), // x, y, z, instant (4 arcs, puis le thé)
@@ -98,9 +98,6 @@ export function createStage(scene, gen, { lite = false } = {}) {
   };
   const sparks = buildSparks(sparkU, lite);
   scene.add(sparks);
-  const puffU = { since: uniform(0), env: uniform(0), o: uniform(new THREE.Vector3()), dir: uniform(new THREE.Vector3(0, 1, 0)), r: uniform(0.1), jet: uniform(0), light: uniform(new THREE.Color(1, 1, 1)), seed: uniform(0) };
-  const puffs = buildPuffs(puffU, lite);
-  scene.add(puffs);
 
   let R = null, meta = null, L = null, boltInfo = null, pending = 0, total = 1, version = 0;
 
@@ -278,7 +275,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
     C.near.value = camera.near; C.far.value = camera.far;
     C.c.value.set(L.center[0], L.base, L.center[2]);
     C.R.value = K.radius; C.H.value = K.height;
-    C.shred.value = S.shred; C.dark.value = S.dark; C.dens.value = K.density;
+    C.vis.value = S.vis; C.visOld.value = S.visOld; C.rag.value = S.rag; C.ragOld.value = S.ragOld; C.dark.value = S.dark; C.dens.value = K.density;
     C.tint.value.set(K.tint); C.shade.value.set(K.shade); C.amb.value = K.ambient;
     C.sun.value.copy(key.position).sub(key.target.position).normalize();
     C.sunCol.value.set(Li.key.color);
@@ -304,7 +301,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
 
     // ── la chaleur de la foudre ──
     // Elle descend le métal depuis la pointe (PHYS.cond), la résistance rougit
-    // et le reste : c'est elle qui fait repartir la vapeur après l'averse.
+    // et le reste : c'est elle qui fait repartir la vapeur, aussitôt après l'arc.
     // (pas de lampe de plus : le métal émet, le thé et la table s'éclairent
     // dans leur propre shader, le halo de la chaîne d'image fait le reste)
     const hot = S.heat, H = meta.heater;
@@ -321,7 +318,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
       g.set(c[0] * ca + c[2] * sa, -c[0] * sa + c[2] * ca, Math.max(0.08, H.glow.y), H.glow.table ? 2.2 * glow * glow : 0);
     }
 
-    // ── le choc : étincelles, gouttes, bouffées ──
+    // ── le choc : étincelles, gouttes (la vapeur, elle, est dans le champ simulé du nuage) ──
     sparkU.tau.value = S.tau;
     for (let j = 0; j < 4; j++) {
       const s = st[j], K = s && info ? info.strokes[up ? 0 : Math.min(s.path, info.strokes.length - 1)] : null;
@@ -334,15 +331,6 @@ export function createStage(scene, gen, { lite = false } = {}) {
       sparkU.src.array[4].set(c[0] * ca + c[2] * sa, meta.liquid.y, -c[0] * sa + c[2] * ca, 0.58 * PHYS.cond);
       sparkU.amp.array[4].set(H.glow.liquid ? 1 : 0, Math.min(H.glow.r, meta.liquid.r * 0.6), 0, 0);
       sparkU.light.value.set(K0.tint).multiplyScalar(K0.ambient * 1.2 + S.light * 4);
-      // bouffées : du thé autour de la résistance, ou du bec d'une théière (un jet)
-      const closed = meta.closed, o = closed ? L.steam.p : [sparkU.src.array[4].x, meta.liquid.y, sparkU.src.array[4].z];
-      puffU.o.value.set(o[0], o[1], o[2]);
-      const d = closed && meta.steam.dir ? meta.steam.dir : [0, 1, 0];
-      puffU.dir.value.set(d[0] * ca + d[2] * sa, d[1], -d[0] * sa + d[2] * ca).normalize();
-      puffU.r.value = closed ? 0.03 : Math.max(0.06, sparkU.amp.array[4].y * 1.1);
-      puffU.jet.value = closed ? 1 : 0;
-      puffU.since.value = S.since; puffU.env.value = S.puffs; puffU.seed.value = K0.seed;
-      puffU.light.value.set(K0.tint).multiplyScalar(Math.min(1.6, K0.ambient * 1.5 + 0.25 + S.light * 2.5));
     }
 
     // ── la pluie ──
@@ -506,50 +494,5 @@ function buildSparks(U, lite) {
   if (!lite) m.mrtNode = mrt({ velocity: vec4(0), refl: vec4(0) });
   const mesh = new THREE.Mesh(g, m);
   mesh.frustumCulled = false; mesh.renderOrder = 9;
-  return mesh;
-}
-
-// ── Bouffées de vapeur ───────────────────────────────────────────────────────
-// De petits nuages qui montent de la résistance (ou sortent du bec en jet) :
-// au choc, puis quand la pluie grésille sur le métal chaud, puis jusqu'à ce que
-// la colonne reparte. Chaque bouffée recommence un nombre de fois par seconde
-// tiré une fois ; son âge se lit dans le temps écoulé depuis la jonction.
-function buildPuffs(U, lite) {
-  const N = lite ? 20 : 44;
-  const quad = new THREE.PlaneGeometry(1, 1), g = new THREE.InstancedBufferGeometry();
-  g.index = quad.index;
-  for (const k of ['position', 'uv', 'normal']) g.setAttribute(k, quad.attributes[k]);
-  const a = new Float32Array(N * 4);
-  let h = 4242;
-  const rnd = () => ((h = Math.imul(h ^ (h >>> 15), 2246822507) ^ Math.imul(h ^ (h >>> 13), 3266489909)) >>> 0) / 4294967296;
-  for (let i = 0; i < N; i++) a.set([rnd(), rnd(), rnd(), rnd()], i * 4);
-  g.setAttribute('iA', new THREE.InstancedBufferAttribute(a, 4));
-  g.instanceCount = N;
-  const m = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false });
-  const r = attribute('iA', 'vec4'), t2 = uv().sub(0.5);
-  const period = r.x.mul(0.9).add(1.1), k = fract(U.since.div(period).add(r.y)), age = k.mul(period);
-  const an = r.z.mul(6.2832), rad = r.w.sqrt();
-  // (elle monte en ralentissant, s'écarte, grossit ; en jet elle part dans l'axe du bec)
-  const up = mix(vec3(0, 1, 0), U.dir, U.jet.mul(exp(age.mul(-1.6))));
-  const lateral = vec3(sin(an), 0, sin(an.add(1.5708))).mul(rad);
-  const rise = age.mul(0.34).mul(age.mul(-0.22).add(1)).add(U.jet.mul(0.12).mul(exp(age.mul(-3)).oneMinus()));
-  const sway = vec3(sin(age.mul(2.1).add(r.z.mul(9))), 0, sin(age.mul(1.7).add(r.w.mul(9)))).mul(0.06).mul(age);
-  const P = U.o.add(lateral.mul(U.r.mul(k.mul(1.5).add(0.6)))).add(up.mul(rise)).add(sway);
-  const size = mix(float(0.1), float(0.42), k.pow(0.7)).mul(r.w.mul(0.5).add(0.75)).mul(mix(1, 0.75, U.jet));
-  const toCam = normalize(cameraPosition.sub(P)), sx = normalize(cross(vec3(0, 1, 0), toCam)), sy = cross(toCam, sx);
-  // (chaque bouffée tourne lentement sur elle-même)
-  const rot = r.y.mul(6.2832).add(age.mul(r.x.sub(0.5)).mul(0.8)), cr = sin(rot.add(1.5708)), sr = sin(rot);
-  const q = vec2(t2.x.mul(cr).sub(t2.y.mul(sr)), t2.x.mul(sr).add(t2.y.mul(cr)));
-  m.positionNode = P.add(sx.mul(q.x).add(sy.mul(q.y)).mul(size));
-  // forme : un disque doux rongé par le bruit commun (lu dans le plan de la bouffée, à un décalage qui lui est propre)
-  const d = length(t2).mul(2);
-  const n = NZ(vec3(t2.mul(1.6).add(r.xy.mul(7)), r.z.mul(4).add(age.mul(0.12)).add(U.seed))).level(0);
-  const body = smoothstep(1, 0.1, d.add(n.z.min(1).mul(0.42)).add(n.x.mul(0.25)));
-  const alpha = body.mul(smoothstep(0, 0.12, k)).mul(smoothstep(1, 0.45, k)).mul(U.env).mul(0.4);
-  m.colorNode = vec4(U.light, 1);
-  m.opacityNode = alpha;
-  if (!lite) m.mrtNode = mrt({ velocity: vec4(0), refl: vec4(0) });
-  const mesh = new THREE.Mesh(g, m);
-  mesh.frustumCulled = false; mesh.renderOrder = 6;
   return mesh;
 }

@@ -233,3 +233,16 @@ Diagnostic : l'histoire se jouait là où la caméra ne regardait pas. Le thé �
 7. **Les supports.** Veines du marbre affinées (on les prenait pour de la fumée), oxydation du zinc calmée.
 
 Écartés : le samovar (une cinquième famille entière, à faire pour elle-même) ; la cuillère posée sur la soucoupe (elle n'a plus de rôle).
+
+## Passe « une seule fumée » (14 novembre)
+
+Remarque de l'utilisateur : « un manque de cohérence entre la fumée générée par la vapeur et la fumée qui forme ensuite le nuage ». Puis sa proposition : revoir le scénario, faire tomber la pluie après la formation du nuage et avant l'éclair, se passer de la vapeur séparée, et détailler davantage la fumée et le nuage.
+
+Diagnostic (captures de toute la boucle, graine f9) : les bouffées n'avaient rien en commun avec la colonne simulée. Autre source (la résistance, décalée de 0,17 du centre de la tasse), autre rendu (images tournées vers la caméra, couleur unie, sans ombre, contre un volume éclairé par la lampe), autre bruit (lu dans le plan de chaque image : des boules de coton), autre mouvement (elles montaient d'un tiers de tasse puis flottaient), et un trou entre u = 0,93 et 1,0 où elles s'éteignaient avant que la colonne ne devienne visible.
+
+1. **Le scénario.** Pluie (0,03 – 0,36, 70 % de l'eau) pendant que le nuage fonce, charge, traceur, foudre ; une bourrasque (0,51 – 0,60) rend le reste ; le nuage vidé se défait (jusqu'à 0,65) pendant que la colonne suivante part du thé, dès que la chaleur atteint la résistance (0,52). C'est plus juste que l'ordre précédent : dans un orage, les précipitations séparent les charges, et la bourrasque qui suit l'éclair existe. La pluie finit avant le ralenti du traceur (elle ne lit pas l'horloge lente). Le grésillement sur le métal chaud est gardé, par la bourrasque.
+2. **Une seule matière.** Plus de sprites : le bouillon du choc est une impulsion de chaleur et de traceur au départ de la simulation, et le nuage qui se défait est lu dans le même champ (dernière image du cycle précédent, enveloppe qui baisse, érosion par lambeaux).
+3. **Le détail.** La colonne était un tuyau lisse : une deuxième déformation turbulente, des filaments (Worley étiré dans le sens de la montée, lu à travers cette déformation) et une rampe de densité plus longue en font un voile filandreux. L'octave fine des bourgeons pèse un peu plus sur les bords du nuage. Environ 3 ms de plus en 1920 × 1080 (voir le README).
+
+Écarté : monter la fréquence de l'octave fine (6,1 → 8,3) : plus de grain, mais 2 ms de plus pour un gain que le flou de profondeur et l'anticrénelage effacent en partie. Des filaments strictement verticaux : ils se lisaient comme une pluie.
+
