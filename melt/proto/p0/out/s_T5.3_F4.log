@@ -1,0 +1,8 @@
+# s_T5.3_F4  Tinf=5.3 °C  F(St)=4  St_eff/Tinf=0.0549 /°C  hold=top
+# grid 80x288  dx=0.500 mm  dt=0.02353 s  R=0.04 Z=0.144  ice a=0.014 H=0.09  MG levels=5 (5x18) nV=2
+# Ra(H, max dT^2) ~ 3.85e+6  Ra/Tinf^2 (L=2a) = 7.24e+3
+t=470.6s step=20000 V/V0=0.5266 umax=1.17mm/s uIce=0.026mm/s div*dx/U=4.2e-7 ms/step=3.01
+t=941.2s step=40000 V/V0=0.2445 umax=1.38mm/s uIce=0.034mm/s div*dx/U=1.3e-7 ms/step=2.89
+# done: t=1235.3 s physical, 52500 steps, wall 151.6 s, 2.89 ms/step, cells=23040
+# snapshots at t = 0, 129, 374, 661, 932, 1235 s ; V/V0 = 1.00, 0.80, 0.60, 0.40, 0.25, 0.12
+# wrote s_T5.3_F4.png (1950x576), s_T5.3_F4.json, s_T5.3_F4_profile.csv

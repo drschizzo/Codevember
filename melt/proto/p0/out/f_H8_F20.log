@@ -1,0 +1,7 @@
+# f_H8_F20  Tinf=8 °C  F(St)=20  St_eff/Tinf=0.2743 /°C  hold=hang
+# grid 160x576  dx=0.250 mm  dt=0.00588 s  R=0.04 Z=0.144  ice a=0.014 H=0.09  MG levels=6 (5x18) nV=2
+# Ra(H, max dT^2) ~ 3.85e+6  Ra/Tinf^2 (L=2a) = 7.24e+3
+t=117.6s step=20000 V/V0=0.1630 umax=8.64mm/s uIce=0.037mm/s div*dx/U=1.6e-7 ms/step=10.54
+# done: t=130.6 s physical, 22200 steps, wall 230.9 s, 10.40 ms/step, cells=92160
+# snapshots at t = 0, 10, 36, 68, 97, 131 s ; V/V0 = 1.00, 0.80, 0.60, 0.40, 0.25, 0.12
+# wrote f_H8_F20.png (1950x576), f_H8_F20.json, f_H8_F20_profile.csv

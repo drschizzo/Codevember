@@ -1,0 +1,11 @@
+# f_S56_F20  Tinf=5.6 °C  F(St)=20  St_eff/Tinf=0.2743 /°C  hold=top
+# grid 160x576  dx=0.250 mm  dt=0.00588 s  R=0.04 Z=0.144  ice a=0.014 H=0.09  MG levels=6 (5x18) nV=2
+# Ra(H, max dT^2) ~ 3.85e+6  Ra/Tinf^2 (L=2a) = 7.24e+3
+t=58.8s step=10000 V/V0=0.6059 umax=1.14mm/s uIce=0.005mm/s div*dx/U=6.1e-8 ms/step=10.44
+t=117.6s step=20000 V/V0=0.4473 umax=1.64mm/s uIce=0.013mm/s div*dx/U=6.8e-8 ms/step=10.29
+t=176.5s step=30000 V/V0=0.3199 umax=1.64mm/s uIce=0.013mm/s div*dx/U=9.8e-8 ms/step=9.12
+t=235.3s step=40000 V/V0=0.2140 umax=1.77mm/s uIce=0.010mm/s div*dx/U=5.8e-8 ms/step=9.07
+t=294.1s step=50000 V/V0=0.1271 umax=1.92mm/s uIce=0.008mm/s div*dx/U=5.3e-8 ms/step=9.13
+# done: t=300.0 s physical, 51000 steps, wall 489.8 s, 9.60 ms/step, cells=92160
+# snapshots at t = 0, 15, 61, 139, 214, 300 s ; V/V0 = 1.00, 0.80, 0.60, 0.40, 0.25, 0.12
+# wrote f_S56_F20.png (1950x576), f_S56_F20.json, f_S56_F20_profile.csv

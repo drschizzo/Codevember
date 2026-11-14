@@ -1,0 +1,8 @@
+# c_A35_F20  Tinf=3.5 °C  F(St)=20  St_eff/Tinf=0.2743 /°C  hold=top
+# grid 80x288  dx=0.500 mm  dt=0.02353 s  R=0.04 Z=0.144  ice a=0.014 H=0.09  MG levels=5 (5x18) nV=2
+# Ra(H, max dT^2) ~ 3.85e+6  Ra/Tinf^2 (L=2a) = 7.24e+3
+t=117.6s step=5000 V/V0=0.5004 umax=1.75mm/s uIce=0.127mm/s div*dx/U=1.1e-6 ms/step=2.77
+t=235.3s step=10000 V/V0=0.2087 umax=1.58mm/s uIce=0.147mm/s div*dx/U=1.0e-6 ms/step=2.54
+# done: t=289.4 s physical, 12300 steps, wall 32.3 s, 2.62 ms/step, cells=23040
+# snapshots at t = 0, 26, 85, 155, 216, 289 s ; V/V0 = 1.00, 0.79, 0.60, 0.40, 0.25, 0.12
+# wrote c_A35_F20.png (1950x576), c_A35_F20.json, c_A35_F20_profile.csv

@@ -1,0 +1,12 @@
+# c_C8_F1  Tinf=8 °C  F(St)=1  St_eff/Tinf=0.0137 /°C  hold=bottom
+# grid 80x288  dx=0.500 mm  dt=0.02353 s  R=0.04 Z=0.144  ice a=0.014 H=0.09  MG levels=5 (5x18) nV=2
+# Ra(H, max dT^2) ~ 3.85e+6  Ra/Tinf^2 (L=2a) = 7.24e+3
+t=235.3s step=10000 V/V0=0.7985 umax=3.70mm/s uIce=0.177mm/s div*dx/U=4.3e-8 ms/step=2.85
+t=470.6s step=20000 V/V0=0.6325 umax=3.63mm/s uIce=0.239mm/s div*dx/U=8.1e-8 ms/step=2.58
+t=705.9s step=30000 V/V0=0.4870 umax=3.46mm/s uIce=0.272mm/s div*dx/U=1.9e-7 ms/step=2.63
+t=941.2s step=40000 V/V0=0.3610 umax=3.21mm/s uIce=0.298mm/s div*dx/U=2.2e-7 ms/step=3.08
+t=1176.5s step=50000 V/V0=0.2542 umax=2.91mm/s uIce=0.302mm/s div*dx/U=1.6e-7 ms/step=2.58
+t=1411.8s step=60000 V/V0=0.1663 umax=2.70mm/s uIce=0.279mm/s div*dx/U=1.2e-7 ms/step=2.38
+# done: t=1564.7 s physical, 66500 steps, wall 176.3 s, 2.65 ms/step, cells=23040
+# snapshots at t = 0, 235, 522, 866, 1188, 1565 s ; V/V0 = 1.00, 0.80, 0.60, 0.40, 0.25, 0.12
+# wrote c_C8_F1.png (1950x576), c_C8_F1.json, c_C8_F1_profile.csv
