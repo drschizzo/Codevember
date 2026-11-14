@@ -102,6 +102,8 @@ export function createUI({ recipe: getRecipe, render, on, moods }) {
     addC(fLight, L.lamp, 'color').name('Lampes : couleur').onChange(ch);
     add(fLight, L.lamp, 'power', 0, 3, 0.01).name('Lampes : puissance').onChange(ch);
     add(fLight, L.lamp, 'glow', 0, 0.5, 0.001).name('Lampes : lueur à travers la paroi').onChange(ch);
+    L.lamp.thread ??= 0.15; // (recette ancienne)
+    add(fLight, L.lamp, 'thread', 0, 1, 0.01).name('Lampes : part reçue par le fil').onChange(ch);
     addC(fLight, L.key, 'color').name('Lumière de la pièce : couleur').onChange(ch);
     add(fLight, L.key, 'power', 0, 3, 0.01).name('Lumière de la pièce : puissance').onChange(ch);
     add(fLight, L.key, 'az', -Math.PI, Math.PI, 0.01).name('Lumière de la pièce : azimut').onChange(ch);

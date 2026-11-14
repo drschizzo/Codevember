@@ -9,9 +9,13 @@ export { MAT as MATERIALS };
 import { MATERIALS as MAT } from './materials-list.js';
 
 
-export function solidMaterial(key, { minRough = 0 } = {}) {
+export function solidMaterial(key, { minRough = 0, lampGain = 1 } = {}) {
   const D = MAT[key] ?? MAT.brass;
   const m = new THREE.MeshPhysicalNodeMaterial({ side: THREE.FrontSide });
+  m.userData.lampGain = lampGain; // (lu par LanternLightNode, lantern.js)
+  // (userData n'entre pas dans la clé du programme : sans cette clé, la
+  // matière « près de la lampe » reprenait le shader de sa jumelle)
+  if (lampGain !== 1) m.customProgramCacheKey = () => `lampGain:${lampGain}`;
   const p = positionGeometry;
   if (D.wood) {
     // fil du bois le long de la pièce (axe y au repos), cernes ondulés
