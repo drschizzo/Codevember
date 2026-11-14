@@ -80,7 +80,7 @@ const MOOD = {
 };
 
 const SHADER = /* wgsl */ `
-struct U { v: array<vec4f, 20>, prof: array<vec4f, 80> };
+struct U { v: array<vec4f, 22>, prof: array<vec4f, 80> };
 @group(0) @binding(0) var<uniform> u: U;
 
 const NW = 1.333;
@@ -150,7 +150,24 @@ fn profile(y: f32) -> f32 {
   return smax(R, wl, 0.25);
 }
 
+// le fuseau libéré (P8) : corps de révolution le long de l'axe a = (sin θ, cos θ, 0),
+// centré en u.v[20].xyz, longueur u.v[21].x, rayon maximal u.v[21].y
+fn sdFrag(p: vec3f) -> f32 {
+  if (u.v[21].z < 0.5) { return 1e9; }
+  let th = u.v[20].w; let a = vec3f(sin(th), cos(th), 0.0);
+  let L = u.v[21].x; let rm = u.v[21].y;
+  let q = p - u.v[20].xyz;
+  let s = dot(q, a) + 0.5 * L; // 0 en bas (bout émoussé), L en haut (pointe du col)
+  let rho = length(q - a * dot(q, a));
+  if (s < 0.0 || s > L) { let e = select(vec3f(0.0) - a * 0.5 * L, a * 0.5 * L, s > L); return length(q - e); }
+  let x = s / L;
+  let r = rm * sqrt(min(1.0, x / 0.12)) * pow(1.0 - x, 0.85) * (1.0 + 0.9 * x) / 1.18;
+  return (rho - r) * 0.6;
+}
 fn sdBody(p: vec3f) -> f32 {
+  return min(sdColumn(p), sdFrag(p));
+}
+fn sdColumn(p: vec3f) -> f32 {
   let r = length(p.xz);
   let yb = -LEN();
   if (p.y < yb) { return length(vec2f(r, p.y - yb)); }
@@ -685,7 +702,7 @@ async function main() {
   for (const m of info2.messages) console[m.type === 'error' ? 'error' : 'log'](`${m.lineNum}:${m.linePos} ${m.message}`);
   if (info2.messages.some((m) => m.type === 'error')) { window.__err = info2.messages.map((m) => `${m.lineNum}: ${m.message}`).join('\n'); return; }
 
-  const ubuf = device.createBuffer({ size: 100 * 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+  const ubuf = device.createBuffer({ size: 102 * 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
   const accTex = device.createTexture({ size: [W, H], format: 'rgba32float', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING });
   const outTex = device.createTexture({ size: [W, H], format: 'rgba8unorm', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC });
 
@@ -748,7 +765,7 @@ async function main() {
   void bgT;
 
   const SEG = /* wgsl */ `
-struct U { v: array<vec4f, 20>, prof: array<vec4f, 80> };
+struct U { v: array<vec4f, 22>, prof: array<vec4f, 80> };
 @group(0) @binding(0) var<uniform> u: U;
 @group(0) @binding(1) var<storage, read> segs: array<f32>;
 struct VO { @builtin(position) pos: vec4f, @location(0) w: vec3f };
@@ -813,7 +830,7 @@ fn proj(p: vec3f) -> vec4f {
     segBG = device.createBindGroup({ layout: bglG, entries: [{ binding: 0, resource: { buffer: ubuf } }, { binding: 1, resource: { buffer: segBuf } }] });
   }
 
-  const U = new Float32Array(100 * 4);
+  const U = new Float32Array(102 * 4);
   const setU = (mood, shape, jit, spp, ice) => {
     const M = { ...MOOD[mood], ...(window.__cam ?? {}) };
     const s = (i, a, b = 0, c = 0, d = 0) => U.set([a, b, c, d], i * 4);
@@ -835,6 +852,9 @@ fn proj(p: vec3f) -> vec4f {
     s(13, window.__dbg ?? 0, typeof ice === 'number' ? ice : ice === 'bulleuse' ? 1.6 : 0, window.__noIce ? 1 : 0, 0);
     s(14, 0.38, 5.0, 0.12, M.Ds ?? 30);
     s(15, jit[0], jit[1], spp, 0);
+    const Fr = window.__frag;
+    s(20, ...(Fr ? Fr.pos : [0, 0, 0]), Fr ? Fr.th : 0);
+    s(21, Fr ? Fr.L : 0, Fr ? Fr.rmax : 0, Fr ? 1 : 0, 0);
     const P5 = window.__p5;
     if (P5) {
       s(16, P5.Z, P5.dx, P5.prof.length, P5.T || P5.dS ? P5.nr : 0);
@@ -846,7 +866,7 @@ fn proj(p: vec3f) -> vec4f {
       U[10 * 4 + 3] = P5.Tinf;
       s(18, P5.Sbot ?? 0, P5.Stop ?? 0, P5.dS ? 1 : 0, M.floorY ?? -17);
       s(19, 1.9e-4, 0.5, P5.refract ? 1 : 0, window.__sgH ?? 0.12);
-      for (let n = 0; n < 320; n++) U[20 * 4 + n] = n < P5.prof.length ? P5.prof[n] : 0;
+      for (let n = 0; n < 320; n++) U[22 * 4 + n] = n < P5.prof.length ? P5.prof[n] : 0;
       // rayonnement réfléchi par une bulle (réflexion totale sur 44 % de sa section)
       const g = M.amb.map((a) => 0.44 * (2 * a + 0.03 * M.lbI + 0.004 * (M.sunI ?? 0)));
       s(17, ...g, window.__bubGain ?? 1);
