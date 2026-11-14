@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generate, MOODS, HABITS, OXIDES, CLUSTERS, FRAMINGS } from '../src/recipe.js';
-import { level, emerge, reach, descent, buildCluster, crystalsAt, tideFor, topOf, cycleT, apparatusAt } from '../src/cycle.js';
+import { level, emerge, reach, line, lift, meltU, SINK, buildCluster, crystalsAt, tideFor, topOf, cycleT, apparatusAt, GRID_WIRE } from '../src/cycle.js';
 import { cameraAt, potFor } from '../src/camera.js';
 import { simulate, gridsFor, stepsFor, bathAt, PHYS } from '../src/melt/model.js';
 
@@ -19,19 +19,37 @@ test('recette déterministe, JSON, tous les choix tirés', () => {
   assert.equal(seen.framing.size, Object.keys(FRAMINGS).length);
 });
 
-test('bain et descente : continus, périodiques, monotones par temps ; le bain ne bouge pas pendant la fonte', () => {
+test('bain fixe ; la grappe sort, attend, redescend par paliers ; tout est continu et périodique', () => {
   const C = tideFor(buildCluster('m0', CLUSTERS.grappe));
-  assert.ok(Math.abs(level(0, C) - level(1 - 1e-9, C)) < 1e-6);
-  let prevL = level(0, C), prevD = descent(0, C);
+  assert.ok(Math.abs(line(0, C) - line(1 - 1e-9, C)) < 1e-6);
+  let prev = line(0, C);
   for (let k = 1; k < 4000; k++) {
-    const t = k / 4000, L = level(t, C), D = descent(t, C);
-    assert.ok(Math.abs(L - prevL) < 0.01, `saut de niveau à t = ${t}`);
-    assert.ok(Math.abs(D - prevD) < 0.01, `saut de descente à t = ${t}`);
-    if (t > C.T0 && t < C.T1) assert.ok(L <= prevL + 1e-12);
-    if (t >= C.T1 && t < C.T4) assert.equal(L, C.LL); // (la fonte : c'est la grappe qui descend, pas le bain qui monte)
-    if (t > C.T4) assert.ok(L >= prevL - 1e-12);
-    assert.ok(D >= prevD - 1e-12, 'la grappe remonte pendant la boucle');
-    prevL = L; prevD = D;
+    const t = k / 4000, l = line(t, C);
+    assert.equal(level(t, C), C.LB); // (le métal ne quitte jamais la marmite)
+    assert.ok(Math.abs(l - prev) < 0.01, `saut de la ligne à t = ${t}`);
+    if (t > C.T0 && t < C.T1) assert.ok(l <= prev + 1e-12, 'la grappe redescend pendant la levée');
+    if (t > C.T2 && t < C.T3) assert.ok(l >= prev - 1e-12, 'la grappe remonte pendant la fonte');
+    prev = l;
+  }
+  // (la fonte calée sur la simulation : quelle que soit sa durée, la ligne reste
+  // continue, ne redescend pas, et la grille vide regagne le fond)
+  for (const UM of [0.4, 0.7]) {
+    const Cu = { ...C, UM };
+    let p = line(0, Cu);
+    for (let k = 1; k < 4000; k++) {
+      const t = k / 4000, l = line(t, Cu);
+      assert.ok(Math.abs(l - p) < 0.02, `UM = ${UM} : saut de la ligne à t = ${t}`); // (la grille vide regagne le fond vite, mais sans saut)
+      if (t > Cu.T2) assert.ok(l >= p - 1e-12);
+      p = l;
+    }
+    assert.ok(Math.abs(line(Cu.T3 + SINK + 1e-3, Cu) - Cu.LH) < 1e-9);
+  }
+  // suspendue : la grille au-dessus du bain ; au repos : tout sous le bain
+  assert.ok(lift((C.T1 + C.T2) / 2, C) > C.LB + 0.2);
+  // les arrêts : au milieu de chaque palier, le cadre ne bouge pas
+  for (let k = 0; k < 4; k++) {
+    const u = k / 4 + 0.07 + 0.09, t = C.T2 + u * (C.T3 - C.T2), e = 1e-3;
+    assert.ok(Math.abs(line(t + e, C) - line(t - e, C)) < 1e-9, `le cadre bouge au palier ${k}`);
   }
   // le métal sort du bain dans l'ordre de la hauteur ; la ligne atteint le cristal de bas en haut
   for (let y = 0; y < 3; y += 0.1) { assert.ok(emerge(y + 0.1, C) <= emerge(y, C)); assert.ok(reach(y + 0.1, C) >= reach(y, C)); }
@@ -44,37 +62,37 @@ test('raccord : au début et à la fin de la boucle, le bain couvre tout', () =>
   for (let i = 0; i < 200; i++) {
     const R = generate(`r${i}`);
     const cl = buildCluster(R.seed, CLUSTERS[R.cluster]), C = tideFor(cl);
-    for (const t of [0, 0.02, C.T0 - 1e-3, C.T3 + 0.02, C.T4 + 0.01, 0.95, 0.999]) {
+    for (const t of [0, 0.005, C.T0 - 1e-3, C.T3 + 0.005, 0.97, 0.999]) {
       const L = level(t, C);
       for (const c of crystalsAt(cl, t, C)) assert.ok(topWorld(c) < L - 0.02, `graine r${i}, t = ${t} : un cristal dépasse (${topWorld(c).toFixed(2)} ≥ ${L.toFixed(2)})`);
     }
   }
 });
 
-test('grappe : cristaux posés, sans interpénétration franche', () => {
+test('grappe : cristaux posés sur la grille, sans la traverser, sans interpénétration franche', () => {
   for (let i = 0; i < 100; i++) {
     const cl = buildCluster(`g${i}`, CLUSTERS.grappe);
     assert.ok(cl.length >= 5);
-    for (const c of cl) assert.ok(c.y - c.s < 0.05, 'un cristal flotte au-dessus de la croûte');
+    // (posés SUR la grille : le point le plus bas de chaque cristal touche le dessus des fils, sans les traverser ni flotter)
+    for (const c of cl) { const low = 2 * c.y - topOf(c); assert.ok(Math.abs(low - GRID_WIRE) < 1e-9, `pied à ${low}`); }
     for (let a = 0; a < cl.length; a++) for (let b = a + 1; b < cl.length; b++) {
       assert.ok(Math.hypot(cl[a].x - cl[b].x, cl[a].z - cl[b].z) >= (cl[a].s + cl[b].s) * 0.95 - 1e-9);
     }
   }
 });
 
-test('fonte : la grappe descend pendant la fonte seulement ; la peau vient après', () => {
+test('fonte : la grappe ne bouge pas pendant l’attente, regagne le fond à la fin ; la peau vient après', () => {
   const cl = buildCluster('f1', CLUSTERS.grappe), C = tideFor(cl);
   const at = (t) => crystalsAt(cl, t, C)[0];
-  assert.equal(at(0.45).desc, 0); // rien ne bouge avant la fonte
-  assert.ok(at((C.T2 + C.T3) / 2).desc > 0);
-  assert.ok(Math.abs(at(C.T3).desc - (C.LH - C.LL)) < 1e-9); // à la fin, la grappe est descendue de toute la marée
-  // la peau n'apparaît qu'une fois le haut englouti
+  assert.equal(at(C.T1 + 0.01).desc, at(C.T2 - 0.01).desc);
+  assert.ok(Math.abs(at(C.T3).desc - (C.LH - C.LB)) < 1e-9);
   const tSub = reach(topOf(cl[0]) + 0.05, C);
   assert.ok(at(tSub - 0.01).skin < 0 && at(tSub + 0.02).skin > 0);
 });
 
 test('modèle de fonte (Node, grille grossière) : les parties minces d’abord, puis le front suit la ligne', () => {
-  const c = { s: 1, y: 0.8, ang: 0.5, tilt: 0.08 }, LL = 0.22, D = 1.85;
+  const c = { s: 1, y: 0.8, ang: 0.5, tilt: 0.08 }, LL = -0.3, D = 2.2;
+  const C = { ...tideFor([c]), LOW: LL, LH: LL + D };
   const { tau, grid } = simulate(c, 0, { LL, D, quality: 2.2 });
   const { h, X, nx, ny } = grid;
   const lead = [];
@@ -83,13 +101,14 @@ test('modèle de fonte (Node, grille grossière) : les parties minces d’abord,
     const j = Math.floor(id / nx) % ny, y = (j + 0.5) * h;
     if (y <= LL + h) continue;
     // instant où le bain (repère du cristal) atteint y, sans tassement
-    const uLine = Math.pow(Math.min(Math.max((y - LL) / D, 0), 1), 1 / PHYS.rise);
+    const uLine = meltU(reach(y, C), C);
     lead.push(tau[id] - uLine);
   }
   lead.sort((a, b) => a - b);
   const q = (f) => lead[Math.floor(f * (lead.length - 1))];
   assert.ok(lead.length > 1000);
-  assert.ok(q(0.5) < 0 && q(0.5) > -0.12, `médiane de l’avance de la fonte sur la ligne : ${q(0.5)}`);
+  // (par paliers : la ligne arrive d'un coup, la fonte la suit de près, sous elle)
+  assert.ok(q(0.5) < 0.06 && q(0.5) > -0.12, `médiane de l’avance de la fonte sur la ligne : ${q(0.5)}`);
   // (avance modeste : le panache est tiède à la ligne, pour que les petits cristaux fondent en s'enfonçant)
   assert.ok(q(0.05) < q(0.5) - 0.02, `les parties minces ne fondent pas avant le reste (${q(0.05)} / ${q(0.5)})`);
   assert.ok(bathAt(1, LL, D) === LL + D && X > c.s);
@@ -120,15 +139,12 @@ test('caméra : périodique, lente, au-dessus du métal, dans le creuset ou deho
   }
 });
 
-test('appareillage : la quenouille pendant le vidage, la flamme pendant la fonte, le filet pendant le remplissage', () => {
+test('appareillage : le brûleur s’allume pendant l’attente, avant la descente, et s’éteint après la fonte', () => {
   const C = tideFor(buildCluster('a0', CLUSTERS.grappe));
   const A = (t) => apparatusAt(t, C);
-  assert.ok(A((C.T0 + C.T1) / 2).drain > 0.99 && A(C.T2).drain === 0 && A(0.01).drain < 0.01);
-  assert.ok(A((C.T2 + C.T3) / 2).flame > 0.99 && A(C.T1).flame === 0 && A(C.T4).flame === 0);
-  // (la flamme s'allume avant que la grappe ne descende : la cause avant l'effet)
-  assert.ok(A(C.T2 - 0.005).flame > 0.5);
-  const s = A((C.T4 + C.T5) / 2).stream;
-  assert.ok(s.r > 0 && s.head < C.LL && A(C.T3).stream.r === 0 && A(0.99).stream.r === 0);
+  assert.ok(A((C.T2 + C.T3) / 2).flame > 0.99 && A(C.T1).flame === 0 && A(0.98).flame === 0);
+  assert.ok(A(C.T2 - 0.01).flame > 0.99); // (la cause avant l'effet)
+  assert.equal(A(0.5).lift, lift(0.5, C));
 });
 
 test('grilles de fonte : elles contiennent le cristal et tiennent dans le budget', () => {

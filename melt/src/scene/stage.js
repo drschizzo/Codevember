@@ -8,7 +8,7 @@ import { texture, screenUV, vec4, positionGeometry } from 'three/tsl';
 import { createTracer } from './tracer.js';
 import { createMelt } from './melt.js';
 import { MOODS, HABITS, CLUSTERS } from '../recipe.js';
-import { level, rising, meltU, buildCluster, crystalsAt, tideFor, cycleT, apparatusAt } from '../cycle.js';
+import { level, rising, meltU, buildCluster, crystalsAt, tideFor, cycleT, apparatusAt, cool, setMeltEnd, meltEndOf } from '../cycle.js';
 import { cameraAt, potFor } from '../camera.js';
 export { cameraAt };
 
@@ -32,10 +32,16 @@ export function createStage(scene, gen, { renderer, lite = false } = {}) {
     melt = null; prog = 0;
     const my = ++token;
     melter.simulate(cluster, {
-      habit: HABITS[R.habit].id, LL: C.LL, D: C.LH - C.LL, quality: lite ? 1.6 : 1, budget: lite ? 3e9 : 2.5e10,
+      habit: HABITS[R.habit].id, LL: C.LOW, D: C.LH - C.LOW, quality: lite ? 1.6 : 1, budget: lite ? 3e9 : 2.5e10,
       onProgress: (f) => { if (my === token) prog = f; },
       cancelled: () => my !== token,
-    }).then((m) => { if (my === token && m) { melt = m; prog = 1; } },
+    }).then((m) => {
+      if (my !== token || !m) return;
+      // (la fonte montrée s'arrête quand le dernier cristal a disparu)
+      const UM = meltEndOf(m.crystals);
+      C = { ...C, UM }; setMeltEnd(`${R.seed}|${R.cluster}`, UM);
+      melt = m; prog = 1;
+    },
       (e) => console.error(`fonte : ${e.message}`));
   }
 
@@ -53,7 +59,7 @@ export function createStage(scene, gen, { renderer, lite = false } = {}) {
       // (le flou de mise au point à l'export seulement : en lecture, un tirage de la lentille par image tremble)
       aperture: sub?.lens ? K.aperture : 0, focus: K.focus,
       world: { pot: { Ri: pot.Ri, th: pot.th, rim: pot.rim, bottom: pot.bottom, bench: pot.bench },
-        rod: { ...pot.rod, lift: A.lift }, drain: A.drain, stream: { ...pot.stream, ...A.stream }, flame: A.flame }, u: meltU(t, C), oxRate: R.oxRate, habit: HABITS[R.habit].id,
+        galette: { ...pot.galette, lift: A.lift }, flame: A.flame, cool: cool(t, C) }, u: meltU(t, C), oxRate: R.oxRate, habit: HABITS[R.habit].id,
       cam: { pos: [camera.position.x, camera.position.y, camera.position.z], tanHalf: Math.tan((camera.fov * Math.PI) / 360), r: [e[0], e[1], e[2]], u: [e[4], e[5], e[6]], f: [-e[8], -e[9], -e[10]] },
       tide: { L: level(t, C), rising: rising(t, C), ...C },
       env: { lo: M.lo, hi: M.hi, forge: M.forge, boxes: M.boxes },

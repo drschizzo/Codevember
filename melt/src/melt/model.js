@@ -3,16 +3,16 @@
 // JavaScript (simulate, pour les tests).
 //
 // Problème de Stefan, méthode de l'enthalpie, sur une grille 3D posée sur la
-// croûte, dans le repère du cristal :
+// grille, dans le repère du cristal :
 // - le solide, à peine sorti du bain, est juste sous le point de fusion (T0) ;
-// - la croûte du fond fond sous la grappe (le creuset chauffe par le bas) : la
+// - la grille replonge la grappe par crans dans le bain chauffé : la
 //   grappe descend dans le bain. Dans le repère du cristal, le bain monte :
 //   L(u) = LL + D·u^RISE (+ le tassement du cristal, voir plus bas). Sous la
 //   ligne, le bain brassé (Tb) échange fortement (hb), au prorata de la part
 //   noyée d'une cellule ;
 // - au-dessus, l'air reçoit un panache chaud né du bain, qui retombe vers l'air
 //   de l'atelier, sous la fusion (ha, a, λ, amb) ;
-// - la croûte, plus froide (le creuset gèle par le bas), tient le pied ;
+// - la grille, plus froide (l'acier a refroidi hors du bain), tient le pied ;
 // - le solide conduit (α). Une cellule qui a reçu la moitié de sa chaleur
 //   latente fond : au-dessus du bain le liquide s'égoutte, dessous il rejoint le
 //   bain. On note l'instant τ où chaque cellule fond ;
@@ -33,9 +33,9 @@ import { HOPPER } from '../scene/hopper.js';
 export const PHYS = {
   alpha: 0.3, T0: -0.1, Tb: 1, Lh: 1,      // diffusivité, solide, bain, chaleur latente
   hb: 2, ha: 0.4, a: 0.45, lam: 0.3,      // échanges bain / air, panache (part de la chaleur du bain à la ligne, longueur)
-  amb: -0.4, crust: -0.6,                 // air de l'atelier, croûte
-  rise: 1.5, fall: 6, neck: 0.15,         // descente en u^rise, vitesse de tassement, section d'appui
-  rest: 0.2, plunge: 4,                   // les restes : part du solide hors du bain sous laquelle ils s'effondrent, vitesse
+  amb: -0.4, crust: -0.6,                 // air de l'atelier, grille
+  steps: 4, ramp: 0.07, fall: 6, neck: 0.15, // paliers de la descente (nombre, durée d'un cran), vitesse de tassement, section d'appui
+  rest: 0.2, plunge: 10,                   // les restes : part du solide hors du bain sous laquelle ils s'effondrent, vitesse
   uEnd: 1.15,                             // (au-delà de 1, le bain a tout couvert)
 };
 
@@ -98,12 +98,18 @@ export function hopper(q, s, habit) {
   for (const [n, t, ext, ea, fs] of faces) if (n - ea + maxD > d) d = Math.max(d, faceCav(n, t, ext, ea, w, fs, sp));
   return d;
 }
-// distance au cristal c, point p dans le repère de sa grille (x, z centrés ; y = 0 : la croûte)
+// distance au cristal c, point p dans le repère de sa grille (x, z centrés ; y = 0 : la grille)
 export const crystalSDF = (p, c, habit) => hopper(rotX(rotY([p[0], p[1] - c.y, p[2]], c.ang), c.tilt), c.s, habit);
 
 // ── version de référence en JavaScript (tests, réglages) ──
 // L(u) : le bain dans le repère du cristal, sans le tassement
-export const bathAt = (u, LL, D, P = PHYS) => LL + D * Math.pow(Math.min(Math.max(u, 0), 1), P.rise);
+// (la grappe descend par crans : chaque cran dure P.ramp, puis le cadre s'arrête)
+export function stairs(u, P = PHYS) {
+  const x = Math.min(Math.max(u, 0), 1); let s = 0;
+  for (let k = 0; k < P.steps; k++) { const a = Math.min(Math.max((x - k / P.steps) / P.ramp, 0), 1); s += a * a * (3 - 2 * a); }
+  return s / P.steps;
+}
+export const bathAt = (u, LL, D, P = PHYS) => LL + D * stairs(u, P);
 
 export function simulate(c, habit, { LL, D, quality = 1, P = PHYS } = {}) {
   const g = gridFor(c, habit, quality), { h, X, nx, ny, nz } = g, N = nx * ny * nz;
