@@ -78,7 +78,7 @@ export const FRAMINGS = {
   large: { label: 'Plan large', pos: [0.5, 3.2, 8.2], tgt: [0, 0.8, 0], fov: 32 },
   rasant: { label: 'Au ras du bain', pos: [0.8, 1.3, 8.6], tgt: [0, 0.9, 0], fov: 28 },
   macro: { label: 'Gros plan', pos: [0.3, 2.4, 4.6], tgt: [0, 0.9, 0], fov: 32 },
-  plongee: { label: 'Plongée', pos: [0.2, 7.5, 5.5], tgt: [0, 0.4, 0], fov: 34 },
+  plongee: { label: 'Plongée', pos: [0.2, 6.2, 6.4], tgt: [0, 0.5, 0], fov: 34 },
 };
 
 export function generate(seed, overrides = {}) {

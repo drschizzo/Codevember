@@ -6,7 +6,7 @@ import * as THREE from 'three/webgpu';
 import { texture, screenUV, vec4, positionGeometry } from 'three/tsl';
 import { createTracer } from './tracer.js';
 import { MOODS, HABITS, CLUSTERS } from '../recipe.js';
-import { CYCLE, level, rising, buildCluster, crystalsAt } from '../cycle.js';
+import { level, rising, buildCluster, crystalsAt, tideFor } from '../cycle.js';
 export { cameraAt } from '../camera.js';
 
 export function createStage(scene, gen, { renderer } = {}) {
@@ -21,9 +21,9 @@ export function createStage(scene, gen, { renderer } = {}) {
   quad.frustumCulled = false;
   scene.add(quad);
   const group = new THREE.Group();
-  let R = null, cluster = null;
+  let R = null, cluster = null, C = null;
 
-  function setRecipe(r) { R = r; cluster = buildCluster(R.seed, CLUSTERS[R.cluster]); }
+  function setRecipe(r) { R = r; cluster = buildCluster(R.seed, CLUSTERS[R.cluster]); C = tideFor(cluster); }
 
   function update(ph, camera, size, jitter = [0, 0]) {
     if (!R) return;
@@ -34,9 +34,9 @@ export function createStage(scene, gen, { renderer } = {}) {
     const tex = tracer.run({
       w: size[0], h: size[1], jitter, t, oxRate: R.oxRate, habit: HABITS[R.habit].id,
       cam: { pos: [camera.position.x, camera.position.y, camera.position.z], tanHalf: Math.tan((camera.fov * Math.PI) / 360), r: [e[0], e[1], e[2]], u: [e[4], e[5], e[6]], f: [-e[8], -e[9], -e[10]] },
-      tide: { L: level(t), rising: rising(t), ...CYCLE },
+      tide: { L: level(t, C), rising: rising(t, C), ...C },
       env: { lo: M.lo, hi: M.hi, forge: M.forge, boxes: M.boxes },
-      crystals: crystalsAt(cluster, t),
+      crystals: crystalsAt(cluster, t, C),
     });
     if (texNode.value !== tex) texNode.value = tex;
   }

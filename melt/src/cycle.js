@@ -15,18 +15,19 @@
 import { createRng } from '../../shared/rng.js';
 
 export const CYCLE = { LH: 2.9, LL: 0.22, T0: 0.06, T1: 0.30, T2: 0.60, T3: 0.86 };
+const RISE = 1.5; // la remontée : niveau en x^RISE
 
 export function level(t, C = CYCLE) {
   if (t < C.T0) return C.LH;
   if (t < C.T1) return C.LH + (C.LL - C.LH) * (t - C.T0) / (C.T1 - C.T0);
   if (t < C.T2) return C.LL;
-  if (t < C.T3) return C.LL + (C.LH - C.LL) * (t - C.T2) / (C.T3 - C.T2);
+  if (t < C.T3) return C.LL + (C.LH - C.LL) * Math.pow((t - C.T2) / (C.T3 - C.T2), RISE); // (lente au pied des cristaux, plus vive au-dessus d'eux)
   return C.LH;
 }
 // instant où le métal à la hauteur y sort du bain
 export const emerge = (y, C = CYCLE) => C.T0 + Math.min(1, Math.max(0, (C.LH - y) / (C.LH - C.LL))) * (C.T1 - C.T0);
 // instant où la ligne de métal chaud atteint la hauteur y en remontant
-export const reach = (y, C = CYCLE) => C.T2 + Math.min(1, Math.max(0, (y - C.LL) / (C.LH - C.LL))) * (C.T3 - C.T2);
+export const reach = (y, C = CYCLE) => C.T2 + Math.pow(Math.min(1, Math.max(0, (y - C.LL) / (C.LH - C.LL))), 1 / RISE) * (C.T3 - C.T2);
 export const rising = (t, C = CYCLE) => (t > C.T2 && t < C.T3 + 0.02 ? Math.min(1, (t - C.T2) / (C.T3 - C.T2)) : 0);
 const sm = (a, b, x) => { const k = Math.max(0, Math.min(1, (x - a) / (b - a))); return k * k * (3 - 2 * k); };
 
@@ -53,6 +54,15 @@ export function buildCluster(seed, { count = 9, scale = 1, spread = 1 } = {}) {
   return out;
 }
 
+// La marée de la grappe : le bain monte juste au-dessus du plus haut cristal
+// (pas plus : une marée taillée pour le grand cristal laissait les petites
+// grappes englouties dès le milieu de la fonte, puis le bain vide)
+export function topOf(c) { const a = Math.abs(c.tilt); return c.y + c.s * (Math.cos(a) + Math.sin(a)); }
+export function tideFor(cluster, C = CYCLE) {
+  const top = Math.max(...cluster.map(topOf));
+  return { ...C, LH: Math.max(top + 0.14, C.LL + 0.8) };
+}
+
 const rotY = (v, a) => [Math.cos(a) * v[0] + Math.sin(a) * v[2], v[1], -Math.sin(a) * v[0] + Math.cos(a) * v[2]];
 
 // État de chaque cristal à l'instant t : pose (affaissement), coin, gouttes,
@@ -63,8 +73,8 @@ export function crystalsAt(cluster, t, C = CYCLE) {
     // l'affaissement : quand la ligne atteint le pied, il fond ; le cristal
     // s'enfonce et penche du côté qui a cédé
     const tBase = reach(c.y - c.s * 0.6, C);
-    const col = sm(tBase, tBase + 0.09, t);
-    const pose = { x: c.x, y: c.y - c.s * 0.55 * col, z: c.z, s: c.s, ang: c.ang, tilt: c.tilt + 0.45 * col * c.lean };
+    const col = sm(tBase, tBase + 0.14, t);
+    const pose = { x: c.x, y: c.y - c.s * 0.3 * col, z: c.z, s: c.s, ang: c.ang, tilt: c.tilt + 0.45 * col * c.lean };
     // le coin de gradin qui cède quand la fonte atteint le milieu du cristal
     const tb = reach(c.y, C) + 0.015;
     const cl = [c.corner[0] * c.s * 0.72, c.s * 0.9, c.corner[1] * c.s * 0.72];
@@ -91,7 +101,7 @@ export function crystalsAt(cluster, t, C = CYCLE) {
         const y0 = c.y + c.s * (0.2 + 0.6 * hk);
         const age = t - reach(y0 - 0.5, C);
         if (age <= 0 || y0 < L) continue;
-        const y = y0 - age * 6 * c.s - c.s * 0.55 * col;
+        const y = y0 - age * 6 * c.s - c.s * 0.3 * col;
         if (y < L - 0.03) continue;
         const r = c.s * (0.1 + 0.06 * hk) * Math.min(age * 14, 1);
         drips.push([c.x + nf[0] * c.s * 1.02 + tf[0] * off * c.s, y, c.z + nf[2] * c.s * 1.02 + tf[2] * off * c.s, r]);
