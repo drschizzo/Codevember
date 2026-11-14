@@ -1,11 +1,11 @@
 // Le cycle du bain de bismuth (fonctions pures, Node et navigateur). Une seule
 // horloge, t ∈ [0, 1). Le métal ne quitte jamais la marmite : les cristaux ont
-// poussé sur une grille d'acier posée au fond, que deux câbles sortent du bain
-// puis y replongent.
+// poussé sur la grille d'un panier à long manche posé au fond, qu'on sort du
+// bain puis qu'on y replonge.
 //
 // - 0 – T0 : le miroir ; la grille est au fond, la grappe a repoussé sous le
 //   bain qui refroidit ;
-// - T0 – T1 : la récolte. Les câbles lèvent la grille : les cristaux sortent du
+// - T0 – T1 : la récolte. On lève le panier : les cristaux sortent du
 //   bain, le haut d'abord, et s'oxydent dès qu'ils touchent l'air ;
 // - T1 – T2 : la grappe suspendue au-dessus du bain, les couleurs mûrissent ;
 //   le brûleur s'allume ;

@@ -19,7 +19,8 @@
 //   de la chaleur du bain, et de la place sur la terrasse (l'arête, plus
 //   exposée, s'oxyde plus que le pied du gradin).
 // - Le creuset : une marmite de fonte, posée sur un brûleur, sur un établi ;
-//   la grille d'acier qui porte la grappe, et ses deux câbles. Matières rugueuses :
+//   le panier (la grille d'acier qui porte la grappe, sa fourche et son long
+//   manche). Matières rugueuses :
 //   éclairement analytique des boîtes de lumière et du dôme, reflet adouci.
 // - Le bain : un miroir de métal liquide ; la peau d'oxyde des cristaux
 //   engloutis s'y étale et s'y défait ; un cristal qui bascule le ride ; le
@@ -30,7 +31,7 @@
 //   bouge) : l'objectif y est fermé. Le satiné du métal, lui, est tiré à
 //   chaque image et moyenné par l'anticrénelage temporel.
 // - Chaque rayon ne visite que les cristaux dont la sphère englobante le croise ;
-//   le reste (bain, creuset, câbles, établi) est analytique, la grille se borne
+//   le reste (bain, creuset, manche, établi) est analytique, la grille se borne
 //   simplement loin de son plan.
 //
 // Unités : cm ; y = 0 : la grille (repère de la grappe) ; le bain est fixe dans le monde.
@@ -50,7 +51,7 @@ struct P {
   forge: vec4f,  // lueur de forge (couleur, force)
   atlas: vec4f,  // dimensions de l'atlas de la fonte, temps u de la fonte
   pot: vec4f,    // rayon intérieur, épaisseur, haut du bord, fond extérieur
-  gal: vec4f,    // la grille : rayon, —, —, hauteur de la grappe dans le monde
+  gal: vec4f,    // la grille : rayon, —, hauteur du montant du manche, hauteur de la grappe dans le monde
   flow: vec4f,   // peau du bain qui refroidit : couverture (0–1), rayon de la déchirure (part du bain), —, —
   flow2: vec4f,  // — ; — ; flamme (0–1) ; —
   lens: vec4f,   // échantillon de la lentille (disque unité), rayon d'ouverture, distance de mise au point
@@ -130,13 +131,14 @@ fn crystalAt(p: vec3f, i: i32) -> vec3f {
 // Une plaque pleine, quoi qu'on en fasse, se lisait en socle ou en neige.
 const GBIT = 32768u;
 const MESH = 0.42; // (pas du treillis, cm)
+const HANDLE = -0.8; // (direction du manche du panier : au fond à gauche ; plus sur le côté, il sortait du cadre des gros plans, et la grille semblait suspendue à rien)
 fn galette(p: vec3f) -> f32 {
   let q = p - vec3f(0.0, u.gal.w, 0.0);
   let rr = length(q.xz);
   // (loin du plan de la grille, une borne simple)
-  let far = max(abs(q.y) - 0.08, rr - u.gal.x - 0.08);
+  let far = max(abs(q.y) - 0.1, rr - u.gal.x - 0.1);
   if (far > 0.03) { return far; }
-  let ring = length(vec2f(rr - u.gal.x, q.y)) - 0.05;
+  let ring = length(vec2f(rr - u.gal.x, q.y)) - 0.08; // (le cerceau : un fil de 1,6 mm)
   let fx = abs(fract(q.x / MESH + 0.5) - 0.5) * MESH; let fz = abs(fract(q.z / MESH + 0.5) - 0.5) * MESH;
   let wire = max(length(vec2f(min(fx, fz), q.y)) - 0.02, rr - u.gal.x);
   return min(ring, wire);
@@ -315,7 +317,7 @@ fn rayMask(ro: vec3f, rd: vec3f, tEnd: ptr<function, f32>) -> u32 {
   }
   // (la grille, tant qu'elle est hors du bain)
   if (u.gal.w > u.tide.x - 0.1) {
-    let c = vec3f(0.0, u.gal.w, 0.0); let R = u.gal.x + 0.15;
+    let c = vec3f(0.0, u.gal.w, 0.0); let R = u.gal.x + 0.2;
     let oc = ro - c; let b = dot(oc, rd); let cc = dot(oc, oc) - R * R; let disc = b * b - cc;
     if (disc > 0.0) { let t1 = -b + sqrt(disc); if (t1 > 0.0) { m |= GBIT; te = max(te, t1); } }
   }
@@ -325,7 +327,7 @@ fn rayMask(ro: vec3f, rd: vec3f, tEnd: ptr<function, f32>) -> u32 {
 
 // ── le creuset et l'atelier, analytiques : (t, matière), normale dans HN ──
 // matières : −1 bain, −2 paroi intérieure, −3 bord, −4 paroi extérieure, 
-// −7 établi, −8 brûleur, −9 dessous du creuset, −10 câbles, −11 grille
+// −7 établi, −8 brûleur, −9 dessous du creuset, −10 fourche et manche du panier, −11 grille
 var<private> HN: vec3f;
 fn cylV(ro: vec2f, rd: vec2f, r: f32) -> vec2f { // (racines t1 ≤ t2 d'un cylindre vertical d'axe passant par l'origine)
   let a = dot(rd, rd); let b = dot(ro, rd); let c = dot(ro, ro) - r * r;
@@ -380,17 +382,23 @@ fn world(ro: vec3f, rd: vec3f, tMin: f32) -> vec2f {
   // la grille elle-même est dans la marche des rayons (galette()) ; ici, ce qui la tient
   {
     let o = u.gal.w; let Rg = u.gal.x;
-    // (deux câbles fins, attachés au cerceau de la grille, au fond à gauche et à
-    // droite, qui montent en se rapprochant vers un crochet, hors champ, derrière
-    // la grappe : ils tiennent la grille sans barrer l'image)
-    // (le crochet est loin derrière la grappe : les câbles partent vers le fond, ils ne passent pas devant elle)
-    let hook = vec3f(0.0, o + u.tide.z + 5.0, -Rg - 5.5);
+    // (un panier à long manche, comme un panier à friture : une fourche de deux
+    // tiges part du cerceau, au fond à gauche ; un montant presque droit monte
+    // jusqu'au-dessus du bord de la marmite (même grille au fond), puis le
+    // manche se coude et part vers le fond à gauche, presque à plat, par-dessus la
+    // paroi, jusqu'à une main hors champ. Deux fils tendus vers un crochet ne se
+    // lisaient pas comme un outil ; un manche droit à 68° se lisait en poteau)
+    let th = HANDLE;
+    let b = vec2f(sin(th), -cos(th));
+    let apex = vec3f(b.x * (Rg + 0.6), o + 0.35, b.y * (Rg + 0.6));
     for (var k = 0; k < 2; k++) {
-      let a = select(-0.8, 0.8, k == 1);
-      let e = vec3f(sin(a) * Rg, o, -cos(a) * Rg);
-      capTest(ro, rd, e, hook, 0.022, -10.0, tMin, &best);
+      let a = th + select(-0.5, 0.5, k == 1);
+      capTest(ro, rd, vec3f(sin(a) * Rg, o + 0.02, -cos(a) * Rg), apex, 0.09, -10.0, tMin, &best);
     }
-    capTest(ro, rd, hook, hook + vec3f(0.0, 60.0, 0.0), 0.03, -10.0, tMin, &best);
+    let bend = apex + vec3f(b.x * 0.25, u.gal.z, b.y * 0.25);
+    capTest(ro, rd, apex, bend, 0.22, -10.0, tMin, &best);
+    let el = 0.26; // (15° au-dessus de l'horizontale)
+    capTest(ro, rd, bend, bend + vec3f(b.x * cos(el), sin(el), b.y * cos(el)) * 60.0, 0.22, -10.0, tMin, &best);
   }
   // le brûleur, sous le creuset
   let rb = Ro * 0.42;
@@ -531,7 +539,7 @@ fn trace(ro0: vec3f, rd0: vec3f) -> vec3f {
       R = filmRGB(th, cosi);
       gl = 0.0; // (en rasant, le moindre dépoli du bain se lit en grain)
     } else {
-      // matières rugueuses : la fonte du creuset, les câbles, l'établi, le brûleur, la grille
+      // matières rugueuses : la fonte du creuset, le panier, l'établi, le brûleur
       // (la fonte : un gris sombre marbré, plus mat par plaques)
       let mott = noise3(p * 2.3) * 0.5 + noise3(p * 13.0) * 0.5;
       var alb = vec3f(0.07, 0.066, 0.063) * (0.85 + 0.3 * mott); var spec = 0.06 * (0.8 + 0.4 * mott); var soft = 0.45 + 0.15 * (1.0 - mott);
