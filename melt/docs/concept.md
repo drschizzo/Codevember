@@ -77,7 +77,7 @@ L'humeur Nuit le suit strictement. Les autres en gardent la sobriété. Le miroi
 - **La température du lac** suit T∞(u) = ½(T₀ + T₁) − ½(T₁ − T₀) cos 2πu, de 1,5 à 9 °C pour le réglage de référence.
 - **L'avance** v(u) est constante (0,5 mm/s simulés) pendant la saison froide, et nulle de u = 0,38 à 0,6, avec des raccords doux de 0,05.
 - **La glace** se recalcule à chaque instant par le solveur. Toute la glace visible est neuve à chaque période, donc la boucle se referme d'elle-même : l'écart entre périodes tombe à 0,11 mm après trois périodes.
-- **Le détachement** revient à la phase 0,645 (±0,004). Sa phase exacte est fixée sur la dernière période simulée.
+- **Le détachement** revient à phase fixe : 0,645 (±0,004) à 0,5 mm de maille (P8), 0,613 à 1 mm, la grille de la scène. Sa phase exacte est fixée sur la dernière période simulée.
 - **Le fuseau libéré** est un corps rigide. Il bascule, se couche et dérive, et sort du cadre avant u = 1.
 - **La caméra** suit une fonction périodique lissée.
 
@@ -89,7 +89,7 @@ L'humeur Nuit le suit strictement. Les autres en gardent la sobriété. Le miroi
 | 0,2 – 0,38 | printemps ; la colonne s'allonge jusqu'à 8 cm, le bout reste arrondi (couche limite montante) | la descente | accéléré |
 | 0,38 – 0,6 | été, rayons de soleil ; la colonne s'arrête ; elle s'effile vers le bas, puis s'amincit à la ligne d'eau | l'amincissement | accéléré, qui ralentit |
 | 0,6 – 0,645 | le col n'est plus qu'un fil | le fil | ralenti |
-| 0,645 – 0,66 | **le temps fort** : le fuseau se détache, s'incline, bascule et se couche contre son reflet, dépasse jusqu'à environ 105°, puis revient | la bascule | **temps réel** (0,5 s physiques, sur environ 1 s de film) |
+| ≈ 0,6 | **le temps fort** : le fuseau se détache, s'incline, glisse le long de la souche, bascule et se couche contre son reflet (vers 90°) | la bascule | **ralenti** : plateau où une seconde de film vaut environ 1,9 s physique ; la bascule dure 2 à 3 s physiques |
 | 0,66 – 0,85 | automne ; le fuseau flotte et dérive avec la brise ; la colonne neuve traverse le miroir | la dérive, la renaissance | accéléré |
 | 0,85 – 1 | retour de l'hiver (= u 0) | | accéléré |
 
@@ -99,7 +99,7 @@ La bascule dépend de l'élancement D/L du fuseau libéré, qui dépend du calib
 
 | Famille | Fuseau | Mouvement au temps fort |
 | --- | --- | --- |
-| **Le chavirement** | long et fin (D/L ≈ 0,1–0,3) | il s'incline, bascule en 0,5 s, dépasse, se couche |
+| **Le chavirement** | long et fin (D/L ≈ 0,1–0,3) | il s'incline, bascule, se couche ; c'est la seule famille que la simulation produit (D/L de 0,08 à 0,26 sur tous les réglages) |
 | **La révérence** | moyen (D/L ≈ 0,5–0,75) | il penche lentement jusqu'à un angle d'équilibre, oscille, puis se couche en roulant |
 | **Le bouchon** | trapu (D/L > 0,8) | il remonte d'un coup et flotte debout en pilonnant, sans basculer |
 

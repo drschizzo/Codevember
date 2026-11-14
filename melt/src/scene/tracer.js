@@ -412,7 +412,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
 }
 `;
 
-export const MOOD_INDEX = { nuit: 0, snell: 1, ombre: 2, lait: 3, tourbe: 4, pierre: 5 };
+export const MOOD_INDEX = { nuit: 0, snell: 1, ombre: 2, lait: 3, tourbe: 4, pierre: 5, contrejour: 6 };
 
 export function createTracer(renderer) {
   const device = renderer.backend.device;
