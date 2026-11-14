@@ -9,7 +9,8 @@
 // poussière de spores le poudre.
 import * as THREE from 'three/webgpu';
 import { Fn, texture, uniform, vec2, vec3, vec4, float, positionLocal, positionGeometry, positionPrevious, normalLocal, modelViewMatrix, normalize, mix, smoothstep, sqrt, max as tmax, abs, clamp, fwidth } from 'three/tsl';
-import { noise, perturb, stableVelocity, isLite, NZ } from '../../../shared/scene/materials.js';
+import { perturb, stableVelocity, isLite } from '../../../shared/scene/materials.js';
+import { nzAA } from './nz.js';
 
 export function woodTextures(maps) {
   const rel = new THREE.DataTexture(maps.relH, maps.M, maps.M, THREE.RGBAFormat, THREE.HalfFloatType);
@@ -86,20 +87,20 @@ export function createWood(T, { lite = false, look = {} } = {}) {
   const across = normalize(vec3(0, g.z.negate(), g.y.add(Wn.R)));
   const nW = normalize(n0.add(vec3(rel.y.negate(), 0, 0)).add(across.mul(rel.z.negate())));
   const nV = normalize(modelViewMatrix.mul(vec4(nW, 0)).xyz);
-  const micro = noise(g.mul(vec3(18, 160, 160))).mul(0.0006).add(noise(g.mul(vec3(60, 420, 420))).mul(0.00025));
+  // (deux octaves, chacune éteinte — et non lue — quand elle passe sous le pixel)
+  const micro = nzAA(g.mul(vec3(18, 160, 160))).x.mul(0.0006).add(nzAA(g.mul(vec3(60, 420, 420))).x.mul(0.00025));
   m.normalNode = perturb(micro, nV);
   let col = alb.rgb, rough = alb.a;
   // fibres du bois plus fines que le texel (43 µm) : de fines stries le long
   // du fil, éteintes quand elles passent sous le pixel. Sans elles, en gros
   // plan, le bois est un aplat flou.
-  const fz = g.z.mul(900), n4 = NZ(vec3(g.x.mul(30), fz, g.y.mul(300)));
+  const fz = g.z.mul(900), n4 = nzAA(vec3(g.x.mul(30), fz, g.y.mul(300)), 0.25, 0.7);
   // (la poudre se loge dans les creux : l'occlusion cuite en fait des amas, sans lecture de plus)
   const dustClump = float(1.45).sub(rel.w.mul(0.95)).clamp(0, 1);
   {
-    const fade = float(1).sub(smoothstep(0.25, 0.7, fwidth(fz)));
-    const fib = n4.x.mul(0.7).add(n4.y.mul(0.3));
-    col = col.mul(fib.mul(0.16).mul(fade).add(1));
-    rough = rough.add(fib.mul(0.06).mul(fade));
+    const fib = n4.x.mul(0.7).add(n4.y.mul(0.3)); // (déjà fondu par nzAA)
+    col = col.mul(fib.mul(0.16).add(1));
+    rough = rough.add(fib.mul(0.06));
   }
   // mouillure : traces du plasmodium (nappe et veines passées), plus sombres et lisses
   const wet = look.trail ? clamp(look.trail(g.x, g.z), 0, 1) : float(0);

@@ -10,6 +10,8 @@
 // outils de mise au point passent tous par lui.
 import * as THREE from 'three/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { pass, vec4, float } from 'three/tsl';
+import { sceneDepth } from './scene/smoke.js';
 import { generate, upgrade, MOODS } from './recipe.js';
 import { createCameraPath, cloudTrack } from './camera.js';
 import { FAMILIES } from './families.js';
@@ -102,10 +104,35 @@ async function main() {
   const gen = createGenerator(LITE ? Math.max(2, Math.min(3, (navigator.hardwareConcurrency || 4) - 1)) : undefined);
   setNoiseVolume(await gen.request({ seed: `${NAME}-noise` }, 'noise')); // (les matériaux en dépendent)
   const stage = createStage(scene, gen, { lite: LITE });
-  const post = createPost(renderer, scene, camera);
+  // Le volume de fumée : sa propre passe, à demi-résolution, posée sur l'image
+  // avant l'anticrénelage temporel (qui lisse aussi son départ tramé). Il lit
+  // la profondeur de la passe de scène pour s'arrêter sur le bois.
+  let smokePass = null;
+  const post = createPost(renderer, scene, camera, {
+    prePassScale: 0.5, // (l'occlusion est à demi-résolution : sa pré-passe aussi)
+    overlay: (color, { scenePass }) => {
+      smokePass?.dispose();
+      sceneDepth.value = scenePass.getTexture('depth');
+      smokePass = pass(stage.smokeScene, camera);
+      smokePass.setResolutionScale(0.5);
+      // (effacée à alpha nul quel que soit l'état du moteur : la passe est
+      // déclenchée depuis le quad du TRAA, qui efface en noir opaque — une
+      // fumée absente devenait un voile noir sur toute l'image)
+      const ub = smokePass.updateBefore.bind(smokePass), cc = new THREE.Color();
+      smokePass.updateBefore = (frame) => {
+        const r = frame.renderer, a = r.getClearAlpha();
+        r.getClearColor(cc); r.setClearColor(0x000000, 0);
+        ub(frame);
+        r.setClearColor(cc, a);
+      };
+      const s = smokePass.getTextureNode(); // (prémultiplié)
+      return vec4(color.rgb.mul(float(1).sub(s.a)).add(s.rgb), color.a);
+    },
+  });
   const accum = createAccumulator(renderer);
   const RENDER = loadRender(LITE);
-  const governor = createGovernor({ target: 1 / 45, min: 0.5, max: 1, onChange: () => !busy && resize() });
+  // (au bureau, pas sous 60 % de la base : plus bas, le TRAA ne rattrape plus la netteté)
+  const governor = createGovernor({ target: 1 / 45, min: LITE ? 0.5 : 0.6, max: 1, onChange: () => !busy && resize() });
   const pace = createPacer(() => RENDER.maxFps);
 
   // ── Recette ──
@@ -347,6 +374,7 @@ async function main() {
     window[NAME] = {
       renderer, scene, camera, controls, stage, post, gen, RENDER, G, pipes, errors, on, renderAt: renderStep, renderAccum,
       get R() { return R; },
+      get smokePass() { return smokePass; },
       seek: (p) => { phi = p; paused = true; },
       play: () => { paused = false; frozen = false; },
       freeze: (v = true) => { frozen = v; },
@@ -446,7 +474,7 @@ async function main() {
   });
 
   // ── Boucle ──
-  let last = performance.now(), fpsAcc = 0, fpsN = 0, fpsT = 0;
+  let last = performance.now(), fpsAcc = 0, fpsN = 0, fpsT = 0, lap = null;
   // (la boucle est une fonction nommée : en ?debug, run() la fait tourner à la
   // main quand le navigateur suspend requestAnimationFrame, panneau masqué)
   function tick(now) {
@@ -472,6 +500,12 @@ async function main() {
       }
       if (!loading.applied || !stage.ready() || loading.settle < 2) return;
     }
+    // Raccord de la boucle : la caméra recule de L (le monde est le même, translaté),
+    // mais les vecteurs vitesse et la reprojection du TRAA voient un bond de L
+    // et des sites dont la phase saute d'une période — une image fausse, qui
+    // « saute ». Raccord signalé : vitesses nulles et historique repris.
+    const lp = Math.floor(phi);
+    if (lp !== lap) { if (lap !== null) post.cut(); lap = lp; }
     renderAt(phi);
     fpsAcc += dt; fpsN++;
     if ((fpsT += dt) > 0.5) { ui?.setFps(`${(fpsN / fpsAcc).toFixed(0)}${RENDER.dynRes ? `  ·  ${Math.round(governor.scale * 100)} %` : ''}  ·  ${gen.busy() ? 'génération…' : 'prêt'}`); fpsAcc = fpsN = fpsT = 0; }
