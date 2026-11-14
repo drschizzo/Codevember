@@ -28,10 +28,10 @@
 export const PLUME = { NR: 64, NZ: 88, NF: 72, DX: 0.025, DT: 0.025, STEPS: 576 };
 
 // spec : { seed, r0 (rayon de la source), top (hauteur du plafond, > 1), heat (force finale de la source),
-//          puffs (bouffées), spread }
+//          puffs (bouffées), kick (le bouillon du départ), spread }
 export function simulatePlume(spec) {
   const { NR, NF, DX, DT, STEPS } = PLUME;
-  const { r0 = 0.1, top = 1.7, heat = 1, puffs = 7, gamma = 5, mix = 0.12 } = spec;
+  const { r0 = 0.1, top = 1.7, heat = 1, puffs = 7, gamma = 5, mix = 0.12, kick: kickK = 1 } = spec;
   // (le plafond est le haut du domaine, fermé : la grille a la hauteur du nuage)
   const NZ = Math.max(48, Math.min(PLUME.NZ, Math.round(top / DX)));
   const N = NR * NZ, I = (i, j) => i + j * NR;
@@ -59,11 +59,15 @@ export function simulatePlume(spec) {
     // ── la source : elle monte en puissance, bat par bouffées, puis faiblit ──
     const ramp = ss(0, 0.12, t), fade = 1 - 0.82 * ss(0.82, 0.98, t);
     const puff = 1 + 0.45 * Math.sin(2 * Math.PI * puffs * t) * ss(0.1, 0.3, t);
-    const B = heat * (0.3 + 1.85 * ss(0.2, 0.85, t)) * ramp * fade * puff; // (faible d'abord : les premières bouffées s'étalent à la base, sans percer)
+    // (le bouillon du choc : le thé saisi par la machine rougie lâche d'un coup
+    // une bouffée dense et rapide — la première image visible du cycle)
+    const kick = Math.exp(-(((t - 0.035) / 0.022) ** 2)) * kickK;
+    const B = heat * (0.3 + 1.85 * ss(0.2, 0.85, t)) * ramp * fade * puff + heat * 0.4 * kick; // (faible d'abord : les premières bouffées s'étalent à la base, sans percer)
+    const S0 = Math.max(fade * ramp, kick), W0 = Math.max(0.35 * ramp * fade, 0.9 * kick);
     for (let j = 0; j < 3; j++) for (let i = 0; i < NR; i++) {
       const prof = Math.exp(-(((i + 0.5) / iR0) ** 2)), k = I(i, j);
       if (prof < 0.01) break;
-      b[k] += (B - b[k]) * prof * 0.6; s[k] += (fade * ramp - s[k]) * prof * 0.6; w[k] += (0.35 * ramp * fade - w[k]) * prof * 0.3;
+      b[k] += (B - b[k]) * prof * 0.6; s[k] += (S0 - s[k]) * prof * 0.6; w[k] += (W0 - w[k]) * prof * 0.3;
     }
     // ── forces : flottabilité, stratification ──
     for (let j = 0; j < NZ; j++) for (let i = 0; i < NR; i++) { const k = I(i, j); b[k] -= DT * w[k] * G[j]; w[k] += DT * b[k]; }

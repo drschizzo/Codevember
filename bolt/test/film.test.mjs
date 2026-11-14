@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { generate } from '../src/recipe.js';
-import { stateAt, cameraAt, TIMES, pulse, clockAt, clockRate } from '../src/film.js';
+import { stateAt, cameraAt, TIMES, RAIN, pulse, clockAt, clockRate } from '../src/film.js';
 
 const SEEDS = Array.from({ length: 60 }, (_, i) => `f${i}`);
 const N = 2400;
@@ -10,10 +10,11 @@ const N = 2400;
 test('la boucle se referme : l’état à u = 1 est l’état à u = 0', () => {
   for (const s of SEEDS) {
     const F = generate(s).film, a = stateAt(F, 0), b = stateAt(F, 1 - 1e-9);
-    for (const k of ['cloud', 'air', 'level', 'dark', 'rain', 'light', 'sim', 'heat']) assert.ok(Math.abs(a[k] - b[k]) < 1e-6, `${s} ${k} : ${a[k]} ≠ ${b[k]}`);
-    // le cycle de l'eau repart de rien, juste après l'averse
+    for (const k of ['cloud', 'air', 'level', 'dark', 'rain', 'light', 'sim', 'vis', 'visOld', 'rag', 'ragOld', 'heat']) assert.ok(Math.abs(a[k] - b[k]) < 1e-6, `${s} ${k} : ${a[k]} ≠ ${b[k]}`);
+    // la vapeur repart de rien, pendant que le nuage précédent finit de se vider
     const c = stateAt(F, TIMES.cycle);
-    assert.ok(c.cloud === 0 && c.sim === 0 && Math.abs(c.air) < 1e-9 && Math.abs(c.level) < 1e-9);
+    assert.ok(c.sim === 0 && c.vis === 1 && c.visOld > 0.5 && c.visOld < 1);
+    assert.ok(c.cloud + c.air < 1 - RAIN + 1e-9);
   }
 });
 
@@ -26,27 +27,33 @@ test('l’eau se conserve à chaque instant : nuage + pluie en vol + thé = cons
   }
 });
 
-test('une seule horloge, des tendances monotones : le nuage ne fait que croître, puis que se vider', () => {
+test('une seule horloge, des tendances monotones : la colonne ne fait que monter, le nuage précédent que se défaire', () => {
   const F = generate('mono').film;
-  // (dans l'ordre du cycle de l'eau : de la reprise de la vapeur à la fin de l'averse)
+  // (dans l'ordre du cycle de l'eau : de la reprise de la vapeur à la suivante)
   const at = (i) => stateAt(F, (TIMES.cycle + 1e-9 + (i / N) * (1 - 2e-9)) % 1);
-  const rainStart = (TIMES.rain[0] - TIMES.cycle + 1) % 1;
   let prev = at(0);
   for (let i = 1; i < N; i++) {
     const S = at(i), v = i / N;
-    if (v < rainStart) assert.ok(S.cloud >= prev.cloud - 1e-12, `le nuage recule à v = ${v}`);
-    else assert.ok(S.cloud <= prev.cloud + 1e-12, `le nuage repousse à v = ${v}`);
-    assert.ok(S.grow >= prev.grow - 1e-12 && S.shred >= prev.shred - 1e-12 && S.sim >= prev.sim - 1e-12);
+    assert.ok(S.grow >= prev.grow - 1e-12 && S.sim >= prev.sim - 1e-12 && S.rag >= prev.rag - 1e-12, `la colonne recule à v = ${v}`);
+    assert.ok(S.vis <= prev.vis + 1e-12 && S.visOld <= prev.visOld + 1e-12, `un nuage se refait à v = ${v}`);
     prev = S;
   }
   for (let i = 1; i < N; i++) { const u = i / N; if (u > TIMES.leader[0] && u <= TIMES.strike) assert.ok(stateAt(F, u).a >= stateAt(F, u - 1 / N).a, `le traceur recule à u = ${u}`); }
 });
 
-test('ordre des temps : la pluie ne commence qu’après le dernier arc, la charge précède le traceur', () => {
+test('ordre des temps : la pluie avant la foudre, la bourrasque après, rien qui tombe pendant le ralenti', () => {
   for (const s of SEEDS) {
     const F = generate(s).film, last = F.strokes[F.strokes.length - 1];
+    // les arcs se sont tus avant que le nuage ait fini de se défaire
     const uLast = TIMES.strike + (last.t + 0.6) / F.duration;
-    assert.ok(uLast < TIMES.rain[0] + 0.03, `${s} : dernier arc à u = ${uLast.toFixed(3)}`);
+    assert.ok(uLast < TIMES.fade[1], `${s} : dernier arc à u = ${uLast.toFixed(3)}`);
+    // il pleut avant la foudre ; le nuage frappé tient encore le reste de son eau, et il est sombre
+    assert.ok(stateAt(F, (TIMES.rain[0] + TIMES.rain[1]) / 2).rain > 0.9);
+    const k = stateAt(F, TIMES.strike);
+    assert.ok(Math.abs(k.cloud - (1 - RAIN)) < 1e-9 && k.dark > 0.99 && k.vis === 1);
+    // (la pluie suit l'horloge du film, pas l'horloge lente : aucune goutte pendant le traceur)
+    for (let u = TIMES.leader[0] - 0.02; u < TIMES.strike + 0.005; u += 0.001) assert.equal(stateAt(F, u).rain, 0, `pluie au ralenti, u = ${u.toFixed(3)}`);
+    assert.ok(stateAt(F, (TIMES.gush[0] + TIMES.gush[1]) / 2).rain > 0.9);
     for (const f of F.flickers) assert.ok(f.u > TIMES.flicker[0] - 1e-9 && f.u < TIMES.leader[0]);
     assert.equal(stateAt(F, TIMES.leader[0] - 1e-6).a, -1);
     assert.equal(stateAt(F, TIMES.strike).a, 1);
@@ -93,21 +100,24 @@ test('horloge des mouvements lents : presque arrêtée pendant le traceur, un to
   assert.ok(clockAt(TIMES.strike) - clockAt(TIMES.leader[0]) < 0.03);
 });
 
-test('le panache simulé : relu sans saute, fini avant le traceur, vide quand il repart', () => {
+test('le panache simulé : relu sans saute ; la colonne part dès que la chaleur atteint la machine', () => {
   const F = generate('panache').film, M = 4800;
   let prev = stateAt(F, 1 - 1 / M);
   for (let i = 0; i < M; i++) {
     const S = stateAt(F, i / M);
-    // ce qu'on voit : l'image de la simulation × ce que l'averse en a laissé ; un saut d'image n'est permis que si tout est effacé
-    // (image 0 de la simulation : vide ; shred = 1 : tout est parti en pluie)
-    const vis = (X) => (X.sim < 0.002 ? 0 : 1 - X.shred), jump = Math.abs(S.sim - prev.sim);
-    assert.ok(jump < 0.002 || (vis(S) < 1e-6 && vis(prev) < 1e-6), `saute du panache à u = ${(i / M).toFixed(4)}`);
+    // ce qu'on voit : l'image sim × vis (le cycle en cours) et la dernière image × visOld (le précédent).
+    // Un saut d'image n'est permis qu'au passage d'un cycle à l'autre, où la lecture en cours devient
+    // la lecture « précédente » sans changer de valeur (image 0 de la simulation : vide)
+    const hand = prev.sim === 1 && S.sim < 0.002 && Math.abs(S.visOld - prev.vis) < 0.01 && prev.visOld < 1e-6;
+    assert.ok((Math.abs(S.sim - prev.sim) < 0.002 && Math.abs(S.visOld - prev.visOld) < 0.01) || hand, `saute du panache à u = ${(i / M).toFixed(4)}`);
     assert.ok(Math.abs(S.heat - prev.heat) < 0.01 || Math.abs(i / M - TIMES.strike) < 2 / M, `saute de la chaleur à u = ${(i / M).toFixed(4)}`);
     prev = S;
   }
   assert.equal(stateAt(F, TIMES.leader[0]).sim, 1);
-  assert.equal(stateAt(F, TIMES.cycle - 1e-6).shred, 1);
-  // le scénario : la foudre laisse de la chaleur, encore là quand la vapeur repart, retombée avant la foudre suivante
+  assert.equal(stateAt(F, TIMES.fade[1] + 0.001).visOld, 0);
+  // le scénario : la foudre laisse de la chaleur ; c'est elle qui fait partir la vapeur, aussitôt
   assert.ok(stateAt(F, TIMES.strike + 0.001).heat > 0.95);
-  assert.ok(stateAt(F, TIMES.cycle).heat > 0.15 && stateAt(F, TIMES.strike - 0.001).heat < 0.02);
+  assert.ok(stateAt(F, TIMES.cycle).heat > 0.9 && stateAt(F, TIMES.strike - 0.001).heat < 0.02);
+  // la machine est chaude quand la colonne part (la chaleur descend le métal en PHYS.cond)
+  assert.ok((TIMES.cycle - TIMES.strike) * F.duration > 0.4);
 });

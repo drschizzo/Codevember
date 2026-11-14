@@ -3,21 +3,30 @@
 // lit ici, en fonction de la seule phase u ∈ [0, 1). Module pur (tests, écran
 // de chargement, scène).
 //
-//   0,93 – 0,36  la vapeur monte et remplit le nuage (accéléré ; simulation relue)
-//   0,22 – 0,385 la charge : le nuage fonce, lueurs (accéléré)
+//   0,52 – 0,95  la foudre a chauffé le thé : la vapeur monte et remplit le
+//                nuage (accéléré ; simulation relue)
+//   0,03 – 0,36  il pleut : le nuage rend l'essentiel de son eau à la tasse
+//                et fonce en se chargeant (dans un orage, ce sont les
+//                précipitations qui séparent les charges)
+//   0,27 – 0,385 la charge : lueurs dans le nuage (accéléré)
 //   0,385 – 0,50 le traceur descend par bonds, hésite, puis saute (caméra rapide)
 //   0,50         la jonction : l'arc en retour
-//   0,50 – 0,62  la chaleur descend le métal, la machine rougit, le thé bout ;
-//                réamorçages, rémanence en perles    (ralenti léger)
-//   0,62 – 0,90  l'averse rend l'eau à la tasse et grésille sur le métal chaud (temps réel)
+//   0,51 – 0,60  la bourrasque de pluie qui suit l'éclair (« rain gush ») rend
+//                le reste de l'eau ; le nuage vidé se défait, et le thé
+//                saisi par la machine rougie lance déjà la colonne suivante
+//                (les deux lus dans le même champ simulé : une seule matière)
 //
 // L'eau se conserve : nuage + pluie en vol + thé = constante, à chaque instant.
 // C'est ce qui referme la boucle (le niveau revient exactement à sa marque).
 
 // cycle : l'instant où la vapeur repart de la tasse (le film d'une graine
-// commence à u = 0, mais le cycle de l'eau commence ici, juste après l'averse) ;
-// fill : durée du remplissage du nuage, en part de boucle
-export const TIMES = { cycle: 0.93, fill: 0.43, dark: [0.22, 0.385], leader: [0.385, 0.5], strike: 0.5, rain: [0.62, 0.9], flicker: [0.27, 0.38] };
+// commence à u = 0, mais le cycle de l'eau commence ici : quand la chaleur de
+// l'arc a atteint la résistance) ; fill : durée du remplissage du nuage, en
+// part de boucle ; rain : la pluie avant la foudre (elle rend la part RAIN de
+// l'eau) ; gush : la bourrasque après l'arc (le reste) ; fade : le nuage vidé
+// se défait
+export const TIMES = { cycle: 0.52, fill: 0.43, dark: [0.0, 0.385], leader: [0.385, 0.5], strike: 0.5, rain: [0.03, 0.36], gush: [0.51, 0.6], fade: [0.505, 0.65], flicker: [0.27, 0.38] };
+export const RAIN = 0.7;
 // vitesses (unités de scène par seconde de film) et durées (secondes de film)
 // cond : durée de la descente de la chaleur le long du métal, de la pointe à la
 // résistance ; rod : refroidissement de la tige (mince), en secondes
@@ -48,8 +57,8 @@ export function pulse(x) {
 }
 
 // La chaleur que la foudre laisse dans la machine (x : part de boucle écoulée
-// depuis la jonction). Elle retombe lentement, tient pendant toute l'averse et
-// la reprise de la vapeur, et s'annule exactement avant la foudre suivante.
+// depuis la jonction). Elle retombe lentement, tient pendant la bourrasque et
+// toute la montée de la vapeur, et s'annule exactement avant la foudre suivante.
 export const heatAt = (x) => Math.exp(-x / 0.34) * (1 - sstep5(0.7, 0.98, x));
 // Le traceur avance par bonds : un saut bref, une pause, de plus en plus vite ;
 // à 0,86 il hésite (l'aigrette monte à sa rencontre), puis saute. t, a ∈ [0, 1].
@@ -61,24 +70,37 @@ export function leaderAt(t) {
   const k = Math.min(BOUNDS - 1, Math.floor(e)), f = e - k;
   return (0.86 * (k + sstep(0, 0.4, f))) / BOUNDS;
 }
-// La bouffée de vapeur du choc : le thé saisi par la résistance (secondes après la jonction)
+// Le bouillon du choc : le thé saisi par la résistance (secondes après la jonction)
 export const burstAt = (tau) => (tau <= 0 ? 0 : sstep(0.12, 0.7, tau) * (1 - sstep(1.3, 3.2, tau)));
 
-const S_rainRate = (v, r0, r1) => (sstep5(r0, r1, v + 0.004) - sstep5(r0, r1, v - 0.004)) / 0.008 / 1.875 / (1 / (r1 - r0)); // débit de la pluie, 0 → 1
+// Le cycle de l'eau, en phase de cycle w ∈ [0, 2) (w = 0 : la vapeur repart ;
+// un cycle déborde sur le suivant : sa bourrasque et la fin de son nuage
+// tombent pendant que la colonne suivante monte). Tout est nul ou constant
+// au-delà de w ≈ 1,1 : un état se lit comme la somme du cycle en cours (w = v)
+// et du précédent (w = v + 1).
+const cyc = (u) => (u - TIMES.cycle + 1) % 1;
+const W = { r0: cyc(TIMES.rain[0]), r1: cyc(TIMES.rain[1]), g0: cyc(TIMES.gush[0]) || 1, g1: cyc(TIMES.gush[1]) + 1, f0: cyc(TIMES.fade[0]) || 1, f1: cyc(TIMES.fade[1]) + 1 };
+const upW = (w) => sstep5(0, TIMES.fill, w);                                            // eau montée (vapeur et nuage : un seul fluide, simulé)
+const outW = (w) => RAIN * sstep5(W.r0, W.r1, w) + (1 - RAIN) * sstep5(W.g0, W.g1, w);  // eau partie en pluie (cumul)
+const visW = (w) => 1 - sstep(W.f0, W.f1, w);                                          // ce qui reste visible du nuage de ce cycle
+const ragW = (w) => 0.35 * sstep(W.r0, W.r1, w) + 0.65 * sstep(W.f0, W.f1, w);          // effilochement (base en lambeaux sous la pluie, puis dislocation)
+const RATE = RAIN * 1.875 / (W.r1 - W.r0);                                              // débit de pointe de la pluie (dérivée de outW)
 
 // État du film à la phase u. F = R.film : { duration, strokes: [{ t, amp, path }], flickers: [{ u, amp, p }] }
 export function stateAt(F, u) {
   u -= Math.floor(u);
   const D = F.duration, T = TIMES;
-  // v : phase dans le cycle de l'eau (0 quand la vapeur repart de la tasse)
-  const v = (u - T.cycle + 1) % 1, r0 = (T.rain[0] - T.cycle + 1) % 1, r1 = (T.rain[1] - T.cycle + 1) % 1;
-  const up = sstep5(0, T.fill, v);                        // eau montée (vapeur et nuage : un seul fluide, simulé)
-  const out = sstep5(r0, r1, v);                          // eau partie en pluie (cumul)
-  const dl = PHYS.fall / D;
-  const landed = sstep5(r0 + dl, r1 + dl, v);             // eau arrivée dans la tasse (cumul)
-  const cloud = up - out, air = out - landed;
-  // la chaleur que la foudre a laissée (la cuillère rougie, le thé qui frémit) :
-  // c'est elle qui fait repartir la vapeur après l'averse
+  // v : phase dans le cycle de l'eau (0 quand la vapeur repart de la tasse) ;
+  // le cycle précédent se lit en v + 1
+  const v = cyc(u), dl = PHYS.fall / D;
+  let cloud = 0, air = 0, rain = 0;
+  for (const w of [v, v + 1]) {
+    const out = outW(w), landed = outW(w - dl);
+    cloud += upW(w) - out; air += out - landed;
+    rain += (outW(w + 0.004) - outW(w - 0.004)) / 0.008 / RATE;              // débit, 0 → 1 (la bourrasque sature)
+  }
+  // la chaleur que la foudre a laissée (la cuillère rougie, le thé qui bout) :
+  // c'est elle qui fait repartir la vapeur, aussitôt après l'arc
   const heat = heatAt((u - T.strike + 1) % 1);
   // avancement du traceur : il part lentement et accélère
   const tl = clamp((u - T.leader[0]) / (T.leader[1] - T.leader[0]));
@@ -96,25 +118,26 @@ export function stateAt(F, u) {
   const glow = F.flickers.map((f) => { const x = (u - f.u) * D; return x <= 0 ? 0 : f.amp * Math.min(1, x / 0.03) * Math.exp(-x / 0.16); });
   return {
     u, clock: clockAt(u), cloud, air, level: -(cloud + air),                    // (niveau : écart à la marque, en parts de F.drop)
-    grow: up,                                                 // forme du nuage (cumulus → tour → enclume)
-    shred: out,                                               // effilochement pendant l'averse
-    dark: sstep(T.dark[0], T.dark[1], u) * (1 - sstep(T.rain[0], T.rain[0] + 0.14, u)),
-    sim: clamp(v / T.fill),                                   // instant de la simulation du panache (0 → 1), puis elle reste sur sa dernière image
+    grow: upW(v),                                             // forme du nuage (cumulus → tour → enclume)
+    // le champ simulé, lu deux fois : le cycle en cours à l'instant sim, et la
+    // dernière image du cycle précédent (son nuage, qui se défait) ; vis : ce
+    // qui en reste ; rag : effilochement de chacun
+    sim: clamp(v / T.fill), vis: visW(v), visOld: visW(v + 1), rag: ragW(v), ragOld: ragW(v + 1),
+    // il fonce en se chargeant (sous la pluie, puis pendant la charge), s'éclaircit en se défaisant
+    dark: (0.55 * sstep(T.dark[0], T.rain[1], u) + 0.45 * sstep(0.22, T.dark[1], u)) * (1 - sstep(T.strike, T.fade[1], u)),
     heat,
     since: ((u - T.strike + 1) % 1) * D,                      // secondes de film depuis la jonction (toujours ≥ 0 : la chaleur dure toute la boucle)
-    burst: burstAt(tau),                                      // la bouffée de vapeur du choc (0 → 1 → 0)
-    sizzle: (out > 0 && out < 1 ? 1 : 0) * sstep(0.08, 0.3, heat), // la pluie grésille sur le métal encore chaud
+    burst: burstAt(tau),                                      // le bouillon du choc (0 → 1 → 0)
     expo: (1 + 0.85 * Math.min(1.3, burn)) * (1 - 0.3 * iris), burn,
-    // les bouffées : le choc, le grésillement de la pluie, puis le relais avant que la colonne ne reparte
-    puffs: Math.max(burstAt(tau), (out > 0 && out < 1 ? sstep(0.05, 0.3, S_rainRate(v, r0, r1)) : 0) * sstep(0.08, 0.3, heat) * 0.85, sstep5(T.rain[1] - 0.05, T.rain[1], u) * (1 - sstep5(T.cycle + 0.015, T.cycle + 0.07, (u < 0.5 ? u + 1 : u))) * 0.8),
     a, tau, light, lead, glow,
-    rain: out > 0 && out < 1 ? (sstep5(r0, r1, v + 0.004) - sstep5(r0, r1, v - 0.004)) / 0.008 / 1.875 / (1 / (r1 - r0)) : 0, // débit, 0 → 1
+    rain: clamp(rain),                                        // débit, 0 → 1
   };
 }
 
 // Caméra : sur pied. Elle s'approche pendant la charge et le traceur ; après la
 // jonction elle descend vers le récipient (c'est là que la suite se passe : le
-// métal qui rougit, le thé qui bout), puis recule pendant l'averse ; un
+// métal qui rougit, le thé qui bout, la vapeur qui repart), puis recule pour
+// suivre la colonne jusqu'au nuage ; un
 // balancement d'une période par boucle. C : R.camera.
 export function cameraAt(C, u) {
   u -= Math.floor(u);

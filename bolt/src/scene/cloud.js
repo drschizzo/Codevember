@@ -29,7 +29,7 @@ export function createCloud() {
   const U = {
     c: uniform(new THREE.Vector3(0, 1.8, 0)),      // centre de la base (le niveau de condensation)
     R: uniform(1), H: uniform(0.9),
-    shred: uniform(0), dark: uniform(0), dens: uniform(1),
+    vis: uniform(1), visOld: uniform(0), rag: uniform(0), ragOld: uniform(0), dark: uniform(0), dens: uniform(1),
     tint: uniform(new THREE.Color('#ffffff')), shade: uniform(new THREE.Color('#556070')), amb: uniform(0.5),
     sun: uniform(new THREE.Vector3(0.5, 0.7, 0.3)), sunCol: uniform(new THREE.Color('#ffffff')),
     drift: uniform(0), seed: uniform(0), frame: uniform(0),
@@ -74,7 +74,19 @@ export function createCloud() {
     // Son plan est donc lobé (trois harmoniques de l'azimut, phases tirées de la
     // graine : un côté s'étale en enclume, l'autre se creuse), et son sommet
     // bourgeonne (les dômes d'un Worley de basse fréquence soulèvent la lecture).
-    const q = p.xz.sub(ctr).add(wn.xy.mul(0.16).mul(amt).mul(U.span)), ql = length(q).max(1e-4);
+    // Dans la colonne, la vapeur est turbulente à plus petite échelle que le
+    // nuage : une deuxième déformation, plus serrée en travers qu'en hauteur,
+    // la tord en volutes (le panache simulé, lui, reste lisse : 64 cellules)
+    // (et près de l'axe, en s'effaçant vers le bord : la colonne n'occupe qu'une
+    // fraction de la boîte de marche, et la déformation ne doit pas y faire de couture)
+    const colW = smoothstep(0.95, 0.5, z0).mul(smoothstep(U.span.mul(U.kr).mul(0.75), U.span.mul(U.kr).mul(0.45), length(p.xz.sub(ctr))));
+    // (lue seulement dans la colonne : au-dessus, elle ne compte plus)
+    let wc = vec4(0);
+    if (fine) {
+      wc = vec4(0).toVar();
+      If(colW.greaterThan(0.002), () => { wc.assign(NZ(vec3(p.x.mul(3.4), p.y.mul(1.3), p.z.mul(3.4)).add(o.mul(0.8))).level(0)); });
+    }
+    const q = p.xz.sub(ctr).add(wn.xy.mul(0.16).mul(amt).mul(U.span)).add(wc.xy.mul(0.075).mul(colW).mul(U.span)), ql = length(q).max(1e-4);
     const cs = q.div(ql), c1 = cs.x, s1 = cs.y, s2 = s1.mul(c1).mul(2), c2 = c1.mul(c1).sub(s1.mul(s1)), s3 = s1.mul(3).sub(s1.mul(s1).mul(s1).mul(4));
     const f1 = U.seed.mul(2.4), f2 = U.seed.mul(4.1).add(1), f3 = U.seed.mul(1.3).add(2);
     const lobes = s1.mul(cos(f1)).add(c1.mul(sin(f1))).mul(0.2).add(s2.mul(cos(f2)).add(c2.mul(sin(f2))).mul(0.15)).add(s3.mul(cos(f3)).mul(0.08));
@@ -83,33 +95,80 @@ export function createCloud() {
     const dome = fine ? wn.z.min(1).oneMinus().sub(0.45).mul(0.34).mul(smoothstep(1.0, 1.35, z0)) : float(0);
     const z = z0.add(wn.x.mul(0.07).mul(amt)).sub(dome);
     const inside = step(r, U.simSize.x.mul(0.985)).mul(step(0.004, z)).mul(step(z, U.simSize.y.mul(0.995)));
-    const tw = U.simT.mul(U.simSize.z.sub(1)).add(0.5).div(U.simSize.z);
-    const sv0 = sim.sample(vec3(r.div(U.simSize.x), z.div(U.simSize.y), tw)).level(0).r;
-    // (le panache simulé s'étale en couronne, plus haute que son cœur : au-dessus de la base, le cœur prend aussi
-    // ce que la couronne a à sa hauteur — un sommet bombé, pas un cratère)
-    const sv = fine ? sv0.max(sim.sample(vec3(r.max(0.8).div(U.simSize.x), z.div(U.simSize.y), tw)).level(0).r.mul(smoothstep(1.05, 1.3, z0))) : sv0;
+    // Le champ est lu à deux instants : le cycle en cours (simT) et la dernière
+    // image du cycle précédent — son nuage, vidé par la pluie, qui se défait
+    // pendant que la colonne suivante monte. Mêmes coordonnées, même bruit,
+    // même lumière : une seule matière, à deux âges.
+    const tw = U.simT.mul(U.simSize.z.sub(1)).add(0.5).div(U.simSize.z), twOld = U.simSize.z.sub(0.5).div(U.simSize.z);
+    const read = (t) => {
+      const v0 = sim.sample(vec3(r.div(U.simSize.x), z.div(U.simSize.y), t)).level(0).r;
+      // (le panache simulé s'étale en couronne, plus haute que son cœur : au-dessus de la base, le cœur prend aussi
+      // ce que la couronne a à sa hauteur — un sommet bombé, pas un cratère)
+      return fine ? v0.max(sim.sample(vec3(r.max(0.8).div(U.simSize.x), z.div(U.simSize.y), t)).level(0).r.mul(smoothstep(1.05, 1.3, z0))) : v0;
+    };
+    // (la seconde lecture n'a lieu que pendant que le nuage précédent se défait :
+    // un branchement sur un uniforme, le même pour tous les pixels)
+    const svA = read(tw).mul(U.vis);
+    let svB = float(0);
+    if (fine) {
+      svB = float(0).toVar();
+      If(U.visOld.greaterThan(0), () => { svB.assign(read(twOld).mul(U.visOld)); });
+    } else svB = read(twOld).mul(U.visOld);
+    const sv = svA.max(svB), wOld = svB.div(svA.add(svB).add(1e-3));
     // (enregistré en racine carrée : 8 bits suffisent pour les voiles minces ;
-    // le plafond du domaine est adouci, sinon le sommet serait une table)
+    // le plafond du domaine est adouci, sinon le sommet serait une table. Un
+    // nuage qui se défait voit son enveloppe baisser : le bruit le ronge par
+    // lambeaux, il ne pâlit pas d'un bloc)
     const env = sv.mul(inside).mul(smoothstep(U.simSize.y, U.simSize.y.sub(0.14), z));
-    // bourgeons (Worley inversé, deux échelles) et lambeaux (Perlin)
-    const w1 = NZ(p.mul(2.6).add(o)).level(0);
-    const fineN = fine ? NZ(p.mul(6.1).add(o.mul(2))).level(0).z.min(1).oneMinus().mul(0.3) : float(0.15);
-    const n = w1.z.min(1).oneMinus().mul(0.56).add(fineN).add(w1.x.mul(0.5).add(0.5).mul(0.18));
-    // érosion : le champ simulé sert d'enveloppe, le bruit en mange les bords.
-    // Plus forte dans la colonne (des volutes, pas un tuyau), sur le pourtour
-    // (des lambeaux, pas un mur) et pendant l'averse.
-    const col = smoothstep(0.95, 0.55, z);
-    const rim = smoothstep(U.R.mul(0.6), U.R.mul(1.08), length(p.xz.sub(U.c.xz)));
-    const er = U.shred.mul(0.9).add(0.78).add(col.mul(0.5)).add(rim.mul(0.5));
-    // (hors du panache, l'enveloppe est négative : le bruit seul ne crée rien)
-    const d = smoothstep(0, 0.15, env.sub(0.2).mul(1.25).add(n.sub(0.72).mul(er)).sub(col.mul(0.1)).sub(rim.mul(0.3)));
+    // Le bruit (quatre lectures d'un volume de 128³, dont deux à haute
+    // fréquence, coûteuses pour le cache) n'est lu que dans l'enveloppe : la
+    // plupart des pas de la marche tombent dans l'air, où la densité est nulle.
+    const erode = () => {
+      // bourgeons (Worley inversé, deux échelles) et lambeaux (Perlin)
+      const w1 = NZ(p.mul(2.6).add(o)).level(0);
+      const fineN = fine ? NZ(p.mul(6.1).add(o.mul(2))).level(0).z.min(1).oneMinus().mul(0.34) : float(0.17);
+      const nCloud = w1.z.min(1).oneMinus().mul(0.52).add(fineN).add(w1.x.mul(0.5).add(0.5).mul(0.18));
+      // la colonne, elle, est faite de filaments : des cellules de Worley étirées
+      // dans le sens de la montée (deux fois et demie plus longues que larges), qui
+      // montent avec le reste du bruit
+      // (lus à travers la même déformation turbulente que la colonne : ils
+      // ondulent et se tordent avec elle, au lieu de tomber droit comme une pluie)
+      const col0 = smoothstep(0.95, 0.55, z);
+      let n = nCloud;
+      if (fine) {
+        n = nCloud.toVar();
+        If(col0.greaterThan(0.005), () => {
+          const pf = p.add(vec3(wc.x, wc.z.sub(0.5).mul(0.6), wc.y).mul(colW.mul(4).min(1).mul(0.13)));
+          const fil = NZ(vec3(pf.x.mul(10), pf.y.mul(4.2), pf.z.mul(10)).add(o.mul(1.6))).level(0);
+          const nFil = fil.z.min(1).oneMinus().mul(0.62).add(fil.x.mul(0.5).add(0.5).mul(0.3)).add(0.06);
+          n.assign(mix(nCloud, nFil, col0.mul(0.85)));
+        });
+      }
+      // érosion : le champ simulé sert d'enveloppe, le bruit en mange les bords.
+      // Plus forte dans la colonne (des volutes, pas un tuyau), sur le pourtour
+      // (des lambeaux, pas un mur), sous la pluie et quand le nuage se défait.
+      const col = col0;
+      const rim = smoothstep(U.R.mul(0.6), U.R.mul(1.08), length(p.xz.sub(U.c.xz)));
+      const er = mix(U.rag, U.ragOld, wOld).mul(0.9).add(0.78).add(col.mul(0.6)).add(rim.mul(0.5));
+      // (hors du panache, l'enveloppe est négative : le bruit seul ne crée
+      // rien ; et hors de toute enveloppe, rien : pas de fantômes)
+      // (dans la colonne, une rampe plus longue : le bruit module la densité au
+      // lieu de seulement découper un bord — un voile filandreux, pas un tuyau plein)
+      return smoothstep(0, col.mul(0.32).add(0.15), env.sub(0.2).mul(1.25).add(n.sub(0.72).mul(er)).sub(col.mul(0.1)).sub(rim.mul(0.3))).mul(smoothstep(0.02, 0.1, env));
+    };
+
+    let d;
+    if (fine) {
+      d = float(0).toVar();
+      If(env.greaterThan(0.02), () => { d.assign(erode()); });
+    } else d = erode();
     // condensation : sous le niveau z = 1, la vapeur ne se voit qu'en partie
     const cond = smoothstep(0.8, 1.03, z).mul(0.7).add(0.3);
     // (la colonne est plus légère que le nuage : c'est dans la densité, continue
     // en hauteur — et non dans le coefficient d'extinction de chaque marche, qui
     // faisait une ligne à leur couture)
     const light = smoothstep(0.5, 1.0, z).mul(0.45).add(0.55);
-    return d.mul(cond).mul(light).mul(U.dens).mul(U.shred.oneMinus().pow(0.6));
+    return d.mul(cond).mul(light).mul(U.dens);
   };
 
   // intersection rayon / boîte alignée (bmin, bmax) → vec2(t0, t1)
@@ -157,7 +216,7 @@ export function createCloud() {
     const march = (bmin, bmax, steps, sigma) => {
       const tc = slab(ro, rd, bmin, bmax);
       const t0 = tc.x, t1 = tMin(tc.y, tScene);
-      If(t1.greaterThan(t0).and(U.shred.lessThan(0.999)), () => {
+      If(t1.greaterThan(t0).and(U.vis.max(U.visOld).greaterThan(0.001)), () => {
         const dt = t1.sub(t0).div(steps);
         const T = float(1).toVar(), L = vec3(0).toVar();
         Loop(steps, ({ i }) => {
