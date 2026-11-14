@@ -79,7 +79,7 @@ La fonte de la scène est une imitation : un arrondi et un comblement des gradin
 
 **Ce qui en sort sans réglage à la main** : les parois minces et les arêtes fondent d'abord, les gradins s'amollissent et pendent en franges de métal fondu le long de la ligne. Une encoche se creuse à la ligne, puis le bloc s'assoit dans son bain. La chaleur du métal fait défiler les couleurs de l'oxyde devant la fonte. Le film est dans `proto/s0/fonte.gif` : le cristal descend dans un bain fixe.
 
-**Pas encore fait** : la peau d'oxyde et la surface du bain (une simulation 2D en hauteur, qui porterait la peau et les rides) ; plusieurs cristaux ; l'intégration dans la scène (une grille par cristal, plus grossière pour les satellites) ; le crènelage des reflets.
+**Fait depuis** (voir « Intégration ») : plusieurs cristaux, l'intégration dans la scène, l'anticrénelage. **Pas fait** : la surface du bain (une simulation 2D en hauteur, qui porterait la peau et les rides).
 
 ## Intégration de la fonte calculée (14 novembre)
 

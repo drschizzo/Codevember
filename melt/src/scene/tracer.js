@@ -244,7 +244,7 @@ fn trace(ro0: vec3f, rd0: vec3f) -> vec3f {
       cosi = clamp(-dot(rd, n), 0.0, 1.0);
       R = filmRGB(th, cosi);
     }
-    // (miroir net : sans anticrénelage temporel, un dépoli aléatoire n'est que du bruit)
+    // (miroir net : l'anticrénelage temporel moyenne les arêtes, un dépoli aléatoire n'y ajouterait que du bruit)
     T *= R;
     ro = p + n * 0.003; rd = reflect(rd, n);
     // (un rayon encore pris dans les gradins au dernier rebond voit le studio, pas le noir)
