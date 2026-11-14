@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#050506">
   <title>Feather · défis techniques</title>
-  <meta name="description" content="Comment Feather est calculé : une plume qui pousse roulée dans sa gaine puis se déroule sans s'étirer, un motif déposé par réaction-diffusion dans le collier du follicule, des voisines qui s'écartent pour que rien ne traverse rien, mesuré par un banc, une couleur structurale de Bragg, des barbes posées dans le vertex shader, un plumage en tuiles.">
+  <meta name="description" content="Comment Feather est calculé : des plumes qui poussent roulées dans leur gaine puis se déroulent sans s'étirer, un motif déposé par réaction-diffusion dans le collier du follicule, une gerbe ordonnée à l'angle d'or où rien ne traverse rien, mesurée par un banc, une couleur structurale de Bragg, des barbes posées dans le vertex shader.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
@@ -24,12 +24,12 @@
     <header class="hero">
       <div class="kicker">Day 12 · Feather · la plume en tuyau</div>
       <h1>Comment une plume sort de son tuyau</h1>
-      <p class="lede">À l'écran, une plume neuve sort de la peau d'un oiseau roulée en tuyau, puis s'ouvre et se couche parmi ses voisines. C'est ainsi qu'elle pousse : elle sort du follicule roulée dans une gaine de kératine, puis la gaine s'effrite et le vexille (la lame de la plume, de part et d'autre de la tige) se déroule. La difficulté est de calculer ce geste sans qu'aucune barbe ne s'étire ni ne traverse une voisine. La forme vient d'un modèle de croissance dans le collier du follicule, le déroulement est une isométrie exacte (aucune longueur ne change), le motif est déposé rangée par rangée par une réaction-diffusion, et chacune des quelque 240 barbes de la plume est posée dans le vertex shader par la même formule que dans les tests.</p>
+      <p class="lede">À l'écran, une gerbe de plumes pousse sur le sommet d'une tête couverte de duvet, comme une huppe : chaque plume sort roulée en tuyau, s'ouvre, se penche, s'use, et la suivante la chasse ; à chaque instant, l'une d'elles se déplie. C'est ainsi qu'une plume pousse : elle sort du follicule roulée dans une gaine de kératine, puis la gaine s'effrite et le vexille (la lame de la plume, de part et d'autre de la tige) se déroule. La difficulté est de calculer ce geste sans qu'aucune barbe ne s'étire ni ne traverse une voisine. La forme vient d'un modèle de croissance dans le collier du follicule, le déroulement est une isométrie exacte (aucune longueur ne change), le motif est déposé rangée par rangée par une réaction-diffusion, chacune des barbes est posée dans le vertex shader par la même formule que dans les tests, et les plumes de la gerbe se suivent à l'angle d'or pour ne jamais se croiser.</p>
     </header>
 
     <figure class="cover">
-      <img src="docs/capture.jpg" alt="Une plume de martin-pêcheur déroulée au-dessus de son plumage, à contre-jour" width="1600" height="900">
-      <figcaption>Martin-pêcheur, contre-jour : la plume nouvelle vient de se dérouler, ses barbes sont agrafées ; autour, les plumes voisines couchées en rangées.</figcaption>
+      <img src="docs/capture.jpg" alt="Une gerbe de plumes de martin-pêcheur sur un sommet de duvet : des tuyaux, des plumes qui se déroulent, d'autres ouvertes et penchées" width="1600" height="900">
+      <figcaption>Martin-pêcheur, cabinet : au centre, des tuyaux encore dans leur gaine ; autour, des plumes à tous les âges, de la plus jeune, presque droite, à la plus usée, la plus penchée.</figcaption>
     </figure>
 
     <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
@@ -41,7 +41,7 @@
         <p>Une plume est faite d'une tige centrale, le rachis, et de barbes fines qui en partent de chaque côté. Elle se fabrique dans le collier du follicule, un anneau de cellules à la base du tube. Les crêtes des barbes y naissent du côté postérieur et montent en hélice jusqu'au côté antérieur, où elles se soudent au rachis (Prum et Williamson, 2001). Ce qui sort du follicule est donc un cylindre dont la circonférence est la largeur totale du vexille, et sur lequel les barbes dessinent des hélices.</p>
         <p>Le programme décrit la plume par son contour déroulé : une demi-largeur par côté, qui s'élargit tôt (la base duveteuse s'évase vite) et finit arrondie ou effilée à la pointe, avec une asymétrie entre les deux vexilles. Chaque barbe part du rachis à un angle α, plus ouvert à la base, et se courbe vers la pointe. Sa longueur est cherchée par point fixe (on la corrige jusqu'à ce qu'elle ne bouge plus) pour que son extrémité touche le contour. Le rayon du tube découle de la largeur totale, demi-largeurs gauche et droite additionnées, enroulée sur un tour :</p>
         <div class="eq">\[ \rho(s) = \frac{W_g(s) + W_d(s)}{2\pi} \]</div>
-        <p>Ce rayon est plafonné à 0,06 L, L étant la longueur de la plume. Un vexille très large, comme celui de l'autruche, s'enroule alors sur plus d'un tour, comme un parchemin.</p>
+        <p>Ce rayon est plafonné à 0,032 L, L étant la longueur de la plume : un tuyau fin, comme sur un oisillon. Un vexille large, comme celui de l'autruche ou l'œil du paon, s'enroule alors sur plus d'un tour, comme un parchemin, caché par la gaine.</p>
         <figure id="fig-tube"><figcaption><b>Le même vexille, roulé et déroulé.</b> À gauche, le tube vu de face, où les barbes sont des hélices. À droite, le plan. Les curseurs règlent l'angle des barbes et l'asymétrie : regarder l'inclinaison des hélices suivre l'angle. Les barbes sont celles de <code>barbTable</code>, posées par <code>barbPose</code>. Simplification : le rachis n'est pas courbé.</figcaption></figure>
       </section>
 
@@ -75,8 +75,8 @@
       <section id="horloge">
         <h2><span class="n">05</span>Une seule horloge, des temps qui ne reviennent jamais en arrière</h2>
         <span class="src">src/gen/feather.js · SCHED, growth(), releaseAt(), zipAt()</span>
-        <p>La boucle raconte plusieurs événements qui doivent rester d'accord entre eux. Croissance, front de déroulement, agrafage, courbure du rachis, pose et usure lisent une seule table de bornes, et la caméra suit la plume. Chaque courbe est monotone dans son temps : un agrafage qui se déferait ou une plume qui remonterait se liraient comme des bogues. Le tuyau sort d'abord sous l'ancienne plume, qui repose sur sa pointe (le contact est exact) et se soulève comme un couvercle. Une fois libérée, l'ancienne plume tombe, et sa chute est filmée en caméra rapide (vrai temps ÷ 8). La croissance s'arrête pendant ce temps, comme dans un accéléré qui ralentit sur un événement. La plume glisse le long du méridien du corps avec l'accélération d'un objet sur une pente avec frottement, a = g(sin θ − μ cos θ) avec μ = 0,45, et disparaît derrière la courbure du dos.</p>
-        <div class="note check"><b>Vérifié</b><p>Un test parcourt la boucle par pas de 1/2000. Il vérifie que chaque grandeur ne décroît jamais, qu'à u = 0 la plume nouvelle est entièrement dans le follicule, et qu'à u = 1 elle est exactement la plume couchée et usée du début (écart &lt; 10⁻⁵ cm).</p></div>
+        <p>Chaque plume vit une boucle entière, et plusieurs événements doivent y rester d'accord entre eux. Croissance, front de déroulement, agrafage, courbure du rachis, inclinaison dans la gerbe et usure lisent une seule table de bornes. Chaque courbe est monotone dans son temps : un agrafage qui se déferait ou une plume qui se redresserait se liraient comme des bogues. Le tuyau qui sort chasse d'abord le calamus de l'ancienne plume hors du follicule : elle glisse le long de son propre axe, de la longueur de son calamus. Libérée, elle bascule vers l'extérieur sous son poids, se couche sur le duvet et glisse le long du méridien du socle, de plus en plus vite à mesure que la pente grandit, puis le long du flanc, hors du cadre. Sa chute est filmée en caméra rapide (vrai temps ÷ 8), comme dans un accéléré qui ralentit sur un événement.</p>
+        <div class="note check"><b>Vérifié</b><p>Un test parcourt la boucle par pas de 1/2000. Il vérifie que chaque grandeur ne décroît jamais, qu'à u = 0 la plume nouvelle est entièrement dans le follicule, et qu'au raccord d'un follicule l'ancienne prend exactement la pose de la courante (écart &lt; 10⁻⁶ cm).</p></div>
         <figure id="fig-horloge"><figcaption><b>Les courbes du film.</b> Les fonctions de <code>feather.js</code>, sur une boucle. Déplacer le curseur pour choisir l'instant : la plume correspondante s'affiche, posée par <code>barbPose</code> et vue de face (projection simplifiée).</figcaption></figure>
       </section>
 
@@ -88,36 +88,30 @@
         <figure id="fig-zip"><figcaption><b>Le front d'agrafage.</b> Un côté du vexille, posé par <code>barbPose</code> à l'instant choisi au curseur. Les barbes libres (claires) s'écartent et ondulent, les barbes agrafées (or) se rangent. Le bouton « Usure » montre la plume à la fin de la boucle.</figcaption></figure>
       </section>
 
-      <section id="plumage">
-        <h2><span class="n">07</span>Le plumage se recouvre comme des tuiles</h2>
-        <span class="src">src/gen/feather.js · layoutPlumage(), featherFrame()</span>
-        <p>Autour de la plume neuve, le plumage doit se recouvrir sans qu'aucune plume ne passe sous sa voisine. Le dos de l'oiseau est une sphère de rayon 2,8 à 3 L, couverte de deux cents plumes environ, couchées en rangées décalées, dont on ne voit que le bout. Une plume couchée suit la courbure du corps (bornée à 0,9/R pour ne jamais y rentrer) et en est soulevée d'un angle ε = 0,16 rad, si bien que sa hauteur croît le long du rachis. La rangée suivante part 0,3 L plus bas. Sur leur recouvrement, la plume du dessus est donc toujours plus haute, d'environ \(0{,}3\,L\sin\varepsilon\), soit 5 % de la longueur d'une plume. Dans une rangée, un roulis de 0,07 rad fait chevaucher les plumes comme des écailles. Sous elles, la peau n'est jamais nue : des rosettes de duvet frisé, couchées à plat (moins d'un millimètre d'épaisseur), sont cuites une fois en un maillage statique.</p>
-        <div class="note check"><b>Vérifié</b><p>Pour trois familles, la hauteur du rachis couché au-dessus du corps croît le long de la plume. À tous les instants (pas de 0,025), aucun point témoin des barbes ne passe sous le corps dessiné, hors de la bouche du follicule.</p></div>
-        <figure id="fig-tuiles"><figcaption><b>Coupe du plumage.</b> Les rachis couchés sur le corps, le long de la pente. Le curseur ε règle le soulèvement, le curseur du pas la distance entre rangées. Les recouvrements où une plume passerait sous la suivante s'allument en rouge.</figcaption></figure>
+      <section id="gerbe">
+        <h2><span class="n">07</span>La gerbe : un zootrope à l'angle d'or</h2>
+        <span class="src">src/gen/bouquet.js · layoutBouquet(), ageOf(), betaOf(), oldPose()</span>
+        <p>Pour que le déroulement soit à l'écran tout le temps, la scène n'a plus une plume mais une gerbe : sept à onze follicules sur une petite couronne au sommet d'un socle de duvet, comme la huppe d'un oiseau. Toutes les plumes ont la même vie, décalée : celle du follicule i a l'âge</p>
+        <div class="eq">\[ a_i(\varphi) = \operatorname{frac}\!\left(\varphi + \frac{i}{N}\right), \qquad \theta_i = \theta_0 + i\cdot 137{,}5^\circ \]</div>
+        <p>où φ est la phase de la boucle et θ<sub>i</sub> l'azimut du follicule, à l'angle d'or. C'est un zootrope : la boucle se referme par construction, et à chaque instant une plume au moins se déplie. L'angle d'or a deux effets. Deux plumes nées l'une après l'autre sont à 137,5° l'une de l'autre, jamais côte à côte. Et deux plumes voisines sur la couronne ont des indices qui diffèrent de 3, 5 ou 8 (la suite de Fibonacci), donc des âges très différents. Or l'inclinaison d'une plume ne fait que croître avec l'âge : le tuyau sort presque droit, la plume se penche à mesure que son vexille ouvert prend du poids, et la plus usée est la plus penchée. Deux voisines sont donc sur deux cônes d'ouverture différente, emboîtés plutôt que croisés.</p>
+        <div class="note trap"><b>Le piège</b><p>Un premier socle était une petite pelote de duvet : une boule qui flottait. Puis un champ de duvet presque plat : la plume chassée y tombait et n'avait plus de raison de quitter le cadre. Le socle est maintenant le sommet arrondi d'une tête, prolongé hors du cadre : la plume chassée glisse sur la pente et disparaît par le bas.</p></div>
+        <figure id="fig-gerbe"><figcaption><b>La gerbe vue de dessus.</b> Chaque trait est une plume, de son follicule à sa pointe projetée ; sa couleur dit son âge (clair : jeune, sombre : usée). Le curseur avance la phase : la naissance saute de 137,5° à chaque fois, et les voisines ont toujours des âges différents.</figcaption></figure>
       </section>
-
 
       <section id="banc">
         <h2><span class="n">08</span>Un banc qui voit ce que l'on voit</h2>
-        <span class="src">src/gen/collide.js · sceneState(), featherLines(), heightField(), crossings()</span>
-        <p>Les premiers tests vérifiaient chaque mécanisme isolément (la plume contre une surface approchée des voisines au repos, une fente contre le seul tuyau). Ils passaient, pendant que l'écran montrait des plumes qui se traversaient. Le banc de test pose maintenant la scène entière telle qu'elle est rendue, avec <code>sceneState</code>, la fonction qui remplit aussi les tableaux d'uniformes du GPU. Chaque barbe et chaque rachis y devient une ligne brisée, calculée par la formule du vertex shader. La surface pleine de chaque plume (barbes agrafées, rachis) devient une carte de hauteur à cellules de 1,2 mm, dans le repère de la plume. Un segment dont les deux extrémités sont de part et d'autre d'une surface, à plus de 0,15 mm, la traverse. Le banc ne suppose rien sur l'ordre des plumes.</p>
-        <div class="note check"><b>Vérifié</b><p>Sans rien corriger, le banc a vu ce que l'on voyait : la plume qui pousse traversait les plumes qui couvrent son follicule sur 72 % de la boucle, jusqu'à 1,9 mm. Un test garde cette preuve : sans le solveur, le banc doit trouver des traversées.</p></div>
+        <span class="src">src/gen/collide.js · bouquetCrossings(), featherLines(), heightField(), crossings()</span>
+        <p>Dans une version précédente (une plume parmi un plumage en tuiles), les premiers tests vérifiaient chaque mécanisme isolément. Ils passaient, pendant que l'écran montrait des plumes qui se traversaient. Le banc pose donc la scène entière telle qu'elle est rendue, avec <code>bouquetState</code>, la fonction qui remplit aussi les tableaux d'uniformes du GPU. Chaque barbe et chaque rachis y devient une ligne brisée, calculée par la formule du vertex shader. La surface pleine de chaque plume (barbes agrafées, rachis) devient une carte de hauteur à cellules de 1,2 mm, dans le repère de la plume. Un segment dont les deux extrémités sont de part et d'autre d'une surface, à plus de 0,15 mm, la traverse. Le banc ne suppose rien sur l'ordre des plumes.</p>
+        <div class="note check"><b>Vérifié</b><p>Le banc a guidé le réglage de la gerbe : les premières traversées (jusqu'à 5 mm pour le paon) étaient presque toutes au pied, où le tuyau qui sort passait sous la base large des plumes les plus penchées. Le tuyau sort maintenant presque droit, la couronne s'est élargie, et les inclinaisons du paon se sont étalées.</p></div>
         <figure id="fig-banc"><figcaption><b>Ce que voit le banc.</b> Une surface pleine (cellules de 1,2 mm, en coupe) et une barbe en ligne brisée, que les curseurs montent, descendent ou inclinent. Les segments qui changent de côté sont des traversées, comptées par <code>crossings</code>, la fonction du projet.</figcaption></figure>
       </section>
 
       <section id="pose">
-        <h2><span class="n">09</span>Bouger en bloc, résoudre, vérifier</h2>
-        <span class="src">src/gen/collide.js · solveSettle(), solveScene()</span>
-        <p>Pour s'éviter, les plumes bougent en bloc autour de leur follicule, sans se déformer, du plus petit mouvement qui supprime toute traversée mesurée par le même banc. Tout est résolu une fois, dans le worker, pour 200 instants de la boucle :</p>
-        <ul>
-          <li><b>la pose</b> : la plume se couche jusqu'à toucher les voisines qu'elle recouvre, puis y reste. Son angle β ne dépasse ni l'angle imposé par le film, ni aucun angle permis plus tard dans la boucle : \( \beta(u) = \min\big(\beta_{\text{imposé}}(u),\ \min_{u' \ge u} \beta_{\text{permis}}(u')\big) \) ;</li>
-          <li><b>l'ancienne plume</b>, chassée, est soulevée juste assez au-dessus des rangées qu'elle survole ;</li>
-          <li><b>les voisines</b> que la plume traverserait pivotent, et au besoin se soulèvent, de la plus petite amplitude permise, dans une direction choisie une fois pour toute la boucle : celle qui demande le moins à l'instant le plus contraint ;</li>
-          <li><b>l'empilement</b> : une voisine écartée soulève celles qui sont posées sur elle (ordre mesuré au repos) et ne doit jamais entrer dans celles qui sont dessous ; on résout par étages, chacun sur les poses lissées du précédent ;</li>
-          <li><b>le temps</b> : chaque mouvement est dilaté puis lissé, périodiquement (u = 1 est u = 0) : les voisines s'écartent un peu avant le contact et se reposent en douceur.</li>
-        </ul>
-        <div class="note trap"><b>Le piège</b><p>Quand le lacet et la bascule étaient choisis indépendamment à chaque instant, le lissage mélangeait deux solutions valides en une pose qui ne l'était pas. Et un lissage qui agrandit un écart après coup pousse la voisine dans celle qui est posée dessus. D'où la résolution par étages, chacun sur les poses déjà lissées.</p></div>
-        <div class="note check"><b>Vérifié</b><p>Sur toute la boucle (101 instants), aucune traversée au-delà de 0,3 mm pour quatre graines de vexille, au-delà de 1,5 mm pour l'autruche, dont les barbes libres se mêlent. Le paon n'est pas encore résolu : ses plumes de 13 cm couvrent le follicule sur trois rangées.</p></div>
+        <h2><span class="n">09</span>Rien à résoudre : l'ordre suffit</h2>
+        <span class="src">src/gen/bouquet.js · GERBE · test/feather.test.mjs</span>
+        <p>Dans le plumage en tuiles, chaque plume nouvelle devait se glisser sous des voisines couchées sur elle, et un solveur les écartait pas à pas : des mouvements sans cause visible. Dans la gerbe, aucune plume n'a à bouger pour une autre. L'ordre à l'angle d'or, des inclinaisons qui ne font que croître et une couronne assez large suffisent. Il n'y a plus de solveur, et le chargement passe de 3 à 8 s à quelques dizaines de millisecondes. Chaque famille a ses réglages (nombre de plumes, couronne, inclinaisons, courbure du rachis), mesurés au banc.</p>
+        <p>Au pied de la gerbe, sur un dixième de la longueur d'une plume, les bases duveteuses et le duvet du socle se mêlent comme des cheveux : on n'y compte pas les traversées. La plume chassée, qui glisse sur le flanc hors du cadre, n'est mesurée contre le socle que dans le cadre.</p>
+        <div class="note check"><b>Vérifié</b><p>Sur 100 instants de la boucle et huit graines, les parties pleines ne se traversent pas de plus de 0,6 mm (vexilles, duvet, paon). L'autruche, dont seuls les rachis sont pleins, garde deux rachis qui se frôlent pendant un ou deux centièmes de boucle (jusqu'à 5 mm). Le relais d'un follicule est exact, la chute est continue et sort du cadre, et à 60 images par seconde aucune partie pleine ne saute de plus de 2 mm.</p></div>
       </section>
 
       <section id="bragg">
@@ -133,7 +127,7 @@
       <section id="vertex">
         <h2><span class="n">11</span>Chaque barbe est un ruban posé dans le vertex shader</h2>
         <span class="src">src/scene/feather.js · barbPoseT(), barbMaterial()</span>
-        <p>Il faut dessiner des milliers de barbes, chacune courbée à sa façon et à chaque image. La plume héroïne compte 2 × 110 à 2 × 140 barbes, et le plumage deux cents plumes en gabarit grossier, soit 10 000 à 15 000 barbes à poser. L'outil habituel de three.js pour répéter un objet, <code>InstancedMesh</code>, n'est pas employé, parce que three.js compile un shader par objet. Le tout est un seul maillage ordinaire, dont la géométrie porte, par barbe, quatre vec4 dans un seul tampon entrelacé : racine, côté, longueur, angle, courbure, rayons du tube, part duveteuse, plume, tirage, largeur, agrafable, affaissement, écart, ondulation, usure. L'état de chaque plume (repère, temps local, usure, courbure) tient dans un tableau d'uniformes de 256 × 4 vec4, des valeurs que le programme envoie au GPU à chaque image. Il est recopié à chaque image dans un second tableau, qui sert au calcul des vecteurs vitesse.</p>
+        <p>Il faut dessiner des milliers de barbes, chacune courbée à sa façon et à chaque image. Une plume compte 2 × 110 à 2 × 140 barbes, et la gerbe en compte sept à onze, toutes au gabarit fin, chacune avec l'ancienne plume qu'elle chasse. L'outil habituel de three.js pour répéter un objet, <code>InstancedMesh</code>, n'est pas employé, parce que three.js compile un shader par objet. Le tout est un seul maillage ordinaire, dont la géométrie porte, par barbe, quatre vec4 dans un seul tampon entrelacé : racine, côté, longueur, angle, courbure, rayons du tube, part duveteuse, plume, tirage, largeur, agrafable, affaissement, écart, ondulation, usure. L'état de chaque plume (repère, temps local, usure, courbure) tient dans un tableau d'uniformes de 32 × 3 vec4, des valeurs que le programme envoie au GPU à chaque image. Il est recopié à chaque image dans un second tableau, qui sert au calcul des vecteurs vitesse.</p>
         <p>Chaque barbe est un ruban de 22 segments, avec 3 sommets en travers : bord, arête, bord. La normale s'incline en travers pour que l'arête du ramus (la tige de la barbe) accroche un filet de lumière. La frange des barbules est un peigne tramé, lissé par l'anticrénelage temporel. Le motif est lu dans le plan déroulé, grâce à deux coordonnées interpolées. La translucidité éclaire le vexille au contre-jour et y dessine le motif en ombre chinoise.</p>
         <div class="note trap"><b>Le piège</b><p>Un bout de barbe carré, multiplié par cent, dessine un contour en dents de scie. Trop effilé, il dessine des épines. La barbe s'amincit de 30 % sur sa longueur, puis de 40 % de plus sur son dernier tiers.</p></div>
         <div class="note trap"><b>Le piège</b><p>Une ombre en bande sur le vexille disparaissait d'un coup quand la plume finissait de se dérouler. C'était l'ombre de la gaine. Une fois la gaine effritée, elle était masquée à l'écran, mais restait entière dans la carte d'ombre, car three.js y réutilise le masque du matériau (<code>maskNode</code>) sans les variables interpolées qu'il lit. Son ombre disparaissait donc d'un bloc, au retrait de la gaine. La gaine effritée est retirée de la géométrie elle-même, et chaque matériau masqué a un masque d'ombre explicite (<code>maskShadowNode</code>).</p></div>
@@ -146,15 +140,12 @@
           <tbody id="budget-rows">
             <tr><td>Motif du collier (128 × 192, réaction-diffusion)</td><td>worker</td><td class="num">10 – 90 ms</td></tr>
             <tr><td>Tables des barbes, profil du tube</td><td>worker</td><td class="num">&lt; 5 ms</td></tr>
-            <tr><td>Scène résolue (pose, ancienne plume, voisines : 200 instants)</td><td>worker</td><td class="num">3 – 8 s</td></tr>
-            <tr><td>État de toutes les plumes à l'image (<code>sceneState</code>)</td><td>fil principal</td><td class="num">0,14 ms</td></tr>
+            <tr><td>État de toutes les plumes à l'image (<code>bouquetState</code>)</td><td>fil principal</td><td class="num">&lt; 0,1 ms</td></tr>
             <tr><td>Trajectoire de caméra (720 poses, lissage gaussien)</td><td>fil principal</td><td class="num">10 – 30 ms</td></tr>
-            <tr><td>Sous-duvet (rosettes cuites en un maillage)</td><td>worker</td><td class="num">50 – 100 ms</td></tr>
-            <tr><td>Contacts du tuyau avec ses voisines</td><td>fil principal, par image</td><td class="num">&lt; 0,5 ms</td></tr>
-            <tr><td>Image, 3,2 Mpx, qualité Haute (ocelle, plume, vexille)</td><td>GPU</td><td class="num">11 – 14,5 ms</td></tr>
-            <tr><td>Image, 3,2 Mpx, duvet parmi les couvertures (le plus lourd)</td><td>GPU</td><td class="num">17 – 17,5 ms</td></tr>
-            <tr><td>Image, version mobile, 0,85 Mpx</td><td>GPU</td><td class="num">1,9 ms</td></tr>
-            <tr><td>Barbes à l'écran (héroïne + voisines), puis sous-duvet</td><td>vertex</td><td class="num">≈ 15 000 rubans ; 100 – 200 k sommets</td></tr>
+            <tr><td>Duvet du socle (rosettes cuites en un maillage)</td><td>worker</td><td class="num">50 – 150 ms</td></tr>
+            <tr><td>Image, 3,2 Mpx, qualité Haute (les quatre familles)</td><td>GPU</td><td class="num">5,5 – 6,6 ms</td></tr>
+            <tr><td>Image, version mobile</td><td>GPU</td><td class="num">1,7 ms</td></tr>
+            <tr><td>Barbes à l'écran (toute la gerbe, deux instances par follicule)</td><td>vertex</td><td class="num">≈ 1 500 – 5 500 rubans fins</td></tr>
           </tbody>
         </table></div>
       </section>
@@ -171,8 +162,9 @@
 
   <script type="module">
     import { demo, C, TAU, lerp, clamp, label, alpha } from '../home/explainer.js';
-    import { shapeOf, barbTable, barbPose, BARB_STRIDE, SCHED, growth, zipAt, bendAt, settleAt, wearAt, sinkAt } from './src/gen/feather.js';
+    import { shapeOf, barbTable, barbPose, BARB_STRIDE, SCHED, growth, zipAt, bendAt, wearAt, sinkAt, qrot } from './src/gen/feather.js';
     import { heightField, crossings } from './src/gen/collide.js';
+    import { layoutBouquet, ageOf, frameAt, leanAt, GERBE, GOLDEN } from './src/gen/bouquet.js';
     import { simulateCollar, normalizePattern, PROGRAMS } from './src/gen/pattern.js';
     import { createRng } from '../shared/rng.js';
 
@@ -198,9 +190,10 @@
             g.strokeStyle = side > 0 ? alpha(C.c1, .85) : alpha(C.c2, .85); g.lineWidth = 1;
             g.beginPath(); let started = false;
             // (roulée : juste avant le passage du front, décalée de ce qui reste à sortir)
-            const dy = u < 1 ? sinkAt(0.335, P.L, P.calamus, P.over) - sinkAt(1, P.L, P.calamus, P.over) : 0;
+            const u0 = SCHED.front[0] - 0.005;
+            const dy = u < 1 ? sinkAt(u0, P.L, P.calamus, P.over) - sinkAt(1, P.L, P.calamus, P.over) : 0;
             for (let i = 0; i <= 16; i++) {
-              const r = barbPose(b, i / 16, 0, 0, { ...S, u: u < 1 ? 0.335 : 1 });
+              const r = barbPose(b, i / 16, 0, 0, { ...S, u: u < 1 ? u0 : 1 });
               const X = ox + r.p[0] * sc, Y = base - (r.p[1] + dy) * sc;
               if (!started) { g.moveTo(X, Y); started = true; } else g.lineTo(X, Y);
             }
@@ -316,7 +309,7 @@
             ['front (pointe → base)', (x) => clamp((x - SCHED.front[0]) / (SCHED.front[1] - SCHED.front[0])), C.c1],
             ['agrafage (milieu)', (x) => zipAt(x, 0.5, 0.5), C.c3],
             ['courbure', bendAt, C.c4],
-            ['pose', settleAt, C.ink],
+            ['inclinaison', (x) => (leanAt(GERBE.vexille, x) - GERBE.vexille.lean[0]) / (GERBE.vexille.lean[2] - GERBE.vexille.lean[0]), C.ink],
             ['usure', wearAt, C.dim],
           ];
           g.strokeStyle = C.grid; g.strokeRect(x0, y0, W, H);
@@ -346,7 +339,7 @@
       const B = barbsOf(P, 'zip', 18).filter((b) => b[1] > 0);
       demo('#fig-zip', {
         title: 'Libres puis agrafées', aspect: 2.2,
-        controls: [{ key: 'u', label: 'Phase u', min: 0.36, max: 0.72, step: .002, value: .5 }],
+        controls: [{ key: 'u', label: 'Âge de la plume', min: SCHED.front[0], max: SCHED.settle[1], step: .002, value: .32 }],
         buttons: [{ key: 'worn', label: 'Usure', toggle: true, value: false }],
         draw(g, d) {
           const u = d.s.worn ? 1 : d.s.u;
@@ -418,45 +411,37 @@
       },
     });
 
-    // ── 07 · les tuiles ────────────────────────────────────────────────────
-    demo('#fig-tuiles', {
-      title: 'Coupe du plumage', aspect: 2.4,
-      controls: [
-        { key: 'eps', label: 'Soulèvement ε (rad)', min: 0, max: 0.25, step: .01, value: .16 },
-        { key: 'step', label: 'Pas des rangées (× L)', min: 0.2, max: 0.7, step: .01, value: .3 },
-      ],
-      draw(g, d) {
-        const L = 6, Rd = 3 * L, k = 0.9 / Rd, cx = d.w * 0.5, cy = d.h * 0.1 + Rd * 0, sc = Math.min(d.w / (L * 4.4), d.h / (L * 1.25));
-        const toScr = (th, h) => { const r = Rd + h; return [cx + Math.sin(th - 0.55) * r * sc, d.h * 0.98 - (Math.cos(th - 0.55) * r - Rd * Math.cos(0.75)) * sc]; };
-        // corps
-        g.strokeStyle = C.dim; g.lineWidth = 1.5; g.beginPath();
-        for (let i = 0; i <= 120; i++) { const th = 0.05 + i / 120 * 1.1; const [X, Y] = toScr(th, 0); i ? g.lineTo(X, Y) : g.moveTo(X, Y); }
-        g.stroke();
-        const rows = [];
-        for (let r = 0; r < 9; r++) {
-          const th0 = 0.1 + r * d.s.step * L / Rd, pts = [];
-          for (let i = 0; i <= 30; i++) {
-            const y = i / 30 * L;
-            // rachis couché : courbure k, soulevé de ε ; hauteur au-dessus du corps
-            const ang = d.s.eps - k * y + y / Rd;
-            const h = y * Math.sin(d.s.eps) - (k - 1 / Rd) * y * y / 2 * -1 * 0 + (1 / Rd - k) * y * y / 2;
-            pts.push([th0 + y / Rd, h]);
-            void ang;
+    // ── 07 · la gerbe ──────────────────────────────────────────────────────
+    {
+      const P = { ...P0 }, lay = layoutBouquet(P, 'explainer');
+      demo('#fig-gerbe', {
+        title: 'La gerbe vue de dessus', aspect: 2, animate: true,
+        controls: [{ key: 'u', label: 'Phase φ', min: 0, max: 1, step: .002, value: .3 }],
+        buttons: [{ key: 'play', label: 'Lecture', toggle: true, value: true }],
+        draw(g, d) {
+          const u = d.s.play ? (d.t * 0.03) % 1 : d.s.u;
+          const cx = d.w * 0.32, cy = d.h * 0.5, sc = (d.h * 0.46) / (P.L * 0.95);
+          g.strokeStyle = C.grid; g.beginPath(); g.arc(cx, cy, P.L * 0.95 * sc, 0, TAU); g.stroke();
+          let born = null;
+          for (const f of lay.follicles) {
+            const a = ageOf(lay, f.i, u), fr = frameAt(lay, f, a);
+            const tip = qrot(fr.q, [0, P.L * f.scale * Math.min(1, growth(a, P.L) * 1.1), 0]).map((v, k) => v + fr.p[k]);
+            const shade = Math.round(40 + 180 * (1 - a));
+            g.strokeStyle = a > SCHED.front[0] && a < SCHED.front[1] ? C.c1 : `rgb(${shade},${shade},${shade})`;
+            g.lineWidth = a > SCHED.front[0] && a < SCHED.front[1] ? 3 : 2;
+            g.beginPath(); g.moveTo(cx + fr.p[0] * sc, cy + fr.p[2] * sc); g.lineTo(cx + tip[0] * sc, cy + tip[2] * sc); g.stroke();
+            if (a < 0.08) born = f;
           }
-          rows.push(pts);
-        }
-        // recouvrements : la plume du dessus doit rester au-dessus
-        let bad = 0;
-        rows.forEach((pts, r) => {
-          g.strokeStyle = r % 2 ? C.c1 : C.c2; g.lineWidth = 2; g.beginPath();
-          pts.forEach(([th, h], i) => { const [X, Y] = toScr(th, h); i ? g.lineTo(X, Y) : g.moveTo(X, Y); });
-          g.stroke();
-          const nxt = rows[r + 1];
-          if (nxt) for (const [th, h] of nxt) { const q = pts.find((p) => Math.abs(p[0] - th) < L / Rd / 60); if (q && q[1] < h) { const [X, Y] = toScr(th, h); g.fillStyle = C.c3; g.fillRect(X - 1.5, Y - 1.5, 3, 3); bad++; } }
-        });
-        d.status(bad ? `${bad} points où une plume passe sous la suivante` : 'aucun croisement');
-      },
-    });
+          // à droite : âge (en ordonnée) et inclinaison de chaque follicule, rangés par azimut
+          const x0 = d.w * 0.62, W = d.w * 0.34, y0 = d.h * 0.12, H = d.h * 0.74;
+          g.strokeStyle = C.grid; g.strokeRect(x0, y0, W, H);
+          const sorted = [...lay.follicles].sort((p, q) => ((p.az % TAU) + TAU) % TAU - ((q.az % TAU) + TAU) % TAU);
+          sorted.forEach((f, k) => { const a = ageOf(lay, f.i, u), X = x0 + (k + 0.5) / sorted.length * W; g.fillStyle = a > SCHED.front[0] && a < SCHED.front[1] ? C.c1 : C.c2; g.fillRect(X - 4, y0 + H - a * H, 8, a * H); });
+          label(g, 'âge des plumes, rangées autour de la couronne', x0, y0 - 6, { size: 11, color: C.dim });
+          d.status(`φ = ${u.toFixed(3)}${born ? ` · une plume naît à ${Math.round(((born.az - lay.follicles[0].az) * 180 / Math.PI) % 360)}°` : ''} · angle d'or ${(GOLDEN * 180 / Math.PI).toFixed(1)}°`);
+        },
+      });
+    }
   </script>
 </body>
 </html>

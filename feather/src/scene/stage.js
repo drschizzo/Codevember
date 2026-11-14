@@ -1,6 +1,6 @@
-// La scène : le fond neutre, le corps de l'oiseau sous son plumage, les plumes
-// voisines couchées en rangées, la plume héroïne (la nouvelle, et l'ancienne
-// qu'elle chasse), sa gaine, les lumières de l'humeur.
+// La scène : le fond neutre, la pelote de duvet, la gerbe de plumes (chaque
+// follicule : la plume courante et l'ancienne qu'elle chasse), leurs gaines,
+// les lumières de l'humeur.
 //
 // update(ph) ne dépend que de la recette et de la phase. Toutes les lumières
 // sont créées une fois, dans un ordre fixe, au premier niveau de la scène.
@@ -9,24 +9,14 @@ import {
   uniform, uniformArray, vec3, vec4, float, mix, normalize, positionWorld, cameraPosition, dot, pow, max as tmax, smoothstep, normalWorld,
   attribute, sin, hash, positionGeometry,
 } from 'three/tsl';
-import { barbGeometry, barbMaterial, rachisGeometry, rachisMaterial, sheathMaterial, createLook, FSTRIDE, tubeTemplate } from './feather.js';
+import { barbGeometry, barbMaterial, rachisGeometry, rachisMaterial, sheathGeometry, sheathMaterial, createLook, FSTRIDE } from './feather.js';
 import { isLite, stableVelocity, noise } from '../../../shared/scene/materials.js';
-import { BIRDS } from '../families.js';
-import { growth, bendOf, layoutPlumage, featherFrame, betaAt, betaSolved, LIE_BETA, settleAt, wearAt, ejection, LIE, SCHED, qrot } from '../gen/feather.js';
+import { growth } from '../gen/feather.js';
+import { layoutBouquet, bouquetState } from '../gen/bouquet.js';
 import { cameraPath } from '../camera.js';
-import { sceneState } from '../gen/collide.js';
 
 const SHADOW = { mobile: 1024, low: 1024, medium: 2048, high: 2048, ultra: 4096 };
-const MAXF = 300; // (3 vec4 par plume : 900 vec4, 14 Ko par tableau)
-
-// quaternion (x, y, z, w) : produit et rotation autour d'un axe
-const qmul = (a, b) => [
-  a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1],
-  a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0],
-  a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3],
-  a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2],
-];
-const qaxis = (ax, a) => { const s = Math.sin(a / 2); return [ax[0] * s, ax[1] * s, ax[2] * s, Math.cos(a / 2)]; };
+const MAXF = 32; // (3 vec4 par plume ; deux instances par follicule)
 
 export function createStage(scene, gen, { lite = false } = {}) {
   // ── Lumières (ordre fixe) ──
@@ -96,17 +86,16 @@ export function createStage(scene, gen, { lite = false } = {}) {
   downMesh.receiveShadow = true; downMesh.castShadow = false; downMesh.visible = false; downMesh.frustumCulled = false;
   scene.add(downMesh);
 
-  // ── Les plumes ──
+  // ── Les plumes : la gerbe (gen/bouquet.js), deux instances par follicule ──
   const group = new THREE.Group();
   scene.add(group);
   const arr = Array.from({ length: MAXF * FSTRIDE }, () => new THREE.Vector4());
   const arrP = Array.from({ length: MAXF * FSTRIDE }, () => new THREE.Vector4());
   const FS = uniformArray(arr, 'vec4'), FSP = uniformArray(arrP, 'vec4');
-  const LK = createLook(), LKT = createLook(); // (LKT : les voisines, quand elles ne sont pas de la famille héroïne)
-  const mkFU = () => ({ L: uniform(6), radial: uniform(0), calamus: uniform(0.1), over: uniform(1.08), r0: uniform(0.05), kb: uniform(0.05), rhoTex: null });
-  const FU = mkFU(), FUT = mkFU();
-  let meshes = [], R = null, lay = null, cam = null, pending = 0, version = 0, nTiles = 0;
-  let texs = [], lastPh = 0, path = null, solved = null, solveProgress = 0;
+  const LK = createLook();
+  const FU = { L: uniform(6), radial: uniform(0), calamus: uniform(0.1), over: uniform(1.08), r0: uniform(0.05), kb: uniform(0.05), rhoTex: null };
+  let meshes = [], R = null, lay = null, cam = null, pending = 0, version = 0, nF = 0;
+  let texs = [], lastPh = 0;
 
   function clear() {
     for (const m of meshes) { group.remove(m); m.geometry.dispose(); m.material.dispose(); }
@@ -119,81 +108,51 @@ export function createStage(scene, gen, { lite = false } = {}) {
     const v = ++version;
     pending = 1;
     downMesh.visible = false;
-    const P = R.shape, T = R.tile ?? P;
-    lay = layoutPlumage(P, R.seed, { lite, tile: R.tile });
-    path = null; solved = null; solveProgress = 0;
+    const P = R.shape;
+    lay = layoutBouquet(P, R.seed, { lite });
+    nF = Math.min(lay.N * 2, MAXF);
     cam = cameraPath(R, lay);
-    nTiles = Math.min(lay.tiles.length, MAXF - 2);
-    body.scale.setScalar(lay.Rd - 0.15);
-    body.position.set(0, -lay.Rd, 0);
-    gen.request({ shape: P, pattern: R.pattern, seed: R.seed, lite, tileShape: R.tile, tilePattern: R.tilePattern }, 'feather', (f) => { if (v === version) solveProgress = f; }).then((o) => {
+    // le socle : une calotte et son cylindre, sous le duvet (le sommet à l'origine)
+    body.geometry.dispose();
+    const H = P.L * 6;
+    body.geometry = new THREE.CapsuleGeometry(lay.Rd * 0.97, H, 48, 96);
+    body.position.set(0, -lay.Rd * 0.97 - H / 2 + (lay.Rd * 0.03), 0);
+    gen.request({ shape: P, pattern: R.pattern, seed: R.seed, lite }, 'feather').then((o) => {
       if (v !== version) return;
       clear();
       for (const t of texs) t.dispose();
-      const patOf = (data) => {
-        const t = new THREE.DataTexture(data, o.nx, o.nz, THREE.RGBAFormat, THREE.UnsignedByteType);
-        t.wrapS = THREE.RepeatWrapping; t.wrapT = THREE.ClampToEdgeWrapping;
-        t.magFilter = t.minFilter = THREE.LinearFilter;
-        t.colorSpace = THREE.NoColorSpace;
-        t.needsUpdate = true;
-        return t;
-      };
-      const rhoOf = (rho) => {
-        const rh = new Uint16Array(65 * 4);
-        for (let i = 0; i < 65; i++) rh[i * 4] = THREE.DataUtils.toHalfFloat(rho[i]);
-        const t = new THREE.DataTexture(rh, 65, 1, THREE.RGBAFormat, THREE.HalfFloatType);
-        t.magFilter = t.minFilter = THREE.LinearFilter;
-        t.needsUpdate = true;
-        return t;
-      };
-      const setFU = (F, S, rho) => {
-        F.rhoTex = rhoOf(rho);
-        F.L.value = S.L; F.radial.value = S.radial ? 1 : 0; F.calamus.value = S.calamus; F.over.value = S.over;
-        F.r0.value = S.radial ? 0.035 : Math.max(0.03, S.L * 0.0085);
-        F.kb.value = bendOf(S, lay.Rd); // (courbure du rachis ; × l'échelle de chaque plume)
-        return F.rhoTex;
-      };
-      // la scène résolue (gen/collide.js) : pose, ancienne plume, voisines qui s'écartent
-      const NB = o.beta.length;
-      solved = { beta: o.beta, old: o.old, tiles: new Map() };
-      o.idx.forEach((j, k) => solved.tiles.set(j, o.moves.subarray(k * NB * 2, (k + 1) * NB * 2)));
-      path = o.beta;
-      cam = cameraPath(R, lay, path); // (la caméra suit la pose résolue)
-      const patTex = patOf(o.tex), patT = o.ttex ? patOf(o.ttex) : patTex;
-      texs = [patTex, setFU(FU, P, o.rho)];
-      if (o.ttex) texs.push(patT, setFU(FUT, T, o.trho));
-      const FT = o.ttex ? FUT : FU, LT = o.ttex ? LKT : LK;
-      // la plume héroïne : la nouvelle (0) et l'ancienne (1) partagent le gabarit fin
-      const heroT = new Float32Array(o.hero.length * 2);
-      heroT.set(o.hero, 0); heroT.set(o.hero, o.hero.length);
-      for (let i = o.hero.length / 16; i < heroT.length / 16; i++) heroT[i * 16 + 8] = 1;
-      const segs = lite ? 12 : 22;
-      add(new THREE.Mesh(barbGeometry(heroT, segs), barbMaterial({ FS, FSP, FU, LK, PAT: patTex, moving: true })));
-      // les voisines : gabarit grossier, une copie par tuile
-      const nt = o.tile.length / 16;
-      const tileT = new Float32Array(o.tile.length * nTiles);
-      for (let j = 0; j < nTiles; j++) {
-        tileT.set(o.tile, j * o.tile.length);
-        for (let i = 0; i < nt; i++) { const q = (j * nt + i) * 16; tileT[q + 8] = j + 2; tileT[q + 9] = (tileT[q + 9] + j * 0.618) % 1; }
+      const t = new THREE.DataTexture(o.tex, o.nx, o.nz, THREE.RGBAFormat, THREE.UnsignedByteType);
+      t.wrapS = THREE.RepeatWrapping; t.wrapT = THREE.ClampToEdgeWrapping;
+      t.magFilter = t.minFilter = THREE.LinearFilter;
+      t.colorSpace = THREE.NoColorSpace;
+      t.needsUpdate = true;
+      const rh = new Uint16Array(65 * 4);
+      for (let i = 0; i < 65; i++) rh[i * 4] = THREE.DataUtils.toHalfFloat(o.rho[i]);
+      const rt = new THREE.DataTexture(rh, 65, 1, THREE.RGBAFormat, THREE.HalfFloatType);
+      rt.magFilter = rt.minFilter = THREE.LinearFilter;
+      rt.needsUpdate = true;
+      FU.rhoTex = rt;
+      FU.L.value = P.L; FU.radial.value = P.radial ? 1 : 0; FU.calamus.value = P.calamus; FU.over.value = P.over;
+      FU.r0.value = P.radial ? 0.035 : Math.max(0.03, P.L * 0.0085);
+      FU.kb.value = lay.kb; // (courbure du rachis ; × l'échelle de chaque plume)
+      texs = [t, rt];
+      // toutes les plumes partagent la table fine : une copie par instance
+      const nb = o.hero.length / 16;
+      const T = new Float32Array(o.hero.length * nF);
+      for (let j = 0; j < nF; j++) {
+        T.set(o.hero, j * o.hero.length);
+        for (let i = 0; i < nb; i++) T[(j * nb + i) * 16 + 8] = j;
       }
-      if (nTiles) add(new THREE.Mesh(barbGeometry(tileT, lite ? 7 : 11), barbMaterial({ FS, FSP, FU: FT, LK: LT, PAT: patT, moving: true, tile: true })));
-      // (duvet : un court calamus)
-      add(new THREE.Mesh(P.radial ? rachisGeometry(2, 8, 8) : rachisGeometry(2), rachisMaterial({ FS, FSP, FU, LK, moving: true, offset: 0 })));
-      if (nTiles) add(new THREE.Mesh(rachisGeometry(nTiles, 16, 5), rachisMaterial({ FS, FSP, FU: FT, LK: LT, moving: true, offset: 2 })));
-      // la gaine de la plume nouvelle
-      const tpl = tubeTemplate(64, 20);
-      const sg = new THREE.BufferGeometry();
-      sg.setAttribute('position', new THREE.BufferAttribute(tpl.position, 3));
-      sg.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(tpl.position.length), 3));
-      sg.setIndex(tpl.index);
-      sg.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e4);
-      add(new THREE.Mesh(sg, sheathMaterial({ FS, FSP, FU, LK, idx: 0 })));
+      add(new THREE.Mesh(barbGeometry(T, lite ? 12 : 22), barbMaterial({ FS, FSP, FU, LK, PAT: t, moving: true })));
+      add(new THREE.Mesh(P.radial ? rachisGeometry(nF, 8, 8) : rachisGeometry(nF), rachisMaterial({ FS, FSP, FU, LK, moving: true, offset: 0 })));
+      // les gaines : une par follicule (la plume courante, id pair)
+      add(new THREE.Mesh(sheathGeometry(Array.from({ length: lay.N }, (_, i) => 2 * i), lite ? 40 : 64, lite ? 12 : 20), sheathMaterial({ FS, FSP, FU, LK })));
       pending--;
       lastPh = -1;
     }).catch((e) => { console.error(e); pending = Math.max(0, pending - 1); });
-    // le sous-duvet (statique, cuit dans le monde) : il arrive avec la plume
+    // le duvet de la pelote (statique, cuit dans le monde) : il arrive avec la plume
     pending++;
-    gen.request({ shape: P, tile: R.tile, seed: R.seed, lite }, 'down').then((o) => {
+    gen.request({ shape: P, seed: R.seed, lite }, 'down').then((o) => {
       if (v !== version) return;
       const g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.BufferAttribute(o.position, 3));
@@ -218,13 +177,9 @@ export function createStage(scene, gen, { lite = false } = {}) {
     [LK.eye0, LK.eye1, LK.eye2, LK.eye3, LK.eye4].forEach((u, i) => u.value.set(eye[i]));
     LK.irid.value = K.irid; LK.iridLo.value = K.iridLo; LK.iridHi.value = K.iridHi; LK.bragg.value = K.bragg ?? 0; LK.iridMark.value = K.iridMark ?? 0; LK.blue.value = K.blue;
     LK.sheen.value = K.sheen; LK.translucency.value = K.translucency;
-    bodyU.color.value.set(K.down).lerp(new THREE.Color(K.base), 0.4).multiplyScalar(0.6); // (le duvet sous les plumes)
-    // les voisines d'une autre famille (le duvet parmi les plumes de couverture)
-    for (const k of Object.keys(LK)) if (LKT[k]) { const a = LK[k].value; if (a?.isColor) LKT[k].value.copy(a); else LKT[k].value = a; }
-    const Bd = BIRDS[R.bird];
-    downU.color.value.set(K.down).lerp(new THREE.Color(Bd.tileBase ?? K.base), 0.35).multiplyScalar(0.55);
-    downU.tip.value.set(K.down).multiplyScalar(0.92);
-    if (R.tile && Bd.tileBase) { LKT.base.value.set(Bd.tileBase); LKT.mark.value.set(Bd.tileMark); LKT.sheen.value = 0.5; LKT.down.value.set(Bd.tileBase).lerp(new THREE.Color(K.down), 0.5); }
+    bodyU.color.value.set(K.down).lerp(new THREE.Color(K.base), 0.3).multiplyScalar(0.28); // (la peau sous le duvet : sombre)
+    downU.color.value.set(K.down).lerp(new THREE.Color(K.base), 0.3).multiplyScalar(0.32);
+    downU.tip.value.set(K.down).lerp(new THREE.Color(K.base), 0.2).multiplyScalar(0.62);
   }
 
   // écrit l'état d'une plume i : position et échelle, quaternion, (temps, usure, tirage, visible)
@@ -239,17 +194,11 @@ export function createStage(scene, gen, { lite = false } = {}) {
   function update(ph) {
     if (!R || !lay || pending) return;
     const P = R.shape;
-    const k = bendOf(P, lay.Rd);
     const jump = lastPh < 0 || Math.abs(ph - lastPh) > 0.02;
-    for (let i = 0; i < (2 + nTiles) * FSTRIDE; i++) arrP[i].copy(arr[i]);
+    for (let i = 0; i < nF * FSTRIDE; i++) arrP[i].copy(arr[i]);
     // toutes les plumes, exactement comme le banc des traversées les voit
-    // (gen/collide.js, sceneState) : la nouvelle, l'ancienne, les voisines
-    // écartées ou au repos
-    for (const o of sceneState(R, lay, ph, solved)) {
-      if (o.kind === 'tile' && o.tile >= nTiles) continue;
-      put(o.id, o.p, o.q, o.scale, o.u, o.wear, o.rnd, o.vis);
-    }
-    if (jump) for (let i = 0; i < (2 + nTiles) * FSTRIDE; i++) arrP[i].copy(arr[i]);
+    for (const o of bouquetState(R, lay, ph)) if (o.id < nF) put(o.id, o.p, o.q, o.scale, o.u, o.wear, o.rnd, o.vis);
+    if (jump) for (let i = 0; i < nF * FSTRIDE; i++) arrP[i].copy(arr[i]);
     lastPh = ph;
 
     // fond, brume, lumières (fixes dans le monde : les ombres ne bougent pas)
@@ -260,7 +209,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
     BG.glowDir.value.copy(_v);
     backdrop.position.set(...c.pos);
     backdrop.scale.setScalar(P.L * 60);
-    const L = R.light, tgt = [0, lay.Rd * (Math.cos(lay.thH) - 1) + P.L * 0.25, lay.Rd * Math.sin(lay.thH)];
+    const L = R.light, tgt = lay.center;
     const base = Math.atan2(c0.pos[0] - c0.target[0], c0.pos[2] - c0.target[2]);
     const place = (l, o, dist) => {
       const az = base + o.az;
@@ -269,10 +218,10 @@ export function createStage(scene, gen, { lite = false } = {}) {
       l.color.set(o.color);
       l.intensity = o.intensity;
     };
-    const D = P.L * 7;
+    const D = P.L * 8;
     place(key, L.key, D); place(rim, L.rim, D); place(fill, L.fill, D);
     if (lite) key.intensity += L.fill.intensity * 0.5;
-    key.angle = Math.atan((P.L * 2.4) / D); key.penumbra = 0.5;
+    key.angle = Math.atan((P.L * 1.9) / D); key.penumbra = 0.5;
     rim.angle = Math.atan((P.L * 3) / D); fill.angle = Math.atan((P.L * 4) / D);
     key.shadow.camera.near = D * 0.5; key.shadow.camera.far = D * 1.6;
     key.shadow.bias = -0.0002; key.shadow.normalBias = 0.01 * P.L;
@@ -287,19 +236,21 @@ export function createStage(scene, gen, { lite = false } = {}) {
   return {
     setRecipe, update, setShadowQuality, syncLook, group, key, rim, fill, body,
     syncFinishes: syncLook,
-    refreshCamera: () => { if (R && lay) cam = cameraPath(R, lay, path); },
+    refreshCamera: () => { if (R && lay) cam = cameraPath(R, lay); },
     cameraAt: (ph) => cam?.at(ph) ?? { pos: [0, 10, 30], target: [0, 0, 0], dist: 30 },
-    // état des plumes visibles, la plume couchée d'abord : à u = 0 c'est
-    // l'ancienne, à u → 1 la nouvelle (les deux instances échangent leur rôle
-    // au raccord ; l'image, elle, est la même)
+    // état des plumes, follicule par follicule (la courante, puis l'ancienne) ;
+    // au raccord, l'ancienne prend la pose de la courante : on les range par
+    // âge décroissant pour que la signature soit la même des deux côtés
     state: () => {
-      const vis = (i) => arr[i * F + 2].w > 0.5 && arr[i * F + 2].x > 1e-6 && (i > 1 || growth(arr[i * F + 2].x, R.shape.L) > 0);
-      const heroes = [0, 1].filter(vis).sort((a, b) => arr[b * F + 2].x - arr[a * F + 2].x);
-      const ids = [...heroes, ...Array.from({ length: nTiles }, (_, j) => j + 2)];
-      return ids.flatMap((i) => [arr[i * F], arr[i * F + 1], arr[i * F + 2]]);
+      const out = [];
+      for (let f = 0; f < nF / 2; f++) {
+        const ids = [2 * f, 2 * f + 1].filter((i) => arr[i * F + 2].w > 0.5 && (i % 2 || growth(arr[i * F + 2].x, R.shape.L) > 0)).sort((a, b) => arr[b * F + 2].x - arr[a * F + 2].x);
+        for (const i of ids) out.push(arr[i * F], arr[i * F + 1], arr[i * F + 2]);
+      }
+      return out;
     },
     layout: () => lay,
     ready: () => pending === 0,
-    progress: () => (pending ? 0.05 + 0.9 * solveProgress : 1),
+    progress: () => (pending ? 0.5 : 1),
   };
 }

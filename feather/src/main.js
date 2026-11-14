@@ -207,7 +207,7 @@ async function main() {
     scene.environmentIntensity = R.env.intensity;
     scene.environmentRotation.set(0, R.env.rotation, 0);
     stage.update(ph);
-    post.update({ ...RENDER, lite: LITE, focus: RENDER.focus * camera.position.distanceTo(_r.set(...cp.target)), focusRange: RENDER.focusRange * cp.dist }, R);
+    post.update({ ...RENDER, lite: LITE, focus: RENDER.focus * (camState.free || !cp.focusDist ? camera.position.distanceTo(_r.set(...cp.target)) : cp.focusDist) /* (la mise au point suit la plume qui se déplie) */, focusRange: RENDER.focusRange * cp.dist }, R);
     void C; void TAU;
     post.render();
   }

@@ -105,15 +105,6 @@ export function generate(seed, overrides = {}) {
   const M = MOODS[mood];
   const shape = shapeOf(family, rs, bird);
   for (const k of Object.keys(shape)) if (typeof shape[k] === 'number') shape[k] = r3(shape[k]);
-  // le duvet pousse parmi les plumes de couverture de l'oiseau (des vexilles) :
-  // la houppe tranche sur un plumage couché
-  let tile = null;
-  if (shape.radial) {
-    tile = shapeOf('vexille', rng.fork('tile'));
-    tile.L = shape.L * 2.1; tile.W = tile.L * 0.4;
-    for (const k of Object.keys(tile)) if (typeof tile[k] === 'number') tile[k] = r3(tile[k]);
-  }
-
   const kelvin = (K) => kelvinToHex(K + rl.range(-150, 150));
   const light = (o) => ({ az: r2(o.az + rl.range(-0.12, 0.12)), el: r2(o.el + rl.range(-0.06, 0.06)), color: kelvin(o.K), intensity: r2(o.I * rl.range(0.92, 1.08)), soft: r2(o.soft ?? 0.5) });
   return {
@@ -121,7 +112,6 @@ export function generate(seed, overrides = {}) {
     loop: { duration: 36 },
     shape,
     pattern: { ...B.pattern, seed: `${seed}` },
-    tile, tilePattern: tile ? { ...(B.tilePattern ?? { program: 'plain' }), seed: `${seed}:tile` } : null,
     look: {
       base: B.base, mark: B.mark, down: B.down, rachis: B.rachis, sheath: B.sheath, eye: B.eye ?? null,
       irid: B.irid[0], iridLo: B.irid[1], iridHi: B.irid[2], bragg: B.bragg ?? 0, iridMark: B.iridMark ?? 0, blue: B.blue, sheen: family === 'duvet' ? 0.9 : 0.5, translucency: 1,
