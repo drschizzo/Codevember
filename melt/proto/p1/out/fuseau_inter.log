@@ -1,0 +1,70 @@
+# fuseau_inter  T∞ 7→9→7 °C, P=400 s, v=0.500 mm/s, F=20, grille 80x320, dx=0.5 mm, dt=0.0235 s
+t=94 s (période 0.24)  T∞=7.91  V=31.01 cm³  bout à z=40 mm  1.93 ms/pas
+# dt → 0.0188
+t=187 s (période 0.47)  T∞=8.98  V=2.78 cm³  bout à z=38 mm  1.93 ms/pas
+# dt → 0.0151
+# dt → 0.0120
+t=241 s (période 0.60)  T∞=8.80  V=0.00 cm³  bout à z=160 mm  1.91 ms/pas
+t=289 s (période 0.72)  T∞=8.17  V=0.00 cm³  bout à z=160 mm  1.90 ms/pas
+t=337 s (période 0.84)  T∞=7.45  V=2.91 cm³  bout à z=155 mm  1.89 ms/pas
+t=385 s (période 0.96)  T∞=7.03  V=6.72 cm³  bout à z=146 mm  1.89 ms/pas
+t=434 s (période 1.08)  T∞=7.14  V=9.61 cm³  bout à z=136 mm  1.89 ms/pas
+t=482 s (période 1.20)  T∞=7.72  V=11.40 cm³  bout à z=124 mm  1.89 ms/pas
+t=530 s (période 1.32)  T∞=8.45  V=7.63 cm³  bout à z=116 mm  1.89 ms/pas
+t=578 s (période 1.45)  T∞=8.94  V=1.39 cm³  bout à z=117 mm  1.88 ms/pas
+t=626 s (période 1.57)  T∞=8.92  V=0.00 cm³  bout à z=160 mm  1.88 ms/pas
+t=675 s (période 1.69)  T∞=8.39  V=0.00 cm³  bout à z=160 mm  1.88 ms/pas
+t=723 s (période 1.81)  T∞=7.65  V=1.52 cm³  bout à z=157 mm  1.88 ms/pas
+t=771 s (période 1.93)  T∞=7.10  V=5.48 cm³  bout à z=148 mm  1.88 ms/pas
+t=819 s (période 2.05)  T∞=7.04  V=9.02 cm³  bout à z=139 mm  1.89 ms/pas
+t=867 s (période 2.17)  T∞=7.51  V=11.18 cm³  bout à z=128 mm  1.89 ms/pas
+t=915 s (période 2.29)  T∞=8.24  V=10.28 cm³  bout à z=116 mm  1.89 ms/pas
+t=964 s (période 2.41)  T∞=8.84  V=2.81 cm³  bout à z=117 mm  1.89 ms/pas
+t=1012 s (période 2.53)  T∞=8.98  V=0.00 cm³  bout à z=160 mm  1.89 ms/pas
+t=1060 s (période 2.65)  T∞=8.59  V=0.00 cm³  bout à z=160 mm  1.88 ms/pas
+t=1108 s (période 2.77)  T∞=7.87  V=0.44 cm³  bout à z=159 mm  1.88 ms/pas
+t=1156 s (période 2.89)  T∞=7.23  V=4.46 cm³  bout à z=151 mm  1.89 ms/pas
+t=1205 s (période 3.01)  T∞=7.00  V=7.98 cm³  bout à z=142 mm  1.89 ms/pas
+t=1253 s (période 3.13)  T∞=7.32  V=10.45 cm³  bout à z=131 mm  1.89 ms/pas
+t=1301 s (période 3.25)  T∞=8.02  V=11.56 cm³  bout à z=119 mm  1.89 ms/pas
+t=1349 s (période 3.37)  T∞=8.70  V=4.66 cm³  bout à z=116 mm  1.89 ms/pas
+t=1397 s (période 3.49)  T∞=9.00  V=0.22 cm³  bout à z=126 mm  1.88 ms/pas
+t=1446 s (période 3.61)  T∞=8.76  V=0.00 cm³  bout à z=160 mm  1.88 ms/pas
+t=1494 s (période 3.73)  T∞=8.10  V=0.00 cm³  bout à z=160 mm  1.88 ms/pas
+t=1542 s (période 3.85)  T∞=7.39  V=3.06 cm³  bout à z=154 mm  1.88 ms/pas
+t=1590 s (période 3.98)  T∞=7.01  V=7.13 cm³  bout à z=145 mm  1.88 ms/pas
+# fin : 124822 pas, 235 s, 1.88 ms/pas, 847 décalages
+# écart période 0 → 1 : RMS 4.305 mm, max 13.99 mm
+# écart période 1 → 2 : RMS 0.140 mm, max 12.36 mm
+# écart période 2 → 3 : RMS 0.118 mm, max 7.93 mm
+# détachement t=195 s (phase 0.487, période 0) : 1.24 cm³, z 38–119 mm
+# détachement t=202 s (phase 0.505, période 0) : 0.10 cm³, z 131–160 mm
+# détachement t=290 s (phase 0.726, période 0) : 0.10 cm³, z 160–160 mm
+# détachement t=301 s (phase 0.753, période 0) : 0.02 cm³, z 160–160 mm
+# détachement t=302 s (phase 0.756, période 0) : 0.07 cm³, z 160–160 mm
+# détachement t=303 s (phase 0.759, période 0) : 0.08 cm³, z 160–160 mm
+# détachement t=305 s (phase 0.762, période 0) : 0.06 cm³, z 160–160 mm
+# détachement t=306 s (phase 0.765, période 0) : 0.05 cm³, z 160–160 mm
+# détachement t=602 s (phase 0.506, période 1) : 0.09 cm³, z 133–160 mm
+# détachement t=690 s (phase 0.725, période 1) : 0.11 cm³, z 160–160 mm
+# détachement t=701 s (phase 0.753, période 1) : 0.02 cm³, z 160–160 mm
+# détachement t=702 s (phase 0.756, période 1) : 0.07 cm³, z 160–160 mm
+# détachement t=703 s (phase 0.759, période 1) : 0.08 cm³, z 160–160 mm
+# détachement t=705 s (phase 0.762, période 1) : 0.07 cm³, z 160–160 mm
+# détachement t=706 s (phase 0.765, période 1) : 0.05 cm³, z 160–160 mm
+# détachement t=1002 s (phase 0.506, période 2) : 0.09 cm³, z 133–160 mm
+# détachement t=1090 s (phase 0.725, période 2) : 0.12 cm³, z 160–160 mm
+# détachement t=1101 s (phase 0.752, période 2) : 0.03 cm³, z 160–160 mm
+# détachement t=1102 s (phase 0.755, période 2) : 0.08 cm³, z 160–160 mm
+# détachement t=1103 s (phase 0.758, période 2) : 0.09 cm³, z 160–160 mm
+# détachement t=1105 s (phase 0.762, période 2) : 0.08 cm³, z 160–160 mm
+# détachement t=1106 s (phase 0.765, période 2) : 0.05 cm³, z 160–160 mm
+# détachement t=1402 s (phase 0.505, période 3) : 0.09 cm³, z 133–160 mm
+# détachement t=1490 s (phase 0.725, période 3) : 0.14 cm³, z 160–160 mm
+# détachement t=1501 s (phase 0.752, période 3) : 0.04 cm³, z 160–160 mm
+# détachement t=1502 s (phase 0.755, période 3) : 0.09 cm³, z 160–160 mm
+# détachement t=1503 s (phase 0.758, période 3) : 0.09 cm³, z 160–160 mm
+# détachement t=1505 s (phase 0.761, période 3) : 0.08 cm³, z 160–160 mm
+# détachement t=1506 s (phase 0.764, période 3) : 0.06 cm³, z 160–160 mm
+# détachement t=1507 s (phase 0.767, période 3) : 0.04 cm³, z 160–160 mm
+# écrit fuseau_inter.png, fuseau_inter.json

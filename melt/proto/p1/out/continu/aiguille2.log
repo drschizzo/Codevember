@@ -1,0 +1,23 @@
+# aiguille2  T∞ 1→4.5→1 °C, P=400 s, v=0.180 mm/s, F=20, grille 80x320, dx=0.5 mm, dt=0.0235 s
+t=94 s (période 0.24)  T∞=2.59  V=53.49 cm³  bout à z=57 mm  2.09 ms/pas
+t=188 s (période 0.47)  T∞=4.47  V=42.97 cm³  bout à z=48 mm  2.08 ms/pas
+t=282 s (période 0.71)  T∞=3.23  V=31.24 cm³  bout à z=40 mm  2.10 ms/pas
+t=376 s (période 0.94)  T∞=1.12  V=24.67 cm³  bout à z=33 mm  2.09 ms/pas
+t=471 s (période 1.18)  T∞=1.97  V=26.37 cm³  bout à z=25 mm  2.10 ms/pas
+t=565 s (période 1.41)  T∞=4.24  V=25.03 cm³  bout à z=53 mm  2.11 ms/pas
+t=659 s (période 1.65)  T∞=3.81  V=20.13 cm³  bout à z=80 mm  2.12 ms/pas
+t=753 s (période 1.88)  T∞=1.46  V=17.57 cm³  bout à z=86 mm  2.13 ms/pas
+t=847 s (période 2.12)  T∞=1.46  V=20.31 cm³  bout à z=79 mm  2.13 ms/pas
+t=941 s (période 2.35)  T∞=3.80  V=22.61 cm³  bout à z=83 mm  2.13 ms/pas
+t=1035 s (période 2.59)  T∞=4.24  V=18.77 cm³  bout à z=94 mm  2.13 ms/pas
+t=1129 s (période 2.82)  T∞=1.97  V=16.24 cm³  bout à z=96 mm  2.13 ms/pas
+t=1224 s (période 3.06)  T∞=1.12  V=18.41 cm³  bout à z=88 mm  2.13 ms/pas
+t=1318 s (période 3.29)  T∞=3.23  V=22.44 cm³  bout à z=86 mm  2.12 ms/pas
+t=1412 s (période 3.53)  T∞=4.47  V=19.40 cm³  bout à z=96 mm  2.11 ms/pas
+t=1506 s (période 3.76)  T∞=2.59  V=16.55 cm³  bout à z=99 mm  2.09 ms/pas
+t=1600 s (période 4.00)  T∞=1.00  V=17.36 cm³  bout à z=92 mm  2.08 ms/pas
+# fin : 68001 pas, 141 s, 2.08 ms/pas, 576 décalages
+# écart période 0 → 1 : RMS 4.154 mm, max 9.71 mm
+# écart période 1 → 2 : RMS 1.579 mm, max 5.36 mm
+# écart période 2 → 3 : RMS 0.351 mm, max 2.45 mm
+# écrit aiguille2.png, aiguille2.json

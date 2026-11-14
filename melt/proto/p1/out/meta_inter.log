@@ -1,0 +1,46 @@
+# meta_inter  T∞ 3→9→3 °C, P=400 s, v=0.500 mm/s, F=20, grille 80x320, dx=0.5 mm, dt=0.0235 s
+t=94 s (période 0.24)  T∞=5.72  V=51.36 cm³  bout à z=35 mm  1.94 ms/pas
+t=188 s (période 0.47)  T∞=8.95  V=23.50 cm³  bout à z=42 mm  1.93 ms/pas
+# dt → 0.0188
+# dt → 0.0151
+t=265 s (période 0.66)  T∞=7.55  V=0.00 cm³  bout à z=160 mm  1.93 ms/pas
+t=326 s (période 0.81)  T∞=4.82  V=2.49 cm³  bout à z=155 mm  1.91 ms/pas
+t=386 s (période 0.96)  T∞=3.07  V=9.29 cm³  bout à z=140 mm  1.91 ms/pas
+t=446 s (période 1.12)  T∞=3.75  V=15.85 cm³  bout à z=122 mm  1.91 ms/pas
+t=506 s (période 1.27)  T∞=6.30  V=21.42 cm³  bout à z=104 mm  1.90 ms/pas
+t=567 s (période 1.42)  T∞=8.60  V=11.75 cm³  bout à z=104 mm  1.90 ms/pas
+t=627 s (période 1.57)  T∞=8.74  V=1.26 cm³  bout à z=109 mm  1.90 ms/pas
+t=687 s (période 1.72)  T∞=6.61  V=0.00 cm³  bout à z=160 mm  1.90 ms/pas
+t=747 s (période 1.87)  T∞=3.97  V=5.14 cm³  bout à z=149 mm  1.90 ms/pas
+t=808 s (période 2.02)  T∞=3.02  V=11.88 cm³  bout à z=134 mm  1.89 ms/pas
+t=868 s (période 2.17)  T∞=4.54  V=17.91 cm³  bout à z=116 mm  1.90 ms/pas
+t=928 s (période 2.32)  T∞=7.28  V=19.76 cm³  bout à z=104 mm  1.90 ms/pas
+t=988 s (période 2.47)  T∞=8.95  V=7.05 cm³  bout à z=105 mm  1.90 ms/pas
+t=1048 s (période 2.62)  T∞=8.17  V=0.00 cm³  bout à z=160 mm  1.90 ms/pas
+t=1109 s (période 2.77)  T∞=5.59  V=0.80 cm³  bout à z=158 mm  1.90 ms/pas
+t=1169 s (période 2.92)  T∞=3.35  V=7.55 cm³  bout à z=144 mm  1.90 ms/pas
+t=1229 s (période 3.07)  T∞=3.31  V=14.29 cm³  bout à z=127 mm  1.90 ms/pas
+t=1289 s (période 3.22)  T∞=5.50  V=20.18 cm³  bout à z=109 mm  1.90 ms/pas
+t=1350 s (période 3.37)  T∞=8.11  V=15.83 cm³  bout à z=104 mm  1.90 ms/pas
+t=1410 s (période 3.52)  T∞=8.96  V=3.27 cm³  bout à z=106 mm  1.90 ms/pas
+t=1470 s (période 3.68)  T∞=7.36  V=0.00 cm³  bout à z=160 mm  1.90 ms/pas
+t=1530 s (période 3.83)  T∞=4.62  V=3.36 cm³  bout à z=153 mm  1.90 ms/pas
+t=1591 s (période 3.98)  T∞=3.03  V=10.12 cm³  bout à z=139 mm  1.90 ms/pas
+# fin : 100625 pas, 191 s, 1.90 ms/pas, 847 décalages
+# écart période 0 → 1 : RMS 5.197 mm, max 13.99 mm
+# écart période 1 → 2 : RMS 0.164 mm, max 9.83 mm
+# écart période 2 → 3 : RMS 0.151 mm, max 8.47 mm
+# détachement t=239 s (phase 0.598, période 0) : 5.71 cm³, z 48–158 mm
+# détachement t=305 s (phase 0.761, période 0) : 0.01 cm³, z 160–160 mm
+# détachement t=633 s (phase 0.582, période 1) : 0.79 cm³, z 110–160 mm
+# détachement t=690 s (phase 0.725, période 1) : 0.03 cm³, z 160–160 mm
+# détachement t=699 s (phase 0.748, période 1) : 0.05 cm³, z 160–160 mm
+# détachement t=701 s (phase 0.752, période 1) : 0.11 cm³, z 160–160 mm
+# détachement t=702 s (phase 0.755, période 1) : 0.10 cm³, z 160–160 mm
+# détachement t=704 s (phase 0.759, période 1) : 0.06 cm³, z 160–160 mm
+# détachement t=1033 s (phase 0.584, période 2) : 0.76 cm³, z 110–159 mm
+# détachement t=1097 s (phase 0.742, période 2) : 0.05 cm³, z 160–160 mm
+# détachement t=1101 s (phase 0.753, période 2) : 0.01 cm³, z 160–160 mm
+# détachement t=1432 s (phase 0.581, période 3) : 0.83 cm³, z 110–160 mm
+# détachement t=1499 s (phase 0.747, période 3) : 0.02 cm³, z 160–160 mm
+# écrit meta_inter.png, meta_inter.json
