@@ -99,7 +99,7 @@ async function main() {
   const loading = { active: true, applied: false, warming: false, settle: 0 };
   // étapes de l'écran de chargement (libellés propres au thème) ; le dessin
   // (app/loaderArt.js) reçoit ce que la recette en dit, par loader.art()
-  const STEPS = [['build', 'le bain se prépare'], ['compile', 'la lumière se prépare'], ['settle', 'premières images']];
+  const STEPS = [['build', 'la fonte se calcule'], ['compile', 'la lumière se prépare'], ['settle', 'premières images']];
   let firstRecipe = true;
   function applyRecipe() {
     const recipe = R;
