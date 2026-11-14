@@ -118,7 +118,7 @@ export function rockRelief(B) {
 // (scene/kelp.js) lit les positions enregistrées et construit le ruban.
 export function strapGeometry(K, plants, { ring = 8, sub = 3 } = {}) {
   const F = FAMILIES[K.family];
-  const pos = [], nidx = [], seg = [], sect = [], anch = [], index = [];
+  const pos = [], nidx = [], seg = [], sect = [], anch = [], index = [], ranges = [];
   let v = 0;
   const rnd = createRng(`straps:${K.family}`);
   for (const [ci, c] of K.chains.entries()) {
@@ -135,7 +135,7 @@ export function strapGeometry(K, plants, { ring = 8, sub = 3 } = {}) {
     // (le bout d'un stipe est fermé : deux anneaux qui se resserrent sur place —
     // ouvert, il se lisait comme un tuyau d'où sortaient les lames)
     if (!blade) rings.push([nseg - 1, 1, 0.55], [nseg - 1, 1, 0.02]);
-    const base = v;
+    const base = v, i0 = index.length;
     rings.forEach(([sI, s, capK = 1], ri) => {
       const ia = sI === 0 ? pre : seq[sI - 1], ib = seq[sI], ic = seq[sI + 1], id = sI + 2 < nn ? seq[sI + 2] : seq[sI + 1];
       const u = (sI + s) / nseg; // (place le long de la chaîne)
@@ -167,11 +167,81 @@ export function strapGeometry(K, plants, { ring = 8, sub = 3 } = {}) {
       const a = base + ri * R + k, b = base + ri * R + ((k + 1) % R), cc = a + R, d = b + R;
       index.push(a, b, cc, b, d, cc); // (faces vers l'extérieur)
     }
+    ranges.push({ plant: c.plant, v0: base, v1: v, i0, i1: index.length });
   }
   return {
     position: new Float32Array(pos), nidx: new Float32Array(nidx), seg: new Float32Array(seg), sect: new Float32Array(sect), anch: new Float32Array(anch),
-    index: v > 65535 ? new Uint32Array(index) : new Uint16Array(index), count: v,
+    index: v > 65535 ? new Uint32Array(index) : new Uint16Array(index), count: v, ranges,
   };
+}
+
+// ── La forêt : des clones décalés dans le temps ──────────────────────────────
+// La mer a une symétrie : à un pas Δ le long de la côte, c'est la même mer,
+// retardée de obliq·Δ (le faisceau n'y change que le détail du bord). Une
+// plante simulée en z est donc une pose valide en z + Δ à l'instant
+// t − obliq·Δ. On ne simule que les plantes proches (contacts, caisson) ; au
+// loin, on pose des clones de touffes entières, à la même distance du bord,
+// rejoués avec leur retard : la frange devient une forêt pour le prix d'un
+// maillage. (Rien à moins de 2,2 m de la caméra : là, tout est simulé.)
+// retour : [{ src: [indices des plantes], dx, dy, dz, ts (s) }]
+export function placeClones({ family, seed, plants, cam, zRange, rockAt, avoid, inside, unwarp, warp, obliq, max }) {
+  const F = FAMILIES[family], r = createRng(`clones:${seed}`);
+  const sp = F.colony ? 0.55 : F.spacing * 0.95, groupR = F.colony ? F.colonyR + 0.06 : F.spacing * 1.1;
+  const taken = plants.map((p) => [p.x, p.z]);
+  const free = (x, z, d) => !taken.some(([a, b]) => (a - x) ** 2 + (b - z) ** 2 < d * d);
+  // les touffes sources : une plante et ses voisines proches (une colonie entière)
+  const groups = plants.map((P, i) => plants.map((Q, j) => [j, Math.hypot(Q.x - P.x, Q.z - P.z)]).filter(([, d]) => d < groupR).map(([j]) => j));
+  const xa = plants.map((P) => unwarp(P.x, P.z)); // (abscisse sur le profil moyen : la distance au bord)
+  const out = [];
+  for (let k = 0; k < max * 40 && out.length < max; k++) {
+    const si = r.int(0, plants.length - 1), S = plants[si];
+    const z = r.range(zRange[0], zRange[1]);
+    const x = warp(xa[si] + (r.next() - 0.5) * 0.5, z);
+    if (Math.hypot(x - cam.x, z - cam.z) < 2.2 || !inside(x, z)) continue;
+    const dx = x - S.x, dz = z - S.z;
+    const grp = groups[si];
+    let ok = true;
+    const ys = [];
+    for (const j of grp) {
+      const P = plants[j], qx = P.x + dx, qz = P.z + dz;
+      if (avoid(qx, qz) || !free(qx, qz, sp) || Math.hypot(qx - cam.x, qz - cam.z) < 2.2) { ok = false; break; }
+      ys.push(rockAt(qx, qz) - P.y);
+    }
+    if (!ok) continue;
+    // (la roche sous la touffe ne doit pas trop différer : une lame couchée
+    // flotterait ou s'enfoncerait)
+    const dy = ys.reduce((a, b) => a + b, 0) / ys.length;
+    if (Math.max(...ys) - Math.min(...ys) > 0.06 || Math.abs(dy) > 0.35) continue;
+    for (const j of grp) taken.push([plants[j].x + dx, plants[j].z + dz]);
+    out.push({ src: grp, dx, dy, dz, ts: +(obliq * dz).toFixed(4) });
+  }
+  return out;
+}
+
+// la géométrie des clones : les chaînes de leurs plantes sources (maillage
+// plus léger), posées sur l'ancre du clone ; attribut « clone » : (retard, 1)
+export function cloneStrapGeometry(L, plants, clones) {
+  const byPlant = new Map();
+  for (const rg of L.ranges) { if (!byPlant.has(rg.plant)) byPlant.set(rg.plant, []); byPlant.get(rg.plant).push(rg); }
+  let nv = 0, ni = 0;
+  for (const c of clones) for (const j of c.src) for (const rg of byPlant.get(j) ?? []) { nv += rg.v1 - rg.v0; ni += rg.i1 - rg.i0; }
+  const position = new Float32Array(nv * 3), nidx = new Float32Array(nv * 4), seg = new Float32Array(nv * 4), sect = new Float32Array(nv * 4), anch = new Float32Array(nv * 4), clone = new Float32Array(nv * 2);
+  const index = new Uint32Array(ni);
+  let v = 0, ii = 0;
+  for (const c of clones) for (const j of c.src) {
+    const P = plants[j], ax = P.x + c.dx, ay = P.y + c.dy, az = P.z + c.dz;
+    for (const rg of byPlant.get(j) ?? []) {
+      const off = v - rg.v0;
+      for (let q = rg.v0; q < rg.v1; q++, v++) {
+        position[3 * v] = ax; position[3 * v + 1] = ay; position[3 * v + 2] = az;
+        for (let k = 0; k < 4; k++) { nidx[4 * v + k] = L.nidx[4 * q + k]; seg[4 * v + k] = L.seg[4 * q + k]; sect[4 * v + k] = L.sect[4 * q + k]; }
+        anch[4 * v] = ax; anch[4 * v + 1] = ay; anch[4 * v + 2] = az; anch[4 * v + 3] = L.anch[4 * q + 3];
+        clone[2 * v] = c.ts; clone[2 * v + 1] = 1;
+      }
+      for (let q = rg.i0; q < rg.i1; q++) index[ii++] = L.index[q] + off;
+    }
+  }
+  return { position, nidx, seg, sect, anch, clone, index, count: nv };
 }
 
 // ── Crampons : des haptères ramifiés agrippés à la roche ─────────────────────
@@ -194,7 +264,7 @@ export function holdfastGeometry(K, plants, rockH, seed) {
         const edge = R0 * (0.9 + 0.22 * N.fbm(Math.cos(a) * 1.3 + ph, Math.sin(a) * 1.3, pi * 0.37, 3));
         const rad = edge * t, x = P.x + Math.cos(a) * rad, z = P.z + Math.sin(a) * rad;
         const lump = 1 + 0.35 * N.fbm(x * 40 + ph, z * 40, pi, 2);
-        return [x, rockH(x, z) + R0 * 0.5 * (1 - t * t) * lump - 0.003 * t, z];
+        return [x, rockH(x, z) + R0 * 0.26 * (1 - t * t) ** 1.5 * lump - 0.004 * t, z]; // (un coussin plat, pas un dôme)
       };
       const base = B.n;
       for (let i = 0; i <= NR; i++) for (let k = 0; k < NT; k++) {
@@ -218,7 +288,7 @@ export function holdfastGeometry(K, plants, rockH, seed) {
     // ramifient une ou deux fois (pointes enfoncées dans la roche)
     const g0 = rockH(P.x, P.z), top = P.y + F.holdfast * 0.6 * age;
     tube(B, [[P.x, g0 - 0.004, P.z], [P.x + (rr.next() - 0.5) * 0.004, (g0 + top) / 2, P.z + (rr.next() - 0.5) * 0.004], [P.x, top + 0.004, P.z]], R0 * 0.42, R0 * 0.16, 10);
-    const n = 6 + Math.floor(rr.next() * 8);
+    const n = P.far ? 4 + Math.floor(rr.next() * 3) : 6 + Math.floor(rr.next() * 8); // (au loin : moins d'haptères)
     const arm = (o, a, reach, r, depth) => {
       const pts = [];
       const bend = (rr.next() - 0.5) * 0.6;
@@ -237,7 +307,7 @@ export function holdfastGeometry(K, plants, rockH, seed) {
       const a = rr.next() * Math.PI * 2;
       const h = g0 + (top - g0) * (0.15 + 0.75 * rr.next());
       const o = [P.x + Math.cos(a) * R0 * 0.25, h, P.z + Math.sin(a) * R0 * 0.25];
-      arm(o, a, R0 * (0.45 + 0.6 * rr.next()), 0.0045 * (0.8 + 0.5 * rr.next()) * Math.sqrt(age), rr.next() < 0.7 ? 1 : 0);
+      arm(o, a, R0 * (0.45 + 0.6 * rr.next()), 0.0045 * (0.8 + 0.5 * rr.next()) * Math.sqrt(age), rr.next() < 0.7 && !P.far ? 1 : 0);
     }
   });
   return B.out();
@@ -355,36 +425,74 @@ function tube(B, pts, r0, r1, nr = 8) {
 }
 
 // ── Tout ─────────────────────────────────────────────────────────────────────
-export function buildScene(R, { lite = false, onProgress = () => {} } = {}) {
-  const t0 = Date.now(), times = {};
-  const T = R.loop.duration;
-  // 1. la mer : le profil fin de la caméra (60 images / s : un ressaut avance
-  // de 6 cm par image ; la ligne d'eau sur le dôme), puis le faisceau de
-  // profils le long de la côte (5 cm, 30 images / s), chacun sur sa coupe du
-  // platier : le front se courbe avec le bord
-  const zRef = R.camera.z;
-  const profZ = makeProfileZ(R.sea.profile, R.sea.edge);
-  const sea = simulateSea({ T, x0: SEA_X[0], x1: SEA_X[1], dx: 0.025, profileFn: (x) => profZ(x, zRef), waves: R.sea.waves, manning: R.sea.manning, fps: 60, loops: 2 }, (p) => onProgress(0.03 * p));
-  let bundle = null;
+// ── Les pièces indépendantes : la mer et la roche ────────────────────────────
+// Le profil fin de la caméra, les tranches du faisceau et la roche ne
+// dépendent que de la recette : le worker de la scène les confie à des
+// workers secondaires, en parallèle (gen/worker.js) ; Node les enchaîne.
+// (avant, elles passaient l'une après l'autre : 1 s de mer, 2 s de roche, et
+// le faisceau en aurait ajouté 4)
+export function sceneJobs(R, lite = false, slices = 1) {
+  const zRef = R.camera.z, jobs = [{ what: 'sea-hero', R }, { what: 'rock', R, lite }];
   if (R.sea.edge) {
     const dz = lite ? 1.5 : 0.9, zs = [];
     for (let k = Math.ceil((BOX.z0 - 1.5 - zRef) / dz); zRef + k * dz <= BOX.z1 + 1.5; k++) zs.push(+(zRef + k * dz).toFixed(4));
-    bundle = simulateBundle({ T, x0: SEA_X[0], x1: SEA_X[1], dx: 0.05, cfl: 0.8, profileZ: profZ, zs, waves: R.sea.waves, manning: R.sea.manning, fps: 30, loops: 2 }, (p) => onProgress(0.03 + 0.07 * p));
+    const n = Math.max(1, Math.min(slices, zs.length)), per = Math.ceil(zs.length / n);
+    for (let i = 0; i < zs.length; i += per) jobs.push({ what: 'sea-bundle', R, zs: zs.slice(i, i + per) });
   }
-  const field = seaField(sea, bundle, R.sea.obliq, zRef);
-  times.sea = Date.now() - t0;
-  // 2. la roche
-  const pools = makePools(R.seed, { x0: -1.6, x1: 3, z0: -8, z1: 2 }, R.rock.pools);
-  const rock = bakeRock({ type: R.rock.type, seed: R.rock.seed, profile: R.sea.profile, edge: R.sea.edge, box: BOX, M: lite ? 640 : 1024, pools, rock: { amp: R.rock.amp, dip: R.rock.dip } });
-  const Hc = sampler(rock, rock.Hc), Hr = sampler(rock, rock.H);
+  return jobs;
+}
+export function runJob(job, onProgress = null) {
+  const { R } = job, T = R.loop.duration, profZ = makeProfileZ(R.sea.profile, R.sea.edge);
+  if (job.what === 'sea-hero') {
+    // le profil fin de la caméra (60 images / s : un ressaut avance de 6 cm
+    // par image ; la ligne d'eau sur le dôme)
+    return simulateSea({ T, x0: SEA_X[0], x1: SEA_X[1], dx: 0.025, profileFn: (x) => profZ(x, R.camera.z), waves: R.sea.waves, manning: R.sea.manning, fps: 60, loops: 2 }, onProgress);
+  }
+  if (job.what === 'sea-bundle') {
+    // une tranche du faisceau de profils le long de la côte (5 cm, 30 images / s)
+    return simulateBundle({ T, x0: SEA_X[0], x1: SEA_X[1], dx: 0.05, cfl: 0.8, profileZ: profZ, zs: job.zs, waves: R.sea.waves, manning: R.sea.manning, fps: 30, loops: 2 }, onProgress);
+  }
+  if (job.what === 'rock') {
+    const pools = makePools(R.seed, { x0: -1.6, x1: 3, z0: -8, z1: 2 }, R.rock.pools);
+    return bakeRock({ type: R.rock.type, seed: R.rock.seed, profile: R.sea.profile, edge: R.sea.edge, box: BOX, M: job.lite ? 640 : 1024, pools, rock: { amp: R.rock.amp, dip: R.rock.dip } });
+  }
+  throw new Error(`pièce inconnue : ${job.what}`);
+}
+// les tranches du faisceau, dans l'ordre des z
+export function mergeBundles(list) {
+  if (!list.length) return null;
+  list = [...list].sort((a, b) => a.z0 - b.z0);
+  const f = list[0], nz = list.reduce((s, B) => s + B.nz, 0), n = f.nf * f.nx;
+  const out = { ...f, nz, residual: list.flatMap((B) => B.residual) };
+  for (const key of ['eta', 'u', 'foam', 'aer', 'wet']) { const A = new Float32Array(nz * n); let o = 0; for (const B of list) { A.set(B[key], o); o += B.nz * n; } out[key] = A; }
+  const bb = new Float32Array(nz * f.nx); let o = 0; for (const B of list) { bb.set(B.b, o); o += B.nz * f.nx; } out.b = bb;
+  const zs = list.flatMap((B) => B.zs);
+  out.zs = zs; out.z0 = zs[0]; out.dz = nz > 1 ? (zs[nz - 1] - zs[0]) / (nz - 1) : 1;
+  return out;
+}
+// tout, d'un trait (Node, tests ; le worker passe par sceneJobs + assembleScene)
+export function buildScene(R, { lite = false, onProgress = () => {} } = {}) {
+  const t0 = Date.now();
+  const res = sceneJobs(R, lite).map((j) => runJob(j));
+  const parts = { sea: res[0], rock: res[1], bundle: mergeBundles(res.slice(2)), tParts: Date.now() - t0 };
   onProgress(0.14);
-  times.rock = Date.now() - t0;
+  return assembleScene(R, parts, { lite, onProgress });
+}
+
+export function assembleScene(R, parts, { lite = false, onProgress = () => {} } = {}) {
+  const t0 = Date.now() - (parts.tParts ?? 0), times = { parts: parts.tParts ?? 0 };
+  const T = R.loop.duration;
+  const zRef = R.camera.z;
+  const profZ = makeProfileZ(R.sea.profile, R.sea.edge);
+  const { sea, bundle, rock } = parts;
+  const field = seaField(sea, bundle, R.sea.obliq, zRef);
+  const Hc = sampler(rock, rock.Hc), Hr = sampler(rock, rock.H);
   // 3. la caméra
   const cam = placeCamera(sea, Hr, R.camera, R.sea.waves);
   // 4. les laminaires : la frange du bord du platier, devant la caméra
   // (la frange du bord du platier, dans le champ de la caméra : un cône
   // horizontal autour de sa direction de visée, jusqu'à ~6 m)
-  const area = { x0: -3.0, x1: Math.max(cam.x + 0.6, -0.2), z0: cam.z - (lite ? 4.8 : 6.2), z1: cam.z + 0.4 };
+  const area = { x0: -3.0, x1: Math.max(cam.x + 0.6, -0.2), z0: cam.z - (lite ? 3.8 : 4.6), z1: cam.z + 0.4 }; // (au-delà : les clones)
   const yaw = R.camera.yaw, half = (R.camera.fov * Math.PI / 180) * 0.5 * 1.8 + 0.15;
   const inside = (x, z) => {
     const dx = x - cam.x, dz = z - cam.z, d = Math.hypot(dx, dz);
@@ -396,7 +504,7 @@ export function buildScene(R, { lite = false, onProgress = () => {} } = {}) {
   // (une abscisse du profil moyen → la même place par rapport au bord, qui avance et recule)
   const shiftZ = edgeShift(R.sea.edge), warp = (x, z) => { let y = x; for (let k = 0; k < 4; k++) y = x + shiftZ(z) * edgeMask(R.sea.profile, y); return y; };
   const plants = layoutPlants(R.family, R.seed, area, Hr, {
-    near: { x: cam.x, z: cam.z }, nearR: 2.4, max: lite ? 36 : 64, density: R.kelp.density, inside, warp,
+    near: { x: cam.x, z: cam.z }, nearR: 2.4, max: Math.round((lite ? 28 : 40) * (FAMILIES[R.family].colony ? 0.85 : 1)), density: R.kelp.density, inside, warp,
     // (pas dans une flaque, pas sur le dôme de la caméra)
     avoid: (x, z) => fill(x, z) - Hr(x, z) > 0.01 || ((x - cam.x) ** 2 + (z - cam.z) ** 2 < 0.06),
   });
@@ -476,7 +584,17 @@ export function buildScene(R, { lite = false, onProgress = () => {} } = {}) {
   // de marches de texels)
   for (let k = 0; k < fillTex.length; k++) fillTex[k] = toHalf(rock.fill[k] - rock.H[k] > 0.002 ? rock.fill[k] : rock.H[k] - 0.002);
   const straps = strapGeometry(K, plants);
-  const holdfasts = holdfastGeometry(K, plants, Hr, R.seed);
+  // la forêt : clones de touffes au-delà des plantes simulées
+  const rockAt = (x, z) => (x > BOX.x0 + 0.05 && x < BOX.x1 - 0.05 && z > BOX.z0 + 0.05 && z < BOX.z1 - 0.05 ? Hr(x, z) : profZ(x, z));
+  const unwarp = (x, z) => x - shiftZ(z) * edgeMask(R.sea.profile, x);
+  const halfW = half * 1.15, insideWide = (x, z) => { const dx = x - cam.x, dz = z - cam.z; return Math.abs(Math.atan2(-dx, -dz) - yaw) < halfW && Math.hypot(dx, dz) < 24; };
+  const clones = placeClones({
+    family: R.family, seed: R.seed, plants, cam, zRange: [BOX.z0 - 7, cam.z - 1.2], rockAt, inside: insideWide, unwarp, warp, obliq: R.sea.obliq, max: lite ? 90 : 240,
+    avoid: (x, z) => (x > BOX.x0 && x < BOX.x1 && z > BOX.z0 && z < BOX.z1 && fill(x, z) - Hr(x, z) > 0.01),
+  });
+  const cloneG = cloneStrapGeometry(strapGeometry(K, plants, { ring: 6, sub: 2 }), plants, clones);
+  const clonePlants = clones.flatMap((c) => c.src.map((j) => ({ x: plants[j].x + c.dx, y: plants[j].y + c.dy, z: plants[j].z + c.dz, far: true })));
+  const holdfasts = holdfastGeometry(K, [...plants, ...clonePlants], rockAt, R.seed);
   const fauna = faunaGeometry(R, cam, rock, plants, lite);
   onProgress(1);
   times.total = Date.now() - t0;
@@ -485,6 +603,6 @@ export function buildScene(R, { lite = false, onProgress = () => {} } = {}) {
     sea: { nx: sea.nx, nf: sea.nf, x0: sea.x0, dx: sea.dx, fps: sea.fps, tex: seaTex, wet: wetTex, b: sea.b, b0, bundle: bundleOut },
     rock: { M: rock.M, box: BOX, relief: rockRelief(rock), color: rockColors(rock, R), fill: fillTex },
     fauna,
-    kelp: { n: N, nf, fps: sim.fps, pos: kpos, dir: kdir, straps, holdfasts, fringe: !!FAMILIES[R.family].blade.fringe, plants: plants.map((p) => [p.x, p.y, p.z]) },
+    kelp: { n: N, nf, fps: sim.fps, pos: kpos, dir: kdir, straps, clones: cloneG, nClones: clones.length, holdfasts, fringe: !!FAMILIES[R.family].blade.fringe, plants: plants.map((p) => [p.x, p.y, p.z]) },
   };
 }

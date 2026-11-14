@@ -30,10 +30,13 @@ export function createKelp(W, lite) {
   dirT.value.minFilter = dirT.value.magFilter = THREE.NearestFilter;
 
   const nid = attribute('nidx', 'vec4'), seg = attribute('seg', 'vec4'), sect = attribute('sect', 'vec4'), anch = attribute('anch', 'vec4');
+  // (clone : son retard sur la plante simulée qu'il rejoue — gen/scene.js, placeClones)
+  const clo = attribute('clone', 'vec2');
   const P_ = (i, f) => textureLoad(posT, ivec2(int(i), int(f))).xyz;
   const D_ = (i, f) => textureLoad(dirT, ivec2(int(i), int(f))).xyz.mul(2).sub(1);
   // pose d'un sommet à l'instant t (secondes dans la boucle)
-  const pose = (t) => {
+  const pose = (tw) => {
+    const t = tw.sub(clo.x); // (l'eau d'un clone est celle de sa place : t − retard)
     const ft = t.mul(KU.fps), fl = floor(ft), w = ft.sub(fl);
     const f0 = fl.sub(floor(fl.div(KU.nf)).mul(KU.nf)), f1 = f0.add(1).sub(floor(f0.add(1).div(KU.nf)).mul(KU.nf));
     const at = (i) => mix(P_(i, f0), P_(i, f1), w);
@@ -55,8 +58,8 @@ export function createKelp(W, lite) {
     // bord ondulé (la marge d'une lame pousse plus vite que son milieu)
     // (dans l'eau, le bord ondule : des ondes courent vers la pointe — 21
     // périodes par boucle, ~1,5 s ; à l'air, il retombe figé)
-    const wet = smoothstep(-0.01, 0.03, W.level(P.x.add(anch.x), P.z.add(anch.z), t).sub(P.y.add(anch.y)));
-    const flutter = sin(seg.z.mul(46).add(sect.w.mul(30)).sub(t.div(U.T).mul(2 * Math.PI * 21))).mul(wet.mul(0.6).add(0.4));
+    const wet = smoothstep(-0.01, 0.03, W.level(P.x.add(anch.x), P.z.add(anch.z), tw).sub(P.y.add(anch.y)));
+    const flutter = sin(seg.z.mul(46).add(sect.w.mul(30)).sub(tw.div(U.T).mul(2 * Math.PI * 21))).mul(wet.mul(0.6).add(0.4));
     const ruffle = flutter.mul(c.mul(c)).mul(hw).mul(mix(float(0.22), float(0.32), wet)).mul(sect.z).mul(smoothstep(0.1, 0.3, seg.z));
     const p = P.add(anch.xyz).add(B.mul(hw.mul(c))).add(F.mul(ht.mul(sn).add(ruffle)));
     const n = normalize(B.mul(ht.mul(c)).add(F.mul(hw.mul(sn))));
@@ -135,8 +138,10 @@ export function createKelp(W, lite) {
   function makeHoldMat() {
     const hmat = new THREE.MeshStandardNodeMaterial();
     const hn = fbm(positionWorld.mul(30), 3);
-    hmat.colorNode = vec3(KU.stipe).mul(hn.mul(0.25).add(0.85));
-    hmat.roughnessNode = mix(float(0.3), float(0.55), smoothstep(-0.003, 0.004, W.level(positionWorld.x, positionWorld.z, U.t).sub(positionWorld.y)));
+    // (mat et sombre : brillant, un crampon se lisait comme une ventouse de
+    // débouchoir ; c'est un paquet de racines, que les lames couvrent)
+    hmat.colorNode = vec3(KU.stipe).mul(hn.mul(0.3).add(0.62));
+    hmat.roughnessNode = mix(float(0.55), float(0.78), smoothstep(-0.003, 0.004, W.level(positionWorld.x, positionWorld.z, U.t).sub(positionWorld.y))).add(hn.mul(0.1));
     hmat.receivedShadowNode = W.receivedShadow;
     return hmat;
   }
@@ -153,15 +158,21 @@ export function createKelp(W, lite) {
     posT.value?.dispose(); dirT.value?.dispose();
     posT.value = pt; dirT.value = dt;
     KU.fps.value = K.fps; KU.nf.value = nf;
-    const S = K.straps;
+    // les plantes simulées, puis leurs clones (la forêt au loin), en un maillage
+    const S = K.straps, CL = K.clones ?? { count: 0, position: new Float32Array(0), nidx: new Float32Array(0), seg: new Float32Array(0), sect: new Float32Array(0), anch: new Float32Array(0), clone: new Float32Array(0), index: new Uint32Array(0) };
+    const cat = (a, b) => { const o = new Float32Array(a.length + b.length); o.set(a); o.set(b, a.length); return o; };
     const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(S.position, 3));
-    g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(S.position.length).fill(0.5), 3));
-    g.setAttribute('nidx', new THREE.BufferAttribute(S.nidx, 4));
-    g.setAttribute('seg', new THREE.BufferAttribute(S.seg, 4));
-    g.setAttribute('sect', new THREE.BufferAttribute(S.sect, 4));
-    g.setAttribute('anch', new THREE.BufferAttribute(S.anch, 4));
-    g.setIndex(new THREE.BufferAttribute(S.index, 1));
+    const nv = S.count + CL.count;
+    g.setAttribute('position', new THREE.BufferAttribute(cat(S.position, CL.position), 3));
+    g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(nv * 3).fill(0.5), 3));
+    g.setAttribute('nidx', new THREE.BufferAttribute(cat(S.nidx, CL.nidx), 4));
+    g.setAttribute('seg', new THREE.BufferAttribute(cat(S.seg, CL.seg), 4));
+    g.setAttribute('sect', new THREE.BufferAttribute(cat(S.sect, CL.sect), 4));
+    g.setAttribute('anch', new THREE.BufferAttribute(cat(S.anch, CL.anch), 4));
+    g.setAttribute('clone', new THREE.BufferAttribute(cat(new Float32Array(S.count * 2), CL.clone), 2));
+    const idx = new Uint32Array(S.index.length + CL.index.length);
+    idx.set(S.index); for (let k = 0; k < CL.index.length; k++) idx[S.index.length + k] = CL.index[k] + S.count;
+    g.setIndex(new THREE.BufferAttribute(idx, 1));
     g.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e4);
     mesh.geometry.dispose(); mesh.geometry = g;
     fringe = !!K.fringe;
