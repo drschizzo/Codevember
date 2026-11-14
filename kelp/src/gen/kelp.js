@@ -65,8 +65,10 @@ export function layoutPlants(family, seed, area, rockH, opts = {}) {
   const tries = Math.round(((area.x1 - area.x0) * (area.z1 - area.z0)) / (sp * sp) * 6);
   for (let k = 0; k < tries && pts.length < (opts.max ?? 80); k++) {
     // densité plus forte près du bord du platier (frange infralittorale)
-    const x = r.range(area.x0, area.x1), z = r.range(area.z0, area.z1);
-    const edge = 1 - Math.max(0, Math.min(1, (x - area.x0) / (area.x1 - area.x0)));
+    const xa = r.range(area.x0, area.x1), z = r.range(area.z0, area.z1);
+    const edge = 1 - Math.max(0, Math.min(1, (xa - area.x0) / (area.x1 - area.x0)));
+    // (la frange suit le bord du platier, qui avance et recule le long de la côte)
+    const x = opts.warp ? opts.warp(xa, z) : xa;
     if (r.next() > 0.45 + 0.55 * edge) continue;
     if (opts.avoid && opts.avoid(x, z)) continue;
     if (opts.inside && !opts.inside(x, z)) continue;
@@ -244,6 +246,8 @@ export function simulateKelp(K, opts, onProgress = null) {
     return (arr[o0] * (1 - wx) + arr[o0 + 1] * wx) * (1 - wt) + (arr[o1] * (1 - wx) + arr[o1 + 1] * wx) * wt;
   };
 
+  // (le champ de la mer en (x, z, t), faisceau de profils compris : gen/sea.js, seaField)
+  const FLD = opts.field ?? null;
   const h = 1 / sub, VMAX = 5, BP = 6, SW = 0.012, SD = Number(globalThis.process?.env?.SD ?? 0.3);
   const DVX = new Float64Array(N), DVY = new Float64Array(N), DVZ = new Float64Array(N);
   // ── voisinage des segments : grille hachée (tableaux, sans allocation) ──
@@ -391,7 +395,7 @@ export function simulateKelp(K, opts, onProgress = null) {
       let s = 0, ux = 0, uz = 0, dux = 0;
       if (water > 0) {
         const tl = t - obliq * (Z[i] - zRef);
-        const eta = fieldAt(S.eta, X[i], tl);
+        const eta = FLD ? FLD.eta(X[i], Z[i], t) : fieldAt(S.eta, X[i], tl);
         const depth = eta - GH[i];
         s = (eta - Y[i]) / (2 * Rr[i] + SW) + 0.5;
         s = (s < 0 ? 0 : s > 1 ? 1 : s) * water;
@@ -405,7 +409,7 @@ export function simulateKelp(K, opts, onProgress = null) {
           // profil de vitesse en puissance 1/7 : plus lent près de la roche
           const zr = Math.max(0, Y[i] - GH[i]) / Math.max(0.02, depth);
           const pr = Math.max(0.35, Math.min(1, zr ** (1 / 7)));
-          const u0 = fieldAt(S.u, X[i], tl) * pr, u1 = fieldAt(S.u, X[i], tl + h) * pr;
+          const u0 = (FLD ? FLD.u(X[i], Z[i], t) : fieldAt(S.u, X[i], tl)) * pr, u1 = (FLD ? FLD.u(X[i], Z[i], t + h) : fieldAt(S.u, X[i], tl + h)) * pr;
           ux = u0; uz = u0 * side; dux = u1 - u0;
         }
       }
@@ -589,7 +593,7 @@ export function simulateKelp(K, opts, onProgress = null) {
     // version à l'autre s'y perd dans le mouvement de l'eau) ; à l'air, une
     // lame qui glisse sur la roche sèche se voit
     const sub = Array.from({ length: NP }, () => new Float64Array(nf));
-    if (S) for (let f = 0; f < nf; f++) { const o = f * N * 3, t = f / fps; for (let i = 0; i < N; i++) { const x = pos[o + 3 * i], y = pos[o + 3 * i + 1], z = pos[o + 3 * i + 2]; if (fieldAt(S.eta, x, t - obliq * (z - zRef)) > y + 0.02) sub[plantOf[i]][f] += 1 / cnt[plantOf[i]]; } }
+    if (S) for (let f = 0; f < nf; f++) { const o = f * N * 3, t = f / fps; for (let i = 0; i < N; i++) { const x = pos[o + 3 * i], y = pos[o + 3 * i + 1], z = pos[o + 3 * i + 2]; if ((FLD ? FLD.eta(x, z, t) : fieldAt(S.eta, x, t - obliq * (z - zRef))) > y + 0.02) sub[plantOf[i]][f] += 1 / cnt[plantOf[i]]; } }
     const center = new Int32Array(NP);
     for (let p = 0; p < NP; p++) {
       let best = Infinity;

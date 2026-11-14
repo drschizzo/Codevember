@@ -93,9 +93,14 @@ export function createStage(scene, gen, { lite = false } = {}) {
     // mer
     const seaTex = W.dataTex(S.tex, S.nx, S.nf, THREE.HalfFloatType, THREE.RGBAFormat, THREE.RepeatWrapping);
     const wetTex = W.dataTex(S.wet, S.nx, S.nf, THREE.HalfFloatType, THREE.RedFormat, THREE.RepeatWrapping);
-    const prof = new Uint16Array(S.nx * 4);
-    for (let i = 0; i < S.nx; i++) prof[4 * i] = toHalf(S.b[i]);
-    const profTex = W.dataTex(prof, S.nx, 1);
+    const prof = new Uint16Array(S.nx * 4), heroB = new Uint16Array(S.nx * 4);
+    for (let i = 0; i < S.nx; i++) { prof[4 * i] = toHalf((S.b0 ?? S.b)[i]); heroB[4 * i] = toHalf(S.b[i]); }
+    const profTex = W.dataTex(prof, S.nx, 1), heroBTex = W.dataTex(heroB, S.nx, 1);
+    // le faisceau de profils (absent des recettes anciennes : la mer extrudée)
+    const Bd = S.bundle;
+    const bTex = Bd ? W.dataTex3(Bd.tex, Bd.nx, Bd.nf, Bd.nz) : W.dataTex3(new Uint16Array(32), 2, 2, 2);
+    const bWetTex = Bd ? W.dataTex3(Bd.wet, Bd.nx, Bd.nf, Bd.nz, THREE.RedFormat) : W.dataTex3(new Uint16Array(8), 2, 2, 2, THREE.RedFormat);
+    const bBTex = Bd ? W.dataTex(Bd.b, Bd.nx, Bd.nz) : W.dataTex(new Uint16Array(16), 2, 2);
     // roche
     const Rk = out.rock;
     const relTex = W.dataTex(Rk.relief, Rk.M, Rk.M);
@@ -103,12 +108,14 @@ export function createStage(scene, gen, { lite = false } = {}) {
     const colTex = W.dataTex(Rk.color, Rk.M, Rk.M, THREE.UnsignedByteType);
     colTex.colorSpace = THREE.SRGBColorSpace;
     colTex.generateMipmaps = true; colTex.minFilter = THREE.LinearMipmapLinearFilter; colTex.anisotropy = 8;
-    for (const [node, t] of [[W.seaT, seaTex], [W.wetT, wetTex], [W.profT, profTex], [W.reliefT, relTex], [W.fillT, fillTex], [terrain.colT, colTex]]) {
+    for (const [node, t] of [[W.seaT, seaTex], [W.wetT, wetTex], [W.profT, profTex], [W.heroBT, heroBTex], [W.bundleT, bTex], [W.bundleWetT, bWetTex], [W.bundleBT, bBTex], [W.reliefT, relTex], [W.fillT, fillTex], [terrain.colT, colTex]]) {
       const old = node.value; node.value = t; if (old && old !== t) old.dispose();
     }
     const U = W.U;
     U.seaX0.value = S.x0; U.seaW.value = S.nx * S.dx; U.nx.value = S.nx; U.fps.value = S.fps; U.nf.value = S.nf; U.T.value = out.T;
     U.box.value.set(Rk.box.x0, Rk.box.z0, Rk.box.x1 - Rk.box.x0, Rk.box.z1 - Rk.box.z0);
+    U.bOn.value = Bd ? 1 : 0;
+    if (Bd) { U.bx0.value = Bd.x0; U.bW.value = Bd.nx * Bd.dx; U.bnf.value = Bd.nf; U.bfps.value = Bd.fps; U.bz0.value = Bd.z0; U.bdz.value = Bd.dz; U.bnz.value = Bd.nz; }
     kelp.setData(out.kelp, R);
     if (out.fauna) fauna.setData(out.fauna);
     track = buildTrack(S, out);
@@ -121,6 +128,11 @@ export function createStage(scene, gen, { lite = false } = {}) {
   function syncLook() {
     const U = W.U;
     U.obliq.value = R.sea.obliq; U.zRef.value = D?.cam?.z ?? R.camera.z;
+    // le bord du platier le long de la côte (absent : droit)
+    const E = R.sea.edge, es = E?.s ?? [], eg = E?.g ?? [];
+    [U.es0, U.es1, U.es2].forEach((u, k) => u.value.set(...(es[k] ?? [0, 0, 0])));
+    [U.eg0, U.eg1].forEach((u, k) => u.value.set(...(eg[k] ?? [0, 0, 1])));
+    U.edgeX.value = R.sea.profile.edgeX ?? -2.6;
     U.ext.value.set(...R.water.ext); U.tint.value.setRGB(...R.water.tint); U.scat.value = R.water.scat ?? 0.3;
     U.glow.value = R.water.glow ?? 0;
     U.dome.value = R.camera.dome;

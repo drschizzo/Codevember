@@ -17,7 +17,7 @@ before(() => {
   R = generate('test1', { mood: 'ploumanach', family: 'digitata' });
   S = buildScene(R, { lite: true });
   const pools = makePools(R.seed, { x0: -1.6, x1: 3, z0: -8, z1: 2 }, R.rock.pools);
-  const rock = bakeRock({ type: R.rock.type, seed: R.rock.seed, profile: R.sea.profile, box: BOX, M: 640, pools, rock: { amp: R.rock.amp, dip: R.rock.dip } });
+  const rock = bakeRock({ type: R.rock.type, seed: R.rock.seed, profile: R.sea.profile, edge: R.sea.edge, box: BOX, M: 640, pools, rock: { amp: R.rock.amp, dip: R.rock.dip } });
   Hc = sampler(rock, rock.Hc);
   sea = simulateSea({ T: R.loop.duration, x0: -9, x1: 10, dx: 0.025, profile: R.sea.profile, waves: R.sea.waves, manning: R.sea.manning, fps: 60, loops: 2 });
 });
@@ -127,4 +127,18 @@ test('les laminaires sont à l\'heure de la mer : un nombre entier de sous-pas p
   assert.equal(out.stats.sub % 30, 0, `sous-pas ${out.stats.sub}`);
   assert.equal(out.nf, 30);
   assert.equal(S.stats.kelp.sub % 30, 0);
+});
+
+test('le faisceau : le bord du platier et le front varient le long de la côte', () => {
+  const B = S.sea.bundle;
+  assert.ok(B && B.nz >= 8, 'faisceau de profils absent');
+  // le fond de deux profils éloignés diffère au tombant
+  const bAt = (k, x) => fromHalf(B.b[(k * B.nx + Math.round((x - B.x0) / B.dx)) * 4]);
+  let dmax = 0;
+  for (let k = 1; k < B.nz; k++) for (let x = -4; x < -1.5; x += 0.1) dmax = Math.max(dmax, Math.abs(bAt(k, x) - bAt(0, x)));
+  assert.ok(dmax > 0.2, `bord droit (écart des fonds ${dmax.toFixed(3)} m)`);
+  // au passage de la grande vague, la hauteur au tombant n'est pas la même d'un profil à l'autre
+  const w3 = R.sea.waves[2], f = Math.round(w3.t * B.fps) % B.nf, i = Math.round((-2.4 - B.x0) / B.dx);
+  const etas = Array.from({ length: B.nz }, (_, k) => fromHalf(B.tex[((k * B.nf + f) * B.nx + i) * 4]));
+  assert.ok(Math.max(...etas) - Math.min(...etas) > 0.05, 'front identique sur tous les profils');
 });

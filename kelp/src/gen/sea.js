@@ -41,6 +41,31 @@ export function makeProfile(P) {
   };
 }
 
+// ── Le bord du platier le long de la côte : s(z) ─────────────────────────────
+// Le tombant n'est pas droit : il avance et recule le long de la côte (trois
+// sinus de longueurs d'onde 9, 4 et 1,8 m environ), avec un chenal (le bord
+// recule d'un coup sur une largeur d'un demi-mètre) et un éperon (il avance).
+// Une même formule ici, dans la roche cuite et dans le shader (profAt).
+// edge : { s: [[a, ω, φ] × 3], g: [[c, zc, w] × 2] }
+export function edgeShift(edge) {
+  if (!edge) return () => 0;
+  const S = edge.s ?? [], Gs = edge.g ?? [];
+  return (z) => {
+    let v = 0;
+    for (const [a, w, p] of S) v += a * Math.sin(w * z + p);
+    for (const [c, zc, w] of Gs) v += c * Math.exp(-(((z - zc) / w) ** 2));
+    return 1.2 * Math.tanh(v / 1.2); // (borné : la déformation du profil reste monotone)
+  };
+}
+// le profil en (x, z) : le profil moyen, déplacé de s(z) au tombant et au
+// large, raccordé au profil moyen sur le platier (déformation monotone tant
+// que |s| < 1,3 m) — la côte, elle, ne bouge pas
+export const edgeMask = (P, x) => 1 - sst((P.edgeX ?? -2.6) + 0.8, (P.edgeX ?? -2.6) + 2.8, x);
+export function makeProfileZ(P, edge) {
+  const prof = makeProfile(P), s = edgeShift(edge);
+  return (x, z) => prof(x - s(z) * edgeMask(P, x));
+}
+
 // ── La série de vagues incidente au large : η_in(t), période T ───────────────
 // chaque vague : une crête de hauteur A (largeur temporelle tc) précédée d'un
 // creux (la mer qui se retire) de profondeur β·A, d secondes avant
@@ -63,7 +88,7 @@ export function makeForcing(waves, T) {
 //   wet : enveloppe de séchage M(x, t) = max(η, M − λ dt) (la roche sous M est mouillée)
 export function simulateSea(spec, onProgress = null) {
   const { T, x0 = -9, x1 = 7, dx = 0.025, fps = 60, manning = 0.035, loops = 3, cfl = 0.42 } = spec;
-  const prof = makeProfile(spec.profile);
+  const prof = spec.profileFn ?? makeProfile(spec.profile);
   const forcing = makeForcing(spec.waves, T);
   const film = spec.film ?? 0.04, drain = spec.drain ?? 1.6, drainBelow = spec.drainBelow ?? -0.35;
   const fk = spec.foam?.k ?? 0.25, ftau = spec.foam?.tau ?? 3.2, atau = spec.foam?.aerTau ?? 1.0, lam = spec.dry ?? 0.012;
@@ -211,4 +236,69 @@ export function sampleField(S, arr, x, t) {
   const A = arr[f0 * S.nx + i0] * (1 - wx) + arr[f0 * S.nx + i0 + 1] * wx;
   const B = arr[f1 * S.nx + i0] * (1 - wx) + arr[f1 * S.nx + i0 + 1] * wx;
   return A * (1 - wt) + B * wt;
+}
+
+// ── Le faisceau de profils ───────────────────────────────────────────────────
+// La mer n'est plus un seul profil extrudé le long de la côte : nz profils de
+// Saint-Venant, chacun sur la coupe du platier à sa propre abscisse z (le bord
+// avance et recule, les chenaux), tous sous la même série au large, dans le
+// même temps local (t − obliq·(z − zRef)). Entre deux profils, le champ est
+// interpolé linéairement : avec un pas de 0,9 m et un bord qui varie
+// lentement, deux fronts voisins sont à ~20 cm l'un de l'autre, et le front
+// se courbe au lieu de se dédoubler.
+// spec : { profileZ: (x, z) → b, zs: [z…], dx, fps, … (comme simulateSea) }
+// retour : { nz, z0, dz, nx, x0, dx, nf, fps, T, eta, u, foam, aer, wet (Float32, nz × nf × nx) }
+export function simulateBundle(spec, onProgress = null) {
+  const { zs, profileZ } = spec;
+  const nzz = zs.length;
+  let out = null;
+  zs.forEach((z, k) => {
+    const S = simulateSea({ ...spec, profileFn: (x) => profileZ(x, z) }, onProgress ? (p) => onProgress((k + p) / nzz) : null);
+    if (!out) {
+      const n = S.nf * S.nx * nzz;
+      out = { nz: nzz, z0: zs[0], dz: nzz > 1 ? zs[1] - zs[0] : 1, nx: S.nx, x0: S.x0, dx: S.dx, nf: S.nf, fps: S.fps, T: S.T,
+        eta: new Float32Array(n), u: new Float32Array(n), foam: new Float32Array(n), aer: new Float32Array(n), wet: new Float32Array(n), b: new Float32Array(nzz * S.nx), residual: [] };
+    }
+    const o = k * S.nf * S.nx;
+    out.b.set(S.b, k * S.nx);
+    out.eta.set(S.eta, o); out.u.set(S.u, o); out.foam.set(S.foam, o); out.aer.set(S.aer, o); out.wet.set(S.wet, o);
+    out.residual.push(S.stats.residual.at(-1));
+  });
+  return out;
+}
+
+// Le champ de la mer en (x, z, t), tel que le GPU le lit (scene/water.js) :
+// le faisceau, et près de la caméra (|z − zRef| < 1 m) le profil fin de la
+// caméra (2,5 cm, 60 images/s : la ligne d'eau sur le dôme), fondu.
+// hero : simulateSea à zRef ; bundle : simulateBundle (ou null : la mer extrudée)
+export function seaField(hero, bundle, obliq, zRef) {
+  const at2 = (S, arr, x, t) => {
+    const fx = (x - S.x0) / S.dx - 0.5, i0 = fx < 0 ? 0 : fx > S.nx - 2 ? S.nx - 2 : Math.floor(fx), wx = Math.min(1, Math.max(0, fx - i0));
+    let ft = (t / S.T) * S.nf; ft -= Math.floor(ft / S.nf) * S.nf;
+    const f0 = Math.floor(ft) % S.nf, f1 = f0 + 1 === S.nf ? 0 : f0 + 1, wt = ft - Math.floor(ft);
+    const o0 = f0 * S.nx + i0, o1 = f1 * S.nx + i0;
+    return (arr[o0] * (1 - wx) + arr[o0 + 1] * wx) * (1 - wt) + (arr[o1] * (1 - wx) + arr[o1 + 1] * wx) * wt;
+  };
+  const B = bundle;
+  // (les sous-tableaux sont créés une fois)
+  const views = {};
+  if (B) for (const key of ['eta', 'u', 'foam', 'aer', 'wet']) { const n = B.nf * B.nx; views[key] = Array.from({ length: B.nz }, (_, k) => B[key].subarray(k * n, (k + 1) * n)); }
+  const at3v = (key, x, z, t) => {
+    const fz = (z - B.z0) / B.dz;
+    if (fz <= 0) return at2(B, views[key][0], x, t);
+    if (fz >= B.nz - 1) return at2(B, views[key][B.nz - 1], x, t);
+    const k0 = Math.floor(fz), wz = fz - k0, a = at2(B, views[key][k0], x, t);
+    return a + (at2(B, views[key][k0 + 1], x, t) - a) * wz;
+  };
+  const heroW = (z) => sst(1.0, 0.3, Math.abs(z - zRef));
+  const get = (key, x, z, t) => {
+    const tl = t - obliq * (z - zRef);
+    if (!B) return at2(hero, hero[key], x, tl);
+    const w = heroW(z);
+    if (w <= 0) return at3v(key, x, z, tl);
+    const h = at2(hero, hero[key], x, tl);
+    if (w >= 1) return h;
+    return at3v(key, x, z, tl) * (1 - w) + h * w;
+  };
+  return { get, eta: (x, z, t) => get('eta', x, z, t), u: (x, z, t) => get('u', x, z, t), heroW };
 }
