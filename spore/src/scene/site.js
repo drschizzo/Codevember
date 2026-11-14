@@ -36,11 +36,14 @@ export function createSiteView({ R, sp, S, wood, off, lite, light }) {
   const spor = sp.head ? createSporangia(ctx) : null;
   const spores = createSmoke(ctx);
   const meshes = [...plas.meshes, ...(spor ? spor.meshes : []), ...spores.meshes];
+  const vol = spores.volume;
   return {
-    U, meshes,
-    attach: (g) => meshes.forEach((m) => g.add(m)),
-    dispose(g) {
+    U, meshes, volume: vol,
+    // (le volume de fumée va dans sa scène à lui, gv : passe à demi-résolution)
+    attach: (g, gv) => { meshes.forEach((m) => g.add(m)); gv.add(vol); },
+    dispose(g, gv) {
       for (const m of meshes) { g.remove(m); m.material.dispose(); }
+      gv.remove(vol); vol.material.dispose();
       plas.dispose?.(); spor?.dispose?.(); spores.dispose?.();
       if (--TX.n === 0) { TX.sheet.dispose(); TX.edges.dispose(); TX.smoke.dep.dispose(); TX.smoke.pos.dispose(); shared.delete(S); }
     },

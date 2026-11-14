@@ -12,6 +12,7 @@ import {
 } from 'three/tsl';
 import { noise, perturb, stableVelocity, isLite, ditherThreshold } from '../../../shared/scene/materials.js';
 import { T as TL } from '../timeline.js';
+import { nzAA } from './nz.js';
 
 const sst = (a, b, x) => smoothstep(float(a), float(b), x);
 export const H_FRONT = 0.028, H_FILM = 0.005; // (cm : 0,28 mm au front, 50 µm de film)
@@ -84,9 +85,9 @@ export function createPlasmodium(ctx) {
     // (filtrées : plus fines qu'un pixel, les stries se replient en moiré —
     // un « acier damassé » ; leur contraste s'éteint quand leur période à
     // l'écran approche du pixel)
+    // (nzAA : la même extinction, sans lire le volume une fois éteint)
     const ph = across.mul(110);
-    const fade = float(1).sub(sst(0.18, 0.55, fwidth(ph)));
-    const streak = mix(float(0.5), noise(vec3(ph, along.mul(12), 0.3)).mul(0.5).add(0.5), fade);
+    const streak = nzAA(vec3(ph, along.mul(12), 0.3), 0.18, 0.55).x.mul(0.5).add(0.5);
     const hh = h.mul(streak.mul(0.45).add(0.75));
     const xw = g.x.add(U.xoff);
     const surf = tmax(Wn.height(xw, g.z).add(0.0004), Wn.smooth(xw, g.z).add(hh));
@@ -162,7 +163,7 @@ export function createPlasmodium(ctx) {
     colorNode: (c) => {
       // granules qui coulent dans le sens du flux (navette)
       const along = dot(positionWorld.xz, vec2(vc.z, vc.w));
-      const g = noise(vec3(along.mul(90).sub(vFlux.mul(U.s).mul(1800)), positionWorld.z.mul(40), 0.5)).mul(0.5).add(0.5);
+      const g = nzAA(vec3(along.mul(90).sub(vFlux.mul(U.s).mul(1800)), positionWorld.z.mul(40), 0.5), 0.25, 0.6, vec3(along.mul(90), positionWorld.z.mul(40), 0)).x.mul(0.5).add(0.5);
       let col = c.mul(g.mul(0.35).add(0.82));
       if (fruitNet) {
         // les veines-fruits dorent : jaune pâle, or, puis or bruni (pas assombries par l'épaisseur)

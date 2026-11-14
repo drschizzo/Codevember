@@ -2,7 +2,10 @@
 //
 // 1. Le volume : une boîte (faces arrière) où chaque pixel marche le long de
 //    son rayon, de l'entrée dans la boîte jusqu'à la sortie ou jusqu'à la
-//    surface opaque la plus proche (profondeur de la scène). La densité vient
+//    surface opaque la plus proche (profondeur de la scène). Il est rendu à
+//    part, à demi-résolution (scène à lui, passe propre : main.js), puis posé
+//    sur l'image (couleur prémultipliée, alpha) avant l'anticrénelage temporel :
+//    en pleine résolution, il coûtait 22 ms au moment du nuage. La densité vient
 //    de deux images enregistrées, interpolées AVEC COMPENSATION DE MOUVEMENT :
 //    chacune est lue au point où la vitesse enregistrée amène (ou ramène) la
 //    fumée à l'instant voulu, si bien qu'entre deux images la fumée glisse au
@@ -19,13 +22,17 @@ import * as THREE from 'three/webgpu';
 import {
   Fn, If, Loop, uniform, float, vec2, vec3, vec4, ivec2, int, texture3D, textureLoad, attribute, positionWorld, positionLocal, positionPrevious,
   cameraPosition, cameraNear, cameraFar, normalize, mix, smoothstep, clamp, exp, max as tmax, min as tmin, abs, dot, length, varying, color,
-  screenUV, viewportDepthTexture, perspectiveDepthToViewZ, cameraViewMatrix, instanceIndex, cross, fract, sin, screenCoordinate, uint, hash, select,
+  screenUV, texture, perspectiveDepthToViewZ, cameraViewMatrix, instanceIndex, cross, fract, sin, screenCoordinate, uint, hash, select,
 } from 'three/tsl';
 import { NZ, isLite, stableVelocity } from '../../../shared/scene/materials.js';
 import { G } from '../../../shared/scene/globals.js';
 import { SMOKE } from '../gen/smoke.js';
 
 const sst = (a, b, x) => smoothstep(float(a), float(b), x);
+
+// profondeur de la passe de scène (posée par la chaîne d'image, main.js) : le
+// volume est rendu dans une autre passe, sa propre profondeur est vide
+export const sceneDepth = texture(new THREE.DepthTexture(1, 1));
 
 export function smokeTextures(Sm) {
   const D = Sm.domain, N = D.nx * D.ny * D.nz;
@@ -61,7 +68,8 @@ export function createSmoke(ctx) {
   // ── 1. le volume ──
   // (un cube unité, posé et étiré à chaque image sur la boîte serrée du nuage)
   const box = new THREE.BoxGeometry(1, 1, 1).translate(0.5, 0.5, 0.5);
-  const vm = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, depthTest: false, side: THREE.BackSide });
+  // (sans mélange : la passe du volume reçoit directement couleur prémultipliée et alpha)
+  const vm = new THREE.MeshBasicNodeMaterial({ transparent: true, blending: THREE.NoBlending, depthWrite: false, depthTest: false, side: THREE.BackSide });
   vm.fog = false;
   const steps = lite ? 14 : 22;
   const march = Fn(() => {
@@ -73,7 +81,7 @@ export function createSmoke(ctx) {
     const tn = tmin(t0v, t1v), tf = tmax(t0v, t1v);
     const tEnter = tmax(tmax(tn.x, tn.y), tmax(tn.z, 0)), tExit = tmin(tmin(tf.x, tf.y), tf.z);
     // la surface opaque la plus proche (profondeur de la scène)
-    const zv = perspectiveDepthToViewZ(viewportDepthTexture(screenUV).x, cameraNear, cameraFar);
+    const zv = perspectiveDepthToViewZ(sceneDepth.sample(screenUV).x, cameraNear, cameraFar);
     const fwd = normalize(cameraViewMatrix.transpose().mul(vec4(0, 0, -1, 0)).xyz);
     const tDepth = zv.negate().div(tmax(dot(rd, fwd), 0.05));
     const tEnd = tmin(tExit, tDepth);
@@ -88,7 +96,8 @@ export function createSmoke(ctx) {
     const cosT = dot(uSun, rd);
     const g = 0.55;
     const hg = float((1 - g * g) / (4 * Math.PI)).div(float(1 + g * g).sub(cosT.mul(2 * g)).pow(1.5)).mul(4 * Math.PI);
-    Loop(steps, ({ i }) => {
+    // (rayon vide — la boîte est derrière le bois ou les sporanges — : aucune lecture)
+    If(len.greaterThan(1e-5), () => { Loop(steps, ({ i }) => {
       If(Tr.greaterThan(0.01), () => {
         const t = tEnter.add(i.toFloat().add(jit).mul(dt));
         const p = ro.add(rd.mul(t));
@@ -116,9 +125,9 @@ export function createSmoke(ctx) {
         acc.addAssign(Tr.mul(float(1).sub(a)).mul(Li.mul(albedo)));
         Tr.mulAssign(a);
       });
-    });
-    const alpha = float(1).sub(Tr).mul(uOn);
-    return vec4(acc.div(tmax(float(1).sub(Tr), 1e-4)), alpha);
+    }); });
+    // (prémultiplié : acc est déjà la lumière diffusée, pondérée par la transmission)
+    return vec4(acc.mul(uOn), float(1).sub(Tr).mul(uOn));
   });
   const out = march();
   vm.colorNode = out.xyz;
@@ -187,7 +196,8 @@ export function createSmoke(ctx) {
   // pâle, elle plâtrait tout le bois en fin de boucle)
   const dustColor = mix(color(new THREE.Color(sp.colors.ripe)), vec3(0.5, 0.46, 0.4), 0.25).mul(0.75);
   return {
-    meshes: [vol, grains],
+    meshes: [grains],
+    volume: vol, // (rendu dans sa propre passe : site.js, main.js)
     dustColor,
     // poudre déposée (point local) : la carte de dépôt cumulée à la phase du site
     dustAt: (x, z) => {

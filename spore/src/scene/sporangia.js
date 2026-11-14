@@ -6,13 +6,14 @@
 // selon la famille, le fléchit (poutre encastrée) et le pose sur le bois.
 import * as THREE from 'three/webgpu';
 import {
-  Fn, attribute, uniformArray, uniform, float, vec2, vec3, vec4, instanceIndex, positionLocal, positionPrevious, normalLocal, positionGeometry,
+  Fn, If, attribute, uniformArray, uniform, float, vec2, vec3, vec4, instanceIndex, positionLocal, positionPrevious, normalLocal, positionGeometry,
   normalize, mix, smoothstep, clamp, sin, cos, abs, max as tmax, min as tmin, varying, color, hash, fract, length, pow, sqrt, select, dot, normalGeometry, normalWorld,
   normalView, positionViewDirection, normalViewGeometry,
 } from 'three/tsl';
 import { stableVelocity, isLite, worley, noise, NZ, ditherThreshold, perturb } from '../../../shared/scene/materials.js';
 
 import { fruitState } from '../fruit.js';
+import { nzAA } from './nz.js';
 
 const sst = (a, b, x) => smoothstep(float(a), float(b), x);
 const C = (h) => color(new THREE.Color(h));
@@ -142,7 +143,11 @@ export function createSporangia(ctx) {
       p.assign(isPart(2).select(vec3(p.x, p.y.mul(k2), p.z), p));
     }
     // rosée : chaque gouttelette grossit puis sèche autour de son centre
-    const dc = p.sub(nn.mul(tp.z));
+    // (figé AVANT l'affectation de p : une expression paresseuse, relue plus
+    // bas après p.assign, donnait à chaque goutte son plein rayon même sans
+    // rosée ni perle — des billes d'eau blanches semées sur le bois nu, en
+    // avant du front)
+    const dc = p.sub(nn.mul(tp.z)).toVar();
     p.assign(isPart(6).select(dc.add(nn.mul(tp.z.mul(uDew).mul(hsh(tp.w.mul(17).add(a1.y)).mul(0.6).add(0.6)))), p));
     // 2. la levée : perle (sphère de rayon rb posée) → sporange dressé
     // (avant la condensation, la perle n'existe pas : bornée à 0,001 de son
@@ -153,7 +158,7 @@ export function createSporangia(ctx) {
     const cNow = mix(rb.mul(0.78), yc, lift);                    // centre de la tête
     const m = sst(0.3, 1, grow);                                  // forme de la tête
     const isHead = isPart(2).or(isNetP).or(isPart(4)).or(isPart(6));
-    const q = p.sub(vec3(0, yc, 0));
+    const q = p.sub(vec3(0, yc, 0)).toVar(); // (figé : relu après p.assign pour la normale)
     // (perle : la tête repliée en sphère. Les pièces internes — filet, fibres,
     // columelle — restent un peu en dedans, sinon elles affleurent la même
     // sphère que le péridium et s'y battent ; chaque goutte de rosée garde sa
@@ -186,7 +191,7 @@ export function createSporangia(ctx) {
     // répartit sur toute sa longueur)
     const ext = fam === 'arcyria' ? float(1).add(float((sp.expand - 1) * (D.top - D.cupTop) / D.top).mul(open)) : float(1);
     const Hn = tmax(mix(rb.mul(2), top, lift).mul(sz).mul(ext), 0.002);
-    const t = clamp(p.y.div(Hn), 0, 1);
+    const t = clamp(p.y.div(Hn), 0, 1).toVar(); // (figé : la pente de la normale est celle d'avant la flexion)
     const shape = t.mul(t).mul(float(3).sub(t)).mul(0.5), slope = t.mul(float(2).sub(t)).mul(1.5).div(Hn);
     const isBent = isPart(0).not();
     p.assign(isBent.select(p.add(vec3(B4.x.mul(shape), shape.mul(B4.x.mul(B4.x).add(B4.y.mul(B4.y))).mul(-0.5).div(Hn), B4.y.mul(shape))), p));
@@ -226,8 +231,10 @@ export function createSporangia(ctx) {
   let col = is(0).select(hypoC, is(1).or(is(5)).select(stalkC, isNetF.select(netC, is(4).select(ripe(K.ripe).mul(0.8), headC))));
   // marbrure : les têtes ne sont jamais d'une teinte unie (masse de spores
   // granuleuse, verrues du péridium)
-  const mott = noise(positionGeometry.mul(160).add(vec3(vRnd.mul(13), 0, 0))).mul(0.16).add(noise(positionGeometry.mul(45)).mul(0.1)).add(1);
-  col = is(2).or(is(4)).select(col.mul(mott), col);
+  // (lu seulement sur la tête : nzAA, gate)
+  const onHead = is(2).or(is(4));
+  const mott = nzAA(positionGeometry.mul(160).add(vec3(vRnd.mul(13), 0, 0)), 0.25, 0.6, undefined, onHead).x.mul(0.16).add(nzAA(positionGeometry.mul(45), 0.25, 0.6, undefined, onHead).x.mul(0.1)).add(1);
+  col = onHead.select(col.mul(mott), col);
   // Stemonitis : la masse qui fume s'éclaircit ; Arcyria : le filet détendu est un coton lumineux
   mat.colorNode = pale(col);
   const wet = float(1).sub(sst(0.1, 0.6, mature));
@@ -258,8 +265,11 @@ export function createSporangia(ctx) {
   // pied ; rien sur les gouttes
   {
     const g = positionGeometry, rk = vec3(vRnd.mul(31), 0, 0);
-    const wart = fam === 'lycogala' ? float(1).sub(NZ(g.mul(55).add(rk)).z.clamp(0, 1)).pow(3).mul(0.0035) : noise(g.mul(230).add(rk)).mul(0.0004).add(noise(g.mul(700).add(rk)).mul(0.00012));
-    const stri = noise(vec3(g.x.mul(900), g.y.mul(60), g.z.mul(900)).add(rk)).mul(0.00008);
+    // (octaves éteintes, et non lues, sous le pixel ; les verrues lues sur la
+    // tête seulement, les stries sur le pied : scene/nz.js)
+    const head = is(2).or(is(4)), stalk = is(1);
+    const wart = fam === 'lycogala' ? float(1).sub(nzAA(g.mul(55).add(rk), 0.25, 0.6, undefined, head).z.clamp(0, 1)).pow(3).mul(0.0035) : nzAA(g.mul(230).add(rk), 0.25, 0.6, undefined, head).x.mul(0.0004).add(nzAA(g.mul(700).add(rk), 0.25, 0.6, undefined, head).x.mul(0.00012));
+    const stri = nzAA(vec3(g.x.mul(900), g.y.mul(60), g.z.mul(900)).add(rk), 0.25, 0.6, undefined, stalk).x.mul(0.00008);
     const hM = mix(float(0), wart, headF).add(mix(float(0), stri, is(1).select(float(1), float(0))));
     mat.normalNode = perturb(hM.mul(float(1).sub(wet.mul(0.6))), normalViewGeometry);
   }
@@ -280,8 +290,13 @@ export function createSporangia(ctx) {
   if (fam === 'arcyria' || fam === 'stemonitis' || fam === 'trichia') {
     const ang = vTp.w.mul(Math.PI * 2 * D.netR), yy = positionGeometry.y;
     const sc = fam === 'arcyria' ? 60 : fam === 'trichia' ? 70 : 85;
-    const cell = worley(vec3(ang.mul(sc), yy.mul(sc), vRnd.mul(9)));
-    const thread = cell.y.sub(cell.x);
+    // (Worley exact — 27 cellules — calculé sur le filet seulement : évalué
+    // partout puis écarté, il coûtait à toutes les faces)
+    const thread = Fn(() => {
+      const t = float(9).toVar();
+      If(is(3), () => { const cell = worley(vec3(ang.mul(sc), yy.mul(sc), vRnd.mul(9))); t.assign(cell.y.sub(cell.x)); });
+      return t;
+    })();
     // (fils le long des bords de cellules : gardés si près d'un bord ; le
     // filet serré est plein, détendu il s'ajoure)
     const w = fam === 'stemonitis' ? mix(mix(float(1.2), float(0.3), sst(0.3, 0.8, mature)), float(0.08), sst(0.1, 0.8, open)) : mix(float(1.2), float(0.2), sst(0.05, 0.7, open));
@@ -296,15 +311,24 @@ export function createSporangia(ctx) {
     // quadrilatère de bord ne garde que les pixels de son écaille ; près
     // d'une frontière, la ligne de déhiscence fonce à maturité
     if (D.flakes) {
-      const dq = normalize(positionGeometry.sub(vec3(0, D.headC, 0)));
-      let bd = float(-2), sd = float(-2), bi = float(0);
-      D.flakes.forEach((c, k) => {
-        const v = dot(dq, vec3(...c));
-        const win = v.greaterThan(bd);
-        sd = win.select(bd, tmax(sd, v));
-        bi = win.select(float(k), bi);
-        bd = tmax(bd, v);
-      });
+      // (Voronoï des écailles : sur le péridium seulement)
+      const fl = Fn(() => {
+        const o = vec3(-2, -2, 0).toVar();
+        If(is(2), () => {
+          const dq = normalize(positionGeometry.sub(vec3(0, D.headC, 0)));
+          let bd = float(-2), sd = float(-2), bi = float(0);
+          D.flakes.forEach((c, k) => {
+            const v = dot(dq, vec3(...c));
+            const win = v.greaterThan(bd);
+            sd = win.select(bd, tmax(sd, v));
+            bi = win.select(float(k), bi);
+            bd = tmax(bd, v);
+          });
+          o.assign(vec3(bd, sd, bi));
+        });
+        return o;
+      })();
+      const bd = fl.x, sd = fl.y, bi = fl.z;
       const own = vTp.z.mul(D.flakes.length).floor();
       andKeep(is(2).not().or(abs(bi.sub(own)).lessThan(0.5)));
       const seam = float(1).sub(sst(0.004, 0.03, bd.sub(sd))).mul(sst(0.4, 0.9, mature)).mul(is(2).select(float(1), float(0)));
@@ -313,7 +337,7 @@ export function createSporangia(ctx) {
   }
   if (fam === 'lycogala') {
     // le sommet se perce : un trou irrégulier qui s'agrandit
-    const nn = worley(vec3(vTp.w.mul(9), hy2.mul(4), vRnd.mul(5))).x;
+    const nn = Fn(() => { const t = float(0).toVar(); If(is(2), () => { t.assign(worley(vec3(vTp.w.mul(9), hy2.mul(4), vRnd.mul(5))).x); }); return t; })();
     andKeep(is(2).not().or(hy2.lessThan(float(1).sub(open.mul(0.1).mul(nn.mul(0.8).add(0.6))))));
   }
   if (keep) mat.maskNode = keep;

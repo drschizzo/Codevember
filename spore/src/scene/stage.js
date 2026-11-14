@@ -31,6 +31,8 @@ export function createStage(scene, gen, { lite = false } = {}) {
 
   const group = new THREE.Group();
   scene.add(group);
+  // le volume de fumée : une scène à part, rendue à demi-résolution (main.js)
+  const smokeScene = new THREE.Scene();
   // ── Le fond : pas un aplat — un dégradé (plus clair à l'horizon, plus sombre
   // en haut) et le halo du soleil dans sa direction (on le voit à contre-jour) ;
   // la brume du lieu prend la couleur de l'horizon ──
@@ -55,7 +57,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
   function clear() {
     if (wood) { group.remove(wood.mesh); wood.mesh.geometry.dispose(); wood.mesh.material.dispose(); wood = null; }
     debris?.dispose(group); debris = null;
-    for (const v of views) v.dispose(group);
+    for (const v of views) v.dispose(group, smokeScene);
     views = [];
     woodTex?.rel.dispose(); woodTex?.col.dispose(); woodTex?.smooth.dispose(); woodTex = null;
     siteData = null;
@@ -80,7 +82,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
       group.add(wood.mesh);
       debris = createDebris(woodTex, R, { lite });
       for (const m of debris.meshes) group.add(m);
-      for (const w of views) w.attach(group);
+      for (const w of views) w.attach(group, smokeScene);
       ready = true;
     }).catch((e) => { console.error(e); stage.error = e; });
     ready = false;
@@ -138,7 +140,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
   }
 
   const stage = {
-    setRecipe, update, setShadowQuality, group, sun, lamp, rim, error: null,
+    setRecipe, update, setShadowQuality, group, smokeScene, sun, lamp, rim, error: null,
     syncFinishes: () => {},
     ready: () => ready,
     progress: () => (ready ? 1 : (total - pending) / (total + 1)),

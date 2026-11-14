@@ -61,7 +61,7 @@ const step05 = (x) => smoothstep(0.45, 0.55, x);
 //   aoSamples : nombre d'échantillons du GTAO (8 suffisent sous le TRAA).
 // Réglages lus dans cfg : msaa (2 ou 4 : MSAA sur la passe de scène ; absent
 // ou 0 : aucun). post.cut() : la prochaine image est un raccord de plan.
-export function createPost(renderer, scene, camera, { haze = null, aoSamples = 0 } = {}) {
+export function createPost(renderer, scene, camera, { haze = null, aoSamples = 0, overlay = null, prePassScale = 1 } = {}) {
   const pipeline = new THREE.RenderPipeline(renderer);
   pipeline.outputColorTransform = false; // (tone mapping dans la chaîne, avant l'anticrénelage)
   const U = {
@@ -101,6 +101,10 @@ export function createPost(renderer, scene, camera, { haze = null, aoSamples = 0
       prePass = pass(scene, camera);
       prePass.transparent = false;
       prePass.setMRT(mrt({ output: normalView })); // (cible en demi-flottants : pas d'encodage)
+      // (prePassScale : pré-passe à résolution réduite — l'occlusion est
+      // calculée à demi-résolution, une pré-passe pleine refait toute la scène
+      // pour rien ; pas avec le MSAA, dont elle porte la profondeur)
+      if (prePassScale !== 1 && !msaa) prePass.setResolutionScale(prePassScale);
       nodes.prePass = prePass;
       normals = prePass.getTextureNode('output');
     }
@@ -170,6 +174,10 @@ export function createPost(renderer, scene, camera, { haze = null, aoSamples = 0
       nodes.ssr = r;
       color = vec4(color.rgb.add(r.rgb.mul(tint).mul(U.ssrMix)), color.a);
     }
+    // overlay(color, { scenePass, depth, cfg }) → color : une couche posée sur
+    // l'image de la scène avant l'anticrénelage temporel (un volume rendu dans
+    // sa propre passe, à résolution réduite) ; sans overlay, rien ne change
+    if (overlay) color = overlay(color, { scenePass, depth, cfg });
     if (useTraa) {
       // garde-fou : un pixel invalide (NaN, infini) ne doit jamais entrer dans
       // l'historique, il y resterait jusqu'à son renouvellement complet
