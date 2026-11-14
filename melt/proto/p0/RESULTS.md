@@ -44,7 +44,7 @@ L'eau de fonte monte le long de la paroi. La couche limite est la plus mince en 
 L'écoulement bidirectionnel est bien là. La sonde à mi-hauteur donne une couche montante de 2 mm contre la glace (0,2 mm/s), puis une couche descendante plus large (1 mm/s), l'isotherme 4 °C à 5 ou 6 mm de la paroi. Mais il reste stationnaire et laminaire. La glace prend une forme de fût, plus large au milieu, avec une seule entaille profonde sous le support (z ≈ 108 mm), qui finit en col. Aucun train d'ondes, et donc aucune mesure de λ(h).
 
 Ce qui a été essayé, sans changer ce résultat :
-- grille deux fois plus fine (0,25 mm) : même forme à 0,1 mm près ;
+- grille deux fois plus fine (0,25 mm), avec F = 4 (le St de l'article) comme avec F = 20 : même forme, 0,1 mm d'écart RMS avec la grille grossière (`f_S56_F4` : 176 400 pas, 28 min de calcul) ;
 - colonne de 20 cm, au Ra de l'article : même structure, une entaille sous le support, puis détachement ;
 - bruit thermique ambiant (0,05 °C/√s) pour amorcer une instabilité convective : écart de forme inférieur à 0,1 mm, le bruit est amorti ;
 - domaine deux fois plus large (R = 8 cm) : même forme, 0,3 mm d'écart RMS.

@@ -1,0 +1,40 @@
+# fjord_D  T∞ 3→10→3 °C, P=500 s, v=0.150 mm/s, F=4, grille 80x320, dx=0.5 mm, dt=0.0235 s
+# dt → 0.0188
+t=85 s (période 0.17)  T∞=4.83  V=55.64 cm³  bout à z=59 mm  2.38 ms/pas
+t=161 s (période 0.32)  T∞=8.02  V=55.73 cm³  bout à z=52 mm  2.40 ms/pas
+t=236 s (période 0.47)  T∞=9.95  V=52.05 cm³  bout à z=52 mm  2.40 ms/pas
+t=311 s (période 0.62)  T∞=9.01  V=47.23 cm³  bout à z=53 mm  2.41 ms/pas
+t=387 s (période 0.77)  T∞=5.99  V=42.47 cm³  bout à z=52 mm  2.43 ms/pas
+t=462 s (période 0.92)  T∞=3.39  V=41.48 cm³  bout à z=44 mm  2.43 ms/pas
+t=537 s (période 1.07)  T∞=3.37  V=40.27 cm³  bout à z=36 mm  2.43 ms/pas
+t=612 s (période 1.22)  T∞=5.95  V=40.80 cm³  bout à z=31 mm  2.44 ms/pas
+t=688 s (période 1.38)  T∞=8.98  V=38.64 cm³  bout à z=34 mm  2.43 ms/pas
+t=763 s (période 1.53)  T∞=9.95  V=35.56 cm³  bout à z=38 mm  2.43 ms/pas
+t=838 s (période 1.68)  T∞=8.06  V=31.36 cm³  bout à z=42 mm  2.43 ms/pas
+t=914 s (période 1.83)  T∞=4.87  V=30.48 cm³  bout à z=43 mm  2.43 ms/pas
+t=989 s (période 1.98)  T∞=3.03  V=31.34 cm³  bout à z=40 mm  2.43 ms/pas
+t=1064 s (période 2.13)  T∞=4.08  V=32.80 cm³  bout à z=41 mm  2.43 ms/pas
+t=1140 s (période 2.28)  T∞=7.13  V=34.61 cm³  bout à z=46 mm  2.43 ms/pas
+t=1215 s (période 2.43)  T∞=9.66  V=31.97 cm³  bout à z=56 mm  2.43 ms/pas
+t=1290 s (période 2.58)  T∞=9.56  V=29.23 cm³  bout à z=61 mm  2.43 ms/pas
+t=1365 s (période 2.73)  T∞=6.92  V=26.19 cm³  bout à z=65 mm  2.43 ms/pas
+t=1441 s (période 2.88)  T∞=3.93  V=27.76 cm³  bout à z=62 mm  2.43 ms/pas
+t=1516 s (période 3.03)  T∞=3.07  V=29.36 cm³  bout à z=61 mm  2.43 ms/pas
+t=1591 s (période 3.18)  T∞=5.06  V=31.05 cm³  bout à z=60 mm  2.43 ms/pas
+t=1667 s (période 3.33)  T∞=8.25  V=31.41 cm³  bout à z=63 mm  2.42 ms/pas
+t=1742 s (période 3.48)  T∞=9.98  V=28.97 cm³  bout à z=68 mm  2.42 ms/pas
+t=1817 s (période 3.63)  T∞=8.83  V=26.19 cm³  bout à z=73 mm  2.42 ms/pas
+t=1892 s (période 3.78)  T∞=5.74  V=24.83 cm³  bout à z=75 mm  2.42 ms/pas
+t=1968 s (période 3.94)  T∞=3.28  V=26.82 cm³  bout à z=70 mm  2.42 ms/pas
+# fin : 105713 pas, 256 s, 2.42 ms/pas, 318 décalages
+# écart période 0 → 1 : RMS 2.839 mm, max 9.28 mm
+# écart période 1 → 2 : RMS 1.990 mm, max 6.43 mm
+# écart période 2 → 3 : RMS 1.029 mm, max 4.50 mm
+# phase 0.000 T∞=3.0 : 0 nappes, espacements  mm
+# phase 0.124 T∞=4.0 : 0 nappes, espacements  mm
+# phase 0.376 T∞=9.0 : 2 nappes, espacements 10 mm
+# phase 0.500 T∞=10.0 : 3 nappes, espacements 12,13 mm
+# phase 0.624 T∞=9.0 : 6 nappes, espacements 7,6,5,14,15 mm
+# phase 0.876 T∞=4.0 : 0 nappes, espacements  mm
+# phase 0.000 T∞=3.0 : 0 nappes, espacements  mm
+# écrit fjord_D.png, fjord_D.json
