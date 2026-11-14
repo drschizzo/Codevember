@@ -4,6 +4,12 @@ Thème : **« melt »**. Sous-titre : *la colonne sans fin*.
 
 Ce document prend la suite de `concept-pinacles.md`, qui garde la trace des essais en eau douce et des prototypes P0 à P5. Le choix du fjord a été fait le 14 novembre, après le bilan de ces prototypes. P6 (`proto/p6/RESULTS.md`) en est la première épreuve.
 
+## État après P7 (14 novembre) : la prémisse ne tient pas
+
+P7 (`proto/p7/RESULTS.md`) mesure que **les nappes ne se voient pas**, ni au soleil, ni à contre-jour, ni dans une eau trouble, ni de nuit. L'écart de sel d'une nappe est fixé par l'écart de température (≈ 0,8 g/kg, Δn ≈ 1,6·10⁻⁴), et une nappe ne s'étend qu'à 1 ou 2 cm de la glace. En ombroscopie de laboratoire, avec un faisceau horizontal et un écran à 1 m, elles ne donnent que des ondulations pâles, dominées par l'ombre de lentille de la glace.
+
+Ce qui suit reste la description de l'intention, mais son argument central (« pour la première fois, la cause et l'effet sont dans l'image ») est réfuté à cette échelle.
+
 ## Pourquoi le fjord
 
 En eau douce, à l'échelle d'une colonne de quelques centimètres, rien ne montre l'eau qui sculpte la glace :
