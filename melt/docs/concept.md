@@ -90,9 +90,13 @@ La scène calcule maintenant la fonte au chargement, une grille par cristal (`sr
 
 Les anciennes fontes dessinées (arrondi au-dessus de la ligne, coin qui tombe, gouttes, affaissement tiré au hasard) sont retirées. L'anticrénelage est temporel, sans reprojection : décalage de Halton et historique borné par le voisinage.
 
+## Les derniers restes (14 novembre)
+
+L'utilisateur : « les derniers résidus disparaissent de manière trop abrupte ». Les derniers restes d'un cristal (des arêtes, le cadre d'une trémie creuse) n'ont qu'une ou deux cellules d'épaisseur : tout leur métal fond au même pas, en l'air, d'une image à l'autre. Un tel squelette ne tient pas : quand il reste moins de 20 % du solide qui a été hors du bain, la simulation le fait s'effondrer dans le bain (4 cm par unité de u, soit environ une seconde et demie). Il disparaît en s'enfonçant, comme englouti, et le bain se ride à cet instant ; la peau d'oxyde s'étale ensuite depuis là.
+
 ## Ce qui reste perfectible
 
-- **Les cristaux allongés** laissent parfois, en fin de fonte, des arêtes minces qui tiennent en l'air un instant. Le tassement ne regarde que le bloc entier, pas ses morceaux détachés.
+- **Le tassement et l'effondrement** regardent le cristal entier, pas ses morceaux détachés un à un.
 - **Les franges** des gradins latéraux, très régulières sur les grands cristaux, font parfois des peignes.
 - **Les peaux d'oxyde** restent dessinées : la surface du bain n'est pas simulée.
 - **Non vérifié :** mobile, et autres GPU que celui de cette machine.

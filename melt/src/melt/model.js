@@ -19,7 +19,11 @@
 // - l'appui : quand la section du solide au ras du bain tombe sous 15 % de ce
 //   qu'elle était à cette hauteur (la taille a fondu, comme l'encoche d'un
 //   iceberg à sa ligne de flottaison), le bloc s'enfonce (vitesse bornée)
-//   jusqu'à reposer sur une section plus large.
+//   jusqu'à reposer sur une section plus large ;
+// - les restes : quand il reste moins de 20 % du solide qui a été hors du bain
+//   (des arêtes minces, le cadre d'une trémie creuse), ils ne tiennent plus et
+//   s'effondrent dans le bain. Sans cela, ces parois d'une ou deux cellules
+//   fondaient d'un coup, en l'air, d'une image à l'autre.
 //
 // Unités : cm ; u, le temps de la fonte (0 : début de la descente, 1 : fin) ;
 // températures rapportées à l'écart bain – fusion (Tm = 0, Tb = 1).
@@ -29,6 +33,7 @@ export const PHYS = {
   hb: 2, ha: 0.4, a: 0.45, lam: 0.3,      // échanges bain / air, panache (part de la chaleur du bain à la ligne, longueur)
   amb: -0.4, crust: -0.6,                 // air de l'atelier, croûte
   rise: 1.5, fall: 6, neck: 0.15,         // descente en u^rise, vitesse de tassement, section d'appui
+  rest: 0.2, plunge: 4,                   // les restes : part du solide hors du bain sous laquelle ils s'effondrent, vitesse
   uEnd: 1.15,                             // (au-delà de 1, le bain a tout couvert)
 };
 
@@ -104,12 +109,12 @@ export function simulate(c, habit, { LL, D, quality = 1, P = PHYS } = {}) {
   }
   const K = P.alpha / (h * h), Hb = P.hb / h, Ha = P.ha / h, half = 0.5 * P.Lh;
   const Tof = (e) => (e < 0 ? e : e > P.Lh ? e - P.Lh : 0);
-  let drop = 0;
+  let drop = 0, aboveMax = 0, plunging = false;
   const dropHist = new Float32Array(steps + 1);
   for (let n = 0; n < steps; n++) {
     const u = n * dt, L = bathAt(u, LL, D, P) + drop;
     const melt = [];
-    let band = 0;
+    let band = 0, above = 0;
     for (const id of list) {
       if (tau[id] <= u) continue;
       const i = id % nx, j = Math.floor(id / nx) % ny, k = Math.floor(id / (nx * ny));
@@ -128,12 +133,15 @@ export function simulate(c, habit, { LL, D, quality = 1, P = PHYS } = {}) {
       const e = H[id] + dt * f;
       H2[id] = e;
       if (e >= half) melt.push(id, u + (dt * (half - H[id])) / Math.max(e - H[id], 1e-9));
-      else { const y = (j + 0.5) * h; if (y >= L && y < L + 2 * h) band++; }
+      else { const y = (j + 0.5) * h; if (y >= L && y < L + 2 * h) band++; if (y >= L) above++; }
     }
     for (const id of list) if (tau[id] > u) H[id] = H2[id];
     for (let m = 0; m < melt.length; m += 2) tau[melt[m]] = melt[m + 1];
     const j0 = Math.floor(L / h), ref = (layer0[j0] ?? 0) + (layer0[j0 + 1] ?? 0);
-    if (ref > 0 && band < P.neck * ref && L < g.Y - 0.1) drop += P.fall * dt;
+    aboveMax = Math.max(aboveMax, above);
+    if (above > 0 && above < P.rest * aboveMax) plunging = true;
+    if (plunging && above > 0) drop += P.plunge * dt;
+    else if (ref > 0 && band < P.neck * ref && L < g.Y - 0.1) drop += P.fall * dt;
     dropHist[n + 1] = drop;
   }
   return { tau, grid: g, dt, steps, drop: dropHist };
