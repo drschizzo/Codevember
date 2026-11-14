@@ -28,6 +28,7 @@ import { createPost } from './render/post.js';
 import { exportLoop, exportPNG } from './app/capture.js';
 import { createLoader } from './app/loader.js';
 import { createUI } from './app/ui.js';
+import { installChrome } from '../../shared/app/chrome.js';
 import { loadRender, saveRender, applyQuality, defaultsFor, SHADOWS } from './app/settings.js';
 import { wantsMobile, switchMobile, createGovernor, createPacer, bindTouch } from './app/mobile.js';
 import { generate, generateLayer, upgrade, orbitOverrides, packRecipe, unpackRecipe, MOODS } from './recipe.js';
@@ -579,6 +580,7 @@ async function main() {
     }, 80);
   }
   const ui = params.get('ui') === '0' ? null : createUI({ recipe: () => R, render: RENDER, on });
+  installChrome(ui, params);
   ui?.build();
   if (LITE || matchMedia?.('(pointer: coarse)').matches) {
     ui?.gui.close();

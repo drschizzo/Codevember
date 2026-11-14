@@ -18,6 +18,7 @@ import { createPost } from '../../shared/render/post.js';
 import { createProbe, PROBE } from './scene/probe.js';
 import { createAccumulator, jitter } from '../../shared/render/accum.js';
 import { createUI } from './app/ui.js';
+import { installChrome } from '../../shared/app/chrome.js';
 import { loadRender, saveRender, applyQuality, defaultsFor } from './app/settings.js';
 import { wantsMobile, switchMobile, createGovernor, createPacer, bindTouch } from '../../shared/app/mobile.js';
 import { exportLoop, exportPNG } from '../../shared/app/capture.js';
@@ -431,6 +432,7 @@ async function main() {
     },
   };
   ui = params.get('ui') === '0' ? null : createUI({ recipe: () => R, render: RENDER, on });
+  installChrome(ui, params);
   // Écran tactile : le panneau reste replié (il couvrirait l'image) ; une touche
   // met en pause, deux touches tirent une nouvelle scène, un appui long masque
   // l'interface.

@@ -18,6 +18,7 @@ import { makeEnvironment } from './scene/env.js';
 import { G, setNoiseVolume, setLite } from './scene/materials.js';
 import { createPost } from './render/post.js';
 import { createUI } from './app/ui.js';
+import { installChrome } from '../../shared/app/chrome.js';
 import { loadRender, saveRender, applyQuality, defaultsFor } from './app/settings.js';
 import { wantsMobile, switchMobile, createGovernor, createPacer, bindTouch } from '../../shared/app/mobile.js';
 import { exportLoop, exportPNG } from './app/capture.js';
@@ -384,6 +385,7 @@ async function main() {
     },
   };
   const ui = params.get('ui') === '0' ? null : createUI({ recipe: () => R, render: RENDER, on });
+  installChrome(ui, params);
   if (ui && params.has('export')) ui.gui.folders[0]?.open();
   // Écran tactile : le panneau reste replié (il couvrirait l'image) ; une touche
   // met en pause, deux touches tirent une nouvelle scène, un appui long masque
