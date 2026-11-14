@@ -89,8 +89,9 @@ export function crystalsAt(cluster, t, C = CYCLE, melt = null) {
     // la peau : quand il ne reste plus rien du cristal au-dessus du bain
     const tGone = m ? C.T2 + m.uGone * (C.T3 - C.T2) : reach(topOf(c) + 0.05, C);
     const skinAge = t - tGone;
-    // la ride : quand le bloc commence à se tasser
-    const tSet = m && m.uSettle > 0 ? C.T2 + m.uSettle * (C.T3 - C.T2) : -1;
+    // la ride : quand les restes s'effondrent dans le bain (ou, à défaut, quand le bloc se tasse)
+    const uR = m ? (m.uPlunge > 0 ? m.uPlunge : m.uSettle) : -1;
+    const tSet = uR > 0 ? C.T2 + uR * (C.T3 - C.T2) : -1;
     const rip = tSet > 0 ? t - tSet : -1;
     return {
       x: c.x, y: c.y, z: c.z, s: c.s, ang: c.ang, tilt: c.tilt, ox: c.ox, seed: c.seed, desc,

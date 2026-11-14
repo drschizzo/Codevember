@@ -18,13 +18,14 @@ struct S {
   heat: vec4f,   // alpha, T0, Tb, Lh
   xch: vec4f,    // hb, ha, a, lambda
   fall: vec4f,   // vitesse de tassement, croûte, port, part de la section d'origine qui porte encore
-  pack: vec4f,   // pas d'une ligne de l'atlas (en u32), —
+  pack: vec4f,   // pas d'une ligne de l'atlas (en u32), seuil des restes, vitesse de leur effondrement, —
 };
 @group(0) @binding(0) var<uniform> S0: S;
 @group(0) @binding(1) var<storage, read_write> Hin: array<f32>;
 @group(0) @binding(2) var<storage, read_write> Hout: array<f32>;
 @group(0) @binding(3) var<storage, read_write> tau: array<f32>;
-// ctr : pas, cellules au ras du bain, bain (repère du cristal), tassement, cellules au-dessus du bain
+// ctr : pas, cellules au ras du bain, bain (repère du cristal), tassement, cellules au-dessus du bain,
+// leur maximum, effondrement des restes (0 / 1)
 // (puis, à partir de 8, la section d'origine du cristal, couche par couche)
 @group(0) @binding(4) var<storage, read_write> ctr: array<atomic<u32>>;
 @group(0) @binding(5) var<storage, read_write> hist: array<f32>;
@@ -68,10 +69,14 @@ fn advance() {
   var sec = 0.0;
   if (j0 >= 0 && j0 < ny()) { sec += f32(atomicLoad(&ctr[8 + j0])); }
   if (j0 + 1 >= 0 && j0 + 1 < ny()) { sec += f32(atomicLoad(&ctr[9 + j0])); }
-  if (sec > 0.0 && band < S0.fall.w * sec && L + d < S0.box.y - 0.1) { d += S0.fall.x * S0.box.z; }
+  // les restes : sous 20 % du solide qui a été hors du bain, ils s’effondrent
+  let ab = atomicLoad(&ctr[4]);
+  let mx = max(atomicLoad(&ctr[5]), ab); atomicStore(&ctr[5], mx);
+  if (ab > 0u && f32(ab) < S0.pack.y * f32(mx)) { atomicStore(&ctr[6], 1u); }
+  if (atomicLoad(&ctr[6]) == 1u && ab > 0u) { d += S0.pack.z * S0.box.z; }
+  else if (sec > 0.0 && band < S0.fall.w * sec && L + d < S0.box.y - 0.1) { d += S0.fall.x * S0.box.z; }
   atomicStore(&ctr[3], bitcast<u32>(d));
   atomicStore(&ctr[2], bitcast<u32>(L + d));
-  let ab = atomicLoad(&ctr[4]);
   let o = 2u * s;
   if (o + 1u < arrayLength(&hist)) { hist[o] = d; hist[o + 1u] = f32(ab); }
   atomicStore(&ctr[1], 0u); atomicStore(&ctr[4], 0u);
@@ -217,7 +222,7 @@ export function createMelt(renderer) {
         const N = g.nx * g.ny * g.nz, stride = Math.ceil((g.nx * 4) / 256) * 64;
         device.queue.writeBuffer(ubuf, 0, new Float32Array([
           g.nx, g.ny, g.nz, g.h, g.X, g.Y, dt, steps, c.s, c.y, c.ang, c.tilt, LL, D, P.rise, P.amb,
-          P.alpha, P.T0, P.Tb, P.Lh, P.hb, P.ha, P.a, P.lam, P.fall, P.crust, habit, P.neck, stride, 0, 0, 0]));
+          P.alpha, P.T0, P.Tb, P.Lh, P.hb, P.ha, P.a, P.lam, P.fall, P.crust, habit, P.neck, stride, P.rest, P.plunge, 0]));
         const hist = mk(2 * (steps + 2), GPUBufferUsage.COPY_SRC);
         const bg = (a, b) => device.createBindGroup({ layout, entries: [
           { binding: 0, resource: { buffer: ubuf } }, { binding: 1, resource: { buffer: a } }, { binding: 2, resource: { buffer: b } },
@@ -265,10 +270,12 @@ export function createMelt(renderer) {
         for (let s = 1; s <= steps; s++) { drop[s] = hv[2 * s]; above[s] = hv[2 * s + 1] > 0 ? 1 : 0; }
         above[0] = 1;
         // (le premier instant où il ne reste plus rien au-dessus du bain, et celui où le bloc commence à s'enfoncer)
-        let uGone = P.uEnd, uSettle = -1;
+        let uGone = P.uEnd, uSettle = -1, uPlunge = -1, mx = 0;
         for (let s = 1; s <= steps; s++) { if (!above[s]) { uGone = s * dt; break; } }
         for (let s = 1; s <= steps; s++) { if (drop[s] > 0) { uSettle = s * dt; break; } }
-        out.push({ ox: pk.pos[ci][0], oz: pk.pos[ci][1], ...g, dt, steps, drop, uGone, uSettle });
+        // (le premier pas où les restes s'effondrent : même règle que le GPU, sur les comptes relus)
+        for (let s = 1; s <= steps; s++) { const a = hv[2 * s + 1]; mx = Math.max(mx, a); if (a > 0 && a < P.rest * mx) { uPlunge = s * dt; break; } }
+        out.push({ ox: pk.pos[ci][0], oz: pk.pos[ci][1], ...g, dt, steps, drop, uGone, uSettle, uPlunge });
       }
     } finally { free(); }
     atlas?.destroy();
