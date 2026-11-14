@@ -10,6 +10,12 @@ Sous-titre proposé : *la colonne sans fin*.
 - **la cause visible de l'écoulement passe aux bulles libérées par la fonte.** Le panache d'eau de fonte ne se voit pas en eau douce ;
 - **le col se forme à la ligne d'eau, et la colonne s'y détache.** C'est devenu le temps fort.
 
+**Révision du 14 novembre, après P1, P2, P4 et P5** (voir « Bilan des prototypes » plus bas) :
+- **l'avance est saisonnière.** La colonne descend l'hiver et s'arrête l'été ; sans cet arrêt, elle devient un cône en toute saison, sans col ni détachement ;
+- **la bascule est validée.** Le fuseau libre se couche en 0,5 s, à 8,3 % émergé ; il lui faut une brise pour dégager la souche ;
+- **les bulles ne montrent pas le courant.** En eau douce, rien ne le montre : ni les bulles, ni l'ombroscopie, ni la turbidité ;
+- **la Pagode tient.** Ses nappes d'eau de fonte se voient pour de vrai, mais la glace ne se creuse pas en gradins.
+
 ## 0. Pourquoi refaire le concept
 
 La revue de la version actuelle (planche de 6 décors × 3 instants, 14 novembre 2026) donne cinq défauts, qui viennent du concept et pas du rendu :
@@ -100,13 +106,13 @@ Par rapport à la première version, l'esthétique et les variations perdent un 
 - La température du bain, rendue par la lumière : les saisons d'un lac glaciaire, en accéléré.
   - Hiver : eau à 2–3 °C, lumière bleue, basse, diffuse.
   - Été : eau à 8–9 °C, rayons de soleil dans l'eau.
-- Le sens de l'écoulement, rendu par les bulles libérées. En eau froide, elles montent collées à la glace. En eau chaude, la couche limite les entraîne vers le bas avant qu'elles ne s'échappent et remontent au large. Le renversement du courant se voit donc sans légende.
+- ~~Le sens de l'écoulement, rendu par les bulles libérées.~~ Abandonné après P5. La physique est juste (en eau chaude, 73 % des bulles de 10 à 30 µm descendent), mais ces bulles sont sous le pixel et restent collées à la glace. En eau douce, le courant ne se voit pas : seule la forme en garde la trace.
 
 Le temps est une convention : environ une heure de fonte réelle montrée en 40–50 s (accéléré × 75). La physique reste exacte à chaque instant pour la température du moment.
 
 ### Formule de la boucle
 
-La colonne avance à la vitesse constante v. La température du bain T∞(u) est périodique de période 1.
+La colonne avance à la vitesse v(u) : constante pendant la saison froide, nulle l'été, avec des raccords doux (P1). La température du bain T∞(u) est périodique de période 1.
 - **La glace.** Chaque tranche entre dans l'eau à l'instant u₀ et y vit moins d'une boucle (on choisit v pour que v·L dépasse la longueur immergée maximale). À la phase u + 1, toute la glace visible est neuve, entrée pendant la dernière boucle, et elle a subi exactement le même forçage que celle de la phase u. **La boucle se referme par construction.**
 - **L'écoulement** s'ajuste en quelques dizaines de secondes à la forme et à T∞, contre une heure pour la forme. Un test mesure l'écart entre la deuxième et la troisième période simulée. Si un résidu subsiste, on applique la méthode de Tension (plancher périodique, résidu absorbé d'abord sur la partie rigide).
 - **Les bulles** sont attachées à la glace jusqu'à ce que le front de fonte les atteigne. Leur motif a une période qui divise v·L.
@@ -251,6 +257,35 @@ La forme du film : une lente métamorphose en trois états (s'effiler, s'inverse
 - **L'appareil** : aucun. La surface, la lumière et les bulles portent la cause.
 - **Le lien avec la collection** : la glace devient de l'eau. La surface rend une colonne neuve, et l'on revient au départ par un autre chemin.
 
+## Bilan des prototypes (14 novembre)
+
+| Test | Verdict | Ce qui tient | Ce qui tombe |
+| --- | --- | --- | --- |
+| P0, simulation | partiel | aiguille, cône dressé, détachement de la colonne suspendue ; coût de 2 ms par pas | les festons |
+| P3, rendu | partiel | la glace bulleuse se lit ; l'ombre de lentille | la glace claire ; le panache à l'ombroscopie |
+| P1, colonne et saisons | partiel | la boucle se referme d'elle-même (0,014 mm après 5 périodes) ; avec un arrêt l'été, détachement à phase fixe | avance continue : un cône en toute saison ; l'aiguille d'hiver ne sort pas dans la métamorphose ; un quart de boucle sans sujet |
+| P2, bascule | oui | bascule en 0,5 s, dépassement, 8,3 % émergé | coincé sous la souche sans brise ni col incliné |
+| P4, pagode | partiel | nappes d'intrusion espacées d'environ 10 mm (15 mm prévus), visibles | pas de gradins dans la glace |
+| P5, traceurs | non | — | bulles et turbidité invisibles en eau douce |
+
+**Ce qui reste solide :**
+- une colonne de glace bulleuse, translucide, qui se lit dans toutes les humeurs ;
+- une métamorphose de forme réelle : bout arrondi, fuseau, amincissement à la ligne d'eau, détachement ;
+- une bascule franche ;
+- une boucle qui se referme par construction ;
+- des nappes d'eau de fonte visibles en eau salée ;
+- l'ombre de lentille comme humeur graphique.
+
+**Ce qui est faible :**
+- **Le geste est lent et discret** jusqu'au détachement. La forme change de quelques millimètres sur des dizaines de secondes, sans cause visible autre que la lumière.
+- **Les familles se ressemblent** (un cône ou un fuseau). Seules la Pagode et la bascule se distinguent vraiment.
+- **Un quart de boucle sans sujet** suit le détachement.
+- **L'avance saisonnière** est une liberté moins évidente que l'avance continue.
+
+**Recommandation.** Le concept tient debout, mais il tient surtout par deux moments : la bascule et les nappes salées. Deux voies pour la suite, à trancher avant de construire :
+1. **Recentrer sur l'eau salée** (« le fjord »). La colonne pend dans une eau stratifiée. Les nappes d'eau de fonte s'empilent autour d'elle et se voient ; la colonne s'amincit, se détache et bascule. On garde une seule cause, la saison, et l'eau de fonte enfin visible porte le geste.
+2. **Garder l'eau douce et tout miser sur la forme et la bascule.** Avance saisonnière, humeur ombre de lentille, quart de boucle rempli par le fuseau qui flotte et dérive. Le risque : un film beau en images fixes, mais lent à lire.
+
 ## Le cœur technique
 
 **La simulation** (dans un worker ou en calcul GPU, pendant l'écran de chargement, qui la montre en direct). C'est la méthode de P0, à compléter :
@@ -286,14 +321,13 @@ La forme du film : une lente métamorphose en trois états (s'effiler, s'inverse
 
 ## Plan
 
-- **P0** (fait) : les deux pointes oui, les festons non, le détachement à la ligne d'eau oui, le coût est acceptable.
-- **P3** (fait) : glace bulleuse obligatoire ; l'ombre de lentille est une humeur forte ; le panache ne se voit pas en eau douce.
-- **P1** (Node) : colonne qui avance, T∞(u) cyclique sur la famille *La métamorphose*. On mesure l'écart de périodicité.
-- **P2** : détachement, puis corps rigide (flottaison, bascule, dérive), avec le test de collision.
-- **P4** : la Pagode (sel et température). Elle reste ou sort de la matrice selon le résultat.
-- **P5** (navigateur) : les bulles libérées, portées par l'écoulement enregistré de P1, sur le rendu de P3. C'est le test de lisibilité du courant qui s'inverse.
+Tous les prototypes sont faits (voir le bilan). Les comptes rendus sont dans `proto/p0` à `proto/p5`, dans les fichiers `RESULTS.md`.
 
-On ne construit la scène qu'après P1, P2 et P5.
+Prochaine décision : la voie 1 (le fjord) ou la voie 2 (eau douce, forme et bascule). Ensuite :
+- corriger l'instabilité de `meta_continu` (NaN à t = 536 s) ;
+- coupler la Pagode à l'avance saisonnière ;
+- passer la bascule en 3D avec la brise ;
+- mesurer le solveur en WebGPU.
 
 ## Sources
 
