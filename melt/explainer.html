@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#050506">
   <title>Melt · défis techniques</title>
-  <meta name="description" content="Comment Melt calcule une colonne de glace sous la surface d’un lac : anomalie de densité de l’eau douce, solveur de fonte axisymétrique en worker, avance saisonnière et boucle qui se referme seule, détachement à phase fixe, critère de flottaison D/L, bascule du fuseau par tranches, horloge qui ralentit au détachement, glace bulleuse et fenêtre de Snell dans un lancer de rayons.">
+  <meta name="description" content="Comment Melt calcule un bain de bismuth : la marée de métal qui découvre les cristaux en trémie, l’oxyde qui pousse en racine du temps, la couleur d’une couche mince par la formule d’Airy, la fonte par le bas quand le métal chaud remonte, l’affaissement, le coin qui tombe, les gouttes et la peau d’oxyde, un état recalculé à chaque image et un lancer de rayons qui ne visite que les cristaux croisés.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
@@ -22,124 +22,120 @@
 
   <main>
     <header class="hero">
-      <div class="kicker">Day 03 · Melt · la colonne sans fin</div>
-      <h1>Comment une colonne de glace se détache de la surface d’un lac</h1>
-      <p class="lede">Sous la surface d’un lac de montagne, une colonne de glace blanche pend dans le noir, et la surface vue d’en dessous la reflète comme un plafond d’argent. L’hiver, la colonne descend et son bout s’arrondit. L’été, elle s’arrête, s’amincit à la ligne d’eau et finit par céder. Le fuseau libéré bascule et se couche contre son reflet, puis une colonne neuve revient. Ces formes sont taillées par l’eau de fonte qui coule le long de la glace, et cette eau ne se voit pas. Melt calcule donc l’écoulement et la fonte qu’il produit, puis la flottaison du morceau détaché et la lumière qui traverse la glace.</p>
+      <div class="kicker">Day 03 · Melt · le bain de bismuth</div>
+      <h1>Comment des cristaux de bismuth sortent de leur bain, se colorent et refondent</h1>
+      <p class="lede">Au fond d’un creuset, une grappe de cristaux de bismuth : des cubes creusés en escalier, les trémies, qui brillent d’or, de magenta et de bleu. Autour d’eux, le métal liquide est un miroir. Au début de la boucle, le bain couvre tout. Il se retire et découvre les cristaux, qui se colorent à mesure qu’ils restent à l’air. Puis le métal chaud remonte : les arêtes s’arrondissent, les gradins se comblent, un coin cède et tombe, les cristaux s’affaissent et le bain se referme sur eux. Aucune de ces couleurs n’est peinte. Elles viennent d’une pellicule d’oxyde de quelques centaines de nanomètres, et Melt calcule à chaque image son épaisseur en chaque point, puis la lumière qu’elle renvoie.</p>
     </header>
 
     <figure class="cover">
-      <img src="docs/capture.jpg" alt="Un fuseau de glace blanche en pleine bascule sous la surface, et son reflet dans le miroir de la surface, formant un chevron sur fond noir" width="1280" height="800">
-      <figcaption>Humeur Nuit, au temps fort. Le fuseau vient de se détacher et bascule. En haut, son reflet dans la surface vue de dessous, ridé par l’onde de la bascule. Les deux forment un chevron.</figcaption>
+      <img src="docs/capture.jpg" alt="Une grande trémie de bismuth aux gradins dorés, magenta et bleu-vert, dont le pied fond en argent liquide dans un bain miroir ; à droite, une peau d’oxyde fendue en plaques irisées flotte sur le bain" width="1280" height="800">
+      <figcaption>Pendant la remontée du métal chaud. Les gradins de la trémie gardent leur oxyde, son pied est déjà arrondi et argenté par la fonte. En bas à droite, la peau d’oxyde d’un cristal englouti flotte sur le bain et se fend en plaques.</figcaption>
     </figure>
 
     <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
 
     <article>
 
-      <section id="densite">
-        <h2><span class="n">01</span>L’eau la plus lourde est à 4 °C, et c’est elle qui taille la glace</h2>
-        <span class="src">src/gen/sim.js · PHYS</span>
-        <p>La glace fond surtout là où l’eau qui la touche se renouvelle vite. Or cette eau bouge d’elle-même : refroidie au contact de la glace, elle change de densité, monte ou descend le long de la paroi, et entraîne l’eau tiède du lac à sa place. Le sens de ce courant décide de la forme. Une couche d’eau qui monte est la plus mince en bas, et la glace fond d’abord par le bas. Une couche qui descend naît à la surface, et la glace s’amincit d’abord à la ligne d’eau.</p>
-        <p>Une équation d’état linéaire, où l’eau est d’autant plus dense qu’elle est froide, ferait toujours descendre l’eau de fonte à 0 °C, et la colonne n’aurait jamais le bout arrondi de l’hiver. L’eau douce a une <strong>anomalie de densité</strong> : elle est la plus dense à 4 °C. Melt la décrit par une équation d’état quadratique,</p>
-        <div class="eq">\[ \rho(T) = \rho^\ast\big[1 - \beta\,(T - 4)^2\big], \qquad \beta = 8\times10^{-6}\ {}^\circ\mathrm{C}^{-2}, \]</div>
-        <p>et la poussée d’une particule d’eau à la température \(T\), dans un lac à \(T_\infty\), vaut</p>
-        <div class="eq">\[ b = g\,\beta\,\big[(T-4)^2 - (T_\infty-4)^2\big]. \]</div>
-        <p>L’eau à 0 °C a la même densité que l’eau à 8 °C. Dans un lac froid, sous 4 °C, toute la couche limite (la mince gaine d’eau refroidie contre la glace) est plus légère que le lac et monte. Au-dessus de 8 °C, la couche est plus dense partout et descend. Entre les deux, elle se partage : l’eau la plus froide monte contre la glace, l’eau proche de 4 °C descend un peu plus loin. Le prototype P0 a balayé la température du lac et trouvé le changement de sens entre 5,3 et 6,2 °C, dans la fenêtre de 5 à 7 °C mesurée par Weady et al. (<em>PRL</em> 128, 044502, 2022). En eau froide, le retrait de la paroi suit la loi de couche limite laminaire en \(h^{-1/4}\) (\(h\), la hauteur depuis le bas de la couche) : un rapport de 1,6 entre \(h = 14\) et 83 mm, pour 1,56 attendu.</p>
-        <p>Le lac de la scène fait un cycle par boucle, \(T_\infty(u) = \tfrac12(T_0+T_1) - \tfrac12(T_1-T_0)\cos 2\pi u\), de 1,5 à 9 °C pour la colonne moyenne. Il traverse donc les trois régimes : bout arrondi l’hiver, amincissement de la ligne d’eau l’été.</p>
-        <figure id="fig-density" class="wide"><figcaption><b>La densité de l’eau et le sens de la couche limite, avec les constantes de <code>sim.js</code> et le lac de <code>lake.js</code>.</b> Le curseur fait avancer l’année, le bouton passe au lac chaud (3 → 11 °C). À gauche, l’écart de densité \(\rho/\rho^\ast - 1\) en millionièmes, l’eau de fonte (0 °C, en bleu) et le lac (en doré) ; la ligne pointillée marque la densité de l’eau à 0 °C. À droite, la poussée \(b\) en fonction de la distance à la glace : vers le haut, l’eau monte ; vers le bas, elle descend. Simplification : le profil de température dans la couche est une exponentielle d’épaisseur 1 mm posée à la main, alors que la scène le calcule.</figcaption></figure>
-        <div class="note trap"><b>Les festons ne sortent pas</b><p>Le premier concept de Melt reposait sur les festons de Weady et al., des vagues régulières taillées dans la glace autour de 5,6 °C. Le solveur ne les produit pas. Il donne un fût bombé avec une seule entaille, quelle que soit la variante essayée : maille de 0,25 mm, colonne de 20 cm au nombre de Rayleigh de l’article, bruit thermique, domaine deux fois plus large. La couche cisaillée a un nombre de Reynolds d’environ 2, trop faible pour qu’une instabilité y grandisse. Le concept a été abandonné et Melt n’utilise que les deux régimes extrêmes, que la simulation reproduit nettement.</p></div>
+      <section id="maree">
+        <h2><span class="n">01</span>Une marée de métal découvre les cristaux, puis les reprend</h2>
+        <span class="src">src/cycle.js · CYCLE, level(), emerge(), reach()</span>
+        <p>Les cristaux de bismuth du commerce poussent dans un creuset qui refroidit. Pour les voir, on verse le métal encore liquide : les cristaux restent, à l’air, encore chauds, et s’oxydent en prenant leurs couleurs. Melt garde ce geste et en fait une boucle. La seule liberté prise avec la physique est le niveau du bain, qui descend et remonte comme une marée.</p>
+        <p>Le niveau \(L(t)\) est affine par morceaux sur la phase \(t \in [0, 1)\) de la boucle. Il reste haut à \(L_H = 2{,}9\) cm jusqu’à \(T_0 = 0{,}06\), descend jusqu’à \(L_L = 0{,}22\) cm à \(T_1 = 0{,}30\), reste bas jusqu’à \(T_2 = 0{,}60\), puis remonte jusqu’à \(L_H\) à \(T_3 = 0{,}86\). Les hauteurs sont mesurées depuis la croûte du fond. Sur la boucle de 40 s de la recette, la descente dure 9,6 s (0,28 cm/s), le bain reste bas 12 s et remonte en 10,4 s.</p>
+        <p>Parce que la marée est affine, chaque hauteur \(y\) a deux instants qui se calculent en une ligne : celui où elle sort du bain et celui où le métal la reprend,</p>
+        <div class="eq">\[ t_e(y) = T_0 + \frac{L_H - y}{L_H - L_L}\,(T_1 - T_0), \qquad t_r(y) = T_2 + \frac{y - L_L}{L_H - L_L}\,(T_3 - T_2), \]</div>
+        <p>bornés aux extrémités. Le haut des cristaux sort le premier et rentre le dernier. Il reste donc le plus longtemps à l’air, et c’est lui qui porte l’oxyde le plus épais : le dégradé de couleurs du pied vers le sommet découle de la marée. Le shader recalcule \(t_e(y)\) en chaque point touché avec les mêmes constantes, passées en uniformes.</p>
+        <figure id="fig-tide" class="wide"><figcaption><b>La marée de <code>cycle.js</code>, importée telle quelle, et la grappe de la graine b1 tirée par <code>buildCluster</code>.</b> Le premier curseur fait avancer la boucle, le second choisit une hauteur. À gauche, le niveau \(L(t)\), la descente (bleu) et la remontée (rouge) ; le trait doré marque le temps que la hauteur choisie passe à l’air, de \(t_e\) à \(t_r\). À droite, la grappe vue de côté : le bain cache tout ce qui est sous sa ligne, et les cristaux s’affaissent pendant la remontée. Simplification : les cristaux sont dessinés en carrés de profil, sans leurs gradins, avec la couleur de l’oxyde à leur sommet.</figcaption></figure>
+        <div class="note check"><b>Vérifié par un test</b><p>Le niveau est continu (aucun saut de plus de 0,01 cm entre deux des 4 000 instants testés), décroît pendant la descente et croît pendant la remontée. \(t_e\) décroît avec la hauteur et \(t_r\) croît : le métal sort et rentre dans l’ordre des hauteurs.</p></div>
       </section>
 
-      <section id="solveur">
-        <h2><span class="n">02</span>Le solveur de fonte tient dans l’écran de chargement</h2>
-        <span class="src">src/gen/sim.js · Sim</span>
-        <p>Pour obtenir ces formes, il faut calculer l’écoulement de l’eau, la chaleur qu’il apporte et la glace qui fond. La colonne est un corps de révolution, et l’écoulement aussi : Melt le résout dans un demi-plan \((r, z)\), un rayon et une hauteur, ce qui ramène un problème 3D à une grille 2D de 40 × 160 mailles d’un millimètre, sur 4 cm de rayon et 16 cm de haut.</p>
+      <section id="tremie">
+        <h2><span class="n">02</span>Une trémie est un cube dont chaque face est creusée en escalier</h2>
+        <span class="src">src/scene/tracer.js · hopper()</span>
+        <p>Un cristal de bismuth qui pousse vite ne remplit pas ses faces. Les arêtes et les coins, plus exposés au métal liquide, avancent plus vite que le milieu des faces, qui reste en retrait. Chaque face devient un escalier de cadres emboîtés qui descend vers le centre : c’est une <strong>trémie</strong>. Un maillage de cadres empilés aurait des centaines de faces par cristal, et la fonte devrait le déformer à chaque image. Melt décrit la trémie par une fonction de distance (pour chaque point de l’espace, la distance à la surface la plus proche), que le lancer de rayons parcourt et que la fonte modifie par quelques paramètres.</p>
+        <p>Dans le repère du cristal, de demi-côté \(s\), le point \(q\) appartient à la face de l’axe où \(|q|\) est le plus grand. Les deux autres coordonnées \(\tau\) donnent la distance au bord de la face, \(\rho = s - \max(|\tau_x|, |\tau_y|)\), puis le numéro du gradin et la profondeur du creux :</p>
+        <div class="eq">\[ w = 0{,}11\,s, \qquad k = \min\!\big(\lfloor \rho / w \rfloor,\ 7\big), \qquad \text{creux} = 0{,}75\,k\,w\,(1 - f). \]</div>
+        <p>Chaque marche a une largeur \(w\) et une hauteur \(0{,}75\,w\). Au plus sept marches, soit un creux de \(7 \times 0{,}11 \times 0{,}75 = 0{,}58\,s\) au centre de chaque face. La distance est le maximum de celle de la boîte et de celle du plan de fond du creux. \(f\) est le comblement par la fonte (section 05). Le numéro \(k\) sort aussi de la fonction : l’oxyde s’en sert pour donner une couleur à chaque terrasse (section 04).</p>
+        <p>Deux variantes, tirées par la recette. La <strong>trémie en spirale</strong> tourne les coordonnées de la face de 0,07 rad par gradin avant de calculer \(\rho\) : les cadres pivotent l’un sur l’autre. La trémie <strong>allongée</strong> étire le cube de \(1/0{,}62 \approx 1{,}6\) le long de \(x\) ; la distance est alors multipliée par 0,62 pour rester une borne inférieure de la vraie distance, sans quoi la marche du rayon traverserait la surface.</p>
+        <figure id="fig-hopper" class="wide"><figcaption><b>La fonction <code>hopper()</code> du shader, recopiée en JavaScript.</b> Les curseurs règlent la largeur des marches (en fraction du demi-côté) et leur hauteur (en fraction de la largeur). « Spirale » tourne chaque gradin de 0,07 rad. À gauche, une coupe du cristal par son plan médian : la matière en clair, les quatre faces creusées en escalier. À droite, une face vue de front, plus sombre là où elle est plus profonde. Simplification : cube droit, sans arrondi ni fonte.</figcaption></figure>
+        <div class="note"><b>Au ras du bain, un bloc sans gradins</b><p>Le cristal se raccorde au bain par un ménisque, une union douce des deux distances de rayon \(0{,}035 + 0{,}1\,r\) cm (\(r\), la remontée, de 0 à 1). Un ménisque qui épouse sept marches donne une jonction dentelée. Sous \(L + 0{,}1\) cm, la fonction rend donc la boîte seule, et le métal enveloppe un bloc lisse.</p></div>
+      </section>
+
+      <section id="film">
+        <h2><span class="n">03</span>Les couleurs sont celles d’une couche mince d’oxyde</h2>
+        <span class="src">src/scene/tracer.js · filmR(), filmRGB()</span>
+        <p>Le bismuth nu est gris argent. À l’air chaud, il se couvre d’oxyde de bismuth, Bi₂O₃, transparent. La lumière se réfléchit deux fois : sur le dessus de l’oxyde, et sur le métal en dessous. Les deux ondes se rejoignent décalées du trajet aller-retour dans la couche. Selon l’épaisseur, certaines longueurs d’onde s’annulent et d’autres se renforcent. Une texture arc-en-ciel posée sur le cristal se tromperait d’ordre, de saturation et de réaction à l’angle de vue. Melt calcule la réflectance d’une couche mince par la <strong>formule d’Airy</strong>, qui somme toutes les réflexions multiples dans la couche :</p>
+        <div class="eq">\[ r = \frac{r_{01} + r_{12}\,e^{i\delta}}{1 + r_{01}\,r_{12}\,e^{i\delta}}, \qquad \delta = \frac{4\pi\, n_1\, d \cos\theta_1}{\lambda}, \qquad R = |r|^2, \]</div>
+        <p>avec l’oxyde d’indice \(n_1 = 2{,}2\) et le métal d’indice complexe \(n_2 = 1{,}9 + 3{,}4\,i\) ; \(r_{01} = (1 - n_1)/(1 + n_1)\) et \(r_{12} = (n_1 - n_2)/(n_1 + n_2)\) sont les coefficients de Fresnel des deux interfaces, \(d\) l’épaisseur, \(\theta_1\) l’angle dans la couche. Le métal nu (\(d = 0\)) renvoie 62 % de la lumière, la valeur que le shader prend pour un bismuth sans couleur. Les coefficients sont ceux de l’incidence normale ; l’angle n’entre que par le déphasage, qui diminue quand on regarde en biais. Une face vue de biais prend donc la couleur d’une couche plus mince.</p>
+        <p>La réflectance est calculée à six longueurs d’onde, moyennées deux par deux : 610 et 650 nm pour le rouge, 530 et 560 nm pour le vert, 450 et 480 nm pour le bleu. Avec ces valeurs, on passe de l’argent (0 nm) au brun doré (20 nm), à un creux sombre (40 nm), au bleu (60 nm), à l’or (120 nm), au magenta (160 nm), au bleu (180 nm) puis au vert (220 nm). À 300 nm, les déphasages de 610 et 650 nm diffèrent de 0,84 rad : la moyenne de deux longueurs d’onde par canal adoucit les ordres élevés, qu’une seule longueur d’onde rendrait trop saturés. Le prototype d’image, <code>proto/b0</code>, n’en prenait que trois.</p>
+        <figure id="fig-film" class="wide"><figcaption><b>La formule d’Airy du shader, recopiée en JavaScript avec ses indices et ses six longueurs d’onde.</b> Le premier curseur règle l’épaisseur d’oxyde, le second l’angle d’incidence. En haut, la couleur réfléchie de 0 à 400 nm. En dessous, la réflectance des trois canaux ; le pointillé marque le métal nu (0,62). Simplification : la couleur est montrée sous une lumière blanche, sans l’éclairage du studio ni l’étalonnage de la scène.</figcaption></figure>
+      </section>
+
+      <section id="oxyde">
+        <h2><span class="n">04</span>L’oxyde pousse comme la racine du temps passé à l’air</h2>
+        <span class="src">src/scene/tracer.js · trace() · src/recipe.js · OXIDES</span>
+        <p>L’oxygène doit traverser la couche déjà formée pour atteindre le métal. Plus la couche est épaisse, plus il passe lentement, et l’épaisseur croît comme la racine carrée du temps (la loi parabolique de l’oxydation). Une croissance linéaire ferait défiler les couleurs à vitesse constante pendant toute la marée basse ; la racine les fait défiler vite à la sortie du bain, puis de plus en plus lentement. En chaque point d’un cristal, à la hauteur \(y\), le shader calcule l’âge à l’air \(a = \max(t - t_e(y), 0)\), en fractions de boucle, puis l’épaisseur en nanomètres :</p>
+        <div class="eq">\[ d = v\cdot 300\,\sqrt{a}\,(0{,}85 + 0{,}3\,o) + 24\,k\,\sqrt{a} + 18\,(\nu - 0{,}5)\min(8a, 1) + 220\,r\,e^{-\max(y - L,\,0)/0{,}9}. \]</div>
+        <p>\(v\) est la vitesse d’oxydation de la gamme tirée par la recette : 0,25 pour « presque argent », 0,65 pour « or et magenta », 1 pour « arc-en-ciel », 1,45 pour « bleus et verts ». \(o \in [0, 1]\) décale chaque cristal, \(k\) est le numéro du gradin : les terrasses intérieures, sorties en même temps que leurs voisines, ont un oxyde un peu plus épais et une autre couleur, comme sur les cristaux réels. \(\nu\) est un bruit qui moire les faces. Avec \(v = 1\), le brun doré de 20 nm arrive après \((20/300)^2 = 0{,}0044\) boucle, 0,18 s : le cristal se colore dès qu’il sort. Un point sorti dès \(t = 0{,}06\) atteint 220 nm à \(t = 0{,}60\), dans le vert du second ordre.</p>
+        <p>Le dernier terme est la <strong>bande de chaleur</strong>. Pendant la remontée (\(r\), de 0 à 1 entre \(T_2\) et \(T_3\)), le métal juste au-dessus de la ligne est chauffé par le bain et s’oxyde plus vite : jusqu’à 220 nm de plus à la ligne, avec une décroissance sur 0,9 cm. Une bande de couleurs monte le long des cristaux devant le métal qui va les reprendre, et annonce la fonte.</p>
+        <figure id="fig-oxide" class="wide"><figcaption><b>L’épaisseur d’oxyde d’un point au fil de la boucle, avec <code>level</code>, <code>emerge</code> et <code>rising</code> de <code>cycle.js</code> et les vitesses de <code>OXIDES</code>.</b> Les curseurs choisissent la hauteur du point, son gradin et la gamme d’oxyde. La courbe donne l’épaisseur (en nm) pendant que le point est à l’air ; les zones grises sont les instants où le bain le couvre. Le bandeau dessous montre la couleur qu’il prend, jusqu’à l’argent liquide de la fonte. Simplification : sans le bruit \(\nu\), avec \(o = 0{,}5\), vu de face.</figcaption></figure>
+      </section>
+
+      <section id="fonte">
+        <h2><span class="n">05</span>Au-dessus du métal chaud, le cristal fond par le bas</h2>
+        <span class="src">src/scene/tracer.js · crystal(), trace()</span>
+        <p>Un cristal plongé dans du métal plus chaud que lui fond d’abord là où il touche le bain. Abaisser un plan de coupe le trancherait net, et rétrécir le cristal entier ferait fondre aussi son sommet. Melt définit une <strong>part fondue</strong> qui dépend de la hauteur au-dessus de la ligne et de l’avancée de la remontée :</p>
+        <div class="eq">\[ m = r\,e^{-\max(y - L,\,0)/0{,}55}. \]</div>
+        <p>Elle agit sur trois choses. Les arêtes s’arrondissent d’un rayon de \(0{,}34\,s\,m\) et les faces reculent de \(0{,}08\,s\,m\) (le cube est rétréci de \(0{,}42\,s\,m\), puis gonflé de 80 % de ce retrait). Les gradins se comblent (\(f = \min(1{,}6\,m, 1)\), pleins dès \(m = 0{,}625\)). Et l’oxyde disparaît : entre \(m = 0{,}45\) et \(0{,}8\), la couleur passe à celle d’un film de 8 nm, presque l’argent nu, et la rugosité de la réflexion tombe de 0,025 à 0,004. Le métal fondu est un miroir. Comme \(m\) varie avec \(y\) en chaque point, un même cristal garde ses gradins colorés en haut et devient une goutte d’argent en bas. Comme \(r\) croît au fil de la remontée, la fonte est faible quand le métal commence à monter et forte à la fin : à \(r = 1\), l’oxyde commence à céder sur les 0,44 cm au-dessus de la ligne, et l’argent est pur sur les 0,12 premiers.</p>
+        <figure id="fig-melt" class="wide"><figcaption><b>Une trémie de demi-côté 1,2 cm coupée par son plan médian, avec la fonction <code>hopper()</code> du shader, la part fondue et l’oxyde.</b> Le curseur parcourt la remontée. À gauche, la coupe peinte de la couleur de la surface à chaque hauteur, et le bain. À droite, en fonction de la hauteur, la part fondue \(m\) (blanc), la bande de chaleur (doré, en fraction de 220 nm), et la zone où l’oxyde cède la place à l’argent liquide (bande grise). Simplification : un cristal fixe, sans affaissement ni ménisque, gamme « arc-en-ciel ».</figcaption></figure>
+      </section>
+
+      <section id="evenements">
+        <h2><span class="n">06</span>L’affaissement, le coin qui cède, les gouttes et la peau suivent la ligne de métal</h2>
+        <span class="src">src/cycle.js · buildCluster(), crystalsAt()</span>
+        <p>La fonte change aussi la pose des cristaux, et chaque événement a besoin d’une cause visible. Ils sont tous déclenchés par l’instant \(t_r\) où la ligne atteint une hauteur précise du cristal, de centre \(y_c\) et de demi-côté \(s\).</p>
         <ul>
-          <li><b>L’écoulement</b> suit les équations de Navier-Stokes dans l’approximation de Boussinesq (la densité ne varie que dans la poussée \(b\)), sur une grille décalée où les vitesses vivent sur les faces des mailles. L’incompressibilité est imposée par une projection : une équation de Poisson axisymétrique, résolue par multigrille (une hiérarchie de grilles de plus en plus grossières qui corrige l’erreur à toutes les échelles). Un seul cycle par pas suffit : P0 a obtenu des formes identiques au centième de millimètre avec deux.</li>
-          <li><b>La glace</b> est suivie par une méthode d’enthalpie : chaque maille porte son énergie \(h\). Dans l’eau, \(h = T\). Dans une maille qui fond, \(h\) va de \(-L/F\) à 0 à température nulle, et la fraction de glace vaut \(f_s = -h F / L\). La condition de Stefan, le bilan qui dit à quelle vitesse recule l’interface, est contenue dans le bilan d’énergie de la maille.</li>
-          <li><b>L’eau ne traverse pas la glace</b> grâce à une pénalisation de Brinkman : un frottement \(-\eta f_s^2\,\mathbf u\), avec \(\eta = 10^6\ \mathrm{s^{-1}}\), traité implicitement, qui arrête l’eau dans les mailles solides.</li>
-          <li>L’advection est un schéma MUSCL à limiteur de van Leer, la diffusion et le temps sont explicites, avec \(\Delta t = 0{,}16\,\Delta x^2/\nu\), réduit de 20 % dès que le nombre de Courant dépasse 0,45.</li>
+          <li><strong>L’affaissement.</strong> Quand la ligne atteint le pied, à \(y_c - 0{,}6\,s\), le cristal s’enfonce de \(0{,}55\,s\) et penche de 0,45 rad du côté qui cède, sur 0,09 boucle (3,6 s), avec un départ et une arrivée adoucis.</li>
+          <li><strong>Le coin.</strong> À \(t_r(y_c) + 0{,}015\), un coin du gradin supérieur se détache. Le cristal garde une entaille, et la plaque tombe : elle part vers l’extérieur à 9 cm par boucle, descend de \(1400\,\tau^2\) cm (\(\tau\) en boucles) et tourne de 18 rad par boucle. Sur 40 s, cela fait 0,88 cm/s², environ 1 100 fois moins que la pesanteur : la chute est filmée environ 33 fois au ralenti. À l’impact, une ride part du point de chute pendant 0,07 boucle (2,8 s).</li>
+          <li><strong>Les gouttes.</strong> Quatre par cristal, sur une face et à une hauteur tirées d’un flux de hasard propre au cristal. Chacune naît quand la ligne passe 0,5 cm sous elle, grossit en 1/14 de boucle, glisse de \(6\,s\) par boucle et se fond dans le bain en l’atteignant. Elles disparaissent avec le cristal quand il s’affaisse.</li>
+          <li><strong>La peau.</strong> L’oxyde fond à 817 °C, le bismuth à 271 °C : quand le métal engloutit un cristal, sa pellicule d’oxyde reste et flotte. Quand la ligne dépasse \(y_c + 1{,}1\,s\), une peau carrée de rayon \(s\,(1{,}05 + 3{,}5\,a)\) s’étale sur le bain et s’arrondit, se fend en cellules de Voronoï de plus en plus grandes, d’épaisseur 90 à 320 nm (des plaques irisées), et s’efface en 0,16 boucle (6,4 s).</li>
         </ul>
-        <p>La fonte réelle est lente. Pour un cylindre de 2,8 cm dans un lac à 8 °C, P0 compte environ 25 minutes pour en fondre 88 %. La chaleur latente, ramenée en degrés, vaut \(L = \rho_i L_f/(\rho_w c_p) = 72{,}9\) °C. Melt la divise par \(F = 20\), ce qui gonfle d’autant le nombre de Stefan (le rapport de la chaleur sensible à la chaleur latente). On attendrait une fonte 20 fois plus rapide. P0 mesure une compression de <b>11,5</b> seulement, parce que la chaleur sensible et l’eau de fonte injectée dans la couche limite pèsent davantage quand la glace fond plus vite. Aux deux régimes extrêmes, les formes n’en dépendent presque pas : de 0,12 à 0,49 mm d’écart RMS entre \(F = 4\) et \(F = 20\). Le régime intermédiaire est plus sensible (1,45 mm).</p>
-        <p>À un millimètre de maille, deux périodes du lac demandent 23&#8239;980 pas, à 0,49 ms le pas en Node, soit 11,7 s (mesuré pour cette page, colonne moyenne, graine t1). La scène les calcule dans un worker pendant l’écran de chargement, qui dessine le profil de la colonne au fil du calcul.</p>
-        <div class="note check"><b>Validé contre l’article</b><p>Sur un cylindre fixe, P0 retrouve la pointe vers le bas à 3,5 °C et le cône dressé à 8 °C, avec 0,1 mm d’écart RMS entre les mailles de 0,5 et 0,25 mm. Les pointes restent arrondies sur une ou deux mailles : l’interface d’enthalpie s’étale sur une maille, et l’affûtage jusqu’à 100 µm décrit par l’article n’est pas atteignable à cette résolution.</p></div>
+        <p>La grappe elle-même vient de <code>buildCluster</code> : un grand cristal au centre (demi-côté 0,85 à 1,05), puis des satellites de 0,25 à 0,75 placés à 0,9 à 2,9 cm du centre, enfoncés dans la croûte (centre à 0,55 à 0,98 demi-côté de hauteur). Un tirage est refusé s’il chevauche un voisin à moins de 0,95 fois la somme des demi-côtés : deux cristaux peuvent se pénétrer un peu, comme des cristaux maclés.</p>
+        <figure id="fig-cluster" class="wide"><figcaption><b>La grappe vue de dessus, tirée par <code>buildCluster</code> et animée par <code>crystalsAt</code>.</b> Le curseur parcourt la boucle, « Lecture » la fait défiler (20 s par boucle), « Autre graine » tire une autre grappe, le second curseur change de type de grappe. Les cristaux à l’air sont peints de la couleur d’oxyde de leur sommet ; ceux que le bain couvre sont en pointillé. On voit l’entaille du coin cédé, la plaque qui tombe, les gouttes (points clairs), la peau qui s’étale (disque doré) et les rides de la chute. À droite, le niveau du bain. Simplification : la peau est un disque sans ses fissures, et l’affaissement ne se voit que par la couleur.</figcaption></figure>
+        <div class="note check"><b>Vérifié par un test</b><p>Sur la grappe de la graine f1 : rien ne bouge avant la remontée, le grand cristal s’est affaissé à \(t = 0{,}84\), et sa peau n’existe pas 0,01 boucle avant que la ligne atteigne \(y_c + 1{,}1\,s\) mais existe 0,02 boucle après. Sur 100 grappes, aucun cristal ne flotte au-dessus de la croûte et aucun couple ne se chevauche au-delà du seuil.</p></div>
       </section>
 
-      <section id="lac">
-        <h2><span class="n">03</span>La colonne avance l’hiver, s’arrête l’été, et la boucle se referme seule</h2>
-        <span class="src">src/gen/lake.js · runLake()</span>
-        <p>La colonne n’a pas de fin : elle descend de la surface sans support visible. C’est la seule liberté du film. Dans le solveur, la glace avance d’une rangée exacte chaque fois qu’elle a parcouru une maille, et une rangée de glace neuve entre par le haut. Au-delà de 8 mm de la paroi, l’eau est rappelée vers la température du lac, au taux de 0,05 s⁻¹, pour imiter un grand bain.</p>
-        <p>La première version faisait avancer la colonne sans arrêt (prototype P1). La glace de la ligne d’eau était alors toujours neuve et la glace profonde toujours la plus vieille, donc la plus fine. La colonne devenait un cône pointé vers le bas en toute saison, sans col ni détachement. Melt fait donc avancer la colonne par saisons : 0,5 mm/s simulés en saison froide, puis un arrêt de la phase 0,38 à 0,6 avec des raccords doux de 0,05. Pendant l’arrêt, l’eau chaude amincit la ligne d’eau, et la colonne cède.</p>
-        <p>Une boucle doit finir dans l’état où elle a commencé. Ici, rien n’est raccordé à la main : toute la glace visible est neuve à chaque période, donc l’état initial s’efface. Sans détachement, P1 mesure un écart d’une période à la suivante divisé par environ 5 à chaque tour, 0,014 mm après cinq périodes. Melt simule deux périodes de 400 s et n’enregistre que la seconde, en 200 profils \(r(z)\). Entre le dernier et le premier profil, l’écart est de 0,04 mm en moyenne et 2,2 mm au plus (colonne moyenne ; le test exige moins de 2,5 mm).</p>
-        <p>Le <strong>détachement</strong> se détecte par un remplissage depuis la rangée du haut, tous les 100 pas : toute maille de glace (\(f_s &gt; 0{,}5\)) qui n’est pas reliée à la surface est retirée, et son profil est relevé. Le plus gros morceau de la période enregistrée devient le fuseau libéré. Il revient à la même phase à chaque période, à ±0,003 près (P1). La reprise de l’avance crée parfois des miettes de 0,01 à 0,1 cm³ ; seuls les morceaux de plus de 0,2 cm³ sont relevés. L’horloge du film lit ensuite la phase exacte du détachement, et l’interpolation entre deux profils ne mélange jamais un profil d’avant et un profil d’après.</p>
-        <figure id="fig-lake" class="wide"><figcaption><b>Le lac calculé dans cette page par le worker de la scène, <code>src/gen/worker.js</code>, qui appelle <code>runLake</code> puis <code>simulateBody</code>.</b> Chaque bouton lance le calcul d’une colonne de la recette (graine t1, deux périodes, 10 à 15 s selon la machine). Pendant le calcul, le profil courant s’affiche avec son reflet. Ensuite, le curseur parcourt la période enregistrée (« Lecture » la fait défiler). À droite, la longueur de glace sous l’eau, la température du lac (pointillé), l’arrêt de l’avance (bande) et le détachement (trait vertical). Simplification : le profil est dessiné en silhouette plate, sans la lumière ni la glace émergée.</figcaption></figure>
-        <div class="note"><b>Le réglage du lac</b><p>Pendant l’arrêt, il ne reste parfois qu’une souche courte : la boucle n’a plus de sujet. P8 a réglé l’hiver, l’avance et l’arrêt pour réduire cette part (moins de 15 mm de glace sous l’eau) de 25 % à 11 % à 0,5 mm de maille. Un hiver plus froid ralentit la fonte, la colonne descend plus loin, et le détachement arrive juste avant la fin de l’arrêt. À 1 mm, la colonne moyenne passe 17,5 % de la boucle sous ce seuil, le temps où le fuseau couché flotte dans le cadre.</p></div>
+      <section id="etat">
+        <h2><span class="n">07</span>Tout l’état est une fonction du temps, calculée une fois par image</h2>
+        <span class="src">src/cycle.js · crystalsAt() · src/scene/stage.js · update()</span>
+        <p>Dans le prototype d’image, le shader calculait lui-même les instants de rupture, l’affaissement et les gouttes. La fonction de distance de la scène, appelée jusqu’à 200 fois par rebond et quatre fois de plus pour chaque normale, recalculait à chaque appel l’état de huit cristaux et de sept gouttes par cristal, avec leurs tirages au hasard. Ces valeurs sont pourtant les mêmes pour tous les pixels d’une image.</p>
+        <p>La scène les calcule donc une fois par image, en JavaScript. <code>crystalsAt(grappe, t)</code> rend pour chaque cristal sa pose, l’entaille, la plaque qui tombe, ses gouttes, l’âge de sa peau et sa ride. Pour douze cristaux, l’appel prend environ 1,5 µs (mesuré en Node pour cette page). Le tout est rangé dans un tampon d’uniformes de 149 vec4, soit 2 384 octets : 11 pour l’en-tête (définition, caméra, temps, marée, fond et lueur du studio), 18 pour les six boîtes de lumière du studio, 36 pour douze cristaux, 24 pour les plaques, 48 pour les gouttes, 12 pour les peaux et les rides. Le shader ne fait plus que lire.</p>
+        <p>Comme l’état ne dépend que de la recette et de \(t\), la même phase donne la même image : on peut reculer dans la boucle, exporter image par image ou accumuler plusieurs rendus d’un même instant. Les gouttes tirent leurs faces d’un générateur recréé à chaque image à partir de la graine du cristal, et restent donc les mêmes d’une image à l’autre. Rien n’est précalculé : la scène est prête dès qu’elle a sa recette.</p>
+        <p>La boucle se referme sous le bain. À \(t = 0\) et à la fin de la boucle, le niveau est \(L_H = 2{,}9\) cm et couvre tous les cristaux. Le bismuth liquide est opaque : ce qu’il couvre ne se voit pas. Les cristaux affaissés de la fin de boucle peuvent donc retrouver leur pose du début sous le miroir, pendant que le métal refroidit : ils repoussent, et à \(t = 1\) l’état est celui de \(t = 0\).</p>
+        <div class="note check"><b>Vérifié par un test</b><p>Pour 200 recettes, aux instants 0 ; 0,02 ; \(T_0 - 0{,}001\) ; \(T_3 + 0{,}03\) ; 0,95 et 0,999, chacun des huit coins de chaque cristal (étiré de \(1/0{,}62\) pour la trémie allongée, incliné selon sa pose) est au moins 0,02 cm sous le bain, et il n’y a ni plaque en chute ni goutte.</p></div>
       </section>
 
-      <section id="debout">
-        <h2><span class="n">04</span>Un cylindre de glace ne flotte debout que si D/L dépasse 0,78</h2>
-        <span class="src">src/gen/body.js</span>
-        <p>Le morceau détaché remonte. Reste à savoir s’il flotte debout ou couché. La glace a une densité relative \(s = 0{,}917\) : elle flotte avec 8,3 % de son volume hors de l’eau. Un corps flottant est stable si son <strong>métacentre</strong> \(M\), le point autour duquel la poussée tourne quand il s’incline, est au-dessus de son centre de gravité \(G\). Pour un cylindre de diamètre \(D\) et de longueur \(L\) qui flotte debout, le centre de poussée \(B\) est au milieu de la partie immergée, et la hauteur métacentrique vaut</p>
-        <div class="eq">\[ GM = \underbrace{\frac{D^2}{16\,s\,L}}_{BM} - \underbrace{\frac{L\,(1-s)}{2}}_{BG}, \qquad GM &gt; 0 \iff \frac DL &gt; \sqrt{8\,s\,(1-s)} \approx 0{,}78. \]</div>
-        <p>Une colonne de 2,8 cm de diamètre devrait donc mesurer moins de 3,6 cm pour flotter debout. Le fuseau libéré par la colonne moyenne mesure 8,5 cm pour un diamètre de 1,2 cm, soit \(D/L = 0{,}14\) (graine t1, à 1 mm de maille ; P8 trouvait 0,08 à 0,5 mm). Il bascule forcément. C’est la famille du chavirement. Les deux autres familles du concept, la révérence (D/L de 0,5 à 0,75, une lente inclinaison) et le bouchon (D/L au-delà de 0,8, qui reste debout en pilonnant), demandent une colonne plus épaisse et une avance plus lente, qui restent à régler.</p>
-        <figure id="fig-upright" class="wide"><figcaption><b>Le critère, calculé et simulé par <code>simulateBody</code>.</b> Le curseur règle l’élancement d’un cylindre de 3 cm de diamètre. À gauche, le cylindre posé debout à l’équilibre, avec \(G\), \(B\) et \(M\) (vert si \(M\) est au-dessus de \(G\)). En haut à droite, \(GM/L\) en fonction de \(D/L\), qui change de signe à 0,78. En bas, l’inclinaison \(\theta(t)\) donnée par le module de la scène, lancé à 0,1 rad (5,7°) sans souche. Avec ce modèle, un cylindre bascule à \(D/L = 0{,}75\) et reste debout à 0,82 (mesuré pour cette page). Simplification : le cylindre est parfait, alors que le fuseau réel est effilé, ce qui réduit sa surface de flottaison et repousse le seuil.</figcaption></figure>
-        <div class="note check"><b>Vérifié par un test</b><p>Un fuseau élancé simulé par <code>body.js</code> se couche à \(90° \pm 7°\) avec \(8{,}3 \pm 0{,}6\) % de son volume émergé. Un bloc trapu de \(D/L = 1{,}4\) reste à moins de 9° de la verticale.</p></div>
-      </section>
-
-      <section id="bascule">
-        <h2><span class="n">05</span>La bascule se calcule sur le vrai profil, tranche par tranche</h2>
-        <span class="src">src/gen/body.js · simulateBody() · bodyPose()</span>
-        <p>Une bascule se joue sur l’écart entre le centre de gravité et le centre de poussée, et celui-ci se déplace à mesure que le corps s’incline et que la partie immergée change de forme. Une poussée appliquée au centre du volume ne basculerait jamais rien. Melt reprend le profil relevé au détachement, rangée par rangée, et le traite comme une pile de disques. Pour chaque disque coupé par le plan d’eau, la partie immergée est un segment de disque dont l’aire et le centroïde sont exacts :</p>
-        <div class="eq">\[ f = \frac{\arccos \eta - \eta\sqrt{1-\eta^2}}{\pi}, \qquad x_b = \frac{2}{3}\,\frac{(1-\eta^2)^{3/2}}{\arccos \eta - \eta\sqrt{1-\eta^2}}\;r, \]</div>
-        <p>où \(\eta\) est la hauteur du centre du disque au-dessus de l’eau, rapportée à la demi-hauteur du disque incliné. Le corps est rigide, dans le plan vertical de bascule \((x, y, \theta)\). S’y ajoutent la masse ajoutée (l’eau qu’il faut mettre en mouvement avec le corps, coefficient 0,5) et l’inertie ajoutée d’un corps élancé, une traînée quadratique par tranche (1,2 en travers, 0,2 le long), l’amortissement par les vagues rayonnées (\(\zeta = 0{,}15\) sur les raideurs de flottaison) et un contact sans frottement avec la souche restée à la surface, un cône de 25°. Le pas est de \(2\times10^{-5}\) s et la trajectoire est relevée à 120 Hz.</p>
-        <p>Le prototype P2, sur un fuseau de 7 cm (\(D/L = 0{,}19\)) incliné de 8°, donne un passage à 45° en 0,53 s, un dépassement jusqu’à environ 105°, puis un fuseau couché en 1,5 s avec 8,3 % émergé. Le fuseau réel de la graine t1, plus élancé et parti de plus près de la verticale, passe 45° à 2,2 s et se couche sans dépasser 92°. L’inclinaison de départ vient de la recette (0,06 à 0,16 rad) : le col ne cède jamais parfaitement droit.</p>
-        <figure id="fig-capsize" class="wide"><figcaption><b>Le fuseau libéré, simulé par <code>simulateBody</code> et posé par <code>bodyPose</code>, en temps réel.</b> Les curseurs règlent l’inclinaison au départ et l’élancement d’un fuseau analytique de 8 cm, au bout émoussé en bas et effilé en haut. « Souche » ajoute le contact avec la colonne restée à la surface. Si le lac a été calculé plus haut, « Profil du lac » prend le vrai profil au détachement. À gauche, le fuseau, la souche et, en pâle, le reflet de la partie immergée dans la surface. À droite, l’inclinaison \(\theta\) et la part émergée. Simplification : la dérive par la brise, hors du plan, n’est pas dessinée.</figcaption></figure>
-        <div class="note trap"><b>Coincé sous la souche</b><p>En 2D, le fuseau couché finit juste sous la souche, 5 % émergé, et un courant de 1 cm/s le long de son axe ne l’en dégage pas. La scène le fait dériver hors du plan de bascule, poussé par une brise visible dans les rides : \(d(\tau) = U_c\,\big(\tau - \tau_d\,(1 - e^{-\tau/\tau_d})\big)\), avec \(U_c = 4\) mm/s et \(\tau_d = 2{,}5\) s. Cette loi part du repos sans à-coup, ce qu’un test vérifie.</p></div>
-      </section>
-
-      <section id="horloge">
-        <h2><span class="n">06</span>Le film ralentit presque au temps réel autour du détachement</h2>
-        <span class="src">src/timeline.js · simPhase()</span>
-        <p>Une période simulée de 400 s vaut \(400 \times 11{,}5 = 4\,600\) s physiques, soit 1 h 17 min, montrées en 48 s de film : 96 secondes physiques par seconde de film. La bascule dure une à deux secondes physiques. À cette cadence, elle tiendrait en une image. Melt déforme donc le temps. Tout ce qui bouge lit la phase simulée \(s(u)\), fonction de la phase du film \(u\), dont la vitesse est un plateau de ralenti :</p>
-        <div class="eq">\[ s(u) = \frac{\int_0^u \big(1 - A\,\Pi(u')\big)\,du'}{\int_0^1 \big(1 - A\,\Pi(u')\big)\,du'}, \qquad A = 0{,}982, \]</div>
-        <p>où \(\Pi\) vaut 1 sur une demi-largeur \(h = 0{,}036\) autour du centre \(c\) et retombe à 0 par des raccords en smoothstep de largeur 0,03. La normalisation garantit \(s(0) = 0\) et \(s(1) = 1\). Le centre \(c\) est cherché par itération de point fixe pour que \(s(c)\) tombe exactement sur la phase du détachement : le fil cède au milieu du ralenti. Sur le plateau, \(ds/du = 0{,}020\), soit 1,9 s physique par seconde de film. Le fuseau lit le temps physique depuis le détachement, \(\tau(u) = (s(u) - s_d)\,P\,F_t\), avec \(P = 400\) s et \(F_t = 11{,}5\), la compression mesurée par P0.</p>
-        <p>La lumière et la température du lac lisent la même phase \(s\). L’été ralentit avec la bascule, et la brise qui ride la surface naît à \(s_d\). Une seule horloge garde les causes et leurs effets en phase.</p>
-        <figure id="fig-warp"><figcaption><b>L’horloge de <code>timeline.js</code>, importée telle quelle.</b> Le premier curseur règle la phase du détachement \(s_d\), le second la phase du film \(u\). À gauche, \(s(u)\) et la diagonale du temps uniforme ; la bande marque le plateau. À droite, en échelle logarithmique, le nombre de secondes physiques par seconde de film (boucle de 48 s). Le bandeau donne \(\tau\), le temps physique depuis le détachement.</figcaption></figure>
-        <div class="note check"><b>Vérifié par un test</b><p>Pour trois phases de détachement, \(s\) part de 0, finit à 1, ne recule jamais, et \(s(c) = s_d\) à \(10^{-5}\) près. Au détachement, la vitesse du film est sous 2,5 % de sa moyenne.</p></div>
-      </section>
-
-      <section id="optique">
-        <h2><span class="n">07</span>La glace claire est invisible dans l’eau, la colonne est en glace bulleuse</h2>
-        <span class="src">src/scene/tracer.js · iceInterior()</span>
-        <p>La glace a un indice de 1,309 et l’eau de 1,333. Leur rapport, 0,982, est si proche de 1 qu’une colonne de glace claire dévie à peine la lumière. Sous incidence normale, elle en réfléchit \(\big((1{,}333-1{,}309)/(1{,}333+1{,}309)\big)^2 = 8{,}3\times10^{-5}\). La réflexion totale n’a lieu qu’au-delà de 79,1° d’incidence, sur les 1,8 % extérieurs du rayon : 0,25 mm pour une colonne de 1,4 cm, environ un pixel. Le prototype P3, un lancer de rayons aux indices vrais, l’a vérifié dans les six humeurs : de la glace claire taillée, il ne reste que le cœur laiteux et les chapelets de bulles.</p>
-        <p>La colonne de Melt est donc en <strong>glace bulleuse</strong>, une glace de lac ou de névé pleine de petites bulles qui diffusent la lumière. Dès un coefficient de diffusion de 0,5 cm⁻¹, la forme se lit dans toutes les humeurs. À 1,6 cm⁻¹, elle prend l’aspect du plâtre. Les glaces de la recette vont de 0,22 cm⁻¹ (bleue de glacier) à 0,9 cm⁻¹ (blanche de névé). Dans le shader, un rayon qui entre dans la glace avance par pas de 0,3 mm. La densité de diffusion est 2,5 fois plus forte au cœur, où le gel chasse les bulles. La lumière diffusée vient de la boîte à lumière et du soleil, atténuée le long de la corde jusqu’à la paroi. Une absorption faible bleuit les fortes épaisseurs.</p>
-        <p>Les grosses bulles (0,12 à 0,52 mm de rayon) sont posées dans des cellules en <strong>coordonnées de la matière</strong>, la hauteur augmentée de l’avance cumulée : elles descendent avec la glace. La colonne avance de 14,6 cm par période (colonne moyenne). La hauteur des cellules est choisie pour qu’un nombre entier d’entre elles y tienne (86 cellules de 1,70 mm), et l’indice vertical est pris modulo ce nombre. À \(u = 1\), le motif retombe exactement sur celui de \(u = 0\). Un rayon qui passe au bord d’une bulle, au-delà de 0,76 de son rayon, y est totalement réfléchi : c’est le sinus de l’angle critique de l’air dans la glace, \(1/1{,}309\). Le fuseau libéré garde les bulles qu’il avait dans la colonne.</p>
-        <figure id="fig-ice" class="wide"><figcaption><b>Une coupe de la colonne dans un faisceau parallèle, avec les indices du shader.</b> Le premier curseur règle l’indice de la glace (1,309 par défaut), le second la diffusion des bulles. À gauche, les rayons tracés exactement à travers une section circulaire : en bleu, les rayons totalement réfléchis au bord. À droite, en travers de la colonne, la part réfléchie par la glace claire (en bleu : Fresnel, avec le saut du liseré) et la part diffusée par la glace bulleuse sur la corde traversée (rayon 1,4 cm). Simplification : une seule diffusion, sans la lumière qu’elle renvoie vers l’œil.</figcaption></figure>
-        <div class="note"><b>Le courant ne se voit pas, la forme si</b><p>Trois prototypes ont cherché à montrer l’eau de fonte elle-même. En ombroscopie (P3), la couche limite ne laisse aucune trace : l’indice de l’eau ne varie que de \(2{,}6\times10^{-6}\) par °C. Les bulles libérées à la fonte (P5) suivent bien le courant, et 73 % de celles de 10 à 30 µm descendent à 8 °C, mais elles font 0,1 à 0,3 pixel, et les grosses filent sur des centaines de pixels pendant la pose d’une image. L’eau de fonte limpide dans un lac trouble change l’image d’au plus 6 niveaux sur 255. En eau salée (P7), les nappes d’intrusion dévient la lumière de quelques milliradians et restent invisibles. À l’échelle de quelques centimètres et en lumière naturelle, le film montre la forme de la glace, et la cause visible est la saison : la lumière et la température du lac.</p></div>
-      </section>
-
-      <section id="snell">
-        <h2><span class="n">08</span>Vue de dessous, la surface est une fenêtre de 48,6° cerclée d’un miroir</h2>
-        <span class="src">src/scene/tracer.js · trace()</span>
-        <p>Sous l’eau, on ne voit le ciel qu’à travers un disque. Un rayon qui monte de l’œil sort dans l’air tant que son angle avec la verticale reste sous l’angle critique, \(\arcsin(1/1{,}333) = 48{,}6°\). Tout le ciel, de l’horizon au zénith, tient dans ce cône : c’est la <strong>fenêtre de Snell</strong>. Au-delà, la réflexion est totale, et la surface devient un miroir parfait qui renvoie le fond du lac. C’est ce miroir qui donne à chaque forme son double : la colonne et son reflet font un fuseau symétrique, et le fuseau couché se referme sur le sien.</p>
-        <p>Une matière à transmission de three.js ne sait faire ni ce miroir ni la réflexion totale au bord de la glace. Melt rend donc l’image par un lancer de rayons écrit en WGSL, dans un shader de calcul qui remplit une texture HDR, avant la chaîne d’image commune. La colonne et le fuseau sont des fonctions de distance signée tirées des profils simulés, interpolés entre rangées. À chaque rencontre de la surface, le rayon se partage selon Fresnel : la part transmise va vers le ciel et la glace émergée, givrée, et la part réfléchie continue sous l’eau, jusqu’à six rebonds. Après le détachement, la surface est ridée par l’onde de la bascule (amplitude \(0{,}006\,e^{-\tau/2{,}5}\), longueur d’onde 1,2 cm), puis par la brise.</p>
-        <figure id="fig-snell"><figcaption><b>La fenêtre de Snell et la réflexion totale, avec les coefficients de Fresnel du shader.</b> Le curseur, ou un glissé dans la coupe, oriente le regard depuis l’œil. À gauche, la coupe : la fenêtre (en vert sur la surface), la colonne qui pend et son reflet. Sous 48,6°, le rayon sort et voit le ciel, comprimé (un regard à 48° voit l’horizon). Au-delà, il revient vers le fond. À droite, la réflectance de l’eau vers l’air et de l’eau vers la glace, avec leurs angles critiques, 48,6° et 79,1°. Simplification : la surface est plane.</figcaption></figure>
+      <section id="rayons">
+        <h2><span class="n">08</span>Un rayon ne visite que les cristaux qu’il croise</h2>
+        <span class="src">src/scene/tracer.js · rayMask(), trace()</span>
+        <p>L’image est un lancer de rayons dans un shader de calcul WebGPU. Chaque rayon avance par bonds de la taille de la distance à la surface la plus proche (la marche de sphère), se réfléchit sur le métal et repart vers le studio. Le prototype <code>proto/b0</code> évaluait à chaque pas les huit cristaux, leurs 56 gouttes et le bain, sur 200 pas et quatre rebonds, jusqu’à 60 cm. Il prenait environ 215 ms par passe en 1 280 × 800. La plupart des pixels voient pourtant le bain ou le fond du studio, loin de tout cristal.</p>
+        <p>La scène teste d’abord, pour chaque rayon, la sphère englobante de chaque cristal : rayon \(2s\) (\(3s\) pour la trémie allongée), agrandi pour contenir la plaque qui tombe et, de \(0{,}4\,s\), les gouttes. Les cristaux touchés forment un masque de bits (douze au plus), et la marche ne visite qu’eux, jusqu’à la sortie de la sphère la plus lointaine. Un rayon qui ne croise aucune sphère ne marche pas du tout : s’il descend, il touche le plan du bain en \(t = (L - y_0)/d_y\), sinon il lit le studio. Au bain, la normale est celle du plan, perturbée par la peau et les rides, sans les quatre évaluations de la scène d’une normale ordinaire. La marche fait au plus 160 pas de 0,7 fois la distance, sur trois rebonds. L’image prend environ 9 ms en 1 280 × 800, et chaque image est neuve : il n’y a pas d’accumulation.</p>
+        <div class="note trap"><b>Une distance qui n’en est pas une</b><p>Le creux de la trémie, le maximum de deux distances, l’étirement de la variante allongée et l’entaille du coin donnent une fonction qui surestime parfois la vraie distance. Un rayon qui avance de toute la valeur peut alors traverser une marche. La scène n’avance que de 70 % de la valeur, avec un pas minimal de 0,008 mm pour ne pas stagner près des surfaces.</p></div>
       </section>
 
       <section id="budget">
         <h2><span class="n">09</span>Budget</h2>
-        <p>Toute la physique est calculée une fois, au chargement, dans un worker. À chaque image, le processeur interpole deux profils enregistrés, lit la pose du fuseau et envoie une centaine de nombres au shader.</p>
+        <p>Aucun précalcul. À chaque image, le processeur appelle <code>crystalsAt</code> et envoie 2 384 octets au shader, qui calcule l’image.</p>
         <div class="tbl"><table>
           <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
           <tbody>
-            <tr><td>Solveur, un pas sur 40 × 160 mailles (1 mm), un cycle de multigrille</td><td>worker</td><td class="num">0,49 ms</td></tr>
-            <tr><td>Lac, deux périodes de 400 s simulées, 23&#8239;980 pas (colonne moyenne, graine t1, mesuré en Node)</td><td>worker</td><td class="num">≈ 12 s</td></tr>
-            <tr><td>Bascule du fuseau, 8 s physiques au pas de 2·10⁻⁵ s, 85 tranches (Node)</td><td>worker</td><td class="num">1,4 s</td></tr>
-            <tr><td>Enregistrement : 200 profils × 160 rangées, en flottants</td><td>mémoire</td><td class="num">125 Ko</td></tr>
-            <tr><td>Lancer de rayons, 1&#8239;280 × 800, jusqu’à six rebonds, 220 pas de marche et 200 pas dans la glace au plus</td><td>GPU</td><td class="num">≈ 3 ms</td></tr>
+            <tr><td>État de la grappe, <code>crystalsAt</code>, 12 cristaux (Node, mesuré pour cette page)</td><td>CPU</td><td class="num">≈ 1,5 µs</td></tr>
+            <tr><td>Uniformes : 149 vec4 (caméra, marée, studio, cristaux, plaques, gouttes, peaux)</td><td>CPU → GPU</td><td class="num">2&#8239;384 octets</td></tr>
+            <tr><td>Lancer de rayons, 1&#8239;280 × 800, trois rebonds, 160 pas au plus, sphères englobantes</td><td>GPU</td><td class="num">≈ 9 ms</td></tr>
+            <tr><td>Prototype <code>proto/b0</code>, même définition, sans sphères englobantes ni bain analytique, une passe</td><td>GPU</td><td class="num">≈ 215 ms</td></tr>
           </tbody>
         </table></div>
-        <p>Les mesures du solveur et de la bascule ont été faites en Node pour cette page. Dans le worker de cette page (la démo de la section 03, ouverte dans le panneau de navigateur masqué), le même calcul a pris 13,2 s. Le temps d’image a été mesuré dans le panneau de navigateur masqué de l’environnement de travail, et n’a pas été vérifié sur un écran visible. Six tests couvrent la recette, l’horloge, la flottaison, la dérive, le lac (un détachement par période pendant l’arrêt, raccord de la boucle, profils jamais mélangés de part et d’autre du détachement) et la caméra (périodique, sous 2 cm/s).</p>
+        <p>Les temps de rendu ont été mesurés pendant le développement, sur la machine de travail, et n’ont pas été vérifiés sur mobile. Six tests couvrent la recette, la marée, le raccord de la boucle sous le bain, la grappe, l’ordre des événements de la fonte et la caméra (périodique, sous 1,5 cm/s).</p>
+        <div class="note"><b>Une version précédente</b><p>Melt a d’abord montré une colonne de glace sous la surface d’un lac. Cette version a été abandonnée pour le bain de bismuth. Ses concepts restent dans <code>docs/concept-*.md</code> et ses prototypes dans <code>proto/p0</code> à <code>proto/p8</code>.</p></div>
       </section>
     </article>
 
@@ -153,18 +149,13 @@
   </main>
 
   <script type="module">
-    import { demo, C, lerp, clamp, alpha, label } from '../home/explainer.js';
-    import { PHYS } from './src/gen/sim.js';
-    import { lakeT, feedRate } from './src/gen/lake.js';
-    import { generate, COLUMNS } from './src/recipe.js';
-    import { simulateBody, bodyPose } from './src/gen/body.js';
-    import { simPhase, detachFilmPhase, columnRows, COMPRESSION } from './src/timeline.js';
+    import { demo, C, lerp, clamp, alpha, label, smooth } from '../home/explainer.js';
+    import { CYCLE, level, emerge, reach, rising, buildCluster, crystalsAt } from './src/cycle.js';
+    import { generate, OXIDES, CLUSTERS } from './src/recipe.js';
 
     const fr = (x, n = 2) => x.toFixed(n).replace('.', ',').replace('-', '−');
-    const DEG = 180 / Math.PI;
-    const SUP = { '-': '⁻', 0: '⁰', 1: '¹', 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹' };
-    const sci = (x) => { if (x === 0) return '0'; const e = Math.floor(Math.log10(x)); return `${fr(x / 10 ** e, 1)}·10${String(e).split('').map((c) => SUP[c]).join('')}`; };
-    const NW = 1.333, NI = 1.309;
+    const LOOP = generate('b1').loop.duration; // s
+    const OXK = Object.keys(OXIDES), CLK = Object.keys(CLUSTERS);
 
     function line(g, pts, color, width = 1.5, dash = null) {
       g.save(); g.strokeStyle = color; g.lineWidth = width; if (dash) g.setLineDash(dash);
@@ -172,512 +163,385 @@
     }
     function box(g, x, y, w, h) { g.save(); g.strokeStyle = C.grid; g.lineWidth = 1; g.strokeRect(x + .5, y + .5, w, h); g.restore(); }
     function dot(g, x, y, r, color) { g.save(); g.fillStyle = color; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill(); g.restore(); }
-    // Fresnel non polarisé, comme fresnel() du shader
-    function fresnel(ci, n1, n2) {
-      const eta = n1 / n2, st2 = eta * eta * (1 - ci * ci);
-      if (st2 >= 1) return 1;
-      const ct = Math.sqrt(1 - st2);
-      const rs = (n1 * ci - n2 * ct) / (n1 * ci + n2 * ct), rp = (n1 * ct - n2 * ci) / (n1 * ct + n2 * ci);
-      return 0.5 * (rs * rs + rp * rp);
+    const hexRGB = (hex) => { const n = parseInt(hex.replace('#', ''), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; };
+
+    // ── couche mince : filmR() et filmRGB() du shader ──
+    const N1 = 2.2, N2 = [1.9, 3.4];
+    const cmul = (a, b) => [a[0] * b[0] - a[1] * b[1], a[0] * b[1] + a[1] * b[0]];
+    const cdiv = (a, b) => { const d = b[0] * b[0] + b[1] * b[1]; return [(a[0] * b[0] + a[1] * b[1]) / d, (a[1] * b[0] - a[0] * b[1]) / d]; };
+    const R01 = (1 - N1) / (1 + N1), R12 = cdiv([N1 - N2[0], -N2[1]], [N1 + N2[0], N2[1]]);
+    function filmR(th, lam, cosi = 1) {
+      const sint = Math.sqrt(Math.max(0, 1 - cosi * cosi)) / N1;
+      const dl = 4 * Math.PI * N1 * th * Math.sqrt(1 - sint * sint) / lam;
+      const e = cmul(R12, [Math.cos(dl), Math.sin(dl)]);
+      const r = cdiv([R01 + e[0], e[1]], [1 + R01 * e[0], R01 * e[1]]);
+      return r[0] * r[0] + r[1] * r[1];
+    }
+    const filmRGB = (th, c = 1) => [
+      .5 * filmR(th, 610, c) + .5 * filmR(th, 650, c),
+      .5 * filmR(th, 530, c) + .5 * filmR(th, 560, c),
+      .5 * filmR(th, 450, c) + .5 * filmR(th, 480, c)];
+    const toSRGB = (x) => { x = clamp(x); return x <= .0031308 ? 12.92 * x : 1.055 * x ** (1 / 2.4) - .055; };
+    const rgb8 = (c, e = 1.3) => c.map((v) => Math.round(255 * toSRGB(v * e)));
+    const css = (c, e) => `rgb(${rgb8(c, e).join(',')})`;
+
+    // ── l'oxyde en un point (trace() du shader, sans le bruit) ──
+    function oxide(y, t, { rate = 1, o = .5, k = 0 } = {}) {
+      const a = Math.max(t - emerge(y), 0), L = level(t), rs = rising(t);
+      const above = Math.max(y - L, 0);
+      const th = rate * 300 * Math.sqrt(a) * (.85 + .3 * o) + 24 * k * Math.sqrt(a) + 220 * rs * Math.exp(-above / .9);
+      const mp = rs * Math.exp(-above / .55);
+      return { th, mp, wet: y < L };
+    }
+    const SILVER = filmRGB(8);
+    function surface(y, t, opt) {
+      const { th, mp } = oxide(y, t, opt), m = smooth(.45, .8, mp), c = filmRGB(Math.max(th, 0));
+      return c.map((v, i) => lerp(v, SILVER[i], m));
     }
 
-    // ── 01 · densité et sens de la couche limite ─────────────────────────
+    // ── la trémie : hopper() du shader ──
+    function hopper(q, s, round, fill, w = .11, dep = .75, spiral = false, cav = 1) {
+      const b = q.map((v) => Math.abs(v) - s);
+      const dbox = Math.hypot(Math.max(b[0], 0), Math.max(b[1], 0), Math.max(b[2], 0)) + Math.min(Math.max(b[0], b[1], b[2]), 0) - round;
+      if (cav < .5) return [dbox, 0];
+      const a = q.map(Math.abs);
+      let n, t;
+      if (a[0] >= a[1] && a[0] >= a[2]) { n = a[0]; t = [q[1], q[2]]; } else if (a[1] >= a[2]) { n = a[1]; t = [q[0], q[2]]; } else { n = a[2]; t = [q[0], q[1]]; }
+      const ww = s * w;
+      let tt = t;
+      if (spiral) {
+        const k0 = Math.floor((s - Math.max(Math.abs(t[0]), Math.abs(t[1]))) / ww), an = k0 * .07, c = Math.cos(an), sn = Math.sin(an);
+        tt = [c * t[0] - sn * t[1], sn * t[0] + c * t[1]];
+      }
+      const rim = s - Math.max(Math.abs(tt[0]), Math.abs(tt[1]));
+      const k = Math.min(Math.floor(rim / ww), 7);
+      const depth = k * ww * dep * (1 - fill);
+      return [Math.max(dbox, n - (s - depth)), k];
+    }
+    // image calculée hors écran puis posée à l'échelle
+    function raster(nx, ny, fn) {
+      const cv = new OffscreenCanvas(nx, ny), cx = cv.getContext('2d'), im = cx.createImageData(nx, ny);
+      for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+        const c = fn(i, j); if (!c) continue;
+        const o = 4 * (j * nx + i); im.data[o] = c[0]; im.data[o + 1] = c[1]; im.data[o + 2] = c[2]; im.data[o + 3] = c[3] ?? 255;
+      }
+      cx.putImageData(im, 0, 0);
+      return cv;
+    }
+    const BATH = [118, 122, 130];
+
+    // ── 01 · la marée ────────────────────────────────────────────────────
     {
-      const { beta, Ts, g: G } = PHYS;
-      demo('#fig-density', {
-        title: 'L’eau de fonte monte ou descend', aspect: 2.3,
-        controls: [{ key: 'u', label: 'Phase de l’année', min: 0, max: 1, step: .005, value: .12, fmt: (v) => fr(v, 2) }],
-        buttons: [{ key: 'warm', label: 'Lac chaud', toggle: true, value: false }],
+      const cl = buildCluster('b1', CLUSTERS.grappe);
+      demo('#fig-tide', {
+        title: 'Le niveau du bain et le temps à l’air', aspect: 2.2,
+        controls: [
+          { key: 't', label: 'Phase de la boucle t', min: 0, max: .999, step: .001, value: .45, fmt: (v) => fr(v, 3) },
+          { key: 'y', label: 'Hauteur suivie (cm)', min: .25, max: 2.85, step: .01, value: 1.4, fmt: (v) => fr(v, 2) },
+        ],
         draw(g, d) {
-          const { w, h } = d;
-          const col = d.s.warm ? COLUMNS.chaude : COLUMNS.moyenne;
-          const Tinf = lakeT(col, d.s.u);
-          const pad = 40, gap = 46, top = 16, H = h - top - 34;
-          const W1 = (w - 2 * pad - gap) * .44, W2 = w - 2 * pad - gap - W1, x1 = pad, x2 = pad + W1 + gap;
-          // gauche : ρ/ρ* − 1 en millionièmes
-          const Tm = 12, rmin = -beta * 1e6 * (Tm - Ts) ** 2;
-          const X = (T) => x1 + (T / Tm) * W1, Y = (r) => top + (r / rmin) * H * .96 + 4;
+          const { w, h } = d, t = d.s.t, y = d.s.y;
+          const top = 14, H = h - top - 34, pad = 40, gap = 36;
+          const W1 = (w - 2 * pad - gap) * .55, W2 = w - 2 * pad - gap - W1, x1 = pad, x2 = pad + W1 + gap;
+          const YM = 3.3, X = (s) => x1 + s * W1, Y = (v) => top + H - v / YM * H;
           box(g, x1, top, W1, H);
-          const pts = []; for (let k = 0; k <= 120; k++) { const T = Tm * k / 120; pts.push([X(T), Y(-beta * 1e6 * (T - Ts) ** 2)]); }
-          line(g, [[x1, Y(-beta * 1e6 * 16)], [x1 + W1, Y(-beta * 1e6 * 16)]], C.faint, 1, [3, 4]);
+          g.fillStyle = alpha(C.c2, .1); g.fillRect(X(CYCLE.T0), top + 1, X(CYCLE.T1) - X(CYCLE.T0), H - 1);
+          g.fillStyle = alpha(C.c3, .1); g.fillRect(X(CYCLE.T2), top + 1, X(CYCLE.T3) - X(CYCLE.T2), H - 1);
+          const pts = []; for (let k = 0; k <= 400; k++) { const s = k / 400 * .9999; pts.push([X(s), Y(level(s))]); }
           line(g, pts, C.ink, 1.6);
-          dot(g, X(0), Y(-beta * 1e6 * 16), 4, C.c2);
-          dot(g, X(Tinf), Y(-beta * 1e6 * (Tinf - Ts) ** 2), 5, C.c1);
-          dot(g, X(4), Y(0), 2.5, C.dim);
-          for (const T of [0, 4, 8, 12]) label(g, T === 4 ? '4 °C (max)' : `${T} °C`, X(T), top + H + 16, { align: 'center', size: 11 });
-          label(g, 'ρ/ρ* − 1 (10⁻⁶)', x1 + 6, top + H - 8, { size: 11 });
-          for (const r of [0, -200, -400]) label(g, String(r).replace('-', '−'), x1 - 6, Y(r) + 4, { align: 'right', size: 10 });
-          label(g, `lac ${fr(Tinf, 1)} °C`, X(Tinf) + (Tinf < 6 ? 10 : -10), Y(-beta * 1e6 * (Tinf - Ts) ** 2) + 18, { size: 11, color: C.c1, align: Tinf < 6 ? 'left' : 'right' });
-          label(g, 'eau de fonte', X(0) + 8, Y(-beta * 1e6 * 16) + 16, { size: 11, color: C.c2 });
-          // droite : poussée b(d) dans la couche limite
-          const dmax = 6, delta = 1, iceW = 14;
-          const bAt = (dd) => { const T = Tinf * (1 - Math.exp(-dd / delta)); return G * beta * ((T - Ts) ** 2 - (Tinf - Ts) ** 2); };
-          const bs = G * beta * 36;
-          const Xd = (dd) => x2 + iceW + (dd / dmax) * (W2 - iceW), Yb = (b) => top + H / 2 - (b / bs) * H * .46;
+          const te = emerge(y), tr = reach(y);
+          line(g, [[x1, Y(y)], [x1 + W1, Y(y)]], C.faint, 1, [3, 4]);
+          line(g, [[X(te), Y(y)], [X(tr), Y(y)]], C.c1, 3);
+          dot(g, X(te), Y(y), 4, C.c2); dot(g, X(tr), Y(y), 4, C.c3);
+          line(g, [[X(t), top], [X(t), top + H]], alpha(C.ink, .45), 1);
+          dot(g, X(t), Y(level(t)), 4.5, C.ink);
+          for (const v of [0, .25, .5, .75, 1]) label(g, fr(v, 2), X(v), top + H + 16, { align: 'center', size: 10 });
+          for (const v of [0, 1, 2, 3]) label(g, String(v), x1 - 6, Y(v) + 4, { align: 'right', size: 10 });
+          label(g, 'L(t) (cm)', x1 + 6, top + 14, { size: 11 });
+          label(g, 'descente', X((CYCLE.T0 + CYCLE.T1) / 2), top + H - 8, { size: 10, color: C.c2, align: 'center' });
+          label(g, 'remontée', X((CYCLE.T2 + CYCLE.T3) / 2), top + H - 8, { size: 10, color: C.c3, align: 'center' });
+          label(g, 'à l’air', X((te + tr) / 2), Y(y) - 7, { size: 10, color: C.c1, align: 'center' });
+          // droite : la grappe de profil
+          const L = level(t), st = crystalsAt(cl, t);
+          const sc = H / YM, Xs = (x) => x2 + W2 / 2 + x * sc;
           box(g, x2, top, W2, H);
-          g.fillStyle = alpha(C.ink, .85); g.fillRect(x2 + 1, top + 1, iceW, H - 1);
-          line(g, [[Xd(0), Yb(0)], [x2 + W2, Yb(0)]], C.grid, 1);
-          let net = 0, pos = false, neg = false;
-          const N = 120, curve = [];
-          for (let k = 0; k <= N; k++) { const dd = dmax * k / N, b = bAt(dd); curve.push([Xd(dd), Yb(b)]); net += b; if (b > 1e-7) pos = true; if (b < -1e-7) neg = true; }
-          g.save(); g.beginPath(); g.moveTo(Xd(0), Yb(0)); curve.forEach(([x, y]) => g.lineTo(x, y)); g.lineTo(Xd(dmax), Yb(0)); g.closePath();
-          g.clip();
-          g.fillStyle = alpha(C.c1, .28); g.fillRect(x2, top, W2, Yb(0) - top);
-          g.fillStyle = alpha(C.c2, .28); g.fillRect(x2, Yb(0), W2, top + H - Yb(0));
+          g.save(); g.beginPath(); g.rect(x2 + 1, top + 1, W2 - 1, H - 1); g.clip();
+          for (const c of [...st].sort((a, b) => b.z - a.z)) {
+            g.save(); g.translate(Xs(c.x), Y(c.y)); g.rotate(c.tilt);
+            const p = c.s * sc;
+            g.fillStyle = css(surface(c.y + c.s, t, { o: c.ox })); g.fillRect(-p, -p, 2 * p, 2 * p);
+            g.strokeStyle = alpha(C.ink, .5); g.lineWidth = 1; g.strokeRect(-p, -p, 2 * p, 2 * p);
+            g.restore();
+          }
+          const gr = g.createLinearGradient(0, Y(L), 0, Y(0));
+          gr.addColorStop(0, '#9da2aa'); gr.addColorStop(1, '#3d4046');
+          g.fillStyle = gr; g.fillRect(x2 + 1, Y(L), W2 - 1, Y(0) - Y(L));
+          line(g, [[x2, Y(L)], [x2 + W2, Y(L)]], C.ink, 1.2);
           g.restore();
-          line(g, curve, C.ink, 1.5);
-          label(g, 'glace', x2 + iceW / 2, top + H + 16, { align: 'center', size: 11 });
-          label(g, 'distance à la glace (mm) →', x2 + W2, top + H + 16, { align: 'right', size: 11 });
-          label(g, 'monte', x2 + iceW + 6, top + 14, { size: 11, color: C.c1 });
-          label(g, 'descend', x2 + iceW + 6, top + H - 8, { size: 11, color: C.c2 });
-          const regime = pos && neg ? `bidirectionnelle, ${net > 0 ? 'surtout montante' : 'surtout descendante'}` : pos ? 'montante : le bout s’arrondit' : 'descendante : la ligne d’eau s’amincit';
-          const feed = feedRate(col, d.s.u) > 0.5 ? 'la colonne avance' : 'l’avance est arrêtée';
-          d.status(`T∞ = ${fr(Tinf, 1)} °C · couche ${regime} · ${feed}`);
+          line(g, [[x2 + W2 - 10, Y(y)], [x2 + W2, Y(y)]], C.c1, 2);
+          label(g, 'bain', x2 + 6, Y(L) + 14, { size: 10, color: '#1a1a1e' });
+          label(g, 'vue de côté, même échelle', x2 + W2 / 2, top + H + 16, { size: 10, align: 'center' });
+          d.status(`t = ${fr(t, 3)} (${fr(t * LOOP, 1)} s) · L = ${fr(L, 2)} cm · à ${fr(y, 2)} cm, le métal sort à t = ${fr(te, 3)} et revient à t = ${fr(tr, 3)} : ${fr((tr - te) * LOOP, 1)} s à l’air`);
         },
       });
     }
 
-    // ── 03 · le lac, calculé par le worker de la scène ────────────────────
-    let LAKE = null;
+    // ── 02 · la trémie ───────────────────────────────────────────────────
     {
-      let worker = null, live = null, err = null, t0 = 0;
-      const KEYS = { moyenne: 'Colonne moyenne', fine: 'Fine', large: 'Large', chaude: 'Lac chaud' };
-      const run = (d, key) => {
-        worker?.terminate();
-        LAKE = null; err = null; live = { f: 0, prof: null, u: 0, T: 0, key }; t0 = performance.now();
-        const R = generate('t1', { column: key });
-        worker = new Worker(new URL('./src/gen/worker.js', import.meta.url), { type: 'module' });
-        worker.onmessage = ({ data }) => {
-          if (data.error) { err = data.error.split('\n')[0]; worker.terminate(); worker = null; live = null; }
-          else if (data.out) { LAKE = { R, ...data.out, ms: performance.now() - t0, key }; live = null; worker.terminate(); worker = null; }
-          else if (live) { live.f = data.progress; try { Object.assign(live, JSON.parse(data.label)); } catch { /* étiquette vide */ } }
-          d.redraw();
-        };
-        worker.onerror = (e) => { err = e.message || 'erreur du worker'; live = null; d.redraw(); };
-        worker.postMessage({ id: 1, spec: R, what: 'lake' });
-        d.redraw();
-      };
-      function drawCol(g, prof, nz, dx, cx, ySurf, sc, fill, refl) {
-        const xs = (j) => prof[j] * 1e-3 * sc, ys = (j) => ySurf + (nz - 1 - j + .5) * dx * sc;
-        g.save(); g.fillStyle = fill;
-        g.beginPath(); g.moveTo(cx, ySurf);
-        for (let j = nz - 1; j >= 0; j--) g.lineTo(cx + xs(j), ys(j));
-        for (let j = 0; j < nz; j++) g.lineTo(cx - xs(j), ys(j));
-        g.closePath(); g.fill();
-        if (refl) {
-          g.globalAlpha = .22; g.beginPath(); g.moveTo(cx, ySurf);
-          for (let j = nz - 1; j >= 0; j--) g.lineTo(cx + xs(j), 2 * ySurf - ys(j));
-          for (let j = 0; j < nz; j++) g.lineTo(cx - xs(j), 2 * ySurf - ys(j));
-          g.closePath(); g.fill();
-        }
-        g.restore();
-      }
-      const rows = new Float32Array(400);
-      demo('#fig-lake', {
-        title: 'La colonne sans fin, calculée', aspect: 2.0, animate: true,
-        controls: [{ key: 's', label: 'Phase simulée s', min: 0, max: .999, step: .001, value: .55, fmt: (v) => fr(v, 3), onChange: (d) => { d.state.s = d.s.s; } }],
+      demo('#fig-hopper', {
+        title: 'Une trémie en coupe et de face', aspect: 2.1,
+        controls: [
+          { key: 'w', label: 'Largeur des marches (× s)', min: .05, max: .2, step: .005, value: .11, fmt: (v) => fr(v, 3) },
+          { key: 'dep', label: 'Hauteur des marches (× largeur)', min: .25, max: 1.2, step: .05, value: .75, fmt: (v) => fr(v, 2) },
+        ],
+        buttons: [{ key: 'spiral', label: 'Spirale', toggle: true, value: false }],
+        draw(g, d) {
+          const { w, h } = d, { w: ws, dep, spiral } = d.s;
+          const top = 12, H = h - top - 30, S = Math.min(H, (w - 60) / 2);
+          const xa = w / 2 - S - 15, xb = w / 2 + 15;
+          const N = 200, ext = 1.15, ink = hexRGB(C.ink), gold = hexRGB(C.c1);
+          // coupe par le plan médian z = 0
+          const sec = raster(N, N, (i, j) => {
+            const x = ((i + .5) / N * 2 - 1) * ext, y = (1 - (j + .5) / N * 2) * ext;
+            const [dd] = hopper([x, y, 0], 1, 0, 0, ws, dep, spiral);
+            return dd < 0 ? [...ink, 230] : null;
+          });
+          // face +y vue de front, plus sombre en profondeur
+          const face = raster(N, N, (i, j) => {
+            const x = ((i + .5) / N * 2 - 1), z = ((j + .5) / N * 2 - 1);
+            const [dd, k] = hopper([x, 1, z], 1, 0, 0, ws, dep, spiral);
+            const kk = Math.max(0, k), sh = 1 - kk * ws * dep / .9;
+            return gold.map((c) => Math.round(c * clamp(sh, .15, 1)));
+          });
+          g.imageSmoothingEnabled = false;
+          g.drawImage(sec, xa, top, S, S);
+          const fs = S / ext;
+          g.drawImage(face, xb + (S - fs) / 2, top + (S - fs) / 2, fs, fs);
+          box(g, xa, top, S, S); box(g, xb, top, S, S);
+          label(g, 'coupe médiane', xa + 6, top + 14, { size: 11 });
+          label(g, 'une face, de front', xb + 6, top + 14, { size: 11 });
+          const kmax = Math.min(7, Math.floor(1 / ws));
+          label(g, 'clair : bord · sombre : creux', xb + S / 2, top + S + 16, { size: 10, align: 'center' });
+          label(g, `${kmax} marches`, xa + S / 2, top + S + 16, { size: 10, align: 'center' });
+          d.status(`marche ${fr(ws, 3)} s · contremarche ${fr(ws * dep, 3)} s · creux au centre ${fr(kmax * ws * dep, 2)} s${spiral ? ' · 0,07 rad par gradin' : ''}`);
+        },
+      });
+    }
+
+    // ── 03 · la couche mince ─────────────────────────────────────────────
+    {
+      demo('#fig-film', {
+        title: 'La couleur d’une couche d’oxyde sur le bismuth', aspect: 2.3,
+        controls: [
+          { key: 'th', label: 'Épaisseur d’oxyde (nm)', min: 0, max: 400, step: 1, value: 160, fmt: (v) => `${v} nm` },
+          { key: 'ang', label: 'Incidence (°)', min: 0, max: 85, step: 1, value: 0, fmt: (v) => `${v}°` },
+        ],
+        draw(g, d) {
+          const { w, h } = d, th = d.s.th, ci = Math.cos(d.s.ang * Math.PI / 180);
+          const pad = 40, sw = 74, x1 = pad, W = w - 2 * pad - sw - 24, top = 12, SH = 34, ytop = top + SH + 16, H = h - ytop - 28;
+          const X = (v) => x1 + v / 400 * W, Y = (r) => ytop + H - r / .75 * H;
+          for (let i = 0; i < W; i++) { g.fillStyle = css(filmRGB(i / W * 400, ci)); g.fillRect(x1 + i, top, 1.5, SH); }
+          box(g, x1, top, W, SH);
+          line(g, [[X(th), top - 3], [X(th), top + SH + 3]], C.ink, 2);
+          box(g, x1, ytop, W, H);
+          line(g, [[x1, Y(.62)], [x1 + W, Y(.62)]], C.faint, 1, [3, 4]);
+          const cols = [C.c3, C.c4, C.c2];
+          for (let ch = 0; ch < 3; ch++) {
+            const p = []; for (let k = 0; k <= 400; k++) p.push([X(k), Y(filmRGB(k, ci)[ch])]);
+            line(g, p, cols[ch], 1.5);
+          }
+          line(g, [[X(th), ytop], [X(th), ytop + H]], alpha(C.ink, .45), 1);
+          for (const v of [0, 100, 200, 300, 400]) label(g, `${v}`, X(v), ytop + H + 16, { size: 10, align: 'center' });
+          for (const v of [0, .25, .5]) label(g, fr(v, 2), x1 - 6, Y(v) + 4, { size: 10, align: 'right' });
+          label(g, 'métal nu 0,62', x1 + W - 4, Y(.62) - 5, { size: 10, align: 'right' });
+          label(g, 'R rouge', x1 + 6, ytop + 14, { size: 10, color: C.c3 });
+          label(g, 'R vert', x1 + 60, ytop + 14, { size: 10, color: C.c4 });
+          label(g, 'R bleu', x1 + 108, ytop + 14, { size: 10, color: C.c2 });
+          const c = filmRGB(th, ci), xs = w - pad - sw;
+          g.fillStyle = css(c); g.fillRect(xs, top, sw, sw);
+          box(g, xs, top, sw, sw);
+          label(g, `${th} nm`, xs + sw / 2, top + sw + 16, { size: 11, align: 'center' });
+          d.status(`R = (${fr(c[0])} ; ${fr(c[1])} ; ${fr(c[2])}) · angle dans l’oxyde ${fr(Math.asin(Math.sin(d.s.ang * Math.PI / 180) / N1) * 180 / Math.PI, 1)}° · bismuth nu : 0,62`);
+        },
+      });
+    }
+
+    // ── 04 · l'oxyde au fil de la boucle ─────────────────────────────────
+    {
+      demo('#fig-oxide', {
+        title: 'L’épaisseur d’oxyde d’un point', aspect: 2.3,
+        controls: [
+          { key: 'y', label: 'Hauteur du point (cm)', min: .3, max: 2.8, step: .01, value: 1.6, fmt: (v) => fr(v, 2) },
+          { key: 'k', label: 'Gradin k', min: 0, max: 7, step: 1, value: 0, fmt: (v) => String(v) },
+          { key: 'ox', label: 'Gamme', min: 0, max: OXK.length - 1, step: 1, value: OXK.indexOf('arcenciel'), fmt: (v) => OXIDES[OXK[v]].label },
+        ],
+        draw(g, d) {
+          const { w, h } = d, y = d.s.y, ox = OXIDES[OXK[d.s.ox]], opt = { rate: ox.rate, k: d.s.k };
+          const pad = 44, x1 = pad, W = w - pad - 16, top = 12, SH = 22, H = h - top - SH - 50;
+          const N = 500, ts = Array.from({ length: N + 1 }, (_, i) => i / N * .9999), S = ts.map((t) => oxide(y, t, opt));
+          const tmax = Math.max(100, Math.ceil(Math.max(...S.filter((s) => !s.wet).map((s) => s.th)) / 100) * 100);
+          const X = (t) => x1 + t * W, Y = (v) => top + H - v / tmax * H;
+          box(g, x1, top, W, H);
+          g.fillStyle = alpha(C.dim, .14); for (let i = 0; i < N; i++) if (S[i].wet) g.fillRect(Math.floor(X(ts[i])), top + 1, Math.ceil(X(ts[i + 1]) - X(ts[i])) + 1, H - 1);
+          for (let v = 100; v < tmax; v += 100) line(g, [[x1, Y(v)], [x1 + W, Y(v)]], C.grid, 1, [2, 4]);
+          let seg = [];
+          for (let i = 0; i <= N; i++) {
+            if (S[i].wet) { if (seg.length) line(g, seg, C.c1, 1.7); seg = []; continue; }
+            seg.push([X(ts[i]), Y(S[i].th)]);
+          }
+          if (seg.length) line(g, seg, C.c1, 1.7);
+          for (let v = 0; v <= tmax; v += 100) label(g, String(v), x1 - 6, Y(v) + 4, { size: 10, align: 'right' });
+          label(g, 'nm', x1 + 6, top + 14, { size: 11 });
+          label(g, 'sous le bain', X(.02), top + H - 8, { size: 10 });
+          const ys = top + H + 8;
+          for (let i = 0; i < N; i++) {
+            g.fillStyle = S[i].wet ? '#3d4046' : css(surface(y, ts[i], opt));
+            g.fillRect(X(ts[i]), ys, X(ts[i + 1]) - X(ts[i]) + .6, SH);
+          }
+          box(g, x1, ys, W, SH);
+          for (const v of [0, .25, .5, .75, 1]) label(g, fr(v, 2), X(v), ys + SH + 15, { size: 10, align: 'center' });
+          const te = emerge(y), tr = reach(y);
+          const at = (t) => oxide(y, t, opt).th;
+          d.status(`sortie à t = ${fr(te, 3)} · à T₂ : ${Math.round(at(CYCLE.T2))} nm · juste avant le retour du métal (t = ${fr(tr, 3)}) : ${Math.round(at(tr - 1e-4))} nm`);
+        },
+      });
+    }
+
+    // ── 05 · la fonte par le bas ─────────────────────────────────────────
+    {
+      const s = 1.2, cy = 1.25, XR = 2, YM = 3.0;
+      demo('#fig-melt', {
+        title: 'Le métal chaud remonte', aspect: 2.1,
+        controls: [{ key: 't', label: 'Phase de la boucle t', min: .55, max: .88, step: .001, value: .74, fmt: (v) => fr(v, 3) }],
+        draw(g, d) {
+          const { w, h } = d, t = d.s.t, L = level(t), rs = rising(t);
+          const top = 12, H = h - top - 30, Wl = H * (2 * XR) / YM, xl = 40, xr = xl + Wl + 50, Wr = w - xr - 20;
+          const Y = (v) => top + H - v / YM * H;
+          const NX = 170, NY = Math.round(NX * YM / (2 * XR)), bath = BATH;
+          const img = raster(NX, NY, (i, j) => {
+            const x = ((i + .5) / NX * 2 - 1) * XR, y = (1 - (j + .5) / NY) * YM;
+            if (y < L) return bath;
+            const mp = rs * Math.exp(-Math.max(y - L, 0) / .55), soft = .42 * s * mp;
+            const [dd] = hopper([x, y - cy, 0], s - soft, soft * .8, clamp(mp * 1.6), .11, .75, false, y > L + .1 ? 1 : 0);
+            return dd < 0 ? rgb8(surface(y, t)) : null;
+          });
+          g.imageSmoothingEnabled = false;
+          g.drawImage(img, xl, top, Wl, H);
+          box(g, xl, top, Wl, H);
+          line(g, [[xl, Y(L)], [xl + Wl, Y(L)]], C.ink, 1.2);
+          label(g, 'bain', xl + 6, Y(L) + 14, { size: 10, color: '#1a1a1e' });
+          for (const v of [0, 1, 2, 3]) label(g, String(v), xl - 6, Y(v) + 4, { size: 10, align: 'right' });
+          // droite : profils en hauteur
+          const X = (v) => xr + v * Wr;
+          box(g, xr, top, Wr, H);
+          g.fillStyle = alpha(C.dim, .12); g.fillRect(xr + 1, Y(YM), Wr - 1, Y(0) - Y(YM));
+          const yS1 = rs > .45 ? L + .55 * Math.log(rs / .45) : L;
+          if (yS1 > L) { g.fillStyle = alpha(C.ink, .14); g.fillRect(xr + 1, Y(Math.min(yS1, YM)), Wr - 1, Y(L) - Y(Math.min(yS1, YM))); }
+          g.fillStyle = 'rgba(118,122,130,.55)'; g.fillRect(xr + 1, Y(L), Wr - 1, Y(0) - Y(L));
+          const pm = [], pb = [];
+          for (let k = 0; k <= 200; k++) {
+            const y = L + (YM - L) * k / 200, a = y - L;
+            pm.push([X(rs * Math.exp(-a / .55)), Y(y)]); pb.push([X(rs * Math.exp(-a / .9)), Y(y)]);
+          }
+          line(g, pb, C.c1, 1.6); line(g, pm, C.ink, 1.6);
+          line(g, [[X(.625), top], [X(.625), Y(L)]], C.faint, 1, [3, 4]);
+          label(g, 'gradins pleins', X(.625) + 4, top + 14, { size: 10 });
+          for (const v of [0, .5, 1]) label(g, fr(v, 1), X(v), top + H + 16, { size: 10, align: 'center' });
+          label(g, 'part fondue m', xr + 8, top + H - 24, { size: 11, color: C.ink });
+          label(g, 'bande de chaleur', xr + 8, top + H - 9, { size: 11, color: C.c1 });
+          const fillTo = rs > .625 ? L + .55 * Math.log(rs / .625) : null;
+          d.status(`r = ${fr(rs, 2)} · L = ${fr(L, 2)} cm · ${yS1 > L ? `l’oxyde cède jusqu’à L + ${fr(yS1 - L, 2)} cm` : 'l’oxyde tient encore'} · ${fillTo ? `gradins comblés jusqu’à L + ${fr(fillTo - L, 2)} cm` : 'gradins encore ouverts'}`);
+        },
+      });
+    }
+
+    // ── 06 · la grappe de dessus ─────────────────────────────────────────
+    {
+      const rotY = (v, a) => [Math.cos(a) * v[0] + Math.sin(a) * v[2], v[1], -Math.sin(a) * v[0] + Math.cos(a) * v[2]];
+      let seed = 1, cl = null, key = '';
+      const fig = document.querySelector('#fig-cluster');
+      demo('#fig-cluster', {
+        title: 'La grappe pendant la boucle', aspect: 1.9, animate: true,
+        controls: [
+          { key: 't', label: 'Phase de la boucle t', min: 0, max: .999, step: .001, value: .63, fmt: (v) => fr(v, 3) },
+          { key: 'type', label: 'Grappe', min: 0, max: CLK.length - 1, step: 1, value: 0, fmt: (v) => CLUSTERS[CLK[v]].label },
+        ],
         buttons: [
-          ...Object.entries(KEYS).map(([k, lab]) => ({ label: lab, onClick: (d) => run(d, k) })),
           { key: 'play', label: 'Lecture', toggle: true, value: false },
+          { label: 'Autre graine', onClick: () => { seed++; } },
         ],
-        setup(d) { d.state.s = d.s.s; },
         draw(g, d) {
           const { w, h } = d;
-          const top = 14, H = h - top - 30, Wl = Math.min(w * .34, H * .7), xl = 30;
-          const Zm = 0.16, above = 0.05, sc = H / (Zm + above), ySurf = top + above * sc, cx = xl + Wl / 2;
-          // gauche : l'eau, la surface, la colonne
-          g.fillStyle = alpha(C.c4, .07); g.fillRect(xl, ySurf, Wl, H - above * sc);
-          box(g, xl, top, Wl, H);
-          line(g, [[xl, ySurf], [xl + Wl, ySurf]], C.dim, 1.2);
-          label(g, 'surface', xl + 4, ySurf - 5, { size: 10 });
-          const xr = xl + Wl + 50, Wr = w - xr - 30;
-          box(g, xr, top, Wr, H);
-          if (err) { label(g, `erreur : ${err}`, xr + 10, top + 24, { color: C.c2 }); d.status('erreur'); return; }
-          if (live) {
-            if (live.prof) drawCol(g, live.prof, live.prof.length, 1e-3, cx, ySurf, sc, alpha(C.ink, .85), true);
-            g.fillStyle = alpha(C.c1, .6); g.fillRect(xr + 1, top + H - 6, (Wr - 1) * live.f, 5);
-            label(g, `calcul de la colonne « ${KEYS[live.key]} » dans un worker…`, xr + 12, top + 24);
-            label(g, `${Math.round(live.f * 100)} % · phase ${fr(live.u, 2)} · lac à ${fr(live.T, 1)} °C`, xr + 12, top + 44, { color: C.dim });
-            label(g, `${fr((performance.now() - t0) / 1000, 1)} s`, xr + 12, top + 64, { color: C.dim });
-            d.status('calcul…');
-            return;
+          if (d.s.play) {
+            d.s.t = (d.s.t + d.dt / 20) % 1;
+            const inp = fig.querySelector('input'), out = fig.querySelector('output');
+            if (inp) inp.value = d.s.t; if (out) out.textContent = fr(d.s.t, 3);
           }
-          if (!LAKE) {
-            label(g, 'Un bouton de colonne lance le solveur du lac', xr + 12, top + 24);
-            label(g, 'dans le worker de la scène (10 à 15 s).', xr + 12, top + 44, { color: C.dim });
-            label(g, 'rien de calculé', cx, ySurf + 40, { align: 'center', size: 11 });
-            d.status('en attente');
-            return;
-          }
-          const { S, B, R } = LAKE;
-          if (d.s.play) { d.state.s = (d.state.s + d.dt / 16) % 1; }
-          const s = d.state.s;
-          columnRows(S, s, rows);
-          drawCol(g, rows, S.nz, S.dx, cx, ySurf, sc, alpha(C.ink, .9), true);
-          // droite : longueur immergée, température, arrêt, détachement
-          const X = (p) => xr + p * Wr, Yl = (mm) => top + H - (mm / 120) * H, Yt = (T) => top + H - (T / 12) * H;
-          const [a0, a1] = R.sim.feedOff;
-          g.fillStyle = alpha(C.c4, .1); g.fillRect(X(a0), top + 1, X(a1) - X(a0), H - 1);
-          label(g, 'arrêt de l’avance', X(a0) + 4, top + 14, { size: 10, color: C.c4 });
-          const Lp = [], Tp = [];
-          for (let k = 0; k < S.samples; k++) Lp.push([X(k / S.samples), Yl(S.Lim[k])]);
-          for (let k = 0; k <= 100; k++) Tp.push([X(k / 100), Yt(lakeT(R.sim, k / 100))]);
-          line(g, Tp, C.c2, 1.2, [4, 4]);
-          line(g, Lp, C.c1, 1.8);
-          if (S.detach) { line(g, [[X(S.detach.phase), top], [X(S.detach.phase), top + H]], C.ink, 1, [2, 3]); label(g, 'détachement', X(S.detach.phase) + 4, top + 30, { size: 10 }); }
-          line(g, [[X(s), top], [X(s), top + H]], alpha(C.ink, .5), 1);
-          for (const mm of [0, 40, 80]) label(g, `${mm} mm`, xr - 6, Yl(mm) + 4, { align: 'right', size: 10 });
-          label(g, 'glace sous l’eau', xr + 6, Yl(110), { size: 10, color: C.c1 });
-          label(g, 'T∞ (0 → 12 °C)', xr + Wr - 6, Yt(11), { size: 10, color: C.c2, align: 'right' });
-          label(g, 'phase simulée s →', xr + Wr, top + H + 18, { align: 'right', size: 11 });
-          const dt = S.detach ? `détachement à s = ${fr(S.detach.phase, 3)} · fuseau ${fr(S.detach.vol_cm3, 2)} cm³${B ? `, ${fr(B.L * 100, 1)} cm, D/L ${fr(B.DL, 2)}` : ''}` : 'aucun détachement';
-          d.status(`${dt} · ${S.steps.toLocaleString('fr')} pas, ${fr(LAKE.ms / 1000, 1)} s`);
-        },
-      });
-    }
-
-    // ── 04 · le critère D/L ───────────────────────────────────────────────
-    {
-      const sI = 0.917;
-      let sim = null, timer = 0;
-      const compute = (d) => {
-        clearTimeout(timer);
-        timer = setTimeout(() => {
-          const DL = d.s.dl, n = 30, D = 0.03, L = D / DL;
-          sim = { DL, B: simulateBody({ prof: new Array(n).fill(D / 2 * 1e3), dz: L / n, tilt0: 0.1, T: 4, stub: false }) };
-          d.redraw();
-        }, 120);
-      };
-      demo('#fig-upright', {
-        title: 'Debout ou couché', aspect: 2.2,
-        controls: [{ key: 'dl', label: 'Élancement D/L', min: .3, max: 1.4, step: .01, value: .6, fmt: (v) => fr(v, 2), onChange: compute }],
-        setup: compute,
-        draw(g, d) {
-          const { w, h } = d;
-          const DL = d.s.dl, D = 0.03, L = D / DL;
-          const top = 14, H = h - top - 30, Wl = w * .3, xl = 24;
-          // gauche : le cylindre debout à l'équilibre
-          const sc = Math.min((H - 20) / L, (Wl - 40) / D, 3200), yW = top + 20 + (1 - sI) * L * sc, cx = xl + Wl / 2;
-          g.fillStyle = alpha(C.c4, .1); g.fillRect(xl, yW, Wl, top + H - yW);
-          box(g, xl, top, Wl, H);
-          line(g, [[xl, yW], [xl + Wl, yW]], C.dim, 1.2);
-          const yBot = yW + sI * L * sc;
-          g.fillStyle = alpha(C.ink, .3); g.fillRect(cx - D / 2 * sc, yBot - L * sc, D * sc, L * sc);
-          const yG = yBot - L / 2 * sc, yB = yBot - sI * L / 2 * sc, BM = D * D / (16 * sI * L), yM = yB - BM * sc;
-          const GM = BM - L * (1 - sI) / 2, ok = GM > 0;
-          const lx = cx + D / 2 * sc + 10;
-          // étiquettes écartées d'au moins 15 px, reliées à leur point
-          const tags = [[yM, 'M', ok ? C.c4 : C.c3], [yG, 'G', C.ink], [yB, 'B', C.c2]].sort((a, b) => a[0] - b[0]);
-          let prev = -1e9;
-          for (const [y, t, c] of tags) {
-            const ly = Math.max(y, prev + 15); prev = ly;
-            dot(g, cx, y, 4, c);
-            line(g, [[cx, y], [lx - 6, y], [lx - 2, ly]], alpha(c, .6), 1);
-            label(g, t, lx + 2, ly + 4, { size: 11, color: c });
-          }
-          // droite haut : GM/L(D/L)
-          const xr = xl + Wl + 54, Wr = w - xr - 20, Hh = H * .45;
-          const X = (v) => xr + ((v - .2) / 1.2) * Wr, Yg = (v) => top + Hh / 2 - v / .12 * Hh * .45;
-          box(g, xr, top, Wr, Hh);
-          line(g, [[xr, Yg(0)], [xr + Wr, Yg(0)]], C.grid, 1);
-          const pts = []; for (let k = 0; k <= 100; k++) { const v = .2 + 1.2 * k / 100; pts.push([X(v), Yg(v * v / (16 * sI) - (1 - sI) / 2)]); }
-          line(g, pts, C.ink, 1.5);
-          const crit = Math.sqrt(8 * sI * (1 - sI));
-          line(g, [[X(crit), top], [X(crit), top + Hh]], C.c4, 1, [3, 3]);
-          label(g, `0,78`, X(crit) + 4, top + 14, { size: 10, color: C.c4 });
-          dot(g, X(DL), Yg(DL * DL / (16 * sI) - (1 - sI) / 2), 4, ok ? C.c4 : C.c3);
-          label(g, 'GM / L', xr + 6, top + 14, { size: 10 });
-          label(g, 'D/L →', xr + Wr - 4, top + Hh - 6, { size: 10, align: 'right' });
-          // droite bas : θ(t)
-          const y2 = top + Hh + 26, H2 = H - Hh - 26, Tm = 4;
-          const Xt = (t) => xr + (t / Tm) * Wr, Yt = (th) => y2 + H2 - (th / 120) * H2;
-          box(g, xr, y2, Wr, H2);
-          line(g, [[xr, Yt(90)], [xr + Wr, Yt(90)]], C.grid, 1, [3, 4]);
-          label(g, '90°', xr - 6, Yt(90) + 4, { size: 10, align: 'right' });
-          label(g, '0°', xr - 6, Yt(0) + 4, { size: 10, align: 'right' });
-          label(g, 'temps (s) →', xr + Wr - 4, y2 + H2 + 16, { size: 10, align: 'right' });
-          if (!sim || Math.abs(sim.DL - DL) > 1e-9) { label(g, 'simulation…', xr + 10, y2 + 18, { size: 11 }); d.status(`D/L = ${fr(DL, 2)} · GM = ${fr(GM * 1000, 1)} mm`); return; }
-          const tr = sim.B.traj, n = tr.length / 4, p = [];
-          for (let i = 0; i < n; i++) p.push([Xt(i * sim.B.dtOut), Yt(Math.abs(tr[i * 4 + 2]) * DEG)]);
-          line(g, p, ok ? C.c4 : C.c3, 1.6);
-          const fin = Math.abs(sim.B.final.th) * DEG;
-          d.status(`D/L = ${fr(DL, 2)} · GM = ${fr(GM * 1000, 1)} mm · ${fin > 45 ? `le cylindre bascule et se couche (${Math.round(fin)}°)` : `il reste debout (${Math.round(fin)}°)`}`);
-        },
-      });
-    }
-
-    // ── 05 · la bascule du fuseau ─────────────────────────────────────────
-    {
-      const spindle = (DL, n = 40, L = 0.08) => {
-        const raw = Array.from({ length: n }, (_, j) => { const x = (j + .5) / n; return Math.sqrt(Math.min(1, x / .12)) * Math.pow(1 - x, .7); });
-        const m = Math.max(...raw), Rm = DL * L / 2 * 1e3;
-        return { prof: raw.map((r) => r / m * Rm + .15), dz: L / n };
-      };
-      let B = null, prof = null, dz = 0, key = '', timer = 0;
-      const Tsim = 4;
-      const compute = (d) => {
-        clearTimeout(timer);
-        timer = setTimeout(() => {
-          const useLake = d.s.lake && LAKE?.S?.detach;
-          const P = useLake ? { prof: Array.from(LAKE.S.detach.prof), dz: LAKE.S.dx } : spindle(d.s.dl);
-          prof = P.prof; dz = P.dz;
-          B = simulateBody({ prof, dz, tilt0: d.s.tilt / DEG, T: Tsim, stub: d.s.stub });
-          key = `${d.s.tilt}|${d.s.dl}|${d.s.stub}|${!!useLake}`;
-          d.state.tau = 0; d.redraw();
-        }, 150);
-      };
-      demo('#fig-capsize', {
-        title: 'Le fuseau libéré bascule', aspect: 2.0, animate: true,
-        controls: [
-          { key: 'tilt', label: 'Inclinaison au départ', min: 1, max: 20, step: .5, value: 6, fmt: (v) => `${fr(v, 1)}°`, onChange: compute },
-          { key: 'dl', label: 'Élancement D/L', min: .08, max: .5, step: .01, value: .14, fmt: (v) => fr(v, 2), onChange: compute },
-        ],
-        buttons: [
-          { label: 'Rejouer', onClick: (d) => { d.state.tau = 0; } },
-          { key: 'stub', label: 'Souche', toggle: true, value: true, onClick: compute },
-          { key: 'lake', label: 'Profil du lac', toggle: true, value: false, onClick: compute },
-        ],
-        setup(d) { d.state.tau = 0; compute(d); },
-        draw(g, d) {
-          const { w, h } = d;
-          const top = 14, H = h - top - 30, Wl = Math.min(w * .48, H * 1.25), xl = 20;
-          box(g, xl, top, Wl, H);
-          if (!B) { label(g, 'simulation…', xl + 12, top + 24); return; }
-          d.state.tau += d.dt;
-          if (d.state.tau > Tsim + 1.5) d.state.tau = 0;
-          const tau = Math.min(d.state.tau, Tsim);
-          const p = bodyPose(B, tau);
-          const span = 0.13, sc = Wl / span, cx = xl + Wl / 2, yS = top + H * .3;
-          const X = (x) => cx + x * sc, Y = (y) => yS - y * sc;
-          g.fillStyle = alpha(C.c4, .08); g.fillRect(xl + 1, yS, Wl - 1, top + H - yS);
-          // souche (cône au ras de la surface, comme dans body.js)
-          if (d.s.stub) {
-            const ys = -0.0004, tc = Math.tan(25 / DEG), yTop = 0.03;
-            g.fillStyle = alpha(C.ink, .35);
-            g.beginPath(); g.moveTo(X(0), Y(ys)); g.lineTo(X(Math.min(0.012, (yTop - ys) * tc)), Y(Math.min(yTop, ys + 0.012 / tc))); g.lineTo(X(0.012), Y(yTop)); g.lineTo(X(-0.012), Y(yTop)); g.lineTo(X(-Math.min(0.012, (yTop - ys) * tc)), Y(Math.min(yTop, ys + 0.012 / tc))); g.closePath(); g.fill();
-          }
-          const outline = () => {
-            const sn = Math.sin(p.th), cs = Math.cos(p.th), Rt = [], Lt = [];
-            for (let n = 0; n < prof.length; n++) {
-              const s = (n + .5) * dz - B.sG, r = prof[n] * 1e-3;
-              const cx0 = p.x + s * sn, cy0 = p.y + s * cs;
-              Rt.push([cx0 + r * cs, cy0 - r * sn]); Lt.push([cx0 - r * cs, cy0 + r * sn]);
+          const ck = CLK[d.s.type], id = `${ck}:${seed}`;
+          if (id !== key) { key = id; cl = buildCluster(`b${seed}`, CLUSTERS[ck]); }
+          const t = d.s.t, L = level(t), st = crystalsAt(cl, t);
+          const gw = 40, pw = w - gw - 30, ph = h - 20, sc = Math.min(pw, ph) / 9.5, cx = 10 + pw / 2, cz = 10 + ph / 2;
+          const P = (x, z) => [cx + x * sc, cz + z * sc];
+          const gr = g.createLinearGradient(0, 10, 0, 10 + ph);
+          gr.addColorStop(0, '#5a5e66'); gr.addColorStop(1, '#2b2d32');
+          g.fillStyle = gr; g.fillRect(10, 10, pw, ph);
+          const quad = (c, hx, hz, a, ox = 0, oz = 0) => {
+            g.beginPath();
+            for (const [u, v] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+              const wv = rotY([ox + u * hx, 0, oz + v * hz], -a), [px, py] = P(c[0] + wv[0], c[1] + wv[2]);
+              g.lineTo(px, py);
             }
-            return Rt.concat(Lt.reverse());
+            g.closePath();
           };
-          const O = outline();
-          // reflet de la partie immergée dans le miroir de la surface
-          g.save(); g.beginPath(); g.rect(xl, top, Wl, yS - top); g.clip();
-          g.fillStyle = alpha(C.ink, .16); g.beginPath(); O.forEach(([x, y], i) => (i ? g.lineTo(X(x), Y(Math.min(0, y) * -1)) : g.moveTo(X(x), Y(Math.min(0, y) * -1)))); g.closePath(); g.fill();
-          g.restore();
-          g.fillStyle = alpha(C.ink, .9); g.beginPath(); O.forEach(([x, y], i) => (i ? g.lineTo(X(x), Y(y)) : g.moveTo(X(x), Y(y)))); g.closePath(); g.fill();
-          line(g, [[xl, yS], [xl + Wl, yS]], C.dim, 1.2);
-          label(g, '1 cm', xl + 10, top + H - 10, { size: 10 });
-          line(g, [[xl + 10, top + H - 22], [xl + 10 + 0.01 * sc, top + H - 22]], C.dim, 2);
-          // droite : θ(t) et part émergée
-          const xr = xl + Wl + 50, Wr = w - xr - 40;
-          const Xt = (t) => xr + (t / Tsim) * Wr, Yt = (th) => top + H - (th / 120) * H, Ye = (e) => top + H - (e / .25) * H;
-          box(g, xr, top, Wr, H);
-          line(g, [[xr, Yt(90)], [xr + Wr, Yt(90)]], C.grid, 1, [3, 4]);
-          line(g, [[xr, Ye(.083)], [xr + Wr, Ye(.083)]], alpha(C.c2, .5), 1, [2, 4]);
-          const tr = B.traj, n = tr.length / 4, pt = [], pe = [];
-          let t45 = null;
-          for (let i = 0; i < n; i++) {
-            const th = Math.abs(tr[i * 4 + 2]) * DEG;
-            if (t45 === null && th > 45) t45 = i * B.dtOut;
-            pt.push([Xt(i * B.dtOut), Yt(th)]); pe.push([Xt(i * B.dtOut), Ye(1 - tr[i * 4 + 3])]);
+          let air = 0, broken = 0, pieces = 0, drips = 0, skins = 0;
+          // peaux et rides sur le bain
+          for (const c of st) {
+            if (c.skin > 0) {
+              skins++;
+              const R0 = c.s * (1.05 + 3.5 * c.skin), fade = 1 - smooth(.08, .16, c.skin), [px, py] = P(c.x, c.z);
+              g.save(); g.globalAlpha = .35 + .5 * fade; g.fillStyle = alpha(C.c1, .45); g.strokeStyle = C.c1; g.setLineDash([3, 3]);
+              g.beginPath(); g.arc(px, py, R0 * sc, 0, Math.PI * 2); g.fill(); g.stroke(); g.restore();
+            }
+            if (c.ripple) {
+              const { x, z, dt } = c.ripple, [px, py] = P(x, z), front = 270 * dt, amp = 1 - dt / .07;
+              for (let n = 0; n < 12; n++) {
+                const r = (900 * dt - 2 * Math.PI * n) / 30;
+                if (r <= 0 || r > front) continue;
+                g.save(); g.strokeStyle = alpha(C.ink, clamp(amp * Math.exp(-r * 1.2))); g.lineWidth = 1;
+                g.beginPath(); g.arc(px, py, r * sc, 0, Math.PI * 2); g.stroke(); g.restore();
+              }
+            }
           }
-          line(g, pe, C.c2, 1.2);
-          line(g, pt, C.c1, 1.8);
-          line(g, [[Xt(tau), top], [Xt(tau), top + H]], alpha(C.ink, .5), 1);
-          label(g, 'θ', xr + 6, Yt(112), { size: 11, color: C.c1 });
-          label(g, '90°', xr - 6, Yt(90) + 4, { size: 10, align: 'right' });
-          label(g, 'émergé (8,3 %)', xr + Wr - 4, Ye(.083) - 5, { size: 10, align: 'right', color: C.c2 });
-          label(g, 'temps physique (s) →', xr + Wr, top + H + 18, { size: 10, align: 'right' });
-          const src = key.endsWith('true') ? 'profil du lac' : 'fuseau analytique';
-          d.status(`${src}, D/L ${fr(B.DL, 2)} · τ = ${fr(tau, 2)} s · θ = ${Math.round(Math.abs(p.th) * DEG)}° · émergé ${fr(p.emerged * 100, 1)} %${t45 !== null ? ` · 45° à ${fr(t45, 2)} s` : ''}`);
-          if (d.s.lake && !LAKE?.S?.detach) label(g, 'calculer d’abord le lac (section 03)', xl + 10, top + 18, { size: 11, color: C.c2 });
-        },
-      });
-    }
-
-    // ── 06 · l'horloge ───────────────────────────────────────────────────
-    {
-      const P = 400, DUR = 48;
-      demo('#fig-warp', {
-        title: 'Le ralenti du détachement', aspect: 2.0,
-        controls: [
-          { key: 'sd', label: 'Détachement s_d', min: .45, max: .75, step: .001, value: .613, fmt: (v) => fr(v, 3) },
-          { key: 'u', label: 'Phase du film u', min: 0, max: .999, step: .001, value: .58, fmt: (v) => fr(v, 3) },
-        ],
-        draw(g, d) {
-          const { w, h } = d;
-          const sd = d.s.sd, u = d.s.u, c = detachFilmPhase(sd);
-          const top = 12, H = h - top - 30, pad = 36, gap = 50, W1 = (w - 2 * pad - gap) / 2, x1 = pad, x2 = pad + W1 + gap;
-          const X1 = (v) => x1 + v * W1, Y1 = (v) => top + H - v * H;
-          box(g, x1, top, W1, H);
-          g.fillStyle = alpha(C.c1, .12); g.fillRect(X1(c - .036), top + 1, .072 * W1, H - 1);
-          line(g, [[X1(0), Y1(0)], [X1(1), Y1(1)]], C.grid, 1, [3, 4]);
-          line(g, [[x1, Y1(sd)], [x1 + W1, Y1(sd)]], alpha(C.c2, .5), 1, [2, 3]);
-          const pts = []; for (let k = 0; k <= 400; k++) { const v = k / 400 * .9999; pts.push([X1(v), Y1(simPhase(v, sd))]); }
-          line(g, pts, C.ink, 1.6);
-          const s = simPhase(u, sd);
-          dot(g, X1(u), Y1(s), 4, C.c1);
-          label(g, 's(u)', x1 + 6, top + 14, { size: 11 });
-          label(g, 'u →', x1 + W1 - 4, top + H + 16, { size: 10, align: 'right' });
-          label(g, 's_d', x1 + W1 - 4, Y1(sd) - 5, { size: 10, align: 'right', color: C.c2 });
-          // droite : secondes physiques par seconde de film (log)
-          const rate = (v) => { const e = 1e-3, a = Math.max(0, v - e), b = Math.min(.9999, v + e); return (simPhase(b, sd) - simPhase(a, sd)) / (b - a) * P * COMPRESSION / DUR; };
-          const lo = Math.log10(1), hi = Math.log10(300), Y2 = (r) => top + H - (Math.log10(r) - lo) / (hi - lo) * H, X2 = (v) => x2 + v * W1;
-          box(g, x2, top, W1, H);
-          for (const r of [1, 10, 100]) { line(g, [[x2, Y2(r)], [x2 + W1, Y2(r)]], C.grid, 1, [2, 4]); label(g, String(r), x2 - 6, Y2(r) + 4, { size: 10, align: 'right' }); }
-          const rp = []; for (let k = 0; k <= 400; k++) { const v = k / 400; rp.push([X2(v), Y2(Math.max(1, rate(v)))]); }
-          line(g, rp, C.c1, 1.6);
-          dot(g, X2(u), Y2(Math.max(1, rate(u))), 4, C.c1);
-          label(g, 's physiques par s de film', x2 + 6, top + 14, { size: 10 });
-          label(g, 'u →', x2 + W1 - 4, top + H + 16, { size: 10, align: 'right' });
-          const tau = (s - sd) * P * COMPRESSION;
-          const tt = Math.abs(tau) < 120 ? `${fr(tau, 1)} s` : `${fr(tau / 60, 0)} min`;
-          d.status(`centre du plateau c = ${fr(c, 3)} · s = ${fr(s, 3)} · τ = ${tt} · ${fr(rate(u), 1)} s physiques par seconde`);
-        },
-      });
-    }
-
-    // ── 07 · la glace dans l'eau ─────────────────────────────────────────
-    {
-      const refract = (I, N, eta) => {
-        const ci = I[0] * N[0] + I[1] * N[1], k = 1 - eta * eta * (1 - ci * ci);
-        if (k < 0) return null;
-        const a = eta * ci + Math.sqrt(k);
-        return [eta * I[0] - a * N[0], eta * I[1] - a * N[1]];
-      };
-      const reflect = (I, N) => { const c = I[0] * N[0] + I[1] * N[1]; return [I[0] - 2 * c * N[0], I[1] - 2 * c * N[1]]; };
-      function trace(b, ni) {
-        const pts = [[-2.4, b]];
-        if (Math.abs(b) >= 1) { pts.push([2.4, b]); return { pts, tir: false }; }
-        let x = -Math.sqrt(1 - b * b), y = b; pts.push([x, y]);
-        const N = [x, y], r = refract([1, 0], N, NW / ni);
-        if (!r) { const q = reflect([1, 0], N); pts.push([x + q[0] * 3, y + q[1] * 3]); return { pts, tir: true }; }
-        const t = -2 * (x * r[0] + y * r[1]); x += t * r[0]; y += t * r[1]; pts.push([x, y]);
-        const o = refract(r, [-x, -y], ni / NW) ?? reflect(r, [-x, -y]);
-        const L = (2.4 - x) / Math.max(.05, o[0]);
-        pts.push([x + o[0] * L, y + o[1] * L]);
-        return { pts, tir: false };
-      }
-      demo('#fig-ice', {
-        title: 'Glace claire, glace bulleuse', aspect: 2.1,
-        controls: [
-          { key: 'ni', label: 'Indice de la glace', min: 1.0, max: 1.6, step: .001, value: NI, fmt: (v) => fr(v, 3) },
-          { key: 'sig', label: 'Diffusion des bulles (cm⁻¹)', min: 0, max: 2, step: .05, value: .5, fmt: (v) => fr(v, 2) },
-        ],
-        draw(g, d) {
-          const { w, h } = d;
-          const ni = d.s.ni, sig = d.s.sig, Rcm = 1.4;
-          const top = 12, H = h - top - 30, Wl = w * .48, xl = 16;
-          const sc = Math.min(H / 2.6, Wl / 5), cx = xl + Wl / 2, cy = top + H / 2;
-          g.fillStyle = alpha(C.c4, .06); g.fillRect(xl, top, Wl, H);
-          box(g, xl, top, Wl, H);
-          g.save(); g.beginPath(); g.rect(xl, top, Wl, H); g.clip();
-          g.fillStyle = alpha(C.ink, Math.min(.5, .04 + .22 * sig)); g.beginPath(); g.arc(cx, cy, sc, 0, Math.PI * 2); g.fill();
-          g.strokeStyle = alpha(C.ink, .4); g.lineWidth = 1; g.stroke();
-          const bs = []; for (let k = 0; k <= 40; k++) bs.push(-1.2 + 2.4 * k / 40);
-          for (let m = 0; m < 8; m++) { bs.push(.975 + m * .0035); bs.push(-.975 - m * .0035); }
-          for (const b of bs) {
-            const { pts, tir } = trace(b, ni);
-            line(g, pts.map(([x, y]) => [cx + x * sc, cy - y * sc]), tir ? C.c2 : alpha(C.c1, .45), tir ? 1.4 : 1);
+          for (const c of [...st].sort((a, b) => a.y + a.s - (b.y + b.s))) {
+            const topY = c.y + c.s;
+            if (topY < L) {
+              g.save(); g.strokeStyle = alpha(C.ink, .35); g.setLineDash([3, 3]); quad([c.x, c.z], c.s, c.s, c.ang); g.stroke(); g.restore();
+              continue;
+            }
+            air++;
+            g.fillStyle = css(surface(topY, t, { o: c.ox })); quad([c.x, c.z], c.s, c.s, c.ang); g.fill();
+            g.strokeStyle = alpha(C.ink, .55); g.lineWidth = 1; g.stroke();
+            if (c.broken) {
+              broken++;
+              g.fillStyle = '#202226'; quad([c.x, c.z], c.s * .29, c.s * .29, c.ang, c.cornerLocal[0], c.cornerLocal[2]); g.fill();
+            }
           }
-          g.restore();
-          label(g, 'lumière →', xl + 8, top + 16, { size: 10 });
-          // droite : réflexion (claire) et diffusion (bulleuse) en travers
-          const xr = xl + Wl + 50, Wr = w - xr - 16;
-          const X = (b) => xr + (b + 1) / 2 * Wr, Y = (v) => top + H - v * H;
-          box(g, xr, top, Wr, H);
-          const pr = [], ps = [];
-          for (let k = 0; k <= 600; k++) {
-            const b = -1 + 2 * k / 600, ci = Math.sqrt(Math.max(0, 1 - b * b));
-            pr.push([X(b), Y(fresnel(ci, NW, ni))]);
-            ps.push([X(b), Y(1 - Math.exp(-sig * 2 * Rcm * ci))]);
+          for (const c of st) {
+            if (c.piece) {
+              pieces++;
+              const p = c.piece;
+              g.fillStyle = css(surface(p.pos[1], t, { o: c.ox })); quad([p.pos[0], p.pos[2]], p.s * .26, p.s * .26, p.ang); g.fill();
+              g.strokeStyle = C.ink; g.lineWidth = 1; g.stroke();
+            }
+            for (const dr of c.drips) { drips++; const [px, py] = P(dr[0], dr[2]); dot(g, px, py, Math.max(1.5, dr[3] * sc), '#e8ecf2'); }
           }
-          line(g, ps, C.c4, 1.6);
-          line(g, pr, C.c2, 1.6);
-          label(g, 'diffusée (glace bulleuse)', xr + 8, top + 16, { size: 10, color: C.c4 });
-          label(g, 'réfléchie (glace claire)', xr + 8, top + 32, { size: 10, color: C.c2 });
-          label(g, 'bord', X(-1), top + H + 16, { size: 10, align: 'center' });
-          label(g, 'axe', X(0), top + H + 16, { size: 10, align: 'center' });
-          label(g, 'bord', X(1), top + H + 16, { size: 10, align: 'center' });
-          const rim = ni < NW ? 1 - ni / NW : 0, R0 = ((NW - ni) / (NW + ni)) ** 2;
-          d.status(`liseré : ${fr(rim * 100, 1)} % du rayon (${fr(rim * 14, 2)} mm) · réflexion au centre ${sci(R0)} · diffusée au centre ${Math.round((1 - Math.exp(-sig * 2 * Rcm)) * 100)} %`);
-        },
-      });
-    }
-
-    // ── 08 · la fenêtre de Snell ─────────────────────────────────────────
-    {
-      const thC = Math.asin(1 / NW) * DEG, thI = Math.asin(NI / NW) * DEG;
-      let geo = null;
-      demo('#fig-snell', {
-        title: 'La fenêtre et le miroir', aspect: 1.9,
-        controls: [{ key: 'th', label: 'Angle du regard', min: 0, max: 89, step: .5, value: 35, fmt: (v) => `${fr(v, 1)}°` }],
-        pointer(d, e) {
-          if (!geo || !e.down) return;
-          const dx = e.x - geo.ex, dy = geo.ey - e.y;
-          if (dy <= 0) return;
-          d.s.th = clamp(Math.atan2(Math.abs(dx), dy) * DEG, 0, 89);
-          const inp = d.fig.querySelector('input'); if (inp) { inp.value = d.s.th; inp.dispatchEvent(new Event('input')); }
-        },
-        draw(g, d) {
-          const { w, h } = d;
-          const th = d.s.th;
-          const top = 12, H = h - top - 30, Wl = w * .5, xl = 16;
-          const yS = top + H * .32, ex = xl + Wl * .55, ey = Math.min(top + H - 12, yS + Wl * .3 / Math.tan(thC / DEG));
-          geo = { ex, ey };
-          g.fillStyle = alpha(C.c4, .08); g.fillRect(xl, yS, Wl, top + H - yS);
-          box(g, xl, top, Wl, H);
-          g.save(); g.beginPath(); g.rect(xl, top, Wl, H); g.clip();
-          const depth = ey - yS, half = depth * Math.tan(thC / DEG);
-          // la surface : miroir, puis la fenêtre
-          line(g, [[xl, yS], [xl + Wl, yS]], alpha(C.ink, .7), 2);
-          line(g, [[ex - half, yS], [ex + half, yS]], C.c4, 3);
-          line(g, [[ex, ey], [ex - half, yS]], alpha(C.c4, .5), 1, [3, 3]);
-          line(g, [[ex, ey], [ex + half, yS]], alpha(C.c4, .5), 1, [3, 3]);
-          // la colonne et son reflet
-          const ccx = xl + Wl * .16, cw = 9, cl = depth * .7;
-          g.fillStyle = alpha(C.ink, .85); g.fillRect(ccx - cw / 2, yS, cw, cl);
-          g.fillStyle = alpha(C.ink, .2); g.fillRect(ccx - cw / 2, Math.max(top, yS - cl), cw, yS - Math.max(top, yS - cl));
-          g.fillStyle = alpha(C.ink, .5); g.fillRect(ccx - cw / 2, Math.max(top, yS - 18), cw, Math.min(18, yS - top));
-          dot(g, ex, ey, 4, C.ink);
-          label(g, 'œil', ex + 8, ey + 4, { size: 10 });
-          // le regard
-          const t = th / DEG, xs = ex + depth * Math.tan(t);
-          const ci = Math.cos(t), F = fresnel(ci, NW, 1);
-          const xsC = Math.min(xs, xl + Wl * 3);
-          line(g, [[ex, ey], [xsC, yS]], C.c1, 1.8);
-          if (F < 1) {
-            const ta = Math.asin(NW * Math.sin(t)), L = yS - top;
-            line(g, [[xs, yS], [xs + L * Math.tan(ta), top]], alpha(C.c1, 1 - F), 1.8);
-            line(g, [[xs, yS], [xs + depth * Math.tan(t), ey]], alpha(C.c1, Math.max(.08, F)), 1.2);
-          } else {
-            line(g, [[xs, yS], [xs + depth * Math.tan(t), ey]], C.c1, 1.8);
-          }
-          g.restore();
-          label(g, 'air', xl + 8, top + 16, { size: 10 });
-          label(g, 'eau', xl + 8, yS + 16, { size: 10 });
-          // droite : réflectance eau → air et eau → glace
-          const xr = xl + Wl + 46, Wr = w - xr - 16;
-          const X = (a) => xr + a / 90 * Wr, Y = (v) => top + H - v * H;
-          box(g, xr, top, Wr, H);
-          const pa = [], pi = [];
-          for (let k = 0; k <= 360; k++) { const a = 90 * k / 360, c = Math.cos(a / DEG); pa.push([X(a), Y(fresnel(c, NW, 1))]); pi.push([X(a), Y(fresnel(c, NW, NI))]); }
-          line(g, pa, C.c1, 1.6); line(g, pi, C.c2, 1.6);
-          line(g, [[X(thC), top], [X(thC), top + H]], alpha(C.c1, .5), 1, [3, 3]);
-          line(g, [[X(thI), top], [X(thI), top + H]], alpha(C.c2, .5), 1, [3, 3]);
-          label(g, '48,6°', X(thC) - 4, top + H - 8, { size: 10, align: 'right', color: C.c1 });
-          label(g, '79,1°', X(thI) - 4, top + H - 24, { size: 10, align: 'right', color: C.c2 });
-          label(g, 'eau → air', xr + 8, top + 16, { size: 10, color: C.c1 });
-          label(g, 'eau → glace', xr + 8, top + 32, { size: 10, color: C.c2 });
-          label(g, 'incidence →', xr + Wr - 4, top + H + 16, { size: 10, align: 'right' });
-          line(g, [[X(th), top], [X(th), top + H]], alpha(C.ink, .5), 1);
-          d.status(F < 1 ? `θ = ${fr(th, 1)}° · ${Math.round((1 - F) * 100)} % transmis · ciel vu à ${fr(Math.asin(Math.min(1, NW * Math.sin(t))) * DEG, 1)}° du zénith` : `θ = ${fr(th, 1)}° · réflexion totale : le miroir renvoie le fond du lac`);
+          box(g, 10, 10, pw, ph);
+          // jauge du niveau
+          const gx = w - gw, Yg = (v) => 10 + ph - v / 3.2 * ph;
+          box(g, gx, 10, 14, ph);
+          g.fillStyle = '#7a7e86'; g.fillRect(gx + 1, Yg(L), 13, Yg(0) - Yg(L));
+          label(g, `${fr(L, 1)} cm`, gx + 7, Yg(L) - 6, { size: 10, align: 'center' });
+          d.status(`t = ${fr(t, 3)} · L = ${fr(L, 2)} cm · ${air} à l’air sur ${st.length} · ${broken} coins cédés · ${pieces} en chute · ${drips} gouttes · ${skins} peaux`);
         },
       });
     }
