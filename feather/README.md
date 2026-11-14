@@ -2,9 +2,9 @@
 
 *la plume en tuyau.* Une gerbe de plumes pousse au sommet d'une tête couverte de duvet, comme une huppe. Chaque plume sort roulée dans sa gaine. La gaine s'effrite, la plume se déroule comme un livre qu'on ouvre, ses barbes s'agrafent l'une à l'autre et son motif apparaît. Elle se penche à sa place dans la gerbe, s'use, et la suivante la chasse. À chaque instant, l'une d'elles se déplie.
 
-Au centre de la gerbe, des tuyaux bleutés montent, roulés dans un tube de kératine cireux. Autour, des plumes à tous les âges : celles qui viennent de s'ouvrir, presque droites, puis de plus en plus penchées à mesure que leur vexille ouvert prend du poids, jusqu'à la plus usée, aux pointes effrangées. Quand un tuyau pousse sous la plus vieille, il chasse son calamus hors du follicule : elle bascule, se couche sur le duvet et glisse sur la pente du crâne, hors du cadre. Sur chaque tuyau, la gaine sèche et s'effrite de la pointe vers la base. Les barbes libérées s'écartent en pinceau, et les deux moitiés du cylindre s'ouvrent, sans s'étirer, pour devenir les deux vexilles (les deux moitiés plates de la plume, de part et d'autre de l'axe). Les barbes, d'abord séparées par des jours, s'agrafent de proche en proche, et le motif (barres, chevrons, taches, ocelle) se lit en entier.
+Au centre de la gerbe, des tuyaux montent : chaque plume roulée en fuseau, dans ses propres couleurs, sous une gaine de kératine fine et claire comme du papier de soie, qui ne se lit qu'à ses bords. Autour, des plumes à tous les âges : celles qui viennent de s'ouvrir, presque droites, puis de plus en plus penchées à mesure que leur vexille ouvert prend du poids, jusqu'à la plus usée, aux pointes effrangées. Quand un tuyau pousse sous la plus vieille, il chasse son calamus hors du follicule : elle bascule, se couche sur le duvet et glisse sur la pente du crâne, hors du cadre. Sur chaque tuyau, la gaine sèche et s'effrite de la pointe vers la base. Les barbes libérées s'écartent en pinceau, et les deux moitiés du cylindre s'ouvrent, sans s'étirer, pour devenir les deux vexilles (les deux moitiés plates de la plume, de part et d'autre de l'axe). Les barbes, d'abord séparées par des jours, s'agrafent de proche en proche, et le motif (barres, chevrons, taches, ocelle) se lit en entier.
 
-![Une gerbe de martin-pêcheur au cabinet : des tuyaux au centre, des plumes ouvertes à tous les âges autour (graine 1)](docs/capture.jpg)
+![Une gerbe de martin-pêcheur au cabinet : au centre, des plumes encore roulées en fuseau sous leur gaine claire, l’une qui se déplie ; autour, des plumes ouvertes à tous les âges (graine 1)](docs/capture.jpg)
 
 Rendu physique en three.js (WebGPU, TSL). La scène est entièrement procédurale : une graine (un code court) produit toujours la même scène. La démarche est dans [docs/concept.md](docs/concept.md) : le thème exploré sous six angles, les clichés écartés, neuf pistes notées, les épreuves (crédibilité, variété, ambition, déclinaison, échelle) et les révisions après les premiers rendus, jusqu'au passage du plumage en tuiles à la gerbe.
 
@@ -69,8 +69,8 @@ La courbure change, la longueur d'arc non : chaque barbe se déroule sur un cyli
 
 ## La plume (`src/gen/feather.js`, `src/scene/feather.js`)
 
-- **La gaine** (une par follicule, instanciée) s'effrite derrière le front de déroulement : elle est retirée de la géométrie elle-même (et donc de la carte d'ombre) au-delà de son bord tramé. Un masque de fragment ne suffit pas : la passe d'ombre de three.js le réutilise sans les variables qu'il lit (la gaine y restait entière, puis disparaissait d'un bloc).
-- **Construction** : calamus translucide (qui reste aux trois quarts dans le follicule), rachis effilé, deux vexilles asymétriques dont la base est duveteuse (barbes libres et frisées), barbes à arête (le ramus) bordées d'une frange de barbules, gaine de kératine cireuse aux crêtes hélicoïdales et à la pulpe sombre, pointe usée, motif déposé pendant la croissance, irisation.
+- **La gaine** (une par follicule, instanciée) est une pellicule, pas un tube opaque : on voit au travers la plume roulée dans ses couleurs. Sa couverture est tramée (lissée par l'anticrénelage temporel) et suit l'incidence (Fresnel : elle ne se lit qu'aux bords du fuseau), ses crêtes hélicoïdales et le bord qui sèche, blanchi, juste sous le front. Elle ne porte pas d'ombre, et une barbe encore roulée non plus : le fuseau se faisait de l'ombre à lui-même et restait un bâton sombre au milieu de la gerbe, surtout à contre-jour, quand les plumes ouvertes s'allument par translucidité. Elle s'effrite derrière le front de déroulement : elle est retirée de la géométrie elle-même (et donc de la carte d'ombre) au-delà de son bord tramé. Un masque de fragment ne suffit pas : la passe d'ombre de three.js le réutilise sans les variables qu'il lit (la gaine y restait entière, puis disparaissait d'un bloc).
+- **Construction** : calamus translucide (qui reste aux trois quarts dans le follicule), rachis effilé, deux vexilles asymétriques dont la base est duveteuse (barbes libres et frisées), barbes à arête (le ramus) bordées d'une frange de barbules, gaine de kératine claire et fine aux crêtes hélicoïdales, pointe usée, motif déposé pendant la croissance, irisation.
 - **Rubans à arête** : chaque barbe est un gabarit de 22 segments sur 3 sommets, instancié pour toutes les plumes de la gerbe (quatre vec4 par instance dans un tampon entrelacé) et posé dans le vertex shader par la même formule qu'en JS (`barbPose`). La normale s'incline en travers (l'arête du ramus accroche un filet de lumière). La frange des barbules est un peigne tramé (lissé par l'anticrénelage temporel).
 - **Libres puis agrafées** : une barbe libérée s'écarte de quelques degrés et ondule (des jours s'ouvrent entre les barbes), puis le front d'agrafage la ramène dans le plan. Les barbes sans crochets s'affaissent sous leur poids.
 - **Matière** : couleur du motif lue dans le plan déroulé, lustre de velours des barbules, translucidité (à contre-jour, le vexille s'allume et son motif se lit en ombre chinoise).
@@ -78,7 +78,7 @@ La courbure change, la longueur d'arc non : chaque barbe se déroule sur un cyli
 
 ## La gerbe (`src/gen/bouquet.js`)
 
-**Un zootrope à l'angle d'or.** Sept à onze follicules sur une petite couronne au sommet du socle. Le follicule i est à l'azimut i × 137,5°, et sa plume a l'âge a = frac(φ + i/N), φ étant la phase de la boucle. Deux plumes nées l'une après l'autre sont donc à 137,5° l'une de l'autre. Deux voisines sur la couronne ont des indices qui diffèrent de 3, 5 ou 8, donc des âges très différents, et comme l'inclinaison ne fait que croître avec l'âge, elles sont sur deux cônes emboîtés plutôt que croisés. La boucle se referme par construction, et à chaque instant une plume au moins se déplie.
+**Un zootrope à l'angle d'or.** Neuf à vingt et un follicules sur une petite couronne au sommet du socle. Le follicule i est à l'azimut i × 137,5°, et sa plume a l'âge a = frac(φ + i/N), φ étant la phase de la boucle. Deux plumes nées l'une après l'autre sont donc à 137,5° l'une de l'autre. Deux voisines sur la couronne ont des indices qui diffèrent de 3, 5 ou 8, donc des âges très différents, et comme l'inclinaison ne fait que croître avec l'âge, elles sont sur deux cônes emboîtés plutôt que croisés. La boucle se referme par construction, et à chaque instant une plume au moins se déplie.
 
 **Le socle.** Le sommet arrondi d'une tête (une calotte prolongée par un cylindre qui sort du cadre), couvert de houppes de duvet gonflées, semées sans trame et cuites une fois en un maillage statique. Deux essais l'ont précédé : une petite pelote, qui se lisait comme une boule flottante, et un champ de duvet presque plat, où la plume chassée tombait sans plus avoir de raison de quitter le cadre.
 
@@ -86,16 +86,18 @@ La courbure change, la longueur d'arc non : chaque barbe se déroule sur un cyli
 
 | Famille | Plumes | Calotte | Couronne | Inclinaison (tuyau → ouverte → usée) | Courbure du rachis |
 | --- | --- | --- | --- | --- | --- |
-| Vexille | 11 | 0,9 L | 0,12 L | 0,02 → 0,34 → 0,6 rad, plus le follicule (0,3) | 0,42 / L |
-| Ocelle | 8 | 0,55 L | 0,06 L | 0,02 → 0,3 → 0,56, plus 0,26 | 0,22 / L |
-| Duvet | 6 | 1,8 L | 0,75 L (une grappe de houppes) | 0,06 → 0,4 → 0,62, plus 0,3 | — |
-| Plume | 7 | 0,6 L | 0,09 L | 0,02 → 0,22 → 0,42, plus 0,2 (une fontaine) | 0,36 / L |
+| Vexille | 21 | 0,9 L | 0,16 L | 0,02 → 0,34 → 0,6 rad, plus le follicule (0,3) | 0,42 / L |
+| Ocelle | 13 | 0,55 L | 0,06 L | 0,02 → 0,5 → 0,95, plus 0,26 | 0,22 / L |
+| Duvet | 9 | 1,8 L | 0,75 L (une grappe de houppes) | 0,06 → 0,4 → 0,62, plus 0,3 | — |
+| Plume | 11 | 0,6 L | 0,12 L | 0,02 → 0,25 → 0,5, plus 0,2 (une fontaine) | 0,36 / L |
+
+Une gerbe fournie : 21 vexilles, 13 paons (des nombres de Fibonacci s'emboîtent le mieux à l'angle d'or). Plus serrés, les disques des paons se touchaient. Leur éventail s'ouvre donc davantage (jusqu'à 0,95 rad), en fontaine. Les plumes d'autruche et d'aigrette, à onze, se penchent moins (0,5 rad) : plus inclinées, leurs pointes entraient dans le duvet du socle.
 
 L'inclinaison du follicule ne s'applique qu'à 30 % tant que la plume est un tuyau, puis entièrement une fois ouverte : un tuyau penché passait sous la base large des plumes les plus vieilles.
 
 **Les traversées : un banc** (`src/gen/collide.js`). Le banc mesure ce que l'on voit. À un instant u, il prend toutes les plumes de la gerbe à leur place réelle (`bouquetState`, la fonction qui remplit aussi les uniformes du GPU). Chaque barbe et chaque rachis y sont des lignes brisées, posées par la même formule que le vertex shader, et la surface pleine de chaque plume (barbes agrafées, rachis) une carte de hauteur dans son propre repère. Un segment dont les deux extrémités sont de part et d'autre d'une surface, de plus de 0,15 mm, la traverse. Les barbes libres (les fils du paon, l'autruche) se mêlent comme des cheveux : elles ne font pas surface. Au pied de la gerbe (sur 0,1 L), les bases duveteuses et le duvet du socle se mêlent de même, et on n'y compte pas les traversées. `node feather/tools/crossings.mjs 1 7 g1:vexille` donne le pire instant de chaque graine.
 
-Il n'y a plus de solveur. Le plumage en tuiles en demandait un (3 à 8 s au chargement), qui écartait les voisines pas à pas, des mouvements sans cause visible. Dans la gerbe, l'ordre suffit. Mesuré sur huit graines et 100 instants : 0,6 mm au plus pour les vexilles, le duvet et le paon. Pour l'autruche, dont seuls les rachis sont pleins, deux rachis se frôlent encore pendant un ou deux centièmes de boucle (jusqu'à 5 mm).
+Il n'y a plus de solveur. Le plumage en tuiles en demandait un (3 à 8 s au chargement), qui écartait les voisines pas à pas, des mouvements sans cause visible. Dans la gerbe, l'ordre suffit. Mesuré sur huit graines et 100 instants : 0,6 mm au plus pour les vexilles, le duvet et le paon. Pour l'autruche, dont seuls les rachis sont pleins, deux rachis se frôlent encore pendant quelques centièmes de boucle (jusqu'à 3 mm).
 
 ## Les décors
 
