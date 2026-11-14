@@ -1,5 +1,7 @@
 # Melt, seconde version — document de travail
 
+> **Remplacé par `concept-fjord.md`** (14 novembre). Ce document garde la trace de la version en eau douce et des prototypes P0 à P5.
+
 Thème : **« melt »**. Le projet garde son nom et son dossier (`melt/`). Ce document remplacera `concept.md` si la piste est adoptée. L'ancien concept (le dégel d'une étoile) reste dans l'historique git.
 
 Sous-titre proposé : *la colonne sans fin*.
