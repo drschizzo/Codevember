@@ -41,18 +41,23 @@ export function potFor(R) {
     Ri = Math.max(Ri, camH + 1.4);
   }
   // la grille (un treillis d'acier dans un cerceau, sur lequel la grappe a
-  // poussé), à peine plus large que les pieds ; deux câbles fins la tiennent par
-  // son cerceau et montent vers un crochet, hors champ, loin derrière la grappe
+  // poussé), à peine plus large que les pieds ; un panier : une fourche part de
+  // son cerceau et rejoint un long manche qui monte vers l'arrière, hors champ
   // (le coin d'un cube tourné va à √2 demi-côté du centre, 1,9 pour la trémie allongée :
   // aucun pied ne doit passer sur le cerceau)
   const Rg = Math.max(...cl.map((c) => Math.hypot(c.x, c.z) + c.s * (habit === 2 ? 1.95 : 1.45))) + 0.12;
-  Ri = Math.max(Ri, Rg + 1.2);
+  // (assez de place derrière la grille pour que le manche du panier, à 68°, passe
+  // par-dessus la paroi même quand la grille est au fond)
+  // (le montant du manche, 0,6 cm derrière le cerceau, ne doit pas toucher la paroi)
+  Ri = Math.max(Ri, Rg + 1.8);
   // (le bain est fixe, à LB ; la grille au repos est à LB − LH, le fond juste dessous ;
   // la paroi monte bien au-dessus du bain : elle fait le fond de l'image)
   const th = 0.45, rim = C.LB + 0.8 * C.LH + 0.4, bottom = C.LB - C.LH - 1.2;
   return {
     Ri, th, rim, bottom, bench: bottom - 1.6,
-    galette: { r: Rg, crust: 0, bar: 0 },
+    // (le montant du manche : assez haut pour que son coude passe au-dessus du bord,
+    // même grille au fond)
+    galette: { r: Rg, crust: 0, bar: rim + 0.5 - (C.LB - C.LH + 0.35) },
   };
 }
 
