@@ -1,0 +1,44 @@
+# p8_d  T∞ 1.5→9.5→1.5 °C, P=400 s, v=0.700 mm/s, F=20, grille 80x320, dx=0.5 mm, dt=0.0235 s
+t=94 s (période 0.24)  T∞=5.13  V=69.96 cm³  bout à z=14 mm  2.00 ms/pas
+t=188 s (période 0.47)  T∞=9.43  V=43.40 cm³  bout à z=5 mm  1.98 ms/pas
+# dt → 0.0188
+t=277 s (période 0.69)  T∞=6.92  V=4.12 cm³  bout à z=151 mm  1.98 ms/pas
+# dt → 0.0151
+t=340 s (période 0.85)  T∞=3.16  V=11.32 cm³  bout à z=134 mm  1.97 ms/pas
+t=400 s (période 1.00)  T∞=1.50  V=21.41 cm³  bout à z=106 mm  1.97 ms/pas
+t=460 s (période 1.15)  T∞=3.16  V=35.37 cm³  bout à z=74 mm  1.96 ms/pas
+t=521 s (période 1.30)  T∞=6.77  V=45.72 cm³  bout à z=46 mm  1.96 ms/pas
+t=581 s (période 1.45)  T∞=9.32  V=35.21 cm³  bout à z=31 mm  1.97 ms/pas
+t=641 s (période 1.60)  T∞=8.70  V=8.72 cm³  bout à z=38 mm  1.96 ms/pas
+t=701 s (période 1.75)  T∞=5.42  V=6.68 cm³  bout à z=146 mm  1.96 ms/pas
+t=761 s (période 1.90)  T∞=2.21  V=14.98 cm³  bout à z=124 mm  1.96 ms/pas
+t=822 s (période 2.05)  T∞=1.73  V=25.98 cm³  bout à z=95 mm  1.95 ms/pas
+t=882 s (période 2.20)  T∞=4.38  V=40.15 cm³  bout à z=63 mm  1.95 ms/pas
+t=942 s (période 2.36)  T∞=7.96  V=48.08 cm³  bout à z=36 mm  1.95 ms/pas
+t=1002 s (période 2.51)  T∞=9.50  V=23.94 cm³  bout à z=36 mm  1.95 ms/pas
+t=1063 s (période 2.66)  T∞=7.72  V=1.96 cm³  bout à z=156 mm  1.96 ms/pas
+t=1123 s (période 2.81)  T∞=4.09  V=9.19 cm³  bout à z=139 mm  1.96 ms/pas
+t=1183 s (période 2.96)  T∞=1.64  V=18.28 cm³  bout à z=114 mm  1.95 ms/pas
+t=1243 s (période 3.11)  T∞=2.39  V=31.47 cm³  bout à z=83 mm  1.95 ms/pas
+t=1304 s (période 3.26)  T∞=5.72  V=43.81 cm³  bout à z=52 mm  1.95 ms/pas
+t=1364 s (période 3.41)  T∞=8.87  V=44.40 cm³  bout à z=28 mm  1.95 ms/pas
+t=1424 s (période 3.56)  T∞=9.22  V=14.36 cm³  bout à z=38 mm  1.95 ms/pas
+t=1484 s (période 3.71)  T∞=6.48  V=5.15 cm³  bout à z=148 mm  1.95 ms/pas
+t=1545 s (période 3.86)  T∞=2.93  V=12.53 cm³  bout à z=131 mm  1.95 ms/pas
+# fin : 99685 pas, 194 s, 1.94 ms/pas, 1724 décalages
+# écart période 0 → 1 : RMS 4.282 mm, max 14.00 mm
+# écart période 1 → 2 : RMS 0.325 mm, max 13.58 mm
+# écart période 2 → 3 : RMS 0.167 mm, max 12.64 mm
+# longueur immergée (mm) aux 16 phases : 55 67 82 95 107 116 128 131 125 123 1 10 14 23 32 44
+# part de la boucle avec moins de 15 mm de glace sous l'eau : 14 %
+# détachement t=245 s (phase 0.612, période 0) : 13.67 cm³, z 15–159 mm
+# détachement t=247 s (phase 0.618, période 0) : 0.09 cm³, z 160–160 mm
+# détachement t=249 s (phase 0.624, période 0) : 0.06 cm³, z 160–160 mm
+# détachement t=644 s (phase 0.610, période 1) : 7.90 cm³, z 38–160 mm
+# détachement t=1045 s (phase 0.611, période 2) : 7.74 cm³, z 39–160 mm
+# détachement t=1049 s (phase 0.623, période 2) : 0.04 cm³, z 160–160 mm
+# détachement t=1051 s (phase 0.626, période 2) : 0.09 cm³, z 160–160 mm
+# détachement t=1052 s (phase 0.630, période 2) : 0.07 cm³, z 160–160 mm
+# détachement t=1445 s (phase 0.613, période 3) : 7.59 cm³, z 38–160 mm
+# détachement t=1448 s (phase 0.620, période 3) : 0.09 cm³, z 160–160 mm
+# écrit p8_d.png, p8_d.json

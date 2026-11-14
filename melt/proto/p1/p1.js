@@ -161,6 +161,16 @@ for (let p = 1; p < periods; p++) {
   res.push({ from: p - 1, to: p, rms_mm: Math.sqrt(s2 / n), max_mm: mx });
   log(`# écart période ${p - 1} → ${p} : RMS ${Math.sqrt(s2 / n).toFixed(3)} mm, max ${mx.toFixed(2)} mm`);
 }
+// longueur immergée de la colonne au cours de la dernière période (bout = plus
+// basse rangée où le rayon dépasse 0,3 mm), et part de la boucle « sans sujet »
+{
+  const lastRec = rec.slice((periods - 1) * perPeriod);
+  const Ls = lastRec.map((r) => { let j = 0; while (j < nz && r[j] < 0.3) j++; return j >= nz ? 0 : (nz - j) * dx * 1e3; });
+  const empty = Ls.filter((L) => L < 15).length / Ls.length;
+  const pick = Array.from({ length: 16 }, (_, k) => Ls[Math.floor(k * Ls.length / 16)].toFixed(0));
+  log(`# longueur immergée (mm) aux 16 phases : ${pick.join(' ')}`);
+  log(`# part de la boucle avec moins de 15 mm de glace sous l'eau : ${(empty * 100).toFixed(0)} %`);
+}
 for (const e of events) log(`# détachement t=${e.t.toFixed(0)} s (phase ${e.phase.toFixed(3)}, période ${Math.floor(e.t / P)}) : ${e.vol_cm3.toFixed(2)} cm³, z ${e.z_mm[0].toFixed(0)}–${e.z_mm[1].toFixed(0)} mm`);
 
 // ---- image : les 8 phases de la dernière période
