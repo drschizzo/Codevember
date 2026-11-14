@@ -25,6 +25,7 @@ import { setNoiseVolume, setLite } from '../../shared/scene/materials.js';
 import { createPost } from '../../shared/render/post.js';
 import { createAccumulator, jitter } from '../../shared/render/accum.js';
 import { createUI } from './app/ui.js';
+import { installChrome } from '../../shared/app/chrome.js';
 import { loadRender, saveRender, applyQuality, defaultsFor } from './app/settings.js';
 import { wantsMobile, switchMobile, createGovernor, createPacer, bindTouch } from '../../shared/app/mobile.js';
 import { exportLoop, exportPNG } from '../../shared/app/capture.js';
@@ -357,6 +358,7 @@ async function main() {
     },
   };
   const ui = params.get('ui') === '0' ? null : createUI({ recipe: () => R, render: RENDER, on, moods: MOODS });
+  installChrome(ui, params);
   // Écran tactile : panneau replié ; une touche = pause, deux touches = nouvelle
   // scène, appui long = masquer l'interface
   const touch = LITE || !!matchMedia?.('(pointer: coarse)').matches;
