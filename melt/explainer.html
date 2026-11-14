@@ -1,11 +1,15 @@
 <!doctype html>
+<!-- Page « défis techniques » de Melt : à réécrire entièrement d'après le
+     projet (voir references/documentation.md et le modèle tangle/explainer.html).
+     Ce gabarit ne garde que la structure : en-tête, sommaire, une section avec
+     une démo d'exemple, budget, pied. -->
 <html lang="fr">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#050506">
   <title>Melt · défis techniques</title>
-  <meta name="description" content="Comment Melt fait pousser puis fondre un cristal de neige : croissance de Gravner-Griffeath, bord en ligne de niveau, fonte ordonnée le long d'un arbre, perles qui conservent l'eau, calottes à angle de contact, laine au niveau des fibres, glace vue par déviation des rayons, une seule horloge.">
+  <meta name="description" content="Comment Melt est calculé : (une phrase qui nomme les défis).">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
@@ -16,151 +20,43 @@
 </head>
 <body>
   <nav class="top"><div class="in">
-    <a href="../">Codevember</a><span class="day">Day 03</span><span class="crumb">Melt · défis techniques</span>
+    <a href="../">Codevember</a><span class="day">Day NN</span><span class="crumb">Melt · défis techniques</span>
     <span class="sp"></span><a class="open" href="./">Ouvrir la scène</a>
   </div></nav>
 
   <main>
     <header class="hero">
-      <div class="kicker">Day 03 · Melt · le dégel d’une étoile</div>
-      <h1>Comment un cristal de neige fond en une goutte</h1>
-      <p class="lede">En macro, une étoile de glace de trois millimètres sort d’une gouttelette gelée, se ramifie, puis fond au soleil : ses bras se rétractent en perles qui remontent vers le centre et s’y rassemblent en une goutte, qui regèle en pointe. La difficulté est de faire pousser et fondre un objet presque transparent sans le modéliser à la main, puis de le rendre visible. La forme vient d’une simulation de croissance, la fonte d’un ordre calculé sur cette forme, l’eau d’un bilan de masse.</p>
+      <div class="kicker">Day NN · Melt · la colonne sans fin</div>
+      <h1>Comment … (le geste du projet, en une phrase)</h1>
+      <p class="lede">Trois ou quatre phrases qu'un curieux sans bagage technique comprend : ce qu'on voit, la difficulté en mots simples, puis ce qui est calculé. Pas de tiret cadratin, pas de « non pas X, mais Y », pas de chute en aphorisme (grille : references/documentation.md).</p>
     </header>
 
     <figure class="cover">
-      <img src="docs/capture.jpg" alt="Un cristal de neige en fougère posé sur un tricot de laine, au moment où le soleil entre" width="1483" height="926">
-      <figcaption>La fougère sur la laine, au moment où le soleil entre (graine k2). Le cristal fait moins de 40 µm d’épaisseur : on ne le voit que par ce que ses nervures reflètent et dévient.</figcaption>
+      <img src="docs/capture.jpg" alt="…" width="1600" height="900">
+      <figcaption>Ce que montre la capture, et ce qu'il faut y regarder.</figcaption>
     </figure>
 
     <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
 
     <article>
-
-      <section id="croissance">
-        <h2><span class="n">01</span>L’étoile pousse d’une règle de voisinage</h2>
-        <span class="src">src/gen/growth.js · src/families.js</span>
-        <p>Le cristal pousse dans une simulation, comme un vrai flocon dans l’air humide. Melt reprend le modèle mésoscopique de <strong>Gravner et Griffeath</strong> (<em>Physica D</em> 237, 2008), un automate cellulaire : une grille hexagonale de cellules qui évoluent chacune selon l’état de leurs voisines. Chaque cellule porte quatre grandeurs : attachée ou non, une masse de « bord » \(b\) (la couche quasi liquide), une masse de glace \(c\) et une masse de vapeur \(d\). Un pas enchaîne cinq opérations :</p>
-        <ul>
-          <li><b>diffusion</b> : \(d \leftarrow \tfrac17\big(d_i + \sum_{j} d_j\big)\) sur la cellule et ses six voisines. Une voisine attachée renvoie la valeur de la cellule, si bien que la vapeur ne la traverse pas ;</li>
-          <li><b>gel</b> : sur une cellule de bord, une part \(\kappa\) de la vapeur devient glace, le reste masse de bord ;</li>
-          <li><b>attachement</b>, selon le nombre \(n\) de voisines attachées : si \(n \le 2\), il faut \(b \ge \beta\) ; si \(n = 3\), \(b \ge 1\), ou \(b \ge \alpha\) avec peu de vapeur autour (\(\sum d < \theta\)) ; si \(n \ge 4\), toujours (la cellule comble un creux) ;</li>
-          <li><b>fonte</b> : une part \(\mu\) de la masse de bord et \(\gamma\) de la glace retournent à la vapeur ;</li>
-          <li><b>bruit</b> : la vapeur est multipliée par \(1 \pm \sigma\), ce qui rend chaque bras un peu différent.</li>
-        </ul>
-        <p>La vapeur s’épuise près du cristal. Les pointes, qui en voient davantage, avancent plus vite et se ramifient. C’est l’instabilité de Mullins-Sekerka, qui sort de ces règles sans qu’aucune ligne de code ne la nomme. Les faces planes avancent par attachement collectif (\(n = 3\)). Le bord du domaine est un réservoir à densité \(\rho\), et seuls les anneaux à moins de 24 cellules du cristal sont calculés : au-delà, la vapeur ne bouge pas.</p>
-        <p>Les sept paramètres \((\rho, \beta, \alpha, \theta, \kappa, \mu, \gamma)\) suffisent à passer de la dendrite stellaire à la fougère, au peigne, à l’échelle ou à la large branche. Les jeux viennent de l’article ou d’un balayage (<code>tools/sweep.mjs</code>). La masse de glace \(c\) de chaque cellule devient ensuite son épaisseur : les nervures, les arêtes des secteurs et les marques des étapes de croissance sortent toutes de la simulation.</p>
-        <figure id="fig-grow" class="wide"><figcaption><b>Le module <code>growth.js</code>, pas à pas.</b> La démo importe <code>growSteps()</code> tel quel et dessine la masse de glace des cellules attachées (plus claire, plus épaisse), sur un réseau de rayon 46 au lieu de 104. L’hexagone sombre est le domaine, bordé par le réservoir de vapeur. À droite, le rayon atteint selon le pas : presque proportionnel pour la dendrite, il rampe pour « Centre en plaque » tant que la plaque avance par ses faces, puis s’emballe avec les dendrites. Les boutons choisissent la forme. Avec σ = 0, la symétrie d’ordre 6 est exacte.</figcaption></figure>
-
-        <div class="note"><b>Aucune plaque n’est un hexagone qui grandit</b><p>Une plaque hexagonale simple ne fait que s’élargir, ce qui donne peu à regarder. Chaque forme composée prend donc un second jeu de paramètres en route (<code>then: { at, growth }</code>), quand le cristal atteint 30 à 60 % de son rayon, comme un flocon dont l’air change pendant la chute. La vapeur loin du cristal prend la nouvelle densité au même instant. On obtient ainsi les étoiles à centre en plaque, les plaques à secteurs prolongés de dendrites, les étoiles prises dans une plaque.</p></div>
-        <div class="note check"><b>Ce que le test vérifie</b><p>Sans bruit, la croissance est invariante par la rotation de 60° \((q, r) \to (-r,\, q + r)\) : même état et même pas d’attachement pour chaque cellule et ses cinq images. L’attachement est définitif. Le bruit est un xorshift déterministe : seule la graine change les bras.</p></div>
-      </section>
-
-      <section id="rayon">
-        <h2><span class="n">02</span>Le film fait avancer le rayon d’un pas régulier</h2>
-        <span class="src">src/gen/crystal.js · growInv · src/timeline.js · growTime()</span>
-        <p>La simulation enregistre, pour chaque cellule, le pas \(T\) où elle s’attache. Le plus simple serait de montrer à l’instant \(e\) du film toutes les cellules telles que \(T \le e\). Mais le rayon n’avance pas au rythme des pas. Pour une dendrite simple, il leur est presque proportionnel. Pour les formes composées, il s’en écarte beaucoup. L’étoile à centre en plaque passe 87 % de ses pas à atteindre la moitié de son rayon (la plaque avance lentement, par ses faces), puis ses dendrites jaillissent ; l’étoile prise dans une plaque fait l’inverse, la moitié du rayon en 8 % des pas (mesures sur le réseau de rayon 104). Filmée en pas de simulation, la première resterait un point pendant la moitié de la croissance.</p>
-        <p>Melt fait donc avancer le rayon d’un pas régulier. Les cellules sont triées par \(T\), et le rayon atteint est le maximum courant de leur distance au centre, \(r(T)\), croissant. Sa réciproque, qui donne le pas où le rayon atteint une fraction donnée de son maximum, est tabulée exactement, par recherche dichotomique, en 257 points :</p>
-        <div class="eq">\[ T^{-1}(\varrho) = \min\{\, T : r(T) \ge \varrho\, r_{\max} \,\}, \qquad \varrho = \tfrac{i}{256}. \]</div>
-        <p>L’horloge lit ce tableau avec une interpolation linéaire, et la ramification garde son ordre réel : seule la vitesse du temps change. Le même tableau sert à la caméra, qui recule pour garder l’étoile dans le cadre.</p>
-        <figure id="fig-inv" class="wide"><figcaption><b>Le même cristal, deux horloges.</b> Un cristal calculé par <code>buildCrystal()</code> (rayon de réseau 56) ; à gauche, les cellules dont le pas d’attachement est passé, en temps de simulation ; au milieu, avec la réciproque <code>growInv</code> du vrai module et <code>growTime()</code> de l’horloge. Les boutons changent de forme : avec « Centre en plaque », l’horloge en pas montre longtemps un simple point. La démo omet les rampes de départ et de fin que <code>clock()</code> ajoute autour.</figcaption></figure>
-      </section>
-
-      <section id="bord">
-        <h2><span class="n">03</span>Le bord passe entre les cellules</h2>
-        <span class="src">src/gen/crystal.js · src/scene/ice.js · field()</span>
-        <p>Chaque cellule du réseau est un sommet du maillage, deux triangles par cellule : environ 30&#8239;000 cellules pour une étoile. Si l’on allumait les cellules une à une, le contour avancerait par marches hexagonales, et le réseau se verrait à chaque image. Le vertex shader, le programme qui place chaque sommet sur la carte graphique, calcule donc une <strong>épaisseur signée</strong>, positive dans la glace et négative au dehors :</p>
-        <div class="eq">\[ v = \big(h + \tfrac12 h_0\big)\; g\; (1 - m) - \tfrac12 h_0, \qquad g = S\!\left(\frac{t - T}{\tau}\right), \quad m = S\!\left(\frac{s - M}{\tau_m}\right), \]</div>
-        <p>où \(h\) est l’épaisseur de la cellule, \(h_0\) celle du cristal, \(T\) et \(M\) ses instants d’attachement et de fonte, \(t\) et \(s\) l’avancée de la croissance et de la fonte, \(S\) un pas lissé. Les sommets de la marge (voisins non attachés) valent toujours \(-\tfrac12 h_0\). Le bord visible est la ligne de niveau \(v = 0\), interpolée linéairement dans chaque triangle par le rastériseur (l’étape du GPU qui remplit les triangles de pixels). La glace est masquée là où \(v\) est négatif, et le contour glisse continûment d’une cellule à l’autre. La rampe dure \(\tau = 2{,}2 / r_{\max}\), le temps qu’il faut au front pour franchir à peu près deux cellules. Les instants \(T\) sont en outre lissés sur les voisines, à ±0,01 près, pour que le contour ne trahisse pas le réseau.</p>
-        <p>Reste la normale, la direction perpendiculaire à la surface dont dépend l’éclairage. Il faudrait la calculer à partir des sommets voisins, que le vertex shader ne voit pas. Comme \(v\) ne dépend de la position qu’à travers \(h\), \(T\) et \(M\), son gradient se recompose à partir de leurs gradients, calculés une fois par moindres carrés sur les voisines et rangés dans deux attributs :</p>
-        <div class="eq">\[ \nabla v = \nabla h\; g(1-m) \;-\; \big(h + \tfrac12 h_0\big)\Big[\, g'\,\tfrac{\nabla T}{\tau}\,(1-m) \;-\; g\, m'\, \tfrac{\nabla M}{\tau_m} \Big]. \]</div>
-        <p>Pendant qu’une cellule pousse, le terme en \(\nabla T\) incline la surface vers l’extérieur : le front a un vrai biseau, qui accroche la lumière.</p>
-        <figure id="fig-level" class="wide"><figcaption><b>Un bout de bras, à l’échelle des cellules.</b> Le maillage réel d’une dendrite (sommets, triangles, \(h\), \(T\), \(\tau\) et \(h_0\) issus de <code>buildCrystal()</code>), tourné pour que le bras pointe vers la droite. Les points clairs sont les sommets où \(v &gt; 0\). Le trait or est la ligne \(v = 0\) interpolée dans les triangles ; sans elle, les cellules entières s’allument par marches. Faites glisser l’avancée de la croissance pour voir le trait or passer d’une cellule à l’autre ; le bouton masque ce trait. Seule la croissance est montrée (\(m = 0\)).</figcaption></figure>
-      </section>
-
-      <section id="fonte">
-        <h2><span class="n">04</span>La fonte remonte l’arbre vers le centre</h2>
-        <span class="src">src/gen/crystal.js · buildCrystal(), meltWater()</span>
-        <p>Une fonte « par la distance au centre » ferait disparaître un anneau entier à la fois, et l’eau de la pointe d’une branche latérale se retrouverait isolée, loin de toute glace. L’eau doit toujours pouvoir se replier vers un morceau de cristal encore là.</p>
-        <p>La priorité de fonte d’une cellule de l’étoile (grande : fond tôt) mêle sa distance au centre <em>le long du cristal</em> \(\mathrm{geo}\), sa finesse (distance au bord en moins de 5 cellules), le côté du soleil et un peu de bruit :</p>
-        <div class="eq">\[ P = 0{,}75\,\frac{\mathrm{geo}}{\mathrm{geo}_{\max}} + 0{,}18\;\mathrm{fin}\cdot r + 0{,}08\;(\hat{x}\cdot\hat{s})\; r + 0{,}01\,\xi. \]</div>
-        <p>Une contrainte garantit que l’eau a toujours où aller. Un parcours en largeur depuis le centre, qui visite les cellules par distance croissante le long du cristal, construit l’<strong>arbre des plus courts chemins</strong> : chaque cellule y a pour mère une voisine plus proche du centre. Chaque cellule est forcée de fondre avant sa mère, \(P(\text{fille}) \ge P(\text{mère}) + 10^{-4}\). Le centre fond en dernier. Les rangs sont ensuite étalés régulièrement sur \([0, 1]\), si bien que la fonte avance à vitesse constante en nombre de cellules. Pour la plaque, la priorité suit d’abord la distance au bord, d’où un bourrelet qui se resserre comme un collier.</p>
-
-        <h3>L’eau suit le front</h3>
-        <p>Quand une cellule fond, son eau (\(0{,}917\) fois le volume de glace) rejoint la perle qui se tient sur elle, et cette perle passe à la mère de la cellule : elle remonte le bras avec le front, en l’avalant. Deux perles qui se rencontrent sur un même chemin fusionnent si c’est le gros de l’eau qui arrive. Un simple filet change de perle sans entraîner la fusion. Une grille de hachage trouve ensuite les calottes qui se touchent (centres à moins de \(0{,}92\,(a_1 + a_2)\)) et les fusionne. La position d’une perle est la moyenne de ses fronts pondérée par l’eau qu’ils portent, en ignorant les filets sous le quart du plus gros.</p>
-        <p>Le résultat est enregistré en 160 images, dans 96 <strong>emplacements stables</strong>. Une perle garde son emplacement toute sa vie. Une perle qui disparaît rejoint la position de sa perle d’accueil en s’annulant, et son emplacement n’est réutilisé que deux images plus tard. Le vertex shader interpole entre deux images sans qu’aucune perle ne saute d’un bout du cristal à l’autre.</p>
-        <figure id="fig-melt" class="wide"><figcaption><b>La fonte réelle d’un cristal de démonstration.</b> Les curseurs règlent l’avancée de la fonte et la direction du soleil, les boutons changent de famille. <code>buildCrystal()</code> du projet (réseau de rayon 56, cristal de 3 mm), relu comme le fait la scène : épaisseur \(v\) avec \(g = 1\), perles interpolées entre les 160 images enregistrées, rayon de base par <code>capBase()</code> avec un angle de contact de 0,85 rad sur la glace. « Ordre de fonte » colore chaque cellule par son instant \(M\) (bleu : tard, or : tôt). Le bilan compare l’eau des perles à 0,917 fois la glace fondue. La goutte gelée du centre n’est pas ajoutée.</figcaption></figure>
-        <div class="note"><b>La colonne : Plateau-Rayleigh</b><p>Une colonne qui fond ne remonte pas vers un centre : l’eau qui la gaine forme un cylindre, qui se rompt en perles espacées d’environ neuf rayons. La priorité y suit la distance au plus proche centre de perle, espacés de \(\lambda = \max(6,\; 9 \times 0{,}62\, h_w)\) cellules sur l’axe (\(h_w\) : demi-largeur du prisme). L’arbre est remplacé par la descente vers ce centre. Les perles du chapelet ne fusionnent que si elles se superposent (seuil \(0{,}4\) au lieu de \(0{,}92\)) et s’évaporent chacune à sa place.</p></div>
-        <div class="note check"><b>Ce que les tests vérifient</b><p>Toute cellule a une voisine plus proche du centre qui fond après elle, et la cellule centrale a \(M = 1\). À la dernière image, toute l’eau est dans l’emplacement 0, au centre à 1,5 cellule près, et égale à 0,917 fois la glace à \(10^{-3}\) près. L’eau montrée ne décroît jamais et ne dépasse jamais l’eau fondue. La colonne finit en au moins deux perles.</p></div>
-      </section>
-
-      <section id="perle">
-        <h2><span class="n">05</span>Une perle est une calotte, et elle regèle en pointe</h2>
-        <span class="src">src/scene/water.js · cap() · src/scene/stage.js · blobsAt()</span>
-        <p>De l’eau de synthèse se trahit vite en « blobs » arrondis. Une petite goutte au repos a pourtant une forme exacte. À ces tailles, la tension superficielle domine la pesanteur, et la goutte est une <strong>calotte sphérique</strong>, un morceau de sphère coupé par le support, dont l’angle de contact \(\theta\) dépend de la surface. Pour un rayon de base \(a\) :</p>
-        <div class="eq">\[ V(a, \theta) = \frac{\pi a^3}{3}\;\frac{2 - 3\cos\theta + \cos^3\theta}{\sin^3\theta}, \qquad R_s = \frac{a}{\sin\theta}. \]</div>
-        <p>L’enregistrement de la fonte ne garde que des volumes ; le rayon de base en découle, \(a = \sqrt[3]{V / V(1,\theta)}\). Chaque perle est une instance d’un même gabarit paramétré par \((\rho, \varphi)\), du sommet (\(\psi = 0\)) à la ligne de contact (\(\psi = \theta\)). Position et normale sont exactes, y compris pour \(\theta\) au-delà de 90°. L’angle dépend du support : 1,85 rad (106°) sur la laine, où la goutte perle, 1,9 sur le velours, 1,55 sur la feuille de houx, 1,1 sur l’ardoise, 0,55 sur le verre et 0,5 sur la lame de saphir, à ±5 %. Sur la glace, il vaut 0,75 à 0,95 rad. Quand la dernière glace disparaît, l’angle passe de celui de la glace à celui du support : la goutte se ramasse.</p>
-
-        <h3>La pointe de la goutte gelée</h3>
-        <p>Une goutte qui gèle sur une surface froide se termine en pointe, d’angle d’ouverture voisin de 139° (Marín et al., 2014) : la glace, 9 % plus volumineuse que l’eau, pousse vers le haut le liquide qui reste. Dans Melt, un front de gel monte de la ligne de contact vers le sommet. La glace devient laiteuse (bulles chassées vers le centre), plus rugueuse, d’indice 1,31 au lieu de 1,333. Quand le front atteint le haut, le sommet se soulève :</p>
-        <div class="eq">\[ \Delta z = \mathrm{pointe}\cdot 0{,}32\,R_s\; S\!\left(\frac{0{,}45 - \rho}{0{,}45}\right)^{2}, \qquad \mathrm{pointe} = S\!\left(\frac{\mathrm{gel} - 0{,}72}{0{,}28}\right). \]</div>
-        <p>Cette perle gelée est l’état de départ de la boucle : son volume est celui de la perle du début, puisque l’évaporation ramène la goutte, après la fonte, à ce volume exact.</p>
-        <figure id="fig-drop"><figcaption><b>Un même volume, six supports.</b> Profil d’une calotte calculé comme <code>cap()</code> dans le vertex shader des perles, pour le volume d’une demi-sphère de 120 µm de rayon. Le curseur « gel » pilote le front (bleu : eau, blanc laiteux : glace) et la pointe, avec les mêmes formules que <code>stage.js</code>. Les boutons donnent l’angle de contact de chaque support. La démo ignore la normale déformée et la réfraction.</figcaption></figure>
-      </section>
-
-      <section id="laine">
-        <h2><span class="n">06</span>Trois mailles de jersey, fibre par fibre</h2>
-        <span class="src">src/gen/wool.js</span>
-        <p>Le cadre fait trois à cinq millimètres de large. À cette échelle, un gant de laine montre ses fibres une à une, épaisses de 17 µm. Les premières tentatives donnaient des brins tressés à la mauvaise échelle (« des feuilles »), puis un feutrage sans structure. Melt suit finalement le <strong>modèle de fil procédural</strong> de Zhao, Luan et Bala (SIGGRAPH 2016), dans la forme temps réel qu’en donnent Wu et Yuksel (I3D 2017).</p>
-        <p>Le fil suit les rangs d’un jersey (mailles en V de 1,75 × 1,45 mm, jambes en avant, têtes passées derrière). Deux brins de rayon 0,21 mm tournent autour de son axe, et la section d’un brin est une ellipse écrasée contre son voisin (\(e_N = 0{,}8\), \(e_B = 1{,}15\)). Chaque fibre y décrit une hélice dont la distance à l’axe <strong>migre</strong>, c’est-à-dire oscille entre deux rayons au fil des tours. Les rayons propres des fibres suivent une densité, plus forte près de l’axe :</p>
-        <div class="eq">\[ R(\theta) = \frac{R_i}{2}\Big(R_{\max} + R_{\min} + (R_{\max} - R_{\min})\cos(\theta_i + s\,\theta)\Big), \qquad \rho(R) = (1 - 2\varepsilon)\left(\frac{e - e^{R}}{e - 1}\right)^{\beta} + \varepsilon, \]</div>
-        <p>avec \(R_{\min} = 0{,}55\), \(R_{\max} = 1{,}05\), \(s = 1{,}6\) migration par tour, et des rayons propres \(R_i\) tirés par rejet selon la densité \(\rho\) (\(\varepsilon = 0{,}1\), \(\beta = 0{,}45\)). Six pour cent des périodes deviennent des boucles (\(R_{\max} \to 1{,}8\)), et 16 % des poils, fibres rompues dont le bout libre s’écarte jusqu’à 4,2 rayons de brin et retombe un peu. Les fibres du cœur, trop serrées pour se distinguer, sont une seule « fibre de cœur » striée en hélice. L’ombre ambiante suit la distance au centre du fil. Les ombres portées viennent de tubes simples, ce qui évite de passer les 570&#8239;000 sommets de fibres dans la passe d’ombre.</p>
-        <figure id="fig-wool" class="wide"><figcaption><b>Un brin en coupe, qui défile.</b> Les 54 fibres explicites d’un brin, rayons tirés par rejet selon la densité de Zhao et al., positions par la formule de migration et les constantes de <code>YARN</code> ; le disque strié est la fibre de cœur. À droite, la distance à l’axe de trois fibres le long du brin : la migration, et une boucle de temps en temps. Les poils sont omis.</figcaption></figure>
-        <div class="note trap"><b>Rien ne dépasse dans l’emprise du cristal</b><p>Un cristal plat posé sur des fibres frisées les traverse forcément quelque part. Dans le rayon du cristal (plus 0,15 mm), les fibres sont tassées sous le plan \(y = -r_{\text{fibre}}\) puis ne remontent qu’en pente douce (0,35). Un poil qui percerait l’emprise est retiré. Le tout est enfin abaissé pour que la fibre la plus haute affleure 0,5 µm sous le cristal. Un test vérifie qu’aucun sommet ne dépasse.</p></div>
-      </section>
-
-      <section id="lumiere">
-        <h2><span class="n">07</span>Voir trente microns de glace</h2>
-        <span class="src">src/scene/sky.js · src/scene/ice.js · src/scene/backlight.js</span>
-        <p>Les premiers rendus ne montraient rien : une plaque de glace claire de 30 µm sur un fond sombre est noire. Un cristal de neige ne se voit que par sa surface. Les photographes de flocons placent donc une grande source douce là où la face plane renvoie le regard de l’objectif, comme un miroir. Le ciel HDR de Melt (à grande dynamique, calculé en 1024 × 512 demi-flottants) porte une boîte à lumière ovale à l’azimut opposé de la caméra et à sa hauteur. Les faces planes s’allument. Les nervures et les pentes renvoient le ciel plus sombre à côté et se dessinent en traits. Une bande étroite, ailleurs, fait scintiller les arêtes quand la caméra se balance.</p>
-        <p>L’éclat argenté d’un vrai flocon vient de la lumière qui ressort après des réflexions totales sur les nervures. La transmission de la glace (indice 1,31) cède donc une part diffuse qui croît avec la pente, de 0,12 sur les faces à 0,42 sur les nervures. Les zones minces s’irisent (film de 300 à 900 nm). Au début de la fonte, un film d’eau vernit la surface : rugosité 0,012, vernis à 0,9.</p>
-
-        <h3>Sur le verre et au microscope, la déviation</h3>
-        <p>Quand la lumière vient d’en dessous, ce qui compte est la <strong>déviation</strong> du rayon. Le shader suit le rayon de l’œil à travers la face supérieure (sa normale), puis la face inférieure, plane contre le support, et mesure l’angle \(\delta\) entre la direction de sortie et le rayon non dévié. Une plaque à faces parallèles ne dévie rien et prend la couleur du fond. Les pentes dévient le rayon, et c’est elles qu’on voit.</p>
-        <p>En <strong>éclairage de Rheinberg</strong>, le condenseur porte un disque central (le champ) et un anneau d’une autre couleur. Un rayon dévié de moins de \(\delta_1 = 0{,}035\) rad voit le champ. Entre \(\delta_1\) et \(\delta_2 = 0{,}22\) rad, il voit l’anneau, plus vif près de son bord intérieur. Au-delà de l’ouverture de l’objectif, il voit le noir. D’où le dessin caractéristique : faces sombres, pentes lumineuses, arêtes et bords des gouttes noirs. Sur la vitre, le sens de la déviation teinte la pente de chaud ou de froid, comme en strioscopie, la technique qui rend visibles les écarts d’indice.</p>
-        <figure id="fig-back" class="wide"><figcaption><b>Une coupe de branche sous le microscope.</b> Les boutons passent du Rheinberg à la vitre, les curseurs règlent le relief et l’inclinaison de l’objectif. Profil synthétique d’une branche de 0,3 mm, à l’épaisseur réelle (nervure centrale, terrasse, faibles ondulations de croissance, bord arrondi sur 3,5 cellules comme dans <code>buildCrystal()</code>). Les deux réfractions et la fonction <code>backlight()</code> sont portées du shader en JavaScript scalaire, avec les constantes de <code>setBacklight()</code>. En haut, la coupe et quelques rayons. Au milieu, \(\delta\) selon la position. En bas, la couleur que reçoit l’objectif. Le terme de Fresnel est omis.</figcaption></figure>
-        <div class="note trap"><b>Le relief exagéré qui faisait de la fausse couleur</b><p>Une première version gonflait le relief d’un facteur 2,4 pour « mieux voir » le cristal. En Rheinberg, presque toute la glace déviait alors au-delà de \(\delta_1\), et les bras se remplissaient d’un aplat de la couleur de l’anneau (champ vert et anneau rose saturés). Avec le relief physique, un champ presque noir et un anneau de lumière chaude, l’image se lit comme de la lumière dans la pénombre. Montez le relief à ×2,4 dans la démo pour voir l’aplat revenir.</p></div>
-        <div class="note"><b>Une glace qui porte une ombre</b><p>Dans three.js, une matière à transmission ne porte pas d’ombre : tout semblait flotter. La glace et les perles ont chacune un double opaque qui ne sert qu’à la passe d’ombre et laisse passer une part de la lumière. Le support calcule en plus une ombre de contact exactement sous la glace à l’instant \(t\), grâce à une carte d’emprise de 256 × 256 qui donne, par texel, l’instant d’attachement, l’instant de fonte et l’épaisseur. Au pied de chaque perle, il pose un anneau d’ombre serré, plus clair au centre, où la goutte concentre la lumière comme une lentille.</p></div>
-      </section>
-
-      <section id="horloge">
-        <h2><span class="n">08</span>Une seule horloge pour toute la boucle</h2>
-        <span class="src">src/timeline.js · clock() · src/camera.js</span>
-        <p>La boucle passe par trois états (la perle gelée, l’étoile, la goutte) par trois chemins différents : une croissance qui se ramifie, une fonte qui rassemble, un gel qui dresse une pointe. Une seule fonction de la phase \(u \in [0, 1)\) les règle tous, avec la lumière et le givre : avancée de la croissance \(t\), de la fonte \(s\), soleil, givre, film d’eau, gel de la perle, évaporation. Chaque grandeur est monotone dans son temps et a la même valeur en \(u = 0\) et \(u = 1\).</p>
-        <p>La boucle se raccorde <strong>par construction</strong>, sans fondu enchaîné. Aux deux bouts, il n’y a pas de cristal (avant sa croissance d’un côté, après sa fonte de l’autre), la goutte a le volume de la perle et elle est gelée, le soleil est couché, le givre a la même hauteur.</p>
-        <p>La fonte se joue en temps réel (de \(u = 0{,}52\) à \(0{,}78\), une dizaine de secondes sur une boucle de 40 s), avec un ralenti au rassemblement. Ce ralenti déforme le temps de la fonte sans changer sa durée totale :</p>
-        <div class="eq">\[ \tau(x) = x - a\,w\,K\!\left(\frac{x - x_0}{w}\right), \qquad K(x) = x - 3x^3 + 3x^5 - x^7 \ \text{sur } [-1, 1]. \]</div>
-        <p>\(K\) s’annule avec sa dérivée aux bords, si bien que \(\tau\) se raccorde sans à-coup à l’identité. Au centre du ralenti, \(\tau'(x_0) = 1 - a\). Avec \(a = 0{,}45\), \(w = 0{,}2\) et \(x_0 = 0{,}8\), la fonte avance à 55 % de sa vitesse au moment où les perles se rejoignent.</p>
-        <figure id="fig-clock" class="wide"><figcaption><b>La fonction <code>clock()</code> du projet, importée telle quelle.</b> Chaque ligne est une grandeur sur une boucle ; le curseur parcourt la boucle en 12 s. La ligne « vitesse de la fonte » est la dérivée de \(s\) : son creux est le ralenti au rassemblement, que l’on peut déplacer. Le tableau <code>growInv</code> n’est pas passé ici : la croissance y suit le pas de simulation.</figcaption></figure>
-        <div class="note"><b>La caméra respire avec le sujet</b><p>La distance de la caméra est calculée en 720 points de la boucle à partir du rayon apparent du sujet (cristal qui pousse, glace et perles qui restent, goutte), puis lissée par un noyau gaussien périodique de 1,2 s environ et relue en Catmull-Rom périodique (une courbe qui passe par les points). Elle recule pendant la croissance, avance pendant le rassemblement et balance d’un seul aller-retour de 6 à 12° en azimut. Les tests vérifient la périodicité, une rotation sous 25°/s et une accélération bornée, échantillonnée à 120 images par seconde.</p></div>
+      <section id="defi-1">
+        <h2><span class="n">01</span>Un titre qui affirme la solution</h2>
+        <span class="src">src/gen/….js · fonction()</span>
+        <p>Le problème concret, en mots simples, avant le premier terme technique (glosé à sa première apparition). Pourquoi l'approche naïve échoue, chiffré. La solution retenue, avec ses constantes réelles. Si une formule éclaire, une phrase dit d'abord ce qu'elle calcule :</p>
+        <div class="eq">\[ x(t) = \ldots \]</div>
+        <p>Puis ce qu'elle implique, avec un ordre de grandeur concret.</p>
+        <div class="note trap"><b>Le piège</b><p>Ce qui a cassé pendant la mise au point, et comment on l'a vu.</p></div>
+        <figure id="fig-exemple"><figcaption><b>Ce que montre la démo.</b> Quoi manipuler, quoi regarder, puis ce qu'elle simplifie par rapport au projet.</figcaption></figure>
       </section>
 
       <section id="budget">
-        <h2><span class="n">09</span>Budget</h2>
-        <p>La croissance, le maillage et la fonte sont calculés une fois, dans des workers, pendant l’écran de chargement, qui montre le cristal de la scène pousser en direct sur un <code>OffscreenCanvas</code>. Le rendu ne fait que relire.</p>
+        <h2><span class="n">0N</span>Budget</h2>
         <div class="tbl"><table>
           <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
           <tbody>
-            <tr><td>Croissance, maillage et fonte enregistrée (réseau de rayon 104, 32&#8239;761 cellules)</td><td>worker</td><td class="num">0,5 à 3,5 s</td></tr>
-            <tr><td>Tricot de laine (~570&#8239;000 sommets de fibres)</td><td>worker</td><td class="num">0,5 s</td></tr>
-            <tr><td>Fonte enregistrée : 160 images × 96 perles × vec4</td><td>mémoire</td><td class="num">240 Kio</td></tr>
-            <tr><td>Carte d’emprise du cristal (ombre de contact), RGBA8</td><td>GPU</td><td class="num">256 × 256</td></tr>
-            <tr><td>Image, qualité Haute, 1,8 Mpx, laine (le décor le plus lourd)</td><td>GPU</td><td class="num">9,2 ms</td></tr>
-            <tr><td>Image, version mobile (réseau de rayon 76, velours)</td><td>GPU</td><td class="num">3,5 ms</td></tr>
-            <tr><td>Pipelines compilées sous l’écran de chargement</td><td>GPU</td><td class="num">207</td></tr>
-            <tr><td>Raccord de boucle : écart des matrices</td><td>mesure</td><td class="num">≤ 2·10⁻⁸</td></tr>
+            <tr><td>(mesures du README : calcul au chargement, ms par image, shaders, mémoire)</td><td>worker</td><td class="num">…</td></tr>
           </tbody>
         </table></div>
-        <p>Treize tests couvrent l’ensemble : symétrie d’ordre 6 et attachement définitif ; chaque cellule fond avant son chemin vers le centre ; l’eau est conservée, l’étoile et la plaque finissent en une goutte au centre, la colonne en chapelet ; calottes (volume et rayon de base) ; l’horloge raccorde exactement et chaque temps est monotone ; la caméra est périodique, lente, sans à-coups, au-dessus du support ; le cristal pose sur la laine sans qu’aucune fibre dépasse ; la glace n’existe pas au raccord ; recette déterministe ; décors, lampes presque blanches et taille réelle du cristal.</p>
       </section>
     </article>
 
@@ -174,531 +70,21 @@
   </main>
 
   <script type="module">
-    import { demo, C, TAU, lerp, clamp, alpha, label, arrow, rng } from '../home/explainer.js';
-    import { growSteps } from './src/gen/growth.js';
-    import { buildCrystal, capBase, capVolume } from './src/gen/crystal.js';
-    import { FAMILIES } from './src/families.js';
-    import { clock, TL, growTime, sstep } from './src/timeline.js';
+    import { demo, C, TAU, lerp, label } from '../home/explainer.js';
+    // Importer les modules purs du projet plutôt que les recopier :
+    // import { … } from './src/gen/….js';
 
-    const SQ3 = Math.sqrt(3);
-    const mix3 = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
-    const rgb = (c) => `rgb(${Math.round(c[0])},${Math.round(c[1])},${Math.round(c[2])})`;
-    const ICE0 = [40, 58, 84], ICE1 = [232, 240, 252];
-    const iceShade = (t) => rgb(mix3(ICE0, ICE1, clamp(t) ** .8));
-    const HEX6 = Array.from({ length: 6 }, (_, k) => [Math.cos(Math.PI / 6 + k * Math.PI / 3), Math.sin(Math.PI / 6 + k * Math.PI / 3)]);
-    const hexPath = (p, x, y, r) => { p.moveTo(x + HEX6[0][0] * r, y + HEX6[0][1] * r); for (let k = 1; k < 6; k++) p.lineTo(x + HEX6[k][0] * r, y + HEX6[k][1] * r); p.closePath(); };
-
-    // cristaux de démonstration, calculés par le vrai buildCrystal()
-    const FORM = { star: ['star', 'dendrite'], plate: ['plate', 'sectorstar'], column: ['column', 'hollow'] };
-    const cache = new Map();
-    function crystal(fam = 'star', sunA = 0, form = null) {
-      const [f, k] = form ?? FORM[fam], key = `${f}/${k}:${sunA.toFixed(3)}`;
-      if (!cache.has(key)) {
-        const F = FAMILIES[f], fo = F.forms[k];
-        cache.set(key, buildCrystal({ family: f, form: k, growth: fo.growth, then: fo.then, column: fo.column, R: 56, size: 3, thick: F.thick, seed: 11, sigma: 4e-5, sun: [Math.cos(sunA), Math.sin(sunA)], thetaIce: .85 }));
-      }
-      return cache.get(key);
-    }
-    // cellules du cristal en hexagones, regroupées par teinte (un chemin par teinte)
-    function drawCells(g, X, cx, cy, sc, fn, pal, B = 10) {
-      const r = X.cell / SQ3 * sc * 1.08, paths = Array.from({ length: B }, () => new Path2D());
-      for (let k = 0; k < X.nCells; k++) {
-        const t = fn(k); if (t === null) continue;
-        hexPath(paths[Math.min(B - 1, Math.max(0, Math.floor(t * B)))], cx + X.position[k * 3] * sc, cy - X.position[k * 3 + 1] * sc, r);
-      }
-      paths.forEach((p, b) => { g.fillStyle = pal((b + .5) / B); g.fill(p); });
-    }
-
-    // ── 01 · croissance de Gravner-Griffeath, pas à pas ──────────────────
-    {
-      const FORMS = [['star', 'dendrite', 'Dendrite'], ['star', 'fern', 'Fougère'], ['star', 'comb', 'Peigne'], ['star', 'platecenter', 'Centre en plaque'], ['plate', 'sectorstar', 'Secteurs puis dendrites']];
-      let form = FORMS[0];
-      const RL = 46, off = document.createElement('canvas'), og = off.getContext('2d');
-      let map = null, mapS = 0, mapL = null;
-      const axial = (qf, rf) => {
-        let x = qf, z = rf, y = -x - z, rx = Math.round(x), ry = Math.round(y), rz = Math.round(z);
-        const dx = Math.abs(rx - x), dy = Math.abs(ry - y), dz = Math.abs(rz - z);
-        if (dx > dy && dx > dz) rx = -ry - rz; else if (dy > dz) ry = -rx - rz; else rz = -rx - ry;
-        return [rx, rz];
-      };
-      const f3 = (x) => String(+x.toPrecision(3)).replace('.', ',');
-      demo('#fig-grow', {
-        title: 'Croissance de Gravner-Griffeath', aspect: 1.8, animate: true,
-        controls: [
-          { key: 'sig', label: 'Bruit de la vapeur σ', min: 0, max: 20, step: 1, value: 4, fmt: (v) => (v ? `${v}·10⁻⁵` : '0'), onChange: (d) => d.reset() },
-          { key: 'sp', label: 'Pas de simulation par image', min: 2, max: 60, step: 1, value: 16 },
-        ],
-        buttons: [...FORMS.map((f) => ({ label: f[2], onClick: (d) => { form = f; d.reset(); } })), { label: 'Rejouer', onClick: (d) => d.reset() }],
-        setup(d) {
-          const fo = FAMILIES[form[0]].forms[form[1]], p = fo.growth;
-          d.state = { it: growSteps({ ...p, then: fo.then, R: RL, fill: .9, sigma: d.s.sig * 1e-5, seed: 7 }, 1), cur: null, done: false, hist: [] };
-          d.readout(`<b>${FAMILIES[form[0]].forms[form[1]].label}</b> · ρ ${f3(p.rho)} · β ${f3(p.beta)} · α ${f3(p.alpha)} · θ ${f3(p.theta)} · κ ${f3(p.kappa)} · μ ${f3(p.mu)} · γ ${f3(p.gamma)}${fo.then ? ` · puis, à ${Math.round(fo.then.at * 100)} % du rayon, ρ ${f3(fo.then.growth.rho)} · β ${f3(fo.then.growth.beta)} · α ${f3(fo.then.growth.alpha)}` : ''}`);
-        },
-        draw(g, d) {
-          const S = d.state;
-          if (!S.done) {
-            const n = Math.max(1, Math.round(d.s.sp * Math.min(3, d.dt * 60)));
-            for (let i = 0; i < n; i++) {
-              const r = S.it.next();
-              if (r.done) { S.done = true; S.cur = { ...r.value, t: r.value.steps, target: S.cur?.target ?? r.value.rmax }; break; }
-              S.cur = r.value; S.hist.push([r.value.t, r.value.rmax]);
-            }
-          }
-          const cur = S.cur; if (!cur) return;
-          const { L, a, c } = cur, { w, h } = d;
-          // cristal : une image par pixel, chaque pixel lit sa cellule
-          const Sz = Math.round(Math.min(h - 16, w * .56)), cx = Sz / 2, sc = (Sz / 2 - 4) / (RL + 1);
-          if (Sz !== mapS || mapL !== L) {
-            mapS = Sz; mapL = L; map = new Int32Array(Sz * Sz).fill(-1); off.width = off.height = Sz;
-            for (let y = 0; y < Sz; y++) for (let x = 0; x < Sz; x++) {
-              const xl = (x + .5 - cx) / sc, yl = (y + .5 - cx) / sc, rf = yl / (SQ3 / 2), qf = xl - rf / 2;
-              const [q, r] = axial(qf, rf);
-              if (Math.max(Math.abs(q), Math.abs(r), Math.abs(q + r)) <= RL) map[y * Sz + x] = L.idx(q, r);
-            }
-          }
-          let lo = Infinity, hi = -Infinity;
-          for (let k = 0; k < L.order.length; k++) { const i = L.order[k]; if (a[i]) { lo = Math.min(lo, c[i]); hi = Math.max(hi, c[i]); } }
-          const img = og.createImageData(Sz, Sz), px = img.data;
-          for (let p = 0; p < map.length; p++) {
-            const i = map[p], o = p * 4;
-            if (i < 0) { px[o + 3] = 0; continue; }
-            if (a[i]) { const t = clamp((c[i] - lo) / (hi - lo + 1e-6)) ** .75, col = mix3(ICE0, ICE1, .25 + .75 * t); px[o] = col[0]; px[o + 1] = col[1]; px[o + 2] = col[2]; }
-            else { px[o] = 20; px[o + 1] = 23; px[o + 2] = 31; }
-            px[o + 3] = 255;
-          }
-          og.putImageData(img, 0, 0);
-          const ox = 8, oy = (h - Sz) / 2;
-          g.drawImage(off, ox, oy);
-          // rayon selon le pas
-          const x0 = ox + Sz + 46, x1 = w - 14, y0 = 26, y1 = h - 34;
-          const tMax = Math.max(400, S.hist.length ? S.hist[S.hist.length - 1][0] : 0), tgt = cur.target || RL;
-          const X = (t) => lerp(x0, x1, t / tMax), Y = (r) => lerp(y1, y0, r / tgt);
-          g.strokeStyle = C.grid; g.lineWidth = 1;
-          for (const f of [0, .25, .5, .75, 1]) { g.beginPath(); g.moveTo(x0, Y(f * tgt)); g.lineTo(x1, Y(f * tgt)); g.stroke(); label(g, `${Math.round(f * 100)} %`, x0 - 6, Y(f * tgt) + 4, { align: 'right', size: 11 }); }
-          label(g, 'rayon atteint', x0, y0 - 10, { size: 11.5 });
-          g.strokeStyle = C.c1; g.lineWidth = 2; g.beginPath();
-          S.hist.forEach(([t, r], j) => { if (j % 2 && j !== S.hist.length - 1) return; j ? g.lineTo(X(t), Y(r)) : g.moveTo(X(t), Y(r)); }); g.stroke();
-          label(g, `${Math.round(tMax)}`, x1, y1 + 18, { align: 'right', size: 11 }); label(g, '0', x0, y1 + 18, { size: 11 });
-          label(g, 'pas de simulation →', (x0 + x1) / 2, y1 + 18, { align: 'center', size: 11, color: C.faint });
-          d.status(S.done ? `fini en ${cur.t} pas · rayon ${cur.rmax}` : `pas ${cur.t} · rayon ${cur.rmax} / ${cur.target}`);
-        },
-      });
-    }
-
-    // ── 02 · le rayon régulier : la réciproque growInv ────────────────────
-    {
-      let pre = null, form = ['star', 'platecenter'];
-      const prep = () => {
-        const X = crystal('star', 0, form), n = X.nCells, rr = new Float32Array(n), ord = [];
-        for (let k = 0; k < n; k++) { rr[k] = Math.hypot(X.position[k * 3], X.position[k * 3 + 1]); ord.push(k); }
-        ord.sort((p, q) => X.A[p * 4 + 1] - X.A[q * 4 + 1]);
-        const Ts = ord.map((k) => X.A[k * 4 + 1]), run = []; let m = 0;
-        for (const k of ord) { m = Math.max(m, rr[k] + X.cell); run.push(m); }
-        const rAt = (T) => { let lo = 0, hi = Ts.length; while (lo < hi) { const md = (lo + hi) >> 1; if (Ts[md] <= T) lo = md + 1; else hi = md; } return lo ? run[lo - 1] : 0; };
-        return { X, rAt, rmax: m };
-      };
-      demo('#fig-inv', {
-        title: 'Temps de simulation ou rayon régulier', aspect: 2.5, animate: true,
-        buttons: [['platecenter', 'Centre en plaque'], ['dendrite', 'Dendrite'], ['framed', 'Étoile prise dans une plaque']].map(([k, n]) => ({ label: n, onClick: (d) => { form = [k === 'framed' ? 'plate' : 'star', k]; pre = null; d.t = 0; } })),
-        draw(g, d) {
-          pre ??= prep();
-          const { X, rAt, rmax } = pre, { w, h } = d;
-          const e = clamp((d.t % 8) / 6.5);
-          const tInv = growTime(e, X.growInv);
-          const Sz = Math.min(w * .3, h - 40), sc = Sz / 2 / (X.radius * 1.05);
-          [[e, 'temps de simulation', C.c3], [tInv, 'rayon régulier (growInv)', C.c1]].forEach(([T, name, col], i) => {
-            const cx = 10 + Sz / 2 + i * (Sz + 16), cy = h / 2 - 8;
-            drawCells(g, X, cx, cy, sc, (k) => (X.A[k * 4 + 1] <= T ? X.A[k * 4] / X.thick : null), iceShade, 6);
-            const r = rAt(T) * sc;
-            g.strokeStyle = alpha(col, .6); g.setLineDash([3, 4]); g.beginPath(); g.arc(cx, cy, Math.max(1, r), 0, TAU); g.stroke(); g.setLineDash([]);
-            label(g, name, cx, h - 12, { align: 'center', color: col, size: 12 });
-          });
-          // courbes du rayon selon le temps du film
-          const x0 = 2 * Sz + 26 + 38, x1 = w - 12, y0 = 18, y1 = h - 34;
-          const PX = (t) => lerp(x0, x1, t), PY = (r) => lerp(y1, y0, r / rmax);
-          g.strokeStyle = C.grid; g.lineWidth = 1;
-          for (const f of [0, .5, 1]) { g.beginPath(); g.moveTo(x0, PY(f * rmax)); g.lineTo(x1, PY(f * rmax)); g.stroke(); label(g, `${Math.round(f * 100)} %`, x0 - 6, PY(f * rmax) + 4, { align: 'right', size: 11 }); }
-          for (const [col, f] of [[C.c3, (t) => rAt(t)], [C.c1, (t) => rAt(growTime(t, X.growInv))]]) {
-            g.strokeStyle = col; g.lineWidth = 2; g.beginPath();
-            for (let i = 0; i <= 160; i++) { const t = i / 160, y = PY(f(t)); i ? g.lineTo(PX(t), y) : g.moveTo(PX(t), y); } g.stroke();
-            g.fillStyle = col; g.beginPath(); g.arc(PX(e), PY(f(e)), 4, 0, TAU); g.fill();
-          }
-          label(g, 'rayon', x0, y0 - 6, { size: 11 });
-          label(g, 'temps du film →', x1, y1 + 18, { align: 'right', size: 11, color: C.faint });
-          d.status(`film ${Math.round(e * 100)} % · rayon ${Math.round(rAt(e) / rmax * 100)} % contre ${Math.round(rAt(tInv) / rmax * 100)} %`);
-        },
-      });
-    }
-
-    // ── 03 · le bord en ligne de niveau ───────────────────────────────────
-    {
-      let P = null;
-      const prep = () => {
-        const X = crystal('star'), n = X.nCells, pos = X.position;
-        // la pointe la plus éloignée : on cadre la fin de son bras
-        let kt = 0, rt = 0;
-        for (let k = 0; k < n; k++) { const r = Math.hypot(pos[k * 3], pos[k * 3 + 1]); if (r > rt) { rt = r; kt = k; } }
-        const phi = Math.atan2(pos[kt * 3 + 1], pos[kt * 3]), cs = Math.cos(-phi), sn = Math.sin(-phi);
-        const cxm = rt * .84, hw = X.cell * 11, hh = hw / 2.1;
-        const nV = pos.length / 3, loc = new Float32Array(nV * 2), inW = new Uint8Array(nV);
-        let Tlo = Infinity, Thi = -Infinity;
-        for (let k = 0; k < nV; k++) {
-          const x = pos[k * 3] * cs - pos[k * 3 + 1] * sn - cxm, y = pos[k * 3] * sn + pos[k * 3 + 1] * cs;
-          loc[k * 2] = x; loc[k * 2 + 1] = y;
-          inW[k] = Math.abs(x) < hw + X.cell * 1.5 && Math.abs(y) < hh + X.cell * 1.5 ? 1 : 0;
-          if (inW[k] && k < n) { Tlo = Math.min(Tlo, X.A[k * 4 + 1]); Thi = Math.max(Thi, X.A[k * 4 + 1]); }
-        }
-        const tris = [];
-        for (let i = 0; i < X.index.length; i += 3) { const a = X.index[i], b = X.index[i + 1], c = X.index[i + 2]; if (inW[a] && inW[b] && inW[c]) tris.push(a, b, c); }
-        return { X, loc, inW, tris, hw, hh, Tlo, Thi };
-      };
-      demo('#fig-level', {
-        title: 'Épaisseur signée v', aspect: 2.1,
-        controls: [{ key: 'tt', label: 'Avancée de la croissance t', min: 0, max: 1, step: .002, value: .55, fmt: (v) => `${Math.round(v * 100)} %` }],
-        buttons: [{ key: 'iso', label: 'Ligne de niveau v = 0', toggle: true, value: true }],
-        draw(g, d) {
-          P ??= prep();
-          const { X, loc, inW, tris, hw, hh, Tlo, Thi } = P, { w, h } = d, A = X.A, h0 = X.thick;
-          const t = lerp(Tlo - X.tau, Thi + X.tau, d.s.tt);
-          const sc = Math.min((w - 20) / (2 * hw), (h - 20) / (2 * hh)), ox = w / 2, oy = h / 2;
-          const SX = (k) => ox + loc[k * 2] * sc, SY = (k) => oy - loc[k * 2 + 1] * sc;
-          const v = (k) => (A[k * 4] + h0 / 2) * sstep((t - A[k * 4 + 1]) / X.tau) - h0 / 2;
-          const V = new Map(); const vv = (k) => { let x = V.get(k); if (x === undefined) { x = v(k); V.set(k, x); } return x; };
-          g.save(); g.beginPath(); g.rect(4, 4, w - 8, h - 8); g.clip();
-          let nOn = 0;
-          if (d.s.iso) {
-            const B = 6, paths = Array.from({ length: B }, () => new Path2D()), edge = new Path2D();
-            for (let i = 0; i < tris.length; i += 3) {
-              const ks = [tris[i], tris[i + 1], tris[i + 2]], vs = ks.map(vv);
-              if (vs.every((x) => x <= 0)) continue;
-              const poly = [], cuts = [];
-              for (let j = 0; j < 3; j++) {
-                const a = ks[j], b = ks[(j + 1) % 3], va = vs[j], vb = vs[(j + 1) % 3];
-                if (va > 0) poly.push([SX(a), SY(a)]);
-                if ((va > 0) !== (vb > 0)) { const f = va / (va - vb), p = [lerp(SX(a), SX(b), f), lerp(SY(a), SY(b), f)]; poly.push(p); cuts.push(p); }
-              }
-              const mean = vs.reduce((s, x) => s + Math.max(0, x), 0) / 3 / h0;
-              const p = paths[Math.min(B - 1, Math.floor(mean * B * 1.4))];
-              poly.forEach((q, j) => (j ? p.lineTo(q[0], q[1]) : p.moveTo(q[0], q[1]))); p.closePath();
-              if (cuts.length === 2) { edge.moveTo(cuts[0][0], cuts[0][1]); edge.lineTo(cuts[1][0], cuts[1][1]); }
-            }
-            paths.forEach((p, b) => { g.fillStyle = iceShade(.3 + .7 * (b + .5) / B); g.fill(p); g.strokeStyle = iceShade(.3 + .7 * (b + .5) / B); g.lineWidth = .6; g.stroke(p); });
-            g.strokeStyle = C.c1; g.lineWidth = 2; g.stroke(edge);
-          } else {
-            const p = new Path2D(), r = X.cell / SQ3 * sc * 1.04;
-            for (let k = 0; k < X.nCells; k++) if (inW[k] && A[k * 4 + 1] <= t) hexPath(p, SX(k), SY(k), r);
-            g.fillStyle = iceShade(.75); g.fill(p); g.strokeStyle = C.c3; g.lineWidth = 1.2; g.stroke(p);
-          }
-          // maillage et sommets
-          g.strokeStyle = alpha(C.ink, .09); g.lineWidth = 1; g.beginPath();
-          for (let i = 0; i < tris.length; i += 3) { const [a, b, c] = [tris[i], tris[i + 1], tris[i + 2]]; g.moveTo(SX(a), SY(a)); g.lineTo(SX(b), SY(b)); g.lineTo(SX(c), SY(c)); g.closePath(); }
-          g.stroke();
-          for (const [k] of V.size ? V : new Map([...inW.keys()].filter((k) => inW[k]).map((k) => [k, 0]))) {
-            const on = vv(k) > 0; if (on) nOn++;
-            g.fillStyle = on ? C.ink : alpha(C.ink, .25); g.beginPath(); g.arc(SX(k), SY(k), on ? 2.2 : 1.6, 0, TAU); g.fill();
-          }
-          g.restore();
-          label(g, 'pointe du bras →', w - 12, 20, { align: 'right', size: 11.5, color: C.faint });
-          d.status(`${nOn} sommets où v > 0 · ${d.s.iso ? 'bord interpolé' : 'cellules entières'}`);
-        },
-      });
-    }
-
-    // ── 04 · la fonte et ses perles ───────────────────────────────────────
-    {
-      let fam = 'star';
-      const ORD0 = [127, 178, 217], ORD1 = [233, 196, 138];
-      demo('#fig-melt', {
-        title: 'Fonte ordonnée, eau conservée', aspect: 1.75,
-        controls: [
-          { key: 's', label: 'Avancée de la fonte s', min: 0, max: 1, step: .002, value: .5, fmt: (v) => `${Math.round(v * 100)} %` },
-          { key: 'sun', label: 'Direction du soleil', min: 0, max: 330, step: 30, value: 30, fmt: (v) => `${v}°` },
-        ],
-        buttons: [
-          { label: 'Étoile', onClick: () => { fam = 'star'; } },
-          { label: 'Plaque', onClick: () => { fam = 'plate'; } },
-          { label: 'Colonne', onClick: () => { fam = 'column'; } },
-          { key: 'ord', label: 'Ordre de fonte', toggle: true, value: false },
-        ],
-        draw(g, d) {
-          const sunA = d.s.sun * Math.PI / 180, X = crystal(fam, sunA), A = X.A, h0 = X.thick, s = d.s.s;
-          const { w, h } = d, Sz = Math.min(h - 16, w * .62), cx = 8 + Sz / 2, cy = h / 2, sc = Sz / 2 / (X.radius * 1.12);
-          // glace
-          const vOf = (k) => (A[k * 4] + h0 / 2) * (1 - sstep((s - A[k * 4 + 2]) / X.tauMelt)) - h0 / 2;
-          if (d.s.ord) drawCells(g, X, cx, cy, sc, (k) => (vOf(k) > 0 ? 1 - A[k * 4 + 2] : null), (t) => rgb(mix3(ORD0, ORD1, t)), 12);
-          else drawCells(g, X, cx, cy, sc, (k) => { const v = vOf(k); return v > 0 ? clamp(v / h0) : null; }, (t) => iceShade(.3 + .7 * t), 6);
-          // perles, interpolées entre les images enregistrées (comme stage.js)
-          const W = X.water, F = W.frames, D = W.data, fr = clamp(s) * (F - 1), f0 = Math.floor(fr), f1 = Math.min(F - 1, f0 + 1), wf = fr - f0;
-          let Vb = 0, nb = 0;
-          for (let k = 0; k < W.slots; k++) {
-            const o0 = (f0 * W.slots + k) * 4, o1 = (f1 * W.slots + k) * 4;
-            if (!(D[o0 + 2] > 0 || D[o1 + 2] > 0)) continue;
-            const x = lerp(D[o0], D[o1], wf), y = lerp(D[o0 + 1], D[o1 + 1], wf), V = lerp(D[o0 + 2], D[o1 + 2], wf);
-            Vb += V; const r = capBase(V, .85) * sc; if (r < .6) continue; nb++;
-            const px = cx + x * sc, py = cy - y * sc, gr = g.createRadialGradient(px - r * .35, py - r * .35, r * .1, px, py, r);
-            gr.addColorStop(0, 'rgba(255,255,255,.95)'); gr.addColorStop(.35, 'rgba(160,205,240,.75)'); gr.addColorStop(1, 'rgba(60,110,160,.85)');
-            g.fillStyle = gr; g.beginPath(); g.arc(px, py, r, 0, TAU); g.fill();
-          }
-          // soleil
-          const R0 = Sz / 2 - 4, sx = cx + Math.cos(sunA) * R0, sy = cy - Math.sin(sunA) * R0;
-          arrow(g, sx, sy, cx + Math.cos(sunA) * (R0 - 28), cy - Math.sin(sunA) * (R0 - 28), { color: C.c1, width: 1.6 });
-          label(g, 'soleil', sx + (Math.cos(sunA) > 0 ? -4 : 4), sy - 8, { align: Math.cos(sunA) > 0 ? 'right' : 'left', color: C.c1, size: 11.5 });
-          // bilan
-          const cellA = SQ3 / 2 * X.cell ** 2;
-          let Vm = 0; for (let k = 0; k < X.nCells; k++) if (A[k * 4 + 2] <= s) Vm += A[k * 4] * cellA * .917;
-          const bx = cx + Sz / 2 + 34, bw = Math.min(160, w - bx - 20), by = 34;
-          label(g, 'bilan de l’eau (mm³)', bx, by, { size: 12 });
-          [['0,917 × glace fondue', Vm, C.c2], ['eau des perles', Vb, C.c1]].forEach(([n, val, col], i) => {
-            const y = by + 22 + i * 46;
-            label(g, n, bx, y, { size: 11.5, color: C.dim });
-            g.fillStyle = alpha(col, .85); g.fillRect(bx, y + 8, bw * clamp(val / X.Vwater), 12);
-            g.strokeStyle = C.line; g.strokeRect(bx, y + 8, bw, 12);
-            label(g, val.toFixed(4).replace('.', ','), bx + bw + 6, y + 18, { size: 11, color: col });
-          });
-          label(g, `${nb} perle${nb > 1 ? 's' : ''} visible${nb > 1 ? 's' : ''}`, bx, by + 130, { size: 12, color: C.ink });
-          label(g, `${X.nCells} cellules`, bx, by + 150, { size: 11.5 });
-          const pct = Vm > 1e-9 ? `${(Vb / Vm * 100).toFixed(1).replace('.', ',')} %` : '—';
-          d.status(`${{ star: 'étoile', plate: 'plaque', column: 'colonne' }[fam]} · eau des perles / eau fondue : ${pct}`);
-        },
-      });
-    }
-
-    // ── 05 · la calotte et sa pointe ──────────────────────────────────────
-    {
-      const MOODS = [['Laine', 1.85], ['Velours', 1.9], ['Houx', 1.55], ['Ardoise', 1.1], ['Verre', .55], ['Rheinberg', .5]];
-      const V0 = capVolume(.12, Math.PI / 2);
-      const setTheta = (d, th) => { const inp = d.fig.querySelector('input[type=range]'); inp.value = th; inp.dispatchEvent(new Event('input')); };
-      demo('#fig-drop', {
-        title: 'Calotte à angle de contact', aspect: 1.7,
-        controls: [
-          { key: 'th', label: 'Angle de contact θ', min: .3, max: 2.2, step: .01, value: 1.85, fmt: (v) => `${v.toFixed(2).replace('.', ',')} rad · ${Math.round(v * 180 / Math.PI)}°` },
-          { key: 'fz', label: 'Gel', min: 0, max: 1, step: .005, value: 0, fmt: (v) => `${Math.round(v * 100)} %` },
-        ],
-        buttons: MOODS.map(([n, th]) => ({ label: n, onClick: (d) => setTheta(d, th) })),
-        draw(g, d) {
-          const th = d.s.th, a = capBase(V0, th), Rs = a / Math.sin(th), zc = -Rs * Math.cos(th);
-          const ff = d.s.fz * 1.4 - .2, tip = sstep((d.s.fz - .72) / .28);
-          const prof = (rho) => { const psi = rho * th, near = sstep((.45 - rho) / .45); return [Rs * Math.sin(psi), zc + Rs * Math.cos(psi) + tip * Rs * .32 * near * near]; };
-          const frozen = (rho) => sstep((ff + .15 - (1 - rho)) / .3);
-          const { w, h } = d, base = h * .8, sc = Math.min(w * .44 / .21, h * .68 / .2), cx = w / 2;
-          const X = (x) => cx + x * sc, Y = (z) => base - z * sc;
-          // support
-          g.fillStyle = alpha(C.ink, .06); g.fillRect(0, base, w, h - base);
-          g.strokeStyle = C.line; g.beginPath(); g.moveTo(0, base); g.lineTo(w, base); g.stroke();
-          // bandes horizontales, du sommet à la ligne de contact
-          const N = 90, WATER = [70, 120, 170], ICE = [226, 232, 240];
-          for (let i = 0; i < N; i++) {
-            const p0 = prof(i / N), p1 = prof((i + 1) / N), fz = frozen((i + .5) / N);
-            g.fillStyle = rgb(mix3(WATER, ICE, fz));
-            g.beginPath(); g.moveTo(X(-p0[0]), Y(p0[1])); g.lineTo(X(p0[0]), Y(p0[1])); g.lineTo(X(p1[0]), Y(p1[1])); g.lineTo(X(-p1[0]), Y(p1[1])); g.closePath(); g.fill();
-          }
-          // contour
-          g.strokeStyle = C.ink; g.lineWidth = 1.4; g.beginPath();
-          for (let i = 0; i <= 120; i++) { const p = prof(i / 120); i ? g.lineTo(X(p[0]), Y(p[1])) : g.moveTo(X(p[0]), Y(p[1])); }
-          g.stroke(); g.beginPath();
-          for (let i = 0; i <= 120; i++) { const p = prof(i / 120); i ? g.lineTo(X(-p[0]), Y(p[1])) : g.moveTo(X(-p[0]), Y(p[1])); }
-          g.stroke();
-          // angle de contact, à droite
-          const xr = X(a), L = 34;
-          g.strokeStyle = C.c1; g.lineWidth = 1.4; g.beginPath(); g.moveTo(xr, base); g.lineTo(xr - Math.cos(th) * L, base - Math.sin(th) * L); g.stroke();
-          g.beginPath(); g.arc(xr, base, 18, Math.PI, Math.PI + th, false); g.stroke();
-          label(g, 'θ', xr - Math.cos(th / 2) * 26 - 4, base - Math.sin(th / 2) * 26 + 4, { color: C.c1, size: 13 });
-          // cotes
-          const top = prof(0)[1];
-          label(g, `rayon de base a = ${Math.round(a * 1000)} µm`, 12, 22, { size: 12, color: C.ink });
-          label(g, `hauteur = ${Math.round(top * 1000)} µm`, 12, 40, { size: 12 });
-          label(g, `volume constant : ${(V0 * 1e3).toFixed(2).replace('.', ',')}·10⁻³ mm³`, 12, 58, { size: 11.5, color: C.faint });
-          d.status(tip > .01 ? `pointe soulevée à ${Math.round(tip * 100)} %` : d.s.fz > 0 ? 'le front de gel monte' : 'eau liquide');
-        },
-      });
-    }
-
-    // ── 06 · le brin de laine en coupe ────────────────────────────────────
-    {
-      const Y = { eN: .8, eB: 1.15, eps: .1, beta: .45, fibers: 54, coreR: .55, plyR: .21, fiberR: .0085, alpha: 1, rMin: .55, rMax: 1.05, s: 1.6, pLoop: .06, rLoop: 1.8 };
-      const density = (R) => (1 - 2 * Y.eps) * ((Math.E - Math.exp(R)) / (Math.E - 1)) ** Y.beta + Y.eps;
-      const R = rng(5), F = [];
-      for (let f = 0; f < Y.fibers; f++) { let Ri; do Ri = Y.coreR * .7 + R() * (1 - Y.coreR * .7); while (R() > density(Ri)); F.push({ Ri, thi: R() * TAU }); }
-      const period = Y.alpha / Y.s;
-      const isLoop = (f, l) => { const P = Math.floor(l / period), hh = ((P * 73856093) ^ (f * 19349663)) >>> 0; return (hh % 1000) / 1000 < Y.pLoop; };
-      const radius = (f, l) => { const { Ri, thi } = F[f], rx = isLoop(f, l) ? Y.rLoop : Y.rMax; return Ri / 2 * (rx + Y.rMin + (rx - Y.rMin) * Math.cos(thi + Y.s * TAU * l / Y.alpha)); };
-      // trois fibres suivies, dont une qui fait une boucle tôt
-      let loopF = 0; for (let f = 0; f < F.length; f++) { let hit = false; for (let l = 0; l < 4; l += period) if (isLoop(f, l)) hit = true; if (hit) { loopF = f; break; } }
-      const HL = [[loopF, C.c1], [(loopF + 7) % F.length, C.c2], [(loopF + 19) % F.length, C.c4]];
-      demo('#fig-wool', {
-        title: 'Migration des fibres (Zhao et al.)', aspect: 2.3, animate: true,
-        controls: [{ key: 'sp', label: 'Défilement', min: 0, max: 1, step: .05, value: .3, fmt: (v) => `${v.toFixed(2).replace('.', ',')} mm/s` }],
-        setup(d) { d.state.l = 0; },
-        draw(g, d) {
-          const S = d.state; S.l = (S.l + d.dt * d.s.sp) % 4;
-          const { w, h } = d, cx = h * .62, cy = h / 2, sc = h * .3;
-          // brin : ellipse, fibre de cœur
-          g.strokeStyle = C.line; g.lineWidth = 1; g.beginPath(); g.ellipse(cx, cy, Y.eN * sc, Y.eB * sc, 0, 0, TAU); g.stroke();
-          g.fillStyle = alpha(C.c2, .18); g.beginPath(); g.ellipse(cx, cy, Y.coreR * Y.eN * sc, Y.coreR * Y.eB * sc, 0, 0, TAU); g.fill();
-          g.save(); g.clip(); g.strokeStyle = alpha(C.c2, .3);
-          const ph = (S.l / Y.alpha * TAU) % TAU;
-          for (let k = -8; k <= 8; k++) { const o = (k + ph / TAU) * sc * .14; g.beginPath(); g.moveTo(cx - sc + o, cy + sc); g.lineTo(cx + sc + o, cy - sc); g.stroke(); }
-          g.restore();
-          const fr = Math.max(1.6, Y.fiberR / Y.plyR * sc);
-          F.forEach((fb, f) => {
-            const th = fb.thi + TAU * S.l / Y.alpha, Rm = radius(f, S.l);
-            const x = cx + Math.cos(th) * Rm * Y.eN * sc, y = cy - Math.sin(th) * Rm * Y.eB * sc;
-            const hl = HL.find((q) => q[0] === f);
-            g.fillStyle = hl ? hl[1] : alpha(C.ink, .7); g.beginPath(); g.arc(x, y, hl ? fr * 1.6 : fr, 0, TAU); g.fill();
-          });
-          label(g, 'coupe d’un brin', cx, h - 10, { align: 'center', size: 11.5 });
-          // distance à l'axe le long du brin
-          const x0 = cx + sc * 1.4 + 40, x1 = w - 12, y0 = 18, y1 = h - 30;
-          const PX = (l) => lerp(x0, x1, l / 4), PY = (r) => lerp(y1, y0, r / 1.8);
-          g.strokeStyle = C.grid;
-          for (const r of [.55, 1, 1.5]) { g.beginPath(); g.moveTo(x0, PY(r)); g.lineTo(x1, PY(r)); g.stroke(); label(g, String(r).replace('.', ','), x0 - 6, PY(r) + 4, { align: 'right', size: 11 }); }
-          g.strokeStyle = alpha(C.ink, .3); g.beginPath(); g.moveTo(x0, PY(1)); g.lineTo(x1, PY(1)); g.stroke();
-          label(g, 'bord du brin', x1, PY(1) - 4, { align: 'right', size: 10.5, color: C.faint });
-          for (const [f, col] of HL) {
-            g.strokeStyle = col; g.lineWidth = 1.6; g.beginPath();
-            for (let i = 0; i <= 400; i++) { const l = i / 100, y = PY(radius(f, l)); i ? g.lineTo(PX(l), y) : g.moveTo(PX(l), y); } g.stroke();
-          }
-          g.strokeStyle = alpha(C.ink, .5); g.setLineDash([3, 4]); g.beginPath(); g.moveTo(PX(S.l), y0); g.lineTo(PX(S.l), y1); g.stroke(); g.setLineDash([]);
-          label(g, 'R / rayon du brin', x0, y0 - 4, { size: 11 });
-          label(g, 'abscisse le long du brin (mm) →', x1, y1 + 18, { align: 'right', size: 11, color: C.faint });
-          d.status(`${S.l.toFixed(2).replace('.', ',')} mm le long du brin`);
-        },
-      });
-    }
-
-    // ── 07 · la lumière d'en dessous : déviation et Rheinberg ─────────────
-    {
-      const lin = (hex) => [1, 3, 5].map((i) => { const c = parseInt(hex.slice(i, i + 2), 16) / 255; return c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4; });
-      const srgb = (c) => c.map((x) => { x = clamp(x); return 255 * (x <= .0031308 ? 12.92 * x : 1.055 * x ** (1 / 2.4) - .055); });
-      const scl = (c, k) => c.map((x) => x * k);
-      const MODE = {
-        rheinberg: { mode: 1, field: scl(lin('#0d1a33'), 1.6), ring: scl(lin('#ffcf7a'), 1.3), d1: .035, d2: .22, soft: .02, gain: 1.2, name: 'Rheinberg' },
-        verre: { mode: 0, field: lin('#3c5476'), warm: lin('#ffb36b'), cool: lin('#6fa6ff'), d1: .04, d2: .6, soft: .05, gain: 1.4, name: 'Verre' },
-      };
-      let M = MODE.rheinberg;
-      const ss = (a, b, x) => { const t = clamp((x - a) / (b - a)); return t * t * (3 - 2 * t); };
-      // backlight() de scene/backlight.js, en scalaire ; D, V unitaires (2D : x le long de la coupe, y vers le haut)
-      const backlight = (B, D, V) => {
-        const d = Math.acos(clamp(D[0] * V[0] + D[1] * V[1], -1, 1));
-        const dark = ss(B.d2 - B.soft * 2, B.d2 + B.soft * 2, d);
-        let col;
-        if (B.mode === 1) {
-          const s1 = ss(B.d1 - B.soft, B.d1 + B.soft, d), x = clamp((d - B.d1) / (B.d2 - B.d1)), ringI = 1.7 - x * x * 1.5;
-          col = mix3(B.field, scl(B.ring, ringI), s1);
-        } else {
-          const dv = [D[0] - V[0], D[1] - V[1]], t = clamp(dv[0] * 5, -1, 1), dl = Math.hypot(dv[0], dv[1]), k = clamp(dl * 9);
-          col = scl(mix3(B.field, mix3(B.cool, B.warm, ss(-1, 1, t)), k * .5), 1 - ss(.12, .45, dl) * .8 - k * .12);
-        }
-        return { col: scl(col, (1 - dark) * B.gain), d };
-      };
-      const refract = (I, N, eta) => { const c = N[0] * I[0] + N[1] * I[1], k = 1 - eta * eta * (1 - c * c); if (k < 0) return null; const f = eta * c + Math.sqrt(k); return [eta * I[0] - f * N[0], eta * I[1] - f * N[1]]; };
-      // profil d'une branche (mm) : nervure centrale, terrasse, ondulations douces, bord arrondi
-      const thick = .032, cell = .014, wB = .15;
-      const hx = (x) => {
-        const ax = Math.abs(x); if (ax >= wB) return 0;
-        const cn = Math.min(1, .25 + .75 * Math.exp(-((x / .006) ** 2)) + .2 * (1 - sstep((ax - .07) / .012)) + .03 * Math.sin(TAU * ax / .03));
-        return thick * (.5 + .5 * cn) * (.45 + .55 * sstep((wB - ax) / cell / 3.5));
-      };
-      const trace = (x, rel, tilt) => {
-        const V = [Math.sin(tilt), -Math.cos(tilt)], e = .0015;
-        const z = hx(x) * rel; if (z <= 0) return { ...backlight(M, V, V), z, V, d1: null };
-        const sl = (hx(x + e) - hx(x - e)) / (2 * e) * rel, nl = Math.hypot(sl, 1), N = [-sl / nl, 1 / nl];
-        const d1 = refract(V, N, 1 / 1.31); if (!d1) return { col: [0, 0, 0], d: Math.PI, z, V, d1: null };
-        const d2 = refract(d1, [0, 1], 1.31); if (!d2) return { col: [0, 0, 0], d: Math.PI, z, V, d1 };
-        const l = Math.hypot(d2[0], d2[1]); const D = [d2[0] / l, d2[1] / l];
-        return { ...backlight(M, D, V), z, V, d1, D };
-      };
-      demo('#fig-back', {
-        title: 'Déviation des rayons', aspect: 1.8,
-        controls: [
-          { key: 'rel', label: 'Relief', min: .5, max: 2.4, step: .05, value: 1, fmt: (v) => `×${v.toFixed(2).replace('.', ',')}` },
-          { key: 'tilt', label: 'Inclinaison de l’objectif', min: 0, max: 35, step: 1, value: 20, fmt: (v) => `${v}°` },
-        ],
-        buttons: [{ label: 'Rheinberg', onClick: () => { M = MODE.rheinberg; } }, { label: 'Verre', onClick: () => { M = MODE.verre; } }],
-        draw(g, d) {
-          const { w, h } = d, rel = d.s.rel, tilt = d.s.tilt * Math.PI / 180;
-          const x0 = 54, x1 = w - 14, span = .18, PX = (x) => lerp(x0, x1, (x + span) / (2 * span));
-          const hs = (x1 - x0) / (2 * span);
-          // bande A : la coupe
-          const aB = h * .4, vs = (aB - 30) / (thick * 2.4), PZ = (z) => aB - z * vs;
-          g.fillStyle = alpha(C.ink, .05); g.fillRect(x0, aB, x1 - x0, 10);
-          g.fillStyle = alpha(C.c2, .22); g.strokeStyle = alpha(C.c2, .8); g.lineWidth = 1.2; g.beginPath(); g.moveTo(PX(-span), PZ(0));
-          for (let i = 0; i <= 400; i++) { const x = -span + i / 400 * 2 * span; g.lineTo(PX(x), PZ(hx(x) * rel)); }
-          g.lineTo(PX(span), PZ(0)); g.closePath(); g.fill(); g.stroke();
-          const ex = vs / hs;
-          label(g, Math.abs(ex - 1) < .05 ? 'coupe, à l’échelle' : `coupe (échelle verticale ×${ex.toFixed(1).replace('.', ',')})`, x0, 14, { size: 11 });
-          // quelques rayons
-          for (let i = 0; i < 13; i++) {
-            const x = -.138 + i * .023, r = trace(x, rel, tilt), col = rgb(srgb(r.col));
-            const zt = r.z, top = [PX(x) - Math.tan(tilt) * 30, PZ(zt) - 30];
-            g.strokeStyle = alpha(C.ink, .35); g.lineWidth = 1; g.beginPath(); g.moveTo(top[0], top[1]); g.lineTo(PX(x), PZ(zt)); g.stroke();
-            if (r.d1 && r.D) {
-              const t = zt / -r.d1[1], bx = x + r.d1[0] * t;
-              g.strokeStyle = alpha(C.ink, .5); g.beginPath(); g.moveTo(PX(x), PZ(zt)); g.lineTo(PX(bx), PZ(0)); g.stroke();
-              g.strokeStyle = r.d > M.d2 ? C.c3 : col; g.lineWidth = 1.6; g.beginPath(); g.moveTo(PX(bx), PZ(0)); g.lineTo(PX(bx) + r.D[0] * 26, PZ(0) - r.D[1] * 26); g.stroke();
-            }
-          }
-          // bande B : la déviation
-          const b0 = aB + 26, b1 = h * .78, dMax = .7, PD = (dd) => lerp(b1, b0, Math.min(dd, dMax) / dMax);
-          g.strokeStyle = C.grid; g.lineWidth = 1;
-          for (const dd of [0, .2, .4, .6]) { g.beginPath(); g.moveTo(x0, PD(dd)); g.lineTo(x1, PD(dd)); g.stroke(); label(g, `${Math.round(dd * 180 / Math.PI)}°`, x0 - 6, PD(dd) + 4, { align: 'right', size: 10.5 }); }
-          for (const [dd, n] of [[M.d1, 'δ₁'], [M.d2, 'δ₂']]) { g.strokeStyle = alpha(C.c1, .7); g.setLineDash([4, 4]); g.beginPath(); g.moveTo(x0, PD(dd)); g.lineTo(x1, PD(dd)); g.stroke(); g.setLineDash([]); label(g, n, x1 - 2, PD(dd) - 4, { align: 'right', size: 11, color: C.c1 }); }
-          const strip = [];
-          g.strokeStyle = C.ink; g.lineWidth = 1.5; g.beginPath();
-          for (let i = 0; i <= 300; i++) { const x = -span + i / 300 * 2 * span, r = trace(x, rel, tilt); strip.push(r.col); const y = PD(r.d); i ? g.lineTo(PX(x), y) : g.moveTo(PX(x), y); }
-          g.stroke();
-          label(g, 'δ', x0 + 4, b0 + 10, { size: 12, color: C.ink });
-          // bande C : ce que voit l'objectif
-          const c0 = b1 + 14, c1 = h - 22, cw = (x1 - x0) / 300;
-          strip.forEach((c, i) => { g.fillStyle = rgb(srgb(c)); g.fillRect(x0 + i * cw, c0, cw + .6, c1 - c0); });
-          label(g, 'image', x0 - 6, (c0 + c1) / 2 + 4, { align: 'right', size: 10.5 });
-          let nR = 0, nD = 0, nIce = 0;
-          for (let i = 0; i <= 300; i++) { const x = -span + i / 300 * 2 * span; if (hx(x) <= 0) continue; nIce++; const dd = trace(x, rel, tilt).d; if (dd > M.d2) nD++; else if (dd > M.d1) nR++; }
-          d.status(`${M.name} · glace entre δ₁ et δ₂ : ${Math.round(nR / nIce * 100)} % · au-delà de δ₂ : ${Math.round(nD / nIce * 100)} %`);
-        },
-      });
-    }
-
-    // ── 08 · l'horloge ────────────────────────────────────────────────────
-    {
-      const PH = [[0, TL.grow0, 'perle'], [TL.grow0, TL.grow1, 'croissance'], [TL.sun0, TL.sun1, 'soleil'], [TL.melt0, TL.melt1, 'fonte'], [TL.evap0, TL.evap1, 'évap.'], [TL.freeze0, TL.freeze1, 'gel']];
-      const phaseOf = (u) => (u < TL.grow0 ? 'la perle gelée' : u < TL.grow1 ? 'l’étoile pousse' : u < TL.melt0 ? 'le soleil entre' : u < TL.melt1 ? 'la fonte' : u < TL.freeze0 ? 'la goutte s’évapore' : u < TL.freeze1 ? 'la goutte gèle' : 'repos');
-      demo('#fig-clock', {
-        title: 'clock(u)', aspect: 1.9, animate: true,
-        controls: [{ key: 'gather', label: 'Instant du ralenti x₀ dans la fonte', min: .5, max: .95, step: .01, value: .8, fmt: (v) => `${Math.round(v * 100)} %` }],
-        draw(g, d) {
-          const { w, h } = d, u = (d.t / 12) % 1, opt = { gather: d.s.gather };
-          const N = 600, K = []; for (let i = 0; i <= N; i++) K.push(clock(i / N * .99999, opt));
-          const LANES = [
-            ['croissance t', (k) => clamp((k.tg + .05) / 1.12), C.c1],
-            ['fonte s', (k) => clamp((k.sm + .05) / 1.12), C.c2],
-            ['vitesse de la fonte', null, C.c2],
-            ['soleil', (k) => k.sun, C.c1],
-            ['givre', (k) => k.frost, C.ink],
-            ['glace mouillée', (k) => k.wet, C.c2],
-            ['perle gelée', (k) => k.frozen, C.ink],
-            ['évaporation', (k) => k.evap, C.c3],
-          ];
-          const x0 = 138, x1 = w - 12, top = 34, lh = (h - top - 26) / LANES.length, X = (t) => lerp(x0, x1, t);
-          // temps
-          PH.forEach(([a, b, n], i) => { g.fillStyle = alpha(i % 2 ? C.c2 : C.c1, .1); g.fillRect(X(a), 6, X(b) - X(a), 18); if (X(b) - X(a) > 34) label(g, n, (X(a) + X(b)) / 2, 19, { align: 'center', size: 10.5 }); });
-          const ds = []; for (let i = 0; i < N; i++) ds.push(Math.max(0, K[i + 1].sm - K[i].sm));
-          const dmax = Math.max(...ds.slice(Math.floor(TL.melt0 * N) + 2, Math.floor(TL.melt1 * N) - 2));
-          LANES.forEach(([n, f, col], j) => {
-            const y0 = top + j * lh, y1 = y0 + lh - 7;
-            g.strokeStyle = C.grid; g.beginPath(); g.moveTo(x0, y1); g.lineTo(x1, y1); g.stroke();
-            label(g, n, x0 - 10, (y0 + y1) / 2 + 4, { align: 'right', size: 11.5 });
-            g.strokeStyle = col; g.lineWidth = 1.7; g.beginPath();
-            if (f) for (let i = 0; i <= N; i++) { const y = lerp(y1, y0, f(K[i])); i ? g.lineTo(X(i / N), y) : g.moveTo(X(i / N), y); }
-            else for (let i = Math.floor(TL.melt0 * N) + 1; i < Math.ceil(TL.melt1 * N) - 1; i++) { const y = lerp(y1, y0, clamp(ds[i] / dmax)); i > Math.floor(TL.melt0 * N) + 1 ? g.lineTo(X(i / N), y) : g.moveTo(X(i / N), y); }
-            g.stroke();
-          });
-          g.strokeStyle = alpha(C.ink, .55); g.lineWidth = 1; g.beginPath(); g.moveTo(X(u), top - 4); g.lineTo(X(u), h - 26); g.stroke();
-          label(g, 'u = 0', x0, h - 8, { size: 11 }); label(g, 'u = 1', x1, h - 8, { align: 'right', size: 11 });
-          d.status(`u = ${u.toFixed(2).replace('.', ',')} · ${phaseOf(u)}`);
-        },
-      });
-    }
+    demo('#fig-exemple', {
+      title: 'Exemple', aspect: 2.2,
+      controls: [{ key: 'a', label: 'Amplitude', min: 0, max: 1, step: .01, value: .5 }],
+      draw(g, d) {
+        g.strokeStyle = C.c1; g.lineWidth = 2; g.beginPath();
+        for (let i = 0; i <= 200; i++) { const x = lerp(16, d.w - 16, i / 200), y = d.h / 2 - Math.sin(i / 200 * TAU * 2) * d.s.a * d.h * .4; i ? g.lineTo(x, y) : g.moveTo(x, y); }
+        g.stroke();
+        label(g, 'à remplacer', 16, 20);
+        d.status(`a = ${d.s.a.toFixed(2)}`);
+      },
+    });
   </script>
 </body>
 </html>

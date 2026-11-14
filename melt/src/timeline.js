@@ -1,74 +1,92 @@
-// L'horloge du film : une seule, lue par tout (règle 17). Module pur.
+// L'horloge : tout ce qui bouge lit la phase du film u (0 → 1), par la saison
+// simulée s(u) et le temps physique depuis le détachement τ(u). Fonctions
+// pures (Node et navigateur).
 //
-// La phase u ∈ [0, 1) parcourt :
-//   0     – 0,03  repos : la perle gelée, dressée en pointe ; froid, givre
-//   0,03  – 0,44  croissance (accéléré) : l'hexagone sort de la perle, les bras partent
-//   0,44  – 0,52  l'étoile entière ; le soleil entre (0,45 – 0,52), le givre s'éteint
-//   0,52  – 0,78  la fonte (temps réel), avec un ralenti au rassemblement
-//   0,79  – 0,88  la goutte s'évapore (accéléré)
-//   0,85  – 0,92  le soleil passe
-//   0,88  – 0,97  la goutte gèle de bas en haut, sa pointe se soulève ; le givre revient
-//   0,97  – 1     repos (= 0)
-// Toutes les grandeurs sont égales à u = 0 et à u = 1 (raccord exact) et
-// monotones à l'intérieur de chaque temps.
+// - s(u) : la phase de la simulation. Le film est un accéléré (une heure de
+//   fonte en ~48 s), sauf autour du détachement, où il ralentit presque au
+//   temps réel pour montrer la bascule (un plateau de ralenti, voir WARP) ;
+//   s(0) = 0, s(1) = 1, et le détachement tombe au milieu du plateau.
+// - τ(u) = (s(u) − s_d) · P_phys : le temps physique (s) depuis le
+//   détachement, qui pilote le fuseau (gen/body.js).
+import { bodyPose } from './gen/body.js';
 
-export const TL = {
-  grow0: 0.03, grow1: 0.44,
-  sun0: 0.45, sun1: 0.52,
-  melt0: 0.52, melt1: 0.78,
-  bead0: 0.52, bead1: 0.58,
-  evap0: 0.79, evap1: 0.88,
-  dusk0: 0.85, dusk1: 0.92,
-  freeze0: 0.88, freeze1: 0.97,
-};
+export const COMPRESSION = 11.5; // temps physique / temps simulé à F = 20 (proto/p0 : 11,5)
+// La vitesse du film v(u) = 1 − A·plateau(u) (plateau lisse de demi-largeur
+// h, raccords de largeur r), normalisée pour que s(1) = 1 ; le centre c du
+// plateau est cherché pour que s(c) = s_d (le détachement tombe au milieu du
+// ralenti). Au plateau, une seconde de film ≈ 1,7 s physique.
+export const WARP = { A: 0.982, h: 0.036, r: 0.03, n: 4096 };
+const warps = new Map();
+function makeWarp(sd) {
+  const { A, h, r, n } = WARP;
+  const table = (c) => {
+    const v = new Float64Array(n + 1), cum = new Float64Array(n + 1);
+    for (let k = 0; k <= n; k++) {
+      let x = Math.abs(k / n - c); x = Math.min(x, 1 - x);
+      const t = Math.max(0, Math.min(1, (x - h) / r)), plateau = 1 - t * t * (3 - 2 * t);
+      v[k] = 1 - A * plateau;
+    }
+    for (let k = 1; k <= n; k++) cum[k] = cum[k - 1] + 0.5 * (v[k] + v[k - 1]) / n;
+    for (let k = 0; k <= n; k++) cum[k] /= cum[n];
+    return cum;
+  };
+  const at = (cum, u) => { const f = u * n, i = Math.min(n - 1, Math.floor(f)), a = f - i; return cum[i] * (1 - a) + cum[i + 1] * a; };
+  let c = sd, cum = table(c);
+  for (let it = 0; it < 30; it++) { const e = at(cum, c) - sd; if (Math.abs(e) < 1e-7) break; c -= e; cum = table(c); }
+  return { c, s: (u) => at(cum, u) };
+}
+export function simPhase(u, sd) {
+  const key = sd.toFixed(6);
+  if (!warps.has(key)) warps.set(key, makeWarp(sd));
+  const ph = u - Math.floor(u);
+  return warps.get(key).s(ph);
+}
+export const detachFilmPhase = (sd) => { simPhase(0, sd); return warps.get(sd.toFixed(6)).c; };
 
-export const sstep = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
-const ramp = (u, a, b) => sstep((u - a) / (b - a));
+const sm = (e0, e1, x) => { const t = Math.max(0, Math.min(1, (x - e0) / (e1 - e0))); return t * t * (3 - 2 * t); };
 
-// noyau de respiration (Hollow, Orrery) : K(x) = x − 3x³ + 3x⁵ − x⁷ sur [−1, 1] ;
-// τ(x) = x − a·w·K((x − x₀)/w) ralentit (a > 0) autour de x₀ sans changer
-// la durée totale, et τ(x₀) = x₀
-export const K7 = (x) => (Math.abs(x) >= 1 ? 0 : x - 3 * x ** 3 + 3 * x ** 5 - x ** 7);
-export const breathe = (x, x0, w, a) => x - a * w * K7((x - x0) / w);
-
-// tau, tauMelt : largeur des rampes d'une cellule (voir gen/crystal.js)
-// growInv : instant d'attachement où le cristal atteint la part ρ de son rayon
-// (gen/crystal.js) — le rayon avance régulièrement à l'écran
-export function growTime(x, growInv) {
-  if (!growInv) return x;
-  const n = growInv.length - 1, f = Math.min(n, Math.max(0, x * n)), i = Math.floor(f), j = Math.min(n, i + 1);
-  return growInv[i] + (growInv[j] - growInv[i]) * (f - i);
+// profil de la colonne à la phase simulée s : interpolé entre deux relevés,
+// sans jamais mélanger les relevés de part et d'autre du détachement
+export function columnRows(S, s, out = new Float32Array(S.nz)) {
+  const n = S.samples, f = (((s % 1) + 1) % 1) * n;
+  const i0 = Math.floor(f) % n, i1 = (i0 + 1) % n;
+  let a = f - Math.floor(f);
+  if (S.detach) {
+    const kd = Math.ceil(S.detach.phase * n) % n;
+    if (i1 === kd) a = s % 1 < S.detach.phase ? 0 : 1;
+  }
+  for (let j = 0; j < S.nz; j++) out[j] = S.prof[i0 * S.nz + j] * (1 - a) + S.prof[i1 * S.nz + j] * a;
+  return out;
+}
+export function feedAt(S, s) {
+  const n = S.samples, f = (((s % 1) + 1) % 1) * n;
+  const i0 = Math.floor(f) % n, a = f - Math.floor(f);
+  const v0 = S.feedAt[i0], v1 = i0 + 1 < n ? S.feedAt[i0 + 1] : S.feedPeriod;
+  return (v0 * (1 - a) + v1 * a) / 10; // cm
 }
 
-export function clock(u, { tau = 0.02, tauMelt = 0.02, gather = 0.8, growInv = null } = {}) {
-  u -= Math.floor(u);
-  // croissance : le rayon avance d'un pas régulier, départ et fin adoucis (la
-  // dernière ramification se pose)
-  const xg = Math.min(1, Math.max(0, (u - TL.grow0) / (TL.grow1 - TL.grow0)));
-  const eg = 0.55 * xg + 0.45 * sstep(xg);
-  // (la rampe d'une cellule dure τ : la dernière s'achève en fin de croissance)
-  const tg = u < TL.grow0 ? -0.05 : -0.05 + 0.05 * Math.min(1, eg * 20) + growTime(eg, growInv) + (tau + 0.05) * sstep((xg - 0.85) / 0.15);
-  // fonte : ralenti au rassemblement (x₀ = gather)
-  const xm = Math.min(1, Math.max(0, (u - TL.melt0) / (TL.melt1 - TL.melt0)));
-  const em = Math.min(1, Math.max(0, breathe(xm, gather, 0.2, 0.45)));
-  const sm = u < TL.melt0 ? -0.05 : u > TL.melt1 ? 1 + tauMelt + 0.05 : -0.05 + (1.1 + tauMelt) * em;
-  // lumière : le soleil entre, puis passe
-  const sun = ramp(u, TL.sun0, TL.sun1) - ramp(u, TL.dusk0, TL.dusk1);
-  // la perle du centre : gelée au repos, fondue de la fonte au gel
-  const frozen = 1 - ramp(u, TL.bead0, TL.bead1) + ramp(u, TL.freeze0, TL.freeze1);
-  // l'évaporation ramène la goutte au volume de la perle
-  const evap = ramp(u, TL.evap0, TL.evap1);
-  // givre des fibres : pousse après le passage du soleil, tient tout le froid,
-  // fond au premier soleil (il est plus fin que le cristal)
-  let frost;
-  if (u >= 0.9) frost = sstep((u - 0.9) / 0.18);
-  else if (u < 0.08) frost = sstep((u + 0.1) / 0.18);
-  else if (u < 0.45) frost = 1;
-  else if (u < 0.5) frost = 1 - sstep((u - 0.45) / 0.05);
-  else frost = 0;
-  // l'air sursaturé (poussière de diamant, brume givrante) : pendant le froid
-  const cold = 1 - sun;
-  // eau sur la glace : la surface se mouille au début de la fonte
-  const wet = ramp(u, TL.melt0 - 0.01, TL.melt0 + 0.03) * (1 - ramp(u, TL.melt1, TL.melt1 + 0.02));
-  return { u, tg, sm, sun, cold, frozen, evap, frost, wet };
+// L'état complet du film à la phase u
+export function stateAt(R, S, B, u) {
+  const ud = S.detach ? S.detach.phase : 0.62;
+  const s = simPhase(u, ud);
+  const summer = 0.5 - 0.5 * Math.cos(2 * Math.PI * s); // 0 l'hiver, 1 l'été
+  const Pphys = S.P * COMPRESSION;
+  let frag = null, ripple = { amp: 0, x: 0, z: 0, t: 0, lambda: 1.2 };
+  if (S.detach && B) {
+    const tau = (s - S.detach.phase) * Pphys;
+    if (tau >= 0) {
+      const p = bodyPose(B, tau);
+      const az = R.body.azimuth, c = Math.cos(az), sn = Math.sin(az);
+      const X = p.x * 100, Y = p.y * 100, D = -p.drift * 100 * R.body.driftDir; // cm
+      const pos = [X * c - D * sn, Y, X * sn + D * c];
+      if (Math.abs(D) < 45) {
+        frag = { pos, th: p.th, az, L: B.L * 100, sG: B.sG * 100, n: S.detach.prof.length,
+          matY: (S.Z - (S.detach.z0 + B.sG)) * -100 + feedAt(S, S.detach.phase) };
+      }
+      // rides : l'onde de la bascule, puis la brise de l'automne
+      const breeze = sm(ud, ud + 0.05, s) * (1 - sm(0.86, 0.95, s));
+      ripple = { amp: 0.012 * Math.exp(-tau / 2.5) + 0.004 * breeze * R.body.breeze, x: pos[0], z: pos[2], t: Math.min(tau, 600), lambda: 1.2 };
+    }
+  }
+  return { u, s, summer, Tlake: 0.5 * (R.lake.T0 + R.lake.T1) - 0.5 * (R.lake.T1 - R.lake.T0) * Math.cos(2 * Math.PI * s), frag, ripple, feed: feedAt(S, s) };
 }

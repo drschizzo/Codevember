@@ -1,57 +1,46 @@
-// La recette : déterminisme, variété, direction artistique (400 graines).
-//   node --test melt/test/*.test.mjs
-import test from 'node:test';
+// Invariants de la recette et de la direction artistique, vérifiés sans
+// navigateur : node --test 'melt/test/*.test.mjs'
+//
+// À compléter avec les invariants du thème : géométrie (maillage étanche, pas
+// de triangle nul), boucle (l'état à u = 1 rejoint celui à u = 0), collisions,
+// et les règles de direction artistique, sur quelques centaines de graines.
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { generate, upgrade, MOODS, MOOD_KEYS, crystalSpec } from '../src/recipe.js';
-import { FAMILIES, FAMILY_KEYS } from '../src/families.js';
+import { generate, upgrade, MOODS } from '../src/recipe.js';
+import { SETS, FINISHES } from '../../shared/finishes.js';
 
-const seeds = Array.from({ length: 400 }, (_, i) => `s${i}`);
-const kelvinOf = (hex) => { const c = parseInt(hex.slice(1), 16); const r = c >> 16, b = c & 255; return b / r; };
+const SEEDS = Array.from({ length: 400 }, (_, i) => `t${i}`);
 
-test('déterministe, aller-retour JSON, mise à niveau sans effet', () => {
-  for (const s of seeds.slice(0, 40)) {
-    const a = generate(s), b = generate(s);
-    assert.deepEqual(a, b);
-    assert.deepEqual(JSON.parse(JSON.stringify(a)), a);
-    assert.deepEqual(upgrade(JSON.parse(JSON.stringify(a))), a);
-  }
+test('une graine donne toujours la même recette', () => {
+  for (const s of SEEDS.slice(0, 50)) assert.deepEqual(generate(s), generate(s));
 });
 
-test('toutes les humeurs, familles et formes sont tirées', () => {
-  const moods = new Set(), fams = new Set(), forms = new Set();
-  for (const s of seeds) { const R = generate(s); moods.add(R.mood); fams.add(R.family); forms.add(`${R.family}/${R.form}`); }
-  assert.deepEqual([...moods].sort(), [...MOOD_KEYS].sort());
-  assert.deepEqual([...fams].sort(), [...FAMILY_KEYS].sort());
-  for (const f of FAMILY_KEYS) for (const k of Object.keys(FAMILIES[f].forms)) assert.ok(forms.has(`${f}/${k}`), `${f}/${k}`);
+test('la recette est du JSON pur (partage par lien)', () => {
+  const R = generate('json');
+  assert.deepEqual(JSON.parse(JSON.stringify(R)), R);
+  assert.deepEqual(upgrade(JSON.parse(JSON.stringify(R))), R);
 });
 
-test('humeurs : un décor chacune (support, cadrage, valeur différents)', () => {
-  const kinds = new Set(MOOD_KEYS.map((k) => MOODS[k].sub.kind));
-  assert.equal(kinds.size, MOOD_KEYS.length);
-  // des valeurs étagées : une très sombre, des moyennes (la glace claire ne
-  // se lit pas sur un fond blanc : pas de fond très clair)
-  const lum = (hex) => { const c = parseInt(hex.slice(1), 16); return (0.2126 * (c >> 16) + 0.7152 * ((c >> 8) & 255) + 0.0722 * (c & 255)) / 255; };
-  const L = MOOD_KEYS.map((k) => lum(MOODS[k].bg));
-  assert.ok(Math.max(...L) > 0.15 && Math.min(...L) < 0.02 && new Set(L.map((l) => Math.round(l * 10))).size >= 3);
-  // cadrages : du ras du support (< 25°) à la plongée (> 65° ; jamais tout à
-  // fait de dessus : l'image y perd sa profondeur)
-  const els = MOOD_KEYS.map((k) => MOODS[k].cam.el);
-  assert.ok(Math.min(...els.map((e) => e[0])) < 25 && Math.max(...els.map((e) => e[1])) > 65 && Math.max(...els.map((e) => e[1])) < 80);
+test('chaque humeur est tirée, et chaque accord ne cite que des jeux existants', () => {
+  const seen = new Set(SEEDS.map((s) => generate(s).mood));
+  for (const m of Object.keys(MOODS)) assert.ok(seen.has(m), `humeur jamais tirée : ${m}`);
+  for (const [m, M] of Object.entries(MOODS)) for (const a of M.accords) for (const k of a.flat()) assert.ok(SETS[k], `${m} : jeu inconnu ${k}`);
 });
 
-test('lampes presque blanches (le soleil d’hiver un peu chaud)', () => {
-  for (const s of seeds) {
+test('boucle parfaite : les mouvements font un nombre entier de tours', () => {
+  for (const s of SEEDS) {
     const R = generate(s);
-    assert.ok(kelvinOf(R.light.key.color) > 0.85, `${s} ciel ${R.light.key.color}`);
-    assert.ok(kelvinOf(R.light.sun.color) > 0.75, `${s} soleil ${R.light.sun.color}`);
+    for (const k of ['spin', 'orbit', 'bob']) assert.ok(Number.isInteger(R.motion[k]), `${s} : motion.${k}`);
+    assert.ok(Number.isInteger(R.camera.orbit));
   }
 });
 
-test('le cristal tient dans le cadre et a une taille réelle', () => {
-  for (const s of seeds) {
-    const R = generate(s), sp = crystalSpec(R);
-    assert.ok(sp.size >= 1.5 && sp.size <= 3.7, `${s} ${sp.size}`);
-    assert.ok(R.camera.el >= 12 && R.camera.el <= 89);
-    assert.ok(R.water.theta > R.water.thetaIce * 0.5);
+test('direction artistique : l’or reste un accent', () => {
+  const warm = (k) => /gold|brass|bronze|copper/i.test(`${SETS[k].outer} ${k}`);
+  for (const s of SEEDS) {
+    const R = generate(s);
+    const share = R.pieces.filter((p) => warm(p.finish.set)).length / R.pieces.length;
+    assert.ok(share <= 0.5, `${s} : ${Math.round(share * 100)} % de métal chaud`);
   }
+  assert.ok(Object.keys(FINISHES).length > 20);
 });

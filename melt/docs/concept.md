@@ -1,226 +1,200 @@
 # Melt — document de travail
 
-Thème donné : **« melt »**. Le projet s'appelle donc *Melt* (dossier `melt/`) ; le sous-titre vient de l'idéation.
+Thème donné : **« melt »**. Le projet garde son nom et son dossier (`melt/`). Sous-titre : *la colonne sans fin*.
+
+## Historique
+
+Ce document est la quatrième version du concept. Les précédentes sont gardées pour la trace :
+- **le dégel d'une étoile** (le flocon en macro sur six supports) : l'historique git, avant le 14 novembre. Il a été abandonné : trop terre à terre, icône usée, décors-nappes, temps fort minuscule ;
+- **les pinacles** (eau douce, festons, bulles comme traceurs) : `concept-pinacles.md`. Les festons ne sortent pas de la simulation (P0), et les bulles ne montrent pas le courant (P5) ;
+- **le fjord** (nappes d'eau de fonte en eau salée) : `concept-fjord.md`. Les nappes ne se voient pas à cette échelle (P7).
+
+Les neuf prototypes (`proto/p0` à `proto/p8`, chacun avec son `RESULTS.md`) ont décidé de ce qui reste. On ne garde que **ce qui est à la fois exact et visible**.
 
 ## a. Le thème en largeur
 
-**Physique et science**
-- Problème de Stefan : le front de fusion avance à la vitesse du flux de chaleur divisé par la chaleur latente (334 J/g pour la glace, 7 fois celle qu'il faut pour chauffer l'eau de 10 °C) ; solution de Neumann, front en 2λ√(αt).
-- Fusion de la glace dans l'eau : pinacles et festons (Weady, Ristroph et al., 2022) ; le maximum de densité de l'eau à 4 °C retourne les panaches et change la forme sculptée.
-- Pénitents et coupes de soleil : la fusion par le rayonnement creuse ce qui est déjà creux.
-- Le cristal de neige et le diagramme de Nakaya : plaques à −2 °C, aiguilles à −5 °C, colonnes à −8 °C, étoiles à −15 °C ; la forme dit la température et la sursaturation.
-- Instabilité de Mullins-Sekerka : un front de croissance plat se ramifie, d'où les dendrites ; la fusion, elle, est stable et arrondit.
-- Une goutte d'eau qui gèle sur une surface froide finit en **pointe** (singularité universelle, angle ≈ 139°, Marín et al. 2014) parce que la glace est moins dense que l'eau.
-- Instabilité de Plateau-Rayleigh : un filet d'eau se rompt en perles espacées de ≈ 9 rayons ; une aiguille de glace qui fond devient un chapelet.
-- Regel : la glace fond sous la pression puis regèle (le fil qui traverse le bloc).
-- Couche quasi liquide : la surface de la glace est mouillée bien au-dessous de 0 °C.
-- Point eutectique, sel qui creuse des rigoles, métal de Field à 62 °C, gallium à 29,8 °C (fond dans la main), bismuth à 271 °C et ses cristaux en trémie irisés.
-
-**Métiers et objets**
-- Fondeur (creuset, louche, lingotière, cire perdue) ; ciergier (bougies trempées, sculptées en couches de couleurs) ; sculpteur sur glace (tronçonneuse, gouge, chalumeau qui fait briller la surface) ; pâtissier (tempérage du chocolat, sucre tiré, isomalt) ; verrier (déjà traité par Calcin).
-- Photographes de flocons : Wilson Bentley (1885, sur velours noir, à contre-jour), Kenneth Libbrecht (cristaux cultivés sur un saphir, éclairage coloré), Alexey Kljatov (sur un gant de laine, à l'objectif inversé), Nathan Myhrvold (caméra refroidie).
-- Glaciologues (carottes, bulles d'air fossile), fabricants de glace claire (congélation directionnelle), horloges à bougie.
-
-**Art, photographie, cinéma**
-- Dalí, *La Persistance de la mémoire* (montres molles) : le cliché absolu.
-- Vanités à la bougie ; Olafur Eliasson, *Ice Watch* (blocs de glacier qui fondent sur une place) ; Andy Goldsworthy (sculptures de glace et de neige qui fondent au soleil) ; Urs Fischer (sculptures de cire qui brûlent comme des bougies).
-- Accélérés de glaçons, de crèmes glacées, de bonhommes de neige ; les flocons de Bentley et le livre *Snow Crystals* (1931).
-- *Frozen*, *Le Magicien d'Oz* (« I'm melting! »), *Terminator 2* (métal liquide).
-
-**Vocabulaire**
-- fonte, fusion, dégel, débâcle, déliquescence, liquéfaction, ablation, regel, névé, givre, frimas, verglas, galaverna, aiguille, trémie, dendrite, plaque à secteurs, nucléus, perle, chapelet, ménisque, front, chaleur latente, eutectique, coulure, larme.
-
-**Cycles et transformations**
-- Eau → glace → eau : le gel et la fonte ne suivent pas le même chemin (une croissance qui se ramifie, une fonte qui arrondit et rassemble).
-- Vapeur → givre → eau → vapeur (sublimation, condensation solide).
-- Cire : solide → bain → coulure → stalactite ; métal : lingot → bain → coulée → pièce → refonte.
-- Le jour et la nuit, les saisons : gel-dégel, débâcle.
-- Un flocon commence souvent par une gouttelette gelée : sa fonte le ramène à la goutte dont il est né.
-
-**Lumière**
-- La glace mince est presque invisible : elle se lit par ses arêtes et ses nervures, qui dévient la lumière (lignes claires ou sombres), par les reflets du ciel et par les couleurs des lames minces (interférences dans les plaques de quelques microns).
-- L'eau mouille la glace : la surface devient lisse et brillante au moment où elle fond (« la glace se vitrifie »).
-- Les gouttes sont des lentilles : elles renversent le fond et concentrent la lumière en un point brillant.
-- La goutte gelée devient laiteuse (bulles chassées vers le centre par le front).
-- Éclairage de Rheinberg (microscopie) : un fond d'une couleur, un anneau d'une autre ; les arêtes du cristal prennent la couleur de l'anneau.
-- Le givre scintille ; la poussière de diamant s'allume dans un rayon de soleil.
+Les angles détaillés sont dans `concept-pinacles.md` (section a). L'essentiel pour la version retenue :
+- **Physique.**
+  - L'anomalie de densité de l'eau douce : densité maximale à 4 °C.
+  - La couche limite de convection naturelle le long d'une paroi de glace, et la fonte qui en résulte (Weady, Tong, Zidovska et Ristroph, *PRL* 128, 044502, 2022). Elle monte en eau froide et arrondit le bas. Elle descend depuis la surface en eau chaude, et amincit la ligne d'eau.
+  - La condition de Stefan.
+  - La stabilité de flottaison : un cylindre de glace (s = 0,917) ne flotte debout que si D/L > √(8 s (1 − s)) ≈ 0,78.
+  - La fenêtre de Snell, de 48,6° de demi-angle, et le miroir de réflexion totale au-delà.
+- **Optique de la glace dans l'eau.** La glace claire y est invisible (indices 1,309 et 1,333). La glace bulleuse diffuse la lumière et se lit. En lumière parallèle, la glace agit en lentille divergente.
+- **Regard.**
+  - Hiroshi Sugimoto, *Conceptual Forms* : une forme blanche unique, sur fond noir, sous une seule lumière douce.
+  - Brancusi : *L'Oiseau dans l'espace*, les formes de révolution effilées.
+  - Les photographies d'icebergs vus sous la surface : le miroir, la fenêtre de ciel.
+- **Cycles.** Les saisons d'un lac de montagne. La glace qui fond, se détache et flotte, et la surface qui rend une colonne neuve.
 
 ## b. Les clichés (interdits comme idée principale)
 
-1. Le glaçon ou le bloc de glace qui fond en accéléré dans une flaque.
-2. La bougie qui se consume et coule (vanité).
-3. Les montres molles de Dalí, les objets qui « coulent » comme de la pâte.
-4. La crème glacée, le bonhommes de neige, le chocolat.
-5. Le métal liquide qui reprend forme (*Terminator 2*), la lampe à lave.
+1. Le glaçon qui fond dans un verre, le bloc dans une flaque.
+2. La bougie qui coule.
+3. Les montres molles de Dalí.
+4. La crème glacée, le bonhomme de neige.
+5. Le métal liquide.
+6. L'iceberg-paysage : la carte postale de lagune glaciaire, le bloc bleu sous le ciel.
 
 ## c. Les pistes
 
-| # | Piste | Image | Geste | Boucle | Cœur technique |
-| --- | --- | --- | --- | --- | --- |
-| 1 | **Le dégel d'une étoile** | un cristal de neige de 3 mm posé sur de la laine, en macro | il pousse de sa gouttelette gelée en accéléré, puis le soleil le fait fondre : ses branches se rétractent en perles qui se rassemblent en une goutte, qui regèle en pointe | cycle de transformations : goutte gelée → étoile → eau → goutte gelée, par deux chemins différents (croissance ramifiée, fonte qui rassemble) | modèle de croissance de Gravner-Griffeath (diffusion de vapeur, attachement selon le nombre de voisins), champ de fonte, coalescence de perles, conservation de la masse |
-| 2 | Le sablier de fonte | un sablier de verre dans un bâti de laiton : collier chauffant en haut, socle froid en bas | la matière du haut fond et coule par le col, se resolidifie en bas en stalagmite ou en cristaux ; le sablier se retourne | cycle de symétries (deux retournements = identité) | solidification par accrétion, coulée par le col, chute du bloc |
-| 3 | Pinacles dans la cuve | un bloc de glace suspendu dans une cuve d'eau, panaches visibles en strioscopie | l'eau sculpte la glace en pinacles ou en festons | aucune naturelle (la glace disparaît) | fusion convective, strioscopie |
-| 4 | La bougie sans fin | une bougie sculptée en couches de couleur, la flamme qui descend | les boucles sculptées fondent, les coulures construisent une draperie | plongée auto-similaire (translation d'une période de coulure) | écoulement et solidification des coulures |
-| 5 | Le creuset de bismuth | des cristaux en trémie irisés dans un creuset sur une flamme | ils s'affaissent en miroir liquide, puis repoussent en marches | cycle fusion → cristallisation | croissance en trémie, couches minces d'oxyde |
-| 6 | La procession d'icebergs | des icebergs dérivent dans la brume, à différents âges | encoche à la ligne de flottaison, surplomb, chavirement | translation d'un intervalle (chronophotographie) | équilibre hydrostatique et stabilité de forme |
-| 7 | La zone fondue | une barre de cristal bouclée en anneau, une bobine incandescente qui en fait le tour | la zone liquide circule, le cristal se refait derrière elle | périodique pur (tours entiers) | fusion de zone, pont liquide par tension superficielle |
-| 8 | Le lac de lave | une croûte de plaques qui se fendent sur un bain incandescent | les plaques s'enfoncent et refondent, d'autres se forment | périodique (régime établi) | convection, croûte, rupture |
-| 9 | La fonte des neiges sur une statue | une sculpture coiffée de neige au soleil | la neige glisse, fond, regèle en chandelles | forçage saisonnier | accumulation et fonte d'une couverture |
-| 10 | Raclette | une demi-meule sous la résistance | la face fond, cloque, dore, est raclée | translation d'une couche | viscoélasticité, brunissement |
+| # | Piste | Boucle | Sort |
+| --- | --- | --- | --- |
+| 1 | Le dégel d'une étoile (flocon en macro) | cycle de transformations | réalisé, puis abandonné |
+| 2 | Les pinacles : une colonne d'eau douce taillée en festons | cycle forcé | festons absents de la simulation |
+| 3 | Le fjord : nappes d'eau de fonte en eau salée | cycle forcé | nappes invisibles à l'image |
+| 4 | **La colonne sans fin : eau douce, saisons, détachement, bascule** | cycle forcé, périodique par construction | **retenue** |
+| 5 | Procession d'icebergs à âges décalés | phases décalées | iceberg-paysage |
+| 6 | Le sablier : un bloc retourné à chaque phase | cycle de symétries | le volume diminue |
+| 7 | Lame mince entre polariseurs croisés | cycle de transformations | proposée, non retenue par l'utilisateur |
+| 8 | Recalescence d'une goutte de métal en lévitation | cycle | trop proche de Bolt |
 
-## d. Notes
-
-| # | Originalité | Esthétique | Boucle | Cœur | Variations | Faisabilité | Total |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 Dégel d'une étoile | 4 | 5 | 5 | 5 | 5 | 4 | **28** |
-| 2 Sablier de fonte | 5 | 4 | 4 | 3 | 4 | 2 | 22 |
-| 3 Pinacles | 4 | 4 | 1 | 4 | 2 | 3 | 18 |
-| 4 Bougie sans fin | 2 | 4 | 5 | 3 | 3 | 3 | 20 |
-| 5 Creuset de bismuth | 4 | 5 | 3 | 3 | 3 | 2 | 20 |
-| 6 Icebergs | 4 | 4 | 3 | 4 | 3 | 3 | 21 |
-| 7 Zone fondue | 4 | 3 | 5 | 3 | 2 | 3 | 20 |
-| 8 Lac de lave | 3 | 4 | 4 | 3 | 2 | 3 | 19 |
-| 9 Neige sur statue | 3 | 4 | 4 | 3 | 3 | 3 | 20 (et trop proche de Moss : couverture qui avance et se retire sur un support) |
-| 10 Raclette | 3 | 2 | 4 | 2 | 2 | 3 | 16 |
-
-**Retenue : 1, le dégel d'une étoile.** Le sablier (2) est la piste la plus originale, mais elle multiplie les mécanismes (chute du bloc, coulée par le col, accrétion) pour un geste moins beau que la fonte d'un cristal. La goutte qui gèle en pointe (une observation physique peu connue) devient un temps du film ; la fonte qui « rassemble » au lieu de « couler » écarte les clichés 1 à 5.
-
-Différence avec le dépôt : aucun objet, cause ou décor repris. Calcin refond du verre dans une sole (fusion d'une matière en vrac, au four) ; ici la fonte est celle d'un objet unique et ramifié, au soleil. Membrane fait éclore une couche, Moss propage un front sur une roche ; ici le geste est une **rétraction** : une forme ramifiée qui se replie sur son centre en perles, puis une **croissance** qui se ramifie, deux chemins opposés qui ne se ressemblent pas. La goutte n'est pas une cause (c'est la matière fondue elle-même).
+| # | Originalité | Esthétique | Boucle | Cœur | Variations | Faisabilité | Regard | Total |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 4 Colonne sans fin | 4 | 4 | 4 | 5 | 3 | 4 | 4 | **28** |
+| 5 Procession | 3 | 4 | 5 | 4 | 3 | 3 | 2 | 24 |
+| 7 Lame mince | 5 | 5 | 4 | 4 | 4 | 4 | 4 | 30 (écartée par l'utilisateur) |
 
 ## e. La piste retenue
 
-**Titre** : *Melt* — *le dégel d'une étoile*.
+**L'image.** Une colonne de glace blanche et translucide (bulleuse, diffusion ≈ 0,5 cm⁻¹), de 2 à 4 cm de diamètre, pend de la surface d'un lac de montagne. On la voit de dessous : la surface est un plafond d'argent où elle se reflète, et la colonne et son reflet forment un fuseau symétrique. L'eau la taille au fil des saisons. L'été, la ligne d'eau s'amincit jusqu'à ce que la colonne s'en détache. Le fuseau libéré bascule en une demi-seconde et se couche contre son reflet, puis la brise l'emporte. À l'automne, une colonne neuve traverse le miroir.
 
-**L'image** : un cristal de neige de 2 à 4 mm, posé à plat sur une matière sombre (laine, velours, feuille de houx) ou sur une plaque de verre, en macro (le cadre fait 1,5 à 5 mm de large). Il est presque invisible en lui-même : il se lit par ses nervures, ses arêtes et les reflets du ciel, comme sur les photographies de Kljatov ou de Bentley.
+**La liberté (une seule)** : la colonne n'a pas de fin. Elle descend de la surface sans support visible l'hiver, et s'arrête l'été.
 
-**Le geste** : la fonte. Le soleil sort, la surface du cristal se mouille et brille, la pointe des branches s'arrondit en perles, les perles remontent les branches en les avalant, se rejoignent, et toute l'étoile se rassemble en une seule goutte au centre. Puis le froid revient : la goutte gèle de bas en haut et se dresse en pointe ; un cristal hexagonal en sort et pousse en étoile, en accéléré.
+**Le regard** : Hiroshi Sugimoto, *Conceptual Forms*.
+- La valeur : le fond domine, et une seule forme claire occupe la hauteur.
+- La lumière : une source douce, qui modèle par la courbure.
+- Le cadrage : frontal, calme, sans contexte.
 
-**Formule de la boucle** (schéma 6, cycle de transformations) : l'état est entièrement décrit par (cristal(t), eau(t), givre(t), lumière(t)), tous fonctions de la phase u :
-- cristal : chaque cellule du réseau hexagonal a un instant d'attachement T(x) (simulation) et un instant de fonte M(x) ; son épaisseur vaut h(x)·g(t − T(x))·(1 − m(t − M(x))), nulle à u = 0 et à u = 1 sauf la perle gelée ;
-- eau : une liste de perles enregistrée (positions, volumes) pendant la fonte, une goutte centrale dont le volume vaut V_perle + V_cristal à la fin de la fonte et V_perle après l'évaporation ;
-- la perle gelée du début est la goutte gelée de la fin (même volume, même pointe) : l'état à u = 1 est l'état à u = 0 par construction ; le givre et la lumière sont des fonctions périodiques de u.
+L'humeur Nuit le suit strictement. Les autres en gardent la sobriété. Le miroir de la surface y ajoute ce que Sugimoto n'a pas : chaque forme et son double.
 
-### Découpage temporel (part de boucle ; durée par défaut 40 s)
+**L'appareil** : aucun. Les causes sont la saison (lumière, température), la gravité, la poussée d'Archimède et la brise.
+
+**Le lien avec la collection** : la glace devient de l'eau, et la surface rend une colonne neuve. On revient au départ par un autre chemin.
+
+### Formule de la boucle (prototypes P1 et P8)
+
+- **La température du lac** suit T∞(u) = ½(T₀ + T₁) − ½(T₁ − T₀) cos 2πu, de 1,5 à 9 °C pour le réglage de référence.
+- **L'avance** v(u) est constante (0,5 mm/s simulés) pendant la saison froide, et nulle de u = 0,38 à 0,6, avec des raccords doux de 0,05.
+- **La glace** se recalcule à chaque instant par le solveur. Toute la glace visible est neuve à chaque période, donc la boucle se referme d'elle-même : l'écart entre périodes tombe à 0,11 mm après trois périodes.
+- **Le détachement** revient à la phase 0,645 (±0,004). Sa phase exacte est fixée sur la dernière période simulée.
+- **Le fuseau libéré** est un corps rigide. Il bascule, se couche et dérive, et sort du cadre avant u = 1.
+- **La caméra** suit une fonction périodique lissée.
+
+### Découpage temporel (durée par défaut 48 s)
 
 | u | Ce qu'on voit | Ce que l'œil suit | Temps |
 | --- | --- | --- | --- |
-| 0 – 0,04 | une perle de glace laiteuse dressée en pointe sur la laine ; givre sur les fibres, poussière de diamant qui tombe dans une lumière froide | la perle, le scintillement | accéléré |
-| 0,04 – 0,44 | un hexagone sort de la perle, s'élargit ; six bras partent, se ramifient, les nervures se dessinent ; la caméra recule pour garder l'étoile dans le cadre | les pointes qui avancent | accéléré (×100 environ) |
-| 0,44 – 0,52 | l'étoile entière, immobile ; le soleil entre de côté, le givre des fibres s'éteint, le cristal s'allume | l'étoile, la lumière qui arrive | accéléré |
-| 0,52 – 0,78 | **la fonte** : la surface se mouille, les pointes s'arrondissent en perles, les perles remontent les bras, les branches latérales disparaissent les premières, l'étoile se rassemble en une goutte ; la caméra avance avec elle | les perles qui reviennent au centre | **temps réel**, avec un ralenti au rassemblement |
-| 0,78 – 0,88 | la goutte, lentille sur la laine, rétrécit (évaporation) | la goutte qui reflète le soleil | accéléré |
-| 0,88 – 0,97 | le soleil s'éteint ; la goutte gèle de bas en haut (elle devient laiteuse) et sa pointe se soulève ; le givre revient sur les fibres | la pointe qui monte | accéléré |
-| 0,97 – 1 | repos (= u 0) | | |
+| 0 – 0,2 | hiver, lumière basse et bleue ; une souche courte, au bout arrondi, descend du miroir | la colonne qui naît | accéléré |
+| 0,2 – 0,38 | printemps ; la colonne s'allonge jusqu'à 8 cm, le bout reste arrondi (couche limite montante) | la descente | accéléré |
+| 0,38 – 0,6 | été, rayons de soleil ; la colonne s'arrête ; elle s'effile vers le bas, puis s'amincit à la ligne d'eau | l'amincissement | accéléré, qui ralentit |
+| 0,6 – 0,645 | le col n'est plus qu'un fil | le fil | ralenti |
+| 0,645 – 0,66 | **le temps fort** : le fuseau se détache, s'incline, bascule et se couche contre son reflet, dépasse jusqu'à environ 105°, puis revient | la bascule | **temps réel** (0,5 s physiques, sur environ 1 s de film) |
+| 0,66 – 0,85 | automne ; le fuseau flotte et dérive avec la brise ; la colonne neuve traverse le miroir | la dérive, la renaissance | accéléré |
+| 0,85 – 1 | retour de l'hiver (= u 0) | | accéléré |
 
-Le temps fort : le rassemblement (0,66 – 0,76). Les respirations : l'étoile entière (0,44 – 0,52), la goutte (0,78 – 0,88).
+### Déclinaison : trois familles, trois temps forts
+
+La bascule dépend de l'élancement D/L du fuseau libéré, qui dépend du calibre de la colonne et de la durée de l'arrêt.
+
+| Famille | Fuseau | Mouvement au temps fort |
+| --- | --- | --- |
+| **Le chavirement** | long et fin (D/L ≈ 0,1–0,3) | il s'incline, bascule en 0,5 s, dépasse, se couche |
+| **La révérence** | moyen (D/L ≈ 0,5–0,75) | il penche lentement jusqu'à un angle d'équilibre, oscille, puis se couche en roulant |
+| **Le bouchon** | trapu (D/L > 0,8) | il remonte d'un coup et flotte debout en pilonnant, sans basculer |
 
 ### Matrice de variations
 
 | Axe | Valeurs |
 | --- | --- |
-| Famille (le geste) | **étoile** (dendrite stellaire, fougère, à plaques au bout des bras) : branches qui se rétractent en perles ; **plaque** (plaque hexagonale, à secteurs, à larges branches) : un bourrelet d'eau qui se resserre comme un collier ; **colonne** (colonne creuse, aiguille) : un cylindre qui se rompt en chapelet (Plateau-Rayleigh) |
-| Forme (paramètres du modèle) | 4 à 6 jeux de paramètres par famille (densité de vapeur ρ, seuils d'attachement β, α, θ, gel κ, fonte μ, γ), plus un bruit qui rend chaque bras un peu différent |
-| Support et humeur | Laine, Verre, Velours, Houx, Rheinberg, Ardoise (voir l'épreuve de variété) |
-| Lumière de fonte | soleil de côté, à contre-jour, de face, d'en haut ; le côté éclairé fond le premier |
-| Cadrage | plongée oblique, vue de dessus, ras du support, contre-jour |
-| Taille | 2 à 4 mm |
+| Famille | chavirement, révérence, bouchon |
+| Section du fût | ronde, carrée (arêtes que l'eau arrondit avec la profondeur), hexagonale, cannelée |
+| Glace | bulleuse fine (0,5 cm⁻¹) ; à chapelets verticaux ; stratifiée (bandes de bulles) ; bleue de glacier (bulles rares, bleue dans l'épaisseur) |
+| Lac | froid (1 → 7 °C), tempéré (1,5 → 9 °C), chaud (3 → 11 °C) : il change la forme d'hiver et la date du détachement |
+| Humeur | six, voir l'épreuve de variété |
+| Cadrage | profil plein cadre, contre-plongée sous le miroir, plongée oblique |
 
-3 familles × ~5 formes × 6 humeurs × 4 lumières × 4 cadrages ≈ 1 400 combinaisons dont les axes se voient tous en vignette.
+3 × 4 × 4 × 3 × 6 × 3 ≈ 2 600 combinaisons. La famille et l'humeur se lisent en vignette.
+
+### Les humeurs (épreuve de variété)
+
+| Humeur | Eau | Lumière | Valeur | Cadrage |
+| --- | --- | --- | --- | --- |
+| **Nuit** (Sugimoto) | pure, noire au-delà de 20 cm | une boîte douce de côté | très sombre | profil, la colonne et son reflet |
+| **Fenêtre de Snell** | claire | plein jour, disque du ciel au-dessus, miroir autour | claire en haut, sombre en bas | contre-plongée |
+| **Ombre** | claire | soleil en lumière parallèle ; l'ombre de lentille de la glace sur un fond de sable pâle | très claire | plongée oblique vers le fond |
+| **Lait glaciaire** | turquoise laiteux (farine de roche) | jour diffus | moyenne, froide | profil |
+| **Tourbe** | brune et ambrée | soleil bas, rayons obliques | sombre et chaude | oblique |
+| **Bassin de pierre** | claire, mur de calcaire à 30 cm | soleil filtré par une surface ridée : caustiques sur le mur | claire, plein jour | profil oblique |
+
+Une phrase sans couleur par humeur :
+- *une forme et son double dans le noir* ;
+- *une colonne qui sort d'un disque de ciel cerné d'un miroir* ;
+- *un objet presque invisible et son ombre très nette sur le sable* ;
+- *une forme qui se perd dans un brouillard d'eau* ;
+- *des rayons obliques dans une eau chaude et sombre* ;
+- *un filet de lumière sur la pierre derrière la glace*.
+
+L'humeur d'ouverture est Nuit ou Fenêtre de Snell. Elle n'est pas dans la gamme sépia, que la collection a déjà en excès.
 
 ### Images clés
 
-1. **L'étoile sur la laine** (u ≈ 0,48) : plongée oblique de 40°, le cristal occupe les deux tiers du cadre ; laine bleu nuit floue, fibres dorées par le contre-jour ; les nervures et les arêtes s'allument en blanc froid, les plaques centrales montrent des irisations ; la profondeur de champ ne garde nets que le cristal et les fibres sur lesquelles il repose.
-2. **Le rassemblement** (u ≈ 0,7) : plus près ; trois bras déjà réduits à des chapelets de perles qui roulent vers le centre ; chaque perle renverse le soleil en un point brillant ; le centre encore cristallin et mouillé, comme verni.
-3. **La goutte gelée** (u ≈ 0,95) : au ras du support, à contre-jour ; une perle laiteuse dressée en pointe ; les fibres reprennent leur givre, des aiguilles de 50 µm ; lumière froide, ombres bleues.
+1. **Le fuseau et son double, Nuit** (u ≈ 0,62). Fond noir, une boîte douce à gauche. La colonne, amincie à la ligne d'eau, et son reflet dans le plafond d'argent forment deux fuseaux pointe contre pointe, reliés par un fil de glace.
+2. **Le chevron, Nuit** (u ≈ 0,65). Le fuseau en pleine bascule, à 50°, et son reflet dessinent un chevron. La souche, au-dessus, pend dans le vide.
+3. **Le ciel, Fenêtre de Snell** (u ≈ 0,7). Vu d'en dessous, le fuseau couché flotte au bord du disque du ciel, la souche neuve au centre.
+
+### Références
+
+1. **Weady et al. 2022**, figures 1 et 2 : des cylindres de glace taillés à 4 °C et 8 °C. Elles imposent l'échelle (quelques centimètres) et des formes douces, sans arêtes vives sauf aux pointes.
+2. **Photographies sous-marines de glace de lac et d'icebergs d'eau douce** : glace blanche et bulleuse, bulles visibles en profondeur, fenêtre de Snell, miroir de surface.
+3. **Glaçons qui basculent dans un verre** (vidéos) : la bascule d'un corps élancé dure moins d'une seconde, avec un dépassement et deux ou trois oscillations amorties.
+4. **Sugimoto, *Conceptual Forms*** : le noir, une seule lumière, la forme pleine hauteur.
 
 ### Risques et parades
 
-- *Le cristal invisible* (glace mince et claire sur fond sombre) : fond clair possible (Verre, Rheinberg), studio dont les boîtes à lumière se reflètent dans les facettes, nervures en relief réel, irisation des zones minces, arêtes qui accrochent la lumière.
-- *Le réseau hexagonal qui se voit* (contours en marches) : le contour est une ligne de niveau de l'instant d'attachement interpolé ; un léger lissage de T.
-- *Une eau en blobs de synthèse* : perles en calottes sphériques à angle de contact mesuré, réunies par un maximum adouci (cous de fusion), lentilles qui réfractent ; gros plan comparé aux photographies.
-- *Le temps de calcul* : croissance en 2 à 5 s dans un worker pendant le chargement, montrée sur l'écran de chargement.
-- *La fonte illisible* (trop rapide, ou partielle) : la fonte occupe un quart de la boucle, filmée en temps réel, avec un ralenti au rassemblement ; la caméra avance avec la forme qui se rétracte.
+- **Un hiver monotone** (P8 : les images 1 à 3 changent peu). La colonne qui traverse le miroir doit être lisible (les traits de scie, les bulles qui descendent avec elle), et la caméra peut s'approcher du bout pendant la descente.
+- **Des pointes molles** (1 à 2 mm à 0,5 mm de maille). Le contour vient de la ligne de niveau de la fraction de glace, interpolée sous la maille. On n'affûte jamais à la main.
+- **Le coût de la simulation** : environ 35 s par période en Node à 0,5 mm. Il faut une grille plus grossière en worker, ou un portage en WebGPU, montré sur l'écran de chargement.
+- **Le fuseau coincé sous la souche** (P2, en 2D). La bascule se fait en 3D, avec la brise et un col qui cède de biais.
+- **Un temps fort trop court.** La bascule dure 0,5 s physiques. Elle est filmée en temps réel, avec un ralenti au contact du miroir, dans une boucle par ailleurs accélérée.
 
-## e bis. Les trois épreuves
+## e bis. Les épreuves
 
 ### Crédibilité
 
 | Temps | Cause visible | Loi | Convention de temps |
 | --- | --- | --- | --- |
-| la goutte gelée, l'hexagone qui en sort | l'air glacé et sursaturé : brume givrante, givre qui pousse sur les fibres au même instant, poussière de diamant | nucléation sur la gouttelette gelée, croissance par dépôt de vapeur | accéléré |
-| la croissance en étoile | la vapeur de la brume, qui s'épuise près du cristal | diffusion de la vapeur et attachement selon la courbure (modèle de Gravner-Griffeath) ; instabilité de Mullins-Sekerka aux pointes | accéléré |
-| la fonte | le soleil qui sort : rayon chaud, givre des fibres qui disparaît d'abord (plus fin), côté éclairé qui fond le premier | chaleur latente : les parties fines et exposées fondent d'abord ; l'eau mouille la glace et se rassemble par tension superficielle (minimisation de l'aire), coalescence | temps réel |
-| la goutte qui rétrécit | le soleil | évaporation | accéléré |
-| la goutte qui gèle en pointe | le froid qui revient : lumière bleue, givre sur les fibres | front de gel de bas en haut ; dilatation de 9 % : la pointe (angle ≈ 139°) | accéléré |
+| la colonne descend | (la liberté) | — | accéléré |
+| le bout s'arrondit l'hiver | eau froide, lumière d'hiver | couche limite montante (anomalie de densité), retrait en h^(−1/4) | accéléré |
+| la ligne d'eau s'amincit l'été | eau chaude, rayons de soleil | couche limite descendante, née à la surface | accéléré |
+| le détachement | le col fond jusqu'au bout | Stefan | ralenti |
+| la bascule | la gravité, la poussée d'Archimède | stabilité de flottaison (D/L < 0,78), masse ajoutée, traînée | temps réel |
+| la dérive | la brise, les rides de la surface | traînée | accéléré |
 
-Rien ne flotte : le cristal repose à plat sur le support (le haut des fibres, le verre, la feuille) ; l'eau mouille la glace, puis perle sur le support ; la poussière de diamant tombe (gravité, vitesse limite de quelques cm/s, vue en accéléré : des traits courts). La masse est conservée : glace × 0,917 = eau pendant la fonte, puis l'évaporation, rendue à la perle d'origine.
-
-### Variété (une humeur = un décor)
-
-| Humeur | Décor (support) | Lumière | Valeur | Cadrage |
-| --- | --- | --- | --- | --- |
-| Laine | tricot de laine bleu nuit, fibres frisées en flou | anneau doux de face, soleil bas à contre-jour pour la fonte | sombre | plongée oblique 40° |
-| Verre | plaque de verre sur une table lumineuse blanche | lumière transmise, diffuse, d'en dessous ; soleil de face | très claire (high key) | presque de dessus |
-| Velours | velours noir (Bentley) | rasante et dure, d'un seul côté | très sombre | ras du support, 15° |
-| Houx | feuille de houx vernissée, nervure saillante | plein jour, soleil d'en haut | moyenne, verte | oblique bas 25° |
-| Rheinberg | lame de saphir au microscope | éclairage de Rheinberg : fond coloré, anneau d'une autre couleur | colorée, moyenne | de dessus |
-| Ardoise | ardoise grise feuilletée, mate | ciel couvert, diffus, d'en haut | gris moyen | oblique 55° |
-
-Une phrase sans couleur par humeur : *un flou de fibres frisées à contre-jour, vu en plongée* ; *une silhouette réfractée sur un fond blanc, vue de dessus* ; *une étoile isolée par une lumière rasante dans le noir, au ras du support* ; *un cristal sur une feuille brillante en plein jour, sous une nervure saillante* ; *une étoile cernée de lumière sur un champ uni, comme au microscope* ; *une étoile sur des feuillets de pierre mate sous un ciel couvert*. Aucune ne ressemble à une autre.
+Rien ne flotte sans raison : la colonne pend de la surface, et le fuseau libéré flotte avec 8,3 % de son volume émergé (P2).
 
 ### Ambition (éléments de construction)
 
-Le cristal : nucléus (la perle gelée), plaque centrale hexagonale, six bras principaux, nervures médianes en relief, branches latérales (en peigne ou en fougère), plaques terminales, secteurs à arêtes, marques concentriques des étapes de croissance, bulles et inclusions, zones minces irisées ; la colonne : prisme hexagonal à extrémités creuses en cône, gaine. L'eau : perles en calottes, cous de coalescence, film qui mouille, goutte-lentille, goutte gelée laiteuse à pointe. Le support : fibres de laine en torons et duvet, givre en aiguilles, poussière de diamant. Plus de cinq éléments, chacun lisible en gros plan.
+- le fût, sa section, les traits de scie de la glace neuve ;
+- la glace bulleuse : un fond diffus, des chapelets, de grosses bulles ;
+- la traversée du miroir : ménisque, reflet, partie émergée givrée ;
+- le bout arrondi, l'effilement d'été, le col ;
+- le fuseau libéré, qui flotte et dérive ;
+- les rides de la brise ;
+- l'ombre de lentille (humeur Ombre).
 
-## e ter. Déclinaison et scénario
+### Échelle
 
-**Familles et leur mouvement**
-- **Étoile** : croissance par les pointes qui se ramifient ; fonte en perles qui naissent aux pointes et *remontent* les bras en les avalant, les branches latérales d'abord.
-- **Plaque** : croissance par des faces planes qui avancent ensemble (l'hexagone grandit, des marques concentriques restent) ; fonte depuis tout le bord : un bourrelet d'eau qui fait le tour de la plaque et se resserre comme un collier, puis une lentille.
-- **Colonne** : croissance en longueur (deux pointes creuses qui s'éloignent) ; fonte en cylindre d'eau qui se rompt en chapelet de perles régulièrement espacées (Plateau-Rayleigh), qui roulent vers le centre.
+- **Plan large** : 15 à 18 cm de haut, soit la colonne entière, la ligne d'eau et son reflet.
+- **Gros plan** : 5 cm, soit le col ou le bout.
+- **Ce qui donne l'échelle** : les bulles (0,1 à 1 mm), les traits de scie (1 mm), les rides de la surface (1 cm).
 
-**Scénario (film muet)**
-1. Froid bleu. Une perle de glace laiteuse, en pointe, sur la laine. Les fibres sont givrées. Des paillettes tombent.
-2. Un petit hexagone transparent sort de la perle et s'élargit. Six bras partent de ses coins. Ils se ramifient ; la caméra recule pour garder toute l'étoile.
-3. L'étoile est finie. Elle scintille. Un rayon de soleil arrive de côté ; le givre des fibres s'éteint.
-4. Le cristal se mouille, brille comme verni. Au bout de chaque bras, une perle. Les perles remontent les bras ; les branches latérales tombent en gouttelettes qui rejoignent les bras. La caméra avance.
-5. Les six perles arrivent au centre et s'y fondent : une seule goutte, qui reflète le soleil.
-6. La goutte rétrécit. Le soleil passe. Elle gèle de bas en haut, devient laiteuse, sa pointe se soulève. Le givre revient sur les fibres. (= 1)
+## e ter. Scénario (film muet, famille du chavirement)
 
-La forme : une montée lente et ramifiée (croissance), un temps suspendu, une descente rapide et convergente (fonte), un repos, un retour par un troisième chemin (la goutte qui gèle). Deux mouvements opposés (diverger, converger) et deux tempos (accéléré, temps réel).
+1. Hiver. Dans le noir, une souche de glace blanche traverse un plafond d'argent et descend. Son reflet descend avec elle.
+2. Elle s'allonge, ronde du bout. La lumière tiédit.
+3. L'été entre en rayons. La colonne s'arrête. Son bout s'effile, et sa ligne d'eau se creuse jusqu'à n'être plus qu'un fil.
+4. Le fil cède. Le fuseau s'incline, bascule et se couche contre son reflet. Il oscille deux fois.
+5. La brise ride la surface et l'emporte hors du cadre. Une colonne neuve traverse le miroir. L'hiver revient (= 1).
 
-## e quater. Les références
-
-1. **Alexey Kljatov, flocons sur un gant de laine** : une étoile de 2 à 3 mm occupe 60 à 80 % du cadre ; fibres de 20 à 30 µm, torons flous derrière ; lumière douce de face ; les nervures sont des lignes claires de 20 à 40 µm, les branches font 0,1 à 0,3 mm de large, les branches latérales sont espacées de 0,1 à 0,2 mm ; le cristal est plat et repose sur quelques fibres.
-2. **Kenneth Libbrecht, cristaux cultivés sur saphir** : plaques à secteurs de 1 à 2 mm, plaque centrale avec un hexagone intérieur (marque de croissance) ; couleurs d'interférence dans les zones de 1 à 2 µm d'épaisseur ; éclairage coloré par en dessous.
-3. **Wilson Bentley, sur velours noir** : contraste maximal, le cristal blanc sur noir, symétrie presque parfaite, centres irréguliers (nucléus).
-4. **Flocons qui fondent sur un vêtement (vidéos macro)** : en 3 à 10 s, les pointes s'arrondissent en perles de 0,1 à 0,2 mm, le cristal devient luisant, les branches se rétractent en perles qui se rejoignent ; il reste une goutte de 0,3 à 0,5 mm qui reflète la lumière.
-5. **Gouttes gelées sur une plaque froide (Marín et al.)** : une goutte de quelques mm gèle en une dizaine de secondes, front de bas en haut, pointe d'angle ≈ 139°, glace laiteuse au centre.
-
-Ce qu'elles imposent : **l'échelle** (le cristal fait 2–4 mm et remplit le cadre ; les fibres de 25 µm donnent l'échelle), **la minceur** (10 à 40 µm d'épaisseur : le cristal se lit par le relief de sa surface, pas par son volume), **la densité** (une branche principale porte 20 à 40 branches latérales), **la lumière** (douce de face ou à contre-jour sur fond sombre, ou transmise sur fond clair).
-
-**Échelle** : dans le plan large, l'étoile entière (≈ 30 000 cellules de 14 µm), une centaine de fibres nettes et quelques torons flous ; dans le gros plan, une branche et ses branches latérales, une dizaine de perles. La densité est portée par la géométrie (une cellule = un sommet du maillage) ; les fibres sont des tubes instanciés ; le flou de la profondeur de champ fait le reste.
-
-## g. Révision après les premiers rendus
-
-- **Le cristal invisible** : une plaque claire de 30 µm sur un fond sombre ne montrait que du noir. Comme les photographes de flocons, une boîte à lumière dans la direction où la face plane renvoie le regard de la caméra (`scene/sky.js`), et une part diffuse plus forte sur les pentes (la lumière qui ressort des nervures après réflexion totale) : le cristal devient argenté. Sur le verre et au microscope, la déviation des rayons calculée par les deux faces donne les traits sombres et l'éclairage de Rheinberg.
-- **La croissance qui démarrait trop lentement** : la simulation accélère à mesure que les pointes s'allongent ; le film suit maintenant le rayon (réciproque exacte, cellule par cellule).
-- **La laine** : d'abord des brins tressés à la mauvaise échelle (on aurait dit des feuilles), puis un feutrage de fibres sans structure. Sur la suggestion de l'utilisateur, le modèle de fil procédural de Zhao et al. (2016) tel que le rendent Wu et Yuksel (*Real-time fiber-level cloth rendering*, I3D 2017) : rangs de jersey, brins retordus à section elliptique, fibres en hélice qui migrent, boucles et poils, fibre de cœur striée, ombre ambiante selon la distance au centre du fil, reflet de tube anisotrope, ombres portées par des tubes simples.
-- **Le givre en herbe** : des aiguilles dix fois trop grandes ; ramenées à 20–60 µm, en touffes.
-- **La colonne** : sa fonte cellule par cellule faisait des blocs ; elle s'amincit maintenant lentement pendant que son chapelet de perles se forme, et les perles restent chacune à sa place (elles ne fusionnent que si elles se superposent).
-- **L'exposition** : mesurée au posemètre par humeur, puis réglée par une exposition fixe propre à chaque humeur (le film boucle).
-
-## h. Deuxième révision (retours de l'utilisateur)
-
-- **Le fond « infini »** : un plan qui filait jusqu'à l'horizon, net, avec un moiré en cercles. La profondeur de champ était trop faible pour une macro (3 pixels de flou au plus). Désormais un vrai flou de macro, le support qui se relève en cyclorama derrière le sujet (comme un drap posé contre un mur), et des motifs fins estompés à l'approche de la fréquence du pixel.
-- **Les « brins » qu'on ne comprenait pas** : des touffes d'aiguilles de givre, noires à contre-jour. Sur les supports plats, le givre est maintenant un semis clairsemé de petits cristaux (jeté au hasard, sans trame), qui scintillent et deviennent des pastilles de bokeh dans le flou ; la poussière de diamant ne se voit que quand une facette renvoie la lumière.
-- **Tout semblait flotter** : la glace (une matière à transmission) ne portait aucune ombre. Elle en porte une maintenant (un double opaque qui laisse passer une part de la lumière), et une ombre de contact est calculée dans la matière du support et des fibres, exactement sous la glace à l'instant t (carte d'emprise du cristal : instants d'attachement et de fonte par texel) et au pied de chaque perle.
-- **La vue de dessus, plate et abstraite** : les vues du verre et du microscope sont inclinées (55 à 72°), avec de la profondeur de champ ; le microscope a son diaphragme de champ (un polygone à dix lamelles projeté sur la lame) ; le verre porte des poussières et de fines rayures nettes, qui donnent l'échelle ; le relief de la glace est accentué en lumière transmise.
-- **Les plaques qui ne sont qu'un hexagone qui grandit** : retirées. Chaque plaque change de régime en route (secteurs prolongés de dendrites, secteurs puis larges branches, étoile prise dans une plaque), et l'étoile gagne deux formes composées.
-- **L'échelle** : la laine est plus fine (le flocon couvre trois mailles), le velours, l'ardoise et le houx ont leur grain réel (poils, micas, cellules), les fibres sont tassées sous le cristal.
-
-## i. Troisième révision : Verre et Rheinberg
-
-- **Rheinberg en « fausse couleur »** : un champ vert et un anneau rose saturés, des bras remplis d'un aplat opaque (le relief, exagéré ×2,4, déviait presque toute la glace vers l'anneau). Désormais un relief physique, un champ sombre (bleu nuit, presque noir) et un anneau de lumière chaude et claire (or, blanc chaud) : l'image se lit comme de la lumière dans la pénombre ; la luminosité de l'anneau décroît vers l'ouverture de l'objectif, au-delà de laquelle tout est noir (les arêtes, le bord des gouttes) ; le diaphragme de champ est un vrai décagone.
-- **Verre, gris et délavé** : une table lumineuse blanche sous une glace claire donne une image sans contraste, quelle que soit la façon de la calculer ; la brume du fond et le reflet de la boîte à lumière sur la vitre la voilaient encore. L'humeur devient une vitre en hiver, à l'heure bleue : le flocon posé sur le verre, éclairé de face, et derrière la vitre seulement un ciel flou en dégradé ; la vitre ne renvoie plus la boîte à lumière, qui ne se reflète que dans le cristal et les gouttes (un diffuseur ovale aux bords doux : plus de reflet rectangulaire).
-- **La glace** diffuse un peu plus (le blanc argenté d'un vrai cristal de neige).
+La forme du film : une lente montée (la descente, l'effilement), un fil tendu, une rupture, un apaisement et un retour.

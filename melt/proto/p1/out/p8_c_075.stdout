@@ -1,0 +1,40 @@
+# p8_c_075  T∞ 1.5→9→1.5 °C, P=400 s, v=0.500 mm/s, F=20, grille 50x200, dx=0.8 mm, dt=0.0602 s
+# dt → 0.0482
+# dt → 0.0386
+t=210 s (période 0.52)  T∞=8.96  V=21.04 cm³  bout à z=36 mm  1.14 ms/pas
+# dt → 0.0308
+# dt → 0.0247
+t=332 s (période 0.83)  T∞=3.45  V=6.67 cm³  bout à z=144 mm  1.13 ms/pas
+t=431 s (période 1.08)  T∞=1.93  V=19.32 cm³  bout à z=111 mm  1.13 ms/pas
+t=529 s (période 1.32)  T∞=6.92  V=32.21 cm³  bout à z=74 mm  1.13 ms/pas
+# dt → 0.0197
+t=628 s (période 1.57)  T∞=8.65  V=5.91 cm³  bout à z=74 mm  1.13 ms/pas
+t=707 s (période 1.77)  T∞=4.87  V=5.01 cm³  bout à z=148 mm  1.13 ms/pas
+t=785 s (période 1.96)  T∞=1.60  V=12.92 cm³  bout à z=127 mm  1.12 ms/pas
+t=864 s (période 2.16)  T∞=3.26  V=25.45 cm³  bout à z=95 mm  1.12 ms/pas
+t=943 s (période 2.36)  T∞=7.61  V=32.11 cm³  bout à z=69 mm  1.12 ms/pas
+t=1022 s (période 2.56)  T∞=8.77  V=7.24 cm³  bout à z=73 mm  1.13 ms/pas
+t=1101 s (période 2.75)  T∞=5.18  V=4.45 cm³  bout à z=150 mm  1.12 ms/pas
+t=1180 s (période 2.95)  T∞=1.68  V=12.63 cm³  bout à z=129 mm  1.12 ms/pas
+t=1259 s (période 3.15)  T∞=3.01  V=24.50 cm³  bout à z=98 mm  1.12 ms/pas
+t=1338 s (période 3.35)  T∞=7.36  V=32.56 cm³  bout à z=70 mm  1.12 ms/pas
+t=1417 s (période 3.54)  T∞=8.87  V=8.70 cm³  bout à z=72 mm  1.12 ms/pas
+t=1496 s (période 3.74)  T∞=5.48  V=4.67 cm³  bout à z=150 mm  1.12 ms/pas
+t=1575 s (période 3.94)  T∞=1.79  V=11.98 cm³  bout à z=130 mm  1.12 ms/pas
+# fin : 69268 pas, 78 s, 1.12 ms/pas, 729 décalages
+# écart période 0 → 1 : RMS 4.818 mm, max 13.60 mm
+# écart période 1 → 2 : RMS 0.262 mm, max 12.85 mm
+# écart période 2 → 3 : RMS 0.195 mm, max 12.85 mm
+# longueur immergée (mm) aux 16 phases : 38 48 58 69 78 86 92 91 90 86 1 7 11 17 22 30
+# part de la boucle avec moins de 15 mm de glace sous l'eau : 18 %
+# détachement t=245 s (phase 0.611, période 0) : 7.75 cm³, z 42–158 mm
+# détachement t=252 s (phase 0.631, période 0) : 0.13 cm³, z 159–160 mm
+# détachement t=645 s (phase 0.613, période 1) : 2.61 cm³, z 78–160 mm
+# détachement t=653 s (phase 0.633, période 1) : 0.08 cm³, z 159–160 mm
+# détachement t=1046 s (phase 0.615, période 2) : 2.51 cm³, z 77–158 mm
+# détachement t=1048 s (phase 0.620, période 2) : 0.02 cm³, z 159–160 mm
+# détachement t=1052 s (phase 0.630, période 2) : 0.14 cm³, z 159–160 mm
+# détachement t=1445 s (phase 0.612, période 3) : 2.74 cm³, z 78–160 mm
+# détachement t=1451 s (phase 0.627, période 3) : 0.02 cm³, z 159–160 mm
+# écrit p8_c_075.png, p8_c_075.json
+node p1.js --name=p8_c_075 --P=400 --periods=4 --T0=1.5 --T1=9 --v=5e-4    76.95s user 0.73s system 99% cpu 1:17.98 total
