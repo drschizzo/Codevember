@@ -124,6 +124,7 @@ export function facetEcho(x) {
 }
 
 // ── Galerie : les images de la lampe entre deux glaces face à face ──
+// (glaces latérales : plans x = gzA et x = gzB ; contours dans le plan (z, y))
 // Même construction que galleryImages() dans optics.js (testée contre des
 // rayons réfléchis). Chaque image est une source ponctuelle d'intensité
 // Rⁿ·I ; elle éclaire x si la droite image → x traverse chaque copie dépliée
@@ -137,10 +138,10 @@ export function galleryList({ skipA1 = false } = {}) {
     for (let n = 1; n <= GALLERY_N; n++) {
       if (skipA1 && side === 'A' && n === 1) continue;
       const k = Math.floor((n - 1) / 2);
-      const z = n % 2 ? z0.mul(2).sub(P.lamp.z).add(D.mul(sg * 2 * k)) : P.lamp.z.add(D.mul(sg * 2 * Math.ceil(n / 2)));
+      const z = n % 2 ? z0.mul(2).sub(P.lamp.x).add(D.mul(sg * 2 * k)) : P.lamp.x.add(D.mul(sg * 2 * Math.ceil(n / 2)));
       const planes = [];
       for (let j = 0; j < n; j++) planes.push({ z: z0.add(D.mul(sg * j)), M: (j % 2 ? (side === 'A' ? P.gB : P.gA) : (side === 'A' ? P.gA : P.gB)) });
-      out.push({ q: vec3(P.lamp.x, P.lamp.y, z), n, side, planes });
+      out.push({ q: vec3(z, P.lamp.y, P.lamp.z), n, side, planes });
     }
   }
   return out;
@@ -151,8 +152,8 @@ export function galleryAperture(im, x) {
   const d = x.sub(im.q);
   let ok = float(1);
   for (const pl of im.planes) {
-    const t = pl.z.sub(im.q.z).div(d.z);
-    const px = im.q.x.add(d.x.mul(t)), py = im.q.y.add(d.y.mul(t));
+    const t = pl.z.sub(im.q.x).div(d.x);
+    const px = im.q.z.add(d.z.mul(t)), py = im.q.y.add(d.y.mul(t)); // (contour dans le plan (z, y))
     const e = float(0.003);
     const ins = smoothstep(pl.M.z.add(e), pl.M.z.sub(e), abs(px.sub(pl.M.x))).mul(smoothstep(pl.M.w.add(e), pl.M.w.sub(e), abs(py.sub(pl.M.y))));
     ok = ok.mul(ins).mul(step(0, t)).mul(step(t, 1));
@@ -163,7 +164,7 @@ export function galleryAperture(im, x) {
 // pondérée vers les sources, monde) }
 export function galleryEcho(x, eye = cameraPosition, opts = {}) {
   let w = float(0), dir = vec3(0);
-  const inRoom = step(P.gzA, x.z).mul(step(x.z, P.gzB));
+  const inRoom = step(P.gzA, x.x).mul(step(x.x, P.gzB));
   const D = length(x.sub(eye));
   for (const im of galleryList(opts)) {
     const v = im.q.sub(x), r = length(v).max(1e-3);

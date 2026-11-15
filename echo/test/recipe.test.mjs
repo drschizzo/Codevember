@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { generate, MOODS, FAMILIES } from '../src/recipe.js';
 import { derive, frontRange, footprint } from '../src/gen/layout.js';
 import { cameraAt, TIMELINE } from '../src/film.js';
-import { sub, dot, norm, cross, planeEcho, reflectPoint } from '../src/gen/optics.js';
+import { sub, add, mul, dot, norm, dist, cross, planeEcho, reflectPoint, planeBasis, ellipseRadius, ellipseEcho } from '../src/gen/optics.js';
 
 const SEEDS = Array.from({ length: 400 }, (_, i) => `t${i}`);
 
@@ -53,14 +53,25 @@ test('trumeau et psyché : la caméra voit le reflet de l’ampoule dans la glac
   assert.ok(n > 100);
 });
 
-test('miroir ardent : le foyer est sur la table, devant la calotte, sans vase dessus', () => {
-  for (const s of SEEDS) {
-    const R = generate(s, { family: 'ardent' });
+test('miroir ardent : une sphère centrée sur l’ampoule, hors de la table, tournée vers elle ; l’écho revient en 2R', () => {
+  for (const s0 of SEEDS) {
+    const R = generate(s0, { family: 'ardent' });
     const D = derive(R), E = D.E;
-    assert.ok(Math.abs(E.f2[1]) < 0.01);
-    // la calotte regarde la lampe et le foyer
-    assert.ok(dot(E.normal, norm(sub(E.f1, E.M))) > 0 && dot(E.normal, norm(sub(E.f2, E.M))) > 0);
-    for (const o of R.objects) assert.ok(Math.hypot(o.x - E.f2[0], o.z - E.f2[2]) > footprint(o) + 0.03, `${s} : un vase sur le foyer`);
+    assert.ok(dist(E.f1, E.f2) < 1e-9, 'le centre de courbure est la lampe');
+    assert.ok(Math.abs(E.a - dist(E.M, E.f1)) < 1e-9, 'rayon R = |M − lampe|');
+    assert.ok(dot(E.normal, norm(sub(E.f1, E.M))) > 0.999, 'la calotte regarde la lampe');
+    // le bord de la calotte reste hors du plateau
+    const { u, v } = planeBasis(E.axis);
+    const th = Math.acos(E.cosCap);
+    for (let k = 0; k < 24; k++) {
+      const ph = (k / 24) * 2 * Math.PI;
+      const d = norm(add(add(mul(E.axis, Math.cos(th)), mul(u, Math.sin(th) * Math.cos(ph))), mul(v, Math.sin(th) * Math.sin(ph))));
+      const P = add(E.f2, mul(d, ellipseRadius(E, d)));
+      assert.ok(P[0] > R.table.width / 2 + 0.01 || P[1] > 0.02, `${s0} : la calotte entre dans la table`);
+    }
+    // un point sur l'axe, entre la calotte et la lampe : chemin 2R − |x − lampe|
+    const x = add(E.f2, mul(E.axis, 0.3));
+    assert.ok(Math.abs(ellipseEcho(x, E).L - (2 * E.a - 0.3)) < 1e-9);
   }
 });
 
@@ -69,6 +80,6 @@ test('le front : rien n’est encore visible au début du ralenti ; durée de 10
     const R = generate(s);
     const { rhoStart, rhoEnd } = frontRange(R);
     assert.ok(rhoStart > 0.8 && rhoEnd > rhoStart + 2 && rhoEnd < 11.5, `${s} : ${rhoStart} → ${rhoEnd}`);
-    assert.ok(R.film.duration >= 10 && R.film.duration <= 16);
+    assert.ok(R.film.duration >= 7 && R.film.duration <= 16);
   }
 });

@@ -26,7 +26,27 @@ export const TIMELINE = { down: 0.1, slow: 0.14, end: 0.86, up: 0.9 };
 // vitesse visée du front (m par seconde de film) : la durée de la boucle en
 // découle (recipe.js), bornée à [10, 16] s
 export const FRONT_SPEED = 0.55;
-export const durationFor = (span) => Math.min(16, Math.max(10, Math.round(span / (FRONT_SPEED * (TIMELINE.end - TIMELINE.slow)))));
+export const durationFor = (span) => Math.min(16, Math.max(7, Math.round(span / (FRONT_SPEED * (TIMELINE.end - TIMELINE.slow)))));
+
+// Ralenti variable : là où la lumière ne touche rien de visible (elle file
+// vers la glace d'en face, hors du champ), le film va GAP fois plus vite ; il
+// ralentit de nouveau un peu avant l'écho suivant. windows : intervalles de ρ
+// où il se passe quelque chose à l'image. Le front, lui, ne recule jamais.
+export const GAP = 6, SOFT = 0.35;
+export function speedFactor(rho, windows) {
+  if (!windows?.length) return 1;
+  let inside = 0;
+  for (const [a, b] of windows) inside = Math.max(inside, sstep(a - SOFT, a, rho) * (1 - sstep(b, b + SOFT, rho)));
+  return GAP - (GAP - 1) * inside;
+}
+// longueur « ressentie » du chemin : ce que le film doit montrer, en mètres au
+// rythme des fenêtres (la durée de la boucle en découle)
+export function weightedSpan(F) {
+  const n = 2000;
+  let acc = 0;
+  for (let i = 0; i < n; i++) { const r = F.rhoStart + ((F.rhoEnd - F.rhoStart) * (i + 0.5)) / n; acc += (F.rhoEnd - F.rhoStart) / n / speedFactor(r, F.windows); }
+  return acc;
+}
 
 const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const smoother = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * t * (t * (6 * t - 15) + 10); };
@@ -37,10 +57,24 @@ const smoother = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b -
 export function createFilm(F) {
   const T = F.duration;
   const tl = TIMELINE;
-  const frontSpeed = (F.rhoEnd - F.rhoStart) / ((tl.end - tl.slow) * T);
+  // ρ(u) pendant le ralenti : dρ/du = s0 · f(ρ), f le facteur de vitesse ;
+  // tabulé puis inversé (les fenêtres ont f = 1, les trous f = GAP)
+  const M = 4096, rr = new Float64Array(M + 1), uu = new Float64Array(M + 1);
+  for (let i = 0; i <= M; i++) rr[i] = F.rhoStart + ((F.rhoEnd - F.rhoStart) * i) / M;
+  for (let i = 1; i <= M; i++) uu[i] = uu[i - 1] + (rr[i] - rr[i - 1]) / speedFactor((rr[i] + rr[i - 1]) / 2, F.windows);
+  const s0 = uu[M] / (tl.end - tl.slow); // (m de chemin par unité de u, à f = 1)
+  const rhoSlow = (u) => {
+    const target = ((u - tl.slow) / (tl.end - tl.slow)) * uu[M];
+    let lo = 0, hi = M;
+    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (uu[m] < target) lo = m; else hi = m; }
+    const f = (target - uu[lo]) / ((uu[hi] - uu[lo]) || 1);
+    return rr[lo] + (rr[hi] - rr[lo]) * f;
+  };
+  const frontSpeed = s0 / T; // (m par seconde de film, dans les fenêtres)
   const K = C_LIGHT / frontSpeed;
   const lnK = Math.log(K);
-  const lam = (u) => -lnK * smoother(tl.down, tl.slow, u) * (1 - smoother(tl.end, tl.up, u));
+  const fAt = (u) => (u > tl.slow && u < tl.end ? speedFactor(rhoSlow(u), F.windows) : 1);
+  const lam = (u) => -lnK * smoother(tl.down, tl.slow, u) * (1 - smoother(tl.end, tl.up, u)) + Math.log(fAt(u));
   // τ(u) tabulé (double précision, trapèzes) ; au ralenti la vitesse est
   // exactement 1/K, le front avance à vitesse constante
   const N = 1 << 15;

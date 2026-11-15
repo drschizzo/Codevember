@@ -2,7 +2,7 @@
 // ralenti, charge du stroboscope, caméra calme.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createFilm, cameraAt, TIMELINE, RHO_MAX, durationFor } from '../src/film.js';
+import { createFilm, cameraAt, TIMELINE, RHO_MAX, durationFor, GAP } from '../src/film.js';
 
 const F = createFilm({ duration: 12, rhoStart: 1.6, rhoEnd: 6.4 });
 
@@ -33,11 +33,11 @@ test('au ralenti, le temps réel est figé ; la charge est vide juste après l�
   for (let u = 0; u < TIMELINE.slow; u += 0.001) { const c = F.charge(u); assert.ok(c >= prev - 1e-9); prev = c; }
 });
 
-test('la durée découle du chemin : bornée entre 10 et 16 s', () => {
-  assert.equal(durationFor(0.5), 10);
+test('la durée découle du chemin : bornée entre 7 et 16 s', () => {
+  assert.equal(durationFor(0.5), 7);
   assert.equal(durationFor(40), 16);
   const T = durationFor(4.8);
-  assert.ok(T >= 10 && T <= 16);
+  assert.ok(T >= 7 && T <= 16);
 });
 
 test('caméra : périodique, lente et sans à-coup (120 i/s)', () => {
@@ -59,4 +59,16 @@ test('caméra : périodique, lente et sans à-coup (120 i/s)', () => {
   }
   assert.ok(maxW < 25, `vitesse angulaire de pointe ${maxW.toFixed(2)}°/s`);
   assert.ok(maxA < 0.8, `accélération de pointe ${maxA.toFixed(3)} m/s²`);
+});
+
+test('ralenti variable : le film file entre deux échos, ralentit dans les fenêtres, le front ne recule jamais', () => {
+  const G = createFilm({ duration: 16, rhoStart: 1.6, rhoEnd: 11, windows: [[1.1, 5], [6.6, 9.5]] });
+  let prev = -Infinity;
+  const du = 1e-4;
+  const slope = (r0) => { let u = TIMELINE.slow; while (G.rho(u) < r0) u += du; return (G.rho(u + du) - G.rho(u)) / du; };
+  for (let u = TIMELINE.slow; u < TIMELINE.up; u += du) { const r = G.rho(u); assert.ok(r >= prev - 1e-9); prev = r; }
+  const inWin = slope(3), inGap = slope(5.8);
+  assert.ok(Math.abs(inGap / inWin - GAP) < 0.05, `rapport ${inGap / inWin}`);
+  assert.ok(Math.abs(G.rho(TIMELINE.slow + 1e-6) - 1.6) < 0.01);
+  assert.ok(Math.abs(G.rho(TIMELINE.end - 1e-6) - 11) < 0.05);
 });

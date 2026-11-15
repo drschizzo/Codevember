@@ -19,7 +19,7 @@ const hg = (c, g) => float((1 - g * g) / (4 * Math.PI)).div(float(1 + g * g).sub
 
 export function createHaze() {
   return (depthTex, lite) => Fn(() => {
-    const N = lite ? 8 : 22;
+    const N = lite ? 8 : 16;
     const dz = depthTex.sample(screenUV).r;
     // (dans une passe plein écran, les nœuds « caméra » désignent la caméra du
     // quad, et getViewPosition suppose une profondeur OpenGL : la caméra de la

@@ -187,28 +187,27 @@ export function facetEcho(x, s, B) {
 }
 
 // ── Galerie : deux glaces face à face ───────────────────────────────────────
-// A au mur (plan z = zA, normale +z), B en face (plan z = zB > zA, normale −z),
-// toutes deux rectangulaires et parallèles. Une image de la lampe obtenue par
-// n réflexions alternées est une source ponctuelle ; le chemin réel lampe →
-// glaces → x a la longueur |x − q|, à condition que la droite q → x, dans
-// l'espace « déplié », traverse chaque copie de glace dans son contour.
+// A à gauche (plan x = zA, normale +x), B à droite (plan x = zB > zA, normale
+// −x), rectangulaires et parallèles, de part et d'autre de la table. (Les
+// noms zA, zB désignent la coordonnée le long de l'axe des deux glaces, ici x ;
+// le contour de chaque glace est donné dans le plan (z, y) : cx = centre en z.)
+// Une image de la lampe obtenue par n réflexions alternées est une source
+// ponctuelle ; le chemin réel lampe → glaces → x a la longueur |x − q|, à
+// condition que la droite q → x, dans l'espace « déplié », traverse chaque
+// copie de glace dans son contour.
 // G = { zA, zB, A: { cx, cy, hw, hh }, B: { cx, cy, hw, hh } }
-// images vues « derrière A » (dernière réflexion sur A) et « derrière B »,
-// jusqu'à n réflexions ; chaque image porte la suite des plans dépliés que le
-// rayon traverse, dans l'ordre en partant de la pièce
+const AX = 0, PZ = 2; // (l'axe des glaces : x ; la coordonnée horizontale du contour : z)
 export function galleryImages(s, G, N = 4) {
   const D = G.zB - G.zA, out = [];
   for (const side of ['A', 'B']) {
     const z0 = side === 'A' ? G.zA : G.zB, sg = side === 'A' ? -1 : 1, other = side === 'A' ? 'B' : 'A';
     for (let n = 1; n <= N; n++) {
-      // z de l'image : réflexions alternées en partant du côté opposé
-      // (n impair : 2·z0 − sz ± …, n pair : sz ± …)
       const k = Math.floor((n - 1) / 2);
-      const z = n % 2 ? 2 * z0 - s[2] + sg * 2 * k * D : s[2] + sg * 2 * Math.ceil(n / 2) * D;
-      // plans dépliés traversés : la glace du côté, puis l'autre, en alternant
+      const a = n % 2 ? 2 * z0 - s[AX] + sg * 2 * k * D : s[AX] + sg * 2 * Math.ceil(n / 2) * D;
       const planes = [];
       for (let j = 0; j < n; j++) planes.push({ z: z0 + sg * j * D, m: j % 2 ? other : side });
-      out.push({ q: [s[0], s[1], z], n, side, planes });
+      const q = [...s]; q[AX] = a;
+      out.push({ q, n, side, planes });
     }
   }
   return out;
@@ -219,13 +218,13 @@ export function galleryEcho(x, s, G, N = 4) {
     const d = sub(x, im.q);
     let ok = true;
     for (const P of im.planes) {
-      const t = (P.z - im.q[2]) / d[2];
+      const t = (P.z - im.q[AX]) / d[AX];
       if (!(t > 0 && t < 1)) { ok = false; break; }
-      const M = G[P.m], px = im.q[0] + d[0] * t, py = im.q[1] + d[1] * t;
-      if (Math.abs(px - M.cx) > M.hw || Math.abs(py - M.cy) > M.hh) { ok = false; break; }
+      const M = G[P.m], pz = im.q[PZ] + d[PZ] * t, py = im.q[1] + d[1] * t;
+      if (Math.abs(pz - M.cx) > M.hw || Math.abs(py - M.cy) > M.hh) { ok = false; break; }
     }
     // x doit être dans la pièce, entre les deux glaces
-    if (ok && x[2] > G.zA && x[2] < G.zB) res.push({ L: len(d), n: im.n, side: im.side, q: im.q });
+    if (ok && x[AX] > G.zA && x[AX] < G.zB) res.push({ L: len(d), n: im.n, side: im.side, q: im.q });
   }
   return res;
 }

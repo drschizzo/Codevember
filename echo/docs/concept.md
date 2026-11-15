@@ -185,3 +185,15 @@ Ce que l'utilisateur a relevé, et ce qui a changé :
 - **« La boucle est très longue. »** Elle durait 30 s (allumage ralenti, pièce éclairée, extinction ralentie). Elle n'a plus qu'un ralenti, et sa durée découle du chemin à montrer : 10 à 12 s pour une glace, 16 s pour la galerie.
 - **« L'animation de l'interrupteur n'est pas cohérente. »** Le cordon descendait sans main pour le tirer. La lampe est devenue un stroboscope : la cause est à l'image (le voyant de charge rougit, s'allume, l'éclair part et le vide), et rien ne bouge tout seul.
 - **« Le concept d'écho reste compliqué. »** L'utilisateur a choisi, entre garder l'ampoule et passer à un éclair, l'éclair : une impulsion se lit comme un « ping » de sonar, ce qui part et ce qui revient sont deux anneaux distincts. Nouvelle famille, la plus fréquente : la **galerie**, deux glaces face à face (la seconde derrière la caméra, vue dans la première), où l'écho revient encore et encore, de plus en plus loin et de plus en plus faible.
+
+## Révision 3 (15 novembre, nuit)
+
+- **« Le second miroir reflété dans le premier est tout noir ; on ne comprend pas d'où vient la lueur qui réapparaît. »** La seconde glace a maintenant son propre reflet (rendu dans celui de la première) : on y voit la pièce, la lampe, le cadre de la première glace.
+- **« Le globe de l'ampoule n'est pas visible dans les miroirs. »** Le verre transparent, sans écriture de profondeur, disparaissait des reflets ; il est devenu un verre opalin, opaque, que l'éclair illumine de l'intérieur.
+- **« On a du mal à comprendre le timing de la lumière avant le second reflet. »** Le trajet vers la glace d'en face se passe hors du champ : quatre secondes sans rien à l'image. Le ralenti est devenu variable (×6 entre les fenêtres où il se passe quelque chose), et la galerie a des murs latéraux, sur lesquels l'anneau court.
+
+## Révision 4 (16 novembre)
+
+- **« Je ne comprends pas qu'il y ait un tel décalage de temps, et que tu aies besoin d'accélérer autant. »** La seconde glace, derrière la caméra, était à 2,9 m de la première : entre deux échos, 5 m de chemin hors du champ. L'accéléré cachait ce défaut de mise en place. Les deux glaces sont maintenant face à face de part et d'autre de la table, à 1,5 m : les échos se suivent tous les 3 m de chemin et la lumière reste dans le cadre ; la caméra est tournée vers la glace de gauche, où la file des copies de la lampe se lit.
+- **« Revois le concentrateur de lumière, l'effet écho est difficilement compréhensible. »** La calotte visait un point de la nappe, petit et sans rapport avec la lampe. C'est maintenant un grand miroir concave sphérique dont le centre de courbure est l'ampoule : l'écho revient à sa source, la rallume et ressort de l'autre côté.
+- En route, une régression : en réécrivant la galerie, la construction du miroir ardent et de la boule avait disparu du worker. Un test (`build.test.mjs`) vérifie désormais que chaque famille construit son réflecteur.
