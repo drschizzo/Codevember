@@ -30,7 +30,7 @@ import { asyncPipelines, warmScene } from '../../shared/app/warmup.js';
 import { createDebugTools, packRecipe, unpackRecipe, sleep } from '../../shared/app/debug.js';
 
 const NAME = 'echo';
-const DEFAULT_SEED = 'e29'; // scène d'ouverture (sans ?seed=) : à choisir parmi les plus belles
+const DEFAULT_SEED = 'h3'; // scène d'ouverture (sans ?seed=) : à choisir parmi les plus belles
 const params = new URLSearchParams(location.search);
 const $ = (s) => document.querySelector(s);
 const randomSeed = () => Math.random().toString(36).slice(2, 8);
@@ -147,6 +147,7 @@ async function main() {
     loading.warming = true;
     loader.step('compile');
     const recipe = R;
+    stage.refreshShadows();
     try {
       return await warmScene({
         renderer, scene, pipes, render: renderStep, phases: [0.02, 0.2, 0.3, 0.47, 0.7],

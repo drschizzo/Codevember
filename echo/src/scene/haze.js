@@ -10,11 +10,7 @@ import * as THREE from 'three/webgpu';
 import {
   Fn, Loop, vec2, vec3, vec4, float, uniform, screenUV, screenCoordinate, perspectiveDepthToViewZ, length, normalize, dot, min, max, fract, select,
 } from 'three/tsl';
-import { P, gateParts, planeEcho, ellipseEcho, facetEcho } from './paths.js';
-
-// part établie et part de l'éclair dans la brume
-const HZ_LIT = 0.18, HZ_FLASH = 1.6;
-const gateK = (k) => { const g = gateParts(k); return g.lit.mul(HZ_LIT).add(g.flash.mul(HZ_FLASH)); };
+import { P, gateK, planeEcho, ellipseEcho, facetEcho, galleryEcho } from './paths.js';
 
 export const HZ = { projInv: uniform(new THREE.Matrix4()), camWorld: uniform(new THREE.Matrix4()), near: uniform(0.05), far: uniform(80) };
 
@@ -68,6 +64,11 @@ export function createHaze() {
         const e = facetEcho(p);
         const v = p.sub(e.sv), r2 = dot(v, v).max(1e-3);
         acc.addAssign(keep(P.cFacet, P.cFacet.mul(e.w).mul(gateK(e.L.add(D))).mul(hg(dot(normalize(v), rd), 0.35)).div(r2)));
+      }
+      // la galerie (les échos au-delà du premier ; isotrope, sans phase)
+      {
+        const e = galleryEcho(p, P.eye, { skipA1: true });
+        acc.addAssign(keep(P.cGallery, P.cGallery.mul(e.w).mul(0.08)));
       }
     });
     return acc.mul(P.haze).mul(tMax.div(N));

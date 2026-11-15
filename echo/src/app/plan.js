@@ -10,7 +10,7 @@ const p3 = (p) => p.map(r3);
 
 export function planOf(R) {
   const D = derive(R);
-  const eye = cameraAt(R.camera, (TIMELINE.on.slow + TIMELINE.on.end) / 2).pos;
+  const eye = cameraAt(R.camera, (TIMELINE.slow + TIMELINE.end) / 2).pos;
   const P = {
     cx: 0.05, cz: (R.room.wallZ + 0.6) / 2, tw: R.table.width, td: R.table.depth, wz: R.room.wallZ,
     objects: R.objects.map((o) => [o.x, 0, o.z, o.r]), s: p3(D.s), eye: p3(eye),

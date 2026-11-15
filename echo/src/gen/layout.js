@@ -8,33 +8,25 @@
 // de la lampe et de la caméra (le reflet de l'ampoule tombe en son centre) ;
 // pour le miroir ardent, la calotte est une part d'ellipsoïde dont les foyers
 // sont l'ampoule et un point d'un vase.
-import { sub, add, mul, dot, norm, dist, len, cross, reflectPoint, planeBasis, planeEcho, makeEllipse, ellipseEcho, facetEcho } from './optics.js';
+import { sub, add, mul, dot, norm, dist, len, cross, reflectPoint, planeBasis, planeEcho, makeEllipse, ellipseEcho, facetEcho, galleryEcho, galleryImages } from './optics.js';
 import { cameraAt, TIMELINE } from '../film.js';
 
 const r3 = (x) => Math.round(x * 1000) / 1000 || 0;
 const v3 = (a) => a.map(r3);
 
 export const TABLE_H = 0.74; // (hauteur du plateau au-dessus du sol ; le plateau est en y = 0)
-export const CEIL = 1.75;    // (plafond, hors champ : d'où pendent les cordons)
+export const CEIL = 1.75;    // (plafond, hors champ : d'où pend le fil de la lampe)
 
 // Rayon d'emprise d'un vase sur la table (anse et bec compris)
 export const footprint = (o) => o.r * (o.kind === 'jug' ? 1.45 : o.kind === 'bowl' ? 1.02 : 1.08);
-
-// position de la perle du cordon au repos (la douille à tirette : le cordon
-// sort du côté de la douille, vers la caméra)
-export function beadRest(L) {
-  return [L.x + 0.026, L.y + 0.05 - L.cord.length, L.z + 0.012];
-}
 
 export function place(R, rng) {
   const T = R.table, Lp = R.lamp, Rf = R.reflector;
   const wallZ = -T.depth / 2 - R.room.wallGap;
   R.room.wallZ = r3(wallZ);
   const s = [Lp.x, Lp.y, Lp.z];
-  const bead = beadRest(Lp);
   const reserved = []; // disques réservés sur la table [x, z, r, hauteur libre au-dessus]
-  reserved.push([bead[0], bead[2], 0.03, bead[1] - 0.025]);
-  reserved.push([s[0], s[2], 0.06, s[1] - 0.06]);
+  reserved.push([s[0], s[2], 0.07, s[1] - 0.09]);
 
   // ── réflecteur posé sur la table ou au-dessus (avant la nature morte) ──
   if (R.family === 'ardent') {
@@ -89,19 +81,28 @@ export function place(R, rng) {
   const C = R.camera;
   C.target = v3([cx * 0.5 + s[0] * 0.3, 0.24, -0.08]);
   const pre = { px: rng.range(-0.05, 0.08), py: rng.range(0.3, 0.38) };
-  const eyeAt = () => cameraAt(C, (TIMELINE.on.slow + TIMELINE.on.end) / 2).pos;
+  const eyeAt = () => cameraAt(C, (TIMELINE.slow + TIMELINE.end) / 2).pos;
   for (let it = 0; it < 3; it++) {
     placeReflector(R, eyeAt(), pre);
     fitCamera(R);
   }
   placeReflector(R, eyeAt(), pre);
+  // galerie : la seconde glace est derrière la caméra, parallèle à la première
+  // et tournée vers elle ; assez grande pour que la file des échos reste dans
+  // les deux contours
+  if (R.family === 'galerie') {
+    let zmax = -1;
+    for (let k = 0; k <= 64; k++) zmax = Math.max(zmax, cameraAt(C, k / 64).pos[2]);
+    const A = Rf.plane;
+    Rf.planeB = { c: v3([A.c[0], A.c[1], zmax + 0.45]), n: [0, 0, -1], u: [-1, 0, 0], v: [0, 1, 0], hw: 0.8, hh: 0.8, shape: 'rect' };
+  }
   return R;
 }
 
 function placeReflector(R, eEcho, pre) {
   const T = R.table, Lp = R.lamp, Rf = R.reflector, wallZ = R.room.wallZ;
   const s = [Lp.x, Lp.y, Lp.z];
-  if (R.family === 'trumeau') {
+  if (R.family === 'trumeau' || R.family === 'galerie') {
     const zg = wallZ + 0.03;
     const n = [0, 0, 1];
     const sv = [s[0], s[1], 2 * zg - s[2]];
@@ -180,6 +181,10 @@ export function derive(R) {
   if (R.family === 'ardent') {
     out.E = makeEllipse(s, Rf.focus, Rf.center, Rf.cap);
   }
+  if (Rf.planeB) {
+    const A = Rf.plane, B = Rf.planeB;
+    out.G = { zA: A.c[2], zB: B.c[2], A: { cx: A.c[0], cy: A.c[1], hw: A.hw, hh: A.hh }, B: { cx: B.c[0], cy: B.c[1], hw: B.hw, hh: B.hh } };
+  }
   if (R.family === 'facettes') {
     out.B = { c: Rf.ballC, r: Rf.ball.r, rows: Rf.ball.rows, cols: Math.round((Math.PI * Rf.ball.rows) / 1.25), spin: 0 };
   }
@@ -198,9 +203,9 @@ export function derive(R) {
 export function frontRange(R) {
   const D = derive(R);
   const C = R.camera;
-  const e0 = cameraAt(C, TIMELINE.on.slow).pos;
+  const e0 = cameraAt(C, TIMELINE.slow).pos;
   const rhoStart = dist(D.s, e0) - 0.12;
-  const e = cameraAt(C, (TIMELINE.on.slow + TIMELINE.on.end) / 2).pos;
+  const e = cameraAt(C, (TIMELINE.slow + TIMELINE.end) / 2).pos;
   const ev = D.plane ? reflectPoint(e, D.plane.c, D.plane.n) : null;
   const W = R.table.width, wz = R.room.wallZ;
   const probes = [];
@@ -213,10 +218,13 @@ export function frontRange(R) {
     if (D.plane) { const q = planeEcho(x, D.s, D.plane); if (q) Ls.push(q.L); }
     if (D.E) { const q = ellipseEcho(x, D.E); if (q) Ls.push(q.L); }
     if (D.B) { const q = facetEcho(x, D.s, D.B); if (q) Ls.push(q.L); }
+    if (D.G) for (const q of galleryEcho(x, D.s, D.G, 3)) Ls.push(q.L);
     for (const v of D.vpl) Ls.push(dist(v.p, D.s) + dist(x, v.p));
     const Ds = [dist(x, e)];
     if (ev && dot(sub(x, D.plane.c), D.plane.n) > 0) Ds.push(dist(x, ev));
     for (const L of Ls) for (const d of Ds) far = Math.max(far, L + d);
   }
+  // (galerie : les images de la lampe vues dans les glaces, jusqu'à trois réflexions)
+  if (D.G) for (const im of galleryImages(D.s, D.G, 3)) far = Math.max(far, dist(im.q, e));
   return { rhoStart: r3(rhoStart), rhoEnd: r3(Math.min(far + 0.25, 11)) };
 }

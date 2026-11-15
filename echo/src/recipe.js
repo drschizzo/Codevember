@@ -13,7 +13,8 @@
 // presque blanches sauf quand l'humeur la justifie (une ampoule à filament
 // dans une pièce lambrissée) ; rien de « sépia » pour l'humeur d'ouverture.
 import { createRng } from '../../shared/rng.js';
-import { place } from './gen/layout.js';
+import { place, frontRange } from './gen/layout.js';
+import { durationFor } from './film.js';
 
 const r2 = (x) => Math.round(x * 100) / 100 || 0; // (|| 0 : jamais de −0, que JSON ne garde pas)
 const r3 = (x) => Math.round(x * 1000) / 1000 || 0;
@@ -33,6 +34,7 @@ export const FAMILIES = {
   trumeau: { label: 'Trumeau (miroir au mur)', gesture: 'une seconde sphère sort de la glace' },
   psyche: { label: 'Psyché (miroir sur pied)', gesture: 'une seconde sphère sort de la glace, de côté' },
   ardent: { label: 'Miroir ardent (concave)', gesture: "l'écho se referme sur un point" },
+  galerie: { label: 'Galerie (deux glaces face à face)', gesture: "l'écho revient, encore et encore, de plus en plus faible" },
   facettes: { label: 'Boule à facettes', gesture: "l'écho éclaté en pinceaux" },
 };
 
@@ -98,50 +100,50 @@ export const MOODS = {
   strandgade: {
     label: 'Strandgade', author: 'Hammershøi',
     wall: 'greyPanel', floor: 'oakFloor', table: ['oak', 'linen'], pal: 'morandi', frames: ['blackFrame', 'walnutFrame'], metal: ['brass', 'nickel'],
-    window: { color: '#8ea6d4', intensity: 0.22, az: -2.2, el: 0.42 }, lampK: 4300, lamp: 1.9,
-    env: 'echoDusk', bg: '#121722', framing: ['assis', 'trois'], families: ['trumeau', 'psyche', 'ardent', 'facettes'],
+    window: { color: '#8ea6d4', intensity: 0.484, az: -2.2, el: 0.42 }, lampK: 4300, lamp: 1.9,
+    env: 'echoDusk', bg: '#121722', framing: ['assis', 'trois'], families: ['galerie', 'trumeau', 'psyche', 'ardent', 'facettes'],
     grade: { contrast: 1.02, saturation: 0.82, shadows: [0.95, 1.0, 1.06], highlights: [1.02, 1.0, 0.97] },
   },
   lambris: {
     label: 'Lambris', author: 'Hammershøi',
     wall: 'greenPanel', floor: 'darkFloor', table: ['walnut', 'linen'], pal: 'green', frames: ['giltFrame', 'walnutFrame'], metal: ['brass'],
-    window: { color: '#9fb2a4', intensity: 0.128, az: -2.4, el: 0.5 }, lampK: 3300, lamp: 2.1,
-    env: 'echoDusk', bg: '#0c110e', framing: ['trois', 'plongee'], families: ['trumeau', 'psyche', 'ardent'],
+    window: { color: '#9fb2a4', intensity: 0.282, az: -2.4, el: 0.5 }, lampK: 3300, lamp: 2.1,
+    env: 'echoDusk', bg: '#0c110e', framing: ['trois', 'plongee'], families: ['galerie', 'trumeau', 'psyche', 'ardent'],
     grade: { contrast: 1.06, saturation: 0.86, shadows: [0.94, 1.0, 1.0], highlights: [1.03, 1.0, 0.95] },
   },
   laque: {
     label: 'Laque',
     wall: 'redLacquer', floor: 'darkFloor', table: ['blackLacquer'], pal: 'red', frames: ['giltFrame', 'blackFrame'], metal: ['brass', 'nickel'],
-    window: { color: '#4a5c8c', intensity: 0.05, az: -2.0, el: 0.6 }, lampK: 5200, lamp: 2.0,
-    env: 'echoNight', bg: '#080404', framing: ['bas', 'assis'], families: ['trumeau', 'ardent', 'facettes'],
+    window: { color: '#4a5c8c', intensity: 0.11, az: -2.0, el: 0.6 }, lampK: 5200, lamp: 2.0,
+    env: 'echoNight', bg: '#080404', framing: ['bas', 'assis'], families: ['galerie', 'trumeau', 'ardent', 'facettes'],
     grade: { contrast: 1.08, saturation: 1.0, shadows: [0.92, 0.96, 1.08], highlights: [1.0, 0.99, 0.98] },
   },
   cabinet: {
     label: 'Cabinet noir',
     wall: 'blackVelvet', floor: 'darkFloor', table: ['whiteMarble'], pal: 'black', frames: ['silverFrame', 'blackFrame'], metal: ['nickel'],
-    window: { color: '#6a7cb0', intensity: 0.12, az: -2.0, el: 0.6 }, lampK: 6000, lamp: 1.7,
+    window: { color: '#6a7cb0', intensity: 0.264, az: -2.0, el: 0.6 }, lampK: 6000, lamp: 1.7,
     env: 'echoDark', bg: '#020203', framing: ['assis', 'trois'], families: ['psyche', 'ardent', 'facettes'],
     grade: { contrast: 1.1, saturation: 0.85, shadows: [0.96, 0.98, 1.06], highlights: [1, 1, 1.01] },
   },
   carrelage: {
     label: 'Carrelage',
     wall: 'whiteTile', floor: 'concrete', table: ['zinc', 'whiteMarble'], pal: 'white', frames: ['nickel', 'silverFrame'], metal: ['nickel'],
-    window: { color: '#b6c4d6', intensity: 0.28, az: -2.3, el: 0.55 }, lampK: 5600, lamp: 1.6,
-    env: 'echoDawn', bg: '#1a1e24', framing: ['assis', 'plongee'], families: ['trumeau', 'ardent', 'facettes'],
+    window: { color: '#b6c4d6', intensity: 0.616, az: -2.3, el: 0.55 }, lampK: 5600, lamp: 1.6,
+    env: 'echoDawn', bg: '#1a1e24', framing: ['assis', 'plongee'], families: ['galerie', 'trumeau', 'ardent', 'facettes'],
     grade: { contrast: 1.0, saturation: 0.85, shadows: [0.96, 1.0, 1.05], highlights: [1, 1, 1] },
   },
   atelier: {
     label: 'Atelier blanc',
     wall: 'whitePlaster', floor: 'concrete', table: ['pine'], pal: 'blue', frames: ['blackFrame', 'silverFrame'], metal: ['nickel'],
-    window: { color: '#c9d6e6', intensity: 0.42, az: -2.5, el: 0.7 }, lampK: 6500, lamp: 2.6,
-    env: 'echoDay', bg: '#2a2d31', framing: ['trois', 'plongee'], families: ['trumeau', 'psyche', 'facettes'],
+    window: { color: '#c9d6e6', intensity: 0.924, az: -2.5, el: 0.7 }, lampK: 6500, lamp: 2.6,
+    env: 'echoDay', bg: '#2a2d31', framing: ['trois', 'plongee'], families: ['galerie', 'trumeau', 'psyche', 'facettes'],
     grade: { contrast: 1.04, saturation: 0.8, shadows: [0.97, 1.0, 1.04], highlights: [1, 1, 1], exposure: 0.9 },
   },
   prusse: {
     label: 'Bleu de Prusse',
     wall: 'blueWall', floor: 'oakFloor', table: ['pine', 'linen'], pal: 'dawn', frames: ['giltFrame', 'silverFrame'], metal: ['brass'],
-    window: { color: '#f0b98f', intensity: 0.2, az: 2.4, el: 0.18 }, lampK: 5000, lamp: 2.0,
-    env: 'echoDawn', bg: '#0e1420', framing: ['assis', 'bas'], families: ['trumeau', 'psyche', 'ardent', 'facettes'],
+    window: { color: '#f0b98f', intensity: 0.44, az: 2.4, el: 0.18 }, lampK: 5000, lamp: 2.0,
+    env: 'echoDawn', bg: '#0e1420', framing: ['assis', 'bas'], families: ['galerie', 'trumeau', 'psyche', 'ardent', 'facettes'],
     grade: { contrast: 1.04, saturation: 0.95, shadows: [0.94, 0.98, 1.08], highlights: [1.03, 1.0, 0.96] },
   },
 };
@@ -165,7 +167,7 @@ export function generate(seed, overrides = {}) {
   const Md = MOODS[mood];
   const rf = rng.fork('family'), rc = rng.fork('camera'), rl = rng.fork('light'), rm = rng.fork('mats'), ro = rng.fork('objects'), rt = rng.fork('film');
   // (les glaces d'abord : c'est là que l'écho se lit le mieux)
-  const family = overrides.family ?? rf.weighted(Md.families.map((f) => [f, { trumeau: 1.6, psyche: 1.3, ardent: 0.7, facettes: 0.9 }[f]]));
+  const family = overrides.family ?? rf.weighted(Md.families.map((f) => [f, { galerie: 1.8, trumeau: 1.3, psyche: 1.0, ardent: 0.6, facettes: 0.8 }[f]]));
 
   const tableMat = rm.pick(Md.table);
   const palette = PAL[Md.pal];
@@ -178,7 +180,7 @@ export function generate(seed, overrides = {}) {
       bas: { el: rc.range(0.02, 0.06), dist: rc.range(1.45, 1.65), fov: rc.range(33, 37) },
     }[fr];
     return {
-      framing: fr, az: r3(rc.range(-0.32, 0.32) + (family === 'psyche' ? 0.12 : 0)), el: r3(F.el), dist: r2(F.dist), fov: r2(F.fov),
+      framing: fr, az: r3(rc.range(-0.32, 0.32) * (family === 'galerie' ? 0.35 : 1) + (family === 'psyche' ? 0.12 : 0)), el: r3(F.el), dist: r2(F.dist), fov: r2(F.fov),
       sway: r3(rc.range(0.025, 0.05)), swayPhase: r2(rc.range(0, 6.28)), push: r3(rc.range(0.03, 0.06)),
     };
   })();
@@ -186,17 +188,16 @@ export function generate(seed, overrides = {}) {
   const lampKind = rl.pick(['poire', 'globe', 'tube', 'flamme']);
   const R = {
     v: 1, seed, mood, family,
-    film: { duration: rt.pick([28, 30, 32]) },
+    film: { duration: 12 },
     camera,
     room: {
-      wall: Md.wall, floor: Md.floor, wallGap: r2(family === 'trumeau' ? rl.range(0.06, 0.16) : family === 'psyche' ? rl.range(0.5, 0.6) : rl.range(0.25, 0.55)),
+      wall: Md.wall, floor: Md.floor, wallGap: r2(family === 'trumeau' || family === 'galerie' ? rl.range(0.06, 0.16) : family === 'psyche' ? rl.range(0.5, 0.6) : rl.range(0.25, 0.55)),
     },
     table: { mat: tableMat, width: r2(rm.range(1.15, 1.4)), depth: r2(rm.range(0.62, 0.74)), legs: rm.pick(['tournés', 'fuselés', 'tréteaux']) },
     lamp: {
       kind: lampKind, socket: rm.pick(Md.metal.concat(['porcelainSocket', 'bakelite'])),
       color: kelvinToHex(Md.lampK + rl.range(-150, 150)), intensity: r2(Md.lamp * rl.range(0.92, 1.08)),
       x: r3(rl.range(-0.44, -0.24)), y: r3(rl.range(0.44, 0.54)), z: r3(rl.range(-0.08, 0.1)),
-      cord: { length: r3(rl.range(0.2, 0.27)), swing: r3(rl.range(0.04, 0.08)), dir: r2(rl.range(0, 6.28)), damping: r2(rl.range(1.3, 2.0)) },
     },
     window: { ...Md.window, intensity: r2(Md.window.intensity * rl.range(0.9, 1.1)) },
     reflector: {
@@ -226,6 +227,10 @@ export function generate(seed, overrides = {}) {
     return { kind: k, h: r3(ro.range(...V.h)), r: r3(ro.range(...V.r)), color, rough, glazed, var: r2(ro.range(0, 1)) };
   });
   place(R, rng.fork('place'));
+  // la durée de la boucle découle du chemin que la lumière doit parcourir à
+  // l'écran (le front avance à FRONT_SPEED m par seconde de film)
+  const fr = frontRange(R);
+  R.film.duration = durationFor(fr.rhoEnd - fr.rhoStart);
   return R;
 }
 

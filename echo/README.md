@@ -2,7 +2,7 @@
 
 *le miroir en retard*
 
-Une pièce dans la pénombre : une nature morte sur une table, une ampoule pendue à sa douille à tirette, un miroir. Le cordon descend d'un coup, et une caméra impossible, quelque sept cents millions de fois plus lente que le réel, montre la lumière avancer. Une sphère sort de l'ampoule, allume la table à partir du point le plus proche, les vases du côté de la lampe, fait naître leurs ombres, atteint le mur, puis la glace. Dans le miroir, l'ampoule s'allume à son tour, en retard. Une seconde lumière revient de la glace, l'écho, et éclaire le revers des objets. La pièce reste allumée quelques secondes ; le cordon reprend son balancement là où le ralenti l'avait figé. Second coup de cordon : l'obscurité part de l'ampoule, la dernière lumière s'en va en coquille vers les murs, et le miroir garde l'ampoule allumée un instant après qu'elle s'est éteinte. La boucle est parfaite par construction : le film est une fonction de la phase, et à u = 0 comme à u = 1 la lampe est éteinte depuis assez longtemps pour que les deux fronts aient quitté la pièce, le cordon au repos, la caméra à la même pose.
+Une pièce dans la pénombre : une nature morte sur une table, une lampe stroboscopique pendue au plafond, un miroir. Sur la douille, un voyant rougit pendant que le condensateur se charge ; il s'allume franchement, l'éclair part, et une caméra impossible, quelque cent millions de fois plus lente que le réel, suit la lumière. Un anneau brillant sort du tube en spirale, passe sur la table et les vases en faisant naître leurs ombres, atteint la glace ; dans le miroir, l'éclair n'apparaît qu'ensuite, et un second anneau, plus faible, revient de la glace : l'écho. Dans la galerie, une seconde glace accrochée en face, derrière la caméra, renvoie l'éclair encore et encore : on voit au fond du miroir une file d'éclairs qui s'allument l'un après l'autre, chaque fois plus loin et plus faibles. Puis le temps réel revient, dans le noir, et le voyant recommence à rougir. La boucle dure 10 à 16 s et elle est parfaite par construction : le film est une fonction de la phase, et à u = 0 comme à u = 1 l'éclair précédent a quitté la pièce, la charge est la même, la caméra à la même pose.
 
 ![Echo](docs/capture.jpg)
 
@@ -33,37 +33,35 @@ Sur écran tactile : une touche met en pause, deux touches tirent une nouvelle s
 | `?ui=0` | sans panneau |
 | `?debug` | outils dans `window.echo` (`shot`, `send`, `sheet`, `film`, `meter`, `poster`, `bench`, `seam`…) |
 
-Le panneau règle l'humeur, le réflecteur, la durée de la boucle, la caméra (champ, distance, azimut, hauteur, glissement, avancée), l'ampoule (forme, couleur, intensité, douille, balancement du cordon), le cadre du miroir, la couleur et la surface de chaque vase, les murs, le sol, la table et la fenêtre hors champ. Puis le rendu (qualité, ombres, image, bloom et objectif, occlusion et reflets). L'export produit une boucle MP4 rendue image par image, éventuellement accumulée (8 à 64 passes), et une image PNG.
+Le panneau règle l'humeur, le réflecteur, la durée de la boucle, la caméra (champ, distance, azimut, hauteur, glissement, avancée), la lampe (forme de l'ampoule, couleur et intensité de l'éclair, douille), le cadre du miroir, la couleur et la surface de chaque vase, les murs, le sol, la table et la fenêtre hors champ. Puis le rendu (qualité, ombres, image, bloom et objectif, occlusion et reflets). L'export produit une boucle MP4 rendue image par image, éventuellement accumulée (8 à 64 passes), et une image PNG.
 
 ## Principe
 
 ### Le front
 
-`src/film.js` donne la convention de temps. La vitesse du film v(u) vaut 1 en temps réel et 1/K au ralenti ; elle passe de l'une à l'autre par des rampes douces sur log v. Le temps physique est τ(u) = T ∫₀ᵘ v, tabulé en double précision (32 768 pas). Chaque événement (allumage, extinction) définit un rayon de front, la longueur de chemin parcourue par la lumière depuis qu'elle a quitté l'ampoule :
+`src/film.js` donne la convention de temps. La vitesse du film v(u) vaut 1 en temps réel et 1/K au ralenti ; elle passe de l'une à l'autre par des rampes douces sur log v. Le temps physique est τ(u) = T ∫₀ᵘ v, tabulé en double précision (32 768 pas). Le rayon du front est la longueur de chemin parcourue par la lumière depuis qu'elle a quitté le tube :
 
 ```
-ρ(u) = c · (τ(u) − τ_événement)        borné à [−1, 60] m pour les flottants du GPU
+ρ(u) = c · (τ(u) − τ_éclair)        borné à [−1, 60] m pour les flottants du GPU
 ```
 
-Un point x reçoit la lumière d'un chemin de longueur L(x) (de la lampe à x, directement ou par un réflecteur). La caméra la voit quand ρ ≥ L(x) + |x − œil|. La part de lumière d'un chemin est donc
+Un point x reçoit la lumière d'un chemin de longueur L(x) (de la lampe à x, directement ou par un réflecteur). La caméra la voit quand elle a aussi parcouru le chemin du point à l'objectif. L'éclair est une impulsion : sa lumière monte sur 2 cm de chemin puis décroît sur 22 cm, si bien que chaque point la voit passer en anneau.
 
 ```
-g = S(ρ_on − L − D) · (1 + 3 e^(−a/0,12 m)) − (même terme pour ρ_off)      a = ρ_on − L − D, D = |x − œil|, S : rampe de 2 cm
+g = S(a) · 4 · e^(−a / 0,22 m)        a = ρ − L(x) − |x − œil|, S : rampe de 2 cm
 ```
 
-L'allumage commence par un éclair : la première lumière est quatre fois plus forte, et cet excès s'éteint sur 12 cm de chemin. Sur chaque surface, le front passe en anneau brillant puis la lumière s'établit ; dans la brume il dessine une coquille, et l'écho en ramène une seconde, depuis la glace. Sans lui, le front n'était qu'un fondu en disque qu'on ne lisait pas comme une propagation.
-
-K est choisi pour que la lumière traverse la scène pendant le ralenti : le front avance à 0,30 à 0,54 m par seconde de film (K de 5,6·10⁸ à 9,9·10⁸ sur 200 graines). Le ralenti commence quand la première lumière est sur le point d'atteindre l'objectif (ρ = |ampoule − œil| − 12 cm) et finit quand le dernier point visible, direct, écho, rebond ou vu dans la glace, est allumé (ρ de 5 à 7 m). Pendant le ralenti, tout ce qui est matériel est figé (cordon, boule, poussière : ils lisent τ) ; seule la caméra continue de glisser (elle lit u).
+La première version allumait une lampe et la laissait allumée : un front qui ne fait qu'allumer se lit comme un disque qui grandit, et l'écho comme un peu plus de lumière. Avec une impulsion, ce qui part et ce qui revient sont deux anneaux distincts.
 
 | u | Temps | Convention |
 | --- | --- | --- |
-| 0 – 0,036 | nuit ; le cordon finit de se balancer | temps réel |
-| 0,036 – 0,072 | le cordon est tiré (2,5 cm), le film ralentit | rampe |
-| 0,072 – 0,40 | l'ampoule, la table, les vases, le mur, la glace, l'écho, les rebonds | ralenti |
-| 0,40 – 0,53 | la pièce éclairée ; le cordon, relâché, remonte et se balance | temps réel |
-| 0,53 – 0,566 | second tirage | rampe |
-| 0,566 – 0,895 | l'obscurité avance ; la dernière lumière en coquille ; le reflet s'éteint en retard | ralenti |
-| 0,925 – 1 | nuit | temps réel |
+| 0 – 0,10 | nuit ; le voyant de charge rougit puis s'allume | temps réel |
+| 0,10 – 0,14 | le film ralentit | rampe |
+| 0,14 – 0,86 | l'éclair : l'anneau direct, l'écho de la glace, les échos suivants | ralenti |
+| 0,86 – 0,90 | le temps réel revient | rampe |
+| 0,90 – 1 | nuit ; le voyant, éteint par l'éclair, recommence à rougir | temps réel |
+
+La durée découle du chemin à montrer : le front avance à 0,55 m par seconde de film, du moment où la première lumière va atteindre l'objectif à celui où le dernier écho visible est passé (`durationFor`, bornée à 10 – 16 s ; 10 à 12 s pour une seule glace ; la galerie, qui montre trois échos, atteint le plafond de 16 s et son front y avance plus vite, vers 0,8 m/s). Pendant le ralenti, rien de matériel ne bouge (boule, poussière, charge : ils lisent τ) ; seule la caméra continue de glisser (elle lit u).
 
 ### Les échos
 
@@ -74,19 +72,22 @@ K est choisi pour que la lumière traverse la scène pendant le ralenti : le fro
 | **Trumeau** | glace au mur, cadre mouluré | \|x − s′\|, s′ symétrique de la lampe, si le segment s′ → x traverse la glace | une seconde sphère sort de la glace et éclaire les revers |
 | **Psyché** | glace ovale ou cintrée sur pied, inclinée | idem, la glace orientée sur la bissectrice lampe / œil | idem, de côté ; le reflet de l'ampoule au centre de la glace |
 | **Miroir ardent** | calotte d'ellipsoïde polie sur une fourche, foyers : l'ampoule et un point de la nappe | 2a − \|x − f₂\| avant le foyer, 2a + \|x − f₂\| après, dans le cône de la calotte | un cône de lumière qui se referme sur la nappe, une tache ardente, puis un cône qui en repart |
+| **Galerie** | deux glaces parallèles face à face : le trumeau, et une grande glace accrochée au mur du devant, derrière la caméra | \|x − qₙ\|, qₙ image de la lampe après n réflexions alternées, si la droite qₙ → x traverse chaque copie dépliée des glaces dans son contour | l'écho revient encore et encore : une file d'éclairs au fond du miroir, chacun plus loin, plus tard et plus faible (0,88ⁿ) |
 | **Boule à facettes** | 490 à 620 tesselles planes | \|x − s′ᶠ\|, s′ᶠ image de la lampe dans la facette dont la normale est la bissectrice de (x − B) et (s − B) | des pinceaux et des taches qui arrivent l'une après l'autre |
 
 Chaque écho est une lumière de three.js dont le nœud multiplie la couleur, au point éclairé, par son ouverture et par g (`src/scene/lights.js`) : la glace est un projecteur placé en s′ avec ses ombres ; le foyer et les facettes récrivent la direction et l'atténuation de la lumière (une source ponctuelle en f₂ dont l'image a la taille du filament, 9 mm au grandissement |f₂M| / |f₁M| ; un miroir plan par facette). Deux rebonds diffus (la table sous la lampe, le mur au plus près) portent la couleur de leur surface et un chemin |v − s| + |x − v| : dans la Laque, cet écho diffus revient rose.
 
+Dans la galerie, une lumière de plus (`GalleryLight`) somme les huit images (quatre réflexions de chaque côté, sauf la première de la glace du mur, portée par le projecteur à ombres). La glace d'en face n'est vue que dans la glace du mur ; elle n'est pas rendue récursivement : son shader dessine les images de l'éclair qui sont « derrière elle », chacune à sa place, à son heure (le chemin |qₙ − œil|) et à son intensité.
+
 Le reflet n'a besoin de rien de plus. La glace est rendue par `reflector()` depuis la caméra symétrique ; dans ce rendu, `cameraPosition` est cette caméra virtuelle, et |x − œil′| vaut exactement |x − glace| + |glace − œil|. L'ampoule du miroir s'allume donc après la vraie, et s'éteint après elle.
 
-La brume (`src/scene/haze.js`, option `haze` de la chaîne d'image commune) marche le long du rayon de vue (22 pas, 8 en mobile) et ajoute en chaque pas la lumière de chaque source à retard. Elle pèse surtout l'éclair (×1,6) et très peu la lumière établie (×0,18) : elle dessine les coquilles qui avancent, la sphère de l'ampoule et celle de la glace, le cône qui se referme, les pinceaux, sans voiler l'image. Elle n'a pas d'ombres.
+La brume (`src/scene/haze.js`, option `haze` de la chaîne d'image commune) marche le long du rayon de vue (22 pas, 8 en mobile) et ajoute en chaque pas la lumière de chaque source à retard. Elle dessine les coquilles qui avancent : celle de la lampe, celle de la glace, le cône qui se referme, les pinceaux, les échos de la galerie. Elle n'a pas d'ombres.
 
 ## Génération
 
-- `src/recipe.js` : graine → recette JSON ; un flux de tirage par famille (`mood`, `family`, `camera`, `light`, `mats`, `objects`, `film`, `place`).
-- `src/gen/layout.js` : la mise en place. La table (1,15 à 1,4 m), la lampe (44 à 54 cm au-dessus du plateau), la nature morte (4 à 7 vases en grappe serrée, les plus hauts au fond, sans contact, hors de la perle du cordon), le réflecteur. Le trumeau est posé là où la droite œil → ampoule image traverse le mur ; la psyché est orientée sur la bissectrice ; le foyer du miroir ardent est sur la nappe, devant la nature morte, dans un couloir laissé libre. Puis la caméra est ajustée (`fitCamera`) : elle garde son azimut et sa hauteur, vise le centre de ce qui doit être à l'image (l'ampoule et sa douille, chaque vase, le réflecteur entier) et recule juste assez pour tout contenir avec 14 % de marge. Trumeau et caméra dépendent l'un de l'autre : trois allers-retours. Les glaces sont tirées plus souvent (trumeau 1,6, psyché 1,3, boule 0,9, ardent 0,7) : c'est là que l'écho se lit le mieux.
-- `src/gen/build.js` : la géométrie, dans un worker (35 à 67 ms par scène). Vases tournés à paroi épaisse et lèvre en demi-rond (bouteille, cruche à anse et bec, pot à couvercle et bouton, bol, gobelet, vase, flacon ; bouchon de liège), table à ceinture et pieds tournés, fuselés ou en tréteaux, nappe à ourlet et retombée plissée, lambris à tables saillantes et cimaise, douille tournée et sa sortie de cordon, ampoule (poire, globe, tube, flamme) avec sa tige de verre, ses fils d'amenée et un filament en hélice de 22 spires, glace biseautée et cadre à moulure balayée le long du contour, psyché à montants tournés, patins et pivots, calotte d'ellipsoïde avec dos, bague, fourche et pied lesté, boule à tesselles chanfreinées et chaînette.
+- `src/recipe.js` : graine → recette JSON ; un flux de tirage par famille (`mood`, `family`, `camera`, `light`, `mats`, `objects`, `place`). La durée de la boucle est calculée, pas tirée.
+- `src/gen/layout.js` : la mise en place. La table (1,15 à 1,4 m), la lampe (44 à 54 cm au-dessus du plateau), la nature morte (4 à 7 vases en grappe serrée, les plus hauts au fond, sans contact, aucun sous la lampe), le réflecteur. Le trumeau est posé là où la droite œil → ampoule image traverse le mur ; la psyché est orientée sur la bissectrice ; le foyer du miroir ardent est sur la nappe, devant la nature morte, dans un couloir laissé libre. Puis la caméra est ajustée (`fitCamera`) : elle garde son azimut et sa hauteur, vise le centre de ce qui doit être à l'image (l'ampoule et sa douille, chaque vase, le réflecteur entier) et recule juste assez pour tout contenir avec 14 % de marge. Trumeau et caméra dépendent l'un de l'autre : trois allers-retours. Les glaces sont tirées plus souvent (galerie 1,8, trumeau 1,3, psyché 1, boule 0,8, ardent 0,6) : c'est là que l'écho se lit le mieux. Pour la galerie, la caméra reste presque de face (azimut réduit au tiers), et la seconde glace est posée 45 cm derrière sa position la plus reculée, parallèle à la première, assez grande (1,6 m) pour que la file des échos reste dans les deux contours.
+- `src/gen/build.js` : la géométrie, dans un worker (35 à 67 ms par scène). Vases tournés à paroi épaisse et lèvre en demi-rond (bouteille, cruche à anse et bec, pot à couvercle et bouton, bol, gobelet, vase, flacon ; bouchon de liège), table à ceinture et pieds tournés, fuselés ou en tréteaux, nappe à ourlet et retombée plissée, lambris à tables saillantes et cimaise, douille tournée et le chaton de son voyant, ampoule (poire, globe, tube, flamme) avec son pied de verre, ses électrodes et un tube à éclats enroulé en trois spires, glace biseautée et cadre à moulure balayée le long du contour, psyché à montants tournés, patins et pivots, calotte d'ellipsoïde avec dos, bague, fourche et pied lesté, boule à tesselles chanfreinées et chaînette.
 
 ## Matériaux
 
@@ -110,23 +111,23 @@ Sept humeurs, chacune un décor :
 | **Atelier blanc** | plâtre blanc, pin brut | jour pâle ; ampoule à 6 500 K | très claire | trois-quarts, plongée |
 | **Bleu de Prusse** | badigeon bleu, pin ou nappe | aube rose de l'autre côté | moyenne | assis, bas |
 
-Sept lumières créées une fois dans un ordre fixe : la fenêtre (ombres), l'ampoule (ombres), la glace (ombres), le foyer, les facettes, deux rebonds. Une famille absente éteint les siennes. La caméra (`cameraAt`) est un plan fixe qui glisse sur un arc (± 1,4 à 2,9°) et avance de 3 à 6 % pendant les deux temps de lumière.
+Huit lumières créées une fois dans un ordre fixe : la fenêtre (ombres), la lampe (ombres), la glace (ombres), le foyer, les facettes, deux rebonds, la galerie. Une famille absente éteint les siennes. La caméra (`cameraAt`) est un plan fixe qui glisse sur un arc (± 1,4 à 2,9°) et avance de 3 à 6 % pendant le ralenti.
 
 ## Tests
 
 ```bash
-node --test 'echo/test/*.test.mjs'    # 16 tests
+node --test 'echo/test/*.test.mjs'    # 17 tests
 ```
 
-- **Optique** : miroir plan, calotte elliptique et boule à facettes : la longueur de chaque chemin égale celle d'un rayon lancé depuis la lampe et réfléchi sur la vraie surface (1e-9 ; 500 rayons sur la calotte, avant et après le foyer), et la loi de la réflexion est vérifiée ; rien derrière la glace ni hors de son contour ; la porte est monotone et s'annule après l'extinction.
-- **Film** : raccord à u = 1 (fronts, cordon, temps réel) ; les fronts n'ont jamais reculé pendant leur ralenti ; le cordon est figé au ralenti ; la perle est en bas quand la lumière part ; la caméra reste sous 25°/s et 0,5 m/s² à 120 i/s.
-- **Recette** (400 graines) : déterminisme et aller-retour JSON ; chaque humeur et chaque famille tirées ; au moins trois vases, aucun contact, tous sur la table, aucun sous la perle ; pour chaque glace, le reflet de l'ampoule est dans la glace vu de l'œil ; le foyer ardent est sur la table, sans vase, et la calotte regarde ses deux foyers ; l'étendue des fronts est cohérente.
+- **Optique** : miroir plan, calotte elliptique et boule à facettes : la longueur de chaque chemin égale celle d'un rayon lancé depuis la lampe et réfléchi sur la vraie surface (1e-9 ; 500 rayons sur la calotte, avant et après le foyer), et la loi de la réflexion est vérifiée ; galerie : chaque image est le bout d'un rayon réellement réfléchi entre les deux glaces, avec le bon nombre de réflexions et la même longueur (plus de 500 chemins) ; rien derrière la glace ni hors de son contour ; l'impulsion vaut 0 avant le front, culmine sur l'anneau et décroît ensuite.
+- **Film** : raccord à u = 1 (front, charge, temps réel) ; le front ne recule jamais pendant le ralenti et a quitté la scène à sa fin ; le temps réel est figé au ralenti ; la charge est pleine juste avant l'éclair, vide juste après, et ne fait que croître entre deux éclairs ; la durée reste entre 10 et 16 s ; la caméra reste sous 25°/s et 0,8 m/s² à 120 i/s.
+- **Recette** (400 graines) : déterminisme et aller-retour JSON ; chaque humeur et chaque famille tirées ; au moins trois vases, aucun contact, tous sur la table, aucun sous la lampe ; pour chaque glace, le reflet de l'ampoule est dans la glace vu de l'œil ; le foyer ardent est sur la table, sans vase, et la calotte regarde ses deux foyers ; l'étendue des fronts est cohérente.
 
 Bancs : `tools/curves.mjs` (les courbes du film), `tools/grid.py` (planches), `tools/art.html` (le dessin du chargement hors du worker).
 
 ## Performances mesurées
 
-Portable Apple Silicon, panneau de navigateur intégré, qualité Haute, 1920 × 1080, graine d'ouverture (e29, Bleu de Prusse, trumeau) : 12,1 ms au passage de l'écho (u = 0,24) ; avant la passe sur l'éclair, les matières et la brume, 12,3 ms sur une autre graine. Raccord de boucle : écart de pose 2·10⁻⁷ (`seam`). 73 à 84 pipelines compilées sous l'écran de chargement ; avec le cache de shaders du navigateur, la scène est prête en 2 s (panneau visible). Les autres familles n'ont pas été chronométrées une à une.
+Portable Apple Silicon, panneau de navigateur intégré, qualité Haute, 1920 × 1080, graine d'ouverture (h3, Strandgade, galerie) : 15,8 ms au passage de l'éclair (u = 0,30), mesuré onglet au premier plan ; des mesures prises pendant une compilation ou dans un onglet en arrière-plan ont donné jusqu'à 21,5 ms. La galerie est la famille la plus chère (huit images dans chaque matériau : 1,2 ms ; la glace rendue depuis la caméra symétrique). Sur une graine à trumeau, avant la refonte en éclair, 12,1 ms. Les réflexions en espace écran coûtent 1,4 ms, l'occlusion ambiante 1,7 ms. Raccord de boucle : écart de pose 1·10⁻¹⁰ (`seam`). 73 à 84 pipelines compilées sous l'écran de chargement ; avec le cache de shaders du navigateur, la scène est prête en 2 s (panneau visible). Les autres familles n'ont pas été chronométrées une à une.
 
 ## Version mobile
 

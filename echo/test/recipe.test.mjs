@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { generate, MOODS, FAMILIES } from '../src/recipe.js';
-import { derive, frontRange, footprint, beadRest } from '../src/gen/layout.js';
+import { derive, frontRange, footprint } from '../src/gen/layout.js';
 import { cameraAt, TIMELINE } from '../src/film.js';
 import { sub, dot, norm, cross, planeEcho, reflectPoint } from '../src/gen/optics.js';
 
@@ -24,7 +24,7 @@ test('toutes les humeurs et toutes les familles sont tirées', () => {
   assert.deepEqual([...fams].sort(), Object.keys(FAMILIES).sort());
 });
 
-test('nature morte : au moins trois vases, aucun ne se traverse, tous sur la table', () => {
+test('nature morte : au moins trois vases, aucun ne se traverse, tous sur la table, aucun sous la lampe', () => {
   for (const s of SEEDS) {
     const R = generate(s);
     assert.ok(R.objects.length >= 3, `${s} : ${R.objects.length} vases`);
@@ -33,9 +33,7 @@ test('nature morte : au moins trois vases, aucun ne se traverse, tous sur la tab
       const f = footprint(o);
       assert.ok(Math.abs(o.x) + f <= T.width / 2 && Math.abs(o.z) + f <= T.depth / 2, `${s} : vase ${i} hors de la table`);
       for (const q of R.objects.slice(i + 1)) assert.ok(Math.hypot(o.x - q.x, o.z - q.z) >= f + footprint(q), `${s} : vases qui se touchent`);
-      // la perle du cordon ne tombe pas dans un vase
-      const b = beadRest(R.lamp);
-      if (Math.hypot(o.x - b[0], o.z - b[2]) < f + 0.01) assert.ok(o.h < b[1] - 0.02, `${s} : la perle touche un vase`);
+      if (Math.hypot(o.x - R.lamp.x, o.z - R.lamp.z) < f + 0.07) assert.ok(o.h < R.lamp.y - 0.09, `${s} : un vase touche la lampe`);
     }
   }
 });
@@ -46,7 +44,7 @@ test('trumeau et psyché : la caméra voit le reflet de l’ampoule dans la glac
     const R = generate(s);
     if (!R.reflector.plane) continue;
     const D = derive(R);
-    const e = cameraAt(R.camera, (TIMELINE.on.slow + TIMELINE.on.end) / 2).pos;
+    const e = cameraAt(R.camera, (TIMELINE.slow + TIMELINE.end) / 2).pos;
     // le rayon de l'œil vers l'ampoule image traverse la glace
     const hit = planeEcho(e, D.s, D.plane);
     assert.ok(hit, `${s} (${R.family}) : le reflet de l'ampoule n'est pas dans la glace`);
@@ -66,10 +64,11 @@ test('miroir ardent : le foyer est sur la table, devant la calotte, sans vase de
   }
 });
 
-test('les fronts : tout est encore noir au début du ralenti, tout est allumé à sa fin', () => {
+test('le front : rien n’est encore visible au début du ralenti ; durée de 10 à 16 s', () => {
   for (const s of SEEDS.slice(0, 120)) {
     const R = generate(s);
     const { rhoStart, rhoEnd } = frontRange(R);
-    assert.ok(rhoStart > 1 && rhoEnd > rhoStart + 2 && rhoEnd < 11.5, `${s} : ${rhoStart} → ${rhoEnd}`);
+    assert.ok(rhoStart > 0.8 && rhoEnd > rhoStart + 2 && rhoEnd < 11.5, `${s} : ${rhoStart} → ${rhoEnd}`);
+    assert.ok(R.film.duration >= 10 && R.film.duration <= 16);
   }
 });
