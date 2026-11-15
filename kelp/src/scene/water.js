@@ -54,6 +54,9 @@ export function createWater() {
     v0: uniform(new THREE.Vector4()), v1: uniform(new THREE.Vector4()), v2: uniform(new THREE.Vector4()),
     T: uniform(32), c0: uniform(Math.sqrt(g * 1.4)),
     foamK: uniform(1), caustic: uniform(1),
+    // la carte d'ombre du soleil (les laminaires, la roche) : relue dans les
+    // rayons de lumière sous l'eau — la canopée y découpe le jour
+    shVP: uniform(new THREE.Matrix4()), shOn: uniform(0), shSize: uniform(2048),
     sw0: uniform(new THREE.Vector3()), sw1: uniform(new THREE.Vector3()), sw2: uniform(new THREE.Vector3()), // (houle : amplitude, n, phase)
     // le faisceau de profils (gen/sea.js, simulateBundle) : x, t, z
     bOn: uniform(0), bx0: uniform(-9), bW: uniform(19), bnf: uniform(960), bfps: uniform(30), bz0: uniform(0), bdz: uniform(1), bnz: uniform(1),
@@ -67,6 +70,18 @@ export function createWater() {
   const fillT = texture(dataTex(new Uint16Array(4), 2, 2, THREE.HalfFloatType, THREE.RedFormat));
   const reliefT = texture(dataTex(new Uint16Array(16), 2, 2));
   const profT = texture(dataTex(new Uint16Array(8), 2, 1));
+  // (une texture de profondeur d'attente, du même type que la carte d'ombre :
+  // on la remplace sans recompiler quand le soleil a rendu sa première ombre)
+  const shDummy = new THREE.RenderTarget(1, 1); shDummy.depthTexture = new THREE.DepthTexture(1, 1);
+  const shT = texture(shDummy.depthTexture);
+  // 1 si le point Q voit le soleil, 0 s'il est à l'ombre d'une laminaire (ou de la roche)
+  const sunVis = (Q) => {
+    const c = U.shVP.mul(vec4(Q, 1)), n = c.xyz.div(c.w);
+    const uv = vec2(n.x.mul(0.5).add(0.5), n.y.mul(-0.5).add(0.5));
+    const inside = uv.x.greaterThan(0).and(uv.x.lessThan(1)).and(uv.y.greaterThan(0)).and(uv.y.lessThan(1));
+    const d = textureLoad(shT, ivec2(uv.mul(U.shSize).clamp(0, U.shSize.sub(1)))).x;
+    return select(inside.and(U.shOn.greaterThan(0.5)), smoothstep(-0.0015, 0.0005, d.sub(n.z)), float(1));
+  };
   const bundleT = texture3D(dataTex3(new Uint16Array(4 * 8), 2, 2, 2));
   // le fond de chaque profil simulé (le profil fin de la caméra, le faisceau) :
   // le sec et le mouillé se décident contre le fond que la mer a vu
@@ -201,7 +216,8 @@ export function createWater() {
       const Q = O.add(P.sub(O).mul(mix(sA, sB, f)));
       const dq = levelNear(Q.x, Q.z, U.t).sub(Q.y).max(0);
       const S = Q.add(Lw.mul(dq.div(Lw.y))); // (où ce rayon de soleil a traversé la surface)
-      shafts = shafts.add(caustic(vec3(S.x, 0, S.z), float(0.5)).sub(1).mul(1.6).add(1).max(0.15));
+      // (la canopée découpe les rayons : à l'ombre d'une lame, presque rien)
+      shafts = shafts.add(caustic(vec3(S.x, 0, S.z), float(0.5)).sub(1).mul(1.6).add(1).max(0.15).mul(sunVis(Q).mul(0.85).add(0.15)));
     }
     shafts = shafts.mul(0.5); // (deux points : l'anticrénelage temporel lisse le reste)
     return waterGlow(dir, depthM, aer, shafts);
@@ -281,7 +297,7 @@ export function createWater() {
   };
   const receivedShadow = (shadow) => shadow.mul(sunAtten(positionWorld));
 
-  return { U, seaT, wetT, fillT, reliefT, profT, bundleT, bundleWetT, dataTex3, edgeShift, profAt, simBed, heroBT, bundleBT, brkT, breaking, localT, sea, level, levelNear, levelDome, wetLevel, rockAt, pool, medium, fogNode, sunAtten, receivedShadow, waterGlow, inBox, boxUV, dataTex };
+  return { U, seaT, wetT, fillT, reliefT, profT, bundleT, bundleWetT, dataTex3, edgeShift, profAt, simBed, shT, sunVis, heroBT, bundleBT, brkT, breaking, localT, sea, level, levelNear, levelDome, wetLevel, rockAt, pool, medium, fogNode, sunAtten, receivedShadow, waterGlow, inBox, boxUV, dataTex };
 }
 
 // ── La surface ───────────────────────────────────────────────────────────────
