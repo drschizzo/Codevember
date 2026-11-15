@@ -9,13 +9,13 @@
 //    une famille absente éteint les siennes (visible = false), ce qui ne
 //    recompile qu'au changement de scène, sous l'écran de chargement.
 import * as THREE from 'three/webgpu';
-import { uniform, vec2, vec3, vec4, float, attribute, positionLocal, sin, cos, length, positionWorld, reflector, dot, max, abs, mix, smoothstep } from 'three/tsl';
+import { uniform, vec2, vec3, vec4, float, attribute, positionLocal, sin, cos, length, positionWorld, reflector, dot, max, abs, mix, smoothstep, normalize, cameraPosition, exp } from 'three/tsl';
 import { fbm, noise2 } from '../../../shared/scene/materials.js';
 import { MATS, MOODS } from '../recipe.js';
 import { derive, frontRange, TABLE_H } from '../gen/layout.js';
 import { createFilm, cameraAt } from '../film.js';
-import { P, gate } from './paths.js';
-import { GatedLight, MirrorLight, FocusLight, FacetLight, registerLights } from './lights.js';
+import { P, gate, gateK, galleryList, galleryAperture } from './paths.js';
+import { GatedLight, MirrorLight, FocusLight, FacetLight, GalleryLight, registerLights } from './lights.js';
 import { surfaceMaterial, ceramicMaterial } from './surfaces.js';
 import { capSolidAngle } from '../gen/optics.js';
 import { createHaze, HZ } from './haze.js';
@@ -54,25 +54,27 @@ export function createStage(scene, gen, { lite = false, renderer = null } = {}) 
   const focusL = new FocusLight(0xffffff, 0, 0, 2);
   const facetL = new FacetLight(0xffffff, 0, 0, 2);
   const vpl = [new GatedLight(0xffffff, 0, 0, 2), new GatedLight(0xffffff, 0, 0, 2)];
-  const LIGHTS = [win, lamp, mirrorL, focusL, facetL, ...vpl];
+  const galleryL = new GalleryLight(0xffffff, 0, 0, 2);
+  const LIGHTS = [win, lamp, mirrorL, focusL, facetL, ...vpl, galleryL];
   for (const l of LIGHTS) { scene.add(l); if (l.target) scene.add(l.target); }
 
   const root = new THREE.Group();
   scene.add(root);
   let R = null, D = null, film = null, version = 0, pending = 0, meshes = [], mats = [];
-  let cord = null, ball = null, dust = null, mirrorTarget = null, pivot = [0, 0, 0];
+  let ball = null, dust = null, mirrorTarget = null;
   const U = {
     realPhase: uniform(0), // (phase du temps réel : dérive de la poussière, figée au ralenti)
     lampColor: uniform(new THREE.Color(1, 1, 1)),
+    charge: uniform(0), // (charge du stroboscope : le voyant)
     bulbGlow: uniform(1),
   };
 
   function clear() {
     for (const m of meshes) { root.remove(m); m.geometry.dispose(); }
     for (const m of mats) m.dispose();
-    for (const g of [cord, ball]) if (g) root.remove(g);
+    if (ball) root.remove(ball);
     meshes = []; mats = [];
-    cord = ball = dust = null;
+    ball = dust = null;
     if (mirrorTarget) { scene.remove(mirrorTarget); mirrorTarget = null; }
   }
   const add = (o, mat, { cast = true, receive = true, extra = [], parent = root } = {}) => {
@@ -96,8 +98,9 @@ export function createStage(scene, gen, { lite = false, renderer = null } = {}) 
     glass.metalnessNode = float(0);
     glass.opacityNode = float(frosted ? 0.55 : 0.12);
     glass.emissiveNode = U.lampColor.mul(U.bulbGlow).mul(frosted ? 9 : 0.9).mul(lampGate());
+    // le tube à éclats : du verre légèrement laiteux au repos, éblouissant pendant l'impulsion
     const fil = new THREE.MeshBasicNodeMaterial();
-    fil.colorNode = vec4(U.lampColor.mul(lampGate().mul(240)).add(vec3(0.03, 0.025, 0.02)), 1);
+    fil.colorNode = vec4(U.lampColor.mul(lampGate().mul(60)).add(vec3(0.05, 0.055, 0.06)), 1);
     const stem = new THREE.MeshPhysicalNodeMaterial({ transparent: true, depthWrite: false });
     stem.colorNode = vec4(0.8, 0.8, 0.8, 1);
     stem.roughnessNode = float(0.1);
@@ -129,6 +132,28 @@ export function createStage(scene, gen, { lite = false, renderer = null } = {}) 
     m.metalnessNode = float(0);
     // tain d'argent (≈ 90 %, à peine verdi par l'épaisseur de la glace), terni où il s'oxyde
     m.emissiveNode = refl.rgb.mul(vec3(0.86, 0.9, 0.88)).mul(float(1).sub(fox.mul(0.75)));
+    return m;
+  }
+
+  // ── la glace d'en face (galerie) : on ne la voit que dans la première glace.
+  // Elle montre les images de l'éclair qui sont « derrière elle », chacune à son
+  // heure (le chemin |q − œil|), de plus en plus petites et faibles : la file
+  // des échos. Calcul exact par les images, sans rendu récursif.
+  function mirrorBMaterial() {
+    const m = new THREE.MeshStandardNodeMaterial();
+    const pw = positionWorld, eye = cameraPosition, v = normalize(pw.sub(eye));
+    let glow = float(0);
+    for (const im of galleryList()) {
+      if (im.side !== 'B') continue;
+      const qe = im.q.sub(eye), along = dot(qe, v), perp = length(qe.sub(v.mul(along)));
+      // (le tube, puis un halo : l'image lointaine reste lisible)
+      const spot = smoothstep(0.022, 0.009, perp).add(exp(perp.div(0.06).negate()).mul(0.12));
+      glow = glow.add(spot.mul(gateK(length(qe))).mul(galleryAperture(im, eye)).mul(P.gR.pow(im.n)));
+    }
+    m.colorNode = vec4(0.012, 0.013, 0.013, 1);
+    m.roughnessNode = float(0.08);
+    m.metalnessNode = float(0.6);
+    m.emissiveNode = U.lampColor.mul(glow.mul(14));
     return m;
   }
 
@@ -189,11 +214,14 @@ export function createStage(scene, gen, { lite = false, renderer = null } = {}) 
     add(o.lamp.socket, sockM, { cast: false });
     const cordM = own(surfaceMaterial({ ...Md.blackVelvet, color: '#2a2622', color2: '#1a1714', sheen: 0.4 }));
     add(o.lamp.wire, cordM, { cast: false });
-    cord = new THREE.Group();
-    pivot = o.lamp.cordPivot;
-    cord.position.set(...pivot);
-    root.add(cord);
-    add(o.lamp.cord, cordM, { parent: cord });
+    // le voyant de charge : il rougit pendant que le condensateur se charge, et
+    // s'allume franchement quand l'éclair est prêt (il s'éteint à l'éclair)
+    const ready = new THREE.MeshPhysicalNodeMaterial();
+    ready.colorNode = vec4(0.25, 0.02, 0.015, 1);
+    ready.roughnessNode = float(0.15);
+    ready.clearcoatNode = float(1);
+    ready.emissiveNode = vec3(1, 0.08, 0.03).mul(U.charge.mul(0.4).add(smoothstep(0.82, 0.92, U.charge).mul(5)));
+    add(o.lamp.ready, own(ready), { cast: false });
     // réflecteur
     if (o.mirror) {
       add(o.mirror.glass, own(mirrorMaterial(R.reflector.plane)), { cast: false });
@@ -204,6 +232,15 @@ export function createStage(scene, gen, { lite = false, renderer = null } = {}) 
       const fm = own(surfaceMaterial(fr, { wear }));
       add(o.mirror.frame, fm, { cast: R.family === 'psyche' });
       add(o.mirror.stand, fm);
+    }
+    if (o.mirrorB) {
+      add(o.mirrorB.glass, own(mirrorBMaterial()), { cast: false });
+      add(o.mirrorB.bevel, own(surfaceMaterial({ ...Md.silverFrame, rough: 0.06 })), { cast: false });
+      const fr = Md[R.reflector.frame];
+      const fmB = own(surfaceMaterial(fr, { wear: fr.kind === 'metal' ? '#7c3523' : '#6b4a30' }));
+      add(o.mirrorB.frame, fmB, { cast: false });
+      add(o.mirrorB.stand, fmB, { cast: false });
+      add(o.frontWall, wallM, { cast: false });
     }
     if (o.ardent) {
       // (argent poli : il reflète la pièce sombre ; un faible rendu d'ambiance,
@@ -231,15 +268,13 @@ export function createStage(scene, gen, { lite = false, renderer = null } = {}) 
     const v = ++version;
     D = derive(R);
     const fr = frontRange(R);
-    film = createFilm({
-      duration: R.film.duration, rhoStart: fr.rhoStart, rhoEnd: fr.rhoEnd,
-      cord: { length: R.lamp.cord.length, damping: R.lamp.cord.damping, pull: 0.25, hold: 0.12, depth: 0.025, swing: R.lamp.cord.swing, dir: R.lamp.cord.dir },
-    });
+    film = createFilm({ duration: R.film.duration, rhoStart: fr.rhoStart, rhoEnd: fr.rhoEnd });
     pending = 1;
     gen.request({ R, opts: { dust: lite ? 2000 : 4500 } }, 'scene').then((o) => {
       if (v !== version) return;
       build(o);
       applyLights();
+      freezeShadows();
       pending = 0;
     }).catch((e) => { console.error(e); pending = 0; });
   }
@@ -299,12 +334,21 @@ export function createStage(scene, gen, { lite = false, renderer = null } = {}) 
       facetL.position.set(...B.c);
       facetL.color.copy(Lc); facetL.intensity = 0.9 * I;
     }
+    galleryL.visible = !!D.G;
+    if (D.G) {
+      const G = D.G;
+      P.gzA.value = G.zA; P.gzB.value = G.zB;
+      P.gA.value.set(G.A.cx, G.A.cy, G.A.hw, G.A.hh); P.gB.value.set(G.B.cx, G.B.cy, G.B.hw, G.B.hh);
+      galleryL.position.set(...D.s);
+      galleryL.color.copy(Lc); galleryL.intensity = I;
+    }
     // brume : couleur × intensité de chaque source (0 si la famille ne l'a pas)
     const cI = (u, l, on) => (on ? u.value.set(l.color.r, l.color.g, l.color.b).multiplyScalar(l.intensity) : u.value.set(0, 0, 0));
     cI(P.cLamp, lamp, true);
     cI(P.cMirror, mirrorL, !!D.plane);
     cI(P.cFocus, focusL, !!D.E);
     cI(P.cFacet, facetL, !!D.B);
+    cI(P.cGallery, galleryL, !!D.G);
     P.haze.value = (MOODS[R.mood].haze ?? 0.1) * (lite ? 0.8 : 1);
     // rebonds diffus : la table sous la lampe, le mur près de la lampe ;
     // I_v = albédo · E · A / π, avec une aire utile de l'ordre de 2d²
@@ -326,16 +370,12 @@ export function createStage(scene, gen, { lite = false, renderer = null } = {}) 
   function update(ph, camera) {
     if (!R || !film) return;
     const r = film.rho(ph);
-    P.rhoOn.value = r.on; P.rhoOff.value = r.off;
+    P.rho.value = r;
+    U.charge.value = film.charge(ph);
     U.realPhase.value = film.realPhase(ph);
-    // cordon : il coulisse (tirage) et se balance
-    if (cord) {
-      const c = film.cordAt(ph);
-      cord.position.set(...cordPivot()).add(_c.set(0, c.y, 0));
-      cord.rotation.set(c.sz, 0, -c.sx);
-    }
     if (ball) ball.rotation.y = -2 * Math.PI * film.realPhase(ph) * (R.reflector.ballSpin ?? 1);
     if (D?.B) P.bspin.value = 2 * Math.PI * film.realPhase(ph) * (R.reflector.ballSpin ?? 1);
+    if (shadowFrames > 0) { shadowFrames--; for (const l of [win, lamp, mirrorL]) l.shadow.needsUpdate = true; }
     if (camera) {
       P.eye.value.copy(camera.position);
       camera.updateMatrixWorld();
@@ -345,12 +385,21 @@ export function createStage(scene, gen, { lite = false, renderer = null } = {}) 
     }
     P.frame.value = (P.frame.value + 1) % 4096;
   }
-  const cordPivot = () => pivot;
 
+  // Tout est immobile (sauf la boule, qui tourne en temps réel) : les cartes
+  // d'ombre ne sont calculées qu'à l'arrivée de la géométrie et quand une
+  // lumière change. (Les recalculer à chaque image coûtait ~8 ms : la carte
+  // cubique de la lampe, six rendus de la scène.)
+  let shadowFrames = 0;
+  function freezeShadows() {
+    const auto = !!R && R.family === 'facettes';
+    for (const l of [win, lamp, mirrorL]) { l.shadow.autoUpdate = auto; l.shadow.needsUpdate = true; }
+    shadowFrames = 3; // (quelques images : les matériaux arrivent par lots)
+  }
   function setShadowQuality(q) {
     const s = SHADOW[q] ?? 1024;
     for (const [l, k] of [[lamp, 2], [mirrorL, 2], [win, 2]]) {
-      if (l.shadow.mapSize.x !== s * k) { l.shadow.mapSize.set(s * k, s * k); l.shadow.map?.dispose(); l.shadow.map = null; }
+      if (l.shadow.mapSize.x !== s * k) { l.shadow.mapSize.set(s * k, s * k); l.shadow.map?.dispose(); l.shadow.map = null; l.shadow.needsUpdate = true; }
     }
   }
 
@@ -363,6 +412,7 @@ export function createStage(scene, gen, { lite = false, renderer = null } = {}) 
     ready: () => pending === 0 && !!film,
     progress: () => (pending ? 0.3 : 1),
     U,
+    refreshShadows: () => freezeShadows(),
     haze: createHaze(),
   };
 }

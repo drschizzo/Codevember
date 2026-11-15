@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   sub, add, mul, dot, norm, dist, reflectDir, planeBasis, planeEcho, makeEllipse, ellipseEcho, rayEllipsoid,
-  facetEcho, facetFrame, gate,
+  facetEcho, facetFrame, gate, galleryImages, galleryEcho,
 } from '../src/gen/optics.js';
 import { createRng } from '../../shared/rng.js';
 
@@ -93,19 +93,41 @@ test('boule à facettes : chemin par la facette = |x − s′ᶠ|, réflexion ex
   assert.ok(n >= 100, `taches trouvées : ${n}`);
 });
 
-test('le front : 0 avant, 1 après, 0 après l’extinction, monotone', () => {
-  let prev = -1;
-  for (let r = 0; r < 6; r += 0.001) {
-    const g = gate(r, -1, 2, 1.5);
-    assert.ok(g >= prev - 1e-12);
-    prev = g;
+test('l’impulsion : 0 avant le front, un pic sur l’anneau, puis elle s’éteint', () => {
+  assert.equal(gate(3.4, 2, 1.5), 0);
+  assert.ok(gate(3.52, 2, 1.5) > 3);
+  assert.ok(gate(5, 2, 1.5) < 0.02);
+  let prev = Infinity;
+  for (let r = 3.52; r < 5; r += 0.01) { const g = gate(r, 2, 1.5); assert.ok(g <= prev + 1e-12); prev = g; }
+});
+
+test('galerie : chaque image est le bout d’un rayon réellement réfléchi entre les deux glaces', () => {
+  const G = { zA: -0.5, zB: 2.0, A: { cx: 0, cy: 0.5, hw: 0.4, hh: 0.45 }, B: { cx: 0, cy: 0.5, hw: 0.7, hh: 0.8 } };
+  const s = [-0.2, 0.5, 0.1];
+  let n = 0;
+  for (let k = 0; k < 3000; k++) {
+    const x = rv([-0.6, 0, -0.4], [0.6, 1, 1.8]);
+    for (const e of galleryEcho(x, s, G, 4)) {
+      // lancer le rayon depuis x vers l'image, le réfléchir à chaque glace
+      // rencontrée, et vérifier qu'il aboutit à la lampe avec la même longueur
+      let o = x, dir = norm(sub(e.q, x)), total = 0, hits = 0;
+      for (let b = 0; b < 8; b++) {
+        const zt = dir[2] < 0 ? G.zA : G.zB;
+        const t = (zt - o[2]) / dir[2];
+        const p = add(o, mul(dir, t));
+        // la lampe est-elle sur ce segment ?
+        const ts = dot(sub(s, o), dir);
+        if (hits === e.n && ts > 0 && ts < t + 1e-9) { total += ts; o = add(o, mul(dir, ts)); break; }
+        total += t; o = p; dir = [dir[0], dir[1], -dir[2]]; hits++;
+      }
+      assert.equal(hits, e.n, 'nombre de réflexions');
+      assert.ok(dist(o, s) < 1e-9, 'le rayon aboutit à la lampe');
+      assert.ok(Math.abs(total - e.L) < 1e-9, 'longueur du chemin');
+      n++;
+    }
   }
-  assert.equal(gate(3.4, -1, 2, 1.5), 0);
-  assert.equal(gate(3.6, -1, 2, 1.5), 1);
-  // l'éclair : l'anneau du front est plus brillant, puis la lumière s'établit
-  assert.ok(gate(3.52, -1, 2, 1.5, 0.02, 3) > 3);
-  assert.ok(Math.abs(gate(5, -1, 2, 1.5, 0.02, 3) - 1) < 1e-4);
-  assert.equal(gate(60, 60, 2, 1.5, 0.02, 3), 0);
-  assert.equal(gate(60, 3.6, 2, 1.5), 0);
-  assert.equal(gate(60, 60, 2, 1.5), 0);
+  assert.ok(n > 500, `chemins vérifiés : ${n}`);
+  // les images s'éloignent : 1, 2, 3, 4 réflexions derrière A
+  const zs = galleryImages(s, G, 4).filter((i) => i.side === 'A').map((i) => i.q[2]);
+  for (let i = 1; i < zs.length; i++) assert.ok(zs[i] < zs[i - 1]);
 });

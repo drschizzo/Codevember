@@ -13,11 +13,11 @@ import {
   uniform, float, vec2, vec3, smoothstep, length, dot, normalize, max, min, abs, floor, cos, sin, asin, atan,
   select, step, clamp, cameraPosition, mix, cross, sqrt, acos, exp,
 } from 'three/tsl';
-import { BALL_LAT, FLASH, FLASH_LEN } from '../gen/optics.js';
+import { BALL_LAT, FRONT, PULSE_LEN, PULSE_PEAK } from '../gen/optics.js';
 
 const V = () => uniform(new THREE.Vector3());
 export const P = {
-  rhoOn: uniform(60), rhoOff: uniform(60), front: uniform(0.02), flash: uniform(FLASH), flashLen: uniform(FLASH_LEN),
+  rho: uniform(60), front: uniform(FRONT), pulseLen: uniform(PULSE_LEN), peak: uniform(PULSE_PEAK),
   lamp: V(),
   // miroir plan
   mc: V(), mn: V(), mu: V(), mv: V(), mhw: uniform(0.3), mhh: uniform(0.4), mshape: uniform(0), msv: V(),
@@ -25,29 +25,22 @@ export const P = {
   ef1: V(), ef2: V(), ea: uniform(0.5), eaxis: V(), ecos: uniform(0.9), efMin: uniform(0.012),
   // boule à facettes
   bc: V(), br: uniform(0.08), brows: uniform(16), bcols: uniform(40), bspin: uniform(0), bsize: uniform(0.01),
+  // galerie : plans des deux glaces, contours (cx, cy, demi-largeur, demi-hauteur)
+  gzA: uniform(-0.5), gzB: uniform(2), gA: uniform(new THREE.Vector4(0, 0.5, 0.3, 0.4)), gB: uniform(new THREE.Vector4(0, 0.5, 0.8, 0.8)), gR: uniform(0.88),
   // œil réel (pour la brume, rendue dans une passe où cameraPosition est celle du quad)
   eye: V(),
   // brume : densité, et la lumière de chaque source (couleur × intensité ; 0 si absente)
-  haze: uniform(0), cLamp: V(), cMirror: V(), cFocus: V(), cFacet: V(), frame: uniform(0),
+  haze: uniform(0), cLamp: V(), cMirror: V(), cFocus: V(), cFacet: V(), cGallery: V(), frame: uniform(0),
 };
 
-// part du front : 0 avant, 1 après l'allumage, 0 après l'extinction
-// (avec l'éclair d'allumage : même formule que gate() dans optics.js)
+// part de l'impulsion arrivée en un point par un chemin de longueur totale k
+// (lampe → point → œil) : même formule que gate() dans optics.js
 export const gateK = (k) => {
   const w = P.front.mul(0.5);
-  const a = P.rhoOn.sub(k);
-  const boost = exp(a.max(0).div(P.flashLen).negate()).mul(P.flash).add(1);
-  return smoothstep(w.negate(), w, a).sub(smoothstep(w.negate(), w, P.rhoOff.sub(k))).mul(boost);
+  const a = P.rho.sub(k);
+  return smoothstep(w.negate(), w, a).mul(exp(a.max(0).div(P.pulseLen).negate())).mul(P.peak);
 };
 export const gate = (L, x, eye = cameraPosition) => gateK(L.add(length(x.sub(eye))));
-// la porte décomposée : la part établie, et l'excès de l'éclair (la brume
-// montre surtout le second : une coquille qui avance, pas un voile)
-export const gateParts = (k) => {
-  const w = P.front.mul(0.5);
-  const a = P.rhoOn.sub(k);
-  const lit = smoothstep(w.negate(), w, a).sub(smoothstep(w.negate(), w, P.rhoOff.sub(k)));
-  return { lit, flash: lit.mul(exp(a.max(0).div(P.flashLen).negate()).mul(P.flash)) };
-};
 
 // ── Miroir plan : la source image et l'ouverture de la glace ──
 // renvoie { L, w } : chemin par la glace, et 1 si le segment s′ → x traverse
@@ -128,4 +121,55 @@ export function facetEcho(x) {
   const inside = smoothstep(half.add(e), half.sub(e), max(abs(dot(q, t)), abs(dot(q, b))));
   const ok = rowOk.mul(step(0, dot(P.lamp.sub(fc), n))).mul(step(0, dot(x.sub(fc), n))).mul(step(0, tt)).mul(step(tt, 1));
   return { L: length(d), w: inside.mul(ok), hit, sv };
+}
+
+// ── Galerie : les images de la lampe entre deux glaces face à face ──
+// Même construction que galleryImages() dans optics.js (testée contre des
+// rayons réfléchis). Chaque image est une source ponctuelle d'intensité
+// Rⁿ·I ; elle éclaire x si la droite image → x traverse chaque copie dépliée
+// des glaces dans son contour. N réflexions au plus, de chaque côté.
+export const GALLERY_N = 4;
+export function galleryList({ skipA1 = false } = {}) {
+  const out = [];
+  const D = P.gzB.sub(P.gzA);
+  for (const side of ['A', 'B']) {
+    const z0 = side === 'A' ? P.gzA : P.gzB, sg = side === 'A' ? -1 : 1;
+    for (let n = 1; n <= GALLERY_N; n++) {
+      if (skipA1 && side === 'A' && n === 1) continue;
+      const k = Math.floor((n - 1) / 2);
+      const z = n % 2 ? z0.mul(2).sub(P.lamp.z).add(D.mul(sg * 2 * k)) : P.lamp.z.add(D.mul(sg * 2 * Math.ceil(n / 2)));
+      const planes = [];
+      for (let j = 0; j < n; j++) planes.push({ z: z0.add(D.mul(sg * j)), M: (j % 2 ? (side === 'A' ? P.gB : P.gA) : (side === 'A' ? P.gA : P.gB)) });
+      out.push({ q: vec3(P.lamp.x, P.lamp.y, z), n, side, planes });
+    }
+  }
+  return out;
+}
+// ouverture d'une image vue depuis un point x (1 si la droite traverse tous
+// les contours, bord adouci sur 3 mm)
+export function galleryAperture(im, x) {
+  const d = x.sub(im.q);
+  let ok = float(1);
+  for (const pl of im.planes) {
+    const t = pl.z.sub(im.q.z).div(d.z);
+    const px = im.q.x.add(d.x.mul(t)), py = im.q.y.add(d.y.mul(t));
+    const e = float(0.003);
+    const ins = smoothstep(pl.M.z.add(e), pl.M.z.sub(e), abs(px.sub(pl.M.x))).mul(smoothstep(pl.M.w.add(e), pl.M.w.sub(e), abs(py.sub(pl.M.y))));
+    ok = ok.mul(ins).mul(step(0, t)).mul(step(t, 1));
+  }
+  return ok;
+}
+// somme des échos de la galerie en x : { w (Σ Rⁿ·porte/r²), dir (direction
+// pondérée vers les sources, monde) }
+export function galleryEcho(x, eye = cameraPosition, opts = {}) {
+  let w = float(0), dir = vec3(0);
+  const inRoom = step(P.gzA, x.z).mul(step(x.z, P.gzB));
+  const D = length(x.sub(eye));
+  for (const im of galleryList(opts)) {
+    const v = im.q.sub(x), r = length(v).max(1e-3);
+    const c = galleryAperture(im, x).mul(gateK(r.add(D))).mul(P.gR.pow(im.n)).div(r.mul(r));
+    w = w.add(c);
+    dir = dir.add(v.div(r).mul(c));
+  }
+  return { w: w.mul(inRoom), dir };
 }

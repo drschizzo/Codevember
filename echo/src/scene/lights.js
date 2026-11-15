@@ -13,8 +13,8 @@
 //   (l'ampoule n'est pas un point : son image a la taille du filament).
 // - FacetLight : les pinceaux de la boule, un par facette.
 import * as THREE from 'three/webgpu';
-import { uniform, positionWorld, length, normalize, vec4, max, cameraViewMatrix, float } from 'three/tsl';
-import { P, gate, planeEcho, ellipseEcho, facetEcho } from './paths.js';
+import { uniform, positionWorld, length, normalize, vec3, vec4, max, cameraViewMatrix, float } from 'three/tsl';
+import { P, gate, planeEcho, ellipseEcho, facetEcho, galleryEcho } from './paths.js';
 
 export class GatedLight extends THREE.PointLight {
   constructor(...a) { super(...a); this.gPos = uniform(new THREE.Vector3()); this.gOff = uniform(0); }
@@ -69,6 +69,17 @@ export class FacetLightNode extends THREE.PointLightNode {
   }
 }
 
+// Les échos de la galerie (deux glaces face à face) : toutes les images sauf
+// la première de la glace du mur, que MirrorLight porte avec ses ombres
+export class GalleryLight extends THREE.PointLight {}
+export class GalleryLightNode extends THREE.PointLightNode {
+  static get type() { return 'GalleryLightNode'; }
+  setupDirect() {
+    const e = galleryEcho(positionWorld, undefined, { skipA1: true });
+    return { lightColor: this.colorNode.mul(e.w), lightDirection: toView(normalize(e.dir.add(vec3(0, 1e-6, 0)))) };
+  }
+}
+
 export function registerLights(renderer) {
   const lib = renderer?.library;
   if (!lib) return;
@@ -76,4 +87,5 @@ export function registerLights(renderer) {
   lib.addLight(MirrorLightNode, MirrorLight);
   lib.addLight(FocusLightNode, FocusLight);
   lib.addLight(FacetLightNode, FacetLight);
+  lib.addLight(GalleryLightNode, GalleryLight);
 }

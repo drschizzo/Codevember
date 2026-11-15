@@ -28,8 +28,8 @@
     </header>
 
     <figure class="cover">
-      <img src="docs/capture.jpg" alt="Une ampoule allumée devant un miroir doré en plein cintre accroché à un mur bleu sombre ; dans la glace, son reflet brille ; une sphère de lumière au bord net s'étend sur le mur ; des vases blancs sur une table de pin." width="1600" height="900">
-      <figcaption>La graine d'ouverture, quelques secondes après le déclic. Le bord net du disque sur le mur est le front de la lumière, porté par l'éclair d'allumage ; dans la glace, l'ampoule s'est allumée après la vraie.</figcaption>
+      <img src="docs/capture.jpg" alt="Un mur lambrissé gris, un miroir en plein cintre au cadre sombre ; un anneau de lumière au bord net s'étend sur le mur autour de lui ; dans la glace, l'ampoule et son reflet ; des vases sur une table." width="1600" height="900">
+      <figcaption>La graine d'ouverture, une galerie, quelques secondes après l'éclair. L'anneau clair sur le mur est l'impulsion qui s'éloigne de la lampe ; un second anneau, plus faible, revient de la glace. Dans la glace, l'éclair n'apparaît qu'après la lampe.</figcaption>
     </figure>
 
     <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
@@ -38,11 +38,11 @@
       <section id="horloge">
         <h2><span class="n">01</span>Une seule horloge, celle d'une caméra rapide</h2>
         <span class="src">src/film.js · createFilm()</span>
-        <p>Le film dure une trentaine de secondes, et presque tout ce qu'il montre se passe en quelques nanosecondes. On ne peut pas ralentir le film entier : le cordon tiré, le balancement de la perle, la pièce éclairée se jouent en temps réel. La vitesse du film \(v(u)\), en fonction de la phase \(u\), vaut donc 1 en temps réel et \(1/K\) pendant les deux ralentis. Elle passe de l'une à l'autre par une rampe douce sur son logarithme, sinon le passage de 1 à \(10^{-9}\) se ferait d'un coup. Le temps physique est son intégrale :</p>
-        <div class="eq">\[ \tau(u) = T \int_0^u v(u')\,du', \qquad \rho(u) = c\,\big(\tau(u) - \tau_{\text{allumage}}\big) \]</div>
+        <p>Le film dure de 10 à 16 secondes, et presque tout ce qu'il montre se passe en quelques nanosecondes. On ne peut pas ralentir le film entier : le voyant du stroboscope qui rougit pendant la charge se joue en temps réel. La vitesse du film \(v(u)\), en fonction de la phase \(u\), vaut donc 1 en temps réel et \(1/K\) pendant le ralenti, qui commence à l'éclair. Elle passe de l'une à l'autre par une rampe douce sur son logarithme, sinon le passage de 1 à \(10^{-9}\) se ferait d'un coup. Le temps physique est son intégrale :</p>
+        <div class="eq">\[ \tau(u) = T \int_0^u v(u')\,du', \qquad \rho(u) = c\,\big(\tau(u) - \tau_{\text{éclair}}\big) \]</div>
         <p>\(\rho\) est la longueur de chemin parcourue par la lumière depuis qu'elle a quitté l'ampoule. Elle est calculée en double précision, sur 32 768 pas, puis bornée à [−1, 60] m avant d'aller au GPU : \(c\,\tau\) vaut des milliards de mètres en temps réel, et un flottant de 32 bits n'y distingue plus deux centimètres.</p>
-        <p>\(K\) est choisi pour que la lumière traverse la scène pendant le ralenti : le front avance de 0,30 à 0,54 m par seconde de film, soit \(K\) entre \(5{,}6\cdot10^8\) et \(9{,}9\cdot10^8\) selon la graine. Le ralenti commence juste avant que la première lumière n'atteigne l'objectif, et finit quand le dernier point visible est allumé.</p>
-        <figure id="fig-horloge"><figcaption><b>Les courbes du film.</b> En haut, le logarithme de la vitesse du film ; en bas, les rayons des deux fronts (allumage, extinction). Le curseur déplace la phase. La démo appelle <code>createFilm</code> du projet avec une scène type (front de 1,5 à 5,6 m).</figcaption></figure>
+        <p>La durée découle du chemin à montrer. Le ralenti commence juste avant que la première lumière n'atteigne l'objectif et finit quand le dernier écho visible est passé ; le front y avance à 0,55 m par seconde de film, et la boucle dure ce qu'il faut, entre 10 et 16 s. La première version enchaînait un allumage, une pièce éclairée et une extinction, chacun ralenti : 30 secondes, jugées trop longues.</p>
+        <figure id="fig-horloge"><figcaption><b>Les courbes du film.</b> En haut, le logarithme de la vitesse du film ; en bas, le rayon du front de l'éclair. Le curseur déplace la phase. La démo appelle <code>createFilm</code> du projet avec une scène type (front de 1,5 à 5,6 m, boucle de 12 s).</figcaption></figure>
       </section>
 
       <section id="oeil">
@@ -51,13 +51,11 @@
         <p>La lumière qu'on voit sur un vase a fait deux voyages : de l'ampoule au vase, puis du vase à l'objectif. Les femto-photographies montrent les deux. Un point \(x\), éclairé par un chemin de longueur \(L(x)\), apparaît allumé quand</p>
         <div class="eq">\[ \rho \;\ge\; L(x) + \lVert x - e \rVert \]</div>
         <p>où \(e\) est l'œil. Sans le second terme, le front serait une sphère centrée sur l'ampoule. Avec lui, l'ensemble des points allumés est un ellipsoïde dont les foyers sont l'ampoule et l'œil : la lumière semble fuir l'objectif plus vite qu'elle ne s'en approche. C'est la géométrie des échos lumineux d'étoiles, où les points de même retard forment un ellipsoïde de foyers l'étoile et l'observateur.</p>
-        <p>Chaque lumière de la scène est multipliée, au point éclairé, par la part du front arrivée, une rampe de 2 cm, moins celle du front d'extinction :</p>
-        <div class="eq">\[ g = S(\rho_\text{on} - L - D) - S(\rho_\text{off} - L - D),\qquad D = \lVert x - e\rVert \]</div>
-        <p>Un front qui ne fait qu'allumer laisse derrière lui une surface uniformément éclairée : à l'image, on voit un disque qui grandit, comme un fondu, et la propagation ne se lit pas. L'allumage commence donc par un éclair : la première lumière est quatre fois plus forte, et l'excès s'éteint sur 12 cm de chemin.</p>
-        <div class="eq">\[ g = S(a)\,\big(1 + 3\,e^{-a/0{,}12\,\text{m}}\big) - \ldots, \qquad a = \rho_\text{on} - L - D \]</div>
-        <p>Sur chaque surface le front passe en anneau brillant ; dans la brume il dessine une coquille qui s'éloigne, et l'écho en ramène une seconde, depuis la glace.</p>
-        <div class="note check"><b>Vérifié</b><p>La porte vaut 0 avant le front, plus de 3 sur l'anneau, 1 une fois la lumière établie, 0 après l'extinction ; la partie établie ne redescend jamais pendant un ralenti (tests <code>optics.test.mjs</code> et <code>film.test.mjs</code>).</p></div>
-        <figure id="fig-oeil"><figcaption><b>Sphère ou ellipsoïde.</b> Le plan de la pièce vu de dessus : l'ampoule, l'œil en bas. Faites avancer le front ; le bouton retire le retard de l'œil. La démo trace la région allumée par la porte <code>gate</code> du projet, sans ombres.</figcaption></figure>
+        <p>Chaque lumière de la scène est multipliée, au point éclairé, par la part de l'éclair qui y passe. L'éclair est une impulsion : sa lumière monte sur 2 cm de chemin, puis décroît sur 22 cm.</p>
+        <div class="eq">\[ g = 4\,S(a)\,e^{-a/0{,}22\,\text{m}}, \qquad a = \rho - L(x) - \lVert x - e\rVert \]</div>
+        <p>La première version allumait une lampe et la laissait allumée. Un front qui ne fait qu'allumer laisse derrière lui une surface uniformément éclairée : à l'image, un disque qui grandit, comme un fondu, et l'écho n'y ajoute qu'un peu de lumière. Avec une impulsion, chaque point voit passer un anneau, et ce qui part et ce qui revient sont deux anneaux distincts.</p>
+        <div class="note check"><b>Vérifié</b><p>L'impulsion vaut 0 avant le front, plus de 3 sur l'anneau, puis décroît sans remonter ; le front ne recule jamais pendant le ralenti (tests <code>optics.test.mjs</code> et <code>film.test.mjs</code>).</p></div>
+        <figure id="fig-oeil"><figcaption><b>Sphère ou ellipsoïde.</b> Le plan de la pièce vu de dessus : l'ampoule, l'œil en bas. Faites avancer le front ; le bouton retire le retard de l'œil. La démo trace l'anneau de l'impulsion par la porte <code>gate</code> du projet, sans ombres.</figcaption></figure>
       </section>
 
       <section id="glace">
@@ -88,8 +86,19 @@
         <figure id="fig-ardent"><figcaption><b>Le foyer.</b> Des rayons partent de l'ampoule, se réfléchissent sur la calotte et convergent ; l'arc clair est le front de l'écho, qui se referme puis se rouvre. Le curseur fait avancer le front. Les longueurs viennent de <code>ellipseEcho</code> du projet, dans un plan de coupe.</figcaption></figure>
       </section>
 
+      <section id="galerie">
+        <h2><span class="n">06</span>Deux glaces face à face renvoient l'écho encore et encore</h2>
+        <span class="src">src/gen/optics.js · galleryImages(), galleryEcho()</span>
+        <p>Un écho qu'on reconnaît se répète : un cri dans une vallée revient plusieurs fois, chaque fois plus faible. Entre deux glaces parallèles, la lumière fait de même. La glace du mur fait face à une seconde glace, accrochée au mur du devant, derrière la caméra : on ne la voit que dans la première, avec, au fond, une file d'images de l'éclair.</p>
+        <p>Chaque image est la lampe réfléchie \(n\) fois, alternativement par les deux glaces. Pour deux plans parallèles \(z = z_A\) et \(z = z_B\), séparés de \(D\), ses positions sont exactes :</p>
+        <div class="eq">\[ z_n = 2z_A - z_s - 2kD \ (n = 2k+1), \qquad z_n = z_s - 2kD \ (n = 2k), \]</div>
+        <p>derrière la glace du mur, et symétriquement derrière l'autre. Le chemin de la lampe à un point \(x\) par cette suite de réflexions a la longueur \(\lVert x - q_n\rVert\), à condition que la droite \(q_n \to x\) traverse chaque glace, dépliée, dans son contour. Chaque image éclaire la pièce avec l'intensité \(0{,}88^n\,I\), et apparaît dans la glace à son heure : quand \(\rho\) atteint \(\lVert q_n - e\rVert\). Deux échos successifs sont séparés de \(2D\), environ 6 m de chemin. Pour les montrer, la galerie atteint le plafond de 16 s, et son front avance plus vite que dans les autres familles (vers 0,8 m/s au lieu de 0,55) : sa boucle montre trois échos.</p>
+        <p>La glace d'en face n'est pas rendue récursivement : son shader dessine directement les images de l'éclair qui sont derrière elle, à leur place et à leur heure, vues depuis la caméra qui la regarde (dans le rendu de la première glace, la caméra symétrique). Le retard de chaque écho reste exact.</p>
+        <div class="note check"><b>Vérifié</b><p>Pour plus de 500 chemins, un rayon lancé de \(x\) vers l'image et réfléchi pas à pas sur les deux plans aboutit à la lampe après exactement \(n\) réflexions, avec la même longueur à \(10^{-9}\) près.</p></div>
+      </section>
+
       <section id="facettes">
-        <h2><span class="n">06</span>Une boule à facettes, un miroir par facette</h2>
+        <h2><span class="n">07</span>Une boule à facettes, un miroir par facette</h2>
         <span class="src">src/scene/paths.js · facetEcho()</span>
         <p>Une boule à facettes porte de 490 à 620 petits miroirs plans. Calculer six cents lumières serait hors de prix. Mais pour un point \(x\) donné, une seule facette peut lui renvoyer l'ampoule : celle dont la normale est la bissectrice des directions de la boule vers \(x\) et vers l'ampoule. On la retrouve par sa rangée (la latitude) et son rang (la longitude), sans boucle. Puis le chemin est celui d'un miroir plan : \(\lVert x - s'_f\rVert\), si le rayon traverse le carré de la facette. Chaque tache a la forme de la facette, agrandie, et arrive à son heure.</p>
         <p>Le nombre de facettes d'une rangée suit le cosinus de sa latitude, pour que l'écart en longitude reste celui de l'équateur ; la boule tourne d'un tour par boucle, mais seulement en temps réel.</p>
@@ -97,33 +106,34 @@
       </section>
 
       <section id="temps">
-        <h2><span class="n">07</span>Pendant le ralenti, la matière est figée</h2>
-        <span class="src">src/film.js · cordAt()</span>
-        <p>Si la lumière avance au ralenti, tout ce qui bouge doit ralentir avec elle. Le cordon, la boule et les grains de poussière lisent le temps physique \(\tau\), pas la phase : ils sont immobiles pendant les dix secondes de lumière, et la perle reprend son balancement exactement là où elle l'avait laissé. Seule la caméra lit la phase et continue de glisser, comme dans un plan au temps suspendu.</p>
-        <p>Le cordon est tiré de 2,5 cm en 0,25 s, le déclic a lieu en bas, la perle est relâchée 0,12 s plus tard, remonte sur le ressort de l'interrupteur et se balance en pendule (longueur 20 à 27 cm, amortissement 1,3 à 2 s). La réponse est sommée sur les deux tirages et leurs images d'une boucle à l'autre : elle est périodique par construction.</p>
-        <figure id="fig-cordon"><figcaption><b>Le cordon.</b> La hauteur de la perle et son angle de balancement sur une boucle, en fonction de la phase ; les bandes grises sont les ralentis. Calcul par <code>cordAt</code> du projet.</figcaption></figure>
+        <h2><span class="n">08</span>Un stroboscope, et rien ne bouge pendant l'éclair</h2>
+        <span class="src">src/film.js · charge(), realPhase()</span>
+        <p>La cause de l'éclair est à l'image : la lampe est un stroboscope, un tube au xénon enroulé en trois spires dans une ampoule claire, alimenté par un condensateur. Sur la douille, un voyant rougit à mesure que la charge monte et s'allume franchement quand elle est prête ; l'éclair part et le vide. La première version tirait le cordon d'une douille à tirette, sans main pour le tirer : la perle descendait toute seule.</p>
+        <p>Si la lumière avance au ralenti, tout ce qui bouge doit ralentir avec elle. La charge, la boule et les grains de poussière lisent le temps réel, figé pendant l'éclair ; seule la caméra lit la phase et continue de glisser. La charge est périodique par construction : vide juste après l'éclair, elle croît pendant tout le temps réel de la boucle et atteint 1 à l'éclair suivant.</p>
+        <figure id="fig-cordon"><figcaption><b>La charge.</b> La charge du stroboscope sur une boucle, en fonction de la phase ; la bande grise est le ralenti, la ligne pointillée le seuil où le voyant s'allume. Calcul par <code>charge</code> du projet.</figcaption></figure>
       </section>
 
       <section id="brume">
-        <h2><span class="n">08</span>La brume montre les fronts dans l'air</h2>
+        <h2><span class="n">09</span>La brume montre les fronts dans l'air</h2>
         <span class="src">src/scene/haze.js · createHaze()</span>
-        <p>Sur les surfaces, le front se voit là où il les coupe. Dans l'air, il faut de la poussière. Une passe de la chaîne d'image marche le long de chaque rayon de vue, en 22 pas tramés, et ajoute en chaque pas la lumière de chaque source à retard. Elle pèse l'éclair du front 1,6 fois et la lumière établie 0,18 fois : une brume qui diffuserait toute la lumière voilait l'image entière d'un halo chaud, alors que ce qu'elle doit montrer, c'est la coquille qui avance. Elle montre la sphère qui sort de l'ampoule, celle qui sort de la glace, le cône qui se referme sur le foyer. Quatre mille cinq cents grains, éclairés par les mêmes lumières et mélangés par addition, n'apparaissent que quand la lumière les touche.</p>
+        <p>Sur les surfaces, le front se voit là où il les coupe. Dans l'air, il faut de la poussière. Une passe de la chaîne d'image marche le long de chaque rayon de vue, en 22 pas tramés, et ajoute en chaque pas la lumière de chaque source à retard. Elle montre la coquille qui sort du tube, celle qui sort de la glace, le cône qui se referme sur le foyer, les échos de la galerie. Quatre mille cinq cents grains, éclairés par les mêmes lumières et mélangés par addition, n'apparaissent que quand la lumière les touche.</p>
         <div class="note trap"><b>Le piège</b><p>La première version rendait l'image entièrement noire. Les sources absentes de la scène ont des uniformes nuls, leurs termes donnaient NaN, et NaN multiplié par zéro reste NaN ; le garde-fou de l'anticrénelage temporel remplace alors chaque pixel par du noir. Chaque terme est désormais derrière une sélection sur la présence de sa source. Le second NaN venait d'une couleur copiée dans un vecteur : <code>Vector3.copy(color)</code> lit <code>x, y, z</code>, qu'une couleur n'a pas.</p></div>
       </section>
 
       <section id="budget">
-        <h2><span class="n">09</span>Budget</h2>
+        <h2><span class="n">10</span>Budget</h2>
         <div class="tbl"><table>
           <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
           <tbody>
             <tr><td>Géométrie de la pièce (vases, table, lambris, lampe, réflecteur, poussière)</td><td>worker</td><td class="num">35 à 67 ms</td></tr>
             <tr><td>Horloge du film (τ tabulé sur 32 768 pas)</td><td>fil principal</td><td class="num">&lt; 5 ms</td></tr>
             <tr><td>Pipelines compilées sous l'écran de chargement</td><td>GPU</td><td class="num">73 à 84</td></tr>
-            <tr><td>Image, 1920 × 1080, qualité Haute, passage de l'écho (graine d'ouverture)</td><td>GPU</td><td class="num">12,1 ms</td></tr>
+            <tr><td>Image, 1920 × 1080, qualité Haute, passage de l'éclair (graine d'ouverture, galerie)</td><td>GPU</td><td class="num">15,8 ms</td></tr>
+            <tr><td>dont les huit images de la galerie, dans chaque matériau</td><td>GPU</td><td class="num">1,2 ms</td></tr>
             <tr><td>Version mobile</td><td>GPU</td><td class="num">4,1 ms</td></tr>
           </tbody>
         </table></div>
-        <p>Mesures sur un portable Apple Silicon, graine d'ouverture (trumeau). Le raccord de boucle est exact à \(2\cdot10^{-7}\) près sur la pose de la caméra.</p>
+        <p>Mesures sur un portable Apple Silicon, graine d'ouverture (galerie), onglet au premier plan. Le raccord de boucle est exact à \(10^{-10}\) près sur la pose de la caméra.</p>
       </section>
     </article>
 
@@ -141,16 +151,15 @@
     import { createFilm, TIMELINE } from './src/film.js';
     import { gate, planeEcho, planeBasis, makeEllipse, ellipseEcho, ellipseRadius, reflectDir, norm, sub, add, mul } from './src/gen/optics.js';
 
-    const cord = { length: 0.24, damping: 1.6, pull: 0.25, hold: 0.12, depth: 0.025, swing: 0.06, dir: 0.3 };
-    const F = createFilm({ duration: 30, rhoStart: 1.5, rhoEnd: 5.6, cord });
+    const F = createFilm({ duration: 12, rhoStart: 1.5, rhoEnd: 5.6 });
     const slowBands = (g, d, x0, x1, y0, y1) => {
       g.fillStyle = alpha(C.ink, 0.05);
-      for (const e of [TIMELINE.on, TIMELINE.off]) g.fillRect(lerp(x0, x1, e.slow), y0, (e.end - e.slow) * (x1 - x0), y1 - y0);
+      g.fillRect(lerp(x0, x1, TIMELINE.slow), y0, (TIMELINE.end - TIMELINE.slow) * (x1 - x0), y1 - y0);
     };
 
     // 01 — les courbes du film
     demo('#fig-horloge', {
-      title: 'Vitesse du film et rayons des fronts', aspect: 2.1,
+      title: 'Vitesse du film et rayon du front', aspect: 2.1,
       controls: [{ key: 'u', label: 'Phase u', min: 0, max: 1, step: 0.001, value: 0.2 }],
       draw(g, d) {
         const x0 = 40, x1 = d.w - 14, mid = d.h * 0.42;
@@ -162,9 +171,9 @@
         label(g, 'log₁₀ v : 0', 4, 22); label(g, '−10', 10, mid - 8);
         // fronts
         const ry = (r) => lerp(d.h - 18, mid + 10, Math.min(1, Math.max(0, r / 7)));
-        for (const [k, col] of [['on', C.c2], ['off', C.c3]]) {
-          g.strokeStyle = col; g.beginPath(); let pen = false;
-          for (let i = 0; i <= 600; i++) { const u = i / 600, r = F.rho(u)[k]; if (r <= -0.5 || r >= 59) { pen = false; continue; } const X = lerp(x0, x1, u), Y = ry(r); pen ? g.lineTo(X, Y) : g.moveTo(X, Y); pen = true; }
+        {
+          g.strokeStyle = C.c2; g.beginPath(); let pen = false;
+          for (let i = 0; i <= 600; i++) { const u = i / 600, r = F.rho(u); if (r <= -0.5 || r >= 59) { pen = false; continue; } const X = lerp(x0, x1, u), Y = ry(r); pen ? g.lineTo(X, Y) : g.moveTo(X, Y); pen = true; }
           g.stroke();
         }
         label(g, 'ρ (m) 0', 4, d.h - 18); label(g, '7', 26, mid + 14);
@@ -172,7 +181,7 @@
         g.strokeStyle = C.ink; g.lineWidth = 1; g.beginPath(); g.moveTo(X, 10); g.lineTo(X, d.h - 14); g.stroke();
         const r = F.rho(d.s.u);
         const fmt = (x) => (x >= 59 ? 'passé' : x <= -0.5 ? '—' : `${x.toFixed(2)} m`);
-        d.status(`v = ${F.speed(d.s.u).toExponential(1)} · allumage ${fmt(r.on)} · extinction ${fmt(r.off)}`);
+        d.status(`v = ${F.speed(d.s.u).toExponential(1)} · front ${fmt(r)}`);
       },
     });
 
@@ -189,7 +198,7 @@
           const x = [(px - d.w / 2) / k, 0, (py - d.h * 0.2) / k - 0.2];
           const D = d.s.warp ? Math.hypot(x[0] - e[0], x[2] - e[2]) : 0;
           const L = Math.hypot(x[0] - s[0], x[2] - s[2]);
-          const gg = gate(d.s.rho + (d.s.warp ? 0 : 0), -1, L, D, 0.04);
+          const gg = gate(d.s.rho, L, D, 0.04) / 4;
           if (gg > 0.01) { g.fillStyle = alpha(C.c2, 0.28 * gg); g.fillRect(px, py, step, step); }
         }
         g.fillStyle = C.c2; g.beginPath(); g.arc(X(s), Y(s), 5, 0, TAU); g.fill(); label(g, 'ampoule', X(s) + 8, Y(s) - 6);
@@ -214,9 +223,9 @@
           for (let py = 0; py < d.h; py += step) for (let px = 0; px < d.w; px += step) {
             const x = [(px - d.w / 2) / k, 0, (py - d.h * 0.25) / k - 0.45];
             if (x[2] < M.c[2]) continue;
-            const a = gate(d.s.rho, -1, Math.hypot(x[0] - s[0], x[2] - s[2]), 0, 0.03);
+            const a = gate(d.s.rho, Math.hypot(x[0] - s[0], x[2] - s[2]), 0, 0.03) / 4;
             const ec = planeEcho(x, s, M);
-            const b = ec ? gate(d.s.rho, -1, ec.L, 0, 0.03) : 0;
+            const b = ec ? gate(d.s.rho, ec.L, 0, 0.03) / 4 : 0;
             if (a > 0.01) { g.fillStyle = alpha(C.c2, 0.22 * a); g.fillRect(px, py, step, step); }
             if (b > 0.01) { g.fillStyle = alpha(C.c3, 0.3 * b); g.fillRect(px, py, step, step); }
           }
@@ -308,21 +317,18 @@
       },
     });
 
-    // 07 — le cordon
+    // 08 — la charge du stroboscope
     demo('#fig-cordon', {
-      title: 'La perle sur une boucle', aspect: 2.4,
+      title: 'La charge sur une boucle', aspect: 2.6,
       draw(g, d) {
-        const x0 = 16, x1 = d.w - 14;
+        const x0 = 16, x1 = d.w - 14, y0 = d.h - 18, y1 = 22;
         slowBands(g, d, x0, x1, 8, d.h - 8);
-        const plot = (f, sc, col, mid) => {
-          g.strokeStyle = col; g.lineWidth = 1.8; g.beginPath();
-          for (let i = 0; i <= 800; i++) { const u = i / 800, y = mid - f(F.cordAt(u)) * sc; i ? g.lineTo(lerp(x0, x1, u), y) : g.moveTo(lerp(x0, x1, u), y); }
-          g.stroke();
-        };
-        plot((c) => c.y, d.h * 9, C.c2, d.h * 0.32);
-        plot((c) => c.sx, d.h * 3, C.c1, d.h * 0.72);
-        label(g, 'hauteur de la perle (tirage 2,5 cm)', x0 + 4, 20);
-        label(g, 'balancement', x0 + 4, d.h * 0.72 - 30);
+        g.strokeStyle = C.faint; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(x0, lerp(y0, y1, 0.87)); g.lineTo(x1, lerp(y0, y1, 0.87)); g.stroke(); g.setLineDash([]);
+        g.strokeStyle = C.c3; g.lineWidth = 2; g.beginPath();
+        for (let i = 0; i <= 800; i++) { const u = i / 800, y = lerp(y0, y1, F.charge(u)); i ? g.lineTo(lerp(x0, x1, u), y) : g.moveTo(lerp(x0, x1, u), y); }
+        g.stroke();
+        label(g, 'charge (le voyant s’allume au-dessus du pointillé)', x0 + 4, 16);
+        label(g, 'éclair', lerp(x0, x1, TIMELINE.slow) + 4, y0 - 4);
       },
     });
 

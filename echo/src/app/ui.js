@@ -56,7 +56,7 @@ export function createUI({ recipe: getRecipe, render, on, moods }) {
 
     add(fScene, R, 'mood', opts(moods)).name('Humeur (nouvelle scène)').onChange((m) => on.moodChanged(m));
     add(fScene, R, 'family', opts(FAMILIES)).name('Réflecteur (nouvelle scène)').onChange((f) => on.familyChanged(f));
-    add(fScene, R.film, 'duration', 16, 60, 1).name('Durée de la boucle (s)').onChange(() => on.rebuild());
+    add(fScene, R.film, 'duration', 8, 30, 1).name('Durée de la boucle (s)').onChange(() => on.rebuild());
 
     add(fCam, R.camera, 'fov', 18, 60, 0.5).name('Champ (°)').onChange(ch);
     add(fCam, R.camera, 'dist', 1.4, 4, 0.01).name('Distance (m)').onChange(() => on.rebuild());
@@ -72,7 +72,6 @@ export function createUI({ recipe: getRecipe, render, on, moods }) {
     addC(fPieces, L, 'color').name('Ampoule : couleur').onChange(() => on.rebuild());
     add(fPieces, L, 'intensity', 0.2, 8, 0.01).name('Ampoule : intensité (cd)').onChange(() => on.rebuild());
     add(fPieces, L, 'socket', opts(Object.fromEntries(['brass', 'nickel', 'porcelainSocket', 'bakelite'].map((k) => [k, MATS[k]])))).name('Douille').onChange(() => on.rebuild());
-    add(fPieces, L.cord, 'swing', 0, 0.15, 0.001).name('Cordon : balancement (rad)').onChange(() => on.rebuild());
     const Rf = R.reflector;
     add(fPieces, Rf, 'frame', opts(Object.fromEntries(['giltFrame', 'blackFrame', 'walnutFrame', 'silverFrame', 'nickel'].map((k) => [k, MATS[k]])))).name('Cadre').onChange(() => on.rebuild());
     const fo = fPieces.addFolder('Nature morte').close();

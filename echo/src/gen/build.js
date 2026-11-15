@@ -9,7 +9,7 @@
 // tournée, filament en hélice sur ses supports.
 import { Buffers, roundedBox, sphere, torus, tube, lathe, OUT, IN, EDGE, add, sub, mul, dot, norm, cross } from '../../../shared/gen/mesh.js';
 import { createRng } from '../../../shared/rng.js';
-import { TABLE_H, CEIL, beadRest, footprint } from './layout.js';
+import { TABLE_H, CEIL, footprint } from './layout.js';
 import { makeEllipse, ellipseRadius, planeBasis, rowLat, rowCols, facetSize, BALL_LAT } from './optics.js';
 
 const { PI, cos, sin, sqrt, max, min, abs } = Math;
@@ -354,54 +354,44 @@ function buildLamp(L) {
     B.noFrame();
     out.glass = B.out();
   }
-  // filament : hélice serrée tendue entre deux supports, sur une tige de verre
+  // tube à éclats (xénon) : un tube de verre enroulé en hélice de trois spires
+  // autour de l'axe de l'ampoule, ses deux électrodes qui remontent au pied
   {
     const B = new Buffers();
-    const span = L.kind === 'tube' ? 0.03 : 0.018, turns = 22, rc = 0.0011;
+    const turns = 3, rc = L.kind === 'tube' ? 0.0085 : 0.011, h = L.kind === 'tube' ? 0.05 : 0.026;
     const pts = [];
-    for (let k = 0; k <= turns * 10; k++) {
-      const f = k / (turns * 10), a = f * turns * 2 * PI;
-      // (l'hélice dessine un arc en V léger, comme un filament de lampe)
-      pts.push([s[0] - span / 2 + span * f + rc * cos(a), s[1] + 0.003 * sin(f * PI) + rc * sin(a), s[2] + rc * 0.6 * cos(a * 0.5)]);
+    for (let k = 0; k <= turns * 40; k++) {
+      const f = k / (turns * 40), a = f * turns * 2 * PI;
+      pts.push([s[0] + rc * cos(a), s[1] - h / 2 + h * f, s[2] + rc * sin(a)]);
     }
-    tube(B, pts, 0.00022, 5, EDGE, false);
+    tube(B, pts, 0.0021, 10, OUT, true);
     out.filament = B.out();
     const S = new Buffers();
-    // fils d'amenée et tige de verre (le pied)
-    const base = [L.x, top - 0.012, L.z];
-    tube(S, [base, [s[0] - span / 2, s[1] + 0.001, s[2]]], 0.00028, 6, EDGE, true);
-    tube(S, [base, [s[0] + span / 2, s[1] + 0.001, s[2]]], 0.00028, 6, EDGE, true);
-    tube(S, [[L.x, top - 0.002, L.z], [L.x, top - 0.016, L.z]], 0.0022, 10, OUT, true);
+    const base = [L.x, top - 0.014, L.z];
+    // électrodes (fils de tungstène dans le verre) et pied de verre
+    tube(S, [pts[0], [s[0] + rc, base[1], s[2]], add(base, [0.003, 0, 0])], 0.0006, 6, EDGE, true);
+    tube(S, [pts[pts.length - 1], [s[0] + rc * cos(turns * 2 * PI), base[1] - 0.002, s[2]], add(base, [-0.003, 0, 0])], 0.0006, 6, EDGE, true);
+    tube(S, [[L.x, top - 0.002, L.z], [L.x, top - 0.018, L.z]], 0.0035, 12, OUT, true);
     out.stem = S.out();
   }
-  // douille à tirette : culot, corps, bague, sortie du cordon ; fil d'alimentation
+  // douille de stroboscope : culot, corps, bague, et le voyant de charge (une
+  // lentille rouge dans son chaton, sur le côté) ; fil d'alimentation
   {
     const B = new Buffers();
     vertical(B, [L.x, top, L.z]);
     lathe(B, smoothLathe([[0, -0.001], [0.0142, -0.001], [0.0148, 0.004], [0.017, 0.006], [0.0185, 0.012], [0.0185, 0.04], [0.02, 0.043], [0.02, 0.05], [0.016, 0.058], [0.011, 0.062], [0.006, 0.07], [0.004, 0.08]], EDGE), 40);
     B.noFrame();
-    // la sortie du cordon (un petit bossage sur le côté)
-    vertical(B, [L.x + 0.019, top + 0.018, L.z + 0.009], 0);
-    lathe(B, smoothLathe([[0, -0.004], [0.0045, -0.004], [0.005, 0.0], [0.004, 0.006], [0.0, 0.0065]], EDGE), 16);
+    // chaton du voyant
+    B.frame([L.x, top + 0.026, L.z + 0.0185], [1, 0, 0], [0, 1, 0], [0, 0, 1]);
+    lathe(B, smoothLathe([[0, 0], [0.0052, 0], [0.0055, 0.0015], [0.0048, 0.0032], [0.0042, 0.0034]], EDGE), 24);
     B.noFrame();
     out.socket = B.out();
+    const V = new Buffers();
+    sphere(V, [L.x, top + 0.026, L.z + 0.0207], 0.0036, 20, 12, OUT);
+    out.ready = V.out();
     const W = new Buffers();
     tube(W, [[L.x, top + 0.07, L.z], [L.x, CEIL, L.z]], 0.0028, 10, OUT, false);
     out.wire = W.out();
-  }
-  // cordon + perle, dans le repère de la sortie (il pivote et coulisse)
-  {
-    const B = new Buffers();
-    const len = L.cord.length - 0.03;
-    tube(B, [[0, 0.04, 0], [0, -len, 0]], 0.0012, 8, OUT, false);
-    vertical(B, [0, -len - 0.011, 0], 0);
-    lathe(B, smoothLathe([[0, 0], [0.004, 0.0005], [0.0075, 0.005], [0.0085, 0.011], [0.0065, 0.018], [0.002, 0.022], [0.0012, 0.024]], EDGE), 24);
-    B.noFrame();
-    out.cord = B.out();
-    const bead = beadRest(L);
-    out.cordPivot = [L.x + 0.026, top + 0.018, L.z + 0.012];
-    out.cordLen = len;
-    void bead;
   }
   return out;
 }
@@ -486,8 +476,7 @@ const frameXf = (c, u, v, n) => ({
   dir: (a, b, f) => norm([u[0] * a + v[0] * b + n[0] * f, u[1] * a + v[1] * b + n[1] * f, u[2] * a + v[2] * b + n[2] * f]),
 });
 
-function buildPlaneMirror(R) {
-  const Pl = R.reflector.plane;
+function buildPlaneMirror(R, Pl = R.reflector.plane) {
   const ol = contour(Pl.shape, Pl.hw, Pl.hh);
   const X = frameXf(Pl.c, Pl.u, Pl.v, Pl.n);
   const G = new Buffers(), Bv = new Buffers(), F = new Buffers(), S = new Buffers();
@@ -502,8 +491,8 @@ function buildPlaneMirror(R) {
   if (R.family === 'psyche') buildPsycheStand(S, R, X, Pl);
   else { // trumeau : deux pitons et un fil
     const top = Pl.c[1] + Pl.hh + fw;
-    for (const sx of [-1, 1]) tube(S, [[Pl.c[0] + sx * Pl.hw * 0.5, top - 0.06, Pl.c[2] - 0.016], [Pl.c[0], top + 0.12, R.room.wallZ + 0.004]], 0.0009, 6, OUT, true);
-    sphere(S, [Pl.c[0], top + 0.12, R.room.wallZ + 0.006], 0.006, 12, 8, EDGE);
+    for (const sx of [-1, 1]) tube(S, [[Pl.c[0] + sx * Pl.hw * 0.5, top - 0.06, Pl.c[2] - Pl.n[2] * 0.016], [Pl.c[0], top + 0.12, Pl.c[2] - Pl.n[2] * 0.026]], 0.0009, 6, OUT, true);
+    sphere(S, [Pl.c[0], top + 0.12, Pl.c[2] - Pl.n[2] * 0.024], 0.006, 12, 8, EDGE);
   }
   return { glass: G.out(), bevel: Bv.out(), frame: F.out(), stand: S.out() };
 }
@@ -647,6 +636,16 @@ export function buildScene(R, opts = {}) {
     lamp: buildLamp(R.lamp),
   };
   if (R.reflector.plane) out.mirror = buildPlaneMirror(R);
+  // galerie : la glace d'en face, accrochée au mur du devant (derrière la
+  // caméra : on ne la voit que dans la première glace)
+  if (R.reflector.planeB) {
+    const B = R.reflector.planeB;
+    out.mirrorB = buildPlaneMirror(R, B);
+    const W = new Buffers(), zf = B.c[2] + 0.03, Wd = 3.2, rows = [];
+    for (let j = 0; j <= 20; j++) { const row = []; for (let i = 0; i <= 30; i++) row.push(W.vert([-Wd / 2 + (Wd * i) / 30, -TABLE_H + ((CEIL + TABLE_H) * j) / 20, zf], [0, 0, -1], OUT)); rows.push(row); }
+    W.grid(rows);
+    out.frontWall = W.out();
+  }
   if (R.family === 'ardent') out.ardent = buildArdent(R, s);
   if (R.family === 'facettes') out.ball = buildBall(R);
   const wz = R.room.wallZ;

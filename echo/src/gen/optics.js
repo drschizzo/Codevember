@@ -186,24 +186,62 @@ export function facetEcho(x, s, B) {
   return { L: len(d), hit, source: sv, facet: ij };
 }
 
-// ── Le front ────────────────────────────────────────────────────────────────
-// largeur du front (m) : la lumière monte de 0 à 1 sur cette longueur de chemin
-export const FRONT = 0.02;
+// ── Galerie : deux glaces face à face ───────────────────────────────────────
+// A au mur (plan z = zA, normale +z), B en face (plan z = zB > zA, normale −z),
+// toutes deux rectangulaires et parallèles. Une image de la lampe obtenue par
+// n réflexions alternées est une source ponctuelle ; le chemin réel lampe →
+// glaces → x a la longueur |x − q|, à condition que la droite q → x, dans
+// l'espace « déplié », traverse chaque copie de glace dans son contour.
+// G = { zA, zB, A: { cx, cy, hw, hh }, B: { cx, cy, hw, hh } }
+// images vues « derrière A » (dernière réflexion sur A) et « derrière B »,
+// jusqu'à n réflexions ; chaque image porte la suite des plans dépliés que le
+// rayon traverse, dans l'ordre en partant de la pièce
+export function galleryImages(s, G, N = 4) {
+  const D = G.zB - G.zA, out = [];
+  for (const side of ['A', 'B']) {
+    const z0 = side === 'A' ? G.zA : G.zB, sg = side === 'A' ? -1 : 1, other = side === 'A' ? 'B' : 'A';
+    for (let n = 1; n <= N; n++) {
+      // z de l'image : réflexions alternées en partant du côté opposé
+      // (n impair : 2·z0 − sz ± …, n pair : sz ± …)
+      const k = Math.floor((n - 1) / 2);
+      const z = n % 2 ? 2 * z0 - s[2] + sg * 2 * k * D : s[2] + sg * 2 * Math.ceil(n / 2) * D;
+      // plans dépliés traversés : la glace du côté, puis l'autre, en alternant
+      const planes = [];
+      for (let j = 0; j < n; j++) planes.push({ z: z0 + sg * j * D, m: j % 2 ? other : side });
+      out.push({ q: [s[0], s[1], z], n, side, planes });
+    }
+  }
+  return out;
+}
+export function galleryEcho(x, s, G, N = 4) {
+  const res = [];
+  for (const im of galleryImages(s, G, N)) {
+    const d = sub(x, im.q);
+    let ok = true;
+    for (const P of im.planes) {
+      const t = (P.z - im.q[2]) / d[2];
+      if (!(t > 0 && t < 1)) { ok = false; break; }
+      const M = G[P.m], px = im.q[0] + d[0] * t, py = im.q[1] + d[1] * t;
+      if (Math.abs(px - M.cx) > M.hw || Math.abs(py - M.cy) > M.hh) { ok = false; break; }
+    }
+    // x doit être dans la pièce, entre les deux glaces
+    if (ok && x[2] > G.zA && x[2] < G.zB) res.push({ L: len(d), n: im.n, side: im.side, q: im.q });
+  }
+  return res;
+}
+
+// ── Le front ──────────────────────────────────────────────────────────────
+// L'éclair est une impulsion : sa lumière monte en FRONT mètres de chemin, puis
+// décroît en exponentielle sur PULSE_LEN mètres. Sur chaque surface, elle passe
+// en anneau ; dans la brume, en coquille ; chaque écho est un nouvel anneau.
+export const FRONT = 0.02, PULSE_LEN = 0.22, PULSE_PEAK = 4;
 export const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
-// part de la lumière d'un chemin de longueur L vue par l'œil à la distance D
-// du point, quand les fronts d'allumage et d'extinction ont parcouru rhoOn et
-// rhoOff mètres (mêmes formules dans scene/paths.js, en TSL)
-// L'allumage commence par un éclair : la lumière qui part la première est
-// (1 + flash) fois plus forte, et cet excès s'éteint sur flashLen mètres de
-// chemin. Sur chaque surface, le front passe en anneau brillant, puis la
-// lumière s'établit ; dans la brume, il dessine une coquille. L'écho porte le
-// même anneau : on le voit revenir.
-export const FLASH = 3, FLASH_LEN = 0.12;
-export function gate(rhoOn, rhoOff, L, D, w = FRONT, flash = 0, flashLen = FLASH_LEN) {
-  const k = L + D;
-  const a = rhoOn - k;
-  const on = sstep(-w / 2, w / 2, a) * (1 + flash * Math.exp(-Math.max(0, a) / flashLen));
-  return on - sstep(-w / 2, w / 2, rhoOff - k) * (1 + flash * Math.exp(-Math.max(0, rhoOn - k) / flashLen));
+// part de la lumière d'un chemin de longueur L, vue par l'œil à la distance D
+// du point, quand le front a parcouru rho mètres (même formule en TSL dans
+// scene/paths.js)
+export function gate(rho, L, D, w = FRONT, len = PULSE_LEN, peak = PULSE_PEAK) {
+  const a = rho - (L + D);
+  return sstep(-w / 2, w / 2, a) * peak * Math.exp(-Math.max(0, a) / len);
 }
 
 // ── Lancer de rayons (tests) ────────────────────────────────────────────────
