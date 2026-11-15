@@ -313,6 +313,16 @@
         "bolt"
       ],
       "port": 8210
+    },
+    {
+      "name": "echo",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        ".claude/serve.py",
+        "8220",
+        "echo"
+      ],
+      "port": 8220
     }
   ]
 }

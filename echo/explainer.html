@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#050506">
+  <title>Echo · défis techniques</title>
+  <meta name="description" content="Comment Echo est calculé : une horloge de caméra rapide, des fronts de lumière vus avec le retard de l'œil, des échos par sources images, un miroir elliptique, une boule à facettes et une brume éclairée par les mêmes fronts.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+  <link rel="stylesheet" href="../home/explainer.css">
+</head>
+<body>
+  <nav class="top"><div class="in">
+    <a href="../">Codevember</a><span class="day">Day 22</span><span class="crumb">Echo · défis techniques</span>
+    <span class="sp"></span><a class="open" href="./">Ouvrir la scène</a>
+  </div></nav>
+
+  <main>
+    <header class="hero">
+      <div class="kicker">Day 22 · Echo · le miroir en retard</div>
+      <h1>Comment filmer la lumière qui revient d'un miroir</h1>
+      <p class="lede">Une ampoule s'allume dans une pièce sombre. La lumière met une dizaine de nanosecondes à traverser la pièce ; ici elle met une dizaine de secondes, et l'on voit une sphère sortir de l'ampoule, allumer la table et les vases, atteindre le miroir et revenir. Dans la glace, l'ampoule s'allume après la vraie. La difficulté : une image ordinaire montre la lumière partout à la fois. Il faut savoir, pour chaque point de l'image, à quel instant la lumière l'atteint par chaque chemin, et à quel instant cette lumière arrive dans l'objectif.</p>
+    </header>
+
+    <figure class="cover">
+      <img src="docs/capture.jpg" alt="Une ampoule allumée devant un miroir doré en plein cintre accroché à un mur bleu sombre ; dans la glace, son reflet brille ; une sphère de lumière au bord net s'étend sur le mur ; des vases blancs sur une table de pin." width="1600" height="900">
+      <figcaption>La graine d'ouverture, quelques secondes après le déclic. Le bord net du disque sur le mur est le front de la lumière, porté par l'éclair d'allumage ; dans la glace, l'ampoule s'est allumée après la vraie.</figcaption>
+    </figure>
+
+    <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
+
+    <article>
+      <section id="horloge">
+        <h2><span class="n">01</span>Une seule horloge, celle d'une caméra rapide</h2>
+        <span class="src">src/film.js · createFilm()</span>
+        <p>Le film dure une trentaine de secondes, et presque tout ce qu'il montre se passe en quelques nanosecondes. On ne peut pas ralentir le film entier : le cordon tiré, le balancement de la perle, la pièce éclairée se jouent en temps réel. La vitesse du film \(v(u)\), en fonction de la phase \(u\), vaut donc 1 en temps réel et \(1/K\) pendant les deux ralentis. Elle passe de l'une à l'autre par une rampe douce sur son logarithme, sinon le passage de 1 à \(10^{-9}\) se ferait d'un coup. Le temps physique est son intégrale :</p>
+        <div class="eq">\[ \tau(u) = T \int_0^u v(u')\,du', \qquad \rho(u) = c\,\big(\tau(u) - \tau_{\text{allumage}}\big) \]</div>
+        <p>\(\rho\) est la longueur de chemin parcourue par la lumière depuis qu'elle a quitté l'ampoule. Elle est calculée en double précision, sur 32 768 pas, puis bornée à [−1, 60] m avant d'aller au GPU : \(c\,\tau\) vaut des milliards de mètres en temps réel, et un flottant de 32 bits n'y distingue plus deux centimètres.</p>
+        <p>\(K\) est choisi pour que la lumière traverse la scène pendant le ralenti : le front avance de 0,30 à 0,54 m par seconde de film, soit \(K\) entre \(5{,}6\cdot10^8\) et \(9{,}9\cdot10^8\) selon la graine. Le ralenti commence juste avant que la première lumière n'atteigne l'objectif, et finit quand le dernier point visible est allumé.</p>
+        <figure id="fig-horloge"><figcaption><b>Les courbes du film.</b> En haut, le logarithme de la vitesse du film ; en bas, les rayons des deux fronts (allumage, extinction). Le curseur déplace la phase. La démo appelle <code>createFilm</code> du projet avec une scène type (front de 1,5 à 5,6 m).</figcaption></figure>
+      </section>
+
+      <section id="oeil">
+        <h2><span class="n">02</span>Un point s'allume quand sa lumière atteint l'œil</h2>
+        <span class="src">src/scene/paths.js · gate()</span>
+        <p>La lumière qu'on voit sur un vase a fait deux voyages : de l'ampoule au vase, puis du vase à l'objectif. Les femto-photographies montrent les deux. Un point \(x\), éclairé par un chemin de longueur \(L(x)\), apparaît allumé quand</p>
+        <div class="eq">\[ \rho \;\ge\; L(x) + \lVert x - e \rVert \]</div>
+        <p>où \(e\) est l'œil. Sans le second terme, le front serait une sphère centrée sur l'ampoule. Avec lui, l'ensemble des points allumés est un ellipsoïde dont les foyers sont l'ampoule et l'œil : la lumière semble fuir l'objectif plus vite qu'elle ne s'en approche. C'est la géométrie des échos lumineux d'étoiles, où les points de même retard forment un ellipsoïde de foyers l'étoile et l'observateur.</p>
+        <p>Chaque lumière de la scène est multipliée, au point éclairé, par la part du front arrivée, une rampe de 2 cm, moins celle du front d'extinction :</p>
+        <div class="eq">\[ g = S(\rho_\text{on} - L - D) - S(\rho_\text{off} - L - D),\qquad D = \lVert x - e\rVert \]</div>
+        <p>Un front qui ne fait qu'allumer laisse derrière lui une surface uniformément éclairée : à l'image, on voit un disque qui grandit, comme un fondu, et la propagation ne se lit pas. L'allumage commence donc par un éclair : la première lumière est quatre fois plus forte, et l'excès s'éteint sur 12 cm de chemin.</p>
+        <div class="eq">\[ g = S(a)\,\big(1 + 3\,e^{-a/0{,}12\,\text{m}}\big) - \ldots, \qquad a = \rho_\text{on} - L - D \]</div>
+        <p>Sur chaque surface le front passe en anneau brillant ; dans la brume il dessine une coquille qui s'éloigne, et l'écho en ramène une seconde, depuis la glace.</p>
+        <div class="note check"><b>Vérifié</b><p>La porte vaut 0 avant le front, plus de 3 sur l'anneau, 1 une fois la lumière établie, 0 après l'extinction ; la partie établie ne redescend jamais pendant un ralenti (tests <code>optics.test.mjs</code> et <code>film.test.mjs</code>).</p></div>
+        <figure id="fig-oeil"><figcaption><b>Sphère ou ellipsoïde.</b> Le plan de la pièce vu de dessus : l'ampoule, l'œil en bas. Faites avancer le front ; le bouton retire le retard de l'œil. La démo trace la région allumée par la porte <code>gate</code> du projet, sans ombres.</figcaption></figure>
+      </section>
+
+      <section id="glace">
+        <h2><span class="n">03</span>Le miroir rend une lampe image</h2>
+        <span class="src">src/gen/optics.js · planeEcho()</span>
+        <p>Un miroir plan renvoie la lumière comme si elle venait de la symétrique \(s'\) de l'ampoule derrière la glace. C'est la méthode des sources images des acousticiens (Allen et Berkley, 1979), exacte pour un plan : le chemin ampoule → glace → \(x\) a la longueur \(\lVert x - s' \rVert\), à condition que le segment \(s' \to x\) traverse la glace et non le mur autour.</p>
+        <p>L'écho est donc une seconde lumière, un projecteur placé en \(s'\), visé sur la glace, avec ses propres ombres et une ouverture qui suit le contour (rectangle, ovale ou plein cintre). Il éclaire le revers des vases, que l'ampoule ne voit pas. Dans la scène, il arrive 1 à 1,4 m de chemin après le front direct, soit 2 à 4 secondes de film.</p>
+        <div class="note check"><b>Vérifié</b><p>Pour 4 000 points tirés dans la pièce, la longueur \(\lVert x - s'\rVert\) égale \(\lVert s - m\rVert + \lVert m - x\rVert\) au point \(m\) de la glace où la loi de la réflexion est respectée, à \(10^{-9}\) près.</p></div>
+        <figure id="fig-glace"><figcaption><b>L'écho de la glace.</b> Déplacez l'ampoule (cliquer-glisser) et faites avancer le front : le cercle clair est le front direct, le cercle rosé l'écho, centré sur la lampe image et limité au cône qui passe par la glace. Calcul par <code>planeEcho</code> du projet ; la démo ignore le retard de l'œil.</figcaption></figure>
+      </section>
+
+      <section id="reflet">
+        <h2><span class="n">04</span>Le reflet est en retard sans rien calculer de plus</h2>
+        <span class="src">src/scene/stage.js · mirrorMaterial()</span>
+        <p>Dans la glace, on voit la pièce depuis une caméra virtuelle, symétrique de la vraie. Le miroir est rendu ainsi, par le nœud <code>reflector()</code> de three.js, qui rend la scène entière depuis cette caméra. Les matériaux y calculent la porte avec la position de la caméra qui les rend : la caméra virtuelle. Or la distance d'un point à la caméra virtuelle est exactement le chemin point → glace → œil. L'ampoule du miroir s'allume donc après la vraie, du temps qu'il faut à la lumière pour faire l'aller-retour jusqu'à la glace, et s'éteint après elle.</p>
+        <p>À l'extinction, c'est l'image la plus parlante du film : la pièce est revenue à la nuit, et la psyché montre encore l'ampoule allumée, pendant une à deux secondes.</p>
+        <div class="note trap"><b>Le piège</b><p>Les réflexions en espace écran, que la chaîne d'image commune applique aux surfaces brillantes, relisent l'image déjà calculée : elles montrent l'état présent de la pièce, sans retard. Elles conviennent au vernis d'une table ; la glace, elle, devait avoir son propre rendu.</p></div>
+      </section>
+
+      <section id="ardent">
+        <h2><span class="n">05</span>Le miroir ardent renvoie tout sur un point</h2>
+        <span class="src">src/gen/optics.js · makeEllipse(), ellipseEcho()</span>
+        <p>Un ellipsoïde a une propriété que les galeries des murmures exploitent pour le son : tout rayon parti d'un foyer repasse par l'autre après une réflexion, et tous ces chemins ont la même longueur \(2a\). La calotte du miroir ardent est un morceau d'ellipsoïde dont un foyer est l'ampoule et l'autre un point de la nappe. Son écho est une sphère qui rétrécit :</p>
+        <div class="eq">\[ L(x) = 2a - \lVert x - f_2\rVert \ \text{avant le foyer}, \qquad L(x) = 2a + \lVert x - f_2\rVert \ \text{après} \]</div>
+        <p>dans le cône de la calotte vue de \(f_2\). Un vrai miroir ne concentre pas la lumière en un point : l'ampoule a une taille, et la calotte en forme une image. Un point est éclairé quand sa distance au cône est inférieure au rayon de cette image, 9 mm multipliés par le grandissement \(\lVert f_2 M\rVert / \lVert f_1 M\rVert\). Loin du foyer, c'est le cône ; au foyer, un disque d'un à deux centimètres, la tache ardente.</p>
+        <div class="note trap"><b>Le piège</b><p>Le premier foyer était posé sur la paroi d'un vase, et l'écho restait invisible. Un cône qui converge en un point d'une surface n'y éclaire que ce point ; la tolérance angulaire ajoutée ensuite n'ouvrait qu'un disque de 2 mm. Le critère juste est la distance au cône, et le foyer a été déplacé sur la nappe, devant la nature morte, dans un couloir que la mise en place laisse libre.</p></div>
+        <div class="note check"><b>Vérifié</b><p>500 rayons lancés depuis l'ampoule et réfléchis sur la calotte passent par \(f_2\) à \(10^{-7}\) près, et la formule donne leur longueur avant et après le foyer.</p></div>
+        <figure id="fig-ardent"><figcaption><b>Le foyer.</b> Des rayons partent de l'ampoule, se réfléchissent sur la calotte et convergent ; l'arc clair est le front de l'écho, qui se referme puis se rouvre. Le curseur fait avancer le front. Les longueurs viennent de <code>ellipseEcho</code> du projet, dans un plan de coupe.</figcaption></figure>
+      </section>
+
+      <section id="facettes">
+        <h2><span class="n">06</span>Une boule à facettes, un miroir par facette</h2>
+        <span class="src">src/scene/paths.js · facetEcho()</span>
+        <p>Une boule à facettes porte de 490 à 620 petits miroirs plans. Calculer six cents lumières serait hors de prix. Mais pour un point \(x\) donné, une seule facette peut lui renvoyer l'ampoule : celle dont la normale est la bissectrice des directions de la boule vers \(x\) et vers l'ampoule. On la retrouve par sa rangée (la latitude) et son rang (la longitude), sans boucle. Puis le chemin est celui d'un miroir plan : \(\lVert x - s'_f\rVert\), si le rayon traverse le carré de la facette. Chaque tache a la forme de la facette, agrandie, et arrive à son heure.</p>
+        <p>Le nombre de facettes d'une rangée suit le cosinus de sa latitude, pour que l'écart en longitude reste celui de l'équateur ; la boule tourne d'un tour par boucle, mais seulement en temps réel.</p>
+        <figure id="fig-facettes"><figcaption><b>Des pinceaux.</b> Une boule en coupe, l'ampoule à gauche, un mur à droite. Chaque facette éclairée renvoie un pinceau ; le front les fait arriver l'un après l'autre sur le mur. Démo en deux dimensions, écrite pour la page.</figcaption></figure>
+      </section>
+
+      <section id="temps">
+        <h2><span class="n">07</span>Pendant le ralenti, la matière est figée</h2>
+        <span class="src">src/film.js · cordAt()</span>
+        <p>Si la lumière avance au ralenti, tout ce qui bouge doit ralentir avec elle. Le cordon, la boule et les grains de poussière lisent le temps physique \(\tau\), pas la phase : ils sont immobiles pendant les dix secondes de lumière, et la perle reprend son balancement exactement là où elle l'avait laissé. Seule la caméra lit la phase et continue de glisser, comme dans un plan au temps suspendu.</p>
+        <p>Le cordon est tiré de 2,5 cm en 0,25 s, le déclic a lieu en bas, la perle est relâchée 0,12 s plus tard, remonte sur le ressort de l'interrupteur et se balance en pendule (longueur 20 à 27 cm, amortissement 1,3 à 2 s). La réponse est sommée sur les deux tirages et leurs images d'une boucle à l'autre : elle est périodique par construction.</p>
+        <figure id="fig-cordon"><figcaption><b>Le cordon.</b> La hauteur de la perle et son angle de balancement sur une boucle, en fonction de la phase ; les bandes grises sont les ralentis. Calcul par <code>cordAt</code> du projet.</figcaption></figure>
+      </section>
+
+      <section id="brume">
+        <h2><span class="n">08</span>La brume montre les fronts dans l'air</h2>
+        <span class="src">src/scene/haze.js · createHaze()</span>
+        <p>Sur les surfaces, le front se voit là où il les coupe. Dans l'air, il faut de la poussière. Une passe de la chaîne d'image marche le long de chaque rayon de vue, en 22 pas tramés, et ajoute en chaque pas la lumière de chaque source à retard. Elle pèse l'éclair du front 1,6 fois et la lumière établie 0,18 fois : une brume qui diffuserait toute la lumière voilait l'image entière d'un halo chaud, alors que ce qu'elle doit montrer, c'est la coquille qui avance. Elle montre la sphère qui sort de l'ampoule, celle qui sort de la glace, le cône qui se referme sur le foyer. Quatre mille cinq cents grains, éclairés par les mêmes lumières et mélangés par addition, n'apparaissent que quand la lumière les touche.</p>
+        <div class="note trap"><b>Le piège</b><p>La première version rendait l'image entièrement noire. Les sources absentes de la scène ont des uniformes nuls, leurs termes donnaient NaN, et NaN multiplié par zéro reste NaN ; le garde-fou de l'anticrénelage temporel remplace alors chaque pixel par du noir. Chaque terme est désormais derrière une sélection sur la présence de sa source. Le second NaN venait d'une couleur copiée dans un vecteur : <code>Vector3.copy(color)</code> lit <code>x, y, z</code>, qu'une couleur n'a pas.</p></div>
+      </section>
+
+      <section id="budget">
+        <h2><span class="n">09</span>Budget</h2>
+        <div class="tbl"><table>
+          <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
+          <tbody>
+            <tr><td>Géométrie de la pièce (vases, table, lambris, lampe, réflecteur, poussière)</td><td>worker</td><td class="num">35 à 67 ms</td></tr>
+            <tr><td>Horloge du film (τ tabulé sur 32 768 pas)</td><td>fil principal</td><td class="num">&lt; 5 ms</td></tr>
+            <tr><td>Pipelines compilées sous l'écran de chargement</td><td>GPU</td><td class="num">73 à 84</td></tr>
+            <tr><td>Image, 1920 × 1080, qualité Haute, passage de l'écho (graine d'ouverture)</td><td>GPU</td><td class="num">12,1 ms</td></tr>
+            <tr><td>Version mobile</td><td>GPU</td><td class="num">4,1 ms</td></tr>
+          </tbody>
+        </table></div>
+        <p>Mesures sur un portable Apple Silicon, graine d'ouverture (trumeau). Le raccord de boucle est exact à \(2\cdot10^{-7}\) près sur la pose de la caméra.</p>
+      </section>
+    </article>
+
+    <footer class="end">
+      <a href="./">Ouvrir Echo</a>
+      <a href="https://github.com/drschizzo/Codevember/blob/main/echo/README.md">README</a>
+      <a href="https://github.com/drschizzo/Codevember/blob/main/echo/docs/concept.md">La démarche</a>
+      <span class="sp"></span>
+      <a href="../">Tous les jours</a>
+    </footer>
+  </main>
+
+  <script type="module">
+    import { demo, C, TAU, lerp, label, alpha } from '../home/explainer.js';
+    import { createFilm, TIMELINE } from './src/film.js';
+    import { gate, planeEcho, planeBasis, makeEllipse, ellipseEcho, ellipseRadius, reflectDir, norm, sub, add, mul } from './src/gen/optics.js';
+
+    const cord = { length: 0.24, damping: 1.6, pull: 0.25, hold: 0.12, depth: 0.025, swing: 0.06, dir: 0.3 };
+    const F = createFilm({ duration: 30, rhoStart: 1.5, rhoEnd: 5.6, cord });
+    const slowBands = (g, d, x0, x1, y0, y1) => {
+      g.fillStyle = alpha(C.ink, 0.05);
+      for (const e of [TIMELINE.on, TIMELINE.off]) g.fillRect(lerp(x0, x1, e.slow), y0, (e.end - e.slow) * (x1 - x0), y1 - y0);
+    };
+
+    // 01 — les courbes du film
+    demo('#fig-horloge', {
+      title: 'Vitesse du film et rayons des fronts', aspect: 2.1,
+      controls: [{ key: 'u', label: 'Phase u', min: 0, max: 1, step: 0.001, value: 0.2 }],
+      draw(g, d) {
+        const x0 = 40, x1 = d.w - 14, mid = d.h * 0.42;
+        slowBands(g, d, x0, x1, 10, d.h - 14);
+        // log10 v
+        g.strokeStyle = C.c1; g.lineWidth = 2; g.beginPath();
+        for (let i = 0; i <= 400; i++) { const u = i / 400, y = lerp(18, mid - 8, -Math.log10(F.speed(u)) / 10); i ? g.lineTo(lerp(x0, x1, u), y) : g.moveTo(lerp(x0, x1, u), y); }
+        g.stroke();
+        label(g, 'log₁₀ v : 0', 4, 22); label(g, '−10', 10, mid - 8);
+        // fronts
+        const ry = (r) => lerp(d.h - 18, mid + 10, Math.min(1, Math.max(0, r / 7)));
+        for (const [k, col] of [['on', C.c2], ['off', C.c3]]) {
+          g.strokeStyle = col; g.beginPath(); let pen = false;
+          for (let i = 0; i <= 600; i++) { const u = i / 600, r = F.rho(u)[k]; if (r <= -0.5 || r >= 59) { pen = false; continue; } const X = lerp(x0, x1, u), Y = ry(r); pen ? g.lineTo(X, Y) : g.moveTo(X, Y); pen = true; }
+          g.stroke();
+        }
+        label(g, 'ρ (m) 0', 4, d.h - 18); label(g, '7', 26, mid + 14);
+        const X = lerp(x0, x1, d.s.u);
+        g.strokeStyle = C.ink; g.lineWidth = 1; g.beginPath(); g.moveTo(X, 10); g.lineTo(X, d.h - 14); g.stroke();
+        const r = F.rho(d.s.u);
+        const fmt = (x) => (x >= 59 ? 'passé' : x <= -0.5 ? '—' : `${x.toFixed(2)} m`);
+        d.status(`v = ${F.speed(d.s.u).toExponential(1)} · allumage ${fmt(r.on)} · extinction ${fmt(r.off)}`);
+      },
+    });
+
+    // 02 — sphère ou ellipsoïde
+    demo('#fig-oeil', {
+      title: 'La région allumée', aspect: 1.8,
+      controls: [{ key: 'rho', label: 'Front ρ (m)', min: 0, max: 5, step: 0.01, value: 2.6 }],
+      buttons: [{ key: 'warp', label: "Retard de l'œil", toggle: true, value: true }],
+      draw(g, d) {
+        const k = d.h / 2.6, s = [-0.3, 0, -0.3], e = [0.2, 0, 1.5];
+        const X = (p) => d.w / 2 + p[0] * k, Y = (p) => d.h * 0.2 + (p[2] + 0.2) * k;
+        const step = 4;
+        for (let py = 0; py < d.h; py += step) for (let px = 0; px < d.w; px += step) {
+          const x = [(px - d.w / 2) / k, 0, (py - d.h * 0.2) / k - 0.2];
+          const D = d.s.warp ? Math.hypot(x[0] - e[0], x[2] - e[2]) : 0;
+          const L = Math.hypot(x[0] - s[0], x[2] - s[2]);
+          const gg = gate(d.s.rho + (d.s.warp ? 0 : 0), -1, L, D, 0.04);
+          if (gg > 0.01) { g.fillStyle = alpha(C.c2, 0.28 * gg); g.fillRect(px, py, step, step); }
+        }
+        g.fillStyle = C.c2; g.beginPath(); g.arc(X(s), Y(s), 5, 0, TAU); g.fill(); label(g, 'ampoule', X(s) + 8, Y(s) - 6);
+        g.fillStyle = C.ink; g.beginPath(); g.arc(X(e), Y(e), 4, 0, TAU); g.fill(); label(g, 'œil', X(e) + 8, Y(e) + 4);
+        d.status(d.s.warp ? 'ellipsoïde : foyers ampoule et œil' : 'sphère centrée sur l’ampoule');
+      },
+    });
+
+    // 03 — l'écho de la glace
+    {
+      const n = [0, 0, 1], { u, v } = planeBasis(n);
+      const M = { c: [0.1, 0, -0.55], n, u, v, hw: 0.32, hh: 10, shape: 'rect' };
+      demo('#fig-glace', {
+        title: 'Front direct et écho', aspect: 1.8,
+        controls: [{ key: 'rho', label: 'Front ρ (m)', min: 0, max: 2.6, step: 0.01, value: 1.2 }],
+        setup(d) { d.state.s = [-0.35, 0, 0.05]; },
+        pointer(d, p) { if (p.down) { const k = d.h / 1.8; d.state.s = [(p.x - d.w / 2) / k, 0, Math.min(0.6, Math.max(-0.5, (p.y - d.h * 0.25) / k - 0.55 + 0.1))]; } },
+        draw(g, d) {
+          const k = d.h / 1.8, s = d.state.s ?? [-0.35, 0, 0.05];
+          const X = (p) => d.w / 2 + p[0] * k, Y = (p) => d.h * 0.25 + (p[2] + 0.55 - 0.1) * k;
+          const step = 4;
+          for (let py = 0; py < d.h; py += step) for (let px = 0; px < d.w; px += step) {
+            const x = [(px - d.w / 2) / k, 0, (py - d.h * 0.25) / k - 0.45];
+            if (x[2] < M.c[2]) continue;
+            const a = gate(d.s.rho, -1, Math.hypot(x[0] - s[0], x[2] - s[2]), 0, 0.03);
+            const ec = planeEcho(x, s, M);
+            const b = ec ? gate(d.s.rho, -1, ec.L, 0, 0.03) : 0;
+            if (a > 0.01) { g.fillStyle = alpha(C.c2, 0.22 * a); g.fillRect(px, py, step, step); }
+            if (b > 0.01) { g.fillStyle = alpha(C.c3, 0.3 * b); g.fillRect(px, py, step, step); }
+          }
+          // mur et glace
+          g.strokeStyle = C.faint; g.lineWidth = 1; g.beginPath(); g.moveTo(0, Y(M.c)); g.lineTo(d.w, Y(M.c)); g.stroke();
+          g.strokeStyle = C.ink; g.lineWidth = 3; g.beginPath(); g.moveTo(X([M.c[0] - M.hw]), Y(M.c)); g.lineTo(X([M.c[0] + M.hw]), Y(M.c)); g.stroke();
+          g.fillStyle = C.c2; g.beginPath(); g.arc(X(s), Y(s), 5, 0, TAU); g.fill();
+          label(g, 'ampoule (glisser)', X(s) + 8, Y(s) - 6);
+          label(g, 'glace', X([M.c[0] + M.hw]) + 6, Y(M.c) - 4);
+          d.status(`ρ = ${d.s.rho.toFixed(2)} m · écho après ${(2 * (s[2] - M.c[2])).toFixed(2)} m de chemin`);
+        },
+      });
+    }
+
+    // 05 — le miroir ardent (plan de coupe y = 0)
+    {
+      const f1 = [-0.55, 0, -0.1], f2 = [0.1, 0, 0.35];
+      const E = makeEllipse(f1, f2, [0.45, 0, -0.35], 0.22);
+      const { u: U2 } = { u: norm([-E.axis[2], 0, E.axis[0]]) };
+      demo('#fig-ardent', {
+        title: 'Calotte d’ellipsoïde', aspect: 1.8,
+        controls: [{ key: 'rho', label: 'Front ρ (m)', min: 0.3, max: 1.9, step: 0.005, value: 1.05 }],
+        draw(g, d) {
+          const k = d.h / 1.4, X = (p) => d.w / 2 + p[0] * k, Y = (p) => d.h * 0.5 + p[2] * k;
+          const th = Math.acos(E.cosCap), cap = [];
+          for (let i = -30; i <= 30; i++) {
+            const a = (th * i) / 30, dd = norm(add(mul(E.axis, Math.cos(a)), mul(U2, Math.sin(a))));
+            cap.push(add(E.f2, mul(dd, ellipseRadius(E, dd))));
+          }
+          // rayons
+          g.lineWidth = 1;
+          for (let i = 0; i < cap.length; i += 4) {
+            const P = cap[i];
+            g.strokeStyle = alpha(C.c2, 0.35); g.beginPath(); g.moveTo(X(f1), Y(f1)); g.lineTo(X(P), Y(P));
+            const r = reflectDir(norm(sub(P, f1)), norm(add(norm(sub(f1, P)), norm(sub(f2, P)))));
+            const Q = add(P, mul(r, 1.2));
+            g.lineTo(X(Q), Y(Q)); g.stroke();
+          }
+          // calotte
+          g.strokeStyle = C.ink; g.lineWidth = 3; g.beginPath(); cap.forEach((p, i) => (i ? g.lineTo(X(p), Y(p)) : g.moveTo(X(p), Y(p)))); g.stroke();
+          // front de l'écho : points du cône où L = ρ
+          g.fillStyle = C.c3;
+          const step = 3;
+          for (let py = 0; py < d.h; py += step) for (let px = 0; px < d.w; px += step) {
+            const x = [(px - d.w / 2) / k, 0, (py - d.h * 0.5) / k];
+            const e = ellipseEcho(x, E);
+            if (e && Math.abs(e.L - d.s.rho) < 0.008) g.fillRect(px, py, step, step);
+          }
+          // front direct
+          g.strokeStyle = alpha(C.c2, 0.8); g.lineWidth = 1.5; g.beginPath(); g.arc(X(f1), Y(f1), d.s.rho * k, 0, TAU); g.stroke();
+          g.fillStyle = C.c2; g.beginPath(); g.arc(X(f1), Y(f1), 5, 0, TAU); g.fill(); label(g, 'ampoule f₁', X(f1) - 30, Y(f1) - 10);
+          g.fillStyle = C.ink; g.beginPath(); g.arc(X(f2), Y(f2), 4, 0, TAU); g.fill(); label(g, 'foyer f₂', X(f2) + 8, Y(f2) + 14);
+          const rr = 2 * E.a - d.s.rho;
+          d.status(rr > 0 ? `l’écho est à ${(rr * 100).toFixed(0)} cm du foyer` : `l’écho est passé par le foyer il y a ${(-rr * 100).toFixed(0)} cm`);
+        },
+      });
+    }
+
+    // 06 — les pinceaux de la boule (en coupe)
+    demo('#fig-facettes', {
+      title: 'Boule à facettes', aspect: 2,
+      controls: [{ key: 'rho', label: 'Front ρ (m)', min: 0, max: 2.2, step: 0.005, value: 1.2 }],
+      draw(g, d) {
+        const k = d.h / 1.2, B = [0, 0], rb = 0.1, s = [-0.7, 0.15], wallX = 0.9, N = 36;
+        const X = (x) => d.w / 2 + x * k, Y = (y) => d.h / 2 - y * k;
+        g.strokeStyle = C.faint; g.beginPath(); g.moveTo(X(wallX), 0); g.lineTo(X(wallX), d.h); g.stroke();
+        const ds = Math.hypot(s[0] - B[0], s[1] - B[1]);
+        for (let i = 0; i < N; i++) {
+          const a = ((i + 0.5) / N) * TAU, n = [Math.cos(a), Math.sin(a)];
+          const c = [B[0] + n[0] * rb, B[1] + n[1] * rb];
+          const l = [s[0] - c[0], s[1] - c[1]], ll = Math.hypot(...l);
+          if ((l[0] * n[0] + l[1] * n[1]) / ll < 0.05) continue;
+          const din = [-l[0] / ll, -l[1] / ll], dt = din[0] * n[0] + din[1] * n[1];
+          const r = [din[0] - 2 * dt * n[0], din[1] - 2 * dt * n[1]];
+          if (r[0] <= 0.05) continue;
+          const t = (wallX - c[0]) / r[0], hit = [c[0] + r[0] * t, c[1] + r[1] * t];
+          const L = Math.hypot(c[0] - s[0], c[1] - s[1]) + t;
+          const reach = Math.min(t, d.s.rho - Math.hypot(c[0] - s[0], c[1] - s[1]));
+          if (reach > 0) {
+            g.strokeStyle = alpha(C.c3, 0.55); g.lineWidth = 1.2; g.beginPath(); g.moveTo(X(c[0]), Y(c[1])); g.lineTo(X(c[0] + r[0] * reach), Y(c[1] + r[1] * reach)); g.stroke();
+          }
+          if (d.s.rho >= L) { g.fillStyle = C.c3; g.fillRect(X(wallX) - 3, Y(hit[1]) - 4, 6, 8); }
+        }
+        g.strokeStyle = alpha(C.c2, 0.6); g.beginPath(); g.arc(X(s[0]), Y(s[1]), d.s.rho * k, 0, TAU); g.stroke();
+        g.strokeStyle = C.ink; g.lineWidth = 2; g.beginPath(); g.arc(X(B[0]), Y(B[1]), rb * k, 0, TAU); g.stroke();
+        g.fillStyle = C.c2; g.beginPath(); g.arc(X(s[0]), Y(s[1]), 5, 0, TAU); g.fill();
+        label(g, 'ampoule', X(s[0]) - 20, Y(s[1]) - 10); label(g, 'mur', X(wallX) + 6, 16);
+        d.status(`ρ = ${d.s.rho.toFixed(2)} m · la boule est à ${ds.toFixed(2)} m de l’ampoule`);
+      },
+    });
+
+    // 07 — le cordon
+    demo('#fig-cordon', {
+      title: 'La perle sur une boucle', aspect: 2.4,
+      draw(g, d) {
+        const x0 = 16, x1 = d.w - 14;
+        slowBands(g, d, x0, x1, 8, d.h - 8);
+        const plot = (f, sc, col, mid) => {
+          g.strokeStyle = col; g.lineWidth = 1.8; g.beginPath();
+          for (let i = 0; i <= 800; i++) { const u = i / 800, y = mid - f(F.cordAt(u)) * sc; i ? g.lineTo(lerp(x0, x1, u), y) : g.moveTo(lerp(x0, x1, u), y); }
+          g.stroke();
+        };
+        plot((c) => c.y, d.h * 9, C.c2, d.h * 0.32);
+        plot((c) => c.sx, d.h * 3, C.c1, d.h * 0.72);
+        label(g, 'hauteur de la perle (tirage 2,5 cm)', x0 + 4, 20);
+        label(g, 'balancement', x0 + 4, d.h * 0.72 - 30);
+      },
+    });
+
+  </script>
+</body>
+</html>
