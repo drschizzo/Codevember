@@ -134,6 +134,48 @@ export function createKelp(W, lite) {
   mesh.castShadow = true;
   mesh.receiveShadow = true;
 
+  // ── la paume de la digitée (gen/scene.js, webGeometry) : entre deux doigts
+  // voisins, le point entre leurs deux splines, à la même hauteur ──
+  const wa = attribute('wa', 'vec4'), wb = attribute('wb', 'vec4'), ws = attribute('ws', 'vec4');
+  const center = (n4, s, t) => {
+    const ft = t.mul(KU.fps), fl = floor(ft), w = ft.sub(fl);
+    const f0 = fl.sub(floor(fl.div(KU.nf)).mul(KU.nf)), f1 = f0.add(1).sub(floor(f0.add(1).div(KU.nf)).mul(KU.nf));
+    const at = (i) => mix(P_(i, f0), P_(i, f1), w);
+    const pa = at(n4.x), pb = at(n4.y), pc = at(n4.z), pd = at(n4.w);
+    const s2 = s.mul(s), s3 = s2.mul(s);
+    const P = pb.mul(2).add(pc.sub(pa).mul(s)).add(pa.mul(2).sub(pb.mul(5)).add(pc.mul(4)).sub(pd).mul(s2)).add(pb.mul(3).sub(pa).sub(pc.mul(3)).add(pd).mul(s3)).mul(0.5);
+    const T = normalize(pc.sub(pa).add(vec3(0, 1e-5, 0)));
+    return { P, T };
+  };
+  const webPose = (t) => {
+    const A = center(wa, ws.x, t), B = center(wb, ws.y, t);
+    const p = mix(A.P, B.P, ws.z).add(anch.xyz);
+    const n = normalize(cross(B.P.sub(A.P).add(vec3(1e-5, 0, 0)), mix(A.T, B.T, ws.z)));
+    return { p, n };
+  };
+  function makeWebMat() {
+    const m = new THREE.MeshStandardNodeMaterial();
+    m.side = THREE.DoubleSide;
+    m.positionNode = Fn(() => {
+      const now = webPose(U.t);
+      normalLocal.assign(now.n);
+      positionPrevious.assign(webPose(U.tPrev).p);
+      return now.p;
+    })();
+    const Pw = positionWorld;
+    const under = smoothstep(-0.003, 0.004, W.level(Pw.x, Pw.z, U.t).sub(Pw.y));
+    const n1 = fbm(Pw.mul(9).add(anch.w.mul(40)), 3);
+    // (la paume : le brun de la lame, un peu plus sombre au cœur, où elle est épaisse)
+    m.colorNode = vec3(KU.blade).mul(n1.mul(0.12).add(0.92)).mul(mix(float(0.85), float(1), ws.w));
+    m.roughnessNode = mix(float(0.36), float(0.5), under).add(n1.mul(0.1));
+    m.receivedShadowNode = W.receivedShadow;
+    return m;
+  }
+  const web = new THREE.Mesh(new THREE.BufferGeometry());
+  web.visible = false;
+  web.frustumCulled = false;
+  web.castShadow = true; web.receiveShadow = true;
+
   // crampons : un maillage fixe
   function makeHoldMat() {
     const hmat = new THREE.MeshStandardNodeMaterial();
@@ -177,6 +219,21 @@ export function createKelp(W, lite) {
     mesh.geometry.dispose(); mesh.geometry = g;
     fringe = !!K.fringe;
     mesh.material?.dispose?.(); mesh.material = makeMat(); mesh.visible = true;
+    // la paume (digitée seulement)
+    const Wg = K.web;
+    if (Wg) {
+      const g2 = new THREE.BufferGeometry();
+      g2.setAttribute('position', new THREE.BufferAttribute(new Float32Array(Wg.count * 3), 3));
+      g2.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(Wg.count * 3).fill(0.5), 3));
+      g2.setAttribute('wa', new THREE.BufferAttribute(Wg.wa, 4));
+      g2.setAttribute('wb', new THREE.BufferAttribute(Wg.wb, 4));
+      g2.setAttribute('ws', new THREE.BufferAttribute(Wg.ws, 4));
+      g2.setAttribute('anch', new THREE.BufferAttribute(Wg.anch, 4));
+      g2.setIndex(new THREE.BufferAttribute(Wg.index, 1));
+      g2.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e4);
+      web.geometry.dispose(); web.geometry = g2;
+      web.material?.dispose?.(); web.material = makeWebMat(); web.visible = true;
+    } else web.visible = false;
     const H = K.holdfasts, hg = new THREE.BufferGeometry();
     hg.setAttribute('position', new THREE.BufferAttribute(H.position, 3));
     hg.setAttribute('normal', new THREE.BufferAttribute(H.normal, 3));
@@ -187,5 +244,5 @@ export function createKelp(W, lite) {
     const C = R.kelp.color, lin = (h) => new THREE.Color(h); // (THREE.Color convertit le sRGB en linéaire)
     KU.blade.value.copy(lin(C.blade)); KU.stipe.value.copy(lin(C.stipe)); KU.light.value.copy(lin(C.light));
   }
-  return { mesh, hold, setData, KU };
+  return { mesh, hold, web, setData, KU };
 }

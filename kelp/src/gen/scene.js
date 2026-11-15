@@ -175,6 +175,50 @@ export function strapGeometry(K, plants, { ring = 8, sub = 3 } = {}) {
   };
 }
 
+// ── La paume de la digitée : une étoffe entre les doigts ──────────────────────
+// La digitée n'est pas un bouquet de rubans : c'est une main, une lame large
+// d'un seul tenant fendue en doigts. Entre deux doigts voisins d'une même
+// plante, une membrane suit les deux lanières de leur base jusqu'au tiers de
+// leur longueur, échancrée en V entre eux (la fente s'ouvre d'abord au
+// milieu). Chaque sommet porte la travée des deux doigts à sa hauteur : le
+// vertex shader (scene/kelp.js) évalue les deux splines et prend le point
+// entre elles — la paume suit la simulation sans un nœud de plus.
+export function webGeometry(K, plants, { rows = 7, cols = 5, split = 0.32 } = {}) {
+  const F = FAMILIES[K.family];
+  if (!F.palm || F.blade.tassel || K.family !== 'digitata') return null;
+  const prevOf = new Map(K.dist.map((d) => [d[1], d[0]]));
+  const at = (c, u) => {
+    const seq = [c.parent, ...c.nodes], nseg = seq.length - 1, f = Math.min(nseg - 1e-4, u * nseg), sI = Math.floor(f), s = f - sI;
+    const pre = prevOf.get(c.parent) ?? c.parent;
+    return [sI === 0 ? pre : seq[sI - 1], seq[sI], seq[sI + 1], sI + 2 < seq.length ? seq[sI + 2] : seq[sI + 1], s];
+  };
+  const byPlant = new Map();
+  K.chains.forEach((c) => { if (c.kind === 1) { if (!byPlant.has(c.plant)) byPlant.set(c.plant, []); byPlant.get(c.plant).push(c); } });
+  const wa = [], wb = [], ws = [], anch = [], index = [];
+  let v = 0;
+  for (const [pi, chs] of byPlant) {
+    const P = plants[pi], rk = (pi * 0.618) % 1;
+    for (let k = 0; k + 1 < chs.length; k++) {
+      const A = chs[k], B = chs[k + 1], base = v;
+      for (let r = 0; r < rows; r++) for (let q = 0; q < cols; q++) {
+        const vv = q / (cols - 1), notch = 0.55 + 0.45 * Math.abs(2 * vv - 1); // (l'échancrure en V)
+        const u = (r / (rows - 1)) * split * notch;
+        const a = at(A, u), b = at(B, u);
+        wa.push(a[0], a[1], a[2], a[3]); wb.push(b[0], b[1], b[2], b[3]);
+        ws.push(a[4], b[4], vv, u / split);
+        anch.push(P.x, P.y, P.z, rk);
+        v++;
+      }
+      for (let r = 0; r < rows - 1; r++) for (let q = 0; q < cols - 1; q++) {
+        const i0 = base + r * cols + q;
+        index.push(i0, i0 + 1, i0 + cols, i0 + 1, i0 + cols + 1, i0 + cols);
+      }
+    }
+  }
+  if (!v) return null;
+  return { wa: new Float32Array(wa), wb: new Float32Array(wb), ws: new Float32Array(ws), anch: new Float32Array(anch), index: new Uint32Array(index), count: v };
+}
+
 // ── La forêt : des clones décalés dans le temps ──────────────────────────────
 // La mer a une symétrie : à un pas Δ le long de la côte, c'est la même mer,
 // retardée de obliq·Δ (le faisceau n'y change que le détail du bord). Une
@@ -643,6 +687,6 @@ export function assembleScene(R, parts, { lite = false, onProgress = () => {} } 
     sea: { nx: sea.nx, nf: sea.nf, x0: sea.x0, dx: sea.dx, fps: sea.fps, tex: seaTex, wet: wetTex, b: sea.b, b0, bundle: bundleOut },
     rock: { M: rock.M, box: BOX, relief: rockRelief(rock), color: rockColors(rock, R), fill: fillTex },
     fauna,
-    kelp: { n: N, nf, fps: sim.fps, pos: kpos, dir: kdir, straps, clones: cloneG, nClones: clones.length, holdfasts, fringe: !!FAMILIES[R.family].blade.fringe, plants: plants.map((p) => [p.x, p.y, p.z]) },
+    kelp: { n: N, nf, fps: sim.fps, pos: kpos, dir: kdir, straps, clones: cloneG, nClones: clones.length, web: webGeometry(K, plants), holdfasts, fringe: !!FAMILIES[R.family].blade.fringe, plants: plants.map((p) => [p.x, p.y, p.z]) },
   };
 }
