@@ -156,3 +156,16 @@ Points à surveiller :
 - les embruns ne se voient bien que lorsque la caméra est à l'air et que la vague casse dans le champ ; sur k39, la grande vague casse quand la caméra est déjà sous l'eau ;
 - le palmier de mer reste lisible comme un palmier dans les colonies proches ; des colonies plus denses coûteraient en contacts ;
 - les clones n'épousent pas exactement la roche de leur nouvelle place (6 cm de tolérance) : au loin, cela ne se voit pas.
+
+## Suivi, deuxième passe (15 novembre 2026)
+
+| Point | État | Ce qui a été fait |
+|---|---|---|
+| Écume « en cercles blancs » | fait | ~100 000 flocons suivis un par un (`foamFlakes`) : nés en îlots de six là où la mer produit de l'écume, emportés par le courant de surface, séparés en traînées où il diverge, défaits en dentelle, échoués en voile mince. Contour déchiré, bulles de toutes tailles. Vue d'en dessous, l'écume (flocons et surface) est une ombre grise. Les embruns sont des grappes de gouttelettes filées dans le sens du vol, plus des disques. |
+| Lèvre en volute | fait | Une grille le long de la côte sur la section d'une volute, posée sur la crête relevée par la mer ; au tombant seulement, sur la vague qui arrive, par tronçons. |
+| Paume de la digitée | fait | Une étoffe entre les doigts voisins, échancrée en V, qui suit les deux splines (`webGeometry`). |
+| Ombres de la canopée | fait | Les rayons sous l'eau et les grains en suspension relisent la carte d'ombre du soleil. |
+| Ce qui flotte sous l'eau | fait | 6 000 grains, débris d'algue, bulles dans l'eau aérée, emportés avec l'eau du dôme. |
+| Roche miroir au loin | corrigé | Au-delà de la boîte de roche cuite, le profil lisse et mouillé faisait un triangle blanc ; bosses de bruit et rugosité mouillée plus forte. Au-delà du faisceau, le bord ne varie plus (la mer y garde le profil du bout). |
+
+Démarrage inchangé (p7 : 18,4 s avant et après, mêmes conditions) : les trajectoires des flocons se calculent avec la mer, dans les tâches parallèles, et tout le reste est sur le GPU (~1,2 ms par image à 960 × 540).
