@@ -45,7 +45,7 @@ export function createFoam(W, lite) {
   const u = W.sea(x, z, U.t).y;
   const size = float(0.035).add(seed.mul(seed).mul(0.11)).mul(aF.mul(0.8).add(0.7)).mul(onWater.mul(0.4).add(0.6)).mul(FU.size); // (échoué : il se rétracte)
   const ang = seed.mul(37.1).fract().sub(0.5).mul(0.9);
-  const sx = size.mul(u.abs().mul(0.5).add(1)), sz = size.mul(seed.mul(13.7).fract().mul(0.5).add(0.6));
+  const sx = size.mul(u.abs().min(2).mul(0.3).add(1)), sz = size.mul(seed.mul(13.7).fract().mul(0.5).add(0.6));
   const ca = cos(ang), sa = sin(ang);
   const lx = fc.x.mul(sx), lz = fc.y.mul(sz);
   const alive = age.lessThan(life).and(FU.on.greaterThan(0.5));
@@ -80,13 +80,13 @@ export function createFoam(W, lite) {
     const fade = smoothstep(0, 0.35, vAge).mul(float(1).sub(smoothstep(0.7, 1.0, vA)));
     // (échouée : plus mince, et elle sèche plus vite)
     // (échouée, la mousse sèche en un voile mince : rien de ces taches de peinture opaques)
-    const al = mask.mul(fade).mul(mix(float(0.22), float(0.7), vWet)).clamp(0, 1);
+    const al = mask.mul(fade).mul(mix(float(0.22), float(0.7), vWet)).mul(select(camAbove, float(1), float(0.55))).clamp(0, 1);
     // éclairée comme l'écume de la surface ; une ombre au cœur (épaisseur)
     const lit = vec3(U.sunE).mul(U.sunDir.y.max(0)).mul(0.7).add(vec3(U.skyE).mul(1.1));
     const shade = float(0.82).add(NZ(vec3(c.mul(6).add(sd.mul(0.5)), 2.2)).x.mul(0.18));
     const tint = mix(vec3(0.82, 0.78, 0.66), vec3(0.88, 0.9, 0.9), vWet); // (échouée : un peu jaunie)
-    const under = select(camAbove, float(1), float(0.4)); // (d'en dessous, la mousse coupe le jour)
-    let rgb = tint.mul(lit).mul(shade).mul(under);
+    // (d'en dessous, la mousse coupe le jour : une ombre grise, pas un blanc)
+    let rgb = select(camAbove, tint.mul(lit).mul(shade), vec3(U.skyE).mul(0.12).add(vec3(U.tint).mul(vec3(U.skyE)).mul(0.25)));
     rgb = W.medium(positionWorld, cameraPosition, rgb);
     return vec4(rgb.mul(al), al);
   })();

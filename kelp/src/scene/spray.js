@@ -14,6 +14,7 @@
 // l'avant) ; sous l'eau, elles disparaissent ; près du dôme, rien.
 import * as THREE from 'three/webgpu';
 import { Fn, attribute, float, vec2, vec3, vec4, fract, floor, exp, mix, smoothstep, uniform, length, max, positionWorld, cameraPosition, cameraWorldMatrix, normalize, dot, select, mrt, hash, varying } from 'three/tsl';
+import { NZ } from '../../../shared/scene/materials.js';
 
 export function createSpray(W, lite) {
   const { U } = W;
@@ -50,7 +51,10 @@ export function createSpray(W, lite) {
     // (chute freinée : y = y0 + (v + g/k)(1 − e^{−kτ})/k − gτ/k)
     const gk = float(g).div(k);
     const p = vec3(x0.add(v.x.mul(e)), y0.add(v.y.add(gk).mul(e)).sub(age.mul(gk)), z.add(v.z.mul(e)));
-    return { p, a, born, I, c };
+    // (la vitesse à cet âge : pour étirer la grappe dans le sens où elle vole)
+    const ek = exp(age.mul(k).negate());
+    const vel = vec3(v.x.mul(ek), v.y.add(gk).mul(ek).sub(gk), v.z.mul(ek));
+    return { p, a, born, I, c, vel };
   };
 
   const mat = new THREE.MeshBasicNodeMaterial();
@@ -69,19 +73,30 @@ export function createSpray(W, lite) {
   const size = mix(float(0.03).add(h(10, S.c).mul(0.04)), float(0.16), big).mul(S.a.mul(1.5).add(1)).mul(SU.size);
   // face à la caméra : les axes de l'écran, dans le repère du monde
   const right = cameraWorldMatrix.mul(vec4(1, 0, 0, 0)).xyz, upv = cameraWorldMatrix.mul(vec4(0, 1, 0, 0)).xyz;
-  mat.positionNode = S.p.add(right.mul(pid.y.mul(size))).add(upv.mul(pid.z.mul(size)));
+  // (étirée dans le sens où elle vole, à l'écran : le filé d'une pose de
+  // 1/50 s — un disque immobile se lisait comme une tache)
+  const sv = vec2(dot(S.vel, right), dot(S.vel, upv)), sl = sv.length().max(1e-3), ax = sv.div(sl), ay = vec2(ax.y.negate(), ax.x);
+  const stretch = sl.mul(0.02).div(size).add(1).min(4).mul(big.oneMinus()).add(big);
+  const off = vec2(ax.mul(pid.y.mul(stretch))).add(ay.mul(pid.z)).mul(size);
+  mat.positionNode = S.p.add(right.mul(off.x)).add(upv.mul(off.y));
   const corner = varying(vec2(pid.y, pid.z));
   // (les états d'une goutte, transmis au fragment)
-  const vA = varying(S.a), vBorn = varying(S.born), vBig = varying(big);
+  const vA = varying(S.a), vBorn = varying(S.born), vBig = varying(big), vSd = varying(h(11, S.c));
   const out = Fn(() => {
     const P = positionWorld, C = cameraPosition;
+    // une grappe de gouttelettes de tailles diverses, pas un disque ; la brume,
+    // une bouffée au contour bruité
+    const sd = vSd.mul(57.3);
     const d = length(corner).mul(2);
-    const disc = smoothstep(1, 0.15, d);
+    const env = smoothstep(1, 0.35, d.add(NZ(vec3(corner.mul(2.5), sd)).x.mul(0.45)));
+    const drops = smoothstep(0.2, 0.05, NZ(vec3(corner.mul(7), sd.add(3.1))).z).add(smoothstep(0.12, 0.02, NZ(vec3(corner.mul(15), sd.add(9.7))).z).mul(0.8)).min(1);
+    const mist = smoothstep(0.0, 0.6, NZ(vec3(corner.mul(3), sd.add(1.7))).x.mul(0.5).add(0.45)).mul(env);
+    const disc = mix(env.mul(drops.mul(0.85).add(0.15)), mist, vBig);
     const alive = vA.lessThan(1).and(vA.greaterThan(0));
     const fade = smoothstep(0, 0.06, vA).mul(float(1).sub(smoothstep(0.55, 1, vA)));
     const above = smoothstep(-0.005, 0.02, P.y.sub(W.level(P.x, P.z, U.t)));
     const near = smoothstep(0.25, 0.6, length(P.sub(C)));
-    const al = select(alive, float(1), float(0)).mul(vBorn).mul(fade).mul(above).mul(near).mul(disc).mul(mix(float(0.6), float(0.14), vBig)).mul(SU.gain).min(1);
+    const al = select(alive, float(1), float(0)).mul(vBorn).mul(fade).mul(above).mul(near).mul(disc).mul(mix(float(0.9), float(0.16), vBig)).mul(SU.gain).min(1);
     // Mie vers l'avant : à contre-jour, les gouttes s'allument
     const vdir = normalize(P.sub(C));
     const mie = dot(vdir, vec3(U.sunDir)).max(0).pow(8).mul(3).add(0.25);

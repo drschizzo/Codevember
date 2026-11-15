@@ -12,6 +12,7 @@ import { createKelp } from './kelp.js';
 import { createFauna } from './fauna.js';
 import { createSpray } from './spray.js';
 import { createFoam } from './foam.js';
+import { createLip } from './lip.js';
 import { sunDir } from '../gen/sky.js';
 import { cameraPose } from '../camera.js';
 import { sceneJobs } from '../gen/scene.js';
@@ -43,6 +44,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
   const fauna = createFauna(W);
   const spray = createSpray(W, lite);
   const foam = createFoam(W, lite);
+  const lip = createLip(W, lite);
   // le ciel : une grande sphère de la scène (le fond de three.js, dessiné à
   // part, restait noir après le préchauffage asynchrone des pipelines)
   const skyNode = tTexture(skyHolder.tex);
@@ -61,7 +63,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
   const skyMesh = new THREE.Mesh(new THREE.SphereGeometry(500, 64, 32), skyMat);
   skyMesh.frustumCulled = false; skyMesh.renderOrder = -1;
   const group = new THREE.Group();
-  group.add(skyMesh, terrain.mesh, kelp.mesh, kelp.hold, fauna.mesh, surface.mesh, spray.mesh, foam.mesh);
+  group.add(skyMesh, terrain.mesh, kelp.mesh, kelp.hold, kelp.web, fauna.mesh, surface.mesh, spray.mesh, foam.mesh, lip.mesh);
   scene.add(group);
 
   let R = null, D = null, sky = null, pending = 0, version = 0, prog = 0, track = null;
@@ -398,7 +400,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
 
   return {
     domeLens, setDomeCamera,
-    setRecipe, update, setShadowQuality, camPose, trackAt, group, sun, W, kelp, terrain, surface, spray, foam,
+    setRecipe, update, setShadowQuality, camPose, trackAt, group, sun, W, kelp, terrain, surface, spray, foam, lip,
     get data() { return D; },
     ready: () => pending === 0 && !!D && !!sky,
     failed: () => pending < 0,
