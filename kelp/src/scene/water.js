@@ -467,7 +467,8 @@ export function createSurface(W, skyTex, lite) {
     // (la mousse a une épaisseur : elle porte une ombre sur l'eau autour d'elle)
     const foamShade = float(1).sub(smoothstep(thr.sub(0.18), thr, laceM).mul(smoothstep(0.03, 0.2, fo)).mul(foamCov.oneMinus()).mul(0.35));
     const lit = vec3(U.sunE).mul(U.sunDir.y.max(0)).mul(0.7).add(vec3(U.skyE).mul(1.1));
-    const foam = vec3(0.86, 0.88, 0.88).mul(lit).mul(select(above, float(1), float(0.6)));
+    // (vue d'en dessous, l'écume coupe le jour : une plaque grise, pas un blanc)
+    const foam = select(above, vec3(0.86, 0.88, 0.88).mul(lit), vec3(U.skyE).mul(0.18).add(vec3(U.tint).mul(vec3(U.skyE)).mul(0.3)));
     // (au bord de l'eau, la nappe s'amincit : transparente)
     const depth = W.level(P.x, P.z, U.t).sub(W.rockAt(P.x, P.z));
     const thin = smoothstep(0.006, 0.02, depth);

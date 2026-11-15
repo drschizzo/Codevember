@@ -121,13 +121,13 @@
         <div class="tbl"><table>
           <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
           <tbody>
-            <tr><td>La mer : le profil fin de la caméra (760 cellules, 60 i/s) et ~22 profils du faisceau (380 cellules, 30 i/s), deux périodes de 32 s chacun, en parallèle</td><td>workers</td><td class="num">~1,5 s</td></tr>
+            <tr><td>La mer : le profil fin de la caméra (760 cellules, 60 i/s) et ~22 profils du faisceau (380 cellules, 30 i/s), deux périodes de 32 s chacun, et les trajectoires de 4 800 flocons d'écume par profil, en parallèle</td><td>workers</td><td class="num">~1,5 s</td></tr>
             <tr><td>La roche : relief 1 024², arête rompue, éboulis, surface de contact, flaques, couleur (en même temps que la mer)</td><td>worker</td><td class="num">~2 s</td></tr>
             <tr><td>Les laminaires : 23 à 40 plantes simulées, 66 s à 120 sous-pas/s, puis 100 à 240 touffes clonées</td><td>worker</td><td class="num">8–17 s</td></tr>
             <tr><td>Données transmises au GPU (faisceau en texture 3D, profil fin 60 i/s, laminaires 30 i/s, roche)</td><td>GPU</td><td class="num">~170 Mo</td></tr>
           </tbody>
         </table></div>
-        <p>Mesures faites dans Node, sur un cœur, avec une graine de test ; la génération est nettement plus lente quand l'onglet est en arrière-plan. Le temps d'image, mesuré à 960 × 540 sur le GPU d'un Mac, était de 6,6 à 6,9 ms, dont ~3,9 ms pour la roche et ~2,8 ms pour l'occlusion ambiante. La passe cinéma l'a porté à 8,1–9,3 ms (graine k39), surtout pour la lumière diffusée sous l'eau. Le faisceau, la forêt clonée (0,4 ms) et les embruns (0,2 ms) coûtent peu ; le démarrage, lui, a raccourci : 17 → ~12 s sur k39, 22,5 → ~18,5 s sur la graine p7.</p>
+        <p>Mesures faites dans Node, sur un cœur, avec une graine de test ; la génération est nettement plus lente quand l'onglet est en arrière-plan. Le temps d'image, mesuré à 960 × 540 sur le GPU d'un Mac, était de 6,6 à 6,9 ms, dont ~3,9 ms pour la roche et ~2,8 ms pour l'occlusion ambiante. La passe cinéma l'a porté à 8,1–9,3 ms (graine k39), surtout pour la lumière diffusée sous l'eau. Le faisceau, la forêt clonée (0,4 ms), les embruns (0,2 ms), les 100 000 flocons d'écume (0,6 ms), la lèvre, la paume et ce qui flotte coûtent peu ; le démarrage, lui, a raccourci : 17 → ~12 s sur k39, 22,5 → ~18,5 s sur la graine p7.</p>
       </section>
     </article>
 

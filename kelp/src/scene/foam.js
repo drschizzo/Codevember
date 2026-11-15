@@ -10,7 +10,7 @@
 import * as THREE from 'three/webgpu';
 import {
   Fn, attribute, float, vec2, vec3, vec4, floor, fract, mix, smoothstep, uniform, length, max, min, cos, sin, select, positionWorld, cameraPosition,
-  textureLoad, texture, ivec2, int, varying, mrt, abs,
+  textureLoad, texture, ivec2, int, varying, mrt, abs, normalize,
 } from 'three/tsl';
 import { NZ } from '../../../shared/scene/materials.js';
 
@@ -64,6 +64,10 @@ export function createFoam(W, lite) {
   mat.positionNode = P;
   mat.outputNode = Fn(() => {
     const c = vC, sd = vSeed.mul(91.3);
+    // vue d'en dessus ou d'en dessous : c'est le point du dôme d'où part le
+    // rayon qui le dit (sur un plan mi-air mi-eau, la moitié basse regarde dans l'eau)
+    const O = cameraPosition.add(normalize(positionWorld.sub(cameraPosition)).mul(U.dome));
+    const seenAbove = O.y.greaterThan(W.levelDome(O.x, O.z, U.t));
     // le contour : déchiré (un rayon bruité), jamais un disque
     const r = length(c).mul(2);
     const edge = r.add(NZ(vec3(c.mul(3.1).add(sd), sd.mul(0.37))).x.mul(0.55)).add(NZ(vec3(c.mul(8.3).add(sd.mul(1.7)), 4.1)).y.mul(0.2));
@@ -80,13 +84,13 @@ export function createFoam(W, lite) {
     const fade = smoothstep(0, 0.35, vAge).mul(float(1).sub(smoothstep(0.7, 1.0, vA)));
     // (échouée : plus mince, et elle sèche plus vite)
     // (échouée, la mousse sèche en un voile mince : rien de ces taches de peinture opaques)
-    const al = mask.mul(fade).mul(mix(float(0.22), float(0.7), vWet)).mul(select(camAbove, float(1), float(0.55))).clamp(0, 1);
+    const al = mask.mul(fade).mul(mix(float(0.22), float(0.7), vWet)).mul(select(seenAbove, float(1), float(0.55))).clamp(0, 1);
     // éclairée comme l'écume de la surface ; une ombre au cœur (épaisseur)
     const lit = vec3(U.sunE).mul(U.sunDir.y.max(0)).mul(0.7).add(vec3(U.skyE).mul(1.1));
     const shade = float(0.82).add(NZ(vec3(c.mul(6).add(sd.mul(0.5)), 2.2)).x.mul(0.18));
     const tint = mix(vec3(0.82, 0.78, 0.66), vec3(0.88, 0.9, 0.9), vWet); // (échouée : un peu jaunie)
     // (d'en dessous, la mousse coupe le jour : une ombre grise, pas un blanc)
-    let rgb = select(camAbove, tint.mul(lit).mul(shade), vec3(U.skyE).mul(0.12).add(vec3(U.tint).mul(vec3(U.skyE)).mul(0.25)));
+    let rgb = select(seenAbove, tint.mul(lit).mul(shade), vec3(U.skyE).mul(0.12).add(vec3(U.tint).mul(vec3(U.skyE)).mul(0.25)));
     rgb = W.medium(positionWorld, cameraPosition, rgb);
     return vec4(rgb.mul(al), al);
   })();
