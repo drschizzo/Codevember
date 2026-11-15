@@ -182,6 +182,10 @@ export function bakeRock(spec) {
     crack[k] = o.crack; id[k] = o.id; motif[k] = o.motif;
   }
   const fill = priorityFill(H, M, spec.seaLevel ?? 0);
+  // (pas de flaque plus étroite qu'environ 5 cm : au fond d'un joint bosselé,
+  // l'eau restait en chapelet de perles qui, à contre-jour, reflétaient le
+  // ciel comme des miroirs ; le joint reste de la roche mouillée, sombre)
+  openPools(fill, H, M, Math.max(1, Math.round(0.025 / ((box.x1 - box.x0) / (M - 1)))));
   // surface de contact des laminaires : enveloppe supérieure lissée du relief
   // (dilatation puis flou, ~3 cm) — une lanière passe par-dessus une fissure
   // au lieu d'y tomber, et ne descend jamais sous la roche dessinée
@@ -203,6 +207,21 @@ function scree(spec, shift) {
     z += rad * (1.1 + 2.2 * r.next());
   }
   return out;
+}
+
+// ouverture morphologique du masque des flaques (érosion puis dilatation, en
+// carré, séparable) : ce qui reste après l'ouverture garde son eau
+function openPools(fill, H, M, r) {
+  const m = new Uint8Array(M * M);
+  for (let k = 0; k < M * M; k++) m[k] = fill[k] - H[k] > 0.002 ? 1 : 0;
+  const pass = (A, op) => {
+    const T = new Uint8Array(M * M), O = new Uint8Array(M * M);
+    for (let j = 0; j < M; j++) for (let i = 0; i < M; i++) { let v = op; for (let q = -r; q <= r && v === op; q++) { const a = A[j * M + Math.min(M - 1, Math.max(0, i + q))]; if (a !== op) v = a; } T[j * M + i] = v; }
+    for (let j = 0; j < M; j++) for (let i = 0; i < M; i++) { let v = op; for (let q = -r; q <= r && v === op; q++) { const a = T[Math.min(M - 1, Math.max(0, j + q)) * M + i]; if (a !== op) v = a; } O[j * M + i] = v; }
+    return O;
+  };
+  const opened = pass(pass(m, 1), 0); // (érosion : un seul sec suffit ; dilatation : un seul mouillé suffit)
+  for (let k = 0; k < M * M; k++) if (m[k] && !opened[k]) fill[k] = H[k];
 }
 
 function dilate(A, M, r) {
