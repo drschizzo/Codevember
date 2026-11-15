@@ -489,7 +489,7 @@ function buildPlaneMirror(R, Pl = R.reflector.plane) {
   const rb = back.map(([a, b]) => F.vert(X.pos(a, b, -0.012), X.dir(0, 0, -1), IN));
   for (let i = 0; i < rb.length; i++) F.tri(cB, rb[(i + 1) % rb.length], rb[i]);
   if (R.family === 'psyche') buildPsycheStand(S, R, X, Pl);
-  else { // trumeau : deux pitons et un fil
+  else if (R.family !== 'galerie') { // trumeau : deux pitons et un fil
     const top = Pl.c[1] + Pl.hh + fw;
     for (const sx of [-1, 1]) tube(S, [[Pl.c[0] + sx * Pl.hw * 0.5, top - 0.06, Pl.c[2] - Pl.n[2] * 0.016], [Pl.c[0], top + 0.12, Pl.c[2] - Pl.n[2] * 0.026]], 0.0009, 6, OUT, true);
     sphere(S, [Pl.c[0], top + 0.12, Pl.c[2] - Pl.n[2] * 0.024], 0.006, 12, 8, EDGE);
@@ -558,7 +558,7 @@ function buildArdent(R, s) {
   const nM = E.normal; // (axe de la calotte en son centre)
   const side = norm(cross(nM, UP));
   const rr = Math.hypot(...sub(rim[0], rimC)) + 0.012;
-  const base = [Rf.stand[0], 0, Rf.stand[2]];
+  const base = [Rf.stand[0], Rf.stand[1], Rf.stand[2]];
   const yokeY = rimC[1] - rr - 0.03;
   for (const sx of [-1, 1]) {
     const pv = add(rimC, mul(side, sx * rr));
@@ -567,8 +567,9 @@ function buildArdent(R, s) {
     tube(metal, [pv, add(pv, [0, -0.02, 0]), low, add([rimC[0], yokeY, rimC[2]], mul(side, sx * rr * 0.4)), [rimC[0], yokeY - 0.01, rimC[2]]], 0.0045, 10, OUT, true);
   }
   vertical(metal, base, 0);
-  const colH = yokeY - 0.01;
-  lathe(metal, smoothLathe([[0, 0], [0.07, 0], [0.072, 0.006], [0.066, 0.016], [0.03, 0.024], [0.014, 0.034], [0.009, 0.05], [0.008, colH - 0.02], [0.012, colH - 0.01], [0.01, colH]], EDGE), 40);
+  // pied lesté au sol, colonne, bague de serrage à mi-hauteur
+  const colH = yokeY - base[1] - 0.01;
+  lathe(metal, smoothLathe([[0, 0], [0.15, 0], [0.152, 0.01], [0.14, 0.026], [0.06, 0.04], [0.026, 0.056], [0.016, 0.08], [0.014, colH * 0.55], [0.022, colH * 0.56], [0.022, colH * 0.6], [0.014, colH * 0.61], [0.012, colH - 0.02], [0.018, colH - 0.01], [0.014, colH]], EDGE), 40);
   metal.noFrame();
   return { cap: cap.out(), back: back.out(), metal: metal.out() };
 }
@@ -636,20 +637,30 @@ export function buildScene(R, opts = {}) {
     lamp: buildLamp(R.lamp),
   };
   if (R.reflector.plane) out.mirror = buildPlaneMirror(R);
-  // galerie : la glace d'en face, accrochée au mur du devant (derrière la
-  // caméra : on ne la voit que dans la première glace)
+  if (R.family === 'ardent') out.ardent = buildArdent(R, s);
+  if (R.family === 'facettes') out.ball = buildBall(R);
+  // galerie : la seconde glace, en face de la première ; les deux sont
+  // accrochées aux murs latéraux, et un mur ferme la pièce derrière la caméra
+  // (on le voit dans les glaces)
   if (R.reflector.planeB) {
     const B = R.reflector.planeB;
     out.mirrorB = buildPlaneMirror(R, B);
-    const W = new Buffers(), zf = B.c[2] + 0.03, Wd = 3.2, rows = [];
+    const W = new Buffers(), zf = R.room.frontZ, Wd = 3.2, rows = [];
     for (let j = 0; j <= 20; j++) { const row = []; for (let i = 0; i <= 30; i++) row.push(W.vert([-Wd / 2 + (Wd * i) / 30, -TABLE_H + ((CEIL + TABLE_H) * j) / 20, zf], [0, 0, -1], OUT)); rows.push(row); }
     W.grid(rows);
+    const xw = Math.abs(B.c[0]) + 0.035, zb = R.room.wallZ;
+    for (const sx of [-1, 1]) {
+      const rr = [];
+      for (let j = 0; j <= 20; j++) { const row = []; for (let i = 0; i <= 30; i++) row.push(W.vert([sx * xw, -TABLE_H + ((CEIL + TABLE_H) * j) / 20, zb + ((zf - zb) * i) / 30], [-sx, 0, 0], OUT)); rr.push(row); }
+      W.grid(rr);
+    }
     out.frontWall = W.out();
   }
-  if (R.family === 'ardent') out.ardent = buildArdent(R, s);
-  if (R.family === 'facettes') out.ball = buildBall(R);
   const wz = R.room.wallZ;
-  out.dust = buildDust(opts.dust ?? 6000, R.seed, [[-1.1, -0.05, wz + 0.05], [1.2, 1.1, 1.1]]);
+  // (galerie : la poussière remplit le couloir jusqu'à la glace d'en face)
+  const zEnd = R.reflector.planeB ? R.room.frontZ - 0.1 : 1.1;
+  const n = Math.round((opts.dust ?? 6000) * (R.reflector.planeB ? 1.8 : 1));
+  out.dust = buildDust(n, R.seed, [[-1.1, -0.05, wz + 0.05], [1.2, 1.1, zEnd]]);
   return out;
 }
 

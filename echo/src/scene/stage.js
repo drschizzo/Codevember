@@ -9,7 +9,7 @@
 //    une famille absente éteint les siennes (visible = false), ce qui ne
 //    recompile qu'au changement de scène, sous l'écran de chargement.
 import * as THREE from 'three/webgpu';
-import { uniform, vec2, vec3, vec4, float, attribute, positionLocal, sin, cos, length, positionWorld, reflector, dot, max, abs, mix, smoothstep, normalize, cameraPosition, exp } from 'three/tsl';
+import { uniform, vec2, vec3, vec4, float, attribute, positionLocal, sin, cos, length, positionWorld, reflector, dot, max, abs, mix, smoothstep, normalize, cameraPosition, exp, normalView, positionViewDirection } from 'three/tsl';
 import { fbm, noise2 } from '../../../shared/scene/materials.js';
 import { MATS, MOODS } from '../recipe.js';
 import { derive, frontRange, TABLE_H } from '../gen/layout.js';
@@ -61,7 +61,7 @@ export function createStage(scene, gen, { lite = false, renderer = null } = {}) 
   const root = new THREE.Group();
   scene.add(root);
   let R = null, D = null, film = null, version = 0, pending = 0, meshes = [], mats = [];
-  let ball = null, dust = null, mirrorTarget = null;
+  let ball = null, dust = null;
   const U = {
     realPhase: uniform(0), // (phase du temps réel : dérive de la poussière, figée au ralenti)
     lampColor: uniform(new THREE.Color(1, 1, 1)),
@@ -75,7 +75,8 @@ export function createStage(scene, gen, { lite = false, renderer = null } = {}) 
     if (ball) root.remove(ball);
     meshes = []; mats = [];
     ball = dust = null;
-    if (mirrorTarget) { scene.remove(mirrorTarget); mirrorTarget = null; }
+    for (const t of targets) scene.remove(t);
+    targets.length = 0;
   }
   const add = (o, mat, { cast = true, receive = true, extra = [], parent = root } = {}) => {
     const mesh = new THREE.Mesh(toGeometry(o, extra), mat);
@@ -91,13 +92,20 @@ export function createStage(scene, gen, { lite = false, renderer = null } = {}) 
   // rend l'image : dans le miroir, l'ampoule s'allume en retard)
   const lampGate = () => gate(length(positionWorld.sub(P.lamp)), positionWorld);
   function bulbMaterials(kind) {
-    const glass = new THREE.MeshPhysicalNodeMaterial({ transparent: true, side: THREE.DoubleSide, depthWrite: false });
-    const frosted = kind === 'globe';
-    glass.colorNode = vec4(0.9, 0.9, 0.9, 1);
-    glass.roughnessNode = float(frosted ? 0.35 : 0.04);
+    // verre opalin, opaque : il se voit dans les glaces (un verre transparent,
+    // sans écriture de profondeur, disparaissait des reflets), et l'éclair
+    // l'illumine de l'intérieur, plus fort au centre qu'aux bords (épaisseur
+    // traversée)
+    const glass = new THREE.MeshPhysicalNodeMaterial();
+    glass.colorNode = vec4(0.8, 0.8, 0.79, 1);
+    glass.roughnessNode = float(0.3);
     glass.metalnessNode = float(0);
-    glass.opacityNode = float(frosted ? 0.55 : 0.12);
-    glass.emissiveNode = U.lampColor.mul(U.bulbGlow).mul(frosted ? 9 : 0.9).mul(lampGate());
+    glass.clearcoatNode = float(1);
+    glass.clearcoatRoughnessNode = float(0.03);
+    glass.sheenNode = vec3(0.2);
+    glass.sheenRoughnessNode = float(0.4);
+    const facing = normalView.dot(positionViewDirection).abs();
+    glass.emissiveNode = U.lampColor.mul(U.bulbGlow).mul(lampGate()).mul(facing.mul(9).add(3));
     // le tube à éclats : du verre légèrement laiteux au repos, éblouissant pendant l'impulsion
     const fil = new THREE.MeshBasicNodeMaterial();
     fil.colorNode = vec4(U.lampColor.mul(lampGate().mul(60)).add(vec3(0.05, 0.055, 0.06)), 1);
@@ -110,18 +118,25 @@ export function createStage(scene, gen, { lite = false, renderer = null } = {}) 
   }
 
   // ── le miroir : la pièce rendue depuis la caméra symétrique ──
-  function mirrorMaterial(Pl) {
-    const refl = reflector({ resolutionScale: lite ? 0.5 : 0.85, bounces: false });
-    mirrorTarget = refl.target;
-    mirrorTarget.position.set(...Pl.c);
-    mirrorTarget.lookAt(Pl.c[0] + Pl.n[0], Pl.c[1] + Pl.n[1], Pl.c[2] + Pl.n[2]);
-    scene.add(mirrorTarget);
+  // Une glace : la pièce rendue depuis la caméra symétrique (reflector). Dans
+  // la galerie, chaque glace voit l'autre, et son reflet y est rendu à son
+  // tour (bounces : un niveau ; la glace qui rend est masquée dans son propre
+  // rendu, la récursion s'arrête là) ; les échos plus profonds (trois
+  // réflexions et plus) sont dessinés par leurs images, à leur place et à leur
+  // heure (le chemin |qₙ − œil|).
+  const targets = [];
+  function mirrorMaterial(Pl, { bounces = false, side = null, res = 0.65 } = {}) {
+    const refl = reflector({ resolutionScale: lite ? res * 0.7 : res, bounces });
+    const tg = refl.target;
+    tg.position.set(...Pl.c);
+    tg.lookAt(Pl.c[0] + Pl.n[0], Pl.c[1] + Pl.n[1], Pl.c[2] + Pl.n[2]);
+    scene.add(tg); targets.push(tg);
     const m = new THREE.MeshStandardNodeMaterial();
     // une glace ancienne : le tain s'oxyde par plaques depuis les bords (piqûres
     // grises et brunes), la poussière se dépose sur le verre. Les deux sont
     // éclairées par les lumières à retard : on voit le front passer SUR la glace
-    const pw = positionWorld, r = pw.sub(P.mc);
-    const a = dot(r, P.mu).div(P.mhw), b = dot(r, P.mv).div(P.mhh);
+    const pw = positionWorld, r = pw.sub(vec3(...Pl.c));
+    const a = dot(r, vec3(...Pl.u)).div(Pl.hw), b = dot(r, vec3(...Pl.v)).div(Pl.hh);
     const edge = float(1).sub(max(abs(a), abs(b)).max(length(vec2(a, b)).mul(0.92)));
     const blot = fbm(pw.mul(9).add(3.1), 4).mul(0.5).add(0.5);
     const fox = smoothstep(0.1, 0.0, edge).mul(smoothstep(0.55, 0.75, blot)).mul(0.8)
@@ -131,29 +146,20 @@ export function createStage(scene, gen, { lite = false, renderer = null } = {}) 
     m.roughnessNode = mix(float(0.18), float(0.7), fox);
     m.metalnessNode = float(0);
     // tain d'argent (≈ 90 %, à peine verdi par l'épaisseur de la glace), terni où il s'oxyde
-    m.emissiveNode = refl.rgb.mul(vec3(0.86, 0.9, 0.88)).mul(float(1).sub(fox.mul(0.75)));
-    return m;
-  }
-
-  // ── la glace d'en face (galerie) : on ne la voit que dans la première glace.
-  // Elle montre les images de l'éclair qui sont « derrière elle », chacune à son
-  // heure (le chemin |q − œil|), de plus en plus petites et faibles : la file
-  // des échos. Calcul exact par les images, sans rendu récursif.
-  function mirrorBMaterial() {
-    const m = new THREE.MeshStandardNodeMaterial();
-    const pw = positionWorld, eye = cameraPosition, v = normalize(pw.sub(eye));
-    let glow = float(0);
-    for (const im of galleryList()) {
-      if (im.side !== 'B') continue;
-      const qe = im.q.sub(eye), along = dot(qe, v), perp = length(qe.sub(v.mul(along)));
-      // (le tube, puis un halo : l'image lointaine reste lisible)
-      const spot = smoothstep(0.022, 0.009, perp).add(exp(perp.div(0.06).negate()).mul(0.12));
-      glow = glow.add(spot.mul(gateK(length(qe))).mul(galleryAperture(im, eye)).mul(P.gR.pow(im.n)));
+    let em = refl.rgb.mul(vec3(0.86, 0.9, 0.88)).mul(float(1).sub(fox.mul(0.75)));
+    if (side) {
+      const eye = cameraPosition, vv = normalize(pw.sub(eye));
+      let glow = float(0);
+      for (const im of galleryList()) {
+        if (im.side !== side || im.n < 3) continue;
+        const qe = im.q.sub(eye), along = dot(qe, vv), perp = length(qe.sub(vv.mul(along)));
+        // (l'ampoule, puis un halo : l'image lointaine reste lisible)
+        const spot = smoothstep(0.03, 0.012, perp).add(exp(perp.div(0.06).negate()).mul(0.12));
+        glow = glow.add(spot.mul(gateK(length(qe))).mul(galleryAperture(im, eye)).mul(P.gR.pow(im.n)));
+      }
+      em = em.add(U.lampColor.mul(glow.mul(14)));
     }
-    m.colorNode = vec4(0.012, 0.013, 0.013, 1);
-    m.roughnessNode = float(0.08);
-    m.metalnessNode = float(0.6);
-    m.emissiveNode = U.lampColor.mul(glow.mul(14));
+    m.emissiveNode = em;
     return m;
   }
 
@@ -208,8 +214,7 @@ export function createStage(scene, gen, { lite = false, renderer = null } = {}) 
     const bm = bulbMaterials(R.lamp.kind);
     own(bm.glass); own(bm.fil); own(bm.stem);
     add(o.lamp.glass, bm.glass, { cast: false, receive: false });
-    add(o.lamp.filament, bm.fil, { cast: false, receive: false });
-    add(o.lamp.stem, bm.stem, { cast: false, receive: false });
+
     const sockM = own(surfaceMaterial(Md[R.lamp.socket]));
     add(o.lamp.socket, sockM, { cast: false });
     const cordM = own(surfaceMaterial({ ...Md.blackVelvet, color: '#2a2622', color2: '#1a1714', sheen: 0.4 }));
@@ -224,7 +229,7 @@ export function createStage(scene, gen, { lite = false, renderer = null } = {}) 
     add(o.lamp.ready, own(ready), { cast: false });
     // réflecteur
     if (o.mirror) {
-      add(o.mirror.glass, own(mirrorMaterial(R.reflector.plane)), { cast: false });
+      add(o.mirror.glass, own(mirrorMaterial(R.reflector.plane, R.family === 'galerie' ? { bounces: true, side: 'A', res: 0.55 } : {})), { cast: false });
       add(o.mirror.bevel, own(surfaceMaterial({ ...Md.silverFrame, rough: 0.06 })), { cast: false });
       // (usure aux arêtes saillantes : le bol rouge sous la dorure, le bois sous le noir)
       const fr = Md[R.reflector.frame];
@@ -234,7 +239,7 @@ export function createStage(scene, gen, { lite = false, renderer = null } = {}) 
       add(o.mirror.stand, fm);
     }
     if (o.mirrorB) {
-      add(o.mirrorB.glass, own(mirrorBMaterial()), { cast: false });
+      add(o.mirrorB.glass, own(mirrorMaterial(R.reflector.planeB, { bounces: true, side: 'B', res: 0.55 })), { cast: false });
       add(o.mirrorB.bevel, own(surfaceMaterial({ ...Md.silverFrame, rough: 0.06 })), { cast: false });
       const fr = Md[R.reflector.frame];
       const fmB = own(surfaceMaterial(fr, { wear: fr.kind === 'metal' ? '#7c3523' : '#6b4a30' }));
@@ -247,6 +252,9 @@ export function createStage(scene, gen, { lite = false, renderer = null } = {}) 
       // teinté par la lampe quand elle est allumée, empêche un trou noir)
       const capM = surfaceMaterial({ ...Md.silverFrame, rough: 0.06, color: '#f2f0ec' }, { flat: true });
       capM.emissiveNode = U.lampColor.mul(gate(length(positionWorld.sub(P.lamp)), positionWorld)).mul(0.04);
+      // (un voile de poussière sur l'argent : on voit l'anneau de l'éclair passer
+      // sur le miroir lui-même)
+      capM.metalnessNode = float(0.86);
       add(o.ardent.cap, own(capM));
       const mm = own(surfaceMaterial(Md[R.lamp.socket === 'brass' ? 'brass' : 'nickel']));
       add(o.ardent.back, mm);
@@ -268,7 +276,7 @@ export function createStage(scene, gen, { lite = false, renderer = null } = {}) 
     const v = ++version;
     D = derive(R);
     const fr = frontRange(R);
-    film = createFilm({ duration: R.film.duration, rhoStart: fr.rhoStart, rhoEnd: fr.rhoEnd });
+    film = createFilm({ duration: R.film.duration, rhoStart: fr.rhoStart, rhoEnd: fr.rhoEnd, windows: fr.windows });
     pending = 1;
     gen.request({ R, opts: { dust: lite ? 2000 : 4500 } }, 'scene').then((o) => {
       if (v !== version) return;

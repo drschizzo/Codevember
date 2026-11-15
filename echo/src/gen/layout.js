@@ -30,18 +30,15 @@ export function place(R, rng) {
 
   // ── réflecteur posé sur la table ou au-dessus (avant la nature morte) ──
   if (R.family === 'ardent') {
-    Rf.stand = v3([rng.range(0.33, 0.47), 0, rng.range(-0.2, -0.04)]);
-    Rf.my = r3(rng.range(0.22, 0.28));
-    reserved.push([Rf.stand[0], Rf.stand[2], 0.085, -1]);
-    reserved.push([Rf.stand[0], Rf.stand[2], 0.16, Rf.my - Rf.cap - 0.02]);
-    // le foyer : un point de la table, devant la nature morte, que la calotte
-    // inclinée vise (la tache ardente s'y forme) ; aucun vase ne s'y pose
-    const fx = Math.max(-T.width / 2 + 0.12, Rf.stand[0] - rng.range(0.2, 0.3));
-    const fz = Math.min(T.depth / 2 - 0.08, Rf.stand[2] + rng.range(0.16, 0.24));
-    Rf.focus = v3([fx, 0.002, fz]);
-    reserved.push([fx, fz, 0.06, -1]);
-    // (et le cône entre la calotte et le foyer reste libre)
-    for (let k = 1; k < 4; k++) reserved.push([fx + ((Rf.stand[0] - fx) * k) / 4, fz + ((Rf.stand[2] - fz) * k) / 4, 0.05, (Rf.my * k) / 4]);
+    // un grand miroir concave sphérique, debout sur un pied à côté de la table,
+    // dont le centre de courbure est l'ampoule : toute la lumière qu'il reçoit
+    // revient à la lampe, au même instant (chemin 2R), et la rallume
+    const dir = norm([1, rng.range(-0.3, -0.12), rng.range(-0.2, 0.15)]);
+    let R0 = rng.range(0.78, 0.95);
+    R0 = Math.max(R0, (T.width / 2 + 0.16 - s[0]) / dir[0]);
+    const M = add(s, mul(dir, R0));
+    Rf.center = v3(M); Rf.focus = v3(s); Rf.radius = r3(R0);
+    Rf.stand = v3([M[0], -TABLE_H, M[2]]);
   }
   if (R.family === 'facettes') {
     Rf.ballC = v3([rng.range(0.12, 0.3), rng.range(0.52, 0.6), rng.range(-0.18, -0.04)]);
@@ -87,14 +84,14 @@ export function place(R, rng) {
     fitCamera(R);
   }
   placeReflector(R, eyeAt(), pre);
-  // galerie : la seconde glace est derrière la caméra, parallèle à la première
-  // et tournée vers elle ; assez grande pour que la file des échos reste dans
-  // les deux contours
+  // galerie : la caméra une fois placée, les glaces vont jusqu'à 45 cm d'elle
+  // (leur partie avant, hors du cadre, porte les images lointaines de la lampe)
   if (R.family === 'galerie') {
+    for (let it = 0; it < 2; it++) { placeReflector(R, eyeAt(), pre); fitCamera(R); }
+    placeReflector(R, eyeAt(), pre);
     let zmax = -1;
     for (let k = 0; k <= 64; k++) zmax = Math.max(zmax, cameraAt(C, k / 64).pos[2]);
-    const A = Rf.plane;
-    Rf.planeB = { c: v3([A.c[0], A.c[1], zmax + 0.45]), n: [0, 0, -1], u: [-1, 0, 0], v: [0, 1, 0], hw: 0.8, hh: 0.8, shape: 'rect' };
+    R.room.frontZ = r3(zmax + 0.6);
   }
   return R;
 }
@@ -102,7 +99,18 @@ export function place(R, rng) {
 function placeReflector(R, eEcho, pre) {
   const T = R.table, Lp = R.lamp, Rf = R.reflector, wallZ = R.room.wallZ;
   const s = [Lp.x, Lp.y, Lp.z];
-  if (R.family === 'trumeau' || R.family === 'galerie') {
+  if (R.family === 'galerie') {
+    // deux grandes glaces face à face, accrochées aux murs latéraux juste
+    // au-delà des bouts de la table, du mur du fond sur 1,35 m
+    const xm = T.width / 2 + 0.14, z0 = wallZ + 0.06;
+    const z1 = Math.min(z0 + 1.35, eEcho[2] - 0.6);
+    const hw = r3((z1 - z0) / 2), hh = 0.7, cz = (z0 + z1) / 2, cy = 0.35;
+    for (const [key, sx] of [['plane', -1], ['planeB', 1]]) {
+      const n = [-sx, 0, 0];
+      const { u, v } = planeBasis(n);
+      Rf[key] = { c: v3([sx * xm, cy, cz]), n, u: v3(u), v: v3(v), hw, hh, shape: 'rect' };
+    }
+  } else if (R.family === 'trumeau') {
     const zg = wallZ + 0.03;
     const n = [0, 0, 1];
     const sv = [s[0], s[1], 2 * zg - s[2]];
@@ -127,7 +135,7 @@ function placeReflector(R, eEcho, pre) {
     Rf.plane = { c: v3(c), n: v3(n), u: v3(u), v: v3(v), hw, hh, shape: Rf.shape === 'arch' ? 'arch' : 'oval' };
     Rf.yaw = r3(yaw); Rf.tilt = r3(tilt);
   } else if (R.family === 'ardent') {
-    Rf.center = v3([Rf.stand[0], Rf.my, Rf.stand[2]]);
+    // (posé dans place() : il ne dépend pas de l'œil)
   } else if (R.family === 'facettes') {
     Rf.ballSpin = 1; // (tours par boucle, en temps réel)
   }
@@ -140,14 +148,19 @@ function placeReflector(R, eEcho, pre) {
 export function framePoints(R) {
   const Lp = R.lamp, Rf = R.reflector, pts = [[Lp.x, Lp.y - 0.08, Lp.z], [Lp.x, Lp.y + 0.12, Lp.z]];
   for (const o of R.objects) pts.push([o.x - o.r, 0, o.z], [o.x + o.r, 0, o.z], [o.x, o.h, o.z]);
-  if (Rf.plane) {
+  if (R.family === 'galerie') {
+    for (const P of [Rf.plane, Rf.planeB].filter(Boolean)) {
+      const zb = P.c[2] - P.hw;
+      for (const y of [P.c[1] - P.hh * 0.6, P.c[1] + P.hh]) pts.push([P.c[0], Math.max(0, y), zb], [P.c[0], Math.max(0, y), zb + 0.5]);
+    }
+  } else if (Rf.plane) {
     const P = Rf.plane;
     for (const a of [-1, 1]) for (const b of [-1, 1]) {
       const q = add(add(P.c, mul(P.u, a * (P.hw + 0.04))), mul(P.v, b * (P.hh + 0.04)));
       pts.push([q[0], Math.max(0, q[1]), q[2]]);
     }
   }
-  if (R.family === 'ardent') { const m = Rf.center; pts.push([m[0], m[1] + Rf.cap + 0.03, m[2]], [m[0], 0, m[2]], Rf.focus); }
+  if (R.family === 'ardent') { const m = Rf.center; pts.push([m[0], m[1] + Rf.cap + 0.04, m[2]], [m[0], m[1] - Rf.cap - 0.04, m[2]], [m[0] + 0.05, m[1], m[2]]); }
   if (R.family === 'facettes') { const c = Rf.ballC, r = Rf.ball.r; pts.push([c[0], c[1] + r + 0.06, c[2]], [c[0] - r, c[1], c[2]], [c[0] + r, c[1], c[2]]); }
   return pts;
 }
@@ -183,7 +196,7 @@ export function derive(R) {
   }
   if (Rf.planeB) {
     const A = Rf.plane, B = Rf.planeB;
-    out.G = { zA: A.c[2], zB: B.c[2], A: { cx: A.c[0], cy: A.c[1], hw: A.hw, hh: A.hh }, B: { cx: B.c[0], cy: B.c[1], hw: B.hw, hh: B.hh } };
+    out.G = { zA: A.c[0], zB: B.c[0], A: { cx: A.c[2], cy: A.c[1], hw: A.hw, hh: A.hh }, B: { cx: B.c[2], cy: B.c[1], hw: B.hw, hh: B.hh } };
   }
   if (R.family === 'facettes') {
     out.B = { c: Rf.ballC, r: Rf.ball.r, rows: Rf.ball.rows, cols: Math.round((Math.PI * Rf.ball.rows) / 1.25), spin: 0 };
@@ -212,19 +225,44 @@ export function frontRange(R) {
   for (let i = 0; i <= 8; i++) for (let j = 0; j <= 4; j++) probes.push([-W / 2 + (W * i) / 8, 0, -R.table.depth / 2 + (R.table.depth * j) / 4]);
   for (let i = 0; i <= 8; i++) for (let j = 0; j <= 5; j++) probes.push([-1.1 + (2.4 * i) / 8, -0.1 + (1.3 * j) / 5, wz + 0.01]);
   for (const o of R.objects) probes.push([o.x, o.h, o.z]);
-  let far = 0;
+  // (ce qui est au centre du cadre : la nature morte, la table, le réflecteur ;
+  // c'est sur eux que le film doit prendre son temps)
+  const inFrame = [];
+  for (const o of R.objects) inFrame.push([o.x - o.r, 0.01, o.z], [o.x + o.r, o.h, o.z]);
+  for (const q of framePoints(R)) inFrame.push([...q]); // (copies : ne jamais marquer un tableau de la recette)
+  for (const q of inFrame) { q.inFrame = true; probes.push(q); }
+  let far = 0, near = 0;
   for (const x of probes) {
     const Ls = [dist(x, D.s)];
     if (D.plane) { const q = planeEcho(x, D.s, D.plane); if (q) Ls.push(q.L); }
     if (D.E) { const q = ellipseEcho(x, D.E); if (q) Ls.push(q.L); }
     if (D.B) { const q = facetEcho(x, D.s, D.B); if (q) Ls.push(q.L); }
-    if (D.G) for (const q of galleryEcho(x, D.s, D.G, 3)) Ls.push(q.L);
+    const seen = Ls.slice(); // (la lumière directe et le premier écho)
     for (const v of D.vpl) Ls.push(dist(v.p, D.s) + dist(x, v.p));
     const Ds = [dist(x, e)];
     if (ev && dot(sub(x, D.plane.c), D.plane.n) > 0) Ds.push(dist(x, ev));
     for (const L of Ls) for (const d of Ds) far = Math.max(far, L + d);
+    // (ce qui se voit vraiment : la lumière directe et le premier écho, vus
+    // en face ; les rebonds diffus et le reflet du fond de la pièce sont
+    // trop faibles pour retenir le film)
+    if (x.inFrame) for (const L of seen) near = Math.max(near, L + Ds[0]);
+    if (D.G) for (const q of galleryEcho(x, D.s, D.G, 3)) for (const d of Ds) far = Math.max(far, q.L + d);
   }
-  // (galerie : les images de la lampe vues dans les glaces, jusqu'à trois réflexions)
-  if (D.G) for (const im of galleryImages(D.s, D.G, 3)) far = Math.max(far, dist(im.q, e));
-  return { rhoStart: r3(rhoStart), rhoEnd: r3(Math.min(far + 0.25, 11)) };
+  // fenêtres où il se passe quelque chose à l'image : la lumière directe et
+  // le premier écho ; puis, dans la galerie, chaque éclair qui reparaît dans
+  // la glace (|qₙ − œil|), précédé du couloir reflété qui s'éclaire
+  const windows = [[rhoStart - 0.5, near + 0.3]];
+  if (D.G) {
+    for (const im of galleryImages(D.s, D.G, 3)) {
+      const r = dist(im.q, e);
+      far = Math.max(far, r);
+      windows.push([r - 0.6, r + 0.9]);
+    }
+  }
+  windows.sort((a, b) => a[0] - b[0]);
+  const merged = [];
+  for (const w of windows) { const l = merged[merged.length - 1]; if (l && w[0] <= l[1]) l[1] = Math.max(l[1], w[1]); else merged.push([...w]); }
+  far = Math.max(far, near);
+  const rhoEnd = Math.min(far + 0.25, 11);
+  return { rhoStart: r3(rhoStart), rhoEnd: r3(rhoEnd), windows: merged.map(([a, b]) => [r3(a), r3(Math.min(b, rhoEnd + 1))]) };
 }

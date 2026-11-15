@@ -102,23 +102,21 @@ test('l’impulsion : 0 avant le front, un pic sur l’anneau, puis elle s’ét
 });
 
 test('galerie : chaque image est le bout d’un rayon réellement réfléchi entre les deux glaces', () => {
-  const G = { zA: -0.5, zB: 2.0, A: { cx: 0, cy: 0.5, hw: 0.4, hh: 0.45 }, B: { cx: 0, cy: 0.5, hw: 0.7, hh: 0.8 } };
+  // (glaces latérales : plans x = −0.75 et x = 0.8 ; contours dans le plan (z, y))
+  const G = { zA: -0.75, zB: 0.8, A: { cx: 0.2, cy: 0.5, hw: 0.85, hh: 0.55 }, B: { cx: 0.2, cy: 0.5, hw: 0.85, hh: 0.55 } };
   const s = [-0.2, 0.5, 0.1];
   let n = 0;
   for (let k = 0; k < 3000; k++) {
-    const x = rv([-0.6, 0, -0.4], [0.6, 1, 1.8]);
+    const x = rv([-0.7, 0, -0.5], [0.75, 1, 1.0]);
     for (const e of galleryEcho(x, s, G, 4)) {
-      // lancer le rayon depuis x vers l'image, le réfléchir à chaque glace
-      // rencontrée, et vérifier qu'il aboutit à la lampe avec la même longueur
       let o = x, dir = norm(sub(e.q, x)), total = 0, hits = 0;
       for (let b = 0; b < 8; b++) {
-        const zt = dir[2] < 0 ? G.zA : G.zB;
-        const t = (zt - o[2]) / dir[2];
+        const xt = dir[0] < 0 ? G.zA : G.zB;
+        const t = (xt - o[0]) / dir[0];
         const p = add(o, mul(dir, t));
-        // la lampe est-elle sur ce segment ?
         const ts = dot(sub(s, o), dir);
         if (hits === e.n && ts > 0 && ts < t + 1e-9) { total += ts; o = add(o, mul(dir, ts)); break; }
-        total += t; o = p; dir = [dir[0], dir[1], -dir[2]]; hits++;
+        total += t; o = p; dir = [-dir[0], dir[1], dir[2]]; hits++;
       }
       assert.equal(hits, e.n, 'nombre de réflexions');
       assert.ok(dist(o, s) < 1e-9, 'le rayon aboutit à la lampe');
@@ -127,7 +125,6 @@ test('galerie : chaque image est le bout d’un rayon réellement réfléchi ent
     }
   }
   assert.ok(n > 500, `chemins vérifiés : ${n}`);
-  // les images s'éloignent : 1, 2, 3, 4 réflexions derrière A
-  const zs = galleryImages(s, G, 4).filter((i) => i.side === 'A').map((i) => i.q[2]);
-  for (let i = 1; i < zs.length; i++) assert.ok(zs[i] < zs[i - 1]);
+  const xs = galleryImages(s, G, 4).filter((i) => i.side === 'A').map((i) => i.q[0]);
+  for (let i = 1; i < xs.length; i++) assert.ok(xs[i] < xs[i - 1]);
 });

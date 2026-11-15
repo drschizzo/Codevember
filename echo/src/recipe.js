@@ -14,7 +14,7 @@
 // dans une pièce lambrissée) ; rien de « sépia » pour l'humeur d'ouverture.
 import { createRng } from '../../shared/rng.js';
 import { place, frontRange } from './gen/layout.js';
-import { durationFor } from './film.js';
+import { durationFor, weightedSpan } from './film.js';
 
 const r2 = (x) => Math.round(x * 100) / 100 || 0; // (|| 0 : jamais de −0, que JSON ne garde pas)
 const r3 = (x) => Math.round(x * 1000) / 1000 || 0;
@@ -33,7 +33,7 @@ export const kelvinToHex = (K) => {
 export const FAMILIES = {
   trumeau: { label: 'Trumeau (miroir au mur)', gesture: 'une seconde sphère sort de la glace' },
   psyche: { label: 'Psyché (miroir sur pied)', gesture: 'une seconde sphère sort de la glace, de côté' },
-  ardent: { label: 'Miroir ardent (concave)', gesture: "l'écho se referme sur un point" },
+  ardent: { label: 'Miroir ardent (concave)', gesture: "l'écho revient à la lampe et la rallume" },
   galerie: { label: 'Galerie (deux glaces face à face)', gesture: "l'écho revient, encore et encore, de plus en plus faible" },
   facettes: { label: 'Boule à facettes', gesture: "l'écho éclaté en pinceaux" },
 };
@@ -180,7 +180,7 @@ export function generate(seed, overrides = {}) {
       bas: { el: rc.range(0.02, 0.06), dist: rc.range(1.45, 1.65), fov: rc.range(33, 37) },
     }[fr];
     return {
-      framing: fr, az: r3(rc.range(-0.32, 0.32) * (family === 'galerie' ? 0.35 : 1) + (family === 'psyche' ? 0.12 : 0)), el: r3(F.el), dist: r2(F.dist), fov: r2(F.fov),
+      framing: fr, az: r3(family === 'galerie' ? rc.range(0.18, 0.26) : family === 'ardent' ? rc.range(-0.5, -0.3) : rc.range(-0.32, 0.32) + (family === 'psyche' ? 0.12 : 0)), el: r3(F.el), dist: r2(F.dist), fov: r2(F.fov),
       sway: r3(rc.range(0.025, 0.05)), swayPhase: r2(rc.range(0, 6.28)), push: r3(rc.range(0.03, 0.06)),
     };
   })();
@@ -191,7 +191,7 @@ export function generate(seed, overrides = {}) {
     film: { duration: 12 },
     camera,
     room: {
-      wall: Md.wall, floor: Md.floor, wallGap: r2(family === 'trumeau' || family === 'galerie' ? rl.range(0.06, 0.16) : family === 'psyche' ? rl.range(0.5, 0.6) : rl.range(0.25, 0.55)),
+      wall: Md.wall, floor: Md.floor, wallGap: r2(family === 'galerie' ? rl.range(0.15, 0.3) : family === 'trumeau' ? rl.range(0.06, 0.16) : family === 'psyche' ? rl.range(0.5, 0.6) : rl.range(0.25, 0.55)),
     },
     table: { mat: tableMat, width: r2(rm.range(1.15, 1.4)), depth: r2(rm.range(0.62, 0.74)), legs: rm.pick(['tournés', 'fuselés', 'tréteaux']) },
     lamp: {
@@ -204,7 +204,7 @@ export function generate(seed, overrides = {}) {
       frame: rm.pick(Md.frames), shape: rf.pick(['rect', 'oval', 'arch']),
       w: r2(rf.range(0.55, 0.8)), h: r2(rf.range(0.7, 0.95)),
       // (psyché : glace haute et étroite ; ardent : calotte ; facettes : boule)
-      cap: r3(rf.range(0.15, 0.19)), ball: { r: r3(rf.range(0.075, 0.1)), rows: rf.pick([14, 16, 18]) },
+      cap: r3(rf.range(0.22, 0.28)), ball: { r: r3(rf.range(0.075, 0.1)), rows: rf.pick([14, 16, 18]) },
       jx: r2(rf.range(-0.3, 0.3)), jy: r2(rf.range(-0.25, 0.25)),
     },
     objects: [],
@@ -230,7 +230,7 @@ export function generate(seed, overrides = {}) {
   // la durée de la boucle découle du chemin que la lumière doit parcourir à
   // l'écran (le front avance à FRONT_SPEED m par seconde de film)
   const fr = frontRange(R);
-  R.film.duration = durationFor(fr.rhoEnd - fr.rhoStart);
+  R.film.duration = durationFor(weightedSpan(fr));
   return R;
 }
 

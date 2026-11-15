@@ -21,7 +21,7 @@ export const RENDER_DEFAULTS = {
   ssr: true, ssrIntensity: 0.7, ssrQuality: 0.5, ssrDistance: 2.5, ssrThickness: 0.05, ssrRes: 0.5, ssrBlur: 2, nestEnv: 0.45, crystalThick: 1,
   dof: false, focus: 1, focusRange: 0.35, bokeh: 2,
   motionBlur: 0.6, ca: 0.1, grain: 0.03,
-  streaks: 0.08, streakLen: 4, halation: 0.25, dirt: 0.3,
+  streaks: 0, streakLen: 4, halation: 0.25, dirt: 0.3,
   dynRes: false, maxFps: 0, // (résolution dynamique, cadence plafonnée : voir app/mobile.js)
 };
 
@@ -38,7 +38,7 @@ export const MOBILE_DEFAULTS = {
   dynRes: true, maxFps: 60,
 };
 
-const STORE = 'echo.render.v1'; // (changer de version quand un défaut change : les réglages mémorisés sont alors oubliés)
+const STORE = 'echo.render.v2'; // (changer de version quand un défaut change : les réglages mémorisés sont alors oubliés)
 
 // (le mode mobile a ses propres réglages mémorisés)
 export const defaultsFor = (lite) => (lite ? MOBILE_DEFAULTS : RENDER_DEFAULTS);
