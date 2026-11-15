@@ -300,6 +300,10 @@ export function holdfastGeometry(K, plants, rockH, seed) {
     // (chaque crampon a son âge : taille de 0,6 à 1,5)
     const age = 0.6 + 0.9 * rr.next() ** 1.5;
     const R0 = F.holdfast * age;
+    // le pied du stipe (gen/kelp.js, buildKelp : l'ancre est à 0,6 × la taille
+    // du crampon au-dessus de la roche) : le crampon doit le rejoindre, quel que
+    // soit son âge — et pour un clone, quelle que soit la roche sous lui
+    const attach = P.y + F.holdfast * 0.6 + 0.006;
     if (K.family === 'durvillaea') {
       // disque massif : un coussin de tissu bosselé, au contour irrégulier,
       // qui épouse la roche (un seul maillage, pas des tubes rayonnants)
@@ -308,7 +312,12 @@ export function holdfastGeometry(K, plants, rockH, seed) {
         const edge = R0 * (0.9 + 0.22 * N.fbm(Math.cos(a) * 1.3 + ph, Math.sin(a) * 1.3, pi * 0.37, 3));
         const rad = edge * t, x = P.x + Math.cos(a) * rad, z = P.z + Math.sin(a) * rad;
         const lump = 1 + 0.35 * N.fbm(x * 40 + ph, z * 40, pi, 2);
-        return [x, rockH(x, z) + R0 * 0.26 * (1 - t * t) ** 1.5 * lump - 0.004 * t, z]; // (un coussin plat, pas un dôme)
+        // (un coussin plat, pas un dôme ; au centre, un cône de racines monte
+        // jusqu'au pied du stipe — aplati seul, le disque laissait le stipe
+        // flotter à quelques centimètres au-dessus)
+        const g = rockH(x, z), pad = R0 * 0.26 * (1 - t * t) ** 1.5 * lump;
+        const boss = (attach - g) * (1 - sst(0.18, 0.75, t)) * (1 + 0.08 * lump);
+        return [x, g + Math.max(pad, boss) - 0.004 * t, z];
       };
       const base = B.n;
       for (let i = 0; i <= NR; i++) for (let k = 0; k < NT; k++) {
@@ -330,7 +339,7 @@ export function holdfastGeometry(K, plants, rockH, seed) {
     // le pied du stipe qui s'évase, puis des haptères en nombre, en longueur et
     // en direction irréguliers, qui plongent en arc vers la roche et s'y
     // ramifient une ou deux fois (pointes enfoncées dans la roche)
-    const g0 = rockH(P.x, P.z), top = P.y + F.holdfast * 0.6 * age;
+    const g0 = rockH(P.x, P.z), top = Math.max(attach, P.y + F.holdfast * 0.6 * age);
     tube(B, [[P.x, g0 - 0.004, P.z], [P.x + (rr.next() - 0.5) * 0.004, (g0 + top) / 2, P.z + (rr.next() - 0.5) * 0.004], [P.x, top + 0.004, P.z]], R0 * 0.42, R0 * 0.16, 10);
     const n = P.far ? 4 + Math.floor(rr.next() * 3) : 6 + Math.floor(rr.next() * 8); // (au loin : moins d'haptères)
     const arm = (o, a, reach, r, depth) => {
