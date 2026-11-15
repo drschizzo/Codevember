@@ -13,6 +13,7 @@ import { createFauna } from './fauna.js';
 import { createSpray } from './spray.js';
 import { createFoam } from './foam.js';
 import { createLip } from './lip.js';
+import { createDrift } from './drift.js';
 import { sunDir } from '../gen/sky.js';
 import { cameraPose } from '../camera.js';
 import { sceneJobs } from '../gen/scene.js';
@@ -45,6 +46,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
   const spray = createSpray(W, lite);
   const foam = createFoam(W, lite);
   const lip = createLip(W, lite);
+  const drift = createDrift(W, lite);
   // le ciel : une grande sphère de la scène (le fond de three.js, dessiné à
   // part, restait noir après le préchauffage asynchrone des pipelines)
   const skyNode = tTexture(skyHolder.tex);
@@ -63,7 +65,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
   const skyMesh = new THREE.Mesh(new THREE.SphereGeometry(500, 64, 32), skyMat);
   skyMesh.frustumCulled = false; skyMesh.renderOrder = -1;
   const group = new THREE.Group();
-  group.add(skyMesh, terrain.mesh, kelp.mesh, kelp.hold, kelp.web, fauna.mesh, surface.mesh, spray.mesh, foam.mesh, lip.mesh);
+  group.add(skyMesh, terrain.mesh, kelp.mesh, kelp.hold, kelp.web, fauna.mesh, surface.mesh, spray.mesh, foam.mesh, lip.mesh, drift.mesh);
   scene.add(group);
 
   let R = null, D = null, sky = null, pending = 0, version = 0, prog = 0, track = null;
@@ -150,6 +152,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
     spray.setData(out.T);
     foam.setData(S.bundle?.flakes ?? null);
     track = buildTrack(S, out);
+    drift.setData(track.u, track.eta, S.fps);
     const E = out.emerge, et = W.dataTex(E.tex, E.nf, E.levels, THREE.HalfFloatType, THREE.RGFormat, THREE.RepeatWrapping);
     et.minFilter = et.magFilter = THREE.NearestFilter;
     { const old = emT.value; emT.value = et; old?.dispose?.(); }
@@ -238,7 +241,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
     let best = 0, bestLen = 0;
     for (let f = 0; f < nf; f++) if (under(f) > 0.5 && under(f - 1) <= 0.5) { let n = 0; while (n < nf && under(f + n) > 0.5) n++; if (n > bestLen) { bestLen = n; best = f; } }
     const T = nf / fps, tHit = best / fps;
-    return { nf, exp, xs, amp, tHit, T };
+    return { nf, exp, xs, amp, tHit, T, u, eta };
   }
   function trackAt(ph) {
     const out = { dx: 0, dy: 0, tilt: 0, roll: 0, exp: 1, focus: 1.4 };
@@ -263,6 +266,15 @@ export function createStage(scene, gen, { lite = false } = {}) {
     const T = D?.T ?? R.loop.duration;
     W.U.t.value = ph * T;
     W.U.tPrev.value = phPrev * T;
+    // la carte d'ombre du soleil, pour les rayons sous l'eau (dès qu'elle existe)
+    const sm = sun.shadow.map?.depthTexture;
+    if (sm) {
+      if (W.shT.value !== sm) W.shT.value = sm;
+      sc.updateMatrixWorld();
+      W.U.shVP.value.multiplyMatrices(sc.projectionMatrix, sc.matrixWorldInverse);
+      W.U.shSize.value = sun.shadow.mapSize.x; W.U.shOn.value = 1;
+    }
+    drift.update(ph);
   }
 
   function setShadowQuality(q) {
@@ -400,7 +412,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
 
   return {
     domeLens, setDomeCamera,
-    setRecipe, update, setShadowQuality, camPose, trackAt, group, sun, W, kelp, terrain, surface, spray, foam, lip,
+    setRecipe, update, setShadowQuality, camPose, trackAt, group, sun, W, kelp, terrain, surface, spray, foam, lip, drift,
     get data() { return D; },
     ready: () => pending === 0 && !!D && !!sky,
     failed: () => pending < 0,

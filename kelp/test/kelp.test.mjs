@@ -154,3 +154,25 @@ test('la forêt : des clones au-delà des plantes simulées, jamais contre le d�
   // les sommets des plantes simulées sont deux fois moins nombreux que ceux de la forêt entière, au moins
   assert.ok(C.count > S.kelp.straps.count * 0.5, 'la forêt ne s\'étend pas');
 });
+
+test("l'écume : des flocons nés dans le ressaut, emportés vers la côte, dont certains s'échouent", () => {
+  const F = S.sea.bundle.flakes;
+  assert.ok(F && F.n > 5000, `trop peu de flocons (${F?.n})`);
+  // un flocon sur cent : son abscisse au départ et en fin de vie, et s'il a fini échoué
+  let moved = 0, stranded = 0, n = 0;
+  for (let j = 0; j < F.n; j += 100) {
+    const row = Math.floor(j / F.perRow), col = (j % F.perRow) * F.K, o0 = (row * F.perRow * F.K + col) * 2, o1 = o0 + (F.K - 1) * 2;
+    const x0 = fromHalf(F.traj[o0]), x1 = fromHalf(F.traj[o1]);
+    if (Math.abs(x1 - x0) > 0.3) moved++;
+    if (fromHalf(F.traj[o1 + 1]) < 0.5) stranded++;
+    n++;
+  }
+  assert.ok(moved > n * 0.3, `les flocons ne bougent pas (${moved}/${n})`);
+  assert.ok(stranded > 0, 'aucun flocon échoué');
+});
+
+test('la paume de la digitée relie les doigts voisins', () => {
+  const Wg = S.kelp.web;
+  assert.ok(Wg && Wg.count > 100, 'pas de paume');
+  for (let v = 0; v < Wg.count; v += 37) assert.ok(Wg.ws[v * 4 + 3] <= 1.0001 && Wg.ws[v * 4 + 2] >= 0 && Wg.ws[v * 4 + 2] <= 1, 'paume hors des doigts');
+});
