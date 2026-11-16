@@ -27,6 +27,15 @@
 
 export const PLUME = { NR: 64, NZ: 88, NF: 192, DX: 0.025, DT: 0.025, STEPS: 576 };
 
+// La source de vapeur au temps t ∈ [0, 1] de la simulation : elle monte en
+// puissance, puis s'éteint aux deux tiers — le thé cesse de bouillir, le
+// dernier souffle monte rejoindre le nuage et la colonne disparaît (une
+// colonne qui montait jusqu'au bout continuait de « remplir » un nuage déjà
+// formé). Partagée avec la scène (le bouillon du thé s'arrête avec elle).
+const sst = (a, c, x) => { const t = Math.max(0, Math.min(1, (x - a) / (c - a))); return t * t * (3 - 2 * t); };
+export const STEAM_END = 0.7;
+export const steamSource = (t) => sst(0, 0.1, t) * (1 - sst(STEAM_END - 0.16, STEAM_END, t));
+
 // spec : { seed, r0 (rayon de la source), top (hauteur du plafond, > 1), heat (force finale de la source),
 //          puffs (bouffées), kick (le bouillon du départ), spread }
 export function simulatePlume(spec) {
@@ -57,12 +66,12 @@ export function simulatePlume(spec) {
   for (let step = 0; step < STEPS; step++) {
     const t = step / STEPS;
     // ── la source : elle monte en puissance, bat par bouffées, puis faiblit ──
-    const ramp = ss(0, 0.12, t), fade = 1 - 0.82 * ss(0.82, 0.98, t);
+    const ramp = ss(0, 0.1, t), fade = 1 - ss(STEAM_END - 0.16, STEAM_END, t);
     const puff = 1 + 0.45 * Math.sin(2 * Math.PI * puffs * t) * ss(0.1, 0.3, t);
     // (le bouillon du choc : le thé saisi par la machine rougie lâche d'un coup
     // une bouffée dense et rapide — la première image visible du cycle)
     const kick = Math.exp(-(((t - 0.035) / 0.022) ** 2)) * kickK;
-    const B = heat * (0.3 + 1.85 * ss(0.2, 0.85, t)) * ramp * fade * puff + heat * 0.4 * kick; // (faible d'abord : les premières bouffées s'étalent à la base, sans percer)
+    const B = heat * (0.3 + 1.85 * ss(0.12, 0.6, t)) * ramp * fade * puff + heat * 0.4 * kick; // (faible d'abord : les premières bouffées s'étalent à la base, sans percer)
     const S0 = Math.max(fade * ramp, kick), W0 = Math.max(0.35 * ramp * fade, 0.9 * kick);
     for (let j = 0; j < 3; j++) for (let i = 0; i < NR; i++) {
       const prof = Math.exp(-(((i + 0.5) / iR0) ** 2)), k = I(i, j);
@@ -102,7 +111,12 @@ export function simulatePlume(spec) {
     // ── mélange turbulent (viscosité de tourbillon) : c'est lui qui fait
     // entraîner l'air ambiant par le panache — il s'élargit en cône, se dilue,
     // et s'arrête au lieu de percer le plafond comme un jet laminaire ──
-    for (const [f, f2, kd, odd] of [[u, u2, mix, true], [w, w2, mix, false], [b, b2, mix, false], [s, s2, mix * 0.35, false]]) {
+    // (quand la source s'éteint, la turbulence qu'elle entretenait retombe :
+    // le mélange et les courants s'amortissent, et le nuage formé cesse de
+    // s'étaler et de se diluer — sinon il n'en restait qu'une bande mince)
+    const calm = ss(STEAM_END - 0.05, STEAM_END + 0.15, t), mx = mix * (1 - 0.85 * calm);
+    if (calm > 0) for (let k = 0; k < N; k++) { u[k] *= 1 - 0.05 * calm; w[k] *= 1 - 0.05 * calm; }
+    for (const [f, f2, kd, odd] of [[u, u2, mx, true], [w, w2, mx, false], [b, b2, mx, false], [s, s2, mx * 0.35, false]]) {
       for (let j = 0; j < NZ; j++) for (let i = 0; i < NR; i++) {
         const k = I(i, j), c = f[k];
         const e = i < NR - 1 ? f[k + 1] : c, wv = i > 0 ? f[k - 1] : (odd ? -c : c), n = j < NZ - 1 ? f[k + NR] : c, so = j > 0 ? f[k - NR] : c;
@@ -116,7 +130,19 @@ export function simulatePlume(spec) {
     // ── enregistrement ──
     if (Math.floor((step + 1) / every) > nf && nf < NF) {
       let m = 0;
-      for (let j = 0; j < NZ; j++) for (let i = 0; i < NR; i++) { const v = Math.max(0, Math.min(1, s[I(i, j)])); frames[i + NR * (j + NZ * nf)] = Math.round(Math.sqrt(v) * 255); m += v * (i + 0.5); }
+      for (let j = 0; j < NZ; j++) {
+        // (au-dessus de la base du nuage, le cœur prend au moins la valeur de
+        // l'anneau voisin, décroissante vers l'axe : une fois la source coupée,
+        // le panache finit en tore, et le nuage vu d'en haut était un beignet)
+        const fill = ss(0.85, 1.05, (j + 0.5) * DX);
+        let ring = 0;
+        for (let i = NR - 1; i >= 0; i--) {
+          const v0 = Math.sqrt(Math.max(0, Math.min(1, s[I(i, j)])));
+          ring = Math.max(v0, ring - 0.008);
+          const v = v0 + (Math.max(v0, ring) - v0) * fill;
+          frames[i + NR * (j + NZ * nf)] = Math.round(v * 255); m += v * v * (i + 0.5);
+        }
+      }
       mass[nf++] = m;
     }
   }
