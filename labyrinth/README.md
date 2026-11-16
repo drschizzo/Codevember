@@ -34,7 +34,7 @@ Trois familles d'appareils, chacune avec sa façon de déplacer la bille :
 
 Pour le Cadran et la Roue, une **poche** coupe la rigole juste derrière la porte d'entrée. Quand la bille est sortie, le disque tourne dans un seul sens et la poche la soulève comme une noria. Au sommet, où la gravité pointe vers le centre, elle retombe par l'entrée.
 
-**La boucle.** Le film est la simulation d'un trajet complet, enregistrée à 120 i/s puis relue. Il commence et finit sur le même état : la bille au repos au même endroit, l'appareil à sa pose de départ (le disque à un nombre entier de tours près). Cet état s'obtient par un point fixe : l'état d'arrivée devient l'état de départ et l'on recommence, jusqu'à ce que l'écart passe sous 0,03 mm (Plateau) ou 0,05 mm (disques). L'écart qui reste, bille arrêtée, est fondu dans la dernière demi-seconde. L'orientation propre de la bille (une agate se voit tourner) est raccordée par une rotation résiduelle répartie sur toute la boucle. `seam()` mesure ainsi moins de 3·10⁻⁷ entre u = 0 et u = 1, le début et la fin de la boucle.
+**La boucle.** Le film est la simulation d'un trajet complet, enregistrée à 120 i/s puis relue. Il commence et finit sur le même état : la bille au repos au même endroit, l'appareil à sa pose de départ (le disque à un nombre entier de tours près). Cet état s'obtient par un point fixe : l'état d'arrivée devient l'état de départ et l'on recommence, jusqu'à ce que l'écart passe sous 0,03 mm (Plateau) ou 0,05 mm (disques). L'écart qui reste, bille arrêtée, est fondu dans la dernière demi-seconde. L'orientation propre de la bille (visible dès qu'une finition du panneau lui donne un motif) est raccordée par une rotation résiduelle répartie sur toute la boucle. `seam()` mesure ainsi moins de 3·10⁻⁷ entre u = 0 et u = 1, le début et la fin de la boucle.
 
 | Temps | Cause visible | Loi | Temps du film |
 | --- | --- | --- | --- |
@@ -81,9 +81,9 @@ Le fond est neutre, une nappe mate qui se fond dans la brume. Chaque humeur se d
 | Béton | béton banché taillé | bloc de béton | ciel couvert | moyenne, froide |
 | Céladon | céramique céladon craquelée, taillée | lin | soleil dur par une fenêtre | haute |
 
-Les disques dressés sont toujours éclairés en lumière rasante de côté (la lampe à 55–75° de leur normale), pour que les parois portent leurs ombres sur la face. La bille tranche en valeur sur son fond, et un test le vérifie : obsidienne ou céramique noire sur les fonds clairs, porcelaine sur la laque, métal poli sur les fonds sombres. Une bille d'acier poli sur le céladon le reflétait et disparaissait.
+Les disques dressés sont toujours éclairés en lumière rasante de côté (la lampe à 55–75° de leur normale), pour que les parois portent leurs ombres sur la face.
 
-**La bille est vermillon dans toutes les humeurs** (acier émaillé, vernis brillant) : c'est le fil rouge de la collection, et c'est elle que l'œil suit. Elle tranchait autrefois en valeur (obsidienne, porcelaine, acier poli selon le fond) ; elle tranche maintenant par la teinte, la saturation ou la valeur, et le test le vérifie sur chaque accord : un fond de laque rouge, où elle se perdait, est devenu de l'os.
+La bille est **vermillon** dans toutes les humeurs (acier émaillé, vernis brillant) : c'est le fil rouge de la collection, et c'est elle que l'œil suit. Elle doit trancher sur le fond du plateau par la teinte, la saturation ou la valeur, et un test le vérifie sur chaque accord. C'est pourquoi le second accord de la Laque a un fond d'os.
 
 **Matières** : finitions au F0 mesuré du dépôt, plus un motif bois (cernes ondulés autour d'un axe parallèle au fil, bois final plus sombre et plus mat, pores en traits fins) pour le noyer, le chêne, le frêne, l'ébène. S'y ajoutent feutre, cuir, lin, béton, ardoise (veinage discret : un relief de piqûres la faisait passer pour du métal martelé), laques, céladon, os.
 

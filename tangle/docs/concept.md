@@ -85,7 +85,9 @@ emmêler, enchevêtrer, entortiller, embrouiller, tortiller, vriller, **coque** 
 
 **Retenue : le tour de trop.** Le thème y est littéral sans être un cliché : on voit une corde **s'emmêler toute seule**, d'une cause visible (le mandrin qui tourne, la rayure qui s'enroule) et selon une loi qu'on comprend en une seconde (un tour de trop, et elle s'enroule sur elle-même). Le retour passe par un autre chemin (le volant libéré tourne vite et la corde se déroule d'un coup), ce n'est pas un aller-retour. Le ruban (9) devient une famille ; la corderie (4) donne une humeur (le décor de la corderie) et une famille (plusieurs brins qui se commettent) ; la tresseuse est écartée (trop proche des engrenages du dépôt, et une tresse est un ordre, pas un enchevêtrement).
 
-## e. La piste retenue
+## e. La piste retenue : plan initial
+
+> Plan initial. La scène construite garde le geste, le banc, la boucle à nombre entier de tours et les sept décors, mais le volant et sa barre sont devenus un balancier de torsion et une glissière, le ruban et le fil ont cédé la place à la spirale, et la corde est toujours vermillon, filmée en plan serré : voir la section g et le README. Les tableaux de temps, la matrice et la déclinaison ci-dessous sont ceux du plan.
 
 **Titre** : *Tangle* — *le tour de trop*.
 
@@ -195,11 +197,11 @@ Le moteur repart, longtemps. Une boucle, puis la torsade s'allonge tour après t
 
 Montée (trois cycles, de plus en plus), réponse (chaque lâcher), retour (le repos initial).
 
-## g. Révision pendant la réalisation
+## g. Ce que les essais ont appris
 
-Les mesures et les premières images ont corrigé le concept sur cinq points :
-- **Le volant devient un balancier de torsion.** Pendant le grand lâcher, la corde balaie jusqu'à 21 cm de l'axe : une barre de blocage près du volant aurait été frappée. Le volant est remplacé par un balancier (moyeu lourd, bras léger à boules de 23,5 cm, pendule de torsion à la Coulomb), et la barre par une **glissière** à 24 cm de l'axe, contre laquelle appuie le bout du bras. Le balancier lourd d'abord essayé (période 7,6 s) ne se posait pas à temps ; le bras léger donne ~3 s.
-- **La came suit l'angle, pas le temps.** Ouvrir la glissière pendant les dernières dixièmes de seconde du moteur, qui ralentit, revenait à usiner une came à face verticale. L'ouverture est donc une fonction des tours du mandrin (le dernier tiers de tour), et la came est calculée d'après elle : un test vérifie que sa levée est l'ouverture de la glissière à chaque instant.
-- **La butée en V.** Un ressort de cran ne recentrait pas le balancier contre le couple de la corde (2,5° d'écart à la fermeture) : la glissière, en revenant, referme un écart permis autour de l'angle de blocage, jusqu'à zéro.
-- **Les familles.** Le ruban (contact de capsules : il se traversait) et le fil d'acier (instabilité de torsion locale) ont été écartés ; la **spirale** (un cordon peu tendu qui se love d'un bout à l'autre) les remplace. La paire est bornée à 7 tours (au-delà, elle se surenroule elle-même et le frottement la garde emmêlée après le lâcher).
-- **La simulation** a demandé cinq corrections, toutes trouvées par l'invariant Lk = Tw + Wr : résolution exacte des longueurs (la corde s'allongeait de moitié sous le balancier), inertie de rotation ×100 (le seuil de flambage dépendait du pas de temps), cisaillement borné (les repères décrochaient de l'axe au claquement), logarithme exact du vecteur de Darboux sans choix d'hémisphère (une articulation au-delà d'un demi-tour glissait d'un tour), obstacles pour la pince et le nez du mandrin (une boucle passait par-dessus l'extrémité de la corde).
+- **Un balancier de torsion plutôt qu'un volant.** Au grand lâcher, la corde balaie jusqu'à 21 cm de l'axe : une barre de blocage près du volant aurait été frappée. Le balancier (moyeu lourd, bras léger à boules) est tenu par une glissière à 24 cm de l'axe. Un balancier lourd (période 7,6 s) ne se posait pas à temps ; le bras léger donne ~3 s.
+- **La came suit l'angle du mandrin, pas le temps.** Ouvrir pendant le ralentissement du moteur revenait à usiner une came à face verticale : l'ouverture est une fonction des tours (le dernier tiers de tour) et la came est calculée d'après elle.
+- **La butée en V.** Un ressort de cran ne recentrait pas le balancier contre le couple de la corde (2,5° d'écart) : la glissière, en revenant, referme un écart permis jusqu'à zéro.
+- **Les familles.** Le ruban se traversait avec un contact de capsules et le fil d'acier montrait une instabilité de torsion locale : la spirale (un cordon peu tendu qui se love d'un bout à l'autre) les remplace. La paire est bornée à 7 tours (au-delà, elle se surenroule et le frottement la garde emmêlée après le lâcher).
+- **La simulation** a demandé cinq corrections, toutes trouvées par l'invariant Lk = Tw + Wr : résolution exacte des longueurs (la corde s'allongeait de moitié sous le balancier), inertie de rotation ×100 (le seuil de flambage dépendait du pas de temps), cisaillement borné (les repères décrochaient de l'axe au claquement), logarithme exact du vecteur de Darboux (une articulation au-delà d'un demi-tour glissait d'un tour), obstacles pour la pince et le nez du mandrin (une boucle passait par-dessus l'extrémité de la corde).
+- **Le sujet est la corde.** Le banc entier en plan laissait la corde mince à l'image : le plan serré descend sous la traverse et suit le désordre de la corde, toujours vermillon (le fil rouge de la collection).

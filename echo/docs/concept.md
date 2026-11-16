@@ -58,142 +58,83 @@ Pourquoi la lumière et pas le son : le son rendu visible demande une convention
 
 ## e. La piste retenue : *Echo, le miroir en retard*
 
-**La liberté** : une caméra impossible, qui filme une pièce entière à six cents millions de fois le ralenti ; la lumière, qui traverse une pièce en dix nanosecondes, met dix secondes, et l'on voit arriver l'écho du miroir. Tout le reste est exact : la lumière avance à c (plus lentement dans le verre), chaque point s'allume quand la lumière y arrive *et* que la lumière qu'il renvoie a eu le temps d'atteindre la caméra (ce retard de l'œil est celui des vraies femto-photographies), le miroir rend une source image, les ombres naissent au passage du front.
+Ce qui suit décrit la scène telle qu'elle est construite. Le plan initial (une ampoule à cordon allumée puis éteinte, deux ralentis, une boucle de 30 s) a changé au fil des essais : voir la section f.
 
-**Le regard** : Vilhelm Hammershøi. Il impose : une pièce aux murs gris clair ou gris-vert, des lambris, presque vide ; une lumière qui vient d'un côté et se lit sur les murs plus que sur les objets ; une valeur moyenne et calme, des noirs rares ; le cadre frontal, de la hauteur d'une personne assise, des lignes verticales ; ce qui est hors champ (la fenêtre, la porte) se devine par la lumière. Au moins une humeur sur trois d'après lui (« Strandgade », « Lambris »). Morandi pour les objets : des pots et des bouteilles serrés, aux couleurs poudrées.
+**La liberté** : une caméra impossible, qui filme une pièce entière à plusieurs centaines de millions de fois le ralenti (le front avance à 0,55 m par seconde de film) ; la lumière, qui traverse une pièce en dix nanosecondes, met quelques secondes, et l'on voit arriver l'écho du miroir. Tout le reste est exact : la lumière avance à c, chaque point s'allume quand la lumière y arrive *et* que la lumière qu'il renvoie a eu le temps d'atteindre la caméra (ce retard de l'œil est celui des vraies femto-photographies), le miroir rend une source image, les ombres naissent au passage du front.
 
-**L'appareil** : aucun banc. La cause est domestique : un cordon de lampe tiré hors champ (on voit le cordon descendre d'un coup, la perle qui oscille).
+**Le regard** : Vilhelm Hammershøi. Il impose : une pièce aux murs gris clair ou gris-vert, des lambris, presque vide ; une lumière qui vient d'un côté et se lit sur les murs plus que sur les objets ; une valeur moyenne et calme, des noirs rares ; le cadre frontal, de la hauteur d'une personne assise, des lignes verticales ; ce qui est hors champ (la fenêtre, la porte) se devine par la lumière. Deux humeurs d'après lui (« Strandgade », « Lambris »), Strandgade et Bleu de Prusse un peu plus souvent tirées. Morandi pour les objets : des pots et des bouteilles serrés, aux couleurs poudrées.
 
-**Le lien avec la collection** : la pièce passe du noir à la lumière et revient au noir ; la lumière partie revient par le miroir avant de s'éteindre.
+**L'appareil** : une lampe stroboscopique, un tube au xénon en spirale dans une ampoule opaline, et le voyant de charge sur sa douille. La cause de l'éclair est à l'image : le voyant rougit pendant que le condensateur se charge, s'allume franchement, l'éclair part et le vide.
 
 ### Le geste
 
-La lampe s'allume. Une sphère de lumière part de l'ampoule. Elle touche le bord de la table, puis les objets les plus proches, qui s'allument du côté de la lampe, leurs ombres naissent derrière eux. Elle atteint le miroir. Dans le miroir, on voit la lampe s'allumer *après* la vraie. Puis une seconde sphère sort du miroir : l'écho. Elle éclaire le revers des objets, que la lampe ne voyait pas. À l'extinction, c'est l'inverse : l'obscurité part de l'ampoule, la dernière lumière s'en va en coquille, et le miroir garde la lampe allumée un instant après qu'elle s'est éteinte.
+Le voyant s'allume, l'éclair part. Un anneau de lumière sort du tube, passe sur la table et les vases, dont les ombres naissent derrière lui, et atteint le réflecteur. Dans la glace, l'éclair n'apparaît qu'ensuite. Un second anneau, plus faible, revient : l'écho, qui éclaire le revers des objets. Puis le temps réel revient, dans le noir, et le voyant recommence à rougir.
 
-### Familles (règle 8 : des gestes différents)
+### Familles (des gestes différents)
 
 | Famille | Réflecteur | Mouvement de l'écho |
 | --- | --- | --- |
-| **Psyché** | un miroir plan sur pied, ou un trumeau au mur | l'écho repart d'une lampe virtuelle derrière la glace : une seconde sphère, venue de l'autre côté, qui éclaire les revers |
-| **Ardent** | un miroir concave elliptique (miroir grossissant sur pied) dont les foyers sont l'ampoule et un objet de la table | l'écho est une sphère qui *rétrécit* : il converge sur l'objet du second foyer, qui s'embrase d'un coup, puis se rouvre de l'autre côté |
-| **Facettes** | une boule à facettes suspendue | l'écho est éclaté en centaines de pinceaux : des taches qui partent de la boule et arrivent l'une après l'autre sur les murs |
+| **Trumeau** | une glace au mur, cadre mouluré | une seconde sphère sort de la glace et éclaire les revers |
+| **Psyché** | une glace sur pied, orientée sur la bissectrice lampe / œil | idem, de côté ; le reflet de l'ampoule au centre de la glace |
+| **Miroir ardent** | un grand miroir concave sphérique sur pied, dont le centre de courbure est l'ampoule | l'écho revient à sa source : une coquille qui se referme sur l'ampoule, la rallume, et ressort de l'autre côté |
+| **Galerie** | deux glaces face à face sur les murs latéraux, à 1,5 m | l'écho revient encore et encore : dans la glace de gauche, les copies de la lampe s'allument l'une après l'autre, plus loin et plus faibles |
+| **Boule à facettes** | une boule suspendue, 372 à 614 tesselles | l'écho éclaté en pinceaux qui arrivent l'un après l'autre |
 
-Trois mouvements distincts : une sphère qui revient, une sphère qui se referme, une gerbe de traits.
-
-### Découpage temporel (boucle de 30 s)
+### Découpage temporel (une boucle de 7 à 13 s)
 
 | u | Temps | Convention |
 | --- | --- | --- |
-| 0,00 – 0,05 | nuit : la pièce dans la lumière bleue d'une fenêtre hors champ, le cordon immobile | temps réel |
-| 0,05 | le cordon descend d'un coup (tiré hors champ), déclic | temps réel |
-| 0,06 – 0,40 | la lumière avance : la table, les objets, le miroir, l'écho, les revers | ralenti 6·10⁸ (rampe logarithmique d'entrée et de sortie) |
-| 0,40 – 0,55 | la pièce éclairée ; le cordon reprend son balancement là où le ralenti l'avait figé | temps réel |
-| 0,55 | second coup de cordon, déclic | temps réel |
-| 0,56 – 0,90 | l'obscurité avance ; la dernière lumière s'en va en coquille ; le miroir s'éteint en retard ; l'écho de la dernière lumière | ralenti |
-| 0,90 – 1,00 | nuit ; le balancement s'amortit jusqu'au repos | temps réel |
+| 0 – 0,10 | nuit ; le voyant de charge rougit puis s'allume | temps réel |
+| 0,10 – 0,14 | le film ralentit | rampe sur log v |
+| 0,14 – 0,86 | l'éclair : l'anneau direct, l'écho, les échos suivants ; le film va six fois plus vite quand la lumière est hors du champ | ralenti variable |
+| 0,86 – 0,90 | le temps réel revient | rampe |
+| 0,90 – 1 | nuit ; le voyant, éteint par l'éclair, recommence à rougir | temps réel |
 
-Temps fort : u ≈ 0,22 – 0,30 (l'écho sort du miroir et croise le front direct sur les objets).
+La durée découle du chemin que la lumière doit parcourir à l'écran : 7 à 8 s pour un seul réflecteur, 10 à 13 s pour la galerie.
 
 ### Formule de la boucle
 
-Le temps physique τ(u) est l'intégrale de la vitesse du film v(u), qui vaut 1 en temps réel et 1/K au ralenti (K ≈ 6·10⁸), raccordée en log v. Chaque événement (allumage τ₁, extinction τ₂) définit un rayon de front ρᵢ(u) = c·(τ(u) − τᵢ) (en mètres de chemin), borné à [−1, 50] m pour les flottants du GPU. Un point x reçoit la lumière d'un chemin de longueur L(x) (source → … → x) et la caméra la voit quand ρ ≥ L(x) + |x − œil|. Éclairement d'un chemin : H(ρ₁ − L − |x−e|) − H(ρ₂ − L − |x−e|). À u = 0 et u = 1, ρ₁ et ρ₂ sont au-delà de 50 m (les deux événements sont passés) : la pièce est dans la nuit, le cordon au repos, la caméra à la même pose. Tout le film est une fonction de u ; rien n'est intégré d'une image à l'autre.
+Le temps physique τ(u) est l'intégrale de la vitesse du film v(u), qui vaut 1 en temps réel et 1/K au ralenti, raccordée en log v. Le rayon du front ρ(u) = c·(τ(u) − τ_éclair) est une longueur de chemin, calculée en double précision et bornée à [−1, 60] m pour les flottants du GPU. Un point x reçoit la lumière d'un chemin de longueur L(x) et la caméra la voit passer en anneau : g = 4·S(a)·e^(−a / 0,22 m), avec a = ρ − L(x) − |x − œil| et S une rampe de 2 cm. Avant l'éclair, ρ vaut 60 m : la lumière de l'éclair précédent a quitté la pièce, et à u = 0 comme à u = 1 la charge et la caméra sont les mêmes. Tout le film est une fonction de u.
 
 ### Le cœur technique et ses invariants
 
-`src/gen/optics.js` (pur, sans three) :
-- **chemins exacts** : direct L = |x − s| ; miroir plan L = |x − s'| (s' symétrique de s), valable si le segment s'→x traverse la glace ; ellipsoïde de foyers s et f : L = 2a − |x − f| avant le foyer, 2a + |x − f| après, dans le cône du miroir vu de f ; boule à facettes : L = |b − s| + |x − b| sur les seules directions qu'une facette renvoie ;
-- **invariants** (tests) : chaque formule égale la longueur d'un rayon lancé et réfléchi pas à pas sur la vraie surface (1e-9) ; les fronts sont monotones (un point allumé ne s'éteint pas avant l'extinction) ; τ(u) est croissant, ρ(0) = ρ(1) au-delà de la scène ; la caméra et le cordon raccordent à u = 1.
+`src/gen/optics.js` (pur, sans three) et sa traduction TSL `src/scene/paths.js` :
+- **chemins exacts** : direct L = |x − s| ; miroir plan L = |x − s′| (s′ symétrique de s), si le segment s′ → x traverse la glace ; miroir ardent 2R ∓ |x − s| avant et après la lampe, dans le cône de la calotte ; galerie |x − qₙ|, qₙ image de la lampe après n réflexions alternées ; boule L = |x − s′ᶠ| par la seule facette dont la normale est la bissectrice ;
+- **invariants** (tests) : chaque formule égale la longueur d'un rayon lancé et réfléchi pas à pas sur la vraie surface ; le front ne recule jamais ; la charge, le front et la caméra raccordent à u = 1.
 
-### Matrice de variations
+### Variations
 
 | Axe | Valeurs |
 | --- | --- |
-| Famille (réflecteur) | psyché, trumeau, ardent, facettes |
-| Lampe | ampoule nue à cordon, lampe de bureau à bras, suspension opaline, lampe pigeon (globe) |
-| Nature morte | Morandi (pots poudrés), verrerie (carafe, verres), étain et faïence, fruits et cruche, flacons de pharmacie |
-| Humeur (décor) | Strandgade, Lambris, Laque, Cabinet noir, Carrelage, Atelier blanc, Aube |
-| Caméra | frontale assise, plongée de trois quarts, bas et rasante |
-| Lumière | blanc chaud 2900 K, blanc neutre, blanc froid, flash |
+| Humeur (décor) | Strandgade, Lambris, Laque, Cabinet noir, Carrelage, Atelier blanc, Bleu de Prusse |
+| Famille | trumeau, psyché, miroir ardent, galerie, boule à facettes (trois à cinq permises par humeur ; les glaces plus souvent) |
+| Cadrage | deux par humeur, parmi assis, trois-quarts, plongée, bas |
+| Ampoule | poire, globe, tube, flamme |
+| Nature morte | 4 à 7 vases parmi sept formes, palette propre à l'humeur |
 
-4 × 4 × 5 × 7 × 3 × 4 = 6 720 combinaisons.
+### Références
 
-### Images clés
-
-1. *Le front* : plan frontal de trois quarts, mi-hauteur ; la moitié gauche de la nature morte est allumée par une courbe nette qui traverse une cruche en biais, la moitié droite est encore bleue de nuit ; les grains de poussière allumés dessinent la sphère dans l'air.
-2. *L'écho* : le miroir montre l'ampoule allumée dans la glace ; une seconde courbe, venue de la glace, allume le revers d'une bouteille et dessine une seconde ombre qui part vers la lampe.
-3. *La rémanence* : la lampe est éteinte, la pièce redevient bleue ; dans le miroir, l'ampoule et le reflet de la table brillent encore, puis le reflet s'éteint du fond vers la glace.
-
-### Risques et parades
-
-- *Effet de balayage* (« un fondu en sphère ») : les ombres qui naissent au passage du front, la poussière, le retard du reflet et l'écho venu de l'autre côté prouvent la physique ; le front doit être net (largeur ~2 cm), jamais un dégradé.
-- *Image bouchée* : la nuit n'est pas noire, c'est l'heure bleue d'une fenêtre hors champ (médiane du sujet ≥ 0,08) ; l'éclairage établi dure 4 s.
-- *Lisibilité de l'écho* : le miroir est toujours dans le cadre, la lampe aussi, et la caméra est placée pour voir la lampe dans la glace.
-- *Le temps* : tout ce qui bouge se fige au ralenti (cordon, poussière), y compris ce qui serait réel à cette échelle.
-- *Précision* : les rayons de fronts sont des différences calculées en JS en double précision, jamais c·τ en flottant.
-
-## e bis. Épreuves
-
-**Crédibilité.**
-
-| Temps | Cause visible | Loi | Temps |
-| --- | --- | --- | --- |
-| allumage | le cordon tiré (on le voit descendre de 2 cm et se balancer) | interrupteur | temps réel |
-| le front direct | l'ampoule | propagation à c, chemin |x − s|, ombres de la lampe | ralenti |
-| le reflet en retard | le miroir | chemin s → miroir → œil plus long | ralenti |
-| l'écho | la glace (Psyché), la paroi elliptique (Ardent), les facettes | source image, foyers, réflexion de chaque facette | ralenti |
-| la pièce éclairée | la lampe | régime établi | temps réel |
-| l'extinction | le cordon tiré | la même propagation, en ombre | ralenti |
-| la poussière | l'air de la pièce | figée au ralenti, dérive lente en temps réel | les deux |
-
-**Variété.**
-
-| Humeur | Décor | Lumière | Valeur | Cadrage |
-| --- | --- | --- | --- | --- |
-| Strandgade | lambris gris clair, plancher, table de chêne nue | nuit bleue de fenêtre à gauche, lampe blanc neutre | moyenne claire | frontal assis |
-| Lambris | boiseries gris-vert foncé, nappe de lin | crépuscule vert-gris, lampe 2900 K | moyenne sombre | plongée de trois quarts |
-| Laque | murs laqués rouge sang, guéridon noir | nuit noire, lampe blanche ; l'écho est rose (il revient du mur rouge) | sombre saturée | bas et rasant |
-| Cabinet noir | velours noir, table de marbre blanc | aucune fenêtre, lampe froide ; seule la poussière et les objets | très sombre | serré |
-| Carrelage | faïence blanche brillante, paillasse | aube grise, lampe froide | claire | frontal |
-| Atelier blanc | cyclorama blanc de plâtre, tréteaux | jour pâle et diffus, flash bleuté | très claire | large |
-| Aube | papier peint pâle, table de pin | aube rose et dorée en fond, lampe blanche | moyenne | trois quarts haut |
-
-**Ambition.** Le miroir : glace biseautée à tain argenté (biseau qui accroche un filet), cadre mouluré à congés, pieds en lyre, pivots à molette, dos de bois ; miroir ardent : coupe métallique polie, bague, rotule, colonne, pied lesté ; boule à facettes : 300 à 600 facettes au bord biseauté, joints sombres, crochet et chaînette ; lampe : douille de laiton, ampoule de verre au filament visible, cordon tressé, perle de tirage. Nature morte : cruche à anse et bec, bouteilles à épaule, pots à couvercle, bols tournés, verres à pied.
-
-**Déclinaison.** Psyché : une seconde sphère venue de derrière la glace ; Ardent : une sphère qui se resserre sur un point puis s'en échappe ; Facettes : une gerbe de pinceaux qui arrivent l'un après l'autre.
-
-**Scénario** (film muet). Nuit bleue. Le cordon descend d'un coup. L'ampoule s'allume par son filament ; une lumière ronde en sort, et la poussière s'allume en sphère autour. La table s'éclaire à partir du point le plus proche ; une bouteille s'allume côté lampe, son ombre naît sur la table. La lumière gagne le miroir. Dans la glace, la lampe s'allume à son tour. Une seconde lumière sort de la glace et revient : les objets s'éclairent par derrière, une seconde ombre se dessine. La pièce reste éclairée ; le cordon se balance. Le cordon descend à nouveau. L'ampoule s'éteint ; l'ombre la suit en sphère ; la dernière lumière se retire vers les murs ; dans la glace, la lampe brille encore, puis s'éteint ; les revers s'éteignent en dernier. Nuit bleue ; le cordon s'immobilise.
-
-**Références** (photographies que tout photographe du sujet ferait) :
 1. Velten et al., la bouteille de la femto-photographie : un front de 2 à 3 cm, net, plus lent dans le liquide ; tout le reste noir.
 2. Hammershøi, *Intérieur, Strandgade 30* : un mur gris clair, une table, le jour qui entre de côté ; aucune couleur saturée.
 3. Morandi, natures mortes : cinq à huit objets de 10 à 30 cm, serrés, qui se recouvrent, sur une table vue de face.
 4. Un miroir de chambre la nuit, une lampe allumée dans le reflet : la lampe et son double, même éclat.
 5. Une boule à facettes dans une pièce sombre : des taches de 2 à 5 cm, nettes, sur les murs, des pinceaux visibles dans la poussière.
 
-Échelle : table de 1,2 m × 0,7 m, objets de 8 à 35 cm, miroir de 0,6 à 1,4 m, caméra à 2 – 2,8 m, front de 1,5 à 2,5 cm. Les grains de poussière (≈ 8 000, 0,3 mm) donnent l'échelle de l'air.
+### Risques et parades
 
-## Révision 1 (15 novembre, après le premier rendu)
+- *Effet de balayage* (« un fondu en sphère ») : l'impulsion fait passer un anneau, les ombres naissent au passage du front, le reflet est en retard, l'écho vient de l'autre côté.
+- *Lisibilité de l'écho* : la caméra est ajustée pour garder l'ampoule, la nature morte et le réflecteur entier dans le cadre (`fitCamera`).
+- *Le temps* : tout ce qui bouge se fige au ralenti (charge, boule, poussière) ; seule la caméra glisse.
+- *Précision* : les rayons de front sont calculés en JS en double précision, jamais c·τ en flottant.
 
-Ce que l'utilisateur a relevé, et ce qui a changé :
+## f. Ce que les essais ont appris
 
-- **« On ne comprend pas suffisamment ce qui se passe ; il faudrait matérialiser la propagation. »** Un front qui ne fait qu'allumer se lit comme un fondu en disque. L'allumage commence maintenant par un éclair : la première lumière est quatre fois plus forte et l'excès s'éteint sur 12 cm de chemin. Chaque surface voit passer un anneau brillant ; la brume, qui ne diffuse presque plus la lumière établie (×0,18) mais fortement l'éclair (×1,6), montre une coquille qui s'éloigne de l'ampoule, puis une seconde qui revient de la glace.
-- **« Sur la scène par défaut on ne voit pratiquement pas le miroir. »** La caméra est ajustée à la composition (`fitCamera`) : elle contient toujours l'ampoule, la nature morte et le réflecteur entier ; le trumeau et la psyché sont tirés plus souvent ; l'ouverture est un trumeau (e29), l'ampoule devant la glace, son reflet à côté d'elle.
-- **« Les matières mériteraient beaucoup plus de travail. »** Céramiques : tournage, émail qui coule et s'amasse, pied en terre nue, lèvre amincie, piqûres, craquelure ; peinture poudrée pour les mats. Glace ancienne au tain piqué près des bords, poussière sur le verre (éclairée par le front). Cadres usés aux arêtes (bol rouge sous la dorure). Marbre à veines en crête. Ronds de verres sur la table.
-
-## Révision 2 (15 novembre, soir)
-
-- **« La boucle est très longue. »** Elle durait 30 s (allumage ralenti, pièce éclairée, extinction ralentie). Elle n'a plus qu'un ralenti, et sa durée découle du chemin à montrer : 10 à 12 s pour une glace, 16 s pour la galerie.
-- **« L'animation de l'interrupteur n'est pas cohérente. »** Le cordon descendait sans main pour le tirer. La lampe est devenue un stroboscope : la cause est à l'image (le voyant de charge rougit, s'allume, l'éclair part et le vide), et rien ne bouge tout seul.
-- **« Le concept d'écho reste compliqué. »** L'utilisateur a choisi, entre garder l'ampoule et passer à un éclair, l'éclair : une impulsion se lit comme un « ping » de sonar, ce qui part et ce qui revient sont deux anneaux distincts. Nouvelle famille, la plus fréquente : la **galerie**, deux glaces face à face (la seconde derrière la caméra, vue dans la première), où l'écho revient encore et encore, de plus en plus loin et de plus en plus faible.
-
-## Révision 3 (15 novembre, nuit)
-
-- **« Le second miroir reflété dans le premier est tout noir ; on ne comprend pas d'où vient la lueur qui réapparaît. »** La seconde glace a maintenant son propre reflet (rendu dans celui de la première) : on y voit la pièce, la lampe, le cadre de la première glace.
-- **« Le globe de l'ampoule n'est pas visible dans les miroirs. »** Le verre transparent, sans écriture de profondeur, disparaissait des reflets ; il est devenu un verre opalin, opaque, que l'éclair illumine de l'intérieur.
-- **« On a du mal à comprendre le timing de la lumière avant le second reflet. »** Le trajet vers la glace d'en face se passe hors du champ : quatre secondes sans rien à l'image. Le ralenti est devenu variable (×6 entre les fenêtres où il se passe quelque chose), et la galerie a des murs latéraux, sur lesquels l'anneau court.
-
-## Révision 4 (16 novembre)
-
-- **« Je ne comprends pas qu'il y ait un tel décalage de temps, et que tu aies besoin d'accélérer autant. »** La seconde glace, derrière la caméra, était à 2,9 m de la première : entre deux échos, 5 m de chemin hors du champ. L'accéléré cachait ce défaut de mise en place. Les deux glaces sont maintenant face à face de part et d'autre de la table, à 1,5 m : les échos se suivent tous les 3 m de chemin et la lumière reste dans le cadre ; la caméra est tournée vers la glace de gauche, où la file des copies de la lampe se lit.
-- **« Revois le concentrateur de lumière, l'effet écho est difficilement compréhensible. »** La calotte visait un point de la nappe, petit et sans rapport avec la lampe. C'est maintenant un grand miroir concave sphérique dont le centre de courbure est l'ampoule : l'écho revient à sa source, la rallume et ressort de l'autre côté.
-- En route, une régression : en réécrivant la galerie, la construction du miroir ardent et de la boule avait disparu du worker. Un test (`build.test.mjs`) vérifie désormais que chaque famille construit son réflecteur.
+- **Un front qui ne fait qu'allumer se lit comme un fondu en disque** : l'éclair (une impulsion) fait de ce qui part et de ce qui revient deux anneaux distincts, comme un « ping » de sonar.
+- **Le réflecteur doit être entier dans le cadre** : sur la scène par défaut, on ne voyait pas le miroir ; d'où `fitCamera` et les glaces tirées plus souvent.
+- **Une boucle à deux ralentis (allumage, extinction) durait 30 s** et paraissait longue : un seul ralenti, dont la durée découle du chemin à montrer.
+- **Une cause visible pour l'éclair** : un cordon qui descend sans main pour le tirer n'était pas crédible ; le voyant de charge du stroboscope l'est.
+- **Un verre transparent sans écriture de profondeur disparaît des reflets** : l'ampoule est en verre opalin, opaque, illuminé de l'intérieur.
+- **Une glace qui ne montre que des images de la lampe sur du noir ne se lit pas comme un miroir** : dans la galerie, chaque glace rend la pièce et le reflet de l'autre.
+- **La lumière hors du champ laisse des secondes vides** : le ralenti est variable (×6 entre les fenêtres), et les glaces de la galerie sont côte à côte, à 1,5 m, plutôt qu'une glace derrière la caméra à 2,9 m (5 m de chemin hors champ entre deux échos).
+- **Un miroir ardent qui concentre sur un point de la nappe ne se comprend pas** : revenir à la lampe se lit sans légende.
+- **Une régression silencieuse** (la construction du miroir ardent et de la boule perdue en réécrivant la galerie) : `build.test.mjs` vérifie que chaque famille construit son réflecteur.

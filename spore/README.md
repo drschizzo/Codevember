@@ -44,7 +44,7 @@ S(0) est le bois nu, S(0 → 1) le cycle (germination, réseau, condensation, fo
 
 | Temps (part de boucle) | Cause visible | Loi | Temps du film |
 | --- | --- | --- | --- |
-| les spores se posent (0,90 → 0,05) | le nuage du site précédent | vent moyen intégré, tourbillons, chute de Stokes (≈ 0,3 cm/s) | temps réel |
+| les spores se posent (0,88 → 0,05) | le nuage du site précédent | vent moyen intégré, tourbillons, chute de Stokes (≈ 0,3 cm/s) | temps réel |
 | germination (0,04 → 0,20) | les spores posées, la nuit | gouttelettes qui croissent et fusionnent | très accéléré |
 | le réseau (0,10 → 0,42) | le front qui avance | adaptation de Tero, navette péristaltique | accéléré |
 | condensation (0,42 → 0,52) | l'aube : la lumière monte | perles le long des veines, volume conservé | accéléré |
@@ -70,7 +70,7 @@ Un gabarit usiné par espèce (solides fermés : hypothallus, pied évasé, cali
 **L'individu.** Aucun sporange n'est la copie d'un autre : le vertex shader bosselle chaque tête (bruit basse fréquence de la direction, tiré par sporange), effile celle de *Trichia* en toupie, cannelle et arque légèrement chaque pied, et étale l'hypothallus en une membrane lobée. Le matériau diffuse sous la surface (les perles jeunes s'allument à contre-jour), porte des verrues en micro-relief, et son vernis humide reste léger et un peu dépoli (miroir, il faisait des billes de chrome). Le capillitium d'*Arcyria*, les élatères de *Trichia* et les branches de la columelle de *Stemonitis* sont de vraies fibres (des tubes fins dans le gabarit), qui suivent le filet dans tous ses gestes. Les écailles du péridium sont découpées au pixel : chaque fragment retrouve son écaille d'après les germes du Voronoï sphérique, et la ligne de déhiscence fonce à maturité.
 
 **Les familles et leurs gestes :**
-- ***Arcyria*** : des coupes serrées. À l'ouverture, le haut du péridium tombe et le filet comprimé se détend vers le haut (2 à 3,6 fois sa hauteur, avec un rebond), ses mailles s'ajourent. *A. obvelata* retombe.
+- ***Arcyria*** : des coupes serrées. À l'ouverture, le haut du péridium tombe et le filet comprimé se détend vers le haut (2,2 à 3 fois sa hauteur, avec un rebond), ses mailles s'ajourent. *A. obvelata* retombe.
 - ***Stemonitis*** : de hautes colonnes en touffes qui plient sous le souffle et fument. La masse de spores s'amincit du sommet vers le pied et laisse la cage claire autour de la columelle. *Comatricha* pousse en semis le long des veines.
 - ***Hemitrichia*** : sans pieds, le réseau lui-même devient le fruit. Une fois le front arrêté, sources et puits du modèle de Tero sont tirés au hasard deux à deux (μ bas, front presque isotrope) : le réseau se referme en mailles, le filet d'*H. serpula*, au lieu de filer en rubans parallèles vers l'ancien front. Seuls les tubes au rayon final ≥ 66 % deviennent fruit, lissés encore entre eux (sinon, épinglés aux petites branches qui s'en détachent, ils dessinaient des marches). Les veines maîtresses gonflent en tubes dorés et les petites se vident en elles. Mûrs, les tubes se fendent et moussent d'élatères.
 - ***Lamproderma*** : des sphères sur pieds fins, iridescentes (interférences dans une couche mince, Inchaussandague et al., 2010). Le péridium s'écaille en plaquettes qui tombent, la masse sombre s'effrite.

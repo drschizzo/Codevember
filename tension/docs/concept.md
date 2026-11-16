@@ -13,7 +13,7 @@ Thème du jour 14 : « tension ». Document de travail : l'exploration, les pist
 - Vitesse des ondes dans une corde : c = √(T/μ) ; la corde pincée de Helmholtz (deux coins qui courent), la corde frottée (un coin qui tourne sur une enveloppe en arcs de parabole).
 - Le basculement : tant que la projection du centre de gravité reste dans le polygone d'appui, l'objet tient ; au-delà, il tombe. Toute la « tension dramatique » d'un équilibre précaire.
 - Énergie élastique stockée : arc, arbalète, ressort, perche ; la relâche est toujours plus rapide que la mise en charge.
-- Photoélasticité (biréfringence sous contrainte) — déjà faite par Membrane.
+- Photoélasticité (biréfringence sous contrainte), déjà faite par Membrane.
 
 **Métiers et objets**
 - Le gréeur (voile) : ridoirs, cosses, épissures, manilles, winchs, cliquets ; on « étarque », on « raidit », on « choque ».
@@ -87,57 +87,55 @@ B (la tour couchée en vrac) obligerait à empiler des barres qui se touchent et
 
 ### Le geste
 
-Une sculpture de tenségrité — des barres d'acier qui ne se touchent pas, tenues en l'air par des câbles — est posée sur un sol nu. Dans l'embout d'une barre, une bobine de laiton tourne et enroule une corde. La structure se tend d'un côté, se déforme, se penche… et bascule, ou rampe, ou roule. La corde se relâche, la structure reprend sa forme, plus loin. Elle n'a ni roue ni pied : elle avance en changeant ses propres tensions.
+Une sculpture de tenségrité (des barres d'acier qui ne se touchent pas, tenues en l'air par des câbles) est posée sur un sol nu. Un petit treuil en ligne enroule un câble. La structure se tend d'un côté, se déforme, se penche… et bascule, ou rampe, ou roule. La corde se relâche, la structure reprend sa forme, plus loin. Elle n'a ni roue ni pied : elle avance en changeant ses propres tensions.
 
-### Trois familles, trois mouvements
+### Trois familles, trois mouvements (telles que construites)
 
 | Famille | Objet | Mouvement |
 | --- | --- | --- |
-| **Culbute** | un prisme de tenségrité (3 à 5 barres), couché sur le flanc | **il bascule** : une corde de l'anneau avant raccourcit, le prisme s'écrase vers l'avant, son centre de gravité sort de l'arête d'appui, il tombe sur la face suivante (ralenti), rebondit, frémit ; la corde se relâche. n culbutes font un tour. |
-| **Chenille** | une chaîne de 3 à 5 prismes carrés, couchée dans son axe, les anneaux posés sur des patins à écailles | **elle rampe** : une onde de contraction court de la queue à la tête ; les patins glissent vers l'avant et accrochent vers l'arrière, si bien que chaque onde fait avancer tout le corps d'un pas. |
-| **Cerceau** | un tore de tenségrité (une couronne de prismes refermée) ; au centre, un moyeu de laiton suspendu par des rayons | **il roule** : le moyeu enroule les rayons de l'avant, se décale vers l'avant et vers le bas ; la jante « tombe » après lui et roule d'un tour entier, puis le moyeu se recentre et elle s'arrête. |
+| **Culbute** | un prisme de tenségrité à six barres, couché sur le flanc | **il bascule** : deux câbles raccourcissent, le prisme s'écrase vers l'avant, son centre de gravité sort de l'arête d'appui, il tombe sur la face suivante (ralenti), rebondit, frémit, les câbles se relâchent. Huit culbutes par boucle. |
+| **Chenille** | une chaîne de quatre ou six prismes carrés à rotules communes, couchée dans son axe, sur des patins | **elle rampe** : une onde de contraction des câbles axiaux court le long du corps, une fois depuis la queue, une fois depuis la tête ; les patins glissent vers l'avant et accrochent vers l'arrière. Quatre ondes par boucle. |
+| **Cerceau** | une roue de vélo : jante en échelle, moyeu lourd suspendu par vingt-quatre rayons | **il roule** : le moyeu enroule les rayons de l'avant et descend en avant du centre ; la jante « tombe » après lui et fait un tour entier, puis le moyeu se recentre et elle s'arrête. |
 
-Trois silhouettes (un tambour anguleux, un long tube, un grand anneau), trois mouvements (la culbute discrète, l'onde qui court, le roulement continu).
+Le plan initial prévoyait des prismes de 3 à 5 barres, des chaînes de 3 à 5 modules, un tore de prismes et des bobines dans les embouts : la section « Ce que la simulation a imposé » dit pourquoi chacun a changé.
 
 ### La boucle
 
-La boucle est **un pas complet** : la Culbute fait n culbutes (un tour du prisme : chaque barre retrouve sa place), la Chenille fait m ondes, le Cerceau fait un tour de jante. À la fin, la structure est exactement la même, au repos, **décalée d'un vecteur horizontal d** : la scène est périodique en translation.
+La boucle est **un pas complet**, qui commence et finit au repos. À la fin, la structure est la même, décalée d'un déplacement plan (translation et petit lacet résiduel), et ré-étiquetée par une symétrie du prisme pour le Culbute.
 
-- Le monde est tourné pour que d soit selon x ; le sol est **périodique de période |d| en x** (lames de parquet, joints de dalles, grain lu dans le volume de bruit à une échelle qui fait tomber |d| sur sa période) ; le fond est un cyclorama sans motif qui suit la caméra.
-- La caméra suit le centre lissé de la structure (travelling latéral) ; sa pose à u = 1 est celle de u = 0 décalée de d. Les lumières suivent la caméra. Image à u = 1 = image à u = 0.
-- La simulation n'est pas exactement périodique : on la fait tourner pas après pas jusqu'à son **cycle limite** (point fixe : l'état d'arrivée, recalé par la translation et le lacet qui le superposent au mieux à l'état de départ — Kabsch dans le plan —, devient l'état de départ du pas suivant), puis on enregistre un pas. L'écart résiduel (de l'ordre du centième de millimètre) est réparti dans la dernière demi-seconde, structure au repos ; le lacet résiduel est réparti sur toute la boucle.
+- Le sol est périodique de la longueur du pas (en coordonnées polaires si un réglage fait tourner le pas franchement) ; la caméra et les lumières suivent le pas. Image à u = 1 = image à u = 0.
+- La simulation n'est pas exactement périodique : on la fait tourner pas après pas jusqu'à son **cycle limite** (point fixe : l'état d'arrivée, recalé par la symétrie et le déplacement plan qui le superposent au mieux à l'état de départ, devient l'état de départ du pas suivant ; arrêt sous 2·10⁻⁴ u), puis on enregistre un pas. Le résidu est réparti sur toute la boucle, sa part rigide d'abord, puis le reste.
 
 Formule : x(u) = sim(τ(u)) avec τ le temps physique (ralentis par le noyau K₇ autour des basculements), et sim(T) = R(θ)·sim(0) + d, θ → 0 par point fixe.
 
 ### Le cœur technique
 
-- **Dynamique de tenségrité** (`src/gen/sim.js`) : XPBD à sous-pas fins (1/4000 s). Nœuds massifs (les embouts portent moteurs et bobines : la masse est aux extrémités, comme sur les robots réels) ; barres rigides (contrainte de longueur exacte) ; câbles **unilatéraux** (ne travaillent qu'en traction, avec une raideur réelle) ; sol avec contact et frottement de Coulomb, **anisotrope** pour les patins à écailles ; amortissement visqueux léger. Actionneurs : longueur au repos des câbles moteurs, fonction lisse du temps (Culbute, Chenille) ou loi de commande (Cerceau : rayons calculés pour placer le moyeu en avant de la jante).
-- **Recherche de forme** (`src/gen/topology.js`) : prismes, chaînes, tores ; état d'équilibre précontraint trouvé par relaxation sans gravité. Invariant : un prisme régulier converge vers la torsion φ = π/2 − π/n (vérifié à 0,1°).
-- **Cycle limite** : point fixe sur des pas complets, recalage rigide de Kabsch, critère d'arrêt.
-- **Câbles mous** : un câble plus court que sa longueur au repos pend en arc de parabole d'arc exact (flèche f telle que la longueur de l'arc vaut L), dans la direction de la gravité projetée ; même formule en JS (tests) et dans le vertex shader.
-- Invariants testés : longueurs des barres conservées (< 10⁻⁴), barres sans contact entre elles (distance segment–segment > somme des rayons, à tous les instants), câbles qui ne traversent pas les barres, rien sous le sol (tous les points des barres, pas seulement les nœuds), raccord exact, caméra lisse (pointes < 25°/s, accélération bornée).
+- **Dynamique de tenségrité** (`src/gen/sim.js`) : XPBD à sous-pas fins (1/4000 s, 1/8000 s pour la roue). Nœuds massifs (les embouts portent la masse, comme sur les robots réels) ; barres rigides (contrainte de longueur exacte) ; câbles **unilatéraux** (ne travaillent qu'en traction, avec une raideur réelle) ; sol avec contact et frottement de Coulomb, **anisotrope** pour les patins ; amortissements visqueux, interne aux câbles et structural. Actionneurs : longueur au repos des câbles moteurs, fonction lisse du temps (Culbute, Chenille) ou loi de commande (Cerceau : rayons calculés pour placer le moyeu en avant de la jante).
+- **Recherche de forme** (`src/gen/sim.js · formFind`, topologies dans `topology.js`) : état d'équilibre précontraint trouvé par relaxation sans gravité. Invariant : un prisme régulier converge vers la torsion φ = π/2 − π/n (vérifié à 0,15°).
+- **Cycle limite** : point fixe sur des pas complets, recalage rigide, critère d'arrêt.
+- **Câbles mous** : un câble plus court que sa longueur au repos pend en arc de parabole d'arc exact (flèche f telle que la longueur de l'arc vaut L) ; même formule en JS (tests) et dans le vertex shader.
+- Invariants testés : longueurs des barres conservées, barres sans contact entre elles (distance segment–segment moins les rayons, à 400 instants), rien sous le sol (embouts et corps des barres), raccord exact, caméra lisse (pointes < 25°/s, accélération < 40 u/s²).
 
-### La matrice de variations
+### La matrice de variations (telle que construite)
 
 | Axe | Valeurs |
 | --- | --- |
 | Famille | Culbute, Chenille, Cerceau |
-| Taille / topologie | Culbute : prisme à 3, 4, 5 barres ; Chenille : 3, 4, 5 modules ; Cerceau : couronne de 6, 8, 10 modules |
-| Barres | acier poli, aluminium brossé, frêne et viroles de laiton, carbone sergé, titane bleui, aluminium anodisé |
-| Câbles | fil d'acier tressé, Dyneema noir, tresse de polyester (couleur d'accent), chanvre ciré |
-| Embouts et bobines | laiton, acier, Delrin noir, bronze |
+| Taille | Culbute : prisme à 6 barres ; Chenille : 4 ou 6 modules ; Cerceau : jante de 12 |
 | Humeur (décor) | Galerie, Ardoise, Midi, Labo, Crépuscule, Scène, Brume |
-| Allure | lente (suspense long), franche, nerveuse ; amplitude de la contraction |
+| Accord de matières | trois par humeur `[tube, virole, embout, câble, treuil]` |
+| Teinte d'anodisation | une parmi cinq, quand la corde n'est pas colorée |
+| Caméra, lumière | légers écarts tirés autour du cadrage et de la lampe de l'humeur |
 
-3 × 3 × 6 × 4 × 4 × 7 × 3 ≈ 54 000 combinaisons avant les réglages continus. Deux graines au hasard diffèrent au moins par la famille ou le décor dans 6 cas sur 7.
+4 sculptures × 7 humeurs × 3 accords = 84 combinaisons de base, avant teintes, écarts et réglages du panneau.
 
-### Trois images clés
+### Trois images clés (plan initial)
 
 1. **Ardoise, Culbute, au bord du basculement.** Caméra au ras du sol, de trois quarts avant. Sol d'ardoise adoucie, noir mat, micas. Un projecteur dur à contre-jour, haut à gauche : les trois barres d'acier poli s'allument en filets, les câbles en traits de lumière, la corde rouge est tendue comme une corde d'arc, les autres pendent un peu. L'ombre du prisme est un dessin de traits sur l'ardoise, en avant de lui.
 2. **Galerie, Cerceau, en roulement.** Parquet de chêne pâle, cyclorama blanc, grande boîte à lumière au-dessus. L'anneau de frêne et de laiton, 50 cm de haut, roule de gauche à droite ; le moyeu, plus bas et en avant, tire ; les rayons du bas sont droits, ceux du haut ondulent, mous.
 3. **Crépuscule, Chenille, en reptation.** Soleil rasant de face, ombres longues qui traînent derrière ; dallage de brique ; le long tube de titane bleui se contracte d'anneau en anneau, une onde de reflets court sur lui.
 
-### Les risques
+### Les risques (plan initial)
 
 - **Un mouvement qui ne marche pas** (la Culbute ne bascule pas, la Chenille patine) : réglé en Node sur les courbes (vitesse moyenne, hauteur du centre, instants de basculement), avant toute image.
 - **Le chaos** (rebonds, frottements) empêche le point fixe de converger : amortissement réaliste, pas lents, pose de repos franche à la fin de chaque pas ; sinon recalage résiduel plus long.
@@ -146,6 +144,8 @@ Formule : x(u) = sim(τ(u)) avec τ le temps physique (ralentis par le noyau K�
 - **Le sol qui se répète** à l'œil : période |d| ≥ 60 cm, motifs dont la période divise |d| sans multiplier les répétitions visibles.
 
 ## e bis. Les épreuves
+
+Les tableaux de cette section sont ceux du plan initial ; le README donne les causes, lois et décors tels qu'ils sont construits.
 
 ### Crédibilité
 
@@ -177,11 +177,11 @@ Barre : tube, deux viroles, deux embouts tournés (gorge, collet, rotule), moteu
 
 ## e ter. Déclinaison et scénario
 
-**Déclinaison** — Culbute : *basculer* (un événement discret, attendu, puis brutal). Chenille : *onduler* (une onde qui court sur un corps qui reste au sol). Cerceau : *rouler* (une chute continue vers l'avant, sans fin, puis l'arrêt). Trois mouvements distincts.
+**Déclinaison.** Culbute : *basculer* (un événement discret, attendu, puis brutal). Chenille : *onduler* (une onde qui court sur un corps qui reste au sol). Cerceau : *rouler* (une chute continue vers l'avant, sans fin, puis l'arrêt). Trois mouvements distincts.
 
-**Scénario** (Culbute, prisme à 3 barres, ~15 s)
+**Scénario initial** (Culbute, prisme à 3 barres, ~15 s ; construit : six barres, huit culbutes, 29,7 s)
 1. Le prisme repose sur une arête, immobile ; la caméra, basse, le voit de trois quarts avant. (1 s)
-2. Dans l'embout avant, la bobine se met à tourner ; la corde rouge raccourcit ; les câbles voisins mollissent et pendent. Le prisme s'écrase vers l'avant, se penche. (2 s, temps réel — le suspense)
+2. Dans l'embout avant, la bobine se met à tourner ; la corde rouge raccourcit ; les câbles voisins mollissent et pendent. Le prisme s'écrase vers l'avant, se penche. (2 s, temps réel : le suspense)
 3. Il passe le point d'équilibre : il bascule sur la face suivante, au ralenti (×4) ; le choc, un petit rebond, les câbles frémissent. (1 s de film)
 4. La bobine déroule ; le prisme se redresse dans sa forme, les câbles se retendent. (1 s)
 5. Deuxième culbute, troisième : le prisme a fait un tour, il est revenu à sa pose de départ, 70 cm plus loin. La caméra a suivi en travelling.
@@ -200,12 +200,12 @@ Barre : tube, deux viroles, deux embouts tournés (gorge, collet, rotule), moteu
 
 Échelle : barres de 25 à 40 cm (Culbute, Chenille), anneau de 40 à 55 cm de diamètre (Cerceau) ; embouts de 2,5 à 3 cm ; câbles de 1 à 2 mm. Vue d'à peu près 1 à 1,6 m. Ce qui donne l'échelle : le grain du sol (fil du chêne, micas de l'ardoise, briques de 22 cm, joints).
 
-## Révision : ce que la simulation a imposé
+## Ce que la simulation a imposé
 
-Le concept a été tenu ; trois familles ont changé de forme en route, chaque fois parce que la physique simulée refusait la première version.
+Le concept a été tenu ; les trois familles ont changé de forme en route, chaque fois parce que la physique simulée refusait la première version.
 
-- **Culbute : six barres, pas trois à cinq.** Un prisme à trois barres couché bascule mal : les faces de sa ceinture alternent entre stables et instables, et la culbute « arrière » sautait deux faces d'un coup. Les prismes à quatre ou cinq barres dérivaient de cap (jusqu'à 10° par boucle). Le prisme à six barres, plus rond, bascule face par face avec des contractions de 27 à 50 %, et huit culbutes ramènent son cap à 2° près. Chaque culbute le retourne d'environ 180° : la boucle se referme par une symétrie du prisme (le Culbute finit ré-étiqueté, ses barres se ressemblent toutes), et sur le cap vrai modulo 2π — modulo π, la pose de repos n'étant symétrique par le demi-tour qu'à 2 cm près, l'écart déformait les barres de 2 %.
+- **Culbute : six barres, pas trois à cinq.** Un prisme à trois barres couché bascule mal : les faces de sa ceinture alternent entre stables et instables, et la culbute « arrière » sautait deux faces d'un coup. Les prismes à quatre ou cinq barres dérivaient de cap (jusqu'à 10° par boucle). Le prisme à six barres, plus rond, bascule face par face avec des contractions de 27 à 50 %, et huit culbutes ramènent son cap à 2° près. Chaque culbute le retourne d'environ 180° : la boucle se referme par une symétrie du prisme (le Culbute finit ré-étiqueté, ses barres se ressemblent toutes), et sur le cap vrai modulo 2π (modulo π, la pose de repos n'est symétrique par le demi-tour qu'à 2 cm près, et l'écart déformait les barres de 2 %).
 - **Chenille : une onde sur deux part de la tête.** La chaîne de prismes tordus est chirale : une onde toujours dans le même sens la faisait tourner de 6 à 10° par boucle, et le sol, dessiné en coordonnées polaires pour rester invariant par ce pas tournant, montrait des rayons convergents. Alterner le sens de l'onde annule le lacet (sous 0,8°) et double l'avancée ; seuls les nombres pairs de modules (4, 6) restent assez droits.
-- **Cerceau : la roue de vélo, pas le tore de prismes.** La couronne de prismes triangulaires, posée sur un seul nœud après la torsion, tombait sur le côté. La roue de vélo — jante en échelle comprimée, rayons tendus, flasques du moyeu plus écartés que la jante — est une tenségrité connue de tous et tient debout sur deux nœuds. Sa commande calcule les rayons sur la géométrie nominale de la jante (calculés sur les positions déformées, ils n'avaient plus de raideur et la roue s'effondrait).
+- **Cerceau : la roue de vélo, pas le tore de prismes.** La couronne de prismes triangulaires, posée sur un seul nœud après la torsion, tombait sur le côté. La roue de vélo (jante en échelle comprimée, rayons tendus, flasques du moyeu plus écartés que la jante) est une tenségrité connue de tous et tient debout sur deux nœuds. Sa commande calcule les rayons sur la géométrie nominale de la jante (calculés sur les positions déformées, ils n'avaient plus de raideur et la roue s'effondrait).
 - **Treuils en ligne.** Les bobines dans les embouts ne survivent pas au ré-étiquetage du Culbute (une symétrie peut retourner un câble bout pour bout) : chaque câble actif porte au milieu un treuil à deux tambours, symétrique, dont le barillet tourne visiblement.
 - **Amortissement structural.** Une tenségrité au repos oscillait sans fin dans ses modes mous (des mécanismes que rien n'étire) ; on freine la seule vitesse de déformation, l'écart au mouvement rigide le mieux ajusté, et les chutes restent des chutes.

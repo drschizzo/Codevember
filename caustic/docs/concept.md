@@ -1,6 +1,6 @@
 # Caustic — document de travail
 
-Thème donné : « caustic ». Le mot désigne d'abord un effet de rendu ; il faut en faire un sujet. Le projet s'appelle **Caustic** (dossier `caustic/`), sous-titre *le foyer des ondes* — le foyer est à la fois le point où la lumière se rassemble et l'âtre où l'on brûle : *kaustikos*, « qui brûle ».
+Thème donné : « caustic ». Le mot désigne d'abord un effet de rendu ; il faut en faire un sujet. Le projet s'appelle **Caustic** (dossier `caustic/`), sous-titre *le foyer des ondes* : le foyer est à la fois le point où la lumière se rassemble et l'âtre où l'on brûle : *kaustikos*, « qui brûle ».
 
 ## a. Le thème en largeur
 
@@ -88,25 +88,25 @@ Thème donné : « caustic ». Le mot désigne d'abord un effet de rendu ; il fa
 
 Pourquoi la 1 : la caustique y est **à la fois l'effet et le sujet**. On ne regarde pas un objet éclairé, on regarde la lumière s'organiser. Le geste se lit sans légende (des anneaux de lumière accourent des bords, se rejoignent, et pendant une seconde la lumière dessine), il est spectaculaire, et il repose sur trois savoirs exacts — transport optimal, ondes dispersives, optique des caustiques — qui sont le spectacle au lieu de le décorer.
 
-## e. La piste retenue
+## e. La piste retenue, telle qu'elle est construite
 
-**L'image.** Une cuve d'eau claire vue de côté, à travers sa vitre, un peu sous la ligne d'eau. En haut, la surface vue d'en dessous, miroir d'argent ondulant ; en bas, le fond pâle de la cuve où la lumière de la lampe (ou du soleil) dessine son réseau ; entre les deux, dans l'eau à peine laiteuse, les rideaux de lumière qui descendent de la surface au fond. Sur les bords, les volets du batteur trempent dans l'eau.
+**L'image.** Une cuve d'eau claire vue de côté, à travers sa vitre, à hauteur de l'eau ou un peu au-dessus : sous la ligne d'eau, le fond pâle où la lumière dessine son réseau et, en haut, la surface vue d'en dessous, miroir de réflexion totale ; au-dessus, la surface vue d'en haut. Dans l'eau à peine laiteuse, les rideaux de lumière. Sur trois parois (la face vitrée reste dégagée), les plongeurs du batteur trempent dans l'eau.
 
-**Le geste.** La lumière se rassemble. Des volets, sur le pourtour, poussent des ondes ; on les voit au fond comme des anneaux de lumière qui accourent vers le centre en se resserrant ; à l'instant où ils se rejoignent, la surface prend exactement la forme d'une lentille et le réseau **se résout en un dessin** — une diatomée, un oursin, une méduse, une rosace — net, lumineux, une seconde ; puis il se défait en anneaux qui repartent vers les bords, où les volets les absorbent. La caméra rapide étire cette seconde.
+**Le geste.** La lumière se rassemble. Les plongeurs poussent des ondes ; on les voit au fond comme des anneaux de lumière qui accourent vers le centre en se resserrant ; à l'instant où ils se rejoignent, la surface prend exactement la forme d'une lentille et le réseau **se résout en un dessin** (une diatomée, un oursin, une méduse, une rosace, un capitule, un radiolaire), net, lumineux, une seconde ; puis il se défait en anneaux qui repartent vers les bords, où les plongeurs les absorbent. La caméra rapide étire cette seconde.
 
-### Découpage temporel (famille Foyer ; boucle de 36 s, trois dessins)
+### Découpage temporel (famille Foyer ; boucle de 36 s, trois dessins de 12 s)
 
-| u | ce qu'on voit | où regarde l'œil |
+Pour chaque dessin, en part de son créneau :
+
+| part du créneau | ce qu'on voit | où regarde l'œil |
 | --- | --- | --- |
-| 0,00 – 0,05 | eau presque calme, un réseau ténu qui frémit ; les volets au repos | la surface, le fond uni |
-| 0,05 – 0,14 | les volets se mettent en marche ; des fronts de lumière entrent par les bords et se resserrent | les anneaux qui convergent |
-| 0,14 – 0,22 | ralenti de caméra rapide (× 60) ; les anneaux se fondent, le dessin **se forme** et tient | le centre du fond |
-| 0,22 – 0,30 | le dessin se défait en anneaux qui repartent ; vitesse normale | les fronts qui partent |
-| 0,30 – 0,33 | les volets absorbent ; calme | — |
-| 0,33 – 0,66 | deuxième dessin, plus riche (même structure) | |
-| 0,66 – 1,00 | troisième dessin, le plus fin, avec ses franges colorées | |
+| 0 – 0,15 | eau presque calme, un frisson au fond | la surface et les plongeurs |
+| 0,15 – 0,4 | les plongeurs plongent en une vague qui court le long des parois ; des fronts de lumière entrent par les bords et se resserrent | la caméra descend vers le fond |
+| 0,4 – 0,6 | caméra rapide (vitesse ramenée de × 0,4 à × 0,006) ; les anneaux se fondent, le dessin **se forme** et tient | le centre du fond |
+| 0,6 – 0,85 | le dessin se défait en anneaux qui repartent ; retour à × 0,4 | la caméra remonte |
+| 0,85 – 1 | les plongeurs absorbent ; calme | — |
 
-Les trois dessins d'une boucle forment une **série** (trois formes d'une même famille de motifs : trois diatomées, trois rosaces…) dans un ordre de complexité croissante : un crescendo.
+Les trois dessins d'une boucle forment une **série** (trois formes d'une même famille de motifs) dans un ordre de complexité croissante : un crescendo. Faraday boucle en 30 s, Kármán en 24 s.
 
 ### La formule de la boucle
 
@@ -114,39 +114,38 @@ Le champ de hauteur de la surface est une somme d'événements :
 
 h(x, t) = h_calme(x, t) + Σⱼ Wⱼ(τⱼ) · Eⱼ(x, τⱼ(t)),  Eⱼ(x, τ) = Re F⁻¹[ Ĥⱼ(k) · cos(ω(k) τ) · e^{−2νk²|τ|} ]
 
-où Ĥⱼ est le spectre de la lentille j (calculée par transport optimal), ω(k) la relation de dispersion exacte des ondes de capillarité-gravité, τⱼ(t) le **temps physique** de l'événement j (la caméra rapide : vitesse ramenée à 1/60 autour de τ = 0, en forme fermée), Wⱼ une fenêtre qui s'annule hors de l'événement (les volets absorbent). Comme cos est pair, la convergence (τ < 0) est la dispersion (τ > 0) lue à l'envers : c'est exactement le retournement temporel. h_calme est une ride de fond dont chaque mode a une fréquence multiple entière de 2π/T (arrondie depuis la dispersion : écart < 0,1 %). Chaque τⱼ ne dépend que de (u − uⱼ) mod 1 et Wⱼ est nulle aux bords de son créneau : **h(u + 1) = h(u) exactement**, la caméra est une fonction périodique lissée, la lumière est fixe.
+où Ĥⱼ est le spectre de la lentille j (calculée par transport optimal), ω(k) la relation de dispersion exacte des ondes de capillarité-gravité, τⱼ(t) le **temps physique** de l'événement j (une seule horloge dont la vitesse descend autour de chaque dessin, intégrée en forme fermée, `src/timeline.js`), Wⱼ une fenêtre qui s'annule hors de l'événement (les plongeurs absorbent). Comme cos est pair, la convergence (τ < 0) est la dispersion (τ > 0) lue à l'envers : c'est exactement le retournement temporel. h_calme est une ride de fond dont chaque mode a une fréquence multiple entière de 2π/T (arrondie depuis la dispersion : écart < 0,1 %). Chaque τⱼ ne dépend que de (u − uⱼ) mod 1 et Wⱼ est nulle aux bords de son créneau : **h(u + 1) = h(u) exactement**, la caméra est une fonction périodique, la lumière est fixe.
 
-Les volets suivent l'eau : le déplacement de chacun est la hauteur du champ à sa place (lue dans le même tampon par le vertex shader), si bien que la cause (les volets) et l'effet (les fronts) coïncident par construction.
+Les plongeurs suivent l'eau : le déplacement de chacun est la hauteur du champ à sa place (lue dans le même tampon que la caustique), si bien que la cause et l'effet coïncident par construction.
 
 ### Matrice de variations
 
 | Axe | Valeurs |
 | --- | --- |
-| **Famille** (le geste) | *Foyer* (convergence et dessin), *Faraday* (cristal de lumière stationnaire), *Kármán* (allée de tourbillons) |
-| **Série de dessins** (Foyer) | diatomées (disques rayonnants, aréoles), oursins (tests à cinq ambulacres de perles), méduses (cloche, bras, tentacules), rosaces (entrelacs à 6–12 lobes), phyllotaxies (spirales de Vogel en points), coquilles (spirales logarithmiques cloisonnées), radiolaires (treillis concentriques et épines) |
-| **Réseau** (Faraday) | carrés, hexagones, quasi-cristal à 8, 10 ou 12 branches ; nucléation au centre ou sur un bord |
-| **Obstacle** (Kármán) | poteau rond, plat, deux poteaux côte à côte (rues jumelles), aile inclinée |
-| **Lumière** | soleil (filets fins, franges), lampe à arc ponctuelle (réseau grossi, très contrasté), stroboscope, lune, verrière diffuse (réseau doux) |
-| **Fond de cuve** | sable blanc, chaux, faïence à joints, travertin, ardoise, cuivre, papier (écran) |
-| **Cuve** | aquarium à bâti de laiton, bassin de pierre à hublot, cuve de laboratoire à bâti d'acier, bac de verre sans cadre |
-| **Eau** | limpide, légèrement laiteuse (rideaux de lumière), teintée (thé, eau de lagon) |
-| **Cadrage** | rasant sous la ligne d'eau, plongeant à travers la vitre, trois-quarts sur une arête |
+| **Famille** (le geste) | *Foyer* (convergence et dessin, une scène sur deux), *Faraday* (cristal de lumière stationnaire), *Kármán* (allée de tourbillons) |
+| **Série de dessins** (Foyer) | diatomées, oursins, méduses, rosaces, phyllotaxies (capitules de Vogel), radiolaires |
+| **Réseau** (Faraday) | deux réseaux successifs parmi carrés, hexagones, quasi-cristal à 8, 10 ou 12 branches ; le second naît sur un bord |
+| **Kármán** | un poteau rond ; 10 ou 12 émissions par boucle, rayon, courant, fossettes tirés |
+| **Humeur** | sept (voir plus bas), chacune n'accueille que certaines familles |
+| **Fond de cuve** | sable blanc, chaux, faïence, travertin, ardoise, émail, papier |
+| **Cuve** | bâti d'acier noirci, aquarium à bâti de laiton, bassin de pierre, cuve émaillée |
+| **Cadrage** | plongée, rasant, trois-quarts |
 
-3 × 7 (ou 5 ou 4) × 5 × 7 × 4 × 3 × 3 : plusieurs dizaines de milliers de combinaisons, mais composées par **humeur** (une humeur = un décor, une lumière, une eau, un fond, une cuve), jamais pièce à pièce.
+Les pièces sont composées par **humeur** (une humeur = un décor, une lumière, une eau, un fond, une cuve), jamais pièce à pièce.
 
 ### Images clés
 
-1. **Le dessin.** Cadrage plongeant à 35° à travers la vitre ; fond de sable blanc, lumière de soleil haute ; au centre, une diatomée de lumière de 30 cm, rayons fins bordés de rouge et de bleu, aréoles en perles brillantes ; autour, l'ombre douce de la lumière qu'elle a prise ; en haut, la surface d'en dessous, lisse comme un miroir au centre et plissée sur les bords, où les volets trempent.
-2. **La convergence.** Rasant, chambre noire, lampe à arc : trois anneaux concentriques de filets brillants qui se pressent vers le centre, leurs fronces en dents de scie ; dans l'eau, les rideaux de lumière forment une corolle qui se referme.
-3. **Le cristal.** Faraday sous stroboscope, fond d'ardoise : un réseau de points de lumière en quasi-cristal à douze branches, qui s'étend depuis le centre ; au bord du domaine, le front où il naît, encore désordonné.
+1. **Le dessin.** Cadrage plongeant à travers la vitre ; fond de sable blanc, soleil haut ; au centre, une diatomée de lumière, rayons fins bordés de rouge et de bleu, aréoles en perles brillantes ; autour, l'ombre douce de la lumière qu'elle a prise.
+2. **La convergence.** Rasant, chambre noire, lampe à arc : des anneaux concentriques de filets brillants qui se pressent vers le centre, leurs fronces en dents de scie ; dans l'eau, les rideaux de lumière.
+3. **Le cristal.** Faraday sous stroboscope : un réseau de points de lumière en quasi-cristal, qui s'étend depuis le centre ; au bord, le front où il naît, encore désordonné.
 
 ### Risques et parades
 
-- *Le dessin illisible* (trop de bruit, trop peu de contraste) : transport optimal sur une cible adoucie (plancher de 25 % de lumière, traits épais), ralenti assez long, fond de cuve pâle et mat, cadrage plongeant qui ne l'écrase pas.
-- *Les pentes irréalistes* : la cuve est profonde (45 cm) et la lentille ne déplace la lumière que localement ; on vérifie que la pente reste < 0,3.
-- *L'aspect « démo WebGL »* : le réseau n'est pas un bruit, il vient d'ondes vraies ; la cuve est un appareil de musée (volets, bielles, bâti) ; rideaux de lumière, surface d'argent, dispersion.
-- *Le coût* : FFT 512² sur GPU (< 0,5 ms), maillage de projection 512² en trois longueurs d'onde (~1,5 ms), coupes pour le volume en 256² ; mobile en 256² et une longueur d'onde.
-- *Le scintillement* : un pli de largeur nulle crénelle ; le flou du disque de la source (physique) l'élargit à 1–2 texels, le TRAA fait le reste.
+- *Le dessin illisible* : transport optimal sur une cible adoucie (32 % de la lumière reste entre les traits), ralenti assez long, fond de cuve pâle et mat, exposition réglée pour les hautes lumières.
+- *Les pentes irréalistes* : la cuve est profonde (45 cm) et la lentille ne déplace la lumière que localement ; un test vérifie que la pente reste < 0,3.
+- *L'aspect « démo WebGL »* : le réseau vient d'ondes vraies ; la cuve est un appareil de musée ; rideaux de lumière, surface d'argent, dispersion.
+- *Le coût* : FFT 1024² sur GPU, maillage de projection de 262 144 sommets en trois longueurs d'onde, huit coupes 256² pour le volume ; mobile en 512² et une longueur d'onde.
+- *Le scintillement* : un pli de largeur nulle crénelle ; le flou du disque de la source (physique) l'élargit, l'anticrénelage temporel fait le reste.
 
 ## e bis. Les trois épreuves
 
@@ -154,51 +153,50 @@ Les volets suivent l'eau : le déplacement de chacun est la hauteur du champ à 
 
 | Temps du film | Cause visible | Loi | Convention de temps |
 | --- | --- | --- | --- |
-| Les fronts entrent | les volets du batteur, qui bougent avec l'eau à leur place | ondes linéaires de capillarité-gravité, dispersion exacte | temps réel (× 0,5) |
-| Le dessin se forme | la rencontre des fronts | retournement temporel (même onde, à l'envers) ; réfraction de Snell | caméra rapide, ralenti × 60 au plus |
-| Le dessin se défait | la propagation | idem, amortissement visqueux 2νk² | retour au temps réel |
-| Le calme | les volets absorbent (absorption active) | — | temps réel |
-| La lumière | la lampe, visible dans la fenêtre de Snell et son reflet | source étendue → largeur des plis | — |
-| Faraday : le cristal naît | l'excitateur sous la cuve (bielle, volant) et le stroboscope | instabilité paramétrique, onde à Ω/2, équations d'amplitude | stroboscope : la vibration à 10 Hz paraît lente (repliement) |
-| Kármán : les tourbillons | le courant (la pompe, le déversoir) et le poteau | décollement, Strouhal St ≈ 0,2, fossettes de Lamb-Oseen | temps réel |
+| Les fronts entrent | les plongeurs, qui bougent avec l'eau à leur place | ondes linéaires de capillarité-gravité, dispersion exacte | réel × 0,4 |
+| Le dessin se forme | la rencontre des fronts | retournement temporel (même onde, à l'envers) ; réfraction de Snell | caméra rapide, jusqu'à × 0,006 |
+| Le dessin se défait | la propagation | idem, amortissement visqueux 2νk² | retour à × 0,4 |
+| Le calme | les plongeurs absorbent | — | — |
+| La lumière | la source, visible dans la fenêtre de Snell et son reflet | source étendue → largeur des plis | — |
+| Faraday : le cristal naît | l'excitateur sous la cuve (volant à excentrique, ressorts) et le stroboscope | instabilité paramétrique, onde à Ω/2 | stroboscope désaccordé : un nombre entier de battements lents par boucle |
+| Kármán : les tourbillons | le courant et le poteau | allée de von Kármán, fossettes de Lamb-Oseen | temps réel, un nombre entier d'émissions par boucle |
 
 ### Variété (une humeur = un décor)
 
 | Humeur | Décor | Lumière | Valeur | Cadrage |
 | --- | --- | --- | --- | --- |
-| **Lagon** | bac de verre sans cadre, sable blanc, eau à peine bleutée, fond en dégradé clair | soleil haut, net, franges colorées | très claire | plongeant |
-| **Chambre noire** | cuve de laboratoire à bâti d'acier noir, fond de chaux, pièce noire | lampe à arc ponctuelle au-dessus, rien d'autre | très sombre, contrastée | rasant sous la ligne d'eau |
-| **Thermes** | bassin de pierre à hublot, fond de faïence à joints | verrière diffuse + soleil voilé | moyenne, douce | trois-quarts sur l'arête |
-| **Heure dorée** | aquarium à bâti de laiton, fond de travertin | soleil bas et rasant par une fenêtre, filets étirés | moyenne-chaude, contre-jour | rasant |
-| **Nocturne** | bac sans cadre, fond d'ardoise, eau limpide | lune et lampe froide | sombre, froide | plongeant |
-| **Atelier** | cuve à bâti d'acier, fond de cuivre poli patiné | projecteur à découpe | moyenne, métal | trois-quarts |
-| **Stroboscope** (Faraday) | cuve de verre sur l'excitateur, fond de papier | stroboscope blanc | sombre, image figée | plongeant |
+| **Lagon** | cuve émaillée, sable blanc | soleil haut, filets nets et frangés | très claire | plongée |
+| **Chambre noire** | cuve à bâti d'acier noirci, fond de chaux, pièce noire | lampe à arc ponctuelle au-dessus | très sombre, contrastée | rasant |
+| **Thermes** | bassin de moellons de travertin, fond de faïence | soleil d'une verrière, un peu diffusé | moyenne, douce | trois-quarts |
+| **Heure dorée** | aquarium à bâti de laiton, fond de travertin | soleil bas et chaud, ombre du rebord | chaude, contre-jour | rasant |
+| **Nocturne** | cuve d'acier, fond d'ardoise | lune froide | sombre, froide | plongée |
+| **Atelier** | cuve émaillée sous un projecteur | lampe proche | moyenne | trois-quarts |
+| **Stroboscope** (Faraday) | cuve d'acier sur l'excitateur, fond de papier | stroboscope blanc | sombre, image figée | plongée |
 
 ### Ambition (éléments de construction)
 
-- **La cuve** : bâti (cornières de laiton ou d'acier à congés, ou pierre taillée), vitres épaisses à chants verts, joints de mastic, fond (sable, chaux, faïence, travertin, ardoise, cuivre), pieds ou socle.
-- **Le batteur** : volets de bois verni ou d'acier, tiges, glissières, bielles, arbre à cames ; plages absorbantes en fibres dans les coins.
-- **L'excitateur** (Faraday) : plateau sur ressorts, bielle, volant, moteur.
-- **Le canal** (Kármán) : déversoir, grille de tranquillisation, poteau poli.
-- **La lampe** : boîtier, réflecteur, diaphragme (ou le soleil par une fenêtre).
-- **L'eau** : surface d'argent vue d'en dessous, ménisque contre la vitre, rideaux dans le volume, particules en suspension qui scintillent.
+- **La cuve** : bâti (cornières d'acier noirci, de laiton ou d'acier brossé, ou pierre), vitre de 12 mm à chants verts, fond (sable, chaux, faïence, travertin, ardoise, émail, papier), parois intérieures (moellons, ardoise, tôle peinte, émail).
+- **Le batteur** : plongeurs, vérins, collier vermillon.
+- **L'excitateur** (Faraday) : volant à excentrique, ressorts, moteur.
+- **Le canal** (Kármán) : poteau chromé qui porte son ombre.
+- **L'eau** : surface d'argent vue d'en dessous, fenêtre de Snell, rideaux dans le volume.
 
 ## e ter. Déclinaison et scénario
 
 ### Déclinaison (le mouvement de chaque famille)
 
-- **Foyer** : des anneaux de lumière **convergent** des bords vers le centre, s'y résolvent en un dessin, puis **divergent** — un mouvement radial, en respiration (aspiration, éclat, expiration).
-- **Faraday** : rien ne voyage ; un réseau **stationnaire** naît d'un point et s'étend comme un cristal qui croît, change de maille (carrés → hexagones → quasi-cristal), bat lentement sous le stroboscope, puis s'éteint d'un bloc — une croissance.
-- **Kármán** : des disques noirs cerclés de lumière **défilent** en quinconce d'un bord à l'autre, émis un à un par le poteau — un cortège.
+- **Foyer** : des anneaux de lumière **convergent** des bords vers le centre, s'y résolvent en un dessin, puis **divergent** : un mouvement radial, en respiration.
+- **Faraday** : rien ne voyage ; un réseau **stationnaire** naît au centre et s'étend comme un cristal qui croît, un second réseau naît sur un bord et l'envahit, le tout bat lentement sous le stroboscope, puis s'éteint : une croissance.
+- **Kármán** : des disques noirs cerclés de lumière **défilent** en quinconce vers le déversoir, émis un à un par le poteau : un cortège.
 
 ### Scénario (Foyer, film muet)
 
-1. L'eau est presque immobile ; au fond, une lumière unie que traverse un frisson. Les volets attendent.
-2. Les volets plongent, d'abord ceux du fond, puis tous, en une vague qui fait le tour de la cuve ; au fond, des fronts de lumière entrent par les quatre côtés.
-3. Les fronts se resserrent ; leurs fronces se croisent ; dans l'eau, les rideaux de lumière se penchent vers le centre.
-4. Le temps ralentit. Les anneaux se fondent ; au centre, la lumière se rassemble en un dessin : une diatomée. Elle tient, presque immobile.
-5. Elle se défait en anneaux qui repartent, le temps reprend sa vitesse ; les volets les reçoivent.
-6. Calme. Puis un deuxième dessin, plus riche ; puis un troisième, le plus fin, bordé de couleurs. Calme : la boucle.
+1. L'eau est presque immobile ; au fond, une lumière unie que traverse un frisson. La caméra regarde la surface et les plongeurs.
+2. Les plongeurs plongent, en une vague qui court le long des parois ; au fond, des fronts de lumière entrent par les bords. La caméra descend vers le fond.
+3. Les fronts se resserrent ; leurs fronces se croisent.
+4. Le temps ralentit. Les anneaux se fondent ; au centre, la lumière se rassemble en un dessin. Il tient, presque immobile.
+5. Il se défait en anneaux qui repartent, le temps reprend sa vitesse ; les plongeurs les reçoivent. La caméra remonte.
+6. Calme. Puis un deuxième dessin, plus riche ; puis un troisième, le plus fin. Calme : la boucle.
 
 ## e quater. Les références
 
@@ -208,20 +206,15 @@ Les volets suivent l'eau : le déplacement de chacun est la hauteur du champ à 
 4. *Rayform / caustique conçue* : un dessin lisible, doux, avec des traits plus brillants que le fond d'un facteur 5–10 ; le reste de la lumière forme un halo.
 5. *Aquarium vu de côté* : la surface d'en dessous en miroir argenté, la fenêtre de Snell, les rideaux de lumière qui descendent en éventail, le fond.
 
-Ce qu'elles imposent : **l'échelle** — dans la cuve de 60 cm, des ondes de 1 à 4 cm et des cellules de réseau de 2 à 5 cm, filets de 1–2 mm ; **la densité** — 150 à 300 cellules visibles au fond dans le plan large ; **la lumière** — un fond pâle et mat (≥ 0,6 d'albédo) pour que les filets se lisent, l'éclairement direct n'arrive au fond **que** par la surface (rien d'autre ne l'éclaire), et le reste de la pièce est sombre ou neutre.
+Ce qu'elles imposent : **l'échelle** (dans la cuve de 60 cm, des ondes de 1 à 4 cm, des filets de 1–2 mm) ; **la lumière** (un fond pâle et mat pour que les filets se lisent, l'éclairement direct n'arrive au fond **que** par la surface, le reste de la pièce sombre ou neutre). Le grain du fond (sable, joints de faïence, lits du travertin) donne l'échelle.
 
-**Échelle à l'image** : plan large — le fond entier (60 × 60 cm) ; le dessin en occupe la moitié. Gros plan : impossible sans casser la boucle de lecture ; la caméra respire légèrement (5–10 %) vers le dessin pendant le ralenti. Le grain du fond (sable de 0,3 mm, joints de faïence de 2 cm, veines du travertin) donne l'échelle.
+## f. Ce que les essais ont appris
 
-## g. Révision après les premiers rendus (mise au point)
-
-- **La ride de fond noyait le dessin** : à 7·10⁻⁵ m, de petites ondes capillaires suffisent à focaliser à 45 cm sous l'eau (H·¼·a·k² > 1) : le fond était un réseau de piscine où le dessin se perdait. Ramenée à 6–9·10⁻⁶ m : un frisson, et le dessin se lit.
-- **La surface trop lumineuse, les traits sans éclat** : on expose maintenant pour les hautes lumières (exposition fixe par humeur, réglée au posemètre : un fond éclairé uniformément vers 0,2, les traits du dessin quatre à cinq fois plus lumineux, en bloom).
-- **La cause hors du cadre** : la caméra ne montrait que le fond. Elle regarde désormais la surface et les plongeurs entre deux dessins, et descend vers le fond quand les ondes convergent (une seule horloge : la gaussienne de l'instant du dessin) ; la rangée de plongeurs de la face vitrée a été retirée (elle bouchait la vue).
-- **Les rideaux de lumière en brouillard** : une lampe qui éclaire toute la surface diffuse uniformément dans une eau trouble ; turbidité ramenée à 0,03–0,08 m⁻¹, les rideaux restent un accent.
-- **Les tourbillons sans anneau** : l'anneau de la caustique d'une fossette est un pli plus fin qu'un pixel ; fossettes élargies (cœur de 14–17 mm) d'après un banc d'essai sur le processeur.
-- **Faraday invisible** : amplitude sous le seuil de focalisation (relevée à 0,22–0,30 mm), et un nom de champ en double dans la recette (le second réseau était écrasé par son horaire).
-- **Du bruit dans la surface vue en rasance** : quatre causes, isolées une à une — l'albédo fin du fond et des parois lu le long de rayons réfractés (version unie pour ces vues), les rides plus fines que le pixel (pentes et hauteur moyennées sur 6 mm pour le rendu de la surface seulement), un niveau de mip implicite lu dans une branche (niveau 0 explicite) et surtout **l'occlusion ambiante d'écran** appliquée à des matériaux qui calculent toute leur lumière (ils écrivent maintenant leur sortie directement).
-
-## h. Deuxième révision (retour de l'utilisateur) : les parois
-
-« Est-ce normal que les murs ne soient pas du tout éclairés par la lumière qui crée la caustique au fond ? » En partie seulement : sous le soleil de l'Heure dorée, la paroi du fond tourne le dos à la lumière réfractée ; mais la tache de soleil au fond est une grande source diffuse, et la paroi qui fait face au soleil reçoit la lumière de biais. Trois corrections : le rebond se calcule à partir de la vraie lumière du fond (adoucie : lue en quelques points nets, elle recopiait le dessin sur la paroi comme un reflet), la caustique directe des parois est dosée physiquement, et les parois des cuves sombres (ardoise, tôle) ont été éclaircies pour pouvoir montrer cette lumière. La turbidité de l'Heure dorée a été baissée (le voile noyait la paroi).
+- **La ride de fond noyait le dessin.** À 7·10⁻⁵ m, de petites ondes capillaires focalisent déjà à 45 cm sous l'eau (H·¼·a·k² > 1) ; ramenée à 6–9·10⁻⁶ m, c'est un frisson et le dessin se lit.
+- **Exposer pour les hautes lumières** : exposition fixe par humeur, réglée au posemètre (un fond uniforme vers 0,2, les traits quatre à cinq fois plus lumineux, en bloom).
+- **Montrer la cause.** Une caméra qui ne montre que le fond perd les plongeurs ; elle regarde la surface entre deux dessins et descend quand les ondes convergent. Pas de plongeurs sur la face vitrée (ils bouchaient la vue). Une humeur vue d'en haut à longue focale (« Planche ») a été retirée : on n'y voyait plus que c'est de l'eau.
+- **Rideaux sans brouillard** : turbidité de 0,03 à 0,06 m⁻¹.
+- **Les tourbillons sans anneau** : l'anneau de la caustique d'une fossette était un pli plus fin qu'un pixel ; cœur de 14 à 17 mm.
+- **Faraday invisible** sous le seuil de focalisation : amplitude relevée à 0,22–0,30 mm.
+- **Le bruit de la surface en rasance** avait quatre causes : l'albédo fin du fond lu le long de rayons réfractés (version unie pour ces vues), les rides plus fines que le pixel (pentes moyennées pour le rendu de la surface), un niveau de mip implicite lu dans une branche (niveau 0 explicite), et surtout l'occlusion ambiante d'écran appliquée à des matériaux qui calculent toute leur lumière (ils écrivent leur sortie directement).
+- **Les parois reçoivent la lumière du fond.** Le rebond se calcule à partir de la vraie lumière du fond, adoucie (lue en quelques points nets, elle recopiait le dessin comme un reflet), et la caustique directe des parois est dosée physiquement.

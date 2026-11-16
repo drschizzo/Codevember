@@ -109,7 +109,7 @@
         <h2><span class="n">09</span>Le sol est invariant par le pas</h2>
         <span class="src">src/scene/floor.js · src/floors.js</span>
         <p>À la fin de la boucle, la structure a avancé d'un pas, et l'image doit pourtant être celle du début : la structure doit reposer au même endroit du même dessin. Tout motif du sol est donc périodique le long de la marche, de période égale à la longueur du pas P. Il y a un nombre entier de lames ou de dalles par pas (<code>jointSpacing</code>), et le bruit est lu dans un volume périodique (période 4 cellules) à des fréquences qui font tenir un nombre entier de périodes dans P (<code>floorFreqs</code>). La caméra et les lumières suivent le pas, si bien que l'image à u = 1 est celle de u = 0. L'outil <code>seam()</code> mesure un écart de 10⁻⁷ u, en comparant les nœuds dans le repère de la caméra comme des ensembles, puisque le Culbute finit ré-étiqueté.</p>
-        <p>Si le pas tourne (lacet notable), le sol est dessiné en coordonnées polaires autour du centre de la rotation, avec une période angulaire égale à l'angle du pas. C'était le cas de la Chenille avant l'onde alternée : les motifs convergeaient vers ce centre en rayons visibles, ce qui était une raison de plus de supprimer le lacet à la source.</p>
+        <p>Si le pas tourne (lacet notable), le sol est dessiné en coordonnées polaires autour du centre de la rotation, avec une période angulaire égale à l'angle du pas. Les motifs y convergent alors vers ce centre en rayons visibles : c'est une raison de plus de supprimer le lacet à la source (§ 06).</p>
       </section>
 
       <section id="budget">

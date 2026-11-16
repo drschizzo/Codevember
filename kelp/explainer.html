@@ -51,7 +51,7 @@
         <span class="src">src/gen/sea.js · makeForcing()</span>
         <p>Dans une série, le moment le plus spectaculaire est le creux qui précède la crête : la mer recule et découvre la frange, les laminaires plaquées vers le large, la roche qui ruisselle. Chaque vague qui entre au large est donc une crête d'amplitude <i>A</i>, précédée d'un creux de profondeur relative <i>β</i> et d'avance <i>d</i> :</p>
         <div class="eq">\[ \eta_{in}(t) = A\left[e^{-(t-t_k)^2/\tau_c^2} - \beta\, e^{-(t-t_k+d)^2/\tau_t^2}\right] \]</div>
-        <p>Les trois vagues vont en crescendo (\(A\) de 0,3 à 0,75 m au large). La plus grande arrive en dernier, au plus tard 8,5 s avant la fin de la boucle, pour avoir le temps de se retirer : la boucle finit au calme, platier découvert, laminaires couchées. Les instants, les hauteurs et les creux sont tirés de la graine. Le forçage est rendu périodique en lui ajoutant ses copies décalées de \(T\).</p>
+        <p>Les trois vagues vont en crescendo (\(A\) de 0,25 à 0,76 m au large). La plus grande arrive en dernier, au plus tard 8,5 s avant la fin de la boucle, pour avoir le temps de se retirer : la boucle finit au calme, platier découvert, laminaires couchées. Les instants, les hauteurs et les creux sont tirés de la graine. Le forçage est rendu périodique en lui ajoutant ses copies décalées de \(T\).</p>
         <figure id="fig-serie"><figcaption><b>La hauteur incidente au large.</b> Les curseurs règlent la profondeur du creux \(\beta\) et son avance <i>d</i>. Le creux qui précède chaque crête, c'est la mer qui se retire. (Les trois vagues de la scène ont chacune leur \(\beta\) ; ici, un seul pour toutes.)</figcaption></figure>
       </section>
 
@@ -127,7 +127,7 @@
             <tr><td>Données transmises au GPU (faisceau en texture 3D, profil fin 60 i/s, laminaires 30 i/s, roche)</td><td>GPU</td><td class="num">~170 Mo</td></tr>
           </tbody>
         </table></div>
-        <p>Mesures faites dans Node, sur un cœur, avec une graine de test ; la génération est nettement plus lente quand l'onglet est en arrière-plan. Le temps d'image, mesuré à 960 × 540 sur le GPU d'un Mac, était de 6,6 à 6,9 ms, dont ~3,9 ms pour la roche et ~2,8 ms pour l'occlusion ambiante. La passe cinéma l'a porté à 8,1–9,3 ms (graine k39), surtout pour la lumière diffusée sous l'eau. Le faisceau, la forêt clonée (0,4 ms), les embruns (0,2 ms), les 100 000 flocons d'écume (0,6 ms), la lèvre, la paume et ce qui flotte coûtent peu ; le démarrage, lui, a raccourci : 17 → ~12 s sur k39, 22,5 → ~18,5 s sur la graine p7.</p>
+        <p>Mesures faites dans Node, sur un cœur, avec une graine de test ; la génération est nettement plus lente quand l'onglet est en arrière-plan. Le temps d'image, mesuré à 960 × 540 sur le GPU d'un Mac (graine k39), est de 8,1 à 9,3 ms sans les flocons, la lèvre, les embruns et ce qui flotte, dont ~3,9 ms pour la roche, ~2,8 ms pour l'occlusion ambiante et ~2,6 ms pour la lumière diffusée sous l'eau. La forêt clonée (0,4 ms), les embruns (0,2 ms), les 100 000 flocons d'écume (0,6 ms), la lèvre, la paume et ce qui flotte coûtent peu. Le démarrage prend ~12 s sur k39 et ~18,5 s sur la graine p7.</p>
       </section>
     </article>
 

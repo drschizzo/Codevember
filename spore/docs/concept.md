@@ -118,40 +118,40 @@ avec S(0) = bois nu, S(0 → 1) = le cycle (germination → réseau → perles �
 Dans le cadre, le site de gauche montre les sporanges vides de la génération précédente (le passé), le centre la génération présente, la droite le bois nu qui attend les spores : une frise lue de gauche à droite, dans le sens du vent.
 
 ### Le cœur technique
-1. **Le plasmodium** (`src/gen/network.js`) : croissance depuis les points de germination (front à vitesse finie, anisotrope selon le fil du bois), puis adaptation du réseau de Tero sur un graphe aléatoire couvrant le bois : conductivités D_ij, pressions par Kirchhoff (gradient conjugué préconditionné), loi d'adaptation dD/dt = |Q|^μ/(1+|Q|^μ) − D ; sources au front qui avance, puits à l'arrière ; rayon des tubes par Poiseuille r ∝ D^{1/4}. Enregistré en instantanés et relu. Invariants : conservation du flux à chaque nœud, réseau connexe, épaississement des chemins utiles.
-2. **La condensation** : le protoplasme du réseau se rassemble en perles placées le long des veines à l'espacement de Plateau-Rayleigh (≈ 9 r), chacune recevant le volume de sa portion de veine. Invariant : volume conservé du réseau aux perles, puis des perles aux sporanges.
-3. **Les sporanges** (`src/gen/sporangia.js`) : maillages usinés par famille (hypothallus, pied, columelle, tête, péridium, capillitium), posés sur la vraie surface du bois, déformés dans le vertex shader par leur stade (perle → pied qui s'allonge → tête → maturation → déhiscence) et par le vent (flexion d'une poutre encastrée).
-4. **Les spores** (`src/gen/spores.js`) : des dizaines de milliers de particules lâchées par les têtes, portées par un vent moyen et des tourbillons, qui sédimentent à la vitesse de Stokes et se posent sur le bois ; trajectoires analytiques (même formule en JS et en TSL). Les points de germination du site suivant sont des points de chute de spores réelles.
-5. **La couleur structurale** des péridiums (*Lamproderma*) : interférence en couche mince, épaisseur et indice tirés, convertie en RVB par trois longueurs d'onde.
+1. **Le plasmodium** (`src/gen/plasmodium.js`) : un front de germination (distance de Dijkstra anisotrope, multi-sources), puis l'adaptation du réseau de Tero sur un treillis qui couvre le territoire : conductivités D_ij, pressions par Kirchhoff (gradient conjugué préconditionné), loi d'adaptation dD/dt = |Q|^μ/(1+|Q|^μ) − D ; sources au corps, puits au front ; rayon des tubes par Poiseuille r ∝ D^{1/4}. Enregistré en instantanés et relu. Invariants : conservation du flux à chaque nœud, épaississement des chemins utiles.
+2. **La condensation** : le protoplasme du réseau se rassemble en perles placées selon l'espèce (grappes, touffes, le long des veines à l'espacement de Plateau-Rayleigh, ≈ 9 r), chacune recevant le volume des veines qui s'y vident. Invariant : volume conservé du réseau aux perles.
+3. **Les sporanges** (`src/gen/sporangia.js`, `src/fruit.js`) : gabarits usinés par espèce (hypothallus, pied, columelle, tête, péridium, capillitium), posés sur la vraie surface du bois, repliés en perle et déformés dans le vertex shader par leur stade (perle → pied qui s'allonge → tête → maturation → déhiscence) et par le vent (flexion d'une poutre encastrée).
+4. **Le nuage** (`src/gen/smoke.js`) : une simulation de fluide 3D (Stable Fluids) au-dessus du bois, où chaque tête verse ce qu'elle perd en s'ouvrant ; la fumée chute selon Stokes et se dépose. Des grains suivis un à un dans le même champ ; les points de germination du site suivant sont leurs points de chute.
+5. **La couleur structurale** des péridiums (*Lamproderma*) : interférence en couche mince, convertie en RVB par trois longueurs d'onde.
 
-## e. Découpage temporel (part de boucle ; durée par défaut 40 s)
+## e. Découpage temporel (part de boucle ; durée par défaut 40 s ; `src/timeline.js`)
 
 | u | Temps | Ce que l'œil regarde | Temps du film |
 |---|---|---|---|
-| 0,00–0,06 | **la pluie de spores** se pose | la poussière brune qui descend en biais et se dépose sur le bois nu ; la caméra ralentit au-dessus du site | temps réel |
-| 0,06–0,22 | **germination** | des gouttelettes jaunes naissent dans la poussière, gonflent et se rejoignent | très accéléré (une nuit en 6 s) |
-| 0,22–0,42 | **le réseau** | la nappe s'étend en éventail ; derrière son front, elle se creuse en veines qui s'épaississent ou disparaissent ; les veines battent (onde péristaltique) | accéléré, ralenti pour que la navette se lise (période ~1,5 s) |
-| 0,42–0,50 | **l'aube : la condensation** | la lumière monte ; les veines se vident dans des perles alignées ; il reste un film brillant (hypothallus) | accéléré |
-| 0,50–0,62 | **la forêt se lève** | les perles se dressent sur leurs pieds, toutes ensemble avec un léger décalage, et penchent vers la lumière ; blanches et translucides | accéléré |
-| 0,62–0,74 | **maturation** | la couleur passe du blanc au rose ou au jaune, puis à la couleur finale ; le vernis sèche ; l'iridescence apparaît | accéléré |
-| 0,74–0,88 | **dissémination** (temps fort) | le souffle arrive : les têtes s'inclinent, les péridiums s'ouvrent selon la famille, le nuage de spores part à droite, allumé à contre-jour | ralenti léger puis temps réel |
-| 0,88–1,00 | **le voyage** | la caméra suit le nuage le long du bois, passe le bois nu, arrive au site suivant où la poussière tombe | temps réel |
+| 0,88–0,05 | **la pluie de spores** se pose | la fumée brune du site précédent descend en biais et poudre le bois nu ; la caméra ralentit au-dessus du site | temps réel |
+| 0,04–0,20 | **germination** | des gouttelettes jaunes naissent dans la poussière, gonflent et se rejoignent | très accéléré |
+| 0,10–0,42 | **le réseau** | la nappe s'étend en éventail ; derrière son front, elle se creuse en veines qui s'épaississent ou disparaissent ; les veines battent (onde péristaltique) | accéléré |
+| 0,38–0,52 | **l'aube : la condensation** | la lumière monte (0,38–0,47) ; les veines se vident dans des perles (0,42–0,52) | accéléré |
+| 0,48–0,62 | **la forêt se lève** | les perles se dressent sur leurs pieds, avec un retard propre à chacune | accéléré |
+| 0,58–0,74 | **maturation** | la couleur passe à la couleur finale ; le vernis sèche | accéléré |
+| 0,72–0,93 | **dissémination** (temps fort) | le souffle (0,72–0,95) : les têtes s'inclinent, s'ouvrent selon la famille (0,74–0,86), les spores partent (0,75–0,93) | temps réel |
+| 0,84–1,04 | **le voyage** | la caméra suit le centre de masse du nuage jusqu'au site suivant ; la lumière baisse (0,86–1) | temps réel |
 
-Respirations : longue pose au-dessus du réseau (la navette), accélération de la croissance, ralenti autour de l'ouverture, voyage fluide. Temps fort : la dissémination (0,78).
+Les sporanges vides du site précédent s'affaissent et s'effritent de 1,05 à 1,9 dans la phase de leur site.
 
 ## e. Matrice de variations
 
 | Axe | Valeurs |
 |---|---|
-| **Famille** (geste de dissémination) | *Arcyria* (le filet se détend), *Stemonitis* (les colonnes fument), *Hemitrichia* (le réseau devient fruit), *Lamproderma* (le péridium iridescent s'écaille) |
-| **Espèce** (variantes) | *Arcyria denudata* (rouge), *A. obvelata* (jaune, filets longs qui retombent), *A. cinerea* (gris) ; *Stemonitis fusca* (chocolat), *S. axifera* (rouille), *Comatricha* (noir, fin) ; *Hemitrichia serpula* (or), *H. calyculata*? ; *Lamproderma* (bleu-violet), *Diachea* (iridescent sur pied blanc) |
+| **Famille** (geste de dissémination) | *Arcyria* (le filet se détend), *Stemonitis* (les colonnes fument), *Hemitrichia* (le réseau devient fruit), *Lamproderma* (le péridium iridescent s'écaille), *Trichia* (la tête éclate en houppe dorée), *Lycogala* (le coussin se perce et souffle) |
+| **Espèce** (variantes) | *Arcyria denudata*, *A. obvelata*, *A. cinerea* ; *Stemonitis fusca*, *S. axifera*, *Comatricha nigra* ; *Hemitrichia serpula* (or, rouille) ; *Lamproderma columbinum*, *Diachea leucopodia*, *L. arcyrioides* ; *Trichia decipiens*, *T. varia* ; *Lycogala epidendrum*, *L. flavofuscum* |
 | **Décor** (humeur) | Grève, Brûlis, Humus, Brume, Sous-bois, Cèdre (voir variété) |
-| **Réseau** | éventail (front unique), rameux (μ fort, arbre), réticulé (μ faible, mailles), double front (deux foyers qui se rejoignent) |
-| **Souffle** | brise régulière, rafales, tourbillon qui soulève, souffle rasant |
-| **Ordre de maturation** | du centre vers le bord, d'un bord à l'autre (dans le sens du réseau), par grappes, d'un seul coup |
-| **Densité** | serrée (les têtes se touchent), en touffes, éparse, en ligne le long d'une fente du bois |
+| **Support** | bûche (rayon 6,5 cm), branche (2,1 cm), rameau (1,05 cm) |
+| **Réseau** | éventail, rameux (μ fort, arbre), réticulé (μ faible, mailles), deux foyers |
+| **Souffle** | rafales, force et montée des spores tirées en continu |
+| **Ordre de maturation** | du centre vers le bord, dans le sens du réseau, par grappes, d'un seul coup |
 
-4 × ~10 × 6 × 4 × 4 × 4 × 4 ≈ 60 000 combinaisons ; deux graines au hasard diffèrent par la famille (silhouette et geste) dans 3 cas sur 4 et par le décor dans 5 cas sur 6.
+6 familles × 6 décors × 3 supports × 4 réseaux × 4 ordres, avant les espèces et les tirages continus.
 
 ## e. Trois images clés
 
@@ -164,9 +164,9 @@ Respirations : longue pose au-dessus du réseau (la navette), accélération de 
 - **Le réseau ressemble aux simulations « physarum » d'art génératif** → un relief translucide posé sur une matière, à l'échelle réelle (veines de 0,1 à 0,6 mm), un front en nappe festonnée, calculé par la loi de Tero (pas d'agents).
 - **Le plasmodium paraît une flaque de peinture jaune** → translucidité, brillance humide, épaisseur qui varie, granules qui coulent, ombre portée sur le bois.
 - **La forêt flotte** → chaque pied planté dans son hypothallus sur la vraie surface du bois (la même fonction de relief), ombres de contact.
-- **Le nuage de spores est un brouillard plat** → particules réelles, de taille et de nombre plausibles, allumées par la diffusion vers l'avant (contre-jour), qui se déposent visiblement.
+- **Le nuage de spores est un brouillard plat** → une fumée simulée, érodée en voiles, allumée par la diffusion vers l'avant (contre-jour), qui se dépose visiblement, et des grains suivis un à un.
 - **Trop de temps différents à lire** → une seule horloge (le jour), une caméra calme, chaque temps au moins 4 s.
-- **Coût** : réseau en carte de hauteur (un maillage déplacé), sporanges instanciés (une géométrie par famille), spores en un seul tirage instancié.
+- **Coût** : nappe sur un maillage déplacé, sporanges instanciés (un gabarit par espèce), nuage en marche de rayons dans une boîte resserrée autour de la fumée visible.
 - **La répétition du site voisin** (même géométrie, translatée) → le site de gauche est vu usé et flou, celui de droite est vide ; la profondeur de champ et le cadrage ne montrent jamais deux sites nets.
 
 ## e bis. Les trois épreuves
@@ -218,7 +218,10 @@ Plus de cinq éléments par famille.
 - ***Hemitrichia*** : pas de pieds : **le réseau lui-même devient le fruit** — les veines gonflent en tubes dorés qui se fendent en long et **moussent** d'élatères.
 - ***Lamproderma*** : de petites sphères sur des pieds fins ; à maturité elles **s'irisent**, puis le péridium **s'écaille** en plaquettes qui tombent, et la sphère sombre s'effrite au vent.
 
-Quatre mouvements : se détendre, fumer, mousser, s'écailler. Et trois silhouettes de forêt différentes (coupes serrées, joncs hauts, réseau couché, perles éparses).
+- ***Trichia*** : des toupies dorées et luisantes ; le péridium se fend en plaques et les élatères **jaillissent en houppe** ronde que le vent peigne.
+- ***Lycogala*** : des coussins corail sans pied ; le sommet se perce et chaque rafale **aspire une bouffée** par l'ouverture (effet Venturi) : le nuage part par bouffées.
+
+Six mouvements : se détendre, fumer, mousser, s'écailler, jaillir, souffler. Et des silhouettes de forêt différentes (coupes serrées, joncs hauts, réseau couché, perles éparses, toupies, coussins).
 
 ### Scénario (film muet ; *Stemonitis* sur le bois carbonisé du Brûlis)
 1. La caméra arrive de la gauche en glissant, ralentit ; une fumée brune descend en biais et se pose sur le bois noir, qu'elle poudre.
@@ -243,27 +246,17 @@ Forme : une condensation lente (on regarde le vivant s'organiser), un temps fort
 
 ## f. Annonce
 
-*Spore — le relais.* Sur du bois mort, une génération de myxomycètes en une boucle : la poussière de spores tombe, germe, s'étend en un réseau jaune pulsant (adaptation de Tero), se condense en perles à l'aube, se dresse en forêt de sporanges qui mûrissent et s'ouvrent au souffle ; la caméra suit le nuage jusqu'au site suivant. Quatre familles (*Arcyria*, *Stemonitis*, *Hemitrichia*, *Lamproderma*), six décors.
+*Spore — le relais.* Sur du bois mort, une génération de myxomycètes en une boucle : la poussière de spores tombe, germe, s'étend en un réseau jaune pulsant (adaptation de Tero), se condense en perles à l'aube, se dresse en forêt de sporanges qui mûrissent et s'ouvrent au souffle ; la caméra suit le nuage, une fumée simulée, jusqu'au site suivant. Six familles (*Arcyria*, *Stemonitis*, *Hemitrichia*, *Lamproderma*, *Trichia*, *Lycogala*), six décors, trois supports.
 
-## g. Après les premiers rendus (corrections de mise au point)
+## Ce que les essais ont appris
 
-Les planches successives (familles × instants, puis 8 graines × 5 instants) ont corrigé :
-- **la nappe paraissait peinte** (une crêpe opaque et plate, les fibres du bois qui la traversaient) : elle remplit maintenant les creux (sa surface suit une hauteur lissée cuite avec le bois, jamais sous le bois), elle est opaque au front et presque transparente derrière, striée de canaux dans le sens de l'avancée, et elle disparaît à la condensation ; sans cela, le temps du réseau n'était qu'une tache claire ;
-- **les veines étaient des fils sombres** : rayons ×1,7 (jusqu'à 0,5 mm de large, comme un *Physarum*), jaune plus dense que le film, rayons lissés le long de chaque brin (sinon, des chapelets de perles) ; les veines-fruits d'*Hemitrichia* forment leurs propres brins (de longs tubes au lieu d'une calotte à chaque petite branche) ;
-- **les sporanges étaient minuscules dans le cadre** : la distance de la caméra passe, pendant la forêt, à l'échelle des sporanges ;
-- **les spores ne se voyaient pas** (une texture float32 non filtrable invalidait la pipeline sans bruit : demi-flottants) puis **pas en nuage** : chaque particule est une bouffée qui s'étale et pâlit ; posées, une pincée de poudre ;
-- **les gouttelettes de germination fusionnaient aussitôt** : le remappage distance → phase ralentit le début (f(x) = ½x^0,55 + ½x^1,6) ;
-- **le charbon et la pourriture ressemblaient à des tuiles** : Voronoï anisotrope fortement déformé au lieu de rangées de blocs ;
-- **les colonnes de *Stemonitis* se cassaient** sous le vent (la flexion était calculée sur la hauteur de la tête, pas du sporange) ; les filets d'*Arcyria* détendus fléchissent sur toute leur longueur ;
-- **le filet d'*Arcyria* était plein quand il aurait dû s'ajourer** (masque inversé) ;
-- **l'iridescence de *Lamproderma* ne se voyait pas** : péridium lisse, couche mince d'indice 2,0 sur un fond de 1,45.
-
-## h. Deuxième révision (retours de l'utilisateur)
-
-Trois remarques : le **niveau graphique** général, la **variété** des scènes, et surtout **le nuage de spores**, pas assez visible ni compréhensible — avec une piste : une vraie simulation de « fumée », rendue avec soin, pour voir le nuage s'envoler et se poser.
-
-**Le nuage devient une simulation de fluide** (`src/gen/smoke.js`). Les spores n'étaient que des particules à trajectoire analytique : on ne lisait ni l'envol, ni le voyage, ni la retombée. Désormais une grille 3D couvre le site et l'aval ; l'air suit les équations d'Euler (Stable Fluids de Stam : forces, advection, projection), poussé par le vent du lieu (couche limite au-dessus du bois), roulé par des tourbillons qui passent avec lui, ses volutes gardées par le confinement de vorticité. Chaque tête verse dans l'air ce qu'elle perd en s'ouvrant ; la fumée chute selon Stokes et se dépose sur le bois — la poussière où germera la génération suivante. Bilan de masse exact. Des grains suivis un à un dans le même champ donnent le détail ; les germinations du site suivant sont leurs points de chute. Rendu en volume : marche de rayons, interpolation entre images avec compensation de mouvement, érosion par un bruit de détail, diffusion vers l'avant, ombre propre. **La caméra suit le centre de masse du nuage** pendant le voyage : on voit la fumée partir, dériver et s'étaler sur le bois du site suivant.
-
-**La variété** : deux familles nouvelles dont le geste ne ressemble à aucun des quatre premiers — *Trichia* (des toupies dorées dont les élatères jaillissent en houppe ronde) et *Lycogala* (des coussins corail sans pied, percés au sommet, que chaque rafale fait souffler par effet Venturi : le nuage part par bouffées) ; un axe **support** (bûche, branche, rameau) qui change toute la composition — la courbure du bois, la ligne d'horizon, la forêt en crête sur un rameau.
-
-**Le niveau graphique** : le fond n'est plus un aplat (dégradé, halo du soleil à contre-jour) ; la rosée se pose à l'aube sur les perles qui montent et sèche pendant la maturation (dans les décors humides) ; les têtes sont marbrées ; le nuage, plus clair (albédo d'une poussière qui diffuse), s'allume à contre-jour.
+- **Un nuage de particules à trajectoire analytique ne se lit pas** : ni l'envol, ni le voyage, ni la retombée. Une vraie simulation de fumée, rendue en volume et suivie par la caméra, montre la cause du recommencement.
+- **Une nappe opaque et plate paraît peinte** : elle remplit les creux du bois (hauteur lissée cuite avec lui, jamais sous le bois), opaque au front, presque transparente derrière, striée dans le sens de l'avancée.
+- **Des veines trop fines sont des fils sombres** : jusqu'à 0,5 mm de large comme un *Physarum*, rayons lissés le long de chaque brin (sinon des chapelets de perles).
+- **Des sporanges minuscules dans le cadre ne se voient pas** : la distance de la caméra passe à leur échelle pendant la forêt.
+- **Piège WebGPU** : une texture float32 non filtrable invalidait la pipeline sans message ; demi-flottants.
+- **Des gouttelettes qui fusionnent aussitôt** : le remappage distance → phase ralentit le début du front.
+- **Le charbon et la pourriture en rangées de blocs ressemblaient à des tuiles** : Voronoï anisotrope fortement déformé.
+- **La flexion se calcule sur la hauteur du sporange**, pas de la tête, sinon les colonnes de *Stemonitis* se cassent sous le vent.
+- **L'iridescence de *Lamproderma* demande un péridium lisse** : couche mince d'indice 2,0 sur un fond de 1,45.
+- **La variété vient du geste et de la composition** : deux familles au geste nouveau (*Trichia*, *Lycogala*) et un axe support (bûche, branche, rameau) qui change la ligne d'horizon, plutôt que des teintes.

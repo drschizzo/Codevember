@@ -1,6 +1,6 @@
 # Melt, troisième version : le fjord
 
-> **Abandonné le 14 novembre** au profit de `concept-eau-douce.md` : P7 a montré que les nappes ne se voient pas.
+> **Version abandonnée le 14 novembre** au profit de `concept-eau-douce.md` : P7 a montré que les nappes ne se voient pas.
 
 Thème : **« melt »**. Sous-titre : *la colonne sans fin*.
 

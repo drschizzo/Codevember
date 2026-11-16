@@ -74,12 +74,12 @@ Le fond est neutre, un dégradé uni sans paysage, pour ne mettre en valeur que 
 
 | Humeur | Support | Lumière | Valeur | Cadrage |
 | --- | --- | --- | --- | --- |
-| Souche | souche couchée, écorce sillonnée | soleil de côté, contre-jour | fond sombre | ras, longue focale |
-| Kokedera | granit à lichens | boîte à lumière douce | gris moyen | plongée |
-| Lande | bloc de granit à lichens | soleil dur l'été, voilé aux pluies | fond très clair | ras |
-| Muret | calcaire ou grès | soleil de midi | fond clair et chaud | contre-plongée |
-| Tourbière | motte de tourbe, sphaigne | soleil bas à contre-jour | fond sombre bleuté | contre-jour |
-| Rosée | motte de terre, aiguilles de pin | lumière froide | fond sombre et froid | plongée |
+| Souche | souche couchée, écorce sillonnée | soleil de côté, contre-jour | fond sombre | ras ou longue focale |
+| Kokedera | granit, gravier ratissé | boîte à lumière douce | gris moyen | plongée ou ras |
+| Lande | bloc de granit à lichens | brouillard blanc qui se lève, puis plein jour | fond très clair | ras ou contre-plongée |
+| Muret | calcaire ou grès | soleil de midi | fond clair et chaud | contre-plongée ou ras |
+| Tourbière | motte de tourbe, sphaigne | soleil bas à contre-jour | fond sombre bleuté | contre-plongée ou ras |
+| Rosée | motte de terre, aiguilles de pin | lune froide, puis soleil bas | fond sombre et froid | plongée ou ras |
 
 **Quatre familles** : la tortule (rosettes vissées au sec, étoiles argentées), le polytric (feuilles raides en ombrelle), la funaire (capsules penchées qui tournent sur leur soie), la sphaigne (capitules qui blanchissent au sec et rougissent mouillés).
 
@@ -91,7 +91,7 @@ Le fond est neutre, un dégradé uni sans paysage, pour ne mettre en valeur que 
 node --test moss/test/recipe.test.mjs moss/test/moss.test.mjs
 ```
 
-Treize tests. La propagation est une orbite périodique et le raccord est exact. La mousse se réfugie à la sécheresse, s'étend aux pluies (le front ne recule jamais pendant les pluies) et se retire ensuite. Les refuges sont les fissures de la roche. Aucune feuille ne touche une feuille d'une autre tige, et les feuilles restent au-dessus de la roche, relief fin compris. La caméra est périodique et lente. Le reste porte sur la recette et les décors : recette déterministe et JSON ; humeurs, familles, eaux tirées ; matières des accords existantes ; humeurs différentes par le décor, la lumière et la valeur ; soleil presque blanc ; gestes des familles distincts.
+Quinze tests. La propagation est une orbite périodique et le raccord est exact. La mousse se réfugie à la sécheresse, s'étend aux pluies (le front ne recule jamais pendant les pluies) et se retire ensuite. Les refuges sont les fissures de la roche, et les tiges des refuges naissent les premières. Le coussin est dense (tiges plantées à moins de 0,6 rayon de rosette, au moins quatre feuilles par tige) et moins de 2 % des feuilles passent à travers la tige d'une voisine (les rosettes s'imbriquent). Les feuilles restent au-dessus de la roche, relief fin compris. La caméra est périodique et pointe sous 25°/s. Le reste porte sur la recette et les décors : recette déterministe et JSON ; humeurs, familles, eaux tirées ; matières des accords existantes ; humeurs différentes par le décor, la lumière et la valeur ; soleil presque blanc ; gestes des familles distincts.
 
 ## Performances
 

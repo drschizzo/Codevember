@@ -113,18 +113,19 @@ Le forçage est une série de trois vagues de période T (la boucle) : la hauteu
 ### Le cœur technique
 
 1. **La roche** (worker) : un platier cuit en relief (2 cm → 0,2 mm par le micro-relief) — pente vers le large, gradins, cuvettes, fissures — selon la roche de l'humeur (granit, basalte, craie, ardoise, grès) ; algue calcaire rose dans les creux, balanes au-dessus. Le même relief porte les crampons, arrête les lanières, fait les flaques.
-2. **La mer** (module pur) : équations de Saint-Venant 1D sur le profil transversal du platier, volumes finis à reconstruction hydrostatique (Audusse et al., 2004) et flux HLL, frottement de Manning implicite, bord du large générant-absorbant (invariants de Riemann). Front mouillé-sec exact, ressauts. Écume produite par la dissipation du ressaut et transportée. Le champ 2D est le champ 1D décalé par l'obliquité de la houle, et relevé à leur seuil dans les cuvettes (les flaques, calculées par inondation prioritaire).
-3. **Les laminaires** (module pur, worker) : chaînes XPBD (pas fins, une itération), inextensibles, à raideur de flexion propre à chaque famille, ancrées au crampon ; gravité, poussée d'Archimède de la partie immergée, traînée de Morison normale et tangentielle (relaxation exponentielle vers l'écoulement, stable), masse ajoutée ; contact et frottement sur la roche ; contacts entre lanières par segments (rubans épais : la séparation demandée dépend de l'orientation, largeur dans le plan, épaisseur hors du plan) ; orientation du ruban (directeur transporté, couché à plat sur ce qui le porte, tourné dans le courant). Enregistrées 30 fois par seconde, relues dans le vertex shader.
+2. **La mer** (module pur) : équations de Saint-Venant 1D, volumes finis à reconstruction hydrostatique (Audusse et al., 2004) et flux HLL, frottement de Manning implicite, bord du large générant-absorbant (invariants de Riemann). Front mouillé-sec exact, ressauts. Écume produite par la dissipation du ressaut et transportée, puis suivie flocon par flocon. Le champ 2D est un faisceau de profils, un tous les 0,9 m le long de la côte, chacun sur sa coupe du platier, dans le temps local décalé par l'obliquité de la houle ; un profil fin à part fait la ligne d'eau sur le dôme. Il est relevé à leur seuil dans les cuvettes (les flaques, calculées par inondation prioritaire).
+3. **Les laminaires** (module pur, worker) : chaînes XPBD (120 sous-pas par seconde, deux itérations), inextensibles, à raideur de flexion propre à chaque famille, ancrées au crampon ; gravité, poussée d'Archimède de la partie immergée, traînée de Morison normale et tangentielle (relaxation exponentielle vers l'écoulement, stable), masse ajoutée ; contact et frottement sur la roche ; contacts entre lanières par segments (rubans épais : la séparation demandée dépend de l'orientation, largeur dans le plan, épaisseur hors du plan) ; orientation du ruban (directeur transporté, couché à plat sur ce qui le porte, tourné dans le courant) et un angle de torsion par nœud, tordu par le courant. Enregistrées 30 fois par seconde, relues dans le vertex shader. Seules les plantes proches de la caméra sont simulées ; au-delà, des touffes clonées rejouent leur mouvement avec le retard de la mer.
 4. **Le rendu au ras de l'eau** : un brouillard d'eau calculé pour chaque pixel sur la partie immergée du rayon (depuis le hublot), avec l'eau aérée qui blanchit ; la surface rendue des deux côtés (reflet de Fresnel au-dessus, fenêtre de Snell et réflexion totale au-dessous) ; le ménisque et les gouttes sur le dôme ; la roche qui fonce et brille où l'eau est passée, puis sèche par le haut.
 
-### Les invariants vérifiables (tests)
+### Les invariants vérifiés (tests)
 
-- la mer : masse conservée sur le domaine fermé (au bord du large près) ; hauteur jamais négative ; l'état à T égale l'état à 0 ;
-- les laminaires : longueur conservée (< 0,5 %), aucun nœud sous la roche, aucune lanière dans une autre (segments contre segments, toute la boucle), raccord exact ;
-- cause et effet : une lanière ne se soulève pas avant que l'eau l'atteigne (sa hauteur ne dépasse la roche de plus que son épaisseur que si la mer la couvre) ;
-- une seule horloge : la hauteur de l'eau à la caméra, la part immergée de l'image, la hauteur moyenne des lanières suivent la même courbe ;
+- la mer : hauteur jamais négative ; l'état à T égale l'état à 0 ; le grand retrait découvre le platier, la grande vague le recouvre ;
+- les laminaires : étirement borné (moins de 5 % après la mise en place), aucun nœud sous la roche ni à moins de 10 cm de l'objectif, raccord sans saut, un nombre entier de sous-pas par image enregistrée ;
+- cause et effet : à l'air, les lanières reposent sur la roche ;
 - la caméra : périodique, lente, jamais sous la roche ;
-- la recette : déterministe, JSON, humeurs et familles tirées, accords.
+- la recette : déterministe, JSON, humeurs et familles tirées, série en crescendo, humeurs qui sont des décors.
+
+Le plan prévoyait aussi un test de non-interpénétration des lanières sur toute la boucle et un test « une seule horloge » : ils n'existent pas.
 
 ### Découpage (boucle de 32 s, valeurs de départ)
 
@@ -146,12 +147,12 @@ Respirations : les retraits ; temps fort : la grande vague.
 | --- | --- |
 | **Famille** (la plante) | *Digitée* (Laminaria digitata : stipe souple, main de 5–9 lanières qui s'ouvre en éventail), *Cochayuyo* (Durvillaea : crampon massif, longues lanières épaisses et alvéolées qui flottent, s'enroulent en anneaux sur la roche), *Palmier de mer* (Postelsia : stipe creux et raide qui reste debout à l'air, plie sous la vague et se redresse ; houppe de lames pendantes), *Boa* (Egregia : longues lanières frangées de petites lames et de flotteurs) |
 | **Roche** | granit rose en boules et diaclases, basalte en dalles polygonales, craie blanche à silex, ardoise en feuillets dressés, grès rouge en gradins |
-| **Lumière** | soleil bas de côté, contre-jour de couchant, ciel couvert lumineux, heure bleue, midi dur, lune |
+| **Lumière** | soleil bas de côté, contre-jour de couchant, ciel couvert lumineux, heure bleue, midi dur, lune, marine grise sans soleil |
 | **Série** | trois vagues de hauteurs (petite, moyenne, grande), écarts et obliquité tirés |
 | **Cadrage** | hauteur du dôme (8–30 cm), focale (grand-angle 60–80° comme sous l'eau), cap (vers le large ou le long de la côte), travelling lent |
 | **Eau** | claire verte, turquoise, bleue profonde, grise, bioluminescente |
 
-4 familles × 6 humeurs × séries et cadrages : deux graines au hasard n'ont ni la même plante, ni la même roche, ni la même lumière.
+4 familles × 7 humeurs × séries et cadrages : deux graines au hasard n'ont ni la même plante, ni la même roche, ni la même lumière.
 
 ### Trois images clés
 
@@ -195,6 +196,7 @@ Rien ne flotte sans flotteur : les familles qui flottent ont des flotteurs ou un
 | **Ardoise** | feuillets d'ardoise dressés en peigne | heure bleue, lumière de ciel seule | basse, froide | dôme bas entre deux feuillets |
 | **Midi** | grès rouge en gradins | soleil haut, dur, ombres courtes, caustiques | claire et contrastée | plan plus large |
 | **Noctiluque** | granit sombre | lune, et l'eau qui s'allume où elle est agitée | très sombre | dôme au ras de l'eau |
+| **Marine** (d'après Sugimoto, *Seascapes* ; une graine sur cinq) | ardoise grise | ciel couvert, aucun soleil, mer et ciel de même valeur | moyenne, presque sans couleur | horizon au milieu exact, vers le large |
 
 ### Ambition (construction de la plante)
 
@@ -224,3 +226,17 @@ Forme : un crescendo (trois vagues de plus en plus hautes, la caméra de plus en
 Ce qu'elles imposent : **densité** — une frange continue, plantes à 25–40 cm, lanières qui se recouvrent (pas une « plantation ») ; **échelle** — vue à 0,2–3 m, la lanière fait quelques centimètres, la roche porte un grain millimétrique (cristaux, balanes de 5–10 mm) qui donne l'échelle ; **forme d'ensemble** — un tapis couché dans une direction, puis une forêt peignée dans l'autre ; **lumière** — reflets en filets sur le brun mouillé à l'air, translucidité ambrée dans l'eau.
 
 Au plan large, une vingtaine à une quarantaine de plantes dans le cadre, chacune de 5 à 9 lanières (150–300 lanières) ; au gros plan, une dizaine. La simulation porte les plantes proches en détail (pas de 5–6 cm), les lointaines plus grossières (8–10 cm) ; au-delà, la frange se poursuit en plantes simplifiées couchées et le flou de la distance.
+
+## f. Ce que les essais ont appris
+
+Le détail est dans les deux revues ([revue-cinema.md](revue-cinema.md), [revue-niveau.md](revue-niveau.md)) ; ce qui éclaire l'état actuel :
+
+- **Un monde extrudé se lit comme une jetée** : un seul profil de mer décalé par l'obliquité donnait un front rectiligne et un bord de platier en bordure de trottoir. D'où le bord qui avance et recule (la même formule dans la mer, la roche et le shader) et le faisceau de profils (`tools/front.mjs` mesure l'écart du front à sa droite).
+- **La densité vient des clones** : la mer a une symétrie (même mer, retardée, à un pas le long de la côte), donc une plante simulée est une pose valide plus loin. Une frange de 64 plantes se lisait en plantation.
+- **Une lame sans torsion reste une planche** : un angle par nœud, tordu par le courant, suffit ; des tiges de Cosserat auraient allongé la génération.
+- **Enregistrer une image tous les `round(sous-pas / 30)` sous-pas** décale les laminaires de la mer (à 100 sous-pas par seconde, 0,030 s au lieu de 1/30 s : 3 s de retard en fin de boucle, des lames en l'air comme des poutres). Les sous-pas sont un multiple de la cadence, et un test le vérifie.
+- **Les sauts de raccord** venaient du mélange des positions de deux poses très différentes : le fondu mélange les directions des segments (`tools/jumps.mjs` : sur k39, pire saut de 0,99 à 0,15 m).
+- **Les artefacts de surface** (triangles vus de dessous, ligne d'eau en escalier, pans verticaux sur les gradins) venaient des sommets plongés sous la roche et des poids 8 bits du filtrage : sommets au niveau de l'eau, mouillé et sec au pixel, niveau au dôme interpolé en pleine précision.
+- **La roche déplacée sans `positionPrevious`** avait des vecteurs vitesse égaux à tout son relief : l'anticrénelage temporel l'étalait à la verticale (la principale cause du flou général des premières images).
+- **Des laminaires claires se lisent en cuir** : albédo linéaire de 0,02 à 0,05, la lame se lit par ses reflets. Des crampons brillants et bombés se lisent en ventouses, un palmier de mer isolé en cocotier.
+- **La dispersion (Serre-Green-Naghdi) est écartée** : une résolution tridiagonale à chaque pas allongerait le démarrage, qui ne doit pas s'allonger.

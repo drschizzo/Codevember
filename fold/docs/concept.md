@@ -1,6 +1,6 @@
 # Fold — document de concept
 
-(Premier nom : *Sensitive*. Le projet porte désormais le nom du thème.)
+(Premier nom : *Sensitive* ; le projet porte le nom du thème, *la feuille qui se replie* reste le sous-titre.)
 
 Document de travail : l'exploration du thème, les pistes écartées et pourquoi, puis la piste retenue et ses trois épreuves.
 
@@ -93,7 +93,9 @@ pli, repli, pliure, plissé, pli montagne / vallée, soufflet, accordéon, éplo
 
 **Retenue : Sensitive.** Le pli y est littéral (« la sensitive replie ses feuilles ») mais vivant : ce n'est ni du papier ni un tissu, et la cause est toujours à l'écran. La vague de folioles qui se ferment par paires, de proche en proche, se lit en une seconde. Le chemin aller (rapide, en vague, en temps réel) n'est pas le chemin retour (lent, d'un seul tenant, en accéléré) : ce n'est pas un aller-retour. Le prisme d'accrétion (2) est la meilleure boucle mais une image plate ; il est écarté. Le pavage rétroéclairé donne une idée de lumière qu'on garde : **les folioles au contre-jour**.
 
-## e. La piste retenue
+## e. La piste retenue : plan initial
+
+> Plan initial. La scène construite garde le geste (toucher, plier, rouvrir en accéléré) et la formule de la boucle, mais ses familles, son scénario et sa caméra ont changé : voir la section g. Les tableaux de temps, la matrice de variations et les décors ci-dessous sont ceux du plan (la Mousson n'a pas été construite, Blossfeldt a été ajoutée).
 
 **Titre** : *Sensitive* — *la feuille qui se replie*.
 
@@ -190,24 +192,22 @@ Aucune paire n'a à la fois le même fond, la même lumière et la même valeur.
 
 Plus de cinq éléments par objet ; la plante seule en compte neuf.
 
-## f. Annonce
+## f. La piste construite
 
-*Sensitive* : une sensitive (*Mimosa pudica*) sous verre ; une goutte ou un coup de marteau, et ses feuilles se replient par paires, en vague, puis se rouvrent en accéléré. Boucle parfaite par trains d'événements périodiques en temps physique ; cœur : botanique générative, propagation du signal sur le graphe vasculaire, cinétique des pulvinus, gouttes. Variations : sept plantes, six montures, quatre causes, huit décors.
+- **Quatre familles** qui plient chacune autrement, au lieu de sept ports de sensitive : la sensitive (folioles en peigne vers le haut, pétiole qui tombe ; ses ports restent des variantes), le Biophytum (folioles rabattues vers le bas), le trèfle (demi-limbes pliés le long de la nervure, folioles qui retombent), la dionée (deux lobes qui claquent). Chacune a son tempo (`KINETICS_BY`) et son ralenti propre (de ×2 à ×10).
+- **Un scénario lisible** : une à trois gouttes de condensation sous verre, ou une seule goutte de burette, ferment chacune toute la feuille touchée et elle seule ; puis le marteau ferme toute la plante, de bas en haut. Tout est rouvert avant le toucher suivant. La dionée, sous cloche, reçoit trois gouttes et pas de marteau. La boucle dure 17 à 19 s par toucher, plus 4 s.
+- **La formule de la boucle** est celle du plan : un temps physique à lenteur variable (réel, caméra rapide ×8 au contact, ralenti du pli, accéléré ajusté pour que le film dure exactement T), et des pulvinus fonctions de τ mod P.
+- **Une caméra** qui fait un tour par boucle dans un seul sens : gros plan sur la cause, puis recul doux (rapport au plus 2,5), lissage de 0,8 s.
+- **Huit décors** : Serre, Cabinet, Planche, Laboratoire, Shōji, Nuit, Velours, et Blossfeldt (carton gris, lumière rasante, organe en plan très serré), tirée une graine sur cinq. Cinq montures : pot de terre, cache-pot, coupe à bonsaï, cloche, caisse de Ward.
 
-## g. Révision après les premiers rendus
+## g. Ce que les essais ont appris
 
-Les premières planches ont corrigé le concept sur six points, tous dans le sens des épreuves :
-- **la plante était maigre** (5 à 28 feuilles, de longues tiges nues) : rameaux latéraux, feuilles dès le bas des tiges, couronne étagée pour le *Biophytum*, écartement qui essaie plusieurs azimuts avant de renoncer à une feuille (jusqu'à 66 feuilles, ~5 000 folioles) ;
-- **la goutte était invisible** (3 mm vus à 23 cm, et une transmission physique qui ne réfracte presque rien) : plan macro à 11–15 cm, au-dessus du plan de la foliole, et un matériau de lentille (fond renversé, liseré sombre, reflets) ;
-- **le coup de marteau ne se lisait pas** (rien pendant 3 s de temps réel, puis tout dans l'accéléré) : signal plus rapide quand il est fort, et un plan qui commence en gros plan sur la tête du marteau puis recule sur la plante ;
-- **les folioles se fondaient en une brume pâle** : la carte d'ombre couvrait tout le cône de la lampe (4 mm par texel pour des folioles de 1,6 mm) ; resserrée sur la plante, elle dessine les ombres en peigne ;
-- **le fond avait un horizon sombre** (le sol hors du faisceau) : lumière du lieu (hémisphère) dans les décors clairs, sol continu pour la planche et le velours, décors peints à l'échelle réelle (un carreau de shōji de 20 cm, pas de 4) ;
-- **la caisse de Ward barrait l'image** de ses petits bois : moins de barreaux, caisse plus haute, et la caméra regarde par une vitre de côté, jamais à travers la verrière.
-
-## h. Deuxième révision (retours de l'utilisateur)
-
-- **Le nom** : le projet s'appelle comme le thème, *Fold* ; *la feuille qui se replie* reste le sous-titre.
-- **La déclinaison** : sept « archétypes » qui restaient tous une sensitive. Désormais quatre familles qui plient chacune autrement — la sensitive (peigne vers le haut, pétiole qui tombe), le Biophytum (folioles rabattues vers le bas), le trèfle (demi-limbes pliés le long de la nervure, folioles qui retombent : un parapluie qui se ferme), la dionée (deux lobes qui claquent) —, chacune avec son tempo et ses couleurs (trèfle vert ou pourpre, piège rouge).
-- **La lisibilité de la boucle** : une goutte fermait parfois quelques folioles, parfois plusieurs feuilles. Désormais un scénario : chaque goutte ferme toute la feuille touchée, et elle seule ; le marteau vient en dernier et ferme toute la plante, de bas en haut ; tout est rouvert avant le toucher suivant.
-- **La caméra** : des azimuts choisis événement par événement et des écarts du macro au plan large la rendaient erratique. Désormais un tour par boucle dans un seul sens, gros plan sur la cause puis recul doux (rapport ≤ 2,5), lissage de 0,8 s.
-- **Le rendu « low poly »** : les folioles étaient des nappes sans épaisseur. Désormais des lames épaisses à tranche arrondie, courbées, à nervures en relief, translucides, lustrées dessus et duveteuses dessous.
+- Une plante maigre (5 à 28 feuilles, longues tiges nues) ne se lit pas : rameaux latéraux, feuilles dès le bas, et un écartement qui essaie plusieurs azimuts avant de renoncer à une feuille (jusqu'à 66 feuilles, ~5 000 folioles).
+- Une goutte de 3 mm vue à 23 cm, avec une transmission physique qui ne réfracte presque rien, est invisible : plan macro à 11–15 cm et matériau de lentille (fond lu à l'opposé de la normale, renversé, liseré sombre).
+- Une carte d'ombre qui couvre tout le cône de la lampe (4 mm par texel pour des folioles de 1,6 mm) fond les folioles en brume pâle : elle est resserrée sur la plante.
+- Le sol hors du faisceau dessine un horizon sombre : lumière du lieu (hémisphère) dans les décors clairs, sol continu pour la planche et le velours, décors à l'échelle réelle.
+- Une goutte qui fermait tantôt quelques folioles, tantôt plusieurs feuilles rendait la boucle illisible : d'où le scénario « une goutte, une feuille ; le marteau, toute la plante ».
+- Un coup de marteau sans rien pendant 3 s de temps réel ne se lit pas : le signal court plus vite quand il est fort, et le plan part de la tête du marteau.
+- Des folioles en nappes sans épaisseur font « low poly » : lames épaisses à tranche arrondie, nervures en relief, translucidité, duvet dessous.
+- Des feuilles crayeuses et un paillage blanc font jouet : vert franc et soutenu, revers à peine plus pâle, profondeur de champ par défaut, terre cuite brune, sphaigne sous la dionée.
+- Le contact de la goutte se calcule sur la surface fine de la plante : sur une surface épaissie, elle touchait 2 ms trop tôt.

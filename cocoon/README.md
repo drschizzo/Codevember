@@ -70,7 +70,7 @@ Les familles enchaînent ces chemins en régimes, si bien que le cocon change de
 
 ### Le dépôt du fil (`winding.js · windCocoon`)
 
-Le ruban (6 à 16 fils jointifs, de 1,1 à 1,9 mm, 4 à 6 fils pour le huit) se pose sur une **carte de hauteur** de la paroi (1 024 × 2 048 cellules, 0,2 à 0,5 mm). La carte part de la cage : entre deux côtes, le fil tendu fait une corde (la paroi est un prisme à facettes). Par tronçons de 16 points (8 pour le huit, qui se recroise vite) :
+Le ruban (9 à 14 fils jointifs, 4 à 6 pour le huit, de 1,4 à 1,9 mm, 1,1 à 1,4 mm pour le cuivre) se pose sur une **carte de hauteur** de la paroi (1 024 × 2 048 cellules, 0,2 à 0,5 mm). La carte part de la cage : entre deux côtes, le fil tendu fait une corde (la paroi est un prisme à facettes). Par tronçons de 16 points (8 pour le huit, qui se recroise vite) :
 
 1. chaque fil lit le maximum de la carte sous son empreinte (sauf son propre dépôt récent), et s'y pose à un rayon au-dessus ;
 2. sa hauteur est dilatée (± 2 points) puis lissée le long du fil, jamais sous la valeur lue : le fil enjambe un croisement un peu avant, il ne le traverse pas ;
@@ -88,7 +88,7 @@ L'ailette porte un rail qui épouse le cocon plein à 5 cm (une ailette de rouet
 
 ## Les fils (`src/scene/threads.js`)
 
-Chaque segment de fil est un ruban de deux triangles tourné vers la caméra, à normale cylindrique et à **profondeur de cylindre** (chaque pixel est écrit à la surface du fil : deux fils voisins vus en biais se recouvrent sans scintiller), jamais plus étroit que ~0,8 px. Le dépôt calcule un point tous les 3 mm ; le rendu n'en garde qu'un sur trois (9 mm : la flèche d'une corde de 9 mm sur la cage fait moins de 0,1 mm), avec la hauteur maximale des points supprimés, si bien que le fil enjambe les croisements comme un fil tendu, sans jamais s'y enfoncer. 35 000 à 100 000 segments par cocon, les mêmes pour les deux lanternes. Un segment recouvert, à tous ses points, par un fil posé après lui n'est plus dessiné à partir de cet instant (l'instant est calculé dans le worker, d'après la table de transmission) : il ne se voit plus. L'éclairage qui ne varie pas à l'échelle d'un segment est calculé par sommet. L'éclairage est écrit à la main (`outputNode`) : L'éclairage est écrit à la main (`outputNode`) :
+Chaque segment de fil est un ruban de deux triangles tourné vers la caméra, à normale cylindrique et à **profondeur de cylindre** (chaque pixel est écrit à la surface du fil : deux fils voisins vus en biais se recouvrent sans scintiller), jamais plus étroit que ~0,8 px. Le dépôt calcule un point tous les 3 mm ; le rendu n'en garde qu'un sur trois (9 mm : la flèche d'une corde de 9 mm sur la cage fait moins de 0,1 mm), avec la hauteur maximale des points supprimés, si bien que le fil enjambe les croisements comme un fil tendu, sans jamais s'y enfoncer. 35 000 à 100 000 segments par cocon, les mêmes pour les deux lanternes. Un segment recouvert, à tous ses points, par un fil posé après lui n'est plus dessiné à partir de cet instant (l'instant est calculé dans le worker, d'après la table de transmission) : il ne se voit plus. L'éclairage qui ne varie pas à l'échelle d'un segment est calculé par sommet. L'éclairage est écrit à la main (`outputNode`) :
 
 - diffusion de Kajiya-Kay et deux lobes de Marschner décalés le long de la fibre : R, blanc et étroit ; TRT, teinté et plus large : le satin de la soie ;
 - la lumière de la pièce sur la seule face du cocon tournée vers elle (le cocon se fait de l'ombre à lui-même) ;
@@ -136,10 +136,10 @@ La pièce est un cyclorama de révolution (sol, gorge, mur) centré derrière l'
 - continuité du ruban (pas de saut de plus de 3,5 mm) ;
 - **dépôt sans traversée** sur les quatre familles, à la grille de l'application (moins de 2 contacts douteux pour 10 000 voisinages contrôlés), et un témoin négatif (tous les fils à la même hauteur) que le banc voit échouer ;
 - table de transmission : instants rangés, moins de 10 % de jours quand le cocon est plein ;
-- ailette : rail à plus de 2,5 cm du cocon plein, rotation continue, brin libre dégagé ;
+- ailette : rail à plus de 2,5 cm du cocon plein, pas de saut de plus de 0,15 rad, brin libre à travers le cocon plein moins de 30 % du temps ;
 - horloge : transfert monotone, relève de 0 à π sans à-coup, raccord par échange, conservation du fil ;
 - caméra : périodique, moins de 25 °/s, accélération bornée à 120 i/s ;
-- recette : déterminisme, aller-retour JSON, chaque humeur, famille, forme et fil tirés ; accords (trois familles de matières, laiton en accent) ; lampes ≥ 3 300 K ; décors distincts.
+- recette : déterminisme, aller-retour JSON, chaque humeur, famille, forme et fil tirés ; accords (trois familles de matières, une seule matière chaude) ; lampes ≥ 3 300 K et lumière de la pièce ≥ 4 700 K ; décors distincts ; la spécification du bobinage ne dépend que de la recette.
 
 ## Performances
 
