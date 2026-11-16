@@ -6,7 +6,7 @@ Au centre d'une sole en cuvette, un bain de verre en fusion. Une paraison en mon
 
 ![Une carafe rouge qui éclate sous le choc du pendule, dans l’Atelier](docs/capture.jpg)
 
-Rendu physique en three.js (WebGPU, TSL). La scène est entièrement procédurale : une graine produit une scène. La démarche qui a conduit à ce concept est dans [docs/concept.md](docs/concept.md) : dix pistes notées, les clichés écartés, puis la révision après les premiers rendus (les trois épreuves : crédibilité, variété, ambition).
+Rendu physique en three.js (WebGPU, TSL). La scène est entièrement procédurale : une graine produit une scène. La démarche est dans [docs/concept.md](docs/concept.md) : les pistes notées, les clichés écartés, puis les trois épreuves (crédibilité, variété, ambition).
 
 ## Utilisation
 
@@ -20,7 +20,7 @@ Rendu physique en three.js (WebGPU, TSL). La scène est entièrement procédural
 
 Sur écran tactile : une touche met en pause, deux touches tirent une nouvelle scène, un appui long masque l'interface.
 
-Paramètres d'URL : `?seed=…` (une scène), `#r=…` (une scène retouchée, produite par « Copier le lien »), `?ui=0` (sans panneau), `?mobile=1` / `?mobile=0` (version mobile imposée / interdite), `?debug` (outils dans `window.shatter` : `shot(phase)`, `send(nom)`, `meter()`, `bench()`, `seam()`, `run()`).
+Paramètres d'URL : `?seed=…` (une scène), `#r=…` (une scène retouchée, produite par « Copier le lien »), `?ui=0` (sans panneau), `?mobile=1` / `?mobile=0` (version mobile imposée / interdite), `?debug` (outils dans `window.shatter` : `shot(phase)`, `send(nom)`, `sheet(graines, phases)`, `meter()`, `bench()`, `seam()`, `run()`).
 
 Le panneau règle tout :
 - **Scène** : décor, nombre de pièces par boucle, durée d'une étape, caméra rapide (ralenti, durée, retour au temps réel) ;
@@ -38,11 +38,11 @@ Chaque moment du cycle a une cause qu'on voit à l'écran et obéit à une loi p
 | Part de l'étape | Ce qu'on voit | Cause | Loi | Temps |
 | --- | --- | --- | --- | --- |
 | 0 – 0,18 | la paraison monte du bain, se gonfle, prend forme ; anse, bouchon et fil sont posés chauds à la fin | souffle, plateau tournant | verre visqueux, incandescent | accéléré |
-| 0,18 – 0,4 | la pièce refroidit du pied vers le bord ; le plateau ralentit et s'arrête | rayonnement | corps noir | accéléré |
+| 0,18 – 0,4 | la pièce refroidit du pied vers le bord ; le plateau ralentit et s'arrête (0,28 – 0,4) | rayonnement | corps noir | accéléré |
 | 0,28 – 0,5 | le déclencheur descend du portique et se met en place | portique | — | réel |
 | 0,5 | rupture : impact, résonance, percussion, choc thermique ; front de fissure | la machine | front à vitesse finie | caméra rapide (×12 à ×20) |
 | 0,5 – 0,75 | les éclats volent, tournoient, tombent, frappent la sole, rebondissent, glissent, se couchent | le choc | balistique (g vraie), choc inélastique, frottement, pente de la cuvette | ralenti puis retour au temps réel |
-| 0,8 – 0,98 | la sole rougeoie ; les éclats s'affaissent et coulent au fond | la chaleur du four | verre qui ramollit et coule | accéléré |
+| 0,82 – 0,98 | la sole rougeoie ; les éclats s'affaissent et coulent au fond | la chaleur du four | verre qui ramollit et coule | accéléré |
 
 **La caméra rapide.** Au moment du choc, le film ralentit comme s'il était tourné à haute vitesse. Il lit un temps physique τ_p(ℓ) = ∫ v(ℓ) dℓ, où ℓ est le temps du film et v la vitesse de lecture : 1 jusqu'au contact, 1/k dans les centièmes qui suivent, puis retour à 1. Le ralenti commence au contact et pas avant, sinon l'outil parcourrait ses derniers millimètres au ralenti et semblerait toucher bien avant que le verre casse (montée en smoothstep, une rampe adoucie aux deux bouts, dont l'intégrale a une forme fermée : r·(u³ − u⁴/2)). Pendant ce temps, la caméra garde sa vitesse, d'où l'impression de temps suspendu. La gravité reste vraie (78 u/s² : une pièce mesure 2 u ≈ 25 cm).
 
@@ -70,7 +70,7 @@ Les éclats sont les régions d'un diagramme de Voronoï calculé dans un espace
 
 Chaque triangle est découpé exactement (Sutherland-Hodgman sur les différences de distances). Une métrique projetée renvoie parfois deux zones disjointes de la coque au même germe : chaque région est découpée en ses composantes connexes, sinon un « éclat » en deux morceaux reposerait d'un côté et flotterait de l'autre. Pour que deux triangles voisins coupent leur arête commune au même endroit, chacun considère les germes proches de ses sommets et de leurs voisins, en ordre canonique. Chaque éclat est un solide fermé : paroi externe, paroi interne, chants le long des fissures et des bords. Le front de fissure se propage de proche en proche. Les vitesses sont physiques (u/s), et les petits éclats tournent plus vite. Pour chaque éclat, la fracture calcule aussi où il tombera (même formule que le shader), donc quand il fondra : ceux du centre d'abord.
 
-**Éclats secondaires.** Un éclat primaire de plus de 0,09 u² (environ 14 cm²) est pré-découpé en deux à six morceaux collés (Voronoï euclidien sur les distances au carré : des fissures droites et exactes). Ils ne se séparent que si l'éclat heurte assez fort la sole ou un autre éclat.
+**Éclats secondaires.** Un éclat primaire est pré-découpé en un morceau par 0,09 u² de surface (environ 14 cm²), soit deux à six morceaux collés dès 0,18 u² (Voronoï euclidien sur les distances au carré : des fissures droites et exactes). Ils ne se séparent que si l'éclat heurte assez fort la sole ou un autre éclat.
 
 ## La chute (`gen/sim.js`, dans les Web Workers)
 
@@ -104,11 +104,11 @@ Les contre-jours suivent la caméra (derrière la pièce, de part et d'autre) et
 node --test 'shatter/test/*.test.mjs'
 ```
 
-Dix tests : recette (déterminisme, JSON), humeurs, direction artistique sur 400 graines, décors (au moins deux clairs, deux sombres, aucun couple semblable par la valeur, la lumière, le cadrage, le sol et l'accessoire), pièces (toutes les parties et tous les modelés sortent ; une carafe à anse et bouchon est posée sur la sole, sans NaN), temps (ralenti ×k au choc, temps réel ailleurs, jamais de recul ; plateau arrêté avant le choc), fracture (éclats fermés, nombres par déclencheur ; près de l'impact, plus petits et plus rapides ; pendule horizontal), simulation (pose de repos exacte avant le choc, accélération g en vol, aucun sommet à plus de 1,2 cm sous la sole à aucun instant, presque tous les éclats au repos à la fin, pas d'interpénétration entre éclats au-delà du rayon d'une sphère, éclats secondaires au chalumeau, fonte après la chute), cause et effet (la bille et le marteau touchent le point d'impact exactement au choc et jamais avant ; le choc arrive en temps réel, le ralenti prend le relais).
+Dix tests : recette (déterminisme, JSON), humeurs, direction artistique sur 400 graines, décors (au moins deux clairs, deux sombres, aucun couple semblable par la valeur, la lumière, le cadrage, le sol et l'accessoire), pièces (toutes les parties et tous les modelés sortent ; une carafe à anse et bouchon est posée sur la sole, sans NaN), temps (ralenti ×k au choc, temps réel ailleurs, jamais de recul ; plateau arrêté avant le choc), fracture (éclats fermés, nombres par déclencheur ; près de l'impact, plus petits et plus rapides ; pendule horizontal), simulation (pose de repos exacte avant le choc, accélération g en vol, aucun sommet à plus de 0,012 u (1,5 mm) sous la sole à aucun instant, presque tous les éclats au repos à la fin, pas d'interpénétration entre éclats au-delà du rayon d'une sphère, éclats secondaires au chalumeau, fonte après la chute), cause et effet (la bille et le marteau touchent le point d'impact exactement au choc et jamais avant ; le choc arrive en temps réel, le ralenti prend le relais).
 
 ## Performances
 
-Mesuré dans le panneau de navigateur de l'application (GPU d'un Mac), qualité Haute, 1,8 Mpx : 15 à 17 ms par image. Le verre transmissif, les pièces plus détaillées (40 000 à 115 000 sommets) et les appareils pèsent plus que dans la première version (7 à 8 ms). Fracture : 0,5 à 0,9 s par pièce dans un worker, simulation des éclats : 1 à 2,5 s de plus. La lecture des trajectoires se fait dans le vertex shader (une texture par pièce, 2 à 5 Mo), avec un seul maillage par pièce.
+Mesuré dans le panneau de navigateur de l'application (GPU d'un Mac), qualité Haute, 1,8 Mpx : 15 à 17 ms par image. Le verre transmissif, les pièces détaillées (40 000 à 115 000 sommets) et les appareils en font l'essentiel. Fracture : 0,5 à 0,9 s par pièce dans un worker, simulation des éclats : 1 à 2,5 s de plus. La lecture des trajectoires se fait dans le vertex shader (une texture par pièce, 2 à 5 Mo), avec un seul maillage par pièce.
 
 ## Version mobile
 

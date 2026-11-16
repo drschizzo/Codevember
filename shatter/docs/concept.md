@@ -58,9 +58,11 @@ Document de travail (protocole d'idéation de la skill codevember-scene) : explo
 
 **Retenue : 3, Calcin.** C'est la seule piste qui revient par un autre chemin (pas de retour en arrière, pas de plongée de plus dans le dépôt), qui réunit les trois lumières du verre (incandescence, transparence, scintillement) dans un même film, et qui change de forme à chaque étape. Elle absorbe les meilleures autres pistes comme temps ou comme variations : le ralenti (1) devient le temps fort de chaque éclatement, la constellation suspendue (4) le temps qui le suit, la larme batavique (7), la chanteuse (10) et le verre trempé deviennent des **mécanismes de rupture**, la loi de puissance de la fragmentation (2) règle la taille des éclats.
 
-## e. La piste retenue : Calcin
+## e. La piste retenue : Calcin (plan initial)
 
 > *sable, verre, éclats, sable*
+
+Ce plan a été revu après les premiers rendus : la pièce est soufflée depuis un bain et non bâtie par du sable, les éclats tombent sous la gravité et refondent au lieu de flotter en constellation puis de s'effriter. La scène construite est décrite dans la dernière partie (« Les trois épreuves ») et dans le README ; cette section garde l'idée de départ.
 
 Un tourbillon de sable incandescent monte, se resserre et bâtit, du pied vers le bord, une pièce de verre soufflé qui rougeoie. Elle refroidit en tournant : l'orange passe au rouge sombre, puis s'éteint, et il reste un verre clair, teinté, qui accroche la lumière. Une bille d'acier la traverse (ou le verre se met à chanter, ou il éclate de lui-même, trempé) : le temps ralentit, un front de fissures court sur la paroi, la pièce s'ouvre en éclats qui s'écartent et restent suspendus, une constellation qui tourne et scintille. Puis chaque éclat s'effrite en poussière de verre, et la poussière, prise dans un tourbillon, bâtit la pièce suivante. Après trois ou quatre pièces, c'est la première qui renaît : la boucle est parfaite par construction.
 
@@ -94,7 +96,7 @@ Temps de boucle t ∈ [0, T), T = N·T_s. La pièce k vit dans son temps local �
 
 | Axe | Valeurs |
 | --- | --- |
-| **Formes** (12) | bulle, bol, coupe, vase à taille, bouteille, fiole, cloche, carafe, tulipe, amphore, gobelet, lentille (dôme épais) — chacune avec ses proportions tirées |
+| **Formes** (12) | bulle, bol, coupe, vase à taille, bouteille, fiole, cloche, carafe, tulipe, amphore, gobelet, lentille (dôme épais), chacune avec ses proportions tirées |
 | **Mécanismes** (4) | bille d'acier (étoile + toile d'araignée, cône d'éclats dans la direction du tir), résonance (le bord s'ovalise puis lames méridiennes projetées vers l'extérieur), trempe (dés minuscules d'un coup, explosion isotrope), choc thermique (quelques grandes pièces aux fissures sinueuses, qui se séparent lentement) |
 | **Verres** (10) | cristal (dispersion forte), cobalt, ambre, émeraude, fumé, rubis à l'or, uranium (fluorescent), dichroïque (irisé), aigue-marine, obsidienne (noir brillant) |
 | **Humeurs** (6) | Verrerie (four, ombres chaudes), Stroboscope (Edgerton : noir, lampe dure), Clinique (cyclorama blanc), Lumière noire (UV, verre à l'uranium), Cathédrale (vitrail : verres colorés, contre-jours saturés), Givre (froid, bleuté) |
@@ -106,9 +108,9 @@ Plus de 12³ × 4³ × 10³ × 6 combinaisons ; deux graines au hasard n'ont pre
 
 ### Trois images clés
 
-1. **L'impact** — Stroboscope. Un vase de cobalt sur fond noir, une bille d'acier enfoncée à mi-hauteur ; une étoile de fissures blanches en part, encore fermée au loin, déjà ouverte près de la bille, où de minuscules esquilles s'échappent. Un contre-jour froid dessine le bord du vase ; la lampe pose une ombre bleue sur le sol laqué.
-2. **La constellation** — Verrerie. Cent vingt éclats de cristal suspendus en coquille autour de l'endroit où était la coupe, chacun tourne ; leurs chants s'allument en vert ; sur le sol sombre, des caustiques et les ombres colorées des éclats ambrés ; quelques grains déjà s'en détachent.
-3. **L'accrétion** — Givre. Un ruban de poussière blanche monte en spirale, s'échauffe en orange en se resserrant, et bâtit le pied d'une bouteille incandescente dont le haut n'existe pas encore ; sa lueur rouge se reflète sur un sol bleu nuit.
+1. **L'impact**, Stroboscope. Un vase de cobalt sur fond noir, une bille d'acier enfoncée à mi-hauteur ; une étoile de fissures blanches en part, encore fermée au loin, déjà ouverte près de la bille, où de minuscules esquilles s'échappent. Un contre-jour froid dessine le bord du vase ; la lampe pose une ombre bleue sur le sol laqué.
+2. **La constellation**, Verrerie. Cent vingt éclats de cristal suspendus en coquille autour de l'endroit où était la coupe, chacun tourne ; leurs chants s'allument en vert ; sur le sol sombre, des caustiques et les ombres colorées des éclats ambrés ; quelques grains déjà s'en détachent.
+3. **L'accrétion**, Givre. Un ruban de poussière blanche monte en spirale, s'échauffe en orange en se resserrant, et bâtit le pied d'une bouteille incandescente dont le haut n'existe pas encore ; sa lueur rouge se reflète sur un sol bleu nuit.
 
 ### Risques et parades
 
@@ -121,25 +123,29 @@ Plus de 12³ × 4³ × 10³ × 6 combinaisons ; deux graines au hasard n'ont pre
 
 ---
 
-## Révision après les premiers rendus : les trois épreuves
+## Les trois épreuves : la piste telle que construite
 
-Retour de l'utilisateur : les scènes se ressemblent (couleur, ambiance), les objets ne sont pas assez ambitieux, et la rupture doit toujours avoir un déclencheur physiquement crédible. Plus largement : même abstrait, tout doit être crédible par la matière, le mouvement et le comportement.
+### Ce que les premiers rendus ont appris
 
-Ce qui ne passait pas : la pièce flottait sans support ; les éclats restaient suspendus, freinés par un « air » imaginaire, sans gravité ; la poussière remontait seule en tourbillon et se changeait en verre ; la bille, le chant, la trempe et la flamme n'avaient pas de source ; six humeurs pour un seul décor sombre teinté ; des coques lisses de révolution.
+- Une pièce sans support flotte : elle monte désormais d'un bain, sur une sole.
+- Des éclats freinés par un « air » imaginaire ne se lisent pas comme du verre : ils tombent sous la gravité vraie et se couchent.
+- Une poussière qui remonte seule et se change en verre n'a pas de cause : les éclats refondent en bain.
+- Chaque rupture a un appareil visible (pendule, haut-parleur, marteau, chalumeau), porté par un portique.
+- Six humeurs pour un seul décor sombre teinté se ressemblaient : un décor par humeur (fond, sol, lumière, valeur, cadrage).
+- Des coques lisses de révolution faisaient pauvre : pièces de verrier modelées et assemblées.
 
-### Le cycle, revu pour être crédible
+### Le cycle
 
-Le calcin est justement du verre brisé que l'on **refond**. La pièce n'est plus bâtie par du sable mais **soufflée depuis un bain de verre en fusion**, au centre d'une **sole en cuvette** (le fond d'un four, ou un marbre de verrier), et ses éclats tombent sur cette sole, où ils sont refondus en bain pour la pièce suivante.
+Le calcin est justement du verre brisé que l'on **refond**. La pièce est **soufflée depuis un bain de verre en fusion**, au centre d'une **sole en cuvette** (le fond d'un four, ou un marbre de verrier), et ses éclats tombent sur cette sole, où ils sont refondus en bain pour la pièce suivante.
 
 | Temps | Ce qu'on voit | Cause visible | Loi | Convention de temps |
 | --- | --- | --- | --- | --- |
-| 0 – 0,2 | la paraison monte du bain, se gonfle en tournant, prend sa forme ; anse et bouchon sont posés à la fin | souffle et rotation du plateau (la sole tourne) | verre visqueux, incandescent (corps noir) | accéléré |
-| 0,2 – 0,42 | la pièce refroidit, du pied vers le bord ; la sole s'éteint ; le plateau ralentit et s'arrête | rayonnement | refroidissement | accéléré |
-| 0,42 – 0,5 | le déclencheur s'annonce | pendule lâché par un électro-aimant ; haut-parleur dont la membrane bat de plus en plus fort ; marteau de percussion qui se lève ; chalumeau dont la flamme chauffe un point | pendule (√(g/L)), résonance, levier, conduction | temps réel |
+| 0 – 0,18 | la paraison monte du bain, se gonfle en tournant, prend sa forme ; anse, bouchon et fil sont posés à la fin | souffle et rotation du plateau | verre visqueux, incandescent (corps noir) | accéléré |
+| 0,18 – 0,4 | la pièce refroidit, du pied vers le bord ; le plateau ralentit et s'arrête (0,28 – 0,4) | rayonnement | refroidissement | accéléré |
+| avant 0,5 | le déclencheur descend du portique et s'annonce | pendule lâché par un électro-aimant ; haut-parleur dont la membrane bat de plus en plus fort ; marteau de percussion qui se lève ; chalumeau dont la flamme chauffe un point | pendule (√(g/L)), résonance, levier, conduction | temps réel |
 | 0,5 | rupture, front de fissure | choc, résonance, percussion sur verre trempé, gradient thermique | front à vitesse finie | **ralenti ×12 à ×20** (caméra rapide) |
-| 0,5 – 0,7 | les éclats partent, tournoient et **tombent** | le choc | balistique, gravité vraie (pas de freinage imaginaire) | ralenti, puis retour au temps réel |
-| 0,7 – 0,78 | ils frappent la sole, rebondissent à peine, glissent et se couchent | la sole | choc inélastique, frottement, pente de la cuvette | temps réel |
-| 0,78 – 1 | la sole rougeoie, les éclats s'affaissent, coulent vers le centre et forment un bain | la chaleur du four, la pente | verre qui ramollit et coule | accéléré |
+| après 0,5 | les éclats partent, tournoient, **tombent**, frappent la sole, rebondissent à peine, glissent et se couchent | le choc, la sole | balistique (gravité vraie), choc inélastique, frottement, pente de la cuvette | ralenti, puis retour au temps réel |
+| 0,82 – 0,98 | la sole rougeoie, les éclats s'affaissent, coulent vers le centre et forment un bain | la chaleur du four, la pente | verre qui ramollit et coule | accéléré |
 
 La caméra garde sa vitesse pendant le ralenti (le temps suspendu, à la manière d'un plan en caméra rapide).
 
@@ -157,4 +163,4 @@ La caméra garde sa vitesse pendant le ralenti (le temps suspendu, à la manièr
 
 ### Ambition : des pièces de verrier
 
-Construction : **pied, jambe, bouton (nœud), coupe** (verre à pied, flûte, coupe sur pied, bougeoir), **anse** appliquée (cruche, carafe, pichet), **bouchon** (flacon, carafe), **côtes optiques**, **torsade** (côtes tordues), **lobes** (quadrilobé), **bord festonné ou ondulé**, **filigrane** (fils de verre blanc en spirale dans la paroi, *lattimo*), **verre doublé** (couche colorée sur verre clair, visible dans les cassures). Les pièces sont assemblées (corps, anse, bouchon, pied) et toutes se brisent.
+Construites : quatorze formes, dont trois à pied avec leur **bouton** (verre à pied, flûte, coupe sur pied) et deux ouvertes vers le bas (cloche, dôme) ; **anse** appliquée (carafe, cruche), deux anses (vase, amphore), **bouchon** (bouteille, flacon, carafe), **fil** appliqué en spirale ; modelés en **côtes optiques**, **côtes torses**, **lobes**, **bord festonné**, **godrons** ; **filigrane** (fils de verre blanc en spirale dans la paroi, *lattimo*). Les pièces sont assemblées (corps, anse, bouchon, fil) en une seule surface, et toutes se brisent. Le verre doublé du plan n'a pas été fait.

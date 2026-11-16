@@ -124,9 +124,9 @@ C'est un échange, pas un aller-retour : à chaque instant on voit une lanterne 
 2. **Dépôt sur une carte de hauteur** : la paroi est une carte (σ, φ) ; chaque fil se pose sur ce qui est déjà là (hauteur = maximum sous son empreinte + demi-épaisseur, lissée le long du fil par dilatation puis gaussienne : le fil enjambe, il ne traverse pas). Aucune interpénétration par construction, épaississement réel aux pôles.
 3. **La paroi comme filtre de lumière** : pour chaque direction issue de la lampe, les instants de passage des quatre premiers fils qui la couvrent (texture). La transmission de la paroi à l'instant f, la lumière sur les murs, les faisceaux dans la brume et l'ombre portée d'une lanterne sur l'autre se lisent dans cette seule table.
 4. **Cinématique de l'appareil déduite du fil** : l'œil est sur la tangente au fil au point de pose, à la distance qui le tient hors du cocon plein ; l'ailette suit l'azimut de l'œil, le chariot sa hauteur. La cause (l'œil qui conduit le ruban) et l'effet (le ruban posé) coïncident par construction.
-5. **Conservation** : longueur posée à droite + longueur restée à gauche + brin libre = L à chaque instant ; un balancier (« danseur ») absorbe les variations du brin libre.
+5. **Conservation** : part posée à droite + part restée à gauche = 1 à chaque instant (le brin libre, tendu, n'est pas compté).
 
-Invariants vérifiables : aucun fil sous la surface ni sous un fil posé avant lui ; fermeture des motifs ; raccord exact u = 0 / u = 1 ; brin libre tangent au point de pose ; conservation de la longueur ; ailettes qui ne touchent jamais le cocon plein ; continuité de la caméra.
+Invariants vérifiés par les tests : aucun fil ne traverse un fil posé avant lui ; continuité du ruban ; raccord exact u = 0 / u = 1 ; conservation de la longueur ; rail des ailettes hors du cocon plein ; caméra périodique et lente.
 
 ### Les familles (épreuve de déclinaison)
 
@@ -141,21 +141,21 @@ Quatre familles, quatre mouvements de l'appareil et quatre façons de se fermer.
 
 ### Les formes (cages)
 
-Ovoïde (cocon de *Bombyx*), arachide (étranglée à la taille), fuseau (pointu), sphère, poire (*Saturnia*), capsule (chōchin, Akari), double cône (losange), melon. Une cage = profil r(σ), nombre de côtes (12–28), anneaux, moyeux polaires, lampe.
+Ovoïde (cocon de *Bombyx*), arachide (étranglée à la taille), fuseau (pointu), sphère, poire (*Saturnia*), capsule (chōchin, Akari), double cône. Chaque famille en accepte quatre ou cinq. Une cage = profil r(σ), nombre de côtes (12 à 24), rosaces polaires, lampe.
 
 ### Matrice de variations
 
 | Axe | Valeurs |
 | --- | --- |
 | Famille | Losange, Cerclage, Huit, Méridien |
-| Forme de cage | ovoïde, arachide, fuseau, sphère, poire, capsule, double cône, melon |
+| Forme de cage | ovoïde, arachide, fuseau, sphère, poire, capsule, double cône (quatre ou cinq par famille) |
 | Fil | soie grège (ivoire), soie dorée (*Nephila*), tussah (miel), yamamai (vert pâle), soie noire, lin écru, fil de cuivre, fibre de verre |
-| Ruban | 6 à 16 fils, fil de 1 à 2 mm, jour entre les fils |
-| Appareil | laiton et noyer, acier bleui et buis, nickel et ébène, fonte laquée vert et laiton |
+| Ruban | 9 à 14 fils (4 à 6 pour le huit), fil de 1,4 à 1,9 mm (1,1 à 1,4 mm pour le cuivre) |
+| Appareil | laiton et noyer, acier bleui et buis, nickel et ébène, fonte laquée vert et laiton, fonte noire et laiton |
 | Humeur (décor) | 7 décors (plus bas) |
-| Tempo | durée du transfert, respirations sur les régimes, demi-tour franc ou balancé |
+| Tempo | boucle de 56, 60 ou 64 s, accéléré de la fermeture (1,9 à 2,5), dépassement du fléau à la relève |
 
-4 × 8 × 8 × 4 × 7 ≈ 7 000 combinaisons structurelles avant les réglages continus. Deux graines au hasard diffèrent au moins par la famille ou l'humeur dans 9 cas sur 10.
+Chaque humeur n'accepte qu'une partie des fils et des appareils. Deux graines au hasard ont presque toujours une famille ou une humeur différente (même couple : une fois sur 28).
 
 ### Les humeurs (épreuve de variété)
 
@@ -173,17 +173,17 @@ Pas deux lignes semblables. Une très claire (Magnanerie), une très sombre (Cha
 
 ### L'objet (épreuve d'ambition)
 
-Éléments de construction de l'appareil : socle tourné en trois gradins, colonne cannelée, chapiteau-palier, fléau en double T à congés, embouts en olive, poulies à gorge sur paliers, balancier « danseur » avec contrepoids, deux stations (moyeu, roulement, axe creux traversant, cage), ailettes en C avec contrepoids et rail, chariot coulissant, œil de porcelaine sur sa filière, cage (côtes en fil, anneaux, rosaces polaires), lampe (ampoule de verre soufflé, filament en boucle, culot). Et le cocon lui-même : rubans de fils ronds, croisements qui enjambent, épaississement aux pôles, lustre satiné et translucidité.
+Éléments de construction de l'appareil : socle tourné en trois gradins, colonne cannelée, chapiteau-palier, fléau en double T à congés, embouts en olive, poulies à gorge sur paliers, deux stations (moyeu, roulement, axe creux traversant, cage), ailettes en C avec contrepoids et rail, chariot coulissant, œil de porcelaine sur sa filière, cage (côtes en fil, rosaces polaires), lampe (ampoule de verre soufflé, filament en boucle, culot). Et le cocon lui-même : rubans de fils ronds, croisements qui enjambent, épaississement aux pôles, lustre satiné et translucidité.
 
-Plus de quinze éléments ; une graine sur trois porte une **pièce d'exception** : fil de cuivre (le cocon devient une lanterne métallique), fibre de verre (un cocon translucide qui garde ses fils en lumière), soie dorée.
+Plus de quinze éléments. Certaines humeurs proposent une **pièce d'exception** : fil de cuivre (le cocon devient une lanterne métallique), fibre de verre (un cocon translucide qui garde ses fils en lumière), soie dorée.
 
-### Scénario (film muet, boucle de ~48 s)
+### Scénario (film muet, boucle de 56 à 64 s)
 
 1. *(0 → 3 %)* Plan fixe. À gauche, un cocon plein, qui ne fait que luire. À droite, une cage nue autour d'une lampe : le mur porte, agrandie, l'ombre de ses côtes. Le ruban va de l'un à l'autre en passant par le fléau. Les deux ailettes, au repos, font un petit recul.
-2. *(3 → 20 %)* **Armature.** Les ailettes partent, lentement d'abord. À droite, quelques rubans espacés se posent : on suit chaque passage de l'œil. Le mur se couvre de grandes bandes d'ombre. À gauche, symétriquement, les dernières couches partent et révèlent en dessous une paroi plus lâche.
-3. *(20 → 60 %)* **Fermeture.** L'ailette accélère (accéléré assumé, comme un time-lapse d'atelier). Les jours de la lanterne de droite se resserrent, les faisceaux dans la brume s'amincissent, la lanterne passe de cage lumineuse à lueur. À gauche, c'est l'inverse : les faisceaux naissent.
-4. *(60 → 78 %)* **Finition.** Ralenti : derniers rubans (cerclage de taille, renforts polaires), à droite la dernière fente se ferme (temps fort), à gauche la cage se dénude et sa lampe nue éclate sur les murs.
-5. *(78 → 82 %)* Les ailettes ralentissent et viennent se ranger à leur angle de repos. Le danseur se stabilise.
+2. *(dès 3 %)* **Armature.** Les ailettes partent, lentement d'abord. À droite, quelques rubans espacés se posent : on suit chaque passage de l'œil. Le mur se couvre de grandes bandes d'ombre. À gauche, symétriquement, les dernières couches partent et révèlent en dessous une paroi plus lâche.
+3. **Fermeture.** L'ailette accélère (accéléré assumé, comme un time-lapse d'atelier). Les jours de la lanterne de droite se resserrent, les faisceaux dans la brume s'amincissent, la lanterne passe de cage lumineuse à lueur. À gauche, c'est l'inverse : les faisceaux naissent.
+4. *(jusqu'à 79 %)* **Finition.** Ralenti : derniers rubans (cerclage de taille, renforts polaires), à droite la dernière fente se ferme (temps fort), à gauche la cage se dénude et sa lampe nue éclate sur les murs.
+5. *(79 → 82 %)* Les ailettes sont arrêtées à leur dernier angle.
 6. *(82 → 97 %)* **La relève.** Le fléau tourne d'un demi-tour autour de la colonne : le cocon plein passe au fond, la cage nue vient au premier plan. Leurs ombres balaient les murs ; le fléau dépasse un peu et revient.
 7. *(97 → 100 %)* Repos : c'est l'image du début.
 
@@ -194,12 +194,11 @@ Structure : une longue fermeture qui accélère puis ralentit, un temps fort (la
 | Temps | Cause visible | Loi | Convention de temps |
 | --- | --- | --- | --- |
 | armature | l'œil de l'ailette conduit le ruban, qui se pose où sa tangente touche la cage | géodésique / frottement ; fil tendu = droite entre l'œil et le point de pose | temps réel |
-| fermeture | même cause, plus vite | dépôt sur ce qui est déjà posé (enjambement) | accéléré (time-lapse) assumé : vitesse ×4 à ×6 |
+| fermeture | même cause, plus vite | dépôt sur ce qui est déjà posé (enjambement) | accéléré (time-lapse) assumé : vitesse ×1,9 à ×2,5 |
 | finition | l'œil, lent | cerclage : r·sin α ≈ r | ralenti relatif |
 | dévidage à gauche | l'œil de gauche tire le ruban | même chemin parcouru à l'envers ; brin libre tangent | idem |
 | lumière | la lampe, visible dans la cage | transmission de la paroi (couches), ombre agrandie | instantanée |
-| relève | moteur de la colonne (engrenage au pied) | rotation rigide avec dépassement amorti | temps réel |
-| brin libre | danseur à contrepoids | longueur conservée | temps réel |
+| relève | le fléau tourne sur sa colonne | rotation rigide avec dépassement amorti | temps réel |
 
 Rien ne flotte : les cages pendent à leur axe, l'axe tient dans un palier, le fléau tient sur la colonne, la colonne sur son socle, le socle sur le sol. Chaque ombre de lampe a sa lampe dans le champ.
 
@@ -221,7 +220,7 @@ Ce qu'elles imposent : une lanterne de **28 à 36 cm** ; des fils de **1,2 à 2 
 
 ### Risques et parades
 
-- **Trop de fils** (perf.) : rubans dessinés comme des rubans face à la caméra à normale cylindrique (comme des cheveux), deux triangles par segment ; ~250 k segments par cocon ; ombres portées par la lumière de la pièce seulement ; lampes éclairées par la table de transmission, sans carte d'ombre de fils.
+- **Trop de fils** (perf.) : rubans dessinés comme des rubans face à la caméra à normale cylindrique (comme des cheveux), deux triangles par segment, un point de dépôt sur trois (35 000 à 100 000 segments par cocon) ; ombres portées par la lumière de la pièce seulement ; lampes éclairées par la table de transmission, sans carte d'ombre de fils.
 - **Le fil qui traverse le fil** : dépôt sur carte de hauteur, test sur tous les segments.
 - **Une ailette qui touche le cocon plein** : rail calculé sur l'enveloppe du cocon plein + jeu, test.
 - **Lanterne pleine qui ne luit pas** (trop dense) : transmission par fil τ réglée par humeur et par fil, posemètre.

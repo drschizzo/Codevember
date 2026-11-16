@@ -89,19 +89,19 @@ Retenue : **le redressement**. Elle absorbe la piste 4 (la vibration de Kapitza 
 
 Titre : **Pendulum** (le nom du thème). Sous-titre : *l'équilibre renversé*.
 
-## e. La piste retenue
+## e. La piste retenue, telle qu'elle est construite
 
 ### Le geste
 
-Une chaîne de pendules pend, immobile. La machine qui la porte se met en mouvement — un chariot qui donne des à-coups sur son rail, un bras qui pivote, un coude qui se plie, une roue qui s'emballe — et la chaîne, qui ne reçoit aucun moteur dans ses articulations, se met à balancer, de plus en plus haut, puis se dresse d'un coup de fouet et **reste debout, à l'envers, immobile**. On la regarde tenir. Puis elle se replie dans une autre figure (le maillon du haut retombe et pend du coude, ou le premier redescend en portant le second debout), et revient pendre.
+Une chaîne de pendules pend, immobile. La machine qui la porte se met en mouvement (un chariot qui donne des à-coups sur son rail, un bras qui pivote, un coude qui se plie, une roue qui s'emballe), et la chaîne, qui ne reçoit aucun moteur dans ses articulations, se met à balancer, de plus en plus haut, puis se dresse d'un coup de fouet et **reste debout, à l'envers, immobile**. On la regarde tenir. Puis elle se replie dans une autre figure (le maillon du haut retombe et pend du coude, ou le premier redescend en portant le second debout), et revient pendre.
 
 Le geste se lit en une seconde : *ça tient debout alors que ça devrait tomber*, et *c'est le chariot qui le fait*.
 
 ### Le cœur technique
 
-- **Dynamique exacte** d'une chaîne plane de n maillons (pendules composés : masse, centre de gravité, inertie) dont **une coordonnée est imposée** (la position du chariot, l'angle du coude, l'angle de la roue, la hauteur du pivot) ; les autres sont libres. Écrite une fois sous la forme θ = A·q + b·s (angles absolus des maillons en fonction des coordonnées libres q et de la coordonnée imposée s), équations projetées Aᵀ(M(θ)θ̈ + C(θ, θ̇) + G(θ) + B(θ)·s̈) = 0 : le travail du moteur disparaît de la projection, il ne reste que ce que la machine impose.
-- **Les transitions** entre deux équilibres sont des problèmes aux deux bouts : trouver s̈(t) sur [0, T] tel que la chaîne parte au repos de l'équilibre A et arrive au repos sur l'équilibre B, avec s, ṡ, s̈ nuls aux deux bouts, la course bornée par le rail, l'effort minimal. Résolus par **tir multiple** (12 à 16 segments intégrés en RK4) et **SQP** (pas de Newton sur les contraintes de raccord, coût quadratique ∫s̈² + β∫s²), comme dans Graichen et al. (2007) et Glück et al. (2013), où la commande est l'accélération du chariot.
-- **Invariants vérifiables** : sans commande, l'énergie se conserve (contrôle de l'intégrateur) ; chaque transition atteint son équilibre au repos (écart < 10⁻⁸) ; la coordonnée imposée est C² (pas de saut d'accélération) ; la course reste dans le rail ; aucune pièce ne traverse une autre ni le sol à aucun instant ; la boucle se referme exactement (équilibres identiques à 2π près).
+- **Dynamique exacte** d'une chaîne plane de n maillons (pendules composés : masse, centre de gravité, inertie) dont **une coordonnée est imposée** (la position du chariot, l'angle du bras, l'angle du coude, l'angle du volant) ; les autres sont libres. Écrite une fois sous la forme θ = A·q + b·s (angles absolus des maillons en fonction des coordonnées libres q et de la coordonnée imposée s), équations projetées Aᵀ(M(θ)θ̈ + C(θ, θ̇) + G(θ) + B(θ)·s̈) = 0 : le travail du moteur disparaît de la projection, il ne reste que ce que la machine impose.
+- **Les transitions** entre deux équilibres sont des problèmes aux deux bouts : trouver s̈(t) sur [0, T] tel que la chaîne parte au repos de l'équilibre A et arrive au repos sur l'équilibre B, avec s, ṡ, s̈ nuls aux deux bouts, la course bornée par le rail, l'effort minimal. Résolus par **tir multiple** (12 à 16 segments intégrés en RK4) et **SQP** (pas de Newton sur les contraintes de raccord, coût quadratique ∫s̈² + β∫s², puis un polissage de norme minimale jusqu'à un résidu sous 10⁻¹⁰), comme dans Graichen et al. (2007) et Glück et al. (2013), où la commande est l'accélération du chariot.
+- **Invariants vérifiables** : sans commande, l'énergie se conserve (contrôle de l'intégrateur) ; chaque transition atteint son équilibre au repos ; la commande est nulle aux deux bouts (pas de saut d'accélération) ; la course reste dans le rail ; aucune pièce ne traverse une autre ni le sol à aucun instant ; la boucle se referme exactement (équilibres identiques à 2π près).
 
 ### La boucle (cycle de transformations)
 
@@ -113,14 +113,14 @@ Les angles d'un maillon redressé valent ±π selon le côté par lequel il est 
 
 | Famille | Machine | Coordonnée imposée | Mouvement propre |
 | --- | --- | --- | --- |
-| **Chariot** | banc à rail rectifié, chariot sur douilles à billes, courroie crantée, moteur et réducteur au bout du banc, chaîne porte-câbles qui suit le chariot | position du chariot x(t) | le chariot donne des à-coups d'avant en arrière, la chaîne (2 ou 3 maillons) fouette et se dresse au-dessus de lui |
-| **Tourniquet** (Furuta) | colonne en fonte avec moteur et réducteur, bras horizontal en haut, palier au bout du bras, collecteur tournant | angle du bras φ(t) | le bras pivote de grands angles autour de la colonne ; le pendule, dans le plan perpendiculaire au bras, monte sur un cône — un mouvement en trois dimensions |
-| **Acrobate** (Acrobot) | portique à barre fixe ; l'épaule tourne librement sur la barre ; le moteur est sur le premier maillon, près de l'épaule, et mène le coude par une courroie | angle du coude α(t) | la chaîne se plie et se déplie au coude comme un gymnaste qui prend son élan ; grand tour, puis appui renversé |
+| **Chariot** | banc sur colonnes, deux barres de guidage, chariot sur douilles à billes, courroie et poulies, moteur à ailettes et réducteur au bout du banc, butées | position du chariot x(t) | le chariot donne des à-coups d'avant en arrière, la chaîne (2 ou 3 maillons) fouette et se dresse au-dessus de lui |
+| **Tourniquet** (Furuta) | socle en fonte nervuré, colonne, carter du moteur, bras en caisson à contrepoids, palier de tête | angle du bras φ(t) | le bras pivote de grands angles autour de la colonne ; le pendule, dans le plan perpendiculaire au bras, monte sur un cône, un mouvement en trois dimensions |
+| **Acrobate** (Acrobot) | portique derrière la chaîne, axe de l'épaule en porte-à-faux ; l'épaule tourne librement ; le moteur est sur le premier maillon, près de l'épaule, et mène le coude par une courroie | angle du coude α(t) | la chaîne se plie et se déplie au coude comme un gymnaste qui prend son élan ; grand tour, puis appui renversé |
 | **Roue** (pendule à roue d'inertie) | potence, pendule au bout duquel tourne un volant à rayons mené par un moteur | angle de la roue ψ(t) | le volant s'emballe et freine ; le pendule part en sens inverse (réaction), monte par à-coups ; les rayons filent |
 
-Quatre mouvements qui ne se ressemblent ni en silhouette (banc horizontal, colonne, portique, potence) ni en mouvement (translation, rotation autour d'une verticale, flexion interne, rotation d'un volant). Variantes : nombre de maillons (Chariot 2–3, Tourniquet 1–2, Acrobate 2, Roue 1–2), longueurs et masses des maillons, lentilles (disques, sphères, barres nues), suite d'équilibres, durées.
+Quatre mouvements qui ne se ressemblent ni en silhouette (banc horizontal, colonne, portique, potence) ni en mouvement (translation, rotation autour d'une verticale, flexion interne, rotation d'un volant). Variantes : nombre de maillons (Chariot 2–3, Tourniquet 1–2, Acrobate 2, Roue 1), longueurs et masses des maillons, lentilles (disques, sphères, barres nues), suite d'équilibres, durées.
 
-### Découpage temporel (exemple : Chariot à deux maillons, boucle de ~30 s)
+### Découpage temporel (exemple : Chariot à deux maillons, suite DD → DU → UU → UD ; les fractions de u sont indicatives, elles découlent des durées tirées)
 
 | u | temps | ce que l'œil regarde |
 | --- | --- | --- |
@@ -142,27 +142,27 @@ La structure est une **montée** (de l'exploit le plus petit au plus grand), un 
 | --- | --- |
 | Famille | Chariot, Tourniquet, Acrobate, Roue |
 | Chaîne | 1, 2 ou 3 maillons ; rapports de longueurs (égaux, décroissants, croissants) ; maillons en barre plate ajourée, en tube, en tige ronde à lentille |
-| Suite d'équilibres | 2 à 5 étapes tirées parmi les équilibres de la famille, en crescendo (le tout-debout toujours au sommet) ; côté de montée (par la gauche, par la droite, par-dessus) |
-| Rythme | durée des transitions (1,4–3 s physiques), tenues (1,5–4 s), ralenti du temps fort (×0,4–0,7 ou aucun) |
-| Humeur (décor) | Cabinet, Laboratoire, Chronophotographie, Plein soleil, Atelier, Heure bleue, Laque |
-| Accord de matières | 4 à 6 par humeur |
-| Caméra | profil serré / plan large / trois-quarts plongeant ; côté ; distance |
+| Suite d'équilibres | 2 à 4 étapes, en crescendo (le tout-debout toujours au sommet), grand tour pour un maillon seul ; sens de bascule |
+| Rythme | durée des transitions (1,6 à 4,6 s physiques selon la famille et le nombre de maillons qui changent, +0 à 15 %, +25 % pour un grand tour), tenues (1,4 à 3,6 s, la plus longue au sommet), ralenti du temps fort (×0,4–0,6) |
+| Humeur (décor) | Pose longue, Cabinet, Laboratoire, Chronophotographie, Plein soleil, Atelier, Heure bleue, Laque |
+| Accord de matières | 2 à 4 par humeur |
+| Caméra | cadrage de l'humeur ; montage en plans (large, moyen, contre-plongée au temps fort, contrechamp) ou plan unique |
 
-4 familles × ~6 chaînes × ~6 suites × 7 humeurs × 5 accords × 3 cadrages : plusieurs dizaines de milliers de combinaisons ; deux graines au hasard ont presque toujours une autre machine **et** un autre décor.
+4 familles × ~6 chaînes × ~6 suites × 8 humeurs × ~3 accords : plusieurs milliers de combinaisons ; deux graines au hasard ont presque toujours une autre machine **et** un autre décor.
 
 ### Images clés
 
 1. **Chariot, Cabinet.** Plan de profil, un peu bas. Un banc d'acajou sur deux tréteaux tournés, rail d'acier poli qui court sur toute la largeur de l'image et renvoie la fenêtre ; le chariot de laiton au centre ; au-dessus, trois maillons de laiton à lentilles debout, alignés, immobiles. Fond vert sombre, lumière douce d'une haute fenêtre à gauche, un filet sur chaque arête de laiton.
 2. **Roue, Plein soleil.** Mur blanchi à la chaux, soleil bas et dur : la potence et son pendule à volant portent une ombre nette et grande sur le mur. Le pendule passe l'horizontale ; les rayons de la roue sont flous, leur ombre aussi.
-3. **Acrobate, Chronophotographie.** Velours noir, lumière dure de côté. Le portique disparaît presque ; la chaîne, laquée noire à filets blancs, est en appui renversé, et derrière elle s'effacent en gris les douze poses précédentes de son grand tour, comme sur une plaque de Marey.
+3. **Acrobate, Chronophotographie.** Velours noir, lumière dure de côté. Le portique disparaît presque ; la chaîne, laquée noire à filets blancs, est en appui renversé, et derrière elle s'effacent en gris les dix poses précédentes de son grand tour, comme sur une plaque de Marey.
 
 ### Risques et parades
 
 - **Le solveur ne converge pas pour une graine** (chaînes triples, durées courtes) → plusieurs essais en parallèle dans le pool de workers (graines d'initialisation, durées T tirées autour de la valeur nominale), continuation depuis une solution voisine ; échec affiché avec ses issues (autre graine, réessayer). Cache des transitions par spécification.
 - **Chargement long** (triple : ~5 s par transition) → les transitions d'une scène se résolvent en parallèle ; l'écran de chargement montre leur convergence (il est fait pour ça).
-- **Une machine de laboratoire stérile** → chaque humeur a son atelier : instrument de cabinet de physique (acajou, laiton), fonte et chêne, laque, aluminium anodisé ; pièces usinées à arêtes arrondies, vis, roulements, courroie, chaîne porte-câbles, butées, plaque de constructeur.
+- **Une machine de laboratoire stérile** → chaque humeur a ses accords : instrument de cabinet de physique (acajou, laiton), fonte et chêne, laque, aluminium anodisé ; pièces usinées à arêtes arrondies, vis, roulements, courroie, butées, plaque de constructeur.
 - **Mouvements trop rapides pour l'œil** (un fouet de 0,3 s) → ralenti de caméra rapide sur le temps fort, la caméra continue à vitesse normale ; tenues longues.
-- **Ça a l'air truqué** (la chaîne tient debout sans raison) → la machine bouge visiblement juste avant, et pendant la tenue la caméra montre le chariot sous la chaîne ; un fin indicateur (galvanomètre du moteur) dévie avec l'effort.
+- **Ça a l'air truqué** (la chaîne tient debout sans raison) → la machine bouge visiblement juste avant, et pendant la tenue debout le rendu ajoute les petites corrections d'une boucle de rétroaction (`film.js · tremor`).
 - **Pièces qui se traversent** (maillons repliés l'un sur l'autre, bras contre colonne) → maillons dans des plans décalés (montage en chape alternée, comme sur les vrais triples pendules), contrôle sur toute la boucle par le banc.
 
 ## e bis. Les trois épreuves
@@ -172,8 +172,8 @@ La structure est une **montée** (de l'exploit le plus petit au plus grand), un 
 | Temps | Cause visible | Loi | Convention de temps |
 | --- | --- | --- | --- |
 | Tenue (pendant) | la gravité | équilibre stable | temps réel |
-| Transition | le chariot / le bras / le coude / la roue, mené par un moteur et une courroie, un réducteur ou un pignon | équations de Lagrange de la chaîne, coordonnée imposée (la machine est assez puissante pour imposer son mouvement) | temps réel, ralenti ×0,4–0,7 sur le fouet du temps fort (caméra rapide), avec rampe de vitesse en forme fermée |
-| Tenue (debout) | la machine immobile sous la chaîne en équilibre exact | équilibre instable ; en vrai, une boucle de rétroaction ferait des corrections de quelques dixièmes de millimètre, invisibles | temps réel |
+| Transition | le chariot / le bras / le coude / la roue, mené par un moteur et une courroie ou un réducteur | équations de Lagrange de la chaîne, coordonnée imposée (la machine est assez puissante pour imposer son mouvement) | temps réel, ralenti ×0,4–0,6 sur le fouet du temps fort (caméra rapide), avec rampe de vitesse en forme fermée |
+| Tenue (debout) | la machine sous la chaîne en équilibre, qui la rattrape sans cesse | équilibre instable ; le rendu ajoute les corrections d'une boucle de rétroaction (quelques millièmes de radian, quelques millimètres de chariot, nulles aux raccords) : sans elles, la chaîne debout se lit comme une image arrêtée | temps réel |
 | La roue | le moteur sur le pendule ; le volant prend la réaction | conservation du moment cinétique (inertie du volant) | temps réel |
 
 Rien ne flotte : le banc repose sur ses tréteaux, la colonne sur son socle, le portique sur ses pieds ; chaque maillon est porté par un roulement dans une chape.
@@ -182,17 +182,18 @@ Rien ne flotte : le banc repose sur ses tréteaux, la colonne sur son socle, le 
 
 | Humeur | Décor | Lumière | Valeur | Cadrage |
 | --- | --- | --- | --- | --- |
-| Cabinet | table d'instrument, mur sombre uni | grande fenêtre haute de côté, douce | moyenne-sombre | profil un peu bas |
+| Pose longue | noir sans bord, machine noire, maillons clairs ; une lampe au bout de la chaîne et sa trace vermillon | lumière dure, basse, de côté | très sombre, sujet clair | profil strict, longue focale |
+| Cabinet | parquet, mur vert sombre | grande fenêtre à meneaux de côté (gobo), son dessin projeté | moyenne-sombre | profil un peu bas |
 | Laboratoire | cyclorama blanc continu, sol clair | grande boîte à lumière au-dessus, deux bandes latérales | très claire | trois-quarts face, plan large |
 | Chronophotographie | velours noir sans horizon | lumière dure rasante de côté, rien d'autre | très sombre, sujet clair | profil strict, téléobjectif |
 | Plein soleil | mur de chaux et sol de terre battue | soleil dur et bas, ciel bleu en remplissage | claire, ombres franches | profil avec le mur en fond, l'ombre du pendule sur le mur |
-| Atelier | halle sombre, sol de béton taché | un rai de lumière zénithale d'une verrière, poussière dans le faisceau | sombre avec un faisceau | légère plongée |
+| Atelier | halle sombre, sol de béton taché | un rai zénithal par une verrière (gobo) : sa grille projetée au sol | sombre | légère plongée |
 | Heure bleue | cyclorama gris froid, brume | ciel froid diffus, contre-jour blanc | moyenne froide | trois-quarts arrière, contre-jour |
 | Laque | sol de feutre gris, mur gris moyen | boîte à lumière au-dessus, contre-jour | moyenne | plan serré, frontal |
 
 ### Ambition (éléments de construction)
 
-Chariot : banc (poutre, tréteaux tournés ou piétement en fonte), deux barres de guidage rectifiées sur paliers, chariot sur quatre douilles à billes, courroie crantée et ses deux poulies (l'une menée par un moteur à ailettes et un réducteur), tendeur, butées à tampons, chaîne porte-câbles articulée qui se déroule derrière le chariot, codeur, plaque gravée ; maillons en chape alternée, roulements à billes visibles, lentilles réglables par une molette, vis à tête fendue. Tourniquet : socle en fonte nervuré, colonne, moteur, couronne et pignon, collecteur tournant à bagues de cuivre, bras en caisson ajouré, contrepoids, palier. Acrobate : portique (deux montants, entretoises, barre fixe), épaule sur roulement, moteur et poulies, courroie le long du premier maillon, coude. Roue : potence, pendule en caisson, moteur, volant à rayons et jante lourde. Bien plus de cinq éléments par famille.
+Chariot : banc sur colonnes (en balustre pour les bois), deux barres de guidage, chariot sur quatre douilles à billes, courroie et ses deux poulies (l'une menée par un moteur à ailettes et un réducteur), butées à tampons, plaque de constructeur ; maillons en chape alternée, roulements à face visible, lentilles réglables par un écrou moleté, vis de blocage. Tourniquet : socle en fonte nervuré, colonne tournée, carter du moteur, bras en caisson, contrepoids, palier de tête. Acrobate : portique derrière la chaîne, axe de l'épaule en porte-à-faux, moteur porté par le premier maillon, courroie jusqu'au coude. Roue : potence, pendule en caisson, moteur, volant à rayons et jante lourde. Bien plus de cinq éléments par famille.
 
 ## e ter. Scénario (film muet, Acrobate, ~32 s)
 
@@ -216,12 +217,13 @@ Ce qu'elles imposent : un **rapport rail / chaîne** de 1,5 à 2 (le rail est le
 
 **Échelle** (épreuve) : une scène = une machine de 0,7 à 2 m. Plan large : toute la machine (le rail entier). Gros plan : le chariot et le premier maillon (~30 cm). Ce qui donne l'échelle : la courroie crantée (pas de 5 mm), les vis, les roulements, le grain du bois ou de la fonte. Pas de foule d'éléments : la densité vient des détails usinés, pas du nombre.
 
-## f. Révisions pendant la construction
+## f. Ce que les essais ont appris
 
-Ce que les premiers calculs et les premières images ont changé :
 - **la chaîne triple ne se redresse pas « de rien »** : partir d'une interpolation des angles ne converge que dans 17 essais sur 128. Une bibliothèque de départs (7 redressements, 6 descentes sur une machine de référence) et une continuation vers les maillons de la graine la rendent sûre (24 sur 24) ; les suites triples se limitent au redressement et à la descente (DDD → UUU → DDD), qui sont aussi les plus spectaculaires ;
 - **l'Acrobot calait à 10⁻⁶** : un polissage par pas de Newton de norme minimale, après la SQP, referme les raccords ;
 - **le portique de l'acrobate traversait la chaîne** : la barre fixe d'un vrai portique passe devant et derrière ; le second maillon, replié le long du premier, la traversait. Portique derrière la chaîne, axe en porte-à-faux ; le banc des contacts le vérifie ;
 - **les machines à un maillon n'avaient que deux temps** (D → U → D) : le « grand tour » (de debout à debout, un tour entier, au ralenti) devient leur temps fort ;
 - **la roue à deux maillons** ne se redresse presque jamais (2 transitions sur 8) : la famille Roue garde un seul maillon ; **le tourniquet à deux maillons** ne se dresse pas d'un seul élan (DD → UU) : il passe par une figure intermédiaire ;
-- **lumière** : au posemètre, le Cabinet et l'Atelier étaient presque noirs (médiane 0,004 à 0,03), le Plein soleil brûlé (médiane 4, 80 % de l'image) ; lampes redosées par humeur, et la caméra glisse au sommet vers un second cadrage (la chaîne debout entière) au lieu d'un simple rapprochement qui coupait la roue.
+- **lumière** : l'exposition de chaque humeur est réglée au posemètre (sans cela, le Cabinet et l'Atelier sortaient presque noirs, le Plein soleil brûlé) ;
+- **la chaîne debout immobile se lisait comme une image arrêtée** : le rendu ajoute les corrections d'une boucle de rétroaction pendant les tenues debout ;
+- **le gobo par `light.colorNode`** dessinait des quadrilatères sur les murs : `SpotLightNode` l'applique dans un `select()` compilé en if/else, où des variables partagées de l'éclairage ne sont calculées que dans une branche. Une sous-classe (`GoboSpotLightNode`) multiplie l'atténuation par le motif, sans branche.

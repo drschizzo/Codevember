@@ -86,53 +86,52 @@ B et D sont des **fronts qui avancent puis reculent** : la structure de mouvemen
 
 On ne marche pas dans ce labyrinthe : on le **tourne**. Un automate incline un plateau, ou fait pivoter un disque dressé ; la gravité fait le reste. La bille roule, bute, hésite au bord d'une impasse, repart, tombe d'un couloir à l'autre, trouve la sortie. Une rigole (ou une noria) la rend à l'entrée ; le plateau revient à sa pose ; tout recommence.
 
-### Trois familles, trois mouvements
+### Trois familles, trois mouvements (telles que construites)
 
 | Famille | Appareil | Mouvement |
 | --- | --- | --- |
-| **Plateau** | plateau horizontal sur cardan, incliné de quelques degrés par deux bielles et deux manivelles | **la bille roule** : elle glisse en longues courbes douces le long des couloirs, freine avant les coudes, s'enfonce dans une impasse et en ressort |
-| **Cadran** | plateau carré dressé, qui pivote dans son plan par quarts de tour, entraîné par une courroie | **la bille tombe** : à chaque quart de tour, elle chute d'un trait le long d'un couloir et rebondit sur la paroi d'en bas ; le cadran la retourne, elle chute ailleurs |
-| **Roue** | disque dressé à labyrinthe circulaire (anneaux et cloisons), qui tourne lentement dans un sens puis dans l'autre | **la bille reste en bas** pendant que le disque tourne sous elle ; elle saute d'anneau en anneau quand une brèche passe sous elle ; une poche la remonte au sommet comme une noria et la lâche vers le centre |
+| **Plateau** | plateau horizontal sur cardan, incliné (≤ 5,5°) par deux bielles et deux manivelles | **la bille roule** : elle glisse en longues courbes le long des couloirs, freine avant les coudes, s'enfonce dans une impasse et en ressort, puis fait le tour de la rigole et rentre |
+| **Cadran** | plateau carré dressé, penché de 12° vers l'arrière, qui pivote dans son plan par quarts et demi-tours, entraîné par une courroie | **la bille tombe** : à chaque rotation, elle chute d'un trait le long d'un couloir et rebondit sur la paroi d'en bas |
+| **Roue** | disque dressé à labyrinthe circulaire (anneaux et cloisons), qui tourne par quarts, demi-tours et huitièmes de tour | **la bille reste en bas** pendant que le disque tourne sous elle ; elle saute d'anneau en anneau quand une brèche passe sous elle |
 
-Trois gestes que l'on ne confond pas : rouler, chuter, rester en bas pendant que le monde tourne.
+Pour le Cadran et la Roue, une **poche** coupe la rigole derrière la porte d'entrée : quand la bille est sortie, le disque tourne dans un seul sens, la poche la soulève comme une noria et la lâche par l'entrée au sommet.
 
 ### La boucle
 
-Pour chaque famille, le film est la simulation d'un trajet complet, enregistrée puis relue :
+Le film est la simulation d'un trajet complet, enregistrée à 120 i/s puis relue :
 
-1. **Plateau** : la bille part au repos de la cellule d'entrée, le plateau à plat ; elle suit le chemin (avec une ou plusieurs impasses visitées), sort par la porte de sortie dans la **rigole** qui fait le tour du plateau, en fait le tour et rentre par la porte d'entrée, où elle s'arrête, plateau à plat.
-2. **Cadran** et **Roue** : la bille est au repos dans la cellule d'arrivée de l'entrée, le disque à son angle de départ ; une suite de rotations (trouvée par recherche en largeur dans le graphe des états) la conduit jusqu'à la porte de sortie, d'où elle tombe dans la rigole ; le disque tourne alors dans un seul sens : une **poche** de la rigole la soulève, au sommet la bille retombe par la porte d'entrée, et le disque s'arrête à son angle de départ (modulo un tour).
+1. **Plateau** : la bille part au repos de la cellule d'entrée, plateau à plat ; elle suit le chemin (une à trois impasses visitées), sort dans la **rigole**, en fait le tour et rentre par la porte d'entrée, où elle s'arrête, plateau à plat.
+2. **Cadran** et **Roue** : une suite de 4 à 12 rotations, trouvée par recherche en largeur dans le graphe des états simulés, conduit la bille de l'entrée à la sortie ; la poche la ramène, et le disque s'arrête à son angle de départ (à un nombre entier de tours près).
 
-Formule : u ∈ [0, 1), t = u·T, avec T la durée du trajet simulé. L'état final (bille au repos à la même place, appareil à la même pose, à un nombre entier de tours près) est l'état initial ; l'écart résiduel de la simulation (≪ 0,1 mm) est absorbé dans la dernière demi-seconde, à l'arrêt. La boucle est parfaite par construction : u = 1 est u = 0.
+L'état final est rendu égal à l'état initial par un point fixe (l'état d'arrivée devient l'état de départ, jusqu'à un écart de 0,03 mm pour le Plateau, 0,05 mm pour les disques) ; le reste est fondu dans la dernière demi-seconde, bille arrêtée, et l'orientation propre de la bille est raccordée par une rotation répartie sur la boucle.
 
 ### Le cœur technique
 
-- **Labyrinthes** (`src/gen/maze.js`) : arbre couvrant uniforme tiré par l'algorithme de Wilson sur trois topologies (grille rectangulaire, grille polaire à anneaux subdivisés, grille hexagonale) ; portes d'entrée et de sortie ; la liste des parois (segments et arcs) sert à la fois au rendu, à la physique et aux tests. Invariant : un arbre (cellules − 1 passages, connexe, sans cycle).
-- **Physique** (`src/gen/physics.js`) : bille qui roule sans glisser dans le plan de l'appareil, gravité projetée, forces d'inertie du disque qui tourne, contacts contre des capsules et des arcs (restitution, frottement), résistance au roulement ; pas de 1 ms. Invariant : la bille n'entre jamais dans une paroi (distance ≥ rayon − 0,05 mm).
-- **Planification** (`src/gen/plan.js`) : pour le Plateau, un pilote qui suit le chemin (vitesse visée, freinage avant les coudes, butée au fond des impasses) et commande l'inclinaison sous une vitesse angulaire bornée (servomoteur) ; pour le Cadran et la Roue, une recherche en largeur sur les états *simulés* (cellule d'arrêt et angle), chaque transition étant une rotation simulée en entier ; le film est la suite exacte des transitions retenues.
-- **Mécanique** (`src/kin.js`) : bielles et manivelles résolues exactement (longueur des bielles constante), courroie tangente aux deux poulies (sans glissement : rapport des rayons), cardan.
+- **Labyrinthes** (`src/gen/maze.js`) : arbre couvrant uniforme tiré par l'algorithme de Wilson sur une grille rectangulaire ou polaire (anneaux qui doublent leurs secteurs) ; portes d'entrée et de sortie ; la liste des parois (segments, arcs, poteaux, cadre) sert au rendu, à la physique et aux tests. Invariant : un arbre (connexe, sans cycle).
+- **Physique** (`src/gen/physics.js`) : bille qui roule sans glisser dans le plan de l'appareil (équation de Weltner, forces d'inertie du disque qui tourne, intégration au point milieu), contacts contre des capsules et des arcs (restitution 0,38, frottement), résistance au roulement ; pas de 1/960 s. Invariant testé : la bille n'entre jamais de plus de 0,06 mm dans une paroi.
+- **Planification** (`src/gen/plan.js`) : pour le Plateau, un pilote qui suit le chemin et commande l'inclinaison sous des servomoteurs bornés à 40°/s ; pour le Cadran et la Roue, une recherche en largeur sur les états *simulés* (cellule d'arrêt et angle au huitième de tour), chaque transition étant une rotation simulée en entier.
+- **Mécanique** (`src/kin.js`) : bielles et manivelles résolues par Newton (longueur constante), courroie tangente aux deux poulies (rapport 5), cardan.
 
-### La matrice de variations
+### La matrice de variations (telle que construite)
 
 | Axe | Valeurs |
 | --- | --- |
 | Famille | Plateau, Cadran, Roue |
-| Topologie | grille carrée, hexagonale (Plateau), polaire (Plateau rond, Roue) |
-| Taille | 7 à 15 cellules de côté ; 4 à 7 anneaux |
-| Style des parois | filets rapportés (parois droites à chant arrondi), taille directe (gorges creusées dans la masse), murets à congé |
-| Bille | acier poli, agate rubanée, porcelaine, obsidienne, bronze |
-| Humeur (décor) | Cabinet, Carrare, Laque, Ardoise, Béton, Céladon |
-| Récit | 0 à 3 impasses visitées, sens de la rigole, portes |
+| Topologie et taille | Plateau : grille de 9 à 13 × 7 à 10 cellules, ou polaire de 5 à 7 anneaux ; Cadran : grille carrée de 7 à 9 ; Roue : polaire de 5 à 7 anneaux |
+| Style des parois | rapportées (Cabinet, Laque, Ardoise) ou taillées dans la masse (Carrare, Béton, Céladon) |
+| Bille | vermillon dans toutes les humeurs (le fil rouge de la collection) |
+| Humeur (décor) | Cabinet, Carrare, Laque, Ardoise, Béton, Céladon, deux accords de matières chacune |
+| Récit | 1 à 3 impasses visitées et tour court ou long de la rigole (Plateau), sens de rotation |
 
-3 familles × 3 topologies (là où elles s'appliquent) × 5 billes × 6 humeurs × tailles et récits : plusieurs milliers de films, et deux graines au hasard ont presque toujours une autre famille ou une autre humeur.
+Le plan initial prévoyait aussi une grille hexagonale et cinq billes (acier poli, agate, porcelaine, obsidienne, bronze).
 
-### Trois images clés
+### Trois images clés (plan initial)
 
 1. **Cabinet, Plateau, plan 3/4 bas** : un plateau de noyer aux filets de laiton, à peine incliné ; la lampe de bureau, de côté, couche les ombres des parois en peigne ; au premier plan, la bielle de laiton sort de l'ombre du socle ; la bille d'acier, en plein couloir, reflète la lampe en un point blanc et le plateau entier en miniature.
 2. **Carrare, Roue, de face** : un disque de marbre blanc dressé sur deux colonnes, des gorges concentriques taillées dans la masse ; lumière zénithale douce, cyclorama blanc ; une bille d'obsidienne noire tout en bas d'un anneau, le disque tourne lentement au-dessus d'elle ; la courroie de cuir passe sur la gorge du disque.
 3. **Laque, Cadran, plan rasant** : un carré de laque noire aux parois vermillon, dressé, à mi-quart de tour ; lumière rasante dure d'un seul côté ; la bille de porcelaine, en pleine chute dans un long couloir, découpée en blanc sur le noir.
 
-### Les risques
+### Les risques (plan initial)
 
 - **Physique instable** (bille qui traverse une paroi lors d'une chute rapide) : pas de 1 ms, vitesse de chute ≤ 2 m/s (2 mm par pas, rayon 6 mm), test sur toute la boucle.
 - **Pilote qui échoue** (la bille se coince, dépasse un coude) : vérifié sur 200 graines dans Node ; repli sur une autre graine de labyrinthe si le trajet échoue.
@@ -141,6 +140,8 @@ Formule : u ∈ [0, 1), t = u·T, avec T la durée du trajet simulé. L'état fi
 - **Coût** : plateau en carte de hauteur cuite (une seule texture de distance aux parois, lue en déplacement et en normale), une seule lampe ombrée, la bille en sphère fine.
 
 ## e bis. Les épreuves
+
+Tableaux du plan initial. Le README donne les valeurs construites (restitution 0,38, disques penchés de 12°, pas de vitre : la bille tient sur la face penchée).
 
 ### Crédibilité
 
@@ -186,9 +187,17 @@ Plateau : dalle à chant mouluré, parois (filets à chant arrondi ou murets tai
 1. **Jeu de labyrinthe à bascule en bois** (photographie de catalogue, 3/4 haut) : plateau de 28 × 23 cm, bille d'acier de 12 mm, parois de 10 mm de haut et 4 mm d'épaisseur, couloirs d'environ 20 mm ; les parois occupent ~25 % de la surface ; la bille fait les deux tiers de la largeur d'un couloir. Lumière de studio douce, ombres courtes.
 2. **Labyrinthe « à doigt » taillé dans le marbre** (pierre de 30 cm) : gorges de 8 à 10 mm de large et 6 mm de profondeur, arêtes adoucies, poli satiné dans les gorges, plus mat sur les crêtes.
 3. **Roue labyrinthe de bois** (jouet d'éveil) : disque de 25 cm sur un pied, couvert d'une vitre, labyrinthe à anneaux concentriques, bille de 10 mm.
-4. **Robot qui résout un labyrinthe à bascule** : deux servomoteurs sous le plateau, palonniers et tringles à rotules, cardan au centre ; on voit le plateau s'incliner de quelques degrés à peine — la bille, elle, file.
+4. **Robot qui résout un labyrinthe à bascule** : deux servomoteurs sous le plateau, palonniers et tringles à rotules, cardan au centre ; on voit le plateau s'incliner de quelques degrés à peine, et la bille file.
 5. **Bille d'acier en macro** : un miroir sphérique, la lampe en point dur, le décor courbé, l'ombre de contact très noire et très petite.
 
 Ce qu'elles imposent : échelle d'un objet de table (25 à 35 cm), bille de 10 à 14 mm qui fait 60 à 70 % de la largeur du couloir, parois de 6 à 10 mm de haut, inclinaisons de quelques degrés (≤ 6°) ; l'ombre de contact de la bille et l'ombre des parois sont ce qui pose tout. Le grain du support à l'échelle : fil du noyer, cristaux du marbre, pores du béton, de l'ordre du demi-millimètre au millimètre.
 
 **Échelle à l'image** : plan d'ensemble, l'appareil remplit 70 à 80 % de la largeur ; la bille fait 40 à 70 px à 1080p ; 50 à 220 cellules à l'image ; ce qui donne l'échelle : la bille et le grain de la matière.
+
+## Ce que les essais ont appris
+
+- **Chambre centrale de 22 mm** : avec 15 mm, la brèche entre deux poteaux faisait 9,6 mm pour une bille de 12.
+- **Point milieu** : en Euler semi-implicite, une bille lancée sur un plateau tournant revenait 25 mm à côté de son départ après un tour, contre 0,008 mm au point milieu.
+- **Temps de bascule du plateau** (0,16 s) dans la vitesse visée du pilote : sans lui, la bille dépassait les coudes de 19 mm et s'engageait dans le couloir voisin.
+- **Cadran à un multiple de 90°** : à un angle quelconque, la gravité n'est pas alignée sur les couloirs, la bille finit dans les coins et la recherche ne trouve que quelques états.
+- **Bille vermillon** : elle tranche par la teinte plutôt que par la valeur ; le test de contraste a fait passer à l'os un fond de laque rouge où elle se perdait.

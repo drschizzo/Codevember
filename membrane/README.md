@@ -49,7 +49,7 @@ Une retouche d'aspect est immédiate. Une retouche de comportement ou d'armature
 
 **Pas de saut d'éclairage.** Une armature qui passe derrière la caméra s'efface en fondu, par un tramage renouvelé à chaque image et lissé par l'anticrénelage temporel. Son ombre s'efface avec elle : aucune ombre, aucune lumière vue au travers des membranes ne disparaît d'un coup. La luminance moyenne de l'image, mesurée sur toute une boucle, varie sans marche.
 
-**Rien ne flotte.** Chaque œuf repose dans une coupe, au centre de l'armature de la couche précédente. Une tige relie cette coupe au pôle arrière de la membrane, que la coupe de la couche précédente reçoit à son tour. Des rayons relient la coupe à la couronne de charnières (ou aux sommets bas de la cage). Toutes les couches tournent à la même vitesse : leur orientation relative est fixe, rien ne glisse. Les pièces qui gonflent le font autour de leur charnière, et restent donc attachées. Un contrôle automatique vérifie, à plusieurs instants de l'ouverture, qu'aucune pièce ne pénètre une autre ni l'œuf suivant. C'est ce qui a conduit à monter les lames de l'iris en persienne, à les ouvrir ensemble et à limiter leur rotation.
+**Rien ne flotte.** Chaque œuf repose dans une coupe, au centre de l'armature de la couche précédente. Une tige relie cette coupe au pôle arrière de la membrane, que la coupe de la couche précédente reçoit à son tour. Des rayons relient la coupe à la couronne de charnières (ou aux sommets bas de la cage). Toutes les couches tournent à la même vitesse : leur orientation relative est fixe, rien ne glisse. Les pièces qui gonflent le font autour de leur charnière, et restent donc attachées. Pour qu'aucune pièce ne pénètre une autre ni l'œuf suivant à aucun instant de l'ouverture, les lames de l'iris sont montées en persienne, s'ouvrent ensemble et tournent peu (24 à 28°).
 
 **Les instances.** La scène compte M emplacements, M multiple de N, et l'emplacement *j* montre toujours le modèle *j* mod N. Il ne change de couche qu'en passant de derrière la caméra au cœur lumineux, deux endroits où il est invisible. Sa géométrie ne change donc jamais, et le passage ne se voit pas.
 
@@ -72,7 +72,7 @@ Une retouche d'aspect est immédiate. Une retouche de comportement ou d'armature
 
 Un fil par lien décide des ruptures : étirement autour du lien, seuil propre à chaque lien, fatigue, dégrafage de l'avant. La rupture se propage d'elle-même. Les lèvres s'enroulent, les lambeaux se relâchent et se retroussent.
 
-Une couche de 20 000 particules (120 images, 16 sous-pas, 6 passes) se simule en moins de 3 s.
+Réglages par défaut : environ 20 000 particules (sphère géodésique de 44 subdivisions), 160 images enregistrées, 16 sous-pas, 6 passes (temps mesurés plus bas).
 
 **L'enregistrement et la pose.** Le GPU enregistre la position de chaque particule à chaque image, quantifiée sur 16 bits (un demi-centième d'arête). À l'affichage, un autre shader de calcul pose chaque couche visible :
 - positions interpolées par une spline de Catmull-Rom (au ralenti, la vitesse reste continue d'une image enregistrée à l'autre), et position à l'image précédente (vecteurs vitesse) ;
@@ -90,7 +90,7 @@ Une couche close ou finie (même image que la fois précédente) n'est pas repos
 **L'armature** (`armature.js`, `kin.js`). Chaque pièce est rigide, à un facteur d'échelle près, et suit une loi de déploiement (gonflement, extension) puis d'ouverture autour d'une charnière. Les natures :
 - **calice** : lames bombées en quartiers, éventuellement feuilletées (jusqu'à trois lames empilées, qui tournent autour de la même charnière et se déploient en éventail) ;
 - **iris** : lames vrillées qui pivotent presque à plat, comme un diaphragme ;
-- **gousse** : deux à quatre mâchoires nervurées ;
+- **gousse** : deux ou trois mâchoires nervurées ;
 - **ombrelle** : des baleines le long des méridiens ;
 - **couronne** : des épingles montées sur la couronne de charnières, qui coulissent (la tête perlée tend puis perce la membrane) puis s'inclinent ;
 - **cage** : un icosaèdre, un dodécaèdre ou un octaèdre fixe, sous la membrane ; c'est la membrane qui gonfle et cède au milieu des faces ;
@@ -144,7 +144,7 @@ Seule la lumière qui traverse la membrane passe entre les polariseurs : ce que 
 
 **Les fibrilles.** Elles sont construites dans le vertex shader. Le filament s'étire et s'amincit à volume constant, ploie, puis claque. Chaque moitié se rétracte alors vers sa lèvre en oscillant, s'épaissit en goutte et se love. Un filament est fait de deux tubes, un par moitié : ils partagent leur anneau du milieu tant que le fil tient, puis se séparent au claquage, et la pointe de chacun se referme. Aucun tronçon n'enjambe l'écart entre les lèvres. Sur les matières humides, un fil qui s'amincit se résout en chapelet de gouttelettes (instabilité de Plateau-Rayleigh, au pas d'environ 9 rayons). Un fil plus fin qu'un pixel est dessiné à un pixel de large, et n'occupe qu'une part des pixels égale à sa couverture réelle : c'est un tramage renouvelé à chaque image, lissé par l'anticrénelage temporel. Il s'estompe ainsi sans tracer de ligne dure. Six fils sur dix claquent tôt.
 
-**L'armature.** Elle reprend les quarante finitions de Hollow et Tesseract : métaux au F0 mesuré, émail guilloché, damas, laque urushi, marbres, céramiques, nacre, carbone…
+**L'armature.** Elle reprend les finitions communes du dépôt (`shared/finishes.js`, une quarantaine) : métaux au F0 mesuré, émail guilloché, damas, laque urushi, marbres, céramiques, nacre, carbone…
 
 **Lumières.**
 - La **lampe**, solidaire de la caméra, sans atténuation, avec les ombres de l'armature.
@@ -185,8 +185,8 @@ Une scène tire une matière dominante, parfois une seconde, et des armatures di
 
 - **Préparation** d'une couche dans le worker : 0,4 s pour 20 000 particules (mesuré dans Node).
 - **Simulation** sur le GPU (160 images, 16 sous-pas, 6 passes) : environ 5 s par couche. Une scène de trois couches est prête en 15 à 20 s, mesurées dans un panneau de navigateur masqué, donc ralenti.
-- **Rendu** : environ 26 ms par image à 1,9 Mpx en qualité haute, plis compris, mesuré dans un panneau de navigateur (contre 32 avant les économies ci-dessous). Les postes, retirés un à un : copies de l'image environ 2,5 (6 avant les faces arrière mélangées), reflets en espace écran 3,4, occlusion ambiante 0,5 (8 échantillons, que l'anticrénelage temporel accumule d'une image à l'autre ; 1,6 avec 16), maillage fin des couches proches 1,1, bloom 0,7, plis 0,6.
-- **Économies** : faces arrière sans copie (−3,5 ms), occlusion ambiante à 8 échantillons (−1,1 ms), poses des couches immobiles mises en cache.
+- **Rendu** : environ 26 ms par image à 1,9 Mpx en qualité haute, plis compris, mesuré dans un panneau de navigateur. Les postes, retirés un à un : copies de l'image environ 2,5, reflets en espace écran 3,4, occlusion ambiante 0,5 (8 échantillons, que l'anticrénelage temporel accumule d'une image à l'autre ; 1,6 avec 16), maillage fin des couches proches 1,1, bloom 0,7, plis 0,6.
+- **Économies déjà faites** : faces arrière sans copie (−3,5 ms), occlusion ambiante à 8 échantillons (−1,1 ms), poses des couches immobiles mises en cache.
 - **Photoélasticité** : environ 3 ms par image (calcul de la déformation et intégration spectrale), et seulement si la lumière polarisée est allumée.
 - **Mémoire** : les images enregistrées pèsent environ 25 Mo par couche différente.
 
@@ -197,5 +197,9 @@ Elle est choisie au chargement (écran tactile et petit écran, `?mobile=1`, ou 
 - **Simulation** : 36 au lieu de 44 subdivisions (≈ 2/3 des particules), 120 images enregistrées au lieu de 160 (interpolées en Catmull-Rom), 13 sous-pas au lieu de 16. La préparation, le calcul au chargement et la mémoire sont presque divisés par deux, et la dynamique de la déchirure reste la même.
 - **Matière** : Worley lu dans le volume de bruit, fBm à deux octaves, bruit de phaseurs des plis sur 8 cellules au lieu de 27, photoélasticité sur 7 longueurs d'onde au lieu de 12, pas de vecteurs vitesse (une évaluation du patch PN en moins par sommet), armature de verre sans transmission (verre sombre vernis), tramage des fondus fixe à l'écran (sans anticrénelage temporel, un tramage renouvelé fourmillerait).
 - **Image** : 1,25 × la résolution CSS au plus, résolution dynamique (50 à 100 %, visée ~45 i/s), cadence plafonnée à 60 i/s ; maillage grossier des couches, ombres en 1024, environnement en 512 ; ni reflets en espace écran, ni occlusion ambiante, ni anticrénelage temporel (FXAA), ni flou de mouvement ; bloom en quart de résolution ; ni traînées, ni poussière sur la lentille, ni aberration chromatique.
+
+## Tests
+
+Le projet n'a pas de tests unitaires (pas de dossier `test/`). Les mesures citées plus haut (luminance moyenne sans marche, passage sans saut entre les deux versions de la face arrière) ont été faites pendant la mise au point. La non-régression du rendu passe par `tools/regress.html` à la racine (graine `regress`).
 
 [![Membrane](docs/capture.jpg)](https://drschizzo.github.io/Codevember/membrane/)

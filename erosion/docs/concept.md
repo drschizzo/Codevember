@@ -2,7 +2,7 @@
 
 Thème donné : « Erosion », avec une exigence explicite : un rendu cinématographique de grande qualité, donc une manière de traiter le thème qui permette, par la seule génération procédurale, un rendu extrêmement convaincant.
 
-Le projet s'appelle **Erosion** (dossier `erosion/`), sous-titre *un paysage d'une heure* — ce que fabrique une table à érosion de laboratoire : un relief entier (canyons, terrasses, deltas) creusé en une heure dans un bac de sable, puis effacé d'un coup de règle.
+Le projet s'appelle **Erosion** (dossier `erosion/`), sous-titre *un paysage d'une heure* : ce que fabrique une table à érosion de laboratoire : un relief entier (canyons, terrasses, deltas) creusé en une heure dans un bac de sable, puis effacé d'un coup de règle.
 
 ## Pourquoi cette piste répond à l'exigence de rendu
 
@@ -82,7 +82,7 @@ Retenue : **la table à érosion**. Elle absorbe le relief géologique (le paysa
 
 Différence avec les projets du dépôt : aucun ne simule un fluide sur un relief ; Moss propage un champ sur une pierre (Fisher-KPP, une colonie), Rust fait naître une matière sur une pièce et une machine l'enlève. Ici la matière **est** déplacée (la masse se conserve), le geste est un écoulement qui sculpte, la machine (le gabarit) ne nettoie pas : elle repousse le sable là d'où l'eau l'a pris. La grammaire de caméra est un vol bas au-dessus du paysage, pas une révolution ni un plan fixe.
 
-## e. La piste retenue
+## e. La piste retenue, telle qu'elle est construite
 
 ### Le geste
 
@@ -90,140 +90,122 @@ Un écoulement qui creuse : l'eau entre dans le sable, s'y fait un chemin, le ch
 
 ### Le cœur technique
 
-1. **Hydraulique** : modèle des tuyaux virtuels (Mei et al. 2007) sur une grille de 512 × 256 cellules de 2,5 mm (bac utile de 1,28 × 0,64 m), pas de temps borné par la condition CFL ; eau ajoutée par les sources (lèvre de la boîte, rampe de pluie), retirée par le déversoir (vanne de sortie dont la crête fixe le niveau du lac).
-2. **Transport** : capacité C = K_c · max(sin α, α_min) · |v| · f(h) (atténuée en eau profonde), érosion ou dépôt vers la capacité, à un taux qui dépend de la **dureté de la strate** atteinte ; sédiment advecté par semi-lagrangien ; MORFAC sur les variations du lit.
-3. **Talus** : redistribution du sable au-delà de l'angle de talus, plus raide pour le sable humide (cohésion capillaire) que pour le sable immergé ; c'est ce qui fait les berges nettes et leurs effondrements.
-4. **Strates** : le corps de sable est un empilement de couches (épaisseur, couleur, dureté tirées par la graine) ; un point du lit montre la couche de son altitude s'il n'a jamais été plus bas (surface d'origine), un dépôt frais sinon (on garde le minimum atteint, `bmin`).
-5. **Enregistrement** : 64 états du relief (b, bmin) à pleine résolution et 128 états de l'eau (surface libre η, turbidité, vitesse) à demi-résolution, dans des textures en tableau sur le GPU ; relecture interpolée.
-6. **Gabarit** : la remise à zéro est une fonction fermée de la phase : derrière la lame, la surface initiale ; devant, le relief enregistré plus un bourrelet dont le volume est la matière poussée (intégrale de b − b₀ le long du trajet, lissée en travers de la lame).
+1. **Hydraulique** : modèle des tuyaux virtuels (Mei et al. 2007) sur une grille de 512 × 256 cellules de 2,5 mm (bac utile de 1,28 × 0,64 m), pas de 1,4 ms ; eau ajoutée par les sources (lèvre de la boîte, simulateur de pluie), retirée par le déversoir (guillotine dont la crête fixe le niveau du lac). Frottement de Manning (n = 0,022).
+2. **Transport** : cisaillement de Manning, capacité de Meyer-Peter–Müller au-dessus du seuil de Shields, arrachement vers la capacité à un taux qui dépend de la **dureté de la strate** atteinte, dépôt au taux w_s/d ; le sédiment suit les flux d'eau eux-mêmes (conservatif) ; MORFAC de 30 à 50 sur les variations du lit.
+3. **Talus** : redistribution du sable au-delà de l'angle de talus, 62° pour le sable humide (cohésion capillaire), 30° sous l'eau : berges nettes et effondrements.
+4. **Strates** : le bac est rempli couche par couche, chacune régalée par le gabarit (épaisseur, ton, dureté tirés par la graine) ; un point du lit montre la couche de sa profondeur sous b₀ s'il n'a jamais été plus bas, un dépôt frais sinon.
+5. **Enregistrement** : 480 états du lit (b − b₀ en demi-flottant, 512 × 256), 96 de sa mémoire (humidité, rides) et 192 de l'eau (256 × 128), ~245 Mo sur le GPU ; le lit est préfiltré (moyenne des pas de chaque intervalle) puis lissé passe-bas sans déphasage, et relu en B-spline cubique dans le temps.
+6. **Gabarit** : la remise à zéro est une fonction fermée de la position de la lame : derrière elle, la surface initiale ; devant, le relief enregistré plus un bourrelet à 33° dont le volume est la matière poussée (intégrale de b − b₀ le long du trajet, lissée en travers sur 4 cm).
 
-Invariants vérifiables : masse d'eau (entrées − sorties − évaporation), masse de sable conservée hors du déversoir, h ≥ 0, pas de NaN, l'état à u = 1 est l'état à u = 0 (le gabarit écrit b₀), la lame touche exactement la surface b₀ (écart nul), les fronts ne reculent pas pendant leur temps (le knickpoint remonte toujours, la brèche ne se referme jamais), la caméra ne passe jamais sous le sable.
+Invariants vérifiés par les tests : masse de sable conservée hors du déversoir, masse d'eau conservée, h ≥ 0, pas de NaN, déterminisme, l'état à u → 1 est l'état à u = 0, le bord bas de la lame est exactement b₀, la lame balaie tout le bac sans revenir en arrière, le séchage ne recule pas, la caméra ne passe jamais sous le sable ni près d'une pièce de l'appareil.
 
 ### La boucle
 
-Cycle de transformations à un état : sable régalé → (écoulement) → paysage mouillé → (vidange, séchage) → paysage sec → (gabarit) → sable régalé. À u = 0 et à u = 1 : la surface b₀ toute fraîche, sèche, sans eau, le portique garé au bout amont. **La boucle est parfaite par construction** : la simulation part de b₀, et le gabarit réécrit b₀ derrière lui ; à la fin de son passage, tout le bac est b₀.
+Cycle de transformations à un état : sable régalé → (écoulement) → paysage mouillé → (vidange, séchage) → paysage sec → (gabarit) → sable régalé. À u = 0 et à u → 1 : la surface b₀, sans eau, le portique garé au-dessus de la boîte d'alimentation. **La boucle est parfaite par construction** : la simulation part de b₀, et le gabarit réécrit b₀ derrière lui.
 
-### Découpage temporel (durée par défaut 48 s)
+### Découpage temporel (boucle de 44, 48 ou 52 s, `src/timeline.js`)
 
-| u | Temps | Ce que l'œil regarde | Cause visible | Loi | Temps du film |
-| --- | --- | --- | --- | --- | --- |
-| 0 – 0,05 | le sable neuf | la surface lisse, les fines stries du gabarit, la lumière rasante | — | — | — |
-| 0,05 – 0,12 | l'eau arrive | la boîte se remplit et déborde, ou la pluie commence, ou le lac monte | la source (lèvre, rampe, pompe) | Saint-Venant | temps réel |
-| 0,12 – 0,62 | l'érosion | le geste de la famille, qui grandit | l'écoulement | transport, talus | relief accéléré (MORFAC), eau en temps réel |
-| 0,62 – 0,70 | la vidange | la source se tarit, l'eau se retire dans les chenaux, le lac baisse | vanne qui s'ouvre, source coupée | Saint-Venant | temps réel |
-| 0,70 – 0,82 | le séchage | le paysage pâlit des crêtes vers les creux, les strates se lisent | évaporation | — | accéléré |
-| 0,82 – 0,97 | le gabarit | la lame descend, le portique roule, le bourrelet pousse le sable, la surface neuve derrière | moteur du portique | conservation de la masse | temps réel |
-| 0,97 – 1 | le sable neuf | — | — | — | — |
+| u | Temps | Ce que l'œil regarde | Cause visible | Temps du film |
+| --- | --- | --- | --- | --- |
+| 0 – 0,05 | le sable neuf | la surface lisse, les fines stries du gabarit | — | — |
+| 0,05 – 0,68 | l'expérience | l'eau arrive, le geste de la famille grandit, puis la source se tarit et l'eau s'infiltre | la boîte, la pluie, la guillotine, la digue | eau en temps réel (un peu ralentie), relief accéléré (MORFAC) |
+| 0,66 – 0,78 | le séchage | le paysage pâlit des crêtes vers les creux | — | accéléré |
+| 0,775 – 0,83 | le portique roule vers l'aval et descend sa lame | — | moteur, vérins | temps réel |
+| 0,83 – 0,95 | le gabarit | le bourrelet pousse le sable vers l'amont, la surface neuve derrière | la lame | temps réel |
+| 0,95 – 1 | la lame se lève, le portique rentre | — | — | — |
 
-Le temps fort est au milieu de l'érosion (u ≈ 0,4), et la plus belle image est au séchage (u ≈ 0,78) : le paysage entier, sec, en lumière rasante, avec ses strates.
+Le temps fort est au milieu de l'érosion, et la plus belle image au séchage : le paysage entier, sec, en lumière rasante, avec ses strates.
 
 ### Les familles (déclinaison : chacune son mouvement)
 
-1. **Ravines** — une rampe de pluie arrose toute la pente ; des milliers de filets se rejoignent, des rigoles naissent au bas de la pente et **remontent** en se ramifiant : un arbre qui pousse vers l'amont. Les interfluves restent en lames aiguës (badlands).
-2. **Delta** — un seul courant entre par la boîte d'alimentation, creuse son chenal et construit un **éventail** dans le lac aval ; l'éventail grandit en lobes, le chenal **bascule** d'un bord à l'autre (avulsion), le panache de turbidité tourne avec lui. Un geste qui s'ouvre et balaie.
-3. **Recul** — un courant établi coule vers le lac ; la vanne s'abaisse d'un cran puis d'un autre : à chaque cran, une **marche** naît à l'embouchure et remonte la vallée, laissant des terrasses emboîtées. Un geste qui remonte par saccades.
-4. **Brèche** — un lac se remplit derrière un barrage de sable ; il déborde par une échancrure ; le filet entaille le barrage, la brèche **s'élargit en accélérant**, le lac se vide en crue et creuse un canyon à l'aval. Un geste qui se rompt.
-5. **Méandre** (rare, une graine sur six) — un faible débit sur une pente douce dans un sable cohésif : le chenal sinue, ses berges concaves reculent, des barres se déposent sur les convexes. Un geste qui serpente.
+1. **Ravines** : le simulateur de pluie arrose un plateau, un escarpement et un glacis ; des rigoles naissent au pied de l'escarpement et **remontent** en se ramifiant. Les interfluves restent en lames.
+2. **Delta** : un seul courant entre par la boîte d'alimentation, creuse son chenal pilote et construit un **éventail** dans le lac aval ; le panache de turbidité tourne.
+3. **Recul** : un courant établi coule vers le lac ; la guillotine s'abaisse de deux ou trois crans : à chaque cran, une **marche** naît à l'embouchure et remonte la vallée, laissant des terrasses emboîtées.
+4. **Brèche** : un lac se remplit derrière une digue de sable ; il déborde par une échancrure, la brèche **s'élargit en accélérant**, le lac se vide en crue et creuse un canyon.
 
-Épreuve de déclinaison : pluie partout → arbre qui remonte ; un courant → éventail qui balaie ; niveau de base qui baisse → marche qui remonte par crans ; lac qui déborde → rupture qui s'accélère ; faible courant → serpentement latéral. Cinq mouvements différents, cinq silhouettes (arbre, éventail, vallée en gradins, entaille en V puis canyon, ruban sinueux).
+Le méandre, prévu d'abord, est écarté (voir plus bas). Quatre mouvements, quatre silhouettes : arbre qui remonte, éventail, vallée en gradins, entaille puis canyon.
 
 ### La matrice de variations
 
 | Axe | Valeurs |
 | --- | --- |
-| Famille | ravines, delta, recul, brèche, méandre |
-| Sable (accord des strates) | silice et kaolin (blanc, crème, une couche grise) ; grès rouge (rouge, ocre, blanc, rouille) ; basalte (noir, gris, une couche blanche) ; ocres (jaune, orange, rouge, violet) ; limon (gris beige, brun, sable) ; vert (glauconie et craie) |
-| Stratigraphie | régulière fine ; épaisse alternée dure/tendre (corniches) ; une couche dure seule (mesa) ; inclinée (couches pentées) ; uniforme (sable pédagogique) |
-| Forme initiale (gabarit) | pente plane ; vallée en V ; plateau et talus ; double pente (dôme) ; bourrelet transversal (barrage) |
-| Humeur (décor) | voir ci-dessous |
-| Cadrage | vol bas dans l'axe, travelling latéral, plongée haute, rase-mottes à contre-jour |
-| Rythme | durée 36–64 s, part de l'érosion, nombre de crans de la vanne, intensité de la pluie |
-
-Soit plus de 5 × 6 × 5 × 5 × 7 × 4 ≈ 21 000 combinaisons de structure, plus les tirages continus.
+| Famille | ravines, delta, recul, brèche |
+| Sable (accord des strates) | silice et kaolin, grès rouge, basalte, ocres, limon, glauconie et craie |
+| Stratigraphie | lits fins réguliers, bancs durs et tendres (corniches), chapeau dur, sable uniforme |
+| Forme initiale (gabarit) | propre à la famille : plateau, escarpement et glacis ; pente, rupture et lac ; cuvette, digue et pente ; chenal pilote ou échancrure au nez de la lame |
+| Humeur (décor) | sept, voir ci-dessous ; chacune préfère trois ou quatre sables |
+| Cadrage | six plans montés cut (ensemble, ras du sable, gros plan, carte, séchage, lame), côté du bac tiré |
+| Rythme | durée 44, 48 ou 52 s, nombre de crans de la guillotine, position de la source |
 
 ### Les humeurs (épreuve de variété, sans parler de couleur)
 
-| Humeur | Décor (fond, sol, accessoires) | Lumière | Valeur | Cadrage |
-| --- | --- | --- | --- | --- |
-| **Laboratoire** | hall d'essais : fond gris moyen, sol de béton, châssis d'aluminium | grandes boîtes à lumière zénithales, douces | moyenne claire | plongée à 55° |
-| **Fin de jour** | atelier sombre, une grande fenêtre de côté | soleil bas, dur, rasant, ombres longues | contrastée | vol bas dans l'axe, face au soleil de trois quarts |
-| **Lampe rasante** | pièce noire | une lampe dure presque au ras du sable, une seule | très sombre (low key) | travelling latéral |
-| **Cyclorama** | cyclorama blanc, table claire | lumière enveloppante d'en haut, ombres douces | très claire (high key) | plongée haute |
-| **Verrière** | sous une verrière, ciel couvert | ciel diffus, un peu bleuté, ombres nulles | moyenne | rase-mottes |
-| **Contre-jour** | fond noir | une lampe derrière le bac, face à la caméra : l'eau scintille | sombre, hautes lumières sur l'eau | rase-mottes face à la lampe |
-| **Midi** | dehors, sous le soleil (bac de jardin d'expérimentation), fond de ciel pâle | soleil haut, dur | très claire | plongée |
+| Humeur | Décor | Lumière | Valeur |
+| --- | --- | --- | --- |
+| **Laboratoire** | hall d'essais, murs gris moyen | grandes boîtes zénithales, lampe de biais | moyenne |
+| **Fin de jour** | atelier sombre, une grande fenêtre | soleil bas et dur, de biais arrière | contrastée |
+| **Lampe rasante** | pièce noire | une lampe au ras du sable, de côté | très sombre |
+| **Cyclorama** | cyclorama blanc | une lampe assez basse, appoint léger | très claire |
+| **Verrière** | sous une verrière, ciel couvert | ciel diffus mais orienté | moyenne |
+| **Contre-jour** | fond noir | une lampe derrière le bac, face à la caméra : l'eau scintille | sombre |
+| **Midi** | dehors | soleil haut et dur | très claire |
 
-Sept phrases qui ne se ressemblent pas : quatre directions de lumière (zénithale, rasante latérale, contre-jour, haute dure), trois valeurs (claire, moyenne, sombre), quatre cadrages.
+Chaque lampe principale reste à moins de ~55° au-dessus du sable : sous une lumière zénithale, un relief de quelques millimètres disparaît.
 
 ### Épreuve de crédibilité
 
 | Temps | Cause visible | Loi | Convention |
 | --- | --- | --- | --- |
-| l'eau arrive | la boîte d'alimentation déborde par sa lèvre (le flotteur du débitmètre monte) ; les gouttes tombent de la rampe ; le lac monte au pied du barrage | Saint-Venant, débit constant | temps réel |
-| l'érosion | l'eau qui coule, ses rides, sa turbidité | capacité de transport, Shields, talus | MORFAC (relief accéléré ×40), écrit dans le README |
-| le recul | le volant de la vanne tourne, la crête du déversoir descend, le lac baisse | niveau de base | temps réel |
-| la vidange | le flotteur retombe, la vanne s'ouvre en grand | Saint-Venant | temps réel |
-| le séchage | — (la lumière : le sable pâlit) | évaporation, frange capillaire | accéléré, comme un time-lapse |
-| le gabarit | le moteur du portique, la courroie, la lame qui descend et touche le sable | conservation de la masse (le bourrelet) | temps réel |
+| l'eau arrive | la boîte d'alimentation déborde par sa lèvre (le flotteur du débitmètre monte) ; les gouttes tombent du simulateur ; le lac monte derrière la digue | Saint-Venant | temps réel |
+| l'érosion | l'eau qui coule, ses rides, sa turbidité | Meyer-Peter–Müller, Shields, talus | MORFAC (relief accéléré ×30 à ×50) |
+| le recul | la guillotine descend par crans, le lac baisse | niveau de base | temps réel |
+| le séchage | — (le sable pâlit) | frange capillaire | accéléré |
+| le gabarit | le moteur du portique, la lame qui descend et touche le sable | conservation de la masse (le bourrelet) | temps réel |
 
-Rien ne flotte : la table repose sur ses pieds et ses vérins ; la boîte est boulonnée au bout amont ; la rampe de pluie est portée par le portique (elle passe au-dessus de la pente pendant la pluie, garée sinon) ; la vanne coulisse dans ses glissières ; le portique roule sur deux rails ronds, entraîné par une courroie crantée.
+Rien ne flotte : la table repose sur ses pieds et ses vérins ; la boîte est au bout amont ; le simulateur de pluie est porté par quatre montants ; la guillotine coulisse dans ses glissières ; le portique roule sur deux rails ronds.
 
 ### Épreuve d'ambition (construction de l'appareil)
 
-Bac (fond, parois d'acrylique clair qui laissent voir la coupe des strates, cornières d'aluminium, vis), châssis (pieds, entretoises, vérins à vis de basculement avec volant), boîte d'alimentation (caisson inox, chicanes, lèvre en biseau, tuyau, raccord, robinet à volant, rotamètre en verre avec flotteur et graduations), vanne de sortie (glissières, guillotine, crémaillère, volant), déversoir et goulotte, portique (deux rails ronds sur supports, chariots à galets, poutre, moteur, courroie crantée et poulies, lame-gabarit profilée en aluminium anodisé, vérins de descente), rampe de pluie (tube, aiguilles, manomètre). Plus de vingt éléments ; le sable lui-même en porte trois échelles (le relief simulé, les rides, le grain).
+Bac (fond, parois d'acrylique clair qui laissent voir la coupe des strates, profilés d'aluminium), piétement (pieds réglables, traverses, vérins de basculement à volant), boîte d'alimentation (caisson inox, goulotte en biseau, robinet à volant, débitmètre à flotteur), déversoir (caisson, glissières, guillotine à crémaillère et volant, tuyau de sortie), portique (rails ronds sur supports, chariots à galets, poutre, moteur pas à pas, vérins de descente, lame-gabarit), simulateur de pluie (montants, caisson à aiguilles). Le sable porte trois échelles : le relief simulé, les rides, le grain.
 
-### Épreuve d'échelle (règle 15) et références
+### Épreuve d'échelle et références
 
 Références photographiques que tout photographe du sujet ferait :
-1. **Une table Emriver vue de trois quarts** : un bac de 1,8 × 0,6 m, sable plastique beige à grains colorés, chenal de 2–5 cm de large et 1–2 cm de profondeur, eau claire presque invisible sauf par ses reflets, delta en éventail de 20–30 cm à l'aval.
-2. **Rigoles de plage à marée descendante** : des réseaux dendritiques de 2 à 30 cm, des chenaux de 2–10 mm, des interfluves arrondis, le sable plus sombre où l'eau coule encore, contre-jour qui fait scintiller les filets.
+1. **Une table Emriver vue de trois quarts** : un bac de 1,8 × 0,6 m, chenal de 2–5 cm de large et 1–2 cm de profondeur, eau claire presque invisible sauf par ses reflets, delta en éventail de 20–30 cm à l'aval.
+2. **Rigoles de plage à marée descendante** : des réseaux dendritiques de 2 à 30 cm, des chenaux de 2–10 mm, le sable plus sombre où l'eau coule encore, contre-jour qui fait scintiller les filets.
 3. **Eurotank / XES vus d'en haut** : deltas en lobes, panaches de turbidité dans le lac, terrasses à chaque baisse du niveau de base.
-4. **Badlands des Bardenas en vue aérienne rasante** : lames aiguës entre les ravines, couches dures en corniches, couleur par strates — c'est l'image que le plan du séchage doit rappeler.
-5. **Coupe de canyon en fente** (Antelope) : strates fines qui ondulent sur les parois, lumière qui descend.
+4. **Badlands des Bardenas en vue aérienne rasante** : lames aiguës entre les ravines, couches dures en corniches, couleur par strates ; c'est l'image que le plan du séchage doit rappeler.
+5. **Coupe de canyon en fente** (Antelope) : strates fines qui ondulent sur les parois.
 
-Ce qu'elles imposent : à l'image, en plan moyen, un champ de 30–50 cm de sable ; les chenaux font de 4 à 40 mm (2 à 16 cellules), les rides 1–2 cm, les grains 0,2–0,5 mm (sous le pixel en plan large : ils deviennent paillettes et micro-relief) ; les berges sont nettes (talus humide raide), les interfluves aigus. Ce qui donne l'échelle : le grain, les paillettes, les bords du bac et ses vis, la lame du gabarit, les gouttes de pluie (2 mm).
-
-Densité : la simulation porte le relief jusqu'à 5 mm ; en dessous, le shader ajoute les rides de courant (orientées par la vitesse enregistrée), la micro-topographie du gabarit (stries), le grain (normales et paillettes). Le maillage du sable est le double de la grille (1 024 × 512), en interpolation bicubique.
+Ce qu'elles imposent : les chenaux font de 4 à 40 mm (2 à 16 cellules), les rides 1–2 cm, les grains ~0,3 mm ; les berges sont nettes (talus humide raide), les interfluves aigus. Le maillage du sable est le double de la grille (1 024 × 512) ; en dessous de la cellule, le shader ajoute les rides de courant, les stries du gabarit et le grain. Un gros plan ne descend pas sous ~35 cm de cadre (140 cellules) : plus près, on verrait l'interpolation du relief.
 
 ### Images clés
 
-1. **Le delta à mi-film** (Fin de jour) : caméra basse à 15° au-dessus du lac, le soleil rasant de trois quarts arrière ; au premier plan l'eau du lac, mate et turbide, où le panache ocre tourne ; au centre l'éventail de sable clair, chaque bras de chenal en fil d'argent ; à l'arrière-plan, flou, la vallée qui s'enfonce et la boîte d'alimentation qui déborde.
-2. **Les ravines sèches** (Lampe rasante) : plan large en travelling latéral, une seule lampe au ras du sable : un réseau d'arbres noirs et de crêtes blanches, les strates rouges et blanches lisibles sur chaque flanc, le grain qui scintille sur les crêtes.
-3. **Le gabarit** (Laboratoire) : la lame d'aluminium au premier plan, de profil, le bourrelet de sable qui roule devant elle et qui s'effondre dans un canyon pour le combler ; derrière, la surface neuve, mate et striée.
+1. **Le delta à mi-film** (Fin de jour) : caméra basse au-dessus du lac, le soleil rasant de trois quarts arrière ; l'eau du lac turbide où le panache tourne ; l'éventail de sable clair, chaque bras de chenal en fil d'argent.
+2. **Les ravines sèches** (Lampe rasante) : une seule lampe au ras du sable, un réseau d'arbres noirs et de crêtes claires, les strates lisibles sur chaque flanc.
+3. **Le gabarit** (Laboratoire) : la lame qui remonte le bac, le bourrelet de sable qui roule devant elle et comble les canyons ; derrière, la surface neuve, striée.
 
 ### Risques et parades
 
-- **Eau illisible ou en aplat bleu** : l'eau n'a pas de couleur propre ; on la rend par son absorption (Beer-Lambert sur l'épaisseur), sa turbidité, ses reflets (Fresnel sur l'environnement), la réfraction du fond, ses rides animées par le champ de vitesse ; jamais une teinte bleue.
-- **Relief en escaliers ou bruité** (artefacts connus du modèle des tuyaux) : talus, lissage de l'érosion, interpolation bicubique, normales calculées au pixel depuis la carte.
-- **Simulation instable** (cellules qui se vident, vitesses infinies) : flux bornés, profondeur minimale pour la vitesse, plafond de vitesse, tests de conservation dans Node.
-- **Temps de chargement** : la simulation tourne sur le GPU (~6 000 pas en quelques secondes) ; l'écran de chargement montre la carte du relief qui se creuse.
-- **Mémoire** : ~100 Mo de textures enregistrées (ordinateur) ; deux fois moins de résolution et d'états en mobile.
-- **Le gabarit qui fait magie** : le bourrelet porte la matière, se gonfle sur les dépôts, se vide dans les creux ; ce qui reste à la fin tombe dans la goulotte amont.
-- **Trop de laboratoire, pas assez de paysage** : la caméra passe 80 % du film au ras du sable (le paysage remplit l'image), l'appareil n'apparaît que lorsqu'il agit.
+- **Eau illisible ou en aplat bleu** : l'eau n'a pas de couleur propre ; absorption (Beer-Lambert), turbidité, reflets, rides advectées ; jamais une teinte bleue.
+- **Relief en escaliers ou bruité** : talus, interpolation monotone lissée le long des crêtes, normales en B-spline bicubique.
+- **Simulation instable** : flux bornés, profondeur plancher pour la vitesse, tests de conservation dans Node.
+- **Temps de chargement** : la simulation tourne sur le GPU (17 500 à 19 000 pas en 4 à 5,5 s) ; l'écran de chargement montre la carte du relief qui se creuse.
+- **Le gabarit qui fait magie** : le bourrelet porte la matière, se gonfle sur les dépôts, se vide dans les creux.
+- **Trop de laboratoire, pas assez de paysage** : le bâti est laqué dans la valeur du lieu, ne porte pas d'ombre sur le sable, et les plans larges sont cadrés sur le bac.
 
 ### L'écran de chargement
 
-La carte du relief de cette graine vue d'en haut, ombrée en lumière rasante et colorée par strates, qui se creuse en direct pendant la simulation sur le GPU (des instantanés lus à 128 × 64) : on voit les ravines remonter, le delta s'ouvrir, la brèche se former, avant même que la scène n'apparaisse.
+La carte du relief de cette graine vue d'en haut, ombrée en lumière rasante et colorée par strates, qui se creuse en direct pendant la simulation sur le GPU (aperçus lus à 128 × 64).
 
-## Révision après les premières images
+## f. Ce que les essais ont appris
 
-- **Le méandre est écarté** : le modèle des tuyaux virtuels n'a ni courants secondaires ni cohésion latérale des berges ; un faible courant y fait un chenal droit qui s'élargit, pas un méandre. Quatre familles restent.
-- **Les strates suivent le gabarit** : des couches horizontales recoupaient la pente et couvraient la surface neuve de chevrons de couleur avant même que l'eau n'arrive. Le bac est rempli couche par couche, chacune régalée par la même lame.
-- **Un chenal pilote et une échancrure** : sans eux, le courant du delta s'étalait en nappe sur toute la vallée et la digue débordait sur toute sa crête. C'est la pratique des tables de laboratoire ; ici, c'est le nez de la lame qui les dessine.
-- **La loi de transport** : une capacité en |v|·pente creusait un fossé à fond plat ; la capacité de Meyer-Peter–Müller au-dessus du seuil de Shields, avec le cisaillement de Manning, concentre l'eau en chenaux. Le transport du sédiment par les flux d'eau (et non par advection semi-lagrangienne) conserve le sable.
-- **La pluie** : à 0,6 mm/s, tout le plateau s'abaissait en nappe et les ravines semblaient se reboucher (une tendance qui s'inverse) ; à 0,35 mm/s, la lame d'eau du plateau reste sous le seuil et seules les ravines creusent.
-- **Ce qui encombrait l'image** : les ombres du portique et des rails en travers du paysage (le châssis ne porte plus d'ombre ; la lame seulement, au contact), la lame garée au bout du sable (le portique se gare au-dessus de la boîte d'alimentation, lame levée de 10 cm), le portique qui traversait la révélation (il roule après), un montant du simulateur de pluie devant l'objectif (la trajectoire de la caméra est écartée des montants, et un test le vérifie).
-- **La lumière** : définie par rapport au côté où vole la caméra (de biais arrière ou à contre-jour) ; de face, le relief s'aplatissait.
-
-## Révision de direction artistique : le sable est la vedette
-
-Une planche de sept graines à six instants montrait que la machine prenait l'image : dans quatre plans sur six, rails, profilés et portique occupaient 30 à 50 % du cadre, souvent au premier plan, en diagonale, et c'étaient les lignes les plus contrastées (aluminium clair sur fond noir, portique blanc à contre-jour au fond du plan au ras du sable). Le sable, sujet du film, n'avait qu'une bande.
-
-- **Le bâti est peint au ton du lieu**, mat (une laque de studio, comme un banc de tournage) : éclairé par l'humeur, il rend à peu près la luminance du fond. Il se lit comme un cadre, par sa forme. La lame, qui est un acteur, garde un peu plus de valeur ; la paroi amont, face à la caméra basse, n'est plus une vitre (elle renvoyait la lampe).
-- **Les plans larges sont recadrés** : ensemble et séchage en plongée franche (~45°) et plus près, le bac remplit le cadre ; le piétement et le sol sortent du champ, le rail proche longe le bord bas au lieu de barrer l'image. La lame est filmée de trois quarts amont, en plongée : la poutre passe derrière elle, le paysage vient vers nous et disparaît sous le bourrelet.
-- **Les humeurs plates retrouvent une direction** : Cyclorama (lampe abaissée, appoint et studio réduits : le basalte sur fond blanc n'avait plus de relief) et Verrière (le ciel couvert vient d'un côté).
-- **La lame dans le bac** : sa course allait 3 cm au-delà de chaque bout du sable — dans la paroi amont et la boîte d'alimentation, dans le caisson du déversoir — et, levée, elle traversait la boîte d'alimentation sur la brèche ; ses tiges sortaient de leurs vérins. L'acrylique transparent le cachait ; la paroi peinte l'a montré. Elle reste maintenant entre les deux bouts du sable, est portée à niveau au-dessus de tout, ses tiges coulissent dans leurs vérins, et un test la confronte aux pièces fixes à chaque instant.
-- **La lame en panoramique** : une caméra qui l'accompagnait à distance fixe finissait derrière la boîte d'alimentation, face au dos de la machine. Elle se tient haut au-dessus du bout amont et regarde la lame remonter tout le bac ; le raccord vers le plan d'ensemble se fait dans le mouvement, avant que la poutre ne passe sous l'objectif.
-- **Le gros plan plutôt que la macro** : à 42 cm et 24°, le cadre couvrait 70 cellules de la simulation : on voyait l'interpolation du relief, floue, pas du sable. À ~35 cm de large (140 cellules), le relief tient.
-- **Les dépôts se mêlent à leur lit** : la couleur du dépôt basculait dès 0,6 mm d'épaisseur, et le moindre voile de la brèche dessinait des aplats de camouflage ; le placage passe maintenant progressivement de quelques grains épars à une couverture pleine vers 2,5 mm.
-
+- **Pas de méandre.** Le modèle des tuyaux virtuels n'a ni courants secondaires ni cohésion latérale des berges : un faible courant y fait un chenal droit qui s'élargit.
+- **Les strates suivent le gabarit.** Des couches horizontales recoupaient la pente et couvraient la surface neuve de chevrons de couleur avant l'arrivée de l'eau.
+- **Un chenal pilote et une échancrure**, dessinés par le nez de la lame : sans eux, le courant du delta s'étale en nappe et la digue déborde sur toute sa crête.
+- **La loi de transport.** Une capacité en |v|·pente creusait un fossé à fond plat ; Meyer-Peter–Müller au-dessus de Shields, avec le cisaillement de Manning, concentre l'eau en chenaux. L'advection semi-lagrangienne du sédiment perdait la moitié du sable.
+- **La pluie** à 0,6 mm/s abaissait tout le plateau en nappe ; à 0,35 mm/s, seule l'eau concentrée dans les ravines creuse.
+- **La lumière** est définie par rapport au côté où vole la caméra (de biais arrière ou à contre-jour) : de face, le relief s'aplatit.
+- **Le sable est la vedette.** Une planche de sept graines montrait rails, profilés et portique sur 30 à 50 % du cadre, en lignes les plus contrastées. D'où le bâti laqué au ton du lieu, sans ombre sur le paysage, et les plans larges recadrés sur le bac.
+- **Une lame cachée par l'acrylique.** Sa course allait 3 cm au-delà de chaque bout du sable sans que l'image le montre ; un test la confronte maintenant aux pièces fixes à chaque instant.
+- **Les dépôts se mêlent à leur lit.** Une couleur de dépôt qui bascule dès 0,6 mm dessinait des aplats de camouflage ; le placage passe progressivement de quelques grains épars à une couverture pleine vers 2,5 mm.
+- **Le « stop motion »** venait du lit qui bouillonne sous le MORFAC et d'un minimum lu dans une mémoire à part, pas de l'interpolation : préfiltre, passe-bas sans déphasage et minimum tiré de la courbe affichée (voir le README).

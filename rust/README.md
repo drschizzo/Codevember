@@ -36,9 +36,10 @@ La rouille naît là où l'eau reste, et le programme calcule ces endroits d'apr
 | 0,04 – 0,36 | les averses | la pluie qui tombe, le ciel qui se voile | temps d'humectation (ISO 9223), loi de dose (ISO 9224), aération différentielle, ruissellement | accéléré (une saison) |
 | 0,36 – 0,44 | la mise en place | moteurs, rails, bras, palan | cinématique à accélérations bornées | temps réel |
 | 0,44 – 0,86 | la remise à nu | la ligne du laser, le cône de grenaille, la rampe de rinçage du bain | ablation, abrasion, réduction cathodique | temps réel (le bain : accéléré pendant l'immersion) |
-| 0,86 – 1 | le retrait | — | — | temps réel |
+| 0,86 – 0,95 | le retrait | moteurs, rails, bras, palan | cinématique à accélérations bornées | temps réel |
+| 0,95 – 1 | le métal nu | — | — | — |
 
-Le temps d'humectation cumulé τ(u) n'avance que sous les averses et pendant le séchage qui suit (la rouille éclair paraît en séchant) : 0 avant la première, 1 après la dernière, constant ensuite. La rouille visible en un point x de normale n vaut h(x, τ(u)) tant que l'outil ne l'a pas atteint (u < c(x, n)), et 0 ensuite. Un point que l'outil n'atteint jamais (dessous d'une tête, face cachée) garde sa rouille de fin de saison toute la boucle. À u = 0 comme à u = 1, τ = 0 : la pièce est nue, la machine au garage. La boucle est donc parfaite par construction, et la pluie, l'eau et le ciel, nuls hors des averses, se raccordent aussi.
+Avec le bain, la remise à nu va de 0,45 à 0,87. Le temps d'humectation cumulé τ(u) n'avance que sous les averses et pendant le séchage qui suit (la rouille éclair paraît en séchant) : 0 avant la première, 1 après la dernière, constant ensuite. La rouille visible en un point x de normale n vaut h(x, τ(u)) tant que l'outil ne l'a pas atteint (u < c(x, n)), et 0 ensuite. Un point que l'outil n'atteint jamais (dessous d'une tête, face cachée) garde sa rouille de fin de saison toute la boucle. À u = 0 comme à u = 1, τ = 0 : la pièce est nue, la machine au garage. La boucle est donc parfaite par construction, et la pluie, l'eau et le ciel, nuls hors des averses, se raccordent aussi.
 
 ### La corrosion (`src/gen/corrosion.js`)
 

@@ -1,4 +1,6 @@
-# Melt, version retenue : eau douce et bascule
+# Melt, version abandonnée : eau douce et bascule
+
+> **Version abandonnée.** Retenue le 14 novembre, puis réalisée en colonne de glace (`concept-colonne.md`), elle-même abandonnée pour le bain de bismuth (`concept.md`).
 
 Thème : **« melt »**. Sous-titre : *la colonne sans fin*.
 

@@ -207,4 +207,4 @@ Variables d’environnement de `tournage.mjs` : `CHROME` (chemin de Chrome, déf
 
 ## Déploiement
 
-`.github/workflows/pages.yml` publie le dépôt sur GitHub Pages à chaque push sur `main` (page d’index à la racine et dossier `planetaire/`, sans `tools/` ni `docs/`). La source Pages du dépôt doit être réglée sur « GitHub Actions ».
+`.github/workflows/pages.yml` publie le dépôt sur GitHub Pages à chaque push sur `main` : la page d’accueil et chaque dossier de projet qui contient un `index.html`, dont `planetaire/`, sans `tools/` ni fichiers Markdown (les images de `docs/` sont publiées). La source Pages du dépôt doit être réglée sur « GitHub Actions ».

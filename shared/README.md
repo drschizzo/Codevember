@@ -14,6 +14,7 @@ de `<projet>/src/`.
 | `app/mobile.js` | détection, résolution dynamique, cadence plafonnée, gestes tactiles |
 | `app/capture.js` | PNG, MP4 H.264 image par image (WebCodecs + mp4-muxer) |
 | `app/loader.js`, `app/loaderWorker.js` | écran de chargement ; le dessin du thème reste dans `<projet>/src/app/loaderArt.js` |
+| `app/chrome.js` | panneau replié au départ (`?panel=1` l'ouvre), aide clavier qui se réveille au mouvement de la souris |
 | `app/warmup.js` | pipelines asynchrones, préparation sans gel |
 | `app/debug.js` | outils de mise au point (`?debug`) : image fixe, collecteur, planches, film, posemètre, épreuve de l'affiche, temps d'image, raccord ; `sleep` sans minuterie ; recette dans l'ancre |
 | `render/post.js` | chaîne d'image (GTAO, SSR, TRAA, MSAA, flou, profondeur de champ, bloom, étalonnage, grain) |

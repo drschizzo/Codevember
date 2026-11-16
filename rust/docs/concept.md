@@ -83,85 +83,83 @@ Retenue : **la remise à nu**. Elle absorbe des morceaux des autres : les coulur
 
 Deux mouvements qui s'opposent dans la même boucle, comme une respiration lente et une expiration nette : **la rouille vient** (lente, collective, un champ qui s'étend depuis les creux sous les averses, accéléré de plusieurs mois) et **la rouille part** (rapide, nette, un front géométrique tracé par une machine, en temps réel). La première est organique et sans dessin ; la seconde est un dessin parfait (lignes, spirale, niveau d'eau) qui coupe dans l'organique. C'est ce contraste qui fait la satisfaction des vidéos de décapage : l'**avant/après** se lit **sur la même image**, de part et d'autre du front.
 
-### Le cœur technique
+### Le cœur technique (tel qu'il est construit)
 
-1. **La corrosion atmosphérique calculée sur la géométrie** (`src/gen/corrosion.js`, dans un worker). Des centaines de milliers de points tirés sur toute la surface de la pièce (rivets compris) ; pour chacun :
-   - la **concavité** (hauteur moyenne des voisins au-dessus du plan tangent, à deux rayons : 1,5 et 5 cm) — positive dans les angles rentrants et au pied des têtes de rivet (aération différentielle), négative sur les arêtes et le sommet des têtes ;
-   - l'**abri** : la part du ciel qui arrose le point (rayons lancés vers le haut dans une grille d'occupation) — un point abrité reçoit moins de pluie mais sèche mal ;
+1. **La corrosion atmosphérique calculée sur la géométrie** (`src/gen/corrosion.js`, dans un worker). Environ 200 000 points tirés sur toute la surface de la pièce (rivets compris, pas de 4,5 mm) ; pour chacun :
+   - la **concavité** (hauteur moyenne des voisins au-dessus du plan tangent, à deux rayons : 1,2 et 4 cm), positive dans les angles rentrants et au pied des têtes de rivet (aération différentielle), négative sur les arêtes et le sommet des têtes ;
+   - le **ciel** : la part de 15 directions vers le haut que rien ne masque (rayons dans une grille d'occupation de 2 cm). Un point abrité reçoit moins de pluie mais sèche mal ;
    - la **stagnation** : face tournée vers le haut et concave ;
-   - le **temps d'humectation** qui en découle, puis l'**instant d'apparition** de la rouille et sa **vitesse** ;
-   - le **ruissellement** : chaque point rouillé envoie des oxydes vers le bas ; la grille propage cette charge en descendant la gravité le long des surfaces occupées (elle s'arrête sur une face horizontale, contourne les têtes).
-   Les champs sont écrits dans un **volume 3D** dans le repère de la pièce (~1 cm par voxel, dilaté), lu par le shader.
-2. **La loi de dose** dans le shader : épaisseur h = k·(τ − t₀)ⁿ, n = 0,5, τ le temps d'humectation cumulé (qui n'avance que sous les averses : une seule horloge). Les **piqûres** sont des germes (Worley 3D) : une tache naît en chaque germe et s'étend en disque à vitesse proportionnelle à l'humidité locale, les taches se rejoignent ; puis la couche s'épaissit et change de phase (voile orange de lépidocrocite → brun de goethite → noir de magnétite dans les creux), cloque, se fend en écailles qui se soulèvent.
-3. **Le décapage en forme fermée** (`src/machines.js`, même formule en JS et en TSL) : pour chaque point de la surface et sa normale, l'instant exact où l'outil l'atteint — balayage en lignes du laser (boustrophédon, ligne de hauteur w), hélice de la buse sur le plateau tournant (un nombre entier de tours), passage du niveau du bain. Le front sur l'image est l'ensemble des points dont l'instant de décapage vaut t.
+   - le **temps d'humectation** qui en découle, puis l'**instant d'apparition**, propagé de proche en proche (Dijkstra sur les voxels occupés) pour que les taches s'étendent depuis les creux ;
+   - le **ruissellement** : chaque voxel rouillé envoie des oxydes vers le bas, de voxel occupé en voxel occupé.
+   Les champs sont écrits dans un **volume 3D** RGBA 8 bits dans le repère de la pièce (~1 cm par voxel, dilaté), lu par le shader.
+2. **La loi de dose** dans le shader : épaisseur h = k·(τ − t₀)^½, τ le temps d'humectation cumulé (qui n'avance que sous les averses : une seule horloge). Les **piqûres** sont des germes (Worley 3D) : une tache naît en chaque germe et s'étend en disque, les taches se rejoignent ; puis la couche s'épaissit et change de phase (voile orange de lépidocrocite, brun de goethite, noir de magnétite dans les creux), cloque, se fend en écailles.
+3. **Le décapage en forme fermée** (`src/machines.js`, même formule en JS et en TSL) : pour chaque point de la surface et sa normale, l'instant exact où l'outil l'atteint. Balayage en rangées du laser (boustrophédon, ligne de hauteur w), entrée dans le rideau de la rampe de sablage sur le plateau tournant (un nombre entier de tours), passage de la rampe de rinçage à la sortie du bain. Le front sur l'image est l'ensemble des points dont l'instant de décapage vaut u.
 
-Invariants vérifiables : la rouille ne recule jamais pendant les averses et ne progresse jamais pendant le décapage ; tout point atteint par l'outil est nu à la fin ; un point n'est atteint qu'une fois, quand l'outil passe devant lui, à l'image exacte où l'outil est à sa hauteur ; le raccord est exact (au début et à la fin, la même pièce nue) ; les points que l'outil n'atteint pas (dessous des têtes, faces cachées) restent rouillés **toute la boucle** (constants, donc sans couture).
+Invariants vérifiés par les tests : la rouille ne recule jamais pendant les averses ; un point n'est atteint qu'une fois, quand l'outil passe devant lui ; le raccord est exact ; les points que l'outil n'atteint pas (dessous des têtes, faces cachées) restent rouillés **toute la boucle** (τ effectif constant, donc sans couture).
 
 ### La formule de la boucle
 
 Cycle de transformations à deux états (nu, rouillé) : u ∈ [0, 1), horloge unique.
 - τ(u) : temps d'humectation cumulé, 0 jusqu'à la première averse, croissant par paliers (une marche par averse, lissée), 1 à la fin des averses, puis constant ;
-- c(x, n) : instant de décapage du point x (fonction de la machine), dans [u_D0, u_D1] ou +∞ (jamais atteint) ;
+- c(x, n) : instant de décapage du point x (fonction de la machine), dans la fenêtre du décapage ou +∞ (jamais atteint) ;
 - rouille visible : R(x, u) = h(x, τ(u)) si u < c(x, n), 0 sinon ; pour un point jamais atteint, R = h(x, 1) partout.
-À u = 0 comme à u = 1, τ = 0 pour les points atteints (rouille nulle, finition du décapage) et h(x, 1) pour les autres : même image. Les machines partent de leur position de repos et y reviennent (trajectoires périodiques, plateau tournant d'un nombre entier de tours).
+Les machines partent de leur position de repos et y reviennent (plateau tournant d'un nombre entier de tours).
 
-### Découpage temporel (boucle de 48 s par défaut)
+### Découpage temporel (boucle de 44, 48 ou 52 s)
 
 | u | Temps | Ce que l'œil regarde |
 | --- | --- | --- |
-| 0,00–0,05 | **Le métal nu** | la pièce décapée, gris clair, qui accroche la lumière ; la machine est repliée ou hors champ |
-| 0,05–0,47 | **Les averses** (accéléré : une saison) | 4 à 6 averses : la pluie passe (gouttes à contre-jour), la pièce fonce et luit ; au séchage, voile orange autour des rivets et dans les angles ; à chaque averse, les taches s'étendent, se rejoignent, coulent ; à la dernière, croûte brune, écailles, coulures sous chaque boulon |
-| 0,47–0,55 | **La mise en place** (temps réel) | la machine arrive : le portique roule sur ses rails, le bras de la sableuse pivote, le couvercle du bain s'ouvre et le palan prend la charge |
-| 0,55–0,90 | **La remise à nu** (temps réel) | le front avance : une ligne d'éclair blanc et d'étincelles (laser), un cône de grenaille et un nuage (sablage), le niveau du bain qui découvre l'acier ruisselant (électrolyse) ; la caméra suit le front de près |
-| 0,90–1,00 | **Le retrait** | la machine repart ; la pièce nue, entière ; la caméra recule |
-
-Respirations : un ralenti n'a pas de sens pour le laser (le geste est déjà lent) ; la vitesse du front ralentit sur les zones denses en rivets (la machine passe plus de temps où il y a plus à faire, ce qui se lit). La dernière ligne est celle qui finit la pièce : la caméra est là.
+| 0,00–0,04 | **Le métal nu** | la pièce décapée, gris clair, qui accroche la lumière ; la machine au garage |
+| 0,04–0,36 | **Les averses** (accéléré : une saison) | 3 à 5 averses : la pluie passe, la pièce fonce et luit ; au séchage, voile orange autour des rivets et dans les angles ; à chaque averse, les taches s'étendent, se rejoignent, coulent ; à la dernière, croûte brune, écailles, coulures sous chaque boulon |
+| 0,36–0,44 | **La mise en place** (temps réel) | le portique roule sur ses rails, le bras de la sableuse pivote, le couvercle de la fosse roule et le palan prend la charge |
+| 0,44–0,86 | **La remise à nu** (temps réel ; 0,45–0,87 pour le bain) | une ligne d'éclair blanc et d'étincelles (laser), un rideau de grenaille et un nuage (sablage), la pièce qui ressort noire de boue puis la rampe de rinçage qui découvre l'acier (bain) ; la caméra suit le front de près |
+| 0,86–0,95 | **Le retrait** | la machine repart ; la caméra recule |
+| 0,95–1,00 | **Le métal nu** | la pièce nue, entière |
 
 ### Crédibilité
 
 | Temps | Cause visible | Loi | Temps du film |
 | --- | --- | --- | --- |
-| la pièce mouille | la pluie qui tombe (gouttes à contre-jour), le ciel qui se voile | — | accéléré (une averse ≈ 1,5 s) |
-| la rouille naît et s'étend | l'eau qui reste dans les creux, autour des rivets ; le séchage | ISO 9223/9224 : temps d'humectation, C = r·tⁿ ; aération différentielle ; piqûres | accéléré (une saison en 20 s) |
+| la pièce mouille | la pluie qui tombe (gouttes à contre-jour), le ciel qui se voile | — | accéléré (une averse ≈ 1,5 à 2 s) |
+| la rouille naît et s'étend | l'eau qui reste dans les creux, autour des rivets ; le séchage | ISO 9223/9224 : temps d'humectation, C = r·tⁿ ; aération différentielle ; piqûres | accéléré (une saison en 14 à 17 s) |
 | les coulures | l'eau qui ruisselle depuis chaque point rouillé | gravité le long de la surface | id. |
 | le portique arrive | moteurs sur rails (galets, crémaillère) | cinématique, accélérations bornées | temps réel |
 | la rouille part (laser) | la ligne de lumière de la tête galvanométrique, à la distance focale | ablation : la rouille absorbe, le métal réfléchit ; étincelles balistiques | temps réel |
-| la rouille part (sablage) | le cône de grenaille de la buse | abrasion : dose cumulée sous l'empreinte gaussienne ; poussière qui retombe | temps réel |
-| la rouille part (bain) | le bain d'électrolyse, les bulles d'hydrogène sur la pièce, les câbles | réduction cathodique ; la croûte se détache ; la pièce ressort ruisselante | accéléré pendant l'immersion (des heures en quelques secondes), temps réel à la sortie |
+| la rouille part (sablage) | le rideau de grenaille de la rampe de buses | abrasion : une face est décapée quand elle entre dans le rideau avec une incidence utile ; poussière qui naît à l'impact | temps réel |
+| la rouille part (bain) | le bain d'électrolyse, les bulles d'hydrogène, puis la rampe de rinçage | réduction cathodique : la croûte devient une boue noire que les jets chassent | accéléré pendant l'immersion (des heures en quelques secondes), temps réel au rinçage |
 
-Rien ne flotte : la pièce est posée sur ses tréteaux ou ses selles, ou sur le plateau tournant, ou pend au crochet d'un palan par deux élingues ; les machines ont leurs rails, leurs colonnes, leur socle.
+Rien ne flotte : la pièce est posée sur ses cales, ses sellettes, son coupon de rail ou son pied, ou sur le plateau tournant, ou pend au crochet d'un palan ; les machines ont leurs rails, leurs colonnes, leur socle.
 
 ### Catalogue
 
-**Les pièces** (quatre familles, de silhouettes différentes) :
+**Les pièces** (quatre familles, de silhouettes différentes ; le détail construit est dans le README) :
 - **Nœud** — un nœud de treillis riveté (le gousset où convergent trois à cinq barres) : gousset découpé, cornières jumelées de part et d'autre, membrure en T, deux rangs de rivets à tête ronde par barre, couvre-joints. Des centaines de rivets. Silhouette en étoile.
 - **Vanne** — une vanne à opercule sur sa tuyauterie : corps de fonte bombé, brides à 8–16 boulons (tête, rondelle, écrou, bout de filet), chapeau boulonné, presse-étoupe, arcade, tige filetée, volant à rayons. Silhouette en croix.
 - **Roue** — une roue motrice de locomotive : moyeu, rayons de section elliptique effilés, jante, bandage à boudin, contrepoids en croissant fait de plaques rivetées, maneton, bout d'essieu à écrou ; posée sur un coupon de rail. Silhouette ronde.
-- **Porte** — une porte étanche de navire dans son cadre : tôle à raidisseurs, hiloire rivetée, taquets à coin et à poignée, charnières, volant central. Silhouette en plaque ornée.
+- **Porte** — une porte étanche de navire dans sa cloison : battant raidi, hiloire en cornière, 6 à 10 taquets à poignée, charnières, plaque de laiton. Silhouette en plaque ornée.
 
 **Les machines** (trois familles de geste) :
-- **Laser** — un portique (deux colonnes, une traverse qui monte et descend, un chariot) qui balaie la face de la pièce **en lignes**, de haut en bas. Front : un trait droit, net, une ligne d'éclair et une gerbe d'étincelles. Fini : acier gris clair satiné, stries fines du balayage.
-- **Sablage** — la pièce sur un **plateau tournant** ; la buse, au bout d'un bras sur colonne, descend lentement pendant que la pièce tourne : le front est une **hélice**. Cône de grenaille, nuage de poussière qui roule, retombe. Fini : gris mat uniforme (métal blanc).
-- **Bain** — un palan sur portique descend la pièce dans une cuve d'électrolyte ; bulles ; la pièce remonte : le front est le **niveau du liquide**, horizontal, qui descend sur elle. Fini : gris sombre, ruisselant, qui sèche.
+- **Laser** — un portique qui roule sur deux rails de derrière la pièce et balaie sa face **en rangées**, de haut en bas. Front : un trait droit, net, une ligne d'éclair et une gerbe d'étincelles. Fini : acier gris clair satiné, stries fines du balayage.
+- **Sablage** — la pièce sur un **plateau tournant** ; une rampe de buses, au bout d'un bras sur colonne, descend lentement pendant que la pièce tourne : le front est une **hélice**. Rideau de grenaille, poussière née à l'impact. Fini : gris mat uniforme (métal blanc).
+- **Bain** — un palan sur portique descend la pièce dans une fosse d'électrolyse ; bulles ; la pièce remonte noire de boue, et une **rampe de rinçage** descend sur elle : le front est la ligne horizontale de ses buses. Fini : gris sombre, ruisselant.
 
 **Les humeurs** (six décors) : voir la variété plus bas.
 
-**Les climats** : bruine continentale (taches fines, coulures longues), averses franches (croûte épaisse, stagnation), embruns salins (akaganéite orangée, cloques, piqûres profondes).
+**Les climats** : bruine (taches fines, coulures longues), averses (croûte épaisse), embruns (rouille orangée, cloques), brouillard (couverture plus uniforme).
 
-**Les aciers** : acier doux (rouille brun orangé, écailles), fer puddlé (feuilletage, rivets plus clairs), fonte (croûte granuleuse grise et brune) — la vanne a un corps de fonte, la roue un bandage d'acier dur ; les boulons de laiton (rares) ne rouillent pas mais brunissent.
+**Les matières** : acier laminé, fonte (corps de la vanne, jante de la roue : rouille plus grise et grenue), laiton et bronze (presse-étoupe, plaque, tige), qui ne rouillent pas mais brunissent. Le fer puddlé du plan initial n'a pas été construit.
 
 ### Matrice de variations
 
 | Axe | Valeurs |
 | --- | --- |
-| Pièce | Nœud (3–5 barres, simple ou double gousset), Vanne (DN, 8–16 boulons, volant à 4–6 rayons), Roue (12–18 rayons, contrepoids), Porte (rectangulaire ou ovale, 6–10 taquets) |
+| Pièce | Nœud (3–5 barres), Vanne (diamètre, 8–16 boulons par bride, volant à 4–6 rayons), Roue (12–18 rayons, contrepoids), Porte (rectangulaire ou ovale, 6–10 taquets) |
 | Machine | Laser (portique), Sablage (plateau tournant), Bain (palan et cuve) |
 | Humeur | six décors |
 | Climat | bruine, averses, embruns, brouillard |
-| Acier | doux, puddlé, fonte (selon la pièce) |
-| Balayage | sens des lignes, largeur de ligne, pas de l'hélice, sens de rotation, profondeur d'immersion |
+| Balayage | sens des rangées, hauteur de ligne, tours et inclinaison de la rampe, sens de rotation, durée d'immersion |
 
-4 × 3 × 6 × 4 × 3 = 864 combinaisons de structure, plus les paramètres continus. Deux graines au hasard diffèrent presque toujours par la pièce ou par la machine, qui changent la silhouette **et** le geste.
+4 × 3 × 6 × 4 = 288 combinaisons de structure, plus les paramètres continus. Deux graines au hasard diffèrent presque toujours par la pièce ou par la machine, qui changent la silhouette **et** le geste.
 
 ### Variété (une phrase par humeur, sans couleur)
 
@@ -181,8 +179,8 @@ Nœud : gousset découpé à congés, cornières à congé de laminage et arête
 ### Déclinaison (le mouvement de chaque famille de machine)
 
 - **Laser** : un trait lumineux droit qui balaie la pièce en lignes, de haut en bas, de gauche à droite puis de droite à gauche ; la pièce est immobile, la tête se déplace.
-- **Sablage** : la pièce tourne sur elle-même ; un cône de poussière immobile descend lentement ; le front s'enroule en hélice.
-- **Bain** : la pièce descend tout entière dans un liquide, disparaît, remonte ; le front est un plan horizontal qui la parcourt de haut en bas à la sortie.
+- **Sablage** : la pièce tourne sur elle-même ; un rideau de grenaille descend lentement ; le front s'enroule en hélice.
+- **Bain** : la pièce descend tout entière dans un liquide, disparaît, remonte noire ; le front est la rampe de rinçage qui la parcourt de haut en bas.
 Trois mouvements de nature différente (translation d'un trait, rotation de la pièce, immersion) : pas des variantes.
 
 ### Scénario (film muet)
@@ -192,7 +190,7 @@ Trois mouvements de nature différente (translation d'un trait, rotation de la p
 3. Deuxième averse : les taches s'étendent depuis ces points, des piqûres naissent sur les plats ; des traînées descendent sous chaque boulon.
 4. Troisième, quatrième averse : les taches se rejoignent, la couleur fonce, la croûte cloque, se fend en écailles ; les coulures s'allongent. La pièce est entièrement rouillée, sauf les filets de laiton.
 5. La machine entre : le portique roule jusqu'à la pièce (ou la buse pivote, ou le palan reprend la charge et le couvercle de la cuve s'ouvre).
-6. Le décapage : la ligne lumineuse part du coin haut ; derrière elle, l'acier nu, net, gris clair ; les étincelles tombent. La caméra s'approche. Ligne après ligne, la pièce se découvre. (Ou : la pièce tourne, le cône descend ; ou : la pièce remonte du bain, ruisselante, nue.)
+6. Le décapage : la ligne lumineuse part du coin haut ; derrière elle, l'acier nu, net, gris clair ; les étincelles tombent. La caméra s'approche. Ligne après ligne, la pièce se découvre. (Ou : la pièce tourne, le rideau de grenaille descend ; ou : la pièce remonte du bain noire de boue, et la rampe de rinçage la découvre.)
 7. La dernière ligne finit la pièce. La machine repart. La pièce nue, entière, comme au début.
 Forme : une **montée** lente (accumulation), une **réponse** nette (le décapage), un **retour**.
 
@@ -206,9 +204,9 @@ Forme : une **montée** lente (accumulation), une **réponse** nette (le décapa
 
 - **Une rouille « texture de jeu »** : la parade est le modèle (germes, champ d'humectation, stratification, coulures) et le relief (écailles, cloques, piqûres), jugés sur des planches en gros plan à côté de photographies de référence.
 - **Un front qui avance « tout seul »** : la cause est toujours à l'endroit du front (la ligne lumineuse est la tête du laser ; le cône est la buse ; le niveau est le bain) ; même formule pour l'outil et pour le shader, test d'écart nul.
-- **La lenteur** : 4 pièces × 3 machines, c'est beaucoup de géométrie. Les rivets et boulons sont des instances (une géométrie, un shader) ; les champs de corrosion sont cuits une fois par pièce dans un worker.
+- **La lenteur** : 4 pièces × 3 machines, c'est beaucoup de géométrie ; tout est construit et le champ de corrosion cuit une fois par scène dans un worker.
 - **La face cachée** : le laser ne voit qu'une face ; ce qu'il ne voit pas reste rouillé toute la boucle (cohérent, et sans couture), mais la caméra reste du côté décapé.
-- **Le bain cache la pièce** : le liquide est opaque (électrolyte trouble), on ne voit pas sous la surface ; le temps fort est la **sortie**.
+- **Le bain cache la pièce** : le liquide est opaque (électrolyte trouble), on ne voit pas sous la surface ; le temps fort est la **sortie** et le rinçage.
 - **Le sur-chargé** : une pièce par scène, une machine, un décor neutre.
 
 ## e quater. Références
@@ -222,25 +220,14 @@ Photographies que tout photographe du sujet ferait, et ce qu'elles imposent :
 
 Échelle : la pièce mesure ~1 m ; un rivet ~2 cm, un boulon M20–M24 ; au plan large (caméra à ~3,5 m), un rivet fait ~6 px de large en 1080p — l'échelle vient des rangées régulières de rivets. Au gros plan (~1,6 m), une écaille fait 10–20 px : le relief doit être là. La rouille se dessine à trois échelles : la tache (5–20 cm, champ d'humectation), la piqûre (5–15 mm, germes), le grain (≤ 1 mm, bruit).
 
-## g. Mise au point (pendant la construction)
+## g. Ce que les essais ont appris
 
-Ce que les premières planches ont fait changer :
-
-- **La rouille d'un seul tenant n'était pas assez travaillée** : une croûte uniforme orange-brun, couverte d'un réseau régulier de fentes (Worley nu), se lisait comme du cuir. Elle a maintenant trois échelles (la tache du champ, des plaques de ~5 cm plus orangées ou brun-noir, le grain millimétrique), des écailles seulement dans la croûte épaisse et par plaques, aux fentes irrégulières (coordonnées déformées) et aux bords relevés plus orangés, de la poudre de rouille tombée sur les faces tournées vers le haut, et des gouttes perlées quand la pièce est mouillée.
-- **Le front de rouille** : l'instant d'apparition purement local faisait rouiller toutes les faces dégagées en même temps ; la propagation géodésique (la rouille gagne de proche en proche depuis les rivets et les creux) donne le geste collectif attendu — des taches qui s'étendent et se rejoignent.
-- **Le laser n'atteignait que les faces tournées vers lui** : les ailes des cornières restaient rouillées toute la boucle, et la pièce paraissait rouillée dès le début. La profondeur tolérée croît maintenant avec l'incidence rasante (la tête balaie aussi un peu de biais).
-- **Les rails du portique barraient le premier plan** : le portique arrive maintenant de derrière la pièce, sur deux rails latéraux, tête relevée par-dessus, puis la tête descend.
-- **La colonne de sablage masquait la pièce** : elle se place de profil par rapport à la caméra (on voit le jet de côté, règle de la cause lisible).
-- **Le sablage ne voyait pas les grandes faces d'une pièce plate** : une buse qui vise l'axe est toujours parallèle à une face qui contient l'axe. Une face est maintenant décapée quand elle se tourne vers la buse, et l'occultation se lit dans 32 cartes de profondeur horizontales.
-- **Le bain** : une cuve posée au sol mettait la pièce à 4 m de haut ; c'est une fosse dont le rebord affleure le sol. Ses battants pivotants traversaient la pièce suspendue : un couvercle unique roule sur le côté.
-- **Exposition** : le posemètre a demandé de doubler la lampe de la Nuit d'usine et de la Cale sèche (médiane du sujet 0,007 et 0,03), et de baisser le Laboratoire et le Plein jour (20 à 30 % de pixels brûlés).
-
-## h. Retours de l'utilisateur
-
-- **La pluie était trop longue** : les averses passent de 42 % à 32 % de la boucle (u de 0,04 à 0,36), en 3 à 5 averses au lieu de 4 à 6 ; le décapage gagne le temps.
-- **La roue avait des pièces détachées** : les plaques du contrepoids flottaient à 6 mm des rayons (elles les serrent maintenant, avec un remplissage coulé entre elles) ; le maneton tombait entre deux rayons (il est porté par un rayon) ; les pitons, vissés dans le bord de la jante, faisaient passer les élingues à travers le bandage (ils sont en haut du bandage).
-- **Les chaînes n'étaient pas des chaînes** : la chaîne de levage empilait des anneaux horizontaux, et les élingues laissaient des jours entre les maillons. Chaque maillon tourne maintenant d'un quart de tour sur le précédent et passe dans lui, au pas de sa longueur intérieure.
-
-## i. Audit de cohérence des pièces
-
-À la demande de l'utilisateur (« des anneaux qui ne semblent attachés à rien »), un audit systématique (`src/gen/audit.js`, devenu un test) : le maillage de chaque pièce est séparé en éléments (composantes connexes après soudure des sommets), échantillonné à 2,5 mm, et chaque élément doit toucher le sol de proche en proche. Il a trouvé : la vanne entière posée sur des berceaux qui ne touchaient ni le tuyau ni leur semelle ; le battant de la porte à 4 mm de l'hiloire ; les nœuds de charnière reliés à rien. La relecture a ajouté ce que l'audit ne voit pas : pitons vissés hors du bord des brides ou dans le chant d'une tôle de 10 mm (remplacés par des oreilles de levage percées et rivetées, une manille dans le trou), bras des taquets à 3 mm du battant, plaque de laiton décollée, goujons du presse-étoupe qui ne descendaient dans rien, cloison pleine derrière la porte (vue de dos sur le plateau tournant : une porte qui ouvre sur un mur — la cloison est maintenant percée), poignée du taquet du bas dans la cornière du pied, roue levée par des trous taraudés dans la bande de roulement (elle pend maintenant à un palonnier, par deux étrangloirs autour du maneton et de l'essieu), et élingues qui traversaient la pièce (la hauteur du crochet est calculée pour qu'aucune chaîne ne passe à moins de 3 cm de la pièce).
+- Une croûte uniforme couverte d'un réseau régulier de fentes (Worley nu) se lit comme du cuir : la rouille a besoin de trois échelles (tache du champ, plaques de ~5 cm, grain millimétrique) et d'écailles seulement dans la croûte épaisse, aux fentes irrégulières.
+- Un instant d'apparition purement local fait rouiller toutes les faces dégagées en même temps : la propagation géodésique donne le geste collectif (des taches qui s'étendent et se rejoignent).
+- Le laser ne doit pas exiger une face tournée vers lui : sans tolérance qui croît avec l'incidence rasante, les ailes des cornières restaient rouillées toute la boucle.
+- Une buse qui vise l'axe est parallèle à toute face qui contient l'axe : une pièce plate ne se décape qu'avec un rideau de buses et un test d'entrée dans le rideau, l'occultation lue dans 32 cartes de profondeur.
+- Dans un vrai bain d'électrolyse la croûte devient une boue noire : la pièce ressort noire, et c'est le rinçage qui montre l'acier.
+- Machines et cadrage : le portique arrive de derrière la pièce (ses rails barraient le premier plan), la colonne de sablage se place de profil, la fosse affleure le sol (une cuve posée mettait la pièce à 4 m de haut) et son couvercle roule sur le côté.
+- Exposition réglée au posemètre par humeur (lampes doublées en Nuit d'usine et Cale sèche, baissées en Laboratoire et Plein jour).
+- Une pièce construite par programme accumule des éléments flottants (berceaux, battant, charnières, plaques à quelques millimètres) : l'audit (`src/gen/audit.js`, composantes connexes échantillonnées à 2,5 mm qui doivent rejoindre le sol de proche en proche) est devenu un test. Il ne voit pas les fixations absurdes (pitons vissés dans un chant), remplacées à la relecture par des oreilles de levage percées et une manille.
+- La hauteur du crochet est calculée pour qu'aucune élingue ne passe à moins de 3 cm de la pièce ; la roue pend à un palonnier, par deux étrangloirs autour du maneton et de l'essieu. Les maillons d'une chaîne tournent d'un quart de tour l'un sur l'autre.

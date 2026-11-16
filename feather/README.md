@@ -6,7 +6,7 @@ Au centre de la gerbe, des tuyaux montent : chaque plume roulée en fuseau, dans
 
 ![Une gerbe de martin-pêcheur au cabinet : au centre, des plumes encore roulées en fuseau sous leur gaine claire, l’une qui se déplie ; autour, des plumes ouvertes à tous les âges (graine 1)](docs/capture.jpg)
 
-Rendu physique en three.js (WebGPU, TSL). La scène est entièrement procédurale : une graine (un code court) produit toujours la même scène. La démarche est dans [docs/concept.md](docs/concept.md) : le thème exploré sous six angles, les clichés écartés, neuf pistes notées, les épreuves (crédibilité, variété, ambition, déclinaison, échelle) et les révisions après les premiers rendus, jusqu'au passage du plumage en tuiles à la gerbe.
+Rendu physique en three.js (WebGPU, TSL). La scène est entièrement procédurale : une graine (un code court) produit toujours la même scène. La démarche est dans [docs/concept.md](docs/concept.md) : le thème exploré sous six angles, les clichés écartés, neuf pistes notées, les épreuves (crédibilité, variété, ambition, déclinaison, échelle) et ce que les essais ont appris.
 
 ## Utilisation
 
@@ -69,7 +69,7 @@ La courbure change, la longueur d'arc non : chaque barbe se déroule sur un cyli
 
 ## La plume (`src/gen/feather.js`, `src/scene/feather.js`)
 
-- **La gaine** (une par follicule, instanciée) est une pellicule, pas un tube opaque : on voit au travers la plume roulée dans ses couleurs. Sa couverture est tramée (lissée par l'anticrénelage temporel) et suit l'incidence (Fresnel : elle ne se lit qu'aux bords du fuseau), ses crêtes hélicoïdales et le bord qui sèche, blanchi, juste sous le front. Elle ne porte pas d'ombre, et une barbe encore roulée non plus : le fuseau se faisait de l'ombre à lui-même et restait un bâton sombre au milieu de la gerbe, surtout à contre-jour, quand les plumes ouvertes s'allument par translucidité. Elle s'effrite derrière le front de déroulement : elle est retirée de la géométrie elle-même (et donc de la carte d'ombre) au-delà de son bord tramé. Un masque de fragment ne suffit pas : la passe d'ombre de three.js le réutilise sans les variables qu'il lit (la gaine y restait entière, puis disparaissait d'un bloc).
+- **La gaine** (une par follicule, instanciée) est une pellicule, pas un tube opaque : on voit au travers la plume roulée dans ses couleurs. Sa couverture est tramée (lissée par l'anticrénelage temporel) et suit l'incidence (Fresnel : elle ne se lit qu'aux bords du fuseau), ses crêtes hélicoïdales et le bord qui sèche, blanchi, juste sous le front. Elle ne porte pas d'ombre, et une barbe encore roulée non plus : sinon le fuseau s'ombre lui-même et reste un bâton sombre au milieu de la gerbe, surtout à contre-jour. Elle s'effrite derrière le front de déroulement : elle est retirée de la géométrie elle-même (et donc de la carte d'ombre) au-delà de son bord tramé. Un masque de fragment ne suffit pas : la passe d'ombre de three.js le réutilise sans les variables qu'il lit, et la gaine y resterait entière.
 - **Construction** : calamus translucide (qui reste aux trois quarts dans le follicule), rachis effilé, deux vexilles asymétriques dont la base est duveteuse (barbes libres et frisées), barbes à arête (le ramus) bordées d'une frange de barbules, gaine de kératine claire et fine aux crêtes hélicoïdales, pointe usée, motif déposé pendant la croissance, irisation.
 - **Rubans à arête** : chaque barbe est un gabarit de 22 segments sur 3 sommets, instancié pour toutes les plumes de la gerbe (quatre vec4 par instance dans un tampon entrelacé) et posé dans le vertex shader par la même formule qu'en JS (`barbPose`). La normale s'incline en travers (l'arête du ramus accroche un filet de lumière). La frange des barbules est un peigne tramé (lissé par l'anticrénelage temporel).
 - **Libres puis agrafées** : une barbe libérée s'écarte de quelques degrés et ondule (des jours s'ouvrent entre les barbes), puis le front d'agrafage la ramène dans le plan. Les barbes sans crochets s'affaissent sous leur poids.
@@ -80,7 +80,7 @@ La courbure change, la longueur d'arc non : chaque barbe se déroule sur un cyli
 
 **Un zootrope à l'angle d'or.** Neuf à vingt et un follicules sur une petite couronne au sommet du socle. Le follicule i est à l'azimut i × 137,5°, et sa plume a l'âge a = frac(φ + i/N), φ étant la phase de la boucle. Deux plumes nées l'une après l'autre sont donc à 137,5° l'une de l'autre. Deux voisines sur la couronne ont des indices qui diffèrent de 3, 5 ou 8, donc des âges très différents, et comme l'inclinaison ne fait que croître avec l'âge, elles sont sur deux cônes emboîtés plutôt que croisés. La boucle se referme par construction, et à chaque instant une plume au moins se déplie.
 
-**Le socle.** Le sommet arrondi d'une tête (une calotte prolongée par un cylindre qui sort du cadre), couvert de houppes de duvet gonflées, semées sans trame et cuites une fois en un maillage statique. Deux essais l'ont précédé : une petite pelote, qui se lisait comme une boule flottante, et un champ de duvet presque plat, où la plume chassée tombait sans plus avoir de raison de quitter le cadre.
+**Le socle.** Le sommet arrondi d'une tête (une calotte prolongée par un cylindre qui sort du cadre), couvert de houppes de duvet gonflées, semées sans trame et cuites une fois en un maillage statique. La pente du crâne donne à la plume chassée sa raison de quitter le cadre.
 
 **Les réglages par famille** (`GERBE`) :
 
@@ -97,7 +97,7 @@ L'inclinaison du follicule ne s'applique qu'à 30 % tant que la plume est un tuy
 
 **Les traversées : un banc** (`src/gen/collide.js`). Le banc mesure ce que l'on voit. À un instant u, il prend toutes les plumes de la gerbe à leur place réelle (`bouquetState`, la fonction qui remplit aussi les uniformes du GPU). Chaque barbe et chaque rachis y sont des lignes brisées, posées par la même formule que le vertex shader, et la surface pleine de chaque plume (barbes agrafées, rachis) une carte de hauteur dans son propre repère. Un segment dont les deux extrémités sont de part et d'autre d'une surface, de plus de 0,15 mm, la traverse. Les barbes libres (les fils du paon, l'autruche) se mêlent comme des cheveux : elles ne font pas surface. Au pied de la gerbe (sur 0,1 L), les bases duveteuses et le duvet du socle se mêlent de même, et on n'y compte pas les traversées. `node feather/tools/crossings.mjs 1 7 g1:vexille` donne le pire instant de chaque graine.
 
-Il n'y a plus de solveur. Le plumage en tuiles en demandait un (3 à 8 s au chargement), qui écartait les voisines pas à pas, des mouvements sans cause visible. Dans la gerbe, l'ordre suffit. Mesuré sur huit graines et 100 instants : 0,6 mm au plus pour les vexilles, le duvet et le paon. Pour l'autruche, dont seuls les rachis sont pleins, deux rachis se frôlent encore pendant quelques centièmes de boucle (jusqu'à 3 mm).
+Aucun solveur n'écarte les plumes : l'ordre de la gerbe suffit, et aucune plume ne bouge pour une autre. Le test (huit graines, 100 instants) borne les traversées à 0,6 mm pour les vexilles et le duvet, 0,8 mm pour le paon. Pour la famille plume, dont seuls les rachis sont pleins, deux rachis se frôlent pendant quelques centièmes de boucle (2,1 mm au banc pour la graine 0, 1,2 mm pour g2 ; le test tolère 5,5 mm).
 
 ## Les décors
 
@@ -125,11 +125,11 @@ L'écran dessine le calcul en cours. Le motif de la plume de cette graine se dé
 node --test feather/test/*.test.mjs
 ```
 
-Dix-sept tests (3 s) : le déroulement est une isométrie ; le calendrier est monotone (croissance, front de déroulement, agrafage, courbure, inclinaison, usure) ; la boucle se referme ; la gerbe est à l'angle d'or (deux plumes nées l'une après l'autre sont loin l'une de l'autre, une plume au moins se déplie à chaque instant, l'inclinaison ne revient jamais en arrière) ; au raccord d'un follicule, l'ancienne prend exactement la pose de la courante ; la chute de l'ancienne glisse le long de son axe sur au plus la longueur du calamus, ne remonte jamais, ne saute pas et sort du cadre ; rien ne traverse rien sur toute la boucle (le banc, huit graines) et rien n'entre dans le socle ; à 60 i/s, aucune partie pleine ne saute de plus de 2 mm ; la caméra est périodique, lente, sans à-coup ; le motif du collier est déterministe, non trivial et respecte sa couverture ; les quatre familles ont des gestes distincts ; recette déterministe et JSON ; familles, oiseaux et humeurs tirés ; humeurs différentes par la lumière et la valeur ; lampes presque blanches ; la plume tranche sur son fond.
+Dix-sept tests (3 s) : le déroulement est une isométrie ; le calendrier est monotone (croissance, front de déroulement, agrafage, courbure, inclinaison, usure) ; la boucle se referme ; la gerbe est à l'angle d'or (deux plumes nées l'une après l'autre sont loin l'une de l'autre, une plume au moins se déplie à chaque instant, l'inclinaison ne revient jamais en arrière) ; au raccord d'un follicule, l'ancienne prend exactement la pose de la courante ; la chute de l'ancienne glisse le long de son axe sur au plus la longueur du calamus, ne remonte jamais, ne saute pas et sort du cadre ; sur toute la boucle, les parties pleines ne se traversent pas au-delà d'un seuil par famille (le banc, huit graines) et rien n'entre de plus de 1,5 mm dans le socle ; à 60 i/s, aucune partie pleine ne saute de plus de 2 mm ; la caméra est périodique, lente, sans à-coup ; le motif du collier est déterministe, non trivial et respecte sa couverture ; les quatre familles ont des gestes distincts ; recette déterministe et JSON ; familles, oiseaux et humeurs tirés ; humeurs différentes par la lumière et la valeur ; lampes presque blanches ; la plume tranche sur son fond.
 
 ## Performances
 
-Génération d'une scène : 10 à 90 ms pour le motif du collier (réaction-diffusion 128 × 192), moins de 5 ms pour la table de barbes, 50 à 150 ms pour le duvet du socle (dans des workers), 10 à 30 ms pour la trajectoire de caméra. Plus de scène à résoudre : le chargement ne dure plus que le temps de compiler les shaders. Temps d'image mesuré dans le panneau de navigateur de l'application (GPU d'un Mac), qualité Haute, 1 983 × 1 597 (3,2 Mpx), boucle arrêtée, 20 rendus :
+Génération d'une scène : 10 à 90 ms pour le motif du collier (réaction-diffusion 128 × 192), moins de 5 ms pour la table de barbes, 50 à 150 ms pour le duvet du socle (dans des workers), 10 à 30 ms pour la trajectoire de caméra. Rien n'est résolu au chargement : il dure le temps de compiler les shaders. Temps d'image mesuré dans le panneau de navigateur de l'application (GPU d'un Mac), qualité Haute, 1 983 × 1 597 (3,2 Mpx), boucle arrêtée, 20 rendus :
 
 | Graine | Famille, humeur | u = 0,3 | u = 0,6 |
 | --- | --- | --- | --- |
@@ -138,7 +138,7 @@ Génération d'une scène : 10 à 90 ms pour le motif du collier (réaction-diff
 | 0 | plume (aigrette), contre-jour | 5,9 ms | 5,9 ms |
 | 2 | duvet (cygne), studio noir | 6,6 ms | 6,6 ms |
 
-Deux fois moins qu'avec le plumage en tuiles (11 à 17 ms) : les deux cents voisines en gabarit grossier ont disparu. Mobile (`?mobile=1`) : 1,7 ms. Raccord de la boucle (`seam()`) sous 10⁻⁷.
+Mobile (`?mobile=1`) : 1,7 ms. Raccord de la boucle (`seam()`) sous 10⁻⁷.
 
 ## Version mobile
 

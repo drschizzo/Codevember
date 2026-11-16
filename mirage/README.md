@@ -4,18 +4,11 @@
 
 Une coupe s'ouvre dans le couvercle, face à la caméra, comme sur une maquette de musée. C'est d'abord une fente, puis un éventail jusqu'au quart, aux tranches peintes en rouge, qui se referme ensuite. Tant qu'elle est ouverte, on voit dans le même cadre le vrai petit mirascope posé au fond et son image qui flotte au-dessus de l'ouverture : le même objet deux fois, dont un seul est là.
 
-La boucle est un seul mouvement. Au départ, le couvercle est entier et un petit mirascope flotte. La coupe s'ouvre pendant que la caméra s'approche lentement. Puis la caméra plonge dans l'image, coupée elle aussi, avec le suivant au fond. Les coupes se referment et l'image emplit l'écran comme le grand au début : la boucle recommence, un niveau plus bas. La lumière ne change pas.
+La boucle (un niveau, 24 s par défaut) est un seul mouvement. Au départ, le couvercle est entier et un petit mirascope flotte. La coupe s'ouvre pendant que la caméra s'approche lentement. Puis la caméra plonge dans l'image, coupée elle aussi, avec le suivant au fond. Les coupes se referment et l'image emplit l'écran comme le grand au début : la boucle recommence, un niveau plus bas. La lumière ne change pas.
 
 ![Mirage](docs/capture.jpg)
 
-Rendu physique en three.js (WebGPU, TSL), entièrement procédural : une graine produit une scène. Page technique : [explainer.html](explainer.html). La démarche est dans [docs/concept.md](docs/concept.md), avec ses versions abandonnées :
-- un horizon au très long foyer (une Fata Morgana), juste mais illisible ;
-- un cabinet de physique où la seconde apparence n'était qu'une déformation ;
-- un mirascope à objets dont la boucle était trop simple ;
-- une plongée en sept actes, trop compliquée ;
-- une plongée seule, où l'on ne voyait plus que c'était un mirage ;
-- une aiguille qui traversait l'image, juste mais muette ;
-- un quart du couvercle ôté en permanence, qu'on ne comprenait pas.
+Rendu physique en three.js (WebGPU, TSL), entièrement procédural : une graine produit une scène. Page technique : [explainer.html](explainer.html). La démarche et les versions abandonnées (une Fata Morgana, un cabinet de physique, un mirascope à objets, une plongée en actes) sont dans [docs/concept.md](docs/concept.md).
 
 Aucune image n'est peinte ou copiée. Chaque pixel suit son rayon entre les miroirs, d'un niveau de la chaîne à l'autre, et les mirascopes flottants sortent de la seule géométrie des rayons.
 
@@ -48,7 +41,7 @@ Fermées, elles se rejoignent à leur bord (y = f/2) et chaque sommet est au foy
 
 Le demi-angle de la coupe va de 0 à 45° (u de 0,06 à 0,16), reste ouvert, puis revient à 0 (u de 0,44 à 0,60). Elle est fermée au raccord. Par la coupe, on voit le petit au fond directement, sans miroir. L'image reste entière, car pour un observateur les rayons qui la forment se réfléchissent sur les coupes du côté opposé au sien. La coupe du bas reste entière : par l'entaille, on ne voit que l'intérieur, jamais la table, que le petit n'a pas.
 
-Dans le tracé, une surface du couvercle (dedans, dehors, joncs, perles) n'est retenue que hors de l'entaille. Pour un paraboloïde, on garde la plus proche des deux racines qui convient. Pour un jonc et pour la couronne, le *sphere tracing* marche dans la forme privée du coin, si bien que les perles sont tranchées une à une à mesure que la coupe s'élargit. Les deux tranches sont des demi-plans verticaux par l'axe, gardés dans l'épaisseur du couvercle (2,5 mm). Elles et les tranches des joncs sont peintes en rouge, comme sur les écorchés des musées. (Un signe inversé dans la coupe des joncs gardait la partie ôtée et ôtait le reste : des trous sombres bordaient l'ouverture. Le tore coupé est max(d_tore, c), c positif dans la coupe, −1 couvercle entier.)
+Dans le tracé, une surface du couvercle (dedans, dehors, joncs, perles) n'est retenue que hors de l'entaille. Pour un paraboloïde, on garde la plus proche des deux racines qui convient. Pour un jonc et pour la couronne, le *sphere tracing* marche dans la forme privée du coin, si bien que les perles sont tranchées une à une à mesure que la coupe s'élargit. Les deux tranches sont des demi-plans verticaux par l'axe, gardés dans l'épaisseur du couvercle (2,5 mm). Elles et les tranches des joncs sont peintes en rouge, comme sur les écorchés des musées. Le tore coupé est max(d_tore, c), c positif dans la coupe et −1 couvercle entier (le signe inverse garde la partie ôtée et borde l'ouverture de trous sombres).
 
 ## La mise en abyme
 
