@@ -73,7 +73,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
   // la chaleur de la foudre : secondes depuis la jonction, ce qu'il en reste, phase de la boucle
   const heatU = { since: uniform(99), heat: uniform(0), phase: uniform(0), grain: uniform(9) }; // (grain : finesse des fissures — des braises aux galets)
   const liquidU = {
-    color: uniform(new THREE.Color('#3d1508')), tau: uniform(-1), rain: uniform(0), boil: uniform(0), time: uniform(0), r: uniform(0.4),
+    color: uniform(new THREE.Color('#3d1508')), tau: uniform(-1), rain: uniform(0), boil: uniform(0), time: uniform(0), dur: uniform(24), r: uniform(0.4),
     hits: uniformArray(Array.from({ length: 4 }, () => new THREE.Vector4(0, 0, 99, 0)), 'vec4'), // x, z, instant, amplitude
     glows: uniformArray(Array.from({ length: 4 }, () => new THREE.Vector4(0, 0, 0, 0)), 'vec4'), // ce qui rougit sous le thé : x, z, rayon (un anneau), poids
     hot: uniform(0), all: uniform(0),
@@ -229,7 +229,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
     const tsec = ph * R.film.duration;
     liquid.position.y = meta.liquid.y + S.level * R.film.drop;
     liquidU.color.value.set(R.vessel.tea);
-    liquidU.tau.value = S.tau; liquidU.rain.value = S.air > 0.0005 ? S.rain : 0; liquidU.time.value = tsec;
+    liquidU.tau.value = S.tau; liquidU.rain.value = S.air > 0.0005 ? S.rain : 0; liquidU.time.value = tsec; liquidU.dur.value = R.film.duration;
     if (slots.liquidBody) slots.liquidBody.mesh.scale.y = 1 + (S.level * R.film.drop) / (meta.liquid.y - meta.yBase);
 
     // ── l'éclair ──
@@ -412,7 +412,7 @@ function liquidMaterial(U, lite) {
     near = near.add(Gj.w.mul(exp(d.div(Gj.z.add(0.1)).pow2().negate())));
   }
   near = near.min(1).mul(U.all.oneMinus()).add(U.all); // (le thé bout autour de la résistance ; partout si elle est sous le récipient)
-  const boil = (f, sp, salt) => { const q = p.mul(f).add(salt), c = floor(q), fr = fract(q).sub(0.5); const h1 = hash(c.x.mul(127.1).add(c.y.mul(311.7)).add(salt)), h2 = hash(c.x.mul(269.5).add(c.y.mul(183.3)).add(salt)); const t = fract(U.time.mul(sp).add(h1)); const d = length(fr.sub(vec2(h1, h2).sub(0.5).mul(0.6))); return smoothstep(0.34, 0.0, d).mul(t.mul(3.14159).sin()).mul(step(h2, U.boil.mul(near))); };
+  const boil = (f, sp, salt) => { const q = p.mul(f).add(salt), c = floor(q), fr = fract(q).sub(0.5); const h1 = hash(c.x.mul(127.1).add(c.y.mul(311.7)).add(salt)), h2 = hash(c.x.mul(269.5).add(c.y.mul(183.3)).add(salt)); const t = fract(U.time.mul(floor(U.dur.mul(sp).add(0.5)).div(U.dur)).add(h1)); const d = length(fr.sub(vec2(h1, h2).sub(0.5).mul(0.6))); return smoothstep(0.34, 0.0, d).mul(t.mul(3.14159).sin()).mul(step(h2, U.boil.mul(near))); };
   h = h.add(boil(16, 2.6, 5.3).add(lite ? 0 : boil(27, 3.4, 9.1)).mul(0.9).mul(smoothstep(0, 0.08, U.boil)));
   const edge = smoothstep(1, 0.93, length(positionLocal.xz).mul(1)); // (le ménisque : calme au bord)
   m.colorNode = vec4(U.color, 1);

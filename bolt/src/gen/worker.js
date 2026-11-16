@@ -7,6 +7,7 @@ import { buildNoiseVolume } from '../../../shared/gen/noisevol.js';
 import { buildVessel } from './vessels.js';
 import { buildBolt, tessellate } from './dbm.js';
 import { simulatePlume } from './plume.js';
+import { buildCloudNoise } from './cloudnoise.js';
 
 // l'éclair prêt à dessiner : segments, et ce que la scène doit savoir de chaque canal
 export function boltFor(spec, rough = 0.13) {
@@ -28,6 +29,7 @@ function build({ spec, what }) {
     case 'vessel': { const v = buildVessel(spec); return { parts: v.parts, meta: v.meta }; }
     case 'bolt': return boltFor(spec.spec, spec.rough);
     case 'plume': return simulatePlume(spec);
+    case 'cloudnoise': return buildCloudNoise();
     default: throw new Error(`inconnu : ${what}`);
   }
 }
