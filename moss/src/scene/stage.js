@@ -41,14 +41,18 @@ function rainMaterial(RU) {
 
 export function createStage(scene, gen, { lite = false } = {}) {
   // ── Lumières (ordre fixe) ──
-  const sun = new THREE.SpotLight(0xffffff, 1, 0, 0.2, 0.3, 2);
+  // (cône assez large pour éclairer tout le support : un cône de 0,2 rad
+  // laissait le bout du muret et de la souche dans une ombre brune, hors du
+  // soleil ; la carte d'ombre couvre ce qu'il éclaire : un bord de carte
+  // dessinait une limite droite sur la souche)
+  const sun = new THREE.SpotLight(0xffffff, 1, 0, 0.34, 0.3, 2);
   sun.castShadow = true;
   sun.shadow.bias = -0.0002;
   sun.shadow.normalBias = 0.006;
   sun.shadow.radius = 2;
   sun.shadow.mapSize.set(2048, 2048);
   sun.shadow.camera.near = 30; sun.shadow.camera.far = 110;
-  sun.shadow.focus = 0.6;
+  sun.shadow.focus = 0.62;
   const rim = new THREE.SpotLight(0xffffff, 1, 0, 0.35, 0.8, 2);
   const hemi = new THREE.HemisphereLight(0xffffff, 0x000000, 1);
   if (lite) rim.visible = false;
@@ -58,9 +62,13 @@ export function createStage(scene, gen, { lite = false } = {}) {
   const fleck = { on: uniform(0), phase: uniform(0) };
   sun.colorNode = Fn(([uv]) => {
     const a = fleck.phase.mul(6.283);
-    const q = uv.xy.mul(7).add(vec2(cos(a), sin(a)).mul(0.6));
-    const n = noise(vec3(q.x, q.y, sin(a).mul(0.4)).mul(1.3)).add(noise(vec3(q.x.mul(2.3), q.y.mul(2.3), cos(a).mul(0.5))).mul(0.5));
-    return vec3(mix(float(1), smoothstep(0.05, 0.4, n).mul(1.15).add(0.08), fleck.on));
+    // (taches larges et douces : le disque du soleil, vu à travers un couvert
+    // haut de plusieurs mètres, floute leurs bords ; la pénombre n'est jamais
+    // noire. Des taches petites et franches se lisaient comme un défaut de
+    // la texture de l'écorce)
+    const q = uv.xy.mul(6.5).add(vec2(cos(a), sin(a)).mul(0.6));
+    const n = noise(vec3(q.x, q.y, sin(a).mul(0.4)).mul(1.3));
+    return vec3(mix(float(1), smoothstep(-0.35, 0.55, n).mul(0.65).add(0.45), fleck.on));
   });
 
   // ── Champ en textures : x mousse B, y eau W, z B moyenné sur un
@@ -115,7 +123,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
     Promise.all([part(gen.request({ colony: { ...R.colony, lite: R.colony.lite || lite }, loop: R.loop, water: R.hydro, camera: R.camera }, 'moss')), rockReq, supReq]).then(([d, rk, sup]) => {
       if (v !== version) return;
       if (rockT) { rockT.rel.dispose(); rockT.col.dispose(); }
-      rockT = rk ? rockTextures(rk) : null;
+      rockT = rk ? rockTextures(rk, R.decor.support === 'log') : null;
       data = d;
       FIELD.E.value = d.habitat.E;
       moss.set(d, R);

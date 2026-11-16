@@ -54,8 +54,13 @@ export function makeRock(type, seed) {
     const edge = f2 - f1;
     // fissure : arrondie par l'usure (épaules en gaussienne), plus profonde par endroits
     const cw = K.crackW * (0.55 + 0.9 * sst(-0.3, 0.5, N.noise(x * 0.35, 3.3, z * 0.35)));
-    const crack = Math.exp(-((edge / cw) ** 2));
-    const plate = (id - 0.5) * 0.12 * (type === 'soil' ? 0 : 1);
+    // (un réseau de diaclases fermé fait un ballon de cuir : les fissures
+    // s'éteignent par endroits, la roche reste d'un seul tenant entre elles)
+    const live = type === 'soil' ? 1 : sst(-0.05, 0.25, N.noise(x * 0.14, 5.5, z * 0.14));
+    // (la terre n'a pas de fissures visibles : ses refuges sont des creux
+    // entre les grumeaux ; edge les garde pour l'habitat, field.js)
+    const crack = type === 'soil' ? 0 : Math.exp(-((edge / cw) ** 2)) * live;
+    const plate = (id - 0.5) * 0.12 * (type === 'soil' ? 0 : live);
     // usure à trois échelles : bosses (cm), crêtes (mm), grain
     const wear = N.fbm(x * 0.45, 0.7, z * 0.45, 4) * K.rough * 3;
     const ridge = (1 - Math.abs(N.noise(x * 2.4, 9.1, z * 2.4))) * 0.018 * (K.rough / 0.07);
@@ -65,8 +70,9 @@ export function makeRock(type, seed) {
     if (type === 'limestone') {
       // cupules de dissolution (bords nets, fond rond) et cannelures
       const [p1, , pid] = worley(x, z, 1.1, s + 5, 1);
-      const pit = pid > 0.62 ? sst(0.3, 0.12, p1) : 0;
-      d -= pit * 0.05 * (0.6 + pid);
+      const pr = 0.1 + 0.18 * (pid - 0.86) / 0.14 + 0.05 * N.noise(x * 6, 3.7, z * 6);
+      const pit = pid > 0.86 ? sst(pr, pr * 0.4, p1) : 0;
+      d -= pit * 0.03 * (0.6 + pid);
       d += Math.sin(x * 1.6 + N.noise(x * 0.3, 2, z * 0.3) * 5) * 0.01;
       extra = pit;
     } else if (type === 'sandstone') {
@@ -75,31 +81,56 @@ export function makeRock(type, seed) {
       d += (0.5 - 0.5 * Math.cos(t * 6.2832)) * 0.018;
       extra = fract(t);
     } else if (type === 'soil') {
-      const [p1, , pid] = worley(x, z, 0.35, s + 7, 1);
-      const pebble = pid > 0.82 ? Math.sqrt(Math.max(0, 1 - (p1 / 0.13) ** 2)) * 0.07 : 0;
-      d += pebble + N.fbm(x * 2, 5, z * 2, 3) * 0.03;
+      // mottes arrondies sans joints (un sol d'humus n'a pas de dalles),
+      // miettes, et çà et là un gravillon à demi enterré
+      const [p1, , pid] = worley(x, z, 0.5, s + 7, 1);
+      const clod = sst(-0.25, 0.55, N.fbm(x * 1.6, 5, z * 1.6, 3)) * 0.06;
+      const crumb = Math.max(0, N.noise(x * 9, 6.3, z * 9)) * 0.016;
+      const pebble = pid > 0.94 ? Math.min(1, Math.max(0, 1 - p1 / 0.17) * 2.2) * 0.06 : 0;
+      d += clod + crumb + pebble;
       extra = pebble > 0 ? 1 : 0;
     }
     // grain fin
     d += N.noise(x * 22, 1.1, z * 22) * 0.004 * K.grain * 10;
-    return { d, crack, edge, id, extra };
+    // (edge : distance à une fissure VISIBLE ; field.js en tire les refuges)
+    return { d, crack, edge: edge / Math.max(0.05, live), id, extra };
   }
-  // écorce (x le long du tronc, z autour) : sillons longitudinaux, plaques
-  // fendues en travers, lambeaux arrachés qui montrent le bois
+  // écorce (x le long du tronc, z autour) : crêtes liégeuses séparées par des
+  // sillons profonds à parois raides (réseau en losanges très étirés), crêtes
+  // feuilletées en écailles superposées (des marches, dont la tranche montre
+  // l'écorce fraîche, rousse), cassures en travers qui découpent les crêtes en
+  // blocs, fibres le long du tronc ; lambeaux arrachés qui montrent le bois
   function barkSample(x, z) {
-    // sillons : fissures longitudinales irrégulières qui se rejoignent (réseau
-    // en losanges très étirés), crêtes arrondies, fibres le long du tronc
-    const wz = z + 0.5 * N.noise(x * 0.1, 2.2, z * 0.3) + 0.2 * N.noise(x * 0.35, 5.1, z * 0.8);
-    const [c1, c2] = worley(x * 0.2, wz * 2.4, 1.0, s + 3, 0.95);
+    // (déformation forte et lente : des crêtes de longueurs et de largeurs
+    // inégales, qui ondulent, plutôt qu'un appareil régulier de losanges)
+    const wz = z + 0.9 * N.noise(x * 0.06, 2.2, z * 0.2) + 0.18 * N.noise(x * 0.4, 5.1, z * 1.1);
+    const wx = x + 2.6 * N.noise(x * 0.07, 3.3, z * 0.35);
+    // (crêtes de 4 à 6 mm, longues de 10 cm et plus : de loin, des traînées)
+    const [c1, c2] = worley(wx * 0.09, wz * 1.9, 1.0, s + 3, 0.95);
     const e = c2 - c1;
-    const furrow = Math.exp(-(e / 0.11));                         // 1 au fond du sillon (en V)
-    const ridge = sst(0.05, 0.45, e) * 0.03 + Math.abs(N.noise(x * 1.5, 6.6, wz * 3)) * 0.02; // crêtes usées, écailleuses
-    const fib = Math.sin(wz * 34 + N.noise(x * 0.6, 8.2, z * 3) * 4) * 0.004 + N.fbm(x * 1.2, 3, wz * 7, 3) * 0.012;
-    const peel = sst(0.33, 0.42, N.fbm(x * 0.08, 7.7, z * 0.16, 3)); // bois mis à nu
-    let d = -furrow * 0.2 + ridge + fib * 1.8 * (1 - furrow);
+    // sillon : fond étroit, parois raides ; largeur et profondeur variables
+    // (profil en travers : une crête arrondie qui plonge en V jusqu'au fond
+    // du sillon, sans plateau ; largeur du sillon variable)
+    const nf = N.noise(x * 0.12, 4.4, z * 0.6);
+    const fw = 0.05 + 0.08 * sst(-0.4, 0.6, nf);
+    const furrow = 1 - sst(0.0, fw, e);
+    const crest = Math.pow(sst(0.0, 0.42, e), 0.7);
+    const depth = 0.21 - 0.06 * nf;
+    // écailles : couches en marches sur la crête (le rebord de chaque couche est sa tranche)
+    const q = (N.fbm(wx * 0.45, 1.7, wz * 1.9, 2) * 0.5 + 0.5) * 4.5, fl = Math.floor(q), fq = q - fl;
+    const rise = sst(0.72, 0.97, fq);
+    const layer = (fl + rise) / 4.5;
+    // cassures en travers des crêtes (tous les 1,5 à 3 cm, pas partout)
+    const tl = Math.abs(Math.sin(wx * 1.3 + 3 * N.noise(x * 0.3, 8.8, z * 0.8)));
+    const tcrack = (1 - sst(0.0, 0.14, tl)) * sst(0.0, 0.35, N.noise(x * 0.5, 9.9, z * 1.3) + 0.15);
+    const shoulder = crest;
+    const fib = Math.sin(wz * 38 + N.noise(x * 0.6, 8.2, z * 3) * 5) * 0.0035 + N.fbm(x * 1.6, 3, wz * 9, 2) * 0.01;
+    const peel = sst(0.36, 0.42, N.fbm(x * 0.08, 7.7, z * 0.16, 3)); // bois mis à nu
+    let d = -depth * (1 - crest) + crest * (layer * 0.035 + fib * 2.4 - tcrack * 0.06);
     const wood = -0.38 + Math.sin(z * 46 + N.noise(x * 0.5, 9, z * 4) * 3) * 0.004 + N.noise(x * 0.4, 8, z * 6) * 0.012;
     d = d * (1 - peel) + wood * peel;
-    return { d, crack: furrow * (1 - peel), edge: e, id: peel, extra: furrow };
+    // tone : hauteur de la crête (usée, grise au sommet) ; riser : tranche d'une écaille
+    return { d, crack: Math.max(furrow, tcrack * 0.25) * (1 - peel), edge: e, id: peel, extra: furrow, tone: shoulder * (0.4 + 0.6 * layer), riser: rise * (1 - rise) * 4 * (1 - furrow) };
   }
   return { sample, type, K, noise: N };
 }
@@ -119,10 +150,12 @@ function toHalf(v) {
 export function bakeRock(type, seed, X, M = 1024, palette = null) {
   const rock = makeRock(type, seed), N = rock.noise;
   const D = new Float32Array(M * M), C = new Float32Array(M * M), E = new Float32Array(M * M), I = new Float32Array(M * M), Xx = new Float32Array(M * M);
+  const Tn = type === 'bark' ? new Float32Array(M * M) : null, Rs = type === 'bark' ? new Float32Array(M * M) : null;
   const px = (2 * X) / M;
   for (let j = 0; j < M; j++) for (let i = 0; i < M; i++) {
     const x = -X + (i + 0.5) * px, z = -X + (j + 0.5) * px, o = rock.sample(x, z), k = j * M + i;
     D[k] = o.d; C[k] = o.crack; E[k] = o.edge; I[k] = o.id; Xx[k] = o.extra;
+    if (Tn) { Tn[k] = o.tone; Rs[k] = o.riser; }
   }
   // occlusion : creux sous la moyenne locale (flou de boîte, deux échelles)
   const blur = (A, r) => {
@@ -149,7 +182,7 @@ export function bakeRock(type, seed, X, M = 1024, palette = null) {
     // variation lente (altération), taches d'oxydes
     const n1 = N.fbm(x * 0.3, 2.2, z * 0.3, 3), n2 = N.fbm(x * 1.4, 8.3, z * 1.4, 3);
     mix(n1 > 0 ? light : dark, Math.min(1, Math.abs(n1) * 1.2));
-    mix(stain, sst(0.15, 0.45, N.fbm(x * 0.5, 13, z * 0.5, 3)) * 0.55);
+    if (type !== 'bark') mix(stain, sst(0.15, 0.45, N.fbm(x * 0.5, 13, z * 0.5, 3)) * 0.55); // (l'écorce a ses algues, plus bas)
     if (type === 'granite') {
       // grains : quartz gris translucide, feldspath blanc rosé, biotite noire
       // mosaïque de cristaux (1 à 2 mm) : biotite noire, feldspath laiteux, quartz gris vitreux
@@ -159,7 +192,12 @@ export function bakeRock(type, seed, X, M = 1024, palette = null) {
       else if (gid < 0.42) mix(c3(P.feldspar ?? '#d8c8bc'), 0.16 * joint);
       else if (gid < 0.65) { mix([0.52, 0.54, 0.57], 0.12 * joint); rough = 0.42; }
     } else if (type === 'limestone') {
-      mix(dark, Xx[k] * 0.35);
+      mix(dark, Xx[k] * 0.14);
+      // patine grise par plaques, coulures plus sombres, piqûres noires de
+      // lichens endolithes (Verrucaria) : une pierre au soleil n'est pas un plâtre
+      mix(dark, sst(0.05, 0.45, n2) * 0.4);
+      mix([0.16, 0.16, 0.14], sst(0.42, 0.62, N.noise(x * 0.3, 21, z * 2.4)) * 0.22);
+      mix([0.05, 0.05, 0.045], sst(0.52, 0.6, N.noise(x * 6.5, 17, z * 6.5)) * 0.7);
       // veines de calcite
       const v = Math.abs(Math.sin(x * 1.3 + z * 0.4 + n2 * 6));
       mix(light, sst(0.985, 1, v) * 0.6);
@@ -169,18 +207,30 @@ export function bakeRock(type, seed, X, M = 1024, palette = null) {
       const [, , gid] = worley(x, z, 0.035, 41, 1);
       mix(gid < 0.3 ? dark : light, 0.12);
     } else if (type === 'soil') {
-      if (Xx[k] > 0) mix(light, 0.6);
+      if (Xx[k] > 0) mix(light, 0.3 + 0.25 * N.noise(x * 3, 1.9, z * 3));
       const [, , gid] = worley(x, z, 0.06, 43, 1);
       mix(gid < 0.25 ? dark : base, 0.4);
     }
     if (type === 'bark') {
-      const peel = I[k];
-      // écorce gris-brun, crêtes plus claires et verdies d'algues (Pleurococcus), sillons sombres
-      mix(light, (1 - Xx[k]) * 0.18);
-      mix([0.3, 0.36, 0.17], sst(0.3, 0.8, n1 + 0.5) * (1 - Xx[k]) * 0.4);
-      // bois mis à nu : fauve, fibres, bord de l'écorce sombre et relevé
+      const peel = I[k], fur = Xx[k];
+      // écorce gris-brun : sommets des crêtes usés, gris argent ; tranches
+      // des écailles rousses (écorce fraîche) ; sillons brun noir ; poudre
+      // verte d'algues (Pleurococcus) sur les crêtes, par plaques
+      mix(light, Tn[k] * 0.28 * (1 - fur) * sst(-0.5, 0.6, N.noise(x * 0.5, 2.9, z * 1.6)));
+      mix(c3(P.inner ?? '#7a4a2c'), Rs[k] * 0.15);
+      // (le flanc des crêtes s'assombrit jusqu'au sillon : sous un soleil
+      // direct, l'occlusion seule ne creuserait pas l'écorce)
+      mix(dark, fur * 0.85 + (1 - Math.min(1, Tn[k] * 2)) * 0.3 * (1 - fur));
+      // (de loin, l'écorce se lit en longues traînées le long du tronc, pas en
+      // cellules : une variation lente, étirée dans l'axe, couvre les crêtes)
+      const lf = 1 + 0.2 * N.noise(x * 0.12, 15.5, z * 2.2);
+      r *= lf; g *= lf; b *= lf;
+      // (algues : un voile gris vert, rare et léger ; vert foncé, l'écorce semblait sale)
+      mix(stain, sst(0.25, 0.7, n1) * Tn[k] * (1 - fur) * 0.18);
+      // bois mis à nu : fauve, fibres
       mix(c3(P.wood), peel * 0.9);
       mix([0.35, 0.2, 0.1], peel * Math.abs(n2) * 0.6);
+      rough = 0.82 - 0.1 * Rs[k];
       if (peel > 0) rough = rough + (0.5 - rough) * peel;
     }
     // les fissures accumulent la terre et l'humus
@@ -190,18 +240,22 @@ export function bakeRock(type, seed, X, M = 1024, palette = null) {
     if (lich.length) {
       for (let L = 0; L < lich.length; L++) {
         const cell = (L === 0 ? 2.4 : 1.3) + L * 0.5;
-        const [f1, , lid] = worley(x, z, cell, 51 + L * 13, 1);
-        if (lid > (P.lichenCover ?? 0.15)) continue;
-        const ang = Math.atan2(z, x);
-        const lobes = Math.min(0.36, 0.22 + 0.15 * lid / 0.15 * 0.6 + 0.04 * Math.sin(ang * 11 + lid * 40) + 0.06 * N.noise(x * 4, L * 5.5, z * 4));
+        // (contour déformé à deux échelles : une colonie de lichen n'est pas
+        // un disque, elle s'étale en lobes inégaux et bute sur ses voisines)
+        const wn = 0.32 * cell * N.noise(x * 0.9 / cell, L * 2.3 + 0.7, z * 0.9 / cell), lx = x + wn, lz = z - 0.8 * wn;
+        const [f1, f2l, lid] = worley(lx, lz, cell, 51 + L * 13, 1);
+        if (lid > (P.lichenCover ?? 0.15) * (P.cover ? P.cover[L] : 1)) continue;
+        const lobes = Math.min(0.42, 0.16 + 1.4 * lid + 0.07 * N.noise(x * 4.5, L * 5.5, z * 4.5));
         const rr = f1 / cell;
-        const inside = sst(lobes, lobes - 0.025, rr) * (1 - C[k]);
+        const inside = sst(lobes, lobes - 0.02, rr) * sst(0.0, 0.03, (f2l - f1) / cell) * (1 - C[k]);
+        // prothalle : un liseré noir autour des thalles jaune-vert (Rhizocarpon)
+        if (P.rims && P.rims[L]) mix([0.05, 0.05, 0.045], sst(lobes + 0.035, lobes + 0.012, rr) * sst(lobes - 0.01, lobes + 0.004, rr) * (1 - C[k]) * 0.85);
         if (inside > 0) {
           const [a1, a2] = worley(x, z, 0.06, 71 + L, 1);
           const areole = sst(0.0, 0.012, a2 - a1);
           const c = lich[L], var_ = 0.75 + 0.35 * N.noise(x * 6, L * 3.1, z * 6);
           mix([c[0] * var_, c[1] * var_, c[2] * var_], inside * (0.35 + 0.55 * areole));
-          mix([0.92, 0.92, 0.85], sst(lobes - 0.06, lobes - 0.02, rr) * inside * 0.12);
+          mix([0.92, 0.92, 0.85], sst(lobes - 0.05, lobes - 0.015, rr) * inside * 0.1);
           // apothécies : petits disques noirs semés dans le thalle (Lecidea, Rhizocarpon)
           if (P.dots && P.dots[L]) {
             const [q1, , qid] = worley(x, z, 0.055, 91 + L, 1);
@@ -212,7 +266,7 @@ export function bakeRock(type, seed, X, M = 1024, palette = null) {
       }
     }
     // algues et mousse grise des endroits humides (près des fissures, au creux)
-    mix([0.24, 0.27, 0.16], sst(0.2, 0.7, C[k] * 0.6 + cav * 2) * 0.35);
+    if (type !== 'bark') mix([0.24, 0.27, 0.16], sst(0.2, 0.7, C[k] * 0.6 + cav * 2) * 0.35);
     r *= 0.55 + 0.45 * ao; g *= 0.55 + 0.45 * ao; b *= 0.55 + 0.45 * ao;
     col[k * 4] = Math.round(Math.min(1, r) * 255); col[k * 4 + 1] = Math.round(Math.min(1, g) * 255); col[k * 4 + 2] = Math.round(Math.min(1, b) * 255); col[k * 4 + 3] = Math.round(rough * 255);
   }
@@ -221,9 +275,9 @@ export function bakeRock(type, seed, X, M = 1024, palette = null) {
 
 // couleurs (sRGB) : fond, clair, sombre, taches, lichens
 export const ROCK_PALETTES = {
-  granite: { base: '#83857a', light: '#a9ab9f', dark: '#585c4e', stain: '#727c58', feldspar: '#c9c8bc', lichens: ['#d6dad0', '#a4ab98', '#c2c08a'], dots: [1, 0, 0], lichenCover: 0.3 },
-  limestone: { base: '#b8b4a2', light: '#dcd8c8', dark: '#7e7c6c', stain: '#8c9468', lichens: ['#e2e2d8', '#2a2a28', '#d9b84a'], dots: [1, 0, 0], lichenCover: 0.25 },
+  granite: { base: '#7d7f75', light: '#a3a598', dark: '#4f5346', stain: '#6c7454', feldspar: '#c4c2b4', lichens: ['#c9cec2', '#9aa38c', '#a9ac62'], dots: [1, 0, 0], rims: [0, 0, 1], cover: [1, 0.8, 0.35], lichenCover: 0.24 },
+  limestone: { base: '#a39f8e', light: '#c6c1ae', dark: '#6c6a5c', stain: '#7c845c', lichens: ['#d4d4c8', '#55554a', '#c9a640'], dots: [1, 0, 0], cover: [1, 0.45, 0.8], lichenCover: 0.13 },
   sandstone: { base: '#b08a64', light: '#cfac84', dark: '#7a5a3e', stain: '#a2603a', lichens: ['#a8b098', '#c8a838'], lichenCover: 0.12 },
-  bark: { base: '#3c342d', light: '#6e675c', dark: '#1a1512', stain: '#4e5a30', wood: '#b07a48', lichens: ['#9aa48a', '#7a8a5a'], dots: [0, 0], lichenCover: 0.07 },
+  bark: { base: '#2f2b26', light: '#57544c', dark: '#120e0b', stain: '#6a6c58', inner: '#4a3427', wood: '#a87444', lichens: ['#8e8f80', '#82836e'], dots: [0, 0], lichenCover: 0.006 },
   soil: { base: '#4a3a2c', light: '#8a7a68', dark: '#2a2018', stain: '#5a3e24', lichens: [], lichenCover: 0 },
 };

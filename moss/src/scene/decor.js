@@ -90,12 +90,14 @@ function decorMaterial(fin, DU, { scale = 1, field = false } = {}) {
 // ── La roche cuite (gen/rock.js) : déplacement des sommets, normal map,
 // couleur minérale et rugosité, occlusion des creux ; micro-relief
 // procédural au pixel pour le macro ; eau et voile de protonéma du champ ──
-export function rockTextures(maps) {
+// (mirror : la souche est plus longue et plus large que la carte cuite —
+// au-delà, la carte est lue en miroir plutôt qu'étirée par son bord)
+export function rockTextures(maps, mirror = false) {
   const rel = new THREE.DataTexture(maps.rel, maps.M, maps.M, THREE.RGBAFormat, THREE.HalfFloatType);
   const col = new THREE.DataTexture(maps.col, maps.M, maps.M, THREE.RGBAFormat, THREE.UnsignedByteType);
   col.colorSpace = THREE.SRGBColorSpace;
-  for (const t of [rel, col]) { t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true; t.anisotropy = 8; t.needsUpdate = true; }
-  return { rel, col, X: maps.X };
+  for (const t of [rel, col]) { t.wrapS = t.wrapT = mirror ? THREE.MirroredRepeatWrapping : THREE.ClampToEdgeWrapping; t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true; t.anisotropy = 8; t.needsUpdate = true; }
+  return { rel, col, X: maps.X, mirror };
 }
 function rockMaterial(T, DU, logR = 0) {
   const m = new THREE.MeshPhysicalNodeMaterial();
@@ -103,13 +105,25 @@ function rockMaterial(T, DU, logR = 0) {
   // (souche couchée le long de x, axe en y = −R : coordonnées (x, arc))
   const coord = (p) => (logR ? vec2(p.x, atan(p.z, p.y.add(logR)).mul(logR)) : p.xz);
   const uvOf = (p) => coord(p).add(X).div(X.mul(2));
-  const fadeOf = (p) => smoothstep(0.5, 0.46, abs(uvOf(p).x.sub(0.5)).max(abs(uvOf(p).y.sub(0.5))));
+  const fadeOf = (p) => (T.mirror ? float(1) : smoothstep(0.5, 0.46, abs(uvOf(p).x.sub(0.5)).max(abs(uvOf(p).y.sub(0.5)))));
   const up = (p) => (logR ? normalize(vec3(0, p.y.add(logR), p.z)) : vec3(0, 1, 0));
-  const disp = (p) => p.add(up(p).mul(texture(T.rel, uvOf(p)).level(0).x.mul(fadeOf(p))));
+  // (flancs raides d'un bloc : la carte, projetée d'en haut, s'y étirerait en
+  // rayures ; on y passe à une pierre procédurale en 3D, de même couleur moyenne)
+  const steepOf = (n) => (logR ? float(0) : smoothstep(0.62, 0.32, n.y));
+  const disp = (p) => p.add(up(p).mul(texture(T.rel, uvOf(p)).level(0).x.mul(fadeOf(p)).mul(steepOf(normalGeometry).oneMinus())));
   m.positionNode = Fn(() => { if (!isLite()) positionPrevious.assign(disp(positionLocal)); return disp(positionLocal); })();
   m.castShadowPositionNode = disp(positionLocal);
-  const g = positionGeometry, uv = uvOf(g), fade = fadeOf(g);
-  const rel = texture(T.rel, uv), alb = texture(T.col, uv);
+  const g = positionGeometry, uv = uvOf(g), proc = tmax(fadeOf(g).oneMinus(), steepOf(normalGeometry)), fade = proc.oneMinus();
+  const relT = texture(T.rel, uv), albT = texture(T.col, uv);
+  // pierre procédurale : la couleur moyenne de la carte (son dernier niveau de
+  // mip), marbrée à deux échelles, grains, occlusion dans les creux du bruit
+  const mean = texture(T.col, vec2(0.5, 0.5)).level(12);
+  const f1 = fbm(g.mul(0.35), 3), f2 = noise(g.mul(2.2)), grain = noise(g.mul(18));
+  // (coulures : des traînées verticales sombres, là où l'eau ruisselle)
+  const streak = smoothstep(0.1, 0.6, noise(vec3(g.x.mul(1.4), g.y.mul(0.12), g.z.mul(1.4))));
+  const procCol = mean.rgb.mul(f1.mul(0.45).add(0.95)).mul(f2.mul(0.2).add(1)).mul(grain.mul(0.12).add(1)).mul(streak.mul(-0.35).add(1));
+  const rel = vec4(relT.x, relT.y, relT.z, mix(relT.w, f1.mul(0.25).add(0.85).clamp(0.4, 1), proc));
+  const alb = vec4(mix(albT.rgb, procCol, proc), mix(albT.a, mean.a, proc));
   // normale : celle de la forme d'ensemble, inclinée par la pente du relief cuit
   const n0 = normalGeometry;
   // (pente du relief : le long de x, et en travers — z pour la roche, l'arc pour la souche)
@@ -117,15 +131,21 @@ function rockMaterial(T, DU, logR = 0) {
   const nW = normalize(n0.add(vec3(rel.y.negate(), 0, 0).add(across.mul(rel.z.negate())).mul(fade)));
   const nV = normalize(modelViewMatrix.mul(vec4(nW, 0)).xyz);
   // micro-relief (grains sous le texel) pour le gros plan
-  m.normalNode = perturb(noise(g.mul(55)).mul(0.0012).add(noise(g.mul(140)).mul(0.0005)), nV);
-  let wet = DU.wet, col = alb.rgb;
+  // (écorce : fibres le long de la souche, sous le texel de la carte ; sans
+  // elles, les crêtes vues de près sont lisses comme une pâte à modeler)
+  const fib = logR ? noise(vec3(g.x.mul(2.5), g.y.mul(48), g.z.mul(48))) : float(0);
+  m.normalNode = perturb(noise(g.mul(55)).mul(0.0012).add(noise(g.mul(140)).mul(0.0005)).add(f1.mul(0.03).add(f2.mul(0.006)).mul(proc)).add(fib.mul(0.0045)), nV);
+  let wet = DU.wet, col = logR ? alb.rgb.mul(fib.mul(0.2).add(1)) : alb.rgb;
   if (DU.FIELD) {
     const F = DU.FIELD, fu = coord(g).div(F.E.mul(2)).add(0.5);
-    const inside = smoothstep(0.5, 0.47, abs(fu.x.sub(0.5)).max(abs(fu.y.sub(0.5))));
+    // (fondu large : un bord net du champ dessinait un rectangle sur le support)
+    const inside = smoothstep(0.5, 0.36, length(fu.sub(0.5)));
     const f = texture(F.tex, fu.clamp(0, 1));
     wet = mix(DU.wet, f.y, inside);
-    // voile vert de protonéma devant le front ; algues dans les creux humides
-    col = mix(col, mix(vec3(0.13, 0.22, 0.04), vec3(0.07, 0.17, 0.025), f.y), smoothstep(0.03, 0.3, f.x).mul(inside).mul(0.7));
+    // voile de protonéma devant le front : un feutre de filaments, vert
+    // sourd, qui gagne d'abord les creux et se déchire sur les bosses
+    const felt = smoothstep(0.03, 0.3, f.x).mul(inside).mul(rel.w.oneMinus().mul(0.9).add(0.35).clamp(0, 1)).mul(smoothstep(-0.35, 0.25, noise(g.mul(6)).add(noise(g.mul(19)).mul(0.4))));
+    col = mix(col, mix(vec3(0.1, 0.16, 0.04), vec3(0.055, 0.12, 0.022), f.y), felt.mul(0.6));
   }
   // mouillé : la roche fonce (l'eau remplit les pores) et brille, d'abord dans les creux
   const pooled = wet.mul(rel.w.oneMinus().mul(0.6).add(0.4));
@@ -266,14 +286,14 @@ export function buildDecor(group, R, C, DU, rockT = null, baked = null) {
           g.computeVertexNormals();
         }
         add(g, rockMaterial(rockT, DU, Rl), { cast: true });
-      } else add(logGeometry(sub, 1 / 0.2, 60), decorMaterial(fin(acc.support), DU, { field: true }), { cast: true });
+      } else add(logGeometry(sub, 1 / (R.colony.support.cz || 0.2), 60), decorMaterial(fin(acc.support), DU, { field: true }), { cast: true });
       break;
     }
     case 'granite': case 'boulder': case 'wall': case 'peat': case 'ground': {
       // le dessus suit le substrat, puis le bloc s'arrondit et plonge vers le sol (gen/support.js)
       const f = (x, z) => surf.f(x, z, !!rockT);
       const res = rockT ? (isLite() ? 360 : 720) : 220;
-      add((rockT && baked && bakedGeometry(baked)) || heightfield((x, z) => Math.max(-14, f(x, z)), 22, 22, res, res), rockT ? rockMaterial(rockT, DU) : decorMaterial(fin(acc.support), DU, { field: true }), { cast: true });
+      add((rockT && baked && bakedGeometry(baked)) || heightfield((x, z) => Math.max(-30, f(x, z)), 22, 22, res, res), rockT ? rockMaterial(rockT, DU) : decorMaterial(fin(acc.support), DU, { field: true }), { cast: true });
       break;
     }
     default: { // tourbe, terre : le substrat s'étend, avec une houle douce au loin
@@ -325,17 +345,42 @@ export function buildDecor(group, R, C, DU, rockT = null, baked = null) {
       pebble(B, [x, groundAt(x, z) + h, z], rng.range(0.9, 1.4), rng, 1.25);
     }
   }
+  // hauteur VRAIE du support (relief cuit compris, comme rockMaterial le
+  // déplace) : ce qui est posé dessus le touche
+  const X = rockT ? rockT.X : 14;
+  const surfAt = surf.kind === 'log' ? groundAt : (x, z) => {
+    let y = surf.f(x, z, !!rockT);
+    if (rockT && sub.rock) {
+      const u = Math.max(Math.abs(x), Math.abs(z)) / (2 * X), fade = 1 - Math.min(1, Math.max(0, (u - 0.46) / 0.04));
+      y += sub.rock.sample(x, z).d * fade * fade * (3 - 2 * fade);
+    }
+    return y;
+  };
   if (props.has('needles') || props.has('litter')) {
-    for (let k = 0; k < 160; k++) {
-      const a = rng.range(0, 6.28), d = rng.range(Rc + 0.8, 14), x = Math.cos(a) * d, z = Math.sin(a) * d;
-      const y = groundAt(x, z);
+    for (let k = 0; k < (props.has('needles') ? 70 : 160); k++) {
+      const a = rng.range(0, 6.28), d = rng.range(Rc + 0.8, 13), x = Math.cos(a) * d, z = Math.sin(a) * d;
       if (props.has('needles')) {
-        const az = rng.range(0, 6.28), l = rng.range(2, 4), dir = [Math.cos(az), 0.02, Math.sin(az)];
-        const pts = [[x, y + 0.05, z], vadd([x, y + 0.05, z], mul(dir, l))];
-        const rows = [];
-        for (const p of pts) { const row = []; for (let i = 0; i < 4; i++) { const ph = i * Math.PI / 2, n = [Math.cos(ph) * -dir[2], Math.sin(ph), Math.cos(ph) * dir[0]]; row.push(B.vert(vadd(p, mul(n, 0.05)), n, [255, 0, 0])); } rows.push(row); }
-        B.grid(rows, true);
-      } else pebble(B, [x, y + 0.05, z], rng.range(0.8, 1.6), rng, 0.08);
+        // aiguilles de pin sylvestre : par paires réunies dans une gaine, couchées
+        // sur le sol ; une aiguille raide repose sur les bosses et enjambe les creux
+        const az = rng.range(0, 6.28), l = rng.range(3.5, 6), spread = rng.range(0.06, 0.25), r = rng.range(0.035, 0.05);
+        for (const side of [-1, 1]) {
+          const ang = az + side * spread, dir = [Math.cos(ang), 0, Math.sin(ang)], NS = 8;
+          const pts = [];
+          for (let i = 0; i <= NS; i++) { const t = i / NS; pts.push([x + dir[0] * l * t, 0, z + dir[2] * l * t]); }
+          const h = pts.map((p) => surfAt(p[0], p[2]));
+          // (enveloppe haute : la plus haute des bosses voisines, lissée)
+          const env = h.map((_, i) => Math.max(h[Math.max(0, i - 1)], h[i], h[Math.min(NS, i + 1)]));
+          pts.forEach((p, i) => { p[1] = (env[Math.max(0, i - 1)] + 2 * env[i] + env[Math.min(NS, i + 1)]) / 4 + r * 0.9 + (i === 0 ? 0.03 : 0); });
+          const rows = [];
+          pts.forEach((p, i) => {
+            const t = i / NS, rr = r * (t > 0.85 ? 1 - (t - 0.85) / 0.15 * 0.85 : 1) * (i === 0 ? 1.4 : 1);
+            const row = [];
+            for (let q = 0; q < 5; q++) { const ph = (q / 5) * Math.PI * 2, n = [Math.cos(ph) * -dir[2], Math.sin(ph), Math.cos(ph) * dir[0]]; row.push(B.vert(vadd(p, mul(n, rr)), n, [255, 0, 0])); }
+            rows.push(row);
+          });
+          B.grid(rows, true);
+        }
+      } else pebble(B, [x, surfAt(x, z) + 0.05, z], rng.range(0.8, 1.6), rng, 0.08);
     }
   }
   if (props.has('pool')) {

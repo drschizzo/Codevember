@@ -29,8 +29,10 @@ export const YEAR = 365;        // période physique (jours)
 export const REC = 30;          // états enregistrés par seconde de film
 
 // saison des pluies (0…1) à la phase u : sèche au début, les pluies reviennent
-// vers 0,15, pleine saison de 0,26 à 0,58, sécheresse à partir de 0,68
-export const SEASON = { rain0: 0.13, rain1: 0.25, dry0: 0.58, dry1: 0.7 };
+// vers 0,15, pleine saison de 0,26 à 0,67, sécheresse à partir de 0,79 (la
+// pluie cesse vers 0,7 : la caméra, revenue au plan large vers 0,68, montre
+// le tapis encore vert avant qu'il ne sèche)
+export const SEASON = { rain0: 0.13, rain1: 0.25, dry0: 0.67, dry1: 0.79 };
 export const wetSeason = (u) => { u -= Math.floor(u); return sst(SEASON.rain0, SEASON.rain1, u) * (1 - sst(SEASON.dry0, SEASON.dry1, u)); };
 
 // averses : bandes de pluie qui traversent la pierre (u0 : début, du : durée
@@ -48,7 +50,7 @@ export function showers(seed) {
 // intensité de la pluie (0…1) au point (x, z) à la phase u ; E : demi-largeur
 export function rainAt(u, x, z, SH, E) {
   u -= Math.floor(u);
-  let r = 0.55 * sst(SEASON.rain1 - 0.02, SEASON.rain1 + 0.03, u) * (1 - sst(SEASON.dry0 - 0.06, SEASON.dry0, u));
+  let r = 0.55 * sst(SEASON.rain1 - 0.02, SEASON.rain1 + 0.03, u) * (1 - sst(SEASON.dry0 - 0.01, SEASON.dry0 + 0.03, u));
   for (const s of SH) {
     const t = (u - s.u0) / s.du;
     if (t < -0.2 || t > 1.4) continue;
