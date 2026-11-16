@@ -18,7 +18,7 @@
 import * as THREE from 'three/webgpu';
 import {
   Fn, attribute, positionLocal, normalLocal, positionPrevious, positionGeometry, normalGeometry, vec2, vec3, vec4, float, int, dot, normalize, mix, smoothstep,
-  abs, uniform, texture, clamp, atan, floor, hash, pow, sin, cos, max as tmax, min as tmin, select, sign, cross, normalViewGeometry, length, exp, fract,
+  abs, uniform, texture, clamp, atan, floor, hash, pow, sin, cos, max as tmax, min as tmin, select, sign, cross, normalViewGeometry, length, exp, fract, cameraPosition,
 } from 'three/tsl';
 import { isLite, stableVelocity, noise, worley, perturb } from '../../../shared/scene/materials.js';
 import { FAMILIES } from '../families.js';
@@ -113,6 +113,7 @@ export function createMossLook() {
     hair: uniform(new THREE.Color()), trans: uniform(new THREE.Color()), seta: uniform(new THREE.Color()), capsule: uniform(new THREE.Color()),
     calyptra: uniform(new THREE.Color()), translucency: uniform(1), gloss: uniform(1), relief: uniform(0.00025),
     bleach: uniform(0), // (sphaigne : blanchit au sec)
+    px: uniform(0.001), // (taille d'un pixel à 1 cm de l'œil, en cm : main.js)
   };
 }
 
@@ -182,6 +183,14 @@ function leafMaterial(U, F, FIELD) {
   col = col.mul(mix(float(1.18), float(0.95), sst(0, 0.5, s)));
   col = mix(col, col.mul(vec3(1.25, 1.2, 0.75)), costa.mul(0.6));
   col = col.mul(rnd.sub(0.5).mul(0.16).add(1)).mul(rows.mul(0.05).add(0.975));
+  // chaque tige a sa nuance (d'un vert jaune à un vert bleuté, plus ou moins
+  // claire), et le coussin se marbre par plaques (le côté au soleil jaunit) :
+  // un vrai coussin n'est jamais d'un seul vert
+  const shoot = fract(sin(i4.y.mul(12.9898).add(i4.z.mul(78.233))).mul(43758.5453));
+  const patch = noise(vec3(i4.y.mul(0.8), 1.7, i4.z.mul(0.8))).add(noise(vec3(i4.y.mul(2.1), 4.3, i4.z.mul(2.1))).mul(0.5));
+  const warmth = shoot.sub(0.5).mul(0.7).add(patch.mul(0.9)).clamp(-1, 1);
+  const tint = mix(vec3(0.9, 0.98, 1.08), vec3(1.12, 1.05, 0.72), warmth.mul(0.5).add(0.5));
+  col = mix(col, col.mul(tint), isHair.oneMinus().mul(0.85)).mul(fract(shoot.mul(7.13)).sub(0.5).mul(0.22).add(1));
   // le poil : hyalin, blanc argenté, devient transparent (plus sombre) mouillé
   col = mix(col, mix(U.hair, U.hair.mul(0.55), wet), isHair);
   // mouillé : plus sombre (le film d'eau)
@@ -194,8 +203,8 @@ function leafMaterial(U, F, FIELD) {
   m.metalnessNode = float(0);
   m.specularIntensityNode = mix(float(0.3), float(0.55), film).mul(deep);
   // (le reflet du ciel sur le film d'eau : seulement pour les feuilles qui le voient)
-  m.clearcoatNode = film.mul(0.22).mul(U.gloss).mul(deep.mul(deep));
-  m.clearcoatRoughnessNode = float(0.2);
+  m.clearcoatNode = film.mul(0.14).mul(U.gloss).mul(deep.mul(deep));
+  m.clearcoatRoughnessNode = float(0.3);
   // sec : la surface papilleuse a un lustre de velours
   m.sheenNode = mix(vec3(0.16, 0.15, 0.1), vec3(0.02), wet).mul(isHair.oneMinus()).mul(deep);
   m.sheenRoughnessNode = float(0.5);
@@ -203,12 +212,12 @@ function leafMaterial(U, F, FIELD) {
   m.normalNode = perturb(H, normalViewGeometry);
   // lumière transmise : la feuille mouillée est translucide (une assise de
   // cellules gorgées d'eau), la feuille sèche presque opaque
-  m.thicknessColorNode = U.trans.mul(U.translucency).mul(mix(float(0.05), float(0.32), wet)).mul(deep).mul(costa.mul(-0.5).add(1)).mul(rim.oneMinus()).mul(old.mul(-0.7).add(1)).add(U.hair.mul(isHair).mul(0.15));
+  m.thicknessColorNode = U.trans.mul(U.translucency).mul(mix(float(0.08), float(0.5), wet)).mul(deep).mul(costa.mul(-0.5).add(1)).mul(rim.oneMinus()).mul(old.mul(-0.7).add(1)).add(U.hair.mul(isHair).mul(0.15));
   m.thicknessDistortionNode = float(0.2);
   m.thicknessAmbientNode = float(0.02);
   m.thicknessAttenuationNode = float(1.0);
   m.thicknessPowerNode = float(3.0);
-  m.thicknessScaleNode = float(1.6);
+  m.thicknessScaleNode = float(2.2);
   m.mrtNode = stableVelocity();
   return m;
 }
@@ -221,7 +230,7 @@ function beadPosition(full, F, FIELD) {
     const base = vec3(i0.x, i4.x, i0.z);
     const G = { L: i0.w, W: i2.z, h: F.thick, stemR: i3.x, twist: i3.y };
     // une perle sur une feuille sur trois du haut ; au bout du poil s'il y en a
-    const pick = sst(0.3, 0.6, i2.y).mul(sst(0.35, 0.6, fract(i2.w.mul(7.31))));
+    const pick = sst(0.3, 0.6, i2.y).mul(sst(0.62, 0.8, fract(i2.w.mul(7.31))));
     const radius = (sv, o) => pow(sst(0.01, 0.4, sv).mul(pick), 0.45).mul(mix(float(0.012), float(0.03), i2.w)).mul(i3.w.oneMinus()).mul(o.mul(0.4).add(0.6));
     const at = (o) => {
       const tipS = select(F.hair.greaterThan(0), float(1.0005).add(1), float(0.96));
@@ -277,7 +286,9 @@ function sporPose(S, ws, full) {
   const openT = float(1).sub(sst(0.12, 0.5, ws)); // dents : ouvertes au sec
   const isSeta = part.lessThan(0.5);
   // seta
-  const rr = S.setaR.mul(float(1).sub(ya.mul(0.3)));
+  // (une soie plus fine qu'un pixel s'émiette en pointillés et la capsule
+  // semble flotter : son rayon ne descend pas sous un demi-pixel)
+  const rr = tmax(S.setaR.mul(float(1).sub(ya.mul(0.3))), S.px.mul(length(cameraPosition.sub(s0.xyz))).mul(0.5));
   const tg = normalize(vec3(S.arc.mul(2).mul(ya), 1, 0));
   const sideA = normalize(cross(tg, vec3(0, 0, 1))), sideB = vec3(0, 0, 1);
   const setaP = arcOff(ya).add(sideA.mul(positionGeometry.x.mul(rr))).add(sideB.mul(positionGeometry.z.mul(rr)));
@@ -346,14 +357,16 @@ function sporMaterial(U, S, FIELD) {
   // luisante, plus sombre à la bouche ; opercule à bec rouge ; dents rouge brun
   const twistStripe = sin(sp.z.mul(3).add(sp.y.mul(40)).add(s2.z.mul(6.28))).mul(0.5).add(0.5);
   const seta = mix(U.seta.mul(0.7), U.seta.mul(1.25), sp.y).mul(twistStripe.mul(0.12).add(0.94));
-  const cap = mix(U.capsule.mul(1.15), U.capsule.mul(0.55), sst(0.75, 1, sp.y)).mul(noise(positionGeometry.mul(60)).mul(0.08).add(1));
+  const cap = mix(U.capsule.mul(0.95), U.capsule.mul(0.45), sst(0.7, 1, sp.y)).mul(noise(positionGeometry.mul(60)).mul(0.08).add(1));
   const lid = mix(U.capsule.mul(0.9), vec3(0.55, 0.12, 0.05), sp.y);
-  const tooth = mix(vec3(0.45, 0.16, 0.06), vec3(0.85, 0.6, 0.35), sp.z);
+  // (dents du péristome rouge brun, à peine plus claires à la pointe : pâles,
+  // la bouche de la capsule se lisait comme une tête de clou)
+  const tooth = mix(vec3(0.36, 0.11, 0.04), vec3(0.62, 0.3, 0.13), sp.z);
   m.colorNode = seta.mul(isSeta).add(cap.mul(isCap)).add(lid.mul(isLid)).add(tooth.mul(isTooth)).add(U.calyptra.mul(isCal));
   m.roughnessNode = float(0.32).mul(isSeta).add(float(0.25).mul(isCap)).add(float(0.3).mul(isLid)).add(float(0.55).mul(isTooth)).add(float(0.6).mul(isCal));
   m.metalnessNode = float(0);
-  m.clearcoatNode = isCap.mul(0.5).add(isSeta.mul(0.3));
-  m.clearcoatRoughnessNode = float(0.18);
+  m.clearcoatNode = isCap.mul(0.6).add(isSeta.mul(0.3)).add(isLid.mul(0.5));
+  m.clearcoatRoughnessNode = float(0.14);
   m.sheenNode = U.calyptra.mul(isCal).mul(0.9).add(vec3(0.15, 0.1, 0.06).mul(isTooth));
   m.sheenRoughnessNode = float(0.35);
   m.mrtNode = stableVelocity();
@@ -395,7 +408,9 @@ function turfMaterial(U, FIELD) {
   const th = attribute('th', 'float');
   // (même loi que la naissance des tiges ; il reste sous la roche tant que
   // presque aucune n'est sortie, et n'existe que sous des tiges — th)
-  const lift = (q, tex) => { const f = fieldAt(q, tex); return q.add(vec3(0, th.mul(sst(0.1, 0.8, tmax(f.z, f.x))), 0)); };
+  // (sans mousse, la natte passe sous la roche : posée à plat sur la grille du
+  // champ, elle affleurait dans les sillons de l'écorce en un rectangle sombre)
+  const lift = (q, tex) => { const f = fieldAt(q, tex), k = sst(0.1, 0.8, tmax(f.z, f.x)); return q.add(vec3(0, th.mul(k).sub(k.oneMinus().mul(0.5)), 0)); };
   m.positionNode = Fn(() => { if (!isLite()) positionPrevious.assign(lift(positionLocal, FIELD.prev)); return lift(positionLocal, FIELD.tex); })();
   m.castShadowPositionNode = lift(positionLocal, FIELD.tex);
   const fw = fieldAt(p, FIELD.tex);
@@ -463,6 +478,7 @@ export function createMoss(group, FIELD) {
     }
     if (m) {
       const S = sporUniforms(fam.spor.kind);
+      S.px = U.px;
       add(instGeometry(data.spor, { sp: data.spor.sp }, C.sporInst, SPOR_STRIDE, m, ['s0', 's1', 's2', 's3']), sporMaterial(U, S, FIELD));
     }
     // tiges

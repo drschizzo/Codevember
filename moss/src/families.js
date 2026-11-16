@@ -66,8 +66,8 @@ export const FAMILIES = {
     wet: { theta: 0.98, kl: 2.5, kt: 120, tw: 0 },
     tau: { open: 8, close: 800 },
     spor: { kind: 'sphagnum', frac: 0.2, seta: [0.25, 0.4], cap: [0.075, 0.075], teeth: 0, lid: 1 },
-    color: { dry: '#d9d6c4', wet: '#8a2a34', young: '#b84a50', old: '#7a6a4a', hair: '#e8e6dc', seta: '#ecebe2', capsule: '#2a1a12', trans: '#e05a5a' },
-    palettes: [{ wet: '#8a2a34', young: '#b84a50', trans: '#e05a5a' }, { wet: '#5f8a2a', young: '#9cc04a', trans: '#b8e050' }, { wet: '#9a6a2a', young: '#c8963a', trans: '#e8b050' }],
+    color: { dry: '#d9d6c4', wet: '#8a2a34', young: '#b84a50', old: '#7a6a4a', hair: '#e8e6dc', seta: '#c9cdb4', capsule: '#2a1a12', trans: '#e05a5a' },
+    palettes: [{ wet: '#8a2a34', young: '#b84a50', trans: '#e05a5a' }, { wet: '#5f8a2a', young: '#9cc04a', trans: '#b8e050' }, { wet: '#5e4220', young: '#80602c', trans: '#b88a44' }],
   },
 };
 

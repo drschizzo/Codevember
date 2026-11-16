@@ -42,8 +42,10 @@ export const MOODS = {
     label: 'Souche', env: 'studio', value: 'sombre, tachetée',
     support: 'log', props: [],
     water: [['rain', 3], ['fog', 1]], families: [['tortule', 2], ['polytric', 3], ['funaire', 1], ['sphaigne', 1]],
-    sun: { K: 5400, el: 0.9, az: -2.2, I: 1.15, cloud: 0.25 },
-    sky: [['#1b1c1a', '#2a2b28'], ['#222320', '#363732']], fog: [0.45, 0.22], hemi: ['#c8d0b8', '#4a3c20', 1.3],
+    // (le soleil passe par le couvert : des taches de lumière qui glissent sur
+    // la souche, une pénombre verte autour — la lumière du lieu est faible)
+    sun: { K: 5400, el: 0.9, az: -2.2, I: 1.5, flecks: true, cloud: 0.25 },
+    sky: [['#1b1c1a', '#2a2b28'], ['#222320', '#363732']], fog: [0.45, 0.22], hemi: ['#b4c4a0', '#3a2e18', 0.6],
     frame: ['ras', 'longue'],
     accords: [{ support: 'bark', ground: 'litter', accent: 'fern' }, { support: 'barkMossy', ground: 'litter', accent: 'fern' }],
     grade: { contrast: 1.06, saturation: 1.04, shadows: [0.94, 1.02, 0.98], highlights: [1.03, 1.02, 0.94] },
@@ -73,10 +75,10 @@ export const MOODS = {
     support: 'wall', props: [],
     water: [['rain', 1]], families: [['tortule', 4], ['funaire', 2], ['polytric', 1]],
     sun: { K: 5700, el: 1.15, az: -1.9, I: 1.35, cloud: 0.06 },
-    sky: [['#a39d92', '#bdb7ab'], ['#c0b9ad', '#dcd6ca']], fog: [0.35, 0.05], hemi: ['#d8dce6', '#9a8a70', 0.9],
+    sky: [['#a39d92', '#bdb7ab'], ['#c0b9ad', '#dcd6ca']], fog: [0.35, 0.05], hemi: ['#d8dce6', '#9a8a70', 0.7],
     frame: ['contre', 'ras'],
     accords: [{ support: 'limestone', ground: 'limestone', accent: 'lichenYellow' }, { support: 'sandstone', ground: 'sandstone', accent: 'lichenGrey' }],
-    grade: { contrast: 1.1, saturation: 1.02, shadows: [0.95, 0.98, 1.06], highlights: [1.03, 1.01, 0.97] },
+    grade: { exposure: 0.86, contrast: 1.1, saturation: 1.02, shadows: [0.95, 0.98, 1.06], highlights: [1.03, 1.01, 0.97] },
   },
   tourbiere: {
     label: 'Tourbière', env: 'studio', value: 'sombre, contre-jour',
@@ -114,16 +116,17 @@ export const DECOR_FINISHES = {
   gravel: { color: '#a8a8a0', rough: 0.7, relief: 0.5, pattern: 'granite' },
   litter: { color: '#3a3020', rough: 0.8, relief: 0.6, pattern: 'peat' },
   heath: { color: '#4a4030', rough: 0.9, relief: 0.6, pattern: 'peat' },
-  needles: { color: '#7a5030', rough: 0.7, relief: 0.4, pattern: 'peat' },
+  needles: { color: '#5e4430', rough: 0.7, relief: 0.4, pattern: 'peat' },
   fern: { color: '#4a7a2a', rough: 0.55 }, stoneLantern: { color: '#8c8a82', rough: 0.75 }, heather: { color: '#7a4a6a', rough: 0.7 },
-  lichenYellow: { color: '#d8b030', rough: 0.8 }, lichenGrey: { color: '#a8aca0', rough: 0.8 }, cotton: { color: '#f0eee8', rough: 0.9 }, cone: { color: '#6a4228', rough: 0.7 },
+  lichenYellow: { color: '#d8b030', rough: 0.8 }, lichenGrey: { color: '#a8aca0', rough: 0.8 }, cotton: { color: '#f0eee8', rough: 0.9 }, cone: { color: '#4e3826', rough: 0.62 },
 };
 
 // formes du substrat (voir gen/colony.js, makeSubstrate)
 // matière du support → relief de roche cuit (gen/rock.js)
 const ROCK_OF = { bark: 'bark', barkMossy: 'bark', granite: 'granite', graniteDark: 'granite', graniteLichen: 'granite', limestone: 'limestone', sandstone: 'sandstone', peat: 'soil', soil: 'soil' };
 const SUPPORTS = {
-  log: () => ({ cx: 0.0, cz: 0.2, tilt: 0, bumps: 0.12 }),
+  // (une souche de 17 cm : à cette échelle, l'écorce et le coussin se lisent)
+  log: () => ({ cx: 0.0, cz: 0.12, tilt: 0, bumps: 0.12 }),
   granite: () => ({ cx: 0.03, cz: 0.04, tilt: 0.03, bumps: 0.45 }),
   boulder: () => ({ cx: 0.035, cz: 0.025, tilt: -0.04, bumps: 0.5 }),
   wall: () => ({ cx: 0.02, cz: 0.12, tilt: 0.02, bumps: 0.15 }),

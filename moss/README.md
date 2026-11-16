@@ -61,10 +61,12 @@ La première ligne remplit la roche sous la pluie et la vide par évaporation. L
 ## La roche et l'écorce (`src/gen/rock.js`)
 
 Un relief de 1 024² texels (0,27 mm) est cuit dans un worker, puis lu deux fois sur le GPU. Il déplace les sommets d'un maillage de 720² dans le vertex shader (WebGPU n'a pas de geometry shader) et sert de normal map au pixel, avec un micro-relief procédural pour le macro, une carte de couleur minérale et de rugosité, et l'occlusion des creux.
-- **Granit** : dalles séparées par des diaclases arrondies par l'usure, usure à trois échelles, mosaïque de cristaux (biotite, feldspath, quartz), lichens crustacés aréolés à apothécies noires, algues des creux humides.
-- **Calcaire** : cupules de dissolution, cannelures, veines de calcite. **Grès** : lits ondulés, bandes ocre.
-- **Écorce** (souches) : plaques en losanges étirés, sillons profonds, fibres, lambeaux arrachés qui montrent le bois.
-- **Terre** (tourbière, sous-bois clair) : grumeaux, gravillons.
+- **Granit** : dalles séparées par des diaclases arrondies par l'usure, qui s'éteignent par endroits (un réseau fermé donnait un ballon de cuir), usure à trois échelles, mosaïque de cristaux (biotite, feldspath, quartz), lichens crustacés aréolés à contour lobé (le géographique cerné de son liseré noir), algues des creux humides.
+- **Calcaire** : rares cupules de dissolution, cannelures, veines de calcite, patine grise et coulures, piqûres noires de lichens endolithes. **Grès** : lits ondulés, bandes ocre.
+- **Écorce** (souches) : crêtes étroites (4 à 6 mm), longues et ondulantes, qui plongent en V dans des sillons profonds, feuilletées en écailles, cassures en travers, fibres le long du tronc (dans le shader, sous le texel de la carte), lambeaux arrachés qui montrent le bois. De loin, elle se lit en longues traînées gris-brun.
+- **Terre** (tourbière, rosée) : mottes arrondies sans joints, miettes, rares gravillons.
+
+Sur les flancs raides d'un bloc, où la carte vue d'en haut s'étirerait en rayures, la pierre devient procédurale (bruit 3D, même couleur moyenne que la carte). La souche, plus longue et plus large que la carte, la lit en miroir.
 
 Ce même relief porte la mousse (les tiges sont plantées dessus) et fait l'habitat : les fissures sont les refuges, et la propagation en part.
 
@@ -74,12 +76,12 @@ Le fond est neutre, un dégradé uni sans paysage, pour ne mettre en valeur que 
 
 | Humeur | Support | Lumière | Valeur | Cadrage |
 | --- | --- | --- | --- | --- |
-| Souche | souche couchée, écorce sillonnée | soleil de côté, contre-jour | fond sombre | ras ou longue focale |
+| Souche | souche couchée (17 cm), écorce sillonnée | taches de soleil larges et douces qui glissent à travers le couvert, pénombre | fond sombre | ras ou longue focale |
 | Kokedera | granit, gravier ratissé | boîte à lumière douce | gris moyen | plongée ou ras |
 | Lande | bloc de granit à lichens | brouillard blanc qui se lève, puis plein jour | fond très clair | ras ou contre-plongée |
 | Muret | calcaire ou grès | soleil de midi | fond clair et chaud | contre-plongée ou ras |
 | Tourbière | motte de tourbe, sphaigne | soleil bas à contre-jour | fond sombre bleuté | contre-plongée ou ras |
-| Rosée | motte de terre, aiguilles de pin | lune froide, puis soleil bas | fond sombre et froid | plongée ou ras |
+| Rosée | motte de terre, aiguilles de pin par paires, couchées sur le relief | lune froide, puis soleil bas | fond sombre et froid | plongée ou ras |
 
 **Quatre familles** : la tortule (rosettes vissées au sec, étoiles argentées), le polytric (feuilles raides en ombrelle), la funaire (capsules penchées qui tournent sur leur soie), la sphaigne (capitules qui blanchissent au sec et rougissent mouillés).
 

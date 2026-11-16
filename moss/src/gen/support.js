@@ -11,7 +11,7 @@ import { makeSubstrate } from './colony.js';
 export function supportSurface(R, sub = makeSubstrate(R.colony.support)) {
   const D = R.decor, Rc = R.colony.radius;
   switch (D.support) {
-    case 'log': return { kind: 'log', Rl: 1 / 0.2, len: 60, top: (x, z) => sub.base(x, z) };
+    case 'log': return { kind: 'log', Rl: 1 / (R.colony.support.cz || 0.2), len: 60, top: (x, z) => sub.base(x, z) };
     case 'granite': case 'boulder': case 'wall': case 'peat': case 'ground': {
       const Rs = Rc + (D.support === 'wall' ? 3 : ['peat', 'ground'].includes(D.support) ? 3.5 : 4.5);
       const f = (x, z, rocky) => {
@@ -93,6 +93,6 @@ export function bakeSupport(spec) {
   const lite = !!spec.lite;
   if (S.kind === 'log') return log(S.top, S.Rl, S.len, lite ? 480 : 900, lite ? 260 : 520);
   const res = lite ? 360 : 720;
-  if (S.kind === 'block') return plane((x, z) => Math.max(-14, S.f(x, z, true)), 22, 22, res, res);
+  if (S.kind === 'block') return plane((x, z) => Math.max(-30, S.f(x, z, true)), 22, 22, res, res);
   return plane((x, z) => S.f(x, z, true), 14, 14, res, res);
 }
