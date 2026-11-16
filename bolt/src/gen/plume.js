@@ -25,7 +25,7 @@
 //
 // Unité : 1 = hauteur de la source au niveau de condensation. Module pur.
 
-export const PLUME = { NR: 64, NZ: 88, NF: 72, DX: 0.025, DT: 0.025, STEPS: 576 };
+export const PLUME = { NR: 64, NZ: 88, NF: 192, DX: 0.025, DT: 0.025, STEPS: 576 };
 
 // spec : { seed, r0 (rayon de la source), top (hauteur du plafond, > 1), heat (force finale de la source),
 //          puffs (bouffées), kick (le bouillon du départ), spread }

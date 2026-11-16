@@ -84,8 +84,11 @@ async function main() {
 
   // ── Modules ──
   const gen = createGenerator(LITE ? Math.max(2, Math.min(3, (navigator.hardwareConcurrency || 4) - 1)) : undefined);
-  setNoiseVolume(await gen.request({ seed: `${NAME}-noise` }, 'noise')); // (les matériaux en dépendent)
+  // (le bruit commun et les deux volumes du nuage, en parallèle dans le pool)
+  const [noiseVol, cloudNoise] = await Promise.all([gen.request({ seed: `${NAME}-noise` }, 'noise'), gen.request({}, 'cloudnoise')]);
+  setNoiseVolume(noiseVol); // (les matériaux en dépendent)
   const stage = createStage(scene, gen, { lite: LITE });
+  stage.cloud.setNoise(cloudNoise);
   const post = createPost(renderer, scene, camera, { haze: stage.cloud.haze, aoSamples: 8 });
   const accum = createAccumulator(renderer);
   const RENDER = loadRender(LITE);
