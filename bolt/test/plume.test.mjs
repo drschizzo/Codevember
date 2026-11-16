@@ -32,7 +32,10 @@ test('le nuage EST la vapeur accumulée : la masse au-dessus du niveau de conden
   assert.ok(P.rMax > 4 * spec.r0);
 });
 
-test('la source faiblit à la fin : la colonne n’est plus qu’un filet quand le nuage est plein', () => {
+test('la source s’éteint : la colonne a disparu quand le nuage est formé, et le nuage garde sa masse', () => {
   const stem = (f) => { let m = 0; for (let j = 6; j < 20; j++) m += at(f, 0, j) ** 2; return m / 14; };
-  assert.ok(stem(P.NF - 1) < 0.45 * stem(Math.round(P.NF * 0.6)));
+  assert.ok(stem(Math.round(P.NF * 0.4)) > 0.5, 'pas de colonne pendant le remplissage');
+  assert.ok(stem(Math.round(P.NF * 0.82)) < 0.03 * stem(Math.round(P.NF * 0.4)), 'la colonne monte encore après l’arrêt de la source');
+  const above = (f) => { let m = 0; for (let j = Math.round(0.9 / P.DX); j < P.NZ; j++) for (let i = 0; i < P.NR; i++) m += at(f, i, j) ** 2 * (i + 0.5); return m; };
+  assert.ok(above(P.NF - 1) > 0.85 * above(Math.round(P.NF * 0.72)), 'le nuage se dilue après l’arrêt de la source');
 });

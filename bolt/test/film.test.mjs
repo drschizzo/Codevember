@@ -47,10 +47,11 @@ test('ordre des temps : la pluie avant la foudre, la bourrasque après, rien qui
     // les arcs se sont tus avant que le nuage ait fini de se défaire
     const uLast = TIMES.strike + (last.t + 0.6) / F.duration;
     assert.ok(uLast < TIMES.fade[1], `${s} : dernier arc à u = ${uLast.toFixed(3)}`);
-    // il pleut avant la foudre ; le nuage frappé tient encore le reste de son eau, et il est sombre
-    assert.ok(stateAt(F, (TIMES.rain[0] + TIMES.rain[1]) / 2).rain > 0.9);
+    // il pleut avant la foudre ; le nuage frappé tient encore le reste de son eau, et il est sombre (et entier : vis = 1, presque pas effiloché)
+    // (la pluie peut enjamber le raccord de la boucle)
+    assert.ok(stateAt(F, (TIMES.rain[0] + ((TIMES.rain[1] - TIMES.rain[0] + 1) % 1) / 2) % 1).rain > 0.9);
     const k = stateAt(F, TIMES.strike);
-    assert.ok(Math.abs(k.cloud - (1 - RAIN)) < 1e-9 && k.dark > 0.99 && k.vis === 1);
+    assert.ok(Math.abs(k.cloud - (1 - RAIN)) < 1e-9 && k.dark > 0.99 && k.vis === 1 && k.rag < 0.1);
     // (la pluie suit l'horloge du film, pas l'horloge lente : aucune goutte pendant le traceur)
     for (let u = TIMES.leader[0] - 0.02; u < TIMES.strike + 0.005; u += 0.001) assert.equal(stateAt(F, u).rain, 0, `pluie au ralenti, u = ${u.toFixed(3)}`);
     assert.ok(stateAt(F, (TIMES.gush[0] + TIMES.gush[1]) / 2).rain > 0.9);

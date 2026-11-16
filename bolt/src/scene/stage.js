@@ -12,6 +12,7 @@ import { buildPieceMaterial, finishUniforms, applyFinish, signature, perturb, st
 import { Buffers, OUT } from '../../../shared/gen/mesh.js';
 import { revolve } from '../gen/vessels.js';
 import { stateAt, PHYS } from '../film.js';
+import { steamSource } from '../gen/plume.js';
 import { layout, ELEMENTS } from '../recipe.js';
 import { createCloud, N_LIGHTS } from './cloud.js';
 import { createLightning, MAX_STROKES } from './lightning.js';
@@ -86,7 +87,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
   // ── Nuage, éclair, pluie ──
   const cloud = createCloud();
   const bolt = createLightning(scene, { lite });
-  const rainU = { rate: uniform(0), time: uniform(0), top: uniform(2), fall: uniform(PHYS.fall), light: uniform(new THREE.Color(1, 1, 1)), gain: uniform(0.5) };
+  const rainU = { rate: uniform(0), time: uniform(0), dur: uniform(24), top: uniform(2), fall: uniform(PHYS.fall), light: uniform(new THREE.Color(1, 1, 1)), gain: uniform(0.5) };
   const rainMat = rainMaterial(rainU, lite);
   let rain = null;
   // étincelles (au point que touche chaque arc), gouttes (le thé saisi par la
@@ -309,7 +310,8 @@ export function createStage(scene, gen, { lite = false } = {}) {
     // (l'élément n'est chaud qu'une fois la chaleur arrivée jusqu'à lui)
     const reached = Math.min(1, Math.max(0, (S.since - 0.58 * PHYS.cond) / 0.25)), glow = hot * reached;
     liquidU.hot.value = glow;
-    liquidU.boil.value = Math.min(1, Math.max(0, glow - 0.1) * 0.9 + S.burst * 0.5);
+    // (le thé bout tant que la source de vapeur débite : quand elle s'éteint, le bouillon cesse avec elle)
+    liquidU.boil.value = Math.min(1, Math.max(0, glow - 0.1) * 0.9 * steamSource(S.sim) + S.burst * 0.5);
     if (slots.liquidBody) slots.liquidBody.U.outer.emit.value = 0.9 * glow * glow;
     if (tableFin) {
       const c = H.glow.c, g = tableFin.U.glow.value;
@@ -334,7 +336,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
     }
 
     // ── la pluie ──
-    rainU.rate.value = S.rain; rainU.time.value = tsec; rainU.top.value = L.base + 0.02;
+    rainU.rate.value = S.rain; rainU.time.value = tsec; rainU.dur.value = R.film.duration; rainU.top.value = L.base + 0.02;
     rainU.light.value.set(K.tint).multiplyScalar(Math.max(0.45, K.ambient * 1.6) + S.light * 3); // (jamais éteinte : dans une scène sombre, c'est le contre-jour qui l'accroche)
     return S;
   }
@@ -398,7 +400,7 @@ function liquidMaterial(U, lite) {
   const rings = (f, sp, salt) => {
     const q = p.mul(f).add(salt), c = floor(q), fr = fract(q).sub(0.5);
     const h1 = hash(c.x.mul(127.1).add(c.y.mul(311.7)).add(salt)), h2 = hash(c.x.mul(269.5).add(c.y.mul(183.3)).add(salt));
-    const t = fract(U.time.mul(sp).add(h1));
+    const t = fract(U.time.mul(floor(U.dur.mul(sp).add(0.5)).div(U.dur)).add(h1)); // (entier par boucle : il pleut au raccord)
     const d = length(fr.sub(vec2(h1, h2).sub(0.5).mul(0.5))), rr = t.mul(0.5);
     return sin(d.sub(rr).mul(46)).mul(exp(d.sub(rr).div(0.07).pow2().negate())).mul(t.oneMinus().pow2()).mul(step(h2, U.rain.mul(1.2)));
   };
@@ -433,7 +435,8 @@ function rainMaterial(U, lite) {
   const m = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
   const a = attribute('iA', 'vec4'), b = attribute('iB', 'vec4');
   const t = uv();
-  const cyc = fract(U.time.div(U.fall.mul(b.y)).add(a.z));
+  // (un nombre entier de chutes par boucle : la pluie tombe pendant le raccord)
+  const cyc = fract(U.time.mul(floor(U.dur.div(U.fall.mul(b.y))).max(1).div(U.dur)).add(a.z));
   // (elle accélère ; le dernier dixième de son cycle, elle s'écrase : un éclat court et large à son point de chute)
   const fl = cyc.div(0.9).min(1), hit = step(0.9, cyc), k = cyc.sub(0.9).div(0.1).clamp(0, 1);
   const y = mix(U.top, b.x, fl.mul(fl).mul(0.5).add(fl.mul(0.5))).add(hit.mul(0.012));

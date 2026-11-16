@@ -3,11 +3,12 @@
 // lit ici, en fonction de la seule phase u ∈ [0, 1). Module pur (tests, écran
 // de chargement, scène).
 //
-//   0,52 – 0,95  la foudre a chauffé le thé : la vapeur monte et remplit le
-//                nuage (accéléré ; simulation relue)
-//   0,03 – 0,36  il pleut : le nuage rend l'essentiel de son eau à la tasse
-//                et fonce en se chargeant (dans un orage, ce sont les
-//                précipitations qui séparent les charges)
+//   0,52 – 0,76  la foudre a chauffé le thé : la vapeur monte et forme le
+//                nuage (accéléré ; simulation relue) ; vers 0,7 le thé cesse
+//                de bouillir et la colonne disparaît dans le nuage
+//   0,80 – 0,30  il pleut (à travers le raccord de la boucle) : le nuage
+//                rend l'essentiel de son eau à la tasse et fonce en se
+//                chargeant ; il reste plein et formé jusqu'à l'éclair
 //   0,27 – 0,385 la charge : lueurs dans le nuage (accéléré)
 //   0,385 – 0,50 le traceur descend par bonds, hésite, puis saute (caméra rapide)
 //   0,50         la jonction : l'arc en retour
@@ -25,7 +26,7 @@
 // part de boucle ; rain : la pluie avant la foudre (elle rend la part RAIN de
 // l'eau) ; gush : la bourrasque après l'arc (le reste) ; fade : le nuage vidé
 // se défait
-export const TIMES = { cycle: 0.52, fill: 0.43, dark: [0.0, 0.385], leader: [0.385, 0.5], strike: 0.5, rain: [0.03, 0.36], gush: [0.51, 0.6], fade: [0.505, 0.65], flicker: [0.27, 0.38] };
+export const TIMES = { cycle: 0.52, fill: 0.24, dark: [0.22, 0.385], leader: [0.385, 0.5], strike: 0.5, rain: [0.8, 0.3], gush: [0.51, 0.6], fade: [0.505, 0.65], flicker: [0.27, 0.38] };
 export const RAIN = 0.7;
 // vitesses (unités de scène par seconde de film) et durées (secondes de film)
 // cond : durée de la descente de la chaleur le long du métal, de la pointe à la
@@ -83,7 +84,12 @@ const W = { r0: cyc(TIMES.rain[0]), r1: cyc(TIMES.rain[1]), g0: cyc(TIMES.gush[0
 const upW = (w) => sstep5(0, TIMES.fill, w);                                            // eau montée (vapeur et nuage : un seul fluide, simulé)
 const outW = (w) => RAIN * sstep5(W.r0, W.r1, w) + (1 - RAIN) * sstep5(W.g0, W.g1, w);  // eau partie en pluie (cumul)
 const visW = (w) => 1 - sstep(W.f0, W.f1, w);                                          // ce qui reste visible du nuage de ce cycle
-const ragW = (w) => 0.35 * sstep(W.r0, W.r1, w) + 0.65 * sstep(W.f0, W.f1, w);          // effilochement (base en lambeaux sous la pluie, puis dislocation)
+// (sous la pluie, la base ne s'effiloche qu'à peine : le nuage doit rester plein et formé jusqu'à l'éclair —
+// à 0,35, l'éclair frappait un nuage réduit à quelques flocons ; il ne se défait qu'après)
+const ragW = (w) => 0.06 * sstep(W.r0, W.r1, w) + 0.94 * sstep(W.f0, W.f1, w);          // effilochement (à peine sous la pluie, puis dislocation)
+// il fonce en se chargeant (sous la pluie, puis pendant la charge), et s'éclaircit en se défaisant après l'arc
+const SK = cyc(TIMES.strike);
+const darkW = (w) => (0.55 * sstep(W.r0, W.r1, w) + 0.45 * sstep(cyc(TIMES.dark[0]), cyc(TIMES.dark[1]), w)) * (1 - sstep(SK, W.f1, w));
 const RATE = RAIN * 1.875 / (W.r1 - W.r0);                                              // débit de pointe de la pluie (dérivée de outW)
 
 // État du film à la phase u. F = R.film : { duration, strokes: [{ t, amp, path }], flickers: [{ u, amp, p }] }
@@ -124,7 +130,7 @@ export function stateAt(F, u) {
     // qui en reste ; rag : effilochement de chacun
     sim: clamp(v / T.fill), vis: visW(v), visOld: visW(v + 1), rag: ragW(v), ragOld: ragW(v + 1),
     // il fonce en se chargeant (sous la pluie, puis pendant la charge), s'éclaircit en se défaisant
-    dark: (0.55 * sstep(T.dark[0], T.rain[1], u) + 0.45 * sstep(0.22, T.dark[1], u)) * (1 - sstep(T.strike, T.fade[1], u)),
+    dark: Math.max(darkW(v), darkW(v + 1)),
     heat,
     since: ((u - T.strike + 1) % 1) * D,                      // secondes de film depuis la jonction (toujours ≥ 0 : la chaleur dure toute la boucle)
     burst: burstAt(tau),                                      // le bouillon du choc (0 → 1 → 0)
@@ -142,7 +148,7 @@ export function stateAt(F, u) {
 export function cameraAt(C, u) {
   u -= Math.floor(u);
   const push = sstep5(0.2, 0.47, u) * (1 - sstep5(0.66, 0.92, u));
-  const dip = sstep5(0.47, 0.6, u) * (1 - sstep5(0.7, 0.93, u));
+  const dip = sstep5(0.47, 0.6, u) * (1 - sstep5(0.58, 0.76, u)); // (remontée calée sur le remplissage, qui finit vers 0,7)
   const az = C.az + C.sway * Math.sin(2 * Math.PI * u) + C.arc * push;
   const el = C.el + C.tilt * push + (C.dipEl ?? 0) * dip;
   const d = C.dist * (1 - C.push * push - (C.dipIn ?? 0) * dip);

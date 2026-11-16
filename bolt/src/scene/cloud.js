@@ -81,6 +81,8 @@ export function createCloud() {
     // des variables posées ici, sinon la lecture du champ change quand une
     // branche cesse d'être prise — le nuage « sautait » à u = 0,65 et au raccord)
     const V = (x) => (fine ? x.toVar() : x);
+    // (deux nombres pseudo-aléatoires par point et par image)
+    const jit = fine ? fract(sin(vec2(dot(p, vec3(12.9898, 78.233, 37.719)), dot(p, vec3(39.346, 11.135, 83.155))).add(U.frame.mul(0.6180339))).mul(43758.5453)) : vec2(0);
     const z0 = V(p.y.sub(U.steamP.y).div(U.span));
     // l'axe du panache : de la source (la tasse, le bec) à l'aplomb du nuage
     const o = vec3(U.seed, U.drift, U.seed.mul(1.7));
@@ -125,12 +127,15 @@ export function createCloud() {
     // (le cœur du panache monte jusqu'au couvercle : au-dessus du nuage, il
     // perçait le sommet en cheminée. Dans le haut du nuage, il s'efface et
     // prend la hauteur de la couronne)
-    const chimney = smoothstep(0.32, 0.1, r).mul(smoothstep(roof.sub(0.45), roof.sub(0.15), z)).mul(smoothstep(1.15, 1.35, z)).mul(0.85).oneMinus(); // (seulement sous le toit : plus bas, il étranglait la jonction de la colonne et du nuage)
+    const chimney = smoothstep(0.32, 0.1, r).mul(smoothstep(roof.sub(0.45), roof.sub(0.15), z)).mul(smoothstep(1.15, 1.35, z)).mul(0).oneMinus(); // (désactivé : la source s'éteint avant que le cœur n'atteigne le toit, et l'effacer creusait un cratère au sommet, visible quand la caméra monte)
     const read = (t) => {
-      const at = (dz) => sim.sample(vec3(r.div(U.simSize.x), z.add(dz).div(U.simSize.y), t)).level(0).r;
-      // (dans la colonne, le champ est lissé en hauteur : la source bat, et ses
-      // bouffées régulières, rendues nettes, empilaient des anneaux)
-      const v0 = (fine ? mix(at(0), at(-0.06).add(at(0)).add(at(0.06)).div(3), smoothstep(0.98, 0.7, z)) : at(0)).mul(chimney);
+      // (lecture tramée d'environ une cellule, renouvelée à chaque image :
+      // l'interpolation linéaire d'un champ de 88 cellules, passée dans le
+      // contraste d'une peau nette, dessinait une crête à chaque cellule — des
+      // bandes en pas de vis dans la colonne ; l'anticrénelage temporel moyenne
+      // le tramage en un flou d'une cellule)
+      const jr = fine ? jit.x.sub(0.5).mul(0.045) : float(0), jz = fine ? jit.y.sub(0.5).mul(0.05) : float(0);
+      const v0 = sim.sample(vec3(r.add(jr).max(0).div(U.simSize.x), z.add(jz).div(U.simSize.y), t)).level(0).r.mul(chimney);
       // (le panache simulé s'étale en couronne, plus haute que son cœur : au-dessus de la base, le cœur prend aussi
       // ce que la couronne a à sa hauteur — un sommet bombé, pas un cratère)
       return fine ? v0.max(sim.sample(vec3(r.max(0.8).div(U.simSize.x), z.div(U.simSize.y), t)).level(0).r.mul(smoothstep(1.05, 1.3, z0))) : v0;
@@ -183,7 +188,10 @@ export function createCloud() {
       // du bruit restent — des bourgeons ; au cœur, tout reste. La couverture ne
       // sature qu'en profondeur, sinon un champ dense donne un galet lisse)
       const c2 = smoothstep(0.02, 0.85, cov);
-      const shaped = base.sub(c2.oneMinus()).div(c2.max(0.02)).clamp(0, 1).mul(c2);
+      // (cœur plein : là où la couverture est franche, la densité a un plancher.
+      // Le nuage formé est une nappe assez mince ; vu d'en haut, le bruit la
+      // perçait de part en part, et l'éclair frappait un beignet)
+      const shaped = base.sub(c2.oneMinus()).div(c2.max(0.02)).clamp(0, 1).mul(c2).max(smoothstep(0.28, 0.55, cov).mul(0.55));
       if (!fine) return shaped.sub(0.1).div(0.9).clamp(0, 1);   // (pour l'ombre : le détail moyen)
       const out = float(0).toVar();
       If(shaped.greaterThan(0.002), () => {
@@ -234,7 +242,7 @@ export function createCloud() {
 
   // haze(depth, lite, rgb) → rgb vu à travers le nuage et la vapeur
   const haze = (depthTex, lite, rgb) => Fn(() => {
-    const N = lite ? 22 : 64, NS = lite ? 12 : 40; // (itérations au plus ; le pas fin est la longueur de la boîte / 72)
+    const N = lite ? 36 : 112, NS = lite ? 12 : 40; // (itérations au plus : à 64, les rayons rasants qui traversent un nuage plat s'épuisaient avant le cœur — des trous par où l'on voyait le fond) // (itérations au plus ; le pas fin est la longueur de la boîte / 72)
     // rayon de la caméra et distance du premier obstacle. Deux pièges : dans
     // une passe plein écran, les nœuds « caméra » de three.js (cameraPosition,
     // cameraWorldMatrix…) désignent la caméra du quad, pas celle de la scène —
@@ -293,9 +301,9 @@ export function createCloud() {
       const outw = normalize(vec3(p.x.sub(U.c.x), p.y.sub(U.c.y.add(U.H.mul(0.35))).mul(0.6), p.z.sub(U.c.z)).add(vec3(0, 0.001, 0)));
       const side = lite ? float(1) : exp(density(p.add(outw.mul(sj.mul(0.14))), false).mul(-2.4));
       const yn = p.y.sub(U.c.y).div(U.H).clamp(0, 1);
-      const sky = mix(U.shade, U.tint.mul(0.85), U.dark.mul(0.75).oneMinus().mul(yn.mul(0.6).add(0.4))).mul(up.mul(0.45).add(0.55)).mul(side.mul(0.75).add(0.25));
-      const litc = U.tint.mul(U.sunCol).mul(U.dark.mul(0.35).oneMinus()).mul(1.35);
-      col.assign(sky.mul(0.6).add(litc.mul(sun).mul(powder).mul(1.25)).mul(U.amb));
+      const sky = mix(U.shade.mul(U.dark.mul(0.25).oneMinus()), U.tint.mul(0.85), U.dark.mul(0.85).oneMinus().mul(yn.mul(0.6).add(0.4))).mul(up.mul(0.4).add(0.6)).mul(side.mul(0.5).add(0.5)); // (plancher haut : une ombre sur le sommet ne doit pas se lire comme un trou)
+      const litc = U.tint.mul(U.sunCol).mul(U.dark.mul(0.72).oneMinus()).mul(1.35); // (le nuage qui se charge fonce franchement : gris d'ardoise sous l'orage)
+      col.assign(sky.mul(0.72).add(litc.mul(sun).mul(powder).mul(1.25)).mul(U.amb));
       for (let k = 0; k < N_LIGHTS; k++) { // les éclairs, de l'intérieur
         const Lk = U.lights.element(k), v = Lk.xyz.sub(p);
         col.addAssign(U.lcol.mul(Lk.w.div(dot(v, v).mul(14).add(1))));
@@ -318,18 +326,18 @@ export function createCloud() {
             If(d.greaterThan(0.004), () => {
               If(inside.lessThan(0.5), () => {
                 // (on entre : on recule pour ne pas sauter la peau)
-                inside.assign(1); t.subAssign(big.sub(small));
+                inside.assign(1); t.assign(t.sub(big.sub(small)).max(t0)); // (jamais avant le début de la boîte : la tranche aurait été comptée deux fois, une ligne à la couture des deux domaines)
               }).Else(() => {
                 const c = vec3(0).toVar();
                 shade(p, d, c);
-                const a = exp(d.mul(small).mul(-sigma)).oneMinus();
+                const a = exp(d.mul(tMin(small, t1.sub(t))).mul(-sigma)).oneMinus(); // (le dernier pas s'arrête au bord de la boîte)
                 L.addAssign(c.mul(a).mul(T));
                 T.mulAssign(a.oneMinus());
                 t.addAssign(small);
               });
             }).Else(() => {
               // (dans l'air : grands pas, après quelques petits pour sortir d'un creux)
-              inside.assign(inside.sub(0.25).max(0));
+              inside.assign(inside.sub(0.5).max(0));
               t.addAssign(select(inside.greaterThan(0), small, big));
             });
           });
