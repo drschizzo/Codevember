@@ -13,7 +13,7 @@ import * as THREE from 'three/webgpu';
 import {
   Fn, uniform, attribute, varyingProperty, vec3, vec4, float, mix, smoothstep, clamp, exp, max, min, sin, cos, cross, dot, abs, sqrt, acos,
   length, normalize, atan, positionGeometry, normalLocal, positionPrevious, faceDirection, normalViewGeometry, mod, step, select,
-  textureLoad, ivec2, int, floor, fract,
+  textureLoad, ivec2, int, floor, fract, positionWorld, cameraPosition, fwidth,
 } from 'three/tsl';
 import { G } from './globals.js';
 import { GLASSES } from '../glasses.js';
@@ -51,9 +51,46 @@ const sm = (u) => u.mul(u).mul(float(3).sub(u.mul(2)));
 // (le verre de travail est à ~1 100 °C : jaune orangé, jamais blanc crème ;
 // l'intensité reste nettement sous le plafond des hautes lumières, sinon le
 // tone mapping désature la pièce en un aplat clair où la forme ne se lit plus)
-export const blackbody = (h) => vec3(1, h.pow(1.5).mul(0.36).add(0.1), h.pow(4).mul(0.06).add(0.005)).mul(h.pow(3).mul(1.15).add(h.mul(0.15)));
+export const blackbody = (h) => vec3(1, h.pow(1.5).mul(0.3).add(0.06), h.pow(4).mul(0.03).add(0.003)).mul(h.pow(3).mul(0.8).add(h.mul(0.12)));
 
 const vCyc = varyingProperty('vec4', 'vCalcin');
+
+// Les lampes de la scène, vues par le verre (stage.js les tient à jour) :
+// position et éclairement (couleur × intensité) de la lampe principale, des
+// deux contre-jours et de la gueule du four ou de la fenêtre.
+export const LIT = Array.from({ length: 4 }, () => ({ pos: uniform(new THREE.Vector3(0, 9, 0)), col: uniform(new THREE.Color(0, 0, 0)) }));
+export const BODY = { gain: uniform(1) };
+
+// Couleur de corps. Un verre teinté dans la masse n'est pas qu'un filtre posé
+// devant le décor : la lumière qui y entre ressort par toute la paroi, teintée
+// — c'est elle qui fait d'un rubis à contre-jour une braise et non une
+// silhouette noire. La transmission du moteur ne voit que l'image derrière la
+// pièce (devant un mur sombre, le verre devenait noir) : ce terme ajoute la
+// lumière des lampes passée à travers le verre, plus forte quand la lampe est
+// derrière la pièce, plus dense et plus saturée là où le regard traverse la
+// paroi en biais. Liberté assumée : pas d'ombre propre dans ce terme.
+const bodyGlow = (tint, cosV, isEdge) => {
+  const V = normalize(cameraPosition.sub(positionWorld));
+  let E = vec3(0);
+  for (const l of LIT) {
+    const d = l.pos.sub(positionWorld), L = normalize(d);
+    const back = dot(L, V).negate().mul(0.5).add(0.5); // (1 : la lampe est derrière le verre)
+    E = E.add(l.col.div(dot(d, d).max(1)).mul(back.pow(2.5).mul(0.85).add(0.15)));
+  }
+  // (éclairement comprimé : sous les contre-jours puissants d'un décor sombre,
+  // la lueur saturait en un aplat de couleur pure)
+  E = E.div(dot(E, vec3(0.2126, 0.7152, 0.0722)).mul(0.07).add(1));
+  // (paroi vue en biais : chemin plus long, teinte plus profonde)
+  // (et lueur plus forte au bord de la silhouette qu'au milieu de la panse :
+  // une lueur égale partout ferait du verre une matière opaque)
+  // (un chant est une tranche de verre épaisse et polie par la cassure : il
+  // prend la lumière et brille de la couleur du verre, jamais en trait noir)
+  // (les tranches : comme la paroi vue un peu en biais, sans lueur propre)
+  const graze = mix(float(1).sub(cosV), float(0.35), isEdge);
+  const path = float(1.5).add(graze.mul(2.5));
+  const sat = max(tint.r, max(tint.g, tint.b)).sub(min(tint.r, min(tint.g, tint.b)));
+  return tint.pow(vec3(path)).mul(E).mul(graze.pow(2).mul(0.9).add(0.1)).mul(smoothstep(0.08, 0.5, sat)).mul(BODY.gain);
+};
 
 export function buildGlassMaterial(U, { glassKey = 'cristal', track } = {}) {
   const lite = isLite();
@@ -149,16 +186,18 @@ export function buildGlassMaterial(U, { glassKey = 'cristal', track } = {}) {
   // chants : lignes de Wallner autour de l'origine de la rupture
   const wall = sin(length(pg.sub(U.origin)).div(U.size).mul(220).add(noise(pg.mul(6)).mul(3))).mul(0.5).add(noise(pg.mul(40)).mul(0.5));
   const N0 = normalViewGeometry.mul(faceDirection);
-  m.normalNode = perturb(wall.mul(isEdge).mul(U.thick).mul(0.04), N0);
+  m.normalNode = perturb(wall.mul(isEdge).mul(U.thick).mul(0.018), N0);
 
   // filigrane : fils de verre blanc opaque pris dans la paroi, en spirale
   const th = atan(pg.z, pg.x);
   const band = cos(th.mul(U.filN).add(pg.y.div(U.size).mul(U.filTwist).mul(2 * Math.PI))).mul(0.5).add(0.5);
   const fil = smoothstep(0.86, 0.93, band).mul(U.fil).mul(float(1).sub(isEdge.mul(0.5)));
 
-  const tint = mix(U.tint, U.edge, isEdge);
+  // (les tranches sont le même verre que la paroi, à peine plus dense : une
+  // teinte propre aux chants les détachait comme un liseré peint)
+  const tint = mix(U.tint, U.edge, isEdge.mul(0.2));
   m.colorNode = opaque ? vec4(mix(vec3(0.012), U.edge.mul(0.05), isEdge), 1) : vec4(mix(vec3(1), vec3(0.92, 0.92, 0.9), fil), 1);
-  m.roughnessNode = mix(mix(float(0.015), float(0.09), isEdge), float(0.35), fil);
+  m.roughnessNode = mix(mix(float(0.015), float(0.035), isEdge), float(0.35), fil);
   m.metalnessNode = float(0);
   m.specularIntensityNode = float(1);
   m.iorNode = U.ior;
@@ -170,9 +209,12 @@ export function buildGlassMaterial(U, { glassKey = 'cristal', track } = {}) {
     // (chants : un peu plus denses et plus verts que la paroi, jamais un trait
     // noir — en trois fois l'épaisseur sous une absorption triplée, chaque
     // éclat était cerné d'un contour de dessin animé)
-    m.thicknessNode = U.thick.mul(mix(float(1.6), float(2), isEdge));
-    m.attenuationColorNode = tint;
-    m.attenuationDistanceNode = U.thick.mul(U.att).mul(mix(float(1), float(0.75), isEdge));
+    m.thicknessNode = U.thick.mul(mix(float(1.6), float(1.9), isEdge));
+    // (chaud, le verre filtre en orangé ce qu'on voit à travers lui : la sole
+    // éclairée par sa propre lueur n'y passe plus en blanc crème)
+    const hotK = smoothstep(0.15, 0.7, heat);
+    m.attenuationColorNode = mix(tint, vec3(1.0, 0.3, 0.04), hotK);
+    m.attenuationDistanceNode = mix(U.thick.mul(U.att), U.thick.mul(0.3), hotK);
     m.dispersionNode = U.disp;
   } else if (!opaque) {
     m.transparent = true;
@@ -189,16 +231,28 @@ export function buildGlassMaterial(U, { glassKey = 'cristal', track } = {}) {
   m.iridescenceThicknessNode = mix(float(250), float(800), noise(pg.mul(3)).mul(0.5).add(0.5));
   // fissures : un trait argenté sur la paroi, qui s'allume au passage du front
   // (lisible même tant que les éclats se tiennent encore)
-  const crackLine = smoothstep(0.55, 0.95, surfA.w).mul(float(1).sub(isEdge)).mul(min(vCyc.w, 1));
+  // (surf.w vaut 1 sur les sommets posés sur une fissure et décroît vers
+  // l'intérieur de l'éclat, sur une distance qui dépend de la taille du triangle :
+  // un seuil fixe donnait un trait d'épaisseur changeante, en pointillés et en
+  // marches d'escalier. Le trait est maintenant mesuré en pixels (distance au
+  // bord ÷ sa dérivée à l'écran) : un pixel partout, bord adouci. Le maillage
+  // garantit qu'aucun triangle n'a ses trois sommets sur une fissure
+  // (gen/fracture.js).)
+  const cw = surfA.w, cfw = fwidth(cw);
+  const crackLine = smoothstep(1.3, 0.3, float(1).sub(cw).div(cfw.max(1e-5))).mul(smoothstep(0.0001, 0.0006, cfw)).mul(float(1).sub(isEdge)).mul(min(vCyc.w, 1));
   // un verre chaud est un émetteur semi-transparent : il rayonne selon
   // l'épaisseur traversée par le regard (1 − e^(−k / cos θ)) — plus fort sur
   // les bords de la silhouette, plus faible de face ; c'est ce qui modèle la
   // forme d'une paraison incandescente sur les photos
   const cosV = dot(normalViewGeometry, vec3(0, 0, 1)).abs().max(0.12);
-  const emis = exp(float(-0.55).div(cosV)).oneMinus().mul(1.5);
-  m.emissiveNode = blackbody(heat).mul(U.heatGain).mul(mix(float(1), emis, isEdge.oneMinus()))
-    .add(U.edge.add(0.4).mul(max(vCyc.w.sub(1), 0).mul(0.5)).mul(isEdge).mul(0.35))
-    .add(vec3(0.9, 0.95, 1).mul(crackLine).mul(max(vCyc.w.sub(1), 0).mul(0.8).add(0.35)))
+  const emis = exp(float(-0.55).div(cosV)).oneMinus().mul(1.15);
+  const body = opaque || lite ? vec3(0) : bodyGlow(tint, cosV, isEdge).mul(float(1).sub(smoothstep(0.2, 0.7, heat))).mul(float(1).sub(fil));
+  m.emissiveNode = blackbody(heat).mul(U.heatGain).mul(mix(float(1), emis, isEdge.oneMinus())).add(body)
+    // (l'éclair des chants au passage du front : faible — vus par la tranche, à
+    // travers la paroi, ces rubans de moins d'un pixel crénelaient en pointillés)
+    .add(U.edge.add(0.4).mul(max(vCyc.w.sub(1), 0).mul(0.5)).mul(isEdge).mul(0.08))
+    // (trait fin et discret une fois le front passé : plus fort, il cernait chaque éclat d'un contour blanc)
+    .add(vec3(0.9, 0.95, 1).mul(crackLine).mul(max(vCyc.w.sub(1), 0).mul(0.8).add(0.14)))
     .add(U.glow.mul(G.uvLight).mul(float(0.04).add(isEdge.mul(0.5)).add(float(1).sub(dot(normalViewGeometry, vec3(0, 0, 1)).abs()).pow(3).mul(0.35))));
   // parties qui apparaissent, éclats fondus dans le bain : tramés, lissés par le TRAA
   const keep = vCyc.x.greaterThan(ditherThreshold(1).mul(0.04)).and(vCyc.y.lessThan(float(0.97).sub(ditherThreshold(2).mul(0.08))));
@@ -231,7 +285,12 @@ export function buildGlassShadowCaster(U, glassMat) {
   const m = new THREE.MeshBasicNodeMaterial();
   m.positionNode = glassMat.positionNode;
   const isEdge = smoothstep(0.5, 0.8, surfA.z);
-  m.castShadowNode = vec4(mix(U.tint.mul(0.45).add(0.04), vec3(0.06), isEdge), 1);
+  // (ombre d'un verre de couleur : une tache de lumière teintée, traversée de
+  // filets plus clairs là où la paroi concentre la lumière, cernée par l'ombre
+  // franche des chants)
+  const pg = positionGeometry;
+  const streak = smoothstep(-0.2, 0.6, noise(vec3(atan(pg.z, pg.x).mul(2.2), pg.y.mul(2.4), 0.5))).mul(0.45).add(0.55);
+  m.castShadowNode = vec4(mix(mix(U.tint, vec3(1), 0.12).mul(streak).mul(0.92), vec3(0.06), isEdge), 1);
   const l = mod(G.time.sub(U.start), U.loopT);
   const isPart = step(1.5, Dd.x);
   const tApp = U.Ts.mul(PH.acc).mul(Dd.x.sub(2).clamp(0, 1).mul(0.3).add(1.0));

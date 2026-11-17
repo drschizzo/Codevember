@@ -49,10 +49,10 @@ test('direction artistique : deux pièces qui se suivent diffèrent en tout ; pa
   assert.ok(forms > 0 && glasses > 0 && mechs > 0);
 });
 
-test('décors : sept humeurs qui diffèrent par la valeur, la lumière et le cadrage, pas seulement par la teinte', () => {
+test('décors : six humeurs qui diffèrent par la valeur, la lumière et le cadrage, pas seulement par la teinte', () => {
   const lum = (h) => { const c = parseInt(h.slice(1), 16); return ((c >> 16 & 255) * 0.2126 + (c >> 8 & 255) * 0.7152 + (c & 255) * 0.0722) / 255; };
   const M = Object.values(MOODS);
-  assert.ok(M.length >= 7);
+  assert.ok(M.length >= 6);
   assert.ok(M.filter((m) => lum(m.bg) > 0.6).length >= 2, 'au moins deux décors clairs');
   assert.ok(M.filter((m) => lum(m.bg) < 0.05).length >= 2, 'au moins deux décors sombres');
   const sig = M.map((m) => `${lum(m.bg) > 0.5}|${m.key.el[0] < 0.6 ? 'rasante' : m.key.el[0] > 1.25 ? 'zénithale' : 'haute'}|${m.key.pen < 0.2 ? 'dure' : m.key.pen > 0.8 ? 'douce' : 'moyenne'}|${m.cam.height[0] > 2 ? 'plongée' : m.cam.height[1] < 0.8 ? 'basse' : 'mi'}|${m.floor.set}|${m.prop ?? ''}`);
@@ -155,6 +155,19 @@ test('cause et effet : l’outil touche le point d’impact exactement au choc, 
   for (const f of [pendulum, hammer]) {
     assert.ok(Math.abs(f(O, nh, 0, t0, Ts).gap) < 1e-9, `${f.name} : contact au choc`);
     for (const tp of [-0.3, -0.1, -0.03, -0.01, -0.002]) assert.ok(f(O, nh, tp, t0 + tp, Ts).gap > 0, `${f.name} : contact avant le choc (${tp})`);
+  }
+  // le marteau frappe de face : avant le choc, sa tête reste du côté extérieur du
+  // plan tangent au verre (elle ne longe ni ne traverse la paroi), même quand
+  // la paroi penche ; et son bras est parallèle à ce plan au contact
+  for (const n of [nh, [0.6 * 0.8, 0.6, -0.8 * 0.8], [0.6 * 0.8, -0.6, -0.8 * 0.8]]) {
+    const { HAMMER } = await import('../src/kinematics.js');
+    for (const tp of [-2, -0.5, -0.09, -0.05, -0.01, 0]) {
+      const K = hammer(O, nh, tp, t0 + tp, Ts, n);
+      const out = (K.center[0] - O[0]) * n[0] + (K.center[1] - O[1]) * n[1] + (K.center[2] - O[2]) * n[2];
+      assert.ok(out >= HAMMER.head - 1e-9, `marteau : la tête passe derrière le plan tangent (${tp})`);
+    }
+    const K0 = hammer(O, nh, 0, t0, Ts, n);
+    assert.ok(Math.abs(K0.dir[0] * n[0] + K0.dir[1] * n[1] + K0.dir[2] * n[2]) < 1e-9 && Math.abs(K0.gap) < 1e-9);
   }
   // le haut-parleur est au plus fort au choc ; la flamme brûle juste avant le choc thermique
   assert.ok(resonanceAmp(t0, Ts) === 1 && resonanceAmp(t0 - 3, Ts) < 0.1);

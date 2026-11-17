@@ -39,12 +39,14 @@ Chaque moment du cycle a une cause qu'on voit à l'écran et obéit à une loi p
 | --- | --- | --- | --- | --- |
 | 0 – 0,18 | la paraison monte du bain, se gonfle, prend forme ; anse, bouchon et fil sont posés chauds à la fin | souffle, plateau tournant | verre visqueux, incandescent | accéléré |
 | 0,18 – 0,4 | la pièce refroidit du pied vers le bord ; le plateau ralentit et s'arrête (0,28 – 0,4) | rayonnement | corps noir | accéléré |
-| 0,28 – 0,5 | le déclencheur descend du portique et se met en place | portique | — | réel |
-| 0,5 | rupture : impact, résonance, percussion, choc thermique ; front de fissure | la machine | front à vitesse finie | caméra rapide (×12 à ×20) |
-| 0,5 – 0,75 | les éclats volent, tournoient, tombent, frappent la sole, rebondissent, glissent, se couchent | le choc | balistique (g vraie), choc inélastique, frottement, pente de la cuvette | ralenti puis retour au temps réel |
+| 0,28 – 0,44 | le déclencheur descend du portique et se met en place | portique | — | réel |
+| 0,44 | rupture : impact, résonance, percussion, choc thermique ; front de fissure | la machine | front à vitesse finie | caméra rapide (×24 à ×34) |
+| 0,44 – 0,8 | les éclats volent, tournoient, tombent, frappent la sole, rebondissent, glissent, se couchent | le choc | balistique (g vraie), choc inélastique, frottement, pente de la cuvette | ralenti puis retour au temps réel |
 | 0,82 – 0,98 | la sole rougeoie ; les éclats s'affaissent et coulent au fond | la chaleur du four | verre qui ramollit et coule | accéléré |
 
-**La caméra rapide.** Au moment du choc, le film ralentit comme s'il était tourné à haute vitesse. Il lit un temps physique τ_p(ℓ) = ∫ v(ℓ) dℓ, où ℓ est le temps du film et v la vitesse de lecture : 1 jusqu'au contact, 1/k dans les centièmes qui suivent, puis retour à 1. Le ralenti commence au contact et pas avant, sinon l'outil parcourrait ses derniers millimètres au ralenti et semblerait toucher bien avant que le verre casse (montée en smoothstep, une rampe adoucie aux deux bouts, dont l'intégrale a une forme fermée : r·(u³ − u⁴/2)). Pendant ce temps, la caméra garde sa vitesse, d'où l'impression de temps suspendu. La gravité reste vraie (78 u/s² : une pièce mesure 2 u ≈ 25 cm).
+**La caméra rapide.** Au moment du choc, le film ralentit comme s'il était tourné à haute vitesse. Il lit un temps physique τ_p(ℓ) = ∫ v(ℓ) dℓ, où ℓ est le temps du film et v la vitesse de lecture : 1 jusqu'au contact, 1/k dans les centièmes qui suivent, puis retour à 1. Le ralenti commence au contact et pas avant, sinon l'outil parcourrait ses derniers millimètres au ralenti et semblerait toucher bien avant que le verre casse (montée en smoothstep, une rampe adoucie aux deux bouts, dont l'intégrale a une forme fermée : r·(u³ − u⁴/2)). Le palier dure 3,6 à 4,4 s de film, pour 0,12 à 0,18 s de temps physique : les éclats restent suspendus, et la caméra, qui garde sa vitesse, glisse autour d'eux en arc (un quart de radian d'un côté, puis de l'autre) avant de revenir. La gravité reste vraie (78 u/s² : une pièce mesure 2 u ≈ 25 cm).
+
+**Le four se ferme.** Dans l'Atelier, la porte de fonte de l'ouvreau se rabat quand la pièce est formée (0,22 – 0,31 de l'étape) et se relève pour la refonte (0,74 – 0,82). Entre les deux, la lueur ne passe plus que par le regard de la porte, et une lampe de travail prend le relais : la lampe principale et les contre-jours montent, le mur de briques derrière la pièce s'éclaire. La casse se lit donc sur un fond clair, sous une lumière blanche, et le feu revient pour la fonte. Les étapes s'enchaînent porte ouverte, le mouvement est continu d'une pièce à la suivante.
 
 **La boucle.** Chaque pièce a son horloge, décalée d'une étape de durée Tₛ sur la précédente : la pièce k vit dans ℓ_k = mod(t − k·Tₛ, N·Tₛ). Le bain qui se forme à la fin de l'étape k est celui d'où monte la pièce k + 1, et la dernière nourrit la première. Chaque image se calcule à partir du seul temps t, sans état gardé d'une image à l'autre. Les formules sont écrites dans `src/cycle.js` (tests, fracture) et reprises dans les shaders.
 
@@ -53,7 +55,7 @@ Chaque moment du cycle a une cause qu'on voit à l'écran et obéit à une loi p
 Chaque appareil est porté par une tige qui descend d'un portique. Il se met en place, agit, puis remonte : rien n'apparaît ni ne disparaît. La cinématique est écrite dans un module pur, sur la vraie géométrie : la surface de la bille ou la face de la tête du marteau touche le point d'impact exactement à l'instant du choc, jamais avant, et un test le vérifie. Le plateau s'arrête en présentant le point d'impact de profil à la caméra (un peu tourné vers elle) : le pendule se lit dans son plan, le marteau de côté, la flamme et la membrane de profil. Au passage du front, des traits de fissure s'allument sur la paroi, en partant du point d'action.
 - **Pendule** : une bille d'acier au bout d'un fil, tenue écartée par un électro-aimant, lâchée un quart de période avant le choc (ω = √(g/L)). Elle frappe à l'horizontale au bas de sa course, traverse la paroi et continue, amortie ; un bras la ramène sur l'aimant. Fracture en étoile et toile d'araignée, cône d'éclats dans le sens du choc.
 - **Haut-parleur** : la membrane bat à la fréquence propre du verre, de plus en plus fort ; le bord de la pièce s'ovalise (mode (2,0)) jusqu'à céder. Fracture en lames qui partent du bord.
-- **Marteau de percussion** : il se lève puis frappe une pièce trempée, qui se pulvérise en dés.
+- **Marteau de percussion** : il descend du portique déjà levé, écarté de la pièce, puis frappe une pièce trempée, qui se pulvérise en dés. Son bras pend le long de la paroi et sa tête frappe de face, selon la normale du verre au point d'impact : il ne balaie jamais l'espace qu'occupe la pièce (un test vérifie que la tête reste du côté extérieur du plan tangent jusqu'au choc).
 - **Chalumeau** : une flamme oxydante (dard bleu) chauffe un point jusqu'au rouge ; la pièce se fend par choc thermique, en quelques grandes pièces aux fissures sinueuses, qui s'écartent à peine.
 
 ## Les pièces (`gen/forms.js`)
@@ -78,8 +80,9 @@ Les éclats sont des corps rigides simulés une fois, pendant le chargement, jus
 
 ## Matériaux
 
-- **Verre** : transmission physique, dispersion, absorption, ombres colorées. Dix verres : cristal, cobalt, ambre, émeraude, fumé, rubis à l'or, uranium (fluorescent sous lumière noire, par les chants et de biais), dichroïque, aigue-marine, obsidienne. Les chants sont plus denses et plus verts, avec des lignes de Wallner. L'incandescence suit un corps noir approché : jaune orangé à 1 100 °C, d'une intensité qui laisse lire la forme au lieu de la blanchir. Le verre chaud reste transparent et rayonne selon l'épaisseur traversée par le regard (1 − e^(−k/cos θ)) : plus fort sur les bords de la silhouette, ce qui modèle la paraison.
-- **Ombres** : un matériau à transmission ne porte aucune ombre dans three.js (WebGPU). Chaque pièce est donc doublée d'un porteur d'ombre invisible (même géométrie, même déformation, matériau opaque, ombre teintée et dense, franche sous les chants), que seule la carte d'ombre voit. La carte d'ombre de la lampe est resserrée sur la sole quelle que soit l'ouverture du faisceau. Les contre-jours n'éclairent pas le sol, pour ne pas effacer les ombres.
+- **Fissures** : le trait argenté qui court sur la paroi au passage du front est mesuré en pixels (distance au bord de l'éclat ÷ sa dérivée à l'écran), un pixel partout ; les polygones bordés par plusieurs fissures sont triangulés depuis leur centre pour que chaque triangle porte une vraie distance au bord. Un seuil fixe sur l'attribut du maillage donnait un trait d'épaisseur changeante, en pointillés crénelés.
+- **Verre** : transmission physique, dispersion, absorption, ombres colorées. Dix verres : cristal, cobalt, ambre, émeraude, fumé, rubis à l'or, uranium (fluorescent sous lumière noire, par les chants et de biais), dichroïque, aigue-marine, obsidienne. Les chants sont le même verre que la paroi, à peine plus dense, avec de légères lignes de Wallner. **Couleur de corps** : la transmission du moteur ne montre que l'image derrière la pièce, et devant un mur sombre un verre teinté devenait noir. Un terme s'y ajoute, la lumière des lampes passée à travers le verre : plus forte quand la lampe est derrière la pièce, plus dense et plus saturée là où le regard traverse la paroi en biais, nulle pour un verre incolore. C'est une liberté (ce terme n'a pas d'ombre propre), prise pour qu'un rubis à contre-jour soit une braise et non une silhouette. L'incandescence suit un corps noir approché : jaune orangé à 1 100 °C, d'une intensité qui laisse lire la forme au lieu de la blanchir. La courbe de rendu est ACES et non AgX, qui délavait les orangés vifs en crème ; le halo est plus franc que dans les autres scènes. Le verre chaud reste transparent et rayonne selon l'épaisseur traversée par le regard (1 − e^(−k/cos θ)) : plus fort sur les bords de la silhouette, ce qui modèle la paraison.
+- **Ombres** : un matériau à transmission ne porte aucune ombre dans three.js (WebGPU). Chaque pièce est donc doublée d'un porteur d'ombre invisible (même géométrie, même déformation, matériau opaque, ombre de la couleur du verre, traversée de filets plus clairs, franche sous les chants), que seule la carte d'ombre voit. La carte d'ombre de la lampe est resserrée sur la sole quelle que soit l'ouverture du faisceau. Les contre-jours n'éclairent pas le sol, pour ne pas effacer les ombres.
 - **Sole, bain et plateau** : la sole rougeoie quand elle chauffe. Le bain est une calotte de verre en fusion qui grandit avec la fonte et se vide pendant le soufflage. Le plateau tournant est en acier brossé, encastré.
 
 ## Les décors
@@ -88,13 +91,14 @@ Chaque humeur est un décor : fond, sol, lumière, valeur et cadrage changent en
 
 | Décor | Fond, sol, accessoire | Lumière | Valeur | Cadrage |
 | --- | --- | --- | --- | --- |
-| Atelier | mur sombre, ouvreau de four rougeoyant (au tiers de l'image), sole d'acier mat | lampe haute, lueur du four dirigée vers la pièce | sombre, chaud | moyen, face au four |
-| Stroboscope | noir, sole de graphite | un éclair dur de côté, contre-jours froids | très contrasté | gros plan bas |
-| Laboratoire | cyclorama blanc, céramique | boîte à lumière au-dessus | très clair | moyen, au-dessus |
-| Plein soleil | ciel pâle, sable | soleil dur et haut | clair | plongée |
-| Lumière noire | noir violet | UV, néons | sombre, saturé | rapproché |
-| Cathédrale | pierre, brume, fenêtre en lancette à vitraux | faisceau coloré d'en haut, lumière de la fenêtre | pénombre | large, bas |
-| Givre | blanc bleuté | soleil levant rasant | moyen, froid | latéral |
+| Atelier | halle de briques réfractaires noircies de suie, ouvreau de four en volume (conduit incandescent, collier, plaque de fonte boulonnée, porte à regard) au tiers de l'image, dalle patinée | lueur du four pendant le soufflage et la fonte, lampe de travail et mur éclairé pendant la casse | sombre, chaud | moyen, face au four |
+| Stroboscope | studio aux panneaux noirs mats, sole de graphite, torche de flash sur son trépied | un éclair dur de côté, contre-jours froids ; la torche éclaire à contre-jour et son éclair part au choc | très contrasté | gros plan bas |
+| Laboratoire | mur de faïence blanche (carreaux de 15 cm un peu bombés, joints gris), céramique | boîte à lumière au-dessus | très clair | moyen, au-dessus |
+| Plein soleil | cour : sable ridé par le vent, mur chaulé, ciel au-dessus | soleil dur et haut | clair | plongée |
+| Lumière noire | rideau de velours à plis, deux tubes de Wood dans leurs réglettes | UV des tubes, néons | sombre, saturé | rapproché |
+| Givre | champ de neige à cristaux, deux lisières de sapins dans la brume, ciel d'aube | soleil levant rasant | moyen, froid | latéral |
+
+Les murs et les sols sont procéduraux, écrits dans `dressWall()` (`src/scene/stage.js`) sur le même volume (cuvette, gorge, mur cylindrique), avec un bruit analytique sans période. Les trois décors clairs sont exposés plus bas que les autres (0,7 à 0,84), et la lueur du verre chaud baisse avec la clarté du sol. Planche des six décors : [docs/decors.jpg](docs/decors.jpg).
 
 Les contre-jours suivent la caméra (derrière la pièce, de part et d'autre) et dessinent les bords du verre sous tous les angles. Un fond clair n'accueille jamais de verre presque incolore (cristal, dichroïque). Deux pièces qui se suivent n'ont jamais la même forme, le même verre ni le même déclencheur, et une forme ne revient presque jamais dans une même boucle. Le cadrage contient toujours la plus haute pièce de la scène, et la caméra ne descend jamais sous le bord relevé de la sole.
 
@@ -108,7 +112,7 @@ Dix tests : recette (déterminisme, JSON), humeurs, direction artistique sur 400
 
 ## Performances
 
-Mesuré dans le panneau de navigateur de l'application (GPU d'un Mac), qualité Haute, 1,8 Mpx : 15 à 17 ms par image. Le verre transmissif, les pièces détaillées (40 000 à 115 000 sommets) et les appareils en font l'essentiel. Fracture : 0,5 à 0,9 s par pièce dans un worker, simulation des éclats : 1 à 2,5 s de plus. La lecture des trajectoires se fait dans le vertex shader (une texture par pièce, 2 à 5 Mo), avec un seul maillage par pièce.
+Mesuré dans le panneau de navigateur de l'application (GPU d'un Mac), qualité Haute, 1,8 Mpx : 17 ms par image dans l'Atelier, éclats en l'air (15 à 17 ms avant le four en volume, le mur de briques et la couleur de corps). Le verre transmissif, les pièces détaillées (40 000 à 115 000 sommets) et les appareils en font l'essentiel. Fracture : 0,5 à 0,9 s par pièce dans un worker, simulation des éclats : 1 à 2,5 s de plus. La lecture des trajectoires se fait dans le vertex shader (une texture par pièce, 2 à 5 Mo), avec un seul maillage par pièce.
 
 ## Version mobile
 

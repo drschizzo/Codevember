@@ -68,7 +68,18 @@ function makeMetric(spec, surf, rng) {
     }
     return best;
   };
-  const az = rng.range(-Math.PI, Math.PI);
+  let az = rng.range(-Math.PI, Math.PI);
+  // (jamais du côté d'une anse : l'outil — bille, marteau, flamme, membrane —
+  // s'y présentait à travers elle. Le point d'origine est écarté d'au moins un
+  // radian de chaque anse ; avec deux anses, il va entre elles.)
+  {
+    const parts = spec.parts ?? [], th0 = spec.handleAngle ?? 0;
+    const handles = parts.includes('anses2') ? [th0, th0 + Math.PI] : parts.includes('anse') ? [th0] : [];
+    for (let k = 0; k < 2; k++) for (const h of handles) {
+      const d = wrapPi(az - h), lim = handles.length > 1 ? 1.1 : 1.3;
+      if (Math.abs(d) < lim) az = h + (d < 0 ? -1 : 1) * lim;
+    }
+  }
   // (sur la coupe ou la panse, jamais sur le pied ni la jambe)
   const sB = surf.sBowl ?? 0, at = (f) => sB + (1 - sB) * f;
   const oi = mech === 'resonance' ? pickVertex(0.97, 1, az) : pickVertex(at(spec.impactAt?.[0] ?? 0.3), at(spec.impactAt?.[1] ?? 0.72), az);
@@ -476,7 +487,20 @@ export function fracture(spec, opts = {}) {
       const o = poly.map((V) => vert(F, V.p, V.n, OUT, V.a, kp(V.p, 'o')));
       const inn = poly.map((V) => { const nn = norm(V.n); return vert(F, sub(V.p, mul(nn, h)), mul(nn, -1), IN, V.a, kp(V.p, 'i')); });
       const nAvg = poly.reduce((s, V) => add(s, V.n), [0, 0, 0]);
-      for (let k = 1; k < poly.length - 1; k++) {
+      // (un polygone bordé par deux fissures ou plus : en éventail depuis un sommet,
+      // certains triangles auraient leurs trois sommets marqués « fissure » et le
+      // trait n'y aurait plus de bord à mesurer — il s'y allumait en plaque, ou s'y
+      // interrompait. Ces polygones sont triangulés depuis leur centre, qui n'est
+      // sur aucune fissure : chaque triangle porte alors une vraie distance au bord.)
+      const nP = poly.length, onCrack = tags.map((m, k) => m >= 0 || tags[(k + nP - 1) % nP] >= 0);
+      if (onCrack.filter(Boolean).length >= 3) {
+        const pc = mul(poly.reduce((s2, V) => add(s2, V.p), [0, 0, 0]), 1 / nP), nc = norm(nAvg), ac = poly.reduce((s2, V) => s2 + V.a, 0) / nP;
+        const co = vert(F, pc, nc, OUT, ac, kp(pc, 'o')), ci = vert(F, sub(pc, mul(nc, h)), mul(nc, -1), IN, ac, kp(pc, 'i'));
+        for (let k = 0; k < nP; k++) {
+          tri(co, o[k], o[(k + 1) % nP], nAvg);
+          tri(ci, inn[k], inn[(k + 1) % nP], mul(nAvg, -1));
+        }
+      } else for (let k = 1; k < poly.length - 1; k++) {
         tri(o[0], o[k], o[k + 1], nAvg);
         tri(inn[0], inn[k], inn[k + 1], mul(nAvg, -1));
       }

@@ -142,23 +142,22 @@ Le calcin est justement du verre brisé que l'on **refond**. La pièce est **sou
 | --- | --- | --- | --- | --- |
 | 0 – 0,18 | la paraison monte du bain, se gonfle en tournant, prend sa forme ; anse, bouchon et fil sont posés à la fin | souffle et rotation du plateau | verre visqueux, incandescent (corps noir) | accéléré |
 | 0,18 – 0,4 | la pièce refroidit, du pied vers le bord ; le plateau ralentit et s'arrête (0,28 – 0,4) | rayonnement | refroidissement | accéléré |
-| avant 0,5 | le déclencheur descend du portique et s'annonce | pendule lâché par un électro-aimant ; haut-parleur dont la membrane bat de plus en plus fort ; marteau de percussion qui se lève ; chalumeau dont la flamme chauffe un point | pendule (√(g/L)), résonance, levier, conduction | temps réel |
-| 0,5 | rupture, front de fissure | choc, résonance, percussion sur verre trempé, gradient thermique | front à vitesse finie | **ralenti ×12 à ×20** (caméra rapide) |
-| après 0,5 | les éclats partent, tournoient, **tombent**, frappent la sole, rebondissent à peine, glissent et se couchent | le choc, la sole | balistique (gravité vraie), choc inélastique, frottement, pente de la cuvette | ralenti, puis retour au temps réel |
+| avant 0,44 | le déclencheur descend du portique et s'annonce | pendule lâché par un électro-aimant ; haut-parleur dont la membrane bat de plus en plus fort ; marteau de percussion qui se lève ; chalumeau dont la flamme chauffe un point | pendule (√(g/L)), résonance, levier, conduction | temps réel |
+| 0,44 | rupture, front de fissure | choc, résonance, percussion sur verre trempé, gradient thermique | front à vitesse finie | **ralenti ×24 à ×34** pendant quatre secondes (caméra rapide) |
+| après 0,44 | les éclats partent, tournoient, **tombent**, frappent la sole, rebondissent à peine, glissent et se couchent | le choc, la sole | balistique (gravité vraie), choc inélastique, frottement, pente de la cuvette | ralenti, puis retour au temps réel |
 | 0,82 – 0,98 | la sole rougeoie, les éclats s'affaissent, coulent vers le centre et forment un bain | la chaleur du four, la pente | verre qui ramollit et coule | accéléré |
 
-La caméra garde sa vitesse pendant le ralenti (le temps suspendu, à la manière d'un plan en caméra rapide).
+La caméra garde sa vitesse pendant le ralenti (le temps suspendu, à la manière d'un plan en caméra rapide) et glisse en arc autour des éclats.
 
 ### Variété : un décor par humeur
 
 | Humeur | Décor | Lumière | Valeur | Cadrage |
 | --- | --- | --- | --- | --- |
-| Atelier | mur sombre où rougeoie la gueule du four, sole d'acier | lampe d'atelier haute, lueur du four de face | sombre et chaud | plan moyen, face au four |
+| Atelier | halle de briques, ouvreau de four en volume dont la porte de fonte se rabat pendant la casse, dalle patinée | lueur du four, puis lampe de travail et mur éclairé | sombre et chaud | plan moyen, face au four |
 | Stroboscope | noir absolu, sole de graphite | un seul éclair dur de côté, un contre-jour froid | très sombre, contrasté | gros plan bas |
 | Laboratoire | cyclorama blanc, sole de céramique blanche | boîte à lumière au-dessus, ombres douces | très clair | plan moyen frontal |
 | Plein soleil | sable clair, ciel pâle | soleil haut et dur, ombres colorées nettes | clair et lumineux | plongée 3/4 |
 | Lumière noire | noir violet, sole noire | UV, néons magenta et bleu | sombre, saturé | plan rapproché |
-| Cathédrale | pierre sombre, brume | faisceaux colorés venus d'en haut, contre-jour | pénombre colorée | plan large, bas |
 | Givre | blanc bleuté mat | soleil levant rasant, froid, de côté | moyen, froid | plan latéral |
 
 ### Ambition : des pièces de verrier

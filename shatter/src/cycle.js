@@ -17,7 +17,7 @@ export const PH = {
   acc: 0.18,        // soufflage (la paraison monte du bain et prend forme)
   cool: 0.22,       // refroidissement d'un point de la paroi
   spinStop: [0.28, 0.4], // le plateau ralentit et s'arrête avant la rupture
-  rupture: 0.5,     // instant du choc
+  rupture: 0.44,    // instant du choc (assez tôt pour que la caméra rapide tienne les éclats en l'air quatre secondes)
   melt: 0.82,       // la sole chauffe, les éclats commencent à fondre
   meltSpan: 0.06,   // (les plus proches du centre d'abord)
   meltDur: 0.1,     // durée de la fonte d'un éclat

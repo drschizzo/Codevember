@@ -106,7 +106,7 @@ export function createApparatus(scene, { finishOf }) {
   for (const o of [pend, spk, ham, torch, ...rods]) scene.add(o);
   const all = [pend, spk, ham, torch];
 
-  const tmp = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
+  const tmp = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), _m = new THREE.Matrix4();
   const rodTo = (r, p, top = 12) => { r.visible = true; r.position.set(p.x, p.y, p.z); r.scale.set(0.012, top - p.y, 0.012); };
 
   // P : pièce de l'étape active ; info : origine, normale, direction (repère
@@ -149,9 +149,13 @@ export function createApparatus(scene, { finishOf }) {
     } else if (P.mech === 'tempered') {
       show(ham);
       // (kinematics.js : la face de la tête touche O exactement au choc)
-      const K = hammer(Oa, na, tp, l, Ts);
-      ham.position.copy(V(K.pivot)).add(L4);
-      ham.rotation.set(0, Math.atan2(nh.x, nh.z), 0, 'YXZ'); ham.rotateX(K.ph);
+      // (kinematics.js : la tête frappe de face, selon la normale du verre ; en
+      // descendant du portique, l'appareil reste écarté de la pièce)
+      const K = hammer(Oa, na, tp, l, Ts, [n.x, n.y, n.z]);
+      ham.position.copy(V(K.pivot)).add(L4).addScaledVector(nh, (lift / UP) * 1.8);
+      // repère du marteau : −z le long du bras, y l'axe de la tête (qui frappe par sa face)
+      const zA = V(K.dir).negate(), yA = V(K.face), xA = new THREE.Vector3().crossVectors(yA, zA);
+      ham.quaternion.setFromRotationMatrix(_m.makeBasis(xA, yA, zA));
       head.position.set(0, 0, -HAMMER.L); head.rotation.set(0, 0, 0);
       rodTo(rods[2], ham.position.clone().add(new THREE.Vector3(0, 0.06, 0)));
     } else if (P.mech === 'thermal') {
