@@ -12,7 +12,7 @@ const add = (a, b, s = 1) => [a[0] + b[0] * s, a[1] + b[1] * s, a[2] + b[2] * s]
 const ease = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
 
 export const PENDULUM = { L: 4.5, th0: 0.62, rb: 0.09 };
-export const HAMMER = { L: 0.84, head: 0.055, ts: 0.09, raise: 1.1 };
+export const HAMMER = { L: 0.84, head: 0.095, ts: 0.09, raise: 1.1 };
 
 // pendule : angle (positif : écarté vers l'extérieur) et centre de la bille
 export function pendulum(O, nh, tp, l, Ts) {
@@ -28,17 +28,28 @@ export function pendulum(O, nh, tp, l, Ts) {
   return { th, center: c, pivot: piv, gap: Math.hypot(c[0] - O[0], c[1] - O[1], c[2] - O[2]) - rb };
 }
 
-// marteau : angle du bras (levé vers le haut) et centre de la tête ; le pivot est
-// placé pour que la face de la tête touche O quand le bras est à l'horizontale
-export function hammer(O, nh, tp, l, Ts) {
+// marteau : le bras pend de son pivot le long de la paroi (parallèle au plan
+// tangent au point d'impact) et la tête frappe de face, selon la normale n du
+// verre. Levé, il s'écarte de la paroi le long de n. Il descend du portique
+// déjà levé : il ne balaie jamais l'espace où se trouve la pièce. (Auparavant
+// le bras était horizontal et s'abattait par le dessus, le long de la paroi :
+// sur une pièce plus large au-dessus du point d'impact, il la traversait.)
+// n : normale sortante du verre au point d'impact (par défaut : nh)
+export function hammer(O, nh, tp, l, Ts, n = nh) {
   const { L, head, ts, raise } = HAMMER;
-  let ph = raise * ease((l - PH.spinStop[1] * Ts) / (0.05 * Ts));
+  // (bras : perpendiculaire à n, vers le haut, dans le plan vertical de n)
+  const ln = Math.hypot(n[0], n[1], n[2]) || 1, N = [n[0] / ln, n[1] / ln, n[2] / ln];
+  const ch = N[0] * nh[0] + N[2] * nh[2], sv = N[1]; // (n = ch·nh + sv·haut)
+  const u = [-sv * nh[0], ch, -sv * nh[2]];
+  let ph = raise;                                                   // levé pendant toute l'approche
   if (tp > -ts && tp <= 0) ph = raise * (tp / -ts) ** 2;            // la frappe, accélérée
-  else if (tp > 0) ph = 0.25 * Math.sin(Math.min(Math.PI, tp * 9)) + 0.8 * ease((l - (PH.rupture + 0.08) * Ts) / (0.06 * Ts)); // rebond, puis il se relève
-  const piv = add(O, nh, L + head);
-  // tête : à L du pivot, vers −nh, relevée de ph dans le plan vertical
-  const c = add(add(piv, nh, -L * Math.cos(ph)), [0, L * Math.sin(ph), 0]);
-  return { ph, center: c, pivot: piv, gap: Math.hypot(c[0] - O[0], c[1] - O[1], c[2] - O[2]) - head };
+  else if (tp > 0) ph = 0.25 * Math.sin(Math.min(Math.PI, tp * 9)) + raise * ease((l - (PH.rupture + 0.08) * Ts) / (0.06 * Ts)); // rebond, puis il se relève
+  const piv = add(add(O, N, head), u, L);
+  // tête : à L du pivot, écartée de ph vers l'extérieur
+  const dir = [-Math.cos(ph) * u[0] + Math.sin(ph) * N[0], -Math.cos(ph) * u[1] + Math.sin(ph) * N[1], -Math.cos(ph) * u[2] + Math.sin(ph) * N[2]];
+  const face = [Math.cos(ph) * N[0] + Math.sin(ph) * u[0], Math.cos(ph) * N[1] + Math.sin(ph) * u[1], Math.cos(ph) * N[2] + Math.sin(ph) * u[2]];
+  const c = add(piv, dir, L);
+  return { ph, center: c, pivot: piv, dir, face, gap: Math.hypot(c[0] - O[0], c[1] - O[1], c[2] - O[2]) - head };
 }
 
 // haut-parleur : amplitude de la membrane et du mode (2,0) du verre, qui

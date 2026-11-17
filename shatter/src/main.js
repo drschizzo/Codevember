@@ -181,7 +181,18 @@ async function main() {
   // u : phase « déroulée » (partie entière = nombre de boucles accomplies) ;
   // sub : décalages d'un rendu accumulé (lentille, pixel), facultatif
   // azimut de la caméra du film (position : sin az, cos az)
-  const camAzAt = (ph) => { const C = R.camera; return C.az + TAU * C.orbit * ph + C.sway * Math.sin(TAU * ph); };
+  // (pendant la caméra rapide, elle glisse en arc autour des éclats suspendus,
+  // d'un côté puis de l'autre, et revient : u·e^(−u²/2), nul loin de la rupture,
+  // donc périodique comme le reste)
+  const camAzAt = (ph) => {
+    const C = R.camera, N = R.pieces.length, Ts = R.loop.stage, S = R.loop.slow, t = ph * Ts * N;
+    let arc = 0;
+    for (let k = -1; k <= N; k++) {
+      const u = (t - ((k + PH.rupture) * Ts + S.plat * 0.5)) / (S.plat * 0.55);
+      arc += (R.pieces[((k % N) + N) % N].side ?? 1) * u * Math.exp(-0.5 * u * u);
+    }
+    return C.az + TAU * C.orbit * ph + C.sway * Math.sin(TAU * ph) + (C.arc ?? 0) * arc;
+  };
   let lastT = null, focusDist = 6;
   // Recul minimal pour qu'en plongée le sommet de la plus haute pièce reste dans
   // l'image (le recul calculé pour une caméra horizontale coupait le bouchon).
@@ -221,17 +232,17 @@ async function main() {
       // caméra périodique : un tour par boucle (ou un balancement), et elle
       // s'approche un peu à chaque rupture (même noyau, périodique)
       let push = 0;
-      for (let k = -1; k <= N; k++) push += Math.exp(-(((t - (k + PH.rupture + 0.04) * Ts) / 2.6) ** 2));
+      for (let k = -1; k <= N; k++) push += Math.exp(-(((t - ((k + PH.rupture) * Ts + R.loop.slow.plat * 0.45)) / 3.2) ** 2));
       const az = camAzAt(ph);
       // (recul minimal pour que la plus haute pièce tienne dans l'image, bord compris)
       const fit = (stage.maxHeight() * 0.55 + 0.45) / Math.tan(((C.fov / 2) * Math.PI) / 180);
       const H = stage.maxHeight();
       const d = Math.max(C.dist, fit, plungeFit(H)) * (1 - C.push * push);
-      const y = C.height + 0.15 * Math.sin(TAU * ph * 2 + 1) - 0.3 * push;
+      const y = C.height + 0.15 * Math.sin(TAU * ph * 2 + 1) - 0.2 * push;
       // (jamais sous le bord relevé de la sole)
       camera.position.set(Math.sin(az) * d, Math.max(y, floorH(d) + 0.3), Math.cos(az) * d);
       camera.up.set(0, 1, 0);
-      camera.lookAt(0, H * 0.48 - 0.3 * push, 0);
+      camera.lookAt(0, H * 0.48 + 0.12 * push, 0); // (elle monte un peu avec les éclats du haut, qui s'envolent)
       focusDist = camera.position.distanceTo(_r.set(0, stage.maxHeight() * 0.45, 0));
     }
     if (camera.fov !== C.fov) { camera.fov = C.fov; camera.updateProjectionMatrix(); }
@@ -253,7 +264,7 @@ async function main() {
     scene.environmentRotation.set(0, R.env.rotation, 0);
     stage.update(t, camera, (tt) => camAzAt(tt / loopDuration(R)));
     // (mise au point sur la pièce : la vraie distance, qui suit le recul et l'approche)
-    post.update({ ...RENDER, lite: LITE, focus: RENDER.focus * focusDist, focusRange: RENDER.focusRange * focusDist }, R);
+    post.update({ ...RENDER, exposure: RENDER.exposure * (R.grade?.exposure ?? 1), lite: LITE, focus: RENDER.focus * focusDist, focusRange: RENDER.focusRange * focusDist }, R);
     post.render();
   }
   // Rendu hors de la boucle d'animation (export, image fixe, débogage) : three.js
