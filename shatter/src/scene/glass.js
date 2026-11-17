@@ -264,7 +264,8 @@ export function buildGlassMaterial(U, { glassKey = 'cristal', track } = {}) {
     const isPartS = step(1.5, Dd.x);
     const tAppS = U.Ts.mul(PH.acc).mul(Dd.x.sub(2).clamp(0, 1).mul(0.3).add(1.0));
     const mS = clamp(l.sub(C.w).div(U.Ts.mul(PH.meltDur)), 0, 1);
-    m.maskShadowNode = mix(float(1), l.sub(tAppS), isPartS).greaterThan(0.02).and(mS.lessThan(0.93));
+    // (tranches : pas d'ombre avant le passage de la fissure, voir le porteur d'ombre)
+    m.maskShadowNode = mix(float(1), l.sub(tAppS), isPartS).greaterThan(0.02).and(mS.lessThan(0.93)).and(surfA.z.lessThan(0.5).or(l.greaterThanEqual(A.w)));
   }
   // ombre du verre : teintée et assez dense dans les parois (la lumière y est
   // en partie absorbée et surtout déviée), franche sous les chants et les parties
@@ -281,7 +282,7 @@ export function buildGlassMaterial(U, { glassKey = 'cristal', track } = {}) {
 // teintée et assez dense dans les parois, franche sous les chants.
 export const SHADOW_LAYER = 2;
 export function buildGlassShadowCaster(U, glassMat) {
-  const Dd = attribute('rigD', 'vec4'), C = attribute('rigC', 'vec4'), surfA = attribute('surf', 'vec4');
+  const A = attribute('rigA', 'vec4'), Dd = attribute('rigD', 'vec4'), C = attribute('rigC', 'vec4'), surfA = attribute('surf', 'vec4');
   const m = new THREE.MeshBasicNodeMaterial();
   m.positionNode = glassMat.positionNode;
   const isEdge = smoothstep(0.5, 0.8, surfA.z);
@@ -295,7 +296,11 @@ export function buildGlassShadowCaster(U, glassMat) {
   const isPart = step(1.5, Dd.x);
   const tApp = U.Ts.mul(PH.acc).mul(Dd.x.sub(2).clamp(0, 1).mul(0.3).add(1.0));
   const melt = clamp(l.sub(C.w).div(U.Ts.mul(PH.meltDur)), 0, 1);
-  m.maskShadowNode = mix(float(1), l.sub(tApp), isPart).greaterThan(0.02).and(melt.lessThan(0.93));
+  // (les tranches ne portent d'ombre qu'une fois la fissure passée : tant que la
+  // pièce est entière, ce sont des cloisons internes entre éclats encore joints,
+  // et leur ombre franche dessinait toute la fracture à venir sous la pièce)
+  const cracked = surfA.z.lessThan(0.5).or(l.greaterThanEqual(A.w));
+  m.maskShadowNode = mix(float(1), l.sub(tApp), isPart).greaterThan(0.02).and(melt.lessThan(0.93)).and(cracked);
   return m;
 }
 
