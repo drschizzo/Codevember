@@ -213,7 +213,7 @@ async function main() {
     regenerate: (seed) => { if (seed && seed !== R.seed) { R = generate(seed); applyRecipe(); } },
     moodChanged: (mood) => { R = generate(R.seed, { mood }); applyRecipe(); },
     // (humeur, colonne, glace, section : nouvelle recette de la même graine, les autres choix gardés)
-    overrideChanged: (k, v) => { R = generate(R.seed, { mood: R.mood, wax: R.wax, heat: R.heat, circuit: R.factory.circuit, [k]: v }); applyRecipe(); },
+    overrideChanged: (k, v) => { R = generate(R.seed, { mood: R.mood, wax: R.wax, heat: R.heat, circuit: R.factory.circuit, objects: R.objects, [k]: v }); applyRecipe(); },
     resimulate: () => applyRecipe(),
     copyLink: async () => {
       const url = new URL(location.href);

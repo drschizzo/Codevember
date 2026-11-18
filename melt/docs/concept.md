@@ -50,7 +50,7 @@ Un seul mât porte le barillet et la source de chaleur. Les pieds des lignes son
 | Cire (masse et veines) | rose et ivoire, bleu canard et crème, miel et lait, sauge et craie, prune et abricot, réglisse et menthe |
 | Source de chaleur | lampe infrarouge par le haut, rampe de brûleurs de biais, ceinture chauffante qui descend le long de l'objet |
 | Circuit | deux ascenseurs, un ascenseur et une rampe |
-| Objets (deux par boucle) | lapin, canard, ourson, chouette, quille |
+| Objets (deux par boucle) | lapin, canard, ourson, chouette, chat |
 | Proportions, sens du circuit, peinture, métal des pièces et des plateaux | tirés |
 
 La source de chaleur change la façon de fondre : par le haut, les oreilles ploient d'abord ; de biais, un flanc coule avant l'autre ; la ceinture, elle, descend lentement et fait fondre l'objet tranche par tranche. (Une première ceinture fixe, à mi-hauteur, laissait le haut de l'objet suspendu : l'appui d'un morceau froid se soutenait lui-même.)
