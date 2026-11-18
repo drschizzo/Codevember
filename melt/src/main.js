@@ -14,6 +14,7 @@ import { generate, upgrade, MOODS } from './recipe.js';
 import { createGenerator } from '../../shared/gen/client.js';
 import { createStage, cameraAt } from './scene/stage.js';
 import { G } from '../../shared/scene/globals.js';
+import { makeEnvironment } from '../../shared/scene/env.js';
 import { setLite } from '../../shared/scene/materials.js';
 import { createPost } from '../../shared/render/post.js';
 import { createAccumulator, jitter } from '../../shared/render/accum.js';
@@ -27,7 +28,7 @@ import { asyncPipelines, warmScene } from '../../shared/app/warmup.js';
 import { createDebugTools, packRecipe, unpackRecipe, sleep } from '../../shared/app/debug.js';
 
 const NAME = 'melt';
-const DEFAULT_SEED = 'j4s5i6'; // scène d'ouverture (sans ?seed=) : tente claire, grappe en gros plan, oxyde bleus et verts
+const DEFAULT_SEED = 'm1'; // scène d'ouverture (sans ?seed=)
 const params = new URLSearchParams(location.search);
 const $ = (s) => document.querySelector(s);
 const randomSeed = () => Math.random().toString(36).slice(2, 8);
@@ -70,7 +71,9 @@ async function main() {
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x000000);
-  const camera = new THREE.PerspectiveCamera(35, innerWidth / innerHeight, 0.5, 400); // (en cm)
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
+  const camera = new THREE.PerspectiveCamera(30, innerWidth / innerHeight, 0.2, 90);
   const controls = new OrbitControls(camera, canvas);
   controls.enabled = false;
   controls.enableDamping = true;
@@ -91,7 +94,13 @@ async function main() {
     try { R = upgrade(await unpackRecipe(location.hash.slice(3))); } catch { R = null; }
   }
   R ??= generate(params.get('seed') || DEFAULT_SEED);
-  function syncEnv() {}
+  let envKey = '';
+  function syncEnv() {
+    const M = MOODS[R.mood];
+    if (M.env !== envKey) { envKey = M.env; const old = scene.environment; scene.environment = makeEnvironment(M.env, 0, LITE ? 512 : 1024); old?.dispose(); }
+    scene.environmentIntensity = M.envI;
+    scene.background.set(M.wall).multiplyScalar(0.5);
+  }
 
   // ── Écran de chargement ──
   // Une scène ne s'affiche que lorsque toute sa géométrie est arrivée, que ses
@@ -100,13 +109,13 @@ async function main() {
   const loading = { active: true, applied: false, warming: false, settle: 0 };
   // étapes de l'écran de chargement (libellés propres au thème) ; le dessin
   // (app/loaderArt.js) reçoit ce que la recette en dit, par loader.art()
-  const STEPS = [['build', 'la fonte se calcule'], ['compile', 'la lumière se prépare'], ['settle', 'premières images']];
+  const STEPS = [['build', 'les moules se taillent'], ['compile', 'la lumière se prépare'], ['settle', 'premières images']];
   let firstRecipe = true;
   function applyRecipe() {
     const recipe = R;
     loading.active = true; loading.applied = false; loading.warming = false; loading.settle = 0;
     loader.show({ steps: STEPS });
-    loader.art({ seed: R.seed, oxRate: R.oxRate, habit: R.habit });
+    loader.art({ seed: R.seed, wax: R.wax, objects: R.objects });
     // (le fondu d'entrée de l'écran se termine avant que la scène ne change)
     // (sleep et non setTimeout : une page masquée ralentit les minuteries)
     sleep(firstRecipe ? 0 : 280).then(() => {
@@ -133,7 +142,7 @@ async function main() {
     const recipe = R;
     try {
       return await warmScene({
-        renderer, scene, pipes, render: renderStep, phases: [0, 0.25, 0.5, 0.75],
+        renderer, scene, pipes, render: renderStep, phases: [0.001],
         onProgress: (f) => loader.progress(f), alive: () => R === recipe,
       });
     } finally {
@@ -160,7 +169,7 @@ async function main() {
     }
     if (camera.fov !== C.fov) { camera.fov = C.fov; camera.updateProjectionMatrix(); }
     stage.update(ph, camera, [canvas.width, canvas.height], sub);
-    post.update({ ...RENDER, lite: LITE }, R);
+    { const dS = C.dist ?? 5; post.update({ ...RENDER, lite: LITE, exposure: RENDER.exposure * (R.grade?.exposure ?? 1), focus: RENDER.focus * dS, focusRange: RENDER.focusRange * dS }, R); }
     post.render();
   }
   // Rendu hors de la boucle d'animation (export, image fixe, débogage) : three.js
@@ -204,7 +213,7 @@ async function main() {
     regenerate: (seed) => { if (seed && seed !== R.seed) { R = generate(seed); applyRecipe(); } },
     moodChanged: (mood) => { R = generate(R.seed, { mood }); applyRecipe(); },
     // (humeur, colonne, glace, section : nouvelle recette de la même graine, les autres choix gardés)
-    overrideChanged: (k, v) => { R = generate(R.seed, { mood: R.mood, habit: R.habit, oxide: R.oxide, cluster: R.cluster, framing: R.framing, [k]: v }); applyRecipe(); },
+    overrideChanged: (k, v) => { R = generate(R.seed, { mood: R.mood, wax: R.wax, heat: R.heat, circuit: R.factory.circuit, [k]: v }); applyRecipe(); },
     resimulate: () => applyRecipe(),
     copyLink: async () => {
       const url = new URL(location.href);

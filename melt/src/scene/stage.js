@@ -1,78 +1,162 @@
-// La scène : l'état du cycle (cycle.js), la fonte calculée au chargement
-// (melt.js) et le lancer de rayons (tracer.js), dont l'image HDR remplit un
-// quad plein écran ; la chaîne d'image commune (shared/render/post.js) passe
-// ensuite dessus. La scène est prête quand la fonte de toute la grappe est
-// calculée (environ une seconde sur un ordinateur de bureau).
+// La scène : l'usine (factory.js), la cire (wax.js) et sa simulation
+// (sim/mpm.js), posées d'après l'état du cycle (cycle.js).
+//
+// La simulation avance d'une image (1/60 s) à la fois. Elle ne dépend que de
+// l'objet et du temps écoulé depuis le début du demi-cycle : pour une phase
+// donnée, l'image de simulation voulue est connue. En lecture, on avance d'une
+// image ; après un saut (flèches, export, image fixe), on repart de l'objet
+// neuf et l'on rattrape, par paquets.
 import * as THREE from 'three/webgpu';
-import { texture, screenUV, vec4, positionGeometry } from 'three/tsl';
-import { createTracer } from './tracer.js';
-import { createMelt } from './melt.js';
-import { MOODS, HABITS, CLUSTERS } from '../recipe.js';
-import { level, rising, meltU, buildCluster, crystalsAt, tideFor, cycleT, apparatusAt, cool, setMeltEnd, meltEndOf } from '../cycle.js';
-import { cameraAt, potFor } from '../camera.js';
-export { cameraAt };
+import { createSim, O, PBASE, CELL, PS, GX, GY, GZ, SEED_H } from '../sim/mpm.js';
+import { createWax } from './wax.js';
+import { createFactory, PLATE_Y } from './factory.js';
+import { OBJECTS, BOX, sdObject, scaleOf, seedPoints, heightOf, mouldField, surfaceNets } from '../objects.js';
+import { stateAt, TL, smooth, beltAt } from '../cycle.js';
+import { WAXES, HEATS, MOODS } from '../recipe.js';
+
+const NMAX = 40000; // particules (capacité : tous les objets ont le même volume)
+const RES = 2; // texture de distance : demi-cellule
+
+// une figurine prête : particules (repère de la grille) et texture de distance
+function makeShape(key, salt) {
+  const sc = scaleOf(key), prims = OBJECTS[key].prims;
+  const pts = seedPoints(key, sc, SEED_H), n = Math.min(NMAX, pts.length / 3);
+  const data = new Float32Array(NMAX * PS);
+  for (let i = 0; i < n; i++) {
+    const x = pts[i * 3] + O[0], y = pts[i * 3 + 1] + O[1], z = pts[i * 3 + 2] + O[2], o = i * PS;
+    data[o] = x; data[o + 1] = y; data[o + 2] = z;
+    data[o + 20] = 1; data[o + 25] = 1; data[o + 30] = 1; // b = I
+    data[o + 32] = x; data[o + 33] = y; data[o + 34] = z;
+    // pigment : des veines dans la masse (repère de repos), que l'écoulement emporte
+    const v = Math.sin(0.33 * y + 2.2 * Math.sin(0.17 * x + 1 + salt) + 1.7 * Math.sin(0.21 * z + 0.4 - salt) + 0.8 * Math.sin(0.5 * x + 0.3 * z + salt));
+    data[o + 37] = Math.min(1, Math.max(0, (v - 0.55) * 4)); data[o + 38] = 1;
+  }
+  for (let i = n; i < NMAX; i++) { data[i * PS] = 3; data[i * PS + 1] = 3; data[i * PS + 2] = 3; } // (inactives)
+  const N = BOX.size.map((v) => v * RES), sdf = new Uint16Array(N[0] * N[1] * N[2]);
+  for (let z = 0; z < N[2]; z++) for (let y = 0; y < N[1]; y++) for (let x = 0; x < N[0]; x++) {
+    sdf[x + N[0] * (y + N[1] * z)] = THREE.DataUtils.toHalfFloat(sdObject(prims, sc, BOX.min[0] + (x + 0.5) / RES, BOX.min[1] + (y + 0.5) / RES, BOX.min[2] + (z + 0.5) / RES));
+  }
+  const tex = new THREE.Data3DTexture(sdf, N[0], N[1], N[2]);
+  tex.format = THREE.RedFormat; tex.type = THREE.HalfFloatType; tex.minFilter = tex.magFilter = THREE.LinearFilter;
+  tex.wrapS = tex.wrapT = tex.wrapR = THREE.ClampToEdgeWrapping; tex.needsUpdate = true;
+  // le moule : deux demi-coques (repère objet, unités du monde)
+  let top = 0, zBack = 0;
+  const halves = [1, -1].map((side) => {
+    const Fd = mouldField(key, sc, side), G = surfaceNets(Fd);
+    top = Fd.top * CELL; zBack = Fd.zBack * CELL;
+    for (let i = 0; i < G.position.length; i++) G.position[i] *= CELL;
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(G.position, 3));
+    g.setIndex(new THREE.BufferAttribute(G.index, 1));
+    g.computeVertexNormals();
+    return g;
+  });
+  return { key, data, tex, n, height: heightOf(key, sc) * CELL, mould: { halves, top, zBack } };
+}
+
+// ── Caméra : elle accompagne la cire ──
+// naissance (gros plan sur le moule), montée (plan large qui suit le plateau),
+// fonte (gros plan, lente avancée), puis redescente le long du filet de cire
+// vers le moule, où naît l'objet suivant. Périodique par demi-cycle.
+export function cameraAt(R, ph) {
+  const S = stateAt(R, ph), F = R.factory, t = S.t, C = R.camera;
+  const lampP = [0, F.y1], mouldP = [0, F.y0];
+  const wp = S.pallets[S.wax];
+  const back = smooth(TL.melt - 1.5, TL.half - 0.4, t); // (redescente)
+  const base = t < TL.move ? [wp[0], wp[1]] : [lampP[0] + (mouldP[0] - lampP[0]) * back, lampP[1] + (mouldP[1] - lampP[1]) * back];
+  const wide = smooth(TL.lift - 0.6, TL.lift + 1.4, t) * (1 - smooth(TL.move - 2.2, TL.move + 0.6, t)) + 0.55 * smooth(TL.melt - 1, TL.melt + 2, t) * (1 - smooth(TL.half - 2.2, TL.half - 0.2, t));
+  const push = smooth(TL.heat, TL.melt, t) * (1 - back);
+  const dist = 4.7 + 4.4 * wide - 0.7 * push;
+  const u = ph * R.objects.length;
+  const az = C.side * (0.5 + 0.22 * Math.sin(Math.PI * 2 * u + 1) * 0 + 0.3 * push - 0.12 * wide) + C.sway * Math.sin(Math.PI * 2 * u);
+  const el = 0.2 + C.lift * 0.3 + 0.1 * wide + 0.07 * Math.sin(Math.PI * 2 * u + 0.8) * C.sway * 6;
+  const tgt = [base[0] * (1 - 0.25 * wide), base[1] + PLATE_Y + 0.42 + 0.25 * wide, 0];
+  const pos = [tgt[0] + Math.sin(az) * Math.cos(el) * dist, Math.max(0.35, tgt[1] + Math.sin(el) * dist), Math.cos(az) * Math.cos(el) * dist];
+  return { pos, tgt, fov: 30, dist };
+}
 
 export function createStage(scene, gen, { renderer, lite = false } = {}) {
-  const tracer = createTracer(renderer);
-  const melter = createMelt(renderer);
-  const blankTex = new THREE.DataTexture(new Uint8Array(4), 1, 1); blankTex.needsUpdate = true;
-  const texNode = texture(blankTex, screenUV);
-  const mat = new THREE.MeshBasicNodeMaterial();
-  mat.colorNode = texNode;
-  mat.vertexNode = vec4(positionGeometry.xy, 0, 1);
-  mat.depthTest = false; mat.depthWrite = false;
-  const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat);
-  quad.frustumCulled = false;
-  scene.add(quad);
-  const group = new THREE.Group();
-  let R = null, cluster = null, C = null, pot = null, melt = null, prog = 0, token = 0;
+  const sim = createSim(renderer, NMAX);
+  const wax = createWax(sim);
+  const factory = createFactory(scene);
+  scene.add(wax.mesh);
+  let R = null, shapes = null, prog = 0, token = 0;
+  let cur = { k: -1 }, rate = 0, lastDrain = 0, frozenSim = false;
+  const dbg = { want: 0, k: 0, reloads: [] };
 
   function setRecipe(r) {
-    R = r; cluster = buildCluster(R.seed, CLUSTERS[R.cluster]); C = tideFor(cluster); pot = potFor(R);
-    melt = null; prog = 0;
+    R = r; shapes = null; prog = 0; cur = { k: -1 };
     const my = ++token;
-    melter.simulate(cluster, {
-      habit: HABITS[R.habit].id, LL: C.LOW, D: C.LH - C.LOW, quality: lite ? 1.6 : 1, budget: lite ? 3e9 : 2.5e10,
-      onProgress: (f) => { if (my === token) prog = f; },
-      cancelled: () => my !== token,
-    }).then((m) => {
-      if (my !== token || !m) return;
-      // (la fonte montrée s'arrête quand le dernier cristal a disparu)
-      const UM = meltEndOf(m.crystals);
-      C = { ...C, UM }; setMeltEnd(`${R.seed}|${R.cluster}`, UM);
-      melt = m; prog = 1;
-    },
-      (e) => console.error(`fonte : ${e.message}`));
+    factory.build(R);
+    const W = WAXES[R.wax];
+    wax.U.a.value.setRGB(...W.a); wax.U.b.value.setRGB(...W.b);
+    // (les figurines : une par image, pour laisser respirer l'écran de chargement)
+    (async () => {
+      const out = [];
+      for (let i = 0; i < R.objects.length; i++) {
+        await new Promise((res) => setTimeout(res, 0));
+        if (my !== token) return;
+        out.push(makeShape(R.objects[i], i * 3.1 + R.seed.length));
+        prog = (i + 1) / R.objects.length;
+      }
+      factory.setMoulds(out);
+      shapes = out;
+    })();
   }
 
-  // ph : la phase affichée ; sub : décalages d'un rendu accumulé (pixel, lentille)
+  // chaleur reçue à l'instant t du demi-cycle (la même loi que cycle.js · stateAt)
+  const heatOf = (t) => smooth(TL.heat, TL.heat + 1.4, t) * (1 - smooth(TL.melt, TL.melt + 1.2, t));
+
   function update(ph, camera, size, sub = null) {
-    if (!R) return;
-    const t = cycleT(ph - Math.floor(ph));
-    const K = cameraAt(R, ph - Math.floor(ph));
-    const A = apparatusAt(t, C, R.loop.duration);
-    const M = MOODS[R.mood];
-    camera.updateMatrixWorld();
-    const e = camera.matrixWorld.elements;
-    const tex = tracer.run({
-      w: size[0], h: size[1], jitter: sub ? sub.pixel : [0, 0], lens: sub?.lens, t,
-      // (le flou de mise au point à l'export seulement : en lecture, un tirage de la lentille par image tremble)
-      aperture: sub?.lens ? K.aperture : 0, focus: K.focus,
-      world: { pot: { Ri: pot.Ri, th: pot.th, rim: pot.rim, bottom: pot.bottom, bench: pot.bench },
-        galette: { ...pot.galette, lift: A.lift }, flame: A.flame, cool: cool(t, C) }, u: meltU(t, C), oxRate: R.oxRate, habit: HABITS[R.habit].id,
-      cam: { pos: [camera.position.x, camera.position.y, camera.position.z], tanHalf: Math.tan((camera.fov * Math.PI) / 360), r: [e[0], e[1], e[2]], u: [e[4], e[5], e[6]], f: [-e[8], -e[9], -e[10]] },
-      tide: { L: level(t, C), rising: rising(t, C), ...C },
-      env: { lo: M.lo, hi: M.hi, forge: M.forge, boxes: M.boxes },
-      crystals: crystalsAt(cluster, t, C, melt?.crystals),
-      melt, blank: melter.blank,
-    });
-    if (texNode.value !== tex) texNode.value = tex;
+    if (!R || !shapes) return;
+    const S = stateAt(R, ph), P = factory.parts(), H = HEATS[R.heat], M = MOODS[R.mood];
+    const shape = shapes[S.k];
+    // ── la simulation rejoint l'image voulue ──
+    if (!frozenSim) {
+      const want = Math.floor(S.t * 60);
+      dbg.want = want; dbg.k = S.k;
+      // (un recul de moins d'une demi-seconde n'est pas un saut : on attend simplement)
+      if (cur.k !== S.k || want < sim.frames() - 30) {
+        dbg.reloads.push([cur.k, S.k, want, sim.frames()]);
+        sim.load(shape.data); wax.setShape(shape.tex);
+        cur = { k: S.k }; lastDrain = 0; rate = 0;
+        const hc = shape.height / CELL;
+        sim.U.heatDir.value.copy(P.dirv); sim.U.heatFlat.value = H.flat; sim.U.band.value.set(0, H.band[0] ? H.band[1] * hc : 0);
+      }
+      // (avant la chaleur, rien ne bouge : on saute ces images, sauf les premières qui posent les appuis)
+      let n = 0;
+      while (sim.frames() < want && n < 48) {
+        const tf = sim.frames() / 60;
+        if (tf < TL.heat - 0.2 && sim.frames() > 50 && want / 60 >= TL.heat - 0.2) { sim.skipTo?.(Math.floor((TL.heat - 0.2) * 60)); }
+        sim.U.heat.value = H.power * heatOf(tf);
+        if (H.band[0]) sim.U.band.value.set(beltAt(tf) * shape.height / CELL, H.band[1] * shape.height / CELL);
+        sim.U.sweep.value = 90 * smooth(TL.melt + 0.3, TL.melt + 1.3, tf);
+        sim.U.plateHot.value = smooth(TL.heat + 0.34 * (TL.melt - TL.heat), TL.heat + 0.6 * (TL.melt - TL.heat), tf);
+        sim.advance(); n++;
+      }
+    }
+    sim.resolve();
+    // ── la machine ──
+    const d = sim.drained();
+    rate += (Math.min(1, Math.max(0, d - lastDrain) / 160) - rate) * 0.12; lastDrain = d;
+    factory.pose(S, { rate, hObj: shape.height });
+    // ── la cire : la grille suit son plateau ──
+    const wp = S.pallets[S.wax];
+    wax.U.origin.value.set(wp[0] - (GX / 2) * CELL, wp[1] - PBASE * CELL, -(GZ / 2) * CELL);
+    wax.mesh.position.set(wp[0], wp[1] - PBASE * CELL + (GY / 2) * CELL, 0);
+    wax.U.keyDir.value.copy(P.kd); wax.U.keyCol.value.copy(P.kc).multiplyScalar(M.key.I * 0.3);
+    wax.U.rimDir.value.copy(P.rd); wax.U.rimCol.value.copy(P.rimC).multiplyScalar(M.rim.I * 0.5);
+    wax.U.heatDir.value.copy(P.dirv); wax.U.heatCol.value.setRGB(1, 0.55, 0.3).multiplyScalar(0.6 * S.heat);
+    wax.U.amb.value.set(M.wall).multiplyScalar(0.22);
+    void camera; void size; void sub;
   }
 
   return {
-    group, setRecipe, update,
-    ready: () => !!R && !!melt, progress: () => prog,
-    cluster: () => cluster, melt: () => melt,
-    setShadowQuality() {}, syncFinishes() {},
+    group: factory.root, setRecipe, update, sim, wax, factory,
+    ready: () => !!R && !!shapes, progress: () => prog,
+    freezeSim: (v) => { frozenSim = v; },
+    setShadowQuality(q) { const s = { mobile: 1024, low: 1024, medium: 2048, high: 2048, ultra: 4096 }[q] ?? 2048; const k = factory.key; if (k.shadow.mapSize.x !== s) { k.shadow.mapSize.set(s, s); k.shadow.map?.dispose(); k.shadow.map = null; } },
+    syncFinishes() {},
+    state: (ph) => stateAt(R, ph), dbg, shapes: () => shapes,
   };
 }

@@ -6,7 +6,7 @@
 // la glace, la bascule, la caméra), puis Rendu.
 import GUI from 'lil-gui';
 import { QUALITY } from './settings.js';
-import { HABITS, OXIDES, CLUSTERS, FRAMINGS } from '../recipe.js';
+import { WAXES, HEATS, CIRCUITS } from '../recipe.js';
 
 const opts = (o, label = (v) => v.label) => Object.fromEntries(Object.entries(o).map(([k, v]) => [label(v), k]));
 
@@ -45,16 +45,12 @@ export function createUI({ recipe: getRecipe, render, on, moods }) {
     const add = (f, o, k, ...a) => { const c = f.add(o, k, ...a); ctls.push(c); return c; };
     const ch = () => on.recipeChanged();
 
-    add(fScene, R, 'mood', opts(moods)).name('Humeur (studio)').onChange((v) => on.overrideChanged('mood', v));
-    add(fScene, R, 'habit', opts(HABITS)).name('Port des cristaux').onChange((v) => on.overrideChanged('habit', v));
-    add(fScene, R, 'cluster', opts(CLUSTERS)).name('Grappe').onChange((v) => on.overrideChanged('cluster', v));
-    add(fScene, R, 'oxide', opts(OXIDES)).name('Gamme d’oxyde').onChange((v) => on.overrideChanged('oxide', v));
-    add(fScene, R, 'oxRate', 0.1, 2, 0.01).name('Vitesse d’oxydation').onChange(ch);
-    add(fScene, R.loop, 'duration', 16, 120, 1).name('Durée de la boucle (s)').onChange(ch);
-    add(fCam, R, 'framing', opts(FRAMINGS)).name('Cadrage').onChange((v) => on.overrideChanged('framing', v));
+    add(fScene, R, 'mood', opts(moods)).name('Lieu').onChange((v) => on.overrideChanged('mood', v));
+    add(fScene, R, 'wax', opts(WAXES)).name('Cire').onChange((v) => on.overrideChanged('wax', v));
+    add(fScene, R, 'heat', opts(HEATS)).name('Source de chaleur').onChange((v) => on.overrideChanged('heat', v));
+    add(fScene, R.factory, 'circuit', opts(CIRCUITS)).name('Circuit').onChange((v) => on.overrideChanged('circuit', v));
     add(fCam, R.camera, 'sway', 0, 0.3, 0.001).name('Balancement').onChange(ch);
-    add(fCam, R.camera, 'dolly', 0.6, 1.5, 0.01).name('Distance (×)').onChange(ch);
-    add(fCam, R.camera, 'lift', -1, 1, 0.01).name('Hauteur (cm)').onChange(ch);
+    add(fCam, R.camera, 'lift', -1, 1, 0.01).name('Hauteur').onChange(ch);
     add(fCam, on.camState, 'free').name('Caméra libre (souris)').onChange((v) => on.freeCam(v));
   }
 

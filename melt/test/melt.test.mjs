@@ -1,164 +1,138 @@
-// Invariants de Melt (le bain de bismuth) : node --test melt/test/*.test.mjs
+// Invariants de Melt (la mini-usine) : node --test melt/test/*.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { generate, MOODS, HABITS, OXIDES, CLUSTERS, FRAMINGS } from '../src/recipe.js';
-import { level, emerge, reach, line, lift, meltU, SINK, buildCluster, crystalsAt, tideFor, topOf, cycleT, apparatusAt, GRID_WIRE } from '../src/cycle.js';
-import { cameraAt, potFor } from '../src/camera.js';
-import { simulate, gridsFor, stepsFor, bathAt, PHYS } from '../src/melt/model.js';
+import { generate, MOODS, WAXES, HEATS, CIRCUITS } from '../src/recipe.js';
+import { OBJECTS, VOLUME, BOX, MOULD, scaleOf, volumeOf, seedPoints, heightOf, sdObject, mouldField, surfaceNets } from '../src/objects.js';
+import { TL, circuit, along, stateAt, carriers } from '../src/cycle.js';
 
 test('recette déterministe, JSON, tous les choix tirés', () => {
   assert.deepEqual(generate('x1'), generate('x1'));
   const R = generate('x1');
   assert.deepEqual(JSON.parse(JSON.stringify(R)), R);
-  const seen = { mood: new Set(), habit: new Set(), oxide: new Set(), cluster: new Set(), framing: new Set() };
-  for (let i = 0; i < 400; i++) { const r = generate(`s${i}`); for (const k of Object.keys(seen)) seen[k].add(r[k]); }
+  const seen = { mood: new Set(), wax: new Set(), heat: new Set(), circuit: new Set(), object: new Set(), count: new Set() };
+  for (let i = 0; i < 400; i++) {
+    const r = generate(`s${i}`);
+    seen.mood.add(r.mood); seen.wax.add(r.wax); seen.heat.add(r.heat); seen.circuit.add(r.factory.circuit); seen.count.add(r.objects.length);
+    for (const o of r.objects) seen.object.add(o);
+    assert.equal(new Set(r.objects).size, r.objects.length, 'une usine ne refond pas deux fois la même figurine');
+    assert.equal(r.loop.duration, r.loop.half * r.objects.length);
+  }
   assert.equal(seen.mood.size, Object.keys(MOODS).length);
-  assert.equal(seen.habit.size, Object.keys(HABITS).length);
-  assert.equal(seen.oxide.size, Object.keys(OXIDES).length);
-  assert.equal(seen.cluster.size, Object.keys(CLUSTERS).length);
-  assert.equal(seen.framing.size, Object.keys(FRAMINGS).length);
+  assert.equal(seen.wax.size, Object.keys(WAXES).length);
+  assert.equal(seen.heat.size, Object.keys(HEATS).length);
+  assert.equal(seen.circuit.size, Object.keys(CIRCUITS).length);
+  assert.equal(seen.object.size, Object.keys(OBJECTS).length);
+  assert.deepEqual([...seen.count].sort(), [2]);
 });
 
-test('bain fixe ; la grappe sort, attend, redescend par paliers ; tout est continu et périodique', () => {
-  const C = tideFor(buildCluster('m0', CLUSTERS.grappe));
-  assert.ok(Math.abs(line(0, C) - line(1 - 1e-9, C)) < 1e-6);
-  let prev = line(0, C);
-  for (let k = 1; k < 4000; k++) {
-    const t = k / 4000, l = line(t, C);
-    assert.equal(level(t, C), C.LB); // (le métal ne quitte jamais la marmite)
-    assert.ok(Math.abs(l - prev) < 0.01, `saut de la ligne à t = ${t}`);
-    if (t > C.T0 && t < C.T1) assert.ok(l <= prev + 1e-12, 'la grappe redescend pendant la levée');
-    if (t > C.T2 && t < C.T3) assert.ok(l >= prev - 1e-12, 'la grappe remonte pendant la fonte');
-    prev = l;
-  }
-  // (la fonte calée sur la simulation : quelle que soit sa durée, la ligne reste
-  // continue, ne redescend pas, et la grille vide regagne le fond)
-  for (const UM of [0.4, 0.7]) {
-    const Cu = { ...C, UM };
-    let p = line(0, Cu);
-    for (let k = 1; k < 4000; k++) {
-      const t = k / 4000, l = line(t, Cu);
-      assert.ok(Math.abs(l - p) < 0.02, `UM = ${UM} : saut de la ligne à t = ${t}`); // (la grille vide regagne le fond vite, mais sans saut)
-      if (t > Cu.T2) assert.ok(l >= p - 1e-12);
-      p = l;
+test('toutes les figurines ont le même volume de cire et tiennent dans leur boîte', () => {
+  const counts = [];
+  for (const k of Object.keys(OBJECTS)) {
+    const sc = scaleOf(k), P = OBJECTS[k].prims;
+    assert.ok(Math.abs(volumeOf(P, sc) / VOLUME - 1) < 0.02, `${k} : volume ${volumeOf(P, sc)}`);
+    const h = heightOf(k, sc);
+    assert.ok(h > 25 && h < BOX.min[1] + BOX.size[1] - 1.5, `${k} : hauteur ${h}`);
+    // rien ne touche le bord de la boîte (la texture de distance y serait coupée)
+    for (let y = 0.5; y < BOX.size[1] - 1; y += 2) for (let a = 0; a < 24; a++) {
+      const c = Math.cos((a / 24) * Math.PI * 2), s = Math.sin((a / 24) * Math.PI * 2);
+      assert.ok(sdObject(P, sc, c * (BOX.size[0] / 2 - 0.5), y, s * (BOX.size[2] / 2 - 0.5)) > 0, `${k} touche le bord de sa boîte`);
     }
-    assert.ok(Math.abs(line(Cu.T3 + SINK + 1e-3, Cu) - Cu.LH) < 1e-9);
+    counts.push(seedPoints(k, sc, 0.6).length / 3);
   }
-  // suspendue : la grille au-dessus du bain ; au repos : tout sous le bain
-  assert.ok(lift((C.T1 + C.T2) / 2, C) > C.LB + 0.2);
-  // les arrêts : au milieu de chaque palier, le cadre ne bouge pas
-  for (let k = 0; k < 4; k++) {
-    const u = k / 4 + 0.07 + 0.09, t = C.T2 + u * (C.T3 - C.T2), e = 1e-3;
-    assert.ok(Math.abs(line(t + e, C) - line(t - e, C)) < 1e-9, `le cadre bouge au palier ${k}`);
-  }
-  // le métal sort du bain dans l'ordre de la hauteur ; la ligne atteint le cristal de bas en haut
-  for (let y = 0; y < 3; y += 0.1) { assert.ok(emerge(y + 0.1, C) <= emerge(y, C)); assert.ok(reach(y + 0.1, C) >= reach(y, C)); }
+  assert.ok(Math.max(...counts) / Math.min(...counts) < 1.04, `particules : ${counts}`);
+  assert.ok(Math.max(...counts) <= 40000, 'la capacité de la simulation suffit');
 });
 
-// plus haut point d'un cristal dans le monde (cube tourné, incliné), à sa descente près
-const topWorld = (c) => topOf(c) - c.desc;
-
-test('raccord : au début et à la fin de la boucle, le bain couvre tout', () => {
+test('circuit : la chaleur est à l’aplomb du moule, les deux demi-chemins se referment', () => {
   for (let i = 0; i < 200; i++) {
-    const R = generate(`r${i}`);
-    const cl = buildCluster(R.seed, CLUSTERS[R.cluster]), C = tideFor(cl);
-    for (const t of [0, 0.005, C.T0 - 1e-3, C.T3 + 0.005, 0.97, 0.999]) {
-      const L = level(t, C);
-      for (const c of crystalsAt(cl, t, C)) assert.ok(topWorld(c) < L - 0.02, `graine r${i}, t = ${t} : un cristal dépasse (${topWorld(c).toFixed(2)} ≥ ${L.toFixed(2)})`);
+    const F = generate(`c${i}`).factory, C = circuit(F);
+    assert.deepEqual(C.down[0], [0, F.y1]); assert.deepEqual(C.down.at(-1), [0, F.y0]);
+    assert.deepEqual(C.up[0], [0, F.y0]); assert.deepEqual(C.up.at(-1), [0, F.y1]);
+    // la cloche levée passe sous la ligne haute (buse comprise)
+    assert.ok(F.y0 + 0.56 + 2 * F.bellH + 0.14 + 0.12 < F.y1 - 0.12, 'la cloche levée heurte la ligne haute');
+    for (const poly of [C.down, C.up]) for (let u = 0; u <= 1; u += 0.01) {
+      const p = along(poly, u);
+      assert.ok(p[1] >= F.y0 - 1e-9 && p[1] <= F.y1 + 1e-9);
     }
   }
 });
 
-test('grappe : cristaux posés sur la grille, sans la traverser, sans interpénétration franche', () => {
-  for (let i = 0; i < 100; i++) {
-    const cl = buildCluster(`g${i}`, CLUSTERS.grappe);
-    assert.ok(cl.length >= 5);
-    // (posés SUR la grille : le point le plus bas de chaque cristal touche le dessus des fils, sans les traverser ni flotter)
-    for (const c of cl) { const low = 2 * c.y - topOf(c); assert.ok(Math.abs(low - GRID_WIRE) < 1e-9, `pied à ${low}`); }
-    for (let a = 0; a < cl.length; a++) for (let b = a + 1; b < cl.length; b++) {
-      assert.ok(Math.hypot(cl[a].x - cl[b].x, cl[a].z - cl[b].z) >= (cl[a].s + cl[b].s) * 0.95 - 1e-9);
+test('cycle : continu, périodique, un plateau sous la chaleur et un sous le moule pendant la fonte', () => {
+  for (const seed of ['a', 'b', 'c', 'd', 'e', 'f']) {
+    const R = generate(seed), F = R.factory, n = R.objects.length, K = 6000;
+    let prev = stateAt(R, 0);
+    const r3 = (v) => Math.round(v * 1000) / 1000 || 0;
+    const key = (S) => S.pallets.map((p) => `${r3(p[0])},${r3(p[1])}`).sort().join('|');
+    // (les deux plateaux sont identiques : c'est l'ensemble de leurs places qui doit être continu)
+    assert.equal(key(stateAt(R, 0)), key(stateAt(R, 1 - 1e-9)));
+    for (let i = 1; i <= K; i++) {
+      const S = stateAt(R, i / K);
+      const a = [...S.pallets].sort((p, q) => p[0] - q[0] || p[1] - q[1]), b = [...prev.pallets].sort((p, q) => p[0] - q[0] || p[1] - q[1]);
+      const d1 = Math.hypot(a[0][0] - b[0][0], a[0][1] - b[0][1]) + Math.hypot(a[1][0] - b[1][0], a[1][1] - b[1][1]);
+      const d2 = Math.hypot(a[0][0] - b[1][0], a[0][1] - b[1][1]) + Math.hypot(a[1][0] - b[0][0], a[1][1] - b[0][1]);
+      assert.ok(Math.min(d1, d2) < 0.2, `saut des plateaux à ${i / K} (${seed})`);
+      assert.ok(Math.abs(S.bell - prev.bell) < 0.05 || S.k !== prev.k && S.bell < 0.05 && prev.bell < 0.05, `saut de la cloche à ${i / K}`);
+      assert.ok(Math.abs(S.heat - prev.heat) < 0.05, `saut de la chaleur à ${i / K}`);
+      if (S.heat > 0) {
+        const w = S.pallets[S.wax], o = S.pallets[1 - S.wax];
+        assert.ok(Math.hypot(w[0], w[1] - F.y1) < 1e-9, 'la cire fond sous la source');
+        assert.ok(Math.hypot(o[0], o[1] - F.y0) < 1e-9, 'le plateau vide attend sous la cloche');
+        assert.ok(S.bell < 1e-6 && S.open < 1e-6, 'le moule est posé et fermé quand la cire coule');
+      }
+      // le barillet ne tourne que cloche levée
+      if (Math.abs(S.arm - prev.arm) > 1e-9 && S.k === prev.k) assert.ok(S.bell > 0.98, `le barillet tourne moule bas à ${i / K}`);
+      { const fr = S.arm - Math.floor(S.arm); if (fr > 0.2 && fr < 0.999) assert.ok(S.open < 0.02, `le moule pivote ouvert à ${i / K}`); }
+      assert.ok(Math.abs(S.open - prev.open) < 0.05 || S.k !== prev.k, `saut de l'ouverture à ${i / K}`);
+      prev = S;
+    }
+    assert.equal(stateAt(R, 0.999999).k, n - 1);
+  }
+  assert.ok(TL.lift < TL.move && TL.move < TL.lower && TL.lower <= TL.heat && TL.heat < TL.melt && TL.melt < TL.half);
+});
+
+test('chariots : à demeure, jamais de plateau sans chariot hors des lignes, retour à vide continu', () => {
+  for (const seed of ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']) {
+    const R = generate(seed), F = R.factory, C = circuit(F), K = 8000;
+    const n0 = stateAt(R, 0).carriers.length;
+    assert.equal(n0, F.circuit === 'rampe' ? 2 : 2, 'un chariot par ascenseur ou par rampe');
+    let prev = stateAt(R, 0);
+    for (let i = 1; i <= K; i++) {
+      const S = stateAt(R, i / K);
+      assert.equal(S.carriers.length, n0, 'un chariot ne disparaît jamais');
+      S.carriers.forEach((c, j) => {
+        const q = prev.carriers[j];
+        if (S.k === prev.k) assert.ok(Math.hypot(c.pos[0] - q.pos[0], c.pos[1] - q.pos[1]) < 0.06, `saut d'un chariot à ${i / K} (${seed})`);
+      });
+      // un plateau qui n'est sur aucune ligne est sur un chariot
+      for (const p of S.pallets) {
+        const onLine = Math.abs(p[1] - F.y0) < 1e-6 || Math.abs(p[1] - F.y1) < 1e-6;
+        if (!onLine) assert.ok(S.carriers.some((c) => Math.hypot(c.pos[0] - p[0], c.pos[1] - p[1]) < 1e-6), `plateau sans chariot à ${i / K} (${seed})`);
+      }
+      prev = S;
+    }
+    // au début comme à la fin d'un demi-cycle, chaque chariot attend au départ de son tronçon
+    for (const t of [0, TL.half - 1e-6]) for (const c of carriers(C, t === 0 ? 0 : 1, t)) assert.ok(Math.hypot(c.pos[0] - c.p[0], c.pos[1] - c.p[1]) < 1e-3, 'chariot hors de sa place d’attente');
+  }
+  assert.ok(TL.back0 > TL.move && TL.back1 < TL.half);
+});
+
+test('moule : deux demi-coques fermées autour de la figurine, canal de coulée dans l’axe', () => {
+  for (const k of ['lapin', 'quille']) {
+    const sc = scaleOf(k);
+    for (const side of [1, -1]) {
+      const F = mouldField(k, sc, side), G = surfaceNets(F);
+      assert.ok(G.position.length > 3000 && G.index.length % 3 === 0);
+      for (let i = 0; i < G.position.length; i += 3) {
+        assert.ok(side * G.position[i] > 0.05, 'une demi-coque reste de son côté du plan de joint');
+        assert.ok(G.position[i + 1] > 0.2 && G.position[i + 1] < F.top + 0.5);
+        // le métal ne mord jamais sur la figurine
+        assert.ok(sdObject(OBJECTS[k].prims, sc, G.position[i], G.position[i + 1], G.position[i + 2]) > MOULD.tIn - 0.6, 'le moule entre dans l’objet');
+      }
+      // chaque arête appartient à deux faces (surface fermée)
+      const edges = new Map();
+      for (let i = 0; i < G.index.length; i += 3) for (let e = 0; e < 3; e++) { const a = G.index[i + e], b = G.index[i + (e + 1) % 3], key = a < b ? `${a},${b}` : `${b},${a}`; edges.set(key, (edges.get(key) || 0) + 1); }
+      let open = 0; for (const v of edges.values()) if (v !== 2) open++;
+      assert.ok(open / edges.size < 0.01, `${open} arêtes ouvertes sur ${edges.size}`);
     }
   }
-});
-
-test('fonte : la grappe ne bouge pas pendant l’attente, regagne le fond à la fin ; la peau vient après', () => {
-  const cl = buildCluster('f1', CLUSTERS.grappe), C = tideFor(cl);
-  const at = (t) => crystalsAt(cl, t, C)[0];
-  assert.equal(at(C.T1 + 0.01).desc, at(C.T2 - 0.01).desc);
-  assert.ok(Math.abs(at(C.T3).desc - (C.LH - C.LB)) < 1e-9);
-  const tSub = reach(topOf(cl[0]) + 0.05, C);
-  assert.ok(at(tSub - 0.01).skin < 0 && at(tSub + 0.02).skin > 0);
-});
-
-test('modèle de fonte (Node, grille grossière) : les parties minces d’abord, puis le front suit la ligne', () => {
-  const c = { s: 1, y: 0.8, ang: 0.5, tilt: 0.08 }, LL = -0.3, D = 2.2;
-  const C = { ...tideFor([c]), LOW: LL, LH: LL + D };
-  const { tau, grid } = simulate(c, 0, { LL, D, quality: 2.2 });
-  const { h, X, nx, ny } = grid;
-  const lead = [];
-  for (let id = 0; id < tau.length; id++) {
-    if (tau[id] < 0 || tau[id] > 50) continue;
-    const j = Math.floor(id / nx) % ny, y = (j + 0.5) * h;
-    if (y <= LL + h) continue;
-    // instant où le bain (repère du cristal) atteint y, sans tassement
-    const uLine = meltU(reach(y, C), C);
-    lead.push(tau[id] - uLine);
-  }
-  lead.sort((a, b) => a - b);
-  const q = (f) => lead[Math.floor(f * (lead.length - 1))];
-  assert.ok(lead.length > 1000);
-  // (par paliers : la ligne arrive d'un coup, la fonte la suit de près, sous elle)
-  assert.ok(q(0.5) < 0.06 && q(0.5) > -0.12, `médiane de l’avance de la fonte sur la ligne : ${q(0.5)}`);
-  // (avance modeste : le panache est tiède à la ligne, pour que les petits cristaux fondent en s'enfonçant)
-  assert.ok(q(0.05) < q(0.5) - 0.02, `les parties minces ne fondent pas avant le reste (${q(0.05)} / ${q(0.5)})`);
-  assert.ok(bathAt(1, LL, D) === LL + D && X > c.s);
-});
-
-test('caméra : périodique, lente, au-dessus du métal, dans le creuset ou dehors selon le cadrage', () => {
-  for (let i = 0; i < 200; i++) {
-    const R = generate(`k${i}`);
-    const C = tideFor(buildCluster(R.seed, CLUSTERS[R.cluster])), pot = potFor(R);
-    for (let k = 0; k < 100; k++) {
-      const ph = k / 100, t = cycleT(ph), p = cameraAt(R, ph).pos, r = Math.hypot(p[0], p[2]);
-      assert.ok(p[1] > level(t, C) + 0.15, `graine k${i} (${R.framing}) : caméra à ${p[1].toFixed(2)} sous le bain ${level(t, C).toFixed(2)}`);
-      // (au-dessus du bain : la paroi proche reste sous l'objectif ; l'atelier : dehors, au-dessus du bord)
-      if (R.framing === 'atelier') assert.ok(r > pot.Ri + pot.th + 1 && p[1] > pot.rim + 2, `graine k${i} : l'atelier est vu du dedans`);
-      else assert.ok(r < pot.Ri - 0.5, `graine k${i} (${R.framing}) : caméra dans la paroi (${r.toFixed(2)} / ${pot.Ri.toFixed(2)})`);
-    }
-  }
-  for (const s of ['c1', 'c2', 'c3', 's7']) {
-    const R = generate(s);
-    const a = cameraAt(R, 0).pos, b = cameraAt(R, 1).pos;
-    for (let i = 0; i < 3; i++) assert.ok(Math.abs(a[i] - b[i]) < 1e-9);
-    let vmax = 0;
-    for (let k = 0; k < 2000; k++) {
-      const p = cameraAt(R, k / 2000).pos, q = cameraAt(R, (k + 1) / 2000).pos;
-      vmax = Math.max(vmax, Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]) * 2000 / R.loop.duration);
-    }
-    assert.ok(vmax < 1.5, `caméra trop rapide : ${vmax} cm/s`);
-  }
-});
-
-test('appareillage : le brûleur s’allume pendant l’attente, avant la descente, et s’éteint après la fonte', () => {
-  const C = tideFor(buildCluster('a0', CLUSTERS.grappe));
-  const A = (t) => apparatusAt(t, C);
-  assert.ok(A((C.T2 + C.T3) / 2).flame > 0.99 && A(C.T1).flame === 0 && A(0.98).flame === 0);
-  assert.ok(A(C.T2 - 0.01).flame > 0.99); // (la cause avant l'effet)
-  assert.equal(A(0.5).lift, lift(0.5, C));
-});
-
-test('grilles de fonte : elles contiennent le cristal et tiennent dans le budget', () => {
-  let worst = 0;
-  for (let i = 0; i < 120; i++) {
-    const R = generate(`a${i}`), habit = HABITS[R.habit].id;
-    const cl = buildCluster(R.seed, CLUSTERS[R.cluster]);
-    const grids = gridsFor(cl, habit);
-    let work = 0;
-    grids.forEach((g, k) => {
-      assert.ok(g.Y > topOf(cl[k]) && g.nx < 400 && g.ny < 300, `grille ${g.nx}×${g.ny}`);
-      work += g.nx * g.ny * g.nz * stepsFor(g.h).steps;
-    });
-    worst = Math.max(worst, work);
-  }
-  assert.ok(worst <= 2.5e10, `travail ${worst.toExponential(2)}`);
 });
