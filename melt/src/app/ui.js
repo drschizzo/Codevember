@@ -7,6 +7,7 @@
 import GUI from 'lil-gui';
 import { QUALITY } from './settings.js';
 import { WAXES, HEATS, CIRCUITS } from '../recipe.js';
+import { OBJECTS } from '../objects.js';
 
 const opts = (o, label = (v) => v.label) => Object.fromEntries(Object.entries(o).map(([k, v]) => [label(v), k]));
 
@@ -49,6 +50,9 @@ export function createUI({ recipe: getRecipe, render, on, moods }) {
     add(fScene, R, 'wax', opts(WAXES)).name('Cire').onChange((v) => on.overrideChanged('wax', v));
     add(fScene, R, 'heat', opts(HEATS)).name('Source de chaleur').onChange((v) => on.overrideChanged('heat', v));
     add(fScene, R.factory, 'circuit', opts(CIRCUITS)).name('Circuit').onChange((v) => on.overrideChanged('circuit', v));
+    // les objets de la boucle : un menu par figurine (la même usine, d'autres moules)
+    const objs = Object.fromEntries(R.objects.map((k, i) => [`o${i}`, k]));
+    R.objects.forEach((_, i) => add(fScene, objs, `o${i}`, opts(OBJECTS)).name(`Objet ${i + 1}`).onChange(() => on.overrideChanged('objects', R.objects.map((__, j) => objs[`o${j}`]))));
     add(fCam, R.camera, 'sway', 0, 0.3, 0.001).name('Balancement').onChange(ch);
     add(fCam, R.camera, 'lift', -1, 1, 0.01).name('Hauteur').onChange(ch);
     add(fCam, on.camState, 'free').name('Caméra libre (souris)').onChange((v) => on.freeCam(v));

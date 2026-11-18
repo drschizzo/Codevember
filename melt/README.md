@@ -28,7 +28,7 @@ Cette version est récente. Fait : la fonte, le cycle complet, les usines par gr
 
 Paramètres d'URL : `?seed=…`, `#r=…` (scène retouchée, « Copier le lien »), `?ui=0`, `?debug` (outils dans `window.melt`, voir `shared/app/debug.js`), `?sink=<port>` (collecteur d'images).
 
-Le panneau règle le lieu, la cire, la source de chaleur et le circuit (nouvelle usine de la même graine), la caméra et le rendu.
+Le panneau règle le lieu, la cire, la source de chaleur, le circuit et les deux objets de la boucle (nouvelle usine de la même graine), la caméra et le rendu.
 
 ## Le cycle (`src/cycle.js`)
 

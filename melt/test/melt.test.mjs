@@ -117,7 +117,7 @@ test('chariots : à demeure, jamais de plateau sans chariot hors des lignes, ret
 });
 
 test('moule : deux demi-coques fermées autour de la figurine, canal de coulée dans l’axe', () => {
-  for (const k of ['lapin', 'quille']) {
+  for (const k of ['lapin', 'chat']) {
     const sc = scaleOf(k);
     for (const side of [1, -1]) {
       const F = mouldField(k, sc, side), G = surfaceNets(F);
