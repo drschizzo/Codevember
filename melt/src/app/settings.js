@@ -2,39 +2,38 @@
 // Propres au projet (valeurs par défaut, clé de stockage) : la chaîne d'image
 // qui les lit est commune (shared/render/post.js).
 
-// La scène est un lancer de rayons (scene/tracer.js) : ni ombres portées, ni
-// occlusion ambiante, ni réflexions en espace écran, ni anticrénelage temporel
-// (pas de vitesses) ; la qualité est la résolution (pixelRatio).
 export const QUALITY = {
-  mobile: { label: 'Mobile', pixelRatio: 0.75, aa: 'fxaa' },
-  draft: { label: 'Brouillon', pixelRatio: 0.75, aa: 'fxaa' },
-  standard: { label: 'Standard', pixelRatio: 1, aa: 'fxaa' },
-  high: { label: 'Haute', pixelRatio: 1.25, aa: 'smaa' },
-  cinema: { label: 'Cinéma', pixelRatio: 2, aa: 'smaa' },
+  // (mode allégé : matériaux, lumières, ombres, chaîne d'image ; voir shared/app/mobile.js)
+  mobile: { label: 'Mobile', pixelRatio: 1, aa: 'fxaa', shadows: 'mobile', ao: false, ssr: false, motionBlur: 0 },
+  draft: { label: 'Brouillon', pixelRatio: 1, aa: 'fxaa', shadows: 'low', ao: false, ssr: false, motionBlur: 0 },
+  standard: { label: 'Standard', pixelRatio: 1, aa: 'smaa', shadows: 'medium', ao: true, ssr: false, motionBlur: 0 },
+  high: { label: 'Haute', pixelRatio: 1.25, aa: 'traa', shadows: 'high', ao: true, ssr: true, ssrRes: 0.5, ssrQuality: 0.5, motionBlur: 0 },
+  cinema: { label: 'Cinéma', pixelRatio: 2, aa: 'traa', shadows: 'ultra', ao: true, ssr: true, ssrRes: 1, ssrQuality: 0.8, motionBlur: 0 },
 };
 
+// (courbe ACES : la cire chaude et la résistance de la lampe gardent leur teinte ;
+//  flou de mouvement coupé : la cire n'écrit pas ses vitesses)
 export const RENDER_DEFAULTS = {
   quality: 'high',
-  pixelRatio: 1.25, aa: 'smaa', shadows: 'high', microDetail: 1, patina: 1, msaa: 0,
-  toneMapping: 'aces', exposure: 1, contrast: 1.04, saturation: 1, warmth: 0, vignette: 0.35,
-  bloom: true, bloomStrength: 0.08, bloomRadius: 0.5, bloomThreshold: 1.2, hiCap: 6, roughFloor: 0,
-  ao: false, aoStrength: 0, aoRadius: 0.4,
-  ssr: false, ssrIntensity: 0, ssrQuality: 0.5, ssrDistance: 2.5, ssrThickness: 0.05, ssrRes: 0.5, ssrBlur: 2,
-  dof: false, focus: 1, focusRange: 0.35, bokeh: 2,
-  motionBlur: 0, ca: 0.06, grain: 0.03,
-  streaks: 0, streakLen: 4, halation: 0.2, dirt: 0,
-  dynRes: true, maxFps: 0, // (le creuset et les gradins fins coûtent : la résolution suit la cadence)
+  pixelRatio: 1.25, aa: 'traa', shadows: 'high', microDetail: 1, patina: 1, msaa: 0,
+  toneMapping: 'aces', exposure: 1, contrast: 1.05, saturation: 1, warmth: 0, vignette: 0.4,
+  bloom: true, bloomStrength: 0.12, bloomRadius: 0.5, bloomThreshold: 1.3, hiCap: 6, roughFloor: 0.08,
+  ao: true, aoStrength: 0.9, aoRadius: 0.4,
+  ssr: true, ssrIntensity: 0.6, ssrQuality: 0.5, ssrDistance: 2.5, ssrThickness: 0.05, ssrRes: 0.5, ssrBlur: 2, nestEnv: 0.45, crystalThick: 1,
+  dof: true, focus: 1, focusRange: 0.3, bokeh: 3,
+  motionBlur: 0, ca: 0.08, grain: 0.03,
+  streaks: 0.06, streakLen: 4, halation: 0.25, dirt: 0.2,
+  dynRes: true, maxFps: 0,
 };
 
-// Mobile : demi-résolution, résolution dynamique, cadence plafonnée.
 export const MOBILE_DEFAULTS = {
   ...RENDER_DEFAULTS,
-  quality: 'mobile', lite: true, pixelRatio: 0.75, aa: 'fxaa', ca: 0, grain: 0.025,
+  quality: 'mobile', lite: true, pixelRatio: 1, aa: 'fxaa', shadows: 'mobile', ao: false, ssr: false, motionBlur: 0,
+  ca: 0, streaks: 0, dirt: 0, grain: 0.025, dof: false,
   dynRes: true, maxFps: 60,
 };
 
-const STORE = 'melt.render.v4';
-const RAYTRACE_OFF = { dof: false, ao: false, ssr: false, motionBlur: 0, streaks: 0, dirt: 0 }; // (changer de version quand un défaut change : les réglages mémorisés sont alors oubliés)
+const STORE = 'melt.render.v5'; // (changer de version quand un défaut change : les réglages mémorisés sont alors oubliés)
 
 // (le mode mobile a ses propres réglages mémorisés)
 export const defaultsFor = (lite) => (lite ? MOBILE_DEFAULTS : RENDER_DEFAULTS);
@@ -42,8 +41,7 @@ export function loadRender(lite = false) {
   const D = defaultsFor(lite);
   try {
     const s = JSON.parse(localStorage.getItem(lite ? `${STORE}.mobile` : STORE) || 'null');
-    // (le lancer de rayons n'a ni profondeur, ni vitesses, ni normales : ces effets restent coupés)
-    if (s && typeof s === 'object') return { ...D, ...s, lite, ...RAYTRACE_OFF, aa: s.aa === 'traa' ? D.aa : s.aa };
+    if (s && typeof s === 'object') return { ...D, ...s, lite };
   } catch { /* stockage indisponible */ }
   return { ...D, lite };
 }

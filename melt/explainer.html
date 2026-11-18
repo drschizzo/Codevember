@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#050506">
   <title>Melt · défis techniques</title>
-  <meta name="description" content="Comment Melt calcule un bain de bismuth : le bain qu’on vide pour récolter des cristaux en trémie, l’oxyde qui pousse en racine du temps, la couleur d’une couche mince par la formule d’Airy, la fonte calculée par un problème de Stefan sur une grille 3D par cristal, le champ des instants de fonte relu comme une distance, le tassement, la peau d’oxyde, un état recalculé à chaque image et un lancer de rayons anticrénelé qui ne visite que les cristaux croisés.">
+  <meta name="description" content="Comment Melt fait fondre un objet de cire : une simulation de matière chauffée sur la carte graphique, une cire qui tient, flue puis coule, et une surface qui reste nette tant que rien n’a bougé.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
@@ -22,194 +22,57 @@
 
   <main>
     <header class="hero">
-      <div class="kicker">Day 03 · Melt · le bain de bismuth</div>
-      <h1>Comment des cristaux de bismuth sortent de leur bain, se colorent et refondent</h1>
-      <p class="lede">Au fond d’un creuset, une grappe de cristaux de bismuth : des cubes creusés en escalier, les trémies, qui brillent d’or, de magenta et de bleu. Autour d’eux, le métal liquide est un miroir. Ils ont poussé au fond, sur une grille d’acier, pendant que le bain refroidissait. On tire la grille hors du bain, comme on récolte le bismuth, et les cristaux se colorent à mesure qu’ils restent à l’air. Puis on allume le brûleur et on les replonge par crans. À chaque arrêt, la grappe est immobile et le bain la ronge à sa ligne de flottaison : les parois minces et les arêtes fondent d’abord, une encoche se creuse, un cristal dont la taille a cédé bascule dans le bain. Le métal ne quitte jamais la marmite : à la fin, la grappe a refondu dans le bain, qui refroidit et se couvre d’une peau dorée.</p>
+      <div class="kicker">Day 03 · Melt · la refonte</div>
+      <h1>Comment un objet de cire fond, coule et renaît dans un moule</h1>
+      <p class="lede">Une mini-usine refond sans fin la même cire. Un objet monte sous une source de chaleur : ses parties fines ploient, sa peau luit puis coule en lobes, et la cire descend en filet dans un moule à la forme de l’objet suivant, qui s’ouvre comme un livre. Cette page explique les trois idées qui font tenir la fonte. Elle sera complétée quand la scène sera terminée.</p>
     </header>
 
     <figure class="cover">
-      <img src="docs/capture.jpg" alt="Une grande trémie de bismuth aux gradins verts et magenta, à moitié descendue dans un bain miroir ; à sa ligne de flottaison, les gradins fondus pendent en franges d’argent liquide ; à gauche et à droite, des peaux d’oxyde fendues en plaques irisées flottent sur le bain" width="1280" height="800">
-      <figcaption>Pendant la fonte (graine j4s5i6, \(t = 0{,}66\)). La grappe est descendue dans son bain. À la ligne de flottaison, les gradins fondus pendent en franges d’argent liquide. À gauche et à droite, les peaux d’oxyde de cristaux déjà engloutis flottent et se défont en plaques.</figcaption>
+      <img src="docs/capture.jpg" alt="Le moule vient de s’ouvrir comme un livre : un lapin de cire brune est sur son assiette, entre les deux demi-coques polies" width="1280" height="720">
+      <figcaption>La naissance (graine m1). Le moule, taillé d’après la figurine, vient de s’ouvrir ; le lapin partira fondre sous les brûleurs.</figcaption>
     </figure>
 
     <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
 
     <article>
 
-      <section id="maree">
-        <h2><span class="n">01</span>On sort la grappe du bain, puis on l’y replonge par paliers</h2>
-        <span class="src">src/cycle.js · CYCLE, line(), lift(), emerge(), reach(), cool()</span>
-        <p>Les cristaux de bismuth poussent dans un bain qui refroidit, sur ce qu’on leur offre : chez les amateurs, souvent une grille d’acier posée au fond. Pour les récolter, on sort la grille : les cristaux quittent le bain encore chauds et s’oxydent en prenant leurs couleurs. Melt garde ce geste, puis refond la grappe en la replongeant dans le bain chauffé. Le métal ne quitte jamais la marmite : le bain est fixe, à \(L_B\), et c’est la grappe qui bouge, sur la grille d’un panier à long manche (section 11 : chaque temps a sa cause à l’écran). La liberté prise avec la physique porte sur les durées : la récolte et la fonte tiennent dans une boucle de 40 s.</p>
-        <p>Tout se lit sur la <strong>ligne du bain vue de la grappe</strong>, \(\ell(t)\), mesurée depuis le dessus de la grille. Au repos, elle vaut \(L_H\) : le bain couvre tout. De \(T_0 = 0{,}01\) à \(T_1 = 0{,}2\), on lève la grille à vitesse constante, et \(\ell\) descend jusqu’à \(L_{\text{bas}} = -0{,}3\) cm : la grille est 0,3 cm au-dessus du bain. La grappe attend, suspendue, jusqu’à \(T_2 = 0{,}32\). Pendant la fonte, de \(T_2\) à \(T_3 = 0{,}94\), on la replonge par quatre crans :</p>
-        <div class="eq">\[ \ell(u) = L_{\text{bas}} + (L_H - L_{\text{bas}})\,\frac{1}{4}\sum_{k=0}^{3} S\!\Big(\frac{u - k/4}{0{,}07}\Big), \qquad u = \frac{t - T_2}{T_3 - T_2}, \]</div>
-        <p>où \(S\) est le palier adouci (0 avant, 1 après, une rampe en S entre les deux). Chaque cran dure 0,07 du temps de fonte, au moins 1,7 s, puis la grille s’arrête quatre secondes ou plus (selon le temps de fonte montré) : la grappe est immobile, et c’est le bain qui la ronge sous nos yeux. Une descente continue, en \(u^{1{,}5}\), faisait suivre le mouvement à l’œil, qui lisait des cristaux qui coulent, pas qui fondent. Le temps \(u\) montré est calé sur la simulation : il va de 0 au moment où le dernier cristal a disparu sous le bain (plus 0,02), et pas forcément jusqu’à 1. Une grappe qui fond vite n’occupe ainsi que deux ou trois crans, chacun plus long, au lieu de laisser le bain vide pendant les derniers. Ensuite, la grille vide regagne le fond en 0,035 boucle. Dans le monde, la grille est à \(o(t) = L_B - \ell(t)\). Chaque cristal y ajoute son propre tassement, calculé par la simulation (section 05). Après \(T_3\), la grille est au fond, les peaux d’oxyde des cristaux engloutis flottent et se défont, et le bain qui refroidit se couvre d’une nouvelle peau (section 04).</p>
-        <p>La marée \(L_H\) dépend de la grappe : 0,14 cm au-dessus de son plus haut cristal (<code>tideFor</code>). Sur la boucle de 40 s de la recette, la récolte dure 7,6 s, l’attente 4,8 s, la fonte au plus 24,8 s et le repos 2,4 s. La boucle affichée ne commence pas à \(t = 0\) mais à \(t = 0{,}26\) (<code>SHIFT</code>, <code>cycleT</code>) : sa première image, et la vignette de l’accueil, montrent la grappe suspendue plutôt qu’un miroir vide.</p>
-        <p>Chaque hauteur \(y\) d’un cristal a deux instants : celui où elle sort du bain pendant la levée, et celui où la ligne du bain la rejoint pendant la fonte (sans compter le tassement ; \(t_r\) s’obtient en inversant \(\ell\) par dichotomie),</p>
-        <div class="eq">\[ t_e(y) = T_0 + \frac{L_H - y}{L_H - L_{\text{bas}}}\,(T_1 - T_0), \qquad \ell\big(t_r(y)\big) = y, \]</div>
-        <p>bornés aux extrémités. Le haut des cristaux sort le premier et le bain le rejoint le dernier. Il reste donc le plus longtemps à l’air, et c’est lui qui porte l’oxyde le plus épais : le dégradé de couleurs du pied vers le sommet découle du cycle. Le shader recalcule \(t_e\) en chaque point touché avec les mêmes constantes, passées en uniformes, à partir de la hauteur du point dans le repère de la grappe (sa hauteur dans le monde moins celle de la grille) : l’oxyde reste attaché au métal quand la grappe bouge.</p>
-        <figure id="fig-tide" class="wide"><figcaption><b>Le cycle de <code>cycle.js</code>, importé tel quel, et la grappe de la graine b1 tirée par <code>buildCluster</code>.</b> Le premier curseur fait avancer la boucle, le second choisit une hauteur sur le cristal. À gauche, la ligne du bain vue de la grappe, \(\ell(t)\) : elle descend pendant la levée, reste basse pendant l’attente, remonte par paliers pendant la fonte ; le trait doré marque le temps que la hauteur choisie passe à l’air, de \(t_e\) à \(t_r\). À droite, la marmite de profil : le bain fixe cache ce qui est sous sa ligne (contours en pointillé), la grappe monte et descend sur sa grille. Simplification : les cristaux sont dessinés en carrés de profil, sans gradins, sans fonte ni tassement, avec la couleur de l’oxyde à leur sommet.</figcaption></figure>
-        <div class="note check"><b>Vérifié par un test</b><p>Le bain ne bouge jamais. La ligne vue de la grappe est continue (aucun saut de plus de 0,01 cm entre deux des 4 000 instants testés) et périodique ; la grappe monte pendant la levée, ne remonte jamais pendant la fonte, et le cadre est immobile au milieu de chaque palier. Pendant l’attente, la grille est au-dessus du bain. \(t_e\) décroît avec la hauteur et \(t_r\) croît. Sur la grappe de la graine f1, rien ne bouge pendant l’attente, et à \(T_3\) la grappe a regagné le fond à \(10^{-9}\) cm près.</p></div>
+      <section id="matiere">
+        <h2><span class="n">01</span>Une seule matière, de solide à liquide</h2>
+        <span class="src">src/sim/mpm.js · kP2G, kG2P</span>
+        <p>La cire est faite d’environ 38 000 particules qui échangent leur quantité de mouvement avec une grille (méthode MLS-MPM, sur la carte graphique). Chaque particule porte une température \(T\), où \(T = 1\) est le point de fusion, et un tenseur \(b\) qui mesure sa déformation élastique.</p>
+        <p>La contrainte a trois parts : une pression, qui empêche la matière de se tasser, une élasticité \(\mu\,s(T)\,\mathrm{dev}(\bar b)\), et une viscosité. Le facteur \(s(T)\) vaut 1 à froid et 0 au-dessus du point de fusion. À chaque pas, \(b\) est ramené vers une forme sans cisaillement, d’une fraction</p>
+        <div class="eq">\[ r = \min\!\big(1,\; k\,a(T)^2\,\Delta t\big), \]</div>
+        <p>où \(a(T)\) monte de 0 à 1 entre \(T = 0{,}55\) et \(T = 1{,}05\). Froide, la cire garde sa forme. Tiède, elle oublie peu à peu sa déformation : elle flue, et une oreille ploie sous son poids. Chaude, elle l’oublie aussitôt : c’est un liquide visqueux.</p>
       </section>
 
-      <section id="tremie">
-        <h2><span class="n">02</span>Une trémie est un cube dont chaque face est creusée en escalier</h2>
-        <span class="src">src/scene/hopper.js · hopperK() · src/melt/model.js · hopper()</span>
-        <p>Un cristal de bismuth qui pousse vite ne remplit pas ses faces. Les arêtes et les coins, plus exposés au métal liquide, avancent plus vite que le milieu des faces, qui reste en retrait. Chaque face devient un escalier de cadres emboîtés qui descend vers le centre : c’est une <strong>trémie</strong>. Un maillage de cadres empilés aurait des centaines de faces par cristal. Melt décrit la trémie par une fonction de distance (pour chaque point de l’espace, la distance à la surface la plus proche). Le lancer de rayons la parcourt, et la simulation de la fonte s’en sert pour savoir quelles cellules de sa grille sont du métal. La même fonction est écrite en WGSL (<code>hopper.js</code>, partagée par les deux shaders) et en JavaScript (<code>model.js</code>, pour la version de référence et les tests).</p>
-        <p>Dans le repère du cristal, de demi-côté \(s\), chaque face creusée a sa hauteur \(n\) au-dessus du centre (le long de sa normale) et deux coordonnées \(\tau\) dans son plan, qui donnent la distance au bord, \(\rho = s - \max(|\tau_x|, |\tau_y|)\). Les gradins ne sont pas réguliers : la distance au bord est d’abord déformée, d’une fonction croissante, pour que la largeur des marches varie d’une marche à l’autre, comme sur un cristal qui a poussé par à-coups :</p>
-        <div class="eq">\[ w = 0{,}075\,s, \qquad x = \tfrac{\rho}{w} + 0{,}2 \sin\!\big(2{,}6\,\tfrac{\rho}{w} + \sigma\big) + 0{,}06 \sin\!\big(5{,}3\,\tfrac{\rho}{w} + 1{,}7\,\sigma\big), \qquad k = \min(\lfloor x \rfloor,\ 9), \qquad \text{creux} = 0{,}6\,k\,w. \]</div>
-        <p>La dérivée de \(x\) reste entre 0,16 et 1,84 : la déformation ne replie jamais les marches. \(\sigma\) est une graine propre à la face et au cristal. Au plus neuf marches, soit un creux de \(9 \times 0{,}075 \times 0{,}6 = 0{,}4\,s\) au centre de chaque face : le cristal reste plein au centre. Avec un creux de \(0{,}58\,s\) depuis chaque face, la première version n’était plus qu’une pile de cadres emboîtés, une cage. La distance au creux d’une face est la plus petite de deux : la distance au fond du gradin, et la distance à la contremarche du gradin extérieur, juste à côté et plus haut (divisée par 1,84, la plus forte pente de la déformation, pour rester une borne inférieure). Sans la seconde, un rayon qui longe le fond d’un gradin traverse la paroi voisine.</p>
-        <p>Le solide est l’intersection de la boîte et, pour chaque face creusée, de « sous le fond de son gradin » : le maximum des distances. Il est continu partout. La première version choisissait la face par l’axe où \(|q|\) est le plus grand : la distance sautait sur les plans diagonaux qui séparent deux faces, et le rendu montrait des fenêtres noires au milieu des grandes faces. Les creux de deux faces opposées ne se rejoignent pas : il suffit d’évaluer celle du côté du point, \(|q_x|\) avec sa graine, ce qui divise le temps de rendu par près de deux. La fonction rend aussi \(k\) et la position sur la terrasse, \(x - k\) (0 sur l’arête, 1 au pied de la marche suivante) : l’oxyde s’en sert (section 04).</p>
-        <p>Deux variantes, tirées par la recette. La <strong>trémie en spirale</strong> tourne les coordonnées de la face de 0,07 rad par gradin avant de calculer \(\rho\) : les cadres pivotent l’un sur l’autre. La trémie <strong>allongée</strong> est une boîte 1,6 fois plus longue le long de \(x\), aux marches de même largeur (la première version écrasait les coordonnées, et les marches s’étiraient sur les grandes faces).</p>
-        <figure id="fig-hopper" class="wide"><figcaption><b>La fonction <code>hopper()</code>, recopiée avec deux réglages de plus.</b> Les curseurs règlent la largeur moyenne des marches (en fraction du demi-côté) et leur hauteur (en fraction de la largeur). « Spirale » tourne chaque gradin de 0,07 rad. À gauche, une coupe du cristal par son plan médian : la matière en clair, les faces creusées en escalier et la base pleine en bas. À droite, la face du dessus vue de front, plus sombre là où elle est plus profonde. Simplification : cube droit, sans fonte.</figcaption></figure>
-        <div class="note"><b>La base a poussé sur la grille</b><p>Un cristal pousse posé sur la grille du fond : sous lui, il n’y avait pas assez de métal liquide pour creuser des gradins. La face du dessous n’est donc pas creusée : la base est pleine. Le pied d’un cristal posé sur la grille ne montre pas de creux, et la simulation part d’un pied massif, que la grille, plus froide, tient longtemps (section 05).</p></div>
+      <section id="figee">
+        <h2><span class="n">02</span>La matière froide ne se calcule pas</h2>
+        <span class="src">src/sim/mpm.js · kPinUpdate, mkGrid</span>
+        <p>Un solide raide coûte cher à simuler : il faudrait des pas de temps minuscules. Or presque tout l’objet est froid et immobile presque tout le temps. Une particule froide reste donc <strong>figée</strong> : elle pèse sur la grille, où le liquide s’accroche à elle, mais elle ne bouge pas.</p>
+        <p>Elle se libère dans deux cas : si elle dépasse \(T = 0{,}86\), ou si elle ne <strong>tient</strong> plus. Une cellule de matière figée tient si elle touche le plateau, ou une voisine qui tient. Cette propriété se propage d’une cellule par sous-pas. Quand le cou a fondu, la tête ne tient plus à rien : elle devient libre, bascule et tombe d’un bloc.</p>
+        <div class="note"><b>Un piège</b><p>Sans ce test d’appui, une partie froide restait suspendue en l’air pendant que son support fondait sous elle.</p></div>
       </section>
 
-      <section id="film">
-        <h2><span class="n">03</span>Les couleurs sont celles d’une couche mince d’oxyde</h2>
-        <span class="src">src/scene/tracer.js · filmR(), filmRGB()</span>
-        <p>Le bismuth nu est gris argent. À l’air chaud, il se couvre d’oxyde de bismuth, Bi₂O₃, transparent. La lumière se réfléchit deux fois : sur le dessus de l’oxyde, et sur le métal en dessous. Les deux ondes se rejoignent décalées du trajet aller-retour dans la couche. Selon l’épaisseur, certaines longueurs d’onde s’annulent et d’autres se renforcent. Une texture arc-en-ciel posée sur le cristal se tromperait d’ordre, de saturation et de réaction à l’angle de vue. Melt calcule la réflectance d’une couche mince par la <strong>formule d’Airy</strong>, qui somme toutes les réflexions multiples dans la couche :</p>
-        <div class="eq">\[ r = \frac{r_{01} + r_{12}\,e^{i\delta}}{1 + r_{01}\,r_{12}\,e^{i\delta}}, \qquad \delta = \frac{4\pi\, n_1\, d \cos\theta_1}{\lambda}, \qquad R = |r|^2, \]</div>
-        <p>avec l’oxyde d’indice \(n_1 = 2{,}2\) et le métal d’indice complexe \(n_2 = 1{,}9 + 3{,}4\,i\) ; \(r_{01} = (1 - n_1)/(1 + n_1)\) et \(r_{12} = (n_1 - n_2)/(n_1 + n_2)\) sont les coefficients de Fresnel des deux interfaces, \(d\) l’épaisseur, \(\theta_1\) l’angle dans la couche. Le métal nu (\(d = 0\)) renvoie 62 % de la lumière, la valeur que le shader prend pour un bismuth sans couleur. Les coefficients sont ceux de l’incidence normale ; l’angle n’entre que par le déphasage, qui diminue quand on regarde en biais. Une face vue de biais prend donc la couleur d’une couche plus mince.</p>
-        <p>La réflectance est calculée à six longueurs d’onde, moyennées deux par deux : 610 et 650 nm pour le rouge, 530 et 560 nm pour le vert, 450 et 480 nm pour le bleu. Avec ces valeurs, on passe de l’argent (0 nm) au brun doré (20 nm), à un creux sombre (40 nm), au bleu (60 nm), à l’or (120 nm), au magenta (160 nm), au bleu (180 nm) puis au vert (220 nm). À 300 nm, les déphasages de 610 et 650 nm diffèrent de 0,84 rad : la moyenne de deux longueurs d’onde par canal adoucit les ordres élevés, qu’une seule longueur d’onde rendrait trop saturés. Le prototype d’image, <code>proto/b0</code>, n’en prenait que trois.</p>
-        <figure id="fig-film" class="wide"><figcaption><b>La formule d’Airy du shader, recopiée en JavaScript avec ses indices et ses six longueurs d’onde.</b> Le premier curseur règle l’épaisseur d’oxyde, le second l’angle d’incidence. En haut, la couleur réfléchie de 0 à 400 nm. En dessous, la réflectance des trois canaux ; le pointillé marque le métal nu (0,62). Simplification : la couleur est montrée sous une lumière blanche, sans l’éclairage du studio ni l’étalonnage de la scène.</figcaption></figure>
+      <section id="surface">
+        <h2><span class="n">03</span>Une surface nette tant que rien n’a bougé</h2>
+        <span class="src">src/scene/wax.js · parts(), phi()</span>
+        <p>Dessiner la surface d’un nuage de particules donne une forme molle, sans détail. Ici chaque particule solide dépose sur la grille son <strong>déplacement</strong> \(d = x - X_0\) depuis sa place d’origine. La surface de la part solide est celle de l’objet d’origine, lue en \(p - d(p)\) dans une texture de distance. Là où rien n’a bougé, \(d = 0\) et l’objet est exactement celui du moule. Là où la matière a flué, il est déformé avec elle.</p>
+        <p>La part liquide, elle, est une iso-densité, lisse. Les deux surfaces sont réunies en douceur : la peau fondue enrobe le cœur encore froid.</p>
+        <div class="note"><b>Un piège</b><p>La cire est une boîte dont chaque pixel marche dans ces champs. L’occlusion ambiante lisait la normale des faces de la boîte, et une couture verticale traversait l’objet : il faut lui donner la normale de la surface marchée.</p></div>
       </section>
 
-      <section id="oxyde">
-        <h2><span class="n">04</span>L’oxyde pousse comme la racine du temps passé à l’air</h2>
-        <span class="src">src/scene/tracer.js · trace() · src/recipe.js · OXIDES</span>
-        <p>L’oxygène doit traverser la couche déjà formée pour atteindre le métal. Plus la couche est épaisse, plus il passe lentement, et l’épaisseur croît comme la racine carrée du temps (la loi parabolique de l’oxydation). Une croissance linéaire ferait défiler les couleurs à vitesse constante pendant tout le temps à l’air ; la racine les fait défiler vite à la sortie du bain, puis de plus en plus lentement. En chaque point d’un cristal, de hauteur \(y_c\) dans le repère du cristal et \(y\) dans le monde, le shader calcule l’âge à l’air \(a = \max(t - t_e(y_c), 0)\), en fractions de boucle, puis l’épaisseur en nanomètres :</p>
-        <div class="eq">\[ d = v\cdot 300\,\sqrt{a}\,(0{,}8 + 0{,}4\,o) + \big(9\,k + 55\,(1 - f)^2\big)\sqrt{a} + (40\,\nu_1 + 10\,\nu_2 - 25)\min(6a, 1) + 140\,r\,e^{-\max(y - L,\,0)/0{,}9}. \]</div>
-        <p>\(v\) est la vitesse d’oxydation de la gamme tirée par la recette : 0,25 pour « presque argent », 0,65 pour « or et magenta », 1 pour « arc-en-ciel », 1,45 pour « bleus et verts ». \(o \in [0, 1]\) décale chaque cristal, \(k\) est le numéro du gradin et \(f\) la position sur sa terrasse (0 sur l’arête, 1 au pied de la marche suivante, section 02). L’arête de chaque terrasse, plus exposée, s’oxyde plus que son pied : chaque marche porte son propre dégradé, au lieu d’une bande de couleur unie par gradin, qui se lisait en rayures régulières. \(\nu_1\), un bruit large, fait glisser la couleur à travers une face ; \(\nu_2\), plus fin, la moire. Avec \(v = 1\), le brun doré de 20 nm arrive après \((20/300)^2 = 0{,}0044\) boucle, 0,18 s : le cristal se colore dès qu’il sort. Un point sorti dès \(t = 0{,}03\) atteint environ 200 nm au début de la fonte (\(t = 0{,}47\)), entre le bleu et le vert du second ordre.</p>
-        <p>Le dernier terme est la <strong>bande de chaleur</strong>. Pendant la fonte, \(r\) passe de 0 à 1 en 0,03 boucle après \(T_2\) et retombe à 0 en 0,04 boucle après \(T_3\) (<code>rising</code>). Le métal juste au-dessus de la ligne est chauffé par le bain et s’oxyde plus vite : jusqu’à 140 nm de plus à la ligne, avec une décroissance sur 0,9 cm. Une bande de couleurs défile devant le métal qui va reprendre le cristal. Une face déjà fondue, elle, n’a pas d’oxyde : c’est du métal liquide, peint comme un film de 8 nm, presque l’argent nu (section 06).</p>
-        <figure id="fig-oxide" class="wide"><figcaption><b>L’épaisseur d’oxyde d’un point au fil de la boucle, avec <code>level</code>, <code>lift</code>, <code>emerge</code> et <code>rising</code> de <code>cycle.js</code> et les vitesses de <code>OXIDES</code>.</b> Les curseurs choisissent la hauteur du point sur le cristal, son gradin et la gamme d’oxyde. La courbe donne l’épaisseur (en nm) pendant que le point est à l’air ; les zones grises sont les instants où le bain le couvre : avant la levée, puis quand la grappe replongée l’a fait passer sous la ligne. Le bandeau dessous montre la couleur qu’il prend. Simplification : sans les bruits \(\nu\), avec \(o = 0{,}5\) et le milieu de la terrasse (\(f = 0{,}5\)), vu de face, sans la fonte qui peut emporter le point avant que la ligne l’atteigne.</figcaption></figure>
-      </section>
-
-      <section id="stefan">
-        <h2><span class="n">05</span>La fonte est un problème de Stefan, résolu une fois par cristal</h2>
-        <span class="src">src/melt/model.js · PHYS, simulate() · src/scene/melt.js</span>
-        <p>Un cristal plongé dans du métal plus chaud que lui fond là où la chaleur arrive le plus vite. Ce n’est pas un plan de coupe qui monte, ni un cristal qui rétrécit en entier : une paroi mince fond avant un bloc, une arête avant une face, et le métal au ras du bain avant celui qui est au-dessus. Melt calcule cette fonte. C’est un <strong>problème de Stefan</strong> (un solide qui change de phase, dont la frontière avance avec la chaleur reçue), résolu par la <strong>méthode de l’enthalpie</strong> sur une grille 3D par cristal, posée sur la grille du panier, dans le repère du cristal.</p>
-        <p>Chaque cellule de métal porte une enthalpie \(H\). Les températures sont rapportées à l’écart entre le bain et le point de fusion (fusion à 0, bain à 1), et la chaleur latente vaut \(L_h = 1\). La température se lit sur l’enthalpie, et chaque pas ajoute les flux reçus par les six faces de la cellule :</p>
-        <div class="eq">\[ T(H) = \begin{cases} H & H < 0 \\ 0 & 0 \le H \le L_h \\ H - L_h & H > L_h \end{cases}, \qquad H_i \leftarrow H_i + \Delta u \sum_{\text{6 faces}} \phi. \]</div>
-        <p>Le flux d’une face dépend de ce qu’elle touche. Une cellule de métal voisine : conduction, \(\phi = \frac{\alpha}{h^2}(T_j - T_i)\). La grille, sous la couche du bas : \(\phi = \frac{\alpha}{h^2}(T_c - T_i)\), avec \(T_c = -0{,}6\), plus froide que le métal (l’acier, sorti du bain, a refroidi), et la grille tient le pied. Une face libre (de l’air, ou une cellule déjà fondue) échange avec le bain ou avec l’air, au prorata de la part noyée \(w\) de la cellule voisine :</p>
-        <div class="eq">\[ \phi = w\,\frac{h_b}{h}\,(T_b - T_i) + (1 - w)\,\frac{h_a}{h}\big(T_{\text{air}}(y) - T_i\big), \qquad T_{\text{air}}(y) = T_{\text{amb}} + (a\,T_b - T_{\text{amb}})\,e^{-\max(y - L,\,0)/\lambda}, \]</div>
-        <p>avec \(w = \mathrm{clamp}\big((L - (y - h/2))/h,\ 0,\ 1\big)\). Sous la ligne, le bain brassé échange fortement (\(h_b = 2\)). Au-dessus, l’air reçoit un panache chaud né du bain : à la ligne, il porte 45 % de l’écart du bain (\(a = 0{,}45\)), au-dessus de la fusion. Il retombe vers l’air de l’atelier (\(T_{\text{amb}} = -0{,}4\)) sur \(\lambda = 0{,}3\) cm, et passe sous la fusion à \(0{,}3 \ln(0{,}85/0{,}4) \approx 0{,}23\) cm au-dessus de la ligne. Sans le prorata, une cellule passerait d’un coup de l’air au bain quand la ligne franchit son centre, et la fonte se strierait par couches.</p>
-        <div class="tbl"><table>
-          <thead><tr><th>Paramètre (<code>PHYS</code>)</th><th>Rôle</th><th class="num">Valeur</th></tr></thead>
+      <section id="perf">
+        <h2><span class="n">04</span>Ce que ça coûte</h2>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Étape</th><th>Où</th><th class="num">Temps</th></tr></thead>
           <tbody>
-            <tr><td>\(\alpha\)</td><td>diffusivité du solide (cm² par unité de \(u\))</td><td class="num">0,3</td></tr>
-            <tr><td>\(T_0\)</td><td>le solide au début de la fonte, juste sous la fusion</td><td class="num">−0,1</td></tr>
-            <tr><td>\(T_b\), \(L_h\)</td><td>bain, chaleur latente</td><td class="num">1, 1</td></tr>
-            <tr><td>\(h_b\), \(h_a\)</td><td>échange avec le bain, avec l’air</td><td class="num">2, 0,4</td></tr>
-            <tr><td>\(a\), \(\lambda\)</td><td>panache : part de la chaleur du bain à la ligne, longueur (cm)</td><td class="num">0,45, 0,3</td></tr>
-            <tr><td>\(T_{\text{amb}}\), \(T_c\)</td><td>air de l’atelier, grille</td><td class="num">−0,4, −0,6</td></tr>
-            <tr><td>steps, ramp, fall, neck</td><td>crans de la descente, durée d’un cran (en \(u\)), vitesse de tassement (cm par unité de \(u\)), section d’appui</td><td class="num">4, 0,07, 6, 0,15</td></tr>
-            <tr><td>rest, plunge</td><td>part du solide hors du bain sous laquelle les restes s’effondrent, vitesse de leur effondrement (cm par unité de \(u\))</td><td class="num">0,2, 10</td></tr>
+            <tr><td>Simulation, objet presque intact (peu de matière libre)</td><td>GPU</td><td class="num">≈ 3 ms</td></tr>
+            <tr><td>Simulation, tout est liquide</td><td>GPU</td><td class="num">≈ 7 ms</td></tr>
+            <tr><td>Image 1 280 × 720, chaîne complète</td><td>GPU</td><td class="num">≈ 10 ms</td></tr>
+            <tr><td>dont la cire</td><td>GPU</td><td class="num">≈ 5 ms</td></tr>
           </tbody>
         </table></div>
-        <p>Le temps \(u\) de la fonte va de 0 (début de la descente) à 1 (fin), et la simulation continue jusqu’à 1,15. Dans le repère du cristal, le bain monte par crans : \(L(u) = \ell(u)\) (section 01), plus le tassement du cristal. Une cellule fond quand elle a reçu <strong>la moitié de sa chaleur latente</strong>, \(H \ge L_h/2\). L’instant \(\tau\) où elle fond est interpolé dans le pas, si bien que \(\tau\) varie continûment d’une cellule à l’autre au lieu de tomber sur la grille des pas. Une cellule fondue quitte le solide : au-dessus du bain, le liquide s’égoutte ; dessous, il rejoint le bain. Elle devient une face libre pour ses voisines.</p>
-        <p>Le schéma est explicite. Le pas \(\Delta u = 0{,}9 / (6\alpha/h^2 + h_b/h)\) est le plus grand qui reste stable. La grille a un pas \(h = \mathrm{clamp}(s/42,\ 0{,}02,\ 0{,}045)\) cm, une demi-largeur de \(1{,}65\,s + 3h\) (\(2{,}15\,s\) pour la trémie allongée, dont un coin tourné va plus loin) et une hauteur \(y_c + 1{,}45\,s + 3h\). Pour le grand cristal de la graine b1, cela fait 139 × 96 × 139 cellules au pas de 0,022 cm et 4 994 pas.</p>
-        <p><strong>Ce qui en sort sans réglage à la main.</strong> Une cellule d’arête a deux ou trois faces libres et reçoit de la chaleur par chacune ; une paroi de gradin, mince, a peu de voisines pour évacuer ce qu’elle reçoit. Les parois minces et les arêtes fondent donc avant les blocs, et les gradins s’amollissent en franges. Au ras du bain, la cellule reçoit à la fois le bain, qui échange cinq fois plus que l’air, et le panache, au plus chaud : une <strong>encoche</strong> se creuse à la ligne, comme celle d’un iceberg à sa ligne de flottaison. La chaleur de l’air, juste au-dessus, fait défiler les couleurs de l’oxyde devant la fonte (section 04).</p>
-        <p><strong>L’appui.</strong> L’encoche finit par couper le cristal. À chaque pas, la simulation compte le solide dans la bande de deux cellules au ras du bain, \([L, L + 2h)\), et le compare à la section du cristal d’origine aux mêmes couches. Sous 15 % de cette section, le bloc au-dessus n’est plus porté : il s’enfonce de 6 cm par unité de \(u\), tant que la condition tient, jusqu’à reposer sur une section plus large. Il ne remonte jamais. La comparaison se fait couche par couche avec le cristal d’origine, et pas avec sa plus grande section : une trémie creuse a une petite section à bien des hauteurs sans que rien n’ait fondu. Le tassement est noté à chaque pas ; la scène le relit pour faire descendre le cristal plus vite que la grappe.</p>
-        <p><strong>Les restes.</strong> Les derniers restes d’un cristal (des arêtes, le cadre d’une trémie creuse) n’ont qu’une ou deux cellules d’épaisseur : tout leur métal fondrait au même pas, en l’air, d’une image à l’autre. Un tel squelette ne tient pas. La simulation compte aussi le solide au-dessus du bain et retient son maximum. Sous 20 % de ce maximum, les restes s’effondrent dans le bain, à 10 cm par unité de \(u\), tant qu’il en reste au-dessus de la ligne. Ils disparaissent en s’enfonçant, et le bain se ride à cet instant.</p>
-        <figure id="fig-stefan" class="wide"><figcaption><b>Le modèle de référence <code>simulate()</code> de <code>model.js</code>, importé tel quel et lancé dans cette page pour le grand cristal de la graine b1, sur une grille grossière.</b> La qualité 2,2 donne un pas d’environ 0,05 cm au lieu de 0,022, et environ une seconde de calcul. Le curseur parcourt le temps \(u\) de la fonte ; « Port » change la forme du cristal et relance le calcul ; « Avance sur la ligne » change la couleur. À gauche, la coupe verticale du champ \(\tau\) par le milieu de la grille, dans le repère du monde : le cristal descend par crans, le bain reste fixe. En plein, le solide encore là (\(\tau > u\)) ; en transparence, ce qui a déjà fondu. La couleur est l’instant \(\tau\) où la cellule fond (rouge tôt, or, bleu tard), ou son avance sur la ligne, \(\tau - u_{\text{ligne}}(y)\) : rouge si la cellule fond avant que la ligne l’atteigne, bleu après. À droite, en fonction de \(u\), la part du solide qui reste (blanc) et la part qui dépasse du bain (or). Simplification : une grille plus grossière que celle de la scène, sans le lissage du rendu (section 06).</figcaption></figure>
-        <div class="note"><b>Le cristal descend, le bain monte : le même calcul</b><p>Le premier film du prototype <code>proto/s0</code> montrait le bain monter autour d’un cristal immobile, et on y voyait le sol monter. La chaleur se calcule dans le repère du cristal, où le bain monte le long de lui ; mais l’image doit montrer la cause, le panier qu’on replonge. Le rendu garde donc le bain fixe et fait descendre le cristal de \(\ell(u) - L_{\text{bas}}\), plus son tassement. Les deux descriptions donnent le même champ \(\tau\).</p></div>
-        <div class="note check"><b>Vérifié par un test</b><p>Sur un cristal de demi-côté 1 cm calculé en Node à la qualité 2,2, l’avance de la fonte sur la ligne, \(\tau - u_{\text{ligne}}(y)\), est mesurée sur toutes les cellules au-dessus de \(L_{\text{bas}} + h\). Sa médiane reste entre −0,12 et +0,06 : par paliers, la ligne arrive d’un coup sur une bande de métal, qui fond juste après, pendant l’arrêt (+0,017 sur ce cristal). Son 5<sup>e</sup> centile est en avance d’au moins 0,02 sur la médiane : les parois minces et les arêtes fondent d’abord (−0,19).</p></div>
-      </section>
-
-      <section id="champ">
-        <h2><span class="n">06</span>Le rendu relit l’instant de fonte comme une distance</h2>
-        <span class="src">src/scene/melt.js · fill, blurAB, blurBA, bake · src/scene/tracer.js · crystalAt()</span>
-        <p>De toute la simulation, la scène garde un seul champ par cristal : pour chaque cellule, l’instant \(\tau\) où elle fond (−1 pour l’air, 99 pour une cellule qui ne fond pas). Le cristal à l’instant \(u\) de la fonte est la trémie d’origine privée de ce qui a fondu, \(\{\text{trémie}\} \cap \{\tau > u\}\). Dessiner les cellules donnerait un cristal en cubes de 0,02 cm. Le rendu a besoin d’une distance.</p>
-        <p>Près du front, \(\tau\) varie à peu près linéairement : en s’écartant de \(\delta\) le long du gradient, \(\tau(p + \delta n) \approx \tau(p) + |\nabla\tau|\,\delta\). La distance à la surface \(\tau = u\) vaut donc \((\tau - u)/|\nabla\tau|\). Avec \(v = 1/|\nabla\tau|\), la vitesse du front (en cm par unité de \(u\)), et le signe des fonctions de distance (positif dehors) :</p>
-        <div class="eq">\[ \varphi = (u - \tau)\,v, \qquad d_{\text{cristal}} = \max(d_{\text{trémie}},\ \varphi). \]</div>
-        <p>Le maximum est l’intersection. Là où rien n’a fondu, \(\varphi\) est très négatif et la trémie garde ses gradins nets, plus fins que la grille (une marche fait \(0{,}11\,s\), une dizaine de cellules). Là où la fonte est passée, la surface est le front calculé. Une face est fondue quand \(\varphi\) l’emporte sur la trémie, avec une transition de ±0,3 cellule : c’est du métal liquide, sans oxyde, peint comme un film de 8 nm. Sa normale se prend par différences sur une cellule entière, et non sur 0,0015 cm comme pour les gradins : le champ garde, même lissé, des couches d’une cellule, et une normale prise plus fin les montre en zébrures dans les reflets. Le lancer de rayons ne lit le champ que près d’un cristal : si la distance à la trémie dépasse \(0{,}05\,s + 0{,}03\) cm, elle suffit.</p>
-        <p>Le champ passe par trois étapes sur le GPU avant d’être relu :</p>
-        <ul>
-          <li><strong>Remplir l’air.</strong> Une cellule d’air prend le plus grand \(\tau\) de ses 26 voisines. Sans cela, l’interpolation trilinéaire entre \(\tau = -1\) dans l’air et \(\tau \approx 0{,}5\) dans le métal créerait une fausse surface juste sous les faces de la trémie. Les valeurs sont bornées à 1,4.</li>
-          <li><strong>Lisser cinq fois</strong>, avec un noyau de 27 cellules pondérées par \(1/(1 + |a| + |b| + |c|)\). La méthode de l’enthalpie fond une cellule entière à la fois, et le front garde la marque de la grille, en terrasses. Dans le métal réel, la tension superficielle arrondit les faces liquides. Le lissage joue ce rôle.</li>
-          <li><strong>Dériver.</strong> \(v\) vient du gradient par différences centrées, borné à [0,02 ; 30]. \(\tau\) et \(v\) sont rangés en deux demi-flottants (<code>rg16float</code>).</li>
-        </ul>
-        <p>Les grilles des cristaux sont rangées dans une seule texture 3D, l’<strong>atlas</strong>, par étagères dans le plan horizontal (2 048 cellules de large au plus). Le shader passe du point du monde au repère de la grille du cristal (en remontant de sa descente), puis à l’atlas, et lit \(\tau\) et \(v\) en une lecture filtrée.</p>
-        <div class="note trap"><b>Une distance du premier ordre, bornée</b><p>\(\varphi\) n’est une distance qu’au voisinage du front, là où \(\tau\) est presque linéaire. Sous la ligne, le bain fond tout presque d’un coup : \(\tau\) y est un plateau, \(|\nabla\tau|\) presque nul, et \(v\) monte à sa borne de 30. \(\varphi\) y valait alors trente fois la vraie distance : la marche traversait la surface, puis se rabattait sur le point le plus proche qu’elle avait vu. À l’écran, cela donnait des dents de scie le long de la ligne de flottaison, des lambeaux et des déchirures noires (la graine sal7va en était pleine). \(\varphi\) est désormais bornée à quatre cellules : loin du front, la marche avance par pas d’au plus quatre cellules, ce qui ne coûte presque rien, et près de lui la distance est juste.</p></div>
-      </section>
-
-      <section id="chargement">
-        <h2><span class="n">07</span>La fonte se calcule au chargement, en une à trois secondes</h2>
-        <span class="src">src/melt/model.js · gridsFor(), stepsFor() · src/scene/melt.js · simulate() · src/scene/stage.js</span>
-        <p>La simulation tourne sur le GPU, une fois par grappe, quand la recette change. Le shader est la traduction du modèle JavaScript : un fil par cellule pour le pas de chaleur, puis un fil unique qui avance la ligne du bain, décide du tassement et note l’historique. Les pas sont envoyés par lots d’environ 400 millions de cellules-pas. Entre deux lots, la page attend le GPU, avance la barre de chargement, et abandonne le calcul si une autre graine a été demandée. Tant que l’atlas n’est pas prêt, la scène attend ; le traceur lit un atlas d’une seule cellule où rien ne fond.</p>
-        <p>Le coût est le nombre de cellules multiplié par le nombre de pas. Les cellules croissent comme \(h^{-3}\), et le pas de temps stable comme \(h^2\) : le travail croît comme \(h^{-5}\). Diviser le pas par deux coûte 32 fois plus. <code>gridsFor</code> tient la grappe entière dans un <strong>budget de \(2{,}5 \times 10^{10}\) cellules-pas</strong> : au-delà, le pas de toutes les grilles grandit de \((W/B)^{1/5}\), à 2 % près, jusqu’à tenir. La grappe de la graine b1 (neuf cristaux, pas de 0,021 à 0,022 cm, environ 5 000 pas) en demande \(2{,}28 \times 10^{10}\). Le calcul prend une à trois secondes sur un ordinateur de bureau.</p>
-        <p>La version mobile prend un pas 1,6 fois plus grand et un budget de \(3 \times 10^9\) : un pas d’environ 0,033 cm, huit fois moins de travail. Les faces fondues y sont un peu plus molles ; les gradins intacts, qui viennent de la trémie, restent nets.</p>
-        <div class="note check"><b>Vérifié par un test</b><p>Pour 120 recettes, chaque grille contient son cristal (sa hauteur dépasse le plus haut point du cristal), mesure moins de 400 cellules de large et 300 de haut, et la grappe entière tient dans le budget de \(2{,}5 \times 10^{10}\) cellules-pas.</p></div>
-      </section>
-
-      <section id="etat">
-        <h2><span class="n">08</span>Tout l’état est une fonction du temps, calculée une fois par image</h2>
-        <span class="src">src/cycle.js · buildCluster(), crystalsAt() · src/scene/stage.js · update()</span>
-        <p>La grappe vient de <code>buildCluster</code> : un grand cristal au centre (demi-côté 0,85 à 1,05 cm), puis des satellites de 0,25 à 0,75 placés à 0,9 à 2,9 cm du centre, posés sur la grille, inclinés d’au plus 0,15 rad : le point le plus bas du cube incliné repose sur le dessus des fils, à \(y = 0{,}02\) cm, sans les traverser. Une première version enfonçait les pieds dans le support ; avec une grille, on voyait ses fils entrer dans les cristaux. Un tirage est refusé s’il chevauche un voisin à moins de 0,95 fois la somme des demi-côtés : deux cristaux peuvent se pénétrer un peu, comme des cristaux maclés.</p>
-        <p>À chaque image, en JavaScript, <code>crystalsAt(grappe, t)</code> rend pour chaque cristal sa pose, sa hauteur (celle de la grille, moins son tassement, interpolé dans l’historique de la simulation), l’âge de sa peau d’oxyde et sa ride. Pour neuf cristaux, l’appel prend environ 0,3 µs (mesuré en Node pour cette page). Le tout est rangé dans un tampon d’uniformes de 120 vec4, soit 1 920 octets : 18 pour l’en-tête (définition, caméra, temps, marée et instants du cycle, fond et lueur du studio, atlas et \(u\), marmite, grille, peau du bain, flamme, lentille), 18 pour les six boîtes de lumière du studio, 72 pour douze cristaux (six chacun : pose, oxyde, place dans l’atlas, descente, bascule) et 12 pour les peaux et les rides. Le shader ne fait que lire.</p>
-        <ul>
-          <li><strong>La peau.</strong> L’oxyde fond à 817 °C, le bismuth à 271 °C : quand le bain engloutit un cristal, sa pellicule d’oxyde reste et flotte. Elle naît au premier pas de la simulation où il ne reste plus de solide au-dessus du bain, et vit 0,11 boucle (4,4 s), moins si le cristal disparaît tard : elle doit être défaite avant la fin de la boucle, sinon elle sauterait au raccord. Elle s’étale depuis l’endroit où le cristal a disparu, sur un rayon \(3{,}4\,s\sqrt{a}\) au bord bruité, d’une seule pellicule de 110 à 260 nm en dégradé. Le bain, chauffé par le bas, s’écoule en surface du centre vers les bords : la peau dérive avec lui, de \(3a + 12a^2\) cm, et ses plis partent avec elle. Puis elle se fend en cellules de Voronoï dont les fentes s’élargissent au-delà du plus grand écart possible entre deux germes avant \(a = 0{,}12\) : toutes les plaques ont rapetissé jusqu’à rien avant la fin de sa vie. Elle ne surgit pas d’un bloc, et aucune plaque ne disparaît encore visible.</li>
-          <li><strong>La ride.</strong> Quand un cristal commence à basculer, ou ses restes à s’effondrer, le bain se ride autour de lui pendant 0,07 boucle (2,8 s) : une onde courte et amortie qui ne touche que la normale du bain.</li>
-        </ul>
-        <p>Comme l’état ne dépend que de la recette, de la simulation et de \(t\), la même phase donne la même image : on peut reculer dans la boucle, exporter image par image ou accumuler plusieurs rendus d’un même instant.</p>
-        <p>La boucle se referme sous le bain. Après \(T_3\), la grille est au fond, tout est couvert, et le cristal fondu reste tel quel. Le bismuth liquide est opaque : ce qu’il couvre ne se voit pas. À \(t = 1\), la fonte revient à \(u < 0\), la trémie entière : la grappe a repoussé sur sa grille pendant que le métal refroidissait, la peau du bain est entière, et l’état est celui de \(t = 0\).</p>
-        <div class="note check"><b>Vérifié par des tests</b><p>Pour 200 recettes, aux instants 0 ; 0,005 ; \(T_0 - 0{,}001\) ; \(T_3 + 0{,}005\) ; 0,97 et 0,999, le plus haut point de chaque cristal (cube tourné et incliné, à la hauteur de sa grille) est au moins 0,02 cm sous le bain. Sur 100 grappes, le point le plus bas de chaque cristal touche exactement le dessus des fils (ni dessous, ni au-dessus), et aucun couple ne se chevauche au-delà du seuil. Sur la grappe de la graine f1, la peau du grand cristal n’existe pas 0,01 boucle avant que la ligne atteigne son sommet, et existe 0,02 boucle après (sans simulation, la peau naît quand la ligne dépasse le sommet de 0,05 cm).</p></div>
-      </section>
-
-      <section id="rayons">
-        <h2><span class="n">09</span>Un rayon ne visite que les cristaux qu’il croise</h2>
-        <span class="src">src/scene/tracer.js · rayMask(), trace()</span>
-        <p>L’image est un lancer de rayons dans un shader de calcul WebGPU. Chaque rayon avance par bonds de la taille de la distance à la surface la plus proche (la marche de sphère), se réfléchit sur le métal et repart vers le studio. Le prototype <code>proto/b0</code> évaluait à chaque pas les huit cristaux, leurs gouttes et le bain, sur 200 pas et quatre rebonds, jusqu’à 60 cm. Il prenait environ 215 ms par passe en 1 280 × 800. La plupart des pixels voient pourtant le bain ou le fond du studio, loin de tout cristal.</p>
-        <p>La scène teste d’abord, pour chaque rayon, la sphère englobante de chaque cristal descendu : rayon \(1{,}9\,s\) (\(2{,}5\,s\) pour la trémie allongée). Un cristal dont la sphère est tout entière sous le bain est ignoré. Les cristaux touchés forment un masque de bits (douze au plus), et la marche ne visite qu’eux, jusqu’à la sortie de la sphère la plus lointaine ou jusqu’au bain. Un rayon qui ne croise aucune sphère ne marche pas du tout : s’il descend, il touche le plan du bain en \(t = (L - y_0)/d_y\), sinon il lit le studio. Au bain, la normale est celle du plan, perturbée par la peau et les rides, sans les quatre évaluations de la scène d’une normale ordinaire. Près d’un cristal, le bain le mouille : un ménisque, union douce des deux distances sur 0,03 cm. La marche fait au plus 200 pas, sur trois rebonds.</p>
-        <div class="note trap"><b>Une distance qui n’en est pas une</b><p>Le creux de la trémie, l’étirement de la variante allongée et la distance de la fonte (section 06) donnent une fonction qui surestime parfois la vraie distance. Un rayon qui avance de toute la valeur peut alors traverser une marche. La scène n’avance que de 80 % de la valeur, avec un pas minimal de 0,008 mm pour ne pas stagner près des surfaces. Un rayon qui épuise ses pas le long d’une paroi sans la toucher prend le point le plus proche rencontré, s’il est à moins de 0,004 cm : sinon, il verrait le noir au fond d’un gradin. Ce seuil valait 0,02 cm ; avec la distance de la fonte non bornée, il fabriquait des surfaces là où il n’y en avait pas.</p></div>
-      </section>
-
-      <section id="anticrenelage">
-        <h2><span class="n">10</span>L’anticrénelage accumule les images sans les reprojeter</h2>
-        <span class="src">src/scene/tracer.js · RESOLVE, run()</span>
-        <p>Les arêtes des gradins et leurs reflets dans le bain sont plus fins qu’un pixel. Un rayon par pixel les dessine en escaliers qui scintillent quand la caméra bouge. Melt lance toujours un seul rayon par pixel, mais le décale d’une image à l’autre d’une fraction de pixel, selon la suite de Halton en bases 2 et 3 (64 positions), et fond chaque image dans un historique : 10 % pour l’image courante, 90 % pour l’historique. Le même mélange moyenne le satiné des terrasses, un léger dépoli de la normale tiré à chaque image. Au bout de quelques dizaines d’images, chaque pixel est la moyenne de dizaines de positions dans sa surface : une image suréchantillonnée.</p>
-        <p>Un anticrénelage temporel ordinaire reprojette l’historique : il suit chaque point d’une image à l’autre avec les vecteurs de mouvement. Melt s’en passe. La caméra se déplace de moins de 1,5 cm/s et la grappe descend lentement : d’une image à l’autre, l’image bouge de bien moins d’un pixel. Pour que ce qui a bougé ne traîne pas, l’historique est d’abord borné, canal par canal, entre le minimum et le maximum des 3 × 3 pixels voisins de l’image courante. Une couleur que le voisinage courant ne contient plus est ramenée dans ses bornes. Le bornage se fait sur des couleurs compressées, \(c/(1 + \max c)\), pour qu’un reflet très clair ne l’élargisse pas à lui seul.</p>
-        <div class="note trap"><b>Le flou de mise au point, à l’export seulement</b><p>Un essai rendait le flou de mise au point en tirant un point de la lentille par image, que l’historique devait moyenner, avec un bornage plus lâche (la moyenne ± 1,5 écart type du voisinage). En lecture, le flou tremblait et les arêtes scintillaient : on le lisait comme une caméra qui bougeait sans cesse. Le flou n’est plus rendu qu’à l’export, où chaque sous-image du rendu accumulé tire son point de la lentille, et le bornage est revenu au minimum et au maximum du voisinage.</p></div>
-        <p>L’historique repart de zéro après un saut : un pas de plus de 0,01 boucle dans le temps, un déplacement de la caméra de plus de 0,05 cm, une nouvelle graine ou une nouvelle taille d’image. L’export et le rendu accumulé fournissent leur propre décalage et ignorent l’historique.</p>
-      </section>
-
-      <section id="creuset">
-        <h2><span class="n">11</span>Chaque temps du cycle a sa cause à l’écran</h2>
-        <span class="src">src/cycle.js · apparatusAt(), cool() · src/camera.js · potFor() · src/scene/tracer.js · world(), galette() (la grille), flames()</span>
-        <p>Un miroir infini, sans bord, qui se viderait et chaufferait sans cause, ferait flotter les cristaux dans le noir. Le bain est dans une <strong>marmite de fonte</strong>, posée sur un brûleur, sur un établi d’acier. Chaque temps du cycle y a sa cause visible :</p>
-        <ul>
-          <li><strong>La grille.</strong> La grappe a poussé sur un treillis d’acier (pas de 0,42 cm, fils de 0,04 cm) tendu dans un cerceau ; les cristaux reposent sur ses fils sans les traverser (la grille est un peu plus large que le coin le plus éloigné de chaque pied), et l’on voit le bain au travers. C’est le fond d’un <strong>panier à long manche</strong>, comme un panier à friture : une fourche de deux tiges part du cerceau, au fond à gauche, et rejoint un montant d’acier de 4 mm, assez haut pour que son coude passe au-dessus du bord de la marmite même quand la grille est au fond ; de là, le manche part vers l’arrière, presque à plat (15°), vers une main hors champ. Une croûte pleine à la place de la grille se lisait en socle ou en neige ; un manche placé sur le côté sortait du cadre des gros plans, et la grille semblait suspendue à rien.</li>
-          <li><strong>La peau du bain.</strong> Au repos, le bain refroidit et se couvre d’une peau d’oxyde, plus épaisse au bord, contre la fonte froide. Elle reste dans les premières couleurs, paille, or et magenta pâle (au plus 34 nm) : plus épaisse, elle vire au brun sale. Quand la grille sort, elle la déchire du centre vers les bords, en un front bruité.</li>
-          <li><strong>Le brûleur</strong> s’allume pendant l’attente, 1,2 s avant que la grappe ne redescende, et s’éteint après la fonte : la cause précède l’effet. Les flammes sont une émission intégrée le long du rayon, en seize échantillons dans la couronne qui entoure le pied de la marmite : une nappe bleue sous le fond, et trente-quatre langues qui lèchent la paroi, de hauteur tirée par un bruit qui boucle. Pendant la fonte, le bain frémit (des cellules de convection, en pente de normale).</li>
-        </ul>
-        <p>Tout le reste est analytique : des cylindres verticaux (les parois, le brûleur), un anneau à lèvre arrondie (le bord), des capsules (la fourche et le manche du panier), deux plans (le bain, borné à la marmite, et l’établi). Un rayon les touche sans marcher. La grille, elle, est dans la marche des rayons : loin de son plan, sa distance se borne sans calculer le treillis. Les matières rugueuses reçoivent l’éclairement du dôme et des boîtes de lumière, intégré d’avance (chaque boîte, vue comme une petite source d’angle solide \(4\,w\,h\)), plus un reflet adouci, pris dans un studio aux bords de boîtes élargis.</p>
-        <p>La marmite est assez large pour la grappe et, pour les cadrages pris au-dessus du bain, pour que la caméra soit au-dessus de son fond : sa paroi proche reste sous l’objectif, sa paroi du fond et son bord ferment l’image. Environ une graine sur sept tire le plan « Le creuset sur le feu », pris du dehors, qui montre la marmite entière, ses flammes et l’établi. La caméra suit la grappe à moitié, sans jamais passer sous le bain : la pose reste périodique.</p>
-        <div class="note check"><b>Vérifié par un test</b><p>Le brûleur brûle au milieu de la fonte et 0,01 boucle avant la descente, et il est éteint à la fin de la récolte comme à la fin de la boucle. Sur 200 graines, la caméra reste au-dessus du bain à chaque instant, au-dessus du fond de la marmite (0,5 cm en deçà de sa paroi), ou, pour le plan de l’atelier, dehors et au-dessus du bord.</p></div>
-      </section>
-
-      <section id="bascule">
-        <h2><span class="n">12</span>Un cristal dont la taille a fondu bascule dans le bain</h2>
-        <span class="src">src/cycle.js · toppleOf() · src/scene/tracer.js · crystalAt(), tip()</span>
-        <p>La simulation sait quand la section d’un cristal au ras du bain tombe sous 15 % de ce qu’elle était (section 05). La partie au-dessus de cette encoche n’est alors plus portée que d’un côté, celui qui regarde le centre de la grappe. Elle pivote sur ce bord : son côté extérieur tombe dans le bain. Pivoter sur le bord extérieur ferait au contraire monter son centre de gravité, comme un levier ; c’est ce que montrait le premier essai, une plaque qui se dressait. L’angle suit une chute qui accélère, \(\theta = \theta_{\max}\,x^2\) pendant 0,06 du temps de fonte (au moins 1,5 s), puis un rebond amorti de 8 %, avec \(\theta_{\max}\) entre 0,5 et 0,85 rad. La partie tombée s’enfonce de 1,1 demi-côté : le bismuth solide (9,8 g/cm³) flotte à peine sur le liquide (10,05 g/cm³), presque à fleur, et il n’en dépasse plus que des bribes. Elle fond ensuite tout entière dans le bain chaud, par une érosion uniforme (une face liquide, qui s’arrondit) qui l’efface avant la fin de la fonte.</p>
-        <p>Le rendu évalue le cristal deux fois : le pied, coupé au plan de l’encoche, dans son repère ; la partie haute, coupée au même plan, dans le repère tourné autour du pivot. La distance est le minimum des deux. La partie tombée a sa propre sphère englobante, qui disparaît quand elle a fini de fondre : sans cela, chaque cristal basculé attrapait les rayons de toute l’image jusqu’à la fin de la boucle, et l’image coûtait près de deux fois plus.</p>
-      </section>
-
-      <section id="budget">
-        <h2><span class="n">13</span>Budget</h2>
-        <p>Un précalcul, au chargement : la fonte de chaque cristal. Ensuite, à chaque image, le processeur appelle <code>crystalsAt</code> et envoie 1 920 octets au shader, qui calcule l’image et la fond dans l’historique.</p>
-        <div class="tbl"><table>
-          <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
-          <tbody>
-            <tr><td>Simulation de la fonte, une grille par cristal, au chargement (budget \(2{,}5 \times 10^{10}\) cellules-pas ; \(3 \times 10^9\) sur mobile)</td><td>GPU</td><td class="num">≈ 1 à 3 s</td></tr>
-            <tr><td>État de la grappe, <code>crystalsAt</code>, 9 cristaux (Node, mesuré pour cette page)</td><td>CPU</td><td class="num">≈ 0,3 µs</td></tr>
-            <tr><td>Uniformes : 120 vec4 (caméra, cycle, creuset, grille et brûleur, studio, cristaux et leur bascule, peaux)</td><td>CPU → GPU</td><td class="num">1&#8239;920 octets</td></tr>
-            <tr><td>Image 1&#8239;280 × 800, trois rebonds, 200 pas au plus, anticrénelage compris (graine sal7va, au ras du bain)</td><td>GPU</td><td class="num">≈ 15 ms</td></tr>
-            <tr><td>Gros plan, toute la grappe suspendue hors du bain avec sa grille (graine j4s5i6)</td><td>GPU</td><td class="num">≈ 25 ms</td></tr>
-            <tr><td>Prototype <code>proto/b0</code>, même définition, sans sphères englobantes ni bain analytique, une passe</td><td>GPU</td><td class="num">≈ 215 ms</td></tr>
-          </tbody>
-        </table></div>
-        <p>Les temps d’image ont été mesurés dans le panneau de navigateur de l’application, sur la machine de travail, et n’ont pas été vérifiés sur mobile. L’image coûte moins pendant la fonte : les cristaux sous le bain sont écartés avant la marche, et le bain se touche sans marcher. La résolution dynamique, active aussi sur ordinateur, baisse la définition au-delà de 22 ms. Neuf tests couvrent la recette, le bain et la descente, le raccord de la boucle sous le bain, la grappe, la descente et la peau, le modèle de fonte, les grilles de fonte, la caméra (périodique, sous 1,5 cm/s, toujours au-dessus du bain, au-dessus du fond de la marmite ou dehors selon le cadrage) et le brûleur (chaque cause dans son temps).</p>
-        <div class="note"><b>Une version précédente</b><p>Melt a d’abord montré une colonne de glace sous la surface d’un lac. Cette version a été abandonnée pour le bain de bismuth. Ses concepts restent dans <code>docs/concept-*.md</code> et ses prototypes dans <code>proto/p0</code> à <code>proto/p8</code>. La fonte du bain de bismuth a d’abord été dessinée à la main (arrondi et comblement des gradins au-dessus de la ligne, affaissement tiré au hasard) ; <code>proto/s0</code> l’a remplacée par le calcul décrit ici.</p></div>
+        <p>Mesuré dans le panneau de navigateur de l’application, sur la machine de travail. Non mesuré sur mobile, où la scène ne tourne pas encore.</p>
       </section>
     </article>
 
@@ -223,396 +86,7 @@
   </main>
 
   <script type="module">
-    import { demo, C, lerp, clamp, alpha, label } from '../home/explainer.js';
-    import { CYCLE, level, line as lineAt, lift, emerge, reach, rising, buildCluster, crystalsAt, tideFor, meltU } from './src/cycle.js';
-    import { generate, OXIDES, CLUSTERS } from './src/recipe.js';
-    import { simulate, bathAt, PHYS } from './src/melt/model.js';
-
-    const fr = (x, n = 2) => x.toFixed(n).replace('.', ',').replace('-', '−');
-    const LOOP = generate('b1').loop.duration; // s
-    const OXK = Object.keys(OXIDES);
-
-    function line(g, pts, color, width = 1.5, dash = null) {
-      g.save(); g.strokeStyle = color; g.lineWidth = width; if (dash) g.setLineDash(dash);
-      g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.stroke(); g.restore();
-    }
-    function box(g, x, y, w, h) { g.save(); g.strokeStyle = C.grid; g.lineWidth = 1; g.strokeRect(x + .5, y + .5, w, h); g.restore(); }
-    function dot(g, x, y, r, color) { g.save(); g.fillStyle = color; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill(); g.restore(); }
-    const hexRGB = (hex) => { const n = parseInt(hex.replace('#', ''), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; };
-    const mixRGB = (a, b, k) => a.map((v, i) => Math.round(lerp(v, b[i], k)));
-
-    // ── couche mince : filmR() et filmRGB() du shader ──
-    const N1 = 2.2, N2 = [1.9, 3.4];
-    const cmul = (a, b) => [a[0] * b[0] - a[1] * b[1], a[0] * b[1] + a[1] * b[0]];
-    const cdiv = (a, b) => { const d = b[0] * b[0] + b[1] * b[1]; return [(a[0] * b[0] + a[1] * b[1]) / d, (a[1] * b[0] - a[0] * b[1]) / d]; };
-    const R01 = (1 - N1) / (1 + N1), R12 = cdiv([N1 - N2[0], -N2[1]], [N1 + N2[0], N2[1]]);
-    function filmR(th, lam, cosi = 1) {
-      const sint = Math.sqrt(Math.max(0, 1 - cosi * cosi)) / N1;
-      const dl = 4 * Math.PI * N1 * th * Math.sqrt(1 - sint * sint) / lam;
-      const e = cmul(R12, [Math.cos(dl), Math.sin(dl)]);
-      const r = cdiv([R01 + e[0], e[1]], [1 + R01 * e[0], R01 * e[1]]);
-      return r[0] * r[0] + r[1] * r[1];
-    }
-    const filmRGB = (th, c = 1) => [
-      .5 * filmR(th, 610, c) + .5 * filmR(th, 650, c),
-      .5 * filmR(th, 530, c) + .5 * filmR(th, 560, c),
-      .5 * filmR(th, 450, c) + .5 * filmR(th, 480, c)];
-    const toSRGB = (x) => { x = clamp(x); return x <= .0031308 ? 12.92 * x : 1.055 * x ** (1 / 2.4) - .055; };
-    const rgb8 = (c, e = 1.3) => c.map((v) => Math.round(255 * toSRGB(v * e)));
-    const css = (c, e) => `rgb(${rgb8(c, e).join(',')})`;
-
-    // ── l'oxyde en un point (trace() du shader, sans le bruit) ──
-    // y : hauteur dans le repère de la grappe ; le point est dans le monde à y + o(t)
-    function oxide(y, t, { rate = 1, o = .5, k = 0 } = {}, TC = CYCLE) {
-      const a = Math.max(t - emerge(y, TC), 0), L = level(t, TC), yw = y + lift(t, TC);
-      const th = rate * 300 * Math.sqrt(a) * (.8 + .4 * o) + (9 * k + 55 * .25) * Math.sqrt(a) + 140 * rising(t, TC) * Math.exp(-Math.max(yw - L, 0) / .9);
-      return { th, wet: yw < L };
-    }
-    const surface = (y, t, opt, TC) => filmRGB(Math.max(oxide(y, t, opt, TC).th, 0));
-
-    // ── la trémie : hopper() de hopper.js, avec la largeur et la hauteur des marches en réglage ──
-    function hopper(q, s, w = .075, dep = .6, spiral = false) {
-      const b = q.map((v) => Math.abs(v) - s);
-      let d = Math.hypot(Math.max(b[0], 0), Math.max(b[1], 0), Math.max(b[2], 0)) + Math.min(Math.max(b[0], b[1], b[2]), 0), kk = 0;
-      const ww = s * w, maxD = 9 * ww * dep, sd = s * 37;
-      const face = (n, t0, fs) => {
-        let t = t0;
-        if (spiral) {
-          const k0 = Math.floor(Math.max(s - Math.max(Math.abs(t[0]), Math.abs(t[1])), 0) / ww), an = k0 * .07, c = Math.cos(an), sn = Math.sin(an);
-          t = [c * t[0] - sn * t[1], sn * t[0] + c * t[1]];
-        }
-        const r = Math.max(s - Math.max(Math.abs(t[0]), Math.abs(t[1])), 0) / ww;
-        const x = r + .2 * Math.sin(2.6 * r + fs) + .06 * Math.sin(5.3 * r + 1.7 * fs);
-        const k = Math.min(Math.max(Math.floor(x), 0), 9);
-        let dc = n - (s - k * ww * dep);
-        if (k > .5) dc = Math.min(dc, Math.hypot((x - k) * ww / 1.84, Math.max(n - (s - (k - 1) * ww * dep), 0)));
-        if (dc > d) { d = dc; kk = k; }
-      };
-      // (le dessous n'est pas creusé : la base a poussé sur la grille)
-      if (Math.abs(q[0]) - s + maxD > d) face(Math.abs(q[0]), [q[1], q[2]], sd + (q[0] < 0 ? 1.3 : 0));
-      if (q[1] - s + maxD > d) face(q[1], [q[0], q[2]], sd + 2.6);
-      if (Math.abs(q[2]) - s + maxD > d) face(Math.abs(q[2]), [q[0], q[1]], sd + (q[2] < 0 ? 5.2 : 3.9));
-      return [d, kk];
-    }
-    // image calculée hors écran puis posée à l'échelle
-    function raster(nx, ny, fn) {
-      const cv = new OffscreenCanvas(nx, ny), cx = cv.getContext('2d'), im = cx.createImageData(nx, ny);
-      for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
-        const c = fn(i, j); if (!c) continue;
-        const o = 4 * (j * nx + i); im.data[o] = c[0]; im.data[o + 1] = c[1]; im.data[o + 2] = c[2]; im.data[o + 3] = c[3] ?? 255;
-      }
-      cx.putImageData(im, 0, 0);
-      return cv;
-    }
-
-    // ── 01 · le cycle ────────────────────────────────────────────────────
-    {
-      const cl = buildCluster('b1', CLUSTERS.grappe), TC = tideFor(cl);
-      demo('#fig-tide', {
-        title: 'La ligne du bain vue de la grappe, et la grappe dans la marmite', aspect: 2.2,
-        controls: [
-          { key: 't', label: 'Phase de la boucle t', min: 0, max: .999, step: .001, value: .6, fmt: (v) => fr(v, 3) },
-          { key: 'y', label: 'Hauteur sur le cristal (cm)', min: .25, max: +(TC.LH - .02).toFixed(2), step: .01, value: 1.2, fmt: (v) => fr(v, 2) },
-        ],
-        draw(g, d) {
-          const { w, h } = d, t = d.s.t, y = d.s.y;
-          const top = 14, H = h - top - 34, pad = 40, gap = 36;
-          const W1 = (w - 2 * pad - gap) * .55, W2 = w - 2 * pad - gap - W1, x1 = pad, x2 = pad + W1 + gap;
-          // gauche : repère de la grappe (y = 0 : la grille)
-          const Y0 = TC.LOW - .3, YM = TC.LH + .4, X = (s) => x1 + s * W1, Y = (v) => top + H - (v - Y0) / (YM - Y0) * H;
-          box(g, x1, top, W1, H);
-          g.fillStyle = alpha(C.c2, .1); g.fillRect(X(TC.T0), top + 1, X(TC.T1) - X(TC.T0), H - 1);
-          g.fillStyle = alpha(C.c3, .1); g.fillRect(X(TC.T2), top + 1, X(TC.T3) - X(TC.T2), H - 1);
-          const pts = [];
-          for (let k = 0; k <= 600; k++) { const s = k / 600 * .9999; pts.push([X(s), Y(lineAt(s, TC))]); }
-          line(g, [[x1, Y(0)], [x1 + W1, Y(0)]], alpha(C.ink, .3), 1, [2, 3]);
-          line(g, pts, C.ink, 1.6);
-          const te = emerge(y, TC), tr = reach(y, TC);
-          line(g, [[x1, Y(y)], [x1 + W1, Y(y)]], C.faint, 1, [3, 4]);
-          line(g, [[X(te), Y(y)], [X(tr), Y(y)]], C.c1, 3);
-          dot(g, X(te), Y(y), 4, C.c2); dot(g, X(tr), Y(y), 4, C.c3);
-          line(g, [[X(t), top], [X(t), top + H]], alpha(C.ink, .45), 1);
-          dot(g, X(t), Y(lineAt(t, TC)), 4.5, C.ink);
-          for (const v of [0, .25, .5, .75, 1]) label(g, fr(v, 2), X(v), top + H + 16, { align: 'center', size: 10 });
-          for (let v = 0; v <= YM; v += 1) label(g, fr(v, 0), x1 - 6, Y(v) + 4, { align: 'right', size: 10 });
-          label(g, 'ℓ(t), vue de la grappe (cm)', x1 + 6, top + 14, { size: 11 });
-          label(g, 'grille', x1 + W1 - 6, Y(0) - 5, { size: 10, align: 'right' });
-          label(g, 'récolte', X((TC.T0 + TC.T1) / 2), top + H - 8, { size: 10, color: C.c2, align: 'center' });
-          label(g, 'fonte par paliers', X((TC.T2 + TC.T3) / 2), top + H - 8, { size: 10, color: C.c3, align: 'center' });
-          label(g, 'à l’air', X((te + tr) / 2), Y(y) - 7, { size: 10, color: C.c1, align: 'center' });
-          // droite : la marmite de profil (monde), le bain fixe, la grappe à sa hauteur
-          const L = level(t, TC), st = crystalsAt(cl, t, TC), o = lift(t, TC);
-          const V0 = TC.LB - TC.LH - .4, VM = TC.LB + TC.LH + .7, sc = H / (VM - V0);
-          const Yw = (v) => top + H - (v - V0) * sc, Xs = (x) => x2 + W2 / 2 + x * sc;
-          box(g, x2, top, W2, H);
-          g.save(); g.beginPath(); g.rect(x2 + 1, top + 1, W2 - 1, H - 1); g.clip();
-          const quadAt = (c, fill) => {
-            g.save(); g.translate(Xs(c.x), Yw(c.y - c.desc)); g.rotate(c.tilt);
-            const p = c.s * sc;
-            if (fill) { g.fillStyle = fill; g.fillRect(-p, -p, 2 * p, 2 * p); g.strokeStyle = alpha(C.ink, .5); g.lineWidth = 1; g.strokeRect(-p, -p, 2 * p, 2 * p); }
-            else { g.strokeStyle = alpha(C.ink, .35); g.setLineDash([3, 3]); g.lineWidth = 1; g.strokeRect(-p, -p, 2 * p, 2 * p); }
-            g.restore();
-          };
-          const order = [...st].sort((a, b) => b.z - a.z);
-          for (const c of order) quadAt(c, css(surface(c.y + c.s, t, { o: c.ox }, TC)));
-          // (la grille sous la grappe)
-          g.fillStyle = '#55585e'; g.fillRect(Xs(-3.3), Yw(o), 6.6 * sc, .22 * sc);
-          const gr = g.createLinearGradient(0, Yw(L), 0, top + H);
-          gr.addColorStop(0, '#9da2aa'); gr.addColorStop(1, '#3d4046');
-          g.fillStyle = gr; g.fillRect(x2 + 1, Yw(L), W2 - 1, top + H - Yw(L));
-          for (const c of order) if (c.y - c.desc - c.s < L) quadAt(c, null);
-          line(g, [[x2, Yw(L)], [x2 + W2, Yw(L)]], C.ink, 1.2);
-          g.restore();
-          line(g, [[x2 + W2 - 10, Yw(y + o)], [x2 + W2, Yw(y + o)]], C.c1, 2);
-          label(g, 'bain', x2 + 6, Yw(L) + 14, { size: 10, color: '#1a1a1e' });
-          label(g, 'la marmite de profil, même échelle', x2 + W2 / 2, top + H + 16, { size: 10, align: 'center' });
-          d.status(`t = ${fr(t, 3)} (${fr(t * LOOP, 1)} s) · ligne vue de la grappe ${fr(lineAt(t, TC), 2)} cm · grille à ${fr(o, 2)} cm (bain à ${fr(L, 2)}) · à ${fr(y, 2)} cm, le métal sort à t = ${fr(te, 3)} et le bain le rejoint à t = ${fr(tr, 3)} : ${fr((tr - te) * LOOP, 1)} s à l’air`);
-        },
-      });
-    }
-
-    // ── 02 · la trémie ───────────────────────────────────────────────────
-    {
-      demo('#fig-hopper', {
-        title: 'Une trémie en coupe et de face', aspect: 2.1,
-        controls: [
-          { key: 'w', label: 'Largeur moyenne des marches (× s)', min: .04, max: .2, step: .005, value: .075, fmt: (v) => fr(v, 3) },
-          { key: 'dep', label: 'Hauteur des marches (× largeur)', min: .25, max: 1.2, step: .05, value: .6, fmt: (v) => fr(v, 2) },
-        ],
-        buttons: [{ key: 'spiral', label: 'Spirale', toggle: true, value: false }],
-        draw(g, d) {
-          const { w, h } = d, { w: ws, dep, spiral } = d.s;
-          const top = 12, H = h - top - 30, S = Math.min(H, (w - 60) / 2);
-          const xa = w / 2 - S - 15, xb = w / 2 + 15;
-          const N = 200, ext = 1.15, ink = hexRGB(C.ink), gold = hexRGB(C.c1);
-          // coupe par le plan médian z = 0
-          const sec = raster(N, N, (i, j) => {
-            const x = ((i + .5) / N * 2 - 1) * ext, y = (1 - (j + .5) / N * 2) * ext;
-            const [dd] = hopper([x, y, 0], 1, ws, dep, spiral);
-            return dd < 0 ? [...ink, 230] : null;
-          });
-          // face +y vue de front, plus sombre en profondeur
-          const face = raster(N, N, (i, j) => {
-            const x = ((i + .5) / N * 2 - 1), z = ((j + .5) / N * 2 - 1);
-            const [, k] = hopper([x, 1, z], 1, ws, dep, spiral);
-            const kk = Math.max(0, k), sh = 1 - kk * ws * dep / .9;
-            return gold.map((c) => Math.round(c * clamp(sh, .15, 1)));
-          });
-          g.imageSmoothingEnabled = false;
-          g.drawImage(sec, xa, top, S, S);
-          const fs = S / ext;
-          g.drawImage(face, xb + (S - fs) / 2, top + (S - fs) / 2, fs, fs);
-          box(g, xa, top, S, S); box(g, xb, top, S, S);
-          label(g, 'coupe médiane', xa + 6, top + 14, { size: 11 });
-          label(g, 'la face du dessus, de front', xb + 6, top + 14, { size: 11 });
-          const kmax = Math.min(9, Math.floor(1 / ws));
-          label(g, 'clair : bord · sombre : creux', xb + S / 2, top + S + 16, { size: 10, align: 'center' });
-          label(g, `${kmax} marches · base pleine en bas`, xa + S / 2, top + S + 16, { size: 10, align: 'center' });
-          d.status(`marche ${fr(ws, 3)} s · contremarche ${fr(ws * dep, 3)} s · creux au centre ${fr(kmax * ws * dep, 2)} s${spiral ? ' · 0,07 rad par gradin' : ''}`);
-        },
-      });
-    }
-
-    // ── 03 · la couche mince ─────────────────────────────────────────────
-    {
-      demo('#fig-film', {
-        title: 'La couleur d’une couche d’oxyde sur le bismuth', aspect: 2.3,
-        controls: [
-          { key: 'th', label: 'Épaisseur d’oxyde (nm)', min: 0, max: 400, step: 1, value: 160, fmt: (v) => `${v} nm` },
-          { key: 'ang', label: 'Incidence (°)', min: 0, max: 85, step: 1, value: 0, fmt: (v) => `${v}°` },
-        ],
-        draw(g, d) {
-          const { w, h } = d, th = d.s.th, ci = Math.cos(d.s.ang * Math.PI / 180);
-          const pad = 40, sw = 74, x1 = pad, W = w - 2 * pad - sw - 24, top = 12, SH = 34, ytop = top + SH + 16, H = h - ytop - 28;
-          const X = (v) => x1 + v / 400 * W, Y = (r) => ytop + H - r / .75 * H;
-          for (let i = 0; i < W; i++) { g.fillStyle = css(filmRGB(i / W * 400, ci)); g.fillRect(x1 + i, top, 1.5, SH); }
-          box(g, x1, top, W, SH);
-          line(g, [[X(th), top - 3], [X(th), top + SH + 3]], C.ink, 2);
-          box(g, x1, ytop, W, H);
-          line(g, [[x1, Y(.62)], [x1 + W, Y(.62)]], C.faint, 1, [3, 4]);
-          const cols = [C.c3, C.c4, C.c2];
-          for (let ch = 0; ch < 3; ch++) {
-            const p = []; for (let k = 0; k <= 400; k++) p.push([X(k), Y(filmRGB(k, ci)[ch])]);
-            line(g, p, cols[ch], 1.5);
-          }
-          line(g, [[X(th), ytop], [X(th), ytop + H]], alpha(C.ink, .45), 1);
-          for (const v of [0, 100, 200, 300, 400]) label(g, `${v}`, X(v), ytop + H + 16, { size: 10, align: 'center' });
-          for (const v of [0, .25, .5]) label(g, fr(v, 2), x1 - 6, Y(v) + 4, { size: 10, align: 'right' });
-          label(g, 'métal nu 0,62', x1 + W - 4, Y(.62) - 5, { size: 10, align: 'right' });
-          label(g, 'R rouge', x1 + 6, ytop + 14, { size: 10, color: C.c3 });
-          label(g, 'R vert', x1 + 60, ytop + 14, { size: 10, color: C.c4 });
-          label(g, 'R bleu', x1 + 108, ytop + 14, { size: 10, color: C.c2 });
-          const c = filmRGB(th, ci), xs = w - pad - sw;
-          g.fillStyle = css(c); g.fillRect(xs, top, sw, sw);
-          box(g, xs, top, sw, sw);
-          label(g, `${th} nm`, xs + sw / 2, top + sw + 16, { size: 11, align: 'center' });
-          d.status(`R = (${fr(c[0])} ; ${fr(c[1])} ; ${fr(c[2])}) · angle dans l’oxyde ${fr(Math.asin(Math.sin(d.s.ang * Math.PI / 180) / N1) * 180 / Math.PI, 1)}° · bismuth nu : 0,62`);
-        },
-      });
-    }
-
-    // ── 04 · l'oxyde au fil de la boucle ─────────────────────────────────
-    {
-      demo('#fig-oxide', {
-        title: 'L’épaisseur d’oxyde d’un point', aspect: 2.3,
-        controls: [
-          { key: 'y', label: 'Hauteur sur le cristal (cm)', min: .3, max: 2.8, step: .01, value: 1.6, fmt: (v) => fr(v, 2) },
-          { key: 'k', label: 'Gradin k', min: 0, max: 7, step: 1, value: 0, fmt: (v) => String(v) },
-          { key: 'ox', label: 'Gamme', min: 0, max: OXK.length - 1, step: 1, value: OXK.indexOf('arcenciel'), fmt: (v) => OXIDES[OXK[v]].label },
-        ],
-        draw(g, d) {
-          const { w, h } = d, y = d.s.y, ox = OXIDES[OXK[d.s.ox]], opt = { rate: ox.rate, k: d.s.k };
-          const pad = 44, x1 = pad, W = w - pad - 16, top = 12, SH = 22, H = h - top - SH - 50;
-          const N = 500, ts = Array.from({ length: N + 1 }, (_, i) => i / N * .9999), S = ts.map((t) => oxide(y, t, opt));
-          const tmax = Math.max(100, Math.ceil(Math.max(...S.filter((s) => !s.wet).map((s) => s.th)) / 100) * 100);
-          const X = (t) => x1 + t * W, Y = (v) => top + H - v / tmax * H;
-          box(g, x1, top, W, H);
-          g.fillStyle = alpha(C.dim, .14); for (let i = 0; i < N; i++) if (S[i].wet) g.fillRect(Math.floor(X(ts[i])), top + 1, Math.ceil(X(ts[i + 1]) - X(ts[i])) + 1, H - 1);
-          for (let v = 100; v < tmax; v += 100) line(g, [[x1, Y(v)], [x1 + W, Y(v)]], C.grid, 1, [2, 4]);
-          let seg = [];
-          for (let i = 0; i <= N; i++) {
-            if (S[i].wet) { if (seg.length) line(g, seg, C.c1, 1.7); seg = []; continue; }
-            seg.push([X(ts[i]), Y(S[i].th)]);
-          }
-          if (seg.length) line(g, seg, C.c1, 1.7);
-          for (let v = 0; v <= tmax; v += 100) label(g, String(v), x1 - 6, Y(v) + 4, { size: 10, align: 'right' });
-          label(g, 'nm', x1 + 6, top + 14, { size: 11 });
-          label(g, 'sous le bain', X(.02), top + H - 8, { size: 10 });
-          const ys = top + H + 8;
-          for (let i = 0; i < N; i++) {
-            g.fillStyle = S[i].wet ? '#3d4046' : css(surface(y, ts[i], opt));
-            g.fillRect(X(ts[i]), ys, X(ts[i + 1]) - X(ts[i]) + .6, SH);
-          }
-          box(g, x1, ys, W, SH);
-          for (const v of [0, .25, .5, .75, 1]) label(g, fr(v, 2), X(v), ys + SH + 15, { size: 10, align: 'center' });
-          const te = emerge(y), tr = reach(y);
-          const at = (t) => oxide(y, t, opt).th;
-          d.status(`sortie à t = ${fr(te, 3)} · à T₂ : ${Math.round(at(CYCLE.T2))} nm · juste avant que le bain le rejoigne (t = ${fr(tr, 3)}) : ${Math.round(at(tr - 1e-4))} nm`);
-        },
-      });
-    }
-
-    // ── 05 · le modèle de fonte, en coupe ────────────────────────────────
-    {
-      const cl = buildCluster('b1', CLUSTERS.grappe), TC = tideFor(cl), c0 = cl[0];
-      const LL = TC.LOW, D = TC.LH - TC.LOW, Q = 2.2, PORTS = ['trémie', 'spirale', 'allongée'];
-      const fig = document.querySelector('#fig-stefan');
-      const cache = {};
-      let dref = null, pending = -1, seen = false;
-      const C1 = hexRGB(C.c1), C2 = hexRGB(C.c2), C3 = hexRGB(C.c3), GREY = [120, 118, 114], NEVER = [86, 86, 92];
-      const dropAt = (r, u) => {
-        if (u <= 0) return 0;
-        const x = Math.min(u / r.dt, r.steps), i = Math.floor(x), f = x - i;
-        return i >= r.steps ? r.drop[r.steps] : r.drop[i] * (1 - f) + r.drop[i + 1] * f;
-      };
-      const uLine = (y) => meltU(reach(y, TC), TC);
-      // ce qu'on relit : la coupe, les instants triés, la part au-dessus du bain au fil de u
-      function prep(r, ms) {
-        const { tau, grid: g } = r, { nx, ny, nz, h } = g, k = nz >> 1;
-        const slice = new Float32Array(nx * ny);
-        for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) slice[i + nx * j] = tau[i + nx * (j + ny * k)];
-        const cells = [];
-        for (let id = 0; id < tau.length; id++) if (tau[id] >= 0) cells.push(id);
-        const sorted = Float32Array.from(cells, (id) => tau[id]).sort();
-        const US = 116, above = new Float32Array(US + 1), lead = [];
-        const jOf = (id) => Math.floor(id / nx) % ny;
-        for (let s = 0; s <= US; s++) {
-          const u = s / US * PHYS.uEnd, Lc = bathAt(u, LL, D) + dropAt(r, u);
-          let n = 0;
-          for (const id of cells) if (tau[id] > u && (jOf(id) + .5) * h >= Lc) n++;
-          above[s] = n / cells.length;
-        }
-        for (const id of cells) { const y = (jOf(id) + .5) * h; if (tau[id] < 50 && y > LL + h) lead.push(tau[id] - uLine(y)); }
-        lead.sort((a, b) => a - b);
-        const uSettle = r.drop.findIndex((v) => v > 0) * r.dt;
-        return { ...r, slice, sorted, above, US, med: lead[lead.length >> 1], q05: lead[Math.floor(.05 * (lead.length - 1))], uSettle, ms };
-      }
-      function run(port) {
-        if (cache[port] || pending === port) return;
-        pending = port; dref?.redraw();
-        setTimeout(() => {
-          const t0 = performance.now();
-          const r = simulate(c0, port, { LL, D, quality: Q });
-          cache[port] = prep(r, performance.now() - t0);
-          pending = -1; dref?.redraw();
-        }, 40);
-      }
-      dref = demo('#fig-stefan', {
-        title: 'Une coupe du champ τ', aspect: 2.0,
-        controls: [
-          { key: 'u', label: 'Temps de la fonte u', min: 0, max: PHYS.uEnd, step: .005, value: .55, fmt: (v) => fr(v, 3) },
-          { key: 'port', label: 'Port', min: 0, max: 2, step: 1, value: 0, fmt: (v) => PORTS[v], onChange: (d) => { if (seen) run(d.s.port); } },
-        ],
-        buttons: [{ key: 'lead', label: 'Avance sur la ligne', toggle: true, value: false }],
-        draw(g, d) {
-          const { w, h } = d, u = d.s.u, port = d.s.port, r = cache[port];
-          if (!r) {
-            label(g, pending === port ? `calcul du modèle (${PORTS[port]}, qualité 2,2)…` : 'le calcul part quand la figure est à l’écran', w / 2, h / 2, { align: 'center', size: 12 });
-            d.status(pending === port ? 'calcul en cours' : 'en attente');
-            return;
-          }
-          const { grid: gr, slice } = r, { nx, ny, h: hc, X } = gr;
-          const um = Math.min(u, 1), dropU = dropAt(r, u), desc = bathAt(um, LL, D) - LL + dropU, Lc = bathAt(u, LL, D) + dropU;
-          // gauche : la coupe, dans le repère du monde
-          const top = 12, H = h - top - 40, yBot = -D - .3, yTop = ny * hc + .1;
-          const Wl = Math.min(H * (2 * X) / (yTop - yBot), w * .5), xl = 40;
-          const Hs = Wl * (yTop - yBot) / (2 * X), y0 = top + (H - Hs) / 2;
-          const Px = (x) => xl + (x + X) / (2 * X) * Wl, Py = (y) => y0 + (yTop - y) / (yTop - yBot) * Hs;
-          const img = raster(nx, ny, (i, jj) => {
-            const j = ny - 1 - jj, v = slice[i + nx * j];
-            if (v < 0) return null;
-            let c;
-            if (v > 50) c = NEVER;
-            else if (d.s.lead) {
-              const x = clamp((v - uLine((j + .5) * hc)) / .08, -1, 1);
-              c = x < 0 ? mixRGB(GREY, C3, -x) : mixRGB(GREY, C2, x);
-            } else {
-              const x = clamp(v / PHYS.uEnd);
-              c = x < .5 ? mixRGB(C3, C1, x * 2) : mixRGB(C1, C2, x * 2 - 2 * .5);
-            }
-            return [...c, v > u ? 255 : 46];
-          });
-          g.save(); g.beginPath(); g.rect(xl, y0, Wl, Hs); g.clip();
-          g.fillStyle = alpha('#5a4a3a', .55); g.fillRect(xl, Py(-desc), Wl, Py(-desc - .3) - Py(-desc));
-          g.imageSmoothingEnabled = false;
-          g.drawImage(img, Px(-X), Py(ny * hc - desc), Wl, Py(-desc) - Py(ny * hc - desc));
-          g.fillStyle = 'rgba(118,122,130,.32)'; g.fillRect(xl, Py(LL), Wl, y0 + Hs - Py(LL));
-          line(g, [[xl, Py(LL)], [xl + Wl, Py(LL)]], C.ink, 1.2);
-          g.restore();
-          box(g, xl, y0, Wl, Hs);
-          label(g, 'bain', xl + 6, Py(LL) + 14, { size: 10 });
-          label(g, 'grille', xl + 6, Math.min(Py(-desc) + 13, y0 + Hs - 4), { size: 10 });
-          for (let v = Math.ceil(yBot); v <= yTop; v++) label(g, String(v), xl - 6, Py(v) + 4, { size: 10, align: 'right' });
-          // légende de la couleur
-          const lx = xl, ly = y0 + Hs + 10, lw = Wl;
-          for (let i = 0; i < lw; i++) {
-            const x = i / lw;
-            const c = d.s.lead ? (x < .5 ? mixRGB(GREY, C3, 1 - 2 * x) : mixRGB(GREY, C2, 2 * x - 1)) : (x < .5 ? mixRGB(C3, C1, 2 * x) : mixRGB(C1, C2, 2 * x - 1));
-            g.fillStyle = `rgb(${c.join(',')})`; g.fillRect(lx + i, ly, 1.5, 6);
-          }
-          label(g, d.s.lead ? 'avant la ligne' : 'τ = 0', lx, ly + 18, { size: 10 });
-          label(g, d.s.lead ? 'après' : `τ = ${fr(PHYS.uEnd, 2)}`, lx + lw, ly + 18, { size: 10, align: 'right' });
-          // droite : la part du solide qui reste, et celle qui dépasse du bain
-          const xr = xl + Wl + 46, Wr = w - xr - 16, Hr = H;
-          const Xr = (v) => xr + v / PHYS.uEnd * Wr, Yr = (f) => top + Hr - f * Hr;
-          box(g, xr, top, Wr, Hr);
-          g.fillStyle = alpha(C.dim, .1); g.fillRect(Xr(1), top + 1, Xr(PHYS.uEnd) - Xr(1), Hr - 1);
-          const left = (uu) => { let lo = 0, hi = r.sorted.length; while (lo < hi) { const m = (lo + hi) >> 1; if (r.sorted[m] <= uu) lo = m + 1; else hi = m; } return 1 - lo / r.sorted.length; };
-          const pl = [], pa = [];
-          for (let s = 0; s <= r.US; s++) { const uu = s / r.US * PHYS.uEnd; pl.push([Xr(uu), Yr(left(uu))]); pa.push([Xr(uu), Yr(r.above[s])]); }
-          line(g, pl, C.ink, 1.6); line(g, pa, C.c1, 1.6);
-          if (r.uSettle > 0) { line(g, [[Xr(r.uSettle), top], [Xr(r.uSettle), top + Hr]], C.c3, 1, [3, 3]); label(g, 'tassement', Xr(r.uSettle) - 4, top + 14, { size: 10, color: C.c3, align: 'right' }); }
-          line(g, [[Xr(u), top], [Xr(u), top + Hr]], alpha(C.ink, .45), 1);
-          for (const v of [0, .5, 1]) label(g, fr(v, 1), Xr(v), top + Hr + 16, { size: 10, align: 'center' });
-          for (const v of [0, .5, 1]) label(g, fr(v, 1), xr - 6, Yr(v) + 4, { size: 10, align: 'right' });
-          label(g, 'u', xr + Wr - 4, top + Hr + 16, { size: 10, align: 'right' });
-          label(g, 'solide restant', xr + 8, top + Hr - 24, { size: 11, color: C.ink });
-          label(g, 'au-dessus du bain', xr + 8, top + Hr - 9, { size: 11, color: C.c1 });
-          d.status(`${PORTS[port]}, ${nx} × ${ny} × ${gr.nz} cellules au pas de ${fr(hc, 3)} cm, ${r.steps} pas, ${fr(r.ms / 1000, 1)} s · u = ${fr(u, 3)} · ligne vue du cristal ${fr(Lc, 2)} cm · descente ${fr(desc, 2)} cm dont tassement ${fr(dropU, 3)} · médiane de l’avance ${fr(r.med, 3)}, 5ᵉ centile ${fr(r.q05, 3)}`);
-        },
-      });
-      new IntersectionObserver(([e]) => { if (e.isIntersecting && !seen) { seen = true; run(dref.s.port); } }, { rootMargin: '200px' }).observe(fig);
-    }
+    import '../home/explainer.js';
   </script>
 </body>
 </html>

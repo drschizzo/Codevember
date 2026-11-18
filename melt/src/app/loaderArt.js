@@ -1,48 +1,47 @@
 // Melt — dessin de l'écran de chargement (dans le worker de loaderWorker.js) :
-// une trémie de bismuth vue de face, dont les gradins apparaissent un à un, du
-// bord vers le centre ; chacun prend la couleur de son oxyde, calculée par la
-// même optique des couches minces que la scène (Airy, Bi₂O₃ sur bismuth).
+// la cloche du moule vue en coupe. Un filet de cire y tombe par le haut, et le
+// niveau monte, veines comprises : c'est le moule qui se remplit pendant que
+// la page taille les siens.
 //
 // Contrat : createArt(S) → { data(d, S), draw(ctx, S) } ; pas de texte, rien
 // sous ~88 % de la hauteur, < 3 ms par image.
-function filmR(th, lam) {
-  const n1 = 2.2, n2r = 1.9, n2i = 3.4;
-  const r01 = (1 - n1) / (1 + n1);
-  // r12 = (n1 − n2) / (n1 + n2), complexe
-  const ar = n1 - n2r, ai = -n2i, br = n1 + n2r, bi = n2i, bd = br * br + bi * bi;
-  const r12r = (ar * br + ai * bi) / bd, r12i = (ai * br - ar * bi) / bd;
-  const dl = (4 * Math.PI * n1 * th) / lam, er = Math.cos(dl), ei = Math.sin(dl);
-  const xr = r12r * er - r12i * ei, xi = r12r * ei + r12i * er; // r12·e
-  const nr = r01 + xr, ni = xi, dr = 1 + r01 * xr, di = r01 * xi;
-  const dd = dr * dr + di * di;
-  const rr = (nr * dr + ni * di) / dd, ri = (ni * dr - nr * di) / dd;
-  return rr * rr + ri * ri;
-}
-const film = (th) => [610, 530, 460].map((l) => Math.min(255, Math.round(255 * Math.pow(filmR(th, l), 0.8) * 1.15)));
+const WAX = { rose: ['#c75a60', '#efe0cc'], canard: ['#2f8f9c', '#ebe2cf'], miel: ['#d9a13a', '#f3ecda'], sauge: ['#7fa56f', '#efe8d6'], prune: ['#8c4a86', '#f0b78a'], noir: ['#3a3a3f', '#bfe9d6'] };
 
 export default function createArt() {
-  let rate = 1, spiral = false;
+  let wax = 'rose';
   return {
-    data(d) { if (d.oxRate != null) rate = d.oxRate; if (d.habit != null) spiral = d.habit === 'spirale'; },
+    data(d) { if (d.wax && WAX[d.wax]) wax = d.wax; },
     draw(ctx, S) {
-      const W = S.w, H = S.h, cx = W / 2, cy = H * 0.44, half = Math.min(W, H) * 0.22;
-      const steps = 8, shown = Math.min(steps, 1 + Math.floor((S.t * 2.2) % (steps + 3)));
+      const W = S.w, H = S.h, cx = W / 2, u = Math.min(W, H), bw = u * 0.15, bh = u * 0.34, top = H * 0.26, bot = top + bh;
+      const [ca, cb] = WAX[wax];
       ctx.globalAlpha = 1 - S.done;
-      ctx.save(); ctx.translate(cx, cy); ctx.rotate(0.12);
-      for (let k = 0; k < shown; k++) {
-        const r = half * (1 - k / steps), age = Math.max(0, S.t * 0.6 - k * 0.12);
-        const th = rate * (60 + 110 * Math.sqrt(age)) + 22 * k;
-        const [R, G, B] = film(th);
-        ctx.strokeStyle = `rgb(${R}, ${G}, ${B})`;
-        ctx.lineWidth = Math.max(1.5, half * 0.07) * (1 - k / (steps + 2));
-        if (spiral) ctx.rotate(0.07);
-        ctx.strokeRect(-r, -r, 2 * r, 2 * r);
+      // contour de la cloche : épaules rondes, goulot
+      const bell = () => {
+        ctx.beginPath();
+        ctx.moveTo(cx - bw, bot); ctx.lineTo(cx - bw, top + bh * 0.3);
+        ctx.quadraticCurveTo(cx - bw, top + bh * 0.06, cx - bw * 0.3, top); ctx.lineTo(cx + bw * 0.3, top);
+        ctx.quadraticCurveTo(cx + bw, top + bh * 0.06, cx + bw, top + bh * 0.3); ctx.lineTo(cx + bw, bot); ctx.closePath();
+      };
+      // la cire monte (boucle lente tant que le calcul dure)
+      const lvl = (S.t * 0.22) % 1.25, y = bot - bh * Math.min(1, lvl);
+      ctx.save(); bell(); ctx.clip();
+      ctx.fillStyle = ca; ctx.fillRect(cx - bw, y, bw * 2, bot - y);
+      ctx.strokeStyle = cb; ctx.lineWidth = Math.max(1.5, u * 0.012);
+      for (let k = 0; k < 3; k++) {
+        ctx.beginPath();
+        for (let i = 0; i <= 24; i++) {
+          const x = cx - bw + (i / 24) * bw * 2, yy = bot - (k + 0.5) * bh * 0.24 + Math.sin(i * 0.5 + k * 2 + S.t * 0.8) * bh * 0.04;
+          if (yy > y) (i ? ctx.lineTo(x, yy) : ctx.moveTo(x, yy));
+        }
+        ctx.stroke();
       }
       ctx.restore();
-      // le reflet dans le bain
-      ctx.globalAlpha = (1 - S.done) * 0.2;
-      ctx.fillStyle = 'rgba(200, 205, 215, 1)';
-      ctx.fillRect(cx - half * 1.4, cy + half * 1.25, half * 2.8, 1.2 * S.dpr);
+      // le filet
+      if (lvl < 1) { ctx.fillStyle = ca; const w = Math.max(1.5, u * 0.008); ctx.fillRect(cx - w / 2, top - u * 0.16, w, y - top + u * 0.16); }
+      ctx.strokeStyle = 'rgba(210, 212, 218, 0.9)'; ctx.lineWidth = Math.max(1.2, u * 0.006);
+      bell(); ctx.stroke();
+      ctx.fillStyle = 'rgba(210, 212, 218, 0.5)';
+      ctx.fillRect(cx - bw * 1.5, bot + u * 0.012, bw * 3, 1.2 * S.dpr);
     },
   };
 }

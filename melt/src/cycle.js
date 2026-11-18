@@ -1,202 +1,105 @@
-// Le cycle du bain de bismuth (fonctions pures, Node et navigateur). Une seule
-// horloge, t ∈ [0, 1). Le métal ne quitte jamais la marmite : les cristaux ont
-// poussé sur la grille d'un panier à long manche posé au fond, qu'on sort du
-// bain puis qu'on y replonge.
+// Le cycle de l'usine : une seule horloge, des fonctions pures de la phase.
 //
-// - 0 – T0 : le miroir ; la grille est au fond, la grappe a repoussé sous le
-//   bain qui refroidit ;
-// - T0 – T1 : la récolte. On lève le panier : les cristaux sortent du
-//   bain, le haut d'abord, et s'oxydent dès qu'ils touchent l'air ;
-// - T1 – T2 : la grappe suspendue au-dessus du bain, les couleurs mûrissent ;
-//   le brûleur s'allume ;
-// - T2 – T3 : la fonte, par paliers. Le cadre abaisse la grappe jusqu'à ce que
-//   le bain la prenne d'un quart de sa hauteur, puis s'arrête : le bain ronge
-//   les cristaux sur place (l'encoche de la ligne de flottaison, les parois
-//   minces, les blocs qui basculent). Puis un cran de plus, et ainsi de suite.
-//   La forme des cristaux vient de la simulation (melt/model.js,
-//   scene/melt.js), relue ici par le tassement et par l'instant où il ne
-//   reste plus rien au-dessus du bain ;
-// - T3 – 1 : la grille vide regagne le fond ; les peaux d'oxyde des cristaux
-//   engloutis flottent et se défont ; le brûleur s'éteint, le bain refroidit
-//   et se couvre d'une peau d'oxyde irisée (cool), que la grille déchire en
-//   ressortant.
+// La boucle enchaîne autant de DEMI-CYCLES que l'usine a d'objets. Un
+// demi-cycle (durée R.loop.half secondes) commence quand la cloche du moule se
+// lève sur l'objet qui vient de naître :
 //
-// Deux repères : celui de la grappe (y = 0 : la grille) et le
-// monde, où le bain est fixe, à LB. ℓ(t) est la ligne du bain vue de la
-// grappe : LH au repos (tout est couvert), LOW suspendue (la grille est
-// au-dessus du bain). La grappe est à la hauteur o(t) = LB − ℓ(t) dans le monde.
-import { createRng } from '../../shared/rng.js';
-import { PHYS, bathAt } from './melt/model.js';
+//   0 … lift      le moule s'ouvre : l'objet neuf est là, sur le plateau du bas
+//   lift … move   les deux plateaux échangent leurs places (l'objet monte sous
+//                 la source de chaleur, le plateau vide descend sous le moule),
+//                 le bras du moule pivote et pose l'autre cloche
+//   move … lower  la cloche descend sur le plateau vide
+//   heat … melt   la chaleur : l'objet fond, la cire coule dans la cloche
+//   melt … 1      la chaleur est coupée, les dernières gouttes ; la cire prend
+//
+// La cire que l'on voit pendant le demi-cycle k est donc toujours un seul
+// objet, né à l'instant 0 : la simulation de fonte ne dépend que du temps écoulé
+// depuis le début du demi-cycle.
+export const TL = { lift: 1.8, move: 6.8, lower: 8, heat: 8.2, melt: 22.6, half: 25, back0: 9.5, back1: 13.5 };
 
-export const CYCLE = { LH: 2.9, LB: 0.22, LOW: -0.3, T0: 0.01, T1: 0.2, T2: 0.32, T3: 0.94 };
-// La boucle affichée commence pendant l'attente (les cristaux sortis, leurs
-// couleurs qui mûrissent) : la première image, la vignette, montre le sujet
-// et non un miroir vide. Le cycle garde son origine (le bain plein).
-export const SHIFT = 0.26;
-export const cycleT = (ph) => { const t = ph + SHIFT; return t - Math.floor(t); };
+export const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+// (accélération et arrivée douces, vitesse de croisière constante)
+export const ease = (t) => { t = Math.min(1, Math.max(0, t)); return t * t * t * (t * (6 * t - 15) + 10); };
 
-const clamp01 = (x) => Math.min(1, Math.max(0, x));
-const sm = (a, b, x) => { const k = clamp01((x - a) / (b - a)); return k * k * (3 - 2 * k); };
-
-// le niveau du bain (monde) : il ne bouge pas
-export const level = (t, C = CYCLE) => C.LB;
-// le temps de la fonte : 0 au début de la descente, 1 à la fin
-// (C.UM : la part du temps de la simulation que la fonte montre ; voir setMeltEnd)
-export const meltU = (t, C = CYCLE) => (t - C.T2) / (C.T3 - C.T2) * (C.UM ?? 1);
-// La fonte s'arrête quand le dernier cristal a disparu sous le bain : son temps
-// est calé sur la simulation (le plus tardif de ses uGone). Sans cela, une grappe
-// qui fond vite laissait un bain vide pendant les derniers paliers. Ensuite, la
-// grille vide regagne le fond en SINK. La valeur, connue après la simulation,
-// est rangée par graine pour que la caméra (camera.js) suive la même grille.
-export const SINK = 0.035;
-const ENDS = new Map();
-export const setMeltEnd = (key, um) => { ENDS.set(key, um); };
-export const meltEnd = (key) => ENDS.get(key) ?? 1;
-export const meltEndOf = (crystals) => Math.min(1, Math.max(0.35, Math.max(...crystals.map((m) => m.uGone)) + 0.02));
-// la ligne du bain vue de la grappe, sans le tassement propre à chaque cristal
-export function line(t, C = CYCLE) {
-  if (t < C.T0) return C.LH;
-  if (t < C.T1) return C.LH + (C.LOW - C.LH) * (t - C.T0) / (C.T1 - C.T0); // (la levée, à vitesse constante)
-  if (t < C.T2) return C.LOW;
-  if (t < C.T3) return bathAt(meltU(t, C), C.LOW, C.LH - C.LOW);
-  const l3 = bathAt(C.UM ?? 1, C.LOW, C.LH - C.LOW);
-  return l3 + (C.LH - l3) * sm(C.T3, C.T3 + SINK, t); // (la grille vide regagne le fond)
+// ── Le circuit : deux demi-chemins (de la chaleur au moule, du moule à la chaleur) ──
+// Chaque demi-chemin est une ligne brisée [x, y] ; les plateaux restent à plat.
+// F : la partie « usine » de la recette (half, y0, y1, dir, circuit, ramp).
+export function circuit(F) {
+  const D = F.dir, X = F.half, a = [0, F.y1], b = [0, F.y0];
+  const down = [a, [D * X, F.y1], [D * X, F.y0], b]; // ligne haute, descente, ligne basse
+  let up;
+  if (F.circuit === 'rampe') {
+    // retour par un plan incliné : la ligne basse file loin, la rampe remonte vers la ligne haute
+    const run = (F.y1 - F.y0) / Math.tan(F.ramp), x1 = F.half * 0.36;
+    up = [b, [-D * (x1 + run), F.y0], [-D * x1, F.y1], a];
+  } else up = [b, [-D * X, F.y0], [-D * X, F.y1], a];
+  return { down, up };
 }
-// la hauteur de la grappe dans le monde
-export const lift = (t, C = CYCLE) => C.LB - line(t, C);
-// instant où le métal à la hauteur y (repère de la grappe) sort du bain
-export const emerge = (y, C = CYCLE) => C.T0 + clamp01((C.LH - y) / (C.LH - C.LOW)) * (C.T1 - C.T0);
-// instant où la ligne du bain atteint la hauteur y pendant la fonte (sans tassement)
-export function reach(y, C = CYCLE) {
-  if (y <= C.LOW) return C.T2;
-  let lo = C.T2, hi = C.T3 + SINK;
-  for (let i = 0; i < 40; i++) { const m = (lo + hi) / 2; if (line(m, C) < y) lo = m; else hi = m; }
-  return hi;
+const segLen = (p, q) => Math.hypot(q[0] - p[0], q[1] - p[1]);
+// point d'une ligne brisée à la fraction u : un arrêt à chaque coude (transfert)
+export function along(poly, u) {
+  const L = []; let tot = 0;
+  for (let i = 0; i + 1 < poly.length; i++) { L.push(segLen(poly[i], poly[i + 1])); tot += L[i]; }
+  let d = Math.min(1, Math.max(0, u)) * tot;
+  for (let i = 0; i < L.length; i++) {
+    if (d <= L[i] || i === L.length - 1) {
+      const t = ease(d / L[i]);
+      return [poly[i][0] + (poly[i + 1][0] - poly[i][0]) * t, poly[i][1] + (poly[i + 1][1] - poly[i][1]) * t, i];
+    }
+    d -= L[i];
+  }
+  return [...poly[poly.length - 1], L.length - 1];
 }
-// la peau du bain qui refroidit : elle se forme après la fonte, couvre le
-// bain au repos, et la grille qui sort la déchire du centre vers les bords
-// (0 : bain nu ; 1 : peau entière ; tear : rayon de la déchirure, en part du bain)
-export function cool(t, C = CYCLE) {
-  if (t < C.T0) return { cover: 1, tear: 0 };
-  if (t < C.T1) return { cover: 1, tear: Math.pow((t - C.T0) / (C.T1 - C.T0), 0.7) * 1.15 };
-  return { cover: sm(C.T3 + 0.03, 0.99, t), tear: 0 };
-}
-// la chaleur de la fonte (0 hors de la fonte, 1 pendant)
-export const rising = (t, C = CYCLE) => sm(C.T2, C.T2 + 0.03, t) * (1 - sm(C.T3, C.T3 + 0.04, t));
 
-// le rayon des fils de la grille (cm) : les cristaux reposent dessus
-export const GRID_WIRE = 0.02;
-
-// ── La grappe : des trémies posées sur la grille du fond, sans s'interpénétrer
-// trop (une trémie peut en pénétrer une autre : ce sont des cristaux maclés) ──
-export function buildCluster(seed, { count = 9, scale = 1, spread = 1 } = {}) {
-  const rng = createRng(seed).fork('cluster');
+// Les chariots : chaque tronçon qui n'est pas une ligne (ascenseur, rampe) a
+// le sien, à demeure. Il attend au départ du tronçon, emporte le plateau, le
+// dépose à l'arrivée, puis revient à vide pendant la fonte (de back0 à back1).
+// Rend, pour chaque tronçon : { p, q (ses bouts), pos, load (porte un plateau) }.
+export function carriers(C, mv, t) {
   const out = [];
-  let tries = 0;
-  while (out.length < count && tries++ < 400) {
-    const big = out.length === 0;
-    const s = (big ? rng.range(0.85, 1.05) : rng.range(0.25, 0.75)) * scale;
-    const r = big ? 0 : rng.range(0.9, 2.9) * spread * scale;
-    const a = rng.range(0, Math.PI * 2);
-    const x = Math.cos(a) * r, z = Math.sin(a) * r;
-    if (out.some((c) => Math.hypot(c.x - x, c.z - z) < (c.s + s) * 0.95)) continue;
-    // (les tirages gardent leur ordre : une graine donne la même grappe qu'avant,
-    // à la hauteur près)
-    rng.range(0.55, 0.98);
-    const ang = rng.range(0, Math.PI), tilt = 0.5 * rng.range(-0.3, 0.3);
-    // posé SUR la grille : son point le plus bas (le cube incliné) repose sur les
-    // fils, sans les traverser ; l'inclinaison reste faible, un cristal ne la
-    // touche pas que d'une arête en équilibre
-    const at = Math.abs(tilt), y = s * (Math.cos(at) + Math.sin(at)) + GRID_WIRE;
-    out.push({
-      x, z, s, y, ang, tilt, ox: rng.range(0, 1), seed: rng.range(0, 50),
-      lean: rng.pick([-1, 1]), corner: [rng.pick([-1, 1]), rng.pick([-1, 1])],
-    });
+  for (const poly of [C.down, C.up]) {
+    const L = []; let tot = 0;
+    for (let i = 0; i + 1 < poly.length; i++) { L.push(segLen(poly[i], poly[i + 1])); tot += L[i]; }
+    let d0 = 0;
+    for (let i = 0; i < L.length; i++) {
+      const p = poly[i], q = poly[i + 1];
+      if (Math.abs(q[1] - p[1]) > 1e-6) {
+        const d = mv * tot;
+        let f = d <= d0 ? 0 : d >= d0 + L[i] ? 1 : ease((d - d0) / L[i]);
+        const load = d > d0 && d < d0 + L[i];
+        if (t >= TL.back0) f = 1 - ease((t - TL.back0) / (TL.back1 - TL.back0)); // (retour à vide)
+        out.push({ p, q, pos: [p[0] + (q[0] - p[0]) * f, p[1] + (q[1] - p[1]) * f], load });
+      }
+      d0 += L[i];
+    }
   }
   return out;
 }
 
-// La marée de la grappe : au repos, le bain couvre son plus haut cristal de 0,14 cm
-export function topOf(c) { const a = Math.abs(c.tilt); return c.y + c.s * (Math.cos(a) + Math.sin(a)); }
-export function tideFor(cluster, C = CYCLE) {
-  const top = Math.max(...cluster.map(topOf));
-  return { ...C, LH: Math.max(top + 0.14, 1) };
+// La ceinture chauffante : sa hauteur, rapportée à celle de l'objet (0 : l'assiette, 1 : le sommet).
+// Garée au-dessus, elle descend lentement le long de l'objet pendant la fonte, puis remonte.
+export function beltAt(t) {
+  const down = smooth(TL.heat - 1, TL.heat + 0.4, t), run = smooth(TL.heat + 0.4, TL.melt - 2.5, t), up = smooth(TL.melt + 0.4, TL.melt + 2, t);
+  const sweep = 1.06 - 1.0 * (0.25 * run + 0.75 * Math.min(1, Math.max(0, (t - TL.heat - 0.4) / (TL.melt - 2.5 - TL.heat - 0.4)))); // (départ et arrivée doux, descente régulière)
+  return 1.5 + (sweep - 1.5) * down * (1 - up);
 }
 
-// le tassement d'un cristal à l'instant u de la fonte (données de la simulation)
-function dropOf(m, u) {
-  if (!m || u <= 0) return 0;
-  const x = Math.min(u / m.dt, m.steps), i = Math.floor(x), f = x - i;
-  return i >= m.steps ? m.drop[m.steps] : m.drop[i] * (1 - f) + m.drop[i + 1] * f;
-}
-
-// La bascule : quand la section au ras du bain a fondu (l'encoche de la
-// ligne de flottaison), la partie haute n'est plus portée que d'un côté, celui
-// qui regarde le centre de la grappe. Elle pivote sur ce bord : son côté
-// extérieur tombe dans le bain, en accélérant (son centre de gravité descend :
-// pivoter sur le bord extérieur le ferait monter, comme un levier), rebondit à
-// peine, s'enfonce jusqu'à n'en laisser dépasser que des bribes (le bismuth solide flotte à
-// peine sur le liquide : 9,8 contre 10,05 g/cm³), et y fond tout entière avant
-// la fin de la fonte. Le pied reste sur la grille et fond avec le bain.
-export function toppleOf(c, m, u, C = CYCLE) {
-  if (!m || !(m.uSettle > 0) || u <= m.uSettle) return null;
-  const uS = m.uSettle, x = (u - uS) / 0.06;
-  const r = (k) => { const v = Math.sin(c.seed * 12.9898 + k * 78.233) * 43758.5453; return v - Math.floor(v); };
-  const amax = 0.5 + 0.35 * r(1);
-  const fall = x < 1 ? x * x : 1 + 0.08 * Math.exp(-2.5 * (x - 1)) * Math.sin(5 * (x - 1));
-  let dx = c.x, dz = c.z; const l = Math.hypot(dx, dz);
-  if (l < 0.2) { dx = Math.cos(c.seed); dz = Math.sin(c.seed); } else { dx /= l; dz /= l; }
-  const dur = Math.max(0.12, Math.min(0.28, 1.08 - uS - 0.05));
-  return {
-    dir: [dx, dz], angle: amax * fall,
-    neck: bathAt(uS, C.LOW, C.LH - C.LOW) + dropOf(m, uS),
-    pivot: -0.85 * c.s, sink: 1.1 * c.s * sm(0.6, 2.2, x),
-    shrink: 1.9 * c.s * Math.pow(Math.min(Math.max((u - uS - 0.05) / dur, 0), 1), 1.3),
-  };
-}
-
-// L'appareillage, ce qui cause chaque temps du cycle : le cadre de levage
-// (sa hauteur est celle de la grappe), et le brûleur, allumé pendant
-// l'attente, avant que la grappe ne redescende, éteint après la fonte.
-export function apparatusAt(t, C = CYCLE) {
-  return {
-    lift: lift(t, C),
-    flame: sm(C.T2 - 0.06, C.T2 - 0.03, t) * (1 - sm(C.T3, C.T3 + 0.03, t)),
-  };
-}
-
-function skinOf(t, tGone) {
-  const life = Math.min(0.11, 0.995 - tGone);
-  if (life < 0.02) return -1;
-  const a = (t - tGone) / life;
-  return a > 0 && a < 1 ? a * 0.11 : -1;
-}
-
-// État de chaque cristal à l'instant t : sa hauteur (celle de la grille, moins
-// son tassement), l'âge de sa peau d'oxyde sur le bain, la ride de son tassement.
-// melt : les résultats de la simulation (un par cristal), ou rien (tests).
-export function crystalsAt(cluster, t, C = CYCLE, melt = null) {
-  const u = meltU(t, C), o = lift(t, C);
-  return cluster.map((c, i) => {
-    const m = melt?.[i];
-    // (desc : de combien le repère de la grappe est sous le monde, tassement compris)
-    const desc = dropOf(m, u) - o;
-    // la peau : quand il ne reste plus rien du cristal au-dessus du bain
-    const toT = (uu) => C.T2 + uu / (C.UM ?? 1) * (C.T3 - C.T2);
-    const tGone = m ? toT(m.uGone) : reach(topOf(c) + 0.05, C);
-    const skinAge = t - tGone;
-    // la ride : quand les restes s'effondrent dans le bain (ou, à défaut, quand le bloc se tasse)
-    const uR = m ? (m.uPlunge > 0 ? m.uPlunge : m.uSettle) : -1;
-    const tSet = uR > 0 ? toT(uR) : -1;
-    const rip = tSet > 0 ? t - tSet : -1;
-    return {
-      x: c.x, y: c.y, z: c.z, s: c.s, ang: c.ang, tilt: c.tilt, ox: c.ox, seed: c.seed, desc,
-      topple: toppleOf(c, m, u, C),
-      // (la peau vit 0,11 boucle, moins si le cristal disparaît tard : elle doit
-      // être défaite avant la fin de la boucle, sinon elle sauterait au raccord ;
-      // son âge est ramené sur 0,11 pour qu'elle se défasse en entier)
-      skin: skinOf(t, tGone),
-      ripple: rip > 0 && rip < 0.07 ? { x: c.x, z: c.z, dt: rip } : null,
-    };
-  });
+// ── L'état de l'usine à la phase ph ∈ [0, 1) ──
+// R.objects : les objets de la boucle ; rend { k, t, pallets, wax, bell, arm, heat, cool }
+export function stateAt(R, ph) {
+  const n = R.objects.length, H = R.loop.half;
+  const T = (ph - Math.floor(ph)) * n * H, k = Math.min(n - 1, Math.floor(T / H)), t = T - k * H;
+  const C = circuit(R.factory);
+  const mv = Math.min(1, Math.max(0, (t - TL.lift) / (TL.move - TL.lift)));
+  // deux plateaux : l'un monte avec l'objet (du moule à la chaleur), l'autre descend à vide
+  const pUp = along(C.up, mv), pDown = along(C.down, mv);
+  const pallets = k % 2 === 0 ? [pUp, pDown] : [pDown, pUp];
+  const wax = k % 2 === 0 ? 0 : 1; // (le plateau qui porte la cire)
+  // le moule : il s'ouvre comme un livre sur l'objet neuf ; une fois le plateau parti, il se
+  // lève, se referme, le barillet pivote, et le moule suivant redescend fermé sur le plateau vide
+  const open = smooth(0.1, TL.lift - 0.15, t) * (1 - smooth(TL.lift + 1.7, TL.lift + 2.7, t));
+  const up = smooth(TL.lift + 0.5, TL.lift + 1.6, t) * (1 - smooth(TL.move, TL.lower, t));
+  const arm = k + ease((t - TL.lift - 1.7) / (TL.move - TL.lift - 1.9));
+  const heat = smooth(TL.heat, TL.heat + 1.4, t) * (1 - smooth(TL.melt, TL.melt + 1.2, t));
+  return { k, t, n, pallets, wax, bell: up, open, arm, heat, carriers: carriers(C, mv, t), object: R.objects[k], next: R.objects[(k + 1) % n] };
 }

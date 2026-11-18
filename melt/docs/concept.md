@@ -1,73 +1,62 @@
 # Melt — document de travail
 
-Thème : **« melt »**. Sous-titre : *le bain de bismuth*.
+Thème : **« melt »**. Sous-titre : *la refonte*.
 
 ## Historique
 
-C'est la cinquième version du concept. Les précédentes sont gardées pour la trace :
+C'est la sixième version du concept. Les précédentes sont gardées pour la trace :
 - **le flocon** qui fond en perles : l'historique git avant le 14 novembre ;
-- **les pinacles** (`concept-pinacles.md`) ;
-- **le fjord** (`concept-fjord.md`) ;
-- **eau douce et bascule** (`concept-eau-douce.md`), puis **la colonne de glace** (`concept-colonne.md`), réalisée puis abandonnée : juste physiquement, mais « n'évoque rien », avec dix secondes de calcul pour une image pauvre.
+- **les pinacles** (`concept-pinacles.md`), **le fjord** (`concept-fjord.md`), **eau douce et bascule** (`concept-eau-douce.md`) ;
+- **la colonne de glace** (`concept-colonne.md`), réalisée puis abandonnée : juste physiquement, mais « n'évoque rien » ;
+- **le bain de bismuth** (`concept-bismuth.md`), réalisé puis abandonné le 18 novembre : « trop technique, pas assez esthétique ». Sur la planche de cinq graines, l'image était celle de cubes gigognes posés sur une grille, dans un vide gris, avec un tiers de la boucle sans sujet à l'écran.
 
-**La leçon retenue** : on fait l'image d'abord, la physique ensuite. Cette version est partie d'un essai d'image (`proto/b0`), validé par l'utilisateur à chaque étape (cristaux, couleurs, fonte), avant toute construction.
+**Ce que ces abandons ont appris.** On fait l'image d'abord, la physique ensuite. Et le sujet doit être la fonte elle-même, vue de près, pas un procédé dont la fonte est une étape.
 
-## Le thème en largeur (ce qui a décidé du bismuth)
+## La piste retenue (proposée par l'utilisateur)
 
-- **Le bismuth fond à 271 °C.** Refroidi lentement, il donne des **cristaux en trémie** : des cubes dont les faces sont creusées en escaliers, parce que les arêtes et les coins poussent plus vite que le milieu des faces. La diffusion y empêche mieux l'accumulation qui freine la croissance (Scientific Reports, 2023).
-- **Ses couleurs viennent d'une couche mince d'oxyde** (Bi₂O₃, quelques dizaines à quelques centaines de nanomètres), qui fait interférer la lumière : or, magenta, bleu, vert. C'est la même physique que les couleurs de revenu de l'acier.
-- **Le métal fondu est un miroir**, couvert d'une peau d'oxyde grise que l'on écume. Les cristaux refondus perdent leur peau.
-- **Le bismuth solide est moins dense que le liquide** (il se dilate en gelant, comme l'eau).
+**Une mini-usine qui refond sans fin la même cire.** Un objet de cire fond sous une source de chaleur ; la cire coule dans un moule, d'où sort un autre objet, qui part fondre à son tour. La boucle se referme d'elle-même : fondre, couler, mouler, démouler, refondre.
 
-## La piste retenue
+**L'exigence qui porte tout le projet** (utilisateur) : la fonte doit être soignée. On ne doit pas avoir l'impression que l'objet « s'aplatit » : on doit voir des coulées, l'objet qui se déforme. D'où une vraie simulation de matière chauffée (`src/sim/mpm.js`), essayée seule avant toute machine (`proto/h0`), puis dans une première machine (`proto/h1`).
 
-**L'image.** Un bain de bismuth fondu, noir et lisse comme un miroir, dans une marmite de fonte posée sur un brûleur. Des trémies irisées en sortent sur la grille d'un panier et s'y reflètent, chaque cristal et son double formant une figure.
+**Ce que l'utilisateur a retenu des essais** : les veines de la cire, qui se déforment avec l'écoulement. Elles sont devenues un élément de chaque cire (une masse et des veines).
 
-**La liberté (une seule) : les durées.** Le métal ne quitte jamais la marmite. On lève le panier pour récolter la grappe, puis on la replonge par crans dans le bain chauffé, et la fonte est calculée. La récolte et la fonte tiennent dans une boucle de 40 s.
+**Écarté** : un sablier (l'objet fond en haut, le moule est en bas, on retourne). L'utilisateur voulait une machine « type mini-usine, avec des tapis roulants ».
 
-**Le cycle** (`src/cycle.js`, une seule horloge, durée 40 s ; la boucle affichée commence à t = 0,26, grappe suspendue) :
+**Demandé en cours de route** : chaque graine construit une usine différente.
 
-| t | Ce qu'on voit | Cause | Loi |
-| --- | --- | --- | --- |
-| 0 – 0,01 | le miroir couvert d'une peau d'oxyde dorée ; la grappe a repoussé au fond | le bain refroidit | croissance en trémie |
-| 0,01 – 0,20 | la grille déchire la peau et sort la grappe, le haut d'abord ; le métal neuf s'oxyde aussitôt | on lève le panier | oxyde en racine du temps passé à l'air |
-| 0,20 – 0,32 | la grappe suspendue ; les couleurs mûrissent (or, magenta, bleu) | l'air chaud ; on allume le brûleur | couche mince d'Airy |
-| 0,32 – 0,94 | **la fonte** : la grappe redescend par quatre crans et, immobile à chaque arrêt, fond à sa ligne de flottaison ; les parois minces et les arêtes d'abord ; une encoche se creuse, la partie haute bascule dans le bain, qui se ride | le brûleur chauffe le bain | problème de Stefan (simulé) |
-| 0,94 – 1 | la grille vide regagne le fond ; les peaux d'oxyde des cristaux engloutis s'étalent et se défont ; le bain se couvre d'une nouvelle peau | on éteint le brûleur | |
+## La machine
 
-Les paliers montrés s'arrêtent quand le dernier cristal a disparu sous le bain (`meltEndOf`) : une grappe qui fond vite occupe moins de crans, chacun plus long.
+Un circuit vertical : une ligne haute et une ligne basse, reliées par deux ascenseurs (ou un ascenseur et une rampe). Deux plateaux y tournent. Un plateau est une cuvette en entonnoir percée d'une buse, qui porte une assiette sur trois colonnettes.
 
-**La boucle se referme par construction.** À t = 0 et à t = 1, le bain couvre tout, et la grappe a repoussé sous le miroir. Un test vérifie, pour 200 graines, qu'aucun coin de cristal ne dépasse.
+- **En haut**, sous la source de chaleur, l'objet fond sur son assiette. La cire tombe du bord de l'assiette dans la cuvette, tenue chaude, et sort par la buse.
+- **En bas**, à l'aplomb, un moule est posé sur l'assiette de l'autre plateau. Le filet de cire y entre par son entonnoir.
+- **Le moule s'ouvre comme un livre** : l'objet suivant est né. Les deux plateaux échangent leurs places ; le moule se lève, se referme, le barillet pivote et pose le moule de l'objet d'après.
 
-**Le regard** : la photographie de minéraux de musée. Un studio sombre, des boîtes de lumière, l'objet qui tranche sur le fond, et le reflet comme second sujet.
+**Le moule a la forme de l'objet** (demandé par l'utilisateur, à la place de cloches toutes pareilles) : une coque en deux moitiés qui suit la figurine, avec une bride au plan de joint et un entonnoir dans l'axe du filet. Les moitiés sont articulées sur une charnière, derrière l'objet, pour ne rien cacher à l'ouverture.
 
-## Variations
+Un seul mât porte le barillet et la source de chaleur. Les pieds des lignes sont aux bouts seulement, parce que les moules balaient le milieu.
+
+**L'allure.** Une première machine en caissons peints et montants noirs était « massive ». L'utilisateur l'a voulue plus élégante, avec des finitions soignées (chanfreins, raccords cohérents) : elle est faite de tubes fins, de bagues et de pieds tournés, comme un instrument de laboratoire.
+
+**Les chariots.** Chaque ascenseur et la rampe ont le leur, à demeure : il attend, emporte le plateau, revient à vide. Un premier jet le faisait apparaître et disparaître avec le plateau, ce qui « cassait la magie » (utilisateur).
+
+**La liberté (une seule) : le temps.** Une cire met des minutes à fondre et des heures à prendre ; ici la fonte dure vingt secondes et la prise quelques-unes.
+
+## Variations (une graine = une usine)
 
 | Axe | Valeurs |
 | --- | --- |
-| Humeur (le studio que le métal reflète) | Studio (dôme clair au zénith, fond noir), Forge (lueur orangée sous l'horizon), Tente claire (high key), Heure bleue |
-| Port des cristaux | trémie, trémie en spirale, allongée |
-| Gamme d'oxyde (vitesse d'oxydation) | or et magenta, arc-en-ciel, bleus et verts, presque argent |
-| Grappe | grappe, druse dense, un grand cristal et ses satellites |
-| Cadrage | plan large, au ras du bain, gros plan, plongée, le creuset sur le feu (vu du dehors, environ une graine sur sept) |
+| Lieu | atelier, laboratoire, équipe de nuit |
+| Cire (masse et veines) | rose et ivoire, bleu canard et crème, miel et lait, sauge et craie, prune et abricot, réglisse et menthe |
+| Source de chaleur | lampe infrarouge par le haut, rampe de brûleurs de biais, ceinture chauffante qui descend le long de l'objet |
+| Circuit | deux ascenseurs, un ascenseur et une rampe |
+| Objets (deux par boucle) | lapin, canard, ourson, chouette, quille |
+| Proportions, sens du circuit, peinture, métal des pièces et des plateaux | tirés |
 
-4 × 3 × 4 × 3 × 5 = 720 combinaisons, plus la graine de chaque grappe.
+La source de chaleur change la façon de fondre : par le haut, les oreilles ploient d'abord ; de biais, un flanc coule avant l'autre ; la ceinture, elle, descend lentement et fait fondre l'objet tranche par tranche. (Une première ceinture fixe, à mi-hauteur, laissait le haut de l'objet suspendu : l'appui d'un morceau froid se soutenait lui-même.)
 
-## Ce que les essais ont appris
+**La durée.** 25 secondes par objet, deux objets : une boucle de 50 secondes. Une première version à 34 secondes et jusqu'à trois objets était « un peu trop longue » (utilisateur).
 
-- **Seule une planche de graines révèle certains défauts** (faces noires, bain vide pendant la fonte, caméra sous le métal) : aucune image isolée ne les montrait.
-- **Une distance juste dans les gradins** : ignorer la paroi du gradin voisin fait traverser la marche et rend des faces noires piquées de points ; un rayon pris dans les gradins au dernier rebond doit voir le studio, pas le noir.
-- **La fonte se calcule** (`proto/s0`, puis `src/melt/model.js` et `src/scene/melt.js`) : une fonte dessinée à la main (arrondi des gradins, affaissement tiré au hasard) ne tenait pas, et c'est le thème. On ne garde que l'instant τ où chaque cellule fond, rendu par φ = (u − τ)·v.
-- **Le repère** : la chaleur se calcule dans le repère du cristal, où le bain monte ; montré ainsi, on voit « le sol qui monte ». L'image garde le bain fixe et fait descendre la grappe, ce qui donne le même champ τ.
-- **Le critère d'appui** compare la section au ras du bain à la section d'origine à la même hauteur : une trémie creuse a une petite section à bien des hauteurs sans que rien n'ait fondu.
-- **Le panache d'air chaud** reste tiède à la ligne (0,45 de la chaleur du bain) : plus chaud, les petits cristaux fondaient entiers dans l'air avant de descendre.
-- **Les derniers restes** (une ou deux cellules d'épaisseur) fondent au même pas, d'une image à l'autre : sous 20 % du solide qui a été hors du bain, la simulation les fait s'effondrer dans le bain.
-- **Les peaux d'oxyde** doivent rapetisser jusqu'à rien avant la fin de leur vie, sinon une grande plaque disparaît d'une image à l'autre ; l'écoulement du bain du centre vers les bords donne une cause à leur dérive.
-- **Les arrêts de la grappe** : une descente continue se lit comme des cristaux qui coulent ; immobile, la grappe est rongée sous nos yeux. Vider le bain puis le remplir à la louche ne tenait pas (les cristaux refondus ne peuvent pas le faire remonter).
+## Ce qui reste à faire
 
-## Ce qui reste perfectible
-
-- **Le tassement et l'effondrement** regardent le cristal entier, pas ses morceaux détachés un à un.
-- **Les franges** des gradins latéraux, très régulières sur les grands cristaux, font parfois des peignes.
-- **Les peaux d'oxyde** restent dessinées : la surface du bain n'est pas simulée (une simulation 2D en hauteur porterait la peau et les rides).
-- **Non vérifié :** mobile, et autres GPU que celui de cette machine.
+Voir le README (« État »).
