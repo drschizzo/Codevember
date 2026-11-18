@@ -144,10 +144,10 @@ export function createStage(scene, gen, { renderer, lite = false } = {}) {
     const wp = S.pallets[S.wax];
     wax.U.origin.value.set(wp[0] - (GX / 2) * CELL, wp[1] - PBASE * CELL, -(GZ / 2) * CELL);
     wax.mesh.position.set(wp[0], wp[1] - PBASE * CELL + (GY / 2) * CELL, 0);
-    wax.U.keyDir.value.copy(P.kd); wax.U.keyCol.value.copy(P.kc).multiplyScalar(M.key.I * 0.3);
+    wax.U.keyDir.value.copy(P.kd); wax.U.keyCol.value.copy(P.kc).multiplyScalar(M.key.I * 0.22);
     wax.U.rimDir.value.copy(P.rd); wax.U.rimCol.value.copy(P.rimC).multiplyScalar(M.rim.I * 0.5);
     wax.U.heatDir.value.copy(P.dirv); wax.U.heatCol.value.setRGB(1, 0.55, 0.3).multiplyScalar(0.6 * S.heat);
-    wax.U.amb.value.set(M.wall).multiplyScalar(0.22);
+    wax.U.amb.value.set(M.wall).multiplyScalar(0.16);
     void camera; void size; void sub;
   }
 

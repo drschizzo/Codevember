@@ -35,6 +35,7 @@ export function createFactory(scene) {
   // lumières (ordre fixe)
   const key = new THREE.DirectionalLight(0xffffff, 3);
   key.castShadow = true; key.shadow.mapSize.set(2048, 2048); key.shadow.bias = -0.0004; key.shadow.normalBias = 0.02; key.shadow.radius = 3;
+  key.shadow.camera.layers.enable(2); // (calque 2 : l'ombre de la cire, scene/wax.js)
   const rim = new THREE.DirectionalLight(0xffffff, 2);
   const heatL = new THREE.PointLight(0xff8040, 0, 4.5, 1.6);
   const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 0.5);
@@ -59,6 +60,7 @@ export function createFactory(scene) {
     const paint = mat({ color: F.paint, metalness: 0, roughness: 0.42, clearcoat: 0.6, clearcoatRoughness: 0.25 }, 0.06);
     const metal = mat({ ...METALS[F.metal], metalness: 1 }, 0.1);
     const pal = mat({ ...METALS[F.pallet], metalness: 1 }, 0.08);
+    const enamel = mat({ color: 0xe9e4d8, metalness: 0, roughness: 0.3, clearcoat: 0.7, clearcoatRoughness: 0.15 }, 0.05);
     const dark = mat({ color: 0x1d1e21, metalness: 0.7, roughness: 0.5 }, 0.1);
     const rubber = mat({ color: 0x121214, metalness: 0, roughness: 0.9 });
     const add = (geo, m, x, y, z, parent = g) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.castShadow = o.receiveShadow = true; parent.add(o); return o; };
@@ -225,7 +227,7 @@ export function createFactory(scene) {
       lathe([[rN, -0.12], [rN, yb0 - 0.004], [rB - 0.03, yb0 - 0.004], [rB - 0.006, yb0 + 0.012], [rB, yb0 + 0.04], [rB, yr - 0.012], [rB + 0.008, yr - 0.004], [rB + 0.008, yr + 0.006], [rB - 0.004, yr + 0.012], [rB - 0.03, yr + 0.006],
         [rB - 0.04, yr - 0.008], [rB - 0.04, DZ(PBASE + pr.floor0 + pr.slope * (pr.bowlR - 2))], [rH, DZ(PBASE + pr.floor0 + pr.slope * pr.holeR)], [rH, -0.12], [rN, -0.12]], pal, q);
       const rp = pr.plateR * CELL;
-      lathe([[0, PLATE_Y], [rp - 0.008, PLATE_Y], [rp, PLATE_Y - 0.008], [rp, PLATE_Y - 0.036], [rp - 0.012, PLATE_Y - 0.05], [0.26, PLATE_Y - 0.06], [0, PLATE_Y - 0.06]], pal, q);
+      lathe([[0, PLATE_Y], [rp - 0.008, PLATE_Y], [rp, PLATE_Y - 0.008], [rp, PLATE_Y - 0.036], [rp - 0.012, PLATE_Y - 0.05], [0.26, PLATE_Y - 0.06], [0, PLATE_Y - 0.06]], enamel, q); // (émail : une assiette de métal poli ne montrerait pas l'ombre de l'objet)
       const yb = DZ(PBASE + pr.floor0 + pr.slope * 11);
       for (let i = 0; i < 3; i++) {
         const a = (i / 3) * Math.PI * 2 + 0.5, x = Math.cos(a) * 0.23, z = Math.sin(a) * 0.23;
@@ -314,7 +316,7 @@ export function createFactory(scene) {
     key.color.copy(kc); key.intensity = M.key.I;
     Object.assign(key.shadow.camera, { left: xmin - 1, right: xmax + 1, top: mastH / 2 + 1.5, bottom: -mastH / 2 - 1.5, near: 2, far: 34 }); key.shadow.camera.updateProjectionMatrix();
     rim.position.copy(mid).addScaledVector(rd, 16); rim.target.position.copy(mid); rim.color.set(M.rim.color); rim.intensity = M.rim.I;
-    hemi.color.set(M.wall).lerp(new THREE.Color(1, 1, 1), 0.6); hemi.groundColor.set(M.floor); hemi.intensity = 0.55;
+    hemi.color.set(M.wall).lerp(new THREE.Color(1, 1, 1), 0.6); hemi.groundColor.set(M.floor); hemi.intensity = 0.22; // (peu d'ambiance : c'est la lampe qui dessine les ombres)
     heatL.position.set(0, F.y1 + PLATE_Y + 0.6, 0).addScaledVector(dirv, 0.9);
 
     P = { F, pallets, cars, hub, spokes, mouldM, paint, dark, metal, moulds: [], heat, ring, stream, dirv, topY, n, C, kd, rd, kc, rimC: new THREE.Color(M.rim.color), M };

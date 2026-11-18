@@ -32,11 +32,11 @@ export const CIRCUITS = { ascenseurs: { label: 'Deux ascenseurs' }, rampe: { lab
 // ── Les lieux ──
 // wall / floor : teintes ; key : lampe principale [az, el], K ; env : studio HDR ; paints : peintures de la machine
 export const MOODS = {
-  atelier: { label: 'Atelier', wall: '#6f6a62', floor: '#4b4743', key: { az: -0.55, el: 0.92, K: 5200, I: 3.4 }, rim: { az: 2.5, el: 0.5, color: '#ffd0a0', I: 2.2 }, env: 'softbox', envI: 0.55,
+  atelier: { label: 'Atelier', wall: '#6f6a62', floor: '#4b4743', key: { az: -0.55, el: 0.92, K: 5200, I: 5 }, rim: { az: 2.5, el: 0.5, color: '#ffd0a0', I: 1.6 }, env: 'softbox', envI: 0.34,
     paints: ['#c9a227', '#2f6f7a', '#a8402a', '#d8d2c4'], grade: { exposure: 1, contrast: 1.05, saturation: 1 } },
-  laboratoire: { label: 'Laboratoire', wall: '#b9bfbf', floor: '#8b9090', key: { az: 0.5, el: 1.05, K: 6200, I: 3 }, rim: { az: -2.4, el: 0.6, color: '#dfe8ff', I: 1.6 }, env: 'softbox', envI: 0.8,
+  laboratoire: { label: 'Laboratoire', wall: '#b9bfbf', floor: '#8b9090', key: { az: 0.5, el: 1.05, K: 6200, I: 4.4 }, rim: { az: -2.4, el: 0.6, color: '#dfe8ff', I: 1.2 }, env: 'softbox', envI: 0.42,
     paints: ['#e8e4da', '#3b6ea5', '#5d6b3a', '#d0453a'], grade: { exposure: 0.86, contrast: 1.02, saturation: 0.95 } },
-  nuit: { label: 'Équipe de nuit', wall: '#2b2f3a', floor: '#24262b', key: { az: -0.9, el: 0.7, K: 4800, I: 2.9 }, rim: { az: 2.2, el: 0.35, color: '#9fb8ff', I: 2.6 }, env: 'night', envI: 0.75,
+  nuit: { label: 'Équipe de nuit', wall: '#2b2f3a', floor: '#24262b', key: { az: -0.9, el: 0.7, K: 4800, I: 4 }, rim: { az: 2.2, el: 0.35, color: '#9fb8ff', I: 2.2 }, env: 'night', envI: 0.5,
     paints: ['#c9a227', '#a8402a', '#2f6f7a', '#8d9096'], grade: { exposure: 1.25, contrast: 1.08, saturation: 1 } },
 };
 

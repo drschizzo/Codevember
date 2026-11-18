@@ -28,7 +28,7 @@ import { asyncPipelines, warmScene } from '../../shared/app/warmup.js';
 import { createDebugTools, packRecipe, unpackRecipe, sleep } from '../../shared/app/debug.js';
 
 const NAME = 'melt';
-const DEFAULT_SEED = 'm1'; // scène d'ouverture (sans ?seed=)
+const DEFAULT_SEED = 'ib352j'; // scène d'ouverture (sans ?seed=) : équipe de nuit, cire miel, lampe, circuit à rampe, un chat et une chouette
 const params = new URLSearchParams(location.search);
 const $ = (s) => document.querySelector(s);
 const randomSeed = () => Math.random().toString(36).slice(2, 8);

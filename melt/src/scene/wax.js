@@ -13,7 +13,7 @@
 import * as THREE from 'three/webgpu';
 import {
   Fn, If, Loop, Break, Discard, uniform, float, vec3, vec4, max, min, pow, clamp, mix, smoothstep, length, normalize, dot, abs, exp, reflect, select,
-  texture3D, cameraPosition, positionWorld, cameraViewMatrix, cameraNear, cameraFar, viewZToPerspectiveDepth,
+  texture3D, cameraPosition, positionWorld, cameraViewMatrix, cameraNear, cameraFar, viewZToPerspectiveDepth, viewZToOrthographicDepth,
 } from 'three/tsl';
 import { GX, GY, GZ, O, CELL, RH } from '../sim/mpm.js';
 import { BOX } from '../objects.js';
@@ -44,7 +44,9 @@ export function createWax(sim) {
     const ms = A.w, d = A.xyz.div(ms.max(1e-3));
     const frac = ms.div(ms.add(Bq.x).max(1e-3));
     const ps = max(sdObj(p.sub(Ov).sub(d)), float(0.3).sub(frac).mul(1.5));
-    const pl = float(ISO_L).sub(Bq.x).mul(KF);
+    // (loin de toute matière, la distance vaut un grand pas : sans cela la marche piétine dans le vide
+    //  de la boîte — c'est ce qui empêchait le rayon d'ombre d'atteindre l'objet)
+    const pl = mix(float(1.2), float(ISO_L).sub(Bq.x).mul(KF), smoothstep(0.004 * RH, 0.03 * RH, ms.add(Bq.x)));
     return { ps: mix(float(1.2), ps, smoothstep(0.004 * RH, 0.03 * RH, ms)), pl, A, Bq };
   };
   const inBox = (p) => p.x.greaterThan(1).and(p.x.lessThan(GX - 1)).and(p.y.greaterThan(1)).and(p.y.lessThan(GY - 1)).and(p.z.greaterThan(1)).and(p.z.lessThan(GZ - 1));
@@ -141,5 +143,31 @@ export function createWax(sim) {
   mat.mrtNode = stableVelocity();
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(GX * CELL, GY * CELL, GZ * CELL), mat);
   mesh.frustumCulled = false;
+
+  // L'ombre portée : une seconde boîte, que seule la caméra d'ombre de la lampe voit (calque 2).
+  // Ses rayons sont parallèles (lampe directionnelle) : on marche de la face d'entrée vers la
+  // face dessinée, le long de la lumière, et l'on écrit la profondeur du point touché.
+  const sMat = new THREE.MeshBasicNodeMaterial();
+  // (la marche est écrite deux fois, une par nœud : une variable partagée entre le masque et la
+  //  profondeur n'est déclarée que dans le premier des deux et manque à l'autre)
+  const sMarch = () => {
+    const rl = U.keyDir.negate(), pe = positionWorld.sub(U.origin).div(CELL);
+    const inv = vec3(1).div(rl), t0 = vec3(1).sub(pe).mul(inv), t1 = Gv.sub(1).sub(pe).mul(inv);
+    const tn = max(max(min(t0.x, t1.x), min(t0.y, t1.y)), min(t0.z, t1.z)); // (négatif : l'entrée est en amont)
+    const tw = tn.toVar(), hit = float(0).toVar();
+    Loop(160, () => {
+      If(tw.greaterThan(0), () => { Break(); });
+      const d = phi(pe.add(rl.mul(tw)));
+      If(d.lessThan(0.05), () => { hit.assign(1); Break(); });
+      tw.addAssign(clamp(d.mul(0.8), 0.15, 1.6));
+    });
+    return { p: pe.add(rl.mul(tw)), hit };
+  };
+  sMat.maskShadowNode = Fn(() => sMarch().hit.greaterThan(0.5))();
+  sMat.depthNode = Fn(() => viewZToOrthographicDepth(cameraViewMatrix.mul(vec4(U.origin.add(sMarch().p.mul(CELL)), 1)).z, cameraNear, cameraFar))();
+  sMat.shadowSide = THREE.BackSide;
+  const shadow = new THREE.Mesh(mesh.geometry, sMat);
+  shadow.frustumCulled = false; shadow.castShadow = true; shadow.layers.set(2);
+  mesh.add(shadow);
   return { mesh, U, setShape: (tex) => { tS.value = tex; } };
 }
