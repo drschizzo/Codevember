@@ -116,7 +116,7 @@ async function main() {
     const recipe = R;
     loading.active = true; loading.applied = false; loading.warming = false; loading.settle = 0;
     loader.show({ steps: STEPS });
-    loader.art({ seed: R.seed, colors: [MOODS[R.mood].papers[R.sheets[0].top][0], MOODS[R.mood].papers[R.sheets[0].bot][0], MOODS[R.mood].wall], n: R.sheets[0].n });
+    loader.art({ seed: R.seed, sheet: R.sheets[0], colors: [MOODS[R.mood].papers[R.sheets[0].top][0], MOODS[R.mood].papers[R.sheets[0].bot][0], MOODS[R.mood].wall] });
     // (le fondu d'entrée de l'écran se termine avant que la scène ne change)
     // (sleep et non setTimeout : une page masquée ralentit les minuteries)
     sleep(firstRecipe ? 0 : 280).then(() => {
