@@ -1,7 +1,7 @@
 // Chaîne de rendu : pré-passe (profondeur, normales) et occlusion ambiante
 // (GTAO, appliquée à l'éclairage indirect pendant la passe de scène), passe de
-// scène (MRT : couleur HDR, vitesses, réflectance), réflexions en espace écran
-// (SSR), anticrénelage temporel, flou de mouvement, profondeur de champ,
+// scène (MRT : couleur HDR, vitesses, réflectance), lumière indirecte en espace
+// écran (cfg.gi, facultative), réflexions en espace écran (SSR), anticrénelage temporel, flou de mouvement, profondeur de champ,
 // bloom, traînées anamorphiques, halation, poussière sur la lentille,
 // étalonnage (balance, contraste, saturation, vignettage), tone mapping,
 // aberration chromatique, anticrénelage d'image (SMAA, FXAA), grain.
@@ -21,9 +21,10 @@ import * as THREE from 'three/webgpu';
 import {
   pass, mrt, output, normalView, velocity, uniform, vec2, vec3, vec4, float,
   dot, mix, max, smoothstep, length, select, screenUV, screenCoordinate, hash, uint, time, fract, renderOutput, pow, uv, floor, mx_cell_noise_float, screenSize,
-  roughness, specularColorBlended, positionViewDirection, builtinAOContext,
+  roughness, specularColorBlended, positionViewDirection, builtinAOContext, diffuseColor,
 } from 'three/tsl';
 import { ssr } from 'three/addons/tsl/display/SSRNode.js';
+import { ssgi } from 'three/addons/tsl/display/SSGINode.js';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import { ao } from 'three/addons/tsl/display/GTAONode.js';
 import { traa } from 'three/addons/tsl/display/TRAANode.js';
@@ -73,12 +74,13 @@ export function createPost(renderer, scene, camera, { haze = null, aoSamples = 0
     ca: uniform(0.2), grain: uniform(0.04), hiCap: uniform(3),
     streaks: uniform(0.3), streakLen: uniform(6), halation: uniform(0.3), dirt: uniform(0.4),
     cut: uniform(0), // (1 pendant l'image d'un raccord : vitesses nulles)
+    gi: uniform(1), // (lumière indirecte en espace écran, cfg.gi)
   };
   let nodes = {};
   let key = '';
 
   function build(cfg) {
-    const k = [cfg.aa, cfg.bloom, cfg.ao, cfg.ssr, cfg.ssrRes, cfg.dof, cfg.motionBlur > 0, cfg.ca > 0, cfg.streaks > 0, cfg.dirt > 0, !!cfg.lite, !!haze, cfg.msaa | 0].join();
+    const k = [cfg.aa, cfg.bloom, cfg.ao, cfg.ssr, cfg.ssrRes, cfg.dof, cfg.motionBlur > 0, cfg.ca > 0, cfg.streaks > 0, cfg.dirt > 0, !!cfg.lite, !!haze, cfg.msaa | 0, !!cfg.gi, cfg.giDebug | 0].join();
     if (k === key) return;
     key = k;
     for (const n of Object.values(nodes)) n?.dispose?.();
@@ -130,8 +132,13 @@ export function createPost(renderer, scene, camera, { haze = null, aoSamples = 0
       const f0 = specularColorBlended, k = float(1).sub(normalView.dot(positionViewDirection).abs().clamp(0, 1)).pow(5);
       outs.refl = vec4(f0.add(vec3(1).sub(f0).mul(k)), roughness);
     }
+    // lumière indirecte en espace écran (cfg.gi, facultatif) : elle a besoin de
+    // la couleur diffuse des surfaces, qui teinte ce qu'elles reçoivent
+    const useGi = !!cfg.gi && !cfg.lite && !!normals && !msaa;
+    if (useGi) outs.diffuse = diffuseColor;
     scenePass.setMRT(mrt(outs));
     if (outs.refl) scenePass.getTexture('refl').type = THREE.UnsignedByteType;
+    if (outs.diffuse) scenePass.getTexture('diffuse').type = THREE.UnsignedByteType;
     normals ??= outs.normal ? scenePass.getTextureNode('normal') : null;
     // (avec le MSAA, la profondeur de la passe de scène est multi-échantillonnée :
     // ni le TRAA, ni la brume, ni la SSR, ni le flou ne peuvent la lire ; ils
@@ -157,6 +164,20 @@ export function createPost(renderer, scene, camera, { haze = null, aoSamples = 0
     // brume éclairée propre au projet, avant l'anticrénelage temporel qui lisse
     // son tramage
     if (haze) color = vec4(color.rgb.add(haze(depth, !!cfg.lite)), color.a);
+    if (useGi) {
+      // Un rebond de lumière entre ce qu'on voit : une surface colorée et
+      // éclairée teinte ses voisines (le sol sous un objet, le creux d'un pli).
+      // Le bruit de l'échantillonnage est lissé par l'anticrénelage temporel.
+      const g = ssgi(base, depth, normals, camera);
+      g.sliceCount.value = cfg.giSlices ?? 2; g.stepCount.value = cfg.giSteps ?? 8;
+      g.radius.value = cfg.giRadius ?? 8; g.giIntensity.value = 10; g.aoIntensity.value = 1;
+      g.backfaceLighting.value = cfg.giBackface ?? 0;
+      g.useTemporalFiltering = useTraa;
+      nodes.gi = g;
+      // (la valeur du nœud est son occlusion ; la lumière indirecte se lit à part)
+      const bounce = g.getGINode().rgb;
+      color = cfg.giDebug ? vec4(bounce.mul(U.gi), 1) : vec4(color.rgb.add(scenePass.getTextureNode('diffuse').rgb.mul(bounce).mul(U.gi)), color.a);
+    }
     if (cfg.ssr) {
       // Réflexions en espace écran : les objets exposés et les doublures
       // reflètent ce qui est réellement autour d'eux (parois de la cellule,
@@ -276,6 +297,7 @@ export function createPost(renderer, scene, camera, { haze = null, aoSamples = 0
       nodes.bloom.threshold.value = cfg.bloomThreshold;
     }
     if (nodes.ao) nodes.ao.radius.value = cfg.aoRadius;
+    U.gi.value = cfg.giIntensity ?? 1;
     if (nodes.ssr) {
       const r = nodes.ssr;
       U.ssrMix.value = cfg.ssrIntensity;

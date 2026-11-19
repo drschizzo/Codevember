@@ -1,213 +1,92 @@
-// Recette d'une scène : tout ce qui découle de la graine. Une recette est un
-// objet JSON (partageable par lien, « Copier le lien ») ; le panneau la modifie
-// en place. Le rendu ne lit QUE la recette et la phase : même recette, même
-// phase → même image.
-//
-// Règles (voir la skill codevember-scene, references/art-direction.md) :
-// - chaque tirage a son propre flux (rng.fork('…')) ;
-// - une humeur est un DÉCOR (fond, table, accessoires, lumière, valeur,
-//   cadrage), pas une teinte ; les matières y sont composées à la main ;
-// - les lampes sont presque blanches (≥ 4700 K) ;
-// - la boucle : des événements à intervalles fixes de temps physique, une
-//   durée de film fixe (voir physio.js, plan.js).
+// La recette : tout ce qu'une graine décide. Un accord de couleurs, deux ou
+// trois feuilles (patron de plis, taille, place, couleurs des deux faces),
+// leurs socles, le fond, la caméra.
 import { createRng } from '../../shared/rng.js';
-import { FINISHES, SETS } from './finishes.js';
-import { PLANTS } from './gen/plant.js';
-import { CONTAINERS } from './container.js';
 
-const r2 = (x) => Math.round(x * 100) / 100 || 0; // (|| 0 : jamais de −0, que JSON ne garde pas)
-const r3 = (x) => Math.round(x * 1000) / 1000 || 0;
+const r2 = (v) => Math.round(v * 100) / 100 + 0; // (+ 0 : jamais de −0, qui ne survit pas au JSON)
 
-export const kelvinToHex = (K) => {
-  const t = K / 100;
-  let r, g, b;
-  if (t <= 66) { r = 255; g = 99.4708025861 * Math.log(t) - 161.1195681661; }
-  else { r = 329.698727446 * (t - 60) ** -0.1332047592; g = 288.1221695283 * (t - 60) ** -0.0755148492; }
-  if (t >= 66) b = 255; else if (t <= 19) b = 0; else b = 138.5177312231 * Math.log(t - 10) - 305.0447927307;
-  const c = (v) => Math.round(Math.min(255, Math.max(0, v))).toString(16).padStart(2, '0');
-  return `#${c(r)}${c(g)}${c(b)}`;
+// ── Les patrons ──
+// Des plis concentriques, montagne et vallée alternées, qui tordent la feuille
+// en selle ; ou des plis rayonnants, qui la ferment en ombrelle.
+// n : côtés (64 : des cercles) ; twist : tour pris du centre au bord ; star :
+// creux des côtés ; lobes : bosses de la selle ; eps : force du coup de pouce
+export const PATTERNS = {
+  carre: { label: 'Carré', n: 4 },
+  hexagone: { label: 'Hexagone', n: 6 },
+  octogone: { label: 'Octogone', n: 8 },
+  spirale: { label: 'Spirale', n: 4, twist: 0.5, eps: 0.05 },
+  rosace: { label: 'Rosace', n: 8, twist: 0.5, eps: 0.05 },
+  etoile: { label: 'Étoile', n: 4, star: 0.35 },
+  soleil: { label: 'Ombrelle', n: 20, kind: 'soleil' },
 };
+// (les plis en cercles, selle ronde ou trèfle à trois bosses, sont dans le solveur — n ≥ 32, lobes — mais leur
+//  bascule ne retombe pas à coup sûr sur son point de départ : ils ne sont pas proposés)
 
-// ── Décors (humeurs) ─────────────────────────────────────────────────────────
-// backdrop : fond peint (scene/decor.js) ; table : jeu de matériaux ;
-// containers : montures possibles ; key : lampe principale (az relatif à la
-// caméra, élévation, ouverture, pénombre, intensité) ; rim : contre-jours ;
-// env : studio HDR ; bg : fond et brume ; grade : étalonnage ; plants :
-// préférences d'archétypes ; view : cadrage (élévation de la caméra,
-// distances des plans rapproché et large, focale).
+
+// ── Les accords ──
+// papers : dégradés (centre → bord) des faces, chauds et froids alternés (une
+// feuille prend deux voisins : ses deux faces s'opposent) ; blocks : le fond (disque, arche, paravent) ; wall / floor : cyclorama, dont les socles prennent la teinte
 export const MOODS = {
-  // d'après Karl Blossfeldt (« Urformen der Kunst », 1928) : l'organe, pas la
-  // plante. Carton gris moyen sans horizon, une seule lumière dure et rasante
-  // de côté qui sculpte les nervures, presque pas de remplissage, couleurs
-  // retenues (la plante reste verte, à peine), plan rapproché serré. Tirée à
-  // part (une scène sur cinq, voir generate) pour ne rien changer aux autres
-  // graines.
-  blossfeldt: {
-    sky: ['#f4f4f2', '#6e6f6b', 0.12],
-    label: 'Blossfeldt', backdrop: 'card', table: ['cardGrey'], containers: [['cachepot', 3], ['terracotta', 2]],
-    key: { K: 5600, az: [1.45, 1.75], el: [0.28, 0.42], angle: 0.7, pen: 0.25, I: [900, 1100] }, rim: [['#ffffff', 50], ['#eef2ff', 20]],
-    // (un carton éclairé de lui-même, mur et sol de même valeur : sans quoi
-    // la flaque de la lampe sur le sol et le mur sombre font une scène de
-    // théâtre, avec un horizon)
-    env: 'cyclo', envI: [0.12, 0.16], bg: '#8c8d89', wall: 0.95,
-    grade: { contrast: 1.18, saturation: 0.45, shadows: [0.98, 1.0, 1.03], highlights: [1, 1, 0.99] },
-    plants: [['flowering', 2], ['bush', 3], ['seedling', 2], ['biophytum', 1]], view: { el: [0.05, 0.18], close: [0.78, 0.95], wide: [3.8, 4.4], fov: [26, 30] },
-    leafLight: 1.0, extra: true,
-  },
-  serre: {
-    sky: ['#eef3ff', '#b7ad98', 1.0],
-    label: 'Serre', backdrop: 'serre', table: ['weathered', 'oak'], containers: [['ward', 2], ['cloche', 2], ['terracotta', 2]],
-    key: { K: 5800, az: [2.5, 3.6], el: [0.75, 1.0], angle: 0.42, pen: 0.55, I: [760, 1000] }, rim: [['#fff4e6', 260], ['#dfeaff', 120]],
-    env: 'softbox', envI: [0.55, 0.8], bg: '#d8dccf', wall: 1.25,
-    grade: { contrast: 1.02, saturation: 1.02, shadows: [0.97, 1.0, 1.0], highlights: [1.03, 1.02, 0.96] },
-    plants: [['bush', 3], ['flowering', 3], ['trailing', 2], ['bijuga', 1], ['fruiting', 1]], view: { el: [0.05, 0.22], close: [1.1, 1.43], wide: [4.6, 5.6], fov: [30, 36] },
-    leafLight: 1.0,
-  },
-  cabinet: {
-    sky: ['#ffe8cc', '#3a2a1c', 0.05],
-    label: 'Cabinet', backdrop: 'cabinet', table: ['walnut'], containers: [['ward', 3], ['cloche', 3]],
-    key: { K: 4800, az: [1.2, 1.9], el: [0.32, 0.5], angle: 0.36, pen: 0.35, I: [700, 950] }, rim: [['#ffe2c0', 180], ['#9fb6ff', 40]],
-    env: 'atelier', envI: [0.12, 0.2], bg: '#2a1a10', wall: 0.22,
-    grade: { contrast: 1.08, saturation: 0.95, shadows: [0.94, 0.98, 1.08], highlights: [1.06, 1.0, 0.92] },
-    plants: [['bush', 3], ['fruiting', 2], ['flowering', 2], ['bijuga', 2]], view: { el: [0.22, 0.4], close: [1.21, 1.54], wide: [5.0, 6.0], fov: [30, 35] },
-    leafLight: 0.9,
-  },
-  planche: {
-    sky: ['#ffffff', '#d8d6d0', 0.35],
-    label: 'Planche', backdrop: 'cyclo', table: ['paperWhite'], containers: [['cachepot', 3], ['terracotta', 2], ['bonsai', 2]],
-    key: { K: 6000, az: [-0.6, 0.6], el: [1.15, 1.35], angle: 0.75, pen: 1.0, I: [400, 500] }, rim: [['#ffffff', 90], ['#eef2ff', 60]],
-    env: 'cyclo', envI: [0.26, 0.34], bg: '#e9e8e4', wall: 0.62,
-    grade: { contrast: 0.98, saturation: 0.92, shadows: [0.98, 1.0, 1.03], highlights: [1, 1, 1] },
-    plants: [['flowering', 3], ['fruiting', 3], ['bush', 2], ['seedling', 2], ['biophytum', 1]], view: { el: [0.08, 0.25], close: [1.32, 1.65], wide: [5.4, 6.4], fov: [28, 34] },
-    leafLight: 1.05,
-  },
-  labo: {
-    sky: ['#eef4ff', '#5a5f5c', 0.35],
-    label: 'Laboratoire', backdrop: 'tiles', table: ['epoxy'], containers: [['terracotta', 3], ['cachepot', 2]],
-    key: { K: 6500, az: [-1.2, -0.5], el: [1.0, 1.25], angle: 0.6, pen: 0.8, I: [650, 850] }, rim: [['#e8f2ff', 220], ['#fff1dc', 90]],
-    env: 'studio', envI: [0.35, 0.5], bg: '#5d6a64', wall: 0.6,
-    grade: { contrast: 1.04, saturation: 0.88, shadows: [0.95, 1.0, 1.04], highlights: [0.98, 1.0, 1.02] },
-    plants: [['bush', 3], ['seedling', 2], ['bijuga', 2], ['fruiting', 1]], view: { el: [0.0, 0.12], close: [1.16, 1.43], wide: [4.8, 5.6], fov: [32, 38] },
-    leafLight: 1.0,
-  },
-  shoji: {
-    sky: ['#fff6e8', '#b59f80', 0.45],
-    label: 'Shōji', backdrop: 'shoji', table: ['hinoki'], containers: [['bonsai', 3], ['cachepot', 1]],
-    key: { K: 5600, az: [1.3, 1.8], el: [0.22, 0.4], angle: 0.9, pen: 1.0, I: [700, 900] }, rim: [['#fff6ea', 120], ['#e6eeff', 40]],
-    env: 'softbox', envI: [0.3, 0.45], bg: '#b9ad98', wall: 0.9,
-    grade: { contrast: 0.99, saturation: 0.9, shadows: [0.99, 0.99, 1.02], highlights: [1.02, 1.0, 0.97] },
-    plants: [['biophytum', 3], ['seedling', 2], ['bijuga', 2], ['bush', 1]], view: { el: [0.02, 0.14], close: [1.1, 1.38], wide: [4.4, 5.2], fov: [30, 36] },
-    leafLight: 1.0,
-  },
-  nuit: {
-    sky: ['#6f86c0', '#0a0c12', 0.06],
-    label: 'Nuit', backdrop: 'night', table: ['ebony', 'walnut'], containers: [['cloche', 3], ['ward', 2], ['terracotta', 1]],
-    key: { K: 7600, az: [2.2, 2.9], el: [0.5, 0.75], angle: 0.32, pen: 0.25, I: [520, 720] }, rim: [['#ffdcb0', 60], ['#7f9cff', 160]],
-    env: 'night', envI: [0.08, 0.14], bg: '#05070d', wall: 0.08,
-    grade: { contrast: 1.1, saturation: 0.9, shadows: [0.9, 0.96, 1.14], highlights: [0.98, 1.0, 1.04] },
-    plants: [['bush', 2], ['trailing', 2], ['flowering', 1], ['bijuga', 2]], view: { el: [-0.06, 0.06], close: [1.16, 1.49], wide: [4.6, 5.6], fov: [32, 38] },
-    leafLight: 0.85,
-  },
-  velours: {
-    sky: ['#ffffff', '#000000', 0.0],
-    label: 'Velours', backdrop: 'velvet', table: ['velvetBlack'], containers: [['cloche', 2], ['cachepot', 2], ['bonsai', 1]],
-    key: { K: 5600, az: [-0.5, 0.5], el: [0.9, 1.15], angle: 0.24, pen: 0.4, I: [800, 1000] }, rim: [['#ffffff', 280], ['#cfe0ff', 180]],
-    env: 'studio', envI: [0.05, 0.1], bg: '#020202', wall: 0.0,
-    grade: { contrast: 1.12, saturation: 0.98, shadows: [0.97, 0.98, 1.04], highlights: [1, 1, 1] },
-    plants: [['flowering', 2], ['bush', 2], ['biophytum', 1], ['fruiting', 2]], view: { el: [0.1, 0.3], close: [0.99, 1.26], wide: [4.2, 5.0], fov: [28, 34] },
-    leafLight: 1.0,
-  },
+  bonbon: { label: 'Bonbon', wall: '#f7b7cf', floor: '#f4aac6', papers: [['#ff2f6d', '#ff8a1f'], ['#12c4d6', '#2f6bff'], ['#ffe14a', '#ff5a7a'], ['#2f6bff', '#12c4d6']], blocks: ['#ff6f61', '#ffd166', '#3ec1d3'],
+    key: '#fff4ea', keyI: 3.4, envI: 0.22, grade: { exposure: 1, contrast: 1.04, saturation: 1.06 } },
+  citron: { label: 'Citron', wall: '#b9a8f2', floor: '#ae9cee', papers: [['#ffe600', '#a6f000'], ['#6a2cff', '#ff3fb0'], ['#ff8a00', '#ffe600'], ['#19e3c0', '#6a2cff']], blocks: ['#ffe600', '#ff6fb5', '#5b3fd6'],
+    key: '#fffbe8', keyI: 3.3, envI: 0.22, grade: { exposure: 1, contrast: 1.04, saturation: 1.05 } },
+  menthe: { label: 'Menthe', wall: '#ffd9a8', floor: '#ffcf96', papers: [['#10e0a0', '#0fa8ff'], ['#ff3f98', '#ff9a2f'], ['#7a3cff', '#10e0a0'], ['#ff9a2f', '#ff3f98']], blocks: ['#12b886', '#ff5d8f', '#fff3d6'],
+    key: '#fff1e0', keyI: 3.3, envI: 0.22, grade: { exposure: 1, contrast: 1.04, saturation: 1.05 } },
+  lagune: { label: 'Lagune', wall: '#bfe8e2', floor: '#b0dfd9', papers: [['#ff5a4f', '#ff2f8a'], ['#2536ff', '#7a3cff'], ['#ffd400', '#ff9a1f'], ['#12b8c8', '#2536ff']], blocks: ['#ff5a4f', '#2536ff', '#ffe9a8'],
+    key: '#fff6ee', keyI: 3.4, envI: 0.22, grade: { exposure: 1, contrast: 1.04, saturation: 1.05 } },
+  sorbet: { label: 'Sorbet', wall: '#f6ecd6', floor: '#f1e4c8', papers: [['#ff7a59', '#ffb23f'], ['#3aa8ff', '#7bdcb5'], ['#ff8ad1', '#ff7a59'], ['#3aa8ff', '#b06bff']], blocks: ['#ff7a59', '#3aa8ff', '#ffd9e6'],
+    key: '#fff6ea', keyI: 3.2, envI: 0.2, grade: { exposure: 0.96, contrast: 1.05, saturation: 1.08 } },
+  reglisse: { label: 'Réglisse', wall: '#33264a', floor: '#2c2040', papers: [['#ff3fa4', '#ff8a3d'], ['#2ff3c0', '#19a8ff'], ['#f6ff4a', '#ff8a3d'], ['#19a8ff', '#7a5cff']], blocks: ['#4a2f78', '#ff3fa4', '#1f8fa8'],
+    key: '#fff0e6', keyI: 4.2, envI: 0.14, grade: { exposure: 1.12, contrast: 1.06, saturation: 1.05 } },
 };
+export const BACKDROPS = { nu: { label: 'Nu' }, disque: { label: 'Un disque' }, arche: { label: 'Une arche' }, paravent: { label: 'Un paravent' } };
+export const HALF = 7; // durée d'une bascule (s) ; la boucle en compte deux
 
-// matières des montures (jamais tirées au hasard ailleurs)
-const POT = { terracotta: 'terracotta', cachepot: 'porcelainPot', bonsai: 'celadonPot', cloche: 'terracotta', ward: 'terracotta' };
-const BASE = { cloche: ['walnut', 'ebony', 'oak'], ward: ['castIron', 'whiteIron'] };
-
-export function finishOf(setKey) {
-  const S = SETS[setKey];
-  const fin = (k) => ({ ...FINISHES[k], preset: k });
-  return { set: setKey, outer: fin(S.outer), inner: fin(S.inner), edge: fin(S.edge), wear: S.wear ?? 0 };
-}
-
-// motifs à l'échelle d'un pot (une dizaine de centimètres)
-const scaled = (f, k) => { for (const s of ['outer', 'inner', 'edge']) f[s].scale = r2(f[s].scale * k); return f; };
-
-export const CAUSES = { drop: 'Goutte', tap: 'Marteau' };
+// places : la grande feuille au centre, les autres devant, à gauche et à droite.
+// az : direction (0 = vers la caméra), y : hauteur du centre, size : rayon
+const SLOTS = [
+  { size: [0.9, 1.02], az: [0, 0], y: [1.14, 1.26], rings: [15, 19], m: 17 },
+  { size: [0.56, 0.66], az: [0.85, 1.05], y: [0.76, 0.9], rings: [10, 13], m: 13 },
+  { size: [0.44, 0.52], az: [-1.0, -0.8], y: [0.54, 0.64], rings: [9, 11], m: 12 },
+];
+export const GAP = 0.08; // jeu entre deux feuilles à plat (elles ne peuvent pas se toucher)
 
 export function generate(seed, overrides = {}) {
   const rng = createRng(seed);
-  // (le tirage des humeurs d'origine est inchangé ; Blossfeldt est tirée à
-  // part, une fois sur cinq, sur son propre flux : les graines déjà choisies
-  // gardent leur décor sauf celles-là)
-  const mood = overrides.mood ?? (rng.fork('regard').chance(0.2) ? 'blossfeldt' : rng.fork('mood').pick(Object.keys(MOODS).filter((k) => !MOODS[k].extra)));
-  const M = MOODS[mood];
-  const rp = rng.fork('plant'), rc = rng.fork('camera'), rl = rng.fork('light'), re = rng.fork('events'), rd = rng.fork('decor');
-  // la famille d'abord (quatre manières de plier), puis le port de la sensitive
-  const family = overrides.family ?? rp.pick(['sensitive', 'biophytum', 'oxalis', 'dionaea']);
-  const kind = family === 'sensitive' ? rp.weighted(M.plants.filter(([k]) => PLANTS[k].family === 'sensitive')) : family;
-  // la dionée vit sous verre (l'humidité d'un terrarium) : ses gouttes sont
-  // de condensation, sur des pièges différents
-  const container = family === 'dionaea' ? 'cloche' : rd.weighted(M.containers);
-  const roof = container === 'cloche' || container === 'ward';
-  // le scénario : des gouttes, chacune sur une autre feuille (sous verre) ou
-  // une seule (la burette goutte toujours au même endroit) ; puis le marteau,
-  // qui ferme toute la plante d'un coup — le temps fort, à la fin
-  const drops = family === 'dionaea' ? 3 : roof ? re.int(1, 3) : 1;
-  const events = Array.from({ length: drops }, () => ({ cause: 'drop', source: roof ? 'roof' : 'burette' }));
-  if (family !== 'dionaea') events.push({ cause: 'tap' });
-  const K = events.length;
-  const spacing = family === 'dionaea' ? 640 : 560;
-  const purple = rp.chance(0.5);
-  const key = M.key;
-  const baseAz = rc.range(-0.5, 0.5);
+  const pick = (k, o) => overrides[k] ?? rng.fork(k).pick(Object.keys(o));
+  const mood = pick('mood', MOODS), backdrop = pick('backdrop', BACKDROPS), M = MOODS[mood];
+  const rs = rng.fork('sheets'), rc = rng.fork('camera');
+  const drawn = rs.chance(0.8) ? 3 : 2, count = overrides.patterns?.length ?? overrides.count ?? drawn;
+  // (tirage complet, quel que soit le nombre de feuilles : changer un patron au panneau ne déplace rien d'autre)
+  const keys = Object.keys(PATTERNS);
+  for (let i = keys.length - 1; i > 0; i--) { const j = rs.int(0, i); [keys[i], keys[j]] = [keys[j], keys[i]]; }
+  const patterns = keys.slice(0, count);
+  const side = rs.sign(), shift = rs.int(0, 3), plinth = rs.pick(['cylindre', 'bloc']);
+  const sheets = [];
+  (overrides.patterns ?? patterns).forEach((pattern, i) => {
+    const S = SLOTS[i], P = PATTERNS[pattern], size = r2(rs.range(...S.size)), y = r2(rs.range(...S.y));
+    // (une feuille tient dans le cylindre de rayon size autour de sa tige : deux cylindres ne se coupent pas)
+    const az = side * rs.range(...S.az), d = i ? sheets[0].size + size + GAP + rs.range(0, 0.12) : 0;
+    // (le socle s'arrête sous le point le plus bas de la feuille)
+    const reach = P.kind === 'soleil' ? 0.95 : 0.62, ph = Math.max(0, Math.min(rs.range(0.1, 0.42), y - reach * size - 0.06));
+    sheets.push({
+      pattern, size, y: r2(P.kind === 'soleil' ? Math.max(y, 0.95 * size + 0.12) : y), at: [r2(d * Math.sin(az)), r2(d * Math.cos(az))], rot: r2(rs.range(0, Math.PI / 2)),
+      rings: P.kind === 'soleil' ? 8 : rs.int(...S.rings), m: S.m, n: P.kind === 'soleil' ? rs.pick([16, 20, 24]) : P.n,
+      hole: r2(P.kind === 'soleil' ? rs.range(0.1, 0.2) : 0.08),
+      rhythm: 0, // (plis larges et étroits alternés : la selle ne bascule pas franchement à cette finesse, laissé de côté)
+      amp: r2(P.amp ?? rs.range(1.8, 2.05)), open: r2(rs.range(0.26, 0.36)), phase: r2(i === 0 ? 0 : rs.range(0.2, 0.8)),
+      top: (i + shift) % 4, bot: (i + shift + 1) % 4,
+      plinth: ph > 0.07 ? { kind: plinth, h: r2(ph), r: r2(rs.range(0.14, 0.19)), color: (i + shift) % 2 } : null,
+    });
+  });
   return {
-    v: 1, seed, mood,
-    plant: { kind, seed: `${seed}` },
-    container,
-    events,
-    loop: { duration: Math.round(K * re.range(17, 19) + 4), spacing }, // (le pli au ralenti prend du temps de film)
-    camera: {
-      fov: r2(rc.range(...M.view.fov)), az: r2(baseAz), el: r2(rc.range(...M.view.el)), close: r2(rc.range(...M.view.close)), wide: r2(rc.range(...M.view.wide)),
-      orbit: 0, rot: rc.pick([1, -1]), sway: r2(rc.range(0.01, 0.025)),
-    },
-    light: {
-      key: { color: kelvinToHex(key.K + rl.range(-150, 150)), intensity: r2(rl.range(...key.I)), az: r2(baseAz + rl.range(...key.az)), el: r2(rl.range(...key.el)), angle: key.angle, penumbra: key.pen },
-      sky: { color: M.sky[0], ground: M.sky[1], intensity: r2(M.sky[2] * rl.range(0.9, 1.1)) },
-      rim: M.rim.map(([c, I], i) => ({ color: c, intensity: r2(I * rl.range(0.85, 1.15)), az: r2(baseAz + (i ? -2.3 : 2.5) + rl.range(-0.2, 0.2)), el: r2(rl.range(0.3, 0.55)) })),
-    },
-    env: { preset: M.env, intensity: r2(rl.range(...M.envI)), rotation: r2(rl.range(0, Math.PI * 2)) },
-    fog: { color: M.bg, near: 12, far: 46 },
-    decor: {
-      backdrop: M.backdrop, wall: M.wall,
-      table: finishOf(rd.pick(M.table)),
-      // paillage : sphaigne pour la dionée (sa tourbière), akadama ou gravier
-      mulch: family === 'dionaea' ? 'sphagnum' : rd.pick(['akadama', 'akadama', 'gravel']), // (sphaigne vivante : la perlite blanche volait la vedette au piège)
-      pot: scaled(finishOf(POT[container]), container === 'terracotta' || container === 'cloche' || container === 'ward' ? 3 : 7),
-      // (dans un décor sombre, un socle de fonte blanche devenait la plus grande
-      // tache claire de l'image : il vole la vedette à la plante)
-      base: BASE[container] ? finishOf(rd.pick(M.wall < 0.3 ? BASE[container].filter((b) => b !== 'whiteIron') : BASE[container])) : null,
-      stand: finishOf('castIron'), brass: finishOf('hammerArm'), coil: finishOf('coil'),
-    },
-    leaf: {
-      family,
-      // trèfle : pourpre (Oxalis triangularis) une fois sur deux
-      // (pourpre d'Oxalis triangularis : un aubergine profond, pas un lilas ;
-      // vert : un vert franc et soutenu, jamais menthe)
-      hue: r2(family === 'oxalis' && purple ? rp.range(300, 318) : family === 'dionaea' ? rp.range(78, 92) : rp.range(88, 104)),
-      sat: r2(family === 'oxalis' && purple ? rp.range(0.38, 0.5) : rp.range(0.5, 0.66)),
-      light: r2((family === 'oxalis' && purple ? rp.range(0.13, 0.17) : rp.range(0.26, 0.31)) * M.leafLight), translucency: r2(rp.range(0.9, 1.25)),
-      flower: kind === 'biophytum' ? '#f2d24a' : rp.pick(['#f4a6cf', '#ef8fc0', '#f7b9d8', '#e98ab9']),
-      inner: family === 'dionaea' ? rp.pick(['#a3201c', '#8c1a2a', '#b8401c']) : '#9c1f1a', eye: family === 'oxalis' && purple ? 0.8 : 0,
-    },
+    v: 6, seed: String(seed), mood, backdrop,
+    patterns: sheets.map((s) => s.pattern), sheets,
+    decor: { side: -side, color: rs.int(0, 2), size: r2(rs.range(1.25, 1.55)) },
+    camera: { side: rc.sign(), sway: r2(rc.range(0.16, 0.26)), lift: r2(rc.range(-0.1, 0.15)), dist: r2(rc.range(5.5, 5.9)) },
+    loop: { half: HALF, duration: 2 * HALF },
     grade: { ...M.grade },
   };
 }
-
-// Recette ancienne (lien partagé) → recette courante : compléter les champs
-// ajoutés depuis, sans rien tirer de nouveau.
-export function upgrade(R) {
-  const D = generate(R.seed, { mood: R.mood });
-  for (const k of Object.keys(D)) if (R[k] === undefined) R[k] = D[k];
-  return R;
-}
-export { PLANTS, CONTAINERS };
+export function upgrade(R) { return R?.v === 6 ? R : generate(R?.seed ?? 'f1'); }
