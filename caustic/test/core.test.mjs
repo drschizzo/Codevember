@@ -157,6 +157,7 @@ test('la lentille et son dessin tiennent dans la cuve pour toutes les humeurs du
   for (const seed of ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']) {
     const R = generate(seed, { family: 'foyer' });
     const L0 = flatLanding(R.light, [0, 0, 0], R.tank.H, nWater(545));
-    assert.ok(Math.hypot(L0[0], L0[2]) < 0.24, `${seed}/${R.mood} : décalage ${Math.hypot(L0[0], L0[2]).toFixed(3)} m`);
+    // (le dessin, de côté 0,52 m, décalé de la lentille : les deux tiennent dans le bassin)
+    assert.ok(Math.hypot(L0[0], L0[2]) < (R.tank.W - 0.52) / 2 - 0.03, `${seed}/${R.mood} : décalage ${Math.hypot(L0[0], L0[2]).toFixed(3)} m`);
   }
 });

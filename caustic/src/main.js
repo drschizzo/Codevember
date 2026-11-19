@@ -28,7 +28,7 @@ import { loader } from '../../shared/app/loader.js';
 import { asyncPipelines, warmScene } from '../../shared/app/warmup.js';
 
 const NAME = 'caustic';
-const DEFAULT_SEED = 'c41'; // scène d'ouverture (sans ?seed=) : la diatomée de l'Atelier
+const DEFAULT_SEED = 'v3lsu6'; // scène d'ouverture (sans ?seed=)
 const params = new URLSearchParams(location.search);
 const $ = (s) => document.querySelector(s);
 const randomSeed = () => Math.random().toString(36).slice(2, 8);

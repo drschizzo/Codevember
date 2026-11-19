@@ -1,8 +1,8 @@
 # Caustic
 
-*le foyer des ondes.* Une cuve d'eau vue de côté, à travers sa vitre. Sur le pourtour, des plongeurs poussent des ondes. On les voit au fond comme des anneaux de lumière qui accourent vers le centre en se resserrant. À l'instant où ils se rejoignent, la surface prend exactement la forme d'une lentille calculée, et la lumière au fond se résout en un **dessin** (une diatomée, un oursin, une méduse, une rosace, un capitule de tournesol, un radiolaire), net et lumineux pendant une seconde de caméra rapide. Puis il se défait en anneaux qui repartent vers les bords, où les plongeurs les absorbent.
+*le foyer des ondes.* Un bassin au soleil, vu de trois quarts. Des ondes accourent des bords vers un point en se resserrant ; on les voit au fond comme des anneaux de lumière. À l'instant où elles se rejoignent, la surface prend exactement la forme d'une lentille calculée, et la lumière au fond se résout en un **dessin** (une diatomée, un oursin, une méduse, une rosace, un capitule de tournesol, un radiolaire). Puis il se défait en anneaux qui repartent vers les bords. L'eau ne se fige jamais : le film ralentit seulement un peu quand le dessin se forme.
 
-![Une diatomée dessinée par la lumière au fond de la cuve émaillée de l’Atelier (graine c41)](docs/capture.jpg)
+![Un bassin de pâte de verre turquoise dans un sol de tomettes, à l'ombre d'un feuillage ; au fond, un capitule de tournesol dessiné par la lumière (graine v3lsu6)](docs/capture.jpg)
 
 Rendu physique en three.js (WebGPU, TSL). La scène est entièrement procédurale : une graine produit une scène. La démarche est dans [docs/concept.md](docs/concept.md) : le thème exploré sous six angles (la physique des catastrophes optiques, les cuves à ondes et les bassins à houle, Hockney et les rideaux de lumière, le vocabulaire, les cycles, la lumière), les clichés écartés (le fond de piscine qui ondule au hasard, la cardioïde dans la tasse, le cristal qui jette des arcs-en-ciel), dix pistes notées, les épreuves de crédibilité, de variété et d'ambition, les photographies de référence.
 
@@ -20,9 +20,9 @@ Rendu physique en three.js (WebGPU, TSL). La scène est entièrement procédural
 
 Sur écran tactile : une touche met en pause, deux touches tirent une nouvelle scène, un appui long masque l'interface.
 
-Paramètres d'URL : `?seed=…`, `#r=…` (scène retouchée, « Copier le lien »), `?family=…` (foyer, faraday, karman), `?mood=…` (lagon, chambre, thermes, doree, nocturne, atelier, stroboscope), `?ui=0`, `?mobile=1` / `?mobile=0`, `?debug` (outils dans `window.caustic` : `shot(phase)`, `send(nom)`, `strip(phases)`, `sheet(graines, phases)` (une graine peut s'écrire `graine:humeur:famille`), `sendRT(cible)`, `meter()`, `meters(graines)`, `bench()`, `seam()`, `run()`).
+Paramètres d'URL : `?seed=…`, `#r=…` (scène retouchée, « Copier le lien »), `?family=…` (foyer, faraday, karman), `?mood=…` (patio, lagon, chambre, thermes, doree, nocturne, atelier, stroboscope), `?ui=0`, `?mobile=1` / `?mobile=0`, `?debug` (outils dans `window.caustic` : `shot(phase)`, `send(nom)`, `strip(phases)`, `sheet(graines, phases)` (une graine peut s'écrire `graine:humeur:famille`), `sendRT(cible)`, `meter()`, `meters(graines)`, `bench()`, `seam()`, `run()`).
 
-Le panneau règle la famille et l'humeur (nouvelle scène de la même graine) et la durée. Le groupe « geste » règle la série de dessins et l'orientation de chacun, la vitesse du film et le ralenti de la caméra rapide, la course des plongeurs ; pour Faraday, les réseaux, le nombre d'onde, l'amplitude et les battements du stroboscope ; pour Kármán, les tourbillons, le courant et les fossettes. Viennent ensuite l'eau (turbidité, ride de fond), la lumière (éclairement, température, taille angulaire de la source, qui fixe la finesse des filets, studio, fond, exposition), la caméra et le rendu. Export MP4 image par image (éventuellement accumulé) et PNG.
+Le panneau règle la famille et l'humeur (nouvelle scène de la même graine) et la durée. Le groupe « geste » règle la série de dessins et l'orientation de chacun, la vitesse du film et le ralentissement au dessin ; pour Faraday, les réseaux, le nombre d'onde, l'amplitude et les battements du stroboscope ; pour Kármán, les tourbillons, le courant et les fossettes. Viennent ensuite l'eau (turbidité, ride de fond), la lumière (éclairement, température, taille angulaire de la source, qui fixe la finesse des filets, studio, fond, exposition), la caméra et le rendu. Export MP4 image par image (éventuellement accumulé) et PNG.
 
 ## Principe : la lumière se rassemble
 
@@ -34,11 +34,11 @@ Une boucle de 36 s montre **trois dessins**, une série en crescendo (le premier
 
 | part du créneau | ce qu'on voit | cause visible | loi | temps |
 | --- | --- | --- | --- | --- |
-| 0 – 0,15 | eau presque calme, un frisson au fond ; la caméra regarde la surface et les plongeurs | — | ride de fond | réel × 0,4 |
-| 0,15 – 0,4 | les plongeurs plongent, en une vague qui court le long des parois ; des fronts de lumière entrent par les bords | les plongeurs, qui suivent l'eau à leur place | ondes de capillarité-gravité, dispersion exacte | réel × 0,4 ; la caméra descend vers le fond |
-| 0,4 – 0,6 | les anneaux se fondent, le dessin se forme et tient | la rencontre des fronts | retournement temporel ; réfraction de Snell | caméra rapide : ralenti jusqu'à × 0,006 |
-| 0,6 – 0,85 | le dessin se défait en anneaux qui repartent | la propagation | idem, amortissement visqueux 2νk² | retour au réel × 0,4 ; la caméra remonte |
-| 0,85 – 1 | les plongeurs absorbent ; calme | les plongeurs | — | — |
+| 0 – 0,15 | eau presque calme, un frisson au fond | — | ride de fond | réel × 0,4 |
+| 0,15 – 0,4 | des fronts de lumière entrent par les bords et se resserrent | — (la scène ne montre plus de batteur : voir « Ce qui a été abandonné ») | ondes de capillarité-gravité, dispersion exacte | réel × 0,4 ; la caméra s'avance |
+| 0,4 – 0,6 | les anneaux se fondent, le dessin se forme et tient | la rencontre des fronts | retournement temporel ; réfraction de Snell | léger ralentissement, jusqu'à × 0,15 |
+| 0,6 – 0,85 | le dessin se défait en anneaux qui repartent | la propagation | idem, amortissement visqueux 2νk² | retour au réel × 0,4 ; la caméra recule |
+| 0,85 – 1 | calme | — | — | — |
 
 La hauteur de la surface est une somme exacte d'ondes linéaires :
 
@@ -61,37 +61,50 @@ Vérifié dans Node (`test/core.test.mjs`) : la lumière poussée par le transpo
 
 ### Trois familles, trois gestes
 
-- **Foyer** : des anneaux de lumière convergent des bords vers le centre, s'y résolvent en un dessin, puis divergent, en un mouvement radial de respiration. Un batteur de plongeurs occupe trois parois (la face vitrée reste dégagée). Chaque coin de plongeur suit la hauteur de l'eau à sa place, lue dans le même tampon que la caustique, si bien que la cause et l'effet coïncident par construction.
-- **Faraday** : rien ne voyage. La cuve est secouée verticalement (volant à excentrique, ressorts). Au-dessus du seuil, un réseau d'ondes stationnaires à Ω/2 naît au centre et s'étend comme un cristal qui croît (carrés, hexagones, ou quasi-cristal à 8, 10, 12 branches). Un second réseau naît sur un bord et l'envahit, puis le forçage retombe et tout s'éteint. Le stroboscope, légèrement désaccordé, montre l'onde battre lentement : le réseau de points de lumière et son complémentaire alternent (un nombre entier de battements par boucle).
-- **Kármán** : dans un canal, l'eau passe autour d'un poteau poli. Des tourbillons alternés s'en détachent à période fixe (un nombre entier par boucle) et défilent vers le déversoir. Chacun creuse la surface (profil de Lamb-Oseen) et projette au fond un disque noir cerclé de lumière, les « ombres de tourbillon » d'un fond de piscine. Le poteau porte son ombre.
+- **Foyer** : des anneaux de lumière convergent des bords vers un point, s'y résolvent en un dessin, puis divergent.
+- **Faraday** : rien ne voyage. Un réseau d'ondes stationnaires naît au centre et s'étend comme un cristal qui croît (carrés, hexagones, ou quasi-cristal à 8, 10, 12 branches) ; un second réseau naît sur un bord et l'envahit, puis tout s'éteint.
+- **Kármán** : l'eau passe autour d'un cylindre d'acier satiné, tenu dans le courant par un pont de laiton posé sur la margelle. Des tourbillons alternés s'en détachent à période fixe et défilent. Chacun creuse la surface (profil de Lamb-Oseen) et projette au fond un disque sombre, les « ombres de tourbillon » d'un fond de piscine. Sous l'eau, le cylindre reflète le fond.
 
-## Matériaux et lumière
+## Le bassin (`src/scene/stage.js`)
 
-Le fond n'est éclairé que par la caustique : la lumière directe n'y arrive qu'à travers la surface. Sa matière donne l'échelle : sable blanc (grains de 0,7 mm, grains sombres), chaux (pores, coups de taloche), faïence (carreaux de 3 cm, joints de 1,8 mm, nuance par carreau), travertin (lits et pores), ardoise (feuillets, micas), émail, papier (fibres).
+Un bassin large et peu profond (1,1 m pour 45 cm d'eau au Foyer), creusé dans un sol, avec une margelle de pierre. Cette forme permet de le filmer de biais en voyant tout le fond.
 
-Les parois intérieures (moellons de travertin à joints, ardoise verte, tôle peinte, émail) reçoivent deux lumières. La première est le **rebond du fond éclairé** : la vraie lumière du fond, réduite et adoucie (128², σ ≈ 3 cm), lue en cinq points devant la paroi à des distances proportionnelles à la hauteur. Le bas d'une paroi s'allume face à la tache de soleil et reste sombre face à l'ombre. La seconde est la **caustique directe**, quand la lumière réfractée les frappe de biais (éclairement horizontal de la coupe à cette profondeur × |t·n|/|t_y|).
+**L'eau.** Le fond n'est éclairé que par la caustique : la lumière directe n'y arrive qu'à travers la surface. La surface se rend par un lancer de rayon analytique : reflet du ciel pondéré par Fresnel, et le fond ou une paroi vus à travers les vagues, réfractés, avec leur décor et la caustique fine. L'eau se colore comme celle d'un bassin plus profond (réglage par ambiance). Une ligne claire et une bande mouillée marquent le niveau sur les parois.
 
-**La surface de l'eau** se rend par un lancer de rayon analytique. Vue d'en haut, elle montre le reflet du studio et le scintillement de la source pondérés par Fresnel, et le fond (ou une paroi) vu à travers les vagues, réfracté. Vue d'en dessous (à travers la vitre), c'est un miroir de réflexion totale au-delà de 48,6° qui renvoie le fond, avec la fenêtre de Snell où brille la source. **Le volume d'eau** diffuse la lumière des coupes (fonction de phase de Henyey-Greenstein, extinction par longueur d'onde) : ce sont les rideaux de lumière. La vitre (12 mm) reflète le studio selon Fresnel, et ses chants sont verts.
+**Les rayons.** Un faisceau dans l'eau est la trace d'un trait brillant du fond. En douze points du trajet du regard, on relit donc la caustique du fond au pied du rayon de lumière qui passe par ce point. Le résultat est comprimé, pour qu'un trait dix fois plus brillant ne donne pas un rayon dix fois plus fort, et s'estompe en remontant : on obtient une lueur fine au-dessus du dessin, sans passe de rendu de plus.
 
-Les appareils sont des pièces à trois finitions (face, intérieur, tranche) aux F0 mesurés : cornières d'acier noirci, de laiton brossé ou d'acier brossé, plongeurs et vérins, volant et moteur, poteau chromé. Une seule lampe porte des ombres : le soleil, lointain, ou une lampe à arc proche.
+**Les matières.** Sol, margelle et mur sont des matériaux physiques complets : un vernis là où c'est mouillé et sur la cire des tomettes, des arêtes adoucies qui accrochent la lumière, chaque carreau posé un rien de travers, une usure qui polit la pierre par endroits, un satiné sur la chaux. Hors de l'eau, chaque tesselle de pâte de verre renvoie le ciel selon son propre angle.
 
-## Les humeurs (une humeur = un décor)
+**Ce qui réchauffe la scène.**
 
-| Humeur | Décor | Lumière | Valeur | Cadrage |
+- l'ombre d'un feuillage hors champ, qui découpe le soleil sur les dalles, les parois et le fond du bassin, et bouge à peine ;
+- des feuilles ou des pétales qui flottent et suivent la hauteur de l'eau ; au fond, leur ombre est cernée d'un liseré clair ;
+- des flaques au bord du bassin ;
+- un mur de fond enduit à la chaux, teinté par ambiance ;
+- un objet par ambiance : deux serviettes pliées le jour, une lanterne de laiton le soir et la nuit ;
+- un bec de fontaine en laiton, d'une seule pièce, scellé au milieu de la margelle du fond (à sec : le calcul des ondes ne connaît pas de filet d'eau) ;
+- un effet d'air discret : poussières qui s'allument dans les rais de soleil, vapeur sur l'eau des Thermes, brume basse la nuit.
+
+## Les ambiances (une ambiance = un décor)
+
+| Ambiance | Bassin | Sol et margelle | Lumière | Accessoires |
 | --- | --- | --- | --- | --- |
-| **Lagon** | cuve émaillée, sable blanc | soleil haut, filets nets et frangés | très claire | plongée |
-| **Chambre noire** | cuve à bâti d'acier noirci, fond de chaux, pièce noire | lampe à arc ponctuelle au-dessus | très sombre, contrastée | rasant |
-| **Thermes** | bassin de moellons de travertin, fond de faïence | soleil d'une verrière, un peu diffusé | moyenne, douce | trois-quarts |
-| **Heure dorée** | aquarium à bâti de laiton, fond de travertin, parois d'ardoise | soleil bas et chaud, ombre du rebord | chaude, contre-jour | rasant |
-| **Nocturne** | cuve d'acier, fond d'ardoise | lune froide | sombre, froide | plongée |
-| **Atelier** | cuve émaillée sous un projecteur | lampe proche | moyenne | trois-quarts |
-| **Stroboscope** (Faraday) | cuve d'acier sur l'excitateur, fond de papier | stroboscope blanc | sombre, image figée | plongée |
+| **Patio** | pâte de verre turquoise | tomettes cirées, margelle de calcaire | soleil de midi, feuillage | pétales, serviettes, bec de fontaine, mur ocre |
+| **Lagon** | chaux blanche, eau très turquoise | marbre blanc | soleil haut, feuillage | feuilles, serviettes, mur blanc cassé |
+| **Thermes** | travertin, eau verte | travertin | soleil plus bas, doux | vapeur, serviettes, bec de fontaine |
+| **Heure dorée** | ardoise sombre | platelage de teck, margelle de calcaire | soleil bas et chaud, feuillage | feuilles d'automne, lanterne, mur terre cuite |
+| **Nocturne** | pâte de verre bleu nuit | ardoise | lumière froide | lanterne, brume |
+| **Chambre noire** | chaux blanche | ardoise | une lampe au-dessus de l'eau | lanterne, brume |
+| **Atelier** | faïence blanche | marbre blanc | lampe | serviettes |
+| **Stroboscope** (Faraday) | pâte de verre noire | ardoise | faisceau parallèle froid | — |
 
-## Scène et caméra
+## Caméra
 
-Les plongeurs gardent le métal de la cuve ; seul leur collier est laqué vermillon, un accent discret là d'où part le geste. Aucune humeur ne regarde le fond d'en haut à longue focale : le dessin y remplit l'image, mais on ne voit plus que c'est de l'eau qui se déforme.
+La caméra regarde le bassin de trois quarts, d'un peu plus haut que la margelle, et s'avance vers le dessin quand il se forme. Elle vise le centre du dessin, qui n'est pas celui du bassin quand la lumière arrive de biais (la lentille est d'un côté, son image de l'autre), et tient compte de la réfraction : pour que son axe tombe sur un point du fond, elle vise à la surface un point plus proche d'elle.
 
-La caméra est hors de la cuve, devant la vitre, à hauteur de l'eau ou un peu au-dessus. Les rayons qui passent sous la ligne d'eau voient le fond à travers la vitre, ceux qui passent au-dessus voient la surface d'en haut : c'est la coupe d'un aquarium. Ses mouvements suivent l'histoire. Entre deux dessins, elle regarde la surface et les plongeurs (la cause) ; quand les ondes convergent, elle descend vers le fond et s'avance un peu (l'effet) ; puis elle remonte. Pointes < 25°/s, accélération bornée image par image (test à 120 i/s).
+## Ce qui a été abandonné
+
+La première version montrait une cuve de laboratoire vue de côté à travers sa vitre, avec un batteur de plongeurs sur le pourtour. Elle a été jugée trop technique et froide. Le bassin n'a plus de batteur : les ondes du Foyer n'ont donc plus de cause visible à l'écran. Écartés aussi en chemin : un fond de zellige à étoiles (il faisait décor de synthèse), des rayons lus dans les coupes floues de l'eau (un nuage laiteux), des rayons en traits nets (artificiels), des gouttes isolées sur la pierre (des pois), un filet d'eau au bec de fontaine (incohérent avec la caustique), la quasi-pause du film au moment du dessin.
 
 ## Tests
 
@@ -99,17 +112,18 @@ La caméra est hors de la cuve, devant la vitre, à hauteur de l'eau ou un peu a
 
 ## Performances mesurées
 
-Graine c41 (Atelier), 1483 × 1228 (1,8 Mpx), qualité Haute, boucle arrêtée (`bench()`, 30 rendus d'affilée) :
+Graine c41 (Patio), 1280 × 720, qualité Haute, boucle arrêtée (`bench()`, 30 rendus d'affilée), panneau du navigateur masqué : ces mesures sont bruitées (deux mesures de suite ont donné 19 puis 17 ms).
 
-| Poste | Temps |
+| État de la scène | Temps par image |
 | --- | --- |
-| Image complète, au dessin (u = 0,5) | 9,1 ms |
-| Image complète, entre deux dessins (u = 0) | 8,8 ms |
-| dont ondes (assemblage du spectre, deux FFT 1024², champ) + caustique (3 × 262 144 sommets) + huit coupes + flous | 2,3 ms |
-| Graine 5z6vio (Heure dorée), image complète, après l'éclairage des parois | 5,9 ms |
-| Version mobile (`?mobile=1`, 1050 × 870) | 2,0 ms |
+| Bassin seul, pierre allégée | ≈ 8 ms |
+| Avec les matières physiques, le feuillage, les feuilles | ≈ 11 ms |
+| Avec les objets et les effets d'air (état livré) | 17 à 19 ms |
+| État livré, matières physiques masquées | ≈ 12 ms |
 
-Chargement d'une scène Foyer : ~6 s (trois transports optimaux en parallèle dans les workers, ~2,7 s chacun, puis compilation sous l'écran de chargement). Aucune pipeline compilée après le chargement sur une boucle entière (vérifié). Raccord de la boucle < 2·10⁻⁹. Export MP4 essayé (640 × 360, 24 i/s).
+Les matières physiques du sol, de la margelle et du mur coûtent environ 5 ms ; la hausse entre 11 et 17 ms n'est pas expliquée en entier. Aucune optimisation n'a été faite après ces mesures.
+
+Chargement d'une scène Foyer : ~6 s (trois transports optimaux en parallèle dans les workers, puis compilation sous l'écran de chargement), mesuré sur l'ancienne cuve.
 
 ## Version mobile
 
@@ -117,4 +131,9 @@ Chargement d'une scène Foyer : ~6 s (trois transports optimaux en parallèle da
 
 ## Ce qui n'est pas vérifié
 
-La fluidité en lecture directe (le panneau du navigateur était masqué pendant la mise au point : les images ont été rendues une à une), un téléphone réel, un export long ou accumulé.
+- La fluidité en lecture directe : le panneau du navigateur était masqué pendant la mise au point, les images ont été rendues une à une. Le rythme du ralentissement et le mouvement du feuillage, des poussières et de la vapeur n'ont été jugés que sur images fixes.
+- Le cadrage centré sur le dessin : contrôlé à l'image sur deux graines seulement.
+- Les ambiances autres que Patio et Nocturne avec leurs objets et leurs effets d'air.
+- La version mobile et l'export, depuis le passage au bassin.
+- Avec un bassin aussi large que le domaine des ondes, les ondes peuvent reboucler par les bords.
+- Un téléphone réel.
