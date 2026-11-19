@@ -17,7 +17,7 @@ export const RENDER_DEFAULTS = {
   ao: true, aoStrength: 0.9, aoRadius: 0.04,
   ssr: true, ssrIntensity: 0.7, ssrQuality: 0.5, ssrDistance: 0.4, ssrThickness: 0.006, ssrRes: 0.5, ssrBlur: 2, nestEnv: 0.45, crystalThick: 1,
   dof: false, focus: 1, focusRange: 0.35, bokeh: 2,
-  motionBlur: 0.6, ca: 0.1, grain: 0.03,
+  motionBlur: 0.6, ca: 0.03, grain: 0.03,
   streaks: 0.08, streakLen: 4, halation: 0.25, dirt: 0.3,
   dynRes: false, maxFps: 0, // (résolution dynamique, cadence plafonnée : voir app/mobile.js)
 };
@@ -35,7 +35,7 @@ export const MOBILE_DEFAULTS = {
   dynRes: true, maxFps: 60,
 };
 
-const STORE = 'caustic.render.v2';
+const STORE = 'caustic.render.v3';
 
 // (le mode mobile a ses propres réglages mémorisés)
 export const defaultsFor = (lite) => (lite ? MOBILE_DEFAULTS : RENDER_DEFAULTS);

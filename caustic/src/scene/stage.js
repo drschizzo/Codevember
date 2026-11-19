@@ -16,15 +16,17 @@
 import * as THREE from 'three/webgpu';
 import {
   Fn, uniform, vec2, vec3, vec4, float, int, positionWorld, positionGeometry, cameraPosition, normalize, dot, max, min, exp, mix,
-  smoothstep, clamp, length, reflect, refract, pow, select, attribute, storage, positionLocal, pmremTexture, hash, abs, fract, floor,
-  mrt, fwidth, sin, cos, step, varyingProperty, screenCoordinate, uint, Loop, If,
+  smoothstep, clamp, length, reflect, refract, pow, select, bumpMap, attribute, storage, positionLocal, pmremTexture, hash, abs, fract, floor,
+  mrt, fwidth, sin, cos, step, varyingProperty, screenCoordinate, uint, Loop, If, instancedBufferAttribute, uv,
 } from 'three/tsl';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createWaves, MAX_MODES } from './waves.js';
 import { createCaustics } from './caustics.js';
 import { buildPieceMaterial, finishUniforms, noise, noise2, fbm, worley, hash33 } from './materials.js';
 import { G } from './globals.js';
 import { FINISHES } from '../finishes.js';
-import { FLOORS, TANKS, kelvinToHex } from '../recipe.js';
+import { FLOORS, TANKS, STONES, kelvinToHex } from '../recipe.js';
 import { foyerClock, faradayState, karmanVortices } from '../timeline.js';
 import { flatLanding } from '../gen/lens.js';
 import { nWater, ABSORB_RGB } from '../optics.js';
@@ -70,6 +72,9 @@ export function createStage(scene, gen, { lite = false, renderer } = {}) {
   key.shadow.mapSize.set(2048, 2048);
   key.shadow.camera.near = 0.1; key.shadow.camera.far = 12;
   scene.add(key); scene.add(key.target);
+  // (la flamme d'une lanterne : créée une fois, éteinte quand la scène n'en a pas)
+  const candle = new THREE.PointLight(0xffa860, 0, 2.5, 2);
+  scene.add(candle);
 
   // ── Uniformes de la scène ──
   const U = {
@@ -81,6 +86,8 @@ export function createStage(scene, gen, { lite = false, renderer } = {}) {
     bg0: uniform(new THREE.Color(0, 0, 0)), bg1: uniform(new THREE.Color(0, 0, 0)),
     W: uniform(0.6), D: uniform(0.6), H: uniform(0.45), rim: uniform(0.05),
     gain: uniform(1.6), angular: uniform(0.005), glint: uniform(1), envRefl: uniform(1),
+    shaft: uniform(0), // rayons dans l'eau : diffusion vers l'œil, par mètre de trajet
+    shadeOn: uniform(0), shadeDir: uniform(new THREE.Vector2(1, 0)), // l'ombre d'un feuillage hors champ, et de quel côté il est
   };
 
   // ── Fond (cyclorama sombre ou clair, en dégradé) ──
@@ -101,6 +108,20 @@ export function createStage(scene, gen, { lite = false, renderer } = {}) {
   let caustics = null, clock = null, env = null;
   let meshes = [];
   const progressCb = { fn: null };
+
+  // ── L'ombre d'un feuillage hors champ ──
+  // Un arbre qu'on ne voit pas découpe le soleil. Le point est remonté le long du rayon jusqu'à la hauteur des
+  // branches ; là, un bruit à deux échelles fait les masses de feuilles et leurs trouées. Le bord des taches est
+  // doux (le soleil a une taille), le feuillage bouge à peine, d'un mouvement qui boucle avec le film, et il ne
+  // couvre qu'un côté de la scène. Renvoie la part de soleil qui passe (1 : plein soleil).
+  const leafShade = Fn(([P]) => {
+    const sd = U.sunDir, q = P.xz.sub(sd.xz.mul(float(2.4).sub(P.y).div(sd.y.negate().max(0.2))));
+    const sway = vec2(sin(G.phase.mul(TAU)), cos(G.phase.mul(TAU * 2))).mul(0.018);
+    // (masses de feuillage, puis le détail des feuilles : des trouées de quelques centimètres)
+    const n = fbm(vec3(q.add(sway).mul(2.1), 0.3), 3).mul(0.5).add(0.5).add(noise(vec3(q.sub(sway).mul(9), 1.7)).mul(0.2)).add(noise(vec3(q.add(sway.mul(2)).mul(21), 4.1)).mul(0.1));
+    const side = smoothstep(-0.9, 0.7, dot(q, U.shadeDir));
+    return mix(float(1), mix(float(1), float(0.1), smoothstep(0.5, 0.57, n)), side.mul(U.shadeOn));
+  });
 
   // ── Fonctions de rendu partagées (dépendent de la recette : construites
   //    avec les matériaux, recompilées à chaque scène) ──
@@ -164,6 +185,37 @@ export function createStage(scene, gen, { lite = false, renderer } = {}) {
           a = mix(U.floorA, U.floorB, fib.mul(0.3).mul(aa(1300)).add(fbm(p3.mul(25), 3).mul(0.08)));
           break;
         }
+        case 'zellige': {
+          // étoiles à huit branches (deux carrés croisés) serties de croix : trois émaux, joints de chaux
+          const ts = 0.045, q = xz.div(ts), c = floor(q.add(0.5)), f = q.sub(c);
+          const ax = abs(f.x), ay = abs(f.y);
+          const dStar = min(max(ax, ay).sub(0.27), ax.add(ay).mul(0.7071).sub(0.27)); // < 0 dans l'étoile
+          const dCross = max(ax, ay).sub(0.5).negate().min(float(0.5).sub(ax.add(ay).mul(0.7071)).negate().add(0.21)); // (reste : croix entre les étoiles)
+          const hv = hash33(vec3(c, 2.3));
+          const glaze = fbm(p3.mul(60), 2).mul(0.06);
+          const star = mix(vec3(0.07, 0.2, 0.62), vec3(0.1, 0.3, 0.72), hv.x).add(glaze); // cobalt
+          const field = mix(U.floorA, U.floorA.mul(0.82), hv.y).add(glaze);
+          const dot8 = smoothstep(0.1, 0.07, length(f)); // un cabochon blanc au cœur de l'étoile
+          let t = mix(field, star, smoothstep(0.015, -0.015, dStar));
+          t = mix(t, U.floorB, dot8);
+          const joint = smoothstep(0.03, 0.012, abs(dStar)).mul(aa(1 / 0.003)).max(smoothstep(0.035, 0.015, min(float(0.5).sub(ax), float(0.5).sub(ay))).mul(aa(1 / 0.003)));
+          a = mix(t, U.floorB.mul(0.82), joint.mul(0.9));
+          break;
+        }
+        case 'mosaicNoir':
+        case 'mosaicNuit':
+        case 'mosaic': {
+          // pâte de verre : tesselles de 2 cm à coins doux, chacune sa nuance, posées par plaques (un rien de travers)
+          const ts = 0.0125, q = xz.div(ts), c = floor(q), f = fract(q).sub(0.5);
+          const hv = hash33(vec3(c, 5.1));
+          // (carré arrondi : la tesselle ; le reste : le joint, à peine plus clair — c'est la lumière qu'on doit lire, pas le quadrillage)
+          const dq = max(abs(f.x), abs(f.y)), dr = length(max(abs(f).sub(0.34), 0)).add(min(dq.sub(0.34), 0)).sub(0.09);
+          const k = aa(1 / 0.009), tess = smoothstep(0.03, -0.03, dr).mul(k).add(float(1).sub(k).mul(0.8));
+          const tone = mix(U.floorA, U.floorB, smoothstep(0.7, 1.0, hv.x).mul(0.55)).mul(hv.y.mul(0.14).add(0.9));
+          const cloud = fbm(p3.mul(7), 3).mul(0.08).add(1); // (lots de teinte légèrement différents)
+          a = mix(mix(vec3(0.74, 0.8, 0.78), U.floorA, 0.45), tone.mul(cloud), tess);
+          break;
+        }
         default: break;
       }
       return a;
@@ -179,14 +231,28 @@ export function createStage(scene, gen, { lite = false, renderer } = {}) {
       return length(d).mul(float(1).sub(tin));
     };
     // éclairement du fond par la caustique (relatif) × lumière de la source
-    const lightAt = (xz) => caustics.floorAt(xz).mul(U.lux).mul(U.sunCol);
+    // Une feuille posée sur l'eau : au fond, son ombre, cernée d'un liseré clair (le ménisque autour d'elle fait lentille).
+    // Leur place ne change pas : l'ombre se calcule en remontant du fond vers la surface le long du rayon de lumière.
+    const LEAVES = R.light.kind === 'sun' ? (R.decor?.leafList ?? []) : [], LK = R.decor?.leaves === 'petale' ? 0.78 : 0.4;
+    const floatShadow = (xz) => {
+      if (!LEAVES.length) return float(1);
+      const sd = R.light.dir, lx = sd[0] / N_W, lz = sd[2] / N_W, ln = Math.hypot(lx, sd[1], lz), kx = (lx / ln) * (H / (-sd[1] / ln)), kz = (lz / ln) * (H / (-sd[1] / ln));
+      let f = float(1);
+      for (const [x, z, a, len] of LEAVES) {
+        const q = xz.sub(vec2(x + kx, z + kz)), c = Math.cos(a), sn = Math.sin(a);
+        const lc = vec2(q.x.mul(c).add(q.y.mul(sn)).div(len / 2), q.x.mul(-sn).add(q.y.mul(c)).div((len / 2) * LK)), dd = length(lc);
+        f = f.mul(float(1).sub(smoothstep(1.15, 0.8, dd).mul(0.85))).add(exp(dd.sub(1.3).div(0.16).pow2().negate()).mul(0.55));
+      }
+      return f;
+    };
+    const lightAt = (xz) => caustics.floorAt(xz).mul(U.lux).mul(U.sunCol).mul(leafShade(vec3(xz.x, -H, xz.y))).mul(floatShadow(xz));
     // radiance du fond en (x, z)
     const floorRadWith = (light, plain = false) => Fn(([xz, fw]) => {
       const a = plain ? vec3(U.floorA) : albedo(xz, fw);
       // les coins reçoivent moins de ciel
       const e = min(min(float(W / 2).sub(abs(xz.x)), float(D / 2).sub(abs(xz.y))), 0.2);
       const ao = smoothstep(-0.005, 0.08, e).mul(0.6).add(0.4);
-      return a.mul(light(xz).div(Math.PI).add(U.ambCol.mul(U.amb).mul(ao)));
+      return a.mul(light(xz).div(Math.PI).add(U.ambCol.mul(U.amb).mul(ao).mul(T.style === 'bassin' ? 0.45 : 1)));
     });
     const floorRad = floorRadWith(lightAt);
     // vu à travers les vagues : la dernière coupe (même lumière, plus douce) —
@@ -212,6 +278,10 @@ export function createStage(scene, gen, { lite = false, renderer } = {}) {
         case 'brass': { // ardoise verte
           const n = fbm(vec3(q.x.mul(6), q.y.mul(26), 0), 3).mul(0.5).add(0.5);
           a = U.wallC.mul(n.mul(0.4).add(0.8));
+          break;
+        }
+        case 'bassin': { // le revêtement du fond remonte sur les parois
+          a = albedo(vec2(p.x.add(p.z), p.y), float(0.002));
           break;
         }
         case 'steel': { // tôle peinte, mate
@@ -253,8 +323,9 @@ export function createStage(scene, gen, { lite = false, renderer } = {}) {
       const Lw = normalize(mix(U.sunDir, p.sub(U.lampPos), U.lampMode));
       const tw = vec3(Lw.x.div(N_W), Lw.y, Lw.z.div(N_W)).normalize();
       const graze = max(dot(tw, nw).negate(), 0).div(max(tw.y.negate(), 0.15));
-      const caus = caustics.sliceAt(p).mul(graze).mul(U.lux).mul(U.sunCol);
-      const E = bounce.add(caus).add(U.ambCol.mul(U.amb).mul(0.7));
+      const caus = caustics.sliceAt(p).mul(graze).mul(U.lux).mul(U.sunCol).mul(leafShade(p));
+      // (bassin à ciel ouvert : les parois voient le ciel, pas le plafond d'un atelier)
+      const E = bounce.add(caus).add(U.ambCol.mul(U.amb).mul(T.style === 'bassin' ? 2.2 : 0.7));
       return (plain ? vec3(U.wallC) : wallAlbedo(p)).mul(E).div(Math.PI);
     });
     const wallRad = wallRadWith(false);
@@ -262,7 +333,7 @@ export function createStage(scene, gen, { lite = false, renderer } = {}) {
     const wallRadSoft = wallRadWith(true);
     // un rayon qui part de Q (dans l'eau) dans la direction d (vers le bas ou
     // de côté) : le fond, ou une paroi ; renvoie la radiance au départ du rayon
-    const traceDown = Fn(([Q, d]) => {
+    const traceDown = Fn(([Q, d, fwS]) => {
       const big = float(1e3);
       const tf = select(d.y.lessThan(-1e-5), float(-H).sub(Q.y).div(d.y), big);
       const tx = select(abs(d.x).greaterThan(1e-5), float(W / 2).mul(d.x.sign()).sub(Q.x).div(d.x), big);
@@ -274,8 +345,53 @@ export function createStage(scene, gen, { lite = false, renderer } = {}) {
       // un centimètre autour de leur arête, qui sinon fourmille)
       const Pf = Q.add(d.mul(tf)), Pw = Q.add(d.mul(tw));
       const kf = smoothstep(-0.01, 0.01, tw.sub(tf).mul(d.length()));
-      const rad = mix(wallRadSoft(Pw), floorRadSoft(Pf.xz, float(0.004).add(t.mul(0.004))), kf);
-      return rad.mul(trans(t));
+      // (bassin vu d'en haut : le fond est le sujet — son décor et la caustique fine, lus avec
+      //  l'empreinte du pixel ; derrière une vitre, de côté, ils fourmillaient : version unie et douce)
+      const rad = mix(T.style === 'bassin' ? wallRad(Pw) : wallRadSoft(Pw), T.style === 'bassin' ? floorRad(Pf.xz, fwS.add(t.mul(0.002))) : floorRadSoft(Pf.xz, float(0.004).add(t.mul(0.004))), kf);
+      // Les rayons dans l'eau (bassin) : l'eau, à peine trouble, renvoie vers l'œil un peu de la lumière
+      // qui la traverse. Cette lumière est déjà connue à huit profondeurs (les coupes de caustics.js) :
+      // on la relit en huit points du trajet du regard, décalés d'une image à l'autre par un tramage que
+      // l'anticrénelage temporel lisse. Ni marche longue, ni passe de plus.
+      if (T.style !== 'bassin') return rad.mul(trans(t));
+      // Le cylindre de Kármán, sous l'eau : un métal poli, qui renvoie le fond du bassin. Rencontre du rayon
+      // et d'un cylindre vertical (une équation du second degré dans le plan), puis un seul rebond vers le fond.
+      let tE = t, radE = rad;
+      if (R.family === 'karman') {
+        const c = vec2(R.karman.post[0], R.karman.post[1]), rr = R.karman.radius;
+        const o2 = Q.xz.sub(c), a2 = dot(d.xz, d.xz).max(1e-8), b2 = dot(o2, d.xz), disc = b2.mul(b2).sub(a2.mul(dot(o2, o2).sub(rr * rr)));
+        const tc = b2.negate().sub(disc.max(0).sqrt()).div(a2);
+        const hit = disc.greaterThan(0).and(tc.greaterThan(0)).and(tc.lessThan(t));
+        const Pc = Q.add(d.mul(tc)), nc = vec3(Pc.x.sub(c.x).div(rr), 0, Pc.z.sub(c.y).div(rr));
+        const rf = reflect(d, nc), tr = float(-H).sub(Pc.y).div(rf.y.min(-0.05));
+        const Pr = Pc.add(rf.mul(tr));
+        const seen = floorRad(vec2(clamp(Pr.x, -W / 2 + 0.01, W / 2 - 0.01), clamp(Pr.z, -D / 2 + 0.01, D / 2 - 0.01)), fwS.add(0.004)).mul(trans(tr));
+        // (vers le haut : le dessous de la surface, miroir sombre ; une arête claire là où le métal regarde la lumière)
+        const up = smoothstep(-0.25, 0.05, rf.y), edge = pow(max(dot(nc, normalize(mix(U.sunDir.negate(), U.lampPos.sub(Pc), U.lampMode))), 0), 6);
+        const metal = mix(seen, U.ambCol.mul(U.amb).mul(0.5), up).mul(0.82).add(U.sunCol.mul(U.lux).mul(edge).mul(0.06));
+        tE = select(hit, tc, t); radE = select(hit, metal, rad);
+      }
+      // Les rayons dans l'eau. Un faisceau est la trace, dans le volume, d'un trait brillant du fond : chaque
+      // point du regard relit donc la caustique du fond (nette, 1 mm par texel) au pied du rayon de lumière
+      // qui le traverse. Les rayons sont des lames fines qui aboutissent exactement sur la figure ; ils
+      // s'estompent en remontant, où la lumière n'est pas encore rassemblée. (Lire les coupes floues de
+      // l'eau donnait un nuage laiteux au-dessus de la figure.)
+      const NS = lite ? 6 : 12;
+      const jit = hash(screenCoordinate.x.toUint().add(screenCoordinate.y.toUint().mul(uint(7919))).add(G.frame.toUint().mul(uint(104729))));
+      const Lw = normalize(mix(U.sunDir, Q.sub(U.lampPos), U.lampMode)), lw = vec3(Lw.x.div(N_W), Lw.y, Lw.z.div(N_W)).normalize();
+      const acc = vec3(0).toVar();
+      Loop(NS, ({ i }) => {
+        const sq = float(i).add(jit).div(NS).mul(tE), p = Q.add(d.mul(sq)), hgt = p.y.add(H).max(0);
+        const foot = p.xz.add(lw.xz.mul(hgt.div(lw.y.negate().max(0.2))));
+        const e = caustics.floorAt(vec2(clamp(foot.x, -W / 2 + 0.002, W / 2 - 0.002), clamp(foot.y, -D / 2 + 0.002, D / 2 - 0.002)));
+        // (bien au-dessus de l'éclairement d'une eau plane : un trait de la figure ; en luminance — les franges colorées,
+        //  relues point par point, donnaient un fourmillement de couleurs)
+        // (comprimé : un trait dix fois plus brillant que l'eau calme ne donne pas un rayon dix fois plus fort —
+        //  sinon le contour de la figure se dresse comme un tube de verre)
+        const b0 = max(dot(e, vec3(0.2126, 0.7152, 0.0722)).sub(1.15), 0), beam = b0.div(b0.mul(0.9).add(1));
+        acc.addAssign(trans(sq).mul(beam).mul(exp(hgt.mul(-6))));
+      });
+      const shafts = acc.mul(tE.div(NS)).mul(U.shaft).mul(U.lux).mul(U.sunCol).mul(leafShade(Q));
+      return radE.mul(trans(tE)).add(shafts);
     });
     return { albedo, floorRad, wallRad, wallAlbedo, traceDown, trans, viewLen, lightAt };
   }
@@ -302,8 +418,21 @@ export function createStage(scene, gen, { lite = false, renderer } = {}) {
       const P = positionWorld;
       const under = S.wallRad(P).mul(S.trans(S.viewLen(P)));
       // au-dessus de l'eau : la lampe et le studio
-      const over = S.wallAlbedo(P).mul(U.lux.mul(0.35).add(U.amb)).div(Math.PI);
-      return vec4(select(P.y.lessThan(0), under, over), 1);
+      const over = S.wallAlbedo(P).mul(U.lux.mul(R.tank.style === 'bassin' ? 0.6 : 0.35).add(U.amb.mul(R.tank.style === 'bassin' ? 2.5 : 1))).div(Math.PI);
+      // la ligne d'eau : un ménisque qui accroche le ciel, et au-dessus une bande mouillée, plus sombre
+      const wet = smoothstep(0.03, 0.004, P.y).mul(0.3), line = smoothstep(0.0035, 0.0005, P.y.abs());
+      // Hors de l'eau, le revêtement est une matière brillante : chaque tesselle, posée un rien de travers, renvoie le
+      // ciel selon son propre angle (Fresnel), et celles qui regardent le soleil s'allument.
+      const tsw = 0.0125, tid = vec3(floor(P.x.add(P.z).div(tsw)), floor(P.y.div(tsw)), 2.9), th = hash33(tid);
+      const sideW = abs(P.x).greaterThan(float(R.tank.W / 2 - 0.002)), nW0 = select(sideW, vec3(P.x.sign().negate(), 0, 0), vec3(0, 0, 1));
+      const nT = normalize(nW0.add(vec3(th.x.sub(0.5), th.y.sub(0.5), th.z.sub(0.5)).mul(0.16)));
+      const Vw = normalize(P.sub(cameraPosition)), rW = reflect(Vw, nT), cW = dot(Vw.negate(), nT).clamp(0, 1);
+      const Fw = float(0.045).add(float(0.955).mul(pow(float(1).sub(cW), 5)));
+      const skyW = scene.environment ? pmremTexture(scene.environment, rW, float(0.12)).rgb.mul(G.envI) : vec3(0.1);
+      const sunW = pow(max(dot(rW, normalize(mix(U.sunDir.negate(), U.lampPos.sub(P), U.lampMode))), 0), 220).mul(U.lux).mul(U.sunCol).mul(2.5);
+      const gloss = skyW.mul(Fw).add(sunW.mul(Fw.add(0.04))).mul(leafShade(P).mul(0.7).add(0.3));
+      const overW = R.tank.style === 'bassin' ? over.mul(float(1).sub(wet)).add(gloss).add(U.ambCol.mul(U.amb).mul(line).mul(1.2)) : over;
+      return vec4(select(P.y.lessThan(0), under, overW), 1);
     })();
     m.mrtNode = mrt({ velocity: vec4(0) });
     return m;
@@ -341,6 +470,7 @@ export function createStage(scene, gen, { lite = false, renderer } = {}) {
       // zéro — sinon le fond et les parois vus au travers fourmillent
       const lod = float(1).div(length(fwidth(vS)).mul(20).add(1));
       const n = normalize(vec3(vS.x.negate().mul(lod), 1, vS.y.negate().mul(lod)));
+      const fwP = fwidth(P.x).add(fwidth(P.z)).max(1e-6); // (empreinte du pixel sur la surface : dérivées hors des branches)
       const L2s = normalize(mix(U.sunDir.negate(), U.lampPos.sub(P), U.lampMode));
       // largeur du reflet de la source : sa taille angulaire, élargie par la
       // variation de la normale dans le pixel (dérivées hors des branches) ;
@@ -356,7 +486,7 @@ export function createStage(scene, gen, { lite = false, renderer } = {}) {
         const sky = envTex ? pmremTexture(envTex, r, float(0.02)).rgb.mul(G.envI).mul(U.envRefl) : vec3(0.1);
         const glint = lobe(r);
         const t = refract(V, n, 1 / N_W);
-        const below = S.traceDown(P, t);
+        const below = S.traceDown(P, t, fwP);
         out.assign(sky.add(glint).mul(F).add(below.mul(float(1).sub(F))));
       }).Else(() => {
         // vue d'en dessous : réflexion totale au-delà de 48,6°
@@ -368,7 +498,7 @@ export function createStage(scene, gen, { lite = false, renderer } = {}) {
         const rs = c.mul(N_W).sub(ct).div(c.mul(N_W).add(ct)), rp = ct.mul(N_W).sub(c).div(ct.mul(N_W).add(c));
         const F = select(tir, float(1), rs.mul(rs).add(rp.mul(rp)).mul(0.5));
         const r = reflect(V, nd);
-        const refl = S.traceDown(P, r);
+        const refl = S.traceDown(P, r, fwP);
         const t = refract(V, nd, N_W);
         const sky = envTex ? pmremTexture(envTex, t, float(0.05)).rgb.mul(G.envI) : vec3(0.1);
         const sun = lobe(t);
@@ -453,6 +583,313 @@ export function createStage(scene, gen, { lite = false, renderer } = {}) {
     })();
   }
 
+  // Le patio : un sol de terre cuite au soleil, percé du bassin, et sa margelle de pierre claire.
+  function patio(add) {
+    const T = R.tank, W = T.W, D = T.D, top = T.rim, cw = 0.075, ch = 0.022, far = 7;
+    // Une seule pierre pour le sol et la margelle : un calcaire beige adouci. Sa matière, du plus grand au plus fin :
+    // des nuages de teinte, de rares veines plus claires, des éclats de coquille, des pores qui retiennent l'ombre.
+    const SP = STONES[T.stone] ?? STONES.calcaire, DC = R.decor ?? {};
+    const shaded = (m) => { m.receivedShadowNode = Fn(([sh]) => sh.mul(leafShade(positionWorld))); return m; };
+    // La pierre mouillée : des flaques et des éclaboussures au bord du bassin, plus sombres et brillantes que la pierre sèche.
+    const wetAt = (P) => {
+      const dB = max(abs(P.x).sub(W / 2), abs(P.z).sub(D / 2)).max(0), near = smoothstep(0.2, 0.01, dB);
+      const pud = smoothstep(float(0.8).sub(near.mul(0.3)), float(0.84).sub(near.mul(0.3)), fbm(vec3(P.x, 0, P.z).mul(13).add(5.1), 3).mul(0.5).add(0.5));
+      // (les gouttes isolées faisaient des pois : seules les flaques, de forme libre, sont gardées)
+      return pud.mul(smoothstep(0.26, 0.1, dB));
+    };
+    // Une seule pierre pour le sol et la margelle (ou, pour le sol, des tomettes ou un platelage de teck). Sa matière,
+    // du plus grand au plus fin : des nuages de teinte, des éclats de coquille, des pores qui retiennent l'ombre.
+    const lime = (kind, polish) => {
+      const m = new THREE.MeshPhysicalNodeMaterial();
+      const P = positionWorld, p3 = vec3(P.x, P.y.mul(0.5), P.z);
+      const fw = fwidth(P.x).add(fwidth(P.z)).add(fwidth(P.y)).max(1e-6), aa = (f) => smoothstep(0.7, 0.2, fw.mul(f));
+      const cloud = fbm(p3.mul(5), 3).mul(0.5).add(0.5);
+      const wet = wetAt(P);
+      if (kind === 'teck') {
+        // platelage : lames de 8 cm, longues, décalées d'un rang à l'autre ; fil du bois, gris argenté par endroits
+        const pw = 0.08, row = floor(P.z.div(pw)), u = P.x.add(row.mul(0.37)).div(1.1), f = vec2(fract(u), fract(P.z.div(pw)));
+        const gap = smoothstep(0.045, 0.02, min(f.y, float(1).sub(f.y))).max(smoothstep(0.004, 0.0015, min(f.x, float(1).sub(f.x))));
+        const hv = hash33(vec3(row, floor(u), 4.4)), grain = fbm(vec3(P.x.mul(4), row, P.z.mul(90)), 3).mul(0.5).add(0.5);
+        const wood = mix(vec3(0.4, 0.25, 0.13), vec3(0.27, 0.16, 0.08), grain.mul(0.7).add(hv.x.mul(0.3))).mul(mix(float(1), float(1.25), cloud.mul(hv.y)));
+        m.colorNode = mix(wood, vec3(0.04, 0.03, 0.02), gap).mul(float(1).sub(wet.mul(0.45)));
+        // le bois huilé : un fil en relief, des lames à peine bombées, un satiné qui varie d'une lame à l'autre ;
+        // mouillé, un film d'eau le vernit
+        const crown = smoothstep(0, 0.22, min(f.y, float(1).sub(f.y)));
+        m.roughnessNode = mix(float(0.5).add(grain.mul(0.22)).add(hv.z.mul(0.12)), float(0.06), wet);
+        m.clearcoatNode = max(wet, hv.y.mul(0.22).mul(float(1).sub(gap)));
+        m.clearcoatRoughnessNode = mix(float(0.35), float(0.03), wet);
+        m.normalNode = bumpMap(gap.mul(-2).add(crown.mul(0.5)).add(grain.mul(0.35).mul(float(1).sub(wet.mul(0.8)))), 0.004);
+        return shaded(m);
+      }
+      const sc = p3.mul(90), sh = hash33(floor(sc)), shell = smoothstep(0.3, 0.14, length(fract(sc).sub(0.5).sub(sh.sub(0.5).mul(0.5)))).mul(step(0.8, sh.z)).mul(aa(90));
+      // (pores : un simple tirage par cellule de 2 mm — un bruit cellulaire coûtait 2 ms par image pour des points d'un pixel)
+      const pc = p3.mul(520), ph = hash33(floor(pc)), pore = smoothstep(0.42, 0.2, length(fract(pc).sub(0.5).sub(ph.sub(0.5).mul(0.4)))).mul(step(0.72, ph.z)).mul(aa(520));
+      let joint = float(0), tone = float(1), edge = float(0), tileC = null, bevel = float(1), tilt = float(0);
+      if (kind === 'dalles' || kind === 'tomette') { // dalles de 30 cm à joints croisés, ou tomettes de 11 cm
+        const ts = kind === 'tomette' ? 0.11 : 0.3, jw = kind === 'tomette' ? 0.003 : 0.0035;
+        const q = vec2(P.x.add(floor(P.z.div(ts)).mul(0.5 * ts)), P.z).div(ts), c = floor(q), f = fract(q);
+        const e = min(min(f.x, float(1).sub(f.x)), min(f.y, float(1).sub(f.y))).mul(ts);
+        joint = smoothstep(jw, jw * 0.3, e);
+        // (arête adoucie : le carreau descend vers son joint sur quelques millimètres ; et chaque carreau est posé un rien de travers)
+        bevel = smoothstep(0, kind === 'tomette' ? 0.009 : 0.006, e);
+        tilt = dot(f.sub(0.5), hash33(vec3(c, 3.9)).xy.sub(0.5)).mul(kind === 'tomette' ? 0.8 : 0.25);
+        edge = smoothstep(0.02, 0.003, e); // (le long des joints : la matière se patine)
+        tileC = hash33(vec3(c, 9.3));
+        tone = tileC.x.mul(kind === 'tomette' ? 0.3 : 0.1).add(kind === 'tomette' ? 0.85 : 0.95);
+      }
+      const mott = fbm(p3.mul(34), 2).mul(0.5).add(0.5); // (marbrure à l'échelle du centimètre)
+      // (tomette : la terre cuite, du rouge brique à l'orangé selon la cuisson de chaque carreau)
+      const A = kind === 'tomette' ? mix(vec3(0.5, 0.2, 0.11), vec3(0.62, 0.3, 0.15), tileC.y) : vec3(...SP.a), B = kind === 'tomette' ? vec3(0.36, 0.14, 0.08) : vec3(...SP.b);
+      const base = mix(A, B, cloud.mul(0.6).add(mott.mul(0.35))).mul(tone);
+      // (de larges taches à peine plus sombres : l'eau a séché là)
+      const stain = smoothstep(0.1, 0.6, fbm(p3.mul(1.6).add(11.3), 3)).mul(0.14);
+      const col = mix(base, kind === 'tomette' ? base.mul(1.25) : vec3(...SP.light), shell.mul(0.22)).mul(float(1).sub(stain)).mul(float(1).sub(edge.mul(0.1))).mul(float(1).sub(pore.mul(0.5)));
+      m.colorNode = mix(col, kind === 'tomette' ? vec3(0.42, 0.36, 0.3) : vec3(...SP.joint), joint).mul(float(1).sub(wet.mul(0.15)));
+      // rugosité : la pierre adoucie, polie par endroits (là où l'on marche), mate dans ses pores et ses joints
+      const worn = fbm(p3.mul(2.3).add(7.7), 3).mul(0.5).add(0.5);
+      const rough = float(polish ? 0.36 : kind === 'tomette' ? 0.5 : 0.66).add(pore.mul(0.3)).add(cloud.mul(0.1)).sub(worn.mul(0.16)).add(joint.mul(0.3)).sub(stain.mul(0.5));
+      m.roughnessNode = mix(rough.clamp(0.12, 1), float(0.05), wet);
+      // vernis : le film d'eau des flaques ; la cire des tomettes, inégale d'un carreau à l'autre ; le poli de la margelle
+      const wax = kind === 'tomette' ? tileC.z.mul(0.45).add(0.15).mul(float(1).sub(joint)) : float(polish ? 0.3 : 0.06).mul(worn);
+      m.clearcoatNode = max(wet, wax);
+      m.clearcoatRoughnessNode = mix(float(kind === 'tomette' ? 0.22 : 0.3).add(mott.mul(0.15)), float(0.025), wet);
+      m.specularIntensityNode = float(1).sub(joint.mul(0.7));
+      // relief : pores et joints en creux, arêtes adoucies, carreaux à peine inclinés, une ondulation large de la surface ;
+      // sous une flaque, l'eau lisse tout
+      const h = pore.mul(-0.6).add(joint.mul(-2)).add(bevel.mul(1.6)).add(tilt).add(fbm(p3.mul(11), 2).mul(0.5)).add(mott.mul(0.12).mul(aa(34)));
+      m.normalNode = bumpMap(h.mul(float(1).sub(wet.mul(0.85))), 0.0025);
+      return shaded(m);
+    };
+    const ground = lime(DC.ground === 'teck' ? 'teck' : DC.ground === 'tomette' ? 'tomette' : 'dalles', false), stone = lime('bloc', true);
+    // Le mur du fond : un enduit à la chaux teinté, passé à la taloche, qui ferme l'image et renvoie sa couleur.
+    if (DC.wall) {
+      const wm = new THREE.MeshPhysicalNodeMaterial();
+      const P = positionWorld, t1 = fbm(vec3(P.x.mul(1.3), P.y.mul(2.2), 3.3), 4).mul(0.5).add(0.5), t2 = fbm(vec3(P.x.mul(9), P.y.mul(14), 8.1), 2);
+      const wc = new THREE.Color(DC.wall);
+      // (plus sombre et sali vers le bas, où l'eau rejaillit)
+      wm.colorNode = vec3(wc.r, wc.g, wc.b).mul(t1.mul(0.22).add(0.86)).mul(t2.mul(0.05).add(1)).mul(mix(float(0.8), float(1), smoothstep(0, 0.35, P.y.sub(top))));
+      // (chaux ferrée : lissée par endroits, où elle prend un satiné, râpeuse ailleurs)
+      wm.roughnessNode = float(0.9).sub(smoothstep(0.45, 0.75, t1).mul(0.3));
+      wm.sheen = 0.25; wm.sheenRoughness = 0.6; wm.sheenColor = wc.clone().lerp(new THREE.Color('#ffffff'), 0.5);
+      wm.normalNode = bumpMap(t1.mul(1.2).add(t2.mul(0.5)).add(fbm(vec3(P.x.mul(40), P.y.mul(40), 2.2), 2).mul(0.15)), 0.004);
+      const wz = -D / 2 - cw - 0.95, wall = new THREE.Mesh(new THREE.PlaneGeometry(14, 4), shaded(wm));
+      wall.position.set(0, top + 2, wz);
+      add(wall);
+      // sa plinthe de pierre
+      const pl = new THREE.Mesh(new RoundedBoxGeometry(14, 0.09, 0.025, 2, 0.005), stone); pl.position.set(0, top + 0.045, wz + 0.0125); add(pl);
+    }
+    // Les feuilles sur l'eau : une lame mince, un peu creusée, qui monte et descend avec l'eau sous elle.
+    if (R.light.kind === 'sun') for (const [x, z, a, len] of (DC.leafList ?? [])) {
+      const petal = DC.leaves === 'petale', wid = len * (petal ? 0.78 : 0.4), nS = 20, pos = [0, 0, 0], uvs = [0.5, 0.5], idx = [];
+      for (let i = 0; i < nS; i++) {
+        const t = (i / nS) * Math.PI * 2, cx = Math.cos(t), sz = Math.sin(t);
+        // (contour en amande : pointu aux deux bouts pour une feuille, rond et échancré pour un pétale)
+        const px = (len / 2) * cx, pz = (wid / 2) * sz * (petal ? 1 - 0.18 * Math.max(0, cx) ** 6 : Math.sqrt(Math.abs(Math.sin(t))) || 0);
+        pos.push(px, len * (petal ? 0.9 : 0.3) * ((px / len) ** 2 + (pz / len) ** 2) + (petal ? 0.06 * len * Math.sin(3 * t) : 0), pz); uvs.push(0.5 + cx / 2, 0.5 + sz / 2);
+        idx.push(0, 1 + ((i + 1) % nS), 1 + i);
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2)); g.setIndex(idx); g.computeVertexNormals();
+      const lm = new THREE.MeshPhysicalNodeMaterial({ side: THREE.DoubleSide });
+      // (feuille : cuticule cirée ; pétale : velouté, un peu translucide)
+      if (petal) { lm.sheen = 0.9; lm.sheenRoughness = 0.5; lm.sheenColor = new THREE.Color('#ffd0e4'); } else { lm.clearcoat = 0.55; lm.clearcoatRoughness = 0.18; }
+      const dxw = T.L / N, cell = Math.round((z + T.L / 2) / dxw - 0.5) * N + Math.round((x + T.L / 2) / dxw - 0.5);
+      lm.positionNode = positionLocal.add(vec3(0, field.element(int(cell)).x.add(0.0012), 0));
+      const u2 = attribute('uv', 'vec2'), rib = smoothstep(0.035, 0.008, abs(u2.y.sub(0.5))).mul(petal ? 0.15 : 0.45), hv = hash33(vec3(x * 91, z * 57, 1.3));
+      const rad2 = length(u2.sub(0.5)).mul(2); // (0 au cœur, 1 au bord)
+      const tint = DC.leaves === 'petale' ? mix(vec3(0.95, 0.8, 0.84), mix(vec3(0.72, 0.05, 0.3), vec3(0.88, 0.16, 0.46), u2.y), smoothstep(0.05, 0.75, rad2)).mul(mix(float(1), float(1.25), smoothstep(0.8, 1, rad2))) : R.mood === 'doree' ? mix(vec3(0.62, 0.42, 0.08), vec3(0.5, 0.2, 0.05), u2.x) : mix(vec3(0.16, 0.3, 0.08), vec3(0.3, 0.4, 0.1), u2.x);
+      lm.colorNode = tint.mul(hv.x.mul(0.3).add(0.85)).mul(float(1).sub(rib));
+      lm.roughnessNode = float(petal ? 0.6 : 0.42);
+      const leaf = new THREE.Mesh(g, shaded(lm));
+      leaf.position.set(x, 0, z); leaf.rotation.y = -a; leaf.frustumCulled = false;
+      add(leaf); leaf.castShadow = false;
+    }
+    // ── Un objet par scène, posé du côté opposé à la caméra ──
+    const sideX = DC.side ?? 1, put = (g, m, x, y, z) => { const b = new THREE.Mesh(g, m); b.position.set(x, y, z); return add(b); };
+    const lathe = (pts, seg = 40) => new THREE.LatheGeometry(pts.map(([x, y]) => new THREE.Vector2(x, y)), seg);
+    candle.intensity = 0;
+    if (DC.prop === 'serviette') {
+      // deux serviettes de coton pliées, l'une sur l'autre : éponge épaisse (un velouté, un grain serré), liteaux tissés
+      const cloth = (band) => {
+        const m = new THREE.MeshPhysicalNodeMaterial({ roughness: 0.95 });
+        m.sheen = 1; m.sheenRoughness = 0.55; m.sheenColor = new THREE.Color('#fff6ea');
+        const P = positionLocal, loop = noise(P.mul(vec3(900, 900, 900))).mul(0.5).add(noise(P.mul(260)).mul(0.5));
+        // (liteaux : trois bandes en travers, près d'un bord)
+        const u = P.x.div(0.165).add(0.5), st = smoothstep(0.02, 0.0, abs(u.sub(0.16))).add(smoothstep(0.008, 0.0, abs(u.sub(0.21)))).add(smoothstep(0.008, 0.0, abs(u.sub(0.11)))).min(1);
+        m.colorNode = mix(vec3(0.86, 0.83, 0.77), vec3(...band), st).mul(loop.mul(0.1).add(0.95));
+        m.normalNode = bumpMap(loop.mul(float(1).sub(st.mul(0.6))), 0.0012);
+        return shaded(m);
+      };
+      const band = { patio: [0.72, 0.2, 0.12], lagon: [0.12, 0.3, 0.55], thermes: [0.45, 0.38, 0.22], atelier: [0.25, 0.3, 0.33] }[R.mood] ?? [0.2, 0.3, 0.5];
+      const tx = sideX * (W / 2 + cw + 0.14), tz = -D * 0.22;
+      const t1 = put(new RoundedBoxGeometry(0.165, 0.024, 0.1, 5, 0.008), cloth(band), tx, top + 0.012, tz); t1.rotation.y = 0.18 * sideX;
+      const t2 = put(new RoundedBoxGeometry(0.158, 0.022, 0.095, 5, 0.008), cloth(band), tx + 0.004, top + 0.035, tz - 0.003); t2.rotation.y = 0.06 * sideX;
+    } else if (DC.prop === 'lanterne') {
+      // Une lanterne de laiton patiné sur la margelle. Chaque pièce a son profil : socle mouluré sur quatre petits
+      // pieds, montants en cornière, traverses haute et basse, toit en pavillon débordant, lanterneau ajouré, anse.
+      const bz = new THREE.MeshPhysicalNodeMaterial({ metalness: 1 });
+      { const P = positionWorld, pat = fbm(P.mul(55), 3).mul(0.5).add(0.5);
+        bz.colorNode = mix(vec3(0.5, 0.36, 0.16), vec3(0.2, 0.15, 0.08), smoothstep(0.45, 0.8, pat)); // (laiton bruni, plus sombre dans les creux)
+        bz.roughnessNode = float(0.3).add(pat.mul(0.3)); }
+      bz.envMapIntensity = 3;
+      const lx = sideX * (W / 2 + cw / 2), lz = -D / 2 - cw / 2, hw = 0.027, hh = 0.082, ct = top + ch, y1 = ct + 0.015; // (ct : le dessus de la margelle, où elle repose)
+      for (const [ax, az] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+        put(new THREE.SphereGeometry(0.0045, 12, 8), bz, lx + ax * (hw - 0.002), ct + 0.0045, lz + az * (hw - 0.002));
+        // montant en cornière : deux ailes de 6 mm
+        put(new THREE.BoxGeometry(0.0065, hh, 0.0015), bz, lx + ax * (hw - 0.0032), y1 + hh / 2, lz + az * hw);
+        put(new THREE.BoxGeometry(0.0015, hh, 0.0065), bz, lx + ax * hw, y1 + hh / 2, lz + az * (hw - 0.0032));
+      }
+      put(new RoundedBoxGeometry(hw * 2 + 0.014, 0.006, hw * 2 + 0.014, 3, 0.0025), bz, lx, ct + 0.012, lz);
+      for (const yy of [y1 + 0.004, y1 + hh - 0.004]) for (const [ax, az] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) put(new THREE.BoxGeometry(ax ? 0.0015 : hw * 2, 0.007, ax ? hw * 2 : 0.0015), bz, lx + ax * hw, yy, lz + az * hw);
+      // le toit : un pavillon à quatre pans qui déborde, puis un lanterneau et son chapeau
+      const roof = put(lathe([[hw * 1.62, 0], [hw * 1.62, 0.002], [hw * 0.5, 0.026], [hw * 0.5, 0.036], [hw * 0.62, 0.037], [hw * 0.62, 0.039], [0.004, 0.05], [0.004, 0.056], [0, 0.056]], 4), bz, lx, y1 + hh, lz); roof.rotation.y = Math.PI / 4;
+      put(new THREE.TorusGeometry(0.0095, 0.0014, 8, 28), bz, lx, y1 + hh + 0.064, lz);
+      // la bougie : un cylindre de cire au sommet creusé, une mèche, une flamme en larme
+      const wax = new THREE.MeshPhysicalNodeMaterial({ color: '#efe4cc', roughness: 0.45 });
+      wax.emissiveNode = vec3(1, 0.5, 0.18).mul(smoothstep(-0.03, 0.02, positionLocal.y).mul(0.55)); // (la cire s'allume sous la flamme)
+      put(lathe([[0, 0], [0.0125, 0], [0.013, 0.001], [0.013, 0.036], [0.0115, 0.038], [0.006, 0.0355], [0, 0.034]], 28), wax, lx, y1 + 0.001, lz);
+      put(new THREE.CylinderGeometry(0.0004, 0.0004, 0.006, 6), new THREE.MeshStandardNodeMaterial({ color: '#1a1410', roughness: 0.9 }), lx, y1 + 0.038, lz);
+      const fl = new THREE.MeshBasicNodeMaterial();
+      const flick = sin(G.phase.mul(TAU * 23)).mul(0.1).add(sin(G.phase.mul(TAU * 37)).mul(0.07)).add(1);
+      // (flamme : cœur presque blanc, bords orangés, base bleutée et sombre autour de la mèche)
+      fl.outputNode = Fn(() => {
+        const hN = positionLocal.y.div(0.02).clamp(0, 1), rim = dot(normalize(attribute('normal', 'vec3')), normalize(cameraPosition.sub(positionWorld))).abs();
+        const c = mix(vec3(1, 0.45, 0.1), vec3(1, 0.9, 0.62), rim.pow(1.5)).mul(mix(float(0.25), float(1), smoothstep(0.0, 0.3, hN)));
+        return vec4(c.mul(14).mul(flick), 1);
+      })();
+      fl.mrtNode = mrt({ velocity: vec4(0) });
+      const flame = put(lathe([[0, 0], [0.0022, 0.002], [0.0032, 0.006], [0.0026, 0.011], [0.0012, 0.016], [0, 0.02]], 16), fl, lx, y1 + 0.04, lz); flame.castShadow = false;
+      // les vitres : un reflet du ciel, presque rien d'autre
+      const gm = new THREE.MeshPhysicalNodeMaterial({ color: '#ffffff', roughness: 0.02, metalness: 0, transparent: true, opacity: 0.12, side: THREE.DoubleSide }); gm.envMapIntensity = 3;
+      for (const [ax, az] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const g = put(new THREE.PlaneGeometry(hw * 2 - 0.003, hh - 0.01), gm, lx + ax * (hw - 0.001), y1 + hh / 2, lz + az * (hw - 0.001)); g.rotation.y = ax ? Math.PI / 2 : 0; g.castShadow = false; }
+      candle.position.set(lx, y1 + 0.05, lz); candle.userData.base = 0.35; candle.intensity = 0.35; candle.distance = 1.6;
+    }
+    // ── Le bec de fontaine : un col de cygne en laiton, scellé au milieu de la margelle du fond ──
+    // (à sec : un filet d'eau aurait dû troubler la lumière au fond, et le calcul des ondes ne le connaît pas)
+    if (DC.spout) {
+      const br = new THREE.MeshPhysicalNodeMaterial({ metalness: 1 });
+      { const P = positionWorld, pat = fbm(P.mul(70), 3).mul(0.5).add(0.5);
+        br.colorNode = mix(vec3(0.95, 0.76, 0.42), vec3(0.72, 0.54, 0.27), smoothstep(0.4, 0.8, pat)); // (laiton poli, à peine terni par endroits)
+        // (satiné plutôt que miroir : un miroir ne renvoyait que le sol sombre du ciel de studio, et le laiton virait au bronze noir)
+        br.roughnessNode = float(0.3).add(pat.mul(0.18)); }
+      br.envMapIntensity = R.light.kind === 'lamp' ? 5 : 3.2;
+      const sx = 0, sz = -D / 2 - cw / 2, y0 = top + ch; // (au centre de la margelle, en largeur comme en longueur)
+      // le scellement : un joint sombre dans la pierre, une rosace à gorge vissée dessus, un écrou à six pans
+      put(new THREE.CylinderGeometry(0.0285, 0.0285, 0.0012, 48), new THREE.MeshStandardNodeMaterial({ color: '#1c1a17', roughness: 0.9 }), sx, y0 + 0.0003, sz);
+      put(lathe([[0, 0], [0.027, 0], [0.0275, 0.0015], [0.0275, 0.004], [0.025, 0.006], [0.02, 0.0065], [0.018, 0.009], [0.0125, 0.0105], [0.0125, 0.012], [0, 0.012]], 56), br, sx, y0 + 0.0008, sz);
+      put(lathe([[0, 0], [0.0118, 0], [0.0128, 0.001], [0.0128, 0.008], [0.0118, 0.009], [0, 0.009]], 6), br, sx, y0 + 0.0125, sz);
+      // Le corps du bec, d'une seule pièce du pied à l'embouchure (des pièces mises bout à bout laissaient voir leurs
+      // raccords) : un tube balayé le long d'une courbe, dont le rayon varie continûment — colonne fuselée, deux
+      // bagues en léger renflement, col de cygne, pavillon évasé au bout.
+      const reach = cw / 2 + 0.04;
+      const curve = new THREE.CatmullRomCurve3([[0.02, 0], [0.05, 0], [0.085, 0], [0.118, 0.003], [0.146, 0.02], [0.158, reach * 0.5], [0.148, reach * 0.88], [0.126, reach], [0.104, reach]].map(([yy, zz]) => new THREE.Vector3(sx, y0 + yy, sz + zz)), false, 'centripetal');
+      const NSEG = 160, NR = 28, fr = curve.computeFrenetFrames(NSEG, false), bump = (t, c, w) => Math.exp(-(((t - c) / w) ** 2));
+      const rad = (t) => 0.0088 - 0.0014 * Math.min(1, t / 0.6) + 0.0016 * bump(t, 0.035, 0.012) + 0.0013 * bump(t, 0.3, 0.012) + 0.003 * Math.max(0, (t - 0.94) / 0.06) ** 2;
+      const pos = [], idx = [];
+      for (let i = 0; i <= NSEG; i++) {
+        const t = i / NSEG, c = curve.getPointAt(t), n = fr.normals[i], bn = fr.binormals[i], r = rad(t);
+        for (let j = 0; j <= NR; j++) { const a2 = (j / NR) * Math.PI * 2, cx = Math.cos(a2) * r, sy = Math.sin(a2) * r; pos.push(c.x + n.x * cx + bn.x * sy, c.y + n.y * cx + bn.y * sy, c.z + n.z * cx + bn.z * sy); }
+      }
+      for (let i = 0; i < NSEG; i++) for (let j = 0; j < NR; j++) { const a2 = i * (NR + 1) + j, b2 = a2 + NR + 1; idx.push(a2, b2, a2 + 1, a2 + 1, b2, b2 + 1); }
+      // (le bord roulé de l'embouchure, puis l'intérieur du tube sur un centimètre : on ne voit pas de tranche)
+      const tEnd = fr.tangents[NSEG], cE = curve.getPointAt(1), nE = fr.normals[NSEG], bE = fr.binormals[NSEG], r1 = rad(1);
+      const lip = [[r1, 0], [r1 - 0.0006, 0.0009], [r1 - 0.0016, 0.0011], [r1 - 0.0024, 0.0006], [r1 - 0.0028, -0.002], [r1 - 0.0031, -0.012]];
+      const base = pos.length / 3;
+      lip.forEach(([r, d]) => { for (let j = 0; j <= NR; j++) { const a2 = (j / NR) * Math.PI * 2, cx = Math.cos(a2) * r, sy = Math.sin(a2) * r; pos.push(cE.x + nE.x * cx + bE.x * sy + tEnd.x * d, cE.y + nE.y * cx + bE.y * sy + tEnd.y * d, cE.z + nE.z * cx + bE.z * sy + tEnd.z * d); } });
+      for (let k = 0; k < lip.length - 1; k++) for (let j = 0; j < NR; j++) { const a2 = base + k * (NR + 1) + j, b2 = a2 + NR + 1; idx.push(a2, b2, a2 + 1, a2 + 1, b2, b2 + 1); }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx);
+      // (normales lissées sur les sommets confondus : la couture du tube et le départ du bord roulé ne se voient pas)
+      const gs = mergeVertices(g, 1e-6); gs.computeVertexNormals();
+      add(new THREE.Mesh(gs, br));
+    }
+    // ── L'air ──
+    if (DC.air === 'poussiere' && !lite) {
+      // Des poussières en suspension, qu'on ne voit que lorsqu'elles traversent un rai de soleil : quelques dizaines de
+      // points très petits, qui dérivent lentement sur des orbites fermées (le film boucle).
+      const NM = 90, base = new Float32Array(NM * 3), ph = new Float32Array(NM * 3);
+      for (let i = 0; i < NM; i++) {
+        const h1 = Math.abs(Math.sin(i * 12.9898 + 4.1) * 43758.5453) % 1, h2 = Math.abs(Math.sin(i * 78.233 + 1.7) * 43758.5453) % 1, h3 = Math.abs(Math.sin(i * 39.425 + 9.2) * 43758.5453) % 1;
+        base.set([(h1 - 0.5) * (W + 1.4), top + 0.04 + h2 * 0.55, (h3 - 0.5) * (D + 1.2) + 0.2], i * 3);
+        ph.set([h2 * 6.283, h3 * 6.283, h1 * 6.283], i * 3);
+      }
+      const b = instancedBufferAttribute(new THREE.InstancedBufferAttribute(base, 3)), q = instancedBufferAttribute(new THREE.InstancedBufferAttribute(ph, 3));
+      const t = G.phase.mul(TAU), ctr = b.add(vec3(sin(t.add(q.x)).mul(0.07), sin(t.mul(2).add(q.y)).mul(0.035), cos(t.add(q.z)).mul(0.07)));
+      const sm = new THREE.SpriteNodeMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+      sm.positionNode = ctr;
+      sm.scaleNode = float(0.0055).add(q.z.mul(0.0006));
+      const disc = smoothstep(0.5, 0.1, length(uv().sub(0.5)));
+      // (dans l'ombre du feuillage : presque rien ; dans un rai : un point de lumière)
+      sm.colorNode = vec3(U.sunCol).mul(U.lux).mul(0.2).mul(leafShade(ctr).sub(0.1).max(0)).mul(disc);
+      sm.opacityNode = disc;
+      sm.mrtNode = mrt({ velocity: vec4(0) });
+      const motes = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), sm);
+      motes.count = NM; motes.frustumCulled = false; motes.renderOrder = 4;
+      add(motes); motes.castShadow = false; motes.receiveShadow = false;
+    } else if (DC.air === 'vapeur' || DC.air === 'brume') {
+      // Une vapeur au ras de l'eau (thermes), ou une brume basse (la nuit) : trois nappes très fines, l'une au-dessus de
+      // l'autre, dont les volutes glissent en rond et reviennent à leur place à la fin du film.
+      const steam = DC.air === 'vapeur';
+      // (deux nappes et un seul bruit chacune : trois nappes à deux bruits doublaient le temps d'image)
+      [0.015, 0.05].forEach((hh, k) => {
+        const m = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false });
+        m.blending = THREE.CustomBlending; m.blendEquation = THREE.AddEquation; m.blendSrc = THREE.OneFactor; m.blendDst = THREE.OneMinusSrcAlphaFactor;
+        m.outputNode = Fn(() => {
+          const P = positionWorld, t = G.phase.mul(TAU), off = vec2(cos(t), sin(t)).mul(0.22 + 0.08 * k);
+          const n1 = fbm(vec3(P.xz.mul(2.6 - 0.5 * k).add(off), 0.4 + k), 3).mul(0.5).add(0.5);
+          // (plus dense au-dessus de l'eau, elle déborde à peine sur la margelle)
+          const over = smoothstep(0.16, -0.05, max(abs(P.x).sub(W / 2), abs(P.z).sub(D / 2)));
+          const a = smoothstep(0.4, 0.75, n1).mul(over).mul((steam ? 0.26 : 0.13) / (1 + k * 0.7));
+          const lit = U.sunCol.mul(U.lux).mul(steam ? 0.26 : 0.12).add(U.ambCol.mul(U.amb).mul(0.6));
+          return vec4(lit.mul(a), a);
+        })();
+        m.mrtNode = mrt({ velocity: vec4(0) });
+        const pl = new THREE.Mesh(new THREE.PlaneGeometry(W + 0.5, D + 0.5, 1, 1).rotateX(-Math.PI / 2), m);
+        pl.position.y = hh; pl.renderOrder = 3 + k; add(pl); pl.castShadow = false; pl.receiveShadow = false;
+      });
+    }
+    const box = (w, h, d, x, y, z, m, r = 0) => { const g = r ? new RoundedBoxGeometry(w, h, d, 3, r) : new THREE.BoxGeometry(w, h, d); const b = new THREE.Mesh(g, m); b.position.set(x, y, z); return add(b); };
+    // le sol, autour du bassin et de sa margelle
+    const iw = W / 2 + cw, id = D / 2 + cw;
+    box(far, 0.2, far, 0, top - 0.1, -id - far / 2, ground); box(far, 0.2, far, 0, top - 0.1, id + far / 2, ground);
+    box(far, 0.2, 2 * id, -iw - far / 2, top - 0.1, 0, ground); box(far, 0.2, 2 * id, iw + far / 2, top - 0.1, 0, ground);
+    // la margelle : quatre dalles à arêtes adoucies, un peu au-dessus du sol
+    box(W + 2 * cw, ch + 0.04, cw, 0, top + ch / 2 - 0.02, -D / 2 - cw / 2, stone, 0.004); box(W + 2 * cw, ch + 0.04, cw, 0, top + ch / 2 - 0.02, D / 2 + cw / 2, stone, 0.004);
+    box(cw, ch + 0.04, D, -W / 2 - cw / 2, top + ch / 2 - 0.02, 0, stone, 0.004); box(cw, ch + 0.04, D, W / 2 + cw / 2, top + ch / 2 - 0.02, 0, stone, 0.004);
+    // la paroi de devant, vue seulement par sa tranche
+    box(W, T.H + top, 0.02, 0, (top - T.H) / 2, D / 2 + 0.01, stone);
+  }
+
+  // L'appareil de Kármán au bord d'un bassin : un cylindre poli tenu dans le courant par un pont fin.
+  // Peu de pièces, chacune finie : pieds tournés posés sur la margelle, colonnettes, tube, bague à vis, bouchon.
+  function karmanRig(add) {
+    const T = R.tank, K = R.karman, [px, pz] = K.post, r = K.radius, cw = 0.075, top = T.rim + 0.022;
+    const yb = top + 0.075, z0 = -T.D / 2 - cw / 2, z1 = T.D / 2 + cw / 2;
+    const lamp = R.light.kind === 'lamp';
+    const brass = new THREE.MeshStandardNodeMaterial({ color: '#b8904a', metalness: 1, roughness: 0.3 });
+    // (acier satiné : un poli miroir, hors de l'eau, ne renvoyait que le noir du plafond)
+    const steel = new THREE.MeshStandardNodeMaterial({ color: '#eceef0', metalness: 1, roughness: 0.34 });
+    brass.envMapIntensity = lamp ? 4 : 1.6; steel.envMapIntensity = lamp ? 9 : 2; // (sous une lampe, le studio est sombre : le métal ne doit pas virer au noir)
+    const lathe = (pts, seg = 48) => new THREE.LatheGeometry(pts.map(([x, y]) => new THREE.Vector2(x, y)), seg);
+    const put = (g, m, x, y, z, rx = 0) => { const b = new THREE.Mesh(g, m); b.position.set(x, y, z); b.rotation.x = rx; return add(b); };
+    // le pont : un tube, d'une margelle à l'autre, bouts arrondis
+    put(new THREE.CapsuleGeometry(0.006, z1 - z0 + 0.03, 8, 24), brass, px, yb, (z0 + z1) / 2, Math.PI / 2);
+    for (const z of [z0, z1]) {
+      // pied tourné : semelle à chanfrein, gorge, colonnette, noix qui serre le tube
+      put(lathe([[0, 0], [0.024, 0], [0.026, 0.002], [0.026, 0.005], [0.02, 0.008], [0.011, 0.011], [0.0075, 0.016], [0.0075, yb - top - 0.014], [0.0105, yb - top - 0.011], [0.0105, yb - top - 0.004], [0, yb - top - 0.004]]), brass, px, top, z);
+      put(new THREE.SphereGeometry(0.0115, 24, 16), brass, px, yb, z);
+    }
+    // la bague au milieu du pont, sa vis moletée, et le cylindre qui descend dans l'eau
+    put(lathe([[0, -0.016], [r + 0.006, -0.016], [r + 0.008, -0.013], [r + 0.008, 0.013], [r + 0.006, 0.016], [0, 0.016]]), brass, px, yb, pz);
+    put(new THREE.CylinderGeometry(0.004, 0.004, 0.022, 16), brass, px + r + 0.014, yb, pz).rotation.z = Math.PI / 2;
+    put(new THREE.CylinderGeometry(0.0075, 0.0075, 0.006, 20), brass, px + r + 0.027, yb, pz).rotation.z = Math.PI / 2;
+    put(lathe([[0, -T.H], [r, -T.H], [r, yb + 0.03], [r - 0.002, yb + 0.034], [0, yb + 0.036]], 40), steel, px, 0, pz);
+    // le ménisque : l'eau remonte d'un millimètre le long du métal et accroche la lumière
+    const men = new THREE.MeshStandardNodeMaterial({ color: '#dfe9ee', metalness: 0, roughness: 0.06 });
+    men.envMapIntensity = lamp ? 6 : 2;
+    put(new THREE.TorusGeometry(r + 0.0012, 0.0016, 10, 48), men, px, 0.0006, pz, Math.PI / 2);
+  }
+
   function clear() {
     for (const m of meshes) { group.remove(m); m.geometry.dispose(); m.material?.dispose?.(); }
     meshes = [];
@@ -485,7 +922,8 @@ export function createStage(scene, gen, { lite = false, renderer } = {}) {
     caustics?.dispose();
     const T = R.tank;
     waves.L = T.L; waves.H = T.H;
-    caustics = createCaustics(renderer, waves, { W: T.W, D: T.D, rim: T.rim, slices: lite ? 4 : 8, res: lite ? 512 : 1024, lite });
+    // (bassin : douze coupes, plus fines — ce sont elles qu'on voit, en rayons)
+    caustics = createCaustics(renderer, waves, { W: T.W, D: T.D, rim: T.rim, slices: lite ? 4 : T.style === 'bassin' ? 12 : 8, sliceRes: !lite && T.style === 'bassin' ? 320 : 256, res: lite ? 512 : 1024, lite });
     clock = R.family === 'foyer' ? foyerClock(R) : null;
     U.W.value = T.W; U.D.value = T.D; U.H.value = T.H; U.rim.value = T.rim;
     const jobs = [];
@@ -522,12 +960,16 @@ export function createStage(scene, gen, { lite = false, renderer } = {}) {
       m.scale.setScalar(0.1);
       return add(m);
     };
+    const pool = T.style === 'bassin';
     const shellFin = T.style === 'stone' ? fin3('bisque') : T.style === 'enamel' ? fin3('whiteCeramic') : fin3('carbonMatte');
-    piece(o.shell, shellFin);
-    piece(o.frame, fin3(ts.frame, T.style === 'brass' ? 0.1 : 0));
-    if (o.rig.position.length) piece(o.rig, T.style === 'stone' ? fin3('bronzeDark') : fin3('blackenedSteel'));
-    if (o.extra.position.length) piece(o.extra, R.family === 'karman' ? fin3('chrome') : fin3('brushedSteel'));
-    if (o.movers) piece(o.movers, (() => { const m = fin3(T.style === 'brass' ? 'polishedBrass' : 'brushedSteel'); return { ...m, inner: { ...FINISHES.vermilion, preset: 'vermilion' } }; })(), plungerRig(), { foot: [o.movers.foot, 1] });
+    if (pool) patio(add); else {
+      piece(o.shell, shellFin);
+      piece(o.frame, fin3(ts.frame, T.style === 'brass' ? 0.1 : 0));
+    }
+    if (!pool && o.rig.position.length) piece(o.rig, T.style === 'stone' ? fin3('bronzeDark') : fin3('blackenedSteel'));
+    if (pool && R.family === 'karman') karmanRig(add);
+    else if (o.extra.position.length) piece(o.extra, R.family === 'karman' ? fin3('chrome') : fin3('brushedSteel'));
+    if (o.movers && !pool) piece(o.movers, (() => { const m = fin3(T.style === 'brass' ? 'polishedBrass' : 'brushedSteel'); return { ...m, inner: { ...FINISHES.vermilion, preset: 'vermilion' } }; })(), plungerRig(), { foot: [o.movers.foot, 1] });
     // parois intérieures
     const inner = new THREE.Mesh(toGeometry(o.inner), wallMaterial(S));
     inner.scale.setScalar(0.1);
@@ -541,6 +983,7 @@ export function createStage(scene, gen, { lite = false, renderer } = {}) {
     const surf = new THREE.Mesh(surfaceGrid(T), surfaceMaterial(S));
     surf.frustumCulled = false;
     add(surf, { shadow: false, receive: false });
+    if (pool) { U.floorMean.value = 0.9; return; }
     // volume (face avant, juste derrière la vitre)
     const vg = new THREE.PlaneGeometry(T.W, T.H, 1, 1);
     const vol = new THREE.Mesh(vg, volumeMaterial());
@@ -569,7 +1012,8 @@ export function createStage(scene, gen, { lite = false, renderer } = {}) {
     if (sun) {
       const d = U.sunDir.value;
       key.position.set(-d.x * 6, -d.y * 6, -d.z * 6);
-      key.decay = 0; key.angle = 0.16; key.penumbra = 0.3;
+      // (bassin : le soleil éclaire tout le sol, sans bord de faisceau dans le cadre)
+      key.decay = 0; key.angle = T.style === 'bassin' ? 0.5 : 0.16; key.penumbra = 0.3;
       key.intensity = Li.lux / Math.max(0.1, -d.y);
     } else {
       key.position.set(...Li.pos);
@@ -585,7 +1029,15 @@ export function createStage(scene, gen, { lite = false, renderer } = {}) {
     U.amb.value = R.env.intensity * 0.6;
     const tint = R.water.tint;
     U.sigma.value = R.water.turbid;
-    U.extinct.value.set(ABSORB_RGB[0] / tint[0] + R.water.turbid, ABSORB_RGB[1] / tint[1] + R.water.turbid, ABSORB_RGB[2] / tint[2] + R.water.turbid);
+    // (Faraday : des centaines de petites lentilles — leurs faisceaux, à pleine force, cacheraient le réseau)
+    if (candle.intensity > 0) candle.intensity = (candle.userData.base ?? 0.09) * (1 + 0.12 * Math.sin(ph * TAU * 23) + 0.08 * Math.sin(ph * TAU * 37));
+    U.shadeOn.value = sun && R.decor?.shade ? 1 : 0;
+    { const a = R.decor?.turn ?? 0; U.shadeDir.value.set(Math.cos(a), Math.sin(a)); }
+    U.shaft.value = (R.water.shafts ?? 0) * (R.family === 'faraday' ? 0.12 : R.family === 'karman' ? 0.6 : 1);
+    // (deep : l'eau d'un bassin se colore comme celle d'un bassin plus profond — le nôtre n'a que 45 cm)
+    const dk = R.water.deep ?? 1;
+    U.extinct.value.set((ABSORB_RGB[0] / tint[0]) * dk + R.water.turbid, (ABSORB_RGB[1] / tint[1]) * dk + R.water.turbid, (ABSORB_RGB[2] / tint[2]) * dk + R.water.turbid);
+    U.glint.value = T.style === 'bassin' ? 0.25 : 1; // (à ciel ouvert, le reflet de la source ne doit pas faire une tache)
     caustics.setLight(Li, Li.angular);
     U.angular.value = Li.angular;
 

@@ -218,3 +218,19 @@ Ce qu'elles imposent : **l'échelle** (dans la cuve de 60 cm, des ondes de 1 à 
 - **Faraday invisible** sous le seuil de focalisation : amplitude relevée à 0,22–0,30 mm.
 - **Le bruit de la surface en rasance** avait quatre causes : l'albédo fin du fond lu le long de rayons réfractés (version unie pour ces vues), les rides plus fines que le pixel (pentes moyennées pour le rendu de la surface), un niveau de mip implicite lu dans une branche (niveau 0 explicite), et surtout l'occlusion ambiante d'écran appliquée à des matériaux qui calculent toute leur lumière (ils écrivent leur sortie directement).
 - **Les parois reçoivent la lumière du fond.** Le rebond se calcule à partir de la vraie lumière du fond, adoucie (lue en quelques points nets, elle recopiait le dessin comme un reflet), et la caustique directe des parois est dosée physiquement.
+
+
+## Refonte : le bassin au soleil
+
+La cuve de laboratoire vue de côté, avec son batteur de plongeurs, a été jugée trop technique et froide : une maquette grise dans le noir, une eau qu'on ne voyait pas, un dessin de lumière petit et terne. L'idée propre à la scène est gardée (des ondes convergent et la lumière dessine une figure), la mise en scène est refaite.
+
+Ce qui a guidé la refonte, dans l'ordre des retours de l'auteur :
+
+1. **Un bassin au soleil**, choisi parmi trois directions (les deux autres : une nature morte de verre, une vue sous l'eau).
+2. **Rester simple et de grande qualité** plutôt que complexe et sans photoréalisme : un fond de pâte de verre plutôt qu'un zellige à étoiles, peu d'objets, chacun fini.
+3. **Des rayons dans l'eau**, pour comprendre comment la caustique se forme, à faible coût. Deux versions refusées (un nuage laiteux, puis des traits trop marqués) avant une lueur fine et courte.
+4. **Pas de pause** quand le dessin se forme, seulement un léger ralentissement.
+5. **Une ambiance moins clinique** : l'ombre d'un feuillage, des pétales sur l'eau, la pierre mouillée, un mur de chaux, des sols de tomettes et de teck, une serviette ou une lanterne, un bec de fontaine.
+6. **Des matières au modèle physique complet**, et tout ajout tenu au photoréalisme : le bec de fontaine a été refait d'une seule pièce, sans filet d'eau (le calcul des ondes ne le connaît pas, la caustique l'aurait trahi).
+
+Le prix : le bassin n'a plus de batteur, donc les ondes du Foyer n'ont plus de cause visible à l'écran.

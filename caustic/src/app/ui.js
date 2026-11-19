@@ -74,7 +74,7 @@ export function createUI({ recipe: getRecipe, render, on, moods, families }) {
       add(fFam, F, 'series', opts(SERIES, (v) => v.name)).name('Série de dessins').onFinishChange(rebuildScene);
       F.events.forEach((e, i) => add(fFam, e, 'rotation', 0, Math.PI * 2, 0.01).name(`Dessin ${i + 1} : orientation`).onFinishChange(rebuildScene));
       add(fFam, F.slow, 'vn', 0.1, 1, 0.01).name('Vitesse du film (× réel)').onChange(ch);
-      add(fFam, F.slow, 'vmin', 0.002, 0.1, 0.001).name('Ralenti au dessin (× réel)').onChange(ch);
+      add(fFam, F.slow, 'vmin', 0.005, 0.4, 0.005).name('Ralenti au dessin (× réel)').onChange(ch);
       add(fFam, F.slow, 'w', 0.5, 5, 0.05).name('Durée du ralenti (s)').onChange(ch);
       add(fFam, F, 'gain', 0, 4, 0.01).name('Course des plongeurs (× eau)').onChange(ch);
     }
