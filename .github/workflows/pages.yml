@@ -60,8 +60,13 @@ jobs:
           touch _site/.nojekyll
 
       - uses: actions/configure-pages@v5
+      # un nom par tentative : un « Re-run » ajoute sinon un second artefact
+      # github-pages au même run et deploy-pages refuse d'en choisir un
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
+          name: github-pages-${{ github.run_attempt }}
       - id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          artifact_name: github-pages-${{ github.run_attempt }}
