@@ -5,9 +5,10 @@
 // Unités : 1 u = 10 cm, masses en kg, temps en s. Une force vaut kg·u/s²
 // (0,1 N) et une raideur kg/s² (numériquement des N/m).
 //
-// Trois familles :
+// Quatre familles :
 // - prism(n)  : prisme tordu à n barres (Culbute), couché sur le flanc ;
 // - chain(m)  : chaîne de m prismes carrés à anneaux partagés (Chenille) ;
+// - icosa()   : tenségrité à six barres, posée sur une face (Icosaèdre) ;
 // - hoop(m)   : couronne de m prismes triangulaires refermée en tore, et un
 //               moyeu (une barre-axe) suspendu par des rayons (Cerceau).
 //
@@ -127,7 +128,39 @@ export function hoop({ m = 12, Rw = 2.2, w = 1.5, hubW = 2.2, barR = 0.04, rungR
   return T;
 }
 
+// ── Icosaèdre : la tenségrité à six barres (le robot SUPERball) ─────────────
+// Trois paires de barres parallèles, une par axe, écartées d'une demi-longueur ;
+// chaque embout est relié par quatre câbles à ses quatre voisins (vingt-quatre
+// câbles). Les douze embouts sont les sommets d'un icosaèdre aplati : huit
+// faces « fermées » (trois câbles) et douze « ouvertes ». La structure est
+// posée sur une face fermée. `perms` : ses symétries (les douze rotations du
+// tétraèdre, et leurs douze images dans un miroir), en permutations des nœuds.
+export function icosa({ L = 3, barR = 0.05, capR = 0.13, mBar = 0.14, mCap = 0.07 } = {}) {
+  const T = base(), d = L / 2, m = mBar / 2 + mCap, P = [];
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) P.push([sx * L / 2, 0, sz * d / 2]);
+  for (const sy of [-1, 1]) for (const sx of [-1, 1]) P.push([sx * d / 2, sy * L / 2, 0]);
+  for (const sz of [-1, 1]) for (const sy of [-1, 1]) P.push([0, sy * d / 2, sz * L / 2]);
+  const D = (i, j) => Math.hypot(P[i][0] - P[j][0], P[i][1] - P[j][1], P[i][2] - P[j][2]), dc = Math.hypot(L / 2 - d / 2, L / 2, d / 2);
+  const perms = [];
+  for (const cyc of [[0, 1, 2], [1, 2, 0], [2, 0, 1]]) for (const sg of [[1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1], [-1, -1, -1], [-1, 1, 1], [1, -1, 1], [1, 1, -1]]) {
+    const p = P.map((q) => { const r = [0, 1, 2].map((a) => sg[a] * q[cyc[a]]); return P.findIndex((o) => Math.hypot(o[0] - r[0], o[1] - r[1], o[2] - r[2]) < 1e-6); });
+    perms.push({ p, mir: sg[0] * sg[1] * sg[2] < 0 });
+  }
+  // la diagonale (1, 1, 1) vers le bas : une face fermée au sol
+  const a = [1, 1, 1].map((v) => v / Math.sqrt(3)), e1 = [1, -1, 0].map((v) => v / Math.SQRT2), e2 = [a[1] * e1[2] - a[2] * e1[1], a[2] * e1[0] - a[0] * e1[2], a[0] * e1[1] - a[1] * e1[0]];
+  const dot = (u, v) => u[0] * v[0] + u[1] * v[1] + u[2] * v[2];
+  P.forEach((q, i) => addNode(T, [dot(q, e1), -dot(q, a), dot(q, e2)], m, capR, { k: i }));
+  for (let i = 0; i < 12; i++) for (let j = i + 1; j < 12; j++) {
+    if (Math.abs(D(i, j) - L) < 1e-9 && [0, 1, 2].filter((c) => Math.abs(P[i][c] - P[j][c]) < 1e-9).length === 2) addBar(T, i, j, barR, { k: T.bars.length });
+    else if (Math.abs(D(i, j) - dc) < 1e-6) addCable(T, i, j, 'ring', { k: T.cables.length });
+  }
+  T.family = 'icosa';
+  T.L = L; T.perms = perms;
+  return T;
+}
+
 export function buildTopology(spec) {
+  if (spec.family === 'icosa') return icosa(spec);
   if (spec.family === 'culbute') return prism(spec);
   if (spec.family === 'chenille') return chain(spec);
   if (spec.family === 'cerceau') return hoop(spec);

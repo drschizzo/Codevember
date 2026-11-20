@@ -25,21 +25,27 @@ function toGeometry(o) {
 }
 const finishU = (f) => ({ outer: finishUniforms(f.outer), inner: finishUniforms(f.inner), edge: finishUniforms(f.edge), wear: uniform(f.wear) });
 
-// les pièces à construire pour une topologie (requêtes au worker)
+// les membres d'une topologie : une troupe en a plusieurs (gen/troupe.js), une sculpture seule un seul
+const CAPPED = (fam) => fam === 'culbute' || fam === 'icosa'; // (embouts massifs, un treuil sur chaque câble)
+export const membersOf = (T) => T.members ?? [{ family: T.family, scale: 1, T, n0: 0, b0: 0, c0: 0, hub: T.hub ?? null }];
+const key3 = (L) => (Math.round(L * 1000) / 1000).toFixed(3);
+const strutKey = (fam, b) => `${key3(b.L)}|${b.r}|${CAPPED(fam) ? 'cap' : 'fork'}`;
+const ballKey = (R) => R.toFixed(4);
+
+// les pièces à construire pour une topologie (requêtes au worker) ; chaque pièce est
+// tournée à la taille 1 : un membre plus grand ou plus petit la porte à son échelle
 export function partSpecs(T) {
-  const fam = T.family, out = { struts: {}, ball: null, winch: null, hub: null, cable: { S: 40, R: 6 } };
-  const key = (L) => (Math.round(L * 1000) / 1000).toFixed(3);
-  for (const b of T.bars) {
-    if (b.hub) continue;
-    const style = fam === 'culbute' ? 'cap' : 'fork';
-    const capR = fam === 'culbute' ? T.nodes[b.i].r : T.nodes[b.i].r * 0.62;
-    const k = `${key(b.L)}|${b.r}|${style}`;
-    out.struts[k] ??= { L: +key(b.L), r: b.r, capR, style };
+  const out = { struts: {}, balls: {}, winch: null, hub: null, cable: { S: 40, R: 6 } };
+  for (const M of membersOf(T)) {
+    const fam = M.family, t = M.T;
+    for (const b of t.bars) {
+      if (b.hub) continue;
+      out.struts[strutKey(fam, b)] ??= { L: +key3(b.L), r: b.r, capR: CAPPED(fam) ? t.nodes[b.i].r : t.nodes[b.i].r * 0.62, style: CAPPED(fam) ? 'cap' : 'fork' };
+    }
+    if (!CAPPED(fam)) { const R = t.nodes.find((n) => n.hub === undefined).r; out.balls[ballKey(R)] ??= { R }; }
+    if (fam !== 'cerceau') out.winch = { len: 0.24, R: 0.036 };
+    if (fam === 'cerceau') out.hub = { W: Math.hypot(...[0, 1, 2].map((a) => t.nodes[t.hub[1]].p[a] - t.nodes[t.hub[0]].p[a])), flR: 0.34 };
   }
-  if (fam !== 'culbute') out.ball = { R: T.nodes.find((n) => !n.hub).r };
-  if (fam !== 'cerceau') out.winch = { len: 0.24, R: 0.036 };
-  if (fam === 'cerceau') out.hub = { W: Math.hypot(...[0, 1, 2].map((a) => T.nodes[T.hub[1]].p[a] - T.nodes[T.hub[0]].p[a])), flR: 0.34 };
-  out.strutKey = (b) => `${key(b.L)}|${b.r}|${fam === 'culbute' ? 'cap' : 'fork'}`;
   return out;
 }
 
@@ -69,13 +75,13 @@ export function createStage(scene, { lite = false } = {}) {
   const CU = createCableUniforms();
   let cableMesh = null;
   let R = null, film = null, T = null, mats = null;
-  let struts = [], balls = [], winches = [], hubMesh = null;
+  let struts = [], balls = [], winches = [], hubs = [], MEM = [], barMesh = [], cableS = new Float32Array(0);
   let ready = false;
 
   function clear() {
-    for (const o of [...struts, ...balls, ...winches, hubMesh, cableMesh]) if (o) group.remove(o);
-    for (const o of [...new Set([...struts, ...balls, ...winches, hubMesh].filter(Boolean).map((o) => o.geometry))]) o.dispose();
-    struts = []; balls = []; winches = []; hubMesh = null;
+    for (const o of [...struts, ...balls, ...winches, ...hubs, cableMesh]) if (o) group.remove(o);
+    for (const o of [...new Set([...struts, ...balls, ...winches, ...hubs].map((o) => o.geometry))]) o.dispose();
+    struts = []; balls = []; winches = []; hubs = []; barMesh = [];
     if (cableMesh) { cableMesh.geometry.dispose(); cableMesh = null; }
     if (mats) { for (const m of Object.values(mats)) m.mat?.dispose(); mats = null; }
     ready = false;
@@ -96,35 +102,31 @@ export function createStage(scene, { lite = false } = {}) {
       cable: { mat: buildCableMaterial(CU) },
     };
     mats.hub = mats.ball;
+    MEM = membersOf(T);
+    const memOf = (e) => MEM[e.mem ?? 0];
+    const add = (g, mat, sc) => { const m = new THREE.Mesh(g, mat); m.castShadow = m.receiveShadow = true; m.matrixAutoUpdate = false; m.userData.s = sc; group.add(m); return m; };
     const geo = Object.fromEntries(Object.entries(parts.struts).map(([k, o]) => [k, toGeometry(o)]));
-    const sk = partSpecs(T).strutKey;
-    for (const b of T.bars) {
-      let m;
-      if (b.hub) { m = hubMesh = new THREE.Mesh(toGeometry(parts.hub), mats.hub.mat); }
-      else { m = new THREE.Mesh(geo[sk(b)], mats.strut.mat); struts.push(m); }
-      m.castShadow = m.receiveShadow = true;
-      m.matrixAutoUpdate = false;
-      group.add(m);
-    }
-    if (parts.ball) {
-      const g = toGeometry(parts.ball);
-      T.nodes.forEach((nd, i) => {
-        if (nd.hub !== undefined) return;
-        const m = new THREE.Mesh(g, mats.ball.mat);
-        m.castShadow = m.receiveShadow = true; m.matrixAutoUpdate = false; m.userData.node = i;
-        balls.push(m); group.add(m);
-      });
-    }
+    const hubGeo = parts.hub ? toGeometry(parts.hub) : null;
+    barMesh = T.bars.map((b) => {
+      const M = memOf(b);
+      if (b.hub) { const m = add(hubGeo, mats.hub.mat, M.scale); hubs.push(m); return m; }
+      const m = add(geo[strutKey(M.family, b)], mats.strut.mat, M.scale); struts.push(m); return m;
+    });
+    const ballGeo = Object.fromEntries(Object.entries(parts.balls ?? {}).map(([k, o]) => [k, toGeometry(o)]));
+    T.nodes.forEach((nd, i) => {
+      const M = memOf(nd);
+      if (CAPPED(M.family) || nd.hub !== undefined) return;
+      const m = add(ballGeo[ballKey(nd.r / M.scale)], mats.ball.mat, M.scale); m.userData.node = i; balls.push(m);
+    });
     if (parts.winch) {
       const g = toGeometry(parts.winch);
       T.cables.forEach((c, i) => {
-        const active = T.family === 'culbute' || c.kind === 'axial';
-        if (!active) return;
-        const m = new THREE.Mesh(g, mats.winch.mat);
-        m.castShadow = m.receiveShadow = true; m.matrixAutoUpdate = false; m.userData.cable = i;
-        winches.push(m); group.add(m);
+        const M = memOf(c);
+        if (!(CAPPED(M.family) || c.kind === 'axial')) return;
+        const m = add(g, mats.winch.mat, M.scale); m.userData.cable = i; winches.push(m);
       });
     }
+    cableS = Float32Array.from(T.cables, (c) => memOf(c).scale);
     const NC = Math.min(MAX_CABLES, T.cables.length);
     cableMesh = new THREE.Mesh(cableGeometry(parts.cable, NC), mats.cable.mat);
     cableMesh.castShadow = true; cableMesh.receiveShadow = true; cableMesh.frustumCulled = false;
@@ -159,18 +161,18 @@ export function createStage(scene, { lite = false } = {}) {
       const M = mats[k], f = R.mats[k];
       if (signature(f) !== M.key) {
         const nm = makeMat(f, k === 'strut' ? 1.3 : k === 'ball' ? 2.7 : 4.1);
-        for (const o of [...struts, ...balls, ...winches, hubMesh]) if (o && o.material === M.mat) o.material = nm.mat;
+        for (const o of [...struts, ...balls, ...winches, ...hubs]) if (o.material === M.mat) o.material = nm.mat;
         M.mat.dispose(); mats[k] = nm;
         if (k === 'ball') mats.hub = nm;
       } else { applyFinish(M.U.outer, f.outer); applyFinish(M.U.inner, f.inner); applyFinish(M.U.edge, f.edge); M.U.wear.value = f.wear; M.f = f; }
     }
     const C = CABLES[R.mats.cable];
     CU.color.value.set(C.color); CU.metal.value = C.metal; CU.rough.value = C.rough; CU.braid.value = C.braid; CU.sheen.value = C.sheen;
-    for (let i = 0; i < MAX_CABLES; i++) { CU.B[i].w = C.r; CU.BP[i].w = C.r; }
+    for (let i = 0; i < MAX_CABLES; i++) { const r = C.r * (cableS[i] ?? 1); CU.B[i].w = r; CU.BP[i].w = r; }
   }
 
   // ── Pose d'une phase ──
-  const P = new Float32Array(256 * 3);
+  let P = new Float32Array(256 * 3);
   let RS = new Float32Array(256);
   const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _d = new THREE.Vector3(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion();
   const Z = new THREE.Vector3(0, 0, 1), _m = new THREE.Matrix4(), _s = new THREE.Vector3(1, 1, 1), _up = new THREE.Vector3();
@@ -191,31 +193,31 @@ export function createStage(scene, { lite = false } = {}) {
     node(c.i, a); node(c.j, b);
     const dTrue = a.distanceTo(b);
     if (c.kind === 'spoke') {
-      const h0 = node(T.hub[0], new THREE.Vector3()), h1 = node(T.hub[1], new THREE.Vector3());
+      const M = MEM[c.mem ?? 0], h0 = node(M.hub[0], new THREE.Vector3()), h1 = node(M.hub[1], new THREE.Vector3());
       const ax = h1.sub(h0).normalize();
       _d.subVectors(b, a); _d.addScaledVector(ax, -_d.dot(ax)).normalize();
-      a.addScaledVector(_d, 0.3);
+      a.addScaledVector(_d, 0.3 * M.scale);
     }
     return dTrue;
   }
 
   function update(u, firstOfJump = false) {
     if (!ready) return;
+    if (P.length < film.N * 3) P = new Float32Array(film.N * 3);
     film.pose(u, P);
     if (RS.length < film.NC) RS = new Float32Array(film.NC);
     film.rests(u, RS);
     // barres
-    let si = 0;
-    T.bars.forEach((b) => {
-      const m = b.hub ? hubMesh : struts[si++];
+    T.bars.forEach((b, k) => {
+      const m = barMesh[k];
       node(b.i, _a); node(b.j, _b);
       _d.subVectors(_b, _a).normalize();
       orient(_d, 0, _q);
       if (b.hub) _a.add(_b).multiplyScalar(0.5);
-      m.matrix.compose(_a, _q, _s);
+      m.matrix.compose(_a, _q, _s.setScalar(m.userData.s));
       m.matrixWorldNeedsUpdate = true;
     });
-    for (const m of balls) { node(m.userData.node, _a); m.matrix.makeTranslation(_a.x, _a.y, _a.z); m.matrixWorldNeedsUpdate = true; }
+    for (const m of balls) { node(m.userData.node, _a); m.matrix.compose(_a, _q.identity(), _s.setScalar(m.userData.s)); m.matrixWorldNeedsUpdate = true; }
     // câbles : extrémités et flèche (parabole d'arc égal à la longueur au repos)
     const NC = Math.min(MAX_CABLES, T.cables.length);
     for (let i = 0; i < NC; i++) {
@@ -238,9 +240,9 @@ export function createStage(scene, { lite = false } = {}) {
       const gl = g.length();
       const mid = _a.clone().add(_b).multiplyScalar(0.5);
       if (gl > 1e-3) mid.addScaledVector(g.multiplyScalar(1 / gl), f * Math.min(1, gl / 0.15));
-      const wound = Math.max(0, c.L0 - RS[i]);
+      const wound = Math.max(0, c.L0 - RS[i]) / m.userData.s;
       orient(_d, (wound / 2) / DRUM_R, _q);
-      m.matrix.compose(mid, _q, _s);
+      m.matrix.compose(mid, _q, _s.setScalar(m.userData.s));
       m.matrixWorldNeedsUpdate = true;
     }
   }

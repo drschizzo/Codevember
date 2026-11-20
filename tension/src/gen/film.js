@@ -98,7 +98,7 @@ export function makeFilm(P, { slow = 0.72, slowW = 0.45 } = {}) {
 
   // ── déformation du temps : ralentis aux chutes (Culbute) ──
   const ks = [];
-  if (P.T.family === 'culbute' && slow > 0) {
+  if ((P.T.family === 'culbute' || P.T.family === 'icosa') && slow > 0) {
     // instant de la chute : vitesse du centre maximale dans la fenêtre du basculement
     const sp = new Float64Array(nf);
     for (let k = 1; k < nf; k++) {

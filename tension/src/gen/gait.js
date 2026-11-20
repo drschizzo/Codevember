@@ -10,6 +10,7 @@
 import { buildTopology } from './topology.js';
 import { formFind, createSim, align3D, rms, planarFit } from './sim.js';
 import { CULBUTE_TABLE } from './culbuteTable.js';
+import { ICOSA_TABLE } from './icosaTable.js';
 
 export const REC_HZ = 240; // images enregistrées par seconde (temps physique)
 
@@ -94,6 +95,48 @@ export function findPrimitives(S, perms, { minMove = 0.6, ks = [0.2, 0.27, 0.35,
     const r = trial(a, b, k);
     if (!r) continue;
     out.push({ pair: [a, b], k, ...r });
+  }
+  S.restore(snap);
+  return out;
+}
+
+// ── Icosaèdre ───────────────────────────────────────────────────────────────
+// La structure à six barres est presque aussi symétrique posée qu'en l'air :
+// toutes ses symétries la recalent à quelques millimètres près, quelle que
+// soit la face au sol. On retient donc celle qui garde la verticale. Une
+// bascule l'amène sur une face fermée de l'autre chiralité : la pose est alors
+// l'image de la pose de départ dans un miroir (z → −z), d'où les symétries
+// impropres. Rend { R, perm, mz } : X0[i] ≈ R · (M X)[perm[i]], M = diag(1, 1, mz).
+const _mir = new Float64Array(3 * 64);
+export function matchUpright(X0, X, N, perms, proper = false) {
+  let best = null;
+  for (const { p, mir } of perms) {
+    if (proper && mir) continue;
+    let Y = X;
+    if (mir) { for (let i = 0; i < 3 * N; i++) _mir[i] = i % 3 === 2 ? -X[i] : X[i]; Y = _mir; }
+    const A = align3D(X0, Y, N, p), sc = A.R[1][1] - 5 * A.rms;
+    if (!best || sc > best.sc) best = { ...A, perm: p, sc, mz: mir ? -1 : 1 };
+  }
+  return best;
+}
+// primitives : les câbles qui, raccourcis seuls, font basculer sur une autre
+// face fermée (ce sont les trois côtés de la face d'appui), à la plus petite
+// contraction plus une marge
+export function findSingles(S, perms, { minMove = 0.6, kMax = 0.55, margin = 1.2 } = {}) {
+  const snap = S.snapshot(), N = S.N, X0 = Float64Array.from(S.x), c0 = centroid(X0, N), out = [];
+  const trial = (c, k) => {
+    S.restore(snap); runTip(S, [c], k);
+    const q = centroid(S.x, N), dx = q[0] - c0[0], dz = q[2] - c0[2];
+    if (Math.hypot(dx, dz) < minMove || S.kinetic() > 0.5) return null;
+    const M = matchUpright(X0, S.x, N, perms);
+    return M.rms < 0.08 && M.R[1][1] > 0.98 ? { dx, dz } : null;
+  };
+  for (let c = 0; c < S.cables.length; c++) {
+    if (!trial(c, kMax)) continue;
+    let lo = 0.2, hi = kMax;
+    for (let it = 0; it < 5; it++) { const mid = (lo + hi) / 2; if (trial(c, mid)) hi = mid; else lo = mid; }
+    const k = Math.min(0.6, hi * margin + 0.01), r = trial(c, k);
+    if (r) out.push({ pair: [c], k, ...r });
   }
   S.restore(snap);
   return out;
@@ -244,6 +287,44 @@ export function prepare(spec, onProgress = () => {}) {
     program.seq = seq;
     program.heads = heads;
     program.prims = prims;
+  } else if (T.family === 'icosa') {
+    // Roulis par bascules : à chaque fois, le côté de la face d'appui qui
+    // regarde le plus vers l'avant raccourcit. Les faces fermées se suivent
+    // en zigzag ; la marche vise la bissectrice (30° à côté de la première
+    // bascule), et deux bascules font un pas droit.
+    const all = T.perms;
+    perms = all.filter((q) => !q.mir).map((q) => q.p);
+    const tab = spec.table === false ? null : (spec.table ?? ICOSA_TABLE);
+    const prims = tab?.prims ?? findSingles(S, all);
+    onProgress(0.3, 'gait');
+    if (prims.length < 2) throw new Error('aucune bascule trouvée');
+    const X0 = Float64Array.from(init.x);
+    const a0 = Math.atan2(prims[0].dz, prims[0].dx) - Math.PI / 6, tx = Math.cos(a0), tz = Math.sin(a0);
+    const tips = 2 * Math.max(1, Math.round((spec.tips ?? 4) / 2)); // (pair : la pose revient sur une face de même chiralité)
+    const plan = (S) => {
+      const M = matchUpright(X0, S.x, N, all);
+      // la direction de marche, vue dans le repère de la pose de départ
+      const fx = M.R[0][0] * tx + M.R[0][2] * tz * M.mz, fz = M.R[2][0] * tx + M.R[2][2] * tz * M.mz;
+      let best = null;
+      for (const p of prims) { const cos = (p.dx * fx + p.dz * fz) / Math.hypot(p.dx, p.dz); if (!best || cos > best.cos) best = { p, cos }; }
+      return { pair: best.p.pair.map((c) => mapCable(T, c, M.perm)), k: best.p.k };
+    };
+    const lead = spec.lead ?? 0.4, dur = tipDuration();
+    program = () => {
+      let k = -1, cur = null;
+      return {
+        ctrl(S, events) {
+          const kk = Math.floor((S.t - lead) / dur);
+          if (kk !== k && kk < tips && S.t >= lead) {
+            k = kk; cur = plan(S); cur.t0 = S.t; cur.L = cur.pair.map((c) => S.cables[c].L0);
+            events.push({ t: S.t, pair: cur.pair, k: cur.k });
+          }
+          if (cur) { const c = tipK(S.t - cur.t0, cur.k); cur.pair.forEach((q, i) => (S.cables[q].rest = cur.L[i] * (1 - c))); }
+        },
+        end: lead + tips * dur,
+      };
+    };
+    program.prims = prims;
   } else if (T.family === 'chenille') {
     const P = { amp: spec.amp ?? 0.34, pulse: spec.pulse ?? 1.1, lag: spec.lag ?? 0.45, waves: spec.waves ?? 4, gap: spec.gap ?? 0.35, lead: 0.3, steer: spec.steer ?? 0, trim: spec.trim ?? 0, alt: spec.alt ?? 1 };
     const axial = T.cables.map((c, i) => (c.kind === 'axial' ? i : -1)).filter((i) => i >= 0);
@@ -291,10 +372,12 @@ export function prepare(spec, onProgress = () => {}) {
     // rayons, à un décalage o du centre de la jante ; son poids décalé fait
     // rouler la jante. o suit une consigne (proportionnelle, dérivée) à travers
     // un filtre du premier ordre (les bobines ont une vitesse finie).
-    const P = { dur: spec.dur ?? 8, start: 0.5, omax: spec.omax ?? 1.25, kp: 1.4, kd: 0.6, tau: 0.22, pre: 0.02, drop: 0.25 };
+    // (flats : la roue ne fait qu'une part de tour, de `flats` côtés de sa jante ; elle se repose ré-étiquetée d'autant)
+    const turns = spec.flats ? spec.flats / T.m : (spec.turns ?? 1);
+    if (spec.flats) perms = Array.from({ length: T.m }, (_, q) => T.nodes.map((nd, i) => (nd.rim ? ((nd.ring + q) % T.m) * 2 + nd.k : i)));
+    const P = { dur: spec.dur ?? (turns >= 1 ? 8 : 3 + 5 * turns), start: 0.5, omax: spec.omax ?? 1.25, kp: 1.4, kd: 0.6, tau: 0.22, pre: 0.02, drop: 0.25 };
     const spokes = T.cables.map((c, i) => (c.kind === 'spoke' ? i : -1)).filter((i) => i >= 0);
     const [h0, h1] = T.hub;
-    const turns = spec.turns ?? 1;
     // géométrie nominale (forme d'équilibre, moyeu au centre) : la longueur de
     // consigne d'un rayon ne dépend que de l'angle de la jante et du décalage
     // voulu, jamais des positions déformées (sinon le rayon n'a plus de raideur)
@@ -349,7 +432,13 @@ export function prepare(spec, onProgress = () => {}) {
   // (lacet et translation : le sol est plat, rien d'autre n'est permis) ;
   // parmi les symétries, celle qui colle le mieux (match 3D), puis l'ajustement plan
   const relabel = (Xend) => {
-    const M = matchSym(init.x, Xend, N, perms);
+    let M = matchSym(init.x, Xend, N, perms);
+    if (T.family === 'icosa') {
+      // (toutes ses symétries collent en trois dimensions : on prend celle qui colle dans le plan)
+      let b = null;
+      for (const perm of perms) { const f = planarFit(Xend, init.x, N, invPerm(perm)); if (!b || f.rms < b.rms) b = { rms: f.rms, perm }; }
+      M = { ...M, perm: b.perm };
+    }
     const fit = planarFit(Xend, init.x, N, invPerm(M.perm)); // (Xend[i] ↔ init[inv[i]])
     const inv = invPerm(M.perm);
     for (let i = 0; i < N; i++) {

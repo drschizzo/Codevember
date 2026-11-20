@@ -27,8 +27,11 @@ export const kelvinToHex = (K) => {
 
 // ── Familles ─────────────────────────────────────────────────────────────────
 // sim : ce que le worker simule (gen/gait.js · prepare) ; tout le reste est rendu.
+// cables : nombre de câbles d'une sculpture (le rendu en porte 192 au plus, scene/cables.js)
+export const CABLE_COUNT = (sim) => ({ culbute: 18, icosa: 24, cerceau: 48 }[sim.family] ?? 4 + 8 * sim.m);
 export const FAMILIES = {
   culbute: { label: 'Culbute', sims: [{ family: 'culbute', n: 6 }] },
+  icosa: { label: 'Icosaèdre', sims: [{ family: 'icosa', tips: 4 }] },
   chenille: { label: 'Chenille', sims: [{ family: 'chenille', m: 4 }, { family: 'chenille', m: 6 }] },
   cerceau: { label: 'Cerceau', sims: [{ family: 'cerceau', m: 12 }] },
 };
@@ -119,10 +122,34 @@ export function generate(seed, overrides = {}) {
   const rng = createRng(seed);
   const mood = overrides.mood ?? rng.fork('mood').pick(Object.keys(MOODS));
   const M = MOODS[mood];
-  const family = overrides.family ?? rng.fork('family').weighted([['culbute', 1.2], ['chenille', 1], ['cerceau', 1]]);
+  const family = overrides.family ?? rng.fork('family').weighted([['culbute', 1], ['icosa', 1.1], ['chenille', 1], ['cerceau', 1]]);
   const Fm = FAMILIES[family];
   const rs = rng.fork('sim');
   const sim = { ...rs.pick(Fm.sims) };
+  // ── La troupe : la sculpture de tête et ses compagnes ──
+  // Deux espèces au plus (deux simulations, menées de front) ; les autres
+  // membres sont des individus plus petits des mêmes espèces. size : échelle
+  // voulue (la taille exacte est ajustée pour que la troupe reste groupée,
+  // gen/troupe.js) ; phase : décalage de son départ dans la boucle ; ahead :
+  // avance dans la formation (u). Du plus grand (au fond) au plus petit.
+  const rt = rng.fork('troupe');
+  const count = overrides.count ?? rt.weighted([[2, 1], [3, 1.5], [4, 0.9]]);
+  const other = rt.pick(Object.keys(FAMILIES).filter((f) => f !== family)), otherSim = { ...rt.pick(FAMILIES[other].sims) };
+  // (en troupe, la roue avance par tiers de tour : elle attend moins longtemps les autres)
+  for (const q of [sim, otherSim]) if (count > 1 && q.family === 'cerceau') { q.flats = 4; q.dur = 4.5; }
+  const sizes = [0.5, 0.58, 0.66, 0.76, 0.86];
+  for (let i = sizes.length - 1; i > 0; i--) { const j = rt.int(0, i); [sizes[i], sizes[j]] = [sizes[j], sizes[i]]; }
+  const troupe = [{ family, sim, size: 1, phase: 0, ahead: 0, lead: true }];
+  let cables = CABLE_COUNT(sim);
+  for (let i = 1; i < count; i++) {
+    // (le deuxième membre est de l'autre espèce ; ensuite, l'une ou l'autre)
+    const own = i > 1 && rt.chance(0.5), sm = own ? sim : otherSim;
+    const m = { family: own ? family : other, sim: sm, size: sizes[i - 1], phase: r2(rt.range(0.12, 0.88)), ahead: r2(rt.range(-1.6, 1.6)) };
+    if (cables + CABLE_COUNT(sm) > 190) break;
+    cables += CABLE_COUNT(sm);
+    troupe.push(m);
+  }
+  troupe.sort((a, b) => b.size - a.size);
   const ra = rng.fork('accord');
   const [tube, ferrule, fitting, cable, winchBody] = ra.pick(M.accords);
   const C = CABLES[cable];
@@ -132,11 +159,11 @@ export function generate(seed, overrides = {}) {
   const set = (o, i, e, wear = 0.06) => ({ outer: fin(o, tint), inner: fin(i, tint), edge: fin(e, tint), wear });
 
   return {
-    v: 1, seed, mood, family, sim,
+    v: 2, seed, mood, family, sim, troupe,
     loop: { duration: 0, speed: 1 }, // (durée : celle du pas simulé, connue après la simulation)
     camera: {
       fov: r2(M.cam.fov + rc.range(-2, 2)), dist: r2(M.cam.dist * rc.range(0.92, 1.08)), az: r2(M.cam.az + rc.range(-0.15, 0.15)),
-      el: r2(M.cam.el + rc.range(-0.04, 0.05)), sway: r2(rc.range(0.04, 0.09)), lead: r2(rc.range(0.05, 0.2)),
+      el: r2(M.cam.el + rc.range(-0.04, 0.05)), sway: r2(rc.range(0.04, 0.09)), lead: r2(rc.range(0.05, 0.2)), montage: true,
     },
     light: {
       key: { color: kelvinToHex(M.key.K + rl.range(-150, 150)), scale: r2(M.key.scale * rl.range(0.92, 1.08)), az: r2(M.key.az + rl.range(-0.12, 0.12)), el: M.key.el, angle: M.key.angle, penumbra: M.key.penumbra, dist: M.key.dist },
@@ -159,6 +186,8 @@ export function generate(seed, overrides = {}) {
 // ajoutés depuis, sans rien tirer de nouveau.
 export function upgrade(R) {
   const D = generate(R.seed, { mood: R.mood, family: R.family });
+  // (un lien d'avant la troupe montre une sculpture seule, comme il a été partagé)
+  if (R.troupe === undefined) R.troupe = [{ family: R.family, sim: R.sim, size: 1, phase: 0, ahead: 0, lead: true }];
   for (const k of Object.keys(D)) if (R[k] === undefined) R[k] = D[k];
   return R;
 }

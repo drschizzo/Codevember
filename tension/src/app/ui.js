@@ -67,7 +67,8 @@ export function createUI({ recipe: getRecipe, render, on, moods, families }) {
 
     add(fScene, R, 'mood', opts(moods)).name('Humeur (nouvelle scène)').onChange((m) => on.moodChanged(m));
     add(fScene, R, 'family', opts(families)).name('Famille (nouvelle scène)').onChange((f) => on.familyChanged(f));
-    add(fScene, R.loop, 'duration').name('Durée du pas simulé (s)').disable();
+    add(fScene, { n: R.troupe?.length ?? 1 }, 'n', { 'Une sculpture seule': 1, 'Deux': 2, 'Trois': 3, 'Quatre': 4 }).name('Troupe (nouvelle scène)').onChange((n) => on.countChanged(+n));
+    add(fScene, R.loop, 'duration').name('Durée de la boucle (s)').disable();
     add(fScene, R.floor, 'type', opts(FLOORS)).name('Sol').onChange(() => on.simChanged());
 
     add(fCam, R.camera, 'fov', 14, 60, 0.5).name('Champ (°)').onChange(ch);
@@ -76,6 +77,8 @@ export function createUI({ recipe: getRecipe, render, on, moods, families }) {
     add(fCam, R.camera, 'el', 0, 1.2, 0.01).name('Hauteur (rad)').onChange(ch);
     add(fCam, R.camera, 'lead', -0.5, 0.6, 0.01).name('Avance du cadre').onChange(ch);
     add(fCam, R.camera, 'sway', 0, 0.2, 0.001).name('Balancement').onChange(ch);
+    R.camera.montage ??= true;
+    add(fCam, R.camera, 'montage').name('Montage en plans (troupe)').onChange(() => on.simChanged());
     add(fCam, on.camState, 'free').name('Caméra libre (souris)').onChange((v) => on.freeCam(v));
 
     // simulation : toute retouche relance le calcul (forme, allure, cycle limite)
@@ -89,7 +92,7 @@ export function createUI({ recipe: getRecipe, render, on, moods, families }) {
       add(fSim, S, 'lag', 0.2, 0.9, 0.05).name('Retard d\u2019un module (s)').onFinishChange(sim);
     } else if (S.family === 'cerceau') {
       S.dur ??= 8; S.omax ??= 1.25;
-      add(fSim, S, 'dur', 5, 14, 0.5).name('Durée du tour (s)').onFinishChange(sim);
+      add(fSim, S, 'dur', 3, 14, 0.5).name(S.flats ? 'Durée du tiers de tour (s)' : 'Durée du tour (s)').onFinishChange(sim);
       add(fSim, S, 'omax', 0.6, 1.6, 0.05).name('Décalage max. du moyeu').onFinishChange(sim);
     } else {
       S.lead ??= 0.4;
