@@ -15,7 +15,7 @@ import {
 import { stableVelocity, isLite } from '../../../shared/scene/materials.js';
 import { G } from '../../../shared/scene/globals.js';
 
-export const MAX_CABLES = 64;
+export const MAX_CABLES = 192; // (une troupe de quatre sculptures)
 
 export function createCableUniforms() {
   const arr = () => Array.from({ length: MAX_CABLES }, () => new THREE.Vector4());

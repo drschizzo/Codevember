@@ -14,7 +14,8 @@ import { generate, upgrade, MOODS, FAMILIES } from './recipe.js';
 import { createGenerator } from '../../shared/gen/client.js';
 import { createStage, partSpecs } from './scene/stage.js';
 import { makeFilm } from './gen/film.js';
-import { makeShot, cameraAt } from './scene/shot.js';
+import { makeTroupe } from './gen/troupe.js';
+import { makeShot, cameraAt, makeMontage } from './scene/shot.js';
 import { makeEnvironment } from '../../shared/scene/env.js';
 import { G } from '../../shared/scene/globals.js';
 import { setNoiseVolume, setLite } from '../../shared/scene/materials.js';
@@ -29,7 +30,7 @@ import { loader } from '../../shared/app/loader.js';
 import { asyncPipelines, warmScene } from '../../shared/app/warmup.js';
 
 const NAME = 'tension';
-const DEFAULT_SEED = 't5'; // scène d'ouverture : Midi, la Chenille aux barres vermillon sur le sol clair (choisie sur une planche des sept humeurs : la structure remplit le cadre, là où le Culbute de la Scène se perdait dans le noir)
+const DEFAULT_SEED = 'z76lqn'; // scène d'ouverture : Galerie, un Cerceau et deux Icosaèdres de carbone à tresse orange, sur le parquet clair
 const params = new URLSearchParams(location.search);
 const $ = (s) => document.querySelector(s);
 const randomSeed = () => Math.random().toString(36).slice(2, 8);
@@ -101,7 +102,7 @@ async function main() {
   const gen = createGenerator(LITE ? Math.max(2, Math.min(3, (navigator.hardwareConcurrency || 4) - 1)) : undefined);
   setNoiseVolume(await gen.request({ seed: `${NAME}-noise` }, 'noise')); // (les matériaux en dépendent)
   const stage = createStage(scene, { lite: LITE });
-  let film = null, shot = null, built = 0;
+  let film = null, shot = null, montage = null, lastShot = 0, built = 0;
   const post = createPost(renderer, scene, camera);
   const accum = createAccumulator(renderer);
   const RENDER = loadRender(LITE);
@@ -113,7 +114,7 @@ async function main() {
   if (location.hash.startsWith('#r=')) {
     try { R = upgrade(await unpackRecipe(location.hash.slice(3))); } catch { R = null; }
   }
-  R ??= generate(params.get('seed') || DEFAULT_SEED, { ...(params.get('mood') ? { mood: params.get('mood') } : {}), ...(params.get('family') ? { family: params.get('family') } : {}) });
+  R ??= generate(params.get('seed') || DEFAULT_SEED, { ...(params.get('mood') ? { mood: params.get('mood') } : {}), ...(params.get('family') ? { family: params.get('family') } : {}), ...(params.get('troupe') ? { count: Math.max(1, Math.min(4, +params.get('troupe'))) } : {}) });
   let envKey = '';
   function syncEnv() {
     const k = R.env.preset;
@@ -141,24 +142,39 @@ async function main() {
     loader.step('form');
     loader.art({ seed: R.seed, family: R.family, sim: R.sim });
     if (params.has('artshot')) loader.art({ debugSend: `http://127.0.0.1:8137/art-${R.seed}.jpg` });
-    // 1. la simulation (worker) : forme, allure, cycle limite, enregistrement
-    gen.request(R.sim, 'sim', (p, label) => {
-      if (v !== version) return;
+    // 1. les simulations (workers) : forme, allure, cycle limite, enregistrement.
+    // Une troupe en demande une par espèce, menées de front ; deux membres de
+    // la même espèce partagent la leur.
+    for (const m of recipe.troupe ?? []) if (m.lead) { m.sim = recipe.sim; m.family = recipe.family; } // (le panneau retouche l'allure de la sculpture de tête)
+    const troupe = recipe.troupe?.length > 1 ? recipe.troupe : null;
+    const specs = new Map();
+    // (clés prises maintenant : le panneau complète ensuite la recette de ses réglages par défaut)
+    const keys = (troupe ?? [{ sim: recipe.sim }]).map((m) => JSON.stringify(m.sim));
+    (troupe ?? [{ sim: recipe.sim }]).forEach((m, i) => specs.set(keys[i], JSON.parse(keys[i])));
+    const leadKey = JSON.stringify(recipe.sim);
+    Promise.all([...specs].map(([k, spec]) => gen.request(spec, 'sim', (p, label) => {
+      if (v !== version || k !== leadKey) return;
       simProgress = p;
       if (label === 'gait' || label === 'cycle' || label === 'record') loader.step(label === 'record' ? 'cycle' : label);
       loader.progress(Math.min(1, p));
-    }).then(async (o) => {
+    }).then((o) => [k, unpackSim(o)]))).then(async (all) => {
       if (v !== version) return;
-      const P = unpackSim(o);
-      const F = makeFilm(P);
-      F.T = P.T;
-      loader.art({ chrono: chronoOf(F, P.T) });
+      const sims = new Map(all), P = sims.get(leadKey);
+      const lead = makeFilm(P, troupe ? { slow: 0 } : {});
+      lead.T = P.T;
+      let F = lead;
+      if (troupe) {
+        const films = new Map([[leadKey, lead]]);
+        for (const [k, Q] of sims) if (!films.has(k)) { const f = makeFilm(Q, { slow: 0 }); f.T = Q.T; films.set(k, f); }
+        F = makeTroupe(troupe.map((m, i) => ({ film: films.get(keys[i]), size: m.size, phase: m.phase, ahead: m.ahead })), { side: Math.sign(recipe.camera.az) || 1 });
+      }
+      loader.art({ chrono: chronoOf(lead, P.T) });
       // 2. les pièces tournées
       loader.step('parts');
-      const spec = partSpecs(P.T);
-      const parts = { struts: {} };
+      const spec = partSpecs(F.T);
+      const parts = { struts: {}, balls: {} };
       const jobs = Object.entries(spec.struts).map(([k, sp]) => gen.request(sp, 'strut').then((g) => { parts.struts[k] = g; }));
-      if (spec.ball) jobs.push(gen.request(spec.ball, 'ball').then((g) => { parts.ball = g; }));
+      for (const [k, sp] of Object.entries(spec.balls)) jobs.push(gen.request(sp, 'ball').then((g) => { parts.balls[k] = g; }));
       if (spec.winch) jobs.push(gen.request(spec.winch, 'winch').then((g) => { parts.winch = g; }));
       if (spec.hub) jobs.push(gen.request(spec.hub, 'hub').then((g) => { parts.hub = g; }));
       jobs.push(gen.request(spec.cable, 'cable').then((g) => { parts.cable = g; }));
@@ -166,6 +182,7 @@ async function main() {
       if (v !== version) return;
       film = F;
       shot = makeShot(F);
+      montage = R.camera.montage === false ? null : makeMontage(F, R.camera);
       R.loop.duration = +F.dur.toFixed(2);
       stage.setScene(R, F, parts);
       syncEnv();
@@ -227,10 +244,15 @@ async function main() {
     const C = R.camera;
     // travelling latéral : le repère de la marche, plus l'écart lissé du centre (scene/shot.js)
     const cam = cameraAt(shot, film, C, u, camera.aspect);
-    const { tgt, tw, ext } = cam;
+    // (les lumières restent sur la formation ; le montage ne déplace que la caméra)
+    const { tw, ext } = cam, lit = cam.tgt;
+    const plan = camState.free ? null : montage?.at(u, camera.aspect) ?? null, tgt = plan ? plan.tgt : cam.tgt;
+    const cutNow = (plan?.shot ?? 0) !== lastShot;
+    lastShot = plan?.shot ?? 0;
+    if (cutNow) post.cut(); // (raccord de plan : pas de flou de mouvement ni d'historique d'une image à l'autre)
     if (camState.free) controls.update();
     else {
-      camera.position.set(...cam.pos);
+      camera.position.set(...(plan ? plan.pos : cam.pos));
       camera.up.set(0, 1, 0);
       camera.lookAt(tgt[0], tgt[1], tgt[2]);
     }
@@ -238,19 +260,21 @@ async function main() {
     {
       const L = R.light, K = L.key;
       const kd = tw(Math.cos(K.az) * Math.cos(K.el), Math.sin(K.el), Math.sin(K.az) * Math.cos(K.el));
-      stage.key.position.set(tgt[0] + kd[0] * K.dist, tgt[1] + kd[1] * K.dist, tgt[2] + kd[2] * K.dist);
-      stage.key.target.position.set(tgt[0], 0, tgt[2]);
-      stage.key.color.set(K.color); stage.key.intensity = 7 * K.scale * K.dist * K.dist; stage.key.angle = K.angle; stage.key.penumbra = K.penumbra;
-      const span = Math.max(ext[0], ext[1], ext[2]) * 0.75 + 1;
-      stage.key.shadow.focus = Math.min(1, Math.max(0.05, Math.atan(span / K.dist) / K.angle));
-      stage.key.shadow.camera.near = Math.max(0.5, K.dist - 9); stage.key.shadow.camera.far = K.dist + 9;
+      // (une troupe : la lampe recule jusqu'à ce que sa nappe couvre toute la formation, à éclairement égal)
+      const reach = film?.T?.troupe ? Math.hypot(ext[0], ext[2]) / 2 : 0, Kd = Math.max(K.dist, (reach * 1.25) / Math.tan(K.angle));
+      stage.key.position.set(lit[0] + kd[0] * Kd, lit[1] + kd[1] * Kd, lit[2] + kd[2] * Kd);
+      stage.key.target.position.set(lit[0], 0, lit[2]);
+      stage.key.color.set(K.color); stage.key.intensity = 7 * K.scale * Kd * Kd; stage.key.angle = K.angle; stage.key.penumbra = K.penumbra;
+      const span = Math.max(ext[0], ext[1], ext[2], reach * 1.6) * 0.75 + 1;
+      stage.key.shadow.focus = Math.min(1, Math.max(0.05, Math.atan(span / Kd) / K.angle));
+      stage.key.shadow.camera.near = Math.max(0.5, Kd - 9 - reach); stage.key.shadow.camera.far = Kd + 9 + reach;
       stage.rims.forEach((l, i) => {
         const r = L.rim[i], d = tw(Math.cos(r.az) * Math.cos(r.el), Math.sin(r.el), Math.sin(r.az) * Math.cos(r.el));
-        l.position.set(tgt[0] + d[0] * 9, tgt[1] + d[1] * 9, tgt[2] + d[2] * 9);
-        l.target.position.set(tgt[0], tgt[1], tgt[2]);
+        l.position.set(lit[0] + d[0] * 9, lit[1] + d[1] * 9, lit[2] + d[2] * 9);
+        l.target.position.set(lit[0], lit[1], lit[2]);
         l.color.set(r.color); l.intensity = 7 * r.scale * 81 * (LITE && i === 0 ? 1.4 : 1);
       });
-      stage.floor.position.set(tgt[0], 0, tgt[2]);
+      stage.floor.position.set(lit[0], 0, lit[2]);
     }
     if (camera.fov !== C.fov) { camera.fov = C.fov; camera.updateProjectionMatrix(); }
     camera.clearViewOffset();
@@ -270,7 +294,7 @@ async function main() {
     { const dS = Math.hypot(camera.position.x - tgt[0], camera.position.y - tgt[1], camera.position.z - tgt[2]); scene.fog.near = dS + R.fog.near; scene.fog.far = dS + R.fog.far; }
     scene.environmentIntensity = R.env.intensity;
     scene.environmentRotation.set(0, R.env.rotation, 0);
-    stage.update(u, jumped(u));
+    stage.update(u, jumped(u) || cutNow);
     stage.CU.pxScale.value = (2 * Math.tan((camera.fov * Math.PI) / 360)) / Math.max(1, canvas.height);
     const fd = Math.hypot(camera.position.x - tgt[0], camera.position.y - tgt[1], camera.position.z - tgt[2]);
     post.update({ ...RENDER, lite: LITE, focus: RENDER.focus * fd, focusRange: RENDER.focusRange * fd }, R);
@@ -315,8 +339,9 @@ async function main() {
     camState,
     random: () => { R = generate(randomSeed()); applyRecipe(); },
     regenerate: (seed) => { if (seed && seed !== R.seed) { R = generate(seed); applyRecipe(); } },
-    moodChanged: (mood) => { R = generate(R.seed, { mood, family: R.family }); applyRecipe(); },
-    familyChanged: (family) => { R = generate(R.seed, { mood: R.mood, family }); applyRecipe(); },
+    moodChanged: (mood) => { R = generate(R.seed, { mood, family: R.family, count: R.troupe.length }); applyRecipe(); },
+    familyChanged: (family) => { R = generate(R.seed, { mood: R.mood, family, count: R.troupe.length }); applyRecipe(); },
+    countChanged: (count) => { R = generate(R.seed, { mood: R.mood, family: R.family, count }); applyRecipe(); },
     copyLink: async () => {
       const url = new URL(location.href);
       url.hash = `r=${await packRecipe(R)}`;
@@ -431,8 +456,8 @@ async function main() {
       // famille sont alors imposées — pour comparer toutes les humeurs d'un coup)
       async sheet(seeds, phases = [0, 0.2, 0.4, 0.6, 0.8], prefix = 'sheet') {
         for (const s of seeds) {
-          const [sd, mood, family] = String(s).split(':');
-          R = generate(sd, { ...(mood ? { mood } : {}), ...(family ? { family } : {}) }); applyRecipe();
+          const [sd, mood, family, count] = String(s).split(':');
+          R = generate(sd, { ...(mood ? { mood } : {}), ...(family ? { family } : {}), ...(count ? { count: +count } : {}) }); applyRecipe();
           await new Promise((r) => setTimeout(r, 400));
           for (const ph of phases) { await this.shot(ph); await this.send(`${prefix}-${s}-${String(Math.round(ph * 100)).padStart(3, '0')}.jpg`); }
         }
@@ -441,8 +466,8 @@ async function main() {
       async meters(seeds, phases = [0.3, 0.6]) {
         const out = {};
         for (const s of seeds) {
-          const [sd, mood, family] = String(s).split(':');
-          R = generate(sd, { ...(mood ? { mood } : {}), ...(family ? { family } : {}) }); applyRecipe();
+          const [sd, mood, family, count] = String(s).split(':');
+          R = generate(sd, { ...(mood ? { mood } : {}), ...(family ? { family } : {}), ...(count ? { count: +count } : {}) }); applyRecipe();
           await new Promise((r) => setTimeout(r, 400));
           out[s] = [];
           for (const ph of phases) { await this.shot(ph); const m = await this.meter(); out[s].push([m.centre.p50, m.image.p50, m.image.brule]); }
