@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#050506">
   <title>Fold · défis techniques</title>
-  <meta name="description" content="Comment Fold plie une feuille de papier : un solveur d’origami à barres inextensibles, une selle qui naît d’un flambage, une boucle refermée par symétrie, et la couleur qu’un pan renvoie sur l’autre.">
+  <meta name="description" content="Comment Fold plie une feuille de papier : un patron cousu en fermeture éclair, un solveur d’origami à barres inextensibles, une selle qui naît d’un flambage, le geste du papier, une boucle refermée par symétrie, un film relu par la carte graphique et la couleur qu’un pan renvoie sur l’autre.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
@@ -24,61 +24,168 @@
     <header class="hero">
       <div class="kicker">Day 01 · Fold · le papier qui se plie seul</div>
       <h1>Comment une feuille de papier se plie, bascule et revient exactement</h1>
-      <p class="lede">Des feuilles de papier bicolore, chacune sur sa tige. Leurs plis se referment et les tordent en selle ou en ombrelle, se rouvrent, et la forme bascule dans son autre état. Personne ne dessine ces formes : elles sortent de deux règles, le papier ne s’étire pas et chaque pliure vise un angle.</p>
+      <p class="lede">Des feuilles de papier bicolore, chacune sur sa tige de laiton. Leurs plis se referment et les tordent en selle ou en ombrelle, se rouvrent, et la forme claque dans son autre état. Personne ne dessine ces formes : elles sortent de deux règles, le papier ne s’étire pas et chaque pliure vise un angle. La difficulté est triple : calculer ce pliage assez vite pour un écran de chargement, lui donner le geste sec du papier plutôt que la mollesse d’une étoffe, et refermer la boucle sans le moindre saut. Les figures de cette page font tourner le solveur du projet lui-même, sur des feuilles plus petites.</p>
     </header>
 
     <figure class="cover">
       <img src="docs/capture.jpg" alt="Trois feuilles de papier plissé sur leurs tiges : une spirale bleue et orange, une petite étoile, une ombrelle fermée, devant un disque beige et un fond rose" width="1280" height="720">
-      <figcaption>La scène d’ouverture (graine 40aatl) : une spirale, une étoile et une ombrelle.</figcaption>
+      <figcaption>La scène d’ouverture (graine 40aatl) : une spirale, une étoile et une ombrelle, dans l’accord Bonbon.</figcaption>
     </figure>
 
     <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
 
     <article>
 
-      <section id="solveur">
-        <h2><span class="n">01</span>Des barres et des charnières</h2>
-        <span class="src">src/sim/fold.js · createSolver()</span>
-        <p>La feuille est un maillage de triangles. Chaque arête est une <b>barre</b>, qui garde sa longueur. Chaque arête intérieure est une <b>charnière</b>, qui vise un angle entre ses deux triangles : zéro dans un pan, \(\pm\theta\) sur une pliure. La force d’une charnière sur ses quatre sommets suit le gradient de l’angle dièdre :</p>
-        <div class="eq">\[ \mathbf{f}_i = -k\,\ell\,(\theta - \theta_0)\,\frac{\partial \theta}{\partial \mathbf{x}_i}. \]</div>
-        <p>Dans le simulateur d’origami de Ghassaei (2018), les barres sont des ressorts très raides, et c’est leur raideur qui fixe le pas de temps : il faut des dizaines de milliers de pas pour plier une feuille. Ici les barres sont des contraintes de longueur, projetées après chaque pas (quatre passes de Gauss-Seidel). Le pas ne dépend plus que de la raideur des plis, et deux à trois mille pas suffisent.</p>
-        <div class="note"><b>Un piège</b><p>Un maillage en rayons a des mailles minuscules près du centre : elles imposaient un pas très court et laissaient 10 % d’étirement. Les anneaux ont maintenant un nombre de mailles proportionnel à leur rayon, et sont cousus en fermeture éclair.</p></div>
+      <section id="patron">
+        <h2><span class="n">01</span>Un patron cousu en fermeture éclair</h2>
+        <span class="src">src/sim/fold.js · pleatedU(), build()</span>
+        <p>Une feuille est un disque percé en son centre (la tige y passe), découpé en triangles. Le patron de plis est écrit dans ce maillage : chaque arête sait si elle est une <strong>pliure montagne</strong> (elle se ferme vers le haut), une <strong>pliure vallée</strong> (vers le bas) ou une simple arête à l’intérieur d’un pan, qui doit rester plat.</p>
+        <p>Deux familles de patrons existent. Dans la première, les pliures sont des anneaux concentriques, montagne et vallée alternées, coupés par des diagonales qui vont du centre aux coins : c’est le pliage du cours de Josef Albers au Bauhaus, qui tord la feuille en selle. La graine choisit le nombre de côtés (carré, hexagone, octogone), une <em>vrille</em> qui tourne chaque anneau un peu plus que le précédent (les diagonales s’enroulent : spirale, rosace) ou des côtés creusés (étoile). Dans la seconde famille, les pliures sont des rayons : la feuille se ferme comme une ombrelle.</p>
+        <h3>Des mailles de même taille partout</h3>
+        <p>Le maillage le plus naturel pour un disque est en rayons : le même nombre de points sur chaque anneau. Près du centre, ces points se serrent, et les triangles deviennent minuscules. Or le pas de temps du solveur est fixé par la plus petite arête (section 3) : toute la feuille paie pour quelques mailles du centre.</p>
+        <p>Dans Fold, le nombre de mailles d’un anneau est proportionnel à son rayon. Deux anneaux voisins n’ont donc pas le même nombre de points, et il faut les coudre : l’algorithme avance en alternance sur l’un et sur l’autre, toujours du côté dont le prochain point est le plus en retard, comme les dents d’une fermeture éclair. La couture se fait côté par côté, pour que les diagonales du patron restent des arêtes du maillage.</p>
+        <pre><code>// entre un anneau de a mailles et le suivant, de b mailles
+while (p &lt; a || q &lt; b) {
+  if (q &lt; b &amp;&amp; (p &gt;= a || (q + 1) / b &lt;= (p + 1) / a)) { triangle(p, q + 1, q); q++; }
+  else                                                 { triangle(p, p + 1, q); p++; }
+}</code></pre>
+        <figure id="fig-patron"><figcaption><b>Le patron à plat.</b> Le maillage est celui que produit <code>pleatedU()</code>, appelé tel quel avec sept anneaux de papier. En rouge les pliures montagne, en bleu les vallées ; les diagonales (traits fins) sont des pliures plus faibles, à 60 % de l’angle des anneaux. Le bouton « Maillage en rayons » dessine à la place le maillage naïf, reconstruit pour la figure : comparez la plus petite arête et le pas de temps qu’elle impose.</figcaption></figure>
+        <div class="note trap"><b>Dix pour cent d’étirement</b><p>La première version du patron était en rayons. Ses mailles minuscules près du centre imposaient un pas très court et laissaient 10 % d’étirement. Le maillage cousu, avec des barres devenues des contraintes (section 3), a réglé les deux défauts.</p></div>
+      </section>
+
+      <section id="charnieres">
+        <h2><span class="n">02</span>Des barres et des charnières</h2>
+        <span class="src">src/sim/fold.js · dihedral(), createSolver()</span>
+        <p>Le modèle vient du simulateur d’origami d’Amanda Ghassaei (2018). Chaque arête du maillage est une <strong>barre</strong>, qui garde sa longueur : le papier se plie mais ne s’étire pas. Chaque arête intérieure est aussi une <strong>charnière</strong> entre ses deux triangles. Elle mesure l’<em>angle dièdre</em> \(\theta\), l’angle dont un triangle est relevé par rapport à l’autre (zéro à plat), et le ramène vers une cible \(\theta_0\) : zéro dans un pan, \(\pm\theta_0\) sur une pliure.</p>
+        <p>Une charnière agit sur quatre sommets : les deux bouts de l’arête et les deux pointes des triangles. La force sur chacun est proportionnelle à l’écart d’angle et suit le gradient de \(\theta\), c’est-à-dire la direction dans laquelle déplacer ce sommet change le plus l’angle :</p>
+        <div class="eq">\[ \mathbf{f}_i = -k\,\ell\,(\theta - \theta_0)\,\frac{\partial \theta}{\partial \mathbf{x}_i}, \qquad \frac{\partial\theta}{\partial \mathbf{x}_2} = -\frac{\ell}{\lVert \mathbf{n}_A\rVert^2}\,\mathbf{n}_A, \quad \frac{\partial\theta}{\partial \mathbf{x}_3} = -\frac{\ell}{\lVert \mathbf{n}_B\rVert^2}\,\mathbf{n}_B. \]</div>
+        <p>\(\ell\) est la longueur de l’arête, \(\mathbf{n}_A\) et \(\mathbf{n}_B\) les normales (non normées) des deux triangles. Les gradients des deux pointes sont portés par ces normales : pousser une pointe hors du plan de son triangle est la seule façon de changer l’angle. Ceux des deux bouts de l’arête s’en déduisent, de sorte que les quatre forces se compensent : une charnière ne pousse ni ne fait tourner la feuille dans son ensemble.</p>
+        <figure id="fig-diedre"><figcaption><b>Une charnière.</b> Deux triangles autour d’une arête. Les flèches sont les quatre forces, calculées par <code>dihedral()</code> du projet et la formule ci-dessus. Tant que l’angle n’a pas atteint sa cible, les pointes sont poussées le long de la normale de leur triangle et l’arête dans l’autre sens ; la somme des quatre est nulle.</figcaption></figure>
+        <div class="note check"><b>Un gradient vérifié</b><p>Une erreur de signe dans ce gradient donne un pliage qui semble marcher, puis diverge. Un test compare donc les douze composantes à une différence finie (un sommet déplacé d’un millionième), avec une tolérance de \(10^{-4}\), et vérifie que l’angle est exactement nul à plat.</p></div>
+      </section>
+
+      <section id="barres">
+        <h2><span class="n">03</span>Les barres ne sont pas des ressorts</h2>
+        <span class="src">src/sim/fold.js · createSolver().step()</span>
+        <p>Dans le simulateur d’origine, les barres sont des ressorts très raides. C’est simple, mais c’est leur raideur qui fixe le pas de temps : un calcul explicite, qui avance d’un petit pas à la fois, diverge si le pas dépasse la période du ressort le plus raide. Il faut alors des dizaines de milliers de pas pour plier une feuille, dont la quasi-totalité sert à empêcher le papier de s’étirer.</p>
+        <p>Fold sépare les deux rôles. Les charnières restent des forces. Les barres deviennent des <strong>contraintes de longueur</strong> : après chaque pas, on parcourt les barres une à une et on rapproche ou on écarte leurs deux bouts, chacun de la moitié de l’erreur, jusqu’à retrouver la longueur d’origine. Corriger une barre dérègle un peu ses voisines ; on repasse donc quatre fois sur l’ensemble. Cette méthode, où chaque correction profite aussitôt des précédentes, est une relaxation de <em>Gauss-Seidel</em>.</p>
+        <div class="eq">\[ \Delta t = 0{,}18\,\sqrt{\frac{\ell_\text{min}}{\max(k,\,k_F)}}, \qquad \mathbf{v} \leftarrow (\mathbf{v} + \Delta t\,\mathbf{f})\,(1 - c), \]</div>
+        <div class="eq">\[ \mathbf{x}^\ast = \mathbf{x} + \Delta t\,\mathbf{v}, \qquad \mathbf{x}' = \operatorname{proj}(\mathbf{x}^\ast), \qquad \mathbf{v} \leftarrow \frac{\mathbf{x}' - \mathbf{x}}{\Delta t}. \]</div>
+        <p>Le pas ne dépend plus que de la raideur des plis (\(k = 0{,}7\) pour une pliure, \(k_F = 2{,}1\) pour un pan) et de la plus petite arête \(\ell_\text{min}\). Le coefficient \(c\) est un amortissement, 5 % de la vitesse perdus à chaque pas, qui mène la feuille vers son équilibre. La vitesse est recalculée à partir de la position corrigée : une barre qui a été raccourcie ne garde pas la vitesse qui l’avait allongée.</p>
+        <div class="note trap"><b>Une seule passe ne suffit pas</b><p>Le premier essai corrigeait toutes les barres en même temps, à partir des mêmes positions (une relaxation de Jacobi), ce qui se prête au calcul sur carte graphique. Une passe laissait trop d’étirement, là où quatre passes de Gauss-Seidel suffisent. Le solveur est donc resté sur le processeur, dans un fil de calcul parallèle (un <em>worker</em>), et la carte graphique ne fait que relire le résultat (section 7).</p></div>
+        <p>Deux précautions tiennent la feuille en place. L’anneau intérieur est recentré à chaque pas sur la tige. Et la rotation d’ensemble autour de la tige est retirée : rien ne retient une feuille de tourner sur elle-même, et la moindre asymétrie numérique la ferait dériver au fil des milliers de pas.</p>
       </section>
 
       <section id="selle">
-        <h2><span class="n">02</span>La selle n’est pas dessinée</h2>
-        <span class="src">src/sim/fold.js · pleatedU(), bake()</span>
-        <p>Des plis concentriques, montagne et vallée alternées, raccourcissent la feuille en rayon sans changer la longueur de ses anneaux. Elle a alors trop de circonférence pour son rayon, et flambe : la moitié de ses coins monte, l’autre descend. C’est le pliage du cours de Josef Albers au Bauhaus.</p>
-        <p>Cette selle a deux états, images l’un de l’autre. Le film d’une feuille est le passage de l’un à l’autre, avec le geste du papier et non d’une étoffe : la feuille est immobile, ses plis se rouvrent un à un du bord vers le centre, elle claque d’un coup dans son autre état et vibre un instant, puis ses plis se referment un à un. Les pans sont trois fois plus raides que les pliures, pour rester plans. Les plis rayonnants donnent une autre famille : une ombrelle, dont la bascule est un retournement.</p>
+        <h2><span class="n">04</span>La selle n’est pas dessinée</h2>
+        <span class="src">src/sim/fold.js · pleatedU(), createSolver()</span>
+        <p>Quand les plis concentriques se referment, chaque anneau de papier devient un zigzag vu en coupe. Un pli fermé d’un angle \(\theta\) ne couvre plus que \(\cos(\theta/2)\) de sa largeur : la feuille raccourcit en rayon. Mais un anneau fait le tour de la feuille, et sa longueur ne change pas, puisque le papier ne s’étire pas. Il se retrouve trop long pour le cercle qu’on lui laisse.</p>
+        <p>Un fil trop long pour son cercle n’a qu’une issue : sortir du plan et onduler. C’est un <strong>flambage</strong>, le même phénomène qui fait gondoler une règle qu’on comprime par ses deux bouts. L’ondulation la moins coûteuse a deux bosses et deux creux : une selle de cheval. Pour un hexagone, les six coins imposent trois bosses.</p>
+        <figure id="fig-flambage"><figcaption><b>Trop de circonférence pour le rayon.</b> Un anneau de longueur \(2\pi R\) est ramené au rayon \(R\cos(\theta/2)\) ; la figure cherche l’ondulation \(y = a\cos(q\varphi)\) qui conserve sa longueur. C’est un modèle à un seul anneau, sans les diagonales ni la raideur des pans : il donne l’ordre de grandeur et surestime la hauteur (0,63 rayon à \(\theta = 2\), quand la petite feuille carrée de la figure suivante monte à 0,4 ou 0,5).</figcaption></figure>
+        <p>Le solveur ne sait rien de tout cela. Il applique ses deux règles, et la selle apparaît. Il lui manque seulement de quoi choisir : une feuille parfaitement symétrique ne sait pas quels coins lever. Une force très faible le lui dit, le <strong>coup de pouce</strong>, qui pousse un coin sur deux vers le haut et les autres vers le bas, d’autant plus fort qu’on s’éloigne du centre :</p>
+        <div class="eq">\[ f_y = \varepsilon\,r^2\cos\!\big(q\,(\varphi - w\,g)\big), \qquad \varepsilon = 0{,}02, \quad w = \frac{\pi}{q}. \]</div>
+        <p>\(q\) est le nombre de bosses, \(\varphi\) l’angle autour de la tige. Le paramètre \(g\) vaut 0 ou 1 : passer de l’un à l’autre décale le motif d’un cran \(w\) et désigne les autres coins. La selle a donc <strong>deux états</strong>, images l’un de l’autre, et c’est ce passage que le film enregistre.</p>
+        <figure id="fig-selle" class="wide"><figcaption><b>Le solveur du projet, en direct.</b> Une feuille de 300 à 340 sommets, pliée par <code>createSolver()</code> importé tel quel (douze pas par image) ; le coup de pouce est recopié de <code>bake()</code>. Faites glisser pour tourner. « Basculer » inverse le coup de pouce avec la pichenette du film (six fois plus fort pendant une demi-seconde, amortissement réduit). Essayez une seule passe de projection : l’étirement mesuré fait plus que doubler. Essayez des pans aussi souples que les pliures : la feuille ondule. La couleur des faces est celle de l’accord Bonbon ; l’éclairage de la figure est une simple loi de Lambert.</figcaption></figure>
+        <h3>Des pans raides</h3>
+        <p>Dans un premier temps, pans et pliures avaient la même raideur. La feuille se pliait, mais ses pans se courbaient entre les plis et tout le mouvement ondulait : l’auteur y voyait du tissu, pas du papier. Le papier se plie là où sa fibre a été cassée et reste plan ailleurs. Les charnières des pans sont maintenant trois fois plus raides que celles des pliures (\(k_F = 3k\)).</p>
+        <p>Une ombrelle fonctionne de la même façon avec des plis en rayons : ses deux états sont « fermée vers le haut » et « fermée vers le bas », et le coup de pouce est une poussée verticale, \(f_y = 3\,\varepsilon\,r^2\cos(\pi g)\).</p>
+      </section>
+
+      <section id="geste">
+        <h2><span class="n">05</span>Le geste du papier</h2>
+        <span class="src">src/sim/fold.js · bake()</span>
+        <p>Le film d’une feuille est une <strong>bascule</strong> : le passage d’un état à l’autre, en sept secondes et trois cents images. Si tous les plis s’ouvraient ensemble pendant que le coup de pouce glisse d’un état à l’autre, la feuille se déformerait continûment, comme une étoffe qu’on retourne. Le calendrier du film est écrit pour l’éviter :</p>
+        <ul>
+          <li>la feuille reste <strong>immobile</strong> pendant le premier dixième du film, et pendant le dernier septième ;</li>
+          <li>ses plis se <strong>rouvrent l’un après l’autre</strong>, du bord vers le centre, jusqu’à 26 à 36 % de leur angle (la graine choisit) ;</li>
+          <li>la selle <strong>claque</strong> : le coup de pouce s’inverse en un centième et demi du film (un dixième de seconde), il est renforcé six fois le temps d’une <em>pichenette</em>, et l’amortissement tombe de 5 % à 1,2 % par pas : la feuille dépasse sa position, vibre un instant et se calme ;</li>
+          <li>les plis se <strong>referment l’un après l’autre</strong>, du centre vers le bord.</li>
+        </ul>
+        <p>L’angle visé par une pliure de rang \(r\) (0 au centre, 1 au bord) à l’instant \(u\) de la bascule (de 0 à 1) est</p>
+        <div class="eq">\[ \theta_0(u, r) = A\,\Big[\,1 - (1 - o)\;S\!\Big(\frac{u - 0{,}1 - 0{,}16\,(1 - r)}{0{,}09}\Big)\,\Big(1 - S\!\Big(\frac{u - 0{,}56 - 0{,}2\,r}{0{,}1}\Big)\Big)\Big], \]</div>
+        <p>où \(A\) est l’angle des plis fermés (1,8 à 2,05 radians), \(o\) l’ouverture et \(S\) une rampe en S (<em>smoothstep</em>), qui part et arrive à pente nulle. Le décalage en \(r\) est ce qui fait passer le mouvement de pli en pli. L’ouverture des plis n’est pas décorative : pliée serrée, une selle résiste à la bascule, et l’hexagone de la figure précédente, plié à fond, la refuse même sous la pichenette. Rouvrir d’abord, c’est abaisser la barrière entre les deux états.</p>
+        <figure id="fig-film" class="wide"><figcaption><b>Le film d’une petite feuille carrée</b> (416 sommets), calculé à l’ouverture de cette page par <code>bake()</code> du projet dans un worker, puis relu en boucle. En bas, le calendrier d’une bascule, recopié de <code>bake()</code> : l’angle des plis du bord et du centre, l’instant où le coup de pouce s’inverse, la fenêtre d’amortissement réduit. La seconde moitié de la boucle est le même film, relu tourné d’un quart de tour (section suivante). Cliquez dans la frise pour déplacer la tête de lecture.</figcaption></figure>
+        <p>Une ombrelle n’a pas de rangs : tous ses plis s’ouvrent ensemble, et sa bascule est un retournement, le cône passe de pointe en bas à pointe en haut.</p>
+        <div class="note"><b>Ce qui a été écarté</b><p>Trois patrons existaient et ont été retirés. Les plis en cercles (selle ronde, trèfle à trois bosses) n’ont pas de coins pour les caler : une fois les pans raidis, leur bascule ne retombait pas à coup sûr sur son point de départ. Les plis larges et étroits alternés ne basculaient pas franchement à la finesse de la grande feuille. Un flocon à six branches se pliait à peine. Le solveur sait toujours les plier ; la recette ne les propose plus.</p></div>
       </section>
 
       <section id="boucle">
-        <h2><span class="n">03</span>Une boucle refermée par symétrie</h2>
+        <h2><span class="n">06</span>Une boucle refermée par symétrie</h2>
         <span class="src">src/sim/fold.js · bake() ; src/scene/stage.js · update()</span>
-        <p>Une simulation ne revient jamais exactement à son point de départ. Mais l’état d’arrivée d’une bascule est l’état de départ tourné d’un cran (un quart de tour pour un carré), et le patron est le même après ce tour. On ne calcule donc qu’une bascule. La suivante est le même film, relu tourné : le shader tourne les positions et les normales, et la lampe est tournée en sens inverse dans ses calculs.</p>
-        <p>Deux précautions rendent le raccord exact. Avant le film, la feuille est refermée par le même chemin qu’à la fin d’une bascule, car l’équilibre d’une feuille plissée dépend du chemin suivi ; l’écart qui reste est fondu sur le dernier quart. Et chaque image est moyennée sur les symétries de la selle, pour qu’après deux bascules la feuille soit revenue sur elle-même, au bit près.</p>
-        <div class="note"><b>Un piège</b><p>Une ombrelle retournée montre son autre face. Le film retourné a donc ses deux couleurs échangées, et le sens de ses triangles inversé : le shader échange les couleurs et retourne la normale quand il lit le film à l’envers.</p></div>
+        <p>Une simulation ne revient jamais exactement à son point de départ, et une boucle qui saute d’un millimètre se voit. Fold n’essaie pas de revenir : il utilise le fait que l’état d’arrivée d’une bascule est l’état de départ <strong>tourné d’un cran</strong> \(w\) (un quart de tour pour un carré ou un octogone, un sixième pour un hexagone), et que le patron est le même après ce tour. Le sommet \(i\) du départ et le sommet \(\sigma(i)\) de l’arrivée, celui qui occupe la même place un cran plus loin, doivent alors vérifier</p>
+        <div class="eq">\[ \mathbf{x}_{\sigma(i)}(1) = R_w\,\mathbf{x}_i(0). \]</div>
+        <p>On ne calcule donc qu’une bascule. La seconde est le même film, relu tourné de \(w\) : le programme de la carte graphique tourne les positions et les normales, et tourne la lampe en sens inverse dans ses calculs d’éclairage. Après deux bascules, la feuille a fait deux crans, ce qui est une symétrie de la selle : elle est revenue sur elle-même. La boucle dure quatorze secondes.</p>
+        <figure id="fig-boucle"><figcaption><b>Le bord de la feuille, déroulé.</b> La hauteur des sommets du bord en fonction de l’angle autour de la tige, pour la première image du film de la figure précédente (bleu) et pour la dernière (rouge, pointillé). Le curseur tourne la première image : à un quart de tour, les deux courbes se confondent. Les écarts affichés sont mesurés sur ce film : celui que la simulation avait laissé avant correction, et celui qui reste dans le film final.</figcaption></figure>
+        <p>Trois opérations rendent ce raccord exact.</p>
+        <ul>
+          <li><strong>Le même chemin avant le film.</strong> L’équilibre d’une feuille plissée dépend du chemin par lequel on y arrive : il y a plusieurs façons de ranger le même papier. Avant d’enregistrer, la feuille est entrouverte, puis refermée par le calendrier exact de la fin d’une bascule. Elle part ainsi de l’état où elle arrivera.</li>
+          <li><strong>Un fondu sur le dernier quart.</strong> L’écart qui reste, de quelques millièmes à quelques centièmes du rayon selon le patron, est réparti en douceur sur les 75 dernières images.</li>
+          <li><strong>Une moyenne sur les symétries.</strong> Chaque image est moyennée avec ses \(q\) copies tournées de deux crans. La feuille acquiert exactement la symétrie de la selle, et la boucle de deux bascules se referme à la précision des nombres flottants.</li>
+        </ul>
+        <div class="note trap"><b>Un dixième de rayon</b><p>Dans une première version, la feuille était pliée d’un seul bloc avant le film, puis fermée pli par pli à la fin. Ce n’était pas le même chemin, donc pas le même équilibre, et le fondu devait rattraper un dixième du rayon : on voyait la feuille glisser en fin de bascule.</p></div>
+        <div class="note trap"><b>L’ombrelle montre son autre face</b><p>L’arrivée d’une ombrelle est son départ tourné d’un cran <em>et retourné haut en bas</em>. Le film relu à l’envers montre donc l’autre face du papier, et le sens de ses triangles est inversé. Le shader échange les deux couleurs et retourne la normale une bascule sur deux, sans quoi l’ombrelle changeait de couleur à chaque retournement.</p></div>
+        <div class="note check"><b>Ce que vérifie le test</b><p>Pour un carré, une rosace et une ombrelle : l’écart avant fondu est inférieur à 6 % du rayon (la selle a bien basculé), l’étirement moyen du papier inférieur à 2 %, la forme a un vrai volume (plus de 0,3 rayon), la dernière image est la première tournée d’un cran à \(10^{-5}\) près, et une image prise au milieu du film a la symétrie de la selle avec la même précision.</p></div>
+      </section>
+
+      <section id="lecture">
+        <h2><span class="n">07</span>Le film, relu par la carte graphique</h2>
+        <span class="src">src/sim/fold.js · renderMesh() ; src/scene/stage.js · addSheet()</span>
+        <p>Simuler à chaque image coûterait des centaines de passes de calcul pour un mouvement qui ne change jamais. Le film est donc calculé une fois, pendant l’écran de chargement, puis rangé dans deux <strong>textures</strong> de nombres flottants : une colonne par sommet, une ligne par image, 301 lignes. L’une contient les positions, l’autre les normales. Le <em>vertex shader</em>, le programme de la carte graphique qui place chaque sommet, lit les deux lignes qui encadrent l’instant courant et les interpole. Le film est échantillonné à 43 images par seconde et lu à n’importe quelle cadence, à l’endroit, à l’envers ou image par image pour l’export.</p>
+        <h3>Des normales vives sur les plis</h3>
+        <p>Si deux pans partagent leurs sommets le long d’une pliure, la normale y est la moyenne des deux et l’éclairage arrondit le pli : le papier ressemble à du caoutchouc. Les sommets sont donc <strong>dédoublés</strong> le long des pliures. Un pan est l’ensemble des triangles reliés par des arêtes qui ne sont pas des pliures ; un sommet posé sur une pliure existe en autant d’exemplaires que de pans qui s’y rejoignent. Chaque exemplaire reçoit la normale moyenne de son seul pan, recalculée pour chacune des 301 images.</p>
+        <figure id="fig-lecture" class="wide"><figcaption><b>Les deux textures du film de la petite feuille</b>, telles que <code>renderMesh()</code> les produit : chaque pixel est un vecteur, ses trois coordonnées lues comme du rouge, du vert et du bleu. Une ligne est une image du film ; le curseur choisit celle que la feuille de gauche relit. On y lit le calendrier de la bascule : les bandes immobiles en haut et en bas, le claquement au milieu. « Sommets partagés » remplace la normale de chaque exemplaire par la moyenne de tous les exemplaires du même sommet, ce que donnerait un maillage sans dédoublement.</figcaption></figure>
+        <h3>La matière</h3>
+        <p>Le papier porte une couleur par face, dégradée du centre vers le bord. Trois détails le font passer pour du papier plutôt que pour du plastique : un grain fin qui accroche la lumière rasante et s’efface dès qu’un pixel couvre plusieurs grains (de loin, il ne ferait que scintiller) ; un filet clair le long des pliures, là où la fibre cassée blanchit ; et la tranche blanche du bord coupé. Le grain est lu dans un secteur de la feuille replié en éventail, pour rester le même quand la selle a tourné d’un cran.</p>
       </section>
 
       <section id="couleur">
-        <h2><span class="n">04</span>La couleur d’un pan sur l’autre</h2>
-        <span class="src">src/scene/stage.js · bleed() ; shared/render/post.js</span>
-        <p>Dans le creux d’un pli, un pan éclairé renvoie sa couleur sur le pan d’en face : c’est ce qui donne au papier plié ses roses et ses orangés profonds. Chaque sommet reçoit la lumière de huit voisins des pans adjacents, par le facteur de forme entre deux petits éléments de surface :</p>
-        <div class="eq">\[ F = \frac{\cos\theta_i\,\cos\theta_j\,A_j}{\pi r^2 + A_j}. \]</div>
-        <p>Le calcul est fait dans le vertex shader, pour le recto et le verso séparément, à partir des mêmes textures que le film. À plus grande échelle, un rebond de lumière en espace écran teinte le sol sous les feuilles et les socles ; et l’ombre d’une feuille prend sa couleur, parce que le papier laisse passer un cinquième de la lumière.</p>
+        <h2><span class="n">08</span>La couleur d’un pan sur l’autre</h2>
+        <span class="src">src/scene/stage.js · bleed() ; src/sim/fold.js · renderMesh()</span>
+        <p>Dans le creux d’un pli, un pan éclairé renvoie sa couleur sur le pan d’en face. C’est ce qui donne au papier plié ses roses et ses orangés profonds, et c’est ce qui manque à une image de synthèse où chaque surface ne voit que la lampe. Calculer ces échanges pour toute la scène est coûteux ; ici la géométrie est connue d’avance, et le calcul se fait par sommet.</p>
+        <p>Chaque sommet connaît ses <strong>huit plus proches voisins des pans adjacents</strong>, cherchés une fois pour toutes sur la feuille à plat (à deux arêtes au plus), et l’aire de papier que chacun représente. La part de lumière qu’un petit élément de surface \(j\), d’aire \(A_j\), envoie sur le sommet \(i\) est son <em>facteur de forme</em> :</p>
+        <div class="eq">\[ F_{ij} = \frac{\cos\theta_i\,\cos\theta_j\,A_j}{\pi r^2 + A_j}, \qquad \mathbf{c}_i = \sum_{j=1}^{8} \mathbf{c}_j\,E_j\,F_{ij}. \]</div>
+        <p>\(r\) est la distance entre les deux, \(\theta_i\) et \(\theta_j\) les angles entre leurs normales et la droite qui les joint. Deux éléments face à face et proches échangent beaucoup, deux éléments de biais ou éloignés presque rien. Le terme \(A_j\) au dénominateur empêche la formule de diverger quand les deux pans se touchent au fond du pli. \(E_j\) est l’éclairement du voisin, calculé d’après sa normale et la direction de la lampe ; sa couleur \(\mathbf{c}_j\) est celle de la face qu’il tourne vers le sommet.</p>
+        <p>Le calcul est fait dans le vertex shader, pour le recto et le verso séparément, à partir des textures du film : les positions des voisins sont celles de l’instant courant, et le renvoi de couleur s’intensifie à mesure que le pli se ferme.</p>
+        <figure id="fig-bleed" class="wide"><figcaption><b>Le calcul du shader, refait sur la petite feuille.</b> Positions, normales, voisins et aires viennent de <code>renderMesh()</code> du projet ; la boucle sur les huit voisins est recopiée de <code>bleed()</code>, avec ses constantes (lampe 3,4, ambiance 0,4, gain du renvoi 1,8). « Renvoi seul » isole ce que chaque pan reçoit des autres : la lumière se loge dans les creux des plis. Avancez dans le film : le renvoi faiblit quand les plis s’ouvrent. La figure n’a ni ombres portées ni rebond en espace écran, et colore chaque triangle de la moyenne de ses trois sommets.</figcaption></figure>
       </section>
 
-      <section id="perf">
-        <h2><span class="n">05</span>Ce que ça coûte</h2>
-        <div class="tablewrap"><table>
-          <thead><tr><th>Étape</th><th>Où</th><th class="num">Temps</th></tr></thead>
+      <section id="lumiere">
+        <h2><span class="n">09</span>Des ombres colorées et un rebond de lumière</h2>
+        <span class="src">src/scene/stage.js · addSheet() ; shared/render/post.js</span>
+        <p>La scène est dépouillée : des feuilles, des tiges, un fond de couleur. Rien n’y cache un éclairage approximatif, et l’auteur demandait un rendu photoréaliste. Trois termes de lumière s’ajoutent au renvoi de couleur.</p>
+        <p><strong>L’ombre d’une feuille n’est pas noire.</strong> Le papier laisse passer environ un cinquième de la lumière, qui prend sa couleur au passage. Le matériau déclare la couleur de son ombre, et la carte d’ombre de la lampe, l’image depuis laquelle on décide ce qui est éclairé, la transporte : sous une feuille rose, le sol est rose sombre.</p>
+        <figure id="fig-ombre" class="wide"><figcaption><b>L’ombre portée de la petite feuille sur un sol de l’accord Bonbon.</b> La teinte de l’ombre suit la formule du matériau, \(0{,}3\,\big(\sqrt{\mathbf{c}_r\,\mathbf{c}_v} + \tfrac14(\mathbf{c}_r + \mathbf{c}_v)\big)\), où \(\mathbf{c}_r\) et \(\mathbf{c}_v\) sont les couleurs du recto et du verso. Le reste est simplifié : chaque triangle est glissé le long du rayon de la lampe jusqu’au sol, sans pénombre, une seule épaisseur de papier compte, et la part d’ambiance du sol (20 %) est un choix de la figure. « Papier opaque » montre l’ombre neutre qu’aurait un matériau ordinaire.</figcaption></figure>
+        <p><strong>La lumière qui traverse.</strong> Vue à contre-jour, une face reçoit la lumière tombée sur l’autre. Ce terme s’ajoute à la couleur de la face regardée.</p>
+        <p><strong>Un rebond en espace écran.</strong> À plus grande échelle, le sol clair éclaire le dessous des feuilles et les socles, et le papier teinte le sol. Ce rebond est calculé sur l’image elle-même (SSGI, <em>screen-space global illumination</em>) : pour chaque pixel, on marche dans quelques directions de l’image et on récolte la lumière des surfaces qu’on y rencontre. Il est actif en qualité Haute et Cinéma, pas sur mobile.</p>
+        <div class="note trap"><b>Des taches vertes sur l’ombrelle</b><p>Deux erreurs donnaient la même tache. La lumière transmise était d’abord teintée par le produit des deux encres : du jaune à travers du bleu donne du vert, en plaques sur le dos des plis. Elle garde maintenant la teinte de la face regardée. Et l’ombre colorée d’un pli tombait sur le pli voisin : le papier reçoit désormais une ombre neutre, un peu plus dense, et seuls le sol et les socles voient l’ombre teintée.</p></div>
+        <div class="note trap"><b>Une image délavée</b><p>Le nœud de rebond de three.js produit deux résultats, une occlusion et la lumière indirecte. Sa sortie par défaut est l’occlusion : ajoutée à l’image comme si c’était de la lumière, elle voilait tout de gris. Il faut demander la lumière indirecte par son accesseur propre, et la multiplier par la couleur des surfaces.</p></div>
+      </section>
+
+      <section id="places">
+        <h2><span class="n">10</span>Des feuilles qui ne se touchent jamais</h2>
+        <span class="src">src/recipe.js · generate()</span>
+        <p>Le solveur ne gère pas les contacts : deux feuilles voisines se traverseraient sans le savoir, et les premières scènes en montraient. Détecter ces collisions pendant le pliage coûterait plus cher que le pliage lui-même. La recette les rend impossibles. Une feuille ne s’étire pas : aucun de ses points ne s’éloigne de la tige de plus que son rayon à plat. Elle tient donc tout entière, quoi qu’elle fasse, dans un cylindre vertical de ce rayon. La graine place les tiges de façon que ces cylindres soient disjoints, avec un jeu de 0,08 unité (le rayon de la grande feuille est proche de 1).</p>
+        <figure id="fig-places"><figcaption><b>Vue de dessus</b> de scènes tirées par <code>generate()</code> du projet. Chaque disque est le cylindre d’une feuille, à sa couleur de recto ; le trait fin marque le jeu. La caméra est en bas. La grande feuille est au centre, les autres devant elle, à gauche et à droite.</figcaption></figure>
+        <p>La même recette pose chaque feuille assez haut sur sa tige pour que son point le plus bas reste au-dessus de son socle (0,62 rayon sous le centre pour une selle, 0,95 pour une ombrelle fermée), et un test le vérifie sur trois cents graines, avec la disjonction des cylindres, l’alternance d’une face chaude et d’une face froide, et le fait que deux feuilles ne portent jamais le même patron.</p>
+        <div class="note"><b>Une limite</b><p>Une feuille peut encore se traverser elle-même dans ses plis les plus serrés, et le papier n’a pas d’épaisseur.</p></div>
+      </section>
+
+      <section id="budget">
+        <h2><span class="n">11</span>Budget</h2>
+        <p>Tout le pliage se fait pendant l’écran de chargement, une feuille par worker, en parallèle. L’écran de chargement plie lui-même, en direct, une version grossière de la grande feuille de la graine avec le même solveur, et n’en dessine que les pliures.</p>
+        <div class="tbl"><table>
+          <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
           <tbody>
-            <tr><td>Film de la grande feuille (≈ 2 000 sommets, 300 images)</td><td>worker</td><td class="num">≈ 10 s</td></tr>
-            <tr><td>Film d’une petite feuille</td><td>worker</td><td class="num">≈ 5 s</td></tr>
-            <tr><td>Image 1 280 × 720, chaîne complète</td><td>GPU</td><td class="num">≈ 5,5 ms</td></tr>
+            <tr><td>Grande feuille : environ 2&#8239;000 sommets, 510 images simulées de 17 pas</td><td>worker</td><td class="num">≈ 10 s</td></tr>
+            <tr><td>Petite feuille</td><td>worker</td><td class="num">≈ 5 s</td></tr>
+            <tr><td>Film enregistré par feuille : 301 images, positions et normales</td><td>GPU</td><td class="num">2 textures flottantes</td></tr>
+            <tr><td>Scène complète</td><td>GPU</td><td class="num">≈ 6&#8239;000 sommets</td></tr>
+            <tr><td>Renvoi de couleur : voisins lus par sommet, pour chaque face</td><td>GPU</td><td class="num">8</td></tr>
+            <tr><td>Image 1&#8239;280 × 720, chaîne complète</td><td>GPU</td><td class="num">≈ 5,5 ms</td></tr>
           </tbody>
         </table></div>
-        <p>Les trois films se calculent en parallèle, un par worker. À l’image, il ne reste que la lecture de deux textures par feuille : la scène pèse environ 6 000 sommets. (Temps d’image mesuré sur un portable Apple M-series, fenêtre du navigateur masquée : un ordre de grandeur.)</p>
+        <p>Les temps de pliage sont ceux du chargement de la scène d’ouverture ; le temps d’image a été mesuré sur un portable Apple, dans une fenêtre masquée : c’est un ordre de grandeur. Le mouvement en continu et l’export vidéo n’ont pas été revus depuis la refonte.</p>
+        <p>Cinq tests tiennent l’ensemble sans navigateur : la recette (déterminisme, tous les choix tirés, feuilles écartées et au-dessus de leur socle), les choix du panneau (changer un patron ne déplace rien d’autre), le gradient de l’angle dièdre, les patrons (maillage fermé, plis alternés, tour d’un cran qui envoie chaque sommet sur un sommet) et le film (bascule, raccord, symétrie, papier qui ne s’étire pas).</p>
       </section>
 
     </article>
@@ -93,7 +200,463 @@
   </main>
 
   <script type="module">
-    import '../home/explainer.js';
+    import { demo, C, TAU, clamp, alpha, label, arrow } from '../home/explainer.js';
+    import { pleatedU, createSolver, dihedral, bake, renderMesh } from './src/sim/fold.js';
+    import { generate, PATTERNS, MOODS, GAP } from './src/recipe.js';
+
+    // ── outils communs ─────────────────────────────────────────────────────
+    const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+    const mix3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+    const rgb = (c, k = 1) => `rgb(${Math.round(clamp(c[0] * k, 0, 255))},${Math.round(clamp(c[1] * k, 0, 255))},${Math.round(clamp(c[2] * k, 0, 255))})`;
+    const fr = (x, n = 2) => x.toFixed(n).replace('.', ',');
+    const sm = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
+    const PAPERS = MOODS.bonbon.papers.map((p) => p.map(hex));
+    const TOP = PAPERS[0], BOT = PAPERS[1];
+    // direction de la lampe du projet (stage.js, KEY_DIR)
+    const KEY = (() => { const v = [-3.2, 5.5, 2.4], l = Math.hypot(...v); return v.map((c) => c / l); })();
+
+    // vue : lacet a, plongée p, échelle s, centre (cx, cy) ; profondeur croissante vers l'œil
+    const mkView = (a, p, s, cx, cy) => ({ ca: Math.cos(a), sa: Math.sin(a), cp: Math.cos(p), sp: Math.sin(p), s, cx, cy });
+    const proj = (V, X, Y, Z) => { const x = X * V.ca - Z * V.sa, z = X * V.sa + Z * V.ca; return [V.cx + V.s * x, V.cy - V.s * (Y * V.cp - z * V.sp), Y * V.sp + z * V.cp]; };
+
+    // une feuille en volume : triangles triés du plus loin au plus proche, une couleur par face
+    function drawSheet(g, V, S, x, { o = 0, turn = 0, my = 1, top = TOP, bot = BOT } = {}) {
+      const N = S.N, tr = S.tris, T = tr.length / 3, ct = Math.cos(turn), st = Math.sin(turn);
+      const W = (S._w ??= new Float32Array(3 * N)), Q = (S._q ??= new Float32Array(3 * N)), dep = (S._d ??= new Float32Array(T));
+      const ord = (S._o ??= Array.from({ length: T }, (_, i) => i));
+      if (!S._rr) { S._rr = new Float32Array(T); for (let t = 0; t < T; t++) { let X = 0, Z = 0; for (let e = 0; e < 3; e++) { X += S.P[3 * tr[3 * t + e]] / 3; Z += S.P[3 * tr[3 * t + e] + 2] / 3; } S._rr[t] = Math.hypot(X, Z); } }
+      for (let i = 0; i < N; i++) {
+        const X = x[o + 3 * i], Y = my * x[o + 3 * i + 1], Z = x[o + 3 * i + 2], Xr = X * ct - Z * st, Zr = X * st + Z * ct, p = proj(V, Xr, Y, Zr);
+        W[3 * i] = Xr; W[3 * i + 1] = Y; W[3 * i + 2] = Zr; Q[3 * i] = p[0]; Q[3 * i + 1] = p[1]; Q[3 * i + 2] = p[2];
+      }
+      for (let t = 0; t < T; t++) dep[t] = Q[3 * tr[3 * t] + 2] + Q[3 * tr[3 * t + 1] + 2] + Q[3 * tr[3 * t + 2] + 2];
+      ord.sort((i, j) => dep[i] - dep[j]);
+      const Dx = V.sa * V.cp, Dy = V.sp, Dz = V.ca * V.cp;
+      g.lineWidth = 0.7; g.lineJoin = 'round';
+      for (const t of ord) {
+        const a = 3 * tr[3 * t], b = 3 * tr[3 * t + 1], c = 3 * tr[3 * t + 2];
+        const ux = W[b] - W[a], uy = W[b + 1] - W[a + 1], uz = W[b + 2] - W[a + 2], vx = W[c] - W[a], vy = W[c + 1] - W[a + 1], vz = W[c + 2] - W[a + 2];
+        const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx, l = Math.hypot(nx, ny, nz) || 1;
+        // (à plat la normale est +y : c'est le recto ; un film retourné inverse le sens des triangles, donc échange les faces)
+        const col = nx * Dx + ny * Dy + nz * Dz > 0 ? top : bot;
+        const lam = 0.5 + 0.5 * Math.abs(nx * KEY[0] + ny * KEY[1] + nz * KEY[2]) / l;
+        g.fillStyle = g.strokeStyle = rgb(mix3(col[0], col[1], sm((S._rr[t] - 0.1) / 0.9)), lam);
+        g.beginPath(); g.moveTo(Q[a], Q[a + 1]); g.lineTo(Q[b], Q[b + 1]); g.lineTo(Q[c], Q[c + 1]); g.closePath(); g.fill(); g.stroke();
+      }
+    }
+    // la tige
+    function drawRod(g, V, len = 0.9) { const a = proj(V, 0, 0, 0), b = proj(V, 0, -len, 0); g.strokeStyle = alpha(C.ink, 0.45); g.lineWidth = 1.5; g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke(); }
+    const orbit = (d, e, v) => { if (e.type === 'down') v.last = [e.x, e.y]; else if (e.down && v.last) { v.a += (e.x - v.last[0]) * 0.01; v.p = clamp(v.p + (e.y - v.last[1]) * 0.01, 0.05, 1.5); v.last = [e.x, e.y]; } if (e.type === 'up') v.last = null; };
+    // le coup de pouce (recopié de bake())
+    const pushOf = (S, eps, g, gain = 1) => (f) => {
+      const q = S.q, w = Math.PI / q;
+      for (let i = 0; i < S.N; i++) { const X = S.P[3 * i], Z = S.P[3 * i + 2]; f[3 * i + 1] += gain * eps * (X * X + Z * Z) * (S.soleil ? 3 * Math.cos(Math.PI * g) : Math.cos(q * (Math.atan2(Z, X) - w * g))); }
+    };
+
+    // ── 01 · le patron ─────────────────────────────────────────────────────
+    demo('#fig-patron', {
+      aspect: 16 / 10, title: 'Le patron et son maillage',
+      controls: [
+        { key: 'n', label: 'Côtés', min: 4, max: 8, step: 2, value: 4, fmt: (v) => String(v) },
+        { key: 'twist', label: 'Vrille', min: 0, max: 0.6, step: 0.05, value: 0, fmt: (v) => `${fr(v)} rad` },
+        { key: 'star', label: 'Creux des côtés', min: 0, max: 0.45, step: 0.05, value: 0, fmt: (v) => fr(v) },
+        { key: 'm', label: 'Finesse', min: 6, max: 16, step: 1, value: 10, fmt: (v) => String(v) },
+      ],
+      buttons: [{ key: 'soleil', label: 'Ombrelle', toggle: true }, { key: 'radial', label: 'Maillage en rayons', toggle: true }],
+      draw(g, d) {
+        const s = d.s, sol = s.soleil, n = sol ? 16 : s.n, twist = sol ? 0 : s.twist, star = sol ? 0 : s.star, hole = sol ? 0.15 : 0.08, rings = sol ? 5 : 7;
+        const S = pleatedU({ n, rings, sub: 2, m: s.m, hole, twist, star, kind: sol ? 'soleil' : 'rings' });
+        const sc = Math.min(d.w, d.h) * 0.46, cx = d.w / 2, cy = d.h / 2, X = (i) => cx + sc * S.P[3 * i], Y = (i) => cy + sc * S.P[3 * i + 2];
+        let lmin = 1e9, count = S.N;
+        if (!s.radial) {
+          g.strokeStyle = alpha(C.ink, 0.16); g.lineWidth = 0.6; g.beginPath();
+          for (let b = 0; b < S.bars.length; b += 3) { g.moveTo(X(S.bars[b]), Y(S.bars[b])); g.lineTo(X(S.bars[b + 1]), Y(S.bars[b + 1])); lmin = Math.min(lmin, S.bars[b + 2]); }
+          g.stroke();
+        } else {
+          // le maillage naïf : autant de points sur chaque anneau (reconstruit pour la figure)
+          const sides = star > 0 ? 2 * n : n, sa = TAU / sides, fc = (i) => (star > 0 && (i & 1) ? 1 - star : 1), K = rings * 2;
+          const sk = Math.max(1, Math.round(Math.sqrt(1 + fc(1) ** 2 - 2 * fc(1) * Math.cos(sa)) * s.m)), R = [];
+          for (let k = 0; k <= K; k++) {
+            const r = hole + (1 - hole) * (k / K), tw = twist * (k / K), row = [];
+            for (let i = 0; i < sides; i++) for (let j = 0; j < sk; j++) { const t = j / sk, a0 = i * sa + tw, a1 = a0 + sa; row.push([r * ((1 - t) * fc(i) * Math.cos(a0) + t * fc(i + 1) * Math.cos(a1)), r * ((1 - t) * fc(i) * Math.sin(a0) + t * fc(i + 1) * Math.sin(a1))]); }
+            R.push(row);
+          }
+          count = R.length * R[0].length;
+          g.strokeStyle = alpha(C.ink, 0.16); g.lineWidth = 0.6; g.beginPath();
+          const seg = (p, q) => { g.moveTo(cx + sc * p[0], cy + sc * p[1]); g.lineTo(cx + sc * q[0], cy + sc * q[1]); lmin = Math.min(lmin, Math.hypot(p[0] - q[0], p[1] - q[1])); };
+          for (let k = 0; k <= K; k++) for (let i = 0; i < R[k].length; i++) { seg(R[k][i], R[k][(i + 1) % R[k].length]); if (k < K) { seg(R[k][i], R[k + 1][i]); seg(R[k][i], R[k + 1][(i + 1) % R[k].length]); } }
+          g.stroke();
+        }
+        // les pliures
+        let nc = 0;
+        for (const pass of [0.6, 1]) for (let h = 0; h < S.hinges.length; h += 6) {
+          const c = S.hinges[h + 4]; if (Math.abs(c) !== pass) continue;
+          nc++;
+          g.strokeStyle = alpha(c > 0 ? C.c3 : C.c2, pass === 1 ? 0.95 : 0.7); g.lineWidth = pass === 1 ? 1.7 : 1;
+          g.beginPath(); g.moveTo(X(S.hinges[h]), Y(S.hinges[h])); g.lineTo(X(S.hinges[h + 1]), Y(S.hinges[h + 1])); g.stroke();
+        }
+        label(g, '— montagne', 12, d.h - 28, { color: C.c3, size: 11 }); label(g, '— vallée', 12, d.h - 12, { color: C.c2, size: 11 });
+        const dt = 0.18 * Math.sqrt(lmin / 2.1);
+        d.status(s.radial ? 'en rayons' : 'en fermeture éclair');
+        d.readout(`<b>${count}</b> sommets · plus petite arête <b>${fr(lmin, 4)}</b> rayon · pas de temps <b>${fr(dt, 4)}</b>${s.radial ? '' : ` · ${S.hinges.length / 6} charnières dont ${nc} sur une pliure`}`);
+      },
+    });
+
+    // ── 02 · une charnière ─────────────────────────────────────────────────
+    demo('#fig-diedre', {
+      aspect: 16 / 9, title: 'Les quatre forces d’une charnière',
+      controls: [
+        { key: 'th', label: 'Angle θ', min: -150, max: 150, step: 1, value: 70, fmt: (v) => `${v}°` },
+        { key: 't0', label: 'Cible θ₀', min: -115, max: 115, step: 1, value: 0, fmt: (v) => `${v}°` },
+      ],
+      pointer(d, e) { orbit(d, e, (d.view ??= { a: 0.55, p: 0.42 })); },
+      draw(g, d) {
+        const v = (d.view ??= { a: 0.55, p: 0.42 }), V = mkView(v.a, v.p, Math.min(d.w * 0.3, d.h * 0.5), d.w / 2, d.h * 0.6);
+        const ph = d.s.th * Math.PI / 180, c = Math.cos(ph / 2), s = Math.sin(ph / 2);
+        // arête le long de z ; les deux pointes relevées de θ/2
+        const x = new Float64Array([0, 0, -0.8, 0, 0, 0.8, -c, s, 0, c, s, 0]), G = new Float64Array(12);
+        const th = dihedral(x, 0, 1, 2, 3, G), kk = -0.7 * 1.6 * (th - d.s.t0 * Math.PI / 180);
+        const P = [0, 1, 2, 3].map((i) => proj(V, x[3 * i], x[3 * i + 1], x[3 * i + 2]));
+        const tris = [[0, 1, 2, TOP], [1, 0, 3, TOP]].map(([a, b, cc, col]) => ({ a, b, cc, z: P[a][2] + P[b][2] + P[cc][2], col })).sort((p, q) => p.z - q.z);
+        for (const t of tris) {
+          const n = t.cc === 2 ? [s, c, 0] : [-s, c, 0], D = [V.sa * V.cp, V.sp, V.ca * V.cp], face = n[0] * D[0] + n[1] * D[1] + n[2] * D[2] > 0;
+          g.fillStyle = rgb((face ? TOP : BOT)[0], 0.55 + 0.45 * Math.abs(n[0] * KEY[0] + n[1] * KEY[1] + n[2] * KEY[2])); g.strokeStyle = alpha(C.ink, 0.5); g.lineWidth = 1;
+          g.beginPath(); g.moveTo(P[t.a][0], P[t.a][1]); g.lineTo(P[t.b][0], P[t.b][1]); g.lineTo(P[t.cc][0], P[t.cc][1]); g.closePath(); g.fill(); g.stroke();
+        }
+        g.strokeStyle = C.ink; g.lineWidth = 2.2; g.beginPath(); g.moveTo(P[0][0], P[0][1]); g.lineTo(P[1][0], P[1][1]); g.stroke();
+        let sx = 0, sy = 0, sz = 0;
+        for (let i = 0; i < 4; i++) {
+          const f = [kk * G[3 * i], kk * G[3 * i + 1], kk * G[3 * i + 2]]; sx += f[0]; sy += f[1]; sz += f[2];
+          const k = 0.55, q = proj(V, x[3 * i] + k * f[0], x[3 * i + 1] + k * f[1], x[3 * i + 2] + k * f[2]);
+          if (Math.hypot(q[0] - P[i][0], q[1] - P[i][1]) > 4) arrow(g, P[i][0], P[i][1], q[0], q[1], { color: i < 2 ? C.c4 : C.c2, width: 1.6 });
+          g.fillStyle = C.ink; g.beginPath(); g.arc(P[i][0], P[i][1], 3, 0, TAU); g.fill();
+        }
+        label(g, 'pointes', 12, 20, { color: C.c2, size: 11 }); label(g, 'bouts de l’arête', 12, 36, { color: C.c4, size: 11 });
+        d.status(Math.abs(th * 180 / Math.PI - d.s.t0) < 1 ? 'à l’équilibre' : 'en charge');
+        d.readout(`θ mesuré par <code>dihedral()</code> : <b>${fr(th * 180 / Math.PI, 1)}°</b> · écart à la cible <b>${fr(th * 180 / Math.PI - d.s.t0, 1)}°</b> · somme des quatre forces <b>${Math.hypot(sx, sy, sz) < 1e-9 ? '0' : fr(Math.hypot(sx, sy, sz), 3)}</b>`);
+      },
+    });
+
+    // ── 04 · le flambage ───────────────────────────────────────────────────
+    const ringLen = (r, a, q) => { let L = 0, px = 0, py = 0, pz = 0; for (let i = 0; i <= 360; i++) { const f = (i / 360) * TAU, X = r * Math.cos(f), Z = r * Math.sin(f), Y = a * Math.cos(q * f); if (i) L += Math.hypot(X - px, Y - py, Z - pz); px = X; py = Y; pz = Z; } return L; };
+    demo('#fig-flambage', {
+      aspect: 16 / 9, title: 'Un anneau trop long pour son cercle',
+      controls: [
+        { key: 'th', label: 'Angle des plis θ', min: 0, max: 2.05, step: 0.01, value: 1.3, fmt: (v) => `${fr(v)} rad` },
+        { key: 'q', label: 'Bosses', min: 2, max: 4, step: 1, value: 2, fmt: (v) => String(v) },
+      ],
+      draw(g, d) {
+        const th = d.s.th, q = d.s.q, rho = Math.cos(th / 2);
+        let lo = 0, hi = 3; for (let i = 0; i < 36; i++) { const m = (lo + hi) / 2; if (ringLen(rho, m, q) < TAU) lo = m; else hi = m; }
+        const a = lo, V = mkView(0.5, 0.42, Math.min(d.w * 0.25, d.h * 0.42), d.w * 0.62, d.h * 0.52);
+        const ring = (r, amp, style, wdt, dash) => {
+          g.strokeStyle = style; g.lineWidth = wdt; g.setLineDash(dash ?? []); g.beginPath();
+          for (let i = 0; i <= 180; i++) { const f = (i / 180) * TAU, p = proj(V, r * Math.cos(f), amp * Math.cos(q * f), r * Math.sin(f)); i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]); }
+          g.stroke(); g.setLineDash([]);
+        };
+        ring(1, 0, alpha(C.ink, 0.3), 1, [4, 4]); ring(rho, 0, alpha(C.c2, 0.8), 1, [2, 3]); ring(rho, a, C.c1, 2.4);
+        // la coupe d'un rayon : six plis en zigzag
+        const x0 = 16, y0 = d.h - 30, L = Math.min(d.w * 0.3, 150), l = L / 6;
+        g.strokeStyle = alpha(C.ink, 0.3); g.lineWidth = 1; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(x0, y0 - 46); g.lineTo(x0 + L, y0 - 46); g.stroke(); g.setLineDash([]);
+        g.strokeStyle = C.c3; g.lineWidth = 2; g.beginPath(); g.moveTo(x0, y0);
+        for (let i = 1; i <= 6; i++) g.lineTo(x0 + i * l * rho, y0 - (i & 1 ? l * Math.sin(th / 2) : 0));
+        g.stroke();
+        label(g, 'un rayon, en coupe', x0, y0 + 18, { size: 11 }); label(g, 'à plat', x0 + L + 6, y0 - 42, { size: 11 });
+        label(g, 'cercle d’origine', d.w - 12, 20, { color: alpha(C.ink, 0.6), size: 11, align: 'right' }); label(g, 'cercle permis par le rayon', d.w - 12, 36, { color: C.c2, size: 11, align: 'right' }); label(g, 'l’anneau, de même longueur', d.w - 12, 52, { color: C.c1, size: 11, align: 'right' });
+        d.readout(`rayon restant <b>${fr(rho)}</b> · longueur en trop <b>${fr((1 / rho - 1) * 100, 0)} %</b> · hauteur des bosses <b>${fr(a)}</b> rayon`);
+      },
+    });
+
+    // ── 04 · le solveur en direct ──────────────────────────────────────────
+    const LIVE = [
+      { name: 'Carré', spec: { n: 4, rings: 6, m: 8 } }, { name: 'Hexagone', spec: { n: 6, rings: 6, m: 8 } },
+      { name: 'Spirale', spec: { n: 4, rings: 6, m: 8, twist: PATTERNS.spirale.twist }, eps: PATTERNS.spirale.eps },
+      { name: 'Étoile', spec: { n: 4, rings: 6, m: 8, star: PATTERNS.etoile.star } }, { name: 'Ombrelle', spec: { n: 12, rings: 5, m: 8, kind: 'soleil', hole: 0.15 } },
+    ];
+    const liveBuild = (d, keep) => {
+      const st = d.state, L = LIVE[d.s.pat];
+      if (!keep || !st.S) { st.S = pleatedU({ sub: 2, ...L.spec }); st.g = 0; st.flick = 0; st.fold = 0; }
+      const old = st.so; st.so = createSolver(st.S, { kF: 0.7 * d.s.kf, iters: d.s.it }); st.eps = L.eps ?? 0.02;
+      if (keep && old) { st.so.x.set(old.x); st.so.v.set(old.v); }
+    };
+    demo('#fig-selle', {
+      aspect: 16 / 8, title: 'Deux règles, et la selle apparaît', animate: true,
+      controls: [
+        { key: 'pat', label: 'Patron', min: 0, max: 4, step: 1, value: 0, fmt: (v) => LIVE[v].name, onChange: (d) => liveBuild(d, false) },
+        { key: 'fold', label: 'Angle des plis', min: 0, max: 2.05, step: 0.05, value: 1.9, fmt: (v) => `${fr(v)} rad` },
+        { key: 'kf', label: 'Raideur des pans', min: 1, max: 3, step: 0.5, value: 3, fmt: (v) => `${fr(v, 1)} × pliure`, onChange: (d) => liveBuild(d, true) },
+        { key: 'it', label: 'Passes de projection', min: 1, max: 6, step: 1, value: 4, fmt: (v) => String(v), onChange: (d) => liveBuild(d, true) },
+      ],
+      buttons: [{ label: 'Basculer', onClick: (d) => { d.state.g = 1 - d.state.g; d.state.flick = 40; } }, { label: 'Remettre à plat', onClick: (d) => d.reset() }],
+      setup(d) { liveBuild(d, false); },
+      pointer(d, e) { orbit(d, e, (d.view ??= { a: 0.32, p: 0.62 })); },
+      draw(g, d) {
+        const st = d.state, { S, so } = st, v = (d.view ??= { a: 0.32, p: 0.62 });
+        // (le pli se referme à vitesse finie, comme dans le film)
+        st.fold += clamp(d.s.fold - st.fold, -0.03, 0.03);
+        so.setFold(st.fold);
+        const fl = st.flick > 10 ? 6 : 0; so.P.drag = st.flick > 0 ? 0.012 : 0.05; if (st.flick > 0) st.flick--;
+        so.step(12, pushOf(S, st.eps, st.g, 1 + fl));
+        const V = mkView(v.a, v.p, Math.min(d.w * 0.3, d.h * 0.52), d.w / 2, d.h * 0.5);
+        if (!Number.isFinite(so.x[0])) { d.reset(); return; }
+        drawRod(g, V); drawSheet(g, V, S, so.x);
+        let h = 0; for (let i = 0; i < S.N; i++) h = Math.max(h, Math.abs(so.x[3 * i + 1]));
+        const [mx, av] = so.strain();
+        d.status(st.flick > 0 ? 'pichenette' : `état ${st.g ? 'B' : 'A'}`);
+        d.readout(`${S.N} sommets · hauteur <b>${fr(h)}</b> rayon · étirement des barres : au pire <b>${fr(mx * 100, 1)} %</b>, en moyenne <b>${fr(av * 100, 2)} %</b>`);
+      },
+    });
+
+    // ── 05–06 · le film d'une petite feuille, calculé dans un worker ───────
+    const FILM = { spec: { n: 4, rings: 7, sub: 2, m: 9 }, opt: { amp: 1.95, open: 0.3, eps: 0.02 }, p: 0, ready: false };
+    FILM.S = pleatedU(FILM.spec);
+    const filmDone = (B, ms, M) => { Object.assign(FILM, { frames: B.frames, F: B.F, gap: B.gap, strain: B.strain, ms, M: M ?? renderMesh(FILM.S, B), ready: true }); FILM.buf = new Float32Array(3 * FILM.S.N); for (const d of FILM.figs) d?.redraw(); };
+    FILM.figs = [];
+    try {
+      const src = `import { pleatedU, bake, renderMesh } from '${new URL('./src/sim/fold.js', location.href)}';
+        onmessage = (e) => { const S = pleatedU(e.data.spec), t0 = performance.now(); let last = 0;
+          const B = bake(S, { ...e.data.opt, onStep: (f) => { if (f - last > 0.02) { last = f; postMessage({ p: f }); } } });
+          const ms = performance.now() - t0, M = renderMesh(S, B);
+          postMessage({ B: { frames: B.frames, F: B.F, gap: B.gap, strain: B.strain }, ms, M }, [B.frames.buffer, M.pos.buffer, M.nor.buffer, M.near.buffer]); };`;
+      const wk = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })), { type: 'module' });
+      wk.onmessage = (e) => { if (e.data.B) { filmDone(e.data.B, e.data.ms, e.data.M); wk.terminate(); } else { FILM.p = e.data.p; for (const d of FILM.figs) d?.redraw(); } };
+      wk.onerror = () => { const t0 = performance.now(); filmDone(bake(FILM.S, FILM.opt), performance.now() - t0); };
+      wk.postMessage({ spec: FILM.spec, opt: FILM.opt });
+    } catch { const t0 = performance.now(); filmDone(bake(FILM.S, FILM.opt), performance.now() - t0); }
+    const waiting = (g, d) => { label(g, `calcul du film… ${Math.round(FILM.p * 100)} %`, d.w / 2, d.h / 2, { align: 'center', size: 13 }); };
+    // le calendrier d'une bascule (recopié de bake())
+    const sched = (u, r) => 1 - (1 - FILM.opt.open) * sm((u - 0.1 - 0.16 * (1 - r)) / 0.09) * (1 - sm((u - 0.56 - 0.2 * r) / 0.1));
+
+    FILM.figs.push(demo('#fig-film', {
+      aspect: 16 / 9, title: 'Une bascule, puis la même, tournée', animate: true,
+      buttons: [{ key: 'pause', label: 'Pause', toggle: true }, { key: 'slow', label: 'Ralenti ×4', toggle: true }],
+      pointer(d, e) {
+        const y0 = d.h * 0.68;
+        if (e.type === 'down') d.grab = e.y > y0 ? 'time' : 'view';
+        if (d.grab === 'time' && e.down) d.clock = clamp((e.x - 16) / (d.w - 32), 0, 0.9999) * 14;
+        else if (d.grab === 'view') orbit(d, e, (d.view ??= { a: 0.32, p: 0.62 }));
+        if (e.type === 'up') d.grab = null;
+      },
+      draw(g, d) {
+        if (!FILM.ready) { waiting(g, d); return; }
+        const { S, F, frames, buf } = FILM, N = S.N, v = (d.view ??= { a: 0.32, p: 0.62 });
+        d.clock = ((d.clock ?? 0) + (d.s.pause || d.grab === 'time' ? 0 : d.dt * (d.s.slow ? 0.25 : 1))) % 14;
+        const tt = d.clock / 7, h = Math.floor(tt), u = tt - h, f = Math.min(u * F, F - 0.001), f0 = Math.floor(f), ft = f - f0, o0 = f0 * 3 * N, o1 = o0 + 3 * N;
+        for (let i = 0; i < 3 * N; i++) buf[i] = frames[o0 + i] + (frames[o1 + i] - frames[o0 + i]) * ft;
+        const y0 = d.h * 0.68, V = mkView(v.a, v.p, Math.min(d.w * 0.26, y0 * 0.6), d.w / 2, y0 * 0.52);
+        drawRod(g, V, 0.7); drawSheet(g, V, S, buf, { turn: h * S.w });
+        // la frise : deux bascules
+        const x0 = 16, x1 = d.w - 16, yb = d.h - 22, yt = y0 + 14, X = (t) => x0 + (x1 - x0) * (t / 2), Yv = (val) => yb - (yb - yt) * val;
+        for (let k = 0; k < 2; k++) {
+          g.fillStyle = alpha(C.c3, 0.13); g.fillRect(X(k + 0.43), yt, X(k + 0.56) - X(k + 0.43), yb - yt);
+          g.strokeStyle = alpha(C.c4, 0.9); g.lineWidth = 1.2; g.beginPath(); g.moveTo(X(k + 0.43), yt); g.lineTo(X(k + 0.43), yb); g.stroke();
+          for (const [r, col] of [[1, C.c1], [0, C.c2]]) {
+            g.strokeStyle = col; g.lineWidth = 1.6; g.beginPath();
+            for (let i = 0; i <= 120; i++) { const uu = i / 120; i ? g.lineTo(X(k + uu), Yv(sched(uu, r))) : g.moveTo(X(k + uu), Yv(sched(uu, r))); }
+            g.stroke();
+          }
+        }
+        g.strokeStyle = alpha(C.ink, 0.25); g.lineWidth = 1; g.beginPath(); g.moveTo(x0, yb); g.lineTo(x1, yb); g.moveTo(X(1), yt - 8); g.lineTo(X(1), yb); g.stroke();
+        g.strokeStyle = C.ink; g.lineWidth = 1.4; g.beginPath(); g.moveTo(X(tt), yt - 8); g.lineTo(X(tt), yb + 4); g.stroke();
+        label(g, 'plis du bord', x0, yt - 4, { color: C.c1, size: 11 }); label(g, 'plis du centre', x0 + 84, yt - 4, { color: C.c2, size: 11 });
+        label(g, 'inversion', X(0.43) + 4, yb - 6, { color: C.c4, size: 11 });
+        label(g, 'film', X(0.5), yb + 16, { size: 11, align: 'center' }); label(g, 'le même, tourné d’un quart de tour', X(1.5), yb + 16, { size: 11, align: 'center' });
+        d.status(`${fr(d.clock, 1)} s · image ${f0} / ${F}`);
+        d.readout(`film calculé en <b>${fr(FILM.ms / 1000, 1)} s</b> · ${N} sommets · étirement moyen <b>${fr(FILM.strain[1] * 100, 2)} %</b> · ${h ? 'seconde bascule : relue tournée' : 'première bascule'}`);
+      },
+    }));
+
+    FILM.figs.push(demo('#fig-boucle', {
+      aspect: 16 / 8, title: 'La dernière image est la première, tournée',
+      controls: [{ key: 'turn', label: 'Tour appliqué à la première image', min: 0, max: 90, step: 1, value: 0, fmt: (v) => `${v}°` }],
+      draw(g, d) {
+        if (!FILM.ready) { waiting(g, d); return; }
+        const { S, F, frames } = FILM, N = S.N;
+        const rim = (FILM.rim ??= (() => { const l = []; for (let i = 0; i < N; i++) if (S.ringOf[i] === S.K) l.push([Math.atan2(S.P[3 * i + 2], S.P[3 * i]), i]); return l.sort((a, b) => a[0] - b[0]); })());
+        const x0 = 34, x1 = d.w - 14, yc = d.h * 0.5, sc = d.h * 0.72, X = (a) => x0 + (x1 - x0) * ((a + Math.PI) / TAU), Y = (y) => yc - sc * y;
+        g.strokeStyle = alpha(C.ink, 0.2); g.lineWidth = 1; g.beginPath(); g.moveTo(x0, yc); g.lineTo(x1, yc);
+        for (let k = 0; k <= 4; k++) { g.moveTo(X(-Math.PI + k * Math.PI / 2), yc - 4); g.lineTo(X(-Math.PI + k * Math.PI / 2), yc + 4); }
+        g.stroke();
+        for (let k = 0; k <= 4; k++) label(g, `${-180 + 90 * k}°`, X(-Math.PI + k * Math.PI / 2), d.h - 8, { size: 10, align: 'center' });
+        label(g, 'hauteur', 6, 16, { size: 11 });
+        // hauteur du bord à l'angle a, lue dans l'image o (interpolée entre deux sommets)
+        const at = (o, a) => { a = ((a + Math.PI) % TAU + TAU) % TAU - Math.PI; let j = rim.findIndex((r) => r[0] > a); if (j < 0) j = 0; const p = rim[(j - 1 + rim.length) % rim.length], n = rim[j]; let da = n[0] - p[0]; if (da <= 0) da += TAU; let t = (a - p[0]); if (t < 0) t += TAU; t /= da; return frames[o + 3 * p[1] + 1] * (1 - t) + frames[o + 3 * n[1] + 1] * t; };
+        const sh = d.s.turn * Math.PI / 180, oF = F * 3 * N;
+        let dev = 0;
+        const curve = (fn, col, dash, wdt) => { g.strokeStyle = col; g.lineWidth = wdt; g.setLineDash(dash); g.beginPath(); for (let i = 0; i <= 240; i++) { const a = -Math.PI + (i / 240) * TAU; i ? g.lineTo(X(a), Y(fn(a))) : g.moveTo(X(a), Y(fn(a))); } g.stroke(); g.setLineDash([]); };
+        curve((a) => at(0, a - sh), C.c2, [], 2.2); curve((a) => at(oF, a), C.c3, [5, 4], 1.6);
+        for (let i = 0; i < 240; i++) { const a = -Math.PI + (i / 240) * TAU; dev = Math.max(dev, Math.abs(at(0, a - sh) - at(oF, a))); }
+        // l'écart exact du film final, sommet par sommet : x_σ(i)(fin) − R_w x_i(début)
+        let res = 0; const c = Math.cos(S.w), s = Math.sin(S.w);
+        for (let i = 0; i < N; i++) { const j = S.perm[i]; res = Math.max(res, Math.hypot(frames[oF + 3 * j] - (frames[3 * i] * c - frames[3 * i + 2] * s), frames[oF + 3 * j + 1] - frames[3 * i + 1], frames[oF + 3 * j + 2] - (frames[3 * i] * s + frames[3 * i + 2] * c))); }
+        label(g, 'première image, tournée', x1, 16, { color: C.c2, size: 11, align: 'right' }); label(g, 'dernière image', x1, 32, { color: C.c3, size: 11, align: 'right' });
+        d.readout(`écart entre les deux courbes <b>${fr(dev, 3)}</b> rayon · écart laissé par la simulation, avant fondu <b>${fr(FILM.gap, 4)}</b> · écart dans le film final <b>${res < 1e-9 ? 'nul (moins de 10⁻⁹)' : fr(res, 6)}</b>`);
+      },
+    }));
+
+    // ── 07–09 · le maillage de rendu du film (renderMesh) ──────────────────
+    const LIN = (c) => c.map((v) => (v / 255) ** 2.2), TOPL = TOP.map(LIN), BOTL = BOT.map(LIN);
+    const tone = (v) => 255 * (v / (1 + v)) ** (1 / 2.2);
+    const lampDir = (az, el) => { const a = az * Math.PI / 180, e = el * Math.PI / 180; return [Math.cos(e) * Math.sin(a), Math.sin(e), Math.cos(e) * Math.cos(a)]; };
+    const KEY_AZ = Math.round(Math.atan2(KEY[0], KEY[2]) * 180 / Math.PI), KEY_EL = Math.round(Math.asin(KEY[1]) * 180 / Math.PI);
+    // triangles triés du plus loin au plus proche ; P : positions (pas de stride à partir de o) ; shade(t, a, b, c, recto) → couleur
+    function drawMesh(g, V, P, stride, o, index, shade) {
+      const T = index.length / 3, n = (P.length - o) / stride, Q = new Float32Array(3 * Math.min(n, 1 + Math.max(...index)));
+      for (let i = 0; i < Q.length / 3; i++) { const p = proj(V, P[o + stride * i], P[o + stride * i + 1], P[o + stride * i + 2]); Q[3 * i] = p[0]; Q[3 * i + 1] = p[1]; Q[3 * i + 2] = p[2]; }
+      const ord = Array.from({ length: T }, (_, t) => t), dep = new Float32Array(T);
+      for (let t = 0; t < T; t++) dep[t] = Q[3 * index[3 * t] + 2] + Q[3 * index[3 * t + 1] + 2] + Q[3 * index[3 * t + 2] + 2];
+      ord.sort((a, b) => dep[a] - dep[b]);
+      const Dx = V.sa * V.cp, Dy = V.sp, Dz = V.ca * V.cp;
+      g.lineWidth = 0.7; g.lineJoin = 'round';
+      for (const t of ord) {
+        const a = index[3 * t], b = index[3 * t + 1], c = index[3 * t + 2], A = o + stride * a, B = o + stride * b, Cc = o + stride * c;
+        const ux = P[B] - P[A], uy = P[B + 1] - P[A + 1], uz = P[B + 2] - P[A + 2], vx = P[Cc] - P[A], vy = P[Cc + 1] - P[A + 1], vz = P[Cc + 2] - P[A + 2];
+        const front = (uy * vz - uz * vy) * Dx + (uz * vx - ux * vz) * Dy + (ux * vy - uy * vx) * Dz > 0;
+        g.fillStyle = g.strokeStyle = shade(t, a, b, c, front);
+        g.beginPath(); g.moveTo(Q[3 * a], Q[3 * a + 1]); g.lineTo(Q[3 * b], Q[3 * b + 1]); g.lineTo(Q[3 * c], Q[3 * c + 1]); g.closePath(); g.fill(); g.stroke();
+      }
+    }
+    // la couleur de chaque sommet de rendu, recto et verso : éclairage direct et renvoi des pans d'en face (stage.js, bleed())
+    function litSheet(f, L, mode) { // mode : 0 tout, 1 direct seul, 2 renvoi seul
+      const { RN, K, pos, nor, near, rest } = FILM.M, o = f * RN * 4, KI = 3.4, AMB = 0.4, GAIN = 1.8;
+      const cF = new Float32Array(3 * RN), cB = new Float32Array(3 * RN);
+      let sumD = 0, sumB = 0;
+      for (let r = 0; r < RN; r++) {
+        const rr = Math.hypot(rest[3 * r], rest[3 * r + 2]), top = mix3(TOPL[0], TOPL[1], sm((rr - 0.1) / 0.9)), bot = mix3(BOTL[0], BOTL[1], sm((rr - 0.2) / 0.9));
+        const p = o + 4 * r, nx = nor[p], ny = nor[p + 1], nz = nor[p + 2], aF = [0, 0, 0], aB = [0, 0, 0];
+        for (let k = 0; k < K; k++) {
+          const e = (k * RN + r) * 4, a = near[e + 1]; if (!a) continue;
+          const q = o + 4 * near[e], dx = pos[q] - pos[p], dy = pos[q + 1] - pos[p + 1], dz = pos[q + 2] - pos[p + 2], r2 = dx * dx + dy * dy + dz * dz + 1e-7, inv = 1 / Math.sqrt(r2);
+          const mx = nor[q], my = nor[q + 1], mz = nor[q + 2], ci = (nx * dx + ny * dy + nz * dz) * inv, cj = (mx * dx + my * dy + mz * dz) * inv, sj = cj < 0 ? 1 : -1; // (la face du voisin tournée vers ce sommet)
+          const E = Math.max((mx * L[0] + my * L[1] + mz * L[2]) * sj, 0) * KI + AMB, F = Math.abs(cj) * a / (Math.PI * r2 + a) * E, cc = sj > 0 ? top : bot;
+          for (let c = 0; c < 3; c++) { aF[c] += cc[c] * F * Math.max(ci, 0); aB[c] += cc[c] * F * Math.max(-ci, 0); }
+        }
+        const nl = nx * L[0] + ny * L[1] + nz * L[2], dF = Math.max(nl, 0) * KI + AMB, dB = Math.max(-nl, 0) * KI + AMB;
+        for (let c = 0; c < 3; c++) {
+          cF[3 * r + c] = top[c] * ((mode !== 2 ? dF / Math.PI : 0) + (mode !== 1 ? aF[c] * GAIN : 0));
+          cB[3 * r + c] = bot[c] * ((mode !== 2 ? dB / Math.PI : 0) + (mode !== 1 ? aB[c] * GAIN : 0));
+        }
+        sumD += (dF + dB) / Math.PI; sumB += (aF[0] + aF[1] + aF[2] + aB[0] + aB[1] + aB[2]) / 3 * GAIN;
+      }
+      return { cF, cB, ratio: sumB / sumD };
+    }
+    const filmFrame = { key: 'f', label: 'Image du film', min: 0, max: 300, step: 1, value: 0, fmt: (v) => `${v} / 300` };
+    const lampAz = { key: 'az', label: 'Lampe : direction', min: -180, max: 180, step: 1, value: KEY_AZ, fmt: (v) => `${v}°` };
+
+    // ── 07 · le film dans une texture ──────────────────────────────────────
+    FILM.figs.push(demo('#fig-lecture', {
+      aspect: 16 / 8, title: 'Le film est une image',
+      controls: [filmFrame],
+      buttons: [{ key: 'nor', label: 'Texture des normales', toggle: true }, { key: 'soft', label: 'Sommets partagés', toggle: true }],
+      pointer(d, e) { orbit(d, e, (d.view ??= { a: 0.32, p: 0.62 })); },
+      draw(g, d) {
+        if (!FILM.ready) { waiting(g, d); return; }
+        const { RN, F1, pos, nor, index, rest } = FILM.M, f = d.s.f, o = f * RN * 4, v = (d.view ??= { a: 0.32, p: 0.62 });
+        // les deux textures, en image : (x, y, z) de −1 à 1 → (rouge, vert, bleu)
+        FILM.tex ??= [pos, nor].map((a) => {
+          const c = document.createElement('canvas'); c.width = RN; c.height = F1;
+          const x = c.getContext('2d'), im = x.createImageData(RN, F1);
+          for (let i = 0; i < RN * F1; i++) { for (let k = 0; k < 3; k++) im.data[4 * i + k] = 255 * clamp(0.5 + 0.5 * a[4 * i + k]); im.data[4 * i + 3] = 255; }
+          x.putImageData(im, 0, 0); return c;
+        });
+        // les exemplaires d'un même sommet (même place à plat) : leur normale commune, si on ne dédoublait pas
+        FILM.grp ??= (() => { const m = new Map(), g2 = new Int32Array(RN); for (let r = 0; r < RN; r++) { const k = `${rest[3 * r].toFixed(5)},${rest[3 * r + 2].toFixed(5)}`; if (!m.has(k)) m.set(k, m.size); g2[r] = m.get(k); } return { id: g2, n: m.size }; })();
+        let N = nor, no = o, ns = 4;
+        if (d.s.soft) {
+          const sum = new Float32Array(3 * FILM.grp.n); N = new Float32Array(3 * RN); no = 0; ns = 3;
+          for (let r = 0; r < RN; r++) for (let k = 0; k < 3; k++) sum[3 * FILM.grp.id[r] + k] += nor[o + 4 * r + k];
+          for (let r = 0; r < RN; r++) { const q = 3 * FILM.grp.id[r], l = Math.hypot(sum[q], sum[q + 1], sum[q + 2]) || 1; for (let k = 0; k < 3; k++) N[3 * r + k] = sum[q + k] / l; }
+        }
+        const wl = d.w * 0.46, V = mkView(v.a, v.p, Math.min(wl * 0.44, d.h * 0.5), wl / 2, d.h * 0.5);
+        drawRod(g, V, 0.7);
+        drawMesh(g, V, pos, 4, o, index, (t, a, b, c, front) => {
+          const nx = N[no + ns * a] + N[no + ns * b] + N[no + ns * c], ny = N[no + ns * a + 1] + N[no + ns * b + 1] + N[no + ns * c + 1], nz = N[no + ns * a + 2] + N[no + ns * b + 2] + N[no + ns * c + 2];
+          const rr = Math.hypot(rest[3 * a] + rest[3 * b] + rest[3 * c], rest[3 * a + 2] + rest[3 * b + 2] + rest[3 * c + 2]) / 3, col = front ? TOP : BOT;
+          return rgb(mix3(col[0], col[1], sm((rr - 0.1) / 0.9)), 0.3 + 0.7 * Math.abs(nx * KEY[0] + ny * KEY[1] + nz * KEY[2]) / (Math.hypot(nx, ny, nz) || 1));
+        });
+        const x0 = wl + 8, x1 = d.w - 14, y0 = 30, y1 = d.h - 16;
+        g.imageSmoothingEnabled = false; g.drawImage(FILM.tex[d.s.nor ? 1 : 0], x0, y0, x1 - x0, y1 - y0);
+        const yr = y0 + (y1 - y0) * (f + 0.5) / F1;
+        g.strokeStyle = C.ink; g.lineWidth = 1.5; g.beginPath(); g.moveTo(x0 - 6, yr); g.lineTo(x1 + 6, yr); g.stroke();
+        label(g, 'une colonne par sommet →', x0, y0 - 8, { size: 11 }); label(g, 'une ligne par image ↓', x1, y0 - 8, { size: 11, align: 'right' });
+        d.status(d.s.soft ? 'normales moyennées : le pli s’arrondit' : 'normales vives');
+        d.readout(`<b>${RN}</b> colonnes pour ${FILM.S.N} sommets (${RN - FILM.S.N} exemplaires de plus le long des pliures) × <b>${F1}</b> lignes · deux textures de ${fr(RN * F1 * 16 / 1e6, 1)} Mo`);
+      },
+    }));
+
+    // ── 08 · la couleur d'un pan sur l'autre ───────────────────────────────
+    FILM.figs.push(demo('#fig-bleed', {
+      aspect: 16 / 8, title: 'Le renvoi de couleur, sommet par sommet',
+      controls: [filmFrame, lampAz],
+      buttons: [{ key: 'off', label: 'Sans renvoi', toggle: true }, { key: 'only', label: 'Renvoi seul', toggle: true }],
+      pointer(d, e) { orbit(d, e, (d.view ??= { a: 0.32, p: 0.5 })); },
+      draw(g, d) {
+        if (!FILM.ready) { waiting(g, d); return; }
+        const { RN, pos, index } = FILM.M, v = (d.view ??= { a: 0.32, p: 0.5 });
+        const mode = d.s.only ? 2 : d.s.off ? 1 : 0, lit = litSheet(d.s.f, lampDir(d.s.az, KEY_EL), mode), gain = mode === 2 ? 2.5 : 1;
+        const V = mkView(v.a, v.p, Math.min(d.w * 0.3, d.h * 0.52), d.w / 2, d.h * 0.5);
+        drawRod(g, V, 0.7);
+        drawMesh(g, V, pos, 4, d.s.f * RN * 4, index, (t, a, b, c, front) => {
+          const col = front ? lit.cF : lit.cB;
+          return rgb([0, 1, 2].map((k) => tone(gain * (col[3 * a + k] + col[3 * b + k] + col[3 * c + k]) / 3)));
+        });
+        d.status(mode === 2 ? 'renvoi seul (× 2,5)' : mode === 1 ? 'éclairage direct seul' : 'direct et renvoi');
+        d.readout(`sur l’ensemble de la feuille, la lumière renvoyée vaut <b>${fr(lit.ratio * 100, 0)} %</b> de l’éclairage direct`);
+      },
+    }));
+
+    // ── 09 · l'ombre colorée ───────────────────────────────────────────────
+    FILM.figs.push(demo('#fig-ombre', {
+      aspect: 16 / 8, title: 'L’ombre d’une feuille',
+      controls: [lampAz, { key: 'el', label: 'Lampe : hauteur', min: 30, max: 80, step: 1, value: KEY_EL, fmt: (v) => `${v}°` }, filmFrame],
+      buttons: [{ key: 'black', label: 'Papier opaque', toggle: true }],
+      pointer(d, e) { orbit(d, e, (d.view ??= { a: 0.32, p: 0.6 })); },
+      draw(g, d) {
+        if (!FILM.ready) { waiting(g, d); return; }
+        const { S, frames } = FILM, N = S.N, o = d.s.f * 3 * N, L = lampDir(d.s.az, d.s.el), v = (d.view ??= { a: 0.32, p: 0.6 }), Y0 = -0.85, AMBF = 0.2;
+        const V = mkView(v.a, v.p, Math.min(d.w * 0.17, d.h * 0.3), d.w / 2, d.h * 0.4), floor = LIN(hex(MOODS.bonbon.floor));
+        // le sol
+        g.fillStyle = rgb(floor.map((c) => 255 * c ** (1 / 2.2))); g.beginPath();
+        for (let i = 0; i <= 64; i++) { const a = (i / 64) * TAU, p = proj(V, 2.6 * Math.cos(a), Y0, 2.6 * Math.sin(a)); i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]); }
+        g.fill();
+        // l'ombre : chaque triangle glissé le long du rayon de la lampe jusqu'au sol, teinté par le papier (stage.js, castShadowNode)
+        const sh = new Float32Array(3 * N);
+        for (let i = 0; i < N; i++) { const k = (frames[o + 3 * i + 1] - Y0) / L[1]; sh[3 * i] = frames[o + 3 * i] - L[0] * k; sh[3 * i + 1] = Y0; sh[3 * i + 2] = frames[o + 3 * i + 2] - L[2] * k; }
+        if (!S._rr) drawSheet(g, mkView(0, 0, 0, -9999, -9999), S, frames, { o });
+        drawMesh(g, V, sh, 3, 0, S.tris, (t) => {
+          const k = S._rr[t], t0 = mix3(TOPL[0], TOPL[1], sm((k - 0.1) / 0.9)), b0 = mix3(BOTL[0], BOTL[1], sm((k - 0.2) / 0.9));
+          return rgb(floor.map((c, i) => { const cast = d.s.black ? 0 : (Math.sqrt(t0[i] * b0[i]) + 0.25 * (t0[i] + b0[i])) * 0.3; return 255 * (c * (AMBF + (1 - AMBF) * cast)) ** (1 / 2.2); }));
+        });
+        drawRod(g, V, -Y0); drawSheet(g, V, S, frames, { o });
+        const a0 = proj(V, L[0] * 1.9, L[1] * 1.9 + 0.2, L[2] * 1.9), a1 = proj(V, L[0] * 1.25, L[1] * 1.25 + 0.2, L[2] * 1.25);
+        arrow(g, a0[0], a0[1], a1[0], a1[1], { color: C.c1, width: 1.5 }); label(g, 'lampe', a0[0] + 8, a0[1], { color: C.c1, size: 11 });
+        d.status(d.s.black ? 'ombre neutre' : 'ombre teintée par le papier');
+      },
+    }));
+
+    // ── 10 · les places ────────────────────────────────────────────────────
+    demo('#fig-places', {
+      aspect: 16 / 9, title: 'Les cylindres des feuilles',
+      buttons: [{ label: 'Autre graine', onClick: (d) => { d.state.k = (d.state.k ?? 0) + 1; } }],
+      draw(g, d) {
+        const seed = d.state.k ? `p${d.state.k}` : '40aatl', R = generate(seed), M = MOODS[R.mood];
+        const sc = Math.min(d.w / 4.6, d.h / 3.3), cx = d.w / 2, cy = d.h * 0.38;
+        let dmin = 1e9;
+        R.sheets.forEach((s, i) => {
+          const x = cx + sc * s.at[0], y = cy + sc * s.at[1], col = hex(M.papers[s.top][0]);
+          g.fillStyle = `rgba(${col.join(',')},0.55)`; g.beginPath(); g.arc(x, y, sc * s.size, 0, TAU); g.fill();
+          g.strokeStyle = alpha(C.ink, 0.45); g.lineWidth = 1; g.setLineDash([3, 3]); g.beginPath(); g.arc(x, y, sc * (s.size + GAP / 2), 0, TAU); g.stroke(); g.setLineDash([]);
+          g.fillStyle = C.ink; g.beginPath(); g.arc(x, y, 2.5, 0, TAU); g.fill();
+          label(g, PATTERNS[s.pattern].label, x, y - 8, { color: C.ink, size: 11, align: 'center' });
+          R.sheets.slice(i + 1).forEach((b) => { dmin = Math.min(dmin, Math.hypot(s.at[0] - b.at[0], s.at[1] - b.at[1]) - s.size - b.size); });
+        });
+        const ex = cx + sc * R.camera.side * 0.5, ey = d.h - 14;
+        g.fillStyle = alpha(C.ink, 0.6); g.beginPath(); g.moveTo(ex, ey - 12); g.lineTo(ex - 9, ey + 4); g.lineTo(ex + 9, ey + 4); g.closePath(); g.fill();
+        label(g, 'caméra', ex + 14, ey + 2, { size: 11 });
+        d.status(`graine ${seed}`);
+        d.readout(`accord <b>${M.label}</b> · ${R.sheets.length} feuilles · plus petit jeu entre deux cylindres <b>${fr(dmin, 3)}</b> (minimum garanti ${fr(GAP)})`);
+      },
+    });
   </script>
 </body>
 </html>
