@@ -45,7 +45,7 @@ export function generate(seed, overrides = {}) {
   const pick = (k, o) => overrides[k] ?? rng.fork(k).pick(Object.keys(o));
   const mood = pick('mood', MOODS), wax = pick('wax', WAXES), heat = pick('heat', HEATS), circ = pick('circuit', CIRCUITS);
   const M = MOODS[mood];
-  // les objets : deux ou trois figurines différentes
+  // les objets : deux figurines différentes
   const ro = rng.fork('objects');
   const keys = Object.keys(OBJECTS), n = overrides.count ?? 2, objects = []; // (deux objets : une boucle de cinquante secondes)
   while (objects.length < n) { const k = ro.pick(keys); if (!objects.includes(k)) objects.push(k); }

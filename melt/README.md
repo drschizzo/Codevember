@@ -13,8 +13,7 @@ Cette version est récente. Fait : la fonte, le cycle complet, les usines par gr
 - la version mobile (la simulation demande une carte graphique de bureau) ;
 - l'ombre de la machine sur la cire (la cire, elle, porte la sienne) ;
 - les veines de l'objet neuf, qui ne reprennent pas celles de la cire fondue ;
-- un contrôle de l'export vidéo et du saut dans la boucle ;
-- la page « défis techniques », réduite pour l'instant à l'essentiel.
+- un contrôle de l'export vidéo et du saut dans la boucle.
 
 ## Utilisation
 

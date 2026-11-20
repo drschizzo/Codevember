@@ -40,7 +40,7 @@ Un seul mât porte le barillet et la source de chaleur. Les pieds des lignes son
 
 **Les chariots.** Chaque ascenseur et la rampe ont le leur, à demeure : il attend, emporte le plateau, revient à vide. Un premier jet le faisait apparaître et disparaître avec le plateau, ce qui « cassait la magie » (utilisateur).
 
-**La liberté (une seule) : le temps.** Une cire met des minutes à fondre et des heures à prendre ; ici la fonte dure vingt secondes et la prise quelques-unes.
+**La liberté (une seule) : le temps.** Une cire met des minutes à fondre et des heures à prendre ; ici la fonte dure environ quatorze secondes et la prise quelques-unes.
 
 ## Variations (une graine = une usine)
 

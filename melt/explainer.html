@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#050506">
   <title>Melt · défis techniques</title>
-  <meta name="description" content="Comment Melt fait fondre un objet de cire : une simulation de matière chauffée sur la carte graphique, une cire qui tient, flue puis coule, et une surface qui reste nette tant que rien n’a bougé.">
+  <meta name="description" content="Comment Melt fait fondre un objet de cire et le refond en un autre : une matière unique qui tient, flue puis coule, une matière froide figée tant qu’elle a un appui, une chaleur qui vient d’une source visible, une simulation reproductible image pour image, une surface nette tant que rien n’a bougé, des moules taillés d’après les figurines, une usine qui est une fonction du temps.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
@@ -24,12 +24,12 @@
     <header class="hero">
       <div class="kicker">Day 03 · Melt · la refonte</div>
       <h1>Comment un objet de cire fond, coule et renaît dans un moule</h1>
-      <p class="lede">Une mini-usine refond sans fin la même cire. Un objet monte sous une source de chaleur : ses parties fines ploient, sa peau luit puis coule en lobes, et la cire descend en filet dans un moule à la forme de l’objet suivant, qui s’ouvre comme un livre. Cette page explique les trois idées qui font tenir la fonte. Elle sera complétée quand la scène sera terminée.</p>
+      <p class="lede">Une mini-usine refond sans fin la même cire. Un objet monte sous une source de chaleur : ses parties fines ploient, sa peau luit puis coule en lobes, et la cire descend en filet dans un moule à la forme de l’objet suivant, qui s’ouvre comme un livre. La difficulté est double. Il faut une matière qui soit tour à tour un solide, une pâte et un liquide, calculée assez vite pour être jouée en direct. Et il faut que cette simulation, qui avance d’image en image, rende la même image chaque fois qu’on revient au même instant de la boucle.</p>
     </header>
 
     <figure class="cover">
       <img src="docs/capture.jpg" alt="Le moule vient de s’ouvrir comme un livre : un chat de cire couleur miel est sur son assiette, devant les deux demi-coques polies" width="1280" height="720">
-      <figcaption>La naissance (graine ib352j, la scène d’ouverture). Le moule, taillé d’après la figurine, vient de s’ouvrir ; le chat partira fondre sous la lampe.</figcaption>
+      <figcaption>La naissance (graine ib352j, la scène d’ouverture : équipe de nuit, cire miel et lait, lampe infrarouge, circuit à rampe). Le moule, taillé d’après la figurine, vient de s’ouvrir. Le chat partira fondre sous la lampe, et sa cire coulera dans le moule de la chouette.</figcaption>
     </figure>
 
     <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
@@ -39,40 +39,151 @@
       <section id="matiere">
         <h2><span class="n">01</span>Une seule matière, de solide à liquide</h2>
         <span class="src">src/sim/mpm.js · kP2G, kG2P</span>
-        <p>La cire est faite d’environ 38 000 particules qui échangent leur quantité de mouvement avec une grille (méthode MLS-MPM, sur la carte graphique). Chaque particule porte une température \(T\), où \(T = 1\) est le point de fusion, et un tenseur \(b\) qui mesure sa déformation élastique.</p>
-        <p>La contrainte a trois parts : une pression, qui empêche la matière de se tasser, une élasticité \(\mu\,s(T)\,\mathrm{dev}(\bar b)\), et une viscosité. Le facteur \(s(T)\) vaut 1 à froid et 0 au-dessus du point de fusion. À chaque pas, \(b\) est ramené vers une forme sans cisaillement, d’une fraction</p>
-        <div class="eq">\[ r = \min\!\big(1,\; k\,a(T)^2\,\Delta t\big), \]</div>
-        <p>où \(a(T)\) monte de 0 à 1 entre \(T = 0{,}55\) et \(T = 1{,}05\). Froide, la cire garde sa forme. Tiède, elle oublie peu à peu sa déformation : elle flue, et une oreille ploie sous son poids. Chaude, elle l’oublie aussitôt : c’est un liquide visqueux.</p>
+        <p>Cette version de Melt est la sixième. Les cinq précédentes ont été abandonnées : un flocon, des pinacles de glace, un fjord, une colonne de glace, un bain de bismuth. La colonne de glace était juste physiquement, mais « n’évoquait rien ». Le bain de bismuth était « trop technique, pas assez esthétique ». Ces abandons ont appris deux choses : on fait l’image d’abord et la physique ensuite, et le sujet doit être la fonte elle-même, vue de près. L’exigence qui porte cette version en découle : on ne doit pas avoir l’impression que l’objet « s’aplatit ». On doit le voir se déformer et voir des coulées.</p>
+        <p>Un fondu entre deux formes ne donne pas cela. Il faut une matière simulée. La cire est faite d’environ 30&#8239;000 particules (29&#8239;600 à 29&#8239;900 selon la figurine) qui portent chacune une position, une vitesse, une température et une déformation. Elles échangent leur quantité de mouvement avec une grille de 64 × 128 × 64 cellules attachée au plateau : c’est la méthode <strong>MLS-MPM</strong>, une méthode de points matériels. À chaque sous-pas, chaque particule dépose sa masse et son élan sur les 27 cellules qui l’entourent, la grille en tire une vitesse par cellule, et les particules relisent cette vitesse pour avancer. Tout tourne sur la carte graphique, dans des <em>compute shaders</em> (des programmes de calcul, sans image). Le point de départ est l’exemple <code>webgpu_compute_particles_fluid</code> de three.js, qui simule un liquide. Melt lui ajoute la température, le solide et tout ce qui suit.</p>
+        <p>Chaque particule porte une température \(T\), où \(T = 1\) est le point de fusion, et une petite matrice \(b\) qui mémorise comment son voisinage a été étiré et cisaillé depuis son état de repos (le tenseur de Cauchy-Green gauche). La contrainte, c’est-à-dire l’effort que la matière oppose, a trois parts :</p>
+        <div class="eq">\[ \sigma = -p\,I \;+\; \mu\,s(T)\,\frac{\rho}{\rho_0}\,\operatorname{dev}(\bar b) \;+\; \eta(T)\,\big(C + C^{\mathsf T}\big), \qquad p = K\,\max\!\Big(0,\ \big(\tfrac{\rho}{\rho_0}\big)^{3} - 1\Big). \]</div>
+        <p>La pression \(p\) empêche la matière de se tasser au-delà de sa densité de repos \(\rho_0\). L’élasticité tire la particule vers la forme dont elle se souvient : \(\bar b\) est \(b\) ramené à volume constant, et \(\operatorname{dev}\) n’en garde que le changement de forme. Le facteur \(s(T)\) vaut 1 jusqu’à \(T = 0{,}72\) et tombe à 0 au point de fusion. La viscosité freine les différences de vitesse (\(C\) est le gradient de vitesse autour de la particule) : elle est constante dans le solide, et le liquide file d’autant mieux qu’il est chaud, jusqu’à 7&nbsp;% de sa viscosité de départ à \(T = 1{,}6\).</p>
+        <p>Ce qui fait passer du solide au liquide est la <strong>mémoire</strong>. À chaque sous-pas, \(b\) suit d’abord le mouvement, \(b \leftarrow (I + \Delta t\,C)\,b\,(I + \Delta t\,C)^{\mathsf T}\), puis il est ramené vers une forme sans cisaillement, d’une fraction</p>
+        <div class="eq">\[ r(T) = \operatorname{clamp}\!\Big(k\,a(T)^2\,\Delta t \;+\; \operatorname{smoothstep}(1{,}05;\ 1{,}2;\ T)\Big), \]</div>
+        <div class="eq">\[ a(T) = \operatorname{smoothstep}(0{,}55;\ 1{,}05;\ T), \qquad k = 3, \qquad \Delta t = \tfrac{1}{240}\ \text{s}. \]</div>
+        <p>Ici <code>smoothstep</code> est une rampe en S entre deux seuils. Froide (\(T \le 0{,}55\)), la cire n’oublie rien : elle revient à sa forme, c’est un solide. Tiède, elle oublie peu à peu : à \(T = 0{,}8\), elle a perdu un peu plus de la moitié de sa déformation en une seconde. Elle <em>flue</em>, et une oreille ploie sous son poids sans se rompre. Au-dessus de \(T = 1{,}2\), elle oublie tout à chaque sous-pas : il ne reste que la pression et la viscosité, c’est un liquide. Ce modèle, un ressort qui se détend avec le temps, s’appelle un solide viscoélastique de Maxwell.</p>
+        <figure id="fig-loi"><figcaption><b>Les trois courbes de la loi.</b> En or, la part d’élasticité \(s(T)\). En bleu, ce qu’il reste de la déformation mémorisée après une seconde, soit \((1 - r)^{240}\). En rouge, la viscosité rapportée à celle du solide. Les fonctions et les seuils sont ceux de <code>kP2G</code> et <code>kG2P</code>. À droite, une déformation imposée à l’instant 0 et ce que la particule en retient pendant deux secondes, à la température choisie : cette ellipse est une illustration, pas une grandeur du code.</figcaption></figure>
+        <p>Deux garde-fous bornent le calcul. Si le déterminant de \(b\) sort de l’intervalle \([0{,}05 ; 20]\), ou n’est plus un nombre, \(b\) est remis à l’identité. Et aucune particule ne dépasse 70 cellules par seconde.</p>
       </section>
 
       <section id="figee">
         <h2><span class="n">02</span>La matière froide ne se calcule pas</h2>
-        <span class="src">src/sim/mpm.js · kPinUpdate, mkGrid</span>
-        <p>Un solide raide coûte cher à simuler : il faudrait des pas de temps minuscules. Or presque tout l’objet est froid et immobile presque tout le temps. Une particule froide reste donc <strong>figée</strong> : elle pèse sur la grille, où le liquide s’accroche à elle, mais elle ne bouge pas.</p>
-        <p>Elle se libère dans deux cas : si elle dépasse \(T = 0{,}86\), ou si elle ne <strong>tient</strong> plus. Une cellule de matière figée tient si elle touche le plateau, ou une voisine qui tient. Cette propriété se propage d’une cellule par sous-pas. Quand le cou a fondu, la tête ne tient plus à rien : elle devient libre, bascule et tombe d’un bloc.</p>
-        <div class="note"><b>Un piège</b><p>Sans ce test d’appui, une partie froide restait suspendue en l’air pendant que son support fondait sous elle.</p></div>
+        <span class="src">src/sim/mpm.js · kPinSplat, kPinUpdate, mkGrid</span>
+        <p>La simulation est explicite : elle avance par petits pas de temps, et plus un solide est raide, plus ces pas doivent être courts. À la raideur \(\mu\) retenue, que quatre sous-pas par image suffisent à calculer, la cire froide a la tenue d’une gelée : une figurine entièrement simulée s’affaisse sous son propre poids (la figure de la section suivante le montre). Une cire assez raide pour tenir debout demanderait des pas bien plus courts, donc bien plus de calcul, pour une matière qui, presque tout le temps, ne bouge pas.</p>
+        <p>Une particule froide reste donc <strong>figée</strong>. Elle ne passe par aucun des calculs du sous-pas. Une fois par image, elle dépose sa masse et sa chaleur sur une grille à part, et sa température est mise à jour. La grille de simulation ajoute cette masse à celle de la matière libre, sans élan : dans une cellule partagée, le liquide est ralenti par la matière immobile, et il s’y accroche. Chaque particule porte un état : 0, figée ; 1, libre ; 2, fondue au moins une fois (passée par \(T &gt; 1{,}02\)). Une particule libre ne redevient jamais figée, et une goutte qui refroidit reste dessinée comme une goutte.</p>
+        <p>Une particule figée se libère dans deux cas : si elle dépasse \(T = 0{,}86\), ou si elle ne <strong>tient</strong> plus. Tenir est une propriété des cellules, recalculée à chaque sous-pas à partir de la valeur \(A\) des voisines au sous-pas précédent :</p>
+        <div class="eq">\[ A'(c) = \begin{cases} 0 &amp; \text{si } c \text{ contient trop peu de matière figée},\\ 1 &amp; \text{si le métal du plateau est à moins de 1,8 cellule},\\ \max\!\big(\max_{v \sim c} A(v) - \tfrac{1}{80},\ 0\big) &amp; \text{sinon.} \end{cases} \]</div>
+        <p>L’appui vaut 1 au contact du plateau et gagne une cellule par sous-pas, en perdant un quatre-vingtième à chaque cellule. « Trop peu » veut dire moins de 7,5&nbsp;% de la densité de repos. Deux tableaux alternent, l’un lu pendant que l’autre est écrit, parce qu’un programme de carte graphique ne peut pas lire et écrire le même tableau sans que le résultat dépende de l’ordre des cellules. La libération par manque d’appui n’est armée qu’après 160 sous-pas (deux tiers de seconde), le temps que l’appui monte du plateau jusqu’aux oreilles : la plus haute figurine mesure 46 cellules. Quand le cou a fondu, la tête n’est plus reliée au plateau : son appui tombe à zéro, elle devient libre, bascule et tombe d’un bloc.</p>
+        <div class="note trap"><b>L’îlot qui se soutenait lui-même</b><p>La première règle était « je tiens si une voisine tient », sans perte. Avec une ceinture chauffante fixe à mi-hauteur, le haut de l’objet restait suspendu en l’air : chaque cellule du morceau coupé tenait par ses voisines, qui tenaient par elle. La perte de 1/80 par cellule règle le cas. Dans un morceau coupé du plateau, la plus grande valeur baisse d’au moins 1/80 par sous-pas : tout est à zéro en moins de 80 sous-pas, un tiers de seconde.</p></div>
+        <figure id="fig-appui"><figcaption><b>L’appui, cellule par cellule.</b> Faites glisser le pointeur sur le cou pour le faire fondre. Plus une cellule est claire, plus son appui est fort. La règle est celle de <code>mkGrid</code>, à quatre voisines au lieu de six (la figure est plane), avec le même seuil de libération (0,002). Ce qui est simplifié : une cellule est pleine ou vide, et une cellule libérée tombe ici tout droit, alors que dans le projet elle rejoint la simulation de matière. Le bouton « Sans la perte » rejoue le piège : la tête coupée reste en l’air.</figcaption></figure>
+      </section>
+
+      <section id="chaleur">
+        <h2><span class="n">03</span>La chaleur vient d’une source, et cela se voit</h2>
+        <span class="src">src/sim/mpm.js · heatUp() · src/recipe.js · HEATS · src/cycle.js · beltAt()</span>
+        <p>Si la température montait partout à la fois, l’objet ramollirait d’un bloc. Ici, la chaleur entre par la surface, du côté de la source, et gagne l’intérieur. La fonction <code>heatUp</code> ajoute trois termes à la température d’une particule.</p>
+        <p><strong>La conduction.</strong> Chaque particule dépose sa chaleur sur la grille avec sa masse. À chaque sous-pas, elle se rapproche de 3,2&nbsp;% de la température moyenne de son voisinage. C’est une diffusion grossière, mais elle suffit à faire avancer un front chaud dans la cire.</p>
+        <p><strong>La source, sur la peau seulement.</strong> Une particule sait qu’elle est en surface parce que la densité lue sur la grille y est plus faible qu’au cœur : le facteur de peau monte de 0 à 1 quand la densité descend de 86&nbsp;% à 50&nbsp;% de la densité de repos. La pente de cette densité donne la normale \(n\), la direction qui sort de la matière. L’éclairement est alors celui d’une lampe, avec une part \(f\) reçue quelle que soit l’orientation :</p>
+        <div class="eq">\[ \Delta T = \Delta t \cdot P \cdot \text{peau}(\rho) \cdot \big( (1 - f)\,\max(n \cdot L,\ 0) + f \big). \]</div>
+        <p>La puissance \(P\) suit le cycle : elle monte en 1,4 s à partir de 8,2 s et se coupe en 1,2 s à partir de 22,6 s. Une peau exposée de face gagne jusqu’à 8 ou 9 unités de température par seconde. C’est la conduction qui l’empêche de fondre en un éclair : elle emporte la chaleur vers l’intérieur.</p>
+        <p><strong>Le plateau.</strong> La cuvette qui recueille la cire est tenue chaude (elle tire tout ce qu’elle contient vers \(T = 1{,}9\)) : un morceau tombé froid y fond. L’assiette qui porte l’objet ne commence à chauffer qu’à 13,1 s, et n’est à pleine puissance qu’à 16,8 s : elle rend les derniers restes. Elle libère aussi le pied de ce qui serait encore froid, qui perd alors son appui.</p>
+        <p>La graine choisit entre trois sources, et la source décide de la façon de fondre :</p>
+        <div class="tbl"><table>
+          <thead><tr><th>Source</th><th>Direction \(L\)</th><th class="num">Part \(f\)</th><th class="num">Puissance</th><th>Ce qu’on voit</th></tr></thead>
+          <tbody>
+            <tr><td>Lampe infrarouge</td><td>d’en haut</td><td class="num">0,25</td><td class="num">8</td><td>les oreilles ploient d’abord</td></tr>
+            <tr><td>Rampe de brûleurs</td><td>de biais</td><td class="num">0,16</td><td class="num">9</td><td>un flanc coule avant l’autre</td></tr>
+            <tr><td>Ceinture chauffante</td><td>une bande horizontale qui descend</td><td class="num">0,10</td><td class="num">8</td><td>l’objet fond tranche par tranche</td></tr>
+          </tbody>
+        </table></div>
+        <p>La ceinture multiplie l’éclairement par un profil en hauteur : une cloche de Gauss centrée sur l’anneau, de demi-épaisseur 15&nbsp;% de la hauteur de l’objet, et un palier au-dessus, parce que l’air chaud monte et que ce que l’anneau a dépassé reste chaud. L’anneau part au-dessus de l’objet et descend régulièrement jusqu’à l’assiette pendant la fonte (<code>beltAt</code>).</p>
+        <figure id="fig-mpm" class="wide"><figcaption><b>La même loi, en deux dimensions.</b> La coupe frontale du lapin du projet (mêmes ellipsoïdes, même échelle, 1&#8239;578 particules au même pas de 0,6 cellule) fond sur une assiette. Sont portés de <code>mpm.js</code> : les trois noyaux du sous-pas, la matière figée et son appui, <code>heatUp</code>, les constantes (gravité 56, \(K\), \(\mu\), \(\eta\) rapportés à la densité, quatre sous-pas), les trois sources de <code>recipe.js</code> et le déroulé du cycle (la chaleur commence à 8,2 s). Ce qui change : le plan au lieu du volume (une tranche n’a pas la même proportion de peau qu’un volume, les durées ne sont donc pas celles du projet), des nombres flottants à la place de la virgule fixe, pas de cuvette (ce qui tombe du bord de l’assiette est compté et retiré). Vers 15 s, l’assiette chauffe : le pied se libère, et le cœur encore froid, sans appui, s’effondre. Le bouton « Tout simuler » supprime la matière figée : le lapin s’affaisse d’un quart en moins d’une seconde, avant toute chaleur. À droite, la part de la matière dans chaque état au fil du temps.</figcaption></figure>
+        <p>À la fin, la chaleur est coupée et la cuvette s’égoutte. Une légère poussée vers la buse, limitée au fond de la cuvette, aide les dernières gouttes à sortir. Une particule qui passe sous la buse est retirée de la simulation et comptée : ce compteur donne son épaisseur au filet de cire (section 08). Un garde-fou ramène vers l’intérieur une goutte projetée près du bord de la cuvette.</p>
+      </section>
+
+      <section id="reproductible">
+        <h2><span class="n">04</span>La même image au même instant de la boucle</h2>
+        <span class="src">src/sim/mpm.js · enc(), dec() · src/scene/stage.js · update()</span>
+        <p>Tout le projet repose sur une règle : l’image ne dépend que de la recette et de la phase de la boucle. La lecture, le saut avec les flèches, l’export image par image passent par la même fonction. L’usine obéit à cette règle sans effort, parce que sa pose est une formule du temps (section 08). Une simulation, elle, a un état qui dépend de tout ce qui a précédé. La règle devient : l’état ne doit dépendre que de l’objet et du <em>nombre d’images</em> simulées depuis qu’il a été posé.</p>
+        <p>Sur une carte graphique, des milliers de particules déposent en même temps sur la même cellule, dans un ordre qui change d’une exécution à l’autre. Les additions concurrentes passent par des opérations <em>atomiques</em> (qui ne peuvent pas se chevaucher), et celles-ci n’existent que pour les entiers. Les grandeurs sont donc converties en <strong>virgule fixe</strong> : multipliées par une constante et tronquées en entiers avant d’être additionnées (\(10^5\) pour la masse et la chaleur, \(10^4\) pour la quantité de mouvement). Ce choix a une seconde vertu : l’addition d’entiers donne le même total dans n’importe quel ordre, ce qui n’est pas vrai des nombres flottants, dont chaque addition arrondit.</p>
+        <figure id="fig-fixe"><figcaption><b>Le total dépend-il de l’ordre ?</b> Les mêmes dépôts sont additionnés dans seize ordres différents. En haut, en flottants de 32 bits (ceux d’une carte graphique, imités ici par <code>Math.fround</code>) : plusieurs totaux différents. En bas, en virgule fixe avec la constante \(10^5\) de <code>mpm.js</code> : un seul. Le prix est une troncature d’au plus \(10^{-5}\) par dépôt, dont l’écart au total exact est affiché.</figcaption></figure>
+        <p>À partir de là, <code>stage.js</code> sait quelle image de simulation correspond à un instant \(t\) du demi-cycle : la numéro \(\lfloor 60\,t \rfloor\). En lecture, la simulation avance d’une image par image dessinée. Après un saut, elle repart de l’objet neuf et rattrape son retard, au plus 48 images de simulation par image dessinée. Avant la chaleur, rien ne bouge : les images 50 à 480 sont sautées d’un coup, les cinquante premières ayant servi à établir les appuis. Un recul de moins d’une demi-seconde ne recharge rien, on attend simplement.</p>
+        <div class="note"><b>Ce que cela garantit, et ce qui n’est pas vérifié</b><p>La virgule fixe retire la seule source de hasard, l’ordre des dépôts. Sur une machine donnée, deux passages au même instant partent du même objet et font les mêmes calculs. Rien n’a été comparé d’une carte graphique à une autre, dont les arrondis peuvent différer. Le saut dans la boucle et l’export vidéo n’ont pas encore fait l’objet d’un contrôle systématique. Une grandeur échappe à la règle : l’épaisseur du filet de cire, lissée d’une image dessinée à la suivante.</p></div>
       </section>
 
       <section id="surface">
-        <h2><span class="n">03</span>Une surface nette tant que rien n’a bougé</h2>
-        <span class="src">src/scene/wax.js · parts(), phi()</span>
-        <p>Dessiner la surface d’un nuage de particules donne une forme molle, sans détail. Ici chaque particule solide dépose sur la grille son <strong>déplacement</strong> \(d = x - X_0\) depuis sa place d’origine. La surface de la part solide est celle de l’objet d’origine, lue en \(p - d(p)\) dans une texture de distance. Là où rien n’a bougé, \(d = 0\) et l’objet est exactement celui du moule. Là où la matière a flué, il est déformé avec elle.</p>
-        <p>La part liquide, elle, est une iso-densité, lisse. Les deux surfaces sont réunies en douceur : la peau fondue enrobe le cœur encore froid.</p>
-        <div class="note"><b>Un piège</b><p>La cire est une boîte dont chaque pixel marche dans ces champs. L’occlusion ambiante lisait la normale des faces de la boîte, et une couture verticale traversait l’objet : il faut lui donner la normale de la surface marchée.</p></div>
+        <h2><span class="n">05</span>Une surface nette tant que rien n’a bougé</h2>
+        <span class="src">src/scene/wax.js · parts(), phi() · src/sim/mpm.js · kRSplat, kResolve</span>
+        <p>La manière habituelle de dessiner un nuage de particules est de calculer sa densité sur une grille et de tracer la surface où elle passe un seuil, une <em>iso-densité</em>. Elle convient au liquide et mal au solide, à cause du seuil. Un film de cire fondue plus mince qu’une cellule ne dépose qu’une faible densité : pour qu’il se voie, le seuil doit être bas, 11&nbsp;% de la densité de repos dans le projet. À ce seuil, une forme pleine enfle d’une cellule entière, et ses creux étroits se comblent : les oreilles du lapin se soudent sur une partie de leur hauteur. Un seuil à mi-densité rend la silhouette à une demi-cellule près, mais il efface les films et les gouttes. Une seule iso-densité ne peut pas servir les deux. Or la figurine doit être intacte au sortir du moule.</p>
+        <p>Chaque particule garde donc sa place d’origine \(X_0\), et la part solide dépose sur la grille son <strong>déplacement</strong> \(d = x - X_0\), pondéré par sa masse. La forme d’origine est connue exactement : c’est un champ de distance (en chaque point, la distance à la surface, négative à l’intérieur), cuit par figurine dans une texture 3D de 72 × 112 × 80, à la demi-cellule. La surface du solide est celle de l’objet d’origine, lu là d’où vient la matière :</p>
+        <div class="eq">\[ \varphi_s(p) = \max\!\Big( \operatorname{sd}_\text{objet}\big(p - d(p)\big),\ 1{,}5\,\big(0{,}3 - \tfrac{m_s}{m_s + m_\ell}\big) \Big), \qquad \varphi_\ell(p) = \big(0{,}9\,R_H - m_\ell(p)\big)\cdot\tfrac{0{,}3}{R_H}. \]</div>
+        <p>Là où rien n’a bougé, \(d = 0\) et l’objet est celui du moule, à deux dixièmes de cellule près (l’union avec le champ du liquide, même vide, gonfle très légèrement la surface). Là où la matière a flué, la forme est entraînée avec elle : une oreille qui ploie reste une oreille. Le second terme de \(\varphi_s\) rogne le solide là où le liquide a pris sa place (\(m_s\) et \(m_\ell\) sont les masses solide et liquide déposées). Le liquide, lui, est une iso-densité \(\varphi_\ell\), dont le seuil est à 11&nbsp;% de la densité de repos (\(R_H\) en est le huitième). Sa mollesse est ici une qualité. Les deux surfaces sont réunies par une union adoucie, sur une largeur de 0,9 cellule : la peau fondue enrobe le cœur encore froid sans arête.</p>
+        <p>Les dépôts suivent la même économie que la simulation. La matière figée ne bouge pas : son dépôt est gardé et refait une image sur quatre. Seule la matière libre est déposée à chaque image. Un dernier passage moyenne chaque cellule avec ses six voisines, pour effacer le grain des particules dans le liquide, et écrit deux textures 3D que le rendu lit avec interpolation.</p>
+        <figure id="fig-surface" class="wide"><figcaption><b>La tête et les oreilles du lapin, à l’arrêt.</b> Le trait clair est le contour de l’objet d’origine, le quadrillage celui des cellules. À gauche, l’iso-densité des particules ; à droite, la surface de <code>wax.js</code>. Cette vue est une coupe du vrai volume : les particules du projet (<code>seedPoints</code>), le noyau à 27 cellules, le lissage de <code>kResolve</code>, la lecture entre deux couches de cellules. À droite, <code>parts()</code> et <code>phi()</code> sont portés avec leurs constantes, et la distance d’origine est cuite à la demi-cellule. Le curseur part du seuil que le projet donne à son liquide (11&nbsp;%) ; à 50&nbsp;%, l’iso-densité ne perd plus qu’une demi-cellule à la pointe des oreilles. « Laisser fondre » passe à la tranche à deux dimensions de la section 03, en entier : la surface de droite suit la matière qui coule ; à gauche, un seuil bas épaissit tout et un seuil élevé rogne la peau fondue. Dans cette seconde vue, le lissage est adapté à quatre voisines, les veines sont celles de <code>stage.js</code>, et l’éclairage est un simple liseré.</figcaption></figure>
+        <div class="note trap"><b>Le vide doit valoir un grand pas</b><p>Loin de toute matière, les deux champs n’ont pas de sens : la densité est nulle, le déplacement indéfini. Le rayon qui cherche la surface (section suivante) y avançait à tout petits pas, et le rayon d’ombre s’épuisait avant d’atteindre l’objet. Dans le vide, la distance vaut donc d’office 1,2 cellule.</p></div>
       </section>
 
-      <section id="perf">
-        <h2><span class="n">04</span>Ce que ça coûte</h2>
-        <div class="tablewrap"><table>
-          <thead><tr><th>Étape</th><th>Où</th><th class="num">Temps</th></tr></thead>
+      <section id="lumiere">
+        <h2><span class="n">06</span>La cire s’éclaire elle-même</h2>
+        <span class="src">src/scene/wax.js · march(), thick(), shade()</span>
+        <p>La cire n’a pas de maillage. Elle est dessinée comme une boîte, celle de la grille. Pour chaque pixel de cette boîte, le fragment shader, le programme de la carte graphique qui calcule la couleur d’un pixel, lance un rayon depuis la caméra et le fait <strong>marcher</strong> dans le champ \(\varphi\). À chaque étape, il avance des trois quarts de la distance lue (entre 0,1 et 1,4 cellule), deux cents fois au plus, et s’arrête sous 0,02 cellule. Trois pas d’affinage le posent ensuite sur la surface, pour que la normale et l’ombre propre ne dépendent plus de la longueur du dernier pas. La normale est la pente de \(\varphi\), mesurée par six lectures autour du point. Le pixel écrit enfin sa vraie profondeur : la cire passe correctement devant et derrière les pièces de la machine.</p>
+        <p>Cette matière n’est pas dans la passe de lumière de three.js. Elle calcule son éclairage, avec les directions et les teintes des lampes de la scène : la lampe principale, le contre-jour et la source de chaleur. Pour chacune, le shader mesure l’<strong>épaisseur de cire traversée</strong> vers la lampe, par neuf lectures de densité espacées de 2,4 cellules. Cette épaisseur \(e\) sert deux fois :</p>
+        <ul>
+          <li><strong>l’ombre propre</strong> : la lumière directe est atténuée en \(e^{-0{,}55\,e}\). Le dessous du menton est sombre sans qu’aucune carte d’ombre n’intervienne ;</li>
+          <li><strong>la translucidité</strong> : une part de lumière traverse, atténuée en \(e^{-\sigma e}\) avec \(\sigma = (0{,}05 ; 0{,}16 ; 0{,}2)\) pour le rouge, le vert et le bleu. Le rouge va plus loin : éclairé par-derrière, le corps rougeoie comme une bougie, et les oreilles, minces, restent claires.</li>
+        </ul>
+        <p>Le reflet dit l’état de la matière. La rugosité passe de 0,42 à 0,1 quand la température monte de 0,55 à 0,95 : <strong>la peau luit avant de couler</strong>, et l’œil lit la chaleur avant tout mouvement. Le liquide est un peu plus sombre (72&nbsp;%). La couleur mêle deux pigments, une masse et des veines. Les veines sont calculées une fois, à la place de repos de chaque particule, puis emportées par elle : elles s’étirent avec l’écoulement. Ce détail vient d’un essai, où il a plu, et il est devenu un élément de chaque cire.</p>
+        <figure id="fig-lumiere"><figcaption><b>Une lampe autour de la figurine.</b> La figurine au repos, vue de face. Tournez la lampe : de face, l’ombre propre creuse le côté opposé ; par-derrière (vers 150°), il ne reste que la lumière qui traverse, plus claire dans les oreilles, rouge sombre dans le corps. Montez la température de la peau : le reflet se resserre et la peau luit. Survolez un point pour lire l’épaisseur traversée. Sont portés de <code>wax.js</code> : <code>thick()</code> (ses neuf lectures font les paliers de « Voir l’épaisseur »), les termes direct, translucide et spéculaire de <code>shade()</code>, le reflet du studio de <code>env()</code>, les veines, la teinte de la lampe du lieu « équipe de nuit ». Simplifié : une lampe au lieu de trois, la forme exacte au lieu de la surface marchée, une densité pleine dans la forme et nulle dehors (adoucie sur une cellule) au lieu du dépôt des particules, une exposition fixe et une compression \(x/(1+x)\) au lieu de la chaîne d’image.</figcaption></figure>
+        <div class="note trap"><b>Une couture verticale dans l’occlusion</b><p>L’occlusion ambiante, l’assombrissement des creux calculé en fin de chaîne, lit la normale écrite par chaque matériau. Le matériau de la cire est du type « basic » de three.js, qui écrit la normale de sa géométrie quoi qu’on lui demande, ici celle des faces de la boîte. Une couture traversait l’objet à l’aplomb d’une arête de la boîte. Il faut surcharger la fonction <code>setupNormal</code> du matériau pour lui faire rendre la normale de la surface marchée.</p></div>
+        <h3>L’ombre portée d’une surface sans maillage</h3>
+        <p>Une boîte marchée ne porte pas d’ombre : la carte d’ombre de la lampe ne verrait que la boîte. Une seconde boîte, rangée sur un calque que seule la caméra d’ombre voit, refait la marche le long des rayons de la lampe (parallèles, 160 pas au plus) et écrit la profondeur du point de cire touché. Deux détails ont compté. La marche est écrite deux fois, une pour le masque et une pour la profondeur : une variable partagée entre ces deux nœuds n’était déclarée que dans le premier. Et l’assiette des plateaux est en émail, parce qu’un métal poli ne montre pas les ombres : l’ombre était juste, mais invisible.</p>
+        <p>Ce qui manque : la machine ne porte pas encore son ombre sur la cire. Le flou de mouvement est coupé, la cire n’écrivant pas ses vitesses.</p>
+      </section>
+
+      <section id="moules">
+        <h2><span class="n">07</span>Des figurines de même volume, et un moule pour chacune</h2>
+        <span class="src">src/objects.js · sdObject(), scaleOf(), mouldField(), surfaceNets()</span>
+        <p>Les cinq figurines (lapin, canard, ourson, chouette, chat) sont faites de huit à onze ellipsoïdes et d’un socle, réunis par la même union adoucie que la cire. Leur forme est un champ de distance, une fonction pure que lisent la simulation (pour semer les particules), le rendu (pour la texture de distance), les moules, l’écran de chargement et les tests.</p>
+        <p>C’est la même cire qui passe d’un objet au suivant : toutes les figurines ont donc le <strong>même volume</strong>, 6&#8239;400 cellules cubes. <code>scaleOf</code> compte le volume de la figurine sur une grille, la met à l’échelle par la racine cubique du rapport, puis recommence une fois, parce que le socle arrondi ne suit pas exactement le cube de l’échelle. Les échelles vont de 0,77 à 0,85. Un test exige un volume à 2&nbsp;% près et des nombres de particules à 4&nbsp;% près. Le nombre de particules est ainsi presque constant, et le tampon de la simulation a une capacité fixe de 40&#8239;000.</p>
+        <h3>Le moule est l’empreinte de l’objet</h3>
+        <p>Les premiers moules étaient des cloches toutes pareilles. Un moule à la forme de l’objet raconte mieux ce qu’il va naître. Il est taillé au chargement, à partir du même champ de distance \(\operatorname{sd}\). Le métal est l’union de quatre volumes :</p>
+        <ul>
+          <li><strong>la paroi</strong> : une coque autour de l’objet, entre 0,25 et 2,6 cellules de sa surface ;</li>
+          <li><strong>la bride</strong> : une plaque de 3 cellules d’épaisseur dans le plan de joint, qui déborde de 6,5 cellules autour de la silhouette ;</li>
+          <li><strong>le fût et l’entonnoir</strong> : un cylindre dans l’axe, évasé sur ses 5 dernières cellules, qui monte à 9 cellules au-dessus de la tête, à l’aplomb du filet de cire ;</li>
+          <li>moins <strong>le canal de coulée</strong>, percé dans l’axe, et moins le dessous, laissé ouvert pour coiffer l’assiette.</li>
+        </ul>
+        <p>Ce champ est échantillonné tous les 0,7 cellule, puis coupé en deux moitiés de part et d’autre du plan de joint. Chaque moitié est maillée par la méthode des <em>surface nets</em> : un sommet par cellule que la surface traverse, placé à la moyenne des points où elle coupe les arêtes de la cellule, puis deux passes de lissage. Les deux moitiés tournent sur une charnière placée derrière l’objet, pour ne rien cacher à l’ouverture : 1,75 radian chacune, soit 100°.</p>
+        <figure id="fig-moule" class="wide"><figcaption><b>Le moule en coupe.</b> À gauche, vu de dessus à la hauteur choisie, avec ses deux moitiés qui s’ouvrent autour de la charnière selon la loi de <code>stateAt</code>. À droite, la coupe de face du moule fermé : la paroi, la bride au-dessus de la tête, le fût, l’entonnoir et le canal. Le champ est celui de <code>mouldField</code>, porté ligne pour ligne et échantillonné au même pas de 0,7 cellule. La figure remplit les cellules au lieu de les mailler. Les échelles, les hauteurs et la position de la charnière sont les valeurs rendues par le code pour ces deux figurines.</figcaption></figure>
+        <div class="note check"><b>Ce que vérifie le test des moules</b><p>Pour le lapin et le chat, chaque demi-coque reste de son côté du plan de joint, le métal ne mord jamais sur la figurine, et le maillage est fermé (moins de 1&nbsp;% d’arêtes qui n’appartiennent pas à exactement deux faces).</p></div>
+        <div class="note"><b>Ce que le moule cache</b><p>La cire n’est pas simulée dans le moule, qui est fermé et opaque. Ce qui passe la buse est retiré et compté. Quand le moule s’ouvre, la simulation est rechargée avec la figurine neuve, qui a le même volume. Le raccord a deux limites connues. Environ la moitié des particules seulement a passé la buse à ce moment : le reste est un film trop mince pour se voir, et il arrive qu’une goutte reste près de la buse. Et les veines de l’objet neuf ne reprennent pas celles de la cire qui vient de couler.</p></div>
+      </section>
+
+      <section id="usine">
+        <h2><span class="n">08</span>L’usine est une fonction du temps</h2>
+        <span class="src">src/cycle.js · stateAt(), circuit(), along(), carriers() · src/scene/factory.js · pose()</span>
+        <p>La boucle dure 50 secondes : deux demi-cycles de 25 s, un par objet. Un demi-cycle commence quand le moule s’ouvre sur l’objet qui vient de naître. Les plateaux échangent leurs places, le moule suivant se pose sur le plateau vide, l’objet fond, la cire coule. Rien de cela n’est intégré d’une image à l’autre : <code>stateAt</code> rend la pose de toute la machine pour une phase donnée, et <code>pose()</code> place les pièces.</p>
+        <p>Le circuit est fait de deux demi-chemins, des lignes brisées : de la chaleur au moule par une ligne haute, une descente et une ligne basse ; du moule à la chaleur par un autre ascenseur ou par une rampe. Un plateau parcourt sa ligne brisée avec un arrêt à chaque coude, chaque tronçon ayant un départ et une arrivée doux (la courbe \(t^3(6t^2 - 15t + 10)\), à vitesse et accélération nulles aux deux bouts). Les deux plateaux sont identiques et échangent leurs rôles à chaque demi-cycle. Ce n’est donc pas la position de chacun qui est périodique, c’est l’ensemble de leurs places : la boucle se referme au bout de deux demi-cycles sans que personne puisse dire lequel est lequel.</p>
+        <figure id="fig-cycle" class="wide"><figcaption><b>Un demi-cycle.</b> À gauche, la machine vue de face, en schéma : les deux plateaux sur leur circuit, les chariots, le moule, la source. À droite, les grandeurs que <code>stateAt</code> rend au fil des 25 secondes. <code>circuit()</code>, <code>along()</code>, <code>carriers()</code>, <code>beltAt()</code> et <code>stateAt()</code> sont portés tels quels, avec les proportions de la graine d’ouverture. Le dessin des pièces, la fonte de la figurine et le filet sont des schémas.</figcaption></figure>
+        <p>Trois décisions viennent d’essais ratés. Un premier chariot apparaissait avec le plateau et disparaissait après l’avoir monté, ce qui « cassait la magie » : chaque ascenseur et chaque rampe a maintenant son chariot à demeure, qui attend, emporte le plateau, le dépose, puis revient à vide pendant la fonte, de 9,5 à 13,5 s. Une première machine en caissons peints était « massive » : elle est faite de tubes fins, d’une bague à chaque jonction et de pieds tournés, comme un instrument de laboratoire. Une première boucle de 34 secondes par objet, jusqu’à trois objets, était trop longue.</p>
+        <p><strong>Le filet de cire</strong> est un cylindre tendu entre la buse et l’entonnoir du moule. Son rayon suit le débit mesuré à la buse, lu sur la carte graphique toutes les six images de simulation : \(r = 0{,}006 + 0{,}034\sqrt{q}\), où \(q\) est le débit lissé, rapporté à 160 particules par lecture.</p>
+        <p><strong>Une graine construit une usine</strong> (<code>recipe.js</code>) : le lieu (atelier, laboratoire, équipe de nuit), la cire (six accords d’une masse et de veines), la source, le circuit, deux figurines différentes, les proportions, le sens du circuit, la peinture et les métaux. Chaque tirage a son propre flux de nombres aléatoires : changer la cire dans le panneau ne change pas le circuit. La caméra accompagne la cire : gros plan sur la naissance, plan large pendant la montée, gros plan sur la fonte, puis descente le long du filet vers le moule.</p>
+        <div class="note check"><b>Ce que vérifient les tests du cycle</b><p>Sur 6&#8239;000 instants de la boucle et six graines : aucun saut des plateaux, du moule ni de la chaleur ; pendant la chauffe, un plateau exactement sous la source et l’autre exactement sous le moule, posé et fermé ; le barillet ne tourne que moule levé et refermé. Sur 8&#8239;000 instants et huit graines : un chariot ne disparaît jamais, ne saute jamais, et un plateau qui n’est pas sur une ligne est toujours sur un chariot. La seule liberté prise avec la physique est le temps : une cire met des minutes à fondre et des heures à prendre.</p></div>
+      </section>
+
+      <section id="chargement">
+        <h2><span class="n">09</span>L’écran de chargement fait fondre la figurine</h2>
+        <span class="src">src/app/loaderArt.js · src/scene/stage.js · makeShape()</span>
+        <p>Au chargement, le projet prépare chaque figurine : ses particules, sa texture de distance et ses deux demi-coques, puis compile les shaders et rend quelques images à blanc pour l’anticrénelage temporel, qui a besoin d’un historique. Les trois étapes s’appellent « les moules se taillent », « la lumière se prépare » et « premières images ».</p>
+        <p>Pendant ce temps, un dessin au trait montre le premier objet de la graine. C’est la vraie figurine : son champ de distance est tranché tous les 1,6 cellule par l’algorithme des <em>carrés marchants</em>, qui trace la ligne de niveau zéro d’un champ sur une grille. Les tranches (25 pour le chat) sont empilées en perspective comme une maquette topographique, qui tourne lentement. Une ceinture descend avec l’avancement réel du chargement, et un peu avec le temps, pour que le dessin ne soit jamais figé. Les tranches qu’elle a passées s’échauffent, s’affaissent de 35&nbsp;% et s’effacent, des gouttes tombent, et une flaque s’étale en anneaux sur l’assiette. Son rayon suit le volume fondu : pleine, elle a le volume de la figurine. Le dessin tourne dans un <em>worker</em>, un fil de calcul parallèle du navigateur : il reste fluide quand le fil principal taille les moules.</p>
+        <figure id="fig-loader"><figcaption><b>Le dessin de chargement.</b> Le découpage en tranches (<code>contour()</code>), la perspective et le tracé sont portés de <code>loaderArt.js</code>, dans les teintes de la cire miel. Ce qui change : le curseur remplace l’avancement réel du chargement, et la part de fonte qui suit le temps est retirée, comme le fondu de sortie.</figcaption></figure>
+      </section>
+
+      <section id="budget">
+        <h2><span class="n">10</span>Budget</h2>
+        <p>Par image de simulation, la carte graphique exécute quinze passes de calcul : trois pour la matière figée, puis trois par sous-pas. Les champs de rendu en demandent trois de plus, cinq quand le dépôt de la matière figée est refait. Le coût dépend de la quantité de matière libre : c’est tout l’intérêt de la section 02.</p>
+        <div class="tbl"><table>
+          <thead><tr><th>Poste</th><th>Où</th><th class="num">Valeur</th></tr></thead>
           <tbody>
-            <tr><td>Simulation, objet presque intact (peu de matière libre)</td><td>GPU</td><td class="num">≈ 3 ms</td></tr>
-            <tr><td>Simulation, tout est liquide</td><td>GPU</td><td class="num">≈ 7 ms</td></tr>
-            <tr><td>Image 1 280 × 720, chaîne complète</td><td>GPU</td><td class="num">≈ 10 ms</td></tr>
-            <tr><td>dont la cire</td><td>GPU</td><td class="num">≈ 5 ms</td></tr>
+            <tr><td>Particules par figurine (capacité 40&#8239;000)</td><td>GPU</td><td class="num">29&#8239;600 à 29&#8239;900</td></tr>
+            <tr><td>Grille, cellules de 0,02 unité</td><td>GPU</td><td class="num">64 × 128 × 64</td></tr>
+            <tr><td>Sous-pas par image de simulation (1/60 s)</td><td>GPU</td><td class="num">4</td></tr>
+            <tr><td>Simulation, selon la quantité de matière libre</td><td>GPU</td><td class="num">3 à 7 ms</td></tr>
+            <tr><td>Image 1&#8239;280 × 720, chaîne complète</td><td>GPU</td><td class="num">≈ 10 ms</td></tr>
+            <tr><td>dont la cire (marche, éclairage)</td><td>GPU</td><td class="num">≈ 5 ms</td></tr>
+            <tr><td>Lecture d’une boucle entière (graine z0)</td><td>GPU</td><td class="num">≥ 70 i/s</td></tr>
+            <tr><td>Taille des deux moules, au chargement</td><td>CPU</td><td class="num">≈ 1 s</td></tr>
+            <tr><td>Tampons et textures de la simulation (somme des tailles déclarées, non mesurée)</td><td>GPU</td><td class="num">≈ 67 Mo</td></tr>
           </tbody>
         </table></div>
-        <p>Mesuré dans le panneau de navigateur de l’application, sur la machine de travail. Non mesuré sur mobile, où la scène ne tourne pas encore.</p>
+        <p>Les temps sont ceux du README : mesurés dans le panneau de navigateur de l’application, sur la carte graphique d’un Mac. Rien n’a été mesuré ailleurs. La version mobile n’existe pas : la simulation demande une carte graphique de bureau.</p>
+        <p>Six tests tiennent ce qui peut l’être sans navigateur : la recette (déterminisme, tous les choix tirés sur 400 graines, jamais deux fois la même figurine), le volume commun des figurines, le circuit refermé avec le moule levé qui passe sous la ligne haute, le cycle continu et périodique, les chariots, les moules. La simulation et le rendu de la cire n’ont pas de test automatique : ils ont été contrôlés à l’œil, sur une boucle entière.</p>
       </section>
     </article>
 
@@ -86,7 +197,943 @@
   </main>
 
   <script type="module">
-    import '../home/explainer.js';
+    import { demo, C, TAU, lerp, clamp, smooth, alpha, label, arrow, rng } from '../home/explainer.js';
+
+    // ── outils communs ─────────────────────────────────────────────────────
+    const fmt = (x, n = 2) => x.toFixed(n).replace('.', ',');
+    const pct = (x) => `${Math.round(x * 100)}\u202f%`;
+    const srgb = (c) => c.map((v) => Math.round(255 * Math.pow(clamp(v), 1 / 2.2)));
+    const WAX = { a: [0.82, 0.48, 0.08], b: [0.93, 0.88, 0.76] }; // recipe.js : « Miel et lait » (linéaire)
+    const HOT = '#e58a5f';
+    // stage.js · makeShape : les veines, au repos (repère de la grille du projet, sel de la graine ib352j)
+    const veinOf = (X, Y, Z, salt = 6) => Math.min(1, Math.max(0, (Math.sin(0.33 * Y + 2.2 * Math.sin(0.17 * X + 1 + salt) + 1.7 * Math.sin(0.21 * Z + 0.4 - salt) + 0.8 * Math.sin(0.5 * X + 0.3 * Z + salt)) - 0.55) * 4));
+    // (les préparations lourdes attendent que la figure approche de l'écran)
+    const seen = (d) => { const r = d.canvas?.getBoundingClientRect?.(); return !r || (r.bottom > -300 && r.top < innerHeight + 300); };
+
+    // objects.js (verbatim ; deux des cinq figurines)
+    const rot = (az, ax) => {
+      const cz = Math.cos(az), sz = Math.sin(az), cx = Math.cos(ax), sx = Math.sin(ax);
+      const R = [[cz, -sz, 0], [cx * sz, cx * cz, -sx], [sx * sz, sx * cz, cx]];
+      return [[R[0][0], R[1][0], R[2][0]], [R[0][1], R[1][1], R[2][1]], [R[0][2], R[1][2], R[2][2]]];
+    };
+    const I3 = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+    const E = (c, r, R = I3) => ({ c, r, R });
+    const OBJECTS = {
+      lapin: { label: 'Lapin', prims: [
+        E([0, 10.5, -2.5], [11.5, 10, 11.5]), E([0, 17, 0], [9.5, 12.5, 9]), E([0, 33.5, 3], [7.6, 7.2, 8.2]), E([0, 31.5, 10], [4, 3.3, 3.6]),
+        E([-3.6, 47.5, 0.5], [2.6, 10.5, 2.1], rot(0.14, -0.1)), E([3.6, 47.5, 0.5], [2.6, 10.5, 2.1], rot(-0.14, -0.1)),
+        E([-4.6, 6, 8.6], [3.1, 5.5, 3.6]), E([4.6, 6, 8.6], [3.1, 5.5, 3.6]), E([-8.5, 3.6, 3], [4, 3.4, 7]), E([8.5, 3.6, 3], [4, 3.4, 7]),
+        E([0, 8.5, -13.2], [4.2, 4.2, 4.2]),
+      ] },
+      chat: { label: 'Chat', prims: [
+        E([0, 10, -2.5], [10.5, 10, 11.5]), E([0, 20, 1], [7.8, 13.5, 7.4]),
+        E([0, 36.5, 3.2], [7.4, 6.5, 7]), E([0, 34.4, 9.2], [3.3, 2.4, 2.5]),
+        E([-4.6, 43.6, 2.4], [2.5, 4.8, 1.7], rot(0.32, 0.1)), E([4.6, 43.6, 2.4], [2.5, 4.8, 1.7], rot(-0.32, 0.1)),
+        E([-3.3, 8.5, 7.2], [2.5, 8.5, 2.9]), E([3.3, 8.5, 7.2], [2.5, 8.5, 2.9]),
+        E([10.2, 4.2, -3], [2.9, 3, 9.5]), E([8.2, 3.6, 7.6], [5, 2.7, 3]), E([3.4, 3.3, 10.6], [3.2, 2.4, 2.2]),
+      ] },
+    };
+    const KS = 2.6;
+    function sdObject(prims, sc, x, y, z) {
+      x /= sc; y /= sc; z /= sc;
+      let d = 1e9;
+      for (const P of prims) {
+        const px = x - P.c[0], py = y - P.c[1], pz = z - P.c[2], R = P.R;
+        const lx = R[0][0] * px + R[0][1] * py + R[0][2] * pz, ly = R[1][0] * px + R[1][1] * py + R[1][2] * pz, lz = R[2][0] * px + R[2][1] * py + R[2][2] * pz;
+        const k0 = Math.hypot(lx / P.r[0], ly / P.r[1], lz / P.r[2]), k1 = Math.hypot(lx / P.r[0] ** 2, ly / P.r[1] ** 2, lz / P.r[2] ** 2);
+        const e = k1 > 1e-9 ? (k0 * (k0 - 1)) / k1 : -Math.min(...P.r);
+        const h = Math.max(KS - Math.abs(d - e), 0) / KS;
+        d = Math.min(d, e) - h * h * KS * 0.25;
+      }
+      const q0 = Math.hypot(x, z) - 12 + 0.8, q1 = Math.abs(y - 1.4) - 1.4 + 0.8;
+      const e = Math.min(Math.max(q0, q1), 0) + Math.hypot(Math.max(q0, 0), Math.max(q1, 0)) - 0.8;
+      const h = Math.max(1.6 - Math.abs(d - e), 0) / 1.6;
+      return (Math.min(d, e) - h * h * 0.4) * sc;
+    }
+    const MOULD = { tIn: 0.25, tOut: 2.6, flange: 6.5, step: 0.7, cup: 5, rise: 9 };
+    // valeurs rendues par scaleOf(), heightOf() et mouldField().zBack (trop longues à recalculer dans une page)
+    const SC = { lapin: 0.80867, chat: 0.84673 }, HT = { lapin: 46.25, chat: 40.25 }, ZB = { lapin: -19.9, chat: -17.8 };
+
+    // cycle.js (verbatim)
+    const TL = { lift: 1.8, move: 6.8, lower: 8, heat: 8.2, melt: 22.6, half: 25, back0: 9.5, back1: 13.5 };
+    const ease = (t) => { t = Math.min(1, Math.max(0, t)); return t * t * t * (t * (6 * t - 15) + 10); };
+    function circuit(F) {
+      const D = F.dir, X = F.half, a = [0, F.y1], b = [0, F.y0];
+      const down = [a, [D * X, F.y1], [D * X, F.y0], b];
+      let up;
+      if (F.circuit === 'rampe') {
+        const run = (F.y1 - F.y0) / Math.tan(F.ramp), x1 = F.half * 0.36;
+        up = [b, [-D * (x1 + run), F.y0], [-D * x1, F.y1], a];
+      } else up = [b, [-D * X, F.y0], [-D * X, F.y1], a];
+      return { down, up };
+    }
+    const segLen = (p, q) => Math.hypot(q[0] - p[0], q[1] - p[1]);
+    function along(poly, u) {
+      const L = []; let tot = 0;
+      for (let i = 0; i + 1 < poly.length; i++) { L.push(segLen(poly[i], poly[i + 1])); tot += L[i]; }
+      let d = Math.min(1, Math.max(0, u)) * tot;
+      for (let i = 0; i < L.length; i++) {
+        if (d <= L[i] || i === L.length - 1) {
+          const t = ease(d / L[i]);
+          return [poly[i][0] + (poly[i + 1][0] - poly[i][0]) * t, poly[i][1] + (poly[i + 1][1] - poly[i][1]) * t, i];
+        }
+        d -= L[i];
+      }
+      return [...poly[poly.length - 1], L.length - 1];
+    }
+    function carriers(Cc, mv, t) {
+      const out = [];
+      for (const poly of [Cc.down, Cc.up]) {
+        const L = []; let tot = 0;
+        for (let i = 0; i + 1 < poly.length; i++) { L.push(segLen(poly[i], poly[i + 1])); tot += L[i]; }
+        let d0 = 0;
+        for (let i = 0; i < L.length; i++) {
+          const p = poly[i], q = poly[i + 1];
+          if (Math.abs(q[1] - p[1]) > 1e-6) {
+            const d = mv * tot;
+            let f = d <= d0 ? 0 : d >= d0 + L[i] ? 1 : ease((d - d0) / L[i]);
+            const load = d > d0 && d < d0 + L[i];
+            if (t >= TL.back0) f = 1 - ease((t - TL.back0) / (TL.back1 - TL.back0));
+            out.push({ p, q, pos: [p[0] + (q[0] - p[0]) * f, p[1] + (q[1] - p[1]) * f], load, f });
+          }
+          d0 += L[i];
+        }
+      }
+      return out;
+    }
+    function beltAt(t) {
+      const down = smooth(TL.heat - 1, TL.heat + 0.4, t), run = smooth(TL.heat + 0.4, TL.melt - 2.5, t), up = smooth(TL.melt + 0.4, TL.melt + 2, t);
+      const sweep = 1.06 - 1.0 * (0.25 * run + 0.75 * Math.min(1, Math.max(0, (t - TL.heat - 0.4) / (TL.melt - 2.5 - TL.heat - 0.4))));
+      return 1.5 + (sweep - 1.5) * down * (1 - up);
+    }
+    function stateAt(R, ph) {
+      const n = R.objects.length, H = R.loop.half;
+      const T = (ph - Math.floor(ph)) * n * H, k = Math.min(n - 1, Math.floor(T / H)), t = T - k * H;
+      const Cc = circuit(R.factory);
+      const mv = Math.min(1, Math.max(0, (t - TL.lift) / (TL.move - TL.lift)));
+      const pUp = along(Cc.up, mv), pDown = along(Cc.down, mv);
+      const pallets = k % 2 === 0 ? [pUp, pDown] : [pDown, pUp];
+      const wax = k % 2 === 0 ? 0 : 1;
+      const open = smooth(0.1, TL.lift - 0.15, t) * (1 - smooth(TL.lift + 1.7, TL.lift + 2.7, t));
+      const up = smooth(TL.lift + 0.5, TL.lift + 1.6, t) * (1 - smooth(TL.move, TL.lower, t));
+      const arm = k + ease((t - TL.lift - 1.7) / (TL.move - TL.lift - 1.9));
+      const heat = smooth(TL.heat, TL.heat + 1.4, t) * (1 - smooth(TL.melt, TL.melt + 1.2, t));
+      return { k, t, n, mv, pallets, wax, bell: up, open, arm, heat, carriers: carriers(Cc, mv, t), object: R.objects[k], next: R.objects[(k + 1) % n] };
+    }
+    const heatOf = (t) => smooth(TL.heat, TL.heat + 1.4, t) * (1 - smooth(TL.melt, TL.melt + 1.2, t)); // stage.js
+
+    // ── sim/mpm.js en deux dimensions ──────────────────────────────────────
+    // Mêmes noyaux, mêmes constantes ; nombres flottants (JavaScript est séquentiel), pas de cuvette.
+    const SUB = 4, DT = 1 / (60 * SUB), SEED_H = 0.6, GX = 48, GY = 64, NC = GX * GY, OX = 24, OY = 10, Z0 = 0.4;
+    const RHO0 = 1 / SEED_H ** 2, RH = RHO0 / 8; // densité de repos (particules par cellule), et son huitième
+    const U0 = { g: 56, K: 8e3 * RH, mu: 3e4 * RH, eta: 150 * RH, relax: 3, kc: 0.032, plate: 4, tPlate: 1.9 };
+    const HEATS = { // recipe.js (direction projetée dans le plan)
+      lampe: { label: 'Lampe', dir: [-0.25, 1], flat: 0.25, band: [0, 0], power: 8 },
+      bruleur: { label: 'Brûleurs', dir: [0.6, 0.6], flat: 0.16, band: [0, 0], power: 9 },
+      ceinture: { label: 'Ceinture', dir: [0, 1], flat: 0.1, band: [1, 0.15], power: 8 },
+    };
+    const T_START = TL.heat - 0.7, PLATE_R = 14.5;
+    const solidOf = (T) => smooth(1, 0.72, T);
+    const col = (x, y) => { // l'assiette (PALLET.plateR), sans la cuvette
+      const r = Math.abs(x - OX), qx = r - (PLATE_R - 0.6), qy = Math.abs(y - (OY - 1.5) + r * r * 0.003) - 0.9;
+      return Math.min(Math.max(qx, qy), 0) + Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) - 0.6;
+    };
+    const W = new Float64Array(6); let bi = 0, bj = 0;
+    function sten(x, y) {
+      const fx = Math.floor(x), fy = Math.floor(y), cx = x - fx - 0.5, cy = y - fy - 0.5;
+      bi = fx - 1; bj = fy - 1;
+      W[0] = 0.5 * (0.5 - cx) ** 2; W[1] = 0.75 - cx * cx; W[2] = 0.5 * (0.5 + cx) ** 2;
+      W[3] = 0.5 * (0.5 - cy) ** 2; W[4] = 0.75 - cy * cy; W[5] = 0.5 * (0.5 + cy) ** 2;
+    }
+    function heatUp(S, T, x, y, rho, gx, gy, tm, h, kc) {
+      const U = S.U;
+      T += (tm / Math.max(rho, 1e-3) - T) * kc;
+      const skin = smooth(RHO0 * 0.86, RHO0 * 0.5, rho) * smooth(0.02, 0.2, rho), gl = Math.hypot(gx, gy);
+      const nx = gl > 1e-3 ? -gx / gl : 0, ny = gl > 1e-3 ? -gy / gl : 1;
+      const by = (y - OY - U.band[0]) / Math.max(U.band[1], 0.5);
+      const lamp = (Math.max(nx * U.dir[0] + ny * U.dir[1], 0) * (1 - U.flat) + U.flat) * lerp(1, Math.max(Math.exp(-by * by), smooth(0, 1, by) * 0.8) * 2.2 + 0.1, smooth(0, 0.5, U.band[1]));
+      T += h * U.heat * skin * lamp;
+      T += h * U0.plate * smooth(3.5, 0.5, col(x, y)) * U.plateHot * Math.max(U0.tPlate - T, 0);
+      return Math.min(T, 2);
+    }
+    function makeSim() {
+      const pts = [];
+      for (let y = SEED_H / 2; y < 55; y += SEED_H) for (let x = -18 + SEED_H / 2; x < 18; x += SEED_H) if (sdObject(OBJECTS.lapin.prims, SC.lapin, x, y, Z0) < 0) pts.push(x + OX, y + OY);
+      const N = pts.length / 2, f = (n) => new Float64Array(n);
+      const S = {
+        N, x: f(N), y: f(N), vx: f(N), vy: f(N), C: f(4 * N), b: f(4 * N), rx: f(N), ry: f(N), T: f(N), pig: f(N), st: new Int8Array(N),
+        am: f(NC), ax: f(NC), ay: f(NC), ah: f(NC), pm: f(NC), ph: f(NC), gm: f(NC), gu: f(NC), gv: f(NC), gt: f(NC), sup: [f(NC), f(NC)],
+        U: { heat: 0, dir: [0, 1], flat: 0.25, band: [0, 0], plateHot: 0 }, pin: true, power: 1, source: 'lampe',
+      };
+      S.reset = () => {
+        for (let i = 0; i < N; i++) {
+          const x = pts[2 * i], y = pts[2 * i + 1], o = 4 * i;
+          S.x[i] = S.rx[i] = x; S.y[i] = S.ry[i] = y; S.vx[i] = S.vy[i] = S.T[i] = 0; S.st[i] = S.pin ? 0 : 1;
+          S.C[o] = S.C[o + 1] = S.C[o + 2] = S.C[o + 3] = S.b[o + 1] = S.b[o + 2] = 0; S.b[o] = S.b[o + 3] = 1;
+          S.pig[i] = veinOf(x - OX + 32, y - OY + 54, Z0 + 32);
+        }
+        for (const k of ['am', 'ax', 'ay', 'ah', 'pm', 'ph', 'gm', 'gu', 'gv', 'gt']) S[k].fill(0);
+        S.sup[0].fill(0); S.sup[1].fill(0); S.step = S.frames = S.drained = 0; S.armed = false;
+      };
+      S.time = () => T_START + S.frames / 60;
+      S.reset();
+      return S;
+    }
+    // un sous-pas : kP2G, la grille (mkGrid), kG2P
+    function substep(S) {
+      const { x, y, vx, vy, C: Cm, b, T, st, gm, gu, gv, gt } = S;
+      for (let i = 0; i < S.N; i++) {
+        if (st[i] < 1) continue;
+        const xi = x[i], yi = y[i]; sten(xi, yi);
+        let den = 0;
+        for (let q = 0; q < 3; q++) for (let a = 0; a < 3; a++) den += gm[bi + a + (bj + q) * GX] * W[a] * W[3 + q];
+        const dm = Math.max(den, 3 * RH), Ti = T[i], sol = solidOf(Ti), o = 4 * i;
+        const p = Math.max(0, ((den / RHO0) ** 3 - 1) * U0.K);
+        // élasticité : μ · dev(b̄), à volume constant (en 2D : b̄ = b / √det b)
+        const J = Math.max(b[o] * b[o + 3] - b[o + 1] * b[o + 2], 1e-4), sc = 1 / Math.sqrt(J), tr = (b[o] + b[o + 3]) * sc / 2, ke = U0.mu * sol * dm / RHO0;
+        const eta = U0.eta * (lerp(1, 0.07, smooth(1, 1.6, Ti)) * (1 - sol) + sol), sh = (Cm[o + 1] + Cm[o + 2]) * eta, f = -4 * DT / dm;
+        const t00 = (-p + (b[o] * sc - tr) * ke + 2 * Cm[o] * eta) * f, t01 = (b[o + 1] * sc * ke + sh) * f, t10 = (b[o + 2] * sc * ke + sh) * f, t11 = (-p + (b[o + 3] * sc - tr) * ke + 2 * Cm[o + 3] * eta) * f;
+        for (let q = 0; q < 3; q++) for (let a = 0; a < 3; a++) {
+          const k = bi + a + (bj + q) * GX, w = W[a] * W[3 + q], dx = bi + a + 0.5 - xi, dy = bj + q + 0.5 - yi;
+          S.ax[k] += w * (vx[i] + Cm[o] * dx + Cm[o + 1] * dy + t00 * dx + t01 * dy);
+          S.ay[k] += w * (vy[i] + Cm[o + 2] * dx + Cm[o + 3] * dy + t10 * dx + t11 * dy);
+          S.am[k] += w; S.ah[k] += w * Ti;
+        }
+      }
+      const prev = S.sup[S.step & 1], next = S.sup[1 - (S.step & 1)];
+      for (let k = 0; k < NC; k++) {
+        const mass = S.am[k] + S.pm[k], heat = S.ah[k] + S.ph[k];
+        let u = S.ax[k], v = S.ay[k];
+        S.am[k] = S.ax[k] = S.ay[k] = S.ah[k] = 0;
+        if (mass <= 1e-4) { gm[k] = gu[k] = gv[k] = gt[k] = next[k] = 0; continue; }
+        u /= mass; v /= mass;
+        const i = k % GX, j = (k / GX) | 0, cx = i + 0.5, cy = j + 0.5, dcol = col(cx, cy);
+        // appui : une cellule de matière figée tient si elle touche le support ou une voisine qui tient
+        const nb = Math.max(prev[k - 1] || 0, prev[k + 1] || 0, prev[k - GX] || 0, prev[k + GX] || 0);
+        next[k] = S.pm[k] > 0.6 * RH ? (dcol < 1.8 ? 1 : Math.max(nb - 1 / 80, 0)) : 0;
+        if (i < 2 || i > GX - 3 || j < 2 || j > GY - 3) u = v = 0;
+        if (dcol < 0) { // le métal : la matière y adhère
+          let nx = col(cx + 0.5, cy) - col(cx - 0.5, cy), ny = col(cx, cy + 0.5) - col(cx, cy - 0.5) + 1e-4;
+          const nl = Math.hypot(nx, ny); nx /= nl; ny /= nl;
+          const vn = Math.min(u * nx + v * ny, 0), kk = 0.97 * smooth(-2.5, -1.2, dcol);
+          u = (u - nx * vn) * kk; v = (v - ny * vn) * kk;
+        }
+        gm[k] = mass; gu[k] = u; gv[k] = v; gt[k] = heat / mass;
+      }
+      for (let i = 0; i < S.N; i++) {
+        if (st[i] < 1) continue;
+        const xi = x[i], yi = y[i]; sten(xi, yi);
+        let u = 0, v = 0, B00 = 0, B01 = 0, B10 = 0, B11 = 0, rho = 0, gx = 0, gy = 0, tm = 0;
+        for (let q = 0; q < 3; q++) for (let a = 0; a < 3; a++) {
+          const k = bi + a + (bj + q) * GX, w = W[a] * W[3 + q], dx = bi + a + 0.5 - xi, dy = bj + q + 0.5 - yi, m = gm[k] * w, wu = gu[k] * w, wv = gv[k] * w;
+          u += wu; v += wv; B00 += wu * dx; B01 += wu * dy; B10 += wv * dx; B11 += wv * dy;
+          rho += m; gx += dx * m; gy += dy * m; tm += gt[k] * m;
+        }
+        v -= U0.g * DT;
+        const Ti = heatUp(S, T[i], xi, yi, rho, gx, gy, tm, DT, U0.kc); T[i] = Ti;
+        if (Ti > 1.02) st[i] = 2;
+        const o = 4 * i, c00 = 4 * B00, c01 = 4 * B01, c10 = 4 * B10, c11 = 4 * B11;
+        Cm[o] = c00; Cm[o + 1] = c01; Cm[o + 2] = c10; Cm[o + 3] = c11;
+        // b ← (I + dt·C) b (I + dt·C)ᵀ, puis relâchement vers l'isotrope
+        const a00 = 1 + DT * c00, a01 = DT * c01, a10 = DT * c10, a11 = 1 + DT * c11;
+        const m00 = a00 * b[o] + a01 * b[o + 2], m01 = a00 * b[o + 1] + a01 * b[o + 3], m10 = a10 * b[o] + a11 * b[o + 2], m11 = a10 * b[o + 1] + a11 * b[o + 3];
+        let n00 = m00 * a00 + m01 * a01, n01 = m00 * a10 + m01 * a11, n10 = m10 * a00 + m11 * a01, n11 = m10 * a10 + m11 * a11;
+        const J = n00 * n11 - n01 * n10, soft = smooth(0.55, 1.05, Ti), r = clamp(U0.relax * soft * soft * DT + smooth(1.05, 1.2, Ti)), iso = Math.sqrt(clamp(J, 0.2, 5));
+        n00 = n00 * (1 - r) + iso * r; n01 *= 1 - r; n10 *= 1 - r; n11 = n11 * (1 - r) + iso * r;
+        if (!(J >= 0.05 && J <= 20)) { n00 = n11 = 1; n01 = n10 = 0; }
+        b[o] = n00; b[o + 1] = n01; b[o + 2] = n10; b[o + 3] = n11;
+        const lim = Math.min(1, 70 / Math.max(Math.hypot(u, v), 1e-3)); u *= lim; v *= lim;
+        let px = clamp(xi + u * DT, 2.01, GX - 2.01), py = clamp(yi + v * DT, 2.01, GY - 2.01);
+        if (py < 3.5) { st[i] = -1; S.drained++; px = py = 3; u = v = 0; } // tombée de l'assiette : comptée, retirée
+        x[i] = px; y[i] = py; vx[i] = u; vy[i] = v;
+      }
+      S.step++;
+    }
+    // une image de simulation (1/60 s) : kPinUpdate, kPinClear, kPinSplat, puis quatre sous-pas
+    function advance(S) {
+      const tf = S.time(), H = HEATS[S.source], hc = HT.lapin, U = S.U, dl = Math.hypot(...H.dir);
+      U.heat = H.power * S.power * heatOf(tf); U.dir = [H.dir[0] / dl, H.dir[1] / dl]; U.flat = H.flat;
+      U.band = H.band[0] ? [beltAt(tf) * hc, H.band[1] * hc] : [0, 0];
+      U.plateHot = smooth(TL.heat + 0.34 * (TL.melt - TL.heat), TL.heat + 0.6 * (TL.melt - TL.heat), tf);
+      const { x, y, T, st, gm, gt } = S;
+      for (let i = 0; i < S.N; i++) {
+        if (st[i] !== 0) continue;
+        sten(x[i], y[i]);
+        let rho = 0, gx = 0, gy = 0, tm = 0;
+        for (let q = 0; q < 3; q++) for (let a = 0; a < 3; a++) {
+          const k = bi + a + (bj + q) * GX, m = gm[k] * W[a] * W[3 + q];
+          rho += m; gx += (bi + a + 0.5 - x[i]) * m; gy += (bj + q + 0.5 - y[i]) * m; tm += gt[k] * m;
+        }
+        T[i] = heatUp(S, T[i], x[i], y[i], rho, gx, gy, tm, DT * SUB, U0.kc * SUB);
+        const held = S.sup[0][Math.floor(x[i]) + Math.floor(y[i]) * GX];
+        if (T[i] > 0.86 || (S.armed && held < 0.002)) st[i] = 1;
+      }
+      S.pm.fill(0); S.ph.fill(0);
+      for (let i = 0; i < S.N; i++) {
+        if (st[i] !== 0) continue;
+        sten(x[i], y[i]);
+        for (let q = 0; q < 3; q++) for (let a = 0; a < 3; a++) { const k = bi + a + (bj + q) * GX, w = W[a] * W[3 + q]; S.pm[k] += w; S.ph[k] += w * T[i]; }
+      }
+      for (let s = 0; s < SUB; s++) substep(S);
+      S.frames++;
+      if (S.step > 160) S.armed = true;
+    }
+    const census = (S) => { const c = [0, 0, 0, 0]; for (let i = 0; i < S.N; i++) c[S.st[i] < 0 ? 3 : S.st[i]]++; return c.map((v) => v / S.N); };
+    // la vue : la grille de x = 0 à 48 et de y = 4 à 62, dans un cadre (x0, largeur)
+    const view = (d, x0, wv) => { const s = Math.min(wv / GX, (d.h - 10) / 58), ox = x0 + (wv - GX * s) / 2; return { s, X: (x) => ox + x * s, Y: (y) => d.h - 5 - (y - 4) * s }; };
+    const drawPlate = (g, V) => { g.fillStyle = alpha(C.ink, 0.3); g.fillRect(V.X(OX - PLATE_R), V.Y(OY), 2 * PLATE_R * V.s, 3 * V.s); };
+    function drawParts(g, V, S, a = 1) {
+      const z = Math.max(1.5, V.s * 0.62);
+      [[0, alpha(C.dim, 0.8 * a)], [1, alpha(C.c1, a)], [2, alpha(HOT, a)]].forEach(([state, colr]) => {
+        g.fillStyle = colr;
+        for (let i = 0; i < S.N; i++) if (S.st[i] === state) g.fillRect(V.X(S.x[i]) - z / 2, V.Y(S.y[i]) - z / 2, z, z);
+      });
+    }
+
+    // ── 01 · la loi ────────────────────────────────────────────────────────
+    {
+      const rOf = (T) => clamp(U0.relax * smooth(0.55, 1.05, T) ** 2 * DT + smooth(1.05, 1.2, T));
+      const mem = (T, s = 1) => (1 - rOf(T)) ** (240 * s);
+      const visc = (T) => lerp(1, 0.07, smooth(1, 1.6, T)) * (1 - solidOf(T)) + solidOf(T);
+      demo('#fig-loi', {
+        title: 'La cire selon sa température', aspect: 2.1, animate: true,
+        controls: [{ key: 'T', label: 'Température T de la particule (1 = fusion)', min: 0.3, max: 1.6, step: 0.01, value: 0.8, fmt: (v) => fmt(v) }],
+        draw(g, d) {
+          const { w, h } = d, x0 = 36, x1 = w * 0.66, y0 = 18, y1 = h - 30, Ta = 0.3, Tb = 1.6, T = d.s.T;
+          const X = (t) => lerp(x0, x1, (t - Ta) / (Tb - Ta)), Y = (v) => lerp(y1, y0, v);
+          g.strokeStyle = C.grid; g.lineWidth = 1;
+          for (const v of [0, 0.5, 1]) { g.beginPath(); g.moveTo(x0, Y(v)); g.lineTo(x1, Y(v)); g.stroke(); label(g, fmt(v, v === 0.5 ? 1 : 0), x0 - 6, Y(v) + 4, { align: 'right', size: 11 }); }
+          for (const t of [0.4, 0.6, 0.8, 1, 1.2, 1.4, 1.6]) label(g, fmt(t, 1), X(t), h - 12, { align: 'center', size: 10.5, color: C.faint });
+          for (const [t, name] of [[0.86, 'libérée'], [1, 'fusion']]) {
+            g.strokeStyle = alpha(C.ink, 0.3); g.setLineDash([3, 4]); g.beginPath(); g.moveTo(X(t), y0); g.lineTo(X(t), y1); g.stroke(); g.setLineDash([]);
+            label(g, name, X(t) + (t < 1 ? -4 : 4), y0 + 9, { size: 10.5, align: t < 1 ? 'right' : 'left' });
+          }
+          const curve = (fn, colr) => { g.strokeStyle = colr; g.lineWidth = 2; g.beginPath(); for (let i = 0; i <= 260; i++) { const t = lerp(Ta, Tb, i / 260); i ? g.lineTo(X(t), Y(fn(t))) : g.moveTo(X(t), Y(fn(t))); } g.stroke(); };
+          curve(solidOf, C.c1); curve(mem, C.c2); curve(visc, C.c3);
+          label(g, 'élasticité s(T)', X(0.32), Y(1) + 15, { color: C.c1, size: 11.5 });
+          label(g, 'mémoire après 1 s', X(0.32), Y(1) + 30, { color: C.c2, size: 11.5 });
+          label(g, 'viscosité', X(1.38), Y(visc(1.38)) - 8, { color: C.c3, size: 11.5 });
+          g.strokeStyle = C.ink; g.lineWidth = 1; g.beginPath(); g.moveTo(X(T), y0); g.lineTo(X(T), y1); g.stroke();
+          for (const [fn, colr] of [[solidOf, C.c1], [mem, C.c2], [visc, C.c3]]) { g.fillStyle = colr; g.beginPath(); g.arc(X(T), Y(fn(T)), 4, 0, TAU); g.fill(); }
+          // la déformation retenue : une ellipse qui revient au cercle
+          const cx = w * 0.84, cy = h * 0.46, R = Math.min(w * 0.085, h * 0.24), tau = d.t % 2.6, e = 0.5 * mem(T, Math.min(tau, 2));
+          g.strokeStyle = alpha(C.ink, 0.35); g.setLineDash([3, 4]); g.beginPath(); g.arc(cx, cy, R, 0, TAU); g.stroke(); g.setLineDash([]);
+          g.strokeStyle = C.c2; g.lineWidth = 2; g.beginPath(); g.ellipse(cx, cy, R * (1 + e), R / (1 + e), -0.5, 0, TAU); g.stroke();
+          label(g, `après ${fmt(Math.min(tau, 2), 1)} s`, cx, cy + R * 1.5 + 22, { align: 'center', size: 11.5 });
+          label(g, 'forme retenue', cx, y0 + 6, { align: 'center', size: 11.5, color: C.c2 });
+          const state = T <= 0.55 ? 'solide' : T < 1 ? 'pâte qui flue' : T < 1.2 ? 'liquide épais' : 'liquide';
+          d.status(`${state} · s = ${fmt(solidOf(T))} · mémoire après 1 s : ${pct(mem(T))}`);
+        },
+      });
+    }
+
+    // ── 02 · l'appui ───────────────────────────────────────────────────────
+    {
+      const NX = 44, NY = 28;
+      const shape = (i, j) => {
+        const x = i + 0.5 - 22, y = j + 0.5;
+        return y > 2 && ((x / 9) ** 2 + ((y - 9.5) / 7.5) ** 2 < 1 || (Math.abs(x) < 2 && y > 15 && y < 20) || (x / 6.5) ** 2 + ((y - 22) / 4) ** 2 < 1 || (Math.abs(Math.abs(x) - 3.6) < 1.1 && y > 24 && y < 28));
+      };
+      function tick(st, dec) {
+        const A = st.A, B = st.B;
+        for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) {
+          const k = i + j * NX;
+          if (st.solid[k] !== 1) { B[k] = 0; continue; }
+          const nb = Math.max(i ? A[k - 1] : 0, i < NX - 1 ? A[k + 1] : 0, j ? A[k - NX] : 0, j < NY - 1 ? A[k + NX] : 0);
+          B[k] = j === 2 ? 1 : Math.max(nb - dec, 0); // (la rangée 2 touche l'assiette)
+        }
+        st.A = B; st.B = A; st.ticks++;
+        if (st.ticks > 160) for (let k = 0; k < NX * NY; k++) if (st.solid[k] === 1 && st.A[k] < 0.002) { st.solid[k] = 0; st.fall.push({ i: k % NX, y: (k / NX) | 0, v: 0 }); st.freed++; }
+      }
+      demo('#fig-appui', {
+        title: 'Tient, ne tient plus', aspect: 44 / 29, animate: true,
+        controls: [{ key: 'sp', label: 'Sous-pas par image affichée (4 dans le projet)', min: 1, max: 4, step: 1, value: 1 }],
+        buttons: [{ key: 'nodec', label: 'Sans la perte', toggle: true, onClick: (d) => d.reset() }, { label: 'Rejouer', onClick: (d) => d.reset() }],
+        setup(d) {
+          const st = d.state; st.solid = new Uint8Array(NX * NY); st.A = new Float32Array(NX * NY); st.B = new Float32Array(NX * NY); st.fall = []; st.ticks = st.freed = 0;
+          for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) st.solid[i + j * NX] = shape(i, j) ? 1 : 0;
+          for (let n = 0; n < 160; n++) tick(st, d.s.nodec ? 0 : 1 / 80);
+        },
+        pointer(d, e) {
+          const st = d.state; if (!e.down || !st.map) return;
+          const ci = (e.x - st.map.ox) / st.map.cs, cj = NY - (e.y - st.map.oy) / st.map.cs;
+          for (let j = 3; j < NY; j++) for (let i = 0; i < NX; i++) if (st.solid[i + j * NX] === 1 && Math.hypot(i + 0.5 - ci, j + 0.5 - cj) < 1.6) st.solid[i + j * NX] = 0;
+        },
+        draw(g, d) {
+          const st = d.state, cs = Math.min(d.w / NX, d.h / (NY + 1)), ox = (d.w - NX * cs) / 2, oy = (d.h - (NY + 1) * cs) / 2 + cs;
+          st.map = { cs, ox, oy };
+          if (d.dt > 0) {
+            for (let n = 0; n < d.s.sp; n++) tick(st, d.s.nodec ? 0 : 1 / 80);
+            st.fall = st.fall.filter((f) => {
+              f.v += 0.012 * d.s.sp; const ny = f.y - f.v, below = Math.floor(ny);
+              if (below < 2 || st.solid[f.i + below * NX]) { let j = Math.max(2, below + 1); while (j < NY - 1 && st.solid[f.i + j * NX]) j++; st.solid[f.i + j * NX] = 2; return false; }
+              f.y = ny; return true;
+            });
+          }
+          const cell = (i, y, colr) => { g.fillStyle = colr; g.fillRect(ox + i * cs + 0.5, oy + (NY - 1 - y) * cs + 0.5, cs - 1, cs - 1); };
+          for (let i = 6; i < NX - 6; i++) for (let j = 0; j < 2; j++) cell(i, j, alpha(C.ink, 0.3));
+          let top = -1;
+          for (let j = 2; j < NY; j++) for (let i = 0; i < NX; i++) {
+            const k = i + j * NX;
+            if (st.solid[k] === 1) { cell(i, j, alpha(C.c1, 0.14 + 0.86 * st.A[k])); top = k; } else if (st.solid[k] === 2) cell(i, j, alpha(HOT, 0.9));
+          }
+          for (const f of st.fall) cell(f.i, f.y, alpha(HOT, 0.9));
+          label(g, 'assiette', ox + 7 * cs, oy + NY * cs - 0.5 * cs + 4, { size: 11, color: C.bg });
+          label(g, 'faites glisser pour faire fondre', ox + 4, oy + 4, { size: 11.5, color: C.faint });
+          d.status(`appui au sommet : ${top < 0 ? '—' : fmt(st.A[top])} · ${st.freed} cellules libérées`);
+        },
+      });
+    }
+
+    // ── 03 · la fonte en deux dimensions ──────────────────────────────────
+    {
+      let S = null, hist = [];
+      const restart = () => { S.reset(); hist = []; };
+      demo('#fig-mpm', {
+        title: 'MLS-MPM, matière figée et chaleur', aspect: 1.7, animate: true,
+        controls: [{ key: 'power', label: 'Puissance de la source', min: 0.5, max: 1.5, step: 0.05, value: 1, fmt: (v) => `×${fmt(v)}` }],
+        buttons: [
+          ...Object.entries(HEATS).map(([k, v]) => ({ label: v.label, onClick: () => { S.source = k; restart(); } })),
+          { key: 'all', label: 'Tout simuler', toggle: true, onClick: (d) => { S.pin = !d.s.all; restart(); } },
+          { label: 'Rejouer', onClick: restart },
+        ],
+        draw(g, d) {
+          S ??= makeSim();
+          S.power = d.s.power;
+          if (d.dt > 0) { if (S.time() >= TL.half) restart(); advance(S); if (S.frames % 6 === 1) hist.push([S.time(), ...census(S)]); }
+          const { w, h } = d, V = view(d, 0, w * 0.52), tf = S.time(), H = HEATS[S.source];
+          drawPlate(g, V); drawParts(g, V, S);
+          // la source
+          const on = heatOf(tf);
+          if (H.band[0]) {
+            const yb = OY + beltAt(tf) * HT.lapin;
+            if (yb < 62) { g.strokeStyle = alpha(HOT, 0.25 + 0.75 * on); g.lineWidth = 3; for (const sx of [-1, 1]) { g.beginPath(); g.moveTo(V.X(OX + sx * 21), V.Y(yb)); g.lineTo(V.X(OX + sx * 15), V.Y(yb)); g.stroke(); } }
+          } else {
+            const dl = Math.hypot(...H.dir), ux = H.dir[0] / dl, uy = H.dir[1] / dl, sx = V.X(OX + ux * 30), sy = V.Y(OY + 24 + uy * 30);
+            arrow(g, sx, Math.max(sy, 14), sx - ux * 5 * V.s, Math.max(sy, 14) + uy * 5 * V.s, { color: alpha(HOT, 0.25 + 0.75 * on), width: 2.5, head: 9 });
+          }
+          // légende et histoire des états
+          const x0 = w * 0.58, x1 = w - 14, y0 = 46, y1 = h - 30, X = (t) => lerp(x0, x1, (t - T_START) / (TL.half - T_START)), Y = (v) => lerp(y1, y0, v);
+          const names = ['figée', 'libre', 'fondue', 'tombée'], cols = [alpha(C.dim, 0.8), C.c1, HOT, alpha(C.ink, 0.18)];
+          names.forEach((n, i) => { g.fillStyle = cols[i]; g.fillRect(x0 + i * (x1 - x0) / 4, 16, 9, 9); label(g, n, x0 + i * (x1 - x0) / 4 + 14, 25, { size: 11.5 }); });
+          for (let s = 0; s < 4; s++) {
+            g.fillStyle = cols[s]; g.beginPath(); g.moveTo(X(T_START), y1);
+            const acc = (r) => { let a = 0; for (let q = 0; q <= s; q++) a += r[1 + q]; return a; }, low = (r) => acc(r) - r[1 + s];
+            for (const r of hist) g.lineTo(X(r[0]), Y(acc(r)));
+            for (let i = hist.length - 1; i >= 0; i--) g.lineTo(X(hist[i][0]), Y(low(hist[i])));
+            g.closePath(); g.fill();
+          }
+          g.strokeStyle = C.line; g.lineWidth = 1; g.strokeRect(x0, y0, x1 - x0, y1 - y0);
+          for (const t of [TL.heat, TL.melt]) { g.strokeStyle = alpha(C.ink, 0.35); g.setLineDash([3, 4]); g.beginPath(); g.moveTo(X(t), y0); g.lineTo(X(t), y1); g.stroke(); g.setLineDash([]); }
+          label(g, 'chaleur', X(TL.heat) + 4, y1 + 14, { size: 10.5, color: C.faint }); label(g, 'coupée', X(TL.melt) - 4, y1 + 14, { size: 10.5, color: C.faint, align: 'right' });
+          const c = census(S);
+          d.status(`t = ${fmt(tf, 1)} s · simulées : ${pct(c[1] + c[2])} des particules · tombées : ${pct(c[3])}`);
+        },
+      });
+    }
+
+    // ── 04 · la virgule fixe ───────────────────────────────────────────────
+    {
+      let seed = 1;
+      demo('#fig-fixe', {
+        title: 'Une somme, seize ordres', aspect: 3,
+        controls: [{ key: 'n', label: 'Dépôts dans la cellule', min: 8, max: 240, step: 1, value: 80 }],
+        buttons: [{ label: 'Autres ordres', onClick: () => { seed++; } }],
+        draw(g, d) {
+          const r = rng(77), n = d.s.n, FM = 1e5, wts = Array.from({ length: n }, () => Math.fround(r() * 0.42)); // (poids d'un noyau quadratique en 3D : au plus 0,75³)
+          const sh = rng(seed * 131 + 7), fl = [], fx = [];
+          let exact = 0; for (const v of wts) exact += v;
+          for (let k = 0; k < 16; k++) {
+            const o = wts.map((_, i) => i);
+            for (let i = n - 1; i > 0; i--) { const j = Math.floor(sh() * (i + 1)); [o[i], o[j]] = [o[j], o[i]]; }
+            let a = 0, q = 0; for (const i of o) { a = Math.fround(a + wts[i]); q += Math.trunc(wts[i] * FM); }
+            fl.push(a); fx.push(q / FM);
+          }
+          const { w, h } = d, x0 = 150, x1 = w - 24, span = Math.max(4e-6, ...fl.map((v) => Math.abs(v - exact))) * 1.25, X = (v, c) => lerp(x0, x1, 0.5 + (v - c) / (2 * span));
+          const row = (y, vals, c, colr, name) => {
+            g.strokeStyle = C.grid; g.lineWidth = 1; g.beginPath(); g.moveTo(x0, y); g.lineTo(x1, y); g.stroke();
+            label(g, name, 14, y + 4, { size: 12, color: colr });
+            g.fillStyle = alpha(colr, 0.7); for (const v of vals) { g.beginPath(); g.arc(X(v, c), y, 5, 0, TAU); g.fill(); }
+          };
+          row(h * 0.32, fl, exact, C.c3, 'flottants 32 bits'); row(h * 0.68, fx, fx[0], C.c4, 'virgule fixe');
+          label(g, `← ${fmt(span * 1e6, 1)} millionièmes →`, (x0 + x1) / 2, h - 10, { align: 'center', size: 11, color: C.faint });
+          d.status(`${new Set(fl).size} totaux flottants différents · ${new Set(fx).size} total entier · troncature : ${fmt((exact - fx[0]) * 1e4, 1)} dix-millièmes`);
+        },
+      });
+    }
+
+    // ── 05 · la surface ────────────────────────────────────────────────────
+    {
+      // wax.js : parts(), phi() ; mpm.js : kRPinSplat, kRSplat, kResolve
+      const ISO_L = 0.9 * RH, KF = 0.3 / RH, KU = 0.9, SW = 72, SH = 112, PX = 3, IW = GX * PX, IH = 58 * PX;
+      let S = null, SDF = null, F = null, cv = null, img = null;
+      const INK = (() => { const h = C.ink.replace('#', ''), n = parseInt(h.length === 3 ? h.replace(/./g, '$&$&') : h, 16); return Number.isFinite(n) ? [n >> 16 & 255, n >> 8 & 255, n & 255] : [230, 230, 230]; })();
+      const bil = (a, W_, H_, u, v) => { u = clamp(u, 0, W_ - 1.001); v = clamp(v, 0, H_ - 1.001); const i = u | 0, j = v | 0, fx = u - i, fy = v - j, k = i + j * W_; return lerp(lerp(a[k], a[k + 1], fx), lerp(a[k + W_], a[k + W_ + 1], fx), fy); };
+      const tex = (a, x, y) => bil(a, GX, GY, x - 0.5, y - 0.5);
+      const sdObj = (px, py) => { // (hors de la boîte : la distance au bord s'ajoute)
+        const qx = (px + 18) / 36, qy = (py + 1) / 56, out = Math.hypot(Math.max(Math.abs(qx - 0.5) - 0.5, 0) * 36, Math.max(Math.abs(qy - 0.5) - 0.5, 0) * 56);
+        return bil(SDF, SW, SH, clamp(qx) * SW - 0.5, clamp(qy) * SH - 0.5) + out;
+      };
+      function init() {
+        S = makeSim(); SDF = new Float32Array(SW * SH);
+        for (let j = 0; j < SH; j++) for (let i = 0; i < SW; i++) SDF[i + j * SW] = sdObject(OBJECTS.lapin.prims, SC.lapin, -18 + (i + 0.5) / 2, -1 + (j + 0.5) / 2, Z0);
+        F = { raw: Array.from({ length: 6 }, () => new Float64Array(NC)), out: Array.from({ length: 6 }, () => new Float64Array(NC)) };
+        cv = [0, 1].map(() => { const c = document.createElement('canvas'); c.width = IW; c.height = IH; return c; });
+        img = cv.map((c) => c.getContext('2d').createImageData(IW, IH));
+      }
+      function fields() { // 0 : masse solide, 1-2 : déplacement, 3 : liquide, 4 : température, 5 : pigment
+        const [m, dx, dy, s, t, c] = F.raw; for (const a of F.raw) a.fill(0);
+        for (let i = 0; i < S.N; i++) {
+          if (S.st[i] < 0) continue;
+          const sol = solidOf(S.T[i]) * (S.st[i] === 0 ? 1 : smooth(1.9, 1.1, S.st[i])), ex = S.x[i] - S.rx[i], ey = S.y[i] - S.ry[i];
+          sten(S.x[i], S.y[i]);
+          for (let q = 0; q < 3; q++) for (let a = 0; a < 3; a++) {
+            const k = bi + a + (bj + q) * GX, w = W[a] * W[3 + q], ws = w * sol;
+            m[k] += ws; dx[k] += ws * ex; dy[k] += ws * ey; s[k] += w - ws; t[k] += w * S.T[i]; c[k] += w * S.pig[i];
+          }
+        }
+        for (let n = 0; n < 6; n++) { const a = F.raw[n], o = F.out[n]; for (let k = GX; k < NC - GX; k++) o[k] = 0.28 * a[k] + 0.18 * (a[k - 1] + a[k + 1] + a[k - GX] + a[k + GX]); }
+      }
+      function paint(n, iso) {
+        const [m, dx, dy, s, t, c] = F.out, px = img[n].data, A = WAX.a, B = WAX.b;
+        for (let j = 0; j < IH; j++) for (let i = 0; i < IW; i++) {
+          const x = (i + 0.5) / PX, y = 62 - (j + 0.5) / PX, o = 4 * (i + j * IW), ms = tex(m, x, y), ml = tex(s, x, y);
+          let phi, liq = 0;
+          if (iso) phi = (iso * 8 * RH - (ms + ml)) * KF;
+          else {
+            const im = 1 / Math.max(ms, 1e-3), frac = ms / Math.max(ms + ml, 1e-3);
+            let ps = Math.max(sdObj(x - OX - tex(dx, x, y) * im, y - OY - tex(dy, x, y) * im), (0.3 - frac) * 1.5);
+            const pl = lerp(1.2, (ISO_L - ml) * KF, smooth(0.004 * RH, 0.03 * RH, ms + ml));
+            ps = lerp(1.2, ps, smooth(0.004 * RH, 0.03 * RH, ms));
+            const hh = Math.max(KU - Math.abs(ps - pl), 0) / KU;
+            phi = Math.min(ps, pl) - hh * hh * KU * 0.25; liq = smooth(-0.25, 0.25, ps - pl);
+          }
+          // (repère : le contour de l'objet d'origine, tel qu'il sort du moule)
+          const edge = clamp(1 - Math.abs(sdObj(x - OX, y - OY)) * PX * 0.9);
+          if (phi > 0.2) { px[o] = INK[0]; px[o + 1] = INK[1]; px[o + 2] = INK[2]; px[o + 3] = 150 * edge; continue; }
+          const tot = Math.max(ms + ml, 1e-3), pig = smooth(0.25, 0.75, clamp(tex(c, x, y) / tot)), wet = smooth(0.55, 0.95, tex(t, x, y) / tot);
+          const k = lerp(1, 0.72, liq) * lerp(0.62, 1, smooth(0, -0.4, phi)) * (1 + 0.25 * wet), rgb = srgb([lerp(A[0], B[0], pig) * k, lerp(A[1], B[1], pig) * k, lerp(A[2], B[2], pig) * k]);
+          const e = 0.6 * edge; px[o] = lerp(rgb[0], INK[0], e); px[o + 1] = lerp(rgb[1], INK[1], e); px[o + 2] = lerp(rgb[2], INK[2], e); px[o + 3] = Math.max(255 * clamp(0.5 - phi * PX), 150 * edge);
+        }
+        cv[n].getContext('2d').putImageData(img[n], 0, 0);
+      }
+      // À l'arrêt : le vrai dépôt en volume. Les particules du projet (objects.js · seedPoints, même trame),
+      // le noyau à 27 cellules, le lissage de kResolve, puis la coupe z = Z0 ; fenêtre sur la tête et les oreilles.
+      const RH3 = 1 / (8 * SEED_H ** 3), BX = [-13, 16, -5], BN = [26, 36, 10], VW = { x0: -10, x1: 10, y0: 23, y1: 47 }, ZP = 8, ZW = 20 * ZP, ZH = 24 * ZP;
+      let rest = null;
+      const w3 = (u, o) => { const f = Math.floor(u), c = u - f - 0.5; o[0] = 0.5 * (0.5 - c) ** 2; o[1] = 0.75 - c * c; o[2] = 0.5 * (0.5 + c) ** 2; return f - 1; };
+      function initRest() {
+        const [nx, ny, nz] = BN, raw = new Float64Array(nx * ny * nz), P = OBJECTS.lapin.prims, sc = SC.lapin, h = SEED_H, dots = [], wx = [0, 0, 0], wy = [0, 0, 0], wz = [0, 0, 0];
+        for (let z = -20 + h / 2; z < 20; z += h) for (let y = h / 2; y < 55; y += h) for (let x = -18 + h / 2; x < 18; x += h) {
+          if (x < BX[0] + 1.5 || x > BX[0] + nx - 1.5 || y < BX[1] + 1.5 || y > BX[1] + ny - 1.5 || z < BX[2] + 1.5 || z > BX[2] + nz - 1.5 || sdObject(P, sc, x, y, z) >= 0) continue;
+          const i0 = w3(x - BX[0], wx), j0 = w3(y - BX[1], wy), k0 = w3(z - BX[2], wz);
+          for (let c = 0; c < 3; c++) for (let b = 0; b < 3; b++) for (let a = 0; a < 3; a++) raw[i0 + a + nx * (j0 + b + ny * (k0 + c))] += wx[a] * wy[b] * wz[c];
+          if (Math.abs(z - Z0) < 0.31 && z < Z0) dots.push(x, y);
+        }
+        // kResolve (0,28 pour la cellule, 0,12 pour chacune des six voisines), puis la tranche z = Z0, entre deux couches de cellules
+        const M2 = new Float64Array(nx * ny), res = (k) => 0.28 * raw[k] + 0.12 * (raw[k - 1] + raw[k + 1] + raw[k - nx] + raw[k + nx] + raw[k - nx * ny] + raw[k + nx * ny]);
+        for (let j = 1; j < ny - 1; j++) for (let i = 1; i < nx - 1; i++) M2[i + nx * j] = lerp(res(i + nx * (j + ny * 4)), res(i + nx * (j + ny * 5)), Z0 + 0.5);
+        // la texture de distance du projet (demi-cellule), lue elle aussi entre deux couches ; et le contour exact
+        const SDR = new Float32Array(SW * SH).fill(4), TRUE = new Float32Array(ZW * ZH);
+        for (let j = 36; j < 104; j++) for (let i = 0; i < SW; i++) { const x = -18 + (i + 0.5) / 2, y = -1 + (j + 0.5) / 2; SDR[i + j * SW] = lerp(sdObject(P, sc, x, y, 0.25), sdObject(P, sc, x, y, 0.75), (Z0 - 0.25) / 0.5); }
+        for (let j = 0; j < ZH; j++) for (let i = 0; i < ZW; i++) TRUE[i + j * ZW] = sdObject(P, sc, VW.x0 + (i + 0.5) / ZP, VW.y1 - (j + 0.5) / ZP, Z0);
+        const cvs = [0, 1].map(() => { const c = document.createElement('canvas'); c.width = ZW; c.height = ZH; return c; });
+        rest = { M2, SDR, TRUE, dots, cvs, ims: cvs.map((c) => c.getContext('2d').createImageData(ZW, ZH)), key: '', dev: [0, 0] };
+      }
+      function paintRest(thr) {
+        const { M2, SDR, TRUE } = rest, col0 = WAX.a, ISO3 = 0.9 * RH3, KF3 = 0.3 / RH3;
+        rest.dev = [0, 0];
+        for (let n = 0; n < 2; n++) {
+          const px = rest.ims[n].data;
+          for (let j = 0; j < ZH; j++) for (let i = 0; i < ZW; i++) {
+            const x = VW.x0 + (i + 0.5) / ZP, y = VW.y1 - (j + 0.5) / ZP, o = 4 * (i + j * ZW), ms = bil(M2, BN[0], BN[1], x - BX[0] - 0.5, y - BX[1] - 0.5), tr = TRUE[i + j * ZW];
+            let phi;
+            if (n === 0) phi = (thr * 8 * RH3 - ms) * KF3;
+            else { // parts() et phi(), sans liquide ni déplacement (d = 0)
+              let ps = Math.max(bil(SDR, SW, SH, (x + 18) * 2 - 0.5, (y + 1) * 2 - 0.5), (0.3 - ms / Math.max(ms, 1e-3)) * 1.5);
+              const pl = lerp(1.2, ISO3 * KF3, smooth(0.004 * RH3, 0.03 * RH3, ms));
+              ps = lerp(1.2, ps, smooth(0.004 * RH3, 0.03 * RH3, ms));
+              const hh = Math.max(KU - Math.abs(ps - pl), 0) / KU;
+              phi = Math.min(ps, pl) - hh * hh * KU * 0.25;
+            }
+            if ((phi < 0) !== (tr < 0)) rest.dev[n] = Math.max(rest.dev[n], Math.abs(tr));
+            const edge = clamp(1 - Math.abs(tr) * ZP * 0.6), a = clamp(0.5 - phi * ZP), k = lerp(0.62, 1, smooth(0, -0.4, phi)), rgb = srgb([col0[0] * k, col0[1] * k, col0[2] * k]);
+            px[o] = lerp(rgb[0], INK[0], edge); px[o + 1] = lerp(rgb[1], INK[1], edge); px[o + 2] = lerp(rgb[2], INK[2], edge); px[o + 3] = 255 * Math.max(a, edge);
+            if (a <= 0) { px[o] = INK[0]; px[o + 1] = INK[1]; px[o + 2] = INK[2]; }
+          }
+          rest.cvs[n].getContext('2d').putImageData(rest.ims[n], 0, 0);
+        }
+      }
+      demo('#fig-surface', {
+        title: 'Iso-densité et surface par déplacement', aspect: 1.72, animate: true,
+        controls: [{ key: 'thr', label: 'Seuil de l’iso-densité (part de la densité de repos)', min: 0.11, max: 0.5, step: 0.01, value: 0.11, fmt: pct }],
+        buttons: [{ key: 'melt', label: 'Laisser fondre', toggle: true, onClick: () => S?.reset() }, { key: 'pause', label: 'Pause', toggle: true }, { key: 'dots', label: 'Particules', toggle: true }, { label: 'Rejouer', onClick: () => S?.reset() }],
+        draw(g, d) {
+          if (!seen(d)) return;
+          const names = ['iso-densité seule', 'objet lu en p − d, réuni au liquide'];
+          if (!d.s.melt) {
+            if (!rest) initRest();
+            if (rest.key !== String(d.s.thr)) { paintRest(d.s.thr); rest.key = String(d.s.thr); }
+            const sc = Math.min(d.w / 2 / 20.6, (d.h - 34) / 24);
+            for (let n = 0; n < 2; n++) {
+              const x0 = n * d.w / 2 + (d.w / 2 - 20 * sc) / 2, y0 = 30;
+              g.imageSmoothingEnabled = true; g.drawImage(rest.cvs[n], x0, y0, 20 * sc, 24 * sc);
+              g.strokeStyle = C.grid; g.lineWidth = 1; g.beginPath(); // les cellules de la grille
+              for (let i = 0; i <= 20; i++) { g.moveTo(x0 + i * sc, y0); g.lineTo(x0 + i * sc, y0 + 24 * sc); }
+              for (let j = 0; j <= 24; j++) { g.moveTo(x0, y0 + j * sc); g.lineTo(x0 + 20 * sc, y0 + j * sc); }
+              g.stroke();
+              if (d.s.dots) { g.fillStyle = alpha(C.ink, 0.55); for (let q = 0; q < rest.dots.length; q += 2) { const x = rest.dots[q], y = rest.dots[q + 1]; if (x > VW.x0 && x < VW.x1 && y > VW.y0 && y < VW.y1) g.fillRect(x0 + (x - VW.x0) * sc - 1, y0 + (VW.y1 - y) * sc - 1, 2, 2); } }
+              label(g, names[n], n * d.w / 2 + 14, 20, { size: 12, color: n ? C.c1 : C.c2 });
+            }
+            d.status(`à l’arrêt · plus grand écart au contour d’origine : ${fmt(rest.dev[0], 1)} cellule à gauche, ${fmt(rest.dev[1], 1)} à droite`);
+            return;
+          }
+          if (!S) init();
+          if (d.dt > 0 && !d.s.pause) { if (S.time() >= TL.half) S.reset(); advance(S); }
+          fields();
+          [true, false].forEach((iso, n) => {
+            const V = view(d, n * d.w / 2, d.w / 2);
+            paint(n, iso ? d.s.thr : 0); drawPlate(g, V);
+            g.imageSmoothingEnabled = true; g.drawImage(cv[n], V.X(0), V.Y(62), GX * V.s, 58 * V.s);
+            if (d.s.dots) { g.fillStyle = alpha(C.ink, 0.5); for (let i = 0; i < S.N; i++) if (S.st[i] >= 0) g.fillRect(V.X(S.x[i]) - 0.75, V.Y(S.y[i]) - 0.75, 1.5, 1.5); }
+            label(g, names[n], n * d.w / 2 + 14, 22, { size: 12, color: iso ? C.c2 : C.c1 });
+          });
+          d.status(`tranche 2D · t = ${fmt(S.time(), 1)} s du demi-cycle${d.s.pause ? ' · en pause' : ''}`);
+        },
+      });
+    }
+
+    // ── 06 · la lumière ────────────────────────────────────────────────────
+    {
+      // wax.js : thick(), shade(), env() — une seule lampe, la figurine au repos vue de face (rayons parallèles)
+      const NXg = 36, NYg = 56, NZg = 40, PL = 4, LW = 32 * PL, LH = 50 * PL, SIG = [0.05, 0.16, 0.2], EXPO = 1.5;
+      const KEYC = [0.95 * 0.88, 0.904 * 0.88, 0.85 * 0.88], AMB = [0.0039, 0.0045, 0.0068]; // « équipe de nuit » : lampe principale × 4 × 0,22 ; mur × 0,16
+      let key = 'lapin', made = '', G = null, surf = null, cvL = null, imL = null, last = '', probe = null;
+      const sdG = (x, y, z) => { // distance cuite à la cellule, lue avec interpolation
+        const u = clamp(x + 17.5, 0, NXg - 1.001), v = clamp(y + 0.5, 0, NYg - 1.001), w = clamp(z + 19.5, 0, NZg - 1.001), i = u | 0, j = v | 0, k = w | 0, fx = u - i, fy = v - j, fz = w - k, o = i + NXg * (j + NYg * k), sy = NXg, sz = NXg * NYg;
+        return lerp(lerp(lerp(G[o], G[o + 1], fx), lerp(G[o + sy], G[o + sy + 1], fx), fy), lerp(lerp(G[o + sz], G[o + sz + 1], fx), lerp(G[o + sz + sy], G[o + sz + sy + 1], fx), fy), fz);
+      };
+      function prepare() {
+        const P = OBJECTS[key].prims, sc = SC[key], f = (x, y, z) => sdObject(P, sc, x, y, z), e = 0.55;
+        G = new Float32Array(NXg * NYg * NZg);
+        for (let k = 0; k < NZg; k++) for (let j = 0; j < NYg; j++) for (let i = 0; i < NXg; i++) G[i + NXg * (j + NYg * k)] = f(-17.5 + i, -0.5 + j, -19.5 + k);
+        surf = new Float32Array(LW * LH * 7).fill(NaN);
+        for (let j = 0; j < LH; j++) for (let i = 0; i < LW; i++) {
+          const x = -16 + (i + 0.5) / PL, y = 49 - (j + 0.5) / PL;
+          let z = 19, dd = 1, n = 0;
+          while (z > -19 && (dd = sdG(x, y, z)) > 0.5) z -= dd; // approche dans la distance cuite
+          if (z <= -19) continue;
+          for (; n < 40 && z > -19 && Math.abs(dd = f(x, y, z)) > 0.02; n++) z -= dd; // puis sur la forme exacte
+          if (Math.abs(dd) > 0.15) continue;
+          let nx = f(x + e, y, z) - f(x - e, y, z), ny = f(x, y + e, z) - f(x, y - e, z), nz = f(x, y, z + e) - f(x, y, z - e);
+          const nl = Math.hypot(nx, ny, nz) || 1;
+          surf.set([x, y, z, nx / nl, ny / nl, nz / nl, veinOf(x + 32, y + 54, z + 32)], 7 * (i + j * LW));
+        }
+        cvL ??= document.createElement('canvas'); cvL.width = LW; cvL.height = LH; imL = cvL.getContext('2d').createImageData(LW, LH);
+        made = key; last = '';
+      }
+      // épaisseur de matière traversée vers la lampe (la densité : pleine dans la forme, nulle dehors, adoucie sur une cellule)
+      const thick = (px, py, pz, L) => {
+        let t = 0;
+        for (let i = 0; i < 9; i++) {
+          const s = (i + 0.5) * 2.4, x = px + L[0] * s, y = py + L[1] * s, z = pz + L[2] * s;
+          if (x < -18 || x > 18 || y < -1 || y > 55 || z < -20 || z > 20) continue;
+          t += smooth(1.2 / 8, 5.5 / 8, clamp(0.5 - sdG(x, y, z))) * 2.4;
+        }
+        return t;
+      };
+      const env = (dx, dy, dz, L, out) => {
+        const bg = lerp(0.4, 1.6, smooth(-0.3, 0.9, dy)), k = smooth(0.83, 0.93, dx * L[0] + dy * L[1] + dz * L[2]) * 2.2;
+        for (let c = 0; c < 3; c++) out[c] = AMB[c] * bg + KEYC[c] * k;
+      };
+      function paint(d, L) {
+        const px = imL.data, T = d.s.T, wet = smooth(0.55, 0.95, T), rough = lerp(0.42, 0.1, wet), gloss = lerp(0.25, 1, wet), ev = [0, 0, 0];
+        const hl = Math.hypot(L[0], L[1], L[2] + 1), hx = L[0] / hl, hy = L[1] / hl, hz = (L[2] + 1) / hl; // v = (0, 0, 1)
+        for (let q = 0; q < LW * LH; q++) {
+          const o = 7 * q, x = surf[o], nx = surf[o + 3], ny = surf[o + 4], nz = surf[o + 5];
+          if (x !== x) { px[4 * q + 3] = 0; continue; }
+          const th = thick(x + nx * 1.3, surf[o + 1] + ny * 1.3, surf[o + 2] + nz * 1.3, L), pig = smooth(0.25, 0.75, surf[o + 6]);
+          const ndl = nx * L[0] + ny * L[1] + nz * L[2], wrap = clamp((ndl + 0.35) / 1.35);
+          const sp = Math.pow(Math.max(nx * hx + ny * hy + nz * hz, 0), 2 / (rough * rough)) * (0.35 / (rough * rough)) * Math.max(ndl, 0) * Math.exp(-1.2 * th) * 0.06;
+          const fres = Math.pow(1 - Math.max(nz, 0), 5) * 0.96 + 0.04;
+          env(2 * nz * nx, 2 * nz * ny, 2 * nz * nz - 1, L, ev); // reflect(rd, n), rd = (0, 0, −1)
+          for (let c = 0; c < 3; c++) {
+            const al = lerp(WAX.a[c], WAX.b[c], pig);
+            let v;
+            if (d.s.map) v = th / 22;
+            else {
+              const direct = al * wrap * Math.exp(-0.55 * th), trans = d.s.trans ? Math.pow(al, 0.6) * Math.exp(-SIG[c] * th) * 0.3 : 0;
+              v = ((direct + trans + sp) * KEYC[c] + al * AMB[c] * (ny * 0.5 + 0.6) + ev[c] * fres * gloss) * EXPO; v = v / (1 + v);
+            }
+            px[4 * q + c] = 255 * Math.pow(clamp(v), 1 / 2.2);
+          }
+          px[4 * q + 3] = 255;
+        }
+        cvL.getContext('2d').putImageData(imL, 0, 0);
+      }
+      demo('#fig-lumiere', {
+        title: 'Une lampe, l’épaisseur de cire, la peau qui luit', aspect: 1.5, animate: true,
+        controls: [
+          { key: 'az', label: 'Lampe : tour autour de la figurine (0° : côté caméra)', min: -180, max: 180, step: 1, value: 150, fmt: (v) => `${v}°` },
+          { key: 'el', label: 'Lampe : hauteur', min: 0, max: 80, step: 1, value: 25, fmt: (v) => `${v}°` },
+          { key: 'T', label: 'Température de la peau', min: 0.3, max: 1, step: 0.01, value: 0.5, fmt: (v) => fmt(v) },
+        ],
+        buttons: [{ key: 'trans', label: 'Translucidité', toggle: true, value: true }, { key: 'map', label: 'Voir l’épaisseur', toggle: true }, ...Object.keys(OBJECTS).map((k) => ({ label: OBJECTS[k].label, onClick: () => { key = k; } }))],
+        pointer(d, e) { const m = d.state.map; if (m) probe = [Math.floor((e.x - m.x0) / m.s * PL), Math.floor((e.y - m.y0) / m.s * PL)]; },
+        draw(g, d) {
+          if (!seen(d)) return;
+          if (made !== key) prepare();
+          const az = d.s.az * Math.PI / 180, el = d.s.el * Math.PI / 180, L = [Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el)];
+          const k = [key, d.s.az, d.s.el, d.s.T, d.s.trans, d.s.map].join();
+          if (k !== last) { paint(d, L); last = k; }
+          const { w, h } = d, s = Math.min((w * 0.7) / 32, (h - 16) / 50), x0 = (w * 0.7 - 32 * s) / 2, y0 = (h - 50 * s) / 2;
+          d.state.map = { x0, y0, s };
+          g.imageSmoothingEnabled = true; g.drawImage(cvL, x0, y0, 32 * s, 50 * s);
+          // la sonde : épaisseur et part de lumière qui traverse, au point survolé
+          let q = probe && probe[0] >= 0 && probe[0] < LW && probe[1] >= 0 && probe[1] < LH ? probe[0] + probe[1] * LW : -1;
+          if (q < 0 || surf[7 * q] !== surf[7 * q]) q = LW / 2 + ((LH * 0.68) | 0) * LW; // (à défaut : le ventre)
+          let txt = 'survolez la figurine';
+          if (q >= 0 && surf[7 * q] === surf[7 * q]) {
+            const o = 7 * q, th = thick(surf[o] + surf[o + 3] * 1.3, surf[o + 1] + surf[o + 4] * 1.3, surf[o + 2] + surf[o + 5] * 1.3, L);
+            const X = x0 + ((q % LW) + 0.5) / PL * s, Y = y0 + (((q / LW) | 0) + 0.5) / PL * s;
+            g.strokeStyle = C.ink; g.lineWidth = 1.2; g.beginPath(); g.arc(X, Y, 6, 0, TAU); g.stroke();
+            txt = `au point visé : ${fmt(th, 1)} cellules de cire vers la lampe · il passe ${pct(Math.exp(-SIG[0] * th))} du rouge, ${pct(Math.exp(-SIG[1] * th))} du vert, ${pct(Math.exp(-SIG[2] * th))} du bleu`;
+          }
+          // la lampe, vue de dessus
+          const cx = w * 0.85, cy = h * 0.4, R = Math.min(w * 0.1, h * 0.26);
+          g.strokeStyle = alpha(C.ink, 0.3); g.lineWidth = 1; g.beginPath(); g.arc(cx, cy, R, 0, TAU); g.stroke();
+          g.fillStyle = C.c1; g.beginPath(); g.arc(cx, cy, R * 0.22, 0, TAU); g.fill();
+          g.fillStyle = HOT; g.beginPath(); g.arc(cx + Math.sin(az) * R, cy + Math.cos(az) * R, 6, 0, TAU); g.fill();
+          arrow(g, cx + Math.sin(az) * R * 0.85, cy + Math.cos(az) * R * 0.85, cx + Math.sin(az) * R * 0.35, cy + Math.cos(az) * R * 0.35, { color: HOT });
+          label(g, 'vu de dessus', cx, cy - R - 12, { align: 'center', size: 11.5, color: C.faint });
+          label(g, 'caméra', cx, cy + R + 22, { align: 'center', size: 11.5 });
+          label(g, d.s.map ? 'blanc : 22 cellules de cire' : `rugosité ${fmt(lerp(0.42, 0.1, smooth(0.55, 0.95, d.s.T)))}`, cx, cy + R + 44, { align: 'center', size: 11.5, color: C.c2 });
+          d.status(txt);
+        },
+      });
+    }
+
+    // ── 07 · le moule ──────────────────────────────────────────────────────
+    {
+      let key = 'chat';
+      // objects.js · mouldField : le champ en un point, avant la coupe en deux moitiés ; rend [métal, distance à l'objet]
+      const mouldAt = (x, y, z) => {
+        const M = MOULD, Ht = HT[key] + M.rise, sd = sdObject(OBJECTS[key].prims, SC[key], x, y, z), rr = Math.hypot(x, z);
+        let s = Math.max(sd - M.tOut, M.tIn - sd); // paroi
+        s = Math.min(s, Math.max(Math.abs(x) - 1.5, sd - M.flange, M.tIn - sd)); // bride du plan de joint
+        s = Math.min(s, Math.max(rr - 5.2, M.tIn - sd, y - Ht, 8 - y)); // fût du canal de coulée
+        const c = y - (Ht - M.cup);
+        s = Math.min(s, Math.max(rr - (5.2 + c * 0.9), -c, y - Ht)); // entonnoir
+        if (y > 6) s = Math.max(s, (2.8 + Math.max(0, c) * 0.9) - rr); // le canal lui-même
+        return [Math.max(s, 0.35 - y), sd];
+      };
+      demo('#fig-moule', {
+        title: 'Le champ du moule, en coupe', aspect: 2.3,
+        controls: [
+          { key: 'y', label: 'Hauteur de la coupe (cellules)', min: 2, max: 56, step: 0.5, value: 30, fmt: (v) => fmt(v, 1) },
+          { key: 't', label: 'Instant du demi-cycle', min: 0, max: 4.6, step: 0.05, value: 0.8, fmt: (v) => `${fmt(v)} s` },
+        ],
+        buttons: Object.keys(OBJECTS).map((k) => ({ label: OBJECTS[k].label, onClick: () => { key = k; } })),
+        draw(g, d) {
+          const { w, h } = d, st = MOULD.step, Ht = HT[key] + MOULD.rise, y = Math.min(d.s.y, Ht - 0.5), t = d.s.t;
+          const open = smooth(0.1, TL.lift - 0.15, t) * (1 - smooth(TL.lift + 1.7, TL.lift + 2.7, t)), th = open * 1.75, zh = ZB[key] - 2.5;
+          const wl = w * 0.62, s1 = Math.min(wl / 96, (h - 24) / 66), cx = wl / 2, cy = h / 2 + 2 * s1;
+          // vue de dessus : x vers la droite, z (l'avant) vers le bas
+          const top = [];
+          for (let z = -29; z <= 29; z += st) for (let x = -25; x <= 25; x += st) { const [s, sd] = mouldAt(x, y, z); if (sd < 0) { g.fillStyle = alpha(C.c1, 0.55); g.fillRect(cx + x * s1 - st * s1 / 2, cy + z * s1 - st * s1 / 2, st * s1 + 0.5, st * s1 + 0.5); } else if (s < 0) top.push(x, z); }
+          for (const side of [1, -1]) {
+            g.save(); g.translate(cx, cy + zh * s1); g.rotate(-side * th); g.fillStyle = alpha(C.c2, side > 0 ? 0.85 : 0.6);
+            for (let k = 0; k < top.length; k += 2) if (0.12 - side * top[k] < 0) g.fillRect(top[k] * s1 - st * s1 / 2, (top[k + 1] - zh) * s1 - st * s1 / 2, st * s1 + 0.5, st * s1 + 0.5);
+            g.restore();
+          }
+          g.fillStyle = C.ink; g.beginPath(); g.arc(cx, cy + zh * s1, 3.5, 0, TAU); g.fill();
+          label(g, 'charnière', cx + 8, cy + zh * s1 - 6, { size: 11 });
+          label(g, 'vu de dessus', 12, 18, { size: 11.5, color: C.faint }); label(g, 'avant ↓', 12, h - 10, { size: 11, color: C.faint });
+          // coupe de face (z = 0), moule fermé
+          const x0 = wl, s2 = Math.min((w - wl) / 56, (h - 24) / (Ht + 5)), fx = x0 + (w - wl) / 2, fy = h - 12 - 1.5 * s2;
+          for (let yy = -0.6; yy <= Ht + 1; yy += st) for (let x = -25; x <= 25; x += st) {
+            const [s, sd] = mouldAt(x, yy, 0), metal = Math.max(s, 0.12 - Math.abs(x)) < 0;
+            if (sd >= 0 && !metal) continue;
+            g.fillStyle = sd < 0 ? alpha(C.c1, 0.55) : alpha(C.c2, x > 0 ? 0.85 : 0.6); g.fillRect(fx + x * s2 - st * s2 / 2, fy - yy * s2 - st * s2 / 2, st * s2 + 0.5, st * s2 + 0.5);
+          }
+          g.strokeStyle = C.ink; g.lineWidth = 1; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(fx - 27 * s2, fy - y * s2); g.lineTo(fx + 27 * s2, fy - y * s2); g.stroke(); g.setLineDash([]);
+          label(g, 'coupe de face, moule fermé', x0 + 6, 18, { size: 11.5, color: C.faint });
+          d.status(`${OBJECTS[key].label} · moule haut de ${fmt(Ht, 1)} cellules · chaque moitié ouverte de ${Math.round(th * 180 / Math.PI)}°`);
+        },
+      });
+    }
+
+    // ── 08 · le cycle ──────────────────────────────────────────────────────
+    {
+      // l'usine de la graine ib352j (recipe.js) ; « ascenseurs » : mêmes proportions, l'autre circuit
+      const FAC = { circuit: 'rampe', dir: -1, half: 2.35, y0: 0.84, bellH: 1.36, y1: 5.07, ramp: 1.07 }, PLATE_Y = 0.56;
+      let circ = 'rampe';
+      const R = () => ({ objects: ['chat', 'chouette'], loop: { half: TL.half }, factory: { ...FAC, circuit: circ } });
+      const TRACKS = [
+        ['moule ouvert', (S) => S.open], ['moule levé', (S) => S.bell], ['plateaux en route', (S) => S.mv], ['barillet', (S) => S.arm - S.k],
+        ['chaleur', (S) => S.heat], ['chariot (0 : en attente)', (S) => S.carriers[0].f], ['ceinture (hauteur)', (S) => beltAt(S.t) / 1.5],
+      ];
+      const PHASES = [[TL.lift, 'le moule s’ouvre'], [TL.move, 'les plateaux échangent leurs places'], [TL.heat, 'le moule suivant se pose'], [TL.melt, 'la fonte'], [TL.half, 'les dernières gouttes']];
+      demo('#fig-cycle', {
+        title: 'stateAt() : la machine à un instant', aspect: 1.9, animate: true,
+        controls: [{ key: 'T', label: 'Temps dans la boucle', min: 0, max: 49.9, step: 0.1, value: 12, fmt: (v) => `${fmt(v, 1)} s` }],
+        buttons: [{ key: 'play', label: 'Lecture', toggle: true, value: true }, { label: 'Deux ascenseurs', onClick: () => { circ = 'ascenseurs'; } }, { label: 'Ascenseur et rampe', onClick: () => { circ = 'rampe'; } }],
+        draw(g, d) {
+          const Rr = R(), F = Rr.factory, T = d.s.play ? (d.t * 1.5) % 50 : d.s.T, S = stateAt(Rr, T / 50), Cc = circuit(F), { w, h } = d;
+          // la machine
+          const all = [...Cc.down, ...Cc.up], xa = Math.min(...all.map((p) => p[0])) - 0.8, xb = Math.max(...all.map((p) => p[0])) + 0.8, yb = F.y1 + PLATE_Y + 1.7;
+          const wl = w * 0.46, sc = Math.min((wl - 12) / (xb - xa), (h - 20) / yb), ox = 6 + (wl - 12 - (xb - xa) * sc) / 2 - xa * sc, X = (x) => ox + x * sc, Y = (y) => h - 10 - y * sc;
+          g.strokeStyle = alpha(C.ink, 0.25); g.lineWidth = 1; g.beginPath(); g.moveTo(X(xa), Y(0)); g.lineTo(X(xb), Y(0)); g.stroke();
+          for (const poly of [Cc.down, Cc.up]) { g.strokeStyle = alpha(C.ink, 0.3); g.lineWidth = 1.5; g.beginPath(); poly.forEach((p, i) => (i ? g.lineTo(X(p[0]), Y(p[1] - 0.08)) : g.moveTo(X(p[0]), Y(p[1] - 0.08)))); g.stroke(); }
+          for (const c of S.carriers) { g.fillStyle = C.c2; g.fillRect(X(c.pos[0]) - 0.42 * sc, Y(c.pos[1] - 0.04), 0.84 * sc, 0.07 * sc); }
+          // la source et le filet
+          const ys = F.y1 + PLATE_Y + 1.25;
+          g.strokeStyle = S.heat > 0.02 ? alpha(HOT, 0.3 + 0.7 * S.heat) : alpha(C.ink, 0.35); g.lineWidth = 3; g.beginPath(); g.arc(X(0), Y(ys - 0.2), 0.4 * sc, Math.PI * 1.15, Math.PI * 1.85); g.stroke();
+          const melt = smooth(TL.heat + 1, TL.melt - 0.5, S.t), mouldY = F.y0 + PLATE_Y + S.bell * (F.bellH + 0.14);
+          if (S.heat > 0.3 && S.bell < 0.01 && melt < 0.98) { g.strokeStyle = alpha(C.c1, 0.9 * S.heat); g.lineWidth = 1.5; g.beginPath(); g.moveTo(X(0), Y(F.y1 - 0.12)); g.lineTo(X(0), Y(mouldY + 0.95)); g.stroke(); }
+          // les plateaux
+          S.pallets.forEach((p, i) => {
+            const x = p[0], y = p[1];
+            g.strokeStyle = C.ink; g.lineWidth = 1.5; g.beginPath(); g.moveTo(X(x - 0.59), Y(y + 0.3)); g.lineTo(X(x - 0.59), Y(y)); g.lineTo(X(x - 0.2), Y(y - 0.06)); g.moveTo(X(x + 0.2), Y(y - 0.06)); g.lineTo(X(x + 0.59), Y(y)); g.lineTo(X(x + 0.59), Y(y + 0.3)); g.stroke();
+            g.beginPath(); g.moveTo(X(x - 0.29), Y(y + PLATE_Y)); g.lineTo(X(x + 0.29), Y(y + PLATE_Y)); g.moveTo(X(x), Y(y + PLATE_Y)); g.lineTo(X(x), Y(y + 0.1)); g.stroke();
+            if (i === S.wax && melt < 0.99) { const hh = 0.8 * (1 - melt); g.fillStyle = C.c1; g.beginPath(); g.ellipse(X(x), Y(y + PLATE_Y + hh / 2), 0.22 * sc * (1 + 0.3 * melt), hh * sc / 2, 0, 0, TAU); g.fill(); }
+          });
+          // le moule : deux moitiés (l'ouverture en livre est figurée par un écartement)
+          for (const sd of [-1, 1]) { g.fillStyle = alpha(C.c2, 0.75); g.fillRect(X(sd * (0.19 + 0.42 * S.open)) - 0.17 * sc, Y(mouldY + 1), 0.34 * sc, 1 * sc); }
+          label(g, S.object, X(S.pallets[S.wax][0]) + 0.4 * sc, Y(S.pallets[S.wax][1] + PLATE_Y + 0.75), { size: 11, color: C.c1 });
+          // les grandeurs
+          const x0 = wl + 150, x1 = w - 12, rowH = (h - 34) / TRACKS.length, Xt = (t) => lerp(x0, x1, t / TL.half);
+          TRACKS.forEach(([name, fn], r) => {
+            const yb2 = 12 + (r + 1) * rowH - 5, yt = yb2 - rowH + 12;
+            label(g, name, wl + 8, yb2 - 3, { size: 11.5 });
+            g.strokeStyle = C.grid; g.lineWidth = 1; g.beginPath(); g.moveTo(x0, yb2); g.lineTo(x1, yb2); g.stroke();
+            g.strokeStyle = r === 4 ? HOT : C.c1; g.lineWidth = 1.6; g.beginPath();
+            for (let i = 0; i <= 200; i++) { const t = i / 200 * (TL.half - 1e-3), v = fn(stateAt(Rr, (S.k * TL.half + t) / 50)), yy = lerp(yb2, yt, clamp(v)); i ? g.lineTo(Xt(t), yy) : g.moveTo(Xt(t), yy); }
+            g.stroke();
+          });
+          g.strokeStyle = C.ink; g.lineWidth = 1; g.beginPath(); g.moveTo(Xt(S.t), 10); g.lineTo(Xt(S.t), h - 22); g.stroke();
+          for (const t of [0, 5, 10, 15, 20, 25]) label(g, String(t), Xt(t), h - 8, { align: 'center', size: 10.5, color: C.faint });
+          d.status(`objet ${S.k + 1} sur 2 (${S.object}) · t = ${fmt(S.t, 1)} s · ${PHASES.find((p) => S.t < p[0])[1]}`);
+        },
+      });
+    }
+
+    // ── 09 · le dessin de chargement ──────────────────────────────────────
+    {
+      // loaderArt.js : contour() (verbatim), prepare() et draw() (sans le fondu de sortie ; l'avancement vient du curseur)
+      function contour(f, nx, nz, x0, z0, h) {
+        const out = [];
+        const at = (i, k) => f[k * nx + i];
+        const lp = (a, b) => a / (a - b);
+        for (let k = 0; k < nz - 1; k++) for (let i = 0; i < nx - 1; i++) {
+          const a = at(i, k), b = at(i + 1, k), c = at(i + 1, k + 1), d = at(i, k + 1);
+          const pts = [];
+          if ((a < 0) !== (b < 0)) pts.push(x0 + (i + lp(a, b)) * h, z0 + k * h);
+          if ((b < 0) !== (c < 0)) pts.push(x0 + (i + 1) * h, z0 + (k + lp(b, c)) * h);
+          if ((c < 0) !== (d < 0)) pts.push(x0 + (i + 1 - lp(c, d)) * h, z0 + (k + 1) * h);
+          if ((d < 0) !== (a < 0)) pts.push(x0 + i * h, z0 + (k + 1 - lp(d, a)) * h);
+          if (pts.length >= 4) out.push(pts[0], pts[1], pts[2], pts[3]);
+          if (pts.length === 8) out.push(pts[4], pts[5], pts[6], pts[7]);
+        }
+        return out;
+      }
+      const es = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
+      const pale = (c, k) => c.map((v) => Math.round(255 * Math.pow(Math.min(1, v), 1 / 2.2) * k + 255 * (1 - k)));
+      const body = pale(WAX.a, 0.5), vein = pale(WAX.b, 0.6);
+      let key = 'chat', made = '', slices = null, Hh = 1, Rp = 1;
+      function prepare() {
+        const sc = SC[key], prims = OBJECTS[key].prims, h = 0.8, x0 = -18, z0 = -20, nx = 46, nz = 51, dy = 1.6;
+        Hh = HT[key];
+        const f = new Float32Array(nx * nz), list = [];
+        let vol = 0;
+        for (let y = 0.6; y < Hh; y += dy) {
+          let area = 0;
+          for (let k = 0; k < nz; k++) for (let i = 0; i < nx; i++) { const v = sdObject(prims, sc, x0 + i * h, y, z0 + k * h); f[k * nx + i] = v; if (v < 0) area++; }
+          const seg = contour(f, nx, nz, x0, z0, h);
+          vol += area * h * h * dy;
+          if (seg.length) list.push({ y, seg: new Float32Array(seg) });
+        }
+        Rp = Math.sqrt(vol / (Math.PI * Hh * 0.12)); // la flaque, mince, a le volume de la figurine
+        slices = list; made = key;
+      }
+      demo('#fig-loader', {
+        title: 'La figurine en courbes de niveau', aspect: 1.5, animate: true,
+        controls: [{ key: 'p', label: 'Avancement du chargement', min: 0, max: 1, step: 0.01, value: 0.4, fmt: pct }],
+        buttons: Object.keys(OBJECTS).map((k) => ({ label: OBJECTS[k].label, onClick: () => { key = k; } })),
+        draw(ctx, d) {
+          if (!seen(d)) return;
+          if (made !== key) prepare();
+          const { w, h, t } = d, dpr = 1, m = Math.min(w, h), cx = w / 2, cy = h * 0.74;
+          const sc = (m * 0.56) / Math.max(Hh, Rp * 1.5);
+          const melt = Math.pow(d.s.p * 0.97, 1.5);
+          const yf = Hh * (1 - melt) + 0.2; // hauteur de la ceinture
+          const a = t * 0.3, ca = Math.cos(a), sa = Math.sin(a), el = 0.36, ce = Math.cos(el), se = Math.sin(el);
+          const q = [0, 0, 0];
+          const proj = (X0, Y0, Z0_, out) => {
+            const X = ca * X0 + sa * Z0_, Zr = -sa * X0 + ca * Z0_, Y = ce * Y0 - se * Zr, Z = se * Y0 + ce * Zr, p = 1 / (1 - (Z / Hh) * 0.35);
+            out[0] = cx + X * sc * p; out[1] = cy - Y * sc * p; out[2] = Z;
+          };
+          const ring = (r, y, wob, ph) => {
+            ctx.beginPath();
+            for (let i = 0; i <= 72; i++) {
+              const u = (i / 72) * Math.PI * 2, rr = r * (1 + wob * Math.sin(u * 3 + ph) + wob * 0.6 * Math.sin(u * 5 - ph * 1.7));
+              proj(Math.cos(u) * rr, y, Math.sin(u) * rr, q);
+              i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]);
+            }
+            ctx.stroke();
+          };
+          ctx.lineCap = 'round';
+          ctx.strokeStyle = 'rgba(240, 232, 218, 0.38)'; ctx.lineWidth = 1 * dpr;
+          ring(Rp * 1.1, 0, 0, 0); // l'assiette
+          const Rm = Rp * Math.sqrt(Math.min(1, melt * 1.05));
+          if (Rm > 0.5) {
+            for (let i = 1; i <= 6; i++) {
+              ctx.strokeStyle = `rgba(${vein[0]}, ${vein[1]}, ${vein[2]}, ${0.25 + 0.5 * (i / 6)})`; ctx.lineWidth = 1.1 * dpr;
+              ring(Rm * (i / 6), 0.3 + Hh * 0.04 * (1 - i / 6), 0.05 * (i / 6), i * 1.3 + t * 0.2);
+            }
+          }
+          // les tranches : intactes sous la ceinture, échauffées à son passage, affaissées et effacées au-dessus
+          for (const front of [false, true]) {
+            for (const s of slices) {
+              const over = (s.y - yf) / (Hh * 0.12);
+              if (over > 1) continue;
+              const gg = es(over), hot = Math.max(0, 1 - Math.abs(s.y - yf) / (Hh * 0.08));
+              const y = s.y - gg * s.y * 0.35, shrink = 1 - 0.15 * gg;
+              const c = hot > 0 ? [0, 1, 2].map((j) => Math.round(body[j] + ([255, 236, 206][j] - body[j]) * hot)) : body;
+              ctx.strokeStyle = `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${(front ? 0.9 : 0.16) * (1 - gg)})`;
+              ctx.lineWidth = 1.15 * dpr * (1 + 0.4 * hot);
+              ctx.beginPath();
+              const sg = s.seg;
+              for (let k = 0; k < sg.length; k += 4) {
+                proj(sg[k] * shrink, y, sg[k + 1] * shrink, q);
+                const ax = q[0], ay = q[1], az = q[2];
+                proj(sg[k + 2] * shrink, y, sg[k + 3] * shrink, q);
+                if ((az + q[2] > 0) !== front) continue;
+                ctx.moveTo(ax, ay); ctx.lineTo(q[0], q[1]);
+              }
+              ctx.stroke();
+            }
+          }
+          if (melt < 0.98) { ctx.strokeStyle = 'rgba(255, 226, 190, 0.7)'; ctx.lineWidth = 1.3 * dpr; ring(Rp * 0.62, yf, 0, 0); } // la ceinture
+          // les gouttes : elles partent du front et tombent jusqu'à la flaque
+          let fr = slices[0];
+          for (const s of slices) if (Math.abs(s.y - yf) < Math.abs(fr.y - yf)) fr = s;
+          if (melt > 0.02 && melt < 0.98) {
+            const sg = fr.seg, ns = sg.length / 4, nd = 9;
+            for (let i = 0; i < nd; i++) {
+              const cyc = t * 0.7 + i / nd, u = cyc % 1, k = 4 * Math.floor(((i * 0.618 + Math.floor(cyc) * 0.37) % 1) * ns);
+              const y = yf * (1 - u * u);
+              proj(sg[k], y, sg[k + 1], q);
+              const hx = q[0], hy = q[1];
+              proj(sg[k], Math.min(yf, y + Hh * 0.05), sg[k + 1], q);
+              ctx.strokeStyle = `rgba(255, 236, 206, ${0.8 * (1 - u * 0.5)})`; ctx.lineWidth = 1.6 * dpr;
+              ctx.beginPath(); ctx.moveTo(q[0], q[1]); ctx.lineTo(hx, hy); ctx.stroke();
+            }
+          }
+          d.status(`${OBJECTS[key].label} · ${slices.length} tranches · ${pct(melt)} du volume fondu`);
+        },
+      });
+    }
   </script>
 </body>
 </html>
