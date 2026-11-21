@@ -197,7 +197,7 @@ export async function createDay({ renderer, pipes, width, height, seed = meta.se
     duration: core.duration, isReady: core.isReady, progress: core.progress, warmPhases: core.warmPhases,
     renderAt: (u, { push = 0 } = {}) => core.renderAt(u, { push }) });
 }</code></pre>
-        <p>Passer vingt-deux pages par leur cœur ne devait rien changer à leur image. Chacune a été rendue avant et après, à trois phases, par l'outil de non-régression du dépôt (<code>tools/regress.html</code>), qui compare l'écart au bruit propre de chaque scène (deux rendus du même code ne sont pas identiques au pixel près, à cause du grain et des particules). Les 66 images sont restées dans ce bruit.</p>
+        <p>Passer les vingt-trois pages par leur cœur ne devait rien changer à leur image. Chacune a été rendue avant et après, à trois phases, par l'outil de non-régression du dépôt (<code>tools/regress.html</code>), qui compare l'écart au bruit propre de chaque scène (deux rendus du même code ne sont pas identiques au pixel près, à cause du grain et des particules). Les 69 images sont restées dans ce bruit.</p>
         <div class="note check"><b>Ce que vérifie le dépôt</b><p><code>npm run check</code> refuse un projet sans <code>core.js</code> ou sans <code>day.js</code>, une page ou un jour qui n'importe pas le cœur, une graine du relais différente de celle de la page, un passage d'entrée inconnu, un jour de l'ordre qui n'existe pas. La skill qui fabrique les nouvelles scènes pose ces trois modules dès l'échafaudage.</p></div>
       </section>
 
@@ -253,7 +253,7 @@ export async function createDay({ renderer, pipes, width, height, seed = meta.se
     ];
     // (relay-check : écart moyen sur 255 aux phases 0,1 et 0,45)
     const ECARTS = {
-      magma: [1.39, 1.0], shatter: [0.43, 0.34], melt: [0.96, 0.69], bolt: [0.33, 0.29], caustic: [0.25, 0.26], kelp: [0.58, 0.35],
+      magma: [0.26, 1.0], shatter: [0.43, 0.34], melt: [0.96, 0.69], bolt: [0.33, 0.29], caustic: [0.25, 0.26], kelp: [0.58, 0.35],
       erosion: [0.33, 1.0], moss: [0.61, 1.21], spore: [0.26, 0.6], feather: [0.54, 0.54], membrane: [2.8, 3.18], cocoon: [0.43, 0.62],
       fold: [0.36, 0.37], tangle: [0.2, 0.2], tension: [0.23, 0.22], pendulum: [0.23, 0.22], labyrinth: [0.29, 0.29], rust: [0.52, 0.78],
       echo: [0.31, 0.28], mirage: [0.24, 0.22], hollow: [0.44, 0.37], tesseract: [0.31, 0.27], planetaire_v2: [0.31, 0.27],

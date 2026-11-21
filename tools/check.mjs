@@ -26,9 +26,9 @@ const HOSTS = new Set(['mega']); // (la méga-scène : un hôte, pas un projet)
 // projets d'avant le relais qui n'y sont pas encore (remarque, pas erreur) ;
 // tout nouveau projet livre son jour (la skill pose core.js et day.js)
 const RELAY_LATER = new Set(['planetaire']);
-// jours dont la page n'est pas encore branchée sur core.js (remarque) : Magma
-// est en cours dans une autre branche
-const CORE_LATER = new Set(['magma']);
+// jours dont la page n'est pas encore branchée sur core.js (remarque, pas
+// erreur) : aucun aujourd'hui
+const CORE_LATER = new Set([]);
 const VERSIONS = { three: '0.186.1', 'lil-gui': '0.20.0', 'mp4-muxer': '5.1.3' };
 
 const read = (f) => fs.readFileSync(path.join(repo, f), 'utf8');

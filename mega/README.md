@@ -109,11 +109,7 @@ pour les deux, sans rien recopier. Ce qui vit dans les modules du projet
 Ce qui ne suit pas seul : un nouveau projet. La skill `codevember-scene` pose
 `core.js` et `day.js` à l'échafaudage ; au livrable, il reste à régler la
 graine et le passage d'entrée (`meta`), et à inscrire le jour dans l'ordre du
-relais (`DAYS`, `mega/src/main.js`). Et la branche : ce qui change sur `main`
-n'arrive ici qu'après fusion.
-
-Magma fait exception pour l'instant : sa page est en cours dans une autre
-branche, son `day.js` duplique encore son rendu.
+relais (`DAYS`, `mega/src/main.js`).
 
 Deux contrôles :
 - `npm run check` : chaque projet a son `day.js` et son `core.js`, importé par
