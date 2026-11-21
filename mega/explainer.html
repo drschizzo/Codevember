@@ -45,7 +45,7 @@
       <section id="relais">
         <h2><span class="n">01</span>Ce que l'on veut voir</h2>
         <span class="src">mega/src/main.js · DAYS</span>
-        <p>Les vingt-trois scènes se suivent dans un ordre qui suit la matière : le feu (la lave, le verre fondu, la cire), l'eau (le thé qui bout, le bassin, la mer, la rigole), la terre et le vivant (la pierre que la mousse reverdit, le bois mort, la plume, la membrane), les fibres (la soie, le papier, la corde, les câbles), les mécanismes (le balancier, le dédale), le métal que la rouille met à nu, la lumière (l'éclair et son écho, le mirage), puis la géométrie et le ciel (les coquilles emboîtées, l'hypercube, le planétaire). Après le planétaire, on revient à la lave.</p>
+        <p>Les vingt-trois scènes se suivent dans l'ordre du calendrier, de Fold (jour 1) à Magma (jour 23), puis on revient à Fold. Le passage d'un jour à l'autre ne dépend que du jour qui arrive : l'ordre peut changer sans retoucher les passages.</p>
         <p>Chaque jour joue sa boucle au moins une fois. À la fin de la boucle, un <b>passage</b> de quelques secondes mêle l'image qui s'en va et celle qui arrive. Pendant tout ce temps, aucun écran de chargement : le jour suivant doit être prêt quand le passage commence.</p>
         <p>Chaque scène, prise seule, est déjà lourde. Elle calcule sa géométrie au chargement (simulations, maillages, textures), compile des centaines de programmes pour la carte graphique (les <i>shaders</i>), et réserve des centaines de mégaoctets pour ses images intermédiaires. La suite de la page montre pourquoi on ne peut pas simplement tout charger, puis comment on fait à la place.</p>
       </section>
@@ -60,7 +60,7 @@
         </ul>
         <p>Additionnées, les vingt-trois scènes demandent environ 6,2 Go de mémoire vidéo et 8 Go de mémoire JavaScript. C'est plus qu'un onglet de navigateur ne peut prendre sur la plupart des machines, et le chargement durerait plusieurs minutes.</p>
         <figure id="fig-memoire"><figcaption><b>La mémoire de N scènes chargées ensemble.</b> Chaque bloc est une scène, dans l'ordre du relais, à sa taille mesurée. Le curseur ajoute des scènes. Le bouton « Le relais » ne garde jamais plus de deux scènes à la fois, celle qui joue et la suivante : la barre montre alors le pire couple de voisins.</figcaption></figure>
-        <p>Aucune scène n'a besoin de la mémoire des autres pendant qu'elle joue. Il suffit donc d'en avoir deux à la fois : celle que l'on regarde et celle qui vient ensuite. Le pire couple de voisins, Membrane et Cocoon, tient en 907 Mo de mémoire vidéo à la taille des pages ; dans le relais, qui dessine plus grand (1 777 × 1 528 pixels), le pire moment mesuré est de 1,6 Go.</p>
+        <p>Aucune scène n'a besoin de la mémoire des autres pendant qu'elle joue. Il suffit donc d'en avoir deux à la fois : celle que l'on regarde et celle qui vient ensuite. Le pire couple de voisins, Membrane et Caustic, tient en 898 Mo de mémoire vidéo à la taille des pages ; dans le relais, qui dessine plus grand (1 777 × 1 528 pixels), le pire moment mesuré est de 1,5 Go.</p>
         <div class="note try"><b>À essayer</b><ul>
           <li>Montez le curseur à 23 : la barre atteint 6,2 Go de mémoire vidéo.</li>
           <li>Activez « Le relais » : la barre ne dépasse plus le pire couple, quel que soit le nombre de scènes. Quel couple est le plus lourd ?</li>
@@ -70,7 +70,7 @@
       <section id="flux">
         <h2><span class="n">03</span>Un jour joue, le suivant se prépare</h2>
         <span class="src">mega/src/main.js · load(), tick() · mega/src/kit.js · prepare()</span>
-        <p>Une scène met entre 1,5 et 23 secondes à se préparer (générer sa géométrie, compiler ses programmes, rendre ses premières images). Si l'on attendait la fin d'un jour pour préparer le suivant, chaque passage serait remplacé par un écran noir de plusieurs secondes.</p>
+        <p>Une scène met entre 2 et 34 secondes à se préparer (générer sa géométrie, compiler ses programmes, rendre ses premières images). Si l'on attendait la fin d'un jour pour préparer le suivant, chaque passage serait remplacé par un écran noir de plusieurs secondes.</p>
         <p>La règle est donc de préparer le jour suivant <b>pendant</b> que le jour courant joue sa boucle. Dès qu'un jour commence à jouer, on crée le suivant ; ses calculs tournent en arrière-plan, et il dessine ses premières images dans une image à part, que personne ne voit. Quand la boucle du jour courant se termine, le suivant est prêt, et le passage peut commencer.</p>
         <p>Il reste un cas : un jour suivant plus long à préparer que la boucle du jour courant. On ne coupe pas la boucle en cours de route. Le jour courant fait simplement <b>un tour de plus</b>, et le passage attend la fin de ce tour.</p>
         <figure id="fig-flux"><figcaption><b>Le relais sur une ligne de temps.</b> En haut, ce que l'on voit : chaque bloc est une boucle d'un jour (ses vraies durées), le gris est un écran de chargement. En bas, la préparation de chaque jour (ses vrais temps, mesurés dans le relais). « À la suite » prépare chaque jour après la fin du précédent ; « En relais » le prépare pendant que le précédent joue. Le curseur ralentit la machine en multipliant tous les temps de préparation.</figcaption></figure>
@@ -83,7 +83,7 @@ if (!trans &amp;&amp; cur.u >= cur.end - T / cur.duration) {
         <p><code>cur.u</code> est la phase de la boucle : elle vaut 0 au début, 1 à la fin du premier tour, 2 à la fin du second. <code>T</code> est la durée du passage (5 secondes). Le passage commence <code>T</code> secondes avant la fin du tour, de sorte qu'il se termine exactement à la fin de la boucle.</p>
         <div class="note try"><b>À essayer</b><ul>
           <li>Comparez « À la suite » et « En relais » : le gris disparaît presque entièrement.</li>
-          <li>En relais, montez le ralentissement à × 3. Quels jours font un tour de plus ? Ce sont ceux qui suivent une boucle courte, ou qui se préparent longtemps.</li>
+          <li>En relais, au rythme normal, deux jours font déjà un tour de plus : Pendulum et Echo, dont les boucles (12 s et 11 s, moins les 5 s du passage) sont plus courtes que la préparation du jour suivant. Montez le ralentissement à × 3 : ce sont toujours les jours qui suivent une boucle courte, ou qui précèdent un jour long à préparer.</li>
         </ul></div>
         <div class="note trap"><b>Le piège : sauter dans la boucle</b><p>Une première version, pour passer plus vite au jour suivant, faisait sauter la phase du jour courant à la fin de sa boucle. Pour Melt, c'était une erreur : sa cire est simulée pas à pas (une méthode particulaire, MPM), et après un saut, la simulation rattrape le temps perdu, jusqu'à 48 pas par image. Plus l'image est longue, plus il y a de pas à rattraper, et l'image suivante est plus longue encore : le passage tombait à 4 images par seconde. Le relais ne fait donc jamais sauter la phase d'un jour. La touche → demande le passage tout de suite, depuis l'endroit où en est la boucle.</p></div>
       </section>
@@ -107,7 +107,7 @@ if (!trans &amp;&amp; cur.u >= cur.end - T / cur.duration) {
           <figure class="pair"><img src="docs/bolt-page.jpg" alt="Bolt dans sa page : une tasse sur une table sombre, sous un nuage." width="800" height="577"><img src="docs/bolt-brule.jpg" alt="Bolt dans le relais avant la correction : la table et la tasse sont blanches, brûlées." width="800" height="577"><figcaption>Bolt à la même phase : dans sa page (à gauche, luminosité moyenne 35 sur 255), et dans le relais avant la correction, préparé derrière Melt (à droite, 104 sur 255).</figcaption></figure></div>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
           <p>Le découpage tient à deux remplacements faits pendant la préparation (<code>shared/app/warmup.js</code>). La création des programmes de la carte graphique devient asynchrone : tant qu'un programme n'est pas prêt, l'objet est sauté. Et la fonction qui dessine un objet vérifie d'abord si cet objet a déjà été construit pour ce matériau et cette passe ; sinon, et si le budget de l'image est dépassé, elle le saute. Le relais coupe ces deux remplacements le temps de dessiner le jour qui joue, pour qu'aucun de ses objets ne soit sauté.</p>
-          <p>Pour Erosion, attendre que la carte graphique ait fini un lot avant d'envoyer le suivant (<code>onSubmittedWorkDone</code>) revenait à attendre aussi le dessin du jour qui joue : moins de trois lots par seconde, une préparation de 130 s. Avec un rythme, le lot suivant attend seulement l'image suivante, puisque la file de la carte graphique exécute déjà les travaux dans l'ordre. Erosion est prête en 20 s derrière Kelp, dont la boucle dure 32 s.</p>
+          <p>Pour Erosion, attendre que la carte graphique ait fini un lot avant d'envoyer le suivant (<code>onSubmittedWorkDone</code>) revenait à attendre aussi le dessin du jour qui joue : moins de trois lots par seconde, une préparation de 130 s. Avec un rythme, le lot suivant attend seulement l'image suivante, puisque la file de la carte graphique exécute déjà les travaux dans l'ordre. Erosion est prête en 11 s derrière Pendulum ; comme la boucle de Pendulum ne dure que 12 s, Pendulum fait un tour de plus avant le passage.</p>
         </div></details>
       </section>
 
@@ -217,11 +217,11 @@ export async function createDay({ renderer, pipes, width, height, seed = meta.se
             <tr><td>Les 23 scènes chargées ensemble (mémoire vidéo / JavaScript)</td><td>chaque page seule, 1 280 × 720</td><td class="num">6,2 Go / 8 Go</td></tr>
             <tr><td>Le pire couple de jours voisins (mémoire vidéo)</td><td>idem</td><td class="num" id="b-pair">–</td></tr>
             <tr><td>Préparation d'un jour en arrière-plan</td><td>relais, panneau visible</td><td class="num" id="b-prep">–</td></tr>
-            <tr><td>Erosion préparée derrière Kelp (17 455 pas de simulation, 32 par image)</td><td>relais</td><td class="num">≈ 20 s</td></tr>
-            <tr><td>Image du jour qui joue, pendant la préparation du suivant (médiane par jour)</td><td>relais, 1 777 × 1 528 pixels</td><td class="num">8 – 52 ms</td></tr>
-            <tr><td>Image pendant un passage (deux jours dessinés, puis la composition ; médiane)</td><td>idem</td><td class="num">17 – 66 ms</td></tr>
-            <tr><td>Gels restants : Tesseract pendant la préparation d'Orrery (ses machines, sur le fil principal) ; Echo pendant celle de Mirage</td><td>idem</td><td class="num">0,58 s · 1,3 s</td></tr>
-            <tr><td>Mémoire vidéo avec un seul jour chargé / avec le suivant prêt</td><td>relais</td><td class="num">270 – 1 140 Mo / 740 – 1 600 Mo</td></tr>
+            <tr><td>Erosion préparée derrière Pendulum (17 455 pas de simulation, 32 par image)</td><td>relais</td><td class="num">≈ 11 s</td></tr>
+            <tr><td>Image du jour qui joue, pendant la préparation du suivant (médiane par jour)</td><td>relais, 1 777 × 1 528 pixels</td><td class="num">8 – 50 ms</td></tr>
+            <tr><td>Image pendant un passage (deux jours dessinés, puis la composition ; médiane)</td><td>idem</td><td class="num">25 – 58 ms</td></tr>
+            <tr><td>Gels restants : Moss pendant la préparation d'Orrery (ses machines, sur le fil principal) ; Cocoon pendant celle de Bolt</td><td>idem</td><td class="num">0,58 s · 0,39 s</td></tr>
+            <tr><td>Mémoire vidéo avec un seul jour chargé / avec le suivant prêt</td><td>relais</td><td class="num">270 – 1 140 Mo / 630 – 1 540 Mo</td></tr>
             <tr><td>Écart moyen entre le relais et les pages</td><td>tools/relay-check.html</td><td class="num" id="b-ecart">–</td></tr>
           </tbody>
         </table></div>
@@ -242,14 +242,14 @@ export async function createDay({ renderer, pipes, width, height, seed = meta.se
     // ── Les mesures (relais, panneau visible ; mémoire : chaque page seule à 1 280 × 720) ──
     // [id, nom, vidéo (Mo), JavaScript (Mo), durée de boucle (s), préparation dans le relais (s)]
     const DAYS = [
-      ['magma', 'Magma', 430, 1073, 32, 5.4], ['shatter', 'Shatter', 354, 112, 42.06, 9.5], ['melt', 'Melt', 192, 310, 50, 5.3],
-      ['bolt', 'Bolt', 201, 492, 24, 3.4], ['caustic', 'Caustic', 221, 509, 36, 6], ['kelp', 'Kelp', 363, 512, 32, 14.7],
-      ['erosion', 'Erosion', 308, 399, 44, 19.9], ['moss', 'Moss', 361, 163, 44, 4.5], ['spore', 'Spore', 226, 253, 40, 7.5],
-      ['feather', 'Feather', 199, 121, 36, 1.5], ['membrane', 'Membrane', 677, 327, 19.92, 22.2], ['cocoon', 'Cocoon', 230, 458, 60, 5.3],
-      ['fold', 'Fold', 327, 92, 14, 11.5], ['tangle', 'Tangle', 243, 171, 46.09, 9.7], ['tension', 'Tension', 166, 132, 35.89, 3.9],
-      ['pendulum', 'Pendulum', 166, 344, 12.36, 7.9], ['labyrinth', 'Labyrinth', 166, 144, 28.75, 4.7], ['rust', 'Rust', 213, 184, 44, 4.5],
-      ['echo', 'Echo', 307, 691, 11, 4.7], ['mirage', 'Mirage', 80, 304, 24, 2.5], ['hollow', 'Hollow', 280, 463, 24, 2.8],
-      ['tesseract', 'Tesseract', 204, 342, 48, 5], ['planetaire_v2', 'Orrery', 258, 381, 42, 22.7],
+      ['fold', 'Fold', 327, 92, 14, 11.5], ['shatter', 'Shatter', 354, 112, 42.06, 8.3], ['melt', 'Melt', 192, 310, 50, 5.4],
+      ['tangle', 'Tangle', 243, 171, 46.09, 10.1], ['moss', 'Moss', 361, 163, 44, 4.3], ['planetaire_v2', 'Orrery', 258, 381, 42, 21.1],
+      ['hollow', 'Hollow', 280, 463, 24, 3], ['tesseract', 'Tesseract', 204, 342, 48, 4.7], ['membrane', 'Membrane', 677, 327, 19.92, 33.8],
+      ['caustic', 'Caustic', 221, 509, 36, 7.1], ['rust', 'Rust', 213, 184, 44, 4.5], ['feather', 'Feather', 199, 121, 36, 1.9],
+      ['labyrinth', 'Labyrinth', 166, 144, 28.75, 4.7], ['tension', 'Tension', 166, 132, 35.89, 3.8], ['mirage', 'Mirage', 80, 304, 24, 2.5],
+      ['spore', 'Spore', 226, 253, 40, 7.1], ['kelp', 'Kelp', 363, 512, 32, 15], ['pendulum', 'Pendulum', 166, 344, 12.36, 9],
+      ['erosion', 'Erosion', 308, 399, 44, 11.1], ['cocoon', 'Cocoon', 230, 458, 60, 4.6], ['bolt', 'Bolt', 201, 492, 24, 4.4],
+      ['echo', 'Echo', 307, 691, 11, 4.4], ['magma', 'Magma', 430, 1073, 32, 6.3],
     ];
     // (relay-check : écart moyen sur 255 aux phases 0,1 et 0,45)
     const ECARTS = {
@@ -319,9 +319,11 @@ export async function createDay({ renderer, pipes, width, height, seed = meta.se
           if (i === 0) { blocks.push({ kind: 'load', t0: 0, t1: prep }); t = prep; }
           else if (fluxMode === 'suite') { blocks.push({ kind: 'load', t0: t, t1: t + prep }); gray += prep; t += prep; }
           else {
-            // le jour i est prêt à prepStart + prep ; le précédent fait des tours tant qu'il ne l'est pas
+            // le jour i est prêt à prepStart + prep ; le passage (5 s) commence
+            // avant la fin du tour : le précédent fait des tours tant que le
+            // jour i n'est pas prêt à ce moment-là
             const prev = days[i - 1][4];
-            while (t < prepStart + prep) { blocks.push({ kind: 'loop', day: days[i - 1], t0: t, t1: t + prev, extra: true }); t += prev; extra++; }
+            while (t - 5 < prepStart + prep) { blocks.push({ kind: 'loop', day: days[i - 1], t0: t, t1: t + prev, extra: true }); t += prev; extra++; }
           }
           prepStart = t;
           blocks.push({ kind: 'loop', day, t0: t, t1: t + day[4], prep: { t0: fluxMode === 'suite' ? t - prep : prepStart, t1: fluxMode === 'suite' ? t : prepStart + (days[i + 1]?.[5] ?? 0) * k } });
@@ -391,8 +393,8 @@ export async function createDay({ renderer, pipes, width, height, seed = meta.se
 
     // ── 07 · les passages, en JavaScript ──
     const KINDS = {
-      'Magma': ['moss', 'magma', 'heat'], 'Caustic': ['bolt', 'caustic', 'ripple'], 'Kelp': ['caustic', 'kelp', 'wave'],
-      'Labyrinth': ['pendulum', 'labyrinth', 'maze'], 'Echo': ['rust', 'echo', 'flash'],
+      'Magma': ['echo', 'magma', 'heat'], 'Caustic': ['membrane', 'caustic', 'ripple'], 'Kelp': ['spore', 'kelp', 'wave'],
+      'Labyrinth': ['feather', 'labyrinth', 'maze'], 'Echo': ['bolt', 'echo', 'flash'],
     };
     let pick = 'Magma';
     const W = 256, H = 160, imgs = {};

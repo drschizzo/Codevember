@@ -1,18 +1,13 @@
 # Le relais (méga-scène, prototype)
 
 Les jours de Codevember en un seul plan. Chaque jour joue sa boucle, puis passe
-la main au suivant. L'ordre suit le fil de la matière : le feu (la lave, le
-verre fondu, la cire), l'eau (le thé qui bout, le bassin, la mer, la rigole),
-la terre et le vivant (la pierre que la mousse reverdit, le bois mort, la plume,
-la membrane), les fibres (la soie, le papier, la corde, les câbles), les
-mécanismes (le balancier, le dédale), le métal que la rouille met à nu, la
-lumière (l'éclair et son écho, le mirage), la géométrie et le ciel (les
-coquilles, l'hypercube, le planétaire) — et les planètes naissent en fusion :
-retour à la lave.
+la main au suivant, dans l'ordre du calendrier (la légende affiche le numéro du
+jour) ; après le dernier, on revient au premier. Les passages ne dépendent que
+du jour qui arrive (`meta.enter`) : l'ordre peut changer sans les retoucher.
 
-Magma → Shatter → Melt → Bolt → Caustic → Kelp → Erosion → Moss → Spore →
-Feather → Membrane → Cocoon → Fold → Tangle → Tension → Pendulum → Labyrinth →
-Rust → Echo → Mirage → Hollow → Tesseract → Orrery → Magma…
+Fold → Shatter → Melt → Tangle → Moss → Orrery → Hollow → Tesseract → Membrane →
+Caustic → Rust → Feather → Labyrinth → Tension → Mirage → Spore → Kelp →
+Pendulum → Erosion → Cocoon → Bolt → Echo → Magma → Fold…
 
 On entre dans un jour par ce qui s'y passe : chaque passage reprend le geste du
 jour qui arrive (`meta.enter`, `mega/src/transitions.js`).
@@ -153,7 +148,7 @@ Points à surveiller en ajoutant un jour :
   `melt/src/gen/shape.js`) ;
 - un calcul GPU long de la génération (la simulation d'Erosion : 17 455 pas)
   doit pouvoir s'étaler : `nextFrame` attend l'image suivante de l'hôte, et
-  Erosion n'envoie plus qu'un lot de 32 pas par image au lieu de 256, sans attendre la fin du GPU entre deux lots (prêt en une quinzaine de secondes derrière Kelp) ;
+  Erosion n'envoie plus qu'un lot de 32 pas par image au lieu de 256, sans attendre la fin du GPU entre deux lots (prêt en 11 s environ derrière Pendulum) ;
 - ce qu'un jour crée directement sur le device WebGPU, hors de three.js,
   échappe au registre : il le rend par `extraDispose` (les tampons de la
   simulation d'Erosion, ≈ 270 Mo ; ceux des ondes de Caustic, ≈ 48 Mo) ;
@@ -162,7 +157,7 @@ Points à surveiller en ajoutant un jour :
 - limite connue : Orrery construit chacune de ses trois machines sur le fil
   principal (`planetaire_v2/src/scene/machine.js`, 360 à 490 ms par monde,
   dont le mouvement seul, `mech/drive.js`, 160 à 240 ms) : préparé derrière
-  Tesseract, il fige son image trois fois environ une demi-seconde. Le
+  Moss, il fige son image trois fois environ une demi-seconde. Le
   remède est de construire la géométrie des machines dans un worker ;
 - un module qui garde une ressource GPU au niveau du module (la sonde de
   Tesseract) l'oublie à la libération du jour (`releaseProbeTarget`), sinon

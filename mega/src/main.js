@@ -8,7 +8,7 @@
 // est libéré (géométries, matériaux, cibles, workers) et le jour d'après se
 // prépare à son tour.
 //
-// Paramètres d'URL : ?days=magma,shatter,melt (l'ordre du relais), ?pr=1
+// Paramètres d'URL : ?days=shatter,melt (l'ordre du relais ; par défaut, celui du calendrier), ?pr=1
 // (rapport de pixels), ?t=5 (durée d'un passage, en secondes), ?loops=1
 // (boucles jouées par jour au moins), ?debug (window.mega).
 import * as THREE from 'three/webgpu';
@@ -24,7 +24,7 @@ const params = new URLSearchParams(location.search);
 // dédale), le métal que la rouille met à nu, la lumière (l'éclair et son
 // écho, le mirage), la géométrie et le ciel (les coquilles, l'hypercube, le
 // planétaire), et les planètes naissent en fusion : retour à la lave
-const DAYS = (params.get('days') || 'magma,shatter,melt,bolt,caustic,kelp,erosion,moss,spore,feather,membrane,cocoon,fold,tangle,tension,pendulum,labyrinth,rust,echo,mirage,hollow,tesseract,planetaire_v2').split(',').filter(Boolean);
+const DAYS = (params.get('days') || 'fold,shatter,melt,tangle,moss,planetaire_v2,hollow,tesseract,membrane,caustic,rust,feather,labyrinth,tension,mirage,spore,kelp,pendulum,erosion,cocoon,bolt,echo,magma').split(',').filter(Boolean);
 const ENTER = params.get('enter'); // (forcer un passage, pour le régler)
 const T = +(params.get('t') || 5);          // durée d'un passage (s)
 const LOOPS = +(params.get('loops') || 1);  // boucles jouées par jour, au moins
