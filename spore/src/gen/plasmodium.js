@@ -97,7 +97,9 @@ export function arrivalField(P, L, seeds) {
       const q = jj * Gx + ii;
       if (!inside[q]) continue;
       if (k >= 8 && !inside[(j + (jj - j >> 1)) * Gx + i + (ii - i >> 1)]) continue; // (le pas de cavalier ne saute pas un bord)
-      const nd = d + (cost[k] * 2) / (speed[o] + speed[q]);
+      // (comparé après arrondi en float32 : sinon une distance arrondie vers le haut
+      // en stockage paraît toujours améliorable, et la même cellule repart sans fin)
+      const nd = Math.fround(d + (cost[k] * 2) / (speed[o] + speed[q]));
       if (nd < D[q]) { D[q] = nd; heap.push(nd, q); }
     }
   }
