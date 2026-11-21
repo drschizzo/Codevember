@@ -29,12 +29,13 @@ jobs:
       - run: npm run check
       - run: npm test
 
-  deploy:
+  # le site est assemblé et envoyé dans un job, publié dans un autre (le
+  # modèle de GitHub) : publié dans le même job, une demi-seconde après
+  # l'envoi, deploy-pages ne trouvait parfois pas encore l'artefact
+  # (« Found 0 artifact(s) », plusieurs échecs le 2026-11-21)
+  build:
     needs: test
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -66,6 +67,14 @@ jobs:
         with:
           path: _site
           name: github-pages-${{ github.run_attempt }}
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - id: deployment
         uses: actions/deploy-pages@v4
         with:
