@@ -215,7 +215,7 @@ export function simulatePlateau(maze, opts = {}) {
       const inRace = s >= raceStart - 4;
       const vmax = inRace ? 300 : 170;
       let vl = vmax;
-      const sp0 = Math.hypot(ball.vx, ball.vy), react = 0.16; // (temps que met le plateau à basculer)
+      const sp0 = Math.hypot(ball.vx, ball.vy), react = opts.react ?? 0.16; // (temps que met le plateau à basculer)
       for (let c = ci; c < cons.length; c++) {
         const [sc, vc] = cons[c];
         if (sc - s > 400) break;

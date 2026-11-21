@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#050506">
   <title>Rust · défis techniques</title>
-  <meta name="description" content="Comment Rust fait rouiller une pièce rivetée là où l'eau reste, puis la décape : temps d'humectation calculé sur la géométrie, front géodésique, coulures, loi de dose dans le shader, laser en boustrophédon, sablage en hélice, bain d'électrolyse, pièces qui ne flottent pas.">
+  <meta name="description" content="Comment fonctionne Rust, reconstruit pas à pas : la rouille là où l'eau reste (concavité, ciel visible, humectation), le temps d'humectation, le front qui gagne de proche en proche, les coulures, la loi de dose au pixel, et l'instant exact où chaque machine décape chaque point.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
@@ -22,123 +22,204 @@
 
   <main>
     <header class="hero">
-      <div class="kicker">Day 11 · Rust · la remise à nu</div>
-      <h1>Comment une pièce rouille là où l’eau reste</h1>
-      <p class="lede">Une pièce rivetée rouille sous les averses d’une saison en accéléré : d’abord au pied des rivets et dans les angles, puis sur les plats, en coulures sous chaque tête. Une machine la remet à nu en temps réel, puis la rouille revient. La difficulté est de la faire naître là où une vraie pièce rouillerait, sans rien peindre à la main. Elle est donc calculée sur la géométrie de la pièce, et chaque outil a sa forme fermée, une formule qui donne directement l’instant où il atteint chaque point.</p>
+      <div class="kicker">Day 11 · Rust · comment ça marche</div>
+      <h1>Comment une pièce rouille là où l'eau reste</h1>
+      <p class="lede">Dans Rust, une pièce d'acier rivetée rouille sous les averses d'une saison en accéléré : d'abord au pied des rivets et dans les angles, puis sur les faces planes, avec des traînées sous chaque tête. Une machine la remet à nu sous nos yeux, puis la rouille revient. Rien n'est peint à la main : la rouille est calculée à partir de la forme de la pièce, là où l'eau resterait sur une vraie pièce. Cette page explique ce calcul, puis comment chaque machine sait à quel instant elle atteint chaque point.</p>
+      <p class="prereq">Pour suivre, il suffit de savoir lire un peu de JavaScript. Les formules résument ce que les démos montrent ; on peut les sauter sans perdre le fil. Les détails de production sont rangés dans les encadrés « Pour aller plus loin ».</p>
     </header>
 
     <figure class="cover">
       <img src="docs/capture.jpg" alt="Une pièce rivetée couverte de rouille dans un décor neutre" width="1600" height="900">
-      <figcaption>Fin de saison : la croûte la plus épaisse est dans les creux et au pied des têtes, les traînées descendent sous chaque source. Le laiton et le bronze ne rouillent pas, ils brunissent.</figcaption>
+      <figcaption>Fin de saison : la croûte la plus épaisse est dans les creux et au pied des têtes, et des traînées descendent sous chaque rivet. Le laiton et le bronze ne rouillent pas, ils brunissent.</figcaption>
     </figure>
 
     <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
 
     <article>
 
-      <section id="horloge">
-        <h2><span class="n">01</span>Une saison entière sur une seule horloge</h2>
-        <span class="src">src/timeline.js</span>
-        <p>Le film tient en une boucle de 44 à 52 secondes : le métal nu, trois à cinq averses en accéléré, la mise en place de la machine, le décapage en temps réel, le retrait. Tout ce qui varie (pluie, ciel, eau sur la pièce, rouille, machine, caméra) est une fonction pure d’une seule phase \(u \in [0, 1)\), qui parcourt la boucle de 0 à 1 : une même valeur de <em>u</em> donne toujours la même image. Rien ne s’accumule d’une image à l’autre, si bien qu’on peut sauter à n’importe quel instant, reculer ou exporter image par image.</p>
-        <p>La rouille avance avec le <strong>temps d’humectation</strong> cumulé \(\tau\), le temps pendant lequel l’acier est resté mouillé (c’est par lui que la norme ISO 9223 mesure la corrosivité d’une atmosphère). Il n’avance que pendant une averse et le séchage qui la suit, car la rouille éclair, le premier voile orange, paraît en séchant. La formule additionne les averses, chacune lissée et pondérée :</p>
-        <div class="eq">\[ \tau(u) = \min\Big(1,\; \sum_k w_k\, s_5\!\Big(\frac{u - s_k}{e_k - s_k + d}\Big)\Big), \qquad w_k \propto \frac{1}{1 + 0{,}25\,k}, \]</div>
-        <p>où \([s_k, e_k]\) est la \(k\)-ième averse, \(d\) le séchage (45 % d’un créneau d’averse) et \(s_5\) le polynôme de degré 5 qui monte de 0 à 1 sans à-coup (dérivées première et seconde nulles aux deux bouts). La première averse pèse le plus, puisque c’est elle qui fait la rouille éclair sur l’acier nu. \(\tau\) vaut 0 avant la première, 1 après la dernière, et ne bouge plus ensuite.</p>
-        <p>La boucle se ferme <em>par construction</em>. La rouille visible d’un point est \(h(x, \tau(u))\) tant que l’outil ne l’a pas atteint, et 0 ensuite. À \(u = 1\) comme à \(u = 0\), tout point atteint est donc nu. Restent les points que l’outil n’atteint jamais (le dessous d’une tête, une face cachée) : avec \(\tau\) revenu à 0, ils perdraient leur rouille d’un coup au raccord. Le shader leur donne donc un \(\tau\) effectif constant, égal à 1, pendant toute la boucle.</p>
-        <pre><code>const tauE = mix(float(1), U.tau, reached);   // jamais atteint : τ = 1</code></pre>
-        <figure id="fig-clock" class="wide"><figcaption><b>Les courbes de la boucle, portées telles quelles depuis <code>timeline.js</code>.</b> En haut, \(\tau(u)\), la pluie, l’eau sur la pièce et le ciel couvert ; les bandes bleues sont les averses tirées. En bas, l’épaisseur relative de rouille de deux points : l’un décapé à \(u = 0{,}6\), l’autre jamais atteint. Glissez sur la figure pour déplacer l’instant. La démo ne montre pas la rouille réelle d’un point, qui dépend aussi de son instant d’apparition (section 03).</figcaption></figure>
+      <section id="scene">
+        <h2><span class="n">01</span>Ce que montre la scène</h2>
+        <p>Le film est une boucle de 44 à 52 secondes. La pièce (un nœud de treillis, une vanne, une roue de locomotive ou une porte étanche) est d'abord en métal nu. Trois à cinq averses passent en accéléré, et la rouille s'installe. Puis une machine se met en place et décape la pièce en temps réel, avant de se retirer : un portique laser, une sableuse avec un plateau tournant, ou un bain d'électrolyse.</p>
+        <p>La page suit deux questions :</p>
+        <ul>
+          <li><b>où et quand la rouille apparaît</b>, à partir de la forme de la pièce (sections 02 à 06) ;</li>
+          <li><b>quand chaque machine atteint chaque point</b>, pour que la rouille disparaisse exactement sous l'outil (sections 07 à 09).</li>
+        </ul>
       </section>
 
-      <section id="humectation">
-        <h2><span class="n">02</span>La rouille commence là où l’eau reste</h2>
+      <section id="eau">
+        <h2><span class="n">02</span>La rouille commence là où l'eau reste</h2>
         <span class="src">src/gen/corrosion.js · concavity(), skyView()</span>
-        <p>Une texture de rouille plaquée met la même tache orange partout. Sur une vraie pièce, la rouille suit l’eau, et l’eau se répartit inégalement. Rust tire environ 200&#8239;000 points uniformément sur toute la surface (rivets et boulons compris, pas de 4,5 mm), dans un worker, et calcule en chacun les termes qui décident du temps d’humectation.</p>
-        <p>La <strong>concavité</strong>, à deux rayons (\(r = 1{,}2\) cm et 4 cm), est la hauteur moyenne des voisins au-dessus du plan tangent (le plan qui touche la surface en ce point), les voisins proches comptant davantage :</p>
-        <div class="eq">\[ c_r(x) = \frac{1}{r}\,\frac{\sum_j w_j\,(p_j - x)\cdot n}{\sum_j w_j}, \qquad w_j = 1 - \frac{|p_j - x|^2}{r^2}. \]</div>
-        <p>Elle est positive dans les angles rentrants et au pied des têtes de rivet. Là joue l’aération différentielle (Evans) : la zone la moins oxygénée, au fond du creux, devient l’anode, la partie du métal qui se dissout, et la rouille commence là. Elle est négative sur les arêtes, qui perdent leur protection en premier. Le <strong>ciel visible</strong> est la part de quinze directions vers le haut (la verticale inclinée par le vent, puis deux couronnes à 62° et 38°) que rien ne masque. Il se mesure en lançant des rayons dans une grille d’occupation de 2 cm (des cubes marqués pleins ou vides), depuis un point décalé de 3 cm le long de la normale. La <strong>stagnation</strong> combine une face tournée vers le haut, un creux et le ciel. L’humectation additionne ces termes et plafonne à 1 :</p>
-        <div class="eq">\[ w = \min\big(1,\; 0{,}12 + 0{,}38\,\text{pluie} + 0{,}55\,\text{stagnation} + \text{creux} + 0{,}3\,\text{arête} + \text{abri}\big). \]</div>
-        <p>L’abri compte aussi : une face qui ne voit pas le ciel reçoit moins de pluie, mais sèche mal (condensation). Le terme d’abri vaut donc \((1 - \text{ciel})\) fois 0,35, ou fois 0,6 pour une face tournée vers le bas. Le laiton et le bronze ont \(w = 0\).</p>
-        <div class="note trap"><b>L’autre face d’une tôle</b><p>Une cornière a des ailes de quelques millimètres. Au rayon de 4 cm, les points de la face opposée tombent dans le voisinage, sous le plan tangent : toute l’aile paraît convexe, comme une arête. Les voisins dont la normale s’oppose à celle du point (\(n_i \cdot n_j < -0{,}3\)) sont donc écartés.</p></div>
-        <figure id="fig-wet"><figcaption><b>Une cornière en coupe, avec deux rivets.</b> Concavité, ciel et humectation calculés par les formules de <code>corrosion.js</code> sur 2 mm d’échantillonnage. Simplifications : une coupe plane au lieu d’une surface, cinq directions de ciel au lieu de quinze. Survolez le contour pour lire les termes d’un point ; désactivez l’exclusion de l’autre face pour voir l’aile verticale devenir une « arête ».</figcaption></figure>
+        <p>L'acier rouille quand il reste mouillé. Le temps pendant lequel une surface reste humide, le <b>temps d'humectation</b>, est d'ailleurs la mesure qu'utilise la norme ISO 9223 pour classer la corrosivité d'une atmosphère. Or l'eau ne se répartit pas également sur une pièce : elle stagne dans les creux et sur les rebords tournés vers le haut, elle sèche vite sur les arêtes, et elle condense sous les faces abritées. Une texture de rouille plaquée, la même tache orange partout, ignore tout cela.</p>
+        <p>Rust tire donc environ 200 000 points sur toute la surface de la pièce (un tous les 4,5 mm), et calcule en chacun quelques grandeurs qui décident s'il reste mouillé :</p>
+        <ul>
+          <li>la <b>concavité</b> : est-on dans un creux ou sur une bosse ? On la mesure par la hauteur moyenne des points voisins au-dessus du plan tangent (le plan qui touche la surface en ce point). Elle est positive dans les angles rentrants et au pied des rivets, négative sur les arêtes ;</li>
+          <li>le <b>ciel visible</b> : quelle part du ciel le point voit-il ? On lance quinze rayons vers le haut et on compte ceux que rien n'arrête. Un point qui voit le ciel reçoit la pluie ; un point abrité la reçoit moins, mais sèche mal ;</li>
+          <li>la <b>stagnation</b> : une face tournée vers le haut, dans un creux, sous le ciel, garde une flaque.</li>
+        </ul>
+        <div class="eq">\[ c_r(x) = \frac{1}{r}\,\frac{\sum_j w_j\,(p_j - x)\cdot n}{\sum_j w_j}, \qquad w_j = 1 - \frac{|p_j - x|^2}{r^2} \]</div>
+        <p>La concavité <i>c</i><sub>r</sub> au point <i>x</i> de normale <i>n</i> est la moyenne des hauteurs (<i>p</i><sub>j</sub> − <i>x</i>) · <i>n</i> de ses voisins <i>p</i><sub>j</sub> à moins de <i>r</i>, les plus proches comptant davantage. On la calcule à deux rayons, 1,2 cm (le pied d'un rivet) et 4 cm (l'angle d'une cornière). Le creux compte double en électrochimie : au fond d'un creux, l'eau contient moins d'oxygène, et c'est cette zone qui se dissout la première (l'aération différentielle, décrite par Evans).</p>
+        <p>Ces termes s'additionnent en une <b>humectation</b> <i>w</i>, entre 0 et 1 :</p>
+        <div class="eq">\[ w = \min\big(1,\; 0{,}12 + 0{,}38\,\text{pluie} + 0{,}55\,\text{stagnation} + \text{creux} + 0{,}3\,\text{arête} + \text{abri}\big) \]</div>
+        <figure id="fig-wet"><figcaption><b>Une cornière en coupe, avec deux rivets.</b> Concavité, ciel et humectation calculés par les formules de <code>corrosion.js</code>, tous les 2 mm, sur une coupe plane avec cinq directions de ciel au lieu de quinze. Les boutons choisissent la grandeur affichée le long du contour : en humectation, de gris (sec) à orange puis brun (très mouillé) ; en concavité, orange pour un creux et bleu pour une arête. Survolez le contour pour lire les termes d'un point.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>En humectation, comparez l'angle intérieur de la cornière et le pied des rivets, très mouillés, aux arêtes du bout des ailes.</li>
+          <li>Passez en concavité 4 cm, puis désactivez « Écarter l'autre face » : toute la cornière devient bleue, comme si elle n'était qu'une arête. Le paragraphe ci-dessous explique pourquoi.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <div class="note"><b>L'autre face d'une tôle</b><p>Une cornière a des ailes de quelques millimètres d'épaisseur. Au rayon de 4 cm, les points de la face opposée tombent dans le voisinage, sous le plan tangent : toute l'aile paraît convexe. Les voisins dont la normale s'oppose à celle du point (<i>n</i><sub>i</sub> · <i>n</i><sub>j</sub> &lt; −0,3) sont donc écartés.</p></div>
+          <p>Les quinze directions de ciel sont la verticale inclinée par le vent, puis deux couronnes à 62° et 38°. Les rayons partent d'un point décalé de 3 cm le long de la normale et avancent dans une grille de cubes de 2 cm marqués pleins ou vides. Le terme d'abri vaut (1 − ciel) × 0,35, ou × 0,6 pour une face tournée vers le bas. Le laiton et le bronze ont <i>w</i> = 0.</p>
+        </div></details>
+      </section>
+
+      <section id="horloge">
+        <h2><span class="n">03</span>Le temps de la rouille</h2>
+        <span class="src">src/timeline.js</span>
+        <p>La rouille n'avance pas au rythme du film : elle avance avec le temps d'humectation cumulé, noté τ, qui va de 0 (début de la saison) à 1 (fin). τ ne monte que pendant une averse et le séchage qui la suit, car la rouille éclair, le premier voile orange, paraît en séchant. Chaque averse ajoute sa part, adoucie par une rampe sans à-coup :</p>
+        <div class="eq">\[ \tau(u) = \min\Big(1,\; \sum_k w_k\, s_5\!\Big(\frac{u - s_k}{e_k - s_k + d}\Big)\Big), \qquad w_k \propto \frac{1}{1 + 0{,}25\,k} \]</div>
+        <p><i>u</i> est la position dans la boucle, de 0 à 1. [<i>s</i><sub>k</sub>, <i>e</i><sub>k</sub>] est la <i>k</i>-ième averse, <i>d</i> la durée du séchage et <i>s</i><sub>5</sub> une rampe de 0 à 1 dont les deux premières dérivées sont nulles aux bouts. La première averse pèse le plus, puisque c'est elle qui fait la rouille éclair sur l'acier nu.</p>
+        <p>Tout ce qui varie (pluie, ciel, eau sur la pièce, rouille, machine, caméra) est une fonction de <i>u</i> seulement. Rien ne s'accumule d'une image à l'autre : on peut sauter à n'importe quel instant, reculer, ou exporter image par image. La boucle se ferme d'elle-même : un point atteint par l'outil est nu à la fin de la boucle comme au début. Seuls les points que l'outil n'atteint jamais (le dessous d'une tête, une face cachée) poseraient problème, puisque τ revient à 0 au raccord : le shader leur donne un τ constant, égal à 1, pendant toute la boucle.</p>
+        <figure id="fig-clock" class="wide"><figcaption><b>Les courbes de la boucle</b>, reprises de <code>timeline.js</code>. En haut, τ(<i>u</i>), la pluie, l'eau sur la pièce et le ciel couvert ; les bandes bleues sont les averses. En bas, l'épaisseur relative de rouille de deux points : l'un décapé à <i>u</i> = 0,6, l'autre jamais atteint. Glissez sur la figure pour déplacer l'instant.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Changez le nombre d'averses : τ monte en autant de marches, de plus en plus courtes.</li>
+          <li>Suivez les deux points à la fin de la boucle : celui que l'outil atteint retombe à zéro, celui qu'il n'atteint jamais garde sa rouille, y compris au raccord.</li>
+        </ul></div>
       </section>
 
       <section id="front">
-        <h2><span class="n">03</span>Les taches s’étendent à vitesse finie</h2>
+        <h2><span class="n">04</span>Quand chaque point rouille</h2>
         <span class="src">src/gen/corrosion.js · Dijkstra sur les voxels</span>
-        <p>L’humectation donne à chaque point un instant d’apparition local, compté sur l’échelle de <em>τ</em>, de 0 à 1 :</p>
-        <div class="eq">\[ t_0 = (1 - t)^{1{,}25}, \qquad t = \operatorname{clamp}\Big(\frac{w - 0{,}28}{0{,}72}\Big). \]</div>
-        <p>Un point très mouillé (<em>w</em> = 1) apparaît dès le début de la saison. Sous <em>w</em> = 0,28, il attend la fin. Pris seul, ce champ fait apparaître la rouille partout à la fois sur une face uniforme, en « fondu ». Or la rouille gagne de proche en proche : elle part d’un creux et s’étend sur le plat qui l’entoure. Les valeurs sont donc moyennées dans un volume découpé en petits cubes, les voxels (environ 1 cm de côté, 150 voxels sur la plus grande dimension). L’instant d’apparition final est ensuite une <strong>distance géodésique</strong>, mesurée le long de la surface. L’algorithme de Dijkstra, qui propage les plus courts chemins de proche en proche, parcourt les voxels occupés (26 voisins par voxel) à la vitesse \(v = 0{,}25\) m par unité de \(\tau\). Chaque voxel garde l’instant le plus précoce entre le sien et celui d’un voisin augmenté du temps de trajet :</p>
-        <div class="eq">\[ t_0(y) \leftarrow \min\big(t_0(y),\; t_0(x) + |x - y| / v\big). \]</div>
-        <p>À cette vitesse, le front avance de 2,5 cm pendant que <em>τ</em> gagne 0,1. Comme le parcours ne passe que par des voxels occupés, il suit la surface : il contourne une aile et ne saute jamais d’une tôle à l’autre à travers le vide. Le résultat est écrit dans un volume RGBA 8 bits que le shader lit en trilinéaire (interpolé entre les huit voxels voisins) : R l’instant d’apparition, G la concavité, B la coulure, A l’humectation. Deux passes de dilatation remplissent les voxels vides voisins de la surface, pour que le filtrage ne mélange pas de zéros.</p>
-        <figure id="fig-front"><figcaption><b>Un gousset vu de face, 60 × 40 voxels de 1 cm.</b> La carte d’humectation est construite à la main d’après les termes de la section 02 (arêtes, pied des rivets, rebord de la cornière où l’eau stagne, abri dessous) ; le seuil, la loi \((1 - t)^{1{,}25}\) et le Dijkstra sont ceux du code, en 8 voisins au lieu de 26. Les couleurs sont celles de l’écran de chargement, qui montre ce même front sur la vraie pièce pendant le calcul. Sans le front, une face dégagée (\(w \approx 0{,}35\)) n’apparaît qu’à \(\tau \approx 0{,}88\) ; avec lui, elle est gagnée bien avant depuis les rivets voisins.</figcaption></figure>
+        <p>L'humectation donne à chaque point un instant d'apparition de la rouille, sur l'échelle de τ. Un point très mouillé (<i>w</i> = 1) rouille dès le début de la saison ; sous <i>w</i> = 0,28, il attend la fin :</p>
+        <div class="eq">\[ t_0 = (1 - t)^{1{,}25}, \qquad t = \operatorname{clamp}\Big(\frac{w - 0{,}28}{0{,}72}\Big) \]</div>
+        <p>Pris seul, ce champ fait apparaître la rouille d'un coup sur toute une face uniforme. Or la rouille gagne de proche en proche : elle part d'un creux et s'étend sur la face qui l'entoure. On ajoute donc une vitesse de propagation. Chaque point rouille au plus tôt entre son propre instant et celui d'un voisin, augmenté du temps qu'il faut au front pour parcourir la distance qui les sépare :</p>
+        <div class="eq">\[ t_0(y) \leftarrow \min\big(t_0(y),\; t_0(x) + |x - y| / v\big) \]</div>
+        <p>À la vitesse <i>v</i> = 0,25 m par unité de τ, le front avance de 2,5 cm pendant que τ gagne 0,1. Ce calcul est celui d'un plus court chemin, résolu par l'<b>algorithme de Dijkstra</b> : on traite toujours le point le plus tôt rouillé, et on met à jour ses voisins. Il se fait dans un volume découpé en cubes d'environ 1 cm, les <b>voxels</b>, en ne passant que par les voxels qui contiennent de la surface. Le front suit donc la pièce : il contourne une aile et ne saute jamais d'une tôle à l'autre à travers le vide.</p>
+        <figure id="fig-front" class="wide"><figcaption><b>Un gousset vu de face, 60 × 40 voxels de 1 cm.</b> À gauche, chaque point rouille à son instant d'apparition local ; à droite, le front géodésique part des points les plus mouillés et gagne les faces planes. La carte d'humectation est construite à la main d'après les termes de la section 02 ; le seuil, la loi en (1 − <i>t</i>)<sup>1,25</sup> et le Dijkstra sont ceux du code, avec 8 voisins au lieu de 26. Les couleurs sont celles de l'écran de chargement, qui montre ce même front pendant le calcul.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Arrêtez la lecture à τ = 0,2 : à gauche, seuls les anneaux autour des rivets ont rouillé (12 % de la surface) ; à droite, des disques ont déjà gagné la plus grande partie du gousset (83 %).</li>
+          <li>Sur la face dégagée, à gauche, la rouille n'arrive qu'à la toute fin de la saison, d'un bloc.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Le volume compte environ 150 voxels sur la plus grande dimension de la pièce, avec 26 voisins par voxel. Le résultat est écrit dans un volume RGBA de 8 bits que le shader lit en interpolant entre huit voxels : rouge l'instant d'apparition, vert la concavité, bleu la coulure (section 05), alpha l'humectation. Deux passes de dilatation remplissent les voxels vides voisins de la surface, pour que l'interpolation ne mélange pas de zéros.</p>
+        </div></details>
       </section>
 
       <section id="coulures">
-        <h2><span class="n">04</span>Les coulures descendent de voxel en voxel</h2>
+        <h2><span class="n">05</span>Les coulures</h2>
         <span class="src">src/gen/corrosion.js · ruissellement</span>
-        <p>Sous les rivets, les boulons et les arêtes, l’eau qui ruisselle emporte des oxydes et les dépose en traînées. Chaque voxel est une source proportionnelle à son humectation et à son ciel visible (\(0{,}55\,w\,\text{ciel}\)). La charge descend ensuite la gravité, couche par couche, du haut du volume vers le bas, en ne passant que par des voxels occupés. Un voxel garde la plus forte de deux valeurs, sa propre source ou la charge reçue d’au-dessus, un peu affaiblie :</p>
-        <div class="eq">\[ S(k) = \max\Big(0{,}55\,w_k\,\text{ciel}_k,\;\; 0{,}972\,\max_{j \in \text{dessus}(k)} \omega_j\, S(j)\Big), \quad \omega = 1,\ 0{,}8,\ 0{,}62. \]</div>
-        <p>Le voisin juste au-dessus transmet entièrement, les voisins de biais un peu moins : la traînée s’évase légèrement en descendant. Avec un facteur 0,972 par voxel, sa demi-longueur est \(\ln 2 / \ln(1/0{,}972) \approx 24\) voxels, soit environ 25 cm. Le <code>max</code>, plutôt qu’une somme, empêche les traînées de s’additionner jusqu’à saturer le bas de la pièce. Dans le shader, la coulure monte avec \(\tau\), de 0,12 à 0,7. Un bruit étiré selon la gravité (fréquence 55 par mètre en travers, 3,5 en long) la découpe en filets.</p>
-        <figure id="fig-streak"><figcaption><b>Les traînées du même gousset.</b> Propagation portée telle quelle (en 2D, seuls les poids 1 et 0,8 interviennent). Par défaut, le champ brut du canal B : les traînées sous les rivets, et le rideau qui descend du rebord de la cornière, où l’eau stagne. Chaque voxel étant aussi une source, le fond n’est jamais nul. Le bouton applique la modulation du shader : facteur 1,6, \(\operatorname{smoothstep}(0{,}12;\ 0{,}7;\ \tau)\) et bruit étiré.</figcaption></figure>
+        <p>Sous les rivets et les arêtes, l'eau qui ruisselle emporte des oxydes et les dépose en traînées. Dans le volume de voxels, chaque voxel est une source de coulure, proportionnelle à son humectation et à son ciel visible. La charge descend ensuite, couche par couche, du haut vers le bas. Chaque voxel garde la plus forte de deux valeurs : sa propre source, ou la charge reçue du voxel au-dessus, un peu affaiblie (facteur 0,972).</p>
+        <div class="eq">\[ S(k) = \max\Big(0{,}55\,w_k\,\text{ciel}_k,\;\; 0{,}972\,\max_{j \in \text{dessus}(k)} \omega_j\, S(j)\Big), \quad \omega = 1,\ 0{,}8,\ 0{,}62 \]</div>
+        <p>Le voisin juste au-dessus transmet entièrement, les voisins de biais un peu moins (ω), si bien que la traînée s'évase légèrement en descendant. Avec un facteur 0,972 par voxel, elle perd la moitié de son intensité en ln 2 / ln(1/0,972) ≈ 24 voxels, soit environ 25 cm. On prend le maximum plutôt que la somme : sinon les traînées s'additionneraient en descendant et satureraient tout le bas de la pièce.</p>
+        <figure id="fig-streak"><figcaption><b>Les traînées du même gousset.</b> Propagation reprise du code (en deux dimensions, seuls les poids 1 et 0,8 interviennent). Par défaut, le champ brut : les traînées sous les rivets, et le rideau qui descend du rebord de la cornière, où l'eau stagne. Le bouton applique ce que fait le shader : le champ monte avec τ et un bruit étiré verticalement le découpe en filets.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Activez la modulation et baissez τ : les traînées n'apparaissent qu'à partir de τ ≈ 0,12 et sont complètes vers 0,7.</li>
+        </ul></div>
       </section>
 
       <section id="dose">
-        <h2><span class="n">05</span>La loi de dose, dans le shader</h2>
+        <h2><span class="n">06</span>L'épaisseur et la couleur, au pixel</h2>
         <span class="src">src/scene/rust.js</span>
-        <p>Le champ ne dit que <em>quand</em> la rouille paraît. Le reste se calcule au pixel, à chaque image, à partir de \(\tau\). L’instant d’apparition est d’abord retardé autour de germes. Un bruit de Worley 3D exact, la distance au plus proche de germes semés au hasard (cherché dans 27 cellules, avec un hachage sans sinus), donne les piqûres, nées d’inclusions ou de défauts de la calamine. Un fBm, somme de bruits de plus en plus fins, donne les irrégularités :</p>
-        <div class="eq">\[ o = \operatorname{clamp}\big(t_0 + 0{,}16\,n_1 + 0{,}09\,F_1 - 0{,}03\big), \qquad h = k\,\sqrt{\frac{\max(\tau - o,\,0)}{\max(1 - o,\ 0{,}08)}}, \quad k = 0{,}45 + 0{,}55\,w. \]</div>
-        <p>L’épaisseur suit la <strong>loi de dose</strong> de l’acier au carbone (ISO 9224 : perte \(\propto t^n\), \(n \approx 0{,}5\)) : la couche d’oxydes freine l’arrivée de l’oxygène, et la croissance ralentit. Avec cet exposant, doubler l’épaisseur demande quatre fois plus de temps. La normalisation par \(1 - o\) garantit que chaque point atteint son épaisseur \(k\) en fin de saison, même apparu tard. Les taches naissent aux germes (là où \(F_1\) est petit) et s’étendent en disques qui se rejoignent.</p>
-        <p>La couleur est une <strong>stratification</strong> lue sur l’épaisseur : voile de lépidocrocite orange, assez mince pour que le métal se voie au travers (opacité 0,5 tant que \(h < 0{,}22\)), brun de goethite, brun sombre, magnétite presque noire dans les creux (\(c > 0{,}02\)), orange vif sur les arêtes. Deux fBm ajoutent des plaques d’environ 5 cm plus orangées ou plus sombres. Le relief vient ensuite, par perturbation de normale (Mikkelsen), qui incline l’éclairage sans déplacer la surface. La rouille gonfle, car l’oxyde occupe plus de volume que le métal qu’il remplace (rapport de Pilling-Bedworth). Elle cloque, et la croûte épaisse se fend par plaques en écailles aux bords relevés. Après le décapage, les piqûres restent dans l’acier : elles sont calculées sur l’épaisseur de fin de saison, identique d’une boucle à l’autre.</p>
-        <div class="note trap"><b>Un NaN dans la lueur du laser</b><p>L’acier tout juste décapé luit un instant : \(e^{-(u - t_c)/0{,}0025}\). Avant le passage de la ligne, \(u - t_c < 0\) et l’exponentielle explose ; multipliée par un masque nul, elle donne \(\infty \times 0\), soit NaN (« pas un nombre »), qui noircit des pixels puis contamine le flou. L’argument est borné par <code>max(freshT, 0)</code> avant l’exponentielle.</p></div>
-        <figure id="fig-dose" class="wide"><figcaption><b>Trois rivets du gousset, couleur de base calculée au pixel.</b> Formules de couverture, d’épaisseur et de stratification portées depuis <code>rust.js</code>, Worley 3D exact compris ; le fBm du volume de bruit est remplacé par un bruit de gradient 2D, l’éclairage par un simple ombrage des têtes. Ni écailles, ni cloques, ni eau. Le métal apparaît en gris de son F0, comme dans <code>colorNode</code>.</figcaption></figure>
+        <p>Le volume dit seulement quand la rouille paraît en chaque point. Son épaisseur, sa couleur et son relief se calculent à chaque image, au pixel, à partir de τ.</p>
+        <p>D'abord, les taches ne naissent pas uniformément : elles partent de petits défauts de l'acier (des inclusions, des défauts de la calamine). On sème donc des germes au hasard, et l'instant d'apparition est un peu avancé près de chaque germe, à l'aide d'un bruit de Worley (la distance au germe le plus proche). Les taches naissent aux germes et s'étendent en disques qui se rejoignent.</p>
+        <p>Ensuite, l'épaisseur suit la <b>loi de dose</b> de l'acier au carbone (ISO 9224) : la perte de métal croît comme une puissance du temps, d'exposant 0,5 environ. La couche d'oxydes freine l'arrivée de l'oxygène, si bien que doubler l'épaisseur demande quatre fois plus de temps.</p>
+        <div class="eq">\[ h = k\,\sqrt{\frac{\max(\tau - o,\,0)}{\max(1 - o,\ 0{,}08)}}, \qquad k = 0{,}45 + 0{,}55\,w \]</div>
+        <p><i>o</i> est l'instant d'apparition du point, avancé par les germes. La division par 1 − <i>o</i> garantit que chaque point atteint son épaisseur finale <i>k</i> en fin de saison, même s'il a rouillé tard ; les points les plus mouillés finissent les plus épais.</p>
+        <p>La couleur se lit sur l'épaisseur, comme les couches d'une vraie rouille : un voile orange assez mince pour que le métal se voie au travers, puis des bruns de plus en plus sombres, une rouille presque noire dans les creux et un orange vif sur les arêtes.</p>
+        <figure id="fig-dose" class="wide"><figcaption><b>Trois rivets du gousset, couleur calculée au pixel.</b> Formules de couverture, d'épaisseur et de couleur reprises de <code>rust.js</code>, bruit de Worley compris ; le bruit d'irrégularité est simplifié et l'éclairage réduit à un ombrage des têtes. Le métal nu apparaît en gris.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Montez τ lentement depuis 0 : la rouille paraît d'abord sur les bords les plus mouillés et au pied des rivets, avec un contour découpé, puis gagne le reste de la plaque.</li>
+          <li>Changez le nombre de germes à τ faible : le contour des taches devient plus fin ou plus grossier, mais la surface rouillée change peu, car elle dépend surtout de l'humectation.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>L'instant d'apparition retardé vaut <i>o</i> = clamp(<i>t</i><sub>0</sub> + 0,16 <i>n</i><sub>1</sub> + 0,09 <i>F</i><sub>1</sub> − 0,03), avec <i>n</i><sub>1</sub> un bruit fractal et <i>F</i><sub>1</sub> la distance de Worley, cherchée dans 27 cellules. Le voile orange a une opacité de 0,5 tant que <i>h</i> &lt; 0,22 ; la rouille presque noire apparaît dans les creux (concavité &gt; 0,02). Deux bruits ajoutent des plaques d'environ 5 cm plus orangées ou plus sombres.</p>
+          <p>Le relief vient d'une perturbation de la normale, qui incline l'éclairage sans déplacer la surface. La rouille gonfle, car l'oxyde occupe plus de volume que le métal qu'il remplace (rapport de Pilling-Bedworth) : elle cloque, et la croûte épaisse se fend en écailles aux bords relevés. Après le décapage, les piqûres restent dans l'acier ; elles sont calculées sur l'épaisseur de fin de saison, identique d'une boucle à l'autre.</p>
+        </div></details>
       </section>
 
       <section id="laser">
-        <h2><span class="n">06</span>Le laser balaie en boustrophédon</h2>
+        <h2><span class="n">07</span>Le laser balaie la pièce en lacets</h2>
         <span class="src">src/machines.js · laserPlan(), laserCleanTime()</span>
-        <p>La rouille ne recule que sous l’outil. Il faut donc, pour chaque point, l’instant <em>exact</em> où l’outil l’atteint, calculé de la même façon en JavaScript (pour la trajectoire de la machine et les tests) et dans le shader (pour la rouille). Cet instant est une forme fermée, évaluée directement en chaque point, ce qui évite de simuler le décapage ou de tenir une carte à jour au fil du temps.</p>
-        <p>Le portique roule de derrière la pièce, tête relevée, puis la tête descend à 20 cm devant la face. Son miroir galvanométrique, orienté par un moteur rapide, balaie une ligne verticale de hauteur \(w\) (7,5 à 10 cm). La tête parcourt la pièce en \(n = \max(3, \operatorname{round}(H / w))\) rangées, de haut en bas, en alternant le sens d’une rangée à l’autre : c’est le boustrophédon. Chaque rangée ne couvre que la largeur de la pièce à sa hauteur, lue sur la carte de profondeur vue de face (cellules de 4 mm), plus 3,5 cm de chaque côté. Sa durée est proportionnelle à cette largeur plus 0,12, et le passage d’une rangée à la suivante coûte \(0{,}22 + 0{,}4\,\Delta x\). Les durées sont ensuite ramenées à la fenêtre du décapage, de \(u = 0{,}44\) à \(0{,}86\). L’instant de décapage d’un point de la rangée \(k\) s’interpole entre le début et la fin de la rangée, selon sa position <em>x</em> :</p>
-        <div class="eq">\[ t_c(x) = t_0^{(k)} + \operatorname{clamp}\Big(\frac{x - x_s^{(k)}}{x_e^{(k)} - x_s^{(k)}}\Big)\,\big(t_1^{(k)} - t_0^{(k)}\big). \]</div>
-        <p>Les rangées (64 au plus) passent au shader dans un tableau d’uniformes, des constantes envoyées au GPU. Le shader retrouve la rangée d’un point par \(\lfloor (y_{\text{haut}} - y)/w \rfloor\). Un point n’est atteint que si sa face regarde la tête (\(n_z > -0{,}12\)) et s’il n’est pas masqué : sa profondeur doit être à moins de \(0{,}012 + 0{,}16\,\operatorname{clamp}((0{,}6 - n_z)/0{,}6)\) de la carte de face, une tolérance qui croît pour les faces rasantes que la tête balaie un peu de biais. Un test vérifie qu’à l’instant \(t_c\) la ligne est exactement sur le point, et qu’elle n’y était pas 0,002 plus tôt.</p>
-        <figure id="fig-laser" class="wide"><figcaption><b>Une vanne vue de face, décapée par le laser.</b> <code>laserPlan</code>, <code>laserHead</code> et <code>laserCleanTime</code> portés tels quels, sur une carte de face en cellules de 1 cm ; ni masquage ni rouille partielle (chaque cellule est rouillée ou nue). Le bouton compare avec des rangées de pleine largeur : la ligne passe plus de temps dans le vide, et chaque rangée utile est balayée plus vite.</figcaption></figure>
+        <p>La rouille ne disparaît que sous l'outil. Pour chaque point, il faut donc connaître l'instant exact où l'outil l'atteint. Plutôt que de simuler le décapage image par image, chaque machine a une formule qui donne directement cet instant pour n'importe quel point. La même formule est écrite en JavaScript (pour la trajectoire de la machine et les tests) et dans le shader (pour la rouille). Sur l'écran, la rouille d'un point s'efface donc exactement quand l'outil passe dessus.</p>
+        <p>Le portique laser descend sa tête devant la face de la pièce. Un miroir orienté par un moteur rapide balaie une ligne verticale de hauteur <i>w</i> (7,5 à 10 cm). La tête parcourt la pièce en rangées, de haut en bas, en changeant de sens à chaque rangée, comme un bœuf qui laboure (c'est le <b>boustrophédon</b>). Chaque rangée ne couvre que la largeur de la pièce à sa hauteur, plus 3,5 cm de chaque côté. Dans une rangée <i>k</i>, l'instant de décapage d'un point d'abscisse <i>x</i> s'interpole entre le début et la fin de la rangée :</p>
+        <div class="eq">\[ t_c(x) = t_0^{(k)} + \operatorname{clamp}\Big(\frac{x - x_s^{(k)}}{x_e^{(k)} - x_s^{(k)}}\Big)\,\big(t_1^{(k)} - t_0^{(k)}\big) \]</div>
+        <p><i>t</i><sub>0</sub><sup>(k)</sup> et <i>t</i><sub>1</sub><sup>(k)</sup> sont les instants de début et de fin de la rangée, <i>x</i><sub>s</sub><sup>(k)</sup> et <i>x</i><sub>e</sub><sup>(k)</sup> ses abscisses de départ et d'arrivée. Le shader retrouve la rangée d'un point par sa hauteur, puis applique cette formule.</p>
+        <figure id="fig-laser" class="wide"><figcaption><b>Une vanne vue de face, décapée par le laser.</b> <code>laserPlan</code>, <code>laserHead</code> et <code>laserCleanTime</code> repris du projet, sur une carte de la face en cellules de 1 cm ; chaque cellule est rouillée ou nue. Le bouton compare avec des rangées de pleine largeur.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Passez en rangées de pleine largeur : la ligne passe du temps dans le vide, à côté de la pièce, et chaque rangée utile est balayée plus vite. Le bandeau de droite compare les durées.</li>
+          <li>Changez la hauteur de la ligne : le nombre de rangées s'ajuste.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>La largeur de chaque rangée est lue sur une carte de profondeur de la pièce vue de face (cellules de 4 mm). La durée d'une rangée est proportionnelle à sa largeur plus 0,12, et le passage d'une rangée à la suivante coûte 0,22 + 0,4 Δ<i>x</i> ; les durées sont ensuite ramenées à la fenêtre du décapage, de <i>u</i> = 0,44 à 0,86. Les rangées (64 au plus) passent au shader dans un tableau d'uniformes. Un point n'est atteint que si sa face regarde la tête et s'il n'est pas caché : sa profondeur doit être proche de celle de la carte de face, avec une tolérance qui croît pour les faces vues de biais. Un test vérifie qu'à l'instant <i>t</i><sub>c</sub> la ligne est exactement sur le point, et qu'elle n'y était pas un instant plus tôt.</p>
+          <div class="note trap"><b>Un NaN dans la lueur du laser</b><p>L'acier tout juste décapé luit un instant : e<sup>−(<i>u</i> − <i>t</i><sub>c</sub>)/0,0025</sup>. Avant le passage de la ligne, <i>u</i> − <i>t</i><sub>c</sub> &lt; 0 et l'exponentielle explose ; multipliée par un masque nul, elle donne ∞ × 0, une valeur indéfinie (NaN) qui noircit des pixels puis contamine le flou. L'argument est borné à zéro avant l'exponentielle.</p></div>
+        </div></details>
       </section>
 
       <section id="sablage">
-        <h2><span class="n">07</span>La rampe de sablage décrit une hélice</h2>
+        <h2><span class="n">08</span>La sableuse décrit une hélice</h2>
         <span class="src">src/machines.js · turnPlan(), turnCleanS()</span>
-        <p>Pour le sablage, c’est la pièce qui bouge : elle tourne sur un plateau pendant qu’une rampe de buses descend. La rampe est un tube horizontal aussi large que la pièce, au bout du bras, qui porte une buse tous les 5 cm ; leurs jets, parallèles et inclinés de 0,22 à 0,38 rad vers le bas, forment un rideau de grenaille. Avec une seule buse visant l’axe, une face plate (le voile d’une roue, une porte) ne serait touchée qu’en son milieu : c’est le rideau qui la décape sur toute sa largeur. Le plateau fait un nombre entier de tours \(N\) (6 à 9, à vitesse constante adoucie sur les 6 % du début et de la fin), si bien que la pièce revient à son orientation de départ. La buse décrit, dans le repère de la pièce, une hélice. Pour ne laisser aucune bande rouillée entre deux spires, son pas doit rester sous l’empreinte du jet : \(N\) est augmenté tant que</p>
-        <div class="eq">\[ \frac{y_{\text{haut}} - y_{\text{bas}}}{N} > 0{,}75\ \text{empreinte}. \]</div>
-        <p>Une face est décapée quand, en tournant, elle <em>entre dans le rideau</em> avec une incidence utile : le cosinus entre sa normale et le jet dépasse 0,45 (en deçà, la grenaille glisse). Son azimut d’entrée est \(\varphi = \varphi_n \pm W\), où \(\varphi_n\) est l’azimut de sa normale horizontale (de sa position pour une face presque horizontale, que le jet incliné touche d’en haut) et \(W\) le demi-angle de son passage dans le rideau. Si elle est masquée à l’entrée, on prend le premier azimut de son passage où rien ne la cache. Le jet incliné frappe plus bas que la rampe, d’autant plus que la face est loin d’elle : la hauteur qui compte est \(y_{\text{impact}} = y + \tan(\text{inclinaison})\,(R_n - p\cdot d)\), avec \(R_n\) la distance de la rampe à l’axe. Avec \(s\) la progression du plateau, \(s_1\) l’instant où le bas de l’empreinte atteint cette hauteur et \(\varphi_b\) l’azimut de la rampe :</p>
-        <div class="eq">\[ s^* = s_1 + \frac{\operatorname{mod}\big(\pm(\varphi_b - \varphi) - 2\pi N s_1,\ 2\pi\big)}{2\pi N}. \]</div>
-        <p>Le signe ± est le sens de rotation du plateau. Le masquage se lit dans 32 cartes de profondeur horizontales (une par direction, cellules de 1 cm, tuilées 8 × 4 dans une seule texture) : une face cachée par une autre partie de la pièce pendant tout son passage dans le rideau reste rouillée. Les mêmes cartes arrêtent chaque jet à l’écran sur la surface qu’il frappe vraiment, ou sur le plateau : la poussière naît là. Mesuré sur les quatre pièces, 86 à 87 % des impacts tombent sur de l’acier qui est en train d’être décapé ou l’est déjà. La colonne de la sableuse se place de profil par rapport à la caméra, pour qu’on voie le rideau de côté.</p>
-        <figure id="fig-turn" class="wide"><figcaption><b>Une colonne de 80 cm, déroulée : azimut en abscisse, hauteur en ordonnée.</b> <code>turnPlan</code>, <code>turnS</code> et la formule de \(s^*\) portés tels quels, sur un cylindre aux normales radiales et sans masquage. Le rectangle est l’empreinte de la buse vue dans le repère de la pièce (0,35 rad de large, la durée du fondu du décapage) ; les points sont ses passages précédents. Élargissez l’empreinte ou réduisez les tours : \(N\) remonte de lui-même pour que l’hélice ne laisse pas de bande.</figcaption></figure>
+        <p>Pour le sablage, c'est la pièce qui bouge : elle tourne sur un plateau pendant qu'une rampe de buses descend le long d'elle. Dans le repère de la pièce, chaque buse décrit donc une <b>hélice</b>. Le plateau fait un nombre entier de tours <i>N</i>, pour que la pièce revienne à son orientation de départ.</p>
+        <p>Entre deux tours, la buse descend du pas de l'hélice. Si ce pas est plus grand que la hauteur de l'empreinte du jet, une bande de pièce passe entre deux spires sans jamais être touchée. <i>N</i> est donc augmenté jusqu'à ce que le pas reste sous l'empreinte, avec une marge de 25 % :</p>
+        <div class="eq">\[ \frac{y_{\text{haut}} - y_{\text{bas}}}{N} \;\le\; 0{,}75\ \text{empreinte} \]</div>
+        <p>L'instant où le jet atteint un point se calcule comme pour le laser, en deux temps : d'abord l'instant <i>s</i><sub>1</sub> où le bas de l'empreinte descend à la hauteur du point, puis le temps que le plateau tourne jusqu'à présenter le point (son azimut φ) devant la rampe (azimut φ<sub>b</sub>) :</p>
+        <div class="eq">\[ s^* = s_1 + \frac{\operatorname{mod}\big(\pm(\varphi_b - \varphi) - 2\pi N s_1,\ 2\pi\big)}{2\pi N} \]</div>
+        <p><i>s</i> est la progression du plateau, de 0 à 1, et le signe ± le sens de rotation.</p>
+        <figure id="fig-turn" class="wide"><figcaption><b>Une colonne de 80 cm, déroulée</b> : azimut en abscisse, hauteur en ordonnée. Formules de <code>turnPlan</code>, <code>turnS</code> et de <i>s</i>* reprises du projet, sur un cylindre sans parties cachées. Le rectangle est l'empreinte du jet vue depuis la pièce ; les points bleus sont ses passages précédents. Pour la démo, un point n'est décapé que s'il est encore dans l'empreinte quand la buse passe à son azimut.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Désactivez « Corriger N » et demandez 4 tours : le pas dépasse l'empreinte (1,36 fois), et des bandes en hélice restent rouillées, 27 % de la colonne. À 6 tours, le pas passe sous l'empreinte et tout est décapé.</li>
+          <li>Réactivez la correction : quels que soient les tours demandés, <i>N</i> remonte et le bandeau indique 0 % jamais décapé.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>La rampe porte une buse tous les 5 cm ; leurs jets, parallèles et inclinés de 0,22 à 0,38 rad vers le bas, forment un rideau de grenaille, qui décape aussi une face plate sur toute sa largeur. Une face est décapée quand elle entre dans le rideau avec une incidence utile (cosinus entre sa normale et le jet supérieur à 0,45 ; en deçà, la grenaille glisse). Le jet incliné frappe plus bas que la rampe, d'autant plus que la face est loin d'elle, ce que corrige la hauteur d'impact <i>y</i> + tan(inclinaison) (<i>R</i><sub>n</sub> − <i>p</i> · <i>d</i>). Les parties cachées se lisent dans 32 cartes de profondeur horizontales, une par direction : une face cachée pendant tout son passage dans le rideau reste rouillée. Les mêmes cartes arrêtent chaque jet à l'écran sur la surface qu'il frappe vraiment ; mesuré sur les quatre pièces, 86 à 87 % des impacts tombent sur de l'acier en train d'être décapé ou déjà nu.</p>
+        </div></details>
       </section>
 
       <section id="bain">
-        <h2><span class="n">08</span>Le bain : la boue, puis la rampe de rinçage</h2>
+        <h2><span class="n">09</span>Le bain d'électrolyse</h2>
         <span class="src">src/machines.js · bathPlan(), bathOffset(), rinseY()</span>
-        <p>La pièce pend à son crochet au-dessus d’une fosse d’électrolyse, où un courant réduit la rouille, et dont le couvercle roule sur le côté. Un palan la descend pendant les premiers 13 % de la fenêtre (\(u \in [0{,}45;\ 0{,}87]\)), jusqu’à ce que son sommet soit 7 cm sous le niveau. Elle y reste 18 à 23 % de la fenêtre : les bulles d’hydrogène se multiplient, le bain se trouble de brun et se couvre d’écume. Puis elle remonte, à vitesse constante adoucie aux bouts. Dans la vraie électrolyse, la croûte ne disparaît pas : elle est réduite en une boue noire (magnétite) qui se décolle. La pièce ressort donc <em>noire</em> et ruisselante, et c’est la rampe de rinçage, un cadre de tubes à buses qui l’entoure, pendu à la poutre par deux câbles, qui la remet à nu en descendant de son sommet à son pied :</p>
-        <div class="eq">\[ \text{rouille}(p, u) = 1 - \big[u \ge u_{\text{remontée}}\big] \wedge \big[p_y + \text{décalage}(u) > L\big], \qquad \text{boue}(p, u) = \big[\text{sortie}\big] \wedge \big[p_y + \text{décalage}(u) < y_{\text{rampe}}(u)\big]. \]</div>
-        <p>Le front visible est la ligne des buses, dont les jets éclatent en brume sur l’acier et chassent l’eau noire, qui tombe en gouttes dans la fosse. Il reste un peu de boue dans les creux, comme sur une vraie pièce. Les tests vérifient que la pièce passe tout entière sous le niveau, que la descente et la remontée sont monotones, qu’aucun point n’est décapé avant la remontée et que tous le sont à la fin.</p>
+        <p>La pièce pend à un crochet au-dessus d'une fosse où un courant électrique réduit la rouille. Un palan la descend jusqu'à ce qu'elle soit tout entière sous le niveau ; elle y reste, couverte de bulles d'hydrogène, pendant que le bain se trouble. Dans une vraie électrolyse, la croûte ne disparaît pas : elle est réduite en une boue noire qui se décolle. La pièce ressort donc noire et ruisselante.</p>
+        <p>C'est la rampe de rinçage, un cadre de tubes à buses qui entoure la pièce, qui la remet à nu en descendant de son sommet à son pied. La règle est simple : après la remontée, un point est nu s'il est au-dessus de la rampe, et couvert de boue s'il est encore en dessous. Le front visible est la ligne des buses, dont les jets chassent l'eau noire.</p>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>La descente occupe les premiers 13 % de la fenêtre (<i>u</i> de 0,45 à 0,87), jusqu'à ce que le sommet de la pièce soit 7 cm sous le niveau ; le séjour dure 18 à 23 % de la fenêtre. Il reste un peu de boue dans les creux, comme sur une vraie pièce. Les tests vérifient que la pièce passe tout entière sous le niveau, que la descente et la remontée sont monotones, qu'aucun point n'est décapé avant la remontée et que tous le sont à la fin.</p>
+        </div></details>
       </section>
 
-      <section id="coherence">
-        <h2><span class="n">09</span>Rien ne flotte, aucune élingue ne traverse</h2>
+      <section id="audit">
+        <h2><span class="n">10</span>Rien ne flotte, aucune élingue ne traverse</h2>
         <span class="src">src/gen/audit.js · src/gen/pieces.js · hookPoint()</span>
-        <p>Une pièce construite par programme accumule de petites incohérences : une charnière à un millimètre de son battant, une plaque posée au-dessus de sa tôle, un piton vissé dans un chant. Elles passent inaperçues tant que la pièce est nue. La rouille les montre, car une pièce flottante n’a pas de pied où l’eau stagne. Un audit les cherche. Le maillage est soudé, puis découpé en composantes connexes, les morceaux d’un seul tenant (par union-find, qui regroupe de proche en proche les triangles reliés). Chaque composante est échantillonnée tous les 2,5 mm, et deux composantes se touchent si deux de leurs points sont à moins de 2,5 mm. Tout groupe qui ne rejoint pas le sol de proche en proche flotte. Un test l’exige sur trois graines par famille.</p>
-        <p>Pour le bain, la pièce est levée par deux élingues, de ses oreilles jusqu’au crochet. Si le crochet est trop bas, une élingue traverse la pièce (le volant d’une vanne, par exemple). La hauteur du crochet est donc <em>calculée</em> : partant de 32 cm au-dessus des oreilles, il monte par pas de 2 cm jusqu’à ce qu’aucun point de la pièce ne soit à moins de 3 cm d’une élingue, en dehors des 7 premiers centimètres, où le contact avec l’oreille est voulu. La roue, trop large, est levée autrement : un palonnier au-dessus d’elle et deux élingues verticales en étrangloir (une boucle serrée sur elle-même) autour du maneton et de l’essieu.</p>
-        <figure id="fig-hook"><figcaption><b>Une vanne levée par ses deux brides.</b> <code>hookPoint</code> porté tel quel, en coupe plane, sur les points d’une silhouette échantillonnée au centimètre. En pointillé rouge, les élingues à la hauteur de départ et les points qu’elles frôlent ; en clair, la position retenue.</figcaption></figure>
-        <div class="note check"><b>Ce que l’audit a trouvé</b><p>Le commit qui l’a introduit a remis au contact les berceaux de la vanne, le battant de la porte sur son hiloire, les bras des taquets sur le battant, la plaque de laiton sur sa tôle et les goujons du presse-étoupe dans leur bossage ; les pitons vissés dans des chants sont devenus des oreilles percées avec manille.</p></div>
+        <p>Une pièce construite par programme accumule de petites incohérences : une charnière à un millimètre de son battant, une plaque posée au-dessus de sa tôle. Tant que la pièce est nue, elles passent inaperçues. La rouille les révèle, parce qu'une pièce qui flotte n'a pas de pied où l'eau stagne.</p>
+        <p>Un audit les cherche. Le maillage est découpé en morceaux d'un seul tenant, et deux morceaux se touchent si deux de leurs points sont à moins de 2,5 mm. Tout groupe qui ne rejoint pas le sol de proche en proche flotte ; un test l'interdit sur trois graines par famille. Pour le bain, la pièce est levée par deux élingues jusqu'au crochet : si le crochet est trop bas, une élingue traverse la pièce. Sa hauteur est donc calculée. Partant de 32 cm au-dessus des oreilles de levage, il monte par pas de 2 cm jusqu'à ce qu'aucun point de la pièce ne soit à moins de 3 cm d'une élingue.</p>
+        <figure id="fig-hook"><figcaption><b>Une vanne levée par ses deux brides.</b> <code>hookPoint</code> repris du projet, en coupe plane, sur une silhouette échantillonnée au centimètre. En pointillés rouges, les élingues à la hauteur de départ et les points qu'elles frôlent ; en clair, la position retenue.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Agrandissez le volant : le crochet doit monter davantage pour que les élingues passent au-dessus.</li>
+          <li>Écartez les brides au maximum : les élingues s'ouvrent et passent à côté du volant, et le crochet n'a plus besoin de monter.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Les morceaux d'un seul tenant sont trouvés par union-find, qui regroupe de proche en proche les triangles reliés, puis échantillonnés tous les 2,5 mm. Dans le calcul du crochet, les 7 premiers centimètres de chaque élingue sont ignorés : le contact avec l'oreille y est voulu. La roue, trop large, est levée par un palonnier et deux élingues serrées autour du maneton et de l'essieu.</p>
+          <div class="note"><b>Ce que l'audit a trouvé</b><p>Il a remis au contact les berceaux de la vanne, le battant de la porte sur son hiloire, les bras des taquets sur le battant, la plaque de laiton sur sa tôle et les goujons du presse-étoupe dans leur bossage ; les pitons vissés dans des chants sont devenus des oreilles percées avec manille.</p></div>
+        </div></details>
+      </section>
+
+      <section id="resume">
+        <h2><span class="n">11</span>Récapitulatif</h2>
+        <p>Pendant le chargement, un worker :</p>
+        <ol>
+          <li>construit la pièce et vérifie que rien ne flotte (section 10) ;</li>
+          <li>tire 200 000 points sur sa surface et calcule leur humectation (section 02) ;</li>
+          <li>en déduit l'instant d'apparition de la rouille, propagé de proche en proche (section 04), et les coulures (section 05), rangés dans un volume de voxels ;</li>
+          <li>prépare la trajectoire de la machine et les cartes qui disent quels points elle atteint (sections 07 à 09).</li>
+        </ol>
+        <p>Pendant l'animation, pour chaque pixel de la pièce, le shader prend la position dans la boucle, en déduit τ (section 03), lit le volume, calcule l'épaisseur et la couleur de la rouille (section 06), et l'efface si l'outil est déjà passé (sections 07 à 09).</p>
       </section>
 
       <section id="budget">
-        <h2><span class="n">10</span>Budget</h2>
-        <p>Toute la géométrie et le champ de corrosion sont calculés dans un worker pendant l’écran de chargement ; le rendu ne fait que lire le volume et les cartes d’accès.</p>
+        <h2><span class="n">12</span>Budget</h2>
+        <p>Toute la géométrie et le champ de corrosion sont calculés dans un worker pendant l'écran de chargement ; le rendu ne fait que lire le volume et les cartes d'accès.</p>
         <div class="tbl"><table>
           <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
           <tbody>
             <tr><td>Géométrie de la pièce</td><td>worker</td><td class="num">30 à 80 ms</td></tr>
             <tr><td>Champ de corrosion (concavités, 15 rayons de ciel par point, Dijkstra, ruissellement, 32 cartes de profondeur)</td><td>worker</td><td class="num">2 à 4 s</td></tr>
-            <tr><td>Même champ, mesuré sous Node pour cette page (graine a1) : vanne, roue, nœud, porte</td><td>Node</td><td class="num">2,5 · 3,0 · 3,7 · 4,6 s</td></tr>
+            <tr><td>Même champ, mesuré sous Node (graine a1) : vanne, roue, nœud, porte</td><td>Node</td><td class="num">2,5 · 3,0 · 3,7 · 4,6 s</td></tr>
             <tr><td>Points de surface correspondants</td><td>mémoire</td><td class="num">208&#8239;000 à 369&#8239;000</td></tr>
             <tr><td>Volume RGBA 8 bits (nœud 155 × 87 × 23, roue 155 × 155 × 103)</td><td>GPU</td><td class="num">1,2 à 9,9 Mo</td></tr>
             <tr><td>Machine (géométrie et trajectoire)</td><td>worker</td><td class="num">quelques dizaines de ms</td></tr>
@@ -146,7 +227,7 @@
             <tr><td>Image, version mobile, 1,2 Mpx (laser)</td><td>GPU</td><td class="num">6,3 ms</td></tr>
           </tbody>
         </table></div>
-        <p>Le poste le plus lourd de l’image est le matériau de la rouille : deux Worley exacts (germes et écailles) et plusieurs fBm lus dans le volume de bruit, avant la chaîne d’image. La version mobile lit le Worley dans le volume de bruit, limite les fBm à deux octaves et échantillonne la surface au pas de 6 mm au lieu de 4,5. Treize tests couvrent l’ensemble : l’horloge et son raccord, la rouille qui commence dans les creux, l’instant exact de chaque outil, la caméra, la recette, la direction artistique, aucune interpénétration, aucun élément flottant, aucune élingue qui traverse.</p>
+        <p>Le poste le plus lourd de l'image est le matériau de la rouille : deux bruits de Worley exacts (germes et écailles) et plusieurs bruits fractals. La version mobile lit le Worley dans un volume de bruit précalculé, limite les bruits fractals à deux octaves et échantillonne la surface tous les 6 mm au lieu de 4,5. Treize tests couvrent l'ensemble : l'horloge et son raccord, la rouille qui commence dans les creux, l'instant exact de chaque outil, la caméra, la recette, la direction artistique, aucune interpénétration, aucun élément flottant, aucune élingue qui traverse.</p>
       </section>
     </article>
 
@@ -203,7 +284,7 @@
       return f1;
     }
 
-    // ── 01 · l'horloge ────────────────────────────────────────────────────
+    // ── 03 · l'horloge ────────────────────────────────────────────────────
     {
       const PH = { rain0: .04, rain1: .36, setup0: .36, clean0: .44, clean1: .86, retract1: .95 };
       const s5 = (t) => { t = clamp(t); return t * t * t * (t * (6 * t - 15) + 10); };
@@ -309,17 +390,18 @@
         return (cache = { excl, c1, c2, tow });
       };
       let chan = 'w';
+      const CH = ['w', 'c1', 'c2', 'sky'], markChan = (d) => d.fig.querySelectorAll('.btns button').forEach((b, k) => { if (k < 4) b.setAttribute('aria-pressed', String(CH[k] === chan)); });
       const rampW = (v) => v < .5 ? STEEL.map((s, k) => lerp(s, [200, 92, 34][k], v / .5)) : [200, 92, 34].map((s, k) => lerp(s, [80, 32, 12][k], (v - .5) / .5));
       demo('#fig-wet', {
-        title: 'Humectation d’une cornière', aspect: 1.75,
+        title: 'Humectation d’une cornière', aspect: 1.5,
         buttons: [
-          { label: 'Humectation', onClick: () => { chan = 'w'; } },
-          { label: 'Concavité 1,2 cm', onClick: () => { chan = 'c1'; } },
-          { label: 'Concavité 4 cm', onClick: () => { chan = 'c2'; } },
-          { label: 'Ciel', onClick: () => { chan = 'sky'; } },
+          { label: 'Humectation', onClick: (d) => { chan = 'w'; markChan(d); } },
+          { label: 'Concavité 1,2 cm', onClick: (d) => { chan = 'c1'; markChan(d); } },
+          { label: 'Concavité 4 cm', onClick: (d) => { chan = 'c2'; markChan(d); } },
+          { label: 'Ciel', onClick: (d) => { chan = 'sky'; markChan(d); } },
           { key: 'excl', label: 'Écarter l’autre face', toggle: true, value: true },
         ],
-        setup(d) { let b = 1e9; S.forEach((p, i) => { const dd = Math.hypot(p.x - t - rf * .3, p.y - t - rf * .3); if (dd < b) { b = dd; d.state.sel = i; } }); },
+        setup(d) { markChan(d); let b = 1e9; S.forEach((p, i) => { const dd = Math.hypot(p.x - t - rf * .3, p.y - t - rf * .3); if (dd < b) { b = dd; d.state.sel = i; } }); },
         pointer(d, e) {
           const T = d.state.T; if (!T) return;
           let best = -1, bd = 1e9; S.forEach((p, i) => { const dd = Math.hypot(T.X(p.x) - e.x, T.Y(p.y) - e.y); if (dd < bd) { bd = dd; best = i; } });
@@ -327,7 +409,7 @@
         },
         draw(g, d) {
           const R = compute(d.s.excl), { w, h } = d;
-          const sc = Math.min((h - 40) / (Lw + .03), w * .55 / (Lw + .03)), ox = 30, oy = h - 26;
+          const sc = Math.min((h - 30) / (Lw + .02), (w < 560 ? w * .5 : w * .58) / (Lw + .02)), ox = 22, oy = h - 18;
           const X = (x) => ox + x * sc, Y = (y) => oy - y * sc; d.state.T = { X, Y };
           g.fillStyle = alpha(C.ink, .07); g.strokeStyle = alpha(C.ink, .25); g.lineWidth = 1; g.beginPath(); poly.forEach(([x, y], i) => i ? g.lineTo(X(x), Y(y)) : g.moveTo(X(x), Y(y))); g.closePath(); g.fill(); g.stroke();
           const val = (i) => chan === 'w' ? R.tow[i].w : chan === 'c1' ? R.c1[i] : chan === 'c2' ? R.c2[i] : sky[i];
@@ -337,21 +419,22 @@
             if (chan === 'sky') return alpha(C.c2, .15 + .85 * v);
             const k = clamp(Math.abs(v) / .2); return v > 0 ? rgb(STEEL.map((s, q) => lerp(s, [214, 110, 40][q], k))) : rgb(STEEL.map((s, q) => lerp(s, [70, 130, 210][q], k)));
           };
-          S.forEach((p, i) => { g.fillStyle = colOf(i); g.beginPath(); g.arc(X(p.x) + p.nx * 3, Y(p.y) - p.ny * 3, 2.6, 0, TAU); g.fill(); });
+          S.forEach((p, i) => { g.fillStyle = colOf(i); g.beginPath(); g.arc(X(p.x) + p.nx * 5, Y(p.y) - p.ny * 5, 4.2, 0, TAU); g.fill(); });
           // point choisi
           const i = d.state.sel, p = S[i];
           if (p) {
-            g.strokeStyle = C.ink; g.lineWidth = 1.4; g.beginPath(); g.arc(X(p.x) + p.nx * 3, Y(p.y) - p.ny * 3, 6, 0, TAU); g.stroke();
-            const x = Math.max(X(Lw) + 40, w * .62), tw = R.tow[i];
+            g.strokeStyle = C.ink; g.lineWidth = 1.6; g.beginPath(); g.arc(X(p.x) + p.nx * 5, Y(p.y) - p.ny * 5, 8, 0, TAU); g.stroke();
+            const x = Math.max(X(Lw) + 24, w * .6), tw = R.tow[i];
+            const small = w < 560;
             const rows = [['concavité 1,2 cm', R.c1[i].toFixed(3)], ['concavité 4 cm', R.c2[i].toFixed(3)], ['ciel visible', sky[i].toFixed(2)], ['stagnation', tw.pl.toFixed(2)], ['creux', tw.crev.toFixed(2)], ['arête', tw.edge.toFixed(2)], ['abri', tw.shelter.toFixed(2)], ['humectation w', tw.w.toFixed(2)], ['apparition locale t₀', Math.pow(1 - clamp((tw.w - .28) / .72), 1.25).toFixed(2)]];
-            rows.forEach(([n, v], k) => { const y = 34 + k * Math.min(26, (h - 50) / 9); label(g, n, x, y, { size: 12, color: k >= 7 ? C.ink : C.dim }); label(g, v, w - 14, y, { size: 14, align: 'right', font: 'Fraunces', color: k === 7 ? C.c1 : C.ink }); });
+            rows.forEach(([n, v], k) => { const y = 34 + k * Math.min(26, (h - 50) / 9); label(g, small ? n.replace('concavité ', 'conc. ').replace('apparition locale ', '') : n, x, y, { size: small ? 10.5 : 12, color: k >= 7 ? C.ink : C.dim }); label(g, v, w - 10, y, { size: small ? 12 : 14, align: 'right', font: 'Fraunces', color: k === 7 ? C.c1 : C.ink }); });
           }
           d.status({ w: 'humectation w', c1: 'concavité au rayon 1,2 cm', c2: 'concavité au rayon 4 cm', sky: 'part du ciel visible' }[chan] + (d.s.excl ? '' : ' · autre face comptée'));
         },
       });
     }
 
-    // ── 03-05 · le gousset : humectation, front, coulures ────────────────
+    // ── 04-06 · le gousset : humectation, front, coulures ────────────────
     const GW = 60, GH = 40, VOX = .01, SPREAD = .25;
     const RIV = []; for (let k = 0; k < 6; k++) RIV.push([.08 + k * .088, .24]); for (const x of [.12, .24, .36, .48]) RIV.push([x, .07]); for (const x of [.15, .3, .45]) RIV.push([x, .37]);
     const ANG = { x0: .03, x1: .57, y0: .18, y1: .30 };
@@ -405,37 +488,42 @@
     }
     function plateFrame(d) { const sc = Math.min((d.h - 16) / .4, (d.w * .68 - 16) / .6), ox = 12, oy = (d.h - .4 * sc) / 2; return { sc, ox, oy, X: (x) => ox + x * sc, Y: (y) => oy + (.4 - y) * sc }; }
 
-    // ── 03 · front géodésique ─────────────────────────────────────────────
+    // ── 04 · front géodésique ─────────────────────────────────────────────
     {
       const [off, og] = pixelCanvas(); off.width = GW; off.height = GH; const img = og.createImageData(GW, GH);
+      const [off2, og2] = pixelCanvas(); off2.width = GW; off2.height = GH; const img2 = og2.createImageData(GW, GH);
+      const paint = (O, tau, im, cx) => {
+        let cov = 0;
+        for (let j = 0; j < GH; j++) for (let i = 0; i < GW; i++) {
+          const k = j * GW + i, o = ((GH - 1 - j) * GW + i) * 4, sh = PLATE.shade[k], age = tau - O[k];
+          let c = STEEL.slice();
+          if (age > 0) { cov++; const r = loadRamp(age), m = Math.min(1, age / .04); c = c.map((v, q) => v + (r[q] - v) * m); }
+          im.data[o] = c[0] * sh; im.data[o + 1] = c[1] * sh; im.data[o + 2] = c[2] * sh; im.data[o + 3] = 255;
+        }
+        cx.putImageData(im, 0, 0);
+        return cov / (GW * GH);
+      };
       demo('#fig-front', {
-        title: 'Instant d’apparition', aspect: 1.9, animate: true,
-        controls: [{ key: 'tau', label: 'Temps d’humectation τ (à l’arrêt)', min: 0, max: 1, step: .005, value: .3, fmt: (v) => v.toFixed(2) }],
-        buttons: [{ key: 'play', label: 'Lecture', toggle: true, value: true }, { key: 'geo', label: 'Front géodésique', toggle: true, value: true }],
+        title: 'Instant d’apparition', aspect: 2.5, animate: true,
+        controls: [{ key: 'tau', label: 'Temps d’humectation τ (à l’arrêt)', min: 0, max: 1, step: .005, value: .2, fmt: (v) => v.toFixed(2) }],
+        buttons: [{ key: 'play', label: 'Lecture', toggle: true, value: true }],
         draw(g, d) {
           const tau = d.s.play ? Math.min(1, ((d.t / 3.2) % 1.25)) : d.s.tau;
-          const O = d.s.geo ? PLATE.front : PLATE.local; let cov = 0;
-          for (let j = 0; j < GH; j++) for (let i = 0; i < GW; i++) {
-            const k = j * GW + i, o = ((GH - 1 - j) * GW + i) * 4, sh = PLATE.shade[k], age = tau - O[k];
-            let c = STEEL.slice();
-            if (age > 0) { cov++; const r = loadRamp(age), m = Math.min(1, age / .04); c = c.map((v, q) => v + (r[q] - v) * m); }
-            img.data[o] = c[0] * sh; img.data[o + 1] = c[1] * sh; img.data[o + 2] = c[2] * sh; img.data[o + 3] = 255;
-          }
-          og.putImageData(img, 0, 0);
-          const F = plateFrame(d); g.imageSmoothingEnabled = true; g.drawImage(off, F.ox, F.oy, .6 * F.sc, .4 * F.sc);
-          drawRivets(g, F.X, F.Y, F.sc);
-          // légende
-          const lx = F.ox + .6 * F.sc + 18, lw = Math.max(20, d.w - lx - 14);
-          label(g, 'τ', lx, 26, { size: 12 }); label(g, tau.toFixed(2), lx, 54, { size: 22, font: 'Fraunces', color: C.ink });
-          label(g, 'surface rouillée', lx, 88, { size: 12 }); label(g, `${Math.round(cov / (GW * GH) * 100)} %`, lx, 116, { size: 22, font: 'Fraunces', color: C.c1 });
-          for (let i = 0; i < 40; i++) { const a = i / 40 * .6; g.fillStyle = rgb(loadRamp(a)); g.fillRect(lx + i / 40 * lw, d.h - 46, lw / 40 + .5, 10); }
-          label(g, 'jeune', lx, d.h - 22, { size: 11 }); label(g, 'épaisse', lx + lw, d.h - 22, { size: 11, align: 'right' });
-          d.status(d.s.geo ? 'front géodésique, v = 0,25 m par unité de τ' : 'apparition locale seule');
+          const covA = paint(PLATE.local, tau, img, og), covB = paint(PLATE.front, tau, img2, og2);
+          const half = d.w / 2, pw = half - 20, ph = pw * .4 / .6, sc = Math.min(pw / .6, (d.h - 50) / .4), oy = 26;
+          [[off, 'apparition locale seule', covA, C.c3], [off2, 'avec le front géodésique', covB, C.c4]].forEach(([cv, name, cov, col], p) => {
+            const ox = p * half + (half - .6 * sc) / 2;
+            g.imageSmoothingEnabled = true; g.drawImage(cv, ox, oy, .6 * sc, .4 * sc);
+            drawRivets(g, (x) => ox + x * sc, (y) => oy + (.4 - y) * sc, sc);
+            label(g, name, p * half + half / 2, 16, { align: 'center', size: 12, color: col });
+            label(g, `surface rouillée ${Math.round(cov * 100)} %`, p * half + half / 2, oy + .4 * sc + 18, { align: 'center', size: 12, color: C.ink });
+          });
+          d.status(`τ = ${tau.toFixed(2)}`);
         },
       });
     }
 
-    // ── 04 · coulures ─────────────────────────────────────────────────────
+    // ── 05 · coulures ─────────────────────────────────────────────────────
     {
       const [off, og] = pixelCanvas();
       let key = '';
@@ -474,7 +562,7 @@
       });
     }
 
-    // ── 05 · la loi de dose au pixel ──────────────────────────────────────
+    // ── 06 · la loi de dose au pixel ──────────────────────────────────────
     {
       const [off, og] = pixelCanvas();
       const RX = [.10, .42], RY = [.16, .32];
@@ -527,7 +615,7 @@
       });
     }
 
-    // ── 06 · le laser ─────────────────────────────────────────────────────
+    // ── 07 · le laser ─────────────────────────────────────────────────────
     // silhouette d'une vanne vue de face (m) : brides en ±ex, volant de rayon rv
     const valve = (ex = .45, rv = .18) => (x, y) => {
       const ax = Math.abs(x);
@@ -626,14 +714,16 @@
       });
     }
 
-    // ── 07 · sablage en hélice ────────────────────────────────────────────
+    // ── 08 · sablage en hélice ────────────────────────────────────────────
     {
       const T = { clean0: .44, clean1: .86 }, RAMP = .06, Hp = .8;
       const Iramp = (x) => { const t = x / RAMP; return RAMP * (t * t * t - (t * t * t * t) / 2); };
       const turnS = (u) => { const x = (u - T.clean0) / (T.clean1 - T.clean0); if (x <= 0) return 0; if (x >= 1) return 1; const tot = 1 - RAMP; if (x < RAMP) return Iramp(x) / tot; if (x > 1 - RAMP) return 1 - Iramp(1 - x) / tot; return (Iramp(RAMP) + (x - RAMP)) / tot; };
-      const turnPlan = (M) => { const yTop = Hp + M.foot * .5, yBot = 0 - M.foot * .25; let N = M.turns; while ((yTop - yBot) / N > M.foot * .75) N++; return { N, yTop, yBot, foot: M.foot, dir: 1, az: 0 }; };
+      const turnPlan = (M) => { const yTop = Hp + M.foot * .5, yBot = 0 - M.foot * .25; let N = M.turns; if (M.fix) while ((yTop - yBot) / N > M.foot * .75) N++; return { N, yTop, yBot, foot: M.foot, dir: 1, az: 0 }; };
       const nozzleY = (p, s) => p.yTop - (p.yTop - p.yBot) * s;
       const cleanS = (p, phi, y) => { const s1 = Math.max(0, (p.yTop - y - p.foot / 2) / (p.yTop - p.yBot)); return s1 + mod(p.dir * (p.az - phi) - TAU * p.N * s1, TAU) / (TAU * p.N); };
+      // (pour la démo : le point n'est décapé que s'il est encore dans l'empreinte quand la buse passe à son azimut)
+      const covered = (p, phi, y) => { const sc = cleanS(p, phi, y); return Math.abs(nozzleY(p, sc) - y) <= p.foot / 2 + 1e-9 ? sc : Infinity; };
       const GWs = 180, GHs = 80, [off, og] = pixelCanvas(); off.width = GWs; off.height = GHs; const img = og.createImageData(GWs, GHs);
       let cache = null;
       demo('#fig-turn', {
@@ -642,12 +732,13 @@
           { key: 'turns', label: 'Tours demandés', min: 3, max: 9, step: 1, value: 6 },
           { key: 'foot', label: 'Empreinte du jet', min: .08, max: .25, step: .005, value: .17, fmt: (v) => `${Math.round(v * 100)} cm` },
         ],
+        buttons: [{ key: 'fix', label: 'Corriger N', toggle: true, value: true }],
         draw(g, d) {
-          const ck = `${d.s.turns}:${d.s.foot}`;
-          if (!cache || cache.k !== ck) { const p = turnPlan({ turns: d.s.turns, foot: d.s.foot }), ss = new Float32Array(GWs * GHs); for (let j = 0; j < GHs; j++) for (let i = 0; i < GWs; i++) ss[j * GWs + i] = cleanS(p, (i + .5) / GWs * TAU, (j + .5) / GHs * Hp); cache = { k: ck, p, ss }; }
+          const ck = `${d.s.turns}:${d.s.foot}:${d.s.fix}`;
+          if (!cache || cache.k !== ck) { const p = turnPlan({ turns: d.s.turns, foot: d.s.foot, fix: d.s.fix }), ss = new Float32Array(GWs * GHs); let miss = 0; for (let j = 0; j < GHs; j++) for (let i = 0; i < GWs; i++) { const v = covered(p, (i + .5) / GWs * TAU, (j + .5) / GHs * Hp); ss[j * GWs + i] = v; if (!Number.isFinite(v)) miss++; } cache = { k: ck, p, ss, miss: miss / (GWs * GHs) }; }
           const { p, ss } = cache, u = .42 + ((d.t * .03) % .46), s = turnS(u), fade = .35 / (TAU * p.N);
           for (let j = 0; j < GHs; j++) for (let i = 0; i < GWs; i++) {
-            const k = j * GWs + i, o = ((GHs - 1 - j) * GWs + i) * 4, r = 1 - sstep(ss[k], ss[k] + fade, s);
+            const k = j * GWs + i, o = ((GHs - 1 - j) * GWs + i) * 4, r = Number.isFinite(ss[k]) ? 1 - sstep(ss[k], ss[k] + fade, s) : 1;
             img.data[o] = lerp(176, 128, r); img.data[o + 1] = lerp(178, 58, r); img.data[o + 2] = lerp(180, 26, r); img.data[o + 3] = 255;
           }
           og.putImageData(img, 0, 0);
@@ -668,12 +759,12 @@
           const lx = x1 + 22, rw = d.w - 14, pitch = (p.yTop - p.yBot) / p.N;
           const row = (k, n, v, col = C.ink) => { label(g, n, lx, 30 + k * 34, { size: 12 }); label(g, v, rw, 30 + k * 34, { size: 17, align: 'right', font: 'Fraunces', color: col }); };
           row(0, 'tours N', String(p.N), p.N > d.s.turns ? C.c1 : C.ink); row(1, 'pas de l’hélice', `${(pitch * 100).toFixed(1)} cm`); row(2, 'pas / empreinte', (pitch / p.foot).toFixed(2)); row(3, 'progression s', s.toFixed(3));
-          d.status(p.N > d.s.turns ? `N porté de ${d.s.turns} à ${p.N} : pas ≤ 0,75 empreinte` : 'pas déjà sous 0,75 empreinte');
+          d.status(`${p.N > d.s.turns ? `N porté de ${d.s.turns} à ${p.N}` : `N = ${p.N}`} · pas / empreinte ${(pitch / p.foot).toFixed(2).replace('.', ',')} · jamais décapé : ${(cache.miss * 100).toFixed(0)} %`);
         },
       });
     }
 
-    // ── 09 · hauteur du crochet ───────────────────────────────────────────
+    // ── 10 · hauteur du crochet ───────────────────────────────────────────
     {
       function hookPoint(pos, lifts, hiY) {
         const mx = (lifts[0][0] + lifts[1][0]) / 2;
