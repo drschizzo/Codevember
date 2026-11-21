@@ -1,0 +1,168 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Codevember · le relais et les pages</title>
+<!--
+  Le jour du relais est-il la page ? Pour chaque jour de la méga-scène
+  (mega/), cette page rend le projet seul (sa page, ?debug) et le même jour dans
+  le relais, préparé derrière le jour qui le précède (comme en vrai : en
+  arrière-plan, pendant qu'un autre joue), à la même taille et aux mêmes
+  phases, puis compare les deux images (moyennes par blocs de 8 × 8 pixels,
+  comme tools/regress.py : le grain et le tramage de l'anticrénelage
+  s'effacent, une exposition, une teinte, une pièce qui manque restent).
+
+    ouvrir tools/relay-check.html              (tous les jours du relais)
+           tools/relay-check.html?only=bolt,kelp&phases=0.2,0.6
+           ?sink=http://127.0.0.1:8099/        (envoie aussi les images au
+                                                collecteur tools/sink.py :
+                                                <jour>-<phase>-page|relais.png)
+  Résultat à l'écran et dans window.__job ({ rows, done }). Un écart au-delà
+  du seuil se regarde avant de conclure (simulations réglées sur l'histoire,
+  particules) ; une teinte ou une exposition qui change est un défaut : la
+  page et le relais ne passent plus par le même rendu (src/core.js).
+
+  Comme pour regress.html : servir par .claude/serve.py, onglet au premier
+  plan, machine au repos. Les réglages mémorisés par le navigateur sont mis de
+  côté pendant les rendus.
+-->
+<style>
+  body { margin: 0; background: #111; color: #ccc; font: 13px/1.5 ui-monospace, monospace; }
+  pre { margin: 12px; white-space: pre-wrap; }
+  iframe { position: fixed; left: 0; top: 0; border: 0; opacity: 0.999; }
+  .bad { color: #f2a07b; }
+</style>
+<pre id="log"></pre>
+<script type="module">
+const q = new URLSearchParams(location.search);
+const phases = (q.get('phases') || '0.45').split(',').map(Number);
+const sink = q.get('sink');
+const W = +(q.get('w') || 960), H = +(q.get('h') || 540);
+// images rendues avant la capture, des deux côtés : assez pour l'historique de
+// l'anticrénelage et pour qu'une simulation qui rattrape sa phase par paquets
+// (Melt : 48 pas par image) y soit arrivée
+const N = +(q.get('n') || 60);
+// (le pire bloc tolère une étincelle ou une particule réglée sur l'horloge,
+// qui n'est jamais au même endroit ; la moyenne est le vrai critère)
+const SEUIL = { moy: +(q.get('moy') || 1.5), max: +(q.get('max') || 60) };
+const log = (s, cls) => { const e = document.createElement('span'); if (cls) e.className = cls; e.textContent = `${s}\n`; document.querySelector('#log').append(e); };
+const tickCh = new MessageChannel(); const waiters = [];
+tickCh.port1.onmessage = () => waiters.shift()?.();
+const yieldNow = () => new Promise((r) => { waiters.push(r); tickCh.port2.postMessage(0); });
+const sleep = async (ms) => { const t = performance.now(); while (performance.now() - t < ms) await yieldNow(); };
+
+// l'ordre du relais, lu dans mega/src/main.js
+const megaMain = await (await fetch('../mega/src/main.js', { cache: 'no-store' })).text();
+const DAYS = megaMain.match(/params\.get\('days'\) \|\| '([^']+)'/)[1].split(',');
+const only = q.get('only')?.split(',');
+const job = window.__job = { rows: [], done: false };
+const stored = Object.entries(localStorage);
+localStorage.clear();
+
+const frameOf = (src) => {
+  const f = document.createElement('iframe');
+  f.width = W; f.height = H; f.src = src;
+  document.body.appendChild(f);
+  return f;
+};
+const until = async (test, s, what) => {
+  const t = performance.now();
+  while (!test()) {
+    if (performance.now() - t > s * 1000) throw new Error(`${what} : rien après ${s} s`);
+    await sleep(250);
+  }
+};
+async function send(name, img) {
+  if (!sink) return;
+  const c = new OffscreenCanvas(img.width, img.height); c.getContext('2d').putImageData(img, 0, 0);
+  await fetch(`${sink}${name}.png`, { method: 'POST', body: await c.convertToBlob({ type: 'image/png' }) });
+}
+// écart par blocs de 8 × 8 (moyenne des trois canaux, sur 255)
+function compare(a, b) {
+  const w = Math.min(a.width, b.width), h = Math.min(a.height, b.height), B = 8;
+  let sum = 0, n = 0, max = 0;
+  for (let by = 0; by + B <= h; by += B) for (let bx = 0; bx + B <= w; bx += B) {
+    let d = 0;
+    for (let c = 0; c < 3; c++) {
+      let sa = 0, sb = 0;
+      for (let y = by; y < by + B; y++) for (let x = bx; x < bx + B; x++) { const i = (y * a.width + x) * 4 + c, j = (y * b.width + x) * 4 + c; sa += a.data[i]; sb += b.data[j]; }
+      d += Math.abs(sa - sb) / (B * B);
+    }
+    d /= 3; sum += d; n++; if (d > max) max = d;
+  }
+  return { moy: +(sum / n).toFixed(2), max: +max.toFixed(1) };
+}
+
+// (pages dont les outils de mise au point n'ont pas grab() : la chaîne
+// d'image rendue dans une cible et relue, comme regress.html)
+async function grabPost(api) {
+  const { renderer, post } = api;
+  const RT = post.nodes.scenePass.renderTarget.constructor;
+  const rt = new RT(W, H);
+  renderer.setRenderTarget(rt); post.render(); renderer.setRenderTarget(null);
+  const px = await renderer.readRenderTargetPixelsAsync(rt, 0, 0, W, H);
+  rt.dispose();
+  const img = new ImageData(W, H), stride = Math.ceil((W * 4) / 256) * 256;
+  for (let y = 0; y < H; y++) img.data.set(px.subarray(y * stride, y * stride + W * 4), y * W * 4);
+  return img;
+}
+
+// la page du projet, à la taille imposée (rapport de pixels 1)
+async function pageImages(day) {
+  // (la graine du jour, lue dans son day.js : une page sans graine d'ouverture
+  // en tirerait une au hasard)
+  const src = await (await fetch(`../${day}/src/day.js`, { cache: 'no-store' })).text();
+  const seed = src.match(/seed:\s*'([^']+)'/)?.[1];
+  const f = frameOf(`../${day}/?debug&ui=0${seed ? `&seed=${seed}` : ''}`);
+  try {
+    await until(() => f.contentWindow[day]?.shot, 240, `${day} (page)`);
+    const api = f.contentWindow[day], out = [];
+    for (const ph of phases) {
+      api.renderer.setPixelRatio(1); api.renderer.setSize(W, H, false);
+      api.camera.aspect = W / H; api.camera.updateProjectionMatrix();
+      await api.shot(ph, N);
+      out.push(api.grab ? await api.grab() : await grabPost(api));
+    }
+    return out;
+  } finally { f.remove(); await sleep(300); }
+}
+// le même jour dans le relais, préparé derrière le précédent
+async function relayImages(day) {
+  const i = DAYS.indexOf(day), prev = DAYS[(i - 1 + DAYS.length) % DAYS.length];
+  const f = frameOf(`../mega/?debug&pr=1&days=${prev},${day}`);
+  try {
+    await until(() => f.contentWindow.mega, 60, 'relais');
+    const m = f.contentWindow.mega;
+    const t = performance.now();
+    while (m.next?.state !== 'ready') {
+      if (performance.now() - t > 240e3) throw new Error(`${day} (relais) : pas prêt après 240 s`);
+      await m.run(0.5); // (la boucle à la main : le panneau peut être masqué)
+    }
+    if (m.next.meta.id !== day) throw new Error(`relais : jour suivant « ${m.next.meta.id} »`);
+    const out = [];
+    for (const ph of phases) out.push(await m.grab(ph, 'next', N));
+    return out;
+  } finally { f.remove(); await sleep(300); }
+}
+
+log(`relais : ${DAYS.join(' → ')}\nphases ${phases.join(', ')} · ${W} × ${H} · seuil moyenne ${SEUIL.moy}, bloc ${SEUIL.max}\n`);
+log('jour          phase    moy    max');
+for (const day of DAYS) {
+  if (only && !only.includes(day)) continue;
+  try {
+    const P = await pageImages(day), Rl = await relayImages(day);
+    phases.forEach((ph, k) => {
+      const r = compare(P[k], Rl[k]), bad = r.moy > SEUIL.moy || r.max > SEUIL.max;
+      job.rows.push({ day, ph, ...r, bad });
+      log(`${day.padEnd(13)} ${String(ph).padEnd(6)} ${String(r.moy).padStart(6)} ${String(r.max).padStart(6)}${bad ? '   ÉCART' : ''}`, bad ? 'bad' : '');
+    });
+    for (const [k, ph] of phases.entries()) { await send(`${day}-${ph}-page`, P[k]); await send(`${day}-${ph}-relais`, Rl[k]); }
+  } catch (e) {
+    job.rows.push({ day, error: String(e?.message || e) });
+    log(`${day.padEnd(13)} ÉCHEC ${e?.message || e}`, 'bad');
+  }
+}
+localStorage.clear();
+for (const [k, v] of stored) localStorage.setItem(k, v);
+job.done = true;
+const bad = job.rows.filter((r) => r.bad || r.error).length;
+log(`\nterminé : ${job.rows.length} mesures, ${bad} écart(s) ou échec(s)`, bad ? 'bad' : '');
+</script>

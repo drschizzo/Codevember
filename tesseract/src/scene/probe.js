@@ -30,6 +30,10 @@ export const PROBE_LAYER = 1;
 const SIZE = 128, LEVELS = Math.log2(SIZE);
 let target = null;
 const cube = () => (target ??= new THREE.CubeRenderTarget(SIZE, { type: THREE.HalfFloatType, generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter }));
+// (le relais de la méga-scène libère un jour et peut le recréer au tour
+// suivant : la cible gardée ici serait alors une cible déjà rendue ; on
+// l'oublie, et le jour suivant en crée une neuve. La page ne l'appelle pas.)
+export function releaseProbeTarget() { target?.dispose(); target = null; }
 
 // part de la sonde dans l'image (0 dehors, 1 dans les pièces)
 export const PROBE = { k: uniform(0) };

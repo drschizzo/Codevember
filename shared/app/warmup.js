@@ -79,8 +79,10 @@ function createGate(renderer) {
 // compilé). onProgress(f) : avancement estimé, 0 à 1. alive() : faux si un
 // autre chargement a été demandé entre-temps (on abandonne).
 // envs : textures d'environnement à refiltrer (préfiltrées pendant des
-// dessins sautés). Rend false si abandonné.
-export async function warmScene({ renderer, scene, pipes, render, phases, onProgress, alive = () => true, budget = 100, envs = () => [scene.environment] }) {
+// dessins sautés). Rend false si abandonné. yieldFn : la pause entre deux
+// dessins (par défaut, rendre la main tout de suite ; la méga-scène y passe
+// « attendre l'image suivante », pour préparer un jour pendant qu'un autre joue).
+export async function warmScene({ renderer, scene, pipes, render, phases, onProgress, alive = () => true, budget = 100, envs = () => [scene.environment], yieldFn = yieldNow }) {
   const gate = renderer.__gate ??= createGate(renderer);
   const fresh = () => renderer._nodes?.nodeFrame?.update?.();
   const culled = [];
@@ -97,7 +99,7 @@ export async function warmScene({ renderer, scene, pipes, render, phases, onProg
         fresh(); render(ph);
         if (first < 0) first = gate.skipped + gate.built;
         report(first ? 1 - gate.skipped / first : 1);
-        await yieldNow();
+        await yieldFn();
         if (!alive()) return false;
       } while (gate.skipped > 0 && ++guard < 400);
       done++;
@@ -111,7 +113,7 @@ export async function warmScene({ renderer, scene, pipes, render, phases, onProg
         gate.t0 = performance.now(); gate.built = 0; gate.skipped = 0;
         fresh(); render(ph);
         skipped += gate.skipped;
-        await pipes.flush(); await yieldNow();
+        await pipes.flush(); await yieldFn();
         if (!alive()) return false;
       }
       if (pipes.made === before && !skipped) break;
@@ -123,7 +125,7 @@ export async function warmScene({ renderer, scene, pipes, render, phases, onProg
       for (const e of E) e.needsPMREMUpdate = true;
       gate.t0 = performance.now(); gate.built = 0;
       fresh(); render(phases[0]);
-      await pipes.flush(); await yieldNow();
+      await pipes.flush(); await yieldFn();
     }
     done = total; report(1);
     return true;

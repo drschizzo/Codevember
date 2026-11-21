@@ -10,48 +10,25 @@ import * as THREE from 'three/webgpu';
 import { createSim, O, PBASE, CELL, PS, GX, GY, GZ, SEED_H } from '../sim/mpm.js';
 import { createWax } from './wax.js';
 import { createFactory, PLATE_Y } from './factory.js';
-import { OBJECTS, BOX, sdObject, scaleOf, seedPoints, heightOf, mouldField, surfaceNets } from '../objects.js';
+import { NMAX } from '../gen/shape.js';
 import { stateAt, TL, smooth, beltAt } from '../cycle.js';
 import { WAXES, HEATS, MOODS } from '../recipe.js';
 
-const NMAX = 40000; // particules (capacité : tous les objets ont le même volume)
-const RES = 2; // texture de distance : demi-cellule
-
-// une figurine prête : particules (repère de la grille) et texture de distance
-function makeShape(key, salt) {
-  const sc = scaleOf(key), prims = OBJECTS[key].prims;
-  const pts = seedPoints(key, sc, SEED_H), n = Math.min(NMAX, pts.length / 3);
-  const data = new Float32Array(NMAX * PS);
-  for (let i = 0; i < n; i++) {
-    const x = pts[i * 3] + O[0], y = pts[i * 3 + 1] + O[1], z = pts[i * 3 + 2] + O[2], o = i * PS;
-    data[o] = x; data[o + 1] = y; data[o + 2] = z;
-    data[o + 20] = 1; data[o + 25] = 1; data[o + 30] = 1; // b = I
-    data[o + 32] = x; data[o + 33] = y; data[o + 34] = z;
-    // pigment : des veines dans la masse (repère de repos), que l'écoulement emporte
-    const v = Math.sin(0.33 * y + 2.2 * Math.sin(0.17 * x + 1 + salt) + 1.7 * Math.sin(0.21 * z + 0.4 - salt) + 0.8 * Math.sin(0.5 * x + 0.3 * z + salt));
-    data[o + 37] = Math.min(1, Math.max(0, (v - 0.55) * 4)); data[o + 38] = 1;
-  }
-  for (let i = n; i < NMAX; i++) { data[i * PS] = 3; data[i * PS + 1] = 3; data[i * PS + 2] = 3; } // (inactives)
-  const N = BOX.size.map((v) => v * RES), sdf = new Uint16Array(N[0] * N[1] * N[2]);
-  for (let z = 0; z < N[2]; z++) for (let y = 0; y < N[1]; y++) for (let x = 0; x < N[0]; x++) {
-    sdf[x + N[0] * (y + N[1] * z)] = THREE.DataUtils.toHalfFloat(sdObject(prims, sc, BOX.min[0] + (x + 0.5) / RES, BOX.min[1] + (y + 0.5) / RES, BOX.min[2] + (z + 0.5) / RES));
-  }
-  const tex = new THREE.Data3DTexture(sdf, N[0], N[1], N[2]);
+// une figurine prête : particules (repère de la grille), texture de distance et
+// moule, à partir des données calculées dans le worker (gen/shape.js)
+function assemble(d) {
+  const tex = new THREE.Data3DTexture(d.sdf, d.dims[0], d.dims[1], d.dims[2]);
   tex.format = THREE.RedFormat; tex.type = THREE.HalfFloatType; tex.minFilter = tex.magFilter = THREE.LinearFilter;
   tex.wrapS = tex.wrapT = tex.wrapR = THREE.ClampToEdgeWrapping; tex.needsUpdate = true;
   // le moule : deux demi-coques (repère objet, unités du monde)
-  let top = 0, zBack = 0;
-  const halves = [1, -1].map((side) => {
-    const Fd = mouldField(key, sc, side), G = surfaceNets(Fd);
-    top = Fd.top * CELL; zBack = Fd.zBack * CELL;
-    for (let i = 0; i < G.position.length; i++) G.position[i] *= CELL;
+  const halves = d.halves.map((h) => {
     const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(G.position, 3));
-    g.setIndex(new THREE.BufferAttribute(G.index, 1));
+    g.setAttribute('position', new THREE.BufferAttribute(h.position, 3));
+    g.setIndex(new THREE.BufferAttribute(h.index, 1));
     g.computeVertexNormals();
     return g;
   });
-  return { key, data, tex, n, height: heightOf(key, sc) * CELL, mould: { halves, top, zBack } };
+  return { key: d.key, data: d.data, tex, n: d.n, height: d.height, mould: { halves, top: d.top, zBack: d.zBack } };
 }
 
 // ── Caméra : elle accompagne la cire ──
@@ -90,18 +67,17 @@ export function createStage(scene, gen, { renderer, lite = false } = {}) {
     factory.build(R);
     const W = WAXES[R.wax];
     wax.U.a.value.setRGB(...W.a); wax.U.b.value.setRGB(...W.b);
-    // (les figurines : une par image, pour laisser respirer l'écran de chargement)
+    // (les figurines : calculées dans les workers, en parallèle — gen/shape.js)
     (async () => {
-      const out = [];
-      for (let i = 0; i < R.objects.length; i++) {
-        await new Promise((res) => setTimeout(res, 0));
-        if (my !== token) return;
-        out.push(makeShape(R.objects[i], i * 3.1 + R.seed.length));
-        prog = (i + 1) / R.objects.length;
-      }
+      const C = { O, PS, CELL, SEED_H };
+      let done = 0;
+      const data = await Promise.all(R.objects.map((key, i) => gen.request({ key, salt: i * 3.1 + R.seed.length, C }, 'shape', null, { cache: false })
+        .then((d) => { prog = ++done / R.objects.length; return d; })));
+      if (my !== token) return;
+      const out = data.map(assemble);
       factory.setMoulds(out);
       shapes = out;
-    })();
+    })().catch((e) => console.error('figurines', e));
   }
 
   // chaleur reçue à l'instant t du demi-cycle (la même loi que cycle.js · stateAt)

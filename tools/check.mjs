@@ -8,7 +8,12 @@
 // - imports : tout import relatif d'un projet mène à un fichier qui existe
 //   (les modules communs sont dans shared/) ;
 // - copies : un fichier de <projet>/src identique à son homonyme de shared/
-//   devrait être importé de shared/, pas copié.
+//   devrait être importé de shared/, pas copié ;
+// - relais (mega/) : chaque projet est un jour de la méga-scène — src/day.js
+//   et src/core.js, la source unique de l'image, importée par la page
+//   (main.js) et par le relais (day.js) ; son passage d'entrée (meta.enter)
+//   existe dans mega/src/transitions.js ; les jours de l'ordre du relais
+//   (DAYS) existent.
 // Les projets d'avant la skill (ARCHIVES) sont dispensés des livrables récents.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -17,6 +22,13 @@ import { fileURLToPath } from 'node:url';
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ARCHIVES = new Set(['planetaire']); // (première version d'Orrery, hors accueil)
 const NO_TESTS = new Set(['planetaire', 'planetaire_v2', 'hollow', 'membrane']); // (bancs dans tools/ ou aucun)
+const HOSTS = new Set(['mega']); // (la méga-scène : un hôte, pas un projet)
+// projets d'avant le relais qui n'y sont pas encore (remarque, pas erreur) ;
+// tout nouveau projet livre son jour (la skill pose core.js et day.js)
+const RELAY_LATER = new Set(['planetaire']);
+// jours dont la page n'est pas encore branchée sur core.js (remarque) : Magma
+// est en cours dans une autre branche
+const CORE_LATER = new Set(['magma']);
 const VERSIONS = { three: '0.186.1', 'lil-gui': '0.20.0', 'mp4-muxer': '5.1.3' };
 
 const read = (f) => fs.readFileSync(path.join(repo, f), 'utf8');
@@ -28,7 +40,7 @@ const walk = (d, out = []) => {
   }
   return out;
 };
-const projects = fs.readdirSync(repo).filter((d) => has(`${d}/src/main.js`)).sort();
+const projects = fs.readdirSync(repo).filter((d) => has(`${d}/src/main.js`) && !HOSTS.has(d)).sort();
 const home = read('index.html'), rootReadme = read('README.md');
 const errors = [], warnings = [];
 const err = (p, m) => errors.push(`${p} : ${m}`), warn = (p, m) => warnings.push(`${p} : ${m}`);
@@ -69,6 +81,36 @@ for (const p of projects) {
     // shared/ importerait l'original)
     const localDeps = [...code.matchAll(SPEC)].some((m) => !path.normalize(path.join(path.dirname(f), m[2])).startsWith('shared'));
     if (!rel.startsWith('..') && has(`shared/${rel}`) && read(`shared/${rel}`) === text && !localDeps) warn(p, `src/${rel} est une copie de shared/${rel}`);
+  }
+}
+
+// ── le relais ──
+if (has('mega/src/main.js')) {
+  const megaMain = read('mega/src/main.js');
+  const days = (megaMain.match(/params\.get\('days'\) \|\| '([^']+)'/)?.[1] ?? '').split(',').filter(Boolean);
+  if (!days.length) errors.push('mega/src/main.js : ordre du relais (DAYS) introuvable');
+  const trans = has('mega/src/transitions.js') ? read('mega/src/transitions.js') : '';
+  const kinds = new Set([...trans.matchAll(/^ {4}([a-z]+): \(\) => \{/gm)].map((m) => m[1]).concat(['fade']));
+  for (const d of days) if (!has(`${d}/src/day.js`)) err('mega', `le jour « ${d} » de l'ordre du relais n'a pas de src/day.js`);
+  for (const p of projects) {
+    if (ARCHIVES.has(p)) continue;
+    const day = has(`${p}/src/day.js`) ? read(`${p}/src/day.js`) : null;
+    if (!day) {
+      (RELAY_LATER.has(p) ? warn : err)(p, 'pas de src/day.js : pas encore un jour du relais (mega/)');
+      continue;
+    }
+    const seed = day.match(/seed:\s*'([^']+)'/)?.[1], pageSeed = read(`${p}/src/main.js`).match(/DEFAULT_SEED\s*=\s*'([^']+)'/)?.[1];
+    if (pageSeed && seed !== pageSeed) err(p, `src/day.js : graine « ${seed} », la page ouvre sur « ${pageSeed} » (DEFAULT_SEED)`);
+    const enter = day.match(/enter:\s*'([a-z]+)'/)?.[1];
+    if (!enter) err(p, 'src/day.js : meta.enter manquant (le passage par lequel on entre dans ce jour)');
+    else if (!kinds.has(enter)) err(p, `src/day.js : passage « ${enter} » inconnu de mega/src/transitions.js`);
+    if (!days.includes(p)) warn(p, "jour du relais absent de l'ordre (DAYS, mega/src/main.js)");
+    const importsCore = (f) => /from\s*['"]\.\/core\.js['"]/.test(read(f));
+    if (!has(`${p}/src/core.js`)) (CORE_LATER.has(p) ? warn : err)(p, 'src/day.js sans src/core.js : le relais duplique le rendu de la page');
+    else {
+      if (!importsCore(`${p}/src/day.js`)) err(p, 'src/day.js n\'importe pas core.js (la source unique)');
+      if (!importsCore(`${p}/src/main.js`)) err(p, 'src/main.js n\'importe pas core.js (la source unique)');
+    }
   }
 }
 

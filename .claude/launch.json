@@ -323,6 +323,17 @@
         "echo"
       ],
       "port": 8220
+    },
+    {
+      "name": "mega",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        ".claude/serve.py",
+        "8240",
+        "."
+      ],
+      "port": 8240,
+      "autoPort": false
     }
   ]
 }

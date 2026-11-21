@@ -140,8 +140,11 @@ class Template {
     const S = { ...prep.params, armDur: a.dur, st: { n: ns, a: a.strAmp ?? 0.35, f: ns > 0 ? (a.strFrac ?? 0.5) : 0 } };
     const fibT = n.storageAttr(Math.max(1, prep.nf));
     const t0 = performance.now();
-    const gpu = await simulate(dev, prep, S, prep.nf ? n.gpuBuffer(fibT) : null, (k) => { this.simProgress = k; n.onProgress?.(); });
-    if (this.pending !== job || this.disposed) { this.free({ gpu, fibT }); return; }
+    // (méga-scène : simulation étalée sur les images de l'hôte, abandonnée si
+    // le jour est libéré avant la fin)
+    const pacing = n.simPace ? { ...n.simPace, alive: () => this.pending === job && !this.disposed } : null;
+    const gpu = await simulate(dev, prep, S, prep.nf ? n.gpuBuffer(fibT) : null, (k) => { this.simProgress = k; n.onProgress?.(); }, pacing);
+    if (!gpu || this.pending !== job || this.disposed) { this.free({ gpu, fibT }); return; }
     const old = this.data;
     this.data = {
       prep, S, gpu, fibT, F: S.frames,
@@ -157,6 +160,7 @@ class Template {
   free(d) {
     if (!d) return;
     for (const k of ['frames', 'meta', 'csr', 'bonds']) d.gpu?.[k]?.destroy();
+    if (d.fibT) this.nest.freeAttr(d.fibT); // (tampon créé directement sur le backend : rien d'autre ne le rend)
     d.geo?.lo.dispose(); d.geo?.hi.dispose(); d.fib?.dispose(); d.arm?.dispose(); d.arm2?.dispose();
   }
   get ready() { return !!this.data && !this.pending && !!this.vessels; }
@@ -245,14 +249,26 @@ class Slot {
   }
 }
 
-export function createNest(scene, gen, renderer, { lite = false } = {}) {
+// simPace : { batch, pace } passés à la simulation (gpusim.js) — la
+// méga-scène y met un petit lot par image ; absent, la simulation va aussi
+// vite qu'avant
+export function createNest(scene, gen, renderer, { lite = false, simPace = null } = {}) {
   const root = new THREE.Group();
   scene.add(root);
-  const nest = { root, gen, renderer, lite, templates: [], slots: [], onProgress: null, onError: null };
+  // (les couches se simulent en parallèle : leurs attentes sont mises à la
+  // file, un seul lot par image pour tout le nid)
+  if (simPace) { let turn = Promise.resolve(); const wait = simPace.pace; simPace = { ...simPace, pace: () => (turn = turn.then(wait)) }; }
+  const nest = { root, gen, renderer, lite, simPace, templates: [], slots: [], onProgress: null, onError: null };
   // attribut de stockage de three.js, et son tampon GPU (écrit par nos shaders de calcul)
   nest.storageAttr = (count) => new THREE.StorageBufferAttribute(new Float32Array(count * 4), 4);
   nest.gpuBuffer = (attr) => { renderer.backend.createStorageAttribute(attr); return renderer.backend.get(attr).buffer; };
-  nest.freeAttr = (attr) => { try { renderer.backend.destroyAttribute(attr); } catch { /* déjà libéré */ } };
+  // (par la table de three.js quand il le connaît — un attribut lu par un
+  // matériau y est inscrit — : elle et le backend restent d'accord, et le
+  // relais, qui rend ensuite par cette table tout ce que le jour a créé, ne
+  // libère pas deux fois le même tampon)
+  nest.freeAttr = (attr) => {
+    try { if (renderer._attributes?.delete(attr) == null) renderer.backend.destroyAttribute(attr); } catch { /* déjà libéré */ }
+  };
 
   nest.setRecipe = (R) => {
     const N = R.levels.length;

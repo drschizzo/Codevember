@@ -66,5 +66,13 @@ export function createGenerator(size = Math.max(2, Math.min(6, (navigator.hardwa
     return p;
   }
 
-  return { request, size, busy: () => pending.size + queue.length };
+  // (le relais libère un jour : ses workers avec lui ; les demandes en cours
+  // restent sans réponse, la scène qui les attendait est libérée aussi)
+  function terminate() {
+    for (const w of workers) w.terminate();
+    queue.length = 0;
+    pending.clear();
+  }
+
+  return { request, size, busy: () => pending.size + queue.length, terminate };
 }

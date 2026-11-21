@@ -12,12 +12,9 @@ import * as THREE from 'three/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { generate, upgrade, MOODS } from './recipe.js';
 import { createGenerator } from '../../shared/gen/client.js';
-import { createStage } from './scene/stage.js';
-import { makeEnvironment } from '../../shared/scene/env.js';
+import { createCore } from './core.js';
 import { G } from '../../shared/scene/globals.js';
-import { setNoiseVolume, setLite } from '../../shared/scene/materials.js';
-import { createPost } from './render/post.js'; // (variante locale : le nuage absorbe)
-import { cameraAt, stateAt } from './film.js';
+import { setLite } from '../../shared/scene/materials.js';
 import { createAccumulator, jitter } from '../../shared/render/accum.js';
 import { createUI } from './app/ui.js';
 import { installChrome } from '../../shared/app/chrome.js';
@@ -73,25 +70,18 @@ async function main() {
   // préparation découpée en petits lots (app/warmup.js).
   const pipes = asyncPipelines(renderer);
 
-  const scene = new THREE.Scene();
-  scene.background = new THREE.Color();
-  scene.fog = new THREE.Fog(0x000000, 1, 2);
-  const camera = new THREE.PerspectiveCamera(35, innerWidth / innerHeight, 0.05, 80);
+  // ── Modules ──
+  // (la scène, sa recette et le rendu d'une phase : core.js, partagé avec le
+  // relais de la méga-scène)
+  const gen = createGenerator(LITE ? Math.max(2, Math.min(3, (navigator.hardwareConcurrency || 4) - 1)) : undefined);
+  const RENDER = loadRender(LITE);
+  const core = await createCore({ renderer, width: innerWidth, height: innerHeight, gen, lite: LITE, RENDER });
+  const { scene, camera, stage, post } = core;
   const controls = new OrbitControls(camera, canvas);
   controls.enabled = false;
   controls.enableDamping = true;
   const camState = { free: false };
-
-  // ── Modules ──
-  const gen = createGenerator(LITE ? Math.max(2, Math.min(3, (navigator.hardwareConcurrency || 4) - 1)) : undefined);
-  // (le bruit commun et les deux volumes du nuage, en parallèle dans le pool)
-  const [noiseVol, cloudNoise] = await Promise.all([gen.request({ seed: `${NAME}-noise` }, 'noise'), gen.request({}, 'cloudnoise')]);
-  setNoiseVolume(noiseVol); // (les matériaux en dépendent)
-  const stage = createStage(scene, gen, { lite: LITE });
-  stage.cloud.setNoise(cloudNoise);
-  const post = createPost(renderer, scene, camera, { haze: stage.cloud.haze, aoSamples: 8 });
   const accum = createAccumulator(renderer);
-  const RENDER = loadRender(LITE);
   const governor = createGovernor({ target: 1 / 45, min: 0.5, max: 1, onChange: () => !busy && resize() });
   const pace = createPacer(() => RENDER.maxFps);
 
@@ -101,15 +91,7 @@ async function main() {
     try { R = upgrade(await unpackRecipe(location.hash.slice(3))); } catch { R = null; }
   }
   R ??= generate(params.get('seed') || DEFAULT_SEED);
-  let envKey = '';
-  function syncEnv() {
-    const k = R.env.preset;
-    if (k === envKey) return;
-    envKey = k;
-    const old = scene.environment;
-    scene.environment = makeEnvironment(k, 0, LITE ? 512 : 1024);
-    old?.dispose();
-  }
+  const syncEnv = () => core.syncEnv();
 
   // ── Écran de chargement ──
   // Une scène ne s'affiche que lorsque toute sa géométrie est arrivée, que ses
@@ -129,8 +111,7 @@ async function main() {
     // (sleep et non setTimeout : une page masquée ralentit les minuteries)
     sleep(firstRecipe ? 0 : 280).then(() => {
       if (R !== recipe) return;
-      stage.setRecipe(R);
-      syncEnv();
+      core.setRecipe(R);
       loading.applied = true;
     });
     firstRecipe = false;
@@ -151,7 +132,7 @@ async function main() {
     const recipe = R;
     try {
       return await warmScene({
-        renderer, scene, pipes, render: renderStep, phases: [0.12, 0.3, 0.45, 0.502, 0.53, 0.6, 0.76],
+        renderer, scene, pipes, render: renderStep, phases: core.warmPhases(),
         onProgress: (f) => loader.progress(f), alive: () => R === recipe,
       });
     } finally {
@@ -161,54 +142,11 @@ async function main() {
   }
 
   // ── Rendu d'une phase ──
-  const TAU = Math.PI * 2;
-  const _f = new THREE.Vector3(), _u = new THREE.Vector3(), _r = new THREE.Vector3(), _flash = new THREE.Color();
   // u : phase « déroulée » (partie entière = nombre de boucles accomplies) ;
   // sub : décalages d'un rendu accumulé (lentille, pixel), facultatif
   function renderAt(u, sub = null) {
-    const ph = u - Math.floor(u);
-    G.phasePrev.value = G.phase.value;
-    G.phase.value = ph;
-    G.frame.value = (G.frame.value + 1) % 65536;
-    const C = R.camera, Lay = stage.layout;
-    // (le plan de l'humeur, réglé sur ce récipient et son nuage)
-    const pose = cameraAt({ ...C, target: Lay?.target ?? C.target, dist: C.dist * (Lay ? Lay.frame / 2.5 : 1) * Math.max(1, 1.45 / camera.aspect) }, ph);
     if (camState.free) controls.update();
-    else {
-      camera.position.set(...pose.pos);
-      camera.up.set(0, 1, 0);
-      camera.lookAt(...pose.target);
-    }
-    if (camera.fov !== C.fov) { camera.fov = C.fov; camera.updateProjectionMatrix(); }
-    // la secousse du coup de foudre : un à-coup du pied de la caméra à chaque arc, amorti en un quart de seconde
-    const F0 = stateAt(R.film, ph);
-    if (!camState.free && F0.tau > 0) {
-      let k = 0;
-      for (const s of R.film.strokes) { const x = F0.tau - s.t; if (x > 0) k += s.amp * Math.exp(-x / 0.16) * Math.sin(x * 2 * Math.PI * 11); }
-      camera.position.y += k * 0.0035 * C.dist;
-    }
-    camera.clearViewOffset();
-    if (sub) {
-      camera.updateMatrixWorld();
-      _f.setFromMatrixColumn(camera.matrixWorld, 0); _u.setFromMatrixColumn(camera.matrixWorld, 1);
-      const ap = 0.012 * (RENDER.dof ? RENDER.bokeh : 0.3);
-      camera.position.addScaledVector(_f, sub.lens[0] * ap).addScaledVector(_u, sub.lens[1] * ap);
-      camera.lookAt(_r.set(...pose.target));
-      camera.setViewOffset(canvas.width, canvas.height, sub.pixel[0], sub.pixel[1], canvas.width, canvas.height);
-    }
-    G.microDetail.value = RENDER.microDetail;
-    G.roughFloor.value = RENDER.roughFloor;
-    const camDist = camera.position.distanceTo(_r.set(...pose.target));
-    // (le mur aussi reçoit l'éclair : c'est la couleur de fond, que les lampes n'atteignent pas)
-    scene.background.set(R.fog.color).lerp(_flash.set(R.bolt.color), Math.min(0.6, F0.light * (0.08 + 0.4 * R.fog.wall)));
-    scene.fog.color.copy(scene.background);
-    scene.fog.near = camDist + 0.8; scene.fog.far = camDist + 6.2; // (la table se fond dans le mur : pas d'horizon)
-    scene.environmentIntensity = R.env.intensity;
-    scene.environmentRotation.set(0, R.env.rotation, 0);
-    R.film.duration = R.loop.duration;
-    stage.update(ph, camera, canvas.height);
-    post.update({ ...RENDER, exposure: RENDER.exposure * F0.expo, lite: LITE, focus: RENDER.focus * camDist, focusRange: RENDER.focusRange * camDist }, R);
-    post.render();
+    core.renderAt(u, { sub, free: camState.free });
   }
   // Rendu hors de la boucle d'animation (export, image fixe, débogage) : three.js
   // ne refait la passe de scène, les ombres et les vitesses de la caméra
@@ -239,7 +177,7 @@ async function main() {
   function applyRender() {
     if (!RENDER.dynRes) governor.reset();
     resize();
-    stage.setShadowQuality(RENDER.shadows);
+    core.applyRender();
     saveRender(RENDER);
   }
 

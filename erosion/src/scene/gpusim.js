@@ -808,6 +808,7 @@ export function createGpuSim(renderer, { lite = false } = {}) {
     recT: buf(FT * N * 2), recM: buf(FM * N * 4), recWT: buf(FW * HN * 4), acc: buf(N * 16), accW: buf(N * 16), recW: buf(FW * HN * 8), prev: buf(8192 * 8), surplus: buf(N * 4), cur: buf(N * 32),
   };
   const BATCH = 256;
+  let disposed = false;
   const stepBuf = buf(BATCH * ALIGN, GPUBufferUsage.UNIFORM | CD);
   const recBuf = buf((FT + FW + FM + 2) * ALIGN, GPUBufferUsage.UNIFORM | CD);
   const resBuf = buf(80, GPUBufferUsage.UNIFORM | CD);
@@ -963,7 +964,10 @@ export function createGpuSim(renderer, { lite = false } = {}) {
 
   // Lance toute la simulation, en lots ; onFrame(k, FT, preview) après chaque
   // état du relief enregistré (aperçu 128 × 64 : [Δb, eau] entrelacés).
-  async function run({ onProgress, onPreview, alive = () => true, until = Infinity } = {}) {
+  // batch (≤ 256) et pace() : des lots plus petits, et une attente entre deux
+  // lots — la méga-scène simule pendant qu'un autre jour joue, un petit lot
+  // par image, pour ne pas lui prendre le GPU (par défaut : comme avant).
+  async function run({ onProgress, onPreview, alive = () => true, until = Infinity, batch = BATCH, pace = null } = {}) {
     const S = spec;
     const total = Math.ceil(Math.min(S.T, until) / dt);
     const tRec = Array.from({ length: FT }, (_, k) => Math.round((k / (FT - 1)) * total));
@@ -976,8 +980,8 @@ export function createGpuSim(renderer, { lite = false } = {}) {
     const fT = frac(tRec), fW = frac(wRec);
     const t0 = performance.now();
     while (n <= total) {
-      if (!alive()) return false;
-      const m = Math.min(BATCH, total + 1 - n);
+      if (!alive() || disposed) return false;
+      const m = Math.min(batch, BATCH, total + 1 - n);
       for (let k = 0; k < m; k++) {
         const T = (n + k) * dt, o = (k * ALIGN) / 4;
         f32[o] = inflowAt(S, T); f32[o + 1] = rainAt(S, T); f32[o + 2] = baseAt(S, T); f32[o + 3] = S.morfac; f32[o + 4] = dt;
@@ -1031,7 +1035,11 @@ export function createGpuSim(renderer, { lite = false } = {}) {
       }
       n += m;
       onProgress?.(Math.min(1, n / total));
-      await device.queue.onSubmittedWorkDone(); // (rend la main : l'écran de chargement reste fluide)
+      // (rend la main : l'écran de chargement reste fluide ; avec un rythme,
+      // l'image suivante suffit — attendre aussi la fin du GPU, qui dessine le
+      // jour en train de jouer, ne laissait passer que trois lots par seconde)
+      if (pace) await pace();
+      else await device.queue.onSubmittedWorkDone();
     }
     while (previewBusy) await device.queue.onSubmittedWorkDone();
     {
@@ -1162,5 +1170,11 @@ export function createGpuSim(renderer, { lite = false } = {}) {
     get ran() { return ran; },
     get final() { return final; },
     bytes: () => Object.values(B).reduce((a, b) => a + b.size, 0),
+    // (les tampons sont créés sur le device, hors de three.js : rien d'autre ne
+    // les rend ; une simulation en cours s'arrête au lot suivant)
+    dispose() {
+      disposed = true;
+      for (const b of [...Object.values(B), stepBuf, recBuf, resBuf, prevRead]) b.destroy();
+    },
   };
 }

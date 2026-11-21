@@ -9,12 +9,10 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { generate, makeLevel, makeArmature, makeMembrane, finishesFor, upgrade, MOODS } from './recipe.js';
 import { createRng } from '../../shared/rng.js';
 import { createGenerator } from './gen/client.js';
-import { createNest, XMAX, MAIN } from './scene/nest.js';
-import { createLights } from './scene/lights.js';
-import { makeEnvironment } from './scene/env.js';
-import { setNoiseVolume, setLite } from './scene/materials.js';
+import { XMAX } from './scene/nest.js';
+import { createCore } from './core.js';
+import { setLite } from './scene/materials.js';
 import { G } from './scene/globals.js';
-import { createPost } from './render/post.js';
 import { createUI } from './app/ui.js';
 import { installChrome } from '../../shared/app/chrome.js';
 import { loadRender, saveRender, applyQuality, defaultsFor } from './app/settings.js';
@@ -40,23 +38,6 @@ async function unpackRecipe(str) {
   const b = Uint8Array.from(bin, (c) => c.charCodeAt(0));
   const s = new Blob([b]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
   return JSON.parse(await new Response(s).text());
-}
-
-// Variation de vitesse autour de chaque déchirure : τ = t − Σ a·w·K((t − k)/w),
-// K(x) = x − 3x³ + 3x⁵ − x⁷ (primitive d'une bosse d'intégrale nulle) : la
-// vitesse vaut 1 − a au moment de la déchirure, remonte de part et d'autre et
-// rejoint 1 sans à-coup ; τ(k) = k. Le ralenti est centré sur l'instant où une
-// couche atteint la profondeur « at » (celle de la rupture).
-const K7 = (x) => x - 3 * x ** 3 + 3 * x ** 5 - x ** 7;
-function choreo(t, C) {
-  const c = C.at - Math.floor(C.at);
-  const u = t + c;
-  let tau = u;
-  for (let k = Math.round(u) - 1; k <= Math.round(u) + 1; k++) {
-    const x = (u - k) / C.width;
-    if (Math.abs(x) < 1) tau -= C.slow * C.width * K7(x);
-  }
-  return tau - c;
 }
 
 // un échec : dit à l'écran, avec de quoi repartir (une fois l'interface prête)
@@ -96,24 +77,18 @@ async function main() {
   // n'est dessiné tant que les couches ne sont pas simulées.
   const pipes = asyncPipelines(renderer);
 
-  const scene = new THREE.Scene();
-  scene.background = new THREE.Color();
-  scene.fog = new THREE.Fog(0x000000, 2, 7);
-  const camera = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.002, 60);
-  camera.layers.mask = MAIN;
+  // (mobile : moins de workers, la préparation ne doit pas étouffer le rendu)
+  const gen = createGenerator(LITE ? Math.max(2, Math.min(3, (navigator.hardwareConcurrency || 4) - 1)) : undefined);
+  // (la scène, sa recette et le rendu d'une phase : core.js, partagé avec le
+  // relais de la méga-scène)
+  const RENDER = loadRender(LITE);
+  const core = await createCore({ renderer, width: innerWidth, height: innerHeight, gen, lite: LITE, RENDER });
+  const { scene, camera, nest, lights, post } = core;
+  nest.onError = (e) => (loading.active ? fail(`Simulation impossible : ${e.message}`) : toast(`Simulation impossible : ${e.message}`, 6000));
   const controls = new OrbitControls(camera, canvas);
   controls.enabled = false;
   controls.enableDamping = true;
   const camState = { free: false };
-
-  // (mobile : moins de workers, la préparation ne doit pas étouffer le rendu)
-  const gen = createGenerator(LITE ? Math.max(2, Math.min(3, (navigator.hardwareConcurrency || 4) - 1)) : undefined);
-  setNoiseVolume(await gen.request({ seed: 'membrane-noise' }, 'noise'));
-  const nest = createNest(scene, gen, renderer, { lite: LITE });
-  nest.onError = (e) => (loading.active ? fail(`Simulation impossible : ${e.message}`) : toast(`Simulation impossible : ${e.message}`, 6000));
-  const lights = createLights(scene, { lite: LITE });
-  const post = createPost(renderer, scene, camera);
-  const RENDER = loadRender(LITE);
   // résolution dynamique : vise ~45 images / s, entre 50 et 100 % de la résolution de base
   let busy = false;
   const governor = createGovernor({ target: 1 / 45, min: 0.5, max: 1, onChange: () => !busy && resize() });
@@ -124,15 +99,7 @@ async function main() {
   R ??= generate(params.get('seed') || randomSeed());
   if (params.has('fast')) R.sim = { ...R.sim, res: 28, frames: 60, substeps: 10, settle: 30 }; // (mise au point : simulation grossière)
 
-  let envKey = '';
-  function syncEnv() {
-    if (R.env.preset === envKey) return;
-    envKey = R.env.preset;
-    const old = scene.environment;
-    // (mobile : carte de 512 px, quatre fois moins de pixels à calculer et à préfiltrer)
-    scene.environment = makeEnvironment(envKey, 0, LITE ? 512 : 1024);
-    old?.dispose();
-  }
+  const syncEnv = () => core.syncEnv();
 
   // ── Écran de chargement ──
   // La scène n'apparaît que prête : couches simulées sur le GPU, matériaux et
@@ -148,14 +115,12 @@ async function main() {
     })),
     ratio: R.nest.ratio, spin: R.nest.spin, core: R.core?.color,
   });
-  let ui = null, resetMotion = true;
+  let ui = null;
   function applyRecipe() {
     loading.active = true; loading.settle = 0; loading.warming = false; loading.t0 = performance.now();
     loader.show({ steps: STEPS });
     loader.art(artData());
-    nest.setRecipe(R);
-    syncEnv();
-    resetMotion = true;
+    core.setRecipe(R);
     ui?.rebuild();
     const url = new URL(location.href);
     url.searchParams.set('seed', R.seed);
@@ -168,46 +133,9 @@ async function main() {
   const resim = (i) => { if (i == null) R.levels.forEach((_, k) => nest.syncLevel(k, R)); else nest.syncLevel(i, R); };
 
   // ── Rendu d'une phase ──
-  function rigCamera(ph) {
-    const K = R.camera, w = ph * Math.PI * 2;
-    // léger balancement (nombre entier d'oscillations par boucle) ; la caméra
-    // reste dans l'axe des ouvertures
-    const sx = K.sway * 0.03 * Math.sin(w * 2), sy = K.sway * 0.02 * Math.sin(w * 3 + 1.1);
-    camera.position.set(sx * D, sy * D, D);
-    camera.up.set(Math.sin(K.roll + w * K.rollTurns), Math.cos(K.roll + w * K.rollTurns), 0);
-    camera.lookAt(0, 0, 0);
-    if (camera.fov !== K.fov) { camera.fov = K.fov; camera.updateProjectionMatrix(); }
-  }
-  let info = null;
   function renderAt(u) {
-    const cycle = Math.floor(u), ph = u - cycle;
-    const N = R.levels.length;
-    const tau = cycle * N + choreo(ph * N, R.chor);
-    G.phase.value = ph;
-    G.frame.value = (G.frame.value + 1) % 65536;
-    G.microDetail.value = RENDER.microDetail;
-    G.roughFloor.value = RENDER.roughFloor;
-    G.backdropBlur.value = RENDER.backdropBlur;
-    G.sssBoost.value = RENDER.sssBoost;
-    G.grazing.value = RENDER.grazing ?? 1;
-    G.armEnv.value = RENDER.armEnv;
-    const pz = R.polar;
-    G.polar.value = pz.amount; G.polCross.value = pz.cross ? 1 : 0; G.polCirc.value = pz.mode === 'circular' ? 1 : 0;
-    G.polPlate.value = pz.mode === 'plate' ? 1 : 0; G.polAngle.value = pz.angle; G.polTurns.value = Math.round(pz.turns); G.polGain.value = pz.gain;
-    if (camState.free) controls.update(); else rigCamera(ph);
-    info = nest.update({ tau, D, R, reset: resetMotion, render: RENDER });
-    resetMotion = false;
-    lights.update(R, camera, D, D * R.nest.ratio ** (XMAX - 0.6));
-    scene.background.set(R.bg);
-    G.bgColor.value.set(R.bg);
-    scene.fog.color.set(R.bg);
-    scene.fog.near = R.fog.near * D;
-    scene.fog.far = R.fog.far * D;
-    G.fogNear.value = scene.fog.near; G.fogFar.value = scene.fog.far;
-    scene.environmentIntensity = R.env.intensity;
-    scene.environmentRotation.set(0, R.env.rotation, 0);
-    post.update({ ...RENDER, focus: D * RENDER.focus * 0.6, focusRange: RENDER.focusRange * D }, R);
-    post.render();
+    if (camState.free) controls.update();
+    core.renderAt(u, { free: camState.free });
   }
   function renderStep(u) {
     renderer._nodes?.nodeFrame?.update();
@@ -226,15 +154,13 @@ async function main() {
     const recipe = R;
     try {
       for (const sl of nest.slots) { sl.sync(RENDER.depthBlur); await yieldNow(); if (R !== recipe) return false; }
-      const N = R.levels.length, loops = nest.slots.length / N, phases = [];
-      for (let i = 0, n = Math.round(loops * N * 4); i < n; i++) phases.push((i / n) * loops);
       return await warmScene({
-        renderer, scene, pipes, render: renderStep, phases,
+        renderer, scene, pipes, render: renderStep, phases: core.warmPhases(),
         onProgress: (f) => loader.progress(f), alive: () => R === recipe,
       });
     } finally {
       loading.warming = false;
-      resetMotion = true;
+      core.resetMotion();
       if (R === recipe) loader.step('settle');
     }
   }
@@ -248,7 +174,7 @@ async function main() {
   function applyRender() {
     if (!RENDER.dynRes) governor.reset();
     resize();
-    lights.setShadowQuality(RENDER.shadows);
+    core.applyRender();
     saveRender(RENDER);
   }
 
@@ -333,7 +259,7 @@ async function main() {
     window.membrane = {
       renderer, scene, camera, nest, lights, post, gen, RENDER, renderAt: renderStep, on, G, pipes, errors, loader,
       get R() { return R; },
-      get info() { return info; },
+      get info() { return core.info; },
       seek: (p) => { phi = p; paused = true; },
       play: () => { paused = false; frozen = false; },
       async shot(u, n = 10) {
@@ -419,7 +345,7 @@ async function main() {
     renderAt(phi);
     fpsAcc += dt; fpsN++;
     if ((fpsT += dt) > 0.5) {
-      ui?.setFps(`${(fpsN / fpsAcc).toFixed(0)}  ·  ${info?.shown ?? 0} couches${RENDER.dynRes ? `  ·  ${Math.round(governor.scale * 100)} %` : ''}`);
+      ui?.setFps(`${(fpsN / fpsAcc).toFixed(0)}  ·  ${core.info?.shown ?? 0} couches${RENDER.dynRes ? `  ·  ${Math.round(governor.scale * 100)} %` : ''}`);
       fpsAcc = fpsN = fpsT = 0;
     }
   }

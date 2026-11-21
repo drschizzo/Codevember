@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#050506">
+  <title>Le relais</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../shared/style.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.webgpu.min.js",
+      "three/webgpu": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.webgpu.min.js",
+      "three/tsl": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.tsl.min.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/",
+      "lil-gui": "https://cdn.jsdelivr.net/npm/lil-gui@0.20.0/dist/lil-gui.esm.min.js"
+    }
+  }
+  </script>
+  <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.webgpu.min.js" crossorigin>
+  <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.core.js" crossorigin>
+  <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.tsl.min.js" crossorigin>
+  <style>
+    #boot { position: fixed; inset: 0; display: grid; place-content: center; gap: 18px; text-align: center; background: #050506; color: #e9e4da; z-index: 20; transition: opacity 1.4s ease; }
+    #boot.gone { opacity: 0; pointer-events: none; }
+    #boot h1 { font: italic 300 42px/1 Fraunces, serif; margin: 0; letter-spacing: 0.01em; }
+    #boot p { font: 300 13px/1.4 Inter, sans-serif; margin: 0; opacity: 0.6; letter-spacing: 0.04em; }
+    #boot div { width: 180px; height: 1px; background: rgba(255,255,255,0.12); margin: 6px auto 0; }
+    #boot u { display: block; height: 1px; width: 0; background: #e9e4da; transition: width 0.3s linear; }
+    #boot.error p { opacity: 1; color: #f2a07b; }
+    #caption { position: fixed; left: 32px; bottom: 30px; color: #f1ece2; opacity: 0; pointer-events: none; text-shadow: 0 1px 12px rgba(0,0,0,0.55); }
+    #caption.on { animation: cap 7s ease forwards; }
+    #caption h2 { font: italic 300 30px/1 Fraunces, serif; margin: 0 0 6px; }
+    #caption p { font: 300 13px/1.3 Inter, sans-serif; margin: 0; opacity: 0.8; }
+    #caption small { font: 400 10px/1 Inter, sans-serif; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.5; display: block; margin-top: 10px; }
+    @keyframes cap { 0% { opacity: 0; transform: translateY(6px); } 18%, 70% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+    body.clean #caption, body.clean #how { display: none; }
+    #how { position: fixed; right: 22px; bottom: 26px; color: rgba(241, 236, 226, .55); font: 400 11px/1 Inter, sans-serif; letter-spacing: .14em; text-transform: uppercase; text-decoration: none; border-bottom: 1px solid transparent; transition: color .2s, border-color .2s; }
+    #how:hover, #how:focus-visible { color: #e9c48a; border-color: rgba(233, 196, 138, .4); }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="boot">
+    <h1>Le relais</h1>
+    <p>les jours en un seul plan, chacun passant la main au suivant</p>
+    <div><u></u></div>
+  </div>
+  <div id="caption"><h2></h2><p></p><small></small></div>
+  <a id="how" href="explainer.html">comment c'est fait</a>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

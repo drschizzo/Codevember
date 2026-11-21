@@ -12,7 +12,8 @@ export function createPool(size = Math.max(2, Math.min(8, (navigator.hardwareCon
   };
   const workers = Array.from({ length: size }, spawn);
   // un worker qui s'emballe (recherche trop longue) est remplacé
-  const respawn = () => { for (let i = 0; i < workers.length; i++) { workers[i].terminate(); workers[i] = spawn(); } };
+  let dead = false;
+  const respawn = () => { if (dead) return; for (let i = 0; i < workers.length; i++) { workers[i].terminate(); workers[i] = spawn(); } };
   let jobId = 0;
 
   // recherche d'une graine ; onSnap(index, snap) pendant la descente, onTry(index, essai)
@@ -107,5 +108,8 @@ export function createPool(size = Math.max(2, Math.min(8, (navigator.hardwareCon
     });
   }
 
-  return { size, search, stability, design };
+  // (le relais libère un jour : ses workers avec lui)
+  const terminate = () => { dead = true; for (const w of workers) w.terminate(); };
+
+  return { size, search, stability, design, terminate };
 }
