@@ -21,6 +21,8 @@ const TAU = Math.PI * 2;
 
 // texture de fumée : des taches douces superposées (tirage fixe, la même partout)
 let smokeTex = null;
+// (même raison que releaseGearCache, scene/machine.js)
+export function releaseSmokeTexture() { smokeTex?.dispose(); smokeTex = null; }
 function smokeTexture() {
   if (smokeTex) return smokeTex;
   const S = 256, c = document.createElement('canvas');

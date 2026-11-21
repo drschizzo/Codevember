@@ -51,8 +51,19 @@ et celle du jour qui arrive recule depuis le plus près. Pas de version mobile.
                              (le même, envoyé au collecteur tools/sink.py)
 ```
 
-Espace : pause · → : passer au jour suivant (dès qu'il est prêt) · H : masquer
-le titre · F : plein écran.
+Commandes discrètes, en bas à droite (elles s'effacent quand la souris se
+repose) :
+- « jours » : le menu des vingt-trois jours. Un jour choisi devient le
+  suivant : il se prépare en arrière-plan et prend la main à la fin de la
+  boucle en cours, puis l'ordre reprend après lui. Le jour qui se préparait
+  est abandonné et libéré (un chargement dépassé par un autre choix est
+  libéré à son arrivée) ; pendant un passage, le menu attend.
+- le bouton du jour suivant : son nom et un filet de préparation ; prêt, il
+  lance le passage tout de suite ; pressé avant, il le lance dès que le jour
+  est prêt (un second appui annule).
+
+Espace : pause · → : comme le bouton du jour suivant · Échap : fermer le menu ·
+H : masquer le titre et les commandes · F : plein écran.
 
 ## Streaming
 
@@ -87,7 +98,12 @@ de Melt) est ainsi rendu aussi : après libération, il reste 0 Mo d'un jour.
 Le registre note aussi quels jours se servent de chaque ressource : three.js
 crée des globales pendant le dessin d'un jour (la table DFG_LUT des matériaux
 physiques, la cible de travail du générateur PMREM…), qui ne sont jamais
-rendues.
+rendues. Une globale dont un seul jour se sert échappe à ce test : la
+géométrie que three.js partage entre tous les sprites, créée par Orrery (le
+seul jour à en avoir), lui était rattachée et rendue avec lui ; au tour
+suivant, Orrery reprenait un tampon détruit et le moteur refusait chaque
+image (animation figée). Les géométries partagées de three.js (sprites,
+passes plein écran) sont donc exclues du registre (`SHARED`, `kit.js`).
 
 ## Une seule source pour la page et le relais
 
@@ -160,9 +176,12 @@ Points à surveiller en ajoutant un jour :
   Moss, il fige son image trois fois environ une demi-seconde. Le
   remède est de construire la géométrie des machines dans un worker ;
 - un module qui garde une ressource GPU au niveau du module (la sonde de
-  Tesseract) l'oublie à la libération du jour (`releaseProbeTarget`), sinon
-  le passage suivant du même jour la réutilise après que le registre l'a
-  rendue ;
+  Tesseract, les roues dentées et la fumée d'Orrery) l'oublie à la libération
+  du jour (`releaseProbeTarget`, `releaseGearCache`, `releaseSmokeTexture`),
+  sinon le passage suivant du même jour la réutilise après que le registre
+  l'a rendue. Un défaut de ce genre n'apparaît qu'au deuxième tour : pour le
+  chercher, `?days=hollow,planetaire_v2` fait revenir un jour toutes les deux
+  places ;
 - deux jours du même projet ne peuvent pas être en mémoire en même temps (le
   registre ne sait pas les séparer).
 

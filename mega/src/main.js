@@ -17,18 +17,15 @@ import { createComposite } from './composite.js';
 import { installLedger } from './kit.js';
 
 const params = new URLSearchParams(location.search);
-// le relais de la matière : le feu (lave, verre, cire), l'eau (le thé qui
-// bout, le bassin, la mer, la rigole), la terre et le vivant (la pierre que
-// la mousse reverdit, le bois mort, la plume, la membrane), les fibres (la
-// soie, le papier, la corde, les câbles), les mécanismes (le balancier, le
-// dédale), le métal que la rouille met à nu, la lumière (l'éclair et son
-// écho, le mirage), la géométrie et le ciel (les coquilles, l'hypercube, le
-// planétaire), et les planètes naissent en fusion : retour à la lave
+// l'ordre du calendrier (jour 1 à 23), puis retour au premier
 const DAYS = (params.get('days') || 'fold,shatter,melt,tangle,moss,planetaire_v2,hollow,tesseract,membrane,caustic,rust,feather,labyrinth,tension,mirage,spore,kelp,pendulum,erosion,cocoon,bolt,echo,magma').split(',').filter(Boolean);
 const ENTER = params.get('enter'); // (forcer un passage, pour le régler)
 const T = +(params.get('t') || 5);          // durée d'un passage (s)
 const LOOPS = +(params.get('loops') || 1);  // boucles jouées par jour, au moins
 const PUSH = 0.45;                          // avancée de la caméra au passage
+// (noms des jours pour le menu, sans charger leurs modules)
+const NAMES = { planetaire_v2: 'Orrery' };
+const nameOf = (id) => NAMES[id] ?? id[0].toUpperCase() + id.slice(1);
 const $ = (s) => document.querySelector(s);
 const ease = (x) => { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x); };
 
@@ -123,12 +120,35 @@ async function main() {
     prepareNext();
   }).catch((e) => fail(e.message));
 
-  async function prepareNext() {
-    try { next = await load(cur.index + 1); } catch (e) { console.error(e); next = null; }
+  // Le jour suivant : celui de l'ordre, ou celui choisi dans le menu (index
+  // du relais : le choisi garde la parité de l'emplacement libre, et l'ordre
+  // reprend après lui). Un choix remplace le jour en préparation, qui est
+  // libéré ; un chargement dépassé par un autre choix est libéré à son arrivée.
+  let loadTok = 0, pending = null; // (pending : le jour en cours de création)
+  async function prepareNext(i = cur.index + 1) {
+    const tok = ++loadTok;
+    pending = DAYS[((i % DAYS.length) + DAYS.length) % DAYS.length];
+    let d = null;
+    try { d = await load(i); } catch (e) { console.error(e); }
+    if (tok !== loadTok) { d?.dispose(); return; }
+    pending = null;
+    next = d;
+  }
+  // choisir le jour qui suivra (menu) ; il prend la main à la fin de la boucle
+  function choose(id) {
+    const j = DAYS.indexOf(id);
+    if (j < 0 || !cur || trans || id === cur.meta.id) return;
+    if (next?.meta.id === id || pending === id) return;
+    next?.dispose(); next = null;
+    let i = cur.index + 1 + ((((j - cur.index - 1) % DAYS.length) + DAYS.length) % DAYS.length);
+    if ((i - cur.index) % 2 === 0) i += DAYS.length; // (l'autre emplacement que le jour qui joue)
+    armed = false;
+    prepareNext(i);
   }
 
   // ── Boucle ──
   let last = performance.now(), clock = 0, trans = null, paused = false, hurry = false, preview = null, hold = false;
+  let armed = false; // (bouton « suivant » pressé avant que le jour soit prêt : passage dès qu'il l'est)
   function tick(now) {
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
@@ -145,6 +165,7 @@ async function main() {
         return;
       }
       if (!paused) clock += dt;
+      if (armed && next?.state === 'ready' && !trans) { armed = false; hurry = true; }
       const D = cur.duration;
       if (!paused) cur.u += dt / D;
       // Le passage se termine sur le raccord de la boucle : le jour sortant ne
@@ -187,18 +208,71 @@ async function main() {
         comp.show(cur.slot);
       }
     } finally {
+      ui();
       const w = waiters; waiters = [];
       for (const r of w) r();
     }
   }
   renderer.setAnimationLoop(tick);
 
+  // ── Commandes discrètes : le menu des jours, le jour suivant ──
+  // (bas à droite ; s'effacent quand la souris se repose, disparaissent avec H)
+  const menu = $('#days'), list = $('#days ol'), pickBtn = $('#pick'), goBtn = $('#go');
+  DAYS.forEach((id, j) => {
+    const li = document.createElement('li'), b = document.createElement('button');
+    b.type = 'button'; b.dataset.id = id;
+    b.innerHTML = `<i>${String(j + 1).padStart(2, '0')}</i><span>${nameOf(id)}</span><em></em>`;
+    b.addEventListener('click', () => { choose(id); openMenu(false); });
+    li.append(b); list.append(li);
+  });
+  function openMenu(v = menu.hidden) {
+    menu.hidden = !v;
+    pickBtn.setAttribute('aria-expanded', String(v));
+  }
+  pickBtn.addEventListener('click', (e) => { e.stopPropagation(); openMenu(); });
+  addEventListener('pointerdown', (e) => { if (!menu.hidden && !e.target.closest('#relay')) openMenu(false); });
+  function goNext() {
+    if (!cur || trans) return;
+    if (next?.state === 'ready') { armed = false; hurry = true; }
+    else armed = !armed; // (pas encore prêt : passage dès qu'il l'est ; un second appui annule)
+  }
+  goBtn.addEventListener('click', goNext);
+  let idleTimer = 0;
+  const wake = () => { document.body.classList.remove('idle'); clearTimeout(idleTimer); idleTimer = setTimeout(() => menu.hidden && document.body.classList.add('idle'), 3000); };
+  addEventListener('pointermove', wake); addEventListener('pointerdown', wake); wake();
+  let uiKey = '';
+  function ui() {
+    if (!firstShown || !cur) return;
+    const id = next?.meta.id ?? pending ?? DAYS[(((cur.index + 1) % DAYS.length) + DAYS.length) % DAYS.length];
+    const ready = next?.state === 'ready';
+    // (la compilation annonce parfois un peu moins que la génération : la barre ne recule pas)
+    if (next) next.shown = Math.max(next.shown ?? 0, next.prog);
+    const prog = ready ? 1 : (next?.shown ?? 0);
+    const key = `${cur.meta.id}|${id}|${ready}|${!!trans}|${armed}|${Math.round(prog * 50)}`;
+    if (key === uiKey) return;
+    uiKey = key;
+    goBtn.disabled = !!trans;
+    goBtn.classList.toggle('ready', ready);
+    goBtn.classList.toggle('armed', armed);
+    goBtn.querySelector('span').textContent = trans ? `passage vers ${nameOf(id)}` : ready ? `${nameOf(id)} →` : armed ? `${nameOf(id)} · dès qu'il est prêt` : `${nameOf(id)} · préparation`;
+    goBtn.title = ready ? 'Passer au jour suivant (→)' : 'Le jour suivant se prépare ; cliquer pour y passer dès qu\'il est prêt (→)';
+    goBtn.querySelector('u').style.width = `${(prog * 100).toFixed(0)}%`;
+    pickBtn.disabled = !!trans;
+    for (const b of list.querySelectorAll('button')) {
+      const d = b.dataset.id, isCur = d === cur.meta.id, isNext = d === id;
+      b.disabled = isCur || !!trans;
+      b.classList.toggle('cur', isCur); b.classList.toggle('next', isNext);
+      b.querySelector('em').textContent = isCur ? 'en cours' : isNext ? (ready ? 'prêt' : 'se prépare') : '';
+    }
+  }
+
   addEventListener('keydown', (e) => {
     if (e.code === 'Space') { e.preventDefault(); paused = !paused; }
     else if (e.key === 'h' || e.key === 'H') document.body.classList.toggle('clean');
     else if (e.key === 'f' || e.key === 'F') document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
     // → : aller au passage suivant (dès que le jour suivant est prêt)
-    else if (e.key === 'ArrowRight' && cur && !trans) hurry = true;
+    else if (e.key === 'ArrowRight') goNext();
+    else if (e.key === 'Escape') openMenu(false);
   });
 
   if (params.has('debug')) {

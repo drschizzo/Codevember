@@ -33,6 +33,8 @@
 // l'a aussi par la recette, R.motion.free, et OrbitControls).
 import * as THREE from 'three/webgpu';
 import { createWorld } from './scene/world.js';
+import { releaseGearCache } from './scene/machine.js';
+import { releaseSmokeTexture } from './scene/atmosphere.js';
 import { createPost } from './render/post.js';
 import { SHADOWS } from './app/settings.js';
 import { orbitOverrides } from './recipe.js';
@@ -341,9 +343,9 @@ export async function createCore({ renderer, width, height, gen: pool, lite = fa
   // (anticrénelage temporel, flou de mouvement : les pièces instanciées gardent
   // leurs matrices de l'image précédente, pour leurs vitesses)
   function render() {
-    const type = renderer.shadowMap.type;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    try { post.render(); } finally { renderer.shadowMap.type = type; }
+    // (PCFSoftShadowMap n'existe plus dans three.js 0.186 : le moteur prenait
+    // PCFShadowMap, celui de l'hôte, en le signalant à chaque image)
+    post.render();
     if (RENDER.aa === 'traa' || RENDER.motionBlur > 0) for (const W of S.worlds) W.machine.afterRender();
   }
   // u : part de la boucle entière (trois plongées), déroulée
@@ -393,7 +395,9 @@ export async function createCore({ renderer, width, height, gen: pool, lite = fa
     // (les orbites, une par couche, puis les machines et les mondes)
     progress: () => (built ? 1 : 0.85 * (found / (R?.layers.length || 3))),
     duration: () => R.motion.segment * R.layers.length,
-    // (les mondes : leurs studios, leurs machines et leurs atmosphères)
-    dispose() { for (const W of S.worlds) W.dispose(); },
+    // (relais, jour libéré : les mondes — leurs studios, leurs machines et
+    // leurs atmosphères —, puis les caches de module, que le registre du
+    // relais vide de leurs tampons GPU : un Orrery suivant doit tout refaire)
+    dispose() { for (const W of S.worlds) W.dispose(); releaseGearCache(); releaseSmokeTexture(); },
   };
 }

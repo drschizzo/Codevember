@@ -66,12 +66,13 @@ export async function createCore({ renderer, width, height, gen, lite = false, R
     stage.update(ph);
     const dS = (C.dist ?? 5) * (1 - push);
     post.update({ ...RENDER, lite, exposure: RENDER.exposure * (R.grade?.exposure ?? 1), focus: RENDER.focus * dS, focusRange: RENDER.focusRange * dS }, R);
-    // (ombres douces et colorées : le moteur est commun aux jours du relais,
-    // dont l'hôte pose des ombres PCF ; celles de Fold sont construites et
-    // dessinées avec le filtre doux, le réglage commun rendu après)
-    const sm = renderer.shadowMap, type = sm.type, transmitted = sm.transmitted;
-    sm.type = THREE.PCFSoftShadowMap; sm.transmitted = true;
-    try { post.render(); } finally { sm.type = type; sm.transmitted = transmitted; }
+    // (ombres colorées, la lumière qui traverse le papier : le moteur est
+    // commun aux jours du relais, le réglage commun est rendu après. Le
+    // filtre doux, PCFSoftShadowMap, n'existe plus dans three.js 0.186 : le
+    // moteur prenait PCFShadowMap en le signalant à chaque image)
+    const sm = renderer.shadowMap, transmitted = sm.transmitted;
+    sm.transmitted = true;
+    try { post.render(); } finally { sm.transmitted = transmitted; }
   }
 
   return {

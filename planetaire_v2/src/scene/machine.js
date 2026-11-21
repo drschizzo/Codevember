@@ -268,6 +268,10 @@ function roundCyl(r, h, seg, r2 = r, fillet = null) {
 // bras (rayons) pour les grandes roues, ou couronne (anneau) ; une denture plus
 // fine que le pixel devient un simple disque
 const gearCache = new Map();
+// (le relais libère un jour : ses tampons GPU sont rendus, ces géométries
+// avec eux ; gardées ici, le Orrery suivant les reprenait sans tampon — le
+// moteur refusait chaque image, l'animation restait figée)
+export function releaseGearCache() { for (const g of gearCache.values()) g.dispose(); gearCache.clear(); }
 // styles : spokes5 (horlogerie), spokes8 (astrolabe), holes (planétaire
 // classique : ajours ronds), solid (atelier : pleine), pulley (poulie lisse),
 // escape (roue d'échappement : dents pointues)

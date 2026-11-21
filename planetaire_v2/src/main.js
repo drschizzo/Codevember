@@ -67,7 +67,7 @@ async function main() {
   renderer.setPixelRatio(pixelRatio());
   renderer.setSize(innerWidth, innerHeight);
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = THREE.PCFShadowMap; // (PCFSoftShadowMap n'existe plus en 0.186 : c'était déjà celui-ci)
   const canvas = renderer.domElement;
   $('#app').appendChild(canvas);
 

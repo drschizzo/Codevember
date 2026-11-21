@@ -29,6 +29,15 @@ let drawing = null; // (le projet dont un dessin est en cours)
 const users = new WeakMap();
 const use = (x) => { if (!drawing || !x) return; let u = users.get(x); if (!u) users.set(x, (u = new Set())); u.add(drawing); };
 const NEVER = new Set(['DFG_LUT']); // (globales connues, jamais rendues)
+// (et les géométries que three.js partage entre tous les objets d'un type :
+// celle des sprites, celle des passes plein écran. Créées pendant le premier
+// jour qui s'en sert — Orrery, seul à avoir des sprites —, elles lui étaient
+// rattachées et rendues avec lui ; le Orrery du tour suivant reprenait un
+// tampon détruit, le moteur refusait chaque image : animation figée)
+const SHARED = new WeakSet();
+for (const g of [new THREE.Sprite().geometry, new THREE.QuadMesh().geometry]) {
+  for (const a of [...Object.values(g.attributes), g.index]) if (a) { SHARED.add(a); if (a.data) SHARED.add(a.data); }
+}
 export function installLedger(renderer) {
   const be = renderer.backend;
   if (be.__ledger) return;
@@ -79,7 +88,7 @@ function releaseTextures(project) {
   if (!set) return 0;
   let n = 0;
   for (const x of set) {
-    if (x.isTexture && NEVER.has(x.name)) continue;
+    if ((x.isTexture && NEVER.has(x.name)) || SHARED.has(x)) continue;
     const u = users.get(x);
     if (u && [...u].some((p) => p !== project)) continue; // (un autre jour s'en sert : globale)
     n++;
@@ -110,7 +119,7 @@ export function disposeScene(scene) {
   const seen = new Set();
   const tex = (v) => { if (v?.isTexture && !seen.has(v)) { seen.add(v); v.dispose(); } };
   scene.traverse((o) => {
-    o.geometry?.dispose?.();
+    if (!SHARED.has(o.geometry?.index)) o.geometry?.dispose?.(); // (pas la géométrie commune des sprites)
     for (const m of [o.material].flat()) {
       if (!m) continue;
       for (const v of Object.values(m)) tex(v);

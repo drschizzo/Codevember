@@ -69,7 +69,7 @@ async function main() {
   const pipes = asyncPipelines(renderer);
 
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = THREE.PCFShadowMap; // (PCFSoftShadowMap n'existe plus en 0.186 : c'était déjà celui-ci)
   renderer.shadowMap.transmitted = true; // (ombres colorées : la lumière qui traverse le papier)
 
   // ── Modules ──

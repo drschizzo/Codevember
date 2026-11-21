@@ -36,9 +36,30 @@
     #caption p { font: 300 13px/1.3 Inter, sans-serif; margin: 0; opacity: 0.8; }
     #caption small { font: 400 10px/1 Inter, sans-serif; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.5; display: block; margin-top: 10px; }
     @keyframes cap { 0% { opacity: 0; transform: translateY(6px); } 18%, 70% { opacity: 1; transform: none; } 100% { opacity: 0; } }
-    body.clean #caption, body.clean #how { display: none; }
-    #how { position: fixed; right: 22px; bottom: 26px; color: rgba(241, 236, 226, .55); font: 400 11px/1 Inter, sans-serif; letter-spacing: .14em; text-transform: uppercase; text-decoration: none; border-bottom: 1px solid transparent; transition: color .2s, border-color .2s; }
-    #how:hover, #how:focus-visible { color: #e9c48a; border-color: rgba(233, 196, 138, .4); }
+    body.clean #caption, body.clean #relay { display: none; }
+    /* commandes discrètes, bas à droite : s'effacent quand la souris se repose */
+    #relay { position: fixed; right: 22px; bottom: 22px; display: flex; align-items: center; gap: 18px; font: 400 11px/1 Inter, sans-serif; letter-spacing: .14em; text-transform: uppercase; transition: opacity .8s ease; }
+    body.idle #relay { opacity: 0; }
+    body.idle #relay:focus-within { opacity: 1; }
+    #relay > a, #relay > button { color: rgba(241, 236, 226, .55); font: inherit; letter-spacing: inherit; text-transform: inherit; text-decoration: none; background: none; border: 0; padding: 4px 0; cursor: pointer; border-bottom: 1px solid transparent; transition: color .2s, border-color .2s; text-shadow: 0 1px 10px rgba(0,0,0,.5); }
+    #relay > a:hover, #relay > a:focus-visible, #relay > button:hover:not(:disabled), #relay > button:focus-visible { color: #e9c48a; border-color: rgba(233, 196, 138, .4); outline: none; }
+    #relay > button:disabled { opacity: .35; cursor: default; }
+    #pick[aria-expanded="true"] { color: #e9c48a; }
+    #go { position: relative; }
+    #go u { position: absolute; left: 0; bottom: -2px; height: 1px; width: 0; background: rgba(233, 196, 138, .55); transition: width .4s linear; }
+    #go.ready { color: rgba(241, 236, 226, .85); }
+    #go.ready u, #go:disabled u { opacity: 0; }
+    #go.armed { color: #e9c48a; }
+    #days { position: absolute; right: 0; bottom: 34px; width: 250px; max-height: min(62vh, 560px); overflow-y: auto; padding: 8px; background: rgba(8, 8, 10, .74); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, .08); border-radius: 10px; scrollbar-width: thin; }
+    #days ol { list-style: none; margin: 0; padding: 0; }
+    #days button { display: flex; align-items: baseline; gap: 10px; width: 100%; padding: 7px 8px; border: 0; border-radius: 6px; background: none; color: rgba(241, 236, 226, .72); font: 400 13px/1.2 Inter, sans-serif; letter-spacing: .01em; text-transform: none; text-align: left; cursor: pointer; }
+    #days button:hover:not(:disabled), #days button:focus-visible { background: rgba(255, 255, 255, .06); color: #f1ece2; outline: none; }
+    #days button i { font-style: normal; font-size: 10px; letter-spacing: .12em; opacity: .45; width: 16px; }
+    #days button span { flex: 1; }
+    #days button em { font-style: normal; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; opacity: .55; }
+    #days button.cur { color: #e9c48a; cursor: default; }
+    #days button.next em { color: #e9c48a; opacity: .8; }
+    #days button:disabled:not(.cur) { opacity: .4; cursor: default; }
   </style>
 </head>
 <body>
@@ -49,7 +70,12 @@
     <div><u></u></div>
   </div>
   <div id="caption"><h2></h2><p></p><small></small></div>
-  <a id="how" href="explainer.html">comment c'est fait</a>
+  <nav id="relay" aria-label="Commandes du relais">
+    <div id="days" hidden><ol aria-label="Choisir le jour suivant"></ol></div>
+    <button id="pick" type="button" aria-expanded="false" aria-controls="days" title="Choisir le jour suivant">jours</button>
+    <button id="go" type="button"><span></span><u></u></button>
+    <a id="how" href="explainer.html">comment c'est fait</a>
+  </nav>
   <script type="module" src="src/main.js"></script>
 </body>
 </html>
