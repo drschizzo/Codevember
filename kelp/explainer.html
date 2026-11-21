@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#050506">
   <title>Kelp · défis techniques</title>
-  <meta name="description" content="Comment Kelp est calculé : une mer de Saint-Venant qui monte sur un platier et s'en retire, des laminaires XPBD qui flottent et se couchent, une boucle refermée sur une orbite périodique, et une caméra au ras de l'eau.">
+  <meta name="description" content="Comment fonctionne Kelp, reconstruit pas à pas : une série de vagues au large, une eau peu profonde qui monte sur le platier et s'en retire, une roche qui sèche par le haut, des laminaires qui flottent et traînent dans le courant, une boucle refermée sur une orbite périodique, et une caméra dont le hublot en dôme voit au-dessus et au-dessous de l'eau.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
@@ -22,112 +22,208 @@
 
   <main>
     <header class="hero">
-      <div class="kicker">Day 17 · Kelp · le ressac</div>
+      <div class="kicker">Day 17 · Kelp · comment ça marche</div>
       <h1>Comment une vague dresse une forêt qui n'existe que dans l'eau</h1>
-      <p class="lede">Une laminaire n'a ni tronc ni bois : à l'air elle s'effondre sur la roche, dans l'eau elle se dresse. Kelp filme ce geste au ras d'un platier, une table de roche que la mer couvre et découvre, pendant qu'une série de trois vagues le recouvre puis s'en retire. La difficulté est de faire naître ce mouvement des seules forces de l'eau, puis de le refermer en boucle. La mer suit les équations de Saint-Venant, celles de l'eau peu profonde, avec un front qui avance sur la roche sèche et recule. Les laminaires sont des chaînes de nœuds calculées par XPBD : elles flottent, traînent dans le courant et se posent les unes sur les autres. La boucle est une orbite périodique, et la caméra voit en même temps au-dessus et au-dessous de l'eau.</p>
+      <p class="lede">Une laminaire, grande algue brune en lanières, n'a ni tronc ni bois : à l'air, elle s'effondre sur la roche ; dans l'eau, elle flotte et se dresse. Kelp filme ce geste au ras d'un platier, une table de roche que la mer couvre et découvre, pendant qu'une série de trois vagues passe. Rien n'est animé à la main : la mer est calculée par une simulation de l'eau peu profonde, et les laminaires réagissent aux forces de cette eau. Cette page reconstruit ces calculs un par un, de la vague au large jusqu'à l'image vue par la caméra, moitié au-dessus, moitié au-dessous de l'eau.</p>
+      <p class="prereq">Pour suivre, il suffit de savoir lire un peu de JavaScript (des tableaux et des boucles). Les formules résument ce que les démos montrent ; on peut les sauter sans perdre le fil. Les détails de production sont rangés dans les encadrés « Pour aller plus loin ».</p>
     </header>
 
     <figure class="cover">
       <img src="docs/capture.jpg" alt="Laminaires au ras de l'eau, moitié au-dessus, moitié au-dessous de la ligne d'eau" width="1600" height="900">
-      <figcaption>La ligne d'eau traverse l'image : au-dessus, le ciel et les lanières qui flottent ; au-dessous, la roche et les crampons. Cette coupure vient de la géométrie du hublot-dôme, dans un seul rendu.</figcaption>
+      <figcaption>La ligne d'eau traverse l'image : au-dessus, le ciel et les lanières qui flottent ; au-dessous, la roche et les crampons. Cette coupure vient de la forme du hublot de la caméra, un dôme, et se calcule dans un seul rendu.</figcaption>
     </figure>
 
     <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
 
     <article>
-      <section id="mer">
-        <h2><span class="n">01</span>La vague est un choc qui monte sur la roche</h2>
-        <span class="src">src/gen/sea.js · simulateSea()</span>
-        <p>Sur un platier, une vague ne roule pas. Elle a déjà déferlé, et c'est un <em>ressaut</em>, une marche d'eau écumeuse, qui court sur la roche, ralentit, s'arrête, puis redescend en nappe. Une somme de vagues sinusoïdales ne sait représenter ni ce saut brusque de hauteur (un choc) ni le front qui avance sur la roche sèche. Il faut calculer l'écoulement de l'eau peu profonde. Les équations de Saint-Venant, écrites sur le profil transversal du platier, disent que l'eau se conserve (à gauche) et que sa quantité de mouvement change sous la pente du fond <i>b</i> et le frottement (à droite), <i>h</i> étant la hauteur d'eau et <i>u</i> sa vitesse :</p>
-        <div class="eq">\[ \partial_t h + \partial_x (hu) = 0, \qquad \partial_t (hu) + \partial_x\!\left(hu^2 + \tfrac{g}{2}h^2\right) = -g h\, \partial_x b - g n^2 \frac{|u|u}{h^{1/3}} \]</div>
-        <p>Le profil est découpé en 760 cellules de 2,5 cm qui échangent de l'eau avec leurs voisines (volumes finis du premier ordre, flux HLL). La difficulté est le fond. Un schéma naïf qui traite \(g h \partial_x b\) comme une force fait bouger une mer au repos sur un fond accidenté, et crée des hauteurs négatives au bord de l'eau. La <b>reconstruction hydrostatique</b> d'Audusse et al. (2004) compare à chaque interface les hauteurs ramenées au fond le plus haut des deux cellules, \(h^* = \max(0, h + b - \max(b_L, b_R))\), et corrige le flux de quantité de mouvement de \(\tfrac{g}{2}(h^2 - h^{*2})\). Le repos reste alors exactement le repos, et \(h \ge 0\) partout.</p>
-        <p>Au large, le bord du domaine est <b>générant-absorbant</b> : il fait entrer la vague et laisse sortir son écho. La vague incidente entre par l'invariant de Riemann montant \(u + 2c\), où <i>c</i> est la vitesse des ondes. La vague réfléchie par la côte sort par le descendant \(u - 2c\) et ne revient pas. Le frottement de Manning (\(n = 0{,}035\)), qui freine l'eau sur la roche, est calculé implicitement. Une lame d'eau de moins de 4 cm se draine par le relief que le profil moyen ne voit pas (fissures, rigoles) ; sans ce drainage, le platier ne se découvrirait jamais entre les vagues.</p>
-        <figure id="fig-mer"><figcaption><b>La série de la graine, en coupe.</b> La même simulation que la scène (même profil, mêmes vagues), au pas de 5 cm au lieu de 2,5. Le curseur règle la hauteur des vagues au large. L'écume naît où la surface est raide et où l'eau converge, c'est-à-dire dans le ressaut.</figcaption></figure>
-        <div class="note check"><b>Vérifié</b><p>Après deux périodes, l'état à \(T\) égale l'état à 0 à moins de 10⁻⁵ m. La hauteur n'est jamais négative. Avant la grande vague, le platier est à sec (moins de 5 cm d'eau) ; pendant, il est recouvert de plus de 35 cm (<code>test/kelp.test.mjs</code>).</p></div>
+      <section id="scene">
+        <h2><span class="n">01</span>Ce que montre la scène</h2>
+        <p>Une caméra sous-marine est posée au ras d'un platier. Son objectif est protégé par un hublot en forme de dôme, et elle filme moitié au-dessus, moitié au-dessous de l'eau. Sur la roche poussent des laminaires : chaque plante est fixée à la roche par un <b>crampon</b>, porte une tige courte, le <b>stipe</b>, puis des <b>lanières</b> plates. Il y a quatre familles, tirées par la graine : la digitée, le cochayuyo, le palmier de mer et le boa.</p>
+        <p>Le film est une boucle de 32 secondes. Une série de trois vagues arrive du large, de plus en plus grandes. Avant chaque vague, la mer se retire et les laminaires se couchent sur la roche, vers le large. Chaque vague les soulève et les peigne vers la côte, puis le retrait les recouche dans l'autre sens. La troisième vague recouvre la caméra : sous l'eau, la forêt est debout.</p>
+        <p>La page suit l'ordre de construction :</p>
+        <ul>
+          <li><b>la mer</b> : la série de vagues au large (section 02), l'eau qui monte sur la roche et s'en retire (03), la roche qui reste mouillée puis sèche (04) ;</li>
+          <li><b>les laminaires</b> : leur flottaison et leur traînée dans l'eau (05), le contact entre lanières (06), la boucle qui se referme (07), la forêt le long de la côte (08) ;</li>
+          <li><b>l'image</b> : la ligne d'eau sur le dôme (09) et la lumière du soleil sous l'eau (10).</li>
+        </ul>
       </section>
 
-      <section id="retrait">
-        <h2><span class="n">02</span>La mer se retire avant la vague</h2>
-        <span class="src">src/gen/sea.js · makeForcing()</span>
-        <p>Dans une série, le moment le plus spectaculaire est le creux qui précède la crête : la mer recule et découvre la frange, les laminaires plaquées vers le large, la roche qui ruisselle. Chaque vague qui entre au large est donc une crête d'amplitude <i>A</i>, précédée d'un creux de profondeur relative <i>β</i> et d'avance <i>d</i> :</p>
+      <section id="serie">
+        <h2><span class="n">02</span>La série de vagues au large</h2>
+        <span class="src">src/gen/sea.js · makeForcing() · src/recipe.js</span>
+        <p>Tout part de ce que fait la mer au large, à l'entrée du domaine simulé. On décrit cette hauteur d'eau, notée η<sub>in</sub>(<i>t</i>), comme une somme de trois vagues. La règle la plus simple donnerait à chaque vague la forme d'une bosse. Mais sur une vraie côte, le moment le plus marquant est le creux qui précède la crête : la mer recule et découvre la frange de laminaires, plaquées vers le large sur une roche qui ruisselle. Chaque vague est donc une crête précédée d'un creux :</p>
         <div class="eq">\[ \eta_{in}(t) = A\left[e^{-(t-t_k)^2/\tau_c^2} - \beta\, e^{-(t-t_k+d)^2/\tau_t^2}\right] \]</div>
-        <p>Les trois vagues vont en crescendo (\(A\) de 0,25 à 0,76 m au large). La plus grande arrive en dernier, au plus tard 8,5 s avant la fin de la boucle, pour avoir le temps de se retirer : la boucle finit au calme, platier découvert, laminaires couchées. Les instants, les hauteurs et les creux sont tirés de la graine. Le forçage est rendu périodique en lui ajoutant ses copies décalées de \(T\).</p>
-        <figure id="fig-serie"><figcaption><b>La hauteur incidente au large.</b> Les curseurs règlent la profondeur du creux \(\beta\) et son avance <i>d</i>. Le creux qui précède chaque crête, c'est la mer qui se retire. (Les trois vagues de la scène ont chacune leur \(\beta\) ; ici, un seul pour toutes.)</figcaption></figure>
+        <p><i>A</i> est la hauteur de la crête (en m), <i>t</i><sub>k</sub> l'instant où elle passe, τ<sub>c</sub> et τ<sub>t</sub> les durées de la crête et du creux (1,2 à 2 s), β la profondeur du creux en proportion de la crête et <i>d</i> son avance sur la crête (2,6 à 3,1 s). Les trois vagues vont en crescendo, avec des crêtes de 0,25 à 0,76 m. La plus grande arrive en dernier, entre 19 et 22,4 s, pour avoir le temps de se retirer : la boucle finit au calme, le platier découvert. Pour que le forçage soit périodique, chaque vague est répétée avec ses copies décalées d'une boucle.</p>
+        <figure id="fig-serie"><figcaption><b>La hauteur de l'eau au large</b> pour la graine a1, sur une boucle. Les curseurs règlent la profondeur du creux β et son avance <i>d</i>. Dans la scène, les trois vagues ont chacune leur β ; ici, un seul pour toutes.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Ramenez β à 0 : la courbe ne descend plus sous zéro, et la mer ne se retirerait plus avant les vagues.</li>
+          <li>Avec β = 0,7, le bandeau donne un creux de −0,52 m avant la grande vague, dont la crête mesure 0,75 m.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Les instants, les hauteurs et les creux sont tirés de la graine (β de 0,4 à 0,5 pour la première vague, de 0,75 à 0,85 pour la troisième). Entre les vagues de la série, une houle de fond de quelques centimètres, faite de sinusoïdes dont les périodes divisent la boucle, empêche la mer d'être un miroir ; la démo ne l'inclut pas.</p>
+        </div></details>
       </section>
 
-      <section id="laminaires">
-        <h2><span class="n">03</span>Une laminaire n'existe que dans l'eau</h2>
-        <span class="src">src/gen/kelp.js · simulateKelp()</span>
-        <p>Chaque plante est un petit arbre de chaînes : un stipe (la tige) ancré au crampon qui agrippe la roche, puis ses lanières. Elles sont calculées par XPBD, une méthode qui déplace directement les nœuds pour satisfaire des contraintes, à petits pas (120 sous-pas par seconde). Les contraintes sont la flexion, une seconde différence pondérée de raideur \(EI/l\), la longueur et le contact sur la roche. La laminaire tient aux forces de l'eau, nœud par nœud : à gauche la flottabilité, freinée par la masse d'eau entraînée ; à droite la traînée.</p>
-        <div class="eq">\[ \dot v_y = g\left(\frac{s}{\rho_r} - 1\right) / \left(1 + \tfrac12 s\, m_a/m\right), \qquad v_r \leftarrow \frac{v_r}{1 + k\,|v_r|\,h\,s} \]</div>
-        <p>\(s\) est la part immergée du nœud (lue dans la mer enregistrée) et \(\rho_r\) le rapport de densité de la famille. \(m_a\) est la masse ajoutée d'une lame à plat (\(\rho\pi w^2/4\)), l'eau qu'elle doit pousser pour bouger : seize fois sa masse, si bien qu'elle monte lentement. La traînée de Morison, la résistance de l'eau, s'applique à la vitesse relative \(v_r = v - u\) de la lame par rapport à l'eau, et elle est intégrée <b>implicitement</b>. En explicite, une lame de 2 mm dans un courant de 3 m/s exigerait un pas de quelques microsecondes. Enfin, l'eau qui accélère emporte la lame avec elle (\(v \mathrel{+}= s\,\Delta u\)).</p>
-        <figure id="fig-familles"><figcaption><b>Une plante de chaque famille, dans la même mer.</b> Le curseur choisit la famille. C'est la vraie simulation (<code>buildKelp</code>, <code>simulateKelp</code>), en coupe, avec une plante seule sur une roche plate. La digitée se soulève et ses lanières se peignent. Le cochayuyo flotte d'un coup. Le palmier de mer plie et se redresse, le boa monte en arc.</figcaption></figure>
-        <div class="note trap"><b>Le piège</b><p>Deux itérations de Gauss-Seidel par sous-pas ne tiennent pas une poutre raide : le palmier de mer s'affaissait en une seconde. Les contraintes raides (EI/l > 2) reçoivent donc dix itérations de plus, peu coûteuses. Autre défaut : une chaîne tirée par le courant s'étirait de 30 % sur sa longueur. Une passe « follow the leader » (Müller et al., 2012), de la racine vers la pointe, replace chaque nœud à la bonne distance du précédent et rend la chaîne exactement inextensible.</p></div>
-      </section>
-
-      <section id="rubans">
-        <h2><span class="n">04</span>Couchée sur une autre, une lanière se pose dessus</h2>
-        <span class="src">src/gen/kelp.js · collide()</span>
-        <p>À basse mer, les lanières forment un tapis : elles se croisent et se recouvrent. Le contact usuel des tiges, une capsule (un cylindre aux bouts arrondis) autour de la ligne médiane, ne convient pas. Trop épaisse, elle laisse les lames flotter à 3 cm les unes des autres ; trop fine, elles se traversent par la tranche. Chaque segment est donc traité comme un ruban, de demi-largeur \(w/2\) le long de son directeur \(\mathbf b\) et de demi-épaisseur \(e/2\) le long de sa normale \(\mathbf n\). Son support sur un axe \(\mathbf a\), la demi-longueur de son ombre projetée sur cet axe, vaut</p>
-        <div class="eq">\[ \sigma(\mathbf a) = \tfrac{w}{2}\,|\mathbf a\cdot\mathbf b| + \tfrac{e}{2}\,|\mathbf a\cdot\mathbf n| \]</div>
-        <p>Trois axes sont candidats : la droite des points les plus proches et les deux normales. La séparation se fait sur celui où les rubans se recouvrent le moins (axe de <b>moindre recouvrement</b>). Deux lames à plat l'une sur l'autre se séparent ainsi de leur épaisseur (axe \(\mathbf n\)), deux lames côte à côte de leur largeur. La correction est bornée à 2,5 mm par sous-pas, parce qu'une correction de position devient une vitesse : un recouvrement résolu d'un coup lançait les nœuds à un mètre.</p>
-        <figure id="fig-rubans"><figcaption><b>Deux sections de lames.</b> Glissez la lame claire. L'axe retenu (flèche) est celui qui demande le moins de déplacement ; il passe de l'épaisseur à la largeur quand les lames se décalent.</figcaption></figure>
-      </section>
-
-      <section id="boucle">
-        <h2><span class="n">05</span>La boucle se referme sur une orbite périodique</h2>
-        <span class="src">src/gen/kelp.js · simulateKelp() · fermeture</span>
-        <p>Le forçage a la période \(T\) de la boucle (32 s), et le système est dissipatif : frottement, déferlement et traînée lui font oublier son état initial. La mer l'oublie en une période. Les laminaires gardent un peu de mémoire, par exemple une lanière tombée à gauche de sa voisine plutôt qu'à droite. Deux boucles sont donc simulées sous le même forçage, A puis B, avec B(0) = A(T). La boucle rendue passe de B à A plante par plante, chacune au moment où ses deux versions se ressemblent le plus :</p>
-        <div class="eq">\[ R(t) = (1-w(t))\,B(t) + w(t)\,A(t), \qquad R(0) = B(0) = A(T) = R(T) \]</div>
-        <p>Le mélange porte sur les directions des segments, et la chaîne est reconstruite depuis le crampon. Mélanger les positions de deux poses très différentes superposait des nœuds, et la chaîne basculait d'une image à l'autre, par sauts d'un mètre. Mesuré par <code>tools/jumps.mjs</code>, le pire saut est passé de 0,99 à 0,15 m.</p>
-        <div class="note check"><b>Vérifié</b><p>La dernière image rejoint la première à moins d'un déplacement d'image ; aucun nœud ne passe sous la roche à aucun instant (<code>test/kelp.test.mjs</code>).</p></div>
+      <section id="mer">
+        <h2><span class="n">03</span>La vague monte sur la roche</h2>
+        <span class="src">src/gen/sea.js · simulateSea()</span>
+        <p>Il faut maintenant faire voyager cette hauteur d'eau jusqu'à la côte. Sur un platier, une vague ne roule pas en rouleau : elle a déjà déferlé au large. Ce qui court sur la roche est un <b>ressaut</b>, une marche d'eau écumeuse qui avance, ralentit, s'arrête, puis redescend en nappe.</p>
+        <h3>Première idée : des vagues sinusoïdales</h3>
+        <p>La façon habituelle d'animer une mer est d'additionner des vagues sinusoïdales. Elle ne sait représenter ni la marche brusque d'un ressaut, ni le bord de l'eau qui avance sur la roche sèche puis recule. Il faut calculer l'écoulement lui-même.</p>
+        <h3>Deuxième idée : simuler une eau peu profonde</h3>
+        <p>Quand l'eau est beaucoup moins profonde que les vagues ne sont longues, on peut ne retenir, en chaque point, que deux grandeurs : la hauteur d'eau <i>h</i> et la vitesse moyenne <i>u</i> de l'eau. Les <b>équations de Saint-Venant</b> relient ces deux grandeurs. On les écrit sur une coupe du platier, du large vers la côte :</p>
+        <div class="eq">\[ \partial_t h + \partial_x (hu) = 0, \qquad \partial_t (hu) + \partial_x\!\left(hu^2 + \tfrac{g}{2}h^2\right) = -g h\, \partial_x b - g n^2 \frac{|u|u}{h^{1/3}} \]</div>
+        <p>∂<sub>t</sub> est la variation dans le temps et ∂<sub>x</sub> la variation le long de la coupe. La première équation dit que l'eau se conserve : une cellule ne gagne que ce qui y entre. La seconde dit que la quantité de mouvement <i>hu</i> change sous l'effet de la pression de l'eau (le terme <i>g h</i>²/2), de la pente du fond <i>b</i> et du frottement sur la roche. <i>g</i> = 9,81 m/s² est la pesanteur et <i>n</i> = 0,035 le coefficient de rugosité de Manning, qui mesure l'aspérité de la roche.</p>
+        <p>Pour les résoudre, la coupe est découpée en cellules (de 2,5 cm dans la scène, 760 sur 19 m). Chaque cellule échange de l'eau avec ses deux voisines à travers leur frontière, et l'on calcule ces échanges, les <b>flux</b>, à chaque pas de temps. Cette méthode des volumes finis conserve l'eau exactement, et elle capture les marches brusques, que les numériciens appellent des <b>chocs</b>.</p>
+        <figure id="fig-mer"><figcaption><b>La série de la graine a1, en coupe.</b> La même simulation que la scène (même profil de roche, mêmes vagues, sans la houle de fond), avec des cellules de 5 cm au lieu de 2,5 cm, lue en accéléré. La roche est en gris, l'eau en bleu ; les points blancs sont l'écume, qui naît là où la surface est raide et où l'eau converge, c'est-à-dire dans le ressaut. Le curseur multiplie la hauteur des trois vagues au large. Les hauteurs sont exagérées d'environ 1,5 fois.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Suivez le bandeau : juste avant la grande vague, vers 21 s, le bord de l'eau recule jusqu'à −2,3 m, presque au bord du platier (qui commence à −2,8 m). Quelques dixièmes de seconde plus tard, la vague passe 3 m.</li>
+          <li>Réglez la hauteur à × 0,5 : la grande vague s'arrête à 2,9 m, sur la pente. Dès × 0,75, elle passe le haut de la pente et sort du cadre.</li>
+        </ul></div>
+        <h3>Le problème du fond</h3>
+        <p>Une difficulté reste. Un schéma naïf, qui traite le terme de pente du fond comme une simple force, fait bouger une mer au repos sur un fond accidenté, et crée des hauteurs d'eau négatives au bord de l'eau. La <b>reconstruction hydrostatique</b> d'Audusse et al. (2004) corrige ce défaut. À chaque frontière, elle compare les deux cellules à la même altitude, celle du fond le plus haut des deux, en calculant pour chacune la hauteur d'eau qui dépasse ce fond :</p>
+        <div class="eq">\[ h^* = \max\big(0,\; h + b - \max(b_G, b_D)\big) \]</div>
+        <p><i>b</i><sub>G</sub> et <i>b</i><sub>D</sub> sont les fonds des cellules de gauche et de droite. Les flux sont calculés avec ces hauteurs <i>h</i>*, et la quantité de mouvement reçoit une correction de <i>g</i>(<i>h</i>² − <i>h</i>*²)/2. Une mer au repos reste alors exactement au repos, et la hauteur d'eau n'est jamais négative.</p>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Les flux sont ceux du solveur HLL (Harten, Lax et van Leer), au premier ordre. Le pas de temps suit la condition de Courant : pendant un pas, une onde ne parcourt pas plus de 0,42 cellule. Au large, le bord du domaine fait entrer la vague et laisse sortir son écho. Il utilise les <b>invariants de Riemann</b>, deux combinaisons de la vitesse et de la célérité des ondes <i>c</i> = √(<i>gh</i>) qui voyagent chacune dans un sens : la vague incidente entre par l'invariant montant <i>u</i> + 2<i>c</i>, et la vague réfléchie par la côte sort par le descendant <i>u</i> − 2<i>c</i> sans revenir. Le frottement de Manning est calculé implicitement, ce qui le rend stable même dans une lame d'eau de quelques millimètres.</p>
+          <p>Une lame d'eau de moins de 4 cm, sur la roche du platier, s'écoule aussi par le relief que la coupe moyenne ne voit pas (fissures, rigoles). Sans ce drainage, le platier ne se découvrirait jamais entre les vagues.</p>
+          <div class="note check"><b>Ce que vérifient les tests</b><p>Après deux boucles, l'état à <i>T</i> égale l'état à 0 à 10⁻⁵ m près. La hauteur n'est jamais négative. Avant la grande vague, le platier est découvert (moins de 5 cm d'eau) ; pendant, il est recouvert de plus de 35 cm (<code>test/kelp.test.mjs</code>).</p></div>
+        </div></details>
       </section>
 
       <section id="secher">
-        <h2><span class="n">06</span>La roche sèche par le haut</h2>
+        <h2><span class="n">04</span>La roche sèche par le haut</h2>
         <span class="src">src/gen/sea.js · enveloppe de séchage · src/scene/terrain.js</span>
-        <p>Une roche mouillée est plus sombre et brille. Elle reste mouillée après le passage de l'eau, et sèche d'abord sur ses bosses. Le rendu ne dépend que de la phase de la boucle : il ne peut pas tenir un état qui s'intègre d'image en image. La simulation enregistre donc une enveloppe, le plus haut niveau d'eau récent, qui redescend à la vitesse <i>λ</i> :</p>
+        <p>Une roche mouillée est plus sombre et brille. Elle reste mouillée un moment après le passage de l'eau, et sèche d'abord sur ses parties hautes. Le rendu de la scène ne dépend que de la position dans la boucle, si bien qu'il ne peut pas faire sécher la roche image après image. La simulation de la mer enregistre donc, pour chaque cellule et chaque image, une <b>enveloppe de séchage</b> : le plus haut niveau d'eau récent, qui redescend lentement à une vitesse λ.</p>
         <div class="eq">\[ M(x, t) = \max\big(\eta(x, t),\; M(x, t - \Delta t) - \lambda\,\Delta t\big), \qquad \lambda = 1{,}2\ \text{cm/s} \]</div>
-        <p>Elle est calculée sur deux tours de la boucle, ce qui la rend périodique. Un point de roche est mouillé si sa hauteur est sous \(M\). Les creux restent foncés plus longtemps que les bosses, et la frontière humide descend vers la mer pendant le retrait. Le séchage est accéléré (quelques secondes au lieu de minutes) : c'est la seule liberté que le film prend avec le temps.</p>
-        <figure id="fig-secher"><figcaption><b>Le diagramme espace-temps de la série.</b> Horizontalement le temps (une boucle), verticalement la position sur le platier. En bleu, l'eau ; en clair, la roche encore mouillée sous l'enveloppe \(M\). Chaque vague dessine sa langue d'eau.</figcaption></figure>
+        <p>η est le niveau de l'eau (fond plus hauteur d'eau) et Δ<i>t</i> la durée d'une image. Un point de roche est mouillé tant que sa hauteur est sous <i>M</i>. Les points les plus hauts passent les premiers au-dessus de l'enveloppe qui descend : la frontière entre roche mouillée et roche sèche descend vers la mer pendant le retrait. L'enveloppe est calculée sur deux passages de la boucle, ce qui la rend périodique. Le séchage est accéléré (quelques secondes au lieu de quelques minutes) ; c'est la seule liberté que le film prend avec le temps.</p>
+        <figure id="fig-secher"><figcaption><b>Le diagramme espace-temps de la série.</b> Horizontalement le temps (une boucle), verticalement la position sur la coupe, du large en bas à la côte en haut. En bleu, l'eau ; en brun clair, la roche encore mouillée (sous l'enveloppe <i>M</i>) ; en sombre, la roche sèche. La ligne pointillée marque le point x = 3 m, sur la pente, où la roche est à 0,92 m. Le curseur règle la vitesse de séchage λ.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>À la vitesse du projet (1,2 cm/s), le point de 3 m reste mouillé toute la boucle : la roche sèche n'apparaît qu'au-dessus de lui, en haut de la pente.</li>
+          <li>Montez λ à 4,8 cm/s : le point de 3 m est sec pendant 47 % de la boucle, et la roche mouillée ne forme plus que des bandes étroites derrière chaque vague.</li>
+        </ul></div>
       </section>
 
-      <section id="dome">
-        <h2><span class="n">07</span>Le hublot-dôme fait la ligne d'eau</h2>
-        <span class="src">src/scene/water.js · medium()</span>
-        <p>Avec une caméra à sténopé, réduite à un point, la surface de l'eau qui passe par le centre optique se projette en une ligne, l'horizon : l'image bascule d'un coup de l'air à l'eau. Les photographies « over-under », moitié dessus, moitié dessous, se font avec un hublot en dôme, et la ligne d'eau traverse alors l'image. Chaque rayon part donc du dôme, à \(r_d = 9\) cm devant le centre optique, et commence dans l'eau si ce point du dôme est sous la surface. Avec <i>y<sub>w</sub></i> la hauteur de l'eau et <i>y<sub>e</sub></i> celle du centre optique, la ligne d'eau est à l'élévation</p>
-        <div class="eq">\[ \theta_w = \arcsin\frac{y_w - y_e}{r_d} \]</div>
-        <p>Elle balaie tout le champ quand l'eau monte de 18 cm sur le dôme, soit deux fois son rayon. Le plan proche de la caméra fait de même pour la surface : rien n'est dessiné entre le centre optique et le dôme. En post-traitement, le même calcul refait pour chaque pixel dessine le ménisque, une ligne sombre de deux pixels là où l'eau coupe le dôme, et la nappe qui ruisselle au-dessus. Sur le haut du dôme qui vient de ressortir, il pose des gouttes : des lentilles cerclées de sombre qui montrent la scène renversée et réduite, glissent et sèchent chacune à son heure. Coût : deux couches de cellules, une seule lecture de l'image déformée, ~0,35 ms à 0,5 Mpx. Le brouillard d'eau de chaque pixel n'est compté que sur la partie immergée du rayon, le niveau de l'eau étant pris linéaire entre ses deux bouts. Une même lanière est ainsi nette au-dessus de la ligne et voilée de vert au-dessous.</p>
-        <figure id="fig-dome"><figcaption><b>Le dôme en coupe.</b> Le curseur règle la hauteur de l'eau par rapport au centre optique. Les rayons qui partent du dôme sous l'eau sont verts. À droite, l'image : la ligne d'eau monte avec l'eau.</figcaption></figure>
+      <section id="laminaires">
+        <h2><span class="n">05</span>Une laminaire n'existe que dans l'eau</h2>
+        <span class="src">src/gen/kelp.js · buildKelp(), simulateKelp()</span>
+        <p>Chaque plante est un petit arbre de chaînes : le stipe, ancré au crampon, puis ses lanières. Une chaîne est une suite de nœuds reliés par des segments. On la calcule avec <b>XPBD</b> (<i>Extended Position-Based Dynamics</i>) : à chaque petit pas de temps, on avance les nœuds selon leur vitesse, puis on les déplace directement pour respecter des contraintes. Ces contraintes sont la longueur des segments, la flexion (une lanière résiste à la courbure, d'autant plus qu'elle est raide) et le contact avec la roche. Le calcul avance par 120 sous-pas par seconde.</p>
+        <p>Ce qui fait bouger la plante, ce sont les forces de l'eau, nœud par nœud. La première est la <b>flottaison</b>. Une lanière un peu moins dense que l'eau de mer monte, une lanière plus dense coule. Mais pour bouger, une lame plate doit aussi pousser l'eau qui l'entoure : cette eau entraînée, la <b>masse ajoutée</b>, vaut de 4 à 31 fois la masse de la lame selon la famille. La lame monte donc lentement :</p>
+        <div class="eq">\[ \frac{dv_y}{dt} = \frac{g\,(s/\rho_r - 1)}{1 + \tfrac12\, s\, m_a/m} \]</div>
+        <p><i>v</i><sub>y</sub> est la vitesse verticale du nœud, <i>s</i> sa part immergée (de 0 à 1, lue dans la mer enregistrée), ρ<sub>r</sub> la densité de la lame rapportée à celle de l'eau de mer (de 0,78 pour le cochayuyo à 1 pour le palmier de mer), <i>m</i> sa masse et <i>m</i><sub>a</sub> la masse ajoutée d'une lame à plat. Hors de l'eau, <i>s</i> = 0 et la lame tombe avec la seule pesanteur.</p>
+        <p>La seconde force est la <b>traînée</b>, la résistance de l'eau au mouvement de la lame par rapport à elle. Elle dépend de la vitesse relative <i>v</i><sub>r</sub> = <i>v</i> − <i>u</i> de la lame par rapport à l'eau (<i>u</i> est la vitesse de l'eau) et croît avec son carré, comme dans la formule de Morison. Une lame de 2 mm d'épaisseur dans un courant de 3 m/s y est si sensible qu'un calcul explicite exigerait des pas de quelques microsecondes. On l'intègre donc de façon <b>implicite</b> : au lieu d'ajouter la force, on divise la vitesse relative, ce qui reste stable à tout pas de temps :</p>
+        <div class="eq">\[ v_r \leftarrow \frac{v_r}{1 + k\,|v_r|\,\Delta t\, s} \]</div>
+        <p><i>k</i> (en 1/m) regroupe la forme de la lame, sa masse et sa masse ajoutée, et Δ<i>t</i> est le sous-pas. Enfin, l'eau qui accélère emporte la lame avec elle.</p>
+        <figure id="fig-familles"><figcaption><b>Une plante de chaque famille, dans la même mer.</b> Le curseur choisit la famille. C'est la simulation du projet (<code>buildKelp</code>, <code>simulateKelp</code>), en coupe, avec une plante seule sur une roche plate, dans la mer de la section 03. La première vue d'une famille demande moins d'une seconde de calcul. Le bandeau donne la hauteur du point le plus haut de la plante au-dessus de la roche, et la hauteur d'eau.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Regardez la digitée : quand l'eau est partie, elle repose sur la roche (6 cm de haut en moyenne) ; sous plus de 30 cm d'eau, elle se soulève à 14 cm en moyenne, et ses lanières suivent le courant.</li>
+          <li>Passez au palmier de mer : c'est l'inverse. Son stipe raide le tient debout à l'air (43 cm en moyenne), et le courant le couche dans l'eau (30 cm).</li>
+          <li>Le cochayuyo, le moins dense (0,78), monte jusqu'à 52 cm, alors que l'eau ne dépasse pas 60 cm à cet endroit : ses longues lanières s'étalent près de la surface.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>La flexion est une seconde différence entre trois nœuds consécutifs, pondérée par la raideur <i>EI</i>/<i>l</i> du segment. La masse ajoutée d'une lame à plat vaut ρπ<i>w</i>²/4 par mètre, où <i>w</i> est la largeur de la lame et ρ la masse volumique de l'eau ; rapportée à la masse de la lame, elle est grande pour une lame large et mince.</p>
+          <div class="note trap"><b>Le piège : un palmier qui s'affaisse, une chaîne qui s'allonge</b><p>Deux itérations de Gauss-Seidel par sous-pas ne tiennent pas une poutre raide : le palmier de mer s'affaissait en une seconde. Les contraintes raides (<i>EI</i>/<i>l</i> &gt; 2) reçoivent donc dix itérations de plus, peu coûteuses. Autre défaut : une chaîne tirée par le courant s'étirait de 30 %. Une passe « follow the leader » (Müller et al., 2012), de la racine vers la pointe, replace chaque nœud à la bonne distance du précédent et rend la chaîne inextensible.</p></div>
+        </div></details>
       </section>
 
-      <section id="lumiere">
-        <h2><span class="n">08</span>Le soleil passe par la surface</h2>
-        <span class="src">src/scene/water.js · sunAtten(), receivedShadow</span>
-        <p>Sous l'eau, le soleil s'affaiblit le long de son chemin réfracté jusqu'au point éclairé, situé à la profondeur <i>d</i>, canal par canal (le rouge s'éteint d'abord) : \(T = e^{-\sigma\, d / \cos\theta_t}\) avec \(\sin\theta_t = \sin\theta_i / 1{,}33\). Des caustiques, les réseaux clairs que les vagues concentrent, le modulent. three.js permet de modifier l'ombre que reçoit un matériau (<code>receivedShadowNode</code>). L'atténuation y est multipliée, si bien que la roche, les lanières et les crampons reçoivent la même lumière sans rien changer à leurs matériaux. Vue d'en dessous, la surface montre la fenêtre de Snell (48,6°), par où passe le ciel, et au-delà la réflexion totale. Vue d'en dessus, son reflet de Fresnel ne devient jamais un miroir au loin, parce que les facettes des vagues regardent plus haut que la normale moyenne.</p>
-        <div class="note trap"><b>Le piège</b><p>Le ciel est longtemps resté noir. D'abord, la même texture servait d'environnement et de fond, et le fond lisait sa version préfiltrée pour les reflets. Ensuite, le fond, dessiné à part, restait marqué en erreur après le préchauffage asynchrone des pipelines. Le ciel est maintenant une grande sphère de la scène, préchauffée comme le reste. Autre piège : au bord mouillé-sec, les sommets de la surface sautent de sous la roche à la surface de l'eau, et leurs vecteurs vitesse étiraient le flou de mouvement en copies répétées des reflets. La surface n'écrit plus de vitesse.</p></div>
+      <section id="rubans">
+        <h2><span class="n">06</span>Couchée sur une autre, une lanière se pose dessus</h2>
+        <span class="src">src/gen/kelp.js · collide()</span>
+        <p>À basse mer, les lanières forment un tapis : elles se croisent et se recouvrent. Il faut donc les empêcher de se traverser. Le contact habituel des tiges entoure la ligne médiane d'une <b>capsule</b>, un cylindre aux bouts arrondis, et sépare deux capsules qui se chevauchent. Pour une lame plate, une capsule ne convient pas. Trop épaisse, elle laisse les lames flotter à 3 cm les unes au-dessus des autres ; trop fine, elle les laisse se traverser par la tranche.</p>
+        <p>Chaque segment est donc traité comme un ruban, de demi-largeur <i>w</i>/2 le long de sa largeur, notée <b>b</b>, et de demi-épaisseur <i>e</i>/2 le long de sa normale <b>n</b>. Pour savoir si deux rubans se recouvrent selon une direction <b>a</b>, on projette chacun sur cette direction. La demi-longueur de cette projection, son <b>support</b>, vaut</p>
+        <div class="eq">\[ \sigma(\mathbf a) = \tfrac{w}{2}\,|\mathbf a\cdot\mathbf b| + \tfrac{e}{2}\,|\mathbf a\cdot\mathbf n| \]</div>
+        <p>Si la distance entre les deux rubans le long de <b>a</b> est plus petite que la somme de leurs supports, ils se recouvrent de la différence. Trois directions sont essayées : la droite qui joint les points les plus proches et les normales des deux rubans. On sépare les rubans le long de celle où ils se recouvrent le moins, l'axe de <b>moindre recouvrement</b>. Deux lames à plat l'une sur l'autre se séparent ainsi de leur épaisseur, deux lames côte à côte de leur largeur.</p>
+        <figure id="fig-rubans"><figcaption><b>Deux sections de lames.</b> Glissez la lame claire. La flèche rouge montre l'axe retenu et le sens dans lequel la lame claire est repoussée ; le bandeau donne le recouvrement le long de cet axe. Les lames sont dessinées très grossies.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Au départ, la lame claire chevauche un peu l'autre par-dessus : l'axe retenu est la normale de la lame claire, et le bandeau donne un recouvrement de 0,39 épaisseur, qu'un petit déplacement vertical suffit à résoudre.</li>
+          <li>Cliquez un peu plus à droite et plus bas, de façon que les lames se touchent par leurs bouts : l'axe passe à la droite des points proches, et la lame claire est repoussée sur le côté.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>La correction est bornée à 2,5 mm par sous-pas. En XPBD, une correction de position devient une vitesse au pas suivant : un recouvrement résolu d'un coup lançait les nœuds à un mètre.</p>
+        </div></details>
+      </section>
+
+      <section id="boucle">
+        <h2><span class="n">07</span>La boucle se referme sur une orbite périodique</h2>
+        <span class="src">src/gen/kelp.js · simulateKelp() · fermeture</span>
+        <p>La boucle doit revenir exactement à son image de départ. La mer et les plantes sont poussées par un forçage qui se répète toutes les 32 secondes, et elles perdent sans cesse de l'énergie (frottement, déferlement, traînée). Un tel système oublie peu à peu son état de départ et finit par suivre le forçage : il converge vers une <b>orbite périodique</b>, un mouvement qui se répète lui aussi toutes les 32 secondes. La mer l'atteint en une boucle ; c'est pourquoi on la simule deux fois et on garde la seconde.</p>
+        <p>Les laminaires gardent un peu plus de mémoire : une lanière tombée à gauche de sa voisine plutôt qu'à droite y reste. Deux boucles sont donc simulées sous le même forçage, A puis B, B partant de l'état final de A. La boucle rendue <i>R</i> passe de B à A plante par plante, chacune au moment où ses deux versions se ressemblent le plus :</p>
+        <div class="eq">\[ R(t) = (1-w(t))\,B(t) + w(t)\,A(t), \qquad R(0) = B(0) = A(T) = R(T) \]</div>
+        <p><i>w</i>(<i>t</i>) passe de 0 à 1 autour de cet instant, et <i>T</i> = 32 s. Au début, <i>R</i> est B, qui part de A(<i>T</i>) ; à la fin, <i>R</i> est A, qui arrive à A(<i>T</i>). Les deux bouts coïncident.</p>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Le mélange porte sur les directions des segments, et la chaîne est reconstruite depuis le crampon. Mélanger les positions de deux poses très différentes superposait des nœuds, et la chaîne basculait d'une image à l'autre, par sauts d'un mètre. Mesuré par <code>tools/jumps.mjs</code>, le pire saut est passé de 0,99 à 0,15 m.</p>
+          <div class="note check"><b>Ce que vérifient les tests</b><p>La dernière image rejoint la première à moins d'un déplacement d'image, aucun nœud ne passe sous la roche à aucun instant, et à l'air moins de 5 % des nœuds restent dressés (<code>test/kelp.test.mjs</code>).</p></div>
+        </div></details>
       </section>
 
       <section id="faisceau">
-        <h2><span class="n">09</span>Le bord n'est pas droit, le front non plus</h2>
+        <h2><span class="n">08</span>Le bord n'est pas droit, le front non plus</h2>
         <span class="src">src/gen/sea.js · edgeShift(), simulateBundle(), seaField() · src/gen/scene.js · placeClones()</span>
-        <p>Une seule coupe de la mer, extrudée le long de la côte, dessinait un front tiré à la règle et un platier bordé comme un trottoir. Le bord avance et recule maintenant le long de la côte, d'une quantité \(s(z)\) (trois ondulations, un chenal, un éperon), la même dans la roche et dans le shader. La mer est un faisceau de profils de Saint-Venant, un tous les 0,9 m, chacun sur sa propre coupe et tous sous la même série. Entre deux profils, le champ est interpolé dans le même temps local \(t - \text{obliq}\,(z - z_\text{ref})\) : le front arrive plus tôt dans le chenal, casse sur l'éperon, et se courbe au lieu de se dédoubler.</p>
-        <p>La même symétrie fait la forêt. À un pas \(\Delta\) le long de la côte, la mer est presque la même, retardée de \(\text{obliq}\,\Delta\). Une laminaire simulée en \(z\) est donc une pose valide en \(z + \Delta\), rejouée avec ce retard. Seules les plantes proches de la caméra sont simulées ; au loin, des touffes entières sont clonées à la même distance du bord. La frange devient une forêt sans une seconde de calcul de plus.</p>
-        <div class="note trap"><b>Le piège</b><p>Le temps de démarrage. Sept fois plus de mer, à la suite, ajoutait 4 s. Les profils, le profil fin de la caméra et la roche ne dépendent que de la recette : ils sont calculés en même temps sur les workers du pool, puis cédés sans copie au worker qui assemble la scène. Le démarrage est plus court qu'avant (17 → 10 s sur la graine k39). Un worker qui lance ses propres workers aurait été plus simple, mais tous les navigateurs ne le permettent pas.</p></div>
+        <p>Une seule coupe de la mer, étirée le long de la côte, dessinait un front tiré à la règle et un platier bordé comme un trottoir. Dans la scène, le bord du platier avance et recule le long de la côte (trois ondulations, un chenal, un éperon), de la même quantité dans la roche et dans la mer. La mer est un faisceau de coupes de Saint-Venant, une tous les 0,9 m, chacune sur son propre profil de roche et toutes sous la même série. Entre deux coupes, la mer est interpolée en tenant compte d'un léger retard le long de la côte, l'<b>obliquité</b> de la houle : le front arrive plus tôt dans le chenal, casse sur l'éperon, et se courbe au lieu de se dédoubler.</p>
+        <p>Ce retard sert aussi à faire la forêt. À une distance Δ le long de la côte, la mer est presque la même, simplement retardée. Une laminaire simulée à un endroit est donc une pose valable à une distance Δ de là, rejouée avec ce retard. Seules les plantes proches de la caméra sont simulées ; au loin, des touffes entières sont recopiées à la même distance du bord. La frange devient une forêt sans calcul supplémentaire.</p>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <div class="note trap"><b>Le piège : le temps de démarrage</b><p>Sept fois plus de mer, calculée à la suite, ajoutait 4 s au chargement. Les coupes, la coupe fine de la caméra et la roche ne dépendent que de la recette : elles sont calculées en même temps sur les workers du pool, puis cédées sans copie au worker qui assemble la scène. Le démarrage est plus court qu'avant (17 → 10 s sur la graine k39). Un worker qui lance ses propres workers aurait été plus simple, mais tous les navigateurs ne le permettent pas.</p></div>
+        </div></details>
+      </section>
+
+      <section id="dome">
+        <h2><span class="n">09</span>Le hublot en dôme fait la ligne d'eau</h2>
+        <span class="src">src/scene/water.js · medium()</span>
+        <p>Une caméra de synthèse ordinaire est un point. Si la surface de l'eau passe par ce point, elle se projette en une ligne d'horizon, et toute l'image bascule d'un coup de l'air à l'eau. Les photographies « over-under », moitié dessus, moitié dessous, se font avec un hublot en dôme devant l'objectif, et la ligne d'eau traverse alors l'image.</p>
+        <p>Le projet reproduit ce dôme. Chaque rayon de la caméra part du dôme, à <i>r</i><sub>d</sub> = 9 cm devant le centre optique, et commence dans l'eau si ce point du dôme est sous la surface. Un rayon d'élévation θ (l'angle au-dessus de l'horizontale) touche le dôme à la hauteur <i>y</i><sub>e</sub> + <i>r</i><sub>d</sub> sin θ, où <i>y</i><sub>e</sub> est la hauteur du centre optique. Avec <i>y</i><sub>w</sub> la hauteur de l'eau, la ligne d'eau est donc à l'élévation</p>
+        <div class="eq">\[ \theta_w = \arcsin\frac{y_w - y_e}{r_d} \]</div>
+        <figure id="fig-dome"><figcaption><b>Le dôme en coupe.</b> Le curseur règle la hauteur de l'eau par rapport au centre optique. Les rayons qui partent du dôme sous l'eau sont bleus, les autres dorés. À droite, l'image, avec un champ vertical de 64° (celui de la scène va de 60 à 72°) : la ligne d'eau monte avec l'eau.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Placez l'eau au niveau du centre optique (0 cm) : la ligne d'eau est au milieu de l'image.</li>
+          <li>Montez-la à 4,7 cm : la ligne arrive au bord haut du cadre (31,5°) ; au-delà de 4,8 cm, toute l'image est sous l'eau. Comme le cadre est symétrique, il suffit que l'eau monte d'une dizaine de centimètres sur le dôme pour que la ligne traverse toute l'image.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Le plan proche de la caméra suit la même règle pour la surface : rien n'est dessiné entre le centre optique et le dôme. En post-traitement, le même calcul refait pour chaque pixel dessine le ménisque, une ligne sombre de deux pixels là où l'eau coupe le dôme, et la nappe qui ruisselle au-dessus. Sur le haut du dôme qui vient de ressortir, il pose des gouttes : de petites lentilles cerclées de sombre qui montrent la scène renversée et réduite, glissent et sèchent chacune à son heure. Coût : environ 0,35 ms à 0,5 Mpx. Le brouillard de l'eau n'est compté que sur la partie immergée de chaque rayon, si bien qu'une même lanière est nette au-dessus de la ligne et voilée de vert au-dessous.</p>
+        </div></details>
+      </section>
+
+      <section id="lumiere">
+        <h2><span class="n">10</span>Le soleil passe par la surface</h2>
+        <span class="src">src/scene/water.js · sunAtten(), receivedShadow</span>
+        <p>Sous l'eau, la lumière du soleil s'affaiblit avec la distance qu'elle parcourt, et le rouge s'éteint plus vite que le vert et le bleu. En entrant dans l'eau, le rayon se rapproche de la verticale (il est réfracté) : son angle θ<sub>t</sub> sous la surface vérifie sin θ<sub>t</sub> = sin θ<sub>i</sub> / 1,33, où θ<sub>i</sub> est son angle au-dessus et 1,33 l'indice de l'eau. Pour atteindre un point à la profondeur <i>d</i>, il parcourt donc <i>d</i> / cos θ<sub>t</sub>, et la part de lumière qui arrive est, pour chaque couleur,</p>
+        <div class="eq">\[ T = e^{-\sigma\, d / \cos\theta_t} \]</div>
+        <p>où σ est le coefficient d'atténuation de l'eau pour cette couleur. Des <b>caustiques</b>, les réseaux clairs que les vagues concentrent sur le fond, modulent cette lumière. three.js permet de modifier l'ombre que reçoit un matériau (<code>receivedShadowNode</code>) : l'atténuation y est multipliée, si bien que la roche, les lanières et les crampons reçoivent la même lumière sans rien changer à leurs matériaux.</p>
+        <p>Vue d'en dessous, la surface montre le ciel dans un cône de 48,6° autour de la verticale, la <b>fenêtre de Snell</b> ; au-delà, elle réfléchit totalement l'eau elle-même. Vue d'en dessus, son reflet ne devient jamais un miroir au loin, parce que les facettes des vagues regardent plus haut que la surface moyenne.</p>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <div class="note trap"><b>Le piège : un ciel noir</b><p>Le ciel est longtemps resté noir. D'abord, la même texture servait d'environnement et de fond, et le fond lisait sa version préfiltrée pour les reflets. Ensuite, le fond, dessiné à part, restait marqué en erreur après la compilation anticipée des shaders. Le ciel est maintenant une grande sphère de la scène, compilée comme le reste.</p></div>
+          <div class="note trap"><b>Le piège : des reflets en copies</b><p>Au bord entre l'eau et la roche sèche, les sommets de la surface sautent d'une image à l'autre de sous la roche au niveau de l'eau. Leurs vecteurs vitesse étiraient le flou de mouvement en copies répétées des reflets. La surface n'écrit plus de vitesse.</p></div>
+        </div></details>
+      </section>
+
+      <section id="resume">
+        <h2><span class="n">11</span>Récapitulatif</h2>
+        <p>Au chargement, dans des workers :</p>
+        <ol>
+          <li>la recette tire la série de vagues (section 02), le profil de la roche, la famille et l'éclairage ;</li>
+          <li>la mer est simulée sur deux boucles : la coupe fine de la caméra et le faisceau de coupes le long de la côte, avec l'écume et l'enveloppe de séchage (sections 03, 04 et 08) ;</li>
+          <li>en même temps, la roche est construite ;</li>
+          <li>les laminaires proches sont simulées dans cette mer, sur deux boucles qui sont ensuite raccordées (sections 05 à 07), puis les touffes lointaines sont recopiées le long de la côte (section 08).</li>
+        </ol>
+        <p>À chaque image :</p>
+        <ol>
+          <li>la position dans la boucle donne, par simple lecture, la mer, la roche mouillée et la pose de chaque laminaire ;</li>
+          <li>chaque rayon part du dôme, dans l'air ou dans l'eau selon le niveau de l'eau à cet endroit (section 09) ;</li>
+          <li>le soleil est atténué le long de son chemin réfracté et modulé par les caustiques (section 10) ; le post-traitement ajoute le ménisque et les gouttes sur le dôme.</li>
+        </ol>
       </section>
 
       <section id="budget">
-        <h2><span class="n">10</span>Budget</h2>
+        <h2><span class="n">12</span>Budget</h2>
         <div class="tbl"><table>
           <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
           <tbody>
-            <tr><td>La mer : le profil fin de la caméra (760 cellules, 60 i/s) et ~22 profils du faisceau (380 cellules, 30 i/s), deux périodes de 32 s chacun, et les trajectoires de 4 800 flocons d'écume par profil, en parallèle</td><td>workers</td><td class="num">~1,5 s</td></tr>
+            <tr><td>La mer : la coupe fine de la caméra (760 cellules, 60 i/s) et environ 22 coupes du faisceau (380 cellules, 30 i/s), deux boucles de 32 s chacune, et les trajectoires de 4 800 flocons d'écume par coupe, en parallèle</td><td>workers</td><td class="num">~1,5 s</td></tr>
             <tr><td>La roche : relief 1 024², arête rompue, éboulis, surface de contact, flaques, couleur (en même temps que la mer)</td><td>worker</td><td class="num">~2 s</td></tr>
-            <tr><td>Les laminaires : 23 à 40 plantes simulées, 66 s à 120 sous-pas/s, puis 100 à 240 touffes clonées</td><td>worker</td><td class="num">8–17 s</td></tr>
-            <tr><td>Données transmises au GPU (faisceau en texture 3D, profil fin 60 i/s, laminaires 30 i/s, roche)</td><td>GPU</td><td class="num">~170 Mo</td></tr>
+            <tr><td>Les laminaires : 23 à 40 plantes simulées, 66 s à 120 sous-pas/s, puis 100 à 240 touffes recopiées</td><td>worker</td><td class="num">8–17 s</td></tr>
+            <tr><td>Données transmises au GPU (faisceau en texture 3D, coupe fine à 60 i/s, laminaires à 30 i/s, roche)</td><td>GPU</td><td class="num">~170 Mo</td></tr>
           </tbody>
         </table></div>
-        <p>Mesures faites dans Node, sur un cœur, avec une graine de test ; la génération est nettement plus lente quand l'onglet est en arrière-plan. Le temps d'image, mesuré à 960 × 540 sur le GPU d'un Mac (graine k39), est de 8,1 à 9,3 ms sans les flocons, la lèvre, les embruns et ce qui flotte, dont ~3,9 ms pour la roche, ~2,8 ms pour l'occlusion ambiante et ~2,6 ms pour la lumière diffusée sous l'eau. La forêt clonée (0,4 ms), les embruns (0,2 ms), les 100 000 flocons d'écume (0,6 ms), la lèvre, la paume et ce qui flotte coûtent peu. Le démarrage prend ~12 s sur k39 et ~18,5 s sur la graine p7.</p>
+        <p>Mesures faites dans Node, sur un cœur, avec une graine de test ; la génération est nettement plus lente quand l'onglet est en arrière-plan. Le temps d'image, mesuré à 960 × 540 sur le GPU d'un Mac (graine k39), est de 8,1 à 9,3 ms sans les flocons, la lèvre, les embruns et ce qui flotte, dont ~3,9 ms pour la roche, ~2,8 ms pour l'occlusion ambiante et ~2,6 ms pour la lumière diffusée sous l'eau. La forêt recopiée (0,4 ms), les embruns (0,2 ms), les 100 000 flocons d'écume (0,6 ms), la lèvre, la paume et ce qui flotte coûtent peu. Le démarrage prend ~12 s sur k39 et ~18,5 s sur la graine p7.</p>
       </section>
     </article>
 
@@ -150,41 +246,16 @@
     const T = R.loop.duration;
     const prof = makeProfile(R.sea.profile);
     const seaCache = new Map();
-    const seaFor = (scale) => {
-      const k = scale.toFixed(2);
-      if (!seaCache.has(k)) seaCache.set(k, simulateSea({ T, x0: -9, x1: 10, dx: 0.05, profile: R.sea.profile, waves: R.sea.waves.map((w) => ({ ...w, A: w.A * scale })), fps: 30, loops: 2 }));
+    // la mer de la graine (sans la houle de fond), au pas de 5 cm ; scale : hauteur des vagues, dry : λ (m/s)
+    const seaFor = (scale, dry = 0.012) => {
+      const k = `${scale.toFixed(2)}:${dry}`;
+      if (!seaCache.has(k)) seaCache.set(k, simulateSea({ T, x0: -9, x1: 10, dx: 0.05, profile: R.sea.profile, waves: R.sea.waves.map((w) => ({ ...w, A: w.A * scale })), fps: 30, loops: 2, dry }));
       return seaCache.get(k);
     };
-    const X0 = -4.5, X1 = 4;
     const cell = (S, x) => Math.max(0, Math.min(S.nx - 1, Math.floor((x - S.x0) / S.dx)));
+    const fr2 = (x, n = 1) => x.toFixed(n).replace('.', ',');
 
-    // 01 — la coupe animée
-    demo('#fig-mer', {
-      title: 'Saint-Venant sur le platier', aspect: 2.3, animate: true,
-      controls: [{ key: 'A', label: 'Hauteur des vagues (×)', min: 0.5, max: 1.3, step: 0.05, value: 1 }],
-      draw(g, d) {
-        const S = seaFor(d.s.A), f = Math.floor(((d.t * 1.5) % T) * S.fps);
-        const sx = (x) => lerp(14, d.w - 14, (x - X0) / (X1 - X0)), sy = (y) => d.h * 0.55 - y * d.h * 0.42;
-        g.fillStyle = alpha(C.dim, 0.35); g.beginPath(); g.moveTo(sx(X0), d.h);
-        for (let x = X0; x <= X1; x += 0.04) g.lineTo(sx(x), sy(prof(x)));
-        g.lineTo(sx(X1), d.h); g.fill();
-        g.fillStyle = alpha(C.c2, 0.45); g.strokeStyle = C.c2; g.lineWidth = 1.5;
-        g.beginPath(); let on = false;
-        for (let x = X0; x <= X1; x += 0.025) {
-          const i = cell(S, x), e = S.eta[f * S.nx + i];
-          if (e > S.b[i] + 0.004) { if (!on) { g.moveTo(sx(x), sy(S.b[i])); on = true; } g.lineTo(sx(x), sy(e)); }
-          else if (on) { g.lineTo(sx(x), sy(S.b[i])); g.closePath(); on = false; }
-        }
-        if (on) { g.lineTo(sx(X1), sy(prof(X1))); g.closePath(); }
-        g.fill();
-        g.fillStyle = C.ink;
-        for (let x = X0; x <= X1; x += 0.05) { const i = cell(S, x), fo = S.foam[f * S.nx + i]; if (fo > 0.2 && S.eta[f * S.nx + i] > S.b[i] + 0.004) { g.beginPath(); g.arc(sx(x), sy(S.eta[f * S.nx + i]) - 2, 1 + 2 * Math.min(1, fo), 0, TAU); g.fill(); } }
-        label(g, 'large', 16, 20); label(g, 'côte', d.w - 16, 20, { align: 'right' });
-        d.status(`t = ${(f / S.fps).toFixed(1)} s / ${T} s`);
-      },
-    });
-
-    // 02 — la série au large
+    // ── 02 · la série au large ─────────────────────────────────────────────
     demo('#fig-serie', {
       title: 'La série : un creux avant chaque crête', aspect: 2.6,
       controls: [{ key: 'beta', label: 'Profondeur du creux β', min: 0, max: 1.2, step: 0.01, value: 0.7 }, { key: 'd', label: 'Avance du creux d (s)', min: 1, max: 5, step: 0.1, value: 3 }],
@@ -196,18 +267,82 @@
         for (let i = 0; i <= 400; i++) { const t = (i / 400) * T; i ? g.lineTo(sx(t), sy(F(t))) : g.moveTo(sx(t), sy(F(t))); }
         g.stroke();
         W.forEach((w, k) => label(g, `vague ${k + 1}`, sx(w.t), sy(w.A) - 8, { align: 'center' }));
-        label(g, 'la mer se retire', sx(W[2].t - W[2].d), sy(-W[2].A * W[2].beta) + 18, { align: 'center', color: C.c3 });
-        d.status(`creux de la grande vague : ${(-W[2].A * W[2].beta).toFixed(2)} m`);
+        if (d.s.beta > 0.05) label(g, 'la mer se retire', sx(W[2].t - W[2].d), sy(-W[2].A * W[2].beta) + 18, { align: 'center', color: C.c3 });
+        label(g, '0 s', 14, d.h - 8, { size: 11 }); label(g, `${T} s`, d.w - 14, d.h - 8, { size: 11, align: 'right' });
+        d.status(`crête de la grande vague ${fr2(W[2].A, 2)} m · creux ${fr2(-W[2].A * W[2].beta, 2)} m`);
       },
     });
 
-    // 03 — les familles, en coupe
+    // ── 03 · la coupe animée ───────────────────────────────────────────────
+    {
+      const X0 = -4.5, X1 = 4;
+      demo('#fig-mer', {
+        title: 'Saint-Venant sur le platier', aspect: 2.3, animate: true,
+        controls: [{ key: 'A', label: 'Hauteur des vagues (×)', min: 0.5, max: 1.3, step: 0.05, value: 1 }],
+        draw(g, d) {
+          const S = seaFor(d.s.A), f = Math.floor(((d.t * 1.5) % T) * S.fps);
+          const sx = (x) => lerp(14, d.w - 14, (x - X0) / (X1 - X0)), sy = (y) => d.h * 0.55 - y * d.h * 0.42;
+          // la roche
+          g.fillStyle = alpha(C.dim, 0.35); g.beginPath(); g.moveTo(sx(X0), d.h);
+          for (let x = X0; x <= X1; x += 0.04) g.lineTo(sx(x), sy(prof(x)));
+          g.lineTo(sx(X1), d.h); g.fill();
+          // l'eau, colonne par colonne (de la roche à la surface)
+          g.fillStyle = alpha(C.c2, 0.55);
+          for (let x = X0; x < X1; x += S.dx) {
+            const i = cell(S, x + S.dx / 2), e = S.eta[f * S.nx + i];
+            if (e > S.b[i] + 0.004) g.fillRect(sx(x), sy(e), sx(x + S.dx) - sx(x) + 0.6, sy(S.b[i]) - sy(e));
+          }
+          // l'écume
+          g.fillStyle = C.ink;
+          for (let x = X0; x <= X1; x += 0.05) { const i = cell(S, x), fo = S.foam[f * S.nx + i]; if (fo > 0.2 && S.eta[f * S.nx + i] > S.b[i] + 0.004) { g.beginPath(); g.arc(sx(x), sy(S.eta[f * S.nx + i]) - 2, 1 + 2 * Math.min(1, fo), 0, TAU); g.fill(); } }
+          // le front : la dernière cellule mouillée (plus de 2 cm) d'un seul tenant depuis le large
+          let xf = X0;
+          for (let i = cell(S, X0); i < S.nx; i++) { if (S.eta[f * S.nx + i] > S.b[i] + 0.02) xf = S.x0 + (i + 0.5) * S.dx; else if (S.x0 + (i + 0.5) * S.dx > -2.8) break; }
+          label(g, 'large', 16, 20); label(g, 'côte', d.w - 16, 20, { align: 'right' });
+          d.status(`t = ${fr2(f / S.fps)} s / ${T} s · bord de l’eau à x = ${xf >= X1 ? 'hors du cadre' : `${fr2(xf)} m`}`);
+        },
+      });
+    }
+
+    // ── 04 · diagramme espace-temps et enveloppe de séchage ────────────────
+    {
+      const X0 = -3.5, X1 = 7, XM = 3;
+      demo('#fig-secher', {
+        title: 'L’eau et la roche mouillée, sur toute la boucle', aspect: 2.2,
+        controls: [{ key: 'lam', label: 'Vitesse de séchage λ (cm/s)', min: 0.6, max: 4.8, step: 0.6, value: 1.2, fmt: (v) => fr2(v) }],
+        draw(g, d) {
+          const S = seaFor(1, d.s.lam / 100), W = Math.round(d.w), Hh = Math.round(d.h), img = g.createImageData(W, Hh);
+          const X = (j) => X1 - (j / Hh) * (X1 - X0);
+          for (let i = 0; i < W; i++) {
+            const f = Math.floor((i / W) * S.nf);
+            for (let j = 0; j < Hh; j++) {
+              const c = cell(S, X(j)), o = (j * W + i) * 4, e = S.eta[f * S.nx + c], b = S.b[c], M = S.wet[f * S.nx + c];
+              let r = 34, gg = 31, bb = 29;
+              if (e > b + 0.004) { const v = Math.min(1, (e - b) * 3); r = 40 + 20 * v; gg = 110 + 70 * v; bb = 130 + 80 * v; }
+              else if (M > b) { r = 120; gg = 104; bb = 86; }
+              img.data[o] = r; img.data[o + 1] = gg; img.data[o + 2] = bb; img.data[o + 3] = 255;
+            }
+          }
+          g.putImageData(img, 0, 0);
+          // le point de 3 m, et la part de la boucle où il est sec
+          const ym = ((X1 - XM) / (X1 - X0)) * Hh, cm = cell(S, XM);
+          let dry = 0; for (let f = 0; f < S.nf; f++) { const o = f * S.nx + cm; if (S.eta[o] <= S.b[cm] + 0.004 && S.wet[o] <= S.b[cm]) dry++; }
+          g.strokeStyle = C.ink; g.setLineDash([5, 4]); g.beginPath(); g.moveTo(0, ym); g.lineTo(d.w, ym); g.stroke(); g.setLineDash([]);
+          label(g, 'x = 3 m', d.w - 8, ym - 6, { align: 'right', color: C.ink, size: 11 });
+          label(g, 'côte', 8, 16, { color: C.ink }); label(g, 'large', 8, d.h - 8, { color: C.ink });
+          label(g, `temps → (${T} s)`, d.w - 8, d.h - 8, { align: 'right', color: C.ink });
+          d.status(`à x = 3 m (roche à ${fr2(S.b[cm], 2)} m) : sec ${Math.round((dry / S.nf) * 100)} % de la boucle`);
+        },
+      });
+    }
+
+    // ── 05 · les familles, en coupe ────────────────────────────────────────
     const famSim = new Map();
-    const flat = () => prof(-1.6); // (une roche plate, pour voir la plante seule)
+    const XP = -1.6, flat = () => prof(XP); // (une roche plate, pour voir la plante seule)
     function simFamily(fam) {
       if (famSim.has(fam)) return famSim.get(fam);
-      const S = seaFor(1);
-      const plants = [{ x: -1.6, z: 0, y: flat(-1.6, 0), lod: 0, stipeL: FAMILIES[fam].stipe.L[1], blades: Array.from({ length: FAMILIES[fam].blade.n[0] }, () => ({ L: FAMILIES[fam].blade.L[1], w: FAMILIES[fam].blade.w[1] })), lean: 0, tilt: 0 }];
+      const S = seaFor(1), F = FAMILIES[fam];
+      const plants = [{ x: XP, z: 0, y: flat(), lod: 0, stipeL: F.stipe.L[1], blades: Array.from({ length: F.blade.n[0] }, () => ({ L: F.blade.L[1], w: F.blade.w[1] })), lean: 0, tilt: 0 }];
       const K = buildKelp(fam, plants, flat);
       const sim = simulateKelp(K, { sea: S, rockH: flat, T, fps: 30, sub: 100, loops: 2, obliq: 0, zRef: 0 });
       const out = { K, sim, S };
@@ -219,28 +354,30 @@
       title: 'Quatre familles, quatre mouvements', aspect: 2.2, animate: true,
       controls: [{ key: 'f', label: 'Famille', min: 0, max: FK.length - 1, step: 1, value: 0, fmt: (v) => FAMILIES[FK[v]].label }],
       draw(g, d) {
-        d.state.fam = FK[Math.round(d.s.f)];
-        const { K, sim, S } = simFamily(d.state.fam);
-        const fr = Math.floor(((d.t * 1.2) % T) * sim.fps) % sim.nf, fs = Math.floor((fr / sim.fps) * S.fps);
+        const fam = FK[Math.round(d.s.f)], F = FAMILIES[fam];
+        const { K, sim, S } = simFamily(fam);
+        const fr = Math.floor(((d.t * 1.2) % T) * sim.fps) % sim.nf, fs = Math.min(S.nf - 1, Math.floor((fr / sim.fps) * S.fps));
         const sx = (x) => lerp(14, d.w - 14, (x + 3.4) / 3.6), sy = (y) => d.h * 0.62 - y * d.h * 0.62;
-        g.fillStyle = alpha(C.dim, 0.35); g.fillRect(0, sy(flat(0)), d.w, d.h);
+        g.fillStyle = alpha(C.dim, 0.35); g.fillRect(0, sy(flat()), d.w, d.h);
         // l'eau à cet instant
         g.fillStyle = alpha(C.c2, 0.3);
-        for (let x = -3.4; x < 0.2; x += 0.05) { const i = cell(S, x), e = S.eta[fs * S.nx + i]; if (e > flat(x) + 0.004) g.fillRect(sx(x), sy(e), sx(x + 0.05) - sx(x) + 1, sy(flat(x)) - sy(e)); }
+        for (let x = -3.4; x < 0.2; x += 0.05) { const i = cell(S, x), e = S.eta[fs * S.nx + i]; if (e > flat() + 0.004) g.fillRect(sx(x), sy(e), sx(x + 0.05) - sx(x) + 0.6, sy(flat()) - sy(e)); }
         g.strokeStyle = C.c1; g.lineCap = 'round';
+        let top = 0;
         for (const c of K.chains) {
           g.lineWidth = c.kind ? 2 : 3.5; g.beginPath();
-          [c.parent, ...c.nodes].forEach((n, i) => { const o = (fr * sim.n + n) * 3, x = sim.pos[o], y = sim.pos[o + 1]; i ? g.lineTo(sx(x), sy(y)) : g.moveTo(sx(x), sy(y)); });
+          [c.parent, ...c.nodes].forEach((n, i) => { const o = (fr * sim.n + n) * 3, x = sim.pos[o], y = sim.pos[o + 1]; top = Math.max(top, y - flat()); i ? g.lineTo(sx(x), sy(y)) : g.moveTo(sx(x), sy(y)); });
           g.stroke();
         }
-        d.status(`${FAMILIES[d.state.fam].label} (${FAMILIES[d.state.fam].latin}) · densité ${FAMILIES[d.state.fam].blade.rho} · t = ${(fr / sim.fps).toFixed(1)} s`);
+        const ci = cell(S, XP), depth = Math.max(0, S.eta[fs * S.nx + ci] - S.b[ci]);
+        d.status(`${F.label} (${F.latin}) · densité ${fr2(F.blade.rho, 2)} · t = ${fr2(fr / sim.fps)} s · plante : ${Math.round(top * 100)} cm · eau : ${Math.round(depth * 100)} cm`);
       },
     });
 
-    // 04 — deux rubans : l'axe de moindre recouvrement
+    // ── 06 · deux rubans : l'axe de moindre recouvrement ───────────────────
     demo('#fig-rubans', {
       title: 'Séparer deux lames', aspect: 2.2,
-      setup(d) { d.state.p = [0.62, 0.47]; d.state.a = 0.35; },
+      setup(d) { d.state.p = [0.52, 0.49]; },
       pointer(d, e) { if (e.down) d.state.p = [e.x / d.w, e.y / d.h]; },
       draw(g, d) {
         const s = Math.min(d.w, d.h) * 1.6, w = 0.12, e = 0.03;
@@ -257,44 +394,22 @@
         const sup = (L, a) => (w / 2) * Math.abs(a[0] * L.b[0] + a[1] * L.b[1]) + (e / 2) * Math.abs(a[0] * L.n[0] + a[1] * L.n[1]);
         let best = null;
         const dl = Math.hypot(...dx);
-        for (const [a, name] of [[dl > 1e-6 ? [dx[0] / dl, dx[1] / dl] : null, 'points proches'], [A.n, 'normale A'], [B.n, 'normale B']]) {
+        for (const [a, name] of [[dl > 1e-6 ? [dx[0] / dl, dx[1] / dl] : null, 'droite des points proches'], [A.n, 'normale de la lame dorée'], [B.n, 'normale de la lame claire']]) {
           if (!a) continue;
           const ov = sup(A, a) + sup(B, a) - Math.abs(dx[0] * a[0] + dx[1] * a[1]);
           if (!best || ov < best.ov) best = { a, ov, name };
         }
         const cx = B.c[0] * d.w, cy = B.c[1] * d.h;
         if (best.ov > 0) { const sg = Math.sign(dx[0] * best.a[0] + dx[1] * best.a[1]) || 1; arrow(g, cx, cy, cx + best.a[0] * sg * 60, cy + best.a[1] * sg * 60, { color: C.c3, width: 2 }); }
-        d.status(best.ov > 0 ? `recouvrement ${(best.ov * 100).toFixed(1)} cm · axe : ${best.name}` : 'séparées');
+        // (épaisseur de lame : e = 3 unités de la figure, soit « 1 épaisseur »)
+        d.status(best.ov > 0 ? `recouvrement ${fr2(best.ov / e, 2)} épaisseur · axe : ${best.name}` : 'séparées');
       },
     });
 
-    // 06 — diagramme espace-temps et enveloppe de séchage
-    demo('#fig-secher', {
-      title: 'L’eau et la roche mouillée, sur toute la boucle', aspect: 2.4,
-      draw(g, d) {
-        const S = seaFor(1), img = g.createImageData(Math.round(d.w), Math.round(d.h));
-        const X = (j) => X1 - (j / img.height) * (X1 - X0);
-        for (let i = 0; i < img.width; i++) {
-          const f = Math.floor((i / img.width) * S.nf);
-          for (let j = 0; j < img.height; j++) {
-            const x = X(j), c = cell(S, x), o = (j * img.width + i) * 4, e = S.eta[f * S.nx + c], b = S.b[c], M = S.wet[f * S.nx + c];
-            let r = 30, gg = 28, bb = 26;
-            if (e > b + 0.004) { const v = Math.min(1, (e - b) * 3); r = 40 + 20 * v; gg = 110 + 70 * v; bb = 130 + 80 * v; }
-            else if (M > b) { r = 92; gg = 84; bb = 76; }
-            else if (b < -1) { r = 18; gg = 30; bb = 40; }
-            img.data[o] = r; img.data[o + 1] = gg; img.data[o + 2] = bb; img.data[o + 3] = 255;
-          }
-        }
-        g.putImageData(img, 0, 0);
-        label(g, 'côte', 8, 16, { color: C.ink }); label(g, 'large', 8, d.h - 8, { color: C.ink });
-        label(g, `temps → (${T} s)`, d.w - 8, 16, { align: 'right', color: C.ink });
-      },
-    });
-
-    // 07 — le dôme
+    // ── 09 · le dôme ───────────────────────────────────────────────────────
     demo('#fig-dome', {
       title: 'La ligne d’eau sur le dôme', aspect: 2.2,
-      controls: [{ key: 'yw', label: 'Eau − centre optique (cm)', min: -10, max: 10, step: 0.1, value: -3 }],
+      controls: [{ key: 'yw', label: 'Eau − centre optique (cm)', min: -9, max: 9, step: 0.1, value: -3 }],
       draw(g, d) {
         const rd = 9, cx = d.w * 0.28, cy = d.h * 0.5, k = d.h / 30, yw = d.s.yw;
         g.fillStyle = alpha(C.c2, 0.25); g.fillRect(0, cy - yw * k, d.w * 0.56, d.h);
@@ -306,14 +421,15 @@
           g.strokeStyle = wet ? C.c2 : C.c1; g.beginPath(); g.moveTo(ox, oy); g.lineTo(ox + Math.cos(a) * d.w * 0.25, oy - Math.sin(a) * d.w * 0.25); g.stroke();
         }
         g.fillStyle = C.ink; g.beginPath(); g.arc(cx, cy, 3, 0, TAU); g.fill();
-        // l'image
-        const ix = d.w * 0.64, iw = d.w * 0.33, ih = iw * 0.62, iy = d.h * 0.5 - ih / 2, fov = 0.9;
+        // l'image : champ vertical de 64°
+        const ix = d.w * 0.64, iw = d.w * 0.33, ih = iw * 0.62, iy = d.h * 0.5 - ih / 2, fov = 64 * Math.PI / 180;
         const th = Math.asin(clamp(yw / rd, -1, 1)), lineY = iy + ih / 2 - (th / fov) * ih;
         g.fillStyle = alpha(C.c1, 0.2); g.fillRect(ix, iy, iw, ih);
         g.fillStyle = alpha(C.c2, 0.55); g.fillRect(ix, clamp(lineY, iy, iy + ih), iw, iy + ih - clamp(lineY, iy, iy + ih));
         g.strokeStyle = C.line; g.strokeRect(ix, iy, iw, ih);
         label(g, 'l’image', ix, iy - 8);
-        d.status(`ligne d'eau à ${(th * 180 / Math.PI).toFixed(1)}° d'élévation`);
+        const deg = th * 180 / Math.PI, inside = Math.abs(deg) <= 32;
+        d.status(`ligne d’eau à ${fr2(deg)}° d’élévation · ${inside ? 'dans le cadre' : deg > 0 ? 'au-dessus du cadre : image sous l’eau' : 'sous le cadre : image à l’air'}`);
       },
     });
   </script>

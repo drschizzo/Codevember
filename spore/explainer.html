@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#050506">
   <title>Spore · défis techniques</title>
-  <meta name="description" content="Comment Spore est calculé : une boucle qui est une translation, un front de Dijkstra, le réseau adaptatif de Tero, des perles de Plateau-Rayleigh, des sporanges en poutres encastrées, des spores de Stokes qui ensemencent le site suivant, un bois périodique, un péridium en couche mince.">
+  <meta name="description" content="Comment fonctionne Spore, reconstruit pas à pas : un front calculé comme une distance de proche en proche, le réseau de veines qui s'adapte à son propre flux (Tero), des perles espacées selon Plateau-Rayleigh, des sporanges qui fléchissent comme des poutres, un nuage de spores simulé qui ensemence le site suivant, une boucle qui est une translation sur un bois périodique, et un péridium irisé par une couche mince.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
@@ -22,9 +22,10 @@
 
   <main>
     <header class="hero">
-      <div class="kicker">Day 16 · Spore · le relais</div>
+      <div class="kicker">Day 16 · Spore · comment ça marche</div>
       <h1>Comment une poussière de spores devient une forêt, puis le nuage qui ensemence la suivante</h1>
-      <p class="lede">Sur du bois mort, une génération de myxomycètes tient en une boucle. Les spores germent en un plasmodium, une masse vivante qui s'étend en réseau de veines, se condense en perles, puis se dresse en sporanges qui mûrissent et s'ouvrent au souffle. Le nuage de spores dérive jusqu'au site suivant, et la caméra le suit. La difficulté est de boucler un cycle de vie qui ne revient jamais à son point de départ. Le réseau est calculé par la loi d'adaptation de Tero, les perles reçoivent exactement le volume des veines, les spores tombent selon la loi de Stokes, et la génération suivante germe là où sont tombées des spores du nuage simulé. La boucle est donc une translation : chaque tour décale la scène d'un site.</p>
+      <p class="lede">Spore montre une génération de myxomycètes sur du bois mort. Ces organismes faits d'une seule cellule rampent sur le bois, puis fructifient comme des champignons. Des spores se posent et germent en une nappe jaune, le plasmodium, qui s'étend et se creuse en veines. Les veines se vident dans des perles, les perles se dressent en petites capsules sur pied, les sporanges, qui mûrissent puis s'ouvrent au vent. Le nuage de spores part se poser un peu plus loin, où la génération suivante germe à son tour. Rien n'est animé à la main : chaque étape est calculée par une loi physique ou biologique au chargement. Cette page reprend ces étapes dans l'ordre du cycle, puis explique comment la boucle se referme.</p>
+      <p class="prereq">Pour suivre, il suffit de savoir lire un peu de JavaScript (des tableaux et des boucles). Les formules résument ce que les démos montrent ; on peut les sauter sans perdre le fil. Les détails de production sont rangés dans les encadrés « Pour aller plus loin ».</p>
     </header>
 
     <figure class="cover">
@@ -35,92 +36,222 @@
     <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
 
     <article>
-      <section id="translation">
-        <h2><span class="n">01</span>La boucle est une translation</h2>
-        <span class="src">src/timeline.js · sites() — src/camera.js · makeTravel()</span>
-        <p>Une génération de myxomycète ne revient pas à son état initial : les sporanges vides restent sur le bois pendant des semaines. Rejouer le film à l'envers, ou fondre la fin dans le début, se verrait. La génération suivante recommence en revanche ailleurs, un peu plus loin sous le vent, là où les spores sont tombées.</p>
-        <p>Le bois est donc périodique : il se répète tous les \(L = 4{,}4\) cm le long du vent. Le site \(j\) vit son cycle avec un retard d'une boucle sur son voisin d'amont :</p>
-        <div class="eq">\[ \text{état}(j, u) = S\big(\operatorname{clamp}(u - j,\, 0,\, 2)\big), \qquad X_\text{caméra}(u + 1) = X_\text{caméra}(u) + L. \]</div>
-        <p>\(S(0)\) est le bois nu, \(S(0 \to 1)\) le cycle, \(S(1 \to 2)\) l'usure des sporanges vides. Le monde à \(u + 1\) est le monde à \(u\) décalé de \(L\), et la caméra aussi, si bien que l'image est la même par construction. L'écran ne montre que deux sites : le présent (phase \(u\)) et le passé (phase \(u + 1\), une période en amont). La caméra avance à une vitesse faite d'un socle (la dérive lente au-dessus du site) et d'une bosse en \(\cos^2\) (le voyage avec le nuage), normalisée pour que son intégrale vaille \(L\).</p>
-        <figure id="fig-frise"><figcaption><b>La frise.</b> Trois sites du bois et le cadre de la caméra. Faites glisser la phase : chaque site vit le même cycle, décalé d'une boucle ; à \(u = 1\), tout s'est décalé d'un site. (Le cycle est résumé en quatre états.)</figcaption></figure>
+      <section id="scene">
+        <h2><span class="n">01</span>Ce que montre la scène</h2>
+        <span class="src">README.md · src/timeline.js</span>
+        <p>La boucle dure 40 secondes. La caméra arrive en glissant le long du bois. Une fumée brune descend en biais et poudre le bois nu : ce sont les spores de la génération précédente. Dans la poudre, des gouttelettes jaunes naissent, gonflent et se rejoignent en une nappe qui s'étend vers l'aval en éventail. Derrière son bord, la nappe se creuse en veines. La lumière monte, les veines se vident dans des perles, et les perles se dressent sur leurs pieds, toutes ensemble. Elles mûrissent et se dessèchent. Un souffle passe, elles s'inclinent et s'ouvrent, et leurs spores partent avec lui. La caméra suit le nuage jusqu'au site suivant, et l'image retombe sur la première.</p>
+        <p>Une graine tire le décor (le bois, sa lumière et son cadrage, parmi six) et la famille de myxomycètes (parmi six : <em>Arcyria</em>, <em>Stemonitis</em>, <em>Hemitrichia</em>, <em>Lamproderma</em>, <em>Trichia</em> et <em>Lycogala</em>).</p>
+        <p>La page suit le cycle :</p>
+        <ul>
+          <li><b>la nappe et ses veines</b> : le front qui avance (section 02), le réseau de veines (section 03), les perles (section 04) ;</li>
+          <li><b>les sporanges et leur nuage</b> : la levée et la flexion au vent (section 05), le nuage simulé (section 06) et sa relecture (section 07) ;</li>
+          <li><b>la boucle</b> : une translation d'un site au suivant (section 08), sur un bois qui se répète exactement (section 09), puis l'irisation de certaines espèces (section 10).</li>
+        </ul>
       </section>
 
       <section id="front">
-        <h2><span class="n">02</span>Le front est une distance de Dijkstra à seize voisins</h2>
+        <h2><span class="n">02</span>Le front : une distance calculée de proche en proche</h2>
         <span class="src">src/gen/plasmodium.js · arrivalField()</span>
-        <p>Chaque spore germe à son instant. La gouttelette s'étend, rejoint ses voisines, et la nappe avance en éventail. Plutôt que de simuler le fluide, on calcule en chaque point l'<em>instant d'arrivée</em> \(T(x, z)\) du plasmodium. C'est une distance de Dijkstra multi-sources : un calcul de plus court chemin sur une grille de 0,11 mm, lancé depuis toutes les spores à la fois, chacune avec son retard. Le pas est anisotrope (le front court \(1{,}1\) à \(1{,}5\) fois plus vite le long du fil du bois), et un bruit module la vitesse, ce qui dessine les festons du front. La nappe de la scène est la courbe de niveau \(T = s\). Son bord reste donc net à toute distance, quelle que soit la résolution de la grille.</p>
-        <div class="note trap"><b>Le piège</b><p>Avec huit voisins, une distance mesurée de case en case diffère de la distance à vol d'oiseau : un front parti d'un point devient un octogone, et les gouttelettes avaient des pans coupés. En ajoutant les huit pas du cavalier des échecs (seize voisins), l'erreur maximale sur la distance tombe de 8 % à moins de 3 %, sans recourir à un fast marching.</p></div>
-        <p>La distance est enfin convertie en phase par \(f(x) = \tfrac12 x^{0{,}55} + \tfrac12 x^{1{,}6}\). Les gouttelettes grossissent lentement (on les voit séparées), le front file au milieu, puis ralentit au bord du territoire.</p>
-        <figure id="fig-front"><figcaption><b>Le front de cette graine.</b> Le calcul de la scène (<code>arrivalField</code>), dessiné en courbes de niveau de \(T\). Réglez l'anisotropie et regardez les courbes s'allonger le long du fil. Les points sont les spores qui germent.</figcaption></figure>
+        <p>Chaque spore germe à son instant. La gouttelette s'étend, rejoint ses voisines, et la nappe avance en éventail, avec un bord festonné. Elle avance plus vite le long du fil du bois qu'en travers.</p>
+        <p>Simuler l'écoulement du protoplasme serait long. On remarque plutôt qu'une nappe qui s'étend à vitesse connue atteint chaque point au bout d'un temps qui ne dépend que de sa distance aux spores. On calcule donc en chaque point l'<b>instant d'arrivée</b> <i>T</i>(<i>x</i>, <i>z</i>) du plasmodium, une seule fois, et la nappe affichée à l'instant <i>s</i> est la région où <i>T</i> &lt; <i>s</i>. Son bord est la courbe de niveau <i>T</i> = <i>s</i>, qui reste nette à toute distance, quelle que soit la finesse de la grille du calcul.</p>
+
+        <h3>La distance de proche en proche</h3>
+        <p>La distance se calcule sur une grille de cellules de 0,15 mm. On part des cellules des spores, et l'on propage : la distance d'une cellule est la plus petite, parmi ses voisines, de leur distance plus la longueur du pas qui les sépare. On traite toujours en premier la cellule la plus proche encore non traitée, ce qui garantit que chaque distance n'est fixée qu'une fois : c'est l'<b>algorithme de Dijkstra</b>, ici lancé depuis toutes les spores à la fois, chacune avec son retard de germination.</p>
+        <p>La règle la plus simple prend comme voisines les huit cellules qui touchent la cellule, diagonales comprises. Elle a un défaut visible : en n'avançant que par pas droits ou diagonaux, on surestime les distances dans les directions intermédiaires, et un front parti d'un point devient un octogone. Les gouttelettes avaient des pans coupés. La correction ajoute les huit pas du cavalier des échecs (deux cases dans un sens, une dans l'autre) : avec seize voisines, les directions permises sont plus nombreuses, et l'écart à la vraie distance tombe de 8,2&nbsp;% à 2,7&nbsp;%.</p>
+        <figure id="fig-voisins"><figcaption><b>Huit ou seize voisines.</b> Une seule source au centre d'une grille de 61 × 61 cellules. Les bandes sont les courbes de même distance calculée, tous les 6 cellules ; le cercle rouge est la vraie distance de 24 cellules. Le bandeau donne le plus grand écart relatif à la distance vraie sur la grille.</figcaption></figure>
+
+        <h3>Le fil du bois et les festons</h3>
+        <p>Deux réglages donnent à la nappe son allure. Le pas est <b>anisotrope</b> : un pas le long du fil coûte moins qu'en travers, si bien que le front y court de 1,1 à 1,5 fois plus vite selon la graine. Et un bruit module la vitesse d'une cellule à l'autre, ce qui dessine les festons du bord.</p>
+        <figure id="fig-front"><figcaption><b>Le front de cette graine.</b> Le calcul de la scène (<code>arrivalField</code>), dessiné en courbes de niveau de <i>T</i>. Les points rouges sont les spores qui germent. Réglez l'anisotropie et les festons.</figcaption></figure>
+
+        <h3>La règle en résumé</h3>
+        <div class="eq">\[ D(q) = \min_{o \sim q}\Big( D(o) + \frac{2\,\ell(o, q)}{v(o) + v(q)} \Big), \qquad \ell = \sqrt{(\Delta x / a)^2 + \Delta z^2}, \qquad T = t_g + (T_\text{fin} - t_g)\, f\!\Big(\frac{D}{D_\text{max}}\Big). \]</div>
+        <p><i>o</i> ∼ <i>q</i> désigne les seize voisines, ℓ la longueur du pas (Δ<i>x</i> le long du fil, Δ<i>z</i> en travers), <i>a</i> l'anisotropie et <i>v</i> la vitesse locale, modulée par le bruit des festons. La distance est enfin convertie en instant par <i>f</i>(<i>x</i>) = ½ <i>x</i><sup>0,55</sup> + ½ <i>x</i><sup>1,6</sup>, où <i>t</i><sub>g</sub> est le début de la germination et <i>T</i><sub>fin</sub> l'instant où le front s'arrête : les gouttelettes grossissent lentement (on les voit séparées), le front file au milieu, puis ralentit au bord du territoire.</p>
+<pre><code>// src/gen/plasmodium.js · arrivalField (simplifié)
+const nb = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1],
+            [2, 1], [2, -1], [-2, 1], [-2, -1], [1, 2], [1, -2], [-1, 2], [-1, -2]];
+const cost = nb.map(([a, b]) =&gt; Math.hypot((a * h) / P.aniso, b * h));
+while (heap.size) {
+  const o = heap.pop();                                // la cellule la plus proche
+  for (let k = 0; k &lt; 16; k++) {
+    const q = voisine(o, k), nd = D[o] + (cost[k] * 2) / (speed[o] + speed[q]);
+    if (nd &lt; D[q]) { D[q] = nd; heap.push(nd, q); }
+  }
+}</code></pre>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Passez de seize à huit voisines : les courbes deviennent des octogones, et le plus grand écart à la distance vraie passe de 2,7&nbsp;% à 8,2&nbsp;%, dans les directions à 22,5° des axes.</li>
+          <li>Montez l'anisotropie à 2 : les courbes s'allongent le long du fil. Ramenez-la à 1 et baissez les festons au minimum (0,05) : chaque gouttelette redevient presque un disque.</li>
+        </ul></div>
       </section>
 
       <section id="tero">
-        <h2><span class="n">03</span>Le réseau s'adapte à son propre flux (Tero)</h2>
-        <span class="src">src/gen/plasmodium.js · networkSteps()</span>
-        <p>Derrière son front, un plasmodium se creuse en veines : les tubes qui transportent beaucoup s'élargissent, les autres disparaissent. Tero et al. (2007) en ont tiré un modèle qui retrouve le réseau ferré de Tokyo. Sur un treillis triangulaire de 0,45 mm, chaque arête a une conductivité \(D_{ij}\), sa facilité à laisser passer le flux. À chaque pas, le protoplasme part du corps (les nœuds âgés) vers quelques nœuds tirés au front. Les pressions obéissent aux lois de Kirchhoff, comme les tensions d'un circuit électrique : ce qui entre en un nœud en ressort. La conductivité de chaque tube croît ensuite avec le débit qui le traverse et décroît sinon :</p>
+        <h2><span class="n">03</span>Le réseau s'adapte à son propre flux</h2>
+        <span class="src">src/gen/plasmodium.js · buildGraph(), networkSteps()</span>
+        <p>Derrière son front, un plasmodium se creuse en veines : les tubes qui transportent beaucoup s'élargissent, les autres disparaissent. Le réseau final dépend de l'espèce : des mailles serrées chez les unes, un arbre de grosses veines chez les autres.</p>
+        <p>Tero et ses collègues ont tiré de ce comportement un modèle simple (2007), qui retrouve par exemple le tracé du réseau ferré de Tokyo. On couvre la nappe d'un treillis de tubes. Chaque tube a une <b>conductivité</b> <i>D</i>, sa facilité à laisser passer le protoplasme. À chaque pas, le protoplasme part du corps (les nœuds atteints depuis longtemps) vers quelques nœuds tirés au front. On calcule alors la pression en chaque nœud, avec la règle des circuits électriques : ce qui entre en un nœud en ressort (loi de Kirchhoff). On en déduit le débit de chaque tube. Puis chaque tube s'adapte : sa conductivité grandit s'il porte un fort débit et diminue sinon.</p>
+        <p>La forme du réseau dépend d'un exposant μ, qui règle la façon dont la croissance suit le débit. Avec μ proche de 1, la croissance est proportionnelle au débit, et plusieurs chemins parallèles survivent : le réseau garde des mailles. Avec μ proche de 2, les tubes déjà gros gagnent beaucoup plus que les petits, et un seul chemin finit par l'emporter entre deux points : le réseau devient un arbre.</p>
+        <figure id="fig-tero"><figcaption><b>Le réseau pousse.</b> Le même générateur que la scène (<code>networkSteps</code>, un pas par image), sur un treillis plus grossier (0,8 mm au lieu de 0,45 mm) et en 90 pas au lieu de 140. L'épaisseur d'un trait suit la racine quatrième de sa conductivité. Le bandeau compte les mailles du réseau dessiné, c'est-à-dire le nombre de boucles indépendantes : tubes − nœuds + morceaux séparés.</figcaption></figure>
+
+        <h3>Le modèle en résumé</h3>
         <div class="eq">\[ \sum_j \frac{D_{ij}}{l_{ij}}\,(p_i - p_j) = b_i, \qquad Q_{ij} = \frac{D_{ij}}{l_{ij}}(p_i - p_j), \qquad \frac{dD_{ij}}{dt} = \frac{|Q_{ij}|^\mu}{1 + |Q_{ij}|^\mu} - D_{ij}. \]</div>
-        <p>Le système est résolu par gradient conjugué préconditionné (Jacobi), une méthode itérative, en repartant des pressions du pas précédent. Le bilan est imposé nul dans chaque composante connexe, car avant leur fusion les gouttelettes sont des réseaux séparés. Le rayon d'une veine suit la loi de Poiseuille : \(D \propto r^4\), donc \(r \propto D^{1/4}\). Le calcul fait 140 pas, dont 32 instantanés sont enregistrés et relus dans le vertex shader.</p>
-        <div class="note check"><b>Vérifié</b><p>Le résidu de Kirchhoff reste sous 6 % du flux injecté à chaque pas, sur les graines testées (<code>test/spore.test.mjs</code>). Le volume des perles est celui du réseau à 10⁻⁹ près.</p></div>
-        <figure id="fig-tero"><figcaption><b>Le réseau pousse.</b> Le même générateur que la scène (un pas par image), en plus grossier. Réglez l'exposant : vers \(\mu \approx 1\), le réseau garde des mailles ; vers \(\mu \approx 2\), il devient un arbre.</figcaption></figure>
+        <p><i>p</i><sub><i>i</i></sub> est la pression au nœud <i>i</i>, <i>l</i><sub><i>ij</i></sub> la longueur du tube entre <i>i</i> et <i>j</i>, <i>b</i><sub><i>i</i></sub> ce qui entre (positif, au corps) ou sort (négatif, au front) au nœud <i>i</i>, et <i>Q</i><sub><i>ij</i></sub> le débit du tube. La dernière équation dit qu'un tube tend vers une conductivité fixée par son débit, et se vide s'il n'en a pas. Le rayon d'une veine suit la loi de Poiseuille pour un tube : <i>D</i> ∝ <i>r</i><sup>4</sup>, donc <i>r</i> ∝ <i>D</i><sup>1/4</sup>.</p>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Réglez μ à 1 : le réseau garde environ 300 mailles. À 1,4, il en reste 28 ; à 1,8, 7 ; à 2,2, deux.</li>
+          <li>Suivez une veine maîtresse pendant que le front avance : elle s'épaissit, et les tubes parallèles à côté d'elle s'effacent.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Le treillis est triangulaire, de 0,45 mm dans la scène. Le système des pressions est résolu par gradient conjugué préconditionné (Jacobi), une méthode itérative, en repartant des pressions du pas précédent. Le bilan est imposé nul dans chaque morceau séparé du réseau, car avant leur fusion les gouttelettes sont des réseaux distincts. Le calcul fait 140 pas, dont 32 instantanés sont enregistrés et relus par le vertex shader (le programme de la carte graphique qui place les sommets).</p>
+          <div class="note check"><b>Ce que vérifient les tests</b><p>Le résidu de Kirchhoff reste sous 6&nbsp;% du flux injecté à chaque pas, sur les graines testées (<code>test/spore.test.mjs</code>).</p></div>
+        </div></details>
       </section>
 
       <section id="perles">
         <h2><span class="n">04</span>Les veines se vident dans des perles</h2>
         <span class="src">src/gen/plasmodium.js · placeBeads()</span>
-        <p>À la lumière, un plasmodium se rassemble en perles, puis chaque perle se dresse en sporange. Le long d'une veine, l'espacement est celui que choisit un filament liquide qui se fragmente, comme un filet d'eau du robinet qui se coupe en gouttes. Cette instabilité de Plateau-Rayleigh amplifie le plus vite la longueur d'onde \(\lambda \approx 9{,}02\, r\). Pour un filament non visqueux de rayon \(a\), le taux de croissance d'une ondulation \(k\) est</p>
+        <p>À la lumière, un plasmodium se rassemble en perles, puis chaque perle se dresse en sporange. Chez certaines espèces, les perles s'alignent le long des veines à intervalles presque réguliers.</p>
+        <p>Cet espacement est celui que choisit un filament de liquide qui se fragmente, comme un filet d'eau du robinet qui se coupe en gouttes. La tension de surface tend à réduire l'aire du filament ; une petite ondulation de son rayon grandit alors d'elle-même, et le filament se rompt aux creux. Toutes les longueurs d'onde ne grandissent pas à la même vitesse : celle qui grandit le plus vite l'emporte et fixe l'espacement des gouttes. C'est l'<b>instabilité de Plateau-Rayleigh</b>.</p>
+        <figure id="fig-plateau"><figcaption><b>Le filament choisit sa longueur d'onde.</b> À gauche, le taux de croissance d'une ondulation selon <i>x</i> = <i>ka</i> (le nombre d'onde rapporté au rayon) ; le point suit le curseur. À droite, un filament ondulé à la longueur d'onde choisie, dont l'ondulation grandit au taux lu à gauche jusqu'à la rupture. La démo recommence quand le filament est rompu.</figcaption></figure>
+
+        <h3>La loi en résumé</h3>
+        <p>Pour un filament de rayon <i>a</i>, sans viscosité, une ondulation de nombre d'onde <i>k</i> (de longueur d'onde λ = 2π/<i>k</i>) grandit au taux ω donné par</p>
         <div class="eq">\[ \omega^2 = \frac{\gamma}{\rho a^3}\; x\,(1 - x^2)\,\frac{I_1(x)}{I_0(x)}, \qquad x = ka, \]</div>
-        <p>maximal en \(x \approx 0{,}697\). Les espèces en grappes (<em>Arcyria</em>) ou en touffes (<em>Stemonitis</em>) se rassemblent autour des nœuds les plus chargés du réseau. Dans tous les cas, chaque veine verse son volume à la perle la plus proche. La somme des perles est donc le volume du réseau, à l'arrondi près, et la taille de chaque sporange en découle (racine cubique du volume). Les veines loin d'une perle se vident les premières, et l'on voit le protoplasme refluer.</p>
-        <figure id="fig-plateau"><figcaption><b>Plateau-Rayleigh.</b> Le taux de croissance selon la longueur d'onde, et le filament qui se fragmente à la longueur d'onde choisie. Déplacez-la loin du maximum : le filament met bien plus longtemps à se rompre.</figcaption></figure>
+        <p>où γ est la tension de surface, ρ la masse volumique, et <i>I</i><sub>0</sub>, <i>I</i><sub>1</sub> des fonctions de Bessel modifiées. Le taux est nul pour <i>x</i> ≥ 1 (les ondulations plus courtes que la circonférence ne grandissent pas) et maximal en <i>x</i> ≈ 0,697, soit λ ≈ 9,02 <i>a</i>. Le projet espace les perles de cette longueur, mesurée sur le rayon de chaque veine.</p>
+        <p>Il reste à donner un volume aux perles. Chaque veine verse son volume à la perle la plus proche. La somme des perles est donc exactement le volume du réseau, et la taille de chaque sporange en découle (son rayon varie comme la racine cubique de son volume). Les veines loin d'une perle se vident les premières, et l'on voit le protoplasme refluer.</p>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Partez de la valeur de départ, λ = 9,02 <i>a</i> : le filament se rompt en un peu moins de 4 secondes. À λ = 20 <i>a</i>, la croissance tombe à 61&nbsp;% du maximum et la rupture prend environ 6 secondes ; à 30 <i>a</i>, 42&nbsp;% et près de 9 secondes.</li>
+          <li>Descendez vers λ = 6,5 <i>a</i> : on s'approche de <i>x</i> = 1, où la croissance s'annule.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Toutes les espèces ne suivent pas les veines. <em>Arcyria</em> se rassemble en grappes autour des nœuds les plus chargés du réseau, <em>Stemonitis</em> en touffes. Chez <em>Hemitrichia</em>, il n'y a pas de perles : les veines maîtresses deviennent elles-mêmes le fruit. Pour que deux têtes ne se traversent pas, une perle trop proche d'une autre y est fondue, ou, à défaut, les deux rétrécissent juste assez.</p>
+          <div class="note check"><b>Ce que vérifient les tests</b><p>Le volume des perles est celui du réseau à 10<sup>−9</sup> près, et les têtes ne se traversent pas.</p></div>
+        </div></details>
       </section>
 
       <section id="poutre">
         <h2><span class="n">05</span>Un sporange est une perle repliée et une poutre encastrée</h2>
-        <span class="src">src/fruit.js · fruitState() — src/scene/sporangia.js</span>
-        <p>Chaque espèce a un gabarit usiné, dans sa forme mûre (hypothallus, pied évasé, calice à lèvre roulée, péridium, capillitium, columelle). Le vertex shader le replie en sphère de même volume (la perle), puis le déplie : le pied s'allonge, la tête monte et prend forme. Le vent le fléchit comme une poutre encastrée chargée en bout, un plongeoir sous un nageur : le déplacement vaut \(\delta(t) = b\, t^2 (3 - t)/2\) le long de la hauteur relative \(t\), avec une amplitude \(b \propto U^2 H\) (la traînée). Les normales tournent de la pente \(\delta'\). La même formule sert au calcul des spores, dont le point de départ suit la tête fléchie.</p>
-        <p>Puis chaque famille fait son geste. Le filet d'<em>Arcyria</em> se détend de 2,2 à 3 fois sa hauteur avec un rebond, et ses mailles s'ajourent ; la masse de <em>Stemonitis</em> s'amincit du sommet vers le pied et laisse la cage ; le péridium de <em>Lamproderma</em> s'écaille ; les tubes d'<em>Hemitrichia</em> se fendent et moussent ; les élatères de <em>Trichia</em> jaillissent en houppe ronde ; le coussin de <em>Lycogala</em> se perce et souffle à chaque rafale.</p>
-        <div class="note trap"><b>Le piège</b><p>Les surfaces de révolution des gabarits étaient tournées à l'envers. Le GPU éliminait la face extérieure et montrait l'intérieur de la coque. L'émission de translucidité éclairait cet intérieur assez pour qu'on croie à un défaut de lumière : des têtes plates, sans modelé. Un test vérifie maintenant que chaque triangle tourne sa face avant du côté de ses normales.</p></div>
-        <figure id="fig-poutre"><figcaption><b>De la perle au sporange.</b> Le profil d'un sporange (ici <em>Arcyria</em>) replié en perle, dressé, fléchi par le vent, et son filet qui se détend, avec les mêmes cotes que le gabarit de la scène.</figcaption></figure>
+        <span class="src">src/fruit.js · fruitState(), beamShape() · src/scene/sporangia.js</span>
+        <p>Une perle se dresse : un pied pousse, et la tête prend la forme propre à l'espèce. Plus tard, quand le vent passe, les sporanges s'inclinent tous dans le même sens, d'autant plus qu'ils sont hauts.</p>
+        <p>Chaque espèce a un gabarit, un maillage modelé une fois dans sa forme mûre (pied évasé, calice, péridium qui enveloppe la tête, filaments intérieurs). Pour la levée, le vertex shader replie ce gabarit en une sphère de même volume, la perle, puis le déplie : le pied s'allonge, la tête monte et prend forme. Il n'y a donc qu'un seul maillage par espèce, et la perle a exactement le volume du sporange qu'elle deviendra.</p>
+        <p>Pour la flexion, la règle la plus simple pencherait le sporange d'un bloc, comme un bâton articulé à sa base. Un pied fin ne se comporte pas ainsi : encastré dans le bois, il garde sa base droite et se courbe d'autant plus qu'on monte, comme un plongeoir sous un nageur. On le traite donc comme une <b>poutre encastrée</b> chargée à son extrémité par la traînée de la tête.</p>
+        <figure id="fig-poutre"><figcaption><b>De la perle au sporange.</b> Le profil d'<em>Arcyria denudata</em>, avec les cotes de son gabarit : replié en perle, dressé, fléchi par le vent, et son filet qui se détend au-dessus du calice quand il s'ouvre. Les trois curseurs règlent la levée, la vitesse du vent et l'ouverture.</figcaption></figure>
+
+        <h3>La flexion en résumé</h3>
+        <div class="eq">\[ \delta(t) = b\,\frac{t^2\,(3 - t)}{2}, \qquad b \propto U^2 H. \]</div>
+        <p><i>t</i> est la hauteur relative le long du pied (0 à la base, 1 au sommet), δ le déplacement horizontal, <i>U</i> la vitesse du vent et <i>H</i> la hauteur du sporange. La traînée d'un objet croît comme le carré de la vitesse, d'où <i>U</i><sup>2</sup>. La pente δ′ fait tourner les normales, pour que l'éclairage suive la courbure. La même formule sert au calcul des spores, dont le point de départ suit la tête fléchie.</p>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Doublez le vent, de 0,9 à 1,8 cm/s : la flexion au sommet passe de 0,06 à 0,26 mm, quatre fois plus, à cause du carré.</li>
+          <li>Ramenez la levée à 0 : le sporange redevient une perle posée sur le bois, et la flexion s'annule avec la hauteur.</li>
+          <li>Ouvrez le sporange : au-dessus du calice, le filet s'allonge jusqu'à 2,6 fois sa hauteur, la valeur de cette espèce.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Chaque famille a son geste d'ouverture. Le filet d'<em>Arcyria</em> se détend de 2,2 à 3 fois sa hauteur selon l'espèce, et ses mailles s'ajourent ; la masse de <em>Stemonitis</em> s'amincit du sommet vers le pied et laisse la cage ; le péridium de <em>Lamproderma</em> s'écaille ; les tubes d'<em>Hemitrichia</em> se fendent et moussent ; les élatères de <em>Trichia</em> jaillissent en houppe ronde ; le coussin de <em>Lycogala</em> se perce et souffle à chaque rafale. L'état de chaque sporange (perle, levée, maturité, ouverture, flexion) est calculé par une seule fonction, <code>fruitState</code>, sur le processeur, et envoyé à la carte graphique.</p>
+          <div class="note trap"><b>Le piège : des têtes plates</b><p>Les surfaces de révolution des gabarits étaient tournées à l'envers. La carte graphique éliminait la face extérieure et montrait l'intérieur de la coque. La lumière qui traverse la tête éclairait cet intérieur assez pour qu'on croie à un défaut d'éclairage : des têtes plates, sans modelé. Un test vérifie maintenant que chaque triangle tourne sa face avant du côté de ses normales.</p></div>
+        </div></details>
       </section>
 
       <section id="fumee">
         <h2><span class="n">06</span>Le nuage est une simulation de fluide, qui dépose ce qu'il porte</h2>
         <span class="src">src/gen/smoke.js · simulateSmoke()</span>
-        <p>Des points lâchés un à un ne font pas un nuage. Un nuage de spores se comporte comme une fumée que le vent soulève, déroule en volutes, emporte et laisse retomber. Une grille 3D de cellules de 1 mm couvre le site et l'aval jusqu'au site suivant (71 × 25 × 29 cellules). L'air y suit les équations d'Euler incompressibles, résolues par la méthode de Stam (« Stable Fluids ») en trois temps : les forces ; l'advection semi-lagrangienne, où chaque cellule va chercher sa valeur là d'où l'air arrive ; la projection, qui retire la part du mouvement qui comprimerait l'air (pression par Jacobi, \(\mathbf u \leftarrow \mathbf u - \nabla p\)). Le bois est un obstacle.</p>
-        <ul>
-          <li><b>Le vent du lieu</b> : un profil logarithmique de couche limite au-dessus du bois, \(U(y) \propto \ln(1 + y/y_0)\), plus faible au ras du bois, rappelé vers la vitesse du souffle de l'horloge. Des tourbillons passent avec lui (forçage à divergence nulle), et le confinement de vorticité entretient les volutes que la grille, trop grossière, effacerait.</li>
-          <li><b>L'émission</b> : chaque tête verse dans l'air exactement ce qu'elle perd en s'ouvrant (\(V \cdot d\,\text{ouverture}/dt\)), avec une impulsion propre à la famille. Chez <em>Lycogala</em>, chaque rafale aspire en plus une bouffée par l'ouverture (effet Venturi : débit \(\propto U^2\)).</li>
-          <li><b>La chute et le dépôt</b> : la concentration est transportée par l'air et par la chute de Stokes, la vitesse limite d'une particule fine dans l'air, \(v_s = 0{,}3\,(d/10\,\mu\text{m})^2\) cm/s. Le flux \(\rho\, v_s\) qui traverse la surface du bois quitte l'air et s'ajoute à une carte de dépôt, la poussière que le plasmodium suivant traversera.</li>
-        </ul>
-        <div class="note check"><b>Vérifié</b><p>Le bilan tombe juste : émis = en l'air + déposé + sorti du domaine, à 10⁻⁴ près. L'advection semi-lagrangienne ne conserve pas la masse ; elle est renormalisée à chaque pas d'après ce bilan. Le dépôt ne décroît jamais, et aucun grain ne passe sous le bois.</p></div>
-        <p>Des grains (6 000 spores suivies une à une, intégrées par Runge-Kutta d'ordre 2) sont portés par le même champ de vitesse et se posent là où la poussière se dépose. Ceux qui tombent le plus près des points de germination du site suivant y sont menés exactement, par une correction appliquée pendant leur vol. Tout est calculé une fois, dans un worker (≈ 2 à 3 s), et enregistré en 64 images. Pendant le voyage, la caméra suit le centre de masse du nuage.</p>
-        <figure id="fig-fumee"><figcaption><b>Une coupe du nuage.</b> Une version 2D du même schéma (Stam, profil de vent, tourbillons, chute, dépôt) sur une grille plus grossière, dans le navigateur. Le bilan s'affiche. Changez la taille des spores : les plus petites vont plus loin.</figcaption></figure>
+        <p>Des points lâchés un à un ne font pas un nuage. Un nuage de spores se comporte comme une fumée : le vent le soulève, le déroule en volutes, l'emporte, et le laisse retomber sur le bois. Les spores retombées sont celles qui germeront au site suivant.</p>
+        <p>On simule donc l'air. Une grille 3D de cellules de 1 mm couvre le site et l'aval jusqu'au site suivant (71 × 25 × 29 cellules). Dans chaque cellule, on garde la vitesse de l'air et la concentration de spores. À chaque pas, l'air suit les équations d'Euler d'un fluide qui ne se comprime pas, résolues par la méthode de Stam (« Stable Fluids ») en trois temps :</p>
+        <ol>
+          <li><b>les forces</b> : le vent du lieu, plus faible au ras du bois, et des tourbillons qui passent avec lui ;</li>
+          <li><b>l'advection</b> : chaque cellule va chercher sa vitesse et sa concentration là d'où l'air arrive, en remontant le courant d'un pas (méthode semi-lagrangienne) ;</li>
+          <li><b>la projection</b> : on retire la part du mouvement qui comprimerait l'air, en calculant une pression qui l'en empêche.</li>
+        </ol>
+        <p>Les spores tombent en plus à leur <b>vitesse de chute</b>, la vitesse limite d'une particule fine dans l'air (loi de Stokes), qui croît comme le carré de leur diamètre. Ce qui traverse la surface du bois quitte l'air et s'ajoute à une carte de dépôt. C'est cette poussière que le plasmodium suivant traversera.</p>
+        <figure id="fig-fumee"><figcaption><b>Une coupe du nuage.</b> Une version à deux dimensions du même schéma (Stam, profil de vent, tourbillons, chute, dépôt), sur une grille plus grossière. La source est le point bleu, à gauche ; la bande sous le bois est la carte de dépôt, et le triangle rouge marque la position moyenne du dépôt. Le bandeau tient le bilan : ce qui a été émis se retrouve en l'air, déposé ou sorti par la droite. La démo s'arrête trois secondes en fin de course, puis recommence.</figcaption></figure>
+        <p>En résumé, la vitesse de chute d'une spore de diamètre <i>d</i> est</p>
+        <div class="eq">\[ v_s = 0{,}3\left(\frac{d}{10\ \mu\text{m}}\right)^{2}\ \text{cm/s}, \]</div>
+        <p>et le profil du vent au-dessus du bois est logarithmique, <i>U</i>(<i>y</i>) ∝ ln(1 + <i>y</i>/<i>y</i><sub>0</sub>), comme dans la couche d'air freinée par un sol. Les diamètres vont de 6 à 13 µm selon l'espèce.</p>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Comparez des spores de 5 et de 14 µm, souffle à 1 : en fin de course, il s'en est déposé 73&nbsp;% contre 83&nbsp;%, et les plus petites se posent à peine plus loin (35 cellules contre 33). La chute est lente devant les tourbillons.</li>
+          <li>Spores de 8 µm, doublez le souffle : le dépôt moyen recule de 34 à 51 cellules, et un quart du nuage sort par la droite.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Dans la scène, le vent est rappelé vers la vitesse du souffle de l'horloge, et le confinement de vorticité entretient les volutes que la grille, trop grossière, effacerait. Chaque tête verse dans l'air exactement ce qu'elle perd en s'ouvrant, avec une impulsion propre à la famille. Chez <em>Lycogala</em>, chaque rafale aspire en plus une bouffée par l'ouverture (effet Venturi : débit ∝ <i>U</i><sup>2</sup>).</p>
+          <p>Des grains (6&#8239;000 spores suivies une à une, avancées par une méthode de Runge-Kutta d'ordre 2) sont portés par le même champ de vitesse et se posent là où la poussière se dépose. Ceux qui tombent le plus près des points de germination du site suivant y sont menés exactement, par une correction appliquée pendant leur vol. Tout est calculé une fois, dans un worker (un fil de calcul parallèle, ≈ 2,5 à 3 s), et enregistré en 64 images. Pendant le voyage, la caméra suit le centre de masse du nuage.</p>
+          <div class="note check"><b>Ce que vérifient les tests</b><p>Le bilan tombe juste : émis = en l'air + déposé + sorti du domaine, à 10<sup>−4</sup> près. L'advection semi-lagrangienne ne conserve pas la masse ; elle est renormalisée à chaque pas d'après ce bilan. Le dépôt ne décroît jamais, aucun grain ne passe sous le bois, et la projection rend un champ presque sans divergence.</p></div>
+        </div></details>
       </section>
 
       <section id="interpolation">
         <h2><span class="n">07</span>Entre deux images enregistrées, la fumée glisse le long de sa vitesse</h2>
         <span class="src">src/scene/smoke.js · march()</span>
-        <p>Le nuage enregistré est relu à n'importe quelle phase. Entre deux images (0,3 s), un simple fondu montrerait deux nuages fantômes qui se croisent. Chaque image enregistre donc aussi la vitesse, et le shader lit l'image \(k\) au point d'où la fumée vient, et l'image \(k + 1\) au point où elle va :</p>
-        <div class="eq">\[ \rho(\mathbf x, t) = (1 - a)\, \rho_k\big(\mathbf x - a\,\Delta t\, \mathbf v\big) + a\, \rho_{k+1}\big(\mathbf x + (1 - a)\,\Delta t\, \mathbf v\big). \]</div>
-        <p>Le rendu est une marche de rayons : chaque pixel avance pas à pas dans le volume et cumule la fumée rencontrée. Elle fait 22 pas, avec un départ tramé que lisse l'anticrénelage temporel, dans une boîte resserrée à chaque image autour de la fumée visible, et s'arrête à la surface opaque la plus proche. Un bruit de détail entraîné par le vent érode les bords et dessine des filaments plus fins que la grille. La lumière est une diffusion simple (Henyey-Greenstein, \(g = 0{,}55\), qui allume le nuage à contre-jour). La transmission vers le soleil, c'est-à-dire l'ombre propre du nuage, est précalculée par image, et une ambiance imite la diffusion multiple.</p>
-        <figure id="fig-interp"><figcaption><b>Fondu ou compensation.</b> Deux images d'une bouffée qui avance, et la phase intermédiaire. Interpolée par un fondu, elle montre deux fantômes ; compensée par la vitesse, la bouffée glisse d'une position à l'autre.</figcaption></figure>
+        <p>Le nuage est enregistré en 64 images, une toutes les 0,3 s de la boucle, mais l'écran en demande soixante par seconde. Il faut donc reconstruire le nuage entre deux images enregistrées.</p>
+        <p>La règle la plus simple est un fondu : on mélange l'image <i>k</i> et l'image <i>k</i> + 1, chacune selon la distance à l'instant voulu. Quand une bouffée s'est déplacée entre les deux images, le fondu montre deux bouffées à moitié transparentes, l'une qui s'éteint, l'autre qui s'allume. La correction se sert de la vitesse, enregistrée avec chaque image : on lit l'image <i>k</i> au point d'où la fumée vient, et l'image <i>k</i> + 1 au point où elle va. La bouffée glisse alors d'une position à l'autre.</p>
+        <figure id="fig-interp"><figcaption><b>Fondu ou compensation.</b> Une bouffée enregistrée à deux instants (à gauche, image <i>k</i> ; à droite, image <i>k</i> + 1), et sa reconstruction à l'instant choisi. Le bouton active la compensation de mouvement.</figcaption></figure>
+        <p>En résumé, à la fraction <i>a</i> de l'intervalle Δ<i>t</i> entre deux images, la densité au point <b>x</b> est</p>
+        <div class="eq">\[ \rho(\mathbf x, t) = (1 - a)\, \rho_k\big(\mathbf x - a\,\Delta t\, \mathbf v\big) + a\, \rho_{k+1}\big(\mathbf x + (1 - a)\,\Delta t\, \mathbf v\big), \]</div>
+        <p>où <b>v</b> est la vitesse enregistrée de l'air en <b>x</b>.</p>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Placez la phase à 0,5 et coupez la compensation : deux fantômes à moitié transparents. Rétablissez-la : une seule bouffée, à mi-chemin.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Le rendu est une marche de rayons : chaque pixel avance pas à pas dans le volume et cumule la fumée rencontrée. Elle fait 22 pas, avec un départ décalé au hasard que lisse l'anticrénelage temporel, dans une boîte resserrée à chaque image autour de la fumée visible, et s'arrête à la surface opaque la plus proche. Un bruit de détail entraîné par le vent érode les bords et dessine des filaments plus fins que la grille. La lumière est une diffusion simple (Henyey-Greenstein, <i>g</i> = 0,55, qui allume le nuage à contre-jour). La transmission vers le soleil, c'est-à-dire l'ombre propre du nuage, est précalculée par image, et une ambiance imite la diffusion multiple.</p>
+        </div></details>
+      </section>
+
+      <section id="translation">
+        <h2><span class="n">08</span>La boucle est une translation</h2>
+        <span class="src">src/timeline.js · sites() · src/camera.js · makeTravel()</span>
+        <p>Une génération de myxomycètes ne revient pas à son état de départ : les sporanges vides restent sur le bois pendant des semaines. Rejouer le film à l'envers, ou fondre la fin dans le début, se verrait. La génération suivante recommence en revanche ailleurs, un peu plus loin sous le vent, là où les spores sont tombées (section 06).</p>
+        <p>La boucle avance donc d'un site au suivant. Le bois se répète tous les <i>L</i> = 4,4 cm le long du vent (section 09). Chaque site vit le même cycle, avec une boucle de retard sur son voisin d'amont, et la caméra avance de <i>L</i> par boucle. Le monde à la fin de la boucle est le monde du début, décalé de <i>L</i>, et la caméra aussi : l'image est la même par construction. Dans le cadre, la gauche montre le passé (les sporanges vides du site précédent, dans le flou), le centre le présent, la droite le bois nu qui attend.</p>
+        <figure id="fig-frise"><figcaption><b>La frise.</b> Des sites du bois et le cadre de la caméra. Faites glisser la phase : chaque site vit le même cycle, décalé d'une boucle ; à <i>u</i> = 1, tout s'est décalé d'un site. Le cycle est résumé en quatre états (gouttelettes, réseau, sporanges, sporanges vides).</figcaption></figure>
+        <p>En résumé, avec <i>u</i> la phase de la boucle (qui va de 0 à 1 en 40 secondes) et <i>S</i> l'état d'un site en fonction de son âge :</p>
+        <div class="eq">\[ \text{état}(j, u) = S\big(\operatorname{clamp}(u - j,\, 0,\, 2)\big), \qquad X_\text{caméra}(u + 1) = X_\text{caméra}(u) + L. \]</div>
+        <p><i>S</i>(0) est le bois nu, <i>S</i> de 0 à 1 le cycle, <i>S</i> de 1 à 2 l'usure des sporanges vides. La vitesse de la caméra est faite d'un socle (la dérive lente au-dessus du site) et d'une bosse en cos² (le voyage avec le nuage), réglés pour que son intégrale sur une boucle vaille <i>L</i>.</p>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Arrêtez la lecture, placez la phase à 0,20 puis à 1,20 : le dessin est le même, décalé d'un site, et le cadre aussi. Le bandeau montre que le site 1 est alors à la phase 0,20, où était le site 0.</li>
+          <li>Faites glisser la phase de 0,85 à 1,05 : c'est le voyage, pendant lequel le cadre avance presque d'un site entier.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Une seule horloge (<code>timeline.js</code>) donne ses bornes au jour (la lumière principale baisse la nuit et monte à l'aube), au vent, à la croissance et à la caméra. À l'intérieur d'un temps, chaque grandeur est monotone. La trajectoire de la caméra est échantillonnée, sa partie périodique lissée par un noyau gaussien périodique (σ = 0,8 s), puis relue par une courbe de Catmull-Rom ; la translation est ajoutée ensuite, exacte.</p>
+          <div class="note check"><b>Ce que vérifient les tests</b><p>La caméra à <i>u</i> + 1 est la caméra à <i>u</i> translatée de <i>L</i> ; elle tourne à moins de 25°/s, y compris quand elle suit le nuage ; chaque germination part d'un grain posé par le nuage du site précédent.</p></div>
+        </div></details>
       </section>
 
       <section id="bois">
-        <h2><span class="n">08</span>Le bois se répète exactement, sans couture</h2>
+        <h2><span class="n">09</span>Le bois se répète exactement, sans couture</h2>
         <span class="src">src/gen/wood.js · makeNoise(), bakeWood()</span>
-        <p>Pour que la caméra retombe sur la même image après avoir avancé de \(L\), le bois doit se répéter exactement. Tout le bruit cuit au four (le précalcul des textures) est donc périodique en \(x\). C'est un bruit de gradient à période entière \(p_x\) (le hachage lit \(i \bmod p_x\)), et chaque octave a une fréquence arrondie à un nombre entier de cellules sur \(L\). Les cellules de Voronoï des fentes et de la croûte de charbon sont tirées de la même façon. Le relief (1 024² texels, 43 µm), ses pentes, son occlusion et une hauteur lissée (le niveau du gel qui remplit les creux) sont cuits dans un worker, puis lus deux fois : en déplacement vertical d'un maillage dense et en normal map.</p>
-        <figure id="fig-bois"><figcaption><b>La couture.</b> Deux périodes du même bruit côte à côte. Quand le bruit est périodique, rien ne marque la jonction ; sinon, une arête traverse le bois.</figcaption></figure>
+        <p>Pour que la caméra retombe sur la même image après avoir avancé de <i>L</i>, le bois doit se répéter exactement tous les <i>L</i>. Un relief tiré d'un bruit ordinaire, simplement recopié, ne se raccorde pas : à la jonction, le relief de la fin d'une période touche celui du début de la suivante, qui n'a rien à voir, et une arête traverse le bois.</p>
+        <p>La correction rend le bruit lui-même périodique. Un bruit de gradient tire un vecteur au hasard à chaque nœud d'une grille, puis interpole entre les nœuds. Si la grille compte un nombre entier de cellules sur <i>L</i>, et que le tirage du nœud <i>i</i> lit <i>i</i> modulo ce nombre, le nœud de la fin d'une période est le même que celui du début, et le bruit se raccorde exactement. Chaque octave du relief a une fréquence arrondie à un nombre entier de cellules sur <i>L</i>. Les cellules de Voronoï des fentes et de la croûte de charbon sont tirées de la même façon.</p>
+        <figure id="fig-bois"><figcaption><b>La couture.</b> Deux périodes du même relief côte à côte, la jonction en pointillés. Avec le bruit périodique de <code>wood.js</code>, rien ne marque la jonction ; avec un bruit ordinaire recopié, une arête la traverse.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Coupez le bruit périodique : une ligne droite apparaît en <i>x</i> = <i>L</i>, où le relief saute. Rétablissez-le : on ne sait plus où est la jonction.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Le relief (1&#8239;024 × 1&#8239;024 texels, 43 µm par texel le long du fil), ses pentes, son occlusion et une hauteur lissée (le niveau du gel qui remplit les creux) sont cuits dans un worker, puis lus deux fois : en déplacement vertical d'un maillage dense et en carte de normales. La menue poussière (grains, sciure, fibres arrachées) est semée sur une période et recopiée de <i>L</i> en <i>L</i>.</p>
+        </div></details>
       </section>
 
       <section id="irisation">
-        <h2><span class="n">09</span>Le péridium irise par une couche mince</h2>
+        <h2><span class="n">10</span>Le péridium irise par une couche mince</h2>
         <span class="src">src/scene/sporangia.js · iridescence</span>
-        <p>Les sphères de <em>Lamproderma</em> et de <em>Diachea</em> sont bleu-violet métallique, avec des reflets or et vert. Cette couleur vient d'une interférence dans une couche mince du péridium (Inchaussandague et al., 2010), comme sur une bulle de savon. Le matériau de three.js la calcule dans le reflet (épaisseur 300 à 640 nm selon l'espèce, indice 2,0 sur un fond d'indice 1,45), et la couleur glisse quand la tête s'incline au vent.</p>
-        <figure id="fig-film"><figcaption><b>Couche mince.</b> Réflectance d'Airy à trois longueurs d'onde (650, 550, 450 nm), convertie en couleur, selon l'angle d'incidence. Changez l'épaisseur : la teinte se décale.</figcaption></figure>
+        <p>Les sphères de <em>Lamproderma</em> et de <em>Diachea</em> sont bleu-violet métallique, avec des reflets or et vert qui changent quand la tête s'incline. Cette couleur ne vient pas d'un pigment : elle vient d'une couche très mince du péridium (Inchaussandague et al., 2010), comme sur une bulle de savon.</p>
+        <p>La lumière se réfléchit à la fois sur le dessus et sur le dessous de la couche. Les deux reflets parcourent des chemins de longueurs différentes, et selon la longueur d'onde ils s'additionnent ou s'annulent. Une couche de quelques centaines de nanomètres renforce donc certaines couleurs et en éteint d'autres. L'écart de chemin dépend de l'épaisseur et de l'angle : la teinte glisse quand on incline la tête.</p>
+        <figure id="fig-film"><figcaption><b>Couche mince.</b> Réflectance de la couche (formule d'Airy) à trois longueurs d'onde, 650, 550 et 450 nm, convertie en couleur, selon l'angle d'incidence de 0 à 80°. Changez l'épaisseur : la teinte se décale.</figcaption></figure>
+        <p>Le matériau de three.js calcule cette interférence dans le reflet, avec une épaisseur de 300 à 640 nm selon l'espèce, un indice de 2,0 pour la couche et de 1,45 pour le fond.</p>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Faites varier l'épaisseur : de face, la réflectance à 550 nm (le vert) vaut 19&nbsp;% pour 500 nm d'épaisseur et tombe à 3&nbsp;% pour 550 nm, où le vert s'éteint. Pour une même épaisseur, la teinte glisse d'un bout à l'autre de la bande, quand l'angle augmente.</li>
+        </ul></div>
+      </section>
+
+      <section id="resume">
+        <h2><span class="n">11</span>Récapitulatif</h2>
+        <p>Au chargement, dans des workers :</p>
+        <ol>
+          <li>le bois est cuit à partir de bruits périodiques (section 09) ;</li>
+          <li>les spores posées donnent l'instant d'arrivée du front (section 02) ;</li>
+          <li>le réseau de Tero est calculé en 140 pas et enregistré en 32 instantanés (section 03) ;</li>
+          <li>les perles sont placées et reçoivent le volume des veines (section 04) ;</li>
+          <li>le nuage est simulé avec ses grains et enregistré en 64 images (section 06).</li>
+        </ol>
+        <p>Puis, à chaque image, tout est lu en fonction de la phase de la boucle : la nappe est la courbe de niveau du front, les veines relisent leurs instantanés, chaque sporange reçoit son état (levée, maturité, ouverture, flexion, section 05), le nuage est reconstruit entre deux images (section 07), et la caméra avance le long de sa trajectoire, décalée d'un site par boucle (section 08).</p>
       </section>
 
       <section id="budget">
-        <h2><span class="n">10</span>Budget</h2>
+        <h2><span class="n">12</span>Budget</h2>
         <div class="tbl"><table>
           <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
           <tbody>
@@ -131,9 +262,9 @@
             <tr><td>Maillage du bois</td><td>GPU</td><td class="num">≈ 390 k sommets</td></tr>
             <tr><td>Image complète, qualité Haute, 1,8 Mpx (réseau · nuage à l'écran)</td><td>GPU</td><td class="num">11,3 · 15,8 ms</td></tr>
             <tr><td>Marche de rayons du nuage avant optimisation (48 pas, boîte entière)</td><td>GPU</td><td class="num">64 ms</td></tr>
-            
           </tbody>
         </table></div>
+        <p>Les temps de calcul sont mesurés dans Node ; ils sont nettement plus longs quand l'onglet est en arrière-plan. Les temps d'image sont mesurés dans le panneau de navigateur de l'application (carte graphique d'un Mac), graine s9.</p>
       </section>
     </article>
 
@@ -155,14 +286,15 @@
     import { FAMILIES } from './src/families.js';
 
     const R0 = generate('c3', { family: 'arcyria' });
+    const fr = (x, n) => x.toFixed(n).replace('.', ','); // (virgule décimale)
 
-    // ── 01 · la frise ───────────────────────────────────────────────────────
+    // ── 08 · la frise ───────────────────────────────────────────────────────
     demo('#fig-frise', {
-      title: 'Trois sites, une caméra', aspect: 2.4, animate: true,
-      controls: [{ key: 'u', label: 'Phase u (boucle)', min: 0, max: 2, step: .001, value: .2, fmt: (v) => v.toFixed(2) }],
+      title: 'Des sites, une caméra', aspect: 2.4, animate: true,
+      controls: [{ key: 'u', label: 'Phase u (boucle)', min: 0, max: 2, step: .001, value: .2, fmt: (v) => fr(v, 2) }],
       buttons: [{ key: 'play', label: 'Lecture', toggle: true, value: true }],
       draw(g, d) {
-        if (d.s.play) { d.s.u = (d.s.u + d.dt / 8) % 2; const inp = d.fig.querySelector('input'); if (inp) { inp.value = d.s.u; inp.previousSibling.textContent = d.s.u.toFixed(2); } }
+        if (d.s.play) { d.s.u = (d.s.u + d.dt / 8) % 2; const inp = d.fig.querySelector('input'); if (inp) { inp.value = d.s.u; inp.previousSibling.textContent = fr(d.s.u, 2); } }
         const u = d.s.u, { w, h } = d, L = w / 3.4, y0 = h * .7;
         const travel = (q) => { const f = q - Math.floor(q); const c = .94, ww = .1; let acc = 0; for (let i = 0; i < 200; i++) { const t = i / 200; let dd = t - c; dd -= Math.round(dd); acc += (t < f ? 1 : 0) * (.12 + .88 * (Math.abs(dd) < ww ? Math.cos(Math.PI * dd / (2 * ww)) ** 2 / ww : 0)); } let tot = 0; for (let i = 0; i < 200; i++) { const t = i / 200; let dd = t - c; dd -= Math.round(dd); tot += .12 + .88 * (Math.abs(dd) < ww ? Math.cos(Math.PI * dd / (2 * ww)) ** 2 / ww : 0); } return Math.floor(q) + acc / tot; };
         const camX = (travel(u) - travel(.44)) * L + w * .3;
@@ -180,16 +312,54 @@
         }
         g.strokeStyle = C.c2; g.lineWidth = 2; g.strokeRect(camX - L * .55, h * .12, L * 1.1, y0 - h * .12 + 30);
         label(g, 'cadre', camX - L * .55 + 6, h * .12 + 16, { color: C.c2 });
-        d.status(`site 0 à la phase ${Math.min(2, Math.max(0, u)).toFixed(2)}`);
+        d.status(`site 0 à la phase ${fr(Math.min(2, Math.max(0, u)), 2)} · site 1 à la phase ${fr(Math.min(2, Math.max(0, u - 1)), 2)}`);
       },
     });
+
+    // ── 02 · huit ou seize voisines ──
+    {
+      const G = 61, c = 30, NB = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1], [2, 1], [2, -1], [-2, 1], [-2, -1], [1, 2], [1, -2], [-1, 2], [-1, -2]];
+      let nbN = 16;
+      const cache = {};
+      const field = (n) => { // Dijkstra depuis le centre (grille petite : on cherche le minimum par balayage)
+        if (cache[n]) return cache[n];
+        const D = new Float64Array(G * G).fill(Infinity), done = new Uint8Array(G * G); D[c * G + c] = 0;
+        for (;;) {
+          let o = -1, m = Infinity; for (let k = 0; k < G * G; k++) if (!done[k] && D[k] < m) { m = D[k]; o = k; }
+          if (o < 0) break; done[o] = 1;
+          const i = o % G, j = (o - i) / G;
+          for (let k = 0; k < n; k++) { const ii = i + NB[k][0], jj = j + NB[k][1]; if (ii < 0 || jj < 0 || ii >= G || jj >= G) continue; const q = jj * G + ii, nd = m + Math.hypot(NB[k][0], NB[k][1]); if (nd < D[q]) D[q] = nd; }
+        }
+        let err = 0; for (let j = 0; j < G; j++) for (let i = 0; i < G; i++) { const r = Math.hypot(i - c, j - c); if (r > 5 && r < 29) err = Math.max(err, D[j * G + i] / r - 1); }
+        return (cache[n] = { D, err });
+      };
+      const NBB = ['8 voisines', '16 voisines'];
+      const markN = (d) => d.fig.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b.textContent === `${nbN} voisines`)));
+      demo('#fig-voisins', {
+        title: 'Le front parti d’un point', aspect: 1.6,
+        buttons: NBB.map((t) => ({ label: t, onClick: (d) => { nbN = parseInt(t, 10); markN(d); } })),
+        setup(d) { markN(d); },
+        draw(g, d) {
+          const { D, err } = field(nbN), { w, h } = d, s = Math.min(w, h - 10) / G, ox = (w - G * s) / 2, oy = (h - G * s) / 2;
+          for (let j = 0; j < G; j++) for (let i = 0; i < G; i++) {
+            const v = D[j * G + i], band = Math.floor(v / 6) % 2;
+            g.fillStyle = alpha(C.c1, band ? 0.32 : 0.1); g.fillRect(ox + i * s, oy + j * s, s + 0.4, s + 0.4);
+          }
+          g.strokeStyle = C.c3; g.lineWidth = 2; g.beginPath(); g.arc(ox + (c + 0.5) * s, oy + (c + 0.5) * s, 24 * s, 0, TAU); g.stroke();
+          g.fillStyle = C.ink; g.beginPath(); g.arc(ox + (c + 0.5) * s, oy + (c + 0.5) * s, 3, 0, TAU); g.fill();
+          // les pas permis, autour de la source
+          for (let k = 0; k < nbN; k++) arrow(g, ox + (c + 0.5) * s, oy + (c + 0.5) * s, ox + (c + 0.5 + NB[k][0]) * s, oy + (c + 0.5 + NB[k][1]) * s, { color: C.ink, width: 1, head: 4 });
+          d.status(`${nbN} voisines · plus grand écart à la distance vraie : ${(err * 100).toFixed(1).replace('.', ',')} %`);
+        },
+      });
+    }
 
     // ── 02 · le front ───────────────────────────────────────────────────────
     {
       let cache = null;
       demo('#fig-front', {
         title: 'Instant d’arrivée T(x, z)', aspect: 2,
-        controls: [{ key: 'an', label: 'Anisotropie (fil du bois)', min: .7, max: 2, step: .05, value: R0.plasmodium.aniso }, { key: 'fe', label: 'Festons', min: 0, max: 1.5, step: .05, value: R0.plasmodium.festoon }],
+        controls: [{ key: 'an', label: 'Anisotropie (fil du bois)', min: .7, max: 2, step: .05, value: R0.plasmodium.aniso }, { key: 'fe', label: 'Festons', min: .05, max: 1.5, step: .05, value: R0.plasmodium.festoon }] /* (festons à 0 : arrivalField ne termine pas) */,
         draw(g, d) {
           const key = `${d.s.an}|${d.s.fe}`;
           if (!cache || cache.key !== key) {
@@ -237,7 +407,15 @@
           g.lineCap = 'round';
           for (let k = 0; k < Gr.m; k++) { const q = S.D[k] / m; if (q < .02) continue; g.strokeStyle = alpha(C.c1, Math.min(1, .2 + q ** .25)); g.lineWidth = .5 + 4 * q ** .25; g.beginPath(); g.moveTo(ox + Gr.x[Gr.ea[k]] * sc, oz + Gr.z[Gr.ea[k]] * sc); g.lineTo(ox + Gr.x[Gr.eb[k]] * sc, oz + Gr.z[Gr.eb[k]] * sc); g.stroke(); }
         }
-        d.status(`phase ${S.s.toFixed(3)} · ${Gr.n} nœuds, ${Gr.m} arêtes${S.done ? ' · fini' : ''}`);
+        let loops = 0;
+        if (S.D) { // mailles du réseau dessiné : tubes − nœuds + morceaux séparés
+          let m = 1e-9; for (let k = 0; k < Gr.m; k++) m = Math.max(m, S.D[k]);
+          const par = Int32Array.from({ length: Gr.n }, (_, i) => i), find = (x) => { while (par[x] !== x) x = par[x] = par[par[x]]; return x; }, used = new Set();
+          let E = 0;
+          for (let k = 0; k < Gr.m; k++) if (S.D[k] / m >= 0.02) { E++; used.add(Gr.ea[k]); used.add(Gr.eb[k]); const a = find(Gr.ea[k]), b = find(Gr.eb[k]); if (a !== b) par[a] = b; }
+          loops = E - used.size + new Set([...used].map(find)).size;
+        }
+        d.status(`μ = ${String(S.P.mu).replace('.', ',')} · phase ${S.s.toFixed(3).replace('.', ',')} · ${loops} mailles${S.done ? ' · fini' : ''}`);
       },
     });
 
@@ -247,7 +425,7 @@
       const w2 = (x) => x * (1 - x * x) * I(1, x) / I(0, x);
       demo('#fig-plateau', {
         title: 'Le filament choisit sa longueur d’onde', aspect: 2.2, animate: true,
-        controls: [{ key: 'lam', label: 'λ / a', min: 6.5, max: 30, step: .1, value: 9.02, fmt: (v) => v.toFixed(2), onChange: (d) => { d.state.t = 0; } }],
+        controls: [{ key: 'lam', label: 'λ / a', min: 6.5, max: 30, step: .1, value: 9.02, fmt: (v) => fr(v, 2), onChange: (d) => { d.state.t = 0; } }],
         setup(d) { d.state = { t: 0 }; },
         draw(g, d) {
           const { w, h } = d, x0 = 40, x1 = w * .45, y1 = h * .85, y0 = h * .12;
@@ -258,7 +436,7 @@
           const xk = TAU / d.s.lam, gr = Math.sqrt(Math.max(0, w2(xk)));
           g.fillStyle = C.c1; g.beginPath(); g.arc(X(xk), Y(gr), 5, 0, TAU); g.fill();
           label(g, 'x = ka', x1, y1 + 18, { align: 'right' }); label(g, 'taux ω', x0 + 6, y0 - 2);
-          label(g, 'max : x = 0,697 (λ = 9,02 a)', X(.697), Y(.343) - 8, { align: 'center', color: C.faint, size: 11 });
+          if (w >= 560) label(g, 'max : x = 0,697 (λ = 9,02 a)', X(.697), Y(.343) - 8, { align: 'center', color: C.faint, size: 11 }); // (écran étroit : le maximum est donné dans le texte)
           // filament
           const S = d.state; S.t += d.dt; const amp = Math.min(.95, .02 * Math.exp(gr * S.t * 3));
           if (amp >= .95 && S.t > 4) S.t = 0;
@@ -267,7 +445,7 @@
           for (let i = 0; i <= 300; i++) { const xx = i / 300 * (fx1 - fx0), r = a * Math.max(0, 1 + amp * Math.cos(xx / scx / d.s.lam * TAU)); g.lineTo(fx0 + xx, fy - r); }
           for (let i = 300; i >= 0; i--) { const xx = i / 300 * (fx1 - fx0), r = a * Math.max(0, 1 + amp * Math.cos(xx / scx / d.s.lam * TAU)); g.lineTo(fx0 + xx, fy + r); }
           g.fill();
-          d.status(`λ = ${d.s.lam.toFixed(2)} a · croissance ${(gr / .343 * 100).toFixed(0)} % du maximum`);
+          d.status(`λ = ${fr(d.s.lam, 2)} a · croissance ${(gr / .343 * 100).toFixed(0)} % du maximum`);
         },
       });
     }
@@ -308,8 +486,8 @@
           for (let i = pts.length - 1; i >= 0; i--) { const [px, py] = P(-pts[i][0], pts[i][1]); g.lineTo(px, py); }
           g.closePath(); g.fill(); g.stroke();
           if (d.s.g > .99) { const [ax, ay] = P(sp.head.r * 1.06, cupTop), [bx] = P(-sp.head.r * 1.06, cupTop); g.strokeStyle = C.c2; g.lineWidth = 2.5; g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, ay); g.stroke(); label(g, 'calice', ax + 8, ay + 4, { color: C.c2 }); }
-          arrow(g, 30, h * .3, 90, h * .3, { color: C.c3 }); label(g, `vent ${d.s.U.toFixed(2)} cm/s`, 30, h * .3 - 8, { color: C.c3 });
-          d.status(`hauteur ${(top * 10).toFixed(1)} mm · flexion au sommet ${(b * 10).toFixed(2)} mm (∝ U²)`);
+          arrow(g, 30, h * .3, 90, h * .3, { color: C.c3 }); label(g, `vent ${fr(d.s.U, 2)} cm/s`, 30, h * .3 - 8, { color: C.c3 });
+          d.status(`hauteur ${fr(top * 10, 1)} mm · flexion au sommet ${fr(b * 10, 2)} mm (∝ U²)`);
         },
       });
     }
@@ -327,8 +505,9 @@
         },
         draw(g, d) {
           const S = d.state, { u, v, r } = S, id = (i, j) => j * nx + i, dt = .5, vs = .06 * (d.s.d / 10) ** 2;
+          const run = S.t <= 260; // (en fin de course, la démo s'arrête trois secondes avant de recommencer)
           const samp = (f, x, y) => { x = Math.min(nx - 1.001, Math.max(0, x)); y = Math.min(ny - 1.001, Math.max(0, y)); const i = x | 0, j = y | 0, fx = x - i, fy = y - j; return (f[id(i, j)] * (1 - fx) + f[id(i + 1, j)] * fx) * (1 - fy) + (f[id(i, j + 1)] * (1 - fx) + f[id(i + 1, j + 1)] * fx) * fy; };
-          for (let it = 0; it < 2; it++) {
+          for (let it = 0; it < (run ? 2 : 0); it++) {
             S.t += dt;
             for (let j = 1; j < ny; j++) for (let i = 0; i < nx; i++) {
               const o = id(i, j), prof = Math.min(1.2, Math.log(1 + j / 1.5) / Math.log(1 + 30 / 1.5));
@@ -364,9 +543,11 @@
           const dm = Math.max(1e-6, ...S.depMap);
           for (let i = 0; i < nx; i++) { g.fillStyle = alpha(C.c3, Math.sqrt(S.depMap[i] / dm)); g.fillRect(i * cw, H - 22, cw + .5, 10); }
           g.fillStyle = C.c2; g.beginPath(); g.arc(15.5 * cw, H - 26 - 9 * ch, 4, 0, TAU); g.fill();
+          let sx = 0, sw = 0; for (let i = 0; i < nx; i++) { sx += i * S.depMap[i]; sw += S.depMap[i]; }
+          if (sw > 0) { const xm = (sx / sw + 0.5) * cw; g.fillStyle = C.c3; g.beginPath(); g.moveTo(xm, H - 12); g.lineTo(xm - 5, H - 3); g.lineTo(xm + 5, H - 3); g.closePath(); g.fill(); }
           const E = Math.max(S.emit, 1e-9), air = Math.max(0, S.emit - S.dep - S.out);
-          d.status(`émis 100 % · en l'air ${(air / E * 100).toFixed(0)} % · déposé ${(S.dep / E * 100).toFixed(0)} % · sorti ${(S.out / E * 100).toFixed(0)} %`);
-          if (S.t > 260) d.reset();
+          d.status(`t = ${S.t.toFixed(0)} · en l'air ${(air / E * 100).toFixed(0)} % · déposé ${(S.dep / E * 100).toFixed(0)} % · sorti ${(S.out / E * 100).toFixed(0)} % · dépôt moyen à ${sw > 0 ? (sx / sw).toFixed(0) : '–'} cellules`);
+          if (!run) { S.hold = (S.hold ?? 0) + d.dt; if (S.hold > 3) d.reset(); }
         },
       });
     }
@@ -389,7 +570,7 @@
       },
     });
 
-    // ── 08 · le bois périodique ─────────────────────────────────────────────
+    // ── 09 · le bois périodique ─────────────────────────────────────────────
     {
       const L = 4.4, N = makeNoise(L, 41);
       const raw = (x, z) => { let s = 0, a = .5, f = 2.4; for (let o = 0; o < 4; o++) { s += a * Math.sin(x * f * 1.7 + z * f * 2.3 + o) * Math.cos(z * f * 1.3 - x * f * .9 + 2 * o); f *= 2.03; a *= .5; } return s; };
@@ -412,7 +593,7 @@
       });
     }
 
-    // ── 09 · couche mince ───────────────────────────────────────────────────
+    // ── 10 · couche mince ───────────────────────────────────────────────────
     {
       const refl = (lam, d, th, n1 = 2.0, n2 = 1.45) => {
         const s0 = Math.sin(th), c0 = Math.cos(th), s1 = s0 / n1, c1 = Math.sqrt(1 - s1 * s1), s2 = s0 / n2, c2 = Math.sqrt(1 - s2 * s2);
@@ -434,7 +615,7 @@
           }
           label(g, '0°', 20, h * .7, { color: C.faint }); label(g, '80°  (incidence)', w - 20, h * .7, { align: 'right', color: C.faint });
           const R550 = refl(550, d.s.d, 0);
-          d.status(`réflectance à 550 nm, incidence normale : ${(R550 * 100).toFixed(1)} %`);
+          d.status(`réflectance à 550 nm, incidence normale : ${fr(R550 * 100, 1)} %`);
         },
       });
     }

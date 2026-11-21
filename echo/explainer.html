@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#050506">
   <title>Echo · défis techniques</title>
-  <meta name="description" content="Comment Echo est calculé : une horloge de caméra rapide, des fronts de lumière vus avec le retard de l'œil, des échos par sources images, un miroir elliptique, une boule à facettes et une brume éclairée par les mêmes fronts.">
+  <meta name="description" content="Comment fonctionne Echo, reconstruit pas à pas : un front de lumière vu avec le retard de l'œil, une horloge de caméra rapide, des échos par lampes images, deux glaces face à face, un miroir concave, une boule à facettes et une brume éclairée par les mêmes fronts.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
@@ -22,107 +22,193 @@
 
   <main>
     <header class="hero">
-      <div class="kicker">Day 22 · Echo · le miroir en retard</div>
+      <div class="kicker">Day 22 · Echo · comment ça marche</div>
       <h1>Comment filmer la lumière qui revient d'un miroir</h1>
-      <p class="lede">Une ampoule s'allume dans une pièce sombre. La lumière met une dizaine de nanosecondes à traverser la pièce ; ici elle met une dizaine de secondes, et l'on voit une sphère sortir de l'ampoule, allumer la table et les vases, atteindre le miroir et revenir. Dans la glace, l'ampoule s'allume après la vraie. La difficulté : une image ordinaire montre la lumière partout à la fois. Il faut savoir, pour chaque point de l'image, à quel instant la lumière l'atteint par chaque chemin, et à quel instant cette lumière arrive dans l'objectif.</p>
+      <p class="lede">Echo montre une pièce sombre où une lampe envoie un éclair. Dans la réalité, la lumière traverse la pièce en une dizaine de nanosecondes. Ici, le film la ralentit des centaines de millions de fois : on voit un anneau de lumière sortir de la lampe, passer sur la table et les vases, atteindre le miroir, puis un second anneau revenir du miroir. Dans la glace, la lampe s'allume après la vraie. Pour dessiner cela, il faut savoir, pour chaque point de l'image, à quel instant la lumière l'atteint par chaque chemin, et à quel instant elle arrive ensuite dans l'objectif. Cette page reconstruit ce calcul, du front le plus simple jusqu'aux échos entre deux glaces.</p>
+      <p class="prereq">Pour suivre, il suffit de savoir lire un peu de JavaScript (des tableaux et des boucles). Les formules résument ce que les démos montrent ; on peut les sauter sans perdre le fil. Les détails de production sont rangés dans les encadrés « Pour aller plus loin ».</p>
     </header>
 
     <figure class="cover">
       <img src="docs/capture.jpg" alt="Un mur lambrissé gris, un miroir en plein cintre au cadre sombre ; un anneau de lumière au bord net s'étend sur le mur autour de lui ; dans la glace, l'ampoule et son reflet ; des vases sur une table." width="1600" height="900">
-      <figcaption>La graine d'ouverture, une galerie, quelques secondes après l'éclair. L'anneau clair sur le mur est l'impulsion qui s'éloigne de la lampe ; un second anneau, plus faible, revient de la glace. Dans la glace, l'éclair n'apparaît qu'après la lampe.</figcaption>
+      <figcaption>Quelques secondes après l'éclair. L'anneau clair sur le mur est l'impulsion qui s'éloigne de la lampe ; un second anneau, plus faible, revient de la glace. Dans la glace, l'éclair n'apparaît qu'après la lampe.</figcaption>
     </figure>
 
     <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
 
     <article>
-      <section id="horloge">
-        <h2><span class="n">01</span>Une seule horloge, celle d'une caméra rapide</h2>
-        <span class="src">src/film.js · createFilm()</span>
-        <p>Le film dure de 7 à 16 secondes, et presque tout ce qu'il montre se passe en quelques nanosecondes. On ne peut pas ralentir le film entier : le voyant du stroboscope qui rougit pendant la charge se joue en temps réel. La vitesse du film \(v(u)\), en fonction de la phase \(u\), vaut donc 1 en temps réel et \(1/K\) pendant le ralenti, qui commence à l'éclair. Elle passe de l'une à l'autre par une rampe douce sur son logarithme, sinon le passage de 1 à \(10^{-9}\) se ferait d'un coup. Le temps physique est son intégrale :</p>
-        <div class="eq">\[ \tau(u) = T \int_0^u v(u')\,du', \qquad \rho(u) = c\,\big(\tau(u) - \tau_{\text{éclair}}\big) \]</div>
-        <p>\(\rho\) est la longueur de chemin parcourue par la lumière depuis qu'elle a quitté l'ampoule. Elle est calculée en double précision, sur 32 768 pas, puis bornée à [−1, 60] m avant d'aller au GPU : \(c\,\tau\) vaut des milliards de mètres en temps réel, et un flottant de 32 bits n'y distingue plus deux centimètres.</p>
-        <p>Le ralenti est variable, comme une rampe de vitesse au montage. Le front avance à 0,55 m par seconde de film tant qu'il se passe quelque chose dans le cadre ; quand la lumière file vers la glace d'en face, hors du champ, le film va six fois plus vite, puis ralentit de nouveau juste avant que l'éclair ne reparaisse au fond du miroir. Le front ne recule jamais. La boucle dure ce qu'il faut : 7 à 8 s pour un seul réflecteur, 10 à 13 s pour la galerie.</p>
-        <figure id="fig-horloge"><figcaption><b>Les courbes du film.</b> En haut, le logarithme de la vitesse du film ; en bas, le rayon du front de l'éclair. Le curseur déplace la phase. La démo appelle <code>createFilm</code> du projet avec une scène type (front de 1,5 à 5,6 m, boucle de 12 s).</figcaption></figure>
+      <section id="scene">
+        <h2><span class="n">01</span>Ce que montre la scène</h2>
+        <span class="src">README.md · src/film.js</span>
+        <p>Le film est une boucle de 7 à 13 secondes, qui se lit sur une seule horloge, la <b>phase</b> <i>u</i>, de 0 à 1 :</p>
+        <ul>
+          <li>jusqu'à <i>u</i> = 0,10, la pièce est dans la nuit, en temps réel ; sur la douille de la lampe, un voyant rougit à mesure qu'un condensateur se charge ;</li>
+          <li>de 0,10 à 0,14, le film ralentit ;</li>
+          <li>de 0,14 à 0,86, l'éclair : on suit l'anneau de lumière qui sort de la lampe, puis ses échos ;</li>
+          <li>de 0,86 à 0,90, le temps réel revient, et jusqu'à la fin le voyant recommence à rougir.</li>
+        </ul>
+        <p>La graine tire un réflecteur parmi cinq familles : une glace au mur (le <b>trumeau</b>), une glace sur pied (la <b>psyché</b>), deux glaces face à face (la <b>galerie</b>), un grand miroir concave (le <b>miroir ardent</b>) et une <b>boule à facettes</b>. La scène ne prend qu'une liberté, le temps : la lumière avance à sa vraie vitesse, et chaque écho a la longueur exacte de son chemin.</p>
+        <p>La page suit l'ordre du calcul :</p>
+        <ul>
+          <li><b>le front de lumière</b> : quand un point paraît allumé (section 02), comment le film ralentit le temps (section 03), et pourquoi rien ne bouge pendant le ralenti (section 04) ;</li>
+          <li><b>les échos</b> : la glace plane (sections 05 et 06), deux glaces face à face (section 07), le miroir concave (section 08), la boule à facettes (section 09) ;</li>
+          <li><b>la brume</b>, qui montre le front dans l'air (section 10).</li>
+        </ul>
       </section>
 
       <section id="oeil">
         <h2><span class="n">02</span>Un point s'allume quand sa lumière atteint l'œil</h2>
-        <span class="src">src/scene/paths.js · gate()</span>
-        <p>La lumière qu'on voit sur un vase a fait deux voyages : de l'ampoule au vase, puis du vase à l'objectif. Les femto-photographies montrent les deux. Un point \(x\), éclairé par un chemin de longueur \(L(x)\), apparaît allumé quand</p>
-        <div class="eq">\[ \rho \;\ge\; L(x) + \lVert x - e \rVert \]</div>
-        <p>où \(e\) est l'œil. Sans le second terme, le front serait une sphère centrée sur l'ampoule. Avec lui, l'ensemble des points allumés est un ellipsoïde dont les foyers sont l'ampoule et l'œil : la lumière semble fuir l'objectif plus vite qu'elle ne s'en approche. C'est la géométrie des échos lumineux d'étoiles, où les points de même retard forment un ellipsoïde de foyers l'étoile et l'observateur.</p>
-        <p>Chaque lumière de la scène est multipliée, au point éclairé, par la part de l'éclair qui y passe. L'éclair est une impulsion : sa lumière monte sur 2 cm de chemin, puis décroît sur 22 cm.</p>
+        <span class="src">src/gen/optics.js · gate() · src/scene/paths.js</span>
+        <p>Les <b>femto-photographies</b> (les films de Velten et Raskar, tournés à l'équivalent d'un billion d'images par seconde) montrent la lumière qui se propage dans une scène. On y voit un front lumineux s'étendre depuis la source.</p>
+        <p>On mesure le temps écoulé depuis l'éclair par une longueur, le <b>rayon du front</b> ρ (rhô) : la distance que la lumière a parcourue depuis qu'elle a quitté la lampe. La règle la plus simple est d'allumer un point dès que ρ dépasse sa distance à la lampe. Le front est alors une sphère centrée sur la lampe.</p>
+        <p>Cette règle oublie que la caméra elle aussi attend la lumière. La lumière qu'on voit sur un vase a fait deux voyages : de la lampe au vase, puis du vase à l'objectif. Un point <i>x</i>, éclairé par un chemin de longueur <i>L</i>(<i>x</i>), ne paraît allumé que quand ρ ≥ <i>L</i>(<i>x</i>) + ‖<i>x</i> − <i>e</i>‖, où <i>e</i> est la position de l'œil. Les points qui s'allument au même instant ont alors une somme de distances constante à la lampe et à l'œil : ils forment un <b>ellipsoïde</b> dont les deux foyers sont la lampe et l'œil. C'est la géométrie des échos lumineux autour des étoiles qui explosent, observés par les astronomes.</p>
+        <p>Une seconde règle simple pose problème : allumer la lampe et la laisser allumée. Un front qui ne fait qu'allumer laisse derrière lui une surface éclairée uniformément ; à l'image, on voit un disque qui grandit, et l'écho n'y ajoute qu'un peu de lumière. L'éclair est donc une <b>impulsion</b> : sa lumière monte sur 2 cm de chemin, puis décroît en exponentielle sur 22 cm. Chaque point voit passer un anneau, et ce qui part et ce qui revient sont deux anneaux distincts.</p>
+        <figure id="fig-oeil"><figcaption><b>Sphère ou ellipsoïde, impulsion ou lampe allumée.</b> Le plan de la pièce vu de dessus : la lampe en bleu, l'œil en bas. Le curseur fait avancer le front. Le premier bouton ajoute ou retire le retard de l'œil, le second remplace l'impulsion par une lampe qui reste allumée. La zone allumée est calculée par la fonction <code>gate</code> du projet, sans ombres.</figcaption></figure>
+        <p>En résumé, chaque lumière de la scène est multipliée, au point éclairé, par la part de l'éclair qui y passe :</p>
         <div class="eq">\[ g = 4\,S(a)\,e^{-a/0{,}22\,\text{m}}, \qquad a = \rho - L(x) - \lVert x - e\rVert \]</div>
-        <p>La première version allumait une lampe et la laissait allumée. Un front qui ne fait qu'allumer laisse derrière lui une surface uniformément éclairée : à l'image, un disque qui grandit, comme un fondu, et l'écho n'y ajoute qu'un peu de lumière. Avec une impulsion, chaque point voit passer un anneau, et ce qui part et ce qui revient sont deux anneaux distincts.</p>
-        <div class="note check"><b>Vérifié</b><p>L'impulsion vaut 0 avant le front, plus de 3 sur l'anneau, puis décroît sans remonter ; le front ne recule jamais pendant le ralenti (tests <code>optics.test.mjs</code> et <code>film.test.mjs</code>).</p></div>
-        <figure id="fig-oeil"><figcaption><b>Sphère ou ellipsoïde.</b> Le plan de la pièce vu de dessus : l'ampoule, l'œil en bas. Faites avancer le front ; le bouton retire le retard de l'œil. La démo trace l'anneau de l'impulsion par la porte <code>gate</code> du projet, sans ombres.</figcaption></figure>
+        <p><i>a</i> est l'avance du front sur le point, en mètres de chemin : négative tant que la lumière n'est pas arrivée. <i>S</i> est une rampe qui passe de 0 à 1 quand <i>a</i> va de −1 à +1 cm. Le facteur 4 est la hauteur du pic, et 0,22 m la longueur de la traîne.</p>
+<pre><code>// src/gen/optics.js
+export function gate(rho, L, D, w = FRONT, len = PULSE_LEN, peak = PULSE_PEAK) {
+  const a = rho - (L + D);                        // avance du front sur le point
+  return sstep(-w / 2, w / 2, a) * peak * Math.exp(-Math.max(0, a) / len);
+}</code></pre>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Ramenez le front à 1,8 m avec le retard de l'œil : rien n'est allumé. La lampe est à 1,87 m de l'œil, et aucune lumière ne peut atteindre l'objectif avant d'avoir parcouru au moins cette distance.</li>
+          <li>À ρ = 2,6 m, comparez les deux modes. Sans retard, l'anneau est un cercle de 2,6 m de rayon autour de la lampe. Avec le retard, il n'est qu'à 0,37 m derrière la lampe, du côté opposé à l'œil : la lumière paraît fuir l'objectif deux fois moins vite qu'elle ne va.</li>
+          <li>Passez en « Lampe allumée » : l'anneau devient un disque plein qui grandit.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <div class="note check"><b>Vérifié</b><p>Les tests vérifient que l'impulsion vaut 0 avant le front, plus de 3 sur l'anneau, puis décroît sans remonter (<code>optics.test.mjs</code>). La même formule est écrite en TSL dans <code>src/scene/paths.js</code> et appliquée à chaque lumière de la scène.</p></div>
+        </div></details>
       </section>
 
-      <section id="glace">
-        <h2><span class="n">03</span>Le miroir rend une lampe image</h2>
-        <span class="src">src/gen/optics.js · planeEcho()</span>
-        <p>Un miroir plan renvoie la lumière comme si elle venait de la symétrique \(s'\) de l'ampoule derrière la glace. C'est la méthode des sources images des acousticiens (Allen et Berkley, 1979), exacte pour un plan : le chemin ampoule → glace → \(x\) a la longueur \(\lVert x - s' \rVert\), à condition que le segment \(s' \to x\) traverse la glace et non le mur autour.</p>
-        <p>L'écho est donc une seconde lumière, un projecteur placé en \(s'\), visé sur la glace, avec ses propres ombres et une ouverture qui suit le contour (rectangle, ovale ou plein cintre). Il éclaire le revers des vases, que l'ampoule ne voit pas. Dans la scène, il arrive 1 à 1,4 m de chemin après le front direct, soit 2 à 4 secondes de film.</p>
-        <div class="note check"><b>Vérifié</b><p>Pour 4 000 points tirés dans la pièce, la longueur \(\lVert x - s'\rVert\) égale \(\lVert s - m\rVert + \lVert m - x\rVert\) au point \(m\) de la glace où la loi de la réflexion est respectée, à \(10^{-9}\) près.</p></div>
-        <figure id="fig-glace"><figcaption><b>L'écho de la glace.</b> Déplacez l'ampoule (cliquer-glisser) et faites avancer le front : le cercle clair est le front direct, le cercle rosé l'écho, centré sur la lampe image et limité au cône qui passe par la glace. Calcul par <code>planeEcho</code> du projet ; la démo ignore le retard de l'œil.</figcaption></figure>
-      </section>
-
-      <section id="reflet">
-        <h2><span class="n">04</span>Le reflet est en retard sans rien calculer de plus</h2>
-        <span class="src">src/scene/stage.js · mirrorMaterial()</span>
-        <p>Dans la glace, on voit la pièce depuis une caméra virtuelle, symétrique de la vraie. Le miroir est rendu ainsi, par le nœud <code>reflector()</code> de three.js, qui rend la scène entière depuis cette caméra. Les matériaux y calculent la porte avec la position de la caméra qui les rend : la caméra virtuelle. Or la distance d'un point à la caméra virtuelle est exactement le chemin point → glace → œil. L'ampoule du miroir s'allume donc après la vraie, du temps qu'il faut à la lumière pour faire l'aller-retour jusqu'à la glace, et s'éteint après elle.</p>
-        <p>Juste après l'éclair, la pièce est déjà revenue au noir, et la glace montre encore l'ampoule allumée, un instant.</p>
-        <div class="note trap"><b>Le piège</b><p>Les réflexions en espace écran, que la chaîne d'image commune applique aux surfaces brillantes, relisent l'image déjà calculée : elles montrent l'état présent de la pièce, sans retard. Elles conviennent au vernis d'une table ; la glace, elle, devait avoir son propre rendu.</p></div>
-      </section>
-
-      <section id="ardent">
-        <h2><span class="n">05</span>Le miroir ardent renvoie la lumière à la lampe</h2>
-        <span class="src">src/gen/optics.js · makeEllipse(), ellipseEcho()</span>
-        <p>Un écho revient à celui qui a crié. Un miroir concave sphérique dont le centre de courbure est l'ampoule fait de même avec la lumière : chaque rayon le frappe à angle droit et repart vers la lampe, et tous les chemins aller-retour ont la même longueur \(2R\). C'est un ellipsoïde dont les deux foyers sont confondus (la galerie des murmures, ramenée à un seul foyer). Le miroir, de 44 à 56 cm de diamètre, se tient sur un pied à côté de la table, à 0,78 à 0,95 m de l'ampoule (plus si le bout de la table l'exige). Son écho est une sphère qui se referme sur la lampe :</p>
-        <div class="eq">\[ L(x) = 2R - \lVert x - s\rVert \ \text{avant de repasser par la lampe}, \qquad L(x) = 2R + \lVert x - s\rVert \ \text{après} \]</div>
-        <p>dans le cône de la calotte. Un vrai miroir ne concentre pas la lumière en un point : l'ampoule a une taille, et la calotte en forme une image, de même taille ici (grandissement 1). Un point est éclairé quand sa distance au cône est inférieure au rayon de cette image, 1,3 cm : la lumière revenue tombe sur le verre de l'ampoule, qui se rallume, et ressort de l'autre côté en pinceau.</p>
-        <div class="note trap"><b>Le piège</b><p>Les premières versions visaient un point de la nappe ou d'un vase avec une calotte d'ellipsoïde : la tache ardente était petite, et l'utilisateur ne voyait pas où était l'écho. Revenir à la lampe se comprend sans légende. (Le critère de la distance au cône, et non d'un angle, vient de ces essais : un cône qui converge sur une surface n'y éclaire qu'un point.)</p></div>
-        <div class="note check"><b>Vérifié</b><p>Sur une calotte d'ellipsoïde quelconque, 500 rayons lancés depuis un foyer et réfléchis passent par l'autre à \(10^{-7}\) près, avec la longueur donnée par la formule ; la sphère en est le cas où les deux foyers se confondent. Pour 400 graines, un test vérifie que le centre de courbure est la lampe, que la calotte la regarde, qu'elle reste hors de la table, et le chemin \(2R - \lVert x - s\rVert\).</p></div>
-        <figure id="fig-ardent"><figcaption><b>Le retour à la lampe.</b> Des rayons partent de l'ampoule, frappent la calotte à angle droit et reviennent ; l'arc clair est le front de l'écho, qui se referme sur l'ampoule puis repart de l'autre côté. Le curseur fait avancer le front. Les longueurs viennent de <code>ellipseEcho</code> du projet, dans un plan de coupe.</figcaption></figure>
-      </section>
-
-      <section id="galerie">
-        <h2><span class="n">06</span>Deux glaces face à face renvoient l'écho encore et encore</h2>
-        <span class="src">src/gen/optics.js · galleryImages(), galleryEcho()</span>
-        <p>Un écho qu'on reconnaît se répète : un cri dans une vallée revient plusieurs fois, chaque fois plus faible. Entre deux glaces parallèles, la lumière fait de même. Deux grandes glaces sont accrochées aux murs, de part et d'autre de la table, à 1,5 m l'une de l'autre ; la caméra est tournée vers celle de gauche, où l'on voit la pièce répétée, et les copies de la lampe.</p>
-        <p>Chaque image est la lampe réfléchie \(n\) fois, alternativement par les deux glaces. Pour deux plans parallèles \(x = x_A\) et \(x = x_B\), séparés de \(D\), ses positions sont exactes :</p>
-        <div class="eq">\[ x_n = 2x_A - x_s - 2kD \ (n = 2k+1), \qquad x_n = x_s - 2kD \ (n = 2k), \]</div>
-        <p>derrière la glace de gauche, et symétriquement derrière l'autre. Le chemin de la lampe à un point \(x\) par cette suite de réflexions a la longueur \(\lVert x - q_n\rVert\), à condition que la droite \(q_n \to x\) traverse chaque glace, dépliée, dans son contour. Chaque image éclaire la pièce avec l'intensité \(0{,}88^n\,I\), et apparaît dans la glace à son heure : quand \(\rho\) atteint \(\lVert q_n - e\rVert\). Deux échos successifs sont séparés de \(2D\), environ 3 m de chemin, et la lumière ne quitte presque pas le cadre. Une seconde glace derrière la caméra, à 2,9 m, laissait 5 m de chemin hors du champ entre deux échos.</p>
-        <p>Chaque glace voit l'autre, et le reflet de l'autre y est rendu à son tour, depuis la symétrique de la caméra symétrique. La distance à cette caméra est exactement le chemin par les deux glaces, si bien que le reflet du reflet est en retard sans rien de plus. Les échos plus profonds sont dessinés par leurs images, à leur place et à leur heure.</p>
-        <div class="note trap"><b>Le piège</b><p>La première version de la galerie ne dessinait que ces images, sur une glace noire. On ne la reconnaissait pas comme un miroir, et la lueur qui revenait en fin de boucle semblait sortir de nulle part. Ces reflets imbriqués ont un prix : quatre rendus de la scène de plus, à 55 % de la résolution.</p></div>
-        <div class="note check"><b>Vérifié</b><p>Pour plus de 500 chemins, un rayon lancé de \(x\) vers l'image et réfléchi pas à pas sur les deux plans aboutit à la lampe après exactement \(n\) réflexions, avec la même longueur à \(10^{-9}\) près.</p></div>
-      </section>
-
-      <section id="facettes">
-        <h2><span class="n">07</span>Une boule à facettes, un miroir par facette</h2>
-        <span class="src">src/scene/paths.js · facetEcho()</span>
-        <p>Une boule à facettes porte de 372 à 614 petits miroirs plans. Calculer six cents lumières serait hors de prix. Mais pour un point \(x\) donné, une seule facette peut lui renvoyer l'ampoule : celle dont la normale est la bissectrice des directions de la boule vers \(x\) et vers l'ampoule. On la retrouve par sa rangée (la latitude) et son rang (la longitude), sans boucle. Puis le chemin est celui d'un miroir plan : \(\lVert x - s'_f\rVert\), si le rayon traverse le carré de la facette. Chaque tache a la forme de la facette, agrandie, et arrive à son heure.</p>
-        <p>Le nombre de facettes d'une rangée suit le cosinus de sa latitude, pour que l'écart en longitude reste celui de l'équateur ; la boule tourne d'un tour par boucle, mais seulement en temps réel.</p>
-        <figure id="fig-facettes"><figcaption><b>Des pinceaux.</b> Une boule en coupe, l'ampoule à gauche, un mur à droite. Chaque facette éclairée renvoie un pinceau ; le front les fait arriver l'un après l'autre sur le mur. Démo en deux dimensions, écrite pour la page.</figcaption></figure>
+      <section id="horloge">
+        <h2><span class="n">03</span>Une horloge de caméra rapide</h2>
+        <span class="src">src/film.js · createFilm()</span>
+        <p>Il faut maintenant relier ρ au temps du film. La boucle dure une dizaine de secondes, et presque tout ce qu'elle montre se passe en quelques nanosecondes. On ne peut pas ralentir le film entier : le voyant qui rougit pendant la charge se joue en temps réel. On définit donc la <b>vitesse du film</b> <i>v</i>(<i>u</i>), le rapport entre le temps réel et le temps du film. Elle vaut 1 en temps réel et 1/<i>K</i> pendant le ralenti, avec <i>K</i> de l'ordre du milliard.</p>
+        <p>Passer de 1 à 10<sup>−9</sup> par une rampe ordinaire ne marche pas : la vitesse passerait presque tout le temps de la rampe au-dessus de 10<sup>−3</sup>, puis tomberait d'un coup. La rampe est donc faite sur le logarithme de la vitesse, qui descend régulièrement de 0 à −9.</p>
+        <p>Le temps réel écoulé est l'intégrale de la vitesse, et le rayon du front s'en déduit :</p>
+        <div class="eq">\[ \tau(u) = T \int_0^u v(u')\,du', \qquad \rho(u) = c\,\big(\tau(u) - \tau_{\text{éclair}}\big) \]</div>
+        <p><i>T</i> est la durée de la boucle en secondes, τ(<i>u</i>) le temps réel écoulé depuis le début de la boucle, <i>c</i> la vitesse de la lumière (299 792 458 m/s) et τ<sub>éclair</sub> l'instant où l'éclair quitte le tube.</p>
+        <figure id="fig-horloge"><figcaption><b>Les courbes du film.</b> En haut, le logarithme de la vitesse du film ; en bas, le rayon du front ; la bande grise est le ralenti. Le curseur déplace la phase. Le bouton active le ralenti variable, avec deux zones où il se passe quelque chose (de 1,5 à 2,6 m et de 4,3 à 5,6 m de chemin). La démo appelle <code>createFilm</code> du projet avec une scène type (front de 1,5 à 5,6 m, boucle de 12 s).</figcaption></figure>
+        <h3>Un ralenti variable</h3>
+        <p>À vitesse constante, le film passerait autant de temps sur la lumière qui file vers une glace hors du cadre que sur celle qui traverse la nature morte. Le ralenti est donc variable, comme une rampe de vitesse au montage. Le projet dresse la liste des intervalles de ρ où la lumière touche quelque chose de visible ; entre eux, le film va six fois plus vite, avec des raccords adoucis sur 35 cm de chemin. Le front ne recule jamais. La durée de la boucle découle de ce chemin pondéré : 7 à 8 s pour un seul réflecteur, 10 à 13 s pour la galerie (sur 400 graines).</p>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>À vitesse constante, le front avance de 0,57 m par dixième de boucle, soit 0,47 m par seconde de film. Activez le ralenti variable : il n'avance plus que de 0,39 m entre <i>u</i> = 0,2 et 0,3, puis de 1,51 m entre 0,4 et 0,5, quand la lumière traverse la zone vide.</li>
+          <li>Placez la phase dans la zone vide : le bandeau montre une vitesse de film environ cinq fois plus grande que dans la première zone.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>τ(<i>u</i>) est calculé en double précision, par la méthode des trapèzes sur 32 768 pas, puis ρ est borné à [−1, 60] m avant d'être envoyé à la carte graphique. En temps réel, <i>c</i> τ vaut des milliards de mètres, et un nombre à virgule de 32 bits n'y distingue plus deux centimètres.</p>
+          <div class="note check"><b>Vérifié</b><p>Le front ne recule jamais pendant le ralenti et a quitté la scène à sa fin ; le ralenti variable va six fois plus vite entre les zones, sans que le front recule ; la durée reste entre 7 et 16 s (<code>film.test.mjs</code>).</p></div>
+        </div></details>
       </section>
 
       <section id="temps">
-        <h2><span class="n">08</span>Un stroboscope, et rien ne bouge pendant l'éclair</h2>
+        <h2><span class="n">04</span>Un stroboscope, et rien ne bouge pendant l'éclair</h2>
         <span class="src">src/film.js · charge(), realPhase()</span>
-        <p>La cause de l'éclair est à l'image : la lampe est un stroboscope, un tube au xénon enroulé en trois spires dans une ampoule claire, alimenté par un condensateur. Sur la douille, un voyant rougit à mesure que la charge monte et s'allume franchement quand elle est prête ; l'éclair part et le vide. La première version tirait le cordon d'une douille à tirette, sans main pour le tirer : la perle descendait toute seule.</p>
-        <p>Si la lumière avance au ralenti, tout ce qui bouge doit ralentir avec elle. La charge, la boule et les grains de poussière lisent le temps réel, figé pendant l'éclair ; seule la caméra lit la phase et continue de glisser. La charge est périodique par construction : vide juste après l'éclair, elle croît pendant tout le temps réel de la boucle et atteint 1 à l'éclair suivant.</p>
-        <figure id="fig-cordon"><figcaption><b>La charge.</b> La charge du stroboscope sur une boucle, en fonction de la phase ; la bande grise est le ralenti, la ligne pointillée le seuil où le voyant s'allume. Calcul par <code>charge</code> du projet.</figcaption></figure>
+        <p>La cause de l'éclair est à l'image. La lampe est un stroboscope : un tube au xénon enroulé en trois spires dans une ampoule, alimenté par un condensateur. Sur la douille, un voyant rougit à mesure que la charge monte et s'allume franchement quand elle est prête. L'éclair part et vide le condensateur. La première version tirait le cordon d'une douille à tirette, sans main pour le tirer : la perle descendait toute seule.</p>
+        <p>Si la lumière avance au ralenti, tout ce qui bouge doit ralentir avec elle. La charge, la boule à facettes et les grains de poussière lisent donc le temps réel τ, presque figé pendant l'éclair. Seule la caméra lit la phase <i>u</i> et continue de glisser, comme un travelling. La charge est périodique par construction : vide juste après l'éclair, elle croît pendant tout le temps réel de la boucle et atteint 1 à l'éclair suivant.</p>
+        <figure id="fig-cordon"><figcaption><b>La charge.</b> La charge du stroboscope sur une boucle, en fonction de la phase ; la bande grise est le ralenti, la zone pointillée celle où le voyant s'allume (de 0,82 à 0,92 de la charge). Le curseur déplace la phase. Calcul par <code>charge</code> du projet, sur la même scène type qu'en section 03.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Parcourez le ralenti : la charge reste à zéro de <i>u</i> = 0,14 à 0,90, pendant le ralenti et la rampe qui le termine, puis remonte en temps réel jusqu'à l'éclair suivant.</li>
+        </ul></div>
+      </section>
+
+      <section id="glace">
+        <h2><span class="n">05</span>Le miroir rend une lampe image</h2>
+        <span class="src">src/gen/optics.js · planeEcho()</span>
+        <p>Pour l'écho d'une glace, il faut la longueur du chemin lampe → glace → point. Un miroir plan renvoie la lumière comme si elle venait de la <b>lampe image</b> <i>s</i>′, la symétrique de la lampe <i>s</i> par rapport au plan de la glace. Le chemin de la lampe au point <i>x</i> par la glace a donc la longueur ‖<i>x</i> − <i>s</i>′‖, à condition que le segment <i>s</i>′ → <i>x</i> traverse la glace et non le mur autour. Les acousticiens appellent cela la méthode des sources images (Allen et Berkley, 1979) ; elle est exacte pour un plan.</p>
+        <div class="eq">\[ s' = s - 2\,\big((s - m)\cdot n\big)\,n, \qquad L_{\text{écho}}(x) = \lVert x - s' \rVert \]</div>
+        <p><i>m</i> est un point de la glace et <i>n</i> sa normale, tournée vers la pièce. L'écho devient ainsi une seconde lumière de la scène : un projecteur placé en <i>s</i>′, visé sur la glace, avec ses propres ombres et une ouverture qui suit le contour (rectangle, ovale ou plein cintre). Il éclaire le revers des vases, que la lampe ne voit pas.</p>
+        <figure id="fig-glace"><figcaption><b>L'écho de la glace.</b> Vue de dessus. Faites glisser la lampe dans la pièce et avancer le front : l'anneau bleu est le front direct, l'anneau rouge l'écho, centré sur la lampe image et limité au cône qui passe par la glace. Calcul par <code>planeEcho</code> du projet ; la démo ignore le retard de l'œil.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Éloignez la lampe de la glace : l'écho part plus tard, et le cône qui passe par la glace se resserre.</li>
+          <li>Faites avancer le front : l'anneau rouge naît sur la glace à l'instant où l'anneau bleu l'atteint. Avec la lampe à sa place de départ, le bandeau indique ρ = 0,60 m, la distance de la lampe à la glace.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <div class="note check"><b>Vérifié</b><p>Pour 4 000 points tirés dans la pièce, la longueur ‖<i>x</i> − <i>s</i>′‖ est égale à ‖<i>s</i> − <i>m</i>‖ + ‖<i>m</i> − <i>x</i>‖ au point <i>m</i> de la glace où la loi de la réflexion est respectée, à 10<sup>−9</sup> près.</p></div>
+        </div></details>
+      </section>
+
+      <section id="reflet">
+        <h2><span class="n">06</span>Le reflet est en retard sans rien calculer de plus</h2>
+        <span class="src">src/scene/stage.js · mirrorMaterial()</span>
+        <p>Dans la glace, on voit la pièce depuis une caméra virtuelle, symétrique de la vraie par rapport au plan de la glace. Le miroir est rendu ainsi, par le nœud <code>reflector()</code> de three.js, qui rend toute la scène depuis cette caméra. Les matériaux y calculent l'impulsion de la section 02 avec la position de la caméra qui les rend, c'est-à-dire la caméra virtuelle. Or la distance d'un point à la caméra virtuelle est exactement la longueur du chemin point → glace → œil. Le retard de l'œil est donc juste dans le reflet, sans calcul supplémentaire : l'ampoule du miroir s'allume après la vraie, du temps qu'il faut à la lumière pour faire l'aller-retour jusqu'à la glace, et s'éteint après elle.</p>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <div class="note trap"><b>Le piège : des reflets sans retard</b><p>Les réflexions en espace écran, que la chaîne d'image commune applique aux surfaces brillantes, relisent l'image déjà calculée : elles montrent l'état présent de la pièce, sans retard. Elles conviennent au vernis d'une table ; la glace devait avoir son propre rendu.</p></div>
+        </div></details>
+      </section>
+
+      <section id="galerie">
+        <h2><span class="n">07</span>Deux glaces face à face renvoient l'écho encore et encore</h2>
+        <span class="src">src/gen/optics.js · galleryImages(), galleryEcho()</span>
+        <p>Un cri dans une vallée revient plusieurs fois, chaque fois plus faible. Entre deux glaces parallèles, la lumière fait de même. Dans la galerie, deux grandes glaces sont accrochées aux murs, de part et d'autre de la table, à 1,5 m l'une de l'autre. La caméra est tournée vers celle de gauche, où l'on voit la pièce répétée et les copies de la lampe.</p>
+        <p>La lampe image de la section 05 se généralise. Réfléchie dans la glace de gauche, la lampe donne une première image ; cette image, réfléchie dans la glace de droite, en donne une deuxième, et ainsi de suite. On note <i>q</i><sub>n</sub> l'image obtenue après <i>n</i> réflexions alternées. Le chemin de la lampe à un point <i>x</i> par cette suite de réflexions a la longueur ‖<i>x</i> − <i>q</i><sub>n</sub>‖, à condition que la droite <i>q</i><sub>n</sub> → <i>x</i> traverse chaque glace dans son contour. Pour deux glaces aux abscisses <i>x</i><sub>A</sub> et <i>x</i><sub>B</sub>, séparées de <i>D</i>, les images derrière la glace de gauche sont à :</p>
+        <div class="eq">\[ x_n = 2x_A - x_s - 2kD \ \ (n = 2k+1), \qquad x_n = x_s - 2kD \ \ (n = 2k) \]</div>
+        <p><i>x</i><sub>s</sub> est l'abscisse de la lampe ; les images derrière l'autre glace s'obtiennent de la même façon. Chaque image éclaire la pièce avec l'intensité 0,88<sup><i>n</i></sup> <i>I</i>, où <i>I</i> est celle de la lampe et 0,88 la part que renvoie une glace. Elle apparaît dans la glace quand ρ atteint ‖<i>q</i><sub>n</sub> − <i>e</i>‖, sa distance à l'œil. Deux échos successifs du même côté sont séparés de 2<i>D</i>, environ 3 m de chemin, et la lumière ne quitte presque pas le cadre.</p>
+        <figure id="fig-galerie"><figcaption><b>Les images de la lampe entre deux glaces.</b> Vue de dessus : les deux glaces, la lampe (bleue) et l'œil. Les points sont les images <i>q</i><sub>n</sub> calculées par <code>galleryImages</code> du projet, jusqu'à quatre réflexions de chaque côté ; leur taille suit leur intensité 0,88<sup><i>n</i></sup>. Une image s'allume quand le front atteint sa distance à l'œil. Le cercle bleu est le front, centré sur la lampe.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Faites avancer le front depuis 1,5 m : les copies s'allument une à une, la première à droite à ρ = 2,09 m, la première à gauche à 2,23 m, puis à 3,03 et 3,74 m.</li>
+          <li>Comparez les copies 1 et 3 du côté gauche : la troisième s'allume 2,6 m de chemin plus tard, et elle est 1,3 fois plus faible (0,88<sup>3</sup> contre 0,88).</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Chaque glace voit l'autre, et le reflet de l'autre y est rendu à son tour, depuis la symétrique de la caméra symétrique. La distance à cette caméra est exactement le chemin par les deux glaces, si bien que le reflet du reflet est lui aussi en retard sans rien de plus. Les échos plus profonds, à partir de trois réflexions, sont dessinés par leurs images, à leur place et à leur heure. Une seconde glace derrière la caméra, à 2,9 m, laissait 5 m de chemin hors du champ entre deux échos.</p>
+          <div class="note trap"><b>Le piège : une glace noire</b><p>La première version de la galerie ne dessinait que les images de la lampe, sur une glace noire. On ne la reconnaissait pas comme un miroir, et la lueur qui revenait en fin de boucle semblait sortir de nulle part. Les reflets imbriqués ont un prix : quatre rendus de la scène de plus, à 55 % de la résolution.</p></div>
+          <div class="note check"><b>Vérifié</b><p>Pour plus de 500 chemins, un rayon lancé de <i>x</i> vers l'image et réfléchi pas à pas sur les deux plans aboutit à la lampe après exactement <i>n</i> réflexions, avec la même longueur à 10<sup>−9</sup> près.</p></div>
+        </div></details>
+      </section>
+
+      <section id="ardent">
+        <h2><span class="n">08</span>Le miroir ardent renvoie la lumière à la lampe</h2>
+        <span class="src">src/gen/optics.js · makeEllipse(), ellipseEcho()</span>
+        <p>Un écho revient à celui qui a crié. Un miroir concave sphérique dont le centre de courbure est la lampe fait de même avec la lumière. Chaque rayon venu de la lampe le frappe à angle droit et repart vers la lampe, et tous les chemins aller-retour ont la même longueur 2<i>R</i>, où <i>R</i> est le rayon de la sphère. Le miroir, de 44 à 56 cm de diamètre, se tient sur un pied à côté de la table, à 0,78 à 0,95 m de la lampe (plus si le bout de la table l'exige).</p>
+        <p>Son écho est une sphère qui se referme sur la lampe, puis repart de l'autre côté. Le code traite ce miroir comme un cas particulier d'ellipsoïde dont les deux foyers sont confondus. Dans le cône de la calotte vu de la lampe <i>s</i>, le chemin vaut :</p>
+        <div class="eq">\[ L(x) = 2R - \lVert x - s\rVert \ \text{avant de repasser par la lampe}, \qquad L(x) = 2R + \lVert x - s\rVert \ \text{après} \]</div>
+        <figure id="fig-ardent"><figcaption><b>Le retour à la lampe.</b> Une coupe : des rayons partent de la lampe, frappent la calotte à angle droit et reviennent ; l'arc rouge est le front de l'écho, qui se referme sur la lampe puis repart de l'autre côté. Le cercle bleu est le front direct. Les longueurs viennent de <code>ellipseEcho</code> du projet ; la calotte de la démo a un rayon de 0,85 m.</figcaption></figure>
+        <p>Un vrai miroir ne concentre pas la lumière en un point. La lampe a une taille, et la calotte en forme une image de même taille (le grandissement vaut 1 au centre de courbure). Un point est donc éclairé par l'écho quand sa distance à l'axe du cône est inférieure au rayon de cette image, 1,3 cm. La lumière revenue tombe sur le verre de la lampe, qui se rallume, et ressort de l'autre côté en pinceau.</p>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Faites avancer le front jusqu'à 1,7 m : l'écho est à 0 cm de la lampe, c'est-à-dire sur elle. Le bandeau donne cet écart à chaque instant.</li>
+          <li>Continuez : l'arc repart de l'autre côté de la lampe, dans le prolongement du cône de la calotte.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <div class="note trap"><b>Le piège : une tache que personne ne voyait</b><p>Les premières versions visaient un point de la nappe ou d'un vase avec une calotte d'ellipsoïde : la tache de lumière concentrée était petite, et l'on ne voyait pas où était l'écho. Le retour à la lampe se comprend sans légende. Le critère de la distance au cône, plutôt que d'un angle, vient de ces essais : un cône qui converge sur une surface n'y éclaire qu'un point.</p></div>
+          <div class="note check"><b>Vérifié</b><p>Sur une calotte d'ellipsoïde quelconque, 500 rayons lancés depuis un foyer et réfléchis passent par l'autre à 10<sup>−7</sup> près, avec la longueur donnée par la formule ; la sphère en est le cas où les deux foyers se confondent. Pour 400 graines, un test vérifie que le centre de courbure est la lampe, que la calotte la regarde, qu'elle reste hors de la table, et que l'écho revient en 2<i>R</i>.</p></div>
+        </div></details>
+      </section>
+
+      <section id="facettes">
+        <h2><span class="n">09</span>Une boule à facettes, un miroir par facette</h2>
+        <span class="src">src/gen/optics.js · facetEcho()</span>
+        <p>Une boule à facettes porte de 372 à 614 petits miroirs plans (14, 16 ou 18 rangées). La méthode de la section 05 demanderait une lumière par facette, six cents lumières, ce qui est hors de prix. Mais pour un point <i>x</i> donné, une seule facette peut lui renvoyer la lampe : celle dont la normale est la bissectrice des directions de la boule vers <i>x</i> et vers la lampe. On la retrouve directement par sa rangée (la latitude de cette normale) et son rang dans la rangée (sa longitude), sans parcourir les facettes. Le chemin est ensuite celui d'un miroir plan, ‖<i>x</i> − <i>s</i>′<sub>f</sub>‖, avec <i>s</i>′<sub>f</sub> l'image de la lampe dans cette facette, si le rayon traverse le carré de la facette.</p>
+        <p>Chaque tache a donc la forme de la facette, agrandie, et arrive à son heure. Le nombre de facettes d'une rangée suit le cosinus de sa latitude, pour que l'écart en longitude reste celui de l'équateur. La boule tourne d'un tour par boucle, mais seulement en temps réel.</p>
+        <figure id="fig-facettes"><figcaption><b>Des pinceaux.</b> Une boule en coupe, la lampe à gauche, un mur à droite. Chaque facette éclairée renvoie un pinceau ; le front les fait arriver l'un après l'autre sur le mur, où chaque tache s'allume à son heure. Démo en deux dimensions, écrite pour la page, avec 36 facettes.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Faites avancer le front lentement : la première tache arrive au mur à ρ = 1,63 m, la quatrième à 2,18 m, la dernière à 4,62 m. Chaque pinceau a sa propre longueur, et les plus inclinés font le plus long chemin.</li>
+        </ul></div>
       </section>
 
       <section id="brume">
-        <h2><span class="n">09</span>La brume montre les fronts dans l'air</h2>
+        <h2><span class="n">10</span>La brume montre les fronts dans l'air</h2>
         <span class="src">src/scene/haze.js · createHaze()</span>
-        <p>Sur les surfaces, le front se voit là où il les coupe. Dans l'air, il faut de la poussière. Une passe de la chaîne d'image marche le long de chaque rayon de vue, en 16 pas tramés, et ajoute en chaque pas la lumière de chaque source à retard. Elle montre la coquille qui sort du tube, celle qui sort de la glace, le cône qui se referme sur le foyer, les échos de la galerie. Quatre mille cinq cents grains, éclairés par les mêmes lumières et mélangés par addition, n'apparaissent que quand la lumière les touche.</p>
-        <div class="note trap"><b>Le piège</b><p>La première version rendait l'image entièrement noire. Les sources absentes de la scène ont des uniformes nuls, leurs termes donnaient NaN, et NaN multiplié par zéro reste NaN ; le garde-fou de l'anticrénelage temporel remplace alors chaque pixel par du noir. Chaque terme est désormais derrière une sélection sur la présence de sa source. Le second NaN venait d'une couleur copiée dans un vecteur : <code>Vector3.copy(color)</code> lit <code>x, y, z</code>, qu'une couleur n'a pas.</p></div>
+        <p>Sur les surfaces, on voit le front là où il les coupe. Pour le voir dans l'air, il faut de la poussière. Une passe de la chaîne d'image avance le long de chaque rayon de vue en 16 pas (8 sur mobile), dont le départ est décalé d'un pixel à l'autre, et ajoute en chaque pas la lumière de chaque source, multipliée par son impulsion. Elle montre la coquille qui sort du tube, celle qui sort de la glace, le cône qui se referme sur la lampe, les échos de la galerie. 4 500 grains de poussière (2 000 sur mobile), éclairés par les mêmes lumières, n'apparaissent que quand la lumière les touche.</p>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <div class="note trap"><b>Le piège : une image noire</b><p>La première version rendait l'image entièrement noire. Les sources absentes de la scène ont des paramètres nuls, leurs termes donnaient NaN (« pas un nombre »), et NaN multiplié par zéro reste NaN ; le garde-fou de l'anticrénelage temporel remplaçait alors chaque pixel par du noir. Chaque terme est désormais derrière une sélection sur la présence de sa source. Le second NaN venait d'une couleur copiée dans un vecteur : <code>Vector3.copy(color)</code> lit <code>x, y, z</code>, qu'une couleur n'a pas.</p></div>
+        </div></details>
+      </section>
+
+      <section id="resume">
+        <h2><span class="n">11</span>Récapitulatif</h2>
+        <p>Au chargement :</p>
+        <ol>
+          <li>la recette place la table, la lampe, la nature morte et le réflecteur, puis cadre la caméra pour tout garder à l'image ;</li>
+          <li>un worker (un fil de calcul séparé de la page) construit la géométrie de la pièce ;</li>
+          <li>l'horloge du film calcule le temps réel τ(<i>u</i>) sur 32 768 pas, avec le ralenti variable (section 03) ;</li>
+          <li>les lumières à retard sont posées : la lampe, la lampe image de la glace, les images de la galerie, le foyer du miroir ardent, les facettes (sections 05 à 09).</li>
+        </ol>
+        <p>À chaque image, la phase <i>u</i> donne le rayon du front ρ, la charge et la pose de la caméra (sections 03 et 04). Chaque lumière éclaire chaque point avec l'impulsion <i>g</i>, calculée avec le chemin de cette lumière et la distance du point à la caméra qui le rend (sections 02 et 06). La brume ajoute les mêmes impulsions le long des rayons de vue (section 10).</p>
       </section>
 
       <section id="budget">
-        <h2><span class="n">10</span>Budget</h2>
+        <h2><span class="n">12</span>Budget</h2>
         <div class="tbl"><table>
           <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
           <tbody>
@@ -134,7 +220,7 @@
             <tr><td>Version mobile</td><td>GPU</td><td class="num">4,1 ms</td></tr>
           </tbody>
         </table></div>
-        <p>Mesures sur un portable Apple Silicon, graine d'ouverture (galerie), onglet au premier plan. Le raccord de boucle est exact à \(10^{-10}\) près sur la pose de la caméra.</p>
+        <p>Mesures du README, sur un portable Apple Silicon, graine d'ouverture (galerie). L'image complète dépasse le budget de 16 ms : la galerie est la famille la plus chère, ses deux glaces rendant chacune la pièce puis l'autre glace. Le raccord de boucle est exact à 10<sup>−10</sup> près sur la pose de la caméra.</p>
       </section>
     </article>
 
@@ -147,78 +233,112 @@
     </footer>
   </main>
 
+
   <script type="module">
     import { demo, C, TAU, lerp, label, alpha } from '../home/explainer.js';
     import { createFilm, TIMELINE } from './src/film.js';
-    import { gate, planeEcho, planeBasis, makeEllipse, ellipseEcho, ellipseRadius, reflectDir, norm, sub, add, mul } from './src/gen/optics.js';
+    import { gate, sstep, planeEcho, planeBasis, makeEllipse, ellipseEcho, ellipseRadius, galleryImages, reflectDir, norm, sub, add, mul, dist } from './src/gen/optics.js';
 
-    const F = createFilm({ duration: 12, rhoStart: 1.5, rhoEnd: 5.6 });
-    const slowBands = (g, d, x0, x1, y0, y1) => {
+    // une scène type : front de 1,5 à 5,6 m, boucle de 12 s ; avec ou sans ralenti variable
+    const FILM = createFilm({ duration: 12, rhoStart: 1.5, rhoEnd: 5.6 });
+    const FILM_VAR = createFilm({ duration: 12, rhoStart: 1.5, rhoEnd: 5.6, windows: [[1.5, 2.6], [4.3, 5.6]] });
+    const slowBands = (g, x0, x1, y0, y1) => {
       g.fillStyle = alpha(C.ink, 0.05);
       g.fillRect(lerp(x0, x1, TIMELINE.slow), y0, (TIMELINE.end - TIMELINE.slow) * (x1 - x0), y1 - y0);
     };
+    const fr = (x, n = 2) => x.toFixed(n).replace('.', ',');
 
-    // 01 — les courbes du film
+    // ── 02 · sphère ou ellipsoïde, impulsion ou lampe allumée ──
+    {
+      const s = [-0.3, 0, -0.3], e = [0.2, 0, 1.5], De = dist(s, e);
+      demo('#fig-oeil', {
+        title: 'La région allumée', aspect: 1.8,
+        controls: [{ key: 'rho', label: 'Front ρ (m)', min: 0, max: 5, step: 0.01, value: 2.6, fmt: (v) => `${fr(v)} m` }],
+        buttons: [{ key: 'warp', label: 'Retard de l\'œil', toggle: true, value: true }, { key: 'pulse', label: 'Impulsion', toggle: true, value: true }],
+        draw(g, d) {
+          const k = d.h / 2.6;
+          const X = (p) => d.w / 2 + p[0] * k, Y = (p) => d.h * 0.2 + (p[2] + 0.2) * k;
+          const step = 4;
+          for (let py = 0; py < d.h; py += step) for (let px = 0; px < d.w; px += step) {
+            const x = [(px - d.w / 2) / k, 0, (py - d.h * 0.2) / k - 0.2];
+            const D = d.s.warp ? Math.hypot(x[0] - e[0], x[2] - e[2]) : 0;
+            const L = Math.hypot(x[0] - s[0], x[2] - s[2]);
+            // impulsion (la porte du projet) ou lampe qui reste allumée (la rampe seule)
+            const gg = d.s.pulse ? gate(d.s.rho, L, D, 0.04) / 4 : sstep(-0.02, 0.02, d.s.rho - L - D) * 0.6;
+            if (gg > 0.01) { g.fillStyle = alpha(C.c2, 0.28 * gg); g.fillRect(px, py, step, step); }
+          }
+          g.fillStyle = C.c2; g.beginPath(); g.arc(X(s), Y(s), 5, 0, TAU); g.fill(); label(g, 'lampe', X(s) + 8, Y(s) - 6);
+          g.fillStyle = C.ink; g.beginPath(); g.arc(X(e), Y(e), 4, 0, TAU); g.fill(); label(g, 'œil', X(e) + 8, Y(e) + 4);
+          // extension du front derrière la lampe, à l'opposé de l'œil
+          const back = d.s.warp ? (d.s.rho - De) / 2 : d.s.rho;
+          d.status(back <= 0 ? 'rien n\'a encore atteint l\'œil' : `${d.s.warp ? 'ellipsoïde' : 'sphère'} · le front est à ${fr(back)} m derrière la lampe`);
+        },
+      });
+    }
+
+    // ── 03 · les courbes du film ──
     demo('#fig-horloge', {
       title: 'Vitesse du film et rayon du front', aspect: 2.1,
-      controls: [{ key: 'u', label: 'Phase u', min: 0, max: 1, step: 0.001, value: 0.2 }],
+      controls: [{ key: 'u', label: 'Phase u', min: 0, max: 1, step: 0.001, value: 0.3, fmt: (v) => v.toFixed(3) }],
+      buttons: [{ key: 'var', label: 'Ralenti variable', toggle: true, value: false }],
       draw(g, d) {
-        const x0 = 40, x1 = d.w - 14, mid = d.h * 0.42;
-        slowBands(g, d, x0, x1, 10, d.h - 14);
+        const F = d.s.var ? FILM_VAR : FILM;
+        const x0 = 44, x1 = d.w - 14, mid = d.h * 0.42;
+        slowBands(g, x0, x1, 10, d.h - 14);
         // log10 v
         g.strokeStyle = C.c1; g.lineWidth = 2; g.beginPath();
         for (let i = 0; i <= 400; i++) { const u = i / 400, y = lerp(18, mid - 8, -Math.log10(F.speed(u)) / 10); i ? g.lineTo(lerp(x0, x1, u), y) : g.moveTo(lerp(x0, x1, u), y); }
         g.stroke();
-        label(g, 'log₁₀ v : 0', 4, 22); label(g, '−10', 10, mid - 8);
-        // fronts
+        label(g, 'log v : 0', 4, 22, { size: 11 }); label(g, '−10', 14, mid - 8, { size: 11 });
+        // zones visibles du ralenti variable
+        if (d.s.var) for (const [a, b] of [[1.5, 2.6], [4.3, 5.6]]) { g.fillStyle = alpha(C.c2, 0.08); g.fillRect(x0, lerp(d.h - 18, mid + 10, b / 7), x1 - x0, lerp(d.h - 18, mid + 10, a / 7) - lerp(d.h - 18, mid + 10, b / 7)); }
+        // front
         const ry = (r) => lerp(d.h - 18, mid + 10, Math.min(1, Math.max(0, r / 7)));
-        {
-          g.strokeStyle = C.c2; g.beginPath(); let pen = false;
-          for (let i = 0; i <= 600; i++) { const u = i / 600, r = F.rho(u); if (r <= -0.5 || r >= 59) { pen = false; continue; } const X = lerp(x0, x1, u), Y = ry(r); pen ? g.lineTo(X, Y) : g.moveTo(X, Y); pen = true; }
-          g.stroke();
-        }
-        label(g, 'ρ (m) 0', 4, d.h - 18); label(g, '7', 26, mid + 14);
+        g.strokeStyle = C.c2; g.lineWidth = 2; g.beginPath(); let pen = false;
+        for (let i = 0; i <= 600; i++) { const u = i / 600, r = F.rho(u); if (r <= -0.5 || r >= 59) { pen = false; continue; } const X = lerp(x0, x1, u), Y = ry(r); pen ? g.lineTo(X, Y) : g.moveTo(X, Y); pen = true; }
+        g.stroke();
+        label(g, 'ρ : 0', 4, d.h - 18, { size: 11 }); label(g, '7 m', 14, mid + 14, { size: 11 });
         const X = lerp(x0, x1, d.s.u);
-        g.strokeStyle = C.ink; g.lineWidth = 1; g.beginPath(); g.moveTo(X, 10); g.lineTo(X, d.h - 14); g.stroke();
+        g.strokeStyle = C.ink; g.lineWidth = 1.5; g.beginPath(); g.moveTo(X, 10); g.lineTo(X, d.h - 14); g.stroke();
         const r = F.rho(d.s.u);
-        const fmt = (x) => (x >= 59 ? 'passé' : x <= -0.5 ? '—' : `${x.toFixed(2)} m`);
-        d.status(`v = ${F.speed(d.s.u).toExponential(1)} · front ${fmt(r)}`);
+        const f = (x) => (x >= 59 ? 'passé' : x <= -0.5 ? 'pas encore parti' : `${fr(x)} m`);
+        d.status(`v = ${F.speed(d.s.u).toExponential(1)} · front ${f(r)}`);
       },
     });
 
-    // 02 — sphère ou ellipsoïde
-    demo('#fig-oeil', {
-      title: 'La région allumée', aspect: 1.8,
-      controls: [{ key: 'rho', label: 'Front ρ (m)', min: 0, max: 5, step: 0.01, value: 2.6 }],
-      buttons: [{ key: 'warp', label: "Retard de l'œil", toggle: true, value: true }],
+    // ── 04 · la charge du stroboscope ──
+    demo('#fig-cordon', {
+      title: 'La charge sur une boucle', aspect: 2.6,
+      controls: [{ key: 'u', label: 'Phase u', min: 0, max: 1, step: 0.001, value: 0.05, fmt: (v) => v.toFixed(3) }],
       draw(g, d) {
-        const k = d.h / 2.6, s = [-0.3, 0, -0.3], e = [0.2, 0, 1.5];
-        const X = (p) => d.w / 2 + p[0] * k, Y = (p) => d.h * 0.2 + (p[2] + 0.2) * k;
-        const step = 4;
-        for (let py = 0; py < d.h; py += step) for (let px = 0; px < d.w; px += step) {
-          const x = [(px - d.w / 2) / k, 0, (py - d.h * 0.2) / k - 0.2];
-          const D = d.s.warp ? Math.hypot(x[0] - e[0], x[2] - e[2]) : 0;
-          const L = Math.hypot(x[0] - s[0], x[2] - s[2]);
-          const gg = gate(d.s.rho, L, D, 0.04) / 4;
-          if (gg > 0.01) { g.fillStyle = alpha(C.c2, 0.28 * gg); g.fillRect(px, py, step, step); }
-        }
-        g.fillStyle = C.c2; g.beginPath(); g.arc(X(s), Y(s), 5, 0, TAU); g.fill(); label(g, 'ampoule', X(s) + 8, Y(s) - 6);
-        g.fillStyle = C.ink; g.beginPath(); g.arc(X(e), Y(e), 4, 0, TAU); g.fill(); label(g, 'œil', X(e) + 8, Y(e) + 4);
-        d.status(d.s.warp ? 'ellipsoïde : foyers ampoule et œil' : 'sphère centrée sur l’ampoule');
+        const F = FILM, x0 = 16, x1 = d.w - 14, y0 = d.h - 18, y1 = 26;
+        slowBands(g, x0, x1, 8, d.h - 8);
+        g.fillStyle = alpha(C.c3, 0.1); g.fillRect(x0, lerp(y0, y1, 0.92), x1 - x0, lerp(y0, y1, 0.82) - lerp(y0, y1, 0.92));
+        g.strokeStyle = C.faint; g.setLineDash([4, 4]);
+        for (const q of [0.82, 0.92]) { g.beginPath(); g.moveTo(x0, lerp(y0, y1, q)); g.lineTo(x1, lerp(y0, y1, q)); g.stroke(); }
+        g.setLineDash([]);
+        g.strokeStyle = C.c3; g.lineWidth = 2; g.beginPath();
+        for (let i = 0; i <= 800; i++) { const u = i / 800, y = lerp(y0, y1, F.charge(u)); i ? g.lineTo(lerp(x0, x1, u), y) : g.moveTo(lerp(x0, x1, u), y); }
+        g.stroke();
+        label(g, 'charge', x0 + 4, 16);
+        label(g, 'éclair', lerp(x0, x1, TIMELINE.slow) + 4, y0 - 4);
+        const X = lerp(x0, x1, d.s.u); g.strokeStyle = C.ink; g.lineWidth = 1.5; g.beginPath(); g.moveTo(X, 8); g.lineTo(X, d.h - 8); g.stroke();
+        const q = F.charge(d.s.u);
+        d.status(`charge ${fr(q)} · voyant ${q >= 0.92 ? 'allumé' : q > 0.82 ? 's\'allume' : 'rougeoyant ou éteint'}`);
       },
     });
 
-    // 03 — l'écho de la glace
+    // ── 05 · l'écho de la glace ──
     {
       const n = [0, 0, 1], { u, v } = planeBasis(n);
       const M = { c: [0.1, 0, -0.55], n, u, v, hw: 0.32, hh: 10, shape: 'rect' };
+      let lampS = [-0.35, 0, 0.05];
       demo('#fig-glace', {
         title: 'Front direct et écho', aspect: 1.8,
-        controls: [{ key: 'rho', label: 'Front ρ (m)', min: 0, max: 2.6, step: 0.01, value: 1.2 }],
-        setup(d) { d.state.s = [-0.35, 0, 0.05]; },
-        pointer(d, p) { if (p.down) { const k = d.h / 1.8; d.state.s = [(p.x - d.w / 2) / k, 0, Math.min(0.6, Math.max(-0.5, (p.y - d.h * 0.25) / k - 0.55 + 0.1))]; } },
+        controls: [{ key: 'rho', label: 'Front ρ (m)', min: 0, max: 2.6, step: 0.01, value: 1.2, fmt: (v) => `${fr(v)} m` }],
+        pointer(d, p) { if (p.down) { const k = d.h / 1.8; lampS = [(p.x - d.w / 2) / k, 0, Math.min(0.6, Math.max(-0.5, (p.y - d.h * 0.25) / k - 0.55 + 0.1))]; } },
         draw(g, d) {
-          const k = d.h / 1.8, s = d.state.s ?? [-0.35, 0, 0.05];
+          const k = d.h / 1.8, s = lampS;
           const X = (p) => d.w / 2 + p[0] * k, Y = (p) => d.h * 0.25 + (p[2] + 0.55 - 0.1) * k;
           const step = 4;
           for (let py = 0; py < d.h; py += step) for (let px = 0; px < d.w; px += step) {
@@ -234,22 +354,52 @@
           g.strokeStyle = C.faint; g.lineWidth = 1; g.beginPath(); g.moveTo(0, Y(M.c)); g.lineTo(d.w, Y(M.c)); g.stroke();
           g.strokeStyle = C.ink; g.lineWidth = 3; g.beginPath(); g.moveTo(X([M.c[0] - M.hw]), Y(M.c)); g.lineTo(X([M.c[0] + M.hw]), Y(M.c)); g.stroke();
           g.fillStyle = C.c2; g.beginPath(); g.arc(X(s), Y(s), 5, 0, TAU); g.fill();
-          label(g, 'ampoule (glisser)', X(s) + 8, Y(s) - 6);
+          label(g, 'lampe (glisser)', X(s) + 8, Y(s) - 6);
           label(g, 'glace', X([M.c[0] + M.hw]) + 6, Y(M.c) - 4);
-          d.status(`ρ = ${d.s.rho.toFixed(2)} m · écho après ${(2 * (s[2] - M.c[2])).toFixed(2)} m de chemin`);
+          d.status(`l\'écho part de la glace à ρ = ${fr(s[2] - M.c[2])} m`);
         },
       });
     }
 
-    // 05 — le miroir ardent (plan de coupe y = 0)
+    // ── 07 · les images de la lampe entre deux glaces (vue de dessus) ──
     {
-      // (une sphère : les deux foyers sont l'ampoule)
+      const G = { zA: -0.75, zB: 0.75, A: { cx: -0.35, cy: 0, hw: 0.75, hh: 10 }, B: { cx: -0.35, cy: 0, hw: 0.75, hh: 10 } };
+      const s = [-0.15, 0, -0.25], e = [0.25, 0, 1.3];
+      const IM = galleryImages(s, G, 4).map((im) => ({ ...im, at: dist(im.q, e) })).sort((a, b) => a.at - b.at);
+      demo('#fig-galerie', {
+        title: 'Les copies de la lampe', aspect: 2.8,
+        controls: [{ key: 'rho', label: 'Front ρ (m)', min: 1.5, max: 7, step: 0.01, value: 2.5, fmt: (v) => `${fr(v)} m` }],
+        draw(g, d) {
+          const k = Math.min(d.w / 13, (d.h - 40) / 2.4), X = (x) => d.w / 2 + (x + 0.15) * k, Z = (z) => d.h / 2 + (z - 0.1) * k;
+          // les glaces (traits épais) et les murs du fond
+          for (const zz of [G.zA, G.zB]) { g.strokeStyle = C.ink; g.lineWidth = 3; g.beginPath(); g.moveTo(X(zz), Z(G.A.cx - G.A.hw)); g.lineTo(X(zz), Z(G.A.cx + G.A.hw)); g.stroke(); }
+          label(g, 'A', X(G.zA) - 12, Z(G.A.cx - G.A.hw) + 8, { size: 11, color: C.ink }); label(g, 'B', X(G.zB) + 5, Z(G.A.cx - G.A.hw) + 8, { size: 11, color: C.ink });
+          // le front direct
+          g.strokeStyle = alpha(C.c2, 0.5); g.lineWidth = 1; g.beginPath(); g.arc(X(s[0]), Z(s[2]), d.s.rho * k, 0, TAU); g.stroke();
+          let lit = 0, next = null;
+          for (const im of IM) {
+            const on = d.s.rho >= im.at, r = 3 + 6 * 0.88 ** im.n;
+            if (on) lit++; else if (!next) next = im;
+            g.fillStyle = on ? alpha(C.c1, 0.35 + 0.65 * 0.88 ** im.n) : 'transparent'; g.strokeStyle = on ? C.c1 : alpha(C.ink, 0.35);
+            g.beginPath(); g.arc(X(im.q[0]), Z(im.q[2]), r, 0, TAU); if (on) g.fill(); g.stroke();
+            label(g, `${im.side}${im.n}`, X(im.q[0]) - 8, Z(im.q[2]) + r + 13, { size: 10, color: on ? C.ink : C.dim });
+          }
+          g.fillStyle = C.c2; g.beginPath(); g.arc(X(s[0]), Z(s[2]), 5, 0, TAU); g.fill(); label(g, 'lampe', X(s[0]), Z(s[2]) + 17, { size: 11, align: 'center' });
+          g.fillStyle = C.ink; g.beginPath(); g.arc(X(e[0]), Z(e[2]), 4, 0, TAU); g.fill(); label(g, 'œil', X(e[0]) + 8, Z(e[2]) + 4, { size: 11 });
+          d.status(`${lit} copie${lit > 1 ? 's' : ''} allumée${lit > 1 ? 's' : ''}${next ? ` · la suivante (${next.side}${next.n}) à ρ = ${fr(next.at)} m` : ''}`);
+        },
+      });
+    }
+
+    // ── 08 · le miroir ardent (plan de coupe y = 0) ──
+    {
+      // (une sphère : les deux foyers sont la lampe)
       const f1 = [-0.45, 0, 0], f2 = f1;
       const E = makeEllipse(f1, f2, [0.4, 0, 0], 0.26);
-      const { u: U2 } = { u: norm([-E.axis[2], 0, E.axis[0]]) };
+      const U2 = norm([-E.axis[2], 0, E.axis[0]]);
       demo('#fig-ardent', {
-        title: 'Miroir concave centré sur l’ampoule', aspect: 1.8,
-        controls: [{ key: 'rho', label: 'Front ρ (m)', min: 0.3, max: 2.4, step: 0.005, value: 1.4 }],
+        title: 'Miroir concave centré sur la lampe', aspect: 1.8,
+        controls: [{ key: 'rho', label: 'Front ρ (m)', min: 0.3, max: 2.4, step: 0.005, value: 1.4, fmt: (v) => `${fr(v)} m` }],
         draw(g, d) {
           const k = d.h / 1.4, X = (p) => d.w / 2 + p[0] * k, Y = (p) => d.h * 0.5 + p[2] * k;
           const th = Math.acos(E.cosCap), cap = [];
@@ -273,28 +423,27 @@
           const step = 3;
           for (let py = 0; py < d.h; py += step) for (let px = 0; px < d.w; px += step) {
             const x = [(px - d.w / 2) / k, 0, (py - d.h * 0.5) / k];
-            const e = ellipseEcho(x, E);
-            if (e && Math.abs(e.L - d.s.rho) < 0.008) g.fillRect(px, py, step, step);
+            const ec = ellipseEcho(x, E);
+            if (ec && Math.abs(ec.L - d.s.rho) < 0.008) g.fillRect(px, py, step, step);
           }
           // front direct
           g.strokeStyle = alpha(C.c2, 0.8); g.lineWidth = 1.5; g.beginPath(); g.arc(X(f1), Y(f1), d.s.rho * k, 0, TAU); g.stroke();
-          g.fillStyle = C.c2; g.beginPath(); g.arc(X(f1), Y(f1), 5, 0, TAU); g.fill(); label(g, 'ampoule', X(f1) - 24, Y(f1) - 12);
-          
+          g.fillStyle = C.c2; g.beginPath(); g.arc(X(f1), Y(f1), 5, 0, TAU); g.fill(); label(g, 'lampe', X(f1) - 24, Y(f1) - 12);
           const rr = 2 * E.a - d.s.rho;
-          d.status(rr > 0 ? `l’écho est à ${(rr * 100).toFixed(0)} cm de l’ampoule` : `l’écho a repassé par l’ampoule il y a ${(-rr * 100).toFixed(0)} cm`);
+          d.status(Math.abs(rr) < 0.005 ? 'l\'écho est sur la lampe' : rr > 0 ? `l\'écho est à ${(rr * 100).toFixed(0)} cm de la lampe` : `l\'écho a repassé par la lampe il y a ${(-rr * 100).toFixed(0)} cm`);
         },
       });
     }
 
-    // 06 — les pinceaux de la boule (en coupe)
+    // ── 09 · les pinceaux de la boule (en coupe) ──
     demo('#fig-facettes', {
       title: 'Boule à facettes', aspect: 2,
-      controls: [{ key: 'rho', label: 'Front ρ (m)', min: 0, max: 2.2, step: 0.005, value: 1.2 }],
+      controls: [{ key: 'rho', label: 'Front ρ (m)', min: 0, max: 4.8, step: 0.005, value: 1.2, fmt: (v) => `${fr(v)} m` }],
       draw(g, d) {
         const k = d.h / 1.2, B = [0, 0], rb = 0.1, s = [-0.7, 0.15], wallX = 0.9, N = 36;
         const X = (x) => d.w / 2 + x * k, Y = (y) => d.h / 2 - y * k;
         g.strokeStyle = C.faint; g.beginPath(); g.moveTo(X(wallX), 0); g.lineTo(X(wallX), d.h); g.stroke();
-        const ds = Math.hypot(s[0] - B[0], s[1] - B[1]);
+        let hits = 0, total = 0; const due = [];
         for (let i = 0; i < N; i++) {
           const a = ((i + 0.5) / N) * TAU, n = [Math.cos(a), Math.sin(a)];
           const c = [B[0] + n[0] * rb, B[1] + n[1] * rb];
@@ -306,34 +455,20 @@
           const t = (wallX - c[0]) / r[0], hit = [c[0] + r[0] * t, c[1] + r[1] * t];
           const L = Math.hypot(c[0] - s[0], c[1] - s[1]) + t;
           const reach = Math.min(t, d.s.rho - Math.hypot(c[0] - s[0], c[1] - s[1]));
+          total++; due.push(L);
           if (reach > 0) {
             g.strokeStyle = alpha(C.c3, 0.55); g.lineWidth = 1.2; g.beginPath(); g.moveTo(X(c[0]), Y(c[1])); g.lineTo(X(c[0] + r[0] * reach), Y(c[1] + r[1] * reach)); g.stroke();
           }
-          if (d.s.rho >= L) { g.fillStyle = C.c3; g.fillRect(X(wallX) - 3, Y(hit[1]) - 4, 6, 8); }
+          if (d.s.rho >= L) { hits++; g.fillStyle = C.c3; g.fillRect(X(wallX) - 3, Y(hit[1]) - 4, 6, 8); }
         }
         g.strokeStyle = alpha(C.c2, 0.6); g.beginPath(); g.arc(X(s[0]), Y(s[1]), d.s.rho * k, 0, TAU); g.stroke();
         g.strokeStyle = C.ink; g.lineWidth = 2; g.beginPath(); g.arc(X(B[0]), Y(B[1]), rb * k, 0, TAU); g.stroke();
         g.fillStyle = C.c2; g.beginPath(); g.arc(X(s[0]), Y(s[1]), 5, 0, TAU); g.fill();
-        label(g, 'ampoule', X(s[0]) - 20, Y(s[1]) - 10); label(g, 'mur', X(wallX) + 6, 16);
-        d.status(`ρ = ${d.s.rho.toFixed(2)} m · la boule est à ${ds.toFixed(2)} m de l’ampoule`);
+        label(g, 'lampe', X(s[0]) - 20, Y(s[1]) - 10); label(g, 'mur', X(wallX) + 6, 16);
+        const next = due.filter((L) => L > d.s.rho).sort((a, b) => a - b)[0];
+        d.status(`${hits} tache${hits > 1 ? 's' : ''} sur ${total} au mur${next ? ` · la suivante à ρ = ${fr(next)} m` : ''}`);
       },
     });
-
-    // 08 — la charge du stroboscope
-    demo('#fig-cordon', {
-      title: 'La charge sur une boucle', aspect: 2.6,
-      draw(g, d) {
-        const x0 = 16, x1 = d.w - 14, y0 = d.h - 18, y1 = 22;
-        slowBands(g, d, x0, x1, 8, d.h - 8);
-        g.strokeStyle = C.faint; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(x0, lerp(y0, y1, 0.87)); g.lineTo(x1, lerp(y0, y1, 0.87)); g.stroke(); g.setLineDash([]);
-        g.strokeStyle = C.c3; g.lineWidth = 2; g.beginPath();
-        for (let i = 0; i <= 800; i++) { const u = i / 800, y = lerp(y0, y1, F.charge(u)); i ? g.lineTo(lerp(x0, x1, u), y) : g.moveTo(lerp(x0, x1, u), y); }
-        g.stroke();
-        label(g, 'charge (le voyant s’allume au-dessus du pointillé)', x0 + 4, 16);
-        label(g, 'éclair', lerp(x0, x1, TIMELINE.slow) + 4, y0 - 4);
-      },
-    });
-
   </script>
 </body>
 </html>

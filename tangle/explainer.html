@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#050506">
   <title>Tangle · défis techniques</title>
-  <meta name="description" content="Comment Tangle tord une corde jusqu'au flambage : tiges de Cosserat en XPBD, inextensibilité exacte, contacts qui ne se traversent pas, Lk = Tw + Wr, came calculée d'après le plan, temps de caméra rapide.">
+  <meta name="description" content="Comment fonctionne Tangle, reconstruit pas à pas : une corde décrite par des segments orientés, sa longueur gardée exacte sous un poids lourd, la torsion mesurée entre voisins, le seuil de flambage, le compte des tours Lk = Tw + Wr, les contacts, la came et le temps du film.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
@@ -22,123 +22,262 @@
 
   <main>
     <header class="hero">
-      <div class="kicker">Day 04 · Tangle · le tour de trop</div>
-      <h1>Comment une corde s’emmêle d’elle-même</h1>
-      <p class="lede">Un moteur tord une corde, tour après tour. Elle reste droite, puis, d’un coup, flambe en une boucle qui s’enroule sur elle-même. Une came libère le balancier et tout se défait. Personne n’anime la corde : chaque image est relue d’une simulation de tige élastique intégrée trois mille fois par seconde. La difficulté est de garder le compte exact des tours de torsion pendant toute la boucle, sans qu’un seul ne se perde ou ne saute.</p>
+      <div class="kicker">Day 04 · Tangle · comment ça marche</div>
+      <h1>Comment une corde s'emmêle d'elle-même</h1>
+      <p class="lede">Dans Tangle, un moteur tord une corde suspendue, tour après tour. La corde reste droite, puis elle cède d'un coup sur le côté en une boucle qui s'enroule sur elle-même. Une came libère ensuite le poids accroché en bas, qui tourne en sens inverse et défait la torsade. Personne n'anime la corde : son mouvement est calculé par une simulation physique pendant l'écran de chargement, puis relu image par image. Cette page reconstruit cette simulation pas à pas, en partant d'une corde décrite par une simple liste de points.</p>
+      <p class="prereq">Pour suivre, il suffit de savoir lire un peu de JavaScript (des tableaux et des boucles). Les formules résument ce que les démos montrent ; on peut les sauter sans perdre le fil. Les détails de production sont rangés dans les encadrés « Pour aller plus loin ».</p>
     </header>
 
     <figure class="cover">
-      <img src="docs/capture.jpg" alt="Le cordon en torsade, dans le décor Muybridge" width="1600" height="900">
-      <figcaption>Le cordon, juste après le flambage. La rayure tissée dans la gaine rend la torsion lisible : dense là où la corde est tordue, lâche dans la boucle, où la torsion est passée dans la forme.</figcaption>
+      <img src="docs/capture.jpg" alt="Le cordon vermillon en torsade sous le mandrin, en plan serré" width="1600" height="900">
+      <figcaption>Le cordon, juste après le flambage. La rayure tissée dans la gaine rend la torsion lisible : elle est serrée là où la corde est tordue, et lâche dans la boucle, où une partie de la torsion est passée dans la forme.</figcaption>
     </figure>
 
     <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
 
     <article>
 
-      <section id="cosserat">
-        <h2><span class="n">01</span>Une corde est une suite de repères</h2>
-        <span class="src">src/gen/rod.js</span>
-        <p>Une ligne médiane ne suffit pas à décrire une corde qu’on tord : chaque morceau doit aussi savoir dans quel sens il est tourné. La corde est donc une <strong>tige de Cosserat discrète</strong> (Kugelstadt et Schömer, 2016) : 64 à 72 segments par brin, chacun portant une position et un <em>repère matériel</em>. Ce repère est un quaternion \(q_i\) (quatre nombres qui codent une rotation) dont le troisième axe \(d_3\) suit la corde et dont les deux autres marquent l’orientation de la gaine.</p>
-        <p>Deux familles de contraintes tiennent l’ensemble. La première attache le repère à la ligne : le segment doit pointer le long de son propre axe,</p>
-        <div class="eq">\[ \frac{p_{i+1} - p_i}{\ell} = d_3(q_i). \]</div>
-        <p>La seconde mesure comment le repère tourne d’un segment au suivant. Cette rotation est le <strong>vecteur de Darboux</strong> \(\Omega\), dont les deux premières composantes sont la courbure et la troisième la torsion. L’énergie élastique est la forme quadratique habituelle, avec \(B\) la raideur en flexion et \(C\) la raideur en torsion : elle croît comme le carré de chaque déformation.</p>
-        <div class="eq">\[ E = \tfrac12\,\ell\,\big(B\,\Omega_1^2 + B\,\Omega_2^2 + C\,\Omega_3^2\big). \]</div>
-        <p>Le tout est intégré par <strong>XPBD à petits pas</strong> (Macklin et al., 2019), une dynamique de positions qui corrige directement les positions pour satisfaire chaque contrainte. Plutôt que d’itérer longtemps sur un grand pas, on fait 3 000 pas par seconde physique avec une seule itération chacun. La raideur reste juste et la simulation ne dépend presque plus du pas de temps.</p>
-
-        <h3>Un demi-tour qui ne doit pas sauter</h3>
-        <p>Le calcul de \(\Omega\) cache le premier piège. La rotation relative entre deux voisins est un quaternion \(r = \bar q_i \otimes q_{i+1}\). La formule classique prend sa partie imaginaire, \(\Omega \approx 2\,\mathrm{Im}(r)/\ell\), qui vaut \(2\sin(\theta/2)\) pour un angle \(\theta\). Exacte pour les petits angles, elle <em>faiblit</em> au-delà d’un quart de tour et s’annule au tour complet. De plus, la plupart des implémentations choisissent l’hémisphère du quaternion (\(r \to -r\) si \(r_w < 0\)). Au-delà d’un demi-tour, le rappel change alors brusquement de signe et la torsion « saute » d’un tour entier. Dans une corde qu’on tord sept fois, ce saut finit toujours par arriver.</p>
-        <p>Tangle prend le logarithme exact de la rotation relative, c’est-à-dire son axe multiplié par son angle, sans choix d’hémisphère. Les quaternions évoluent continûment, leur produit aussi, et le rappel croît avec l’angle jusqu’au tour complet.</p>
-        <pre><code>const im = Math.hypot(rx, ry, rz);
-const sc = im > 1e-9 ? 2 * Math.atan2(im, rw) / im : 2;   // θ / sin(θ/2)
-Ω = sc * (rx, ry, rz) / ℓ;</code></pre>
-        <figure id="fig-log"><figcaption><b>Le rappel en torsion selon l’angle entre deux voisins.</b> À gauche, deux segments vus en bout ; la marque blanche est l’axe \(d_1\) de chacun. À droite, la composante \(\Omega_3\) que voit le solveur selon les trois formules. Tournez l’angle et suivez les trois courbes : seul le logarithme reste monotone jusqu’au tour complet, et le choix d’hémisphère inverse le rappel à \(\theta = \pi\).</figcaption></figure>
-
-        <div class="note"><b>Inertie de rotation ×100</b><p>Un segment de 9 mm a une inertie de rotation minuscule. La torsion s’y propage si vite qu’il faudrait des pas de temps encore plus fins. Multiplier cette inertie par cent ne change pas l’équilibre, seulement la vitesse des ondes de torsion, invisibles ici. Le seuil de flambage devient alors indépendant du pas : 6,0 à 6,6 tours mesurés dès 1&#8239;500 pas par seconde, pour 6,3 prédits par la théorie.</p></div>
+      <section id="scene">
+        <h2><span class="n">01</span>Ce que montre la scène</h2>
+        <span class="src">README.md · src/plan.js</span>
+        <p>Le dispositif est un banc d'essai de torsion, comme ceux des cabinets de physique. Une corde pend du <b>mandrin</b>, la pince à trois mors qu'un moteur fait tourner. À son autre bout est accroché un <b>balancier</b> : un moyeu lourd, qui tend la corde, et un bras terminé par des boules. Le bout du bras est tenu par une glissière, si bien que le balancier peut monter mais pas tourner.</p>
+        <p>Une boucle de l'animation enchaîne trois cycles. Pendant un cycle, le moteur fait tourner le mandrin d'un nombre entier de tours. La rayure tissée dans la gaine s'enroule en hélice et la corde reste droite. Au-delà d'un certain nombre de tours, elle cède sur le côté : on dit qu'elle <b>flambe</b>. La boucle qui naît s'enroule sur elle-même en torsade et remonte le balancier. Quand le mandrin a fini ses tours, une came écarte la glissière. Le balancier, libéré, tourne en sens inverse, la torsade se défait, et il se pose. Les trois cycles vont en crescendo : le premier reste sous le seuil de flambage, le deuxième le franchit à peine, le troisième le dépasse nettement.</p>
+        <p>La graine tire l'une de trois familles de cordes :</p>
+        <ul>
+          <li><b>Cordon</b> : une corde ronde de 1 cm de diamètre, tendue par un balancier de 110 g, tordue de 4, 7 puis 8 tours ;</li>
+          <li><b>Paire</b> : deux brins plus fins, écartés de 2,8 cm et tendus par 160 g, qui s'enroulent l'un autour de l'autre comme les torons d'un cordage (3, 5 puis 7 tours) ;</li>
+          <li><b>Spirale</b> : un cordon tendu par 25 g seulement, qui se love en ressort d'un bout à l'autre (2, 5 puis 6 tours).</li>
+        </ul>
+        <p>La page suit la construction de la simulation. On décrit d'abord la corde par des segments qui ont chacun une orientation (section 02). On apprend ensuite à garder sa longueur exacte sous un poids lourd (section 03), puis à mesurer sa flexion et sa torsion (section 04). On en déduit le nombre de tours qui la fait flamber (section 05). Viennent ensuite deux garde-fous : un compte des tours qui ne doit jamais changer (section 06) et des contacts qui empêchent la corde de se traverser (section 07). Les deux dernières sections décrivent la came qui commande la machine (section 08) et le temps du film, ralenti au moment du flambage (section 09).</p>
       </section>
 
-      <section id="inextensible">
-        <h2><span class="n">02</span>Un balancier deux cents fois plus lourd qu’un segment</h2>
-        <span class="src">src/gen/rod.js · inextensible()</span>
-        <p>La corde porte un balancier de 110 g, alors qu’un segment de 9 mm pèse un demi-gramme. En dynamique de positions, chaque contrainte de longueur répartit sa correction au prorata des masses inverses \(w = 1/m\). Le balancier ne bouge presque pas, le segment du dessus encaisse toute la correction, et la contrainte suivante, traitée ensuite, défait une partie de ce travail. Un passage de Gauss-Seidel, qui traite les contraintes une à une, n’a pas le temps de faire remonter l’information jusqu’au mandrin (l’axe du moteur qui tient le haut de la corde). La corde s’allonge alors comme un élastique, de moitié dans les cas extrêmes.</p>
-        <p>Comme les contraintes de longueur d’une chaîne ne couplent que des voisins, leur système linéaire est <strong>tridiagonal</strong> : chaque équation ne fait intervenir que ses deux voisines. Tangle le résout exactement à chaque pas par l’algorithme de Thomas, en \(O(n)\), le balancier compris :</p>
-        <div class="eq">\[ \big(J\,W\,J^{\top}\big)\,\lambda = C, \qquad \Delta p = -\,W J^{\top} \lambda, \]</div>
-        <p>où \(C_j = |p_{j+1} - p_j| - \ell\) est l’allongement de chaque segment et \(W\) la diagonale des masses inverses (pour le dernier sommet : sa masse plus la part du balancier, sur l’axe vertical seulement, puisque le balancier coulisse dans sa douille).</p>
-        <figure id="fig-chain"><figcaption><b>Une chaîne de vingt maillons tenant une masse.</b> Simulation verticale à une dimension, maillons de 9 mm sous la pesanteur réelle, XPBD à 600 pas par seconde. Augmentez le rapport des masses. Avec Gauss-Seidel, la chaîne s’étire bien au-delà de sa longueur ; la résolution tridiagonale la garde à sa longueur exacte, quel que soit le rapport. La ligne pointillée est la longueur au repos.</figcaption></figure>
+      <section id="reperes">
+        <h2><span class="n">02</span>Une corde est une suite de segments orientés</h2>
+        <span class="src">src/gen/rod.js · createRod()</span>
+        <p>Sur une corde lisse, on ne voit pas si elle est tordue. La gaine du projet porte donc une <b>rayure</b> : un fil d'une autre couleur, tissé dans la tresse. Comme tous les fils d'une tresse, elle tourne déjà en hélice autour de la corde. Quand on tord la corde, cette hélice se resserre ou se détend, et la torsion devient visible.</p>
+        <p>La description la plus simple d'une corde est une liste de points reliés par des segments, comme une chaîne. On découpe la corde de 62 cm en 72 segments d'environ 8,6 mm (64 pour chacun des deux brins de la paire). Cette liste décrit bien la forme de la corde, mais pas sa torsion. Une corde droite tordue de six tours a exactement les mêmes points qu'une corde droite au repos.</p>
+        <p>On attache donc à chaque segment un <b>repère matériel</b>, trois flèches perpendiculaires collées à la gaine. La troisième flèche, <i>d</i><sub>3</sub>, suit le segment. Les deux autres, <i>d</i><sub>1</sub> et <i>d</i><sub>2</sub>, sont dans la section de la corde et tournent avec elle, comme la rayure. Tordre la corde, c'est faire tourner <i>d</i><sub>1</sub> et <i>d</i><sub>2</sub> autour de <i>d</i><sub>3</sub> un peu plus à chaque segment. Une corde décrite ainsi s'appelle une <b>tige de Cosserat discrète</b> (Kugelstadt et Schömer, 2016). Dans le code, chaque repère est rangé dans un <b>quaternion</b> <i>q</i><sub>i</sub>, quatre nombres qui codent une rotation.</p>
+        <figure id="fig-braid"><figcaption><b>La gaine tressée</b>, calculée pixel par pixel comme dans le shader de la scène : deux familles de huit fils qui se croisent, et la rayure tissée dans l'une d'elles. Le curseur fait tourner le repère <i>d</i><sub>1</sub> d'un bout à l'autre du morceau visible, et la tresse tourne avec lui.</figcaption></figure>
+        <p>Les positions et les repères ne sont pas indépendants : le segment doit pointer dans la direction de sa propre flèche <i>d</i><sub>3</sub>. Cette règle s'écrit</p>
+        <div class="eq">\[ \frac{p_{i+1} - p_i}{\ell} = d_3(q_i), \]</div>
+        <p>où <i>p</i><sub>i</sub> et <i>p</i><sub>i+1</sub> sont les deux extrémités du segment <i>i</i> (en mètres), ℓ sa longueur au repos (8,6 mm pour le cordon) et <i>d</i><sub>3</sub>(<i>q</i><sub>i</sub>) la troisième flèche de son repère. Le premier membre est la direction du segment, ramenée à une longueur 1 quand le segment a sa longueur de repos. La règle tient donc à la fois la direction du segment et sa longueur. La simulation ne l'impose pas d'un coup : elle corrige un peu les positions et les repères à chaque pas, comme on le verra dans la section suivante.</p>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Au repos, la rayure fait 3,15 tours d'hélice sur le morceau visible (le bandeau les compte). Tordez de −3 tours : elle en fait 6,15 et l'hélice se resserre. Tordez de +3 tours : il n'en reste que 0,15, et la rayure court presque droite le long de la corde.</li>
+          <li>Suivez la rayure au repos : elle disparaît un passage sur deux sous les fils de l'autre famille. C'est le dessin d'une tresse réelle en sergé 2/2, où chaque fil passe sur deux fils de l'autre famille, puis sous deux.</li>
+          <li>Activez « Deux rayures » : les deux fuseaux de couleur sont opposés sur le tour de la corde et dessinent une double hélice.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>La gaine de la scène compte seize fuseaux, huit dans chaque sens, chaque fil en relief (une bosse d'environ 0,5 mm) avec ses fibres, et un lustre textile. La rayure est un fuseau d'une autre couleur, ou deux fuseaux opposés.</p>
+          <p>Le tube est déformé dans le vertex shader, le programme de la carte graphique qui place chaque sommet du maillage. À chaque image, le processeur relit la simulation, densifie la ligne médiane par une spline de Catmull-Rom (trois points par segment) et calcule le vecteur <i>d</i><sub>1</sub> en chaque point. Il range le tout dans une petite texture de 217 × 4 texels par brin : les positions, <i>d</i><sub>1</sub>, et les mêmes grandeurs à l'image précédente, qui servent à calculer le flou de mouvement. Le motif de la tresse tourne avec <i>d</i><sub>1</sub>, si bien que la torsion qu'on voit est exactement celle de la simulation.</p>
+        </div></details>
+      </section>
+
+      <section id="longueur">
+        <h2><span class="n">03</span>Garder la longueur sous un poids lourd</h2>
+        <span class="src">src/gen/rod.js · step(), inextensible()</span>
+        <p>Une corde ne s'allonge presque pas, même sous un poids. Or le balancier du cordon pèse 110 g, alors qu'un segment pèse environ un demi-gramme (0,06 kg/m × 8,6 mm = 0,52 g), soit plus de deux cents fois moins. Ce rapport de masses pose un problème à la méthode de simulation la plus courante pour les cordes.</p>
+
+        <h3>Première idée : avancer, puis corriger les positions</h3>
+        <p>Cette méthode s'appelle la <b>dynamique de positions</b>. À chaque pas de temps, on avance chaque point selon sa vitesse et la pesanteur, sans s'occuper des règles. Puis on corrige les positions pour que chaque règle soit de nouveau respectée. Pour un segment trop long, on rapproche ses deux extrémités. La correction est partagée selon les masses : chaque extrémité bouge en proportion de sa <b>masse inverse</b> <i>w</i> = 1/<i>m</i>, si bien que le point le plus léger fait presque tout le chemin. Enfin, on déduit la nouvelle vitesse du déplacement effectué pendant le pas.</p>
+        <p>Le projet utilise la variante <b>XPBD</b> (Macklin et al., 2019), qui donne à chaque règle une souplesse. Une règle peut alors représenter un ressort de raideur connue, comme la résistance de la corde à la flexion, plutôt qu'une liaison rigide. Il fait 3 000 pas par seconde de temps physique, avec une seule passe de corrections par pas : des pas très courts valent mieux qu'un grand pas corrigé longuement.</p>
+        <p>Les segments sont corrigés l'un après l'autre, du haut vers le bas, chacun voyant les positions déjà corrigées par le précédent. Cette façon de faire s'appelle la méthode de <b>Gauss-Seidel</b>. La démo l'applique à une chaîne verticale de vingt maillons de 9 mm, accrochée en haut et lestée en bas.</p>
+        <figure id="fig-chain"><figcaption><b>Une chaîne de vingt maillons qui porte une masse.</b> Simulation verticale à une dimension, sous la pesanteur réelle, à 600 pas par seconde. Le premier curseur règle le rapport entre la masse accrochée et celle d'un maillon (×214 correspond au cordon) ; le second, le nombre de passes de Gauss-Seidel par pas. La ligne pointillée est la longueur au repos ; la jauge donne l'allongement.</figcaption></figure>
+
+        <h3>Ce qui ne va pas : la chaîne s'étire</h3>
+        <p>Quand la masse du bas est légère, une passe par pas suffit presque. Quand elle est lourde, la correction du dernier segment ne déplace presque que le maillon du dessus, puisque c'est lui le plus léger. La correction suivante défait une partie de ce travail, et ainsi de suite. En une passe, l'information ne remonte pas jusqu'au point d'attache : la chaîne s'allonge comme un élastique. Au rapport du cordon, elle s'allonge de près des deux tiers. Multiplier les passes réduit l'écart sans l'annuler, et chaque passe coûte autant que la première.</p>
+
+        <h3>La correction : résoudre toutes les longueurs à la fois</h3>
+        <p>L'allongement d'un segment ne dépend que de ses deux extrémités, donc de ses deux voisins. Si l'on écrit les corrections de tous les segments comme un seul système d'équations, chaque équation ne fait intervenir que sa voisine du dessus et sa voisine du dessous. Un tel système est dit <b>tridiagonal</b>, parce que ses coefficients non nuls tiennent sur trois diagonales. On le résout exactement en deux balayages de la chaîne, par l'<b>algorithme de Thomas</b> : un balayage descendant qui élimine une inconnue par équation, puis un balayage remontant qui donne les corrections. Le coût est proportionnel au nombre de segments, comme une passe de Gauss-Seidel, et la chaîne garde sa longueur exacte quel que soit le poids accroché.</p>
+        <p>En résumé, chaque pas résout</p>
+        <div class="eq">\[ \big(J\,W\,J^{\top}\big)\,\lambda = C, \qquad \Delta p = -\,W J^{\top} \lambda. \]</div>
+        <p><i>C</i> est la liste des allongements, <i>C</i><sub>j</sub> = |<i>p</i><sub>j+1</sub> − <i>p</i><sub>j</sub>| − ℓ, en mètres. <i>W</i> est la matrice diagonale des masses inverses. <i>J</i> contient la dérivée de chaque allongement par rapport à chaque position : elle dit dans quelle direction déplacer un point pour raccourcir un segment. λ contient une intensité de correction par segment, et Δ<i>p</i> est le déplacement qui en résulte pour chaque point. Comme <i>J</i> ne relie que des voisins, la matrice <i>J W J</i><sup>⊤</sup> est tridiagonale.</p>
+        <p>À une dimension, comme dans la démo, l'algorithme tient en quelques lignes (<code>a</code>, <code>b</code>, <code>c</code> sont les trois diagonales, <code>r</code> les allongements) :</p>
+<pre><code>for (let k = 1; k &lt; N; k++) {             // balayage descendant
+  const f = a[k] / b[k - 1];
+  b[k] -= f * c[k - 1]; r[k] -= f * r[k - 1];
+}
+lam[N - 1] = r[N - 1] / b[N - 1];          // balayage remontant
+for (let k = N - 2; k &gt;= 0; k--) lam[k] = (r[k] - c[k] * lam[k + 1]) / b[k];
+for (let k = 0; k &lt; N; k++) {             // corrections des positions
+  y[k] += w[k] * lam[k]; y[k + 1] -= w[k + 1] * lam[k];
+}</code></pre>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Au rapport ×214, avec une passe : la chaîne oscille, puis se stabilise vers 64 % d'allongement au bout de dix secondes.</li>
+          <li>Montez à 30 passes par pas : l'allongement tombe à 2,1 %, sans disparaître. Activez la résolution exacte : il reste à 0,00 %.</li>
+          <li>Descendez le rapport à ×1 avec une seule passe : l'allongement n'est plus que de 2,9 %, contre 64 % au rapport du cordon.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Dans la scène, le dernier sommet de chaque brin porte, en plus de sa masse, la part du balancier, mais seulement sur l'axe vertical : le balancier coulisse dans sa douille et ne peut pas partir de côté. Les deux premiers sommets sont pris dans les mors du mandrin, les deux derniers dans la pince du balancier, et ne bougent qu'avec eux.</p>
+          <p>La règle de la section 02 peut aussi incliner un segment par rapport à sa flèche <i>d</i><sub>3</sub> (un cisaillement). Cet écart est borné à 0,05 rad, soit 2,9° : au-delà, lors d'un claquement de la corde, les repères décrochaient de la ligne.</p>
+        </div></details>
+      </section>
+
+      <section id="torsion">
+        <h2><span class="n">04</span>Mesurer la flexion et la torsion</h2>
+        <span class="src">src/gen/rod.js · bendTwist()</span>
+        <p>Une corde résiste quand on la plie et quand on la tord, et elle revient vers sa forme de repos quand on la lâche. Pour le simuler, il faut mesurer de combien elle est pliée et tordue à chaque endroit.</p>
+        <p>Cette mesure se fait entre deux segments voisins. On compare le repère du segment <i>i</i> à celui du segment <i>i</i> + 1 : la rotation qui fait passer de l'un à l'autre a un axe et un angle θ. Divisée par la longueur d'un segment, elle donne le <b>vecteur de Darboux</b> Ω, en radians par mètre. Ses deux premières composantes, Ω<sub>1</sub> et Ω<sub>2</sub>, mesurent la courbure ; la troisième, Ω<sub>3</sub>, mesure la torsion. Une corde droite tordue de six tours sur 62 cm a Ω<sub>3</sub> = 6 × 2π / 0,62 ≈ 61 rad/m.</p>
+        <p>L'énergie élastique stockée dans un segment croît comme le carré de chaque déformation :</p>
+        <div class="eq">\[ E = \tfrac12\,\ell\,\big(B\,\Omega_1^2 + B\,\Omega_2^2 + C\,\Omega_3^2\big). \]</div>
+        <p><i>B</i> est la raideur en flexion et <i>C</i> la raideur en torsion, en N·m². Pour le cordon, <i>B</i> = 2,4·10⁻³ N·m² et <i>C</i> = <i>B</i>/1,4 ≈ 1,7·10⁻³ N·m². La simulation corrige les repères pour faire baisser cette énergie, avec la souplesse de XPBD : un segment qui a reçu trop de torsion la rend à ses voisins.</p>
+
+        <h3>La formule courante faiblit, puis s'inverse</h3>
+        <p>Dans le code, la rotation relative est un quaternion <i>r</i> = <i>q̄</i><sub>i</sub> ⊗ <i>q</i><sub>i+1</sub>. Sa partie imaginaire, Im(<i>r</i>), vaut l'axe de la rotation multiplié par sin(θ/2). La formule habituelle prend Ω ≈ 2 Im(<i>r</i>)/ℓ, ce qui revient à remplacer l'angle θ par 2 sin(θ/2). C'est exact pour les petits angles, mais l'écart grandit avec l'angle : 10 % de trop peu à un quart de tour, 36 % à un demi-tour, et au-delà la valeur redescend jusqu'à zéro au tour complet. Le rappel faiblit donc au moment où la torsion est la plus forte.</p>
+        <p>Beaucoup d'implémentations ajoutent un second défaut. Un quaternion et son opposé codent la même rotation, et l'on choisit souvent celui dont la partie réelle est positive (on dit qu'on choisit l'hémisphère). Au-delà d'un demi-tour entre deux voisins, ce choix bascule : le rappel change brusquement de signe et la torsion saute d'un tour entier. Dans une corde qu'on tord huit fois et qui claque en flambant, ce cas finit par arriver.</p>
+        <figure id="fig-log"><figcaption><b>Le rappel en torsion selon l'angle entre deux voisins.</b> À gauche, deux segments vus en bout ; le trait blanc est la flèche <i>d</i><sub>1</sub> de chacun. À droite, la torsion Ω<sub>3</sub> (multipliée par ℓ) que verrait le calcul avec chacune des trois formules ; les points suivent le curseur.</figcaption></figure>
+
+        <h3>La correction : le logarithme exact</h3>
+        <p>Tangle calcule l'angle exact à partir des deux parties du quaternion, sans choisir d'hémisphère. La partie imaginaire a pour longueur sin(θ/2) et la partie réelle vaut cos(θ/2) ; la fonction <code>atan2</code> en tire θ/2 sans ambiguïté. On obtient Ω = θ <i>n</i> / ℓ, où <i>n</i> est l'axe de la rotation. Cette opération s'appelle le logarithme de la rotation. Comme les quaternions évoluent continûment d'un pas à l'autre, leur produit aussi, et le rappel croît avec l'angle jusqu'au tour complet.</p>
+<pre><code>const rw = w1 * w2 + x1 * x2 + y1 * y2 + z1 * z2;  // partie réelle de r
+const im = Math.hypot(rx, ry, rz);                 // longueur de Im(r)
+const sc = im &gt; 1e-9 ? 2 * Math.atan2(im, rw) / im : 2;  // θ / sin(θ/2)
+om[0] = sc * rx / len; om[1] = sc * ry / len; om[2] = sc * rz / len;</code></pre>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Placez le curseur à 90° : le logarithme donne 1,57 (l'angle en radians), la formule 2 Im(<i>r</i>) 1,41.</li>
+          <li>Passez 180° : la formule avec choix d'hémisphère saute de +2 à −2 et tire la corde à l'envers.</li>
+          <li>À 300°, le logarithme donne 5,24, la formule 2 Im(<i>r</i>) seulement 1,00, et l'hémisphère −1,00.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Le rappel ne vise pas zéro mais une petite courbure naturelle, le pli que garde une corde sortie de sa bobine (de 0,12 à 0,6 rad/m selon l'endroit, avec une phase tirée de la graine). C'est elle qui décide de quel côté et à quelle hauteur la boucle naît.</p>
+          <div class="note"><b>Inertie de rotation ×100</b><p>Un segment de 8,6 mm a une inertie de rotation minuscule : la torsion s'y propage si vite qu'il faudrait des pas encore plus courts. Le projet multiplie cette inertie par cent. Cela ne change pas l'équilibre, seulement la vitesse des ondes de torsion, invisible ici. Le flambage ne dépend alors presque plus du pas de temps. Mesuré sur un cordon (graine b5), il survient à 6,51 tours à 1 500 pas par seconde, 6,61 à 3 000 et 6,64 à 6 000, pour 6,33 prédits par la formule de la section suivante.</p></div>
+        </div></details>
       </section>
 
       <section id="greenhill">
-        <h2><span class="n">03</span>Le seuil de flambage</h2>
-        <span class="src">src/plan.js · criticalTurns()</span>
-        <p>Une tige tendue qu’on tord reste droite tant que la torsion est faible, car la tension la redresse. Au-delà d’un taux de torsion critique, se courber en hélice coûte moins d’énergie que de continuer à se tordre. C’est le <strong>flambage de Greenhill</strong>. Pour une tension \(F\), le taux critique et le nombre de tours correspondant sur toute la longueur de la corde valent :</p>
+        <h2><span class="n">05</span>Le seuil de flambage</h2>
+        <span class="src">src/plan.js · criticalTurns(), FAMILIES</span>
+        <p>Une corde tendue qu'on tord reste droite tant que la torsion est faible, parce que le poids qui la tend la redresse. Au-delà d'un certain taux de torsion, il devient moins coûteux en énergie de se courber en hélice que de continuer à se tordre, et la corde cède sur le côté. C'est le <b>flambage de Greenhill</b>.</p>
+        <p>Plus la corde est tendue, plus il faut de tours pour la faire flamber. Le calcul de stabilité d'une tige tendue donne le taux de torsion critique τ<sub>c</sub>, puis le nombre de tours correspondant sur toute la longueur :</p>
         <div class="eq">\[ \tau_c = \frac{2\sqrt{B F}}{C}, \qquad \mathrm{Lk}_c = \frac{\tau_c\,L}{2\pi}. \]</div>
-        <p>Plus le balancier tire, plus il faut de tours pour faire flamber la corde, en racine carrée de la tension. Toute la mise en scène se règle sur cette formule. Chaque famille enchaîne trois cycles en crescendo, choisis par rapport à son seuil : le premier reste dessous (la rayure s’enroule seule), le deuxième le franchit à peine (une boucle naît), le troisième le dépasse franchement (la torsade s’allonge). Le poids du balancier fixe la tension, donc le seuil. On règle la scène en choisissant ce poids, et la corde n’est jamais animée.</p>
-        <figure id="fig-greenhill"><figcaption><b>Le seuil en tours selon la masse du balancier.</b> Formule portée telle quelle depuis <code>plan.js</code>, avec les raideurs réelles de chaque famille. Les traits horizontaux sont les trois cycles de la famille, verts s’ils restent sous le seuil, or s’ils le franchissent.</figcaption></figure>
+        <p><i>B</i> et <i>C</i> sont les raideurs de la section 04. <i>F</i> est la tension, en newtons, prise au milieu de la corde : le poids du balancier plus celui de la moitié inférieure de la corde, <i>F</i> = (<i>M</i> + ½ μ <i>L</i>) <i>g</i>, avec <i>M</i> la masse du balancier, μ = 0,06 kg/m la masse linéique et <i>g</i> = 9,81 m/s². <i>L</i> = 0,62 m est la longueur de la corde. Lk<sub>c</sub> est le nombre de tours de mandrin au seuil. La tension entre sous une racine carrée : pour doubler le seuil, il faut quadrupler la tension.</p>
+        <p>Pour le cordon (110 g), la formule donne 6,33 tours. La simulation flambe à 6,61 tours, 4 % plus tard (mesuré sur la graine b5 : on repère le moment où le balancier remonte de 1 cm). Toute la mise en scène se règle sur cette formule. Les tours de chaque cycle sont fixés, et c'est le poids du balancier qui place le seuil entre eux. On règle la scène en choisissant ce poids ; la corde, elle, n'est jamais animée.</p>
+        <figure id="fig-greenhill"><figcaption><b>Le seuil en tours selon la masse du balancier</b>, calculé par la fonction du projet avec les raideurs de chaque famille. Les traits horizontaux sont les trois cycles de la famille : vert s'ils restent sous le seuil, or s'ils le dépassent.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Cordon à 110 g : le seuil est à 6,33 tours, entre le premier cycle (4 tours) et les deux suivants (7 et 8).</li>
+          <li>Montez à 138 g : le cycle de 7 tours ne flambe plus. Au-delà de 187 g, plus aucun cycle ne flambe. Descendez sous 33 g : même le premier cycle flambe, et le crescendo disparaît.</li>
+          <li>Passez à la spirale : avec 25 g, le seuil tombe à 3,71 tours. Les cycles de 5 et 6 tours le dépassent largement, ce qui laisse à la corde le temps de se lover entièrement.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>La paire n'a pas de démo ici. Ses deux brins écartés s'enroulent l'un autour de l'autre dès les premiers tours, sans flamber, et se raccourcissent en remontant le balancier. La formule appliquée à un seul de ses brins donne 14,6 tours, que ses cycles (3, 5 et 7 tours) n'atteignent pas.</p>
+        </div></details>
       </section>
 
       <section id="lk">
-        <h2><span class="n">04</span>Lk = Tw + Wr : l’invariant qui juge la simulation</h2>
+        <h2><span class="n">06</span>Le compte des tours : Lk = Tw + Wr</h2>
         <span class="src">src/gen/rod.js · twist(), writhe()</span>
-        <p>Le théorème de Călugăreanu-White explique pourquoi la boucle « absorbe » la torsion. Pour un ruban fermé, l’<em>enlacement</em> Lk (le nombre de fois que les deux bords tournent l’un autour de l’autre) est un entier qui ne change que si le ruban se traverse. Il se partage en deux termes : la <em>torsion</em> Tw, qui se lit sur la rayure, et la <em>vrille</em> Wr, qui ne dépend que de la forme de l’axe. La vrille se calcule par une intégrale double sur toutes les paires de points de l’axe :</p>
-        <div class="eq">\[ \mathrm{Lk} = \mathrm{Tw} + \mathrm{Wr}, \qquad \mathrm{Wr} = \frac{1}{4\pi}\oint\!\!\oint \frac{(\dot r(s) \times \dot r(s'))\cdot\big(r(s) - r(s')\big)}{|r(s) - r(s')|^3}\,ds\,ds'. \]</div>
-        <p>Ici, Lk est simplement la différence des tours du mandrin et du balancier. Tant que la corde est droite, Wr = 0 et toute la torsion est sur la rayure. Quand elle flambe, une boucle porte presque un tour de vrille, et la rayure se détend d’autant.</p>
-        <p>Dans la simulation, les trois termes sont mesurés <em>indépendamment</em>. Tw additionne les angles entre repères transportés parallèlement. Wr est cette intégrale de Gauss, calculée exactement par la formule de Klenin et Langowski (2000), qui donne l’angle solide d’une paire de segments. Pour appliquer le théorème, la corde ouverte est fermée par deux demi-droites verticales au-dessus du mandrin et sous le balancier. Un test vérifie que la somme reste égale à Lk pendant deux cycles complets ; une traversée la ferait sauter de 2.</p>
-        <figure id="fig-lk" class="wide"><figcaption><b>Le même enlacement, partagé autrement.</b> Faites glisser la corde pour la tourner. Le curseur « boucle » enroule l’axe ; Wr est calculé à chaque changement par la formule de Klenin-Langowski sur 160 segments, prolongés par deux demi-droites. La rayure montre alors Tw = Lk − Wr, et se détend à mesure que la boucle se forme. (Dans la démo, Tw est déduit du théorème ; dans la simulation, il est mesuré, et c’est la somme qui est testée.)</figcaption></figure>
-        <div class="note check"><b>Ce que l’invariant a trouvé</b><p>Pendant la mise au point, chaque écart de Lk a désigné une faute réelle : des repères qui décrochaient de l’axe dans un claquement (d’où un cisaillement borné), une articulation qui glissait d’un tour au-delà d’un demi-tour (d’où le logarithme exact), une boucle qui passait par-dessus l’extrémité de la corde à travers la pince (d’où la pince en obstacle). Aucune de ces fautes ne se voyait nettement à l’œil ; toutes se lisaient dans le compte des tours.</p></div>
+        <p>Après le flambage, la rayure de la boucle est moins serrée qu'avant : une partie de la torsion a disparu de la gaine. Elle n'est pas perdue. Elle est passée dans la forme de la corde, dans la boucle elle-même.</p>
+        <p>Le théorème de Călugăreanu-White fait ce compte. On le présente sur un ruban fermé, dont on suit les deux bords. L'<b>enlacement</b> Lk est le nombre de fois que les deux bords tournent l'un autour de l'autre ; c'est un entier, qui ne change que si le ruban se traverse lui-même. Il se partage en deux termes. La <b>torsion</b> Tw mesure de combien le ruban tourne autour de son axe ; c'est ce que montre la rayure. La <b>vrille</b> Wr ne dépend que de la forme de l'axe : elle vaut 0 pour un axe droit et s'approche de 1 pour une boucle complète.</p>
+        <div class="eq">\[ \mathrm{Lk} = \mathrm{Tw} + \mathrm{Wr} \]</div>
+        <p>Dans Tangle, Lk est la différence entre les tours du mandrin et ceux du balancier. Tant que la corde est droite, Wr = 0 et toute la torsion est sur la rayure. Quand elle flambe, la boucle prend presque un tour de vrille, et la rayure se détend d'autant.</p>
+        <figure id="fig-lk" class="wide"><figcaption><b>Le même enlacement, partagé autrement.</b> Le premier curseur fixe Lk, le second enroule l'axe en boucle. Wr est calculé à chaque changement à partir de la forme seule (formule de Klenin et Langowski, 160 segments). La rayure montre alors Tw = Lk − Wr. Faites glisser la corde pour la tourner. Dans la démo, Tw est déduit du théorème ; dans la simulation, il est mesuré séparément, et c'est la somme qui est vérifiée.</figcaption></figure>
+        <p>La vrille se calcule par une double somme sur toutes les paires de segments de l'axe. Pour chaque paire, on mesure l'angle sous lequel un segment « voit » l'autre (un angle solide), avec un signe qui dit dans quel sens ils se croisent. Klenin et Langowski (2000) ont donné une formule exacte de cet angle pour deux segments droits, que le projet utilise. Comme le théorème vaut pour une courbe fermée, la corde est prolongée par deux demi-droites verticales, au-dessus du mandrin et sous le balancier.</p>
+        <div class="eq">\[ \mathrm{Wr} = \frac{1}{4\pi}\sum_{i}\sum_{j \neq i} \Omega_{ij} \]</div>
+        <p>Ω<sub>ij</sub> est l'angle solide signé sous lequel le segment <i>i</i> voit le segment <i>j</i>, en stéradians. La somme sur toutes les paires ordonnées compte chaque paire deux fois ; le code ne parcourt chaque paire qu'une fois et multiplie par deux.</p>
+        <p>L'intérêt pour la simulation est que les trois termes sont mesurés indépendamment : Lk par les angles du mandrin et du balancier, Tw par les repères, Wr par la forme. Si leur somme cesse d'être juste, la simulation a commis une faute. Une corde qui se traverse fait sauter Lk de 2.</p>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Partez de « Boucle » à 0 : Wr = 0 et Tw = Lk. Montez progressivement jusqu'à 1 : Wr croît sans sauter jusqu'à 0,86, et la rayure perd autant de tours.</li>
+          <li>Poussez à 1,6 : l'axe fait plus d'un tour et demi, et Wr atteint 1,64. Avec Lk = 2, la torsion de la rayure devient presque nulle (0,36 tour).</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Tw est calculé en transportant le repère d'un segment au suivant par la rotation la plus courte qui aligne leurs axes (transport parallèle), puis en mesurant l'angle qui reste entre la flèche transportée et la vraie flèche <i>d</i><sub>1</sub>. Un test vérifie que Lk = Tw + Wr pendant deux cycles complets d'un cordon.</p>
+          <div class="note check"><b>Ce que l'invariant a trouvé</b><p>Pendant la mise au point, chaque écart de Lk a désigné une faute réelle : des repères qui décrochaient de l'axe dans un claquement (d'où le cisaillement borné de la section 03), une articulation qui glissait d'un tour au-delà d'un demi-tour (d'où le logarithme exact de la section 04), une boucle qui passait par-dessus l'extrémité de la corde à travers la pince du balancier (d'où la pince traitée comme un obstacle). Aucune de ces fautes ne se voyait nettement à l'œil ; toutes se lisaient dans le compte des tours.</p></div>
+        </div></details>
       </section>
 
       <section id="contacts">
-        <h2><span class="n">05</span>Une corde qui ne se traverse pas</h2>
+        <h2><span class="n">07</span>Une corde qui ne se traverse pas</h2>
         <span class="src">src/gen/rod.js · contacts()</span>
-        <p>Une torsade, c’est la corde enroulée sur elle-même, deux brins serrés l’un contre l’autre sur toute leur longueur. Chaque segment est une <strong>capsule</strong> de rayon \(r\), un cylindre à bouts arrondis. Les paires proches sont trouvées par une grille de hachage, qui range les segments par case de l’espace pour ne comparer que des voisins. Deux capsules qui se pénètrent sont écartées le long de la droite qui joint leurs points les plus proches, avec un frottement de position.</p>
-        <p>Le piège est classique. Si, pendant un pas, une capsule a franchi plus de la moitié de l’autre, le point le plus proche est désormais <em>de l’autre côté</em>, et la correction la pousse à travers. Lk saute de 2 et le nœud se défait sans cause visible. La parade de Tangle tient en une ligne : on recalcule la même paire de points au pas précédent. Si la séparation a changé de signe, la paire s’est croisée, et c’est l’ancienne normale qui fixe le côté.</p>
-        <figure id="fig-contact"><figcaption><b>Deux brins en coupe.</b> Le brin clair tombe vers le brin fixe ; chaque pas est figé un instant (fantôme : position avant correction). À grande vitesse par pas, la normale « naturelle » expulse le brin du mauvais côté ; avec la normale du pas précédent, il se pose dessus. Dans Tangle, les 3 000 pas par seconde rendent ce cas rare, mais sur des dizaines de secondes de torsade il finit toujours par arriver.</figcaption></figure>
+        <p>Dans une torsade, la corde est enroulée sur elle-même : deux brins serrés l'un contre l'autre sur toute leur longueur. Il faut empêcher la corde de passer à travers elle-même, sinon Lk saute de 2 et la torsade se défait sans cause visible.</p>
+        <p>La règle la plus simple traite chaque segment comme une <b>capsule</b>, un cylindre de rayon <i>r</i> aux bouts arrondis. Pour chaque paire de segments proches, on cherche les deux points les plus proches. S'ils sont à moins de 2<i>r</i>, les capsules se pénètrent, et on les écarte le long de la droite qui joint ces deux points, jusqu'à la distance 2<i>r</i>. Pour ne pas comparer toutes les paires, une grille range les segments par case de l'espace, et l'on ne compare que les voisins (une grille de hachage).</p>
+        <h3>Ce qui ne va pas : un pas trop grand</h3>
+        <p>Si, pendant un pas, un brin a avancé de plus d'un rayon dans l'autre, son centre a dépassé celui de l'autre brin. La droite qui joint les points les plus proches pointe alors de l'autre côté, et la correction pousse le brin à travers au lieu de le repousser.</p>
+        <p>La correction de Tangle compare avec le pas précédent. On recalcule la même paire de points avec les positions d'avant le pas. Si le vecteur qui les joint s'est retourné, les brins se sont croisés pendant le pas, et c'est l'ancienne direction qui décide du côté où l'on remet le brin.</p>
+        <figure id="fig-contact"><figcaption><b>Deux brins en coupe, deux règles côte à côte.</b> Dans chaque panneau, le brin clair tombe sur le brin fixe, un pas à la fois. Le cercle pointillé est la position prédite avant correction, la flèche la correction. À gauche, la correction suit la direction du moment ; à droite, celle du pas précédent quand les brins se sont croisés. Le curseur règle le déplacement par pas, en diamètres de brin.</figcaption></figure>
+<pre><code>// même paire de points (paramètres s0, t0) au pas précédent : vecteur q
+if (d &lt; r && dot(dCur, q) &lt; 0 && |q| &gt; r) {
+  n = q / |q|;                        // croisés : on revient du côté d'avant
+  depth = 2 * r - dot(dCur, n);
+} else {
+  n = dCur / d; depth = 2 * r - d;    // cas ordinaire
+}</code></pre>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Jusqu'à 1,65 diamètre par pas, les deux règles posent le brin du bon côté.</li>
+          <li>Entre 1,75 et 2,15 diamètres par pas, la règle du moment fait traverser le brin, celle du pas précédent le pose dessus.</li>
+          <li>À partir de 2,2 diamètres, les deux échouent : le centre du brin a dépassé l'autre de plus d'un rayon, et la règle ne s'applique plus. Seuls des pas plus courts protègent de ce cas.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Dans la scène, 3 000 pas par seconde rendent un déplacement d'un rayon par pas très rare : il faudrait qu'un brin de 1 cm de diamètre aille à 15 m/s. Mais une torsade dure des dizaines de secondes de temps physique et compte des centaines de paires en contact ; le cas finit par se produire. Les contacts sont traités deux fois par pas, avant et après la correction des longueurs, pour que celle-ci ne fasse pas passer un brin au travers d'un autre. Le frottement entre brins est appliqué aux positions : on annule une partie du glissement relatif depuis le pas précédent, dans la limite de 0,25 fois l'enfoncement. La corde est aussi repoussée par des obstacles : le nez du mandrin, la pince et le moyeu du balancier, la glissière (qui pivote) et les colonnes du banc.</p>
+        </div></details>
       </section>
 
       <section id="came">
-        <h2><span class="n">06</span>La came est usinée d’après le plan</h2>
-        <span class="src">src/plan.js · camLift() · src/gen/bench.js</span>
-        <p>Le balancier doit tourner librement au bon moment, quand le mandrin a fini son compte de tours. Plutôt qu’une barre qui s’ouvre « à la seconde 12 », la glissière qui le retient est menée par une came, une roue au contour profilé qu’un poussoir suit. La came est portée par la roue-programme, engrenée au mandrin au rapport \(1 : (K_1 + K_2 + K_3)\). La roue fait donc exactement un tour par boucle.</p>
-        <p>L’ouverture est d’abord une fonction du nombre de tours faits dans le cycle. La barre s’écarte pendant le dernier tiers de tour, reste ouverte tant que le moteur est arrêté et revient pendant le premier tiers du cycle suivant. Le profil de la came est ensuite <em>calculé</em> à partir de cette fonction, \(r(\psi) = R + \text{course}\cdot\text{ouverture}(\psi)\), puis usiné en 720 points. Un test vérifie que la levée de la came usinée suit l’ouverture de la glissière à 3 % près à chaque instant : la came qu’on voit tourner est bien celle qui commande la barre.</p>
-        <figure id="fig-cam"><figcaption><b>La roue-programme d’une boucle du cordon (4 + 7 + 8 tours).</b> La came tourne d’un tour quand le mandrin en fait dix-neuf ; le poussoir lit son rayon au point bas. En dessous, l’ouverture de la glissière selon les tours du mandrin : trois fenêtres, une par cycle. Les retours au repos n’apparaissent pas sur cet axe : le mandrin est arrêté, la came aussi.</figcaption></figure>
+        <h2><span class="n">08</span>La came est calculée d'après le plan</h2>
+        <span class="src">src/plan.js · makePlan(), camLift() · src/gen/bench.js</span>
+        <p>Le balancier doit être libéré au bon moment, quand le mandrin a fini ses tours. Sur le banc, c'est une <b>came</b> qui écarte la glissière : une roue au contour irrégulier, sur laquelle appuie un poussoir. Quand le rayon de la came augmente sous le poussoir, celui-ci descend et écarte la glissière par un levier.</p>
+        <p>La came est portée par la roue-programme, engrenée au mandrin au rapport 1 : (<i>K</i><sub>1</sub> + <i>K</i><sub>2</sub> + <i>K</i><sub>3</sub>), où les <i>K</i> sont les tours des trois cycles. Pour le cordon, la roue fait donc un tour pendant que le mandrin en fait dix-neuf, soit un tour par boucle de l'animation.</p>
+        <p>On ne dessine pas la came à la main. On écrit d'abord l'ouverture voulue de la glissière en fonction du nombre de tours faits dans le cycle : elle s'écarte pendant les trois derniers dixièmes de tour du mandrin, reste ouverte tant que le moteur est arrêté, et revient pendant les trois premiers dixièmes de tour du cycle suivant. Le contour de la came s'en déduit : à l'angle ψ de la roue, son rayon vaut</p>
+        <div class="eq">\[ r(\psi) = R + \text{course} \times \text{ouverture}(\psi), \]</div>
+        <p>où <i>R</i> est le rayon de base et la course le déplacement maximal du poussoir. Ce contour est ensuite fabriqué en 720 points. La came qu'on voit tourner est donc bien celle qui commande la glissière.</p>
+        <figure id="fig-cam"><figcaption><b>La roue-programme du cordon (4 + 7 + 8 tours).</b> La came tourne d'un tour pendant que le mandrin en fait dix-neuf ; le poussoir lit son rayon au point bas. À droite, l'ouverture de la glissière selon les tours du mandrin : trois fenêtres, une par cycle. Les retours au repos n'apparaissent pas sur cet axe, parce que le mandrin et la came sont alors arrêtés.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Suivez le poussoir pendant un tour de came : il descend trois fois, à la fin des tours 4, 11 et 19 du mandrin.</li>
+          <li>Comparez les trois fenêtres : elles ont toutes la même largeur, 0,3 tour de mandrin de chaque côté de la fin du cycle, quelle que soit la longueur du cycle.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Le levier mesure 4 cm et tourne la glissière de 8° au plus. Quand la glissière revient, l'entrée en V de sa butée recentre le bras du balancier. Les tests vérifient que la levée de la came fabriquée suit l'ouverture de la glissière à 3 % près à chaque instant, et que le balancier est dans l'entrée en V (à ± 4°) quand elle commence à revenir, puis en place (à ± 0,5°) quand elle est fermée.</p>
+          <p>Le moteur suit une vitesse en trapèze aux rampes lisses de 0,6 s, dont l'intégrale (l'angle du mandrin) est écrite en forme fermée.</p>
+        </div></details>
       </section>
 
       <section id="temps">
-        <h2><span class="n">07</span>Le temps d’une caméra rapide</h2>
-        <span class="src">src/plan.js · makeWarp()</span>
-        <p>La simulation avance en temps physique \(\tau\), le film en temps \(t\). Le flambage dure une fraction de seconde, le retour au repos plusieurs secondes. Le film ralentit donc le premier (comme une caméra rapide) et accélère le second. La vitesse du temps physique par seconde de film est une somme de <strong>bosses lisses en logarithme</strong>, et le temps du film s’en déduit par intégration :</p>
+        <h2><span class="n">09</span>Le temps d'une caméra rapide</h2>
+        <span class="src">src/plan.js · makeWarp() · src/gen/sim.js</span>
+        <p>Le flambage dure une fraction de seconde ; le retour au repos du balancier, plusieurs secondes. Filmée en temps réel, la boucle passerait trop vite sur le moment le plus intéressant et s'attarderait sur le moins intéressant. Le film fait donc comme une caméra rapide : il ralentit au flambage et au lâcher, et il accélère pendant les longs retours au repos.</p>
+        <p>La simulation avance en temps physique τ, le film en temps <i>t</i>. On choisit la vitesse <i>v</i>(τ), le nombre de secondes physiques montrées par seconde de film : sous 1, c'est un ralenti ; au-dessus, un accéléré. Sa forme est une somme de bosses lisses, centrées sur les moments choisis. Les bosses sont additionnées sur le logarithme de la vitesse, ce qui garantit que <i>v</i> reste positive : le film ne s'arrête jamais et ne recule jamais. Le temps du film s'obtient ensuite en additionnant la durée de chaque petit morceau de temps physique :</p>
         <div class="eq">\[ \ln v(\tau) = \sum_i a_i\, b\!\left(\frac{\tau - c_i}{w_i}\right), \quad b(x) = (1 - x^2)^3, \qquad t(\tau) = \int_0^\tau \frac{d\tau'}{v(\tau')}. \]</div>
-        <p>Travailler en logarithme garantit que \(v\) reste strictement positive, donc que le temps du film ne s’arrête ni ne recule jamais. Les bosses sont périodiques, ce qui donne \(\tau(t + T) = \tau(t) + P\), et la boucle du film raccorde avec celle de la physique. L’intégrale est calculée par Simpson sur une grille de 4 000 points, et \(\tau(t)\) par recherche dichotomique.</p>
-        <figure id="fig-warp"><figcaption><b>La vitesse du temps sur une boucle du cordon.</b> En haut, \(v(\tau)\) en échelle logarithmique : sous 1, ralenti ; au-dessus, accéléré. En bas, le temps du film selon le temps physique ; la pente est \(1/v\). Les repères marquent les flambages (or) et les lâchers (bleu).</figcaption></figure>
+        <p><i>c</i><sub>i</sub> est le centre de la bosse <i>i</i> (en secondes physiques), <i>w</i><sub>i</sub> sa demi-largeur, et <i>a</i><sub>i</sub> son amplitude, le logarithme du facteur de vitesse visé. Au flambage, <i>a</i> = ln(1/2,5) et <i>w</i> = 0,9 s. Au lâcher, le ralenti est de 2 (de 3 au dernier lâcher). Pendant les retours au repos de plus de 5 s, l'accéléré est de 1,7. La fonction <i>b</i> vaut 1 au centre et s'annule avec sa pente au bord, ce qui raccorde chaque bosse sans à-coup.</p>
+        <p>Les moments de flambage ne sont pas connus d'avance : la simulation les repère quand le balancier remonte de 1 cm pendant un cycle. Le temps du film est donc calculé après la simulation. L'intégrale est évaluée par la méthode de Simpson sur 4 000 intervalles, et l'instant physique de chaque image, τ(<i>t</i>), se trouve par dichotomie dans cette table.</p>
+        <figure id="fig-warp"><figcaption><b>La vitesse du temps sur une boucle du cordon (graine b5).</b> En haut, <i>v</i>(τ) en échelle logarithmique. En bas, le temps du film selon le temps physique ; sa pente est 1/<i>v</i>, et le pointillé est le temps réel. Les repères marquent les flambages mesurés (or) et les lâchers (bleu). Les bosses sont construites comme dans <code>sim.js</code> ; les curseurs changent leurs facteurs.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Avec les réglages du projet, 41,1 s de temps physique deviennent 46,1 s de film, et le flambage passe à 0,39 fois la vitesse réelle.</li>
+          <li>Ramenez les deux curseurs à ×1 : il ne reste que les ralentis des lâchers, et le film dure 45,5 s. Montez le ralenti au flambage à ×4 : 48,1 s.</li>
+          <li>Ramenez l'accéléré à ×1 : le film dure 47,8 s. Les retours au repos prennent alors une bonne part de la boucle.</li>
+        </ul></div>
 
         <h3>La boucle parfaite, mesurée</h3>
-        <p>Le mandrin tourne d’un nombre entier de tours. À chaque lâcher, le balancier tourne jusqu’à annuler la torsion, et la glissière, en revenant, le recentre exactement. Une simulation n’est pourtant jamais exactement périodique. La boucle entière (40 à 50 s physiques) est donc intégrée, enregistrée à 30 images par seconde de film, puis relue. À la fin, la corde est droite et le balancier a tourné de N tours entiers. L’écart mesuré avec l’état initial, quelques dixièmes de millimètre, est réparti sur la dernière seconde de repos, sans fondu d’images.</p>
+        <p>Le mandrin tourne d'un nombre entier de tours. À chaque lâcher, le balancier tourne jusqu'à annuler la torsion, et la glissière le recentre en revenant. À la fin de la boucle, la corde est donc droite et le balancier a fait autant de tours que le mandrin. Une simulation n'est pourtant jamais exactement périodique. Sur le cordon de la graine b5, l'état final s'écarte de l'état initial de 0,32 mm au plus, et le balancier de 0,002 tour. Cet écart est retiré progressivement pendant les 1,5 dernières secondes de repos, par une correction de position, sans fondu entre deux images.</p>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Les bosses sont périodiques (chacune est aussi ajoutée décalée d'une période), ce qui donne τ(<i>t</i> + <i>T</i>) = τ(<i>t</i>) + <i>P</i>, où <i>P</i> est la durée physique de la boucle et <i>T</i> celle du film. La simulation est enregistrée à 120 états par seconde physique, puis rééchantillonnée à 30 images par seconde de film par une interpolation de Catmull-Rom en τ. Après N tours, un repère revient à la même orientation, mais son quaternion peut avoir changé de signe ; la correction du raccord vise donc <i>q</i><sub>0</sub> ou −<i>q</i><sub>0</sub>, le plus proche.</p>
+        </div></details>
       </section>
 
-      <section id="tresse">
-        <h2><span class="n">08</span>Une rayure tissée pour lire la torsion</h2>
-        <span class="src">src/scene/cord.js · src/scene/materials.js</span>
-        <p>Sur une corde lisse, la rotation autour de l’axe ne se voit pas : il faut un repère. La gaine est donc tressée : seize fuseaux, deux familles d’hélices qui se croisent en sergé 2/2 (chaque fil passe sur deux fils de l’autre famille, puis sous deux), chaque fil en relief avec ses fibres. Un fuseau d’une autre couleur, tissé dans la tresse, fait la <strong>rayure de repère</strong>. Comme sur une corde réelle, elle disparaît sous les fils croisés un passage sur deux, et ce pointillé la rend crédible.</p>
-        <p>Le tube est déformé dans le vertex shader (le programme de la carte graphique qui place chaque sommet) d’après une petite texture mise à jour à chaque image. Elle contient la ligne médiane, densifiée par une spline de Catmull-Rom (trois points par segment), et le vecteur matériel \(d_1\) en chaque point. Le motif de la tresse tourne avec \(d_1\), si bien que la torsion qu’on voit est exactement celle de la simulation. La pose de l’image précédente est jointe, pour calculer les vitesses du flou de mouvement.</p>
-        <figure id="fig-braid"><figcaption><b>La gaine tressée, calculée pixel par pixel</b> comme dans le shader : deux familles de huit fils, sergé 2/2, profil de fil et fibres, rayure de repère dans l’une des familles. Tordez la corde : la rayure s’enroule en hélice. Le pointillé de la rayure (dessus, dessous, dessus) est celui d’une tresse réelle.</figcaption></figure>
+      <section id="resume">
+        <h2><span class="n">10</span>Récapitulatif</h2>
+        <p>Pendant l'écran de chargement, un worker (un fil de calcul parallèle du navigateur) :</p>
+        <ol>
+          <li>tire la famille et les cycles, et construit le plan de la machine : angle du mandrin, ouverture de la glissière et contour de la came (section 08) ;</li>
+          <li>simule la corde sur toute la boucle, à 3 000 pas par seconde : prédiction des positions, flexion et torsion par le logarithme exact (section 04), contacts (section 07), longueurs résolues exactement (section 03), attache au balancier et obstacles ;</li>
+          <li>repère les flambages, en déduit le temps du film (section 09), corrige le raccord de la boucle et enregistre 30 images par seconde de film.</li>
+        </ol>
+        <p>À chaque image, la scène relit l'enregistrement au temps du film, densifie la ligne médiane, envoie positions et repères dans la texture de la corde, et le shader dessine la tresse tournée avec le repère (section 02). Le mandrin, la courroie, la came et la glissière sont placés d'après le plan.</p>
       </section>
 
       <section id="budget">
-        <h2><span class="n">09</span>Budget</h2>
-        <p>Toute la physique tourne pendant l’écran de chargement, dans un worker (un fil de calcul parallèle du navigateur). Le rendu ne fait ensuite que relire l’enregistrement.</p>
+        <h2><span class="n">11</span>Budget</h2>
+        <p>Toute la physique tourne pendant l'écran de chargement, dans le worker. Le rendu ne fait ensuite que relire l'enregistrement.</p>
         <div class="tbl"><table>
           <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
           <tbody>
-            <tr><td>Simulation d’une boucle (40 à 50 s physiques, 3 000 pas/s), cordon ou spirale</td><td>worker</td><td class="num">6 à 8 s</td></tr>
-            <tr><td>Simulation d’une paire (deux brins et leurs contacts)</td><td>worker</td><td class="num">~25 s</td></tr>
+            <tr><td>Simulation d'une boucle (40 à 50 s physiques, 3 000 pas/s), cordon ou spirale</td><td>worker</td><td class="num">6 à 8 s</td></tr>
+            <tr><td>Simulation d'une paire (deux brins et leurs contacts)</td><td>worker</td><td class="num">~25 s</td></tr>
             <tr><td>Enregistrement (30 images par seconde de film)</td><td>mémoire</td><td class="num">~5 Mo</td></tr>
             <tr><td>Texture de pose par brin (courbe dense + repères)</td><td>GPU</td><td class="num">217 × 4 texels</td></tr>
             <tr><td>Image pendant la torsade, qualité Haute, 1,8 Mpx</td><td>GPU</td><td class="num">5,4 ms</td></tr>
             <tr><td>Image, version mobile, 1,2 Mpx</td><td>GPU</td><td class="num">2,1 ms</td></tr>
-            <tr><td>Shaders, tous compilés sous l’écran de chargement</td><td>GPU</td><td class="num">55</td></tr>
+            <tr><td>Shaders, tous compilés sous l'écran de chargement</td><td>GPU</td><td class="num">55</td></tr>
           </tbody>
         </table></div>
-        <p>Vingt-cinq tests tiennent l’ensemble : Lk = Tw + Wr pendant deux cycles ; pour chaque famille, la boucle se referme (résidu, N tours entiers, raccord) et la corde ne touche ni la glissière, ni les colonnes, ni le mandrin, à aucune image ; la came est l’ouverture de la barre ; la caméra est périodique et ne dépasse jamais 25°/s.</p>
+        <p>Vingt-cinq tests tiennent l'ensemble : Lk = Tw + Wr pendant deux cycles ; pour chaque famille, la boucle se referme (écart final, nombre entier de tours du balancier, raccord) et la corde ne touche ni la glissière, ni les colonnes, ni le mandrin, ni le balancier, à aucune image ; la came suit l'ouverture de la glissière ; la caméra est périodique et tourne à moins de 25°/s.</p>
       </section>
     </article>
 
@@ -153,59 +292,65 @@ const sc = im > 1e-9 ? 2 * Math.atan2(im, rw) / im : 2;   // θ / sin(θ/2)
 
   <script type="module">
     import { demo, C, TAU, lerp, clamp, smooth, alpha, label, arrow } from '../home/explainer.js';
+    import { FAMILIES, CATALOGUE, criticalTurns, makePlan, makeWarp } from './src/plan.js';
 
-    // ── 01 · le rappel en torsion selon la formule ─────────────────────────
-    demo('#fig-log', {
-      title: 'Ω₃ selon l’angle relatif', aspect: 2.2,
-      controls: [{ key: 'th', label: 'Angle entre voisins θ', min: 0, max: 360, step: 1, value: 140, fmt: (v) => `${v}°` }],
-      draw(g, d) {
-        const { w, h } = d, th = d.s.th * Math.PI / 180;
-        const L = Math.min(w * .32, h);
-        // deux disques vus en bout
-        const cy = h / 2, R = Math.min(L * .2, h * .2);
-        [[L * .3, 0], [L * .72, th]].forEach(([cx, a], i) => {
-          g.fillStyle = alpha(C.c1, i ? .22 : .14); g.strokeStyle = alpha(C.c1, .7); g.lineWidth = 1.2;
-          g.beginPath(); g.arc(cx, cy, R, 0, TAU); g.fill(); g.stroke();
-          g.strokeStyle = C.ink; g.lineWidth = 2.2; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.cos(-a - Math.PI / 2 + Math.PI) * 0 + Math.sin(a) * R, cy - Math.cos(a) * R); g.stroke();
-          label(g, i ? 'segment i+1' : 'segment i', cx, cy + R + 18, { align: 'center' });
-        });
-        // courbes
-        const x0 = L + 30, x1 = w - 16, y0 = 18, y1 = h - 30, ym = (y0 + y1) / 2;
-        const X = (t) => lerp(x0, x1, t / TAU), Y = (v) => ym - v / (TAU * 1.04) * (y1 - y0) / 2;
-        g.strokeStyle = C.grid; g.lineWidth = 1;
-        for (const t of [0, Math.PI, TAU]) { g.beginPath(); g.moveTo(X(t), y0); g.lineTo(X(t), y1); g.stroke(); }
-        g.beginPath(); g.moveTo(x0, ym); g.lineTo(x1, ym); g.stroke();
-        label(g, '0', X(0), y1 + 16, { align: 'center' }); label(g, 'π', X(Math.PI), y1 + 16, { align: 'center' }); label(g, '2π', X(TAU), y1 + 16, { align: 'center' });
-        const curves = [
-          [C.c3, 'hémisphère', (t) => { const s = Math.sin(t / 2), c = Math.cos(t / 2); const sg = c < 0 ? -1 : 1; return 2 * sg * s; }],
-          [C.c2, '2·Im(r)', (t) => 2 * Math.sin(t / 2)],
-          [C.c1, 'logarithme', (t) => t],
-        ];
-        curves.forEach(([col, name, f], k) => {
-          g.strokeStyle = col; g.lineWidth = k === 2 ? 2.2 : 1.6; g.beginPath();
-          let prev = null;
-          for (let i = 0; i <= 300; i++) { const t = i / 300 * TAU, v = f(t), x = X(t), y = Y(v); if (prev !== null && Math.abs(v - prev) > 1) g.moveTo(x, y); else if (i) g.lineTo(x, y); else g.moveTo(x, y); prev = v; }
-          g.stroke();
-          const v = f(th); g.fillStyle = col; g.beginPath(); g.arc(X(th), Y(v), 4, 0, TAU); g.fill();
-          label(g, name, x0 + 6, y0 + 4 + k * 16, { color: col, base: 'top' });
-        });
-        g.strokeStyle = alpha(C.ink, .35); g.setLineDash([3, 4]); g.beginPath(); g.moveTo(X(th), y0); g.lineTo(X(th), y1); g.stroke(); g.setLineDash([]);
-        const flip = th > Math.PI;
-        d.status(flip ? 'au-delà du demi-tour : l’hémisphère tire à l’envers' : th > Math.PI / 2 ? 'Im(r) faiblit' : 'les trois formules s’accordent');
-      },
-    });
+    // bouton actif d'une rangée de choix
+    const mark = (d, i) => d.fig.querySelectorAll('.btns button').forEach((b, k) => b.setAttribute('aria-pressed', String(k === i)));
 
-    // ── 02 · chaîne lourde : Gauss-Seidel contre Thomas ───────────────────
+    // ── 02 · la tresse ────────────────────────────────────────────────────
+    {
+      const off = document.createElement('canvas'), og = off.getContext('2d');
+      const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+      const A = hex('#7d1420'), B = hex('#5c0d17'), ST = hex('#d9a640');
+      demo('#fig-braid', {
+        title: 'Gaine en sergé 2/2', aspect: 2.6,
+        controls: [{ key: 'tw', label: 'Torsion appliquée', min: -3, max: 3, step: .05, value: 0, fmt: (v) => `${v.toFixed(2).replace('.', ',').replace('-', '−')} tour` }],
+        buttons: [{ key: 'two', label: 'Deux rayures', toggle: true, value: false }],
+        draw(g, d) {
+          const W = Math.max(2, Math.round(d.w / 2)), H = Math.max(2, Math.round(d.h / 2));
+          off.width = W; off.height = H;
+          const img = og.createImageData(W, H), px = img.data;
+          const len = 7.5, hel = .42, n = 8; // longueur visible en circonférences ; pas des hélices
+          const yTop = H * .2, yBot = H * .8, r = (yBot - yTop) / 2, yc = (yTop + yBot) / 2;
+          for (let y = 0; y < H; y++) {
+            const yn = (y + .5 - yc) / r;
+            for (let x = 0; x < W; x++) {
+              const o = (y * W + x) * 4;
+              if (Math.abs(yn) >= 1) { px[o + 3] = 0; continue; }
+              const v = (x / W) * len, nz = Math.sqrt(1 - yn * yn);
+              const u = Math.asin(yn) / TAU + .25 - d.s.tw * (x / W);
+              const a = (u + v * hel) * n, b = (u - v * hel) * n;
+              const ia = Math.floor(a), ib = Math.floor(b), fa = a - ia, fb = b - ib;
+              const topA = (((ia + ib) % 4) + 4) % 4 < 2;
+              const f = topA ? fa : fb, idx = topA ? ia : ib;
+              const prof = Math.sin(Math.PI * f), fib = .86 + .14 * Math.sin(f * Math.PI * 14 + (topA ? b : a) * 3);
+              const im = ((idx % n) + n) % n;
+              let col = (im % 2 ? A : B);
+              if (topA && (im === 0 || (d.s.two && im === 4))) col = ST;
+              const light = (.28 + .72 * Math.max(0, nz * .8 - yn * .45)) * (.35 + .65 * Math.pow(prof, .6)) * fib;
+              const sheen = Math.pow(Math.max(0, nz), 18) * .25 * prof;
+              px[o] = Math.min(255, col[0] * light + 255 * sheen); px[o + 1] = Math.min(255, col[1] * light + 230 * sheen); px[o + 2] = Math.min(255, col[2] * light + 200 * sheen); px[o + 3] = 255;
+            }
+          }
+          og.putImageData(img, 0, 0);
+          g.imageSmoothingEnabled = true; g.drawImage(off, 0, 0, d.w, d.h);
+          label(g, 'mandrin', 8, d.h * .12, { size: 11.5 }); label(g, 'balancier', d.w - 8, d.h * .12, { size: 11.5, align: 'right' });
+          d.status(`${Math.abs(d.s.tw) < .01 ? 'au repos' : `torsion ${d.s.tw.toFixed(2).replace('.', ',').replace('-', '−')} tour`} · rayure : ${Math.abs(len * hel - d.s.tw).toFixed(2).replace('.', ',')} tours d'hélice`);
+        },
+      });
+    }
+
+    // ── 03 · chaîne lourde : Gauss-Seidel contre Thomas ───────────────────
     {
       const N = 20, l = 1;
       demo('#fig-chain', {
         title: 'Allongement de la chaîne', aspect: 1.9, animate: true,
         controls: [
-          { key: 'ratio', label: 'Masse du balancier / masse d’un maillon', min: 0, max: 2.7, step: .01, value: 2.08, fmt: (v) => `×${Math.round(10 ** v)}` },
-          { key: 'it', label: 'Itérations par pas (Gauss-Seidel)', min: 1, max: 30, step: 1, value: 1 },
+          { key: 'ratio', label: 'Masse accrochée / masse d\'un maillon', min: 0, max: 2.7, step: .01, value: Math.log10(214), fmt: (v) => `×${Math.round(10 ** v)}` },
+          { key: 'it', label: 'Passes par pas (Gauss-Seidel)', min: 1, max: 30, step: 1, value: 1 },
         ],
         buttons: [{ key: 'exact', label: 'Résolution exacte (Thomas)', toggle: true, value: false }, { label: 'Lâcher', onClick: (d) => d.reset() }],
-        setup(d) { d.state = { y: Float64Array.from({ length: N + 1 }, (_, i) => i * l), yp: Float64Array.from({ length: N + 1 }, (_, i) => i * l), v: new Float64Array(N + 1), shown: 0 }; },
+        setup(d) { d.state = { y: Float64Array.from({ length: N + 1 }, (_, i) => i * l), yp: Float64Array.from({ length: N + 1 }, (_, i) => i * l), v: new Float64Array(N + 1), shown: 0, T: 0 }; },
         draw(g, d) {
           const S = d.state, M = 10 ** d.s.ratio;
           const w = new Float64Array(N + 1).fill(1); w[0] = 0; w[N] = 1 / M;
@@ -227,69 +372,109 @@ const sc = im > 1e-9 ? 2 * Math.atan2(im, rw) / im : 2;   // θ / sin(θ/2)
             }
             for (let i = 1; i <= N; i++) S.v[i] = (S.y[i] - S.yp[i]) / dt;
           }
+          S.T += steps * dt;
           const len = S.y[N] - S.y[0];
           S.shown = lerp(S.shown, len / (N * l) - 1, .15);
           // dessin
           const { w: W, h: H } = d, top = 22, maxLen = N * l * 2.7, sc = (H - top - 40) / maxLen;
-          const cx = W * .38;
-          g.strokeStyle = C.grid; g.lineWidth = 1; g.beginPath(); g.moveTo(cx - 60, top); g.lineTo(cx + 60, top); g.stroke();
-          g.fillStyle = alpha(C.ink, .2); g.fillRect(cx - 60, top - 6, 120, 6);
+          const cx = W * .3;
+          g.fillStyle = alpha(C.ink, .2); g.fillRect(cx - 40, top - 6, 80, 6);
           const yr = top + N * l * sc;
-          g.setLineDash([4, 5]); g.strokeStyle = alpha(C.ink, .45); g.beginPath(); g.moveTo(cx - 90, yr); g.lineTo(cx + 90, yr); g.stroke(); g.setLineDash([]);
-          label(g, 'longueur au repos', cx + 96, yr + 4);
+          g.setLineDash([4, 5]); g.strokeStyle = alpha(C.ink, .45); g.beginPath(); g.moveTo(cx - 60, yr); g.lineTo(cx + 60, yr); g.stroke(); g.setLineDash([]);
+          label(g, 'longueur au repos', cx + 66, yr + 4, { size: 11 });
           g.strokeStyle = C.c1; g.lineWidth = 2; g.beginPath();
           for (let i = 0; i <= N; i++) { const y = top + S.y[i] * sc; i ? g.lineTo(cx, y) : g.moveTo(cx, y); } g.stroke();
           g.fillStyle = C.c1; for (let i = 1; i < N; i++) { g.beginPath(); g.arc(cx, top + S.y[i] * sc, 2.4, 0, TAU); g.fill(); }
           const rM = 6 + 5 * d.s.ratio; g.fillStyle = alpha(C.c2, .85); g.beginPath(); g.arc(cx, top + S.y[N] * sc + rM, rM, 0, TAU); g.fill();
           // jauge
-          const gx = W * .74, gw = Math.min(150, W * .2), gh = H - top - 60, pct = Math.max(0, S.shown);
+          const gx = W * .7, gw = Math.min(150, W * .2), gh = H - top - 60, pct = Math.max(0, S.shown);
           label(g, 'allongement', gx, top + 4, { base: 'top' });
           g.strokeStyle = C.line; g.strokeRect(gx, top + 24, gw * .25, gh);
           const fh = Math.min(1, pct / 1.5) * gh; g.fillStyle = pct > .02 ? C.c3 : C.c4; g.fillRect(gx, top + 24 + gh - fh, gw * .25, fh);
-          label(g, `${(pct * 100).toFixed(pct < .01 ? 2 : 0)} %`, gx + gw * .25 + 10, top + 24 + gh - fh + 4, { color: C.ink, size: 15 });
-          d.status(d.s.exact ? 'Thomas · exacte en un passage' : `Gauss-Seidel · ${d.s.it} itération${d.s.it > 1 ? 's' : ''}`);
+          label(g, `${(pct * 100).toFixed(pct < .1 ? 2 : 0).replace('.', ',')} %`, gx + gw * .25 + 8, top + 24 + gh - fh + 4, { color: C.ink, size: 15 });
+          d.status(`${d.s.exact ? 'Thomas, exact' : `Gauss-Seidel, ${d.s.it} passe${d.s.it > 1 ? 's' : ''}`} · ${S.T.toFixed(0)} s · ${(pct * 100).toFixed(1).replace('.', ',')} %`);
         },
       });
     }
 
-    // ── 03 · Greenhill ────────────────────────────────────────────────────
+    // ── 04 · le rappel en torsion selon la formule ─────────────────────────
+    demo('#fig-log', {
+      title: 'Ω₃ selon l\'angle relatif', aspect: 2.2,
+      controls: [{ key: 'th', label: 'Angle entre voisins θ', min: 0, max: 360, step: 1, value: 140, fmt: (v) => `${v}°` }],
+      draw(g, d) {
+        const { w, h } = d, th = d.s.th * Math.PI / 180;
+        const L = Math.min(w * .32, h);
+        // deux disques vus en bout
+        const cy = h / 2, R = Math.min(L * .2, h * .2);
+        [[L * .3, 0], [L * .72, th]].forEach(([cx, a], i) => {
+          g.fillStyle = alpha(C.c1, i ? .22 : .14); g.strokeStyle = alpha(C.c1, .7); g.lineWidth = 1.2;
+          g.beginPath(); g.arc(cx, cy, R, 0, TAU); g.fill(); g.stroke();
+          g.strokeStyle = C.ink; g.lineWidth = 2.2; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.sin(a) * R, cy - Math.cos(a) * R); g.stroke();
+          label(g, w < 520 ? (i ? 'i + 1' : 'i') : (i ? 'segment i+1' : 'segment i'), cx, cy + R + 18, { align: 'center', size: 11 });
+        });
+        // courbes
+        const x0 = L + 30, x1 = w - 16, y0 = 18, y1 = h - 30, ym = (y0 + y1) / 2;
+        const X = (t) => lerp(x0, x1, t / TAU), Y = (v) => ym - v / (TAU * 1.04) * (y1 - y0) / 2;
+        g.strokeStyle = C.grid; g.lineWidth = 1;
+        for (const t of [0, Math.PI, TAU]) { g.beginPath(); g.moveTo(X(t), y0); g.lineTo(X(t), y1); g.stroke(); }
+        g.beginPath(); g.moveTo(x0, ym); g.lineTo(x1, ym); g.stroke();
+        label(g, '0', X(0), y1 + 16, { align: 'center' }); label(g, 'π', X(Math.PI), y1 + 16, { align: 'center' }); label(g, '2π', X(TAU), y1 + 16, { align: 'center' });
+        const curves = [
+          [C.c3, 'hémisphère', (t) => (Math.cos(t / 2) < 0 ? -2 : 2) * Math.sin(t / 2)],
+          [C.c2, '2·Im(r)', (t) => 2 * Math.sin(t / 2)],
+          [C.c1, 'logarithme', (t) => t],
+        ];
+        const vals = [];
+        curves.forEach(([col, name, f], k) => {
+          g.strokeStyle = col; g.lineWidth = k === 2 ? 2.2 : 1.6; g.beginPath();
+          let prev = null;
+          for (let i = 0; i <= 300; i++) { const t = i / 300 * TAU, v = f(t), x = X(t), y = Y(v); if (prev !== null && Math.abs(v - prev) > 1) g.moveTo(x, y); else if (i) g.lineTo(x, y); else g.moveTo(x, y); prev = v; }
+          g.stroke();
+          const v = f(th); vals.push(v); g.fillStyle = col; g.beginPath(); g.arc(X(th), Y(v), 4, 0, TAU); g.fill();
+          label(g, name, x0 + 6, y0 + 4 + k * 16, { color: col, base: 'top' });
+        });
+        g.strokeStyle = alpha(C.ink, .35); g.setLineDash([3, 4]); g.beginPath(); g.moveTo(X(th), y0); g.lineTo(X(th), y1); g.stroke(); g.setLineDash([]);
+        const f2 = (v) => v.toFixed(2).replace('.', ',').replace('-', '−');
+        d.status(`log ${f2(vals[2])} · 2 Im ${f2(vals[1])} · hémisphère ${f2(vals[0])}`);
+      },
+    });
+
+    // ── 05 · Greenhill ────────────────────────────────────────────────────
     {
-      const FAM = {
-        cordon: { L: .62, mu: .06, B: 2.4e-3, CB: 1 / 1.4, M: .11, cycles: [4, 7, 8] },
-        spirale: { L: .62, mu: .05, B: 2.2e-3, CB: 1 / 1.4, M: .025, cycles: [2, 5, 6] },
-      };
-      const crit = (F, M) => { const T = (M + .5 * F.mu * F.L) * 9.81, Cc = F.B * F.CB; return (2 * Math.sqrt(F.B * T) / Cc) * F.L / TAU; };
       let fam = 'cordon';
-      const dd = demo('#fig-greenhill', {
+      const fams = ['cordon', 'spirale'];
+      const crit = (M) => criticalTurns({ ...FAMILIES[fam], M });
+      demo('#fig-greenhill', {
         title: 'Seuil de Greenhill', aspect: 2.1,
         controls: [{ key: 'M', label: 'Masse du balancier', min: .005, max: .4, step: .001, value: .11, fmt: (v) => `${Math.round(v * 1000)} g` }],
-        buttons: [
-          { label: 'Cordon', onClick: (d) => { fam = 'cordon'; } },
-          { label: 'Spirale', onClick: (d) => { fam = 'spirale'; } },
-        ],
+        buttons: fams.map((f, i) => ({ label: FAMILIES[f].label, onClick: (d) => { fam = f; mark(d, i); } })),
+        setup(d) { mark(d, fams.indexOf(fam)); },
         draw(g, d) {
-          const F = FAM[fam], { w, h } = d, x0 = 44, x1 = w - 16, y0 = 16, y1 = h - 30, Mmax = .4, Nmax = 12;
+          const cycles = CATALOGUE[fam].cycles, { w, h } = d, x0 = 44, x1 = w - 16, y0 = 16, y1 = h - 30, Mmax = .4, Nmax = 12;
           const X = (m) => lerp(x0, x1, m / Mmax), Y = (n) => lerp(y1, y0, n / Nmax);
           g.strokeStyle = C.grid; g.lineWidth = 1;
           for (let n = 0; n <= Nmax; n += 2) { g.beginPath(); g.moveTo(x0, Y(n)); g.lineTo(x1, Y(n)); g.stroke(); label(g, String(n), x0 - 8, Y(n) + 4, { align: 'right' }); }
-          for (let m = 0; m <= Mmax + 1e-9; m += .1) label(g, `${Math.round(m * 1000)} g`, X(m), y1 + 18, { align: 'center' });
+          for (let m = 0; m <= Mmax + 1e-9; m += .1) label(g, `${Math.round(m * 1000)} g`, X(m), y1 + 18, { align: 'center', size: 11 });
           label(g, 'tours', x0 + 6, y0 + 2, { base: 'top' });
-          const c = crit(F, d.s.M);
-          F.cycles.forEach((k, i) => {
+          const c = crit(d.s.M);
+          cycles.forEach((k, i) => {
             const over = k > c; g.strokeStyle = over ? C.c1 : C.c4; g.lineWidth = 1.2; g.setLineDash([5, 4]);
             g.beginPath(); g.moveTo(x0, Y(k)); g.lineTo(x1, Y(k)); g.stroke(); g.setLineDash([]);
-            label(g, `cycle ${i + 1} · ${k} tours`, x1 - 4, Y(k) - 5, { align: 'right', color: over ? C.c1 : C.c4 });
+            const alt = i === 1 && w < 520; // (sur un écran étroit, les cycles 2 et 3 sont trop proches : l'étiquette du 2 passe sous son trait)
+            label(g, `cycle ${i + 1} · ${k} tours`, x1 - 4, Y(k) + (alt ? 13 : -5), { align: 'right', color: over ? C.c1 : C.c4, size: 11 });
           });
           g.strokeStyle = C.c2; g.lineWidth = 2.2; g.beginPath();
-          for (let i = 0; i <= 200; i++) { const m = .002 + i / 200 * (Mmax - .002), y = Y(crit(F, m)); i ? g.lineTo(X(m), y) : g.moveTo(X(m), y); } g.stroke();
+          for (let i = 0; i <= 200; i++) { const m = .002 + i / 200 * (Mmax - .002), y = Y(crit(m)); i ? g.lineTo(X(m), y) : g.moveTo(X(m), y); } g.stroke();
           g.fillStyle = C.c2; g.beginPath(); g.arc(X(d.s.M), Y(c), 5, 0, TAU); g.fill();
-          label(g, `Lk꜀ = ${c.toFixed(2)} tours`, X(d.s.M) + 10, Y(c) + 18, { color: C.c2, size: 13 });
-          d.status(`${fam} · ${F.cycles.filter((k) => k > c).length} cycle(s) au-delà du seuil`);
+          const right = X(d.s.M) > (x0 + x1) / 2;
+          label(g, `Lk꜀ = ${c.toFixed(2).replace('.', ',')} tours`, X(d.s.M) + (right ? -10 : 10), Y(c) + 20, { color: C.c2, size: 13, align: right ? 'right' : 'left' });
+          const nOver = cycles.filter((k) => k > c).length;
+          d.status(`${FAMILIES[fam].label.toLowerCase()} · ${nOver} cycle${nOver > 1 ? 's' : ''} sur 3 au-delà du seuil`);
         },
       });
     }
 
-    // ── 04 · Lk = Tw + Wr ─────────────────────────────────────────────────
+    // ── 06 · Lk = Tw + Wr ─────────────────────────────────────────────────
     {
       const NS = 160, Lr = 6;
       const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
@@ -297,17 +482,18 @@ const sc = im > 1e-9 ? 2 * Math.atan2(im, rw) / im : 2;   // θ / sin(θ/2)
       const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
       const nrm = (a) => { const l = Math.hypot(...a); return l > 1e-12 ? [a[0] / l, a[1] / l, a[2] / l] : null; };
       function curve(loop) {
-        // un axe droit qui fait une boucle dans un plan vertical (la corde
-        // descend, remonte en cercle, se croise et repart vers le bas) ; un
-        // léger écart hors du plan sépare les deux brins au croisement
-        const pts = [], s0 = .3, s1 = .7, R = .7;
+        // un axe droit qui fait une boucle dans un plan vertical ; l'écart hors
+        // du plan croît le long de la boucle, si bien que deux points distincts
+        // de l'axe ne se rejoignent jamais : la courbe ne se traverse pas, et
+        // Wr varie continûment avec le curseur
+        const pts = [], s0 = .3, s1 = .7, R = .7, sep = -.8;
         const dz = Lr / NS, k = Math.min(1, loop) * .97;
         let z = Lr / 2;
         for (let i = 0; i <= NS; i++) {
           const s = i / NS, u = clamp((s - s0) / (s1 - s0)), env = Math.sin(Math.PI * u) ** 2;
           const ph = TAU * loop * smooth(0, 1, u);
           if (i) z -= dz * (1 - k * env);
-          pts.push([R * (1 - Math.cos(ph)), -.32 * Math.sin(ph / 2) * Math.min(1, loop * 2), z - R * Math.sin(ph)]);
+          pts.push([R * (1 - Math.cos(ph)), sep * (u - .5) * Math.min(1, loop * 2), z - R * Math.sin(ph)]);
         }
         return pts;
       }
@@ -325,11 +511,12 @@ const sc = im > 1e-9 ? 2 * Math.atan2(im, rw) / im : 2;   // θ / sin(θ/2)
         return 2 * wr / (4 * Math.PI);
       }
       let cache = null;
+      const fr = (v) => v.toFixed(2).replace('.', ',').replace('-', '−');
       demo('#fig-lk', {
         title: 'Călugăreanu-White', aspect: 2,
         controls: [
           { key: 'lk', label: 'Lk : tours du mandrin', min: 0, max: 8, step: 1, value: 6 },
-          { key: 'loop', label: 'Boucle', min: 0, max: 1.6, step: .01, value: .9, onChange: () => { cache = null; } },
+          { key: 'loop', label: 'Boucle', min: 0, max: 1.6, step: .01, value: .9, fmt: (v) => v.toFixed(2).replace('.', ','), onChange: () => { cache = null; } },
         ],
         setup(d) { d.state.yaw = .3; d.state.pitch = .12; },
         pointer(d, e) {
@@ -346,9 +533,8 @@ const sc = im > 1e-9 ? 2 * Math.atan2(im, rw) / im : 2;   // θ / sin(θ/2)
           let d1 = [1, 0, 0];
           for (let i = 0; i < NS; i++) { const t = T[i]; d1 = nrm(sub(d1, t.map((x) => x * dot(d1, t)))); D1.push(d1); }
           const { yaw, pitch } = d.state, cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
-          // projection : écran x = x, écran y = -z' ; profondeur = y'
           const P3 = (q) => { const x = q[0] * cy + q[1] * sy, y = -q[0] * sy + q[1] * cy, z = q[2]; return { x, y: y * cp - z * sp, z: z * cp + y * sp }; };
-          const sc = Math.min(d.w * .55, d.h * .95) / Lr, ox = d.w * .38, oy = d.h / 2;
+          const sc = Math.min(d.w * .55, d.h * .95) / Lr, ox = d.w * .36, oy = d.h / 2;
           const scr = (q) => { const r = P3(q); return [ox + r.x * sc, oy - r.z * sc, r.y]; };
           const rad = .15;
           const segs = [];
@@ -357,7 +543,7 @@ const sc = im > 1e-9 ? 2 * Math.atan2(im, rw) / im : 2;   // θ / sin(θ/2)
             const ang = TAU * tw * (i + .5) / NS, t = T[i], d2 = cross(t, D1[i]);
             const m = [0, 1, 2].map((k) => (p[i][k] + p[i + 1][k]) / 2), off = [0, 1, 2].map((k) => rad * (Math.cos(ang) * D1[i][k] + Math.sin(ang) * d2[k]));
             const view = P3(off).y; // < 0 : vers l'observateur
-            segs.push({ a, b, depth: (a[2] + b[2]) / 2, s: scr(m.map((x, k) => x + off[k])), front: view < 0, lit: clamp(.55 - P3(t).z * 0 + (-(a[2] + b[2]) / 2) * .08 + .15, .25, 1) });
+            segs.push({ a, b, depth: (a[2] + b[2]) / 2, s: scr(m.map((x, k) => x + off[k])), front: view < 0, lit: clamp(.7 - (a[2] + b[2]) / 2 * .08, .25, 1) });
           }
           segs.sort((u, v) => v.depth - u.depth);
           for (const s of segs) {
@@ -367,185 +553,165 @@ const sc = im > 1e-9 ? 2 * Math.atan2(im, rw) / im : 2;   // θ / sin(θ/2)
             if (s.front) { g.fillStyle = C.c1; g.beginPath(); g.arc(s.s[0], s.s[1], rad * sc * .38, 0, TAU); g.fill(); }
           }
           // compte
-          const x = d.w * .74;
-          const row = (k, name, val, col) => { label(g, name, x, 40 + k * 34, { color: C.dim, size: 12 }); label(g, val, x + Math.min(150, d.w * .22), 40 + k * 34, { color: col, size: 18, align: 'right', font: 'Fraunces' }); };
-          row(0, 'Lk', d.s.lk.toFixed(2), C.ink); row(1, 'Wr (calculé)', wr.toFixed(2), C.c2); row(2, 'Tw = Lk − Wr', tw.toFixed(2), C.c1);
-          label(g, 'glisser pour tourner', x, d.h - 16, { size: 11.5, color: C.faint });
-          d.status(`${d.s.lk} = ${tw.toFixed(2)} + ${wr.toFixed(2)}`);
+          const narrow = d.w < 520, x = d.w * (narrow ? .64 : .7), xr = d.w - 14;
+          const row = (k, name, val, col) => {
+            if (narrow) { label(g, name, x, 28 + k * 46, { color: C.dim, size: 11 }); label(g, val, x, 50 + k * 46, { color: col, size: 17, font: 'Fraunces' }); }
+            else { label(g, name, x, 40 + k * 34, { color: C.dim, size: 12 }); label(g, val, xr, 40 + k * 34, { color: col, size: 18, align: 'right', font: 'Fraunces' }); }
+          };
+          row(0, 'Lk', fr(d.s.lk), C.ink); row(1, 'Wr (forme)', fr(wr), C.c2); row(2, 'Tw = Lk − Wr', fr(tw), C.c1);
+          label(g, 'glisser pour tourner', xr, d.h - 12, { size: 11, color: C.faint, align: 'right' });
+          d.status(`${d.s.lk} = ${fr(tw)} + ${fr(wr)}`);
         },
       });
     }
 
-    // ── 05 · contacts : normale du pas précédent ──────────────────────────
-    demo('#fig-contact', {
-      title: 'Contact entre capsules', aspect: 2.2, animate: true,
-      controls: [{ key: 'v', label: 'Déplacement par pas (en diamètres)', min: .2, max: 2.4, step: .05, value: 1.35, fmt: (v) => `${v.toFixed(2)} d` }],
-      buttons: [{ key: 'fix', label: 'Normale du pas précédent', toggle: true, value: true }, { label: 'Rejouer', onClick: (d) => d.reset() }],
-      setup(d) { d.state = { y: -3.4, x: .28, hist: [], clock: 0, done: false, through: false }; },
-      draw(g, d) {
-        const S = d.state, R = 1; // rayon d'un brin ; diamètre 2
-        S.clock += d.dt;
-        if (S.clock > .55 && !S.done) {
-          S.clock = 0;
-          const prev = [S.x, S.y], step = d.s.v * 2 * R;
-          let px = S.x, py = S.y + step;
-          const dx = px, dy = py, dist = Math.hypot(dx, dy);
-          let out = [px, py];
-          if (dist < 2 * R) {
-            const qx = prev[0], qy = prev[1], dq = Math.hypot(qx, qy);
-            let nx, ny;
-            if (d.s.fix && dist < R && dx * qx + dy * qy < 0 && dq > R) { nx = qx / dq; ny = qy / dq; }
-            else { nx = dx / dist; ny = dy / dist; }
-            const depth = 2 * R - (dx * nx + dy * ny);
-            out = [px + nx * depth, py + ny * depth];
-            if (ny < 0) S.done = true; else S.through = true;
-          }
-          S.hist.push({ from: prev, pred: [px, py], to: out });
-          [S.x, S.y] = out;
-          if (S.y > 4) S.done = true;
-        }
-        if (S.done) { S.wait = (S.wait ?? 0) + d.dt; if (S.wait > 2.2) { d.reset(); return; } }
-        const sc = Math.min(d.h / 9, d.w / 12), ox = d.w * .42, oy = d.h * .52, X = (x) => ox + x * sc, Y = (y) => oy + y * sc;
-        // brin fixe
-        g.fillStyle = alpha(C.c2, .35); g.strokeStyle = C.c2; g.lineWidth = 1.4; g.beginPath(); g.arc(X(0), Y(0), R * sc, 0, TAU); g.fill(); g.stroke();
-        g.setLineDash([3, 4]); g.strokeStyle = alpha(C.c2, .4); g.beginPath(); g.arc(X(0), Y(0), 2 * R * sc, 0, TAU); g.stroke(); g.setLineDash([]);
-        const last = S.hist[S.hist.length - 1];
-        for (const hh of S.hist.slice(-4)) { g.strokeStyle = alpha(C.c1, .18); g.beginPath(); g.arc(X(hh.from[0]), Y(hh.from[1]), R * sc, 0, TAU); g.stroke(); }
-        if (last && last.pred[0] !== last.to[0]) {
-          g.setLineDash([2, 3]); g.strokeStyle = alpha(C.c3, .8); g.beginPath(); g.arc(X(last.pred[0]), Y(last.pred[1]), R * sc, 0, TAU); g.stroke(); g.setLineDash([]);
-          arrow(g, X(last.pred[0]), Y(last.pred[1]), X(last.to[0]), Y(last.to[1]), { color: C.c3 });
-          label(g, 'prédit', X(last.pred[0]) + R * sc + 6, Y(last.pred[1]) + 4, { color: C.c3 });
-        }
-        g.fillStyle = alpha(C.c1, .55); g.strokeStyle = C.c1; g.beginPath(); g.arc(X(S.x), Y(S.y), R * sc, 0, TAU); g.fill(); g.stroke();
-        label(g, 'brin fixe', X(0) + 2.2 * R * sc, Y(0) + 4, { color: C.c2 });
-        d.status(S.through ? 'traversé : Lk saute de 2' : S.done ? 'posé du bon côté' : 'en chute, un pas à la fois');
-      },
-    });
-
-    // ── 06 · la came d'après le plan ──────────────────────────────────────
+    // ── 07 · contacts : normale du moment contre normale du pas précédent ─
     {
-      const cycles = [4, 7, 8], N = 19, CAM = .3, CLOSE = .3;
-      const sstep = (a, b, x) => smooth(a, b, x);
-      const barOf = (n, K) => Math.max(1 - sstep(0, CLOSE, n), sstep(K - CAM, K, n));
-      const camLift = (psi) => { const n = (((psi % 1) + 1) % 1) * N; let f = 0; for (const K of cycles) { if (n >= f && n < f + K) return barOf(n - f, K); f += K; } return 1; };
+      const R = 1; // rayon d'un brin ; diamètre 2
+      const fresh = () => ({ y: -3.4, x: .28, hist: [], done: false, through: false });
+      // un pas : avance, puis correction de contact (même test que rod.js)
+      function stepBall(S, v, fix) {
+        const prev = [S.x, S.y], px = S.x, py = S.y + v * 2 * R;
+        const dist = Math.hypot(px, py);
+        let out = [px, py];
+        if (dist < 2 * R) {
+          const qx = prev[0], qy = prev[1], dq = Math.hypot(qx, qy);
+          let nx, ny;
+          if (fix && dist < R && px * qx + py * qy < 0 && dq > R) { nx = qx / dq; ny = qy / dq; }
+          else { nx = px / dist; ny = py / dist; }
+          const depth = 2 * R - (px * nx + py * ny);
+          out = [px + nx * depth, py + ny * depth];
+          if (ny < 0) S.done = true; else S.through = true;
+        }
+        S.hist.push({ from: prev, pred: [px, py], to: out });
+        [S.x, S.y] = out;
+        if (S.y > 4) { S.done = true; S.through = true; }
+      }
+      demo('#fig-contact', {
+        title: 'Contact entre capsules', aspect: 2.2, animate: true,
+        controls: [{ key: 'v', label: 'Déplacement par pas (en diamètres)', min: .2, max: 2.4, step: .05, value: 1.9, fmt: (v) => `${v.toFixed(2).replace('.', ',')} d`, onChange: (d) => d.reset() }],
+        buttons: [{ label: 'Rejouer', onClick: (d) => d.reset() }],
+        setup(d) { d.state = { A: fresh(), B: fresh(), clock: 0, wait: 0 }; },
+        draw(g, d) {
+          const S = d.state;
+          S.clock += d.dt;
+          if (S.clock > .55 && !(S.A.done && S.B.done)) {
+            S.clock = 0;
+            if (!S.A.done) stepBall(S.A, d.s.v, false);
+            if (!S.B.done) stepBall(S.B, d.s.v, true);
+          }
+          if (S.A.done && S.B.done) { S.wait += d.dt; if (S.wait > 2.2) { d.reset(); return; } }
+          const half = d.w / 2, sc = Math.min(d.h / 9.4, half / 6.4);
+          const panel = (P, ox, name) => {
+            const oy = d.h * .5, X = (x) => ox + x * sc, Y = (y) => oy + y * sc;
+            g.fillStyle = alpha(C.c2, .35); g.strokeStyle = C.c2; g.lineWidth = 1.4; g.beginPath(); g.arc(X(0), Y(0), R * sc, 0, TAU); g.fill(); g.stroke();
+            g.setLineDash([3, 4]); g.strokeStyle = alpha(C.c2, .4); g.beginPath(); g.arc(X(0), Y(0), 2 * R * sc, 0, TAU); g.stroke(); g.setLineDash([]);
+            for (const hh of P.hist.slice(-4)) { g.strokeStyle = alpha(C.c1, .18); g.beginPath(); g.arc(X(hh.from[0]), Y(hh.from[1]), R * sc, 0, TAU); g.stroke(); }
+            const last = P.hist[P.hist.length - 1];
+            if (last && last.pred[0] !== last.to[0]) {
+              g.setLineDash([2, 3]); g.strokeStyle = alpha(C.c3, .8); g.beginPath(); g.arc(X(last.pred[0]), Y(last.pred[1]), R * sc, 0, TAU); g.stroke(); g.setLineDash([]);
+              arrow(g, X(last.pred[0]), Y(last.pred[1]), X(last.to[0]), Y(last.to[1]), { color: C.c3 });
+            }
+            g.fillStyle = alpha(C.c1, .55); g.strokeStyle = C.c1; g.beginPath(); g.arc(X(P.x), Y(P.y), R * sc, 0, TAU); g.fill(); g.stroke();
+            label(g, name, ox, 16, { align: 'center', base: 'top', size: 12, color: C.ink });
+            const verdict = P.through ? 'traversé' : P.done ? 'posé dessus' : '';
+            if (verdict) label(g, verdict, ox, d.h - 12, { align: 'center', size: 13, color: P.through ? C.c3 : C.c4 });
+          };
+          g.strokeStyle = C.grid; g.beginPath(); g.moveTo(half, 10); g.lineTo(half, d.h - 10); g.stroke();
+          panel(S.A, half * .5, 'normale du moment');
+          panel(S.B, half * 1.5, 'normale du pas précédent');
+          const st = (P) => P.through ? 'traversé' : P.done ? 'posé' : 'en chute';
+          d.status(`gauche : ${st(S.A)} · droite : ${st(S.B)}`);
+        },
+      });
+    }
+
+    // ── 08 · la came d'après le plan ──────────────────────────────────────
+    {
+      const plan = makePlan({ cycles: CATALOGUE.cordon.cycles.map((K, i) => ({ K, rate: 1, settle: CATALOGUE.cordon.settle[i] })) });
+      const N = plan.N, cycles = CATALOGUE.cordon.cycles;
       demo('#fig-cam', {
         title: 'Roue-programme', aspect: 1.9, animate: true,
-        controls: [{ key: 'sp', label: 'Vitesse du mandrin', min: 0, max: 3, step: .05, value: 1.2, fmt: (v) => `${v.toFixed(2)} tour/s` }],
+        controls: [{ key: 'sp', label: 'Vitesse du mandrin', min: 0, max: 3, step: .05, value: 1.2, fmt: (v) => `${v.toFixed(2).replace('.', ',')} tour/s` }],
         setup(d) { d.state.n = 0; },
         draw(g, d) {
           const S = d.state; S.n = (S.n + d.dt * d.s.sp) % N;
           const psi = S.n / N, { w, h } = d;
-          const cx = w * .26, cy = h * .4, R = Math.min(w * .17, h * .27), course = R * .22;
-          // came : r(φ) lu au point bas ; on dessine la came tournée
+          const cx = w * .24, cy = h * .4, R = Math.min(w * .16, h * .27), course = R * .22;
+          // came : r(ψ) lu au point bas ; on dessine la came tournée
           g.fillStyle = alpha(C.c1, .16); g.strokeStyle = C.c1; g.lineWidth = 1.6; g.beginPath();
           for (let i = 0; i <= 720; i++) {
-            const a = i / 720, r = R * .78 + course * camLift(a), ang = Math.PI / 2 + (a - psi) * TAU;
+            const a = i / 720, r = R * .78 + course * plan.camLift(a), ang = Math.PI / 2 + (a - psi) * TAU;
             const x = cx + Math.cos(ang) * r, y = cy + Math.sin(ang) * r; i ? g.lineTo(x, y) : g.moveTo(x, y);
           }
           g.closePath(); g.fill(); g.stroke();
-          // graduations : un trait par tour
+          // graduations : un trait par tour du mandrin
           g.strokeStyle = alpha(C.ink, .5); g.lineWidth = 1;
           for (let k = 0; k < N; k++) { const ang = Math.PI / 2 + (k / N - psi) * TAU, r0 = R * .5, r1 = R * .58; g.beginPath(); g.moveTo(cx + Math.cos(ang) * r0, cy + Math.sin(ang) * r0); g.lineTo(cx + Math.cos(ang) * r1, cy + Math.sin(ang) * r1); g.stroke(); }
           g.fillStyle = C.ink; g.beginPath(); g.arc(cx, cy, 4, 0, TAU); g.fill();
           // poussoir au point bas
-          const lift = camLift(psi), ry = cy + R * .78 + course * lift;
+          const lift = plan.camLift(psi), ry = cy + R * .78 + course * lift;
           g.fillStyle = alpha(C.c2, .9); g.fillRect(cx - 5, ry, 10, R * .45); g.beginPath(); g.arc(cx, ry, 6, 0, TAU); g.fill();
-          label(g, `ouverture ${(lift * 100).toFixed(0)} %`, cx + 14, ry + R * .3, { color: C.c2 });
+          label(g, `ouverture ${(lift * 100).toFixed(0)} %`, cx + 14, ry + R * .3, { color: C.c2, size: 11.5 });
           // frise de l'ouverture selon les tours
           const x0 = w * .52, x1 = w - 16, y0 = h * .14, y1 = h * .62;
           const X = (n) => lerp(x0, x1, n / N), Y = (v) => lerp(y1, y0, v);
           g.strokeStyle = C.grid; g.beginPath(); g.moveTo(x0, y1); g.lineTo(x1, y1); g.moveTo(x0, y0); g.lineTo(x1, y0); g.stroke();
-          let f = 0; for (const K of cycles) { g.strokeStyle = alpha(C.ink, .25); g.beginPath(); g.moveTo(X(f), y0 - 6); g.lineTo(X(f), y1 + 6); g.stroke(); label(g, `${K} tours`, X(f + K / 2), y1 + 20, { align: 'center' }); f += K; }
+          let f = 0; for (const K of cycles) { g.strokeStyle = alpha(C.ink, .25); g.beginPath(); g.moveTo(X(f), y0 - 6); g.lineTo(X(f), y1 + 6); g.stroke(); label(g, `${K} tours`, X(f + K / 2), y1 + 20, { align: 'center', size: 11 }); f += K; }
           g.strokeStyle = C.c2; g.lineWidth = 2; g.beginPath();
-          for (let i = 0; i <= 600; i++) { const n = i / 600 * N, y = Y(camLift(n / N)); i ? g.lineTo(X(n), y) : g.moveTo(X(n), y); } g.stroke();
+          for (let i = 0; i <= 600; i++) { const n = i / 600 * N, y = Y(plan.camLift(n / N)); i ? g.lineTo(X(n), y) : g.moveTo(X(n), y); } g.stroke();
           g.fillStyle = C.c1; g.beginPath(); g.arc(X(S.n), Y(lift), 5, 0, TAU); g.fill();
-          label(g, 'ouverte', x0 - 6, y0 + 4, { align: 'right' }); label(g, 'fermée', x0 - 6, y1 + 4, { align: 'right' });
-          label(g, 'tours du mandrin →', x1, h * .9, { align: 'right', color: C.faint });
-          d.status(`tour ${S.n.toFixed(1)} / ${N}`);
+          label(g, 'ouverte', x0 - 6, y0 + 4, { align: 'right', size: 11 }); label(g, 'fermée', x0 - 6, y1 + 4, { align: 'right', size: 11 });
+          label(g, 'tours du mandrin →', x1, h * .9, { align: 'right', color: C.faint, size: 11 });
+          d.status(`tour ${S.n.toFixed(1).replace('.', ',')} / ${N}`);
         },
       });
     }
 
-    // ── 07 · temps du film ────────────────────────────────────────────────
+    // ── 09 · temps du film ────────────────────────────────────────────────
     {
-      // plan du cordon : cycles 4, 7, 8 tours à 1,2 tour/s, retours 5, 6,5, 8 s
-      const RAMP = .6, rate = 1.2, Ks = [4, 7, 8], settle = [5, 6.5, 8];
-      let t = 0; const ev = [];
-      Ks.forEach((K, i) => { const D = K / rate + RAMP; if (K > 6.3) ev.push({ c: t + 6.3 / rate + RAMP / 2, kind: 'buckle' }); ev.push({ c: t + D + .2, kind: 'free' }); ev.push({ c: t + D + settle[i] * .62, kind: 'rest' }); t += D + settle[i]; });
-      const P = t;
+      // le cordon de la graine b5 ; flambages mesurés dans Node avec sim.js
+      // (le balancier remonte de 1 cm) : cycles 2 et 3, τ = 16,81 et 31,36 s
+      const R = { cycles: [{ K: 4, rate: 1.03, settle: 5 }, { K: 7, rate: .94, settle: 6.5 }, { K: 8, rate: .94, settle: 8 }] };
+      const plan = makePlan(R), P = plan.P, buckles = [null, 16.81, 31.36];
+      // bosses construites comme dans sim.js, facteurs réglables
+      const bumpsOf = (slow, fast) => {
+        const out = [];
+        plan.cycles.forEach((c, k) => {
+          const big = k === plan.cycles.length - 1;
+          if (buckles[k]) out.push({ c: buckles[k] + .15, w: .9, a: Math.log(1 / slow) });
+          out.push({ c: c.free0 + .35, w: big ? 1.6 : 1.1, a: Math.log(1 / (big ? 3 : 2)) });
+          if (c.settle > 5) out.push({ c: (c.free0 + 2.5 + c.free1) / 2, w: (c.free1 - c.free0 - 3) / 2, a: Math.log(fast) });
+        });
+        return out;
+      };
+      const fr = (v, n = 1) => v.toFixed(n).replace('.', ',');
       demo('#fig-warp', {
         title: 'Temps physique et temps du film', aspect: 1.8,
         controls: [
-          { key: 'slow', label: 'Ralenti au flambage et au lâcher', min: 1, max: 4, step: .1, value: 2.5, fmt: (v) => `×${v.toFixed(1)}` },
-          { key: 'fast', label: 'Accéléré au repos', min: 1, max: 3, step: .1, value: 1.7, fmt: (v) => `×${v.toFixed(1)}` },
+          { key: 'slow', label: 'Ralenti au flambage', min: 1, max: 4, step: .1, value: 2.5, fmt: (v) => `×${fr(v)}` },
+          { key: 'fast', label: 'Accéléré au repos', min: 1, max: 3, step: .1, value: 1.7, fmt: (v) => `×${fr(v)}` },
         ],
         draw(g, d) {
-          const bumps = ev.map((e) => e.kind === 'rest' ? { c: e.c, w: 2.2, a: Math.log(d.s.fast) } : { c: e.c, w: e.kind === 'buckle' ? 1.1 : 1.4, a: -Math.log(d.s.slow) });
-          const lnv = (tau) => { let s = 0; for (const b of bumps) for (const sh of [-P, 0, P]) { const x = (tau + sh - b.c) / b.w; if (x > -1 && x < 1) { const q = 1 - x * x; s += b.a * q * q * q; } } return s; };
-          const G = 800, tt = new Float64Array(G + 1);
-          for (let i = 0; i < G; i++) { const a = i / G * P, b = (i + 1) / G * P; tt[i + 1] = tt[i] + (P / G) * (Math.exp(-lnv(a)) + 4 * Math.exp(-lnv((a + b) / 2)) + Math.exp(-lnv(b))) / 6; }
-          const T = tt[G], { w, h } = d, x0 = 46, x1 = w - 14;
+          const W = makeWarp(P, bumpsOf(d.s.slow, d.s.fast)), T = W.T, { w, h } = d, x0 = 46, x1 = w - 14;
           const X = (tau) => lerp(x0, x1, tau / P);
-          // v(τ), log
+          // v(τ), échelle log
           const a0 = 16, a1 = h * .4, lmax = Math.log(4);
           const Yv = (l) => lerp(a1, a0, (l + lmax) / (2 * lmax));
-          g.strokeStyle = C.grid; for (const v of [.25, .5, 1, 2, 4]) { const y = Yv(Math.log(v)); g.beginPath(); g.moveTo(x0, y); g.lineTo(x1, y); g.stroke(); label(g, `×${v}`, x0 - 6, y + 4, { align: 'right', size: 11 }); }
-          for (const e of ev) if (e.kind !== 'rest') { g.strokeStyle = alpha(e.kind === 'buckle' ? C.c1 : C.c2, .5); g.beginPath(); g.moveTo(X(e.c), a0); g.lineTo(X(e.c), h - 30); g.stroke(); }
+          g.strokeStyle = C.grid; for (const v of [.25, .5, 1, 2, 4]) { const y = Yv(Math.log(v)); g.beginPath(); g.moveTo(x0, y); g.lineTo(x1, y); g.stroke(); label(g, `×${String(v).replace('.', ',')}`, x0 - 6, y + 4, { align: 'right', size: 11 }); }
+          const marks = [...buckles.filter(Boolean).map((c) => [c, C.c1]), ...plan.cycles.map((c) => [c.free0, C.c2])];
+          for (const [c, col] of marks) { g.strokeStyle = alpha(col, .55); g.beginPath(); g.moveTo(X(c), a0); g.lineTo(X(c), h - 30); g.stroke(); }
           g.strokeStyle = C.ink; g.lineWidth = 1.8; g.beginPath();
-          for (let i = 0; i <= 400; i++) { const tau = i / 400 * P, y = Yv(lnv(tau)); i ? g.lineTo(X(tau), y) : g.moveTo(X(tau), y); } g.stroke();
+          for (let i = 0; i <= 600; i++) { const tau = i / 600 * P, y = Yv(Math.log(W.speed(tau))); i ? g.lineTo(X(tau), y) : g.moveTo(X(tau), y); } g.stroke();
           label(g, 'v(τ)', x1, a0 + 10, { align: 'right', color: C.ink });
           // t(τ)
           const b0 = h * .5, b1 = h - 30, Yt = (tv) => lerp(b1, b0, tv / Math.max(T, P));
           g.strokeStyle = alpha(C.ink, .25); g.setLineDash([3, 4]); g.beginPath(); g.moveTo(X(0), Yt(0)); g.lineTo(X(P), Yt(P)); g.stroke(); g.setLineDash([]);
-          label(g, 'pointillé : temps réel', x0 + 6, b0 + 14, { size: 11 });
           g.strokeStyle = C.c1; g.lineWidth = 2; g.beginPath();
-          for (let i = 0; i <= G; i += 2) { const y = Yt(tt[i]); i ? g.lineTo(X(i / G * P), y) : g.moveTo(X(0), y); } g.stroke();
-          label(g, 't(τ) : temps du film', x0 + 6, b0 - 2, { color: C.c1 });
-          label(g, 'temps physique τ →', x1, h - 10, { align: 'right', color: C.faint });
-          d.status(`P = ${P.toFixed(1)} s physiques → T = ${T.toFixed(1)} s de film`);
-        },
-      });
-    }
-
-    // ── 08 · la tresse ────────────────────────────────────────────────────
-    {
-      const off = document.createElement('canvas'), og = off.getContext('2d');
-      const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
-      const A = hex('#7d1420'), B = hex('#5c0d17'), ST = hex('#d9a640');
-      demo('#fig-braid', {
-        title: 'Gaine en sergé 2/2', aspect: 2.6,
-        controls: [{ key: 'tw', label: 'Torsion appliquée', min: -3, max: 3, step: .05, value: 0, fmt: (v) => `${v.toFixed(2)} tour` }],
-        buttons: [{ key: 'two', label: 'Deux rayures', toggle: true, value: false }],
-        draw(g, d) {
-          const W = Math.max(2, Math.round(d.w / 2)), H = Math.max(2, Math.round(d.h / 2));
-          off.width = W; off.height = H;
-          const img = og.createImageData(W, H), px = img.data;
-          const len = 7.5, hel = .42, n = 8; // longueur visible en circonférences ; pas des hélices
-          const yTop = H * .2, yBot = H * .8, r = (yBot - yTop) / 2, yc = (yTop + yBot) / 2;
-          for (let y = 0; y < H; y++) {
-            const yn = (y + .5 - yc) / r;
-            for (let x = 0; x < W; x++) {
-              const o = (y * W + x) * 4;
-              if (Math.abs(yn) >= 1) { px[o + 3] = 0; continue; }
-              const v = (x / W) * len, nz = Math.sqrt(1 - yn * yn);
-              let u = Math.asin(yn) / TAU + .25 - d.s.tw * (x / W);
-              const a = (u + v * hel) * n, b = (u - v * hel) * n;
-              const ia = Math.floor(a), ib = Math.floor(b), fa = a - ia, fb = b - ib;
-              const topA = (((ia + ib) % 4) + 4) % 4 < 2;
-              const f = topA ? fa : fb, idx = topA ? ia : ib;
-              const prof = Math.sin(Math.PI * f), fib = .86 + .14 * Math.sin(f * Math.PI * 14 + (topA ? b : a) * 3);
-              const im = ((idx % n) + n) % n;
-              let col = (im % 2 ? A : B);
-              if (topA && (im === 0 || (d.s.two && im === 4))) col = ST;
-              const light = (.28 + .72 * Math.max(0, nz * .8 - yn * .45)) * (.35 + .65 * Math.pow(prof, .6)) * fib;
-              const sheen = Math.pow(Math.max(0, nz), 18) * .25 * prof;
-              px[o] = Math.min(255, col[0] * light + 255 * sheen); px[o + 1] = Math.min(255, col[1] * light + 230 * sheen); px[o + 2] = Math.min(255, col[2] * light + 200 * sheen); px[o + 3] = 255;
-            }
-          }
-          og.putImageData(img, 0, 0);
-          g.imageSmoothingEnabled = true; g.drawImage(off, 0, 0, d.w, d.h);
-          label(g, 'mandrin', 8, d.h * .12, { size: 11.5 }); label(g, 'balancier', d.w - 8, d.h * .12, { size: 11.5, align: 'right' });
-          d.status(Math.abs(d.s.tw) < .01 ? 'au repos' : `rayure en hélice · ${Math.abs(d.s.tw).toFixed(2)} tour`);
+          for (let i = 0; i <= 400; i++) { const tau = i / 400 * P, y = Yt(W.tOf(tau)); i ? g.lineTo(X(tau), y) : g.moveTo(X(tau), y); } g.stroke();
+          label(g, 't(τ) : temps du film', x0 + 6, b0 - 2, { color: C.c1, size: 11.5 });
+          label(g, 'temps physique τ →', x1, h - 10, { align: 'right', color: C.faint, size: 11 });
+          d.status(`P = ${fr(P)} s physiques → T = ${fr(T)} s de film · flambage à ×${fr(W.speed(buckles[1] + .15), 2)}`);
         },
       });
     }
