@@ -5,8 +5,8 @@
 // 2. repère les temps forts (le premier flambage de chaque cycle, les lâchers)
 //    et en déduit le temps du film (ralentis de caméra rapide, accélérés) ;
 // 3. corrige le résidu de la boucle (l'état final rejoint l'état initial, à
-//    quelques microns près ; la correction est répartie sur la dernière
-//    seconde de repos) ;
+//    0,3 mm près avant correction ; la correction est répartie sur la
+//    dernière seconde et demie de repos) ;
 // 4. rééchantillonne à 30 images par seconde de film.
 // Module pur : importable depuis Node (tests, bancs) et le worker.
 import { createRod } from './rod.js';
