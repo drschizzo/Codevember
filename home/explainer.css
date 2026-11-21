@@ -90,6 +90,21 @@ pre code { background: none; border: 0; padding: 0; white-space: pre; font-size:
 .note.check { border-color: rgba(156, 199, 154, .55); background: linear-gradient(90deg, rgba(156, 199, 154, .06), transparent 70%); }
 .note.check > b:first-child { color: var(--c4); }
 .note p:first-of-type { margin-top: 0; }
+/* « À essayer » : des manipulations sur la démo qui précède */
+.note.try { border-color: rgba(127, 178, 217, .55); background: linear-gradient(90deg, rgba(127, 178, 217, .06), transparent 70%); }
+.note.try > b:first-child { color: var(--c2); }
+.note ul, .note ol { margin-top: 6px; }
+/* « Pour aller plus loin » : les détails de production, repliés */
+details.deep { margin-top: 24px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+details.deep > summary { cursor: pointer; list-style: none; padding: 11px 16px; font: 400 11px/1.4 Inter, sans-serif; letter-spacing: .16em; text-transform: uppercase; color: var(--dim); }
+details.deep > summary::-webkit-details-marker { display: none; }
+details.deep > summary::before { content: '+'; display: inline-block; width: 1.4em; color: var(--gold); }
+details.deep[open] > summary::before { content: '−'; }
+details.deep > summary:hover { color: var(--fg); }
+details.deep > .in { padding: 0 16px 16px; font-size: 15px; }
+details.deep > .in > :first-child { margin-top: 0; }
+details.deep .note { margin-top: 16px; }
+.hero .prereq { margin-top: 14px; max-width: 38em; color: var(--dim); font-size: 14.5px; }
 
 /* tableaux */
 .tbl { overflow-x: auto; margin-top: 20px; }

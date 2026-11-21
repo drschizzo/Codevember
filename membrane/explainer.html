@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#050506">
   <title>Membrane · défis techniques</title>
-  <meta name="description" content="Comment Membrane déchire sans fin des membranes emboîtées : plongée périodique, motif de déchirure lissé, XPBD par particule en shaders de calcul, assauts avant la rupture, images 16 bits relues en Catmull-Rom, triangles PN, photoélasticité de Jones, plis sous-maille en bruit de phaseurs.">
+  <meta name="description" content="Comment fonctionne Membrane, reconstruit pas à pas : des particules et des liens, la dynamique par positions, la résolution parallèle, les coutures préparées, la rupture, la relecture au ralenti, la plongée sans fin, et le rendu (triangles PN, photoélasticité, plis).">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
@@ -22,157 +22,314 @@
 
   <main>
     <header class="hero">
-      <div class="kicker">Day 09 · Membrane · l’éclosion sans fin</div>
+      <div class="kicker">Day 09 · Membrane · comment ça marche</div>
       <h1>Comment une membrane se déchire, encore et encore</h1>
-      <p class="lede">Un solide dort dans une membrane translucide. Son armature se déploie, pousse, recule et repousse ; la membrane bombe, blanchit, puis cède. Les lèvres s’enroulent, des filaments claquent, et la caméra plonge par l’ouverture vers l’œuf suivant, qui s’ouvrira à son tour. Aucune de ces déchirures n’est animée à la main : chacune est une simulation de vingt mille particules, résolue sur le GPU pendant l’écran de chargement, puis relue image par image. La difficulté : faire céder une matière de façon crédible, puis répéter l’éclosion dans une boucle parfaite.</p>
+      <p class="lede">Dans Membrane, un objet dort dans une enveloppe translucide. Son armature se déploie, pousse la membrane, recule et pousse encore, jusqu'à ce que la membrane cède. Les bords de la déchirure s'enroulent, des filaments se tendent puis claquent, et la caméra entre par l'ouverture vers l'œuf suivant, qui s'ouvrira à son tour. Aucune déchirure n'est animée à la main : chacune est simulée sur la carte graphique pendant le chargement, puis relue image par image. Cette page reconstruit cette simulation à partir de l'idée la plus simple, des points reliés par des liens.</p>
+      <p class="prereq">Pour suivre, il suffit de savoir lire un peu de JavaScript. Les formules résument ce que les démos montrent ; on peut les sauter sans perdre le fil. Les détails de production sont rangés dans les encadrés « Pour aller plus loin ».</p>
     </header>
 
     <figure class="cover">
       <img src="docs/capture.jpg" alt="Une membrane vascularisée déchirée en quatre lambeaux autour de ses lames, l’œuf suivant au centre" width="1175" height="1007">
-      <figcaption>Un chorion vascularisé, juste après la rupture. Les coupures suivent les intervalles entre les lames, en zigzag irrégulier ; les lèvres sont enroulées en bourrelet, des filaments relient encore les bords. Au centre, l’œuf suivant, enveloppé à son tour.</figcaption>
+      <figcaption>Une membrane veinée de vaisseaux, juste après la rupture. Les coupures passent entre les lames de l'armature, en zigzag ; les bords sont enroulés en bourrelet et des filaments relient encore les lèvres. Au centre, l'œuf suivant, enveloppé à son tour.</figcaption>
     </figure>
 
     <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
 
     <article>
 
-      <section id="plongee">
-        <h2><span class="n">01</span>La plongée sans fin tient dans une seule variable</h2>
-        <span class="src">src/scene/nest.js · src/main.js · choreo()</span>
-        <p>La caméra traverse une couche, puis la suivante, toujours vers l’avant. Pour que la boucle soit parfaite, la scène doit redevenir <em>exactement</em> identique à elle-même au bout d’un tour, sans fondu pour masquer le raccord. Membrane l’obtient par construction : tout dépend d’une seule grandeur, la <strong>profondeur relative</strong> \(x = d - \tau\) d’une couche, où \(d\) est son numéro dans l’emboîtement et \(\tau\) l’avancée de la caméra, comptée en couches. Le rayon, l’orientation, l’instant de l’éclosion et la visibilité d’une couche sont tous des fonctions de \(x\). Le rayon décroît géométriquement avec la profondeur, et le modèle de la couche revient tous les N rangs :</p>
-        <div class="eq">\[ r(x) = D\,q^{x}, \qquad q \in [0{,}42\,;\,0{,}5], \qquad \text{modèle}(d) = d \bmod N. \]</div>
-        <p>Chaque couche fait donc 42 à 50 % du rayon de celle qui l’enveloppe. Avec \(N\) modèles différents (deux à quatre), la scène à \(\tau + N\) est celle de \(\tau\). L’éclosion se joue entre \(x = \text{open}\) (2,25 à 2,5) et \(x = -0{,}35\). La simulation enregistrée et l’armature avancent avec \(x\), et rien d’autre ne les pilote.</p>
-        <p>Il faut encore éviter de reconstruire de la géométrie en route. Le nid dispose de \(M\) <strong>emplacements</strong>, des couches toutes prêtes en nombre fixe : c’est un multiple de \(N\) assez grand pour couvrir les profondeurs visibles (huit ou neuf selon \(N\)). L’emplacement \(j\) montre toujours le modèle \(j \bmod N\) et vit dans l’intervalle \(x \in [-2{,}2\,;\,3{,}6[\). Il ne change de couche qu’en passant du bord \(x = -2{,}2\) (derrière la caméra, dans la brume) au bord \(x = 3{,}6\) (dans la lueur du cœur), deux endroits où il est invisible.</p>
-        <figure id="fig-nest" class="wide"><figcaption><b>Le nid vu de la caméra, et ses emplacements.</b> À gauche, les couches en coupe, de rayon \(q^x\) ; la couleur est le modèle, et les ouvertures dans le cercle représentent l’éclosion en cours (\(x\) entre open et end). À droite, l’axe des profondeurs : chaque point est un emplacement, qui descend avec \(\tau\) et saute du bas vers le haut là où sa visibilité est nulle. Changez le nombre de modèles N et suivez un point d’un bord à l’autre. La démo ignore l’orientation des couches et dessine l’éclosion comme de simples brèches.</figcaption></figure>
-
-        <h3>Un ralenti qui retombe sur ses pieds</h3>
-        <p>La rupture dure une fraction de seconde, et la chorégraphie la ralentit en déformant le temps. Autour de chaque instant de rupture \(k\), l’avancée de la caméra \(\tau(t)\) s’écarte de l’horloge \(t\) : on lui soustrait la primitive d’une bosse d’intégrale nulle, nulle hors d’une courte fenêtre :</p>
-        <div class="eq">\[ \tau(t) = t - \sum_k a\,w\,K\!\left(\frac{t-k}{w}\right), \qquad K(x) = x - 3x^3 + 3x^5 - x^7, \]</div>
-        <p>où \(a\), entre 0,35 et 0,75, règle la force du ralenti et \(w\), entre 0,3 et 0,45 couche, sa demi-largeur. Comme \(K(\pm 1) = 0\), on a \(\tau(k \pm w) = k \pm w\) : le ralenti ne décale rien au-delà de sa fenêtre, et \(\tau(t+1) = \tau(t) + 1\), ce qui préserve la boucle. La vitesse de la caméra vaut \(1 - a\,K'(x)\). Elle tombe à exactement \(1 - a\) à la rupture (40 % de la vitesse normale pour <i>a</i> = 0,6), dépasse un peu 1 de part et d’autre pour rattraper le retard (au plus \(1 + 0{,}65\,a\)), et reste positive tant que \(a < 1\). La caméra ralentit sans jamais s’arrêter ni reculer.</p>
-        <figure id="fig-choreo"><figcaption><b>La vitesse de la plongée sur trois couches.</b> Fonction <code>choreo()</code> portée telle quelle depuis <code>main.js</code>. En haut, \(d\tau/dt\) ; en bas, \(\tau(t)\) et la diagonale (pointillés). Les traits verticaux marquent les ruptures. Les curseurs règlent la force et la largeur du ralenti : poussez la force vers 0,95, la vitesse frôle zéro sans changer de signe. Dans la scène, le centre du ralenti est réglé à la génération sur la fin moyenne des assauts de l’armature (section 04).</figcaption></figure>
-        <div class="note"><b>Des appuis, des ombres et une lumière continus</b><p>Chaque œuf repose dans une coupe, au centre de l’armature de la couche précédente, et toutes les couches tournent à la même vitesse : leur orientation relative est fixe. Une armature qui passe derrière la caméra s’efface en fondu par un tramage, qui écarte une part croissante de ses pixels selon un motif renouvelé à chaque image, lissé ensuite par l’anticrénelage temporel (la moyenne des images successives). Son ombre s’efface avec elle. Mesurée sur une boucle entière, la luminance moyenne de l’image varie sans à-coup.</p></div>
+      <section id="scene">
+        <h2><span class="n">01</span>Ce que montre la scène</h2>
+        <p>La scène est une suite d'enveloppes emboîtées, comme des poupées russes. Chaque couche contient une armature repliée (des lames, une cage, des épingles selon le modèle) et, au centre, la couche suivante, deux fois plus petite. Quand vient son tour, l'armature s'ouvre et déchire la membrane, et la caméra avance vers la couche suivante. La boucle ne s'arrête jamais.</p>
+        <p>Il faut résoudre trois problèmes pour obtenir cela :</p>
+        <ul>
+          <li><b>simuler une matière qui se déchire</b> : une membrane mince, presque inextensible, sous pression, poussée par une armature, qui cède le long de coupures crédibles (sections 02 à 05) ;</li>
+          <li><b>rejouer cette simulation sans fin</b> : l'enregistrer, la relire au ralenti, et faire revenir la scène exactement à son point de départ (sections 06 et 07) ;</li>
+          <li><b>la rendre comme une vraie matière</b> : des bords enroulés lisses, la contrainte lisible en lumière polarisée, des plis plus fins que le maillage, et la transparence (sections 08 à 11).</li>
+        </ul>
       </section>
 
-      <section id="dechirure">
-        <h2><span class="n">02</span>La déchirure est tracée avant d’arriver</h2>
-        <span class="src">src/gen/tear.js · src/gen/prep.js · fairSeams()</span>
-        <p>Un solveur de particules ne sait pas couper un triangle en deux : il ne peut séparer le maillage que le long des arêtes existantes. Laisser la rupture choisir n’importe quelle arête donne des déchirures en escalier, à l’échelle exacte du maillage. Membrane prépare donc le maillage avant la simulation. Chaque triangle reçoit l’étiquette du <strong>lambeau</strong> auquel il appartiendra. Les arêtes entre deux étiquettes deviennent des <strong>coutures</strong>, où les sommets sont dédoublés et tenus par des liens. La simulation décide ensuite seule de l’ordre, de la vitesse et de l’étendue de la rupture, et certaines coutures ne céderont jamais.</p>
-        <p>Le motif suit l’armature. Pour un calice, les secteurs sont pris entre deux lames. Pour l’iris, l’angle est vrillé avec la colatitude, et les secteurs deviennent des spirales. Pour la couronne, une perforation en étoile entoure chaque tête d’épingle, prolongée par une cellule de Voronoï. Pour la cage, chaque face se fend de son centre vers ses sommets. L’étiquette se calcule sur la direction du triangle déformée par un bruit fractal à quatre octaves, quatre couches de bruit de plus en plus fines : la coupure garde le dessin de l’armature, mais zigzague à toutes les échelles. Un second réseau, plus fin et plus résistant (60 sites au plus), greffe des embranchements près des coupures principales.</p>
-        <pre><code>// ph, th : angles de la direction déformée
-const s = wrap(ph - P.phi0 - PI / P.n - P.twist * th);
-major[t] = floor(s / ((2 * PI) / P.n)) % P.n;</code></pre>
+      <section id="points">
+        <h2><span class="n">02</span>Une membrane est un filet de points</h2>
+        <span class="src">src/scene/gpusim.js · solveOne()</span>
+        <p>Pour l'ordinateur, la membrane est un ensemble de points, les <b>particules</b>, reliés par des liens. La membrane de Membrane en compte environ 20 000, posées sur une sphère et reliées en triangles. Chaque particule a une position et une vitesse. La gravité, la pression de l'air enfermé et l'armature la poussent ; les liens la retiennent à ses voisines.</p>
+        <p>Pour comprendre comment les liens retiennent les particules, on regarde le cas le plus simple : une chaîne de seize maillons de 5 cm, suspendue par un bout, chaque particule pesant 10 g.</p>
 
-        <h3>Lisser le tracé en gardant son irrégularité</h3>
-        <p>Au zigzag voulu du bruit s’ajoute un zigzag parasite, d’arête en arête. Le maillage est une sphère géodésique (des triangles presque égaux qui pavent la sphère) volontairement désordonnée, et une coupure qui suit ses arêtes fait des dents de la taille d’un triangle, que les lèvres enroulées rendent très visibles. Avant le dédoublement, chaque sommet d’un tracé (exactement deux voisins sur le tracé) glisse vers le milieu de ses voisins, \(p \leftarrow 0{,}45\,p + 0{,}55\,m\). Les autres sommets se détendent ensuite autour, \(p \leftarrow \tfrac12 p + \tfrac12 \bar p_{\text{voisins}}\). L’opération est répétée six fois. Les jonctions entre tracés restent en place, si bien que la forme d’ensemble, et donc l’irrégularité voulue, demeure.</p>
-        <figure id="fig-tear" class="wide"><figcaption><b>Le motif de déchirure d’un calice, vu depuis le pôle.</b> Les curseurs règlent le nombre de lames, la vrille de l’iris et l’irrégularité du tracé. Algorithme porté depuis <code>tear.js</code> (étiquettes, absorption des îlots) et <code>fairSeams()</code> de <code>prep.js</code>, sur un disque plan au lieu de la sphère ; le réseau secondaire est omis. Le maillage est une grille triangulaire désordonnée puis détendue, comme la sphère géodésique. À gauche le tracé brut, à droite après les six passes de lissage.</figcaption></figure>
-        <figure>
-          <img src="docs/avant-apres-lissage.jpg" alt="Comparaison avant et après lissage des coutures sur deux scènes" width="1110" height="926" loading="lazy">
-          <figcaption><b>Dans la scène, avant et après le lissage.</b> En haut, une gélatine : les bords en dents de scie deviennent des courbes. En bas, un chorion : les lèvres enroulées suivent un tracé continu, et l’irrégularité à grande échelle est conservée.</figcaption>
-        </figure>
+        <h3>Première idée : des ressorts</h3>
+        <p>La façon classique de relier deux particules est un ressort, comme dans le chapitre « Oscillation » de <i>The Nature of Code</i>. Un ressort tire ses deux extrémités l'une vers l'autre avec une force proportionnelle à son allongement : <i>F</i> = −<i>k</i> (<i>l</i> − <i>L</i>), où <i>l</i> est sa longueur actuelle, <i>L</i> sa longueur au repos et <i>k</i> sa raideur. On additionne les forces sur chaque particule, on en déduit l'accélération, puis la nouvelle vitesse et la nouvelle position.</p>
+        <p>Avec un ressort mou, la chaîne pend et s'étire nettement sous son propre poids, comme un élastique. Une membrane doit s'étirer bien moins que cela, donc il faut des ressorts raides. Or un ressort raide oscille très vite. Si le pas de temps de la simulation dure plus qu'une petite fraction de cette oscillation, chaque pas corrige trop, le pas suivant corrige trop dans l'autre sens, et la simulation diverge. Dans la démo, à 60 images par seconde et deux pas par image, cela arrive vers 150 N/m. Pour aller au-delà, il faudrait réduire le pas de temps en proportion de la raideur.</p>
+
+        <h3>Deuxième idée : corriger directement les positions</h3>
+        <p>La <b>dynamique par positions</b> (Müller et ses collègues, 2007) renverse le raisonnement. On fait d'abord avancer chaque particule librement, sous la gravité et avec sa vitesse, sans tenir compte des liens. Puis, pour chaque lien trop long ou trop court, on déplace directement ses deux particules pour lui rendre sa longueur. La vitesse se déduit ensuite du déplacement total pendant le pas. Une correction de position ne peut pas « trop corriger » comme une force : au pire, le lien retrouve exactement sa longueur.</p>
+        <p>Cette méthode a d'abord eu un défaut : la raideur obtenue dépendait du nombre de corrections par pas, pas du matériau. Sa version étendue, <b>XPBD</b> (Macklin, Müller et Chentanez, 2016), y ajoute une souplesse α = 1/<i>k</i>. Une contrainte souple n'est corrigée qu'en partie à chaque pas, et la partie corrigée correspond exactement à ce que ferait un ressort de raideur <i>k</i>. Pour un lien de longueur au repos <i>L</i> entre deux particules <i>i</i> et <i>j</i> :</p>
+        <div class="eq">\[ C = |x_j - x_i| - L, \qquad \Delta\lambda = \frac{-C - \tilde\alpha\,\lambda}{w_i + w_j + \tilde\alpha}, \qquad \tilde\alpha = \frac{\alpha}{\Delta t^2} \]</div>
+        <p><i>C</i> est l'erreur de longueur. <i>w</i> = 1/<i>m</i> est l'inverse de la masse, nul pour une particule fixée. λ accumule la correction déjà appliquée pendant le pas. On déplace ensuite <i>x</i><sub>j</sub> de <i>w</i><sub>j</sub> Δλ le long du lien, et <i>x</i><sub>i</sub> de la même quantité pondérée par <i>w</i><sub>i</sub> dans l'autre sens. Si α vaut zéro, le lien est rigide ; s'il est grand, la correction devient faible et le lien s'allonge comme un ressort mou.</p>
+<pre><code>// un pas : avancer librement, puis corriger les liens
+for (const p of particules) { p.v.y -= g * dt; p.avant = copie(p.x); p.x += p.v * dt; }
+for (const lien of liens) {
+  const e = sub(lien.b.x, lien.a.x), l = len(e), C = l - lien.L;
+  const at = alpha / (dt * dt);
+  const dl = (-C - at * lien.lambda) / (lien.a.w + lien.b.w + at);
+  lien.lambda += dl;
+  lien.a.x -= lien.a.w * dl * e / l;  lien.b.x += lien.b.w * dl * e / l;
+}
+for (const p of particules) p.v = (p.x - p.avant) / dt;   // la vitesse vient du déplacement</code></pre>
+        <figure id="fig-chaine" class="wide"><figcaption><b>La même chaîne, deux méthodes, la même raideur.</b> À gauche, des ressorts (forces, puis vitesses, puis positions) ; à droite, des contraintes de position XPBD de souplesse 1/<i>k</i>. Les deux sont avancées de deux pas par image. Le curseur règle la raideur <i>k</i> des liens, sur une échelle logarithmique. Glissez dans l'un des panneaux pour tirer le bout libre des deux chaînes en même temps. Le bandeau donne l'allongement de chaque chaîne.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>À 10 N/m, les deux chaînes s'allongent de près de 170 % : à raideur faible, les deux méthodes décrivent le même matériau.</li>
+          <li>Montez la raideur au-delà de 150 N/m : la chaîne à ressorts finit par diverger, d'autant plus vite que la raideur est grande (en une fraction de seconde à 200 N/m). La chaîne XPBD se raidit et garde sa longueur.</li>
+          <li>Tirez le bout des chaînes à raideur élevée : XPBD reste stable même quand on la secoue.</li>
+        </ul></div>
+        <p>La membrane utilise plusieurs sortes de contraintes : l'<b>étirement</b> le long de chaque arête de triangle, la <b>flexion</b> entre les sommets opposés de deux triangles voisins (qui empêche la membrane de se plier comme un tissu sans tenue), les <b>liens des coutures</b> dont on parlera en section 04, et les <b>collisions</b> avec l'armature et avec l'œuf suivant. La pression de l'air enfermé, elle, est une force qui pousse chaque particule vers l'extérieur.</p>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Chaque image enregistrée est découpée en 16 sous-pas, et chaque sous-pas fait 6 passes de corrections. Faire beaucoup de petits pas plutôt que beaucoup de passes sur un grand pas (Macklin et ses collègues, 2019) rend la raideur plus juste et amortit moins le mouvement. La démo de la chaîne fait 4 passes de Gauss-Seidel par sous-pas : aux raideurs élevées, elle est un peu plus raide que la théorie, faute de passes.</p>
+          <p>Les longueurs au repos des arêtes sont raccourcies de quelques pour cent (la <b>précontrainte</b>) : la membrane est tendue avant même que la pression s'en mêle, comme une peau de tambour. Une arête comprimée est huit fois plus souple qu'une arête étirée : la membrane résiste à l'étirement mais se dérobe sous la compression, comme un film mince, ce qui prépare les plis de la section 10.</p>
+        </div></details>
       </section>
 
       <section id="jacobi">
-        <h2><span class="n">03</span>Un fil de calcul par particule, sans atomiques</h2>
+        <h2><span class="n">03</span>Corriger toutes les particules à la fois</h2>
         <span class="src">src/scene/gpusim.js · solveOne()</span>
-        <p>La dynamique est de l’<strong>XPBD à petits pas</strong> (<i>extended position-based dynamics</i>) : au lieu d’intégrer des forces, on déplace directement les particules pour satisfaire des contraintes, en découpant chaque image en nombreux pas de temps courts. Membrane fait 16 sous-pas par image enregistrée et 6 passes de résolution par sous-pas, sur environ 20&#8239;000 particules. Les contraintes sont l’étirement (avec des longueurs au repos raccourcies : la précontrainte), la flexion entre sommets opposés de deux triangles voisins, les liens des coutures, la pression intérieure, et les collisions avec l’armature et l’œuf suivant.</p>
-        <p>La manière classique de paralléliser une dynamique de positions sur GPU est de colorer le graphe des contraintes, pour traiter ensemble des contraintes qui ne partagent aucune particule, ou d’accumuler les corrections par additions atomiques, dont l’ordre varie d’une exécution à l’autre. Membrane lance un fil par particule. Chaque fil parcourt sa propre table de voisinage, calcule chaque correction de son côté et écrit dans une copie (deux tampons alternés). La résolution n’a besoin ni de coloration ni d’additions atomiques, et son résultat est le même d’une machine à l’autre.</p>
-        <p>Ce schéma, où chaque correction part de l’état précédent sans voir les autres, est celui de Jacobi, et son piège est connu. Une particule reçoit une dizaine de corrections calculées indépendamment, qui visent toutes le même écart. Les additionner revient à corriger dix fois : la solution oscille, puis diverge. Membrane en fait la moyenne, puis l’amplifie d’un facteur de sur-relaxation \(\omega = 1{,}6\) qui compense la prudence de la moyenne :</p>
-        <div class="eq">\[ x_i \leftarrow x_i + \frac{\omega}{\max(1, n_c)} \sum_{c} \Delta x_i^{(c)} . \]</div>
-        <pre><code>// Jacobi moyenné : stable quel que soit le nombre de contraintes
+        <p>Dans la démo de la chaîne, les liens sont corrigés l'un après l'autre, et chaque correction part des positions déjà corrigées par la précédente (la méthode de <b>Gauss-Seidel</b>). Avec 20 000 particules, on veut au contraire les traiter toutes en même temps sur la carte graphique, qui fait tourner des milliers de calculs en parallèle. Mais deux calculs qui corrigent deux liens partageant une particule voudraient la déplacer au même moment.</p>
+        <p>Les solutions habituelles sont de répartir les liens en groupes qui ne partagent aucune particule (la coloration du graphe), ou d'additionner les corrections avec des opérations atomiques, dont l'ordre varie d'une exécution à l'autre. Membrane fait plus simple : un calcul par particule. Chaque calcul parcourt la liste des liens de sa particule, calcule toutes les corrections à partir des positions du début de la passe, et écrit le résultat dans une copie. C'est la méthode de <b>Jacobi</b>. Elle n'a besoin ni de coloration ni d'atomiques, et donne le même résultat sur toutes les machines.</p>
+
+        <h3>Le problème : additionner les corrections</h3>
+        <p>Une particule de la membrane est touchée par une dizaine de contraintes. Chacune calcule de son côté le déplacement qui la satisferait, sans savoir que les autres visent souvent le même écart. Si on additionne ces déplacements, la particule va environ dix fois trop loin. On peut compenser par un facteur de réduction ω, mais le bon facteur dépend du nombre de contraintes par particule : il change dès qu'on ajoute un type de contrainte, ou quand des coutures cèdent pendant la déchirure.</p>
+        <p>Membrane fait donc la <b>moyenne</b> des corrections plutôt que leur somme, puis l'amplifie d'un facteur ω = 1,6 qui compense la prudence de la moyenne :</p>
+        <div class="eq">\[ x_i \;\leftarrow\; x_i + \frac{\omega}{\max(1, n_c)} \sum_{c} \Delta x_i^{(c)} \]</div>
+        <p><i>n</i><sub>c</sub> est le nombre de contraintes qui touchent la particule <i>i</i>, et Δ<i>x</i><sub>i</sub><sup>(c)</sup> la correction demandée par la contrainte <i>c</i>. La dernière ligne de <code>solveOne()</code> l'écrit ainsi :</p>
+<pre><code>// Jacobi moyenné : stable quel que soit le nombre de contraintes
 return x + d * (c.omega / max(1.0, nc)) + db / max(1.0, nbd);</code></pre>
-        <p>Les liens des coutures (<code>db</code>) sont moyennés à part, sans sur-relaxation : ils recollent les deux copies d’un sommet dédoublé tant que le lien tient.</p>
-        <figure id="fig-jacobi" class="wide"><figcaption><b>Un carré de membrane ramené à sa forme.</b> Les sommets du bord sont fixes, les autres partent d’une position perturbée ; à chaque itération, toutes les contraintes de distance sont projetées en parallèle. Réglez \(\omega\), puis basculez entre la somme et la moyenne (« Moyenne (Membrane) »). Avec la somme, le facteur stable dépend du nombre de contraintes par particule : ajoutez la flexion, et un réglage qui convergeait diverge. La moyenne converge dans les deux cas. La démo fait une projection pure, sans souplesse XPBD ni inertie.</figcaption></figure>
+        <p>Le terme <code>db</code> rassemble les liens des coutures, moyennés à part et sans amplification : ils recollent les deux copies d'un sommet dédoublé tant que le lien tient (section 04).</p>
+        <figure id="fig-jacobi" class="wide"><figcaption><b>Un carré de membrane ramené à sa forme, deux fois.</b> Les sommets du bord sont fixes, les autres partent d'une position perturbée ; à chaque itération, toutes les contraintes de distance sont corrigées en parallèle. À gauche, la somme des corrections, avec un facteur ω réglable ; à droite, la moyenne avec ω = 1,6, comme dans le projet. Les arêtes passent au rouge quand leur longueur est fausse de plus de 5 %. Sous chaque carré, l'écart moyen des longueurs à chaque itération, en échelle logarithmique. La démo corrige les positions sans gravité ni inertie.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Laissez ω = 0,5 pour la somme : les deux carrés reviennent à leur forme. Ajoutez la flexion, qui donne à chaque particule environ deux fois plus de contraintes : la somme diverge, la moyenne converge toujours.</li>
+          <li>Descendez ω jusqu'à ce que la somme converge avec la flexion (vers 0,3). Retirez la flexion : elle converge encore, mais plus lentement qu'à 0,5. Le bon réglage de la somme dépend du nombre de contraintes ; celui de la moyenne, non.</li>
+        </ul></div>
       </section>
 
-      <section id="assauts">
-        <h2><span class="n">04</span>La membrane encaisse avant de céder</h2>
+      <section id="coutures">
+        <h2><span class="n">04</span>Décider où la membrane va se déchirer</h2>
+        <span class="src">src/gen/tear.js · src/gen/prep.js · fairSeams()</span>
+        <p>Pour déchirer la membrane, il faut pouvoir séparer des particules qui étaient liées. La simulation ne sait pas couper un triangle en deux : elle ne peut séparer le maillage que le long des arêtes existantes. Si on la laisse rompre n'importe quelle arête trop étirée, la déchirure suit les arêtes du maillage et prend la forme d'un escalier dont les marches font la taille d'un triangle.</p>
+        <p>Membrane prépare donc le maillage avant la simulation. Chaque triangle reçoit le numéro du lambeau auquel il appartiendra. Là où deux triangles voisins ont des numéros différents, l'arête devient une <b>couture</b> : ses sommets sont dédoublés, et les deux copies sont tenues ensemble par un lien qui pourra céder. La simulation décide seule de l'ordre, de la vitesse et de l'étendue de la rupture ; certaines coutures ne céderont jamais.</p>
+        <p>Le découpage suit l'armature. Pour un calice à <i>n</i> lames, chaque lambeau est un secteur d'angle compris entre deux lames ; pour l'iris, l'angle tourne avec la distance au pôle et les secteurs deviennent des spirales. Pour éviter des coupures en lignes droites, on calcule l'angle sur une direction légèrement déformée par un bruit fractal (quatre couches de bruit de plus en plus fines) : la coupure garde le dessin de l'armature mais zigzague à toutes les échelles.</p>
+<pre><code>// ph, th : angles de la direction déformée par le bruit
+const s = wrap(ph - P.phi0 - PI / P.n - P.twist * th);
+major[t] = floor(s / ((2 * PI) / P.n)) % P.n;     // numéro du lambeau du triangle t</code></pre>
+
+        <h3>Lisser le tracé sans perdre son irrégularité</h3>
+        <p>Au zigzag voulu du bruit s'ajoute un zigzag parasite, d'arête en arête, de la taille d'un triangle. Le maillage est volontairement un peu désordonné (un maillage trop régulier donnerait des reflets en motif), et les lèvres enroulées rendent ces dents très visibles. Avant de dédoubler les sommets, on lisse donc chaque tracé. Un sommet qui a exactement deux voisins sur le tracé glisse vers leur milieu <i>m</i> ; les autres sommets se détendent ensuite autour, pour que les triangles restent bien formés :</p>
+        <div class="eq">\[ p \leftarrow 0{,}45\,p + 0{,}55\,m \quad\text{(sur le tracé)}, \qquad p \leftarrow \tfrac12\,p + \tfrac12\,\bar p_{\text{voisins}} \quad\text{(autour)} \]</div>
+        <p>L'opération est répétée six fois. Les points où plusieurs tracés se rejoignent ne bougent pas, si bien que la forme d'ensemble, et donc l'irrégularité voulue, est conservée.</p>
+        <figure id="fig-tear" class="wide"><figcaption><b>Le découpage d'un calice, vu depuis le pôle.</b> Chaque couleur est un futur lambeau ; les traits dorés sont les coutures. À gauche le tracé brut, à droite après les six passes de lissage. Les curseurs règlent le nombre de lames, la vrille de l'iris et l'irrégularité du tracé. Algorithme porté depuis <code>tear.js</code> et <code>fairSeams()</code>, sur un disque plat au lieu de la sphère, sans le réseau secondaire.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Mettez l'irrégularité à zéro : les coupures sont des rayons droits, en escalier à gauche, lisses à droite.</li>
+          <li>Remontez l'irrégularité, puis donnez de la vrille : le lissage efface les marches sans redresser les grandes ondulations.</li>
+        </ul></div>
+        <figure>
+          <img src="docs/avant-apres-lissage.jpg" alt="Comparaison avant et après lissage des coutures sur deux scènes" width="1110" height="926" loading="lazy">
+          <figcaption><b>Dans la scène, avant et après le lissage.</b> En haut, une gélatine : les bords en dents de scie deviennent des courbes. En bas, une membrane veinée : les lèvres enroulées suivent un tracé continu, et l'irrégularité à grande échelle est conservée.</figcaption>
+        </figure>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Les autres armatures ont leur propre découpage : pour la couronne, une perforation en étoile autour de chaque tête d'épingle, prolongée par une cellule de Voronoï ; pour la cage, chaque face se fend de son centre vers ses sommets. Un second réseau de coutures, plus fin et plus résistant (60 sites au plus), greffe des embranchements près des coupures principales. Les petits îlots d'un seul triangle, isolés au milieu d'un autre lambeau, sont absorbés par leurs voisins.</p>
+        </div></details>
+      </section>
+
+      <section id="rupture">
+        <h2><span class="n">05</span>La membrane encaisse avant de céder</h2>
         <span class="src">src/gen/kin.js · struggle() · src/scene/gpusim.js · bondsK()</span>
-        <p>Une membrane qui se rompt au premier contact ressemble à un ballon qui éclate : on n’y voit ni la résistance de la matière, ni l’effort de ce qui pousse. Avant de s’ouvrir, l’armature mène donc de deux à quatre <strong>assauts</strong> de plus en plus forts : elle pousse, recule, repousse. Pendant la fraction \(f\) du déploiement qui leur est réservée (0,5 à 0,62), l’ouverture effective de l’armature vaut</p>
-        <div class="eq">\[ u' = a\left(0{,}45 + 0{,}55\,\frac{k+1}{n}\right)\sin^2(\pi v), \qquad w = \frac{u}{f}\,n,\; k = \lfloor w \rfloor,\; v = w - k, \]</div>
-        <p>où <i>u</i> est l’avancée du déploiement, <i>a</i> la force des assauts, <i>n</i> leur nombre, <i>k</i> le numéro de l’assaut en cours et <i>v</i> la progression dans cet assaut. Le facteur entre parenthèses fait croître la force d’un assaut à l’autre, et le sinus carré fait partir et revenir chaque assaut à vitesse nulle. L’ouverture finale prend le reste du déploiement. La même fonction existe trois fois, à l’identique : dans la cinématique (JS), dans le vertex shader de l’armature et dans la simulation. La membrane heurte donc exactement l’armature que l’on voit.</p>
-        <p>Pendant ce temps, la rupture passe par trois régimes : interdite, puis gardée, puis facilitée. Le seuil de chaque lien est mesuré après la mise en place : c’est l’étirement au repos sous pression, plus une résistance propre au lien, à ±30 %. Un fil par lien compare l’étirement maximal des arêtes de ses deux particules à ce seuil, corrigé de deux facteurs :</p>
-        <div class="eq">\[ s_{\text{seuil}} = s_0\,\big(1 - \phi\,e(\tfrac{t - t_s - 0{,}08}{0{,}4})\big)\,\big(1 + g\,(1 - e(\tfrac{t - 0{,}9\,t_s}{0{,}1\,t_s}))\big), \]</div>
-        <p>où \(t_s\) est la fin des assauts, \(\phi = 0{,}85\) la fatigue, \(g = 0{,}7\) la garde et \(e\) le lissage quintique, une rampe douce de 0 à 1. La garde relève le seuil de 70 % jusqu’à 0,9 t<sub>s</sub>, puis s’efface avant la fin des assauts ; la fatigue l’abaisse ensuite, de 85 % au plus. Avant \(0{,}92\,t_s\), aucun lien ne peut céder. Après la première rupture, la pression fuit en \(e^{-(t - t_f)/\text{fuite}}\), et un dégrafage qui part de l’avant propage le front de rupture partout, du pôle vers l’arrière.</p>
-        <figure id="fig-rupture" class="wide"><figcaption><b>Une membrane en coupe, trois lames, trois coutures.</b> Les curseurs règlent le nombre et la force des assauts, et la vitesse de lecture. Anneau de 120 particules sous pression, résolu par le Jacobi moyenné de la section 03 (\(\omega = 1{,}6\), 6 passes, 600 pas par seconde) ; les lames suivent <code>struggle()</code> porté tel quel, la rupture suit <code>bondsK()</code> (garde, fatigue, seuil mesuré après la mise en place). Les arêtes sont teintées par leur étirement, et les coutures sont les points or. En dessous, l’étirement des coutures face à leur seuil. La démo est plane et n’a ni enroulement des lèvres ni retroussement.</figcaption></figure>
-        <div class="note"><b>Les filaments</b><p>Quand une couture s’ouvre, quelques liens laissent un filament, construit dans le vertex shader : il s’étire et s’amincit à volume constant, ploie, puis claque (six sur dix claquent tôt). Il est fait de deux tubes, un par moitié, qui partagent leur anneau du milieu tant que le fil tient. Avec un seul tube, un tronçon enjamberait après le claquage l’écart entre les lèvres et tracerait de longues lignes à travers l’image. Sur les matières humides, un fil qui s’amincit se résout en gouttelettes espacées d’environ neuf rayons, par l’instabilité de Plateau-Rayleigh, celle qui découpe en gouttes un mince filet d’eau.</p></div>
+        <p>Une membrane qui cède au premier contact fait penser à un ballon qui éclate : on n'y voit ni la résistance de la matière, ni l'effort de ce qui pousse. Dans la scène, l'armature mène donc de deux à quatre assauts de plus en plus forts avant de s'ouvrir : elle pousse, recule, pousse encore.</p>
+
+        <h3>Les assauts de l'armature</h3>
+        <p>Le déploiement de l'armature est décrit par un nombre <i>u</i> qui va de 0 (repliée) à 1 (ouverte). Une fraction <i>f</i> de ce déploiement, entre 0,5 et 0,62, est réservée aux assauts. Pendant cette fraction, l'ouverture réelle ne suit pas <i>u</i> : elle monte et redescend <i>n</i> fois, chaque fois un peu plus haut. L'ouverture finale occupe le reste du déploiement.</p>
+        <div class="eq">\[ u' = a\left(0{,}45 + 0{,}55\,\frac{k+1}{n}\right)\sin^2(\pi v), \qquad w = \frac{u}{f}\,n,\quad k = \lfloor w \rfloor,\quad v = w - k \]</div>
+        <p><i>a</i> est la force des assauts et <i>n</i> leur nombre ; <i>k</i> est le numéro de l'assaut en cours et <i>v</i> la progression dans cet assaut, de 0 à 1. Le facteur entre parenthèses fait croître la force d'un assaut au suivant, et le sinus au carré fait partir et revenir chaque assaut à vitesse nulle. La même fonction est écrite trois fois à l'identique : pour le mouvement de l'armature, pour son dessin, et pour la simulation. La membrane heurte donc exactement l'armature que l'on voit.</p>
+
+        <h3>Quand une couture cède</h3>
+        <p>Un lien de couture cède quand l'étirement des arêtes autour de lui dépasse un seuil. Ce seuil est mesuré sur la membrane déjà gonflée et au repos, plus une marge propre à chaque lien, tirée au hasard à ± 30 % : les coutures ne cèdent pas toutes en même temps. Si l'on s'en tenait là, la membrane céderait dès le premier assaut, ou jamais. Le seuil passe donc par trois régimes :</p>
+        <ul>
+          <li><b>interdit</b> : jusqu'à 92 % de la durée des assauts, aucune couture ne peut céder ;</li>
+          <li><b>gardé</b> : le seuil est relevé de 70 % (la <i>garde</i>), puis cette marge disparaît progressivement à la fin des assauts ;</li>
+          <li><b>facilité</b> : après les assauts, le seuil baisse progressivement, jusqu'à 85 % de moins (la <i>fatigue</i>), et la poussée finale ouvre la membrane.</li>
+        </ul>
+        <p>Après la première rupture, l'air enfermé s'échappe et la pression décroît exponentiellement. Un dégrafage parti de l'avant propage ensuite la rupture le long des coutures, du pôle vers l'arrière.</p>
+        <figure id="fig-rupture" class="wide"><figcaption><b>Une membrane en coupe, trois lames, trois coutures.</b> Un anneau de 120 particules sous pression, corrigé par la moyenne de la section 03 (ω = 1,6, 6 passes, 600 pas par seconde). Les lames suivent les assauts décrits plus haut, et les coutures (points dorés) cèdent selon les trois régimes. Les arêtes passent au rouge quand elles s'étirent. À droite, en haut, le rayon des lames ; en bas, l'étirement de la couture la plus tendue (rouge) face au seuil (doré). La démo est plane ; les lèvres ne s'y enroulent pas.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Comparez 0 et 3 assauts. Sans assaut, les lames poussent une seule fois et la membrane cède dès que l'étirement d'une couture atteint son seuil. Avec trois assauts, l'étirement monte à chaque poussée pendant la zone où la rupture est interdite, et la membrane ne cède qu'à la poussée finale.</li>
+          <li>Réduisez la force des assauts : les poussées se voient moins sur la membrane, mais la rupture arrive au même moment, puisqu'elle est réglée par le calendrier des seuils.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Avec <i>t</i><sub>s</sub> la fin des assauts et <i>e</i> une rampe douce de 0 à 1 (un lissage du cinquième degré), le seuil d'étirement d'un lien vaut :</p>
+          <div class="eq">\[ s = s_0\,\big(1 - 0{,}85\,e(\tfrac{t - t_s - 0{,}08}{0{,}4})\big)\,\big(1 + 0{,}7\,(1 - e(\tfrac{t - 0{,}9\,t_s}{0{,}1\,t_s}))\big) \]</div>
+          <div class="note"><b>Les filaments</b><p>Quand une couture s'ouvre, quelques liens laissent un filament, construit au moment du dessin : il s'étire et s'amincit à volume constant, ploie, puis claque (six sur dix claquent tôt). Il est fait de deux tubes, un par moitié, qui partagent leur anneau du milieu tant que le fil tient. Avec un seul tube, un tronçon enjamberait après le claquage l'écart entre les lèvres et tracerait de longues lignes à travers l'image. Sur les matières humides, un fil qui s'amincit se résout en gouttelettes espacées d'environ neuf rayons, par l'instabilité de Plateau-Rayleigh, celle qui découpe en gouttes un mince filet d'eau.</p></div>
+        </div></details>
       </section>
 
-      <section id="enregistrement">
-        <h2><span class="n">05</span>Seize bits par coordonnée, une spline au ralenti</h2>
+      <section id="relecture">
+        <h2><span class="n">06</span>Enregistrer la simulation et la relire au ralenti</h2>
         <span class="src">src/scene/gpusim.js · packPos(), at()</span>
-        <p>La simulation est calculée une fois par couche (160 images, 3,6 s de temps physique) et enregistrée dans un tampon du GPU, que le rendu relit à chaque image. À \(N\) couches de 20&#8239;000 particules, stockées en <code>vec4f</code> (quatre flottants de 32 bits par particule), cela ferait 152 Mo pour trois couches. Les positions sont donc rangées en deux mots de 32 bits par particule, chaque coordonnée quantifiée sur 16 bits dans \([-4, 4]\) :</p>
-        <pre><code>let q = x / 8.0 + 0.5;
+        <p>Simuler 20 000 particules avec 16 sous-pas par image prend environ 5 secondes par couche, bien trop pour le faire pendant l'animation. La simulation d'une couche est donc calculée une seule fois, pendant l'écran de chargement : 160 images, soit 3,6 secondes de temps physique. Les positions de chaque image sont enregistrées dans la mémoire de la carte graphique, et le rendu les relit.</p>
+
+        <h3>Seize bits par coordonnée</h3>
+        <p>Stockées en nombres à virgule de 32 bits, les positions de trois couches occuperaient 152 Mo. Chaque coordonnée est donc ramenée à un entier de 16 bits, entre −4 et 4 (la membrane au repos a un rayon de 1). Le pas de l'arrondi vaut 8 / 65 535 ≈ 1,2·10⁻⁴, un demi-centième de la longueur d'une arête : invisible, et la mémoire est divisée par deux.</p>
+<pre><code>let q = x / 8.0 + 0.5;                                  // [−4, 4] → [0, 1]
 return vec2u(pack2x16unorm(q.xy), pack2x16unorm(vec2f(q.z, 0.0)));</code></pre>
-        <p>Le pas de quantification vaut \(8/65\,535 \approx 1{,}2\cdot10^{-4}\) pour une membrane de rayon 1 au repos, soit un demi-centième d’arête. La mémoire est divisée par deux (76 Mo pour trois couches), sans différence visible.</p>
-        <p>À l’affichage, un shader de calcul pose chaque couche visible à l’image fractionnaire \(f\). Au ralenti de la rupture, une image enregistrée couvre plusieurs images affichées. Une interpolation linéaire casserait la vitesse à chaque image enregistrée, et les lambeaux avanceraient par à-coups. La pose prend donc une <strong>spline de Catmull-Rom</strong>, qui passe par les images enregistrées et se calcule sur quatre d’entre elles (les deux qui encadrent l’instant et une de chaque côté). Sa dérivée est continue :</p>
-        <div class="eq">\[ p(t) = p_1 + \tfrac12 t\Big[(p_2 - p_0) + t\big((2p_0 - 5p_1 + 4p_2 - p_3) + t\,(3(p_1 - p_2) + p_3 - p_0)\big)\Big]. \]</div>
-        <figure id="fig-spline"><figcaption><b>L’extrémité d’un lambeau qui oscille après la rupture.</b> Les points sont les images enregistrées ; les courbes, ce que voit le spectateur au ralenti choisi. Réglez le nombre d’images affichées par image enregistrée. En bas, la vitesse image à image : en marches avec l’interpolation linéaire, continue avec Catmull-Rom (formule de <code>at()</code> portée telle quelle). Le mouvement est un oscillateur amorti analytique, choisi pour la démo à la place d’une sortie de la simulation.</figcaption></figure>
-        <p>La même passe calcule les normales. Elles sont soudées à travers les coutures intactes, puis lissées sur le premier anneau de voisins, parce que le maillage simulé est volontairement désordonné et que le reflet dessinerait ses arêtes. Elle calcule aussi la courbure, la dilatation de surface \(J\) (le rapport de l’aire courante à l’aire au repos), l’endommagement près des coupures et les sommets des lèvres. Une couche close ou finie, dont l’image n’a pas changé, n’est pas reposée.</p>
+
+        <h3>Relire au ralenti sans à-coups</h3>
+        <p>Au moment de la rupture, la caméra ralentit (section 07), et une image enregistrée doit couvrir plusieurs images affichées. Il faut donc calculer des positions entre deux images enregistrées. L'interpolation linéaire, une ligne droite d'une image à l'autre, donne une vitesse constante sur chaque intervalle, qui change brusquement à chaque image enregistrée : les lambeaux avancent par saccades. La relecture utilise une courbe de <b>Catmull-Rom</b>, qui passe elle aussi par les images enregistrées mais tient compte de l'image d'avant et de celle d'après. Sa vitesse varie sans saut :</p>
+        <div class="eq">\[ p(t) = p_1 + \tfrac12\, t\Big[(p_2 - p_0) + t\big((2p_0 - 5p_1 + 4p_2 - p_3) + t\,(3(p_1 - p_2) + p_3 - p_0)\big)\Big] \]</div>
+        <p><i>p</i><sub>1</sub> et <i>p</i><sub>2</sub> sont les images qui encadrent l'instant voulu, <i>p</i><sub>0</sub> et <i>p</i><sub>3</sub> leurs voisines, et <i>t</i>, entre 0 et 1, la position entre <i>p</i><sub>1</sub> et <i>p</i><sub>2</sub>.</p>
+        <figure id="fig-spline"><figcaption><b>Le bout d'un lambeau qui oscille après la rupture, relu au ralenti.</b> En haut, deux points rejouent le mouvement en boucle à la vitesse d'affichage : linéaire (rouge) et Catmull-Rom (doré). Au milieu, la position : les gros points sont les images enregistrées, les petits les images affichées. En bas, la vitesse d'une image affichée à la suivante : en marches pour la linéaire, continue pour Catmull-Rom. Le mouvement est un oscillateur amorti calculé exactement, à la place d'une sortie de la simulation.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Montez le ralenti à 8 ou 10 images affichées par image enregistrée et regardez les deux points : le rouge accélère et freine par à-coups, le doré glisse.</li>
+          <li>À 1 image affichée par image enregistrée, il n'y a pas de ralenti et les deux méthodes donnent le même résultat.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>La même passe de calcul, à chaque image, prépare tout ce dont le rendu a besoin. Elle calcule les normales, soudées à travers les coutures intactes puis lissées sur les voisins immédiats, parce que le maillage simulé est volontairement désordonné et que le reflet dessinerait ses arêtes. Elle calcule aussi la courbure, la dilatation de surface <i>J</i> (le rapport de l'aire courante à l'aire au repos), l'endommagement près des coupures et les sommets des lèvres. Une couche close ou finie, dont l'image n'a pas changé, n'est pas recalculée.</p>
+        </div></details>
+      </section>
+
+      <section id="plongee">
+        <h2><span class="n">07</span>Une plongée sans fin</h2>
+        <span class="src">src/scene/nest.js · src/main.js · choreo()</span>
+        <p>La caméra traverse une couche, puis la suivante, toujours vers l'avant. Pour que la boucle soit parfaite, la scène doit redevenir exactement identique à elle-même au bout d'un tour, sans fondu pour masquer le raccord.</p>
+
+        <h3>Tout dépend de la profondeur relative</h3>
+        <p>On numérote les couches par leur rang <i>d</i> dans l'emboîtement, et on mesure l'avancée de la caméra τ en couches. Ce qui compte pour une couche, c'est sa position par rapport à la caméra, <i>x</i> = <i>d</i> − τ. Son rayon, son orientation, l'instant de son éclosion et sa visibilité sont tous des fonctions de <i>x</i> seulement. Le rayon diminue d'un facteur <i>q</i> d'une couche à la suivante, et les modèles de couche (calice, iris, cage…) reviennent dans le même ordre tous les <i>N</i> rangs :</p>
+        <div class="eq">\[ r(x) = D\,q^{x}, \qquad q \in [0{,}42\,;\,0{,}5], \qquad \text{modèle}(d) = d \bmod N \]</div>
+        <p>Chaque couche fait donc de 42 à 50 % du rayon de celle qui l'enveloppe. Quand la caméra a avancé de <i>N</i> couches, chaque couche a pris la place exacte d'une couche de même modèle : la scène à τ + <i>N</i> est identique à la scène à τ. La simulation enregistrée et l'armature d'une couche avancent elles aussi avec <i>x</i>, et rien d'autre ne les pilote. L'éclosion se joue entre <i>x</i> = 2,25 à 2,5 et <i>x</i> = −0,35.</p>
+        <p>Il reste à éviter de construire de nouvelles couches en route. Le nid dispose d'un nombre fixe d'<b>emplacements</b>, des couches toutes prêtes (huit ou neuf selon <i>N</i>). L'emplacement <i>j</i> montre toujours le modèle <i>j</i> mod <i>N</i>. Quand une couche passe derrière la caméra (<i>x</i> = −2,2), son emplacement est réutilisé tout au fond (<i>x</i> = 3,6), pour une couche du même modèle. Les deux bords sont invisibles, l'un dans la brume derrière la caméra, l'autre dans la lueur du cœur, et le changement ne se voit pas.</p>
+        <figure id="fig-nest" class="wide"><figcaption><b>Le nid vu de la caméra, et ses emplacements.</b> À gauche, les couches en coupe ; la couleur est le modèle, et les brèches dans un cercle représentent son éclosion. À droite, l'axe des profondeurs <i>x</i> : chaque point est un emplacement, qui descend quand la caméra avance et saute du bas vers le haut là où il est invisible. La démo ignore l'orientation des couches et dessine l'éclosion comme de simples brèches.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Arrêtez la plongée, puis cliquez sur « Avancer de N couches » : l'image de gauche ne change pas, seuls les numéros des emplacements ont tourné.</li>
+          <li>Changez <i>N</i> et suivez un point d'un bord à l'autre : il reprend du service au fond avec la même couleur, donc le même modèle.</li>
+        </ul></div>
+
+        <h3>Un ralenti qui ne décale pas la boucle</h3>
+        <p>La rupture dure une fraction de seconde. Pour qu'on la voie, la caméra ralentit autour de chaque rupture, puis rattrape son retard. On déforme pour cela le temps : l'avancée τ de la caméra s'écarte de l'horloge <i>t</i> près de chaque instant de rupture <i>k</i>, puis la rejoint.</p>
+        <div class="eq">\[ \tau(t) = t - \sum_k a\,w\,K\!\left(\frac{t-k}{w}\right), \qquad K(x) = x - 3x^3 + 3x^5 - x^7 \]</div>
+        <p><i>a</i>, entre 0,35 et 0,75, règle la force du ralenti, et <i>w</i>, entre 0,3 et 0,45 couche, sa demi-largeur. Hors de la fenêtre |<i>x</i>| &lt; 1, le terme est nul. Comme <i>K</i>(±1) = 0, la caméra a exactement rattrapé l'horloge en sortant de la fenêtre : le ralenti ne décale rien, et la boucle est préservée. À la rupture, la vitesse de la caméra tombe à 1 − <i>a</i> (40 % de la vitesse normale pour <i>a</i> = 0,6). De part et d'autre, elle dépasse un peu 1 pour rattraper le retard, d'au plus 0,65 <i>a</i>.</p>
+        <figure id="fig-choreo"><figcaption><b>La vitesse de la plongée sur trois couches.</b> Fonction <code>choreo()</code> reprise du projet. En haut, la vitesse de la caméra dτ/d<i>t</i> ; en bas, τ(<i>t</i>) et la diagonale τ = <i>t</i> (pointillés). Les traits verticaux marquent les ruptures.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Poussez la force vers 0,95 : la vitesse frôle zéro à la rupture sans jamais devenir négative, et la courbe τ(<i>t</i>) rejoint toujours la diagonale entre deux ruptures.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Le centre du ralenti est réglé à la génération sur la fin moyenne des assauts de l'armature. Chaque œuf repose dans une coupe, au centre de l'armature de la couche précédente, et toutes les couches tournent à la même vitesse : leur orientation relative est fixe. Une armature qui passe derrière la caméra s'efface par un tramage, qui écarte une part croissante de ses pixels selon un motif renouvelé à chaque image, lissé ensuite par l'anticrénelage temporel (la moyenne des images successives). Son ombre s'efface avec elle. Mesurée sur une boucle entière, la luminance moyenne de l'image varie sans à-coup.</p>
+        </div></details>
       </section>
 
       <section id="pn">
-        <h2><span class="n">06</span>Des lambeaux qui restent courbes</h2>
+        <h2><span class="n">08</span>Des lambeaux qui restent courbes</h2>
         <span class="src">src/gen/tess.js · src/scene/membrane.js · pnPosition()</span>
-        <p>Vingt mille particules suffisent à la dynamique, mais un lambeau enroulé sur cinq ou six particules s’affiche comme un polygone. Le maillage de rendu découpe chaque triangle simulé en \(n^2\) triangles (\(n = 4\) pour les couches proches, soit ×16, \(n = 2\) au loin, soit ×4). Le vertex shader les pose sur le <strong>patch cubique des triangles PN</strong> (Vlachos et al., 2001), une surface courbe de degré 3 bâtie sur chaque triangle. Le patch ne dépend que des positions et normales des trois coins. Sur chaque arête, ses points de contrôle sont les tiers de l’arête projetés sur le plan tangent de leur coin :</p>
-        <div class="eq">\[ b_{ij} = \frac{2P_i + P_j - \big((P_j - P_i)\cdot N_i\big)\,N_i}{3}. \]</div>
-        <p>La normale suit une interpolation quadratique, dont les milieux d’arête sont réfléchis par le plan médian de l’arête, si bien qu’un pli en S garde son ombrage. Un sommet de coin ou d’arête est écrit sous une forme canonique, la même depuis les deux triangles qui le partagent. Le shader calcule ainsi exactement la même position des deux côtés, et aucune fissure ne s’ouvre entre eux. Le passage d’un niveau de détail à l’autre ne change que l’échantillonnage du même patch.</p>
-        <figure id="fig-pn"><figcaption><b>Une lèvre enroulée, en coupe.</b> Six particules (points), leurs normales (traits), le maillage plat et la courbe PN de chaque arête, formule de <code>pnPosition()</code> restreinte à une arête. Les curseurs règlent l’enroulement et le découpage n. Les normales sont, comme dans la pose, la moyenne de celles des segments voisins.</figcaption></figure>
+        <p>Vingt mille particules suffisent pour le mouvement, mais pas pour le dessin. Une lèvre enroulée ne compte que cinq ou six particules sur son tour, et si on relie ces particules par des triangles plats, elle s'affiche comme un polygone.</p>
+        <p>Pour le dessin, chaque triangle simulé est découpé en <i>n</i>² petits triangles (<i>n</i> = 4 pour les couches proches, soit 16 fois plus de triangles, <i>n</i> = 2 au loin). Encore faut-il placer les nouveaux sommets ailleurs que sur le triangle plat. On utilise les <b>triangles PN</b> (Vlachos et ses collègues, 2001) : sur chaque triangle, une surface courbe construite à partir des seules positions <i>P</i> et normales <i>N</i> de ses trois coins. Sur chaque arête, la courbe part de chaque coin tangente à la surface en ce coin. Ses points de contrôle sont les tiers de l'arête, ramenés dans le plan tangent de leur coin :</p>
+        <div class="eq">\[ b_{ij} = \frac{2P_i + P_j - \big((P_j - P_i)\cdot N_i\big)\,N_i}{3} \]</div>
+        <p>Le terme soustrait retire la part de l'arête qui sort du plan tangent du coin <i>i</i>. La surface ne dépend que de chaque triangle et de ses coins : deux triangles voisins calculent exactement la même courbe sur leur arête commune, et aucune fente ne s'ouvre entre eux.</p>
+        <figure id="fig-pn"><figcaption><b>Une lèvre enroulée, en coupe.</b> Six particules (points blancs) et leurs normales (traits). En rouge, le maillage plat ; en doré, la courbe PN de chaque arête, découpée en <i>n</i> tronçons (formule de <code>pnPosition()</code> restreinte à une arête). Les normales sont, comme dans le projet, la moyenne de celles des segments voisins.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Enroulez la lèvre : le maillage plat reste fait de segments droits qui se coupent en angles, la courbe PN passe par les mêmes particules en arrondissant chaque angle. Le bandeau donne l'écart entre les deux, en part de la longueur d'une arête.</li>
+          <li>Affichez les points de contrôle et passez <i>n</i> de 1 à 8 : <i>n</i> ne change que le nombre de points pris sur la même courbe.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>La normale suit une interpolation du second degré, dont les milieux d'arête sont réfléchis par le plan médian de l'arête : un pli en S garde son ombrage. Un sommet de coin ou d'arête est écrit sous une forme canonique, la même depuis les deux triangles qui le partagent, pour que le calcul donne exactement la même position des deux côtés. Le passage d'un niveau de détail à l'autre ne change que le nombre d'échantillons pris sur la même surface.</p>
+        </div></details>
       </section>
 
       <section id="photo">
-        <h2><span class="n">07</span>La contrainte devient couleur</h2>
+        <h2><span class="n">09</span>La contrainte devient couleur</h2>
         <span class="src">src/scene/photo.js · src/scene/gpusim.js · STRAIN</span>
-        <p>Un film de polymère tendu devient biréfringent : la lumière y avance à des vitesses différentes selon sa direction de polarisation. Entre deux polariseurs, la contrainte, invisible à l’œil nu, se lit alors en franges colorées. Membrane calcule ces franges à partir de sa propre simulation. À chaque pose, un shader de calcul tire de chaque triangle le gradient de la déformation \(F\), qui envoie le triangle au repos sur sa pose, puis le tenseur \(b = FF^\top\), ses étirements principaux \(\lambda_1 \ge \lambda_2\) et leurs directions. Il garde le <strong>déviateur logarithmique</strong>, la part de la déformation qui distingue une direction de l’autre :</p>
-        <div class="eq">\[ E = \tfrac12 \ln\frac{\lambda_1}{\lambda_2}\,\big(d_1 d_1^\top - d_2 d_2^\top\big), \]</div>
-        <p>Ce déviateur est moyenné par aire autour de chaque particule, soudé et lissé. Une tension égale dans toutes les directions ne donne rien : un œuf gonflé reste noir entre polariseurs croisés. La déformation est mesurée depuis la forme au repos plutôt que depuis les longueurs relâchées, si bien qu’un lambeau étiré plastiquement garde sa biréfringence, comme un film plastique tiré.</p>
-        <p>Au pixel, \(E\) passe dans le repère de la vue et se projette sur le plan de l’image, ce qui donne un écart \(\Delta\) et un axe \(\theta\). Le retard, le décalage entre les deux polarisations à la sortie, vaut \(\Gamma = C\,\Delta\,h\). \(C\) dépend de la matière (4&#8239;200 nm pour la gélatine, 2&#8239;600 pour le latex, 0 pour la bulle et l’or), et \(h\) est l’épaisseur traversée, amincie en \(1/J\) et allongée en incidence rasante. Vient ensuite le <strong>calcul de Jones</strong>, qui suit l’état de polarisation à travers chaque élément optique par un produit de matrices 2 × 2, sur 12 longueurs d’onde de 400 à 700 nm : polariseur, membrane (lame de retard), lame teinte sensible facultative (550 nm à 45°), analyseur. Les intensités sont pondérées par les fonctions colorimétriques CIE 1931 (approximation analytique de Wyman, Sloan et Shirley) et normalisées sur le blanc. Le résultat reproduit l’échelle de Michel-Lévy, la suite de teintes qu’on lit au microscope polarisant.</p>
-        <figure id="fig-photo" class="wide"><figcaption><b>Un film de gélatine tiré entre deux doigts, entre polariseurs.</b> Les curseurs règlent la traction, le gonflement isotrope et l’angle des polariseurs ; les boutons changent de mode. Le champ de déplacement est analytique (traction entre les doigts, contraction latérale, gonflement isotrope). Le reste est le vrai calcul : déviateur logarithmique tiré de \(F\), retard \(C\Delta/J\) avec \(C = 4\,200\) nm, calcul de Jones et pondérations CIE portés tels quels depuis <code>photo.js</code> (12 longueurs d’onde). Le gonflement isotrope ne change rien aux franges, seulement à l’épaisseur. Tournez les polariseurs en linéaire : les bandes sombres où l’axe de la contrainte s’aligne sur un polariseur (les isoclines) balaient le film. En circulaire, il ne reste que les isochromes, les franges d’égal retard. En bas, l’échelle de Michel-Lévy du mode choisi, de 0 à 2&#8239;500 nm.</figcaption></figure>
+        <p>Un film de plastique ou de gélatine étiré dévie la lumière différemment selon sa direction de vibration (sa polarisation) : il devient <b>biréfringent</b>. Placé entre deux filtres polarisants, il se couvre de franges colorées qui dessinent la contrainte, invisible à l'œil nu. C'est la <b>photoélasticité</b>, que les ingénieurs utilisent pour voir où une pièce travaille. Membrane calcule ces franges à partir de sa propre simulation.</p>
+
+        <h3>Mesurer l'étirement de chaque triangle</h3>
+        <p>On compare chaque triangle à sa forme au repos. Le <b>gradient de déformation</b> <i>F</i> est la matrice 2 × 2 qui envoie le triangle au repos sur sa forme actuelle ; on en tire les deux étirements principaux λ<sub>1</sub> ≥ λ<sub>2</sub> (le plus et le moins étiré) et leurs directions <i>d</i><sub>1</sub>, <i>d</i><sub>2</sub>. Seule compte la différence entre les deux directions :</p>
+        <div class="eq">\[ E = \tfrac12 \ln\frac{\lambda_1}{\lambda_2}\,\big(d_1 d_1^\top - d_2 d_2^\top\big) \]</div>
+        <p>Un étirement égal dans toutes les directions donne λ<sub>1</sub> = λ<sub>2</sub>, donc <i>E</i> = 0 : un œuf gonflé uniformément reste noir entre deux polariseurs croisés. La déformation est mesurée depuis la forme au repos, si bien qu'un lambeau étiré de façon permanente garde sa couleur, comme un film plastique qu'on a tiré.</p>
+
+        <h3>De l'étirement à la couleur</h3>
+        <p>La lumière qui traverse la membrane se sépare en deux vibrations perpendiculaires qui avancent à des vitesses légèrement différentes. À la sortie, l'une est en retard sur l'autre de Γ = <i>C</i> Δ <i>h</i>, où Δ est l'écart d'étirement vu par la caméra, <i>h</i> l'épaisseur traversée et <i>C</i> une constante du matériau (4 200 nm pour la gélatine, 2 600 pour le latex). Selon la longueur d'onde, ce retard fait que la lumière passe ou non le second polariseur : certaines couleurs s'éteignent, d'autres restent. Le rendu suit la polarisation à travers chaque filtre par le <b>calcul de Jones</b> (une matrice 2 × 2 par élément optique), pour 12 longueurs d'onde de 400 à 700 nm, puis recompose la couleur perçue. On obtient l'échelle de teintes de Michel-Lévy, celle qu'on lit au microscope polarisant.</p>
+        <figure id="fig-photo" class="wide"><figcaption><b>Un film de gélatine tiré entre deux doigts, entre deux polariseurs.</b> Le déplacement du film est donné par une formule (traction entre les doigts, contraction sur les côtés, gonflement uniforme) ; le reste est le calcul du projet, repris de <code>photo.js</code>. En bas, l'échelle de teintes du mode choisi, pour un retard de 0 à 2 500 nm.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Montez la traction : les franges se resserrent là où le film est le plus étiré, entre les doigts.</li>
+          <li>Montez le gonflement uniforme à traction nulle : le film reste noir, puisque l'étirement est le même dans toutes les directions.</li>
+          <li>Passez en linéaire et tournez les polariseurs : des bandes sombres, les isoclines, balaient le film là où la direction de l'étirement s'aligne sur un polariseur. En circulaire, elles disparaissent et il ne reste que les franges d'égal retard.</li>
+        </ul></div>
         <figure>
           <img src="docs/photoelasticite.jpg" alt="Douze vues de membranes en lumière polarisée, quatre modes" width="2472" height="1473" loading="lazy">
-          <figcaption><b>Dans la scène, quatre réglages de la lumière polarisée</b> : polariseurs croisés, lame teinte sensible (fond pourpre), champ clair (analyseur parallèle), linéaire. Les franges serrées des silhouettes viennent de l’épaisseur traversée en incidence rasante.</figcaption>
+          <figcaption><b>Dans la scène, quatre réglages de la lumière polarisée</b> : polariseurs croisés, lame teinte sensible (fond pourpre), analyseur parallèle (fond clair), polarisation linéaire. Les franges serrées des silhouettes viennent de la grande épaisseur traversée quand on regarde la membrane de biais.</figcaption>
         </figure>
-        <div class="note trap"><b>Une approximation assumée</b><p>Chaque couche est traitée comme si elle était seule entre ses deux polariseurs : les retards de couches successives ne se composent pas. Seule la lumière transmise passe entre les polariseurs. La diffusion dépolarise, et le reflet reste blanc. Le calcul coûte environ 3 ms par image, et seulement si la lumière polarisée est allumée.</p></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Le tenseur <i>E</i> est moyenné par aire autour de chaque particule, soudé à travers les coutures et lissé. Au pixel, il passe dans le repère de la vue et se projette sur le plan de l'image, ce qui donne l'écart Δ et l'axe θ. L'épaisseur <i>h</i> est amincie en 1/<i>J</i> quand la membrane s'étire et allongée quand on la voit de biais. La lame teinte sensible facultative vaut 550 nm à 45°. Les intensités sont pondérées par les fonctions colorimétriques CIE 1931 (approximation analytique de Wyman, Sloan et Shirley) et normalisées sur le blanc.</p>
+          <div class="note trap"><b>Une approximation assumée</b><p>Chaque couche est traitée comme si elle était seule entre ses deux polariseurs : les retards de couches successives ne se composent pas. Seule la lumière transmise passe entre les polariseurs ; la diffusion dépolarise, et le reflet reste blanc. Le calcul coûte environ 3 ms par image, et seulement si la lumière polarisée est allumée.</p></div>
+        </div></details>
       </section>
 
       <section id="plis">
-        <h2><span class="n">08</span>Des plis plus fins que le maillage</h2>
+        <h2><span class="n">10</span>Des plis plus fins que le maillage</h2>
         <span class="src">src/scene/membrane.js · wrinkleSlope()</span>
-        <p>Un film mince ne supporte pas la compression : il flambe, c’est-à-dire qu’il se dérobe en ondulant, et forme des plis parallèles à la tension, comme un film étirable tiré entre deux doigts. Pour l’épaisseur habituelle, ces plis ont une longueur d’onde de l’ordre de 8 % du rayon, à peine trois arêtes du maillage simulé : bien trop peu pour résoudre une ondulation. La simulation ne voit pas les plis, mais elle sait où la matière est comprimée, dans quel sens et de combien. La pose garde, dans le repère au repos (pour que les plis restent attachés à la matière), le tenseur</p>
-        <div class="eq">\[ W = c\,k\,k^\top, \qquad c = \max\big(0,\,(1 - \text{pre}) - \lambda_2\big), \]</div>
-        <p>où \(k\) est la direction de compression (vecteur propre de \(C = F^\top F\) pour la plus petite valeur propre) et \(c\) la compression au-delà de la longueur relâchée. La longueur d’onde suit la loi de Cerda et Mahadevan, \(\lambda \propto \sqrt{t\,L}\), où <i>t</i> est l’épaisseur et <i>L</i> une longueur de la zone tendue (ici \(\lambda = 1{,}6\sqrt{0{,}2\,t}\)) : la bulle plisse fin, la gélatine large. L’amplitude \(A = (\lambda/\pi)\sqrt{c}\) fait passer dans l’ondulation le surplus de longueur de la matière comprimée.</p>
-        <p>Le motif est un <strong>bruit de phaseurs</strong> (Tricard et al., 2019) : une somme de noyaux de Gabor, de petites ondes sous une enveloppe en cloche, orientés selon \(k\), un par cellule de 1,5 λ, dont on ne garde que la phase \(\varphi\). Un bruit de Gabor ordinaire a un contraste qui varie d’un endroit à l’autre. La phase seule donne des bandes de contraste constant, qui suivent l’orientation sans se rompre. Tout est analytique. La pente \(2\sqrt{c}\,\cos\varphi\,k\) est exprimée sur l’écran par les dérivées de la position au repos (prises hors de la branche), puis perturbe la normale. Seuls les pixels où la pente dépasse 2° évaluent le bruit, et les plis de moins de trois pixels s’effacent.</p>
-        <figure id="fig-wrinkle" class="wide"><figcaption><b>Le même film tiré, en lumière rasante.</b> Les curseurs règlent la traction et l’épaisseur, qui fixe la longueur d’onde. Compression tirée du même champ de déplacement que la démo précédente (\(C = F^\top F\), précontrainte 0,04) ; bruit de phaseurs porté depuis <code>wrinkleSlope()</code> en deux dimensions (9 cellules au lieu de 27). Le bouton compare la phase seule à la partie réelle de la somme de Gabor : même orientation, mais un contraste qui s’éteint par endroits.</figcaption></figure>
+        <p>Tirez un film étirable entre deux doigts : il se couvre de plis fins, parallèles à la traction. Sur les côtés, le film est comprimé, et un film mince ne supporte pas la compression : il <b>flambe</b>, c'est-à-dire qu'il se dérobe en ondulant au lieu de raccourcir. Sur la membrane, ces plis ont une longueur d'onde de l'ordre de 8 % du rayon, à peine trois arêtes du maillage : bien trop peu pour que la simulation les reproduise.</p>
+        <p>La simulation ne voit pas les plis, mais elle sait où la matière est comprimée, dans quelle direction <i>k</i> et de combien. On dessine donc les plis au moment du rendu, sans les simuler : on modifie la normale de la surface pour faire croire à une ondulation. Trois grandeurs suffisent :</p>
+        <ul>
+          <li>la <b>compression</b> <i>c</i>, ce qui manque à la direction la plus courte pour retrouver la longueur relâchée ;</li>
+          <li>la <b>longueur d'onde</b> λ, qui suit la loi de Cerda et Mahadevan, λ ∝ √(<i>t L</i>), avec <i>t</i> l'épaisseur et <i>L</i> une longueur de la zone tendue : une bulle de savon plisse fin, une gélatine large ;</li>
+          <li>l'<b>amplitude</b> <i>A</i> = (λ/π) √<i>c</i>, choisie pour que l'ondulation absorbe le surplus de longueur de la matière comprimée.</li>
+        </ul>
+        <div class="eq">\[ c = \max\big(0,\,(1 - \text{pre}) - \lambda_2\big), \qquad \lambda = 1{,}6\,\sqrt{0{,}2\,t}, \qquad A = \frac{\lambda}{\pi}\sqrt{c} \]</div>
+        <p>Reste à dessiner un motif de bandes qui suit la direction <i>k</i>, avec un peu d'irrégularité. Membrane utilise un <b>bruit de phaseurs</b> (Tricard et ses collègues, 2019) : une somme de petites ondes orientées selon <i>k</i>, chacune sous une enveloppe en cloche, dont on ne garde que la phase. Garder la phase seule donne des bandes de contraste constant, qui suivent l'orientation sans s'éteindre par endroits.</p>
+        <figure id="fig-wrinkle" class="wide"><figcaption><b>Le même film tiré, en lumière rasante.</b> La compression est tirée du même déplacement que dans la démo précédente ; le motif est repris de <code>wrinkleSlope()</code>, en deux dimensions. Le bouton remplace la phase seule par la somme des ondes elle-même (le bruit de Gabor ordinaire).</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Changez l'épaisseur : les plis s'élargissent comme la racine de l'épaisseur.</li>
+          <li>Mettez la traction à zéro : plus de compression, plus de plis.</li>
+          <li>Passez au bruit de Gabor : l'orientation est la même, mais le contraste s'éteint par plaques.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>La direction de compression <i>k</i> est le vecteur propre de <i>C</i> = <i>F</i><sup>⊤</sup><i>F</i> pour sa plus petite valeur propre, et elle est gardée dans le repère au repos, pour que les plis restent attachés à la matière quand elle bouge. Il y a un noyau d'onde par cellule de 1,5 λ. La pente 2√<i>c</i> cos φ <i>k</i> est exprimée à l'écran par les dérivées de la position au repos, puis perturbe la normale. Seuls les pixels où la pente dépasse 2° évaluent le bruit, et les plis de moins de trois pixels s'effacent.</p>
+        </div></details>
       </section>
 
-      <section id="travers">
-        <h2><span class="n">09</span>Voir au travers sans tout recopier</h2>
+      <section id="transparence">
+        <h2><span class="n">11</span>Voir au travers</h2>
         <span class="src">src/scene/nest.js · src/scene/membrane.js</span>
-        <p>Une membrane est une couche mince diffusante. Son épaisseur relative vaut irrégularité × vaisseaux × fibres / \(J\). La transmission suit la loi de Beer-Lambert, qui fait décroître la lumière exponentiellement avec l’épaisseur traversée, avec l’absorption du sang (forte dans les gros vaisseaux, faible dans les capillaires). Vue de biais, la membrane est traversée sur une épaisseur \(h/\cos\), divisée par le cosinus de l’angle de vue. La silhouette d’une peau est donc plus dense que son centre, et l’on distingue la membrane de ce qu’elle contient.</p>
-        <p>Pour montrer ce qui est derrière une membrane, le rendu lit une <strong>copie de l’image</strong>, prise juste avant de la dessiner, avec ses niveaux de mipmap (des versions réduites, donc floues) pour la part diffusée. Pour que les couches intérieures y figurent déjà, l’ordre de dessin est fixé : armatures et filaments, puis les faces arrière de l’extérieur vers l’intérieur, puis les faces avant de l’intérieur vers l’extérieur. Le flou dépend de la distance, lue dans une copie de la profondeur propre à chaque couche : une lame qui touche la membrane reste nette, et le lointain se dissout.</p>
-        <p>Six à huit copies par image coûtaient cher. Quand la caméra est hors d’une couche (\(x > 0{,}35\)), la face arrière de cette couche n’est vue qu’au travers de sa face avant, qui réfracte et floute déjà. Une copie propre à la face arrière ne servirait qu’à flouter deux fois. Cette face se mélange alors directement à l’image, par le mélange matériel de la carte graphique : lumière propre + fond × transmission moyenne.</p>
-        <div class="note check"><b>Un passage mesuré</b><p>Entre \(x = 0{,}10\) et \(0{,}35\), la version avec copie perd progressivement réfraction, flou, teinte, plis et reflets en espace écran, jusqu’à donner exactement l’image de la version mélangée, brume comprise. Mesuré de part et d’autre du seuil, l’écart est celui de deux images voisines. Gain : 3,5 ms par image. La version mobile pousse l’idée aux faces avant lointaines (au-delà de \(x = 0{,}8\)), en deux passages pour garder la teinte. Sur un GPU à tuiles, l’architecture des téléphones qui rend l’image par petits carreaux en mémoire rapide, chaque copie vide la mémoire de tuile.</p></div>
-        <div class="note"><b>L’anticrénelage du reflet</b><p>Les dérivées écran d’une normale interpolée sont constantes par triangle. Un anticrénelage spéculaire classique, qui élargit le reflet là où la normale varie vite dans le pixel, dessinerait donc les facettes dans le reflet d’une peau humide. Membrane tire la variance de la normale dans le pixel de la courbure calculée par sommet à la pose, continue d’un triangle à l’autre, et de la taille du pixel à cette distance, allongée en incidence rasante.</p></div>
+        <p>La membrane laisse voir ce qu'elle contient, en le floutant et en le teintant. La lumière qui la traverse est atténuée exponentiellement avec l'épaisseur traversée (loi de Beer-Lambert), et davantage là où passent des vaisseaux. Vue de biais, la membrane est traversée sur une plus grande épaisseur (<i>h</i> divisé par le cosinus de l'angle de vue) : ses bords paraissent plus denses que son centre, ce qui aide à distinguer la membrane de ce qu'elle enveloppe.</p>
+        <p>Pour montrer ce qui est derrière une membrane, le rendu prend une copie de l'image juste avant de dessiner cette membrane, avec des versions réduites et floues de cette copie, et y lit le fond. Les couches intérieures doivent donc être déjà dessinées : l'ordre est fixé, armatures et filaments d'abord, puis les faces arrière de l'extérieur vers l'intérieur, puis les faces avant de l'intérieur vers l'extérieur. Le flou dépend de la distance entre la membrane et ce qu'on voit derrière : une lame qui touche la membrane reste nette, le lointain se dissout.</p>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>L'épaisseur relative de la membrane vaut irrégularité × vaisseaux × fibres / <i>J</i>, et l'absorption suit celle du sang (forte dans les gros vaisseaux, faible dans les capillaires). Six à huit copies de l'image par image coûtaient cher. Quand la caméra est hors d'une couche (<i>x</i> &gt; 0,35), la face arrière de cette couche n'est vue qu'à travers sa face avant, qui floute déjà : une copie propre à la face arrière ne servirait qu'à flouter deux fois. Cette face est alors mélangée directement à l'image par la carte graphique : lumière propre + fond × transmission moyenne.</p>
+          <div class="note check"><b>Un passage mesuré</b><p>Entre <i>x</i> = 0,10 et 0,35, la version avec copie perd progressivement réfraction, flou, teinte, plis et reflets, jusqu'à donner exactement l'image de la version mélangée, brume comprise. Mesuré de part et d'autre du seuil, l'écart est celui de deux images voisines. Gain : 3,5 ms par image. La version mobile applique la même idée aux faces avant lointaines (au-delà de <i>x</i> = 0,8) : sur les cartes graphiques des téléphones, qui calculent l'image par petits carreaux en mémoire rapide, chaque copie oblige à vider cette mémoire.</p></div>
+          <div class="note"><b>L'anticrénelage du reflet</b><p>Sur une normale interpolée, les variations d'un pixel à l'autre sont constantes par triangle. Un anticrénelage du reflet classique, qui élargit le reflet là où la normale varie vite, dessinerait donc les facettes dans le reflet d'une peau humide. Membrane tire la variation de la normale dans le pixel de la courbure calculée à chaque sommet, continue d'un triangle à l'autre, et de la taille du pixel à cette distance.</p></div>
+        </div></details>
+      </section>
+
+      <section id="resume">
+        <h2><span class="n">12</span>Récapitulatif</h2>
+        <p>Pendant le chargement, chaque couche est préparée puis simulée. La préparation découpe le maillage en futurs lambeaux, lisse les coutures et dédouble leurs sommets (section 04). Puis chaque sous-pas de la simulation :</p>
+        <ol>
+          <li>fait avancer chaque particule librement, sous la pression et la résistance de l'air ;</li>
+          <li>corrige les positions en six passes, chaque particule faisant la moyenne des corrections de ses contraintes (sections 02 et 03) ;</li>
+          <li>repousse les particules hors de l'armature, qui mène ses assauts (section 05), et hors de l'œuf suivant ;</li>
+          <li>teste chaque lien de couture contre son seuil du moment (section 05) ;</li>
+          <li>déduit les vitesses des déplacements.</li>
+        </ol>
+        <p>Toutes les seize sous-pas, les positions sont enregistrées sur 16 bits (section 06). Pendant l'animation, chaque image relit ces positions par Catmull-Rom au temps donné par la plongée (sections 06 et 07), puis le rendu courbe les lambeaux, ajoute les franges et les plis, et laisse voir les couches intérieures (sections 08 à 11).</p>
       </section>
 
       <section id="budget">
-        <h2><span class="n">10</span>Budget</h2>
-        <p>La préparation tourne dans un worker, et la simulation sur le GPU pendant l’écran de chargement. Le rendu ne fait que relire et poser.</p>
+        <h2><span class="n">13</span>Budget</h2>
+        <p>La préparation tourne dans un worker, et la simulation sur le GPU pendant l'écran de chargement. Le rendu ne fait que relire et poser.</p>
         <div class="tbl"><table>
           <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
           <tbody>
-            <tr><td>Préparation d’une couche (maillage, motif, coutures, tables, poses de l’armature), 20&#8239;000 particules</td><td>worker</td><td class="num">0,4 s</td></tr>
-            <tr><td>Simulation d’une couche (160 images, 16 sous-pas, 6 passes)</td><td>GPU</td><td class="num">~5 s</td></tr>
+            <tr><td>Préparation d'une couche (maillage, motif, coutures, tables, poses de l'armature), 20&#8239;000 particules</td><td>worker</td><td class="num">0,4 s</td></tr>
+            <tr><td>Simulation d'une couche (160 images, 16 sous-pas, 6 passes)</td><td>GPU</td><td class="num">~5 s</td></tr>
             <tr><td>Scène de trois couches prête (panneau de navigateur masqué, donc ralenti)</td><td>GPU</td><td class="num">15 à 20 s</td></tr>
             <tr><td>Images enregistrées, 16 bits par coordonnée</td><td>mémoire</td><td class="num">~25 Mo / couche</td></tr>
             <tr><td>Image complète, qualité haute, 1,9 Mpx, plis compris</td><td>GPU</td><td class="num">~26 ms</td></tr>
             <tr><td>dont reflets en espace écran</td><td>GPU</td><td class="num">3,4 ms</td></tr>
-            <tr><td>dont copies de l’image</td><td>GPU</td><td class="num">~2,5 ms</td></tr>
+            <tr><td>dont copies de l'image</td><td>GPU</td><td class="num">~2,5 ms</td></tr>
             <tr><td>dont maillage fin des couches proches (×16)</td><td>GPU</td><td class="num">1,1 ms</td></tr>
             <tr><td>dont bloom · plis · occlusion ambiante (8 échantillons)</td><td>GPU</td><td class="num">0,7 · 0,6 · 0,5 ms</td></tr>
             <tr><td>Photoélasticité (déformation et intégration spectrale), si allumée</td><td>GPU</td><td class="num">~3 ms</td></tr>
           </tbody>
         </table></div>
-        <p>La version mobile simule un maillage plus grossier (36 subdivisions au lieu de 44, deux tiers des particules), 120 images au lieu de 160, 13 sous-pas au lieu de 16 : préparation, calcul et mémoire presque divisés par deux, avec la même dynamique de déchirure. Les plis y évaluent 8 cellules au lieu de 27, la photoélasticité 7 longueurs d’onde au lieu de 12.</p>
+        <p>La version mobile simule un maillage plus grossier (36 subdivisions au lieu de 44, deux tiers des particules), 120 images au lieu de 160, 13 sous-pas au lieu de 16 : préparation, calcul et mémoire presque divisés par deux, avec la même dynamique de déchirure. Les plis y évaluent 8 cellules au lieu de 27, la photoélasticité 7 longueurs d'onde au lieu de 12.</p>
       </section>
     </article>
 
@@ -191,14 +348,86 @@ return vec2u(pack2x16unorm(q.xy), pack2x16unorm(vec2f(q.z, 0.0)));</code></pre>
     const ease = (u) => { u = u < 0 ? 0 : u > 1 ? 1 : u; return u * u * u * (u * (u * 6 - 15) + 10); };
     const PAL = [C.c1, C.c2, C.c3, C.c4];
 
-    // ── 01 · le nid ─────────────────────────────────────────────────────────
+    // ── 02 · la chaîne : ressorts contre contraintes XPBD ──────────────────
+    {
+      const CH = { n: 16, L: 0.05, m: 0.01, g: 9.81, sub: 2, damp: 0.6, iters: 4 };
+      const chain = () => { const x = [], v = []; for (let i = 0; i <= CH.n; i++) { x.push([i * CH.L * 0.7, -i * CH.L * 0.7]); v.push([0, 0]); } return { x, v, lam: new Float64Array(CH.n), dead: 0 }; };
+      const lenOf = (S) => { let s = 0; for (let i = 0; i < CH.n; i++) s += Math.hypot(S.x[i + 1][0] - S.x[i][0], S.x[i + 1][1] - S.x[i][1]); return s / (CH.n * CH.L) - 1; };
+      // ressorts : forces, puis vitesses (Euler semi-implicite), puis positions
+      function stepSpring(S, k, dt, grab) {
+        const { n, L, m, g } = CH, h = dt / CH.sub;
+        for (let s = 0; s < CH.sub; s++) {
+          const f = S.x.map(() => [0, -m * g]);
+          for (let i = 0; i < n; i++) { const a = S.x[i], b = S.x[i + 1], ex = b[0] - a[0], ey = b[1] - a[1], l = Math.hypot(ex, ey) || 1e-9, F = k * (l - L); f[i][0] += F * ex / l; f[i][1] += F * ey / l; f[i + 1][0] -= F * ex / l; f[i + 1][1] -= F * ey / l; }
+          for (let i = 1; i <= n; i++) {
+            if (grab && i === n) { S.v[i] = [(grab[0] - S.x[i][0]) / h, (grab[1] - S.x[i][1]) / h]; S.x[i] = [...grab]; continue; }
+            const dm = Math.exp(-CH.damp * h);
+            S.v[i][0] = (S.v[i][0] + h * f[i][0] / m) * dm; S.v[i][1] = (S.v[i][1] + h * f[i][1] / m) * dm;
+            S.x[i][0] += h * S.v[i][0]; S.x[i][1] += h * S.v[i][1];
+          }
+        }
+      }
+      // XPBD : avancer librement, corriger les positions (souplesse 1/k), déduire les vitesses
+      function stepXPBD(S, k, dt, grab) {
+        const { n, L, m, g } = CH, h = dt / CH.sub, at = 1 / k / (h * h);
+        for (let s = 0; s < CH.sub; s++) {
+          const p = S.x.map((x) => [...x]);
+          for (let i = 1; i <= n; i++) { const dm = Math.exp(-CH.damp * h); S.v[i][1] -= g * h; S.v[i][0] *= dm; S.v[i][1] *= dm; S.x[i][0] += h * S.v[i][0]; S.x[i][1] += h * S.v[i][1]; }
+          if (grab) S.x[n] = [...grab];
+          S.lam.fill(0);
+          for (let it = 0; it < CH.iters; it++) for (let i = 0; i < n; i++) {
+            const a = S.x[i], b = S.x[i + 1], wa = i === 0 ? 0 : 1 / m, wb = grab && i + 1 === n ? 0 : 1 / m;
+            const ex = b[0] - a[0], ey = b[1] - a[1], l = Math.hypot(ex, ey) || 1e-9, C = l - L;
+            const dl = (-C - at * S.lam[i]) / (wa + wb + at); S.lam[i] += dl;
+            a[0] -= wa * dl * ex / l; a[1] -= wa * dl * ey / l; b[0] += wb * dl * ex / l; b[1] += wb * dl * ey / l;
+          }
+          for (let i = 1; i <= n; i++) S.v[i] = [(S.x[i][0] - p[i][0]) / h, (S.x[i][1] - p[i][1]) / h];
+        }
+      }
+      const kOf = (v) => 5 * 1000 ** v; // curseur 0–1 → 5 à 5 000 N/m
+      let grab = null;
+      demo('#fig-chaine', {
+        title: 'Ressorts ou contraintes', aspect: 2, animate: true, alt: 'Deux chaînes suspendues, l’une à ressorts, l’autre à contraintes de position',
+        controls: [{ key: 'k', label: 'Raideur k des liens', min: 0, max: 1, step: 0.005, value: 0.1, fmt: (v) => `${kOf(v) < 100 ? kOf(v).toFixed(0) : (Math.round(kOf(v) / 10) * 10).toLocaleString('fr')} N/m` }],
+        buttons: [{ label: 'Rejouer', onClick: (d) => d.reset() }],
+        setup(d) { d.state = { A: chain(), B: chain() }; },
+        pointer(d, e) {
+          if (e.type === 'up' || !e.down) { grab = null; return; }
+          const half = d.w / 2, ox = (e.x < half ? 0 : half) + half / 2, sc = (d.h - 60) / 2.4;
+          grab = [(e.x - ox) / sc, -(e.y - 30) / sc];
+        },
+        draw(g, d) {
+          const S = d.state, k = kOf(d.s.k), dt = Math.min(d.dt, 1 / 30) || 1 / 60;
+          if (!S.A.dead) { stepSpring(S.A, k, dt, grab); const e = lenOf(S.A); if (!isFinite(e) || e > 20) S.A.dead = 1e-6; } else { S.A.dead += d.dt; if (S.A.dead > 1.8) S.A = chain(); }
+          stepXPBD(S.B, k, dt, grab);
+          const half = d.w / 2, sc = (d.h - 60) / 2.4;
+          [[S.A, 'ressorts (forces)', C.c3], [S.B, 'contraintes XPBD (positions)', C.c1]].forEach(([Ch, name, col], p) => {
+            const ox = p * half + half / 2, oy = 30, T = (q) => [ox + q[0] * sc, oy - q[1] * sc];
+            g.save(); g.beginPath(); g.rect(p * half, 0, half, d.h - 42); g.clip();
+            g.fillStyle = C.dim; g.fillRect(ox - 22, oy - 4, 44, 3);
+            if (Ch.dead) label(g, 'la simulation a divergé', ox, d.h / 2, { align: 'center', color: C.c3, size: 14 });
+            else {
+              g.strokeStyle = alpha(col, 0.9); g.lineWidth = 2; g.beginPath(); Ch.x.forEach((q, i) => { const t = T(q); i ? g.lineTo(...t) : g.moveTo(...t); }); g.stroke();
+              g.fillStyle = C.ink; for (const q of Ch.x) { const t = T(q); g.beginPath(); g.arc(t[0], t[1], 2.6, 0, TAU); g.fill(); }
+            }
+            g.restore();
+            label(g, half > 220 ? name : name.split(' (')[0].replace('contraintes ', ''), ox, d.h - 26, { align: 'center', color: col, size: 12 });
+            label(g, Ch.dead ? '—' : `allongement ${(lenOf(Ch) * 100).toFixed(0)} %`, ox, d.h - 9, { align: 'center', size: 11 });
+          });
+          g.strokeStyle = C.line; g.beginPath(); g.moveTo(half, 10); g.lineTo(half, d.h - 10); g.stroke();
+          d.status(`k = ${k < 100 ? k.toFixed(0) : Math.round(k)} N/m · ${S.A.dead ? 'les ressorts ont divergé' : `ressorts ${(lenOf(S.A) * 100).toFixed(0)} % · XPBD ${(lenOf(S.B) * 100).toFixed(0)} %`}`);
+        },
+      });
+    }
+
+    // ── 07 · le nid ─────────────────────────────────────────────────────────
     {
       const XMIN = -2.2, XMAX = 3.6, q = 0.46, OPEN = 2.4, END = -0.35;
       const ss = (a, b, x) => smooth(a, b, x);
       demo('#fig-nest', {
         title: 'Plongée périodique', aspect: 2, animate: true,
         controls: [{ key: 'N', label: 'Modèles différents N', min: 2, max: 4, step: 1, value: 3 }],
-        buttons: [{ key: 'play', label: 'Plonger', toggle: true, value: true }],
+        buttons: [{ key: 'play', label: 'Plonger', toggle: true, value: true }, { label: 'Avancer de N couches', onClick: (d) => { d.state.tau += d.s.N; } }],
         setup(d) { d.state.tau = 0.3; },
         draw(g, d) {
           const S = d.state, N = d.s.N, M = N * Math.ceil((XMAX - XMIN + 0.2) / N);
@@ -247,7 +476,7 @@ return vec2u(pack2x16unorm(q.xy), pack2x16unorm(vec2f(q.z, 0.0)));</code></pre>
       });
     }
 
-    // ── 01b · le ralenti ────────────────────────────────────────────────────
+    // ── 07b · le ralenti ────────────────────────────────────────────────────
     {
       const K7 = (x) => x - 3 * x ** 3 + 3 * x ** 5 - x ** 7;
       function choreo(t, Cc) {
@@ -290,7 +519,7 @@ return vec2u(pack2x16unorm(q.xy), pack2x16unorm(vec2f(q.z, 0.0)));</code></pre>
       });
     }
 
-    // ── 02 · motif de déchirure et lissage ─────────────────────────────────
+    // ── 04 · motif de déchirure et lissage ─────────────────────────────────
     {
       // bruit de valeur 2D et fBm
       const hsh = (x, y) => { const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453; return s - Math.floor(s); };
@@ -391,7 +620,7 @@ return vec2u(pack2x16unorm(q.xy), pack2x16unorm(vec2f(q.z, 0.0)));</code></pre>
       });
     }
 
-    // ── 03 · Jacobi : somme contre moyenne ────────────────────────────────
+    // ── 03 · Jacobi : somme contre moyenne, côte à côte ───────────────────
     {
       const NX = 13, NY = 11, P = [], pin = [];
       for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) { P.push([i + (j % 2) * 0.5, j * 0.866]); pin.push(i === 0 || j === 0 || i === NX - 1 || j === NY - 1); }
@@ -407,56 +636,63 @@ return vec2u(pack2x16unorm(q.xy), pack2x16unorm(vec2f(q.z, 0.0)));</code></pre>
         const k = a < c ? a + '_' + c : c + '_' + a; if (seen.has(k)) continue; seen.add(k); E.push([a, c]);
       }
       const L = E.map(([a, b]) => Math.hypot(P[a][0] - P[b][0], P[a][1] - P[b][1]));
+      const start = () => { const r = rng(5); return P.map((p, k) => pin[k] ? [...p] : [p[0] + (r() - 0.5) * 0.8, p[1] + (r() - 0.5) * 0.8]); };
+      const resid = (X, ne) => { let r = 0; for (let k = 0; k < ne; k++) { const [a, b] = E[k]; r += (Math.hypot(X[a][0] - X[b][0], X[a][1] - X[b][1]) - L[k]) ** 2; } return Math.sqrt(r / ne); };
+      function iterate(X, ne, avg, om) {
+        const D = X.map(() => [0, 0, 0]);
+        for (let k = 0; k < ne; k++) {
+          const [a, b] = E[k], ex = X[a][0] - X[b][0], ey = X[a][1] - X[b][1], l = Math.hypot(ex, ey), wa = pin[a] ? 0 : 1, wb = pin[b] ? 0 : 1;
+          if (!(wa + wb) || l < 1e-9) continue; const s = -(l - L[k]) / (wa + wb) / l;
+          D[a][0] += ex * s * wa; D[a][1] += ey * s * wa; D[a][2]++; D[b][0] -= ex * s * wb; D[b][1] -= ey * s * wb; D[b][2]++;
+        }
+        X.forEach((x, k) => { if (pin[k]) return; const f = avg ? om / Math.max(1, D[k][2]) : om; x[0] += D[k][0] * f; x[1] += D[k][1] * f; });
+      }
+      const IT = 60;
       demo('#fig-jacobi', {
-        title: 'Jacobi parallèle', aspect: 2.1, animate: true,
-        controls: [{ key: 'om', label: 'Facteur ω', min: 0.2, max: 2.4, step: 0.05, value: 0.5, fmt: (v) => v.toFixed(2), onChange: (d) => d.reset() }],
+        title: 'Somme ou moyenne', aspect: 1.9, animate: true,
+        controls: [{ key: 'om', label: 'Facteur ω de la somme', min: 0.2, max: 1.2, step: 0.05, value: 0.5, fmt: (v) => v.toFixed(2), onChange: (d) => d.reset() }],
         buttons: [
-          { key: 'avg', label: 'Moyenne (Membrane)', toggle: true, value: false, onClick: (d) => d.reset() },
           { key: 'bend', label: 'Avec la flexion', toggle: true, value: false, onClick: (d) => d.reset() },
           { label: 'Rejouer', onClick: (d) => d.reset() },
         ],
-        setup(d) { const r = rng(5); d.state = { X: P.map((p, k) => pin[k] ? [...p] : [p[0] + (r() - 0.5) * 0.8, p[1] + (r() - 0.5) * 0.8]), res: [], clock: 0 }; },
+        setup(d) { d.state = { runs: [{ X: start(), res: [], avg: false }, { X: start(), res: [], avg: true }], clock: 0 }; },
         draw(g, d) {
           const S = d.state, ne = d.s.bend ? E.length : E1;
-          const resid = () => { let r = 0; for (let k = 0; k < ne; k++) { const [a, b] = E[k]; r += (Math.hypot(S.X[a][0] - S.X[b][0], S.X[a][1] - S.X[b][1]) - L[k]) ** 2; } return Math.sqrt(r / ne); };
-          if (!S.res.length) S.res.push(resid());
+          for (const R of S.runs) if (!R.res.length) R.res.push(resid(R.X, ne));
           S.clock += d.dt;
-          if (S.clock > 0.09 && S.res.length < 61 && S.res[S.res.length - 1] < 1e3) {
+          if (S.clock > 0.08) {
             S.clock = 0;
-            const D = S.X.map(() => [0, 0, 0]);
-            for (let k = 0; k < ne; k++) {
-              const [a, b] = E[k], ex = S.X[a][0] - S.X[b][0], ey = S.X[a][1] - S.X[b][1], l = Math.hypot(ex, ey), wa = pin[a] ? 0 : 1, wb = pin[b] ? 0 : 1;
-              if (!(wa + wb) || l < 1e-9) continue; const s = -(l - L[k]) / (wa + wb) / l;
-              D[a][0] += ex * s * wa; D[a][1] += ey * s * wa; D[a][2]++; D[b][0] -= ex * s * wb; D[b][1] -= ey * s * wb; D[b][2]++;
-            }
-            S.X.forEach((x, k) => { if (pin[k]) return; const f = d.s.avg ? d.s.om / Math.max(1, D[k][2]) : d.s.om; x[0] += D[k][0] * f; x[1] += D[k][1] * f; });
-            S.res.push(resid());
+            for (const R of S.runs) { const last = R.res[R.res.length - 1]; if (R.res.length <= IT && last < 1e3 && isFinite(last)) { iterate(R.X, ne, R.avg, R.avg ? 1.6 : d.s.om); R.res.push(resid(R.X, ne)); } }
           }
-          // maillage
-          const { w, h } = d, sz = Math.min(w * 0.42 / (NX - 0.5), (h - 30) / ((NY - 1) * 0.866)), ox = 18, oy = (h - (NY - 1) * 0.866 * sz) / 2;
-          const T = (p) => [ox + clamp(p[0], -3, NX + 3) * sz, oy + clamp(p[1], -3, NY + 3) * sz];
-          g.save(); g.beginPath(); g.rect(0, 0, w * 0.47, h); g.clip();
-          g.lineWidth = 1;
-          for (let k = 0; k < E1; k++) { const [a, b] = E[k], A = T(S.X[a]), B = T(S.X[b]), e = Math.abs(Math.hypot(S.X[a][0] - S.X[b][0], S.X[a][1] - S.X[b][1]) - L[k]) / L[k]; g.strokeStyle = alpha(e > 0.05 ? C.c3 : C.c4, clamp(0.35 + e * 3, 0.35, 1)); g.beginPath(); g.moveTo(...A); g.lineTo(...B); g.stroke(); }
-          S.X.forEach((p, k) => { const A = T(p); g.fillStyle = pin[k] ? C.dim : C.c1; g.fillRect(A[0] - 1.5, A[1] - 1.5, 3, 3); });
-          g.restore();
-          // résidu
-          const x0 = w * 0.55, x1 = w - 14, y0 = 18, y1 = h - 28, lo = -6, hi = 2;
-          const X = (i) => lerp(x0, x1, i / 60), Y = (r) => lerp(y1, y0, (clamp(Math.log10(Math.max(r, 1e-9)), lo, hi) - lo) / (hi - lo));
-          g.strokeStyle = C.grid;
-          for (let e = lo; e <= hi; e += 2) { g.beginPath(); g.moveTo(x0, Y(10 ** e)); g.lineTo(x1, Y(10 ** e)); g.stroke(); label(g, `1e${e}`, x0 - 6, Y(10 ** e) + 4, { align: 'right', size: 10.5 }); }
-          label(g, 'écart RMS des longueurs', x0 + 4, y0 - 4, { size: 11 });
-          label(g, 'itérations →', x1, h - 8, { align: 'right', color: C.faint, size: 11 });
-          const last = S.res[S.res.length - 1], div = last > S.res[0] * 2 || !isFinite(last);
-          g.strokeStyle = div ? C.c3 : C.c1; g.lineWidth = 2; g.beginPath();
-          S.res.forEach((r, i) => { const y = Y(r); i ? g.lineTo(X(i), y) : g.moveTo(X(i), y); }); g.stroke();
-          const nc = (2 * ne / P.length).toFixed(1);
-          d.status(`${d.s.avg ? 'moyenne' : 'somme'} · ~${nc} contraintes par particule · ${div ? 'diverge' : S.res.length > 60 ? 'converge' : 'en cours'}`);
+          const { w, h } = d, half = w / 2, meshH = h * 0.56;
+          const verdict = [];
+          S.runs.forEach((R, p) => {
+            const x0 = p * half, sz = Math.min((half - 30) / (NX - 0.5), (meshH - 34) / ((NY - 1) * 0.866)), ox = x0 + (half - (NX - 0.5) * sz) / 2, oy = 28;
+            const T = (q) => [ox + clamp(q[0], -2, NX + 2) * sz, oy + clamp(q[1], -2, NY + 2) * sz];
+            g.save(); g.beginPath(); g.rect(x0, 0, half, meshH + 4); g.clip(); g.lineWidth = 1;
+            for (let k = 0; k < E1; k++) { const [a, b] = E[k], A = T(R.X[a]), B = T(R.X[b]), e = Math.abs(Math.hypot(R.X[a][0] - R.X[b][0], R.X[a][1] - R.X[b][1]) - L[k]) / L[k]; g.strokeStyle = alpha(e > 0.05 ? C.c3 : C.c4, clamp(0.35 + e * 3, 0.35, 1)); g.beginPath(); g.moveTo(...A); g.lineTo(...B); g.stroke(); }
+            R.X.forEach((q, k) => { const A = T(q); g.fillStyle = pin[k] ? C.dim : C.c1; g.fillRect(A[0] - 1.5, A[1] - 1.5, 3, 3); });
+            g.restore();
+            g.fillStyle = C.bg; g.fillRect(x0 + half / 2 - 95, 2, 190, 20);
+            label(g, R.avg ? (half > 280 ? 'moyenne, ω = 1,6 (Membrane)' : 'moyenne, ω = 1,6') : `somme, ω = ${d.s.om.toFixed(2).replace('.', ',')}`, x0 + half / 2, 16, { align: 'center', size: 12, color: C.ink });
+            // écart des longueurs, échelle log
+            const gx0 = x0 + 46, gx1 = x0 + half - 14, gy0 = meshH + 34, gy1 = h - 14, lo = -5, hi = 1;
+            const X = (i) => lerp(gx0, gx1, i / IT), Y = (r) => lerp(gy1, gy0, (clamp(Math.log10(Math.max(r, 1e-9)), lo, hi) - lo) / (hi - lo));
+            g.strokeStyle = C.grid; g.lineWidth = 1;
+            for (let e = lo; e <= hi; e += 2) { g.beginPath(); g.moveTo(gx0, Y(10 ** e)); g.lineTo(gx1, Y(10 ** e)); g.stroke(); label(g, `1e${e}`, gx0 - 6, Y(10 ** e) + 4, { align: 'right', size: 10 }); }
+            const last = R.res[R.res.length - 1], div = !(last < R.res[0] * 2);
+            g.strokeStyle = div ? C.c3 : C.c1; g.lineWidth = 2; g.beginPath(); R.res.forEach((r, i) => { const y = Y(r); i ? g.lineTo(X(i), y) : g.moveTo(X(i), y); }); g.stroke();
+            const v = div ? 'diverge' : R.res.length > IT ? `écart ÷ ${Math.round(R.res[0] / last).toLocaleString('fr')}` : 'en cours';
+            if (half > 280) label(g, 'écart des longueurs', gx0, meshH + 22, { size: 11 }); label(g, v, gx1, meshH + 22, { align: 'right', size: 11.5, color: div ? C.c3 : C.c4 });
+            verdict.push(`${R.avg ? 'moyenne' : 'somme'} : ${div ? 'diverge' : R.res.length > IT ? 'converge' : '…'}`);
+          });
+          g.strokeStyle = C.line; g.beginPath(); g.moveTo(half, 8); g.lineTo(half, h - 8); g.stroke();
+          d.status(`~${(2 * ne / P.length).toFixed(1).replace('.', ',')} contraintes par particule · ${verdict.join(' · ')}`);
         },
       });
     }
 
-    // ── 04 · assauts et rupture ───────────────────────────────────────────
+    // ── 05 · assauts et rupture ───────────────────────────────────────────
     {
       function struggle(u, S) { if (!S || S.n <= 0 || S.f <= 0) return u; if (u >= S.f) return (u - S.f) / (1 - S.f); const w = (u / S.f) * S.n, k = Math.floor(w), v = w - k; return S.a * (0.45 + (0.55 * (k + 1)) / S.n) * Math.sin(Math.PI * v) ** 2; }
       const NP = 120, NB = 3, PRE = 0.04, DUR = 1.0, H = 1 / 600;
@@ -579,48 +815,59 @@ return vec2u(pack2x16unorm(q.xy), pack2x16unorm(vec2f(q.z, 0.0)));</code></pre>
       function lerpCol(s) { const t = clamp(s / 0.3); return `rgb(${Math.round(lerp(230, 217, t))},${Math.round(lerp(220, 110, t))},${Math.round(lerp(210, 90, t))})`; }
     }
 
-    // ── 05 · Catmull-Rom ──────────────────────────────────────────────────
+    // ── 06 · Catmull-Rom ──────────────────────────────────────────────────
     {
       const sig = (t) => Math.exp(-1.4 * t) * Math.cos(10 * t) * 0.9;
       demo('#fig-spline', {
-        title: 'Relecture au ralenti', aspect: 1.7,
+        title: 'Relecture au ralenti', aspect: 1.45, animate: true,
         controls: [
           { key: 'k', label: 'Images affichées par image enregistrée', min: 1, max: 10, step: 1, value: 6 },
           { key: 'F', label: 'Images enregistrées sur la fenêtre', min: 8, max: 30, step: 1, value: 12 },
         ],
+        setup(d) { d.state.play = 0; },
         draw(g, d) {
-          const F = d.s.F, Tw = 1.4, fr = Array.from({ length: F }, (_, i) => sig(i / (F - 1) * Tw));
-          const frame = (k) => fr[Math.min(Math.max(k, 0), F - 1)];
-          const at = (f) => { const ff = clamp(f, 0, F - 1), k = Math.floor(ff), t = ff - k; const p0 = frame(Math.max(k, 1) - 1), p1 = frame(k), p2 = frame(k + 1), p3 = frame(k + 2); return p1 + 0.5 * t * ((p2 - p0) + t * ((2 * p0 - 5 * p1 + 4 * p2 - p3) + t * (3 * (p1 - p2) + p3 - p0))); };
-          const lin = (f) => { const ff = clamp(f, 0, F - 1), k = Math.floor(ff), t = ff - k; return lerp(frame(k), frame(k + 1), t); };
-          const { w, h } = d, x0 = 40, x1 = w - 14, X = (f) => lerp(x0, x1, f / (F - 1));
-          const a0 = 16, a1 = h * 0.5, Yp = (v) => lerp(a1, a0, (v + 0.9) / 1.95);
+          const F = d.s.F, k = d.s.k, Tw = 1.4, fr = Array.from({ length: F }, (_, i) => sig(i / (F - 1) * Tw));
+          const frame = (i) => fr[Math.min(Math.max(i, 0), F - 1)];
+          const at = (f) => { const ff = clamp(f, 0, F - 1), i = Math.floor(ff), t = ff - i; const p0 = frame(Math.max(i, 1) - 1), p1 = frame(i), p2 = frame(i + 1), p3 = frame(i + 2); return p1 + 0.5 * t * ((p2 - p0) + t * ((2 * p0 - 5 * p1 + 4 * p2 - p3) + t * (3 * (p1 - p2) + p3 - p0))); };
+          const lin = (f) => { const ff = clamp(f, 0, F - 1), i = Math.floor(ff), t = ff - i; return lerp(frame(i), frame(i + 1), t); };
+          const n = (F - 1) * k, samp = (fn) => Array.from({ length: n + 1 }, (_, i) => fn(i / k));
+          const Ls = samp(lin), Cr = samp(at);
+          // lecture : une image affichée tous les 1/30 s, en boucle (avec une pause à la fin)
+          d.state.play = (d.state.play + d.dt * 30) % (n + 20);
+          const cur = Math.min(n, Math.floor(d.state.play));
+          const { w, h } = d, x0 = 44, x1 = w - 14, X = (f) => lerp(x0, x1, f / (F - 1));
+          // 1. les deux points rejoués
+          const tr = (v) => lerp(x0 + 80, x1 - 20, (v + 0.9) / 1.8), yA = 20, yB = 46;
+          [[yA, Ls, C.c3, 'linéaire'], [yB, Cr, C.c1, 'Catmull-Rom']].forEach(([y, arr, col, name]) => {
+            g.strokeStyle = C.grid; g.lineWidth = 1; g.beginPath(); g.moveTo(x0 + 80, y); g.lineTo(x1 - 20, y); g.stroke();
+            g.fillStyle = col; g.beginPath(); g.arc(tr(arr[cur]), y, 7, 0, TAU); g.fill();
+            label(g, name, 14, y + 4, { size: 11, color: col });
+          });
+          // 2. position
+          const a0 = 72, a1 = 72 + (h - 100) * 0.5, Yp = (v) => lerp(a1, a0, (v + 0.9) / 1.95);
           g.strokeStyle = C.grid; g.beginPath(); g.moveTo(x0, Yp(0)); g.lineTo(x1, Yp(0)); g.stroke();
-          const n = (F - 1) * d.s.k, samp = (fn) => Array.from({ length: n + 1 }, (_, i) => fn(i / d.s.k));
-          const L = samp(lin), Cr = samp(at);
-          const poly = (arr, Y, col, lw, dots) => { g.strokeStyle = col; g.lineWidth = lw; g.beginPath(); arr.forEach((v, i) => { const x = X(i / d.s.k), y = Y(v); i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.stroke(); if (dots) { g.fillStyle = col; arr.forEach((v, i) => { g.beginPath(); g.arc(X(i / d.s.k), Y(v), 1.6, 0, TAU); g.fill(); }); } };
-          poly(L, Yp, alpha(C.c3, 0.85), 1.4, true); poly(Cr, Yp, C.c1, 1.8, true);
+          const poly = (arr, Y, col, lw) => { g.strokeStyle = col; g.fillStyle = col; g.lineWidth = lw; g.beginPath(); arr.forEach((v, i) => { const x = X(i / k), y = Y(v); i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.stroke(); arr.forEach((v, i) => { g.beginPath(); g.arc(X(i / k), Y(v), 1.6, 0, TAU); g.fill(); }); };
+          poly(Ls, Yp, alpha(C.c3, 0.85), 1.4); poly(Cr, Yp, C.c1, 1.8);
           g.fillStyle = C.ink; fr.forEach((v, i) => { g.beginPath(); g.arc(X(i), Yp(v), 3.6, 0, TAU); g.fill(); });
-          label(g, 'position', x1, a0 + 4, { base: 'top', size: 11, align: 'right' });
-          // vitesse
-          const b0 = h * 0.58, b1 = h - 26;
-          const vel = (arr) => arr.slice(1).map((v, i) => (v - arr[i]) * d.s.k);
-          const VL = vel(L), VC = vel(Cr), m = Math.max(...VL.map(Math.abs), ...VC.map(Math.abs), 1e-6);
+          label(g, 'position', x1, a0 - 2, { size: 11, align: 'right' });
+          // 3. vitesse d'une image affichée à la suivante
+          const b0 = a1 + 30, b1 = h - 24;
+          const vel = (arr) => arr.slice(1).map((v, i) => (v - arr[i]) * k);
+          const VL = vel(Ls), VC = vel(Cr), m = Math.max(...VL.map(Math.abs), ...VC.map(Math.abs), 1e-6);
           const Yv = (v) => lerp(b1, b0, (v / m + 1) / 2);
           g.strokeStyle = C.grid; g.beginPath(); g.moveTo(x0, Yv(0)); g.lineTo(x1, Yv(0)); g.stroke();
-          const step = (arr, col, lw) => { g.strokeStyle = col; g.fillStyle = col; g.lineWidth = lw; g.beginPath(); arr.forEach((v, i) => { const x = X((i + 0.5) / d.s.k), y = Yv(v); i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.stroke(); arr.forEach((v, i) => { g.beginPath(); g.arc(X((i + 0.5) / d.s.k), Yv(v), 1.8, 0, TAU); g.fill(); }); };
+          const step = (arr, col, lw) => { g.strokeStyle = col; g.fillStyle = col; g.lineWidth = lw; g.beginPath(); arr.forEach((v, i) => { const x = X((i + 0.5) / k), y = Yv(v); i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.stroke(); };
           step(VL, alpha(C.c3, 0.85), 1.4); step(VC, C.c1, 1.8);
-          label(g, 'vitesse image à image', x0 + 4, b0 - 4, { size: 11 });
-          label(g, 'linéaire', x1, b1 + 16, { align: 'right', color: C.c3, size: 11.5 });
-          label(g, 'Catmull-Rom', x1 - 70, b1 + 16, { align: 'right', color: C.c1, size: 11.5 });
-          // saut de vitesse maximal aux images enregistrées
+          label(g, 'vitesse', x0 + 4, b0 - 6, { size: 11 });
+          // tête de lecture
+          g.strokeStyle = alpha(C.ink, 0.35); g.lineWidth = 1; g.beginPath(); g.moveTo(X(cur / k), a0); g.lineTo(X(cur / k), b1); g.stroke();
           let jl = 0, jc = 0; for (let i = 1; i < VL.length; i++) { jl = Math.max(jl, Math.abs(VL[i] - VL[i - 1])); jc = Math.max(jc, Math.abs(VC[i] - VC[i - 1])); }
-          d.status(d.s.k === 1 ? 'pas de ralenti : les deux coïncident' : `plus grand saut de vitesse : ${(jl / m * 100).toFixed(0)} % contre ${(jc / m * 100).toFixed(0)} %`);
+          d.status(k === 1 ? 'pas de ralenti : les deux coïncident' : `plus grand saut de vitesse : linéaire ${(jl / m * 100).toFixed(0)} %, Catmull-Rom ${(jc / m * 100).toFixed(0)} %`);
         },
       });
     }
 
-    // ── 06 · triangles PN (une arête) ────────────────────────────────────
+    // ── 08 · triangles PN (une arête) ────────────────────────────────────
     {
       demo('#fig-pn', {
         title: 'Arête PN', aspect: 1.8,
@@ -644,7 +891,7 @@ return vec2u(pack2x16unorm(q.xy), pack2x16unorm(vec2f(q.z, 0.0)));</code></pre>
           const sc = Math.min(d.w / (mxx - mnx), (d.h - 20) / (mxy - mny)), ox = (d.w - (mxx - mnx) * sc) / 2 - mnx * sc, oy = (d.h - (mxy - mny) * sc) / 2 + mxy * sc;
           const T = (p) => [ox + p[0] * sc, oy - p[1] * sc];
           // maillage plat
-          g.strokeStyle = alpha(C.c3, 0.8); g.lineWidth = 1.4; g.setLineDash([4, 4]); g.beginPath(); P.forEach((p, i) => { const q = T(p); i ? g.lineTo(...q) : g.moveTo(...q); }); g.stroke(); g.setLineDash([]);
+          g.strokeStyle = alpha(C.c3, 0.85); g.lineWidth = 2; g.beginPath(); P.forEach((p, i) => { const q = T(p); i ? g.lineTo(...q) : g.moveTo(...q); }); g.stroke();
           // PN
           let maxd = 0;
           g.strokeStyle = C.c1; g.lineWidth = 2.2; g.beginPath();
@@ -663,7 +910,7 @@ return vec2u(pack2x16unorm(q.xy), pack2x16unorm(vec2f(q.z, 0.0)));</code></pre>
       });
     }
 
-    // ── champ de déplacement commun (07, 08) : film tiré entre deux doigts ──
+    // ── champ de déplacement commun (09, 10) : film tiré entre deux doigts ──
     const FING = 0.55;
     function dispF(x, y, pull, iso) {
       // u = traction (x) avec contraction latérale (y), localisée entre les doigts, + gonflement isotrope
@@ -674,7 +921,7 @@ return vec2u(pack2x16unorm(q.xy), pack2x16unorm(vec2f(q.z, 0.0)));</code></pre>
     const sym2 = (a, b, c) => { const tr = (a + c) / 2, df = Math.sqrt(((a - c) / 2) ** 2 + b * b); return [tr + df, tr - df, 0.5 * Math.atan2(2 * b, a - c)]; };
     const srgb = (v) => { v = Math.max(0, v); return 255 * Math.min(1, v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055); };
 
-    // ── 07 · photoélasticité ─────────────────────────────────────────────
+    // ── 09 · photoélasticité ─────────────────────────────────────────────
     {
       // pondérations portées de photo.js
       const NL = 12, LAMBDAS = Array.from({ length: NL }, (_, i) => 400 + (300 * (i + 0.5)) / NL);
@@ -696,6 +943,7 @@ return vec2u(pack2x16unorm(q.xy), pack2x16unorm(vec2f(q.z, 0.0)));</code></pre>
       }
       const off = document.createElement('canvas'), og = off.getContext('2d');
       let mode = 'circ';
+      const markMode = (d) => d.fig.querySelectorAll('.btns button').forEach((b, k) => { if (k < 3) b.setAttribute('aria-pressed', String(['circ', 'lin', 'plate'][k] === mode)); });
       demo('#fig-photo', {
         title: 'Polariscope', aspect: 2.1,
         controls: [
@@ -704,11 +952,12 @@ return vec2u(pack2x16unorm(q.xy), pack2x16unorm(vec2f(q.z, 0.0)));</code></pre>
           { key: 'phi', label: 'Angle des polariseurs', min: 0, max: 180, step: 1, value: 20, fmt: (v) => `${v}°` },
         ],
         buttons: [
-          { label: 'Circulaire', onClick: () => { mode = 'circ'; } },
-          { label: 'Linéaire', onClick: () => { mode = 'lin'; } },
-          { label: 'Lame teinte sensible', onClick: () => { mode = 'plate'; } },
+          { label: 'Circulaire', onClick: (d) => { mode = 'circ'; markMode(d); } },
+          { label: 'Linéaire', onClick: (d) => { mode = 'lin'; markMode(d); } },
+          { label: 'Lame teinte sensible', onClick: (d) => { mode = 'plate'; markMode(d); } },
           { key: 'par', label: 'Analyseur parallèle', toggle: true, value: false },
         ],
+        setup(d) { markMode(d); },
         draw(g, d) {
           const Wd = Math.max(2, Math.round(d.w / 2)), Hd = Math.max(2, Math.round(d.h / 2)); off.width = Wd; off.height = Hd;
           const img = og.createImageData(Wd, Hd), px = img.data, rgb = [0, 0, 0];
@@ -742,7 +991,7 @@ return vec2u(pack2x16unorm(q.xy), pack2x16unorm(vec2f(q.z, 0.0)));</code></pre>
       });
     }
 
-    // ── 08 · plis en bruit de phaseurs ───────────────────────────────────
+    // ── 10 · plis en bruit de phaseurs ───────────────────────────────────
     {
       const fr = (v) => v - Math.floor(v);
       const h2 = (x, y, s) => [fr(Math.sin(x * 127.1 + y * 311.7 + s) * 43758.5453), fr(Math.sin(x * 269.5 + y * 183.3 + s) * 43758.5453)];

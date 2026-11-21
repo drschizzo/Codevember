@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#050506">
   <title>Moss · défis techniques</title>
-  <meta name="description" content="Comment Moss fait vivre une année de mousse sur sa pierre : équation de Fisher-KPP forcée par les saisons, orbite périodique enregistrée, fissures de la roche comme refuges, coussins en dômes, feuilles posées en forme fermée, rosettes imbriquées à la densité d’un vrai coussin, quarante mille feuilles dans un seul shader, état lu dans la texture du champ et niveaux de détail tirés de la trajectoire de la caméra.">
+  <meta name="description" content="Comment fonctionne Moss, reconstruit pas à pas : pousser et se répandre (Fisher-KPP), l'eau et les saisons, les fissures comme refuges, l'année qui se referme, puis le coussin de tiges et la feuille qui se rouvre à l'eau.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
@@ -22,120 +22,202 @@
 
   <main>
     <header class="hero">
-      <div class="kicker">Day 05 · Moss · la reviviscence</div>
+      <div class="kicker">Day 05 · Moss · comment ça marche</div>
       <h1>Comment une mousse traverse une année sur sa pierre</h1>
-      <p class="lede">À la sécheresse, il ne reste que des îlots bruns dans les fissures de la pierre. Une averse passe, la roche fonce, les îlots reverdissent. Pendant toute la saison des pluies, les coussins de mousse s’étendent sur la roche, puis la sécheresse les fait reculer jusqu’à leurs refuges. Aucune main n’anime ce mouvement. Il sort d’une équation de réaction-diffusion, où la mousse pousse sur place et gagne de proche en proche, forcée par les saisons et intégrée jusqu’à ce que l’année se referme sur elle-même.</p>
+      <p class="lede">Dans Moss, une année passe en quarante secondes sur une pierre. À la sécheresse, il ne reste de la mousse que des îlots bruns dans les fissures. Une averse passe, la roche fonce, les îlots reverdissent ; pendant la saison des pluies, les coussins s'étendent sur la pierre, puis la sécheresse les fait reculer jusqu'à leurs refuges. Personne n'anime ce mouvement : il sort d'une équation où la mousse pousse sur place et gagne de proche en proche. Cette page construit cette équation pas à pas, puis montre comment on passe d'un champ de nombres à des milliers de petites tiges dont les feuilles s'ouvrent quand il pleut.</p>
+      <p class="prereq">Pour suivre, il suffit de savoir lire un peu de JavaScript. Les formules résument ce que les démos montrent ; on peut les sauter sans perdre le fil. Les détails de production sont rangés dans les encadrés « Pour aller plus loin ».</p>
     </header>
 
     <figure class="cover">
       <img src="docs/capture.jpg" alt="Un coussin de tortule sur une souche, en fin de saison des pluies" width="1483" height="1228">
-      <figcaption>Souche, tortule : le coussin sur sa souche en fin de saison des pluies (graine b88). Chaque rosette est une tige modélisée, plantée dans l’écorce cuite. Ses feuilles sont posées dans le vertex shader, le programme du GPU qui place chaque sommet.</figcaption>
+      <figcaption>Un coussin de tortule sur une souche, en fin de saison des pluies (graine b88). Chaque rosette est une tige modélisée, plantée dans l'écorce ; ses feuilles sont posées par la carte graphique à chaque image.</figcaption>
     </figure>
 
     <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
 
     <article>
 
-      <section id="fisher">
-        <h2><span class="n">01</span>Une année de mousse est une équation de Fisher-KPP</h2>
-        <span class="src">src/field.js</span>
-        <p>La première version de Moss ouvrait des tiges une à une sous la pluie. Ce geste était trop proche de celui d’une autre scène, et surtout illisible, puisque rien ne le reliait à l’eau ou à la lumière. Le geste retenu est une propagation : une mousse qui s’étend et se rétracte sur sa pierre au fil d’une année filmée en accéléré.</p>
-        <p>Deux champs, des grandeurs définies en chaque point, vivent sur une grille de 64 × 64 posée sur le dessus de la pierre : \(W\), l’eau de la roche, et \(B\), la mousse. Une carte d’habitat fixe, la <em>rétention</em> \(R\), dit où l’eau reste : les fissures, les creux, le côté à l’ombre. Les deux champs évoluent selon le système :</p>
-        <div class="eq">\[ \begin{aligned} \partial_t W &= p(t,x)\,(1 - W) - e(t)\,(1{,}2 - R)\,W, \\ \partial_t B &= D\,\nabla^2 B + r\,s(t)\,W\,B\,\Big(1 - \frac{B}{K}\Big) - m\,(1 - W)\,(1 - R)^2\,B, \qquad B \ge b_0\,\mathrm{refuge}(R). \end{aligned} \]</div>
-        <p>La seconde ligne est l’équation de <strong>Fisher-KPP</strong>, celle d’une population qui croît jusqu’à saturation (croissance logistique) et se répand de proche en proche (diffusion), modulée ici par l’eau. La croissance est forte à la saison des pluies et ne descend jamais sous 15&nbsp;% de son maximum, \(s(t) = \max(0{,}15,\ \text{saison})\). La mortalité frappe là où la roche sèche vite, et l’exposant 2 sur \(1 - R\) épargne nettement les fissures. Le plancher \(b_0 = 0{,}5\) garde des fragments vivants dans les refuges : il n’agit que là où \(R\) dépasse 0,45 et atteint sa pleine valeur à 0,9. La capacité \(K = 0{,}55 + 0{,}45\,R\), la densité que la mousse ne dépasse pas, rend les coussins plus épais là où l’eau reste.</p>
-        <p>La pluie est la cause visible de ces mouvements. Trois averses traversent la pierre en bandes entre les phases 0,105 et 0,19 de la boucle, chacune dans une direction tirée de la graine. Sous une averse, l’évaporation tombe au dixième et la roche fonce. Une pluie de fond (0,55) s’installe ensuite pour la saison. Aucune averse ne tombe pendant la sécheresse, et le retrait se fait d’un seul mouvement, du bord vers les fissures.</p>
-        <pre><code>const r = 0.034, D = 0.0011, m = 0.022, b0 = 0.5, ev = 0.35;   // jours, cm
-L[k] = D * lap + r * season * W[k] * c * (1 - c / K[k])
-     - m * (1 - W[k]) * (1 - R[k]) ** 2 * c;</code></pre>
-        <figure id="fig-year" class="wide"><figcaption><b>L’année d’une pierre de granit, calculée par <code>field.js</code> dans cette page.</b> Le module est importé tel quel (habitat tiré d’une roche de granit, averses, intégration jusqu’à l’orbite périodique, enregistrement à 30 états par seconde de film pour une boucle de 40 s). Le curseur choisit la phase de la boucle, « Lecture » la fait défiler. À gauche, la pierre vue de dessus : la roche fonce avec l’eau, et la mousse brune reverdit avec elle puis s’étend. Le bouton « Habitat R » montre la rétention \(R\). À droite, la saison des pluies (bleu) et la part de la pierre couverte de mousse épaisse (\(B > 0{,}3\), le seuil des tests). Simplification : la carte est colorée, alors que la scène montre des tiges.</figcaption></figure>
+      <section id="scene">
+        <h2><span class="n">01</span>Ce que montre la scène</h2>
+        <p>La scène est une pierre (granit, calcaire, grès, souche ou motte de terre) couverte de mousse, filmée sur une année. La première version ouvrait des tiges une à une sous la pluie : ce geste n'était relié à rien de visible. Le geste retenu est une <b>propagation</b> : la mousse s'étend pendant la saison des pluies et recule pendant la sécheresse, toujours depuis les mêmes refuges.</p>
+        <p>La page suit deux étapes :</p>
+        <ul>
+          <li><b>calculer où est la mousse</b>, à chaque instant de l'année, sur une grille posée sur la pierre (sections 02 à 05) ;</li>
+          <li><b>la montrer</b> sous forme de coussins de petites tiges, dont les feuilles se ferment au sec et s'ouvrent à l'eau (sections 06 à 09).</li>
+        </ul>
       </section>
 
-      <section id="front">
-        <h2><span class="n">02</span>Le front avance au plus à 2√(rD)</h2>
+      <section id="fisher">
+        <h2><span class="n">02</span>Pousser et se répandre</h2>
+        <span class="src">src/field.js</span>
+        <p>Décrivons la mousse par sa densité <i>B</i> en chaque point de la pierre, de 0 (pierre nue) à environ 1 (coussin épais). Deux mécanismes la font changer.</p>
+        <p>D'abord, elle <b>pousse sur place</b>. Là où il y en a un peu, il en vient davantage, et de plus en plus vite, jusqu'à ce que la place manque. C'est la croissance logistique, la même que celle d'une population dans un milieu limité : <i>r B</i> (1 − <i>B</i>/<i>K</i>), où <i>r</i> est le taux de croissance et <i>K</i> la densité maximale. Mais seule, cette croissance ne déplace rien : un point sans mousse reste sans mousse.</p>
+        <p>Ensuite, elle <b>se répand</b> de proche en proche : spores, fragments, rameaux qui s'étalent. On le modélise par une diffusion, <i>D</i> ∇²<i>B</i>, qui fait passer la mousse des endroits denses vers les endroits clairsemés, comme une goutte d'encre qui s'étale. Seule, la diffusion étale la mousse sans en créer : la quantité totale reste la même, et le coussin s'amincit jusqu'à disparaître.</p>
+        <p>Ensemble, ces deux termes forment l'<b>équation de Fisher-KPP</b>. La diffusion pousse un peu de mousse en avant du coussin, la croissance l'épaissit, et le front avance sans jamais s'arrêter :</p>
+        <div class="eq">\[ \partial_t B = D\,\nabla^2 B + r\,B\,\Big(1 - \frac{B}{K}\Big) \]</div>
+        <p>La vitesse du front n'est réglée nulle part : elle découle de la croissance et de la diffusion. Un front qui envahit un milieu vide se stabilise à la vitesse</p>
+        <div class="eq">\[ c^\ast = 2\sqrt{r\,D} \]</div>
+        <p>Avec les constantes de la scène, <i>r</i> = 0,034 par jour et <i>D</i> = 0,0011 cm² par jour, cela fait 0,12 mm par jour au plus, à peu près l'épaisseur d'une feuille de papier : un centimètre et demi sur une saison des pluies. C'est l'échelle d'une vraie colonie de mousse, dont les coussins se rejoignent en une saison sans recouvrir toute la pierre.</p>
+<pre><code>for (let i = 0; i &lt; N; i++) {
+  const lap = (B[i - 1] + B[i + 1] - 2 * B[i]) / (dx * dx);  // diffusion
+  L[i] = D * lap + r * B[i] * (1 - B[i]);                    // + croissance
+}
+for (let i = 0; i &lt; N; i++) B[i] += dt * L[i];</code></pre>
+        <figure id="fig-front"><figcaption><b>Un front de mousse à une dimension</b>, avec les constantes du projet. La mousse part d'un refuge de 1,5 mm à gauche, avec l'eau et la saison au maximum ; une seconde de démo vaut quinze jours. En haut, le profil de <i>B</i> ; en bas, la position du front (<i>B</i> = 0,5) au fil des jours, et la pente théorique 2√(<i>rD</i>) en pointillés. Les boutons retirent la diffusion ou la croissance.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>« Croissance seule » : le refuge reste un refuge, le front ne bouge pas de 1,5 mm.</li>
+          <li>« Diffusion seule » : la mousse s'étale et s'amincit ; sa quantité totale ne change pas, et nulle part elle ne dépasse la moitié de la densité maximale.</li>
+          <li>« Les deux » : au bout de 170 jours, le front a avancé de 14 mm. La vitesse mesurée approche la pente théorique par en dessous (environ 80 % au bout de 160 jours) : c'est un front « tiré » par sa pointe, où la mousse est rare, qui n'atteint sa vitesse limite que lentement.</li>
+          <li>Augmentez <i>D</i> au maximum du curseur (3,6 fois la valeur du projet) : la vitesse théorique affichée n'est multipliée que par 1,9, la racine carrée de 3,6.</li>
+        </ul></div>
+      </section>
+
+      <section id="saisons">
+        <h2><span class="n">03</span>L'eau et les saisons</h2>
         <span class="src">src/field.js · simulateField()</span>
-        <p>La vitesse de la propagation n’est réglée nulle part. Elle découle de la croissance et de la diffusion, et c’est ce qui la rend crédible. Pour l’équation de Fisher-KPP, un front qui envahit un milieu vide se stabilise à la vitesse minimale</p>
-        <div class="eq">\[ c^\ast = 2\sqrt{r\,D}. \]</div>
-        <p>Avec \(r = 0{,}034\) par jour et \(D = 0{,}0011\) cm² par jour, \(c^\ast \approx 0{,}012\) cm par jour à pleine eau, soit 0,12 mm, à peu près l’épaisseur d’une feuille de papier. Cela fait au plus un centimètre et demi sur une saison des pluies. Le front va moins vite en pratique, puisque \(W\) reste sous 1 et que la vitesse limite n’est atteinte que lentement. C’est l’échelle d’une colonie de mousse : les coussins se rejoignent en une saison sans recouvrir toute la pierre.</p>
-        <p>Le schéma est explicite (chaque pas se calcule directement à partir du précédent), avec un laplacien à cinq points, qui compare chaque cellule à ses quatre voisines, et un sous-pas d’au plus un demi-jour. Pour une boucle de 40 s enregistrée à 30 images par seconde, un pas d’image vaut \(365 / 1\,200 \approx 0{,}3\) jour. Un pas par image suffit, et la stabilité n’est pas en jeu : \(D\,\Delta t / \Delta x^2\) vaut environ 0,02 pour une pierre de 8 cm, loin de la limite de 0,25 du schéma explicite.</p>
-        <figure id="fig-front"><figcaption><b>Un front de Fisher-KPP à une dimension, avec les constantes de <code>field.js</code>.</b> Les curseurs règlent la croissance <em>r</em> et la diffusion <em>D</em>, « Relancer » repart du début. La mousse part d’un refuge de 1,5 mm à gauche, avec l’eau et la saison au maximum. Une seconde de démo vaut quinze jours. En haut, le profil \(B(x)\). En bas, la position du front (\(B = 0{,}5\)) au fil des jours, et la pente théorique \(2\sqrt{rD}\) en pointillé. Le front mesuré approche cette vitesse par en dessous. C’est un front « tiré », mené par sa pointe où la mousse est rare, qui ne l’atteint qu’asymptotiquement (environ 80 % au bout de 160 jours avec les valeurs par défaut).</figcaption></figure>
+        <p>Une mousse ne pousse que mouillée. On ajoute donc un second champ, l'eau de la roche <i>W</i>, entre 0 et 1, et une carte fixe, la <b>rétention</b> <i>R</i>, qui dit où l'eau reste : les fissures, les creux, le côté à l'ombre (section 04). Les deux champs vivent sur une grille de 64 × 64 posée sur la pierre :</p>
+        <div class="eq">\[ \begin{aligned} \partial_t W &= p(t,x)\,(1 - W) - e(t)\,(1{,}2 - R)\,W, \\ \partial_t B &= D\,\nabla^2 B + r\,s(t)\,W\,B\,\Big(1 - \frac{B}{K}\Big) - m\,(1 - W)\,(1 - R)^2\,B. \end{aligned} \]</div>
+        <p>La première ligne dit que la pluie <i>p</i> remplit la roche, et que l'évaporation <i>e</i> la vide, plus vite là où la roche retient mal l'eau. La seconde reprend Fisher-KPP, avec trois changements :</p>
+        <ul>
+          <li>la croissance est multipliée par l'eau <i>W</i> et par la saison <i>s</i>(<i>t</i>), forte à la saison des pluies, jamais sous 15 % de son maximum ;</li>
+          <li>un terme de mortalité <i>m</i> frappe là où la roche est sèche et retient mal l'eau ; l'exposant 2 sur 1 − <i>R</i> épargne nettement les fissures ;</li>
+          <li>la densité maximale <i>K</i> = 0,55 + 0,45 <i>R</i> rend les coussins plus épais là où l'eau reste.</li>
+        </ul>
+        <p>Enfin, un plancher garde des fragments vivants dans les refuges, là où <i>R</i> est élevé : ce sont eux qui reverdissent à la première averse.</p>
+        <p>La pluie est la cause visible de tout le mouvement. Trois averses traversent la pierre en bandes au début de la saison, chacune dans une direction tirée de la graine ; sous une averse, l'évaporation tombe au dixième et la roche fonce. Une pluie de fond s'installe ensuite pour la saison. Aucune averse ne tombe pendant la sécheresse, et le retrait se fait d'un seul mouvement, du bord vers les fissures.</p>
+<pre><code>const r = 0.034, D = 0.0011, m = 0.022, b0 = 0.5, ev = 0.35; // jours, cm
+L[k] = D * lap + r * season * W[k] * c * (1 - c / K[k])
+     - m * (1 - W[k]) * (1 - R[k]) ** 2 * c;</code></pre>
+        <figure id="fig-year" class="wide"><figcaption><b>L'année d'une pierre de granit, calculée par <code>field.js</code> dans cette page.</b> À gauche, la pierre vue de dessus : la roche fonce avec l'eau, la mousse brune reverdit puis s'étend. Le bouton « Habitat R » montre la rétention. À droite, la saison des pluies (bleu) et la part de la pierre couverte de mousse épaisse (<i>B</i> &gt; 0,3). La carte est colorée, alors que la scène montre des tiges.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Placez la phase vers 0,05, à la fin de la sécheresse, puis lancez la lecture : il ne reste que des îlots dans les fissures ; au passage des averses, ils reverdissent puis s'étendent.</li>
+          <li>Comparez avec « Habitat R » : les îlots de la sécheresse sont exactement les zones de forte rétention.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Le plancher vaut <i>b</i><sub>0</sub> = 0,5 ; il n'agit que là où <i>R</i> dépasse 0,45 et atteint sa pleine valeur à 0,9. Les averses tombent entre les phases 0,105 et 0,19 de la boucle, puis la pluie de fond vaut 0,55. Le schéma est explicite, avec un laplacien à cinq points (chaque cellule comparée à ses quatre voisines) et un pas d'au plus un demi-jour. Pour une boucle de 40 s enregistrée à 30 images par seconde, un pas d'image vaut 365 / 1 200 ≈ 0,3 jour. La stabilité n'est pas en jeu : <i>D</i> Δ<i>t</i> / Δ<i>x</i>² vaut environ 0,02 pour une pierre de 8 cm, loin de la limite de 0,25.</p>
+          <div class="note"><b>Le temps du film garde l'heure</b><p>La lumière lit la même horloge que la mousse. Le ciel se couvre avec la saison des pluies, chaque averse l'assombrit en passant, et le soleil est plus haut et plus dur à la sécheresse. Il ne se couche jamais : l'accéléré garde l'heure de la prise de vue, ce qui évite de faire clignoter des jours et des nuits à quelques images d'intervalle.</p></div>
+        </div></details>
+      </section>
+
+      <section id="refuges">
+        <h2><span class="n">04</span>Les fissures de la roche sont les refuges</h2>
+        <span class="src">src/gen/rock.js · field.js · makeHabitat()</span>
+        <p>Si la mousse survivait au hasard sur la pierre, l'œil ne verrait pas pourquoi elle reste à un endroit plutôt qu'à un autre. La rétention <i>R</i> est donc tirée de la roche elle-même. Une seule fonction décrit le relief de la roche et la distance au bord des dalles, et elle sert trois fois : pour dessiner la roche, pour planter les tiges sur sa vraie surface, et pour calculer l'habitat.</p>
+        <p>Dans l'habitat, le terme principal est la proximité d'une fissure, qui décroît en cloche avec la distance au bord de dalle. S'y ajoutent les creux et le côté à l'ombre :</p>
+        <div class="eq">\[ R = 0{,}7\,\exp\!\big(-(\text{bord}/0{,}75)^2\big) + 0{,}35\,\text{creux} + 0{,}3\,\text{ombre} - 0{,}1 \]</div>
+        <p>Les fissures du granit sont les bords de cellules d'un pavage aléatoire (un diagramme de Voronoï, ici en dalles de 7,5 cm), déformé par du bruit. Leur profil est arrondi plutôt qu'en V, comme les fractures naturelles d'une roche usée. Les autres roches ont leur propre relief : cupules et cannelures du calcaire, lits du grès, crêtes et sillons de l'écorce.</p>
+        <figure id="fig-rock" class="wide"><figcaption><b>Le relief de <code>rock.js</code>, échantillonné dans cette page</b> (à demi-résolution, ombré par la pente seule, sans la couleur minérale ni les lichens). Les boutons changent de support. En vert, le terme de fissure de la rétention, celui que lit l'habitat sur la même roche : c'est là que la mousse survit à la sécheresse, et de là que la propagation repart.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Passez du granit au calcaire puis à l'écorce : le dessin des refuges change avec le relief, sans qu'aucun refuge ne soit placé à la main.</li>
+          <li>Masquez les refuges et cherchez les fissures à l'œil : elles sont aux mêmes endroits.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Pour le rendu, la roche est cuite dans un worker sur 1 024² texels couvrant 28 cm (0,27 mm par texel), puis lue par la carte graphique pour déplacer un maillage de 720² et pour incliner l'éclairage au pixel. L'usure agit à trois échelles : bosses centimétriques, crêtes millimétriques et grain. La couleur ajoute les cristaux de 1 à 2 mm du granit, les lichens et les algues des creux humides. Les fissures s'éteignent par endroits : un réseau de dalles toutes fermées faisait un ballon de cuir. Sur l'écorce et la terre, la largeur du refuge est propre au support (0,12 et 0,3 cm). Un test vérifie que moins de 0,2 % des points de feuilles passent sous la roche.</p>
+          <div class="note check"><b>Vérifié par un test</b><p>Sur un granit, la rétention moyenne des cellules situées dans une fissure doit dépasser de 0,3 au moins celle des cellules hors fissure.</p></div>
+        </div></details>
       </section>
 
       <section id="orbite">
-        <h2><span class="n">03</span>La boucle est une orbite périodique</h2>
+        <h2><span class="n">05</span>Une année qui se referme sur elle-même</h2>
         <span class="src">src/field.js · simulateField()</span>
-        <p>Une année simulée à partir d’un état arbitraire ne se termine pas dans l’état où elle a commencé, et la mousse de la dernière sécheresse ne recouvre pas celle de la première. Raccorder les deux bouts par un fondu montrerait la mousse sauter. Or le système est <strong>dissipatif</strong> : la mortalité, la saturation logistique et le plancher des refuges effacent la mémoire de l’état initial. Sous un forçage de période \(P\) (un an), il converge vers une orbite périodique, une année qui se répète à l’identique.</p>
-        <p>Moss intègre donc des années entières sans les enregistrer et compare l’état à \(t + P\) à l’état à \(t\). Il s’arrête quand l’écart maximal, sur les 2 × 4&#8239;096 valeurs de \(B\) et de \(W\), passe sous \(2 \times 10^{-4}\), au bout de dix années au plus (en pratique deux à quatre, parfois cinq). Seule l’année suivante est enregistrée, un octet par valeur, à 30 états par seconde de film. L’image à \(u = 1\) est donc l’image à \(u = 0\) par construction. Un test vérifie le résidu (sous \(10^{-3}\)) et le raccord, valeur par valeur.</p>
-        <figure id="fig-orbit"><figcaption><b>Une seule cellule de la grille, année après année.</b> Mêmes équations que <code>field.js</code>, sans la diffusion, avec les vraies averses (graine de démonstration) au centre de la pierre. Les curseurs règlent la rétention de la cellule et la quantité de mousse au départ. Chaque courbe est une année de \(B\), de la plus ancienne (rouge) à la dernière (vert). À droite, l’écart entre le début et la fin de chaque année, en échelle logarithmique, et le seuil \(2 \times 10^{-4}\). Quel que soit l’état de départ, les années se superposent vite, et d’autant plus vite que la cellule retient l’eau.</figcaption></figure>
-        <div class="note"><b>Le temps du film garde l’heure</b><p>La lumière lit la même horloge que la mousse. Le ciel se couvre avec la saison des pluies, chaque averse l’assombrit en passant, et le soleil est plus haut et plus dur à la sécheresse. Il ne se couche jamais : l’accéléré garde l’heure de la prise de vue, selon la convention du genre, ce qui évite de faire clignoter des jours et des nuits à quelques images d’intervalle.</p></div>
+        <p>Une année simulée à partir d'un état quelconque ne se termine pas dans l'état où elle a commencé : la mousse de la dernière sécheresse ne coïncide pas avec celle de la première. Raccorder les deux bouts par un fondu montrerait la mousse sauter.</p>
+        <p>Mais le système oublie son point de départ. La mortalité, la saturation et le plancher des refuges effacent peu à peu ce qui distinguait l'état initial. Sous les mêmes saisons, répétées chaque année, il converge vers une <b>orbite périodique</b> : une année qui se répète à l'identique, quel que soit l'état de départ.</p>
+        <p>Moss simule donc des années entières sans les enregistrer, et compare chaque fois l'état de fin d'année à celui du début. Dès que l'écart maximal passe sous 2·10⁻⁴, il enregistre l'année suivante. L'image de la fin de la boucle est alors celle du début, par construction.</p>
+        <figure id="fig-orbit"><figcaption><b>Une seule cellule de la grille, année après année</b> (mêmes équations que <code>field.js</code>, sans la diffusion, avec les vraies averses). Chaque courbe est une année de <i>B</i>, de la plus ancienne (rouge) à la dernière (vert). À droite, l'écart entre le début et la fin de chaque année, en échelle logarithmique, et le seuil de 2·10⁻⁴.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Partez de presque pas de mousse, puis de beaucoup : les premières années diffèrent, mais les courbes se superposent dès la deuxième ou la troisième année.</li>
+          <li>Baissez la rétention : la cellule finit l'année bien plus pauvre en mousse, mais elle atteint son orbite aussi vite.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>L'écart est mesuré sur les 2 × 4 096 valeurs de <i>B</i> et de <i>W</i>, au bout de dix années au plus (deux à cinq en pratique). L'année retenue est enregistrée à un octet par valeur, à 30 états par seconde de film. Un test vérifie le résidu (sous 10⁻³) et le raccord, valeur par valeur.</p>
+        </div></details>
       </section>
 
-      <section id="roche">
-        <h2><span class="n">04</span>Les fissures de la roche sont les refuges</h2>
-        <span class="src">src/gen/rock.js · field.js · makeHabitat()</span>
-        <p>Si la mousse survivait au hasard sur la pierre, l’œil ne verrait pas pourquoi elle reste à un endroit plutôt qu’à un autre. Moss tire donc l’habitat de la roche elle-même. Une seule fonction, <code>makeRock(type, seed).sample(x, z)</code>, rend le relief fin en centimètres et la distance au bord de dalle. Elle sert trois fois.</p>
-        <ul>
-          <li>Pour cuire la roche, dans un worker (un calcul mené en parallèle de la page), elle est échantillonnée sur 1&#8239;024² texels (les pixels d’une texture) couvrant 28 cm, soit 0,27 mm par texel. Le GPU la lit ensuite pour déplacer un maillage de 720² et comme normal map au pixel, une carte qui incline l’éclairage pour dessiner le relief fin. S’y ajoutent la couleur minérale, la rugosité et l’occlusion des creux (deux flous de boîte, rayons 3 et 14 texels).</li>
-          <li>Pour planter les tiges, elle donne la vraie surface, fissures comprises. Un test vérifie que moins de 0,2 % des points de feuilles passent sous la roche.</li>
-          <li>Pour l’habitat, elle fournit surtout un terme de fissure, \(\exp\!\big(-(\text{bord}/0{,}75)^2\big)\), auquel s’ajoutent les creux et le côté à l’ombre : \(R = 0{,}7\,\text{fissure} + 0{,}35\,\text{creux} + 0{,}3\,\text{ombre} - 0{,}1\).</li>
-        </ul>
-        <p>Les fissures du granit sont les bords de cellules de Worley, un pavage aléatoire en dalles (ici de 7,5 cm), sur un domaine déformé par du bruit. Leur profil est gaussien plutôt qu’en V, comme des diaclases (les fractures naturelles de la roche) arrondies par l’usure. L’usure agit à trois échelles : bosses centimétriques, crêtes millimétriques et grain. La couleur ajoute ensuite la mosaïque de cristaux de 1 à 2 mm (biotite, feldspath, quartz), les lichens crustacés aréolés à apothécies noires et les algues des creux humides. Le calcaire a ses cupules et ses cannelures, le grès ses lits. Les diaclases s’éteignent par endroits : un réseau de dalles toutes fermées faisait un ballon de cuir. L’écorce a ses crêtes arrondies et ondulantes, feuilletées en écailles, ses sillons en V, ses cassures en travers et ses lambeaux arrachés qui montrent le bois.</p>
-        <figure id="fig-rock" class="wide"><figcaption><b>Le relief de <code>rock.js</code>, importé et échantillonné dans cette page</b> (demi-résolution, ombrage par la pente seule, sans la couleur minérale ni les lichens). Les boutons changent de support, et « Refuges » affiche ou masque le terme de fissure. En vert, ce terme de la rétention, exactement celui que <code>makeHabitat</code> lit sur la même roche. C’est là que la mousse survit à la sécheresse, et de là que la propagation repart. Sur l’écorce et la terre, la largeur du refuge est propre au support (0,12 et 0,3 cm).</figcaption></figure>
-        <div class="note check"><b>Vérifié par un test</b><p>Sur une roche de granit, la rétention moyenne des cellules de grille situées dans une fissure (terme de fissure supérieur à 0,6) doit dépasser de 0,3 au moins celle des cellules hors fissure. Aucun refuge n’est dessiné à part : tous sortent du relief de la roche.</p></div>
-      </section>
-
-      <section id="dome">
-        <h2><span class="n">05</span>Un coussin est un dôme, et ses tiges en suivent la normale</h2>
+      <section id="coussin">
+        <h2><span class="n">06</span>Du champ au coussin</h2>
         <span class="src">src/gen/build.js · src/gen/colony.js · src/scene/stage.js</span>
-        <p>Des tiges dressées sur une roche plate ressemblent à une plantation. C’était la première remarque faite sur la version initiale : « pas de notion d’échelle ». Un vrai coussin est bombé et serré, et seules les rosettes du sommet des tiges affleurent. Dessous s’étend un feutre sombre de tiges et de rhizoïdes, les filaments qui tiennent lieu de racines.</p>
-        <p>L’épaisseur du coussin pleinement poussé vient de la simulation. On prend le maximum annuel de \(B\) en chaque cellule et on l’adoucit par un noyau gaussien de 13 × 13 cellules, une moyenne pondérée en cloche. On lui donne enfin un profil en S qui s’arrondit jusqu’à la roche, sans falaise :</p>
-        <div class="eq">\[ T(x) = h_{\text{dôme}}\,\sqrt{\mathrm{smoothstep}\!\Big(\frac{\bar B_{\max}(x) - 0{,}1}{0{,}75}\Big)}. \]</div>
-        <p>Les tiges ne sont plantées que là où il y aura un coussin (\(T > 0{,}04\) cm). Leur axe suit la <strong>normale du dôme</strong>, la direction perpendiculaire à sa surface, à 85 %, plus 15 % de la normale de la roche. Elles sont droites au sommet et couchées vers l’extérieur sur les flancs, où les rosettes débordent. Leur longueur est calculée pour que la rosette arrive à la surface du dôme, quelle que soit l’inclinaison.</p>
-        <p>Reste à faire croître et reculer le coussin sans qu’une rosette ne s’enfouisse ni ne flotte. Chaque tige, feuilles comprises, est mise à l’échelle autour de son pied par un facteur \(g\). Chacune a son propre <strong>seuil de naissance</strong> \(b\) : elle sort quand la mousse locale le dépasse, si bien que le front avance tige par tige au lieu de gonfler en bloc. La mousse locale est le plus grand de \(B\) et de sa moyenne sur neuf points dans un rayon d’un demi-centimètre, pour qu’une fissure étroite garde ses tiges :</p>
-        <pre><code>b = max(0.03, 0.03 + (Bmax - 0.25) * u * (1 - refuge));  // u ∈ [0, 1] tiré par tige
-g = sst(b, b + 0.22, max(B̄, B));
-const grow = (p, base, g) => base.add(p.sub(base).mul(g));  // TSL</code></pre>
-        <p>Dans les refuges, le seuil est ramené au plancher : ces tiges naissent les premières et passent la sécheresse entières, brunes et refermées. Sous les tiges, une natte sombre de rhizoïdes est posée sur la roche à peine levée. Le corps du coussin, ce sont les tiges elles-mêmes, avec leurs feuilles mortes le long du bas, dans la pénombre des rosettes.</p>
-        <figure id="fig-dome" class="wide"><figcaption><b>Coupe d’un coussin de tortule autour d’une fissure.</b> Le curseur fait avancer la saison. Le pointillé est le dôme pleinement poussé \(T(x)\). Les tiges suivent la mousse locale \(B\), qui part du refuge et s’étend, chacune quand \(B\) passe son seuil. Elles sont tracées avec leur rosette, à l’échelle (0,12 cm d’espacement, rosettes ouvertes de 0,26 cm de rayon). Le bouton « Tiges verticales » montre la version naïve : sur les flancs, les rosettes se plantent dans la pente au lieu d’en épouser la surface. Simplification : le profil de la mousse (une bosse et un front) est posé à la main, sans passer par la simulation.</figcaption></figure>
+        <p>Des tiges dressées sur une roche plate ressemblent à une plantation ; c'était la première remarque faite sur la version initiale. Un vrai coussin est bombé et serré, et seules les rosettes du sommet des tiges affleurent. Dessous s'étend un feutre sombre de tiges et de filaments qui tiennent lieu de racines.</p>
+        <p>La hauteur du coussin pleinement poussé vient de la simulation : on prend la plus grande densité de mousse de l'année en chaque point, on l'adoucit, et on lui donne un profil qui s'arrondit jusqu'à la roche :</p>
+        <div class="eq">\[ T(x) = h_{\text{dôme}}\,\sqrt{\mathrm{smoothstep}\!\Big(\frac{\bar B_{\max}(x) - 0{,}1}{0{,}75}\Big)} \]</div>
+        <p>Les tiges ne sont plantées que là où il y aura un coussin. Leur axe suit la perpendiculaire au dôme, si bien qu'elles sont droites au sommet et couchées vers l'extérieur sur les flancs, et leur longueur est calculée pour que la rosette arrive à la surface du dôme.</p>
+        <p>Pour faire croître et reculer le coussin, chaque tige est agrandie ou réduite autour de son pied par un facteur <i>g</i>. Chaque tige a son propre seuil de naissance : elle sort quand la mousse locale le dépasse. Le front avance ainsi tige par tige, au lieu de gonfler en bloc. Dans les refuges, le seuil est au plus bas : ces tiges naissent les premières et passent la sécheresse entières, brunes et refermées.</p>
+<pre><code>b = max(0.03, 0.03 + (Bmax - 0.25) * u * (1 - refuge)); // u ∈ [0, 1] tiré par tige
+g = sst(b, b + 0.22, max(B̄, B));                         // croissance de la tige
+const grow = (p, base, g) => base.add(p.sub(base).mul(g)); // TSL : mise à l'échelle autour du pied</code></pre>
+        <figure id="fig-dome" class="wide"><figcaption><b>Coupe d'un coussin de tortule autour d'une fissure.</b> Le curseur fait avancer la saison. Le pointillé est le dôme pleinement poussé ; chaque tige sort quand la mousse locale passe son seuil. Tiges et rosettes à l'échelle (0,12 cm d'espacement, rosettes de 0,26 cm de rayon). Le profil de la mousse est posé à la main, sans passer par la simulation.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Faites avancer la saison depuis zéro : les tiges de la fissure sont déjà là, puis les autres sortent une à une vers l'extérieur.</li>
+          <li>Activez « Tiges verticales » : sur les flancs, les rosettes se plantent dans la pente au lieu d'en épouser la surface.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Le maximum annuel de <i>B</i> est adouci par un noyau gaussien de 13 × 13 cellules. Les tiges ne sont plantées que là où <i>T</i> dépasse 0,04 cm. Leur axe mêle à 85 % la normale du dôme et à 15 % celle de la roche. La mousse locale est le plus grand de <i>B</i> et de sa moyenne sur neuf points dans un rayon d'un demi-centimètre, pour qu'une fissure étroite garde ses tiges. Sous les tiges, une natte sombre est posée sur la roche à peine levée ; le corps du coussin, ce sont les tiges elles-mêmes, avec leurs feuilles mortes le long du bas.</p>
+        </div></details>
       </section>
 
-      <section id="pose">
-        <h2><span class="n">06</span>La feuille se pose en forme fermée</h2>
+      <section id="feuille">
+        <h2><span class="n">07</span>La feuille qui se rouvre</h2>
         <span class="src">src/pose.js · src/families.js</span>
-        <p>La reviviscence, le retour à la vie d’une mousse sèche qu’on mouille, se joue dans la feuille. Sèche, la feuille de tortule est roulée en gouttière et tordue en vis autour de la tige. Mouillée, elle se détord, s’aplatit et s’étale en étoile recourbée. Ce geste doit être calculé pour chacune des trente à quarante mille feuilles, à chaque image, et deux fois (pose courante et pose précédente, pour les vecteurs vitesse). Il faut donc une <strong>forme fermée</strong>, une formule qui donne la pose directement, sans itération.</p>
-        <p>La nervure est une suite de trois arcs de cercle : une gaine droite le long de la tige (angle \(a_0\)), une charnière courte qui la porte à l’angle d’insertion \(\theta\), puis le limbe (la lame de la feuille) de courbure \(k_l\). Un arc partant à l’angle \(a\) avec la courbure \(k\) sur une longueur \(\ell\) se déplace de</p>
-        <div class="eq">\[ \Delta r = \frac{\cos a - \cos(a + k\ell)}{k}, \qquad \Delta y = \frac{\sin(a + k\ell) - \sin a}{k}. \]</div>
-        <p>La section est roulée (courbure \(k_t\), marges relevées). Toute la feuille s’enroule autour de la tige d’un angle \(\tau\,s\) de la base à la pointe. L’épaisseur forme une vraie lame, avec un dessus, un dessous et une tranche arrondie. Chaque famille donne ses quatre grandeurs au sec et mouillée. Pour la tortule, \(\theta\) passe de 0,2 à 0,95 rad, \(k_l\) de −3,5 à 8,5 cm⁻¹, \(k_t\) de 52 à 9 cm⁻¹, et l’enroulement de 2,3 rad à 0. L’ouverture \(f\) les interpole.</p>
-        <p>Les feuilles d’une même tige ne s’ouvrent pas ensemble. Une feuille de rang \(\rho\) (0 en bas, 1 au bourgeon) suit l’ouverture \(o\) de la tige avec un retard :</p>
-        <div class="eq">\[ f = \mathrm{smoothstep}\big(0{,}45\,\rho,\ 0{,}45\,\rho + 0{,}55,\ o\big). \]</div>
-        <p>Les feuilles extérieures s’ouvrent les premières et se ferment les dernières, comme sur la plante, où une feuille intérieure est tenue par celles qui l’entourent. Ce retard empêche aussi les feuilles d’une même rosette de se traverser. L’ouverture de chaque tige suit l’eau sans retard visible, \(o = \mathrm{smoothstep}(0{,}2,\ 0{,}65,\ W)\). Une année tient en 40 s, si bien qu’une seconde de film couvre plus de neuf jours, et les quelques secondes de la reviviscence réelle y deviennent instantanées.</p>
-        <figure id="fig-leaf" class="wide"><figcaption><b>Une tige et ses feuilles posées par <code>pose.js</code>, importé tel quel.</b> Le curseur règle l’ouverture de la tige, les boutons changent de famille, et un glissé fait tourner la vue. Contours des feuilles (bords \(x = \pm 1\), sans l’épaisseur), avec les gabarits, les poses sèche et mouillée et la phyllotaxie de chaque famille, c’est-à-dire l’étagement des feuilles autour de la tige (divergence 2/5 pour la tortule et la funaire, 3/8 pour le polytric). Le poil hyalin (transparent) de la tortule prolonge la pointe. En bas à droite, l’ouverture de chaque feuille selon son rang montre la cascade des feuilles extérieures vers le bourgeon.</figcaption></figure>
-        <div class="note check"><b>Deux implémentations, une formule</b><p>La pose est écrite deux fois : en JavaScript dans <code>pose.js</code> (pour la génération et les tests) et en TSL, le langage de shaders de three.js, dans <code>scene/moss.js</code> (pour le vertex shader). Le module JS sert de référence. La génération s’en sert pour mesurer la rosette ouverte et régler l’écartement des tiges, et les tests pour vérifier qu’aucune feuille ne transperce la tige d’une voisine. Le shader en est la traduction, ligne pour ligne.</p></div>
+        <p>Une mousse sèche qu'on mouille reprend vie en quelques secondes : c'est la <b>reviviscence</b>, et elle se voit dans la feuille. Sèche, la feuille de tortule est roulée en gouttière et tordue en vis autour de la tige. Mouillée, elle se détord, s'aplatit et s'étale en étoile.</p>
+        <p>Ce geste doit être calculé pour trente à quarante mille feuilles, à chaque image. Il faut donc une formule qui donne directement la pose de chaque feuille, sans calcul itératif. La nervure de la feuille est décrite par trois arcs de cercle mis bout à bout : une gaine le long de la tige, une charnière courte, puis la lame de la feuille. Un arc partant à l'angle <i>a</i>, de courbure <i>k</i> et de longueur ℓ, déplace son extrémité de</p>
+        <div class="eq">\[ \Delta r = \frac{\cos a - \cos(a + k\ell)}{k}, \qquad \Delta y = \frac{\sin(a + k\ell) - \sin a}{k} \]</div>
+        <p>Chaque famille de mousse donne quatre grandeurs au sec et mouillée : l'angle d'insertion de la feuille, la courbure de la lame, l'enroulement de sa section et sa torsion autour de la tige. L'ouverture <i>f</i> de la feuille, de 0 à 1, interpole entre les deux. Pour la tortule, l'angle d'insertion passe de 0,2 à 0,95 rad et la torsion de 2,3 rad à 0.</p>
+        <p>Les feuilles d'une tige ne s'ouvrent pas toutes ensemble. Une feuille de rang ρ (0 en bas, 1 au bourgeon) suit l'ouverture <i>o</i> de la tige avec un retard :</p>
+        <div class="eq">\[ f = \mathrm{smoothstep}\big(0{,}45\,\rho,\ 0{,}45\,\rho + 0{,}55,\ o\big) \]</div>
+        <p>Les feuilles extérieures s'ouvrent les premières et se ferment les dernières, comme sur la plante, où une feuille intérieure est tenue par celles qui l'entourent. Ce retard évite aussi que les feuilles d'une même rosette se traversent. L'ouverture de la tige suit l'eau, <i>o</i> = smoothstep(0,2, 0,65, <i>W</i>).</p>
+        <figure id="fig-leaf" class="wide"><figcaption><b>Une tige et ses feuilles posées par <code>pose.js</code>.</b> Le curseur règle l'ouverture de la tige, les boutons changent de famille, et un glissé fait tourner la vue. En bas à droite, l'ouverture de chaque feuille selon son rang. Le poil transparent de la tortule prolonge la pointe.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Montez l'ouverture depuis 0 : les feuilles du bas s'écartent d'abord, celles du bourgeon en dernier ; le diagramme en bas à droite montre cette cascade.</li>
+          <li>Passez au polytric : au sec, ses feuilles raides sont plaquées contre la tige sans s'enrouler ; mouillées, elles pivotent à leur charnière et s'ouvrent en ombrelle.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>La section est roulée (courbure <i>k</i><sub>t</sub>, de 52 à 9 cm⁻¹ pour la tortule), toute la feuille s'enroule autour de la tige d'un angle croissant de la base à la pointe, et l'épaisseur forme une vraie lame avec une tranche arrondie. Les feuilles sont étagées autour de la tige selon une divergence de 2/5 pour la tortule et la funaire, de 3/8 pour le polytric. Une année tient en 40 s : une seconde de film couvre plus de neuf jours, et les quelques secondes de la reviviscence réelle y deviennent instantanées.</p>
+          <div class="note"><b>Deux implémentations, une formule</b><p>La pose est écrite en JavaScript dans <code>pose.js</code> (pour la génération et les tests) et en TSL, le langage de shaders de three.js, dans <code>scene/moss.js</code>. Le module JS sert de référence : la génération s'en sert pour mesurer la rosette ouverte et régler l'écartement des tiges, et les tests pour vérifier qu'aucune feuille ne transperce la tige d'une voisine.</p></div>
+        </div></details>
       </section>
 
-      <section id="voronoi">
-        <h2><span class="n">07</span>Les rosettes s’imbriquent</h2>
+      <section id="rosettes">
+        <h2><span class="n">08</span>Des rosettes serrées</h2>
         <span class="src">src/gen/colony.js · buildColony()</span>
-        <p>Les tiges sont réparties par échantillonnage de Poisson (Bridson), un tirage au hasard qui garde une distance minimale entre deux tiges. La première version de Moss tirait cette distance de la rosette ouverte (0,78 fois son rayon pour la tortule) et bornait chaque feuille à la <strong>cellule de Voronoï de sa tige</strong>, la région plus proche de cette tige que de toute autre. Deux feuilles de tiges différentes ne pouvaient alors jamais se toucher. Le prix était lourd : pour la tortule, 17 tiges par cm² au plus, et selon la famille 6 à 37 % des feuilles retirées faute de place. Entre les tiges, une peau peinte d’étoiles comblait les trous, et de près on voyait que c’était une texture plate.</p>
-        <p>Dans un vrai coussin, les rosettes voisines s’imbriquent : une feuille passe au-dessus ou au-dessous de celles de la voisine. On plante donc les tiges à <strong>0,45 rayon de rosette</strong>, à peu près trois fois plus serrées, sans retirer aucune feuille. Seule règle gardée : une tige serrée s’ouvre moins. Son écartement dépend de la distance \(d_n\) à sa plus proche voisine, rapportée au rayon \(r\) de la rosette ouverte :</p>
-        <div class="eq">\[ \text{amp} = \mathrm{clamp}\Big(\frac{1{,}4\,d_n}{r},\ 0{,}55,\ 1\Big). \]</div>
-        <p>L’écartement borne l’angle d’insertion et la courbure du limbe. La feuille se détord et s’aplatit quand même entièrement, si bien que le geste de la reviviscence reste entier. Les feuilles s’interpénètrent parfois, mais dans l’épaisseur de la canopée, où on ne les voit pas. Ce qui compte, c’est qu’une feuille ne transperce pas la tige d’une voisine.</p>
-        <figure id="fig-voronoi" class="wide"><figcaption><b>Sept rosettes de tortule vues de dessus.</b> Feuilles posées par <code>pose.js</code>, tiges verticales. Le curseur règle l’ouverture, et un glissé déplace une tige. Par défaut, les tiges sont plantées à la densité actuelle (0,45 rayon de rosette) et s’imbriquent ; les feuilles du bas sont dessinées d’abord, celles du bourgeon par-dessus. Le bouton « Ancienne règle » replace les tiges à 0,78 rayon et borne chaque feuille à sa cellule (lignes claires) : les feuilles serrées s’écartent moins (en clair), celles qu’aucune pose ne loge sont retirées (dans la scène, 6 à 37 % selon la famille), et le coussin est trois fois moins dense.</figcaption></figure>
-        <div class="note check"><b>Vérifié par des tests</b><p>Pour chaque famille, au sec et mouillée, moins de 2 % des points de nervure passent à moins d’un rayon de tige de l’axe d’une voisine. Ce petit reste existe déjà au sec, feuilles plaquées : ce sont deux tiges voisines penchées l’une vers l’autre sur un flanc de dôme. Un deuxième test vérifie la densité (tiges à moins de 0,6 rayon de rosette, aucune feuille retirée, chaque tige garde sa rosette).</p></div>
+        <p>Les tiges sont réparties au hasard, mais en gardant une distance minimale entre deux tiges (échantillonnage de Poisson). Il faut choisir cette distance. La première version la tirait de la taille de la rosette ouverte et interdisait à chaque feuille de sortir de la zone la plus proche de sa tige (sa cellule de Voronoï) : deux feuilles de tiges différentes ne pouvaient jamais se toucher. Le prix était lourd : pour la tortule, 17 tiges par cm² au plus, et 6 à 37 % des feuilles retirées faute de place. Entre les tiges, une texture plate comblait les trous.</p>
+        <p>Dans un vrai coussin, les rosettes voisines s'imbriquent : une feuille passe au-dessus ou au-dessous de celles de la voisine. Les tiges sont donc plantées trois fois plus serrées, sans retirer aucune feuille. Une seule règle reste : une tige serrée s'ouvre moins. Son écartement dépend de la distance <i>d</i><sub>n</sub> à sa plus proche voisine, rapportée au rayon <i>r</i> de la rosette ouverte :</p>
+        <div class="eq">\[ \text{amp} = \mathrm{clamp}\Big(\frac{1{,}4\,d_n}{r},\ 0{,}55,\ 1\Big) \]</div>
+        <p>La feuille se détord et s'aplatit quand même entièrement, si bien que le geste de la reviviscence reste visible. Les feuilles se croisent parfois, mais dans l'épaisseur du coussin, où on ne les voit pas ; ce qui compte, c'est qu'aucune ne transperce la tige d'une voisine.</p>
+        <figure id="fig-voronoi" class="wide"><figcaption><b>Sept rosettes de tortule vues de dessus.</b> Feuilles posées par <code>pose.js</code>, tiges verticales. Le curseur règle l'ouverture, et un glissé déplace une tige. Par défaut, les tiges sont à la densité actuelle (0,45 rayon de rosette) et s'imbriquent. « Ancienne règle » replace les tiges à 0,78 rayon et borne chaque feuille à sa cellule (lignes claires).</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Passez à l'ancienne règle : les rosettes s'écartent, des feuilles disparaissent faute de place, et le coussin est trois fois moins dense.</li>
+          <li>Rapprochez deux tiges à la main : leurs rosettes s'ouvrent moins, mais leurs feuilles restent entières.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <div class="note check"><b>Vérifié par des tests</b><p>Pour chaque famille, au sec et mouillée, moins de 2 % des points de nervure passent à moins d'un rayon de tige de l'axe d'une voisine ; ce petit reste vient de deux tiges voisines penchées l'une vers l'autre sur un flanc de dôme. Un deuxième test vérifie la densité : tiges à moins de 0,6 rayon de rosette, aucune feuille retirée.</p></div>
+        </div></details>
       </section>
 
-      <section id="shader">
-        <h2><span class="n">08</span>Quarante mille feuilles, un seul shader</h2>
+      <section id="rendu">
+        <h2><span class="n">09</span>Quarante mille feuilles, un seul shader</h2>
         <span class="src">src/scene/moss.js · src/scene/stage.js · src/gen/build.js</span>
-        <p>three.js compile un programme par <code>InstancedMesh</code>. Avec un maillage par tige ou par famille de feuilles, le nombre de shaders exploserait. Les feuilles sont donc un <code>Mesh</code> ordinaire sur une <code>InstancedBufferGeometry</code> : un gabarit de feuille, et pour chaque copie de ce gabarit vingt flottants dans un seul tampon entrelacé (point d’insertion, quaternion du repère de la tige, longueur, seuil de naissance de la tige, rang, largeur, rayon de la tige, sens de l’enroulement, écartement permis, pied de la tige et son serrement).</p>
-        <p><strong>L’état d’une tige se lit dans la texture du champ.</strong> L’ouverture \(o\), la croissance \(g\), l’eau de surface (les perles) et l’eau de la feuille (la translucidité) ne dépendent que du champ au pied de la tige. À chaque image, le processeur écrit dans la texture du champ (64², quatre canaux) la mousse \(B\), l’eau \(W\), la mousse moyennée et l’eau de surface. Chaque sommet la lit au pied de sa tige. La première version passait l’état par un tableau d’uniformes, un <code>vec4</code> par tige, que la taille maximale d’un tampon d’uniformes WebGPU (64 Ko) plafonnait à environ 4 000 tiges. Avec la texture, il n’y a plus de plafond. Le vertex shader recalcule la pose de l’image précédente à partir de la texture du champ précédent, ce qui donne des vecteurs vitesse exacts à l’anticrénelage temporel (le lissage des bords par mélange des images successives).</p>
-        <p><strong>Trois niveaux de détail, tirés de la trajectoire de la caméra.</strong> La caméra ne dépend que de la recette, si bien que la génération la connaît d’avance. Pour chaque feuille, elle cherche sur toute la boucle sa plus grande taille à l’écran (dans le champ, pour une image de 1 080 lignes). Au-delà de 150 pixels, la feuille prend le gabarit fin (8 sections, tranche arrondie, 336 à 384 triangles). Entre 35 et 150 pixels, elle prend le gabarit moyen (6 sections, 60 à 78 triangles), et en dessous une lame à quatre faces (24 à 30 triangles), sans ombre portée. Au loin, les feuilles du bas d’une tige serrée, cachées dans le coussin, ne sont pas créées. Les trois gabarits partagent le même matériau. Les perles d’eau sont une autre géométrie instanciée, seulement sur les feuilles qui peuvent en porter une.</p>
-        <p><strong>La pénombre de la canopée.</strong> Dans un coussin serré, une feuille du bas d’une tige ne voit presque plus le ciel. Sa couleur, son occlusion, son reflet spéculaire, son vernis d’eau et sa lumière transmise sont assombris selon son rang \(\rho\), sa position \(s\) le long du limbe et le serrement de sa tige (le nombre de voisines). C’est cette pénombre qui donne au coussin sa profondeur : pointes claires, cœur presque noir.</p>
-        <div class="note trap"><b>Changer l’ordre des lumières recompile tout</b><p>Toutes les lumières de la scène sont créées une fois, dans un ordre fixe, au premier niveau. Les saisons ne changent que leur intensité, leur couleur et leur position. Ajouter ou réordonner une lumière en cours de route forcerait la recompilation de tous les matériaux, feuilles comprises.</p></div>
+        <p>Toutes les feuilles sont une seule géométrie instanciée : un modèle de feuille, recopié autant de fois qu'il y a de feuilles, chaque copie portant ses propres valeurs (point d'insertion, orientation de la tige, longueur, rang, seuil de naissance…). Un seul programme les pose toutes.</p>
+        <p>L'état de chaque tige (son ouverture, sa croissance, l'eau sur ses feuilles) ne dépend que du champ au pied de la tige. À chaque image, le processeur écrit le champ de l'instant dans une petite texture de 64 × 64, et chaque sommet de chaque feuille la lit au pied de sa tige. Dans un coussin serré, les feuilles du bas ne voient presque plus le ciel : elles sont assombries selon leur rang et le nombre de voisines de leur tige. Cette pénombre donne au coussin sa profondeur, pointes claires et cœur presque noir.</p>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Chaque copie de feuille porte vingt flottants dans un seul tampon entrelacé. La première version passait l'état des tiges par un tableau d'uniformes, plafonné à environ 4 000 tiges par la taille maximale d'un tampon d'uniformes WebGPU (64 Ko) ; la texture n'a pas de plafond. Le shader recalcule aussi la pose de l'image précédente, à partir de la texture du champ précédent, ce qui donne des vecteurs vitesse exacts à l'anticrénelage temporel.</p>
+          <p>Trois niveaux de détail sont tirés de la trajectoire de la caméra, qui ne dépend que de la recette : pour chaque feuille, la génération cherche sa plus grande taille à l'écran sur toute la boucle. Au-delà de 150 pixels, la feuille prend le modèle fin (336 à 384 triangles) ; entre 35 et 150, le modèle moyen (60 à 78) ; en dessous, une lame de 24 à 30 triangles, sans ombre portée. Les feuilles du bas d'une tige serrée, cachées au loin, ne sont pas créées.</p>
+          <div class="note trap"><b>Changer l'ordre des lumières recompile tout</b><p>Toutes les lumières de la scène sont créées une fois, dans un ordre fixe. Les saisons ne changent que leur intensité, leur couleur et leur position. Ajouter ou réordonner une lumière en cours de route forcerait la recompilation de tous les matériaux, feuilles comprises.</p></div>
+        </div></details>
+      </section>
+
+      <section id="resume">
+        <h2><span class="n">10</span>Récapitulatif</h2>
+        <p>Pendant le chargement, deux workers :</p>
+        <ol>
+          <li>construisent la roche et en tirent la rétention <i>R</i> (section 04) ;</li>
+          <li>simulent l'eau et la mousse, année après année, jusqu'à l'orbite périodique, puis enregistrent une année (sections 02, 03 et 05) ;</li>
+          <li>calculent le dôme et plantent les tiges, serrées, avec leur seuil de naissance (sections 06 et 08).</li>
+        </ol>
+        <p>À chaque image, le processeur relit l'état enregistré et l'écrit dans la texture du champ ; le shader en déduit, pour chaque feuille, la croissance de sa tige et son ouverture, et la pose par la formule des arcs (sections 06, 07 et 09).</p>
       </section>
 
       <section id="budget">
-        <h2><span class="n">09</span>Budget</h2>
-        <p>La propagation, le coussin et la roche sont calculés pendant l’écran de chargement, dans deux workers en parallèle. À chaque image, le processeur ne fait que relire l’enregistrement et remplir la texture du champ (64², quatre canaux).</p>
+        <h2><span class="n">11</span>Budget</h2>
+        <p>La propagation, le coussin et la roche sont calculés pendant l'écran de chargement, dans deux workers en parallèle. À chaque image, le processeur ne fait que relire l'enregistrement et remplir la texture du champ.</p>
         <div class="tbl"><table>
           <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
           <tbody>
@@ -146,11 +228,10 @@ const grow = (p, base, g) => base.add(p.sub(base).mul(g));  // TSL</code></pre>
             <tr><td>Feuilles instanciées, trois niveaux de détail, pose calculée deux fois par sommet</td><td>GPU</td><td class="num">30 à 43&#8239;000</td></tr>
             <tr><td>Triangles de feuilles (~1 M en mobile)</td><td>GPU</td><td class="num">2,9 à 5,7 M</td></tr>
             <tr><td>Maillage déplacé de la roche (360² en mobile)</td><td>GPU</td><td class="num">720²</td></tr>
-            <tr><td>Image en pleine saison, qualité Haute, 1,8 Mpx, graine b88 (première version, 10 000 feuilles)</td><td>GPU</td><td class="num">14 ms</td></tr>
-            <tr><td>Graine b88, plan large / front / plein coussin, panneau masqué en 3,1 Mpx : première version → coussin dense</td><td>GPU</td><td class="num">17 → 31 / 21 → 39 / 22 → 30 ms</td></tr>
+            <tr><td>Graine b88, plan large / front / plein coussin, en 3,1 Mpx : première version → coussin dense</td><td>GPU</td><td class="num">17 → 31 / 21 → 39 / 22 → 30 ms</td></tr>
           </tbody>
         </table></div>
-        <p>Les postes les plus lourds sont les feuilles et le maillage de la roche ; aucun poste ne domine dans le coussin dense (ombres portées ~3 ms, feuilles du niveau moyen ~4 ms, perles ~1,5 ms). Quinze tests couvrent l’ensemble. Ils vérifient l’orbite périodique et son raccord, le refuge à la sécheresse, l’extension aux pluies (le front ne recule jamais pendant les pluies) et le retrait qui suit. D’autres contrôlent que les refuges sont dans les fissures, qu’aucune feuille ne transperce la tige d’une voisine, que le coussin est dense sans feuille retirée, que les tiges des refuges naissent les premières et que les feuilles restent au-dessus de la roche. Les derniers portent sur la caméra (périodique et sous 25°/s), sur le déterminisme de la recette et sur la variété des décors.</p>
+        <p>Les postes les plus lourds sont les feuilles et le maillage de la roche ; aucun ne domine dans le coussin dense (ombres portées ~3 ms, feuilles du niveau moyen ~4 ms, perles d'eau ~1,5 ms). Quinze tests couvrent l'ensemble : l'orbite périodique et son raccord, le refuge à la sécheresse, l'extension aux pluies et le retrait qui suit, les refuges dans les fissures, aucune feuille qui transperce une tige voisine, le coussin dense sans feuille retirée, les tiges des refuges qui naissent les premières, les feuilles au-dessus de la roche, la caméra (périodique et sous 25°/s), le déterminisme de la recette et la variété des décors.</p>
       </section>
     </article>
 
@@ -175,7 +256,7 @@ const grow = (p, base, g) => base.add(p.sub(base).mul(g));  // TSL</code></pre>
     const mix3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
     const rgb = (c, k = 1) => `rgb(${Math.round(c[0] * k)},${Math.round(c[1] * k)},${Math.round(c[2] * k)})`;
 
-    // ── 01 · l'année, calculée par field.js ───────────────────────────────
+    // ── 03 · l'année, calculée par field.js ───────────────────────────────
     {
       const SEED = 'demo', E = 3.6 * 1.12, T = 40, NN = FIELD_N * FIELD_N;
       let SIM = null;
@@ -254,16 +335,23 @@ const grow = (p, base, g) => base.add(p.sub(base).mul(g));  // TSL</code></pre>
     // ── 02 · le front de Fisher-KPP ───────────────────────────────────────
     {
       const N = 240, Lx = 3, dx = Lx / N, DAYS_PER_S = 15, TMAX = 170;
+      let mode = 'both'; const MODES = ['grow', 'diff', 'both'];
+      const markMode = (d) => d.fig.querySelectorAll('.btns button').forEach((b, k) => { if (k < 3) b.setAttribute('aria-pressed', String(MODES[k] === mode)); });
       demo('#fig-front', {
         title: 'Vitesse du front', aspect: 1.8, animate: true,
         controls: [
           { key: 'r', label: 'Croissance r', min: .01, max: .1, step: .001, value: .034, fmt: (v) => `${v.toFixed(3)} /jour`, onChange: (d) => d.reset() },
           { key: 'D', label: 'Diffusion D', min: .0003, max: .004, step: .0001, value: .0011, fmt: (v) => `${v.toFixed(4)} cm²/jour`, onChange: (d) => d.reset() },
         ],
-        buttons: [{ label: 'Relancer', onClick: (d) => d.reset() }],
-        setup(d) { const B = new Float64Array(N); for (let i = 0; i < N; i++) B[i] = (i + .5) * dx < .15 ? 1 : 0; d.state = { B, L: new Float64Array(N), day: 0, trace: [] }; },
+        buttons: [
+          { label: 'Croissance seule', onClick: (d) => { mode = 'grow'; markMode(d); d.reset(); } },
+          { label: 'Diffusion seule', onClick: (d) => { mode = 'diff'; markMode(d); d.reset(); } },
+          { label: 'Les deux', onClick: (d) => { mode = 'both'; markMode(d); d.reset(); } },
+          { label: 'Relancer', onClick: (d) => d.reset() },
+        ],
+        setup(d) { markMode(d); const B = new Float64Array(N); for (let i = 0; i < N; i++) B[i] = (i + .5) * dx < .15 ? 1 : 0; d.state = { B, L: new Float64Array(N), day: 0, trace: [] }; },
         draw(g, d) {
-          const S = d.state, r = d.s.r, D = d.s.D;
+          const S = d.state, r = mode === 'diff' ? 0 : d.s.r, D = mode === 'grow' ? 0 : d.s.D;
           const dt = Math.min(.1, .2 * dx * dx / D);
           let todo = S.day < TMAX ? d.dt * DAYS_PER_S : 0;
           while (todo > 1e-9) {
@@ -287,7 +375,7 @@ const grow = (p, base, g) => base.add(p.sub(base).mul(g));  // TSL</code></pre>
           const b0 = h * .5, b1 = h - 32, Yd = (t) => lerp(b0, b1, t / TMAX);
           g.strokeStyle = C.grid; for (let t = 0; t <= TMAX; t += 40) { g.beginPath(); g.moveTo(x0, Yd(t)); g.lineTo(x1, Yd(t)); g.stroke(); label(g, `${t} j`, x0 - 6, Yd(t) + 4, { align: 'right', size: 11 }); }
           for (let x = 0; x <= Lx; x += .5) label(g, `${x} cm`, X(x), h - 14, { align: 'center', size: 11 });
-          const cs = 2 * Math.sqrt(r * D), t0 = S.trace.length > 1 ? S.trace[Math.min(S.trace.length - 1, 30)] : [0, .15];
+          const cs = 2 * Math.sqrt(d.s.r * d.s.D), t0 = S.trace.length > 1 ? S.trace[Math.min(S.trace.length - 1, 30)] : [0, .15];
           g.strokeStyle = alpha(C.ink, .5); g.setLineDash([4, 4]); g.beginPath();
           g.moveTo(X(t0[1] - cs * t0[0]), Yd(0)); g.lineTo(X(t0[1] + cs * (TMAX - t0[0])), Yd(TMAX)); g.stroke(); g.setLineDash([]);
           g.strokeStyle = C.c1; g.lineWidth = 2; g.beginPath();
@@ -298,12 +386,13 @@ const grow = (p, base, g) => base.add(p.sub(base).mul(g));  // TSL</code></pre>
           let meas = 0; const tr = S.trace; if (tr.length > 10) { const a = tr.find((p) => p[0] >= S.day - 30) ?? tr[0], b = tr[tr.length - 1]; if (b[0] - a[0] > 5) meas = (b[1] - a[1]) / (b[0] - a[0]); }
           label(g, `2√(rD) = ${(cs * 10).toFixed(3)} mm/jour`, x1, a0 + 16, { align: 'right', color: C.ink });
           label(g, `mesuré : ${(meas * 10).toFixed(3)} mm/jour`, x1, a0 + 34, { align: 'right', color: C.c1 });
-          d.status(`jour ${Math.round(S.day)} · front à ${(fx * 10).toFixed(1)} mm${meas ? ` · ${(100 * meas / cs).toFixed(0)} % de 2√(rD)` : ''}`);
+          let mass = 0; for (let i = 0; i < N; i++) mass += S.B[i] * dx;
+          d.status(`${{ grow: 'croissance seule', diff: 'diffusion seule', both: 'croissance et diffusion' }[mode]} · jour ${Math.round(S.day)} · front à ${(fx * 10).toFixed(1)} mm · mousse totale ${(mass * 10).toFixed(1)} mm${meas && mode === 'both' ? ` · ${(100 * meas / cs).toFixed(0)} % de 2√(rD)` : ''}`);
         },
       });
     }
 
-    // ── 03 · l'orbite d'une cellule ───────────────────────────────────────
+    // ── 05 · l'orbite d'une cellule ───────────────────────────────────────
     {
       const SH = showers('demo'), E = 4, F = 1200, YEARS = 8;
       const sst = smooth;
@@ -366,6 +455,7 @@ const grow = (p, base, g) => base.add(p.sub(base).mul(g));  // TSL</code></pre>
     {
       const TYPES = { granite: 'Granit', limestone: 'Calcaire', sandstone: 'Grès', bark: 'Écorce' };
       let type = 'granite'; const cacheR = {};
+      const markT = (d) => d.fig.querySelectorAll('.btns button').forEach((b, k) => { if (k < 4) b.setAttribute('aria-pressed', String(Object.keys(TYPES)[k] === type)); });
       const off = document.createElement('canvas'), og = off.getContext('2d');
       const bake = (t, W, H) => {
         const key = `${t}:${W}x${H}`; if (cacheR[key]) return cacheR[key];
@@ -380,9 +470,10 @@ const grow = (p, base, g) => base.add(p.sub(base).mul(g));  // TSL</code></pre>
       demo('#fig-rock', {
         title: 'Relief et refuges', aspect: 2.4,
         buttons: [
-          ...Object.entries(TYPES).map(([k, l]) => ({ label: l, onClick: () => { type = k; } })),
+          ...Object.entries(TYPES).map(([k, l]) => ({ label: l, onClick: (d) => { type = k; markT(d); } })),
           { key: 'ref', label: 'Refuges', toggle: true, value: true },
         ],
+        setup(d) { markT(d); },
         draw(g, d) {
           const W = Math.max(2, Math.round(d.w / 2)), H = Math.max(2, Math.round(d.h / 2));
           const t0 = performance.now(), R = bake(type, W, H), ms = performance.now() - t0;
@@ -408,7 +499,7 @@ const grow = (p, base, g) => base.add(p.sub(base).mul(g));  // TSL</code></pre>
       });
     }
 
-    // ── 05 · coupe d'un coussin ───────────────────────────────────────────
+    // ── 06 · coupe d'un coussin ───────────────────────────────────────────
     {
       const fam = FAMILIES.tortule, Lf = fam.leaf, Sh = fam.shoot;
       const ROS = Lf.L[1] * .9, DOME = Sh.dome, REACH = rosetteReach(fam, Lf.L[1]).r, SP = Math.max(Sh.spacing * .4, REACH * .45);
@@ -467,9 +558,10 @@ const grow = (p, base, g) => base.add(p.sub(base).mul(g));  // TSL</code></pre>
       });
     }
 
-    // ── 06 · la pose d'une feuille ────────────────────────────────────────
+    // ── 07 · la pose d'une feuille ────────────────────────────────────────
     {
       let famKey = 'tortule';
+      const markF = (d) => d.fig.querySelectorAll('.btns button').forEach((b, k) => b.setAttribute('aria-pressed', String(['tortule', 'polytric', 'funaire'][k] === famKey)));
       const leavesOf = (fam) => {
         const Sh = fam.shoot, Lf = fam.leaf, nl = Math.round((Sh.leaves[0] + Sh.leaves[1]) / 2), H = (Sh.height[0] + Sh.height[1]) / 2 * .55;
         const lo = 1 - Sh.leafy, L0 = (Lf.L[0] + Lf.L[1]) / 2, out = []; let az = .3;
@@ -483,8 +575,8 @@ const grow = (p, base, g) => base.add(p.sub(base).mul(g));  // TSL</code></pre>
       demo('#fig-leaf', {
         title: 'Pose en forme fermée', aspect: 2.1,
         controls: [{ key: 'o', label: 'Ouverture de la tige o (l’eau)', min: 0, max: 1, step: .005, value: .55 }],
-        buttons: ['tortule', 'polytric', 'funaire'].map((k) => ({ label: FAMILIES[k].label, onClick: () => { famKey = k; } })),
-        setup(d) { d.state.yaw = .4; d.state.pitch = .5; },
+        buttons: ['tortule', 'polytric', 'funaire'].map((k) => ({ label: FAMILIES[k].label, onClick: (d) => { famKey = k; markF(d); } })),
+        setup(d) { d.state.yaw = .4; d.state.pitch = .5; markF(d); },
         pointer(d, e) {
           if (e.type === 'down') d.state.drag = [e.x, e.y, d.state.yaw, d.state.pitch];
           else if (e.type === 'up') d.state.drag = null;
@@ -538,7 +630,7 @@ const grow = (p, base, g) => base.add(p.sub(base).mul(g));  // TSL</code></pre>
       });
     }
 
-    // ── 07 · Imbrication (et l'ancienne borne de Voronoï, pour comparer) ──
+    // ── 08 · Imbrication (et l'ancienne borne de Voronoï, pour comparer) ──
     {
       const fam = FAMILIES.tortule, Lf = fam.leaf, Sh = fam.shoot;
       const reach = rosetteReach(fam, Lf.L[1]);

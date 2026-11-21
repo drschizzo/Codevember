@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#050506">
   <title>Erosion · défis techniques</title>
-  <meta name="description" content="Comment Erosion est calculé : eau peu profonde par tuyaux virtuels sur le GPU, transport de sédiments conservatif, talus, strates parallèles au gabarit, remise à zéro par la lame, relecture d'une simulation enregistrée.">
+  <meta name="description" content="Comment fonctionne Erosion, reconstruit pas à pas : une carte de hauteurs, l'eau qui coule par des tuyaux virtuels, le sable qu'elle arrache et dépose, les berges qui s'effondrent, la lame qui remet le bac à zéro.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
@@ -22,14 +22,15 @@
 
   <main>
     <header class="hero">
-      <div class="kicker">Day 19 · Erosion · un paysage d'une heure</div>
+      <div class="kicker">Day 19 · Erosion · comment ça marche</div>
       <h1>Comment une table de sable fabrique un paysage, puis l'efface</h1>
-      <p class="lede">Une table à érosion de laboratoire : l'eau creuse un bac de sable stratifié, en fait des ravines, un canyon, un delta, une brèche ; puis une lame-gabarit repasse le sable et rend la surface de départ. Rien n'est dessiné : le relief est le produit d'une simulation hydraulique de 18 000 pas, calculée sur le GPU sous l'écran de chargement, enregistrée, puis relue à chaque image. La difficulté : une physique qui creuse des formes vraies sans exploser ni perdre de sable, une boucle parfaite alors que l'érosion ne revient jamais en arrière, et le rendu d'un sable et d'une eau de quelques millimètres.</p>
+      <p class="lede">Erosion montre une table à érosion de laboratoire, un bac de sable dans lequel on fait couler de l'eau. En une minute, l'eau y creuse des ravines, un canyon ou un delta. Puis une lame repasse sur le sable et lui rend sa forme de départ, ce qui permet à l'animation de boucler. Le relief n'est pas modelé à la main : il est calculé par une simulation de l'eau et du sable pendant le chargement. Cette page reconstruit cette simulation pas à pas, en partant d'un simple tableau de nombres.</p>
+      <p class="prereq">Pour suivre, il suffit de savoir lire un peu de JavaScript (des tableaux et des boucles). Les formules résument ce que les démos montrent ; on peut les sauter sans perdre le fil. Les détails de production sont rangés dans les encadrés « Pour aller plus loin ».</p>
     </header>
 
     <figure class="cover">
       <img src="docs/capture.jpg" alt="Une table à érosion : un canyon creusé dans un sable stratifié, un delta dans le lac aval." width="1600" height="900">
-      <figcaption>Un delta en fin de jour : le chenal s'est incisé en canyon dans les strates, le sable arraché a construit un éventail couvert de dunes sous l'eau du lac.</figcaption>
+      <figcaption>Un delta en fin d'expérience. Le courant a creusé un canyon dans les couches de sable ; le sable arraché s'est déposé plus bas, dans le lac, en un éventail couvert de rides.</figcaption>
     </figure>
 
     <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
@@ -38,74 +39,248 @@
       <section id="table">
         <h2><span class="n">01</span>Une table de laboratoire plutôt qu'un paysage</h2>
         <span class="src">docs/concept.md · src/gen/table.js</span>
-        <p>Un terrain de bruit fractal ne trompe personne ; un terrain érodé par une loi d'écoulement trompe tout le monde — les logiciels de relief le savent. Mais un paysage géologique a deux défauts pour ce projet : sa cause (des millions d'années de pluie) ne se montre pas, et l'érosion ne revient jamais en arrière, donc pas de boucle. Une <b>table à érosion</b> (stream table, flume) résout les deux : la cause est un objet — une boîte d'alimentation qui déborde, un simulateur de pluie, une guillotine de déversoir — et le laboratoire remet le bac à zéro avec un gabarit. Vu de près, un bac de sable creusé ne se distingue pas d'une photographie aérienne.</p>
-        <p>Le bac utile mesure 1,28 × 0,64 m, simulé sur une grille de 512 × 256 cellules de 2,5 mm. Quatre familles déclinent le geste : la pluie qui fait remonter des ravines dans un plateau, un courant qui creuse un canyon et construit un delta, un niveau de base qui baisse par crans et fait remonter des marches, un lac qui déborde et rompt sa digue.</p>
-        <figure id="fig-sim"><figcaption><b>La simulation de référence, dans cette page.</b> Le même module que le projet (<code>gen/sim.js</code>), sur une grille de 96 × 48 au lieu de 512 × 256, quelques dizaines de pas par image : carte ombrée du lit (strates et dépôts) et de l'eau. Le projet calcule la même chose sur le GPU, vingt fois plus vite qu'en JavaScript.</figcaption></figure>
+        <p>Les logiciels qui fabriquent des reliefs le savent : un terrain tiré d'un bruit aléatoire ne ressemble pas à un vrai paysage, alors qu'un terrain creusé par une loi d'écoulement d'eau y ressemble. On aurait donc pu simuler une vallée. Deux choses s'y opposaient. Dans une vallée, la cause du relief (des millions d'années de pluie) est invisible. Et l'érosion ne revient jamais en arrière, ce qui interdit une animation en boucle.</p>
+        <p>Une <b>table à érosion</b> règle les deux problèmes. C'est un dispositif réel des laboratoires de géologie : un bac rempli de sable, incliné, où l'on fait couler de l'eau pour observer en quelques heures ce qui prend des siècles dans la nature. La cause se voit (une boîte qui déborde, une rampe de pluie, une vanne), et le laboratoire remet le bac à zéro en repassant le sable avec une lame profilée, le gabarit.</p>
+        <p>Le bac de la scène mesure 1,28 × 0,64 m. Il y a quatre expériences possibles, tirées par la graine :</p>
+        <ul>
+          <li><b>Ravines</b> : la pluie tombe sur un plateau, des rigoles se forment et remontent vers l'amont.</li>
+          <li><b>Delta</b> : un courant creuse un canyon et dépose le sable arraché à l'entrée d'un lac.</li>
+          <li><b>Recul</b> : le niveau du déversoir baisse par crans, et chaque baisse fait remonter une marche dans le lit.</li>
+          <li><b>Brèche</b> : un lac retenu par une digue de sable déborde, puis la digue cède.</li>
+        </ul>
+        <p>La démo ci-dessous fait tourner la simulation du projet dans cette page, à une résolution plus faible. Le reste de la page explique comment elle fonctionne, une règle après l'autre.</p>
+        <figure id="fig-sim"><figcaption><b>La simulation du projet, dans cette page.</b> Le même module que la scène (<code>gen/sim.js</code>), sur une grille de 96 × 48 cellules au lieu de 512 × 256. Le relief est ombré comme sous une lampe ; le bleu est l'eau, les teintes du sable sont les couches qu'elle a mises à nu, et le sable clair uni est du dépôt.</figcaption></figure>
+      </section>
+
+      <section id="grille">
+        <h2><span class="n">02</span>Un relief est un tableau de hauteurs</h2>
+        <span class="src">src/gen/sim.js · createSim()</span>
+        <p>Pour simuler le bac, on le découpe en petites cases carrées, des <b>cellules</b> de 2,5 mm de côté : 512 dans la longueur, 256 dans la largeur. Dans chaque cellule, on ne retient que deux nombres :</p>
+        <ul>
+          <li><code>b</code>, la hauteur du sable (le <i>lit</i>), en mètres au-dessus du fond du bac ;</li>
+          <li><code>d</code>, l'épaisseur d'eau posée sur ce sable.</li>
+        </ul>
+        <p>Leur somme, <code>b + d</code>, est l'altitude de la surface de l'eau. On l'appelle la <b>surface libre</b> et on la note η (êta). C'est elle qui décide où l'eau va : l'eau s'écoule d'une cellule vers sa voisine si la surface libre y est plus basse, quelle que soit la forme du sable dessous.</p>
+        <figure id="fig-grille"><figcaption><b>Une rangée de cellules, vue en coupe.</b> Chaque colonne porte une hauteur de sable <i>b</i> et, par-dessus, une épaisseur d'eau <i>d</i>. Dans le creux, l'eau est au repos parce que sa surface libre η = <i>b</i> + <i>d</i> est la même partout, alors que les épaisseurs d'eau, elles, diffèrent.</figcaption></figure>
+        <p>En code, le bac entier tient dans quelques tableaux de nombres à virgule. On range les cellules ligne après ligne, si bien que la cellule (<i>i</i>, <i>j</i>) est à l'indice <code>j * NX + i</code> :</p>
+<pre><code>const NX = 512, NY = 256;            // cellules de 2,5 mm
+const b = new Float32Array(NX * NY); // hauteur du sable (m)
+const d = new Float32Array(NX * NY); // épaisseur d'eau (m)
+const s = new Float32Array(NX * NY); // sable transporté par l'eau (m)
+
+const eta = (c) => b[c] + d[c];      // surface libre de la cellule c</code></pre>
+        <p>Cette représentation, une <b>carte de hauteurs</b>, a une limite : elle ne connaît qu'une hauteur par cellule, donc elle ne peut pas représenter un surplomb ou une grotte. Pour une table de sable, ce n'est pas gênant : le sable qui surplombe s'effondre de toute façon (on le verra en <a href="#talus">section 05</a>).</p>
       </section>
 
       <section id="tuyaux">
-        <h2><span class="n">02</span>L'eau coule par des tuyaux virtuels</h2>
-        <span class="src">src/gen/sim.js · step() · src/scene/gpusim.js · fluxes, depth</span>
-        <p>L'eau est une lame mince : les équations de Saint-Venant suffisent. Le <b>modèle des tuyaux virtuels</b> (O'Brien et Hodgins 1995, Mei, Decaudin et Hu 2007) les résout sur la grille : chaque cellule pousse vers ses quatre voisines un flux accéléré par la différence de surface libre, freiné ici par le frottement de Manning, puis réduit d'un facteur K pour ne jamais sortir plus d'eau qu'il n'y en a :</p>
-        <div class="eq">\[ f_{i\to j}^{t+\Delta t} = \frac{\max\!\left(0,\; f_{i\to j}^{t} + \Delta t\, A\, g\, \frac{\eta_i - \eta_j}{\ell}\right)}{1 + \Delta t\, g n^2 |v| / d^{4/3}}, \qquad K = \min\!\left(1, \frac{d_i\, \ell^2}{\Delta t \sum_j f_{i\to j}}\right) \]</div>
-        <p>avec η = b + d la surface libre, n = 0,022, un pas Δt = 0,55 ℓ / (1 m/s) = 1,4 ms (la condition de Courant pour des vitesses jusqu'à 1,2 m/s et des ondes dans un lac de 3 cm). La vitesse se déduit des flux traversants, avec une profondeur plancher de 0,8 mm : sans elle, une lame de quelques micromètres prenait des vitesses infinies.</p>
-        <div class="note"><b>Un pas, sept passes</b><p>Sources, flux, transport, profondeur et vitesse, arrachement et dépôt, talus (deux passes) : chaque passe ne lit que l'état laissé par la précédente, comme sur le GPU. La référence en JavaScript fait la même chose dans le même ordre, et les deux concordent : après 2 182 pas à 256 × 128, même volume d'eau à 10⁻⁶ près, lit à 0,15 mm près (l'écart des flottants).</p></div>
+        <h2><span class="n">03</span>Faire couler l'eau</h2>
+        <span class="src">src/gen/sim.js · step(), passes 1 et 3 · src/scene/gpusim.js · fluxes, depth</span>
+        <p>À chaque pas de temps, il faut décider combien d'eau passe d'une cellule à chacune de ses quatre voisines. Pour comprendre le problème, on se contente ici d'une seule rangée de cellules : un canal d'un mètre de long, découpé en cent cellules d'un centimètre. Au départ, une retenue d'eau de 4 cm occupe le quart amont, comme derrière un barrage qu'on vient d'ouvrir.</p>
+
+        <h3>Première idée : l'eau descend vers la voisine plus basse</h3>
+        <p>La règle la plus simple consiste à transférer, à chaque pas, une part de la différence de niveau : si la surface libre d'une cellule dépasse celle de sa voisine, elle lui cède le quart de l'écart. L'eau finit bien par se mettre à niveau. Mais elle s'étale lentement, sans jamais déborder ni former de vague, comme un liquide très visqueux. Et la vitesse de l'étalement dépend du nombre de pas par seconde qu'on choisit, pas de la gravité. Cette règle déplace l'eau, mais elle ne lui donne pas d'élan.</p>
+
+        <h3>Deuxième idée : des tuyaux dont le débit se souvient</h3>
+        <p>Il manque à l'eau l'inertie : une eau lancée continue d'avancer même quand le niveau devant elle est déjà égal. Le <b>modèle des tuyaux virtuels</b> (O'Brien et Hodgins, 1995, repris pour l'érosion sur GPU par Mei, Decaudin et Hu, 2007) la rétablit. On imagine un tuyau entre chaque cellule et chacune de ses voisines. Chaque tuyau garde en mémoire son débit <i>f</i> d'un pas à l'autre, et la différence de niveau ne fixe plus le débit : elle l'<i>accélère</i>.</p>
+        <p>C'est la deuxième loi de Newton appliquée à l'eau du tuyau. La différence de niveau entre les deux cellules crée une différence de pression, donc une force ; la force change la vitesse de l'eau, pas sa position. On ajoute donc au débit une quantité proportionnelle à l'écart de niveau :</p>
+        <div class="eq">\[ f_{i\to j} \;\leftarrow\; \max\!\left(0,\; f_{i\to j} + \Delta t\, A\, g\, \frac{\eta_i - \eta_j}{\ell}\right) \]</div>
+        <p><i>f</i><sub>i→j</sub> est le débit de la cellule <i>i</i> vers sa voisine <i>j</i>, en m³/s. Δ<i>t</i> est le pas de temps, <i>g</i> = 9,81 m/s² la pesanteur, ℓ la taille d'une cellule et <i>A</i> = ℓ² la section du tuyau. Le <code>max(0, …)</code> garde un débit positif : chaque cellule ne gère que l'eau qui sort d'elle, l'eau qui entre étant le débit sortant de la voisine.</p>
+        <p>Avec cette règle, l'eau du barrage part en vague, frappe le bout du canal, revient et oscille avant de se calmer. Son mouvement vient maintenant de la gravité, et non plus du nombre de pas par seconde.</p>
+        <figure id="fig-canal"><figcaption><b>Un canal d'un mètre, cent cellules.</b> Le sable en or, l'eau en bleu, les hauteurs exagérées ; à droite, le fond remonte en pente douce comme une plage. Les trois boutons ajoutent ou retirent un ingrédient du modèle ; le curseur multiplie le pas de temps du projet. Cliquez ou glissez dans le canal pour verser de l'eau. Une eau négative, qui n'a pas de sens physique, apparaît en rouge sous le sable.</figcaption></figure>
+
+        <h3>Premier problème : une cellule qui donne plus qu'elle n'a</h3>
+        <p>Les débits sont calculés tuyau par tuyau, sans regarder combien d'eau contient la cellule. Une cellule presque vide, à côté de voisines plus basses, peut donc ouvrir ses quatre tuyaux en grand et céder en un pas plus d'eau qu'elle n'en contient : son épaisseur d'eau devient négative. Pour l'empêcher, on calcule d'abord tous les débits sortants, puis on les réduit tous du même facteur <i>K</i> si leur somme dépasse le contenu de la cellule :</p>
+        <div class="eq">\[ K = \min\!\left(1,\; \frac{d_i\, \ell^2}{\Delta t \sum_j f_{i\to j}}\right) \]</div>
+        <p>Le numérateur est le volume d'eau de la cellule ; le dénominateur, le volume qui sortirait pendant le pas. Si la cellule a de quoi fournir, <i>K</i> vaut 1 et rien ne change.</p>
+
+        <h3>Deuxième problème : l'eau ne s'arrête jamais</h3>
+        <p>Sans frottement, rien ne freine les vagues, qui font des allers-retours pendant de longues secondes. Dans le bac, l'eau frotte sur le sable, et ce frottement compte beaucoup parce que l'eau n'y a que quelques millimètres d'épaisseur. Les hydrauliciens l'estiment avec la <b>formule de Manning</b> : le frottement augmente avec la vitesse de l'eau et devient très fort quand la lame d'eau est mince. Dans le modèle, il divise le débit à chaque pas :</p>
+        <div class="eq">\[ f_{i\to j} \;\leftarrow\; \frac{f_{i\to j}}{1 + \Delta t\, g\, n^2\, |v| \,/\, d^{4/3}} \]</div>
+        <p><i>v</i> est la vitesse de l'eau dans la cellule et <i>d</i> son épaisseur. <i>n</i> = 0,022 est le coefficient de rugosité de Manning, tiré des tables pour un sable fin. On voit le rôle de l'épaisseur : à vitesse égale, une lame dix fois plus mince est freinée plus de vingt fois plus fort (10<sup>4/3</sup> ≈ 21).</p>
+
+        <h3>Troisième problème : le pas de temps</h3>
+        <p>Le modèle avance par pas de Δ<i>t</i> = 1,4 ms. Ce pas n'est pas libre. Pendant un pas, l'eau ne doit pas parcourir plus d'une cellule, sinon une cellule reçoit de l'eau d'une voisine qui n'est pas la sienne et réagit à une situation déjà périmée ; l'erreur grandit alors d'un pas à l'autre. C'est la <b>condition de Courant</b>. Le projet choisit le pas pour qu'une eau à 1 m/s parcoure un peu plus de la moitié d'une cellule (Δ<i>t</i> = 0,55 ℓ / (1 m/s)), et plafonne la vitesse à 1,2 m/s. Avec des cellules de 2,5 mm, cela donne des pas de l'ordre de la milliseconde : une expérience complète compte environ 18 000 pas.</p>
+        <p>Le modèle complet tient en quelques lignes. Voici la version à une dimension de la démo, qui suit le code du projet avec deux voisines au lieu de quatre :</p>
+<pre><code>for (let i = 0; i &lt; N; i++) {                 // 1. débits sortants
+  const eta = b[i] + d[i];
+  const frein = 1 / (1 + dt * g * n * n * Math.abs(v[i]) / d[i] ** (4 / 3));
+  fL[i] = Math.max(0, (fL[i] + dt * A * g * (eta - b[i - 1] - d[i - 1]) / l) * frein);
+  fR[i] = Math.max(0, (fR[i] + dt * A * g * (eta - b[i + 1] - d[i + 1]) / l) * frein);
+  const K = Math.min(1, d[i] * A / ((fL[i] + fR[i]) * dt));
+  fL[i] *= K; fR[i] *= K;
+}
+for (let i = 0; i &lt; N; i++) {                 // 2. bilan de chaque cellule
+  const entre = fR[i - 1] + fL[i + 1], sort = fL[i] + fR[i];
+  d[i] += dt * (entre - sort) / A;
+}</code></pre>
+        <p>Le calcul se fait en deux boucles séparées : tous les débits d'abord, puis tous les bilans. Ainsi une cellule ne voit jamais l'état d'une voisine déjà mise à jour pendant le même pas, et l'ordre dans lequel on parcourt les cellules ne change rien. C'est aussi ce qui permet de calculer toutes les cellules en même temps sur la carte graphique.</p>
+
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Coupez « Débit qui se souvient » : l'eau s'étale sans vague, et beaucoup plus lentement.</li>
+          <li>Coupez le frottement et le limiteur <i>K</i>, puis rejouez : au bout de trois secondes environ, quand la vague se retire de la plage, des cellules passent sous zéro. Remettez le limiteur seul : l'eau reste positive.</li>
+          <li>Montez le pas de temps à × 6. Avec le limiteur, l'eau s'empile en une colonne qui ne retombe pas ; sans lui, la simulation diverge en une fraction de seconde. Vers quel multiple du pas les premiers défauts apparaissent-ils ?</li>
+        </ul></div>
+
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Les tuyaux virtuels résolvent, de façon approchée, les <b>équations de Saint-Venant</b>, qui décrivent une eau peu profonde par rapport à son étendue. L'approximation principale est la section du tuyau, fixée à ℓ² quelle que soit la profondeur. Elle donne aux petites vagues une vitesse √(<i>g</i>ℓ) au lieu de √(<i>g d</i>) : c'est juste pour une eau aussi profonde qu'une cellule est large (2,5 mm, l'épaisseur typique du ruissellement sur la table), mais dans les 3 cm du lac les vagues vont environ trois fois moins vite qu'en réalité.</p>
+          <p>La vitesse <i>v</i> d'une cellule se déduit des débits qui la traversent, divisés par l'épaisseur d'eau moyenne du pas. Cette épaisseur est prise au moins égale à 0,8 mm : sans ce plancher, une lame de quelques micromètres, qui ne laisse passer qu'un débit minuscule, obtenait des vitesses absurdes. La vitesse est aussi plafonnée à 1,2 m/s. Une cellule qui a moins de 0,02 mm d'eau est considérée comme sèche et ne cède rien.</p>
+          <div class="note"><b>Un pas, sept passes</b><p>Sur la carte graphique, un pas complet enchaîne sept passes : sources et débits, transport du sable, épaisseur d'eau et vitesse, arrachement et dépôt, puis l'effondrement des berges en deux passes. Chaque passe ne lit que l'état laissé par la précédente. La version JavaScript, qui sert aux tests et aux démos de cette page, fait la même chose dans le même ordre. Les deux concordent : après 2 182 pas sur une grille de 256 × 128, même volume d'eau à 10⁻⁶ près, même relief à 0,15 mm près, l'écart venant de l'arrondi des nombres à virgule.</p></div>
+        </div></details>
       </section>
 
       <section id="transport">
-        <h2><span class="n">03</span>Le sable suit l'eau, sans se perdre</h2>
-        <span class="src">src/gen/sim.js · passes 2 et 4</span>
-        <p>Une eau qui coule arrache le sable jusqu'à sa <b>capacité de transport</b> et dépose au-delà. La capacité suit la loi de Meyer-Peter et Müller au-dessus du seuil de Shields, avec le cisaillement au fond estimé par le frottement de Manning :</p>
-        <div class="eq">\[ \frac{\tau}{\rho g} = \frac{n^2 v^2}{d^{1/3}}, \qquad s_{eq} = K_c \left(\frac{\tau}{\rho g} - \tau_c\right)^{3/2}, \qquad \tau_c = \theta_c \left(\tfrac{\rho_s}{\rho}-1\right) D \approx 1{,}5\cdot10^{-5}\ \text{m} \]</div>
-        <p>Le sable en suspension est arraché au taux K_s (1 − dureté de la couche) et déposé au taux w_s / d — la vitesse de chute du sable fin, 2 cm/s : à l'entrée du lac, l'eau ralentit, le sable tombe et construit le delta. Les changements du lit sont multipliés par un <b>facteur d'accélération morphologique</b> (MORFAC, 30 à 50 : la technique de Delft3D) : l'eau coule à sa vitesse, le paysage se fait en une demi-minute.</p>
-        <div class="note trap"><b>Le piège : le sable qui disparaît</b><p>L'advection semi-lagrangienne du sédiment, celle des articles d'érosion sur GPU, n'est pas conservative : sur le premier essai, le bac perdait près de la moitié du sable arraché (érodé 5,6 L, déposé 0,8 L, sorti 2,4 L). Le sédiment voyage maintenant <i>avec les flux d'eau eux-mêmes</i> : une cellule cède la part de son sable que porte l'eau qui sort. Le test vérifie que ce qui manque au bac est exactement ce qui est sorti par le déversoir.</p></div>
-        <div class="note trap"><b>Le piège : un lac qui se creuse</b><p>Avec le cisaillement d·S (profondeur × pente de la surface libre), les ondes du lac suffisaient à arracher son fond. Le cisaillement de Manning, nul quand l'eau ne coule pas, n'a pas ce défaut ; il restait des fosses d'un centimètre là où les courants traversaient le lac vers le déversoir : sous plus de 2 cm d'eau, l'arrachement est coupé.</p></div>
-        <figure id="fig-capa"><figcaption><b>Capacité, arrachement, dépôt.</b> En régime établi (vitesse de Manning), le cisaillement vaut d·S : sur une même pente, une lame d'un demi-millimètre reste sous le seuil de Shields et n'arrache rien, un chenal de quelques millimètres creuse — et la capacité croît comme la puissance 3/2 de l'excès. C'est ce contraste qui concentre l'eau en chenaux, et qui fait remonter les ravines.</figcaption></figure>
+        <h2><span class="n">04</span>L'eau arrache le sable et le dépose plus loin</h2>
+        <span class="src">src/gen/sim.js · step(), passes 2 et 4</span>
+        <p>On sait faire couler l'eau sur le sable. Il faut maintenant que l'eau modifie le sable. Ce que l'on observe sur une vraie table : là où l'eau coule vite, elle arrache des grains et les emporte ; là où elle ralentit, à l'entrée du lac par exemple, elle les laisse tomber. Sur un plateau où ruisselle une lame d'eau très mince, en revanche, presque rien ne bouge.</p>
+
+        <h3>La capacité de transport</h3>
+        <p>On résume ce comportement par une seule grandeur, la <b>capacité de transport</b> <i>C</i> : la quantité de sable qu'une eau donnée peut porter. Chaque cellule compare cette capacité au sable que son eau porte déjà, noté <i>s</i>, et en déduit ce qu'elle fait :</p>
+        <ul>
+          <li>si <i>s</i> &lt; <i>C</i>, l'eau peut porter plus qu'elle ne porte : elle arrache du sable au lit, <i>b</i> baisse et <i>s</i> augmente ;</li>
+          <li>si <i>s</i> &gt; <i>C</i>, l'eau porte plus qu'elle ne peut : elle en dépose une partie, <i>b</i> monte et <i>s</i> diminue.</li>
+        </ul>
+<pre><code>// (simplifié : sans les plafonds ni le tassement inégal du sable)
+if (s[c] &lt; C) {                       // l'eau peut emporter davantage
+  const e = Ks * (1 - dur) * (C - s[c]) * dt;
+  b[c] -= e * MORFAC; s[c] += e;
+} else {                              // l'eau est trop chargée : le sable tombe
+  const e = (s[c] - C) * Math.min(1, ws * dt / d[c]);
+  b[c] += e * MORFAC; s[c] -= e;
+}</code></pre>
+        <p>L'arrachement est progressif (<i>K</i><sub>s</sub> = 2 par seconde) et plus faible dans les couches dures du bac (la dureté <code>dur</code> va de 0 à 0,9, on y revient en <a href="#strates">section 06</a>). Le dépôt suit la chute des grains : un grain de sable fin tombe dans l'eau à <i>w</i><sub>s</sub> = 2 cm/s, donc il lui faut plus longtemps pour atteindre le fond quand l'eau est profonde. Le facteur <code>MORFAC</code> est expliqué plus bas.</p>
+
+        <h3>Ce dont dépend la capacité</h3>
+        <p>Ce qui arrache un grain, c'est la force que l'eau exerce en frottant sur le fond, le <b>cisaillement</b>. On l'obtient avec la formule de Manning déjà utilisée pour freiner l'eau : il croît avec le carré de la vitesse et diminue un peu avec la profondeur. Les grains ne se mettent à bouger qu'au-delà d'un seuil, le <b>seuil de Shields</b>, qui dépend de leur taille et de leur densité. Au-dessus du seuil, la capacité croît avec l'excès de cisaillement selon la loi de Meyer-Peter et Müller, établie en canal d'essai :</p>
+        <div class="eq">\[ \frac{\tau}{\rho g} = \frac{n^2 v^2}{d^{1/3}}, \qquad C = K_c \left(\frac{\tau}{\rho g} - \tau_c\right)^{3/2} \]</div>
+        <p>τ est le cisaillement, divisé par ρ<i>g</i> (la masse volumique de l'eau fois la pesanteur) pour l'exprimer comme une hauteur, en mètres. τ<sub>c</sub> ≈ 15 µm est le seuil de Shields d'un sable de 0,18 mm, et <i>K</i><sub>c</sub> = 200 un coefficient de calage.</p>
+        <p>Le seuil est ce qui fait apparaître les chenaux. Sur une pente donnée, une lame d'eau d'un demi-millimètre reste sous le seuil et n'arrache rien. Si un petit creux rassemble l'eau sur quelques millimètres, le cisaillement y dépasse le seuil, le creux s'approfondit, attire encore plus d'eau, et devient un chenal. Les ravines naissent de ce renforcement.</p>
+        <figure id="fig-capa"><figcaption><b>Capacité de transport selon la profondeur</b>, pour trois pentes de la surface de l'eau. On suppose ici l'écoulement établi : l'eau a atteint la vitesse où le frottement compense la pente (vitesse de Manning). Le point blanc suit les deux curseurs ; le bandeau donne la vitesse, le cisaillement et la capacité.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Pente de 3,5 % : à partir de quelle profondeur l'eau commence-t-elle à arracher du sable ?</li>
+          <li>Doublez la profondeur, puis doublez-la encore. La capacité augmente bien plus vite que la profondeur : c'est ce qui donne l'avantage aux chenaux.</li>
+        </ul></div>
+
+        <h3>Transporter le sable sans en perdre</h3>
+        <p>Le sable arraché doit voyager avec l'eau. La méthode la plus répandue dans les articles sur l'érosion par GPU est le <b>transport semi-lagrangien</b> : chaque cellule regarde d'où vient son eau (sa position moins la vitesse fois le pas de temps) et y prend la quantité de sable qui s'y trouvait. Elle est simple et stable. Mais elle ne compte pas : rien ne garantit que le sable qui part d'une cellule est égal à celui qui arrive dans les autres.</p>
+        <p>Le défaut apparaît quand l'eau ralentit, à l'entrée d'un lac. L'eau lente devrait accumuler le sable qu'apporte l'eau rapide, comme une file de voitures qui se resserre en arrivant sur un bouchon. Le transport semi-lagrangien recopie la quantité de sable telle quelle au lieu de l'accumuler, et la différence disparaît. Sur le premier essai du projet, le bac perdait ainsi près de la moitié du sable arraché : 5,6 litres arrachés, 0,8 litre déposé, 2,4 litres sortis par le déversoir, le reste évanoui.</p>
+        <p>La correction utilise les débits d'eau, déjà calculés et déjà justes. Une cellule cède à chaque voisine la part de son sable qui correspond à la part de son eau qui part vers elle. Si 10 % de l'eau d'une cellule passe à droite pendant le pas, 10 % de son sable suit :</p>
+        <div class="eq">\[ s_i \;\leftarrow\; s_i + \frac{\Delta t}{\ell^2} \Big( \sum_j f_{j\to i}\, \frac{s_j}{d_j} \;-\; \sum_j f_{i\to j}\, \frac{s_i}{d_i} \Big) \]</div>
+        <p>Le rapport <i>s</i>/<i>d</i> est la concentration de sable dans l'eau. Chaque terme qui quitte une cellule entre exactement dans une autre : par construction, le sable ne peut ni apparaître ni disparaître. Le test du projet le vérifie : ce qui manque au bac en fin d'expérience est égal, aux arrondis près, à ce qui est sorti par le déversoir.</p>
+        <figure id="fig-sable"><figcaption><b>Un courant qui entre dans un lac</b>, à débit constant. L'eau arrive par la gauche, mince et rapide, et ralentit en entrant dans le lac à droite. Elle apporte du sable à concentration fixe, un point par grain ; pour isoler le transport, on n'arrache ni ne dépose rien. Sous la coupe, le débit de sable le long du canal : s'il ne se perd rien en route, il est le même partout une fois le canal rempli. À droite, les comptes : sable entré, sorti, présent dans l'eau, et sable perdu.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Passez en semi-lagrangien et attendez que le lac se remplisse. Les grains deviennent rares dans le lac, et la courbe du débit de sable chute à son entrée : c'est là que le sable disparaît. Au bout de vingt secondes, il manque plus des quatre cinquièmes du sable entré.</li>
+          <li>Revenez aux débits d'eau : la courbe reste au niveau du débit entrant, les grains sont aussi serrés dans le lac que dans le chenal, et ce qui entre finit par sortir.</li>
+        </ul></div>
+
+        <h3>Accélérer le temps du sable</h3>
+        <p>Il reste un problème de durée. Une vraie table à érosion met des heures à creuser un canyon, et la simulation avance par pas d'une milliseconde. On ne peut pas allonger le pas, à cause de la condition de Courant. La solution vient des modèles d'ingénierie fluviale (le logiciel Delft3D, par exemple) : on multiplie chaque changement du lit par un <b>facteur d'accélération morphologique</b>, le MORFAC, de 30 à 50 selon l'expérience. L'eau s'écoule à sa vitesse réelle, mais le sable réagit comme si chaque seconde d'écoulement en valait quarante. Le canyon se creuse en une demi-minute de temps d'eau.</p>
+        <p>Cette approximation est valable tant que le relief change lentement par rapport à l'eau, ce qui est le cas dans le bac. Elle a un coût, décrit en <a href="#horloge">section 08</a> : les petites oscillations de l'eau, multipliées par quarante, font trembler le lit.</p>
+
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Le seuil de Shields s'écrit τ<sub>c</sub> = θ<sub>c</sub> (ρ<sub>s</sub>/ρ − 1) <i>D</i>, avec θ<sub>c</sub> ≈ 0,05, ρ<sub>s</sub>/ρ = 2,65 pour le quartz et <i>D</i> = 0,18 mm, soit 1,5·10⁻⁵ m.</p>
+          <p>Sous l'eau, le lit est aussi lissé par une faible diffusion (10⁻⁶ m²/s, en temps morphologique), qui représente le sable roulé sur le fond. Elle efface le bruit d'une cellule sans toucher aux formes plus grandes. L'arrachement est enfin modulé par un tassement inégal du sable, un bruit de quelques centimètres tiré de la graine (± 35 %), qui donne aux berges des irrégularités.</p>
+          <div class="note trap"><b>Le piège : un lac qui creuse son propre fond</b><p>Une première version estimait le cisaillement par le produit de la profondeur et de la pente de la surface de l'eau. Dans le lac, les petites ondes suffisaient alors à arracher le fond. Le cisaillement de Manning, nul quand l'eau ne coule pas, n'a pas ce défaut. Il restait des fosses d'un centimètre sous les courants qui traversent le lac vers le déversoir : dans une eau profonde, la vitesse moyenne surestime le frottement au fond. L'arrachement est donc atténué progressivement entre 1,2 et 2,2 cm d'eau, et nul au-delà.</p></div>
+        </div></details>
       </section>
 
       <section id="talus">
-        <h2><span class="n">04</span>Les berges tiennent droites, puis s'effondrent</h2>
+        <h2><span class="n">05</span>Les berges tiennent droites, puis s'effondrent</h2>
         <span class="src">src/gen/sim.js · passe 5 · src/scene/gpusim.js · talusOut, talusIn</span>
-        <p>Le sable humide d'une table tient presque vertical : les ponts capillaires entre les grains (les châteaux de sable). Sous l'eau, il n'en reste rien : une berge sapée à son pied s'effondre. La simulation l'écrit en deux angles : au-delà de 62° pour une cellule humide, de 30° pour une cellule sous l'eau, la part en excès glisse vers les voisins plus bas (huit voisins, un quart de l'excès par pas, en deux passes pour rester conservatif). C'est ce qui donne aux canyons leurs parois franches et leurs éboulis.</p>
-        <figure id="fig-talus"><figcaption><b>Une berge en coupe.</b> Creusez le pied de la berge (le chenal s'approfondit) : tant que la paroi reste sous 62°, elle tient ; au-delà, elle s'effondre et le talus sous l'eau se règle à 30°. Même règle que le projet, sur un profil à une dimension.</figcaption></figure>
+        <p>Sans autre règle, rien n'empêcherait l'eau de creuser des fentes étroites aux parois verticales. Sur une vraie table, les berges creusées à leur pied finissent par s'effondrer, et les canyons s'élargissent par éboulements successifs.</p>
+        <p>Un tas de sable ne tient qu'en dessous d'une certaine pente, son <b>angle de talus</b>. Le sable humide tient presque à la verticale, parce que l'eau retenue entre les grains forme de petits ponts qui les collent : c'est ce qui permet de bâtir un château de sable. Sous l'eau, ces ponts disparaissent et le sable ne tient plus qu'à une trentaine de degrés. La simulation retient deux angles : 62° pour le sable humide, 30° pour le sable couvert de plus d'un demi-millimètre d'eau.</p>
+        <p>La règle compare chaque cellule à ses huit voisines (diagonales comprises). Si la pente vers une voisine dépasse l'angle de talus, l'excès de hauteur est en trop, et une partie glisse vers cette voisine :</p>
+<pre><code>const tan = d[c] &gt; 0.0005 ? Math.tan(30°) : Math.tan(62°);
+for (const n of voisins8(c)) {
+  const dist = diagonale(n) ? l * Math.SQRT2 : l;
+  exces[n] = Math.max(0, b[c] - b[n] - tan * dist);
+}
+// un huitième du plus grand excès glisse, réparti entre les voisines
+// en proportion de leur propre excès</code></pre>
+        <p>On ne fait glisser qu'une petite part de l'excès à chaque pas, pour que l'effondrement se répartisse sur plusieurs pas comme un vrai éboulement, au lieu de régler la pente d'un coup. Comme pour l'eau, tout le sable qui quitte une cellule arrive dans une autre : le calcul est fait en deux passes, les départs d'abord, les arrivées ensuite.</p>
+        <figure id="fig-talus"><figcaption><b>Une berge en coupe.</b> À gauche, un plateau de sable humide ; à droite, un chenal sous l'eau. Le curseur creuse le pied de la berge, comme le ferait le courant. La règle du projet, appliquée sur cette coupe à une dimension, fait glisser le sable jusqu'au repos.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Creusez le pied de la berge petit à petit : la partie de la paroi hors de l'eau reste raide, et le sable tombé dans le chenal s'étale en pente plus douce.</li>
+          <li>Le bandeau donne la pente maximale : elle ne dépasse jamais 62°.</li>
+        </ul></div>
       </section>
 
       <section id="strates">
-        <h2><span class="n">05</span>Les strates suivent le gabarit</h2>
+        <h2><span class="n">06</span>Les couches du sable</h2>
         <span class="src">src/gen/table.js · layerAt(), hardnessAt() · src/scene/sand.js</span>
-        <p>Des strates horizontales recouperaient la pente du bac : la surface neuve se serait couverte de chevrons de couleur avant même que l'eau n'arrive (premier essai). Un bac de laboratoire se remplit couche par couche, chacune régalée par le même gabarit : les strates sont <b>parallèles à la surface de départ</b>. Une couche se repère par sa profondeur sous b₀ ; la dureté (0,6–0,8 pour les bancs durs) réduit l'arrachement — corniches et terrasses. Le shader montre la couche de la profondeur atteinte si le point n'a jamais été plus bas (bmin), un dépôt frais sinon ; contre les parois d'acrylique, une coupe montre l'empilement entier.</p>
-        <figure id="fig-strates"><figcaption><b>Une coupe en travers du bac.</b> Le profil de la lame (chenal pilote, creux de vallée) porte les couches parallèles ; un chenal qui s'incise les traverse une à une. Strates et couleurs tirées par la vraie recette de la graine.</figcaption></figure>
+        <p>Le sable du bac n'est pas uniforme. Il est fait de couches de teintes et de duretés différentes. Quand l'eau creuse, elle met ces couches à nu sur les parois des chenaux, comme dans un vrai canyon, et les couches dures résistent mieux : elles forment des corniches et des terrasses.</p>
+        <p>La première version empilait les couches à plat. Comme la surface du bac est en pente, elle recoupait ces couches horizontales avant même que l'eau n'arrive, et le sable neuf se couvrait de bandes de couleur. Un bac de laboratoire se remplit autrement : couche après couche, chacune lissée par le même gabarit. Les couches sont donc <b>parallèles à la surface de départ</b>, notée <i>b</i><sub>0</sub>.</p>
+        <p>Cela simplifie le calcul. Pour savoir dans quelle couche se trouve un point du lit, il suffit de mesurer de combien il est descendu sous la surface de départ, <i>b</i><sub>0</sub> − <i>b</i>, et de chercher cette profondeur dans la liste des couches. La même fonction donne la teinte (pour le rendu) et la dureté (pour l'arrachement). Si le point est remonté au-dessus du plus bas qu'il ait atteint, c'est que du sable s'y est déposé : il prend alors la teinte uniforme des dépôts.</p>
+<pre><code>function layerAt(strata, depth) {    // depth = b0 - b, en mètres
+  for (let k = 0; k &lt; strata.length; k++)
+    if (depth &lt;= strata[k].bottom) return k;
+  return strata.length - 1;
+}</code></pre>
+        <figure id="fig-strates"><figcaption><b>Une coupe en travers du bac.</b> Les pointillés sont la surface laissée par le gabarit ; les couches la suivent. Le curseur enfonce un chenal qui les traverse une à une. Couches et teintes sont tirées par la recette de la scène pour la graine choisie.</figcaption></figure>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Entre deux couches, la dureté passe de l'une à l'autre sur 1,2 mm au lieu de sauter d'un coup : une marche de dureté créait une marche dans le relief. Le rendu montre la couche de la profondeur atteinte tant que le point n'est jamais remonté, et sinon la teinte des dépôts. Contre les parois transparentes du bac, une coupe montre l'empilement entier.</p>
+        </div></details>
       </section>
 
       <section id="lame">
-        <h2><span class="n">06</span>La lame réécrit la surface de départ</h2>
+        <h2><span class="n">07</span>La lame remet le bac à zéro</h2>
         <span class="src">src/timeline.js · src/scene/gpusim.js · resolve · finish()</span>
-        <p>La boucle tient sur une remise à zéro physique : le portique roule vers l'aval, lame levée, l'abaisse, et remonte le bac. Le bord bas de la lame est le profil en travers du gabarit, et sa hauteur suit le programme le long du bac : <i>il est exactement b₀</i> (test : écart nul pendant tout le passage). Derrière la lame, la surface de départ ; devant, le relief enregistré plus un bourrelet à l'angle de repos (33°) dont la section est la matière poussée :</p>
-        <div class="eq">\[ V(x_L, y) = \int_{x_L}^{\text{aval}} \big(b_{fin}(x, y) - b_0(x, y)\big)\, dx, \qquad h_B = \sqrt{2\, V \tan 33^\circ} \]</div>
-        <p>lissée en travers sur 4 cm (le bourrelet s'étale le long de la lame). La lame part de l'aval, où le delta a déposé, vers l'amont, où l'eau a pris : le bourrelet enfle sur les dépôts et se vide dans les canyons. Le sable se conservant dans la simulation, ce qui reste au bout est ce que le déversoir n'a pas emporté.</p>
-        <figure id="fig-lame"><figcaption><b>Le passage de la lame</b>, sur le profil en long d'une simulation calculée dans cette page (delta, 96 × 48, l'axe du chenal) : le relief à la fin de l'expérience, la surface de départ derrière la lame, et le bourrelet devant elle, dont le volume suit l'intégrale.</figcaption></figure>
+        <p>Une animation en boucle doit revenir exactement à son image de départ. L'érosion ne le fait pas d'elle-même : on ne peut pas faire remonter le sable en faisant tourner la simulation à l'envers. La scène fait donc ce que fait le laboratoire. Une fois l'eau vidée et le sable séché, un portique roule jusqu'à l'aval du bac, abaisse une lame et la tire vers l'amont. Le bord inférieur de la lame a exactement la forme de la surface de départ : derrière elle, le sable retrouve exactement <i>b</i><sub>0</sub> (un test vérifie que l'écart est nul pendant tout le passage).</p>
+        <p>Devant la lame, le sable raclé s'accumule en un bourrelet. Pour le dessiner, on compte le sable que la lame a déjà poussé : c'est la somme de tout ce qui dépassait la surface de départ entre l'aval et la lame, moins les creux qu'elle a comblés en route. On en tire une section <i>V</i> (une surface, en m²). Le sable poussé prend la forme d'un triangle appuyé contre la lame, dont la pente avant est l'angle de talus du sable sec, 33°. Un triangle de hauteur <i>h</i> et de pente α a pour surface <i>h</i>² / (2 tan α), d'où la hauteur du bourrelet :</p>
+        <div class="eq">\[ V(x_L) = \int_{x_L}^{\text{aval}} \big(b_{\text{fin}}(x) - b_0(x)\big)\, dx, \qquad h = \sqrt{2\, V \tan 33^\circ} \]</div>
+        <p>La lame part de l'aval, où le delta a déposé du sable, vers l'amont, où l'eau en a pris : le bourrelet grossit sur les dépôts et se vide dans les canyons. Comme la simulation ne perd pas de sable, ce qui reste devant la lame à la fin du passage est exactement ce que le déversoir n'a pas emporté.</p>
+        <figure id="fig-lame"><figcaption><b>Le passage de la lame</b>, sur un profil en long calculé dans cette page (expérience « delta », grille de 96 × 48, profil pris dans l'axe du chenal). En pointillés, le relief en fin d'expérience. Derrière la lame, la surface de départ ; devant, le bourrelet, dont le bandeau donne la section et la hauteur.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Faites glisser le curseur de la droite vers la gauche, ce qui fait avancer la lame de l'aval vers l'amont : le bourrelet grossit au passage du delta, puis maigrit en traversant le canyon.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>La section est lissée en travers sur 4 cm, parce que le sable poussé s'étale le long de la lame. Sa hauteur ne descend pas sous 3 mm, pour que la lame pousse toujours un petit cordon de sable.</p>
+        </div></details>
       </section>
 
       <section id="horloge">
-        <h2><span class="n">07</span>Une seule horloge, un raccord exact</h2>
+        <h2><span class="n">08</span>Une seule horloge pour toute la boucle</h2>
         <span class="src">src/timeline.js · filmState()</span>
-        <p>Tout lit la même phase u : le temps hydraulique T (0 avant l'expérience, S.T après), le séchage, la position du portique et la levée de la lame, le débit de la boîte, la pluie, le niveau du déversoir — et la relecture de la simulation, qui relit 480 états du lit — chacun la moyenne de son intervalle, puis toute la suite filtrée passe-bas sans déphasage (le MORFAC fait osciller le lit au rythme des vagues : relu tel quel, il bouillonnait, en « stop motion ») et relue en B-spline —, le plus bas atteint tiré de cette même courbe (la couleur des strates ne saute plus), et 192 états de l'eau avec, pour chaque cellule, l'instant où elle a changé : un front d'eau fait basculer chaque cellule à son instant, si bien qu'il glisse au lieu de sauter d'un état à l'autre. À u = 0, l'expérience n'a pas commencé : le relief est b₀ ; à u → 1, la lame est passée partout : le relief est b₀. Les mouvements de la machine sont des profils du cinquième degré (accélération bornée) ; la pluie et les rides de l'eau font un nombre entier de cycles par boucle.</p>
-        <div class="note check"><b>Ce que vérifient les tests</b><p>Raccord (l'état à u → 1 est celui de u = 0, sans eau ni débit), la lame balaie tout le bac sans jamais revenir en arrière, le séchage ne recule jamais, l'eau ne revient pas après la vidange, le film a six plans de plus de 4 s et un raccord par plan ; dans chaque plan la caméra reste sous 25 °/s et 1,5 m/s², au-dessus des parois (ou, au ras du sable, dans le bac, loin des parois et au-dessus du sable de départ), à plus de 12 cm des montants, des rails et de la poutre.</p></div>
-        <figure id="fig-horloge"><figcaption><b>Les courbes du film</b> pour une famille : temps hydraulique, débit, pluie, niveau de base, séchage, position du portique et levée de la lame, en fonction de u — calculées par le module du projet.</figcaption></figure>
+        <p>Toute la scène dépend d'un seul nombre, la <b>phase</b> <i>u</i>, qui va de 0 à 1 pendant une boucle. À partir de <i>u</i>, une fonction calcule l'état de tout le reste : où en est l'expérience, le débit de la boîte et la pluie, le niveau du déversoir, le séchage du sable, la position du portique et la hauteur de la lame. À <i>u</i> = 0, l'expérience n'a pas commencé et le relief est la surface de départ ; quand <i>u</i> approche de 1, la lame est passée partout et le relief est revenu à la surface de départ. Le raccord est donc exact.</p>
+        <p>La simulation, elle, ne tourne pas pendant l'animation. Elle est calculée une seule fois sur la carte graphique, pendant l'écran de chargement (4 à 5,5 secondes), et le projet enregistre 480 états du relief et 192 états de l'eau. À chaque image, la scène relit l'état qui correspond à <i>u</i> en interpolant entre deux états enregistrés. On peut ainsi revenir en arrière, ralentir ou reprendre la boucle sans rien recalculer.</p>
+        <figure id="fig-horloge"><figcaption><b>Les courbes de la boucle</b> pour une expérience : le temps de l'eau, le débit, la pluie, le niveau du déversoir, le séchage, la position du portique et la levée de la lame, en fonction de <i>u</i>. Elles sont calculées par le module du projet.</figcaption></figure>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Relire des états enregistrés pose deux problèmes. Le premier vient du MORFAC : l'eau oscille un peu au rythme de ses vagues, et le lit, dont chaque changement est multiplié par quarante, oscille avec elle. Relus tels quels, les états faisaient bouillonner le relief, comme un film image par image. Chaque état enregistré est donc la moyenne du relief sur son intervalle, puis toute la suite est filtrée pour ne garder que les changements lents, sans décalage dans le temps, et relue par une courbe lisse (une B-spline). Le plus bas atteint par chaque point est tiré de cette même courbe, pour que la couleur des couches ne saute pas.</p>
+          <p>Le second problème est l'eau : avec 192 états, un front d'eau sauterait d'un état au suivant. Pour chaque cellule, le projet enregistre aussi l'instant où elle a changé d'état. Le front fait basculer chaque cellule à son instant et glisse au lieu de sauter.</p>
+          <p>Les mouvements de la machine suivent des courbes du cinquième degré, dont l'accélération est bornée. La pluie et les rides de l'eau font un nombre entier de cycles par boucle.</p>
+          <div class="note check"><b>Ce que vérifient les tests</b><p>L'état à <i>u</i> → 1 est celui de <i>u</i> = 0, sans eau ni débit. La lame balaie tout le bac sans jamais revenir en arrière, le séchage ne recule jamais, l'eau ne revient pas après la vidange. Le film compte six plans de plus de 4 secondes. Dans chaque plan, la caméra tourne à moins de 25 °/s, accélère à moins de 1,5 m/s², reste au-dessus des parois (ou, au ras du sable, loin d'elles et au-dessus du sable de départ) et à plus de 12 cm des montants, des rails et de la poutre.</p></div>
+        </div></details>
       </section>
 
       <section id="eau">
-        <h2><span class="n">08</span>Un seul maillage pour le sable et l'eau</h2>
+        <h2><span class="n">09</span>Dessiner le sable et l'eau</h2>
         <span class="src">src/scene/sand.js · positionNode, waterNormal</span>
-        <p>Le sable et l'eau sont un seul maillage de 1 024 × 512 sommets : le vertex shader lit le lit, évalué aux sommets par une passe de calcul (Hermite monotone moyenné le long des crêtes), et la surface libre par-dessus là où elle le recouvre. L'eau est enregistrée à demi-résolution ; si l'on interpolait la <i>hauteur d'eau</i>, la ligne d'eau suivrait les blocs de 5 mm. On interpole la <b>surface libre</b>, lisse, et la ligne d'eau devient l'intersection d'une surface lisse et du lit fin : nette, comme une vraie rive. Au pixel, l'eau est un vernis (clearcoat) à sa propre normale — le gradient de la surface libre et des rides entraînées par le courant, deux lectures d'un bruit advectées et décalées d'une demi-période ; sous elle, le fond est atténué (Beer-Lambert) et voilé par la turbidité, de la teinte du sable fin.</p>
-        <div class="note trap"><b>Le piège : la grille sous la lumière rasante</b><p>Les normales du relief, calculées par cellule et interpolées en bilinéaire, sont continues mais pas leurs dérivées : sous une lampe rasante, la grille de 2,5 mm se dessinait en losanges. Elles sont maintenant filtrées en B-spline bicubique, par quatre lectures bilinéaires (Sigg et Hadwiger).</p></div>
-        <div class="note trap"><b>Le piège : les crêtes en dents de scie</b><p>Une crête oblique, à l'angle de talus, est faite de coins de cellules ; une interpolation séparable (en x, puis en y) est haute à chaque nœud et creuse un col entre deux : les arêtes se festonnaient au pas de la grille. Le relief est lissé le long des crêtes seulement (orientation du tenseur de structure), puis évalué aux sommets du maillage, moyenné sur la ligne de niveau ; le pixel lit la normale de la même surface.</p></div>
-        <div class="note trap"><b>Le piège : l'occlusion qui coûtait 10 ms</b><p>La GTAO de la chaîne d'image refait une pré-passe de toute la scène : avec le matériau du sable (bicubique, strates, eau), 10 ms par image. L'occlusion est maintenant calculée sur la carte de hauteur elle-même, une fois par image (l'horizon dans 8 directions, 5 pas de 2,5 mm à 4 cm), et la normale de l'eau seulement aux pixels mouillés : 29 → 15 ms à 1 920 × 1 080.</p></div>
-        <figure id="fig-eau"><figcaption><b>La ligne d'eau.</b> Une coupe : le lit fin (2,5 mm) et l'eau enregistrée à 5 mm. En interpolant la hauteur d'eau, la rive suit les blocs ; en interpolant la surface libre, elle tombe là où l'eau rencontre le sable.</figcaption></figure>
+        <p>Pour l'affichage, le sable et l'eau forment une seule surface, un maillage de 1 024 × 512 sommets, deux fois plus fin que la grille de simulation. Chaque sommet prend la hauteur du sable, ou celle de la surface de l'eau là où l'eau recouvre le sable. Au pixel, l'eau est traitée comme un vernis transparent posé sur le sable : elle reflète la lumière et assombrit le fond d'autant plus qu'elle est profonde et chargée de sable.</p>
+        <p>Un détail montre bien la différence entre interpoler une grandeur ou une autre. Pour économiser la mémoire, l'eau est enregistrée avec des cellules deux fois plus grandes que le sable (5 mm). Si l'on interpole l'épaisseur d'eau entre ces grosses cellules, le bord de l'eau suit leur grille : la rive dessine des marches de 5 mm. Si l'on interpole plutôt la surface libre, qui est presque plate, le bord de l'eau devient l'endroit où cette surface lisse croise le sable fin. Il tombe alors là où il doit, avec la netteté d'une vraie rive.</p>
+        <figure id="fig-eau"><figcaption><b>La rive, en coupe.</b> Le sable est connu tous les 2,5 mm, l'eau tous les 5 mm. Le bouton change la grandeur interpolée entre les cellules d'eau : l'épaisseur d'eau, ou la surface libre.</figcaption></figure>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Le relief est évalué aux sommets du maillage par une passe de calcul, avec une interpolation qui ne crée pas de bosses (Hermite monotone). La normale de l'eau combine la pente de la surface libre et des rides entraînées par le courant : deux lectures d'un même bruit, transportées par la vitesse de l'eau et décalées d'une demi-période, pour que l'une prenne le relais de l'autre quand elle se déforme trop. Sous l'eau, la lumière est atténuée avec la profondeur (loi de Beer-Lambert) et voilée par la turbidité, de la teinte du sable fin.</p>
+          <div class="note trap"><b>Le piège : la grille sous une lumière rasante</b><p>Les normales du relief étaient calculées par cellule puis interpolées linéairement. Elles étaient continues, mais leur variation ne l'était pas : sous une lampe rasante, la grille de 2,5 mm se dessinait en losanges. Elles sont maintenant filtrées par une B-spline bicubique, obtenue avec quatre lectures bilinéaires (méthode de Sigg et Hadwiger).</p></div>
+          <div class="note trap"><b>Le piège : les crêtes en dents de scie</b><p>Une crête oblique, à l'angle de talus, passe par les coins des cellules. Une interpolation qui travaille en <i>x</i> puis en <i>y</i> la rend haute à chaque nœud de la grille et creuse un petit col entre deux : les arêtes se festonnaient au pas de la grille. Le relief est donc lissé le long des crêtes seulement (leur direction est estimée par le tenseur de structure), puis évalué aux sommets du maillage, et le pixel lit la normale de cette même surface.</p></div>
+          <div class="note trap"><b>Le piège : l'ombrage de contact qui coûtait 10 ms</b><p>L'occlusion ambiante de la chaîne de rendu (GTAO) redessinait toute la scène dans une passe préalable ; avec le matériau du sable, cela coûtait 10 ms par image. L'occlusion est maintenant calculée directement sur la carte de hauteurs, une fois par image : pour chaque point, on cherche l'horizon dans 8 directions, en 5 pas de 2,5 mm à 4 cm. La normale de l'eau n'est calculée qu'aux pixels mouillés. Une image en 1 920 × 1 080 est passée de 29 à 15 ms.</p></div>
+        </div></details>
+      </section>
+
+      <section id="resume">
+        <h2><span class="n">10</span>Récapitulatif</h2>
+        <p>Un pas de la simulation applique, dans l'ordre, les règles vues dans cette page :</p>
+        <ol>
+          <li>l'eau entre par la boîte ou la pluie et sort par le déversoir ;</li>
+          <li>les débits entre cellules sont accélérés par la différence de surface libre, freinés par le frottement, puis limités à l'eau disponible (section 03) ;</li>
+          <li>le sable en suspension suit les débits d'eau (section 04) ;</li>
+          <li>chaque cellule met à jour son épaisseur d'eau et sa vitesse ;</li>
+          <li>l'eau arrache ou dépose du sable selon sa capacité de transport, et le changement du lit est multiplié par le MORFAC (section 04) ;</li>
+          <li>le sable au-delà de l'angle de talus glisse vers les cellules plus basses (section 05).</li>
+        </ol>
+        <p>La version JavaScript de référence, <a href="https://github.com/drschizzo/Codevember/blob/main/erosion/src/gen/sim.js"><code>src/gen/sim.js</code></a>, fait moins de deux cents lignes et suit cet ordre. Elle peut se lire comme la suite de cette page.</p>
       </section>
 
       <section id="budget">
-        <h2><span class="n">09</span>Budget</h2>
+        <h2><span class="n">11</span>Budget</h2>
         <div class="tbl"><table>
           <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
           <tbody>
@@ -130,11 +305,11 @@
   </main>
 
   <script type="module">
-    import { demo, C, TAU, lerp, clamp, label, alpha } from '../home/explainer.js';
+    import { demo, C, TAU, lerp, clamp, label, alpha, arrow } from '../home/explainer.js';
     import { createSim, PHYS } from './src/gen/sim.js';
     import { familySpec, initialTerrain, TABLE, layerAt, longProfile, crossProfile } from './src/gen/table.js';
     import { generate, SANDS } from './src/recipe.js';
-    import { filmState, U } from './src/timeline.js';
+    import { filmState } from './src/timeline.js';
 
     const hex = (h) => { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
     const STRATA = [{ bottom: 0.004, hard: 0.1, tone: 0 }, { bottom: 0.007, hard: 0.7, tone: 2 }, { bottom: 0.013, hard: 0.1, tone: 1 }, { bottom: 0.017, hard: 0.7, tone: 2 }, { bottom: 0.026, hard: 0.1, tone: 3 }, { bottom: 1, hard: 0.2, tone: 0 }];
@@ -157,15 +332,16 @@
     }
 
     // ── 01 : la simulation dans la page ──
+    let simFam = 'delta'; // (hors de d.state : d.reset() le remet à zéro)
     demo('#fig-sim', {
       title: 'La table, simulée ici', aspect: 2, animate: true,
       buttons: [
-        { label: 'Delta', onClick: (d) => { d.state.fam = 'delta'; d.reset(); } },
-        { label: 'Ravines', onClick: (d) => { d.state.fam = 'ravines'; d.reset(); } },
-        { label: 'Brèche', onClick: (d) => { d.state.fam = 'breche'; d.reset(); } },
+        { label: 'Delta', onClick: (d) => { simFam = 'delta'; d.reset(); } },
+        { label: 'Ravines', onClick: (d) => { simFam = 'ravines'; d.reset(); } },
+        { label: 'Brèche', onClick: (d) => { simFam = 'breche'; d.reset(); } },
       ],
       setup(d) {
-        const fam = d.state.fam ?? 'delta';
+        const fam = simFam;
         const S = familySpec(fam); S.seed = 5;
         const NX = 96, NY = 48, b0 = initialTerrain(S.form, NX, NY, 5);
         d.state = { fam, S, b0, sim: createSim({ NX, NY, b0, strata: STRATA, S }) };
@@ -179,16 +355,119 @@
         s.cx.putImageData(s.img, 0, 0);
         g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
         g.drawImage(s.cv, 0, 0, d.w, d.h);
-        d.status(`${s.fam} · T = ${s.sim.st.T.toFixed(1)} s / ${s.S.T} s · ${s.sim.st.steps} pas`);
+        d.status(`${s.fam} · temps de l'eau ${s.sim.st.T.toFixed(1)} s / ${s.S.T} s · ${s.sim.st.steps} pas`);
       },
     });
 
-    // ── 03 : la capacité ──
+    // ── 02 : une rangée de cellules ──
+    demo('#fig-grille', {
+      title: 'Sable, eau, surface libre', aspect: 2.4,
+      draw(g, d) {
+        const N = 16, m = 34, W = d.w - 2 * m, cw = W / N, base = d.h - 30, sy = (d.h - 80) / 0.05;
+        const bed = [0.042, 0.04, 0.037, 0.031, 0.024, 0.018, 0.012, 0.009, 0.008, 0.01, 0.014, 0.019, 0.026, 0.033, 0.038, 0.041];
+        const eta = 0.026, Y = (z) => base - z * sy;
+        for (let i = 0; i < N; i++) {
+          const x = m + i * cw, b = bed[i];
+          g.fillStyle = alpha(C.c1, 0.8); g.fillRect(x + 1, Y(b), cw - 2, base - Y(b));
+          if (eta > b) { g.fillStyle = alpha(C.c2, 0.6); g.fillRect(x + 1, Y(eta), cw - 2, Y(b) - Y(eta)); }
+        }
+        g.strokeStyle = C.c2; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(m + 3 * cw, Y(eta)); g.lineTo(m + 13 * cw, Y(eta)); g.stroke(); g.setLineDash([]);
+        label(g, 'η = b + d', m + 13 * cw + 6, Y(eta) + 4, { color: C.c2 });
+        // cotes sur une cellule mouillée et une cellule sèche
+        const xi = m + 8 * cw + cw / 2;
+        arrow(g, xi, base, xi, Y(bed[8]) + 1, { color: C.bg, width: 1.5 });
+        label(g, 'b', xi + 6, (base + Y(bed[8])) / 2 + 4, { color: C.bg, size: 13 });
+        arrow(g, xi, Y(bed[8]) - 1, xi, Y(eta) + 1, { color: C.ink, width: 1.5, head: 6 });
+        label(g, 'd', xi + 6, (Y(bed[8]) + Y(eta)) / 2 + 4, { color: C.ink, size: 13 });
+        const x1 = m + 1 * cw + cw / 2;
+        label(g, 'cellule sèche : d = 0', x1 - cw / 2, Y(bed[1]) - 10);
+        g.strokeStyle = C.dim; g.beginPath(); g.moveTo(m + 2 * cw, base + 10); g.lineTo(m + 3 * cw, base + 10); g.stroke();
+        label(g, 'ℓ = 2,5 mm', m + 3 * cw + 6, base + 14, { size: 11 });
+      },
+    });
+
+    // ── 03 : le canal à une dimension (mêmes équations que sim.js, avec NY = 1) ──
+    const CANAL = { N: 100, l: 0.01 };
+    function canalSetup(d) {
+      const { N, l } = CANAL;
+      const b = new Float64Array(N), w = new Float64Array(N);
+      for (let i = 0; i < N; i++) { b[i] = 0.004 + 0.012 * Math.max(0, (i - 60) / 40); w[i] = i < 25 ? 0.044 - b[i] : 0; }
+      d.state = { b, d: w, fL: new Float64Array(N), fR: new Float64Array(N), v: new Float64Array(N), T: 0, vol0: w.reduce((a, x) => a + x, 0), min: 0, dead: 0, pour: null };
+    }
+    function canalStep(st, o) {
+      const { N, l } = CANAL, P = PHYS, A = l * l, g = P.g, dt = P.courant * l * o.dtk;
+      const { b, d: w, fL, fR, v } = st;
+      for (let i = 0; i < N; i++) {
+        if (w[i] < P.dWet) { fL[i] = fR[i] = 0; continue; }
+        const h = b[i] + w[i];
+        const frein = o.fric ? 1 / (1 + dt * g * P.manning ** 2 * Math.abs(v[i]) / Math.pow(Math.max(w[i], 1e-4), 4 / 3)) : 1;
+        const flow = (f, j) => {
+          if (j < 0 || j >= N) return 0;
+          const dh = h - b[j] - w[j];
+          return o.mem ? Math.max(0, (f + dt * A * g * dh / l) * frein) : Math.max(0, 0.25 * A * dh / dt);
+        };
+        const a = flow(fL[i], i - 1), e = flow(fR[i], i + 1), s = a + e;
+        const K = o.K && s > 0 ? Math.min(1, w[i] * A / (s * dt)) : 1;
+        fL[i] = a * K; fR[i] = e * K;
+      }
+      for (let i = 0; i < N; i++) {
+        const inL = i > 0 ? fR[i - 1] : 0, inR = i < N - 1 ? fL[i + 1] : 0;
+        const d0 = w[i]; w[i] = d0 + dt * (inL + inR - fL[i] - fR[i]) / A;
+        const dm = Math.max((d0 + w[i]) / 2, P.dVel);
+        v[i] = (inL - fL[i] + fR[i] - inR) / 2 / (dm * l);
+      }
+      st.T += dt;
+      return dt;
+    }
+    demo('#fig-canal', {
+      title: 'L’eau dans un canal', aspect: 2.3, animate: true, alt: 'Un canal à une dimension où l’eau d’un barrage se répand',
+      controls: [{ key: 'dtk', label: 'Pas de temps (× celui du projet)', min: 0.5, max: 6, step: 0.1, value: 1, fmt: (x) => `× ${x.toFixed(1)}` }],
+      buttons: [
+        { key: 'mem', label: 'Débit qui se souvient', toggle: true, value: true },
+        { key: 'K', label: 'Limiteur K', toggle: true, value: true },
+        { key: 'fric', label: 'Frottement', toggle: true, value: true },
+        { label: 'Rejouer', onClick: (d) => d.reset() },
+      ],
+      setup: canalSetup,
+      pointer(d, e) {
+        if (e.type === 'up' || !e.down) { d.state.pour = null; return; }
+        d.state.pour = clamp(Math.floor((e.x - 24) / ((d.w - 48) / CANAL.N)), 0, CANAL.N - 1);
+      },
+      draw(g, d) {
+        const st = d.state, { N } = CANAL, o = d.s;
+        // temps réel : autant de pas que la durée de l'image en contient (plafonné)
+        if (!st.dead) {
+          let t = 0; const goal = Math.min(d.dt, 1 / 30);
+          for (let k = 0; k < 80 && t < goal; k++) {
+            if (st.pour != null) for (let i = Math.max(0, st.pour - 2); i <= Math.min(N - 1, st.pour + 2); i++) st.d[i] += 0.00012 * o.dtk;
+            t += canalStep(st, o);
+            let mn = Infinity, mx = 0; for (let i = 0; i < N; i++) { mn = Math.min(mn, st.d[i]); mx = Math.max(mx, st.d[i]); }
+            st.min = Math.min(st.min, mn);
+            if (!isFinite(mx) || mx > 0.5) { st.dead = 1; break; }
+          }
+        } else { st.dead += d.dt; if (st.dead > 2.5) { d.reset(); return; } }
+        const m = 24, W = d.w - 2 * m, cw = W / N, base = d.h - 18, top = 26, sy = (base - top) / 0.075, Y = (z) => base - z * sy;
+        for (let i = 0; i < N; i++) {
+          const x = m + i * cw, b = st.b[i], w = st.dead ? 0 : st.d[i];
+          g.fillStyle = alpha(C.c1, 0.75); g.fillRect(x, Y(b), cw + 0.4, base - Y(b));
+          if (w > 0) { g.fillStyle = alpha(C.c2, 0.7); g.fillRect(x, Y(Math.min(0.075, b + w)), cw + 0.4, Y(b) - Y(Math.min(0.075, b + w))); }
+          else if (w < -1e-6) { g.fillStyle = C.c3; g.fillRect(x, Y(b), cw + 0.4, Math.min(base - Y(b), -w * sy)); }
+        }
+        g.strokeStyle = C.grid; g.beginPath(); g.moveTo(m, base + 0.5); g.lineTo(m + W, base + 0.5); g.stroke();
+        label(g, `hauteurs × ${(sy / (W / (N * CANAL.l))).toFixed(0)}`, d.w - m, 16, { align: 'right', size: 11 });
+        if (st.dead) { label(g, 'la simulation a divergé', d.w / 2, d.h / 2, { color: C.c3, align: 'center', size: 15 }); d.status('divergence'); return; }
+        const vol = st.d.reduce((a, x) => a + x, 0);
+        const neg = st.min < -1e-6 ? ` · <span style="color:${C.c3}">eau minimale ${(st.min * 1000).toFixed(2)} mm</span>` : '';
+        d.status(`t = ${st.T.toFixed(1)} s · volume ${(vol / st.vol0 * 100).toFixed(0)} %${neg}`);
+      },
+    });
+
+    // ── 04 : la capacité ──
     // (régime établi : vitesse de Manning v = d^⅔ S^½ / n, donc τ/ρg = n²v²/d^⅓ = d·S)
     demo('#fig-capa', {
       title: 'Capacité de transport', aspect: 2.1,
       controls: [
-        { key: 'S', label: 'Pente de la surface libre (%)', min: 0.5, max: 8, step: 0.1, value: 3.5 },
+        { key: 'S', label: 'Pente de la surface de l’eau (%)', min: 0.5, max: 8, step: 0.1, value: 3.5 },
         { key: 'd', label: 'Profondeur (mm)', min: 0.2, max: 12, step: 0.1, value: 1 },
       ],
       draw(g, d) {
@@ -207,18 +486,97 @@
         const x = m + (dd / dmax) * W, y = m + H - (c / cmax) * H;
         g.fillStyle = C.ink; g.beginPath(); g.arc(x, y, 4, 0, TAU); g.fill();
         label(g, 'profondeur →', m + W, m + H + 18, { align: 'right' }); label(g, 'capacité ↑', m, m - 8);
-        d.status(`v = ${v(dd, S).toFixed(2)} m/s · τ/ρg = ${(t * 1e6).toFixed(0)} µm ${t > P.tauC ? '>' : '≤'} τc = ${(P.tauC * 1e6).toFixed(0)} µm${t > P.tauC ? ` · s_eq = ${(c * 1e6).toFixed(1)} µm` : ' : rien n’est arraché'}`);
+        d.status(`v = ${v(dd, S).toFixed(2)} m/s · τ/ρg = ${(t * 1e6).toFixed(0)} µm ${t > P.tauC ? '>' : '≤'} τc = ${(P.tauC * 1e6).toFixed(0)} µm${t > P.tauC ? ` · C = ${(c * 1e6).toFixed(1)} µm` : ' : rien n’est arraché'}`);
       },
     });
 
-    // ── 04 : le talus ──
+    // ── 04 : le sable porté par l'eau, conservatif ou semi-lagrangien ──
+    // (la méthode vit hors de d.state : d.reset() remet d.state à zéro)
+    const SED = { N: 100, l: 0.01, q: 0.002, cin: 0.02, dt: 0.0055 };
+    let sedFlux = true;
+    const grain = (i, k, s) => { let h = Math.imul(i * 73856093 ^ k * 19349663 ^ s * 83492791, 2654435761) >>> 0; h ^= h >>> 15; return (Math.imul(h, 2246822519) >>> 0) / 4294967296; };
+    demo('#fig-sable', {
+      title: 'Compter le sable', aspect: 1.75, animate: true,
+      alt: 'Un chenal qui entre dans un lac, le sable transporté et les comptes du sable',
+      buttons: [
+        { label: 'Porté par les débits', onClick: (d) => { sedFlux = true; d.reset(); } },
+        { label: 'Semi-lagrangien', onClick: (d) => { sedFlux = false; d.reset(); } },
+        { label: 'Rejouer', onClick: (d) => d.reset() },
+      ],
+      setup(d) {
+        const { N } = SED;
+        const depth = Float64Array.from({ length: N }, (_, i) => 0.003 + 0.027 / (1 + Math.exp(-(i - 55) / 4)));
+        d.state = { depth, v: depth.map((x) => SED.q / x), s: new Float64Array(N), inn: 0, out: 0, T: 0 };
+        d.fig.querySelectorAll('.btns button').forEach((b, k) => { if (k < 2) b.setAttribute('aria-pressed', String(k === (sedFlux ? 0 : 1))); });
+      },
+      draw(g, d) {
+        const st = d.state, { N, l, q, cin, dt } = SED;
+        if (st.T < 20) for (let k = 0; k < 8; k++) {
+          const sIn = cin * q * dt, n = new Float64Array(N);
+          if (sedFlux) {
+            // chaque cellule cède la part de son sable que porte l'eau qui sort
+            for (let i = 0; i < N; i++) {
+              const inflow = i === 0 ? sIn / l : q * (st.s[i - 1] / st.depth[i - 1]) * dt / l;
+              n[i] = st.s[i] + inflow - q * (st.s[i] / st.depth[i]) * dt / l;
+            }
+            st.out += q * (st.s[N - 1] / st.depth[N - 1]) * dt;
+          } else {
+            // chaque cellule recopie le sable de l'endroit d'où vient son eau
+            for (let i = 0; i < N; i++) {
+              const x = i - st.v[i] * dt / l;
+              if (x < 0) { n[i] = cin * st.depth[0] + (st.s[0] - cin * st.depth[0]) * (x + 1); continue; }
+              const j = Math.floor(x), t = x - j; n[i] = st.s[j] * (1 - t) + st.s[Math.min(N - 1, j + 1)] * t;
+            }
+            st.out += st.s[N - 1] * st.v[N - 1] * dt;
+          }
+          st.s.set(n); st.inn += sIn; st.T += dt;
+        }
+        const present = st.s.reduce((a, x) => a + x, 0) * l, lost = Math.max(0, st.inn - st.out - present);
+        const m = 24, W = d.w * 0.68 - m, cw = W / N;
+        // 1. la coupe : surface de l'eau presque plate, fond qui plonge dans le lac ; un point par grain
+        const top = 34, H1 = d.h * 0.5, sy = (H1 - 10) / 0.031, surf = top + 4;
+        label(g, 'chenal : eau mince et rapide', m, top - 12, { size: 11 });
+        label(g, 'lac : eau profonde et lente', m + W, top - 12, { size: 11, align: 'right' });
+        for (let i = 0; i < N; i++) {
+          const x = m + i * cw, y1 = surf + st.depth[i] * sy;
+          g.fillStyle = alpha(C.c2, 0.28); g.fillRect(x, surf, cw + 0.4, y1 - surf);
+          g.fillStyle = alpha(C.ink, 0.12); g.fillRect(x, y1, cw + 0.4, top + H1 + 6 - y1);
+        }
+        g.fillStyle = C.c1;
+        for (let i = 0; i < N; i++) {
+          const c = st.s[i] / st.depth[i] / cin, y1 = surf + st.depth[i] * sy;
+          for (let k = 0; surf + (k + 1) * 4 < y1; k++) if (grain(i, k, 1) < 0.5 * c) g.fillRect(m + (i + grain(i, k, 2)) * cw - 0.8, surf + (k + grain(i, k, 3)) * 4 + 1, 1.8, 1.8);
+        }
+        // 2. le débit de sable le long du canal : constant s'il ne se perd rien
+        const y0 = top + H1 + 30, H2 = d.h - y0 - 26, Yf = (r) => y0 + H2 - clamp(r / 1.2) * H2;
+        g.strokeStyle = C.grid; g.strokeRect(m, y0, W, H2);
+        g.strokeStyle = C.dim; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(m, Yf(1)); g.lineTo(m + W, Yf(1)); g.stroke(); g.setLineDash([]);
+        label(g, 'débit de sable entrant', m + W - 4, Yf(1) - 6, { size: 11, align: 'right' });
+        g.strokeStyle = C.c1; g.lineWidth = 2; g.beginPath();
+        for (let i = 0; i < N; i++) { const r = (q * st.s[i] / st.depth[i]) / (q * cin), x = m + (i + 0.5) * cw; i ? g.lineTo(x, Yf(r)) : g.moveTo(x, Yf(r)); }
+        g.stroke(); g.lineWidth = 1;
+        label(g, 'débit de sable le long du canal', m, y0 - 8, { size: 11 });
+        // 3. les comptes
+        const bx = d.w * 0.68 + 26, bw = (d.w - bx - 16) / 4, bh = d.h - top - 60, Ymax = Math.max(st.inn, 1e-12);
+        [['entré', st.inn, C.ink], ['sorti', st.out, C.c2], ['présent', present, C.c1], ['perdu', lost, C.c3]].forEach(([n, v, col], k) => {
+          const h = (v / Ymax) * bh, x = bx + k * bw;
+          g.fillStyle = alpha(C.ink, 0.06); g.fillRect(x + 3, top, bw - 8, bh);
+          g.fillStyle = col; g.fillRect(x + 3, top + bh - h, bw - 8, h);
+          label(g, n, x + bw / 2 - 1, top + bh + 16, { align: 'center', size: 11 });
+          label(g, `${(v / Ymax * 100).toFixed(0)} %`, x + bw / 2 - 1, top + bh + 31, { align: 'center', size: 11, color: col });
+        });
+        d.status(`${sedFlux ? 'porté par les débits' : 'semi-lagrangien'} · ${st.T.toFixed(1)} s · perdu ${(lost / Math.max(st.inn, 1e-12) * 100).toFixed(1)} % du sable entré`);
+      },
+    });
+
+    // ── 05 : le talus ──
     demo('#fig-talus', {
       title: 'Une berge en coupe', aspect: 2.2,
       controls: [{ key: 'cut', label: 'Creusement du pied (mm)', min: 0, max: 24, step: 0.5, value: 6 }],
       draw(g, d) {
         const N = 120, l = 0.0025, P = PHYS;
         // profil : plateau humide à gauche, chenal à droite (sous l'eau), pied creusé de `cut`
-        const b = new Float32Array(N), water = 0.008;
+        const b = new Float32Array(N), water = 0.014;
         for (let i = 0; i < N; i++) b[i] = i < 56 ? 0.03 : 0.012;
         for (let i = 56; i < 66; i++) b[i] -= (d.s.cut / 1000) * (1 - (i - 56) / 10);
         for (let i = 56; i < N; i++) b[i] = Math.max(0, b[i] - d.s.cut / 1000 * 0.4);
@@ -246,7 +604,7 @@
       },
     });
 
-    // ── 05 : les strates ──
+    // ── 06 : les strates ──
     demo('#fig-strates', {
       title: 'Coupe en travers', aspect: 2.4,
       controls: [{ key: 'inc', label: 'Incision du chenal (mm)', min: 0, max: 30, step: 0.5, value: 9 }, { key: 'seed', label: 'Graine', min: 1, max: 40, step: 1, value: 7 }],
@@ -272,7 +630,7 @@
       },
     });
 
-    // ── 06 : la lame ──
+    // ── 07 : la lame ──
     let profile = null;
     function computeProfile() {
       const S = familySpec('delta'); S.seed = 5;
@@ -304,13 +662,14 @@
         g.stroke(); g.setLineDash([]);
         g.fillStyle = C.ink; g.fillRect(X(xL) - 2, Y(P.b0[k]) - 50, 4, 50);
         label(g, 'relief en fin d’expérience (pointillés)', m, m - 6);
+        label(g, 'amont', m, m + H + 18, { size: 11 }); label(g, 'aval', m + W, m + H + 18, { size: 11, align: 'right' });
         d.status(`bourrelet : ${(V * 1e4).toFixed(1)} cm² de section, ${(hB * 1000).toFixed(1)} mm de haut`);
       },
     });
 
-    // ── 07 : l'horloge ──
+    // ── 08 : l'horloge ──
     demo('#fig-horloge', {
-      title: 'Les courbes du film', aspect: 2.2,
+      title: 'Les courbes de la boucle', aspect: 2.2,
       controls: [{ key: 'u', label: 'Phase u', min: 0, max: 1, step: 0.001, value: 0.4 }],
       buttons: [
         { label: 'Delta', onClick: (d) => { d.state.f = 'delta'; } }, { label: 'Recul', onClick: (d) => { d.state.f = 'recul'; } },
@@ -320,9 +679,9 @@
         const S = familySpec(d.state.f ?? 'delta'), m = 30, W = d.w - 2 * m, H = d.h - 2 * m - 26;
         const qmax = Math.max(1e-9, ...(S.inflow ?? [{ q: 0 }]).map((f) => f.q)), rmax = S.rain?.rate || 1;
         const curves = [
-          ['temps hydraulique', C.c1, (F) => F.T / S.T],
+          ['temps de l’eau', C.c1, (F) => F.T / S.T],
           ['débit', C.c2, (F) => F.inflow / qmax], ['pluie', C.c2, (F) => F.rain / rmax],
-          ['niveau de base', C.c4, (F) => (F.base - 0.03) / 0.06],
+          ['niveau du déversoir', C.c4, (F) => (F.base - 0.03) / 0.06],
           ['séchage', C.c3, (F) => F.dry],
           ['portique', C.ink, (F) => (F.gantryX + 0.13) / (TABLE.Lx + 0.15)], ['levée de la lame', C.dim, (F) => F.bladeLift / 0.17],
         ];
@@ -334,13 +693,13 @@
         });
         const x = m + d.s.u * W; g.strokeStyle = C.ink; g.beginPath(); g.moveTo(x, m); g.lineTo(x, m + H); g.stroke();
         const F = filmState(d.s.u, S);
-        d.status(`T = ${F.T.toFixed(1)} s · eau ${F.water ? 'visible' : 'absente'} · lame ${F.screed > -1.5 ? (F.screed >= 0 ? `à ${F.screed.toFixed(2)} m` : 'passée') : 'garée ou levée'}`);
+        d.status(`temps de l'eau ${F.T.toFixed(1)} s · eau ${F.water ? 'visible' : 'absente'} · lame ${F.screed > -1.5 ? (F.screed >= 0 ? `à ${F.screed.toFixed(2)} m` : 'passée') : 'garée ou levée'}`);
       },
     });
 
-    // ── 08 : la ligne d'eau ──
+    // ── 09 : la ligne d'eau ──
     demo('#fig-eau', {
-      title: 'La ligne d’eau', aspect: 2.4,
+      title: 'La rive', aspect: 2.4,
       buttons: [{ key: 'eta', label: 'Interpoler la surface libre', toggle: true, value: true }],
       draw(g, d) {
         const N = 64, l = 0.0025, m = 24, W = d.w - 2 * m, H = d.h - 2 * m;
@@ -349,7 +708,6 @@
         const X = (x) => m + (x / (N * l)) * W, Y = (z) => m + H - ((z + 0.01) / 0.03) * H;
         // eau à demi-résolution : bloc de 2 cellules
         const blocks = []; for (let k = 0; k < N / 2; k++) { const x = (2 * k + 1) * l; const b1 = bed((2 * k + 0.5) * l), b2 = bed((2 * k + 1.5) * l); const wet = [b1, b2].filter((b) => b < water); blocks.push({ x, eta: wet.length ? water : -1, depth: wet.reduce((a, b) => a + water - b, 0) / 2 }); }
-        const at = (x, key) => { const f = clamp(x / (2 * l) - 0.5, 0, N / 2 - 1.001), i = Math.floor(f), t = f - i; const A = blocks[i], B = blocks[i + 1]; return [A, B]; };
         g.fillStyle = alpha(C.c1, 0.85); g.beginPath(); g.moveTo(X(0), m + H);
         for (let i = 0; i <= 400; i++) { const x = (i / 400) * N * l; g.lineTo(X(x), Y(bed(x))); }
         g.lineTo(X(N * l), m + H); g.closePath(); g.fill();
@@ -366,7 +724,7 @@
         for (let i = 600; i >= 0; i--) { const x = (i / 600) * N * l; g.lineTo(X(x), Y(bed(x))); }
         g.closePath(); g.fill();
         g.strokeStyle = C.dim; g.setLineDash([3, 3]); g.beginPath(); g.moveTo(X(0), Y(water)); g.lineTo(X(N * l), Y(water)); g.stroke(); g.setLineDash([]);
-        d.status(d.s.eta ? 'surface libre interpolée : la rive est là où l’eau rencontre le lit' : 'hauteur d’eau interpolée : la rive suit les blocs de 5 mm');
+        d.status(d.s.eta ? 'surface libre interpolée : la rive est là où l’eau rencontre le sable' : 'épaisseur d’eau interpolée : la rive suit les cellules de 5 mm');
       },
     });
   </script>
