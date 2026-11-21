@@ -11,13 +11,10 @@
 import * as THREE from 'three/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { generate, upgrade, kelvinToHex, MOODS, FAMILIES } from './recipe.js';
-import { cameraPose, foyerClock } from './timeline.js';
 import { createGenerator } from './gen/client.js';
-import { createStage } from './scene/stage.js';
-import { makeEnvironment } from './scene/env.js';
+import { createCore } from './core.js';
 import { G } from './scene/globals.js';
-import { setNoiseVolume, setLite } from './scene/materials.js';
-import { createPost } from '../../shared/render/post.js';
+import { setLite } from './scene/materials.js';
 import { createAccumulator, jitter } from '../../shared/render/accum.js';
 import { createUI } from './app/ui.js';
 import { installChrome } from '../../shared/app/chrome.js';
@@ -92,21 +89,18 @@ async function main() {
   // préparation découpée en petits lots (app/warmup.js).
   const pipes = asyncPipelines(renderer);
 
-  const scene = new THREE.Scene();
-  scene.background = new THREE.Color();
-  const camera = new THREE.PerspectiveCamera(35, innerWidth / innerHeight, 0.01, 40); // (unités : mètres)
+  // ── Modules ──
+  // (la scène, sa recette et le rendu d'une phase : core.js, partagé avec le
+  // relais de la méga-scène)
+  const gen = createGenerator(LITE ? Math.max(2, Math.min(3, (navigator.hardwareConcurrency || 4) - 1)) : undefined);
+  const RENDER = loadRender(LITE);
+  const core = await createCore({ renderer, width: innerWidth, height: innerHeight, gen, lite: LITE, RENDER });
+  const { scene, camera, stage, post } = core;
   const controls = new OrbitControls(camera, canvas);
   controls.enabled = false;
   controls.enableDamping = true;
   const camState = { free: false };
-
-  // ── Modules ──
-  const gen = createGenerator(LITE ? Math.max(2, Math.min(3, (navigator.hardwareConcurrency || 4) - 1)) : undefined);
-  setNoiseVolume(await gen.request({ seed: `${NAME}-noise` }, 'noise')); // (les matériaux en dépendent)
-  const stage = createStage(scene, gen, { lite: LITE, renderer });
-  const post = createPost(renderer, scene, camera);
   const accum = createAccumulator(renderer);
-  const RENDER = loadRender(LITE);
   const governor = createGovernor({ target: 1 / 45, min: 0.5, max: 1, onChange: () => !busy && resize() });
   const pace = createPacer(() => RENDER.maxFps);
 
@@ -116,15 +110,7 @@ async function main() {
     try { R = upgrade(await unpackRecipe(location.hash.slice(3))); } catch { R = null; }
   }
   R ??= generate(params.get('seed') || DEFAULT_SEED, { ...(params.get('mood') ? { mood: params.get('mood') } : {}), ...(params.get('family') ? { family: params.get('family') } : {}) });
-  let envKey = '', clock = null;
-  function syncEnv() {
-    const k = R.env.preset;
-    if (k === envKey) return;
-    envKey = k;
-    const old = scene.environment;
-    scene.environment = makeEnvironment(k, 0, LITE ? 512 : 1024);
-    old?.dispose();
-  }
+  const syncEnv = () => core.syncEnv();
 
   // ── Écran de chargement : le calcul lui-même (app/loaderArt.js) ──
   // Pour un Foyer, chaque grille de l'application ∇u du transport optimal
@@ -177,9 +163,7 @@ async function main() {
     // (le fondu d'entrée de l'écran se termine avant que la scène ne change)
     sleep(firstRecipe ? 0 : 280).then(() => {
       if (R !== recipe) return;
-      syncEnv(); // (avant les matériaux : l'eau et la vitre reflètent le studio)
-      clock = R.family === 'foyer' ? foyerClock(R) : null;
-      stage.setRecipe(R);
+      core.setRecipe(R); // (studio, horloge, puis la scène)
       loading.applied = true;
     }).catch((e) => fail(e.message));
     firstRecipe = false;
@@ -200,7 +184,7 @@ async function main() {
     const recipe = R;
     try {
       return await warmScene({
-        renderer, scene, pipes, render: renderStep, phases: [0, 0.25, 0.5, 0.75],
+        renderer, scene, pipes, render: renderStep, phases: core.warmPhases(),
         onProgress: (f) => loader.progress(f), alive: () => R === recipe,
       });
     } finally {
@@ -210,43 +194,11 @@ async function main() {
   }
 
   // ── Rendu d'une phase ──
-  const TAU = Math.PI * 2;
-  const _f = new THREE.Vector3(), _u = new THREE.Vector3(), _r = new THREE.Vector3();
   // u : phase « déroulée » (partie entière = nombre de boucles accomplies) ;
   // sub : décalages d'un rendu accumulé (lentille, pixel), facultatif
   function renderAt(u, sub = null) {
-    const ph = u - Math.floor(u);
-    G.phasePrev.value = G.phase.value;
-    G.phase.value = ph;
-    G.frame.value = (G.frame.value + 1) % 65536;
-    const C = R.camera;
     if (camState.free) controls.update();
-    else {
-      // caméra périodique en ph (même pose à 0 et à 1), voir timeline.js
-      const pose = cameraPose(R, ph, clock);
-      camera.position.set(...pose.pos);
-      camera.up.set(0, 1, 0);
-      camera.lookAt(...pose.target);
-    }
-    if (camera.fov !== C.fov) { camera.fov = C.fov; camera.updateProjectionMatrix(); }
-    camera.clearViewOffset();
-    if (sub) {
-      camera.updateMatrixWorld();
-      _f.setFromMatrixColumn(camera.matrixWorld, 0); _u.setFromMatrixColumn(camera.matrixWorld, 1);
-      const ap = 0.012 * (RENDER.dof ? RENDER.bokeh : 0.3);
-      camera.position.addScaledVector(_f, sub.lens[0] * ap).addScaledVector(_u, sub.lens[1] * ap);
-      camera.lookAt(_r.set(...C.target));
-      camera.setViewOffset(canvas.width, canvas.height, sub.pixel[0], sub.pixel[1], canvas.width, canvas.height);
-    }
-    G.microDetail.value = RENDER.microDetail;
-    G.roughFloor.value = RENDER.roughFloor;
-    scene.background.set(R.bg[1]);
-    scene.environmentIntensity = R.env.intensity;
-    G.envI.value = R.env.intensity;
-    scene.environmentRotation.set(0, R.env.rotation, 0);
-    stage.update(ph);
-    post.update({ ...RENDER, lite: LITE, focus: RENDER.focus * C.dist, focusRange: RENDER.focusRange * C.dist }, R);
-    post.render();
+    core.renderAt(u, { sub, free: camState.free });
   }
   // Rendu hors de la boucle d'animation (export, image fixe, débogage) : three.js
   // ne refait la passe de scène, les ombres et les vitesses de la caméra
@@ -277,7 +229,7 @@ async function main() {
   function applyRender() {
     if (!RENDER.dynRes) governor.reset();
     resize();
-    stage.setShadowQuality(RENDER.shadows);
+    core.applyRender();
     saveRender(RENDER);
   }
 
@@ -295,7 +247,7 @@ async function main() {
       await navigator.clipboard.writeText(url.href).then(() => toast('Lien copié (scène et retouches)'), () => toast(url.href, 8000));
     },
     togglePause: () => { paused = !paused; toast(paused ? 'Pause' : 'Lecture', 900); },
-    recipeChanged: () => { clock = R.family === 'foyer' ? foyerClock(R) : null; },
+    recipeChanged: () => core.syncClock(),
     sceneChanged: () => applyRecipe(),
     finishChanged: () => stage.syncFinishes(),
     envChanged: () => syncEnv(),

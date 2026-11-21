@@ -23,24 +23,21 @@
 import * as THREE from 'three/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createPool } from './orbit/client.js';
-import { createWorld } from './scene/world.js';
-import { createPost } from './render/post.js';
+import { createCore } from './core.js';
 import { exportLoop, exportPNG } from './app/capture.js';
 import { createLoader } from './app/loader.js';
 import { createUI } from './app/ui.js';
 import { installChrome } from '../../shared/app/chrome.js';
-import { loadRender, saveRender, applyQuality, defaultsFor, SHADOWS } from './app/settings.js';
+import { loadRender, saveRender, applyQuality, defaultsFor } from './app/settings.js';
 import { wantsMobile, switchMobile, createGovernor, createPacer, bindTouch } from './app/mobile.js';
-import { generate, generateLayer, upgrade, orbitOverrides, packRecipe, unpackRecipe, MOODS } from './recipe.js';
+import { generate, generateLayer, upgrade, packRecipe, unpackRecipe, MOODS } from './recipe.js';
 import { createRng } from '../../shared/rng.js';
-import { withPivots } from './mech/design.js';
 
 const TAU = Math.PI * 2;
 const params = new URLSearchParams(location.search);
 const DEFAULT_SEED = 'bwkwvk';
 const $ = (s) => document.querySelector(s);
 const randomSeed = () => Math.random().toString(36).slice(2, 8);
-const ss5 = (x) => { const t = Math.min(1, Math.max(0, x)); return t * t * t * (t * (t * 6 - 15) + 10); };
 
 let toastTimer = 0;
 function toast(msg, ms = 2200) {
@@ -74,17 +71,6 @@ async function main() {
   const canvas = renderer.domElement;
   $('#app').appendChild(canvas);
 
-  const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x050403);
-  const camera = new THREE.PerspectiveCamera(30, innerWidth / innerHeight, 0.01, 60);
-  const controls = new OrbitControls(camera, canvas);
-  controls.enabled = false; controls.enableDamping = true;
-  controls.target.set(0, -0.16, 0);
-  const root = new THREE.Group(); // reçoit la similitude de la plongée
-  scene.add(root);
-
-  const post = createPost(renderer, scene, camera, null);
-
   // ── Compilation sans gel de l'écran de chargement. three.js crée ses
   // pipelines de rendu de façon synchrone au premier dessin : le processus
   // graphique du navigateur est alors bloqué pendant la compilation de chaque
@@ -115,256 +101,25 @@ async function main() {
     try { R = upgrade(await unpackRecipe(location.hash.slice(3))); } catch { R = null; }
   }
   R ??= generate(params.get('seed') || DEFAULT_SEED);
-  // trois mondes emboîtés : le monde m est la couche m de la recette
-  const INST = 3;
-  const M = () => INST;
-  const layerOf = (m) => m % R.layers.length;
-  const layerSeed = (m) => (layerOf(m) ? `${R.seed}/${layerOf(m)}` : R.seed);
 
+  // ── La scène, les trois mondes et le rendu d'un instant : core.js, partagé
+  // avec le relais de la méga-scène. La page y ajoute la recherche sous les
+  // yeux, l'écran de chargement et son atterrissage.
   // (mobile : moins de workers, la recherche ne doit pas étouffer le rendu)
   const pool = createPool(LITE ? Math.max(2, Math.min(3, (navigator.hardwareConcurrency || 4) - 1)) : undefined);
-  const orbits = [];
-
-  // ── caméra de base d'une couche : périodique en u (même pose à u = 0 et 1)
-  // distance qui cadre le plateau (rayon pr) en largeur comme en hauteur
-  const fitFor = (pr = 1.6) => {
-    const vf = (30 * Math.PI) / 360, hf = Math.atan(Math.tan(vf) * camera.aspect);
-    return (pr + 0.05) / Math.tan(Math.min(vf * 1.25, hf));
-  };
-  function poseParams(m, u) {
-    const c = R.layers[layerOf(m)].camera;
-    return { az: c.az + c.sweep * Math.sin(TAU * u), el: c.el + 0.06 * Math.cos(TAU * u) };
-  }
-  // pose de la caméra ; pendant la plongée, elle glisse de l'angle de la couche
-  // courante (a) vers celui de la suivante (b), pour arriver exactement sur la
-  // pose de départ de b
-  function basePose(m, u, next = null, s = 0) {
-    const A = poseParams(m, u);
-    let { az, el } = A;
-    if (next !== null && s > 0) {
-      const B = poseParams(next, u - 1);
-      // le plus court chemin d'un azimut à l'autre, choisi une fois pour toute la
-      // plongée sur les angles de base des deux couches : choisi à chaque instant
-      // (les deux azimuts balancent avec u), il changeait de sens quand l'écart
-      // passait par un demi-tour, et la caméra sautait de l'autre côté de la boule
-      const a0 = R.layers[layerOf(m)].camera.az, b0 = R.layers[layerOf(next)].camera.az;
-      const dAz = Math.atan2(Math.sin(b0 - a0), Math.cos(b0 - a0)) + (B.az - b0) - (A.az - a0);
-      az = A.az + dAz * s; el = A.el + (B.el - A.el) * s;
-    }
-    // la caméra reste dans la coque du monde (rayon RG) : au-delà, on élargit le champ
-    // (cadrage serré : la machine et le début de la couronne)
-    const frame = (W) => Math.max(W.machine.bezelR * 0.82, W.machine.bodyReach + 0.1);
-    const pr = S.worlds[m] ? frame(S.worlds[m]) : 1.6;
-    const prN = next !== null && S.worlds[next] ? frame(S.worlds[next]) : pr;
-    const want = fitFor(pr + (prN - pr) * s), r = Math.min(want, 4.3);
-    const pos = new THREE.Vector3(Math.cos(az) * Math.cos(el) * r, -0.16 + Math.sin(el) * r, Math.sin(az) * Math.cos(el) * r);
-    return { pos, target: new THREE.Vector3(0, -0.16, 0), fov: want > 4.3 ? 30 * (want / 4.3) : 30 };
-  }
-
-  // ── la boule visée dans l'image pendant la plongée. Le monde subit la
-  // similitude x → (x − tr) / kˢ ; avec tr = p·(1 − kˢ·a(s)), la boule (en p,
-  // qui bouge : elle suit son orbite) est dessinée en p·a(s). a vaut 1 au début
-  // (rien ne bouge quand la plongée commence) et 0 bien avant la fin : la boule
-  // glisse vers le centre de l'image tant qu'elle est petite, puis y reste
-  // fixée pendant qu'elle grandit. (Avec un zoom de point fixe p, a(s) =
-  // (kˢ − k) / (kˢ·(1 − k)) : la boule ne se centrait qu'à la toute fin, et
-  // remplissait déjà l'image en se promenant encore au gré de son orbite ; la
-  // caméra semblait la chercher.) À s = 1, tr = p : le raccord est inchangé.
-  const glide = (s) => 1 - ss5(s / 0.5);
-
-  // ── construction des mondes (après la recherche des orbites)
-  // (onStep(i) : un monde de plus est construit ; la construction peut échouer :
-  // l'ancienne scène reste alors en place)
-  // conceptions des machines, par orbite (calculées dans un worker, une seule
-  // fois pour les trois mondes et pour les réglages qui suivent)
-  const designs = new WeakMap();
-  async function designOf(orbit) {
-    if (!designs.has(orbit)) designs.set(orbit, withPivots(await pool.design(orbit)));
-    return designs.get(orbit);
-  }
-  async function buildWorlds(onStep = null) {
-    const sh = SHADOWS[RENDER.shadows] || SHADOWS.high;
-    const made = [];
-    await Promise.all(R.layers.map((_, l) => designOf(orbits[l]))); // (un worker par machine)
-    try {
-      for (let m = 0; m < INST; m++) {
-        if (onStep) { onStep(m); await new Promise((res) => setTimeout(res, 0)); }
-        // calque 1 + m : la lampe de chaque monde n'ombre que lui
-        made.push(createWorld({ orbit: orbits[layerOf(m)], L: R.layers[layerOf(m)], lite: LITE, shadows: sh, seed: layerSeed(m), layer: 1 + m, design: designs.get(orbits[layerOf(m)]), hold: () => R.motion.hold }));
-      }
-    } catch (e) {
-      for (const W of made) W.dispose();
-      throw e;
-    }
-    for (const W of S.worlds) { W.group.removeFromParent(); W.dispose(); }
-    S.worlds = made;
-    // les lumières de chaque monde, dans un ordre fixe (voir world.js)
-    for (const W of S.worlds) scene.add(W.rig);
-    S.k = S.worlds.map((W, m) => W.setNext(S.worlds[(m + 1) % M()]));
-    // boule visée : la plus proche de la caméra au début de la plongée
-    S.target = S.worlds.map((W, m) => {
-      const h = R.motion.hold;
-      W.update(h);
-      const cam = basePose(m, h).pos;
-      let best = 0, bd = Infinity;
-      W.local.forEach((p, j) => { const d = p.distanceTo(cam); if (d < bd) { bd = d; best = j; } });
-      return best;
-    });
-    S.worlds.forEach((W, m) => W.setTarget(S.target[m]));
-    S.passage = S.worlds.map((W, m) => passage(m));
-    S.root = -1;
-    applyLive();
-  }
-
-  // ── la monture de la boule visée livre passage à la caméra. Au début de la
-  // plongée, ses anneaux ralentissent et s'arrêtent, et la cage pivote (autour
-  // de la verticale) jusqu'à présenter un vide sur la trajectoire de la caméra :
-  // celle-ci passe entre les montants, et la monture sort du cadre d'elle-même.
-  // La trajectoire est connue d'avance (tout ne dépend que de τ) : on
-  // l'échantillonne là où elle traverse la monture et l'on cherche l'angle qui
-  // l'en écarte le plus, en tournant le moins possible.
-  const RING_STOP = 0.15; // (durée, en couche, du ralentissement des anneaux)
-  function passage(m) {
-    const W = S.worlds[m], j = S.target[m], G = W.globes[j], h = R.motion.hold, k = S.k[m];
-    const next = (m + 1) % M();
-    // anneaux : angle et vitesse au début de la plongée, angle d'arrêt
-    W.update(h);
-    const a0 = G.mount.rings.map((r) => r.rotation.y);
-    W.update(h + 1e-3);
-    const sp = G.mount.rings.map((r, i) => (r.rotation.y - a0[i]) / 1e-3);
-    const stop = a0.map((a, i) => a + sp[i] * RING_STOP * 0.5);
-    // sommets de la monture (dans son repère, anneaux arrêtés)
-    G.mount.rings.forEach((r, i) => { r.rotation.y = stop[i]; });
-    G.mount.group.rotation.y = 0;
-    G.mount.group.updateMatrixWorld(true);
-    const inv = new THREE.Matrix4().copy(G.mount.group.matrixWorld).invert(), mm = new THREE.Matrix4(), v = new THREE.Vector3();
-    const verts = [];
-    let total = 0;
-    G.mount.group.traverse((o) => { if (o.isMesh) total += o.geometry.attributes.position.count; });
-    const step = Math.max(1, Math.ceil(total / 1500));
-    G.mount.group.traverse((o) => {
-      if (!o.isMesh) return;
-      mm.multiplyMatrices(inv, o.matrixWorld);
-      const pos = o.geometry.attributes.position;
-      for (let i = 0; i < pos.count; i += step) verts.push(v.fromBufferAttribute(pos, i).applyMatrix4(mm).clone());
-    });
-    // trajectoire de la caméra dans le repère du monde, relative à la boule
-    const path = [];
-    for (let q = 0; q <= 200; q++) {
-      const u = h + (1 - h) * (q / 200), s = ss5((u - h) / (1 - h)), ks = Math.pow(k, s);
-      W.update(u);
-      const p = W.local[j];
-      const cam = basePose(m, u, next, s).pos.multiplyScalar(ks).add(p.clone().multiplyScalar(1 - ks * glide(s)));
-      const rel = cam.sub(p);
-      const d = rel.length();
-      if (d > W.rg * 0.85 && d < W.rg * 1.8) path.push(rel);
-    }
-    let best = { yaw: 0, score: -Infinity };
-    const cand = [];
-    if (path.length && verts.length) {
-      for (let q = 0; q < 144; q++) {
-        const yaw = ((q / 144) * 2 - 1) * Math.PI, c = Math.cos(yaw), sn = Math.sin(yaw);
-        let dmin = Infinity;
-        for (const p of path) for (const w of verts) {
-          // (rotation de la monture d'angle yaw autour de y)
-          const x = w.x * c + w.z * sn, z = -w.x * sn + w.z * c;
-          const d = Math.hypot(x - p.x, w.y - p.y, z - p.z);
-          if (d < dmin) dmin = d;
-        }
-        cand.push({ yaw, score: Math.min(dmin, W.rg * 0.4), clear: dmin / W.rg });
-      }
-      // parmi les angles presque aussi dégagés que le meilleur, le plus petit
-      // (les montures ont des symétries : beaucoup d'angles se valent)
-      const top = Math.max(...cand.map((c) => c.score));
-      best = cand.filter((c) => c.score >= top - 0.03 * W.rg).sort((x, y) => Math.abs(x.yaw) - Math.abs(y.yaw))[0];
-    }
-    return { yaw: best.yaw, clear: best.clear, samples: path.length, a0, sp };
-  }
-
-  // ── la plongée : état complet à l'instant τ (pure fonction de τ)
-  const tmp = new THREE.Vector3(), col = new THREE.Color();
-  function setTime(tau) {
-    const Mn = M();
-    S.tau = ((tau % Mn) + Mn) % Mn;
-    if (!S.worlds.length) return;
-    const d = Math.floor(S.tau), u = S.tau - d;
-    const a = d % Mn, b = (d + 1) % Mn, c = (d + 2) % Mn;
-    const Wa = S.worlds[a], Wb = S.worlds[b], Wc = S.worlds[c];
-    // emboîtement : b dans la boule visée de a, c dans celle de b
-    if (S.root !== a) {
-      S.root = a;
-      for (const W of S.worlds) { W.group.removeFromParent(); W.group.visible = true; }
-      for (const W of S.worlds) for (const G of W.globes) if (G.mini) G.mini.visible = true;
-      root.add(Wa.group); Wa.group.scale.setScalar(1);
-      const Ga = Wa.globes[S.target[a]], Gb = Wb.globes[S.target[b]];
-      Ga.inner.add(Wb.group); Wb.group.scale.setScalar(S.k[a]); Ga.mini.visible = false;
-      if (Mn > 2) { Gb.inner.add(Wc.group); Wc.group.scale.setScalar(S.k[b]); }
-      scene.background.copy(Wa.bg);
-      caption();
-      applyLive();
-    }
-    Wa.update(u);
-    Wb.update(u - 1);
-    if (Mn > 2) Wc.update(u - 2);
-    // similitude : zoom sur la boule visée, qui glisse vers le centre de l'image (voir glide)
-    const h = R.motion.hold, s = ss5((u - h) / (1 - h)), k = S.k[a];
-    const p = Wa.local[S.target[a]];
-    const ks = Math.pow(k, s), tr = tmp.copy(p).multiplyScalar(1 - ks * glide(s));
-    root.scale.setScalar(1 / ks);
-    root.position.copy(tr).multiplyScalar(-1 / ks);
-    // la monture de la boule visée s'efface quand on s'en approche, puis son
-    // verre quand il remplit l'image ; tout revient à l'identique d'une couche à
-    // l'autre (ce sont les réglages du monde courant ; les autres sont pleins)
-    for (const W of [Wa, Wb, Wc]) {
-      W.glassFade.value = 1;
-      for (const G of W.globes) G.mount.group.rotation.y = 0;
-    }
-    const Ps = S.passage?.[a];
-    if (Ps && u > h) {
-      const G = Wa.globes[S.target[a]];
-      const x = Math.min(1, (u - h) / RING_STOP);
-      G.mount.rings.forEach((r, i) => { r.rotation.y = Ps.a0[i] + Ps.sp[i] * RING_STOP * (x - x * x / 2); });
-      G.mount.group.rotation.y = Ps.yaw * ss5(s / 0.5);
-    }
-    Wa.glassFade.value = 1 - ss5((s - 0.45) / 0.4);
-    // échelle de chaque monde dans l'image : chaque monde n'est éclairé que par
-    // ses propres lumières, à son échelle (intensité × échelle²) : rien ne
-    // s'allume ni ne s'éteint, la plongée est auto-similaire
-    const sa = 1 / ks, sb = k / ks, sc = sb * S.k[b];
-    Wa.setScale(sa); Wb.setScale(sb);
-    if (Mn > 2) {
-      // le troisième monde n'occupe que quelques pixels tant qu'on n'a pas
-      // plongé : sa miniature suffit (des milliers d'appels de dessin en moins)
-      const show = sc > 0.3 * S.k[b];
-      Wc.group.visible = show;
-      Wb.globes[S.target[b]].mini.visible = !show;
-      Wc.setScale(sc, show);
-    }
-    for (let m = 0; m < Mn; m++) S.worlds[m].syncRig();
-    // caméra (fixe dans l'image, pose de base de la couche) ; mise au point
-    // sur la machine, puis sur la boule visée
-    if (!R.motion.free) {
-      const pose = basePose(a, u, b, s);
-      camera.position.copy(pose.pos); camera.lookAt(pose.target);
-      if (Math.abs(camera.fov - pose.fov) > 1e-4) { camera.fov = pose.fov; camera.updateProjectionMatrix(); }
-      const g = new THREE.Vector3().copy(p).sub(tr).multiplyScalar(1 / ks); // boule visée, dans l'image
-      const focusPt = pose.target.clone().lerp(g, ss5(s * 3));
-      post.U.focus.value = camera.position.distanceTo(focusPt);
-      post.U.focusRange.value = RENDER.focusSpread * post.U.focus.value;
-    }
-  }
-
-  // ── Réglages à vif
-  function applyLive() {
-    const Wa = S.worlds[Math.max(0, S.root)];
-    if (Wa) post.U.warmth.value = RENDER.warmth + Wa.L.light.warmth;
-  }
+  const core = await createCore({ renderer, width: innerWidth, height: innerHeight, gen: pool, lite: LITE, RENDER, S, onRoot: () => caption() });
+  core.use(R);
+  const { scene, camera, root, post, orbits, M, designOf, buildWorlds } = core;
+  const controls = new OrbitControls(camera, canvas);
+  controls.enabled = false; controls.enableDamping = true;
+  controls.target.set(0, -0.16, 0);
+  const setTime = (tau) => core.setTime(tau);
+  const applyLive = () => core.applyLive();
   function applyRender() {
     if (!RENDER.dynRes) governor.reset();
     renderer.setPixelRatio(pixelRatio());
     renderer.setSize(innerWidth, innerHeight);
-    post.update({ ...RENDER, lite: LITE, focus: post.U.focus.value, focusRange: post.U.focusRange.value, warmth: RENDER.warmth }, null);
-    applyLive();
+    core.applyRender();
     saveRender(RENDER);
   }
 
@@ -387,7 +142,6 @@ async function main() {
   // Chaque échec (aucune orbite, essai planté, machine impossible à construire,
   // recherche trop longue) est dit à l'écran, avec de quoi repartir : une autre
   // graine, réessayer, ou revenir à la dernière scène qui marchait.
-  const SEARCH_TIMEOUT = 40000;
   function fail(msg, err) {
     if (err) console.error(err);
     S.busy = !S.worlds.length;
@@ -397,7 +151,7 @@ async function main() {
     loader.error(msg, actions);
   }
   function restoreGood() {
-    R = JSON.parse(JSON.stringify(S.good.R));
+    R = core.use(JSON.parse(JSON.stringify(S.good.R)));
     orbits.length = 0; orbits.push(...S.good.orbits);
     ui?.build();
     load();
@@ -416,24 +170,13 @@ async function main() {
       if (only !== null && m !== only && orbits[m]) continue;
       if (only === null && orbits[m]) continue;
       loader.layer(m, R.layers.map((_, i) => !!orbits[i]));
-      let seed = layerSeed(m), r = null;
-      const TRIES = 6;
-      for (let tries = 0; tries < TRIES; tries++) {
-        loader.status(tries ? `la graine précédente n’a donné aucune chorégraphie : nouvelle graine (${tries + 1} / ${TRIES})` : '');
-        try {
-          loader.begin(seed, 24);
-          r = await pool.search(seed, { maxAttempts: 24, timeout: SEARCH_TIMEOUT, over: { ...orbitOverrides(R.layers[m]), maxArms: 14 }, onSnap: (i, sn) => loader.snap(i, sn), onTry: (i, res) => loader.result(i, res) });
-        } catch (e) {
-          if (run !== S.run) return;
-          return fail(`La recherche d’orbite a échoué (${e.message}).`, e);
-        }
-        if (run !== S.run) return;
-        if (r.ok) break;
-        if (r.reason === 'timeout') return fail('La recherche d’orbite a pris trop de temps (plus de 40 s). Ces contraintes sont peut-être trop difficiles.');
-        seed = `${seed}+`;
-      }
-      if (!r.ok) return fail(`Aucune orbite trouvée avec ces contraintes (${TRIES} graines essayées).`);
-      orbits[m] = r.orbit;
+      const res = await core.searchLayer(m, {
+        onStatus: (t) => loader.status(t), onBegin: (seed, n) => loader.begin(seed, n),
+        onSnap: (i, sn) => loader.snap(i, sn), onTry: (i, r) => loader.result(i, r), alive: () => run === S.run,
+      });
+      if (run !== S.run) return;
+      if (!res.ok) return fail(res.message, res.error);
+      orbits[m] = res.orbit;
     }
     const url = new URL(location.href);
     url.searchParams.set('seed', R.seed); url.hash = ''; history.replaceState(null, '', url);
@@ -544,8 +287,8 @@ async function main() {
 
   // ── Panneau ──
   const on = {
-    random: () => { R = generate(randomSeed()); orbits.length = 0; S.tau = 0; ui?.build(); load(); },
-    regenerate: (seed) => { R = generate(seed || randomSeed()); orbits.length = 0; S.tau = 0; ui?.build(); load(); },
+    random: () => { R = core.use(generate(randomSeed())); orbits.length = 0; S.tau = 0; ui?.build(); load(); },
+    regenerate: (seed) => { R = core.use(generate(seed || randomSeed())); orbits.length = 0; S.tau = 0; ui?.build(); load(); },
     copyLink: async () => {
       const url = new URL(location.href);
       url.hash = `r=${await packRecipe(R)}`;
@@ -592,10 +335,6 @@ async function main() {
   }
   applyRender();
 
-  // (anticrénelage temporel, flou de mouvement : les pièces instanciées gardent
-  // leurs matrices de l'image précédente, pour leurs vitesses)
-  const endFrame = () => { if (RENDER.aa === 'traa' || RENDER.motionBlur > 0) for (const W of S.worlds) W.machine.afterRender(); };
-
   // l'état du premier monde, pour l'écran de chargement : temps de l'orbite,
   // angle du plateau, hauteur des astres, et la matrice qui projette un point
   // de ce monde sur l'écran
@@ -616,7 +355,7 @@ async function main() {
     if (RENDER.dynRes && !S.busy) governor.frame(dt0);
     if (!S.paused && S.worlds.length && !S.exporting && !S.loading && !S.landing) setTime(S.tau + dt / R.motion.segment);
     if (R.motion.free) controls.update();
-    if (!S.loading) { post.render(); endFrame(); }
+    if (!S.loading) core.render();
     if (S.handoff) loader.pose(scenePose()); // (chargement : la scène est préparée dans warm())
     frames++;
     if (now - fpsT > 500) { ui?.setFps(`${(frames * 1000 / (now - fpsT)).toFixed(0)}${RENDER.dynRes ? `  ·  ${Math.round(governor.scale * 100)} %` : ''}`); frames = 0; fpsT = now; }
@@ -639,7 +378,7 @@ async function main() {
     try {
       await exportLoop({
         canvas, duration: R.motion.segment * R.layers.length,
-        renderAt: (v) => { setTime(v * R.layers.length); post.render(); endFrame(); },
+        renderAt: (v) => core.renderAt(v),
         setSize: (w, h) => { renderer.setPixelRatio(1); renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); },
         restore: () => { canvas.style.width = ''; canvas.style.height = ''; resize(); },
       }, { width, height, fps, mbps }, (f) => { $('#progress u').style.width = `${(f * 100).toFixed(1)}%`; }, `orrery-${R.seed}.mp4`);
@@ -660,7 +399,38 @@ async function main() {
     else if (kk === 'p') on.exportPNG();
   });
 
-  if (params.has('debug')) window.chor = { marks, pipes, warm, loader, S, get R() { return R; }, setTime, render: () => post.render(), renderer, scene, camera, controls, post, load, on, root };
+  if (params.has('debug')) {
+    window.chor = { marks, pipes, warm, loader, S, get R() { return R; }, setTime, render: () => post.render(), renderer, scene, camera, controls, post, load, on, root, core };
+    // image fixe à la phase v de la boucle entière (0..1 : les trois plongées),
+    // rendue n fois (historique de l'anticrénelage), dès que les mondes sont
+    // construits et préparés ; la boucle reste en pause sur cet instant.
+    // (On n'attend pas l'atterrissage de l'écran de chargement : il passe par
+    // requestAnimationFrame, suspendu quand le panneau est masqué. Attentes par
+    // messages : les minuteries d'une page masquée sont ralenties.)
+    const yieldNow = () => new Promise((res) => { const c = new MessageChannel(); c.port1.onmessage = () => res(); c.port2.postMessage(0); });
+    window.chor.shot = async (v, n = 12) => {
+      while (S.loading || !S.worlds.length) await yieldNow();
+      S.paused = true;
+      document.body.classList.add('clean');
+      for (let i = 0; i < n; i++) {
+        renderer._nodes?.nodeFrame?.update(); // (sans nouvelle image, la passe de scène réutiliserait la précédente)
+        core.renderAt(v);
+        await renderer.backend.device?.queue.onSubmittedWorkDone();
+      }
+    };
+    // l'image de la chaîne complète, relue sur le GPU : ImageData (comme shared/app/debug.js)
+    window.chor.grab = async () => {
+      const w = canvas.width, h = canvas.height;
+      const rt = new THREE.RenderTarget(w, h, { type: THREE.UnsignedByteType });
+      renderer.setRenderTarget(rt); post.render(); renderer.setRenderTarget(null);
+      const px = await renderer.readRenderTargetPixelsAsync(rt, 0, 0, w, h);
+      rt.dispose();
+      const img = new ImageData(w, h), stride = Math.ceil((w * 4) / 256) * 256; // (lignes alignées sur 256 octets)
+      for (let y = 0; y < h; y++) img.data.set(px.subarray(y * stride, y * stride + w * 4), y * w * 4);
+      return img;
+    };
+    window.planetaire_v2 = window.chor; // (sous le nom du dossier aussi : tools/relay-check.html cherche window[<jour>])
+  }
   load();
 }
 

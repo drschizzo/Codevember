@@ -31,7 +31,9 @@ shared/                 modules communs (voir shared/README.md)
   README.md             documentation complète (modèle : les quatre projets)
   docs/capture.jpg      image de la page d'accueil du dépôt
   src/
-    main.js             intégration : moteur, recette, chargement, renderAt, export, clavier, ?debug
+    core.js             le cœur : scène, application de la recette, rendu d'une phase (source unique)
+    main.js             la page : moteur, recette, chargement, interface, export, clavier, ?debug
+    day.js              le jour du relais (mega/) : branche core.js sur le kit de la méga-scène
     recipe.js           graine → recette JSON : humeurs, accords, tirages, upgrade()
     app/ui.js           panneau lil-gui (ne connaît que la recette, les réglages et des rappels)
     app/settings.js     qualités (Mobile, Brouillon, Standard, Haute, Cinéma), réglages par défaut, clé de stockage
@@ -66,9 +68,44 @@ Les catalogues (matières, verres, formes, humeurs) vivent dans des **modules pu
 - Simulation sur GPU : WGSL brut via `renderer.backend.device`, tampons partagés avec three par `StorageBufferAttribute` (voir three-tsl-pitfalls.md) ; préparation (maillage, tables de voisinage) dans le worker.
 - Échec : une recherche sans solution, une erreur, un délai dépassé s'affichent sur l'écran de chargement avec des issues (autre graine, réessayer, revenir à la dernière scène).
 
+## core.js, main.js, day.js : une seule source pour la page et le relais
+
+Chaque projet est aussi un jour de la méga-scène (`mega/`, « le relais » : les
+jours en un seul plan, un seul moteur, le suivant préparé pendant que l'autre
+joue). Pour qu'une retouche vaille pour les deux, **tout ce qui fait l'image vit
+dans `core.js`** ; la page et le relais ne font que l'appeler.
+
+- `core.js` : `createCore({ renderer, width, height, gen, lite, RENDER })` →
+  `{ scene, camera, stage, post, R, setRecipe, syncEnv, renderAt, isReady,
+  progress, duration, warmPhases, applyRender }`. La scène, la caméra, le
+  plateau, la chaîne d'image, le volume de bruit, le studio, l'application de la
+  recette, et `renderAt(u, { push, sub, free })` : la caméra du film, les
+  uniformes, le brouillard, la mise au point. `RENDER` est passé par référence
+  (le panneau de la page le modifie en place). `free` : caméra libre (la page la
+  pose elle-même) ; `sub` : décalages d'un rendu accumulé ; `push` ∈ [0, 1) :
+  la caméra avance vers ce qu'elle regarde (passages du relais).
+- `main.js` : ce qui n'est qu'à la page — écran de chargement, panneau, URL,
+  export, résolution dynamique, caméra libre (OrbitControls), outils `?debug`,
+  boucle. Il crée le pool de workers et `RENDER`, puis le cœur.
+- `day.js` : `meta = { id, name, subtitle, seed, enter }` et
+  `createDay({ renderer, pipes, width, height, nextFrame })` → `makeDay(…)`
+  (kit de `mega/src/kit.js`) : réglages par défaut, pas de mode léger, la
+  graine d'ouverture de la page. `enter` choisit le passage par lequel on entre
+  dans ce jour (`mega/src/transitions.js`), tiré de son geste.
+
+Ce que le relais impose au cœur (une seule page tient plusieurs projets) :
+rien ne lit la page (`location`, `document`, `innerWidth`, le canvas : tailles
+par `renderer.domElement`) ; `G` (`shared/scene/globals.js`) est commun aux
+jours, donc la phase précédente se garde localement (`lastPh`) ; tout calcul
+lourd de la génération va dans le worker (une seconde de fil principal passe
+sous un écran de chargement, elle fige le jour qui joue dans le relais) ; un
+long calcul GPU de génération accepte un rythme (`nextFrame`, petits lots) ; ce
+qui est créé hors de three.js (`device.createBuffer`) se rend par
+`extraDispose`. Détail et pièges : `mega/README.md`.
+
 ## main.js : le contrat
 
-- `renderAt(u, sub?)` : pose caméra, uniformes, scène, puis `post.update(...)` et `post.render()`. `sub` : décalages d'un rendu accumulé (lentille, pixel, lampe).
+- `renderAt(u, sub?)` : la caméra libre si elle est active, puis `core.renderAt(u, { sub, free })` (pose caméra, uniformes, scène, puis `post.update(...)` et `post.render()`). `sub` : décalages d'un rendu accumulé (lentille, pixel, lampe).
 - `renderStep(u)` = `renderer._nodes.nodeFrame.update()` + `renderAt(u)` : tout rendu hors de `setAnimationLoop`.
 - `tick(now)` : boucle (pause, cadence, résolution dynamique, chargement, FPS dans le panneau).
 - Écran de chargement : géométrie complète → `warm()` (pipelines asynchrones, rendus aux phases qui comptent, `frustumCulled` coupé) → quelques images (historique TRAA) → fondu.

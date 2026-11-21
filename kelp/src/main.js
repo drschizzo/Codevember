@@ -12,10 +12,9 @@ import * as THREE from 'three/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { generate, upgrade, MOODS } from './recipe.js';
 import { createGenerator } from '../../shared/gen/client.js';
-import { createStage } from './scene/stage.js';
+import { createCore } from './core.js';
 import { G } from '../../shared/scene/globals.js';
-import { setNoiseVolume, setLite } from '../../shared/scene/materials.js';
-import { createPost } from './render/post.js';
+import { setLite } from '../../shared/scene/materials.js';
 import { createAccumulator, jitter } from '../../shared/render/accum.js';
 import { createUI } from './app/ui.js';
 import { installChrome } from '../../shared/app/chrome.js';
@@ -89,22 +88,18 @@ async function main() {
   // préparation découpée en petits lots (app/warmup.js).
   const pipes = asyncPipelines(renderer);
 
-  const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x101418);
-  // (le brouillard est l'eau elle-même : scene.fogNode, posé par la scène)
-  const camera = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.05, 600);
+  // ── Modules ──
+  // (la scène, sa recette et le rendu d'une phase : core.js, partagé avec le
+  // relais de la méga-scène)
+  const gen = createGenerator(LITE ? Math.max(2, Math.min(3, (navigator.hardwareConcurrency || 4) - 1)) : undefined, { maxCache: 4 }); // (une scène pèse des dizaines de Mo)
+  const RENDER = loadRender(LITE);
+  const core = await createCore({ renderer, width: innerWidth, height: innerHeight, gen, lite: LITE, RENDER });
+  const { scene, camera, stage, post } = core;
   const controls = new OrbitControls(camera, canvas);
   controls.enabled = false;
   controls.enableDamping = true;
   const camState = { free: false };
-
-  // ── Modules ──
-  const gen = createGenerator(LITE ? Math.max(2, Math.min(3, (navigator.hardwareConcurrency || 4) - 1)) : undefined, { maxCache: 4 }); // (une scène pèse des dizaines de Mo)
-  setNoiseVolume(await gen.request({ seed: `${NAME}-noise` }, 'noise')); // (les matériaux en dépendent)
-  const stage = createStage(scene, gen, { lite: LITE });
-  const post = createPost(renderer, scene, camera, { lens: (sample) => stage.domeLens(sample) });
   const accum = createAccumulator(renderer);
-  const RENDER = loadRender(LITE);
   const governor = createGovernor({ target: 1 / 45, min: 0.5, max: 1, onChange: () => !busy && resize() });
   const pace = createPacer(() => RENDER.maxFps);
 
@@ -133,7 +128,7 @@ async function main() {
     // (le fondu d'entrée de l'écran se termine avant que la scène ne change)
     sleepMC(firstRecipe ? 0 : 280).then(() => {
       if (R !== recipe) return;
-      stage.setRecipe(R, (p) => { if (R === recipe) { buildProgress = p; loader.art({ progress: p }); } });
+      core.setRecipe(R, (p) => { if (R === recipe) { buildProgress = p; loader.art({ progress: p }); } });
       loading.applied = true;
     });
     firstRecipe = false;
@@ -154,7 +149,7 @@ async function main() {
     const recipe = R;
     try {
       return await warmScene({
-        renderer, scene, pipes, render: renderStep, phases: [0, 0.2, 0.45, 0.66, 0.72, 0.85],
+        renderer, scene, pipes, render: renderStep, phases: core.warmPhases(),
         onProgress: (f) => loader.progress(f), alive: () => R === recipe,
       });
     } finally {
@@ -164,44 +159,11 @@ async function main() {
   }
 
   // ── Rendu d'une phase ──
-  const TAU = Math.PI * 2;
-  const _f = new THREE.Vector3(), _u = new THREE.Vector3(), _r = new THREE.Vector3();
   // u : phase « déroulée » (partie entière = nombre de boucles accomplies) ;
   // sub : décalages d'un rendu accumulé (lentille, pixel), facultatif
   function renderAt(u, sub = null) {
-    const ph = u - Math.floor(u);
-    G.phasePrev.value = G.phase.value;
-    G.phase.value = ph;
-    G.frame.value = (G.frame.value + 1) % 65536;
-    const C = R.camera;
-    const pose = stage.camPose(ph);
     if (camState.free) controls.update();
-    else {
-      // un trépied au ras de l'eau, un lent travelling périodique (même pose à 0 et à 1)
-      camera.position.copy(pose.pos);
-      camera.up.set(0, 1, 0);
-      camera.lookAt(pose.target);
-      camera.rotateZ(pose.roll ?? 0); // (le caisson roule sous le choc de la vague)
-    }
-    if (camera.fov !== C.fov) { camera.fov = C.fov; camera.updateProjectionMatrix(); }
-    camera.clearViewOffset();
-    if (sub) {
-      camera.updateMatrixWorld();
-      _f.setFromMatrixColumn(camera.matrixWorld, 0); _u.setFromMatrixColumn(camera.matrixWorld, 1);
-      const ap = 0.002 * (RENDER.dof ? RENDER.bokeh : 0.3);
-      camera.position.addScaledVector(_f, sub.lens[0] * ap).addScaledVector(_u, sub.lens[1] * ap);
-      camera.lookAt(pose.target);
-      camera.setViewOffset(canvas.width, canvas.height, sub.pixel[0], sub.pixel[1], canvas.width, canvas.height);
-    }
-    G.microDetail.value = RENDER.microDetail;
-    G.roughFloor.value = RENDER.roughFloor;
-    camera.updateMatrixWorld();
-    stage.setDomeCamera(camera);
-    stage.update(ph, G.phasePrev.value);
-    // exposition qui suit la plongée, mise au point qui glisse vers la grande vague (stage.trackAt)
-    const tk = stage.trackAt(ph);
-    post.update({ ...RENDER, lite: LITE, exposure: RENDER.exposure * tk.exp, focus: tk.focus * RENDER.focus, focusRange: RENDER.focusRange * tk.focus }, R);
-    post.render();
+    core.renderAt(u, { sub, free: camState.free });
   }
   // Rendu hors de la boucle d'animation (export, image fixe, débogage) : three.js
   // ne refait la passe de scène, les ombres et les vitesses de la caméra
@@ -232,7 +194,7 @@ async function main() {
   function applyRender() {
     if (!RENDER.dynRes) governor.reset();
     resize();
-    stage.setShadowQuality(RENDER.shadows);
+    core.applyRender();
     saveRender(RENDER);
   }
 

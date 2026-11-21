@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#050506">
+  <title>Le relais · comment il est fait</title>
+  <meta name="description" content="Comment vingt-trois scènes de Codevember tiennent en un seul plan : un seul moteur, un jour qui joue pendant que le suivant se prépare, la mémoire rendue, les passages d'un jour à l'autre, une seule source pour la page et le relais.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../home/explainer.css">
+  <style>
+    .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 18px; }
+    .pair img { width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--line); display: block; }
+    .pair figcaption { grid-column: 1 / -1; }
+    .schema svg { width: 100%; height: auto; display: block; margin-top: 18px; }
+    .schema text { font: 400 12px Inter, system-ui, sans-serif; fill: var(--dim); }
+    .schema .t { fill: var(--fg); }
+    @media (max-width: 560px) { .pair { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <nav class="top"><div class="in">
+    <a href="../">Codevember</a><span class="day">Le relais</span><span class="crumb">comment il est fait</span>
+    <span class="sp"></span><a class="open" href="./">Ouvrir le relais</a>
+  </div></nav>
+
+  <main>
+    <header class="hero">
+      <div class="kicker">Le relais · comment il est fait</div>
+      <h1>Vingt-trois scènes dans un seul plan</h1>
+      <p class="lede">Chaque jour de Codevember est une page à part : son moteur de rendu, sa génération, son écran de chargement. Le relais les montre toutes à la suite, sans écran de chargement entre deux jours : un jour joue sa boucle, puis passe la main au suivant par un passage qui reprend le geste de la scène qui arrive. Cette page explique comment on y arrive, alors que charger les vingt-trois scènes ensemble demanderait plus de six gigaoctets de mémoire vidéo.</p>
+      <p class="prereq">Pour suivre, il suffit de savoir ce qu'est une boucle d'animation (une fonction appelée à chaque image). Les chiffres viennent de mesures faites sur le relais lui-même, sur un Mac de bureau, dans une fenêtre de 1 185 × 1 019 points. Les détails d'implémentation sont rangés dans les encadrés « Pour aller plus loin ».</p>
+    </header>
+
+    <figure class="cover">
+      <img src="docs/capture.jpg" alt="Un passage du relais : la mousse de Moss gagne les falaises d'Erosion par taches, bordées de vert." width="832" height="468">
+      <figcaption>Un passage du relais, à mi-course. L'image du jour qui s'en va s'ouvre sur celle du jour qui arrive, suivant le geste propre à ce dernier.</figcaption>
+    </figure>
+
+    <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
+
+    <article>
+      <section id="relais">
+        <h2><span class="n">01</span>Ce que l'on veut voir</h2>
+        <span class="src">mega/src/main.js · DAYS</span>
+        <p>Les vingt-trois scènes se suivent dans un ordre qui suit la matière : le feu (la lave, le verre fondu, la cire), l'eau (le thé qui bout, le bassin, la mer, la rigole), la terre et le vivant (la pierre que la mousse reverdit, le bois mort, la plume, la membrane), les fibres (la soie, le papier, la corde, les câbles), les mécanismes (le balancier, le dédale), le métal que la rouille met à nu, la lumière (l'éclair et son écho, le mirage), puis la géométrie et le ciel (les coquilles emboîtées, l'hypercube, le planétaire). Après le planétaire, on revient à la lave.</p>
+        <p>Chaque jour joue sa boucle au moins une fois. À la fin de la boucle, un <b>passage</b> de quelques secondes mêle l'image qui s'en va et celle qui arrive. Pendant tout ce temps, aucun écran de chargement : le jour suivant doit être prêt quand le passage commence.</p>
+        <p>Chaque scène, prise seule, est déjà lourde. Elle calcule sa géométrie au chargement (simulations, maillages, textures), compile des centaines de programmes pour la carte graphique (les <i>shaders</i>), et réserve des centaines de mégaoctets pour ses images intermédiaires. La suite de la page montre pourquoi on ne peut pas simplement tout charger, puis comment on fait à la place.</p>
+      </section>
+
+      <section id="memoire">
+        <h2><span class="n">02</span>Tout charger d'un coup ne tient pas</h2>
+        <span class="src">mesures : chaque scène chargée seule, 1 280 × 720</span>
+        <p>La première idée est la plus simple : charger les vingt-trois scènes au démarrage, puis passer de l'une à l'autre. On a mesuré ce que chaque scène occupe une fois prête, dans sa propre page. Deux mémoires comptent :</p>
+        <ul>
+          <li>la <b>mémoire vidéo</b>, celle de la carte graphique : textures, géométrie et surtout les images intermédiaires de la chaîne de rendu (occlusion, réflexions, flou de profondeur…), de 80 Mo (Mirage) à 677 Mo (Membrane) ;</li>
+          <li>la <b>mémoire du programme JavaScript</b>, qui garde les données de génération : de 92 Mo (Fold) à 1 073 Mo (Magma).</li>
+        </ul>
+        <p>Additionnées, les vingt-trois scènes demandent environ 6,2 Go de mémoire vidéo et 8 Go de mémoire JavaScript. C'est plus qu'un onglet de navigateur ne peut prendre sur la plupart des machines, et le chargement durerait plusieurs minutes.</p>
+        <figure id="fig-memoire"><figcaption><b>La mémoire de N scènes chargées ensemble.</b> Chaque bloc est une scène, dans l'ordre du relais, à sa taille mesurée. Le curseur ajoute des scènes. Le bouton « Le relais » ne garde jamais plus de deux scènes à la fois, celle qui joue et la suivante : la barre montre alors le pire couple de voisins.</figcaption></figure>
+        <p>Aucune scène n'a besoin de la mémoire des autres pendant qu'elle joue. Il suffit donc d'en avoir deux à la fois : celle que l'on regarde et celle qui vient ensuite. Le pire couple de voisins, Membrane et Cocoon, tient en 907 Mo de mémoire vidéo à la taille des pages ; dans le relais, qui dessine plus grand (1 777 × 1 528 pixels), le pire moment mesuré est de 1,6 Go.</p>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Montez le curseur à 23 : la barre atteint 6,2 Go de mémoire vidéo.</li>
+          <li>Activez « Le relais » : la barre ne dépasse plus le pire couple, quel que soit le nombre de scènes. Quel couple est le plus lourd ?</li>
+        </ul></div>
+      </section>
+
+      <section id="flux">
+        <h2><span class="n">03</span>Un jour joue, le suivant se prépare</h2>
+        <span class="src">mega/src/main.js · load(), tick() · mega/src/kit.js · prepare()</span>
+        <p>Une scène met entre 1,5 et 23 secondes à se préparer (générer sa géométrie, compiler ses programmes, rendre ses premières images). Si l'on attendait la fin d'un jour pour préparer le suivant, chaque passage serait remplacé par un écran noir de plusieurs secondes.</p>
+        <p>La règle est donc de préparer le jour suivant <b>pendant</b> que le jour courant joue sa boucle. Dès qu'un jour commence à jouer, on crée le suivant ; ses calculs tournent en arrière-plan, et il dessine ses premières images dans une image à part, que personne ne voit. Quand la boucle du jour courant se termine, le suivant est prêt, et le passage peut commencer.</p>
+        <p>Il reste un cas : un jour suivant plus long à préparer que la boucle du jour courant. On ne coupe pas la boucle en cours de route. Le jour courant fait simplement <b>un tour de plus</b>, et le passage attend la fin de ce tour.</p>
+        <figure id="fig-flux"><figcaption><b>Le relais sur une ligne de temps.</b> En haut, ce que l'on voit : chaque bloc est une boucle d'un jour (ses vraies durées), le gris est un écran de chargement. En bas, la préparation de chaque jour (ses vrais temps, mesurés dans le relais). « À la suite » prépare chaque jour après la fin du précédent ; « En relais » le prépare pendant que le précédent joue. Le curseur ralentit la machine en multipliant tous les temps de préparation.</figcaption></figure>
+<pre><code>// à chaque image (mega/src/main.js, simplifié)
+cur.u += dt / cur.duration;                       // la boucle du jour courant avance
+if (!trans &amp;&amp; cur.u >= cur.end - T / cur.duration) {
+  if (next.state === 'ready') trans = { t: 0 };   // le passage commence
+  else cur.end += 1;                              // pas prêt : un tour de plus
+}</code></pre>
+        <p><code>cur.u</code> est la phase de la boucle : elle vaut 0 au début, 1 à la fin du premier tour, 2 à la fin du second. <code>T</code> est la durée du passage (5 secondes). Le passage commence <code>T</code> secondes avant la fin du tour, de sorte qu'il se termine exactement à la fin de la boucle.</p>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Comparez « À la suite » et « En relais » : le gris disparaît presque entièrement.</li>
+          <li>En relais, montez le ralentissement à × 3. Quels jours font un tour de plus ? Ce sont ceux qui suivent une boucle courte, ou qui se préparent longtemps.</li>
+        </ul></div>
+        <div class="note trap"><b>Le piège : sauter dans la boucle</b><p>Une première version, pour passer plus vite au jour suivant, faisait sauter la phase du jour courant à la fin de sa boucle. Pour Melt, c'était une erreur : sa cire est simulée pas à pas (une méthode particulaire, MPM), et après un saut, la simulation rattrape le temps perdu, jusqu'à 48 pas par image. Plus l'image est longue, plus il y a de pas à rattraper, et l'image suivante est plus longue encore : le passage tombait à 4 images par seconde. Le relais ne fait donc jamais sauter la phase d'un jour. La touche → demande le passage tout de suite, depuis l'endroit où en est la boucle.</p></div>
+      </section>
+
+      <section id="budget-image">
+        <h2><span class="n">04</span>Préparer sans voler d'images</h2>
+        <span class="src">shared/app/warmup.js · warmScene · mega/src/kit.js · melt/src/gen/shape.js</span>
+        <p>Préparer un jour en arrière-plan ne suffit pas s'il prend le temps du jour qui joue. Le navigateur n'a qu'un fil d'exécution principal (le <i>fil principal</i>), qui doit calculer chaque image en moins de 16,7 ms pour tenir 60 images par seconde. Si la préparation occupe ce fil une demi-seconde d'un bloc, l'image du jour courant se fige une demi-seconde.</p>
+        <p>Dans sa propre page, une scène se prépare derrière un écran de chargement : elle peut prendre le fil principal par paquets de 100 ms sans que personne ne le voie. Dans le relais, le même paquet fige le jour qui joue. Trois corrections ont été nécessaires :</p>
+        <ul>
+          <li><b>Construire peu à la fois.</b> La préparation dessine la scène en ne construisant, à chaque image, que les objets nouveaux qui tiennent dans un budget ; les autres attendent l'image suivante. Le budget passe de 100 ms (dans la page) à 6 ms (dans le relais), et la préparation ne dessine qu'une fois par image du relais.</li>
+          <li><b>Calculer ailleurs.</b> Tout calcul lourd de la génération va dans un <i>worker</i>, un fil d'exécution séparé. Melt calculait ses figurines (le champ de distance de l'objet, ses particules, les deux demi-moules) sur le fil principal : deux blocs de 1,1 et 1,3 s. Ils tournent maintenant dans son worker, qui produit les mêmes octets (vérifié pour les cinq objets).</li>
+          <li><b>Étaler les calculs de la carte graphique.</b> Erosion simule son paysage sur la carte graphique pendant sa préparation : 17 455 pas. Envoyés par lots de 256, ils occupaient la carte graphique devant le jour qui joue. Ils partent maintenant par lots de 32, un lot par image.</li>
+        </ul>
+        <figure id="fig-image"><figcaption><b>Quatre secondes de relais, image par image.</b> Chaque barre est le temps d'une image ; la ligne verte marque 16,7 ms (60 images par seconde). Le jour qui joue coûte 12 ms par image. Pendant ce temps, le jour suivant doit construire 612 ms d'objets (la mesure du premier dessin de Melt) et, selon le réglage, calculer ses figurines sur le fil principal (1,1 + 1,3 s, mesurées).</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Avec un budget de 100 ms, la préparation se termine vite, mais six images durent plus de 50 ms (la pire, 116 ms) : on voit l'image se figer. Passez à 6 ms : plus aucune image ne dépasse 18 ms, et la préparation prend 2 s au lieu de 0,8 s.</li>
+          <li>Remettez les figurines sur le fil principal : deux images d'une seconde apparaissent, quel que soit le budget. C'était le ralentissement visible au début de Shatter.</li>
+        </ul></div>
+        <div class="note trap"><b>Le piège : le studio à moitié préfiltré</b><p>Une scène éclairée par un studio (une image panoramique qui sert de ciel et de reflet) le <i>préfiltre</i> au chargement : la carte graphique en calcule des versions floues, une par degré de rugosité des surfaces, en dessinant dans une suite de petites images. Pour le découpage par budget, chacune de ces petites images était un objet « nouveau ». Avec 6 ms par dessin, une partie du préfiltrage était sautée, et le studio restait faux pour toute la durée du jour. Sur Bolt, la tasse et la table sortaient brûlées. La préparation refait maintenant le préfiltrage une dernière fois, sans découpage.</p>
+          <figure class="pair"><img src="docs/bolt-page.jpg" alt="Bolt dans sa page : une tasse sur une table sombre, sous un nuage." width="800" height="577"><img src="docs/bolt-brule.jpg" alt="Bolt dans le relais avant la correction : la table et la tasse sont blanches, brûlées." width="800" height="577"><figcaption>Bolt à la même phase : dans sa page (à gauche, luminosité moyenne 35 sur 255), et dans le relais avant la correction, préparé derrière Melt (à droite, 104 sur 255).</figcaption></figure></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Le découpage tient à deux remplacements faits pendant la préparation (<code>shared/app/warmup.js</code>). La création des programmes de la carte graphique devient asynchrone : tant qu'un programme n'est pas prêt, l'objet est sauté. Et la fonction qui dessine un objet vérifie d'abord si cet objet a déjà été construit pour ce matériau et cette passe ; sinon, et si le budget de l'image est dépassé, elle le saute. Le relais coupe ces deux remplacements le temps de dessiner le jour qui joue, pour qu'aucun de ses objets ne soit sauté.</p>
+          <p>Pour Erosion, attendre que la carte graphique ait fini un lot avant d'envoyer le suivant (<code>onSubmittedWorkDone</code>) revenait à attendre aussi le dessin du jour qui joue : moins de trois lots par seconde, une préparation de 130 s. Avec un rythme, le lot suivant attend seulement l'image suivante, puisque la file de la carte graphique exécute déjà les travaux dans l'ordre. Erosion est prête en 20 s derrière Kelp, dont la boucle dure 32 s.</p>
+        </div></details>
+      </section>
+
+      <section id="moteur">
+        <h2><span class="n">05</span>Un seul moteur pour vingt-trois scènes</h2>
+        <span class="src">mega/src/kit.js · makeDay().draw · mega/src/composite.js</span>
+        <p>Chaque page a son propre moteur de rendu, qui dessine dans le canvas de la page. Le relais n'en a qu'un, partagé par tous les jours. Chaque jour dessine dans une image à lui, jamais dans le canvas ; seule la <b>composition</b> du relais écrit dans le canvas, en copiant l'image du jour qui joue, ou en mêlant les deux pendant un passage.</p>
+        <figure class="schema" id="fig-cibles">
+          <svg viewBox="0 0 720 230" role="img" aria-label="Deux jours dessinent chacun dans un emplacement ; la composition lit les deux emplacements et écrit dans le canvas.">
+            <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#e9c48a"/></marker></defs>
+            <g fill="none" stroke="rgba(255,240,220,.22)">
+              <rect x="20" y="30" width="170" height="60" rx="8"/><rect x="20" y="140" width="170" height="60" rx="8"/>
+              <rect x="270" y="30" width="170" height="60" rx="8"/><rect x="270" y="140" width="170" height="60" rx="8"/>
+              <rect x="520" y="85" width="180" height="60" rx="8" stroke="#e9c48a"/>
+            </g>
+            <g stroke="#e9c48a" stroke-width="1.3" fill="none" marker-end="url(#ar)">
+              <path d="M190 60 H266"/><path d="M190 170 H266"/><path d="M440 60 C480 60 480 105 516 108"/><path d="M440 170 C480 170 480 125 516 122"/>
+            </g>
+            <text class="t" x="34" y="56">Le jour qui joue</text><text x="34" y="76">(indice pair)</text>
+            <text class="t" x="34" y="166">Le jour qui se prépare</text><text x="34" y="186">(indice impair)</text>
+            <text class="t" x="284" y="56">Emplacement 0</text><text x="284" y="76">image demi-flottante</text>
+            <text class="t" x="284" y="166">Emplacement 1</text><text x="284" y="186">image demi-flottante</text>
+            <text class="t" x="534" y="111">Composition</text><text x="534" y="131">→ le canvas</text>
+          </svg>
+          <figcaption>Les deux emplacements du relais. Un jour dessine dans l'emplacement de sa parité dans l'ordre : celui qui joue et celui qui se prépare n'en partagent jamais un. Ces images sont déjà étalonnées (couleurs, exposition) par la chaîne de rendu de chaque jour : la composition ne fait que les copier ou les mêler.</figcaption>
+        </figure>
+        <p>Partager un moteur, c'est aussi partager ses réglages et quelques valeurs communes aux modules. Plusieurs scènes supposaient être seules :</p>
+        <ul>
+          <li><b>Le canvas.</b> Le champ de lave de Magma se dessine dans ses propres images, puis revient « au canvas » plutôt qu'à l'image d'où il venait. Dans sa page, c'est sans conséquence. Dans le relais, la suite de l'image de Magma partait dans le canvas : Magma apparaissait par éclairs au milieu de Melt pendant qu'il se préparait, et son image restait noire quand il jouait. Pendant le dessin d'un jour, le relais remplace donc « le canvas » par l'image du jour.</li>
+          <li><b>La phase précédente.</b> Un module commun garde la phase de l'image courante et celle de l'image précédente, pour calculer le mouvement de chaque point (le flou de mouvement, l'anticrénelage). Pendant un passage, deux jours dessinent dans la même image du relais, à deux phases différentes. Chaque jour garde donc sa propre phase précédente et la remet avant de dessiner.</li>
+          <li><b>Les réglages du moteur.</b> La chaîne de rendu de Kelp change le mappage des tons du moteur ; Fold a besoin d'ombres plus douces que les autres. Ces réglages sont rendus tels quels après chaque dessin d'un jour.</li>
+        </ul>
+      </section>
+
+      <section id="liberer">
+        <h2><span class="n">06</span>Rendre la mémoire</h2>
+        <span class="src">mega/src/kit.js · installLedger(), releaseTextures()</span>
+        <p>Après un passage, le jour qui s'en va doit rendre toute sa mémoire, sinon le relais en accumule à chaque tour. La première version parcourait la scène du jour et libérait ce qu'elle y trouvait : géométries, matériaux, textures des matériaux. Il restait de 228 à 560 Mo par jour. Les objets restés en mémoire ne sont pas dans la scène : les cartes d'ombre des lumières, les images intermédiaires de la chaîne de rendu, le studio préfiltré, les textures lues seulement dans les programmes de la carte graphique, les tampons de calcul des particules de Melt.</p>
+        <p>Le relais tient donc un <b>registre</b>. Chaque fois que le moteur crée une texture ou un tampon sur la carte graphique, il regarde quel code l'a demandé : la pile des appels en cours contient le chemin du fichier, et donc le nom du projet (<code>/melt/src/…</code>). La ressource est inscrite au nom de ce projet. Quand le jour s'en va, tout ce qui est inscrit à son nom est rendu. Il reste alors 0 Mo du jour.</p>
+<pre><code>// mega/src/kit.js, simplifié
+be.createTexture = (texture, options) => {
+  const stack = new Error().stack;                      // qui a demandé cette texture ?
+  const owner = /\/([a-z0-9_]+)\/src\//.exec(stack)?.[1] ?? drawing;
+  ledgers.get(owner).add(texture);
+  return create(texture, options);
+};</code></pre>
+        <div class="note trap"><b>Le piège : rendre ce qui est à tout le monde</b><p>Le moteur crée certaines ressources une fois pour toutes les scènes, au moment où la première en a besoin : une table qui sert à l'éclairage de tous les matériaux physiques (<code>DFG_LUT</code>), l'image de travail du préfiltrage des studios. Créées pendant le dessin du premier jour, elles étaient inscrites à son nom et rendues avec lui. Le registre note maintenant aussi quels jours <i>utilisent</i> chaque ressource, et ne rend que ce qu'aucun autre jour n'a utilisé.</p></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Deux cas échappent au registre. Ce qu'un jour crée directement sur la carte graphique, sans passer par le moteur (les tampons de la simulation d'Erosion, 270 Mo, et ceux des ondes de Caustic, 48 Mo), est rendu par une fonction propre au jour, appelée à sa libération. Et deux jours du même projet ne peuvent pas être en mémoire en même temps, puisque le registre ne sait pas les séparer.</p>
+          <p>Mesuré sur un tour complet des vingt-trois jours : avec un seul jour chargé, la mémoire vidéo va de 270 Mo (Mirage) à 1 140 Mo (Membrane), et revient à la même valeur quand le même jour revient (Shatter : 545 Mo aux deux tours). Rien ne s'accumule.</p>
+        </div></details>
+      </section>
+
+      <section id="passages">
+        <h2><span class="n">07</span>Passer la main</h2>
+        <span class="src">mega/src/transitions.js · mega/src/composite.js</span>
+        <p>Un fondu enchaîné aurait suffi pour passer d'un jour à l'autre. Mais chaque scène raconte un geste : la lave qui se fend, la vague qui monte, l'onde qui converge vers un point. On entre donc dans un jour par ce qui s'y passe. Chaque jour déclare son passage d'entrée (<code>meta.enter</code>), et la composition l'applique pendant les cinq secondes du passage.</p>
+        <p>Un passage est une fonction qui, pour chaque pixel, décide quelle image montrer. On lui donne l'avancée du passage <i>p</i>, de 0 (tout le jour qui s'en va) à 1 (tout le jour qui arrive). La plupart des passages suivent le même schéma : chaque pixel reçoit un <b>ordre d'ouverture</b> entre 0 (s'ouvre d'abord) et 1 (s'ouvre en dernier), et un front qui avance avec <i>p</i> ouvre les pixels dont l'ordre est dépassé. Tout le caractère du passage est dans cet ordre : la distance à une fissure pour la lave, la hauteur dans l'image pour la vague, la distance au centre pour les ondes.</p>
+        <div class="eq">\[ m = \operatorname{smoothstep}\big(o - w,\; o + w,\; p\,(1 + 2w) - w\big) \]</div>
+        <p><i>m</i> est la part de l'image qui arrive dans le pixel, <i>o</i> son ordre d'ouverture et <i>w</i> la largeur du front (de 0,03 à 0,07). Le facteur (1 + 2<i>w</i>) garantit que tout est fermé à <i>p</i> = 0 et tout ouvert à <i>p</i> = 1. Le liseré, qui donne sa couleur au front (incandescent pour la lave, écume pour la vague), vaut (4<i>m</i>(1 − <i>m</i>))<sup>1,5</sup> : il est nul loin du front et maximal dessus.</p>
+        <figure id="fig-passage"><figcaption><b>Cinq passages, recalculés dans cette page.</b> Les images sont les vignettes de l'accueil. Le calcul est une traduction en JavaScript, à basse résolution, des fonctions du relais (qui tournent sur la carte graphique). Choisissez le jour qui arrive ; le curseur fige l'avancée du passage.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Figez « → Magma » vers 0,3 : les fissures rougeoient avant de s'ouvrir. L'ordre d'ouverture suit la distance au bord des cellules.</li>
+          <li>Comparez « → Caustic » et « → Echo » : tous deux ouvrent en cercle, mais l'onde vient des bords vers le centre (le foyer des ondes de Caustic), l'éclair part d'un point vers les bords (la lampe d'Echo).</li>
+        </ul></div>
+        <div class="note trap"><b>Le piège : la première image noire</b><p>La composition lisait d'abord l'image de chaque jour par un nœud de texture dont on changeait la valeur à chaque passage. Le moteur ne relit cette valeur qu'à l'image suivante : la première image de chaque passage était entièrement noire (luminosité 0, mesurée sur le canvas). La composition lit maintenant toujours les deux mêmes emplacements, et un seul nombre dit lequel tient le jour qui s'en va.</p></div>
+      </section>
+
+      <section id="source">
+        <h2><span class="n">08</span>Une seule source pour la page et le relais</h2>
+        <span class="src">&lt;projet&gt;/src/core.js · main.js · day.js</span>
+        <p>Le relais doit montrer chaque jour exactement comme sa page. La première version recopiait, pour chaque jour, le rendu d'une phase de la page : la caméra, la lumière, le brouillard, la mise au point. Une retouche de la page n'aurait pas atteint le relais. Chaque projet a donc trois modules :</p>
+        <ul>
+          <li><code>core.js</code>, le <b>cœur</b> : la scène, l'application de la recette, le rendu d'une phase ;</li>
+          <li><code>main.js</code>, la page : l'écran de chargement, le panneau de réglages, l'adresse, l'export vidéo, la caméra libre ;</li>
+          <li><code>day.js</code>, le jour du relais : les réglages par défaut, la graine d'ouverture de la page, le passage d'entrée.</li>
+        </ul>
+        <p>La page et le relais appellent la même fonction <code>renderAt</code> du cœur. Le relais lui passe en plus l'avancée de la caméra pendant un passage (<code>push</code>) ; la page, la caméra libre et les décalages du rendu accumulé.</p>
+<pre><code>// melt/src/day.js
+export async function createDay({ renderer, pipes, width, height, seed = meta.seed }) {
+  const gen = generatorFor('melt', workers);
+  const core = await createCore({ renderer, width, height, gen, lite: false, RENDER: defaultsFor(false) });
+  core.applyRender();
+  core.setRecipe(generate(seed));
+  return makeDay({ meta, renderer, pipes, width, height, gen,
+    scene: core.scene, camera: core.camera, post: core.post,
+    duration: core.duration, isReady: core.isReady, progress: core.progress, warmPhases: core.warmPhases,
+    renderAt: (u, { push = 0 } = {}) => core.renderAt(u, { push }) });
+}</code></pre>
+        <p>Passer vingt-deux pages par leur cœur ne devait rien changer à leur image. Chacune a été rendue avant et après, à trois phases, par l'outil de non-régression du dépôt (<code>tools/regress.html</code>), qui compare l'écart au bruit propre de chaque scène (deux rendus du même code ne sont pas identiques au pixel près, à cause du grain et des particules). Les 66 images sont restées dans ce bruit.</p>
+        <div class="note check"><b>Ce que vérifie le dépôt</b><p><code>npm run check</code> refuse un projet sans <code>core.js</code> ou sans <code>day.js</code>, une page ou un jour qui n'importe pas le cœur, une graine du relais différente de celle de la page, un passage d'entrée inconnu, un jour de l'ordre qui n'existe pas. La skill qui fabrique les nouvelles scènes pose ces trois modules dès l'échafaudage.</p></div>
+      </section>
+
+      <section id="verifier">
+        <h2><span class="n">09</span>Vérifier que le relais est la page</h2>
+        <span class="src">tools/relay-check.html</span>
+        <p>Les défauts de cette page ont tous été trouvés en comparant une image du relais à la même image dans la page du projet : la tasse brûlée, l'écran noir, la première image noire. L'outil <code>tools/relay-check.html</code> refait cette comparaison pour chaque jour, dans les conditions du relais : le jour est préparé en arrière-plan, derrière le jour qui le précède, puis rendu à la même taille et à la même phase que sa page. Les deux images sont moyennées par blocs de 8 × 8 pixels, pour effacer le grain, puis comparées. Vingt-deux jours restent sous le seuil de 1,5. Membrane le dépasse (2,8 et 3,2) : sa simulation dépend de son histoire, qui n'est pas exactement la même quand le jour se prépare par petits paquets derrière un autre ; la teinte et l'exposition, elles, ne changent pas.</p>
+        <figure id="fig-ecarts"><figcaption><b>Écart entre chaque jour du relais et sa page.</b> Écart moyen sur 255, à deux phases de la boucle (0,1 et 0,45). La ligne marque le seuil de 1,5, au-delà duquel une teinte ou une exposition commence à changer.</figcaption></figure>
+        <div class="note"><b>Mesurer sans voir</b><p>Les mesures se font dans un panneau de navigateur intégré à l'outil de développement. Quand ce panneau est masqué, le navigateur ralentit la page et ses captures d'écran restent périmées : les temps mesurés deviennent faux, et ce qu'on croit voir est une image ancienne. Les outils du relais ont donc leur propre boucle manuelle (<code>run()</code>), et relisent les images sur la carte graphique pour les envoyer à un petit serveur local qui les enregistre.</p></div>
+      </section>
+
+      <section id="budget">
+        <h2><span class="n">10</span>Budget</h2>
+        <div class="tbl"><table>
+          <thead><tr><th>Mesure</th><th>Où</th><th class="num">Valeur</th></tr></thead>
+          <tbody>
+            <tr><td>Les 23 scènes chargées ensemble (mémoire vidéo / JavaScript)</td><td>chaque page seule, 1 280 × 720</td><td class="num">6,2 Go / 8 Go</td></tr>
+            <tr><td>Le pire couple de jours voisins (mémoire vidéo)</td><td>idem</td><td class="num" id="b-pair">–</td></tr>
+            <tr><td>Préparation d'un jour en arrière-plan</td><td>relais, panneau visible</td><td class="num" id="b-prep">–</td></tr>
+            <tr><td>Erosion préparée derrière Kelp (17 455 pas de simulation, 32 par image)</td><td>relais</td><td class="num">≈ 20 s</td></tr>
+            <tr><td>Image du jour qui joue, pendant la préparation du suivant (médiane par jour)</td><td>relais, 1 777 × 1 528 pixels</td><td class="num">8 – 52 ms</td></tr>
+            <tr><td>Image pendant un passage (deux jours dessinés, puis la composition ; médiane)</td><td>idem</td><td class="num">17 – 66 ms</td></tr>
+            <tr><td>Gels restants : Tesseract pendant la préparation d'Orrery (ses machines, sur le fil principal) ; Echo pendant celle de Mirage</td><td>idem</td><td class="num">0,58 s · 1,3 s</td></tr>
+            <tr><td>Mémoire vidéo avec un seul jour chargé / avec le suivant prêt</td><td>relais</td><td class="num">270 – 1 140 Mo / 740 – 1 600 Mo</td></tr>
+            <tr><td>Écart moyen entre le relais et les pages</td><td>tools/relay-check.html</td><td class="num" id="b-ecart">–</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+    </article>
+
+    <footer class="end">
+      <a href="./">Ouvrir le relais</a>
+      <a href="https://github.com/drschizzo/Codevember/blob/main/mega/README.md">README</a>
+      <span class="sp"></span>
+      <a href="../">Tous les jours</a>
+    </footer>
+  </main>
+
+  <script type="module">
+    import { demo, C, clamp, lerp, label, alpha } from '../home/explainer.js';
+
+    // ── Les mesures (relais, panneau visible ; mémoire : chaque page seule à 1 280 × 720) ──
+    // [id, nom, vidéo (Mo), JavaScript (Mo), durée de boucle (s), préparation dans le relais (s)]
+    const DAYS = [
+      ['magma', 'Magma', 430, 1073, 32, 5.4], ['shatter', 'Shatter', 354, 112, 42.06, 9.5], ['melt', 'Melt', 192, 310, 50, 5.3],
+      ['bolt', 'Bolt', 201, 492, 24, 3.4], ['caustic', 'Caustic', 221, 509, 36, 6], ['kelp', 'Kelp', 363, 512, 32, 14.7],
+      ['erosion', 'Erosion', 308, 399, 44, 19.9], ['moss', 'Moss', 361, 163, 44, 4.5], ['spore', 'Spore', 226, 253, 40, 7.5],
+      ['feather', 'Feather', 199, 121, 36, 1.5], ['membrane', 'Membrane', 677, 327, 19.92, 22.2], ['cocoon', 'Cocoon', 230, 458, 60, 5.3],
+      ['fold', 'Fold', 327, 92, 14, 11.5], ['tangle', 'Tangle', 243, 171, 46.09, 9.7], ['tension', 'Tension', 166, 132, 35.89, 3.9],
+      ['pendulum', 'Pendulum', 166, 344, 12.36, 7.9], ['labyrinth', 'Labyrinth', 166, 144, 28.75, 4.7], ['rust', 'Rust', 213, 184, 44, 4.5],
+      ['echo', 'Echo', 307, 691, 11, 4.7], ['mirage', 'Mirage', 80, 304, 24, 2.5], ['hollow', 'Hollow', 280, 463, 24, 2.8],
+      ['tesseract', 'Tesseract', 204, 342, 48, 5], ['planetaire_v2', 'Orrery', 258, 381, 42, 22.7],
+    ];
+    // (relay-check : écart moyen sur 255 aux phases 0,1 et 0,45)
+    const ECARTS = {
+      magma: [1.39, 1.0], shatter: [0.43, 0.34], melt: [0.96, 0.69], bolt: [0.33, 0.29], caustic: [0.25, 0.26], kelp: [0.58, 0.35],
+      erosion: [0.33, 1.0], moss: [0.61, 1.21], spore: [0.26, 0.6], feather: [0.54, 0.54], membrane: [2.8, 3.18], cocoon: [0.43, 0.62],
+      fold: [0.36, 0.37], tangle: [0.2, 0.2], tension: [0.23, 0.22], pendulum: [0.23, 0.22], labyrinth: [0.29, 0.29], rust: [0.52, 0.78],
+      echo: [0.31, 0.28], mirage: [0.24, 0.22], hollow: [0.44, 0.37], tesseract: [0.31, 0.27], planetaire_v2: [0.31, 0.27],
+    };
+    const fmtGo = (mo) => (mo >= 1000 ? `${(mo / 1000).toFixed(1).replace('.', ',')} Go` : `${Math.round(mo)} Mo`);
+    const pairs = DAYS.map((d, i) => [d, DAYS[(i + 1) % DAYS.length]]);
+    const worst = pairs.reduce((a, p) => (p[0][2] + p[1][2] > a[0][0][2] + a[0][1][2] ? [p] : a), [pairs[0]])[0];
+    document.querySelector('#b-pair').textContent = `${fmtGo(worst[0][2] + worst[1][2])} (${worst[0][1]} + ${worst[1][1]})`;
+    const preps = DAYS.map((d) => d[5]).filter((x) => x > 0);
+    document.querySelector('#b-prep').textContent = `${String(Math.min(...preps)).replace('.', ',')} – ${String(Math.max(...preps)).replace('.', ',')} s`;
+    const ec = Object.values(ECARTS).flat();
+    document.querySelector('#b-ecart').textContent = `${String(Math.min(...ec)).replace('.', ',')} – ${String(Math.max(...ec)).replace('.', ',')} / 255`;
+
+    // boutons exclusifs : l'état vit hors de d.state (reset ne l'efface pas)
+    const group = (d, labels, current) => d.fig.querySelectorAll('.btns button').forEach((b) => { if (labels.includes(b.textContent)) b.setAttribute('aria-pressed', String(b.textContent === current)); });
+
+    // ── 02 · la mémoire ──
+    let memRelais = false;
+    demo('#fig-memoire', {
+      aspect: 16 / 7.5, title: 'Mémoire de N scènes',
+      controls: [{ key: 'n', label: 'Scènes chargées', min: 1, max: 23, step: 1, value: 4, fmt: (v) => String(v) }],
+      buttons: [{ key: 'relais', label: 'Le relais : deux à la fois', toggle: true, onClick: (d) => { memRelais = d.s.relais; } }],
+      draw(g, d) {
+        const n = d.s.n, x0 = 92, x1 = d.w - 20, max = 8200, sx = (mo) => x0 + (mo / max) * (x1 - x0);
+        const rows = [['Vidéo', 2, C.c1, 38], ['JavaScript', 3, C.c2, 96]];
+        for (let k = 0; k <= 8; k++) { const x = sx(k * 1000); g.strokeStyle = C.grid; g.beginPath(); g.moveTo(x, 24); g.lineTo(x, d.h - 32); g.stroke(); label(g, `${k} Go`, x, d.h - 14, { align: 'center', size: 11 }); }
+        let showSet;
+        if (memRelais) {
+          showSet = pairs.slice(0, Math.max(1, n)).reduce((a, p) => (p[0][2] + p[1][2] > a[0][2] + a[1][2] ? p : a));
+        }
+        for (const [name, col, color, y] of rows) {
+          label(g, name, 14, y + 22, { color: C.ink, size: 12 });
+          const list = memRelais ? showSet : DAYS.slice(0, n);
+          let acc = 0;
+          for (const day of list) {
+            const v = day[col]; const xa = sx(acc), xb = sx(acc + v);
+            g.fillStyle = alpha(color, 0.55); g.fillRect(xa, y, Math.max(1, xb - xa - 1), 34);
+            if (xb - xa > 46) label(g, day[1], xa + 5, y + 21, { color: '#111', size: 11 });
+            acc += v;
+          }
+          label(g, fmtGo(acc), sx(acc) + 6, y + 22, { color: C.ink, size: 12 });
+        }
+        d.status(memRelais ? `pire couple : ${showSet[0][1]} + ${showSet[1][1]}` : `${n} scène${n > 1 ? 's' : ''}`);
+      },
+    });
+
+    // ── 03 · la ligne de temps ──
+    let fluxMode = 'relais';
+    demo('#fig-flux', {
+      aspect: 16 / 8, title: 'Le relais, jour après jour',
+      controls: [{ key: 'slow', label: 'Ralentissement de la machine', min: 1, max: 4, step: 0.1, value: 1, fmt: (v) => `× ${v.toFixed(1)}` }],
+      buttons: [
+        { label: 'À la suite', onClick: (d) => { fluxMode = 'suite'; group(d, ['À la suite', 'En relais'], 'À la suite'); } },
+        { label: 'En relais', onClick: (d) => { fluxMode = 'relais'; group(d, ['À la suite', 'En relais'], 'En relais'); } },
+      ],
+      setup(d) { group(d, ['À la suite', 'En relais'], fluxMode === 'relais' ? 'En relais' : 'À la suite'); },
+      draw(g, d) {
+        const days = DAYS.filter((x) => x[4] > 0 && x[5] > 0), k = d.s.slow;
+        // (le relais : chaque jour se prépare dès que le précédent commence)
+        const blocks = []; let t = 0, gray = 0, extra = 0, prepStart = 0;
+        days.forEach((day, i) => {
+          const prep = day[5] * k;
+          if (i === 0) { blocks.push({ kind: 'load', t0: 0, t1: prep }); t = prep; }
+          else if (fluxMode === 'suite') { blocks.push({ kind: 'load', t0: t, t1: t + prep }); gray += prep; t += prep; }
+          else {
+            // le jour i est prêt à prepStart + prep ; le précédent fait des tours tant qu'il ne l'est pas
+            const prev = days[i - 1][4];
+            while (t < prepStart + prep) { blocks.push({ kind: 'loop', day: days[i - 1], t0: t, t1: t + prev, extra: true }); t += prev; extra++; }
+          }
+          prepStart = t;
+          blocks.push({ kind: 'loop', day, t0: t, t1: t + day[4], prep: { t0: fluxMode === 'suite' ? t - prep : prepStart, t1: fluxMode === 'suite' ? t : prepStart + (days[i + 1]?.[5] ?? 0) * k } });
+          t += day[4];
+        });
+        const T = t, x0 = 16, x1 = d.w - 16, sx = (s) => x0 + (s / T) * (x1 - x0), yA = 40, hA = 46, yB = 118;
+        label(g, 'Ce que l\'on voit', x0, yA - 10, { size: 11 }); label(g, 'Préparation du jour suivant', x0, yB - 10, { size: 11 });
+        blocks.forEach((b, i) => {
+          if (b.kind === 'load') { g.fillStyle = alpha(C.dim, 0.35); g.fillRect(sx(b.t0), yA, sx(b.t1) - sx(b.t0), hA); return; }
+          g.fillStyle = alpha(b.extra ? C.c3 : C.c1, b.extra ? 0.55 : 0.18 + 0.22 * (i % 2)); g.fillRect(sx(b.t0), yA, sx(b.t1) - sx(b.t0) - 1, hA);
+          if (sx(b.t1) - sx(b.t0) > 44) label(g, b.day[1], sx(b.t0) + 4, yA + 28, { color: C.ink, size: 11 });
+        });
+        let row = 0;
+        days.forEach((day, i) => {
+          if (i === 0) return;
+          const b = blocks.find((x) => x.kind === 'loop' && x.day === days[i - 1] && x.prep);
+          const p0 = fluxMode === 'suite' ? blocks.find((x) => x.kind === 'loop' && x.day === day).t0 - day[5] * k : b.t0;
+          g.fillStyle = alpha(C.c2, 0.55); g.fillRect(sx(p0), yB + (row % 3) * 16, Math.max(2, sx(p0 + day[5] * k) - sx(p0)), 11);
+          row++;
+        });
+        for (let s = 0; s <= T; s += 60) { label(g, `${s / 60} min`, sx(s), d.h - 10, { align: 'center', size: 10 }); }
+        d.status(`écran de chargement : ${Math.round(gray)} s · tours de plus : ${extra} · ${days.length} jours mesurés`);
+      },
+    });
+
+    // ── 04 · le budget d'une image ──
+    let budget = 100, figWorker = true;
+    demo('#fig-image', {
+      aspect: 16 / 7, title: 'Le temps de chaque image',
+      buttons: [
+        { label: 'Budget 100 ms', onClick: (d) => { budget = 100; group(d, ['Budget 100 ms', 'Budget 6 ms'], 'Budget 100 ms'); } },
+        { label: 'Budget 6 ms', onClick: (d) => { budget = 6; group(d, ['Budget 100 ms', 'Budget 6 ms'], 'Budget 6 ms'); } },
+        { label: 'Figurines dans le worker', onClick: (d) => { figWorker = true; group(d, ['Figurines dans le worker', 'Figurines sur le fil principal'], 'Figurines dans le worker'); } },
+        { label: 'Figurines sur le fil principal', onClick: (d) => { figWorker = false; group(d, ['Figurines dans le worker', 'Figurines sur le fil principal'], 'Figurines sur le fil principal'); } },
+      ],
+      setup(d) {
+        group(d, ['Budget 100 ms', 'Budget 6 ms'], `Budget ${budget} ms`);
+        group(d, ['Figurines dans le worker', 'Figurines sur le fil principal'], figWorker ? 'Figurines dans le worker' : 'Figurines sur le fil principal');
+      },
+      draw(g, d) {
+        // simulation image par image : le jour qui joue coûte 12 ms ; la préparation
+        // construit 612 ms d'objets, au plus « budget » par image (un objet commencé
+        // se termine : 4 ms au plus) ; les figurines, si elles sont sur le fil
+        // principal, arrivent en deux blocs (1,1 s et 1,3 s) à 0,5 s et 0,9 s
+        const frames = [], base = 12, total = 612; let left = total, t = 0, ready = null;
+        const blocks = figWorker ? [] : [[0.5, 1072], [0.9, 1270]];
+        while (t < 4) {
+          let ms = base;
+          for (const bk of blocks) if (!bk.done && t >= bk[0]) { ms += bk[1]; bk.done = true; }
+          if (left > 0 && t > 0.2) { const w = Math.min(left, budget + (budget < 10 ? 0 : 4)); ms += w; left -= w; if (left <= 0) ready = t; }
+          frames.push([t, ms]); t += Math.max(ms, 16.7) / 1000;
+        }
+        const x0 = 40, x1 = d.w - 12, y0 = 20, y1 = d.h - 30, ymax = 140, sy = (ms) => y1 - (Math.min(ms, ymax) / ymax) * (y1 - y0), sx = (s) => x0 + (s / 4) * (x1 - x0);
+        for (const v of [0, 50, 100]) { g.strokeStyle = C.grid; g.beginPath(); g.moveTo(x0, sy(v)); g.lineTo(x1, sy(v)); g.stroke(); label(g, `${v} ms`, x0 - 6, sy(v) + 4, { align: 'right', size: 10 }); }
+        g.strokeStyle = alpha(C.c4, 0.8); g.beginPath(); g.moveTo(x0, sy(16.7)); g.lineTo(x1, sy(16.7)); g.stroke();
+        for (const [ft, ms] of frames) {
+          g.fillStyle = ms > 50 ? C.c3 : ms > 18 ? C.c1 : alpha(C.c2, 0.8);
+          const w = Math.max(1.5, (Math.max(ms, 16.7) / 1000 / 4) * (x1 - x0) - 0.6);
+          g.fillRect(sx(ft), sy(ms), w, y1 - sy(ms));
+          if (ms > ymax) label(g, `${(ms / 1000).toFixed(1).replace('.', ',')} s`, sx(ft) + w / 2, y0 - 6, { align: 'center', size: 10, color: C.c3 });
+        }
+        for (let s = 0; s <= 4; s++) label(g, `${s} s`, sx(s), d.h - 10, { align: 'center', size: 10 });
+        const worstMs = Math.max(...frames.map((f) => f[1])), over = frames.filter((f) => f[1] > 50).length;
+        d.status(`pire image : ${Math.round(worstMs)} ms · images de plus de 50 ms : ${over} · prêt à ${ready ? `${ready.toFixed(1).replace('.', ',')} s` : 'plus de 4 s'}`);
+      },
+    });
+
+    // ── 07 · les passages, en JavaScript ──
+    const KINDS = {
+      'Magma': ['moss', 'magma', 'heat'], 'Caustic': ['bolt', 'caustic', 'ripple'], 'Kelp': ['caustic', 'kelp', 'wave'],
+      'Labyrinth': ['pendulum', 'labyrinth', 'maze'], 'Echo': ['rust', 'echo', 'flash'],
+    };
+    let pick = 'Magma';
+    const W = 256, H = 160, imgs = {};
+    const load = (id) => imgs[id] ??= new Promise((res) => {
+      const im = new Image(); im.onload = () => { const c = new OffscreenCanvas(W, H), cg = c.getContext('2d'); cg.drawImage(im, 0, 0, W, H); res(cg.getImageData(0, 0, W, H).data); }; im.src = `../home/${id === 'planetaire_v2' ? 'orrery' : id}-scene.jpg`;
+    });
+    const fract = (x) => x - Math.floor(x);
+    const hash2 = (x, y) => fract(Math.sin(x * 127.1 + y * 311.7) * 43758.5453);
+    const vnoise = (x, y) => { const i = Math.floor(x), j = Math.floor(y), u = x - i, v = y - j, s = (t) => t * t * (3 - 2 * t); return lerp(lerp(hash2(i, j), hash2(i + 1, j), s(u)), lerp(hash2(i, j + 1), hash2(i + 1, j + 1), s(u)), s(v)) * 2 - 1; };
+    const fbm = (x, y) => vnoise(x, y) * 0.5 + vnoise(x * 2.03, y * 2.03) * 0.25 + vnoise(x * 4.1, y * 4.1) * 0.125;
+    const sstep = (a, b, x) => { const t = clamp((x - a) / (b - a)); return t * t * (3 - 2 * t); };
+    function voronoi(x, y) {
+      const cx = Math.floor(x), cy = Math.floor(y); let F1 = 8, F2 = 8;
+      for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {
+        const gx = cx + i, gy = cy + j, px = gx + hash2(gx, gy), py = gy + hash2(gx + 37, gy + 11), dd = Math.hypot(px - x, py - y);
+        if (dd < F1) { F2 = F1; F1 = dd; } else if (dd < F2) F2 = dd;
+      }
+      return { F1, edge: F2 - F1 };
+    }
+    function sweepM(o, p, w) { const f = p * (1 + 2 * w) - w, m = sstep(o - w, o + w, f); return [m, Math.pow(m * (1 - m) * 4, 1.5)]; }
+    // une fonction par passage : (u, v, p, a, b, asp) → [r, g, b] (0…1)
+    const PASS = {
+      heat(u, v, p, a, b, asp) {
+        const vo = voronoi(u * asp * 6.5, v * 6.5), n = fbm(u * asp * 2.5, v * 2.5) * 0.5 + 0.5, lum = 0.2126 * a[0] + 0.7152 * a[1] + 0.0722 * a[2];
+        const o = clamp(sstep(0, 0.45, vo.edge) * 0.75 + n * 0.25 - lum * 0.1), [m, rim] = sweepM(o, p, 0.07);
+        const crack = (1 - sstep(0, 0.06, vo.edge)) * sstep(0, 0.25, p) * (1 - m), hot = [1, 0.34, 0.07];
+        return [0, 1, 2].map((k) => lerp(a[k] * (1 - crack * 0.3), b[k], m) + hot[k] * (rim * 0.9 + crack * 1.1));
+      },
+      ripple(u, v, p, a, b, asp, A, B) {
+        const dx = (u - 0.5) * asp, dy = v - 0.5, r = Math.hypot(dx, dy), R = (1 - p) * (Math.hypot(asp, 1) * 0.5 + 0.05), dl = r - R;
+        const env = Math.exp(-Math.abs(dl) / 0.07), wave = Math.sin(dl * 95), off = wave * env * 0.012 / Math.max(r, 1e-3);
+        const aa = A(u + dx * off / asp, v + dy * off), bb = B(u + dx * off * 0.6 / asp, v + dy * off * 0.6), m = sstep(-0.012, 0.012, dl);
+        const lines = Math.pow(Math.max(wave, 0), 6) * env * m * 0.45;
+        return [0, 1, 2].map((k) => lerp(aa[k], bb[k], m) + [1, 0.97, 0.86][k] * lines);
+      },
+      wave(u, v, p, a, b, asp) {
+        const x = u * asp, yl = 1.18 - p * 1.42 + Math.sin(x * 8) * 0.03 + Math.sin(x * 21) * 0.012, dl = v - yl, m = sstep(-0.005, 0.005, dl);
+        const fn = vnoise(u * asp * 38, v * 38) * 0.5 + 0.5, foam = Math.exp(-Math.abs(dl) / 0.012) * (fn * 0.5 + 0.5) + Math.exp(-dl / 0.05) * m * Math.pow(fn, 4) * 0.6;
+        return [0, 1, 2].map((k) => lerp(a[k], b[k], m) + [0.93, 0.96, 1][k] * foam * 0.75);
+      },
+      maze(u, v, p, a, b, asp) {
+        const X = u * asp * 9, Y = v * 9, cx = Math.floor(X), cy = Math.floor(Y), fx = X - cx, fy = Y - cy, r = hash2(cx, cy);
+        const diag = r > 0.5 ? Math.abs(fx - fy) : Math.abs(fx + fy - 1), wall = 1 - sstep(0.04, 0.09, diag);
+        const side = r > 0.5 ? (fx > fy ? 1 : 0) : (fx + fy > 1 ? 1 : 0), half = hash2(cx * 2 + side, cy * 2 + 17);
+        const o = clamp(Math.hypot((cx + 0.5) / 9, (cy + 0.5) / 9 - 1) * 0.6 + half * 0.25), [m, rim] = sweepM(o, p, 0.03);
+        const lit = sstep(0, 0.2, p) * (1 - sstep(0.8, 1, p));
+        return [0, 1, 2].map((k) => lerp(a[k], b[k], m) * (1 - wall * lit * 0.45) + [0.95, 0.85, 0.6][k] * rim * 0.35);
+      },
+      flash(u, v, p, a, b, asp) {
+        const r = Math.hypot((u - 0.32) * asp, v - 0.4), R = p * Math.hypot(asp, 1) * 1.05, dl = r - R, m = sstep(0.01, -0.01, dl);
+        const front = Math.exp(-Math.abs(dl) / 0.012) * (1 - sstep(0.85, 1, p)), glow = Math.exp(-p / 0.04) * 0.6;
+        return [0, 1, 2].map((k) => lerp(a[k], b[k], m) + [1, 0.97, 0.9][k] * (front * 1.1 + glow));
+      },
+    };
+    demo('#fig-passage', {
+      aspect: 16 / 10, title: 'Le passage vers le jour qui arrive', animate: true,
+      controls: [{ key: 'p', label: 'Avancée figée (0 : en mouvement)', min: 0, max: 1, step: 0.01, value: 0, fmt: (v) => (v ? v.toFixed(2).replace('.', ',') : 'en mouvement') }],
+      buttons: Object.keys(KINDS).map((k) => ({ label: `→ ${k}`, onClick: (d) => { pick = k; group(d, Object.keys(KINDS).map((x) => `→ ${x}`), `→ ${k}`); d.state.cache = null; } })),
+      setup(d) { group(d, Object.keys(KINDS).map((x) => `→ ${x}`), `→ ${pick}`); },
+      draw(g, d) {
+        const [from, to, kind] = KINDS[pick];
+        if (!d.state.cache || d.state.cache.pick !== pick) {
+          d.state.cache = { pick, ready: false };
+          Promise.all([load(from), load(to)]).then(([A, B]) => { if (d.state.cache?.pick === pick) Object.assign(d.state.cache, { A, B, ready: true }); });
+        }
+        const c = d.state.cache;
+        if (!c.ready) { label(g, 'chargement des vignettes…', 12, 24); return; }
+        const p = d.s.p || (0.5 - 0.5 * Math.cos((d.t % 6) / 6 * Math.PI * 2)) * 1;
+        const img = d.state.out ??= new ImageData(W, H), asp = W / H;
+        const at = (D, u, v) => { const x = clamp(Math.round(u * (W - 1)), 0, W - 1), y = clamp(Math.round(v * (H - 1)), 0, H - 1), o = (y * W + x) * 4; return [D[o] / 255, D[o + 1] / 255, D[o + 2] / 255]; };
+        const A = (u, v) => at(c.A, u, v), B = (u, v) => at(c.B, u, v), f = PASS[kind];
+        for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+          const u = (x + 0.5) / W, v = (y + 0.5) / H, rgb = f(u, v, p, A(u, v), B(u, v), asp, A, B), o = (y * W + x) * 4;
+          img.data[o] = clamp(rgb[0]) * 255; img.data[o + 1] = clamp(rgb[1]) * 255; img.data[o + 2] = clamp(rgb[2]) * 255; img.data[o + 3] = 255;
+        }
+        const cv = d.state.cv ??= new OffscreenCanvas(W, H); cv.getContext('2d').putImageData(img, 0, 0);
+        g.imageSmoothingEnabled = true; g.drawImage(cv, 0, 0, d.w, d.h);
+        d.status(`${DAYS.find((x) => x[0] === from)[1]} → ${DAYS.find((x) => x[0] === to)[1]} · « ${kind} » · p = ${p.toFixed(2).replace('.', ',')}`);
+      },
+    });
+
+    // ── 09 · les écarts mesurés ──
+    demo('#fig-ecarts', {
+      aspect: 16 / 7, title: 'relay-check : écart moyen par jour',
+      draw(g, d) {
+        const list = DAYS.filter((x) => ECARTS[x[0]]), x0 = 36, x1 = d.w - 10, y0 = 16, y1 = d.h - 46, vmax = 3.5, sy = (v) => y1 - (v / vmax) * (y1 - y0);
+        const bw = (x1 - x0) / list.length;
+        for (const v of [0, 1, 1.5, 2, 3]) { g.strokeStyle = v === 1.5 ? alpha(C.c3, 0.8) : C.grid; g.beginPath(); g.moveTo(x0, sy(v)); g.lineTo(x1, sy(v)); g.stroke(); label(g, String(v).replace('.', ','), x0 - 6, sy(v) + 4, { align: 'right', size: 10 }); }
+        list.forEach((day, i) => {
+          const [a, b] = ECARTS[day[0]], x = x0 + i * bw;
+          g.fillStyle = alpha(C.c2, 0.8); g.fillRect(x + bw * 0.15, sy(a), bw * 0.3, y1 - sy(a));
+          g.fillStyle = alpha(C.c1, 0.8); g.fillRect(x + bw * 0.5, sy(b), bw * 0.3, y1 - sy(b));
+          g.save(); g.translate(x + bw * 0.5, y1 + 8); g.rotate(-0.6); label(g, day[1], 0, 0, { align: 'right', size: 10 }); g.restore();
+        });
+        d.status(`<span style="color:${C.c2}">■</span> phase 0,1 &nbsp; <span style="color:${C.c1}">■</span> phase 0,45 &nbsp; · ${list.length} jours`);
+      },
+    });
+  </script>
+</body>
+</html>

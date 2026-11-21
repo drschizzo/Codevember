@@ -10,19 +10,12 @@
 // outils de mise au point passent tous par lui.
 import * as THREE from 'three/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { pass, vec4, float } from 'three/tsl';
-import { sceneDepth } from './scene/smoke.js';
 import { generate, upgrade, MOODS } from './recipe.js';
-import { createCameraPath, cloudTrack } from './camera.js';
 import { FAMILIES } from './families.js';
-import { heightOf } from './fruit.js';
-import { logBase } from './gen/wood.js';
 import { createGenerator } from '../../shared/gen/client.js';
-import { createStage } from './scene/stage.js';
-import { makeEnvironment } from './scene/env.js';
+import { createCore } from './core.js';
 import { G } from '../../shared/scene/globals.js';
-import { setNoiseVolume, setLite } from '../../shared/scene/materials.js';
-import { createPost } from '../../shared/render/post.js';
+import { setLite } from '../../shared/scene/materials.js';
 import { createAccumulator, jitter } from '../../shared/render/accum.js';
 import { createUI } from './app/ui.js';
 import { installChrome } from '../../shared/app/chrome.js';
@@ -92,46 +85,18 @@ async function main() {
   // préparation découpée en petits lots (app/warmup.js).
   const pipes = asyncPipelines(renderer);
 
-  const scene = new THREE.Scene();
-  scene.background = new THREE.Color();
-  scene.fog = new THREE.Fog(0x000000, 1, 2);
-  const camera = new THREE.PerspectiveCamera(28, innerWidth / innerHeight, 0.05, 200); // (centimètres)
+  // ── Modules ──
+  // (la scène, sa recette et le rendu d'une phase : core.js, partagé avec le
+  // relais de la méga-scène ; le volume de fumée y a sa passe)
+  const gen = createGenerator(LITE ? Math.max(2, Math.min(3, (navigator.hardwareConcurrency || 4) - 1)) : undefined);
+  const RENDER = loadRender(LITE);
+  const core = await createCore({ renderer, width: innerWidth, height: innerHeight, gen, lite: LITE, RENDER });
+  const { scene, camera, stage, post } = core;
   const controls = new OrbitControls(camera, canvas);
   controls.enabled = false;
   controls.enableDamping = true;
   const camState = { free: false };
-
-  // ── Modules ──
-  const gen = createGenerator(LITE ? Math.max(2, Math.min(3, (navigator.hardwareConcurrency || 4) - 1)) : undefined);
-  setNoiseVolume(await gen.request({ seed: `${NAME}-noise` }, 'noise')); // (les matériaux en dépendent)
-  const stage = createStage(scene, gen, { lite: LITE });
-  // Le volume de fumée : sa propre passe, à demi-résolution, posée sur l'image
-  // avant l'anticrénelage temporel (qui lisse aussi son départ tramé). Il lit
-  // la profondeur de la passe de scène pour s'arrêter sur le bois.
-  let smokePass = null;
-  const post = createPost(renderer, scene, camera, {
-    prePassScale: 0.5, // (l'occlusion est à demi-résolution : sa pré-passe aussi)
-    overlay: (color, { scenePass }) => {
-      smokePass?.dispose();
-      sceneDepth.value = scenePass.getTexture('depth');
-      smokePass = pass(stage.smokeScene, camera);
-      smokePass.setResolutionScale(0.5);
-      // (effacée à alpha nul quel que soit l'état du moteur : la passe est
-      // déclenchée depuis le quad du TRAA, qui efface en noir opaque — une
-      // fumée absente devenait un voile noir sur toute l'image)
-      const ub = smokePass.updateBefore.bind(smokePass), cc = new THREE.Color();
-      smokePass.updateBefore = (frame) => {
-        const r = frame.renderer, a = r.getClearAlpha();
-        r.getClearColor(cc); r.setClearColor(0x000000, 0);
-        ub(frame);
-        r.setClearColor(cc, a);
-      };
-      const s = smokePass.getTextureNode(); // (prémultiplié)
-      return vec4(color.rgb.mul(float(1).sub(s.a)).add(s.rgb), color.a);
-    },
-  });
   const accum = createAccumulator(renderer);
-  const RENDER = loadRender(LITE);
   // (au bureau, pas sous 60 % de la base : plus bas, le TRAA ne rattrape plus la netteté)
   const governor = createGovernor({ target: 1 / 45, min: LITE ? 0.5 : 0.6, max: 1, onChange: () => !busy && resize() });
   const pace = createPacer(() => RENDER.maxFps);
@@ -142,36 +107,8 @@ async function main() {
     try { R = upgrade(await unpackRecipe(location.hash.slice(3))); } catch { R = null; }
   }
   R ??= generate(params.get('seed') || DEFAULT_SEED);
-  let envKey = '';
-  function syncEnv() {
-    const k = R.env.preset;
-    if (k === envKey) return;
-    envKey = k;
-    const old = scene.environment;
-    scene.environment = makeEnvironment(k, 0, LITE ? 512 : 1024);
-    old?.dispose();
-  }
-
-  // ── La caméra du film : construite quand le site est calculé (elle vise le
-  // centre du réseau, puis la forêt) ──
-  let path = null;
-  function makePath() {
-    const S = stage.site(), P = R.plasmodium, sp = FAMILIES[R.family].species[R.species];
-    let fx = P.territory[0], fz = P.territory[1];
-    if (S && S.nBeads) {
-      let ax = 0, az = 0, w = 0;
-      for (let i = 0; i < S.nBeads; i++) { ax += S.beads[i * 8]; az += S.beads[i * 8 + 1]; w++; }
-      fx = ax / w; fz = az / w;
-    }
-    const H = sp.head ? heightOf(sp) : 0.06;
-    path = createCameraPath(R.camera, {
-      L: R.site.L, target: [P.territory[0] + 0.1, P.territory[1]], forest: [fx, fz], H, y0: logBase(fz, R.site.logR),
-      // (la forêt remplit le cadre : distance à l'échelle des sporanges)
-      distForest: Math.min(R.camera.dist, Math.max(1.6, H * (H > 0.5 ? 4.4 : 6.5) + 0.6)),
-      groundAt: (x, z) => logBase(z, R.site.logR) + 0.05,
-      cloud: cloudTrack(S?.smoke, R.site.L), // (la caméra suit le nuage pendant le voyage)
-    }, 40);
-  }
+  const syncEnv = () => core.syncEnv();
+  // (la caméra du film, construite quand le site est calculé : core.js)
 
   // ── Écran de chargement ──
   // Une scène ne s'affiche que lorsque toute sa géométrie est arrivée, que ses
@@ -190,9 +127,7 @@ async function main() {
     // (le fondu d'entrée de l'écran se termine avant que la scène ne change)
     setTimeout(() => {
       if (R !== recipe) return;
-      path = null;
-      stage.setRecipe(R);
-      syncEnv();
+      core.setRecipe(R);
       loading.applied = true;
     }, firstRecipe ? 0 : 280);
     firstRecipe = false;
@@ -213,7 +148,7 @@ async function main() {
     const recipe = R;
     try {
       return await warmScene({
-        renderer, scene, pipes, render: renderStep, phases: [0, 0.25, 0.5, 0.75],
+        renderer, scene, pipes, render: renderStep, phases: core.warmPhases(),
         onProgress: (f) => loader.progress(f), alive: () => R === recipe,
       });
     } finally {
@@ -223,46 +158,11 @@ async function main() {
   }
 
   // ── Rendu d'une phase ──
-  const TAU = Math.PI * 2;
-  const _f = new THREE.Vector3(), _u = new THREE.Vector3(), _r = new THREE.Vector3();
   // u : phase « déroulée » (partie entière = nombre de boucles accomplies) ;
   // sub : décalages d'un rendu accumulé (lentille, pixel), facultatif
   function renderAt(u, sub = null) {
-    const ph = u - Math.floor(u);
-    G.phasePrev.value = G.phase.value;
-    G.phase.value = ph;
-    G.frame.value = (G.frame.value + 1) % 65536;
-    const C = R.camera;
-    if (!path && stage.ready()) makePath();
-    const pose = path ? path.pose(ph) : { pos: [0, 2, 6], target: [0, 0, 0], fov: C.fov, focus: 6 };
     if (camState.free) controls.update();
-    else {
-      camera.position.set(...pose.pos);
-      camera.up.set(0, 1, 0);
-      camera.lookAt(...pose.target);
-    }
-    if (camera.fov !== C.fov) { camera.fov = C.fov; camera.updateProjectionMatrix(); }
-    camera.clearViewOffset();
-    if (sub) {
-      camera.updateMatrixWorld();
-      _f.setFromMatrixColumn(camera.matrixWorld, 0); _u.setFromMatrixColumn(camera.matrixWorld, 1);
-      const ap = 0.006 * (RENDER.dof ? RENDER.bokeh : 0.3);
-      camera.position.addScaledVector(_f, sub.lens[0] * ap).addScaledVector(_u, sub.lens[1] * ap);
-      camera.lookAt(_r.set(...pose.target));
-      camera.setViewOffset(canvas.width, canvas.height, sub.pixel[0], sub.pixel[1], canvas.width, canvas.height);
-    }
-    camera.updateMatrixWorld();
-    G.microDetail.value = RENDER.microDetail;
-    G.roughFloor.value = RENDER.roughFloor;
-    scene.background.set(R.fog.color);
-    scene.fog.color.set(R.fog.color);
-    scene.fog.near = R.fog.near; scene.fog.far = R.fog.far;
-    scene.environmentIntensity = R.env.intensity;
-    scene.environmentRotation.set(0, R.env.rotation, 0);
-    stage.update(ph, pose, camera);
-    const focus = camState.free ? camera.position.distanceTo(controls.target) : pose.focus;
-    post.update({ ...RENDER, lite: LITE, focus: RENDER.focus * focus, focusRange: RENDER.focusRange * focus }, R);
-    post.render();
+    core.renderAt(u, { sub, free: camState.free, target: controls.target });
   }
   // Rendu hors de la boucle d'animation (export, image fixe, débogage) : three.js
   // ne refait la passe de scène, les ombres et les vitesses de la caméra
@@ -293,7 +193,7 @@ async function main() {
   function applyRender() {
     if (!RENDER.dynRes) governor.reset();
     resize();
-    stage.setShadowQuality(RENDER.shadows);
+    core.applyRender();
     saveRender(RENDER);
   }
 
@@ -307,7 +207,7 @@ async function main() {
     familyChanged: (family) => { R = generate(R.seed, { mood: R.mood, family, support: R.support }); applyRecipe(); },
     supportChanged: (support) => { R = generate(R.seed, { mood: R.mood, family: R.family, support }); applyRecipe(); },
     siteChanged: () => { applyRecipe(); },
-    cameraChanged: () => { path = null; },
+    cameraChanged: () => core.resetPath(),
     copyLink: async () => {
       const url = new URL(location.href);
       url.hash = `r=${await packRecipe(R)}`;
@@ -327,7 +227,7 @@ async function main() {
     freeCam: (v) => {
       camState.free = v;
       controls.enabled = v;
-      if (v && path) controls.target.set(...path.pose(phi - Math.floor(phi)).target);
+      if (v && core.path) controls.target.set(...core.path.pose(phi - Math.floor(phi)).target);
       toast(v ? 'Caméra libre' : 'Caméra du film', 1600);
     },
     exportPNG: (o = {}) => exportPNG(canvas, () => (o.samples > 1 ? renderAccum(phi, o.samples) : renderStep(phi)), `${NAME}-${R.seed}.png`),
@@ -376,7 +276,7 @@ async function main() {
     window[NAME] = {
       renderer, scene, camera, controls, stage, post, gen, RENDER, G, pipes, errors, on, renderAt: renderStep, renderAccum,
       get R() { return R; },
-      get smokePass() { return smokePass; },
+      get smokePass() { return core.smokePass; },
       seek: (p) => { phi = p; paused = true; },
       play: () => { paused = false; frozen = false; },
       freeze: (v = true) => { frozen = v; },

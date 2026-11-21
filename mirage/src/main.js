@@ -11,12 +11,11 @@
 import * as THREE from 'three/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { generate, upgrade } from './recipe.js';
-import { cameraAt, seamAt, compExp, levelAt } from './timeline.js';
+import { levelAt } from './timeline.js';
 import { createGenerator } from '../../shared/gen/client.js';
-import { createStage } from './scene/stage.js';
+import { createCore } from './core.js';
 import { G } from '../../shared/scene/globals.js';
-import { setNoiseVolume, setLite } from '../../shared/scene/materials.js';
-import { createPost } from '../../shared/render/post.js';
+import { setLite } from '../../shared/scene/materials.js';
 import { createAccumulator, jitter } from '../../shared/render/accum.js';
 import { createUI } from './app/ui.js';
 import { installChrome } from '../../shared/app/chrome.js';
@@ -88,20 +87,18 @@ async function main() {
   // préparation découpée en petits lots (app/warmup.js).
   const pipes = asyncPipelines(renderer);
 
-  const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(25, innerWidth / innerHeight, 0.01, 10);
+  // ── Modules ──
+  // (la scène, sa recette et le rendu d'une phase : core.js, partagé avec le
+  // relais de la méga-scène)
+  const gen = createGenerator(LITE ? Math.max(2, Math.min(3, (navigator.hardwareConcurrency || 4) - 1)) : undefined);
+  const RENDER = loadRender(LITE);
+  const core = await createCore({ renderer, width: innerWidth, height: innerHeight, gen, lite: LITE, RENDER });
+  const { scene, camera, stage, post } = core;
   const controls = new OrbitControls(camera, canvas);
   controls.enabled = false;
   controls.enableDamping = true;
   const camState = { free: false };
-
-  // ── Modules ──
-  const gen = createGenerator(LITE ? Math.max(2, Math.min(3, (navigator.hardwareConcurrency || 4) - 1)) : undefined);
-  setNoiseVolume(await gen.request({ seed: `${NAME}-noise` }, 'noise')); // (les matériaux en dépendent)
-  const stage = createStage(scene, gen, { renderer, camera, lite: LITE });
-  const post = createPost(renderer, scene, camera);
   const accum = createAccumulator(renderer);
-  const RENDER = loadRender(LITE);
   const governor = createGovernor({ target: 1 / 45, min: 0.5, max: 1, onChange: () => !busy && resize() });
   const pace = createPacer(() => RENDER.maxFps);
 
@@ -129,7 +126,7 @@ async function main() {
     // (le fondu d'entrée de l'écran se termine avant que la scène ne change)
     sleep(firstRecipe ? 0 : 280).then(() => {
       if (R !== recipe) return;
-      stage.setRecipe(R);
+      core.setRecipe(R);
       loading.applied = true;
     });
     firstRecipe = false;
@@ -150,7 +147,7 @@ async function main() {
     const recipe = R;
     try {
       return await warmScene({
-        renderer, scene, pipes, render: renderStep, phases: [0, 0.25, 0.5, 0.75],
+        renderer, scene, pipes, render: renderStep, phases: core.warmPhases(),
         onProgress: (f) => loader.progress(f), alive: () => R === recipe,
       });
     } finally {
@@ -160,53 +157,11 @@ async function main() {
   }
 
   // ── Rendu d'une phase ──
-  const TAU = Math.PI * 2;
-  const _r = new THREE.Vector3();
-  const altCam = new THREE.PerspectiveCamera(25, 1, 0.01, 10);
-  let dbgNoSeam = false; // (?debug : window.mirage.noSeam(true) montre chaque vue sans le fondu)
-  // pose d'une caméra : position, visée, champ (élargi en portrait), étirement
-  // horizontal du raccord (le format du dessin, multiplié par ax)
-  function pose(cam, P, sub) {
-    cam.position.set(...P.pos);
-    cam.up.set(0, 1, 0);
-    cam.lookAt(_r.set(...P.tgt));
-    const base = canvas.width / Math.max(1, canvas.height);
-    const fovDeg = P.fov * (base >= 1 ? 1 : Math.min(1.7, 1.1 / base)), asp = base * (P.ax ?? 1);
-    if (cam.fov !== fovDeg || cam.aspect !== asp) { cam.fov = fovDeg; cam.aspect = asp; cam.updateProjectionMatrix(); }
-    cam.clearViewOffset();
-    if (sub) cam.setViewOffset(canvas.width, canvas.height, sub.pixel[0], sub.pixel[1], canvas.width, canvas.height);
-    cam.updateMatrixWorld();
-  }
   // u : phase « déroulée » (partie entière = nombre de boucles accomplies) ;
   // sub : décalages d'un rendu accumulé (lentille, pixel), facultatif
   function renderAt(u, sub = null) {
-    const ph = u - Math.floor(u);
-    G.phasePrev.value = G.phase.value;
-    G.phase.value = ph;
-    G.frame.value = (G.frame.value + 1) % 65536;
-    // la caméra de la chorégraphie : la spirale de l'abyme
-    const P = cameraAt(R, ph);
-    pose(camera, P, sub);
-    // le raccord : la même image vue depuis l'autre niveau, mêlée en fondu ;
-    // l'argent perdu par l'image du petit, compensé à mesure qu'elle grandit
-    const U = stage.raytrace.U, rho = U.inner.value;
-    const pixA = (2 * Math.tan((camera.fov * Math.PI) / 360)) / Math.max(1, canvas.height);
-    const dist = (Q) => Math.hypot(Q.pos[0] - Q.tgt[0], Q.pos[1] - Q.tgt[1], Q.pos[2] - Q.tgt[2]);
-    U.pixFoot.value = pixA * dist(P); // (un pixel, à la distance de la visée ; le tracé le convertit au niveau touché)
-    const comp = (e) => [rho.r, rho.g, rho.b].map((c) => c ** (-2 * e));
-    U.comp.value.set(...comp(compExp(P.level)));
-    const S = dbgNoSeam ? null : seamAt(R, ph);
-    if (S) {
-      pose(altCam, cameraAt(R, ph, S.alt), sub);
-      U.altPos.value.copy(altCam.position); U.altWorld.value.copy(altCam.matrixWorld); U.altProjInv.value.copy(altCam.projectionMatrixInverse);
-      U.altComp.value.set(...comp(compExp(S.alt)));
-      const A2 = cameraAt(R, ph, S.alt);
-      U.altPixFoot.value = pixA * dist(A2);
-      U.altW.value = S.w;
-    } else U.altW.value = 0;
-    stage.update(ph, camera);
-    post.update({ ...RENDER, lite: LITE, exposure: RENDER.exposure * stage.exposure() }, R);
-    post.render();
+    if (camState.free) controls.update();
+    core.renderAt(u, { sub, free: camState.free });
   }
   // Rendu hors de la boucle d'animation (export, image fixe, débogage) : three.js
   // ne refait la passe de scène, les ombres et les vitesses de la caméra
@@ -237,7 +192,7 @@ async function main() {
   function applyRender() {
     if (!RENDER.dynRes) governor.reset();
     resize();
-    stage.setShadowQuality(RENDER.shadows);
+    core.applyRender();
     saveRender(RENDER);
   }
 
@@ -318,7 +273,7 @@ async function main() {
       renderer, scene, camera, controls, stage, post, gen, RENDER, G, pipes, errors, on, renderAt: renderStep, renderAccum,
       get R() { return R; },
       seek: (p) => { phi = p; paused = true; },
-      noSeam: (v = true) => { dbgNoSeam = v; },
+      noSeam: (v = true) => core.noSeam(v),
       play: () => { paused = false; frozen = false; },
       freeze: (v = true) => { frozen = v; },
       // image fixe à la phase ph (n images : historique de l'anticrénelage)

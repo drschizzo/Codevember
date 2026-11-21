@@ -20,7 +20,9 @@ import { G } from '../../../shared/scene/globals.js';
 
 const SHADOW = { mobile: 2048, low: 2048, medium: 4096, high: 4096, ultra: 4096 };
 
-export function createStage(scene, renderer, { lite = false } = {}) {
+// simPace : { batch, pace } passés à la simulation (gs.run) — la méga-scène y
+// met un petit lot par image ; absent, la simulation va aussi vite qu'avant
+export function createStage(scene, renderer, { lite = false, simPace = {} } = {}) {
   // ── Lumières (ordre fixe) ──
   const key = new THREE.SpotLight(0xffffff, 10, 0, 0.5, 0.7, 2);
   key.castShadow = true;
@@ -70,6 +72,7 @@ export function createStage(scene, renderer, { lite = false } = {}) {
     app.setRecipe(R, S);
     floorMat.color.set(R.floor);
     await gs.run({
+      ...simPace,
       alive: () => v === version,
       onProgress: (f) => { if (v === version) prog = f; },
       onPreview: (a, f) => { if (v === version) onPreview?.(a, f, gs); },

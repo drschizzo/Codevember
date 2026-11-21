@@ -11,12 +11,8 @@ import { SETS } from './finishes.js';
 import { TYPES } from './types.js';
 import { createRng } from '../../shared/rng.js';
 import { createGenerator } from './gen/client.js';
-import { createNest } from './scene/nest.js';
-import { createLights } from './scene/lights.js';
-import { createDust } from './scene/dust.js';
-import { makeEnvironment } from './scene/env.js';
-import { G, setNoiseVolume, setLite } from './scene/materials.js';
-import { createPost } from './render/post.js';
+import { createCore } from './core.js';
+import { setLite } from './scene/materials.js';
 import { createUI } from './app/ui.js';
 import { installChrome } from '../../shared/app/chrome.js';
 import { loadRender, saveRender, applyQuality, defaultsFor } from './app/settings.js';
@@ -27,7 +23,6 @@ import { loader } from '../../shared/app/loader.js';
 import { asyncPipelines, warmScene } from '../../shared/app/warmup.js';
 
 const DEFAULT_SEED = 'ce0gkq'; // scène d'ouverture (sans ?seed=)
-const D = 4; // distance caméra–centre (toutes les longueurs de la scène en dépendent)
 const params = new URLSearchParams(location.search);
 const $ = (s) => document.querySelector(s);
 const randomSeed = () => Math.random().toString(36).slice(2, 8);
@@ -45,25 +40,6 @@ async function unpackRecipe(str) {
   const b = Uint8Array.from(bin, (c) => c.charCodeAt(0));
   const s = new Blob([b]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
   return JSON.parse(await new Response(s).text());
-}
-
-// Variation de vitesse autour du passage k (t entier) : τ = t − Σ a·w·K((t − k)/w),
-// K(x) = x − 3x³ + 3x⁵ − x⁷ (primitive de k(x) = (1 − 7x²)(1 − x²)², d'intégrale
-// nulle) : la vitesse vaut 1 − a au passage, remonte jusqu'à 1 + 0,65·a de part
-// et d'autre, et rejoint 1 sans à-coup en ±w ; τ(k) = k. a > 0 : ralenti ;
-// a < 0 : accélération. beats : un battement par couche, { a, w }.
-const K7 = (x) => x - 3 * x ** 3 + 3 * x ** 5 - x ** 7;
-function beatShift(t, N, cam) {
-  const beats = cam.beats?.length ? cam.beats : [{ a: 1, w: 0.5 }];
-  const amp = cam.ramp ?? 0;
-  let tau = t, open = 0;
-  for (let k = Math.round(t) - 1; k <= Math.round(t) + 1; k++) {
-    const b = beats[(((k % N) + N) % N) % beats.length], x = (t - k) / b.w;
-    if (Math.abs(x) >= 1) continue;
-    tau -= amp * b.a * b.w * K7(x);
-    open += Math.max(0, b.a) * (1 - x * x) ** 2;
-  }
-  return { tau, open };
 }
 
 // un échec : dit à l'écran, avec de quoi repartir (une fois l'interface prête)
@@ -106,18 +82,6 @@ async function main() {
   // préparation découpée en petits lots (app/warmup.js).
   const pipes = asyncPipelines(renderer);
 
-  const scene = new THREE.Scene();
-  scene.background = new THREE.Color();
-  scene.fog = new THREE.Fog(0x000000, 1, 2);
-  const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.01, 60);
-  camera.position.set(0, 0, D);
-  const controls = new OrbitControls(camera, canvas);
-  controls.enabled = false;
-  controls.enableDamping = true;
-  controls.minDistance = 0.3;
-  controls.maxDistance = 20;
-  const camState = { free: false };
-
   // ── Recette ── (connue avant les modules : l'écran de chargement en dessine les couches)
   let R;
   if (location.hash.startsWith('#r=')) {
@@ -132,28 +96,25 @@ async function main() {
   showNest();
 
   // ── Modules ──
+  // (la scène, sa recette et le rendu d'une phase : core.js, partagé avec le
+  // relais de la méga-scène)
   // (mobile : moins de workers, la génération ne doit pas étouffer le rendu)
   const gen = createGenerator(LITE ? Math.max(2, Math.min(3, (navigator.hardwareConcurrency || 4) - 1)) : undefined);
-  setNoiseVolume(await gen.request({ seed: 'hollow-noise' }, 0, 'noise')); // (les matériaux en dépendent)
-  const nest = createNest(scene, gen, { minLod: LITE ? 1 : 0 });
-  const lights = createLights(scene, { lite: LITE });
-  const dust = createDust(scene, { lite: LITE });
-  const post = createPost(renderer, scene, camera, lights);
   const RENDER = loadRender(LITE);
+  const core = await createCore({ renderer, width: innerWidth, height: innerHeight, gen, lite: LITE, RENDER });
+  const { scene, camera, nest, lights, dust, post } = core;
+  const controls = new OrbitControls(camera, canvas);
+  controls.enabled = false;
+  controls.enableDamping = true;
+  controls.minDistance = 0.3;
+  controls.maxDistance = 20;
+  const camState = { free: false };
+
   // résolution dynamique : vise ~45 images / s, entre 50 et 100 % de la résolution de base
   const governor = createGovernor({ target: 1 / 45, min: 0.5, max: 1, onChange: () => !busy && resize() });
   const pace = createPacer(() => RENDER.maxFps);
 
-  let envKey = '';
-
-  function syncEnv() {
-    const k = R.env.preset;
-    if (k === envKey) return;
-    envKey = k;
-    const old = scene.environment;
-    scene.environment = makeEnvironment(k, 0, LITE ? 512 : 1024);
-    old?.dispose();
-  }
+  const syncEnv = () => core.syncEnv();
 
   // Écran de chargement : une nouvelle scène ne s'affiche que lorsque toutes ses
   // coquilles ont leur forme définitive (tous niveaux de détail, cristaux), que
@@ -174,8 +135,7 @@ async function main() {
     // (le fondu d'entrée de l'écran se termine avant que la scène ne change)
     setTimeout(() => {
       if (R !== recipe) return; // (une autre scène a été demandée entre-temps)
-      nest.setRecipe(R);
-      syncEnv();
+      core.setRecipe(R);
       loading.applied = true;
     }, firstRecipe ? 0 : 280);
     firstRecipe = false;
@@ -187,60 +147,10 @@ async function main() {
     document.title = `Hollow · ${R.seed}`;
   }
 
-  // ── Rendu d'une phase ──
-  function rig(ph) {
-    const w = ph * Math.PI * 2, s = R.camera.sway * D;
-    camera.position.set(s * Math.sin(w + 0.7), s * 0.65 * Math.sin(2 * w + 1.3), D);
-    const roll = R.camera.roll * Math.sin(w + 2.1);
-    camera.up.set(Math.sin(roll), Math.cos(roll), 0);
-    camera.lookAt(s * 0.25 * Math.sin(w + 2.4), s * 0.2 * Math.cos(w), 0);
-  }
-  let shells = 0, curTau = 0;
-  // u : phase « déroulée » (le nombre de boucles accomplies en partie entière),
-  // pour que chaque instance de coquille garde sa couche d'une boucle à l'autre
+  // ── Rendu d'une phase ── (core.js)
   function renderAt(u) {
-    const cycle = Math.floor(u), ph = u - cycle;
-    const dive = R.loop.dive;
-    // Chorégraphie : chaque passage d'oculus a sa propre « respiration » (voir
-    // beatShift) — un ralenti plus ou moins appuyé, un passage filé, une
-    // accélération — et le champ s'ouvre un peu dans les ralentis. Les passages
-    // se répètent d'une boucle à l'autre : la boucle est intacte.
-    const N = R.layers.length, t = ph * N;
-    const { tau, open } = dive ? beatShift(t, N, R.camera) : { tau: R.loop.depth, open: 0 };
-    // (image précédente, pour les vecteurs vitesse des pièces animées ; un saut
-    // dans la boucle ne compte pas comme un mouvement)
-    let dTau = tau - curTau;
-    if (dTau < -N / 2) dTau += N; // (fin de boucle : τ repart de 0)
-    const jump = Math.abs(dTau) > 0.5;
-    G.dTau.value = jump ? 0 : dTau;
-    G.phasePrev.value = jump ? ph : G.phase.value;
-    curTau = tau;
-    if (camState.free) controls.update(); else rig(ph);
-    const fov = R.camera.fov * (1 + (R.camera.kick ?? 0) * open);
-    if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); }
-    G.phase.value = ph;
-    G.D.value = D;
-    G.ratio.value = R.nest.ratio;
-    G.envFalloff.value = RENDER.envFalloff;
-    G.microDetail.value = RENDER.microDetail;
-    G.roughFloor.value = RENDER.roughFloor;
-    G.coreR.value = R.nest.core * D;
-    G.coreColor.value.set(R.core.color);
-    G.coreGlow.value = R.core.glow;
-    G.halo.value = R.core.halo ?? 2.4;
-    scene.background.set(R.fog.color);
-    scene.fog.color.set(R.fog.color);
-    scene.fog.near = R.fog.near * D;
-    scene.fog.far = R.fog.far * D;
-    scene.environmentIntensity = R.env.intensity;
-    scene.environmentRotation.set(0, R.env.rotation, 0);
-    const pxPerUnit = canvas.height / (2 * Math.tan((camera.fov * Math.PI) / 360)); // (pixels par unité à distance 1)
-    const info = nest.update({ tau, phi: ph, cycle, dive, ratio: R.nest.ratio, D, coreRel: R.nest.core, detail: RENDER.detail, pxPerUnit });
-    shells = info?.shells ?? 0;
-    dust.update({ tau, N: R.layers.length, ratio: R.nest.ratio, xMax: info?.birth ?? 6 }, R.dust);
-    lights.update(R, camera, D, Math.sin(ph * Math.PI * 4));
-    post.update({ ...RENDER, focus: RENDER.focus * D, focusRange: RENDER.focusRange * D }, R);
-    post.render();
+    if (camState.free) controls.update();
+    core.renderAt(u, { free: camState.free });
   }
 
   function resize() {
@@ -262,14 +172,13 @@ async function main() {
   // Préparation de tout ce que la boucle dessinera, sans gel : deux boucles de la
   // plongée (chaque couche passe à toutes les profondeurs et tous les niveaux de
   // détail, et les instances des deux boucles sont construites).
-  const PHASES = Array.from({ length: 16 }, (_, i) => i / 8);
   async function warm() {
     loading.warming = true;
     loader.step('compile');
     const recipe = R;
     try {
       return await warmScene({
-        renderer, scene, pipes, render: renderStep, phases: PHASES,
+        renderer, scene, pipes, render: renderStep, phases: core.warmPhases(),
         onProgress: (f) => loader.progress(f), alive: () => R === recipe,
       });
     } finally {
@@ -281,7 +190,7 @@ async function main() {
   function applyRender() {
     if (!RENDER.dynRes) governor.reset();
     resize();
-    lights.setShadowQuality(RENDER.shadows);
+    core.applyRender();
     saveRender(RENDER);
   }
 
@@ -406,7 +315,7 @@ async function main() {
   applyRecipe();
   if (params.has('debug')) {
     window.hollow = {
-      renderer, scene, camera, controls, nest, lights, dust, post, gen, RENDER, pipes, errors, renderAt: renderStep, on,
+      renderer, scene, camera, controls, nest, lights, dust, post, gen, RENDER, pipes, errors, renderAt: renderStep, on, core,
       get R() { return R; },
       seek: (p) => { phi = p; paused = true; },
       play: () => { paused = false; frozen = false; },
@@ -417,6 +326,17 @@ async function main() {
         frozen = true;
         document.body.classList.add('clean');
         for (let i = 0; i < n; i++) { renderStep(ph); await renderer.backend.device?.queue.onSubmittedWorkDone(); }
+      },
+      // l'image de la chaîne complète, relue sur le GPU : ImageData (comme shared/app/debug.js)
+      async grab() {
+        const w = canvas.width, h = canvas.height;
+        const rt = new THREE.RenderTarget(w, h, { type: THREE.UnsignedByteType });
+        renderer.setRenderTarget(rt); post.render(); renderer.setRenderTarget(null);
+        const px = await renderer.readRenderTargetPixelsAsync(rt, 0, 0, w, h);
+        rt.dispose();
+        const img = new ImageData(w, h), stride = Math.ceil((w * 4) / 256) * 256; // (lignes alignées sur 256 octets)
+        for (let y = 0; y < h; y++) img.data.set(px.subarray(y * stride, y * stride + w * 4), y * w * 4);
+        return img;
       },
       // la couche i à la profondeur relative x (seule, ou dans la scène)
       view(i, x, solo = true) {
@@ -473,9 +393,9 @@ async function main() {
       if (!ready || loading.settle < 2) return;
     }
     renderAt(phi);
-    if (!loading.active) sound.update({ tau: curTau, phase: phi - Math.floor(phi), N: R.layers.length, layers: R.layers, mood: R.mood });
+    if (!loading.active) sound.update({ tau: core.curTau, phase: phi - Math.floor(phi), N: R.layers.length, layers: R.layers, mood: R.mood });
     fpsAcc += dt; fpsN++;
-    if ((fpsT += dt) > 0.5) { ui?.setFps(`${(fpsN / fpsAcc).toFixed(0)}  ·  ${shells} coquilles  ·  ${RENDER.dynRes ? `${Math.round(governor.scale * 100)} %  ·  ` : ''}${gen.busy() ? 'génération…' : 'prêt'}`); fpsAcc = fpsN = fpsT = 0; }
+    if ((fpsT += dt) > 0.5) { ui?.setFps(`${(fpsN / fpsAcc).toFixed(0)}  ·  ${core.shells} coquilles  ·  ${RENDER.dynRes ? `${Math.round(governor.scale * 100)} %  ·  ` : ''}${gen.busy() ? 'génération…' : 'prêt'}`); fpsAcc = fpsN = fpsT = 0; }
   }
   renderer.setAnimationLoop(tick);
   if (window.hollow) {

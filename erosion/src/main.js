@@ -11,13 +11,11 @@
 import * as THREE from 'three/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { generate, upgrade, MOODS } from './recipe.js';
-import { buildCamera, shotAt } from './camera.js';
+import { shotAt } from './camera.js';
 import { createGenerator } from '../../shared/gen/client.js';
-import { createStage } from './scene/stage.js';
-import { makeEnvironment } from './scene/env.js';
+import { createCore } from './core.js';
 import { G } from '../../shared/scene/globals.js';
-import { setNoiseVolume, setLite } from '../../shared/scene/materials.js';
-import { createPost } from '../../shared/render/post.js';
+import { setLite } from '../../shared/scene/materials.js';
 import { createAccumulator, jitter } from '../../shared/render/accum.js';
 import { createUI } from './app/ui.js';
 import { installChrome } from '../../shared/app/chrome.js';
@@ -87,25 +85,20 @@ async function main() {
   // préparation découpée en petits lots (app/warmup.js).
   const pipes = asyncPipelines(renderer);
 
-  const scene = new THREE.Scene();
-  scene.background = new THREE.Color();
-  scene.fog = new THREE.Fog(0x000000, 1, 2);
-  const camera = new THREE.PerspectiveCamera(35, innerWidth / innerHeight, 0.05, 80);
+  // ── Modules ──
+  // (la scène, sa recette et le rendu d'une phase : core.js, partagé avec le
+  // relais de la méga-scène)
+  const gen = createGenerator(LITE ? Math.max(2, Math.min(3, (navigator.hardwareConcurrency || 4) - 1)) : undefined);
+  const RENDER = loadRender(LITE);
+  const core = await createCore({ renderer, width: innerWidth, height: innerHeight, gen, lite: LITE, RENDER });
+  const { scene, camera, stage, post } = core;
   const controls = new OrbitControls(camera, canvas);
   controls.enabled = false;
   controls.enableDamping = true;
   const camState = { free: false };
-
-  // ── Modules ──
-  const gen = createGenerator(LITE ? Math.max(2, Math.min(3, (navigator.hardwareConcurrency || 4) - 1)) : undefined);
-  setNoiseVolume(await gen.request({ seed: `${NAME}-noise` }, 'noise')); // (les matériaux en dépendent)
-  const stage = createStage(scene, renderer, { lite: LITE });
-  let pose = null;
   // l'écran de chargement dessine le relief qui se creuse : aperçus 128 × 64 lus sur le GPU
   stage.onPreview = (a, f) => loader.art({ preview: a, f }, [a.buffer]);
-  const post = createPost(renderer, scene, camera);
   const accum = createAccumulator(renderer);
-  const RENDER = loadRender(LITE);
   // (résolution dynamique, aussi sur ordinateur : le sable remplit souvent tout le cadre
   // et coûte 25 à 40 ms en Retina plein écran ; on vise 55 i/s, l'anticrénelage temporel lisse)
   const governor = createGovernor({ target: LITE ? 1 / 45 : 1 / 55, min: 0.5, max: 1, onChange: () => !busy && resize() });
@@ -117,15 +110,7 @@ async function main() {
     try { R = upgrade(await unpackRecipe(location.hash.slice(3))); } catch { R = null; }
   }
   R ??= generate(params.get('seed') || DEFAULT_SEED, { ...(params.get('mood') ? { mood: params.get('mood') } : {}), ...(params.get('family') ? { family: params.get('family') } : {}) });
-  let envKey = '';
-  function syncEnv() {
-    const k = R.env.preset;
-    if (k === envKey) return;
-    envKey = k;
-    const old = scene.environment;
-    scene.environment = makeEnvironment(k, 0, LITE ? 512 : 1024);
-    old?.dispose();
-  }
+  const syncEnv = () => core.syncEnv();
 
   // ── Écran de chargement ──
   // Une scène ne s'affiche que lorsque toute sa géométrie est arrivée, que ses
@@ -144,9 +129,7 @@ async function main() {
     // (le fondu d'entrée de l'écran se termine avant que la scène ne change)
     setTimeout(() => {
       if (R !== recipe) return;
-      stage.setRecipe(R).catch((e) => { console.error(e); fail(`La simulation a échoué (${e.message}).`); });
-      pose = buildCamera(R, stage.S);
-      syncEnv();
+      core.setRecipe(R).catch((e) => { console.error(e); fail(`La simulation a échoué (${e.message}).`); });
       loading.applied = true;
     }, firstRecipe ? 0 : 280);
     firstRecipe = false;
@@ -167,7 +150,7 @@ async function main() {
     const recipe = R;
     try {
       return await warmScene({
-        renderer, scene, pipes, render: renderStep, phases: [0.02, 0.3, 0.55, 0.75, 0.88],
+        renderer, scene, pipes, render: renderStep, phases: core.warmPhases(),
         onProgress: (f) => loader.progress(f), alive: () => R === recipe,
       });
     } finally {
@@ -177,51 +160,11 @@ async function main() {
   }
 
   // ── Rendu d'une phase ──
-  const TAU = Math.PI * 2;
-  const _f = new THREE.Vector3(), _u = new THREE.Vector3(), _r = new THREE.Vector3();
-  let lastShot = null;
   // u : phase « déroulée » (partie entière = nombre de boucles accomplies) ;
   // sub : décalages d'un rendu accumulé (lentille, pixel), facultatif
   function renderAt(u, sub = null) {
-    const ph = u - Math.floor(u);
-    G.phasePrev.value = G.phase.value;
-    G.phase.value = ph;
-    G.frame.value = (G.frame.value + 1) % 65536;
-    const Pc = pose(ph);
-    const near = camState.free ? 0.05 : Pc.near;
     if (camState.free) controls.update();
-    else {
-      // caméra du film : le plan du découpage qui contient ph (camera.js)
-      camera.position.set(...Pc.position);
-      camera.up.set(0, 1, 0);
-      camera.lookAt(...Pc.target);
-      // un raccord : l'historique de l'anticrénelage et les vitesses appartiennent au plan précédent
-      if (lastShot !== null && Pc.shot !== lastShot) post.cut();
-      lastShot = Pc.shot;
-    }
-    if (Math.abs(camera.fov - Pc.fov) > 1e-6 || camera.near !== near) { camera.fov = Pc.fov; camera.near = near; camera.updateProjectionMatrix(); }
-    const dist = camState.free ? camera.position.distanceTo(controls.target) : Math.hypot(Pc.position[0] - Pc.target[0], Pc.position[1] - Pc.target[1], Pc.position[2] - Pc.target[2]);
-    camera.clearViewOffset();
-    if (sub) {
-      camera.updateMatrixWorld();
-      _f.setFromMatrixColumn(camera.matrixWorld, 0); _u.setFromMatrixColumn(camera.matrixWorld, 1);
-      const ap = 0.0012 * (RENDER.dof ? RENDER.bokeh : 0.3) * dist;
-      camera.position.addScaledVector(_f, sub.lens[0] * ap).addScaledVector(_u, sub.lens[1] * ap);
-      camera.lookAt(_r.set(...Pc.target));
-      camera.setViewOffset(canvas.width, canvas.height, sub.pixel[0], sub.pixel[1], canvas.width, canvas.height);
-    }
-    G.microDetail.value = RENDER.microDetail;
-    G.roughFloor.value = RENDER.roughFloor;
-    scene.background.set(R.fog.color);
-    scene.fog.color.set(R.fog.color);
-    scene.fog.near = 2.5; scene.fog.far = 9;
-    scene.environmentIntensity = R.env.intensity;
-    scene.environmentRotation.set(0, R.env.rotation, 0);
-    stage.update(ph, R.loop.duration);
-    // (profondeur de champ du plan : faible en macro, grande au ras du sable)
-    const dk = camState.free ? 1 : Pc.dof;
-    post.update({ ...RENDER, lite: LITE, focus: RENDER.focus * dist, focusRange: RENDER.focusRange * dist * dk, bokeh: RENDER.bokeh * Math.min(1.4, 1 / Math.sqrt(dk)) }, R);
-    post.render();
+    core.renderAt(u, { sub, free: camState.free, target: controls.target });
   }
   // Rendu hors de la boucle d'animation (export, image fixe, débogage) : three.js
   // ne refait la passe de scène, les ombres et les vitesses de la caméra
@@ -254,7 +197,7 @@ async function main() {
   function applyRender() {
     if (!RENDER.dynRes) governor.reset();
     resize();
-    stage.setShadowQuality(RENDER.shadows);
+    core.applyRender();
     saveRender(RENDER);
   }
 
@@ -269,7 +212,7 @@ async function main() {
     familyChanged: (family) => { R = generate(R.seed, { mood: R.mood, family }); applyRecipe(); },
     sandChanged: (sand, strata) => { R = generate(R.seed, { mood: R.mood, family: R.family, sand, strata }); applyRecipe(); },
     strataChanged: () => stage.sand.setStrata(R),
-    cameraChanged: () => { pose = buildCamera(R, stage.S); },
+    cameraChanged: () => core.rebuildCamera(),
     copyLink: async () => {
       const url = new URL(location.href);
       url.hash = `r=${await packRecipe(R)}`;

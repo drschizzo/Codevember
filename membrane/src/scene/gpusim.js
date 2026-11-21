@@ -684,7 +684,13 @@ const emptyBuf = (device, size) => device.createBuffer({ size: Math.max(16, Math
 // ringOff, bonds } (csr : tables de voisinage, puis lèvres à partir de lipOff
 // et anneaux à partir de ringOff — un seul tampon, la pose étant à la limite
 // des 8 tampons de stockage par étape).
-export async function simulate(device, prep, S, fibOut, onProgress) {
+// pacing (méga-scène seulement) : { batch, pace, alive } — des lots de batch
+// pas au lieu de 10 images (mise en place) et 8 (éclosion), et pace() (l'image
+// suivante de l'hôte) entre deux lots plutôt que la fin du GPU : la couche se
+// simule pendant qu'un autre jour joue sans lui prendre le GPU. Mêmes pas,
+// dans le même ordre : le résultat ne change pas. alive() faux : tout est
+// rendu, et la simulation rend null. Absent : comme avant.
+export async function simulate(device, prep, S, fibOut, onProgress, pacing = null) {
   const P = await pipelinesAsync(device);
   const np = prep.np, nb = prep.nb, F = S.frames, SUB = S.substeps;
   const h = S.duration / (F - 1) / SUB;
@@ -740,25 +746,63 @@ export async function simulate(device, prep, S, fibOut, onProgress) {
     if (!settle) { pass.setPipeline(P.bonds); pass.dispatchWorkgroups(gB); }
     if (!skip.velocity) { pass.setPipeline(P.velocity); pass.dispatchWorkgroups(gP); }
   };
+  const pace = pacing?.pace ?? null;
   const submit = async (fn) => {
     const enc = device.createCommandEncoder();
     const pass = enc.beginComputePass();
     fn(pass);
     pass.end();
     device.queue.submit([enc.finish()]);
-    await device.queue.onSubmittedWorkDone();
+    if (pace) await pace();
+    else await device.queue.onSubmittedWorkDone();
   };
+  // (abandon : un jour du relais libéré avant la fin de sa simulation)
+  const dead = () => {
+    if (!pacing?.alive || pacing.alive()) return false;
+    for (const b of Object.values(B)) b.destroy();
+    cBuf.destroy(); pBuf.destroy();
+    return true;
+  };
+  // Méga-scène : des lots de `batch` pas (une image de simulation en compte
+  // SUB), une soumission par image de l'hôte. Chaque opération pose son
+  // groupe de liaison : couper n'importe où ne change rien au calcul.
+  const lot = Math.max(1, pacing?.batch ?? 8);
+  let cur = null, nOps = 0;
+  const open = () => {
+    if (!cur) { const enc = device.createCommandEncoder(); cur = { enc, pass: enc.beginComputePass() }; }
+    return cur.pass;
+  };
+  // → faux si la simulation est abandonnée
+  const flush = async () => {
+    if (cur) { cur.pass.end(); device.queue.submit([cur.enc.finish()]); cur = null; }
+    nOps = 0;
+    await pace();
+    return !dead();
+  };
+  const op = async (fn) => { fn(open()); return ++nOps >= lot ? flush() : true; };
   // mise en place (armature fermée) et réglage de la pression
-  for (let f0 = 0; f0 < S.settle; f0 += 10) {
-    await submit((pass) => {
-      for (let f = f0; f < Math.min(S.settle, f0 + 10); f++) {
-        for (let k = 0; k < SUB; k++) step(pass, f * SUB + k, true);
-        pass.setBindGroup(0, bg, [0]);
-        pass.setPipeline(P.radius); pass.dispatchWorkgroups(gP);
-        pass.setPipeline(P.adjust); pass.dispatchWorkgroups(1);
-      }
-    });
-    onProgress?.((f0 / S.settle) * 0.25);
+  if (!pace) {
+    for (let f0 = 0; f0 < S.settle; f0 += 10) {
+      await submit((pass) => {
+        for (let f = f0; f < Math.min(S.settle, f0 + 10); f++) {
+          for (let k = 0; k < SUB; k++) step(pass, f * SUB + k, true);
+          pass.setBindGroup(0, bg, [0]);
+          pass.setPipeline(P.radius); pass.dispatchWorkgroups(gP);
+          pass.setPipeline(P.adjust); pass.dispatchWorkgroups(1);
+        }
+      });
+      onProgress?.((f0 / S.settle) * 0.25);
+    }
+  } else {
+    for (let f = 0; f < S.settle; f++) {
+      for (let k = 0; k < SUB; k++) if (!(await op((pass) => step(pass, f * SUB + k, true)))) return null;
+      const pass = open();
+      pass.setBindGroup(0, bg, [0]);
+      pass.setPipeline(P.radius); pass.dispatchWorkgroups(gP);
+      pass.setPipeline(P.adjust); pass.dispatchWorkgroups(1);
+      onProgress?.((f / S.settle) * 0.25);
+    }
+    if (!(await flush())) return null;
   }
   await submit((pass) => {
     pass.setBindGroup(0, bg, [(nRec - 1) * 256]);
@@ -767,16 +811,28 @@ export async function simulate(device, prep, S, fibOut, onProgress) {
     pass.setPipeline(P.record); pass.dispatchWorkgroups(gP);
   });
   // éclosion
-  const CH = 8;
-  for (let f0 = 1; f0 < F; f0 += CH) {
-    await submit((pass) => {
-      for (let f = f0; f < Math.min(F, f0 + CH); f++) {
-        for (let k = 0; k < SUB; k++) step(pass, settleSteps + (f - 1) * SUB + k, false);
-        pass.setBindGroup(0, bg, [(settleSteps + f * SUB - 1) * 256]);
-        pass.setPipeline(P.record); pass.dispatchWorkgroups(gP);
-      }
-    });
-    onProgress?.(0.25 + 0.75 * (f0 / F));
+  if (!pace) {
+    const CH = 8;
+    for (let f0 = 1; f0 < F; f0 += CH) {
+      await submit((pass) => {
+        for (let f = f0; f < Math.min(F, f0 + CH); f++) {
+          for (let k = 0; k < SUB; k++) step(pass, settleSteps + (f - 1) * SUB + k, false);
+          pass.setBindGroup(0, bg, [(settleSteps + f * SUB - 1) * 256]);
+          pass.setPipeline(P.record); pass.dispatchWorkgroups(gP);
+        }
+      });
+      onProgress?.(0.25 + 0.75 * (f0 / F));
+    }
+  } else {
+    if (dead()) return null;
+    for (let f = 1; f < F; f++) {
+      for (let k = 0; k < SUB; k++) if (!(await op((pass) => step(pass, settleSteps + (f - 1) * SUB + k, false)))) return null;
+      const pass = open();
+      pass.setBindGroup(0, bg, [(settleSteps + f * SUB - 1) * 256]);
+      pass.setPipeline(P.record); pass.dispatchWorkgroups(gP);
+      onProgress?.(0.25 + 0.75 * (f / F));
+    }
+    if (!(await flush())) return null;
   }
   // fibrilles
   if (prep.nf > 0 && fibOut) {

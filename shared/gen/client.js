@@ -56,5 +56,13 @@ export function createGenerator(size = Math.max(2, Math.min(6, (navigator.hardwa
   // un résultat est-il déjà en cache (ou en cours) sous cette clé ?
   const has = (key) => cache.has(key);
 
-  return { request, has, size, busy: () => pending.size + queue.length };
+  // fin du pool : les workers sont arrêtés, les demandes en attente rejetées
+  // (la méga-scène libère un jour qu'elle a fini de montrer)
+  function terminate() {
+    for (const w of workers) w.terminate();
+    for (const job of [...pending.values(), ...queue.splice(0)]) job.reject(new Error('générateur arrêté'));
+    pending.clear(); cache.clear();
+  }
+
+  return { request, has, size, busy: () => pending.size + queue.length, terminate };
 }

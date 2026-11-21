@@ -3,7 +3,7 @@
 //
 //   node .claude/skills/codevember-scene/scripts/scaffold.mjs <dossier> "<Titre>" "<sous-titre>" [port]
 //
-// 1. Pose le gabarit de la skill (main.js, panneau, recette, réglages, plateau,
+// 1. Pose le gabarit de la skill (core.js, main.js, day.js, panneau, recette, réglages, plateau,
 //    worker, tests, README, page « défis techniques » explainer.html), où
 //    {{NAME}}, {{TITLE}}, {{SUBTITLE}} sont remplacés. Rien n'est copié des
 //    autres projets : les modules indépendants du thème (hasard, mobile,
