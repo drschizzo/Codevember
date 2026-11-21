@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#050506">
   <title>Fold · défis techniques</title>
-  <meta name="description" content="Comment Fold plie une feuille de papier : un patron cousu en fermeture éclair, un solveur d’origami à barres inextensibles, une selle qui naît d’un flambage, le geste du papier, une boucle refermée par symétrie, un film relu par la carte graphique et la couleur qu’un pan renvoie sur l’autre.">
+  <meta name="description" content="Comment fonctionne Fold, reconstruit pas à pas : des charnières qui cherchent leur angle, des barres qui empêchent le papier de s'étirer, un maillage cousu en fermeture éclair, une selle qui naît d'un flambage, le geste sec du papier, une boucle refermée par symétrie, un film relu par la carte graphique et la couleur qu'un pan renvoie sur l'autre.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
@@ -22,170 +22,258 @@
 
   <main>
     <header class="hero">
-      <div class="kicker">Day 01 · Fold · le papier qui se plie seul</div>
+      <div class="kicker">Day 01 · Fold · comment ça marche</div>
       <h1>Comment une feuille de papier se plie, bascule et revient exactement</h1>
-      <p class="lede">Des feuilles de papier bicolore, chacune sur sa tige de laiton. Leurs plis se referment et les tordent en selle ou en ombrelle, se rouvrent, et la forme claque dans son autre état. Personne ne dessine ces formes : elles sortent de deux règles, le papier ne s’étire pas et chaque pliure vise un angle. La difficulté est triple : calculer ce pliage assez vite pour un écran de chargement, lui donner le geste sec du papier plutôt que la mollesse d’une étoffe, et refermer la boucle sans le moindre saut. Les figures de cette page font tourner le solveur du projet lui-même, sur des feuilles plus petites.</p>
+      <p class="lede">Fold montre deux ou trois feuilles de papier, chacune portée par une tige de laiton. Leurs plis se referment et tordent la feuille en selle ou en ombrelle. Puis les plis se rouvrent, la feuille claque dans son autre position, et les plis se referment. Personne ne dessine ces formes : elles sont calculées à partir de deux règles, le papier ne s'étire pas et chaque pli cherche à atteindre un angle. Cette page reconstruit ce calcul pas à pas. Ses démos font tourner le code du projet lui-même, sur des feuilles plus petites.</p>
+      <p class="prereq">Pour suivre, il suffit de savoir lire un peu de JavaScript (des tableaux et des boucles). Les formules résument ce que les démos montrent ; on peut les sauter sans perdre le fil. Les détails de production sont rangés dans les encadrés « Pour aller plus loin ».</p>
     </header>
 
     <figure class="cover">
       <img src="docs/capture.jpg" alt="Trois feuilles de papier plissé sur leurs tiges : une spirale bleue et orange, une petite étoile, une ombrelle fermée, devant un disque beige et un fond rose" width="1280" height="720">
-      <figcaption>La scène d’ouverture (graine 40aatl) : une spirale, une étoile et une ombrelle, dans l’accord Bonbon.</figcaption>
+      <figcaption>La scène d'ouverture (graine 40aatl) : une spirale, une étoile et une ombrelle, dans l'accord de couleurs Bonbon.</figcaption>
     </figure>
 
     <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
 
     <article>
 
+      <section id="scene">
+        <h2><span class="n">01</span>Ce que montre la scène</h2>
+        <p>Chaque feuille est un disque de papier percé en son centre, par où passe sa tige. Elle a deux couleurs, une par face. Sur la feuille sont marqués des <b>plis</b>. Un pli <b>montagne</b> se ferme vers le haut, comme le faîte d'un toit ; un pli <b>vallée</b> se ferme vers le bas. Entre les plis, les zones de papier qui doivent rester planes s'appellent des <b>pans</b>. L'ensemble des plis d'une feuille est son <b>patron</b>.</p>
+        <p>Il y a deux familles de patrons. Dans la première, les plis sont des anneaux concentriques, montagne et vallée alternés, coupés par des diagonales qui vont du centre aux coins. C'est un exercice classique du cours de Josef Albers au Bauhaus : la feuille, en se pliant, se tord en forme de selle de cheval. La graine choisit le nombre de côtés (carré, hexagone, octogone), une vrille qui tourne chaque anneau un peu plus que le précédent (spirale, rosace) ou des côtés creusés (étoile). Dans la seconde famille, les plis partent du centre comme des rayons, et la feuille se ferme comme une ombrelle.</p>
+        <p>Le film est une boucle de 14 secondes. Pendant ce temps, chaque feuille passe deux fois d'une position à l'autre. La page suit l'ordre de construction :</p>
+        <ul>
+          <li><b>le solveur</b>, le programme qui calcule la forme : des charnières qui plient (section 02), des barres qui empêchent le papier de s'étirer (03) et le maillage de la feuille (04) ;</li>
+          <li><b>le mouvement</b> : la selle qui apparaît d'elle-même (05), le geste sec du papier (06) et la boucle qui se referme sans saut (07) ;</li>
+          <li><b>le rendu</b> : le film relu par la carte graphique (08), la couleur qu'un pan renvoie sur l'autre (09), les ombres colorées (10), et la place des feuilles dans la scène (11).</li>
+        </ul>
+      </section>
+
+      <section id="charnieres">
+        <h2><span class="n">02</span>Des charnières qui cherchent leur angle</h2>
+        <span class="src">src/sim/fold.js · dihedral(), createSolver()</span>
+        <p>Pour calculer une feuille, on la découpe en petits triangles, un <b>maillage</b>. Les plis du patron suivent des arêtes de ce maillage. Le modèle vient du simulateur d'origami d'Amanda Ghassaei (2018).</p>
+        <p>Chaque arête intérieure est une <b>charnière</b> entre ses deux triangles. On mesure l'angle dont un triangle est relevé par rapport à l'autre, l'<b>angle dièdre</b> θ, qui vaut zéro quand la feuille est à plat. Chaque charnière a une cible θ<sub>0</sub> : zéro dans un pan, puisque le papier y reste plan, et ±θ<sub>0</sub> sur un pli, avec un signe qui dit montagne ou vallée. La règle la plus simple est celle d'un ressort : plus l'angle est loin de sa cible, plus la charnière pousse fort pour l'y ramener.</p>
+        <p>Une charnière agit sur quatre sommets : les deux bouts de l'arête et les deux pointes des triangles. La force sur chacun est proportionnelle à l'écart d'angle, et dirigée selon le <b>gradient</b> de θ, c'est-à-dire la direction dans laquelle déplacer ce sommet change le plus l'angle :</p>
+        <div class="eq">\[ \mathbf{f}_i = -k\,\ell\,(\theta - \theta_0)\,\frac{\partial \theta}{\partial \mathbf{x}_i}, \qquad \frac{\partial\theta}{\partial \mathbf{x}_2} = -\frac{\ell}{\lVert \mathbf{n}_A\rVert^2}\,\mathbf{n}_A, \quad \frac{\partial\theta}{\partial \mathbf{x}_3} = -\frac{\ell}{\lVert \mathbf{n}_B\rVert^2}\,\mathbf{n}_B \]</div>
+        <p><b>f</b><sub>i</sub> est la force sur le sommet <i>i</i>, <i>k</i> la raideur de la charnière (0,7 pour un pli), ℓ la longueur de l'arête, <b>x</b><sub>2</sub> et <b>x</b><sub>3</sub> les deux pointes, <b>n</b><sub>A</sub> et <b>n</b><sub>B</sub> les normales des deux triangles (perpendiculaires à leur plan, non ramenées à la longueur 1). Les forces des pointes sont portées par ces normales : pousser une pointe hors du plan de son triangle est la seule façon de changer l'angle. Celles des deux bouts de l'arête s'en déduisent, de façon que les quatre forces s'annulent : une charnière ne déplace ni ne fait tourner la feuille dans son ensemble.</p>
+        <figure id="fig-diedre"><figcaption><b>Une charnière.</b> Deux triangles autour d'une arête. Les flèches sont les quatre forces, calculées par <code>dihedral()</code> du projet et la formule ci-dessus ; glissez sur la figure pour la tourner.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Laissez la cible à 0° et faites varier l'angle : les pointes sont poussées vers le plan, les bouts de l'arête dans l'autre sens, et le bandeau donne une somme des quatre forces nulle à toutes les positions.</li>
+          <li>Donnez à la cible la même valeur que l'angle : les flèches disparaissent, la charnière est à l'équilibre.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <div class="note check"><b>Un gradient vérifié</b><p>Une erreur de signe dans ce gradient donne un pliage qui semble marcher, puis diverge. Un test compare donc les douze composantes à une différence finie (un sommet déplacé d'un millionième), avec une tolérance de 10⁻⁴, et vérifie que l'angle est exactement nul à plat.</p></div>
+        </div></details>
+      </section>
+
+      <section id="barres">
+        <h2><span class="n">03</span>Des barres qui ne s'allongent pas</h2>
+        <span class="src">src/sim/fold.js · createSolver().step()</span>
+        <p>Les charnières plient la feuille. Il faut aussi l'empêcher de s'étirer. Chaque arête du maillage est donc une <b>barre</b>, qui doit garder sa longueur.</p>
+        <h3>Première idée : des ressorts très raides</h3>
+        <p>Dans le simulateur d'origine, les barres sont des ressorts très raides. Le calcul avance par petits pas de temps Δ<i>t</i> : à chaque pas, la force change la vitesse, puis la vitesse change la position. Cette méthode, dite explicite, diverge si le pas dépasse une fraction de la période d'oscillation du ressort le plus raide. Plus les barres sont raides, plus le pas doit être court. Il faut alors des dizaines de milliers de pas pour plier une feuille, et presque tout ce travail sert à empêcher le papier de s'étirer.</p>
+        <h3>Deuxième idée : corriger les longueurs après chaque pas</h3>
+        <p>Fold sépare les deux rôles. Les charnières restent des forces. Les barres deviennent des <b>contraintes de longueur</b> : après chaque pas, on parcourt les barres une à une, et l'on rapproche ou écarte leurs deux bouts, chacun de la moitié de l'erreur, pour leur rendre leur longueur d'origine. Corriger une barre dérègle un peu ses voisines ; on repasse donc quatre fois sur l'ensemble. Cette méthode, où chaque correction profite aussitôt des précédentes, s'appelle une relaxation de <b>Gauss-Seidel</b>. La vitesse est ensuite recalculée à partir de la position corrigée : une barre qu'on vient de raccourcir ne garde pas la vitesse qui l'avait allongée.</p>
+        <p>En résumé, un pas du solveur s'écrit :</p>
+        <div class="eq">\[ \mathbf{v} \leftarrow (\mathbf{v} + \Delta t\,\mathbf{f})\,(1 - c), \qquad \mathbf{x}^\ast = \mathbf{x} + \Delta t\,\mathbf{v}, \qquad \mathbf{x}' = \operatorname{proj}(\mathbf{x}^\ast), \qquad \mathbf{v} \leftarrow \frac{\mathbf{x}' - \mathbf{x}}{\Delta t} \]</div>
+        <p><b>x</b> et <b>v</b> sont les positions et les vitesses des sommets, <b>f</b> la somme des forces des charnières, <i>c</i> = 0,05 un amortissement (5 % de la vitesse perdus à chaque pas, qui mène la feuille vers son équilibre) et proj la correction des barres. Le pas de temps ne dépend plus que de la raideur des charnières et de la plus petite arête ℓ<sub>min</sub> :</p>
+        <div class="eq">\[ \Delta t = 0{,}18\,\sqrt{\frac{\ell_\text{min}}{\max(k,\,k_F)}} \]</div>
+        <p><i>k</i> = 0,7 est la raideur d'un pli, <i>k</i><sub>F</sub> = 2,1 celle d'un pan (on verra en section 05 pourquoi elle est trois fois plus forte), et les longueurs sont mesurées en rayons de feuille. Retenons que la plus petite arête du maillage fixe le pas de toute la feuille. La démo de la section 05 permet de réduire le nombre de passes de correction.</p>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <div class="note trap"><b>Le piège : une seule passe ne suffit pas</b><p>Le premier essai corrigeait toutes les barres en même temps, à partir des mêmes positions (une relaxation de Jacobi), ce qui se prête au calcul sur carte graphique. Une passe laissait trop d'étirement, là où quatre passes de Gauss-Seidel suffisent. Le solveur est donc resté sur le processeur, dans un fil de calcul parallèle (un <i>worker</i>), et la carte graphique ne fait que relire le résultat (section 08).</p></div>
+          <p>Deux précautions tiennent la feuille en place. L'anneau intérieur est recentré à chaque pas sur la tige. Et la rotation d'ensemble autour de la tige est retirée : rien ne retient une feuille de tourner sur elle-même, et la moindre asymétrie numérique la ferait dériver au fil des milliers de pas.</p>
+        </div></details>
+      </section>
+
       <section id="patron">
-        <h2><span class="n">01</span>Un patron cousu en fermeture éclair</h2>
-        <span class="src">src/sim/fold.js · pleatedU(), build()</span>
-        <p>Une feuille est un disque percé en son centre (la tige y passe), découpé en triangles. Le patron de plis est écrit dans ce maillage : chaque arête sait si elle est une <strong>pliure montagne</strong> (elle se ferme vers le haut), une <strong>pliure vallée</strong> (vers le bas) ou une simple arête à l’intérieur d’un pan, qui doit rester plat.</p>
-        <p>Deux familles de patrons existent. Dans la première, les pliures sont des anneaux concentriques, montagne et vallée alternées, coupés par des diagonales qui vont du centre aux coins : c’est le pliage du cours de Josef Albers au Bauhaus, qui tord la feuille en selle. La graine choisit le nombre de côtés (carré, hexagone, octogone), une <em>vrille</em> qui tourne chaque anneau un peu plus que le précédent (les diagonales s’enroulent : spirale, rosace) ou des côtés creusés (étoile). Dans la seconde famille, les pliures sont des rayons : la feuille se ferme comme une ombrelle.</p>
-        <h3>Des mailles de même taille partout</h3>
-        <p>Le maillage le plus naturel pour un disque est en rayons : le même nombre de points sur chaque anneau. Près du centre, ces points se serrent, et les triangles deviennent minuscules. Or le pas de temps du solveur est fixé par la plus petite arête (section 3) : toute la feuille paie pour quelques mailles du centre.</p>
-        <p>Dans Fold, le nombre de mailles d’un anneau est proportionnel à son rayon. Deux anneaux voisins n’ont donc pas le même nombre de points, et il faut les coudre : l’algorithme avance en alternance sur l’un et sur l’autre, toujours du côté dont le prochain point est le plus en retard, comme les dents d’une fermeture éclair. La couture se fait côté par côté, pour que les diagonales du patron restent des arêtes du maillage.</p>
-        <pre><code>// entre un anneau de a mailles et le suivant, de b mailles
+        <h2><span class="n">04</span>Un maillage cousu en fermeture éclair</h2>
+        <span class="src">src/sim/fold.js · pleatedU()</span>
+        <p>Il reste à découper la feuille en triangles. Le maillage le plus naturel pour un disque est en rayons : des anneaux concentriques qui portent tous le même nombre de points. Près du centre, ces points se serrent, et les triangles deviennent minuscules. Or on vient de voir que la plus petite arête fixe le pas de temps : toute la feuille paierait pour quelques mailles du centre.</p>
+        <p>Dans Fold, le nombre de mailles d'un anneau est proportionnel à son rayon, si bien que toutes les mailles ont à peu près la même taille. Deux anneaux voisins n'ont alors pas le même nombre de points, et il faut les relier par des triangles. L'algorithme avance en alternance sur l'un et sur l'autre, toujours du côté dont le prochain point est le plus en retard, comme les dents d'une fermeture éclair. La couture se fait côté par côté, pour que les diagonales du patron restent des arêtes du maillage.</p>
+<pre><code>// entre un anneau de a mailles et le suivant, de b mailles
 while (p &lt; a || q &lt; b) {
   if (q &lt; b &amp;&amp; (p &gt;= a || (q + 1) / b &lt;= (p + 1) / a)) { triangle(p, q + 1, q); q++; }
   else                                                 { triangle(p, p + 1, q); p++; }
 }</code></pre>
-        <figure id="fig-patron"><figcaption><b>Le patron à plat.</b> Le maillage est celui que produit <code>pleatedU()</code>, appelé tel quel avec sept anneaux de papier. En rouge les pliures montagne, en bleu les vallées ; les diagonales (traits fins) sont des pliures plus faibles, à 60 % de l’angle des anneaux. Le bouton « Maillage en rayons » dessine à la place le maillage naïf, reconstruit pour la figure : comparez la plus petite arête et le pas de temps qu’elle impose.</figcaption></figure>
-        <div class="note trap"><b>Dix pour cent d’étirement</b><p>La première version du patron était en rayons. Ses mailles minuscules près du centre imposaient un pas très court et laissaient 10 % d’étirement. Le maillage cousu, avec des barres devenues des contraintes (section 3), a réglé les deux défauts.</p></div>
-      </section>
-
-      <section id="charnieres">
-        <h2><span class="n">02</span>Des barres et des charnières</h2>
-        <span class="src">src/sim/fold.js · dihedral(), createSolver()</span>
-        <p>Le modèle vient du simulateur d’origami d’Amanda Ghassaei (2018). Chaque arête du maillage est une <strong>barre</strong>, qui garde sa longueur : le papier se plie mais ne s’étire pas. Chaque arête intérieure est aussi une <strong>charnière</strong> entre ses deux triangles. Elle mesure l’<em>angle dièdre</em> \(\theta\), l’angle dont un triangle est relevé par rapport à l’autre (zéro à plat), et le ramène vers une cible \(\theta_0\) : zéro dans un pan, \(\pm\theta_0\) sur une pliure.</p>
-        <p>Une charnière agit sur quatre sommets : les deux bouts de l’arête et les deux pointes des triangles. La force sur chacun est proportionnelle à l’écart d’angle et suit le gradient de \(\theta\), c’est-à-dire la direction dans laquelle déplacer ce sommet change le plus l’angle :</p>
-        <div class="eq">\[ \mathbf{f}_i = -k\,\ell\,(\theta - \theta_0)\,\frac{\partial \theta}{\partial \mathbf{x}_i}, \qquad \frac{\partial\theta}{\partial \mathbf{x}_2} = -\frac{\ell}{\lVert \mathbf{n}_A\rVert^2}\,\mathbf{n}_A, \quad \frac{\partial\theta}{\partial \mathbf{x}_3} = -\frac{\ell}{\lVert \mathbf{n}_B\rVert^2}\,\mathbf{n}_B. \]</div>
-        <p>\(\ell\) est la longueur de l’arête, \(\mathbf{n}_A\) et \(\mathbf{n}_B\) les normales (non normées) des deux triangles. Les gradients des deux pointes sont portés par ces normales : pousser une pointe hors du plan de son triangle est la seule façon de changer l’angle. Ceux des deux bouts de l’arête s’en déduisent, de sorte que les quatre forces se compensent : une charnière ne pousse ni ne fait tourner la feuille dans son ensemble.</p>
-        <figure id="fig-diedre"><figcaption><b>Une charnière.</b> Deux triangles autour d’une arête. Les flèches sont les quatre forces, calculées par <code>dihedral()</code> du projet et la formule ci-dessus. Tant que l’angle n’a pas atteint sa cible, les pointes sont poussées le long de la normale de leur triangle et l’arête dans l’autre sens ; la somme des quatre est nulle.</figcaption></figure>
-        <div class="note check"><b>Un gradient vérifié</b><p>Une erreur de signe dans ce gradient donne un pliage qui semble marcher, puis diverge. Un test compare donc les douze composantes à une différence finie (un sommet déplacé d’un millionième), avec une tolérance de \(10^{-4}\), et vérifie que l’angle est exactement nul à plat.</p></div>
-      </section>
-
-      <section id="barres">
-        <h2><span class="n">03</span>Les barres ne sont pas des ressorts</h2>
-        <span class="src">src/sim/fold.js · createSolver().step()</span>
-        <p>Dans le simulateur d’origine, les barres sont des ressorts très raides. C’est simple, mais c’est leur raideur qui fixe le pas de temps : un calcul explicite, qui avance d’un petit pas à la fois, diverge si le pas dépasse la période du ressort le plus raide. Il faut alors des dizaines de milliers de pas pour plier une feuille, dont la quasi-totalité sert à empêcher le papier de s’étirer.</p>
-        <p>Fold sépare les deux rôles. Les charnières restent des forces. Les barres deviennent des <strong>contraintes de longueur</strong> : après chaque pas, on parcourt les barres une à une et on rapproche ou on écarte leurs deux bouts, chacun de la moitié de l’erreur, jusqu’à retrouver la longueur d’origine. Corriger une barre dérègle un peu ses voisines ; on repasse donc quatre fois sur l’ensemble. Cette méthode, où chaque correction profite aussitôt des précédentes, est une relaxation de <em>Gauss-Seidel</em>.</p>
-        <div class="eq">\[ \Delta t = 0{,}18\,\sqrt{\frac{\ell_\text{min}}{\max(k,\,k_F)}}, \qquad \mathbf{v} \leftarrow (\mathbf{v} + \Delta t\,\mathbf{f})\,(1 - c), \]</div>
-        <div class="eq">\[ \mathbf{x}^\ast = \mathbf{x} + \Delta t\,\mathbf{v}, \qquad \mathbf{x}' = \operatorname{proj}(\mathbf{x}^\ast), \qquad \mathbf{v} \leftarrow \frac{\mathbf{x}' - \mathbf{x}}{\Delta t}. \]</div>
-        <p>Le pas ne dépend plus que de la raideur des plis (\(k = 0{,}7\) pour une pliure, \(k_F = 2{,}1\) pour un pan) et de la plus petite arête \(\ell_\text{min}\). Le coefficient \(c\) est un amortissement, 5 % de la vitesse perdus à chaque pas, qui mène la feuille vers son équilibre. La vitesse est recalculée à partir de la position corrigée : une barre qui a été raccourcie ne garde pas la vitesse qui l’avait allongée.</p>
-        <div class="note trap"><b>Une seule passe ne suffit pas</b><p>Le premier essai corrigeait toutes les barres en même temps, à partir des mêmes positions (une relaxation de Jacobi), ce qui se prête au calcul sur carte graphique. Une passe laissait trop d’étirement, là où quatre passes de Gauss-Seidel suffisent. Le solveur est donc resté sur le processeur, dans un fil de calcul parallèle (un <em>worker</em>), et la carte graphique ne fait que relire le résultat (section 7).</p></div>
-        <p>Deux précautions tiennent la feuille en place. L’anneau intérieur est recentré à chaque pas sur la tige. Et la rotation d’ensemble autour de la tige est retirée : rien ne retient une feuille de tourner sur elle-même, et la moindre asymétrie numérique la ferait dériver au fil des milliers de pas.</p>
+        <figure id="fig-patron"><figcaption><b>Le patron à plat.</b> Le maillage est celui que produit <code>pleatedU()</code>, appelé tel quel avec sept anneaux de papier. En rouge les plis montagne, en bleu les vallées ; les diagonales (traits fins) sont des plis plus faibles, à 60 % de l'angle des anneaux. Le bouton « Maillage en rayons » dessine à la place le maillage naïf, reconstruit pour la figure. Les arêtes de moins de 0,02 rayon sont surlignées en vert, et leur nombre est affiché en bas à gauche.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Passez en maillage en rayons : les arêtes courtes s'accumulent au centre. La plus petite arête tombe de 0,047 à 0,008 rayon, et le pas de temps de 0,027 à 0,011.</li>
+          <li>Montez la finesse à 16 dans les deux maillages : en rayons, la plus petite arête descend encore (0,005 rayon), alors qu'en fermeture éclair elle reste à 0,047 rayon, parce que la finesse ne change que le nombre de mailles le long des anneaux.</li>
+          <li>Essayez « Ombrelle » : les plis deviennent des rayons, montagne et vallée alternés.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <div class="note trap"><b>Le piège : dix pour cent d'étirement</b><p>La première version du patron était en rayons. Ses mailles minuscules près du centre imposaient un pas très court, et le papier s'étirait de 10 %. Le maillage cousu, avec des barres devenues des contraintes (section 03), a réglé les deux défauts.</p></div>
+        </div></details>
       </section>
 
       <section id="selle">
-        <h2><span class="n">04</span>La selle n’est pas dessinée</h2>
+        <h2><span class="n">05</span>La selle n'est pas dessinée</h2>
         <span class="src">src/sim/fold.js · pleatedU(), createSolver()</span>
-        <p>Quand les plis concentriques se referment, chaque anneau de papier devient un zigzag vu en coupe. Un pli fermé d’un angle \(\theta\) ne couvre plus que \(\cos(\theta/2)\) de sa largeur : la feuille raccourcit en rayon. Mais un anneau fait le tour de la feuille, et sa longueur ne change pas, puisque le papier ne s’étire pas. Il se retrouve trop long pour le cercle qu’on lui laisse.</p>
-        <p>Un fil trop long pour son cercle n’a qu’une issue : sortir du plan et onduler. C’est un <strong>flambage</strong>, le même phénomène qui fait gondoler une règle qu’on comprime par ses deux bouts. L’ondulation la moins coûteuse a deux bosses et deux creux : une selle de cheval. Pour un hexagone, les six coins imposent trois bosses.</p>
-        <figure id="fig-flambage"><figcaption><b>Trop de circonférence pour le rayon.</b> Un anneau de longueur \(2\pi R\) est ramené au rayon \(R\cos(\theta/2)\) ; la figure cherche l’ondulation \(y = a\cos(q\varphi)\) qui conserve sa longueur. C’est un modèle à un seul anneau, sans les diagonales ni la raideur des pans : il donne l’ordre de grandeur et surestime la hauteur (0,63 rayon à \(\theta = 2\), quand la petite feuille carrée de la figure suivante monte à 0,4 ou 0,5).</figcaption></figure>
-        <p>Le solveur ne sait rien de tout cela. Il applique ses deux règles, et la selle apparaît. Il lui manque seulement de quoi choisir : une feuille parfaitement symétrique ne sait pas quels coins lever. Une force très faible le lui dit, le <strong>coup de pouce</strong>, qui pousse un coin sur deux vers le haut et les autres vers le bas, d’autant plus fort qu’on s’éloigne du centre :</p>
-        <div class="eq">\[ f_y = \varepsilon\,r^2\cos\!\big(q\,(\varphi - w\,g)\big), \qquad \varepsilon = 0{,}02, \quad w = \frac{\pi}{q}. \]</div>
-        <p>\(q\) est le nombre de bosses, \(\varphi\) l’angle autour de la tige. Le paramètre \(g\) vaut 0 ou 1 : passer de l’un à l’autre décale le motif d’un cran \(w\) et désigne les autres coins. La selle a donc <strong>deux états</strong>, images l’un de l’autre, et c’est ce passage que le film enregistre.</p>
-        <figure id="fig-selle" class="wide"><figcaption><b>Le solveur du projet, en direct.</b> Une feuille de 300 à 340 sommets, pliée par <code>createSolver()</code> importé tel quel (douze pas par image) ; le coup de pouce est recopié de <code>bake()</code>. Faites glisser pour tourner. « Basculer » inverse le coup de pouce avec la pichenette du film (six fois plus fort pendant une demi-seconde, amortissement réduit). Essayez une seule passe de projection : l’étirement mesuré fait plus que doubler. Essayez des pans aussi souples que les pliures : la feuille ondule. La couleur des faces est celle de l’accord Bonbon ; l’éclairage de la figure est une simple loi de Lambert.</figcaption></figure>
+        <p>On sait plier une feuille sans l'étirer. Regardons maintenant ce qui arrive quand les plis concentriques se referment. Vu en coupe le long d'un rayon, chaque anneau de papier devient un zigzag. Un pli fermé d'un angle θ ne couvre plus que cos(θ/2) de sa largeur : la feuille raccourcit en rayon. Mais chaque anneau fait le tour de la feuille, et sa longueur ne change pas, puisque le papier ne s'étire pas. Il est donc trop long pour le cercle qu'on lui laisse.</p>
+        <p>Un fil trop long pour son cercle n'a qu'une issue : sortir du plan et onduler. C'est un <b>flambage</b>, le phénomène qui fait gondoler une règle qu'on comprime par ses deux bouts. L'ondulation qui coûte le moins d'énergie a deux bosses et deux creux : la selle de cheval.</p>
+        <figure id="fig-flambage"><figcaption><b>Trop de circonférence pour le rayon.</b> Un anneau de longueur 2π<i>R</i> est ramené au rayon <i>R</i> cos(θ/2) ; la figure cherche l'ondulation <i>y</i> = <i>a</i> cos(<i>q</i>φ) qui conserve sa longueur. C'est un modèle à un seul anneau, sans les diagonales ni la raideur des pans : il donne l'ordre de grandeur et surestime la hauteur.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Montez l'angle des plis à 2 rad : le rayon permis tombe à 0,54, l'anneau a 85 % de longueur en trop, et ses deux bosses montent à 0,63 rayon. La petite feuille carrée de la démo suivante, avec ses diagonales et ses pans raides, ne monte qu'à 0,47 rayon.</li>
+          <li>Passez à 3 bosses : pour la même longueur en trop, elles ne montent qu'à 0,42 rayon. C'est l'ondulation d'un hexagone, dont les six coins imposent trois bosses.</li>
+        </ul></div>
+        <h3>Le coup de pouce</h3>
+        <p>Le solveur ne sait rien de ce raisonnement. Il applique ses deux règles, et la selle apparaît. Il lui manque seulement de quoi choisir : une feuille parfaitement symétrique ne sait pas quels coins lever. Une force très faible le lui dit, le <b>coup de pouce</b>, qui pousse un coin sur deux vers le haut et les autres vers le bas, d'autant plus fort qu'on s'éloigne du centre :</p>
+        <div class="eq">\[ f_y = \varepsilon\,r^2\cos\!\big(q\,(\varphi - w\,g)\big), \qquad w = \frac{\pi}{q} \]</div>
+        <p><i>f</i><sub>y</sub> est la force verticale sur un sommet, <i>r</i> sa distance à la tige et φ son angle autour d'elle. ε = 0,02 règle la force (0,05 pour la spirale et la rosace), et <i>q</i> est le nombre de bosses. Le paramètre <i>g</i> vaut 0 ou 1 : passer de l'un à l'autre décale le motif d'un cran <i>w</i> et désigne les autres coins. La selle a donc <b>deux états</b>, images l'un de l'autre par une rotation, et le film enregistre le passage de l'un à l'autre.</p>
+        <figure id="fig-selle" class="wide"><figcaption><b>Le solveur du projet, en direct.</b> Une feuille de 312 à 336 sommets, pliée par <code>createSolver()</code> importé tel quel (douze pas par image) ; le coup de pouce est recopié de <code>bake()</code>. Faites glisser pour tourner. « Basculer » inverse le coup de pouce avec la pichenette du film (sept fois plus fort pendant une demi-seconde, amortissement réduit). Le bandeau indique dans quel état se trouve vraiment la selle. La couleur des faces est celle de l'accord Bonbon ; l'éclairage de la figure est une simple loi de Lambert.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Passez à une seule passe de projection : l'étirement moyen passe de 0,23 % à 0,64 %, et le pire de 1,6 % à 4,1 %.</li>
+          <li>Ramenez la raideur des pans à 1 × pliure : les pans se courbent entre les plis, et leur angle moyen passe de 4,6° à 6,6°.</li>
+          <li>Le carré bascule même plié à fond. Choisissez maintenant l'hexagone, laissez-le se plier à 1,9 rad, puis cliquez sur « Basculer » : le bandeau indique que le coup de pouce pousse vers B, mais la selle reste dans l'état A. Rouvrez les plis à 0,6 rad : la selle passe d'elle-même dans l'état B.</li>
+        </ul></div>
         <h3>Des pans raides</h3>
-        <p>Dans un premier temps, pans et pliures avaient la même raideur. La feuille se pliait, mais ses pans se courbaient entre les plis et tout le mouvement ondulait : l’auteur y voyait du tissu, pas du papier. Le papier se plie là où sa fibre a été cassée et reste plan ailleurs. Les charnières des pans sont maintenant trois fois plus raides que celles des pliures (\(k_F = 3k\)).</p>
-        <p>Une ombrelle fonctionne de la même façon avec des plis en rayons : ses deux états sont « fermée vers le haut » et « fermée vers le bas », et le coup de pouce est une poussée verticale, \(f_y = 3\,\varepsilon\,r^2\cos(\pi g)\).</p>
+        <p>Dans un premier temps, pans et plis avaient la même raideur. La feuille se pliait, mais ses pans se courbaient entre les plis et tout le mouvement ondulait : on y voyait du tissu, pas du papier. Le papier se plie là où sa fibre a été cassée et reste plan ailleurs. Les charnières des pans sont maintenant trois fois plus raides que celles des plis (<i>k</i><sub>F</sub> = 3<i>k</i>).</p>
+        <p>Une ombrelle fonctionne de la même façon avec des plis en rayons. Ses deux états sont « fermée vers le haut » et « fermée vers le bas », et le coup de pouce est une poussée verticale, <i>f</i><sub>y</sub> = 3 ε <i>r</i>² cos(π<i>g</i>).</p>
       </section>
 
       <section id="geste">
-        <h2><span class="n">05</span>Le geste du papier</h2>
+        <h2><span class="n">06</span>Le geste du papier</h2>
         <span class="src">src/sim/fold.js · bake()</span>
-        <p>Le film d’une feuille est une <strong>bascule</strong> : le passage d’un état à l’autre, en sept secondes et trois cents images. Si tous les plis s’ouvraient ensemble pendant que le coup de pouce glisse d’un état à l’autre, la feuille se déformerait continûment, comme une étoffe qu’on retourne. Le calendrier du film est écrit pour l’éviter :</p>
+        <p>Le film d'une feuille est une <b>bascule</b> : le passage d'un état à l'autre, en sept secondes et trois cents images. Si tous les plis s'ouvraient ensemble pendant que le coup de pouce glisse d'un état à l'autre, la feuille se déformerait continûment, comme une étoffe qu'on retourne. On a vu dans la démo précédente qu'une selle pliée à fond peut aussi refuser de basculer. Le calendrier du film règle ces deux problèmes :</p>
         <ul>
-          <li>la feuille reste <strong>immobile</strong> pendant le premier dixième du film, et pendant le dernier septième ;</li>
-          <li>ses plis se <strong>rouvrent l’un après l’autre</strong>, du bord vers le centre, jusqu’à 26 à 36 % de leur angle (la graine choisit) ;</li>
-          <li>la selle <strong>claque</strong> : le coup de pouce s’inverse en un centième et demi du film (un dixième de seconde), il est renforcé six fois le temps d’une <em>pichenette</em>, et l’amortissement tombe de 5 % à 1,2 % par pas : la feuille dépasse sa position, vibre un instant et se calme ;</li>
-          <li>les plis se <strong>referment l’un après l’autre</strong>, du centre vers le bord.</li>
+          <li>la feuille reste immobile pendant le premier dixième du film, et pendant le dernier septième ;</li>
+          <li>ses plis se rouvrent l'un après l'autre, du bord vers le centre, jusqu'à 26 à 36 % de leur angle (la graine choisit) ; la selle rouverte bascule plus facilement ;</li>
+          <li>la selle claque : le coup de pouce s'inverse en un centième et demi du film (un dixième de seconde), il est renforcé sept fois le temps d'une <b>pichenette</b>, et l'amortissement tombe de 5 % à 1,2 % par pas, si bien que la feuille dépasse sa position, vibre un instant et se calme ;</li>
+          <li>les plis se referment l'un après l'autre, du centre vers le bord.</li>
         </ul>
-        <p>L’angle visé par une pliure de rang \(r\) (0 au centre, 1 au bord) à l’instant \(u\) de la bascule (de 0 à 1) est</p>
-        <div class="eq">\[ \theta_0(u, r) = A\,\Big[\,1 - (1 - o)\;S\!\Big(\frac{u - 0{,}1 - 0{,}16\,(1 - r)}{0{,}09}\Big)\,\Big(1 - S\!\Big(\frac{u - 0{,}56 - 0{,}2\,r}{0{,}1}\Big)\Big)\Big], \]</div>
-        <p>où \(A\) est l’angle des plis fermés (1,8 à 2,05 radians), \(o\) l’ouverture et \(S\) une rampe en S (<em>smoothstep</em>), qui part et arrive à pente nulle. Le décalage en \(r\) est ce qui fait passer le mouvement de pli en pli. L’ouverture des plis n’est pas décorative : pliée serrée, une selle résiste à la bascule, et l’hexagone de la figure précédente, plié à fond, la refuse même sous la pichenette. Rouvrir d’abord, c’est abaisser la barrière entre les deux états.</p>
-        <figure id="fig-film" class="wide"><figcaption><b>Le film d’une petite feuille carrée</b> (416 sommets), calculé à l’ouverture de cette page par <code>bake()</code> du projet dans un worker, puis relu en boucle. En bas, le calendrier d’une bascule, recopié de <code>bake()</code> : l’angle des plis du bord et du centre, l’instant où le coup de pouce s’inverse, la fenêtre d’amortissement réduit. La seconde moitié de la boucle est le même film, relu tourné d’un quart de tour (section suivante). Cliquez dans la frise pour déplacer la tête de lecture.</figcaption></figure>
-        <p>Une ombrelle n’a pas de rangs : tous ses plis s’ouvrent ensemble, et sa bascule est un retournement, le cône passe de pointe en bas à pointe en haut.</p>
-        <div class="note"><b>Ce qui a été écarté</b><p>Trois patrons existaient et ont été retirés. Les plis en cercles (selle ronde, trèfle à trois bosses) n’ont pas de coins pour les caler : une fois les pans raidis, leur bascule ne retombait pas à coup sûr sur son point de départ. Les plis larges et étroits alternés ne basculaient pas franchement à la finesse de la grande feuille. Un flocon à six branches se pliait à peine. Le solveur sait toujours les plier ; la recette ne les propose plus.</p></div>
+        <p>L'angle visé par un pli de rang <i>r</i> (0 au centre, 1 au bord) à l'instant <i>u</i> de la bascule (de 0 à 1) est</p>
+        <div class="eq">\[ \theta_0(u, r) = A\,\Big[\,1 - (1 - o)\;S\!\Big(\frac{u - 0{,}1 - 0{,}16\,(1 - r)}{0{,}09}\Big)\,\Big(1 - S\!\Big(\frac{u - 0{,}56 - 0{,}2\,r}{0{,}1}\Big)\Big)\Big] \]</div>
+        <p><i>A</i> est l'angle des plis fermés (1,8 à 2,05 radians), <i>o</i> la part de l'angle gardée pendant l'ouverture et <i>S</i> une rampe en S (<i>smoothstep</i>) qui part et arrive à pente nulle. Le premier <i>S</i> rouvre le pli, le second le referme ; le décalage en <i>r</i> fait passer le mouvement de pli en pli.</p>
+        <figure id="fig-film" class="wide"><figcaption><b>Le film d'une petite feuille carrée</b> (416 sommets), calculé à l'ouverture de cette page par <code>bake()</code> du projet dans un worker, puis relu en boucle. En bas, le calendrier d'une bascule, recopié de <code>bake()</code> : l'angle des plis du bord et du centre, l'instant où le coup de pouce s'inverse, la fenêtre d'amortissement réduit. La seconde moitié de la boucle est le même film, relu tourné d'un quart de tour (section suivante). Cliquez dans la frise pour déplacer la tête de lecture.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Passez au ralenti × 4 et regardez le passage de la ligne verte « inversion » : la feuille claque en quelques images, dépasse sa position et vibre, pendant la bande teintée où l'amortissement est réduit.</li>
+          <li>Suivez les deux courbes : les plis du bord se rouvrent les premiers, ceux du centre se referment les premiers.</li>
+        </ul></div>
+        <p>Une ombrelle n'a pas de rangs : tous ses plis s'ouvrent ensemble, et sa bascule est un retournement, le cône passant de pointe en bas à pointe en haut.</p>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <div class="note"><b>Ce qui a été écarté</b><p>Trois patrons existaient et ont été retirés de la recette. Les plis en cercles (selle ronde, trèfle à trois bosses) n'ont pas de coins pour les caler : une fois les pans raidis, leur bascule ne retombait pas à coup sûr sur son point de départ. Les plis larges et étroits alternés ne basculaient pas franchement à la finesse de la grande feuille. Un flocon à six branches se pliait à peine. Le solveur sait toujours les plier.</p></div>
+        </div></details>
       </section>
 
       <section id="boucle">
-        <h2><span class="n">06</span>Une boucle refermée par symétrie</h2>
-        <span class="src">src/sim/fold.js · bake() ; src/scene/stage.js · update()</span>
-        <p>Une simulation ne revient jamais exactement à son point de départ, et une boucle qui saute d’un millimètre se voit. Fold n’essaie pas de revenir : il utilise le fait que l’état d’arrivée d’une bascule est l’état de départ <strong>tourné d’un cran</strong> \(w\) (un quart de tour pour un carré ou un octogone, un sixième pour un hexagone), et que le patron est le même après ce tour. Le sommet \(i\) du départ et le sommet \(\sigma(i)\) de l’arrivée, celui qui occupe la même place un cran plus loin, doivent alors vérifier</p>
-        <div class="eq">\[ \mathbf{x}_{\sigma(i)}(1) = R_w\,\mathbf{x}_i(0). \]</div>
-        <p>On ne calcule donc qu’une bascule. La seconde est le même film, relu tourné de \(w\) : le programme de la carte graphique tourne les positions et les normales, et tourne la lampe en sens inverse dans ses calculs d’éclairage. Après deux bascules, la feuille a fait deux crans, ce qui est une symétrie de la selle : elle est revenue sur elle-même. La boucle dure quatorze secondes.</p>
-        <figure id="fig-boucle"><figcaption><b>Le bord de la feuille, déroulé.</b> La hauteur des sommets du bord en fonction de l’angle autour de la tige, pour la première image du film de la figure précédente (bleu) et pour la dernière (rouge, pointillé). Le curseur tourne la première image : à un quart de tour, les deux courbes se confondent. Les écarts affichés sont mesurés sur ce film : celui que la simulation avait laissé avant correction, et celui qui reste dans le film final.</figcaption></figure>
-        <p>Trois opérations rendent ce raccord exact.</p>
+        <h2><span class="n">07</span>Une boucle refermée par symétrie</h2>
+        <span class="src">src/sim/fold.js · bake() · src/scene/stage.js · update()</span>
+        <p>Une simulation ne revient jamais exactement à son point de départ, et une boucle qui saute d'un millimètre se voit. Fold n'essaie pas de revenir au départ. Il utilise le fait que l'état d'arrivée d'une bascule est l'état de départ <b>tourné d'un cran</b> <i>w</i> (un quart de tour pour un carré ou un octogone, un sixième pour un hexagone), et que le patron est le même après ce tour. Si σ(<i>i</i>) désigne le sommet qui occupe, un cran plus loin, la place du sommet <i>i</i>, le film doit vérifier</p>
+        <div class="eq">\[ \mathbf{x}_{\sigma(i)}(1) = R_w\,\mathbf{x}_i(0) \]</div>
+        <p>où <b>x</b><sub>i</sub>(0) est la position du sommet <i>i</i> au début de la bascule, <b>x</b><sub>σ(i)</sub>(1) celle de σ(<i>i</i>) à la fin, et <i>R</i><sub>w</sub> la rotation d'un cran autour de la tige.</p>
+        <p>On ne calcule donc qu'une bascule. La seconde est le même film, relu tourné de <i>w</i> : le programme de la carte graphique tourne les positions et les normales, et tourne la lampe en sens inverse dans ses calculs d'éclairage. Après deux bascules, la feuille a tourné de deux crans, ce qui la ramène sur elle-même puisque la selle a cette symétrie.</p>
+        <figure id="fig-boucle"><figcaption><b>Le bord de la feuille, déroulé.</b> La hauteur des sommets du bord en fonction de l'angle autour de la tige, pour la première image du film de la section 06 (bleu) et pour la dernière (rouge, pointillé). Le curseur tourne la première image. Le bandeau donne l'écart que la simulation avait laissé avant correction, et celui qui reste dans le film final.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>À 0°, les deux courbes sont décalées, avec un écart de 0,83 rayon. Tournez la première image d'un quart de tour (90°) : les courbes se superposent, et l'écart tombe à 0,000.</li>
+        </ul></div>
+        <p>Trois opérations rendent ce raccord exact :</p>
         <ul>
-          <li><strong>Le même chemin avant le film.</strong> L’équilibre d’une feuille plissée dépend du chemin par lequel on y arrive : il y a plusieurs façons de ranger le même papier. Avant d’enregistrer, la feuille est entrouverte, puis refermée par le calendrier exact de la fin d’une bascule. Elle part ainsi de l’état où elle arrivera.</li>
-          <li><strong>Un fondu sur le dernier quart.</strong> L’écart qui reste, de quelques millièmes à quelques centièmes du rayon selon le patron, est réparti en douceur sur les 75 dernières images.</li>
-          <li><strong>Une moyenne sur les symétries.</strong> Chaque image est moyennée avec ses \(q\) copies tournées de deux crans. La feuille acquiert exactement la symétrie de la selle, et la boucle de deux bascules se referme à la précision des nombres flottants.</li>
+          <li><b>Le même chemin avant le film.</b> L'équilibre d'une feuille plissée dépend du chemin par lequel on y arrive : il y a plusieurs façons de ranger le même papier. Avant d'enregistrer, la feuille est entrouverte, puis refermée par le calendrier exact de la fin d'une bascule. Elle part ainsi de l'état où elle arrivera.</li>
+          <li><b>Un fondu sur le dernier quart.</b> L'écart qui reste (0,0026 rayon pour la petite feuille de la démo, 0,043 pour la grande spirale de la scène d'ouverture) est réparti en douceur sur les 75 dernières images.</li>
+          <li><b>Une moyenne sur les symétries.</b> Chaque image est moyennée avec ses <i>q</i> copies tournées de deux crans. La feuille acquiert exactement la symétrie de la selle, et la boucle de deux bascules se referme à la précision des nombres à virgule.</li>
         </ul>
-        <div class="note trap"><b>Un dixième de rayon</b><p>Dans une première version, la feuille était pliée d’un seul bloc avant le film, puis fermée pli par pli à la fin. Ce n’était pas le même chemin, donc pas le même équilibre, et le fondu devait rattraper un dixième du rayon : on voyait la feuille glisser en fin de bascule.</p></div>
-        <div class="note trap"><b>L’ombrelle montre son autre face</b><p>L’arrivée d’une ombrelle est son départ tourné d’un cran <em>et retourné haut en bas</em>. Le film relu à l’envers montre donc l’autre face du papier, et le sens de ses triangles est inversé. Le shader échange les deux couleurs et retourne la normale une bascule sur deux, sans quoi l’ombrelle changeait de couleur à chaque retournement.</p></div>
-        <div class="note check"><b>Ce que vérifie le test</b><p>Pour un carré, une rosace et une ombrelle : l’écart avant fondu est inférieur à 6 % du rayon (la selle a bien basculé), l’étirement moyen du papier inférieur à 2 %, la forme a un vrai volume (plus de 0,3 rayon), la dernière image est la première tournée d’un cran à \(10^{-5}\) près, et une image prise au milieu du film a la symétrie de la selle avec la même précision.</p></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <div class="note trap"><b>Le piège : un dixième de rayon</b><p>Dans une première version, la feuille était pliée d'un seul bloc avant le film, puis fermée pli par pli à la fin. Ce n'était pas le même chemin, donc pas le même équilibre, et le fondu devait rattraper un dixième du rayon : on voyait la feuille glisser en fin de bascule.</p></div>
+          <div class="note trap"><b>Le piège : l'ombrelle montre son autre face</b><p>L'arrivée d'une ombrelle est son départ tourné d'un cran et retourné haut en bas. Le film relu à l'envers montre donc l'autre face du papier, et le sens de ses triangles est inversé. Le shader échange les deux couleurs et retourne la normale une bascule sur deux ; sans cela, l'ombrelle changeait de couleur à chaque retournement.</p></div>
+          <div class="note check"><b>Ce que vérifie le test</b><p>Pour un carré, une rosace et une ombrelle : l'écart avant fondu est inférieur à 6 % du rayon (la selle a bien basculé), l'étirement moyen du papier inférieur à 2 %, la forme a un vrai volume (plus de 0,3 rayon), la dernière image est la première tournée d'un cran à 10⁻⁵ près, et une image prise au milieu du film a la symétrie de la selle avec la même précision.</p></div>
+        </div></details>
       </section>
 
       <section id="lecture">
-        <h2><span class="n">07</span>Le film, relu par la carte graphique</h2>
-        <span class="src">src/sim/fold.js · renderMesh() ; src/scene/stage.js · addSheet()</span>
-        <p>Simuler à chaque image coûterait des centaines de passes de calcul pour un mouvement qui ne change jamais. Le film est donc calculé une fois, pendant l’écran de chargement, puis rangé dans deux <strong>textures</strong> de nombres flottants : une colonne par sommet, une ligne par image, 301 lignes. L’une contient les positions, l’autre les normales. Le <em>vertex shader</em>, le programme de la carte graphique qui place chaque sommet, lit les deux lignes qui encadrent l’instant courant et les interpole. Le film est échantillonné à 43 images par seconde et lu à n’importe quelle cadence, à l’endroit, à l’envers ou image par image pour l’export.</p>
+        <h2><span class="n">08</span>Le film, relu par la carte graphique</h2>
+        <span class="src">src/sim/fold.js · renderMesh() · src/scene/stage.js · addSheet()</span>
+        <p>Simuler à chaque image coûterait des centaines de pas de calcul pour un mouvement qui ne change jamais. Le film est donc calculé une fois, pendant l'écran de chargement, puis rangé dans deux <b>textures</b>, des images dont chaque pixel contient des nombres à virgule : une colonne par sommet, une ligne par image du film, 301 lignes. L'une contient les positions, l'autre les normales. Le <b>vertex shader</b>, le programme de la carte graphique qui place chaque sommet, lit les deux lignes qui encadrent l'instant courant et les interpole. Le film est échantillonné à 43 images par seconde et peut être lu à n'importe quelle cadence, à l'endroit, à l'envers ou image par image pour l'export.</p>
         <h3>Des normales vives sur les plis</h3>
-        <p>Si deux pans partagent leurs sommets le long d’une pliure, la normale y est la moyenne des deux et l’éclairage arrondit le pli : le papier ressemble à du caoutchouc. Les sommets sont donc <strong>dédoublés</strong> le long des pliures. Un pan est l’ensemble des triangles reliés par des arêtes qui ne sont pas des pliures ; un sommet posé sur une pliure existe en autant d’exemplaires que de pans qui s’y rejoignent. Chaque exemplaire reçoit la normale moyenne de son seul pan, recalculée pour chacune des 301 images.</p>
-        <figure id="fig-lecture" class="wide"><figcaption><b>Les deux textures du film de la petite feuille</b>, telles que <code>renderMesh()</code> les produit : chaque pixel est un vecteur, ses trois coordonnées lues comme du rouge, du vert et du bleu. Une ligne est une image du film ; le curseur choisit celle que la feuille de gauche relit. On y lit le calendrier de la bascule : les bandes immobiles en haut et en bas, le claquement au milieu. « Sommets partagés » remplace la normale de chaque exemplaire par la moyenne de tous les exemplaires du même sommet, ce que donnerait un maillage sans dédoublement.</figcaption></figure>
-        <h3>La matière</h3>
-        <p>Le papier porte une couleur par face, dégradée du centre vers le bord. Trois détails le font passer pour du papier plutôt que pour du plastique : un grain fin qui accroche la lumière rasante et s’efface dès qu’un pixel couvre plusieurs grains (de loin, il ne ferait que scintiller) ; un filet clair le long des pliures, là où la fibre cassée blanchit ; et la tranche blanche du bord coupé. Le grain est lu dans un secteur de la feuille replié en éventail, pour rester le même quand la selle a tourné d’un cran.</p>
+        <p>Si deux pans partagent leurs sommets le long d'un pli, la normale y est la moyenne des deux, et l'éclairage arrondit le pli : le papier ressemble à du caoutchouc. Les sommets sont donc <b>dédoublés</b> le long des plis. Un pan est l'ensemble des triangles reliés par des arêtes qui ne sont pas des plis ; un sommet posé sur un pli existe en autant d'exemplaires que de pans qui s'y rejoignent. Chaque exemplaire reçoit la normale moyenne de son seul pan, recalculée pour chacune des 301 images.</p>
+        <figure id="fig-lecture" class="wide"><figcaption><b>Les deux textures du film de la petite feuille</b>, telles que <code>renderMesh()</code> les produit : chaque pixel est un vecteur, ses trois coordonnées lues comme du rouge, du vert et du bleu. Une ligne est une image du film ; le curseur choisit celle que la feuille de gauche relit. On y lit le calendrier de la bascule : les bandes immobiles en haut et en bas, le claquement au milieu.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Cliquez sur « Sommets partagés » : la normale de chaque exemplaire est remplacée par la moyenne de tous les exemplaires du même sommet, ce que donnerait un maillage sans dédoublement. Les arêtes vives des plis s'adoucissent.</li>
+          <li>Le bandeau compte 667 colonnes pour 416 sommets : 251 exemplaires de plus le long des plis.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Le papier porte une couleur par face, dégradée du centre vers le bord. Trois détails le font passer pour du papier plutôt que pour du plastique : un grain fin qui accroche la lumière rasante et s'efface dès qu'un pixel couvre plusieurs grains (de loin, il ne ferait que scintiller), un filet clair le long des plis, là où la fibre cassée blanchit, et la tranche blanche du bord coupé. Le grain est lu dans un secteur de la feuille replié en éventail, pour rester le même quand la selle a tourné d'un cran.</p>
+        </div></details>
       </section>
 
       <section id="couleur">
-        <h2><span class="n">08</span>La couleur d’un pan sur l’autre</h2>
-        <span class="src">src/scene/stage.js · bleed() ; src/sim/fold.js · renderMesh()</span>
-        <p>Dans le creux d’un pli, un pan éclairé renvoie sa couleur sur le pan d’en face. C’est ce qui donne au papier plié ses roses et ses orangés profonds, et c’est ce qui manque à une image de synthèse où chaque surface ne voit que la lampe. Calculer ces échanges pour toute la scène est coûteux ; ici la géométrie est connue d’avance, et le calcul se fait par sommet.</p>
-        <p>Chaque sommet connaît ses <strong>huit plus proches voisins des pans adjacents</strong>, cherchés une fois pour toutes sur la feuille à plat (à deux arêtes au plus), et l’aire de papier que chacun représente. La part de lumière qu’un petit élément de surface \(j\), d’aire \(A_j\), envoie sur le sommet \(i\) est son <em>facteur de forme</em> :</p>
-        <div class="eq">\[ F_{ij} = \frac{\cos\theta_i\,\cos\theta_j\,A_j}{\pi r^2 + A_j}, \qquad \mathbf{c}_i = \sum_{j=1}^{8} \mathbf{c}_j\,E_j\,F_{ij}. \]</div>
-        <p>\(r\) est la distance entre les deux, \(\theta_i\) et \(\theta_j\) les angles entre leurs normales et la droite qui les joint. Deux éléments face à face et proches échangent beaucoup, deux éléments de biais ou éloignés presque rien. Le terme \(A_j\) au dénominateur empêche la formule de diverger quand les deux pans se touchent au fond du pli. \(E_j\) est l’éclairement du voisin, calculé d’après sa normale et la direction de la lampe ; sa couleur \(\mathbf{c}_j\) est celle de la face qu’il tourne vers le sommet.</p>
-        <p>Le calcul est fait dans le vertex shader, pour le recto et le verso séparément, à partir des textures du film : les positions des voisins sont celles de l’instant courant, et le renvoi de couleur s’intensifie à mesure que le pli se ferme.</p>
-        <figure id="fig-bleed" class="wide"><figcaption><b>Le calcul du shader, refait sur la petite feuille.</b> Positions, normales, voisins et aires viennent de <code>renderMesh()</code> du projet ; la boucle sur les huit voisins est recopiée de <code>bleed()</code>, avec ses constantes (lampe 3,4, ambiance 0,4, gain du renvoi 1,8). « Renvoi seul » isole ce que chaque pan reçoit des autres : la lumière se loge dans les creux des plis. Avancez dans le film : le renvoi faiblit quand les plis s’ouvrent. La figure n’a ni ombres portées ni rebond en espace écran, et colore chaque triangle de la moyenne de ses trois sommets.</figcaption></figure>
+        <h2><span class="n">09</span>La couleur d'un pan sur l'autre</h2>
+        <span class="src">src/scene/stage.js · bleed() · src/sim/fold.js · renderMesh()</span>
+        <p>Dans le creux d'un pli, un pan éclairé renvoie sa couleur sur le pan d'en face. Ce renvoi donne au papier plié ses tons profonds, et il manque à une image de synthèse où chaque surface ne voit que la lampe. Le calculer pour toute la scène est coûteux. Ici, la géométrie de chaque feuille est connue d'avance, et le calcul peut se faire sommet par sommet.</p>
+        <p>Chaque sommet connaît ses <b>huit plus proches voisins des pans adjacents</b>, cherchés une fois pour toutes sur la feuille à plat, et l'aire de papier que chacun représente. La part de lumière qu'un petit élément de surface <i>j</i>, d'aire <i>A</i><sub>j</sub>, envoie vers le sommet <i>i</i> s'appelle son <b>facteur de forme</b> :</p>
+        <div class="eq">\[ F_{ij} = \frac{\cos\theta_i\,\cos\theta_j\,A_j}{\pi r^2 + A_j}, \qquad \mathbf{c}_i = \sum_{j=1}^{8} \mathbf{c}_j\,E_j\,F_{ij} \]</div>
+        <p><i>r</i> est la distance entre les deux, θ<sub>i</sub> et θ<sub>j</sub> les angles entre leurs normales et la droite qui les joint. Deux éléments face à face et proches échangent beaucoup de lumière, deux éléments de biais ou éloignés presque rien. Le terme <i>A</i><sub>j</sub> au dénominateur empêche la formule de diverger quand les deux pans se touchent au fond du pli. <i>E</i><sub>j</sub> est l'éclairement du voisin, calculé d'après sa normale et la direction de la lampe ; <b>c</b><sub>j</sub> est la couleur de la face qu'il tourne vers le sommet, et <b>c</b><sub>i</sub> la lumière colorée que le sommet reçoit. Le calcul est fait dans le vertex shader, pour le recto et le verso séparément, à partir des positions de l'instant courant.</p>
+        <figure id="fig-bleed" class="wide"><figcaption><b>Le calcul du shader, refait sur la petite feuille.</b> Positions, normales, voisins et aires viennent de <code>renderMesh()</code> du projet ; la boucle sur les huit voisins est recopiée de <code>bleed()</code>, avec ses constantes (lampe 3,4, ambiance 0,4, gain du renvoi 1,8). La figure n'a ni ombres portées ni rebond en espace écran, et colore chaque triangle de la moyenne de ses trois sommets.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Cliquez sur « Renvoi seul » : seule reste la lumière que chaque pan reçoit des autres, logée dans les creux des plis.</li>
+          <li>Avancez dans le film : le renvoi vaut 12 % de l'éclairage direct à l'image 0, quand les plis sont fermés, et 2 % à l'image 150, quand ils sont rouverts.</li>
+        </ul></div>
       </section>
 
       <section id="lumiere">
-        <h2><span class="n">09</span>Des ombres colorées et un rebond de lumière</h2>
-        <span class="src">src/scene/stage.js · addSheet() ; shared/render/post.js</span>
-        <p>La scène est dépouillée : des feuilles, des tiges, un fond de couleur. Rien n’y cache un éclairage approximatif, et l’auteur demandait un rendu photoréaliste. Trois termes de lumière s’ajoutent au renvoi de couleur.</p>
-        <p><strong>L’ombre d’une feuille n’est pas noire.</strong> Le papier laisse passer environ un cinquième de la lumière, qui prend sa couleur au passage. Le matériau déclare la couleur de son ombre, et la carte d’ombre de la lampe, l’image depuis laquelle on décide ce qui est éclairé, la transporte : sous une feuille rose, le sol est rose sombre.</p>
-        <figure id="fig-ombre" class="wide"><figcaption><b>L’ombre portée de la petite feuille sur un sol de l’accord Bonbon.</b> La teinte de l’ombre suit la formule du matériau, \(0{,}3\,\big(\sqrt{\mathbf{c}_r\,\mathbf{c}_v} + \tfrac14(\mathbf{c}_r + \mathbf{c}_v)\big)\), où \(\mathbf{c}_r\) et \(\mathbf{c}_v\) sont les couleurs du recto et du verso. Le reste est simplifié : chaque triangle est glissé le long du rayon de la lampe jusqu’au sol, sans pénombre, une seule épaisseur de papier compte, et la part d’ambiance du sol (20 %) est un choix de la figure. « Papier opaque » montre l’ombre neutre qu’aurait un matériau ordinaire.</figcaption></figure>
-        <p><strong>La lumière qui traverse.</strong> Vue à contre-jour, une face reçoit la lumière tombée sur l’autre. Ce terme s’ajoute à la couleur de la face regardée.</p>
-        <p><strong>Un rebond en espace écran.</strong> À plus grande échelle, le sol clair éclaire le dessous des feuilles et les socles, et le papier teinte le sol. Ce rebond est calculé sur l’image elle-même (SSGI, <em>screen-space global illumination</em>) : pour chaque pixel, on marche dans quelques directions de l’image et on récolte la lumière des surfaces qu’on y rencontre. Il est actif en qualité Haute et Cinéma, pas sur mobile.</p>
-        <div class="note trap"><b>Des taches vertes sur l’ombrelle</b><p>Deux erreurs donnaient la même tache. La lumière transmise était d’abord teintée par le produit des deux encres : du jaune à travers du bleu donne du vert, en plaques sur le dos des plis. Elle garde maintenant la teinte de la face regardée. Et l’ombre colorée d’un pli tombait sur le pli voisin : le papier reçoit désormais une ombre neutre, un peu plus dense, et seuls le sol et les socles voient l’ombre teintée.</p></div>
-        <div class="note trap"><b>Une image délavée</b><p>Le nœud de rebond de three.js produit deux résultats, une occlusion et la lumière indirecte. Sa sortie par défaut est l’occlusion : ajoutée à l’image comme si c’était de la lumière, elle voilait tout de gris. Il faut demander la lumière indirecte par son accesseur propre, et la multiplier par la couleur des surfaces.</p></div>
+        <h2><span class="n">10</span>Des ombres colorées et un rebond de lumière</h2>
+        <span class="src">src/scene/stage.js · addSheet() · shared/render/post.js</span>
+        <p>La scène est dépouillée : des feuilles, des tiges, un fond de couleur. Rien n'y cache un éclairage approximatif. Trois termes de lumière s'ajoutent au renvoi de couleur.</p>
+        <p><b>L'ombre d'une feuille n'est pas noire.</b> Le papier laisse passer environ un cinquième de la lumière, qui prend sa couleur au passage. Le matériau déclare donc la couleur de son ombre, et la <b>carte d'ombre</b> de la lampe (l'image vue depuis la lampe, qui sert à décider ce qui est éclairé) la transporte : sous une feuille rose, le sol est rose sombre.</p>
+        <figure id="fig-ombre" class="wide"><figcaption><b>L'ombre portée de la petite feuille sur un sol de l'accord Bonbon.</b> La teinte de l'ombre suit la formule du matériau, 0,3 (√(<b>c</b><sub>r</sub> <b>c</b><sub>v</sub>) + ¼ (<b>c</b><sub>r</sub> + <b>c</b><sub>v</sub>)), où <b>c</b><sub>r</sub> et <b>c</b><sub>v</sub> sont les couleurs du recto et du verso. Le reste est simplifié : chaque triangle est glissé le long du rayon de la lampe jusqu'au sol, sans pénombre, une seule épaisseur de papier compte, et la part d'ambiance du sol (20 %) est un choix de la figure.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Cliquez sur « Papier opaque » : l'ombre devient neutre, comme celle d'un matériau ordinaire, et le sol rose ne garde que sa part d'ambiance.</li>
+          <li>Abaissez la lampe : l'ombre s'allonge et s'éloigne de la tige.</li>
+        </ul></div>
+        <p><b>La lumière qui traverse.</b> Vue à contre-jour, une face reçoit la lumière tombée sur l'autre. Ce terme s'ajoute à la couleur de la face regardée.</p>
+        <p><b>Un rebond en espace écran.</b> À plus grande échelle, le sol clair éclaire le dessous des feuilles et les socles, et le papier teinte le sol. Ce rebond est calculé sur l'image elle-même (SSGI, <i>screen-space global illumination</i>) : pour chaque pixel, on explore l'image dans quelques directions et l'on récolte la lumière des surfaces qu'on y rencontre. Il est actif en qualité Haute et Cinéma, pas sur mobile.</p>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <div class="note trap"><b>Le piège : des taches vertes sur l'ombrelle</b><p>Deux erreurs donnaient la même tache. La lumière transmise était d'abord teintée par le produit des deux encres : du jaune à travers du bleu donne du vert, en plaques sur le dos des plis. Elle garde maintenant la teinte de la face regardée. Et l'ombre colorée d'un pli tombait sur le pli voisin : le papier reçoit désormais une ombre neutre, un peu plus dense, et seuls le sol et les socles voient l'ombre teintée.</p></div>
+          <div class="note trap"><b>Le piège : une image délavée</b><p>Le nœud de rebond de three.js produit deux résultats, une occlusion et la lumière indirecte. Sa sortie par défaut est l'occlusion : ajoutée à l'image comme si c'était de la lumière, elle voilait tout de gris. Il faut demander la lumière indirecte par son accesseur propre, et la multiplier par la couleur des surfaces.</p></div>
+        </div></details>
       </section>
 
       <section id="places">
-        <h2><span class="n">10</span>Des feuilles qui ne se touchent jamais</h2>
+        <h2><span class="n">11</span>Des feuilles qui ne se touchent jamais</h2>
         <span class="src">src/recipe.js · generate()</span>
-        <p>Le solveur ne gère pas les contacts : deux feuilles voisines se traverseraient sans le savoir, et les premières scènes en montraient. Détecter ces collisions pendant le pliage coûterait plus cher que le pliage lui-même. La recette les rend impossibles. Une feuille ne s’étire pas : aucun de ses points ne s’éloigne de la tige de plus que son rayon à plat. Elle tient donc tout entière, quoi qu’elle fasse, dans un cylindre vertical de ce rayon. La graine place les tiges de façon que ces cylindres soient disjoints, avec un jeu de 0,08 unité (le rayon de la grande feuille est proche de 1).</p>
-        <figure id="fig-places"><figcaption><b>Vue de dessus</b> de scènes tirées par <code>generate()</code> du projet. Chaque disque est le cylindre d’une feuille, à sa couleur de recto ; le trait fin marque le jeu. La caméra est en bas. La grande feuille est au centre, les autres devant elle, à gauche et à droite.</figcaption></figure>
-        <p>La même recette pose chaque feuille assez haut sur sa tige pour que son point le plus bas reste au-dessus de son socle (0,62 rayon sous le centre pour une selle, 0,95 pour une ombrelle fermée), et un test le vérifie sur trois cents graines, avec la disjonction des cylindres, l’alternance d’une face chaude et d’une face froide, et le fait que deux feuilles ne portent jamais le même patron.</p>
-        <div class="note"><b>Une limite</b><p>Une feuille peut encore se traverser elle-même dans ses plis les plus serrés, et le papier n’a pas d’épaisseur.</p></div>
+        <p>Le solveur ne gère pas les contacts : deux feuilles voisines se traverseraient sans le savoir, et les premières scènes en montraient. Détecter ces collisions pendant le pliage coûterait plus cher que le pliage lui-même. La recette les rend impossibles. Une feuille ne s'étire pas, donc aucun de ses points ne s'éloigne de la tige de plus que son rayon à plat. Elle tient tout entière, quoi qu'elle fasse, dans un cylindre vertical de ce rayon autour de sa tige. La graine place les tiges de façon que ces cylindres soient séparés par un jeu d'au moins 0,08 (le rayon de la grande feuille est proche de 1).</p>
+        <figure id="fig-places"><figcaption><b>Vue de dessus</b> de scènes tirées par <code>generate()</code> du projet. Chaque disque est le cylindre d'une feuille, à sa couleur de recto ; le cercle pointillé ajoute la moitié du jeu. La caméra est en bas. La grande feuille est au centre, les autres devant elle, à gauche et à droite.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Cliquez plusieurs fois sur « Autre graine » : le plus petit jeu entre deux cylindres varie (0,096 pour la graine 40aatl, de 0,093 à 0,160 pour les quatre suivantes), sans jamais descendre sous 0,08.</li>
+        </ul></div>
+        <p>La même recette pose chaque feuille assez haut sur sa tige pour que son point le plus bas reste au-dessus de son socle : il descend au plus à 0,62 rayon sous le centre pour une selle, 0,95 pour une ombrelle fermée.</p>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Un test le vérifie sur trois cents graines, avec la séparation des cylindres, l'alternance d'une face chaude et d'une face froide, et le fait que deux feuilles ne portent jamais le même patron. Une limite demeure : une feuille peut encore se traverser elle-même dans ses plis les plus serrés, et le papier n'a pas d'épaisseur.</p>
+        </div></details>
+      </section>
+
+      <section id="resume">
+        <h2><span class="n">12</span>Récapitulatif</h2>
+        <p>Au chargement, pour chaque feuille, dans un worker :</p>
+        <ol>
+          <li>le patron est maillé en fermeture éclair (section 04) ;</li>
+          <li>la feuille est entrouverte, puis refermée comme à la fin d'une bascule (section 07) ;</li>
+          <li>le film d'une bascule est calculé : à chaque pas, les charnières poussent vers l'angle du calendrier, le coup de pouce choisit l'état, puis les barres sont corrigées en quatre passes (sections 02, 03, 05 et 06) ;</li>
+          <li>l'écart de raccord est fondu sur le dernier quart, chaque image est moyennée sur les symétries de la selle (section 07), puis les sommets sont dédoublés le long des plis et le film est rangé en deux textures (section 08).</li>
+        </ol>
+        <p>À chaque image :</p>
+        <ol>
+          <li>la phase de la boucle donne, pour chaque feuille, la bascule en cours et l'instant dans le film ; la seconde bascule est la première tournée d'un cran (section 07) ;</li>
+          <li>le vertex shader interpole les positions et les normales entre deux lignes des textures, et calcule le renvoi de couleur de huit voisins (sections 08 et 09) ;</li>
+          <li>le rendu ajoute les ombres teintées, la lumière transmise et le rebond en espace écran (section 10).</li>
+        </ol>
       </section>
 
       <section id="budget">
-        <h2><span class="n">11</span>Budget</h2>
-        <p>Tout le pliage se fait pendant l’écran de chargement, une feuille par worker, en parallèle. L’écran de chargement plie lui-même, en direct, une version grossière de la grande feuille de la graine avec le même solveur, et n’en dessine que les pliures.</p>
+        <h2><span class="n">13</span>Budget</h2>
+        <p>Tout le pliage se fait pendant l'écran de chargement, une feuille par worker, en parallèle. L'écran de chargement plie lui-même, en direct, une version grossière de la grande feuille de la graine avec le même solveur, et n'en dessine que les plis.</p>
         <div class="tbl"><table>
           <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
           <tbody>
-            <tr><td>Grande feuille : environ 2&#8239;000 sommets, 510 images simulées de 17 pas</td><td>worker</td><td class="num">≈ 10 s</td></tr>
-            <tr><td>Petite feuille</td><td>worker</td><td class="num">≈ 5 s</td></tr>
+            <tr><td>Grande feuille de la graine 40aatl : 1&#8239;924 sommets, 510 images simulées de 17 pas</td><td>worker</td><td class="num">≈ 9 s</td></tr>
+            <tr><td>Petite feuille de démo (416 sommets)</td><td>worker</td><td class="num">≈ 1,4 s</td></tr>
             <tr><td>Film enregistré par feuille : 301 images, positions et normales</td><td>GPU</td><td class="num">2 textures flottantes</td></tr>
-            <tr><td>Scène complète</td><td>GPU</td><td class="num">≈ 6&#8239;000 sommets</td></tr>
+            <tr><td>Scène d'ouverture : sommets simulés (trois feuilles)</td><td>worker</td><td class="num">3&#8239;748</td></tr>
             <tr><td>Renvoi de couleur : voisins lus par sommet, pour chaque face</td><td>GPU</td><td class="num">8</td></tr>
             <tr><td>Image 1&#8239;280 × 720, chaîne complète</td><td>GPU</td><td class="num">≈ 5,5 ms</td></tr>
           </tbody>
         </table></div>
-        <p>Les temps de pliage sont ceux du chargement de la scène d’ouverture ; le temps d’image a été mesuré sur un portable Apple, dans une fenêtre masquée : c’est un ordre de grandeur. Le mouvement en continu et l’export vidéo n’ont pas été revus depuis la refonte.</p>
-        <p>Cinq tests tiennent l’ensemble sans navigateur : la recette (déterminisme, tous les choix tirés, feuilles écartées et au-dessus de leur socle), les choix du panneau (changer un patron ne déplace rien d’autre), le gradient de l’angle dièdre, les patrons (maillage fermé, plis alternés, tour d’un cran qui envoie chaque sommet sur un sommet) et le film (bascule, raccord, symétrie, papier qui ne s’étire pas).</p>
+        <p>Le temps de la grande feuille a été mesuré dans Node sur un portable Apple (8,9 s), celui de la petite feuille dans cette page. Le temps d'image a été mesuré sur le même portable, dans une fenêtre masquée : c'est un ordre de grandeur.</p>
       </section>
 
     </article>
@@ -253,7 +341,7 @@ while (p &lt; a || q &lt; b) {
       for (let i = 0; i < S.N; i++) { const X = S.P[3 * i], Z = S.P[3 * i + 2]; f[3 * i + 1] += gain * eps * (X * X + Z * Z) * (S.soleil ? 3 * Math.cos(Math.PI * g) : Math.cos(q * (Math.atan2(Z, X) - w * g))); }
     };
 
-    // ── 01 · le patron ─────────────────────────────────────────────────────
+    // ── 04 · le patron ─────────────────────────────────────────────────────
     demo('#fig-patron', {
       aspect: 16 / 10, title: 'Le patron et son maillage',
       controls: [
@@ -267,10 +355,10 @@ while (p &lt; a || q &lt; b) {
         const s = d.s, sol = s.soleil, n = sol ? 16 : s.n, twist = sol ? 0 : s.twist, star = sol ? 0 : s.star, hole = sol ? 0.15 : 0.08, rings = sol ? 5 : 7;
         const S = pleatedU({ n, rings, sub: 2, m: s.m, hole, twist, star, kind: sol ? 'soleil' : 'rings' });
         const sc = Math.min(d.w, d.h) * 0.46, cx = d.w / 2, cy = d.h / 2, X = (i) => cx + sc * S.P[3 * i], Y = (i) => cy + sc * S.P[3 * i + 2];
-        let lmin = 1e9, count = S.N;
+        let lmin = 1e9, count = S.N; const short = [], SHORT = 0.02;
         if (!s.radial) {
           g.strokeStyle = alpha(C.ink, 0.16); g.lineWidth = 0.6; g.beginPath();
-          for (let b = 0; b < S.bars.length; b += 3) { g.moveTo(X(S.bars[b]), Y(S.bars[b])); g.lineTo(X(S.bars[b + 1]), Y(S.bars[b + 1])); lmin = Math.min(lmin, S.bars[b + 2]); }
+          for (let b = 0; b < S.bars.length; b += 3) { g.moveTo(X(S.bars[b]), Y(S.bars[b])); g.lineTo(X(S.bars[b + 1]), Y(S.bars[b + 1])); lmin = Math.min(lmin, S.bars[b + 2]); if (S.bars[b + 2] < SHORT) short.push([X(S.bars[b]), Y(S.bars[b]), X(S.bars[b + 1]), Y(S.bars[b + 1])]); }
           g.stroke();
         } else {
           // le maillage naïf : autant de points sur chaque anneau (reconstruit pour la figure)
@@ -283,7 +371,7 @@ while (p &lt; a || q &lt; b) {
           }
           count = R.length * R[0].length;
           g.strokeStyle = alpha(C.ink, 0.16); g.lineWidth = 0.6; g.beginPath();
-          const seg = (p, q) => { g.moveTo(cx + sc * p[0], cy + sc * p[1]); g.lineTo(cx + sc * q[0], cy + sc * q[1]); lmin = Math.min(lmin, Math.hypot(p[0] - q[0], p[1] - q[1])); };
+          const seg = (p, q) => { g.moveTo(cx + sc * p[0], cy + sc * p[1]); g.lineTo(cx + sc * q[0], cy + sc * q[1]); const l = Math.hypot(p[0] - q[0], p[1] - q[1]); lmin = Math.min(lmin, l); if (l < SHORT) short.push([cx + sc * p[0], cy + sc * p[1], cx + sc * q[0], cy + sc * q[1]]); };
           for (let k = 0; k <= K; k++) for (let i = 0; i < R[k].length; i++) { seg(R[k][i], R[k][(i + 1) % R[k].length]); if (k < K) { seg(R[k][i], R[k + 1][i]); seg(R[k][i], R[k + 1][(i + 1) % R[k].length]); } }
           g.stroke();
         }
@@ -295,7 +383,9 @@ while (p &lt; a || q &lt; b) {
           g.strokeStyle = alpha(c > 0 ? C.c3 : C.c2, pass === 1 ? 0.95 : 0.7); g.lineWidth = pass === 1 ? 1.7 : 1;
           g.beginPath(); g.moveTo(X(S.hinges[h]), Y(S.hinges[h])); g.lineTo(X(S.hinges[h + 1]), Y(S.hinges[h + 1])); g.stroke();
         }
-        label(g, '— montagne', 12, d.h - 28, { color: C.c3, size: 11 }); label(g, '— vallée', 12, d.h - 12, { color: C.c2, size: 11 });
+        // les arêtes courtes, celles qui fixent le pas de temps
+        g.strokeStyle = C.c4; g.lineWidth = 1.6; g.beginPath(); for (const s of short) { g.moveTo(s[0], s[1]); g.lineTo(s[2], s[3]); } g.stroke();
+        label(g, 'montagne', 12, d.h - 44, { color: C.c3, size: 11 }); label(g, 'vallée', 12, d.h - 28, { color: C.c2, size: 11 }); label(g, `arêtes < ${fr(SHORT)} : ${short.length}`, 12, d.h - 12, { color: C.c4, size: 11 });
         const dt = 0.18 * Math.sqrt(lmin / 2.1);
         d.status(s.radial ? 'en rayons' : 'en fermeture éclair');
         d.readout(`<b>${count}</b> sommets · plus petite arête <b>${fr(lmin, 4)}</b> rayon · pas de temps <b>${fr(dt, 4)}</b>${s.radial ? '' : ` · ${S.hinges.length / 6} charnières dont ${nc} sur une pliure`}`);
@@ -337,7 +427,7 @@ while (p &lt; a || q &lt; b) {
       },
     });
 
-    // ── 04 · le flambage ───────────────────────────────────────────────────
+    // ── 05 · le flambage ───────────────────────────────────────────────────
     const ringLen = (r, a, q) => { let L = 0, px = 0, py = 0, pz = 0; for (let i = 0; i <= 360; i++) { const f = (i / 360) * TAU, X = r * Math.cos(f), Z = r * Math.sin(f), Y = a * Math.cos(q * f); if (i) L += Math.hypot(X - px, Y - py, Z - pz); px = X; py = Y; pz = Z; } return L; };
     demo('#fig-flambage', {
       aspect: 16 / 9, title: 'Un anneau trop long pour son cercle',
@@ -367,7 +457,7 @@ while (p &lt; a || q &lt; b) {
       },
     });
 
-    // ── 04 · le solveur en direct ──────────────────────────────────────────
+    // ── 05 · le solveur en direct ──────────────────────────────────────────
     const LIVE = [
       { name: 'Carré', spec: { n: 4, rings: 6, m: 8 } }, { name: 'Hexagone', spec: { n: 6, rings: 6, m: 8 } },
       { name: 'Spirale', spec: { n: 4, rings: 6, m: 8, twist: PATTERNS.spirale.twist }, eps: PATTERNS.spirale.eps },
@@ -402,12 +492,17 @@ while (p &lt; a || q &lt; b) {
         drawRod(g, V); drawSheet(g, V, S, so.x);
         let h = 0; for (let i = 0; i < S.N; i++) h = Math.max(h, Math.abs(so.x[3 * i + 1]));
         const [mx, av] = so.strain();
-        d.status(st.flick > 0 ? 'pichenette' : `état ${st.g ? 'B' : 'A'}`);
-        d.readout(`${S.N} sommets · hauteur <b>${fr(h)}</b> rayon · étirement des barres : au pire <b>${fr(mx * 100, 1)} %</b>, en moyenne <b>${fr(av * 100, 2)} %</b>`);
+        // l'état réel : le signe de la selle sur le motif du coup de pouce (g = 0 : état A)
+        let sg = 0; for (let i = 0; i < S.N; i++) { const X = S.P[3 * i], Z = S.P[3 * i + 2]; sg += so.x[3 * i + 1] * (S.soleil ? 1 : Math.cos(S.q * Math.atan2(Z, X))); }
+        // la courbure des pans : angle moyen des charnières qui ne sont pas des plis
+        let pa = 0, pn = 0; const G = (st.G ??= new Float64Array(12));
+        for (let k = 0; k < S.hinges.length; k += 6) if (!S.hinges[k + 4]) { pa += Math.abs(dihedral(so.x, S.hinges[k], S.hinges[k + 1], S.hinges[k + 2], S.hinges[k + 3], G)); pn++; }
+        d.status(`${st.flick > 0 ? 'pichenette · ' : ''}selle dans l’état ${sg >= 0 ? 'A' : 'B'} · coup de pouce vers ${st.g ? 'B' : 'A'}`);
+        d.readout(`${S.N} sommets · hauteur <b>${fr(h)}</b> rayon · étirement des barres : au pire <b>${fr(mx * 100, 1)} %</b>, en moyenne <b>${fr(av * 100, 2)} %</b> · angle moyen des pans <b>${fr(pa / Math.max(1, pn) * 180 / Math.PI, 1)}°</b>`);
       },
     });
 
-    // ── 05–06 · le film d'une petite feuille, calculé dans un worker ───────
+    // ── 06–07 · le film d'une petite feuille, calculé dans un worker ───────
     const FILM = { spec: { n: 4, rings: 7, sub: 2, m: 9 }, opt: { amp: 1.95, open: 0.3, eps: 0.02 }, p: 0, ready: false };
     FILM.S = pleatedU(FILM.spec);
     const filmDone = (B, ms, M) => { Object.assign(FILM, { frames: B.frames, F: B.F, gap: B.gap, strain: B.strain, ms, M: M ?? renderMesh(FILM.S, B), ready: true }); FILM.buf = new Float32Array(3 * FILM.S.N); for (const d of FILM.figs) d?.redraw(); };
@@ -494,7 +589,7 @@ while (p &lt; a || q &lt; b) {
       },
     }));
 
-    // ── 07–09 · le maillage de rendu du film (renderMesh) ──────────────────
+    // ── 08–10 · le maillage de rendu du film (renderMesh) ──────────────────
     const LIN = (c) => c.map((v) => (v / 255) ** 2.2), TOPL = TOP.map(LIN), BOTL = BOT.map(LIN);
     const tone = (v) => 255 * (v / (1 + v)) ** (1 / 2.2);
     const lampDir = (az, el) => { const a = az * Math.PI / 180, e = el * Math.PI / 180; return [Math.cos(e) * Math.sin(a), Math.sin(e), Math.cos(e) * Math.cos(a)]; };
@@ -543,7 +638,7 @@ while (p &lt; a || q &lt; b) {
     const filmFrame = { key: 'f', label: 'Image du film', min: 0, max: 300, step: 1, value: 0, fmt: (v) => `${v} / 300` };
     const lampAz = { key: 'az', label: 'Lampe : direction', min: -180, max: 180, step: 1, value: KEY_AZ, fmt: (v) => `${v}°` };
 
-    // ── 07 · le film dans une texture ──────────────────────────────────────
+    // ── 08 · le film dans une texture ──────────────────────────────────────
     FILM.figs.push(demo('#fig-lecture', {
       aspect: 16 / 8, title: 'Le film est une image',
       controls: [filmFrame],
@@ -578,13 +673,13 @@ while (p &lt; a || q &lt; b) {
         g.imageSmoothingEnabled = false; g.drawImage(FILM.tex[d.s.nor ? 1 : 0], x0, y0, x1 - x0, y1 - y0);
         const yr = y0 + (y1 - y0) * (f + 0.5) / F1;
         g.strokeStyle = C.ink; g.lineWidth = 1.5; g.beginPath(); g.moveTo(x0 - 6, yr); g.lineTo(x1 + 6, yr); g.stroke();
-        label(g, 'une colonne par sommet →', x0, y0 - 8, { size: 11 }); label(g, 'une ligne par image ↓', x1, y0 - 8, { size: 11, align: 'right' });
+        const nw = d.w < 520; label(g, nw ? 'sommets →' : 'une colonne par sommet →', x0, y0 - 8, { size: 11 }); label(g, nw ? 'images ↓' : 'une ligne par image ↓', x1, y0 - 8, { size: 11, align: 'right' });
         d.status(d.s.soft ? 'normales moyennées : le pli s’arrondit' : 'normales vives');
         d.readout(`<b>${RN}</b> colonnes pour ${FILM.S.N} sommets (${RN - FILM.S.N} exemplaires de plus le long des pliures) × <b>${F1}</b> lignes · deux textures de ${fr(RN * F1 * 16 / 1e6, 1)} Mo`);
       },
     }));
 
-    // ── 08 · la couleur d'un pan sur l'autre ───────────────────────────────
+    // ── 09 · la couleur d'un pan sur l'autre ───────────────────────────────
     FILM.figs.push(demo('#fig-bleed', {
       aspect: 16 / 8, title: 'Le renvoi de couleur, sommet par sommet',
       controls: [filmFrame, lampAz],
@@ -605,7 +700,7 @@ while (p &lt; a || q &lt; b) {
       },
     }));
 
-    // ── 09 · l'ombre colorée ───────────────────────────────────────────────
+    // ── 10 · l'ombre colorée ───────────────────────────────────────────────
     FILM.figs.push(demo('#fig-ombre', {
       aspect: 16 / 8, title: 'L’ombre d’une feuille',
       controls: [lampAz, { key: 'el', label: 'Lampe : hauteur', min: 30, max: 80, step: 1, value: KEY_EL, fmt: (v) => `${v}°` }, filmFrame],
@@ -634,7 +729,7 @@ while (p &lt; a || q &lt; b) {
       },
     }));
 
-    // ── 10 · les places ────────────────────────────────────────────────────
+    // ── 11 · les places ────────────────────────────────────────────────────
     demo('#fig-places', {
       aspect: 16 / 9, title: 'Les cylindres des feuilles',
       buttons: [{ label: 'Autre graine', onClick: (d) => { d.state.k = (d.state.k ?? 0) + 1; } }],

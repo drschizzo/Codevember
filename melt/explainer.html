@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#050506">
   <title>Melt · défis techniques</title>
-  <meta name="description" content="Comment Melt fait fondre un objet de cire et le refond en un autre : une matière unique qui tient, flue puis coule, une matière froide figée tant qu’elle a un appui, une chaleur qui vient d’une source visible, une simulation reproductible image pour image, une surface nette tant que rien n’a bougé, des moules taillés d’après les figurines, une usine qui est une fonction du temps.">
+  <meta name="description" content="Comment fonctionne Melt, reconstruit pas à pas : une usine dont la pose est une fonction du temps, une cire faite de particules qui passe du solide au liquide selon sa température, une matière froide qu'on ne calcule pas, une chaleur qui vient d'une source, une simulation qui rend la même image au même instant, des moules taillés d'après les figurines, une surface nette et une cire qui s'éclaire elle-même.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
@@ -22,152 +22,326 @@
 
   <main>
     <header class="hero">
-      <div class="kicker">Day 03 · Melt · la refonte</div>
+      <div class="kicker">Day 03 · Melt · comment ça marche</div>
       <h1>Comment un objet de cire fond, coule et renaît dans un moule</h1>
-      <p class="lede">Une mini-usine refond sans fin la même cire. Un objet monte sous une source de chaleur : ses parties fines ploient, sa peau luit puis coule en lobes, et la cire descend en filet dans un moule à la forme de l’objet suivant, qui s’ouvre comme un livre. La difficulté est double. Il faut une matière qui soit tour à tour un solide, une pâte et un liquide, calculée assez vite pour être jouée en direct. Et il faut que cette simulation, qui avance d’image en image, rende la même image chaque fois qu’on revient au même instant de la boucle.</p>
+      <p class="lede">Dans Melt, une petite usine refond sans fin la même cire. Une figurine de cire monte sur un plateau jusque sous une source de chaleur. Ses parties fines ploient, sa peau devient brillante, puis elle coule. La cire descend en filet dans un moule qui a la forme de la figurine suivante, et le moule s'ouvre sur l'objet neuf, qui part fondre à son tour. La fonte n'est pas dessinée à la main : la cire est simulée par trente mille particules pendant que la scène tourne. Cette page explique d'abord la machine, puis cette simulation, puis la façon de dessiner une cire qui n'a pas de maillage.</p>
+      <p class="prereq">Pour suivre, il suffit de savoir lire un peu de JavaScript (des tableaux et des boucles). Les formules résument ce que les démos montrent ; on peut les sauter sans perdre le fil. Les détails de production sont rangés dans les encadrés « Pour aller plus loin ».</p>
     </header>
 
     <figure class="cover">
-      <img src="docs/capture.jpg" alt="Le moule vient de s’ouvrir comme un livre : un chat de cire couleur miel est sur son assiette, devant les deux demi-coques polies" width="1280" height="720">
-      <figcaption>La naissance (graine ib352j, la scène d’ouverture : équipe de nuit, cire miel et lait, lampe infrarouge, circuit à rampe). Le moule, taillé d’après la figurine, vient de s’ouvrir. Le chat partira fondre sous la lampe, et sa cire coulera dans le moule de la chouette.</figcaption>
+      <img src="docs/capture.jpg" alt="Le moule vient de s'ouvrir comme un livre : un chat de cire couleur miel est sur son assiette, devant les deux demi-coques polies" width="1280" height="720">
+      <figcaption>La naissance (graine ib352j, la scène d'ouverture : équipe de nuit, cire miel et lait, lampe infrarouge, circuit à rampe). Le moule, taillé d'après la figurine, vient de s'ouvrir. Le chat partira fondre sous la lampe, et sa cire coulera dans le moule de la chouette.</figcaption>
     </figure>
 
     <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
 
     <article>
 
+      <section id="scene">
+        <h2><span class="n">01</span>Ce que montre la scène</h2>
+        <span class="src">README.md · docs/concept.md</span>
+        <p>La boucle dure 50 secondes. Elle compte deux demi-cycles de 25 secondes, un par figurine. Au début d'un demi-cycle, un moule s'ouvre sur une figurine neuve. Les deux plateaux de l'usine échangent leurs places : la figurine monte sous la source de chaleur, et le moule de la figurine suivante se pose sur l'autre plateau, en dessous. La figurine fond pendant environ quatorze secondes. Sa cire tombe de l'assiette dans une cuvette, sort par une buse et coule dans le moule. Au demi-cycle suivant, c'est la nouvelle figurine qui fond, et sa cire remplit le moule de la première.</p>
+        <p>Chaque graine construit une usine différente. Elle tire le lieu (atelier, laboratoire ou équipe de nuit), les teintes de la cire, la source de chaleur, la forme du circuit et deux figurines parmi cinq : lapin, canard, ourson, chouette et chat.</p>
+        <p>La page suit trois questions :</p>
+        <ul>
+          <li><b>comment la machine sait où est chaque pièce</b> à chaque instant de la boucle (section 02) ;</li>
+          <li><b>comment la cire passe du solide au liquide</b>, et comment la calculer assez vite et toujours de la même façon (sections 03 à 06) ;</li>
+          <li><b>comment tailler les moules et dessiner la cire</b>, qui n'a pas de maillage (sections 07 à 10).</li>
+        </ul>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Cette version de Melt est la sixième. Les cinq précédentes ont été abandonnées : un flocon qui fondait en perles, des pinacles de glace, un fjord, une colonne de glace et un bain de bismuth. La colonne de glace était juste physiquement, mais elle « n'évoquait rien ». Le bain de bismuth était « trop technique, pas assez esthétique ». Ces abandons ont fixé deux règles : on fait l'image d'abord et la physique ensuite, et le sujet doit être la fonte elle-même, vue de près.</p>
+          <p>Cette version part d'une exigence : on ne doit pas avoir l'impression que l'objet « s'aplatit ». On doit le voir se déformer et couler. Un fondu entre deux formes ne le permet pas, d'où la simulation de matière des sections 03 à 06. La piste d'une mini-usine à tapis roulants, qui refond sans fin la même cire, a été préférée à celle d'un sablier.</p>
+        </div></details>
+      </section>
+
+      <section id="usine">
+        <h2><span class="n">02</span>L'usine est une fonction du temps</h2>
+        <span class="src">src/cycle.js · stateAt(), circuit(), along(), carriers() · src/scene/factory.js · pose()</span>
+        <p>Pendant un demi-cycle, beaucoup de pièces bougent : les deux plateaux, les chariots des ascenseurs et de la rampe, le moule qui s'ouvre, se lève et se referme, le barillet qui pivote pour présenter le moule suivant, la source qui s'allume puis s'éteint. Il faut que tout se raccorde exactement d'une boucle à la suivante. Il faut aussi pouvoir sauter à n'importe quel instant, avec les flèches du clavier ou pendant l'export d'une vidéo image par image.</p>
+        <p>La règle la plus simple est de ne rien faire avancer d'une image à l'autre. Une seule fonction, <code>stateAt</code>, reçoit la position dans la boucle, appelée la <b>phase</b> (un nombre entre 0 et 1), et rend la pose de toute la machine : où est chaque plateau, de combien le moule est ouvert et levé, quelle part de la chaleur est allumée. La fonction <code>pose()</code> place ensuite les pièces. Comme rien ne s'accumule, revenir au même instant redonne la même pose, et la boucle se referme parce que la fonction a la même valeur au début et à la fin.</p>
+        <p>Chaque mouvement est une rampe entre deux instants du demi-cycle. Le moule s'ouvre entre 0,1 et 1,65 s. Les plateaux roulent de 1,8 à 6,8 s. La chaleur monte à partir de 8,2 s et se coupe à partir de 22,6 s. Un plateau suit un chemin en ligne brisée (une ligne haute, une descente, une ligne basse) et marque un arrêt à chaque coude. Sur chaque tronçon, il ne va pas à vitesse constante : il démarre et s'arrête en douceur.</p>
+        <figure id="fig-cycle" class="wide"><figcaption><b>Un demi-cycle.</b> D'un côté, la machine vue de face, en schéma : les deux plateaux sur leur circuit, les chariots (en bleu), le moule, la source. De l'autre, les grandeurs que <code>stateAt</code> rend au fil des 25 secondes, de 0 à 1. <code>circuit()</code>, <code>along()</code>, <code>carriers()</code>, <code>beltAt()</code> et <code>stateAt()</code> sont repris tels quels, avec les proportions de la graine d'ouverture. Le dessin des pièces, la fonte de la figurine et le filet sont des schémas. Les boutons « Deux ascenseurs » et « Ascenseur et rampe » changent la forme du circuit.</figcaption></figure>
+
+        <h3>Deux plateaux qui échangent leurs rôles</h3>
+        <p>Les deux plateaux sont identiques. Pendant un demi-cycle, celui du haut porte la figurine qui fond, celui du bas porte le moule. Au demi-cycle suivant, les rôles s'échangent : le plateau qui portait le moule monte avec la figurine neuve, et l'autre descend recevoir le moule suivant. À la fin d'un demi-cycle, les plateaux sont revenus aux deux places du début ; seul le rôle de chacun a changé. La même fonction sert donc à tous les demi-cycles, en échangeant les deux plateaux quand le numéro du demi-cycle est impair.</p>
+
+        <h3>Ce qui n'allait pas : des pièces qui apparaissaient</h3>
+        <p>Dans un premier essai, un chariot apparaissait avec le plateau et disparaissait après l'avoir monté. On voyait une pièce naître de rien. Chaque ascenseur et chaque rampe a maintenant son chariot à demeure. Il attend au départ, emporte le plateau, le dépose, puis revient à vide pendant la fonte, entre 9,5 et 13,5 s. Avec une fonction du temps, cette correction ne coûte qu'une courbe de plus.</p>
+
+        <h3>La règle en résumé</h3>
+        <p>Sur un tronçon, la position d'un plateau est une fraction <i>s</i> de la longueur du tronçon :</p>
+        <div class="eq">\[ s(t) = t^3\,(6t^2 - 15t + 10), \qquad s(0) = 0,\quad s(1) = 1,\quad s'(0) = s'(1) = s''(0) = s''(1) = 0. \]</div>
+        <p><i>t</i> va de 0 (début du tronçon) à 1 (fin). La vitesse <i>s</i>′ et l'accélération <i>s</i>″ sont nulles aux deux bouts : le plateau ne donne aucun à-coup en partant ni en s'arrêtant. Les autres mouvements utilisent une rampe plus simple, <code>smoothstep</code>, qui passe de 0 à 1 entre deux instants avec une vitesse nulle aux bouts.</p>
+<pre><code>// src/cycle.js · stateAt (simplifié) ; t est l'instant dans le demi-cycle k
+const mv = clamp((t - 1.8) / (6.8 - 1.8));                    // les plateaux roulent
+const pUp = along(C.up, mv), pDown = along(C.down, mv);
+const pallets = k % 2 === 0 ? [pUp, pDown] : [pDown, pUp];   // les rôles s'échangent
+const open = smoothstep(0.1, 1.65, t) * (1 - smoothstep(3.5, 4.5, t));
+const heat = smoothstep(8.2, 9.6, t) * (1 - smoothstep(22.6, 23.8, t));
+return { k, t, pallets, open, heat };</code></pre>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Arrêtez la lecture, placez le curseur à 24,9 s puis à 25,1 s. Les plateaux n'ont pas bougé. À 24,9 s, il ne reste rien du chat sur le plateau du haut ; à 25,1 s, la chouette est sur le plateau du bas, dans le moule qui commence à s'ouvrir. Le bandeau passe de l'objet 1 à l'objet 2.</li>
+          <li>Faites glisser le curseur de 9 à 14 s en suivant la courbe « chariot » : elle redescend à 0 entre 9,5 et 13,5 s, pendant que la courbe « chaleur » reste à 1.</li>
+          <li>Passez de « Ascenseur et rampe » à « Deux ascenseurs » : seul le chemin de retour change. Les courbes du moule, des plateaux et de la chaleur restent les mêmes.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Une graine construit une usine (<code>recipe.js</code>) : le lieu, la cire (six accords d'une masse et de veines), la source, le circuit, deux figurines différentes, les proportions, le sens du circuit, la peinture et les métaux. Chaque tirage a son propre flux de nombres aléatoires : changer la cire dans le panneau ne change pas le circuit. La caméra suit la cire : gros plan sur la naissance, plan large pendant la montée, gros plan sur la fonte, puis descente le long du filet vers le moule.</p>
+          <p>Deux autres décisions viennent d'essais refusés. Une première machine en caissons peints a été jugée « massive » : elle est maintenant faite de tubes fins, d'une bague à chaque jonction et de pieds tournés, comme un instrument de laboratoire. Une première boucle de 34 secondes par objet, avec jusqu'à trois objets, était trop longue.</p>
+          <div class="note check"><b>Ce que vérifient les tests du cycle</b><p>Sur 6&#8239;000 instants de la boucle et six graines : aucun saut des plateaux, du moule ni de la chaleur ; pendant la chauffe, un plateau exactement sous la source et l'autre exactement sous le moule, posé et fermé ; le barillet ne tourne que moule levé et refermé. Sur 8&#8239;000 instants et huit graines : un chariot ne disparaît jamais, ne saute jamais, et un plateau qui n'est pas sur une ligne est toujours sur un chariot. La seule liberté prise avec la physique est le temps : une vraie cire met des minutes à fondre et des heures à prendre.</p></div>
+        </div></details>
+      </section>
+
       <section id="matiere">
-        <h2><span class="n">01</span>Une seule matière, de solide à liquide</h2>
-        <span class="src">src/sim/mpm.js · kP2G, kG2P</span>
-        <p>Cette version de Melt est la sixième. Les cinq précédentes ont été abandonnées : un flocon, des pinacles de glace, un fjord, une colonne de glace, un bain de bismuth. La colonne de glace était juste physiquement, mais « n’évoquait rien ». Le bain de bismuth était « trop technique, pas assez esthétique ». Ces abandons ont appris deux choses : on fait l’image d’abord et la physique ensuite, et le sujet doit être la fonte elle-même, vue de près. L’exigence qui porte cette version en découle : on ne doit pas avoir l’impression que l’objet « s’aplatit ». On doit le voir se déformer et voir des coulées.</p>
-        <p>Un fondu entre deux formes ne donne pas cela. Il faut une matière simulée. La cire est faite d’environ 30&#8239;000 particules (29&#8239;600 à 29&#8239;900 selon la figurine) qui portent chacune une position, une vitesse, une température et une déformation. Elles échangent leur quantité de mouvement avec une grille de 64 × 128 × 64 cellules attachée au plateau : c’est la méthode <strong>MLS-MPM</strong>, une méthode de points matériels. À chaque sous-pas, chaque particule dépose sa masse et son élan sur les 27 cellules qui l’entourent, la grille en tire une vitesse par cellule, et les particules relisent cette vitesse pour avancer. Tout tourne sur la carte graphique, dans des <em>compute shaders</em> (des programmes de calcul, sans image). Le point de départ est l’exemple <code>webgpu_compute_particles_fluid</code> de three.js, qui simule un liquide. Melt lui ajoute la température, le solide et tout ce qui suit.</p>
-        <p>Chaque particule porte une température \(T\), où \(T = 1\) est le point de fusion, et une petite matrice \(b\) qui mémorise comment son voisinage a été étiré et cisaillé depuis son état de repos (le tenseur de Cauchy-Green gauche). La contrainte, c’est-à-dire l’effort que la matière oppose, a trois parts :</p>
+        <h2><span class="n">03</span>Une cire faite de particules, de solide à liquide</h2>
+        <span class="src">src/sim/mpm.js · kP2G, mkGrid, kG2P</span>
+        <p>Une figurine de cire qui chauffe ne passe pas d'un coup de l'état solide à l'état liquide. Une oreille ramollie ploie sous son poids sans se détacher. La peau coule en lobes pendant que le cœur tient encore. Il faut donc une matière qui soit, selon sa température, un solide, une pâte ou un liquide, et qui puisse être les trois à la fois dans une même figurine.</p>
+
+        <h3>Des particules et une grille</h3>
+        <p>La cire est représentée par environ 30&#8239;000 particules (29&#8239;600 à 29&#8239;900 selon la figurine). Chacune porte une position, une vitesse et une température. Pour calculer les efforts entre particules voisines sans comparer chaque particule à toutes les autres, on passe par une grille fixe de 64 × 128 × 64 cellules attachée au plateau. Le calcul avance par petits pas de temps, les <b>sous-pas</b> : quatre par image de simulation, soit Δ<i>t</i> = 1/240 s. Un sous-pas fait trois choses :</p>
+        <ol>
+          <li>chaque particule dépose sa masse et sa quantité de mouvement sur les 27 cellules qui l'entourent (3 × 3 × 3), avec un poids qui diminue avec la distance (<code>kP2G</code>, des particules vers la grille) ;</li>
+          <li>chaque cellule divise la quantité de mouvement reçue par la masse reçue, ce qui lui donne une vitesse ; contre le métal du plateau, la part de vitesse qui entrerait dans le métal est retirée (<code>mkGrid</code>) ;</li>
+          <li>chaque particule relit la vitesse des cellules voisines, ajoute la pesanteur, avance, et note comment la vitesse varie autour d'elle (<code>kG2P</code>, de la grille vers les particules).</li>
+        </ol>
+        <p>Cette méthode s'appelle <b>MLS-MPM</b> (une méthode des points matériels, dans sa variante aux moindres carrés). Le projet part de l'exemple <code>webgpu_compute_particles_fluid</code> de three.js, qui simule un liquide. Tout tourne sur la carte graphique, dans des <i>compute shaders</i>, des programmes de calcul qui ne dessinent rien. Melt ajoute à l'exemple la température et le solide.</p>
+
+        <h3>La forme dont une particule se souvient</h3>
+        <p>Un liquide n'a besoin que de sa pression : il résiste quand on le comprime, et coule sinon. Un solide doit en plus se souvenir de sa forme. Chaque particule porte pour cela une petite matrice 3 × 3, notée <i>b</i>, qui mémorise de combien la matière a été étirée et cisaillée autour d'elle depuis sa forme de repos (en mécanique, c'est le tenseur de Cauchy-Green gauche). Au repos, <i>b</i> est la matrice identité. À chaque sous-pas, <i>b</i> suit le mouvement : on lui applique l'étirement que le champ de vitesses vient d'imposer.</p>
+        <p>L'effort que la matière oppose, la <b>contrainte</b>, se calcule à partir de <i>b</i>. Il tire chaque particule vers la forme dont elle se souvient, comme un ressort revient à sa longueur. Si <i>b</i> garde toute sa mémoire, la matière est un solide élastique : on peut la tordre, elle revient. Si <i>b</i> oublie tout à chaque sous-pas, plus rien ne la ramène : elle coule.</p>
+
+        <h3>Une mémoire qui s'efface avec la chaleur</h3>
+        <p>Il reste à passer de l'un à l'autre. La règle retenue efface, à chaque sous-pas, une fraction <i>r</i> de la déformation mémorisée, et cette fraction dépend de la température <i>T</i> de la particule (<i>T</i> = 1 est le point de fusion). Froide (<i>T</i> ≤ 0,55), la cire n'oublie rien et reste un solide. Tiède, elle oublie peu à peu : une oreille ploie sous son poids pendant que sa mémoire s'efface, sans se rompre. On dit qu'elle <b>flue</b>. Au-dessus de <i>T</i> = 1,2, elle oublie tout à chaque sous-pas, et il ne reste que la pression et la viscosité d'un liquide. Ce comportement, un ressort qui se détend avec le temps, est celui du modèle de Maxwell d'un solide viscoélastique.</p>
+        <figure id="fig-loi"><figcaption><b>Les trois courbes de la loi.</b> En or, la part d'élasticité <i>s</i>(<i>T</i>). En bleu, la part de la déformation mémorisée qui reste après une seconde, soit (1 − <i>r</i>)<sup>240</sup>. En rouge, la viscosité rapportée à celle du solide. Les fonctions et les seuils sont ceux de <code>kP2G</code> et <code>kG2P</code>. À droite, une déformation imposée à l'instant 0 et ce que la particule en retient pendant deux secondes, à la température choisie ; cette ellipse illustre la mémoire, elle n'est pas une grandeur du code. Les pointillés marquent la libération d'une particule figée (<i>T</i> = 0,86, section 04) et la fusion (<i>T</i> = 1).</figcaption></figure>
+
+        <h3>La loi en résumé</h3>
+        <p>À chaque sous-pas, <i>b</i> est ramenée vers une forme de même volume sans cisaillement, d'une fraction</p>
+        <div class="eq">\[ r(T) = \operatorname{clamp}\!\Big(k\,a(T)^2\,\Delta t \;+\; \operatorname{smoothstep}(1{,}05;\ 1{,}2;\ T)\Big), \qquad a(T) = \operatorname{smoothstep}(0{,}55;\ 1{,}05;\ T). \]</div>
+        <p><i>k</i> = 3 par seconde règle la vitesse de l'oubli, Δ<i>t</i> = 1/240 s est le sous-pas, et <code>smoothstep</code>(<i>a</i> ; <i>b</i> ; <i>x</i>) est une rampe en S qui passe de 0 à 1 quand <i>x</i> va de <i>a</i> à <i>b</i>. La contrainte σ a trois parts :</p>
         <div class="eq">\[ \sigma = -p\,I \;+\; \mu\,s(T)\,\frac{\rho}{\rho_0}\,\operatorname{dev}(\bar b) \;+\; \eta(T)\,\big(C + C^{\mathsf T}\big), \qquad p = K\,\max\!\Big(0,\ \big(\tfrac{\rho}{\rho_0}\big)^{3} - 1\Big). \]</div>
-        <p>La pression \(p\) empêche la matière de se tasser au-delà de sa densité de repos \(\rho_0\). L’élasticité tire la particule vers la forme dont elle se souvient : \(\bar b\) est \(b\) ramené à volume constant, et \(\operatorname{dev}\) n’en garde que le changement de forme. Le facteur \(s(T)\) vaut 1 jusqu’à \(T = 0{,}72\) et tombe à 0 au point de fusion. La viscosité freine les différences de vitesse (\(C\) est le gradient de vitesse autour de la particule) : elle est constante dans le solide, et le liquide file d’autant mieux qu’il est chaud, jusqu’à 7&nbsp;% de sa viscosité de départ à \(T = 1{,}6\).</p>
-        <p>Ce qui fait passer du solide au liquide est la <strong>mémoire</strong>. À chaque sous-pas, \(b\) suit d’abord le mouvement, \(b \leftarrow (I + \Delta t\,C)\,b\,(I + \Delta t\,C)^{\mathsf T}\), puis il est ramené vers une forme sans cisaillement, d’une fraction</p>
-        <div class="eq">\[ r(T) = \operatorname{clamp}\!\Big(k\,a(T)^2\,\Delta t \;+\; \operatorname{smoothstep}(1{,}05;\ 1{,}2;\ T)\Big), \]</div>
-        <div class="eq">\[ a(T) = \operatorname{smoothstep}(0{,}55;\ 1{,}05;\ T), \qquad k = 3, \qquad \Delta t = \tfrac{1}{240}\ \text{s}. \]</div>
-        <p>Ici <code>smoothstep</code> est une rampe en S entre deux seuils. Froide (\(T \le 0{,}55\)), la cire n’oublie rien : elle revient à sa forme, c’est un solide. Tiède, elle oublie peu à peu : à \(T = 0{,}8\), elle a perdu un peu plus de la moitié de sa déformation en une seconde. Elle <em>flue</em>, et une oreille ploie sous son poids sans se rompre. Au-dessus de \(T = 1{,}2\), elle oublie tout à chaque sous-pas : il ne reste que la pression et la viscosité, c’est un liquide. Ce modèle, un ressort qui se détend avec le temps, s’appelle un solide viscoélastique de Maxwell.</p>
-        <figure id="fig-loi"><figcaption><b>Les trois courbes de la loi.</b> En or, la part d’élasticité \(s(T)\). En bleu, ce qu’il reste de la déformation mémorisée après une seconde, soit \((1 - r)^{240}\). En rouge, la viscosité rapportée à celle du solide. Les fonctions et les seuils sont ceux de <code>kP2G</code> et <code>kG2P</code>. À droite, une déformation imposée à l’instant 0 et ce que la particule en retient pendant deux secondes, à la température choisie : cette ellipse est une illustration, pas une grandeur du code.</figcaption></figure>
-        <p>Deux garde-fous bornent le calcul. Si le déterminant de \(b\) sort de l’intervalle \([0{,}05 ; 20]\), ou n’est plus un nombre, \(b\) est remis à l’identité. Et aucune particule ne dépasse 70 cellules par seconde.</p>
+        <p>La pression <i>p</i> empêche la matière de se tasser au-delà de sa densité de repos ρ<sub>0</sub> ; ρ est la densité lue sur la grille et <i>K</i> la raideur en compression. Le deuxième terme est l'élasticité, de raideur μ : <i>b̄</i> est <i>b</i> ramenée à volume constant, et dev n'en garde que le changement de forme. Le facteur <i>s</i>(<i>T</i>) vaut 1 jusqu'à <i>T</i> = 0,72 et tombe à 0 au point de fusion. Le dernier terme est la viscosité η(<i>T</i>), qui freine les différences de vitesse ; <i>C</i> est la variation de la vitesse autour de la particule, notée à l'étape 3. La viscosité est constante dans le solide ; dans le liquide, elle diminue avec la chaleur jusqu'à 7&nbsp;% de sa valeur de départ à <i>T</i> = 1,6.</p>
+<pre><code>// src/sim/mpm.js · kG2P (simplifié)
+const A = I + C * dt;                              // l'étirement de ce sous-pas
+b = A * b * transpose(A);                          // la mémoire suit le mouvement
+const soft = smoothstep(0.55, 1.05, T);
+const r = clamp(relax * soft * soft * dt + smoothstep(1.05, 1.2, T), 0, 1);
+const iso = pow(clamp(det(b), 0.2, 5), 1 / 3);     // même volume, sans cisaillement
+b = b * (1 - r) + I * iso * r;                     // une part r de la mémoire s'efface</code></pre>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Placez <i>T</i> à 0,55, puis à 0,8, puis à 1,2. La mémoire après une seconde passe de 100&nbsp;% à 47&nbsp;% puis à 0&nbsp;%, L'ellipse de droite, qui représente la déformation mémorisée, reste allongée, se rapproche lentement du cercle, ou redevient un cercle aussitôt.</li>
+          <li>Cherchez la température où la mémoire après une seconde tombe sous 10&nbsp;% : vers <i>T</i> = 0,94, alors que la cire n'a pas encore atteint son point de fusion.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Les poids du dépôt sont ceux d'une B-spline quadratique : 0,5 (0,5 − <i>c</i>)², 0,75 − <i>c</i>² et 0,5 (0,5 + <i>c</i>)² sur chaque axe, où <i>c</i> est l'écart de la particule au centre de sa cellule. La pesanteur vaut 56 cellules par seconde au carré, et <i>K</i>, μ et η sont proportionnels à la densité de repos des particules (8 000, 30 000 et 150 fois son huitième).</p>
+          <p>Deux garde-fous bornent le calcul. Si le déterminant de <i>b</i> sort de l'intervalle [0,05 ; 20], ou n'est plus un nombre, <i>b</i> est remise à l'identité. Et aucune particule ne dépasse 70 cellules par seconde.</p>
+        </div></details>
       </section>
 
       <section id="figee">
-        <h2><span class="n">02</span>La matière froide ne se calcule pas</h2>
+        <h2><span class="n">04</span>La matière froide ne se calcule pas</h2>
         <span class="src">src/sim/mpm.js · kPinSplat, kPinUpdate, mkGrid</span>
-        <p>La simulation est explicite : elle avance par petits pas de temps, et plus un solide est raide, plus ces pas doivent être courts. À la raideur \(\mu\) retenue, que quatre sous-pas par image suffisent à calculer, la cire froide a la tenue d’une gelée : une figurine entièrement simulée s’affaisse sous son propre poids (la figure de la section suivante le montre). Une cire assez raide pour tenir debout demanderait des pas bien plus courts, donc bien plus de calcul, pour une matière qui, presque tout le temps, ne bouge pas.</p>
-        <p>Une particule froide reste donc <strong>figée</strong>. Elle ne passe par aucun des calculs du sous-pas. Une fois par image, elle dépose sa masse et sa chaleur sur une grille à part, et sa température est mise à jour. La grille de simulation ajoute cette masse à celle de la matière libre, sans élan : dans une cellule partagée, le liquide est ralenti par la matière immobile, et il s’y accroche. Chaque particule porte un état : 0, figée ; 1, libre ; 2, fondue au moins une fois (passée par \(T &gt; 1{,}02\)). Une particule libre ne redevient jamais figée, et une goutte qui refroidit reste dessinée comme une goutte.</p>
-        <p>Une particule figée se libère dans deux cas : si elle dépasse \(T = 0{,}86\), ou si elle ne <strong>tient</strong> plus. Tenir est une propriété des cellules, recalculée à chaque sous-pas à partir de la valeur \(A\) des voisines au sous-pas précédent :</p>
+        <p>Pendant presque tout le demi-cycle, la plus grande partie de la figurine ne bouge pas : rien ne chauffe avant 8,2 s, et le cœur reste froid longtemps après.</p>
+        <p>La première idée est de tout simuler. Mais la simulation est explicite : chaque sous-pas ne regarde que l'état du sous-pas précédent, et plus un solide est raide, plus ses pas doivent être courts pour que le calcul reste stable. À la raideur μ retenue, que quatre sous-pas par image suffisent à calculer, la cire froide a la tenue d'une gelée. Dans la version à deux dimensions de la section suivante, le lapin entièrement simulé perd près d'un quart de sa hauteur dans la première seconde, sous son seul poids. Une cire assez raide pour tenir debout demanderait des pas bien plus courts, donc bien plus de calcul, pour une matière qui presque tout le temps reste immobile.</p>
+
+        <h3>Figer ce qui est froid</h3>
+        <p>Une particule froide reste donc <b>figée</b>. Elle ne passe par aucun des calculs du sous-pas. Une fois par image, elle dépose sa masse et sa chaleur sur une grille à part, et sa température est mise à jour. La grille de simulation ajoute cette masse à celle de la matière libre, sans vitesse : dans une cellule partagée, le liquide est ralenti par la matière immobile et s'y accroche. Une particule figée devient <b>libre</b> dans deux cas : si elle dépasse <i>T</i> = 0,86, ou si elle ne <b>tient</b> plus au plateau. Une particule libre ne redevient jamais figée.</p>
+
+        <h3>Tenir au plateau, de proche en proche</h3>
+        <p>Quand le cou a fondu, la tête n'est plus reliée au plateau : elle doit tomber, même froide. Il faut donc savoir quelles cellules de matière figée sont reliées au plateau. Le calcul se fait cellule par cellule, avec une valeur d'<b>appui</b> <i>A</i> entre 0 et 1. La première règle était « une cellule tient si une de ses voisines tient ». Elle a échoué avec la ceinture chauffante, qui coupe l'objet à mi-hauteur : le haut restait suspendu en l'air, parce que chaque cellule du morceau coupé tenait par ses voisines, qui tenaient par elle.</p>
+        <p>La correction fait perdre un peu d'appui à chaque cellule traversée. L'appui vaut 1 au contact du plateau. Ailleurs, une cellule prend l'appui de sa meilleure voisine, moins 1/80. Dans un morceau relié au plateau, l'appui est entretenu depuis le bas. Dans un morceau coupé, la plus grande valeur baisse de 1/80 à chaque sous-pas, et tout tombe à zéro en moins de 80 sous-pas, un tiers de seconde.</p>
+        <figure id="fig-appui"><figcaption><b>L'appui, cellule par cellule.</b> Faites glisser le pointeur sur le cou pour le faire fondre. Plus une cellule est claire, plus son appui est fort. La règle est celle de <code>mkGrid</code>, avec quatre voisines au lieu de six (la figure est plane) et le même seuil de libération (0,002). Ce qui est simplifié : une cellule est pleine ou vide, et une cellule libérée tombe tout droit, alors que dans le projet elle rejoint la simulation de matière. Le bouton « Sans la perte » applique la première règle.</figcaption></figure>
+        <p>En résumé, l'appui d'une cellule <i>c</i> est recalculé à chaque sous-pas à partir des valeurs de ses voisines au sous-pas précédent :</p>
         <div class="eq">\[ A'(c) = \begin{cases} 0 &amp; \text{si } c \text{ contient trop peu de matière figée},\\ 1 &amp; \text{si le métal du plateau est à moins de 1,8 cellule},\\ \max\!\big(\max_{v \sim c} A(v) - \tfrac{1}{80},\ 0\big) &amp; \text{sinon.} \end{cases} \]</div>
-        <p>L’appui vaut 1 au contact du plateau et gagne une cellule par sous-pas, en perdant un quatre-vingtième à chaque cellule. « Trop peu » veut dire moins de 7,5&nbsp;% de la densité de repos. Deux tableaux alternent, l’un lu pendant que l’autre est écrit, parce qu’un programme de carte graphique ne peut pas lire et écrire le même tableau sans que le résultat dépende de l’ordre des cellules. La libération par manque d’appui n’est armée qu’après 160 sous-pas (deux tiers de seconde), le temps que l’appui monte du plateau jusqu’aux oreilles : la plus haute figurine mesure 46 cellules. Quand le cou a fondu, la tête n’est plus reliée au plateau : son appui tombe à zéro, elle devient libre, bascule et tombe d’un bloc.</p>
-        <div class="note trap"><b>L’îlot qui se soutenait lui-même</b><p>La première règle était « je tiens si une voisine tient », sans perte. Avec une ceinture chauffante fixe à mi-hauteur, le haut de l’objet restait suspendu en l’air : chaque cellule du morceau coupé tenait par ses voisines, qui tenaient par elle. La perte de 1/80 par cellule règle le cas. Dans un morceau coupé du plateau, la plus grande valeur baisse d’au moins 1/80 par sous-pas : tout est à zéro en moins de 80 sous-pas, un tiers de seconde.</p></div>
-        <figure id="fig-appui"><figcaption><b>L’appui, cellule par cellule.</b> Faites glisser le pointeur sur le cou pour le faire fondre. Plus une cellule est claire, plus son appui est fort. La règle est celle de <code>mkGrid</code>, à quatre voisines au lieu de six (la figure est plane), avec le même seuil de libération (0,002). Ce qui est simplifié : une cellule est pleine ou vide, et une cellule libérée tombe ici tout droit, alors que dans le projet elle rejoint la simulation de matière. Le bouton « Sans la perte » rejoue le piège : la tête coupée reste en l’air.</figcaption></figure>
+        <p><i>v</i> ∼ <i>c</i> désigne les six cellules qui partagent une face avec <i>c</i>. « Trop peu » veut dire moins de 7,5&nbsp;% de la densité de repos. Une particule figée dont la cellule a un appui inférieur à 0,002 devient libre.</p>
+<pre><code>// src/sim/mpm.js · mkGrid (simplifié) : l'appui de la cellule c
+const nb = max(Sprev[c - 1], Sprev[c + 1], Sprev[c - GX], Sprev[c + GX], Sprev[c - GX * GY], Sprev[c + GX * GY]);
+Snext[c] = pinMass &gt; 0.6 * RH ? (dPlateau &lt; 1.8 ? 1 : max(nb - 1 / 80, 0)) : 0;
+// src/sim/mpm.js · kPinUpdate : une particule figée se libère
+if (T &gt; 0.86 || (armed &amp;&amp; held &lt; 0.002)) state = 1;</code></pre>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Coupez le cou d'un geste. La tête et les oreilles (86 cellules) restent en place un instant, le temps que leur appui s'épuise, puis tombent d'un bloc. Avec un sous-pas par image, il faut 64 images.</li>
+          <li>Rejouez avec 4 sous-pas par image, comme le projet : la tête tombe quatre fois plus tôt.</li>
+          <li>Activez « Sans la perte » : l'appui au sommet vaut 1,00 au lieu de 0,65, et après la coupe la tête reste en l'air.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Deux tableaux d'appui alternent, l'un lu pendant que l'autre est écrit : un programme de carte graphique ne peut pas lire et écrire le même tableau sans que le résultat dépende de l'ordre des cellules. La libération par manque d'appui n'est armée qu'après 160 sous-pas (deux tiers de seconde), le temps que l'appui monte du plateau jusqu'aux oreilles : la plus haute figurine mesure 46 cellules.</p>
+          <p>Chaque particule porte un état : 0, figée ; 1, libre ; 2, fondue au moins une fois (passée par <i>T</i> &gt; 1,02). Ce dernier état sert au rendu : une goutte qui refroidit reste dessinée comme une goutte.</p>
+        </div></details>
       </section>
 
       <section id="chaleur">
-        <h2><span class="n">03</span>La chaleur vient d’une source, et cela se voit</h2>
+        <h2><span class="n">05</span>La chaleur vient d'une source, et cela se voit</h2>
         <span class="src">src/sim/mpm.js · heatUp() · src/recipe.js · HEATS · src/cycle.js · beltAt()</span>
-        <p>Si la température montait partout à la fois, l’objet ramollirait d’un bloc. Ici, la chaleur entre par la surface, du côté de la source, et gagne l’intérieur. La fonction <code>heatUp</code> ajoute trois termes à la température d’une particule.</p>
-        <p><strong>La conduction.</strong> Chaque particule dépose sa chaleur sur la grille avec sa masse. À chaque sous-pas, elle se rapproche de 3,2&nbsp;% de la température moyenne de son voisinage. C’est une diffusion grossière, mais elle suffit à faire avancer un front chaud dans la cire.</p>
-        <p><strong>La source, sur la peau seulement.</strong> Une particule sait qu’elle est en surface parce que la densité lue sur la grille y est plus faible qu’au cœur : le facteur de peau monte de 0 à 1 quand la densité descend de 86&nbsp;% à 50&nbsp;% de la densité de repos. La pente de cette densité donne la normale \(n\), la direction qui sort de la matière. L’éclairement est alors celui d’une lampe, avec une part \(f\) reçue quelle que soit l’orientation :</p>
+        <p>Sous une lampe placée au-dessus, les oreilles ploient les premières. Sous une rampe de brûleurs placée de biais, un flanc coule avant l'autre. Sous un anneau chauffant qui descend, l'objet fond tranche par tranche. On veut que la façon de fondre dise d'où vient la chaleur.</p>
+        <p>La règle la plus simple serait de faire monter la température de toutes les particules au même rythme. L'objet ramollirait alors d'un bloc et s'affaisserait d'un coup, sans cause visible. La chaleur doit au contraire entrer par la surface, du côté de la source, puis gagner l'intérieur. La fonction <code>heatUp</code> ajoute pour cela trois termes à la température d'une particule.</p>
+        <p><b>La conduction.</b> Chaque particule dépose sa chaleur sur la grille avec sa masse. À chaque sous-pas, sa température se rapproche de 3,2&nbsp;% de la température moyenne de son voisinage. C'est une diffusion grossière, qui suffit à faire avancer un front chaud dans la cire.</p>
+        <p><b>La source, sur la peau seulement.</b> Une particule sait qu'elle est en surface parce que la densité lue sur la grille y est plus faible qu'au cœur : un facteur de peau monte de 0 à 1 quand la densité descend de 86&nbsp;% à 50&nbsp;% de la densité de repos. La pente de cette densité donne la normale <i>n</i>, la direction qui sort de la matière. La peau reçoit alors la chaleur comme elle recevrait la lumière d'une lampe, avec en plus une part reçue quelle que soit son orientation.</p>
+        <p><b>Le plateau.</b> La cuvette qui recueille la cire est tenue chaude : elle tire tout ce qu'elle contient vers <i>T</i> = 1,9, si bien qu'un morceau tombé froid y fond. L'assiette qui porte l'objet ne commence à chauffer qu'à 13,1 s et n'est à pleine puissance qu'à 16,8 s. Elle fond les derniers restes et libère le pied de ce qui serait encore froid, qui perd alors son appui.</p>
+        <figure id="fig-mpm" class="wide"><figcaption><b>La même loi, en deux dimensions.</b> La coupe de face du lapin du projet (mêmes ellipsoïdes, même échelle, 1&#8239;578 particules au même espacement de 0,6 cellule) fond sur une assiette. Viennent de <code>mpm.js</code> : les trois étapes du sous-pas, la matière figée et son appui, <code>heatUp</code>, les constantes et les quatre sous-pas ; de <code>recipe.js</code>, les trois sources ; du cycle, le déroulé (la chaleur commence à 8,2 s). Ce qui change : le plan au lieu du volume (une tranche n'a pas la même proportion de peau qu'un volume, les durées ne sont donc pas celles du projet), des nombres à virgule flottante au lieu de la virgule fixe de la section 06, et pas de cuvette : ce qui tombe du bord de l'assiette est compté et retiré. Gris : figé ; or : libre ; orange : fondu au moins une fois. À droite, la part de la matière dans chaque état au fil du temps.</figcaption></figure>
+
+        <h3>La règle en résumé</h3>
+        <p>À chaque sous-pas, la source ajoute à la température d'une particule de peau</p>
         <div class="eq">\[ \Delta T = \Delta t \cdot P \cdot \text{peau}(\rho) \cdot \big( (1 - f)\,\max(n \cdot L,\ 0) + f \big). \]</div>
-        <p>La puissance \(P\) suit le cycle : elle monte en 1,4 s à partir de 8,2 s et se coupe en 1,2 s à partir de 22,6 s. Une peau exposée de face gagne jusqu’à 8 ou 9 unités de température par seconde. C’est la conduction qui l’empêche de fondre en un éclair : elle emporte la chaleur vers l’intérieur.</p>
-        <p><strong>Le plateau.</strong> La cuvette qui recueille la cire est tenue chaude (elle tire tout ce qu’elle contient vers \(T = 1{,}9\)) : un morceau tombé froid y fond. L’assiette qui porte l’objet ne commence à chauffer qu’à 13,1 s, et n’est à pleine puissance qu’à 16,8 s : elle rend les derniers restes. Elle libère aussi le pied de ce qui serait encore froid, qui perd alors son appui.</p>
-        <p>La graine choisit entre trois sources, et la source décide de la façon de fondre :</p>
+        <p><i>L</i> est la direction de la source, <i>f</i> la part reçue quelle que soit l'orientation, <i>P</i> la puissance et peau(ρ) le facteur de peau. La puissance suit le cycle : elle monte en 1,4 s à partir de 8,2 s et se coupe en 1,2 s à partir de 22,6 s. Une peau exposée de face gagne jusqu'à 8 ou 9 unités de température par seconde ; c'est la conduction qui l'empêche de fondre en un éclair, en emportant la chaleur vers l'intérieur. La graine choisit entre trois sources :</p>
         <div class="tbl"><table>
-          <thead><tr><th>Source</th><th>Direction \(L\)</th><th class="num">Part \(f\)</th><th class="num">Puissance</th><th>Ce qu’on voit</th></tr></thead>
+          <thead><tr><th>Source</th><th>Direction <i>L</i></th><th class="num">Part <i>f</i></th><th class="num">Puissance <i>P</i></th><th>Ce qu'on voit</th></tr></thead>
           <tbody>
-            <tr><td>Lampe infrarouge</td><td>d’en haut</td><td class="num">0,25</td><td class="num">8</td><td>les oreilles ploient d’abord</td></tr>
-            <tr><td>Rampe de brûleurs</td><td>de biais</td><td class="num">0,16</td><td class="num">9</td><td>un flanc coule avant l’autre</td></tr>
-            <tr><td>Ceinture chauffante</td><td>une bande horizontale qui descend</td><td class="num">0,10</td><td class="num">8</td><td>l’objet fond tranche par tranche</td></tr>
+            <tr><td>Lampe infrarouge</td><td>d'en haut</td><td class="num">0,25</td><td class="num">8</td><td>les oreilles ploient d'abord</td></tr>
+            <tr><td>Rampe de brûleurs</td><td>de biais</td><td class="num">0,16</td><td class="num">9</td><td>un flanc coule avant l'autre</td></tr>
+            <tr><td>Ceinture chauffante</td><td>une bande horizontale qui descend</td><td class="num">0,10</td><td class="num">8</td><td>l'objet fond tranche par tranche</td></tr>
           </tbody>
         </table></div>
-        <p>La ceinture multiplie l’éclairement par un profil en hauteur : une cloche de Gauss centrée sur l’anneau, de demi-épaisseur 15&nbsp;% de la hauteur de l’objet, et un palier au-dessus, parce que l’air chaud monte et que ce que l’anneau a dépassé reste chaud. L’anneau part au-dessus de l’objet et descend régulièrement jusqu’à l’assiette pendant la fonte (<code>beltAt</code>).</p>
-        <figure id="fig-mpm" class="wide"><figcaption><b>La même loi, en deux dimensions.</b> La coupe frontale du lapin du projet (mêmes ellipsoïdes, même échelle, 1&#8239;578 particules au même pas de 0,6 cellule) fond sur une assiette. Sont portés de <code>mpm.js</code> : les trois noyaux du sous-pas, la matière figée et son appui, <code>heatUp</code>, les constantes (gravité 56, \(K\), \(\mu\), \(\eta\) rapportés à la densité, quatre sous-pas), les trois sources de <code>recipe.js</code> et le déroulé du cycle (la chaleur commence à 8,2 s). Ce qui change : le plan au lieu du volume (une tranche n’a pas la même proportion de peau qu’un volume, les durées ne sont donc pas celles du projet), des nombres flottants à la place de la virgule fixe, pas de cuvette (ce qui tombe du bord de l’assiette est compté et retiré). Vers 15 s, l’assiette chauffe : le pied se libère, et le cœur encore froid, sans appui, s’effondre. Le bouton « Tout simuler » supprime la matière figée : le lapin s’affaisse d’un quart en moins d’une seconde, avant toute chaleur. À droite, la part de la matière dans chaque état au fil du temps.</figcaption></figure>
-        <p>À la fin, la chaleur est coupée et la cuvette s’égoutte. Une légère poussée vers la buse, limitée au fond de la cuvette, aide les dernières gouttes à sortir. Une particule qui passe sous la buse est retirée de la simulation et comptée : ce compteur donne son épaisseur au filet de cire (section 08). Un garde-fou ramène vers l’intérieur une goutte projetée près du bord de la cuvette.</p>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Activez « Tout simuler » : toutes les particules sont libres dès le départ. En une demi-seconde, avant que la chaleur ne s'allume, le sommet des oreilles descend de 46 à 39 cellules ; au bout d'une seconde, il est à 35, puis le lapin oscille comme une gelée.</li>
+          <li>Avec la lampe, suivez la courbe de droite vers 15 s : la part figée passe de 59&nbsp;% à zéro en une demi-seconde. L'assiette chauffe, le pied se libère, et le cœur encore froid, sans appui, s'effondre.</li>
+          <li>Réglez la puissance, puis « Rejouer ». À 14 s, il reste 88&nbsp;% de matière figée à × 0,5, 65&nbsp;% à × 1 et 48&nbsp;% à × 1,5.</li>
+          <li>Essayez la ceinture : à 14 s, il reste 82&nbsp;% de matière figée, contre 65&nbsp;% avec la lampe, parce que l'anneau ne chauffe qu'une bande à la fois.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>La ceinture multiplie l'éclairement par un profil en hauteur : une cloche de Gauss centrée sur l'anneau, de demi-épaisseur 15&nbsp;% de la hauteur de l'objet, et un palier au-dessus, parce que l'air chaud monte et que ce que l'anneau a dépassé reste chaud. L'anneau part au-dessus de l'objet et descend régulièrement jusqu'à l'assiette pendant la fonte (<code>beltAt</code>).</p>
+          <p>À la fin, la chaleur est coupée et la cuvette s'égoutte. Une légère poussée vers la buse, limitée au fond de la cuvette, aide les dernières gouttes à sortir. Une particule qui passe sous la buse est retirée de la simulation et comptée. Ce compteur, lu sur la carte graphique toutes les six images de simulation, donne son épaisseur au filet de cire, un cylindre tendu entre la buse et l'entonnoir du moule : <i>r</i> = 0,006 + 0,034 √<i>q</i>, où <i>q</i> est le débit lissé, rapporté à 160 particules par lecture. Un garde-fou ramène vers l'intérieur une goutte projetée près du bord de la cuvette.</p>
+        </div></details>
       </section>
 
       <section id="reproductible">
-        <h2><span class="n">04</span>La même image au même instant de la boucle</h2>
+        <h2><span class="n">06</span>La même image au même instant de la boucle</h2>
         <span class="src">src/sim/mpm.js · enc(), dec() · src/scene/stage.js · update()</span>
-        <p>Tout le projet repose sur une règle : l’image ne dépend que de la recette et de la phase de la boucle. La lecture, le saut avec les flèches, l’export image par image passent par la même fonction. L’usine obéit à cette règle sans effort, parce que sa pose est une formule du temps (section 08). Une simulation, elle, a un état qui dépend de tout ce qui a précédé. La règle devient : l’état ne doit dépendre que de l’objet et du <em>nombre d’images</em> simulées depuis qu’il a été posé.</p>
-        <p>Sur une carte graphique, des milliers de particules déposent en même temps sur la même cellule, dans un ordre qui change d’une exécution à l’autre. Les additions concurrentes passent par des opérations <em>atomiques</em> (qui ne peuvent pas se chevaucher), et celles-ci n’existent que pour les entiers. Les grandeurs sont donc converties en <strong>virgule fixe</strong> : multipliées par une constante et tronquées en entiers avant d’être additionnées (\(10^5\) pour la masse et la chaleur, \(10^4\) pour la quantité de mouvement). Ce choix a une seconde vertu : l’addition d’entiers donne le même total dans n’importe quel ordre, ce qui n’est pas vrai des nombres flottants, dont chaque addition arrondit.</p>
-        <figure id="fig-fixe"><figcaption><b>Le total dépend-il de l’ordre ?</b> Les mêmes dépôts sont additionnés dans seize ordres différents. En haut, en flottants de 32 bits (ceux d’une carte graphique, imités ici par <code>Math.fround</code>) : plusieurs totaux différents. En bas, en virgule fixe avec la constante \(10^5\) de <code>mpm.js</code> : un seul. Le prix est une troncature d’au plus \(10^{-5}\) par dépôt, dont l’écart au total exact est affiché.</figcaption></figure>
-        <p>À partir de là, <code>stage.js</code> sait quelle image de simulation correspond à un instant \(t\) du demi-cycle : la numéro \(\lfloor 60\,t \rfloor\). En lecture, la simulation avance d’une image par image dessinée. Après un saut, elle repart de l’objet neuf et rattrape son retard, au plus 48 images de simulation par image dessinée. Avant la chaleur, rien ne bouge : les images 50 à 480 sont sautées d’un coup, les cinquante premières ayant servi à établir les appuis. Un recul de moins d’une demi-seconde ne recharge rien, on attend simplement.</p>
-        <div class="note"><b>Ce que cela garantit, et ce qui n’est pas vérifié</b><p>La virgule fixe retire la seule source de hasard, l’ordre des dépôts. Sur une machine donnée, deux passages au même instant partent du même objet et font les mêmes calculs. Rien n’a été comparé d’une carte graphique à une autre, dont les arrondis peuvent différer. Le saut dans la boucle et l’export vidéo n’ont pas encore fait l’objet d’un contrôle systématique. Une grandeur échappe à la règle : l’épaisseur du filet de cire, lissée d’une image dessinée à la suivante.</p></div>
-      </section>
-
-      <section id="surface">
-        <h2><span class="n">05</span>Une surface nette tant que rien n’a bougé</h2>
-        <span class="src">src/scene/wax.js · parts(), phi() · src/sim/mpm.js · kRSplat, kResolve</span>
-        <p>La manière habituelle de dessiner un nuage de particules est de calculer sa densité sur une grille et de tracer la surface où elle passe un seuil, une <em>iso-densité</em>. Elle convient au liquide et mal au solide, à cause du seuil. Un film de cire fondue plus mince qu’une cellule ne dépose qu’une faible densité : pour qu’il se voie, le seuil doit être bas, 11&nbsp;% de la densité de repos dans le projet. À ce seuil, une forme pleine enfle d’une cellule entière, et ses creux étroits se comblent : les oreilles du lapin se soudent sur une partie de leur hauteur. Un seuil à mi-densité rend la silhouette à une demi-cellule près, mais il efface les films et les gouttes. Une seule iso-densité ne peut pas servir les deux. Or la figurine doit être intacte au sortir du moule.</p>
-        <p>Chaque particule garde donc sa place d’origine \(X_0\), et la part solide dépose sur la grille son <strong>déplacement</strong> \(d = x - X_0\), pondéré par sa masse. La forme d’origine est connue exactement : c’est un champ de distance (en chaque point, la distance à la surface, négative à l’intérieur), cuit par figurine dans une texture 3D de 72 × 112 × 80, à la demi-cellule. La surface du solide est celle de l’objet d’origine, lu là d’où vient la matière :</p>
-        <div class="eq">\[ \varphi_s(p) = \max\!\Big( \operatorname{sd}_\text{objet}\big(p - d(p)\big),\ 1{,}5\,\big(0{,}3 - \tfrac{m_s}{m_s + m_\ell}\big) \Big), \qquad \varphi_\ell(p) = \big(0{,}9\,R_H - m_\ell(p)\big)\cdot\tfrac{0{,}3}{R_H}. \]</div>
-        <p>Là où rien n’a bougé, \(d = 0\) et l’objet est celui du moule, à deux dixièmes de cellule près (l’union avec le champ du liquide, même vide, gonfle très légèrement la surface). Là où la matière a flué, la forme est entraînée avec elle : une oreille qui ploie reste une oreille. Le second terme de \(\varphi_s\) rogne le solide là où le liquide a pris sa place (\(m_s\) et \(m_\ell\) sont les masses solide et liquide déposées). Le liquide, lui, est une iso-densité \(\varphi_\ell\), dont le seuil est à 11&nbsp;% de la densité de repos (\(R_H\) en est le huitième). Sa mollesse est ici une qualité. Les deux surfaces sont réunies par une union adoucie, sur une largeur de 0,9 cellule : la peau fondue enrobe le cœur encore froid sans arête.</p>
-        <p>Les dépôts suivent la même économie que la simulation. La matière figée ne bouge pas : son dépôt est gardé et refait une image sur quatre. Seule la matière libre est déposée à chaque image. Un dernier passage moyenne chaque cellule avec ses six voisines, pour effacer le grain des particules dans le liquide, et écrit deux textures 3D que le rendu lit avec interpolation.</p>
-        <figure id="fig-surface" class="wide"><figcaption><b>La tête et les oreilles du lapin, à l’arrêt.</b> Le trait clair est le contour de l’objet d’origine, le quadrillage celui des cellules. À gauche, l’iso-densité des particules ; à droite, la surface de <code>wax.js</code>. Cette vue est une coupe du vrai volume : les particules du projet (<code>seedPoints</code>), le noyau à 27 cellules, le lissage de <code>kResolve</code>, la lecture entre deux couches de cellules. À droite, <code>parts()</code> et <code>phi()</code> sont portés avec leurs constantes, et la distance d’origine est cuite à la demi-cellule. Le curseur part du seuil que le projet donne à son liquide (11&nbsp;%) ; à 50&nbsp;%, l’iso-densité ne perd plus qu’une demi-cellule à la pointe des oreilles. « Laisser fondre » passe à la tranche à deux dimensions de la section 03, en entier : la surface de droite suit la matière qui coule ; à gauche, un seuil bas épaissit tout et un seuil élevé rogne la peau fondue. Dans cette seconde vue, le lissage est adapté à quatre voisines, les veines sont celles de <code>stage.js</code>, et l’éclairage est un simple liseré.</figcaption></figure>
-        <div class="note trap"><b>Le vide doit valoir un grand pas</b><p>Loin de toute matière, les deux champs n’ont pas de sens : la densité est nulle, le déplacement indéfini. Le rayon qui cherche la surface (section suivante) y avançait à tout petits pas, et le rayon d’ombre s’épuisait avant d’atteindre l’objet. Dans le vide, la distance vaut donc d’office 1,2 cellule.</p></div>
-      </section>
-
-      <section id="lumiere">
-        <h2><span class="n">06</span>La cire s’éclaire elle-même</h2>
-        <span class="src">src/scene/wax.js · march(), thick(), shade()</span>
-        <p>La cire n’a pas de maillage. Elle est dessinée comme une boîte, celle de la grille. Pour chaque pixel de cette boîte, le fragment shader, le programme de la carte graphique qui calcule la couleur d’un pixel, lance un rayon depuis la caméra et le fait <strong>marcher</strong> dans le champ \(\varphi\). À chaque étape, il avance des trois quarts de la distance lue (entre 0,1 et 1,4 cellule), deux cents fois au plus, et s’arrête sous 0,02 cellule. Trois pas d’affinage le posent ensuite sur la surface, pour que la normale et l’ombre propre ne dépendent plus de la longueur du dernier pas. La normale est la pente de \(\varphi\), mesurée par six lectures autour du point. Le pixel écrit enfin sa vraie profondeur : la cire passe correctement devant et derrière les pièces de la machine.</p>
-        <p>Cette matière n’est pas dans la passe de lumière de three.js. Elle calcule son éclairage, avec les directions et les teintes des lampes de la scène : la lampe principale, le contre-jour et la source de chaleur. Pour chacune, le shader mesure l’<strong>épaisseur de cire traversée</strong> vers la lampe, par neuf lectures de densité espacées de 2,4 cellules. Cette épaisseur \(e\) sert deux fois :</p>
-        <ul>
-          <li><strong>l’ombre propre</strong> : la lumière directe est atténuée en \(e^{-0{,}55\,e}\). Le dessous du menton est sombre sans qu’aucune carte d’ombre n’intervienne ;</li>
-          <li><strong>la translucidité</strong> : une part de lumière traverse, atténuée en \(e^{-\sigma e}\) avec \(\sigma = (0{,}05 ; 0{,}16 ; 0{,}2)\) pour le rouge, le vert et le bleu. Le rouge va plus loin : éclairé par-derrière, le corps rougeoie comme une bougie, et les oreilles, minces, restent claires.</li>
-        </ul>
-        <p>Le reflet dit l’état de la matière. La rugosité passe de 0,42 à 0,1 quand la température monte de 0,55 à 0,95 : <strong>la peau luit avant de couler</strong>, et l’œil lit la chaleur avant tout mouvement. Le liquide est un peu plus sombre (72&nbsp;%). La couleur mêle deux pigments, une masse et des veines. Les veines sont calculées une fois, à la place de repos de chaque particule, puis emportées par elle : elles s’étirent avec l’écoulement. Ce détail vient d’un essai, où il a plu, et il est devenu un élément de chaque cire.</p>
-        <figure id="fig-lumiere"><figcaption><b>Une lampe autour de la figurine.</b> La figurine au repos, vue de face. Tournez la lampe : de face, l’ombre propre creuse le côté opposé ; par-derrière (vers 150°), il ne reste que la lumière qui traverse, plus claire dans les oreilles, rouge sombre dans le corps. Montez la température de la peau : le reflet se resserre et la peau luit. Survolez un point pour lire l’épaisseur traversée. Sont portés de <code>wax.js</code> : <code>thick()</code> (ses neuf lectures font les paliers de « Voir l’épaisseur »), les termes direct, translucide et spéculaire de <code>shade()</code>, le reflet du studio de <code>env()</code>, les veines, la teinte de la lampe du lieu « équipe de nuit ». Simplifié : une lampe au lieu de trois, la forme exacte au lieu de la surface marchée, une densité pleine dans la forme et nulle dehors (adoucie sur une cellule) au lieu du dépôt des particules, une exposition fixe et une compression \(x/(1+x)\) au lieu de la chaîne d’image.</figcaption></figure>
-        <div class="note trap"><b>Une couture verticale dans l’occlusion</b><p>L’occlusion ambiante, l’assombrissement des creux calculé en fin de chaîne, lit la normale écrite par chaque matériau. Le matériau de la cire est du type « basic » de three.js, qui écrit la normale de sa géométrie quoi qu’on lui demande, ici celle des faces de la boîte. Une couture traversait l’objet à l’aplomb d’une arête de la boîte. Il faut surcharger la fonction <code>setupNormal</code> du matériau pour lui faire rendre la normale de la surface marchée.</p></div>
-        <h3>L’ombre portée d’une surface sans maillage</h3>
-        <p>Une boîte marchée ne porte pas d’ombre : la carte d’ombre de la lampe ne verrait que la boîte. Une seconde boîte, rangée sur un calque que seule la caméra d’ombre voit, refait la marche le long des rayons de la lampe (parallèles, 160 pas au plus) et écrit la profondeur du point de cire touché. Deux détails ont compté. La marche est écrite deux fois, une pour le masque et une pour la profondeur : une variable partagée entre ces deux nœuds n’était déclarée que dans le premier. Et l’assiette des plateaux est en émail, parce qu’un métal poli ne montre pas les ombres : l’ombre était juste, mais invisible.</p>
-        <p>Ce qui manque : la machine ne porte pas encore son ombre sur la cire. Le flou de mouvement est coupé, la cire n’écrivant pas ses vitesses.</p>
+        <p>Tout le projet suit une règle : l'image ne dépend que de la recette et de la phase de la boucle. La lecture, le saut avec les flèches et l'export image par image passent par la même fonction. L'usine obéit à cette règle sans effort, parce que sa pose est une fonction du temps (section 02). Une simulation, elle, a un état qui dépend de tout ce qui a précédé. La règle devient donc : l'état de la cire ne dépend que de la figurine et du <b>nombre d'images</b> simulées depuis qu'elle a été posée.</p>
+        <p>Pour sauter à un instant, il suffit alors de repartir de la figurine neuve et de refaire les mêmes calculs. Cela suppose que les mêmes calculs donnent le même résultat, ce que rien ne garantit d'emblée. Sur une carte graphique, des milliers de particules déposent en même temps sur la même cellule, dans un ordre qui change d'une exécution à l'autre. Avec des nombres à virgule flottante, chaque addition arrondit, et le total dépend de l'ordre des additions.</p>
+        <p>La correction vient d'une contrainte du matériel. Les additions concurrentes passent par des opérations <b>atomiques</b>, qui ne peuvent pas se chevaucher, et celles-ci n'existent que pour les entiers. Les grandeurs sont donc converties en <b>virgule fixe</b> : multipliées par une constante et tronquées en entiers avant d'être additionnées, puis redivisées. L'addition d'entiers est exacte, donc son total ne dépend pas de l'ordre.</p>
+        <figure id="fig-fixe"><figcaption><b>Le total dépend-il de l'ordre ?</b> Les mêmes dépôts sont additionnés dans seize ordres différents. En haut, en nombres à virgule flottante de 32 bits (ceux d'une carte graphique, imités ici par <code>Math.fround</code>) : chaque point est un total, et ils ne tombent pas tous au même endroit. En bas, en virgule fixe avec la constante 10<sup>5</sup> de <code>mpm.js</code> : un seul total. Le prix est une troncature d'au plus 10<sup>−5</sup> par dépôt, dont le bandeau donne la somme.</figcaption></figure>
+        <p>En résumé, une grandeur <i>f</i> est déposée sous la forme de l'entier</p>
+        <div class="eq">\[ \operatorname{enc}(f) = \lfloor f \cdot M \rfloor \ \text{(tronqué vers zéro)}, \qquad \operatorname{dec}(i) = i / M, \]</div>
+        <p>avec <i>M</i> = 10<sup>5</sup> pour la masse et la chaleur, et <i>M</i> = 10<sup>4</sup> pour la quantité de mouvement.</p>
+        <p>À partir de là, <code>stage.js</code> sait quelle image de simulation correspond à un instant <i>t</i> du demi-cycle : la numéro ⌊60 <i>t</i>⌋. En lecture, la simulation avance d'une image par image dessinée. Après un saut, elle repart de la figurine neuve et rattrape son retard, au plus 48 images de simulation par image dessinée. Avant la chaleur, rien ne bouge : les images 50 à 480 sont sautées d'un coup, les cinquante premières ayant servi à établir les appuis. Un recul de moins d'une demi-seconde ne recharge rien ; la scène attend simplement que l'instant soit rattrapé.</p>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Avec 8 dépôts, les seize ordres donnent deux ou trois totaux flottants différents ; avec 240, sept à dix. Cliquez « Autres ordres » pour tirer seize nouveaux ordres : la virgule fixe donne toujours un seul total.</li>
+          <li>Suivez la troncature dans le bandeau : 0,4 dix-millième pour 8 dépôts, 11 pour 240. Elle grandit avec le nombre de dépôts, mais elle est la même quel que soit l'ordre.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <div class="note"><b>Ce que cela garantit, et ce qui n'est pas vérifié</b><p>La virgule fixe retire la seule source de hasard, l'ordre des dépôts. Sur une machine donnée, deux passages au même instant partent de la même figurine et font les mêmes calculs. Rien n'a été comparé d'une carte graphique à une autre, dont les arrondis peuvent différer. Le saut dans la boucle et l'export vidéo n'ont pas encore fait l'objet d'un contrôle systématique. Une grandeur échappe à la règle : l'épaisseur du filet de cire, lissée d'une image dessinée à la suivante.</p></div>
+        </div></details>
       </section>
 
       <section id="moules">
         <h2><span class="n">07</span>Des figurines de même volume, et un moule pour chacune</h2>
         <span class="src">src/objects.js · sdObject(), scaleOf(), mouldField(), surfaceNets()</span>
-        <p>Les cinq figurines (lapin, canard, ourson, chouette, chat) sont faites de huit à onze ellipsoïdes et d’un socle, réunis par la même union adoucie que la cire. Leur forme est un champ de distance, une fonction pure que lisent la simulation (pour semer les particules), le rendu (pour la texture de distance), les moules, l’écran de chargement et les tests.</p>
-        <p>C’est la même cire qui passe d’un objet au suivant : toutes les figurines ont donc le <strong>même volume</strong>, 6&#8239;400 cellules cubes. <code>scaleOf</code> compte le volume de la figurine sur une grille, la met à l’échelle par la racine cubique du rapport, puis recommence une fois, parce que le socle arrondi ne suit pas exactement le cube de l’échelle. Les échelles vont de 0,77 à 0,85. Un test exige un volume à 2&nbsp;% près et des nombres de particules à 4&nbsp;% près. Le nombre de particules est ainsi presque constant, et le tampon de la simulation a une capacité fixe de 40&#8239;000.</p>
-        <h3>Le moule est l’empreinte de l’objet</h3>
-        <p>Les premiers moules étaient des cloches toutes pareilles. Un moule à la forme de l’objet raconte mieux ce qu’il va naître. Il est taillé au chargement, à partir du même champ de distance \(\operatorname{sd}\). Le métal est l’union de quatre volumes :</p>
+        <p>Les cinq figurines sont faites de huit à onze ellipsoïdes et d'un socle. Leur forme n'est pas un maillage : c'est un <b>champ de distance</b>, une fonction qui donne, en chaque point de l'espace, la distance à la surface de l'objet, comptée négativement à l'intérieur. Les ellipsoïdes sont réunis par une <b>union adoucie</b> : au lieu de prendre la plus petite des deux distances, ce qui laisserait une arête à la jonction, on la diminue un peu là où les deux sont proches, ce qui arrondit le raccord sur environ deux cellules. La même fonction sert partout : à semer les particules, au rendu, aux moules, à l'écran de chargement et aux tests.</p>
+        <p>C'est la même cire qui passe d'une figurine à la suivante. Toutes ont donc le <b>même volume</b>, 6&#8239;400 cellules cubes. <code>scaleOf</code> compte le volume de la figurine sur une grille, la met à l'échelle par la racine cubique du rapport, puis recommence une fois, parce que le socle arrondi ne suit pas exactement le cube de l'échelle. Les échelles vont de 0,77 à 0,85. Le nombre de particules est ainsi presque constant, et le tampon de la simulation a une capacité fixe de 40&#8239;000.</p>
+
+        <h3>Le moule est l'empreinte de l'objet</h3>
+        <p>Les premiers moules étaient des cloches toutes pareilles. Il fallait un moule à la forme de l'objet, qui dit ce qui va naître. Il est taillé au chargement à partir du même champ de distance. Le métal est l'union de quatre volumes :</p>
         <ul>
-          <li><strong>la paroi</strong> : une coque autour de l’objet, entre 0,25 et 2,6 cellules de sa surface ;</li>
-          <li><strong>la bride</strong> : une plaque de 3 cellules d’épaisseur dans le plan de joint, qui déborde de 6,5 cellules autour de la silhouette ;</li>
-          <li><strong>le fût et l’entonnoir</strong> : un cylindre dans l’axe, évasé sur ses 5 dernières cellules, qui monte à 9 cellules au-dessus de la tête, à l’aplomb du filet de cire ;</li>
-          <li>moins <strong>le canal de coulée</strong>, percé dans l’axe, et moins le dessous, laissé ouvert pour coiffer l’assiette.</li>
+          <li><b>la paroi</b> : une coque autour de l'objet, entre 0,25 et 2,6 cellules de sa surface ;</li>
+          <li><b>la bride</b> : une plaque de 3 cellules d'épaisseur dans le plan de joint, qui déborde de 6,5 cellules autour de la silhouette ;</li>
+          <li><b>le fût et l'entonnoir</b> : un cylindre dans l'axe, évasé sur ses 5 dernières cellules, qui monte à 9 cellules au-dessus de la tête, à l'aplomb du filet de cire ;</li>
+          <li>moins <b>le canal de coulée</b>, percé dans l'axe, et moins le dessous, laissé ouvert pour coiffer l'assiette.</li>
         </ul>
-        <p>Ce champ est échantillonné tous les 0,7 cellule, puis coupé en deux moitiés de part et d’autre du plan de joint. Chaque moitié est maillée par la méthode des <em>surface nets</em> : un sommet par cellule que la surface traverse, placé à la moyenne des points où elle coupe les arêtes de la cellule, puis deux passes de lissage. Les deux moitiés tournent sur une charnière placée derrière l’objet, pour ne rien cacher à l’ouverture : 1,75 radian chacune, soit 100°.</p>
-        <figure id="fig-moule" class="wide"><figcaption><b>Le moule en coupe.</b> À gauche, vu de dessus à la hauteur choisie, avec ses deux moitiés qui s’ouvrent autour de la charnière selon la loi de <code>stateAt</code>. À droite, la coupe de face du moule fermé : la paroi, la bride au-dessus de la tête, le fût, l’entonnoir et le canal. Le champ est celui de <code>mouldField</code>, porté ligne pour ligne et échantillonné au même pas de 0,7 cellule. La figure remplit les cellules au lieu de les mailler. Les échelles, les hauteurs et la position de la charnière sont les valeurs rendues par le code pour ces deux figurines.</figcaption></figure>
-        <div class="note check"><b>Ce que vérifie le test des moules</b><p>Pour le lapin et le chat, chaque demi-coque reste de son côté du plan de joint, le métal ne mord jamais sur la figurine, et le maillage est fermé (moins de 1&nbsp;% d’arêtes qui n’appartiennent pas à exactement deux faces).</p></div>
-        <div class="note"><b>Ce que le moule cache</b><p>La cire n’est pas simulée dans le moule, qui est fermé et opaque. Ce qui passe la buse est retiré et compté. Quand le moule s’ouvre, la simulation est rechargée avec la figurine neuve, qui a le même volume. Le raccord a deux limites connues. Environ la moitié des particules seulement a passé la buse à ce moment : le reste est un film trop mince pour se voir, et il arrive qu’une goutte reste près de la buse. Et les veines de l’objet neuf ne reprennent pas celles de la cire qui vient de couler.</p></div>
+        <p>Ce champ est échantillonné tous les 0,7 cellule, puis coupé en deux moitiés de part et d'autre du plan de joint. Chaque moitié est transformée en maillage, puis les deux moitiés tournent sur une charnière placée derrière l'objet, pour ne rien cacher à l'ouverture : 1,75 radian chacune, soit 100°.</p>
+        <figure id="fig-moule" class="wide"><figcaption><b>Le moule en coupe.</b> À gauche, vu de dessus à la hauteur choisie (en or, la figurine ; en bleu, les deux moitiés du moule), avec les deux moitiés qui s'ouvrent autour de la charnière selon la loi de <code>stateAt</code>. À droite, la coupe de face du moule fermé : la paroi, la bride au-dessus de la tête, le fût, l'entonnoir et le canal. Le champ est celui de <code>mouldField</code>, repris ligne pour ligne et échantillonné au même pas de 0,7 cellule. La figure remplit les cellules au lieu de les mailler. Les échelles, les hauteurs et la position de la charnière sont les valeurs rendues par le code pour ces deux figurines.</figcaption></figure>
+        <p>En résumé, avec sd la distance à l'objet, une union est un minimum et une soustraction un maximum :</p>
+        <div class="eq">\[ \text{paroi}(p) = \max\big(\operatorname{sd}(p) - 2{,}6,\ \ 0{,}25 - \operatorname{sd}(p)\big), \qquad \text{moule} = \max\big(\min(\text{paroi},\ \text{bride},\ \text{fût},\ \text{entonnoir}),\ -\text{canal}\big). \]</div>
+        <p>Chaque volume est lui-même un champ de distance, négatif à l'intérieur. La paroi est donc pleine là où la distance à l'objet est comprise entre 0,25 et 2,6 cellules, et le canal, de distance « canal », est retiré du métal. Le dessous ouvert est retiré de la même façon.</p>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Faites glisser l'instant de 0 à 1,65 s : chaque moitié s'ouvre de 0 à 100° (62° à 1 s). Elle reste ouverte jusqu'à 3,5 s, puis se referme en une seconde.</li>
+          <li>Comparez le chat et le lapin : le moule du lapin mesure 55,3 cellules de haut, celui du chat 49,3, parce que le fût monte toujours à 9 cellules au-dessus de la tête et que les oreilles du lapin sont plus hautes.</li>
+          <li>Montez la coupe jusqu'au-dessus de la tête : il ne reste que le fût et son canal, un anneau dans l'axe.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Chaque moitié est maillée par la méthode des <i>surface nets</i> : un sommet par cellule que la surface traverse, placé à la moyenne des points où elle coupe les arêtes de la cellule, puis deux passes de lissage.</p>
+          <div class="note check"><b>Ce que vérifient les tests</b><p>Les figurines ont le même volume à 2&nbsp;% près et le même nombre de particules à 4&nbsp;% près. Pour le lapin et le chat, chaque demi-coque reste de son côté du plan de joint, le métal ne mord jamais sur la figurine, et le maillage est fermé (moins de 1&nbsp;% d'arêtes qui n'appartiennent pas à exactement deux faces).</p></div>
+          <div class="note"><b>Ce que le moule cache</b><p>La cire n'est pas simulée dans le moule, qui est fermé et opaque. Ce qui passe la buse est retiré et compté. Quand le moule s'ouvre, la simulation est rechargée avec la figurine neuve, qui a le même volume. Le raccord a deux limites connues. Environ la moitié des particules seulement a passé la buse à ce moment : le reste est un film trop mince pour se voir, et il arrive qu'une goutte reste près de la buse. Et les veines de l'objet neuf ne reprennent pas celles de la cire qui vient de couler.</p></div>
+        </div></details>
       </section>
 
-      <section id="usine">
-        <h2><span class="n">08</span>L’usine est une fonction du temps</h2>
-        <span class="src">src/cycle.js · stateAt(), circuit(), along(), carriers() · src/scene/factory.js · pose()</span>
-        <p>La boucle dure 50 secondes : deux demi-cycles de 25 s, un par objet. Un demi-cycle commence quand le moule s’ouvre sur l’objet qui vient de naître. Les plateaux échangent leurs places, le moule suivant se pose sur le plateau vide, l’objet fond, la cire coule. Rien de cela n’est intégré d’une image à l’autre : <code>stateAt</code> rend la pose de toute la machine pour une phase donnée, et <code>pose()</code> place les pièces.</p>
-        <p>Le circuit est fait de deux demi-chemins, des lignes brisées : de la chaleur au moule par une ligne haute, une descente et une ligne basse ; du moule à la chaleur par un autre ascenseur ou par une rampe. Un plateau parcourt sa ligne brisée avec un arrêt à chaque coude, chaque tronçon ayant un départ et une arrivée doux (la courbe \(t^3(6t^2 - 15t + 10)\), à vitesse et accélération nulles aux deux bouts). Les deux plateaux sont identiques et échangent leurs rôles à chaque demi-cycle. Ce n’est donc pas la position de chacun qui est périodique, c’est l’ensemble de leurs places : la boucle se referme au bout de deux demi-cycles sans que personne puisse dire lequel est lequel.</p>
-        <figure id="fig-cycle" class="wide"><figcaption><b>Un demi-cycle.</b> À gauche, la machine vue de face, en schéma : les deux plateaux sur leur circuit, les chariots, le moule, la source. À droite, les grandeurs que <code>stateAt</code> rend au fil des 25 secondes. <code>circuit()</code>, <code>along()</code>, <code>carriers()</code>, <code>beltAt()</code> et <code>stateAt()</code> sont portés tels quels, avec les proportions de la graine d’ouverture. Le dessin des pièces, la fonte de la figurine et le filet sont des schémas.</figcaption></figure>
-        <p>Trois décisions viennent d’essais ratés. Un premier chariot apparaissait avec le plateau et disparaissait après l’avoir monté, ce qui « cassait la magie » : chaque ascenseur et chaque rampe a maintenant son chariot à demeure, qui attend, emporte le plateau, le dépose, puis revient à vide pendant la fonte, de 9,5 à 13,5 s. Une première machine en caissons peints était « massive » : elle est faite de tubes fins, d’une bague à chaque jonction et de pieds tournés, comme un instrument de laboratoire. Une première boucle de 34 secondes par objet, jusqu’à trois objets, était trop longue.</p>
-        <p><strong>Le filet de cire</strong> est un cylindre tendu entre la buse et l’entonnoir du moule. Son rayon suit le débit mesuré à la buse, lu sur la carte graphique toutes les six images de simulation : \(r = 0{,}006 + 0{,}034\sqrt{q}\), où \(q\) est le débit lissé, rapporté à 160 particules par lecture.</p>
-        <p><strong>Une graine construit une usine</strong> (<code>recipe.js</code>) : le lieu (atelier, laboratoire, équipe de nuit), la cire (six accords d’une masse et de veines), la source, le circuit, deux figurines différentes, les proportions, le sens du circuit, la peinture et les métaux. Chaque tirage a son propre flux de nombres aléatoires : changer la cire dans le panneau ne change pas le circuit. La caméra accompagne la cire : gros plan sur la naissance, plan large pendant la montée, gros plan sur la fonte, puis descente le long du filet vers le moule.</p>
-        <div class="note check"><b>Ce que vérifient les tests du cycle</b><p>Sur 6&#8239;000 instants de la boucle et six graines : aucun saut des plateaux, du moule ni de la chaleur ; pendant la chauffe, un plateau exactement sous la source et l’autre exactement sous le moule, posé et fermé ; le barillet ne tourne que moule levé et refermé. Sur 8&#8239;000 instants et huit graines : un chariot ne disparaît jamais, ne saute jamais, et un plateau qui n’est pas sur une ligne est toujours sur un chariot. La seule liberté prise avec la physique est le temps : une cire met des minutes à fondre et des heures à prendre.</p></div>
+      <section id="surface">
+        <h2><span class="n">08</span>Une surface nette tant que rien n'a bougé</h2>
+        <span class="src">src/scene/wax.js · parts(), phi() · src/sim/mpm.js · kRSplat, kResolve</span>
+        <p>Au sortir du moule, la figurine doit être intacte : des oreilles fines et séparées, un museau net. Plus tard, un film de cire fondue, plus mince qu'une cellule, doit rester visible en coulant le long du corps. La surface qu'on dessine doit satisfaire les deux.</p>
+        <p>La manière habituelle de dessiner un nuage de particules est de calculer sa densité sur la grille et de tracer la surface où elle passe un seuil, une <b>iso-densité</b>. Le choix du seuil pose problème. Un film de cire plus mince qu'une cellule ne dépose qu'une faible densité : pour qu'il se voie, le seuil doit être bas, 11&nbsp;% de la densité de repos dans le projet. À ce seuil, une forme pleine enfle d'une cellule entière, et ses creux étroits se comblent : les oreilles du lapin se soudent sur une partie de leur hauteur. Un seuil plus haut rend la silhouette à une fraction de cellule près, mais il efface les films et les gouttes. Une seule iso-densité ne peut pas servir les deux.</p>
+
+        <h3>Lire la forme d'origine là d'où vient la matière</h3>
+        <p>La correction se sert de ce qu'on connaît déjà : la forme d'origine, donnée par le champ de distance de la section 07. Chaque particule garde sa place de départ <i>X</i><sub>0</sub>. La part solide de la matière dépose sur la grille son <b>déplacement</b> <i>d</i> = <i>x</i> − <i>X</i><sub>0</sub>, pondéré par sa masse. Pour savoir si un point <i>p</i> est dans le solide, on regarde d'où vient la matière qui s'y trouve, <i>p</i> − <i>d</i>(<i>p</i>), et on lit le champ de distance de la figurine en ce point. Là où rien n'a bougé, <i>d</i> = 0 et la surface est exactement celle du moule. Là où la matière a flué, la forme est entraînée avec elle : une oreille qui ploie reste une oreille.</p>
+        <p>Le liquide, lui, garde l'iso-densité à 11&nbsp;%, dont la mollesse convient à une coulée. Les deux surfaces sont réunies par une union adoucie, sur une largeur de 0,9 cellule : la peau fondue enrobe le cœur encore froid sans arête.</p>
+        <figure id="fig-surface" class="wide"><figcaption><b>La tête et les oreilles du lapin, à l'arrêt.</b> Le trait clair est le contour de l'objet d'origine, le quadrillage celui des cellules. À gauche, l'iso-densité des particules ; à droite, la surface de <code>wax.js</code>. Cette vue est une coupe du vrai volume : les particules du projet, le dépôt sur 27 cellules, le lissage de <code>kResolve</code>, la lecture entre deux couches de cellules. À droite, <code>parts()</code> et <code>phi()</code> sont repris avec leurs constantes, et la distance d'origine est cuite à la demi-cellule. « Laisser fondre » passe à la tranche à deux dimensions de la section 05, en entier : la surface de droite suit la matière qui coule. Dans cette seconde vue, le lissage est adapté à quatre voisines, les veines sont celles de <code>stage.js</code>, et l'éclairage est un simple liseré.</figcaption></figure>
+        <p>En résumé, la surface est l'endroit où le champ φ s'annule, avec</p>
+        <div class="eq">\[ \varphi_s(p) = \max\!\Big( \operatorname{sd}\big(p - d(p)\big),\ 1{,}5\,\big(0{,}3 - \tfrac{m_s}{m_s + m_\ell}\big) \Big), \qquad \varphi_\ell(p) = \big(0{,}9\,R_H - m_\ell(p)\big)\cdot\tfrac{0{,}3}{R_H}. \]</div>
+        <p>φ<sub><i>s</i></sub> est le champ du solide, φ<sub>ℓ</sub> celui du liquide, et φ leur union adoucie. sd est la distance à la figurine d'origine, <i>m</i><sub><i>s</i></sub> et <i>m</i><sub>ℓ</sub> les masses solide et liquide déposées au point <i>p</i>, et <i>R</i><sub><i>H</i></sub> le huitième de la densité de repos (0,9 <i>R</i><sub><i>H</i></sub> en est donc 11&nbsp;%). Le second terme de φ<sub><i>s</i></sub> rogne le solide là où le liquide a pris sa place.</p>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>À l'arrêt, montez le seuil de 11&nbsp;% à 40&nbsp;% : le plus grand écart au contour d'origine passe à gauche de 1,0 cellule à 0,2. À 50&nbsp;%, il remonte à 0,5 cellule, parce que la pointe des oreilles est rognée. La surface de droite reste à 0,2 cellule.</li>
+          <li>Activez « Laisser fondre », attendez que le lapin s'effondre (vers 16 s), mettez en pause et montez le seuil de 11&nbsp;% à 40&nbsp;% : la cire de gauche perd un quart de sa surface et ses bords minces, celle de droite ne change pas, parce que son liquide garde son propre seuil.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>La distance d'origine est cuite par figurine dans une texture 3D de 72 × 112 × 80, à la demi-cellule. Là où rien n'a bougé, la surface est celle du moule à deux dixièmes de cellule près : l'union avec le champ du liquide, même vide, la gonfle très légèrement.</p>
+          <p>Les dépôts suivent la même économie que la simulation. La matière figée ne bouge pas : son dépôt est gardé et refait une image sur quatre. Seule la matière libre est déposée à chaque image. Un dernier passage moyenne chaque cellule avec ses six voisines, pour effacer le grain des particules dans le liquide, et écrit deux textures 3D que le rendu lit avec interpolation.</p>
+        </div></details>
+      </section>
+
+      <section id="lumiere">
+        <h2><span class="n">09</span>La cire s'éclaire elle-même</h2>
+        <span class="src">src/scene/wax.js · march(), thick(), shade()</span>
+        <p>Une cire éclairée par-derrière rougeoit, comme une bougie : la lumière la traverse, et le rouge passe mieux que le bleu. Ses parties minces sont plus claires que ses parties épaisses. Le rendu habituel d'un objet, qui ne regarde que sa surface, ne donne rien de tout cela.</p>
+
+        <h3>Trouver la surface le long d'un rayon</h3>
+        <p>La cire n'a pas de maillage. Elle est dessinée comme une boîte, celle de la grille. Pour chaque pixel de cette boîte, le <i>fragment shader</i> (le programme de la carte graphique qui calcule la couleur d'un pixel) lance un rayon depuis la caméra et le fait <b>marcher</b> dans le champ φ de la section 08. À chaque étape, il avance des trois quarts de la valeur lue (entre 0,1 et 1,4 cellule), deux cents fois au plus, et s'arrête quand elle passe sous 0,02 cellule. Trois pas d'affinage le posent ensuite sur la surface. La normale est la pente de φ, mesurée par six lectures autour du point. Le pixel écrit enfin sa vraie profondeur, pour que la cire passe correctement devant et derrière les pièces de la machine.</p>
+
+        <h3>L'épaisseur traversée</h3>
+        <p>Cette matière calcule son éclairage elle-même, avec les directions et les teintes des lampes de la scène : la lampe principale, le contre-jour et la source de chaleur. Pour chacune, le shader mesure l'<b>épaisseur de cire traversée</b> vers la lampe, par neuf lectures de densité espacées de 2,4 cellules. Cette épaisseur <i>e</i>, en cellules, sert deux fois :</p>
+        <ul>
+          <li><b>l'ombre propre</b> : la lumière directe est atténuée en e<sup>−0,55 <i>e</i></sup>, si bien que le dessous du menton est sombre sans carte d'ombre ;</li>
+          <li><b>la translucidité</b> : une part de la lumière traverse, atténuée en e<sup>−σ <i>e</i></sup> avec σ = 0,05 pour le rouge, 0,16 pour le vert et 0,2 pour le bleu. Le rouge va plus loin : éclairé par-derrière, le corps rougeoie, et les oreilles, minces, restent claires.</li>
+        </ul>
+        <p>Le reflet dit l'état de la matière. La rugosité passe de 0,42 à 0,1 quand la température monte de 0,55 à 0,95 : la peau devient brillante avant de couler, et l'œil lit la chaleur avant tout mouvement. Le liquide est un peu plus sombre (72&nbsp;%). La couleur mêle deux pigments, une masse et des veines. Les veines sont calculées une fois, à la place de repos de chaque particule, puis emportées par elle : elles s'étirent avec l'écoulement. Elles sont apparues lors d'un essai et font maintenant partie de chaque cire.</p>
+        <figure id="fig-lumiere"><figcaption><b>Une lampe autour de la figurine.</b> La figurine au repos, vue de face. Tournez la lampe : de face, l'ombre propre creuse le côté opposé ; par-derrière, il ne reste que la lumière qui traverse. Survolez un point pour lire l'épaisseur traversée ; par défaut, la mesure est prise au ventre. Viennent de <code>wax.js</code> : <code>thick()</code> (ses neuf lectures font les paliers de « Voir l'épaisseur »), les termes direct, translucide et spéculaire de <code>shade()</code>, le reflet du studio de <code>env()</code>, les veines et la teinte de la lampe du lieu « équipe de nuit ». Simplifié : une lampe au lieu de trois, la forme exacte au lieu de la surface marchée, une densité pleine dans la forme et nulle dehors (adoucie sur une cellule), une exposition fixe et une compression <i>x</i>/(1 + <i>x</i>) au lieu de la chaîne d'image.</figcaption></figure>
+        <p>En résumé, pour une lampe de couleur <i>c</i><sub>L</sub>, un pixel de cire d'albédo (couleur propre) <i>a</i> reçoit, canal par canal,</p>
+        <div class="eq">\[ c = c_L \Big( a\,w(n \cdot L)\,e^{-0{,}55\,e} \;+\; 0{,}3\,a^{0{,}6}\,e^{-\sigma e} \;+\; \text{reflet} \Big), \]</div>
+        <p>où <i>w</i> est un éclairage enveloppant (la lumière dépasse un peu le côté éclairé) et <i>e</i> l'épaisseur traversée vers la lampe. Le reflet dépend de la rugosité, donc de la température.</p>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Lampe à 150°, derrière la figurine : au ventre, la lumière traverse 9,6 cellules de cire. Il en sort 62&nbsp;% du rouge, 22&nbsp;% du vert et 15&nbsp;% du bleu, d'où la teinte rouge. À 180°, l'épaisseur passe à 12,2 cellules et le bleu tombe à 9&nbsp;%.</li>
+          <li>Lampe à 180°, coupez la translucidité : la luminosité moyenne de la figurine tombe au tiers environ. Il ne reste que la lumière qui déborde sur les côtés et le reflet du studio.</li>
+          <li>Lampe à 30°, montez la température de la peau de 0,5 à 0,95 : la rugosité affichée sous le schéma passe de 0,42 à 0,1, et de petits reflets vifs apparaissent sur les oreilles et le ventre.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <div class="note trap"><b>Le piège : le vide doit valoir un grand pas</b><p>Loin de toute matière, les deux champs n'ont pas de sens : la densité est nulle, le déplacement indéfini. Le rayon qui cherche la surface y avançait à tout petits pas, et le rayon d'ombre s'épuisait avant d'atteindre l'objet. Dans le vide, la distance vaut donc d'office 1,2 cellule.</p></div>
+          <div class="note trap"><b>Le piège : une couture verticale dans l'occlusion</b><p>L'occlusion ambiante, l'assombrissement des creux calculé en fin de chaîne d'image, lit la normale écrite par chaque matériau. Le matériau de la cire est du type « basic » de three.js, qui écrit la normale de sa géométrie quoi qu'on lui demande, ici celle des faces de la boîte. Une couture traversait l'objet à l'aplomb d'une arête de la boîte. Il a fallu surcharger la fonction <code>setupNormal</code> du matériau pour lui faire rendre la normale de la surface marchée.</p></div>
+          <p><b>L'ombre portée.</b> Une boîte marchée ne porte pas d'ombre : la carte d'ombre de la lampe ne verrait que la boîte. Une seconde boîte, rangée sur un calque que seule la caméra d'ombre voit, refait la marche le long des rayons de la lampe (parallèles, 160 pas au plus) et écrit la profondeur du point de cire touché. La marche est écrite deux fois, une pour le masque et une pour la profondeur, parce qu'une variable partagée entre ces deux nœuds n'était déclarée que dans le premier. Et l'assiette des plateaux est en émail, parce qu'un métal poli ne montre pas les ombres : l'ombre était juste, mais invisible.</p>
+          <p>Ce qui manque : la machine ne porte pas encore son ombre sur la cire. Le flou de mouvement est coupé, parce que la cire n'écrit pas ses vitesses.</p>
+        </div></details>
       </section>
 
       <section id="chargement">
-        <h2><span class="n">09</span>L’écran de chargement fait fondre la figurine</h2>
+        <h2><span class="n">10</span>L'écran de chargement fait fondre la figurine</h2>
         <span class="src">src/app/loaderArt.js · src/scene/stage.js · makeShape()</span>
-        <p>Au chargement, le projet prépare chaque figurine : ses particules, sa texture de distance et ses deux demi-coques, puis compile les shaders et rend quelques images à blanc pour l’anticrénelage temporel, qui a besoin d’un historique. Les trois étapes s’appellent « les moules se taillent », « la lumière se prépare » et « premières images ».</p>
-        <p>Pendant ce temps, un dessin au trait montre le premier objet de la graine. C’est la vraie figurine : son champ de distance est tranché tous les 1,6 cellule par l’algorithme des <em>carrés marchants</em>, qui trace la ligne de niveau zéro d’un champ sur une grille. Les tranches (25 pour le chat) sont empilées en perspective comme une maquette topographique, qui tourne lentement. Une ceinture descend avec l’avancement réel du chargement, et un peu avec le temps, pour que le dessin ne soit jamais figé. Les tranches qu’elle a passées s’échauffent, s’affaissent de 35&nbsp;% et s’effacent, des gouttes tombent, et une flaque s’étale en anneaux sur l’assiette. Son rayon suit le volume fondu : pleine, elle a le volume de la figurine. Le dessin tourne dans un <em>worker</em>, un fil de calcul parallèle du navigateur : il reste fluide quand le fil principal taille les moules.</p>
-        <figure id="fig-loader"><figcaption><b>Le dessin de chargement.</b> Le découpage en tranches (<code>contour()</code>), la perspective et le tracé sont portés de <code>loaderArt.js</code>, dans les teintes de la cire miel. Ce qui change : le curseur remplace l’avancement réel du chargement, et la part de fonte qui suit le temps est retirée, comme le fondu de sortie.</figcaption></figure>
+        <p>Au chargement, le projet prépare chaque figurine (ses particules, sa texture de distance et ses deux demi-coques), compile les shaders et rend quelques images à blanc pour l'anticrénelage temporel, qui a besoin d'un historique. Pendant ce temps, un dessin au trait montre la première figurine de la graine.</p>
+        <p>C'est la vraie figurine. Son champ de distance est tranché tous les 1,6 cellule, et chaque tranche est tracée par l'algorithme des <b>carrés marchants</b>, qui suit la ligne où un champ s'annule sur une grille : dans chaque carré dont les coins n'ont pas tous le même signe, il place un segment entre les points où le champ change de signe. Les tranches sont empilées en perspective comme une maquette topographique, qui tourne lentement. Une ceinture descend avec l'avancement réel du chargement. Les tranches qu'elle a passées s'échauffent, s'affaissent de 35&nbsp;% et s'effacent, des gouttes tombent, et une flaque s'étale en anneaux sur l'assiette. Son rayon suit le volume fondu : pleine, elle a le volume de la figurine.</p>
+        <figure id="fig-loader"><figcaption><b>Le dessin de chargement.</b> Le découpage en tranches (<code>contour()</code>), la perspective et le tracé sont repris de <code>loaderArt.js</code>, dans les teintes de la cire miel. Ce qui change : le curseur remplace l'avancement réel du chargement, et la part de fonte qui suit le temps est retirée, comme le fondu de sortie.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Comparez le chat et le lapin : 25 tranches pour le chat, 29 pour le lapin, plus haut.</li>
+          <li>Poussez l'avancement à 100&nbsp;% : 96&nbsp;% du volume a fondu, et la flaque atteint presque son rayon final.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Le dessin tourne dans un <i>worker</i>, un fil de calcul parallèle du navigateur : il reste fluide pendant que le fil principal taille les moules. La ceinture avance aussi un peu avec le temps, pour que le dessin ne soit jamais figé. Les trois étapes affichées s'appellent « les moules se taillent », « la lumière se prépare » et « premières images ».</p>
+        </div></details>
+      </section>
+
+      <section id="resume">
+        <h2><span class="n">11</span>Récapitulatif</h2>
+        <p>Au chargement, pour chacune des deux figurines de la graine :</p>
+        <ol>
+          <li>la figurine est mise à l'échelle du volume commun, et environ 30&#8239;000 particules sont semées dans sa forme (section 07) ;</li>
+          <li>son champ de distance est cuit dans une texture 3D, qui servira à la surface (section 08) ;</li>
+          <li>son moule est taillé dans le même champ, coupé en deux et maillé (section 07).</li>
+        </ol>
+        <p>Puis, à chaque image :</p>
+        <ol>
+          <li><code>stateAt</code> donne la pose de l'usine pour la phase de la boucle (section 02) ;</li>
+          <li>la simulation avance jusqu'à l'image ⌊60 <i>t</i>⌋ du demi-cycle (section 06) : la matière figée dépose sa masse et met à jour sa température, l'appui est propagé, puis quatre sous-pas déplacent la matière libre, la chauffent et effacent sa mémoire selon sa température (sections 03 à 05) ;</li>
+          <li>les dépôts du rendu donnent le champ φ (section 08), dans lequel chaque pixel de la boîte marche jusqu'à la cire et l'éclaire avec l'épaisseur traversée (section 09).</li>
+        </ol>
       </section>
 
       <section id="budget">
-        <h2><span class="n">10</span>Budget</h2>
-        <p>Par image de simulation, la carte graphique exécute quinze passes de calcul : trois pour la matière figée, puis trois par sous-pas. Les champs de rendu en demandent trois de plus, cinq quand le dépôt de la matière figée est refait. Le coût dépend de la quantité de matière libre : c’est tout l’intérêt de la section 02.</p>
+        <h2><span class="n">12</span>Budget</h2>
+        <p>Par image de simulation, la carte graphique exécute quinze passes de calcul : trois pour la matière figée, puis trois par sous-pas. Les champs de rendu en demandent trois de plus, cinq quand le dépôt de la matière figée est refait. Le coût dépend de la quantité de matière libre, ce qui justifie la section 04.</p>
         <div class="tbl"><table>
           <thead><tr><th>Poste</th><th>Où</th><th class="num">Valeur</th></tr></thead>
           <tbody>
@@ -177,13 +351,13 @@
             <tr><td>Simulation, selon la quantité de matière libre</td><td>GPU</td><td class="num">3 à 7 ms</td></tr>
             <tr><td>Image 1&#8239;280 × 720, chaîne complète</td><td>GPU</td><td class="num">≈ 10 ms</td></tr>
             <tr><td>dont la cire (marche, éclairage)</td><td>GPU</td><td class="num">≈ 5 ms</td></tr>
-            <tr><td>Lecture d’une boucle entière (graine z0)</td><td>GPU</td><td class="num">≥ 70 i/s</td></tr>
+            <tr><td>Lecture d'une boucle entière (graine z0)</td><td>GPU</td><td class="num">≥ 70 i/s</td></tr>
             <tr><td>Taille des deux moules, au chargement</td><td>CPU</td><td class="num">≈ 1 s</td></tr>
             <tr><td>Tampons et textures de la simulation (somme des tailles déclarées, non mesurée)</td><td>GPU</td><td class="num">≈ 67 Mo</td></tr>
           </tbody>
         </table></div>
-        <p>Les temps sont ceux du README : mesurés dans le panneau de navigateur de l’application, sur la carte graphique d’un Mac. Rien n’a été mesuré ailleurs. La version mobile n’existe pas : la simulation demande une carte graphique de bureau.</p>
-        <p>Six tests tiennent ce qui peut l’être sans navigateur : la recette (déterminisme, tous les choix tirés sur 400 graines, jamais deux fois la même figurine), le volume commun des figurines, le circuit refermé avec le moule levé qui passe sous la ligne haute, le cycle continu et périodique, les chariots, les moules. La simulation et le rendu de la cire n’ont pas de test automatique : ils ont été contrôlés à l’œil, sur une boucle entière.</p>
+        <p>Les temps sont ceux du README : mesurés dans le panneau de navigateur de l'application, sur la carte graphique d'un Mac. Rien n'a été mesuré ailleurs. La version mobile n'existe pas : la simulation demande une carte graphique de bureau.</p>
+        <p>Six tests tiennent ce qui peut l'être sans navigateur : la recette (déterminisme, tous les choix tirés sur 400 graines, jamais deux fois la même figurine), le volume commun des figurines, le circuit refermé avec le moule levé qui passe sous la ligne haute, le cycle continu et périodique, les chariots, les moules. La simulation et le rendu de la cire n'ont pas de test automatique : ils ont été contrôlés à l'œil, sur une boucle entière.</p>
       </section>
     </article>
 
@@ -208,6 +382,8 @@
     // stage.js · makeShape : les veines, au repos (repère de la grille du projet, sel de la graine ib352j)
     const veinOf = (X, Y, Z, salt = 6) => Math.min(1, Math.max(0, (Math.sin(0.33 * Y + 2.2 * Math.sin(0.17 * X + 1 + salt) + 1.7 * Math.sin(0.21 * Z + 0.4 - salt) + 0.8 * Math.sin(0.5 * X + 0.3 * Z + salt)) - 0.55) * 4));
     // (les préparations lourdes attendent que la figure approche de l'écran)
+    // marque le bouton de choix actif (aria-pressed) parmi ceux dont le texte est dans labels
+    const mark = (d, labels, active) => d.fig.querySelectorAll('button').forEach((b) => { if (labels.includes(b.textContent)) b.setAttribute('aria-pressed', String(b.textContent === active)); });
     const seen = (d) => { const r = d.canvas?.getBoundingClientRect?.(); return !r || (r.bottom > -300 && r.top < innerHeight + 300); };
 
     // objects.js (verbatim ; deux des cinq figurines)
@@ -233,6 +409,7 @@
         E([10.2, 4.2, -3], [2.9, 3, 9.5]), E([8.2, 3.6, 7.6], [5, 2.7, 3]), E([3.4, 3.3, 10.6], [3.2, 2.4, 2.2]),
       ] },
     };
+    const OBJ = ['Lapin', 'Chat'];
     const KS = 2.6;
     function sdObject(prims, sc, x, y, z) {
       x /= sc; y /= sc; z /= sc;
@@ -490,7 +667,7 @@
       });
     }
 
-    // ── 01 · la loi ────────────────────────────────────────────────────────
+    // ── 03 · la loi ────────────────────────────────────────────────────────
     {
       const rOf = (T) => clamp(U0.relax * smooth(0.55, 1.05, T) ** 2 * DT + smooth(1.05, 1.2, T));
       const mem = (T, s = 1) => (1 - rOf(T)) ** (240 * s);
@@ -506,13 +683,14 @@
           for (const t of [0.4, 0.6, 0.8, 1, 1.2, 1.4, 1.6]) label(g, fmt(t, 1), X(t), h - 12, { align: 'center', size: 10.5, color: C.faint });
           for (const [t, name] of [[0.86, 'libérée'], [1, 'fusion']]) {
             g.strokeStyle = alpha(C.ink, 0.3); g.setLineDash([3, 4]); g.beginPath(); g.moveTo(X(t), y0); g.lineTo(X(t), y1); g.stroke(); g.setLineDash([]);
-            label(g, name, X(t) + (t < 1 ? -4 : 4), y0 + 9, { size: 10.5, align: t < 1 ? 'right' : 'left' });
+            if (w >= 560) label(g, name, X(t) + (t < 1 ? -4 : 4), y0 + 9, { size: 10.5, align: t < 1 ? 'right' : 'left' });
           }
           const curve = (fn, colr) => { g.strokeStyle = colr; g.lineWidth = 2; g.beginPath(); for (let i = 0; i <= 260; i++) { const t = lerp(Ta, Tb, i / 260); i ? g.lineTo(X(t), Y(fn(t))) : g.moveTo(X(t), Y(fn(t))); } g.stroke(); };
           curve(solidOf, C.c1); curve(mem, C.c2); curve(visc, C.c3);
-          label(g, 'élasticité s(T)', X(0.32), Y(1) + 15, { color: C.c1, size: 11.5 });
-          label(g, 'mémoire après 1 s', X(0.32), Y(1) + 30, { color: C.c2, size: 11.5 });
-          label(g, 'viscosité', X(1.38), Y(visc(1.38)) - 8, { color: C.c3, size: 11.5 });
+          const nw = w < 560; // (écran étroit : la légende dans le coin vide, en bas à gauche)
+          label(g, nw ? 'élasticité' : 'élasticité s(T)', X(0.32), nw ? Y(0.36) : Y(1) + 15, { color: C.c1, size: nw ? 10.5 : 11.5 });
+          label(g, nw ? 'mémoire' : 'mémoire après 1 s', X(0.32), nw ? Y(0.22) : Y(1) + 30, { color: C.c2, size: nw ? 10.5 : 11.5 });
+          label(g, 'viscosité', nw ? X(0.32) : X(1.38), nw ? Y(0.08) : Y(visc(1.38)) - 8, { color: C.c3, size: nw ? 10.5 : 11.5 });
           g.strokeStyle = C.ink; g.lineWidth = 1; g.beginPath(); g.moveTo(X(T), y0); g.lineTo(X(T), y1); g.stroke();
           for (const [fn, colr] of [[solidOf, C.c1], [mem, C.c2], [visc, C.c3]]) { g.fillStyle = colr; g.beginPath(); g.arc(X(T), Y(fn(T)), 4, 0, TAU); g.fill(); }
           // la déformation retenue : une ellipse qui revient au cercle
@@ -527,7 +705,7 @@
       });
     }
 
-    // ── 02 · l'appui ───────────────────────────────────────────────────────
+    // ── 04 · l'appui ───────────────────────────────────────────────────────
     {
       const NX = 44, NY = 28;
       const shape = (i, j) => {
@@ -585,15 +763,17 @@
       });
     }
 
-    // ── 03 · la fonte en deux dimensions ──────────────────────────────────
+    // ── 05 · la fonte en deux dimensions ──────────────────────────────────
     {
       let S = null, hist = [];
+      const SRC = Object.values(HEATS).map((v) => v.label);
       const restart = () => { S.reset(); hist = []; };
       demo('#fig-mpm', {
         title: 'MLS-MPM, matière figée et chaleur', aspect: 1.7, animate: true,
+        setup(d) { mark(d, SRC, HEATS[S?.source ?? 'lampe'].label); },
         controls: [{ key: 'power', label: 'Puissance de la source', min: 0.5, max: 1.5, step: 0.05, value: 1, fmt: (v) => `×${fmt(v)}` }],
         buttons: [
-          ...Object.entries(HEATS).map(([k, v]) => ({ label: v.label, onClick: () => { S.source = k; restart(); } })),
+          ...Object.entries(HEATS).map(([k, v]) => ({ label: v.label, onClick: (d) => { S ??= makeSim(); S.source = k; restart(); mark(d, SRC, v.label); } })),
           { key: 'all', label: 'Tout simuler', toggle: true, onClick: (d) => { S.pin = !d.s.all; restart(); } },
           { label: 'Rejouer', onClick: restart },
         ],
@@ -613,9 +793,9 @@
             arrow(g, sx, Math.max(sy, 14), sx - ux * 5 * V.s, Math.max(sy, 14) + uy * 5 * V.s, { color: alpha(HOT, 0.25 + 0.75 * on), width: 2.5, head: 9 });
           }
           // légende et histoire des états
-          const x0 = w * 0.58, x1 = w - 14, y0 = 46, y1 = h - 30, X = (t) => lerp(x0, x1, (t - T_START) / (TL.half - T_START)), Y = (v) => lerp(y1, y0, v);
+          const narrow = w < 560, x0 = w * 0.58, x1 = w - 14, y0 = narrow ? 52 : 46, y1 = h - 30, X = (t) => lerp(x0, x1, (t - T_START) / (TL.half - T_START)), Y = (v) => lerp(y1, y0, v);
           const names = ['figée', 'libre', 'fondue', 'tombée'], cols = [alpha(C.dim, 0.8), C.c1, HOT, alpha(C.ink, 0.18)];
-          names.forEach((n, i) => { g.fillStyle = cols[i]; g.fillRect(x0 + i * (x1 - x0) / 4, 16, 9, 9); label(g, n, x0 + i * (x1 - x0) / 4 + 14, 25, { size: 11.5 }); });
+          names.forEach((n, i) => { const lx = narrow ? x0 + (i % 2) * (x1 - x0) / 2 : x0 + i * (x1 - x0) / 4, ly = narrow ? 8 + Math.floor(i / 2) * 18 : 16; g.fillStyle = cols[i]; g.fillRect(lx, ly, 9, 9); label(g, n, lx + 13, ly + 9, { size: narrow ? 11 : 11.5 }); });
           for (let s = 0; s < 4; s++) {
             g.fillStyle = cols[s]; g.beginPath(); g.moveTo(X(T_START), y1);
             const acc = (r) => { let a = 0; for (let q = 0; q <= s; q++) a += r[1 + q]; return a; }, low = (r) => acc(r) - r[1 + s];
@@ -632,7 +812,7 @@
       });
     }
 
-    // ── 04 · la virgule fixe ───────────────────────────────────────────────
+    // ── 06 · la virgule fixe ───────────────────────────────────────────────
     {
       let seed = 1;
       demo('#fig-fixe', {
@@ -662,7 +842,7 @@
       });
     }
 
-    // ── 05 · la surface ────────────────────────────────────────────────────
+    // ── 08 · la surface ────────────────────────────────────────────────────
     {
       // wax.js : parts(), phi() ; mpm.js : kRPinSplat, kRSplat, kResolve
       const ISO_L = 0.9 * RH, KF = 0.3 / RH, KU = 0.9, SW = 72, SH = 112, PX = 3, IW = GX * PX, IH = 58 * PX;
@@ -770,7 +950,7 @@
         buttons: [{ key: 'melt', label: 'Laisser fondre', toggle: true, onClick: () => S?.reset() }, { key: 'pause', label: 'Pause', toggle: true }, { key: 'dots', label: 'Particules', toggle: true }, { label: 'Rejouer', onClick: () => S?.reset() }],
         draw(g, d) {
           if (!seen(d)) return;
-          const names = ['iso-densité seule', 'objet lu en p − d, réuni au liquide'];
+          const names = ['iso-densité seule', d.w < 560 ? 'objet lu en p − d' : 'objet lu en p − d, réuni au liquide'];
           if (!d.s.melt) {
             if (!rest) initRest();
             if (rest.key !== String(d.s.thr)) { paintRest(d.s.thr); rest.key = String(d.s.thr); }
@@ -803,7 +983,7 @@
       });
     }
 
-    // ── 06 · la lumière ────────────────────────────────────────────────────
+    // ── 09 · la lumière ────────────────────────────────────────────────────
     {
       // wax.js : thick(), shade(), env() — une seule lampe, la figurine au repos vue de face (rayons parallèles)
       const NXg = 36, NYg = 56, NZg = 40, PL = 4, LW = 32 * PL, LH = 50 * PL, SIG = [0.05, 0.16, 0.2], EXPO = 1.5;
@@ -878,7 +1058,8 @@
           { key: 'el', label: 'Lampe : hauteur', min: 0, max: 80, step: 1, value: 25, fmt: (v) => `${v}°` },
           { key: 'T', label: 'Température de la peau', min: 0.3, max: 1, step: 0.01, value: 0.5, fmt: (v) => fmt(v) },
         ],
-        buttons: [{ key: 'trans', label: 'Translucidité', toggle: true, value: true }, { key: 'map', label: 'Voir l’épaisseur', toggle: true }, ...Object.keys(OBJECTS).map((k) => ({ label: OBJECTS[k].label, onClick: () => { key = k; } }))],
+        buttons: [{ key: 'trans', label: 'Translucidité', toggle: true, value: true }, { key: 'map', label: 'Voir l’épaisseur', toggle: true }, ...Object.keys(OBJECTS).map((k) => ({ label: OBJECTS[k].label, onClick: (d) => { key = k; mark(d, OBJ, OBJECTS[k].label); } }))],
+        setup(d) { mark(d, OBJ, OBJECTS[key].label); },
         pointer(d, e) { const m = d.state.map; if (m) probe = [Math.floor((e.x - m.x0) / m.s * PL), Math.floor((e.y - m.y0) / m.s * PL)]; },
         draw(g, d) {
           if (!seen(d)) return;
@@ -933,7 +1114,8 @@
           { key: 'y', label: 'Hauteur de la coupe (cellules)', min: 2, max: 56, step: 0.5, value: 30, fmt: (v) => fmt(v, 1) },
           { key: 't', label: 'Instant du demi-cycle', min: 0, max: 4.6, step: 0.05, value: 0.8, fmt: (v) => `${fmt(v)} s` },
         ],
-        buttons: Object.keys(OBJECTS).map((k) => ({ label: OBJECTS[k].label, onClick: () => { key = k; } })),
+        buttons: Object.keys(OBJECTS).map((k) => ({ label: OBJECTS[k].label, onClick: (d) => { key = k; mark(d, OBJ, OBJECTS[k].label); } })),
+        setup(d) { mark(d, OBJ, OBJECTS[key].label); },
         draw(g, d) {
           const { w, h } = d, st = MOULD.step, Ht = HT[key] + MOULD.rise, y = Math.min(d.s.y, Ht - 0.5), t = d.s.t;
           const open = smooth(0.1, TL.lift - 0.15, t) * (1 - smooth(TL.lift + 1.7, TL.lift + 2.7, t)), th = open * 1.75, zh = ZB[key] - 2.5;
@@ -957,17 +1139,18 @@
             g.fillStyle = sd < 0 ? alpha(C.c1, 0.55) : alpha(C.c2, x > 0 ? 0.85 : 0.6); g.fillRect(fx + x * s2 - st * s2 / 2, fy - yy * s2 - st * s2 / 2, st * s2 + 0.5, st * s2 + 0.5);
           }
           g.strokeStyle = C.ink; g.lineWidth = 1; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(fx - 27 * s2, fy - y * s2); g.lineTo(fx + 27 * s2, fy - y * s2); g.stroke(); g.setLineDash([]);
-          label(g, 'coupe de face, moule fermé', x0 + 6, 18, { size: 11.5, color: C.faint });
+          label(g, w < 560 ? 'de face, fermé' : 'coupe de face, moule fermé', x0 + 6, 18, { size: 11.5, color: C.faint });
           d.status(`${OBJECTS[key].label} · moule haut de ${fmt(Ht, 1)} cellules · chaque moitié ouverte de ${Math.round(th * 180 / Math.PI)}°`);
         },
       });
     }
 
-    // ── 08 · le cycle ──────────────────────────────────────────────────────
+    // ── 02 · le cycle ──────────────────────────────────────────────────────
     {
       // l'usine de la graine ib352j (recipe.js) ; « ascenseurs » : mêmes proportions, l'autre circuit
       const FAC = { circuit: 'rampe', dir: -1, half: 2.35, y0: 0.84, bellH: 1.36, y1: 5.07, ramp: 1.07 }, PLATE_Y = 0.56;
       let circ = 'rampe';
+      const CIRC = ['Deux ascenseurs', 'Ascenseur et rampe'];
       const R = () => ({ objects: ['chat', 'chouette'], loop: { half: TL.half }, factory: { ...FAC, circuit: circ } });
       const TRACKS = [
         ['moule ouvert', (S) => S.open], ['moule levé', (S) => S.bell], ['plateaux en route', (S) => S.mv], ['barillet', (S) => S.arm - S.k],
@@ -977,12 +1160,15 @@
       demo('#fig-cycle', {
         title: 'stateAt() : la machine à un instant', aspect: 1.9, animate: true,
         controls: [{ key: 'T', label: 'Temps dans la boucle', min: 0, max: 49.9, step: 0.1, value: 12, fmt: (v) => `${fmt(v, 1)} s` }],
-        buttons: [{ key: 'play', label: 'Lecture', toggle: true, value: true }, { label: 'Deux ascenseurs', onClick: () => { circ = 'ascenseurs'; } }, { label: 'Ascenseur et rampe', onClick: () => { circ = 'rampe'; } }],
+        buttons: [{ key: 'play', label: 'Lecture', toggle: true, value: true }, { label: 'Deux ascenseurs', onClick: (d) => { circ = 'ascenseurs'; mark(d, CIRC, 'Deux ascenseurs'); } }, { label: 'Ascenseur et rampe', onClick: (d) => { circ = 'rampe'; mark(d, CIRC, 'Ascenseur et rampe'); } }],
+        setup(d) { mark(d, CIRC, circ === 'rampe' ? 'Ascenseur et rampe' : 'Deux ascenseurs'); d.canvas.style.setProperty('--ar', innerWidth < 600 ? '0.8' : '1.9'); },
         draw(g, d) {
           const Rr = R(), F = Rr.factory, T = d.s.play ? (d.t * 1.5) % 50 : d.s.T, S = stateAt(Rr, T / 50), Cc = circuit(F), { w, h } = d;
+          // (sur un écran étroit, la machine au-dessus et les courbes en dessous)
+          const narrow = w < 560, mw = narrow ? w : w * 0.46, mh = narrow ? h * 0.42 : h, ty = narrow ? mh + 6 : 0, th = h - ty, lx = narrow ? 8 : mw + 8, lw = narrow ? 136 : 150;
           // la machine
           const all = [...Cc.down, ...Cc.up], xa = Math.min(...all.map((p) => p[0])) - 0.8, xb = Math.max(...all.map((p) => p[0])) + 0.8, yb = F.y1 + PLATE_Y + 1.7;
-          const wl = w * 0.46, sc = Math.min((wl - 12) / (xb - xa), (h - 20) / yb), ox = 6 + (wl - 12 - (xb - xa) * sc) / 2 - xa * sc, X = (x) => ox + x * sc, Y = (y) => h - 10 - y * sc;
+          const sc = Math.min((mw - 12) / (xb - xa), (mh - 20) / yb), ox = 6 + (mw - 12 - (xb - xa) * sc) / 2 - xa * sc, X = (x) => ox + x * sc, Y = (y) => mh - 10 - y * sc;
           g.strokeStyle = alpha(C.ink, 0.25); g.lineWidth = 1; g.beginPath(); g.moveTo(X(xa), Y(0)); g.lineTo(X(xb), Y(0)); g.stroke();
           for (const poly of [Cc.down, Cc.up]) { g.strokeStyle = alpha(C.ink, 0.3); g.lineWidth = 1.5; g.beginPath(); poly.forEach((p, i) => (i ? g.lineTo(X(p[0]), Y(p[1] - 0.08)) : g.moveTo(X(p[0]), Y(p[1] - 0.08)))); g.stroke(); }
           for (const c of S.carriers) { g.fillStyle = C.c2; g.fillRect(X(c.pos[0]) - 0.42 * sc, Y(c.pos[1] - 0.04), 0.84 * sc, 0.07 * sc); }
@@ -1002,23 +1188,23 @@
           for (const sd of [-1, 1]) { g.fillStyle = alpha(C.c2, 0.75); g.fillRect(X(sd * (0.19 + 0.42 * S.open)) - 0.17 * sc, Y(mouldY + 1), 0.34 * sc, 1 * sc); }
           label(g, S.object, X(S.pallets[S.wax][0]) + 0.4 * sc, Y(S.pallets[S.wax][1] + PLATE_Y + 0.75), { size: 11, color: C.c1 });
           // les grandeurs
-          const x0 = wl + 150, x1 = w - 12, rowH = (h - 34) / TRACKS.length, Xt = (t) => lerp(x0, x1, t / TL.half);
+          const x0 = lx + lw, x1 = w - 12, rowH = (th - 34) / TRACKS.length, Xt = (t) => lerp(x0, x1, t / TL.half);
           TRACKS.forEach(([name, fn], r) => {
-            const yb2 = 12 + (r + 1) * rowH - 5, yt = yb2 - rowH + 12;
-            label(g, name, wl + 8, yb2 - 3, { size: 11.5 });
+            const yb2 = ty + 12 + (r + 1) * rowH - 5, yt = yb2 - rowH + 12;
+            label(g, name, lx, yb2 - 3, { size: narrow ? 11 : 11.5 });
             g.strokeStyle = C.grid; g.lineWidth = 1; g.beginPath(); g.moveTo(x0, yb2); g.lineTo(x1, yb2); g.stroke();
             g.strokeStyle = r === 4 ? HOT : C.c1; g.lineWidth = 1.6; g.beginPath();
             for (let i = 0; i <= 200; i++) { const t = i / 200 * (TL.half - 1e-3), v = fn(stateAt(Rr, (S.k * TL.half + t) / 50)), yy = lerp(yb2, yt, clamp(v)); i ? g.lineTo(Xt(t), yy) : g.moveTo(Xt(t), yy); }
             g.stroke();
           });
-          g.strokeStyle = C.ink; g.lineWidth = 1; g.beginPath(); g.moveTo(Xt(S.t), 10); g.lineTo(Xt(S.t), h - 22); g.stroke();
-          for (const t of [0, 5, 10, 15, 20, 25]) label(g, String(t), Xt(t), h - 8, { align: 'center', size: 10.5, color: C.faint });
+          g.strokeStyle = C.ink; g.lineWidth = 1; g.beginPath(); g.moveTo(Xt(S.t), ty + 10); g.lineTo(Xt(S.t), h - 22); g.stroke();
+          for (const t of narrow ? [0, 10, 20] : [0, 5, 10, 15, 20, 25]) label(g, String(t), Xt(t), h - 8, { align: 'center', size: 10.5, color: C.faint });
           d.status(`objet ${S.k + 1} sur 2 (${S.object}) · t = ${fmt(S.t, 1)} s · ${PHASES.find((p) => S.t < p[0])[1]}`);
         },
       });
     }
 
-    // ── 09 · le dessin de chargement ──────────────────────────────────────
+    // ── 10 · le dessin de chargement ──────────────────────────────────────
     {
       // loaderArt.js : contour() (verbatim), prepare() et draw() (sans le fondu de sortie ; l'avancement vient du curseur)
       function contour(f, nx, nz, x0, z0, h) {
@@ -1059,7 +1245,8 @@
       demo('#fig-loader', {
         title: 'La figurine en courbes de niveau', aspect: 1.5, animate: true,
         controls: [{ key: 'p', label: 'Avancement du chargement', min: 0, max: 1, step: 0.01, value: 0.4, fmt: pct }],
-        buttons: Object.keys(OBJECTS).map((k) => ({ label: OBJECTS[k].label, onClick: () => { key = k; } })),
+        buttons: Object.keys(OBJECTS).map((k) => ({ label: OBJECTS[k].label, onClick: (d) => { key = k; mark(d, OBJ, OBJECTS[k].label); } })),
+        setup(d) { mark(d, OBJ, OBJECTS[key].label); },
         draw(ctx, d) {
           if (!seen(d)) return;
           if (made !== key) prepare();
