@@ -18,7 +18,7 @@ import { installLedger } from './kit.js';
 
 const params = new URLSearchParams(location.search);
 // l'ordre du calendrier (jour 1 à 23), puis retour au premier
-const DAYS = (params.get('days') || 'fold,shatter,melt,tangle,moss,planetaire_v2,hollow,tesseract,membrane,caustic,rust,feather,labyrinth,tension,mirage,spore,kelp,pendulum,erosion,cocoon,bolt,echo,magma').split(',').filter(Boolean);
+const DAYS = (params.get('days') || 'fold,shatter,melt,tangle,moss,planetaire_v2,hollow,tesseract,membrane,caustic,rust,feather,labyrinth,tension,mirage,spore,kelp,pendulum,erosion,cocoon,bolt,echo,magma,nest').split(',').filter(Boolean);
 const ENTER = params.get('enter'); // (forcer un passage, pour le régler)
 const T = +(params.get('t') || 5);          // durée d'un passage (s)
 const LOOPS = +(params.get('loops') || 1);  // boucles jouées par jour, au moins

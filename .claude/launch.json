@@ -344,6 +344,16 @@
       ],
       "port": 8240,
       "autoPort": false
+    },
+    {
+      "name": "nest",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        ".claude/serve.py",
+        "8250",
+        "nest"
+      ],
+      "port": 8250
     }
   ]
 }

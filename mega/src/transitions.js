@@ -36,6 +36,8 @@
 //                       d'un cube qui se replie
 //   orbit    → Orrery   trois corps parcourent un huit, leurs traînées ouvrent
 //                       l'image
+//   scales   → Nest     des écailles de papier poussent du haut vers le bas,
+//                       bande après bande, et recouvrent l'image
 //
 // screenUV : origine en haut à gauche, y vers le bas.
 import * as THREE from 'three/webgpu';
@@ -181,6 +183,29 @@ export function createTransitions(slots) {
       return mix(A(uv).mul(float(1).sub(wet.mul(0.4))), B(uv), m).add(vec3(0.75, 0.86, 0.97).mul(rim.mul(0.3)));
     },
     // → Moss : la pierre fonce sous l'averse, des îlots verts naissent et se rejoignent
+    // → Nest : des écailles de papier en coquille poussent rangée après rangée,
+    // du haut vers le bas ; chacune s'étend de sa racine vers son bord libre,
+    // bande par bande (la bande fraîche, sombre), et découvre le jour suivant
+    scales: () => {
+      const P = uv.mul(asp).mul(vec2(7, 9));
+      const row = floor(P.y), off = fract(row.mul(0.5)).mul(1); // (rangées décalées d'une demi-écaille)
+      const pick = (r) => {
+        const x = P.x.add(fract(r.mul(0.5))), col = floor(x);
+        const dx = fract(x).sub(0.5).mul(2), dy = P.y.sub(r).mul(0.95);
+        const t = pow(pow(abs(dx), 2.6).add(pow(dy.max(0), 2.6)), 1 / 2.6);
+        const id = mx_cell_noise_float(vec2(col, r));
+        const order = clamp(r.div(9.5).mul(0.78).add(id.mul(0.14)), 0, 1);
+        const g = clamp(p.mul(1.25).sub(order).div(0.2), 0, 1);
+        return { t, g, in: step(t, g).mul(step(0, dy)) };
+      };
+      const up = pick(row.sub(1)), me = pick(row);
+      const useUp = up.in;
+      const t = mix(me.t, up.t, useUp), g = mix(me.g, up.g, useUp);
+      const m = max(up.in, me.in);
+      const band = fract(t.mul(11)), fresh = smoothstep(0.07, 0, g.sub(t)).mul(m);
+      const stripe = smoothstep(0.0, 0.12, band).mul(smoothstep(1.0, 0.88, band)).mul(0.12).add(0.88);
+      return mix(A(uv), B(uv).mul(mix(float(1), stripe, smoothstep(0.98, 0.6, p))).mul(float(1).sub(fresh.mul(0.35))), m);
+    },
     moss: () => {
       const P = uv.mul(asp);
       const v = voronoi(P.mul(5));
