@@ -14,7 +14,7 @@
 
 export function createRunner() {
   const S = { w: 1, h: 1, dpr: 1, t: 0, dt: 0, p: 0, step: 'load', stepIdx: 0, steps: ['load'], real: 0, done: 0, error: false, lite: false, bg: '#050506' };
-  let cv = null, ctx = null, art = null, artReady = null, running = false, frames = 0, last = 0, ended = false;
+  let cv = null, ctx = null, art = null, artMake = null, artReady = null, running = false, frames = 0, last = 0, ended = false;
   const pending = [];
   const raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (f) => setTimeout(() => f(performance.now()), 16);
 
@@ -75,7 +75,8 @@ export function createRunner() {
         S.bg = m.bg || S.bg; S.lite = !!m.lite;
         if (m.canvas) { cv = m.canvas; ctx = cv.getContext('2d'); }
         artReady = import(m.art).then((mod) => {
-          art = (mod.default || mod.createArt)(S) || null;
+          artMake = mod.default || mod.createArt;
+          art = artMake(S) || null;
           for (const d of pending.splice(0)) art?.data?.(d, S);
         }, (e) => console.warn('dessin du chargement :', e));
         break;
@@ -98,7 +99,13 @@ export function createRunner() {
       case 'error': S.error = !!m.on; break;
       case 'start': ended = false; S.done = 0; start(); break;
       case 'done': ended = true; art?.end?.(S); break;
-      case 'stop': running = false; break;
+      // l'écran est effacé : le dessin repart d'une instance neuve, sans les données
+      // reçues (le maillage d'une scène, ses trajectoires : jusqu'à des centaines de
+      // Mo gardés toute la boucle) ; un nouveau chargement lui renvoie les siennes
+      case 'stop':
+        running = false;
+        if (artMake && art) { try { art = artMake(S) || null; art?.resize?.(S); } catch (e) { console.warn(e); art = null; } }
+        break;
       case 'stats': return { type: 'stats', frames, t: S.t };
       // (contrôle : une image à la main, sans horloge — captures, tests)
       case 'frame': running = true; last = 0; frame.manual = m.dt ?? 1 / 60; frame(0); running = false; break;

@@ -6,34 +6,52 @@
 //
 // maxCache : nombre de résultats gardés (96 par défaut ; quelques-uns
 // seulement quand une scène pèse des dizaines de Mo).
+// idleMs : arrêt des workers après ce délai sans travail (4 s ; 0 : jamais).
 
-export function createGenerator(size = Math.max(2, Math.min(6, (navigator.hardwareConcurrency || 4) - 1)), { worker = new URL('./src/gen/worker.js', document.baseURI), maxCache = 96 } = {}) {
-  const workers = Array.from({ length: size }, () => new Worker(worker, { type: 'module' }));
-  const idle = [...workers];
+export function createGenerator(size = Math.max(2, Math.min(6, (navigator.hardwareConcurrency || 4) - 1)), { worker = new URL('./src/gen/worker.js', document.baseURI), maxCache = 96, idleMs = 4000 } = {}) {
+  // Les workers sont arrêtés après idleMs sans travail (0 : jamais) et recréés à
+  // la demande suivante. Une fois la scène prête, leurs tas (souvent des centaines
+  // de Mo après une génération) ne restent pas en mémoire pendant toute la boucle.
+  let workers = [];
+  const idle = [];
   const queue = [];
   const pending = new Map();
   const cache = new Map();
-  let nextId = 1;
+  let nextId = 1, reapTimer = 0;
 
-  workers.forEach((w) => {
-    w.onmessage = ({ data }) => {
-      const job = pending.get(data.id);
-      if (data.progress != null) { job?.onProgress?.(data.progress, data.label); return; } // (avancement d'un long calcul)
-      pending.delete(data.id);
-      idle.push(w);
-      if (data.error) job.reject(new Error(data.error)); else job.resolve(data.out);
-      pump();
-    };
-    w.onerror = (e) => console.error('worker', e.message);
-  });
+  function spawn() {
+    workers = Array.from({ length: size }, () => {
+      const w = new Worker(worker, { type: 'module' });
+      w.onmessage = ({ data }) => {
+        const job = pending.get(data.id);
+        if (data.progress != null) { job?.onProgress?.(data.progress, data.label); return; } // (avancement d'un long calcul)
+        pending.delete(data.id);
+        idle.push(w);
+        if (data.error) job.reject(new Error(data.error)); else job.resolve(data.out);
+        pump();
+      };
+      w.onerror = (e) => console.error('worker', e.message);
+      return w;
+    });
+    idle.push(...workers);
+  }
+  function reap() {
+    reapTimer = 0;
+    if (pending.size || queue.length || !workers.length) return;
+    for (const w of workers) w.terminate();
+    workers = []; idle.length = 0;
+  }
+  spawn(); // (dès maintenant : les modules des workers se chargent pendant que la page s'installe)
 
   function pump() {
+    if (queue.length) { clearTimeout(reapTimer); reapTimer = 0; if (!workers.length) spawn(); }
     while (idle.length && queue.length) {
       const job = queue.shift();
       const w = idle.pop();
       pending.set(job.id, job);
       w.postMessage({ id: job.id, spec: job.spec, what: job.what }, job.transfer ?? []);
     }
+    if (idleMs > 0 && !pending.size && !queue.length && workers.length && !reapTimer) reapTimer = setTimeout(reap, idleMs);
   }
 
   // onProgress(f, label) : avancement posté par le worker pendant un long
@@ -61,7 +79,9 @@ export function createGenerator(size = Math.max(2, Math.min(6, (navigator.hardwa
   // abandonnées sans réponse — les rejeter faisait remonter des erreurs du
   // code d'un jour qui n'existe plus ; ses promesses en attente partent avec lui
   function terminate() {
+    clearTimeout(reapTimer); reapTimer = 0;
     for (const w of workers) w.terminate();
+    workers = []; idle.length = 0;
     queue.splice(0);
     pending.clear(); cache.clear();
   }

@@ -23,7 +23,11 @@ export function threadGeometry(seg, capacity = seg?.count ?? 0) {
   g.setAttribute('position', new THREE.BufferAttribute(new Float32Array([0, -1, 0, 1, -1, 0, 1, 1, 0, 0, 1, 0]), 3));
   g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1]), 3));
   g.setIndex([0, 1, 2, 0, 2, 3]);
-  const mk = (arr) => { const a = new THREE.InstancedBufferAttribute(arr, 4); a.setUsage(THREE.DynamicDrawUsage); return a; };
+  // (DynamicDrawUsage fait renvoyer l'attribut au GPU à chaque rendu, ombres comprises :
+  // ≈ 1,6 Mo × 5 attributs × 4 rendus par image pour un cocon. Les fils posés ne changent
+  // qu'à la reconstruction ; seuls les rubans à capacité fixe, réécrits à chaque image
+  // avec needsUpdate, gardent l'usage dynamique.)
+  const mk = (arr) => { const a = new THREE.InstancedBufferAttribute(arr, 4); if (!seg) a.setUsage(THREE.DynamicDrawUsage); return a; };
   g.setAttribute('ta', mk(seg ? seg.a : new Float32Array(capacity * 4)));
   g.setAttribute('tb', mk(seg ? seg.b : new Float32Array(capacity * 4)));
   g.setAttribute('tc', mk(seg ? seg.c : new Float32Array(capacity * 4)));

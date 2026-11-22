@@ -9,25 +9,41 @@ const MAX_BYTES = 384 << 20; // (les tableaux restent en vie tant qu'ils sont en
 const bytesOf = (out) => Object.values(out).reduce((a, v) => a + (ArrayBuffer.isView(v) ? v.byteLength : v && typeof v === 'object' ? bytesOf(v) : 0), 0);
 
 export function createGenerator(size = Math.max(2, Math.min(6, (navigator.hardwareConcurrency || 4) - 1))) {
-  const workers = Array.from({ length: size }, () => new Worker(new URL('./worker.js', import.meta.url), { type: 'module' }));
-  const idle = [...workers];
+  let workers = [];
+  const idle = [];
   const queue = [];
   const pending = new Map();
   const cache = new Map(); // clé → Promise
   let nextId = 1, seq = 0;
 
-  workers.forEach((w) => {
-    w.onmessage = ({ data }) => {
-      const job = pending.get(data.id);
-      pending.delete(data.id);
-      idle.push(w);
-      if (data.error) job.reject(new Error(data.error)); else job.resolve(data.out);
-      pump();
-    };
-    w.onerror = (e) => console.error('worker', e.message);
-  });
+  // Les workers sont arrêtés après 4 s sans travail et recréés à la demande
+  // suivante : une fois la scène prête, leurs tas (souvent des centaines de Mo
+  // après une génération) ne restent pas en mémoire pendant toute la boucle.
+  let reapTimer = 0;
+  function spawn() {
+    workers = Array.from({ length: size }, () => new Worker(new URL('./worker.js', import.meta.url), { type: 'module' }));
+    workers.forEach((w) => {
+      w.onmessage = ({ data }) => {
+        const job = pending.get(data.id);
+        pending.delete(data.id);
+        idle.push(w);
+        if (data.error) job.reject(new Error(data.error)); else job.resolve(data.out);
+        pump();
+      };
+      w.onerror = (e) => console.error('worker', e.message);
+    });
+    idle.push(...workers);
+  }
+  function reap() {
+    reapTimer = 0;
+    if (pending.size || queue.length || !workers.length) return;
+    for (const w of workers) w.terminate();
+    workers = []; idle.length = 0;
+  }
+  spawn(); // (dès maintenant : les modules des workers se chargent pendant que la page s'installe)
 
   function pump() {
+    if (queue.length) { clearTimeout(reapTimer); reapTimer = 0; if (!workers.length) spawn(); }
     while (idle.length && queue.length) {
       queue.sort((a, b) => a.prio - b.prio || b.seq - a.seq);
       const job = queue.shift();
@@ -36,6 +52,7 @@ export function createGenerator(size = Math.max(2, Math.min(6, (navigator.hardwa
       pending.set(job.id, job);
       w.postMessage({ id: job.id, spec: job.spec, lod: job.lod, what: job.what });
     }
+    if (!pending.size && !queue.length && workers.length && !reapTimer) reapTimer = setTimeout(reap, 4000);
   }
 
   // éviction des plus anciennes entrées : nombre et volume bornés

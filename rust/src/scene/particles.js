@@ -20,9 +20,10 @@ export function createParticles(scene, { max: N, kind = 'streak', blend = 'add',
   g.setAttribute('position', quad.attributes.position);
   g.setAttribute('uv', quad.attributes.uv);
   g.setAttribute('normal', quad.attributes.normal);
-  const iPos = new THREE.InstancedBufferAttribute(new Float32Array(N * 3), 3).setUsage(THREE.DynamicDrawUsage);
-  const iDir = new THREE.InstancedBufferAttribute(new Float32Array(N * 3), 3).setUsage(THREE.DynamicDrawUsage);
-  const iPar = new THREE.InstancedBufferAttribute(new Float32Array(N * 4), 4).setUsage(THREE.DynamicDrawUsage);
+  // (réécrits à chaque image par end() : needsUpdate suffit ; DynamicDrawUsage les renverrait à chaque passe de rendu)
+  const iPos = new THREE.InstancedBufferAttribute(new Float32Array(N * 3), 3);
+  const iDir = new THREE.InstancedBufferAttribute(new Float32Array(N * 3), 3);
+  const iPar = new THREE.InstancedBufferAttribute(new Float32Array(N * 4), 4);
   g.setAttribute('iPos', iPos); g.setAttribute('iDir', iDir); g.setAttribute('iPar', iPar);
   g.instanceCount = 0;
 

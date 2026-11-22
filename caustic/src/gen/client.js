@@ -4,32 +4,49 @@
 const MAX_CACHE = 96;
 
 export function createGenerator(size = Math.max(2, Math.min(6, (navigator.hardwareConcurrency || 4) - 1))) {
-  const workers = Array.from({ length: size }, () => new Worker(new URL('./worker.js', import.meta.url), { type: 'module' }));
-  const idle = [...workers];
+  let workers = [];
+  const idle = [];
   const queue = [];
   const pending = new Map();
   const cache = new Map();
   let nextId = 1;
 
-  workers.forEach((w) => {
-    w.onmessage = ({ data }) => {
-      const job = pending.get(data.id);
-      if (data.progress) { job?.onProgress?.(data.progress); return; } // (avancement d'un long calcul)
-      pending.delete(data.id);
-      idle.push(w);
-      if (data.error) job.reject(new Error(data.error)); else job.resolve(data.out);
-      pump();
-    };
-    w.onerror = (e) => console.error('worker', e.message);
-  });
+  // Les workers sont arrêtés après 4 s sans travail et recréés à la demande
+  // suivante : une fois la scène prête, leurs tas (souvent des centaines de Mo
+  // après une génération) ne restent pas en mémoire pendant toute la boucle.
+  let reapTimer = 0;
+  function spawn() {
+    workers = Array.from({ length: size }, () => new Worker(new URL('./worker.js', import.meta.url), { type: 'module' }));
+    workers.forEach((w) => {
+      w.onmessage = ({ data }) => {
+        const job = pending.get(data.id);
+        if (data.progress) { job?.onProgress?.(data.progress); return; } // (avancement d'un long calcul)
+        pending.delete(data.id);
+        idle.push(w);
+        if (data.error) job.reject(new Error(data.error)); else job.resolve(data.out);
+        pump();
+      };
+      w.onerror = (e) => console.error('worker', e.message);
+    });
+    idle.push(...workers);
+  }
+  function reap() {
+    reapTimer = 0;
+    if (pending.size || queue.length || !workers.length) return;
+    for (const w of workers) w.terminate();
+    workers = []; idle.length = 0;
+  }
+  spawn(); // (dès maintenant : les modules des workers se chargent pendant que la page s'installe)
 
   function pump() {
+    if (queue.length) { clearTimeout(reapTimer); reapTimer = 0; if (!workers.length) spawn(); }
     while (idle.length && queue.length) {
       const job = queue.shift();
       const w = idle.pop();
       pending.set(job.id, job);
       w.postMessage({ id: job.id, spec: job.spec, what: job.what });
     }
+    if (!pending.size && !queue.length && workers.length && !reapTimer) reapTimer = setTimeout(reap, 4000);
   }
 
   // (onProgress : avancement d'un long calcul ; noCache : gros tampons

@@ -30,7 +30,7 @@ export function createTrace() {
   }
   for (let i = 0; i < SAMPLES; i++) for (let j = 0; j < RADIAL; j++) age[i * RADIAL + j] = i / (SAMPLES - 1);
   const geo = new THREE.BufferGeometry();
-  const pa = new THREE.BufferAttribute(pos, 3); pa.setUsage(THREE.DynamicDrawUsage);
+  const pa = new THREE.BufferAttribute(pos, 3); // (réécrit à chaque image : needsUpdate suffit ; DynamicDrawUsage le renverrait à chaque passe de rendu)
   geo.setAttribute('position', pa);
   geo.setAttribute('age', new THREE.BufferAttribute(age, 1));
   geo.setIndex(idx);

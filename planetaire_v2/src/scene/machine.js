@@ -521,7 +521,7 @@ function instanceChains(chains, group, n, keep) {
         ig.setAttribute('normal', c0.geometry.attributes.normal);
         ig.instanceCount = gs.length;
         const bufs = ['im', 'ip'].map((p) => {
-          const ib = new THREE.InstancedInterleavedBuffer(new Float32Array(16 * gs.length), 16, 1).setUsage(THREE.DynamicDrawUsage);
+          const ib = new THREE.InstancedInterleavedBuffer(new Float32Array(16 * gs.length), 16, 1); // (needsUpdate à chaque image ; sans DynamicDrawUsage, qui le renverrait à chaque passe)
           for (let q = 0; q < 4; q++) ig.setAttribute(`${p}${q}`, new THREE.InterleavedBufferAttribute(ib, 4, 4 * q));
           return ib;
         });

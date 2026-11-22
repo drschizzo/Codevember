@@ -14,7 +14,9 @@ export function createStage(scene, renderer, gen, { lite = false } = {}) {
   // ── Soleil (une seule lampe, fixe dans le monde) ──
   const sun = new THREE.DirectionalLight(0xffffff, 1);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(lite ? 1024 : 4096, lite ? 1024 : 4096);
+  // (2048 : un texel de 2,3 mm sur le cadre de 4,8 m ; 4096 coûtait 128 Mo de cibles,
+  // couleur et profondeur, pour une différence invisible au cadrage de la caméra)
+  sun.shadow.mapSize.set(lite ? 1024 : 2048, lite ? 1024 : 2048);
   sun.shadow.bias = -0.0002; sun.shadow.normalBias = 0.01;
   const sc = sun.shadow.camera; sc.left = -2.4; sc.right = 2.4; sc.top = 2.4; sc.bottom = -2.4; sc.near = 0.1; sc.far = 20;
   scene.add(sun); scene.add(sun.target);

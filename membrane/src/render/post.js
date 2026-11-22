@@ -27,6 +27,7 @@ import { fxaa } from 'three/addons/tsl/display/FXAANode.js';
 import { dof } from 'three/addons/tsl/display/DepthOfFieldNode.js';
 import { chromaticAberration } from 'three/addons/tsl/display/ChromaticAberrationNode.js';
 import { gaussianBlur } from 'three/addons/tsl/display/GaussianBlurNode.js';
+import { asTexture } from '../../../shared/render/rtt.js'; // (entrées des effets en texture plein écran sans profondeur)
 
 const LUMA = vec3(0.2126, 0.7152, 0.0722);
 
@@ -83,6 +84,8 @@ export function createPost(renderer, scene, camera) {
       outs.refl = vec4(f0.add(vec3(1).sub(f0).mul(k)), roughness);
     }
     scenePass.setMRT(mrt(outs));
+    // (vitesses : seules x et y sont lues, par l'anticrénelage temporel et le flou de mouvement)
+    if (outs.velocity) scenePass.getTexture('velocity').format = THREE.RGFormat;
     if (outs.refl) scenePass.getTexture('refl').type = THREE.UnsignedByteType;
     nodes.scenePass = scenePass;
     const depth = scenePass.getTextureNode('depth');
@@ -132,12 +135,12 @@ export function createPost(renderer, scene, camera) {
       // garde-fou : un pixel invalide (NaN, infini) ne doit jamais entrer dans
       // l'historique, il y resterait jusqu'à son renouvellement complet
       color = select(dot(color.rgb, color.rgb).lessThan(1e8), color, vec4(0, 0, 0, 1));
-      const t = traa(color, depth, scenePass.getTextureNode('velocity'), camera);
+      const t = traa(asTexture(color), depth, scenePass.getTextureNode('velocity'), camera);
       nodes.traa = t;
       color = t;
     }
     if (cfg.dof) {
-      const d = dof(color, scenePass.getViewZNode(), U.focus, U.focusRange, U.bokeh);
+      const d = dof(asTexture(color), scenePass.getViewZNode(), U.focus, U.focusRange, U.bokeh);
       nodes.dof = d;
       color = d;
     }
@@ -152,7 +155,7 @@ export function createPost(renderer, scene, camera) {
       c = c.mul(mt.div(m));
     }
     if (cfg.bloom) {
-      const b = bloom(vec4(c, 1), cfg.bloomStrength, cfg.bloomRadius, cfg.bloomThreshold);
+      const b = bloom(asTexture(vec4(c, 1)), cfg.bloomStrength, cfg.bloomRadius, cfg.bloomThreshold);
       if (cfg.lite) b.setResolutionScale(0.25); // (le bloom est flou par nature)
       nodes.bloom = b;
       // halation (pellicule : un liseré rouge orangé autour des hautes lumières)
@@ -164,7 +167,7 @@ export function createPost(renderer, scene, camera) {
       // traînées anamorphiques : seules les lumières les plus vives (le cœur, un
       // reflet franc) s'étirent à l'horizontale, en un filet à peine bleuté
       const hi = max(c.sub(vec3(U.hiCap.mul(0.75))), vec3(0));
-      const st = gaussianBlur(vec4(hi, 1), vec2(U.streakLen, 0), 10, { resolutionScale: 0.25 });
+      const st = gaussianBlur(asTexture(vec4(hi, 1)), vec2(U.streakLen, 0), 10, { resolutionScale: 0.25 });
       nodes.streaks = st;
       c = c.add(st.rgb.mul(vec3(0.8, 0.88, 1)).mul(U.streaks));
     }
@@ -182,14 +185,14 @@ export function createPost(renderer, scene, camera) {
     c = max(c, vec3(0));
 
     let out = renderOutput(vec4(c, 1));
-    if (cfg.ca > 0) out = chromaticAberration(out, U.ca, vec2(0.5, 0.5), 1.1);
+    if (cfg.ca > 0) out = chromaticAberration(asTexture(out), U.ca, vec2(0.5, 0.5), 1.1);
     // grain (après tone mapping, plus discret dans les hautes lumières)
     const pix = screenCoordinate.x.toUint().add(screenCoordinate.y.toUint().mul(uint(8191)));
     const g = hash(pix.add(fract(time.mul(0.37)).mul(1e6).toUint().mul(uint(131071)))).sub(0.5);
     const lo = dot(out.rgb, LUMA);
     out = vec4(out.rgb.add(g.mul(U.grain).mul(float(1).sub(lo.mul(0.6)))), 1);
-    if (cfg.aa === 'smaa') out = smaa(out);
-    else if (cfg.aa === 'fxaa') out = fxaa(out);
+    if (cfg.aa === 'smaa') out = smaa(asTexture(out));
+    else if (cfg.aa === 'fxaa') out = fxaa(asTexture(out));
     pipeline.outputNode = out;
     pipeline.needsUpdate = true;
   }

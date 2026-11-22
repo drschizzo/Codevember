@@ -13,17 +13,18 @@ de `<projet>/src/`.
 | `finishes.js` | finitions (F0 mesurés) et jeux `[externe, interne, tranche]` |
 | `app/mobile.js` | détection, résolution dynamique, cadence plafonnée, gestes tactiles |
 | `app/capture.js` | PNG, MP4 H.264 image par image (WebCodecs + mp4-muxer) |
-| `app/loader.js`, `app/loaderWorker.js` | écran de chargement ; le dessin du thème reste dans `<projet>/src/app/loaderArt.js` |
+| `app/loader.js`, `app/loaderWorker.js` | écran de chargement ; le dessin du thème reste dans `<projet>/src/app/loaderArt.js` (repris d'une instance neuve quand l'écran s'efface : ses données ne restent pas en mémoire) |
 | `app/chrome.js` | panneau replié au départ (`?panel=1` l'ouvre), aide clavier qui se réveille au mouvement de la souris |
 | `app/warmup.js` | pipelines asynchrones, préparation sans gel |
 | `app/debug.js` | outils de mise au point (`?debug`) : image fixe, collecteur, planches, film, posemètre, épreuve de l'affiche, temps d'image, raccord ; `sleep` sans minuterie ; recette dans l'ancre |
-| `render/post.js` | chaîne d'image (GTAO, SSR, TRAA, MSAA, flou, profondeur de champ, bloom, étalonnage, grain) |
+| `render/post.js` | chaîne d'image (GTAO, SSR, TRAA, MSAA, flou, profondeur de champ, bloom, étalonnage, grain) ; vitesses en `rg16float` |
+| `render/rtt.js` | `asTexture` : l'entrée d'un effet rendue en cible plein écran sans tampon de profondeur (celle de three.js en garde un, inutile) |
 | `render/accum.js` | rendu accumulé |
 | `scene/globals.js` | uniformes partagés (phase, image, micro-relief) |
 | `scene/materials.js` | matériau TSL d'une pièce à trois finitions |
 | `scene/rig.js` | déformation des sommets |
 | `scene/env.js`, `gen/envmap.js` | studio HDR calculé |
-| `gen/client.js` | pool de workers avec cache ; le worker du thème reste dans `<projet>/src/gen/worker.js` |
+| `gen/client.js` | pool de workers avec cache, arrêtés après `idleMs` (4 s) sans travail et recréés à la demande ; le worker du thème reste dans `<projet>/src/gen/worker.js` |
 | `gen/mesh.js` | tampons de maillage et primitives |
 | `gen/noisevol.js` | volume de bruit périodique |
 
