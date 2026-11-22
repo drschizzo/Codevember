@@ -42,7 +42,9 @@ export async function createCore({ renderer, width, height, gen, lite = false, R
   setNoiseVolume(await gen.request({ seed: 'nest-noise' }, 'noise')); // (les matériaux en dépendent)
   const stage = createStage(scene, gen, { lite });
   stage.camera = camera; // (niveau de détail des guêpes : leur taille à l'écran)
-  const post = createPost(renderer, scene, camera);
+  // (pré-passe de l'occlusion en demi-définition : l'occlusion est calculée à
+  // demi-définition, une pré-passe pleine redessinait tout le papier pour rien)
+  const post = createPost(renderer, scene, camera, { prePassScale: 0.5 });
 
   let R = null, envKey = '';
   function syncEnv() {

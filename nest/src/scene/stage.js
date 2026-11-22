@@ -70,13 +70,19 @@ export function createStage(scene, gen, { lite = false } = {}) {
     decor.setRecipe(R);
     R.nest.palette.forEach((c, i) => palette.array[i].set(c));
     foundReady = false; hero = null;
-    for (const B of bells) { nestGroup.remove(B.mesh, B.front); B.mesh.geometry.dispose(); B.mesh.material?.dispose?.(); B.front.material?.dispose?.(); B.tex?.dispose(); }
+    for (const B of bells) { nestGroup.remove(B.mesh, B.front, B.pre); B.mesh.geometry.dispose(); B.mesh.material?.dispose?.(); B.front.material?.dispose?.(); B.pre.material?.dispose?.(); B.tex?.dispose(); }
     bells = P.bells.map((b) => {
       // deux tracés d'une même géométrie : les écailles finies (sans masque) et le front
       const mesh = new THREE.Mesh(new THREE.BufferGeometry());
       const front = new THREE.Mesh(mesh.geometry);
       for (const o of [mesh, front]) { o.castShadow = o.receiveShadow = true; o.visible = false; o.frustumCulled = false; nestGroup.add(o); }
-      return { ...b, mesh, front, tex: null, ready: false, hideAt: 2, hero: heroUniforms(), info: null };
+      // une pré-passe de profondeur des écailles finies : les écailles se
+      // recouvrent en tuiles sur plusieurs couches, et sans elle chaque pixel
+      // évaluait le papier (bandes, fibres, relief, lumière) une fois par couche
+      const pre = new THREE.Mesh(mesh.geometry);
+      pre.renderOrder = -10; pre.visible = false; pre.frustumCulled = false;
+      nestGroup.add(pre);
+      return { ...b, mesh, front, pre, tex: null, ready: false, hideAt: 2, hero: heroUniforms(), info: null };
     });
     // une cloche est recouverte (et rongée de l'intérieur) quand la suivante est fermée
     bells.forEach((B, k) => { if (bells[k + 1]) B.hideAt = bells[k + 1].s1 + 0.004; });
@@ -121,12 +127,17 @@ export function createStage(scene, gen, { lite = false } = {}) {
         g.setIndex(new THREE.BufferAttribute(o.index, 1));
         g.computeBoundingSphere();
         B.mesh.geometry.dispose();
-        B.mesh.geometry = g; B.front.geometry = g;
+        B.mesh.geometry = g; B.front.geometry = g; B.pre.geometry = g;
         B.tex = bandTexture(o.bands, o.nScales);
         B.mesh.material?.dispose?.(); B.front.material?.dispose?.();
         B.mesh.material = buildPaper({ bandTex: B.tex, palette, nPal: R.nest.palette.length, hero: B.hero, part: 'done' });
         B.front.material = buildPaper({ bandTex: B.tex, palette, nPal: R.nest.palette.length, hero: B.hero, part: 'front' });
-        B.mesh.position.y = o.yOff; B.front.position.y = o.yOff;
+        // (même sommet que la passe « finie », un rien plus loin : la passe de
+        // papier ne perd aucun de ses pixels à l'égalité des profondeurs)
+        B.pre.material?.dispose?.();
+        B.pre.material = new THREE.MeshBasicNodeMaterial({ colorWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 2 });
+        B.pre.material.positionNode = B.mesh.material.positionNode;
+        B.mesh.position.y = o.yOff; B.front.position.y = o.yOff; B.pre.position.y = o.yOff;
         B.info = o.info; B.grid = o.grid;
         maps[B.k] = reliefMap(o.position);
         if (B.s0 <= P.strip && P.strip < B.s1) pickHero(B);
@@ -423,6 +434,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
     for (const B of bells) {
       B.mesh.visible = B.ready && (warm || (S >= B.s0 && S < B.hideAt)) && (api.only == null || api.only === B.k);
       B.front.visible = B.mesh.visible && (warm || S < B.s1 + 0.002 || hero?.B === B);
+      B.pre.visible = B.mesh.visible && !!B.pre.material;
     }
     const L = R.light;
     // la lumière suit la saison (une seule horloge) : le soleil d'été monte et

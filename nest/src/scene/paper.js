@@ -15,6 +15,7 @@ import {
 import { noise, noise2, fbm, perturb, stableVelocity } from '../../../shared/scene/materials.js';
 import { G } from '../../../shared/scene/globals.js';
 import { MAXB, SP } from '../gen/envelope.js';
+import { nzIf } from './nz.js';
 
 // table des bandes → texture (RGBA8, lue texel par texel)
 export function bandTexture(bands, nScales) {
@@ -65,13 +66,17 @@ export function buildPaper({ bandTex, palette, nPal, hero = heroUniforms(), part
   const nb = textureLoad(bandTex, ivec2(int(0), row)).a.mul(255);
   // (bords de bande ondulés et fibreux : une bande n'est jamais un trait de règle)
   const tw = t.add(noise(vec3(t.mul(3.0), id.mul(0.53), 1.7)).mul(0.07)); // (largeurs inégales)
+  // (les lectures du bruit ne se font que là où elles comptent : sur les
+  // écailles et non sur le corps, et pas quand leur détail est sous le pixel —
+  // nz.js ; le résultat est le même, sans saturer le cache de textures)
+  const sc = body.oneMinus(), f260 = fade(260).mul(sc);
   const wob = noise(vec3(a.mul(3.0), id.mul(0.371), t.mul(1.2))).mul(0.9)
     .add(noise(vec3(a.mul(11.0), id.mul(0.29), t.mul(4.0))).mul(0.3))
     .add(noise2(pos.mul(55)).mul(0.16))
-    .add(noise(pos.mul(260)).mul(0.07).mul(fade(260)));
+    .add(nzIf(pos.mul(260), f260).x.mul(0.07).mul(f260));
   const btS = tw.mul(nb).add(wob);
   // corps (feuille précédente) : bandes en anneaux autour du nid, collerette du trou en cercles serrés
-  const btB = t.mul(46).add(noise(pos.mul(6)).mul(1.3)).add(noise2(pos.mul(55)).mul(0.2));
+  const btB = t.mul(46).add(nzIf(pos.mul(6), body).x.mul(1.3)).add(nzIf(pos.mul(55), body).y.mul(0.2));
   const bt = mix(btS, btB, body);
   const k = floor(bt), f = fract(bt);
   const tx = textureLoad(bandTex, ivec2(int(clamp(k, 0, 47)), row));
@@ -83,19 +88,20 @@ export function buildPaper({ bandTex, palette, nPal, hero = heroUniforms(), part
   // bord de bande : les fibres de la charge suivante débordent sur celle-ci
   const tx2 = textureLoad(bandTex, ivec2(int(clamp(k.add(1), 0, 47)), row));
   const src2 = int(mix(tx2.r.mul(255).add(0.5).floor(), srcB, body));
-  const mixN = smoothstep(0.78, 1.0, f.add(noise(pos.mul(340)).mul(0.12).mul(fade(340))));
+  const mixN = smoothstep(0.78, 1.0, f.add(nzIf(pos.mul(340), fade(340)).x.mul(0.12).mul(fade(340))));
   const pal = mix(mix(palette.element(src), palette.element(src2), mixN.mul(0.7)), hero.color, inStrip.mul(step(0.001, hero.w)));
   // nuance de la charge (±7 %), plus sombre au bord pressé de la bande
   const press = smoothstep(0.0, 0.35, f).mul(0.06).add(0.94);
   // fibres couchées le long de la bande (la mandibule étire la pâte en
   // travers de son pas) : bruit étiré selon l'angle autour de la racine
   const ang = atan(P.x, P.y);
-  const fibA = noise(vec3(ang.mul(70), t.mul(nb).mul(9), id.mul(0.77))).mul(fade(600));
-  const fibB = noise2(vec3(ang.mul(190), t.mul(nb).mul(26), id.mul(1.31))).mul(fade(1500));
-  const fibre = mix(fibA.mul(0.6).add(fibB.mul(0.4)), noise(pos.mul(500)).mul(fade(500)), body);
-  const mottle = noise(pos.mul(160)).mul(0.06).mul(fade(160));
+  const f600 = fade(600).mul(sc), f1500 = fade(1500).mul(sc), f500 = fade(500).mul(body);
+  const fibA = nzIf(vec3(ang.mul(70), t.mul(nb).mul(9), id.mul(0.77)), f600).x.mul(f600);
+  const fibB = nzIf(vec3(ang.mul(190), t.mul(nb).mul(26), id.mul(1.31)), f1500).y.mul(f1500);
+  const fibre = mix(fibA.mul(0.6).add(fibB.mul(0.4)), nzIf(pos.mul(500), f500).x.mul(f500), body);
+  const mottle = nzIf(pos.mul(160), fade(160)).x.mul(0.06).mul(fade(160));
   // grains : éclats de fibres plus clairs ou plus sombres
-  const fl = noise2(pos.mul(620));
+  const fl = nzIf(pos.mul(620), fade(620)).y;
   const speck = smoothstep(0.42, 0.7, fl).mul(0.1).sub(smoothstep(-0.42, -0.7, fl).mul(0.12)).mul(fade(620));
   // voile lent (la pâte n'est jamais uniforme)
   const veil = fbm(pos.mul(14), 3).mul(0.07);
@@ -110,18 +116,18 @@ export function buildPaper({ bandTex, palette, nPal, hero = heroUniforms(), part
   col = col.mul(wet.mul(-0.45).add(1)); // (pâte humide : plus sombre)
   // hiver : le papier boit l'humidité (plus sombre, par plaques) ; la gelée
   // blanche prend sur les lèvres des écailles et les faces tournées vers le haut
-  const dampN = smoothstep(-0.3, 0.4, noise(pos.mul(5)).add(SEASON_U.damp.mul(1.6).sub(0.8)));
+  const dampN = smoothstep(-0.3, 0.4, nzIf(pos.mul(5), SEASON_U.damp).x.add(SEASON_U.damp.mul(1.6).sub(0.8)));
   col = col.mul(dampN.mul(SEASON_U.damp).mul(-0.5).add(1));
   const rimF = smoothstep(0.9, 1.0, t).mul(body.oneMinus()).mul(0.8).max(smoothstep(0.5, 0.95, normalWorld.y).mul(0.5));
-  const frostM = smoothstep(0.45, 0.9, rimF.mul(noise2(pos.mul(260)).mul(0.6).add(0.6))).mul(SEASON_U.frost).mul(0.75);
+  const frostM = smoothstep(0.45, 0.9, rimF.mul(nzIf(pos.mul(260), SEASON_U.frost).y.mul(0.6).add(0.6))).mul(SEASON_U.frost).mul(0.75);
   const glint = step(0.97, hash(floor(pos.mul(900)).dot(vec3(1, 57, 113)))).mul(frostM);
   col = mix(col, vec3(0.78, 0.82, 0.86), frostM.mul(0.6)).add(glint.mul(0.5));
 
   // ── relief (en unités monde) ──
   const ridge = f.mul(2).sub(1).abs().oneMinus().pow(0.6).mul(0.0006);
   const seam = smoothstep(0.1, 0.0, f).mul(-0.0004);
-  const fib = fibre.mul(0.00028).add(noise(pos.mul(900)).mul(0.00008).mul(fade(900)));
-  const bump = noise(pos.mul(120)).mul(0.00025).mul(fade(120));
+  const fib = fibre.mul(0.00028).add(nzIf(pos.mul(900), fade(900)).x.mul(0.00008).mul(fade(900)));
+  const bump = nzIf(pos.mul(120), fade(120)).x.mul(0.00025).mul(fade(120));
   const H = ridge.add(seam).mul(fade(nb.max(1).mul(8))).add(fib).add(bump).mul(G.microDetail);
   const N0 = normalViewGeometry.mul(faceDirection);
 
@@ -167,12 +173,12 @@ export function buildCombPaper({ palette, nPal }) {
   // bandes : ~1,5 mm de haut, source tirée par bande et par cellule
   const k = floor(pos.y.mul(-65).add(noise(pos.mul(40)).mul(0.5)).add(noise2(vec3(pos.x.mul(3), pos.y.mul(0), pos.z.mul(3)).add(cid)).mul(0.6)));
   const src = int(hash(k.add(cid.mul(37.1))).mul(nPal).floor());
-  const fl = noise2(pos.mul(620));
+  const fl = nzIf(pos.mul(620), fade(620)).y;
   let col = palette.element(src).mul(hash(k.mul(3.1).add(cid)).sub(0.5).mul(0.12).add(1)).mul(smoothstep(0.42, 0.7, fl).mul(0.08).add(1).mul(fade(620)).add(fade(620).oneMinus()));
   col = mix(col, col.mul(0.45), pet);
   col = mix(col, col.mul(0.1), fond); // (le fond d'une cellule : au bout du tube, dans l'ombre)
   // (pâte fibreuse : des fibres couchées le long de la paroi, un grain)
-  col = col.mul(noise(vec3(pos.x.mul(900), pos.y.mul(160), pos.z.mul(900))).mul(0.12).mul(fade(900)).add(noise2(pos.mul(240)).mul(0.08)).add(1));
+  col = col.mul(nzIf(vec3(pos.x.mul(900), pos.y.mul(160), pos.z.mul(900)), fade(900)).x.mul(0.12).mul(fade(900)).add(noise2(pos.mul(240)).mul(0.08)).add(1));
   // (le rayon : la même pâte, un peu plus sombre que l'enveloppe — elle a été
   // mâchée plus longtemps ; parois intérieures dans l'ombre de la cellule ;
   // la lèvre, plus claire, fraîche)
@@ -181,13 +187,13 @@ export function buildCombPaper({ palette, nPal }) {
   const age = SEASON_U.s.sub(GR.x.add(h.mul(GR.y)));
   const wet = smoothstep(SEASON_U.dry, 0, age).mul(pet.oneMinus()).max(SEASON_U.wet);
   col = col.mul(wet.mul(-0.45).add(1));
-  const H = noise(pos.mul(400)).mul(0.0002).mul(fade(400)).add(fract(pos.y.mul(-65)).mul(0.0004).mul(fade(65)));
+  const H = nzIf(pos.mul(400), fade(400)).x.mul(0.0002).mul(fade(400)).add(fract(pos.y.mul(-65)).mul(0.0004).mul(fade(65)));
   const m = new THREE.MeshPhysicalNodeMaterial({ side: THREE.DoubleSide });
   m.colorNode = vec4(col, 1);
   m.roughnessNode = mix(float(0.88), float(0.35), pet).sub(wet.mul(0.3));
   m.specularIntensityNode = mix(float(0.35), float(0.8), pet);
   m.metalnessNode = float(0);
-  m.normalNode = perturb(H.add(noise(vec3(pos.x.mul(900), pos.y.mul(160), pos.z.mul(900))).mul(0.00012).mul(fade(900))).mul(G.microDetail), normalViewGeometry.mul(faceDirection));
+  m.normalNode = perturb(H.add(nzIf(vec3(pos.x.mul(900), pos.y.mul(160), pos.z.mul(900)), fade(900)).x.mul(0.00012).mul(fade(900))).mul(G.microDetail), normalViewGeometry.mul(faceDirection));
   m.maskNode = keep.greaterThan(0.5);
   m.maskShadowNode = keep.greaterThan(0.5);
   m.mrtNode = stableVelocity();

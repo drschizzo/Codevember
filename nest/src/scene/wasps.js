@@ -20,6 +20,7 @@ import {
 } from 'three/tsl';
 import { noise, noise2, stableVelocity, perturb } from '../../../shared/scene/materials.js';
 import { WINGS, WING_COPIES, EYE_U, EYE_W, skeleton } from '../gen/wasp.js';
+import { nzIf } from './nz.js';
 
 export const MAXW = 128, STRIDE = 48;
 
@@ -178,14 +179,15 @@ export function createWasps(scene) {
     col = mix(col, YEL.mul(0.75), isP(6).mul(step(2.5, sg)));
     // ponctuation de la cuticule : un grain fin, mat dans les creux
     const pf = length(fwidth(P)), fd = (k) => smoothstep(0.5, 0.15, pf.mul(k));
-    const n1 = noise(P.mul(900)).mul(0.5).add(0.5);
-    const pits = smoothstep(0.35, 0.8, noise2(P.mul(2600))).mul(fd(2600));
+    // (lectures du bruit sautées quand leur détail est sous le pixel : nz.js)
+    const n1 = nzIf(P.mul(900), fd(900)).x.mul(fd(900)).mul(0.5).add(0.5);
+    const pits = smoothstep(0.35, 0.8, nzIf(P.mul(2600), fd(2600)).y).mul(fd(2600));
     col = col.mul(n1.mul(0.1).add(0.95)).mul(pits.mul(-0.18).add(1));
     bodyMat.colorNode = vec4(col, 1);
     const eye = eyeM.add(isP(9)).clamp(0, 1), hairP = isP(8);
     const KF = 3600;
     const hex = cos(P.y.mul(KF)).add(cos(P.y.mul(KF * 0.5).add(P.x.mul(KF * 0.866)))).add(cos(P.y.mul(KF * 0.5).sub(P.x.mul(KF * 0.866))));
-    const H = mix(pits.mul(-0.00006).add(noise(P.mul(700)).mul(0.00003).mul(fd(700))), hex.mul(0.000012).mul(fd(KF)), eye).mul(hairP.oneMinus());
+    const H = mix(pits.mul(-0.00006).add(nzIf(P.mul(700), fd(700)).x.mul(0.00003).mul(fd(700))), hex.mul(0.000012).mul(fd(KF)), eye).mul(hairP.oneMinus());
     bodyMat.normalNode = perturb(H, normalViewGeometry);
     bodyMat.roughnessNode = mix(mix(float(0.58), float(0.36), yel), float(0.46), eye).add(n1.mul(0.06)).add(pits.mul(0.12)).max(hairP.mul(0.5));
     bodyMat.specularIntensityNode = mix(mix(float(0.45), float(0.85), yel), float(0.4), eye).mul(hairP.mul(-0.6).add(1)); // (les soies : un éclat discret, pas des points)

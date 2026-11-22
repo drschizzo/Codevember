@@ -110,6 +110,23 @@ MacBook (Apple Silicon), Chrome, 1920 × 1080, qualité Haute (TRAA, GTAO, ombre
 | SSR (coupé par défaut : le papier est mat) | +16 ms |
 | GTAO | ~6 ms |
 
+**Passe d'optimisation** (2 268 × 1 400, soit la qualité Haute ×1,5 sur un écran Retina ; meilleur de trois passages alternés avec la version précédente, la carte graphique étant partagée) :
+
+| Instant | Avant | Après |
+| --- | --- | --- |
+| nid entier (u = 0,6) | 47,8 ms | 18,6 ms |
+| croissance (u = 0,3) | 67,4 ms | 18 ms |
+| hiver (u = 0,8) | 45,7 ms | 15,8 ms |
+| gros plan de l'ouvrière (u = 0,425) | 43,8 ms | 28,7 ms |
+
+Trois causes, sans rien changer à l'image (écart moyen sous le bruit entre deux captures identiques) :
+
+- **Les couches d'écailles** : elles se recouvrent en tuiles, et chaque pixel évaluait tout le shader du papier une fois par couche. Une pré-passe de profondeur (même sommet que la passe des écailles finies, décalée d'un rien vers l'arrière) ne laisse ombrer que la couche visible.
+- **Les lectures du bruit sous le pixel** : le volume de bruit 3D commun n'a pas de mipmaps ; lu jusqu'à pos × 1 500 (fibres, grains, relief), il saturait le cache de textures, même quand le fondu effaçait le résultat. `scene/nz.js` (`nzIf`) saute la lecture quand son poids est nul : fondu sous le pixel, partie de l'objet (écaille ou corps), saison (humidité, givre).
+- **La pré-passe de l'occlusion** redessinait toute la scène en pleine définition pour une occlusion calculée en demi-définition : elle est en demi-définition.
+
+Le processeur ne compte pas (moins de 2 ms par image, guêpes et temps fort compris). Au gros plan, le papier vu de près (~10 ms), le corps des guêpes (4 à 9 ms) et la profondeur de champ restent les postes principaux.
+
 ## Version mobile
 
 `?mobile=1` : écailles 1,25 × plus grandes (deux fois moins nombreuses), grille d'écaille 6 × 14, chaîne d'image allégée (FXAA, sans GTAO), résolution dynamique, 60 i/s plafonnés.
@@ -117,7 +134,7 @@ MacBook (Apple Silicon), Chrome, 1920 × 1080, qualité Haute (TRAA, GTAO, ombre
 ## Ce qui n'est pas vérifié
 
 - La lecture fluide en direct dans un navigateur affiché (les vérifications ont été faites en images fixes et en mesures, dans un Chrome sans tête).
-- Les temps d'image ont été mesurés pendant que d'autres onglets occupaient le GPU : à refaire au calme.
+- Les temps d'image ont été mesurés sur une carte graphique partagée (d'un passage à l'autre, la même version varie du simple au double) : les gains sont des rapports entre meilleurs passages alternés, pas des temps absolus.
 - L'appui des pattes ne règle que le fémur, et seulement pour l'ouvrière du temps fort : un tarse peut flotter de quelques dixièmes de millimètre (0,2 mm en médiane, jusqu'à 1,4 mm, mesuré par `nest.stage.heroLegs(u)` en `?debug`), le pied ne reste pas cloué au papier pendant l'appui, et les ouvrières de l'accéléré gardent la pose nominale.
 - L'humeur *Contre-jour* ne fait pas encore briller le papier comme un vrai contre-jour.
 - Les familles *ombrelle* (Polistes) et *clocher* (Chartergus) du concept ne sont pas faites.
