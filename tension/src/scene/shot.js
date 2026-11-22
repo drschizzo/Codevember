@@ -118,25 +118,44 @@ export function makeMontage(film, C, { samples = 480, shotLen = 6.5 } = {}) {
   // les plans : le large à cheval sur le raccord, les autres à la suite
   const w = 1 / n, w2 = (1 - w) / (n - 1), shots = [];
   const hash = (j, s) => { const x = Math.sin(j * 127.1 + s * 311.7) * 43758.5453; return x - Math.floor(x); };
-  let last = -1;
+  // (Les compagnes d'une même espèce rejouent le même film, plus petites et décalées en phase : un plan
+  //  rapproché, réglé sur la taille du sujet, les montre identiques. Couper de l'une à l'autre — ou de la
+  //  sculpture à elle-même — ne se lit pas comme un nouveau plan mais comme un saut de l'animation. Deux
+  //  plans qui se suivent montrent donc deux espèces différentes quand la troupe en a deux, sinon au moins
+  //  une autre sculpture, et l'angle change franchement : règle des 30°, plus bas.)
+  const famOf = (m) => MB[m].family;
+  const species = new Set(MB.map((m) => m.family)).size;
+  const like = (m, p) => (!p ? 1 : m === p.m ? 0.02 : species > 1 && famOf(m) === famOf(p.m) ? 0.06 : 1);
+  let before = null;
   for (let j = 1; j < n; j++) {
     const u0 = w / 2 + (j - 1) * w2, u1 = u0 + w2, k0 = Math.ceil(u0 * S), k1 = Math.min(S - 1, Math.floor(u1 * S));
-    if (KINDS[j] === 'macro') {
+    let kind = KINDS[j];
+    if (kind === 'close') {
+      let best = null;
+      for (let m = 0; m < NM; m++) { let a = 0; for (let k = k0; k <= k1; k++) a += act[m][k]; a *= like(m, before); if (!best || a > best.a) best = { m, a }; }
+      if (before?.kind === 'close' && famOf(best.m) === famOf(before.m)) {
+        // (seule bouge une sculpture de la même espèce : un très gros plan change d'échelle, ce qui se lit comme
+        //  un nouveau plan ; sinon, pas de coupe — le plan précédent continue)
+        if (KINDS[j + 1] !== 'macro') kind = 'macro';
+        else { before.u1 = u1; before.k1 = k1; continue; }
+      } else {
+        shots.push({ kind: 'close', u0, u1, k0, k1, m: best.m });
+        before = shots[shots.length - 1];
+        continue;
+      }
+    }
+    if (kind === 'macro') {
       // le câble qui s'enroule le plus pendant le plan
       let best = null;
       for (let q = 0; q < film.NC; q++) {
         let lo = 1e9, hi = -1e9; for (let k = k0; k <= k1; k++) { const v = rest[k * film.NC + q]; if (v < lo) lo = v; if (v > hi) hi = v; }
-        const m = T.cables[q].mem ?? 0, sc = ((hi - lo) / MB[m].scale) * (T.cables[q].kind === 'spoke' ? 0.4 : 1); // (un treuil qui tourne se lit mieux qu'un rayon)
+        const m = T.cables[q].mem ?? 0, sc = ((hi - lo) / MB[m].scale) * (T.cables[q].kind === 'spoke' ? 0.4 : 1) * Math.max(0.3, like(m, before)); // (un treuil qui tourne se lit mieux qu'un rayon ; le très gros plan change déjà d'échelle, il tolère la même espèce)
         if (!best || sc > best.sc) best = { q, sc, m };
       }
       // (une roue n'a pas de treuil sur ses rayons : on regarde son moyeu, là où les rayons s'enroulent)
       shots.push({ kind: 'macro', u0, u1, k0, k1, m: best.m, q: best.q, hub: T.cables[best.q].kind === 'spoke' });
-      continue;
+      before = shots[shots.length - 1];
     }
-    let best = null;
-    for (let m = 0; m < NM; m++) { let a = 0; for (let k = k0; k <= k1; k++) a += act[m][k]; a *= m === last ? 0.35 : 1; if (!best || a > best.a) best = { m, a }; }
-    last = best.m;
-    shots.push({ kind: 'close', u0, u1, k0, k1, m: best.m });
   }
   // la trajectoire lissée du point visé, plan par plan (noyau gaussien, bords tenus)
   for (const s of shots) {
@@ -189,7 +208,10 @@ export function makeMontage(film, C, { samples = 480, shotLen = 6.5 } = {}) {
           if (segDist(cam, end, [Q[b.i * 3], Q[b.i * 3 + 1], Q[b.i * 3 + 2]], [Q[b.j * 3], Q[b.j * 3 + 1], Q[b.j * 3 + 2]]) < (macro ? 0.14 * sc : 0.35 * bs) + b.r * bs) hit++;
         }
       });
-      if (!best || hit < best.hit) best = { hit, az, el };
+      // (règle des 30° : après un plan sur la même espèce, l'angle doit changer franchement)
+      const p = shots[j - 1], same = p && famOf(p.m) === famOf(s.m);
+      const score = hit + (same && Math.hypot(az - p.az, 0.7 * (el - p.el)) < 0.6 ? 40 : 0);
+      if (!best || score < best.score) best = { hit, score, az, el };
     }
     s.az = best.az; s.el = best.el; s.hidden = best.hit;
   });
