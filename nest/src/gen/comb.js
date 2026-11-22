@@ -111,6 +111,25 @@ export function buildFoundation(spec) {
     for (let k = 0; k < 6; k++) M.I.push(ctr, rim[k + 1], rim[k]);
     const top = M.vert([cx, yComb + 0.004, cz], [0, 1, 0], g, [0, i, 0, 4]);
     for (let k = 0; k < 6; k++) M.I.push(top, rim[k], rim[k + 1]);
+    // l'œuf : la reine en pond un dans chaque cellule à demi construite,
+    // collé par un bout au fond, contre une paroi, pendu vers la bouche
+    // (rôle 5 ; blanc nacré : vu d'en dessous, il dit ce qu'est la cellule)
+    {
+      const ge = [b + d * 0.45, d * 0.1], ea = (PI / 3) * Math.floor(rng.range(0, 6)) + twist + PI / 6, eo = R * 0.28;
+      const base = at(cx + Math.cos(ea) * eo, cz + Math.sin(ea) * eo, 0.02), tip = at(cx + Math.cos(ea) * eo * 0.3, cz + Math.sin(ea) * eo * 0.3, 0.42);
+      const ax = norm(base.map((x, k) => tip[k] - x)), len = Math.hypot(...base.map((x, k) => tip[k] - x));
+      const side = norm([ax[1], -ax[0], 0].map((x, k) => x + (k === 2 ? 1e-3 : 0))), up = norm([ax[1] * side[2] - ax[2] * side[1], ax[2] * side[0] - ax[0] * side[2], ax[0] * side[1] - ax[1] * side[0]]);
+      const NU = 10, NV = 7, rows = [];
+      for (let v = 0; v <= NV; v++) {
+        const t = v / NV, r = 0.0028 * Math.sin(PI * Math.min(1, t * 0.97 + 0.03)) ** 0.8 * (1 + 0.12 * t), row = [];
+        for (let k = 0; k <= NU; k++) {
+          const a = (2 * PI * k) / NU, o = side.map((x, m) => x * Math.cos(a) + up[m] * Math.sin(a));
+          row.push(M.vert(base.map((x, m) => x + ax[m] * t * len + o[m] * r), o, ge, [t, i, 0, 5]));
+        }
+        rows.push(row);
+      }
+      for (let v = 0; v < NV; v++) for (let k = 0; k < NU; k++) M.quad(rows[v][k], rows[v + 1][k], rows[v + 1][k + 1], rows[v][k + 1]);
+    }
   });
   return { ...M.out(), yComb, cells: C.length };
 }

@@ -13,7 +13,7 @@ export function cameraScale(clock, P) {
   // printemps (après que le nid a quitté l'image), tenu jusqu'à la reine
   const N = 1024, raw = new Float64Array(N), out = new Float64Array(N);
   const L0 = 0.055; // (printemps, fondation : un cadre de 2,5 cm, la reine et son pétiole)
-  const uHold = FILM.peak + 0.02, uFall = FILM.fall + 0.02, uBack = FILM.spring + 0.04;
+  const uHold = FILM.peak + 0.02, uFall = FILM.fall + 0.02, uBack = FILM.spring + 0.07; // (un retour assez long pour que la caméra, qui redescend sous la poutre, tourne lentement)
   for (let i = 0; i < N; i++) {
     const u = i / N, s = clock.s(u);
     let L = L0;
@@ -76,9 +76,9 @@ export function cameraOrbit() {
 export function filmCamera(C, yB, L, orb = [0, 0]) {
   const target = [C.target[0] * L, yB - (yB - C.target[1]) * L, C.target[2] * L];
   const pos = [C.pos[0] * L, yB - (yB - C.pos[1]) * L, C.pos[2] * L];
-  const x = Math.min(1, Math.max(0, (L - 0.06) / 0.4)), low = 1 - x * x * (3 - 2 * x);
+  const x = Math.min(1, Math.max(0, (L - 0.06) / 0.7)), low = 1 - x * x * (3 - 2 * x); // (la caméra remonte sur une plage large : plus basse sous le rayon, elle tournait trop vite en remontant)
   const d = Math.hypot(pos[0] - target[0], pos[1] - target[1], pos[2] - target[2]);
-  pos[1] -= low * d * 0.45;
+  pos[1] -= low * d * 0.75; // (assez bas pour voir dans les cellules ouvertes, et l'œuf au fond)
   // l'orbite : la caméra tourne autour de la verticale de la visée, puis
   // monte ou descend sur sa sphère (même distance)
   let v = [pos[0] - target[0], pos[1] - target[1], pos[2] - target[2]];

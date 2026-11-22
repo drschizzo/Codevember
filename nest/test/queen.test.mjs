@@ -26,7 +26,7 @@ const qrot = (q, v) => {
 for (const seed of ['n29', 'a1', 'h8']) {
   test(`${seed} : le pétiole et le rayon ne traversent pas la reine`, () => {
     const R = generate(seed), C = makeClock(R.loop.duration), P = plan(C);
-    const F = buildFoundation({ seed: R.seed, yBeam: R.decor.yBeam, s0: P.queen, s1: P.comb, n: 12 });
+    const F = buildFoundation({ seed: R.seed, yBeam: R.decor.yBeam, s0: P.queen, s1: P.comb, n: 19 });
     const nV = F.position.length / 3;
     let worst = Infinity, at = null, checked = 0;
     for (let k = 0; k <= 400; k++) {

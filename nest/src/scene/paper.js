@@ -177,21 +177,26 @@ export function buildCombPaper({ palette, nPal }) {
   let col = palette.element(src).mul(hash(k.mul(3.1).add(cid)).sub(0.5).mul(0.12).add(1)).mul(smoothstep(0.42, 0.7, fl).mul(0.08).add(1).mul(fade(620)).add(fade(620).oneMinus()));
   col = mix(col, col.mul(0.45), pet);
   col = mix(col, col.mul(0.1), fond); // (le fond d'une cellule : au bout du tube, dans l'ombre)
+  // l'œuf (rôle 5) : blanc nacré, lisse
+  const egg = step(4.5, role);
+  col = mix(col, vec3(0.86, 0.84, 0.76).mul(noise2(pos.mul(900)).mul(0.04).add(1)), egg);
   // (pâte fibreuse : des fibres couchées le long de la paroi, un grain)
   col = col.mul(nzIf(vec3(pos.x.mul(900), pos.y.mul(160), pos.z.mul(900)), fade(900)).x.mul(0.12).mul(fade(900)).add(noise2(pos.mul(240)).mul(0.08)).add(1));
   // (le rayon : la même pâte, un peu plus sombre que l'enveloppe — elle a été
   // mâchée plus longtemps ; parois intérieures dans l'ombre de la cellule ;
   // la lèvre, plus claire, fraîche)
   const inner = step(0.5, role).mul(step(role, 1.5)), lip = step(1.5, role).mul(step(role, 2.5));
-  col = col.mul(mix(float(0.3), h.mul(0.25).add(0.08), inner)).mul(lip.mul(0.3).add(1));
+  // (l'intérieur d'une cellule s'assombrit vers le fond : la carte d'ombres ne
+  // résout pas une cellule de 5 mm, c'est l'occlusion qui la creuse)
+  col = col.mul(mix(float(0.3), h.mul(h).mul(0.3).add(0.03), inner)).mul(lip.mul(0.3).add(1));
   const age = SEASON_U.s.sub(GR.x.add(h.mul(GR.y)));
-  const wet = smoothstep(SEASON_U.dry, 0, age).mul(pet.oneMinus()).max(SEASON_U.wet);
+  const wet = smoothstep(SEASON_U.dry, 0, age).mul(pet.oneMinus()).max(SEASON_U.wet).mul(egg.oneMinus());
   col = col.mul(wet.mul(-0.45).add(1));
   const H = nzIf(pos.mul(400), fade(400)).x.mul(0.0002).mul(fade(400)).add(fract(pos.y.mul(-65)).mul(0.0004).mul(fade(65)));
   const m = new THREE.MeshPhysicalNodeMaterial({ side: THREE.DoubleSide });
   m.colorNode = vec4(col, 1);
-  m.roughnessNode = mix(float(0.88), float(0.35), pet).sub(wet.mul(0.3));
-  m.specularIntensityNode = mix(float(0.35), float(0.8), pet);
+  m.roughnessNode = mix(mix(float(0.88), float(0.35), pet).sub(wet.mul(0.3)), float(0.28), egg);
+  m.specularIntensityNode = mix(mix(float(0.35), float(0.8), pet), float(0.7), egg);
   m.metalnessNode = float(0);
   m.normalNode = perturb(H.add(nzIf(vec3(pos.x.mul(900), pos.y.mul(160), pos.z.mul(900)), fade(900)).x.mul(0.00012).mul(fade(900))).mul(G.microDetail), normalViewGeometry.mul(faceDirection));
   m.maskNode = keep.greaterThan(0.5);

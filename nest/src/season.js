@@ -24,10 +24,12 @@ export const T_SEASON = 180 * 86400; // (avril → septembre, puis l'hiver : ~ s
 // chacune une bande sur une cloche différente (strips), le nid tombe. Le nid
 // fini ne tient qu'un cinquième du film avant de se décrocher.
 export const FILM = {
-  queen: 0.05, comb: 0.115, strips: [0.235, 0.375, 0.515], peak: 0.65, decline: 0.685, wet: 0.715, frost: 0.745, fall: 0.82, spring: 0.9,
+  queen: 0.05, comb: 0.135, strips: [0.235, 0.375, 0.515], peak: 0.65, decline: 0.685, wet: 0.715, frost: 0.745, fall: 0.82, spring: 0.9,
   // (une cloche qui porte une bande commence bien avant son ralenti et finit
   // bien après : pendant le ralenti, la saison ne bouge presque plus)
-  bells: [[0.1, 0.155], [0.14, 0.19], [0.165, 0.33], [0.31, 0.465], [0.45, 0.6], [0.59, 0.65]],
+  // (la cloche 0 attend que le rayon de la reine se lise : quelques cellules, un
+  // œuf dans chacune ; puis elle les enveloppe pendant que le rayon grandit encore)
+  bells: [[0.122, 0.17], [0.155, 0.2], [0.165, 0.33], [0.31, 0.465], [0.45, 0.6], [0.59, 0.65]],
 };
 
 // nœuds (u, s) : la part du film donnée à chaque temps de la saison

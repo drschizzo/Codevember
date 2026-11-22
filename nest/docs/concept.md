@@ -204,3 +204,9 @@ Retour de l'utilisateur : la caméra « bugue » en suivant la reine quand l'acc
 - La boucle passe de 64 à 56 s ; le nid fini ne tient plus que de u = 0,65 à 0,82 (≈ 10 s au lieu de 18).
 - Trois temps forts au lieu d'un, chacun sur sa cloche (2, 3, 4) et avec la pâte d'une autre planche (la peinture du village au milieu, ses voisines dans la palette avant et après). Chaque cloche qui porte une bande commence bien avant son ralenti et finit bien après (pendant le ralenti, la saison ne bouge presque pas).
 - Entre deux, un plan de transfert : la caméra remonte voir le nid grandir, puis redescend vers l'ouvrière suivante, prise du même côté du nid que la précédente (sinon le transfert fait le tour du nid, trop vite).
+
+## Révision : le premier rayon (22 novembre)
+
+Retour de l'utilisateur : on ne comprend pas à quoi correspond le début de structure en alvéoles démarré par la reine, qui s'arrête d'un coup. Il était vu de côté (des blocs gris), une seconde à peine, avant que la première enveloppe ne l'avale.
+
+Le vrai déroulé d'une fondation, montré tel quel : la reine bâtit quelques cellules sous le pétiole et pond un œuf dans chacune ; puis elle les enveloppe d'une coupe de papier, sous laquelle le rayon continue de grandir. Le rayon a dix-neuf cellules (au lieu de douze), chacune son œuf ; la cloche 0 commence plus tard (u = 0,122 au lieu de 0,1) ; la caméra regarde le rayon par en dessous, dans les cellules ouvertes, dont l'intérieur s'assombrit vers le fond.

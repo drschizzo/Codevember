@@ -36,7 +36,7 @@ La saison s(u) est une fonction croissante de la phase u, avec s(0) = 0 et s(1) 
 | --- | --- | --- | --- |
 | 0 – 0,035 | la poutre nue, la tache de l'an passé, lumière de printemps | | accéléré |
 | 0,035 – 0,066 | la reine arrive en vol, se retourne, se pose, râpe le bois | la reine | **temps réel** |
-| 0,07 – 0,12 | le pétiole, puis les cellules du premier rayon, une à une | la reine (fantôme de l'accéléré) | accéléré |
+| 0,07 – 0,135 | le pétiole, puis le premier rayon : dix-neuf cellules ajoutées une à une autour du pétiole, un œuf blanc pondu au fond de chacune ; à partir de 0,122, la première coupe d'enveloppe descend autour du rayon et le referme | la reine (fantôme de l'accéléré) | accéléré |
 | 0,1 – 0,65 | six cloches emboîtées, chacune bâtie du haut vers le bas | les ouvrières, de plus en plus nombreuses (jusqu'à 110), posées sur le front | accéléré (×3·10⁵), guêpes vues 12 fois par seconde |
 | 0,196 – 0,274, 0,336 – 0,414, 0,476 – 0,554 | trois ouvrières, chacune sur sa cloche (2, 3, 4) : arrivée en vol avec sa boule de pâte, vol stationnaire, pose, bande posée par coups, vrombissement, envol ; entre deux, la caméra remonte voir le nid grandir puis redescend | l'ouvrière | **ralenti ×0,5** |
 | 0,65 – 0,705 | la colonie s'éteint, le soleil d'automne baisse | | accéléré |
@@ -60,7 +60,7 @@ Une seule horloge commande tout : la croissance, la lumière (le soleil d'été 
 - les **bandes** : 25 à 45 par écaille, une par charge (2 à 3 mm), dont la source est tirée par une chaîne de Markov (probabilité 0,3 à 0,45 de rester sur la même planche) ;
 - les **naissances** : un front descend de l'attache vers le trou de vol ; une écaille ne naît que lorsque celle qui la recouvre a poussé jusqu'à sa racine (sinon son amorce flotterait sous le front), jamais avant celles nettement plus haut ; le corps (la feuille sous les écailles) paraît après la dernière écaille de sa rangée.
 
-**La fondation** (`comb.js`) : un pétiole torsadé évasé sur la poutre, puis douze cellules hexagonales en spirale autour de lui, parois en lames épaisses qui s'allongent.
+**La fondation** (`comb.js`) : un pétiole torsadé évasé sur la poutre, qui pousse de la poutre vers le bas, puis dix-neuf cellules hexagonales en spirale autour de lui, parois en lames épaisses qui s'allongent, leur intérieur assombri vers le fond (la carte d'ombres ne résout pas une cellule de 5 mm) ; dans chaque cellule à demi construite, un œuf blanc nacré collé au fond. La caméra regarde le rayon par en dessous, dans les cellules ouvertes.
 
 **La cicatrice** (`buildScar`) : la plaque de papier délavée, déchirée, qui reste collée à la poutre ; la même aux deux bouts de la boucle.
 

@@ -139,7 +139,7 @@ export const QUEEN_REACH = 0.0735 * QS;
 // rayon du chantier à l'instant s : le pétiole, puis chaque alvéole dès sa
 // naissance au plus tôt (gen/comb.js : centre, hexagone évasé, penché vers
 // l'extérieur) — la reine travaille à son bord, jamais dedans
-export function combExtent(s, s0, s1, n = 12, pitch = 0.052) {
+export function combExtent(s, s0, s1, n = 19, pitch = 0.052) {
   const span = s1 - s0, t0 = s0 + span * 0.1, tc = (span * 0.9) / n;
   let r = 0.0085; // (le pétiole à hauteur de mâchoires)
   // (son pied s'évase en plaque à hauteur de la tête : elle recule d'autant)

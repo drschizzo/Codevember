@@ -116,7 +116,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
     }).catch((e) => { console.error(e); pending--; });
     // la fondation : pétiole et premier rayon (de la reine à la fermeture de la cloche 0)
     found.visible = false;
-    gen.request({ seed: R.seed, yBeam: R.decor.yBeam, s0: P.queen, s1: P.comb, n: 12 }, 'foundation').then((o) => {
+    gen.request({ seed: R.seed, yBeam: R.decor.yBeam, s0: P.queen, s1: P.comb, n: 19 }, 'foundation').then((o) => {
       if (v !== version) return;
       const g = new THREE.BufferGeometry();
       for (const [k, n] of [['position', 3], ['normal', 3], ['grow', 2], ['cell', 4]]) g.setAttribute(k, new THREE.BufferAttribute(o[k], n));
