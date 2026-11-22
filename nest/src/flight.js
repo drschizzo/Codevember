@@ -159,10 +159,10 @@ function queen(t, tLand, yBeam, comb, onComb) {
   const site = [-HEADING[0] * (QUEEN_REACH + 0.0085), y, -HEADING[2] * (QUEEN_REACH + 0.0085)];
   const land = [site[0] - HEADING[0] * 0.06, y, site[2] - HEADING[2] * 0.06];
   const toSite = HEADING;
-  if (t < tLand) { // elle arrive de la gauche en descendant, ralentit, se retourne sous la poutre
+  if (t < tLand) { // elle arrive du fond (côté mur, loin de l'objectif) en descendant, ralentit, se retourne sous la poutre
     const u = Math.max(0, 1 - (tLand - t) / 2.4);
     if (u <= 0) return null;
-    const F = [-1.1, yBeam - 0.55, 0.85], c1 = [-0.45, yBeam - 0.42, 0.5], c2 = [land[0] + 0.05, yBeam - 0.14, land[2] + 0.06];
+    const F = [-0.9, yBeam - 0.5, -0.7], c1 = [-0.4, yBeam - 0.36, -0.35], c2 = [land[0] + 0.05, yBeam - 0.14, land[2] - 0.04];
     const k = 1 - (1 - u) ** 2.2; // (elle freine à l'approche)
     const p = bez(F, c1, c2, land, k), pE = bez(F, c1, c2, land, Math.min(1, k + 0.004));
     let f = sub(pE, p); if (len(f) < 1e-6) f = toSite;
@@ -177,16 +177,28 @@ function queen(t, tLand, yBeam, comb, onComb) {
     const p = lerp(land, site, q);
     return { p, q: frameQuat(toSite, [0, -1, 0]), s: QS, pose: [(d / 0.046) * TAU, 0, 0, 1], ext: [0, dt * TAU * 1.6, 0.3 * Math.sin(dt * 2), dt * TAU * 1.2] };
   }
-  if (!onComb) { // au site : elle râpe le bois de la poutre (la pâte), la tête qui va et vient
-    const bob = 0.0008 * (1 - Math.cos((dt - walkT) * TAU * 3.2)); // (elle recule, jamais n'avance dans le pétiole)
-    const p = [site[0] - toSite[0] * bob, y, site[2] - toSite[2] * bob];
-    const w = dt - walkT;
-    return { p, q: frameQuat(toSite, [0, -1, 0]), s: QS, pose: [Math.sin(w * TAU * 0.7) * 0.5, 0, 0, 1], ext: [w * TAU * 3.2, w * TAU * 1.1, 0.4 * Math.sin(w * 0.9), w * TAU * 1.2] };
+  if (!onComb) {
+    // au site, elle râpe le bois de la poutre (c'est sa pâte) : par coups de
+    // 1,1 s — elle recule de 1,6 mm en arrachant une fibre, la tête basse,
+    // les mandibules au travail, les antennes sur le bois ; une pause où la
+    // tête balaie ; un pas en avant pour reprendre au même endroit. Les pattes
+    // suivent le chemin parcouru (aller et retour comptés : pas de glissement)
+    const w = dt - walkT, PER = 1.1, n = Math.floor(w / PER), f = w / PER - n, D = 0.016;
+    const back = sstep(0, 0.55, f) * (1 - sstep(0.8, 1, f));
+    const travelled = n * 2 * D + D * (sstep(0, 0.55, f) + sstep(0.8, 1, f));
+    const scrape = f < 0.55 ? 1 : 0, pause = sstep(0.55, 0.62, f) * (1 - sstep(0.76, 0.8, f));
+    const p = [site[0] - toSite[0] * D * back, y, site[2] - toSite[2] * D * back];
+    return {
+      p, q: frameQuat(toSite, [0, -1, 0]), s: QS, pose: [((dist + travelled) / 0.046) * TAU, 0, 0, 1], // (la phase continue celle des pas jusqu'au site)
+      ext: [w * TAU * (2 + 2.5 * scrape), w * TAU * (1.1 + 1.2 * scrape), pause * Math.sin(w * TAU * 1.4) * 0.7, w * TAU * 1.2],
+      ext3: [0, 0, 0, 0.3 + 0.6 * scrape],
+    };
   }
   // l'accéléré : à chaque prise de vue, elle est ailleurs au bord du rayon, les
   // mandibules sur la paroi qu'elle allonge ; le rayon s'élargit, elle recule
   const cyc = Math.floor(dt / 23), h = (k) => hash(cyc * 3.7 + k);
-  const a = h(1) * TAU, r = comb.r + QUEEN_REACH + 0.001 + h(2) * 0.004;
+  // (du côté du rayon opposé à la caméra, qui est côté +z : jamais devant l'objectif)
+  const a = Math.PI + 0.35 + h(1) * (Math.PI - 0.7), r = comb.r + QUEEN_REACH + 0.001 + h(2) * 0.004;
   const p = [Math.cos(a) * r, y, Math.sin(a) * r];
   const f = norm([-Math.cos(a), 0, -Math.sin(a)]);
   return { p, q: frameQuat(f, [0, -1, 0]), s: QS, pose: [h(5) * TAU, 0, 0, 1] };

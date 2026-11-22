@@ -224,8 +224,8 @@ export function buildWasp({ lod = 0 } = {}) {
       for (let q = 0; q < 4; q++) {
         const a = J[q], b = J[q + 1];
         const bump = q === 3 ? (s) => 1 + 0.4 * Math.pow(Math.abs(Math.sin(5 * PI * s)), 3) : q === 1 ? (s) => 1 + 0.35 * Math.pow(Math.sin(PI * s), 0.7) : q === 2 ? (s) => 1 + 0.12 * Math.pow(s, 4) : (s) => 1 + 0.2 * Math.sin(PI * s);
-        const flat = q === 1 ? 0.72 : q === 2 ? 0.82 : 0.92;
-        sweep(M, (s) => lerp3(a, b, s), (s) => (R[q][0] + (R[q][1] - R[q][0]) * s) * bump(s), (s) => (R[q][0] + (R[q][1] - R[q][0]) * s) * bump(s) * flat, 6, code(ch, q), q === 3 ? 26 : 14, 10);
+        const flat = q === 1 ? 0.84 : q === 2 ? 0.88 : 0.94; // (aplatis, mais sans grandes faces planes qui s'allument d'un bloc)
+        sweep(M, (s) => lerp3(a, b, s), (s) => (R[q][0] + (R[q][1] - R[q][0]) * s) * bump(s), (s) => (R[q][0] + (R[q][1] - R[q][0]) * s) * bump(s) * flat, 6, code(ch, q), q === 3 ? 26 : 18, 16); // (16 côtés : de près, une patte est ronde, pas une barre à facettes)
         // soies et épines (tibia, tarse), les deux éperons au bout du tibia
         if (q >= 2) for (let h = 0; h < (q === 2 ? 12 : 8); h++) {
           const sp = (h + 0.5) / (q === 2 ? 12 : 8), P0 = lerp3(a, b, sp), dir = norm(sub(b, a));

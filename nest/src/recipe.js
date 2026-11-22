@@ -121,7 +121,7 @@ export function generate(seed, overrides = {}) {
   const tgt = [0, r2(cy + 0.15 * k), 0];
   return {
     v: 1, seed, mood, village, family,
-    loop: { duration: 64 },
+    loop: { duration: 56 },
     nest: {
       family,
       paint: V.paint ?? 3, // (la couleur du temps fort : la peinture du village)

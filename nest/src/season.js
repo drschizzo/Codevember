@@ -20,23 +20,27 @@ export const T_SEASON = 180 * 86400; // (avril → septembre, puis l'hiver : ~ s
 
 // Les temps du film, en u (la part du film où chaque chose se voit) ; ils
 // sont convertis en saison s par l'horloge (plan()). Les ralentis (SLOW)
-// tombent sur trois d'entre eux : la reine se pose, une ouvrière pose sa
-// bande, le nid tombe.
+// tombent sur cinq d'entre eux : la reine se pose, trois ouvrières posent
+// chacune une bande sur une cloche différente (strips), le nid tombe. Le nid
+// fini ne tient qu'un cinquième du film avant de se décrocher.
 export const FILM = {
-  queen: 0.05, comb: 0.115, strip: 0.42, peak: 0.58, decline: 0.665, wet: 0.715, frost: 0.76, fall: 0.862, spring: 0.93,
-  bells: [[0.1, 0.16], [0.15, 0.22], [0.21, 0.29], [0.275, 0.365], [0.355, 0.49], [0.48, 0.58]],
+  queen: 0.05, comb: 0.115, strips: [0.235, 0.375, 0.515], peak: 0.65, decline: 0.685, wet: 0.715, frost: 0.745, fall: 0.82, spring: 0.9,
+  // (une cloche qui porte une bande commence bien avant son ralenti et finit
+  // bien après : pendant le ralenti, la saison ne bouge presque plus)
+  bells: [[0.1, 0.155], [0.14, 0.19], [0.165, 0.33], [0.31, 0.465], [0.45, 0.6], [0.59, 0.65]],
 };
 
 // nœuds (u, s) : la part du film donnée à chaque temps de la saison
 const KNOTS = [
-  [0.0, 0.0], [0.03, 0.09], [0.05, 0.105], [0.22, 0.25], [0.42, 0.43], [0.58, 0.6], [0.7, 0.72], [0.845, 0.905], [0.862, 0.91], [0.9, 0.94], [1.0, 1.0],
+  [0.0, 0.0], [0.03, 0.09], [0.05, 0.105], [0.235, 0.29], [0.375, 0.44], [0.515, 0.55], [0.65, 0.6], [0.7, 0.75], [0.805, 0.905], [0.82, 0.91], [0.86, 0.94], [1.0, 1.0],
 ];
 
 // passages au temps réel : centre (en u du film), demi-largeur du palier, rampe, vitesse (×temps réel)
 export const SLOW = [
   { name: 'queen', c: 0.05, half: 0.016, ramp: 0.018, k: 1 },
-  { name: 'strip', c: 0.42, half: 0.025, ramp: 0.025, k: 0.5 }, // (léger ralenti : une caméra à 120 i/s)
-  { name: 'fall', c: 0.862, half: 0.008, ramp: 0.012, k: 1 },
+  // (trois ouvrières, chacune sur sa cloche : léger ralenti, une caméra à 120 i/s)
+  ...FILM.strips.map((c, i) => ({ name: `strip${i}`, c, half: 0.027, ramp: 0.022, k: 0.5 })),
+  { name: 'fall', c: 0.82, half: 0.008, ramp: 0.012, k: 1 },
 ];
 
 // interpolation monotone (Fritsch–Carlson) des nœuds
@@ -105,7 +109,9 @@ export function makeClock(D = 48, slow = SLOW) {
 export const LAMBDA = [0.17, 0.3, 0.46, 0.63, 0.82, 1.0];
 export function plan(clock) {
   const P = {};
-  for (const [k, v] of Object.entries(FILM)) if (k !== 'bells') P[k] = clock.s(v);
+  for (const [k, v] of Object.entries(FILM)) if (k !== 'bells' && k !== 'strips') P[k] = clock.s(v);
+  P.strips = FILM.strips.map((v) => clock.s(v));
+  P.strip = P.strips[1]; // (la bande du milieu : le repère de l'été)
   P.bells = FILM.bells.map(([a, b], k) => ({ k, lam: LAMBDA[k], s0: clock.s(a), s1: clock.s(b) }));
   return P;
 }

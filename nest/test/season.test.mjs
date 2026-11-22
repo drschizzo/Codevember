@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { makeClock, plan, colony, SLOW, FILM, T_SEASON } from '../src/season.js';
-import { cameraScale, filmCamera } from '../src/camera.js';
+import { cameraScale, filmCamera, cameraOrbit } from '../src/camera.js';
 import { waspsAt } from '../src/flight.js';
 import { generate } from '../src/recipe.js';
 
@@ -30,9 +30,14 @@ test('le plan de la saison est ordonné et tient dans la boucle', () => {
     assert.ok(b.s0 < b.s1 && b.s1 <= P.peak + 1e-9, `cloche ${k}`);
     if (k) assert.ok(b.s0 >= P.bells[k - 1].s0, `cloche ${k} avant la précédente`);
   });
-  // le temps fort tombe pendant la construction de la cloche 4, ni au début ni à la fin
-  const b4 = P.bells[4], f = (P.strip - b4.s0) / (b4.s1 - b4.s0);
-  assert.ok(f > 0.25 && f < 0.75, `temps fort à ${f.toFixed(2)} de la cloche 4`);
+  // chaque temps fort tombe pendant la construction d'une cloche (la sienne,
+  // une par bande, la 2, la 3 puis la 4), ni au début ni à la fin
+  P.strips.forEach((sj, j) => {
+    const b = P.bells[j + 2], f = (sj - b.s0) / (b.s1 - b.s0);
+    assert.ok(f > 0.25 && f < 0.75, `temps fort ${j} à ${f.toFixed(2)} de la cloche ${j + 2}`);
+  });
+  // le nid fini ne tient pas plus d'un cinquième du film avant de tomber
+  assert.ok(FILM.fall - FILM.peak <= 0.2, `nid fini pendant ${((FILM.fall - FILM.peak) * 100).toFixed(0)} % du film`);
 });
 
 test('la colonie : vide aux deux bouts, une seule montée et une seule descente', () => {
@@ -49,8 +54,8 @@ test('la colonie : vide aux deux bouts, une seule montée et une seule descente'
 
 test('la caméra du film : continue, raccord exact, moins de 25°/s', () => {
   for (const seed of ['a1', 'b2', 'c3', 'd4']) {
-    const R = generate(seed), L = cameraScale(C, P);
-    const pose = (u) => filmCamera(R.camera, R.decor.yBeam, L(u));
+    const R = generate(seed), L = cameraScale(C, P), O = cameraOrbit();
+    const pose = (u) => filmCamera(R.camera, R.decor.yBeam, L(u), O(u));
     const a = pose(0), b = pose(1 - 1e-9);
     for (const k of [0, 1, 2]) { assert.ok(Math.abs(a.pos[k] - b.pos[k]) < 1e-4, `${seed} : raccord`); }
     const n = R.loop.duration * 120;
@@ -63,6 +68,8 @@ test('la caméra du film : continue, raccord exact, moins de 25°/s', () => {
         maxJump = Math.max(maxJump, Math.hypot(...p.pos.map((x, k) => x - prevPos[k])) / l);
       }
       prevDir = dir; prevPos = p.pos;
+      assert.ok(p.pos[1] < R.decor.yBeam - 0.02, `${seed} : caméra dans la poutre à u = ${(i / n).toFixed(3)}`);
+      assert.ok(p.pos[2] > -R.decor.wall + 0.3, `${seed} : caméra derrière le mur à u = ${(i / n).toFixed(3)}`);
     }
     assert.ok(maxDeg < 25, `${seed} : ${maxDeg.toFixed(1)}°/s`);
     assert.ok(maxJump < 0.05, `${seed} : saut de ${(maxJump * 100).toFixed(1)} % de la distance en une image`);
@@ -80,4 +87,14 @@ test('les guêpes : aucune au raccord, la reine au printemps, des ouvrières en 
     assert.ok(Math.abs(Math.hypot(...w.q) - 1) < 1e-6, 'quaternion unitaire');
   }
   assert.ok(T_SEASON > 1e7);
+});
+
+test('l’orbite : une spirale qui tourne dans un sens pendant la croissance, revient dans l’autre, sans aller-retour', () => {
+  const O = cameraOrbit();
+  let prev = O(0.06)[0];
+  for (let u = 0.065; u <= 0.55; u += 0.005) { const a = O(u)[0]; assert.ok(a >= prev - 1e-9, `l'azimut recule à u = ${u.toFixed(3)}`); prev = a; }
+  prev = O(0.66)[0];
+  for (let u = 0.665; u <= 0.99; u += 0.005) { const a = O(u)[0]; assert.ok(a <= prev + 1e-9, `l'azimut repart à u = ${u.toFixed(3)}`); prev = a; }
+  const sweep = (O(0.55)[0] - O(0.06)[0]) * 180 / Math.PI;
+  assert.ok(sweep > 40, `la spirale ne tourne que de ${sweep.toFixed(0)}°`);
 });

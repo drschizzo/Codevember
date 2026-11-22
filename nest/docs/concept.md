@@ -180,3 +180,27 @@ Planche du 22 novembre : 7 captures sépia sur 25 ; peu de gris froid, presque p
 ### L'écran de chargement
 
 Le dessin du nid vu en coupe qui se construit : les feuilles d'enveloppe en arcs concentriques posés bande par bande, de la couleur des sources tirées par la graine, autour des rayons qui s'ajoutent étage par étage ; il avance avec les étapes réelles du calcul.
+
+## Révision : la caméra et les guêpes (22 novembre)
+
+Retour de l'utilisateur : « le très gros plan puis retour arrière, puis très gros plan rapide, puis retour arrière est un peu trop simpliste » ; l'animation des guêpes en gros plan est à retravailler. La caméra n'était qu'un zoom : une seule direction de visée, une distance qui suivait la taille du nid, et un plongeon de moins d'une seconde vers l'ouvrière.
+
+Le découpage, plan par plan (une seule horloge : chaque mouvement a sa cause dans le film) :
+
+1. **La reine (0 – 0,1).** Macro sous la poutre. La caméra suit la reine qui arrive et se pose, puis tourne lentement autour d'elle pendant qu'elle râpe le bois (un arc de ~20°, la lumière de la fenêtre glisse sur son dos).
+2. **La spirale (0,1 – 0,36).** Le nid enfle ; la caméra recule en montant et tourne autour de lui (une spirale ascendante, ~50° d'azimut), au lieu de reculer en ligne droite : chaque cloche se découvre sous un autre angle.
+3. **L'ouvrière (0,35 – 0,51).** L'accéléré ralentit ; la caméra descend vers l'écaille en arc (une grue qui tourne, pas un zoom) pendant que l'ouvrière arrive en vol, sa boule de pâte aux mandibules : elle la suit, la voit hésiter en vol stationnaire, se poser. Elle pose sa bande par coups : un pas en arrière, puis la tête qui balaie le bord en mâchant, les antennes qui tapotent le papier ; la boule de pâte maigrit d'autant. La caméra glisse lentement le long du bord (un travelling, ~20° d'arc, en se rapprochant). L'ouvrière fait vrombir ses ailes, décolle ; la caméra la suit, et c'est son envol qui la ramène en arrière, vers le nid entier.
+4. **Le plein et le déclin (0,51 – 0,76).** La caméra a fini sa spirale de l'autre côté du nid ; elle revient lentement pendant le déclin.
+5. **L'hiver et la chute (0,76 – 0,93).** Elle descend un peu (plus frontale, plus basse) ; le nid tombe hors du cadre, elle reste sur la poutre.
+6. **Le printemps (0,93 – 1).** Elle se rapproche de la cicatrice en revenant à son angle de départ : le raccord.
+
+Contraintes : la boucle est exacte (azimut et hauteur périodiques), chaque mouvement est monotone dans son temps, la vitesse de visée reste sous 25°/s hors du temps fort (où la caméra suit une guêpe en vol : sous 45°/s), aucune ligne de visée du temps fort ne traverse l'enveloppe, à aucun instant de l'arc.
+
+## Révision : la boucle et les ralentis (22 novembre)
+
+Retour de l'utilisateur : la caméra « bugue » en suivant la reine quand l'accéléré commence (chaque prise de vue la montre ailleurs) ; le nid reste trop longtemps fini avant de se décrocher ; il faudrait plusieurs ralentis où l'on voit les ouvrières travailler de près.
+
+- La caméra lâche la reine à la fin de son temps réel, avant l'accéléré.
+- La boucle passe de 64 à 56 s ; le nid fini ne tient plus que de u = 0,65 à 0,82 (≈ 10 s au lieu de 18).
+- Trois temps forts au lieu d'un, chacun sur sa cloche (2, 3, 4) et avec la pâte d'une autre planche (la peinture du village au milieu, ses voisines dans la palette avant et après). Chaque cloche qui porte une bande commence bien avant son ralenti et finit bien après (pendant le ralenti, la saison ne bouge presque pas).
+- Entre deux, un plan de transfert : la caméra remonte voir le nid grandir, puis redescend vers l'ouvrière suivante, prise du même côté du nid que la précédente (sinon le transfert fait le tour du nid, trop vite).

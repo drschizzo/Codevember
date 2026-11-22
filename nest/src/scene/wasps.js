@@ -15,7 +15,7 @@
 // replie) ; en vol, les pattes pendent vers l'arrière.
 import * as THREE from 'three/webgpu';
 import {
-  Fn, If, attribute, vec3, vec4, float, int, cross, cos, sin, mix, smoothstep, step, abs, floor, fract, clamp, length, min as tmin,
+  Fn, If, attribute, vec3, vec4, float, int, round, cross, cos, sin, mix, smoothstep, step, abs, floor, fract, clamp, length, min as tmin,
   normalLocal, positionPrevious, positionGeometry, select, dot, uniformArray, normalViewGeometry, fwidth,
 } from 'three/tsl';
 import { noise, noise2, stableVelocity, perturb } from '../../../shared/scene/materials.js';
@@ -61,12 +61,15 @@ export function createWasps(scene) {
       const pair = floor(chain.mul(0.5)), side = chain.sub(pair.mul(2)), sgn = side.mul(-2).add(1);
       const ph = P.x.add(fract(pair.add(side).mul(0.5)).mul(2 * Math.PI));
       const air = sin(ph).max(0).mul(fly.oneMinus());
+      // l'appui de la patte (legs.js, packLeg) : fémur + 16·round(hanche·512)
+      const pk = select(chain.lessThan(0.5), D.y, select(chain.lessThan(1.5), D.z, select(chain.lessThan(2.5), D.w, select(chain.lessThan(3.5), D2.x, select(chain.lessThan(4.5), D2.y, D2.z)))));
+      const qy = round(pk.div(16)), lift = pk.sub(qy.mul(16)), yaw = qy.div(512);
       r.assign([
-        cos(ph).mul(-0.42).mul(fly.oneMinus()).sub(fly.mul(0.45).mul(pair.mul(0.4).add(0.6))).mul(sgn),
+        cos(ph).mul(-0.42).mul(fly.oneMinus()).sub(fly.mul(0.45).mul(pair.mul(0.4).add(0.6))).mul(sgn).add(yaw), // (yaw : la hanche porte la patte vers le bord qu'elle agrippe)
         // (D.x : le corps soulevé, le fémur descend d'autant ; D.yzw, D2.xyz :
         // l'appui de chaque patte, la correction du fémur qui pose le tarse sur
         // le papier sous lui — legs.js)
-        air.mul(0.42).sub(fly.mul(0.35)).sub(D.x.mul(28)).add(select(chain.lessThan(0.5), D.y, select(chain.lessThan(1.5), D.z, select(chain.lessThan(2.5), D.w, select(chain.lessThan(3.5), D2.x, select(chain.lessThan(4.5), D2.y, D2.z)))))),
+        air.mul(0.42).sub(fly.mul(0.35)).sub(D.x.mul(28)).add(lift),
         air.mul(-0.5).sub(fly.mul(0.55)).add(D.x.mul(14)),
         air.mul(0.25).add(fly.mul(0.3)),
       ][j]);
@@ -74,7 +77,7 @@ export function createWasps(scene) {
       const as = chain.sub(6), asg = as.mul(-2).add(1), ap = E.y;
       r.assign([
         sin(ap.add(as.mul(1.7))).mul(0.2).sub(fly.mul(0.15)).mul(asg),
-        sin(ap.mul(1.37).add(1).add(as)).mul(0.16).add(fly.mul(0.25)),
+        sin(ap.mul(1.37).add(1).add(as)).mul(0.16).add(fly.mul(0.25)).sub(D2.w.mul(0.35)), // (D2.w : antennes abaissées vers le papier qu'elles tapotent)
         sin(ap.mul(0.83).add(2).add(as.mul(0.6))).mul(0.28).sub(0.05),
         sin(ap.mul(1.1).add(as)).mul(0.1).mul(asg),
       ][j]);
@@ -170,12 +173,17 @@ export function createWasps(scene) {
     const ch = floor(cd.mul(0.125).add(0.001)), sg = cd.sub(ch.mul(8));
     const lY = step(1.5, sg).max(step(0.5, sg).mul(step(sg, 1.5)).mul(smoothstep(0.75, 0.9, s)));
     const yel = headP.mul(hY).add(isP(3).mul(tY)).add(isP(5).mul(gY)).add(isP(6).mul(lY)).add(isP(10).mul(anchor.oneMinus())).add(isP(7)).clamp(0, 1);
-    let col = mix(BLK, YEL, yel);
+    // le jaune n'est pas une peinture : la cuticule est plus épaisse et plus
+    // chaude au milieu d'une plage, plus claire et plus citron sur ses bords
+    // (plus mince), marbrée au dixième de millimètre
+    const ym = noise(P.mul(260)).mul(0.5).add(0.5);
+    const YELv = mix(vec3(0.6, 0.27, 0.004), vec3(0.72, 0.42, 0.02), ym.mul(0.6).add(smoothstep(0.2, 0.9, yel).oneMinus().mul(0.4)));
+    let col = mix(BLK, YELv, yel);
     col = mix(col, mix(YEL, BRN, smoothstep(0.55, 0.85, s)), isP(7));
     col = mix(col, mix(vec3(0.06, 0.045, 0.028), vec3(0.022, 0.017, 0.011), smoothstep(0.2, 1, ee)), eyeM); // (l'œil : brun sombre, plus clair au centre, distinct de la capsule noire)
     col = mix(col, vec3(0.09, 0.05, 0.02), isP(9));
-    const darkHair = select(cd.lessThan(0).or(cd.greaterThan(80).and(cd.lessThan(87))), float(0.3), float(1)); // (thorax et tête : soies brun sombre ; gastre : dorées)
-    col = mix(col, mix(vec3(0.05, 0.03, 0.015), mix(vec3(0.07, 0.045, 0.025), vec3(0.42, 0.3, 0.14), a.mul(a).mul(a).mul(darkHair)), s), isP(8)); // (soies : brunes à la base, dorées au bout, chacune sa nuance)
+    const darkHair = select(cd.lessThan(0).or(cd.greaterThan(80).and(cd.lessThan(87))), float(0.06), float(1)); // (thorax et tête : soies brun-noir — dix fois plus claires que la cuticule, elles faisaient des traits blancs ; gastre : dorées)
+    col = mix(col, mix(vec3(0.014, 0.011, 0.008), mix(vec3(0.07, 0.045, 0.025), vec3(0.42, 0.3, 0.14), a.mul(a).mul(a).mul(darkHair)), s), isP(8)); // (soies : brunes à la base, dorées au bout, chacune sa nuance)
     col = mix(col, YEL.mul(0.75), isP(6).mul(step(2.5, sg)));
     // ponctuation de la cuticule : un grain fin, mat dans les creux
     const pf = length(fwidth(P)), fd = (k) => smoothstep(0.5, 0.15, pf.mul(k));
@@ -183,14 +191,26 @@ export function createWasps(scene) {
     const n1 = nzIf(P.mul(900), fd(900)).x.mul(fd(900)).mul(0.5).add(0.5);
     const pits = smoothstep(0.35, 0.8, nzIf(P.mul(2600), fd(2600)).y).mul(fd(2600));
     col = col.mul(n1.mul(0.1).add(0.95)).mul(pits.mul(-0.18).add(1));
+    // creux et jointures : l'avant de chaque tergite glissé sous le précédent,
+    // les sutures du mésosome (pronotum, scutum, scutellum), la base de chaque
+    // article de patte — sombres, et sans reflet (le volume se lit par là)
+    const tg = isP(5).mul(smoothstep(0.0, 0.12, f).oneMinus()).mul(step(0.5, tk));
+    const sut = isP(3).mul(smoothstep(0.022, 0.0, abs(s.sub(0.44))).max(smoothstep(0.02, 0.0, abs(s.sub(0.865)))).max(smoothstep(0.025, 0.0, abs(s.sub(0.3))).mul(0.6)));
+    const jnt = isP(6).mul(smoothstep(0.1, 0.0, s)).add(isP(2).mul(smoothstep(0.06, 0.0, s)));
+    const cav = tg.mul(0.75).max(sut.mul(0.6)).max(jnt.mul(0.5)).clamp(0, 1);
+    col = col.mul(cav.mul(-0.7).add(1));
     bodyMat.colorNode = vec4(col, 1);
     const eye = eyeM.add(isP(9)).clamp(0, 1), hairP = isP(8);
     const KF = 3600;
     const hex = cos(P.y.mul(KF)).add(cos(P.y.mul(KF * 0.5).add(P.x.mul(KF * 0.866)))).add(cos(P.y.mul(KF * 0.5).sub(P.x.mul(KF * 0.866))));
-    const H = mix(pits.mul(-0.00006).add(nzIf(P.mul(700), fd(700)).x.mul(0.00003).mul(fd(700))), hex.mul(0.000012).mul(fd(KF)), eye).mul(hairP.oneMinus());
+    // (ponctuation adoucie : sur une cuticule lisse, un relief plus fort scintillait en milliers d'éclats sous une lampe dure)
+    const H = mix(pits.mul(-0.00003).add(nzIf(P.mul(700), fd(700)).x.mul(0.000015).mul(fd(700))), hex.mul(0.000012).mul(fd(KF)), eye).mul(hairP.oneMinus());
     bodyMat.normalNode = perturb(H, normalViewGeometry);
-    bodyMat.roughnessNode = mix(mix(float(0.58), float(0.36), yel), float(0.46), eye).add(n1.mul(0.06)).add(pits.mul(0.12)).max(hairP.mul(0.5));
-    bodyMat.specularIntensityNode = mix(mix(float(0.45), float(0.85), yel), float(0.4), eye).mul(hairP.mul(-0.6).add(1)); // (les soies : un éclat discret, pas des points)
+    // la cuticule noire : lisse et lustrée, au reflet net (un lustre large et
+    // terne la grisait de bleu sous un studio clair) ; la ponctuation, mate ;
+    // les soies, mates (vues de biais, des cylindres fins s'allumaient en traits blancs)
+    bodyMat.roughnessNode = mix(mix(float(0.3), float(0.34), yel), float(0.4), eye).add(n1.mul(0.08)).add(pits.mul(0.2)).max(hairP.mul(0.85));
+    bodyMat.specularIntensityNode = mix(mix(float(0.75), float(0.8), yel), float(0.45), eye).mul(cav.mul(-0.85).add(1)).mul(hairP.mul(-0.97).add(1)); // (une soie est vue presque toujours de biais : le reflet y monte vers son maximum, il faut le couper presque entièrement)
     bodyMat.metalnessNode = float(0);
     // la cuticule jaune est translucide : elle s'allume au contre-jour
     bodyMat.thicknessColorNode = YEL.mul(yel).mul(0.5);
@@ -208,7 +228,10 @@ export function createWasps(scene) {
   bodyLo.castShadow = false; // (une guêpe lointaine : son ombre est sous le pixel)
 
   // ── ailes ──
-  const wingMat = new THREE.MeshPhysicalNodeMaterial({ side: THREE.DoubleSide, transparent: true, depthWrite: false });
+  // (une seule face par vue : chaque aile a ses deux faces modélisées ; dessinées
+  // des deux côtés, les quatre ailes repliées empilaient une douzaine de couches
+  // de membrane, un voile gris sur le gastre)
+  const wingMat = new THREE.MeshPhysicalNodeMaterial({ side: THREE.FrontSide, transparent: true, depthWrite: false });
   {
     const ww = attribute('ww', 'vec4');
     const [i0, i1, i2, i3, i4, i5] = I();
@@ -218,9 +241,10 @@ export function createWasps(scene) {
     const len = mix(float(Hw.len), float(F.len), fore), chord = mix(float(Hw.chord), float(F.chord), fore);
     const hinge = mix(vec3(...Hw.hinge), vec3(...F.hinge), fore);
     const place = (Q) => {
-      // Q.y : part du vol ; Q.z : phase du battement ; Q.w : ailes repliées en long.
+      // Q.z : phase du battement ; Q.w : ailes repliées en long — leur battement
+      // est 1 − Q.w (en vol, ou au sol quand elles vrombissent avant l'envol).
       // Chaque copie prend un instant du battement : en vol, l'aile floue.
-      const fly = Q.y, phc = Q.z.add(copy.mul((2 * Math.PI) / WING_COPIES));
+      const fly = Q.w.oneMinus(), phc = Q.z.add(copy.mul((2 * Math.PI) / WING_COPIES));
       const psi = mix(float(2.86).sub(fore.oneMinus().mul(0.06)), float(1.5).add(fore.oneMinus().mul(0.22)), fly);
       const d = vec3(cos(psi), 0, sin(psi)), c = vec3(sin(psi).negate(), 0, cos(psi));
       const vv = v.mul(mix(float(1), float(0.42), Q.w.mul(fore))); // (pli longitudinal des vespidés)
@@ -249,12 +273,13 @@ export function createWasps(scene) {
     const vh = tmin(tmin(seg(0, 0.015, 0.6, 0.025), seg(0.05, 0.1, 0.5, 0.22)), seg(0.1, 0.25, 0.4, 0.45));
     const vein = smoothstep(0.006, 0.0025, mix(vh, vf, fore)).max(smoothstep(0.03, 0.0, v).mul(0.7));
     const stigma = smoothstep(0.05, 0.03, length(vec3(u.sub(0.64), v.sub(0.055).mul(2.2), 0))).mul(fore);
-    const flyNow = i4.y;
+    const flyNow = i4.w.oneMinus();
     // en vol, cinq copies à un tiers d'opacité chacune ; au repos, la seule copie 0
     const vis = mix(step(copy, 0.5), float(1.7 / WING_COPIES), flyNow);
-    wingMat.colorNode = vec4(mix(vec3(0.55, 0.48, 0.36), vec3(0.1, 0.055, 0.022), vein.max(stigma)), 1);
-    wingMat.opacityNode = mix(float(0.06), float(0.95), vein.max(stigma).mul(flyNow.mul(-0.6).add(1))).mul(smoothstep(0.0, 0.03, u)).mul(vis);
-    wingMat.roughnessNode = float(0.1);
+    wingMat.colorNode = vec4(mix(vec3(0.34, 0.27, 0.17), vec3(0.08, 0.045, 0.018), vein.max(stigma)), 1); // (membrane légèrement fumée, nervures brunes)
+    wingMat.opacityNode = mix(float(0.045), float(0.95), vein.max(stigma).mul(flyNow.mul(-0.6).add(1))).mul(smoothstep(0.0, 0.03, u)).mul(vis);
+    wingMat.roughnessNode = float(0.16);
+    wingMat.specularIntensityNode = float(0.6); // (une membrane : un reflet net mais faible, pas un voile gris sur le gastre)
     wingMat.metalnessNode = float(0);
     wingMat.iridescenceNode = float(0.5);
     wingMat.iridescenceIORNode = float(1.5);

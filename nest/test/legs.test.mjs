@@ -38,3 +38,23 @@ test('surface bombée, guêpe penchée : les tarses sur la sphère', () => {
   const L = legLifts(st, n, height);
   for (const t of tipsAt(st, L)) assert.ok(Math.abs(Math.hypot(...t) - R) < 6e-4, `tarse à ${(Math.hypot(...t) - R).toFixed(5)} de la sphère`);
 });
+
+import { legReach, packLeg, unpackLeg } from '../src/legs.js';
+test('une patte au-dessus du vide atteint un point de papier voisin (hanche + fémur)', () => {
+  const st = { p: [0, 0, 0], q: [0, 0, 0, 1], s: 1, pose: [0.7, 0, 0, 1] };
+  for (let c = 0; c < 6; c++) {
+    // (un point que la hanche et le fémur peuvent atteindre : la patte portée
+    // en avant ou en arrière, abaissée vers un bord)
+    const target = legTip(c, legAngles(c, st.pose, 0, -0.35 + 0.1 * c, true, 0.3 - 0.12 * c));
+    const r = legReach(st, c, target);
+    assert.ok(r, `patte ${c} : hors de portée`);
+    const t = legTip(c, legAngles(c, st.pose, 0, r[0], true, r[1]));
+    assert.ok(Math.hypot(...t.map((x, i) => x - target[i])) < 0.0002, `patte ${c} : à ${(Math.hypot(...t.map((x, i) => x - target[i])) * 100).toFixed(2)} mm`);
+  }
+});
+test('les deux corrections tiennent dans un flottant', () => {
+  for (const [l, y] of [[0, 0], [-1.1, 0.6], [1.05, -0.6], [0.3, -0.017]]) {
+    const [l2, y2] = unpackLeg(Math.fround(packLeg(l, y)));
+    assert.ok(Math.abs(l2 - l) < 2e-3 && Math.abs(y2 - y) < 1.5e-3, `${l}, ${y} → ${l2}, ${y2}`);
+  }
+});
