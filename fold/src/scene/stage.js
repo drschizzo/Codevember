@@ -6,6 +6,7 @@ import * as THREE from 'three/webgpu';
 import { Fn, Loop, uniform, float, ivec2, vec2, vec3, vec4, mix, mx_noise_vec3, fwidth, smoothstep, attribute, frontFacing, select, textureLoad, max, abs, dot, normalize, length, floor, fract, sqrt, cos, sin, atan, mod, transformNormalToView, mx_noise_float } from 'three/tsl';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { MOODS, PATTERNS } from '../recipe.js';
+import { createTower } from './tower.js';
 
 const TAU = Math.PI * 2;
 const KEY_DIR = new THREE.Vector3(-3.2, 5.5, 2.4).normalize();
@@ -21,8 +22,9 @@ export function cameraAt(R, ph, aspect = 16 / 9) {
   for (const s of R.sheets) { x0 = Math.min(x0, s.at[0] - s.size); x1 = Math.max(x1, s.at[0] + s.size); z1 = Math.max(z1, s.at[1]); }
   const tgt = [(x0 + x1) / 2, 0.76, z1 * 0.4], y = 1.36 + C.lift + 0.1 * Math.sin(2 * TAU * ph);
   const pos = [tgt[0] + d * Math.sin(a), y, tgt[2] + d * Math.cos(a)];
-  const H = R.sheets[0];
-  return { pos, tgt, fov: 26, dist: Math.hypot(pos[0] - H.at[0], pos[1] - H.y, pos[2] - H.at[1]) };
+  // (mise au point sur la pièce du centre : le centre d'une feuille, le milieu de la hauteur d'une tour)
+  const H = R.sheets[0], hy = H.pattern === 'tour' ? (H.base + H.y) / 2 : H.y;
+  return { pos, tgt, fov: 26, dist: Math.hypot(pos[0] - H.at[0], pos[1] - hy, pos[2] - H.at[1]) };
 }
 
 // profil tourné à arêtes adoucies (socles, pieds)
@@ -51,7 +53,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
   const bounce = new THREE.DirectionalLight(0xffffff, 0.35); bounce.position.set(0.8, -4, 1.5); bounce.target.position.set(0, 1, 0);
   scene.add(key, key.target, fill, fill.target, bounce, bounce.target);
 
-  let R = null, sheets = [], prog = [], built = 0, token = 0;
+  let R = null, sheets = [], towers = [], prog = [], built = 0, token = 0;
   const gaps = [];
   const brass = new THREE.MeshStandardNodeMaterial({ color: '#e6d3ad', metalness: 1, roughness: 0.3 });
   const matte = (c) => new THREE.MeshStandardNodeMaterial({ color: c, roughness: 0.58 });
@@ -60,7 +62,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
   function clear() {
     for (const o of [...group.children]) { group.remove(o); o.traverse?.((c) => { c.geometry?.dispose(); if (c.material && c.material !== brass) c.material.dispose(); }); }
     for (const s of sheets) { s.posTex.dispose(); s.norTex.dispose(); s.nearTex.dispose(); }
-    sheets = [];
+    sheets = []; towers = []; // (les tours sont dans le groupe : leurs géométries et matériaux viennent d'être libérés)
   }
 
   // ── Le décor : cyclorama, fond, socles ──
@@ -100,6 +102,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
         const b = P.kind === 'bloc' ? new THREE.Mesh(new RoundedBoxGeometry(P.r * 1.7, P.h, P.r * 1.7, 4, 0.014), m) : new THREE.Mesh(turned(P.r, P.h, 0.014), m);
         b.position.set(sx, P.kind === 'bloc' ? P.h / 2 : 0, sz); b.rotation.y = P.kind === 'bloc' ? S.rot : 0; group.add(cast(b));
       }
+      if (S.pattern === 'tour') continue; // (une tour repose sur son plateau de laiton, sans tige)
       // la tige, son pied tourné et sa bague
       const foot = cast(new THREE.Mesh(turned(0.085, 0.016, 0.006, 48), brass)); foot.position.set(sx, top, sz);
       const rod = cast(new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, S.y - top, 20), brass), false); rod.position.set(sx, (S.y + top) / 2, sz);
@@ -190,25 +193,48 @@ export function createStage(scene, gen, { lite = false } = {}) {
     sheets.push({ S, M, U, mesh, posTex, norTex, nearTex, L0 });
   }
 
+  // Ce que le worker calcule pour chaque pièce de la recette : la même
+  // demande donne le même résultat (le pool le garde en cache, par demande)
+  function pieces(R) {
+    return R.sheets.map((S) => {
+      const P = PATTERNS[S.pattern];
+      // (le film d'une tour dure une boucle ; les imperfections de raideur fixent l'ordre des claquements)
+      if (P.kind === 'tour') return { what: 'tour', spec: { tower: { units: S.units, loop: R.loop.duration, spread: S.spread } } };
+      return { what: 'sheet', spec: { sheet: { n: S.n, rings: S.rings, sub: 2, m: lite ? Math.round(S.m * 0.8) : S.m, hole: S.hole, twist: P.twist ?? 0, star: P.star ?? 0, rhythm: S.rhythm, kind: P.kind ?? 'rings', lobes: P.lobes ?? 2 },
+        film: { amp: S.amp, open: S.open, eps: P.eps ?? 0.02 } } };
+    });
+  }
+
   function setRecipe(r) {
     R = r; built = 0;
     const my = ++token;
     clear(); decor();
     prog = R.sheets.map(() => 0);
-    R.sheets.forEach((S, i) => {
-      const P = PATTERNS[S.pattern];
-      const spec = { sheet: { n: S.n, rings: S.rings, sub: 2, m: lite ? Math.round(S.m * 0.8) : S.m, hole: S.hole, twist: P.twist ?? 0, star: P.star ?? 0, rhythm: S.rhythm, kind: P.kind ?? 'rings', lobes: P.lobes ?? 2 },
-        film: { amp: S.amp, open: S.open, eps: P.eps ?? 0.02 } };
-      gen.request(spec, 'sheet', (f) => { if (my === token) prog[i] = f; }).then((M) => {
+    pieces(R).forEach(({ what, spec }, i) => {
+      const S = R.sheets[i];
+      gen.request(spec, what, (f) => { if (my === token) prog[i] = f; }).then((M) => {
         if (my !== token) return;
-        // (les tampons d'un résultat gardé en cache servent à plusieurs scènes : textures sur des copies partagées, jamais cédées)
-        addSheet(S, M); prog[i] = 1; built++; gaps[i] = M.gap;
+        if (what === 'tour') {
+          const T = createTower(S, M, MOODS[R.mood], G, key.position, brass);
+          group.add(T.group); towers.push(T); T.update(0, G); gaps[i] = 0;
+        } else {
+          // (les tampons d'un résultat gardé en cache servent à plusieurs scènes : textures sur des copies partagées, jamais cédées)
+          addSheet(S, M); gaps[i] = M.gap;
+        }
+        prog[i] = 1; built++;
       });
     });
   }
 
+  // Préparer une scène à l'avance : ses pièces sont calculées et gardées en
+  // cache ; quand elle viendra, elle s'affichera sans attendre.
+  function prefetch(r) {
+    for (const { what, spec } of pieces(r)) gen.request(spec, what).catch(() => {});
+  }
+
   // ph : phase de la boucle (deux bascules)
   function update(ph) {
+    for (const t of towers) t.update(ph, G);
     for (const s of sheets) {
       const t = (2 * ph + s.S.phase) % 2, h = Math.floor(t), u = t - h, a = h * s.M.w, c = Math.cos(a), sn = Math.sin(a), my = h && s.M.mirror ? -1 : 1;
       s.U.frame.value = Math.min(u * (s.M.F1 - 1), s.M.F1 - 1.001);
@@ -220,7 +246,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
   }
 
   return {
-    group, setRecipe, update, G, key, gaps,
+    group, setRecipe, prefetch, update, G, key, gaps,
     ready: () => !!R && built === R.sheets.length, progress: () => (prog.length ? prog.reduce((a, b) => a + b, 0) / prog.length : 0),
     setShadowQuality(q) { const s = { mobile: 1024, low: 1024, medium: 2048, high: 4096, ultra: 4096 }[q] ?? 2048; if (key.shadow.mapSize.x !== s) { key.shadow.mapSize.set(s, s); key.shadow.map?.dispose(); key.shadow.map = null; } },
   };

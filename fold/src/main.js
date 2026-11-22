@@ -27,7 +27,7 @@ import { asyncPipelines, warmScene } from '../../shared/app/warmup.js';
 import { createDebugTools, packRecipe, unpackRecipe, sleep } from '../../shared/app/debug.js';
 
 const NAME = 'fold';
-const DEFAULT_SEED = '40aatl'; // scène d'ouverture (sans ?seed=) : accord bonbon, un disque au fond, une spirale, une étoile et une ombrelle
+const DEFAULT_SEED = '2nwhb5'; // scène d'ouverture (sans ?seed=) : accord menthe, sans fond, la tour au centre, un carré et une ombrelle
 const params = new URLSearchParams(location.search);
 const $ = (s) => document.querySelector(s);
 const randomSeed = () => Math.random().toString(36).slice(2, 8);
@@ -108,7 +108,9 @@ async function main() {
     const recipe = R;
     loading.active = true; loading.applied = false; loading.warming = false; loading.settle = 0;
     loader.show({ steps: STEPS });
-    loader.art({ seed: R.seed, sheet: R.sheets[0], colors: [MOODS[R.mood].papers[R.sheets[0].top][0], MOODS[R.mood].papers[R.sheets[0].bot][0], MOODS[R.mood].wall] });
+    // (le dessin plie une feuille : quand la tour est au centre, il prend la première feuille de la scène)
+    const S0 = R.sheets.find((s) => s.pattern !== 'tour') ?? R.sheets[0];
+    loader.art({ seed: R.seed, sheet: S0, colors: [MOODS[R.mood].papers[S0.top][0], MOODS[R.mood].papers[S0.bot][0], MOODS[R.mood].wall] });
     // (le fondu d'entrée de l'écran se termine avant que la scène ne change)
     // (sleep et non setTimeout : une page masquée ralentit les minuteries)
     sleep(firstRecipe ? 0 : 280).then(() => {
@@ -184,10 +186,11 @@ async function main() {
   }
 
   // ── Interface ──
-  let phi = 0, paused = false, busy = false, frozen = false;
+  let phi = 0, paused = false, busy = false, frozen = false, nextSeed = null;
   const on = {
     camState,
-    random: () => { R = generate(randomSeed()); applyRecipe(); },
+    // (la scène suivante a peut-être déjà été préparée pendant qu'on regardait celle-ci)
+    random: () => { const s = nextSeed ?? randomSeed(); nextSeed = null; R = generate(s); applyRecipe(); },
     regenerate: (seed) => { if (seed && seed !== R.seed) { R = generate(seed); applyRecipe(); } },
     moodChanged: (mood) => { R = generate(R.seed, { mood }); applyRecipe(); },
     // (accord, fond, patrons : nouvelle recette de la même graine, les autres choix gardés)
@@ -302,7 +305,7 @@ async function main() {
     if (!pace(now)) return; // (écrans 90 / 120 Hz : cadence plafonnée)
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
-    if (RENDER.dynRes && !loading.active) governor.frame(dt); // (pas pendant le chargement : les workers faussent la mesure)
+    if (RENDER.dynRes && !loading.active && !gen.busy()) governor.frame(dt); // (pas pendant un calcul : les workers faussent la mesure)
     if (!paused && !loading.active) phi += dt / R.loop.duration;
     if (loading.active) {
       if (!loading.settle) loader.progress(stage.progress());
@@ -314,6 +317,11 @@ async function main() {
         } else if (loading.settle >= 2 && ++loading.settle > 8) {
           loading.active = false;
           loader.hide();
+          // La scène suivante (touche N) se prépare pendant qu'on regarde celle-ci : la
+          // grande feuille demande une dizaine de secondes de calcul, une boucle en dure
+          // quatorze. Pas sur mobile (la batterie), pas pendant un export, ni avec un petit pool
+          // (il faut des workers libres pour une retouche au panneau pendant ce temps).
+          if (!LITE && !nextSeed && gen.size >= 5) sleep(1500).then(() => { if (!loading.active && !busy && !nextSeed) { nextSeed = randomSeed(); stage.prefetch(generate(nextSeed)); } });
           if (touch && !hinted) { hinted = true; toast('touche : pause · deux touches : nouvelle scène · appui long : masquer', 4500); }
         }
       }

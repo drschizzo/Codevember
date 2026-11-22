@@ -103,6 +103,41 @@ export function dihedral(x, a, b, c, d, g) {
   }
   return th;
 }
+// Math.hypot à trois termes, recopiée de V8 (src/builtins/math.tq : mise à
+// l'échelle par le plus grand, somme compensée de Kahan) : mêmes opérations,
+// donc mêmes bits, sans l'appel à la fonction intégrée, qui coûtait plusieurs
+// secondes au chargement (des dizaines de millions d'appels).
+function hypot3(a, b, c) {
+  a = Math.abs(a); b = Math.abs(b); c = Math.abs(c);
+  const m = Math.max(a, b, c);
+  if (m === 0) return 0;
+  let sum = 0, comp = 0, n, t, p;
+  n = a / m; t = n * n - comp; p = sum + t; comp = (p - sum) - t; sum = p;
+  n = b / m; t = n * n - comp; p = sum + t; comp = (p - sum) - t; sum = p;
+  n = c / m; t = n * n - comp; p = sum + t; comp = (p - sum) - t; sum = p;
+  return Math.sqrt(sum) * m;
+}
+// (la même, indices déjà multipliés par 3 : pour la boucle du solveur)
+function dihedral3(x, a, b, c, d, g) {
+  const ex = x[b] - x[a], ey = x[b + 1] - x[a + 1], ez = x[b + 2] - x[a + 2];
+  const ux = x[c] - x[a], uy = x[c + 1] - x[a + 1], uz = x[c + 2] - x[a + 2];
+  const vx = x[d] - x[a], vy = x[d + 1] - x[a + 1], vz = x[d + 2] - x[a + 2];
+  const ax = ey * uz - ez * uy, ay = ez * ux - ex * uz, az = ex * uy - ey * ux; // nA = e × u
+  const bx = vy * ez - vz * ey, by = vz * ex - vx * ez, bz = vx * ey - vy * ex; // nB = v × e
+  const L = hypot3(ex, ey, ez), a2 = ax * ax + ay * ay + az * az, b2 = bx * bx + by * by + bz * bz;
+  const cx = ay * bz - az * by, cy = az * bx - ax * bz, cz = ax * by - ay * bx;
+  const th = Math.atan2((cx * ex + cy * ey + cz * ez) / L, ax * bx + ay * by + az * bz);
+  if (g) {
+    const sa = -L / Math.max(a2, 1e-12), sb = -L / Math.max(b2, 1e-12);
+    g[6] = sa * ax; g[7] = sa * ay; g[8] = sa * az;
+    g[9] = sb * bx; g[10] = sb * by; g[11] = sb * bz;
+    const L2 = L * L;
+    const p1 = ((ex - ux) * ex + (ey - uy) * ey + (ez - uz) * ez) / L2, p2 = ((ex - vx) * ex + (ey - vy) * ey + (ez - vz) * ez) / L2;
+    const q1 = (ux * ex + uy * ey + uz * ez) / L2, q2 = (vx * ex + vy * ey + vz * ez) / L2;
+    for (let i = 0; i < 3; i++) { g[i] = -p1 * g[6 + i] - p2 * g[9 + i]; g[3 + i] = -q1 * g[6 + i] - q2 * g[9 + i]; }
+  }
+  return th;
+}
 
 // ── Solveur ──────────────────────────────────────────────────────────────────
 // Les charnières sont des forces, les barres des contraintes de longueur
@@ -121,24 +156,30 @@ export function createSolver(S, { k = 0.7, kF = 2.1, dtK = 0.18, iters = 4, drag
   const dt = dtK * Math.sqrt(lmin / Math.max(k, kF));
   const ring0 = [];
   for (let i = 0; i < N; i++) if (S.ringOf[i] === 0) ring0.push(i);
+  // (la boucle chaude du chargement : indices déjà multipliés par 3, en entiers, et raideurs signées
+  //  précalculées. Mêmes opérations, dans le même ordre : le film est identique au bit près)
+  const B3 = new Int32Array(2 * NB), BL = new Float64Array(NB);
+  for (let b = 0; b < NB; b++) { B3[2 * b] = 3 * bars[3 * b]; B3[2 * b + 1] = 3 * bars[3 * b + 1]; BL[b] = bars[3 * b + 2]; }
+  const H3 = new Int32Array(4 * NH), HK = new Float64Array(NH);
+  for (let h = 0; h < NH; h++) { for (let c = 0; c < 4; c++) H3[4 * h + c] = 3 * hinges[6 * h + c]; HK[h] = -(hinges[6 * h + 4] ? k : kF) * hinges[6 * h + 5]; }
   // force : (i, fx, fy, fz) ajoutée à chaque pas (le coup de pouce qui choisit la selle)
   function step(n = 1, push = null) {
     for (let s = 0; s < n; s++) {
       f.fill(0);
       if (push) push(f, x);
       for (let h = 0; h < NH; h++) {
-        const a = hinges[6 * h], b = hinges[6 * h + 1], c = hinges[6 * h + 2], d = hinges[6 * h + 3], l = hinges[6 * h + 5];
-        let dth = dihedral(x, a, b, c, d, G) - target[h];
+        const a = H3[4 * h], b = H3[4 * h + 1], c = H3[4 * h + 2], d = H3[4 * h + 3];
+        let dth = dihedral3(x, a, b, c, d, G) - target[h];
         if (dth > Math.PI) dth -= 2 * Math.PI; else if (dth < -Math.PI) dth += 2 * Math.PI;
-        const kk = -(hinges[6 * h + 4] ? k : kF) * l * dth;
-        for (let i = 0; i < 3; i++) { f[3 * a + i] += kk * G[i]; f[3 * b + i] += kk * G[3 + i]; f[3 * c + i] += kk * G[6 + i]; f[3 * d + i] += kk * G[9 + i]; }
+        const kk = HK[h] * dth;
+        for (let i = 0; i < 3; i++) { f[a + i] += kk * G[i]; f[b + i] += kk * G[3 + i]; f[c + i] += kk * G[6 + i]; f[d + i] += kk * G[9 + i]; }
       }
       for (let i = 0; i < 3 * N; i++) { v[i] = (v[i] + dt * f[i]) * (1 - P.drag); xp[i] = x[i] + dt * v[i]; }
       for (let it = 0; it < iters; it++) for (let b = 0; b < NB; b++) {
-        const i = bars[3 * b], j = bars[3 * b + 1], l0 = bars[3 * b + 2];
-        const dx = xp[3 * j] - xp[3 * i], dy = xp[3 * j + 1] - xp[3 * i + 1], dz = xp[3 * j + 2] - xp[3 * i + 2];
-        const c = 0.5 * (Math.sqrt(dx * dx + dy * dy + dz * dz) - l0) / Math.sqrt(dx * dx + dy * dy + dz * dz);
-        xp[3 * i] += c * dx; xp[3 * i + 1] += c * dy; xp[3 * i + 2] += c * dz; xp[3 * j] -= c * dx; xp[3 * j + 1] -= c * dy; xp[3 * j + 2] -= c * dz;
+        const i = B3[2 * b], j = B3[2 * b + 1], l0 = BL[b];
+        const dx = xp[j] - xp[i], dy = xp[j + 1] - xp[i + 1], dz = xp[j + 2] - xp[i + 2];
+        const dl = Math.sqrt(dx * dx + dy * dy + dz * dz), c = 0.5 * (dl - l0) / dl;
+        xp[i] += c * dx; xp[i + 1] += c * dy; xp[i + 2] += c * dz; xp[j] -= c * dx; xp[j + 1] -= c * dy; xp[j + 2] -= c * dz;
       }
       // la feuille tient par son centre : l'anneau intérieur reste centré, et la
       // feuille ne tourne pas sur elle-même

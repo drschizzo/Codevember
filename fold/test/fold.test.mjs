@@ -17,6 +17,13 @@ test('recette déterministe, JSON, tous les choix tirés', () => {
     for (const s of r.sheets) {
       seen.pattern.add(s.pattern);
       assert.notEqual(s.top % 2, s.bot % 2, 'les deux faces : une chaude, une froide');
+      if (s.pattern === 'tour') {
+        // une tour : posée sur son plateau de laiton (sur le socle, ou au sol)
+        assert.ok(Math.abs(s.base - ((s.plinth?.h ?? 0) + 0.012)) < 1e-3 && s.y > s.base + 0.3 && s.y < 1.9, `tour mal posée (${r.seed})`);
+        // (tirée au hasard, elle est le sujet : au centre, et grande)
+        assert.ok(s.size >= 1.3 * s.l && r.sheets.indexOf(s) === 0 && s.y > 1.5 && s.l > 0.19, `tour pas mise en avant (${r.seed})`);
+        continue;
+      }
       // le bas de la selle ne touche ni son socle ni le sol
       assert.ok(s.y - (s.pattern === 'soleil' ? 0.95 : 0.62) * s.size > (s.plinth?.h ?? 0), `feuille trop basse (${r.seed})`);
     }
@@ -45,6 +52,7 @@ test('angle dièdre : nul à plat, gradient exact', () => {
 
 test('patron : maillage fermé, plis alternés, tour de 2π/n', () => {
   for (const k of Object.keys(PATTERNS)) {
+    if (PATTERNS[k].kind === 'tour') continue; // (pas une feuille : test/tower.test.mjs)
     const { label, eps, amp, ...spec } = PATTERNS[k];
     const S = pleatedU({ ...spec, rings: 8, sub: 2, m: 10 });
     if (S.soleil) { assert.ok(S.mirror); continue; }

@@ -34,6 +34,9 @@ Un patron est un disque percé, maillé en anneaux concentriques cousus côté p
 | Spirale, rosace | carré ou octogone dont chaque anneau est un peu tourné : les diagonales s'enroulent | une selle vrillée |
 | Étoile | carré aux côtés creusés | une selle à pointes |
 | Ombrelle | plis rayonnants, montagne et vallée alternées | un cône plissé, qui se ferme comme un parapluie |
+| Tour | quatre prismes hexagonaux empilés, une diagonale pliée et l'autre coupée par face | des étages qui claquent à plat un à un, puis se redressent (voir *La tour*) |
+
+Une scène sur trois environ a une tour : elle est alors le sujet, au centre et en grand (1,6 à 1,8 m), et les feuilles se rangent autour. Elle est tirée à part : une graine sans tour garde exactement sa scène.
 
 ## Le pliage (`src/sim/fold.js`)
 
@@ -54,6 +57,16 @@ Les pans sont trois fois plus raides à la flexion que les pliures : la feuille 
 
 Le calcul se fait au chargement, dans des workers, une feuille par worker.
 
+## La tour (`src/sim/fpori.js`, `src/sim/tower.js`, `src/scene/tower.js`)
+
+D'après Liu et al., « Rigid-foldable cylindrical origami with tunable mechanical behaviors » (*Sci. Rep.* 14, 145, 2024). Un étage est un prisme hexagonal dont chaque face porte une diagonale pliée en vallée et l'autre coupée ; le centre de la face se dédouble, et la coupe s'ouvre en losange quand le dessus tourne et descend.
+
+À α = 60° (la moitié de l'angle de l'hexagone), l'étage est **bistable**. Il tourne librement jusqu'à 60°, puis les deux triangles qui encadrent chaque arête verticale se referment l'un sur l'autre. Pour aller plus loin, le papier doit se tendre : une barrière d'énergie. À plat (120°), plus rien n'est tendu : un second état stable. Le modèle est celui de l'article : plateaux rigides, plis en barres élastiques, et les deux triangles pressés l'un contre l'autre au-delà du contact. Il retrouve ses résultats sans réglage : bistable à 60°, monostable à 54°, sans énergie à 45°.
+
+**La dynamique.** Chaque étage suit son chemin de moindre énergie, paramétré par sa longueur (la hauteur, elle, a une dérivée infinie à plat) ; les plateaux ont une masse et une inertie de rotation, les étages des chiralités alternées. Le dessus est mené par une course qui descend, attend et remonte. Les étages tournent d'abord ensemble, se bloquent, puis claquent un à un, dans l'ordre de petites différences de raideur ; à la remontée, ils se redressent un à un, dans un autre ordre. Rien n'est écrit à la main. Deux cycles sont simulés, et seul le second est gardé : il commence là où le premier finit, la boucle raccorde.
+
+Le film (l'état de chaque étage, image par image) est calculé par un worker, en même temps que les feuilles ; la pose en découle à chaque image, et la couleur que chaque pan renvoie sur ses voisins aussi.
+
 ## Le rendu (`src/scene/stage.js`)
 
 - **Lecture du film.** Positions et normales de chaque image sont dans deux textures ; le vertex shader lit les deux images voisines et les interpole. Les sommets sont dédoublés le long des pliures : normales lisses dans un pan, vives sur un pli.
@@ -71,11 +84,12 @@ Deux feuilles ne peuvent pas se toucher : chacune tient dans un cylindre de rayo
 node --test fold/test/*.test.mjs
 ```
 
-Recette déterministe et tous les choix tirés, feuilles écartées et au-dessus de leur socle, gradient de l'angle dièdre, maillage fermé et plis alternés, film qui bascule, raccord et symétrie exacts, papier qui ne s'étire pas.
+Recette déterministe et tous les choix tirés, feuilles écartées et au-dessus de leur socle, gradient de l'angle dièdre, maillage fermé et plis alternés, film qui bascule, raccord et symétrie exacts, papier qui ne s'étire pas. Pour la tour : bistable à 60° (et à 67,5° pour l'octogone), monostable à 54°, sans énergie à 45° ; pose symétrique et sans interpénétration ; tous les étages à plat au milieu de la boucle, déployés au bout, raccord exact ; une tour de temps en temps, et les autres graines inchangées.
 
 ## Limites
 
 - Une feuille peut se traverser elle-même dans ses plis les plus serrés : le solveur ne gère pas les contacts.
 - Le papier n'a pas d'épaisseur.
-- Le chargement prend une dizaine de secondes (le pliage de la grande feuille).
+- Dans la tour, le papier tendu au-delà du contact s'étire de 3 à 5 % au lieu de gondoler.
+- Le premier chargement prend une dizaine de secondes (le pliage de la grande feuille : une projection de Gauss-Seidel, séquentielle, que rien ne répartit entre les workers). Ensuite, la scène suivante (touche N) est préparée pendant qu'on regarde l'actuelle et s'affiche en deux secondes.
 - Les plis en cercles (selle ronde, trèfle à trois bosses) sont dans le solveur mais pas dans les scènes : leur bascule ne retombe pas à coup sûr sur son point de départ.

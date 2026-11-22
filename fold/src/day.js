@@ -8,7 +8,7 @@ import { createCore } from './core.js';
 import { defaultsFor } from './app/settings.js';
 import { generatorFor, makeDay } from '../../mega/src/kit.js';
 
-export const meta = { id: 'fold', name: 'Fold', subtitle: 'le papier qui se plie seul', seed: '40aatl', enter: 'fold' };
+export const meta = { id: 'fold', name: 'Fold', subtitle: 'le papier qui se plie seul', seed: '2nwhb5', enter: 'fold' };
 
 export async function createDay({ renderer, pipes, width, height, seed = meta.seed }) {
   const gen = generatorFor('fold', Math.max(2, Math.min(6, (navigator.hardwareConcurrency || 4) - 1)));

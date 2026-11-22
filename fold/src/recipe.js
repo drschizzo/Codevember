@@ -18,7 +18,14 @@ export const PATTERNS = {
   rosace: { label: 'Rosace', n: 8, twist: 0.5, eps: 0.05 },
   etoile: { label: 'Étoile', n: 4, star: 0.35 },
   soleil: { label: 'Ombrelle', n: 20, kind: 'soleil' },
+  // (pas une feuille : une tour de prismes bistables, qui claquent à plat un à un puis se redressent ; src/sim/fpori.js)
+  tour: { label: 'Tour', kind: 'tour' },
 };
+// les feuilles, dans l'ordre du tirage (la tour est tirée à part : une graine sans tour garde sa scène d'avant)
+const SHEET_KEYS = ['carre', 'hexagone', 'octogone', 'spirale', 'rosace', 'etoile', 'soleil'];
+// La tour : quatre unités hexagonales à α = 60° (= β/2, bistables), de chiralités alternées.
+export const TOWER = { n: 6, alpha: Math.PI / 3, units: 4, chance: 0.35 };
+const r3 = (v) => Math.round(v * 1000) / 1000 + 0;
 // (les plis en cercles, selle ronde ou trèfle à trois bosses, sont dans le solveur — n ≥ 32, lobes — mais leur
 //  bascule ne retombe pas à coup sûr sur son point de départ : ils ne sont pas proposés)
 
@@ -59,13 +66,18 @@ export function generate(seed, overrides = {}) {
   const rs = rng.fork('sheets'), rc = rng.fork('camera');
   const drawn = rs.chance(0.8) ? 3 : 2, count = overrides.patterns?.length ?? overrides.count ?? drawn;
   // (tirage complet, quel que soit le nombre de feuilles : changer un patron au panneau ne déplace rien d'autre)
-  const keys = Object.keys(PATTERNS);
+  const keys = SHEET_KEYS.slice();
   for (let i = keys.length - 1; i > 0; i--) { const j = rs.int(0, i); [keys[i], keys[j]] = [keys[j], keys[i]]; }
   const patterns = keys.slice(0, count);
+  // une fois sur trois, une tour : c'est alors elle le sujet. Elle prend la place du centre, en grand, et
+  // les feuilles se rangent autour (la grande devient la moyenne, la moyenne la petite)
+  const rt = rng.fork('tour');
+  if (count >= 2 && rt.chance(TOWER.chance)) patterns.splice(0, count, 'tour', ...patterns.slice(0, count - 1));
   const side = rs.sign(), shift = rs.int(0, 3), plinth = rs.pick(['cylindre', 'bloc']);
   const sheets = [];
   (overrides.patterns ?? patterns).forEach((pattern, i) => {
     const S = SLOTS[i], P = PATTERNS[pattern], size = r2(rs.range(...S.size)), y = r2(rs.range(...S.y));
+    if (P.kind === 'tour') { sheets.push(tower(i, size, y, sheets, side, rt, rs, shift, plinth)); return; }
     // (une feuille tient dans le cylindre de rayon size autour de sa tige : deux cylindres ne se coupent pas)
     const az = side * rs.range(...S.az), d = i ? sheets[0].size + size + GAP + rs.range(0, 0.12) : 0;
     // (le socle s'arrête sous le point le plus bas de la feuille)
@@ -87,6 +99,30 @@ export function generate(seed, overrides = {}) {
     camera: { side: rc.sign(), sway: r2(rc.range(0.16, 0.26)), lift: r2(rc.range(-0.1, 0.15)), dist: r2(rc.range(5.5, 5.9)) },
     loop: { half: HALF, duration: 2 * HALF },
     grade: { ...M.grade },
+  };
+}
+// Une tour à la place d'une feuille. Au centre, elle est le sujet : son
+// sommet monte à la hauteur du haut de la grande feuille (1,6 à 1,8 m), sur
+// un socle bas. Ailleurs (choix du panneau), un peu au-dessus du centre
+// qu'aurait eu la feuille. Sa largeur (le côté l d'une unité) en découle. Son emprise (plateau de laiton, socle) remplace la taille de la
+// feuille pour l'écart avec les voisines.
+function tower(i, size, y, sheets, side, rt, rs, shift, plinth) {
+  const S = SLOTS[i], az = side * rs.range(...S.az), jit = i ? rs.range(0, 0.12) : 0;
+  // (le socle cède la hauteur à la tour : jamais d'unités de moins de 8,5 cm de côté)
+  const hero = i === 0, topY = y + (hero ? 0.5 : 0.3) * size, ph = r2(Math.min(hero ? rs.range(0.06, 0.2) : rs.range(0.1, 0.42), topY - 0.012 - TOWER.units * 0.085 * Math.tan(TOWER.alpha))), hasPlinth = ph > 0.12;
+  const base = (hasPlinth ? ph : 0) + 0.012; // (plateau de laiton : 12 mm)
+  const l = r3((topY - base) / (TOWER.units * Math.tan(TOWER.alpha)));
+  const pr = r2(Math.max(rs.range(0.14, 0.19), 1.42 * l)), kind = plinth;
+  const reach = Math.max(1.3 * l, hasPlinth ? (kind === 'bloc' ? 0.85 * pr * Math.SQRT2 : pr) : 0);
+  const foot = r2(reach + 0.01), d = i ? sheets[0].size + foot + GAP + jit : 0;
+  // (l'ordre des claquements : de petites différences de raideur entre unités)
+  const rk = rt.fork(`spread${i}`), spread = [1.0, 0.9, 1.08, 0.95];
+  for (let k = spread.length - 1; k > 0; k--) { const j = rk.int(0, k); [spread[k], spread[j]] = [spread[j], spread[k]]; }
+  return {
+    pattern: 'tour', size: foot, y: r2(base + TOWER.units * l * Math.tan(TOWER.alpha)), at: [r2(d * Math.sin(az)), r2(d * Math.cos(az))], rot: r2(rs.range(0, Math.PI / 3)),
+    n: TOWER.n, units: TOWER.units, l, base: r3(base), spread, phase: r2(i === 0 ? 0 : rs.range(0.2, 0.8)),
+    top: (i + shift) % 4, bot: (i + shift + 1) % 4,
+    plinth: hasPlinth ? { kind, h: r2(ph), r: pr, color: (i + shift) % 2 } : null,
   };
 }
 export function upgrade(R) { return R?.v === 6 ? R : generate(R?.seed ?? 'f1'); }
