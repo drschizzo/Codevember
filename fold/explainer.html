@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#050506">
   <title>Fold · défis techniques</title>
-  <meta name="description" content="Comment fonctionne Fold, reconstruit pas à pas : des charnières qui cherchent leur angle, des barres qui empêchent le papier de s'étirer, un maillage cousu en fermeture éclair, une selle qui naît d'un flambage, le geste sec du papier, une boucle refermée par symétrie, un film relu par la carte graphique et la couleur qu'un pan renvoie sur l'autre.">
+  <meta name="description" content="Comment fonctionne Fold, reconstruit pas à pas : des charnières qui cherchent leur angle, des barres qui empêchent le papier de s'étirer, un maillage cousu en fermeture éclair, une selle qui naît d'un flambage, le geste sec du papier, une boucle refermée par symétrie, un film relu par la carte graphique, la couleur qu'un pan renvoie sur l'autre, et une tour de prismes bistables qui claque étage par étage.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
@@ -24,13 +24,13 @@
     <header class="hero">
       <div class="kicker">Day 01 · Fold · comment ça marche</div>
       <h1>Comment une feuille de papier se plie, bascule et revient exactement</h1>
-      <p class="lede">Fold montre deux ou trois feuilles de papier, chacune portée par une tige de laiton. Leurs plis se referment et tordent la feuille en selle ou en ombrelle. Puis les plis se rouvrent, la feuille claque dans son autre position, et les plis se referment. Personne ne dessine ces formes : elles sont calculées à partir de deux règles, le papier ne s'étire pas et chaque pli cherche à atteindre un angle. Cette page reconstruit ce calcul pas à pas. Ses démos font tourner le code du projet lui-même, sur des feuilles plus petites.</p>
+      <p class="lede">Fold montre deux ou trois pièces de papier : des feuilles, chacune portée par une tige de laiton, et parfois une tour de prismes en papier au centre. Leurs plis se referment et tordent la feuille en selle ou en ombrelle. Puis les plis se rouvrent, la feuille claque dans son autre position, et les plis se referment. Personne ne dessine ces formes : elles sont calculées à partir de deux règles, le papier ne s'étire pas et chaque pli cherche à atteindre un angle. La tour obéit aux mêmes règles, mais ses étages ont deux positions de repos et passent de l'une à l'autre d'un coup sec. Cette page reconstruit ces calculs pas à pas. Ses démos font tourner le code du projet lui-même, sur des feuilles plus petites.</p>
       <p class="prereq">Pour suivre, il suffit de savoir lire un peu de JavaScript (des tableaux et des boucles). Les formules résument ce que les démos montrent ; on peut les sauter sans perdre le fil. Les détails de production sont rangés dans les encadrés « Pour aller plus loin ».</p>
     </header>
 
     <figure class="cover">
       <img src="docs/capture.jpg" alt="Trois feuilles de papier plissé sur leurs tiges : une spirale bleue et orange, une petite étoile, une ombrelle fermée, devant un disque beige et un fond rose" width="1280" height="720">
-      <figcaption>La scène d'ouverture (graine 40aatl) : une spirale, une étoile et une ombrelle, dans l'accord de couleurs Bonbon.</figcaption>
+      <figcaption>Une scène de Fold (graine 40aatl) : une spirale, une étoile et une ombrelle, dans l'accord de couleurs Bonbon.</figcaption>
     </figure>
 
     <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
@@ -41,11 +41,13 @@
         <h2><span class="n">01</span>Ce que montre la scène</h2>
         <p>Chaque feuille est un disque de papier percé en son centre, par où passe sa tige. Elle a deux couleurs, une par face. Sur la feuille sont marqués des <b>plis</b>. Un pli <b>montagne</b> se ferme vers le haut, comme le faîte d'un toit ; un pli <b>vallée</b> se ferme vers le bas. Entre les plis, les zones de papier qui doivent rester planes s'appellent des <b>pans</b>. L'ensemble des plis d'une feuille est son <b>patron</b>.</p>
         <p>Il y a deux familles de patrons. Dans la première, les plis sont des anneaux concentriques, montagne et vallée alternés, coupés par des diagonales qui vont du centre aux coins. C'est un exercice classique du cours de Josef Albers au Bauhaus : la feuille, en se pliant, se tord en forme de selle de cheval. La graine choisit le nombre de côtés (carré, hexagone, octogone), une vrille qui tourne chaque anneau un peu plus que le précédent (spirale, rosace) ou des côtés creusés (étoile). Dans la seconde famille, les plis partent du centre comme des rayons, et la feuille se ferme comme une ombrelle.</p>
+        <p>Une scène sur trois environ remplace la grande feuille par une tour de quatre prismes en papier empilés, qui s'écrasent à plat étage par étage puis se redressent.</p>
         <p>Le film est une boucle de 14 secondes. Pendant ce temps, chaque feuille passe deux fois d'une position à l'autre. La page suit l'ordre de construction :</p>
         <ul>
           <li><b>le solveur</b>, le programme qui calcule la forme : des charnières qui plient (section 02), des barres qui empêchent le papier de s'étirer (03) et le maillage de la feuille (04) ;</li>
           <li><b>le mouvement</b> : la selle qui apparaît d'elle-même (05), le geste sec du papier (06) et la boucle qui se referme sans saut (07) ;</li>
-          <li><b>le rendu</b> : le film relu par la carte graphique (08), la couleur qu'un pan renvoie sur l'autre (09), les ombres colorées (10), et la place des feuilles dans la scène (11).</li>
+          <li><b>le rendu</b> : le film relu par la carte graphique (08), la couleur qu'un pan renvoie sur l'autre (09), les ombres colorées (10), et la place des feuilles dans la scène (11) ;</li>
+          <li><b>la tour</b> : un prisme aux faces rigides (12), ses deux états stables (13) et la tour qui claque étage par étage (14).</li>
         </ul>
       </section>
 
@@ -237,30 +239,116 @@ while (p &lt; a || q &lt; b) {
           <li>Cliquez plusieurs fois sur « Autre graine » : le plus petit jeu entre deux cylindres varie (0,096 pour la graine 40aatl, de 0,093 à 0,160 pour les quatre suivantes), sans jamais descendre sous 0,08.</li>
         </ul></div>
         <p>La même recette pose chaque feuille assez haut sur sa tige pour que son point le plus bas reste au-dessus de son socle : il descend au plus à 0,62 rayon sous le centre pour une selle, 0,95 pour une ombrelle fermée.</p>
+        <p>Une tour suit la même règle. Ses étages tournent et s'affaissent, mais aucun point ne sort du cylindre de son plateau de laiton, de rayon 1,3 <i>l</i>, ni de celui de son socle. Quand la graine tire une tour, elle prend la place du centre et les feuilles se rangent autour : la grande devient la moyenne, la moyenne la petite. La tour est tirée à part des autres choix, si bien qu'une graine sans tour garde exactement la scène qu'elle avait avant que la tour n'existe.</p>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
           <p>Un test le vérifie sur trois cents graines, avec la séparation des cylindres, l'alternance d'une face chaude et d'une face froide, et le fait que deux feuilles ne portent jamais le même patron. Une limite demeure : une feuille peut encore se traverser elle-même dans ses plis les plus serrés, et le papier n'a pas d'épaisseur.</p>
         </div></details>
       </section>
 
+      <section id="tour">
+        <h2><span class="n">12</span>Une tour de prismes aux faces rigides</h2>
+        <span class="src">src/sim/fpori.js · unitParams(), corners(), fitPoint()</span>
+        <p>Dans une scène sur trois environ, une tour de papier remplace la grande feuille au centre. Ses quatre étages tournent ensemble en s'affaissant, puis s'écrasent à plat l'un après l'autre, d'un coup sec. Plus tard, ils se redressent un à un.</p>
+        <figure><img src="docs/tour.jpg" alt="La scène d'ouverture à trois instants : la tour debout, deux étages écrasés, puis toute la tour à plat entre une selle et une ombrelle" width="1680" height="480" loading="lazy"><figcaption>La scène d'ouverture (graine 2nwhb5) à trois instants de la boucle : la tour debout, deux étages écrasés, tous les étages à plat.</figcaption></figure>
+        <p>La tour reprend un pliage publié par Liu et ses collègues en 2024 (FP-ori, dans <i>Scientific Reports</i>). Un étage est un prisme droit à six côtés. Chaque face latérale est un rectangle de largeur <i>l</i> et de hauteur <i>H</i><sub>0</sub>. Une de ses diagonales, du coin bas gauche au coin haut droit, est pliée en vallée ; l'autre est coupée. Le centre de la face devient donc deux points, <i>X</i> et <i>Y</i>, qui s'écartent quand le dessus tourne : la coupe s'ouvre en losange. Chaque face se partage ainsi en quatre triangles.</p>
+        <p>La règle la plus simple suppose que le papier est rigide entre les plis : aucun triangle ne se déforme. Le dessus tourne d'un angle θ autour de l'axe et descend. Comme l'arête verticale d'un coin du bas au coin du dessus garde sa longueur <i>H</i><sub>0</sub>, la hauteur ne dépend que de θ. Le point <i>X</i> d'une face reste à la même distance <i>d</i> (la demi-diagonale) de ses trois coins : il est à l'intersection de trois sphères. La pose entière se calcule donc sans simulation, en forme close.</p>
+        <figure id="fig-prisme"><figcaption><b>Un étage, avec la règle des faces rigides.</b> Le dessus tourne de θ et la hauteur suit la formule ci-dessous ; les points <i>X</i> et <i>Y</i> sont placés par <code>fitPoint()</code> du projet, à la distance <i>d</i> de leurs trois coins. En rouge, les triangles qui en traversent un autre, détectés par <code>intersections()</code>. Le dehors est jaune orangé, le dedans bleu. Glissez sur la figure pour la tourner.</figcaption></figure>
+        <p>La démo montre où cette règle échoue. L'angle α mesure la pente de la diagonale : <i>H</i><sub>0</sub> = <i>l</i> tan α. À α = 45°, l'étage se plie à plat pour θ = 60° et aucun triangle n'en traverse un autre. Au-dessus de 45°, quelque chose cède à θ = 60°. Dans chaque coin, le triangle gauche d'une face et le triangle droit de la face voisine partagent l'arête verticale. Ils se referment l'un sur l'autre comme les pages d'un livre. La règle rigide fait ensuite passer chaque aile du coin à travers l'autre, à partir de 61°, ce que le papier ne peut pas faire. La section suivante corrige ce défaut.</p>
+        <div class="eq">\[ R = \frac{l}{2\sin(\pi/n)}, \qquad H_0 = l\tan\alpha, \qquad h(\theta) = \sqrt{H_0^2 - 2R^2\,(1-\cos\theta)}, \qquad d = \frac{l}{2\cos\alpha} \]</div>
+        <p><i>n</i> est le nombre de côtés (6), <i>l</i> la longueur d'un côté (de 8,5 à 24 cm selon la place de la tour), <i>R</i> le rayon du cercle qui passe par les coins (égal à <i>l</i> pour un hexagone), <i>H</i><sub>0</sub> la hauteur de l'étage déployé, <i>h</i> sa hauteur quand le dessus a tourné de θ, <i>d</i> la demi-diagonale d'une face. <i>h</i> s'annule pour cos θ = 1 − <i>H</i><sub>0</sub>²/(2<i>R</i>²) : 60° à α = 45°, 87° à α = 54°, 120° à α = 60°.</p>
+        <pre><code>// src/sim/fpori.js (simplifié) : les coins, puis X et Y à la distance d de trois coins
+const { B, T } = corners(P, h, th);           // dessous fixe, dessus tourné de θ à la hauteur h
+let X = fitPoint([B[0], B[1], T[0]], [1, 1, 1], P.d, X0);
+let Y = fitPoint([T[0], T[n - 1], B[0]], [1, 1, 1], P.d, Y0);
+// les autres faces : la même chose tournée de 2π/n autour de l'axe</code></pre>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Laissez α à 45° et poussez θ jusqu'au bout : l'étage arrive à plat à 60° sans qu'aucun triangle ne devienne rouge.</li>
+          <li>Passez α à 60° et poussez θ au-delà de 60° : dans chaque coin, les deux ailes se traversent, soit douze paires de triangles. Vers 96°, d'autres paires s'y ajoutent.</li>
+          <li>Comparez α = 54° et α = 60° : dans les deux cas, les faces se traversent dès 61°. La règle rigide ne distingue pas ces deux pliages ; le papier, lui, les distingue (section suivante).</li>
+        </ul></div>
+      </section>
+
+      <section id="bistable">
+        <h2><span class="n">13</span>Deux états stables</h2>
+        <span class="src">src/sim/fpori.js · limb(), energyPath()</span>
+        <p>Avec de vrais modèles en papier, l'article observe deux comportements. À α = 60°, l'étage écrasé à plat y reste tout seul. À α = 54°, il se redresse dès qu'on le lâche. Un objet qui a deux positions de repos s'appelle <b>bistable</b>.</p>
+        <p>La correction de la section précédente part du contact. Quand les deux triangles d'un coin se rencontrent, ils restent pressés l'un contre l'autre : leurs points <i>X</i> et <i>Y</i> se confondent en un seul point <i>M</i>, tiré par quatre coins au lieu de trois. Un point tiré par quatre coins ne peut plus être à la bonne distance de chacun, et le papier doit s'étirer un peu. On reprend le modèle de l'article : les plateaux du dessus et du dessous sont rigides, chaque pli est une barre élastique qui a une longueur de repos. L'<b>énergie</b> de l'étage est la somme, sur toutes les barres, du carré de leur allongement. Pour chaque rotation θ, on cherche la hauteur et la position de <i>M</i> qui rendent cette énergie la plus petite possible : c'est le <b>chemin de moindre énergie</b>, le chemin que suit l'étage quand on l'écrase lentement.</p>
+        <figure id="fig-energie" class="wide"><figcaption><b>L'énergie le long du chemin de moindre énergie</b>, calculée par <code>energyPath()</code> du projet pour l'angle α choisi (trait épais) et, en fin, pour 45°, 54° et 60°. À gauche, l'étage dans l'état correspondant, posé par <code>poseAt()</code> : un triangle rougit avec l'allongement de ses barres (rouge plein à 3 %). Les longueurs sont en unités du côté <i>l</i>, et les barres ont une raideur de 1.</figcaption></figure>
+        <p>La courbe de 60° montre les deux états. Jusqu'à 60°, l'énergie est nulle : l'étage tourne sans effort, il suit la règle rigide. Au contact, elle monte : le papier se tend. Elle passe par un maximum vers 88°, puis redescend et revient à zéro à plat, à 120°. L'étage à plat est un second état de repos, séparé du premier par une barrière. Pour passer la barrière, il faut pousser ; une fois au-delà, l'étage tombe de lui-même à plat. C'est le claquement. À 54°, la courbe ne redescend pas : à plat, le papier reste tendu, et l'étage se redresse. Le modèle retrouve les deux observations de l'article sans aucun réglage.</p>
+        <div class="eq">\[ U(\theta) = \min_{h,\,M}\ \tfrac12 \sum_{\text{barres}} \big(L - L_0\big)^2, \qquad F = -\frac{dU}{dh} \]</div>
+        <p><i>U</i> est l'énergie de l'étage, <i>L</i> la longueur d'une barre dans l'état (<i>h</i>, θ), <i>L</i><sub>0</sub> sa longueur dans le papier à plat, <i>F</i> la force verticale qu'il faut exercer sur le dessus pour tenir l'étage dans cet état. À 60°, <i>F</i> atteint 0,032 en compression avant la barrière, puis −0,016 au-delà : l'étage tire alors vers le bas. Le papier s'étire au plus de 2,5 %, vers 85°.</p>
+        <pre><code>// src/sim/fpori.js · limb() (simplifié) : un coin de l'étage dans l'état (h, θ)
+X = fitPoint([b0, b1, t0], [1, 1, 1], d, X);   // à la distance d de ses trois coins
+Y = fitPoint([t0, tm, b0], [1, 1, 1], d, Y);
+phi3 = angleAbout(b0, ax, ref, Y) - angleAbout(b0, ax, ref, X);  // ouverture du livre
+if (phi3 &lt; 0) {
+  // pressés l'un contre l'autre : un seul point, tiré par quatre coins
+  // (B0 M et T0 M appartiennent aux deux triangles : leur poids est double)
+  const M = fitPoint([b0, b1, t0, tm], [2, 1, 2, 1], d, mid(X, Y));
+  X = M; Y = M;
+}</code></pre>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Avec α = 60°, faites glisser θ de 60° à 120° : les triangles des coins rougissent jusque vers 88°, puis pâlissent. À 120°, la courbe et la couleur reviennent à zéro.</li>
+          <li>Passez α à 54° : la courbe épaisse monte jusqu'à plat et y reste (0,011). L'étage n'a qu'un état de repos.</li>
+          <li>Faites varier α entre 54° et 60°. À partir de 56° environ, la courbe épaisse passe par un maximum puis redescend : l'étage à plat est retenu, même si le papier y reste un peu tendu. En dessous, elle ne fait que monter. L'article annonce une telle frontière entre 45° et 60° ; ce modèle la place vers 56°. Seul α = 60° donne un état à plat sans aucune tension.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Les tests du projet vérifient ces résultats : contact à θ = 2π/<i>n</i>, barrière, puis énergie nulle à plat pour <i>n</i> = 6 et α = 60° ; énergie piégée à plat à 54° ; aucune énergie à 45° ; bistable aussi pour un octogone à 67,5°, la moitié de son angle. Ils vérifient encore que la pose garde exactement la symétrie d'ordre six et qu'aucun triangle n'en traverse un autre le long du chemin.</p>
+          <p>Au rendu, deux triangles pressés l'un contre l'autre auraient exactement la même position, et la carte graphique ne saurait pas lequel montrer : ils scintilleraient. Ils sont écartés de l'épaisseur d'une feuille (0,35 mm pour un côté de 9 cm), sauf presque à plat, où cet écart les ferait croiser les couches voisines. Le papier du modèle s'étire au lieu de gondoler comme le vrai : c'est une limite.</p>
+        </div></details>
+      </section>
+
+      <section id="claque">
+        <h2><span class="n">14</span>Une tour qui claque étage par étage</h2>
+        <span class="src">src/sim/tower.js · simulate(), pressY()</span>
+        <p>Quatre étages empilés se partagent la compression. Pourtant, dans la scène, ils ne s'écrasent pas ensemble : ils tournent d'abord tous un peu, puis ils claquent l'un après l'autre, à une demi-seconde d'intervalle.</p>
+        <p>La règle : chaque étage avance le long de son chemin de moindre énergie, et lui seul en décide la forme. Les plateaux entre deux étages ont une masse et peuvent tourner ; un étage sur deux est l'image de l'autre dans un miroir, si bien que deux plateaux voisins tournent en sens contraires. Le dessus est mené par une course qui descend, attend, puis remonte. Dans la scène, rien ne montre ce qui la mène : comme les feuilles, la tour se plie seule. Quand la course impose la hauteur totale, les étages en série portent la même force. Le premier qui passe sa barrière claque ; les autres se détendent un peu, puisque la hauteur qu'il vient de perdre leur est rendue.</p>
+        <figure id="fig-claque" class="wide"><figcaption><b>Le film de la tour</b>, calculé à l'ouverture de cette page par <code>simulate()</code> du projet dans un worker. À gauche, la tour vue de côté : un rectangle par étage, à sa hauteur, et sur chaque plateau un repère qui tourne avec lui. Le trait pointillé est la course. À droite, la rotation θ de chaque étage pendant les 14 secondes de la boucle ; le trait gris marque le contact, à 60°. Les boutons changent les raideurs des quatre étages (de bas en haut) et relancent le calcul.</figcaption></figure>
+        <p>Dans quel ordre les étages claquent-ils ? Si les quatre étaient identiques, le calcul n'aurait aucune raison de choisir. Deux choses les distinguent. La première est le poids : l'étage du bas porte les trois plateaux du dessus, il claque le premier, et à la remontée c'est celui du haut qui se redresse d'abord. La seconde est l'imperfection : la graine donne à chaque étage une raideur un peu différente (de 0,9 à 1,08), comme deux modèles en papier ne sont jamais tout à fait pareils. Celui dont la barrière est la plus basse claque le premier.</p>
+        <div class="note trap"><b>Le piège : une coordonnée qui s'emballe</b><p>Le premier calcul utilisait θ comme coordonnée de chaque étage. Près de l'état à plat, la hauteur varie infiniment vite avec θ (la courbe <i>h</i>(θ) y est verticale), et la masse apparente des plateaux devient infinie. L'intégrateur injectait de l'énergie : les étages dépassaient la butée et tournaient jusqu'à 200°. La correction paramètre chaque étage par la longueur σ parcourue sur son chemin (en mêlant hauteur et rotation), dont les dérivées restent bornées, et écrit les équations du mouvement complètes.</p></div>
+        <div class="eq">\[ M(\sigma)\,\ddot{\sigma} = -\nabla U - c\,\dot\sigma + Q_{\text{course}} + Q_{\text{poids}} - \Big(\sum_{i&lt;j} m\, h_i''\,\dot\sigma_i^2\Big)_j \]</div>
+        <p>σ regroupe la position de chaque étage sur son chemin, <i>M</i> est la matrice de masse (la masse <i>m</i> de chaque plateau, 12 g, et son inertie de rotation), <i>U</i> la somme des énergies des étages, <i>c</i> l'amortissement des plis, <i>Q</i> les forces de la course et du poids. Le dernier terme vient de ce que la hauteur d'un plateau est une somme de fonctions d'une seule variable : <i>h</i><sub>i</sub>'' est la courbure du chemin de l'étage <i>i</i>. Le pas de temps est fixe (1/24 000 s). Deux boucles sont calculées et seule la seconde est gardée : elle commence là où la première finit, et le raccord est exact (moins d'un dixième de degré).</p>
+        <pre><code>// src/sim/tower.js · simulate() (simplifié) : un pas
+for (let j = 1; j &lt;= N; j++) {           // plateau j, porté par les étages i &lt; j
+  cy += h2[j - 1] * v[j - 1] ** 2;         // accélération due à la courbure des chemins
+  for (let a = 0; a &lt; j; a++) {
+    for (let b = 0; b &lt; j; b++) M[a * N + b] += m * h1[a] * h1[b] + I * t1[a] * t1[b];
+    Q[a] -= m * h1[a] * cy + I * t1[a] * cp;
+  }
+}
+// + énergie des barres, plis, poids, course ; puis M σ̈ = Q, et un pas d'Euler symplectique</code></pre>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Avec « Raideurs égales », regardez l'ordre : à la descente, du bas vers le haut (1, 2, 3, 4) ; à la remontée, du haut vers le bas. Seul le poids décide.</li>
+          <li>Avec « Raideurs de la graine » (1, 1,08, 0,9, 0,95), l'étage 3, le plus souple, claque le premier, puis 1, 4 et 2. À la remontée, le poids reprend la main.</li>
+          <li>Sur la courbe, repérez le moment où un étage claque : les autres reculent un instant sous 60°.</li>
+        </ul></div>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Le film d'une tour (quatre angles et quatre hauteurs par image, 60 images par seconde) est calculé au chargement par un worker du projet, en même temps que les feuilles, en moins d'une seconde. À chaque image, la pose de chaque étage est reconstruite sur le processeur à partir de (<i>h</i>, θ), ainsi que la couleur que chaque pan renvoie sur ses voisins : la tour n'a que 126 triangles. La simulation est faite pour un côté de 9 cm ; la scène l'agrandit sans changer le temps.</p>
+          <p>Dans la scène, la tour reste à plat moins de deux secondes : elle est le sujet, et le centre ne doit pas rester vide. Sa place suit la règle des cylindres de la section 11 : son emprise est le rayon de son plateau de laiton (1,3 <i>l</i>) ou de son socle.</p>
+        </div></details>
+      </section>
+
       <section id="resume">
-        <h2><span class="n">12</span>Récapitulatif</h2>
+        <h2><span class="n">15</span>Récapitulatif</h2>
         <p>Au chargement, pour chaque feuille, dans un worker :</p>
         <ol>
           <li>le patron est maillé en fermeture éclair (section 04) ;</li>
           <li>la feuille est entrouverte, puis refermée comme à la fin d'une bascule (section 07) ;</li>
           <li>le film d'une bascule est calculé : à chaque pas, les charnières poussent vers l'angle du calendrier, le coup de pouce choisit l'état, puis les barres sont corrigées en quatre passes (sections 02, 03, 05 et 06) ;</li>
-          <li>l'écart de raccord est fondu sur le dernier quart, chaque image est moyennée sur les symétries de la selle (section 07), puis les sommets sont dédoublés le long des plis et le film est rangé en deux textures (section 08).</li>
+          <li>l'écart de raccord est fondu sur le dernier quart, chaque image est moyennée sur les symétries de la selle (section 07), puis les sommets sont dédoublés le long des plis et le film est rangé en deux textures (section 08) ;</li>
+          <li>pour une tour : le chemin de moindre énergie d'un étage est tabulé, puis deux boucles de la tour sous sa course sont simulées, et seule la seconde est gardée (sections 13 et 14).</li>
         </ol>
         <p>À chaque image :</p>
         <ol>
           <li>la phase de la boucle donne, pour chaque feuille, la bascule en cours et l'instant dans le film ; la seconde bascule est la première tournée d'un cran (section 07) ;</li>
           <li>le vertex shader interpole les positions et les normales entre deux lignes des textures, et calcule le renvoi de couleur de huit voisins (sections 08 et 09) ;</li>
+          <li>la pose de chaque étage de la tour est reconstruite sur le processeur à partir de sa hauteur et de sa rotation, avec la couleur renvoyée entre ses pans (sections 12 à 14) ;</li>
           <li>le rendu ajoute les ombres teintées, la lumière transmise et le rebond en espace écran (section 10).</li>
         </ol>
       </section>
 
       <section id="budget">
-        <h2><span class="n">13</span>Budget</h2>
+        <h2><span class="n">16</span>Budget</h2>
         <p>Tout le pliage se fait pendant l'écran de chargement, une feuille par worker, en parallèle. L'écran de chargement plie lui-même, en direct, une version grossière de la grande feuille de la graine avec le même solveur, et n'en dessine que les plis.</p>
         <div class="tbl"><table>
           <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
@@ -268,12 +356,14 @@ while (p &lt; a || q &lt; b) {
             <tr><td>Grande feuille de la graine 40aatl : 1&#8239;924 sommets, 510 images simulées de 17 pas</td><td>worker</td><td class="num">≈ 9 s</td></tr>
             <tr><td>Petite feuille de démo (416 sommets)</td><td>worker</td><td class="num">≈ 1,4 s</td></tr>
             <tr><td>Film enregistré par feuille : 301 images, positions et normales</td><td>GPU</td><td class="num">2 textures flottantes</td></tr>
-            <tr><td>Scène d'ouverture : sommets simulés (trois feuilles)</td><td>worker</td><td class="num">3&#8239;748</td></tr>
+            <tr><td>Film d'une tour : quatre étages, deux boucles simulées au pas de 1/24&#8239;000 s</td><td>worker</td><td class="num">≈ 0,7 s</td></tr>
+            <tr><td>Pose d'une tour, à chaque image : 126 triangles et leurs renvois de couleur</td><td>processeur</td><td class="num">126</td></tr>
+            <tr><td>Scène d'ouverture (graine 2nwhb5) : une tour, un carré et une ombrelle ; la pièce la plus longue, le carré (832 sommets)</td><td>worker</td><td class="num">≈ 2,7 s</td></tr>
             <tr><td>Renvoi de couleur : voisins lus par sommet, pour chaque face</td><td>GPU</td><td class="num">8</td></tr>
             <tr><td>Image 1&#8239;280 × 720, chaîne complète</td><td>GPU</td><td class="num">≈ 5,5 ms</td></tr>
           </tbody>
         </table></div>
-        <p>Le temps de la grande feuille a été mesuré dans Node sur un portable Apple (8,9 s), celui de la petite feuille dans cette page. Le temps d'image a été mesuré sur le même portable, dans une fenêtre masquée : c'est un ordre de grandeur.</p>
+        <p>Les pièces d'une scène sont calculées en parallèle : le chargement dure autant que la plus longue, presque toujours la grande feuille. Une fois la scène affichée, la page calcule déjà la scène suivante dans les workers libres, et la touche N l'affiche en deux secondes environ. Le temps de la grande feuille a été mesuré dans Node sur un portable Apple (8,9 s), celui de la petite feuille dans cette page. Le temps d'image a été mesuré sur le même portable, dans une fenêtre masquée : c'est un ordre de grandeur.</p>
       </section>
 
     </article>
@@ -291,6 +381,7 @@ while (p &lt; a || q &lt; b) {
     import { demo, C, TAU, clamp, alpha, label, arrow } from '../home/explainer.js';
     import { pleatedU, createSolver, dihedral, bake, renderMesh } from './src/sim/fold.js';
     import { generate, PATTERNS, MOODS, GAP } from './src/recipe.js';
+    import { unitParams, unitTriangles, unitPoints, intersections, heightAt, corners, fitPoint, poseAt, energyPath } from './src/sim/fpori.js';
 
     // ── outils communs ─────────────────────────────────────────────────────
     const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
@@ -752,6 +843,164 @@ while (p &lt; a || q &lt; b) {
         d.readout(`accord <b>${M.label}</b> · ${R.sheets.length} feuilles · plus petit jeu entre deux cylindres <b>${fr(dmin, 3)}</b> (minimum garanti ${fr(GAP)})`);
       },
     });
+
+    // ── 12 à 14 · la tour ──────────────────────────────────────────────────
+    const DEG = 180 / Math.PI, UT = unitTriangles(6);
+    const T_OUT = [hex('#ffb21f'), hex('#ffd866')], T_IN = [hex('#2f8bff'), hex('#12c4d6')];
+    // la règle rigide (section 12) : X et Y à la distance d de leurs trois coins, sans contact
+    function rigidPose(P, th) {
+      const h = heightAt(P, th), { B, T } = corners(P, h, th), n = P.n;
+      const inw = (a, b, e, f) => { const c = [0, 1, 2].map((k) => (a[k] + b[k] + e[k] + f[k]) / 4); return [c[0] * 0.95, c[1], c[2] * 0.95]; };
+      const X0 = fitPoint([B[0], B[1], T[0]], [1, 1, 1], P.d, inw(B[0], B[1], T[0], T[1]));
+      const Y0 = fitPoint([T[0], T[n - 1], B[0]], [1, 1, 1], P.d, inw(B[0], T[n - 1], T[0], B[n - 1]));
+      const rot = (p, a) => { const c = Math.cos(a), s = Math.sin(a); return [p[0] * c + p[2] * s, p[1], -p[0] * s + p[2] * c]; };
+      const X = [], Y = [];
+      for (let k = 0; k < n; k++) { X.push(rot(X0, (TAU * k) / n)); Y.push(rot(Y0, (TAU * (k + 1)) / n)); }
+      return { B, T, X, Y, h };
+    }
+    // un étage en volume : ses 24 triangles et ses deux plateaux, du plus loin au plus proche.
+    // tint(t) : 0 → couleur du papier, 1 → rouge
+    function drawUnit(g, V, pose, tint = () => 0) {
+      const pts = unitPoints(pose), Q = pts.map((p) => proj(V, p[0], p[1], p[2])), polys = [];
+      UT.forEach((t, i) => polys.push({ v: t.v, i, z: (Q[t.v[0]][2] + Q[t.v[1]][2] + Q[t.v[2]][2]) / 3 }));
+      for (const [k0, top] of [[0, false], [6, true]]) { const v = [0, 1, 2, 3, 4, 5].map((k) => k0 + k); polys.push({ v, plate: true, top, z: v.reduce((s, k) => s + Q[k][2], 0) / 6 }); }
+      polys.sort((a, b) => a.z - b.z);
+      const Dx = V.sa * V.cp, Dy = V.sp, Dz = V.ca * V.cp;
+      g.lineJoin = 'round';
+      for (const p of polys) {
+        let col;
+        if (p.plate) col = rgb([236, 232, 226], 0.75 + (p.top ? 0.2 : 0));
+        else {
+          const [a, b, c] = p.v.map((k) => pts[k]);
+          const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2], vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
+          const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx, l = Math.hypot(nx, ny, nz) || 1;
+          const out = nx * Dx + ny * Dy + nz * Dz > 0, base = out ? T_OUT : T_IN;
+          const lam = 0.55 + 0.45 * Math.abs(nx * KEY[0] + ny * KEY[1] + nz * KEY[2]) / l, r = clamp(tint(p.i), 0, 1);
+          col = rgb(mix3(mix3(base[0], base[1], (a[1] + b[1] + c[1]) / 6), [225, 25, 45], r), lam);
+        }
+        g.fillStyle = col; g.strokeStyle = alpha(C.ink, 0.35); g.lineWidth = 0.7;
+        g.beginPath(); p.v.forEach((k, j) => (j ? g.lineTo(Q[k][0], Q[k][1]) : g.moveTo(Q[k][0], Q[k][1]))); g.closePath(); g.fill(); g.stroke();
+      }
+    }
+
+    demo('#fig-prisme', {
+      aspect: 16 / 10, title: 'La règle des faces rigides',
+      controls: [
+        { key: 'a', label: 'Angle α de la diagonale', min: 45, max: 62, step: 0.5, value: 45, fmt: (v) => `${fr(v, 1)}°` },
+        { key: 'th', label: 'Rotation θ du dessus', min: 0, max: 130, step: 0.5, value: 40, fmt: (v) => `${fr(v, 1)}°` },
+      ],
+      pointer(d, e) { orbit(d, e, (d.view ??= { a: 0.5, p: 0.45 })); },
+      draw(g, d) {
+        const v = (d.view ??= { a: 0.5, p: 0.45 }), P = unitParams(6, d.s.a / DEG, 1);
+        const th = Math.min(d.s.th / DEG, P.thetaMax), pose = rigidPose(P, th);
+        // (à plat, tout est dans un même plan : « traverser » n'y a plus de sens)
+        const pairs = pose.h < 1e-6 ? [] : intersections(unitPoints(pose), UT), red = new Set(pairs.flat());
+        const V = mkView(v.a, v.p, Math.min(d.w * 0.2, d.h * 0.27), d.w / 2, d.h * 0.8);
+        drawUnit(g, V, pose, (i) => (red.has(i) ? 0.8 : 0));
+        const flat = pose.h < 1e-6;
+        d.status(pairs.length ? 'des faces se traversent' : flat ? 'à plat' : 'aucun contact');
+        d.readout(`θ <b>${fr(th * DEG, 1)}°</b>${th < d.s.th / DEG - 1e-9 ? ` (l'étage est à plat dès ${fr(P.thetaMax * DEG, 0)}°)` : ''} · hauteur <b>${fr((100 * pose.h) / P.H0, 0)} %</b> de <i>H</i><sub>0</sub> · paires de triangles qui se traversent <b>${pairs.length}</b>`);
+      },
+    });
+
+    const EP = new Map();
+    const pathOf = (a) => { if (!EP.has(a)) EP.set(a, energyPath(unitParams(6, a / DEG, 1), 200)); return EP.get(a); };
+    const along = (E, th, arr) => { const m = E.th.length, u = clamp(th / E.thEnd, 0, 1) * (m - 1), i = Math.min(Math.floor(u), m - 2), f = u - i; return arr[i] * (1 - f) + arr[i + 1] * f; };
+    demo('#fig-energie', {
+      aspect: 16 / 8, title: 'Une barrière, puis un second repos',
+      controls: [
+        { key: 'a', label: 'Angle α de la diagonale', min: 45, max: 62, step: 0.5, value: 60, fmt: (v) => `${fr(v, 1)}°` },
+        { key: 'th', label: 'Rotation θ du dessus', min: 0, max: 130, step: 0.5, value: 75, fmt: (v) => `${fr(v, 1)}°` },
+      ],
+      pointer(d, e) { if (e.x < d.w * 0.36) orbit(d, e, (d.view ??= { a: 0.5, p: 0.45 })); },
+      draw(g, d) {
+        const v = (d.view ??= { a: 0.5, p: 0.45 }), P = unitParams(6, d.s.a / DEG, 1), E = pathOf(d.s.a);
+        const th = Math.min(d.s.th / DEG, E.thEnd), h = along(E, th, E.h), U = along(E, th, E.U);
+        // l'étage : allongement de chaque triangle (sa barre la plus étirée)
+        const pose = poseAt(P, h, th, null, 0), rest = unitPoints(poseAt(P, P.H0, 0, null, 0)), pts = unitPoints(pose);
+        const L = (p, a, b) => Math.hypot(p[a][0] - p[b][0], p[a][1] - p[b][1], p[a][2] - p[b][2]);
+        let smax = 0; const st = UT.map((t) => { let m = 0; for (let k = 0; k < 3; k++) { const a = t.v[k], b = t.v[(k + 1) % 3]; m = Math.max(m, Math.abs(L(pts, a, b) / L(rest, a, b) - 1)); } smax = Math.max(smax, m); return m; });
+        drawUnit(g, mkView(v.a, v.p, Math.min(d.w * 0.1, d.h * 0.26), d.w * 0.18, d.h * 0.8), pose, (i) => st[i] / 0.03);
+        // les courbes
+        const x0 = d.w * 0.4, x1 = d.w - 18, y0 = d.h - 30, y1 = 22, TM = 130, UM = 0.0125;
+        const X = (t) => x0 + ((x1 - x0) * t * DEG) / TM, Y = (u) => y0 - ((y0 - y1) * u) / UM;
+        g.strokeStyle = alpha(C.ink, 0.35); g.lineWidth = 1; g.beginPath(); g.moveTo(x0, y1); g.lineTo(x0, y0); g.lineTo(x1, y0); g.stroke();
+        for (let t = 0; t <= TM; t += 30) label(g, `${t}°`, X(t / DEG), y0 + 14, { size: 10, align: 'center', color: C.dim });
+        label(g, 'θ', x1, y0 - 6, { size: 11, align: 'right', color: C.dim }); label(g, 'énergie U', x0 + 6, y1 + 2, { size: 11, color: C.dim });
+        g.strokeStyle = alpha(C.ink, 0.25); g.setLineDash([3, 4]); g.beginPath(); g.moveTo(X(60 / DEG), y0); g.lineTo(X(60 / DEG), y1); g.stroke(); g.setLineDash([]);
+        label(g, 'contact', X(60 / DEG) + 4, y1 + 16, { size: 10, color: C.dim });
+        const curve = (E2, col, w) => { g.strokeStyle = col; g.lineWidth = w; g.beginPath(); for (let i = 0; i < E2.th.length; i++) { const px = X(E2.th[i]), py = Y(Math.min(E2.U[i], UM)); i ? g.lineTo(px, py) : g.moveTo(px, py); } g.stroke(); const m = E2.th.length - 1; g.fillStyle = col; g.beginPath(); g.arc(X(E2.th[m]), Y(Math.min(E2.U[m], UM)), w + 1.5, 0, TAU); g.fill(); };
+        [[45, C.c1], [54, C.c2], [60, C.c3]].forEach(([a, col]) => { const E2 = pathOf(a); curve(E2, alpha(col, 0.55), 1.2); const m = E2.th.length - 1; label(g, `${a}°`, X(E2.th[m]) + 6, Y(Math.min(E2.U[m], UM)) - 6, { size: 10, color: col }); });
+        curve(E, C.ink, 2.4);
+        g.fillStyle = C.c4; g.beginPath(); g.arc(X(th), Y(U), 5, 0, TAU); g.fill();
+        // le verdict, d'après la courbe entière
+        const m = E.U.length - 1; let pk = 0, pi = 0; for (let i = 0; i <= m; i++) if (E.U[i] > pk) { pk = E.U[i]; pi = i; }
+        const verdict = pk < 1e-9 ? 'aucune énergie : la règle rigide suffit' : E.U[m] < 1e-6 ? 'bistable : à plat, le papier n’est plus tendu' : pi < m && pk > E.U[m] * 1.01 ? 'bistable : retenu à plat, papier encore tendu' : 'monostable : l’énergie ne redescend pas';
+        d.status(verdict);
+        d.readout(`θ <b>${fr(th * DEG, 1)}°</b> · hauteur <b>${fr(h, 2)}</b> <i>l</i> · énergie <b>${fr(U * 1000, 2)}</b> × 10⁻³ · barre la plus étirée <b>${fr(smax * 100, 2)} %</b> · à plat <b>${fr(E.U[m] * 1000, 2)}</b> × 10⁻³`);
+      },
+    });
+
+    // la tour sous sa course : le film de simulate(), calculé dans un worker, un par jeu de raideurs
+    const CLQ = { mode: 'graine', films: {}, wait: {}, figs: [] };
+    const SPREADS = { graine: generate('2nwhb5').sheets[0].spread, egales: [1, 1, 1, 1], fort: [1, 0.8, 1.2, 0.9] };
+    function clqFilm(mode) {
+      if (CLQ.films[mode] || CLQ.wait[mode]) return;
+      CLQ.wait[mode] = true;
+      const done = (F) => { CLQ.films[mode] = F; CLQ.wait[mode] = false; for (const d of CLQ.figs) d?.redraw(); };
+      const local = async () => { const { simulate } = await import('./src/sim/tower.js'); const S = simulate({ units: 4, loop: 14, fps: 30, spread: SPREADS[mode] }); done({ th: S.frames.map((f) => f.th), h: S.frames.map((f) => f.h), press: S.frames.map((f) => f.press), l: S.o.l }); };
+      try {
+        const src = `import { simulate } from '${new URL('./src/sim/tower.js', location.href)}';
+          onmessage = (e) => { const S = simulate({ units: 4, loop: 14, fps: 30, spread: e.data }); postMessage({ th: S.frames.map((f) => f.th), h: S.frames.map((f) => f.h), press: S.frames.map((f) => f.press), l: S.o.l }); };`;
+        const wk = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })), { type: 'module' });
+        wk.onmessage = (e) => { done(e.data); wk.terminate(); };
+        wk.onerror = () => { wk.terminate(); local(); };
+        wk.postMessage(SPREADS[mode]);
+      } catch { local(); }
+    }
+    const UCOL = () => [C.c1, C.c2, C.c3, C.c4];
+    const pick = (d, mode) => { CLQ.mode = mode; clqFilm(mode); d.fig.querySelectorAll('.btns button').forEach((b, i) => b.setAttribute('aria-pressed', String(['graine', 'egales', 'fort'][i] === mode))); };
+    CLQ.figs.push(demo('#fig-claque', {
+      aspect: 16 / 8, title: 'Quatre étages sous une course', animate: true,
+      buttons: [{ label: 'Raideurs de la graine', onClick: (d) => pick(d, 'graine') }, { label: 'Raideurs égales', onClick: (d) => pick(d, 'egales') }, { label: 'Écart fort', onClick: (d) => pick(d, 'fort') }],
+      setup(d) { pick(d, CLQ.mode); },
+      pointer(d, e) { if (e.down && e.x > d.w * 0.36) d.clock = clamp((e.x - d.w * 0.4) / (d.w - 18 - d.w * 0.4), 0, 0.999) * 14; },
+      draw(g, d) {
+        const F = CLQ.films[CLQ.mode];
+        if (!F) { label(g, 'calcul du film de la tour…', d.w / 2, d.h / 2, { align: 'center', size: 13 }); return; }
+        const n = F.th.length, cols = UCOL();
+        d.clock = ((d.clock ?? 0) + d.dt) % 14;
+        const fi = Math.min(n - 1, Math.floor((d.clock / 14) * n));
+        // la tour de côté
+        const R = F.l, H0 = R * Math.tan(Math.PI / 3), top = 4 * H0, s = (d.h - 50) / (top * 1.12), cx = d.w * 0.18, yb = d.h - 26;
+        g.strokeStyle = alpha(C.ink, 0.4); g.lineWidth = 1; g.beginPath(); g.moveTo(cx - R * s * 1.6, yb); g.lineTo(cx + R * s * 1.6, yb); g.stroke();
+        let y = 0, psi = 0;
+        for (let j = 0; j < 4; j++) {
+          const h = F.h[fi][j];
+          g.fillStyle = alpha(cols[j], 0.3); g.strokeStyle = cols[j]; g.lineWidth = 1.2;
+          g.fillRect(cx - R * s, yb - (y + h) * s, 2 * R * s, h * s); g.strokeRect(cx - R * s, yb - (y + h) * s, 2 * R * s, h * s);
+          y += h; psi += j % 2 ? -F.th[fi][j] : F.th[fi][j];
+          // le repère du plateau : un point sur le bord, vu de côté
+          g.fillStyle = C.ink; g.beginPath(); g.arc(cx + R * s * Math.sin(psi), yb - y * s, 2.6, 0, TAU); g.fill();
+          label(g, String(j + 1), cx - R * s - 12, yb - (y - h / 2) * s + 4, { size: 11, color: cols[j], align: 'center' });
+        }
+        const yp = yb - F.press[fi] * s;
+        g.strokeStyle = alpha(C.ink, 0.6); g.setLineDash([4, 3]); g.beginPath(); g.moveTo(cx - R * s * 1.5, yp); g.lineTo(cx + R * s * 1.5, yp); g.stroke(); g.setLineDash([]);
+        label(g, 'course', cx + R * s * 1.5 + 4, yp + 4, { size: 10, color: C.dim });
+        // les rotations au fil de la boucle
+        const x0 = d.w * 0.4, x1 = d.w - 18, y0 = d.h - 30, y1 = 18, X = (i) => x0 + ((x1 - x0) * i) / (n - 1), Y = (t) => y0 - ((y0 - y1) * t * DEG) / 125;
+        g.strokeStyle = alpha(C.ink, 0.35); g.lineWidth = 1; g.beginPath(); g.moveTo(x0, y1); g.lineTo(x0, y0); g.lineTo(x1, y0); g.stroke();
+        for (let t = 0; t <= 14; t += 2) label(g, `${t} s`, x0 + ((x1 - x0) * t) / 14, y0 + 14, { size: 10, align: 'center', color: C.dim });
+        for (const a of [0, 60, 120]) label(g, `${a}°`, x0 - 6, Y(a / DEG) + 4, { size: 10, align: 'right', color: C.dim });
+        g.strokeStyle = alpha(C.ink, 0.25); g.setLineDash([3, 4]); g.beginPath(); g.moveTo(x0, Y(60 / DEG)); g.lineTo(x1, Y(60 / DEG)); g.stroke(); g.setLineDash([]);
+        for (let j = 0; j < 4; j++) { g.strokeStyle = cols[j]; g.lineWidth = 1.6; g.beginPath(); for (let i = 0; i < n; i++) { const px = X(i), py = Y(F.th[i][j]); i ? g.lineTo(px, py) : g.moveTo(px, py); } g.stroke(); }
+        g.strokeStyle = C.ink; g.lineWidth = 1; g.beginPath(); g.moveTo(X(fi), y1); g.lineTo(X(fi), y0); g.stroke();
+        // l'ordre : passages de 90° vers le plat, puis vers le haut
+        const ev = (dir) => { const out = []; for (let j = 0; j < 4; j++) for (let i = 1; i < n; i++) { const a = F.th[i - 1][j] * DEG, b = F.th[i][j] * DEG; if (dir > 0 ? a < 90 && b >= 90 : a > 90 && b <= 90) { out.push([i, j + 1]); break; } } return out.sort((p, q) => p[0] - q[0]).map((p) => p[1]).join(', '); };
+        d.status(`t = ${fr(d.clock, 1)} s`);
+        d.readout(`raideurs (de bas en haut) <b>${SPREADS[CLQ.mode].map((x) => fr(x, 2)).join(' · ')}</b> · à la descente, les étages claquent dans l'ordre <b>${ev(1)}</b> · à la remontée, ils se redressent dans l'ordre <b>${ev(-1)}</b>`);
+      },
+    }));
   </script>
 </body>
 </html>
