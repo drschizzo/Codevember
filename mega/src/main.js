@@ -102,6 +102,10 @@ async function main() {
     $('#caption h2').textContent = day.meta.name;
     $('#caption p').textContent = day.meta.subtitle;
     $('#caption small').textContent = `jour ${(day.index % DAYS.length) + 1} / ${DAYS.length}`;
+    // (l'explication suit le jour à l'écran, pas celle du relais)
+    const how = $('#how');
+    how.href = `../${day.meta.id}/explainer.html`;
+    how.title = `Comment est fait ${day.meta.name}`;
     const c = $('#caption');
     c.classList.remove('on'); void c.offsetWidth; c.classList.add('on');
   };
