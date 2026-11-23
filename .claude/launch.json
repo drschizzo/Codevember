@@ -354,6 +354,16 @@
         "nest"
       ],
       "port": 8250
+    },
+    {
+      "name": "veil",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        ".claude/serve.py",
+        "8260",
+        "veil"
+      ],
+      "port": 8260
     }
   ]
 }

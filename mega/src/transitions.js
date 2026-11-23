@@ -38,6 +38,8 @@
 //                       l'image
 //   scales   → Nest     des écailles de papier poussent du haut vers le bas,
 //                       bande après bande, et recouvrent l'image
+//   veil     → Veil     un voile tombe sur l'image, puis se lève par le centre
+//                       au bout d'un cordon et découvre le jour suivant
 //
 // screenUV : origine en haut à gauche, y vers le bas.
 import * as THREE from 'three/webgpu';
@@ -186,6 +188,32 @@ export function createTransitions(slots) {
     // → Nest : des écailles de papier en coquille poussent rangée après rangée,
     // du haut vers le bas ; chacune s'étend de sa racine vers son bord libre,
     // bande par bande (la bande fraîche, sombre), et découvre le jour suivant
+    // → Veil : une mousseline tombe sur l'image (plis verticaux, translucide),
+    // puis un cordon la lève par le centre : son ourlet remonte en cloche et
+    // se resserre en colonne ; derrière, le jour suivant
+    veil: () => {
+      const d = uv.sub(0.5).mul(asp);
+      const P = uv.mul(asp);
+      const drop = smoothstep(0.0, 0.42, p), lift = smoothstep(0.52, 1.0, p);
+      // ourlet qui tombe (y vers le bas), festonné par les plis
+      const wav = sin(d.x.mul(23).add(fbm(P.mul(2.2), 3.1).mul(4))).mul(0.018);
+      const hemFall = drop.mul(1.15).sub(0.05).add(wav);
+      // levée par le centre : l'ourlet remonte, plus vite au milieu, et le voile se resserre
+      const ax = abs(d.x);
+      const hemLift = float(1.15).sub(lift.mul(1.45).mul(float(1).sub(ax.mul(0.55)))).add(wav);
+      const width = mix(float(1.2), float(0.07), pow(lift, 0.8));
+      const hem = select(p.lessThan(0.5), hemFall, hemLift);
+      const cover = smoothstep(hem.add(0.006), hem.sub(0.006), uv.y).mul(smoothstep(width.add(0.01), width.sub(0.01), ax));
+      // plis : bandes verticales qui convergent vers le haut du centre à la levée
+      const conv = d.x.div(mix(float(1), uv.y.add(0.15).max(0.15), lift));
+      const fold = sin(conv.mul(41).add(fbm(P.mul(vec2(1.5, 0.4)), 7.3).mul(5))).mul(0.5).add(0.5);
+      const shade = fold.mul(0.18).add(0.8);
+      const base = select(p.lessThan(0.5), A(uv), B(uv));
+      const cloth = vec3(0.95, 0.94, 0.91).mul(shade);
+      // (translucide : l'image se devine au travers, plus dans les creux des plis)
+      const veiled = mix(cloth, base.mul(0.9).add(cloth.mul(0.1)), fold.mul(0.18).add(0.1));
+      return mix(base, veiled, cover);
+    },
     scales: () => {
       const P = uv.mul(asp).mul(vec2(7, 9));
       const row = floor(P.y), off = fract(row.mul(0.5)).mul(1); // (rangées décalées d'une demi-écaille)

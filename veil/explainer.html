@@ -1,0 +1,592 @@
+<!doctype html>
+<!-- Page « défis techniques » de Veil. Les démos importent les modules purs du
+     projet (src/gen/forms.js, src/gen/cloth.js, src/app/loaderArt.js,
+     src/timeline.js, src/recipe.js) : elles restent justes quand le code change. -->
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#050506">
+  <title>Veil · défis techniques</title>
+  <meta name="description" content="Comment Veil est calculé : une dentelle humide simulée par dynamique des positions, des statues qui n'existent qu'en champs de distance et luisent un instant en hologramme, sept dentelles procédurales, une boucle qui se referme sans recalage.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+  <link rel="stylesheet" href="../home/explainer.css">
+</head>
+<body>
+  <nav class="top"><div class="in">
+    <a href="../">Codevember</a><span class="day">Day 25</span><span class="crumb">Veil · défis techniques</span>
+    <span class="sp"></span><a class="open" href="./">Ouvrir la scène</a>
+  </div></nav>
+
+  <main>
+    <header class="hero">
+      <div class="kicker">Day 25 · Veil · la statue absente</div>
+      <h1>Comment un voile dessine une statue qui n'existe pas</h1>
+      <p class="lede">Une dentelle humide posée sur un socle de musée prend la forme d'une chaise. Sous elle, la chaise luit quelques instants, puis s'efface : le socle est vide. Quatre cordons reprennent le linge, le soulèvent, et le reposent sur rien, où il dessine autre chose. Pour que l'illusion tienne, tout ce qui n'est pas la statue doit être juste : l'étoffe qui pèse, frotte, se plie sans se traverser, l'eau qui la colle à ce qu'elle couvre. Et le film doit revenir à son premier drapé sans qu'on voie le raccord.</p>
+    </header>
+
+    <figure class="cover">
+      <img src="docs/capture.jpg" alt="Une dentelle blanche posée sur une chaise absente, dont l'hologramme luit à travers les jours, sur une selle de sculpteur" width="1600" height="900">
+      <figcaption>La statue n'a ni ombre ni reflet. Le voile la dessine, et son hologramme la montre quelques secondes, seulement là où le voile la couvre.</figcaption>
+    </figure>
+
+    <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
+
+    <article>
+      <section id="boucle">
+        <h2><span class="n">01</span>La boucle se referme dans un mouvement</h2>
+        <span class="src">src/timeline.js · buildTimeline() · src/scene/stage.js · easeSeam()</span>
+        <p>Une étoffe simulée ne revient jamais d'elle-même à un état antérieur : deux chutes sur la même forme donnent deux drapés. Lire le film à l'envers ou fondre la fin dans le début se verrait. La boucle est donc construite sur un état que l'on fixe.</p>
+        <ul>
+          <li><b>H</b>, la pendaison : le voile pendu en hamac par ses quatre coins au-dessus du socle vide. Elle est calculée une fois, en lâchant le carré à plat et en l'amortissant fortement pendant 3,5 s.</li>
+          <li><b>La première descente</b> part de H et finit sur un drapé.</li>
+          <li><b>Chaque morceau suivant</b> part de la fin du précédent, positions et vitesses : montée, descente sur la forme suivante, montée…</li>
+        </ul>
+        <p>Reste le dernier raccord. La dernière montée finit sur un hamac qui balance puis se calme, mais pas exactement sur H : un pli tombe 1 ou 2 cm à côté. La première idée est de ramener le linge sur H pendant qu'il pend, par un rappel appliqué à chaque sous-pas, \( X \leftarrow X + \beta\,(H - X) \). Deux réglages de β ont été essayés, l'un resserré sur la fin, l'autre étalé sur toute la pendaison. Les deux se voyaient : une étoffe au repos qui se déplace sans cause.</p>
+        <p>L'écart n'est donc plus corrigé dans un repos, mais dans un mouvement. La dernière montée n'a aucun rappel. On note l'écart Δ = E − H entre sa fin E et la pendaison de référence, et la vitesse v qui lui reste. Le début de la première descente, calculé depuis H, reçoit alors un décalage qui s'éteint pendant que le hamac descend :</p>
+        <div class="eq">\[ X(t) \leftarrow X(t) + \big(\Delta + v\,\tau\,(1 - e^{-t/\tau})\big)\,\big(1 - \mathrm{smoother}(t / T_0)\big) \]</div>
+        <p>t est le temps depuis le début de la descente, T<sub>0</sub> la durée de la descente du hamac (2,3 à 2,6 s) et τ = 0,25 s le temps en lequel la vitesse de fin de montée s'éteint. À t = 0 le film reprend exactement la fin de la montée, position et vitesse. À t = T<sub>0</sub>, quand le ventre du hamac touche la statue, le décalage est nul. Dans un linge qui descend de 20 cm, 2 cm répartis sur deux secondes ne se lisent pas.</p>
+        <div class="note check"><b>Mesuré</b><p>Au raccord, l'écart de position entre la dernière image de la montée et la première de la descente est de 0,06 mm (un pas de la quantification du film). Chaque instant de la boucle appartient à un seul morceau.</p></div>
+        <div class="note trap"><b>Le piège</b><p>La première descente commence avant l'origine (u = 0 tombe à l'instant où le linge se pose). Un calcul de temps local qui ne ramenait que les valeurs négatives laissait la fin de la boucle sans morceau, et le voile sautait au dernier instant. Le test du programme ne vérifiait qu'une borne et passait ; il compte maintenant les morceaux de chaque instant.</p></div>
+        <div class="note"><b>La statue s'efface</b><p>Au bout de chaque repos, la statue se resserre vers son axe et s'enfonce dans le socle, et le linge s'affaisse sur le plateau. Les cordons reprennent alors les coins, les écartent au ras du socle pour ouvrir le tas, puis les montent. Deux coins voisins ne sont jamais écartés de plus d'un côté du linge : retombé de travers, il s'étirait sinon de trois à cinq mailles pendant toute la reprise.</p></div>
+        <figure id="fig-timeline"><figcaption><b>Le programme du film d'une graine.</b> Glisser pour parcourir la boucle. Les morceaux de descente (clair) et de montée (sombre) s'enchaînent ; la courbe est la hauteur des prises, en forme fermée. Simplification : la hauteur réelle du linge vient de la simulation.</figcaption></figure>
+      </section>
+
+      <section id="formes">
+        <h2><span class="n">02</span>Les statues n'existent que comme champs de distance</h2>
+        <span class="src">src/gen/forms.js · buildForm(), bakeForm()</span>
+        <p>Une statue invisible n'a pas besoin de maillage. Il lui faut seulement répondre à la question que pose le voile à chaque sous-pas : à quelle distance suis-je de la matière, et dans quelle direction en sortir ? Un champ de distance signé (une fonction négative dans la matière, positive dehors, nulle sur la surface) y répond directement.</p>
+        <p>Chaque forme est sculptée en primitives : ellipsoïdes, capsules, cônes arrondis, profils tournés. Elles sont jointes par des unions douces, dont le raccord a un rayon k :</p>
+        <div class="eq">\[ \mathrm{smin}(a, b, k) = \min(a, b) - \frac{\max(k - |a - b|,\,0)^2}{4k} \]</div>
+        <p>Sept objets sont tirés : le buste, le chat qui fait le gros dos, la verseuse, le cratère à volutes, la chaise, trois blocs et la lyre. Un buste compte une vingtaine de primitives : crâne, visage, mâchoire, arcades, pommettes, orbites (soustraites), nez, ailes du nez, lèvres, menton, oreilles, cou, épaules, poitrine et piédouche. Les reliefs du visage sont accentués d'environ 20 %, comme sur les voiles de marbre napolitains, pour se lire à travers l'étoffe.</p>
+        <p>Interrogée des millions de fois, la fonction coûtait 42 % de la simulation. Chaque forme est donc cuite sur une grille de 5 mm. Une passe grossière, à 2 cm, repère la bande où la surface passe. On n'évalue exactement que les nœuds à moins de 3,5 cm de la surface ; ailleurs, la valeur grossière suffit, puisque aucun contact ne s'y joue. La lecture est trilinéaire, avec son gradient exact par cellule. La cuisson prend de 0,1 à 0,4 s par forme. Près de la surface, l'écart reste sous 2 mm.</p>
+        <p>Chaque objet existe en deux versions. Celle qui porte le linge est épaissie : rien n'y est plus mince que 4 cm, soit trois mailles du voile. Sur un dossier de chaise de 2 cm, chaque particule contournait l'arête de son côté, et le linge traversait le dossier rang après rang. L'autre version, détaillée, est celle que l'hologramme montre (section 10) : barreaux, anses, cordes à leurs vraies sections. Elle doit rester sous l'enveloppe de la première, sinon elle percerait le linge ; un script le vérifie colonne par colonne.</p>
+        <div class="note"><b>Ce qu'un linge posé montre d'un objet</b><p>Seulement l'enveloppe du dessus. Les creux disparaissent (un cou, une taille, une anse plaquée) et des pointes rapprochées se fondent en une tente : les trois mâts d'une maquette de voilier, essayée, ne donnaient qu'un cône. Restent lisibles des paliers larges séparés par des chutes franches (le dossier et l'assise d'une chaise), deux pointes très écartées (les volutes du cratère) ou la ligne tête, épaules, chute d'un buste aux épaules larges. Le chat assis n'offrait que deux oreilles au sommet d'un cône ; il fait le gros dos, de profil.</p></div>
+        <figure id="fig-forms"><figcaption><b>La coupe d'une statue absente, et la coupe de son voile.</b> Les boutons choisissent la forme. En pointillés, le contour du champ dans le plan z = 0 ; il s'allume là où le voile le touche. La forme tracée est celle qui porte le linge. Le voile, coupé par sa diagonale, est une chaîne de 80 maillons qui pend en hamac au bout de ses deux cordons. Il descend, son ventre touche la statue, les cordons lâchent et l'étoffe l'épouse. Puis la statue s'enfonce dans le socle en se resserrant, l'étoffe s'affaisse, et les cordons la reprennent par les bouts. C'est le dessin de l'écran de chargement, importé tel quel. Simplification : une coupe 2D au lieu du tissu, sèche.</figcaption></figure>
+      </section>
+
+      <section id="chaine">
+        <h2><span class="n">03</span>Le poids du voile se résout de la bague vers le bord</h2>
+        <span class="src">src/gen/cloth.js · makeCloth(), simulate()</span>
+        <p>Le voile est un carré de 53 × 53 particules, reliées par des contraintes de longueur. La dynamique des positions étendue (XPBD) les traite une à une : chaque contrainte rapproche ou écarte ses deux bouts jusqu'à sa longueur de repos, puis on passe à la suivante. On emploie beaucoup de sous-pas (450 par seconde) avec deux passes chacun.</p>
+        <p>Un voile pendu par son centre met toute sa charge sur les quelques mailles autour de la bague. Résolues dans l'ordre du tableau, rangée par rangée, les corrections ne remontent que d'une maille par passe. À 65 × 65 particules, les mailles du centre s'étiraient de 58 % ; la pendaison décrochait au bout d'une seconde et le voile tombait au sol.</p>
+        <p>Deux remèdes l'ont tenue :</p>
+        <ul>
+          <li><b>Des attaches à longue portée</b> (Kim, Chentanez et Müller, 2012) : aucun point ne peut s'éloigner de la bague au-delà de sa distance sur l'étoffe à plat.</li>
+          <li><b>Un ordre de résolution</b> : les contraintes sont rangées par anneau autour de la bague. Une passe vers l'extérieur transmet la tension d'un seul balayage, comme on résout une chaîne pendue de haut en bas ; la passe suivante revient vers la bague.</li>
+        </ul>
+        <div class="note trap"><b>Essayé et abandonné</b><p>Faire tenir à la bague une rosette de 3 × 3 particules, à plat, pour répartir la charge. Le pli vif au bord du disque étirait davantage l'étoffe : 50 % au lieu de 17 %.</p></div>
+        <div class="note"><b>Sur le GPU</b><p>L'ordre de la bague vers le bord n'existe pas en parallèle. Le solveur GPU colorie la grille en 9 (i mod 3, j mod 3) : deux sommets de même couleur ne partagent aucun lien, et chaque couleur est un Gauss-Seidel sans conflit. Trois passes par sous-pas, puis une limite d'étirement à 8 % après la projection. Le Jacobi moyenné, essayé d'abord, laissait 12 % d'étirement au centile 99. Ce Gauss-Seidel par sommet a un défaut, qui fait l'objet de la section suivante.</p></div>
+        <div class="note"><b>Le hamac</b><p>Sur le GPU, le voile n'est plus pendu par son centre mais par ses quatre coins, en hamac : son ventre se pose sur la statue, puis les cordons lâchent les coins et le linge tombe autour. Un coin tenu par un seul point étirait ses voisines de 62 %. Ici, contrairement à la rosette de la bague, une pince de 3 × 3 mailles aide, avec des attaches à longue portée depuis chaque pince : 32 % au pire, sur la maille qui borde la pince. Elles ont d'abord dû être coupées à la montée, quand le linge enveloppait encore la statue : en ligne droite, elles le tiraient au travers. Depuis que la statue s'efface avant la montée, elles servent tout du long. À la reprise, les neuf points d'une pince passent de la pose où ils reposent à la pince à plat. Mêlées en ligne droite, deux poses tournées l'une de l'autre passent par une pince rétrécie de moitié ; la pince tourne donc de l'une à l'autre, et seul son froissé se défait en ligne droite.</p></div>
+        <figure id="fig-chain"><figcaption><b>Une chaîne pendue, une passe par sous-pas.</b> Les boutons changent l'ordre de résolution. Dans l'ordre du tableau, la chaîne s'allonge et se distend en haut. Dans l'ordre depuis la bague, elle garde sa longueur. La couleur marque l'étirement de chaque maillon. Simplification : une chaîne de 40 maillons au lieu d'un carré d'étoffe, sans auto-collision.</figcaption></figure>
+      </section>
+
+      <section id="pas">
+        <h2><span class="n">04</span>Douze corrections qui s'additionnent</h2>
+        <span class="src">src/scene/gpucloth.js · SOLVE_GS</span>
+        <p>Par moments, un point du voile partait à des kilomètres, et tout le film qui suivait était perdu. Le tulle, une des étoffes d'alors, divergeait même à chaque scène, dès la pendaison.</p>
+        <p>Dans le Gauss-Seidel par sommet, un point lit ses douze liens (quatre fils, quatre biais, quatre liens de flexion) et additionne leurs corrections. Chaque correction est juste si le point ne répond qu'à ce lien-là : elle ramène la moitié de l'écart, l'autre moitié revenant au voisin. Deux fils opposés font ainsi, ensemble, un pas exact. Mais les biais et la flexion s'y ajoutent, et dans un pli froissé plusieurs liens se replient du même côté : leurs corrections tirent alors dans la même direction, et leur somme dépasse la cible.</p>
+        <p>On mesure ce dépassement par un gain : 1 quand le point arrive juste sur sa cible, 2 quand il la dépasse d'autant qu'il en était loin. Au-delà de 2, l'erreur grandit à chaque passe. Le tulle, le plus raide en biais, était à 1,85 à plat ; cinq liens repliés du même côté donnent 2,5.</p>
+        <figure id="fig-step"><figcaption><b>Un point, des liens repliés du même côté, une passe toutes les demi-secondes.</b> Le curseur règle le nombre de liens qui tirent dans la même direction ; chacun corrige la moitié de l'écart. La courbe est l'écart à la cible, en échelle logarithmique. Jusqu'à trois liens il se résorbe, à quatre il ne bouge plus, au-delà il explose. Le bouton ramène le pas au pas exact. Simplification : une seule direction, des voisins fixes.</figcaption></figure>
+        <p>La correction : ramener le pas au pas exact le long de la direction de la correction, sans jamais l'allonger. Avec g<sub>j</sub> le gain du lien j et d<sub>j</sub> sa direction, la somme a est divisée par son gain le long de sa propre direction â :</p>
+        <div class="eq">\[ a \leftarrow \frac{a}{\max\!\big(1,\ \hat a^{\mathsf T}\,\big(\textstyle\sum_j g_j\, d_j d_j^{\mathsf T}\big)\,\hat a\big)} \]</div>
+        <p>C'est un pas de Gauss-Newton sur une droite. Quand le gain est inférieur à 1, rien ne change, et le drapé garde son allure. La limite d'étirement, qui additionne aussi ses quatre fils, reçoit la même règle.</p>
+        <div class="note check"><b>Mesuré</b><p>Sur seize graines, plus aucune divergence, et l'étirement d'un fil à la montée passe de 2 à 6 mailles à moins d'une. Par sécurité, aucun point ne parcourt plus de 12 m/s en un sous-pas, une valeur non finie est remplacée par la position du début du sous-pas, et chaque morceau du film est mesuré avant d'être transmis au suivant.</p></div>
+      </section>
+
+      <section id="frottement">
+        <h2><span class="n">05</span>Le frottement passe avant les fils</h2>
+        <span class="src">src/gen/cloth.js · contact(), friction()</span>
+        <p>Le frottement de Coulomb retient le déplacement tangent d'un point qui touche une surface. Tant que ce déplacement reste sous le seuil μ fois l'enfoncement, il est annulé : le point colle. Au-delà, il est seulement réduit : le point glisse.</p>
+        <p>Appliqué après les fils, ce calcul défaisait leurs corrections. Un point collé au crâne n'avait plus le droit de suivre ses voisins, et un fil posé sur la statue s'étirait jusqu'à 92 %. Le sous-pas fait donc, dans l'ordre :</p>
+        <ol>
+          <li>les auto-collisions ;</li>
+          <li>les contacts avec frottement ;</li>
+          <li>les fils ;</li>
+          <li>les attaches à longue portée ;</li>
+          <li>une dernière projection hors de la matière, sans frottement.</li>
+        </ol>
+        <p>Les fils ont ainsi le dernier mot sur l'étoffe, et la projection sur la matière : rien ne traverse.</p>
+        <div class="note check"><b>Vérifié</b><p>Sur toutes les images d'une descente et d'une montée : aucun point dans le socle ni sous le sol ; 99 % des fils à moins de 8 % d'étirement, aucun au-delà de 35 % ; particules non voisines jamais plus proches que 0,4 fois le rayon d'auto-collision.</p></div>
+        <div class="note trap"><b>Le piège du linge humide</b><p>Le seuil du frottement est μ fois l'enfoncement d'un sous-pas : pour une étoffe posée, il est presque nul. Or c'est la succion de l'eau qui plaque le linge sur la statue. Sans elle dans le seuil, les pans qui tombaient faisaient glisser tout le voile d'un bloc hors de la forme. Au contact, la charge capillaire compte désormais comme une charge normale.</p></div>
+        <div class="note trap"><b>Ce que ce frottement ne retient pas</b><p>Il annule le déplacement que le point allait faire de lui-même pendant le sous-pas. La dérive que les fils lui imposent ensuite lui échappe. Un linge mal centré rampait donc sur le marbre, puis glissait d'un bloc : jusqu'au sol pour une théière sur trois, et du buste dès la pose dans une scène sur quatre. Le linge mouillé a maintenant une adhérence statique : un point au contact, que tout le sous-pas ne déplace pas plus vite que 0,4 m/s le long de la surface, y reste. Ce qui tombe, ce qu'on tire et ce qui pend sans rien toucher restent libres. La limite d'étirement, qui passe après, traite ces points comme des ancrages : sinon elle les déplaçait quand même, et le linge filait du dossier d'une chaise en deux secondes.</p></div>
+        <figure id="fig-friction"><figcaption><b>Une étoffe tirée sur un dôme, frottement avant ou après les fils.</b> Le bouton échange l'ordre. Le bout gauche est tiré lentement ; les points en contact frottent. Après les fils, les points collés retiennent leurs voisins et la chaîne se distend (fils rouges). Avant, elle glisse d'un seul tenant. Simplification : une chaîne 2D sur un cercle.</figcaption></figure>
+      </section>
+
+      <section id="humide">
+        <h2><span class="n">06</span>Un linge humide se colle à ce qu'il couvre</h2>
+        <span class="src">src/gen/cloth.js · contact() · ADH, RA</span>
+        <p>Un drap sec posé sur une tête tombe en tente depuis le sommet : on lit un fantôme, pas un visage. Le premier remède essayé a été un vent venu de la caméra, qui plaquait l'étoffe sur la forme. Il la faisait aussi battre et glisser sans cause visible, et les mouvements du voile ne se comprenaient plus : il a été retiré.</p>
+        <p>Les voiles de marbre napolitains montrent une étoffe mouillée. C'est aussi un geste d'atelier : le sculpteur couvre la terre de linges humides pour qu'elle ne sèche pas. L'eau change trois choses :</p>
+        <ul>
+          <li>elle alourdit l'étoffe (×2,2 trempée) ;</li>
+          <li>elle réduit son frottement de moitié sur le marbre : le linge glisse ;</li>
+          <li>par capillarité, elle attire vers la surface chaque point qui en est à moins de 5 cm.</li>
+        </ul>
+        <p>L'attraction se borne à l'écart qui reste, pour ne jamais faire entrer l'étoffe dans la matière :</p>
+        <div class="eq">\[ \Delta x = -\min\!\left(d - r_c,\; a\,\Delta t^2\right) \nabla d, \qquad a = 60\ \text{m/s}^2 \times \text{humidité}, \quad d &lt; r_c + 5\ \text{cm} \]</div>
+        <p>Mesuré au repos sur un buste, la part du voile à moins de 3 cm de la statue passe de 47 % (portée de 2,2 cm, 30 m/s²) à 83 %. Un amortissement interne de 1,2 s⁻¹ fait qu'un linge posé ne frémit plus.</p>
+        <div class="note"><b>Sur le GPU</b><p>Cette aspiration a été retirée de la simulation à 81 × 81 : à 5 cm de portée, elle tirait une couche extérieure du linge à travers celle du dessous. Le linge y tient par son poids, par le frottement et par l'adhérence statique de la section précédente. La démo garde l'aspiration, qui montre bien ce que l'eau change.</p></div>
+        <figure id="fig-wet"><figcaption><b>Une coupe de linge sur un profil.</b> Le curseur règle l'humidité. Sec, le linge tombe du sommet et passe devant le nez et les lèvres sans les toucher. Humide, il s'y colle et le profil apparaît. Simplification : une chaîne 2D sur un profil fait de cercles, mêmes règles de contact et d'adhérence que la simulation.</figcaption></figure>
+      </section>
+
+      <section id="fin">
+        <h2><span class="n">07</span>Un second étage, plus fin, sur le GPU</h2>
+        <span class="src">src/scene/fine.js · src/gen/fineRef.js</span>
+        <p>La simulation (81 × 81, 1,25 cm de pas) se rend en surface lisse et en plis fins grâce à un second étage. La surface interpolée entre ses particules passe à travers le visage, et le visage disparaît. L'idée vient de Huamin Wang (<i>GPU-Based Simulation of Cloth Wrinkles at Submillimeter Levels</i>, SIGGRAPH 2021) :</p>
+        <ul>
+          <li>la simulation grossière garde le mouvement ;</li>
+          <li>à chaque image, une grille régulière 2 fois plus fine (161 × 161 sommets, 6 mm) est posée sur sa surface ;</li>
+          <li>cette grille est amenée à l'équilibre sur le GPU, en 24 itérations de Jacobi.</li>
+        </ul>
+        <p>Les fils de la grille fine ont la longueur de la vraie étoffe. La surface grossière, tendue entre ses particules, est plus courte : ce surplus fait les plis. Une attache tangentielle la retient près de la surface grossière, sans l'empêcher d'en sortir de 5 cm. Le contact avec la statue fait le reste.</p>
+        <div class="note trap"><b>Essayé puis retiré</b><p>Une aspiration dans l'étage fin collait la grille sur la statue. Avec une simulation à 2 cm de pas, c'est elle qui faisait apparaître le visage. Mais elle montrait la peau lisse de la forme, découpée de bords nets, et des zones basculaient d'une image à l'autre entre collée et libre. À 81 × 81, la simulation elle-même porte le détail, et l'étage fin n'est plus qu'un lisseur avec contact.</p></div>
+        <div class="note check"><b>Vérifié</b><p>Le solveur part chaque image de la surface grossière, sans état gardé : l'image ne dépend que de la phase, et la boucle reste exacte. Une copie JS ligne pour ligne sert aux tests ; dans la page, elle concorde avec le GPU à 0,14 mm près.</p></div>
+      </section>
+
+      <section id="surface">
+        <h2><span class="n">08</span>53 × 53 particules, une surface lisse à l'écran</h2>
+        <span class="src">src/scene/veil.js · sampleCloth(), patch()</span>
+        <p>Le pas de 2 cm de la simulation se verrait en facettes. La grille fine part d'un patch bicubique de Catmull-Rom tiré des 16 particules autour de chaque sommet : une surface qui passe exactement par les particules, avec 4 × 4 sommets par maille. Sa normale vient des dérivées exactes du patch, ∂P/∂u × ∂P/∂v, et non d'un lissage. En version mobile, sans étage fin, ce patch est la surface rendue.</p>
+        <p>Dans le temps, les 30 images enregistrées par seconde (quantifiées sur 16 bits, pas de 0,04 mm) s'interpolent aussi en Catmull-Rom, sur les images voisines du même morceau.</p>
+        <figure id="fig-cr"><figcaption><b>Catmull-Rom contre segments.</b> Glisser les points de contrôle. La courbe passe par chacun d'eux avec une tangente continue ; la ligne brisée montre ce que donnerait le maillage simulé tel quel. Simplification : une courbe au lieu d'un patch (le patch est le même calcul, dans les deux directions).</figcaption></figure>
+      </section>
+
+      <section id="dentelle">
+        <h2><span class="n">09</span>Une dentelle en trois couches</h2>
+        <span class="src">src/scene/veil.js · lace(), tulle(), DESSINS</span>
+        <p>Le voile est une dentelle. Elle n'a pas de texture : chaque fragment calcule, d'après sa position sur l'étoffe en mètres, s'il tombe sur un fil ou dans un jour. Trois couches se superposent :</p>
+        <ul>
+          <li><b>le réseau</b>, un tulle à mailles hexagonales de 2,6 mm, qui couvre un tiers de la surface ;</li>
+          <li><b>le toilé</b>, une toile tissée serrée à petits jours carrés, qui remplit les motifs ;</li>
+          <li><b>le cordonnet</b>, le fil de contour, les nervures et les pleins brodés, opaque et en saillie.</li>
+        </ul>
+        <p>Pour le réseau, la première idée est de percer des jours ronds dans un aplat. Le fil est alors épais entre trois jours et mince entre deux, et l'on voit une tôle perforée. Un vrai tulle a un fil de largeur constante : il faut mesurer la distance au bord de la maille, qui est un hexagone, et non au centre. Pour un point à (x, y) du centre de sa maille, de pas 1 :</p>
+        <div class="eq">\[ h = \max\!\big(|x|,\ \tfrac12 |x| + \tfrac{\sqrt3}{2} |y|\big), \qquad \text{fil si } h > \tfrac12 - t \]</div>
+        <p>t est la demi-largeur du fil, 0,09 pas ici. Loin de la caméra, quand la maille passe sous le pixel, chaque couche est remplacée par sa moyenne : la transparence est tramée, et l'anticrénelage temporel la lisse.</p>
+        <figure id="fig-lace"><figcaption><b>Une fleur de Chantilly, couche par couche.</b> Les boutons allument le réseau, le toilé et le cordonnet. Le dernier remplace les mailles hexagonales par des jours ronds : le fil s'épaissit aux nœuds. Calcul refait en JavaScript sur la même formule que le shader.</figcaption></figure>
+        <p>Sept dessins existent : Chantilly, guipure (sans réseau, tout en brides), filet brodé, plumetis, Cluny, écailles, rinceaux. Un seul est évalué par fragment, par une branche sur un uniforme : on en change au panneau sans recompiler ni resimuler. Le bord est festonné dans la matière, avec un galon et un œillet par lobe, en nombre entier par côté. L'ombre portée est tramée elle aussi, si bien que le réseau laisse passer une part de la lumière et que le motif la retient.</p>
+        <div class="note trap"><b>Deux essais retirés</b><p>Teindre tout le motif d'un second fil en faisait un aplat collé sur le réseau : le second fil ne colore plus que le cordonnet. Et un cordonnet clair sur un réseau noir, devant un mur clair, se lisait blanc : le réseau est si léger que c'est le motif qui donne sa valeur au voile. Le second fil doit donc trancher sur le fond, lui aussi.</p></div>
+      </section>
+
+      <section id="hologramme">
+        <h2><span class="n">10</span>La statue luit sous le voile</h2>
+        <span class="src">src/scene/stage.js · holoMat, holoAt() · src/gen/worker.js · show</span>
+        <p>Un linge ne montre qu'une enveloppe : une chaise et une table couverte se ressemblent. Pendant 2,6 s, un tiers de seconde après la pose, la statue absente apparaît donc en lumière, à travers les jours de la dentelle, puis s'éteint bien avant de s'effacer.</p>
+        <p>Elle n'a toujours pas de maillage. Son modèle détaillé est cuit dans un worker en champ de distance, sur une grille de 4 mm, et dessiné par marche de rayon dans sa boîte. Le rayon part de l'œil ; à chaque pas, le champ donne la distance d à la surface la plus proche. On peut avancer de d sans rien traverser, quelle que soit la direction, puis recommencer. Près de la surface les pas raccourcissent, et l'on s'arrête quand d passe sous 0,7 mm.</p>
+        <figure id="fig-march"><figcaption><b>Un rayon dans le champ de distance d'une verseuse.</b> Déplacer le pointeur pour viser. Chaque cercle a pour rayon la distance lue au point où il est centré : le rayon avance d'un cercle à l'autre. Il fait de grands pas dans le vide et de petits en rasant la panse. Coupe dans le plan de symétrie du modèle détaillé, importé tel quel.</figcaption></figure>
+        <p>Le volume tient sur 8 bits par nœud. Codée en ligne droite, la distance avait des pas de 0,5 mm et le modelé sortait crénelé. Elle est codée en racine, \( d = 0{,}1\; e\,|e| \) : les pas sont de 0,1 mm à 1 mm de la surface, et grossiers loin d'elle, où ils ne servent qu'à avancer.</p>
+        <p><b>Seulement sous le voile.</b> Le fragment de l'hologramme écrit la profondeur du point touché, et le test de profondeur est inversé : il ne passe que si quelque chose est déjà dessiné devant ce point. Avec la dentelle seule, il n'apparaissait que sur les fils. Une doublure du voile, pleine et qui n'écrit que la profondeur, est donc dessinée pendant l'apparition : l'hologramme passe à travers les jours, mais pas au-delà du bord du linge.</p>
+        <p><b>Par à-coups.</b> L'intensité suit une enveloppe, multipliée par un tirage refait seize fois par seconde : allumé ou presque éteint, avec une chance d'être allumé qui va de 30 % au début et à la fin à 98 % au milieu. Par instants, des tranches horizontales se décalent. Tout découle du temps local du morceau, et la boucle reste exacte.</p>
+        <p><b>La bande.</b> Une bande claire parcourt l'objet une fois, de haut en bas. La matière du voile lit le même volume : chaque fragment de dentelle connaît sa distance à la statue, et reçoit la lumière de la bande selon cette distance, avec une portée de 5 cm. Chaque objet a sa teinte, jamais deux fois la même dans une scène.</p>
+      </section>
+
+      <section id="couleur">
+        <h2><span class="n">11</span>Un voile qui tranche sur son fond</h2>
+        <span class="src">src/recipe.js · generate()</span>
+        <p>Une étoffe ajourée ne se lit que par contraste de valeur : un voile bleu poudre sur un ciel bleu était invisible. Le fil du réseau est tiré parmi quatorze teintes, seulement parmi celles dont la luminance s'écarte d'au moins 0,3 de celle du fond. Une dentelle sur six a un second fil pour le cordonnet (or sur noir, blanc sur ivoire), qui doit s'écarter du fond d'au moins 0,25. Sur 400 graines, le voile tranche toujours.</p>
+        <p>La lumière est dosée de la même façon : une lampe qui sculpte une dentelle noire brûle une dentelle blanche. L'intensité des lampes suit la racine de 0,32 divisé par l'albédo du voile, bornée entre 0,55 et 1,3. Le lustre prend la teinte du fil, à peine éclaircie : plus clair, il délavait les fils teints, et un vermillon devenait saumon.</p>
+        <figure id="fig-colors"><figcaption><b>Les fils possibles, par humeur.</b> Chaque case est un fil sur le fond de l'humeur. Les fils barrés ne sont pas tirés : leur écart de luminance au fond est inférieur à 0,3. Calculé avec les teintes et la fonction de luminance de la recette.</figcaption></figure>
+      </section>
+
+      <section id="budget">
+        <h2><span class="n">12</span>Budget</h2>
+        <div class="tbl"><table>
+          <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
+          <tbody>
+            <tr><td>Cuisson d'une forme qui porte le linge (grille de 5 mm)</td><td>worker</td><td class="num">0,1 à 0,4 s</td></tr>
+            <tr><td>Cuisson d'un modèle d'hologramme (grille de 4 mm)</td><td>worker, en arrière-plan</td><td class="num">0,3 à 2 s</td></tr>
+            <tr><td>Pendaison, première descente (GPU, 81 × 81, Gauss-Seidel colorié)</td><td>GPU, au chargement</td><td class="num">1,2 · 2,8 s</td></tr>
+            <tr><td>Morceaux suivants (une montée, une descente)</td><td>GPU, pendant la lecture</td><td class="num">1,5 · 3,3 s</td></tr>
+            <tr><td>Tranche de calcul pendant la lecture</td><td>GPU, chaque image</td><td class="num">28 sous-pas au plus</td></tr>
+            <tr><td>Étage fin (161 × 161, 24 itérations)</td><td>GPU, chaque image</td><td class="num">&lt; 1 ms</td></tr>
+            <tr><td>Chargement, de la recette à la première image</td><td>page</td><td class="num">≈ 5 s</td></tr>
+            <tr><td>Lecture, qualité Haute, calcul des morceaux en cours</td><td>page</td><td class="num">60 à 70 images/s</td></tr>
+            <tr><td>Mémoire du film (images quantifiées, 3 formes)</td><td>page</td><td class="num">≈ 20 Mo</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+    </article>
+
+    <footer class="end">
+      <a href="./">Ouvrir Veil</a>
+      <a href="https://github.com/drschizzo/Codevember/blob/main/veil/README.md">README</a>
+      <a href="https://github.com/drschizzo/Codevember/blob/main/veil/docs/concept.md">La démarche</a>
+      <span class="sp"></span>
+      <a href="../">Tous les jours</a>
+    </footer>
+  </main>
+
+  <script type="module">
+    import { demo, C, TAU, lerp, clamp, label, alpha } from '../home/explainer.js';
+    import { generate, MOODS, VEIL_COLORS, lum } from './src/recipe.js';
+    import { buildTimeline, locate } from './src/timeline.js';
+    import { knotRise, knotDesc } from './src/gen/cloth.js';
+    import { buildForm } from './src/gen/forms.js';
+    import createArt from './src/app/loaderArt.js';
+
+    // ── 01 : le programme du film ──
+    {
+      const R = generate('a1');
+      const TL = buildTimeline(R);
+      const knotAt = (tf) => {
+        const { seg, local } = locate(TL, tf);
+        // (hauteur relative : 0 posée, 1 pendue)
+        return seg.kind === 'desc' ? knotDesc(local, 1, 0, R.timing.desc) : knotRise(local, 0, 1, R.timing.rise);
+      };
+      demo('#fig-timeline', {
+        title: `Graine a1 : ${R.forms.length} formes, ${TL.total.toFixed(1)} s`, aspect: 2.6,
+        setup(d) { d.state.u = 0.1; },
+        pointer(d, e) { if (e.down) d.state.u = clamp((e.x - 20) / (d.w - 40)); },
+        draw(g, d) {
+          const x0 = 20, x1 = d.w - 20, yb = d.h - 40, H = d.h - 90;
+          for (const s of TL.segs) {
+            for (const off of [0, TL.total]) {
+              const a = (s.t0 + off) / TL.total, b = (s.t0 + s.dur + off) / TL.total;
+              const xa = lerp(x0, x1, clamp(a)), xb = lerp(x0, x1, clamp(b));
+              if (xb <= xa) continue;
+              g.fillStyle = s.kind === 'desc' ? alpha(C.c1, 0.22) : alpha(C.c2, 0.18);
+              g.fillRect(xa, yb + 8, xb - xa, 14);
+              if (xb - xa > 60) label(g, `${s.kind === 'desc' ? 'descente' : 'montée'} ${s.k}`, xa + 6, yb + 19, { size: 11 });
+            }
+          }
+          g.strokeStyle = C.c1; g.lineWidth = 2; g.beginPath();
+          for (let i = 0; i <= 400; i++) { const u = i / 400, y = yb - knotAt(u * TL.total) * H; i ? g.lineTo(lerp(x0, x1, u), y) : g.moveTo(lerp(x0, x1, u), y); }
+          g.stroke();
+          const u = d.state.u, x = lerp(x0, x1, u), y = yb - knotAt(u * TL.total) * H;
+          g.strokeStyle = C.dim; g.lineWidth = 1; g.beginPath(); g.moveTo(x, 20); g.lineTo(x, yb + 24); g.stroke();
+          g.fillStyle = C.ink; g.beginPath(); g.arc(x, y, 5, 0, TAU); g.fill();
+          label(g, 'pendu (H)', x0, yb - H - 6, { size: 11 }); label(g, 'posé (Dk)', x0, yb + 2, { size: 11 });
+          const { seg, local } = locate(TL, u * TL.total);
+          d.status(`u = ${u.toFixed(3)} · ${seg.kind === 'desc' ? 'descente' : 'montée'} ${seg.k} (${R.forms[seg.k].kind}) · ${local.toFixed(2)} s`);
+        },
+      });
+    }
+
+    // ── 02 : la coupe des formes (le dessin du chargement) ──
+    {
+      const kinds = ['bust', 'cat', 'teapot', 'amphora', 'chair', 'blocks', 'lyre'];
+      const NAMES = { bust: 'Buste', cat: 'Chat', teapot: 'Verseuse', amphora: 'Cratère', chair: 'Chaise', blocks: 'Blocs', lyre: 'Lyre' };
+      const R = generate('a1');
+      let art = null, kind = 'bust';
+      const make = (k) => {
+        kind = k;
+        const spec = { ...generate('form-' + k, { forms: [k] }).forms[0] };
+        art = createArt();
+        art.data({ forms: [spec], L: R.veil.L, color: C.c1, plinth: R.plinth });
+      };
+      make('bust');
+      demo('#fig-forms', {
+        title: 'La statue absente, en coupe', aspect: 1.5, animate: true,
+        buttons: kinds.map((k) => ({ label: NAMES[k], onClick: () => make(k) })),
+        draw(g, d) {
+          g.fillStyle = '#060607'; g.fillRect(0, 0, d.w, d.h);
+          const dpr = 1;
+          art.draw(g, { w: d.w, h: d.h * 1.15, dpr, t: d.t, dt: Math.min(0.05, d.dt), done: 0 });
+          d.status(NAMES[kind]);
+        },
+      });
+    }
+
+    // ── 03 : la chaîne pendue, ordre de résolution ──
+    {
+      const M = 40, Lk = 1 / (M - 1);
+      demo('#fig-chain', {
+        title: 'Une passe par sous-pas', aspect: 1.9, animate: true,
+        buttons: [{ key: 'ring', label: 'Depuis la bague', toggle: true, value: false }, { label: 'Relâcher', onClick: (d) => d.reset() }],
+        setup(d) { d.state.P = Array.from({ length: M }, (_, i) => [i * Lk, 0]); d.state.Q = d.state.P.map((p) => [...p]); },
+        draw(g, d) {
+          const { P, Q } = d.state, sub = 30, dt = 1 / 900, ring = d.s.ring;
+          for (let s = 0; s < sub; s++) {
+            for (let i = 1; i < M; i++) { const p = P[i], q = Q[i]; const vx = p[0] - q[0], vy = p[1] - q[1]; q[0] = p[0]; q[1] = p[1]; p[0] += vx * 0.999; p[1] += vy * 0.999 - 9.81 * dt * dt; }
+            P[0][0] = 0; P[0][1] = 0;
+            // ordre du tableau : du dernier maillon vers la bague (le pire cas) ; ou depuis la bague
+            for (let c = 0; c < M - 1; c++) {
+              const i = ring ? c : M - 2 - c;
+              const a = P[i], b = P[i + 1], ex = b[0] - a[0], ey = b[1] - a[1], l = Math.hypot(ex, ey) || 1e-9, k = (l - Lk) / l;
+              const wa = i === 0 ? 0 : 1, wb = 1, w = wa + wb;
+              a[0] += ex * k * wa / w; a[1] += ey * k * wa / w; b[0] -= ex * k * wb / w; b[1] -= ey * k * wb / w;
+            }
+          }
+          const sc = d.h * 0.42, ox = d.w * 0.5, oy = 24;
+          let len = 0, worst = 0;
+          for (let i = 0; i + 1 < M; i++) {
+            const a = P[i], b = P[i + 1], e = Math.hypot(b[0] - a[0], b[1] - a[1]) / Lk - 1;
+            len += Math.hypot(b[0] - a[0], b[1] - a[1]); worst = Math.max(worst, e);
+            g.strokeStyle = e > 0.05 ? '#e06a5a' : e > 0.01 ? C.c2 : C.c1; g.lineWidth = 3;
+            g.beginPath(); g.moveTo(ox + a[0] * sc, oy - a[1] * sc); g.lineTo(ox + b[0] * sc, oy - b[1] * sc); g.stroke();
+          }
+          g.fillStyle = C.ink; g.beginPath(); g.arc(ox, oy, 4, 0, TAU); g.fill();
+          d.status(`${ring ? 'depuis la bague' : 'ordre du tableau'} · longueur ${(len * 100).toFixed(0)} % · pire maillon +${(worst * 100).toFixed(1)} %`);
+        },
+      });
+    }
+
+    // ── le pas exact : n liens repliés du même côté ──
+    {
+      demo('#fig-step', {
+        title: 'Une passe toutes les demi-secondes', aspect: 2.4, animate: true,
+        controls: [{ key: 'n', label: 'Liens du même côté', min: 1, max: 6, step: 1, value: 5, fmt: (v) => String(v), onChange: (d) => d.reset() }],
+        buttons: [{ key: 'exact', label: 'Pas exact', toggle: true, value: false, onClick: (d) => d.reset() }, { label: 'Rejouer', onClick: (d) => d.reset() }],
+        setup(d) { d.state.e = [1]; d.state.acc = 0; },
+        draw(g, d) {
+          const n = d.s.n, gain = n * 0.5, eff = d.s.exact ? gain / Math.max(1, gain) : gain, E = d.state.e;
+          d.state.acc += d.dt;
+          if (d.state.acc > 0.5 && E.length < 15) { d.state.acc = 0; E.push(E[E.length - 1] * (1 - eff)); }
+          const e = E[E.length - 1];
+          // à gauche : la cible, le point, ses liens
+          const cx = d.w * 0.22, cy = d.h * 0.5, sc = d.w * 0.055;
+          g.strokeStyle = C.dim; g.setLineDash([3, 4]); g.beginPath(); g.moveTo(cx, 18); g.lineTo(cx, d.h - 18); g.stroke(); g.setLineDash([]);
+          const px = cx + clamp(e, -3.4, 3.4) * sc;
+          for (let k = 0; k < n; k++) { const y = cy + (k - (n - 1) / 2) * 13; g.strokeStyle = alpha(C.c1, 0.55); g.lineWidth = 1.5; g.beginPath(); g.moveTo(cx - sc * 3.6, y); g.lineTo(px, cy); g.stroke(); g.fillStyle = C.dim; g.beginPath(); g.arc(cx - sc * 3.6, y, 3, 0, TAU); g.fill(); }
+          g.fillStyle = Math.abs(e) > 3.4 ? '#e06a5a' : C.ink; g.beginPath(); g.arc(px, cy, 6, 0, TAU); g.fill();
+          label(g, 'cible', cx + 5, 16, { size: 11 });
+          // à droite : l'écart à la cible, passe après passe (échelle logarithmique)
+          const x0 = d.w * 0.5, x1 = d.w - 18, yT = 18, yB = d.h - 26, Y = (v) => lerp(yB, yT, clamp((Math.log10(Math.max(Math.abs(v), 1e-3)) + 3) / 6));
+          g.strokeStyle = C.grid; g.lineWidth = 1;
+          for (const v of [1e-3, 1, 1e3]) { g.beginPath(); g.moveTo(x0, Y(v)); g.lineTo(x1, Y(v)); g.stroke(); label(g, v === 1 ? 'écart 1' : v < 1 ? '÷ 1000' : '× 1000', x0 + 4, Y(v) - 4, { size: 10 }); }
+          g.strokeStyle = Math.abs(1 - eff) > 1 ? '#e06a5a' : C.c1; g.lineWidth = 2.5; g.beginPath();
+          E.forEach((v, i) => { const x = lerp(x0, x1, i / 14); i ? g.lineTo(x, Y(v)) : g.moveTo(x, Y(v)); });
+          g.stroke();
+          for (let i = 0; i < E.length; i++) { g.fillStyle = C.ink; g.beginPath(); g.arc(lerp(x0, x1, i / 14), Y(E[i]), 2.5, 0, TAU); g.fill(); }
+          label(g, 'passes', x1, d.h - 8, { size: 10, align: 'right' });
+          d.status(`gain ${gain.toFixed(1)}${d.s.exact && gain > 1 ? ' ramené à 1' : ''} · écart après ${E.length - 1} passes : ${Math.abs(e) >= 100 ? Math.abs(e).toExponential(1) : Math.abs(e).toFixed(3)}`);
+        },
+      });
+    }
+
+    // ── 04 : frottement avant ou après les fils ──
+    {
+      const M = 46, Lk = 0.032, R0 = 0.42;
+      demo('#fig-friction', {
+        title: 'Frottement et fils', aspect: 1.9, animate: true,
+        buttons: [{ key: 'before', label: 'Frottement avant les fils', toggle: true, value: true }, { label: 'Rejouer', onClick: (d) => d.reset() }],
+        setup(d) {
+          // la chaîne posée sur le dôme (cercle de rayon R0 centré en 0)
+          d.state.P = Array.from({ length: M }, (_, i) => { const a = Math.PI * 0.95 - (i / (M - 1)) * Math.PI * 0.9; return [Math.cos(a) * (R0 + 0.004), Math.sin(a) * (R0 + 0.004)]; });
+          d.state.Q = d.state.P.map((p) => [...p]); d.state.T = 0;
+        },
+        draw(g, d) {
+          const { P, Q } = d.state, sub = 20, dt = 1 / 600, mu = 0.6, before = d.s.before;
+          const contact = (p, q, fr) => {
+            const r = Math.hypot(p[0], p[1]); if (r >= R0) return;
+            const nx = p[0] / r, ny = p[1] / r, pen = R0 - r; p[0] += nx * pen; p[1] += ny * pen;
+            if (!fr) return;
+            const dx = p[0] - q[0], dy = p[1] - q[1], dn = dx * nx + dy * ny, tx = dx - dn * nx, ty = dy - dn * ny, tl = Math.hypot(tx, ty);
+            if (tl < 1e-12) return; const s = tl < mu * pen ? 1 : Math.min(1, mu * pen / tl); p[0] -= tx * s; p[1] -= ty * s;
+          };
+          for (let s = 0; s < sub; s++) {
+            d.state.T += dt;
+            for (let i = 0; i < M; i++) { const p = P[i], q = Q[i]; const vx = p[0] - q[0], vy = p[1] - q[1]; q[0] = p[0]; q[1] = p[1]; p[0] += vx * 0.995; p[1] += vy * 0.995 - 9.81 * dt * dt; }
+            // le bout gauche est tiré vers la gauche et le bas
+            P[0][0] = Math.cos(Math.PI * 0.95) * (R0 + 0.004) - Math.min(0.5, d.state.T * 0.12); P[0][1] = Math.sin(Math.PI * 0.95) * R0 - Math.min(0.5, d.state.T * 0.12);
+            if (before) for (let i = 1; i < M; i++) contact(P[i], Q[i], true);
+            for (let pass = 0; pass < 2; pass++) for (let c = 0; c < M - 1; c++) {
+              const a = P[c], b = P[c + 1], ex = b[0] - a[0], ey = b[1] - a[1], l = Math.hypot(ex, ey) || 1e-9, k = (l - Lk) / l;
+              const wa = c === 0 ? 0 : 1, w = wa + 1; a[0] += ex * k * wa / w; a[1] += ey * k * wa / w; b[0] -= ex * k / w; b[1] -= ey * k / w;
+            }
+            for (let i = 1; i < M; i++) contact(P[i], Q[i], !before);
+          }
+          const sc = d.h * 0.95, ox = d.w * 0.55, oy = d.h * 0.88;
+          g.strokeStyle = C.dim; g.setLineDash([3, 4]); g.beginPath(); g.arc(ox, oy, R0 * sc, Math.PI, TAU); g.stroke(); g.setLineDash([]);
+          let worst = 0;
+          for (let i = 0; i + 1 < M; i++) {
+            const a = P[i], b = P[i + 1], e = Math.hypot(b[0] - a[0], b[1] - a[1]) / Lk - 1; worst = Math.max(worst, e);
+            g.strokeStyle = e > 0.05 ? '#e06a5a' : C.c1; g.lineWidth = 3; g.beginPath(); g.moveTo(ox + a[0] * sc, oy - a[1] * sc); g.lineTo(ox + b[0] * sc, oy - b[1] * sc); g.stroke();
+          }
+          d.status(`${before ? 'frottement avant les fils' : 'frottement après les fils'} · pire fil +${(worst * 100).toFixed(1)} %`);
+        },
+      });
+    }
+
+    // ── 05 : le linge humide sur un profil ──
+    {
+      const M = 60, Lk = 0.012;
+      // profil (x vers la droite = vers le visage) : crâne, front, nez, lèvres, menton, cou, épaule
+      const circ = [[0, 0.46, 0.095], [0.06, 0.43, 0.05], [0.112, 0.385, 0.014], [0.098, 0.355, 0.011], [0.09, 0.325, 0.02], [0.0, 0.25, 0.05], [-0.02, 0.13, 0.13]];
+      const sd = (x, y) => { let d = 9; for (const [cx, cy, r] of circ) d = Math.min(d, Math.hypot(x - cx, y - cy) - r); return d; };
+      demo('#fig-wet', {
+        title: 'Sec ou humide', aspect: 1.5, animate: true,
+        controls: [{ key: 'w', label: 'Humidité', min: 0, max: 1, step: 0.05, value: 0.8, fmt: (v) => v.toFixed(2) }],
+        buttons: [{ label: 'Reposer', onClick: (d) => d.reset() }],
+        setup(d) { d.state.P = Array.from({ length: M }, (_, i) => [0.005 + (i - 20) * Lk * 0.5, 0.75 - Math.abs(i - 20) * Lk * 0.85]); d.state.Q = d.state.P.map((p) => [...p]); d.state.t = 0; },
+        draw(g, d) {
+          const { P, Q } = d.state, sub = 16, dt = 1 / 480, c = 20, rc = 0.004, RA = 0.05, a = 60 * d.s.w;
+          for (let s = 0; s < sub; s++) {
+            d.state.t += dt;
+            const ky = Math.max(0.555 + rc, 0.75 - d.state.t * 0.25);
+            for (let i = 0; i < M; i++) { const p = P[i], q = Q[i]; const vx = (p[0] - q[0]) * 0.995, vy = (p[1] - q[1]) * 0.995; q[0] = p[0]; q[1] = p[1]; p[0] += vx; p[1] += vy - 9.81 * dt * dt; }
+            P[c][0] = 0; P[c][1] = ky;
+            for (let i = 0; i < M; i++) {
+              if (i === c) continue;
+              const p = P[i], dd = sd(p[0], p[1]);
+              if (dd < rc + RA) {
+                const e = 1e-4, gx = sd(p[0] + e, p[1]) - sd(p[0] - e, p[1]), gy = sd(p[0], p[1] + e) - sd(p[0], p[1] - e), gl = Math.hypot(gx, gy) || 1;
+                if (dd < rc) { p[0] += gx / gl * (rc - dd); p[1] += gy / gl * (rc - dd); Q[i][0] += (p[0] - Q[i][0]) * 0.3 * (1 - 0.5 * d.s.w); }
+                else { const m = Math.min(dd - rc, a * dt * dt); p[0] -= gx / gl * m; p[1] -= gy / gl * m; }
+              }
+            }
+            for (let pass = 0; pass < 2; pass++) for (let k = 0; k < M - 1; k++) {
+              const A = P[k], B = P[k + 1], ex = B[0] - A[0], ey = B[1] - A[1], l = Math.hypot(ex, ey) || 1e-9, f = (l - Lk) / l;
+              const wa = k === c ? 0 : 1, wb = k + 1 === c ? 0 : 1, w = wa + wb || 1;
+              A[0] += ex * f * wa / w; A[1] += ey * f * wa / w; B[0] -= ex * f * wb / w; B[1] -= ey * f * wb / w;
+            }
+          }
+          const sc = d.h * 1.3, ox = d.w * 0.5, oy = d.h * 1.02;
+          g.strokeStyle = C.dim; g.setLineDash([3, 4]);
+          for (const [cx, cy, r] of circ) { g.beginPath(); g.arc(ox + cx * sc, oy - cy * sc, r * sc, 0, TAU); g.stroke(); }
+          g.setLineDash([]);
+          g.strokeStyle = C.c1; g.lineWidth = 2.5; g.beginPath();
+          P.forEach((p, i) => (i ? g.lineTo(ox + p[0] * sc, oy - p[1] * sc) : g.moveTo(ox + p[0] * sc, oy - p[1] * sc)));
+          g.stroke();
+          let touch = 0; for (const p of P) if (sd(p[0], p[1]) < 0.01) touch++;
+          d.status(`humidité ${d.s.w.toFixed(2)} · ${Math.round(100 * touch / M)} % de la coupe au contact`);
+        },
+      });
+    }
+
+    // ── 06 : Catmull-Rom ──
+    {
+      demo('#fig-cr', {
+        title: 'Catmull-Rom', aspect: 2.4,
+        setup(d) { d.state.P = Array.from({ length: 7 }, (_, i) => [0.08 + i * 0.14, 0.5 + 0.28 * Math.sin(i * 1.7)]); d.state.drag = -1; },
+        pointer(d, e) {
+          const P = d.state.P, X = (p) => [p[0] * d.w, p[1] * d.h];
+          if (e.type === 'down') { d.state.drag = P.findIndex((p) => Math.hypot(X(p)[0] - e.x, X(p)[1] - e.y) < 16); }
+          if (e.type === 'up') d.state.drag = -1;
+          if (e.down && d.state.drag >= 0) { P[d.state.drag][0] = clamp(e.x / d.w); P[d.state.drag][1] = clamp(e.y / d.h); }
+        },
+        draw(g, d) {
+          const P = d.state.P, n = P.length, at = (i) => P[Math.max(0, Math.min(n - 1, i))];
+          g.strokeStyle = C.dim; g.lineWidth = 1; g.beginPath(); P.forEach((p, i) => (i ? g.lineTo(p[0] * d.w, p[1] * d.h) : g.moveTo(p[0] * d.w, p[1] * d.h))); g.stroke();
+          g.strokeStyle = C.c1; g.lineWidth = 2.5; g.beginPath();
+          for (let i = 0; i < n - 1; i++) for (let k = 0; k <= 24; k++) {
+            const t = k / 24, w = [t * ((2 - t) * t - 1) * 0.5, (t * t * (3 * t - 5) + 2) * 0.5, t * ((4 - 3 * t) * t + 1) * 0.5, (t - 1) * t * t * 0.5];
+            const q = [0, 1].map((c) => w[0] * at(i - 1)[c] + w[1] * at(i)[c] + w[2] * at(i + 1)[c] + w[3] * at(i + 2)[c]);
+            (i || k) ? g.lineTo(q[0] * d.w, q[1] * d.h) : g.moveTo(q[0] * d.w, q[1] * d.h);
+          }
+          g.stroke();
+          for (const p of P) { g.fillStyle = C.ink; g.beginPath(); g.arc(p[0] * d.w, p[1] * d.h, 5, 0, TAU); g.fill(); }
+          d.status('glisser les points');
+        },
+      });
+    }
+
+    // ── la dentelle, couche par couche (mêmes formules que scene/veil.js) ──
+    {
+      const W = 360, H = 210, span = 0.15; // (15 cm d'étoffe en largeur)
+      const off = Object.assign(document.createElement('canvas'), { width: W, height: H }), og = off.getContext('2d');
+      const img = og.createImageData(W, H);
+      const fr = (x) => x - Math.floor(x), inside = (d, f) => clamp(0.5 - d / (2 * f)), line = (d, w, f) => clamp(0.5 + (w - Math.abs(d)) / (2 * f));
+      const tulle = (x, y, round, f) => {
+        const u = x / 0.0026, v = y / 0.0026, R3 = 1.7320508;
+        const ax = (fr(u) - 0.5), ay = (fr(v / R3) - 0.5) * R3, bx = (fr(u - 0.5) - 0.5), by = (fr((v - R3 / 2) / R3) - 0.5) * R3;
+        const [vx, vy] = Math.hypot(ax, ay) < Math.hypot(bx, by) ? [ax, ay] : [bx, by], ff = f / 0.0026;
+        if (round) return clamp(0.5 + (Math.hypot(vx, vy) - 0.38) / (2 * ff)); // jours ronds
+        const h = Math.max(Math.abs(vx), 0.5 * Math.abs(vx) + 0.8660254 * Math.abs(vy));
+        return clamp(0.5 + (h - 0.41) / (2 * ff)); // fil de demi-largeur 0,09 pas
+      };
+      let key = '';
+      demo('#fig-lace', {
+        title: 'Chantilly', aspect: W / H,
+        buttons: [{ key: 'net', label: 'Réseau', toggle: true, value: true }, { key: 'toile', label: 'Toilé', toggle: true, value: true }, { key: 'cord', label: 'Cordonnet', toggle: true, value: true }, { key: 'round', label: 'Jours ronds', toggle: true, value: false }],
+        draw(g, d) {
+          const k = [d.s.net, d.s.toile, d.s.cord, d.s.round].join();
+          if (k !== key) {
+            key = k;
+            const s = 0.06, px = span / W, f = px / s;
+            for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+              const x = i * px + 0.012, y = j * px + 0.01, qy = y / s, qx = x / s + Math.floor(qy) * 0.5;
+              const cx = fr(qx) - 0.5, cy = fr(qy) - 0.5, r = Math.hypot(cx, cy), th = Math.atan2(cy, cx);
+              const fl = r - (0.27 + 0.11 * Math.cos(5 * th));
+              const nerv = line(Math.sin(2.5 * th) * r, 0.007, f) * inside(fl + 0.03, f) * (1 - inside(r - 0.115, f));
+              const toile = inside(fl, f), cord = Math.max(line(fl, 0.018, f), line(r - 0.115, 0.012, f), nerv, inside(r - 0.055, f));
+              const gx = x / 0.0006, gy = y / 0.0006, jour = inside(Math.max(Math.abs(fr(gx) - 0.5), Math.abs(fr(gy) - 0.5)) - 0.27, px / 0.0006);
+              const tissu = px / 0.0006 > 0.5 ? 0.71 : 1 - jour;
+              const cov = Math.max(d.s.net ? tulle(x, y, d.s.round, px) : 0, d.s.toile ? toile * tissu : 0, d.s.cord ? cord : 0);
+              const o = (j * W + i) * 4; img.data[o] = 233; img.data[o + 1] = 227; img.data[o + 2] = 216; img.data[o + 3] = Math.round(255 * cov);
+            }
+            og.putImageData(img, 0, 0);
+          }
+          g.fillStyle = '#0b0c0f'; g.fillRect(0, 0, d.w, d.h);
+          g.drawImage(off, 0, 0, d.w, d.h);
+          d.status(`${[d.s.net && (d.s.round ? 'réseau à jours ronds' : 'réseau hexagonal'), d.s.toile && 'toilé', d.s.cord && 'cordonnet'].filter(Boolean).join(' · ') || 'rien'} · 15 cm d'étoffe`);
+        },
+      });
+    }
+
+    // ── la marche de rayon dans le champ de distance (le modèle détaillé de la verseuse) ──
+    {
+      const spec = { ...generate('form-teapot', { forms: ['teapot'] }).forms[0], yaw: 0, turn: 0 };
+      const f = buildForm(spec, true);
+      const X0 = -0.42, X1 = 0.42, Y0 = -0.02, Y1 = 0.64, GW = 210, GH = 165;
+      const off = Object.assign(document.createElement('canvas'), { width: GW, height: GH }), og = off.getContext('2d');
+      const img = og.createImageData(GW, GH);
+      for (let j = 0; j < GH; j++) for (let i = 0; i < GW; i++) {
+        const dd = f(lerp(X0, X1, i / (GW - 1)), lerp(Y1, Y0, j / (GH - 1)), 0), o = (j * GW + i) * 4;
+        const a = dd < 0 ? 0.5 : Math.max(0, 0.14 - dd * 4.5); // (halo de 3 cm : plus large, il montrait le bord de la boîte du champ)
+        img.data[o] = 143; img.data[o + 1] = 214; img.data[o + 2] = 255; img.data[o + 3] = Math.round(255 * a);
+      }
+      og.putImageData(img, 0, 0);
+      demo('#fig-march', {
+        title: 'Avancer de la distance lue', aspect: (X1 - X0) / (Y1 - Y0),
+        setup(d) { d.state.tx = 0.62; d.state.ty = 0.5; },
+        pointer(d, e) { d.state.tx = clamp(e.x / d.w); d.state.ty = clamp(e.y / d.h); d.redraw(); },
+        draw(g, d) {
+          g.fillStyle = '#07080b'; g.fillRect(0, 0, d.w, d.h);
+          g.drawImage(off, 0, 0, d.w, d.h);
+          const PX = (x) => ((x - X0) / (X1 - X0)) * d.w, PY = (y) => ((Y1 - y) / (Y1 - Y0)) * d.h, sc = d.w / (X1 - X0);
+          const ox = X0 + 0.02, oy = 0.56, tx = lerp(X0, X1, d.state.tx), ty = lerp(Y1, Y0, d.state.ty);
+          const l = Math.hypot(tx - ox, ty - oy) || 1, dx = (tx - ox) / l, dy = (ty - oy) / l;
+          let t = 0, n = 0, hit = false;
+          g.lineWidth = 1;
+          for (; n < 60; n++) {
+            const x = ox + dx * t, y = oy + dy * t;
+            if (x > X1 || x < X0 || y < Y0 || y > Y1) break;
+            const dd = f(x, y, 0);
+            if (dd < 0.0007) { hit = true; break; }
+            g.strokeStyle = alpha(C.c1, 0.55); g.beginPath(); g.arc(PX(x), PY(y), Math.max(1, dd * sc), 0, TAU); g.stroke();
+            g.fillStyle = C.ink; g.beginPath(); g.arc(PX(x), PY(y), 2, 0, TAU); g.fill();
+            t += Math.max(dd, 0.0012);
+          }
+          g.strokeStyle = C.dim; g.beginPath(); g.moveTo(PX(ox), PY(oy)); g.lineTo(PX(ox + dx * t), PY(oy + dy * t)); g.stroke();
+          g.fillStyle = hit ? '#ffc98a' : C.dim; g.beginPath(); g.arc(PX(ox + dx * t), PY(oy + dy * t), 4, 0, TAU); g.fill();
+          label(g, 'œil', PX(ox) + 6, PY(oy) - 8, { size: 11 });
+          d.status(hit ? `surface touchée en ${n} pas` : `rien touché en ${n} pas`);
+        },
+      });
+    }
+
+    // ── les fils par humeur ──
+    {
+      const cols = Object.keys(VEIL_COLORS);
+      demo('#fig-colors', {
+        title: 'Fils tirables', aspect: 1.9,
+        draw(g, d) {
+          const moods = Object.keys(MOODS);
+          const cw = (d.w - 120) / cols.length, rh = (d.h - 20) / moods.length;
+          let n = 0;
+          moods.forEach((m, j) => {
+            const M = MOODS[m], y = 10 + j * rh;
+            g.fillStyle = M.bg; g.fillRect(110, y, d.w - 120, rh - 4);
+            label(g, M.label, 8, y + rh * 0.55, { color: C.ink, size: 12 });
+            cols.forEach((k, i) => {
+              const c = VEIL_COLORS[k].hex, s = Math.min(cw * 0.62, rh * 0.62), x = 110 + i * cw + (cw - s) / 2;
+              g.fillStyle = c; g.fillRect(x, y + (rh - 4 - s) / 2, s, s);
+              if (Math.abs(lum(c) - lum(M.bg)) < 0.3) { g.strokeStyle = '#e06a5a'; g.lineWidth = 2; g.beginPath(); g.moveTo(x - 2, y + 4); g.lineTo(x + s + 2, y + rh - 8); g.stroke(); } else n++;
+            });
+          });
+          d.status(`${cols.length} fils · ${n} couples fil et fond tirables sur ${cols.length * moods.length}`);
+        },
+      });
+    }
+
+    addEventListener('DOMContentLoaded', () => window.renderMathInElement?.(document.body, { delimiters: [{ left: '\\[', right: '\\]', display: true }, { left: '\\(', right: '\\)', display: false }] }));
+  </script>
+</body>
+</html>
