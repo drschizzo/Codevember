@@ -212,7 +212,6 @@ function horse(p) {
 }
 
 // Théière : la panse, le bec, l'anse et le bouton du couvercle
-const verseuse = makeLathe(0, 0, [[0, 0.065], [0.015, 0.075], [0.06, 0.105], [0.13, 0.115], [0.21, 0.09], [0.28, 0.058], [0.33, 0.052], [0.345, 0.062], [0.365, 0.055], [0.39, 0.03]]);
 function teapot(p) {
   const fr = makeFrame({ pivot: [0, 0, 0], ry: p.turn * 0.25 });
   return (x0, y, z0) => {
@@ -221,7 +220,7 @@ function teapot(p) {
     // reposait surtout sur le socle et n'en faisait qu'un tas. Trois chevilles
     // à trois hauteurs — le bouton, le bout du bec, le haut de l'anse — et
     // rien de plus mince que trois mailles.)
-    let d = verseuse(x, y, z); // panse en poire, col, couvercle
+    let d = min(verseuseFine(x, y, z), verseuseLid(x, y, z)); // panse en poire, col, couvercle : ceux qu'on montre
     d = smin(d, sdSphere(x, y, z, 0, 0.415, 0, 0.026), 0.012); // bouton
     d = smin(d, sdCapsule(x, y, z, 0.07, 0.1, 0, 0.215, 0.33, 0, 0.034, 0.02), 0.02); // bec, long et relevé
     const t = smax(sdTorusZ(x, y, z, -0.1, 0.255, 0, 0.085, 0.02), x + 0.07, 0.005); // anse, qui remonte au-dessus de l'épaule
@@ -230,12 +229,11 @@ function teapot(p) {
 }
 
 // Amphore : col étroit, deux anses
-const amphoraBody = makeLathe(0, 0, [[0, 0.05], [0.02, 0.06], [0.07, 0.085], [0.17, 0.13], [0.27, 0.118], [0.33, 0.075], [0.37, 0.07], [0.41, 0.085], [0.432, 0.1], [0.445, 0.098]]);
 function amphora(p) {
   const fr = makeFrame({ pivot: [0, 0, 0], ry: p.turn * 0.25 });
   return (x0, y, z0) => {
     const [x, , z] = fr(x0, y, z0);
-    let d = amphoraBody(x, y, z);
+    let d = kraterFine(x, y, z); // (la panse qu'on montre)
     for (const sx of [1, -1]) {
       // (anses à volutes, plus hautes que la lèvre : sous le linge, des anses
       // plaquées au col disparaissaient ; celles-ci font deux cornes de part
@@ -255,8 +253,11 @@ function chair(p) {
   const fr = makeFrame({ pivot: [0, 0, 0], ry: p.turn * 0.3 });
   return (x0, y, z0) => {
     const [x, , z] = fr(x0, y, z0);
-    let d = sdRoundBox(x, y, z, 0, 0.268, 0.005, 0.125, 0.013, 0.118, 0.006); // assise
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) d = min(d, sdCapsule(x, y, z, sx * 0.105, 0.012, sz * 0.098 + 0.005, sx * 0.108, 0.26, sz * 0.1 + 0.005, 0.012, 0.011)); // pieds
+    let d = sdRoundCyl(x, y, z, 0, 0.005, 0.255, 0.28, 0.125, 0.008); // assise (ronde, comme celle qu'on montre : carrée, ses coins portaient le linge au-dessus de rien)
+    for (const sx of [-1, 1]) { // pieds, sur le tracé de ceux qu'on montre
+      d = min(d, sdCapsule(x, y, z, sx * 0.082, 0.26, 0.088, sx * 0.104, 0.012, 0.112, 0.014, 0.012));
+      d = min(d, sdCapsule(x, y, z, sx * 0.085, 0.26, -0.082, sx * 0.106, 0.012, -0.102, 0.014, 0.012));
+    }
     // Le dossier porteur est l'arceau de la chaise montrée (gen : chairShow), en
     // 4 cm d'épaisseur, trois mailles du voile : à 2 cm, le linge posé dessus
     // le traversait rang après rang, comme un fil à couper le beurre, et ne
@@ -289,6 +290,11 @@ function lyre() {
 // épaissies exprès (rien de plus mince que trois mailles) ; l'hologramme, lui,
 // dessine l'objet à ses vraies sections — barreaux, anses, cordes — logé à
 // l'intérieur de la forme épaisse, donc toujours sous le linge.
+// Règle : ce qui PORTE le linge a la même surface dans les deux versions (un
+// dos, une épaule, une panse ne sont pas amincis), et une partie fine touche
+// la forme épaisse par son sommet (une queue, une anse, un arceau sont
+// remontés d'autant qu'ils sont amincis). Aminci partout, l'hologramme était
+// plus petit que ce qui porte le voile, qui semblait flotter 1 à 3 cm au-dessus.
 const sdTorusY = (x, y, z, cx, cy, cz, R, r) => hypot(hypot(x - cx, z - cz) - R, y - cy) - r; // (anneau horizontal)
 const sdTorusX = (x, y, z, cx, cy, cz, R, r) => hypot(hypot(y - cy, z - cz) - R, x - cx) - r; // (roue dans le plan yz)
 const sdDiscX = (x, y, z, cx, cy, cz, R, hw, r) => sdRoundCyl(y - cy, x, z - cz, 0, 0, cx - hw, cx + hw, R, r); // (disque d'axe x)
@@ -306,10 +312,10 @@ function chairShow(p) {
     for (const sx of [-1, 1]) {
       d = min(d, sdCapsule(x, y, z, sx * 0.082, 0.26, 0.088, sx * 0.104, 0.008, 0.112, 0.012, 0.008)); // pied avant
       d = min(d, sdCapsule(x, y, z, sx * 0.085, 0.26, -0.082, sx * 0.106, 0.008, -0.102, 0.012, 0.008)); // pied arrière
-      d = min(d, sdCapsule(x, y, z, sx * 0.1, 0.26, -0.086, sx * 0.102, 0.385, -0.112, 0.012, 0.011)); // montant du grand arceau
+      d = min(d, sdCapsule(x, y, z, sx * 0.1, 0.26, -0.086, sx * 0.102, 0.394, -0.112, 0.012, 0.011)); // montant du grand arceau
       d = min(d, sdCapsule(x, y, z, sx * 0.05, 0.27, -0.088, sx * 0.058, 0.365, -0.108, 0.008)); // montant du petit
     }
-    d = min(d, smax(sdTorusZ(x, y, z, 0, 0.385, -0.112, 0.102, 0.011), 0.385 - y, 0.004)); // grand arceau
+    d = min(d, smax(sdTorusZ(x, y, z, 0, 0.394, -0.112, 0.102, 0.011), 0.394 - y, 0.004)); // grand arceau (remonté de 9 mm : son sommet touche celui de l'arceau épais)
     d = min(d, smax(sdTorusZ(x, y, z, 0, 0.365, -0.108, 0.058, 0.008), 0.365 - y, 0.004)); // petit arceau
     return d;
   };
@@ -320,9 +326,8 @@ function chairShow(p) {
 function catShow(p) {
   const head = makeFrame({ pivot: [0.2, 0.25, 0], ry: p.turn * 0.5, rx: p.tilt * 0.4 });
   return (x, y, z) => {
-    let d = sdCapsule(x, y, z, -0.13, 0.27, 0, -0.02, 0.395, 0, 0.055, 0.06); // croupe → sommet du dos
-    d = smin(d, sdCapsule(x, y, z, -0.02, 0.395, 0, 0.13, 0.28, 0, 0.06, 0.048), 0.03); // sommet → épaules
-    d = smin(d, sdEllipsoid(x, y, z, 0.05, 0.27, 0, 0.09, 0.05, 0.045), 0.03); // ventre rentré
+    let d = sdCapsule(x, y, z, -0.13, 0.27, 0, -0.02, 0.4, 0, 0.068, 0.072); // croupe → sommet du dos
+    d = smin(d, sdCapsule(x, y, z, -0.02, 0.4, 0, 0.13, 0.28, 0, 0.072, 0.062), 0.03); // sommet → épaules
     for (const sz of [-1, 1]) {
       d = smin(d, sdEllipsoid(x, y, z, -0.13, 0.21, sz * 0.042, 0.045, 0.07, 0.028), 0.02); // cuisse
       d = smin(d, sdCapsule(x, y, z, -0.135, 0.15, sz * 0.045, -0.15, 0.03, sz * 0.05, 0.019, 0.013), 0.012); // jarret
@@ -330,18 +335,17 @@ function catShow(p) {
       d = smin(d, sdCapsule(x, y, z, 0.12, 0.25, sz * 0.038, 0.15, 0.03, sz * 0.045, 0.021, 0.013), 0.012); // patte avant
       d = smin(d, sdEllipsoid(x, y, z, 0.162, 0.012, sz * 0.045, 0.028, 0.012, 0.017), 0.008);
     }
-    d = smin(d, sdCapsule(x, y, z, -0.165, 0.27, 0, -0.2, 0.4, 0, 0.02, 0.016), 0.015); // queue
-    d = smin(d, sdCapsule(x, y, z, -0.2, 0.4, 0, -0.2, 0.47, 0, 0.016, 0.013), 0.006);
-    d = smin(d, sdCapsule(x, y, z, -0.2, 0.47, 0, -0.177, 0.512, 0, 0.013, 0.009), 0.006);
-    d = smin(d, sdCapsule(x, y, z, 0.13, 0.28, 0, 0.19, 0.25, 0, 0.044, 0.04), 0.02); // cou
+    d = smin(d, sdCapsule(x, y, z, -0.165, 0.27, 0, -0.2, 0.4, 0, 0.022, 0.018), 0.015); // queue
+    d = smin(d, sdCapsule(x, y, z, -0.2, 0.4, 0, -0.2, 0.475, 0, 0.018, 0.015), 0.006);
+    d = smin(d, sdCapsule(x, y, z, -0.2, 0.475, 0, -0.176, 0.528, 0, 0.015, 0.014), 0.006); // (son bout touche celui de la queue épaisse)
+    d = smin(d, sdCapsule(x, y, z, 0.13, 0.28, 0, 0.19, 0.25, 0, 0.055), 0.02); // cou
     const [a, b, c] = head(x, y, z);
-    let h = sdEllipsoid(a, b, c, 0.215, 0.25, 0, 0.056, 0.052, 0.058); // tête
-    h = smin(h, sdEllipsoid(a, b, c, 0.262, 0.232, 0, 0.026, 0.022, 0.03), 0.015); // museau
-    h = smin(h, sdSphere(a, b, c, 0.287, 0.24, 0, 0.007), 0.004); // truffe
+    let h = sdEllipsoid(a, b, c, 0.215, 0.25, 0, 0.068, 0.062, 0.07); // tête
+    h = smin(h, sdEllipsoid(a, b, c, 0.27, 0.23, 0, 0.03, 0.026, 0.034), 0.015); // museau
+    h = smin(h, sdSphere(a, b, c, 0.298, 0.238, 0, 0.007), 0.004); // truffe
     for (const sz of [-1, 1]) {
-      h = smin(h, sdSphere(a, b, c, 0.248, 0.224, sz * 0.03, 0.021), 0.01); // joue
-      h = smax(h, -sdSphere(a, b, c, 0.262, 0.266, sz * 0.03, 0.01), 0.006); // orbite
-      h = smin(h, sdCapsule(a, b, c, 0.2, 0.288, sz * 0.036, 0.19, 0.36, sz * 0.062, 0.024, 0.003), 0.008); // oreille
+      h = smax(h, -sdSphere(a, b, c, 0.272, 0.268, sz * 0.034, 0.01), 0.006); // orbite
+      h = smin(h, sdCapsule(a, b, c, 0.2, 0.29, sz * 0.04, 0.19, 0.374, sz * 0.066, 0.028, 0.005), 0.008); // oreille (sa pointe touche celle de l'oreille épaisse)
     }
     return smin(d, h, 0.015);
   };
@@ -353,13 +357,13 @@ function bustShow(p) {
   const head0 = makeFrame({ pivot: [0, 0.33, 0], rx: p.tilt, ry: p.turn, rz: p.lean * 0.5 });
   const o = { bun: p.bun, chin: p.chin, nose: p.nose };
   return (x, y, z) => {
-    let d = smax(sdEllipsoid(x, y, z, 0, 0.185, -0.008, 0.185, 0.095, 0.08), 0.09 - y, 0.012); // poitrine, coupée
-    d = smin(d, sdEllipsoid(x, y, z, 0.15, 0.236, -0.012, 0.062, 0.042, 0.06), 0.022); // épaules
-    d = smin(d, sdEllipsoid(x, y, z, -0.15, 0.236, -0.012, 0.062, 0.042, 0.06), 0.022);
-    d = smin(d, sdCapsule(x, y, z, -0.1, 0.25, 0.04, 0.1, 0.25, 0.04, 0.01), 0.015); // clavicules
+    let d = smax(sdRoundBox(x, y, z, 0, 0.19, -0.008, 0.2, 0.09, 0.085, 0.05), 0.1 - y, 0.03); // poitrine : le dessus de la forme porteuse, coupée en arrondi par-dessous
+    d = smin(d, sdEllipsoid(x, y, z, 0.165, 0.255, -0.012, 0.07, 0.045, 0.07), 0.03); // épaules
+    d = smin(d, sdEllipsoid(x, y, z, -0.165, 0.255, -0.012, 0.07, 0.045, 0.07), 0.03);
+    d = smax(d, -sdCapsule(x, y, z, -0.08, 0.262, 0.1, 0.08, 0.262, 0.1, 0.022), 0.012); // creux sous les clavicules
     d = smin(d, pedestal(x, y * 0.85, z), 0.012); // piédouche
     const q = head0(x, y - 0.06, z);
-    d = smin(d, sdCapsule(q[0], q[1], q[2], 0, 0.2, -0.012, 0, 0.35, 0.0, 0.044, 0.04), 0.018); // cou
+    d = smin(d, sdCapsule(q[0], q[1], q[2], 0, 0.2, -0.012, 0, 0.35, 0.0, 0.05, 0.046), 0.03); // cou
     d = smin(d, headSDF(q[0], q[1], q[2], o), 0.02);
     return d;
   };
@@ -375,16 +379,15 @@ function teapotShow(p) {
     const [x, , z] = fr(x0, y, z0);
     let d = verseuseFine(x, y, z);
     d = min(d, verseuseLid(x, y, z));
-    d = min(d, sdCapsule(x, y, z, 0, 0.388, 0, 0, 0.402, 0, 0.006)); // tige du bouton
-    d = smin(d, sdSphere(x, y, z, 0, 0.41, 0, 0.013), 0.004);
+    d = min(d, sdCapsule(x, y, z, 0, 0.388, 0, 0, 0.42, 0, 0.006)); // tige du bouton
+    d = smin(d, sdSphere(x, y, z, 0, 0.428, 0, 0.013), 0.004); // (son sommet touche celui du bouton épais)
     d = min(d, sdTorusY(x, y, z, 0, 0.13, 0, 0.109, 0.004)); // filets
     d = min(d, sdTorusY(x, y, z, 0, 0.3, 0, 0.049, 0.004));
     let b = sdCapsule(x, y, z, 0.085, 0.11, 0, 0.15, 0.17, 0, 0.026, 0.018); // bec
     b = smin(b, sdCapsule(x, y, z, 0.15, 0.17, 0, 0.19, 0.27, 0, 0.018, 0.012), 0.012);
-    b = smin(b, sdCapsule(x, y, z, 0.19, 0.27, 0, 0.214, 0.336, 0, 0.012, 0.008), 0.008);
+    b = smin(b, sdCapsule(x, y, z, 0.19, 0.27, 0, 0.217, 0.341, 0, 0.012, 0.009), 0.008);
     d = smin(d, b, 0.012);
-    d = smin(d, smax(sdTorusZ(x, y, z, -0.1, 0.252, 0, 0.074, 0.009), x + 0.078, 0.004), 0.008); // anse
-    d = smin(d, sdSphere(x, y, z, -0.11, 0.322, 0, 0.01), 0.006); // poucier
+    d = smin(d, smax(sdTorusZ(x, y, z, -0.1, 0.255, 0, 0.096, 0.009), x + 0.075, 0.004), 0.008); // anse (son tour extérieur est celui de l'anse épaisse)
     return d;
   };
 }
@@ -399,11 +402,11 @@ function amphoraShow(p) {
     let d = smax(kraterFine(x, y, z), -sdRoundCyl(x, y, z, 0, 0, 0.385, 0.6, 0.056, 0.01), 0.006); // bouche creusée (plus étroite que le col : à 8 cm, elle le coupait et la lèvre flottait)
     d = min(d, sdTorusY(x, y, z, 0, 0.3, 0, 0.09, 0.004)); // filet de l'épaule
     for (const sx of [1, -1]) {
-      for (const sz of [-1, 1]) d = min(d, sdCapsule(sx * x, y, z, 0.12, 0.3, sz * 0.01, 0.158, 0.445, sz * 0.01, 0.008, 0.007)); // joncs
-      d = min(d, sdDiscZ(sx * x, y, z, 0.158, 0.466, 0, 0.028, 0.02, 0.006)); // volute
+      for (const sz of [-1, 1]) d = min(d, sdCapsule(sx * x, y, z, 0.13, 0.3, sz * 0.01, 0.168, 0.44, sz * 0.01, 0.008, 0.007)); // joncs
+      d = min(d, sdDiscZ(sx * x, y, z, 0.16, 0.468, 0, 0.032, 0.02, 0.006)); // volute
       d = min(d, sdCapsule(sx * x, y, z, 0.135, 0.445, 0, 0.095, 0.438, 0, 0.008, 0.007)); // attache à la lèvre
-      d = smax(d, -sdTorusZ(sx * x, y, Math.abs(z), 0.158, 0.466, 0.023, 0.016, 0.004), 0.003); // sa gorge
-      d = min(d, sdSphere(sx * x, y, Math.abs(z), 0.158, 0.466, 0.02, 0.008)); // son œil
+      d = smax(d, -sdTorusZ(sx * x, y, Math.abs(z), 0.16, 0.468, 0.023, 0.018, 0.004), 0.003); // sa gorge
+      d = min(d, sdSphere(sx * x, y, Math.abs(z), 0.16, 0.468, 0.02, 0.008)); // son œil
     }
     return d;
   };
@@ -412,16 +415,16 @@ function amphoraShow(p) {
 // Lyre : caisse en écaille et son ouïe, pied, deux cornes galbées, joug à
 // boutons, sept cordes tendues du joug au chevalet
 function lyreShow() {
-  const arm = [[0.08, 0.19, 0.02], [0.15, 0.27, 0.016], [0.172, 0.36, 0.013], [0.155, 0.465, 0.009], [0.135, 0.486, 0.006]];
+  const arm = [[0.085, 0.19, 0.022], [0.165, 0.275, 0.018], [0.186, 0.36, 0.014], [0.168, 0.47, 0.011], [0.15, 0.487, 0.007]];
   return (x, y, z) => {
-    let d = smax(sdEllipsoid(x, y, z, 0, 0.13, 0, 0.108, 0.108, 0.045), -sdSphere(x, y, z, 0, 0.145, 0.055, 0.03), 0.005); // caisse, ouïe
-    d = smin(d, sdRoundBox(x, y, z, 0, 0.018, 0, 0.085, 0.018, 0.055, 0.006), 0.012); // pied
+    let d = smax(sdEllipsoid(x, y, z, 0, 0.13, 0, 0.115, 0.115, 0.06), -sdSphere(x, y, z, 0, 0.145, 0.072, 0.03), 0.005); // caisse, ouïe
+    d = smin(d, sdRoundBox(x, y, z, 0, 0.02, 0, 0.09, 0.02, 0.06, 0.008), 0.015); // pied
     const ax = Math.abs(x);
     for (let k = 0; k + 1 < arm.length; k++) d = smin(d, sdCapsule(ax, y, z, arm[k][0], arm[k][1], 0, arm[k + 1][0], arm[k + 1][1], 0, arm[k][2], arm[k + 1][2]), 0.008); // cornes
-    d = min(d, sdCapsule(x, y, z, -0.182, 0.36, 0, 0.182, 0.36, 0, 0.009)); // joug
-    d = min(d, sdSphere(ax, y, z, 0.186, 0.36, 0, 0.014)); // boutons
-    d = min(d, sdRoundBox(x, y, z, 0, 0.112, 0.047, 0.05, 0.006, 0.006, 0.003)); // chevalet
-    for (let k = -3; k <= 3; k++) d = min(d, sdCapsule(x, y, z, k * 0.03, 0.36, -0.004, k * 0.014, 0.13, 0.044, 0.0034)); // cordes
+    d = min(d, sdCapsule(x, y, z, -0.186, 0.37, 0, 0.186, 0.37, 0, 0.01)); // joug (remonté : son dessus est celui du joug épais)
+    d = min(d, sdSphere(ax, y, z, 0.19, 0.37, 0, 0.012)); // boutons
+    d = min(d, sdRoundBox(x, y, z, 0, 0.112, 0.06, 0.05, 0.006, 0.006, 0.003)); // chevalet
+    for (let k = -3; k <= 3; k++) d = min(d, sdCapsule(x, y, z, k * 0.03, 0.37, -0.004, k * 0.014, 0.125, 0.057, 0.0034)); // cordes
     return d;
   };
 }

@@ -197,6 +197,7 @@ Le solveur part chaque image de la surface simulée, sans état gardé : l'image
 - **La bande** qui le parcourt une fois de haut en bas éclaire la dentelle qu'elle longe : la matière du voile lit le même volume, et reçoit la lumière selon sa distance à la statue (portée de 5 cm).
 - **Une teinte par objet**, jamais deux fois la même dans une scène : six teintes pâles sur fond sombre, six soutenues devant un mur clair. Réglages au panneau : intensité (0 l'éteint) et teinte de chaque statue.
 - Les modèles montrés restent sous l'enveloppe de la forme qui porte le linge (mesuré colonne par colonne), sinon ils le perceraient : c'est ce qui arrivait aux deux bouts des montants de la chaise.
+- Ils ne sont amincis que là où le linge ne s'appuie pas. Ce qui le porte (un dos, une épaule, une panse, une assise) a la même surface dans les deux versions, et une partie fine touche la forme épaisse par son sommet : la queue, les oreilles, l'anse, l'arceau sont remontés d'autant qu'ils sont amincis. Amincis partout, ils laissaient le voile flotter au-dessus de l'hologramme : 27 mm en médiane sur le chat, 16 sur la verseuse, 14 sur le cratère ; 0 à 1 mm maintenant.
 
 **Cinq socles** : le dé à corniche, la colonne, le bloc, le guéridon et la selle de sculpteur.
 

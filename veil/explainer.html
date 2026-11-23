@@ -54,7 +54,7 @@
         <div class="note check"><b>Mesuré</b><p>Au raccord, l'écart de position entre la dernière image de la montée et la première de la descente est de 0,06 mm (un pas de la quantification du film). Chaque instant de la boucle appartient à un seul morceau.</p></div>
         <div class="note trap"><b>Le piège</b><p>La première descente commence avant l'origine (u = 0 tombe à l'instant où le linge se pose). Un calcul de temps local qui ne ramenait que les valeurs négatives laissait la fin de la boucle sans morceau, et le voile sautait au dernier instant. Le test du programme ne vérifiait qu'une borne et passait ; il compte maintenant les morceaux de chaque instant.</p></div>
         <div class="note"><b>La statue s'efface</b><p>Au bout de chaque repos, la statue se resserre vers son axe et s'enfonce dans le socle, et le linge s'affaisse sur le plateau. Les cordons reprennent alors les coins, les écartent au ras du socle pour ouvrir le tas, puis les montent. Deux coins voisins ne sont jamais écartés de plus d'un côté du linge : retombé de travers, il s'étirait sinon de trois à cinq mailles pendant toute la reprise.</p></div>
-        <figure id="fig-timeline"><figcaption><b>Le programme du film d'une graine.</b> Glisser pour parcourir la boucle. Les morceaux de descente (clair) et de montée (sombre) s'enchaînent ; la courbe est la hauteur des prises, en forme fermée. Simplification : la hauteur réelle du linge vient de la simulation.</figcaption></figure>
+        <figure id="fig-timeline"><figcaption><b>Le programme du film d'une graine.</b> Glisser pour parcourir la boucle ; le bandeau dit ce qui se passe à cet instant. La courbe est la hauteur des prises des cordons. Sous elle, une ligne par statue : le linge posé (trait clair), l'hologramme (trait de couleur), puis la statue qui s'efface (pointillé). Le décalage du raccord, hachuré, n'occupe que la descente du hamac, à la fin de la boucle. Simplification : la hauteur réelle du linge vient de la simulation.</figcaption></figure>
       </section>
 
       <section id="formes">
@@ -65,7 +65,7 @@
         <div class="eq">\[ \mathrm{smin}(a, b, k) = \min(a, b) - \frac{\max(k - |a - b|,\,0)^2}{4k} \]</div>
         <p>Sept objets sont tirés : le buste, le chat qui fait le gros dos, la verseuse, le cratère à volutes, la chaise, trois blocs et la lyre. Un buste compte une vingtaine de primitives : crâne, visage, mâchoire, arcades, pommettes, orbites (soustraites), nez, ailes du nez, lèvres, menton, oreilles, cou, épaules, poitrine et piédouche. Les reliefs du visage sont accentués d'environ 20 %, comme sur les voiles de marbre napolitains, pour se lire à travers l'étoffe.</p>
         <p>Interrogée des millions de fois, la fonction coûtait 42 % de la simulation. Chaque forme est donc cuite sur une grille de 5 mm. Une passe grossière, à 2 cm, repère la bande où la surface passe. On n'évalue exactement que les nœuds à moins de 3,5 cm de la surface ; ailleurs, la valeur grossière suffit, puisque aucun contact ne s'y joue. La lecture est trilinéaire, avec son gradient exact par cellule. La cuisson prend de 0,1 à 0,4 s par forme. Près de la surface, l'écart reste sous 2 mm.</p>
-        <p>Chaque objet existe en deux versions. Celle qui porte le linge est épaissie : rien n'y est plus mince que 4 cm, soit trois mailles du voile. Sur un dossier de chaise de 2 cm, chaque particule contournait l'arête de son côté, et le linge traversait le dossier rang après rang. L'autre version, détaillée, est celle que l'hologramme montre (section 10) : barreaux, anses, cordes à leurs vraies sections. Elle doit rester sous l'enveloppe de la première, sinon elle percerait le linge ; un script le vérifie colonne par colonne.</p>
+        <p>Chaque objet existe en deux versions. Celle qui porte le linge est épaissie : rien n'y est plus mince que 4 cm, soit trois mailles du voile. Sur un dossier de chaise de 2 cm, chaque particule contournait l'arête de son côté, et le linge traversait le dossier rang après rang. L'autre version, détaillée, est celle que l'hologramme montre (section 10) : barreaux, anses, cordes à leurs vraies sections. Elle doit rester sous l'enveloppe de la première, sinon elle percerait le linge ; un script le vérifie colonne par colonne. Elle ne doit pas non plus être plus petite là où le linge s'appuie, sinon il flotte au-dessus de ce qu'on voit : un dos, une épaule, une panse ont la même surface dans les deux versions, et une partie fine (une queue, une anse, un arceau) est remontée pour toucher la forme épaisse par son sommet.</p>
         <div class="note"><b>Ce qu'un linge posé montre d'un objet</b><p>Seulement l'enveloppe du dessus. Les creux disparaissent (un cou, une taille, une anse plaquée) et des pointes rapprochées se fondent en une tente : les trois mâts d'une maquette de voilier, essayée, ne donnaient qu'un cône. Restent lisibles des paliers larges séparés par des chutes franches (le dossier et l'assise d'une chaise), deux pointes très écartées (les volutes du cratère) ou la ligne tête, épaules, chute d'un buste aux épaules larges. Le chat assis n'offrait que deux oreilles au sommet d'un cône ; il fait le gros dos, de profil.</p></div>
         <figure id="fig-forms"><figcaption><b>La coupe d'une statue absente, et la coupe de son voile.</b> Les boutons choisissent la forme. En pointillés, le contour du champ dans le plan z = 0 ; il s'allume là où le voile le touche. La forme tracée est celle qui porte le linge. Le voile, coupé par sa diagonale, est une chaîne de 80 maillons qui pend en hamac au bout de ses deux cordons. Il descend, son ventre touche la statue, les cordons lâchent et l'étoffe l'épouse. Puis la statue s'enfonce dans le socle en se resserrant, l'étoffe s'affaisse, et les cordons la reprennent par les bouts. C'est le dessin de l'écran de chargement, importé tel quel. Simplification : une coupe 2D au lieu du tissu, sèche.</figcaption></figure>
       </section>
@@ -75,15 +75,15 @@
         <span class="src">src/gen/cloth.js · makeCloth(), simulate()</span>
         <p>Le voile est un carré de 53 × 53 particules, reliées par des contraintes de longueur. La dynamique des positions étendue (XPBD) les traite une à une : chaque contrainte rapproche ou écarte ses deux bouts jusqu'à sa longueur de repos, puis on passe à la suivante. On emploie beaucoup de sous-pas (450 par seconde) avec deux passes chacun.</p>
         <p>Un voile pendu par son centre met toute sa charge sur les quelques mailles autour de la bague. Résolues dans l'ordre du tableau, rangée par rangée, les corrections ne remontent que d'une maille par passe. À 65 × 65 particules, les mailles du centre s'étiraient de 58 % ; la pendaison décrochait au bout d'une seconde et le voile tombait au sol.</p>
-        <p>Deux remèdes l'ont tenue :</p>
+        <p>Deux remèdes l'ont tenue, avec la cadence des sous-pas (450 par seconde) :</p>
         <ul>
           <li><b>Des attaches à longue portée</b> (Kim, Chentanez et Müller, 2012) : aucun point ne peut s'éloigner de la bague au-delà de sa distance sur l'étoffe à plat.</li>
-          <li><b>Un ordre de résolution</b> : les contraintes sont rangées par anneau autour de la bague. Une passe vers l'extérieur transmet la tension d'un seul balayage, comme on résout une chaîne pendue de haut en bas ; la passe suivante revient vers la bague.</li>
+          <li><b>Un ordre de résolution</b> : les contraintes sont rangées par anneau autour de la bague, une passe vers l'extérieur puis une passe de retour. Il a été retenu sur le carré d'étoffe ; sur une simple chaîne, l'ordre ne change rien de mesurable, et la démo ci-dessous ne le montre donc pas.</li>
         </ul>
         <div class="note trap"><b>Essayé et abandonné</b><p>Faire tenir à la bague une rosette de 3 × 3 particules, à plat, pour répartir la charge. Le pli vif au bord du disque étirait davantage l'étoffe : 50 % au lieu de 17 %.</p></div>
         <div class="note"><b>Sur le GPU</b><p>L'ordre de la bague vers le bord n'existe pas en parallèle. Le solveur GPU colorie la grille en 9 (i mod 3, j mod 3) : deux sommets de même couleur ne partagent aucun lien, et chaque couleur est un Gauss-Seidel sans conflit. Trois passes par sous-pas, puis une limite d'étirement à 8 % après la projection. Le Jacobi moyenné, essayé d'abord, laissait 12 % d'étirement au centile 99. Ce Gauss-Seidel par sommet a un défaut, qui fait l'objet de la section suivante.</p></div>
         <div class="note"><b>Le hamac</b><p>Sur le GPU, le voile n'est plus pendu par son centre mais par ses quatre coins, en hamac : son ventre se pose sur la statue, puis les cordons lâchent les coins et le linge tombe autour. Un coin tenu par un seul point étirait ses voisines de 62 %. Ici, contrairement à la rosette de la bague, une pince de 3 × 3 mailles aide, avec des attaches à longue portée depuis chaque pince : 32 % au pire, sur la maille qui borde la pince. Elles ont d'abord dû être coupées à la montée, quand le linge enveloppait encore la statue : en ligne droite, elles le tiraient au travers. Depuis que la statue s'efface avant la montée, elles servent tout du long. À la reprise, les neuf points d'une pince passent de la pose où ils reposent à la pince à plat. Mêlées en ligne droite, deux poses tournées l'une de l'autre passent par une pince rétrécie de moitié ; la pince tourne donc de l'une à l'autre, et seul son froissé se défait en ligne droite.</p></div>
-        <figure id="fig-chain"><figcaption><b>Une chaîne pendue, une passe par sous-pas.</b> Les boutons changent l'ordre de résolution. Dans l'ordre du tableau, la chaîne s'allonge et se distend en haut. Dans l'ordre depuis la bague, elle garde sa longueur. La couleur marque l'étirement de chaque maillon. Simplification : une chaîne de 40 maillons au lieu d'un carré d'étoffe, sans auto-collision.</figcaption></figure>
+        <figure id="fig-chain"><figcaption><b>Une chaîne lâchée à l'horizontale, une passe par sous-pas.</b> Le trait pointillé marque sa vraie longueur. Le curseur règle la cadence : à 60 sous-pas par seconde, la chaîne s'étire à plus du double (maillons rouges) ; à 900, elle tient presque. Le bouton ajoute les attaches à longue portée : aucun maillon ne s'éloigne de l'attache de plus que sa distance le long de la chaîne, et la longueur est tenue même à 60. Simplification : une chaîne de 40 maillons au lieu d'un carré d'étoffe.</figcaption></figure>
       </section>
 
       <section id="pas">
@@ -114,8 +114,9 @@
         <p>Les fils ont ainsi le dernier mot sur l'étoffe, et la projection sur la matière : rien ne traverse.</p>
         <div class="note check"><b>Vérifié</b><p>Sur toutes les images d'une descente et d'une montée : aucun point dans le socle ni sous le sol ; 99 % des fils à moins de 8 % d'étirement, aucun au-delà de 35 % ; particules non voisines jamais plus proches que 0,4 fois le rayon d'auto-collision.</p></div>
         <div class="note trap"><b>Le piège du linge humide</b><p>Le seuil du frottement est μ fois l'enfoncement d'un sous-pas : pour une étoffe posée, il est presque nul. Or c'est la succion de l'eau qui plaque le linge sur la statue. Sans elle dans le seuil, les pans qui tombaient faisaient glisser tout le voile d'un bloc hors de la forme. Au contact, la charge capillaire compte désormais comme une charge normale.</p></div>
-        <div class="note trap"><b>Ce que ce frottement ne retient pas</b><p>Il annule le déplacement que le point allait faire de lui-même pendant le sous-pas. La dérive que les fils lui imposent ensuite lui échappe. Un linge mal centré rampait donc sur le marbre, puis glissait d'un bloc : jusqu'au sol pour une théière sur trois, et du buste dès la pose dans une scène sur quatre. Le linge mouillé a maintenant une adhérence statique : un point au contact, que tout le sous-pas ne déplace pas plus vite que 0,4 m/s le long de la surface, y reste. Ce qui tombe, ce qu'on tire et ce qui pend sans rien toucher restent libres. La limite d'étirement, qui passe après, traite ces points comme des ancrages : sinon elle les déplaçait quand même, et le linge filait du dossier d'une chaise en deux secondes.</p></div>
-        <figure id="fig-friction"><figcaption><b>Une étoffe tirée sur un dôme, frottement avant ou après les fils.</b> Le bouton échange l'ordre. Le bout gauche est tiré lentement ; les points en contact frottent. Après les fils, les points collés retiennent leurs voisins et la chaîne se distend (fils rouges). Avant, elle glisse d'un seul tenant. Simplification : une chaîne 2D sur un cercle.</figcaption></figure>
+        <p><b>Ce que ce frottement ne retient pas.</b> Il annule le déplacement que le point allait faire de lui-même pendant le sous-pas. La dérive que les fils lui imposent ensuite lui échappe : à chaque sous-pas, le fil tire un peu le point, et le frottement du sous-pas suivant n'efface que l'élan que cela lui a donné, pas le chemin déjà fait. Un linge mal centré rampait donc sur le marbre, puis glissait d'un bloc : jusqu'au sol pour une théière sur trois, et du buste dès la pose dans une scène sur quatre.</p>
+        <figure id="fig-friction"><figcaption><b>Un bloc sur une table, tiré par un poids qui pend.</b> Le curseur règle le poids. Tant qu'il est inférieur à μ fois celui du bloc (0,6 ici), le bloc devrait rester immobile. Avec le frottement de la simulation, il rampe quand même, à vitesse constante : la courbe de droite monte en ligne droite. Le bouton ajoute l'adhérence statique, et la courbe reste à zéro. Mêmes règles que la simulation, réduites à deux points et un fil.</figcaption></figure>
+        <p>Le linge mouillé a maintenant une adhérence statique : un point au contact, que tout le sous-pas (frottement, fils, attaches) ne déplace pas plus vite que 0,4 m/s le long de la surface, y reste. Ce qui tombe, ce qu'on tire et ce qui pend sans rien toucher restent libres. La limite d'étirement, qui passe après, traite ces points comme des ancrages : sinon elle les déplaçait quand même, et le linge filait du dossier d'une chaise en deux secondes.</p>
       </section>
 
       <section id="humide">
@@ -233,37 +234,51 @@
     // ── 01 : le programme du film ──
     {
       const R = generate('a1');
-      const TL = buildTimeline(R);
+      const TL = buildTimeline(R), Td = R.timing.desc, Tr = R.timing.rise;
+      const NAMES = { bust: 'buste', cat: 'chat', teapot: 'verseuse', amphora: 'cratère', chair: 'chaise', blocks: 'blocs', lyre: 'lyre' };
       const knotAt = (tf) => {
         const { seg, local } = locate(TL, tf);
         // (hauteur relative : 0 posée, 1 pendue)
-        return seg.kind === 'desc' ? knotDesc(local, 1, 0, R.timing.desc) : knotRise(local, 0, 1, R.timing.rise);
+        return seg.kind === 'desc' ? knotDesc(local, 1, 0, Td) : knotRise(local, 0, 1, Tr);
+      };
+      // ce qui se passe au temps local d'un morceau (mêmes instants que scene/stage.js)
+      const land = Td.pre + Td.lower, h0 = land + 0.35, h1 = h0 + Math.min(2.6, Td.settle - 0.6), gone = land + Td.settle;
+      const what = (seg, local) => {
+        if (seg.kind === 'rise') return local < 0.35 * (Tr.tug + Tr.lift) ? 'les cordons reprennent les coins et ouvrent le tas' : local < Tr.tug + Tr.lift ? 'le hamac monte' : 'le hamac pend et se calme';
+        if (local < Td.pre) return 'le hamac pend';
+        if (local < land) return 'le hamac descend' + (seg.k === 0 ? ' (et résorbe l\'écart du raccord)' : '');
+        if (local < h0) return 'le linge se pose, les cordons lâchent';
+        if (local < h1) return 'l\'hologramme luit sous le linge';
+        if (local < gone) return 'le linge repose';
+        return 'la statue s\'efface, le linge s\'affaisse';
       };
       demo('#fig-timeline', {
-        title: `Graine a1 : ${R.forms.length} formes, ${TL.total.toFixed(1)} s`, aspect: 2.6,
-        setup(d) { d.state.u = 0.1; },
-        pointer(d, e) { if (e.down) d.state.u = clamp((e.x - 20) / (d.w - 40)); },
+        title: `Graine a1 : ${R.forms.map((f) => NAMES[f.kind] ?? f.kind).join(', ')} · ${TL.total.toFixed(1)} s`, aspect: 2.3,
+        setup(d) { d.state.u = 0.08; },
+        pointer(d, e) { if (e.down) { d.state.u = clamp((e.x - 20) / (d.w - 40)); d.redraw(); } },
         draw(g, d) {
-          const x0 = 20, x1 = d.w - 20, yb = d.h - 40, H = d.h - 90;
+          const x0 = 20, x1 = d.w - 20, yb = d.h - 62, H = d.h - 100, T = TL.total, X = (t) => lerp(x0, x1, t / T);
+          // un intervalle [a, b] du temps local d'un morceau, tracé sur la ligne du film (il peut passer le bout de la boucle)
+          const span = (s, a, b, fn) => { for (const off of [0, T, -T]) { const ta = Math.max(0, s.t0 + a + off), tb = Math.min(T, s.t0 + b + off); if (tb > ta) fn(X(ta), X(tb)); } };
           for (const s of TL.segs) {
-            for (const off of [0, TL.total]) {
-              const a = (s.t0 + off) / TL.total, b = (s.t0 + s.dur + off) / TL.total;
-              const xa = lerp(x0, x1, clamp(a)), xb = lerp(x0, x1, clamp(b));
-              if (xb <= xa) continue;
-              g.fillStyle = s.kind === 'desc' ? alpha(C.c1, 0.22) : alpha(C.c2, 0.18);
-              g.fillRect(xa, yb + 8, xb - xa, 14);
-              if (xb - xa > 60) label(g, `${s.kind === 'desc' ? 'descente' : 'montée'} ${s.k}`, xa + 6, yb + 19, { size: 11 });
-            }
+            span(s, 0, s.dur, (xa, xb) => { g.fillStyle = s.kind === 'desc' ? alpha(C.c1, 0.2) : alpha(C.c2, 0.16); g.fillRect(xa, yb + 8, xb - xa, 14); if (xb - xa > 64) label(g, `${s.kind === 'desc' ? 'descente' : 'montée'} ${s.k + 1}`, xa + 6, yb + 19, { size: 11 }); });
+            if (s.kind !== 'desc') continue;
+            const col = R.forms[s.k].holo ?? C.c3, y = yb + 34;
+            span(s, land, gone, (xa, xb) => { g.strokeStyle = alpha(C.ink, 0.55); g.lineWidth = 2; g.beginPath(); g.moveTo(xa, y); g.lineTo(xb, y); g.stroke(); });
+            span(s, h0, h1, (xa, xb) => { g.strokeStyle = col; g.lineWidth = 5; g.beginPath(); g.moveTo(xa, y); g.lineTo(xb, y); g.stroke(); });
+            span(s, gone, Td.pre + Td.lower + Td.settle + (Td.fall ?? 0), (xa, xb) => { g.strokeStyle = alpha(C.ink, 0.55); g.lineWidth = 2; g.setLineDash([2, 4]); g.beginPath(); g.moveTo(xa, y); g.lineTo(xb, y); g.stroke(); g.setLineDash([]); });
+            if (s.k === 0) span(s, 0, land, (xa, xb) => { g.strokeStyle = alpha(C.c2, 0.8); g.lineWidth = 1; for (let x = xa; x < xb - 2; x += 5) { g.beginPath(); g.moveTo(x, yb + 22); g.lineTo(x + 4, yb + 8); g.stroke(); } });
           }
+          label(g, 'statue', x0, yb + 50, { size: 10 });
           g.strokeStyle = C.c1; g.lineWidth = 2; g.beginPath();
-          for (let i = 0; i <= 400; i++) { const u = i / 400, y = yb - knotAt(u * TL.total) * H; i ? g.lineTo(lerp(x0, x1, u), y) : g.moveTo(lerp(x0, x1, u), y); }
+          for (let i = 0; i <= 400; i++) { const u = i / 400, y = yb - knotAt(u * T) * H; i ? g.lineTo(lerp(x0, x1, u), y) : g.moveTo(lerp(x0, x1, u), y); }
           g.stroke();
-          const u = d.state.u, x = lerp(x0, x1, u), y = yb - knotAt(u * TL.total) * H;
-          g.strokeStyle = C.dim; g.lineWidth = 1; g.beginPath(); g.moveTo(x, 20); g.lineTo(x, yb + 24); g.stroke();
+          const u = d.state.u, x = lerp(x0, x1, u), y = yb - knotAt(u * T) * H;
+          g.strokeStyle = C.dim; g.lineWidth = 1; g.beginPath(); g.moveTo(x, 14); g.lineTo(x, yb + 40); g.stroke();
           g.fillStyle = C.ink; g.beginPath(); g.arc(x, y, 5, 0, TAU); g.fill();
-          label(g, 'pendu (H)', x0, yb - H - 6, { size: 11 }); label(g, 'posé (Dk)', x0, yb + 2, { size: 11 });
-          const { seg, local } = locate(TL, u * TL.total);
-          d.status(`u = ${u.toFixed(3)} · ${seg.kind === 'desc' ? 'descente' : 'montée'} ${seg.k} (${R.forms[seg.k].kind}) · ${local.toFixed(2)} s`);
+          label(g, 'prises en haut', x0, yb - H - 5, { size: 10 }); label(g, 'prises en bas', x0, yb + 2, { size: 10 });
+          const { seg, local } = locate(TL, u * T);
+          d.status(`${(u * T).toFixed(1)} s · ${NAMES[R.forms[seg.k].kind] ?? R.forms[seg.k].kind} · ${what(seg, local)}`);
         },
       });
     }
@@ -293,36 +308,39 @@
       });
     }
 
-    // ── 03 : la chaîne pendue, ordre de résolution ──
+    // ── 03 : la chaîne pendue, cadence des sous-pas et attaches à longue portée ──
     {
       const M = 40, Lk = 1 / (M - 1);
       demo('#fig-chain', {
         title: 'Une passe par sous-pas', aspect: 1.9, animate: true,
-        buttons: [{ key: 'ring', label: 'Depuis la bague', toggle: true, value: false }, { label: 'Relâcher', onClick: (d) => d.reset() }],
-        setup(d) { d.state.P = Array.from({ length: M }, (_, i) => [i * Lk, 0]); d.state.Q = d.state.P.map((p) => [...p]); },
+        controls: [{ key: 'rate', label: 'Sous-pas par seconde', min: 60, max: 900, step: 60, value: 60, fmt: (v) => String(v), onChange: (d) => d.reset() }],
+        buttons: [{ key: 'lra', label: 'Attaches à longue portée', toggle: true, value: false, onClick: (d) => d.reset() }, { label: 'Relâcher', onClick: (d) => d.reset() }],
+        setup(d) { d.state.P = Array.from({ length: M }, (_, i) => [i * Lk, 0]); d.state.Q = d.state.P.map((p) => [...p]); d.state.max = 1; },
         draw(g, d) {
-          const { P, Q } = d.state, sub = 30, dt = 1 / 900, ring = d.s.ring;
-          for (let s = 0; s < sub; s++) {
-            for (let i = 1; i < M; i++) { const p = P[i], q = Q[i]; const vx = p[0] - q[0], vy = p[1] - q[1]; q[0] = p[0]; q[1] = p[1]; p[0] += vx * 0.999; p[1] += vy * 0.999 - 9.81 * dt * dt; }
-            P[0][0] = 0; P[0][1] = 0;
-            // ordre du tableau : du dernier maillon vers la bague (le pire cas) ; ou depuis la bague
+          const { P, Q } = d.state, rate = d.s.rate, dt = 1 / rate, lra = d.s.lra;
+          for (let s = 0; s < rate / 60; s++) {
+            for (let i = 1; i < M; i++) { const p = P[i], q = Q[i]; const vx = p[0] - q[0], vy = p[1] - q[1]; q[0] = p[0]; q[1] = p[1]; p[0] += vx * 0.998; p[1] += vy * 0.998 - 9.81 * dt * dt; }
             for (let c = 0; c < M - 1; c++) {
-              const i = ring ? c : M - 2 - c;
-              const a = P[i], b = P[i + 1], ex = b[0] - a[0], ey = b[1] - a[1], l = Math.hypot(ex, ey) || 1e-9, k = (l - Lk) / l;
-              const wa = i === 0 ? 0 : 1, wb = 1, w = wa + wb;
-              a[0] += ex * k * wa / w; a[1] += ey * k * wa / w; b[0] -= ex * k * wb / w; b[1] -= ey * k * wb / w;
+              const a = P[c], b = P[c + 1], ex = b[0] - a[0], ey = b[1] - a[1], l = Math.hypot(ex, ey) || 1e-9, k = (l - Lk) / l;
+              const wa = c === 0 ? 0 : 1, w = wa + 1;
+              a[0] += ex * k * wa / w; a[1] += ey * k * wa / w; b[0] -= ex * k / w; b[1] -= ey * k / w;
             }
+            // attaches à longue portée : jamais plus loin de l'attache que la longueur de chaîne qui y mène
+            if (lra) for (let i = 1; i < M; i++) { const r = i * Lk, l = Math.hypot(P[i][0], P[i][1]); if (l > r) { P[i][0] *= r / l; P[i][1] *= r / l; } }
           }
-          const sc = d.h * 0.42, ox = d.w * 0.5, oy = 24;
-          let len = 0, worst = 0;
+          const sc = d.h * 0.36, ox = d.w * 0.5, oy = 22;
+          g.strokeStyle = C.dim; g.lineWidth = 1; g.setLineDash([3, 4]); g.beginPath(); g.arc(ox, oy, sc, 0, Math.PI); g.stroke(); g.setLineDash([]);
+          label(g, 'vraie longueur', ox + sc + 6, oy + 14, { size: 10 });
+          let len = 0, red = 0;
           for (let i = 0; i + 1 < M; i++) {
             const a = P[i], b = P[i + 1], e = Math.hypot(b[0] - a[0], b[1] - a[1]) / Lk - 1;
-            len += Math.hypot(b[0] - a[0], b[1] - a[1]); worst = Math.max(worst, e);
+            len += Math.hypot(b[0] - a[0], b[1] - a[1]); if (e > 0.05) red++;
             g.strokeStyle = e > 0.05 ? '#e06a5a' : e > 0.01 ? C.c2 : C.c1; g.lineWidth = 3;
             g.beginPath(); g.moveTo(ox + a[0] * sc, oy - a[1] * sc); g.lineTo(ox + b[0] * sc, oy - b[1] * sc); g.stroke();
           }
           g.fillStyle = C.ink; g.beginPath(); g.arc(ox, oy, 4, 0, TAU); g.fill();
-          d.status(`${ring ? 'depuis la bague' : 'ordre du tableau'} · longueur ${(len * 100).toFixed(0)} % · pire maillon +${(worst * 100).toFixed(1)} %`);
+          d.state.max = Math.max(d.state.max, len);
+          d.status(`${rate} sous-pas/s${lra ? ' · attaches' : ''} · longueur ${(len * 100).toFixed(0)} % (au pire ${(d.state.max * 100).toFixed(0)} %) · ${red} maillons étirés de plus de 5 %`);
         },
       });
     }
@@ -360,46 +378,44 @@
       });
     }
 
-    // ── 04 : frottement avant ou après les fils ──
+    // ── le frottement d'inertie laisse ramper ; l'adhérence statique retient ──
     {
-      const M = 46, Lk = 0.032, R0 = 0.42;
+      const MU = 0.6, G = 9.81, DT = 1 / 480, VS = 0.4, TMAX = 8, AMAX = 0.11;
       demo('#fig-friction', {
-        title: 'Frottement et fils', aspect: 1.9, animate: true,
-        buttons: [{ key: 'before', label: 'Frottement avant les fils', toggle: true, value: true }, { label: 'Rejouer', onClick: (d) => d.reset() }],
-        setup(d) {
-          // la chaîne posée sur le dôme (cercle de rayon R0 centré en 0)
-          d.state.P = Array.from({ length: M }, (_, i) => { const a = Math.PI * 0.95 - (i / (M - 1)) * Math.PI * 0.9; return [Math.cos(a) * (R0 + 0.004), Math.sin(a) * (R0 + 0.004)]; });
-          d.state.Q = d.state.P.map((p) => [...p]); d.state.T = 0;
-        },
+        title: 'Un bloc, un fil, un poids', aspect: 2.2, animate: true,
+        controls: [{ key: 'm', label: 'Poids qui pend (× le bloc)', min: 0.1, max: 1.2, step: 0.05, value: 0.4, fmt: (v) => v.toFixed(2), onChange: (d) => d.reset() }],
+        buttons: [{ key: 'stick', label: 'Adhérence statique', toggle: true, value: false, onClick: (d) => d.reset() }, { label: 'Rejouer', onClick: (d) => d.reset() }],
+        setup(d) { d.state.S = { a: 0, b: 0, va: 0, vb: 0, t: 0 }; d.state.tr = [[0, 0]]; },
         draw(g, d) {
-          const { P, Q } = d.state, sub = 20, dt = 1 / 600, mu = 0.6, before = d.s.before;
-          const contact = (p, q, fr) => {
-            const r = Math.hypot(p[0], p[1]); if (r >= R0) return;
-            const nx = p[0] / r, ny = p[1] / r, pen = R0 - r; p[0] += nx * pen; p[1] += ny * pen;
-            if (!fr) return;
-            const dx = p[0] - q[0], dy = p[1] - q[1], dn = dx * nx + dy * ny, tx = dx - dn * nx, ty = dy - dn * ny, tl = Math.hypot(tx, ty);
-            if (tl < 1e-12) return; const s = tl < mu * pen ? 1 : Math.min(1, mu * pen / tl); p[0] -= tx * s; p[1] -= ty * s;
-          };
-          for (let s = 0; s < sub; s++) {
-            d.state.T += dt;
-            for (let i = 0; i < M; i++) { const p = P[i], q = Q[i]; const vx = p[0] - q[0], vy = p[1] - q[1]; q[0] = p[0]; q[1] = p[1]; p[0] += vx * 0.995; p[1] += vy * 0.995 - 9.81 * dt * dt; }
-            // le bout gauche est tiré vers la gauche et le bas
-            P[0][0] = Math.cos(Math.PI * 0.95) * (R0 + 0.004) - Math.min(0.5, d.state.T * 0.12); P[0][1] = Math.sin(Math.PI * 0.95) * R0 - Math.min(0.5, d.state.T * 0.12);
-            if (before) for (let i = 1; i < M; i++) contact(P[i], Q[i], true);
-            for (let pass = 0; pass < 2; pass++) for (let c = 0; c < M - 1; c++) {
-              const a = P[c], b = P[c + 1], ex = b[0] - a[0], ey = b[1] - a[1], l = Math.hypot(ex, ey) || 1e-9, k = (l - Lk) / l;
-              const wa = c === 0 ? 0 : 1, w = wa + 1; a[0] += ex * k * wa / w; a[1] += ey * k * wa / w; b[0] -= ex * k / w; b[1] -= ey * k / w;
-            }
-            for (let i = 1; i < M; i++) contact(P[i], Q[i], !before);
+          const S = d.state.S, mB = d.s.m, wA = 1, wB = 1 / mB;
+          for (let s = 0; s < 8 && S.t < TMAX && S.a < AMAX; s++) {
+            const a0 = S.a, b0 = S.b;
+            let a = S.a + S.va * DT, b = S.b + S.vb * DT + G * DT * DT;
+            // frottement de Coulomb sur le déplacement d'inertie (charge : le poids du bloc pendant un sous-pas)
+            const t = a - a0, lim = MU * G * DT * DT; a = Math.abs(t) < lim ? a0 : a - Math.sign(t) * lim;
+            // le fil : le bloc avance d'autant que le poids descend
+            const Cn = b - a; a += Cn * wA / (wA + wB); b -= Cn * wB / (wA + wB);
+            // adhérence statique : un déplacement plus lent que VS, tout compris, est annulé
+            if (d.s.stick && Math.abs(a - a0) < VS * DT) { a = a0; b = a; }
+            S.va = (a - a0) / DT; S.vb = (b - b0) / DT; S.a = a; S.b = b; S.t += DT;
           }
-          const sc = d.h * 0.95, ox = d.w * 0.55, oy = d.h * 0.88;
-          g.strokeStyle = C.dim; g.setLineDash([3, 4]); g.beginPath(); g.arc(ox, oy, R0 * sc, Math.PI, TAU); g.stroke(); g.setLineDash([]);
-          let worst = 0;
-          for (let i = 0; i + 1 < M; i++) {
-            const a = P[i], b = P[i + 1], e = Math.hypot(b[0] - a[0], b[1] - a[1]) / Lk - 1; worst = Math.max(worst, e);
-            g.strokeStyle = e > 0.05 ? '#e06a5a' : C.c1; g.lineWidth = 3; g.beginPath(); g.moveTo(ox + a[0] * sc, oy - a[1] * sc); g.lineTo(ox + b[0] * sc, oy - b[1] * sc); g.stroke();
-          }
-          d.status(`${before ? 'frottement avant les fils' : 'frottement après les fils'} · pire fil +${(worst * 100).toFixed(1)} %`);
+          const tr = d.state.tr; if (S.t - tr[tr.length - 1][0] > 0.05) tr.push([S.t, S.a]);
+          // à gauche : la table, le bloc, le fil, le poids (déplacements à l'échelle 1)
+          const tw = d.w * 0.4, ty = d.h * 0.42, sc = (tw * 0.5) / AMAX, bx = 30 + S.a * sc, bw = 46, bh = 30;
+          g.strokeStyle = C.dim; g.lineWidth = 2; g.beginPath(); g.moveTo(14, ty); g.lineTo(tw, ty); g.lineTo(tw, d.h - 14); g.stroke();
+          g.setLineDash([2, 4]); g.lineWidth = 1; g.beginPath(); g.moveTo(30, ty + 4); g.lineTo(30, ty + 14); g.stroke(); g.setLineDash([]);
+          g.fillStyle = alpha(C.c1, 0.85); g.fillRect(bx, ty - bh, bw, bh);
+          const wy = ty + 24 + S.b * sc, ws = 12 + 16 * Math.sqrt(mB);
+          g.strokeStyle = C.ink; g.lineWidth = 1.2; g.beginPath(); g.moveTo(bx + bw, ty - bh / 2); g.lineTo(tw + 6, ty - bh / 2); g.lineTo(tw + 6, Math.min(wy, d.h - 16)); g.stroke();
+          g.fillStyle = alpha(C.c2, 0.9); g.fillRect(tw + 6 - ws / 2, Math.min(wy, d.h - 16), ws, ws);
+          label(g, 'départ', 22, ty + 26, { size: 10 });
+          // à droite : le chemin du bloc au cours du temps
+          const x0 = d.w * 0.56, x1 = d.w - 16, yB = d.h - 28, yT = 20, X = (t) => lerp(x0, x1, t / TMAX), Y = (a) => lerp(yB, yT, clamp(a / AMAX));
+          g.strokeStyle = C.grid; g.lineWidth = 1; g.beginPath(); g.moveTo(x0, yT); g.lineTo(x0, yB); g.lineTo(x1, yB); g.stroke();
+          label(g, 'glissement', x0 + 4, yT + 8, { size: 10 }); label(g, `${TMAX} s`, x1, yB + 14, { size: 10, align: 'right' }); label(g, `${AMAX * 100} cm`, x0 - 4, yT + 4, { size: 10, align: 'right' });
+          const holds = mB < MU;
+          g.strokeStyle = tr[tr.length - 1][1] > 0.001 ? '#e06a5a' : C.c1; g.lineWidth = 2.5; g.beginPath(); tr.forEach(([t, a], i) => (i ? g.lineTo(X(t), Y(a)) : g.moveTo(X(t), Y(a)))); g.stroke();
+          d.status(`poids ${mB.toFixed(2)} ${holds ? '<' : '≥'} μ = ${MU} : le bloc devrait ${holds ? 'tenir' : 'glisser'} · ${d.s.stick ? 'adhérence statique' : 'frottement seul'} · glissé de ${(S.a * 1000).toFixed(0)} mm en ${S.t.toFixed(1)} s`);
         },
       });
     }
