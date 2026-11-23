@@ -6,7 +6,7 @@
 //
 //   node tools/stats-page.mjs runtime-a.json [runtime-b.json …]
 import { execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -34,6 +34,7 @@ const projects = list.map(({ day, id, name, tag }) => {
     code: lines(p, ['runtime']), tests: lines(p, ['test', 'tools']), explainer: lines(p, ['explainer']),
     files: Object.entries(p.roles).filter(([k]) => k !== 'proto').reduce((s, [, v]) => s + v.files, 0),
     commits: p.git.commits, first: p.git.first, last: p.git.last,
+    sheet: existsSync(join(ROOT, `stats/passes/${id}.html`)), // (planche des passes : tools/passes.mjs)
   };
   if (r) Object.assign(o, {
     download: r.net.wire, own: r.net.localGz,
