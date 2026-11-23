@@ -16,7 +16,7 @@ const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = 8399, CDP = 9339, W = 1920, H = 1080;
 const ALL = ['planetaire', 'hollow', 'tesseract', 'membrane', 'planetaire_v2', 'fold', 'tangle', 'moss', 'melt',
   'caustic', 'rust', 'feather', 'labyrinth', 'shatter', 'tension', 'mirage', 'spore', 'kelp', 'pendulum', 'erosion',
-  'cocoon', 'bolt', 'echo', 'magma', 'mega'];
+  'cocoon', 'bolt', 'echo', 'magma', 'nest', 'veil', 'mega'];
 const [out = 'stats-runtime.json', ...only] = process.argv.slice(2);
 const list = only.length ? only : ALL;
 const probe = readFileSync(join(ROOT, 'tools/stats-probe.js'), 'utf8');
