@@ -24,7 +24,7 @@
     <header class="hero">
       <div class="kicker">Day 14 · Tension · comment ça marche</div>
       <h1>Faire marcher des sculptures qui ne tiennent que par leurs câbles</h1>
-      <p class="lede">Une tenségrité est un assemblage de barres qui ne se touchent pas, tenues en l'air par des câbles tendus. Dans Tension, de petits treuils raccourcissent ces câbles, et les sculptures avancent : l'une bascule, une autre roule de face en face, une troisième rampe, la dernière roule comme une roue. Elles marchent en troupe, et la boucle est montée en plans, comme un petit film. Aucun de ces gestes n'est animé à la main : chacun sort d'une simulation physique calculée pendant le chargement, puis relue. Cette page reconstruit cette simulation, puis explique comment la boucle se referme et comment plusieurs sculptures marchent ensemble.</p>
+      <p class="lede">Une tenségrité est un assemblage de barres qui ne se touchent pas, tenues en l'air par des câbles tendus. Dans Tension, de petits treuils raccourcissent ces câbles, et les sculptures avancent : l'une bascule, une autre roule de face en face, une troisième rampe, la dernière roule comme une roue. Elles marchent en troupe, et la boucle est montée en plans, comme un petit film. Ces gestes ne sont pas animés à la main : chacun résulte d'une simulation physique, calculée pendant le chargement puis relue. Cette page reconstruit cette simulation, puis explique comment la boucle se referme et comment plusieurs sculptures marchent ensemble.</p>
       <p class="prereq">Pour suivre, il suffit de savoir lire un peu de JavaScript (des tableaux et des boucles). Les formules résument ce que les démos montrent ; on peut les sauter sans perdre le fil. Les détails de production sont rangés dans les encadrés « Pour aller plus loin ».</p>
     </header>
 
@@ -47,7 +47,7 @@
           <li><b>Chenille</b> : une chaîne de quatre ou six prismes, qui rampe en faisant courir une onde de contraction ;</li>
           <li><b>Cerceau</b> : une roue de vélo, dont le moyeu lourd descend vers l'avant et entraîne la jante.</li>
         </ul>
-        <p>Une scène réunit deux à quatre sculptures de deux espèces au plus, de tailles différentes, chacune dans son couloir. La boucle est montée en plans : la troupe de loin, puis une sculpture de près, puis un treuil qui enroule sa corde.</p>
+        <p>Une scène réunit deux à quatre sculptures de deux espèces au plus, de tailles différentes, chacune dans son couloir ; ces choix forment la <b>recette</b> de la scène, tirée de la graine. La boucle est montée en plans : la troupe de loin, puis une sculpture de près, puis un treuil qui enroule sa corde.</p>
         <p>La page suit l'ordre de la construction. On écrit d'abord les règles de la simulation (section 02), puis on laisse les câbles trouver la forme de la structure (section 03), et l'on dessine les câbles mous (section 04). Les sections 05 à 09 expliquent comment chaque espèce avance. La section 10 montre comment un pas simulé devient une boucle qui se referme exactement, la section 11 comment le sol se répète d'un pas à l'autre. Les deux dernières décrivent la troupe (section 12) et le montage en plans (section 13).</p>
       </section>
 
@@ -66,7 +66,7 @@
         <div class="eq">\[ F = k \,\max(0,\ \ell - L) \]</div>
         <p>où ℓ est la distance entre ses deux nœuds, <i>L</i> sa longueur au repos (en mètres) et <i>k</i> sa raideur. Un treuil qui enroule son câble diminue <i>L</i> : c'est le seul moyen d'action des sculptures.</p>
 
-        <h3>Ce qui ne va pas : la structure ne s'arrête jamais</h3>
+        <h3>Amortir le mouvement</h3>
         <p>Il faut aussi freiner le mouvement, sinon la structure vibre indéfiniment. Le projet applique un frottement de l'air (0,7 s⁻¹ pour le Culbute, 0,8 pour la Chenille, 1,5 pour le Cerceau), un frottement dans la tresse des câbles tendus (40 s⁻¹ sur la vitesse d'allongement du câble) et une perte au contact du sol (30 s⁻¹). Avec ces trois-là seulement, un prisme posé au sol continuait de bouger. Une tenségrité a des <b>modes mous</b> : de petits mouvements de mécanisme qui ne tendent aucun câble et que ni l'air ni la tresse ne freinent assez.</p>
         <p>La correction est un amortissement <b>structural</b>. À chaque pas, on calcule le mouvement rigide qui ressemble le plus à celui des nœuds : la même vitesse d'ensemble et la même rotation (le même moment cinétique). Ce qui reste, l'écart à ce mouvement rigide, est la vitesse de déformation, et c'est elle seule qu'on freine :</p>
         <div class="eq">\[ v_i \;\leftarrow\; v_i^{\text{rigide}} + \big(v_i - v_i^{\text{rigide}}\big)\, e^{-6\,h} \]</div>
@@ -76,12 +76,12 @@
           <li>Suivez les deux courbes pendant les huit secondes. Avec l'amortissement structural, l'énergie descend régulièrement : vers 10⁻⁶ à quatre secondes, sous 10⁻⁸ à sept. Sans lui, elle descend bien plus lentement et remonte par moments, parce que la structure se balance sur ses modes mous ; à huit secondes, elle est encore plus de dix mille fois plus haute.</li>
         </ul></div>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
-          <p>Le mouvement rigide le plus proche se calcule avec le centre de masse, la vitesse moyenne et le tenseur d'inertie de l'ensemble des nœuds : la vitesse de rotation est le moment cinétique multiplié par l'inverse du tenseur d'inertie. Le frottement au sol passe par l'enfoncement du pas (méthode de Müller) : on retire au glissement au plus μ fois l'enfoncement, avec μ = 0,8 tant que le nœud adhère et 0,6 quand il glisse (1,0 et 0,8 pour la roue). Pour les patins de la Chenille, ce coefficient dépend du sens (section 08). Les unités du code sont des décimètres (1 u = 10 cm), et la pesanteur y vaut 98,1 u/s².</p>
+          <p>Le mouvement rigide le plus proche se calcule avec le centre de masse, la vitesse moyenne et le tenseur d'inertie de l'ensemble des nœuds : la vitesse de rotation est le moment cinétique multiplié par l'inverse du tenseur d'inertie. Le frottement au sol se calcule à partir de la profondeur dont le nœud s'est enfoncé pendant le pas (méthode de Müller) : on retire du glissement horizontal au plus μ fois cette profondeur, avec μ = 0,8 tant que le nœud adhère et 0,6 quand il glisse (1,0 et 0,8 pour la roue). Pour les patins de la Chenille, ce coefficient dépend du sens (section 08). Les unités du code sont des décimètres (1 u = 10 cm), et la pesanteur y vaut 98,1 u/s².</p>
         </div></details>
       </section>
 
       <section id="forme">
-        <h2><span class="n">03</span>Les câbles trouvent eux-mêmes la forme</h2>
+        <h2><span class="n">03</span>La forme trouvée par relaxation</h2>
         <span class="src">src/gen/sim.js · formFind() · src/gen/topology.js</span>
         <p>Une tenségrité n'a pas n'importe quelle forme. Un prisme de tenségrité, par exemple, ne tient que tordu : son anneau du haut est tourné par rapport à celui du bas, d'un angle qui ne dépend que du nombre de barres.</p>
         <p>Le programme ne calcule pas cette forme à la main. Il part d'une géométrie approchée, raccourcit tous les câbles de 4 % pour les mettre en tension (la <b>précontrainte</b>), et laisse la structure bouger sans gravité ni sol, avec un fort frottement, jusqu'à l'arrêt. On appelle cela une <b>relaxation</b>. Tirés par les câbles et repoussés par les barres, les nœuds glissent jusqu'à la position où toutes les forces s'équilibrent. Pour un prisme à <i>n</i> barres, c'est la torsion classique :</p>
@@ -99,7 +99,7 @@
       </section>
 
       <section id="cable">
-        <h2><span class="n">04</span>Un câble mou pend avec exactement sa longueur</h2>
+        <h2><span class="n">04</span>La forme d'un câble mou</h2>
         <span class="src">src/gen/cable.js · sagOf() · src/scene/cables.js</span>
         <p>Quand un treuil enroule un câble, la structure se déforme, et certains câbles voisins se retrouvent plus longs que la distance entre leurs bouts. Un vrai câble mou pend. S'il restait droit à l'écran, il aurait l'air d'une tige.</p>
         <p>La courbe exacte d'un câble qui pend est une chaînette. Pour une <b>flèche</b> modérée (la profondeur de l'arc en son milieu), une parabole la remplace bien. Le câble pend dans le plan vertical qui contient ses deux bouts. On cherche la flèche <i>f</i> pour laquelle l'arc de parabole a exactement la longueur au repos <i>L</i> du câble :</p>
@@ -120,7 +120,7 @@
           <li>Raccourcissez-le sous la distance entre les bouts : il devient droit, et la flèche vaut 0.</li>
         </ul></div>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
-          <p>Le vertex shader (le programme de la carte graphique qui place chaque sommet) refait le même calcul et pose le tube du câble sur cette parabole, avec son repère exact : tangente, normale dans le plan de l'arc, binormale. Le rayon apparent d'un câble ne descend jamais sous 0,7 pixel, pour qu'un câble lointain ne scintille pas, et une tresse en hélice dans la rugosité accroche la lumière.</p>
+          <p>Le vertex shader (le programme de la carte graphique qui place chaque sommet) refait le même calcul et pose le tube du câble sur cette parabole, avec son repère exact : tangente, normale dans le plan de l'arc, binormale. Le rayon apparent d'un câble ne descend jamais sous 0,7 pixel, pour qu'un câble lointain ne scintille pas, et la rugosité du matériau dessine une tresse en hélice qui accroche la lumière.</p>
         </div></details>
       </section>
 
@@ -128,19 +128,19 @@
         <h2><span class="n">05</span>Le Culbute : sortir le centre de gravité de l'appui</h2>
         <span class="src">src/gen/gait.js · tipK(), findPrimitives()</span>
         <p>Un objet posé au sol bascule quand l'aplomb de son centre de gravité sort de la zone où il s'appuie. Le Culbute est un prisme à six barres couché sur le flanc : douze embouts, dix-huit câbles. Pour le faire basculer, on raccourcit une paire de câbles. Le prisme s'écrase vers l'avant, son centre de gravité avance, et quand il dépasse l'arête d'appui, le prisme tombe sur la face suivante.</p>
-        <p>Le raccourcissement suit un profil fixe : les deux câbles perdent une part <i>k</i> de leur longueur pendant une montée lisse de 1,5 s, la gardent 0,3 s, la rendent en 0,75 s, puis le prisme se repose 0,8 s. Depuis la pose de départ, le programme essaie toutes les paires de câbles et garde celles qui font basculer le prisme d'une face entière, chacune avec la plus petite contraction qui y parvient (trouvée par dichotomie, plus 12 % de marge). Ces bascules s'appellent les <b>primitives</b>. Chacune est notée avec son déplacement et son changement de cap.</p>
+        <p>Le raccourcissement suit un profil fixe : les deux câbles perdent une part <i>k</i> de leur longueur pendant une montée lisse de 1,5 s, la gardent 0,3 s, la rendent en 0,75 s, puis le prisme se repose 0,8 s. Depuis la pose de départ, le programme essaie toutes les paires de câbles et garde celles qui font basculer le prisme d'une face entière, chacune avec la plus petite contraction qui y parvient (trouvée par dichotomie, plus 12 % de marge). Ces bascules s'appellent les <b>primitives</b>. Chacune est enregistrée avec son déplacement et son changement de cap (l'angle dont tourne la direction de marche).</p>
         <figure id="fig-culbute"><figcaption><b>Une culbute, simulée dans la page.</b> Le prisme du projet et la première primitive de sa séquence (deux câbles raccourcis de 49,8 %, en couleur). Vue de côté, dans la direction de la bascule. Le trait pointillé est l'aplomb du centre de gravité, la bande au sol l'étendue des appuis. Le curseur ralentit ou accélère la simulation.</figcaption></figure>
         <div class="note try"><b>À essayer</b><ul>
           <li>Regardez le bandeau pendant la montée : le centre de gravité sort de l'appui 1,58 s après le début, quand la contraction atteint 47 %. La chute part à ce moment-là, et pas avant.</li>
           <li>Après la culbute, le prisme a avancé d'environ 13 cm et repose sur une autre face, que ses câbles relâchés laissent au repos.</li>
         </ul></div>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
-          <p>Après une culbute, le prisme repose sur une autre face, mais toutes ses barres se ressemblent. Pour jouer la culbute suivante, on ramène la pose courante sur la pose de départ par une symétrie du prisme. Son groupe de symétries (le groupe diédral D₆) en compte douze, qui sont autant de façons de renuméroter les nœuds. Pour chacune, on cherche la rotation qui superpose le mieux les deux poses (méthode de Horn : le vecteur propre d'une matrice construite à partir des deux nuages de points donne le quaternion de cette rotation), et l'on garde la meilleure. On joue alors la primitive choisie sur les câbles qui correspondent par cette symétrie.</p>
+          <p>Après une culbute, le prisme repose sur une autre face, et comme toutes ses barres sont identiques, cette pose est celle de départ avec des nœuds renumérotés. Pour jouer la culbute suivante, on ramène la pose courante sur la pose de départ par une symétrie du prisme. Son groupe de symétries (le groupe diédral D₆) en compte douze, qui sont autant de façons de renuméroter les nœuds. Pour chacune, on cherche la rotation qui superpose le mieux les deux poses (méthode de Horn : le vecteur propre d'une matrice construite à partir des deux nuages de points donne le quaternion de cette rotation), et l'on garde la meilleure. On joue alors la primitive choisie sur les câbles qui correspondent par cette symétrie.</p>
         </div></details>
       </section>
 
       <section id="cap">
-        <h2><span class="n">06</span>Huit culbutes, et le cap revient</h2>
+        <h2><span class="n">06</span>Le cap après huit culbutes</h2>
         <span class="src">tools/precompute.mjs · src/gen/culbuteTable.js</span>
         <p>Une culbute fait tourner le prisme d'environ un demi-tour autour de la verticale, parce qu'il roule sur une ceinture de faces, et ajoute un petit écart de cap. Pour que la boucle se referme, il faut finir orienté comme au départ.</p>
         <p>À chaque culbute, le programme choisit la primitive qui avance vers l'avant et ramène le cap vers zéro. Il cherche ensuite le nombre de culbutes, entre 6 et 14, dont le cap final, à un tour près, est le plus proche de zéro. Il en faut huit. Dans la simulation complète, le pas de huit culbutes avance de 1,07 m en 29,7 s et finit avec un cap de −1,56°.</p>
@@ -149,8 +149,8 @@
           <li>Suivez les étiquettes : le cap dérive d'environ un demi-degré par culbute pendant les six premières (3,3° après la sixième). La septième culbute, une autre primitive, le ramène à −0,6°, et la huitième le porte à 4,4° dans ce calcul simplifié. Dans la simulation complète, la déformation de la structure change ces écarts, et le cap final vaut −1,56°.</li>
         </ul></div>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
-          <p>Pour la direction de marche, un cap à un demi-tour près aurait suffi. Pour le raccord, il ne suffit pas : la pose de repos n'est symétrique par le demi-tour qu'à 2 cm près, et cet écart, réparti sur la boucle, allongeait les barres de 2 %.</p>
-          <div class="note trap"><b>Le piège</b><p>Les tests l'ont vu avant l'œil : « longueur des barres : 0,0215 ». Le raccord se faisait par la mauvaise symétrie.</p></div>
+          <p>Pour la direction de marche, un cap à un demi-tour près aurait suffi. Pour que la boucle se referme, il ne suffit pas : la pose de repos n'est symétrique par le demi-tour qu'à 2 cm près, et cet écart, réparti sur la boucle, allongerait les barres de 2 %.</p>
+          <div class="note trap"><b>Le piège</b><p>Le raccord doit utiliser le cap pris à un tour entier près, et non à un demi-tour près : sinon les barres se déforment, ce que le test de longueur des barres signale (écart de l'ordre de 0,02 u).</p></div>
           <p>La recherche complète des primitives et de la séquence prend environ une minute. Elles sont donc précalculées dans une table, et au chargement il ne reste à calculer que le cycle limite (section 10).</p>
         </div></details>
       </section>
@@ -159,19 +159,19 @@
         <h2><span class="n">07</span>L'Icosaèdre roule de face en face</h2>
         <span class="src">src/gen/topology.js · icosa() · src/gen/gait.js · src/gen/icosaTable.js</span>
         <p>L'Icosaèdre est la tenségrité à six barres du robot SUPERball : trois paires de barres parallèles, douze embouts, vingt-quatre câbles. Ses vingt-quatre câbles forment huit triangles fermés, et la structure repose sur l'un d'eux.</p>
-        <p>Sa règle de marche reprend celle du Culbute, avec un seul câble. On raccourcit de moitié le câble qui borde la face d'appui du côté de la marche. La face se déforme, le centre de gravité passe au-delà de ce côté, et la structure bascule sur la face fermée voisine. Une face a trois côtés, donc trois bascules possibles ; à chaque fois, on prend celle qui regarde le plus vers l'avant. Les faces se suivent en zigzag, et deux bascules font un pas droit. Un pas en compte quatre : 54 cm en 15,9 s.</p>
+        <p>Sa règle de marche reprend celle du Culbute, avec un seul câble. On raccourcit de moitié le câble qui borde la face d'appui du côté de la marche. La face se déforme, le centre de gravité passe au-delà de ce côté, et la structure bascule sur la face fermée voisine. Une face a trois côtés, donc trois bascules possibles ; à chaque fois, on prend celle qui regarde le plus vers l'avant. Les faces se suivent en zigzag, et deux bascules font avancer en ligne droite. Le pas de la boucle enchaîne quatre bascules : 54 cm en 15,9 s.</p>
         <figure id="fig-icosa"><figcaption><b>Une bascule de l'Icosaèdre, simulée dans la page.</b> La première bascule de la table : un câble raccourci de 49,9 % (en couleur). Vue de côté dans la direction de la bascule, avec l'aplomb du centre de gravité et l'étendue des appuis, comme pour le Culbute.</figcaption></figure>
         <div class="note try"><b>À essayer</b><ul>
           <li>Le centre de gravité sort de l'appui environ 1,65 s après le début, à 48,6 % de contraction, et la structure avance de 15 cm.</li>
           <li>Comparez avec la culbute de la section 05 : un seul câble suffit ici, contre deux pour le Culbute, pour une contraction semblable.</li>
         </ul></div>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
-          <p>L'Icosaèdre a vingt-quatre symétries : les douze rotations du tétraèdre et leurs douze images dans un miroir. Une bascule l'amène sur une face de l'autre sens de rotation (l'autre chiralité), où la pose est l'image de la pose de départ dans un miroir. Le recalage utilise donc aussi les symétries miroir, et un pas compte un nombre pair de bascules pour revenir sur une face du même sens. La structure posée reste presque aussi symétrique qu'en l'air : toutes ses symétries la recalent à quelques millimètres près. On retient celle qui garde la verticale. La table des trois bascules est précalculée (<code>icosaTable.js</code>).</p>
+          <p>L'Icosaèdre a vingt-quatre symétries : les douze rotations du tétraèdre et leurs douze images dans un miroir. Une bascule l'amène sur une face de l'autre sens de rotation (l'autre chiralité), où la pose est l'image de la pose de départ dans un miroir. Le recalage utilise donc aussi les symétries miroir, et un pas compte un nombre pair de bascules pour revenir sur une face du même sens. La structure posée reste presque aussi symétrique qu'en l'air : toutes ses symétries la recalent à quelques millimètres près. On retient celle qui laisse le haut en haut. La table des trois bascules est précalculée (<code>icosaTable.js</code>).</p>
         </div></details>
       </section>
 
       <section id="chenille">
-        <h2><span class="n">08</span>La Chenille avance parce que ses patins choisissent un sens</h2>
+        <h2><span class="n">08</span>La Chenille : une onde de contraction et des patins directionnels</h2>
         <span class="src">src/gen/gait.js · waveK() · simOptions()</span>
         <p>Une chenille avance en contractant ses anneaux l'un après l'autre. Celle de la scène est une chaîne de quatre ou six prismes carrés qui partagent leurs anneaux. Une onde court le long de la chaîne : les câbles le long du corps (les câbles axiaux) de chaque module raccourcissent de 34 % puis reviennent, avec un profil en sin², chaque module 0,45 s après le précédent.</p>
         <p>Seule, cette onde ferait trembler le corps sur place : ce qu'un module gagne en se contractant, il le reperd en s'allongeant. Les patins en font un pas. Leur coefficient de frottement vaut 0,06 vers l'avant et 1,2 vers l'arrière, comme des écailles : glisser vers l'arrière coûte vingt fois plus. Un module qui se contracte tire donc l'arrière vers l'avant, et un module qui s'allonge pousse l'avant.</p>
@@ -184,16 +184,16 @@
           <li>Coupez « Une onde sur deux depuis la tête » : chaque onde part de la queue, et la chaîne n'avance plus que de 1,4 module en dix secondes.</li>
         </ul></div>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
-          <p>La démo est à une dimension. Elle ne peut pas montrer la raison principale de l'alternance dans la scène, qui est un lacet.</p>
-          <div class="note trap"><b>Le piège</b><p>Les modules sont des prismes tordus, alternativement à gauche et à droite. La chaîne est donc <b>chirale</b> (différente de son image dans un miroir), et chaque onde partie de la queue la faisait tourner de 6 à 10° par boucle. Ni un frottement latéral plus fort ni une contraction plus forte d'un côté n'y changeaient rien. Faire partir une onde sur deux de la tête annule presque ce lacet, et la chenille avance en plus deux fois plus loin. Mesuré dans Node : 38 cm en 13,3 s avec quatre modules (lacet de −0,73°), 51 cm en 16,3 s avec six (0,50°). Les nombres de modules impairs gardent un lacet de 2 à 3°, et la recette ne tire que 4 ou 6.</p></div>
+          <p>La démo est à une dimension. Elle ne peut pas montrer la raison principale pour laquelle la scène fait partir les ondes tantôt de la queue, tantôt de la tête : le lacet, la lente rotation de la chaîne autour de la verticale (voir l'encadré ci-dessous).</p>
+          <div class="note trap"><b>Pourquoi ce choix : des ondes parties des deux bouts</b><p>Les modules sont des prismes tordus, alternativement à gauche et à droite. La chaîne est donc <b>chirale</b> (différente de son image dans un miroir), et chaque onde partie de la queue la fait tourner de 6 à 10° par boucle. Ni un frottement latéral plus fort ni une contraction plus forte d'un côté n'y change rien. Faire partir une onde sur deux de la tête annule presque ce lacet, et la chenille avance en plus deux fois plus loin. Mesures faites dans Node (JavaScript exécuté hors du navigateur) : avec quatre modules, 38 cm en 13,3 s et un lacet de −0,73° ; avec six, 51 cm en 16,3 s et un lacet de 0,50°. Un nombre impair de modules garde un lacet de 2 à 3°, et la recette ne tire que 4 ou 6.</p></div>
         </div></details>
       </section>
 
       <section id="roue">
-        <h2><span class="n">09</span>Le Cerceau : la roue tombe en avant de son moyeu</h2>
+        <h2><span class="n">09</span>Le Cerceau : un moyeu décalé fait rouler la roue</h2>
         <span class="src">src/gen/gait.js · prepare (Cerceau) · src/gen/topology.js · hoop()</span>
         <p>Une roue de vélo est une tenségrité : la jante est comprimée, les rayons sont tendus. Le Cerceau a une jante à douze pans de 22 cm de rayon et un moyeu lourd (0,9 kg, pour 0,84 kg de jante), suspendu par vingt-quatre rayons.</p>
-        <p>Pour la faire rouler, les moteurs du moyeu enroulent les rayons de l'avant et déroulent ceux de l'arrière. Le moyeu se décale vers l'avant. Son poids, désormais en avant du point d'appui, fait basculer la jante sur le pan suivant, puis sur le suivant : la roue roule après son moyeu.</p>
+        <p>Pour la faire rouler, les moteurs du moyeu enroulent les rayons de l'avant et déroulent ceux de l'arrière. Le moyeu se décale vers l'avant. Son poids, désormais en avant du point d'appui, fait basculer la jante sur le pan suivant, puis sur le suivant : la roue suit son moyeu.</p>
         <figure id="fig-roue"><figcaption><b>Le centre de gravité et l'appui.</b> Une jante à douze pans posée sur un plat, et son moyeu, que le curseur décale vers l'avant. Tant que le centre de gravité commun (point doré) reste au-dessus de l'appui, la roue tient ; dès qu'il le dépasse, elle bascule. Statique simplifiée : masses de la jante et du moyeu du projet, rayons rigides.</figcaption></figure>
         <p>Le seuil se calcule. L'appui est le pan posé au sol, qui dépasse le centre de la roue d'un demi-pan, <i>R</i> sin(π/12), vers l'avant. Le centre de gravité commun est la moyenne des positions de la jante et du moyeu, pondérée par leurs masses. Il atteint le bord de l'appui quand le décalage du moyeu vaut</p>
         <div class="eq">\[ o_c = R\,\sin\frac{\pi}{12}\;\frac{m_{\text{jante}} + m_{\text{moyeu}}}{m_{\text{moyeu}}} \]</div>
@@ -202,8 +202,8 @@
           <li>Montez le décalage lentement : la roue part à 1,10 u, soit 11 cm, la moitié du rayon de la jante.</li>
         </ul></div>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
-          <p>Dans la scène, une commande fait faire à la roue exactement un tour. Elle décale le moyeu en proportion de l'écart entre l'angle de la jante et sa consigne, et de sa vitesse (une commande proportionnelle-dérivée), à travers un filtre de 0,22 s, parce que les bobines ont une vitesse finie. La consigne fait un tour en 8 s avec un départ et une arrivée lissés. À la fin du tour, le moyeu se recentre et freine, et la jante se pose sur un plat. Mesuré dans Node : 1,37 m en 10,9 s.</p>
-          <div class="note trap"><b>Le piège</b><p>La première commande calculait la longueur de chaque rayon d'après la position <i>courante</i> du nœud de jante. Le rayon suivait alors sa propre déformation et n'avait plus aucune raideur, et la roue s'effondrait sous son moyeu en 0,3 s. La consigne se calcule sur la forme nominale de la jante, tournée de l'angle courant.</p></div>
+          <p>Dans la scène, une commande fait faire à la roue exactement un tour. Elle décale le moyeu en proportion de l'écart entre l'angle de la jante et sa consigne (l'angle visé), ainsi que de la vitesse à laquelle cet écart varie (une commande proportionnelle-dérivée), à travers un filtre de 0,22 s qui représente la vitesse limitée des bobines. La consigne fait un tour en 8 s avec un départ et une arrivée lissés. À la fin du tour, le moyeu se recentre et freine, et la jante se pose sur un plat. Mesuré dans Node : 1,37 m en 10,9 s.</p>
+          <div class="note trap"><b>Le piège</b><p>Si la longueur de chaque rayon était calculée d'après la position <i>courante</i> du nœud de jante, le rayon se raccourcirait ou s'allongerait avec la jante qui se déforme : il ne serait jamais tendu et ne retiendrait plus rien, et la roue s'effondrerait sous son moyeu en 0,3 s. La consigne se calcule donc sur la forme nominale (non déformée) de la jante, tournée de l'angle courant.</p></div>
         </div></details>
       </section>
 
@@ -214,7 +214,7 @@
         <p>On cherche donc un <b>point fixe</b> : une pose de départ qui se reproduit après un pas. On simule un pas, puis on recale la pose d'arrivée sur celle de départ, d'abord par la symétrie de la structure qui les superpose le mieux (le Culbute et l'Icosaèdre finissent leur pas sur une autre face), puis par un déplacement dans le plan du sol (une rotation autour de la verticale et une translation). Cette pose recalée devient le départ du pas suivant. Après deux ou trois itérations, l'écart quadratique moyen entre départ et arrivée tombe sous 2·10⁻⁴ u, soit 0,02 mm. Une pose qui ne change plus d'un pas au suivant s'appelle un <b>cycle limite</b>.</p>
         <p>Il reste un petit écart au raccord, au plus 2,3·10⁻⁴ u (0,02 mm, mesuré sur les quatre espèces). Il est réparti sur toute la boucle en deux temps : d'abord sa part rigide, rotation et translation interpolées, puis ce qui reste, linéairement.</p>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
-          <div class="note trap"><b>Le piège</b><p>Répartir l'écart nœud par nœud, sans en retirer la part rigide, déformait la roue : ses barres s'allongeaient de 0,4 %. La simulation brute, elle, les tenait à 6·10⁻⁵ près. La part rigide (la roue a tourné d'un tour à un millième près) doit être interpolée comme une rotation.</p></div>
+          <div class="note trap"><b>Le piège</b><p>Répartir l'écart nœud par nœud, sans en retirer la part rigide, déforme la roue : ses barres s'allongent de 0,4 %, alors que la simulation brute les tient à 6·10⁻⁵ près. Il faut donc interpoler cette part rigide comme une rotation (la roue a tourné d'un tour, à un millième près), et seul le reste nœud par nœud.</p></div>
           <p>Le film relit les images enregistrées à 240 par seconde, interpolées par des courbes de Catmull-Rom. Quand une sculpture est seule (<code>?troupe=1</code>), chaque chute du Culbute ou de l'Icosaèdre est ralentie comme par une caméra rapide, sans changer la durée totale. Le temps de simulation affiché à l'instant <i>t</i> du film est</p>
           <div class="eq">\[ \tau(t) = t - \sum_k a\,w\,K\!\left(\frac{t - t_k}{w}\right), \qquad K(x) = x - 3x^3 + 3x^5 - x^7, \]</div>
           <p>où <i>t</i><sub>k</sub> est l'instant de la chute <i>k</i>, <i>w</i> = 0,45 s la demi-largeur du ralenti et <i>a</i> = 0,72 son amplitude. <i>K</i> s'annule aux bords de sa fenêtre, si bien que τ(<i>t</i>) = <i>t</i> entre deux chutes. Au centre, la pente de τ vaut 1 − <i>a</i> = 0,28 : le film passe 3,6 fois plus lentement. En troupe, il n'y a pas de ralenti, parce qu'il faudrait ralentir toutes les sculptures à la fois.</p>
@@ -226,28 +226,28 @@
         <span class="src">src/scene/floor.js · src/floors.js</span>
         <p>À la fin de la boucle, les sculptures ont avancé, et l'image doit pourtant être celle du début. Elles doivent donc reposer sur le même dessin du sol. Le motif du sol est périodique le long de la marche, avec une période égale à la longueur du pas : un nombre entier de lames ou de dalles par pas (<code>jointSpacing</code>), et un bruit lu dans un volume qui se répète toutes les 4 cellules, à des fréquences choisies pour qu'un nombre entier de répétitions tienne dans le pas (<code>floorFreqs</code>). La caméra et les lumières suivent le pas. L'image à la fin de la boucle est donc celle du début : l'outil <code>seam()</code> mesure un écart de 10⁻⁷ u.</p>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
-          <p>Le petit lacet d'un pas (de 0 à 1,6°) est réparti sur la boucle par une rotation d'ensemble, imperceptible. Si un réglage du panneau fait tourner franchement le pas (rayon de courbure de la trajectoire sous 6 m), le sol est dessiné en coordonnées polaires autour du centre de cette rotation, avec une période angulaire égale à l'angle du pas. Les motifs convergent alors vers ce centre, ce qui se voit : c'est une raison de plus de supprimer le lacet à la source (section 08). Pour le Culbute, qui finit renuméroté, <code>seam()</code> compare les nœuds comme des ensembles de points.</p>
+          <p>Le petit lacet d'un pas (de 0 à 1,6°) est réparti sur la boucle par une rotation d'ensemble, imperceptible. Si un réglage du panneau fait tourner franchement le pas (rayon de courbure de la trajectoire sous 6 m), le sol est dessiné en coordonnées polaires autour du centre de cette rotation, avec une période angulaire égale à l'angle du pas. Les motifs convergent alors vers ce centre, ce qui se voit : c'est une raison de plus de supprimer le lacet à la source (section 08). Pour le Culbute, qui finit renuméroté, <code>seam()</code> compare les nœuds comme des ensembles de points, sans tenir compte de leur numéro.</p>
         </div></details>
       </section>
 
       <section id="troupe">
-        <h2><span class="n">12</span>Une troupe qui arrive ensemble</h2>
+        <h2><span class="n">12</span>La troupe : même distance et même durée</h2>
         <span class="src">src/gen/troupe.js · makeTroupe() · src/recipe.js</span>
         <p>Une scène montre deux à quatre sculptures, de deux espèces au plus. Ce sont deux simulations, une par espèce, menées en parallèle ; les autres membres sont des individus plus petits des mêmes espèces, qui relisent le même enregistrement à leur taille. Pour que la boucle se referme, tous doivent avoir parcouru la même distance <i>D</i> au bout de la même durée <i>T</i>. Or leurs pas n'ont ni la même longueur ni la même durée.</p>
-        <p>Pour la distance, chaque membre fait un nombre entier <i>n</i> de pas, et sa taille est ajustée pour que ces <i>n</i> pas fassent exactement <i>D</i>. <i>D</i> est le plus petit multiple des pas qui laisse toutes les tailles à moins de 18 % de la taille tirée par la recette.</p>
+        <p>Pour la distance, chaque membre fait un nombre entier <i>n</i> de pas, et sa taille est ajustée pour que ces <i>n</i> pas fassent exactement <i>D</i>. On prend pour <i>D</i> la plus petite distance qui permet à chaque membre de faire un nombre entier de pas en restant à moins de 18 % de la taille tirée par la recette.</p>
         <p>Pour la durée, on ne peut pas rejouer le film d'une sculpture agrandie à la même vitesse. Une structure <i>s</i> fois plus grande, sous la même pesanteur, tombe et se balance √<i>s</i> fois plus lentement : c'est la règle de similitude de Froude, la même qui fait qu'un grand pendule oscille plus lentement qu'un petit. Le pas d'un membre d'échelle <i>s</i> dure donc √<i>s</i> fois celui de l'enregistrement. La boucle dure le temps du membre le plus lent, plus 6 %, et les autres attendent au repos entre deux pas.</p>
         <div class="eq">\[ s = \frac{D}{n\,p}, \qquad d_{\text{pas}} = d_0\,\sqrt{s}, \qquad T = 1{,}06\,\max\big(n\,d_{\text{pas}}\big) \]</div>
         <p><i>p</i> et <i>d</i><sub>0</sub> sont la longueur et la durée du pas enregistré, <i>s</i> l'échelle du membre, <i>n</i> son nombre de pas et <i>d</i><sub>pas</sub> la durée d'un de ses pas.</p>
         <figure id="fig-troupe"><figcaption><b>Le calendrier d'une troupe de deux.</b> Mêmes formules que <code>troupe.js</code>, avec les pas mesurés dans Node pour chaque espèce. Le premier membre a la taille 1, le curseur règle la taille voulue du second. Chaque barre est la boucle d'un membre : en couleur ses pas, en gris ses attentes au repos.</figcaption></figure>
         <div class="note try"><b>À essayer</b><ul>
-          <li>Icosaèdre et Chenille, Chenille à 0,66 : <i>D</i> = 51 cm, l'Icosaèdre fait un pas de 15,4 s et attend 33 % de la boucle, la Chenille fait deux pas de 10,8 s.</li>
+          <li>Avec un Icosaèdre et une Chenille de taille 0,66 : <i>D</i> = 51 cm, l'Icosaèdre fait un pas de 15,4 s et attend 33 % de la boucle, la Chenille fait deux pas de 10,8 s.</li>
           <li>Montez la Chenille à 0,86 : il faut maintenant deux pas d'Icosaèdre et trois de Chenille, et la boucle passe de 22,8 à 39,1 s.</li>
-          <li>Culbute et Cerceau : la roue, petite, fait trois à cinq pas pendant l'unique pas du Culbute, et attend de 22 à 40 % du temps selon sa taille.</li>
+          <li>Avec un Culbute et un Cerceau : la roue, petite, fait trois à cinq pas pendant l'unique pas du Culbute, et attend de 22 à 40 % du temps selon sa taille.</li>
         </ul></div>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
-          <p>Les départs des membres sont décalés dans la boucle. En troupe, la roue avance par tiers de tour (quatre pans de sa jante, 46 cm en 7,2 s) : sur un tour entier, elle attendait les autres 80 % du temps.</p>
+          <p>Les départs des membres sont décalés dans la boucle. En troupe, la roue avance par tiers de tour (quatre pans de sa jante, 46 cm en 7,2 s) : avec un tour entier par pas, elle attendrait les autres 80 % du temps.</p>
           <p>Chaque membre reste dans une bande de sol, un couloir, mesurée sur tout son pas (zigzag du Culbute et de l'Icosaèdre compris) ; les couloirs sont disjoints, avec un jeu, si bien que deux sculptures ne peuvent pas se toucher. La formation est en échelon, de la plus grande (au fond) à la plus petite, pour que les sculptures se présentent côte à côte vues de trois quarts.</p>
-          <p>Un pas de Culbute, d'Icosaèdre ou de roue par tiers de tour finit renuméroté par une symétrie. Pour qu'un nœud garde sa trajectoire d'un pas au suivant, il rejoue au pas <i>k</i> la piste du nœud que la symétrie, appliquée <i>k</i> fois, lui associe ; les câbles suivent leurs extrémités.</p>
+          <p>Un pas de Culbute, d'Icosaèdre ou de roue par tiers de tour finit renuméroté par une symétrie. Comme ce renumérotage change la place de chaque nœud, un nœud ne reste continu d'un pas à l'autre que s'il rejoue, au pas <i>k</i>, la piste du nœud que la symétrie, appliquée <i>k</i> fois, lui associe ; les câbles suivent leurs extrémités.</p>
         </div></details>
       </section>
 
@@ -257,7 +257,7 @@
         <p>De loin, on voit la troupe, mais plus les treuils ni les câbles. La boucle est donc découpée en trois à six plans, coupés net, d'environ six secondes et demie chacun (la durée de la boucle divisée par 6,5 s, arrondie). Le premier est un <b>plan large</b>, de trois quarts et un peu en hauteur ; il est à cheval sur la fin et le début de la boucle, si bien que le raccord se fait dans un plan continu. Les suivants sont des <b>plans rapprochés</b> sur la sculpture qui bouge le plus pendant le plan, et, à partir de quatre plans, un <b>très gros plan</b> (deux quand il y a six plans) sur le treuil qui enroule le plus de corde (ou sur le moyeu d'une roue).</p>
         <p>Aucun plan n'est tiré au hasard. Le programme relit la boucle sur 480 instants et mesure, pour chaque sculpture, le déplacement moyen de ses nœuds rapporté à sa taille, et, pour chaque câble, la variation de sa longueur au repos. Pour chaque plan, la caméra essaie quelques angles et garde celui d'où le sujet est le moins caché. Les lumières restent sur la formation ; seule la caméra change de place.</p>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
-          <p>La sculpture choisie pour un plan rapproché ne l'est jamais deux fois de suite, sauf si elle est seule à bouger (son activité est comptée à 35 % si elle vient d'être filmée). La trajectoire du point visé est lissée plan par plan par un noyau gaussien (0,9 s, 0,4 s pour un très gros plan). Un rayon compte 40 % d'un câble de treuil dans le choix du très gros plan, parce qu'un treuil qui tourne se lit mieux qu'un rayon.</p>
+          <p>La sculpture choisie pour un plan rapproché ne l'est jamais deux fois de suite, sauf si elle est seule à bouger (son activité ne compte que pour 35 % de sa valeur si elle vient d'être filmée). La trajectoire du point visé est lissée plan par plan par un noyau gaussien (0,9 s, 0,4 s pour un très gros plan). Dans le choix du très gros plan, la variation d'un rayon de roue ne compte que pour 40 % de celle d'un câble de treuil, parce qu'un treuil qui tourne se lit mieux qu'un rayon.</p>
         </div></details>
       </section>
 
@@ -282,12 +282,12 @@
             <tr><td>Même simulation : Chenille (4 ou 6 modules)</td><td>worker</td><td class="num">1,4 – 3,1 s</td></tr>
             <tr><td>Même simulation : Cerceau (pas de 1/8 000 s), tour entier ou tiers de tour</td><td>worker</td><td class="num">3,6 s · 2,5 s</td></tr>
             <tr><td>Recherche complète des primitives et de la séquence du Culbute</td><td>Node, hors ligne</td><td class="num">≈ 1 min</td></tr>
-            <tr><td>Image, qualité Haute, 1,8 Mpx (Scène, Culbute seul, avant la troupe)</td><td>GPU</td><td class="num">7,0 ms</td></tr>
-            <tr><td>Image, version mobile (Galerie, Cerceau seul, avant la troupe)</td><td>GPU</td><td class="num">2,7 ms</td></tr>
-            <tr><td>Pipelines compilées sous l'écran de chargement (aucune après), avant la troupe</td><td>GPU</td><td class="num">39</td></tr>
+            <tr><td>Image, qualité Haute, 1,8 Mpx (Scène, Culbute seul)</td><td>GPU</td><td class="num">7,0 ms</td></tr>
+            <tr><td>Image, version mobile (Galerie, Cerceau seul)</td><td>GPU</td><td class="num">2,7 ms</td></tr>
+            <tr><td>Pipelines compilées sous l'écran de chargement (aucune après)</td><td>GPU</td><td class="num">39</td></tr>
           </tbody>
         </table></div>
-        <p>Les temps de simulation sont mesurés dans Node ; une troupe demande deux simulations, menées de front, et son chargement dure celui de la plus longue s'il reste un worker libre. Les temps d'image datent d'avant la troupe et les pièces détaillées (un treuil compte 4 800 triangles, une barre à manchon 10 000, un moyeu 13 800) ; ils n'ont pas été remesurés depuis. Vingt-sept tests couvrent l'ensemble : recherche de forme, câble mou, symétries ; pour chaque espèce, le pas avance, le cycle limite est atteint, le raccord est exact, les barres restent rigides, rien ne passe sous le sol, aucune barre n'en traverse une autre et la caméra reste douce ; l'Icosaèdre et la roue par tiers de tour ; la recette et la troupe (même distance et même durée pour tous, couloirs disjoints, boucle exacte).</p>
+        <p>Les temps de simulation sont mesurés dans Node ; une troupe demande deux simulations, menées de front, et son chargement dure celui de la plus longue s'il reste un worker libre. Les pièces détaillées comptent 4 800 triangles pour un treuil, 10 000 pour une barre à manchon, 13 800 pour un moyeu. Vingt-sept tests couvrent l'ensemble : recherche de forme, câble mou, symétries ; pour chaque espèce, le pas avance, le cycle limite est atteint, le raccord est exact, les barres restent rigides, rien ne passe sous le sol, aucune barre n'en traverse une autre et la caméra reste douce ; l'Icosaèdre et la roue par tiers de tour ; la recette et la troupe (même distance et même durée pour tous, couloirs disjoints, boucle exacte).</p>
       </section>
     </article>
 
@@ -471,8 +471,8 @@
         },
       });
     }
-    tipDemo('#fig-culbute', 'culbute', 'Tirer, pencher, tomber');
-    tipDemo('#fig-icosa', 'icosa', 'Un câble, une face');
+    tipDemo('#fig-culbute', 'culbute', 'Culbute simulée');
+    tipDemo('#fig-icosa', 'icosa', 'Bascule de l’Icosaèdre');
 
     // ── 06 · le cap des huit culbutes ──
     demo('#fig-cap', {

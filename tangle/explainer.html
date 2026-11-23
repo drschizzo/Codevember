@@ -24,7 +24,7 @@
     <header class="hero">
       <div class="kicker">Day 04 · Tangle · comment ça marche</div>
       <h1>Comment une corde s'emmêle d'elle-même</h1>
-      <p class="lede">Dans Tangle, un moteur tord une corde suspendue, tour après tour. La corde reste droite, puis elle cède d'un coup sur le côté en une boucle qui s'enroule sur elle-même. Une came libère ensuite le poids accroché en bas, qui tourne en sens inverse et défait la torsade. Personne n'anime la corde : son mouvement est calculé par une simulation physique pendant l'écran de chargement, puis relu image par image. Cette page reconstruit cette simulation pas à pas, en partant d'une corde décrite par une simple liste de points.</p>
+      <p class="lede">Dans Tangle, un moteur tord une corde suspendue, tour après tour. La corde reste droite, puis elle cède d'un coup sur le côté en une boucle qui s'enroule sur elle-même. Une came libère ensuite le poids accroché en bas, qui tourne en sens inverse et défait la torsade. La corde n'est pas animée à la main : son mouvement est calculé par une simulation physique pendant l'écran de chargement, puis relu image par image. Cette page reconstruit cette simulation pas à pas, en partant d'une corde décrite par une simple liste de points.</p>
       <p class="prereq">Pour suivre, il suffit de savoir lire un peu de JavaScript (des tableaux et des boucles). Les formules résument ce que les démos montrent ; on peut les sauter sans perdre le fil. Les détails de production sont rangés dans les encadrés « Pour aller plus loin ».</p>
     </header>
 
@@ -79,11 +79,11 @@
 
         <h3>Première idée : avancer, puis corriger les positions</h3>
         <p>Cette méthode s'appelle la <b>dynamique de positions</b>. À chaque pas de temps, on avance chaque point selon sa vitesse et la pesanteur, sans s'occuper des règles. Puis on corrige les positions pour que chaque règle soit de nouveau respectée. Pour un segment trop long, on rapproche ses deux extrémités. La correction est partagée selon les masses : chaque extrémité bouge en proportion de sa <b>masse inverse</b> <i>w</i> = 1/<i>m</i>, si bien que le point le plus léger fait presque tout le chemin. Enfin, on déduit la nouvelle vitesse du déplacement effectué pendant le pas.</p>
-        <p>Le projet utilise la variante <b>XPBD</b> (Macklin et al., 2019), qui donne à chaque règle une souplesse. Une règle peut alors représenter un ressort de raideur connue, comme la résistance de la corde à la flexion, plutôt qu'une liaison rigide. Il fait 3 000 pas par seconde de temps physique, avec une seule passe de corrections par pas : des pas très courts valent mieux qu'un grand pas corrigé longuement.</p>
+        <p>Le projet utilise la variante <b>XPBD</b> (Macklin et al., 2019), qui donne à chaque règle une souplesse. Une règle peut alors représenter un ressort de raideur connue, comme la résistance de la corde à la flexion, plutôt qu'une liaison rigide. La simulation fait 3 000 pas par seconde de temps physique, avec une seule passe de corrections par pas : des pas très courts valent mieux qu'un grand pas corrigé longuement.</p>
         <p>Les segments sont corrigés l'un après l'autre, du haut vers le bas, chacun voyant les positions déjà corrigées par le précédent. Cette façon de faire s'appelle la méthode de <b>Gauss-Seidel</b>. La démo l'applique à une chaîne verticale de vingt maillons de 9 mm, accrochée en haut et lestée en bas.</p>
         <figure id="fig-chain"><figcaption><b>Une chaîne de vingt maillons qui porte une masse.</b> Simulation verticale à une dimension, sous la pesanteur réelle, à 600 pas par seconde. Le premier curseur règle le rapport entre la masse accrochée et celle d'un maillon (×214 correspond au cordon) ; le second, le nombre de passes de Gauss-Seidel par pas. La ligne pointillée est la longueur au repos ; la jauge donne l'allongement.</figcaption></figure>
 
-        <h3>Ce qui ne va pas : la chaîne s'étire</h3>
+        <h3>Le problème : la chaîne s'étire</h3>
         <p>Quand la masse du bas est légère, une passe par pas suffit presque. Quand elle est lourde, la correction du dernier segment ne déplace presque que le maillon du dessus, puisque c'est lui le plus léger. La correction suivante défait une partie de ce travail, et ainsi de suite. En une passe, l'information ne remonte pas jusqu'au point d'attache : la chaîne s'allonge comme un élastique. Au rapport du cordon, elle s'allonge de près des deux tiers. Multiplier les passes réduit l'écart sans l'annuler, et chaque passe coûte autant que la première.</p>
 
         <h3>La correction : résoudre toutes les longueurs à la fois</h3>
@@ -108,7 +108,7 @@ for (let k = 0; k &lt; N; k++) {             // corrections des positions
         </ul></div>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
           <p>Dans la scène, le dernier sommet de chaque brin porte, en plus de sa masse, la part du balancier, mais seulement sur l'axe vertical : le balancier coulisse dans sa douille et ne peut pas partir de côté. Les deux premiers sommets sont pris dans les mors du mandrin, les deux derniers dans la pince du balancier, et ne bougent qu'avec eux.</p>
-          <p>La règle de la section 02 peut aussi incliner un segment par rapport à sa flèche <i>d</i><sub>3</sub> (un cisaillement). Cet écart est borné à 0,05 rad, soit 2,9° : au-delà, lors d'un claquement de la corde, les repères décrochaient de la ligne.</p>
+          <p>La règle de la section 02 peut aussi incliner un segment par rapport à sa flèche <i>d</i><sub>3</sub> (un cisaillement). Cet écart est borné à 0,05 rad, soit 2,9°. Sans cette borne, lors d'un claquement de la corde, les repères décrochaient de la ligne.</p>
         </div></details>
       </section>
 
@@ -139,7 +139,7 @@ om[0] = sc * rx / len; om[1] = sc * ry / len; om[2] = sc * rz / len;</code></pre
         </ul></div>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
           <p>Le rappel ne vise pas zéro mais une petite courbure naturelle, le pli que garde une corde sortie de sa bobine (de 0,12 à 0,6 rad/m selon l'endroit, avec une phase tirée de la graine). C'est elle qui décide de quel côté et à quelle hauteur la boucle naît.</p>
-          <div class="note"><b>Inertie de rotation ×100</b><p>Un segment de 8,6 mm a une inertie de rotation minuscule : la torsion s'y propage si vite qu'il faudrait des pas encore plus courts. Le projet multiplie cette inertie par cent. Cela ne change pas l'équilibre, seulement la vitesse des ondes de torsion, invisible ici. Le flambage ne dépend alors presque plus du pas de temps. Mesuré sur un cordon (graine b5), il survient à 6,51 tours à 1 500 pas par seconde, 6,61 à 3 000 et 6,64 à 6 000, pour 6,33 prédits par la formule de la section suivante.</p></div>
+          <div class="note"><b>Inertie de rotation ×100</b><p>Un segment de 8,6 mm a une inertie de rotation minuscule : la torsion s'y propage si vite qu'il faudrait des pas encore plus courts. Le projet multiplie cette inertie par cent. Cela ne change pas l'équilibre, seulement la vitesse des ondes de torsion, qu'on ne voit pas dans le film. Avec cette inertie, l'instant du flambage varie peu quand on change le pas de temps. Mesuré sur un cordon (graine b5), il survient à 6,51 tours à 1 500 pas par seconde, 6,61 à 3 000 et 6,64 à 6 000, pour 6,33 prédits par la formule de la section suivante.</p></div>
         </div></details>
       </section>
 
@@ -173,14 +173,14 @@ om[0] = sc * rx / len; om[1] = sc * ry / len; om[2] = sc * rz / len;</code></pre
         <p>La vrille se calcule par une double somme sur toutes les paires de segments de l'axe. Pour chaque paire, on mesure l'angle sous lequel un segment « voit » l'autre (un angle solide), avec un signe qui dit dans quel sens ils se croisent. Klenin et Langowski (2000) ont donné une formule exacte de cet angle pour deux segments droits, que le projet utilise. Comme le théorème vaut pour une courbe fermée, la corde est prolongée par deux demi-droites verticales, au-dessus du mandrin et sous le balancier.</p>
         <div class="eq">\[ \mathrm{Wr} = \frac{1}{4\pi}\sum_{i}\sum_{j \neq i} \Omega_{ij} \]</div>
         <p>Ω<sub>ij</sub> est l'angle solide signé sous lequel le segment <i>i</i> voit le segment <i>j</i>, en stéradians. La somme sur toutes les paires ordonnées compte chaque paire deux fois ; le code ne parcourt chaque paire qu'une fois et multiplie par deux.</p>
-        <p>L'intérêt pour la simulation est que les trois termes sont mesurés indépendamment : Lk par les angles du mandrin et du balancier, Tw par les repères, Wr par la forme. Si leur somme cesse d'être juste, la simulation a commis une faute. Une corde qui se traverse fait sauter Lk de 2.</p>
+        <p>L'intérêt pour la simulation est que les trois termes sont mesurés indépendamment : Lk par les angles du mandrin et du balancier, Tw par les repères, Wr par la forme. Si Lk cesse d'être égal à Tw + Wr, la simulation a commis une faute. Une corde qui se traverse fait sauter Lk de 2.</p>
         <div class="note try"><b>À essayer</b><ul>
           <li>Partez de « Boucle » à 0 : Wr = 0 et Tw = Lk. Montez progressivement jusqu'à 1 : Wr croît sans sauter jusqu'à 0,86, et la rayure perd autant de tours.</li>
           <li>Poussez à 1,6 : l'axe fait plus d'un tour et demi, et Wr atteint 1,64. Avec Lk = 2, la torsion de la rayure devient presque nulle (0,36 tour).</li>
         </ul></div>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
           <p>Tw est calculé en transportant le repère d'un segment au suivant par la rotation la plus courte qui aligne leurs axes (transport parallèle), puis en mesurant l'angle qui reste entre la flèche transportée et la vraie flèche <i>d</i><sub>1</sub>. Un test vérifie que Lk = Tw + Wr pendant deux cycles complets d'un cordon.</p>
-          <div class="note check"><b>Ce que l'invariant a trouvé</b><p>Pendant la mise au point, chaque écart de Lk a désigné une faute réelle : des repères qui décrochaient de l'axe dans un claquement (d'où le cisaillement borné de la section 03), une articulation qui glissait d'un tour au-delà d'un demi-tour (d'où le logarithme exact de la section 04), une boucle qui passait par-dessus l'extrémité de la corde à travers la pince du balancier (d'où la pince traitée comme un obstacle). Aucune de ces fautes ne se voyait nettement à l'œil ; toutes se lisaient dans le compte des tours.</p></div>
+          <div class="note check"><b>Ce que le compte des tours détecte</b><p>Un écart dans ce compte désigne une faute réelle de la simulation : des repères qui décrochent de l'axe dans un claquement (d'où le cisaillement borné de la section 03), une articulation qui glisse d'un tour au-delà d'un demi-tour (d'où le logarithme exact de la section 04), une boucle qui passe par-dessus l'extrémité de la corde à travers la pince du balancier (d'où la pince traitée comme un obstacle). Aucune de ces fautes ne se voit nettement à l'œil ; toutes se lisent dans le compte des tours.</p></div>
         </div></details>
       </section>
 
@@ -189,7 +189,7 @@ om[0] = sc * rx / len; om[1] = sc * ry / len; om[2] = sc * rz / len;</code></pre
         <span class="src">src/gen/rod.js · contacts()</span>
         <p>Dans une torsade, la corde est enroulée sur elle-même : deux brins serrés l'un contre l'autre sur toute leur longueur. Il faut empêcher la corde de passer à travers elle-même, sinon Lk saute de 2 et la torsade se défait sans cause visible.</p>
         <p>La règle la plus simple traite chaque segment comme une <b>capsule</b>, un cylindre de rayon <i>r</i> aux bouts arrondis. Pour chaque paire de segments proches, on cherche les deux points les plus proches. S'ils sont à moins de 2<i>r</i>, les capsules se pénètrent, et on les écarte le long de la droite qui joint ces deux points, jusqu'à la distance 2<i>r</i>. Pour ne pas comparer toutes les paires, une grille range les segments par case de l'espace, et l'on ne compare que les voisins (une grille de hachage).</p>
-        <h3>Ce qui ne va pas : un pas trop grand</h3>
+        <h3>Le problème : un pas trop grand</h3>
         <p>Si, pendant un pas, un brin a avancé de plus d'un rayon dans l'autre, son centre a dépassé celui de l'autre brin. La droite qui joint les points les plus proches pointe alors de l'autre côté, et la correction pousse le brin à travers au lieu de le repousser.</p>
         <p>La correction de Tangle compare avec le pas précédent. On recalcule la même paire de points avec les positions d'avant le pas. Si le vecteur qui les joint s'est retourné, les brins se sont croisés pendant le pas, et c'est l'ancienne direction qui décide du côté où l'on remet le brin.</p>
         <figure id="fig-contact"><figcaption><b>Deux brins en coupe, deux règles côte à côte.</b> Dans chaque panneau, le brin clair tombe sur le brin fixe, un pas à la fois. Le cercle pointillé est la position prédite avant correction, la flèche la correction. À gauche, la correction suit la direction du moment ; à droite, celle du pas précédent quand les brins se sont croisés. Le curseur règle le déplacement par pas, en diamètres de brin.</figcaption></figure>
@@ -215,7 +215,7 @@ if (d &lt; r && dot(dCur, q) &lt; 0 && |q| &gt; r) {
         <span class="src">src/plan.js · makePlan(), camLift() · src/gen/bench.js</span>
         <p>Le balancier doit être libéré au bon moment, quand le mandrin a fini ses tours. Sur le banc, c'est une <b>came</b> qui écarte la glissière : une roue au contour irrégulier, sur laquelle appuie un poussoir. Quand le rayon de la came augmente sous le poussoir, celui-ci descend et écarte la glissière par un levier.</p>
         <p>La came est portée par la roue-programme, engrenée au mandrin au rapport 1 : (<i>K</i><sub>1</sub> + <i>K</i><sub>2</sub> + <i>K</i><sub>3</sub>), où les <i>K</i> sont les tours des trois cycles. Pour le cordon, la roue fait donc un tour pendant que le mandrin en fait dix-neuf, soit un tour par boucle de l'animation.</p>
-        <p>On ne dessine pas la came à la main. On écrit d'abord l'ouverture voulue de la glissière en fonction du nombre de tours faits dans le cycle : elle s'écarte pendant les trois derniers dixièmes de tour du mandrin, reste ouverte tant que le moteur est arrêté, et revient pendant les trois premiers dixièmes de tour du cycle suivant. Le contour de la came s'en déduit : à l'angle ψ de la roue, son rayon vaut</p>
+        <p>On ne dessine pas la came à la main. On écrit d'abord l'ouverture voulue de la glissière en fonction du nombre de tours faits dans le cycle : la glissière s'écarte pendant les trois derniers dixièmes de tour du mandrin, reste ouverte tant que le moteur est arrêté, et revient pendant les trois premiers dixièmes de tour du cycle suivant. Le contour de la came s'en déduit : à l'angle ψ de la roue, son rayon vaut</p>
         <div class="eq">\[ r(\psi) = R + \text{course} \times \text{ouverture}(\psi), \]</div>
         <p>où <i>R</i> est le rayon de base et la course le déplacement maximal du poussoir. Ce contour est ensuite fabriqué en 720 points. La came qu'on voit tourner est donc bien celle qui commande la glissière.</p>
         <figure id="fig-cam"><figcaption><b>La roue-programme du cordon (4 + 7 + 8 tours).</b> La came tourne d'un tour pendant que le mandrin en fait dix-neuf ; le poussoir lit son rayon au point bas. À droite, l'ouverture de la glissière selon les tours du mandrin : trois fenêtres, une par cycle. Les retours au repos n'apparaissent pas sur cet axe, parce que le mandrin et la came sont alors arrêtés.</figcaption></figure>
@@ -224,19 +224,19 @@ if (d &lt; r && dot(dCur, q) &lt; 0 && |q| &gt; r) {
           <li>Comparez les trois fenêtres : elles ont toutes la même largeur, 0,3 tour de mandrin de chaque côté de la fin du cycle, quelle que soit la longueur du cycle.</li>
         </ul></div>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
-          <p>Le levier mesure 4 cm et tourne la glissière de 8° au plus. Quand la glissière revient, l'entrée en V de sa butée recentre le bras du balancier. Les tests vérifient que la levée de la came fabriquée suit l'ouverture de la glissière à 3 % près à chaque instant, et que le balancier est dans l'entrée en V (à ± 4°) quand elle commence à revenir, puis en place (à ± 0,5°) quand elle est fermée.</p>
-          <p>Le moteur suit une vitesse en trapèze aux rampes lisses de 0,6 s, dont l'intégrale (l'angle du mandrin) est écrite en forme fermée.</p>
+          <p>Le levier mesure 4 cm et tourne la glissière de 8° au plus. Quand la glissière revient, l'entrée en V de sa butée recentre le bras du balancier. Les tests vérifient que la levée de la came fabriquée suit l'ouverture de la glissière à 3 % près à chaque instant, et que le balancier est dans l'entrée en V (à ± 4°) quand la glissière commence à revenir, puis en place (à ± 0,5°) quand celle-ci est fermée.</p>
+          <p>Le moteur suit une vitesse en trapèze aux rampes lisses de 0,6 s, dont l'intégrale (l'angle du mandrin) s'écrit par une formule directe, sans calcul numérique.</p>
         </div></details>
       </section>
 
       <section id="temps">
-        <h2><span class="n">09</span>Le temps d'une caméra rapide</h2>
+        <h2><span class="n">09</span>Le temps du film</h2>
         <span class="src">src/plan.js · makeWarp() · src/gen/sim.js</span>
         <p>Le flambage dure une fraction de seconde ; le retour au repos du balancier, plusieurs secondes. Filmée en temps réel, la boucle passerait trop vite sur le moment le plus intéressant et s'attarderait sur le moins intéressant. Le film fait donc comme une caméra rapide : il ralentit au flambage et au lâcher, et il accélère pendant les longs retours au repos.</p>
         <p>La simulation avance en temps physique τ, le film en temps <i>t</i>. On choisit la vitesse <i>v</i>(τ), le nombre de secondes physiques montrées par seconde de film : sous 1, c'est un ralenti ; au-dessus, un accéléré. Sa forme est une somme de bosses lisses, centrées sur les moments choisis. Les bosses sont additionnées sur le logarithme de la vitesse, ce qui garantit que <i>v</i> reste positive : le film ne s'arrête jamais et ne recule jamais. Le temps du film s'obtient ensuite en additionnant la durée de chaque petit morceau de temps physique :</p>
         <div class="eq">\[ \ln v(\tau) = \sum_i a_i\, b\!\left(\frac{\tau - c_i}{w_i}\right), \quad b(x) = (1 - x^2)^3, \qquad t(\tau) = \int_0^\tau \frac{d\tau'}{v(\tau')}. \]</div>
         <p><i>c</i><sub>i</sub> est le centre de la bosse <i>i</i> (en secondes physiques), <i>w</i><sub>i</sub> sa demi-largeur, et <i>a</i><sub>i</sub> son amplitude, le logarithme du facteur de vitesse visé. Au flambage, <i>a</i> = ln(1/2,5) et <i>w</i> = 0,9 s. Au lâcher, le ralenti est de 2 (de 3 au dernier lâcher). Pendant les retours au repos de plus de 5 s, l'accéléré est de 1,7. La fonction <i>b</i> vaut 1 au centre et s'annule avec sa pente au bord, ce qui raccorde chaque bosse sans à-coup.</p>
-        <p>Les moments de flambage ne sont pas connus d'avance : la simulation les repère quand le balancier remonte de 1 cm pendant un cycle. Le temps du film est donc calculé après la simulation. L'intégrale est évaluée par la méthode de Simpson sur 4 000 intervalles, et l'instant physique de chaque image, τ(<i>t</i>), se trouve par dichotomie dans cette table.</p>
+        <p>Les moments de flambage ne sont pas connus d'avance : la simulation les repère quand le balancier remonte de 1 cm pendant un cycle. Le temps du film est donc calculé après la simulation. L'intégrale est évaluée par la méthode de Simpson sur 4 000 intervalles et rangée dans une table ; l'instant physique de chaque image, τ(<i>t</i>), se trouve ensuite dans cette table par dichotomie (recherche par moitiés successives).</p>
         <figure id="fig-warp"><figcaption><b>La vitesse du temps sur une boucle du cordon (graine b5).</b> En haut, <i>v</i>(τ) en échelle logarithmique. En bas, le temps du film selon le temps physique ; sa pente est 1/<i>v</i>, et le pointillé est le temps réel. Les repères marquent les flambages mesurés (or) et les lâchers (bleu). Les bosses sont construites comme dans <code>sim.js</code> ; les curseurs changent leurs facteurs.</figcaption></figure>
         <div class="note try"><b>À essayer</b><ul>
           <li>Avec les réglages du projet, 41,1 s de temps physique deviennent 46,1 s de film, et le flambage passe à 0,39 fois la vitesse réelle.</li>
@@ -244,8 +244,8 @@ if (d &lt; r && dot(dCur, q) &lt; 0 && |q| &gt; r) {
           <li>Ramenez l'accéléré à ×1 : le film dure 47,8 s. Les retours au repos prennent alors une bonne part de la boucle.</li>
         </ul></div>
 
-        <h3>La boucle parfaite, mesurée</h3>
-        <p>Le mandrin tourne d'un nombre entier de tours. À chaque lâcher, le balancier tourne jusqu'à annuler la torsion, et la glissière le recentre en revenant. À la fin de la boucle, la corde est donc droite et le balancier a fait autant de tours que le mandrin. Une simulation n'est pourtant jamais exactement périodique. Sur le cordon de la graine b5, l'état final s'écarte de l'état initial de 0,32 mm au plus, et le balancier de 0,002 tour. Cet écart est retiré progressivement pendant les 1,5 dernières secondes de repos, par une correction de position, sans fondu entre deux images.</p>
+        <h3>La fermeture de la boucle</h3>
+        <p>Le mandrin tourne d'un nombre entier de tours. À chaque lâcher, le balancier tourne jusqu'à annuler la torsion, et la glissière le recentre en revenant. À la fin de la boucle, la corde est donc droite et le balancier a fait autant de tours que le mandrin. Une simulation n'est pourtant jamais exactement périodique. Sur le cordon de la graine b5, l'état final de la corde (positions et repères) s'écarte de l'état initial de 0,32 mm au plus, et le balancier de 0,002 tour. Cet écart est retiré progressivement pendant les 1,5 dernières secondes de repos, par une correction de position, sans fondu entre deux images.</p>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
           <p>Les bosses sont périodiques (chacune est aussi ajoutée décalée d'une période), ce qui donne τ(<i>t</i> + <i>T</i>) = τ(<i>t</i>) + <i>P</i>, où <i>P</i> est la durée physique de la boucle et <i>T</i> celle du film. La simulation est enregistrée à 120 états par seconde physique, puis rééchantillonnée à 30 images par seconde de film par une interpolation de Catmull-Rom en τ. Après N tours, un repère revient à la même orientation, mais son quaternion peut avoir changé de signe ; la correction du raccord vise donc <i>q</i><sub>0</sub> ou −<i>q</i><sub>0</sub>, le plus proche.</p>
         </div></details>
@@ -277,7 +277,7 @@ if (d &lt; r && dot(dCur, q) &lt; 0 && |q| &gt; r) {
             <tr><td>Shaders, tous compilés sous l'écran de chargement</td><td>GPU</td><td class="num">55</td></tr>
           </tbody>
         </table></div>
-        <p>Vingt-cinq tests tiennent l'ensemble : Lk = Tw + Wr pendant deux cycles ; pour chaque famille, la boucle se referme (écart final, nombre entier de tours du balancier, raccord) et la corde ne touche ni la glissière, ni les colonnes, ni le mandrin, ni le balancier, à aucune image ; la came suit l'ouverture de la glissière ; la caméra est périodique et tourne à moins de 25°/s.</p>
+        <p>Vingt-cinq tests vérifient l'ensemble : Lk = Tw + Wr pendant deux cycles ; pour chaque famille, la boucle se referme (écart final, nombre entier de tours du balancier, raccord) et la corde ne touche ni la glissière, ni les colonnes, ni le mandrin, ni le balancier, à aucune image ; la came suit l'ouverture de la glissière ; la caméra est périodique et tourne à moins de 25°/s.</p>
       </section>
     </article>
 

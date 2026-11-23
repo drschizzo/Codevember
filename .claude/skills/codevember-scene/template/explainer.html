@@ -2,14 +2,18 @@
 <!-- Page « défis techniques » de {{TITLE}} : à réécrire entièrement d'après le
      projet (voir references/documentation.md et le modèle tangle/explainer.html).
      Ce gabarit ne garde que la structure : en-tête, sommaire, une section avec
-     une démo d'exemple, budget, pied. -->
+     une démo d'exemple, budget, pied.
+     La page décrit uniquement l'état ACTUEL du projet : ni chronologie de la mise
+     au point, ni versions successives, ni pistes abandonnées, ni mesures « avant ».
+     Un échec n'a sa place que s'il explique le modèle actuel, et il s'écrit alors
+     au présent (« sans X, on observe Y ; le programme fait donc Z »). -->
 <html lang="fr">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#050506">
   <title>{{TITLE}} · défis techniques</title>
-  <meta name="description" content="Comment {{TITLE}} est calculé : (une phrase qui nomme les défis).">
+  <meta name="description" content="Comment {{TITLE}} est calculé : (une phrase qui nomme les problèmes traités).">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
@@ -27,26 +31,26 @@
   <main>
     <header class="hero">
       <div class="kicker">Day NN · {{TITLE}} · {{SUBTITLE}}</div>
-      <h1>Comment … (le geste du projet, en une phrase)</h1>
-      <p class="lede">Trois ou quatre phrases qu'un curieux sans bagage technique comprend : ce qu'on voit, la difficulté en mots simples, puis ce qui est calculé. Pas de tiret cadratin, pas de « non pas X, mais Y », pas de chute en aphorisme (grille : references/documentation.md).</p>
+      <h1>Comment … (ce que calcule le projet, en une phrase descriptive)</h1>
+      <p class="lede">Trois ou quatre phrases qu'un lecteur sans bagage technique comprend : ce que l'on voit, la difficulté en mots simples, puis ce qui est calculé. Une idée par phrase, sans tiret cadratin, sans « non pas X, mais Y » et sans phrase de conclusion (grille : references/documentation.md).</p>
     </header>
 
     <figure class="cover">
       <img src="docs/capture.jpg" alt="…" width="1600" height="900">
-      <figcaption>Ce que montre la capture, et ce qu'il faut y regarder.</figcaption>
+      <figcaption>Ce que montre la capture, et ce qu'il faut y observer.</figcaption>
     </figure>
 
     <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
 
     <article>
       <section id="defi-1">
-        <h2><span class="n">01</span>Un titre qui affirme la solution</h2>
+        <h2><span class="n">01</span>Un titre descriptif et sobre, qui nomme la solution</h2>
         <span class="src">src/gen/….js · fonction()</span>
-        <p>Le problème concret, en mots simples, avant le premier terme technique (glosé à sa première apparition). Pourquoi l'approche naïve échoue, chiffré. La solution retenue, avec ses constantes réelles. Si une formule éclaire, une phrase dit d'abord ce qu'elle calcule :</p>
+        <p>Le problème concret, en mots simples, avant le premier terme technique (défini à sa première apparition : le mot courant d'abord, le terme savant entre parenthèses). Pourquoi l'approche la plus simple échoue, avec des chiffres, au présent. La solution retenue, avec ses constantes réelles. Si une formule aide, une phrase dit d'abord ce qu'elle calcule :</p>
         <div class="eq">\[ x(t) = \ldots \]</div>
-        <p>Puis ce qu'elle implique, avec un ordre de grandeur concret.</p>
-        <div class="note trap"><b>Le piège</b><p>Ce qui a cassé pendant la mise au point, et comment on l'a vu.</p></div>
-        <figure id="fig-exemple"><figcaption><b>Ce que montre la démo.</b> Quoi manipuler, quoi regarder, puis ce qu'elle simplifie par rapport au projet.</figcaption></figure>
+        <p>Puis ce qu'elle implique, avec un ordre de grandeur.</p>
+        <div class="note trap"><b>Pourquoi ce choix</b><p>Ce qui se passerait sans ce choix, écrit au présent (« sans X, on observe Y ; c'est pourquoi le programme fait Z »). Pas de récit de mise au point. À omettre si aucune alternative naïve n'éclaire le modèle ; le titre « Le piège » est réservé à une erreur que le lecteur pourrait commettre.</p></div>
+        <figure id="fig-exemple"><figcaption><b>Ce que montre la démo.</b> Ce que l'on peut régler, ce qu'il faut observer, puis ce qu'elle simplifie par rapport au projet.</figcaption></figure>
       </section>
 
       <section id="budget">
@@ -54,7 +58,7 @@
         <div class="tbl"><table>
           <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
           <tbody>
-            <tr><td>(mesures du README : calcul au chargement, ms par image, shaders, mémoire)</td><td>worker</td><td class="num">…</td></tr>
+            <tr><td>(mesures actuelles du README : calcul au chargement, ms par image, shaders, mémoire)</td><td>worker</td><td class="num">…</td></tr>
           </tbody>
         </table></div>
       </section>

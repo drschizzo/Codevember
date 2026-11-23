@@ -30,7 +30,7 @@
     <header class="hero">
       <div class="kicker">Le relais · comment il est fait</div>
       <h1>Vingt-trois scènes dans un seul plan</h1>
-      <p class="lede">Chaque jour de Codevember est une page à part : son moteur de rendu, sa génération, son écran de chargement. Le relais les montre toutes à la suite, sans écran de chargement entre deux jours : un jour joue sa boucle, puis passe la main au suivant par un passage qui reprend le geste de la scène qui arrive. Cette page explique comment on y arrive, alors que charger les vingt-trois scènes ensemble demanderait plus de six gigaoctets de mémoire vidéo.</p>
+      <p class="lede">Chaque jour de Codevember est une page à part : son moteur de rendu, sa génération, son écran de chargement. Le relais les montre toutes à la suite, sans écran de chargement entre deux jours : un jour joue sa boucle, puis laisse la place au suivant par un passage qui reprend le geste de la scène qui arrive. Charger les vingt-trois scènes ensemble demanderait plus de six gigaoctets de mémoire vidéo ; cette page explique comment le relais s'en dispense.</p>
       <p class="prereq">Pour suivre, il suffit de savoir ce qu'est une boucle d'animation (une fonction appelée à chaque image). Les chiffres viennent de mesures faites sur le relais lui-même, sur un Mac de bureau, dans une fenêtre de 1 185 × 1 019 points. Les détails d'implémentation sont rangés dans les encadrés « Pour aller plus loin ».</p>
     </header>
 
@@ -43,7 +43,7 @@
 
     <article>
       <section id="relais">
-        <h2><span class="n">01</span>Ce que l'on veut voir</h2>
+        <h2><span class="n">01</span>Le comportement attendu</h2>
         <span class="src">mega/src/main.js · DAYS</span>
         <p>Les vingt-trois scènes se suivent dans l'ordre du calendrier, de Fold (jour 1) à Magma (jour 23), puis on revient à Fold. Le passage d'un jour à l'autre ne dépend que du jour qui arrive : l'ordre peut changer sans retoucher les passages.</p>
         <p>Chaque jour joue sa boucle au moins une fois. À la fin de la boucle, un <b>passage</b> de quelques secondes mêle l'image qui s'en va et celle qui arrive. Pendant tout ce temps, aucun écran de chargement : le jour suivant doit être prêt quand le passage commence.</p>
@@ -51,7 +51,7 @@
       </section>
 
       <section id="memoire">
-        <h2><span class="n">02</span>Tout charger d'un coup ne tient pas</h2>
+        <h2><span class="n">02</span>La mémoire nécessaire pour tout charger</h2>
         <span class="src">mesures : chaque scène chargée seule, 1 280 × 720</span>
         <p>La première idée est la plus simple : charger les vingt-trois scènes au démarrage, puis passer de l'une à l'autre. On a mesuré ce que chaque scène occupe une fois prête, dans sa propre page. Deux mémoires comptent :</p>
         <ul>
@@ -63,17 +63,17 @@
         <p>Aucune scène n'a besoin de la mémoire des autres pendant qu'elle joue. Il suffit donc d'en avoir deux à la fois : celle que l'on regarde et celle qui vient ensuite. Le pire couple de voisins, Membrane et Caustic, tient en 898 Mo de mémoire vidéo à la taille des pages ; dans le relais, qui dessine plus grand (1 777 × 1 528 pixels), le pire moment mesuré est de 1,5 Go.</p>
         <div class="note try"><b>À essayer</b><ul>
           <li>Montez le curseur à 23 : la barre atteint 6,2 Go de mémoire vidéo.</li>
-          <li>Activez « Le relais » : la barre ne dépasse plus le pire couple, quel que soit le nombre de scènes. Quel couple est le plus lourd ?</li>
+          <li>Activez « Le relais » : la barre ne dépasse plus le pire couple, quel que soit le nombre de scènes. Relevez quel est le couple le plus lourd.</li>
         </ul></div>
       </section>
 
       <section id="flux">
-        <h2><span class="n">03</span>Un jour joue, le suivant se prépare</h2>
+        <h2><span class="n">03</span>Préparer le jour suivant pendant que le jour courant joue</h2>
         <span class="src">mega/src/main.js · load(), tick() · mega/src/kit.js · prepare()</span>
         <p>Une scène met entre 2 et 34 secondes à se préparer (générer sa géométrie, compiler ses programmes, rendre ses premières images). Si l'on attendait la fin d'un jour pour préparer le suivant, chaque passage serait remplacé par un écran noir de plusieurs secondes.</p>
         <p>La règle est donc de préparer le jour suivant <b>pendant</b> que le jour courant joue sa boucle. Dès qu'un jour commence à jouer, on crée le suivant ; ses calculs tournent en arrière-plan, et il dessine ses premières images dans une image à part, que personne ne voit. Quand la boucle du jour courant se termine, le suivant est prêt, et le passage peut commencer.</p>
-        <p>Le menu « jours », en bas à droite du relais, change seulement le jour suivant : celui qui se préparait est libéré, le jour choisi se prépare à sa place, et l'ordre reprend après lui. La mémoire reste celle de deux jours : un chargement dépassé par un autre choix est libéré dès qu'il arrive.</p>
-        <p>Il reste un cas : un jour suivant plus long à préparer que la boucle du jour courant. On ne coupe pas la boucle en cours de route. Le jour courant fait simplement <b>un tour de plus</b>, et le passage attend la fin de ce tour.</p>
+        <p>Le menu « jours », en bas à droite du relais, change seulement le jour suivant : celui qui se préparait est libéré, le jour choisi se prépare à sa place, et l'ordre reprend après lui. La mémoire reste celle de deux jours : si l'on change de choix pendant qu'un jour se prépare, ce chargement devenu inutile est libéré dès qu'il se termine.</p>
+        <p>Il reste un cas : un jour suivant plus long à préparer que la boucle du jour courant. On ne coupe pas la boucle en cours de route. Le jour courant fait <b>un tour de plus</b>, et le passage attend la fin de ce tour.</p>
         <figure id="fig-flux"><figcaption><b>Le relais sur une ligne de temps.</b> En haut, ce que l'on voit : chaque bloc est une boucle d'un jour (ses vraies durées), le gris est un écran de chargement. En bas, la préparation de chaque jour (ses vrais temps, mesurés dans le relais). « À la suite » prépare chaque jour après la fin du précédent ; « En relais » le prépare pendant que le précédent joue. Le curseur ralentit la machine en multipliant tous les temps de préparation.</figcaption></figure>
 <pre><code>// à chaque image (mega/src/main.js, simplifié)
 cur.u += dt / cur.duration;                       // la boucle du jour courant avance
@@ -84,13 +84,13 @@ if (!trans &amp;&amp; cur.u >= cur.end - T / cur.duration) {
         <p><code>cur.u</code> est la phase de la boucle : elle vaut 0 au début, 1 à la fin du premier tour, 2 à la fin du second. <code>T</code> est la durée du passage (5 secondes). Le passage commence <code>T</code> secondes avant la fin du tour, de sorte qu'il se termine exactement à la fin de la boucle.</p>
         <div class="note try"><b>À essayer</b><ul>
           <li>Comparez « À la suite » et « En relais » : le gris disparaît presque entièrement.</li>
-          <li>En relais, au rythme normal, deux jours font déjà un tour de plus : Pendulum et Echo, dont les boucles (12 s et 11 s, moins les 5 s du passage) sont plus courtes que la préparation du jour suivant. Montez le ralentissement à × 3 : ce sont toujours les jours qui suivent une boucle courte, ou qui précèdent un jour long à préparer.</li>
+          <li>En relais, au rythme normal, deux jours font déjà un tour de plus : Pendulum et Echo, dont les boucles (12 s et 11 s, moins les 5 s du passage) sont plus courtes que la préparation du jour suivant. Montez le ralentissement à × 3 : les jours qui font un tour de plus sont toujours ceux dont la boucle est courte ou dont le suivant est long à préparer.</li>
         </ul></div>
-        <div class="note trap"><b>Le piège : sauter dans la boucle</b><p>Une première version, pour passer plus vite au jour suivant, faisait sauter la phase du jour courant à la fin de sa boucle. Pour Melt, c'était une erreur : sa cire est simulée pas à pas (une méthode particulaire, MPM), et après un saut, la simulation rattrape le temps perdu, jusqu'à 48 pas par image. Plus l'image est longue, plus il y a de pas à rattraper, et l'image suivante est plus longue encore : le passage tombait à 4 images par seconde. Le relais ne fait donc jamais sauter la phase d'un jour. La touche → (ou le bouton du jour suivant, en bas à droite) demande le passage tout de suite, depuis l'endroit où en est la boucle.</p></div>
+        <div class="note trap"><b>Pourquoi la phase ne saute jamais</b><p>Faire sauter la phase du jour courant à la fin de sa boucle pour passer plus vite au jour suivant poserait problème pour Melt : sa cire est simulée pas à pas (une méthode particulaire, MPM), et après un saut, la simulation rattrape le temps perdu, jusqu'à 48 pas par image. Plus l'image est longue, plus il y a de pas à rattraper, et l'image suivante est plus longue encore : le passage tomberait à 4 images par seconde. Le relais ne fait donc jamais sauter la phase d'un jour. La touche → (ou le bouton du jour suivant, en bas à droite) demande le passage tout de suite, depuis l'endroit où en est la boucle.</p></div>
       </section>
 
       <section id="budget-image">
-        <h2><span class="n">04</span>Préparer sans voler d'images</h2>
+        <h2><span class="n">04</span>Préparer sans ralentir l'image</h2>
         <span class="src">shared/app/warmup.js · warmScene · mega/src/kit.js · melt/src/gen/shape.js</span>
         <p>Préparer un jour en arrière-plan ne suffit pas s'il prend le temps du jour qui joue. Le navigateur n'a qu'un fil d'exécution principal (le <i>fil principal</i>), qui doit calculer chaque image en moins de 16,7 ms pour tenir 60 images par seconde. Si la préparation occupe ce fil une demi-seconde d'un bloc, l'image du jour courant se fige une demi-seconde.</p>
         <p>Dans sa propre page, une scène se prépare derrière un écran de chargement : elle peut prendre le fil principal par paquets de 100 ms sans que personne ne le voie. Dans le relais, le même paquet fige le jour qui joue. Trois corrections ont été nécessaires :</p>
@@ -102,13 +102,13 @@ if (!trans &amp;&amp; cur.u >= cur.end - T / cur.duration) {
         <figure id="fig-image"><figcaption><b>Quatre secondes de relais, image par image.</b> Chaque barre est le temps d'une image ; la ligne verte marque 16,7 ms (60 images par seconde). Le jour qui joue coûte 12 ms par image. Pendant ce temps, le jour suivant doit construire 612 ms d'objets (la mesure du premier dessin de Melt) et, selon le réglage, calculer ses figurines sur le fil principal (1,1 + 1,3 s, mesurées).</figcaption></figure>
         <div class="note try"><b>À essayer</b><ul>
           <li>Avec un budget de 100 ms, la préparation se termine vite, mais six images durent plus de 50 ms (la pire, 116 ms) : on voit l'image se figer. Passez à 6 ms : plus aucune image ne dépasse 18 ms, et la préparation prend 2 s au lieu de 0,8 s.</li>
-          <li>Remettez les figurines sur le fil principal : deux images d'une seconde apparaissent, quel que soit le budget. C'était le ralentissement visible au début de Shatter.</li>
+          <li>Remettez les figurines sur le fil principal : deux images d'une seconde apparaissent, quel que soit le budget. C'est le ralentissement que l'on voyait au début de Shatter, pendant que Melt se préparait derrière lui.</li>
         </ul></div>
-        <div class="note trap"><b>Le piège : le studio à moitié préfiltré</b><p>Une scène éclairée par un studio (une image panoramique qui sert de ciel et de reflet) le <i>préfiltre</i> au chargement : la carte graphique en calcule des versions floues, une par degré de rugosité des surfaces, en dessinant dans une suite de petites images. Pour le découpage par budget, chacune de ces petites images était un objet « nouveau ». Avec 6 ms par dessin, une partie du préfiltrage était sautée, et le studio restait faux pour toute la durée du jour. Sur Bolt, la tasse et la table sortaient brûlées. La préparation refait maintenant le préfiltrage une dernière fois, sans découpage.</p>
-          <figure class="pair"><img src="docs/bolt-page.jpg" alt="Bolt dans sa page : une tasse sur une table sombre, sous un nuage." width="800" height="577"><img src="docs/bolt-brule.jpg" alt="Bolt dans le relais avant la correction : la table et la tasse sont blanches, brûlées." width="800" height="577"><figcaption>Bolt à la même phase : dans sa page (à gauche, luminosité moyenne 35 sur 255), et dans le relais avant la correction, préparé derrière Melt (à droite, 104 sur 255).</figcaption></figure></div>
+        <div class="note trap"><b>Le studio à moitié préfiltré</b><p>Une scène éclairée par un studio (une image panoramique qui sert de ciel et de reflet) le <i>préfiltre</i> au chargement : la carte graphique en calcule des versions floues, une par degré de rugosité des surfaces, en dessinant dans une suite de petites images. Pour le découpage par budget, chacune de ces petites images est un objet « nouveau ». Avec 6 ms par dessin, une partie du préfiltrage serait sautée, et le studio resterait faux pour toute la durée du jour : sur Bolt, la tasse et la table sortiraient brûlées. La préparation refait donc le préfiltrage une dernière fois, sans découpage.</p>
+          <figure class="pair"><img src="docs/bolt-page.jpg" alt="Bolt dans sa page : une tasse sur une table sombre, sous un nuage." width="800" height="577"><img src="docs/bolt-brule.jpg" alt="Bolt dans le relais avec un préfiltrage incomplet : la table et la tasse sont blanches, brûlées." width="800" height="577"><figcaption>Bolt à la même phase : dans sa page (à gauche, luminosité moyenne 35 sur 255), et dans le relais avec un préfiltrage incomplet, préparé derrière Melt (à droite, 104 sur 255).</figcaption></figure></div>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
           <p>Le découpage tient à deux remplacements faits pendant la préparation (<code>shared/app/warmup.js</code>). La création des programmes de la carte graphique devient asynchrone : tant qu'un programme n'est pas prêt, l'objet est sauté. Et la fonction qui dessine un objet vérifie d'abord si cet objet a déjà été construit pour ce matériau et cette passe ; sinon, et si le budget de l'image est dépassé, elle le saute. Le relais coupe ces deux remplacements le temps de dessiner le jour qui joue, pour qu'aucun de ses objets ne soit sauté.</p>
-          <p>Pour Erosion, attendre que la carte graphique ait fini un lot avant d'envoyer le suivant (<code>onSubmittedWorkDone</code>) revenait à attendre aussi le dessin du jour qui joue : moins de trois lots par seconde, une préparation de 130 s. Avec un rythme, le lot suivant attend seulement l'image suivante, puisque la file de la carte graphique exécute déjà les travaux dans l'ordre. Erosion est prête en 11 s derrière Pendulum ; comme la boucle de Pendulum ne dure que 12 s, Pendulum fait un tour de plus avant le passage.</p>
+          <p>Pour Erosion, attendre que la carte graphique ait fini un lot avant d'envoyer le suivant (<code>onSubmittedWorkDone</code>) reviendrait à attendre aussi le dessin du jour qui joue : moins de trois lots par seconde, une préparation de 130 s. Le relais envoie donc un lot par image, sans attendre la fin du précédent, et ne perd rien : le lot suivant part à l'image suivante, et la file de la carte graphique exécute de toute façon les travaux dans l'ordre. Erosion est prête en 11 s derrière Pendulum ; comme la boucle de Pendulum ne dure que 12 s, Pendulum fait un tour de plus avant le passage.</p>
         </div></details>
       </section>
 
@@ -133,20 +133,20 @@ if (!trans &amp;&amp; cur.u >= cur.end - T / cur.duration) {
             <text class="t" x="284" y="166">Emplacement 1</text><text x="284" y="186">image demi-flottante</text>
             <text class="t" x="534" y="111">Composition</text><text x="534" y="131">→ le canvas</text>
           </svg>
-          <figcaption>Les deux emplacements du relais. Un jour dessine dans l'emplacement de sa parité dans l'ordre : celui qui joue et celui qui se prépare n'en partagent jamais un. Ces images sont déjà étalonnées (couleurs, exposition) par la chaîne de rendu de chaque jour : la composition ne fait que les copier ou les mêler.</figcaption>
+          <figcaption>Les deux emplacements du relais. Un jour dessine dans l'emplacement qui correspond à la parité de son rang dans l'ordre (pair ou impair) : deux jours voisins, celui qui joue et celui qui se prépare, n'en partagent donc jamais un. Ces images sont déjà étalonnées (couleurs, exposition) par la chaîne de rendu de chaque jour : la composition ne fait que les copier ou les mêler.</figcaption>
         </figure>
         <p>Partager un moteur, c'est aussi partager ses réglages et quelques valeurs communes aux modules. Plusieurs scènes supposaient être seules :</p>
         <ul>
-          <li><b>Le canvas.</b> Le champ de lave de Magma se dessine dans ses propres images, puis revient « au canvas » plutôt qu'à l'image d'où il venait. Dans sa page, c'est sans conséquence. Dans le relais, la suite de l'image de Magma partait dans le canvas : Magma apparaissait par éclairs au milieu de Melt pendant qu'il se préparait, et son image restait noire quand il jouait. Pendant le dessin d'un jour, le relais remplace donc « le canvas » par l'image du jour.</li>
+          <li><b>Le canvas.</b> Magma dessine son champ de lave dans ses propres images, puis rend la main en revenant « au canvas », et non à l'image dans laquelle il dessinait avant. Dans sa page, c'est sans conséquence. Dans le relais, la fin du dessin de Magma partirait donc dans le canvas : Magma apparaîtrait par éclairs au milieu du jour qui joue pendant qu'il se prépare, et son image resterait noire quand il joue. Pendant le dessin d'un jour, le relais remplace donc « le canvas » par l'image du jour.</li>
           <li><b>La phase précédente.</b> Un module commun garde la phase de l'image courante et celle de l'image précédente, pour calculer le mouvement de chaque point (le flou de mouvement, l'anticrénelage). Pendant un passage, deux jours dessinent dans la même image du relais, à deux phases différentes. Chaque jour garde donc sa propre phase précédente et la remet avant de dessiner.</li>
-          <li><b>Les réglages du moteur.</b> La chaîne de rendu de Kelp change le mappage des tons du moteur ; Fold a besoin d'ombres plus douces que les autres. Ces réglages sont rendus tels quels après chaque dessin d'un jour.</li>
+          <li><b>Les réglages du moteur.</b> La chaîne de rendu de Kelp change le mappage des tons du moteur ; Fold a besoin d'ombres plus douces que les autres. Le relais mémorise ces réglages avant chaque dessin d'un jour et les rétablit après, pour qu'ils ne déteignent pas sur les autres jours.</li>
         </ul>
       </section>
 
       <section id="liberer">
-        <h2><span class="n">06</span>Rendre la mémoire</h2>
+        <h2><span class="n">06</span>Libérer la mémoire</h2>
         <span class="src">mega/src/kit.js · installLedger(), releaseTextures()</span>
-        <p>Après un passage, le jour qui s'en va doit rendre toute sa mémoire, sinon le relais en accumule à chaque tour. La première version parcourait la scène du jour et libérait ce qu'elle y trouvait : géométries, matériaux, textures des matériaux. Il restait de 228 à 560 Mo par jour. Les objets restés en mémoire ne sont pas dans la scène : les cartes d'ombre des lumières, les images intermédiaires de la chaîne de rendu, le studio préfiltré, les textures lues seulement dans les programmes de la carte graphique, les tampons de calcul des particules de Melt.</p>
+        <p>Après un passage, le jour qui s'en va doit rendre toute sa mémoire, sinon le relais en accumule à chaque tour. Parcourir la scène du jour pour libérer ce qu'on y trouve (géométries, matériaux, textures des matériaux) ne suffit pas : il resterait de 228 à 560 Mo par jour. Les objets restés en mémoire ne sont pas dans la scène : les cartes d'ombre des lumières, les images intermédiaires de la chaîne de rendu, le studio préfiltré, les textures lues seulement dans les programmes de la carte graphique, les tampons de calcul des particules de Melt.</p>
         <p>Le relais tient donc un <b>registre</b>. Chaque fois que le moteur crée une texture ou un tampon sur la carte graphique, il regarde quel code l'a demandé : la pile des appels en cours contient le chemin du fichier, et donc le nom du projet (<code>/melt/src/…</code>). La ressource est inscrite au nom de ce projet. Quand le jour s'en va, tout ce qui est inscrit à son nom est rendu. Il reste alors 0 Mo du jour.</p>
 <pre><code>// mega/src/kit.js, simplifié
 be.createTexture = (texture, options) => {
@@ -155,7 +155,7 @@ be.createTexture = (texture, options) => {
   ledgers.get(owner).add(texture);
   return create(texture, options);
 };</code></pre>
-        <div class="note trap"><b>Le piège : rendre ce qui est à tout le monde</b><p>Le moteur crée certaines ressources une fois pour toutes les scènes, au moment où la première en a besoin : une table qui sert à l'éclairage de tous les matériaux physiques (<code>DFG_LUT</code>), l'image de travail du préfiltrage des studios. Créées pendant le dessin du premier jour, elles étaient inscrites à son nom et rendues avec lui. Le registre note maintenant aussi quels jours <i>utilisent</i> chaque ressource, et ne rend que ce qu'aucun autre jour n'a utilisé.</p></div>
+        <div class="note trap"><b>Le piège : rendre ce qui est à tout le monde</b><p>Le moteur crée certaines ressources une fois pour toutes les scènes, au moment où la première en a besoin : une table qui sert à l'éclairage de tous les matériaux physiques (<code>DFG_LUT</code>), l'image de travail du préfiltrage des studios. Créées pendant le dessin du premier jour, elles seraient inscrites à son nom et rendues avec lui. Le registre note donc aussi quels jours <i>utilisent</i> chaque ressource, et ne rend que ce qu'aucun autre jour n'a utilisé.</p></div>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
           <p>Deux cas échappent au registre. Ce qu'un jour crée directement sur la carte graphique, sans passer par le moteur (les tampons de la simulation d'Erosion, 270 Mo, et ceux des ondes de Caustic, 48 Mo), est rendu par une fonction propre au jour, appelée à sa libération. Et deux jours du même projet ne peuvent pas être en mémoire en même temps, puisque le registre ne sait pas les séparer.</p>
           <p>Mesuré sur un tour complet des vingt-trois jours : avec un seul jour chargé, la mémoire vidéo va de 270 Mo (Mirage) à 1 140 Mo (Membrane), et revient à la même valeur quand le même jour revient (Shatter : 545 Mo aux deux tours). Rien ne s'accumule.</p>
@@ -163,10 +163,10 @@ be.createTexture = (texture, options) => {
       </section>
 
       <section id="passages">
-        <h2><span class="n">07</span>Passer la main</h2>
+        <h2><span class="n">07</span>Les passages d'un jour à l'autre</h2>
         <span class="src">mega/src/transitions.js · mega/src/composite.js</span>
-        <p>Un fondu enchaîné aurait suffi pour passer d'un jour à l'autre. Mais chaque scène raconte un geste : la lave qui se fend, la vague qui monte, l'onde qui converge vers un point. On entre donc dans un jour par ce qui s'y passe. Chaque jour déclare son passage d'entrée (<code>meta.enter</code>), et la composition l'applique pendant les cinq secondes du passage.</p>
-        <p>Un passage est une fonction qui, pour chaque pixel, décide quelle image montrer. On lui donne l'avancée du passage <i>p</i>, de 0 (tout le jour qui s'en va) à 1 (tout le jour qui arrive). La plupart des passages suivent le même schéma : chaque pixel reçoit un <b>ordre d'ouverture</b> entre 0 (s'ouvre d'abord) et 1 (s'ouvre en dernier), et un front qui avance avec <i>p</i> ouvre les pixels dont l'ordre est dépassé. Tout le caractère du passage est dans cet ordre : la distance à une fissure pour la lave, la hauteur dans l'image pour la vague, la distance au centre pour les ondes.</p>
+        <p>Un fondu enchaîné suffirait pour passer d'un jour à l'autre. Or chaque scène a un geste propre : la lave qui se fend, la vague qui monte, l'onde qui converge vers un point. On entre donc dans un jour par ce qui s'y passe. Chaque jour déclare son passage d'entrée (<code>meta.enter</code>), et la composition l'applique pendant les cinq secondes du passage.</p>
+        <p>Un passage est une fonction qui, pour chaque pixel, décide quelle image montrer. On lui donne l'avancée du passage <i>p</i>, de 0 (tout le jour qui s'en va) à 1 (tout le jour qui arrive). La plupart des passages suivent le même schéma : chaque pixel reçoit un <b>ordre d'ouverture</b> entre 0 (s'ouvre d'abord) et 1 (s'ouvre en dernier), et un front qui avance avec <i>p</i> ouvre les pixels dont l'ordre est dépassé. Le passage est défini par cet ordre : la distance à une fissure pour la lave, la hauteur dans l'image pour la vague, la distance au centre pour les ondes.</p>
         <div class="eq">\[ m = \operatorname{smoothstep}\big(o - w,\; o + w,\; p\,(1 + 2w) - w\big) \]</div>
         <p><i>m</i> est la part de l'image qui arrive dans le pixel, <i>o</i> son ordre d'ouverture et <i>w</i> la largeur du front (de 0,03 à 0,07). Le facteur (1 + 2<i>w</i>) garantit que tout est fermé à <i>p</i> = 0 et tout ouvert à <i>p</i> = 1. Le liseré, qui donne sa couleur au front (incandescent pour la lave, écume pour la vague), vaut (4<i>m</i>(1 − <i>m</i>))<sup>1,5</sup> : il est nul loin du front et maximal dessus.</p>
         <figure id="fig-passage"><figcaption><b>Cinq passages, recalculés dans cette page.</b> Les images sont les vignettes de l'accueil. Le calcul est une traduction en JavaScript, à basse résolution, des fonctions du relais (qui tournent sur la carte graphique). Choisissez le jour qui arrive ; le curseur fige l'avancée du passage.</figcaption></figure>
@@ -174,19 +174,19 @@ be.createTexture = (texture, options) => {
           <li>Figez « → Magma » vers 0,3 : les fissures rougeoient avant de s'ouvrir. L'ordre d'ouverture suit la distance au bord des cellules.</li>
           <li>Comparez « → Caustic » et « → Echo » : tous deux ouvrent en cercle, mais l'onde vient des bords vers le centre (le foyer des ondes de Caustic), l'éclair part d'un point vers les bords (la lampe d'Echo).</li>
         </ul></div>
-        <div class="note trap"><b>Le piège : la première image noire</b><p>La composition lisait d'abord l'image de chaque jour par un nœud de texture dont on changeait la valeur à chaque passage. Le moteur ne relit cette valeur qu'à l'image suivante : la première image de chaque passage était entièrement noire (luminosité 0, mesurée sur le canvas). La composition lit maintenant toujours les deux mêmes emplacements, et un seul nombre dit lequel tient le jour qui s'en va.</p></div>
+        <div class="note trap"><b>Pourquoi deux emplacements fixes</b><p>Lire l'image de chaque jour par un nœud de texture dont on changerait la valeur à chaque passage ne marcherait pas : le moteur ne relit cette valeur qu'à l'image suivante, et la première image de chaque passage serait entièrement noire. La composition lit donc toujours les deux mêmes emplacements, et un seul nombre indique lequel des deux contient le jour qui s'en va.</p></div>
       </section>
 
       <section id="source">
         <h2><span class="n">08</span>Une seule source pour la page et le relais</h2>
         <span class="src">&lt;projet&gt;/src/core.js · main.js · day.js</span>
-        <p>Le relais doit montrer chaque jour exactement comme sa page. La première version recopiait, pour chaque jour, le rendu d'une phase de la page : la caméra, la lumière, le brouillard, la mise au point. Une retouche de la page n'aurait pas atteint le relais. Chaque projet a donc trois modules :</p>
+        <p>Le relais doit montrer chaque jour exactement comme sa page. Recopier pour chaque jour le rendu d'une phase de la page (la caméra, la lumière, le brouillard, la mise au point) ne suffirait pas : une retouche de la page n'atteindrait pas le relais. Chaque projet a donc trois modules :</p>
         <ul>
           <li><code>core.js</code>, le <b>cœur</b> : la scène, l'application de la recette, le rendu d'une phase ;</li>
           <li><code>main.js</code>, la page : l'écran de chargement, le panneau de réglages, l'adresse, l'export vidéo, la caméra libre ;</li>
           <li><code>day.js</code>, le jour du relais : les réglages par défaut, la graine d'ouverture de la page, le passage d'entrée.</li>
         </ul>
-        <p>La page et le relais appellent la même fonction <code>renderAt</code> du cœur. Le relais lui passe en plus l'avancée de la caméra pendant un passage (<code>push</code>) ; la page, la caméra libre et les décalages du rendu accumulé.</p>
+        <p>La page et le relais appellent la même fonction <code>renderAt</code> du cœur. Le relais lui passe en plus l'avancée de la caméra pendant un passage (<code>push</code>) ; la page lui passe, elle, la caméra libre et les décalages du rendu accumulé (plusieurs rendus décalés puis moyennés, pour l'export).</p>
 <pre><code>// melt/src/day.js
 export async function createDay({ renderer, pipes, width, height, seed = meta.seed }) {
   const gen = generatorFor('melt', workers);
@@ -198,16 +198,15 @@ export async function createDay({ renderer, pipes, width, height, seed = meta.se
     duration: core.duration, isReady: core.isReady, progress: core.progress, warmPhases: core.warmPhases,
     renderAt: (u, { push = 0 } = {}) => core.renderAt(u, { push }) });
 }</code></pre>
-        <p>Passer les vingt-trois pages par leur cœur ne devait rien changer à leur image. Chacune a été rendue avant et après, à trois phases, par l'outil de non-régression du dépôt (<code>tools/regress.html</code>), qui compare l'écart au bruit propre de chaque scène (deux rendus du même code ne sont pas identiques au pixel près, à cause du grain et des particules). Les 69 images sont restées dans ce bruit.</p>
         <div class="note check"><b>Ce que vérifie le dépôt</b><p><code>npm run check</code> refuse un projet sans <code>core.js</code> ou sans <code>day.js</code>, une page ou un jour qui n'importe pas le cœur, une graine du relais différente de celle de la page, un passage d'entrée inconnu, un jour de l'ordre qui n'existe pas. La skill qui fabrique les nouvelles scènes pose ces trois modules dès l'échafaudage.</p></div>
       </section>
 
       <section id="verifier">
         <h2><span class="n">09</span>Vérifier que le relais est la page</h2>
         <span class="src">tools/relay-check.html</span>
-        <p>Les défauts de cette page ont tous été trouvés en comparant une image du relais à la même image dans la page du projet : la tasse brûlée, l'écran noir, la première image noire. L'outil <code>tools/relay-check.html</code> refait cette comparaison pour chaque jour, dans les conditions du relais : le jour est préparé en arrière-plan, derrière le jour qui le précède, puis rendu à la même taille et à la même phase que sa page. Les deux images sont moyennées par blocs de 8 × 8 pixels, pour effacer le grain, puis comparées. Vingt-deux jours restent sous le seuil de 1,5. Membrane le dépasse (2,8 et 3,2) : sa simulation dépend de son histoire, qui n'est pas exactement la même quand le jour se prépare par petits paquets derrière un autre ; la teinte et l'exposition, elles, ne changent pas.</p>
+        <p>L'outil <code>tools/relay-check.html</code> compare, pour chaque jour, une image du relais à la même image dans la page du projet, dans les conditions du relais : le jour est préparé en arrière-plan, derrière le jour qui le précède, puis rendu à la même taille et à la même phase que sa page. Les deux images sont moyennées par blocs de 8 × 8 pixels, pour effacer le grain, puis comparées. Vingt-deux jours restent sous le seuil de 1,5. Membrane le dépasse (2,8 et 3,2) : sa simulation dépend de son histoire, qui n'est pas exactement la même quand le jour se prépare par petits paquets derrière un autre ; la teinte et l'exposition, elles, ne changent pas.</p>
         <figure id="fig-ecarts"><figcaption><b>Écart entre chaque jour du relais et sa page.</b> Écart moyen sur 255, à deux phases de la boucle (0,1 et 0,45). La ligne marque le seuil de 1,5, au-delà duquel une teinte ou une exposition commence à changer.</figcaption></figure>
-        <div class="note"><b>Mesurer sans voir</b><p>Les mesures se font dans un panneau de navigateur intégré à l'outil de développement. Quand ce panneau est masqué, le navigateur ralentit la page et ses captures d'écran restent périmées : les temps mesurés deviennent faux, et ce qu'on croit voir est une image ancienne. Les outils du relais ont donc leur propre boucle manuelle (<code>run()</code>), et relisent les images sur la carte graphique pour les envoyer à un petit serveur local qui les enregistre.</p></div>
+        <div class="note"><b>Mesurer avec un panneau masqué</b><p>Les mesures se font dans un panneau de navigateur intégré à l'outil de développement. Quand ce panneau est masqué, le navigateur ralentit la page et ses captures d'écran restent périmées : les temps mesurés deviennent faux, et ce qu'on croit voir est une image ancienne. Les outils du relais ont donc leur propre boucle manuelle (<code>run()</code>), et relisent les images sur la carte graphique pour les envoyer à un petit serveur local qui les enregistre.</p></div>
       </section>
 
       <section id="budget">

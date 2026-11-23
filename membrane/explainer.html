@@ -23,7 +23,7 @@
   <main>
     <header class="hero">
       <div class="kicker">Day 09 · Membrane · comment ça marche</div>
-      <h1>Comment une membrane se déchire, encore et encore</h1>
+      <h1>Comment simuler une membrane qui se déchire en boucle</h1>
       <p class="lede">Dans Membrane, un objet dort dans une enveloppe translucide. Son armature se déploie, pousse la membrane, recule et pousse encore, jusqu'à ce que la membrane cède. Les bords de la déchirure s'enroulent, des filaments se tendent puis claquent, et la caméra entre par l'ouverture vers l'œuf suivant, qui s'ouvrira à son tour. Aucune déchirure n'est animée à la main : chacune est simulée sur la carte graphique pendant le chargement, puis relue image par image. Cette page reconstruit cette simulation à partir de l'idée la plus simple, des points reliés par des liens.</p>
       <p class="prereq">Pour suivre, il suffit de savoir lire un peu de JavaScript. Les formules résument ce que les démos montrent ; on peut les sauter sans perdre le fil. Les détails de production sont rangés dans les encadrés « Pour aller plus loin ».</p>
     </header>
@@ -39,7 +39,7 @@
 
       <section id="scene">
         <h2><span class="n">01</span>Ce que montre la scène</h2>
-        <p>La scène est une suite d'enveloppes emboîtées, comme des poupées russes. Chaque couche contient une armature repliée (des lames, une cage, des épingles selon le modèle) et, au centre, la couche suivante, deux fois plus petite. Quand vient son tour, l'armature s'ouvre et déchire la membrane, et la caméra avance vers la couche suivante. La boucle ne s'arrête jamais.</p>
+        <p>La scène est une suite d'enveloppes emboîtées les unes dans les autres. Chaque couche contient une armature repliée (des lames, une cage, des épingles selon le modèle) et, au centre, la couche suivante, deux fois plus petite. Quand vient son tour, l'armature s'ouvre et déchire la membrane, et la caméra avance vers la couche suivante. La boucle se répète sans fin.</p>
         <p>Il faut résoudre trois problèmes pour obtenir cela :</p>
         <ul>
           <li><b>simuler une matière qui se déchire</b> : une membrane mince, presque inextensible, sous pression, poussée par une armature, qui cède le long de coupures crédibles (sections 02 à 05) ;</li>
@@ -59,7 +59,7 @@
         <p>Avec un ressort mou, la chaîne pend et s'étire nettement sous son propre poids, comme un élastique. Une membrane doit s'étirer bien moins que cela, donc il faut des ressorts raides. Or un ressort raide oscille très vite. Si le pas de temps de la simulation dure plus qu'une petite fraction de cette oscillation, chaque pas corrige trop, le pas suivant corrige trop dans l'autre sens, et la simulation diverge. Dans la démo, à 60 images par seconde et deux pas par image, cela arrive vers 150 N/m. Pour aller au-delà, il faudrait réduire le pas de temps en proportion de la raideur.</p>
 
         <h3>Deuxième idée : corriger directement les positions</h3>
-        <p>La <b>dynamique par positions</b> (Müller et ses collègues, 2007) renverse le raisonnement. On fait d'abord avancer chaque particule librement, sous la gravité et avec sa vitesse, sans tenir compte des liens. Puis, pour chaque lien trop long ou trop court, on déplace directement ses deux particules pour lui rendre sa longueur. La vitesse se déduit ensuite du déplacement total pendant le pas. Une correction de position ne peut pas « trop corriger » comme une force : au pire, le lien retrouve exactement sa longueur.</p>
+        <p>La <b>dynamique par positions</b> (Müller et ses collègues, 2007) inverse l'ordre du calcul. On fait d'abord avancer chaque particule librement, sous la gravité et avec sa vitesse, sans tenir compte des liens. Puis, pour chaque lien trop long ou trop court, on déplace directement ses deux particules pour lui rendre sa longueur. La vitesse se déduit ensuite du déplacement total pendant le pas. Une correction de position ne peut pas « trop corriger » comme une force : au pire, le lien retrouve exactement sa longueur.</p>
         <p>Cette méthode a d'abord eu un défaut : la raideur obtenue dépendait du nombre de corrections par pas, pas du matériau. Sa version étendue, <b>XPBD</b> (Macklin, Müller et Chentanez, 2016), y ajoute une souplesse α = 1/<i>k</i>. Une contrainte souple n'est corrigée qu'en partie à chaque pas, et la partie corrigée correspond exactement à ce que ferait un ressort de raideur <i>k</i>. Pour un lien de longueur au repos <i>L</i> entre deux particules <i>i</i> et <i>j</i> :</p>
         <div class="eq">\[ C = |x_j - x_i| - L, \qquad \Delta\lambda = \frac{-C - \tilde\alpha\,\lambda}{w_i + w_j + \tilde\alpha}, \qquad \tilde\alpha = \frac{\alpha}{\Delta t^2} \]</div>
         <p><i>C</i> est l'erreur de longueur. <i>w</i> = 1/<i>m</i> est l'inverse de la masse, nul pour une particule fixée. λ accumule la correction déjà appliquée pendant le pas. On déplace ensuite <i>x</i><sub>j</sub> de <i>w</i><sub>j</sub> Δλ le long du lien, et <i>x</i><sub>i</sub> de la même quantité pondérée par <i>w</i><sub>i</sub> dans l'autre sens. Si α vaut zéro, le lien est rigide ; s'il est grand, la correction devient faible et le lien s'allonge comme un ressort mou.</p>
@@ -90,7 +90,7 @@ for (const p of particules) p.v = (p.x - p.avant) / dt;   // la vitesse vient du
         <h2><span class="n">03</span>Corriger toutes les particules à la fois</h2>
         <span class="src">src/scene/gpusim.js · solveOne()</span>
         <p>Dans la démo de la chaîne, les liens sont corrigés l'un après l'autre, et chaque correction part des positions déjà corrigées par la précédente (la méthode de <b>Gauss-Seidel</b>). Avec 20 000 particules, on veut au contraire les traiter toutes en même temps sur la carte graphique, qui fait tourner des milliers de calculs en parallèle. Mais deux calculs qui corrigent deux liens partageant une particule voudraient la déplacer au même moment.</p>
-        <p>Les solutions habituelles sont de répartir les liens en groupes qui ne partagent aucune particule (la coloration du graphe), ou d'additionner les corrections avec des opérations atomiques, dont l'ordre varie d'une exécution à l'autre. Membrane fait plus simple : un calcul par particule. Chaque calcul parcourt la liste des liens de sa particule, calcule toutes les corrections à partir des positions du début de la passe, et écrit le résultat dans une copie. C'est la méthode de <b>Jacobi</b>. Elle n'a besoin ni de coloration ni d'atomiques, et donne le même résultat sur toutes les machines.</p>
+        <p>Les solutions habituelles sont de répartir les liens en groupes qui ne partagent aucune particule (la coloration du graphe), ou d'additionner les corrections avec des opérations atomiques, dont l'ordre varie d'une exécution à l'autre. Membrane procède plus simplement : un calcul par particule. Chaque calcul parcourt la liste des liens de sa particule, calcule toutes les corrections à partir des positions du début de la passe, et écrit le résultat dans une copie. C'est la méthode de <b>Jacobi</b>. Elle n'a besoin ni de coloration ni d'atomiques, et donne le même résultat sur toutes les machines.</p>
 
         <h3>Le problème : additionner les corrections</h3>
         <p>Une particule de la membrane est touchée par une dizaine de contraintes. Chacune calcule de son côté le déplacement qui la satisferait, sans savoir que les autres visent souvent le même écart. Si on additionne ces déplacements, la particule va environ dix fois trop loin. On peut compenser par un facteur de réduction ω, mais le bon facteur dépend du nombre de contraintes par particule : il change dès qu'on ajoute un type de contrainte, ou quand des coutures cèdent pendant la déchirure.</p>
@@ -131,16 +131,16 @@ major[t] = floor(s / ((2 * PI) / P.n)) % P.n;     // numéro du lambeau du trian
           <figcaption><b>Dans la scène, avant et après le lissage.</b> En haut, une gélatine : les bords en dents de scie deviennent des courbes. En bas, une membrane veinée : les lèvres enroulées suivent un tracé continu, et l'irrégularité à grande échelle est conservée.</figcaption>
         </figure>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
-          <p>Les autres armatures ont leur propre découpage : pour la couronne, une perforation en étoile autour de chaque tête d'épingle, prolongée par une cellule de Voronoï ; pour la cage, chaque face se fend de son centre vers ses sommets. Un second réseau de coutures, plus fin et plus résistant (60 sites au plus), greffe des embranchements près des coupures principales. Les petits îlots d'un seul triangle, isolés au milieu d'un autre lambeau, sont absorbés par leurs voisins.</p>
+          <p>Les autres armatures ont leur propre découpage : pour la couronne, une perforation en étoile autour de chaque tête d'épingle, prolongée par une cellule de Voronoï ; pour la cage, chaque face se fend de son centre vers ses sommets. Un second réseau de coutures, plus fin et plus résistant (60 points de départ au plus), greffe des embranchements près des coupures principales. Les petits îlots d'un seul triangle, isolés au milieu d'un autre lambeau, sont absorbés par leurs voisins.</p>
         </div></details>
       </section>
 
       <section id="rupture">
-        <h2><span class="n">05</span>La membrane encaisse avant de céder</h2>
+        <h2><span class="n">05</span>Les assauts de l'armature et le seuil de rupture</h2>
         <span class="src">src/gen/kin.js · struggle() · src/scene/gpusim.js · bondsK()</span>
-        <p>Une membrane qui cède au premier contact fait penser à un ballon qui éclate : on n'y voit ni la résistance de la matière, ni l'effort de ce qui pousse. Dans la scène, l'armature mène donc de deux à quatre assauts de plus en plus forts avant de s'ouvrir : elle pousse, recule, pousse encore.</p>
+        <p>Une membrane qui cède au premier contact ressemble à un ballon qui éclate : on ne voit ni la résistance de la matière, ni l'effort de ce qui pousse. Dans la scène, l'armature mène donc de deux à quatre assauts de plus en plus forts avant de s'ouvrir : elle pousse, recule, pousse encore.</p>
 
-        <h3>Les assauts de l'armature</h3>
+        <h3>Les assauts</h3>
         <p>Le déploiement de l'armature est décrit par un nombre <i>u</i> qui va de 0 (repliée) à 1 (ouverte). Une fraction <i>f</i> de ce déploiement, entre 0,5 et 0,62, est réservée aux assauts. Pendant cette fraction, l'ouverture réelle ne suit pas <i>u</i> : elle monte et redescend <i>n</i> fois, chaque fois un peu plus haut. L'ouverture finale occupe le reste du déploiement.</p>
         <div class="eq">\[ u' = a\left(0{,}45 + 0{,}55\,\frac{k+1}{n}\right)\sin^2(\pi v), \qquad w = \frac{u}{f}\,n,\quad k = \lfloor w \rfloor,\quad v = w - k \]</div>
         <p><i>a</i> est la force des assauts et <i>n</i> leur nombre ; <i>k</i> est le numéro de l'assaut en cours et <i>v</i> la progression dans cet assaut, de 0 à 1. Le facteur entre parenthèses fait croître la force d'un assaut au suivant, et le sinus au carré fait partir et revenir chaque assaut à vitesse nulle. La même fonction est écrite trois fois à l'identique : pour le mouvement de l'armature, pour son dessin, et pour la simulation. La membrane heurte donc exactement l'armature que l'on voit.</p>
@@ -152,7 +152,7 @@ major[t] = floor(s / ((2 * PI) / P.n)) % P.n;     // numéro du lambeau du trian
           <li><b>gardé</b> : le seuil est relevé de 70 % (la <i>garde</i>), puis cette marge disparaît progressivement à la fin des assauts ;</li>
           <li><b>facilité</b> : après les assauts, le seuil baisse progressivement, jusqu'à 85 % de moins (la <i>fatigue</i>), et la poussée finale ouvre la membrane.</li>
         </ul>
-        <p>Après la première rupture, l'air enfermé s'échappe et la pression décroît exponentiellement. Un dégrafage parti de l'avant propage ensuite la rupture le long des coutures, du pôle vers l'arrière.</p>
+        <p>Après la première rupture, l'air enfermé s'échappe et la pression décroît exponentiellement. Ensuite, un « dégrafage » fait avancer la rupture le long des coutures, de l'avant (le pôle) vers l'arrière : chaque couture reçoit un instant d'ouverture qui dépend de sa position.</p>
         <figure id="fig-rupture" class="wide"><figcaption><b>Une membrane en coupe, trois lames, trois coutures.</b> Un anneau de 120 particules sous pression, corrigé par la moyenne de la section 03 (ω = 1,6, 6 passes, 600 pas par seconde). Les lames suivent les assauts décrits plus haut, et les coutures (points dorés) cèdent selon les trois régimes. Les arêtes passent au rouge quand elles s'étirent. À droite, en haut, le rayon des lames ; en bas, l'étirement de la couture la plus tendue (rouge) face au seuil (doré). La démo est plane ; les lèvres ne s'y enroulent pas.</figcaption></figure>
         <div class="note try"><b>À essayer</b><ul>
           <li>Comparez 0 et 3 assauts. Sans assaut, les lames poussent une seule fois et la membrane cède dès que l'étirement d'une couture atteint son seuil. Avec trois assauts, l'étirement monte à chaque poussée pendant la zone où la rupture est interdite, et la membrane ne cède qu'à la poussée finale.</li>
@@ -190,7 +190,7 @@ return vec2u(pack2x16unorm(q.xy), pack2x16unorm(vec2f(q.z, 0.0)));</code></pre>
       </section>
 
       <section id="plongee">
-        <h2><span class="n">07</span>Une plongée sans fin</h2>
+        <h2><span class="n">07</span>Une plongée qui se répète à l'identique</h2>
         <span class="src">src/scene/nest.js · src/main.js · choreo()</span>
         <p>La caméra traverse une couche, puis la suivante, toujours vers l'avant. Pour que la boucle soit parfaite, la scène doit redevenir exactement identique à elle-même au bout d'un tour, sans fondu pour masquer le raccord.</p>
 
@@ -214,12 +214,12 @@ return vec2u(pack2x16unorm(q.xy), pack2x16unorm(vec2f(q.z, 0.0)));</code></pre>
           <li>Poussez la force vers 0,95 : la vitesse frôle zéro à la rupture sans jamais devenir négative, et la courbe τ(<i>t</i>) rejoint toujours la diagonale entre deux ruptures.</li>
         </ul></div>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
-          <p>Le centre du ralenti est réglé à la génération sur la fin moyenne des assauts de l'armature. Chaque œuf repose dans une coupe, au centre de l'armature de la couche précédente, et toutes les couches tournent à la même vitesse : leur orientation relative est fixe. Une armature qui passe derrière la caméra s'efface par un tramage, qui écarte une part croissante de ses pixels selon un motif renouvelé à chaque image, lissé ensuite par l'anticrénelage temporel (la moyenne des images successives). Son ombre s'efface avec elle. Mesurée sur une boucle entière, la luminance moyenne de l'image varie sans à-coup.</p>
+          <p>Lors de la génération de la scène, le ralenti de la caméra est centré sur l'instant moyen où les assauts de l'armature se terminent. Chaque œuf repose dans une coupe, au centre de l'armature de la couche précédente, et toutes les couches tournent à la même vitesse : leur orientation relative est fixe. Une armature qui passe derrière la caméra s'efface par un tramage, qui écarte une part croissante de ses pixels selon un motif renouvelé à chaque image, lissé ensuite par l'anticrénelage temporel (la moyenne des images successives). Son ombre s'efface avec elle. Mesurée sur une boucle entière, la luminance moyenne de l'image varie sans à-coup.</p>
         </div></details>
       </section>
 
       <section id="pn">
-        <h2><span class="n">08</span>Des lambeaux qui restent courbes</h2>
+        <h2><span class="n">08</span>Des bords arrondis : les triangles PN</h2>
         <span class="src">src/gen/tess.js · src/scene/membrane.js · pnPosition()</span>
         <p>Vingt mille particules suffisent pour le mouvement, mais pas pour le dessin. Une lèvre enroulée ne compte que cinq ou six particules sur son tour, et si on relie ces particules par des triangles plats, elle s'affiche comme un polygone.</p>
         <p>Pour le dessin, chaque triangle simulé est découpé en <i>n</i>² petits triangles (<i>n</i> = 4 pour les couches proches, soit 16 fois plus de triangles, <i>n</i> = 2 au loin). Encore faut-il placer les nouveaux sommets ailleurs que sur le triangle plat. On utilise les <b>triangles PN</b> (Vlachos et ses collègues, 2001) : sur chaque triangle, une surface courbe construite à partir des seules positions <i>P</i> et normales <i>N</i> de ses trois coins. Sur chaque arête, la courbe part de chaque coin tangente à la surface en ce coin. Ses points de contrôle sont les tiers de l'arête, ramenés dans le plan tangent de leur coin :</p>
@@ -236,7 +236,7 @@ return vec2u(pack2x16unorm(q.xy), pack2x16unorm(vec2f(q.z, 0.0)));</code></pre>
       </section>
 
       <section id="photo">
-        <h2><span class="n">09</span>La contrainte devient couleur</h2>
+        <h2><span class="n">09</span>Rendre la contrainte visible : la photoélasticité</h2>
         <span class="src">src/scene/photo.js · src/scene/gpusim.js · STRAIN</span>
         <p>Un film de plastique ou de gélatine étiré dévie la lumière différemment selon sa direction de vibration (sa polarisation) : il devient <b>biréfringent</b>. Placé entre deux filtres polarisants, il se couvre de franges colorées qui dessinent la contrainte, invisible à l'œil nu. C'est la <b>photoélasticité</b>, que les ingénieurs utilisent pour voir où une pièce travaille. Membrane calcule ces franges à partir de sa propre simulation.</p>
 
@@ -259,7 +259,7 @@ return vec2u(pack2x16unorm(q.xy), pack2x16unorm(vec2f(q.z, 0.0)));</code></pre>
         </figure>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
           <p>Le tenseur <i>E</i> est moyenné par aire autour de chaque particule, soudé à travers les coutures et lissé. Au pixel, il passe dans le repère de la vue et se projette sur le plan de l'image, ce qui donne l'écart Δ et l'axe θ. L'épaisseur <i>h</i> est amincie en 1/<i>J</i> quand la membrane s'étire et allongée quand on la voit de biais. La lame teinte sensible facultative vaut 550 nm à 45°. Les intensités sont pondérées par les fonctions colorimétriques CIE 1931 (approximation analytique de Wyman, Sloan et Shirley) et normalisées sur le blanc.</p>
-          <div class="note trap"><b>Une approximation assumée</b><p>Chaque couche est traitée comme si elle était seule entre ses deux polariseurs : les retards de couches successives ne se composent pas. Seule la lumière transmise passe entre les polariseurs ; la diffusion dépolarise, et le reflet reste blanc. Le calcul coûte environ 3 ms par image, et seulement si la lumière polarisée est allumée.</p></div>
+          <div class="note trap"><b>Une approximation</b><p>Chaque couche est traitée comme si elle était seule entre ses deux polariseurs : les retards de couches successives ne se composent pas. Seule la lumière transmise passe entre les polariseurs ; la diffusion dépolarise, et le reflet reste blanc. Le calcul coûte environ 3 ms par image, et seulement si la lumière polarisée est allumée.</p></div>
         </div></details>
       </section>
 
@@ -287,14 +287,14 @@ return vec2u(pack2x16unorm(q.xy), pack2x16unorm(vec2f(q.z, 0.0)));</code></pre>
       </section>
 
       <section id="transparence">
-        <h2><span class="n">11</span>Voir au travers</h2>
+        <h2><span class="n">11</span>La transparence de la membrane</h2>
         <span class="src">src/scene/nest.js · src/scene/membrane.js</span>
         <p>La membrane laisse voir ce qu'elle contient, en le floutant et en le teintant. La lumière qui la traverse est atténuée exponentiellement avec l'épaisseur traversée (loi de Beer-Lambert), et davantage là où passent des vaisseaux. Vue de biais, la membrane est traversée sur une plus grande épaisseur (<i>h</i> divisé par le cosinus de l'angle de vue) : ses bords paraissent plus denses que son centre, ce qui aide à distinguer la membrane de ce qu'elle enveloppe.</p>
         <p>Pour montrer ce qui est derrière une membrane, le rendu prend une copie de l'image juste avant de dessiner cette membrane, avec des versions réduites et floues de cette copie, et y lit le fond. Les couches intérieures doivent donc être déjà dessinées : l'ordre est fixé, armatures et filaments d'abord, puis les faces arrière de l'extérieur vers l'intérieur, puis les faces avant de l'intérieur vers l'extérieur. Le flou dépend de la distance entre la membrane et ce qu'on voit derrière : une lame qui touche la membrane reste nette, le lointain se dissout.</p>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
-          <p>L'épaisseur relative de la membrane vaut irrégularité × vaisseaux × fibres / <i>J</i>, et l'absorption suit celle du sang (forte dans les gros vaisseaux, faible dans les capillaires). Six à huit copies de l'image par image coûtaient cher. Quand la caméra est hors d'une couche (<i>x</i> &gt; 0,35), la face arrière de cette couche n'est vue qu'à travers sa face avant, qui floute déjà : une copie propre à la face arrière ne servirait qu'à flouter deux fois. Cette face est alors mélangée directement à l'image par la carte graphique : lumière propre + fond × transmission moyenne.</p>
+          <p>L'épaisseur relative de la membrane vaut irrégularité × vaisseaux × fibres / <i>J</i>, et l'absorption suit celle du sang (forte dans les gros vaisseaux, faible dans les capillaires). Six à huit copies de l'image par image seraient coûteuses. Quand la caméra est hors d'une couche (<i>x</i> &gt; 0,35), la face arrière de cette couche n'est vue qu'à travers sa face avant, qui floute déjà : une copie propre à la face arrière ne servirait qu'à flouter deux fois. Cette face est alors mélangée directement à l'image par la carte graphique : lumière propre + fond × transmission moyenne.</p>
           <div class="note check"><b>Un passage mesuré</b><p>Entre <i>x</i> = 0,10 et 0,35, la version avec copie perd progressivement réfraction, flou, teinte, plis et reflets, jusqu'à donner exactement l'image de la version mélangée, brume comprise. Mesuré de part et d'autre du seuil, l'écart est celui de deux images voisines. Gain : 3,5 ms par image. La version mobile applique la même idée aux faces avant lointaines (au-delà de <i>x</i> = 0,8) : sur les cartes graphiques des téléphones, qui calculent l'image par petits carreaux en mémoire rapide, chaque copie oblige à vider cette mémoire.</p></div>
-          <div class="note"><b>L'anticrénelage du reflet</b><p>Sur une normale interpolée, les variations d'un pixel à l'autre sont constantes par triangle. Un anticrénelage du reflet classique, qui élargit le reflet là où la normale varie vite, dessinerait donc les facettes dans le reflet d'une peau humide. Membrane tire la variation de la normale dans le pixel de la courbure calculée à chaque sommet, continue d'un triangle à l'autre, et de la taille du pixel à cette distance.</p></div>
+          <div class="note"><b>L'anticrénelage du reflet</b><p>Sur une normale interpolée, les variations d'un pixel à l'autre sont constantes par triangle. Un anticrénelage du reflet classique, qui élargit le reflet là où la normale varie vite, dessinerait donc les facettes dans le reflet d'une peau humide. Membrane estime donc la variation de la normale dans le pixel à partir de la courbure calculée à chaque sommet, qui est continue d'un triangle à l'autre, multipliée par la taille du pixel à cette distance.</p></div>
         </div></details>
       </section>
 

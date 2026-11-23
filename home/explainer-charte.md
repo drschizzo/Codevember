@@ -23,7 +23,7 @@ Une section explique une seule idée, dans cet ordre :
 3. **Une démo** qui applique cette règle, avec un réglage qui permet de la
    mettre en défaut.
 4. **Ce qui ne va pas**, constaté dans la démo, puis **la correction**.
-   Les échecs réels du projet (les encadrés « Le piège ») ont leur place ici.
+   Les échecs que le lecteur risque lui-même de rencontrer (les encadrés « Le piège ») ont leur place ici, formulés au présent : « sans X, on observe Y ».
 5. **La formule**, en résumé de ce qui vient d'être compris, jamais avant.
    Chaque symbole est défini juste après, avec son unité et la valeur du
    projet.
@@ -110,6 +110,14 @@ On écrit pour être compris, sans chercher l'effet.
 - les tirets cadratins en cascade ; une incise se met entre virgules ou
   entre parenthèses ;
 - les métaphores filées et les conclusions morales.
+
+## L'état actuel seulement
+
+Une page décrit le projet tel qu'il est. L'histoire de sa mise au point
+(versions successives, pistes abandonnées, bugs corrigés, mesures d'avant une
+optimisation, retours reçus) n'y figure pas. Un fait historique reste
+seulement s'il explique pourquoi le modèle actuel est fait ainsi ; il est
+alors reformulé au présent, comme une propriété du modèle.
 
 ## La justesse
 

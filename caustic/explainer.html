@@ -23,8 +23,8 @@
   <main>
     <header class="hero">
       <div class="kicker">Day 10 · Caustic · comment ça marche</div>
-      <h1>Comment une surface d'eau dessine avec la lumière</h1>
-      <p class="lede">Caustic montre un bassin au soleil. Des ondes partent des bords, se resserrent vers un point, et à l'instant où elles se rejoignent, la lumière au fond du bassin forme un dessin net : une diatomée, un oursin, une rosace. Puis le dessin se défait en anneaux qui repartent. Rien n'est peint. Chaque image est la lumière du soleil réfractée par une surface d'eau calculée pour produire ce dessin. Cette page explique comment on calcule cette surface, et comment on la fait naître d'une eau calme.</p>
+      <h1>Comment une surface d'eau produit un dessin de lumière</h1>
+      <p class="lede">Caustic montre un bassin au soleil. Des ondes partent des bords du bassin et se resserrent vers un point. Quand elles se rejoignent, la lumière au fond forme un dessin net (une diatomée, un oursin, une rosace). Puis le dessin se défait en anneaux qui repartent. Ce dessin est produit par la lumière du soleil, réfractée par une surface d'eau que l'on calcule à cet effet. Cette page explique comment on calcule cette surface, et comment on la fait naître d'une eau calme.</p>
       <p class="prereq">Pour suivre, il suffit de savoir lire un peu de JavaScript et de se souvenir qu'un rayon de lumière se plie en entrant dans l'eau. Les formules résument ce que les démos montrent ; on peut les sauter sans perdre le fil. Les détails de production sont rangés dans les encadrés « Pour aller plus loin ».</p>
     </header>
 
@@ -39,7 +39,7 @@
 
       <section id="scene">
         <h2><span class="n">01</span>Ce que montre la scène</h2>
-        <p>Les traits de lumière qui dansent au fond d'une piscine s'appellent des <b>caustiques</b>. Ils apparaissent parce que la surface de l'eau n'est jamais plate : chaque bosse se comporte comme une petite loupe et rassemble la lumière du soleil sur le fond. D'habitude, ce dessin est le fruit du hasard des vagues. Ici, on le choisit.</p>
+        <p>Les traits de lumière qui dansent au fond d'une piscine s'appellent des <b>caustiques</b>. Ils apparaissent parce que la surface de l'eau n'est jamais plate : chaque bosse se comporte comme une petite loupe et rassemble la lumière du soleil sur le fond. D'ordinaire, ce dessin dépend du hasard des vagues. Ici, on le choisit à l'avance.</p>
         <p>La scène est une boucle de 36 secondes, qui montre trois dessins. Pour chacun, on voit des anneaux de lumière entrer par les bords du bassin et se resserrer ; ils se fondent en un dessin qui tient un instant, puis le dessin se défait en anneaux qui repartent. Pour obtenir cela, il faut résoudre deux problèmes, qui structurent la page :</p>
         <ul>
           <li><b>trouver la forme d'eau qui dessine une image donnée</b> : où la lumière doit aller, puis quelle pente donner à l'eau en chaque point pour l'y envoyer (sections 02 à 04) ;</li>
@@ -48,7 +48,7 @@
       </section>
 
       <section id="loupe">
-        <h2><span class="n">02</span>Une bosse d'eau est une loupe</h2>
+        <h2><span class="n">02</span>Une bosse d'eau concentre la lumière</h2>
         <span class="src">src/optics.js · refract()</span>
         <p>Un rayon de soleil qui entre dans l'eau se rapproche de la verticale : c'est la <b>réfraction</b>, décrite par la loi de Snell-Descartes, <i>n</i><sub>1</sub> sin θ<sub>1</sub> = <i>n</i><sub>2</sub> sin θ<sub>2</sub>, avec <i>n</i><sub>1</sub> = 1 pour l'air et <i>n</i><sub>2</sub> ≈ 1,334 pour l'eau. Sur une eau plate et sous un soleil au zénith, tous les rayons descendent droit, et le fond est éclairé uniformément.</p>
         <p>Si la surface penche, le rayon est dévié d'un angle proportionnel à la pente, d'environ un quart de cette pente (1 − 1/<i>n</i><sub>2</sub> ≈ 0,25). Sous une bosse, les pentes de part et d'autre renvoient les rayons vers le milieu : ils se rapprochent en descendant, et la lumière se concentre sur le fond. Sous un creux, ils s'écartent et le fond s'assombrit. La lumière n'est ni créée ni détruite : elle est seulement déplacée.</p>
@@ -66,7 +66,7 @@
       </section>
 
       <section id="transport">
-        <h2><span class="n">03</span>Décider où va la lumière</h2>
+        <h2><span class="n">03</span>Choisir où va la lumière</h2>
         <span class="src">src/gen/motifs.js · src/gen/transport.js</span>
         <p>Puisque la surface ne fait que déplacer la lumière, un trait ne peut briller que si on prend sa lumière ailleurs. On décrit d'abord le dessin voulu par une <b>densité cible</b> ν : l'éclairement souhaité en chaque point du fond, relativement à celui d'une eau plate. Hors du disque du dessin, ν = 1 et la lumière ne bouge pas. Dedans, le fond descend à 32 %, et la lumière ainsi libérée se rassemble sur les traits. La lumière totale est la même que celle d'une eau plate : la moyenne de ν vaut exactement 1.</p>
 
@@ -74,7 +74,7 @@
         <p>Il faut maintenant décider où chaque point de la surface envoie sa lumière, sans que deux rayons se croisent (sinon on retombe sur les plis). Sur une ligne, la réponse est simple. On parcourt la surface de gauche à droite en cumulant la lumière qu'elle reçoit, et le fond de gauche à droite en cumulant la lumière que demande la cible. Le point de la surface qui a vu passer 30 % de la lumière envoie la sienne au point du fond où la cible a cumulé 30 %. L'ordre des rayons est conservé, donc aucun ne croise son voisin.</p>
 
         <h3>En deux dimensions : le transport optimal</h3>
-        <p>Sur une surface, il n'y a plus d'ordre naturel, et l'on cherche une application <i>T</i> qui envoie chaque point <i>x</i> de la surface vers un point <i>T</i>(<i>x</i>) du fond. C'est un problème de <b>transport optimal</b> : déplacer une répartition de lumière vers une autre en la déplaçant le moins possible. Sa solution s'écrit <i>T</i> = ∇<i>u</i>, le gradient d'une fonction convexe <i>u</i>, ce qui garantit que les rayons ne se croisent pas. La lumière d'un petit carré de la surface doit égaler celle de son image sur le fond : densité cible multipliée par l'agrandissement de l'aire, qui est le déterminant des dérivées secondes de <i>u</i>. C'est l'<b>équation de Monge-Ampère</b> :</p>
+        <p>Sur une surface, il n'y a plus d'ordre naturel, et l'on cherche une fonction <i>T</i> qui envoie chaque point <i>x</i> de la surface vers un point <i>T</i>(<i>x</i>) du fond. C'est un problème de <b>transport optimal</b> : déplacer une répartition de lumière vers une autre en la déplaçant le moins possible. Sa solution s'écrit <i>T</i> = ∇<i>u</i>, le gradient d'une fonction convexe <i>u</i>, ce qui garantit que les rayons ne se croisent pas. La lumière d'un petit carré de la surface doit égaler celle de son image sur le fond : densité cible multipliée par l'agrandissement de l'aire, qui est le déterminant des dérivées secondes de <i>u</i>. C'est l'<b>équation de Monge-Ampère</b> :</p>
         <div class="eq">\[ \mu(x) = \nu\big(\nabla u(x)\big)\,\det D^2 u(x) \]</div>
         <p>μ est l'éclairement reçu par la surface (uniforme). Cette équation est difficile à résoudre directement. La méthode de Benamou, Froese et Oberman (2010) la remplace par une suite d'équations de Poisson, qu'on sait résoudre exactement et vite par transformée de Fourier. À chaque itération, on met dans l'équation ce que le déterminant devrait valoir, on résout, et on recommence :</p>
         <div class="eq">\[ \Delta u^{(n+1)} = \sqrt{(u_{xx} - u_{yy})^2 + 4u_{xy}^2 + 4 f}, \qquad f = \frac{\mu}{\nu(\nabla u^{(n)})} \]</div>
@@ -85,7 +85,7 @@
           <li>Passez au dessin le plus riche d'une série : la grille de 64² ne suffit plus à rendre tous les détails, ce qui explique les 256² de la scène.</li>
         </ul></div>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
-          <p>Chaque équation de Poisson est résolue par FFT après une extension impaire du domaine (condition de Dirichlet). Au bord, <i>u</i> = |<i>x</i>|²/2, donc <i>T</i> est l'identité, là où ν = 1. Une relaxation de 0,9 stabilise la suite. Là où des traits du dessin se recouvrent, la densité est saturée en douceur (1 − e<sup>−1,6 <i>a</i></sup>) pour éviter les points brûlés, et le bord du disque du dessin est adouci entre 0,66 et 0,8 du demi-côté.</p>
+          <p>Chaque équation de Poisson est résolue par FFT, après avoir prolongé le domaine par symétrie impaire (ce qui impose la valeur de <i>u</i> au bord, condition dite de Dirichlet). Au bord, on impose <i>u</i> = |<i>x</i>|²/2, donc <i>T</i> y est l'identité : la lumière n'y bouge pas, comme là où ν = 1. À chaque itération, la nouvelle solution est mélangée à la précédente avec un poids de 0,9 (relaxation), ce qui stabilise la suite. Là où des traits du dessin se recouvrent, la densité est saturée en douceur (1 − e<sup>−1,6 <i>a</i></sup>) pour éviter des zones surexposées, et le bord du disque du dessin est adouci entre 0,66 et 0,8 du demi-côté.</p>
           <div class="note check"><b>Ce que vérifient les tests</b><p>Pour chacune des six séries : la lumière totale de la cible est conservée à 10⁻⁶ près, l'erreur converge, et la lumière effectivement envoyée par <i>T</i> (chaque cellule étalée sur l'aire de son image) est corrélée à plus de 0,8 avec la cible.</p></div>
         </div></details>
       </section>
@@ -93,7 +93,7 @@
       <section id="snell">
         <h2><span class="n">04</span>De la direction des rayons à la forme de l'eau</h2>
         <span class="src">src/optics.js · snellNormal() · src/gen/lens.js</span>
-        <p>Le transport dit où chaque point de la surface doit envoyer sa lumière. Il reste à trouver la pente de l'eau qui fait cette déviation. La loi de Snell se lit dans les deux sens : d'habitude, on connaît la normale de la surface et on en déduit le rayon réfracté ; ici, on connaît le rayon incident <i>i</i> (la direction du soleil) et le rayon voulu <i>t</i> (vers le point du fond), et on cherche la normale. Elle est simplement</p>
+        <p>Le transport dit où chaque point de la surface doit envoyer sa lumière. Il reste à trouver la pente de l'eau qui produit cette déviation. La loi de Snell se lit dans les deux sens : d'habitude, on connaît la normale de la surface et on en déduit le rayon réfracté ; ici, on connaît le rayon incident <i>i</i> (la direction du soleil) et le rayon voulu <i>t</i> (vers le point du fond), et on cherche la normale. Elle s'écrit</p>
         <div class="eq">\[ n \;\parallel\; n_1\, i - n_2\, t \]</div>
         <p>orientée vers le haut. On le vérifie en remarquant que <i>n</i><sub>1</sub> <i>i</i> − <i>n</i><sub>2</sub> <i>t</i> n'a pas de composante le long de la surface quand la loi de Snell est respectée. De la normale, on tire les deux pentes de la hauteur, et il ne reste qu'à <b>intégrer ces pentes</b> pour obtenir la hauteur elle-même. En une dimension, c'est une somme cumulée ; en deux dimensions, les pentes demandées ne sont pas toujours exactement celles d'une surface, et on prend la surface la plus proche, au sens des moindres carrés (encore une équation de Poisson, résolue par FFT).</p>
 <pre><code>// la normale qui envoie le rayon i dans la direction t
@@ -104,7 +104,7 @@ function snellNormal(i, t, n1, n2) {
         <figure id="fig-snell"><figcaption><b>Une lentille d'eau en coupe.</b> Un dessin à une dimension (des traits de lumière) est transporté en rangeant la lumière dans l'ordre, converti en pentes par <code>snellNormal()</code>, puis intégré. En haut, le relief obtenu, très exagéré ; au milieu, un rayon sur six, retracé à travers cette surface ; en bas, l'éclairement mesuré au fond (doré) et la cible (pointillés bleus). Bassin de 45 cm, eau à 545 nm.</figcaption></figure>
         <div class="note try"><b>À essayer</b><ul>
           <li>Changez le nombre de traits : la courbe dorée suit la cible, et le bandeau donne la flèche de la surface (la hauteur de la bosse), de 20 à 35 mm environ pour cette coupe.</li>
-          <li>Baissez le soleil : les traits se décalent un peu. Le calcul part de rayons qui touchent l'eau au niveau du repos ; il néglige la hauteur de la bosse elle-même, comme le projet.</li>
+          <li>Baissez le soleil : les traits se décalent un peu. Le calcul part de rayons qui touchent l'eau au niveau du repos ; il néglige la hauteur de la bosse elle-même, comme le fait la scène.</li>
         </ul></div>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
           <p>Sous une lampe proche, l'eau plane dévie déjà les rayons et grandit l'image ; on retire donc des pentes celles que la surface au repos produirait seule. L'intégration se fait sur une grille deux fois plus grande que le dessin : les pentes y sont ramenées à zéro entre 84 et 94 % du demi-côté, et les bords de la grille, où la hauteur revient à zéro, tombent hors du bassin. Avec 45 cm d'eau, le transport n'a besoin de déplacer la lumière que localement, et les pentes restent faibles, de 0,13 à 0,24, pour une flèche de 12 à 17 mm. Les pentes et la flèche de la coupe ci-dessus diffèrent de celles de la scène, qui travaille en deux dimensions.</p>
@@ -112,9 +112,9 @@ function snellNormal(i, t, n1, n2) {
       </section>
 
       <section id="ondes">
-        <h2><span class="n">05</span>Faire naître la lentille d'une eau calme</h2>
+        <h2><span class="n">05</span>Obtenir la lentille à partir d'une eau calme</h2>
         <span class="src">src/optics.js · omega() · src/gen/waves.js</span>
-        <p>On sait maintenant quelle forme l'eau doit avoir au moment du dessin. Mais on ne sait pas construire directement des vagues qui convergent vers une forme donnée. On sait en revanche, très précisément, comment cette forme se défait si on la pose sur une eau immobile et qu'on la lâche.</p>
+        <p>On sait maintenant quelle forme l'eau doit avoir au moment du dessin. Mais on ne sait pas construire directement des vagues qui convergent vers une forme donnée. On sait en revanche calculer exactement comment cette forme se défait si on la pose sur une eau immobile et qu'on la lâche.</p>
 
         <h3>Chaque onde va à sa vitesse</h3>
         <p>Toute forme de surface peut s'écrire comme une somme d'ondes sinusoïdales de différentes longueurs (c'est sa décomposition de Fourier). Pour une petite amplitude, chacune de ces ondes évolue seule, sans se mêler aux autres : elle oscille à sa propre fréquence ω(<i>k</i>), et s'amortit lentement par la viscosité de l'eau. Deux forces la ramènent à plat : la pesanteur, qui domine pour les ondes longues, et la tension de surface, qui domine pour les rides de quelques millimètres. La relation entre ω et <i>k</i>, la <b>relation de dispersion</b>, est connue :</p>
@@ -128,7 +128,7 @@ function snellNormal(i, t, n1, n2) {
         <h3>Lire le film à l'envers</h3>
         <p>Si on lâche la lentille à vitesse nulle, chaque onde de sa décomposition oscille comme un cosinus du temps τ :</p>
         <div class="eq">\[ \hat H(k, \tau) = \hat H_0(k)\,\cos\!\big(\omega(k)\,\tau\big)\,e^{-2\nu k^2 |\tau|} \]</div>
-        <p><i>Ĥ</i><sub>0</sub>(<i>k</i>) est l'amplitude de l'onde de nombre <i>k</i> dans la lentille, et ν = 10⁻⁶ m²/s la viscosité de l'eau. Le cosinus a une propriété décisive : cos(−<i>x</i>) = cos(<i>x</i>). L'état de l'eau une demi-seconde avant le dessin est exactement celui d'une demi-seconde après. La lentille qui se défait en anneaux, vue à l'envers, est donc une suite d'anneaux qui convergent et se rassemblent en lentille. Il suffit de faire courir τ de valeurs négatives à positives. C'est le principe du miroir à retournement temporel de Mathias Fink, réalisé sur de vraies ondes d'eau par Bacot, Labousse, Eddi, Fink et Fort (<i>Nature Physics</i>, 2016).</p>
+        <p><i>Ĥ</i><sub>0</sub>(<i>k</i>) est l'amplitude de l'onde de nombre <i>k</i> dans la lentille, et ν = 10⁻⁶ m²/s la viscosité de l'eau. Le cosinus est pair : cos(−<i>x</i>) = cos(<i>x</i>). L'état de l'eau une demi-seconde avant le dessin est exactement celui d'une demi-seconde après. La lentille qui se défait en anneaux, vue à l'envers, est donc une suite d'anneaux qui convergent et se rassemblent en lentille. Il suffit de faire courir τ de valeurs négatives à positives. C'est le principe du miroir à retournement temporel de Mathias Fink, réalisé sur de vraies ondes d'eau par Bacot, Labousse, Eddi, Fink et Fort (<i>Nature Physics</i>, 2016).</p>
         <p>La dispersion rend la convergence lisible. Comme les ondes de longueurs différentes ne vont pas à la même vitesse, le dessin n'arrive pas d'un bloc : les fronts arrivent les uns après les autres, et le dessin se met au point en dernier.</p>
         <figure id="fig-tr" class="wide"><figcaption><b>Le retournement temporel, en coupe.</b> La lentille de la section 04 (cinq traits, soleil au zénith) est posée sur une bande d'eau de 1,2 m, décomposée en ondes, puis chaque onde est avancée à sa propre fréquence. En haut, la surface ; en bas, l'éclairement du fond, recalculé rayon par rayon. Les pointillés montrent l'éclairement à l'instant opposé, −τ. En une dimension, les fronts sont des droites ; dans le bassin, ce sont des anneaux.</figcaption></figure>
         <div class="note try"><b>À essayer</b><ul>
@@ -136,23 +136,23 @@ function snellNormal(i, t, n1, n2) {
           <li>Arrêtez la lecture et déplacez τ : la courbe dorée (instant τ) recouvre exactement les pointillés (instant −τ), et le bandeau donne l'écart entre les deux. Le bouton « Voir −τ » échange les deux instants sans rien changer à l'image.</li>
         </ul></div>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
-          <p>Le spectre de la lentille est filtré au-delà de 0,72 fois la fréquence de Nyquist de la grille, comme dans <code>lens.js</code>, pour que les ondes les plus courtes ne produisent pas de grain.</p>
-          <div class="note check"><b>Au bit près</b><p>Un test propage un spectre à +0,3 s et à −0,3 s et compare hauteurs et pentes : l'écart est inférieur à 10⁻¹². Un autre trace la caustique sur le processeur à τ = 0 et vérifie qu'elle a du contraste au foyer (écart-type relatif supérieur à 0,4).</p></div>
+          <p>Le spectre de la lentille est filtré au-delà de 0,72 fois la fréquence de Nyquist de la grille (celle de la plus courte onde qu'elle peut représenter), comme dans <code>lens.js</code>, pour que les ondes les plus courtes ne produisent pas de grain.</p>
+          <div class="note check"><b>Vérification de la symétrie</b><p>Un test propage un spectre à +0,3 s et à −0,3 s et compare hauteurs et pentes : l'écart est inférieur à 10⁻¹². Un autre trace la caustique sur le processeur à τ = 0 et vérifie qu'elle a du contraste au foyer (écart-type relatif supérieur à 0,4).</p></div>
         </div></details>
       </section>
 
       <section id="ride">
-        <h2><span class="n">06</span>Une eau qui frissonne sans plisser</h2>
+        <h2><span class="n">06</span>La ride de fond</h2>
         <span class="src">src/gen/ambient.js · src/recipe.js</span>
-        <p>Entre deux dessins, une eau parfaitement plane paraît morte. La surface porte donc une ride de fond : un champ aléatoire de petites ondes capillaires, de 2,4 à 3,9 cm de longueur d'onde, qui ondulent en permanence.</p>
-        <p>Toute la difficulté est l'amplitude. On l'a vu en section 02 : des ondulations focalisent dès que <i>H</i> (1 − 1/<i>n</i>) <i>a k</i>² dépasse 1. Pour des rides aussi courtes, au-dessus d'un fond à 45 cm, cela arrive dès quelques centièmes de millimètre. Le premier réglage, 70 µm, couvrait tout le fond d'un réseau de piscine où le dessin se perdait. La scène utilise maintenant de 5 à 11 µm : un frisson qui module la lumière sans la plisser.</p>
+        <p>Entre deux dessins, une eau parfaitement plane paraît figée. La surface porte donc une ride de fond : un champ aléatoire de petites ondes capillaires, de 2,4 à 3,9 cm de longueur d'onde, qui ondulent en permanence.</p>
+        <p>Le point délicat est l'amplitude. On l'a vu en section 02 : des ondulations focalisent dès que <i>H</i> (1 − 1/<i>n</i>) <i>a k</i>² dépasse 1. Pour des rides aussi courtes, au-dessus d'un fond à 45 cm, cela arrive dès quelques centièmes de millimètre. À 70 µm, la ride couvrirait tout le fond d'un réseau de piscine où le dessin se perdrait. La scène utilise donc de 5 à 11 µm : une ondulation légère qui module la lumière sans la plisser.</p>
         <figure id="fig-ripple"><figcaption><b>La ride de fond, ajoutée au dessin.</b> Même coupe qu'en section 05, au moment du dessin. Le curseur règle l'amplitude de la ride ; les boutons « 7 µm » et « 70 µm » la placent aux deux réglages. Le bandeau donne le critère de la section 02, calculé sur la ride : au-delà de 1, la courbe passe au rouge.</figcaption></figure>
         <div class="note try"><b>À essayer</b><ul>
           <li>Passez de 7 µm à 70 µm : les cinq traits disparaissent sous des pics de lumière aléatoires.</li>
           <li>Coupez le dessin pour voir la ride seule, puis tirez d'autres rides : à 7 µm, l'éclairement ne s'écarte presque pas de 1.</li>
         </ul></div>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
-          <p>Les nombres d'onde de la ride forment un anneau autour de <i>k</i><sub>0</sub> = 160 à 260 rad/m, de largeur log-normale, étalé autour d'une direction. Le champ est normalisé pour que l'amplitude de la recette soit son écart type en mètres.</p>
+          <p>Les nombres d'onde de la ride forment un anneau autour de <i>k</i><sub>0</sub> = 160 à 260 rad/m, de largeur log-normale, étalé autour d'une direction. Le champ est normalisé pour que l'amplitude choisie pour la graine soit son écart type en mètres.</p>
           <div class="note"><b>Une boucle exacte, même pour le bruit</b><p>La ride est faite d'ondes progressives, réelles par construction. Chaque fréquence est arrondie au multiple entier de 2π/<i>T</i> le plus proche, <i>T</i> étant le temps physique d'une boucle. L'écart à la vraie dispersion reste inférieur à 0,1 %, et la ride revient exactement à son état initial au bout de la boucle.</p></div>
         </div></details>
       </section>
@@ -160,7 +160,7 @@ function snellNormal(i, t, n1, n2) {
       <section id="horloge">
         <h2><span class="n">07</span>Une seule horloge et un léger ralenti</h2>
         <span class="src">src/timeline.js · foyerClock()</span>
-        <p>Les ondes convergent en quelques dixièmes de seconde : à vitesse réelle, le dessin ne serait qu'un éclair. Le film fait donc comme une caméra rapide. Hors des dessins, le temps de l'eau avance à 0,4 fois le temps du film ; autour de chaque dessin, il ralentit jusqu'à 0,15 fois. Une boucle de 36 s porte trois dessins, à 6, 18 et 30 s.</p>
+        <p>Les ondes convergent en quelques dixièmes de seconde : à vitesse réelle, le dessin ne serait qu'un éclair. On ralentit donc le temps de l'eau, comme avec une caméra rapide. Hors des dessins, le temps de l'eau avance à 0,4 fois le temps du film ; autour de chaque dessin, il ralentit jusqu'à 0,15 fois. Une boucle de 36 s porte trois dessins, à 6, 18 et 30 s.</p>
         <p>La vitesse du temps de l'eau suit une courbe en cloche autour de chaque dessin, de demi-largeur <i>w</i> = 2,5 s :</p>
         <div class="eq">\[ v(t) = v_n - (v_n - v_\text{min}) \sum_j b\!\left(\frac{t - t_j}{w}\right), \qquad b(x) = (1 - x^2)^3 \]</div>
         <p>Le temps de l'eau est l'intégrale de cette vitesse. Plutôt que de l'approcher par une somme de petits pas, ce qui accumulerait des erreurs, on intègre le polynôme <i>b</i> une fois pour toutes : sa primitive est <i>B</i>(<i>x</i>) = <i>x</i> − <i>x</i>³ + 3<i>x</i>⁵/5 − <i>x</i>⁷/7. Le temps de l'eau à n'importe quel instant du film s'obtient alors directement :</p>
@@ -169,10 +169,10 @@ function snellNormal(i, t, n1, n2) {
   for (const c of tj) s -= (vn - vmin) * w * (B7((t - c) / w) - B7(-c / w));
   return s;
 };</code></pre>
-        <p>Tout lit cette horloge : le temps τ de chaque dessin (nul à l'instant du dessin), la ride de fond, qui ralentit avec le reste, et la caméra, qui s'avance quand le dessin se forme. Comme tout ne dépend que de la position dans la boucle, la scène revient exactement à son état de départ : l'écart mesuré au raccord est inférieur à 2·10⁻⁹.</p>
+        <p>Cette horloge est lue par tous les éléments : le temps τ de chaque dessin (nul à l'instant du dessin), la ride de fond, qui ralentit avec le reste, et la caméra, qui s'avance quand le dessin se forme. Comme tout ne dépend que de la position dans la boucle, la scène revient exactement à son état de départ : l'écart mesuré au raccord est inférieur à 2·10⁻⁹.</p>
         <figure id="fig-clock"><figcaption><b>L'horloge sur une boucle de 36 s.</b> En haut, la vitesse du temps de l'eau, en échelle logarithmique ; en bas, le temps τ de chaque dessin, tracé quand ce dessin est actif. Fonctions <code>foyerClock()</code> et <code>B7()</code> du projet. Les curseurs démarrent sur les réglages de la scène.</figcaption></figure>
         <div class="note try"><b>À essayer</b><ul>
-          <li>Descendez la vitesse au dessin vers 0,006 : c'est le réglage de la première version, une quasi-pause, abandonnée parce qu'un dessin figé n'apportait rien. Les courbes τ deviennent presque plates autour de zéro.</li>
+          <li>Descendez la vitesse au dessin vers 0,006 : le temps de l'eau s'arrête presque autour du dessin, et les courbes τ deviennent presque plates autour de zéro.</li>
           <li>Le bandeau donne le temps d'eau total d'une boucle : il diminue quand le ralenti s'élargit.</li>
         </ul></div>
       </section>
@@ -186,8 +186,8 @@ function snellNormal(i, t, n1, n2) {
           <p>Trois shaders de calcul WGSL s'exécutent directement sur le périphérique WebGPU de three.js. L'assemblage évalue pour chaque onde la somme des trois dessins, chacun avec sa fenêtre d'activité, plus la ride de fond. La FFT travaille en deux passes, lignes puis colonnes : un groupe de 256 fils charge une ligne entière en mémoire partagée (la mémoire rapide commune au groupe), dans l'ordre bit-inversé, enchaîne les dix étapes de Cooley-Tukey séparées par une barrière de groupe, puis réécrit la ligne. Si <i>Ŝ</i> est le spectre de la hauteur, on transforme <i>i k</i><sub>x</sub> <i>Ŝ</i> + <i>i</i> (<i>i k</i><sub>z</sub> <i>Ŝ</i>) :</p>
 <pre><code>A[c] = S;
 B[c] = vec2f(-kv.x * S.y - kv.y * S.x, kv.x * S.x - kv.y * S.y);</code></pre>
-          <p>La finalisation écrit (<i>h</i>, ∂<sub>x</sub><i>h</i>, ∂<sub>z</sub><i>h</i>) dans un tampon que three.js lit directement : la caustique, le rendu de la surface et les feuilles qui flottent lisent tous ce même tampon. Elle ajoute aussi les termes calculés directement des deux autres familles (section 10).</p>
-          <div class="note"><b>Ondes, caustique, coupes et flous : 2,3 ms</b><p>Mesuré à 1,8 Mpx sur la première version de la scène : l'assemblage, les deux FFT 1 024², la caustique en trois longueurs d'onde, les huit coupes et leurs flous tiennent ensemble en 2,3 ms. La version mobile passe à 512².</p></div>
+          <p>La finalisation écrit (<i>h</i>, ∂<sub>x</sub><i>h</i>, ∂<sub>z</sub><i>h</i>) dans un tampon que three.js lit directement : la caustique, le rendu de la surface et les feuilles qui flottent lisent tous ce même tampon. Elle ajoute aussi les termes que les deux autres familles de scènes, Faraday et Kármán, calculent directement (section 10).</p>
+          <div class="note"><b>Ondes, caustique, coupes et flous : 2,3 ms</b><p>Mesuré à 1,8 Mpx : l'assemblage, les deux FFT 1 024², la caustique en trois longueurs d'onde, les huit coupes (des cartes de lumière à huit profondeurs, pour éclairer l'eau dans son volume) et leurs flous tiennent ensemble en 2,3 ms. La version mobile passe à 512².</p></div>
         </div></details>
       </section>
 
@@ -196,7 +196,7 @@ B[c] = vec2f(-kv.x * S.y - kv.y * S.x, kv.x * S.x - kv.y * S.y);</code></pre>
         <span class="src">src/scene/caustics.js</span>
         <p>Connaissant la surface, il reste à calculer l'éclairement du fond. La méthode la plus directe, le tracé de photons, lance des rayons au hasard et compte ceux qui tombent dans chaque pixel. Le résultat est bruité, et d'autant plus que la lumière est concentrée, c'est-à-dire là où se trouve le dessin.</p>
         <p>Caustic suit l'idée de la section 03 : déformer une grille. Un maillage de triangles couvre la surface, un sommet par point de la grille des ondes (262 144 sommets dans le bassin). Pour chaque sommet, la carte graphique réfracte le rayon du soleil par la pente de l'eau et pose le sommet là où ce rayon touche le fond. Chaque triangle apporte au fond la lumière qu'il a reçue en surface et l'étale sur sa surface d'arrivée. Un triangle qui arrive deux fois plus petit qu'il n'est parti éclaire deux fois plus : l'éclairement est le rapport de l'aire de départ à l'aire d'arrivée.</p>
-        <p>Ce calcul ne laisse aucun bruit et conserve exactement la lumière. Les plis s'y voient d'eux-mêmes : ce sont les lignes où des triangles se retournent, parce que des rayons voisins se sont croisés. Là où plusieurs nappes de triangles se recouvrent, leurs lumières s'additionnent.</p>
+        <p>Ce calcul ne produit aucun bruit et conserve exactement la lumière. Les plis s'y voient d'eux-mêmes : ce sont les lignes où des triangles se retournent, parce que des rayons voisins se sont croisés. Là où plusieurs nappes de triangles se recouvrent, leurs lumières s'additionnent.</p>
 <pre><code>// l'aire de départ couverte par ce pixel, lue par les dérivées d'écran
 const a = abs(dFdx(vSrc.x).mul(dFdy(vSrc.y)).sub(dFdx(vSrc.y).mul(dFdy(vSrc.x))));
 const E = min(vFlux.mul(a).div(texel), U.eMax);</code></pre>
@@ -223,8 +223,8 @@ const E = min(vFlux.mul(a).div(texel), U.eMax);</code></pre>
         </ul></div>
         <p>Les mêmes ondes servent à deux autres familles de scènes. Dans <b>Faraday</b>, rien ne voyage : un réseau d'ondes stationnaires (carrés, hexagones ou quasi-cristal) naît au centre et s'étend, puis un second réseau l'envahit. Dans <b>Kármán</b>, l'eau passe autour d'un cylindre et des tourbillons alternés s'en détachent ; chacun creuse la surface et projette au fond un disque sombre. Ces deux familles ajoutent leurs termes directement à la hauteur calculée en section 08.</p>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
-          <p>Le fond donne l'échelle par sa matière : tesselles de pâte de verre, chaux, travertin, faïence. L'exposition est fixée par ambiance au posemètre : fond uniforme vers 0,2, traits du dessin quatre à cinq fois plus lumineux, avec un halo. La lumière du fond, réduite et fortement adoucie, éclaire le bas des parois comme une grande source diffuse ; lue en quelques points nets, elle recopiait le dessin sur la paroi comme un reflet. Les rayons dans l'eau sont obtenus en relisant, en douze points du regard, la caustique du fond au pied du rayon de lumière qui passe par ce point, puis en comprimant le résultat pour qu'ils restent discrets.</p>
-          <div class="note"><b>Quatre causes de grain, isolées une à une</b><p>Vue de biais, la surface fourmillait. Le décor fin du fond était lu le long de rayons réfractés ; une version unie sert pour ces vues. Des rides plus fines que le pixel scintillaient ; les pentes sont moyennées sur 6 mm pour le seul rendu de la surface. Un niveau de détail de texture implicite était lu dans une branche du shader ; il est désormais explicite. Enfin, l'occlusion ambiante d'écran assombrissait des matériaux qui calculent toute leur lumière eux-mêmes ; ils écrivent désormais leur sortie directement.</p></div>
+          <p>Le fond donne l'échelle par sa matière : tesselles de pâte de verre, chaux, travertin, faïence. L'exposition est fixée par ambiance au posemètre : fond uniforme vers 0,2, traits du dessin quatre à cinq fois plus lumineux, avec un halo. La lumière du fond, réduite et fortement adoucie, éclaire le bas des parois comme une grande source diffuse ; lue en quelques points nets, elle recopierait le dessin sur la paroi comme un reflet. Les rayons de lumière visibles dans l'eau se calculent ainsi : le long de chaque ligne de visée, on prend douze points ; en chacun, on relit la caustique du fond à l'endroit où arrive le rayon de soleil qui passe par ce point, puis on comprime la valeur pour que les rayons restent discrets.</p>
+          <div class="note"><b>Quatre causes de grain et leurs remèdes</b><p>Vue de biais, la surface fourmille dès qu'une de ces causes joue. Le décor fin du fond (les tesselles) lu le long de rayons réfractés : ces vues utilisent une version unie. Des rides plus fines que le pixel scintillent : les pentes sont moyennées sur 6 mm pour le seul rendu de la surface. Un niveau de détail de texture implicite lu dans une branche du shader : il est rendu explicite. Enfin, l'occlusion ambiante d'écran (un assombrissement des creux calculé sur l'image) altère les matériaux qui calculent toute leur lumière eux-mêmes : ils écrivent leur couleur finale sans passer par elle.</p></div>
         </div></details>
       </section>
 
@@ -253,11 +253,11 @@ const E = min(vFlux.mul(a).div(texel), U.eMax);</code></pre>
           <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
           <tbody>
             <tr><td>Transport optimal d'un dessin (256², 30 à 40 itérations)</td><td>worker</td><td class="num">~2,7 s</td></tr>
-            <tr><td>Chargement d'une scène Foyer (trois transports en parallèle, puis compilation), mesuré sur la première version</td><td>workers + GPU</td><td class="num">~6 s</td></tr>
-            <tr><td>Ondes (assemblage, deux FFT 1&#8239;024²) + caustique (3 × 262&#8239;144 sommets) + huit coupes + flous, première version</td><td>GPU</td><td class="num">2,3 ms</td></tr>
+            <tr><td>Chargement d'une scène Foyer (trois transports en parallèle, puis compilation)</td><td>workers + GPU</td><td class="num">~6 s</td></tr>
+            <tr><td>Ondes (assemblage, deux FFT 1&#8239;024²) + caustique (3 × 262&#8239;144 sommets) + huit coupes + flous</td><td>GPU</td><td class="num">2,3 ms</td></tr>
             <tr><td>Image complète, bassin seul, 1&#8239;280 × 720, qualité Haute</td><td>GPU</td><td class="num">≈ 8 ms</td></tr>
             <tr><td>Avec les matières physiques, le feuillage, les feuilles</td><td>GPU</td><td class="num">≈ 11 ms</td></tr>
-            <tr><td>Avec les objets et les effets d'air (état livré)</td><td>GPU</td><td class="num">17 à 19 ms</td></tr>
+            <tr><td>Avec les objets et les effets d'air (version livrée)</td><td>GPU</td><td class="num">17 à 19 ms</td></tr>
             <tr><td>Version mobile (512², une longueur d'onde, quatre coupes)</td><td>GPU</td><td class="num">~2 ms</td></tr>
             <tr><td>Écart au raccord de la boucle</td><td>—</td><td class="num">&lt; 2·10⁻⁹</td></tr>
           </tbody>
@@ -960,7 +960,7 @@ const E = min(vFlux.mul(a).div(texel), U.eMax);</code></pre>
           strip(g, E, xl, 16, xr - xl, 14);
           plotCurve(g, E, XE, YE, crit > 1 ? C.c3 : C.c1, 1.6);
           label(g, 'éclairement au fond (45 cm)', xl + 4, e0 - 6, { size: 11 });
-          d.status(`H(1 − 1/n)·max|h″| = ${fr(crit)} · ${crit > 1 ? 'les rides focalisent : réseau de piscine' : 'sous le seuil : un frisson'}`);
+          d.status(`H(1 − 1/n)·max|h″| = ${fr(crit)} · ${crit > 1 ? 'les rides focalisent : réseau de piscine' : 'sous le seuil : une ondulation légère'}`);
         },
       });
       function syncRange(d, key) { const inp = d.fig.querySelectorAll('.ctl input[type=range]')[0]; if (inp) { inp.value = d.s[key]; inp.dispatchEvent(new Event('input')); } }

@@ -24,7 +24,7 @@
     <header class="hero">
       <div class="kicker">Day 13 · Labyrinth · comment ça marche</div>
       <h1>Comment un automate conduit une bille à travers un labyrinthe en le tournant</h1>
-      <p class="lede">Dans Labyrinth, une bille d'acier émaillée vermillon traverse un labyrinthe de bois sans que rien ne la touche. Un plateau s'incline de quelques degrés, ou un disque dressé pivote, et la gravité fait rouler la bille. Le labyrinthe est tiré au hasard, mais la bille doit réussir à coup sûr, ne traverser aucune paroi et revenir exactement à son point de départ pour que le film boucle. Cette page explique comment on tire le labyrinthe, comment la bille roule, et comment la machine trouve les gestes qui la conduisent à la sortie.</p>
+      <p class="lede">Dans Labyrinth, une bille d'acier émaillée vermillon traverse un labyrinthe de bois sans que rien ne la touche. Un plateau s'incline de quelques degrés, ou un disque dressé pivote, et la gravité fait rouler la bille. Le labyrinthe est tiré au hasard. La bille doit pourtant toujours atteindre la sortie sans traverser de paroi, puis revenir exactement à son point de départ pour que le film boucle. Cette page explique comment on tire le labyrinthe, comment la bille roule, et comment la machine trouve les gestes qui la conduisent à la sortie.</p>
       <p class="prereq">Pour suivre, il suffit de savoir lire un peu de JavaScript. Les formules résument ce que les démos montrent ; on peut les sauter sans perdre le fil. Les détails de production sont rangés dans les encadrés « Pour aller plus loin ».</p>
     </header>
 
@@ -50,10 +50,10 @@
       </section>
 
       <section id="wilson">
-        <h2><span class="n">02</span>Tirer un labyrinthe sans signature</h2>
+        <h2><span class="n">02</span>Tirer un labyrinthe uniformément au hasard</h2>
         <span class="src">src/gen/maze.js · wilson()</span>
-        <p>Un labyrinthe « parfait », où un seul chemin relie deux cases quelconques, est un <b>arbre couvrant</b> de la grille : un réseau de couloirs qui atteint toutes les cases sans jamais former de boucle. Il existe plusieurs façons d'en fabriquer un, et chacune laisse sa signature. Le retour arrière en profondeur creuse de longs couloirs sinueux avec peu d'impasses ; les algorithmes de Prim et de Kruskal hérissent le labyrinthe de culs-de-sac d'une case.</p>
-        <p>Pour que le labyrinthe ne trahisse pas sa fabrication, Labyrinth le tire au hasard <b>uniformément</b> parmi tous les arbres couvrants possibles, grâce à l'algorithme de Wilson. Une marche aléatoire part d'une case hors de l'arbre et erre. Chaque fois qu'elle recoupe son propre tracé, la boucle ainsi fermée est effacée. Quand elle touche l'arbre, ce qui reste d'elle y est greffé et devient couloir. On recommence depuis une autre case, jusqu'à ce que toutes soient dans l'arbre.</p>
+        <p>Un labyrinthe « parfait », où un seul chemin relie deux cases quelconques, est un <b>arbre couvrant</b> de la grille : un réseau de couloirs qui atteint toutes les cases sans jamais former de boucle. Il existe plusieurs façons d'en fabriquer un, et chacune laisse sa signature. Le retour arrière en profondeur creuse de longs couloirs sinueux avec peu d'impasses ; les algorithmes de Prim et de Kruskal produisent beaucoup de culs-de-sac d'une case.</p>
+        <p>Pour que le labyrinthe ne porte la trace d'aucun algorithme, Labyrinth le tire au hasard <b>uniformément</b> parmi tous les arbres couvrants possibles, grâce à l'algorithme de Wilson. Une marche aléatoire part d'une case hors de l'arbre et erre. Chaque fois qu'elle recoupe son propre tracé, la boucle ainsi fermée est effacée. Quand elle touche l'arbre, ce qui reste d'elle y est greffé et devient couloir. On recommence depuis une autre case, jusqu'à ce que toutes soient dans l'arbre.</p>
 <pre><code>while (pasDansLArbre.size) {
   let c = unePasDansLArbre(), chemin = [c];
   while (!arbre.has(c)) {                       // marche aléatoire
@@ -76,7 +76,7 @@
       </section>
 
       <section id="breches">
-        <h2><span class="n">03</span>Toute brèche laisse passer la bille</h2>
+        <h2><span class="n">03</span>Des brèches plus larges que la bille</h2>
         <span class="src">src/gen/maze.js · polarRings()</span>
         <p>Les cases font 22 mm, les parois 4 mm d'épaisseur, et un poteau couvre chaque jonction. La bille fait 12 mm. Sur une grille carrée, un passage laisse 16,6 mm, largement assez. Sur une grille polaire, c'est moins simple : la largeur d'une case dépend de son rayon, et un anneau qui découpe trop tôt ses cases en deux fait des cases intérieures plus étroites que la bille.</p>
         <p>La règle : un anneau ne double son nombre de secteurs que si chaque case garde au moins 0,92 × 22 mm d'arc à son rayon intérieur, là où la brèche est la plus étroite. La chambre centrale fait 22 mm de rayon.</p>
@@ -86,7 +86,7 @@
           <li>Réduisez la chambre à 15 mm : la brèche vers le premier anneau se ferme aussi.</li>
         </ul></div>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
-          <div class="note trap"><b>Le piège</b><p>Avec une chambre de 15 mm, la brèche vers le premier anneau mesurait 15 mm moins deux poteaux, soit 9,6 mm pour une bille de 12. Le pilote poussait la bille contre l'arc sans jamais la faire passer, et le film échouait (« bille bloquée »).</p></div>
+          <div class="note trap"><b>Le piège</b><p>Avec une chambre de 15 mm, la brèche vers le premier anneau mesure 15 mm moins deux poteaux, soit 9,6 mm pour une bille de 12. Le pilote pousserait la bille contre la paroi courbe sans jamais la faire passer, et le film échouerait (« bille bloquée »).</p></div>
         </div></details>
       </section>
 
@@ -94,7 +94,7 @@
         <h2><span class="n">04</span>Une bille qui roule sur un disque qui tourne</h2>
         <span class="src">src/gen/physics.js · step()</span>
         <p>Une bille qui roule sans glisser n'accélère pas comme un objet qui glisse : une part de l'énergie la fait tourner sur elle-même. Sur un plan incliné d'un angle θ, son accélération vaut (5/7) <i>g</i> sin θ au lieu de <i>g</i> sin θ.</p>
-        <p>Sur le Cadran et la Roue, le plan lui-même tourne. La recette qui vient à l'esprit est d'écrire les forces d'inertie du repère tournant (centrifuge et Coriolis), puis de tout multiplier par 5/7. Elle est fausse : la force qui fait rouler la bille vient du contact avec la surface, et cette surface bouge sous elle. Le résultat est connu des physiciens et surprend toujours : sur un plateau tournant horizontal, une bille lancée ne file pas vers le bord, elle décrit un cercle, à 2/7 de la vitesse du plateau (Weltner, 1979).</p>
+        <p>Sur le Cadran et la Roue, le plan lui-même tourne. La recette qui vient à l'esprit est d'écrire les forces d'inertie du repère tournant (centrifuge et Coriolis), puis de tout multiplier par 5/7. Elle est fausse : la force qui fait rouler la bille vient du contact avec la surface, et cette surface bouge sous elle. Le résultat est connu des physiciens et contraire à l'intuition : sur un plateau tournant horizontal, une bille lancée ne file pas vers le bord, elle décrit un cercle, à 2/7 de la vitesse du plateau (Weltner, 1979).</p>
         <p>Écrite dans le repère du disque, où se trouvent les parois, l'accélération de la bille est (<i>J</i> désignant une rotation d'un quart de tour) :</p>
         <div class="eq">\[ \mathbf a = \tfrac57\left(\mathbf g_\parallel + \Omega^2\mathbf x - \dot\Omega\,J\mathbf x\right) - \tfrac{12}{7}\,\Omega\,J\mathbf v \]</div>
         <p>Ω est la vitesse de rotation du disque, <b>x</b> la position de la bille et <b>v</b> sa vitesse, <b>g</b><sub>∥</sub> la gravité dans le plan du disque. Le terme de Coriolis porte 12/7 au lieu des 10/7 de la recette naïve.</p>
@@ -105,14 +105,14 @@
         </ul></div>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
           <p>Dans le repère de la pièce, l'accélération s'écrit <b>v̇</b> = (5/7) <b>F</b>/<i>m</i> + (2/7) (Ω̇ × <b>x</b> + Ω × <b>v</b>). Le pas de temps est de 1/960 s. Les contacts se calculent par distances signées aux parois, aux poteaux et au cadre. Au-dessus de 25 mm/s, la bille rebondit avec une restitution de 0,38 ; en dessous, elle reste au contact. La paroi exerce un frottement, et la résistance au roulement vaut 0,0035. Sur les disques s'ajoute un amortissement de 0,9 s⁻¹, sans lequel la bille au fond d'un anneau se balance plusieurs secondes comme un pendule.</p>
-          <div class="note trap"><b>Le piège</b><p>Même avec l'équation juste, l'intégration la plus simple (Euler semi-implicite) dérivait : une bille lancée sur un plateau tournant revenait 25 mm à côté de son point de départ après un tour de 14 s, parce que les termes d'inertie couplent position et vitesse. La partie lisse du mouvement est intégrée au point milieu, et l'écart tombe à 0,008 mm.</p></div>
+          <div class="note trap"><b>Le piège</b><p>Même avec l'équation juste, l'intégration la plus simple (Euler semi-implicite) dérive : une bille lancée sur un plateau tournant reviendrait 25 mm à côté de son point de départ après un tour de 14 s, parce que les termes d'inertie couplent position et vitesse. La partie lisse du mouvement est donc intégrée au point milieu, et l'écart tombe à 0,008 mm.</p></div>
         </div></details>
       </section>
 
       <section id="pilote">
-        <h2><span class="n">05</span>Le pilote du plateau anticipe</h2>
+        <h2><span class="n">05</span>Le pilote du Plateau</h2>
         <span class="src">src/gen/plan.js · simulatePlateau()</span>
-        <p>Sur le Plateau, aucune trajectoire n'est imposée à la bille : un pilote la conduit dans la simulation, comme un joueur. Il suit un chemin (la solution, plus quelques impasses visitées jusqu'au fond, puis le tour de la rigole jusqu'à l'entrée) et commande les deux angles du plateau. Pour obtenir une accélération <b>a</b>, il faut dans le plan une gravité (7/5) <b>a</b>, qui donne directement les deux angles. Ils sont bornés à 5,5°, et des servomoteurs les tournent à 40°/s au plus.</p>
+        <p>Sur le Plateau, aucune trajectoire n'est imposée à la bille : un pilote la conduit dans la simulation, comme un joueur. Il suit un chemin (la solution, plus quelques impasses visitées jusqu'au fond, puis le tour de la rigole, le chemin en boucle qui entoure le labyrinthe, jusqu'à l'entrée) et commande les deux angles du plateau. Pour obtenir une accélération <b>a</b>, il faut dans le plan une gravité (7/5) <b>a</b>, qui donne directement les deux angles. Ils sont bornés à 5,5°, et des servomoteurs les tournent à 40°/s au plus.</p>
         <p>Le pilote choisit sa vitesse en regardant devant lui : en chaque point du chemin, il ne va pas plus vite que ce qui lui permet de s'arrêter au prochain arrêt, ou de passer le prochain coude à 55 mm/s. Mais le plateau met du temps à basculer dans l'autre sens. Pendant ce temps τ, la bille parcourt encore <i>v</i> τ avant que le freinage ne commence. Le pilote en tient compte :</p>
         <div class="eq">\[ v(s) = \min_k \sqrt{v_k^2 + 2\,a_f\,\max(0,\ s_k - s - v\,\tau)},\quad \tau = 0{,}16\ \text{s} \]</div>
         <p><i>s</i> est la position sur le chemin, <i>s</i><sub>k</sub> et <i>v</i><sub>k</sub> la position et la vitesse permise du <i>k</i>-ième coude ou arrêt, <i>a</i><sub>f</sub> le freinage disponible.</p>
@@ -123,46 +123,46 @@
         </ul></div>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
           <p>Les angles du cardan donnent la gravité dans le plan par <b>g</b><sub>∥</sub> = (<i>g</i> sin β cos α, −<i>g</i> sin α). Quand la bille s'écarte de plus de 5 mm du chemin, le pilote la ramène d'abord dessus avant de repartir.</p>
-          <div class="note trap"><b>Le piège</b><p>Sans le terme <i>v</i> τ, la première version arrivait au premier coude à 141 mm/s ; le plateau mettait 0,4 s à s'incliner dans l'autre sens, et la bille dépassait le coude de 19 mm, assez pour s'engager dans le couloir voisin, où le pilote la poussait contre une paroi. Une branche d'impasse coupée à 5 cases alors qu'elle continuait plus loin a produit le même blocage : seules les impasses entières sont visitées.</p></div>
+          <div class="note trap"><b>Le piège</b><p>Sans le terme <i>v</i> τ, la bille arriverait au premier coude à 141 mm/s ; le plateau mettrait 0,4 s à s'incliner dans l'autre sens, et la bille dépasserait le coude de 19 mm, assez pour s'engager dans le couloir voisin, où le pilote la pousserait contre une paroi. Le même blocage survient quand une impasse n'est visitée que sur ses 5 premières cases alors qu'elle continue plus loin : seules les impasses entières sont donc visitées.</p></div>
         </div></details>
       </section>
 
       <section id="recherche">
-        <h2><span class="n">06</span>Les rotations du cadran sont cherchées, pas calculées</h2>
+        <h2><span class="n">06</span>Chercher les rotations du Cadran</h2>
         <span class="src">src/gen/plan.js · searchDisc()</span>
         <p>Sur un disque dressé, on ne pilote pas la bille : on choisit des rotations, et la gravité fait le reste. La bille tombe jusqu'à la paroi suivante, rebondit, reste au fond d'un anneau ou se fait soulever par une cloison. Plutôt que de prévoir ces comportements, on simule chaque rotation possible et on regarde où la bille s'arrête.</p>
         <p>Un <b>état</b> est la case où la bille est au repos et l'angle du disque. Une transition est une rotation (±90° ou 180°, ±45° aussi pour la Roue), suivie de l'arrêt de la bille. Une <b>recherche en largeur</b> essaie toutes les suites d'une rotation, puis de deux, et ainsi de suite : la première qui fait sortir la bille est la plus courte. Le film est la suite exacte de ces simulations.</p>
-        <p>Vient ensuite le retour. Le disque tourne dans un seul sens ; une poche qui coupe la rigole soulève la bille comme le godet d'une noria, et au sommet, où la gravité pointe vers le centre, elle retombe par l'entrée.</p>
+        <p>Il faut ensuite ramener la bille à l'entrée, pour que le film boucle. Le disque tourne dans un seul sens ; une poche qui coupe la rigole soulève la bille comme le godet d'une noria, et au sommet, où la gravité pointe vers le centre, elle retombe par l'entrée.</p>
         <figure id="fig-recherche"><figcaption><b>Un Cadran, relu.</b> Labyrinthe 7 × 7 planifié par le module du projet, recherche comprise, avec la liste des rotations trouvées. Le disque est dessiné de face, sans son inclinaison de 12°.</figcaption></figure>
         <div class="note try"><b>À essayer</b><ul>
           <li>Suivez la liste des rotations pendant le film : à chaque rotation, la bille tombe d'une case à l'autre, et la suivante la rapproche de la sortie.</li>
         </ul></div>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
-          <p>Les rotations suivent un profil à secousse minimale. Si un labyrinthe ne donne pas un bon film (moins de 4 ou plus de 12 rotations, plus de 52 s, raccord non atteint), on essaie graine~1, graine~2, et ainsi de suite : la scène reste entièrement déterminée par la graine.</p>
-          <div class="note trap"><b>Le piège</b><p>Un Cadran arrêté après le retour à un angle quelconque (248° dans un essai) n'a plus la gravité alignée sur ses couloirs : la bille finit dans des coins, et la recherche ne trouve que 5 états. Le Cadran s'arrête donc sur un multiple de 90°.</p></div>
+          <p>Chaque rotation suit un profil à secousse minimale, c'est-à-dire sans à-coup d'accélération. Si un labyrinthe ne donne pas un bon film (moins de 4 ou plus de 12 rotations, film de plus de 52 s, ou boucle impossible à refermer), on essaie la même graine suivie de ~1, puis de ~2, et ainsi de suite : la scène reste entièrement déterminée par la graine.</p>
+          <div class="note trap"><b>Le piège</b><p>Un Cadran arrêté à un angle quelconque (248°, par exemple) n'a plus la gravité alignée sur ses couloirs : la bille finit dans des coins, et la recherche ne trouve que 5 états. Le Cadran s'arrête donc sur un multiple de 90°.</p></div>
         </div></details>
       </section>
 
       <section id="bielles">
-        <h2><span class="n">07</span>Les bielles gardent leur longueur</h2>
+        <h2><span class="n">07</span>Les bielles et leur longueur constante</h2>
         <span class="src">src/kin.js · crankAngle()</span>
-        <p>Le plateau est incliné par deux moteurs posés sur le socle. Chacun porte une manivelle de 15 mm, reliée au plateau par une bielle de 66 mm. Pour une inclinaison donnée, il faut trouver l'angle de la manivelle qui garde la bielle exactement à sa longueur. Une simple proportion à l'inclinaison changerait la longueur de la bielle, et la pièce s'étirerait à l'écran. L'angle est donc résolu par la méthode de Newton, qui corrige une estimation jusqu'à ce que la distance soit exacte.</p>
+        <p>Le plateau est incliné par deux moteurs posés sur le socle. Chacun porte une manivelle de 15 mm, reliée au plateau par une bielle de 66 mm. Pour une inclinaison donnée, il faut trouver l'angle de la manivelle qui garde la bielle exactement à sa longueur. Si l'angle était simplement proportionnel à l'inclinaison, la longueur de la bielle changerait et la pièce s'étirerait à l'écran. L'angle est donc résolu par la méthode de Newton, qui corrige une estimation jusqu'à ce que la distance soit exacte.</p>
         <figure id="fig-bielle"><figcaption><b>Une bielle-manivelle, vue de côté.</b> Le curseur incline le plateau ; l'angle de la manivelle est celui que calcule <code>plateauPose()</code>. Le bandeau donne la longueur de la bielle.</figcaption></figure>
         <div class="note try"><b>À essayer</b><ul>
           <li>Inclinez le plateau d'un bout à l'autre : la manivelle tourne d'environ 35° pour 5,5° d'inclinaison, et la bielle reste à 66,000000 mm.</li>
         </ul></div>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
-          <div class="note check"><b>Vérifié</b><p>Sur toute la boucle, les bielles gardent 66 mm à 10⁻⁶ mm près, les manivelles restent sous ±69°, le maneton au-dessus du socle, et le dessous du plateau au-dessus des carters des moteurs.</p></div>
+          <div class="note check"><b>Vérifié</b><p>Sur toute la boucle, les bielles gardent 66 mm à 10⁻⁶ mm près, les manivelles restent sous ±69°, le maneton (le bouton de la manivelle où s'attache la bielle) au-dessus du socle, et le dessous du plateau au-dessus des carters des moteurs.</p></div>
         </div></details>
       </section>
 
       <section id="boucle">
-        <h2><span class="n">08</span>La boucle se referme par un point fixe</h2>
+        <h2><span class="n">08</span>Refermer la boucle par un point fixe</h2>
         <span class="src">src/gen/plan.js · simulateFilm(), close()</span>
-        <p>Une simulation ne revient jamais exactement à son point de départ : la bille s'arrête toujours un peu à côté. Le film commence donc là où il finit. On simule depuis un état, on prend l'état d'arrivée comme nouveau départ, et on recommence jusqu'à ce que l'écart tombe sous 0,03 mm (Plateau) ou 0,05 mm (disques). C'est la recherche d'un <b>point fixe</b>. Le reste, quelques centièmes de millimètre avec la bille arrêtée, est fondu dans la dernière demi-seconde. Le disque finit à un nombre entier de tours de son départ.</p>
+        <p>Une simulation ne revient jamais exactement à son point de départ : la bille s'arrête toujours un peu à côté. Le film commence donc là où il finit. On simule depuis un état, on prend l'état d'arrivée comme nouveau départ, et on recommence jusqu'à ce que l'écart tombe sous 0,03 mm (Plateau) ou 0,05 mm (disques). C'est la recherche d'un <b>point fixe</b>. L'écart restant, quelques centièmes de millimètre, est réparti en douceur sur la dernière demi-seconde, la bille étant à l'arrêt. Le disque finit à un nombre entier de tours de son départ.</p>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
           <p>La poulie du moteur finit elle aussi à un nombre entier de tours (rapport 5). L'orientation propre de la bille, visible dès qu'une finition lui donne un motif, est raccordée par une petite rotation répartie sur toute la boucle.</p>
-          <div class="note check"><b>Vérifié</b><p>Aucune paroi n'est traversée, sur aucune image du film (sept scènes, trois machines), et ce test est validé par un témoin qui doit échouer. La caméra et toutes les pièces se raccordent à moins de 3·10⁻⁷. La bille ne part pas tant que le plateau est à plat, et la caméra tourne à moins de 25°/s.</p></div>
+          <div class="note check"><b>Vérifié</b><p>Aucune paroi n'est traversée, sur aucune image du film (sept scènes, trois machines), et un test témoin vérifie que ce contrôle repère bien une bille posée dans une paroi. Entre la dernière image et la première, la caméra et toutes les pièces se raccordent à moins de 3·10⁻⁷. La bille ne part pas tant que le plateau est à plat, et la caméra tourne à moins de 25°/s.</p></div>
         </div></details>
       </section>
 

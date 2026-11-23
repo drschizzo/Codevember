@@ -49,16 +49,16 @@
       </section>
 
       <section id="trois">
-        <h2><span class="n">02</span>Simuler ne suffit pas</h2>
+        <h2><span class="n">02</span>Pourquoi la simulation ne suffit pas</h2>
         <span class="src">src/orbit/integrate.js</span>
         <p>Le réflexe, quand on veut voir des corps qui s'attirent, est de les simuler : on place des corps, on leur donne une vitesse, et à chaque pas on additionne leurs attractions en 1/<i>r</i>², comme dans le chapitre « Forces » de <i>The Nature of Code</i>. Avec deux corps, on obtient des ellipses. Avec trois, presque toujours, deux corps finissent par passer très près l'un de l'autre, et l'un des trois est éjecté.</p>
-        <p>Il existe pourtant des mouvements périodiques. Le plus célèbre est le <b>huit</b>, découvert numériquement par Moore en 1993 et démontré par Chenciner et Montgomery en 2000 : trois corps de même masse se poursuivent sur une courbe en forme de 8. Mais il faut partir de positions et de vitesses précises à huit chiffres près. Tirer ces conditions au hasard ne les trouvera jamais.</p>
+        <p>Il existe pourtant des mouvements périodiques. Le plus célèbre est le <b>huit</b>, découvert numériquement par Moore en 1993 et démontré par Chenciner et Montgomery en 2000 : trois corps de même masse se poursuivent sur une courbe en forme de 8. Mais il faut partir de positions et de vitesses précises à huit chiffres près. Un tirage au hasard ne tombe pas sur de telles conditions.</p>
         <figure id="fig-three" class="wide"><figcaption><b>Trois corps de même masse</b>, simulés dans la page (pas de 0,0005, intégrateur de Verlet). « Le huit » part des conditions initiales connues de cette orbite ; « Trois corps au hasard » tire des positions et des vitesses quelconques, sans vitesse d'ensemble. Le bandeau donne la plus grande distance d'un corps au centre.</figcaption></figure>
         <div class="note try"><b>À essayer</b><ul>
           <li>Tirez plusieurs fois trois corps au hasard : dans la grande majorité des cas, deux corps se frôlent, et l'un des trois s'en va très loin (des centaines d'unités).</li>
           <li>Revenez au huit : la distance au centre reste sous 1,1, et les corps repassent par leur point de départ à chaque période.</li>
         </ul></div>
-        <p>Orrery renverse donc le problème : au lieu de partir de conditions initiales et d'espérer une orbite, il cherche directement la courbe.</p>
+        <p>Orrery procède donc à l'inverse : au lieu de partir de conditions initiales pour obtenir une orbite, il cherche directement la courbe.</p>
       </section>
 
       <section id="action">
@@ -70,36 +70,36 @@
         <div class="eq">\[ \mathcal{A} = \int_0^{2\pi} \tfrac12\,\big|\dot x + \omega\, e_z \times x\big|^2 + \tfrac12 \sum_{j=1}^{N-1} \frac{1}{\big|x(t) - x(t + 2\pi j/N)\big|}\; dt \]</div>
         <p>Le premier terme est l'énergie cinétique (dans le repère tournant), le second l'attraction entre le corps et chacun des autres. Chercher une chorégraphie devient chercher un point où le gradient de 𝒜 par rapport aux coefficients s'annule. On part d'une courbe aléatoire et on descend la pente de l'action avec L-BFGS, une descente qui estime la courbure à partir de ses derniers pas.</p>
 
-        <h3>Garder la tresse du départ</h3>
-        <p>Laissée libre, la descente échoue souvent : la courbe traverse un autre corps et se dénoue vers l'orbite la plus simple à sa portée, un polygone de corps qui tourne. Orrery reprend l'astuce de Moore : pendant la descente, une force supplémentaire très forte près des collisions (ε/<i>r</i>²) rend toute collision infiniment coûteuse. La courbe ne peut plus traverser un corps, et garde la façon dont elle s'enroulait au départ. On retire ensuite cette force par paliers (0,2, puis 0,05, 0,01, et 0), en reprenant la descente à chaque palier.</p>
-        <figure id="fig-descent" class="wide"><figcaption><b>Les trois premiers essais de la graine par défaut, rejoués avec le vrai code</b> (4 corps, classe à 7 pétales). La courbe se déforme itération par itération ; à droite, la norme du gradient. Chaque palier de ε repart d'un gradient plus fort, puisque le potentiel a changé. Le verdict final vient de la fonction des workers.</figcaption></figure>
+        <h3>Conserver l'enroulement de départ</h3>
+        <p>Laissée libre, la descente échoue souvent : la courbe traverse un autre corps et se dénoue vers l'orbite la plus simple à sa portée, un polygone de corps qui tourne. Orrery reprend l'astuce de Moore : pendant la descente, une force supplémentaire très forte près des collisions (ε/<i>r</i>²) rend toute collision infiniment coûteuse. La courbe ne peut plus traverser un corps, et conserve la façon dont elle s'enroulait au départ. On retire ensuite cette force par paliers (0,2, puis 0,05, 0,01, et 0), en reprenant la descente à chaque palier.</p>
+        <figure id="fig-descent" class="wide"><figcaption><b>Les trois premiers essais de la graine par défaut, rejoués avec le vrai code</b> (4 corps, classe à 7 pétales). La courbe se déforme itération par itération ; à droite, la norme du gradient. Chaque palier de ε repart d'un gradient plus fort, puisque l'attraction à minimiser a changé. Le verdict final (orbite retenue ou écartée) est celui que rend le code des workers, utilisé tel quel au chargement.</figcaption></figure>
         <div class="note try"><b>À essayer</b><ul>
           <li>Comparez les essais : les essais 1 et 2 aboutissent à un polygone de corps qui tourne, et sont écartés ; l'essai 3 garde ses pétales et devient l'orbite de la graine.</li>
           <li>Suivez le gradient : il remonte à chaque palier de ε, puis redescend.</li>
         </ul></div>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
           <p>Les harmoniques multiples de <i>N</i> sont retirées une fois pour toutes : ce sont celles qui déplaceraient le centre de masse. L'intégrale est évaluée sur <i>Q</i> points équidistants, <i>Q</i> multiple de <i>N</i> : décaler un corps revient à décaler un indice, et le gradient exact s'écrit en une passe (vérifié par différences finies à 10⁻⁸ près).</p>
-          <p>Préconditionnement : la courbure de l'action sur l'harmonique <i>k</i> est dominée par l'énergie cinétique, qui croît comme <i>k</i>². Sans correction, la direction la plus raide l'est dix mille fois plus que la plus plate, et la descente zigzague. L-BFGS reçoit 1/<i>k</i>² comme diagonale initiale, et le temps de recherche complet est divisé par 6. Avant tout, la courbe de départ est mise à l'échelle : l'action d'une courbe dilatée de λ vaut <i>a</i>λ² + <i>b</i>/λ, minimale pour λ³ = <i>b</i>/2<i>a</i>.</p>
-          <div class="note"><b>Même graine, même orbite</b><p>Les essais d'une graine sont indépendants : chacun tire sa courbe de départ d'un générateur initialisé par graine et indice. Ils sont répartis entre les workers, et le premier essai réussi par ordre d'indice fait foi, quel que soit celui qui finit en premier.</p></div>
+          <p>La courbure de l'action sur l'harmonique <i>k</i> est dominée par l'énergie cinétique, qui croît comme <i>k</i>². Sans correction, la direction la plus raide l'est dix mille fois plus que la plus plate, et la descente zigzague. On donne donc à L-BFGS 1/<i>k</i>² comme estimation de départ de la courbure de chaque harmonique (c'est le préconditionnement), et le temps de recherche complet est divisé par 6. Avant tout, la courbe de départ est mise à l'échelle : l'action d'une courbe dilatée de λ vaut <i>a</i>λ² + <i>b</i>/λ, minimale pour λ³ = <i>b</i>/2<i>a</i>.</p>
+          <div class="note"><b>Même graine, même orbite</b><p>Les essais d'une graine sont indépendants : chacun tire sa courbe de départ d'un générateur initialisé par graine et indice. Ils sont répartis entre les workers, et l'on retient le réussi qui a le plus petit indice, même si un autre a fini avant lui.</p></div>
         </div></details>
       </section>
 
       <section id="symetrie">
-        <h2><span class="n">04</span>La symétrie décide de ce qu'on trouve</h2>
+        <h2><span class="n">04</span>La symétrie de la courbe de départ</h2>
         <span class="src">src/orbit/symmetry.js</span>
-        <p>Les premiers essais retrouvaient sans cesse les mêmes orbites : le cercle de Lagrange, le huit, et leurs parentes. Changer d'algorithme n'y changeait rien. La variété est venue du point de départ : de la façon dont la courbe initiale s'enroule.</p>
-        <p>La graine impose souvent une symétrie : la courbe a <i>m</i> pétales identiques, et parfois un miroir. En écrivant la courbe avec des nombres complexes, <i>z</i>(<i>t</i>) = Σ <i>c</i><sub>k</sub> e<sup>i<i>kt</i></sup>, cette symétrie revient simplement à annuler certains coefficients :</p>
+        <p>Sans contrainte sur la courbe de départ, la recherche retrouve sans cesse les mêmes orbites : le cercle de Lagrange, le huit, et leurs parentes. Changer d'algorithme n'y change rien. La variété vient du point de départ : de la façon dont la courbe initiale s'enroule.</p>
+        <p>La graine impose souvent une symétrie : la courbe a <i>m</i> pétales identiques, et parfois un miroir. En écrivant la courbe avec des nombres complexes, <i>z</i>(<i>t</i>) = Σ <i>c</i><sub>k</sub> e<sup>i<i>kt</i></sup>, cette symétrie revient à annuler certains coefficients :</p>
         <div class="eq">\[ z\!\left(t + \tfrac{2\pi}{m}\right) = e^{2i\pi l/m}\, z(t) \;\iff\; c_k = 0 \text{ sauf si } k \equiv l \pmod m \]</div>
-        <p>On cherche alors l'orbite parmi les seules courbes qui ont cette symétrie (sa <b>classe</b>). Comme l'action est elle-même symétrique, un point de pente nulle dans la classe est un point de pente nulle tout court : c'est une vraie chorégraphie (le principe de criticité symétrique de Palais). Rester dans la classe est simple : il suffit d'annuler les mêmes coefficients, dans la courbe comme dans le gradient.</p>
-        <p>Toutes les classes ne se valent pas. Dans la plupart, la descente aboutit au polygone de Lagrange, les corps aux sommets d'un polygone régulier qui tourne à la plus basse fréquence permise <i>k</i><sub>min</sub>. Mais si <i>k</i><sub>min</sub> et <i>N</i> ont un diviseur commun, ce polygone est une collision, des corps s'y superposent : il est hors d'atteinte, et la descente doit trouver autre chose. Ces classes donnent une orbite pour 100 % des graines, les autres pour 0 à 37 %.</p>
+        <p>On cherche alors l'orbite parmi les seules courbes qui ont cette symétrie (sa <b>classe</b>). Comme l'action est elle-même symétrique, un point de pente nulle dans la classe est un point de pente nulle tout court : c'est une vraie chorégraphie (le principe de criticité symétrique de Palais). Pour rester dans la classe, il suffit d'annuler les mêmes coefficients, dans la courbe comme dans le gradient.</p>
+        <p>Toutes les classes ne se valent pas. Dans la plupart, la descente aboutit au polygone de Lagrange, les corps aux sommets d'un polygone régulier qui tourne à la plus basse fréquence permise <i>k</i><sub>min</sub>. Mais si <i>k</i><sub>min</sub> et <i>N</i> ont un diviseur commun, ce polygone est une collision, des corps s'y superposent : la descente ne peut donc pas y aboutir et doit trouver autre chose. Avec ces classes, dites <b>sûres</b>, la recherche réussit pour 100 % des graines ; avec les autres, pour 0 à 37 %.</p>
         <figure id="fig-sym" class="wide"><figcaption><b>Les fréquences d'une classe et le polygone qu'elle contient.</b> En haut, les fréquences <i>k</i> de −15 à 15 : barrées, les multiples de <i>N</i> (centre de masse) ; pleines, celles que la classe permet ; cerclée, <i>k</i><sub>min</sub>. En bas, le polygone de Lagrange qui tourne à <i>k</i><sub>min</sub>. Fonctions importées du projet.</figcaption></figure>
         <div class="note try"><b>À essayer</b><ul>
           <li>Parcourez les classes pour <i>N</i> = 4 : quand <i>k</i><sub>min</sub> partage un diviseur avec 4, le polygone montre des corps superposés, et la classe est « sûre ».</li>
           <li>Passez à un <i>N</i> premier : aucune classe n'est sûre, puisque rien ne partage de diviseur avec lui.</li>
         </ul></div>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
-          <p>Le miroir s'écrit <i>z</i>(−<i>t</i>) = <span style="text-decoration:overline"><i>z</i>(<i>t</i>)</span>, soit des <i>c</i><sub>k</sub> réels. Le minimum dans la classe est en général un point selle de l'action complète : aucune descente libre ne s'y arrêterait. Les classes sûres n'existent que pour <i>N</i> composé (4, 6, 8, 9) ; la graine les tire à 85 %.</p>
-          <div class="note"><b>Une orbite parcourue deux fois n'est pas une orbite nouvelle</b><p>Le huit revenait parfois déguisé, parcouru deux fois. Une courbe dont toutes les harmoniques sont multiples d'un même entier est une orbite plus simple aux corps renumérotés : si le PGCD des harmoniques non nulles dépasse 1, l'essai est écarté.</p></div>
+          <p>Le miroir s'écrit <i>z</i>(−<i>t</i>) = <span style="text-decoration:overline"><i>z</i>(<i>t</i>)</span>, soit des <i>c</i><sub>k</sub> réels. Le point de pente nulle trouvé dans la classe est en général un point selle de l'action complète : une descente sans classe imposée ne s'y arrêterait pas. Les classes sûres n'existent que pour <i>N</i> composé (4, 6, 8, 9), et la graine en tire une dans 85 % des cas.</p>
+          <div class="note"><b>Une orbite parcourue deux fois n'est pas une orbite nouvelle</b><p>Le huit peut revenir déguisé, parcouru deux fois. Une courbe dont toutes les harmoniques sont multiples d'un même entier est en réalité une orbite plus simple, parcourue plusieurs fois, dont les corps sont simplement répartis autrement. Si le plus grand diviseur commun des harmoniques non nulles dépasse 1, l'essai est écarté.</p></div>
         </div></details>
       </section>
 
@@ -115,17 +115,17 @@
         </ul></div>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
           <p>Chaque pas de Newton demande de résoudre <i>H</i> δ = −∇𝒜, avec <i>H</i> le hessien (la matrice des courbures), par MINRES préconditionné. Le hessien est symétrique, indéfini et singulier (décaler le temps ou tourner la courbe laisse l'action invariante) ; il n'est jamais formé, les produits <i>Hv</i> étant des différences centrées du gradient exact. On double le nombre d'harmoniques (32, 64, 128) tant que la loi de Newton n'est pas satisfaite. L'intégrateur est Dormand–Prince 5(4), à une tolérance relative de 10⁻¹¹. Le produit des jacobiennes des segments donne la matrice de monodromie, dont la plus grande valeur propre dit si l'orbite est stable.</p>
-          <div class="note"><b>Des orbites stables, à confirmer</b><p>Sur 300 graines, 61 orbites ont un rayon spectral proche de 1 : 24 sont le huit, redécouvert, et 37 sont des orbites à 4 corps, dont 36 dans des classes de symétrie. La stabilité a été contre-vérifiée sur 13 d'entre elles par une méthode indépendante (état perturbé de 10⁻⁹, intégré sur 20 périodes). Elles restent des candidates, à comparer aux catalogues avant toute annonce.</p></div>
+          <div class="note"><b>Des orbites stables, à confirmer</b><p>Sur 300 graines, 61 orbites ont un rayon spectral proche de 1 (la plus grande valeur propre, en valeur absolue, de la matrice de monodromie) : 24 sont le huit, redécouvert, et 37 sont des orbites à 4 corps, dont 36 dans des classes de symétrie. La stabilité a été contre-vérifiée sur 13 d'entre elles par une méthode indépendante (état perturbé de 10⁻⁹, intégré sur 20 périodes). Elles restent des candidates, à comparer aux catalogues avant toute annonce.</p></div>
         </div></details>
       </section>
 
       <section id="epicycles">
-        <h2><span class="n">06</span>La série de Fourier est déjà une machine</h2>
+        <h2><span class="n">06</span>La série de Fourier décrit déjà une machine</h2>
         <span class="src">src/scene/epicycles.js · src/mech/design.js · designTrain()</span>
         <p>Chaque terme de la série de Fourier, <i>c</i><sub>k</sub> e<sup>i<i>kt</i></sup>, est un cercle de rayon |<i>c</i><sub>k</sub>| parcouru <i>k</i> fois par période. Une somme de tels termes est donc un bras qui tourne, portant au bout un deuxième bras qui tourne à sa propre vitesse, et ainsi de suite : ce sont les épicycles de Ptolémée. La série que la recherche a trouvée décrit donc déjà une machine. Pour chaque astre, on garde les bras les plus longs, jusqu'à ce que le reste tienne sous 0,3 % de la taille de l'orbite.</p>
         <figure id="fig-epi" class="wide"><figcaption><b>Les bras d'une chaîne et la courbe qu'ils tracent.</b> En or, la courbe tracée par les bras retenus ; en gris, l'orbite exacte. Le bandeau donne l'écart, la somme des amplitudes oubliées rapportée à la taille de l'orbite.</figcaption></figure>
         <div class="note try"><b>À essayer</b><ul>
-          <li>Retirez des bras un à un : la courbe dorée perd d'abord ses petites boucles, puis s'éloigne franchement de l'orbite.</li>
+          <li>Retirez des bras un à un : la courbe dorée perd d'abord ses petites boucles, puis s'éloigne nettement de l'orbite.</li>
         </ul></div>
 
         <h3>Un train d'engrenages par bras</h3>
@@ -137,27 +137,27 @@
           <li>Changez les vitesses : le nombre de renvois change de parité quand il faut inverser le sens, et la vitesse obtenue tombe toujours exactement sur la vitesse voulue.</li>
         </ul></div>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
-          <p>Les bras sont 14 au plus par astre, et la recherche écarte d'emblée les orbites qu'une telle machine ne tracerait pas à 1 % près. Dans une classe de symétrie, il faut en médiane 4 harmoniques pour 0,2 % de précision, contre 12 sans classe. Les nombres de dents sont des multiples du numérateur et du dénominateur du rapport, au moins 10. On ajoute des renvois, par deux, tant qu'une roue dépasse la longueur du bras divisée par 2,2. Les dents de chaque paire sont calées dans les creux de l'autre : sur 1 014 paires vérifiées, l'erreur reste sous 10⁻¹² pas.</p>
+          <p>Les bras sont 14 au plus par astre, et la recherche écarte d'emblée les orbites qu'une telle machine ne tracerait pas à 1 % près. Dans une classe de symétrie, il faut en médiane 4 harmoniques pour 0,2 % de précision, contre 12 sans classe. Les nombres de dents sont des multiples du numérateur et du dénominateur du rapport, pour que celui-ci soit exact, et valent au moins 10. On ajoute des renvois, par deux, tant qu'une roue dépasse la longueur du bras divisée par 2,2. Les dents de chaque paire sont calées dans les creux de l'autre : sur 1 014 paires vérifiées, l'erreur reste sous 10⁻¹² pas.</p>
         </div></details>
       </section>
 
       <section id="etages">
         <h2><span class="n">07</span>Ranger les bras par étages</h2>
         <span class="src">src/mech/design.js · designOrder(), portals() · tools/collide.mjs</span>
-        <p><i>N</i> chaînes de bras balaient le même disque. Deux bras de même rang qui se croisent à un moment de la période ne peuvent pas être à la même hauteur. Le placement est une <b>coloration de graphe</b> : chaque bras est un nœud, deux bras qui se croisent sont reliés, et chaque couleur est un étage, interdit à deux nœuds voisins. On cherche le moins d'étages possible, parce que chaque étage ajoute de la hauteur à la machine.</p>
+        <p><i>N</i> chaînes de bras balaient le même disque. Deux bras de même rang qui se croisent à un moment de la période ne peuvent pas être à la même hauteur. Le placement est une <b>coloration de graphe</b> : chaque bras est un nœud, deux bras qui se croisent sont reliés, et chaque couleur est un étage. Deux nœuds reliés ne peuvent pas avoir la même couleur, donc pas le même étage. On cherche le moins d'étages possible, parce que chaque étage ajoute de la hauteur à la machine.</p>
         <figure id="fig-levels" class="wide"><figcaption><b>La machine vue de dessus</b>, chaque bras coloré par son étage dans son rang. <code>designMachine()</code> est appelée telle quelle. À droite, l'élévation. « Tout au même étage » montre les croisements que la coloration évite, cerclés de rouge.</figcaption></figure>
         <div class="note try"><b>À essayer</b><ul>
           <li>Activez « Tout au même étage » : des cercles rouges apparaissent là où deux bras de même rang se traversent.</li>
         </ul></div>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
-          <p>Chaque bras et le train qu'il porte forment une dalle de 34 mm. Le graphe est échantillonné en 160 instants par période, sur la vraie largeur de chaque dalle. Les éléments verticaux (goupilles des astres, axes, colonnes des galets) ajoutent des contraintes d'ordre ; quand elles forment un cycle, on renonce à la plus légère. L'ordre de sommation des bras ne change pas le bout de la chaîne : la conception en essaie jusqu'à 24 et garde la machine qui a le moins de collisions.</p>
-          <p>Sur les machines à 11 bras ou plus, les grands bras d'une chaîne balaient les axes des chaînes voisines, et aucun rangement ne défait tous les croisements. Ces passages sont mis en scène : comme tout ne dépend que du temps de la boucle, la conception calcule d'avance les fenêtres de chaque rencontre, et l'axe s'ouvre comme un portail aux bords dorés pour laisser passer le bras.</p>
+          <p>Chaque bras et le train d'engrenages qu'il porte forment une dalle, une plaque de 34 mm d'épaisseur. Le graphe est échantillonné en 160 instants par période, sur la vraie largeur de chaque dalle. Les éléments verticaux (goupilles des astres, axes, colonnes des galets) ajoutent des contraintes d'ordre (telle dalle doit être au-dessus de telle autre) ; quand elles se contredisent en formant un cycle, on abandonne la plus légère. L'ordre de sommation des bras ne change pas le bout de la chaîne : la conception en essaie jusqu'à 24 et garde la machine qui a le moins de collisions.</p>
+          <p>Sur les machines à 11 bras ou plus, les grands bras d'une chaîne balaient les axes des chaînes voisines, et aucun rangement ne défait tous les croisements. Ces passages sont mis en scène : comme tout ne dépend que du temps de la boucle, la conception calcule d'avance les intervalles de temps de chaque rencontre, et l'axe s'ouvre comme un portail aux bords dorés pour laisser passer le bras.</p>
           <div class="note check"><b>Un contrôle qui ne partage rien avec la conception</b><p><code>tools/collide.mjs</code> refait la vérification sur la forme réelle des pièces, à au moins 20 000 instants par période. Sur les graines 0 à 29 : aucune pénétration dans les 25 machines ; 14 sans aucun croisement, les 11 autres avec 3 à 25 portails.</p></div>
         </div></details>
       </section>
 
       <section id="verre">
-        <h2><span class="n">08</span>Le fil de verre refroidit d'un <i>N</i>-ième de période</h2>
+        <h2><span class="n">08</span>Le refroidissement du fil de verre</h2>
         <span class="src">src/scene/orbit3d.js</span>
         <p>La trace de l'orbite est un fil de verre qui rougeoie derrière chaque astre. Garder l'historique des positions coûterait de la mémoire et casserait la boucle parfaite. Or, sur une chorégraphie, on sait d'avance quand un astre est passé pour la dernière fois en chaque point de la courbe. Au point d'abscisse <i>s</i> (en fraction de période), avec φ la phase courante :</p>
         <div class="eq">\[ h(s) = 1 - \operatorname{fract}\!\big(N(\varphi - s)\big), \qquad \text{éclat} = e^{-\kappa\,(1 - h)} \]</div>
@@ -169,10 +169,10 @@
       </section>
 
       <section id="plongee">
-        <h2><span class="n">09</span>Plonger dans une boule sans couture</h2>
+        <h2><span class="n">09</span>La plongée dans une boule, sans couture</h2>
         <span class="src">src/main.js · setTime() · src/scene/world.js</span>
         <p>Chaque astre est une boule de verre qui contient le monde suivant, réduit d'un facteur <i>k</i> (au plus 0,075 / 5,2). La caméra ne bouge pas : c'est le monde qui grandit, de 1 à 1/<i>k</i>, pendant la plongée. Quand la plongée est finie, le monde intérieur occupe exactement la place de l'ancien, et il devient la nouvelle racine de la scène sans que rien ne bouge à l'écran.</p>
-        <p>Le zoom le plus simple garde la boule visée immobile à l'écran et grossit tout autour d'elle. Le raccord est exact, mais la boule ne se centre qu'à la toute fin : elle remplit déjà l'image et se promène encore. Orrery sépare donc deux mouvements : la boule glisse vers le centre tant qu'elle est petite, y est fixée dès la moitié de la plongée, puis grandit sur place.</p>
+        <p>Le zoom le plus simple garde la boule visée immobile à l'écran et grossit tout autour d'elle. Le raccord est exact, mais la boule ne se centre qu'à la toute fin : elle remplit déjà l'image alors qu'elle se déplace encore. Orrery sépare donc deux mouvements : la boule glisse vers le centre tant qu'elle est petite, y est fixée dès la moitié de la plongée, puis grandit sur place.</p>
         <div class="eq">\[ x \mapsto \frac{x - t_r}{k^s}, \qquad t_r = p\,\big(1 - k^s a(s)\big), \qquad a(s) = 1 - \mathrm{ss}_5\!\left(\tfrac{s}{0{,}5}\right) \]</div>
         <p><i>s</i> va de 0 à 1 pendant la plongée, <i>p</i> est la position de la boule visée, et ss<sub>5</sub> une rampe douce du cinquième degré. La boule est dessinée en <i>p a</i>(<i>s</i>) : à <i>s</i> = 0,5, elle est au centre.</p>
         <figure id="fig-plunge" class="wide"><figcaption><b>Une plongée, vue de dessus.</b> Le monde est dessiné sous la transformation ; la boule visée contient le monde suivant, qui contient le suivant. Le pointillé est le chemin de la boule visée dans l'image pendant toute la plongée. « Zoom de point fixe » montre la version simple.</figcaption></figure>
@@ -180,16 +180,16 @@
           <li>Activez « Zoom de point fixe » : la boule visée reste excentrée jusqu'à la fin, alors qu'elle remplit déjà l'image.</li>
         </ul></div>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
-          <p>Pendant la plongée, le temps du monde qu'on quitte ralentit jusqu'à 8 % de son allure ; le monde qu'on rejoint tourne à la sienne. Position et échelle sont identiques à 10⁻¹⁴ près aux trois raccords, bouclage compris. La monture de la boule visée est calculée pour s'écarter de la caméra : ses anneaux s'arrêtent, et la cage pivote de l'angle qui éloigne le plus ses barreaux de la trajectoire.</p>
+          <p>Pendant la plongée, le temps du monde qu'on quitte ralentit jusqu'à 8 % de son allure ; le monde qu'on rejoint tourne à la sienne. Position et échelle sont identiques à 10⁻¹⁴ près aux trois raccords, bouclage compris. La monture de la boule visée (les anneaux et la cage de barreaux qui l'entourent) est orientée pour ne pas gêner la caméra : les anneaux cessent de tourner, et la cage pivote de l'angle qui éloigne le plus ses barreaux de la trajectoire de la caméra.</p>
         </div></details>
       </section>
 
       <section id="compilation">
-        <h2><span class="n">10</span>Trois mondes compilés sans geler l'écran</h2>
+        <h2><span class="n">10</span>Compiler trois mondes sans geler l'écran</h2>
         <span class="src">src/main.js · pipes, warm() · src/scene/world.js</span>
-        <p>Les trois mondes sont emboîtés en permanence, chacun avec ses matières, son studio et ses lumières. Deux pièges faisaient geler l'image.</p>
-        <p>Le premier : three.js calcule la clé de ses shaders à partir de l'ordre des lumières de la scène. Ré-emboîter les mondes à chaque raccord changeait cet ordre et recompilait tous les matériaux. Les lumières sont donc placées dans la scène dans un ordre fixe, et recopient à chaque image la transformation de leur monde.</p>
-        <p>Le second : three.js compile le programme de chaque combinaison de matière et de géométrie au premier dessin, et le navigateur reste bloqué pendant chaque compilation. Pendant le chargement, la compilation est détournée vers sa version asynchrone : un objet pas encore prêt est sauté, et l'on redessine jusqu'à ce qu'il n'en manque plus.</p>
+        <p>Les trois mondes sont emboîtés en permanence, chacun avec ses matières, son studio et ses lumières. Deux problèmes peuvent faire geler l'image.</p>
+        <p>Le premier vient de l'ordre des lumières : three.js calcule la clé de ses shaders à partir de l'ordre des lumières de la scène. Ré-emboîter les mondes à chaque raccord changerait cet ordre et ferait recompiler tous les matériaux. Les lumières sont donc placées dans la scène dans un ordre fixe, et recopient à chaque image la transformation de leur monde.</p>
+        <p>Le second vient de la compilation : three.js compile le programme de chaque combinaison de matière et de géométrie au premier dessin, et le navigateur reste bloqué pendant chaque compilation. Pendant le chargement, la compilation est détournée vers sa version asynchrone : un objet pas encore prêt est sauté, et l'on redessine jusqu'à ce qu'il n'en manque plus.</p>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
 <pre><code>be.createRenderPipeline = (renderObject, promises) => {
   if (!pipes.on || promises) return create(renderObject, promises);
@@ -201,8 +201,8 @@
   pipes.pending.push(Promise.all(list)
     .then(() => { if (data.pipeline) data.error = false; }));
 };</code></pre>
-          <p>La scène est révélée par petits lots (au plus 4 shaders ou 30 ms par lot), puis dessinée aux six moments qui comptent. Mesuré sur la graine 17 : 1,4 s de blocages de l'affichage au total avec la compilation synchrone, 0,1 s ainsi. Ensuite, plus rien ne se compile : sur une boucle entière, aucune image ne dépasse 34 ms.</p>
-          <div class="note"><b>Instancier sans InstancedMesh</b><p>Pour un InstancedMesh, three.js compile un shader par objet. La matrice de chaque instance est donc un attribut de la géométrie, appliqué par la matière : pour trois machines, 181 shaders au lieu de 477, et un chargement de 10,6 s ramené à 7,7 s.</p></div>
+          <p>La scène est révélée par petits lots (au plus 4 shaders ou 30 ms par lot), puis dessinée à six instants choisis de la boucle (deux par monde), pour que chaque shader soit déjà compilé quand il apparaît. Mesuré sur la graine 17 : 1,4 s de blocages de l'affichage au total avec la compilation synchrone, 0,1 s ainsi. Ensuite, plus rien ne se compile : sur une boucle entière, aucune image ne dépasse 34 ms.</p>
+          <div class="note"><b>Instancier sans InstancedMesh</b><p>Avec un InstancedMesh, three.js compile un shader par objet. La matrice de chaque instance est donc un attribut de la géométrie, appliqué par la matière : pour trois machines, 181 shaders au lieu de 477, et un chargement de 7,7 s au lieu de 10,6 s.</p></div>
         </div></details>
       </section>
 
@@ -230,7 +230,7 @@
             <tr><td>Orbites distinctes sur 259 trouvées</td><td>—</td><td class="num">229</td></tr>
             <tr><td>Shaders pour trois machines (instanciation par attribut)</td><td>GPU</td><td class="num">181 (au lieu de 477)</td></tr>
             <tr><td>Chargement complet, trois mondes</td><td>page</td><td class="num">7,7 s (au lieu de 10,6)</td></tr>
-            <tr><td>Image, 7 corps à 11 bras</td><td>GPU</td><td class="num">~14 ms (au lieu de ~60)</td></tr>
+            <tr><td>Image, 7 corps à 11 bras</td><td>GPU</td><td class="num">~14 ms</td></tr>
             <tr><td>Atmosphère (poussières, faisceau, fumée, braises)</td><td>GPU</td><td class="num">~2 ms</td></tr>
             <tr><td>Blocages de l'affichage au chargement, graine 17</td><td>page</td><td class="num">0,1 s (au lieu de 1,4 s)</td></tr>
             <tr><td>Pire image sur une boucle entière</td><td>page</td><td class="num">34 ms</td></tr>

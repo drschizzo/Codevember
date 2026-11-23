@@ -48,12 +48,12 @@
       </section>
 
       <section id="nid">
-        <h2><span class="n">02</span>Une boucle parfaite par construction</h2>
+        <h2><span class="n">02</span>Une boucle exacte par construction</h2>
         <span class="src">src/scene/nest.js</span>
         <p>Pour que la plongée tourne en boucle, il faut qu'au bout d'un tour la scène soit exactement celle du départ, sans fondu pour masquer le raccord. Hollow l'obtient par la géométrie seule.</p>
         <p>Les coquilles sont numérotées par leur rang <i>d</i> dans l'emboîtement, et la coquille de rang <i>d</i> utilise le modèle <i>d</i> mod <i>N</i> : les <i>N</i> modèles reviennent dans l'ordre. Chaque coquille est plus petite que la précédente d'un même rapport <i>k</i> (0,58 à 0,66). La caméra avance de τ couches, et ce qui compte pour une coquille est sa position par rapport à la caméra, <i>x</i> = <i>d</i> − τ :</p>
         <div class="eq">\[ r = D\,k^{\,x}, \qquad x = d - \tau \]</div>
-        <p><i>D</i> est la distance de la caméra au centre. La coquille à <i>x</i> = 0 passe exactement par la caméra : c'est celle qu'on traverse. Quand τ augmente de <i>N</i>, chaque coquille prend la place exacte de celle qui portait le même modèle <i>N</i> rangs plus haut : la scène à τ + <i>N</i> est la scène à τ. Toute la conception en découle. Taille, lumière reçue, brouillard, niveau de détail, ouverture du diaphragme : chaque grandeur d'une coquille ne dépend que de <i>x</i>, jamais de son rang ni du temps absolu.</p>
+        <p><i>D</i> est la distance de la caméra au centre. La coquille à <i>x</i> = 0 passe exactement par la caméra : c'est celle qu'on traverse. Quand τ augmente de <i>N</i>, chaque coquille prend la place exacte de celle qui portait le même modèle <i>N</i> rangs plus haut : la scène à τ + <i>N</i> est la scène à τ. Il en résulte que la taille, la lumière reçue, le brouillard, le niveau de détail et l'ouverture du diaphragme d'une coquille ne dépendent que de <i>x</i>, jamais de son rang ni du temps absolu.</p>
         <p>Les coquilles culbutent pendant qu'elles approchent, puis s'immobilisent oculus face à la caméra avant le passage. L'angle de culbute est un nombre entier de tours, parcouru par une rampe 6<i>u</i>⁵ − 15<i>u</i>⁴ + 10<i>u</i>³ qui part et arrive à vitesse nulle : la coquille retrouve exactement son orientation au passage.</p>
         <figure id="fig-nest" class="wide"><figcaption><b>Le nid en coupe.</b> La caméra est à droite, sur la coquille <i>x</i> = 0 ; chaque couleur est un modèle. Faites glisser horizontalement pour avancer ou reculer la plongée. Les coquilles les plus profondes existent mais restent cachées dans le cœur. La culbute est dessinée dans le plan de coupe, alors qu'elle tourne autour d'un axe tiré dans l'espace.</figcaption></figure>
         <div class="note try"><b>À essayer</b><ul>
@@ -62,7 +62,7 @@
         </ul></div>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
           <p>Une coquille est affichée de <i>x</i> = −2,3 (derrière la caméra, noyée dans le brouillard) jusqu'à la profondeur de naissance <i>x</i><sub>B</sub> = ⌈ln <i>c</i> / ln <i>k</i>⌉ + 1, où <i>c</i> est le rayon relatif du cœur (0,035 à 0,06) : c'est la première couche entièrement cachée par le cœur. Avec un rapport de 0,6 et cinq modèles, la coquille de même modèle cinq couches plus loin n'a plus que 8 % du rayon de celle que traverse la caméra.</p>
-          <div class="note"><b>Des exemplaires qui gardent leur couche</b><p>Chaque coquille visible est un exemplaire de son modèle. Le choix de l'exemplaire est calculé depuis la phase « déroulée », dont la partie entière compte les boucles accomplies, si bien qu'un exemplaire garde la même couche d'une boucle à l'autre. Un exemplaire qui sauterait d'une couche à une autre emporterait sa position de l'image précédente : le flou de mouvement et l'anticrénelage temporel, qui comparent chaque image à la précédente, y verraient un déplacement énorme et produiraient un éclair.</p></div>
+          <div class="note"><b>Des exemplaires qui gardent leur couche</b><p>Chaque coquille visible est un exemplaire de son modèle. Le choix de l'exemplaire est calculé depuis la phase « déroulée » (le temps de la scène sans le ramener à un seul tour), dont la partie entière compte les boucles accomplies, si bien qu'un exemplaire garde la même couche d'une boucle à l'autre. Un exemplaire qui sauterait d'une couche à une autre emporterait sa position de l'image précédente : le flou de mouvement et l'anticrénelage temporel, qui comparent chaque image à la précédente, y verraient un déplacement énorme et produiraient un éclair.</p></div>
           <div class="note"><b>Trier soi-même</b><p>Toutes les coquilles ont le même centre, si bien que le tri par distance de three.js ne sait pas les départager. L'ordre de rendu est fixé d'après <i>x</i> : la coquille traversée d'abord, puis les suivantes vers le cœur, et celles qui entourent la caméra en dernier.</p></div>
         </div></details>
       </section>
@@ -70,7 +70,7 @@
       <section id="respiration">
         <h2><span class="n">03</span>Chaque passage a son tempo</h2>
         <span class="src">src/main.js · beatShift() · src/recipe.js · beatsFor()</span>
-        <p>À vitesse constante, la plongée devient vite mécanique. Hollow donne à chaque passage son tempo : ralenti appuyé, passage filé ou accélération. Il ne faut pas pour autant abîmer la boucle. Le temps de la scène τ doit rester croissant, sans saut de vitesse, et tomber exactement sur un entier à chaque passage, pour que la coquille soit bien dans la caméra à cet instant.</p>
+        <p>À vitesse constante, la plongée devient vite mécanique. Hollow donne à chaque passage son tempo : ralenti appuyé, passage filé ou accélération. Ce tempo ne doit pas casser la boucle : le temps de la scène τ doit rester croissant, sans saut de vitesse, et tomber exactement sur un entier à chaque passage, pour que la coquille soit bien dans la caméra à cet instant.</p>
         <p>On retranche au temps réel <i>t</i> une petite bosse centrée sur chaque passage <i>k</i>, de demi-largeur <i>w</i> et d'amplitude <i>a</i> :</p>
         <div class="eq">\[ \tau(t) = t - \sum_k a_k\,w_k\,K\!\left(\frac{t-k}{w_k}\right), \qquad K(x) = x - 3x^3 + 3x^5 - x^7 \]</div>
         <p>Le polynôme <i>K</i> est choisi pour trois propriétés. Il s'annule en 0, donc τ(<i>k</i>) = <i>k</i> exactement au passage. Il s'annule aussi en ±1, donc le temps perdu par le ralenti est rendu de part et d'autre, à l'intérieur de la fenêtre. Et sa dérivée <i>K</i>'(<i>x</i>) = (1 − 7<i>x</i>²)(1 − <i>x</i>²)² s'annule en ±1 avec sa propre dérivée, donc la vitesse rejoint 1 sans à-coup. La vitesse vaut 1 − <i>a</i> au passage, et une seule condition suffit pour que le temps ne recule jamais : <i>a</i> &lt; 1.</p>
@@ -81,15 +81,15 @@
         </ul></div>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
           <p>Chaque scène tire six battements, repris en boucle : ralenti (<i>a</i> entre 0,45 et 1), passage filé (<i>a</i> entre −0,1 et 0,15) ou accélération (<i>a</i> entre −0,85 et −0,4), avec <i>w</i> entre 0,28 et 0,5. Une amplitude globale de 0,55 à 0,85 multiplie le tout, si bien que la vitesse ne descend jamais sous 0,15 dans la scène. Dans les ralentis, le champ de la caméra s'ouvre de 0 à 12 %.</p>
-          <div class="note"><b>Le saut de fin de boucle</b><p>Les pièces animées ont besoin de τ à l'image précédente pour leurs vecteurs vitesse. En fin de boucle, τ repart de 0 : l'écart est donc ramené dans [−<i>N</i>/2, <i>N</i>/2], et un saut de plus d'une demi-couche n'est pas compté comme un mouvement.</p></div>
+          <div class="note"><b>Le saut de fin de boucle</b><p>Les pièces animées ont besoin de τ à l'image précédente pour leurs vecteurs vitesse. En fin de boucle, τ repart de 0 : la différence avec l'image précédente est donc ramenée dans [−<i>N</i>/2, <i>N</i>/2] en lui ajoutant une période <i>N</i>, et ce saut n'est pas compté comme un mouvement.</p></div>
         </div></details>
       </section>
 
       <section id="trous">
         <h2><span class="n">04</span>Percer un trou au bord net</h2>
         <span class="src">src/gen/shell.js · prepareCells(), holeRim()</span>
-        <p>Une coquille percée part d'un pavage de la sphère, un découpage de sa surface en cellules : alvéoles (des hexagones et douze pentagones), cellules irrégulières de Voronoï, fentes ou entrelacs. Chaque cellule devient un trou, entouré de barreaux de même largeur partout, avec des angles plus ou moins arrondis. Les premières versions cherchaient ce bord par essais successifs, et 2 à 7 % des triangles sortaient étirés en aiguilles.</p>
-        <p>Le bord est maintenant construit exactement. On projette la cellule sur un plan tangent depuis le centre de la sphère (la projection gnomonique, qui change les grands cercles en droites) : la cellule y devient un vrai polygone. Puis, en trois étapes :</p>
+        <p>Une coquille percée part d'un pavage de la sphère, un découpage de sa surface en cellules : alvéoles (des hexagones et douze pentagones), cellules irrégulières de Voronoï, fentes ou entrelacs. Chaque cellule devient un trou, entouré de barreaux de même largeur partout, avec des angles plus ou moins arrondis.</p>
+        <p>Le bord est construit par un calcul exact. On projette la cellule sur un plan tangent depuis le centre de la sphère (la projection gnomonique, qui change les grands cercles en droites) : la cellule y devient un vrai polygone. Puis, en trois étapes :</p>
         <ol>
           <li>on rétrécit le polygone de la demi-largeur du barreau, côté par côté : c'est le bord intérieur des barreaux, <i>P</i><sub>1</sub> ;</li>
           <li>on le rétrécit encore du rayon de congé <i>r</i><sub>c</sub>, l'arrondi voulu pour les coins : c'est le noyau <i>P</i><sub>2</sub> ;</li>
@@ -105,7 +105,7 @@
         </ul></div>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
           <p>Le rayon de congé vaut <i>r</i><sub>c</sub> = 0,97 × arrondi × ρ, ρ étant la distance du centre de <i>P</i><sub>1</sub> à son côté le plus proche. Les rétrécissements sont des intersections de demi-plans, découpées par l'algorithme de Sutherland-Hodgman. Une forme imposée (ellipse, étoile, diaphragme) est combinée par un minimum lisse, qui laisse un congé là où elle coupe le polygone, comme l'aurait fait une fraise. La courbe est évaluée en 1 024 directions avant d'être rééchantillonnée ; pas et rotation dépendent du niveau de détail (0,022 et 0,14 rad au plus fin, 0,075 et 0,45 rad pour le maillage des ombres).</p>
-          <p>Biseau, paroi et épaulement sont des décalages de ce bord. La cellule voisine partage le même contour avec le même nombre de points, si bien que le maillage est étanche. Mesuré sur le résultat : moins de 1 % de triangles étirés, aucun triangle nul ni retourné, et jusqu'à trois fois moins de triangles sur les pièces les plus chargées.</p>
+          <p>Biseau, paroi et épaulement sont des décalages de ce bord. La cellule voisine partage le même contour avec le même nombre de points, si bien que le maillage est étanche. Mesuré sur le résultat : moins de 1 % de triangles étirés, aucun triangle nul ni retourné.</p>
         </div></details>
       </section>
 
@@ -141,7 +141,7 @@
         </ul></div>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
           <p>Six surfaces sont proposées : gyroïde, Schwarz P, diamant, Neovius, I-WP, Fischer-Koch S. Le maximum lisse vaut smax(<i>a</i>, <i>b</i>) = max(<i>a</i>, <i>b</i>) + <i>h</i>²<i>k</i>/4, avec <i>h</i> = max(<i>k</i> − |<i>a</i> − <i>b</i>|, 0)/<i>k</i>. La feuille fait au moins 0,065 d'épaisseur pour un rayon de 1 (environ quatre cases au niveau moyen), et le congé environ 0,09. La grille compte 224, 132 ou 76 cases par côté selon le niveau, mais n'est parcourue que dans la bande de la coquille. La fausse position (variante d'Illinois) remplace la méthode de Newton, qui saute de l'autre côté d'une feuille mince.</p>
-          <div class="note"><b>Deux fois plus vite, même maillage</b><p>Le gradient exact du champ remplace six évaluations par une, et la fausse position remplace dix-huit dichotomies. Les sommets restent sur la surface à 10⁻⁸ près, avec le même nombre de triangles, et le niveau le plus fin passe de 2,5–4,1 s à 1,2–1,8 s de génération. Dans le shader, la normale est recalculée à chaque pixel à partir du champ, si bien que les reflets ne trahissent jamais les triangles.</p></div>
+          <div class="note"><b>Gradient direct, fausse position</b><p>Le calcul direct de la pente du champ (son gradient) remplace six évaluations par une, et la fausse position remplace dix-huit dichotomies. Les sommets restent sur la surface à 10⁻⁸ près, et le niveau le plus fin se génère en 1,2–1,8 s. Dans le shader, la normale est recalculée à chaque pixel à partir du champ, si bien que les reflets ne trahissent jamais les triangles.</p></div>
         </div></details>
       </section>
 
@@ -162,7 +162,7 @@
       </section>
 
       <section id="pieces">
-        <h2><span class="n">08</span>Des pièces qui bougent, ombre comprise</h2>
+        <h2><span class="n">08</span>Des pièces mobiles et leur ombre</h2>
         <span class="src">src/scene/rig.js · src/gen/iris.js · src/scene/materials.js</span>
         <p>Diaphragmes d'oculus, éclats de kintsugi, écailles et anneaux sont des pièces rigides d'un seul maillage. Pour les faire bouger sans découper le maillage en milliers d'objets, chaque sommet porte le pivot <i>b</i> de sa pièce, un axe <i>a</i> et une amplitude. Le shader le tourne d'un angle θ autour du pivot :</p>
         <div class="eq">\[ p' = b + \mathcal{R}(a, \theta)\,(p - b) + t\,\hat b \]</div>
@@ -173,27 +173,27 @@
           <li>Changez le nombre de lames : l'angle d'ouverture cherché s'ajuste pour que chaque lame dégage le trou (163° avec 6 lames, 142° avec 12).</li>
         </ul></div>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
-          <p>Le shader doit connaître <i>x</i>. La première version le passait comme valeur propre à chaque objet, mais des exemplaires d'une même couche recevaient parfois la valeur d'un autre, et un diaphragme restait fermé au passage. Le shader le déduit maintenant de l'échelle de l'objet, qui vaut <i>D k</i><sup>x</sup>, par un logarithme.</p>
+          <p>Le shader doit connaître <i>x</i>. Le passer comme valeur propre à chaque objet est fragile : des exemplaires d'une même couche pourraient recevoir la valeur d'un autre, et un diaphragme resterait fermé au passage. Le shader le déduit donc de l'échelle de l'objet, qui vaut <i>D k</i><sup>x</sup>, par un logarithme.</p>
 <pre><code>export const layerX = log(modelScale.x.div(G.D)).div(log(G.ratio));</code></pre>
           <p>Les coquilles naissent dans le cœur. Si une nouvelle coquille se mettait d'un coup à projeter son ombre, toute la lumière du cœur sauterait : dans la carte d'ombre, ses barreaux s'élargissent donc progressivement pendant la dernière unité de profondeur, entièrement à l'intérieur du cœur.</p>
-          <div class="note trap"><b>Deux caches de three.js</b><p>three.js compile un objet d'après les attributs de sa géométrie à ce moment ; un échange de géométrie ne fait que remplacer les tampons. Les copies rendues pendant le chargement, compilées sans les attributs de pivot, gardaient des diaphragmes figés : les matériaux sont reconstruits à chaque échange. De même, la passe d'ombre met en cache son programme par maillage et par matériau ; chaque couche a donc son propre matériau d'ombre.</p></div>
+          <div class="note trap"><b>Deux caches de three.js</b><p>three.js compile le programme d'un objet d'après les attributs de sa géométrie au moment du premier rendu ; échanger la géométrie ne fait que remplacer les tampons, sans recompiler. Les copies provisoires affichées pendant le chargement, compilées sans les attributs de pivot, garderaient donc des diaphragmes figés : les matériaux sont reconstruits à chaque échange. De même, la passe d'ombre met en cache son programme par maillage et par matériau ; chaque couche a donc son propre matériau d'ombre.</p></div>
         </div></details>
       </section>
 
       <section id="biseau">
-        <h2><span class="n">09</span>Un biseau rond avec trois segments</h2>
+        <h2><span class="n">09</span>Un biseau arrondi à trois segments</h2>
         <span class="src">src/scene/materials.js · bevelNormal()</span>
         <p>Les arêtes des trous reçoivent un biseau arrondi qui accroche la lumière. Ce biseau n'a que trois segments au plus fin et un seul au plus loin, et les métaux polis reflètent l'environnement comme un miroir. Les normales interpolées entre les sommets trahissent alors les segments : les reflets sont coudés, et le biseau change d'aspect d'un niveau de détail à l'autre.</p>
         <p>Le mailleur écrit donc sur la tranche l'angle α du profil du biseau (0 sur la paroi, π/2 sur la face), et le shader reconstruit à chaque pixel la normale d'un quart de cercle exact :</p>
         <div class="eq">\[ n = \cos\alpha\;\hat w + \sin\alpha\;\hat r \]</div>
-        <p><i>ŵ</i> est la direction horizontale du bord du trou et <i>r̂</i> la direction radiale. L'angle s'interpole linéairement entre les sommets, donc la normale tourne à vitesse constante quel que soit le nombre de segments. Les niveaux de détail ne diffèrent plus que par la silhouette du biseau.</p>
+        <p><i>ŵ</i> est la direction horizontale du bord du trou et <i>r̂</i> la direction radiale. L'angle s'interpole linéairement entre les sommets, donc la normale tourne à vitesse constante quel que soit le nombre de segments. Les niveaux de détail ne diffèrent que par la silhouette du biseau.</p>
         <figure id="fig-bevel" class="wide"><figcaption><b>Un trou rond vu d'en haut, en laiton poli.</b> Le maillage est dessiné triangle par triangle avec le nombre de points et de segments de chaque niveau. À droite, le profil du biseau et les normales de ses sommets. Le bouton passe de la normale interpolée à la normale par pixel.</figcaption></figure>
         <div class="note try"><b>À essayer</b><ul>
           <li>Au niveau 2 (un seul segment), basculez la normale par pixel : les reflets en dents de scie deviennent un anneau continu.</li>
         </ul></div>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
-          <p>Les seuils de détail ont pu être relevés (niveau 0 au-delà de 1 100 px de rayon à l'écran, niveau 1 au-delà de 280). Les congés serrés font varier la normale très vite d'un pixel à l'autre, et le reflet scintille : la méthode de Kaplanyan augmente la rugosité là où la normale varie, d'après ses dérivées à l'écran, ρ' = (ρ⁴ + min(0,5 (‖∂<sub>x</sub><i>N</i>‖² + ‖∂<sub>y</sub><i>N</i>‖²), 0,18))<sup>1/4</sup>. Les motifs échantillonnent un volume de bruit précalculé (128³) au lieu de calculer du bruit à chaque pixel.</p>
-          <div class="note trap"><b>Sans branche</b><p>Un choix conditionnel en TSL devient un if/else en WGSL, et la normale géométrique, variable partagée, n'était alors assignée que dans une des deux branches. Le choix entre normale de tranche et normale du maillage est donc un mélange par une fonction en marche, avec des divisions bornées, car une valeur indéfinie (NaN) se propagerait aux pixels voisins par les dérivées.</p></div>
+          <p>Les seuils de changement de niveau de détail ont pu être relevés (le niveau 0 commence au-delà de 1 100 px de rayon à l'écran, le niveau 1 au-delà de 280). Les congés serrés font varier la normale très vite d'un pixel à l'autre, et le reflet scintille : la méthode de Kaplanyan augmente la rugosité là où la normale varie, d'après ses dérivées à l'écran, ρ' = (ρ⁴ + min(0,5 (‖∂<sub>x</sub><i>N</i>‖² + ‖∂<sub>y</sub><i>N</i>‖²), 0,18))<sup>1/4</sup>. Les motifs échantillonnent un volume de bruit précalculé (128³) au lieu de calculer du bruit à chaque pixel.</p>
+          <div class="note trap"><b>Sans branche</b><p>Un choix conditionnel écrit en TSL (le langage de shaders de three.js) devient un if/else en WGSL (celui de WebGPU), et la normale géométrique, partagée entre les deux branches, n'est alors assignée que dans l'une d'elles. Le choix entre normale de tranche et normale du maillage est donc un mélange pondéré par une fonction en escalier, avec des divisions bornées : une valeur indéfinie (NaN) se propagerait aux pixels voisins par les dérivées.</p></div>
         </div></details>
       </section>
 
@@ -211,7 +211,7 @@
           <tbody>
             <tr><td>Surface minimale, niveau le plus fin (grille 224³ restreinte à la bande)</td><td>worker</td><td class="num">1,2 à 1,8 s</td></tr>
             <tr><td>Corail : réaction-diffusion sur sphère géodésique</td><td>worker</td><td class="num">5&#8239;000 itérations</td></tr>
-            <tr><td>Sommet de coquille (normale et tangente compressées)</td><td>GPU</td><td class="num">28 octets (44 avant)</td></tr>
+            <tr><td>Sommet de coquille (normale et tangente compressées)</td><td>GPU</td><td class="num">28 octets</td></tr>
             <tr><td>Volume de bruit périodique (Perlin, Worley)</td><td>GPU</td><td class="num">128³</td></tr>
             <tr><td>Poussière d'or (version mobile : un quart)</td><td>GPU</td><td class="num">6&#8239;000 paillettes</td></tr>
             <tr><td>Rayons du cœur, pas de marche (mobile : quart de résolution)</td><td>GPU</td><td class="num">48 (18)</td></tr>
