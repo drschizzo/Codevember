@@ -26,6 +26,7 @@ import { createStage } from './scene/stage.js';
 import { makeEnvironment } from './scene/env.js';
 import { G, setNoiseVolume, setLite } from './scene/materials.js';
 import { createPost } from '../../shared/render/post.js';
+import { createHandheld } from '../../shared/scene/handheld.js';
 import { createProbe, PROBE } from './scene/probe.js';
 import { smoothInsidePose, entryAxis } from './scene/voyage.js';
 import { timelineFor } from './math4.js';
@@ -126,8 +127,17 @@ export async function createCore({ renderer, width, height, gen, lite = false, R
       camera.lookAt(_t.copy(pos).add(fwd));
       fov = K.fov + ((R.voyage.fov ?? 68) - K.fov) * kc;
     }
+    // caméra tenue, sur la pose finale (dehors comme dedans) : visée le long de
+    // l'axe de la caméra, à la distance du tesseract ; dans l'hypersphère, la
+    // caméra tourne sans se déplacer (les parois et le passage sont tout près)
+    if ((RENDER.handheld ?? 0) > 0) { // (à 0 : la pose calculée, au bit près)
+      const kcH = info?.kc ?? 0, dH = Math.max(0.05, camera.position.distanceTo(tess.group.position));
+      _hT.copy(camera.position).addScaledVector(_hF.set(0, 0, -1).applyQuaternion(camera.quaternion), dH);
+      camera.lookAt(hand.aim(camera, _hT, ph, { amp: RENDER.handheld, duration: R.loop.duration, fov, move: 1 - kcH }, _hA));
+    }
     if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); }
   }
+  const hand = createHandheld('tesseract'), _hA = new THREE.Vector3(), _hT = new THREE.Vector3(), _hF = new THREE.Vector3(); // (caméra tenue : RENDER.handheld, 0 = la caméra calculée seule)
   const _f = new THREE.Vector3(), _u = new THREE.Vector3(), _t = new THREE.Vector3(), _j = new THREE.Vector3(), _dark = new THREE.Color();
   let lastPhase = 0, info = null;
   // u : phase « déroulée » (seule sa partie fractionnaire compte ici)

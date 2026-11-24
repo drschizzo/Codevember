@@ -30,6 +30,7 @@ import { setNoiseVolume, setLite } from '../../shared/scene/materials.js';
 import { createPost } from '../../shared/render/post.js';
 import { makeClock, plan, SLOW } from './season.js';
 import { cameraScale, filmCamera, cameraOrbit } from './camera.js';
+import { createHandheld } from '../../shared/scene/handheld.js';
 
 const TAU = Math.PI * 2;
 
@@ -69,6 +70,7 @@ export async function createCore({ renderer, width, height, gen, lite = false, R
   // u : phase « déroulée » (partie entière = nombre de boucles accomplies)
   const _f = new THREE.Vector3(), _u = new THREE.Vector3(), _r = new THREE.Vector3(), _t = new THREE.Vector3(), _h = new THREE.Vector3(), _n = new THREE.Vector3(), _p1 = new THREE.Vector3(), _p2 = new THREE.Vector3();
   let lastPh = 0;
+  const hand = createHandheld('nest'), _hA = new THREE.Vector3(); // (caméra tenue : RENDER.handheld, 0 = la caméra calculée seule)
   function renderAt(u, { push = 0, sub = null, free = false } = {}) {
     const ph = u - Math.floor(u);
     G.phase.value = lastPh; // (G est commun aux jours du relais : la phase précédente est la nôtre)
@@ -153,6 +155,8 @@ export async function createCore({ renderer, width, height, gen, lite = false, R
       camera.lookAt(_t);
       dHero = Math.max(dHero, w);
     }
+    // caméra tenue, sur la pose finale (fondation et gros plan compris)
+    if (!free) camera.lookAt(hand.aim(camera, _t, ph, { amp: RENDER.handheld ?? 0, duration: R.loop.duration }, _hA));
     if (camera.fov !== C.fov) { camera.fov = C.fov; camera.updateProjectionMatrix(); }
     camera.clearViewOffset();
     if (sub) {
@@ -161,7 +165,7 @@ export async function createCore({ renderer, width, height, gen, lite = false, R
       _f.setFromMatrixColumn(camera.matrixWorld, 0); _u.setFromMatrixColumn(camera.matrixWorld, 1);
       const ap = 0.012 * (RENDER.dof ? RENDER.bokeh : 0.3);
       camera.position.addScaledVector(_f, sub.lens[0] * ap).addScaledVector(_u, sub.lens[1] * ap);
-      camera.lookAt(_t);
+      camera.lookAt(free ? _t : _hA);
       camera.setViewOffset(canvas.width, canvas.height, sub.pixel[0], sub.pixel[1], canvas.width, canvas.height);
     }
     G.microDetail.value = RENDER.microDetail;

@@ -10,6 +10,7 @@ export const QUALITY = {
 };
 
 export const RENDER_DEFAULTS = {
+  handheld: 1, // (caméra tenue : imperfections d'opérateur, shared/scene/handheld.js ; 0 = la caméra calculée seule)
   quality: 'high',
   // (anticrénelage spatial : la passe tracée n'a pas de vecteurs vitesse)
   pixelRatio: 1.5, aa: 'smaa', shadows: 'high', microDetail: 1, patina: 1,

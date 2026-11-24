@@ -21,6 +21,7 @@ import { G } from '../../shared/scene/globals.js';
 import { makeEnvironment } from '../../shared/scene/env.js';
 import { setLite } from '../../shared/scene/materials.js';
 import { createPost } from '../../shared/render/post.js';
+import { createHandheld } from '../../shared/scene/handheld.js';
 
 export async function createCore({ renderer, width, height, gen, lite = false, RENDER }) {
   setLite(lite); // (lu à la construction des matériaux)
@@ -46,6 +47,7 @@ export async function createCore({ renderer, width, height, gen, lite = false, R
   // u : phase « déroulée » (partie entière = nombre de boucles accomplies)
   const _t = new THREE.Vector3();
   let lastPh = 0;
+  const hand = createHandheld('fold'), _hA = new THREE.Vector3(), _hT = new THREE.Vector3(); // (caméra tenue : RENDER.handheld, 0 = la caméra calculée seule)
   function renderAt(u, { push = 0, sub = null, free = false } = {}) {
     const ph = u - Math.floor(u);
     G.phase.value = lastPh; // (G est commun aux jours du relais : la phase précédente est la nôtre)
@@ -60,7 +62,7 @@ export async function createCore({ renderer, width, height, gen, lite = false, R
       // (relais : la caméra avance vers ce qu'elle regarde)
       if (push) camera.position.lerp(_t.set(...C.tgt), push);
       camera.up.set(0, 1, 0);
-      camera.lookAt(...C.tgt);
+      camera.lookAt(hand.aim(camera, _hT.set(...C.tgt), ph, { amp: RENDER.handheld ?? 0, duration: R.loop.duration }, _hA));
     }
     if (camera.fov !== C.fov) { camera.fov = C.fov; camera.updateProjectionMatrix(); }
     stage.update(ph);

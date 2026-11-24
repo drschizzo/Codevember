@@ -23,6 +23,7 @@ de `<projet>/src/`.
 | `scene/globals.js` | uniformes partagés (phase, image, micro-relief) |
 | `scene/materials.js` | matériau TSL d'une pièce à trois finitions |
 | `scene/rig.js` | déformation des sommets |
+| `scene/handheld.js` | caméra tenue : imperfections d'opérateur (dérive, respiration, roulis), périodiques en phase ; `RENDER.handheld`, 0 = la caméra calculée seule |
 | `scene/env.js`, `gen/envmap.js` | studio HDR calculé |
 | `gen/client.js` | pool de workers avec cache, arrêtés après `idleMs` (4 s) sans travail et recréés à la demande ; le worker du thème reste dans `<projet>/src/gen/worker.js` |
 | `gen/mesh.js` | tampons de maillage et primitives |

@@ -91,6 +91,7 @@ async function main() {
   // les états de la simulation en route)
   const gen = createGenerator(LITE ? Math.max(2, Math.min(3, (navigator.hardwareConcurrency || 4) - 1)) : undefined);
   const RENDER = loadRender(LITE);
+  if (params.has('handheld')) RENDER.handheld = +params.get('handheld') || 0; // (?handheld=0 : la caméra calculée seule, pour comparer)
   // (l'écran de chargement dessine la corde pendant que la simulation la calcule : app/loaderArt.js)
   const core = await createCore({
     renderer, width: innerWidth, height: innerHeight, gen, lite: LITE, RENDER,

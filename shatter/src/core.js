@@ -21,6 +21,7 @@ import { makeEnvironment } from './scene/env.js';
 import { G } from './scene/globals.js';
 import { setNoiseVolume, setLite } from './scene/materials.js';
 import { createPost } from '../../shared/render/post.js';
+import { createHandheld } from '../../shared/scene/handheld.js';
 
 const TAU = Math.PI * 2;
 
@@ -85,6 +86,7 @@ export async function createCore({ renderer, width, height, gen, lite = false, R
     return hi;
   }
   // u : phase « déroulée » (partie entière = nombre de boucles accomplies)
+  const hand = createHandheld('shatter'), _hA = new THREE.Vector3(), _hT = new THREE.Vector3(); // (caméra tenue : RENDER.handheld, 0 = la caméra calculée seule)
   function renderAt(u, { push: look = 0, sub = null, free = false } = {}) {
     const ph = u - Math.floor(u);
     const N = R.pieces.length, Ts = R.loop.stage, T = loopDuration(R);
@@ -116,7 +118,7 @@ export async function createCore({ renderer, width, height, gen, lite = false, R
       // (relais : la caméra avance vers la pièce, en restant au-dessus de la sole)
       if (look) { _r.set(0, tgtY, 0); camera.position.lerp(_r, look); }
       camera.up.set(0, 1, 0);
-      camera.lookAt(0, tgtY, 0);
+      camera.lookAt(hand.aim(camera, _hT.set(0, tgtY, 0), ph, { amp: RENDER.handheld ?? 0, duration: T }, _hA));
       focusDist = camera.position.distanceTo(_r.set(0, stage.maxHeight() * 0.45, 0));
     }
     if (camera.fov !== C.fov) { camera.fov = C.fov; camera.updateProjectionMatrix(); }
@@ -127,7 +129,7 @@ export async function createCore({ renderer, width, height, gen, lite = false, R
       _f.setFromMatrixColumn(camera.matrixWorld, 0); _u.setFromMatrixColumn(camera.matrixWorld, 1);
       const ap = 0.012 * (RENDER.dof ? RENDER.bokeh : 0.3);
       camera.position.addScaledVector(_f, sub.lens[0] * ap).addScaledVector(_u, sub.lens[1] * ap);
-      camera.lookAt(_r.set(0, 0.95, 0));
+      camera.lookAt(!free ? _hA : _r.set(0, 0.95, 0));
       camera.setViewOffset(canvas.width, canvas.height, sub.pixel[0], sub.pixel[1], canvas.width, canvas.height);
     }
     G.microDetail.value = RENDER.microDetail;

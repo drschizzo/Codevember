@@ -14,6 +14,7 @@ export const QUALITY = {
 // (courbe ACES : la cire chaude et la résistance de la lampe gardent leur teinte ;
 //  flou de mouvement coupé : la cire n'écrit pas ses vitesses)
 export const RENDER_DEFAULTS = {
+  handheld: 1, // (caméra tenue : imperfections d'opérateur, shared/scene/handheld.js ; 0 = la caméra calculée seule)
   quality: 'high',
   pixelRatio: 1.25, aa: 'traa', shadows: 'high', microDetail: 1, patina: 1, msaa: 0,
   toneMapping: 'aces', exposure: 1, contrast: 1.05, saturation: 1, warmth: 0, vignette: 0.4,

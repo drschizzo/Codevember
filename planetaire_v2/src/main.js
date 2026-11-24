@@ -55,6 +55,7 @@ async function main() {
   const LITE = wantsMobile(params);
   if (LITE) document.body.classList.add('lite');
   const RENDER = loadRender(LITE);
+  if (params.has('handheld')) RENDER.handheld = +params.get('handheld') || 0; // (?handheld=0 : la caméra calculée seule, pour comparer)
   const S = { worlds: [], k: [], target: [], tau: 0, paused: false, busy: true, run: 0, exporting: false, loading: false, landing: false, handoff: false, root: -1, good: null };
   // résolution dynamique : vise ~45 images / s, entre 50 et 100 % de la résolution de base
   const governor = createGovernor({ target: 1 / 45, min: 0.5, max: 1, onChange: () => !S.busy && resize() });

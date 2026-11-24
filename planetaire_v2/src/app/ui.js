@@ -157,6 +157,7 @@ export function createUI({ recipe: getRecipe, render: RENDER, on }) {
   fRender.add(RENDER, 'bloomStrength', 0, 0.6, 0.005).name('Bloom : force').onChange(rc);
   fRender.add(RENDER, 'bloomThreshold', 0, 4, 0.01).name('Bloom : seuil').onChange(rc);
   fRender.add(RENDER, 'dof').name('Profondeur de champ').onChange(rc);
+  fRender.add(RENDER, 'handheld', 0, 3, 0.05).name('Caméra tenue').onChange(rc);
   fRender.add(RENDER, 'bokeh', 0, 4, 0.01).name('Bokeh').onChange(rc);
   fRender.add(RENDER, 'focusSpread', 0.1, 2, 0.01).name('Zone nette').onChange(rc);
   fRender.add(RENDER, 'halation', 0, 1, 0.01).name('Halation').onChange(rc);

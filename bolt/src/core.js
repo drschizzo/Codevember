@@ -20,6 +20,7 @@ import { G } from '../../shared/scene/globals.js';
 import { setNoiseVolume, setLite } from '../../shared/scene/materials.js';
 import { createPost } from './render/post.js'; // (variante locale : le nuage absorbe)
 import { cameraAt, stateAt } from './film.js';
+import { createHandheld } from '../../shared/scene/handheld.js';
 
 export async function createCore({ renderer, width, height, gen, lite = false, RENDER }) {
   setLite(lite); // (lu à la construction des matériaux)
@@ -53,6 +54,7 @@ export async function createCore({ renderer, width, height, gen, lite = false, R
   const _f = new THREE.Vector3(), _u = new THREE.Vector3(), _r = new THREE.Vector3(), _flash = new THREE.Color();
   let lastPh = 0;
   // u : phase « déroulée » (partie entière = nombre de boucles accomplies)
+  const hand = createHandheld('bolt'), _hA = new THREE.Vector3(), _hT = new THREE.Vector3(); // (caméra tenue : RENDER.handheld, 0 = la caméra calculée seule)
   function renderAt(u, { push = 0, sub = null, free = false } = {}) {
     const ph = u - Math.floor(u);
     G.phase.value = lastPh; // (G est commun aux jours du relais : la phase précédente est la nôtre)
@@ -68,7 +70,7 @@ export async function createCore({ renderer, width, height, gen, lite = false, R
       // (relais : la caméra avance vers ce qu'elle regarde)
       if (push) camera.position.lerp(_r.set(...pose.target), push);
       camera.up.set(0, 1, 0);
-      camera.lookAt(...pose.target);
+      camera.lookAt(hand.aim(camera, _hT.set(...pose.target), ph, { amp: RENDER.handheld ?? 0, duration: R.loop.duration }, _hA));
     }
     if (camera.fov !== C.fov) { camera.fov = C.fov; camera.updateProjectionMatrix(); }
     // la secousse du coup de foudre : un à-coup du pied de la caméra à chaque arc, amorti en un quart de seconde
@@ -85,7 +87,7 @@ export async function createCore({ renderer, width, height, gen, lite = false, R
       _f.setFromMatrixColumn(camera.matrixWorld, 0); _u.setFromMatrixColumn(camera.matrixWorld, 1);
       const ap = 0.012 * (RENDER.dof ? RENDER.bokeh : 0.3);
       camera.position.addScaledVector(_f, sub.lens[0] * ap).addScaledVector(_u, sub.lens[1] * ap);
-      camera.lookAt(_r.set(...pose.target));
+      camera.lookAt(!free ? _hA : _r.set(...pose.target));
       camera.setViewOffset(canvas.width, canvas.height, sub.pixel[0], sub.pixel[1], canvas.width, canvas.height);
     }
     G.microDetail.value = RENDER.microDetail;

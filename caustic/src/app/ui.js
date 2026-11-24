@@ -149,6 +149,7 @@ export function createUI({ recipe: getRecipe, render, on, moods, families }) {
   fb.add(r, 'halation', 0, 1.5, 0.01).name('Halation').onChange(rch);
   fb.add(r, 'dirt', 0, 2, 0.01).name('Poussière sur la lentille').onChange(rch);
   fb.add(r, 'motionBlur', 0, 2, 0.01).name('Flou de mouvement').onChange(rch);
+  fb.add(r, 'handheld', 0, 3, 0.05).name('Caméra tenue').onChange(rch);
   fb.add(r, 'dof').name('Profondeur de champ').onChange(rch);
   fb.add(r, 'focus', 0.1, 2, 0.01).name('Mise au point (× distance)').onChange(rch);
   fb.add(r, 'bokeh', 0, 8, 0.05).name('Bokeh').onChange(rch);

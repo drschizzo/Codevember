@@ -82,6 +82,7 @@ async function main() {
   // (la scène, sa recette et le rendu d'une phase : core.js, partagé avec le
   // relais de la méga-scène)
   const RENDER = loadRender(LITE);
+  if (params.has('handheld')) RENDER.handheld = +params.get('handheld') || 0; // (?handheld=0 : la caméra calculée seule, pour comparer)
   const core = await createCore({ renderer, width: innerWidth, height: innerHeight, gen, lite: LITE, RENDER });
   const { scene, camera, nest, lights, post } = core;
   nest.onError = (e) => (loading.active ? fail(`Simulation impossible : ${e.message}`) : toast(`Simulation impossible : ${e.message}`, 6000));

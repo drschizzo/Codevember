@@ -31,6 +31,7 @@ import { makeEnvironment } from './scene/env.js';
 import { setNoiseVolume, setLite } from './scene/materials.js';
 import { G } from './scene/globals.js';
 import { createPost } from './render/post.js';
+import { createHandheld } from '../../shared/scene/handheld.js';
 
 const D = 1; // distance caméra–centre (échelle de la plongée)
 
@@ -94,6 +95,8 @@ export async function createCore({ renderer, width, height, gen, lite = false, R
   }
 
   // ── Rendu d'une phase ──
+  const hand = createHandheld('membrane'), _hA = new THREE.Vector3(); // (caméra tenue : RENDER.handheld, 0 = la caméra calculée seule)
+  const _o = new THREE.Vector3();
   function rigCamera(ph, push) {
     const K = R.camera, w = ph * Math.PI * 2;
     // léger balancement (nombre entier d'oscillations par boucle) ; la caméra
@@ -103,7 +106,7 @@ export async function createCore({ renderer, width, height, gen, lite = false, R
     // (relais : la caméra avance vers le cœur du nid)
     if (push) camera.position.multiplyScalar(1 - push);
     camera.up.set(Math.sin(K.roll + w * K.rollTurns), Math.cos(K.roll + w * K.rollTurns), 0);
-    camera.lookAt(0, 0, 0);
+    camera.lookAt(hand.aim(camera, _o.set(0, 0, 0), ph, { amp: RENDER.handheld ?? 0, duration: R.loop.beat * R.levels.length }, _hA));
     if (camera.fov !== K.fov) { camera.fov = K.fov; camera.updateProjectionMatrix(); }
   }
   // u : phase « déroulée » (partie entière = nombre de boucles accomplies)

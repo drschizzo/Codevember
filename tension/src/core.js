@@ -29,6 +29,7 @@ import { makeEnvironment } from '../../shared/scene/env.js';
 import { G } from '../../shared/scene/globals.js';
 import { setNoiseVolume, setLite } from '../../shared/scene/materials.js';
 import { createPost } from '../../shared/render/post.js';
+import { createHandheld } from '../../shared/scene/handheld.js';
 
 // le résultat du worker (tableaux à plat) → la forme attendue par makeFilm
 function unpackSim(o) {
@@ -121,6 +122,7 @@ export async function createCore({ renderer, width, height, gen, lite = false, R
   let lastU = null;
   const jumped = (u) => { const j = lastU === null || Math.abs(u - lastU) > 0.02 || Math.floor(u) !== Math.floor(lastU); lastU = u; return j; };
   const _f = new THREE.Vector3(), _u = new THREE.Vector3(), _r = new THREE.Vector3(), _t = new THREE.Vector3();
+  const hand = createHandheld('tension'); const _a = new THREE.Vector3(); // (caméra tenue : RENDER.handheld, 0 = la caméra calculée seule)
   let lastPh = 0;
   // u : phase « déroulée » (partie entière = nombre de boucles accomplies)
   function renderAt(u, { push = 0, sub = null, free = false } = {}) {
@@ -139,12 +141,14 @@ export async function createCore({ renderer, width, height, gen, lite = false, R
     const cutNow = (plan?.shot ?? 0) !== lastShot;
     lastShot = plan?.shot ?? 0;
     if (cutNow) post.cut(); // (raccord de plan : pas de flou de mouvement ni d'historique d'une image à l'autre)
+    let aim = _r.set(tgt[0], tgt[1], tgt[2]);
     if (!free) {
       camera.position.set(...(plan ? plan.pos : cam.pos));
       // (relais : la caméra avance vers ce que regarde le plan)
       if (push) camera.position.lerp(_t.set(tgt[0], tgt[1], tgt[2]), push);
       camera.up.set(0, 1, 0);
-      camera.lookAt(tgt[0], tgt[1], tgt[2]);
+      aim = hand.aim(camera, _r, ph, { amp: RENDER.handheld ?? 0, duration: R.loop.duration, fov: C.fov }, _a);
+      camera.lookAt(aim);
     }
     // lumières : dans le repère de la marche, autour du centre suivi
     {
@@ -174,7 +178,7 @@ export async function createCore({ renderer, width, height, gen, lite = false, R
       _f.setFromMatrixColumn(camera.matrixWorld, 0); _u.setFromMatrixColumn(camera.matrixWorld, 1);
       const ap = 0.012 * (RENDER.dof ? RENDER.bokeh : 0.3);
       camera.position.addScaledVector(_f, sub.lens[0] * ap).addScaledVector(_u, sub.lens[1] * ap);
-      camera.lookAt(_r.set(tgt[0], tgt[1], tgt[2]));
+      camera.lookAt(aim);
       camera.setViewOffset(canvas.width, canvas.height, sub.pixel[0], sub.pixel[1], canvas.width, canvas.height);
     }
     G.microDetail.value = RENDER.microDetail;

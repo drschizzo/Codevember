@@ -24,6 +24,7 @@ import { createStage } from './scene/stage.js';
 import { G } from '../../shared/scene/globals.js';
 import { setNoiseVolume, setLite } from '../../shared/scene/materials.js';
 import { createPost } from '../../shared/render/post.js';
+import { createHandheld } from '../../shared/scene/handheld.js';
 
 export async function createCore({ renderer, width, height, gen, lite = false, RENDER }) {
   setLite(lite); // (lu à la construction des matériaux)
@@ -44,6 +45,10 @@ export async function createCore({ renderer, width, height, gen, lite = false, R
   // ── Rendu d'une phase ──
   const _r = new THREE.Vector3();
   const altCam = new THREE.PerspectiveCamera(25, 1, 0.01, 10);
+  // caméra tenue : le même tremblé pour les deux caméras du raccord (angles, et
+  // translation proportionnelle à la distance) : l'abyme reste auto-similaire
+  const hand = createHandheld('mirage'), _hA = new THREE.Vector3(); // (RENDER.handheld, 0 = la caméra calculée seule)
+  let hPh = 0;
   let dbgNoSeam = false; // (?debug : window.mirage.noSeam(true) montre chaque vue sans le fondu)
   // pose d'une caméra : position, visée, champ (élargi en portrait), étirement
   // horizontal du raccord (le format du dessin, multiplié par ax) ; place :
@@ -55,7 +60,7 @@ export async function createCore({ renderer, width, height, gen, lite = false, R
       // (relais : la caméra avance vers ce qu'elle regarde)
       if (push) cam.position.lerp(_r.set(...P.tgt), push);
       cam.up.set(0, 1, 0);
-      cam.lookAt(_r.set(...P.tgt));
+      cam.lookAt(hand.aim(cam, _r.set(...P.tgt), hPh, { amp: RENDER.handheld ?? 0, duration: R.loop.duration, fov: 35 }, _hA));
     }
     const base = canvas.width / Math.max(1, canvas.height);
     const fovDeg = P.fov * (base >= 1 ? 1 : Math.min(1.7, 1.1 / base)), asp = base * (P.ax ?? 1);
@@ -76,6 +81,7 @@ export async function createCore({ renderer, width, height, gen, lite = false, R
     const canvas = renderer.domElement;
     // la caméra de la chorégraphie : la spirale de l'abyme
     const P = cameraAt(R, ph);
+    hPh = ph;
     pose(camera, P, sub, push, !free);
     // le raccord : la même image vue depuis l'autre niveau, mêlée en fondu ;
     // l'argent perdu par l'image du petit, compensé à mesure qu'elle grandit

@@ -28,6 +28,7 @@ import { makeEnvironment } from '../../shared/scene/env.js';
 import { G } from '../../shared/scene/globals.js';
 import { setNoiseVolume, setLite } from '../../shared/scene/materials.js';
 import { createPost } from '../../shared/render/post.js';
+import { createHandheld } from '../../shared/scene/handheld.js';
 
 const TAU = Math.PI * 2;
 
@@ -58,6 +59,7 @@ export async function createCore({ renderer, width, height, gen, lite = false, R
 
   // u : phase « déroulée » (partie entière = nombre de boucles accomplies)
   const _f = new THREE.Vector3(), _u = new THREE.Vector3(), _r = new THREE.Vector3();
+  const hand = createHandheld('{{NAME}}'), _hA = new THREE.Vector3(), _hT = new THREE.Vector3(); // (caméra tenue : RENDER.handheld, 0 = la caméra calculée seule)
   let lastPh = 0;
   function renderAt(u, { push = 0, sub = null, free = false } = {}) {
     const ph = u - Math.floor(u);
@@ -74,7 +76,8 @@ export async function createCore({ renderer, width, height, gen, lite = false, R
       camera.position.set(Math.sin(az) * C.dist, C.height + C.sway * 4 * Math.sin(2 * TAU * ph + 1), Math.cos(az) * C.dist);
       if (push) camera.position.lerp(_r.set(0, 0, 0), push); // (relais : la caméra avance vers ce qu'elle regarde)
       camera.up.set(0, 1, 0);
-      camera.lookAt(0, 0, 0);
+      // caméra tenue : les imperfections d'un opérateur, par-dessus la pose calculée (shared/scene/handheld.js)
+      camera.lookAt(hand.aim(camera, _hT.set(0, 0, 0), ph, { amp: RENDER.handheld ?? 0, duration: R.loop.duration }, _hA));
     }
     if (camera.fov !== C.fov) { camera.fov = C.fov; camera.updateProjectionMatrix(); }
     camera.clearViewOffset();
@@ -84,7 +87,7 @@ export async function createCore({ renderer, width, height, gen, lite = false, R
       _f.setFromMatrixColumn(camera.matrixWorld, 0); _u.setFromMatrixColumn(camera.matrixWorld, 1);
       const ap = 0.012 * (RENDER.dof ? RENDER.bokeh : 0.3);
       camera.position.addScaledVector(_f, sub.lens[0] * ap).addScaledVector(_u, sub.lens[1] * ap);
-      camera.lookAt(_r.set(0, 0, 0));
+      camera.lookAt(free ? _r.set(0, 0, 0) : _hA); // (la visée tremblée, comme la pose)
       camera.setViewOffset(canvas.width, canvas.height, sub.pixel[0], sub.pixel[1], canvas.width, canvas.height);
     }
     G.microDetail.value = RENDER.microDetail;

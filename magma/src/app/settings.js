@@ -12,6 +12,7 @@ export const QUALITY = {
 };
 
 export const RENDER_DEFAULTS = {
+  handheld: 1, // (caméra tenue : imperfections d'opérateur, shared/scene/handheld.js ; 0 = la caméra calculée seule)
   quality: 'high',
   pixelRatio: 1.5, aa: 'traa', shadows: 'high', microDetail: 1, patina: 1,
   msaa: 0, // (2 ou 4 : MSAA sur la passe de scène, pour un sujet à fils ou à arêtes fines que le TRAA seul laisse scintiller)

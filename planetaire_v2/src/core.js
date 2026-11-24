@@ -39,6 +39,7 @@ import { createPost } from './render/post.js';
 import { SHADOWS } from './app/settings.js';
 import { orbitOverrides } from './recipe.js';
 import { withPivots } from './mech/design.js';
+import { createHandheld } from '../../shared/scene/handheld.js';
 
 const TAU = Math.PI * 2;
 const ss5 = (x) => { const t = Math.min(1, Math.max(0, x)); return t * t * t * (t * (t * 6 - 15) + 10); };
@@ -254,6 +255,7 @@ export async function createCore({ renderer, width, height, gen: pool, lite = fa
   // push : la caméra avance vers ce qu'elle regarde (relais), la mise au point
   // suit (× (1 − push)) ; free : la caméra n'est pas posée
   const tmp = new THREE.Vector3();
+  const hand = createHandheld('planetaire_v2'), _hA = new THREE.Vector3(); // (caméra tenue : RENDER.handheld, 0 = la caméra calculée seule)
   function setTime(tau, { push = 0, free = false } = {}) {
     const Mn = M();
     S.tau = ((tau % Mn) + Mn) % Mn;
@@ -318,7 +320,8 @@ export async function createCore({ renderer, width, height, gen: pool, lite = fa
       const pose = basePose(a, u, b, s);
       camera.position.copy(pose.pos);
       if (push) camera.position.lerp(pose.target, push); // (relais)
-      camera.lookAt(pose.target);
+      const hph = tau / R.layers.length;
+      camera.lookAt(hand.aim(camera, pose.target, hph - Math.floor(hph), { amp: RENDER.handheld ?? 0, duration: R.motion.segment * R.layers.length, fov: pose.fov }, _hA));
       if (Math.abs(camera.fov - pose.fov) > 1e-4) { camera.fov = pose.fov; camera.updateProjectionMatrix(); }
       const g = new THREE.Vector3().copy(p).sub(tr).multiplyScalar(1 / ks); // boule visée, dans l'image
       const focusPt = pose.target.clone().lerp(g, ss5(s * 3));

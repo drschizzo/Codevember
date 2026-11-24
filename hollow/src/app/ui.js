@@ -246,6 +246,7 @@ export function createUI({ recipe: getRecipe, render, on }) {
   fa.add(r, 'aoRadius', 0.05, 1.5, 0.01).name('Rayon').onChange(rch);
   const fl = fRender.addFolder('Objectif').close();
   fl.add(r, 'motionBlur', 0, 2, 0.01).name('Flou de mouvement').onChange(rch);
+  fl.add(r, 'handheld', 0, 3, 0.05).name('Caméra tenue').onChange(rch);
   fl.add(r, 'dof').name('Profondeur de champ').onChange(rch);
   fl.add(r, 'focus', 0.1, 2, 0.01).name('Mise au point (× distance)').onChange(rch);
   fl.add(r, 'focusRange', 0.02, 2, 0.01).name('Zone nette').onChange(rch);

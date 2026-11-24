@@ -18,6 +18,7 @@ export const SHADOWS = {
 };
 
 export const RENDER_DEFAULTS = {
+  handheld: 1, // (caméra tenue : imperfections d'opérateur, shared/scene/handheld.js ; 0 = la caméra calculée seule)
   quality: 'high', pixelRatio: 1.5, aa: 'smaa', shadows: 'high',
   toneMapping: 'agx', exposure: 1.2, contrast: 1.08, saturation: 1.05, warmth: 0, vignette: 0.45,
   bloom: true, bloomStrength: 0.09, bloomRadius: 0.4, bloomThreshold: 1.4, hiCap: 6,

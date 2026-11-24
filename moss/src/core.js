@@ -21,6 +21,7 @@ import { makeEnvironment } from './scene/env.js';
 import { G } from '../../shared/scene/globals.js';
 import { setNoiseVolume, setLite } from '../../shared/scene/materials.js';
 import { createPost } from '../../shared/render/post.js';
+import { createHandheld } from '../../shared/scene/handheld.js';
 
 export async function createCore({ renderer, width, height, gen, lite = false, RENDER }) {
   const scene = new THREE.Scene();
@@ -58,6 +59,7 @@ export async function createCore({ renderer, width, height, gen, lite = false, R
   // u : phase « déroulée » (partie entière = nombre de boucles accomplies)
   const _f = new THREE.Vector3(), _u = new THREE.Vector3(), _r = new THREE.Vector3(), _t = new THREE.Vector3();
   let lastPh = 0;
+  const hand = createHandheld('moss'), _hA = new THREE.Vector3(), _hT = new THREE.Vector3(); // (caméra tenue : RENDER.handheld, 0 = la caméra calculée seule)
   function renderAt(u, { push = 0, sub = null, free = false, target = null } = {}) {
     const ph = u - Math.floor(u);
     G.phase.value = lastPh; // (G est commun aux jours du relais : la phase précédente est la nôtre)
@@ -73,7 +75,7 @@ export async function createCore({ renderer, width, height, gen, lite = false, R
       // (relais : la caméra avance vers le coussin)
       if (push) camera.position.lerp(_t.set(...pose.target), push);
       camera.up.set(0, 1, 0);
-      camera.lookAt(_r.set(...pose.target));
+      camera.lookAt(hand.aim(camera, _r.set(...pose.target), ph, { amp: RENDER.handheld ?? 0, duration: R.loop.duration }, _hA));
     }
     if (camera.fov !== C.fov) { camera.fov = C.fov; camera.updateProjectionMatrix(); }
     camera.clearViewOffset();
@@ -84,7 +86,7 @@ export async function createCore({ renderer, width, height, gen, lite = false, R
       // (ouverture de l'objectif macro : la vraie profondeur de champ du rendu accumulé)
       const ap = 0.05 * (RENDER.dof ? RENDER.bokeh / 2 : 0.3) * C.aperture;
       camera.position.addScaledVector(_f, sub.lens[0] * ap).addScaledVector(_u, sub.lens[1] * ap);
-      camera.lookAt(_r.set(...pose.target));
+      camera.lookAt(!free ? _hA : _r.set(...pose.target));
       camera.setViewOffset(canvas.width, canvas.height, sub.pixel[0], sub.pixel[1], canvas.width, canvas.height);
     }
     stage.moss.U.px.value = (2 * Math.tan((camera.fov * Math.PI) / 360)) / Math.max(1, canvas.height);

@@ -10,6 +10,7 @@ export const QUALITY = {
 };
 
 export const RENDER_DEFAULTS = {
+  handheld: 1, // (caméra tenue : imperfections d'opérateur, shared/scene/handheld.js ; 0 = la caméra calculée seule)
   quality: 'high',
   pixelRatio: 1.5, aa: 'traa', shadows: 'high', microDetail: 1, patina: 1,
   // (courbe ACES et non AgX : AgX délave les orangés vifs, et le verre en fusion

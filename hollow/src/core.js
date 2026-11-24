@@ -26,6 +26,7 @@ import { createDust } from './scene/dust.js';
 import { makeEnvironment } from './scene/env.js';
 import { G, setNoiseVolume, setLite } from './scene/materials.js';
 import { createPost } from './render/post.js';
+import { createHandheld } from '../../shared/scene/handheld.js';
 
 export const D = 4; // distance caméra–centre (toutes les longueurs de la scène en dépendent)
 
@@ -79,6 +80,7 @@ export async function createCore({ renderer, width, height, gen, lite = false, R
   // ── Rendu d'une phase ──
   // pose de la caméra du film à la phase ph ; rend le point visé
   const _t = new THREE.Vector3();
+  const hand = createHandheld('hollow'), _hA = new THREE.Vector3(); // (caméra tenue : RENDER.handheld, 0 = la caméra calculée seule)
   function rig(ph, push) {
     const w = ph * Math.PI * 2, s = R.camera.sway * D;
     camera.position.set(s * Math.sin(w + 0.7), s * 0.65 * Math.sin(2 * w + 1.3), D);
@@ -87,7 +89,7 @@ export async function createCore({ renderer, width, height, gen, lite = false, R
     _t.set(s * 0.25 * Math.sin(w + 2.4), s * 0.2 * Math.cos(w), 0);
     // (relais : la caméra avance vers ce qu'elle regarde)
     if (push) camera.position.lerp(_t, push);
-    camera.lookAt(_t);
+    camera.lookAt(hand.aim(camera, _t, ph, { amp: RENDER.handheld ?? 0, duration: R.loop.duration }, _hA));
   }
   let shells = 0, curTau = 0;
   // u : phase « déroulée » (le nombre de boucles accomplies en partie entière),

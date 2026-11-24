@@ -10,6 +10,7 @@ export const QUALITY = {
 };
 
 export const RENDER_DEFAULTS = {
+  handheld: 1, // (caméra tenue : imperfections d'opérateur, shared/scene/handheld.js ; 0 = la caméra calculée seule)
   quality: 'high',
   // (1,25 × CSS : l'anticrénelage temporel affine déjà l'image ; à 1,5, la
   // scène, limitée par le coût de ses pixels, tombait sous 15 i/s en plein écran)

@@ -10,6 +10,7 @@ export const QUALITY = {
 };
 
 export const RENDER_DEFAULTS = {
+  handheld: 1, // (caméra tenue : imperfections d'opérateur, shared/scene/handheld.js ; 0 = la caméra calculée seule)
   quality: 'high',
   pixelRatio: 1.25, aa: 'traa', shadows: 'high', microDetail: 1, patina: 1,
   toneMapping: 'agx', exposure: 1.1, contrast: 1.08, saturation: 1.05, warmth: 0, vignette: 0.45,

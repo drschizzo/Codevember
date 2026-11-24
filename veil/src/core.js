@@ -28,6 +28,7 @@ import { makeEnvironment } from '../../shared/scene/env.js';
 import { G } from '../../shared/scene/globals.js';
 import { setNoiseVolume, setLite } from '../../shared/scene/materials.js';
 import { createPost } from '../../shared/render/post.js';
+import { createHandheld } from '../../shared/scene/handheld.js';
 
 const TAU = Math.PI * 2;
 
@@ -63,6 +64,7 @@ export async function createCore({ renderer, width, height, gen, lite = false, R
   // seul aller-retour par boucle. Tout est périodique en u.
   const _f = new THREE.Vector3(), _u = new THREE.Vector3(), _t = new THREE.Vector3();
   let lastPh = 0;
+  const hand = createHandheld('veil'), _hA = new THREE.Vector3(); // (caméra tenue : RENDER.handheld, 0 = la caméra calculée seule)
   function cameraPose(ph, push = 0) {
     const C = R.camera, TLt = stage.TL.total;
     const o = stage.openness(ph * TLt);
@@ -79,7 +81,7 @@ export async function createCore({ renderer, width, height, gen, lite = false, R
     _t.set(0, ty, 0);
     camera.position.set(Math.sin(az) * Math.cos(el) * d, ty + Math.sin(el) * d, Math.cos(az) * Math.cos(el) * d);
     camera.up.set(0, 1, 0);
-    camera.lookAt(_t);
+    camera.lookAt(hand.aim(camera, _t, ph, { amp: RENDER.handheld ?? 0, duration: stage.TL?.total ?? R.loop.duration }, _hA));
     return d;
   }
   const mix = (a, b, t) => a + (b - a) * t;
@@ -102,7 +104,7 @@ export async function createCore({ renderer, width, height, gen, lite = false, R
       _f.setFromMatrixColumn(camera.matrixWorld, 0); _u.setFromMatrixColumn(camera.matrixWorld, 1);
       const ap = 0.006 * (RENDER.dof ? RENDER.bokeh : 0.3);
       camera.position.addScaledVector(_f, sub.lens[0] * ap).addScaledVector(_u, sub.lens[1] * ap);
-      camera.lookAt(_t);
+      camera.lookAt(free ? _t : _hA);
       camera.setViewOffset(canvas.width, canvas.height, sub.pixel[0], sub.pixel[1], canvas.width, canvas.height);
     }
     G.microDetail.value = RENDER.microDetail;

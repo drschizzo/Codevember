@@ -18,6 +18,7 @@ export const RENDER_DEFAULTS = {
   ssr: true, ssrIntensity: 0.7, ssrQuality: 0.5, ssrDistance: 2.5, ssrThickness: 0.05, ssrRes: 0.5, ssrBlur: 2, nestEnv: 0.45, crystalThick: 1,
   dof: false, focus: 1, focusRange: 0.35, bokeh: 2,
   motionBlur: 0.6, ca: 0.1, grain: 0.03,
+  handheld: 1, // (caméra tenue : imperfections d'opérateur, shared/scene/handheld.js ; 0 = la caméra calculée seule)
   streaks: 0.08, streakLen: 4, halation: 0.25, dirt: 0.3,
   dynRes: false, maxFps: 0, // (résolution dynamique, cadence plafonnée : voir app/mobile.js)
 };

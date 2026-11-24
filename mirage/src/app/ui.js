@@ -63,6 +63,7 @@ export function createUI({ recipe: getRecipe, render, on }) {
   ft.add(r, 'grain', 0, 0.15, 0.001).name('Grain').onChange(rch);
   const fb = fRender.addFolder('Bloom').close();
   fb.add(r, 'bloom').name('Bloom').onChange(rch);
+  fb.add(r, 'handheld', 0, 3, 0.05).name('Caméra tenue').onChange(rch);
   fb.add(r, 'bloomStrength', 0, 2, 0.01).name('Bloom : intensité').onChange(rch);
   fb.add(r, 'bloomThreshold', 0, 4, 0.01).name('Bloom : seuil').onChange(rch);
   fRender.add({ reset: () => on.resetRender() }, 'reset').name('Réglages par défaut');

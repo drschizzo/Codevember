@@ -76,6 +76,7 @@ export function createUI({ recipe: getRecipe, render, on, moods }) {
   ft.add(r, 'ca', 0, 1.5, 0.01).name('Aberration chromatique').onChange(rch);
   const fb = fRender.addFolder('Bloom').close();
   fb.add(r, 'bloom').name('Bloom').onChange(rch);
+  fb.add(r, 'handheld', 0, 3, 0.05).name('Caméra tenue').onChange(rch);
   fb.add(r, 'bloomStrength', 0, 2, 0.01).name('Bloom : intensité').onChange(rch);
   fb.add(r, 'bloomThreshold', 0, 4, 0.01).name('Bloom : seuil').onChange(rch);
   fb.add(r, 'halation', 0, 1.5, 0.01).name('Halation').onChange(rch);

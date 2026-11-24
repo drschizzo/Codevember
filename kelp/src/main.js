@@ -93,6 +93,7 @@ async function main() {
   // relais de la méga-scène)
   const gen = createGenerator(LITE ? Math.max(2, Math.min(3, (navigator.hardwareConcurrency || 4) - 1)) : undefined, { maxCache: 4 }); // (une scène pèse des dizaines de Mo)
   const RENDER = loadRender(LITE);
+  if (params.has('handheld')) RENDER.handheld = +params.get('handheld') || 0; // (?handheld=0 : la caméra calculée seule, pour comparer)
   const core = await createCore({ renderer, width: innerWidth, height: innerHeight, gen, lite: LITE, RENDER });
   const { scene, camera, stage, post } = core;
   const controls = new OrbitControls(camera, canvas);
