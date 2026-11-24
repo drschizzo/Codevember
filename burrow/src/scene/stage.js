@@ -3,7 +3,8 @@
 // (pas SHELF.L) ; quatre emplacements suffisent à remplir le champ : chacun
 // prend, à chaque image, la tranche et l'âge de la place qu'il occupe.
 import * as THREE from 'three/webgpu';
-import { uniform, vec3, mix, smoothstep, positionWorld } from 'three/tsl';
+import { uniform, vec3, vec4, mix, smoothstep, positionWorld, cameraPosition, normalize, dot, max, pow, float, Fn, normalWorld, texture, equirectUV, reflect } from 'three/tsl';
+import { envPixels } from '../gen/envmap.js';
 import { createSlab } from './slab.js';
 import { createAnts, antPaths } from './ants.js';
 import { roomMaterial } from './room.js';
@@ -74,7 +75,23 @@ export function createStage(scene, gen, { lite = false } = {}) {
   scene.add(dust.mesh);
 
   // ── les emplacements ──
-  const glass = new THREE.MeshPhysicalNodeMaterial({ color: 0x000000, metalness: 0, roughness: 0.04, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, envMapIntensity: 1.6 }); // (le verre ne montre que ses reflets : les portes-fenêtres, légèrement)
+  // le verre : il reflète les portes-fenêtres derrière la caméra (une image qui
+  // ne sert qu'à lui), selon la vraie direction de réflexion et le Fresnel ;
+  // ailleurs la pièce est sombre et le verre ne rend rien. (Le reflet uniforme
+  // de toute la pièce faisait un voile gris : noirs remontés de 27 à 89.)
+  const GW = lite ? 256 : 1024;
+  const winTex = new THREE.DataTexture(envPixels('glassWindows', 0, GW), GW, GW / 2, THREE.RGBAFormat, THREE.HalfFloatType);
+  winTex.magFilter = winTex.minFilter = THREE.LinearFilter; winTex.needsUpdate = true;
+  const glassU = { col: uniform(new THREE.Color(1, 1, 1)), k: uniform(0.06) };
+  const glass = new THREE.MeshBasicNodeMaterial({ transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
+  glass.colorNode = Fn(() => {
+    const v = normalize(positionWorld.sub(cameraPosition)), n = normalize(normalWorld);
+    const c = max(dot(v.negate(), n), 0);
+    const F = float(0.04).add(float(0.96).mul(pow(float(1).sub(c), 5))).div(0.04).min(4);
+    const e = max(texture(winTex, equirectUV(reflect(v, n))).rgb, vec3(0));
+    return vec4(e.mul(vec3(glassU.col)).mul(F).mul(glassU.k), 1);
+  })();
+  glass.fog = false;
   const gW = SLAB.W + 0.02, gH = SLAB_H + 0.01;
   const frames = [];
   const slots = [];
@@ -178,6 +195,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
     dust.U.sun.value.copy(_d); dust.U.sunCol.value.set(R.sun.color).multiplyScalar(R.sun.intensity * (R.dust ?? 0.35));
     hemi.color.set(R.room.sky[0]); hemi.groundColor.set(R.room.sky[1]); hemi.intensity = R.room.hemi;
     scene.environmentIntensity = R.env.intensity;
+    glassU.col.value.set(R.sun.color);
   }
   function setShadowQuality(q) {
     const s = SHADOW[q] ?? 2048;

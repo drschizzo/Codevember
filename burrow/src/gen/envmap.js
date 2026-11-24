@@ -10,13 +10,24 @@ const room = (label, wall, floor, win, extra = []) => ({
     [Math.PI, 0.42, 0.42, 0.55, 0.06, ...win.map((c) => c * 0.45)], // la fenêtre
     [Math.PI, 0.42, 0.012, 0.55, 0.004, ...win.map((c) => -c * 0.38)], // son meneau (vertical)
     [0, 1.45, 3.2, 0.18, 0.4, ...wall.map((c) => c * 0.6)], // le plafond
-    // les portes-fenêtres derrière la caméra (azimut π/2 : vers +z) : ce que
-    // reflètent les verres des tranches, des rectangles séparés par les trumeaux
-    ...[-0.55, 0, 0.55].map((d) => [Math.PI / 2 + d, 0.25, 0.2, 0.55, 0.05, ...win.map((c) => c * 0.55)]),
     ...extra,
   ],
 });
+// ce que reflètent les verres (et seulement eux) : les portes-fenêtres derrière
+// la caméra (azimut π/2, vers +z), aux bords nets, avec leur montant et leur
+// traverse ; tout le reste est noir (pas de voile sur les tranches)
+const glassWindows = () => {
+  const L = [];
+  for (const d of [-0.62, 0, 0.62]) {
+    const az = Math.PI / 2 + d;
+    L.push([az, 0.05, 0.2, 0.62, 0.012, 1, 1, 1]);
+    L.push([az, 0.05, 0.008, 0.62, 0.003, -1, -1, -1]); // (le montant)
+    for (const e of [-0.32, 0.02, 0.36]) L.push([az, e, 0.2, 0.007, 0.003, -1, -1, -1]); // (les petits bois : quatre carreaux de haut)
+  }
+  return L;
+};
 Object.assign(ENV_PRESETS, {
+  glassWindows: { label: 'Reflets des verres', ambient: [0, 0, 0], floor: [0, 0, 0], lights: glassWindows() },
   roomPale: room('Pièce claire', [0.07, 0.07, 0.075], [0.09, 0.085, 0.08], [6, 6, 6.2]),
   roomWinter: room('Pièce d’hiver', [0.04, 0.05, 0.07], [0.05, 0.055, 0.065], [5, 5.6, 6.8], [[0.6, 0.05, 1.2, 0.08, 0.2, 0.6, 0.75, 1.0]]),
   roomGreen: room('Verrière', [0.08, 0.095, 0.085], [0.07, 0.08, 0.07], [4, 4.3, 4], [[0, 1.2, 3.2, 0.4, 0.3, 2.2, 2.4, 2.2]]),
