@@ -374,6 +374,16 @@
         "anamorph"
       ],
       "port": 8270
+    },
+    {
+      "name": "burrow",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        ".claude/serve.py",
+        "8280",
+        "burrow"
+      ],
+      "port": 8280
     }
   ]
 }

@@ -1,0 +1,255 @@
+<!doctype html>
+<!-- Page « défis techniques » de Burrow. Elle décrit l'état actuel du projet. -->
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#050506">
+  <title>Burrow · défis techniques</title>
+  <meta name="description" content="Comment Burrow est calculé : des strates de sable, des galeries creusées dans l'ordre, un tumulus qui conserve le volume et inverse les couches, une étagère qui boucle par translation.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+  <link rel="stylesheet" href="../home/explainer.css">
+</head>
+<body>
+  <nav class="top"><div class="in">
+    <a href="../">Codevember</a><span class="day">Day 27</span><span class="crumb">Burrow · défis techniques</span>
+    <span class="sp"></span><a class="open" href="./">Ouvrir la scène</a>
+  </div></nav>
+
+  <main>
+    <header class="hero">
+      <div class="kicker">Day 27 · Burrow · la coupe vivante</div>
+      <h1>Comment se creusent des fourmilières en coupe, et où va le sable</h1>
+      <p class="lede">Des tranches de sable coloré, prises entre deux verres, se creusent pendant que la caméra longe l'étagère. Le sable sorti des galeries forme un tas autour de chaque entrée. Ce tas contient exactement le sable creusé, et il empile les couches dans l'ordre inverse : le sable du fond arrive en dernier, donc en surface. Tout est calculé une fois au chargement, puis dessiné à n'importe quel instant sans rien recalculer.</p>
+    </header>
+
+    <figure class="cover">
+      <img src="docs/capture.jpg" alt="Une tranche de sable stratifié à mi-creusement, deux galeries, deux tumulus rayés" width="1600" height="1000">
+      <figcaption>Une tranche à mi-creusement. Les tumulus portent déjà les couleurs des couches traversées par les galeries.</figcaption>
+    </figure>
+
+    <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
+
+    <article>
+      <section id="strates">
+        <h2><span class="n">01</span>Des couches de sable, puis des grains</h2>
+        <span class="src">src/gen/slab.js · buildSlab() ; src/scene/slab.js · grains()</span>
+        <p>La tranche est une grille de cellules de 0,4 mm, 800 de large sur 725 de haut. Les couches suivent un motif, un par tranche : des lits à peine ondulés ; les montagnes d'une bouteille de sable coloré, versé à l'entonnoir (des pics triangulaires qui dérivent d'une couche à l'autre) ; des dunes (rides dissymétriques) ; un éventail (des couches qui s'épaississent d'un côté). Les frontières sont rangées colonne par colonne : une couche ne s'amincit jamais sous 1,2 mm. Chaque tranche tire son ordre de couleurs, sans deux voisines pareilles. Dans chaque couche, une coordonnée fine (la lamine) module un peu la clarté.</p>
+        <p>Une couche peinte d'une seule teinte se lit comme de la peinture. Le rendu dessine donc des grains : des cellules de Voronoï à la taille du sable (fin 0,24 mm, moyen 0,35, gros 0,55 ; parfois un gravier de 1,3 mm aux galets multicolores), chacune tirée dans un mélange de minéraux. Un grain prend le sable de la couche où tombe son centre, à une petite dérive près : les frontières sont grenues, comme dans le vrai sable. 84 % des grains ont la couleur de la couche, 6 % sont du quartz clair, 6 % des grains sombres, le reste vient de la couche voisine. Chaque grain a un petit dôme qui accroche la lumière et un joint plus sombre. Quand un grain devient plus petit qu'un pixel, il est remplacé par la moyenne du mélange, pour éviter le scintillement.</p>
+        <figure id="fig-strates"><figcaption><b>La vraie première tranche d'une graine.</b> Changez de graine. Les couleurs sont celles du jeu « ocres ».</figcaption></figure>
+      </section>
+
+      <section id="galeries">
+        <h2><span class="n">02</span>Des galeries creusées dans l'ordre</h2>
+        <span class="src">src/gen/slab.js · gallery(), carve(), carveEll()</span>
+        <p>Chaque entrée lance une galerie. C'est une marche aléatoire dont le virage change peu à peu : à chaque pas de 0,6 mm, un petit virage tiré au hasard s'ajoute à un virage amorti. Un rappel ramène la galerie vers le bas, et l'éloigne des bords. En route, elle se ramifie parfois et ouvre des chambres, au plancher plat et au plafond en voûte. Au bout, une dernière chambre.</p>
+        <p>Chaque cellule enlevée garde l'instant où elle l'a été. Chaque entrée a sa propre horloge, ramenée entre 0 et 1 : toutes les entrées creusent donc en même temps, chacune à son rythme. Une tranche d'âge \(s\) montre les cellules dont l'instant est inférieur à \(s\).</p>
+        <p>Une galerie est un puits qui descend, une branche (sur trois générations) ou une longue galerie d'étage, presque horizontale, qui garde sa hauteur. En route, des chambres, parfois en grappe. Quand une branche rencontre une galerie plus ancienne de la même entrée, elle s'y raccorde et s'arrête : le réseau forme des boucles. La densité varie d'une tranche à l'autre ; un budget par entrée garde le tas sous le cadre.</p>
+        <p>Deux creuseurs. Les fourmis font des galeries de 4,4 mm, des branches et des chambres. Les vers font un terrier plus fin (2,6 mm), plus long, qui serpente, sans chambre ; leurs déblais (les turricules) tombent juste à la bouche et font de petits cônes pointus.</p>
+        <figure id="fig-galeries"><figcaption><b>Le creusement.</b> Faites varier l'âge de la tranche : les galeries s'allongent, et le tas monte au-dessus de chaque entrée.</figcaption></figure>
+      </section>
+
+      <section id="tas">
+        <h2><span class="n">03</span>Le tas conserve le volume et retourne les couches</h2>
+        <span class="src">src/gen/slab.js · tumulus</span>
+        <p>Chaque cellule creusée, dans l'ordre de creusement, remonte et tombe près de la bouche de sa galerie, à une distance tirée selon une loi normale. Elle roule ensuite tant que la pente l'y oblige. Une boulette de sable humide tient sur une pente plus forte qu'un sable sec : sur une pente douce, elle s'arrête souvent là où elle tombe. Le profil du tas est donc arrondi et un peu bosselé.</p>
+        <p>Deux propriétés en découlent et sont testées. Le tas compte exactement autant de grains que de cellules creusées. Et comme les galeries descendent avec le temps, les grains déposés en dernier viennent des couches les plus profondes : la peau du tas est faite du fond de la tranche.</p>
+        <figure id="fig-tas"><figcaption><b>Les couches à l'envers.</b> À gauche, la colonne de sable traversée par une galerie, du haut vers le bas. À droite, le tas qui en sort, du bas vers le haut. Faites varier l'âge.</figcaption></figure>
+      </section>
+
+      <section id="talus">
+        <h2><span class="n">04</span>Un talus de sable humide</h2>
+        <span class="src">src/gen/slab.js · une boulette roule</span>
+        <p>Le tas est un empilement de colonnes. Un grain qui arrive sur une colonne passe à sa voisine si celle-ci est plus basse d'au moins deux grains. Avec cette seule règle, le sable sec forme des cônes à flancs droits, à l'angle de talus exact, qui ressemblent à des pyramides dessinées. Le programme ajoute une adhérence : sous un écart de quatre grains, la boulette a 30 % de chances de s'arrêter. Le profil s'arrondit au sommet et se creuse au pied, comme un vrai tas de déblais.</p>
+        <figure id="fig-talus"><figcaption><b>Sable sec ou humide.</b> Réglez la probabilité d'arrêt. À zéro, on obtient un cône aux flancs droits ; vers 0,3, le profil du projet.</figcaption></figure>
+      </section>
+
+      <section id="rendu">
+        <h2><span class="n">05</span>Un relief réel derrière le verre</h2>
+        <span class="src">src/gen/slabtex.js · src/scene/slab.js</span>
+        <p>Une galerie contre le verre est un creux : on voit le sable du fond, à quelques millimètres en retrait. Le rendu utilise un maillage d'un sommet pour 2 × 2 cellules, soit 145 000 sommets par tranche (la normale vient de la texture, au pixel), déplacé vers l'arrière de la profondeur de la galerie. Cette profondeur est une voûte : elle vaut zéro au bord et 1,6 fois le rayon au milieu, d'après la distance de chaque cellule au sable intact. Le soleil entre donc vraiment dans les tunnels, et leur bord y porte ombre.</p>
+        <p>La nappe ne porte pas d'ombre dans la carte du soleil : la silhouette des tumulus et des galeries, projetée sur le mur, se lit comme un défaut. Un bloc simple, en retrait derrière les galeries, porte l'ombre de la tranche. L'ombre propre d'une galerie est calculée dans le shader : depuis chaque point, on remonte vers le soleil dans la carte de profondeur, par huit pas de 4 mm ; si le sable intact coupe le rayon, le point est à l'ombre.</p>
+        <p>Une gorge éclairée de côté peut se lire comme une bosse. Le fond des galeries est donc un peu plus sombre que la surface (moins de lumière ambiante, du sable dans l'ombre de sa voûte) : l'œil y voit un creux.</p>
+        <p>Deux textures suffisent à dessiner n'importe quel âge : l'instant de creusement et la profondeur finale de chaque cellule, et l'instant d'apparition des grains du tas. Une cellule fraîchement creusée s'enfonce en un court instant, comme un grain arraché.</p>
+      </section>
+
+      <section id="etagere">
+        <h2><span class="n">06</span>Une étagère qui boucle par translation</h2>
+        <span class="src">src/layout.js · ageAt(), SHELF ; src/scene/stage.js</span>
+        <p>Trois tranches différentes se répètent au pas \(L\) = 40 cm. La caméra avance de \(3L\) par boucle. L'âge d'une tranche ne dépend que de sa place par rapport à la caméra :</p>
+        <div class="eq">\[ s(p) = \mathrm{clamp}\!\left(\frac{1{,}2 - p}{2{,}4},\,0,\,1\right),\qquad p = \frac{x_\text{tranche} - x_\text{caméra}}{L} \]</div>
+        <p>Une tranche entre neuve à droite, est à mi-creusement au centre, sort achevée à gauche. C'est cohérent : des fourmilières lancées à intervalles réguliers vieillissent ensemble, et la caméra avance à la vitesse du temps. À la fin de la boucle, chaque tranche a pris la place et l'âge de celle qui était trois rangs plus loin, qui est la même. La table, le mur et les fenêtres sont invariants par translation d'un pas. L'ombre du soleil est recalée sur une grille de texels dont la période contient un nombre entier.</p>
+        <figure id="fig-etagere"><figcaption><b>L'étagère vue de dessus.</b> Faites avancer la boucle. Le cadre est le champ de la caméra ; la couleur de chaque tranche est son âge.</figcaption></figure>
+      </section>
+
+      <section id="fenetres">
+        <h2><span class="n">07</span>Une fenêtre par tranche</h2>
+        <span class="src">src/layout.js · WINDOW ; src/scene/stage.js</span>
+        <p>Le sol et le mur suivent la caméra, mais leur motif (parquet, dalles, zinc, granito, plâtre) est accroché au monde. Les pas des motifs divisent la boucle (lames de 1,2 m, dalles de 0,6 m, joints de zinc tous les 1,5 m, éclats de granito de 2 cm), et le volume de bruit commun, de période 4, est lu à l'échelle f/3 avec f entier : tout se répète exactement tous les 12 m.</p>
+        <p>Le soleil entre par de hautes portes-fenêtres, dans un mur hors champ devant l'étagère, une par pas. Un point de la tranche voit le soleil à travers le mur au point \(x + Z\,d_x/d_z\), où \(d\) est la direction du soleil et \(Z\) la distance du mur. Le mur est décalé d'autant : chaque tranche tombe entière dans sa tache, et seuls les trumeaux portent ombre, entre deux tranches et sur le mur du fond.</p>
+        <figure id="fig-fenetres"><figcaption><b>Les rayons, vus de dessus.</b> Réglez l'azimut du soleil : le mur des fenêtres se décale pour que chaque tranche reste au soleil.</figcaption></figure>
+      </section>
+
+      <section id="budget">
+        <h2><span class="n">08</span>Budget</h2>
+        <div class="tbl"><table>
+          <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
+          <tbody>
+            <tr><td>Une tranche (strates, galeries, tas)</td><td>worker</td><td class="num">≈ 0,25 s</td></tr>
+            <tr><td>Textures d'une tranche (distances, profondeur)</td><td>worker</td><td class="num">≈ 0,15 s</td></tr>
+            <tr><td>Une image, 1920 × 1080, qualité Haute</td><td>GPU</td><td class="num">7,2 ms</td></tr>
+            <tr><td>Sommets d'une tranche (un pour 2 × 2 cellules)</td><td>GPU</td><td class="num">145 000</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+    </article>
+
+    <footer class="end">
+      <a href="./">Ouvrir Burrow</a>
+      <a href="https://github.com/drschizzo/Codevember/blob/main/burrow/README.md">README</a>
+      <a href="https://github.com/drschizzo/Codevember/blob/main/burrow/docs/concept.md">La démarche</a>
+      <span class="sp"></span>
+      <a href="../">Tous les jours</a>
+    </footer>
+  </main>
+
+  <script type="module">
+    import { demo, C, label, clamp, rng } from '../home/explainer.js';
+    import { buildSlab } from './src/gen/slab.js';
+    import { PALETTES } from './src/recipe.js';
+    import { SHELF, ageAt, WINDOW, sunDirAt } from './src/layout.js';
+
+    const hex = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+    const PAL = PALETTES.roussillon.cols.map(hex);
+    const cache = new Map();
+    const slabOf = (seed, P = {}) => { const k = seed + JSON.stringify(P); if (!cache.has(k)) cache.set(k, buildSlab(seed, P)); return cache.get(k); };
+    // dessine une tranche à l'âge s dans un rectangle
+    function drawSlab(g, S, s, x0, y0, W, H, K = 2) {
+      const w = Math.floor(S.nx / K), h = Math.floor(S.ny / K);
+      const img = g.createImageData(w, h), d = img.data;
+      for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+        const id = i * K + S.nx * (j * K), o = (i + w * (h - 1 - j)) * 4;
+        const isM = S.mound[id] >= 0;
+        if (isM ? S.mound[id] > s : S.layer[id] === 255) continue;
+        const c = PAL[S.colorOrder[S.layer[id]] % PAL.length];
+        const gr = 0.85 + 0.3 * (((Math.sin(i * 12.9898 + j * 78.233) * 43758.5453) % 1 + 1) % 1);
+        const k = gr * (!isM && S.dug[id] >= 0 && S.dug[id] <= s ? 0.3 : 1);
+        d[o] = c[0] * k; d[o + 1] = c[1] * k; d[o + 2] = c[2] * k; d[o + 3] = 255;
+      }
+      const cv = new OffscreenCanvas(w, h); cv.getContext('2d').putImageData(img, 0, 0);
+      g.imageSmoothingEnabled = true;
+      g.drawImage(cv, x0, y0, W, H);
+    }
+    const fit = (d, S) => { const a = S.nx / S.ny, H = Math.min(d.h - 24, (d.w - 24) / a), W = H * a; return [(d.w - W) / 2, (d.h - H) / 2, W, H]; };
+
+    demo('#fig-strates', {
+      title: 'Strates', aspect: 1.5,
+      controls: [{ key: 'style', label: 'Motif', min: 0, max: 3, step: 1, value: 1, fmt: (v) => ['lits', 'sablier', 'dunes', 'éventail'][v] }, { key: 'seed', label: 'Graine', min: 0, max: 30, step: 1, value: 3 }],
+      draw(g, d) {
+        g.clearRect(0, 0, d.w, d.h);
+        const style = ['lits', 'sablier', 'dunes', 'eventail'][d.s.style];
+        const S = slabOf(`e${d.s.seed}-0`, { style });
+        drawSlab(g, S, 0, ...fit(d, S));
+        d.status(`${S.nL} couches`);
+      },
+    });
+
+    demo('#fig-galeries', {
+      title: 'Creusement', aspect: 1.5,
+      controls: [{ key: 'age', label: 'Âge s', min: 0, max: 1, step: .005, value: .6 }, { key: 'seed', label: 'Graine', min: 0, max: 30, step: 1, value: 7 }],
+      draw(g, d) {
+        g.clearRect(0, 0, d.w, d.h);
+        const S = slabOf(`e${d.s.seed}-0`);
+        drawSlab(g, S, d.s.age, ...fit(d, S));
+        let n = 0; for (let i = 0; i < S.dug.length; i++) if (S.dug[i] >= 0 && S.dug[i] <= d.s.age) n++;
+        d.status(`${n.toLocaleString('fr')} cellules creusées · autant de grains sur le tas`);
+      },
+    });
+
+    demo('#fig-tas', {
+      title: 'Couches à l\'envers', aspect: 2,
+      controls: [{ key: 'age', label: 'Âge s', min: .05, max: 1, step: .005, value: 1 }],
+      draw(g, d) {
+        g.clearRect(0, 0, d.w, d.h);
+        const S = slabOf('e7-0');
+        // grains du tas dans l'ordre de dépôt, et cellules creusées dans l'ordre de creusement
+        const dug = [], mound = [];
+        for (let id = 0; id < S.dug.length; id++) { if (S.mound[id] >= 0 && S.mound[id] <= d.s.age) mound.push([S.mound[id], S.layer[id]]); else if (S.dug[id] >= 0 && S.dug[id] <= d.s.age && S.mound[id] < 0) dug.push([S.dug[id], S.layer[id]]); }
+        dug.sort((a, b) => a[0] - b[0]); mound.sort((a, b) => a[0] - b[0]);
+        const bar = (L, x, top) => {
+          const H = d.h - 40, w = d.w * 0.3;
+          L.forEach(([, k], i) => { const c = PAL[S.colorOrder[k] % PAL.length]; g.fillStyle = `rgb(${c})`; const y = top ? 20 + (i / L.length) * H : 20 + H - ((i + 1) / L.length) * H; g.fillRect(x, y, w, H / L.length + 1); });
+        };
+        bar(dug, d.w * 0.1, true); bar(mound, d.w * 0.6, false);
+        label(g, 'creusé, dans l\'ordre ↓', d.w * 0.1, 14); label(g, 'déposé, dans l\'ordre ↑', d.w * 0.6, 14);
+        d.status(`${dug.length.toLocaleString('fr')} = ${mound.length.toLocaleString('fr')}`);
+      },
+    });
+
+    demo('#fig-talus', {
+      title: 'Talus', aspect: 2.4,
+      controls: [{ key: 'p', label: 'Probabilité d\'arrêt', min: 0, max: .8, step: .01, value: .3 }],
+      draw(g, d) {
+        g.clearRect(0, 0, d.w, d.h);
+        const n = 160, h = new Int32Array(n), m = 80, r = rng(5);
+        const gauss = () => Math.sqrt(-2 * Math.log(Math.max(1e-9, r()))) * Math.cos(6.2832 * r());
+        for (let k = 0; k < 3200; k++) {
+          let c = clamp(m + Math.round((r() < .5 ? -1 : 1) * (2 + Math.abs(gauss()) * 14)), 0, n - 1);
+          for (let s = 0; s < 999; s++) {
+            const dl = c > 0 ? h[c] - h[c - 1] : -9, dr = c < n - 1 ? h[c] - h[c + 1] : -9, dd = Math.max(dl, dr);
+            if (dd < 2 || (dd < 4 && r() < d.s.p)) break;
+            c = dl === dr ? (r() < .5 ? c - 1 : c + 1) : dl > dr ? c - 1 : c + 1;
+          }
+          h[c]++;
+        }
+        const sx = d.w / n, sy = (d.h - 20) / Math.max(...h);
+        g.fillStyle = C.c2;
+        for (let i = 0; i < n; i++) g.fillRect(i * sx, d.h - 10 - h[i] * sy, sx + 0.5, h[i] * sy);
+        d.status(d.s.p < .05 ? 'sable sec : flancs droits' : 'sable humide : profil arrondi');
+      },
+    });
+
+    demo('#fig-etagere', {
+      title: 'Étagère', aspect: 2.4,
+      controls: [{ key: 'u', label: 'Phase de la boucle', min: 0, max: 1, step: .002, value: .1 }],
+      draw(g, d) {
+        g.clearRect(0, 0, d.w, d.h);
+        const xc = d.s.u * SHELF.M * SHELF.L, sc = d.w / (SHELF.L * 4.5), cx = d.w / 2;
+        for (let k = Math.floor(xc / SHELF.L) - 3; k <= Math.floor(xc / SHELF.L) + 3; k++) {
+          const p = (k * SHELF.L - xc) / SHELF.L, s = ageAt(p), x = cx + (k * SHELF.L - xc) * sc;
+          g.fillStyle = `hsl(${30 - s * 20}, ${30 + s * 40}%, ${75 - s * 40}%)`;
+          g.fillRect(x - 1.6 * sc, d.h * 0.35, 3.2 * sc, d.h * 0.18);
+          label(g, `${'ABC'[((k % 3) + 3) % 3]} · s = ${s.toFixed(2)}`, x, d.h * 0.3, { align: 'center' });
+        }
+        g.strokeStyle = C.ink; g.strokeRect(cx - 2.6 * sc, d.h * 0.2, 5.2 * sc, d.h * 0.5);
+        label(g, 'champ de la caméra', cx, d.h * 0.82, { align: 'center' });
+        d.status(`caméra à ${(xc * 10).toFixed(0)} cm`);
+      },
+    });
+
+    demo('#fig-fenetres', {
+      title: 'Fenêtres', aspect: 2,
+      controls: [{ key: 'az', label: 'Azimut du soleil', min: .25, max: .9, step: .01, value: .45 }],
+      draw(g, d) {
+        g.clearRect(0, 0, d.w, d.h);
+        const dir = sunDirAt(d.s.az, 0.4), shift = (WINDOW.Z * dir[0]) / dir[2];
+        const sc = d.w / 18, X = (x) => d.w * 0.6 + x * sc, Zp = (z) => d.h * 0.85 - z * sc * 0.9;
+        // tranches (z = 0) et mur des fenêtres (z = Z)
+        for (let k = -2; k <= 2; k++) { g.fillStyle = C.c2; g.fillRect(X(k * SHELF.L - 1.6), Zp(0), 3.2 * sc, 4); }
+        g.fillStyle = C.dim;
+        const off = ((shift % SHELF.L) + SHELF.L) % SHELF.L;
+        for (let k = -6; k <= 6; k++) { const o = k * SHELF.L + off; g.fillRect(X(o + WINDOW.x1), Zp(WINDOW.Z), (SHELF.L - (WINDOW.x1 - WINDOW.x0)) * sc, 5); }
+        g.strokeStyle = C.c1; g.lineWidth = 1;
+        for (let k = -2; k <= 2; k++) for (const e of [-1.6, 0, 1.6]) { const x = k * SHELF.L + e; g.beginPath(); g.moveTo(X(x), Zp(0)); g.lineTo(X(x + shift), Zp(WINDOW.Z)); g.stroke(); }
+        label(g, 'mur des fenêtres (trumeaux)', 12, Zp(WINDOW.Z) - 8); label(g, 'tranches', 12, Zp(0) + 18);
+        d.status(`décalage ${(shift * 10).toFixed(0)} cm`);
+      },
+    });
+  </script>
+</body>
+</html>
