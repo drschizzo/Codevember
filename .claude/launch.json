@@ -364,6 +364,16 @@
         "veil"
       ],
       "port": 8260
+    },
+    {
+      "name": "anamorph",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        ".claude/serve.py",
+        "8270",
+        "anamorph"
+      ],
+      "port": 8270
     }
   ]
 }

@@ -23,6 +23,9 @@
 //   cables   → Tension  des câbles tendus découpent l'image en panneaux, qui
 //                       s'ouvrent un à un
 //   rust     → Rust     la rouille fleurit sur l'image, puis s'écaille en plaques
+//   shadow   → Anamorph une ombre longue et bleue balaie l'image en tournant
+//                       autour d'un pied, comme celle d'un gnomon ; la scène
+//                       suivante est derrière elle
 //   membrane → Membrane une membrane veinée couvre l'image, se tend et se
 //                       déchire depuis le centre
 //   fold     → Fold     l'image se plie le long de plis, panneau par panneau
@@ -424,6 +427,18 @@ export function createTransitions(slots) {
       const lip = exp(abs(r.sub(hole)).negate().div(0.01)).mul(float(1).sub(smoothstep(0.9, 1, p)));
       const silver = vec3(0.9, 0.92, 0.95);
       return mix(a.mul(float(1).sub(pull)), B(uv), m).add(silver.mul(lip.mul(0.7)));
+    },
+    // → Anamorph : une ombre bleue balaie l'image en tournant autour d'un pied
+    // posé en bas du cadre, comme celle du tas au soleil de minuit ; ce qu'elle
+    // a couvert est déjà le jour suivant
+    shadow: () => {
+      const d = uv.sub(vec2(0.5, 1.08)).mul(asp); // (le pied, sous le bas de l'image)
+      const ang = d.x.div(max(d.y.negate(), 1e-3)).atan(); // (−π/2…π/2 depuis la verticale)
+      const order = clamp(ang.div(Math.PI).add(0.5), 0, 1).mul(0.85).add(length(d).mul(0.06));
+      const { m, rim } = sweep(order, p, 0.05);
+      // l'ombre elle-même : une bande froide et sombre au front, à bord flou (la pénombre)
+      const cold = vec3(0.55, 0.66, 0.9);
+      return mix(A(uv), B(uv), m).mul(mix(vec3(1), cold.mul(0.45), rim.mul(0.85)));
     },
     // → Hollow : la caméra plonge dans une alvéole ; l'image se dilate autour
     // d'elle, et la scène suivante remplit le trou qui s'élargit

@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#050506">
+  <title>Anamorph · défis techniques</title>
+  <meta name="description" content="Comment Anamorph est calculé : la course du soleil de minuit, la forme qui projette deux silhouettes, l'ombre pleine et la pénombre, le peuplement en pièces qui ne se traversent pas, le bois flotté sillonné.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+  <link rel="stylesheet" href="../home/explainer.css">
+</head>
+<body>
+  <nav class="top"><div class="in">
+    <a href="../">Codevember</a><span class="day">Day 26</span><span class="crumb">Anamorph · défis techniques</span>
+    <span class="sp"></span><a class="open" href="./">Ouvrir la scène</a>
+  </div></nav>
+
+  <main>
+    <header class="hero">
+      <div class="kicker">Day 26 · Anamorph · le cadran des ombres</div>
+      <h1>Comment un tas de rebut projette deux animaux, chacun à son heure</h1>
+      <p class="lede">Au-delà du cercle polaire, en été, le soleil tourne autour de l'horizon sans se coucher. Sur la neige, un tas de ferraille, de bois flotté ou de tuyaux porte une ombre longue qui tourne avec lui. Vers 21 h, elle dessine un renard ; vers 3 h, un lièvre. Le tas lui-même n'a aucune forme reconnaissable. Il faut donc trouver le volume dont l'ombre tombe dans deux silhouettes à la fois, puis le remplir de vraies pièces qui ne se traversent pas et dont l'ombre reste nette malgré le flou du soleil.</p>
+    </header>
+
+    <figure class="cover">
+      <img src="docs/capture.jpg" alt="Un tas de pièces sur la neige, vu d'en haut ; son ombre bleue dessine un animal" width="1600" height="900">
+      <figcaption>La graine d'ouverture à la tenue d'une figure : le tas en bas du cadre, l'animal sur la neige. Les bords de l'ombre sont un peu déchiquetés : ce sont les pièces.</figcaption>
+    </figure>
+
+    <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
+
+    <article>
+      <section id="soleil">
+        <h2><span class="n">01</span>Le soleil de minuit fait un tour exact, et ralentit sur les figures</h2>
+        <span class="src">src/gen/shadowart.js · sunAt() · src/gen/clock.js · hourAngle()</span>
+        <p>Toute la scène dépend d'une seule horloge : la position du soleil. À la latitude \(\varphi\) et à la déclinaison \(\delta\) (la date), la hauteur du soleil pour l'angle horaire \(H\) (0 à midi, \(\pi\) à minuit) vaut :</p>
+        <div class="eq">\[ \sin h = \sin\varphi \sin\delta + \cos\varphi \cos\delta \cos H \]</div>
+        <p>À \(\varphi = 78^\circ\) N et pour \(\delta\) entre 14° et 23,4° (de fin avril au solstice), \(h\) ne devient jamais négatif. Les deux figures sont placées à \(H = \pi \mp 0{,}8\), vers 21 h et 3 h, symétriques autour de minuit. Le soleil y est entre 5,5° et 14,8° selon la date, l'ombre fait 3,8 à 10,4 fois la hauteur de l'objet, et les deux ombres partent à ±44° d'azimut : elles font un angle droit.</p>
+        <p>La boucle dure une journée. Un accéléré uniforme ferait passer chaque figure en une fraction de seconde. L'horloge est donc un accéléré à vitesse variable : la vitesse du soleil \(\rho(u)\) tombe à 14 % de sa moyenne autour de chaque tenue \(u_k\), puis elle est intégrée et normalisée.</p>
+        <div class="eq">\[ \rho(u) = 1 - 0{,}86\,\min\!\Big(1, \sum_k e^{-((u-u_k)/0{,}05)^2}\Big), \qquad H(u) = H_s + 2\pi\,\frac{\int_0^u \rho}{\int_0^1 \rho} \]</div>
+        <p>\(\rho\) reste positive : le soleil ne recule jamais, et \(H(1) = H(0) + 2\pi\) ferme la boucle exactement. \(u_1\) est fixé à 0,16. \(u_2\) est trouvé par dichotomie pour que le soleil soit exactement à l'heure de la seconde figure au milieu de sa tenue.</p>
+        <div class="note check"><b>Vérifié</b><p>Sur 40 graines : \(H(1) - H(0) = 2\pi\) à \(10^{-9}\) près, \(H\) strictement croissante sur 400 pas, et l'écart à l'heure de chaque figure pendant sa tenue inférieur à \(10^{-6}\) radian.</p></div>
+        <figure id="fig-sun"><figcaption><b>La course et l'horloge.</b> À gauche, vu d'en haut : le soleil autour de l'horizon (sa distance au centre dit sa hauteur), l'ombre de l'objet sur le sol, les deux directions des figures. À droite, l'heure en fonction de la phase de la boucle, avec ses deux paliers. Le curseur règle la date. La démo appelle les vraies fonctions du projet.</figcaption></figure>
+      </section>
+
+      <section id="coque">
+        <h2><span class="n">02</span>La coque : les points dont l'ombre tombe dans les deux silhouettes</h2>
+        <span class="src">src/gen/shadowart.js · voxelHull() · solvePlacement()</span>
+        <p>Chaque figure est posée sur le sol, dans le repère de son ombre : un axe \(a\) du pied de l'objet vers le bout de l'ombre, un axe \(b\) en travers. Elle est droite pour la caméra qui la regarde dos au soleil. Un point de l'espace à la hauteur \(y\) projette son ombre à \(y \cot h\) de son pied, à l'opposé du soleil. La coque est l'ensemble des points dont les deux ombres tombent dans les deux cibles (d'après Mitra et Pauly, <i>Shadow Art</i>, 2009). Tout ce qui est dans la coque fait une ombre qui ne déborde jamais.</p>
+        <p>L'ombre de la coque, en revanche, ne remplit pas toujours la cible. Le sommet de l'objet fait le bout des deux ombres à la fois. Les deux figures doivent donc avoir la même « hauteur », et leurs détails latéraux se gênent. La recherche du placement fait 160 essais sur une coque en voxels de 56 × 56 × 40 : chaque figure peut glisser le long de son ombre (et commencer derrière le pied de l'objet) ou en travers, pour maximiser la plus petite des deux couvertures.</p>
+        <div class="note trap"><b>Pourquoi deux figures</b><p>Avec trois figures, chaque point de la coque doit tomber dans trois cibles. Les parties qui font reconnaître l'animal (oreilles, museau, queue) sont justement celles qui disparaissent : la couverture tombe entre 64 et 78 %. Avec deux figures dont les ombres font un angle droit, elle dépasse 97 %.</p></div>
+        <figure id="fig-hull"><figcaption><b>Couverture de la coque.</b> Choisir la paire : les cibles en contour, l'ombre de la coque en voxels en bleu, pour chacune des deux heures. Le bouton « Placer » relance la recherche du placement (quelques secondes). La démo utilise les vraies silhouettes et la vraie coque, à la même résolution que la recherche.</figcaption></figure>
+      </section>
+
+      <section id="distance">
+        <h2><span class="n">03</span>La forme devient une distance signée, par transformée de distance exacte</h2>
+        <span class="src">src/gen/shadowart.js · polygonSDFGrid() · hullSDF()</span>
+        <p>Pour poser des pièces dans la coque, il faut savoir à quelle distance du bord se trouve chaque point (une distance signée, négative dedans). Pour chaque figure, on calcule la distance au contour de la silhouette dans le plan du sol, sur une grille de 512². Calculée arête par arête, elle coûterait 1,3 s, le quart de la génération. Elle vient d'une transformée de distance euclidienne exacte (Felzenszwalb et Huttenlocher, 2012) : deux passes d'enveloppe inférieure de paraboles, en temps linéaire. L'écart moyen à la distance exacte au polygone est d'un quart de pixel, et la grille reste en cache par figure.</p>
+        <p>Une distance mesurée au sol n'est pas la distance à la paroi oblique de la coque. La paroi contient la direction du soleil \(\mathbf d\) et la tangente \(\mathbf t\) du contour. Avec \(n_b\) la composante en travers de la normale du contour :</p>
+        <div class="eq">\[ d_{\text{paroi}} = d_{\text{sol}}\,\frac{\sin h}{\sqrt{1 - n_b^2 \cos^2 h}} \]</div>
+        <p>Pour un bord parallèle à l'ombre, le facteur vaut 1. Pour un bord en travers, il vaut \(\sin h\), soit 0,12 à 7°. Les deux figures, le sol et le plafond de hauteur se combinent par un maximum lissé, qui arrondit les arêtes sur 6 mm.</p>
+        <figure id="fig-edt"><figcaption><b>La distance signée d'une silhouette.</b> Couleur par bandes de distance (dedans en bleu, dehors en gris), contour en clair. Le curseur règle la résolution de la grille. La démo appelle <code>polygonSDFGrid()</code> du projet.</figcaption></figure>
+      </section>
+
+      <section id="penombre">
+        <h2><span class="n">04</span>Seule l'ombre pleine dessine : une pièce haute doit être épaisse</h2>
+        <span class="src">src/gen/pieces.js · stamp() · rMinAt()</span>
+        <p>Le soleil n'est pas un point : il occupe 0,53° du ciel. Derrière une barre, le sol ne reçoit aucun rayon seulement sur une bande centrale, l'ombre pleine. Autour, une pénombre s'éclaircit. Un point à la hauteur \(y\) étale sa pénombre sur une largeur \(2\,\alpha\, y / \sin h\), avec \(\alpha = 0{,}267^\circ\). Une barre de rayon \(r\) ne garde donc une ombre pleine que si :</p>
+        <div class="eq">\[ r > \alpha\,\frac{y}{\sin h} \]</div>
+        <p>Au sommet du tas (80 cm) et avec un soleil à 7°, il faut plus de 3 cm de rayon. Le peuplement ne crédite que l'ombre pleine. Il refuse les pièces plus fines que \(1{,}15\,\alpha\, y/\sin h_{\min}\) à leur point le plus haut : elles n'ajouteraient que du flou et prendraient la place des bonnes.</p>
+        <figure id="fig-pen"><figcaption><b>Ombre pleine et pénombre.</b> Profil de l'éclairement au sol en travers de l'ombre d'une barre : 0 dans l'ombre pleine, 1 en plein soleil. Les curseurs règlent le rayon, la hauteur et la hauteur du soleil. La démo intègre le disque solaire réel ; elle ignore la lumière du ciel qui éclaire l'ombre.</figcaption></figure>
+      </section>
+
+      <section id="pieces">
+        <h2><span class="n">05</span>Des pièces posées une à une, qui ne se traversent jamais</h2>
+        <span class="src">src/gen/pieces.js · coverWithPieces()</span>
+        <p>La coque n'est pas l'objet. Elle est remplie de pièces réelles, choisies une à une : à chaque pas, 170 candidates, et l'on garde celle qui couvre le plus de cible encore nue dans les deux figures à la fois. Les candidates suivent quatre règles.</p>
+        <ul>
+          <li><b>Une hiérarchie de tailles</b> : 9 pièces de structure de 4,2 à 6 cm de calibre posées au sol, puis jusqu'à 170 moyennes, puis jusqu'à 300 petites (1,1 à 2,4 cm).</li>
+          <li><b>Rien ne flotte</b> : une pièce repose sur le sol par le point le plus bas de sa vraie section, ou part du flanc d'une pièce déjà posée. Son bout affleure la surface réelle de la mère, calculée par la fonction support de sa section.</li>
+          <li><b>Rien ne se traverse</b> : chaque pièce reste à \(r_c^i + r_c^j + 2\) mm de toutes les autres, \(r_c\) étant la distance de l'axe au coin le plus éloigné, flèche et écrasement compris. Seule la jonction avec la mère, sur \(0{,}6\,(r_c + r_c^{\text{mère}})\), est exemptée : c'est la soudure.</li>
+          <li><b>Le contour d'abord</b> : un pixel près du bord ou dans une partie fine pèse jusqu'à 5 fois plus qu'un pixel du milieu, que la pénombre comble. Un tiers des candidates visent un pixel nu du contour, remonté le long du rayon de soleil jusque dans la coque, et poussent vers lui depuis la pièce voisine.</li>
+        </ul>
+        <p>Résultat : 230 à 480 pièces, 72 à 86 % d'ombre pleine par figure, en 2 à 3 s. Le reste du contour est comblé par la pénombre, et les bords de la figure gardent la dentelure de la ferraille.</p>
+        <div class="note check"><b>Vérifié</b><p>Sur la sortie du worker, pour les cinq matières : aucune paire de pièces à moins de \(r_c^i + r_c^j\), aucun point d'une section sous la neige, chaque pièce posée au sol ou soudée à une mère posée avant elle, et plus de 70 % (bois) ou 74 % (métaux) d'ombre pleine par figure.</p></div>
+        <figure id="fig-greedy"><figcaption><b>Le peuplement, vu d'en haut.</b> « Calculer » lance le vrai peuplement (version réduite : 60 candidates par pas, quelques secondes). À gauche, les pièces vues de dessus ; au milieu et à droite, l'ombre pleine de chaque pièce dans chacune des deux figures, du gris clair (premières pièces) au bleu (dernières).</figcaption></figure>
+      </section>
+
+      <section id="bois">
+        <h2><span class="n">06</span>Le bois flotté est sillonné dans la géométrie</h2>
+        <span class="src">src/gen/forge.js · woodRelief() · forgeMesh()</span>
+        <p>Cinq matières se partagent les graines : ferraille rouillée, bois flotté, plomberie de cuivre, acier peint écaillé, acier galvanisé. Chacune a ses profilés, ses déformations et ses jonctions. Pour le bois, un fil peint dans la couleur disparaît à la distance du film. Les branches ont donc leur relief dans le maillage : des sillons entre 13 veines dures qui serpentent le long de la branche (jusqu'à 7 % du rayon), une ou deux fentes (jusqu'à 20 %) et un ou deux nœuds en creux (14 %). Le creux ne dépasse jamais 32 % du rayon, et le rayon ne dépasse jamais la section nominale : les contacts et les tests restent justes.</p>
+        <p>Une branche a 28 à 40 côtés et une rangée tous les 1,2 cm. Les normales sont recalculées sur la surface creusée, par différences centrées sur la grille. La profondeur du creux passe au shader dans un canal libre des rôles de surface : les creux sont foncés et salis, les crêtes pâlies.</p>
+        <div class="note trap"><b>Pourquoi pas un relief d'éclairage</b><p>Un fil marqué dans le seul relief d'éclairage (bumpMap), à cette fréquence, donne des normales presque aléatoires. Une fois moyennée par l'anticrénelage, l'image est grise et uniforme, comme du plastique.</p></div>
+        <figure id="fig-wood"><figcaption><b>La section d'une branche.</b> À gauche, la coupe à l'abscisse choisie ; à droite, la branche dépliée (l'angle en vertical, la longueur en horizontal), le creux en sombre. Le curseur parcourt la branche ; « Autre branche » change le tirage. La démo appelle <code>woodRelief()</code> du projet.</figcaption></figure>
+      </section>
+
+      <section id="assemblage">
+        <h2><span class="n">07</span>Le tas se monte dans l'ordre inverse d'un démontage</h2>
+        <span class="src">src/gen/assembly.js · planAssembly() · src/scene/motion.js</span>
+        <p>Au début de la boucle, les pièces sont éparpillées à plat sur la neige. Elles viennent une à une se poser sur le tas, puis repartent après les deux figures. Une pièce ne doit jamais passer à travers une pièce déjà posée, et une fille ne peut arriver qu'une fois sa mère en place. Dans l'ordre de construction de l'algorithme glouton, 30 % des pièces seraient enfermées par des voisines posées avant elles.</p>
+        <p>L'ordre de montage est donc calculé à rebours. Tant qu'il reste des pièces, on retire celles qui n'ont plus de fille et dont un couloir de sortie est libre : on essaie la verticale, puis des directions de plus en plus inclinées (de 20° à 78°, dix azimuts), jusqu'à l'altitude de passage au-dessus du tas. Le montage est ce démontage à l'envers : chaque pièce descend par le couloir par lequel elle serait sortie, parmi exactement les pièces déjà posées. 84 à 89 % des pièces trouvent un couloir libre ; les autres, enchevêtrées, prennent le moins encombré.</p>
+        <p>Le démontage est le même film à l'envers, symétrique autour du milieu des deux figures. À la phase \(u\), la pièce de rang \(k\) a pour avancement :</p>
+        <div class="eq">\[ s_k(u) = \operatorname{clamp}\!\left(\frac{x - (a_k - T)}{T}\right), \quad x = \begin{cases} u & u \le m \\ 2m - u & u > m \end{cases}, \quad a_k = a_0 + (a_1 - a_0)\,\frac{k}{N-1} \]</div>
+        <p>avec \(a_0 = 0{,}07\), \(a_1 = 0{,}28\), \(T = 0{,}05\) et \(m = (u_1+u_2)/2\). Au raccord (\(u = 0\) et \(u = 1\)), toutes les pièces sont au sol. La pose de chaque pièce est calculée sur le processeur et passée au vertex shader, avec celle de l'image précédente, pour que l'anticrénelage temporel ne laisse pas de traînées.</p>
+        <div class="note check"><b>Vérifié</b><p>Sur deux graines : toutes les pièces au sol au raccord et toutes posées pendant les deux figures, chaque mère posée avant sa fille, démontage égal à l'assemblage renversé à \(10^{-9}\) près, places au sol à plat et sans contact.</p></div>
+      </section>
+
+      <section id="sols">
+        <h2><span class="n">08</span>Six sols, en relief réel autour du tas</h2>
+        <span class="src">src/scene/ground.js · groundMaterial() · src/gen/drift.js</span>
+        <p>Neige tassée par le vent, gneiss poli par un glacier, sable humide ridé, dalle de béton, planches grisées, lave cordée : six sols, tous des surfaces dures que le temps réel rend bien. Leur relief a deux échelles, calculées par la même fonction. La grosse échelle (crêtes de neige de 5 à 30 cm, rides de sable de 14 cm, bosses de roche) déplace réellement un carré de 400 × 400 sommets autour du tas, sur 2,6 m de marge. Elle entre aussi dans le relief d'éclairage, mais la normale de la géométrie ne la contient pas : il n'y a pas de double compte. La fine échelle (stries, grain, joints) reste dans le relief d'éclairage seul. Le grand plan est troué à la place du carré, et le déplacement s'annule au bord : le raccord est exact.</p>
+        <p>Sous le tas, la grosse échelle s'aplatit sur la roche et la lave : aucune pièce ne s'enfonce dans le sol ni ne flotte. Dans la neige, une congère pose le tas : contre chaque pièce basse, la neige monte jusqu'à 45 % de la section et s'étire sous le vent (×2,8). Sa hauteur est un attribut du sol, dosé par la part de pièces posées : elle monte avec le tas et disparaît avec lui.</p>
+      </section>
+
+      <section id="budget">
+        <h2><span class="n">09</span>Budget</h2>
+        <div class="tbl"><table>
+          <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
+          <tbody>
+            <tr><td>Placement des figures (160 coques en voxels)</td><td>worker</td><td class="num">≈ 1 s</td></tr>
+            <tr><td>Distances signées des deux silhouettes (en cache ensuite)</td><td>worker</td><td class="num">≈ 0,1 s</td></tr>
+            <tr><td>Peuplement (230 à 480 pièces)</td><td>worker</td><td class="num">2 à 3 s</td></tr>
+            <tr><td>Maillage des pièces et congère</td><td>worker</td><td class="num">≈ 0,3 s</td></tr>
+            <tr><td>Places au sol, ordre de montage, couloirs</td><td>worker</td><td class="num">0,3 à 0,5 s</td></tr>
+            <tr><td>Génération complète, selon la graine</td><td>worker</td><td class="num">4,1 à 5,6 s</td></tr>
+            <tr><td>Sommets de l'objet (bois flotté le plus lourd)</td><td>GPU</td><td class="num">115 000 à 230 000</td></tr>
+            <tr><td>Une image, qualité Haute, 1,76 Mpx, tenue sur une figure</td><td>GPU</td><td class="num">9,8 ms</td></tr>
+            <tr><td>Une image, qualité Haute, ronde au ras du tas</td><td>GPU</td><td class="num">15,5 ms</td></tr>
+            <tr><td>Une image, version mobile</td><td>GPU</td><td class="num">4,5 ms</td></tr>
+          </tbody>
+        </table></div>
+        <p>Mesures sur un portable Apple Silicon (génération dans Node, images dans le navigateur avec <code>bench()</code>).</p>
+      </section>
+    </article>
+
+    <footer class="end">
+      <a href="./">Ouvrir Anamorph</a>
+      <a href="https://github.com/drschizzo/Codevember/blob/main/anamorph/README.md">README</a>
+      <a href="https://github.com/drschizzo/Codevember/blob/main/anamorph/docs/concept.md">La démarche</a>
+      <span class="sp"></span>
+      <a href="../">Tous les jours</a>
+    </footer>
+  </main>
+
+  <script type="module">
+    import { demo, C, TAU, lerp, label, alpha, clamp, rng } from '../home/explainer.js';
+    import { sunAt, setupFigures, place, voxelHull, coverage, solvePlacement, polygonSDFGrid, hullSDF, toFigure, shadowOf, fromFigure, SUN_RADIUS } from './src/gen/shadowart.js';
+    import { figurePolygon } from './src/gen/silhouettes.js';
+    import { coverWithPieces } from './src/gen/pieces.js';
+    import { woodRelief } from './src/gen/forge.js';
+
+    const DEG = Math.PI / 180;
+    const figSpec = (n1, n2, dec = 20) => ({ lat: 78, dec, height: 0.8, figs: [[n1, Math.PI - 0.8], [n2, Math.PI + 0.8]].map(([name, H]) => ({ name, H, camAz: (sunAt(78, dec, H).az / DEG + 540) % 360 })) });
+
+    // ── 01 : la course du soleil et l'horloge ──
+    demo('#fig-sun', {
+      title: 'Soleil de minuit, 78° N', aspect: 2.2, animate: true,
+      controls: [{ key: 'dec', label: 'Date (déclinaison, °)', min: 12, max: 23.4, step: 0.1, value: 20 }],
+      draw(g, d) {
+        const { w, h } = d, dec = d.s.dec;
+        const cx = h * 0.55, cy = h * 0.52, R = h * 0.42;
+        // l'horloge (même forme que clock.js : deux tenues à 0,16 et ≈ 0,45)
+        const uk = [0.16, 0.452], N = 400, rho = [], W = [0];
+        for (let i = 0; i <= N; i++) { const u = i / N; let b = 0; for (const k of uk) { let x = u - k; x -= Math.round(x); b += Math.exp(-((x / 0.05) ** 2)); } rho.push(1 - 0.86 * Math.min(1, b)); }
+        for (let i = 1; i <= N; i++) W.push(W[i - 1] + (rho[i - 1] + rho[i]) / 2 / N);
+        const tot = W[N], Hs = Math.PI - 0.8 - 2 * Math.PI * W[Math.round(0.16 * N)] / tot;
+        const u = (d.t / 18) % 1, Hu = Hs + 2 * Math.PI * W[Math.round(u * N)] / tot;
+        // vue de dessus : horizon, course, figures
+        g.strokeStyle = alpha(C.ink, 0.25); g.lineWidth = 1; g.beginPath(); g.arc(cx, cy, R, 0, TAU); g.stroke();
+        g.beginPath();
+        for (let i = 0; i <= 96; i++) { const s = sunAt(78, dec, i / 96 * TAU), r = R * (1 - s.h / (Math.PI / 2)); const x = cx + Math.sin(s.az) * r, y = cy - Math.cos(s.az) * r; i ? g.lineTo(x, y) : g.moveTo(x, y); }
+        g.strokeStyle = alpha(C.c2, 0.7); g.stroke();
+        for (const Hf of [Math.PI - 0.8, Math.PI + 0.8]) {
+          const s = sunAt(78, dec, Hf), L = Math.min(R * 0.95, 0.12 * R / Math.tan(s.h));
+          g.strokeStyle = alpha(C.c1, 0.35); g.setLineDash([4, 4]); g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx - Math.sin(s.az) * L, cy + Math.cos(s.az) * L); g.stroke(); g.setLineDash([]);
+        }
+        const s = sunAt(78, dec, Hu), r = R * (1 - s.h / (Math.PI / 2));
+        const L = Math.min(R * 0.95, 0.12 * R / Math.tan(Math.max(0.01, s.h)));
+        g.strokeStyle = C.c1; g.lineWidth = 4; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx - Math.sin(s.az) * L, cy + Math.cos(s.az) * L); g.stroke(); g.lineWidth = 1;
+        g.fillStyle = C.ink; g.beginPath(); g.arc(cx, cy, 3, 0, TAU); g.fill();
+        g.fillStyle = C.c2; g.beginPath(); g.arc(cx + Math.sin(s.az) * r, cy - Math.cos(s.az) * r, 6, 0, TAU); g.fill();
+        label(g, 'N', cx - 4, cy - R - 6); label(g, 'S', cx - 4, cy + R + 14);
+        // l'heure en fonction de la phase
+        const x0 = h * 1.25, x1 = w - 20, y0 = h * 0.88, y1 = h * 0.12;
+        g.strokeStyle = alpha(C.ink, 0.25); g.strokeRect(x0, y1, x1 - x0, y0 - y1);
+        g.beginPath();
+        for (let i = 0; i <= N; i++) { const x = lerp(x0, x1, i / N), y = lerp(y0, y1, W[i] / tot); i ? g.lineTo(x, y) : g.moveTo(x, y); }
+        g.strokeStyle = C.c1; g.lineWidth = 2; g.stroke(); g.lineWidth = 1;
+        for (const k of uk) { g.strokeStyle = alpha(C.c2, 0.5); g.beginPath(); g.moveTo(lerp(x0, x1, k), y0); g.lineTo(lerp(x0, x1, k), y1); g.stroke(); }
+        g.fillStyle = C.ink; g.beginPath(); g.arc(lerp(x0, x1, u), lerp(y0, y1, W[Math.round(u * N)] / tot), 4, 0, TAU); g.fill();
+        label(g, 'phase u →', x1 - 64, y0 + 16); label(g, 'heure (un tour)', x0 + 4, y1 - 6);
+        d.status(`h = ${(s.h / DEG).toFixed(1)}° · tenues à h = ${(sunAt(78, dec, Math.PI - 0.8).h / DEG).toFixed(1)}°`);
+      },
+    });
+
+    // ── 02 : la coque et sa couverture ──
+    const PAIRS = [['renard', 'lievre'], ['lievre', 'macareux'], ['macareux', 'renard']];
+    demo('#fig-hull', {
+      title: 'Ombre de la coque', aspect: 2.2,
+      controls: [{ key: 'pair', label: 'Paire', min: 0, max: 2, step: 1, value: 0, fmt: (v) => PAIRS[v].join(' + '), onChange: (d) => { d.state.F = null; } }],
+      buttons: [{ label: 'Placer', onClick: (d) => { d.state.solve = true; } }],
+      draw(g, d) {
+        const st = d.state;
+        if (!st.F) { st.F = setupFigures(figSpec(...PAIRS[d.s.pair])); place(st.F, [[-0.4, 0], [-0.4, 0]]); st.cov = null; }
+        if (st.solve) { st.solve = false; const r = rng(7); solvePlacement(st.F, 0.8, r, { iters: 60 }); st.cov = null; }
+        const F = st.F, H = voxelHull(F, 0.8, 1.4, 56, 40);
+        st.cov = coverage(F, H, 128);
+        const pw = d.h * 0.9, gap = (d.w - 2 * pw) / 3;
+        F.forEach((f, k) => {
+          const ox = gap + k * (pw + gap), oy = d.h * 0.05;
+          const X = (b) => ox + (b + 0.55) / 1.1 * pw, Y = (a) => oy + (1.05 - a) / 1.1 * pw;
+          // ombre des voxels
+          g.fillStyle = alpha(C.c2, 0.55);
+          const { vox, N, NY, box, height } = H;
+          for (let iy = 0; iy < NY; iy++) for (let iz = 0; iz < N; iz++) for (let ix = 0; ix < N; ix++) {
+            if (!vox[(iy * N + iz) * N + ix]) continue;
+            const [a, b] = toFigure(f, ...shadowOf(f, -box + (ix + 0.5) * 2 * box / N, (iy + 0.5) * height / NY, -box + (iz + 0.5) * 2 * box / N));
+            g.fillRect(X(b) - 1, Y(a) - 1, 2.4, 2.4);
+          }
+          const P = figurePolygon(f.name);
+          g.strokeStyle = C.ink; g.lineWidth = 1.2; g.beginPath(); P.forEach(([a, b], i) => (i ? g.lineTo(X(b), Y(a)) : g.moveTo(X(b), Y(a)))); g.closePath(); g.stroke();
+          label(g, `${f.name} · ${(100 * st.cov[k]).toFixed(0)} %`, ox, d.h - 6);
+        });
+        d.status(`plus petite couverture : ${(100 * Math.min(...st.cov)).toFixed(0)} %`);
+      },
+    });
+
+    // ── 03 : la distance signée ──
+    demo('#fig-edt', {
+      title: 'Distance signée d\'une silhouette', aspect: 2.2,
+      controls: [{ key: 'res', label: 'Grille', min: 32, max: 256, step: 32, value: 128 }],
+      draw(g, d) {
+        const res = d.s.res, names = ['renard', 'lievre', 'macareux'];
+        const pw = d.h * 0.92, gap = (d.w - 3 * pw * 0.72) / 4;
+        names.forEach((n, k) => {
+          const G = polygonSDFGrid(n, res);
+          const ox = gap + k * (pw * 0.72 + gap) - pw * 0.14, oy = d.h * 0.04;
+          const cell = pw / 160;
+          for (let j = 0; j < 160; j++) for (let i = 0; i < 160; i++) {
+            const a = 1.05 - (j + 0.5) / 160 * 1.1, b = (i + 0.5) / 160 * 1.1 - 0.55;
+            const s = G.sample(a, b), band = Math.floor(Math.abs(s) / 0.025) % 2;
+            g.fillStyle = s < 0 ? (band ? '#24476e' : '#2e5a8a') : (band ? '#1a1b1f' : '#24262b');
+            g.fillRect(ox + i * cell, oy + j * cell, cell + 0.5, cell + 0.5);
+          }
+          const P = figurePolygon(n);
+          g.strokeStyle = C.ink; g.lineWidth = 1; g.beginPath(); P.forEach(([a, b], i) => { const x = ox + (b + 0.55) / 1.1 * pw, y = oy + (1.05 - a) / 1.1 * pw; i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.closePath(); g.stroke();
+        });
+        d.status(`grille ${res}² · bandes de 0,025 (unités de figure)`);
+      },
+    });
+
+    // ── 04 : ombre pleine et pénombre ──
+    demo('#fig-pen', {
+      title: 'Éclairement au sol, en travers de l\'ombre d\'une barre', aspect: 2.4,
+      controls: [
+        { key: 'r', label: 'Rayon (cm)', min: 0.5, max: 6, step: 0.1, value: 3.5 },
+        { key: 'y', label: 'Hauteur (cm)', min: 5, max: 80, step: 1, value: 60 },
+        { key: 'h', label: 'Soleil (°)', min: 5, max: 15, step: 0.5, value: 7 },
+      ],
+      draw(g, d) {
+        const r = d.s.r / 100, y = d.s.y / 100, h = d.s.h * DEG;
+        const Lp = y / Math.sin(h); // trajet du rayon jusqu'au sol
+        const xs = 0.08, x0 = 30, x1 = d.w - 20, ytop = 24, ybot = d.h - 34;
+        // fraction du disque solaire visible depuis x (en travers) : disque de rayon α·L, bande opaque de ±r
+        const vis = (x) => { const R = SUN_RADIUS * Lp; let c = 0, n = 0; for (let i = -40; i <= 40; i++) for (let j = -40; j <= 40; j++) { const u = i / 40, v = j / 40; if (u * u + v * v > 1) continue; n++; if (Math.abs(x + u * R) > r) c++; } return c / n; };
+        g.strokeStyle = alpha(C.ink, 0.25); g.beginPath(); g.moveTo(x0, ybot); g.lineTo(x1, ybot); g.moveTo(x0, ytop); g.lineTo(x1, ytop); g.stroke();
+        g.beginPath();
+        for (let i = 0; i <= 160; i++) { const x = lerp(-xs, xs, i / 160), v = vis(x); const px = lerp(x0, x1, i / 160), py = lerp(ybot, ytop, v); i ? g.lineTo(px, py) : g.moveTo(px, py); }
+        g.strokeStyle = C.c1; g.lineWidth = 2; g.stroke(); g.lineWidth = 1;
+        const umbra = Math.max(0, r - SUN_RADIUS * Lp);
+        label(g, '1 (soleil)', x0 + 2, ytop - 6); label(g, '0 (ombre pleine)', x0 + 2, ybot + 16);
+        d.status(umbra > 0 ? `ombre pleine : ${(200 * umbra).toFixed(1)} cm sur ${(200 * r).toFixed(1)} cm` : `aucune ombre pleine (il faudrait r > ${(100 * SUN_RADIUS * Lp).toFixed(1)} cm)`);
+      },
+    });
+
+    // ── 05 : le peuplement ──
+    demo('#fig-greedy', {
+      title: 'Peuplement glouton', aspect: 2.4,
+      buttons: [{ label: 'Calculer', onClick: (d) => { d.state.run = true; } }],
+      draw(g, d) {
+        const st = d.state;
+        if (st.run) {
+          st.run = false;
+          d.status('calcul…');
+          const spec = figSpec('renard', 'lievre', 20);
+          const F = setupFigures(spec);
+          solvePlacement(F, 0.8, rng(3), { iters: 60 });
+          const sdf = hullSDF(F, 0.8);
+          const H = voxelHull(F, 0.8, 1.4, 64, 32);
+          let b = [9, 0, 9, -9, 0.8, -9];
+          for (let iy = 0; iy < H.NY; iy++) for (let iz = 0; iz < H.N; iz++) for (let ix = 0; ix < H.N; ix++) if (H.vox[(iy * H.N + iz) * H.N + ix]) { const x = -1.4 + (ix + 0.5) * 2.8 / H.N, z = -1.4 + (iz + 0.5) * 2.8 / H.N; b = [Math.min(b[0], x), 0, Math.min(b[2], z), Math.max(b[3], x), 0.8, Math.max(b[5], z)]; }
+          const t0 = performance.now();
+          const res = coverWithPieces(F, sdf, b, rng(5), { cands: 60 });
+          st.res = { F, pieces: res.pieces, cov: res.coverage, ms: performance.now() - t0, b };
+        }
+        if (!st.res) { label(g, 'Appuyer sur « Calculer »', 20, d.h / 2); return; }
+        const { F, pieces, cov, b } = st.res, n = pieces.length;
+        const pw = d.h * 0.9, gap = (d.w - 3 * pw) / 4;
+        // vue de dessus
+        {
+          const ox = gap, oy = d.h * 0.05, sc = pw / Math.max(b[3] - b[0], b[5] - b[2]) * 0.9;
+          pieces.forEach((P, i) => { g.strokeStyle = alpha(lerp(0, 1, i / n) < 0.5 ? C.ink : C.c1, 0.75); g.lineWidth = Math.max(1, 2 * P.r * sc); g.beginPath(); g.moveTo(ox + (P.p0[0] - b[0]) * sc, oy + (P.p0[2] - b[2]) * sc); g.lineTo(ox + (P.p1[0] - b[0]) * sc, oy + (P.p1[2] - b[2]) * sc); g.stroke(); });
+          g.lineWidth = 1; label(g, `${n} pièces, vues de dessus`, ox, d.h - 6);
+        }
+        F.forEach((f, k) => {
+          const ox = gap + (k + 1) * (pw + gap), oy = d.h * 0.05;
+          const X = (bb) => ox + (bb + 0.55) / 1.1 * pw, Y = (a) => oy + (1.05 - a) / 1.1 * pw;
+          g.lineCap = 'round';
+          pieces.forEach((P, i) => {
+            const [a0, b0] = toFigure(f, ...shadowOf(f, ...P.p0)), [a1, b1] = toFigure(f, ...shadowOf(f, ...P.p1));
+            const umb = Math.max(0, P.r * 0.95 - SUN_RADIUS * Math.max(P.p0[1], P.p1[1]) / Math.sin(f.sun.h));
+            if (!umb) return;
+            g.strokeStyle = alpha(i / n < 0.5 ? '#9aa3b5' : C.c1, 0.8); g.lineWidth = Math.max(1, 2 * umb / f.scale / 1.1 * pw);
+            g.beginPath(); g.moveTo(X(b0), Y(a0)); g.lineTo(X(b1), Y(a1)); g.stroke();
+          });
+          const Pg = figurePolygon(f.name);
+          g.strokeStyle = C.ink; g.lineWidth = 1; g.beginPath(); Pg.forEach(([a, bb], i) => (i ? g.lineTo(X(bb), Y(a)) : g.moveTo(X(bb), Y(a)))); g.closePath(); g.stroke();
+          label(g, `${f.name} · ${(100 * cov[k]).toFixed(0)} % d'ombre pleine`, ox, d.h - 6);
+        });
+        d.status(`${n} pièces en ${(st.res.ms / 1000).toFixed(1)} s (60 candidates par pas ; le projet en tire 170)`);
+      },
+    });
+
+    // ── 06 : la section d'une branche ──
+    demo('#fig-wood', {
+      title: 'Relief d\'une branche de bois flotté', aspect: 2.2,
+      controls: [{ key: 't', label: 'Le long de la branche', min: 0, max: 1, step: 0.005, value: 0.4 }],
+      buttons: [{ label: 'Autre branche', onClick: (d) => { d.state.roll = (d.state.roll ?? 1.3) + 0.917; } }],
+      draw(g, d) {
+        const roll = d.state.roll ?? 1.3, L = 0.6, P = { r: 0.04, roll };
+        const rel = woodRelief(P, L), t = d.s.t;
+        // la coupe
+        const cx = d.h * 0.48, cy = d.h * 0.5, R = d.h * 0.4;
+        g.beginPath();
+        for (let i = 0; i <= 360; i++) { const th = i / 360 * TAU, rr = R * (1 - rel(th, t)); const x = cx + Math.cos(th) * rr, y = cy - Math.sin(th) * rr; i ? g.lineTo(x, y) : g.moveTo(x, y); }
+        g.fillStyle = '#5c544a'; g.fill(); g.strokeStyle = C.ink; g.stroke();
+        g.strokeStyle = alpha(C.ink, 0.25); g.setLineDash([3, 4]); g.beginPath(); g.arc(cx, cy, R, 0, TAU); g.stroke(); g.setLineDash([]);
+        label(g, 'section nominale', cx - R * 0.55, cy + R + 14);
+        // la branche dépliée
+        const x0 = d.h * 1.05, x1 = d.w - 16, y0 = 16, y1 = d.h - 24, nu = 220, nv = 72;
+        const cw = (x1 - x0) / nu, ch = (y1 - y0) / nv;
+        for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) {
+          const gg = rel(j / nv * TAU, i / nu), v = Math.round(200 - Math.min(1, gg / 0.2) * 170);
+          g.fillStyle = `rgb(${v},${Math.round(v * 0.94)},${Math.round(v * 0.86)})`; g.fillRect(x0 + i * cw, y0 + j * ch, cw + 0.5, ch + 0.5);
+        }
+        g.strokeStyle = C.c1; g.beginPath(); g.moveTo(lerp(x0, x1, t), y0); g.lineTo(lerp(x0, x1, t), y1); g.stroke();
+        label(g, 'longueur →', x1 - 70, d.h - 6); label(g, 'angle', x0, d.h - 6);
+        let mx = 0; for (let i = 0; i < 360; i++) mx = Math.max(mx, rel(i / 360 * TAU, t));
+        d.status(`creux maximal à cette abscisse : ${(100 * mx).toFixed(0)} % du rayon`);
+      },
+    });
+
+  </script>
+</body>
+</html>
