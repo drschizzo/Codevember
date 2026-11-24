@@ -123,3 +123,23 @@ test('les motifs du sol se répètent exactement sur une boucle', () => {
   const P = SHELF.M * SHELF.L;
   for (const s of [1.2, 0.6, 1.5, 0.02]) assert.ok(Math.abs(P / s - Math.round(P / s)) < 1e-9, `pas ${s}`);
 });
+
+test('une galerie ne se dessine pas avant d\'être creusée (lèvres sans propagation)', async () => {
+  const { half } = await import('../src/gen/half.js');
+  const h2f = (h) => { const e = (h >> 10) & 31, m = h & 1023; return e === 0 ? m * 2 ** -24 : (1 + m / 1024) * 2 ** (e - 15); };
+  for (const [seed, P] of [['b24-2', { style: 'lits', digger: 'vers' }], ['b24-0', { style: 'sablier', digger: 'fourmis' }]]) {
+    const S = buildSlab(seed, P), o = slabTextures({ seed, params: P });
+    const { nx, ny } = o;
+    for (const age of [0.1, 0.23, 0.5, 0.8]) {
+      for (let j = 1; j < ny - 1; j++) for (let i = 1; i < nx - 1; i++) {
+        const id = i + nx * j;
+        if (j >= S.nyS - 2 || S.mound[id] >= 0) continue; // (la bouche du tas, et sa lèvre, sont ouvertes exprès)
+        if (h2f(o.A[id * 4 + 2]) > age) continue; // (fermée à cet âge)
+        // ouverte : elle-même ou une voisine immédiate est vraiment creusée à cet âge
+        let ok = false;
+        for (let dj = -1; dj <= 1 && !ok; dj++) for (let di = -1; di <= 1 && !ok; di++) { const d = S.dug[id + di + nx * dj]; if (d >= 0 && h2f(half(d)) <= age + 1e-3) ok = true; }
+        assert.ok(ok, `${seed} âge ${age} : cellule (${i}, ${j}) ouverte sans galerie creusée à côté`);
+      }
+    }
+  }
+});

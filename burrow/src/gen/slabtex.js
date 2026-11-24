@@ -57,11 +57,14 @@ export function slabTextures({ seed, params = {} }) {
     for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) { let a = 0, n = 0; for (let k = -1; k <= 1; k++) { const x = i + k; if (x >= 0 && x < nx) { a += depthA[x + nx * j]; n++; } } tmp[i + nx * j] = a / n; }
     for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) { let a = 0, n = 0; for (let k = -1; k <= 1; k++) { const y = j + k; if (y >= 0 && y < ny) { a += tmp[i + nx * y]; n++; } } depthA[i + nx * j] = a / n; }
   }
+  // (les instants lus dans une copie : écrits sur place, ils se propageaient de
+  //  lèvre en lèvre et entouraient une galerie future d'une coquille déjà creusée)
+  const dig0 = dig.slice();
   for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
     const id = i + nx * j;
-    if (dig[id] < NEVER || depthA[id] <= 1e-4 || appear[id] >= NEVER) continue;
+    if (dig0[id] < NEVER || depthA[id] <= 1e-4 || appear[id] >= NEVER) continue;
     let m = NEVER;
-    for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) { const x = i + di, y = j + dj; if (x >= 0 && y >= 0 && x < nx && y < ny) m = Math.min(m, dig[x + nx * y]); }
+    for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) { const x = i + di, y = j + dj; if (x >= 0 && y >= 0 && x < nx && y < ny) m = Math.min(m, dig0[x + nx * y]); }
     if (m < NEVER) dig[id] = m; else depthA[id] = 0;
   }
   const A = new Uint16Array(N * 4), B = new Uint16Array(N * 2);
