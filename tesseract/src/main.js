@@ -1,12 +1,12 @@
 // Point d'entrée : moteur, scène, génération, interface, boucle de rendu.
 //
-// Paramètres d'URL : ?seed=… (la scène), #r=… (une scène retouchée, partagée
+// Paramètres d'URL : ?seed=… (la scène), ?interior=classic (l'ancien intérieur), #r=… (une scène retouchée, partagée
 // par « Copier le lien »), ?ui=0 (sans panneau), ?debug (outils dans
 // window.tess, dont shot(phase) : une image fixe à une phase donnée),
 // ?mobile=1 / ?mobile=0 (version allégée imposée / interdite ; voir app/mobile.js).
 import * as THREE from 'three/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { generate, makeCell, finishesFor, upgrade, ornate } from './recipe.js';
+import { generate as generate0, makeCell, finishesFor, upgrade, ornate, toGallery } from './recipe.js';
 import { randomNet, randomMoves } from './math4.js';
 import { createRng } from '../../shared/rng.js';
 import { createGenerator } from '../../shared/gen/client.js';
@@ -27,6 +27,10 @@ const params = new URLSearchParams(location.search);
 const $ = (s) => document.querySelector(s);
 const randomSeed = () => Math.random().toString(36).slice(2, 8);
 const DEFAULT_SEED = 'atl45i'; // (la scène de l'ouverture, sans ?seed=)
+// L'intérieur est une galerie en enfilade (voir recipe.js, toGallery) ;
+// ?interior=classic : l'ancien voyage, aux parois ornées et ajourées.
+const CLASSIC = params.get('interior') === 'classic';
+const generate = (seed, o) => (CLASSIC ? generate0(seed, o) : toGallery(generate0(seed, o)));
 
 async function packRecipe(R) {
   const s = new Blob([JSON.stringify(R)]).stream().pipeThrough(new CompressionStream('deflate-raw'));
@@ -222,8 +226,9 @@ async function main() {
     togglePause: () => { paused = !paused; toast(paused ? 'Pause' : 'Lecture', 900); },
     recipeChanged: () => tess.refresh(),
     envChanged: () => syncEnv(),
-    netChanged: (shape) => { R.net.shape = shape; R.net.parent = randomNet(rngUI(), shape); tess.refresh(); },
-    movesChanged: () => { R.moves = randomMoves(rngUI(), R.moveMode, true); if (R.voyage?.on) R.loop.duration = Math.round(voyageSeconds(R)); tess.refresh(); ui?.rebuild(); },
+    // (galerie : le patron en rangée et le voyage en ligne droite vont ensemble)
+    netChanged: (shape) => { if (R.voyage?.gallery) return toast('Patron fixé par la galerie (?interior=classic pour le changer)', 3200); R.net.shape = shape; R.net.parent = randomNet(rngUI(), shape); tess.refresh(); },
+    movesChanged: () => { if (R.voyage?.gallery) return toast('Voyage fixé par la galerie (?interior=classic pour le changer)', 3200); R.moves = randomMoves(rngUI(), R.moveMode, true); if (R.voyage?.on) R.loop.duration = Math.round(voyageSeconds(R)); tess.refresh(); ui?.rebuild(); },
     frameGeometry: () => tess.syncGeometry(null),
     frameSet: (s) => { R.frame.set = s; R.frame.finish = finishesFor(s, rngUI(), R.palette); tess.syncMaterial(null); ui?.rebuild(); },
     frameMaterial: () => tess.syncMaterial(null),

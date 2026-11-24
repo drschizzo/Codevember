@@ -45,7 +45,21 @@ export function probeLight(N, base, metal, rough, { diffuse = 1, specular = 1 } 
   if (MODE.lite) return null;
   const tex = (dirView, level) => cubeTexture(cube().texture, cameraWorldMatrix.mul(vec4(dirView, 0)).xyz).level(level).rgb;
   let out = vec3(0);
-  if (diffuse) out = out.add(base.mul(float(1).sub(metal)).mul(tex(N, float(LEVELS - 2))).mul(diffuse));
+  if (diffuse) {
+    // Éclairement diffus : un « cube d'ambiance ». Les six faces de la carte,
+    // réduites chacune à leur teinte moyenne (dernier niveau, lu au centre de
+    // la face), pondérées par le carré de la normale. Une lecture directe d'un
+    // niveau flou laissait voir les arêtes de la carte, dont les faces ne se
+    // raccordent pas : les plans à 45° du centre coupent chaque paroi selon
+    // ses diagonales et y traçaient une ligne claire, floue et crénelée (prise
+    // pour un reflet de l'objet, ou pour un filet de lumière pixelisé).
+    const Nw = cameraWorldMatrix.mul(vec4(N, 0)).xyz, w = Nw.mul(Nw);
+    const face = (x, y, z) => cubeTexture(cube().texture, vec3(x, y, z)).level(float(LEVELS)).rgb;
+    const irr = mix(face(-1, 0, 0), face(1, 0, 0), step(0, Nw.x)).mul(w.x)
+      .add(mix(face(0, -1, 0), face(0, 1, 0), step(0, Nw.y)).mul(w.y))
+      .add(mix(face(0, 0, -1), face(0, 0, 1), step(0, Nw.z)).mul(w.z));
+    out = out.add(base.mul(float(1).sub(metal)).mul(irr).mul(diffuse));
+  }
   if (specular) {
     const V = positionViewDirection;
     const f0 = mix(vec3(0.04), base, metal);

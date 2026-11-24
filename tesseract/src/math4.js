@@ -479,6 +479,10 @@ export function voyageStateAt(ph, R, cache) {
     // (un soupçon de recul avant l'élan et de dépassement à l'arrivée : vu de
     // l'intérieur, davantage se lit comme un à-coup)
     turn = easeBack(f, 0.02 + 0.06 * chor.turnAntic);
+    // (galerie : un pas régulier — élan et freinage sur les bords, vitesse
+    // constante entre les deux ; une courbe en S entassait le passage de la
+    // porte en une seconde, entre deux longues attentes)
+    if (R.voyage?.gallery) { const a = 0.28, k = 1 / (2 * a * (1 - a)); turn = f < a ? k * f * f : f > 1 - a ? 1 - k * (1 - f) * (1 - f) : (f - a / 2) / (1 - a); }
   }
   if (seg.k === 'surface') step = n - 1;
   return { Q, theta, turn, move, fold: foldMean, step, phase: seg.k, v: u, maxD, seg: j, room: seg.i, f };

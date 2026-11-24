@@ -173,12 +173,17 @@ export function createStage(scene, { lite = false } = {}) {
         side.addScaledVector(axis, -side.dot(axis) / Math.max(1e-9, h * h));
         if (side.lengthSq() > 1e-9) side.normalize(); else side.set(0, 0, 0);
         _c.copy(T.pos).addScaledVector(side, TOP.toward * h);
+        // (galerie : la caméra est dans l'axe ; une douche venue d'elle cachait
+        // l'ombre derrière l'objet — la lampe se décale de côté, l'ombre tombe
+        // sur le sol et le mur d'en face, et l'objet a un côté clair et un côté sombre)
+        if (vc.lateral) _c.addScaledVector(vc.lateral, 0.6 * h);
         // (échantillon de lentille de l'export accumulé : la source a une taille, l'ombre une pénombre)
         if (vc.jitter) _c.addScaledVector(vc.jitter, 0.06 * h);
         key.position.lerp(_c, kc);
         key.target.position.lerp(T.target, kc);
         key.intensity = k.intensity * (1 - kc) + (vc.lamp ?? 1) * TOP.power * (vc.gain ?? 1) * (k.intensity / 700) * s * s * kc;
-        key.angle = k.angle + (TOP.angle - k.angle) * kc;
+        // (galerie : un faisceau plus serré — l'objet et le sol dans la lumière, les murs en dégradé)
+        key.angle = k.angle + ((vc.lateral ? 0.62 : TOP.angle) - k.angle) * kc;
         key.penumbra = k.penumbra + (1 - k.penumbra) * kc;
         key.shadow.radius = k.soft * (1 - kc) + 3 * kc;
         sc.near = 3 + (0.05 * s - 3) * kc;

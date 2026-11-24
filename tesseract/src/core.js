@@ -139,6 +139,7 @@ export async function createCore({ renderer, width, height, gen, lite = false, R
   }
   const hand = createHandheld('tesseract'), _hA = new THREE.Vector3(), _hT = new THREE.Vector3(), _hF = new THREE.Vector3(); // (caméra tenue : RENDER.handheld, 0 = la caméra calculée seule)
   const _f = new THREE.Vector3(), _u = new THREE.Vector3(), _t = new THREE.Vector3(), _j = new THREE.Vector3(), _dark = new THREE.Color();
+  const _lat = new THREE.Vector3();
   let lastPhase = 0, info = null;
   // u : phase « déroulée » (seule sa partie fractionnaire compte ici)
   function renderAt(u, { push = 0, sub = null, free = false } = {}) {
@@ -187,7 +188,7 @@ export async function createCore({ renderer, width, height, gen, lite = false, R
     camera.updateMatrixWorld();
     tess.setViewer(camera.position);
     const kp = info?.kp ?? 0, kc = info?.kc ?? 0, sc = info?.scale ?? 1;
-    stage.update(R, floorY, { kc, kp, camera, scale: sc, lamp: R.voyage?.lamp ?? 1, top: info?.top, gain: info?.top?.gain ?? 1, jitter: sub ? _j.set(sub.light[0], 0, sub.light[1]) : null });
+    stage.update(R, floorY, { lateral: R.voyage?.gallery ? _lat.setFromMatrixColumn(camera.matrixWorld, 0).negate() : null, kc, kp, camera, scale: sc, lamp: R.voyage?.lamp ?? 1, top: info?.top, gain: info?.top?.gain ?? 1, jitter: sub ? _j.set(sub.light[0], 0, sub.light[1]) : null });
     // sonde de pièce (voir scene/probe.js) : une face par image, dans les pièces
     PROBE.k.value = probe && info?.top ? kc * (RENDER.probe ?? 1) : 0;
     if (PROBE.k.value > 0.01) probe.update(info.top.target, 0.03 * sc, reset); else probe?.invalidate();
@@ -198,6 +199,8 @@ export async function createCore({ renderer, width, height, gen, lite = false, R
     if (kc > 0) {
       const L = 0.2126 * scene.background.r + 0.7152 * scene.background.g + 0.0722 * scene.background.b;
       _dark.copy(scene.background).multiplyScalar(Math.min(1, 0.012 / Math.max(L, 1e-4)));
+      // (galerie : un gris sourd plutôt que le noir, là où l'on voit le fond)
+      if (R.voyage?.gallery && R.voyage.haze) _dark.set(R.voyage.haze);
       scene.background.lerp(_dark, Math.min(1, kc * 1.3));
     }
     scene.fog.color.copy(scene.background);
@@ -214,7 +217,8 @@ export async function createCore({ renderer, width, height, gen, lite = false, R
     post.update({
       ...RENDER, focus: focusDist, focusRange: RENDER.focusRange * TARGET * 2,
       halation: RENDER.halation * (1 - 0.7 * kc), dirt: RENDER.dirt * (1 - 0.6 * kc), motionBlur: RENDER.motionBlur * (1 - 0.5 * kc),
-      ssrIntensity: RENDER.ssrIntensity * (1 - 0.6 * kc),
+      // (galerie : des murs mats, un sol poli — ses reflets à pleine force)
+      ssrIntensity: RENDER.ssrIntensity * (R.voyage?.gallery ? 1 + 0.3 * kc : 1 - 0.6 * kc),
       // (rendu accumulé : ni anticrénelage temporel ni flou de mouvement calculé, la moyenne les fait)
       ...(sub ? { aa: 'none', motionBlur: 0, dof: false } : {}),
     }, R);

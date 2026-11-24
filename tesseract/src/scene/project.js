@@ -102,6 +102,16 @@ export const cellReveal = () => ({
   caustic: uniform(new THREE.Color(0, 0, 0)),
   // (direction où tombe la lumière qui a traversé l'objet : à l'opposé du plafond)
   causticDir: uniform(new THREE.Vector3(0, -1, 0)),
+  // (galerie : direction locale de la face qui sert de sol ; nulle : aucune)
+  floorDir: uniform(new THREE.Vector3(0, 0, 0)),
+  // (galerie : part de sa propre teinte que rend une paroi sans lumière — forte
+  // dans les pièces lointaines, qu'aucune lampe n'atteint, faible dans celle où
+  // l'on se tient, pour que sa lumière garde du modelé ; et la lueur que
+  // chaque porte laisse entrer, à la teinte de la pièce d'à côté)
+  fill: uniform(0),
+  // (galerie : part du rebond de lumière entre les six faces de la pièce, voir materials.js)
+  bounce: uniform(0),
+  spill: uniformArray(Array.from({ length: DOORS }, () => new THREE.Color(0, 0, 0)), 'color'),
 });
 // matrice ligne-major (math4.cellMatrix) → uniforme
 export function setMatrix(u, m) {
@@ -111,7 +121,9 @@ export function setMatrix(u, m) {
 // ajourage, en un seul varying : xy, position du point dans la trame des trous
 // (en carreaux : un trou au centre de chacun) ; z, ouverture du panneau (0 :
 // plein ; 1 : effacé)
-const revealVar = varyingProperty('vec3', 'vReveal');
+// (w : 1 sur la face qui sert de sol dans la galerie — le même varying, sans entrée de plus)
+const revealVar = varyingProperty('vec4', 'vReveal');
+export const revealFloor = revealVar.w;
 const revealUV = revealVar.xy;
 export const revealOpen = revealVar.z;
 // position projetée (espace local du groupe), pour le passage de la caméra
@@ -168,7 +180,7 @@ function irisEdge(i) {
   if (irisMemo[i]) return irisMemo[i];
   const q = projP.sub(G.doorP.element(i)), R = G.doorR.element(i);
   const x = abs(dot(q, G.doorU.element(i))), y = abs(dot(q, G.doorV.element(i)));
-  const d = tmax(tmax(x, y), x.add(y).mul(Math.SQRT1_2)).sub(R);
+  const d = tmax(tmax(x.mul(G.doorShape.x), y), x.add(y).mul(Math.SQRT1_2).mul(G.doorShape.y)).sub(R);
   return (irisMemo[i] = { d, guard: step(abs(dot(q, G.doorN.element(i))), R.mul(0.55)), on: step(1e-4, R), R });
 }
 // lisière lumineuse des iris (à verser dans l'émission des parois) : un filet
@@ -215,7 +227,9 @@ function assignReveal(reveal, l) {
   const g = reveal.grid.element(fi), { X, Y } = faceAxes(f);
   const perf = vec2(dot(l, X), dot(l, Y)).add(g.y).mul(g.x.div(g.y.mul(2).max(1e-3)));
   const lattice = mat2(0.7071, -0.7071, 0.7071, 0.7071).mul(attribute('pat', 'vec3').xy).mul(G.revealDensity);
-  revealVar.assign(vec3(mix(lattice, perf, step(0.5, g.x)), reveal.open.element(fi)));
+  const anc = attribute('anchor', 'vec3');
+  const onFloor = step(0.5, dot(anc.div(length(anc).max(1e-4)), reveal.floorDir));
+  revealVar.assign(vec4(mix(lattice, perf, step(0.5, g.x)), reveal.open.element(fi), onFloor));
 }
 
 // U : uniformes du maillage ; full : passe principale (normale, tangente,

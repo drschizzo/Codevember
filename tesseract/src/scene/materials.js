@@ -24,12 +24,12 @@ import * as THREE from 'three/webgpu';
 import {
   Fn, If, struct, uniform, attribute, positionView, vec2, vec3, vec4,
   float, mat3, mix, smoothstep, clamp, abs, length, normalize, dot, cross, sin, floor, fract, mod, step, acos, sign,
-  dFdx, dFdy, fwidth, faceDirection, mrt, normalViewGeometry, atan, select, velocity, cos, max as tmax, min as tmin, positionGeometry, texture3D, mx_cell_noise_vec3, modelViewMatrix, modelScale,
+  dFdx, dFdy, fwidth, faceDirection, mrt, normalViewGeometry, atan, select, velocity, cos, max as tmax, min as tmin, positionGeometry, texture3D, mx_cell_noise_vec3, modelViewMatrix, modelScale, positionLocal,
 } from 'three/tsl';
 import { FINISH_KEYS } from '../finishes.js';
 import { NOISE_PERIOD } from '../../../shared/gen/noisevol.js';
-import { projectPosition, localScale, revealMask, depthW, depthColor, frameMerge, doorGlow } from './project.js';
-import { G, MODE } from './globals.js';
+import { projectPosition, localScale, revealMask, depthW, depthColor, frameMerge, doorGlow, revealFloor } from './project.js';
+import { G, MODE, DOORS } from './globals.js';
 import { probeLight } from './probe.js';
 
 const PI = Math.PI;
@@ -66,6 +66,22 @@ export function setNoiseVolume({ data, size }) {
 const NZ = (p) => texture3D(noiseTexture, p.mul(1 / NOISE_PERIOD));
 const noise = (p) => NZ(p).x;                    // gradient, ≈ [-1, 1]
 const noise2 = (p) => NZ(p).y;
+// Sans répétition (comme Rust) : le volume de bruit est périodique, et une
+// lecture à une seule fréquence dessine sur un mur une trame régulière de
+// bosses — très visible dans le relief (grain d'une laque, peau d'orange d'un
+// émail, fibres d'un velours). Deux lectures sur deux réseaux incommensurables
+// (tourné, × 1,37, décalé), mêlées par un poids lu dans la seconde, contraste
+// renormalisé : aucune période commune. Réservé aux motifs des doublures.
+const ROT2 = mat3(0.36, 0.48, -0.8, -0.8, 0.6, 0.0, 0.48, 0.64, 0.6);
+const detile = (p, ch) => {
+  const a = NZ(p), b = NZ(ROT2.mul(p).mul(1.37).add(vec3(17.31, 5.77, 41.13)));
+  const w = smoothstep(-0.3, 0.3, b.y);
+  const k = float(1).div(w.mul(w).add(float(1).sub(w).mul(float(1).sub(w))).sqrt());
+  return a[ch].mul(float(1).sub(w)).add(b[ch].mul(w)).mul(k);
+};
+const noiseNT = (p) => detile(p, 'x');
+// grain d'une matière : deux échelles sans rapport simple, jamais une seule fréquence
+const grain = (p) => detile(p, 'y').mul(0.7).add(detile(ROT.mul(p).mul(0.37), 'x').mul(0.5));
 // rotation entre octaves (cache la périodicité, évite les alignements sur les axes)
 const ROT = mat3(0.0, 0.8, 0.6, -0.8, 0.36, -0.48, -0.6, -0.48, 0.64);
 const fbm = (p, oct = 4) => {
@@ -173,11 +189,11 @@ function surface(fin, U, p, pf, pn, lines) {
       const c = worley(p.mul(S.mul(8)));
       const fw = pf.mul(S).mul(8); // empreinte du pixel, en cellules : le trait reste net sans crénelage
       const crack = smoothstep(fw.mul(1.5).add(0.045), fw.mul(0.5), c.y.sub(c.x)).mul(aa(40)).mul(lines);
-      const pool = noise(p.mul(S.mul(3))).mul(0.5).add(0.5);
+      const pool = noiseNT(p.mul(S.mul(3))).mul(0.5).add(0.5);
       out.color = mix(mix(U.color, U.color.mul(0.8), pool.mul(0.45)), U.color2, crack.mul(0.85));
       out.rough = U.rough.add(crack.mul(0.3));
       out.h = crack.negate().mul(0.5);
-      out.ccH = noise2(p.mul(S.mul(160))).mul(aa(160));
+      out.ccH = grain(p.mul(S.mul(160))).mul(aa(160));
       break;
     }
     case 'weave': { // sergé 2/2 de carbone, projeté sur trois plans (triplanaire) : mèches, fibres
@@ -236,8 +252,8 @@ function surface(fin, U, p, pf, pn, lines) {
       break;
     }
     case 'velvet': { // velours : fibres et nuances
-      const fib = noise2(p.mul(S.mul(320)));
-      const blot = noise(p.mul(S.mul(5)));
+      const fib = grain(p.mul(S.mul(320)));
+      const blot = noiseNT(p.mul(S.mul(5)));
       out.color = mix(U.color, U.color2, clamp(fib.mul(0.3).mul(aa(320)).add(blot.mul(0.5)).add(0.4), 0, 1));
       out.h = fib.mul(0.5).add(0.5).mul(0.2).mul(aa(320));
       break;
@@ -303,7 +319,7 @@ function surface(fin, U, p, pf, pn, lines) {
       out.metal = flake;
       out.rough = mix(U.rough, float(0.22), flake);
       out.glitter = cell.sub(0.5).mul(0.9).mul(flake);
-      out.h = noise2(p.mul(S.mul(110))).mul(0.12).mul(aa(110));
+      out.h = grain(p.mul(S.mul(110))).mul(0.12).mul(aa(110));
       break;
     }
     case 'soap': { // film de savon : l'épaisseur coule lentement (boucle parfaite)
@@ -446,8 +462,39 @@ export function buildPieceMaterial(finish, U, M, { shadowTint = null, reveal = n
     // l'assombrissait ; l'encrassement y est déjà
     if (MODE.lite) m.aoNode = smoothstep(0.7, 0.99, mid).mul(-0.45).add(1).mul(smoothstep(0.85, 0.99, hi.add(lo).mul(0.5)).mul(-0.25).add(1));
   }
+  // Galerie — le rebond dans une boîte. Chaque pièce est un cube dont on
+  // connaît les six faces (cinq de la matière de la doublure, une de sol) : en
+  // un point d'une face, chacune des autres renvoie sa teinte selon l'angle
+  // sous lequel on la voit (facteur de forme d'un mur vu depuis son pied), et
+  // ferme un peu la lumière dans l'angle. Le sol se teinte du mur près du mur,
+  // le bas des murs prend le sol, les angles s'assombrissent : ce qu'un sol uni
+  // et plat ne disait pas. Tout se lit dans la position au repos (repère de la
+  // cellule), sans varying de plus ; la face où l'on est se reconnaît à sa
+  // normale géométrique.
+  let bleed = null, corner = null, floorMask = null;
+  if (reveal && patina) {
+    const pg = positionGeometry, nL = abs(normalize(cross(dFdx(pg), dFdy(pg))));
+    let occ = float(1);
+    bleed = vec3(0);
+    for (let a = 0; a < 3; a++) for (const s of [-1, 1]) {
+      const d = float(0.93).sub([pg.x, pg.y, pg.z][a].mul(s)).max(0), other = float(1).sub([nL.x, nL.y, nL.z][a]);
+      const wall = mix(U.inner.color, G.floorColor, step(0.5, dot(vec3(a === 0 ? s : 0, a === 1 ? s : 0, a === 2 ? s : 0), reveal.floorDir)));
+      bleed = bleed.add(wall.mul(float(1).sub(d.div(d.mul(d).add(0.6).sqrt())).mul(0.5)).mul(other));
+      occ = occ.mul(float(1).sub(other.mul(d.div(-0.3).exp()).mul(0.42)));
+    }
+    corner = mix(float(1), occ, reveal.bounce.min(1));
+  }
+  if (reveal && patina) { // (galerie : la face qui sert de sol)
+    const fl = step(0.5, revealFloor).mul(step(0.5, surfA.y)); // (face interne seulement : dehors, le panneau garde sa matière)
+    floorMask = fl;
+    color = mix(color, G.floorColor, fl);
+    rough = mix(rough, G.floorRough, fl);
+    color = color.mul(corner);
+  }
   m.colorNode = vec4(color, 1);
-  m.metalnessNode = get('metal');
+  // (sol de la galerie : une pierre polie — assez de réflectance pour que la
+  // porte, l'objet et la lampe s'y reflètent en espace écran)
+  m.metalnessNode = floorMask ? mix(get('metal'), G.floorMetal, floorMask) : get('metal');
   if (F.smudge) {
     const sm = smoothstep(0.1, 0.45, fbm(p.mul(2.2).add(7.3), 3)).mul(noise2(p.mul(140)).mul(0.25).add(0.75));
     rough = rough.add(sm.mul(get('smudge')).mul(0.35));
@@ -512,6 +559,40 @@ export function buildPieceMaterial(finish, U, M, { shadowTint = null, reveal = n
     m.emissiveNode = m.emissiveNode ? m.emissiveNode.add(e) : e;
   }
   // lisière lumineuse des portes du voyage (parois et verre)
+  if (reveal && patina) {
+    // galerie : teinte propre (voir cellReveal) et lueur des portes — une
+    // nappe de la couleur de la pièce voisine, devant chaque porte, sur le sol
+    // et le bas des murs (nulle dans le plan de la porte : la lumière entre)
+    let spill = vec3(0);
+    for (let i = 0; i < DOORS; i++) {
+      const R = G.doorR.element(i).max(1e-4), q = positionLocal.sub(G.doorP.element(i)).div(R);
+      const k = abs(dot(q, G.doorN.element(i))).mul(1.6).clamp(0, 1).mul(dot(q, q).mul(-0.3).exp()).mul(step(2e-4, G.doorR.element(i)));
+      spill = spill.add(reveal.spill.element(i).mul(k));
+    }
+    let e = color.mul(spill.add(reveal.fill).add(bleed.mul(reveal.bounce)));
+    // Le sol poli reflète les portes : le rayon de l'œil, réfléchi sur le sol,
+    // atteint-il le rectangle d'une porte ? Si oui, il rapporte la teinte de la
+    // pièce d'à côté, d'autant plus qu'il est rasant (Fresnel) et d'autant plus
+    // flou qu'il vient de loin. (Les reflets en espace écran ne rendaient
+    // presque rien sur ce sol, même en miroir.)
+    if (floorMask) {
+      const vd = normalize(positionLocal.sub(G.viewLocal)), cosv = dot(vd, G.galUp);
+      const rd = vd.sub(G.galUp.mul(cosv.mul(2)));
+      let seen = vec3(0);
+      for (let i = 0; i < DOORS; i++) {
+        const n = G.doorN.element(i), R = G.doorR.element(i).max(1e-4), den = dot(rd, n);
+        const t = dot(G.doorP.element(i).sub(positionLocal), n).div(den.abs().max(1e-3).mul(sign(den)));
+        const h = positionLocal.add(rd.mul(t)).sub(G.doorP.element(i));
+        const x = abs(dot(h, G.doorU.element(i))).mul(G.doorShape.x).div(R), y = abs(dot(h, G.doorV.element(i))).div(R);
+        const soft = t.div(R).mul(0.05).add(0.05).clamp(0.05, 0.6);
+        const inside = smoothstep(soft.add(1), soft.oneMinus(), tmax(x, y)).mul(step(0, t)).mul(step(2e-4, G.doorR.element(i)));
+        seen = seen.add(reveal.spill.element(i).mul(inside));
+      }
+      const g = float(1).sub(cosv.abs()).clamp(0, 1), g2 = g.mul(g);
+      e = e.add(seen.mul(g2.mul(g2).mul(g).mul(0.92).add(0.08)).mul(G.floorGloss).mul(floorMask));
+    }
+    m.emissiveNode = m.emissiveNode ? m.emissiveNode.add(e) : e;
+  }
   if (reveal) { const e = G.doorRim.mul(doorGlow()); m.emissiveNode = m.emissiveNode ? m.emissiveNode.add(e) : e; }
   if (gi && !MODE.lite) {
     // (le verre ne diffuse rien ; une paroi ne prend de la sonde que le rebond

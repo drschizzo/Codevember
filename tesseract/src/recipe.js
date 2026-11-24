@@ -1,8 +1,8 @@
 // Recette d'une scène : tout ce qui découle de la graine. Une recette est un
 // objet JSON (partageable par lien) ; le panneau la modifie en place.
 import { createRng } from '../../shared/rng.js';
-import { FINISHES, SETS, TINTS } from './finishes.js';
-import { randomNet, randomMoves, ROOT, voyageSeconds, twinFace, stepOrientations, innerCell } from './math4.js';
+import { FINISHES, SETS, TINTS, FINISH_DEFAULTS } from './finishes.js';
+import { randomNet, randomMoves, ROOT, voyageSeconds, twinFace, stepOrientations, innerCell, cellTransforms, apply, embedLocal, validNet, cellOf } from './math4.js';
 
 const r2 = (x) => Math.round(x * 100) / 100;
 const r3 = (x) => Math.round(x * 1000) / 1000;
@@ -548,6 +548,79 @@ export function generate(seed, opts = {}) {
 }
 
 export const rootCell = ROOT;
+
+// ── La galerie ──────────────────────────────────────────────────────────────────
+// L'intérieur en enfilade : un tour en ligne droite (quatre quarts de tour
+// dans le même plan, donc un haut constant et un vrai sol), des parois
+// pleines, et un biscuit pâle pour les quatre pièces latérales.
+// Chaque pièce visitée : une matière (dedans comme dehors : le patron montre
+// les quatre pièces que l'on va traverser) et un relief plein sur ses deux
+// murs de côté — jamais sur les murs des portes, le sol ni le plafond.
+//   laque vermillon en paravent plissé · céladon craquelé et ses ondes ·
+//   laque ocre cannelée · velours nuit capitonné
+// Quatre teintes franches : un marbre et un céladon pâle se confondaient, sur
+// le patron, avec le biscuit des pièces latérales.
+export const GALLERY_ROOMS = [
+  { finish: 'urushiRed', side: 'miura', objects: ['crystal', 'ceramicWhite', 'chrome', 'nacre'], set: { miura: { n: 5, rows: 6, h: 0.5, s: 0.4 } } },
+  { finish: 'glaze', tint: '#5fa58c', more: { color: '#3f9478', color2: '#317660', scale: 1.6, bump: 0.08, clearcoat: 0.2, rough: 0.6 }, side: 'ripple', objects: ['goldLeaf', 'ceramicWhite', 'guillocheRuby', 'bronze'], set: { ripple: { n: 4, amp: 0.55, src: 'center' } } },
+  { finish: 'lacquerMatte', tint: '#b98a2e', side: 'corrugated', objects: ['ceramicBlack', 'crystalBlue', 'guilloche', 'ceramicWhite'], set: { corr: { n: 7, amp: 0.3 } } },
+  { finish: 'velvetNight', side: 'stud', objects: ['goldLeaf', 'ceramicWhite', 'kintsugi', 'crystal'], set: { stud: { n: 6, mode: 'dome', height: 0.55 } } },
+];
+export function toGallery(R) {
+  const rng = createRng(`${R.seed}:galerie`);
+  R.moveMode = 'same';
+  // (le long de x : déplié, la rangée des quatre pièces se présente de face)
+  const mv = { a: 0, s: rng.chance(0.5) ? 1 : -1 };
+  R.moves = [mv, mv, mv, mv];
+  const rooms = stepOrientations(R.moves).slice(0, 4).map(innerCell);
+  // Le patron : les quatre pièces du voyage en une rangée (la quatrième, la
+  // première, la deuxième, la troisième : repliée, la rangée se referme en
+  // anneau), et les quatre pièces latérales accrochées chacune à une pièce
+  // différente — aucune pièce du voyage n'est enfermée au cœur d'une croix,
+  // on les voit toutes avant d'y entrer.
+  {
+    const parent = new Array(8).fill(-2), row = [rooms[3], rooms[0], rooms[1], rooms[2]];
+    parent[rooms[0]] = -1; parent[rooms[1]] = rooms[0]; parent[rooms[3]] = rooms[0]; parent[rooms[2]] = rooms[1];
+    const lat = [...Array(8).keys()].filter((c) => !rooms.includes(c));
+    const perms = (a) => (a.length < 2 ? [a] : a.flatMap((x, i) => perms([...a.slice(0, i), ...a.slice(i + 1)]).map((r) => [x, ...r])));
+    // (la pièce latérale de devant, +z, cacherait la rangée à la caméra : elle
+    // s'accroche à celle du dessus ; celle de derrière, à une pièce du bout)
+    const yUp = cellOf(1, 1), yDn = cellOf(1, -1), zFront = cellOf(2, 1), zBack = cellOf(2, -1);
+    parent[yUp] = rooms[1]; parent[yDn] = rooms[3]; parent[zFront] = yUp; parent[zBack] = rooms[2];
+    if (!validNet(parent)) for (const hosts of perms(row)) {
+      lat.forEach((c, i) => { parent[c] = hosts[i]; });
+      if (validNet(parent)) break;
+    }
+    if (validNet(parent)) R.net = { shape: 'gallery', parent };
+  }
+  const fin = (k, tint, more) => ({ ...FINISHES[k], preset: k, ...(tint ? { color: tint } : {}), ...more });
+  // le haut : un axe que les quarts de tour laissent en place (y, ou z quand
+  // on voyage le long de y) ; le sol de chaque cellule est sa face opposée,
+  // ses murs de côté regardent le troisième axe
+  const along = R.moves[0].a, up = along === 1 ? 2 : 1, side = 3 - along - up;
+  const T = cellTransforms({ theta: new Array(8).fill(0), move: null, turn: 0, Q: stepOrientations(R.moves)[0] }, R.net.parent);
+  const OBJ = 0.22, DROP = 0.3;
+  R.cells.forEach((cell, c) => {
+    const i = rooms.indexOf(c), room = GALLERY_ROOMS[i];
+    const f = room ? fin(room.finish, room.tint, room.more) : fin('bisque');
+    cell.panel = { outer: f, inner: { ...f }, edge: fin(room ? 'polishedBrass' : 'whiteCeramic'), wear: 0 };
+    if (room) Object.assign(cell, JSON.parse(JSON.stringify(room.set)));
+    // (l'objet tranche sur les murs de sa pièce : matières choisies pour chacune)
+    if (room && cell.content.type !== 'gem') { const k = rng.fork(`objet${i}`).pick(room.objects); cell.content.set = k; cell.content.finish = finishesFor(k, rng.fork(`fini${i}`), R.palette); }
+    const base = apply(T[c], embedLocal(c, [0, 0, 0]));
+    cell.faces = cell.faces.map((_, face) => {
+      const l = [0, 0, 0]; l[face >> 1] = face & 1 ? 1 : -1;
+      const y = apply(T[c], embedLocal(c, l));
+      // l'objet flotte un peu plus bas que le regard : il ne masque pas l'enfilade
+      if (y[up] - base[up] < -0.5) Object.assign(cell.content, { size: OBJ, drop: l.map((x) => x * DROP) });
+      return room && Math.abs(y[side] - base[side]) > 0.5 ? room.side : 'plate';
+    });
+  });
+  R.voyage = { ...R.voyage, gallery: true, see: 0, up, objScale: OBJ, fogNear: 3, fogFar: 22, haze: '#2c2927', lamp: 3.6, fillHere: 0.03, dwell: 2.2, travel: 5.2 };
+  R.view = { ...R.view, doorRim: 0.3, caustics: 0, cutaway: 0.35, practical: 1.5 }; // (pas de filets de lumière sur les murs)
+  R.loop.duration = Math.round(voyageSeconds(R));
+  return R;
+}
 
 // Lisibilité et vue sur l'intérieur (réglages par défaut)
 //   ghost : silhouette du tesseract plié (destination) ; seams : liserés des

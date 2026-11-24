@@ -115,7 +115,50 @@ export function voyageFrames(R, cache) {
     const o = { uIn: fwdIn.clone().negate(), uOut: fwdOut.clone().negate(), upL: new THREE.Vector3(0, 1, 0).applyQuaternion(_gq) };
     return insidePose({ phase: 'dwell', room: i, f: 0.5 }, R, out, o).up;
   });
+  // La galerie : un haut constant. Les quatre traversées se font dans le même
+  // plan (D est le même à chaque fois) ; le haut est celui des deux autres
+  // axes qui est le plus proche du haut du monde à la première halte.
+  if (R.voyage?.gallery && n) {
+    const seg = tl.find((p) => p.k === 'dwell' && p.i === 0), ph = seg ? (seg.a + seg.b) / 2 : 0;
+    _gq.setFromEuler(_eu.set(R.proj.tiltX, Math.PI * 2 * R.proj.spin * ph, R.proj.tiltZ, 'YXZ')).invert();
+    const upL = new THREE.Vector3(0, 1, 0).applyQuaternion(_gq), D = out[0].D;
+    let U = null, best = -1;
+    if (R.voyage.up !== undefined) U = new THREE.Vector3().setComponent(R.voyage.up, 1);
+    else for (let a = 0; a < 3; a++) {
+      if (Math.abs(D.getComponent(a)) > 0.5) continue;
+      const s = upL.getComponent(a);
+      if (Math.abs(s) > best) { best = Math.abs(s); U = new THREE.Vector3().setComponent(a, Math.sign(s) || 1); }
+    }
+    out.U = U;
+    out.ups = out.rooms.map(() => U.clone());
+  }
   return out;
+}
+
+// pose de la galerie : en retrait de l'objet, un peu de côté et un peu plus
+// haut que lui, le regard le long de l'enfilade. La caméra ne bouge pas : ce
+// sont les pièces qui viennent à elle.
+// (dans l'axe des portes : un décalage de côté se lisait comme un cadrage de travers)
+const GAL = { back: 0.64, side: 0, h: 0.16, aim: 2.2, drop: 0.3 };
+function galleryPose(frames) {
+  const D = frames[0].D, U = frames.U, S = new THREE.Vector3().crossVectors(D, U);
+  const pos = D.clone().multiplyScalar(-GAL.back).addScaledVector(S, GAL.side).addScaledVector(U, GAL.h);
+  const fwd = D.clone().multiplyScalar(GAL.aim).addScaledVector(U, -GAL.drop).sub(pos).normalize();
+  const up = U.clone().addScaledVector(fwd, -U.dot(fwd)).normalize();
+  return { pos, fwd, up };
+}
+
+// pose intermédiaire : la position tourne autour de l'origine (direction en
+// arc, rayon interpolé), l'orientation par interpolation sphérique
+const _m = new THREE.Matrix4();
+const quatOf = (P) => new THREE.Quaternion().setFromRotationMatrix(_m.makeBasis(new THREE.Vector3().crossVectors(P.fwd, P.up), P.up, P.fwd.clone().negate()));
+function blendPose(A, B, k) {
+  if (k <= 0) return A;
+  if (k >= 1) return B;
+  const ra = A.pos.length(), rb = B.pos.length(), da = A.pos.clone().normalize(), db = B.pos.clone().normalize();
+  const dir = da.clone().applyQuaternion(new THREE.Quaternion().slerp(new THREE.Quaternion().setFromUnitVectors(da, db), k));
+  const q = quatOf(A).slerp(quatOf(B), k);
+  return { pos: dir.multiplyScalar(ra + (rb - ra) * k), fwd: new THREE.Vector3(0, 0, -1).applyQuaternion(q), up: new THREE.Vector3(0, 1, 0).applyQuaternion(q) };
 }
 
 // Allures d'une traversée : regard (β), roulis autour de l'axe (τ : la caméra
@@ -200,6 +243,14 @@ function poseIn(q, r, beta, tau) {
 // exprimée dans le même repère (entrée et sortie s'y raccordent)
 export function insidePose(st, R, frames, out) {
   const V = R.voyage, n = R.moves.length;
+  if (V.gallery && frames.U && (st.phase === 'dwell' || st.phase === 'travel')) {
+    const Gp = galleryPose(frames);
+    // première et dernière halte : de la pose d'arrivée de la plongée à celle
+    // de la galerie, et retour (en tournant autour du centre, jamais au travers)
+    if (st.phase !== 'dwell' || (st.room !== 0 && st.room !== n)) return Gp;
+    const first = st.room === 0, dock = dockPose(1, out, first ? out.uIn : out.uOut, out.upL);
+    return blendPose(dock, Gp, first ? sm(0.02, 0.8, st.f) : 1 - sm(0.2, 0.98, st.f));
+  }
   // (out.uIn, out.uOut : rayons d'entrée et de sortie ; out.upL : le haut)
   const fin = frameOnAxis(out.uIn, out.upL), fout = frameOnAxis(out.uOut, out.upL);
   const qIn = basisQ(fin.D, fin.O), qOut = basisQ(fout.D, fout.O);

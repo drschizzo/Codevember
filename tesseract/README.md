@@ -22,6 +22,7 @@ Rendu physique en three.js (WebGPU, TSL). La scène est entièrement procédural
 
 Paramètres d'URL :
 - `?seed=…` : une scène (par défaut `atl45i`) ;
+- `?interior=classic` : l'ancien intérieur (parois ornées et ajourées, caméra libre de son roulis), décrit plus bas ;
 - `#r=…` : une scène retouchée, produite par « Copier le lien » ;
 - `?ui=0` : sans panneau ;
 - `?debug` : outils dans `window.tess`, dont `shot(phase)` (une image fixe à une phase donnée), `at('travel', 1, 0.5)` (la phase d'un moment du voyage), `send(nom)` (l'image rendue, envoyée à un collecteur local sur le port 8099), `sendAccum(nom, phase, passes)` (la même, en rendu accumulé) et `meter()` (posemètre : luminance de la passe de scène, médiane et centiles, part de noir et de brûlé, sur l'image et sur son centre).
@@ -79,7 +80,29 @@ Légendes et encart sont masqués par défaut et s'affichent à la demande (touc
 
 **Le cadrage.** L'objet reste centré, à une taille qui ne suit qu'en partie l'étendue du patron (déplié, il est bien plus grand que plié). Il est soulevé au besoin pour ne jamais traverser le sol.
 
-## Le voyage intérieur (`src/scene/voyage.js`)
+## La galerie (`src/recipe.js`, `toGallery`)
+
+L'intérieur par défaut. Le premier voyage, aux parois ornées et ajourées, était exact mais illisible : sans sol ni haut, avec les motifs de plusieurs pièces superposés, on ne comprenait pas ce que l'on voyait. La galerie garde la même géométrie et en retire ce qui brouillait la lecture.
+
+**Le trajet.** Quatre quarts de tour dans le même plan, le long de x. On marche tout droit, on traverse quatre pièces et l'on revient dans la première. Un axe reste en place pendant tout le voyage : c'est le haut, et chaque pièce a un vrai sol.
+
+**Les pièces.** Chacune a une matière, la même dehors et dedans, et un relief plein sur ses deux murs de côté : laque vermillon plissée, émail vert craquelé à ondes, laque ocre cannelée, velours nuit capitonné. Les murs des portes, le plafond et le sol (une pierre sombre polie) restent lisses, et rien n'est ajouré. Les quatre pièces latérales, que l'on ne visite pas, sont en biscuit pâle. L'objet de chaque pièce flotte un peu plus bas que le regard, dans une matière choisie pour trancher sur son mur.
+
+**Le patron.** Les quatre pièces du voyage y forment une rangée, dans l'ordre où on les traverse. Aucune n'est enfermée au centre d'une croix, et aucune pièce latérale ne se pose devant la rangée : on voit, déplié, ce que l'on va visiter.
+
+**Les portes** sont droites, du sol aux deux tiers du mur, et restent ouvertes pendant tout le voyage. Dans l'hypersphère, les portes à 45° et à 135° du regard ont la même taille apparente, et leurs cadres se confondraient : une porte lointaine est donc plus étroite, pour que les cadres s'emboîtent.
+
+**La caméra** ne bouge pas. Elle se tient dans l'axe des portes, en retrait de l'objet, et ce sont les pièces qui viennent à elle, à vitesse constante entre un élan et un freinage. À la première et à la dernière halte, elle passe de la pose de la plongée à celle de la galerie en tournant autour de l'objet.
+
+**La lumière.**
+- Le projecteur du plafond est décalé de côté et son faisceau resserré : l'ombre de l'objet tombe sur le sol, et les murs partent en dégradé.
+- Le rebond dans une boîte (`src/scene/materials.js`). En chaque point d'une face, les cinq autres renvoient leur teinte selon l'angle sous lequel on les voit, et les angles se ferment. Le sol se teinte du mur près du mur.
+- Le sol reflète les portes. Le regard, réfléchi sur le sol, atteint-il le rectangle d'une porte ? Si oui, il rapporte la teinte de la pièce d'à côté, d'autant plus qu'il est rasant.
+- Une pièce lointaine, qu'aucune lampe n'atteint, rend une part de sa propre teinte.
+
+**Ce qu'on ne voit pas.** Un regard porté droit devant part à l'infini et ne revient pas par l'arrière : on voit la pièce suivante, puis celle du bout du cercle, mais pas son propre dos.
+
+## Le voyage intérieur classique (`src/scene/voyage.js`, `?interior=classic`)
 
 **L'idée.** Gonflé jusqu'au bout, le tesseract devient la 3-sphère de rayon 2, pavée par ses huit cellules. Quand l'œil 4D se pose sur cette sphère (d = 2), la perspective devient une projection stéréographique. Celle-ci envoie le pôle opposé à l'œil (le centre du cube intérieur) à l'origine, et les grands cercles qui y passent sur des droites. Une caméra placée à l'origine voit donc chaque point de l'hypersphère dans sa vraie direction, comme le verrait un habitant de cet univers. La projection et le reste du rendu ne changent pas. Seuls deux réglages bougent (gonflement 1, distance 2).
 

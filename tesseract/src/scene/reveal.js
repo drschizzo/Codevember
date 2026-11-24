@@ -23,6 +23,9 @@ const PASS = { far: 0.36, near: 0.1, lat: 1.05 };
 // caméra la franchit à l'écart de son centre, sur une diagonale) et rotation
 // de ses lames pendant qu'il s'ouvre
 const DOOR = { radius: 0.8, spin: 0.9 };
+// (galerie : une porte droite, du sol aux deux tiers de la paroi — demi-largeur,
+// demi-hauteur et pied, en parts du demi-côté)
+const GALLERY_DOOR = { w: 0.3, h: 0.62, foot: 0.92, far: 0.6 };
 // part de la lumière du studio qu'une face laisse passer, pleine, selon sa
 // nature (voir cellOpenness)
 const FACE_CLEAR = { open: 1, glass: 0.85, bars: 0.7, leaded: 0.6, comb: 0.5, grid: 0.5, target: 0.45, oculus: 0.4, twist: 0.4, louvre: 0.35, perf: 0.3 };
@@ -67,9 +70,27 @@ export function voyageDoors(st, R, frames, T, d, inflate) {
     const v = cross(nrm, u), spin = DOOR.spin * (1 - ease), cs = Math.cos(spin), sn = Math.sin(spin);
     return {
       p, n: nrm, u: u.map((c, j) => c * cs + v[j] * sn), v: v.map((c, j) => c * cs - u[j] * sn),
-      r: DOOR.radius * half * ease, half, spin, open,
+      r: DOOR.radius * half * ease, half, spin, open, u0: u, v0: v,
     };
   };
+  // La galerie : les quatre portes du cercle restent ouvertes, sans lames.
+  if (R.voyage?.gallery && (st.phase === 'dwell' || st.phase === 'travel')) {
+    const r = frames.rooms;
+    const U = frames.U.toArray();
+    const ajar = st.phase !== 'dwell' ? 1 : st.room === 0 ? smoothstep(0.15, 0.6, f) : st.room === n ? 1 - smoothstep(0.4, 0.85, f) : 1;
+    if (ajar <= 0) return [null, null];
+    return [[3, 0], [0, 1], [1, 2], [2, 3]].map(([a, b]) => {
+      const w = wall(r[a], r[b], 1), k = U[0] * w.n[0] + U[1] * w.n[1] + U[2] * w.n[2];
+      const v = unit(U.map((c, j) => c - k * w.n[j])), u = cross(w.n, v);
+      // (une porte lointaine se fait plus étroite : dans l'hypersphère, les
+      // portes à 45° et à 135° ont la même taille apparente, et leurs cadres
+      // se confondraient au lieu de s'emboîter)
+      const na = normalOf(r[a]), nb = normalOf(r[b]), ww = apply(T[r[a]], na.map((x, j) => x + nb[j]))[3];
+      const far = (1 - GALLERY_DOOR.far * smoothstep(-0.7, 0.7, ww)) * ajar;
+      const hh = GALLERY_DOOR.h * w.half * far, lift = -GALLERY_DOOR.foot * w.half + hh;
+      return { ...w, p: w.p.map((c, j) => c + v[j] * lift), u, v, r: hh, shape: [GALLERY_DOOR.h / GALLERY_DOOR.w, 0] };
+    });
+  }
   if (st.phase === 'dwell') {
     // L'enfilade : un tour en ligne droite (quatre pièces sur un grand cercle)
     // aligne ses quatre portes. À la dernière halte, revenu dans la première

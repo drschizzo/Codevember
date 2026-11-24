@@ -39,7 +39,14 @@ export const G = {
   doorU: uniformArray(Array.from({ length: DOORS }, () => new THREE.Vector3(0, 1, 0)), 'vec3'),
   doorV: uniformArray(Array.from({ length: DOORS }, () => new THREE.Vector3(0, 0, 1)), 'vec3'),
   doorR: uniformArray(new Array(DOORS).fill(0), 'float'),
+  // forme : x, rapport hauteur / largeur (1 : carrée) ; y, part de l'octogone (0 : rectangle)
+  doorShape: uniform(new THREE.Vector2(1, 1)),
   doorRim: uniform(new THREE.Color(0, 0, 0)),
+  // sol des pièces de la galerie : teinte et rugosité
+  floorColor: uniform(new THREE.Color('#4c4641')), floorRough: uniform(0.16), floorMetal: uniform(0.2),
+  // (reflet des portes sur le sol poli : le haut de la galerie et l'œil, dans l'espace projeté)
+  galUp: uniform(new THREE.Vector3(0, 1, 0)), viewLocal: uniform(new THREE.Vector3()), floorGloss: uniform(1.6),
+
   roughFloor: uniform(0.08),  // rugosité minimale (reflets jamais réduits à un point)
   nestEnv: uniform(0.45),     // part du studio encore visible depuis l'intérieur d'une cellule
   crystalThick: uniform(1),   // épaisseur optique des cristaux massifs (× leur taille)

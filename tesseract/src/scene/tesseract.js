@@ -362,6 +362,10 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
       amount: lerp(R.proj.reveal ?? 1, R.voyage?.see ?? 0.9, kp),
       lo: lerp(R.proj.revealLo ?? -0.5, 0.1, kp), hi: lerp(R.proj.revealHi ?? 0.85, 1.85, kp),
     };
+    // (galerie : parois pleines, sauf celle qui passe par l'œil 4D au milieu
+    // d'une traversée — projetée à l'infini, elle couvrait l'écran d'un aplat
+    // le temps d'une image ; elle s'efface à son approche)
+    if (R.voyage?.gallery) { shell.amount = lerp(shell.amount, 1, kp); shell.lo = lerp(shell.lo, 1.12, kp); shell.hi = lerp(shell.hi, 1.3, kp); }
     G.voyageK.value = kc; // (part du voyage, pour l'éclairage)
     if (reset) { G.dPrev.value = G.d.value; G.inflatePrev.value = G.inflate.value; }
 
@@ -400,6 +404,10 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
       const keep = (1 - merge + merge * outer) * (1 - kp);
       const Pf = pieceOf(cc, 'frame');
       Pf.M.keep.value = keep;
+      // (rentrée dans ses axes, une barre n'a plus d'épaisseur mais reste
+      // tracée, par éclats d'un pixel que l'anticrénelage temporel étale en une
+      // ligne floue et crénelée : on ne la dessine plus)
+      if (Pf.has) { const on = keep > 0.002; Pf.mesh.visible = on; Pf.mesh.castShadow = on; }
       const Afr = cellMatrix(T[cc], cc, inset);
       cellA[cc] = Afr;
       cellSphere(Afr, G.d.value, G.inflate.value, bounds[cc]);
@@ -413,7 +421,7 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
       const vs = lerp(1, Math.min(1, (R.voyage?.objScale ?? 0.27) / con.size), Math.max(kp, kc));
       const k3 = Math.max(1e-3, shrink) * vs;
       const rot = mul3(axisAngle(normv(con.axis), Math.PI * 2 * con.turns * ph), axisAngle(normv(con.tilt), 0.6)).map((x) => x * k3);
-      const Aco = cellMatrix(T[cc], cc, inset, { m3: rot, t3: [0, 0, 0] });
+      const Aco = cellMatrix(T[cc], cc, inset, { m3: rot, t3: con.drop ?? [0, 0, 0] });
       for (const role of ROLES) {
         const P = pieceOf(cc, role);
         if (!P.has) continue;
@@ -423,6 +431,21 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
         setMatrix(P.M.Aprev, reset || !P.prev ? A : P.prev);
         setMatrix(P.M.A, A);
         P.prev = A;
+      }
+    }
+    // galerie : la face de chaque cellule qui sert de sol (à l'opposé du haut,
+    // constant : les quarts de tour laissent cet axe en place)
+    // (en permanence, et non à l'entrée de la caméra : le sol de la première
+    // pièce changeait d'un coup de matière pendant la plongée)
+    const U = R.voyage?.gallery ? cache.frames.U : null;
+    for (let cc = 0; cc < 8; cc++) {
+      const dir = reveals[cc].floorDir.value.set(0, 0, 0);
+      if (!U) continue;
+      const base = apply(T[cc], embedLocal(cc, [0, 0, 0]));
+      for (let f = 0; f < 6; f++) {
+        const l = [0, 0, 0]; l[f >> 1] = f & 1 ? 1 : -1;
+        const y = apply(T[cc], embedLocal(cc, l));
+        if ((y[0] - base[0]) * U.x + (y[1] - base[1]) * U.y + (y[2] - base[2]) * U.z < -0.5) dir.set(l[0], l[1], l[2]);
       }
     }
     group.updateMatrixWorld();
@@ -447,6 +470,25 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
       rim = Math.max(rim, D.open);
     }
     view.doorList = doors;
+    // galerie : teinte propre et lueur des portes de chaque cellule
+    const gal = R.voyage?.gallery && kc > 0 && cache.frames.rooms, V = R.voyage ?? {};
+    const rm = gal ? cache.frames.rooms : null, ri = Math.min(st.room ?? 0, 3);
+    const tw = gal && st.phase === 'travel' ? smoothstep(0.3, 0.7, st.f) : 0;
+    for (let cc = 0; cc < 8; cc++) {
+      const rv = reveals[cc];
+      for (let i = 0; i < DOORS; i++) rv.spill.array[i].setRGB(0, 0, 0);
+      rv.bounce.value = gal ? kc * (V.bounce ?? 1.7) : 0;
+      if (!gal) { rv.fill.value = 0; continue; }
+      const here = (cc === rm[ri % 4] ? 1 - tw : 0) + (cc === rm[(ri + 1) % 4] ? tw : 0);
+      rv.fill.value = kc * ((V.fill ?? 0.3) + ((V.fillHere ?? 0.07) - (V.fill ?? 0.3)) * here);
+      // (les portes : [3-0, 0-1, 1-2, 2-3] — chacune éclaire ses deux pièces de la teinte de l'autre)
+      for (let i = 0; i < DOORS; i++) {
+        if (!doors[i]) continue;
+        const a = rm[(i + 3) % 4], b = rm[i], other = cc === a ? b : cc === b ? a : -1;
+        if (other >= 0) rv.spill.array[i].set(R.cells[other].panel.inner.color).multiplyScalar((V.spill ?? 0.9) * kc * doors[i].open);
+      }
+    }
+    G.doorShape.value.set(...(doors.find((D) => D?.shape)?.shape ?? [1, 1]));
     G.doorRim.value.set(R.view.practicalColor).multiplyScalar(1.8 * Math.min(1, rim * 4) * (R.view.doorRim ?? 1));
     return { state: st, scale: s, lift, timeline: cache.timeline, kp, kc, frames: cache.frames, top: topLight(st) };
   }
@@ -470,7 +512,9 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
     const kc = G.voyageK.value;
     for (let c = 0; c < 8; c++) {
       const here = (c === a ? 1 - w : 0) + (c === b ? w : 0);
-      reveals[c].gi.value = kc * (0.3 + 0.7 * here);
+      // (galerie : la sonde donne la même lumière à tout un mur ; le rebond calculé
+      // par face, qui varie d'un point à l'autre, en prend la plus grande part)
+      reveals[c].gi.value = kc * (0.3 + 0.7 * here) * (R.voyage?.gallery ? 0.4 : 1);
       // caustiques : la teinte de la pierre ou du cristal, là où le projecteur l'éclaire
       const con = R.cells[c].content, tint = con.type === 'gem' ? con.gem.color : con.finish.outer.glass ? con.finish.outer.color2 : null;
       if (tint && con.type !== 'none') reveals[c].caustic.value.set(tint).lerp(_white, 0.45).multiplyScalar(kc * (0.12 + 0.88 * here) * 0.55 * (R.view.caustics ?? 1));
@@ -489,6 +533,8 @@ export function createTesseract(scene, gen, { studioLights = [] } = {}) {
     if (!view) return;
     practicals.aim(pos);
     const camLocal = group.worldToLocal(_cam.copy(pos));
+    G.viewLocal.value.copy(camLocal);
+    if (cache.frames.U) G.galUp.value.copy(cache.frames.U);
     computeOpenings(openArrays, { ...view, viewPos: pos, camLocal });
     // Un iris s'élargit quand la caméra le franchit, jusqu'à avaler la paroi
     // (il se resserre derrière elle) : son cadre ne frôle jamais l'objectif,
