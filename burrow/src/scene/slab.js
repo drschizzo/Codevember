@@ -12,6 +12,11 @@ import {
 import { SLAB } from '../gen/slab.js';
 import { NZ } from '../../../shared/scene/materials.js';
 
+// fenêtre d'arrachage d'un grain, en part de la vie de la tranche : ~1 mm de
+// galerie au front (plus large, une gorge à peine amorcée se dessinait devant
+// le front, sur 1 à 2 cm, avant d'être creusée)
+const OPEN = 0.0008;
+
 
 export function createSlab({ lite = false } = {}) {
   const blank = new THREE.DataTexture(new Uint16Array(4 * 4), 2, 2, THREE.RGBAFormat, THREE.HalfFloatType);
@@ -38,14 +43,14 @@ export function createSlab({ lite = false } = {}) {
   const A = (q) => {
     const a = A0(q), b = Bn(q);
     const solid = b.x.lessThanEqual(U.age);
-    const dig = smoothstep(a.z, a.z.add(0.006), U.age).mul(step(a.z, float(8)));
+    const dig = smoothstep(a.z, a.z.add(OPEN), U.age).mul(step(a.z, float(8)));
     return vec4(b.y, a.y, a.w.mul(dig), select(solid, float(1), float(0)));
   };
   const hash = (p) => fract(sin(dot(p, vec2(127.1, 311.7))).mul(43758.5453));
   const hash2 = (p) => vec2(hash(p), hash(p.add(vec2(17.3, 41.9))));
 
   // profondeur brute d'une cellule à l'âge s (sans le dessus du tas)
-  const depthAt = (q) => { const a = A0(q); return a.w.mul(smoothstep(a.z, a.z.add(0.006), U.age)).mul(step(a.z, float(8))); };
+  const depthAt = (q) => { const a = A0(q); return a.w.mul(smoothstep(a.z, a.z.add(OPEN), U.age)).mul(step(a.z, float(8))); };
 
   // déplacement : la profondeur, vers l'arrière
   const positionNode = Fn(() => {
