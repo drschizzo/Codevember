@@ -400,3 +400,26 @@ Demande de l'utilisateur : « aller un peu plus loin dans la boucle : les élém
 - **La caméra** de la ronde est plus haute et plus loin (plongée 30 à 50°, 7 à 8,5 m) pour qu'on voie tout l'anneau.
 
 Point ouvert : les pièces sans couloir libre (11 à 16 %) peuvent frôler une voisine pendant leur descente. Le choix « par le haut ou en oblique » ne suffit pas pour elles : il faudrait des couloirs le long de leur propre axe, ou un ordre de montage qui les fasse arriver avant leurs voisines.
+
+## Révision 6 (24 novembre) : des figures qu'on lit, et une ombre plus complète
+
+Verdict de l'utilisateur : « depuis qu'on a changé la boucle, il y a beaucoup de situations où on lit très mal la silhouette sur l'ombre », puis : « fais attention à ce que la couverture soit la plus complète possible pour que l'ombre soit la plus précise possible, sans exploser les temps de chargement ».
+
+**Ce qui cachait les figures.** Le placement cherchait seulement la meilleure couverture. Il faisait commencer les figures jusqu'à 1,6 m derrière le pied de l'objet, et logeait ainsi jusqu'à la moitié de l'animal sous le tas. Vu d'en haut, le tas s'évase en montant : il masque plus que son emprise au sol. Mesure sur six graines, part de la figure la plus cachée, vue par la caméra de la tenue : 33 à 57 %. Le nouveau scénario rendait le défaut flagrant, puisqu'on voit le tas se construire sur l'ombre.
+
+**Corrections :**
+- `hiddenFraction()` : la part de chaque cible cachée par le tas, projeté le long du regard de la caméra de sa tenue (plongée 68°). Le placement retire 1,5 fois ce qui dépasse 8 %. Résultat : 16 à 33 % au pire.
+- Une assise d'au moins 0,12 m² au sol est exigée par le score. Sans elle, la recherche posait le tas sur une pointe et le peuplement ne trouvait plus aucune pièce d'appui.
+- Le peuplement prend ses appuis dans une liste des points d'assise (distance à la paroi mesurée à 3,5 cm de haut) au lieu d'un tirage dans tout le rectangle. Les pièces d'appui montent en poteau quand l'assise est étroite. Le peuplement utilise une coque sans plancher : le sol, adouci par le max lissé, interdisait les assises étroites, et il est de toute façon vérifié à part d'après la vraie section.
+- La couverture du placement est pondérée par le contour et les parties fines, comme celle du peuplement.
+
+**Une ombre plus complète, à temps égal :**
+- **L'ombre franche** remplace l'ombre pleine : une pièce compte là où elle cache au moins 70 % du disque solaire. Dans le haut des figures, des pièces un peu plus fines que la pénombre donnent encore une ombre nette ; l'ombre pleine les interdisait, et les oreilles restaient nues.
+- Les pièces moyennes et petites visent toutes un pixel nu du contour, avec 16 cibles par pas et 120 candidates ; la patience passe à 40 pas sans gain. La pièce mère d'une candidate visée est cherchée à 25 cm avant 70 cm : cette recherche prenait 40 % du temps.
+- Mesures sur quatre graines (peuplement seul) : 83,2 % d'ombre franche en moyenne, 75,2 % au pire, en 1,6 s. Avant : 74,6 % d'ombre pleine, 67,7 % au pire, en 3,7 s. Génération complète : 3,0 à 5,1 s, contre 4,1 à 5,6 s.
+
+**Graine d'ouverture : k13** (Kertész, acier peint jaune, renard puis macareux), choisie sur une mesure de 14 graines sur la neige (couverture pondérée minimale 0,90, part cachée 24 % au plus). Sur la paire lièvre + renard de k8, les deux oreilles du lièvre et la tête du renard se disputent le haut du tas, et la coque ne produit pas les oreilles. Capture : le macareux, amplitude 0,51.
+
+Points ouverts :
+- La paire lièvre + renard reste la plus faible : les oreilles du lièvre y sont souvent incomplètes.
+- Le tas repose sur une assise étroite, et son centre de gravité n'est pas au-dessus de ses appuis. Il tient parce qu'il est soudé et que ses pièces d'appui sont prises dans la neige gelée ; aucun calcul d'équilibre ne le vérifie.

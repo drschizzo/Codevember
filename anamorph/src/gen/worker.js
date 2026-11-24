@@ -48,7 +48,7 @@ export function buildObject(spec, progress = () => {}) {
         batch = [];
       }
     };
-    const res = coverWithPieces(F, sdf, [lo[0], 0, lo[2], hi[0], spec.height, hi[2]], createRng(`${spec.seed}:pieces`).next, { onStep, accord: spec.accord });
+    const res = coverWithPieces(F, hullSDF(F, spec.height, { floor: false }), [lo[0], 0, lo[2], hi[0], spec.height, hi[2]], createRng(`${spec.seed}:pieces`).next, { onStep, accord: spec.accord });
     if (batch.length) progress(0.92, JSON.stringify({ strokes: batch, cov: res.coverage }));
     bars = res.pieces; coverage = res.coverage;
     mesh = forgeMesh(bars, createRng(`${spec.seed}:forge`).next, spec.accord, ACCORDS[spec.accord]?.joint);

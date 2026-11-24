@@ -45,8 +45,8 @@ export const ACCORDS = {
   galva: { label: 'Acier galvanisé', kinds: { tube: 0.4, corniere: 0.3, plat: 0.3 }, bend: { tube: 0.15, corniere: 0.05, plat: 0.15 }, crush: 0.2, joint: 'soudure' },
 };
 
-const TIERS = [
-  { r: [0.042, 0.06], n: 9, ground: 0.75, len: [0.35, 1.3] },
+export const TIERS = [
+  { r: [0.042, 0.06], n: 9, ground: 0.75, len: [0.35, 1.3], aim: 3 }, // (la structure : des candidates libres, pour ses appuis au sol)
   { r: [0.022, 0.04], n: 170, ground: 0.1, len: [0.16, 0.9] },
   { r: [0.011, 0.024], n: 300, ground: 0.06, len: [0.1, 0.6] },
 ];
@@ -81,6 +81,19 @@ function makeRasters(F) {
   });
 }
 
+// L'ombre franche : la bande où la pièce cache au moins DARK (70 %) du disque
+// solaire. Modèle 1D (le disque comme une bande de demi-largeur ρ = α·L, la pièce
+// comme une bande de demi-largeur r) : la part cachée vaut min(r/ρ, 1) sur
+// |x| ≤ |ρ − r|, puis (r + ρ − |x|) / 2ρ. D'où la demi-largeur franche :
+//   r ≥ DARK·ρ : max(|ρ − r| si r < ρ, r − (2·DARK − 1)·ρ) ; sinon 0.
+// (Une pièce un peu plus fine que la pénombre garde une ombre nette et sombre ;
+// exiger l'ombre pleine, 100 %, interdisait toute pièce dans le haut des figures.)
+export const DARK = 0.7;
+export function darkHalfWidth(r, rho) {
+  if (r < DARK * rho) return 0;
+  return Math.max(r < rho ? rho - r : 0, r - (2 * DARK - 1) * rho);
+}
+
 // Pixels de la cible que l'ombre pleine de la pièce couvrirait (et les marque si mark).
 function stamp(f, Rr, p0, p1, r, mark) {
   const s = Math.sin(f.sun.h);
@@ -91,7 +104,7 @@ function stamp(f, Rr, p0, p1, r, mark) {
   for (let k = 0; k <= steps; k++) {
     const t = k / steps;
     const y = p0[1] + (p1[1] - p0[1]) * t;
-    const ru = r - SUN_RADIUS * y / s; // demi-largeur de l'ombre pleine
+    const ru = darkHalfWidth(r, SUN_RADIUS * y / s); // demi-largeur de l'ombre franche
     if (ru <= 0) continue;
     const ca = ga + (ha - ga) * t, cb = gb + (hb - gb) * t;
     const rb = ru / f.scale, ra = ru / s / f.scale;
@@ -171,7 +184,7 @@ const nrm = (a) => { const l = Math.hypot(...a) || 1; return [a[0] / l, a[1] / l
 const crs = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 
 // rnd : tirages de la graine ; bounds : [x0, 0, z0, x1, h, z1] (emprise de la coque)
-export function coverWithPieces(F, sdf, bounds, rnd, { target = 0.97, cands = 170, onStep = null, accord = 'rouille' } = {}) {
+export function coverWithPieces(F, sdf, bounds, rnd, { target = 0.97, cands = 120, onStep = null, accord = 'rouille', aimEvery = 1, nTargets = 16, tiers = TIERS, stallMax = 40, stats = null } = {}) {
   const AC = ACCORDS[accord] ?? ACCORDS.rouille;
   const Rr = makeRasters(F);
   const pieces = [];
@@ -190,7 +203,7 @@ export function coverWithPieces(F, sdf, bounds, rnd, { target = 0.97, cands = 17
   };
   // calibre minimal pour porter une ombre pleine depuis la hauteur y (soleil le plus bas)
   const sinMin = Math.min(...F.map((f) => Math.sin(f.sun.h)));
-  const rMinAt = (y) => 1.15 * SUN_RADIUS * y / sinMin;
+  const rMinAt = (y) => 1.05 * DARK * SUN_RADIUS * y / sinMin; // (en dessous : pas d'ombre franche)
   // un pixel nu de la cible k (tiré selon son poids), remonté le long du rayon
   // de soleil jusqu'à un point de la coque où une pièce de rayon r tiendrait
   // (cumuls des poids nus, refaits une fois par pas : tirage par dichotomie)
@@ -219,19 +232,28 @@ export function coverWithPieces(F, sdf, bounds, rnd, { target = 0.97, cands = 17
     }
     return ok.length ? ok[Math.floor(rnd() * ok.length)] : null;
   }
+  // l'assise : les points du sol où une pièce d'appui tient (distance à la paroi
+  // de la coque mesurée à 3,5 cm de haut, sur une grille de 1 cm)
+  const base = [];
+  for (let x = bounds[0]; x <= bounds[3]; x += 0.01) for (let z = bounds[2]; z <= bounds[5]; z += 0.01) {
+    const room = -sdf(x, 0.035, z);
+    if (room > 0.02) base.push([x, z, room]);
+  }
   let steps = 0;
-  for (const tier of TIERS) {
+  for (const [ti, tier] of tiers.entries()) {
     let placed = 0, stall = 0;
+    if (stats) stats[`palier${ti}`] = 'plafond';
     while (placed < tier.n && !Rr.every((x) => x.cov >= target)) {
       const W = Rr.map((x) => 1 / (x.cov + 0.05) ** 2);
       let best = null;
       // quelques candidates poussent vers un point du contour encore nu
       const targets = [];
       if (pieces.length && (steps++ & 3) === 0) rebuildCum(); // (les points visés vieillissent de quatre pas au plus)
-      if (pieces.length) for (let k = 0; k < 6; k++) { const T = targetPoint(k % F.length); if (T) targets.push(T); }
+      if (pieces.length) for (let k = 0; k < nTargets; k++) { const T = targetPoint(k % F.length); if (T) targets.push(T); }
       for (let c = 0; c < cands; c++) {
         const kind = pickKind(), P = PROFILES[kind];
-        const aim = targets.length && c % 3 === 0 ? targets[(c / 3) % targets.length | 0] : null;
+        const ae = tier.aim ?? aimEvery; // (moyennes et petites : toutes visent un pixel nu du contour)
+        const aim = targets.length && c % ae === 0 ? targets[(c / ae) % targets.length | 0] : null;
         let r = tier.r[0] + (tier.r[1] - tier.r[0]) * rnd();
         if (aim) r = Math.min(tier.r[1] * 1.4, Math.max(r, rMinAt(aim[1])));
         const roll = rnd() * Math.PI;
@@ -244,19 +266,34 @@ export function coverWithPieces(F, sdf, bounds, rnd, { target = 0.97, cands = 17
           if (rnd() < pb) bend = { s: r * Math.min(AC.bendMax ?? 9, kind === 'rond' ? 0.3 + 1.3 * rnd() : 0.2 + 0.6 * rnd()), dir: rnd() * 2 * Math.PI };
           if (kind === 'tube' && rnd() < AC.crush) crush = { c: 0.15 + 0.3 * rnd(), end: rnd() < 0.5 ? 0 : 1 };
         }
+        // posée au sol : un point d'appui dans l'assise de la coque (qui peut être
+        // étroite : les figures ne se recouvrent qu'au pied), et un calibre qui y tient
+        let ga = null;
+        if (onGround) {
+          if (!base.length) continue;
+          const b = base[Math.floor(rnd() * base.length)];
+          ga = { q: [b[0] + (rnd() - 0.5) * 0.01, 0, b[1] + (rnd() - 0.5) * 0.01], room: b[2] };
+          r = Math.min(r, (0.85 * ga.room) / P.rc);
+        }
         // encombrement : coin le plus éloigné, ovalisation, flèche du cintrage
         const rc = r * P.rc * (1 + (crush?.c ?? 0)) + (bend?.s ?? 0);
         let a, d, parent = -1;
         if (onGround) {
           // posée au sol : son bout bas touche la neige (hauteur réglée plus bas, d'après la section)
-          a = [bounds[0] + rnd() * (bounds[3] - bounds[0]), 0, bounds[2] + rnd() * (bounds[5] - bounds[2])];
+          a = ga.q;
           d = randDir(); d[1] = Math.abs(d[1]) * (rnd() < 0.5 ? 0.25 : 1); d = nrm(d);
+          // assise étroite (la coque s'évase en montant) : la pièce d'appui monte en poteau
+          if (ga.room < 0.09 || rnd() < 0.35) { const h = 0.55 + 0.45 * rnd(), k = Math.sqrt(1 - h * h), t = rnd() * 2 * Math.PI; d = [k * Math.cos(t), h, k * Math.sin(t)]; }
           const probe = { kind, r, roll, p0: [0, 0, 0], p1: d };
           a[1] = supportAt(probe, [0, -1, 0]) + 0.0005;
         } else if (aim) {
           // pousse vers le point visé, depuis la pièce posée la plus proche
           let bd = 0.7;
-          for (const id of grid.near(aim, aim, 0.7)) { const dd = segDist(aim, aim, pieces[id].p0, pieces[id].p1); if (dd < bd) { bd = dd; parent = id; } }
+          // (voisinage proche d'abord : la recherche à 70 cm coûtait le tiers du peuplement)
+          for (const rad of [0.25, 0.7]) {
+            for (const id of grid.near(aim, aim, rad)) { const dd = segDist(aim, aim, pieces[id].p0, pieces[id].p1); if (dd < bd) { bd = dd; parent = id; } }
+            if (parent >= 0) break;
+          }
           if (parent < 0) continue;
           const o = pieces[parent], X = pieceFrame(o).X, Lo = Math.hypot(...sub(o.p1, o.p0));
           const t = Math.min(0.95, Math.max(0.05, ((aim[0] - o.p0[0]) * X[0] + (aim[1] - o.p0[1]) * X[1] + (aim[2] - o.p0[2]) * X[2]) / Lo + (rnd() - 0.5) * 0.2));
@@ -315,7 +352,7 @@ export function coverWithPieces(F, sdf, bounds, rnd, { target = 0.97, cands = 17
         score /= 1 + 0.1 * L;
         if (!best || score > best.score) best = { score, p0: a, p1, r, rc, kind, parent, roll, bend, crush };
       }
-      if (!best || best.score < 1e-5) { if (++stall > 25) break; continue; }
+      if (!best || best.score < 1e-5) { if (++stall > stallMax) { if (stats) stats[`palier${ti}`] = 'calé'; break; } continue; }
       stall = 0;
       F.forEach((f, k) => { stamp(f, Rr[k], best.p0, best.p1, best.r * PROFILES[best.kind].rcov * (AC.rcov ?? 1), true); });
       Rr.forEach((x) => { x.cov = x.nc / x.n; }); // (compte tenu à jour par stamp)
@@ -325,5 +362,6 @@ export function coverWithPieces(F, sdf, bounds, rnd, { target = 0.97, cands = 17
       onStep?.(pieces.length, Rr.map((x) => x.cov), pieces[pieces.length - 1]);
     }
   }
+  if (stats) stats.rasters = Rr.map((x) => ({ T: x.T, C: x.C, G }));
   return { pieces, coverage: Rr.map((x) => x.cov) };
 }

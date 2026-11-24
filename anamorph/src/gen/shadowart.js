@@ -85,7 +85,26 @@ export function voxelHull(F, height, box, N, NY) {
 }
 
 // Couverture de chaque cible par l'ombre de la coque (projection des voxels, grille G de la figure).
-export function coverage(F, Hv, G = 128) {
+// Poids de chaque pixel d'une cible : ce qui fait lire la figure, c'est son
+// contour et ses parties fines (oreilles, museau, bec), qui pèsent jusqu'à 5 fois
+// plus que le milieu (distance au bord par chanfrein 3-4, en pixels de la grille).
+const WCACHE = new Map();
+export function figureWeights(name, G) {
+  const key = `${name}:${G}`;
+  if (WCACHE.has(key)) return WCACHE.get(key);
+  const m = figureMask(name, 512), T = new Uint8Array(G * G), D = new Float32Array(G * G);
+  for (let j = 0; j < G; j++) for (let i = 0; i < G; i++) { const q = j * G + i; T[q] = m.at(1 - (j + 0.5) / G, (i + 0.5) / G - 0.5); D[q] = T[q] ? 1e9 : 0; }
+  for (let j = 0; j < G; j++) for (let i = 0; i < G; i++) { const q = j * G + i; if (!T[q]) continue; if (i) D[q] = Math.min(D[q], D[q - 1] + 3); if (j) D[q] = Math.min(D[q], D[q - G] + 3); if (i && j) D[q] = Math.min(D[q], D[q - G - 1] + 4); if (i < G - 1 && j) D[q] = Math.min(D[q], D[q - G + 1] + 4); }
+  for (let j = G - 1; j >= 0; j--) for (let i = G - 1; i >= 0; i--) { const q = j * G + i; if (!T[q]) continue; if (i < G - 1) D[q] = Math.min(D[q], D[q + 1] + 3); if (j < G - 1) D[q] = Math.min(D[q], D[q + G] + 3); if (i < G - 1 && j < G - 1) D[q] = Math.min(D[q], D[q + G + 1] + 4); if (i && j < G - 1) D[q] = Math.min(D[q], D[q + G - 1] + 4); }
+  const W = new Float32Array(G * G), px = G / 384; // (même échelle de poids que le peuplement, grille de 384)
+  for (let q = 0; q < G * G; q++) if (T[q]) W[q] = 1 + 4 * Math.exp(-D[q] / 3 / (6 * px));
+  const out = { T, W };
+  WCACHE.set(key, out);
+  return out;
+}
+
+// weighted : couverture pondérée par figureWeights (le placement), sinon la part brute
+export function coverage(F, Hv, G = 128, weighted = false) {
   const { vox, N, NY, box, height } = Hv;
   return F.map((f) => {
     const sh = new Uint8Array(G * G);
@@ -103,6 +122,12 @@ export function coverage(F, Hv, G = 128) {
       }
     }
     let t = 0, c = 0;
+    if (weighted) {
+      const { T, W } = figureWeights(f.name, G);
+      let tr = 0, cr = 0;
+      for (let q = 0; q < G * G; q++) if (T[q]) { t += W[q]; tr++; if (sh[q]) { c += W[q]; cr++; } }
+      return weighted === 'both' ? [cr / tr, c / t] : c / t;
+    }
     for (let j = 0; j < G; j++) for (let q = 0; q < G; q++) {
       if (f.mask.at(1 - (j + 0.5) / G, (q + 0.5) / G - 0.5)) { t++; if (sh[j * G + q]) c++; }
     }
@@ -110,9 +135,42 @@ export function coverage(F, Hv, G = 128) {
   });
 }
 
+// Part de chaque cible cachée sous le tas : les pixels de la figure qui tombent
+// dans l'emprise au sol de la coque (vue d'en haut, la caméra ne les voit pas :
+// l'objet est dessus). Un placement qui loge la moitié de l'animal sous le tas
+// couvre bien la cible, mais ne se lit pas.
+export function hiddenFraction(F, Hv, G = 128, plunge = 68) {
+  // (vu par la caméra de la tenue : elle regarde dans l'axe de l'ombre u, plongée
+  // de « plunge » degrés ; un point du tas à la hauteur y cache le sol en
+  // p + u · y · cot(plongée). C'est cette vue, et non l'emprise au sol, qui compte :
+  // la coque s'évase en montant.)
+  const { vox, N, NY, box, height } = Hv;
+  const cot = 1 / Math.tan(plunge * DEG);
+  return F.map((f) => {
+    const hid = new Uint8Array(G * G);
+    for (let iy = 0; iy < NY; iy++) {
+      const y = (iy + 0.5) * height / NY;
+      for (let iz = 0; iz < N; iz++) for (let ix = 0; ix < N; ix++) {
+        if (!vox[(iy * N + iz) * N + ix]) continue;
+        const x = -box + (ix + 0.5) * 2 * box / N + f.u[0] * y * cot, z = -box + (iz + 0.5) * 2 * box / N + f.u[1] * y * cot;
+        const [a, b] = toFigure(f, x, z);
+        const j = Math.floor((1 - a) * G), i = Math.floor((b + 0.5) * G);
+        const rr = Math.ceil(2 * box / N / f.scale * G * 0.6);
+        for (let dj = -rr; dj <= rr; dj++) for (let di = -rr; di <= rr; di++) { const jj = j + dj, ii = i + di; if (jj >= 0 && ii >= 0 && jj < G && ii < G) hid[jj * G + ii] = 1; }
+      }
+    }
+    let t = 0, h = 0;
+    for (let j = 0; j < G; j++) for (let i = 0; i < G; i++) {
+      if (!f.mask.at(1 - (j + 0.5) / G, (i + 0.5) / G - 0.5)) continue;
+      t++; if (hid[j * G + i]) h++;
+    }
+    return h / t;
+  });
+}
+
 // Recherche des placements (a0 ≤ 0 : la figure peut commencer derrière le pied
 // de l'objet ; b0 : décalage en travers). Déterministe : rnd vient de la graine.
-export function solvePlacement(F, height, rnd, { iters = 160, box = 1.4, onStep = null } = {}) {
+export function solvePlacement(F, height, rnd, { iters = 160, box = 1.4, onStep = null, hide = 1.5, hideFree = 0.08, baseMin = 0.12 } = {}) {
   let best = { score: -1, P: F.map(() => [0, 0]), cov: null };
   for (let it = 0; it < iters; it++) {
     const local = it > 0 && rnd() < 0.7;
@@ -120,9 +178,19 @@ export function solvePlacement(F, height, rnd, { iters = 160, box = 1.4, onStep 
       ? [Math.min(0, best.P[i][0] + (rnd() - 0.5) * 0.25), best.P[i][1] + (rnd() - 0.5) * 0.25]
       : [-rnd() * 1.6, (rnd() - 0.5) * 1.0]));
     place(F, P);
-    const cov = coverage(F, voxelHull(F, height, box, 56, 40), 128);
-    const score = Math.min(...cov);
-    if (score > best.score) best = { score, P, cov };
+    const Hv = voxelHull(F, height, box, 56, 40);
+    const both = coverage(F, Hv, 128, 'both'); // (une passe : brute, et pondérée par le contour et les parties fines)
+    const cov = both.map((x) => x[0]), wcov = both.map((x) => x[1]);
+    // (la figure doit se lire : la part cachée sous le tas pèse contre le placement,
+    // au-delà d'une part tolérée, le pied de l'animal, sans laquelle le tas n'a plus
+    // d'assise au sol)
+    const hid = hide ? hiddenFraction(F, Hv, 96) : F.map(() => 0);
+    // (et le tas doit avoir une assise : l'aire de la coque dans les 4 premiers cm)
+    const cell = (2 * box / 56) ** 2, NY = 40;
+    const layer = (iy) => { let n = 0; for (let q = 0; q < 56 * 56; q++) n += Hv.vox[iy * 56 * 56 + q]; return n * cell; };
+    const baseArea = Math.min(layer(0), layer(1));
+    const score = Math.min(...wcov) - hide * Math.max(0, Math.max(...hid) - hideFree) - (baseMin ? 2 * Math.max(0, baseMin - baseArea) / baseMin : 0);
+    if (score > best.score) best = { score, P, cov, hid };
     onStep?.(it / iters, best);
   }
   place(F, best.P);
@@ -179,11 +247,13 @@ export function polygonSDFGrid(name, res) {
 
 const smax = (a, b, k) => { const h = Math.max(k - Math.abs(a - b), 0) / k; return Math.max(a, b) + h * h * k * 0.25; };
 
-export function hullSDF(F, height, { res = 512, round = 0.006 } = {}) {
+// floor : false pour le peuplement (le sol y est vérifié d'après la vraie section ;
+// le plancher, adouci par le max lissé, y interdirait les assises étroites)
+export function hullSDF(F, height, { res = 512, round = 0.006, floor = true } = {}) {
   const grids = F.map((f) => polygonSDFGrid(f.name, res));
   return (x, y, z) => {
-    let d = -y; // le sol
-    d = smax(d, y - height, round);
+    let d = floor ? -y : -1; // le sol
+    d = floor ? smax(d, y - height, round) : y - height;
     F.forEach((f, i) => {
       const [gx, gz] = shadowOf(f, x, y, z);
       const [a, b] = toFigure(f, gx, gz);

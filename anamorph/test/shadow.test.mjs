@@ -3,17 +3,19 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRng } from '../../shared/rng.js';
-import { sunAt, setupFigures, solvePlacement, voxelHull, shadowOf, toFigure } from '../src/gen/shadowart.js';
+import { sunAt, setupFigures, solvePlacement, voxelHull, shadowOf, toFigure, hiddenFraction } from '../src/gen/shadowart.js';
 
 const PAIRS = [['renard', 'lievre'], ['lievre', 'macareux'], ['macareux', 'renard']];
 
 for (const [n1, n2] of PAIRS) {
-  test(`${n1} + ${n2} : couverture ≥ 95 %, aucun débord`, () => {
+  test(`${n1} + ${n2} : couverture ≥ 80 %, figure visible à 65 % au moins, aucun débord`, () => {
     const figs = [[n1, Math.PI - 0.8], [n2, Math.PI + 0.8]].map(([name, H]) => ({ name, H, camAz: (sunAt(78, 20, H).az * 180 / Math.PI + 540) % 360 }));
     const spec = { lat: 78, dec: 20, height: 0.8, figs };
     const F = setupFigures(spec);
     const best = solvePlacement(F, spec.height, createRng('test').next);
-    for (const c of best.cov) assert.ok(c >= 0.95, `couverture ${(100 * c).toFixed(1)} %`);
+    for (const c of best.cov) assert.ok(c >= 0.8, `couverture ${(100 * c).toFixed(1)} %`);
+    // la caméra de la tenue ne doit pas voir la figure à moitié cachée par le tas
+    for (const h of hiddenFraction(F, voxelHull(F, spec.height, 1.4, 112, 64))) assert.ok(h <= 0.35, `figure cachée à ${(100 * h).toFixed(0)} %`);
     // tout voxel plein projette dans les deux cibles (par construction)
     const H = voxelHull(F, spec.height, 1.4, 64, 40);
     let n = 0;

@@ -26,7 +26,7 @@ import { asyncPipelines, warmScene } from '../../shared/app/warmup.js';
 import { createDebugTools, packRecipe, unpackRecipe, sleep } from '../../shared/app/debug.js';
 
 const NAME = 'anamorph';
-const DEFAULT_SEED = 'k8'; // scène d'ouverture (sans ?seed=) : Kertész, ferraille, lièvre puis renard (planche du 24 novembre)
+const DEFAULT_SEED = 'k13'; // scène d'ouverture (sans ?seed=) : Kertész, acier peint jaune, renard puis macareux (planche du 24 novembre)
 const params = new URLSearchParams(location.search);
 const $ = (s) => document.querySelector(s);
 const randomSeed = () => Math.random().toString(36).slice(2, 8);

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#050506">
   <title>Anamorph · défis techniques</title>
-  <meta name="description" content="Comment Anamorph est calculé : la course du soleil de minuit, la forme qui projette deux silhouettes, l'ombre pleine et la pénombre, le peuplement en pièces qui ne se traversent pas, le bois flotté sillonné.">
+  <meta name="description" content="Comment Anamorph est calculé : la course du soleil de minuit, la forme qui projette deux silhouettes sans que le tas les cache, l'ombre franche et la pénombre, le peuplement en pièces qui ne se traversent pas, le bois flotté sillonné.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
@@ -29,7 +29,7 @@
 
     <figure class="cover">
       <img src="docs/capture.jpg" alt="Un tas de pièces sur la neige, vu d'en haut ; son ombre bleue dessine un animal" width="1600" height="900">
-      <figcaption>La graine d'ouverture à la tenue d'une figure : le tas en bas du cadre, l'animal sur la neige. Les bords de l'ombre sont un peu déchiquetés : ce sont les pièces.</figcaption>
+      <figcaption>La graine d'ouverture (k13, acier peint) à la tenue du macareux : le tas en bas du cadre, l'animal sur la neige. Les bords de l'ombre sont un peu déchiquetés : ce sont les pièces.</figcaption>
     </figure>
 
     <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
@@ -52,7 +52,8 @@
         <h2><span class="n">02</span>La coque : les points dont l'ombre tombe dans les deux silhouettes</h2>
         <span class="src">src/gen/shadowart.js · voxelHull() · solvePlacement()</span>
         <p>Chaque figure est posée sur le sol, dans le repère de son ombre : un axe \(a\) du pied de l'objet vers le bout de l'ombre, un axe \(b\) en travers. Elle est droite pour la caméra qui la regarde dos au soleil. Un point de l'espace à la hauteur \(y\) projette son ombre à \(y \cot h\) de son pied, à l'opposé du soleil. La coque est l'ensemble des points dont les deux ombres tombent dans les deux cibles (d'après Mitra et Pauly, <i>Shadow Art</i>, 2009). Tout ce qui est dans la coque fait une ombre qui ne déborde jamais.</p>
-        <p>L'ombre de la coque, en revanche, ne remplit pas toujours la cible. Le sommet de l'objet fait le bout des deux ombres à la fois. Les deux figures doivent donc avoir la même « hauteur », et leurs détails latéraux se gênent. La recherche du placement fait 160 essais sur une coque en voxels de 56 × 56 × 40 : chaque figure peut glisser le long de son ombre (et commencer derrière le pied de l'objet) ou en travers, pour maximiser la plus petite des deux couvertures.</p>
+        <p>L'ombre de la coque, en revanche, ne remplit pas toujours la cible. Le sommet de l'objet fait le bout des deux ombres à la fois. Les deux figures doivent donc avoir la même « hauteur », et leurs détails latéraux se gênent. La recherche du placement fait 160 essais sur une coque en voxels de 56 × 56 × 40 : chaque figure peut glisser le long de son ombre ou en travers. Le score est la plus petite des deux couvertures, pondérées pour que le contour et les parties fines (oreilles, bec) comptent jusqu'à 5 fois plus.</p>
+        <p>Une figure bien couverte peut encore être illisible : vue d'en haut, la caméra voit le tas entier, et la coque s'évase en montant (0,12 m² au sol, 1 m² à 30 cm). Sans précaution, la recherche loge jusqu'à la moitié de l'animal sous le tas. Le score retire donc la part de chaque figure que le tas cache à la caméra de sa tenue, au-delà de 8 %. Il exige aussi une assise d'au moins 0,12 m² au sol, sans laquelle le tas reposerait sur une pointe. La caméra voit alors 70 à 80 % de chaque figure ; le reste est le pied de l'animal, sous le tas.</p>
         <div class="note trap"><b>Pourquoi deux figures</b><p>Avec trois figures, chaque point de la coque doit tomber dans trois cibles. Les parties qui font reconnaître l'animal (oreilles, museau, queue) sont justement celles qui disparaissent : la couverture tombe entre 64 et 78 %. Avec deux figures dont les ombres font un angle droit, elle dépasse 97 %.</p></div>
         <figure id="fig-hull"><figcaption><b>Couverture de la coque.</b> Choisir la paire : les cibles en contour, l'ombre de la coque en voxels en bleu, pour chacune des deux heures. Le bouton « Placer » relance la recherche du placement (quelques secondes). La démo utilise les vraies silhouettes et la vraie coque, à la même résolution que la recherche.</figcaption></figure>
       </section>
@@ -68,11 +69,11 @@
       </section>
 
       <section id="penombre">
-        <h2><span class="n">04</span>Seule l'ombre pleine dessine : une pièce haute doit être épaisse</h2>
+        <h2><span class="n">04</span>Seule l'ombre franche dessine : une pièce haute doit être épaisse</h2>
         <span class="src">src/gen/pieces.js · stamp() · rMinAt()</span>
         <p>Le soleil n'est pas un point : il occupe 0,53° du ciel. Derrière une barre, le sol ne reçoit aucun rayon seulement sur une bande centrale, l'ombre pleine. Autour, une pénombre s'éclaircit. Un point à la hauteur \(y\) étale sa pénombre sur une largeur \(2\,\alpha\, y / \sin h\), avec \(\alpha = 0{,}267^\circ\). Une barre de rayon \(r\) ne garde donc une ombre pleine que si :</p>
         <div class="eq">\[ r > \alpha\,\frac{y}{\sin h} \]</div>
-        <p>Au sommet du tas (80 cm) et avec un soleil à 7°, il faut plus de 3 cm de rayon. Le peuplement ne crédite que l'ombre pleine. Il refuse les pièces plus fines que \(1{,}15\,\alpha\, y/\sin h_{\min}\) à leur point le plus haut : elles n'ajouteraient que du flou et prendraient la place des bonnes.</p>
+        <p>Au sommet du tas (80 cm) et avec un soleil à 7°, il faut plus de 3 cm de rayon. Exiger cette ombre pleine partout interdit pourtant toute pièce dans le haut des figures, là où la coque est mince. Une pièce un peu plus fine garde une ombre nette et sombre : le peuplement crédite l'<b>ombre franche</b>, la bande où la pièce cache au moins 70 % du disque solaire. Dans un modèle à une dimension (le disque comme une bande de demi-largeur \(\rho = \alpha L\)), sa demi-largeur vaut \(\max(\rho - r,\ r - 0{,}4\,\rho)\) dès que \(r \ge 0{,}7\,\rho\). Les pièces plus fines que \(0{,}74\,\alpha\, y/\sin h_{\min}\) à leur point le plus haut sont refusées.</p>
         <figure id="fig-pen"><figcaption><b>Ombre pleine et pénombre.</b> Profil de l'éclairement au sol en travers de l'ombre d'une barre : 0 dans l'ombre pleine, 1 en plein soleil. Les curseurs règlent le rayon, la hauteur et la hauteur du soleil. La démo intègre le disque solaire réel ; elle ignore la lumière du ciel qui éclaire l'ombre.</figcaption></figure>
       </section>
 
@@ -84,10 +85,10 @@
           <li><b>Une hiérarchie de tailles</b> : 9 pièces de structure de 4,2 à 6 cm de calibre posées au sol, puis jusqu'à 170 moyennes, puis jusqu'à 300 petites (1,1 à 2,4 cm).</li>
           <li><b>Rien ne flotte</b> : une pièce repose sur le sol par le point le plus bas de sa vraie section, ou part du flanc d'une pièce déjà posée. Son bout affleure la surface réelle de la mère, calculée par la fonction support de sa section.</li>
           <li><b>Rien ne se traverse</b> : chaque pièce reste à \(r_c^i + r_c^j + 2\) mm de toutes les autres, \(r_c\) étant la distance de l'axe au coin le plus éloigné, flèche et écrasement compris. Seule la jonction avec la mère, sur \(0{,}6\,(r_c + r_c^{\text{mère}})\), est exemptée : c'est la soudure.</li>
-          <li><b>Le contour d'abord</b> : un pixel près du bord ou dans une partie fine pèse jusqu'à 5 fois plus qu'un pixel du milieu, que la pénombre comble. Un tiers des candidates visent un pixel nu du contour, remonté le long du rayon de soleil jusque dans la coque, et poussent vers lui depuis la pièce voisine.</li>
+          <li><b>Le contour d'abord</b> : un pixel près du bord ou dans une partie fine pèse jusqu'à 5 fois plus qu'un pixel du milieu. Hors des pièces de structure, toutes les candidates visent un pixel nu du contour, remonté le long du rayon de soleil jusque dans la coque, et poussent vers lui depuis la pièce posée la plus proche (cherchée à 25 cm, puis à 70 cm). Viser toujours couvre mieux que tirer au hasard, et coûte moins : 120 candidates par pas suffisent.</li>
         </ul>
-        <p>Résultat : 230 à 480 pièces, 72 à 86 % d'ombre pleine par figure, en 2 à 3 s. Le reste du contour est comblé par la pénombre, et les bords de la figure gardent la dentelure de la ferraille.</p>
-        <div class="note check"><b>Vérifié</b><p>Sur la sortie du worker, pour les cinq matières : aucune paire de pièces à moins de \(r_c^i + r_c^j\), aucun point d'une section sous la neige, chaque pièce posée au sol ou soudée à une mère posée avant elle, et plus de 70 % (bois) ou 74 % (métaux) d'ombre pleine par figure.</p></div>
+        <p>Résultat : 230 à 480 pièces, 75 à 91 % d'ombre franche par figure (83 % en moyenne), en 1,5 à 3 s. Le reste du contour est comblé par la pénombre, et les bords de la figure gardent la dentelure de la ferraille.</p>
+        <div class="note check"><b>Vérifié</b><p>Sur la sortie du worker, pour les cinq matières : aucune paire de pièces à moins de \(r_c^i + r_c^j\), aucun point d'une section sous la neige, chaque pièce posée au sol ou soudée à une mère posée avant elle, et plus de 70 % (bois) ou 74 % (métaux) d'ombre franche par figure.</p></div>
         <figure id="fig-greedy"><figcaption><b>Le peuplement, vu d'en haut.</b> « Calculer » lance le vrai peuplement (version réduite : 60 candidates par pas, quelques secondes). À gauche, les pièces vues de dessus ; au milieu et à droite, l'ombre pleine de chaque pièce dans chacune des deux figures, du gris clair (premières pièces) au bleu (dernières).</figcaption></figure>
       </section>
 
@@ -123,12 +124,12 @@
         <div class="tbl"><table>
           <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
           <tbody>
-            <tr><td>Placement des figures (160 coques en voxels)</td><td>worker</td><td class="num">≈ 1 s</td></tr>
+            <tr><td>Placement des figures (160 coques en voxels, vue de la caméra)</td><td>worker</td><td class="num">≈ 1,2 s</td></tr>
             <tr><td>Distances signées des deux silhouettes (en cache ensuite)</td><td>worker</td><td class="num">≈ 0,1 s</td></tr>
-            <tr><td>Peuplement (230 à 480 pièces)</td><td>worker</td><td class="num">2 à 3 s</td></tr>
+            <tr><td>Peuplement (230 à 480 pièces)</td><td>worker</td><td class="num">1,5 à 3 s</td></tr>
             <tr><td>Maillage des pièces et congère</td><td>worker</td><td class="num">≈ 0,3 s</td></tr>
             <tr><td>Places au sol, ordre de montage, couloirs</td><td>worker</td><td class="num">0,3 à 0,5 s</td></tr>
-            <tr><td>Génération complète, selon la graine</td><td>worker</td><td class="num">4,1 à 5,6 s</td></tr>
+            <tr><td>Génération complète, selon la graine</td><td>worker</td><td class="num">3,0 à 5,1 s</td></tr>
             <tr><td>Sommets de l'objet (bois flotté le plus lourd)</td><td>GPU</td><td class="num">115 000 à 230 000</td></tr>
             <tr><td>Une image, qualité Haute, 1,76 Mpx, tenue sur une figure</td><td>GPU</td><td class="num">9,8 ms</td></tr>
             <tr><td>Une image, qualité Haute, ronde au ras du tas</td><td>GPU</td><td class="num">15,5 ms</td></tr>
@@ -321,7 +322,7 @@
           });
           const Pg = figurePolygon(f.name);
           g.strokeStyle = C.ink; g.lineWidth = 1; g.beginPath(); Pg.forEach(([a, bb], i) => (i ? g.lineTo(X(bb), Y(a)) : g.moveTo(X(bb), Y(a)))); g.closePath(); g.stroke();
-          label(g, `${f.name} · ${(100 * cov[k]).toFixed(0)} % d'ombre pleine`, ox, d.h - 6);
+          label(g, `${f.name} · ${(100 * cov[k]).toFixed(0)} % d'ombre franche`, ox, d.h - 6);
         });
         d.status(`${n} pièces en ${(st.res.ms / 1000).toFixed(1)} s (60 candidates par pas ; le projet en tire 170)`);
       },

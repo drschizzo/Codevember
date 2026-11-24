@@ -15,7 +15,7 @@ import { createCore } from './core.js';
 import { defaultsFor } from './app/settings.js';
 import { generatorFor, makeDay } from '../../mega/src/kit.js';
 
-export const meta = { id: 'anamorph', name: 'Anamorph', subtitle: 'le cadran des ombres', seed: 'k8', enter: 'shadow' };
+export const meta = { id: 'anamorph', name: 'Anamorph', subtitle: 'le cadran des ombres', seed: 'k13', enter: 'shadow' };
 
 export async function createDay({ renderer, pipes, width, height, seed = meta.seed }) {
   // (autant de workers que la page au bureau)
