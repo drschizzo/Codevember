@@ -1,1 +1,4 @@
 exports/
+
+# vidéos des prototypes (gardées en local, hors du dépôt)
+*/proto/**/*.mp4
