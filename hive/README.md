@@ -95,7 +95,7 @@ P s'arrête à chaque porte (son temps est adouci par étape) : le rayon tient u
 
 **Cadres et supports** (`stage.js`). Un cadre a une barre du haut à oreilles, deux montants et une barre du bas, en bois à arêtes arrondies. Chaque barre est taillée dans un tronc qui lui est propre, dont l'axe suit à peu près sa longueur et passe près d'elle : les cernes sont des cylindres autour de cet axe, inégaux, sinueux, bois de printemps clair et bois d'été sombre. S'y ajoutent des fibres étirées le long du fil, qui s'effacent avant le pixel, et des taches ambrées de cire et de propolis. Chaque oreille repose sur la coupelle d'une tige de métal, chaque tige a son pied sur un socle commun. Les deux cadres du fond sont tournés de quelques degrés vers le centre ; le rayon et son cadre subissent le même cisaillement, dans le shader des alvéoles comme dans la matrice du cadre.
 
-**Décor et lumière** : un sol qui remonte en mur loin derrière (cyclorama), dont seul le sol reçoit les ombres. Trois lumières : une lampe parallèle chaude dont la carte d'ombres (4096²) est cadrée sur les cadres ; un remplissage froid sans ombre, du côté opposé ; un contre-jour qui traverse la cire. Plus un studio HDR calculé, faible. La profondeur de champ est active : zone nette large au plan d'ensemble, mince au gros plan.
+**Décor et lumière** : un sol qui remonte en mur loin derrière (cyclorama), dont seul le sol reçoit les ombres. Trois lumières : une lampe parallèle chaude dont la carte d'ombres (4096²) est cadrée sur les cadres ; un remplissage froid sans ombre, du côté opposé ; un contre-jour qui traverse la cire. Plus un studio HDR calculé, faible. La profondeur de champ est coupée par défaut (elle n'a pas de zone franchement nette et adoucissait le rayon vu de biais) et le flou de mouvement est léger ; les deux se règlent dans le panneau.
 
 **Caméra** (`core.js`) : un seul mouvement périodique, du plan d'ensemble (les trois cadres) au gros plan pris de biais sur la bande de miel du cadre de devant (à 2,5 à 3 unités, le rayon tient encore dans l'image), en échelle logarithmique, avec un glissement latéral ; par-dessus, la caméra tenue commune.
 
@@ -125,9 +125,9 @@ MacBook (Apple Silicon), Chrome, 1920 × 1080, qualité Haute, graine cw1gi9, 20
 
 | Instant | Temps par image |
 | --- | --- |
-| plan d'ensemble (u = 0,03) | 11,3 ms |
-| approche (u = 0,3) | 13,6 ms |
-| gros plan (u = 0,5) | 14,3 ms |
+| plan d'ensemble (u = 0,03) | 9,5 ms |
+| approche (u = 0,3) | 11,5 ms |
+| gros plan (u = 0,5) | 12,3 ms |
 
 Aucune pipeline n'est compilée après le chargement.
 

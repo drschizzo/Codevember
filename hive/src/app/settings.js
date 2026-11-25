@@ -6,9 +6,9 @@ export const QUALITY = {
   // (mode allégé : matériaux, lumières, ombres, chaîne d'image ; voir app/mobile.js)
   mobile: { label: 'Mobile', pixelRatio: 1.25, aa: 'fxaa', shadows: 'mobile', ao: false, ssr: false, motionBlur: 0 },
   draft: { label: 'Brouillon', pixelRatio: 1, aa: 'fxaa', shadows: 'low', ao: false, ssr: false, motionBlur: 0 },
-  standard: { label: 'Standard', pixelRatio: 1.25, aa: 'smaa', shadows: 'medium', ao: true, ssr: false, ssrRes: 0.5, ssrQuality: 0.35, motionBlur: 0.5 },
-  high: { label: 'Haute', pixelRatio: 1.5, aa: 'traa', shadows: 'high', ao: true, ssr: false, ssrRes: 0.5, ssrQuality: 0.5, motionBlur: 0.6 },
-  cinema: { label: 'Cinéma', pixelRatio: 2, aa: 'traa', shadows: 'ultra', ao: true, ssr: true, ssrRes: 1, ssrQuality: 0.8, motionBlur: 0.8 },
+  standard: { label: 'Standard', pixelRatio: 1.25, aa: 'smaa', shadows: 'medium', ao: true, ssr: false, ssrRes: 0.5, ssrQuality: 0.35, motionBlur: 0.2 },
+  high: { label: 'Haute', pixelRatio: 1.5, aa: 'traa', shadows: 'high', ao: true, ssr: false, ssrRes: 0.5, ssrQuality: 0.5, motionBlur: 0.25 },
+  cinema: { label: 'Cinéma', pixelRatio: 2, aa: 'traa', shadows: 'ultra', ao: true, ssr: true, ssrRes: 1, ssrQuality: 0.8, motionBlur: 0.35 },
 };
 
 export const RENDER_DEFAULTS = {
@@ -20,8 +20,8 @@ export const RENDER_DEFAULTS = {
   bloom: true, bloomStrength: 0.06, bloomRadius: 0.4, bloomThreshold: 1.6, hiCap: 4, roughFloor: 0.08,
   ao: true, aoStrength: 0.9, aoRadius: 0.4,
   ssr: false, ssrIntensity: 0.7, // (la cire est mate et le miel a son propre reflet : les reflets en espace écran coûtaient 5 ms pour rien) ssrQuality: 0.5, ssrDistance: 2.5, ssrThickness: 0.05, ssrRes: 0.5, ssrBlur: 2, nestEnv: 0.45, crystalThick: 1,
-  dof: true, focus: 1, focusRange: 0.32, bokeh: 2.2, // (le gros plan détache la langue de devant ; au large, tout reste net)
-  motionBlur: 0.6, ca: 0.1, grain: 0.03,
+  dof: false, focus: 1, focusRange: 0.32, bokeh: 2.2, // (coupée : elle n'a pas de zone franchement nette, et adoucit le rayon vu de biais ; réglable dans le panneau)
+  motionBlur: 0.25, ca: 0.1, grain: 0.03, // (un flou de mouvement léger : les alvéoles sont fines, un flou franc les noie pendant les déplacements)
   streaks: 0.08, streakLen: 4, halation: 0.25, dirt: 0.3,
   dynRes: false, maxFps: 0, // (résolution dynamique, cadence plafonnée : voir app/mobile.js)
 };
@@ -39,7 +39,7 @@ export const MOBILE_DEFAULTS = {
   dynRes: true, maxFps: 60,
 };
 
-const STORE = 'hive.render.v5'; // (changer de version quand un défaut change : les réglages mémorisés sont alors oubliés)
+const STORE = 'hive.render.v6'; // (changer de version quand un défaut change : les réglages mémorisés sont alors oubliés)
 
 // (le mode mobile a ses propres réglages mémorisés)
 export const defaultsFor = (lite) => (lite ? MOBILE_DEFAULTS : RENDER_DEFAULTS);
