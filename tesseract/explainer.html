@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#050506">
   <title>Tesseract · défis techniques</title>
-  <meta name="description" content="Comment fonctionne Tesseract, reconstruit pas à pas : la projection d'un objet à quatre dimensions et sa jacobienne, le patron qui se replie, la boucle de quarts de tour qui se referme d'elle-même, la caméra qui entre dans l'hypersphère, les parois ajourées, les portes en iris et la lumière dosée par pièce.">
+  <meta name="description" content="Comment fonctionne Tesseract, reconstruit pas à pas : la projection d'un objet à quatre dimensions et sa jacobienne, le patron qui se replie, la boucle de quarts de tour qui se referme d'elle-même, la caméra qui entre dans l'hypersphère, les parois ajourées, la galerie de quatre pièces en ligne droite, ses portes, et la lumière qui rebondit dans chaque pièce.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
@@ -24,13 +24,13 @@
     <header class="hero">
       <div class="kicker">Day 08 · Tesseract · comment ça marche</div>
       <h1>Comment un hypercube se replie et tourne dans une quatrième dimension</h1>
-      <p class="lede">Un cube a pour bord six carrés ; un hypercube, le cube à quatre dimensions, a pour bord huit cubes. Dans Tesseract, ces huit cubes sont posés à plat en patron, puis se replient en hypercube. L'hypercube fait un quart de tour en quatre dimensions, et le cube du centre passe à l'extérieur. Ensuite, la caméra entre, l'espace se referme sur lui-même, et chaque rotation devient un voyage d'une pièce à la suivante. Chaque sommet est placé en quatre dimensions, puis projeté en trois dimensions à chaque image. Cette page explique cette projection, puis comment la boucle se referme et comment la caméra circule dans un espace courbe.</p>
+      <p class="lede">Un cube a pour bord six carrés ; un hypercube, le cube à quatre dimensions, a pour bord huit cubes. Dans Tesseract, ces huit cubes sont posés à plat en patron, puis se replient en hypercube. L'hypercube fait un quart de tour en quatre dimensions, et le cube du centre passe à l'extérieur. Ensuite, la caméra entre, l'espace se referme sur lui-même, et chaque rotation fait avancer d'une pièce le long d'une galerie de quatre pièces, qui ramène à son point de départ. Chaque sommet est placé en quatre dimensions, puis projeté en trois dimensions à chaque image. Cette page explique cette projection, puis comment la boucle se referme et comment la caméra circule dans un espace courbe.</p>
       <p class="prereq">Pour suivre, il suffit de savoir lire un peu de JavaScript (des tableaux et des boucles). Les formules résument ce que les démos montrent ; on peut les sauter sans perdre le fil. Les détails de production sont rangés dans les encadrés « Pour aller plus loin ».</p>
     </header>
 
     <figure class="cover">
-      <img src="docs/capture.jpg" alt="Une pièce du tesseract : un Saturne devant une paroi de tôle perforée, entouré de barres" width="1600" height="1000">
-      <figcaption>Une pièce du tesseract vue de près : l'objet exposé (un Saturne), la paroi du fond en tôle perforée et, autour, les barres et les parois ajourées des cellules voisines.</figcaption>
+      <img src="docs/capture.jpg" alt="Une pièce du tesseract : des murs d'émail vert, un objet hérissé de pointes dorées au premier plan, et une porte ouverte sur la pièce ocre suivante" width="1600" height="1000">
+      <figcaption>La deuxième pièce de la galerie, pendant une halte : des murs d'émail vert, un sol de pierre sombre et, au premier plan, l'objet de la pièce. Par la porte, on voit la pièce suivante, ocre, et son objet.</figcaption>
     </figure>
 
     <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
@@ -41,14 +41,14 @@
         <h2><span class="n">01</span>Ce que montre la scène</h2>
         <span class="src">README.md · src/math4.js</span>
         <p>L'hypercube, ou <b>tesseract</b>, est au cube ce que le cube est au carré. Un carré a quatre côtés, un cube six faces carrées, et un tesseract huit « faces » cubiques, qu'on appelle ses <b>cellules</b>. On ne peut pas le voir directement, mais on peut le projeter en trois dimensions, comme une photographie projette un cube sur un plan.</p>
-        <p>Dans la scène, chaque cellule est une vitrine : une ossature de barres, des parois (pleines, perforées, vitrées ou ajourées) et un objet exposé au centre. Une boucle de l'animation se déroule ainsi :</p>
+        <p>Dans la scène, chaque cellule est une vitrine : une ossature de barres, six parois et un objet exposé au centre. Quatre cellules forment la galerie que l'on visite. Chacune a sa matière et sa couleur, les mêmes dehors et dedans : laque vermillon, émail vert, laque ocre, velours bleu nuit. Les quatre autres sont en biscuit clair. Une boucle de l'animation se déroule ainsi :</p>
         <ol>
           <li>les huit cellules sont posées à plat en patron, puis se replient en hypercube ;</li>
           <li>la caméra entre dans le cube du centre, et l'espace se referme autour d'elle ;</li>
-          <li>l'hypercube fait une suite de quarts de tour en quatre dimensions ; vue de l'intérieur, chacun fait passer d'une pièce à la suivante ;</li>
+          <li>l'hypercube fait quatre quarts de tour dans le même plan ; vue de l'intérieur, chacun fait passer d'une pièce à la suivante, toujours tout droit ;</li>
           <li>la caméra ressort et le patron se déplie, exactement comme au départ.</li>
         </ol>
-        <p>La page suit l'ordre de la construction. On commence par la projection, qui permet de voir un objet à quatre dimensions (section 02). On s'en sert pour plier le patron (section 03), puis pour faire tourner l'hypercube sans que la boucle ait besoin de raccord (section 04). La section 05 montre comment la même projection devient le point de vue d'un habitant de cet espace, et la section 06 comment la caméra y entre sans heurter une barre. Les trois dernières traitent de ce qu'on voit : des parois qui s'ouvrent selon leur position en quatre dimensions (section 07), des portes en iris (section 08) et une lumière dosée pièce par pièce (section 09).</p>
+        <p>La page suit l'ordre de la construction. On commence par la projection, qui permet de voir un objet à quatre dimensions (section 02). On s'en sert pour plier le patron (section 03), puis pour faire tourner l'hypercube sans que la boucle ait besoin de raccord (section 04). La section 05 montre comment la même projection devient le point de vue d'un habitant de cet espace, et la section 06 comment la caméra y entre sans heurter une barre. Les quatre suivantes traitent de ce qu'on voit : des parois qui s'ouvrent selon leur position en quatre dimensions (section 07), les portes de la galerie (section 08), une lampe dosée pièce par pièce (section 09) et la lumière que les murs et le sol se renvoient (section 10).</p>
       </section>
 
       <section id="projection">
@@ -91,12 +91,13 @@
         <figure id="fig-net" class="wide"><figcaption><b>Le patron, de l'hypercube à plat.</b> Les fonctions <code>hinge</code>, <code>unfoldTransforms</code>, <code>randomNet</code> et <code>project</code> sont importées telles quelles de <code>math4.js</code>. Réglez l'angle θ des charnières, et tirez un autre patron avec les boutons. En or, le socle −W. Faites glisser pour tourner la vue.</figcaption></figure>
         <h3>Ce qui ne va pas : deux cellules au même endroit</h3>
         <p>Tous les arbres ne sont pas des patrons. Une fois dépliées, deux cellules peuvent tomber au même endroit. Un patron tiré au hasard (en croix autour du socle, en serpent, ou libre) est donc vérifié : on le déplie, on arrondit les centres des cellules, on refuse tout doublon et tout centre hors de <i>w</i> = −1, et l'on recommence le tirage, jusqu'à 500 fois. Il existe 261 patrons du tesseract à symétrie près. La croix du <i>Corpus Hypercubus</i> de Dalí en est un, codé à part.</p>
+        <p>Par défaut, la scène ne tire pas son patron : elle le construit pour qu'on y reconnaisse la galerie avant d'y entrer. Les quatre pièces visitées forment une rangée, dans l'ordre où on les traverse. Les quatre autres cellules s'accrochent au-dessus, au-dessous et derrière cette rangée, aucune devant, où elle la cacherait à la caméra. Les patrons tirés au hasard servent à l'intérieur classique (paramètre <code>?interior=classic</code>).</p>
         <div class="note try"><b>À essayer</b><ul>
           <li>Faites glisser θ de 0° à 90° : à 0°, le bandeau indique « plié » ; à 90°, « à plat, <i>w</i> = −1 ».</li>
           <li>Le patron de Dalí a une profondeur de 2 (aucune cellule n'est à plus de deux charnières du socle). Tirez des serpents : sur 200 tirages, 156 ont une profondeur de 5 à 7.</li>
         </ul></div>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
-          <p>Dans la démo, toutes les charnières ont le même angle. Dans la scène, elles se ferment tour à tour, les feuilles de l'arbre d'abord, avec de l'anticipation et du rebond : le mouvement recule un peu avant de partir, et dépasse un peu avant de se poser. La recette tire la croix de Dalí, une croix, un serpent ou un patron libre, avec des poids 2,5, 1,5, 1 et 2.</p>
+          <p>Dans la démo, toutes les charnières ont le même angle. Dans la scène, elles se ferment tour à tour, les feuilles de l'arbre d'abord, avec de l'anticipation et du rebond : le mouvement recule un peu avant de partir, et dépasse un peu avant de se poser. Pour l'intérieur classique, la recette tire la croix de Dalí, une croix, un serpent ou un patron libre, avec des poids 2,5, 1,5, 1 et 2.</p>
         </div></details>
       </section>
 
@@ -107,15 +108,16 @@
         <p>Chacun de ces mouvements est une <b>symétrie de l'hypercube</b> : après un quart de tour, l'hypercube occupe exactement la même place, seules les cellules ont changé d'emplacement. Sa matrice ne contient que des 0 et un seul ±1 par ligne (une permutation signée), ce qu'un test vérifie. On peut donc déplier l'hypercube selon le <i>même</i> patron, aux mêmes emplacements, garni d'autres cellules. L'emplacement de la cellule <i>c</i> est <i>Q</i> <i>n</i><sub>c</sub>, où <i>Q</i> est le produit des mouvements déjà faits. Il suffit que la suite de mouvements ait pour produit l'identité pour que chaque cellule ait retrouvé sa place à la fin, sans aucun raccord :</p>
         <div class="eq">\[ Q_0 = I, \quad Q_{k+1} = g_k\,Q_k, \qquad Q_n = g_{n-1}\cdots g_1\,g_0 = I. \]</div>
         <p><i>g</i><sub>k</sub> est la matrice du mouvement <i>k</i>, <i>Q</i><sub>k</sub> l'orientation de l'hypercube avant ce mouvement, et <i>I</i> l'identité. La cellule du centre se lit directement sur <i>Q</i> : c'est celle dont la normale va vers −<i>e</i><sub>w</sub>, soit <i>n</i><sub>c</sub> = <i>Q</i><sup>⊤</sup>(−<i>e</i><sub>w</sub>), l'opposée de la dernière ligne de <i>Q</i>.</p>
-        <p>Par défaut, la séquence est un <b>tour de quatre pièces</b> : quatre mouvements qui font passer le cube du centre par quatre cellules distinctes, une fois chacune, avant de revenir à la première. Une recherche en profondeur le trouve. Elle essaie les mouvements dans un ordre tiré de la graine, interdit les cellules déjà visitées et exige que le dernier mouvement soit l'inverse exact du produit des précédents (budget : 50 000 essais). Le tour complet fait de même avec huit mouvements et les huit cellules.</p>
-        <figure id="fig-loop" class="wide"><figcaption><b>Une boucle de quarts de tour.</b> Séquence tirée par <code>randomMoves</code> (importée de <code>math4.js</code>, avec le générateur de la scène). Chaque étape tient un instant puis tourne. Les boutons tirent une boucle de quatre pièces, une ligne droite dans un seul plan, le tour complet ou une autre graine ; le curseur parcourt la boucle quand la lecture est arrêtée. La couleur des arêtes est leur coordonnée <i>w</i>. Le cube du centre est tracé en trait épais. Le bandeau du bas suit la pièce occupée. Ici la boucle reste pliée ; dans la scène, chaque étape déplie et replie le patron.</figcaption></figure>
+        <p>Par défaut, la séquence répète quatre fois le même quart de tour, dans le plan des axes <i>x</i> et <i>w</i> (son sens est tiré de la graine). Le cube du centre passe par quatre cellules alignées sur un même grand cercle de l'hypersphère, et le quatrième quart de tour ramène la première : c'est une <b>ligne droite</b> qui se referme. Aucun des quatre mouvements ne touche aux axes <i>y</i> et <i>z</i>. La section 05 s'en sert pour donner un haut à l'intérieur.</p>
+        <p>L'intérieur classique (paramètre <code>?interior=classic</code>) tire d'autres boucles. Le <b>tour de quatre pièces</b> est fait de quatre mouvements qui font passer le cube du centre par quatre cellules distinctes, une fois chacune, avant de revenir à la première. Une recherche en profondeur le trouve. Elle essaie les mouvements dans un ordre tiré de la graine, interdit les cellules déjà visitées et exige que le dernier mouvement soit l'inverse exact du produit des précédents (budget : 50 000 essais). Le tour complet fait de même avec huit mouvements et les huit cellules.</p>
+        <figure id="fig-loop" class="wide"><figcaption><b>Une boucle de quarts de tour.</b> Séquence tirée par <code>randomMoves</code> (importée de <code>math4.js</code>, avec le générateur de la scène). Chaque étape tient un instant puis tourne. Les boutons tirent une boucle de quatre pièces, une ligne droite dans un seul plan (la boucle de la scène), le tour complet ou une autre graine ; le curseur parcourt la boucle quand la lecture est arrêtée. La couleur des arêtes est leur coordonnée <i>w</i>. Le cube du centre est tracé en trait épais. Le bandeau du bas suit la pièce occupée. Ici la boucle reste pliée ; dans la scène, chaque étape déplie et replie le patron.</figcaption></figure>
         <div class="note try"><b>À essayer</b><ul>
           <li>Lisez le bandeau du bas : quelle que soit la séquence tirée, la dernière flèche ramène à −W, la pièce de départ, et le bandeau du haut indique « produit = identité ».</li>
-          <li>« Un seul plan » répète quatre fois le même quart de tour : le cube du centre passe par −W, une voisine, +W, puis l'opposée de la voisine. C'est une <b>ligne droite</b> : quatre pièces sur le même grand cercle.</li>
+          <li>« Un seul plan » répète quatre fois le même quart de tour : le cube du centre passe par −W, une voisine, +W, puis l'opposée de la voisine. C'est une <b>ligne droite</b> : quatre pièces sur le même grand cercle. La scène fait ce tour par défaut.</li>
           <li>« Tour complet » enchaîne huit mouvements et passe par les huit cellules.</li>
         </ul></div>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
-          <p>Sur 1 000 graines de la recette, 517 tirent une ligne droite (la recette n'autorise les mouvements doubles que six fois sur dix, ce qui favorise les lignes droites). Dans la scène, chaque étape suit le même déroulé : pause dépliée, pliage échelonné, pause, rotation, pause, dépliage.</p>
+          <p>Dans l'intérieur classique, sur 1 000 graines de la recette, 517 tirent elles aussi une ligne droite (la recette n'autorise les mouvements doubles que six fois sur dix, ce qui favorise les lignes droites). Dans la scène, chaque étape suit le même déroulé : pause dépliée, pliage échelonné, pause, rotation, pause, dépliage.</p>
           <div class="note"><b>Une seule ossature une fois plié</b><p>Plié, chaque arête de l'hypercube est partagée par trois cellules et chaque sommet par quatre : huit ossatures complètes s'y empileraient. À la fin du pliage, seule la cellule extérieure, projetée en cube sans déformation, garde ses barres. Celles des autres se rétractent dans leurs axes, commandées par une seule valeur transmise au shader (un uniform). Pendant un quart de tour, le contour passe d'une cellule à l'autre.</p></div>
         </div></details>
       </section>
@@ -131,9 +133,17 @@
           <li>Œil sur la sphère, faites glisser « Traversée » de 0° à 90° : la pièce voisine glisse en ligne droite jusqu'au centre, et le panneau de droite passe de −Z à +X.</li>
         </ul></div>
         <p>L'ordre des deux réglages compte. Vu du dehors, le gonflement complet donne une boule bosselée et percée, illisible. La plongée entre donc d'abord dans le tesseract plié, un cube dans un cube, jusqu'au cube du centre (62 % de sa durée), et l'espace ne se referme qu'ensuite, autour de la pièce où l'on se tient. La remontée fait l'inverse.</p>
-        <figure class="wide"><img src="docs/voyage.jpg" alt="Trois images du voyage intérieur : la plongée, une traversée, une halte" width="2400" height="500" style="width:100%;height:auto;display:block;border-radius:6px"><figcaption>Le voyage dans la scène : la plongée dans le cube du centre, une traversée par une porte, une halte dans la pièce suivante.</figcaption></figure>
-        <details class="deep"><summary>Pour aller plus loin : l'orientation de la caméra</summary><div class="in">
-          <p>Chaque traversée a son allure (droit devant, à reculons, de côté, en tonneau, en spirale), jamais deux fois la même de suite, et une diagonale de porte choisie parmi quatre, le plus loin possible des barres. Chaque traversée est choisie pour commencer près de là où la précédente a fini, si bien que la halte qui les sépare n'a pas à se retourner. Comme l'hypersphère n'a pas de haut, le roulis est porté d'une traversée à l'autre et ne se défait qu'une fois, avant la remontée.</p>
+        <figure class="wide"><img src="docs/voyage.jpg" alt="Trois images du voyage intérieur : la plongée, une traversée, une halte" width="2400" height="500" style="width:100%;height:auto;display:block;border-radius:6px"><figcaption>Le voyage dans la scène : la plongée vers le cube du centre, la traversée de la pièce rouge vers la pièce verte, une halte dans la pièce bleu nuit, d'où l'on revoit la pièce rouge du départ.</figcaption></figure>
+        <h3>Une galerie en ligne droite</h3>
+        <p>Les quatre quarts de tour de la boucle se font dans le même plan (section 04). Vue du centre, chaque pièce arrive donc de la même direction, et la caméra n'a pas à bouger : elle garde une seule pose pendant tout le voyage, et ce sont les pièces qui viennent à elle. Elle se tient dans l'axe des portes, en retrait de 0,64 par rapport au centre de la pièce et à 0,16 au-dessus de lui (dans le repère projeté, la paroi du fond est à 0,83 du centre). Elle regarde le long de l'axe, un peu vers le bas. L'objet de la pièce flotte sous le centre, à 0,3 demi-côté, pour ne pas cacher les portes.</p>
+        <p>Les mêmes quarts de tour laissent en place les axes <i>y</i> et <i>z</i>. L'axe <i>y</i> sert de <b>haut</b>, le même dans les quatre pièces. Dans chaque cellule, la face tournée vers −<i>y</i> est un sol, et le reste pendant toute la boucle. Les deux faces tournées vers ±<i>z</i> sont les murs de côté, qui portent le relief de la pièce. Les deux dernières, sur l'axe du voyage, sont percées d'une porte (section 08).</p>
+        <p>Dans cette pose, le regard suit le grand cercle du voyage. Il passe la porte d'en face, traverse la pièce suivante, passe une deuxième porte et finit dans la troisième pièce. Le centre de cette pièce est l'antipode de la caméra, que la projection envoie à l'infini. Un regard droit devant ne revient donc pas par-derrière : la quatrième pièce est dans le dos de la caméra.</p>
+        <p>Une traversée dure 5,2 s et une halte 2,2 s, à un facteur près, tiré pour chaque étape entre 0,75 et 1,3. L'angle du quart de tour suit un profil en trapèze : la rotation prend son élan, garde une vitesse constante, puis freine.</p>
+        <div class="eq">\[ \tau(f) = \begin{cases} k\,f^2 &amp; f &lt; a \\[2pt] \dfrac{f - a/2}{1 - a} &amp; a \le f \le 1 - a \\[6pt] 1 - k\,(1 - f)^2 &amp; f &gt; 1 - a \end{cases} \qquad k = \frac{1}{2a\,(1 - a)},\quad a = 0{,}28. \]</div>
+        <p><i>f</i> est l'avancement de la traversée, de 0 à 1, et τ la part du quart de tour accomplie. L'élan et le freinage occupent chacun 28 % de la durée. Entre les deux, pendant 44 % de la durée, la vitesse vaut 1/(1 − <i>a</i>) ≈ 1,39 fois la vitesse moyenne, et c'est à cette vitesse constante que la porte est franchie.</p>
+        <p>La plongée (section 06) arrive dans la première pièce de biais. Pendant la première halte, la caméra rejoint la pose de la galerie en tournant autour du centre de la pièce, ce qui lui évite de passer au travers de l'objet. La dernière halte fait le chemin inverse avant la remontée.</p>
+        <details class="deep"><summary>Pour aller plus loin : la caméra de l'intérieur classique</summary><div class="in">
+          <p>Dans l'intérieur classique, la boucle n'est pas toujours une ligne droite, et rien ne désigne un haut. Chaque traversée a son allure (droit devant, à reculons, de côté, en tonneau, en spirale), jamais deux fois la même de suite, et une diagonale de porte choisie parmi quatre, le plus loin possible des barres. Chaque traversée est choisie pour commencer près de là où la précédente a fini, si bien que la halte qui les sépare n'a pas à se retourner. Comme l'hypersphère n'a pas de haut, le roulis est porté d'une traversée à l'autre et ne se défait qu'une fois, avant la remontée.</p>
           <p>Par-dessus, la pose est lissée par un noyau gaussien, une moyenne des poses voisines pondérée en cloche (σ ≈ 0,3 s, neuf échantillons de −2σ à 2σ). Ce lissage est calculé sur la trajectoire elle-même, sans historique : la boucle se referme et l'export rend la même chose. Le regard tourne en moyenne à moins de 30°/s dans les pièces.</p>
         </div></details>
       </section>
@@ -150,7 +160,7 @@
         </ul></div>
         <p>La caméra rejoint ce rayon en glissant sur une sphère qui englobe tout (de rayon 6 au moins), puis le descend jusqu'à 0,6 du centre, entre l'objet et la paroi. Sa distance au centre décroît d'un même pourcentage par unité de temps :</p>
         <div class="eq">\[ \rho = R_0\,\Big(\frac{0{,}6}{R_0}\Big)^{b} \]</div>
-        <p>ρ est la distance au centre, <i>R</i><sub>0</sub> le rayon de départ et <i>b</i> l'avancement de la descente, de 0 à 1. Les deux gestes se chevauchent, ce qui évite un virage sec. Les parois qu'elle franchit sont percées d'un passage rond et net, centré sur ce rayon et un peu plus large au loin, où les pièces sont projetées plus grandes. Il s'ouvre devant elle et se referme derrière.</p>
+        <p>ρ est la distance au centre, <i>R</i><sub>0</sub> le rayon de départ et <i>b</i> l'avancement de la descente, de 0 à 1. Les deux gestes se chevauchent, ce qui évite un virage sec. Les parois qu'elle franchit sont percées d'un passage rond et net, centré sur ce rayon et un peu plus large au loin, où les pièces sont projetées plus grandes. Il s'ouvre devant elle et se referme derrière. Arrivée à 0,6 du centre, la caméra rejoint la pose de la galerie pendant la première halte (section 05).</p>
       </section>
 
       <section id="ajourage">
@@ -171,32 +181,39 @@ return cover.greaterThan(noise);</code></pre>
           <li>En « Seuil franc », les trous ont des bords en escalier qui changent de forme pendant que la paroi glisse. En « Tramé, une image », le bord devient un semis de pixels. Avec l'anticrénelage temporel, ce semis se fond en un bord lisse.</li>
         </ul></div>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
-          <p>S'ajoutent à cette règle une coupe côté caméra (les panneaux tournés vers elle s'ajourent aussi), le passage de l'entrée et les portes du voyage. Chaque face prend la plus grande des ouvertures que ces règles lui donnent. L'ouverture est constante sur une face : elle est calculée en JavaScript, une fois par face et par image, soit 48 valeurs, que le vertex shader lit selon la face à laquelle chaque pièce est rattachée. À l'intérieur, les bornes de la rampe glissent avec la plongée (de −0,5 et 0,85 vers 0,1 et 1,85).</p>
+          <p>S'ajoutent à cette règle une coupe côté caméra (les panneaux tournés vers elle s'ajourent aussi), le passage de l'entrée et les portes du voyage. Chaque face prend la plus grande des ouvertures que ces règles lui donnent. L'ouverture est constante sur une face : elle est calculée en JavaScript, une fois par face et par image, soit 48 valeurs, que le vertex shader lit selon la face à laquelle chaque pièce est rattachée. Dans la galerie, les parois restent pleines : pendant la plongée, les bornes de la rampe glissent de −0,5 et 0,85 vers 1,12 et 1,3. Seule s'efface la paroi qui passe par l'œil 4D au milieu d'une traversée. Projetée à l'infini, elle couvrirait l'écran d'un aplat. Dans l'intérieur classique, les bornes glissent vers 0,1 et 1,85, et les parois lointaines s'ajourent.</p>
           <div class="note"><b>Une tôle perforée s'ajoure par ses propres trous</b><p>Une seconde trame de trous percée par-dessus celle d'une tôle perforée dessinerait du moiré. Sur ces faces, la trame de l'ajourage est remplacée par celle de la tôle (nombre de trous par côté et demi-côté de la paroi, transmis avec l'ouverture), et ce sont ses trous qui s'agrandissent.</p></div>
         </div></details>
       </section>
 
-      <section id="iris">
-        <h2><span class="n">08</span>Les portes en iris</h2>
+      <section id="portes">
+        <h2><span class="n">08</span>Les portes</h2>
         <span class="src">src/scene/project.js · irisEdge(), doorGlow() · src/scene/reveal.js · voyageDoors()</span>
-        <p>Dans le voyage, la paroi entre la pièce où l'on se tient et la suivante doit s'ouvrir. La dissoudre par la trame de trous de la section 07 se lirait comme un effet de dissolution plutôt que comme un passage. Elle s'ouvre donc par un <b>iris</b>, un octogone qui tourne en s'ouvrant comme le diaphragme d'un objectif, bordé d'une lisière lumineuse.</p>
-        <p>Tout est calculé dans la position projetée, sans varying de plus et sans trigonométrie dans le shader. Le JavaScript fournit, pour chaque porte, son centre projeté, sa normale, deux axes de son plan déjà tournés de l'angle des lames, et son rayon. Un octogone régulier dont les côtés sont à la distance <i>R</i> du centre, sur les axes et sur les diagonales, s'écrit alors comme une distance à trois termes. Elle est négative dans l'ouverture et positive sur la paroi :</p>
-        <div class="eq">\[ x = |q\cdot u|,\quad y = |q\cdot v|, \qquad \delta = \max\!\Big(x,\ y,\ \tfrac{x + y}{\sqrt 2}\Big) - R. \]</div>
-        <p><i>q</i> est la position du point par rapport au centre de la porte, <i>u</i> et <i>v</i> les deux axes du plan de la porte, et δ la distance au bord de l'octogone. Le rayon vaut 0,8 fois le demi-côté de la paroi, multiplié par l'ouverture lissée, et les lames tournent de 0,9 × (1 − ouverture) radian. La lisière est un filet smoothstep(0,04<i>R</i> ; 0,008<i>R</i> ; δ) côté paroi, ajouté à la lumière émise.</p>
-        <figure id="fig-iris" class="wide"><figcaption><b>L'iris d'une paroi.</b> Distance, rotation des lames et lisière portées de <code>irisEdge</code>, <code>doorGlow</code> et <code>voyageDoors</code>, dans le plan de la paroi ; derrière, la pièce suivante est esquissée. Le bouton montre, pour comparaison, l'ouverture par la trame de trous de l'ajourage.</figcaption></figure>
+        <p>Dans la galerie, la paroi entre deux pièces voisines est percée d'une porte. La dissoudre par la trame de trous de la section 07 se lirait comme un effet de dissolution plutôt que comme un passage. La porte est donc une découpe nette : un rectangle debout, dont le pied touche presque le sol, bordé d'une lisière lumineuse. Les quatre portes du grand cercle restent ouvertes pendant tout le voyage. On voit ainsi la pièce suivante avant d'y entrer.</p>
+        <p>Tout est calculé dans la position projetée, sans varying de plus. Le JavaScript fournit, pour chaque porte, son centre projeté, sa normale, deux axes de son plan (le second pointe vers le haut de la galerie) et sa demi-hauteur. Une même expression à trois termes décrit le rectangle de la galerie et l'octogone de l'intérieur classique. Elle est négative dans l'ouverture et positive sur la paroi :</p>
+        <div class="eq">\[ x = |q\cdot u|,\quad y = |q\cdot v|, \qquad \delta = \max\!\Big(a\,x,\ y,\ c\,\tfrac{x + y}{\sqrt 2}\Big) - R. \]</div>
+        <p><i>q</i> est la position du point par rapport au centre de la porte, <i>u</i> et <i>v</i> les deux axes de son plan, <i>R</i> sa demi-hauteur et δ l'écart à son bord. Pour la porte de la galerie, <i>a</i> = 0,62/0,3 ≈ 2,07 et <i>c</i> = 0 : la demi-largeur vaut <i>R</i>/<i>a</i>. Grande ouverte, la porte a une demi-hauteur de 0,62 demi-côté de paroi et une demi-largeur de 0,3. Son pied est à 0,92 demi-côté sous le centre de la paroi, et son linteau aux deux tiers de la hauteur. La lisière est un filet smoothstep(0,04<i>R</i> ; 0,008<i>R</i> ; δ) côté paroi, ajouté à la lumière émise.</p>
+        <h3>Ce qui ne va pas : des portes lointaines aussi grandes que les proches</h3>
+        <p>Vues du centre d'une pièce, la porte d'en face et la suivante sont à 45° et à 135° sur le grand cercle, et la projection leur donne la même taille apparente. Leurs cadres se confondent au lieu de s'emboîter. Une porte est donc rétrécie selon la coordonnée <i>w</i> du centre de sa paroi, c'est-à-dire selon son éloignement :</p>
+        <div class="eq">\[ R = 0{,}62\,h\,\big(1 - 0{,}6\ \mathrm{smoothstep}(-0{,}7;\ 0{,}7;\ w)\big)\times\text{ouverture}. \]</div>
+        <p><i>h</i> est le demi-côté de la paroi. La porte de la pièce où l'on se tient (<i>w</i> proche de −1) garde sa taille. Celle d'une paroi proche de l'œil 4D, la plus lointaine pour la caméra, est réduite à 40 %. Le pied de la porte ne bouge pas : elle rétrécit vers le sol.</p>
+        <figure id="fig-iris" class="wide"><figcaption><b>La porte d'une paroi.</b> Distance, taille et lisière portées de <code>irisEdge</code>, <code>doorGlow</code> et <code>voyageDoors</code>, dans le plan de la paroi ; derrière, la pièce suivante est esquissée. Les boutons montrent la porte droite de la galerie, l'iris de l'intérieur classique et, pour comparaison, l'ouverture par la trame de trous de l'ajourage. Le curseur <i>w</i> n'agit que sur la porte droite.</figcaption></figure>
         <div class="note try"><b>À essayer</b><ul>
-          <li>Faites glisser l'ouverture de 0 à 100 % : le rayon passe de 0 à 0,8 demi-côté, et les lames tournent de 0,9 rad à 0. À 55 %, le rayon vaut 0,46 demi-côté et les lames sont tournées de 0,38 rad.</li>
-          <li>Activez « Ancienne dissolution » à la même ouverture : la paroi devient une grille de trous, et l'on ne voit plus de seuil à franchir.</li>
+          <li>Porte droite, ouverture à 100 %, <i>w</i> = −1 : la demi-hauteur vaut 0,62 demi-côté et la demi-largeur 0,30. Glissez <i>w</i> vers 1 : à <i>w</i> = 0, elles valent 0,43 et 0,21 ; au-delà de 0,7, elles valent 0,25 et 0,12, et le pied de la porte est resté au même endroit.</li>
+          <li>Ramenez l'ouverture vers 0 : la porte se referme vers le sol. C'est ainsi qu'elle s'ouvre pendant la première halte.</li>
+          <li>« Iris » : l'ouverture devient un octogone (<i>a</i> = <i>c</i> = 1) qui tourne en s'ouvrant. À 55 %, son rayon vaut 0,46 demi-côté et ses lames sont tournées de 0,38 rad.</li>
+          <li>« Trame de trous », à la même ouverture : la paroi devient une grille de trous, et l'on ne voit plus de seuil à franchir.</li>
         </ul></div>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
-          <p>Un garde |<i>q</i> · <i>n</i>| &lt; 0,55 <i>R</i> limite la découpe au voisinage du plan de la porte : seuls les deux panneaux dos à dos de la paroi sont percés, ensemble. La carte d'ombre et la sonde de pièce voient la même ouverture. La porte d'arrivée se referme pendant le premier tiers de la halte, et la suivante s'ouvre sur sa seconde moitié, si bien que la pièce suivante est visible avant la traversée. Quand la boucle est une ligne droite, la dernière halte ouvre ses quatre portes l'une après l'autre, décalées de 0,08 de la halte. Cette suite de portes alignées est l'enfilade : le couloir se referme sur lui-même.</p>
+          <p>Un garde |<i>q</i> · <i>n</i>| &lt; 0,55 <i>R</i> limite la découpe au voisinage du plan de la porte : seuls les deux panneaux dos à dos de la paroi sont percés, ensemble. La carte d'ombre et la sonde de pièce voient la même ouverture. Les portes de la galerie s'ouvrent pendant la première halte (entre 15 % et 60 % de sa durée) et se referment pendant la dernière (entre 40 % et 85 %).</p>
+          <p>Dans l'intérieur classique, la porte est un iris, un octogone qui tourne en s'ouvrant comme le diaphragme d'un objectif. Son rayon vaut 0,8 fois le demi-côté de la paroi, multiplié par l'ouverture lissée, et ses lames tournent de 0,9 × (1 − ouverture) radian. Les axes <i>u</i> et <i>v</i> sont tournés de cet angle en JavaScript, ce qui évite toute trigonométrie dans le shader. La porte d'arrivée se referme pendant le premier tiers de la halte, et la suivante s'ouvre sur sa seconde moitié.</p>
         </div></details>
       </section>
 
       <section id="lumiere">
         <h2><span class="n">09</span>Une lampe par pièce, dosée selon ses murs</h2>
         <span class="src">src/scene/dose.js · roomGain() · src/scene/practicals.js · src/scene/probe.js</span>
-        <p>Dans l'hypersphère, il n'y a ni sol ni haut. Le sol de la scène (le plateau) s'éloigne et ses contre-jours s'éteignent. Le plafond est alors choisi d'après la caméra : pour chaque pièce visitée, c'est celle de ses six faces qui est la plus haute pour la caméra au milieu de la halte. Le projecteur, seul à porter une ombre, s'y accroche, décalé vers la caméra, et glisse d'un plafond à l'autre pendant une traversée. Une gorge lumineuse court au pourtour du plafond.</p>
+        <p>Une fois la caméra entrée, le sol de la scène (le plateau) s'éloigne et ses contre-jours s'éteignent. Chaque pièce est alors éclairée par sa propre lampe, accrochée à son plafond, la face tournée vers le haut de la galerie. Le projecteur, seul à porter une ombre, est décalé de côté par rapport à la caméra : placé dans son axe, il cacherait l'ombre derrière l'objet. Son faisceau est serré (0,62 rad), si bien que l'objet et le sol sont en pleine lumière et que les murs s'éclairent en dégradé. Il glisse d'un plafond à l'autre pendant une traversée. Une gorge lumineuse court au pourtour du plafond.</p>
         <h3>Ce qui ne va pas : des pièces brûlées ou noires</h3>
         <p>Avec la même lampe partout, l'écart entre les pièces dépasserait deux ordres de grandeur. Une pièce de marbre blanc serait brûlée (parois à 4 à 7 au posemètre pour un blanc à 1), une pièce de laque sombre resterait dans le noir. L'exposition de l'image reste fixe, pour que le film reste une boucle exacte. La lampe de chaque pièce est donc dosée d'après la luminance linéaire <i>L</i> de sa <b>doublure</b>, le revêtement intérieur de ses parois. Pour un métal, qui ne diffuse rien, on compte la moitié de la luminance de sa couleur. Le gain baisse quand la doublure est claire, entre deux bornes :</p>
         <div class="eq">\[ \text{gain} = \mathrm{clamp}\big(0{,}22\,L^{-0{,}7};\ 0{,}22;\ 2{,}5\big), \qquad L\cdot\text{gain} = 0{,}22\,L^{0{,}3}\ \text{entre les bornes}. \]</div>
@@ -208,25 +225,49 @@ return cover.greaterThan(noise);</code></pre>
           <li>Laque urushi (<i>L</i> = 0,0025) : même au gain maximal, elle ne renvoie que 0,006, et la pièce reste sombre.</li>
         </ul></div>
         <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
-          <p>La lumière qui met chaque objet en valeur (la lumière de vedette) se règle de même sur la clarté de l'objet (entre 0,3 et 1,5 ; telle quelle pour les métaux et les pierres). Le rebond vient d'une sonde de pièce : une carte cubique de 128 pixels rendue depuis le centre de la pièce, une face toutes les deux images. Son niveau de mipmap le plus flou, lu selon la normale, donne la couleur des murs sur l'objet. Les autres niveaux, lus selon le reflet et la rugosité, donnent le reflet de la pièce sur les métaux et les vernis. La sonde voit des doublures unies éclairées par les mêmes lampes, à la place des vrais matériaux : la lumière ne rebondit qu'une fois, sans boucle de rétroaction.</p>
+          <p>La lumière qui met chaque objet en valeur (la lumière de vedette) se règle de même sur la clarté de l'objet (entre 0,3 et 1,5 ; telle quelle pour les métaux et les pierres). Le rebond vient d'une sonde de pièce : une carte cubique de 128 pixels rendue depuis le centre de la pièce, une face toutes les deux images. Son niveau de mipmap le plus flou donne la couleur des murs sur l'objet : il est lu au centre de chacune des six faces de la carte, et les six teintes sont pondérées par le carré de la normale (un cube d'ambiance). Lu directement selon la normale, ce niveau laisse voir les arêtes de la carte, dont les faces ne se raccordent pas. Les autres niveaux, lus selon le reflet et la rugosité, donnent le reflet de la pièce sur les métaux et les vernis. La sonde voit des doublures unies éclairées par les mêmes lampes, à la place des vrais matériaux : la lumière ne rebondit qu'une fois, sans boucle de rétroaction. Dans la galerie, la part de la sonde sur les parois est ramenée à 40 % : elle donne la même lumière à tout un mur, et le rebond de la section 10 la complète point par point.</p>
+        </div></details>
+      </section>
+
+      <section id="rebond">
+        <h2><span class="n">10</span>Le rebond dans une boîte</h2>
+        <span class="src">src/scene/materials.js · src/scene/tesseract.js</span>
+        <p>Dans une vraie pièce aux murs colorés, le sol n'est pas uniforme. Il prend la teinte du mur près du mur, le bas des murs prend celle du sol, et les angles sont plus sombres. La sonde de la section 09 ne donne qu'une teinte par face : sur les grandes parois unies de la galerie, elle laisse le sol plat.</p>
+        <p>Une pièce de la galerie est un cube dont on connaît les six faces : cinq de la matière de la pièce, une de sol. Le rebond se calcule donc sans rien mesurer dans l'image. En un point d'une face, chacune des quatre faces perpendiculaires renvoie sa teinte, d'autant plus qu'on en est près, et ferme un peu la lumière dans l'angle :</p>
+        <div class="eq">\[ B = \sum_{i=1}^{4} C_i\ \tfrac12\Big(1 - \frac{d_i}{\sqrt{d_i^2 + 0{,}6}}\Big), \qquad O = \prod_{i=1}^{4}\big(1 - 0{,}42\,e^{-d_i/0{,}3}\big). \]</div>
+        <p><i>d</i><sub>i</sub> est la distance du point au plan de la face <i>i</i>, en demi-côtés de la pièce (0 au pied du mur, 1,86 au pied du mur d'en face), et <i>C</i><sub>i</sub> la teinte de cette face, celle de la pièce ou celle du sol. Le poids de <i>C</i><sub>i</sub> a la forme du facteur de forme d'un mur vu depuis son pied : il vaut 1/2 contre le mur et décroît avec la distance. <i>B</i>, multiplié par la couleur de la paroi et par 1,7, s'ajoute à la lumière qu'elle émet. <i>O</i> multiplie sa couleur et l'assombrit dans les angles. La face d'en face n'est pas comptée.</p>
+        <figure id="fig-bounce" class="wide"><figcaption><b>Le sol d'une pièce, vu de dessus.</b> Poids et fermeture portés de <code>materials.js</code>, teintes des pièces importées de <code>recipe.js</code>. À gauche, le sol entre ses quatre murs ; à droite, <i>B</i> et <i>O</i> le long de la ligne pointillée. La démo remplace le projecteur par une lumière uniforme et relève l'exposition : elle ne montre que ce que le rebond ajoute.</figcaption></figure>
+        <div class="note try"><b>À essayer</b><ul>
+          <li>Coupez « Rebond des murs » : le sol devient gris et uniforme. Rallumez-le : il prend la teinte des murs, surtout à leur pied. Le bandeau donne le poids total des quatre murs : 0,46 au centre, 0,77 au pied d'un mur, 1,08 dans un coin.</li>
+          <li>Coupez « Fermeture des angles » : les bords s'éclaircissent. La fermeture vaut 0,93 au centre, 0,56 au pied d'un mur et 0,34 dans un coin.</li>
+          <li>Changez de pièce : dans le velours bleu nuit, presque noir, le rebond n'ajoute presque rien, et il ne reste que la fermeture des angles.</li>
+        </ul></div>
+        <p>Le point est repéré par sa position au repos, dans le repère de sa cellule, avant toute projection : aucun varying de plus n'est nécessaire, et le résultat suit la pièce dans ses déformations. La face où se trouve le point se reconnaît à sa normale géométrique.</p>
+        <h3>Un sol poli qui reflète les portes</h3>
+        <p>Le sol est une pierre sombre et polie (rugosité 0,16, part métallique 0,2). Les reflets en espace écran de la chaîne de rendu n'y rendent presque rien. Le reflet des portes est donc calculé directement. Le rayon de l'œil est réfléchi sur le sol, puis prolongé jusqu'au plan de chaque porte. S'il tombe dans le rectangle, il rapporte la teinte de la pièce d'à côté :</p>
+        <div class="eq">\[ r = v - 2\,(v\cdot U)\,U, \qquad t = \frac{(p - x)\cdot n}{r\cdot n}, \qquad F = 0{,}08 + 0{,}92\,(1 - |v\cdot U|)^5. \]</div>
+        <p><i>v</i> est la direction du regard, <i>U</i> le haut de la galerie, <i>r</i> le rayon réfléchi, <i>x</i> le point du sol, <i>p</i> le centre de la porte et <i>n</i> sa normale. Le point d'arrivée <i>x</i> + <i>t</i> <i>r</i> est testé contre le rectangle de la section 08. <i>F</i> est un terme de Fresnel : le reflet est faible quand on regarde le sol de haut et fort en vue rasante. Le bord du reflet s'adoucit avec la distance <i>t</i>, comme sur un sol qui n'est pas un miroir parfait.</p>
+        <details class="deep"><summary>Pour aller plus loin</summary><div class="in">
+          <p>Deux termes par pièce complètent le rebond. Un appoint de la teinte de la pièce vaut 0,3 dans les pièces vues par les portes et 0,03 dans celle où l'on se tient : la pièce antipodale, projetée à l'infini, n'a pas de lampe, et resterait noire dans l'encadrement des portes. Une lueur devant chaque porte, sur le sol et le bas des murs, porte la teinte de la pièce voisine (0,9 fois sa couleur, porte grande ouverte). Ces valeurs sont des uniforms par cellule, calculés en JavaScript à chaque image.</p>
+          <div class="note"><b>Un sol qui ne dépend pas de la caméra</b><p>La face qui sert de sol est désignée pour chaque cellule pendant toute la boucle, y compris hors du voyage, et seule sa face interne en prend la matière. Désignée seulement à l'entrée de la caméra, elle changerait de matière sous les yeux du spectateur pendant la plongée.</p></div>
         </div></details>
       </section>
 
       <section id="resume">
-        <h2><span class="n">10</span>Récapitulatif</h2>
-        <p>Au chargement, la recette tire le patron (section 03) et la suite de mouvements (section 04), et des Web Workers (des fils de calcul parallèles du navigateur) produisent la géométrie de chaque pièce dans le repère de sa cellule : barres profilées, panneaux, objets.</p>
-        <p>À chaque image, le JavaScript calcule la phase de la boucle, la matrice 4 × 4 de chaque cellule (dépliage, rotation 4D, objet), les réglages <i>g</i> et <i>d</i> de la projection (sections 02 et 05), la pose de la caméra (sections 05 et 06), les 48 ouvertures des faces et les portes (sections 07 et 08), et la lampe de la pièce (section 09). Le vertex shader porte chaque sommet en quatre dimensions, le projette et calcule sa normale par la jacobienne (section 02). Le fragment shader perce les trous et les iris, puis éclaire.</p>
+        <h2><span class="n">11</span>Récapitulatif</h2>
+        <p>Au chargement, la recette fixe le patron (section 03), la suite de mouvements (section 04) et les matières des quatre pièces, et des Web Workers (des fils de calcul parallèles du navigateur) produisent la géométrie de chaque pièce dans le repère de sa cellule : barres profilées, panneaux, objets.</p>
+        <p>À chaque image, le JavaScript calcule la phase de la boucle, la matrice 4 × 4 de chaque cellule (dépliage, rotation 4D, objet), les réglages <i>g</i> et <i>d</i> de la projection (sections 02 et 05), la pose de la caméra (sections 05 et 06), les 48 ouvertures des faces et les portes (sections 07 et 08), la lampe de la pièce (section 09) et, pour chaque cellule, son sol, son appoint et la teinte de ses portes (section 10). Le vertex shader porte chaque sommet en quatre dimensions, le projette et calcule sa normale par la jacobienne (section 02). Le fragment shader perce les trous et les portes, éclaire, puis ajoute le rebond et le reflet du sol.</p>
       </section>
 
       <section id="budget">
-        <h2><span class="n">11</span>Budget</h2>
+        <h2><span class="n">12</span>Budget</h2>
         <p>La géométrie est produite dans des Web Workers sous l'écran de chargement. Ensuite, chaque image ne calcule en JavaScript que quelques dizaines de matrices et d'ouvertures, et le reste se fait dans les shaders. L'image est limitée par les fragments : le nombre de lumières évaluées par pixel compte bien plus que le nombre de sommets.</p>
         <div class="tbl"><table>
           <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
           <tbody>
-            <tr><td>Image dehors, qualité Haute, 1,9 Mpx (graine <code>k3v9pa</code>)</td><td>GPU</td><td class="num">9,7 ms</td></tr>
-            <tr><td>Image pendant une traversée</td><td>GPU</td><td class="num">10,8 ms</td></tr>
-            <tr><td>Image pendant une halte</td><td>GPU</td><td class="num">12,6 ms</td></tr>
+            <tr><td>Image dehors, qualité Haute, 1,9 Mpx (graine <code>k3v9pa</code>)</td><td>GPU</td><td class="num">21 ms</td></tr>
+            <tr><td>Image pendant une traversée</td><td>GPU</td><td class="num">24 ms</td></tr>
+            <tr><td>Image pendant une halte</td><td>GPU</td><td class="num">22 ms</td></tr>
             <tr><td>Ouverture des faces (coque, coupe, passage, portes)</td><td>JS</td><td class="num">48 valeurs / image</td></tr>
             <tr><td>Sonde de pièce</td><td>GPU</td><td class="num">cube 128 px, 1 face / 2 images</td></tr>
             <tr><td>Varyings d'un panneau anisotrope</td><td>GPU</td><td class="num">≤ 14 sur 15</td></tr>
@@ -234,8 +275,9 @@ return cover.greaterThan(noise);</code></pre>
             <tr><td>Version mobile, rendu logiciel, 390 × 844 à 3×</td><td>GPU</td><td class="num">≈ 3,8× moins par image</td></tr>
           </tbody>
         </table></div>
+        <p>Les trois premières lignes sont des médianes sur 40 images, chaque image étant attendue jusqu'à la fin du travail du GPU. Dans l'intérieur classique, la même mesure donne 17, 25 et 27 ms.</p>
         <p>La sonde ne rend qu'une face une image sur deux, et ses mipmaps sont refaits une fois par tour des six faces. La sphère englobante de chaque cellule est recalculée à chaque image dans l'espace projeté, pour que three.js élimine les pièces hors champ, pour la caméra comme pour la carte d'ombre. Les shaders qui ne servent que dans le voyage sont compilés sous l'écran de chargement par quelques images d'amorçage : sans cela, la première image de la plongée gèlerait la page une demi-seconde.</p>
-        <p>Dix-sept tests vérifient les invariants sans navigateur, avec <code>node --test</code> : charnières et patrons (arbres couvrants sans chevauchement), mouvements (permutations signées dont la suite se referme), boucle courte et tour complet, boucle parfaite avec ou sans voyage, jacobienne contre différences finies, accord entre l'ajourage et l'ancrage de chaque face, dosage, portes et enfilade, et, sur 400 graines, les règles de direction artistique.</p>
+        <p>Vingt et un tests vérifient les invariants sans navigateur, avec <code>node --test</code> : charnières et patrons (arbres couvrants sans chevauchement), mouvements (permutations signées dont la suite se referme), boucle courte et tour complet, boucle parfaite avec ou sans voyage, jacobienne contre différences finies, accord entre l'ajourage et l'ancrage de chaque face, dosage, portes et enfilade, galerie (trajet en ligne droite, patron en rangée sans cellule devant, matières et objets des pièces, même graine, même galerie) et, sur 400 graines, les règles de direction artistique.</p>
       </section>
     </article>
 
@@ -253,6 +295,7 @@ return cover.greaterThan(noise);</code></pre>
     import { createRng } from '../shared/rng.js';
     import { FINISHES } from './src/finishes.js';
     import { roomGain } from './src/scene/dose.js';
+    import { GALLERY_ROOMS } from './src/recipe.js';
 
     // ── outils communs ────────────────────────────────────────────────────
     const fr = (x, n = 2) => x.toFixed(n).replace('.', ',');
@@ -658,57 +701,135 @@ return cover.greaterThan(noise);</code></pre>
       });
     }
 
-    // ── 08 · l'iris ───────────────────────────────────────────────────────
+    // ── 08 · les portes ───────────────────────────────────────────────────
     {
       const off = document.createElement('canvas'), og = off.getContext('2d');
       const fract = (x) => x - Math.floor(x);
       const ss = (a, b, x) => { const t = clamp((x - a) / (b - a)); return t * t * (3 - 2 * t); };
       const WALL = hex('#2c4a6e'), ROOM = hex('#d8c9ae'), GLOW = hex('#ffd9a8'), FRAME = hex('#0d0d10');
+      // (portée de reveal.js · GALLERY_DOOR : demi-largeur, demi-hauteur, pied, rétrécissement au loin)
+      const DOOR = { w: .3, h: .62, foot: .92, far: .6 };
+      const DOORB = [0, 1, 2];
+      let mode = 'rect'; // (hors de d.state : survit à reset)
       demo('#fig-iris', {
-        title: 'Porte en iris', aspect: 2,
-        controls: [{ key: 'o', label: 'Ouverture', min: 0, max: 1, step: .01, value: .55, fmt: (v) => `${Math.round(v * 100)} %` }],
-        buttons: [{ key: 'old', label: 'Ancienne dissolution', toggle: true, value: false }],
+        title: 'Porte d\'une paroi', aspect: 2,
+        controls: [
+          { key: 'o', label: 'Ouverture', min: 0, max: 1, step: .01, value: 1, fmt: (v) => `${Math.round(v * 100)} %` },
+          { key: 'w', label: 'Coordonnée w du centre de la paroi', min: -1, max: 1, step: .01, value: -1, fmt: (v) => fr(v, 2) },
+        ],
+        buttons: [
+          { label: 'Porte droite', onClick: (d) => { mode = 'rect'; mark(d, 0, DOORB); } },
+          { label: 'Iris', onClick: (d) => { mode = 'iris'; mark(d, 1, DOORB); } },
+          { label: 'Trame de trous', onClick: (d) => { mode = 'holes'; mark(d, 2, DOORB); } },
+        ],
+        setup(d) { mark(d, ['rect', 'iris', 'holes'].indexOf(mode), DOORB); },
         draw(g, d) {
           const W = Math.max(2, Math.round(d.w / 2)), H = Math.max(2, Math.round(d.h / 2));
           off.width = W; off.height = H;
           const img = og.createImageData(W, H), px = img.data;
           const half = Math.min(W, H) * .44, cx = W / 2, cy = H / 2;
-          // portée de voyageDoors : rayon et rotation des lames
-          const op = d.s.o, ease = op * op * (3 - 2 * op), R = .8 * half * ease, spin = .9 * (1 - ease);
-          const ux = Math.cos(spin), uy = Math.sin(spin);
+          const op = d.s.o, ease = op * op * (3 - 2 * op);
+          // portée de voyageDoors — iris : rayon et rotation des lames ; porte droite : demi-hauteur, rétrécie au loin
+          const iris = mode === 'iris';
+          const R = iris ? .8 * half * ease : DOOR.h * half * (1 - DOOR.far * ss(-.7, .7, d.s.w)) * op;
+          const spin = iris ? .9 * (1 - ease) : 0, ux = Math.cos(spin), uy = Math.sin(spin);
+          const a = iris ? 1 : DOOR.h / DOOR.w, c = iris ? 1 : 0;
+          // (la porte droite est posée sur son pied : son centre monte avec sa demi-hauteur)
+          const dy = iris ? 0 : DOOR.foot * half - R;
           for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
             const qx = x + .5 - cx, qy = y + .5 - cy, o = (y * W + x) * 4;
             let col;
-            if (Math.abs(qx) > half || Math.abs(qy) > half) col = FRAME.map((c) => c + 8);
+            if (Math.abs(qx) > half || Math.abs(qy) > half) col = FRAME.map((v) => v + 8);
             else {
               // la pièce suivante, esquissée : un fond clair et son objet
               const rr = Math.hypot(qx, qy + half * .1) / half;
-              const room = ROOM.map((c) => c * (.35 + .4 * (1 - rr * .6)));
-              const obj = Math.hypot(qx, qy - half * .05) < half * .13 ? 1 : 0;
+              const room = ROOM.map((v) => v * (.35 + .4 * (1 - rr * .6)));
+              const obj = Math.hypot(qx, qy - half * .3) < half * .13 ? 1 : 0;
               const behind = obj ? [233, 196, 138] : room;
               const lit = .7 + .3 * (1 - (qy + half) / (2 * half));
-              const wall = WALL.map((c) => c * lit);
+              const wall = WALL.map((v) => v * lit);
               let open = 0, glow = 0;
-              if (d.s.old) {
+              if (mode === 'holes') {
                 const u = (qx + qy) * .7071 / (half / 4.5), v = (qy - qx) * .7071 / (half / 4.5);
                 const dist = Math.hypot(fract(u) - .5, fract(v) - .5), rad = ease * .78;
                 open = rad < 1e-4 ? 0 : 1 - ss(-.04, .04, dist - rad);
               } else if (R > 1e-4) {
-                // portée de irisEdge : octogone sans trigonométrie
-                const ax = Math.abs(qx * ux + qy * uy), ay = Math.abs(-qx * uy + qy * ux);
-                const dd = Math.max(ax, ay, (ax + ay) * Math.SQRT1_2) - R;
+                // portée de irisEdge : δ = max(a·x, y, c·(x + y)/√2) − R
+                const py = qy - dy;
+                const ax = Math.abs(qx * ux + py * uy), ay = Math.abs(-qx * uy + py * ux);
+                const dd = Math.max(a * ax, ay, c * (ax + ay) * Math.SQRT1_2) - R;
                 open = 1 - ss(-.7, .7, dd);
                 glow = dd >= 0 ? ss(R * .04, R * .008, dd) : 0;
               }
-              col = wall.map((c, i) => lerp(c, behind[i], open) + GLOW[i] * glow * 1.4);
+              col = wall.map((v, i) => lerp(v, behind[i], open) + GLOW[i] * glow * 1.4);
             }
             px[o] = Math.min(255, col[0]); px[o + 1] = Math.min(255, col[1]); px[o + 2] = Math.min(255, col[2]); px[o + 3] = 255;
           }
           og.putImageData(img, 0, 0);
           g.drawImage(off, 0, 0, d.w, d.h);
-          label(g, `R = ${fr(R / half)} demi-côté`, 12, 20, { size: 11.5 });
-          label(g, `lames tournées de ${fr(spin)} rad`, 12, 38, { size: 11.5 });
-          d.status(d.s.old ? 'ancienne version : la paroi se dissout' : ease < .01 ? 'fermée' : ease > .99 ? 'grand ouverte' : 'l\'iris s\'ouvre en tournant');
+          if (mode === 'rect') {
+            label(g, `demi-hauteur R = ${fr(R / half)} demi-côté`, 12, 20, { size: 11.5 });
+            label(g, `demi-largeur R/a = ${fr(R / a / half)}`, 12, 38, { size: 11.5 });
+            d.status(op < .01 ? 'porte droite : fermée' : `porte droite · w = ${fr(d.s.w)} · taille ${Math.round(100 * (1 - DOOR.far * ss(-.7, .7, d.s.w)))} % · ouverture ${Math.round(op * 100)} %`);
+          } else if (iris) {
+            label(g, `R = ${fr(R / half)} demi-côté`, 12, 20, { size: 11.5 });
+            label(g, `lames tournées de ${fr(spin)} rad`, 12, 38, { size: 11.5 });
+            d.status(ease < .01 ? 'iris : fermé' : ease > .99 ? 'iris : grand ouvert' : 'l\'iris s\'ouvre en tournant');
+          } else d.status('trame de trous : la paroi se dissout');
+        },
+      });
+    }
+
+    // ── 10 · le rebond dans une boîte ─────────────────────────────────────
+    {
+      const off = document.createElement('canvas'), og = off.getContext('2d');
+      const lin = (v) => (v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4);
+      const toS = (x) => { x = clamp(x); return Math.round(255 * (x <= .0031308 ? 12.92 * x : 1.055 * x ** (1 / 2.4) - .055)); };
+      const rgb = (h) => hex(h).map((v) => lin(v / 255));
+      // teintes des quatre pièces (recipe.js · GALLERY_ROOMS) et du sol (globals.js · floorColor)
+      const NAMES = ['Laque vermillon', 'Émail vert', 'Laque ocre', 'Velours bleu nuit'];
+      const ROOMS = GALLERY_ROOMS.map((r, i) => ({ label: NAMES[i], col: rgb(r.more?.color ?? r.tint ?? FINISHES[r.finish].color) }));
+      const FLOOR = rgb('#4c4641');
+      // (portée de materials.js : bord des panneaux, poids d'un mur, fermeture de l'angle ; tesseract.js : part du rebond)
+      const EXT = .93, BOUNCE = 1.7;
+      const form = (dd) => .5 * (1 - dd / Math.sqrt(dd * dd + .6)), shut = (dd) => 1 - .42 * Math.exp(-dd / .3);
+      const at = (x, y) => { let B = 0, O = 1; for (const dd of [EXT - x, EXT + x, EXT - y, EXT + y]) { B += form(dd); O *= shut(dd); } return { B, O }; };
+      // (la démo : une lumière uniforme à la place du projecteur, exposition relevée)
+      const LAMP = .22, EXPO = 9;
+      demo('#fig-bounce', {
+        title: 'Rebond sur le sol', aspect: 1.9,
+        controls: [{ key: 'i', label: 'Pièce', min: 0, max: ROOMS.length - 1, step: 1, value: 1, fmt: (v) => ROOMS[v].label }],
+        buttons: [{ key: 'b', label: 'Rebond des murs', toggle: true, value: true }, { key: 'o', label: 'Fermeture des angles', toggle: true, value: true }],
+        draw(g, d) {
+          const room = ROOMS[d.s.i], C3 = room.col;
+          // le sol vu de dessus, entre ses quatre murs
+          const S = Math.min(d.h - 28, d.w * .44), x0 = 14, y0 = (d.h - S) / 2, band = S * .07;
+          const N = Math.max(8, Math.round((S - 2 * band) / 2));
+          off.width = N; off.height = N;
+          const img = og.createImageData(N, N), px = img.data;
+          for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+            const x = ((i + .5) / N * 2 - 1) * EXT, y = ((j + .5) / N * 2 - 1) * EXT, o = (j * N + i) * 4;
+            const { B, O } = at(x, y), k = d.s.o ? O : 1;
+            for (let c = 0; c < 3; c++) px[o + c] = toS(FLOOR[c] * k * (LAMP + (d.s.b ? BOUNCE * B * C3[c] : 0)) * EXPO);
+            px[o + 3] = 255;
+          }
+          og.putImageData(img, 0, 0);
+          g.fillStyle = `rgb(${C3.map((v) => toS(v)).join(',')})`; g.fillRect(x0, y0, S, S);
+          g.imageSmoothingEnabled = true; g.drawImage(off, x0 + band, y0 + band, S - 2 * band, S - 2 * band);
+          g.strokeStyle = alpha(C.ink, .6); g.lineWidth = 1; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(x0 + band, y0 + S / 2); g.lineTo(x0 + S - band, y0 + S / 2); g.stroke(); g.setLineDash([]);
+          if (d.w >= 520) { label(g, 'mur', x0 + S / 2, y0 + band - 4, { align: 'center', size: 10.5, color: '#fff' }); label(g, 'sol', x0 + S / 2, y0 + S / 2 - 8, { align: 'center', size: 10.5, color: '#fff' }); }
+          // B et O le long de la ligne pointillée
+          const gx0 = x0 + S + 44, gx1 = d.w - 14, gy0 = y0 + 8, gy1 = y0 + S - 18;
+          const X = (x) => lerp(gx0, gx1, (x / EXT + 1) / 2), Y = (v) => lerp(gy1, gy0, v / 1.1);
+          g.strokeStyle = C.grid; g.lineWidth = 1;
+          for (const v of [0, .25, .5, .75, 1]) { g.beginPath(); g.moveTo(gx0, Y(v)); g.lineTo(gx1, Y(v)); g.stroke(); label(g, fr(v), gx0 - 6, Y(v) + 4, { align: 'right', size: 11 }); }
+          label(g, 'd\'un mur au mur d\'en face →', gx1, gy1 + 16, { align: 'right', size: 11, color: C.faint });
+          const curve = (f, col, on) => { g.strokeStyle = on ? col : alpha(col, .25); g.lineWidth = 2; g.beginPath(); for (let i = 0; i <= 120; i++) { const x = (i / 120 * 2 - 1) * EXT, v = f(at(x, 0)); i ? g.lineTo(X(x), Y(v)) : g.moveTo(X(x), Y(v)); } g.stroke(); };
+          curve((p) => p.B, C.c1, d.s.b); curve((p) => p.O, C.c2, d.s.o);
+          label(g, 'B, poids des quatre murs', X(0), Y(at(0, 0).B) + 18, { align: 'center', size: 11.5, color: C.c1 });
+          label(g, 'O, fermeture', X(0), Y(at(0, 0).O) - 8, { align: 'center', size: 11.5, color: C.c2 });
+          const c0 = at(0, 0), c1 = at(EXT, 0), c2 = at(EXT, EXT);
+          d.status(`${room.label} · B : ${fr(c0.B)} au centre, ${fr(c1.B)} au pied d'un mur, ${fr(c2.B)} dans un coin · O : ${fr(c0.O)}, ${fr(c1.O)}, ${fr(c2.O)}`);
         },
       });
     }
