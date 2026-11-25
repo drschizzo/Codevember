@@ -73,7 +73,7 @@ Jour 28, thème « hive ». Le dépôt a déjà un nid de guêpes (Nest) : Hive 
 | 7 Fond d'alvéole | 1 | 3 | 4 | 2 | 2 | 4 | 2 | 18 |
 | 8 Déformation de parquet | 3 | 4 | 2 | 3 | 4 | 5 | 4 | 25 |
 
-La piste 1 est retenue. Elle absorbe la 8 (le changement de forme descend le rayon comme une onde : une image fixe montre plusieurs états à la fois, comme une *Métamorphose* d'Escher) et un peu de la 5 (la cire tiède qui flue est ce qui rend le mouvement plausible).
+La piste 1 est retenue. Elle absorbe la 3 (le chapeau est une quatrième famille), la 8 (le changement de forme descend le rayon comme une onde : une image fixe montre plusieurs états à la fois, comme une *Métamorphose* d'Escher) et un peu de la 5 (la cire tiède qui flue est ce qui rend le mouvement plausible).
 
 ## e. La piste retenue
 
@@ -86,6 +86,10 @@ Le groupe G du pavage est fixe. Ses centres de rotation découpent le plan en tr
 - Quand P arrive sur un coin, le pavage dégénère en un pavage classique, le même pour F et F* : P peut ressortir dans l'autre sorte de triangle. C'est une porte.
 - Une boucle par deux portes différentes ramène le pavage à lui-même, chaque alvéole ayant tourné autour du troisième centre : elle est à la place de sa voisine.
 
+### Le chapeau
+
+Pas de groupe : le pavage vient de la substitution par métatuiles de l'article de 2023. Les arêtes sont de deux sortes, a et b, et la tuile se referme séparément sur chacune ; chaque sommet est en A·a + B·b pour a, b complexes. La boucle est un lacet fermé dans le plan du rapport b/a. Dès que b/a n'est pas réel, la tuile retournée devient une seconde forme ; l'aire n'est conservée qu'en moyenne.
+
 ### Formule de la boucle
 
 Phase locale ψ = u − r·w(x), où w croît de la barre du haut vers la lisière. L'alvéole de l'instance g est h^⌊ψ⌋ · T(ψ − ⌊ψ⌋) transportée par g, où h est le relais. À u + 1, chaque instance g montre ce que montrait g·h à u : l'ensemble des alvéoles est le même (G·h = G). Le contenu d'une alvéole se lit au point fixe de h. L'image à u = 1 est donc l'image à u = 0, sans fondu ni retour en arrière.
@@ -97,6 +101,7 @@ Phase locale ψ = u − r·w(x), où w croît de la barre du haut vers la lisiè
 | Moulinet | p3 | C₃C₃C₃C₃C₃C₃ (hexagone) | les alvéoles passent par des losanges et tournent par trois, d'un tiers de tour |
 | Tourniquet | p4 | CC₄C₄C₄C₄ (pentagone du Caire) | elles passent par des carrés ou des triangles rectangles, et tournent d'un quart ou d'un demi-tour |
 | Rosace | p6 | CC₃C₃C₆C₆ (pentagone en fleuron) | elles passent par des cerfs-volants ou des triangles, et tournent par six, par trois ou par deux |
+| Chapeau | aucun (apériodique) | Tile(a, b) | tout le rayon change ensemble, du chapeau vers la tortue, en se vrillant d'un côté puis de l'autre |
 
 Variantes par les arêtes : droite, en S, à crochet, à double vague, à lobe, en dent. L'amplitude est réduite si l'alvéole cesse d'être un polygone simple à un instant de la boucle.
 
@@ -115,7 +120,7 @@ Une seule horloge : P(ψ), les arêtes, le miel et la caméra lisent u. P s'arr�
 
 | Axe | Valeurs |
 | --- | --- |
-| Famille du cadre de devant | moulinet, tourniquet, rosace (les deux autres cadres prennent les deux autres) |
+| Famille du cadre de devant | moulinet, tourniquet, rosace, chapeau (les deux autres cadres en prennent deux autres ; il y a toujours un chapeau parmi les trois) |
 | Arêtes | droite, S, crochet, double vague, lobe, dent (différentes d'un cadre à l'autre) |
 | Portes | trois couples par famille (le relais tourne autour d'un autre centre) |
 | Chemin de P | court, moyen, long (jusqu'où il s'écarte du bord du triangle) |

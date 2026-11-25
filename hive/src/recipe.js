@@ -9,6 +9,7 @@
 //   simple à tous les instants de la boucle (sinon on adoucit les arêtes).
 import { createRng } from '../../shared/rng.js';
 import { track, tileAt, isSimple } from './gen/tiling.js';
+import { hatParams, hatShape } from './gen/hat.js';
 
 const r2 = (x) => Math.round(x * 100) / 100 || 0; // (|| 0 : jamais de −0, que JSON ne garde pas)
 const r3 = (x) => Math.round(x * 1000) / 1000 || 0;
@@ -30,6 +31,9 @@ export const FAMILIES = {
   moulinet: { label: 'Moulinet (p3)', group: 'p3', gates: [[0, 1], [1, 2], [2, 0]] },
   tourniquet: { label: 'Tourniquet (p4)', group: 'p4', gates: [[1, 2], [0, 1], [2, 0]] },
   rosace: { label: 'Rosace (p6)', group: 'p6', gates: [[0, 1], [1, 2], [2, 0]] },
+  // le chapeau : pas de groupe, pas de porte — un pavage qui ne se répète jamais, et dont la
+  // boucle est un lacet fermé dans le plan du rapport b/a de ses deux sortes d'arêtes
+  chapeau: { label: 'Chapeau (apériodique)', group: 'hat', gates: [] },
 };
 
 // ── Arêtes : le profil des trois rayons (un par classe de coin) ──────────────
@@ -106,6 +110,12 @@ function makePath(rng, gates, style) {
   return { legs: [{ a, b, q: q(rng.range(...wide)) }, { a: b, b: a, q: q(rng.range(...wide)) }] };
 }
 
+/** Le chapeau et l'anti-chapeau restent-ils des polygones simples tout au long du lacet ? */
+export function hatIsValid(loop, n = 48) {
+  for (let k = 0; k < n; k++) { const P = hatParams(loop, k / n); if (!isSimple(hatShape(P.a, P.b, 0)) || !isSimple(hatShape(P.a, P.b, 1))) return false; }
+  return true;
+}
+
 /** L'alvéole reste-t-elle un polygone simple tout au long de la boucle ? */
 export function pathIsValid(group, path, profiles, amp, n = 96) {
   const tr = track(group, path);
@@ -116,13 +126,22 @@ export function pathIsValid(group, path, profiles, amp, n = 96) {
 export function generate(seed, overrides = {}) {
   const rng = createRng(seed);
   const mood = overrides.mood ?? rng.fork('mood').pick(Object.keys(MOODS));
-  const family = overrides.family ?? rng.fork('family').pick(Object.keys(FAMILIES));
+  // (le chapeau est tiré à part : les graines gardent la famille qu'elles avaient parmi les trois pavages de groupe)
+  const GROUPED = Object.keys(FAMILIES).filter((f) => FAMILIES[f].group !== 'hat');
+  const family = overrides.family ?? (rng.fork('apériodique').range(0, 1) < 0.22 ? 'chapeau' : rng.fork('family').pick(GROUPED));
   const M = MOODS[mood];
   const rt = rng.fork('tiling'), rc = rng.fork('camera'), rl = rng.fork('light'), rb = rng.fork('comb'), rw = rng.fork('wave');
 
   // ── un pavage : famille, arêtes, chemin ; le chemin est vérifié ──
   const makeTiling = (fam, r, edges) => {
     const Ff = FAMILIES[fam];
+    if (Ff.group === 'hat') {
+      // ln|b/a| = r0 + dr·cos, arg(b/a) = dphi·sin : du chapeau vers la tortue et retour, par un autre côté
+      const loop = { r0: r2(r.range(-0.05, 0.12)), dr: r2(r.range(0.42, 0.56)), dphi: r2(r.range(0.16, 0.26) * r.pick([1, -1])) };
+      rw.pick([0, 0, 0, 0]); // (même nombre de tirages que les autres familles : le reste de la scène ne change pas)
+      while (!hatIsValid(loop) && loop.dr > 0.1) { loop.dr = r2(loop.dr * 0.8); loop.dphi = r2(loop.dphi * 0.8); }
+      return { family: fam, group: 'hat', edges: 'droite', loop, rot: r2(r.range(0, 6.28)), amp: 1, wall: r3(r.range(0.034, 0.042)), wave: 0 };
+    }
     edges ??= r.pick(Object.keys(EDGES));
     const profiles = EDGES[edges].make(r.fork('edges'));
     const path = makePath(r.fork('path'), r.pick(Ff.gates), r.pick(['court', 'moyen', 'long']));
@@ -158,14 +177,21 @@ export function generate(seed, overrides = {}) {
   // suivantes épuisent les autres familles avant d'en reprendre une (avec
   // d'autres arêtes et une autre porte)
   {
-    const fams = Object.keys(FAMILIES), others = fams.filter((f) => f !== family);
+    // chaque scène montre un chapeau. S'il n'est pas devant, il prend l'un des deux cadres du
+    // fond, l'autre gardant un pavage de groupe ; s'il est devant, le fond a deux pavages de groupe
+    const ro = rng.fork('others');
+    const others = GROUPED.filter((f) => f !== family);
+    if (family === 'chapeau') others.splice(ro.int(0, 2), 1);
+    else others[ro.int(0, 1)] = 'chapeau';
     const edgeKeys = Object.keys(EDGES), used = new Set();
     lobes.forEach((l, k) => {
-      const f2 = k === 0 ? family : k <= others.length ? others[k - 1] : fams[k % fams.length];
+      const f2 = k === 0 ? family : others[k - 1];
       let e = k === 0 ? (overrides.edges ?? rt.pick(edgeKeys)) : rt.pick(edgeKeys);
       for (let i = 0; i < 6 && used.has(e); i++) e = edgeKeys[(edgeKeys.indexOf(e) + 1) % edgeKeys.length];
       used.add(e);
       l.tiling = makeTiling(f2, rt.fork('lobe' + k), e);
+      // (le pavage chapeau se déforme en bloc pendant la boucle : son rayon garde plus de marge dans le cadre)
+      if (l.tiling.group === 'hat') { l.W = r2(l.W * 0.78); l.L = r2(Math.min(l.L, frame.Hi * 0.8)); }
     });
   }
   const edges = lobes[0].tiling.edges;

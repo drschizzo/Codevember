@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#050506">
   <title>Hive · défis techniques</title>
-  <meta name="description" content="Comment Hive est calculé : des pavages d’une seule forme qui se déforment sans laisser de jour, le passage par des pavages dégénérés, le rendu d’une alvéole par instances, le ménisque du miel.">
+  <meta name="description" content="Comment Hive est calculé : des pavages d’une seule forme qui se déforment sans laisser de jour, le passage par des pavages dégénérés, un pavage apériodique et sa famille continue, le rendu d’une alvéole par instances, le ménisque du miel.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
@@ -24,12 +24,12 @@
     <header class="hero">
       <div class="kicker">Day 28 · Hive · le rayon qui cherche sa cellule</div>
       <h1>Comment un rayon de cire change de pavage sans laisser un seul jour entre ses alvéoles</h1>
-      <p class="lede">Trois cadres d’apiculteur sont exposés comme des pièces de musée. Dans chacun pend un rayon de cire à moitié bâti. Ses alvéoles ne sont pas des hexagones : chaque rayon est pavé d’une seule forme, répétée, et cette forme change pendant toute la boucle. La difficulté tient en une phrase : à chaque instant, toutes les alvéoles doivent rester identiques entre elles et se toucher partout. Le programme l’obtient avec un seul point mobile par pavage, puis dessine des milliers d’alvéoles à partir d’une seule.</p>
+      <p class="lede">Trois cadres d’apiculteur sont exposés comme des pièces de musée. Dans chacun pend un rayon de cire à moitié bâti. Ses alvéoles ne sont pas des hexagones : chaque rayon est pavé d’une seule forme, répétée, et cette forme change pendant toute la boucle. L’un des pavages possibles ne se répète même jamais. La difficulté tient en une phrase : à chaque instant, toutes les alvéoles doivent rester identiques entre elles et se toucher partout. Le programme l’obtient avec un seul point mobile par pavage, puis dessine des milliers d’alvéoles à partir d’une seule.</p>
     </header>
 
     <figure class="cover">
-      <img src="docs/capture.jpg" alt="Un cadre en bois clair suspendu à deux tiges, où pend un rayon de cire en U : miel ambré en haut, vieille cire au milieu, lisière pâle en bas" width="1600" height="1000">
-      <figcaption>Graine cw1gi9. Le rayon pend de la barre du haut et s’arrête sur une lisière pâle. En haut, le miel renvoie la fenêtre dans chaque alvéole ; au milieu, la vieille cire est plus sombre.</figcaption>
+      <img src="docs/capture.jpg" alt="Un cadre en bois clair suspendu à deux tiges, où pend un rayon de cire pavé de chapeaux, des alvéoles à 13 côtés : miel ambré en haut, vieille cire au milieu" width="1600" height="1000">
+      <figcaption>Graine cw1gi9. Le rayon du cadre central est pavé de « chapeaux », des alvéoles à 13 côtés qui ne se répètent jamais. En haut, le miel ; au milieu, la vieille cire, plus sombre.</figcaption>
     </figure>
 
     <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
@@ -80,8 +80,21 @@
         <div class="note check"><b>Ce que les tests vérifient</b><p>À \(\psi = 1\), l’alvéole suivie est l’image de celle de \(\psi = 0\) par \(h\), à 10⁻⁷ près, et \(h^k\) est l’identité. Un test témoin vérifie que sans \(h\) l’alvéole n’est pas revenue à sa place.</p></div>
       </section>
 
+      <section id="chapeau">
+        <h2><span class="n">04</span>Le chapeau pave sans jamais se répéter, et il se déforme quand même</h2>
+        <span class="src">src/gen/hat.js · hatPatch(), hatParams()</span>
+        <p>Les trois familles précédentes sont périodiques : leur dessin se répète. La quatrième ne se répète jamais. Le chapeau est un polygone à 13 côtés, découvert en 2023, qui pave le plan mais seulement sans période. Une tuile sur huit environ y est posée retournée.</p>
+        <p>Sans période, il n’y a pas de groupe où ranger les tuiles, et une recherche par essais s’enferme vite dans des impasses : les contraintes de ce pavage portent loin. Le programme reprend la construction de l’article d’origine. Quatre « métatuiles », H, T, P et F, contiennent chacune quelques chapeaux. À chaque niveau, 29 métatuiles du niveau précédent s’assemblent en une pièce d’où l’on découpe les quatre suivantes. Une métatuile H contient 25 chapeaux au premier niveau, puis 169, 1 156 et 7 921.</p>
+        <p>Pour l’animer, il faut une famille continue. Les arêtes du chapeau sont de deux sortes : huit de longueur \(a = 1\), six de longueur \(b = \sqrt 3\). Le chapeau se referme séparément sur chacune : la somme de ses arêtes \(a\) est nulle, celle de ses arêtes \(b\) aussi. On peut donc remplacer \(a\) et \(b\) par deux nombres complexes quelconques, et la position de chaque sommet du pavage reste une combinaison</p>
+        <div class="eq">\[ z = A \cdot a + B \cdot b \]</div>
+        <p>où \(A\) et \(B\) sont calculés une fois, en parcourant le pavage d’arête en arête. Le module de \(b/a\) mène du chapeau vers une autre tuile connue, la tortue. Son argument fait tourner les arêtes \(b\) par rapport aux arêtes \(a\). La boucle est un lacet fermé dans ce plan : l’aller et le retour ne passent pas par les mêmes formes.</p>
+        <div class="note trap"><b>Deux formes au lieu d’une</b><p>Dès que \(b/a\) n’est pas réel, une tuile retournée n’est plus le reflet exact des autres : c’est le reflet de la tuile de paramètres conjugués. Le pavage compte alors deux formes, le chapeau et un anti-chapeau, cuites séparément. Leurs aires diffèrent : celle du chapeau varie de moins de 6 % le long du lacet, celle de l’anti-chapeau d’environ 20 %. Le miel n’est donc pas conservé exactement dans cette famille, contrairement aux trois autres. Seule l’aire moyenne est tenue égale à 1.</p></div>
+        <figure id="fig-chapeau"><figcaption><b>La famille du chapeau.</b> Le premier curseur change le rapport des longueurs, du chapeau vers la tortue. Le second fait tourner une sorte d’arêtes par rapport à l’autre : les tuiles teintées, retournées, prennent alors une forme différente des autres. Le pavage reste jointif.</figcaption></figure>
+        <div class="note check"><b>Ce que les tests vérifient</b><p>Les coefficients \(A, B\) se referment à 10⁻⁹ près sur les 1 156 tuiles. À huit instants du lacet, 500 points tirés dans un disque tombent chacun dans une tuile et une seule. Un témoin, où l’anti-chapeau est remplacé par le simple reflet du chapeau, laisse des jours.</p></div>
+      </section>
+
       <section id="onde">
-        <h2><span class="n">04</span>Une onde descend le rayon : chaque point a sa propre phase</h2>
+        <h2><span class="n">05</span>Une onde descend le rayon : chaque point a sa propre phase</h2>
         <span class="src">src/scene/comb.js · waveAt()</span>
         <p>Si toutes les alvéoles changeaient au même instant, une image fixe ne montrerait qu’un état. Le film retarde le changement selon la hauteur : le haut du rayon est en avance sur le bas.</p>
         <div class="eq">\[ \psi(x) = u - r \cdot w(x) \]</div>
@@ -91,7 +104,7 @@
       </section>
 
       <section id="instances">
-        <h2><span class="n">05</span>Le GPU ne reçoit qu’une alvéole par rayon</h2>
+        <h2><span class="n">06</span>Le GPU ne reçoit qu’une alvéole par rayon</h2>
         <span class="src">src/gen/bake.js · bakeTiling() · src/scene/comb.js</span>
         <p>Un rayon porte plusieurs centaines d’alvéoles, dont les parois bougent à chaque image. Recalculer et renvoyer leur géométrie depuis le processeur coûterait trop cher.</p>
         <p>Toutes les alvéoles d’un rayon sont la même forme, déplacée par une rotation et une translation. Le programme cuit donc une seule alvéole : son contour en 96 points, à 48 instants par étape du chemin, rangé dans une texture (une rangée par instant). Chaque instance porte quatre nombres, sa rotation et sa translation. Le vertex shader lit le contour à la phase du sommet, le déplace, et bâtit la paroi. Le fond, le miel et l’opercule sont un rectangle par alvéole, serré sur la boîte de l’alvéole à cet instant et découpé au pixel.</p>
@@ -101,7 +114,7 @@
       </section>
 
       <section id="miel">
-        <h2><span class="n">06</span>La surface du miel est un champ lisse, cuit avec l’alvéole</h2>
+        <h2><span class="n">07</span>La surface du miel est un champ lisse, cuit avec l’alvéole</h2>
         <span class="src">src/gen/bake.js · src/scene/comb.js · fieldAt()</span>
         <p>Le miel se reconnaît à son reflet. Dans une alvéole de 5 mm, la capillarité creuse toute la surface : elle remonte le long des parois. Cette courbure fait qu’une fenêtre se reflète quelque part dans chaque alvéole.</p>
         <p>L’idée la plus simple est de tirer la hauteur de la distance à la paroi. Elle échoue : la distance fait un pli le long de l’axe médian de l’alvéole, là où deux parois sont à égale distance. Dans un reflet net, ces plis dessinent une étoile de facettes.</p>
@@ -114,7 +127,7 @@
       </section>
 
       <section id="cire">
-        <h2><span class="n">07</span>La cire laisse passer la lumière et la garde</h2>
+        <h2><span class="n">08</span>La cire laisse passer la lumière et la garde</h2>
         <span class="src">src/scene/comb.js</span>
         <p>Une cire opaque fait plastique. La vraie laisse passer la lumière à travers ses parois minces et la diffuse dans son épaisseur : ses ombres ne sont jamais grises.</p>
         <p>Le matériau a deux termes de translucidité. Le premier est directionnel : la lumière qui arrive derrière une paroi la traverse, davantage en haut où la paroi est mince. Le second est ambiant : une part de la lumière reçue ressort teintée par la cire, quelle que soit la direction. Le fond d’une alvéole, que la carte d’ombres ne résout pas, est assombri vers une teinte chaude et saturée plutôt que vers le gris.</p>
@@ -123,15 +136,15 @@
       </section>
 
       <section id="budget">
-        <h2><span class="n">08</span>Budget</h2>
+        <h2><span class="n">09</span>Budget</h2>
         <div class="tbl"><table>
           <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
           <tbody>
             <tr><td>Vérification du chemin d’un pavage (96 instants)</td><td>recette</td><td class="num">quelques ms</td></tr>
             <tr><td>Cuisson d’un pavage (96 rangées, grille de 64², ménisque compris), mesurée dans Node</td><td>worker</td><td class="num">0,9 s</td></tr>
             <tr><td>Matériaux pour toutes les alvéoles des trois rayons</td><td>GPU</td><td class="num">3</td></tr>
-            <tr><td>Image en 1920 × 1080, qualité Haute, plan d’ensemble</td><td>GPU</td><td class="num">11,4 ms</td></tr>
-            <tr><td>Image au gros plan (le miel remplit l’image)</td><td>GPU</td><td class="num">13,4 ms</td></tr>
+            <tr><td>Image en 1920 × 1080, qualité Haute, plan d’ensemble</td><td>GPU</td><td class="num">11,3 ms</td></tr>
+            <tr><td>Image au gros plan (le miel remplit l’image)</td><td>GPU</td><td class="num">14,3 ms</td></tr>
           </tbody>
         </table></div>
       </section>
@@ -150,6 +163,7 @@
     import { demo, C, alpha, clamp } from '../home/explainer.js';
     import { GROUPS, flip, pointAt, outline, track, tileAt, elements, applyIso } from './src/gen/tiling.js';
     import { inset } from './src/gen/bake.js';
+    import { hatPatch, hatParams, hatTile } from './src/gen/hat.js';
 
     const path = (g, P, k, cx, cy) => { g.beginPath(); for (let i = 0; i < P.length; i += 2) { const x = cx + P[i] * k, y = cy - P[i + 1] * k; i ? g.lineTo(x, y) : g.moveTo(x, y); } g.closePath(); };
     const moved = (m, P) => { const Q = new Float64Array(P.length); for (let i = 0; i < P.length; i += 2) { const p = applyIso(m, [P[i], P[i + 1]]); Q[i] = p[0]; Q[i + 1] = p[1]; } return Q; };
@@ -221,7 +235,28 @@
       },
     });
 
-    // 4 — l'onde
+    // 4 — le chapeau
+    const HP = hatPatch(2);
+    demo('#fig-chapeau', {
+      title: 'Tile(a, b), a et b complexes', aspect: 1.9,
+      controls: [{ key: 'r', label: 'ln |b / a|', min: -0.5, max: 0.62, step: 0.01, value: 0.55, fmt: (v) => v.toFixed(2) }, { key: 'p', label: 'arg (b / a)', min: -0.3, max: 0.3, step: 0.005, value: 0, fmt: (v) => v.toFixed(2) }],
+      draw(g, d) {
+        const P = hatParams({ r0: d.s.r, dr: 0, dphi: 0 }, 0), c = Math.cos(d.s.p), sn = Math.sin(d.s.p);
+        const b = [P.b[0] * c - P.b[1] * sn, P.b[0] * sn + P.b[1] * c];
+        const polys = HP.tiles.map((T) => hatTile(T, P.a, b));
+        let ox = 0, oy = 0; for (const Q of polys) { ox += Q[0]; oy += Q[1]; } ox /= polys.length; oy /= polys.length;
+        const k = d.h * 0.062, cx = d.w / 2, cy = d.h / 2;
+        g.lineJoin = 'round'; g.lineWidth = 1.3;
+        polys.forEach((Q, i) => {
+          g.beginPath(); for (let j = 0; j < Q.length; j += 2) { const x = cx + (Q[j] - ox) * k, y = cy - (Q[j + 1] - oy) * k; j ? g.lineTo(x, y) : g.moveTo(x, y); } g.closePath();
+          if (HP.tiles[i].mir) { g.fillStyle = alpha(C.c1, 0.35); g.fill(); }
+          g.strokeStyle = C.ink; g.stroke();
+        });
+        d.status(`aire du chapeau ${P.area[0].toFixed(3)}`);
+      },
+    });
+
+    // 5 — l'onde
     demo('#fig-onde', {
       title: 'Une phase par alvéole', aspect: 1.6, animate: true,
       controls: [{ key: 'r', label: 'Retard', min: 0, max: 0.6, step: 0.01, value: 0.4 }],
@@ -240,7 +275,7 @@
       },
     });
 
-    // 5 — la paroi
+    // 6 — la paroi
     demo('#fig-paroi', {
       title: 'Axe du mur et face intérieure', aspect: 1.9,
       controls: [{ key: 'w', label: 'Demi-épaisseur', min: 0.01, max: 0.09, step: 0.002, value: 0.04 }, { key: 'psi', label: 'Phase ψ', min: 0.02, max: 0.98, step: 0.005, value: 0.3 }],
@@ -260,7 +295,7 @@
       },
     });
 
-    // 6 — distance contre ménisque
+    // 7 — distance contre ménisque
     demo('#fig-miel', {
       title: 'Le pli de la distance', aspect: 2,
       controls: [{ key: 'psi', label: 'Forme (phase ψ)', min: 0.05, max: 0.95, step: 0.01, value: 0.28 }],

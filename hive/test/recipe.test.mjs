@@ -1,7 +1,7 @@
 // Invariants de la recette et de la direction artistique, sans navigateur.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { generate, upgrade, MOODS, FAMILIES, EDGES, pathIsValid } from '../src/recipe.js';
+import { generate, upgrade, MOODS, FAMILIES, EDGES, pathIsValid, hatIsValid } from '../src/recipe.js';
 
 const SEEDS = Array.from({ length: 300 }, (_, i) => `t${i}`);
 const ALL = SEEDS.map((s) => generate(s));
@@ -29,12 +29,14 @@ test('chaque cadre a son motif : jamais deux fois la même famille avec les mêm
     assert.equal(new Set(keys).size, keys.length, `${R.seed} : ${keys}`);
     if (keys.length >= 3) assert.equal(new Set(R.comb.lobes.slice(0, 3).map((l) => l.tiling.family)).size, 3, R.seed);
     assert.equal(R.comb.lobes[0].tiling.family, R.family);
+    assert.equal(R.comb.lobes.filter((l) => l.tiling.family === 'chapeau').length, 1, `${R.seed} : un chapeau et un seul par scène`);
   }
 });
 
 test('le chemin de chaque pavage garde l’alvéole simple, et passe par deux portes différentes (le relais)', () => {
   for (const R of ALL.slice(0, 120)) for (const l of R.comb.lobes) {
     const T = l.tiling;
+    if (T.group === 'hat') { assert.ok(hatIsValid(T.loop), `${R.seed} : chapeau non simple`); assert.equal(T.wave, 0); continue; }
     assert.ok(pathIsValid(T.group, T.path, T.profiles, T.amp, 60), `${R.seed} : alvéole non simple`);
     assert.equal(T.path.legs.length, 2);
     assert.notEqual(T.path.legs[0].a, T.path.legs[0].b);

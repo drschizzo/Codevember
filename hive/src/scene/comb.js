@@ -39,6 +39,9 @@ export function combUniforms() {
     // cintrage de chaque langue : z = c·x² + l·x − v·x·y + o·sin(f·y + φ) — (c, l, v, o) et (f, φ)
     warpA: uniformArray(Array.from({ length: MAXL }, () => new THREE.Vector4(0, 0, 0, 0)), 'vec4'),
     warpB: uniformArray(Array.from({ length: MAXL }, () => new THREE.Vector4(1, 0, 0, 0)), 'vec4'),
+    // chapeau : (est un chapeau, décalage x, y du pavage dans le rayon) et (a, b) à ψ = 0
+    lobeF: uniformArray(Array.from({ length: MAXL }, () => new THREE.Vector4(0, 0, 0, 0)), 'vec4'),
+    lobeH: uniformArray(Array.from({ length: MAXL }, () => new THREE.Vector4(1, 0, 1, 0)), 'vec4'),
     ringC: uniformArray(Array.from({ length: MAXL }, () => new THREE.Vector4(0, 0, 0, 0)), 'vec4'),
     nLobes: uniform(1),
     // matières
@@ -72,11 +75,12 @@ export function buildComb(U, tex, { lod = 1 } = {}) {
   // ── phase locale ── (k : n° de langue ; LP = lobeP[k])
   const waveAt = (p, LP) => U.wave.mul(LP.w).mul(clamp(dot(p, U.waveDir.xy).add(U.waveDir.z), 0, 1));
   // rangée de la texture pour ψ : (r0, r1, f, n)
-  const rowOf = (psi, LP) => {
+  // (vr : pour le chapeau, la forme de l'instance — 0 chapeau, 1 anti-chapeau — a son propre bloc de rangées)
+  const rowOf = (psi, LP, vr = float(0)) => {
     const n = floor(psi), f = psi.sub(n);
-    const x = f.mul(LP.x), leg = tmin(floor(x), LP.x.sub(1));
+    const x = f.mul(LP.x), leg = tmin(floor(x), LP.x.sub(1)).add(vr);
     const base = LP.y.add(leg.mul(U.RL));
-    const row = base.add(ease(x.sub(leg)).mul(U.RL.sub(1)));
+    const row = base.add(ease(x.sub(leg.sub(vr))).mul(U.RL.sub(1)));
     const r0 = floor(row), r1 = tmin(r0.add(1), base.add(U.RL.sub(1)));
     return { r0, r1, fr: row.sub(r0), n, leg };
   };
@@ -85,13 +89,25 @@ export function buildComb(U, tex, { lod = 1 } = {}) {
   const legHi = (psi, LP) => legLo(psi, LP).add(float(1).div(LP.x)).sub(1e-4);
   const relayOf = (n, k) => U.relay.element(int(k.mul(3).add(clamp(n.negate(), 0, 2)).add(0.5)));
   // deux courbes du contour au point j, à la phase ψ, dans le repère du pavage
-  const curveAt = (j, psi, LP, k) => {
-    const R = rowOf(psi, LP);
+  const curveAt = (j, psi, LP, k, vr) => {
+    const R = rowOf(psi, LP, vr);
     const a = textureLoad(tex.curves, ivec2(int(j), int(R.r0))), b = textureLoad(tex.curves, ivec2(int(j), int(R.r1)));
     const c = mix(a, b, R.fr), h = relayOf(R.n, k);
-    return vec4(iso(h, c.xy), iso(h, c.zw));
+    return { C: vec4(iso(h, c.xy), iso(h, c.zw)), R };
   };
-  const I = attribute('iIso', 'vec4'), Lb = attribute('iLobe', 'vec4');
+  const I = attribute('iIso', 'vec4'), Lb = attribute('iLobe', 'vec4'), Hc = attribute('iHat', 'vec4');
+  // ── chapeau : pas de groupe, donc pas d'isométrie fixe. Chaque tuile porte les coefficients
+  // (A, B) de son premier sommet, qui est en A·a + B·b ; (a, b) se lit avec le contour ──
+  const cmul = (a, b) => vec2(a.x.mul(b.x).sub(a.y.mul(b.y)), a.x.mul(b.y).add(a.y.mul(b.x)));
+  const LFv = U.lobeF.element(int(Lb.w)), LHv = U.lobeH.element(int(Lb.w));
+  const isHat = LFv.x, vrV = I.z.mul(isHat);
+  const isoAt = (R) => {
+    const ab = mix(textureLoad(tex.curves, ivec2(int(U.M.add(2)), int(R.r0))), textureLoad(tex.curves, ivec2(int(U.M.add(2)), int(R.r1))), R.fr);
+    return vec4(I.xy, mix(I.zw, cmul(Hc.xy, ab.xy).add(cmul(Hc.zw, ab.zw)).add(LFv.yz), isHat));
+  };
+  // l'ancre d'une alvéole : un point qui ne bouge jamais, où se lisent son existence et son
+  // contenu — le centre de rotation du relais, ou pour le chapeau sa place à ψ = 0
+  const anchor = () => mix(iso(I, U.ringC.element(int(Lb.w)).xy), cmul(Hc.xy, LHv.xy).add(cmul(Hc.zw, LHv.zw)).add(LFv.yz), isHat).mul(U.cell);
   const lobeBox = U.lobeBox.element(int(Lb.w));
   const LPv = U.lobeP.element(int(Lb.w)); // (paramètres du pavage de cette langue, côté sommets)
   // atlas de la langue au point p (repère de la langue) : (distance au bord, miel, opercule, âge)
@@ -105,26 +121,29 @@ export function buildComb(U, tex, { lod = 1 } = {}) {
   // du relais, qui ne bouge pas. Le bord du rayon est donc fait d'alvéoles entières, toujours les
   // mêmes. Découpé au pixel par le contour du rayon, il entamait des alvéoles qui se déplacent :
   // on les voyait s'ouvrir et se refermer.
-  const existsV = () => step(U.cell.mul(0.5), atlasAt(iso(I, U.ringC.element(int(Lb.w)).xy).mul(U.cell)).x);
+  const existsV = () => step(U.cell.mul(0.5), atlasAt(anchor()).x);
 
   // ── parois ──
   const vWall = varyingProperty('vec4', 'vWall'); // (hauteur relative, distance au bord, cran du bord, âge)
   const wallPos = (phase, withNormal) => {
     const j = positionLocal.x, k = positionLocal.y;
     // première estimation de ψ au centre de l'instance, puis au point lui-même
-    const c0 = iso(I, textureLoad(tex.curves, ivec2(int(U.M), int(LPv.y))).xy).mul(U.cell);
+    const c0 = mix(iso(I, textureLoad(tex.curves, ivec2(int(U.M), int(LPv.y))).xy).mul(U.cell), anchor(), isHat);
     // (l'étape est toujours celle de l'image courante : la position précédente,
     // qui donne le vecteur de mouvement, se lit avec la même numérotation des
     // points — sinon l'anticrénelage temporel dédouble l'alvéole à la porte)
     const psiNow = G.phase.sub(waveAt(c0, LPv));
     const psi0 = clamp(phase.sub(waveAt(c0, LPv)), legLo(psiNow, LPv), legHi(psiNow, LPv));
-    const p0 = iso(I, curveAt(j, psi0, LPv, Lb.w).xy).mul(U.cell);
+    const Q0 = curveAt(j, psi0, LPv, Lb.w, vrV);
+    const p0 = iso(isoAt(Q0.R), Q0.C.xy).mul(U.cell);
     // (tous les points d'une alvéole restent dans l'étape de son centre : à une
     // porte, les deux étapes décrivent la même forme mais ne numérotent pas ses
     // points pareil ; la vitesse y est nulle, la borne ne se voit pas)
     const psi = clamp(phase.sub(waveAt(p0, LPv)), legLo(psiNow, LPv), legHi(psiNow, LPv));
-    const C = curveAt(j, psi, LPv, Lb.w);
-    const axis = iso(I, C.xy).mul(U.cell), inner = iso(I, C.zw).mul(U.cell);
+    const Q = curveAt(j, psi, LPv, Lb.w, vrV), C = Q.C, Ie = isoAt(Q.R);
+    // (rien ne dépasse au-dessus de la barre du haut : le rayon y est attaché, ses alvéoles y sont coupées net)
+    const under = (p) => vec2(p.x, tmin(p.y, 0));
+    const axis = under(iso(Ie, C.xy).mul(U.cell)), inner = under(iso(Ie, C.zw).mul(U.cell));
     const at = atlasAt(axis);
     // (bâti à la main : le bord des parois n'est pas à hauteur constante)
     const wob = sin(axis.x.mul(41).add(axis.y.mul(23))).mul(sin(axis.y.mul(57).sub(axis.x.mul(19)))).mul(0.035).add(sin(axis.x.mul(7.3).add(axis.y.mul(5.1)).add(Lb.w.mul(2))).mul(0.03));
@@ -195,50 +214,51 @@ export function buildComb(U, tex, { lod = 1 } = {}) {
   const vIso = varyingProperty('vec4', 'vIso'); // (l'isométrie de l'instance)
   const vH = varyingProperty('vec4', 'vH');     // (hauteur des parois ici, âge, z relatif, n° de langue)
   const cellState = (phase) => {
-    const c0 = iso(I, textureLoad(tex.curves, ivec2(int(U.M), int(LPv.y))).xy).mul(U.cell);
+    const c0 = mix(iso(I, textureLoad(tex.curves, ivec2(int(U.M), int(LPv.y))).xy).mul(U.cell), anchor(), isHat);
     const psiNow = G.phase.sub(waveAt(c0, LPv));
     const psi = clamp(phase.sub(waveAt(c0, LPv)), legLo(psiNow, LPv), legHi(psiNow, LPv)); // (même étape que l'image courante)
-    const R = rowOf(psi, LPv);
+    const R = rowOf(psi, LPv, vrV), Ie = isoAt(R);
     // centre de l'alvéole (colonne M de la texture)
     const ca = textureLoad(tex.curves, ivec2(int(U.M), int(R.r0))), cb = textureLoad(tex.curves, ivec2(int(U.M), int(R.r1)));
-    const cen = iso(I, iso(relayOf(R.n, Lb.w), mix(ca, cb, R.fr).xy)).mul(U.cell);
+    const cen = iso(Ie, iso(relayOf(R.n, Lb.w), mix(ca, cb, R.fr).xy)).mul(U.cell);
     // boîte de l'alvéole à cet instant (colonne M + 1), élargie d'un rien : le rectangle
     // ne couvre que l'alvéole, pas tout le chemin qu'elle parcourt pendant l'étape
     const ba = textureLoad(tex.curves, ivec2(int(U.M.add(1)), int(R.r0))), bb = textureLoad(tex.curves, ivec2(int(U.M.add(1)), int(R.r1)));
     const tight = vec4(tmin(ba.xy, bb.xy).sub(0.03), tmax(ba.zw, bb.zw).add(0.03));
-    return { psi, R, cen, tight };
+    return { psi, R, cen, tight, Ie };
   };
   const innerPos = (phase, layer, assign) => {
     const S = cellState(phase);
     const local = mix(S.tight.xy, S.tight.zw, positionLocal.xy);
-    const xy = iso(I, iso(relayOf(S.R.n, Lb.w), local)).mul(U.cell);
+    const xy0 = iso(S.Ie, iso(relayOf(S.R.n, Lb.w), local)).mul(U.cell), xy = vec2(xy0.x, tmin(xy0.y, 0));
     const at = atlasAt(S.cen);
     // le contenu (miel, opercule) est celui de la rosette : il se lit au centre de rotation du
     // relais, qui ne bouge pas. Lu au centre de l'alvéole, qui se déplace d'une place par boucle,
     // il ferait s'ouvrir et se refermer les opercules en bordure. L'état est le même pour
     // l'alvéole et pour celle qui la remplace : la boucle reste exacte.
-    const ring = atlasAt(iso(I, U.ringC.element(int(Lb.w)).xy).mul(U.cell));
+    const ring = atlasAt(anchor());
     const H = heightAt(at.x);
     const cap = step(0.5, ring.z);                         // (un opercule est entier ou absent)
     const honey = tmax(ring.y, cap).mul(U.honeyFill);     // (sous un opercule, l'alvéole est pleine)
     const z = layer === 'cap' ? H.mul(0.93).mul(step(0.01, cap)) : H.mul(honey).mul(0.72);
     if (assign) {
       vIn.assign(vec4(xy, honey, cap));
-      vIso.assign(I);
-      vH.assign(vec4(H, at.w, z.div(U.depth), Lb.w));
+      vIso.assign(S.Ie);
+      vH.assign(vec4(H, at.w, z.div(U.depth), Lb.w.add(vrV.mul(0.5)))); // (n° du rayon, + ½ pour un anti-chapeau)
     }
     // (rien à dessiner hors de la langue, ni d'opercule sans opercule)
     const keep = layer === 'cap' ? step(0.01, cap).mul(existsV()) : existsV();
     return vec3(xy.x.add(Lb.x), xy.y.add(Lb.y).add(z.mul(U.tilt)), z.add(warpOf(U, xy, Lb.w).x).add(Lb.z)).mul(keep);
   };
   // distance signée au contour (en unités d'alvéole) au point p de la langue
-  const kF = floor(vH.w.add(0.5));                 // (n° de langue, côté pixels)
+  const kF = floor(vH.w.add(0.25));                // (n° du rayon, côté pixels)
+  const vrF = step(0.25, vH.w.sub(kF));            // (forme : 0 chapeau ou pavage de groupe, 1 anti-chapeau)
   const LPf = U.lobeP.element(int(kF));
   // au point p de la langue : (distance signée, ménisque, gradient du ménisque en x et y de la langue)
   const rot = (m, v) => vec2(m.x.mul(v.x).sub(m.y.mul(v.y)), m.y.mul(v.x).add(m.x.mul(v.y)));
   const fieldAt = (p, phase) => {
     const psi = phase.sub(waveAt(p, LPf));
-    const R = rowOf(psi, LPf);
+    const R = rowOf(psi, LPf, vrF);
     const h = relayOf(R.n, kF);
     const q = isoInv(h, isoInv(vIso, p.div(U.cell)));
     const box = U.boxes.element(int(kF.mul(MAXLEG).add(R.leg).add(0.5)));
@@ -253,12 +273,6 @@ export function buildComb(U, tex, { lod = 1 } = {}) {
     const e = float(1.5).div(U.sdfN);
     const g = vec2(S(vec2(e, 0)).y.sub(S(vec2(e.negate(), 0)).y), S(vec2(0, e)).y.sub(S(vec2(0, e.negate())).y)).div(e.mul(2).mul(box.z));
     return vec4(c.x, c.y, rot(vIso, rot(h, g)));
-  };
-  // distance au bord de la langue, au pixel (l'intérieur s'arrête à la lisière)
-  const edgeAt = (p) => {
-    const lb = U.lobeBox.element(int(vH.w.add(0.5)));
-    const uv = clamp(p.sub(lb.xy).div(lb.z), 0.004, 0.996);
-    return texture(tex.atlas, vec2(uv.x.add(floor(vH.w.add(0.5))).div(U.nLobes), uv.y)).level(0).x;
   };
   const makeInner = (layer) => {
     const m = new THREE.MeshSSSNodeMaterial({ side: THREE.FrontSide });
@@ -330,7 +344,7 @@ export function buildComb(U, tex, { lod = 1 } = {}) {
 }
 
 /** Géométries d'instances : l'anneau de la paroi (M points × RINGS crans) et le rectangle intérieur. */
-export function combGeometries(M, isoArr, lobeArr, count, step = 1) {
+export function combGeometries(M, isoArr, lobeArr, hatArr, count, step = 1) {
   const Mi = M / step;
   const pos = new Float32Array(Mi * RINGS * 3), idx = [];
   for (let k = 0; k < RINGS; k++) for (let j = 0; j < Mi; j++) { const o = (k * Mi + j) * 3; pos[o] = j * step; pos[o + 1] = k; }
@@ -341,6 +355,7 @@ export function combGeometries(M, isoArr, lobeArr, count, step = 1) {
   const mk = (g) => {
     g.setAttribute('iIso', new THREE.InstancedBufferAttribute(isoArr, 4));
     g.setAttribute('iLobe', new THREE.InstancedBufferAttribute(lobeArr, 4));
+    g.setAttribute('iHat', new THREE.InstancedBufferAttribute(hatArr, 4));
     g.instanceCount = count;
     g.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 50);
     return g;

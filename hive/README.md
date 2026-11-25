@@ -1,8 +1,8 @@
 # Hive
 
-*le rayon qui cherche sa cellule.* Trois cadres d'apiculteur en bois clair, présentés comme des pièces de musée : chacun pend par ses oreilles sur deux fines tiges, au-dessus d'un socle. Les abeilles y ont bâti librement, sans cire gaufrée, et pas en hexagones. Chaque rayon est pavé d'une seule forme répétée (des pentagones en fleur, des hexagones en moulinet, des pentagones du Caire), à parois épaisses et bord roulé, et ne remplit qu'une partie de son cadre : il s'arrête sur une lisière de cire fraîche. Une onde descend de la barre du haut. Là où elle passe, les alvéoles se déforment toutes ensemble sans jamais laisser de jour entre elles, deviennent un instant des losanges, des carrés ou des triangles, puis reprennent leur dessin. À la fin de la boucle le rayon est le même, et chaque alvéole a pris la place de sa voisine.
+*le rayon qui cherche sa cellule.* Trois cadres d'apiculteur en bois clair, présentés comme des pièces de musée : chacun pend par ses oreilles sur deux fines tiges, au-dessus d'un socle. Les abeilles y ont bâti librement, sans cire gaufrée, et pas en hexagones. Chaque rayon est pavé d'une seule forme répétée (des pentagones en fleur, des hexagones en moulinet, des pentagones du Caire, ou le « chapeau », qui pave sans jamais se répéter), à parois épaisses et bord roulé, et ne remplit qu'une partie de son cadre : il s'arrête sur une lisière de cire fraîche. Une onde descend de la barre du haut. Là où elle passe, les alvéoles se déforment toutes ensemble sans jamais laisser de jour entre elles, deviennent un instant des losanges, des carrés ou des triangles, puis reprennent leur dessin. À la fin de la boucle le rayon est le même, et chaque alvéole a pris la place de sa voisine.
 
-![Un cadre en bois clair suspendu à deux tiges : un rayon de cire y pend de la barre du haut, alvéoles en pentagones du Caire aux arêtes courbes, miel ambré en haut, vieille cire au milieu, lisière pâle en bas (graine cw1gi9, humeur Cire vierge)](docs/capture.jpg)
+![Un cadre en bois clair suspendu à deux tiges : un rayon de cire y pend de la barre du haut, pavé de « chapeaux », des alvéoles à 13 côtés qui ne dessinent aucun motif répété ; du miel ambré en haut, de la vieille cire au milieu (graine cw1gi9, humeur Cire vierge)](docs/capture.jpg)
 
 Rendu physique en three.js (WebGPU, TSL). La scène est entièrement procédurale : une graine produit une scène. La démarche est dans [docs/concept.md](docs/concept.md).
 
@@ -18,7 +18,7 @@ Rendu physique en three.js (WebGPU, TSL). La scène est entièrement procédural
 
 Sur écran tactile : une touche met en pause, deux touches tirent une nouvelle scène, un appui long masque l'interface.
 
-Paramètres d'URL : `?seed=…` (une scène), `?mood=…`, `?family=…`, `?edges=…` (imposer l'humeur, la famille et les arêtes du rayon de devant), `#r=…` (une scène retouchée, produite par « Copier le lien »), `?ui=0` (sans panneau), `?mobile=1` / `?mobile=0` (version mobile imposée / interdite), `?debug` (outils dans `window.hive` : `shot(phase)`, `send(nom)`, `sheet(graines, phases)`, `film(u0, u1, n)`, `meter()`, `bench(phase, n)`, `seam()`).
+Paramètres d'URL : `?seed=…` (une scène), `?mood=…`, `?family=…` (`moulinet`, `tourniquet`, `rosace`, `chapeau`), `?edges=…` (imposer l'humeur, la famille et les arêtes du rayon de devant), `#r=…` (une scène retouchée, produite par « Copier le lien »), `?ui=0` (sans panneau), `?mobile=1` / `?mobile=0` (version mobile imposée / interdite), `?debug` (outils dans `window.hive` : `shot(phase)`, `send(nom)`, `sheet(graines, phases)`, `film(u0, u1, n)`, `meter()`, `bench(phase, n)`, `seam()`).
 
 Le panneau règle l'humeur et la famille (nouvelle scène de la même graine), la durée de la boucle et le retard de l'onde. Le dossier **Le rayon** règle la taille et la profondeur des alvéoles, la lisière, le niveau du miel, les couleurs de la cire selon son âge, des opercules et du miel, la translucidité et la diffusion. Viennent ensuite la caméra, la lumière et le rendu. L'export produit une boucle MP4 (H.264) rendue image par image, éventuellement accumulée, et une image PNG.
 
@@ -36,7 +36,9 @@ Le groupe de symétrie du pavage est fixe. Ses centres de rotation découpent le
 | **Tourniquet** | p4 | (2, 4, 4) | pentagone CC₄C₄C₄C₄ (pavage du Caire) | carrés, triangles rectangles isocèles |
 | **Rosace** | p6 | (2, 3, 6) | pentagone CC₃C₃C₆C₆ (pavage en fleurons) | cerfs-volants, triangles équilatéraux, triangles isocèles à 120° |
 
-Les arêtes ne sont pas droites : chaque rayon coin → P suit un profil (droit, en S, à crochet, double vague, à lobe, en dent), le même pour tous les rayons issus d'une même classe de centres. Les alvéoles restent superposables.
+Une quatrième famille n'a pas de groupe : le **chapeau**, la tuile apériodique à 13 côtés de Smith, Myers, Kaplan et Goodman-Strauss (2023), qui pave le plan sans jamais se répéter. Ses arêtes sont de deux sortes, a et b, et il se referme séparément sur chacune : en remplaçant a et b par deux nombres complexes, chaque sommet du pavage reste en A·a + B·b et le pavage reste un pavage. La boucle du chapeau est un lacet fermé dans le plan du rapport b/a (ln|b/a| = r₀ + Δr·cos 2πψ, arg(b/a) = Δφ·sin 2πψ) : l'aller et le retour ne passent pas par les mêmes formes. Dès que b/a n'est pas réel, une tuile retournée (une sur huit) n'est plus le reflet des autres : le pavage a deux formes, le chapeau et l'anti-chapeau. L'aire du chapeau varie alors de moins de 6 % et celle de l'anti-chapeau d'environ 20 % : dans cette famille le miel n'est pas conservé exactement, seule l'aire moyenne vaut 1.
+
+Les arêtes des trois pavages de groupe ne sont pas droites : chaque rayon coin → P suit un profil (droit, en S, à crochet, double vague, à lobe, en dent), le même pour tous les rayons issus d'une même classe de centres. Les alvéoles restent superposables.
 
 ### Les portes et le relais
 
@@ -63,11 +65,13 @@ P s'arrête à chaque porte (son temps est adouci par étape) : le rayon tient u
 
 **Le pavage** (`tiling.js`, module pur). Les faces de référence ont l'aire 1/2 (une alvéole a l'aire 1). `outline()` trace les six arêtes d'une alvéole autour d'une face F* : pour chaque côté, la jonction de la face voisine, puis deux rayons. `track()` suit l'alvéole à travers les portes : à la porte de classe a, elle vaut la face centrale réunie à la voisine opposée au coin a, et cette voisine devient la face centrale. Il en sort le relais h. `elements()` énumère le groupe dans un disque.
 
+**Le chapeau** (`hat.js`, module pur). Le pavage vient de la substitution de l'article : quatre métatuiles H, T, P, F ; à chaque niveau, 29 métatuiles du niveau précédent s'assemblent en une pièce d'où l'on découpe les quatre suivantes. Une métatuile H contient 25, 169, 1 156 puis 7 921 chapeaux ; la scène prend le niveau 4. Les coefficients (A, B) de chaque tuile sont propagés d'arête en arête dans le graphe des sommets, et leur écart de fermeture (nul si le pavage est sans trou) est renvoyé avec eux.
+
 **La cuisson** (`bake.js`). Pour l'alvéole suivie, à 48 instants par étape : le contour (96 points), le contour rentré d'une demi-épaisseur de paroi (chaque point glisse le long du gradient de la distance jusqu'à la ligne de niveau, ce qui arrondit les coins), le centre de gravité, et sur une grille de 96 × 96 la distance signée au contour et le champ de ménisque du miel. Un pavage se cuit en ~0,9 s sur une grille de 64² dans Node (mesuré), davantage en 96².
 
-**Les rayons** (`lobes.js`). Un rayon pend de la barre du haut et occupe de 48 à 100 % de la hauteur de son cadre (74 à 92 % pour le cadre de devant). Son contour est une superellipse en U (exposants 3,4 à 6), à peine ondulée. Un atlas par rayon porte quatre champs : la distance au bord (les parois sont plus basses à la lisière, d'un tiers de leur hauteur au moins), le miel, les opercules, et l'âge de la cire (un cœur ancien au milieu, qui s'efface vers le bord). Une nervure centrale mince, juste derrière le fond des alvéoles, ferme le rayon.
+**Les rayons** (`lobes.js`). Un rayon pend de la barre du haut et occupe de 48 à 100 % de la hauteur de son cadre (74 à 92 % pour le cadre de devant). Son contour est une superellipse en U (exposants 3,4 à 6), à peine ondulée. Un atlas par rayon porte quatre champs : la distance au bord (les parois sont plus basses à la lisière, d'un tiers de leur hauteur au moins), le miel, les opercules, et l'âge de la cire (un cœur ancien au milieu, qui s'efface vers le bord). Une nervure centrale mince, juste derrière le fond des alvéoles, ferme le rayon (sauf celui du chapeau, dont le pavage se déforme en bloc : son contour est fait de chapeaux entiers).
 
-**La recette** (`recipe.js`). Trois cadres, trois familles : le cadre de devant porte la famille de la scène, les deux autres portent les deux familles restantes, avec d'autres arêtes et d'autres portes. Le chemin de chaque pavage est vérifié à la génération : si l'alvéole cesse d'être un polygone simple à un instant de la boucle, l'amplitude des arêtes est réduite.
+**La recette** (`recipe.js`). Trois cadres, trois familles différentes, et toujours un chapeau parmi elles. Le cadre de devant porte la famille de la scène (le chapeau une fois sur cinq environ). Si le chapeau n'est pas devant, il prend l'un des deux cadres du fond et l'autre garde un pavage de groupe ; s'il est devant, le fond porte deux pavages de groupe. Chaque cadre a ses arêtes et ses portes. Le chemin de chaque pavage est vérifié à la génération : si l'alvéole cesse d'être un polygone simple à un instant de la boucle, l'amplitude des arêtes est réduite.
 
 ## Scène (`src/scene/`)
 
@@ -75,9 +79,11 @@ P s'arrête à chaque porte (son temps est adouci par étape) : le rayon tient u
 
 - Tous les sommets d'une alvéole lisent la même étape du chemin que son centre : aux portes, les deux étapes décrivent la même forme sans numéroter ses points pareil.
 - La position de l'image précédente (vecteurs de mouvement) est lue dans l'étape de l'image courante, et la phase précédente est déroulée au raccord.
+- Le chapeau n'a pas d'isométrie fixe par instance : chaque tuile porte sa rotation, sa forme (chapeau ou anti-chapeau) et ses coefficients (A, B) ; le shader lit (a, b) avec le contour et place la tuile en A·a + B·b. Son rayon garde plus de marge dans le cadre, car le pavage se déforme en bloc pendant la boucle, et l'onde y est sans retard.
+- Rien ne dépasse au-dessus de la barre du haut : les alvéoles y sont coupées net.
 - Une alvéole existe ou non selon sa rosette : la distance au bord du rayon se lit au centre de rotation du relais. Le bord est donc fait d'alvéoles entières, toujours les mêmes, et la nervure dépasse un peu autour d'elles.
 
-**Contenu par rosette** : l'état d'une alvéole (présente ou non, operculée, miel, vide) se lit au centre de rotation du relais, le point fixe de h. Les alvéoles qui tournent autour d'un même centre partagent donc leur état, et celui-ci ne change jamais. Un opercule est entier ou absent.
+**Contenu par rosette** : l'état d'une alvéole (présente ou non, operculée, miel, vide) se lit au centre de rotation du relais, le point fixe de h (pour le chapeau, à la place de la tuile au début de la boucle). Les alvéoles qui tournent autour d'un même centre partagent donc leur état, et celui-ci ne change jamais. Un opercule est entier ou absent.
 
 **Âge de la cire** : chaque rayon a un cœur ancien (brun, opaque, aux alvéoles sombres), de la cire dorée autour, et une lisière fraîche presque blanche et translucide. L'âge passe par une rampe à trois tons, réglée par humeur (`gold`, `old`, `zoning`).
 
@@ -111,7 +117,7 @@ Sept humeurs, chacune un fond, un bois, un métal, une lumière, une valeur et u
 node --test hive/test/*.test.mjs
 ```
 
-19 tests. Le pavage : faces d'aire 1/2 et angles π/k ; aire de l'alvéole constante à 10⁻¹² près sur toute la boucle ; alvéole simple ; les images par le groupe pavent le plan sans jour ni recouvrement (160 points, 8 instants, 9 chemins) ; relais exact, d'ordre égal à celui du troisième centre, avec un témoin (sans relais, l'alvéole n'est pas revenue à sa place) ; continuité aux portes et au raccord ; vitesse nulle aux portes ; cuisson. La recette : déterminisme, JSON, tout est tiré, un motif par cadre et trois familles, chemins valides, direction artistique (cire plus claire que le miel, fonds contrastés, lampes ≥ 5000 K, gros plan de biais).
+29 tests. Le pavage : faces d'aire 1/2 et angles π/k ; aire de l'alvéole constante à 10⁻¹² près sur toute la boucle ; alvéole simple ; les images par le groupe pavent le plan sans jour ni recouvrement (160 points, 8 instants, 9 chemins) ; relais exact, d'ordre égal à celui du troisième centre, avec un témoin (sans relais, l'alvéole n'est pas revenue à sa place) ; continuité aux portes et au raccord ; vitesse nulle aux portes ; cuisson. Le chapeau : fermeture séparée en a et en b ; 25, 169 et 1 156 tuiles ; coefficients cohérents à 10⁻⁹ près ; pavage sans jour ni recouvrement au point d'origine et à huit instants du lacet (500 points), avec un témoin (l'anti-chapeau pris pour un simple reflet laisse des jours) ; lacet fermé et sans retour sur ses pas ; aire moyenne égale à 1 ; cuisson et instances. La recette : déterminisme, JSON, tout est tiré, un motif par cadre et trois familles, chemins valides, direction artistique (cire plus claire que le miel, fonds contrastés, lampes ≥ 5000 K, gros plan de biais).
 
 ## Performances mesurées
 
@@ -119,9 +125,9 @@ MacBook (Apple Silicon), Chrome, 1920 × 1080, qualité Haute, graine cw1gi9, 20
 
 | Instant | Temps par image |
 | --- | --- |
-| plan d'ensemble (u = 0,03) | 11,4 ms |
-| approche (u = 0,3) | 13,4 ms |
-| gros plan (u = 0,5) | 13,4 ms |
+| plan d'ensemble (u = 0,03) | 11,3 ms |
+| approche (u = 0,3) | 13,6 ms |
+| gros plan (u = 0,5) | 14,3 ms |
 
 Aucune pipeline n'est compilée après le chargement.
 
@@ -141,4 +147,3 @@ Répartition mesurée au gros plan : la scène elle-même ~8 ms, l'occlusion amb
 - La version mobile se charge sans erreur ; aucune image n'en a été capturée, et elle n'a pas été essayée sur un téléphone.
 - Le jour du relais (`src/day.js`) est inscrit mais n'a pas été comparé à la page (`tools/relay-check.html`).
 - Aucun test ne vérifie que le rayon reste à l'intérieur de son cadre ni que les pièces du mobilier ne se traversent ; c'est tenu par construction (le rayon est plus étroit que le cadre) et vu sur les planches.
-- Un prototype de pavage apériodique (la tuile « chapeau ») est dans `tools/proto-chapeau/` ; il n'est pas dans la scène.

@@ -168,18 +168,20 @@ export function createStage(scene, gen, { lite = false } = {}) {
     R = recipe;
     const v = ++version;
     const C = R.comb, NL = C.lobes.length;
-    const n = lite ? 10 : 16, RL = lite ? 32 : 48, sdfN = lite ? 48 : 96, M = 6 * n, W = M + 2;
+    const n = lite ? 10 : 16, RL = lite ? 32 : 48, sdfN = lite ? 48 : 96, M = 6 * n, W = M + 3;
     // une cuisson par langue (son pavage), en deux tranches ; ses instances ; l'atlas des langues
     buildDecor();
     const jobs = [], plan = [];
     let rowBase = 0;
     C.lobes.forEach((l, k) => {
-      const T = l.tiling, L = T.path.legs.length, rows = L * RL;
-      const base = { group: T.group, path: T.path, profiles: T.profiles, amp: T.amp, wall: T.wall, n, RL, sdfN };
+      const T = l.tiling, hat = T.group === 'hat';
+      // (le chapeau : une seule étape dans le temps, mais deux blocs de rangées — chapeau et anti-chapeau)
+      const L = hat ? 1 : T.path.legs.length, rows = (hat ? 2 : L) * RL;
+      const base = hat ? { group: 'hat', loop: T.loop, wall: T.wall, n, RL, sdfN } : { group: T.group, path: T.path, profiles: T.profiles, amp: T.amp, wall: T.wall, n, RL, sdfN };
       const ext = Math.hypot(l.W * 1.3, l.L) / C.cell * 0.62 + 7.3 + Math.hypot(l.off[0], l.off[1]);
       const entry = { k, L, rows, rowBase, parts: [], inst: null };
       for (let c = 0; c < 2; c++) jobs.push(gen.request({ ...base, rows: [Math.floor(rows * c / 2), Math.floor(rows * (c + 1) / 2)] }, 'tiling').then((o) => { entry.parts.push(o); }));
-      jobs.push(gen.request({ group: T.group, path: T.path, profiles: T.profiles, amp: T.amp, R: ext }, 'instances').then((o) => { entry.inst = o; }));
+      jobs.push(gen.request(hat ? { group: 'hat', level: 4, rot: T.rot, loop: T.loop } : { group: T.group, path: T.path, profiles: T.profiles, amp: T.amp, R: ext }, 'instances').then((o) => { entry.inst = o; }));
       plan.push(entry);
       rowBase += rows;
     });
@@ -205,7 +207,7 @@ export function createStage(scene, gen, { lite = false } = {}) {
       // ── uniformes de structure ──
       U.RL.value = RL; U.rows.value = rowsAll; U.M.value = M; U.sdfN.value = sdfN; U.nLobes.value = NL;
       const mul = (a, q) => ({ c: a.c * q.c - a.s * q.s, s: a.s * q.c + a.c * q.s, tx: a.c * q.tx - a.s * q.ty + a.tx, ty: a.s * q.tx + a.c * q.ty + a.ty });
-      const isoA = [], lobeA = [], isoB = [], lobeB = [];
+      const isoA = [], lobeA = [], hatA = [], isoB = [], lobeB = [], hatB = [];
       for (const e of plan) {
         const l = C.lobes[e.k], T = l.tiling, k = e.k, inst = e.inst;
         U.lobeP.array[k].set(e.L, e.rowBase, T.wall, T.wave);
@@ -218,7 +220,21 @@ export function createStage(scene, gen, { lite = false } = {}) {
         U.lobeBox.array[k].set(lob.boxes[4 * k], lob.boxes[4 * k + 1], lob.boxes[4 * k + 2], 0);
         { const det = (1 - h.c) ** 2 + h.s ** 2 || 1; U.ringC.array[k].set(((1 - h.c) * h.tx - h.s * h.ty) / det, (h.s * h.tx + (1 - h.c) * h.ty) / det, 0, 0); } // (point fixe du relais)
         // les éléments du groupe qui couvrent la langue
-        const ox = l.off[0], oy = l.off[1] - l.L / 2 / C.cell; // (décalage du pavage dans la langue, en alvéoles)
+        const ox = l.off[0], oy = l.off[1] - l.L / 2 / C.cell; // (décalage du pavage dans le rayon, en alvéoles)
+        const isHat = T.group === 'hat';
+        U.lobeF.array[k].set(isHat ? 1 : 0, ox, oy, 0);
+        if (isHat) U.lobeH.array[k].set(...inst.ab0);
+        const mrg = 2.4 * C.cell;
+        if (isHat) {
+          for (let i = 0; i < inst.count; i++) {
+            const x = (inst.pos[2 * i] + ox) * C.cell, y = (inst.pos[2 * i + 1] + oy) * C.cell;
+            if (y > mrg || y < -l.L - mrg || Math.abs(x) > l.W * 1.25 + mrg) continue;
+            (k === 0 ? isoA : isoB).push(inst.iso[4 * i], inst.iso[4 * i + 1], inst.iso[4 * i + 2], 0);
+            (k === 0 ? lobeA : lobeB).push(l.x, C.top, l.z, k);
+            (k === 0 ? hatA : hatB).push(inst.hat[4 * i], inst.hat[4 * i + 1], inst.hat[4 * i + 2], inst.hat[4 * i + 3]);
+          }
+          continue;
+        }
         for (let i = 0; i < inst.count; i++) {
           const c = inst.iso[4 * i], s = inst.iso[4 * i + 1], tx = inst.iso[4 * i + 2] + ox, ty = inst.iso[4 * i + 3] + oy;
           const x = (c * inst.ref[0] - s * inst.ref[1] + tx) * C.cell, y = (s * inst.ref[0] + c * inst.ref[1] + ty) * C.cell;
@@ -226,21 +242,22 @@ export function createStage(scene, gen, { lite = false } = {}) {
           if (y > m || y < -l.L - m || Math.abs(x) > l.W * 1.25 + m) continue;
           (k === 0 ? isoA : isoB).push(c, s, tx, ty);
           (k === 0 ? lobeA : lobeB).push(l.x, C.top, l.z, k);
+          (k === 0 ? hatA : hatB).push(0, 0, 0, 0);
         }
       }
       const mats = buildComb(U, { curves: tc, sdf: ts, atlas: ta });
       disposables.push(mats.wall, mats.floor, mats.cap);
-      const addSet = (isoArr, lobeArr, step) => {
+      const addSet = (isoArr, lobeArr, hatArr, step) => {
         if (!isoArr.length) return;
-        const geo = combGeometries(M, new Float32Array(isoArr), new Float32Array(lobeArr), isoArr.length / 4, step);
+        const geo = combGeometries(M, new Float32Array(isoArr), new Float32Array(lobeArr), new Float32Array(hatArr), isoArr.length / 4, step);
         disposables.push(geo.ring, geo.quad);
         const walls = new THREE.Mesh(geo.ring, mats.wall); walls.castShadow = walls.receiveShadow = true;
         const floors = new THREE.Mesh(geo.quad, mats.floor); floors.receiveShadow = true;
         const caps = new THREE.Mesh(geo.quad, mats.cap); caps.receiveShadow = true;
         for (const o of [walls, floors, caps]) { o.frustumCulled = false; group.add(o); }
       };
-      addSet(isoA, lobeA, 1);
-      addSet(isoB, lobeB, 2); // (les langues du fond : un point sur deux)
+      addSet(isoA, lobeA, hatA, 1);
+      addSet(isoB, lobeB, hatB, 2); // (les langues du fond : un point sur deux)
       // ── nervures ──
       const pm = new THREE.MeshSSSNodeMaterial({ side: THREE.DoubleSide });
       const gr = fbm(positionWorld.mul(40), 3);
@@ -257,6 +274,8 @@ export function createStage(scene, gen, { lite = false } = {}) {
       pm.thicknessDistortionNode = float(0.3); pm.thicknessAmbientNode = U.sss; pm.thicknessAttenuationNode = float(1); pm.thicknessPowerNode = float(3); pm.thicknessScaleNode = float(0.7);
       disposables.push(pm);
       lob.plates.forEach((p, k) => {
+        // (pas de nervure pour le chapeau : son pavage se déforme en bloc, elle ne le suivrait pas)
+        if (C.lobes[k].tiling.group === 'hat') return;
         const g = new THREE.BufferGeometry();
         g.setAttribute('position', new THREE.BufferAttribute(p.position, 3));
         g.setAttribute('normal', new THREE.BufferAttribute(p.normal, 3));

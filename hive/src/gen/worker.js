@@ -2,14 +2,14 @@
 // instances du groupe, les langues de cire. Fonctions pures, importables
 // depuis Node (tests, bancs d'essai).
 import { buildNoiseVolume } from '../../../shared/gen/noisevol.js';
-import { bakeTiling, bakeInstances } from './bake.js';
+import { bakeTiling, bakeInstances, bakeHatInstances } from './bake.js';
 import { buildLobes } from './lobes.js';
 
 function build({ spec, what }) {
   switch (what) {
     case 'noise': return buildNoiseVolume(spec.seed);
     case 'tiling': return bakeTiling(spec);
-    case 'instances': return bakeInstances(spec.group, spec.path, spec.profiles, spec.R, spec.amp);
+    case 'instances': return spec.group === 'hat' ? bakeHatInstances(spec) : bakeInstances(spec.group, spec.path, spec.profiles, spec.R, spec.amp);
     case 'lobes': return buildLobes(spec);
     default: throw new Error(`inconnu : ${what}`);
   }

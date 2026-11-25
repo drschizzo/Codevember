@@ -10,6 +10,7 @@
 //   fond de l'alvéole, le miel (ménisque) et l'opercule.
 // Les instances du pavage sont les images de cette alvéole par le groupe.
 import { track, outline, elements, area } from './tiling.js';
+import { hatPatch, hatParams, hatShape, NE } from './hat.js';
 
 // demi-flottant (IEEE 754 binary16)
 const f32 = new Float32Array(1), u32 = new Uint32Array(f32.buffer);
@@ -85,41 +86,69 @@ export function inset(poly, n, d, out, o) {
  * spec : { group, path, profiles, amp, wall (demi-épaisseur, en unités d'alvéole),
  *          n (points par arête), RL (instants par étape), sdfN, rows:[r0, r1] (tranche à cuire) }
  */
-export function bakeTiling(spec) {
-  const { group, path, profiles, amp = 1, wall = 0.04, n = 16, RL = 48, sdfN = 64 } = spec;
+// D'où vient le contour de la rangée r : un pavage de groupe (une étape du chemin par bloc
+// de RL rangées) ou le chapeau (deux blocs : le chapeau, puis l'anti-chapeau).
+function provider(spec, M, RL) {
+  if (spec.group === 'hat') {
+    const ne = Math.floor(M / NE);
+    return {
+      L: 2, relay: { c: 1, s: 0, tx: 0, ty: 0, err: 0 },
+      row(r, tmp) {
+        const v = Math.floor(r / RL), P = hatParams(spec.loop, (r - v * RL) / (RL - 1));
+        const S = hatShape(P.a, P.b, v);
+        let o = 0;
+        for (let e = 0; e < NE; e++) {
+          const f = (e + 1) % NE;
+          for (let i = 0; i < ne; i++) { const t = i / ne; tmp[o++] = S[2 * e] + (S[2 * f] - S[2 * e]) * t; tmp[o++] = S[2 * e + 1] + (S[2 * f + 1] - S[2 * e + 1]) * t; }
+        }
+        while (o < 2 * M) { tmp[o++] = S[0]; tmp[o++] = S[1]; } // (points en trop : confondus avec le premier)
+        // (sens direct, comme les autres pavages : les faces des parois en dépendent)
+        if (area(tmp) < 0) for (let i = 0, j = M - 1; i < j; i++, j--) { const x = tmp[2 * i], y = tmp[2 * i + 1]; tmp[2 * i] = tmp[2 * j]; tmp[2 * i + 1] = tmp[2 * j + 1]; tmp[2 * j] = x; tmp[2 * j + 1] = y; }
+        return { leg: v, extra: [P.a[0], P.a[1], P.b[0], P.b[1]] };
+      },
+    };
+  }
+  const { group, path, profiles, amp = 1 } = spec, n = M / 6;
   const tr = track(group, path);
-  const L = path.legs.length, M = 6 * n, rows = L * RL;
+  return {
+    L: path.legs.length, relay: tr.relay,
+    row(r, tmp) {
+      const leg = Math.floor(r / RL), s = (r - leg * RL) / (RL - 1), g = path.legs[leg];
+      const ea = [0, 0, 0], eb = [0, 0, 0]; ea[g.a] = 1; eb[g.b] = 1;
+      const u = 1 - s;
+      outline(tr.centers[leg], [0, 1, 2].map((k) => u * u * ea[k] + 2 * u * s * g.q[k] + s * s * eb[k]), profiles, n, amp, tmp);
+      return { leg, extra: [0, 0, 0, 0] };
+    },
+  };
+}
+
+export function bakeTiling(spec) {
+  const { wall = 0.04, n = 16, RL = 48, sdfN = 64 } = spec;
+  const M = 6 * n;
+  const prov = provider(spec, M, RL);
+  const L = prov.L, rows = L * RL;
   const r0 = spec.rows ? spec.rows[0] : 0, r1 = spec.rows ? spec.rows[1] : rows;
-  // boîtes par étape (carrées), sur un échantillonnage grossier de l'étape entière
+  // boîtes par bloc (carrées), sur un échantillonnage grossier du bloc entier
   const boxes = new Float32Array(L * 4);
   const tmp = new Float64Array(2 * M);
-  const rowBeta = (r) => {
-    const leg = Math.floor(r / RL), s = (r - leg * RL) / (RL - 1);
-    const g = path.legs[leg];
-    const ea = [0, 0, 0], eb = [0, 0, 0]; ea[g.a] = 1; eb[g.b] = 1;
-    const u = 1 - s;
-    return { leg, beta: [0, 1, 2].map((k) => u * u * ea[k] + 2 * u * s * g.q[k] + s * s * eb[k]) };
-  };
   for (let l = 0; l < L; l++) {
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     for (let k = 0; k < 17; k++) {
-      const r = l * RL + Math.round(k / 16 * (RL - 1));
-      const { leg, beta } = rowBeta(r);
-      outline(tr.centers[leg], beta, profiles, n, amp, tmp);
+      prov.row(l * RL + Math.round(k / 16 * (RL - 1)), tmp);
       for (let i = 0; i < M; i++) { x0 = Math.min(x0, tmp[2 * i]); x1 = Math.max(x1, tmp[2 * i]); y0 = Math.min(y0, tmp[2 * i + 1]); y1 = Math.max(y1, tmp[2 * i + 1]); }
     }
     const size = Math.max(x1 - x0, y1 - y0) + 0.16;
     boxes[4 * l] = (x0 + x1) / 2 - size / 2; boxes[4 * l + 1] = (y0 + y1) / 2 - size / 2; boxes[4 * l + 2] = size; boxes[4 * l + 3] = 0;
   }
   const nr = r1 - r0;
-  const W = M + 2; // (colonne M : le centre de l'alvéole ; colonne M + 1 : sa boîte, à cet instant)
+  const W = M + 3; // (colonne M : le centre de l'alvéole ; M + 1 : sa boîte à cet instant ; M + 2 : (a, b) du chapeau)
   const curves = new Float32Array(nr * W * 4);
   const sdf = new Uint16Array(nr * sdfN * sdfN * 2); // (distance signée, ménisque)
   const lam = spec.capillary ?? 0.11, segL = new Float64Array(M), midX = new Float64Array(M), midY = new Float64Array(M);
   for (let r = r0; r < r1; r++) {
-    const { leg, beta } = rowBeta(r);
-    outline(tr.centers[leg], beta, profiles, n, amp, tmp);
+    const { leg, extra } = prov.row(r, tmp);
     const o = (r - r0) * W * 4;
+    curves.set(extra, o + 4 * M + 8);
     for (let i = 0; i < M; i++) { curves[o + 4 * i] = tmp[2 * i]; curves[o + 4 * i + 1] = tmp[2 * i + 1]; }
     inset(tmp, M, wall, curves, o);
     {
@@ -154,7 +183,7 @@ export function bakeTiling(spec) {
       }
     }
   }
-  return { curves, sdf, boxes, M, W, rows, r0, r1, RL, L, sdfN, relay: tr.relay, wall };
+  return { curves, sdf, boxes, M, W, rows, r0, r1, RL, L, sdfN, relay: prov.relay, wall };
 }
 
 /** Les instances : isométries du groupe dans un disque (c, s, tx, ty), et le centre de l'alvéole de référence. */
@@ -166,4 +195,27 @@ export function bakeInstances(group, path, profiles, R, amp = 1) {
   const c = tr.centers[0];
   const ref = [(c[0][0] + c[1][0] + c[2][0]) / 3, (c[0][1] + c[1][1] + c[2][1]) / 3];
   return { iso, count: els.length, ref, relay: tr.relay };
+}
+
+/**
+ * Les instances d'un pavage chapeau : rotation (c, s) et forme (0 chapeau, 1 anti-chapeau),
+ * coefficients (A, B) de leur premier sommet, recentrés sur une tuile du milieu (elle reste
+ * à l'origine pendant toute la boucle) et tournés de `rot`. pos : leur place à ψ = 0.
+ */
+export function bakeHatInstances({ level = 4, rot = 0, loop }) {
+  const H = hatPatch(level), n = H.tiles.length;
+  const P0 = hatParams(loop, 0);
+  const at = (T) => [T.A[0] * P0.a[0] - T.A[1] * P0.a[1] + T.B[0] * P0.b[0] - T.B[1] * P0.b[1], T.A[0] * P0.a[1] + T.A[1] * P0.a[0] + T.B[0] * P0.b[1] + T.B[1] * P0.b[0]];
+  let cx = 0, cy = 0; for (const T of H.tiles) { const p = at(T); cx += p[0]; cy += p[1]; } cx /= n; cy /= n;
+  let mid = H.tiles[0], best = Infinity; for (const T of H.tiles) { const p = at(T), d = Math.hypot(p[0] - cx, p[1] - cy); if (d < best) { best = d; mid = T; } }
+  const A0 = mid.A.slice(), B0 = mid.B.slice(), rc = Math.cos(rot), rs = Math.sin(rot);
+  const iso = new Float32Array(n * 4), hat = new Float32Array(n * 4), pos = new Float32Array(n * 2);
+  H.tiles.forEach((T, i) => {
+    const ax = T.A[0] - A0[0], ay = T.A[1] - A0[1], bx = T.B[0] - B0[0], by = T.B[1] - B0[1];
+    const A = [rc * ax - rs * ay, rs * ax + rc * ay], B = [rc * bx - rs * by, rs * bx + rc * by];
+    iso.set([rc * T.c - rs * T.s, rs * T.c + rc * T.s, T.mir, 0], 4 * i);
+    hat.set([A[0], A[1], B[0], B[1]], 4 * i);
+    pos.set(at({ A, B }), 2 * i);
+  });
+  return { iso, hat, pos, count: n, err: H.err, ab0: [P0.a[0], P0.a[1], P0.b[0], P0.b[1]], relay: { c: 1, s: 0, tx: 0, ty: 0 } };
 }
