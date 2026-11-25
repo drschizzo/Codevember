@@ -53,6 +53,14 @@ npm run new -- marees "Marées" "le sous-titre"   # échafaude une scène
 
 Un changement dans `shared/` touche toutes les scènes : [`tools/regress.html`](tools/regress.html) rend chaque scène à taille et phases fixes avant et après, et `tools/regress.py` compare les deux séries au bruit propre de chaque rendu. Les tests et le contrôle de cohérence tournent avant chaque publication.
 
+## [Hive](hive/)
+
+*le rayon qui cherche sa cellule.* Trois cadres d'apiculteur en bois clair, exposés comme des pièces de musée sur de fines tiges. Dans chacun pend un rayon de cire à moitié bâti, dont les alvéoles ne sont pas des hexagones : chaque rayon est pavé d'une seule forme répétée (pentagones en fleur, hexagones en moulinet, pentagones du Caire), avec du miel, des opercules, un cœur de vieille cire et une lisière fraîche. Une onde descend de la barre du haut : les alvéoles se déforment toutes ensemble sans laisser de jour, deviennent un instant losanges, carrés ou triangles, puis retrouvent leur dessin, chaque alvéole à la place de sa voisine. Un seul sommet libre par pavage, dans un triangle de centres de rotation ; l'aire de chaque alvéole reste exacte.
+
+[Démo en ligne](https://drschizzo.github.io/Codevember/hive/) · [version légère](https://drschizzo.github.io/Codevember/hive/?mobile=1) · [documentation](https://drschizzo.github.io/Codevember/hive/explainer.html) · [concept](hive/docs/concept.md)
+
+[![Hive](hive/docs/capture.jpg)](https://drschizzo.github.io/Codevember/hive/)
+
 ## [Burrow](burrow/)
 
 La coupe vivante. Sur une longue table, devant de hautes portes-fenêtres, des tranches de sable coloré prises entre deux verres. La caméra longe l'étagère : chaque tranche entre neuve, se creuse en passant (des fourmis, ou des vers, descendent au front et remontent leurs déblais), et sort avec son réseau et son tumulus achevés. Le tumulus est fait du sable sorti des galeries, grain pour grain : il empile les couches à l'envers. Côté technique : quatre motifs de sable (lits, montagnes de sablier, dunes, éventail) et des grains de plusieurs natures (sable fin, moyen ou gros, gravier, verre pilé, billes de verre, nacre, paillettes de mica) ; réseau par marche aléatoire avec puits, branches, galeries d'étage, chambres en grappe et boucles ; tumulus par roulement de boulettes de sable humide, volume conservé et ordre des couches inversé, testés ; rendu d'un maillage déplacé dans le verre, grains de Voronoï à frontières grenues, ombre propre des galeries par marche dans la carte de profondeur ; poussières dans les rayons des fenêtres ; étagère qui boucle par translation de trois tranches ; 70 images/s à 2,8 Mpx.

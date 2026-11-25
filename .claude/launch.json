@@ -384,6 +384,16 @@
         "burrow"
       ],
       "port": 8280
+    },
+    {
+      "name": "hive",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        ".claude/serve.py",
+        "8290",
+        "hive"
+      ],
+      "port": 8290
     }
   ]
 }

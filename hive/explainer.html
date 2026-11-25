@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#050506">
+  <title>Hive · défis techniques</title>
+  <meta name="description" content="Comment Hive est calculé : des pavages d’une seule forme qui se déforment sans laisser de jour, le passage par des pavages dégénérés, le rendu d’une alvéole par instances, le ménisque du miel.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+  <link rel="stylesheet" href="../home/explainer.css">
+</head>
+<body>
+  <nav class="top"><div class="in">
+    <a href="../">Codevember</a><span class="day">Day 28</span><span class="crumb">Hive · défis techniques</span>
+    <span class="sp"></span><a class="open" href="./">Ouvrir la scène</a>
+  </div></nav>
+
+  <main>
+    <header class="hero">
+      <div class="kicker">Day 28 · Hive · le rayon qui cherche sa cellule</div>
+      <h1>Comment un rayon de cire change de pavage sans laisser un seul jour entre ses alvéoles</h1>
+      <p class="lede">Trois cadres d’apiculteur sont exposés comme des pièces de musée. Dans chacun pend un rayon de cire à moitié bâti. Ses alvéoles ne sont pas des hexagones : chaque rayon est pavé d’une seule forme, répétée, et cette forme change pendant toute la boucle. La difficulté tient en une phrase : à chaque instant, toutes les alvéoles doivent rester identiques entre elles et se toucher partout. Le programme l’obtient avec un seul point mobile par pavage, puis dessine des milliers d’alvéoles à partir d’une seule.</p>
+    </header>
+
+    <figure class="cover">
+      <img src="docs/capture.jpg" alt="Un cadre en bois clair suspendu à deux tiges, où pend un rayon de cire en U : miel ambré en haut, vieille cire au milieu, lisière pâle en bas" width="1600" height="1000">
+      <figcaption>Graine cw1gi9. Le rayon pend de la barre du haut et s’arrête sur une lisière pâle. En haut, le miel renvoie la fenêtre dans chaque alvéole ; au milieu, la vieille cire est plus sombre.</figcaption>
+    </figure>
+
+    <nav class="toc" aria-label="Sommaire"><h2>Sommaire</h2><ol></ol></nav>
+
+    <article>
+      <section id="sommet-libre">
+        <h2><span class="n">01</span>Un seul point mobile décide de la forme de toutes les alvéoles</h2>
+        <span class="src">src/gen/tiling.js · outline()</span>
+        <p>Paver un plan avec une seule forme est facile si la forme est fixe. Ici elle doit bouger, et rester une forme qui pave. Déformer un hexagone à la main échoue aussitôt : dès qu’un côté avance, il manque de la place au voisin ou il en reste trop.</p>
+        <p>Le programme part de la symétrie plutôt que de la forme. Un pavage régulier a des centres de rotation : des points autour desquels on peut tourner tout le dessin d’un tiers, d’un quart ou d’un sixième de tour sans le changer. Ces centres découpent le plan en triangles de deux sortes, images miroir l’une de l’autre. Appelons-les F et F*.</p>
+        <p>La règle tient en une ligne. Dans chaque triangle F, on place un point au même endroit (les mêmes poids barycentriques \(\beta\)), et on le relie aux trois coins de son triangle. Les alvéoles sont les polygones qui entourent les triangles F*. Comme tous les triangles F sont images les uns des autres par les rotations du groupe, toutes les alvéoles sont superposables, où que soit le point.</p>
+        <div class="eq">\[ \text{aire}(\text{alvéole}) = \text{aire}(F) + \text{aire}(F^*) = 1 \quad \text{pour tout } \beta \]</div>
+        <p>L’aire ne dépend pas de la position du point : l’alvéole contient toujours un triangle de chaque sorte. Le miel n’a donc ni à monter ni à déborder quand la forme change.</p>
+        <div class="tbl"><table>
+          <thead><tr><th>Famille</th><th>Groupe</th><th>Angles du triangle</th><th>Alvéole</th></tr></thead>
+          <tbody>
+            <tr><td>Moulinet</td><td>p3</td><td>60°, 60°, 60°</td><td>hexagone</td></tr>
+            <tr><td>Tourniquet</td><td>p4</td><td>90°, 45°, 45°</td><td>pentagone (pavage du Caire)</td></tr>
+            <tr><td>Rosace</td><td>p6</td><td>90°, 60°, 30°</td><td>pentagone (pavage en fleurons)</td></tr>
+          </tbody>
+        </table></div>
+        <p>Un coin d’ordre 2 (demi-tour) n’est pas un sommet du pavage : l’arête le traverse. C’est pourquoi les triangles à angle droit donnent des pentagones.</p>
+        <figure id="fig-point"><figcaption><b>Faire glisser le point.</b> Le triangle clair est une face F, le point s’y déplace à la souris. Toutes les alvéoles suivent et restent identiques. Près d’un coin, elles tendent vers un pavage classique. La démo trace des arêtes droites.</figcaption></figure>
+        <div class="note check"><b>Ce que les tests vérifient</b><p>Sur neuf chemins et huit instants, 160 points tirés au hasard tombent chacun dans une alvéole et une seule. L’aire reste égale à 1 à 10⁻¹² près sur 200 instants de la boucle.</p></div>
+      </section>
+
+      <section id="aretes">
+        <h2><span class="n">02</span>Les arêtes se courbent sans casser le pavage</h2>
+        <span class="src">src/gen/tiling.js · profile(), spoke()</span>
+        <p>Des arêtes droites donnent des polygones sages. Le thème demande des formes complexes. On peut courber une arête à condition que l’alvéole d’en face reçoive exactement la même courbe.</p>
+        <p>Chaque arête est un rayon qui va d’un centre de rotation au point libre. Le programme lui donne un profil : un écart perpendiculaire à la corde, en part de sa longueur, nul aux deux bouts. Tous les rayons issus d’une même classe de centres portent le même profil, mesuré dans le même sens. Une rotation du groupe envoie donc chaque rayon courbe sur un autre rayon courbe, et les alvéoles restent superposables.</p>
+        <div class="eq">\[ f(t) = a_1 \sin(\pi t) + a_2 \sin(2\pi t) + a_3 \sin(3\pi t) \]</div>
+        <p>\(a_1\) donne un ventre, \(a_2\) un S, \(a_3\) une double vague. Les amplitudes vont de 0,03 à 0,18. Comme l’écart est proportionnel à la corde, la courbe s’efface d’elle-même quand le rayon raccourcit.</p>
+        <div class="note trap"><b>Une courbe trop ample se recoupe</b><p>Deux rayons voisins peuvent se croiser quand le point libre s’approche d’un coin. La recette parcourt donc toute la boucle à la génération (96 instants) et vérifie que l’alvéole reste un polygone simple. Sinon elle réduit l’amplitude de 20 % et recommence. Sur 300 graines, moins de 15 % des pavages sont adoucis de plus de 40 %.</p></div>
+        <figure id="fig-aretes"><figcaption><b>Trois profils, un par classe de centres.</b> Les curseurs règlent le ventre du premier, le S du deuxième, la double vague du troisième. Le pavage reste jointif pour toutes les valeurs.</figcaption></figure>
+      </section>
+
+      <section id="portes">
+        <h2><span class="n">03</span>Le point sort de son triangle par un coin, et le rayon ne rebrousse jamais chemin</h2>
+        <span class="src">src/gen/tiling.js · track()</span>
+        <p>Si le point libre fait un aller-retour dans son triangle, le film se rembobine. Pour l’éviter, il faut un chemin qui revienne au même pavage par une autre route.</p>
+        <p>Quand le point arrive sur un coin, toutes les jonctions voisines se rassemblent sur ce centre. Le pavage dégénère en un pavage connu : des losanges pour le moulinet, des carrés ou des triangles rectangles pour le tourniquet, des cerfs-volants ou des triangles pour la rosace. Ce pavage dégénéré est le même, que le point vienne d’un triangle F ou d’un triangle F*. Le point peut donc entrer par un coin dans une sorte de triangle et en ressortir dans l’autre. Le programme appelle ce coin une porte.</p>
+        <p>La boucle a deux étapes : de la porte \(a\) à la porte \(b\) dans F, puis de \(b\) à \(a\) dans F*. Le pavage est revenu à son dessin. L’alvéole que l’on suit, elle, a tourné autour du centre de la troisième classe :</p>
+        <div class="eq">\[ T(\psi + 1) = h \cdot T(\psi), \qquad h = \text{rotation de } \tfrac{2\pi}{k} \text{ autour du troisième centre} \]</div>
+        <p>où \(k\) est l’ordre de ce centre. Chaque alvéole finit à la place de sa voisine : 60° autour d’un centre d’ordre 6, 90°, 120° ou 180° ailleurs. À chaque porte, la vitesse du point s’annule (une courbe d’adoucissement par étape), et le rayon tient un instant sa forme dégénérée.</p>
+        <p>Le contenu d’une alvéole (operculée, pleine de miel, vide) doit survivre à ce relais. Il se lit donc au centre de la rotation \(h\), un point qui ne bouge pas : les alvéoles qui tournent autour d’un même centre partagent leur état. Lu au centre de l’alvéole, qui se déplace d’une place par boucle, il ferait s’ouvrir et se refermer les opercules à la limite du miel.</p>
+        <figure id="fig-portes"><figcaption><b>Suivre une alvéole.</b> Le curseur parcourt deux boucles. L’alvéole teintée est toujours la même : à la fin de la première boucle, elle occupe la place d’une voisine. Les boutons changent de famille.</figcaption></figure>
+        <div class="note check"><b>Ce que les tests vérifient</b><p>À \(\psi = 1\), l’alvéole suivie est l’image de celle de \(\psi = 0\) par \(h\), à 10⁻⁷ près, et \(h^k\) est l’identité. Un test témoin vérifie que sans \(h\) l’alvéole n’est pas revenue à sa place.</p></div>
+      </section>
+
+      <section id="onde">
+        <h2><span class="n">04</span>Une onde descend le rayon : chaque point a sa propre phase</h2>
+        <span class="src">src/scene/comb.js · waveAt()</span>
+        <p>Si toutes les alvéoles changeaient au même instant, une image fixe ne montrerait qu’un état. Le film retarde le changement selon la hauteur : le haut du rayon est en avance sur le bas.</p>
+        <div class="eq">\[ \psi(x) = u - r \cdot w(x) \]</div>
+        <p>\(u\) est la phase de la boucle, \(w\) croît de 0 à l’attache jusqu’à 1 vers la lisière, et \(r\) vaut de 0,3 à 0,6 boucle. Une même image montre alors plusieurs états du pavage, comme une déformation de parquet.</p>
+        <p>Deux alvéoles voisines n’ont plus exactement la même phase. Leur paroi commune resterait pourtant en un seul morceau si chaque point de la paroi calculait sa propre phase d’après sa position. C’est ce que fait le vertex shader : il estime la position du sommet à la phase du centre de l’alvéole, puis recalcule la phase en ce point.</p>
+        <figure id="fig-onde"><figcaption><b>Le retard de l’onde.</b> À zéro, tout le rayon change ensemble. En l’augmentant, le haut prend de l’avance. La démo donne une phase par alvéole (la scène en donne une par sommet), d’où les petits jours aux forts retards.</figcaption></figure>
+      </section>
+
+      <section id="instances">
+        <h2><span class="n">05</span>Le GPU ne reçoit qu’une alvéole par rayon</h2>
+        <span class="src">src/gen/bake.js · bakeTiling() · src/scene/comb.js</span>
+        <p>Un rayon porte plusieurs centaines d’alvéoles, dont les parois bougent à chaque image. Recalculer et renvoyer leur géométrie depuis le processeur coûterait trop cher.</p>
+        <p>Toutes les alvéoles d’un rayon sont la même forme, déplacée par une rotation et une translation. Le programme cuit donc une seule alvéole : son contour en 96 points, à 48 instants par étape du chemin, rangé dans une texture (une rangée par instant). Chaque instance porte quatre nombres, sa rotation et sa translation. Le vertex shader lit le contour à la phase du sommet, le déplace, et bâtit la paroi. Le fond, le miel et l’opercule sont un rectangle par alvéole, serré sur la boîte de l’alvéole à cet instant et découpé au pixel.</p>
+        <p>La paroi a une épaisseur. La cuisson calcule un second contour, rentré d’une demi-épaisseur : chaque point glisse le long du gradient de la distance au contour jusqu’à la bonne ligne de niveau, ce qui arrondit les coins. Le shader monte la face intérieure entre les deux contours, puis roule le bord en quart de rond jusqu’à l’axe du mur. L’alvéole voisine fait l’autre moitié.</p>
+        <figure id="fig-paroi"><figcaption><b>Les deux contours.</b> En clair l’axe du mur, en couleur la face intérieure. Le curseur règle la demi-épaisseur (0,034 à 0,046 dans la scène). Aux pointes, le contour rentré s’arrondit.</figcaption></figure>
+        <div class="note trap"><b>Deux étapes, deux numérotations</b><p>À une porte, les deux étapes décrivent la même forme, mais leurs 96 points ne sont pas rangés pareil : des points confondus sur un coin dans l’une sont étalés dans l’autre. Sans précaution, l’onde fait lire à une même alvéole la moitié de ses sommets dans chaque étape, et la paroi se déchire dans une bande qui descend. Tous les sommets d’une alvéole lisent donc l’étape de son centre. La position de l’image précédente, qui donne les vecteurs de mouvement, se lit aussi dans l’étape de l’image courante. Sinon l’anticrénelage temporel dédouble l’alvéole pendant une image.</p></div>
+      </section>
+
+      <section id="miel">
+        <h2><span class="n">06</span>La surface du miel est un champ lisse, cuit avec l’alvéole</h2>
+        <span class="src">src/gen/bake.js · src/scene/comb.js · fieldAt()</span>
+        <p>Le miel se reconnaît à son reflet. Dans une alvéole de 5 mm, la capillarité creuse toute la surface : elle remonte le long des parois. Cette courbure fait qu’une fenêtre se reflète quelque part dans chaque alvéole.</p>
+        <p>L’idée la plus simple est de tirer la hauteur de la distance à la paroi. Elle échoue : la distance fait un pli le long de l’axe médian de l’alvéole, là où deux parois sont à égale distance. Dans un reflet net, ces plis dessinent une étoile de facettes.</p>
+        <p>Le programme cuit un autre champ, lisse partout. C’est la somme, sur tout le contour, d’un noyau exponentiel de la distance :</p>
+        <div class="eq">\[ m(x) = \frac{1}{Z} \oint e^{-|x - y| / \lambda} \, \mathrm{d}y, \qquad \lambda = 0{,}11 \]</div>
+        <p>\(\lambda\) joue le rôle de la longueur capillaire, en unités d’alvéole. Contre une paroi droite le champ vaut environ 1, il décroît vers le centre, et la somme n’a aucun pli. Il est rangé à côté de la distance signée, sur une grille de 96 × 96 par instant.</p>
+        <p>La normale vient du gradient de ce champ, pris par différences centrées à 1,5 texel. Une dérivée d’écran de la texture donnerait une normale constante par texel, donc des facettes. La pente atteint 0,2 fois le gradient pour le miel, 0,3 pour le fond de cire des alvéoles vides.</p>
+        <figure id="fig-miel"><figcaption><b>Distance contre ménisque.</b> La même alvéole, éclairée de côté. À gauche, le relief tiré de la distance : les plis de l’axe médian. À droite, le champ cuit. Le curseur change la forme de l’alvéole.</figcaption></figure>
+        <div class="note"><b>Le reflet de la fenêtre</b><p>Une lumière parallèle ne laisserait qu’un point dans le miel, ou rien. La lampe est donc traitée comme une source étendue de 0,3 radian pour le reflet du miel, avec un coefficient de Fresnel calculé pour l’indice 1,49.</p></div>
+      </section>
+
+      <section id="cire">
+        <h2><span class="n">07</span>La cire laisse passer la lumière et la garde</h2>
+        <span class="src">src/scene/comb.js</span>
+        <p>Une cire opaque fait plastique. La vraie laisse passer la lumière à travers ses parois minces et la diffuse dans son épaisseur : ses ombres ne sont jamais grises.</p>
+        <p>Le matériau a deux termes de translucidité. Le premier est directionnel : la lumière qui arrive derrière une paroi la traverse, davantage en haut où la paroi est mince. Le second est ambiant : une part de la lumière reçue ressort teintée par la cire, quelle que soit la direction. Le fond d’une alvéole, que la carte d’ombres ne résout pas, est assombri vers une teinte chaude et saturée plutôt que vers le gris.</p>
+        <p>Le grain de la cire (nuages de pollen, mouchetures, cire pétrie) vient d’un volume de bruit sans niveaux de détail. Chaque grain est multiplié par un fondu qui l’éteint avant que sa période n’atteigne la taille du pixel, sinon il fourmille d’une image à l’autre.</p>
+        <p>La hauteur des parois dépend de la distance au bord du rayon, lue dans un atlas : un tiers de la hauteur au bord, la hauteur entière au-delà de 0,16 à 0,26 unité. Le bord lui-même est fait d’alvéoles entières. Une alvéole existe ou non selon la distance au bord lue au centre de rotation du relais, un point fixe : découper le rayon au pixel entamerait des alvéoles qui se déplacent, et on les verrait s’ouvrir et se refermer.</p>
+      </section>
+
+      <section id="budget">
+        <h2><span class="n">08</span>Budget</h2>
+        <div class="tbl"><table>
+          <thead><tr><th>Étape</th><th>Où</th><th class="num">Coût</th></tr></thead>
+          <tbody>
+            <tr><td>Vérification du chemin d’un pavage (96 instants)</td><td>recette</td><td class="num">quelques ms</td></tr>
+            <tr><td>Cuisson d’un pavage (96 rangées, grille de 64², ménisque compris), mesurée dans Node</td><td>worker</td><td class="num">0,9 s</td></tr>
+            <tr><td>Matériaux pour toutes les alvéoles des trois rayons</td><td>GPU</td><td class="num">3</td></tr>
+            <tr><td>Image en 1920 × 1080, qualité Haute, plan d’ensemble</td><td>GPU</td><td class="num">11,4 ms</td></tr>
+            <tr><td>Image au gros plan (le miel remplit l’image)</td><td>GPU</td><td class="num">13,4 ms</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+    </article>
+
+    <footer class="end">
+      <a href="./">Ouvrir Hive</a>
+      <a href="https://github.com/drschizzo/Codevember/blob/main/hive/README.md">README</a>
+      <a href="https://github.com/drschizzo/Codevember/blob/main/hive/docs/concept.md">La démarche</a>
+      <span class="sp"></span>
+      <a href="../">Tous les jours</a>
+    </footer>
+  </main>
+
+  <script type="module">
+    import { demo, C, alpha, clamp } from '../home/explainer.js';
+    import { GROUPS, flip, pointAt, outline, track, tileAt, elements, applyIso } from './src/gen/tiling.js';
+    import { inset } from './src/gen/bake.js';
+
+    const path = (g, P, k, cx, cy) => { g.beginPath(); for (let i = 0; i < P.length; i += 2) { const x = cx + P[i] * k, y = cy - P[i + 1] * k; i ? g.lineTo(x, y) : g.moveTo(x, y); } g.closePath(); };
+    const moved = (m, P) => { const Q = new Float64Array(P.length); for (let i = 0; i < P.length; i += 2) { const p = applyIso(m, [P[i], P[i + 1]]); Q[i] = p[0]; Q[i + 1] = p[1]; } return Q; };
+    const ELS = { p3: elements('p3', 5.5), p4: elements('p4', 5.5), p6: elements('p6', 5.5) };
+    const groupButtons = [['p3', 'Moulinet'], ['p4', 'Tourniquet'], ['p6', 'Rosace']].map(([k, label]) => ({ label, onClick: (d) => { d.state.group = k; } }));
+    const drawTiling = (g, d, group, T, k, { fill = null, stroke = C.ink } = {}) => {
+      const cx = d.w / 2, cy = d.h / 2;
+      g.lineWidth = 1.4; g.lineJoin = 'round'; g.strokeStyle = stroke;
+      ELS[group].forEach((m, i) => { const Q = moved(m, T); path(g, Q, k, cx, cy); if (fill && i % 7 === 0) { g.fillStyle = fill; g.fill(); } g.stroke(); });
+    };
+    const NOP = [{}, {}, {}];
+
+    // 1 — le point libre
+    demo('#fig-point', {
+      title: 'Un point, toutes les alvéoles', aspect: 1.9, buttons: groupButtons,
+      setup(d) { d.state.group ??= 'p6'; d.state.beta = [0.34, 0.33, 0.33]; },
+      pointer(d, e) {
+        if (!e.down) return;
+        const F = GROUPS[d.state.group].corners, k = d.h * 0.2, cx = d.w / 2, cy = d.h / 2;
+        const x = (e.x - cx) / k, y = -(e.y - cy) / k;
+        const det = (F[1][1] - F[2][1]) * (F[0][0] - F[2][0]) + (F[2][0] - F[1][0]) * (F[0][1] - F[2][1]);
+        let a = ((F[1][1] - F[2][1]) * (x - F[2][0]) + (F[2][0] - F[1][0]) * (y - F[2][1])) / det;
+        let b = ((F[2][1] - F[0][1]) * (x - F[2][0]) + (F[0][0] - F[2][0]) * (y - F[2][1])) / det;
+        a = clamp(a, 0.01, 0.98); b = clamp(b, 0.01, 0.99 - a);
+        d.state.beta = [a, b, 1 - a - b];
+      },
+      draw(g, d) {
+        const G = d.state.group, F = GROUPS[G].corners, k = d.h * 0.2, cx = d.w / 2, cy = d.h / 2;
+        drawTiling(g, d, G, outline(flip(F, 0), d.state.beta, NOP, 6), k, { fill: alpha(C.c2, 0.14) });
+        g.fillStyle = alpha(C.c1, 0.16); g.strokeStyle = C.c1; g.lineWidth = 1.5;
+        g.beginPath(); F.forEach((p, i) => { const x = cx + p[0] * k, y = cy - p[1] * k; i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.closePath(); g.fill(); g.stroke();
+        const P = pointAt(F, d.state.beta);
+        g.fillStyle = C.c1; g.beginPath(); g.arc(cx + P[0] * k, cy - P[1] * k, 5, 0, 7); g.fill();
+        d.status(`β = ${d.state.beta.map((v) => v.toFixed(2)).join(' · ')}`);
+      },
+    });
+
+    // 2 — les arêtes
+    demo('#fig-aretes', {
+      title: 'Profils des arêtes', aspect: 1.9, buttons: groupButtons,
+      controls: [
+        { key: 'a1', label: 'Ventre (classe 1)', min: -0.18, max: 0.18, step: 0.005, value: 0.12 },
+        { key: 'a2', label: 'S (classe 2)', min: -0.13, max: 0.13, step: 0.005, value: 0.1 },
+        { key: 'a3', label: 'Double vague (classe 3)', min: -0.09, max: 0.09, step: 0.005, value: 0.06 },
+      ],
+      setup(d) { d.state.group ??= 'p3'; },
+      draw(g, d) {
+        const G = d.state.group, F = GROUPS[G].corners;
+        drawTiling(g, d, G, outline(flip(F, 0), [0.36, 0.32, 0.32], [{ a1: d.s.a1 }, { a2: d.s.a2 }, { a3: d.s.a3 }], 14), d.h * 0.2, { fill: alpha(C.c2, 0.14) });
+      },
+    });
+
+    // 3 — les portes et le relais
+    const PATHS = { p3: { legs: [{ a: 0, b: 1, q: [0.3, 0.3, 0.4] }, { a: 1, b: 0, q: [0.25, 0.25, 0.5] }] }, p4: { legs: [{ a: 0, b: 1, q: [0.3, 0.3, 0.4] }, { a: 1, b: 0, q: [0.25, 0.25, 0.5] }] }, p6: { legs: [{ a: 0, b: 1, q: [0.3, 0.3, 0.4] }, { a: 1, b: 0, q: [0.25, 0.25, 0.5] }] } };
+    const PROF = [{ a1: 0.1, a2: 0.08 }, { a1: -0.1 }, { a2: 0.1 }];
+    const TR = Object.fromEntries(Object.keys(PATHS).map((k) => [k, track(k, PATHS[k])]));
+    demo('#fig-portes', {
+      title: 'Deux portes, un relais', aspect: 1.9, buttons: groupButtons,
+      controls: [{ key: 'psi', label: 'Phase ψ', min: 0, max: 2, step: 0.005, value: 0.25, fmt: (v) => v.toFixed(2) }],
+      setup(d) { d.state.group ??= 'p6'; },
+      draw(g, d) {
+        const G = d.state.group, k = d.h * 0.19, cx = d.w / 2, cy = d.h / 2;
+        const f = d.s.psi - Math.floor(d.s.psi);
+        drawTiling(g, d, G, tileAt(G, PATHS[G], TR[G], PROF, f, 12), k);
+        const T = tileAt(G, PATHS[G], TR[G], PROF, Math.min(d.s.psi, 1.999), 12);
+        path(g, T, k, cx, cy); g.fillStyle = alpha(C.c1, 0.4); g.fill(); g.strokeStyle = C.c1; g.lineWidth = 2; g.stroke();
+        const gate = Math.abs(f - 0.5) < 0.03 || f < 0.03 || f > 0.97;
+        d.status(gate ? 'porte : pavage dégénéré' : `boucle ${Math.floor(d.s.psi) + 1}, étape ${f < 0.5 ? 1 : 2}`);
+      },
+    });
+
+    // 4 — l'onde
+    demo('#fig-onde', {
+      title: 'Une phase par alvéole', aspect: 1.6, animate: true,
+      controls: [{ key: 'r', label: 'Retard', min: 0, max: 0.6, step: 0.01, value: 0.4 }],
+      draw(g, d) {
+        const G = 'p6', k = d.h * 0.12, cx = d.w / 2, cy = d.h / 2, u = (d.t * 0.05) % 1;
+        const ref = tileAt(G, PATHS[G], TR[G], PROF, 0, 4);
+        let ox = 0, oy = 0; for (let i = 0; i < ref.length; i += 2) { ox += ref[i]; oy += ref[i + 1]; } ox /= ref.length / 2; oy /= ref.length / 2;
+        g.lineWidth = 1.3; g.strokeStyle = C.ink; g.lineJoin = 'round';
+        for (const m of ELS[G]) {
+          const c = applyIso(m, [ox, oy]);
+          if (Math.abs(c[1]) > 4.4 || Math.abs(c[0]) > 4.6) continue;
+          const w = clamp((4.2 - c[1]) / 8.4);
+          path(g, moved(m, tileAt(G, PATHS[G], TR[G], PROF, u - d.s.r * w, 8)), k, cx, cy); g.stroke();
+        }
+        d.status(`u = ${u.toFixed(2)}`);
+      },
+    });
+
+    // 5 — la paroi
+    demo('#fig-paroi', {
+      title: 'Axe du mur et face intérieure', aspect: 1.9,
+      controls: [{ key: 'w', label: 'Demi-épaisseur', min: 0.01, max: 0.09, step: 0.002, value: 0.04 }, { key: 'psi', label: 'Phase ψ', min: 0.02, max: 0.98, step: 0.005, value: 0.3 }],
+      draw(g, d) {
+        const G = 'p3', k = d.h * 0.3, cx = d.w / 2, cy = d.h / 2;
+        const T = tileAt(G, PATHS[G], TR[G], PROF, d.s.psi, 16), M = T.length / 2;
+        const buf = new Float32Array(M * 4); inset(T, M, d.s.w, buf, 0);
+        const In = new Float64Array(M * 2); for (let i = 0; i < M; i++) { In[2 * i] = buf[4 * i + 2]; In[2 * i + 1] = buf[4 * i + 3]; }
+        let ox = 0, oy = 0; for (let i = 0; i < T.length; i += 2) { ox += T[i]; oy += T[i + 1]; } ox /= M; oy /= M;
+        g.lineJoin = 'round';
+        for (const m of ELS[G]) {
+          const c = applyIso(m, [ox, oy]); if (Math.hypot(c[0] - ox, c[1] - oy) > 2.4) continue;
+          const sh = (P) => { const Q = moved(m, P); for (let i = 0; i < Q.length; i += 2) { Q[i] -= ox; Q[i + 1] -= oy; } return Q; };
+          path(g, sh(In), k, cx, cy); g.fillStyle = alpha(C.c2, 0.16); g.fill(); g.strokeStyle = C.c2; g.lineWidth = 1.5; g.stroke();
+          path(g, sh(T), k, cx, cy); g.strokeStyle = alpha(C.ink, 0.55); g.lineWidth = 1; g.stroke();
+        }
+      },
+    });
+
+    // 6 — distance contre ménisque
+    demo('#fig-miel', {
+      title: 'Le pli de la distance', aspect: 2,
+      controls: [{ key: 'psi', label: 'Forme (phase ψ)', min: 0.05, max: 0.95, step: 0.01, value: 0.28 }],
+      draw(g, d) {
+        const G = 'p6', N = 56, lam = 0.11, wall = 0.04;
+        const T = tileAt(G, PATHS[G], TR[G], PROF, d.s.psi, 12), M = T.length / 2;
+        let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9; for (let i = 0; i < M; i++) { x0 = Math.min(x0, T[2 * i]); x1 = Math.max(x1, T[2 * i]); y0 = Math.min(y0, T[2 * i + 1]); y1 = Math.max(y1, T[2 * i + 1]); }
+        const S = Math.max(x1 - x0, y1 - y0) + 0.1, bx = (x0 + x1 - S) / 2, by = (y0 + y1 - S) / 2;
+        const A = new Float32Array(N * N), B = new Float32Array(N * N), In = new Uint8Array(N * N);
+        for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+          const x = bx + (i + 0.5) / N * S, y = by + (j + 0.5) / N * S;
+          let best = 1e9, h = 0, c = false;
+          for (let a = 0, b = M - 1; a < M; b = a++) {
+            const ax = T[2 * b], ay = T[2 * b + 1], dx = T[2 * a] - ax, dy = T[2 * a + 1] - ay, l2 = dx * dx + dy * dy;
+            let t = l2 > 0 ? ((x - ax) * dx + (y - ay) * dy) / l2 : 0; t = t < 0 ? 0 : t > 1 ? 1 : t;
+            best = Math.min(best, Math.hypot(x - ax - t * dx, y - ay - t * dy));
+            h += Math.sqrt(l2) * Math.exp(-Math.max(Math.hypot(x - ax - dx / 2, y - ay - dy / 2), wall) / lam);
+            if ((T[2 * a + 1] > y) !== (ay > y) && x < (ax - T[2 * a]) * (y - T[2 * a + 1]) / (ay - T[2 * a + 1]) + T[2 * a]) c = !c;
+          }
+          A[j * N + i] = lam * Math.exp(-best / lam) * 4; B[j * N + i] = h / (2 * lam * 0.9); In[j * N + i] = c && best > wall ? 1 : 0;
+        }
+        const side = Math.min(d.h - 20, d.w / 2 - 30), px = side / N;
+        [[A, d.w / 4 - side / 2, 'distance'], [B, 3 * d.w / 4 - side / 2, 'ménisque cuit']].forEach(([H, X, name]) => {
+          for (let j = 1; j < N - 1; j++) for (let i = 1; i < N - 1; i++) {
+            if (!In[j * N + i]) continue;
+            const gx = (H[j * N + i + 1] - H[j * N + i - 1]) * N / (2 * S) * 0.2, gy = (H[(j + 1) * N + i] - H[(j - 1) * N + i]) * N / (2 * S) * 0.2;
+            const l = Math.hypot(gx, gy, 1), sh = clamp((-gx * 0.6 - gy * 0.5 + 0.62) / l);
+            const spec = Math.pow(clamp((-gx * 0.45 - gy * 0.4 + 0.8) / l), 60);
+            const v = Math.round(40 + 120 * sh + 255 * spec);
+            g.fillStyle = `rgb(${Math.min(255, v + 50)},${Math.min(255, Math.round(v * 0.72) + 20)},${Math.min(255, Math.round(v * 0.3))})`;
+            g.fillRect(X + i * px, 10 + (N - 1 - j) * px, px + 0.6, px + 0.6);
+          }
+          g.fillStyle = C.dim; g.font = '12px Inter'; g.textAlign = 'center'; g.fillText(name, X + side / 2, d.h - 2);
+        });
+      },
+    });
+  </script>
+</body>
+</html>
